@@ -440,16 +440,35 @@
     });
   }
 
-  /* the hero's "up to N×" derives from the audio-in pairs — the same rows § 03 shows, never a
-     hand-typed number. Floor keeps the claim conservative (6.19 measured → "6×"). */
+  /* Everything numeric in the hero derives from the records — the same rows the tables show,
+     never a hand-typed number. The "up to N×" is the best audio-in pair, floored (6.19 measured
+     → "6×"); the terminal output is the strongest un-annotated LLM pair, re-picked per load. */
   function mountHero(recs) {
     var el = document.getElementById('dl-hero-x');
-    if (!el) return;
-    var best = 0;
-    buildAudioRows(recs, 'audio-chat').forEach(function (r) {
-      if (r.speed > best) best = r.speed;
+    if (el) {
+      var best = 0;
+      buildAudioRows(recs, 'audio-chat').forEach(function (r) {
+        if (r.speed > best) best = r.speed;
+      });
+      if (best > 1) el.textContent = best >= 3 ? String(Math.floor(best)) : best.toFixed(1);
+    }
+    var top = null;
+    buildLLMPairs(recs).forEach(function (r) {
+      if (r.noted || !(r.pp_ratio > 1) || !(r.tg_ratio > 1)) return;   // caveated rows never front the page
+      if (!top || r.pp_ratio * r.tg_ratio > top.pp_ratio * top.tg_ratio) top = r;
     });
-    if (best > 1) el.textContent = best >= 3 ? String(Math.floor(best)) : best.toFixed(1);
+    if (!top) return;
+    function put(id, text) {
+      var n = document.getElementById(id);
+      if (n) n.textContent = text;
+    }
+    put('dl-mock-load', '  loaded ' + top.model + ' · q8 · ' + fmt(top.size / 1073741824, 1) + ' GB · ' +
+      top.lane + ' / ' + top.das.threads + ' threads');
+    put('dl-mock-pp', fmt(top.pp_das, 1) + ' tok/s');
+    put('dl-mock-ppr', '· das/llama.cpp ' + fmt(top.pp_ratio, 2) + '×');
+    put('dl-mock-tg', fmt(top.tg_das, 1) + ' tok/s');
+    put('dl-mock-tgr', '· das/llama.cpp ' + fmt(top.tg_ratio, 2) + '×');
+    put('dl-mock-foot', '  ✓ no hand-written assembly · ' + top.boxName + ' · measured ' + (top.das.date || ''));
   }
 
   /* ── load ───────────────────────────────────────────────────── */

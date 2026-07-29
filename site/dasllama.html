@@ -241,7 +241,7 @@ require daslib/jobque_boost
 
 [export]
 def main() {
-    let path = "Llama-3.1-8B.gguf"
+    let path = "model.gguf"
     var m &lt;- load_model(path, QuantMode.q8)
     let ids &lt;- encode(m, "Summarize the results:")
     with_job_que() {
@@ -254,13 +254,15 @@ def main() {
         }
     }
 }</code></pre>
+                <!-- a REAL row from bench_records.json — the strongest un-annotated pair, re-derived
+                     at render time (mountHero); the static text is that same row at commit time -->
                 <div class="forge-output">
                     <div class="dl-run">
                         <div><span class="prompt">$</span> daslang -jit dasllama.das</div>
-                        <div class="dim">  loaded Llama-3.1-8B · q8 · 8.03B active · CPU / 16 threads, pinned</div>
-                        <div><span class="metric">prefill</span> <span class="amber">99.8 tok/s</span> <span class="dim">· das/llama.cpp 1.51×</span></div>
-                        <div><span class="metric">decode&nbsp;</span> <span class="amber">6.9 tok/s</span> <span class="dim">· das/llama.cpp 1.03×</span></div>
-                        <div class="ok">  ✓ no hand-written assembly · Threadripper 3990X</div>
+                        <div class="dim" id="dl-mock-load">  loaded Qwen3-30B-A3B-Instruct-2507-Q4_K_M · q8 · 17.3 GB · cpu + accel / 10 threads</div>
+                        <div><span class="metric">prefill</span> <span class="amber" id="dl-mock-pp">301.5 tok/s</span> <span class="dim" id="dl-mock-ppr">· das/llama.cpp 1.78×</span></div>
+                        <div><span class="metric">decode&nbsp;</span> <span class="amber" id="dl-mock-tg">85.2 tok/s</span> <span class="dim" id="dl-mock-tgr">· das/llama.cpp 1.11×</span></div>
+                        <div class="ok" id="dl-mock-foot">  ✓ no hand-written assembly · Apple M4 Pro · measured 2026-07-26</div>
                     </div>
                 </div>
             </div>
