@@ -59,16 +59,19 @@ review capacity is the bottleneck the arcs exist to fix.
   (the cross-worktree search above, seeded and scoped). Deliberately
   duplicates the click-a-link path — selection survives even when the
   linkifier fails to recognise a path.
-- **Drag-and-drop into the terminal — map what agents accept.** Filed as
-  its own sensitive question: a drop onto the terminal must become
-  something the agent inside actually receives. Baseline: OS drop →
-  quoted path typed into the PTY (what every terminal does; Claude Code
-  and codex both accept pasted paths, and CC understands @-mention
-  paths). Beyond paths: images and rich payloads differ per agent and per
-  terminal stack — needs a real inventory (CC paste-image support on
-  Windows ConPTY, codex behavior, plain shells) before promising
-  anything. GLFW gives the host a drop callback; the watcher owns the
-  PTY write.
+- **Drag-and-drop: the herder HOLDS the payload (Boris's design turn,
+  2026-07-29).** Do not squeeze anything through the PTY beyond a
+  reference. A drop (or paste) onto a session becomes a herder-held
+  artifact: stored in that session's space (beside events/mailbox/
+  bundles, same durability rules), then DELIVERED as a reference — the
+  path typed into the PTY, or an inbox message carrying it with
+  provenance. Images just work everywhere because agents read files by
+  path (Claude Code reads PNGs natively); "or anything else" holds — any
+  payload is a held file plus a reference. This also unlocks: clipboard
+  image paste into a session, Look-at-that with an attachment, and
+  agent→agent artifact handoff through the same store. Baseline
+  fallback for plain shells: quoted path typed into the PTY. GLFW gives
+  the host the drop callback; the watcher owns storage + delivery.
 - **"Where is the file, really?"** A file's location is three-dimensional
   (repository, worktree/branch, path) and the app shows only the path. Any
   file surface should answer: which worktrees contain this path, which is
