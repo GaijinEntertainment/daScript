@@ -76,6 +76,11 @@
   .dl-dim { color: var(--fg-faint); }
   .dl-td-model { color: var(--fg); max-width: 300px; }   /* long model names wrap at hyphens instead of forcing the ratio columns off-screen */
 
+  /* the bridge: the tables convince, this points at the reason — the language */
+  .dl-bridge { margin-top: 30px; padding: 18px 22px; border: 1px solid var(--rule); border-left: 2px solid var(--amber); border-radius: 8px; max-width: 780px; }
+  .dl-bridge p { margin: 0; color: var(--fg-dim); font-size: 14px; line-height: 1.6; }
+  .dl-bridge__links { margin-top: 10px !important; display: flex; gap: 26px; flex-wrap: wrap; }
+
   /* pair tables — one row per das measurement ÷ its reference (§ 01 LLM, § 02 ASR, § 03 audio in) */
   .forge-p--wide { max-width: 780px; }
 
@@ -222,7 +227,7 @@
                     outperform llama.cpp's hand-written universal kernels, on the CPU path and on
                     Metal alike. llama.cpp has no speech-to-text engine, so Whisper and Parakeet are
                     measured against the dedicated ones instead — whisper.cpp, parakeet, ONNX Runtime,
-                    NeMo — and hold their own. Every number below is a measured pair.
+                    NeMo — and lead most of those rows too. Every number below is a measured pair.
                 </p>
                 <div class="forge-hero__ctas">
                     <a class="forge-btn-primary" href="#bench">$ view the scoreboard →</a>
@@ -285,6 +290,15 @@ def main() {
             <div class="dl-filters" id="bench-filters"></div>
             <div class="dl-table-wrap"><table class="dl-table dl-table--bench" id="bench-table"></table></div>
             <div class="dl-caption" id="bench-caption"></div>
+
+            <div class="dl-bridge">
+                <p>Every kernel, loader and scheduler behind these numbers is daslang &mdash; JIT-compiled, no C++ in the hot path. The speed is the language: auto-tuned generic kernels, one codebase from GGUF parsing to Metal dispatch.</p>
+                <p class="dl-bridge__links">
+                    <a class="forge-link-amber" href="doc/reference/tutorials/dasLLAMA_00_problem_statement.html">how dasLLAMA is built &rarr;</a>
+                    <a class="forge-link-amber" href="doc/index.html">the daslang reference &rarr;</a>
+                    <a class="forge-link-amber" href="https://github.com/GaijinEntertainment/daScript">source &rarr;</a>
+                </p>
+            </div>
         </div>
     </section>
 
