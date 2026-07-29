@@ -89,7 +89,13 @@ review capacity is the bottleneck the arcs exist to fix.
   listening and speech is full of filler. dasHerd voice input rides that
   exact pipeline — a muttered "look at that ..." arrives at the agent as
   a crisp written message; the cleanup pass IS the feature. Telegram's
-  builtin transcription is the cautionary counterexample (meh).
+  builtin transcription is the cautionary counterexample (meh). (4) The
+  cleanup model is SMALL and fast — the job is paragraphs, not reasoning.
+  (5) Every voice file is KEPT and logged (archive-never-delete, as
+  everywhere in the herder): the recordings plus their cleaned outputs
+  are the training corpus for later fine-tuning a local model on the
+  clean-text-and-commands half specifically — the ASR stays stock, the
+  domain fit goes into the language side.
 - **"Where is the file, really?"** A file's location is three-dimensional
   (repository, worktree/branch, path) and the app shows only the path. Any
   file surface should answer: which worktrees contain this path, which is
