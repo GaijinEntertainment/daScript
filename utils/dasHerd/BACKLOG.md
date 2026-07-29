@@ -22,6 +22,19 @@ review capacity is the bottleneck the arcs exist to fix.
   string heap when the overflow is in the string heap — skipping the das
   heap walk should make the per-cycle cost markedly cheaper. Runtime
   change (main repo), pairs with hunting the churn source itself.
+- **SECOND silent death, same signature (09:17:47, ~5 h after restart).**
+  Identical shape: log ends mid-GC-line, exit 1, no words; heap totals
+  FLAT to the end (das 0x11b5130 constant, string heap bounded) — no
+  leak, no growth, healthy 8 ms GC cycles right up to termination.
+  Sudden stop mid-healthy-loop still reads external. Supporting datum:
+  a daslang.exe SURVIVED both deaths in Session 0 ("Services",
+  PID 53472, 463 MB) — a user-level `taskkill /IM daslang.exe` kills
+  user-session processes but gets access-denied on Session 0, which is
+  exactly the survivor pattern observed. Sibling sessions loaded the
+  OLD kill-by-name skills before today's fix, so repeat deaths are
+  expected until those sessions cycle; the tombstone will classify.
+  (Also: what IS the Session-0 daslang? 463 MB, running as a service —
+  identify it.)
 - **Death verdict revised: probably taskkill, not a crash.** No log
   tail + exit code 1 is exactly what `taskkill /F` (TerminateProcess)
   leaves; the likely killer is ANOTHER session clearing daslang.exe by
