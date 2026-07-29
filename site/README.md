@@ -11,7 +11,11 @@ the same commands and treats this file as the source of truth.
 site/
 ├── index.html              # landing — hand-authored
 ├── downloads.html          # downloads & links — hand-authored
+├── dasllama.html           # dasLLAMA benchmarks — pair tables/bars from files/dasllama/bench_records.json
 ├── files/
+│   ├── dasllama.js         # dasLLAMA page renderer (bars + tables + receipts, all derived from the records)
+│   ├── dasllama/
+│   │   └── bench_records.json  # COMMITTED — merged per-box stores, written by gen_site_records
 │   ├── forge.css           # tokens + components (source of truth) — includes responsive rules + mobile nav
 │   ├── forge.js            # sample switcher · install tabs · bench · news (skips CM init on mobile)
 │   ├── highlight.js        # daslang tokenizer (hero + blog code blocks)
@@ -255,6 +259,23 @@ cd _site && python3 -m http.server 8000
 
 Click through: landing → blog → a post → docs (Sphinx) → playground → run a
 sample. No broken links, consistent Forge chrome on every page.
+
+## Updating the dasLLAMA benchmarks page
+
+`site/dasllama.html` renders entirely from `site/files/dasllama/bench_records.json` — every
+row is a das measurement paired with its reference run, every ratio derived in
+`files/dasllama.js`, nothing hand-placed. The JSON is generated from the per-box record
+stores and COMMITTED (no CI fetch):
+
+```bash
+bin/daslang modules/dasLLAMA/performance/gen_site_records.das
+cd site && python3 -m http.server 8000    # eyeball all three sections before pushing
+```
+
+Measurement methodology and the sweep tooling live in `modules/dasLLAMA/METHODOLOGY.md`
+(published at /doc/reference/dasllama_methodology.html) and
+`modules/dasLLAMA/performance/BRINGUP.md`. Hand-written per-row notes go in
+`modules/dasLLAMA/performance/records/annotations.json` — never edit the JSON by hand.
 
 ## Updating dasProfile snapshot
 
