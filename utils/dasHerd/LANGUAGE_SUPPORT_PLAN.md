@@ -127,6 +127,11 @@ The "better than VSCode" step, and the reason `--overlay` matters:
 
 ## Step 4 — the editor is a PRODUCT, dasHerd is its first customer
 
+> Detailed plan of record: **EDITOR_ARC_PLAN.md** (2026-07-29) — one
+> component, two skins, E1–E7 order (basic editing before LSP), the
+> .cpp-free proof, and the one named .cpp risk (incremental parse,
+> avoided in v1).
+
 (Reframed 2026-07-29, Boris's review.) An integrated code editor — with
 LSP, for das — is a feature USERS have asked for: they want a code editor
 inside their own tools. dasHerd's conflict resolution is the first use
