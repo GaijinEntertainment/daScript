@@ -47,6 +47,28 @@ review capacity is the bottleneck the arcs exist to fix.
   automatically with the installed identity — stale-while-revalidate
   already keeps the swap flicker-free. Watch generation guards: a user
   click mid-auto-reload must win.
+- **Terminal file-link navigation (PLAN T3, now with concrete shape).**
+  When a session's terminal shows a path (agents print them constantly),
+  clicking it opens the file in the inspector, resolved against THAT
+  session's worktree — many trees exist, the session's own tree is the
+  answer. Detection: worktree-relative or absolute paths in terminal text,
+  the linkifying done in the renderer's visible viewport only.
+- **Right-click → Find in the terminal (the fallback door).** Select text
+  in any terminal (ours or an adopted external one) → right-click → Find:
+  treat the selection as a file-name query against the session's worktree
+  (the cross-worktree search above, seeded and scoped). Deliberately
+  duplicates the click-a-link path — selection survives even when the
+  linkifier fails to recognise a path.
+- **Drag-and-drop into the terminal — map what agents accept.** Filed as
+  its own sensitive question: a drop onto the terminal must become
+  something the agent inside actually receives. Baseline: OS drop →
+  quoted path typed into the PTY (what every terminal does; Claude Code
+  and codex both accept pasted paths, and CC understands @-mention
+  paths). Beyond paths: images and rich payloads differ per agent and per
+  terminal stack — needs a real inventory (CC paste-image support on
+  Windows ConPTY, codex behavior, plain shells) before promising
+  anything. GLFW gives the host a drop callback; the watcher owns the
+  PTY write.
 - **"Where is the file, really?"** A file's location is three-dimensional
   (repository, worktree/branch, path) and the app shows only the path. Any
   file surface should answer: which worktrees contain this path, which is
