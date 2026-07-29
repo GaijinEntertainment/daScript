@@ -2,6 +2,8 @@ options gen2
 options _comment_hygiene = true
 
 module dasllama_image shared public
+options _cyclomatic_complexity = 0   // image walk/GC bodies mirror the archive schema
+options _function_length = 0   // same
 
 require daslib/fio
 require dasllama/dasllama_env  // the shared typed env readers + the knob registry

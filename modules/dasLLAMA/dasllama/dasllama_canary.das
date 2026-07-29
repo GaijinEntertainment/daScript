@@ -2,6 +2,8 @@ options gen2
 options _comment_hygiene = true
 
 module dasllama_canary shared public
+options _cyclomatic_complexity = 0   // model forward/serialize walks mirror the model schema
+options _function_length = 0   // same
 
 require math
 require daslib/fio

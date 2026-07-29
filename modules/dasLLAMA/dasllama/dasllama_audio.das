@@ -2,6 +2,7 @@ options gen2
 options _comment_hygiene = true
 
 module dasllama_audio shared public
+options _function_length = 0   // per-family transcribe pipelines mirror the model schema
 
 require math
 require dasllama/dasllama_env  // the shared typed env readers + the knob registry

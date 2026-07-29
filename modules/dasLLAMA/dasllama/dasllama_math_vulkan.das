@@ -2,6 +2,8 @@ options gen2
 options _comment_hygiene = true
 
 module dasllama_math_vulkan shared public
+options _cyclomatic_complexity = 0   // GPU kernel emitters/dispatch ladders are the domain shape
+options _function_length = 0   // same
 
 require dasllama/dasllama_math
 require dasllama/dasllama_gemm_schema  // kq_qsb/kq_ssb + the q8/kq plane consts — the stride source

@@ -1,5 +1,6 @@
 options gen2
 options stack = 131072   // the ASR model structs (decoder + tower) need a deep stack (asr_bench parity)
+options _function_length = 0   // cell main; absorbed into lcpp_bench by the single-rig consolidation
 
 // One ASR das cell for the record store — the audio sibling of lcpp_bench's --json-path protocol.
 // Loads ONE catalog model, times transcribe (best-of-reps) over its corpus buckets under the tuned

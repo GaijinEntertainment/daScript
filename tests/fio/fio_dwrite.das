@@ -1,4 +1,5 @@
 options gen2
+options _function_length = 0   // test bodies enumerate the fixture arms
 require dastest/testing_boost
 require daslib/fio
 

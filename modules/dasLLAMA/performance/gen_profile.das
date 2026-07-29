@@ -1,6 +1,7 @@
 options gen2
 options stack = 524288   // the forward/prefill chain needs more than the 16K default; the 122B/Coder-Next hybrid eval frames outgrew the old 64K (scratch probes needed 512K)
 options _jit_fast_math = true   // ggml-parity FP laxity (non-bit-exact, ~+10%); the profile is a speed measurement
+options _function_length = 0   // legacy profiler main; superseded by gen_bench_records
 
 // The das-side half of the profiling suite: for each tier-selected model it measures prefill (one
 // batched forward_prefill) and emission (a greedy decode loop) tok/s under the tuned per-box runtime,

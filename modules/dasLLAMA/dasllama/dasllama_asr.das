@@ -2,6 +2,7 @@ options gen2
 options _comment_hygiene = true
 
 module dasllama_asr shared public
+options _function_length = 0   // per-family transcribe pipelines mirror the model schema
 
 require math
 require daslib/fio

@@ -2,6 +2,7 @@ options gen2
 options _comment_hygiene = true
 
 module dasllama_qwen3a shared public
+options _function_length = 0   // model forward/serialize walks mirror the model schema
 
 require math
 require daslib/fio

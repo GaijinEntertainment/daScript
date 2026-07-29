@@ -1,6 +1,8 @@
 options gen2
 options stack = 65536   // dasLLAMA program-root convention (options stack does not unify up from libs)
 options _jit_fast_math = true   // ggml-parity FP laxity — matches how llama.cpp is benched
+options _cyclomatic_complexity = 0   // bench cell main = the measurement protocol ladder
+options _function_length = 0   // same
 
 require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + apply_box_profile_runtime (engine-level, not re-exported)

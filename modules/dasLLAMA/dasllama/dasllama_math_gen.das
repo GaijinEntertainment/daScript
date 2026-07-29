@@ -2,6 +2,7 @@ options gen2
 options _comment_hygiene = true
 
 module dasllama_math_gen shared public
+options _function_length = 0   // kernel generator bodies are the domain shape
 
 require dasllama/dasllama_math
 require dasllama/dasllama_math_aarch64_neon

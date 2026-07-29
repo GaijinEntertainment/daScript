@@ -1,6 +1,7 @@
 options gen2
 options persistent_heap   // + explicit deletes: each arm frees its model before the next loads
 options stack = 131072
+options _function_length = 0   // test bodies enumerate the fixture arms
 
 require dastest/testing_boost public
 require dasllama/dasllama            // the facade: load_model's image cache is the surface under test

@@ -1,5 +1,7 @@
 options gen2
 options stack = 65536   // dasLLAMA program-root convention (options stack does not unify up from libs)
+options _cyclomatic_complexity = 0   // orchestrator passes; reshaped by the single-rig consolidation
+options _function_length = 0   // same
 
 require profile_common
 require dasllama/dasllama_image   // dlim_clean — the automatic step-zero GC
