@@ -14,6 +14,29 @@ review capacity is the bottleneck the arcs exist to fix.
   crash-capture treatment: last-words handler + the exit reason in the
   log, always. (New watcher token after restart:
   0x63ad4756-0xce6172c6-0x664a86cd-0xd313c828.)
+- **GC: strings-only collection when the overflow is in strings (Boris,
+  design note — do not code yet).** das strings are immutable; the last
+  generated string rides a special temp list and is collected
+  immediately, but that fundamentally addresses nothing for churn like
+  the watcher's. The collecting loop can be adjusted to collect ONLY the
+  string heap when the overflow is in the string heap — skipping the das
+  heap walk should make the per-cycle cost markedly cheaper. Runtime
+  change (main repo), pairs with hunting the churn source itself.
+- **Death verdict revised: probably taskkill, not a crash.** No log
+  tail + exit code 1 is exactly what `taskkill /F` (TerminateProcess)
+  leaves; the likely killer is ANOTHER session clearing daslang.exe by
+  IMAGE NAME before a build — the standard kill-before-link ritual,
+  aimed imprecisely. Two mitigations, different owners: (1) sessions
+  must kill by PATH (their own tree's binaries), never by name — a
+  discipline fix; (2) the watcher gets a tombstone protocol — heartbeat
+  file each tick + an explicit goodbye on graceful exit; next start,
+  heartbeat-without-goodbye = "died unclean at T", and the parent task
+  record's exit code separates kill (1, silent) from crash (panic text /
+  0xC0000005-class codes). TerminateProcess is UNDETECTABLE from inside
+  the dying process — no handler runs, ever — so detection is
+  post-mortem inference plus, if wanted, OS-level attribution (audit
+  4688 / Sysmon records the `taskkill /IM daslang.exe` invocation and
+  its parent; that names the killer, not just the death).
 - **Idle GC churn in the watcher (probable cause-adjacent).** With the
   client CLOSED and zero user activity, the dead run logged 253
   string_fragmentation GC cycles — one per second, ~70 ms each, string
