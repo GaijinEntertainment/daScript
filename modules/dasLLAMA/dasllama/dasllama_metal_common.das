@@ -15,11 +15,11 @@ require dasllama/dasllama_metal_shapes public   // the extracted portable shape 
 
 // Shared infrastructure for the dasMetal resident drivers (the format-matrix arc's W1 split):
 // device/queue init, buffer pools, the weight-region + block_q8_0-blob + cat-blob caches, the
-// per-session KV mirror arena (watermark/LRU/rewind contract — see dasllama_metal_llama's
+// per-session KV mirror arena (watermark/LRU/rewind contract — see dasllama_metal_decode's
 // header), HazTrack, the pending-step (encode-ahead) machinery + metal_decode_flush, upload +
 // uniform helpers, and the decline observability layer (all three GPU paths' reason enums,
 // declines-by-reason tables, and the stage report). The kernel/PSO registry
-// (dasllama_metal_kernels) and the family graph modules (dasllama_metal_llama) sit on top.
+// (dasllama_metal_kernels) and the family graph modules (dasllama_metal_decode) sit on top.
 // Module-level state is deliberately non-private: this is an internal driver family, required
 // only by dasLLAMA itself, and the family modules read/write it directly.
 

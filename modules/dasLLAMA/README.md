@@ -112,7 +112,7 @@ modules/dasLLAMA/
     dasllama_math_accelerate.das #  the "+AMX" float tier — Accelerate BLAS (AMX on M1-M3, SME on M4+) over the float-plane batch shapes
     dasllama_math_metal.das   #   Metal GPU prefill-GEMM backend (batch-only donor; decode GEMV stays CPU)
     dasllama_metal_prefill.das #  Metal full-GPU-resident prefill kernel set (requant, rmsnorm, rope, attention)
-    dasllama_metal_llama.das  #   Metal GPU-resident DECODE driver — one command buffer per token step, the layer stack as fused dispatches
+    dasllama_metal_decode.das  #   Metal GPU-resident DECODE driver — one command buffer per token step, the layer stack as fused dispatches
     dasllama_metal_kernels.das #  the family-agnostic Metal kernel + PSO registry (GEMV/GEMM forms, single-query attn per KV codec, fused rope+KV-store)
     dasllama_metal_common.das #   the Metal dispatch/capture rail — kn_dispatch + graph replay
     dasllama_metal_shapes.das #   the Metal drivers' MODEL-SHAPE gates, extracted PORTABLE (no das_metal) so any box can bake a metal-flavor .dlim

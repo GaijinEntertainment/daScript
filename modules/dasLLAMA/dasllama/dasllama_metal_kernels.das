@@ -19,7 +19,7 @@ require dasllama/dasllama_metal_lens
 // rope+KV-store family, add+rms/ew — plus their enc_* dispatch helpers and the PSO lifecycle
 // (metal_decode_init / metal_kernels_release). The rms/add/swiglu/mul_mm MSL sources are the
 // prefill module's, verbatim (own PSOs, zero copy drift). Kernel-shape rationale lives with
-// each class; the driver contracts live in dasllama_metal_llama's header.
+// each class; the driver contracts live in dasllama_metal_decode's header.
 
 // ===== the new kernels =====
 

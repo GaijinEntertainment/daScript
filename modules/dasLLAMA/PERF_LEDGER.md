@@ -47,7 +47,7 @@ what it costs today and what the fix would change.
   live set — plus ew-chain fusion and a graph-reorder pass that grows concurrent sets. Our shape:
   an enc_dispatch wrapper in dasllama_metal_common taking declared read/write (buffer, off, len)
   ranges per dispatch (every enc_* helper already knows its buffers), auto-barriering on conflict;
-  g_skip runs must stay serial (the knockout-unbarriered caveat at dasllama_metal_llama.das:2511).
+  g_skip runs must stay serial (the knockout-unbarriered caveat at dasllama_metal_decode.das:2511).
   **SESSION 1 SHIPPED (2026-07-23): the hazard-tracked concurrent encoder is in** — range tracker
   in dasllama_metal_common (exact (buffer, off, len) ranges, mutable frame buffers only; weights/
   uniforms untracked), hz_gate in every decode-path enc_* helper, undeclared dispatches take a
@@ -148,7 +148,7 @@ what it costs today and what the fix would change.
   successful save; or utime-touch images on load and age out cold siblings at save time.
 
 - **Q6-greedy spec-chain inversion on big pure-k6 files (2026-07-22 re-pair).** `spec_cls_capable`
-  (dasllama_metal_llama.das:164) is a pure CAPABILITY test — it engages the greedy spec chain for
+  (dasllama_metal_decode.das:164) is a pure CAPABILITY test — it engages the greedy spec chain for
   any tied-k6 classifier with no BENEFICIAL condition, so a big pure-k6 file eats the spec-chain
   work where it is a net loss. Cost today: gemma4-12B Q6_K B=1 greedy runs 26.81 t/s with spec on
   vs 27.11 spec-off (~+1%; `DASLLAMA_METAL_SPEC=0` recovers). This was the board's "0.81x" cell —

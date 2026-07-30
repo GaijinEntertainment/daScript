@@ -1,7 +1,7 @@
 options gen2
 options _comment_hygiene = true
 
-module dasllama_metal_llama shared public
+module dasllama_metal_decode shared public
 
 require math
 require daslib/fio
@@ -3230,7 +3230,7 @@ def private load_decode_fuse() {
 }
 
 [init]
-def dasllama_metal_llama_register() {
+def dasllama_metal_decode_register() {
     // registered but dormant: only select_decode_override("metal") (env rail DASLLAMA_PIN_DECODE
     // in the harnesses) activates it — the batch twin rides the same name — and unsupported
     // shapes decline per call

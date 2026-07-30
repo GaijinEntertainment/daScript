@@ -1797,7 +1797,7 @@ class MetalMoeCombine {
 
 // gpt-oss clamped swiglu (stage 4): x = min(g, 7), y = clamp(u, -7, 7),
 // g = (x / (1 + exp(-1.702 x))) * (y + 1) — the clamps and the +1 are trained weights' contract.
-// SHARED with the decode rail (dasllama_metal_llama's enc_ew2 binds slots 0-2) — keep the layout.
+// SHARED with the decode rail (dasllama_metal_decode's enc_ew2 binds slots 0-2) — keep the layout.
 class MetalSwigluOai {
     @ssbo @binding = 0 @role = "readwrite" g : array<float4>
     @ssbo @binding = 1 @role = "read" u : array<float4>

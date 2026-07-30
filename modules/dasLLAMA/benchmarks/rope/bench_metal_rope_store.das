@@ -5,7 +5,7 @@ require dastest/testing_boost
 require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
 require metal/msl_shader
 require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — GPU driver half, Apple builds only
-require dasllama/dasllama_metal_llama  // nolint:STYLE030 — the production rope+KV-store MSL (zero copy drift)
+require dasllama/dasllama_metal_decode  // nolint:STYLE030 — the production rope+KV-store MSL (zero copy drift)
 require math
 require strings
 

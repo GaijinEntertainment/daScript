@@ -7,7 +7,7 @@ require dasllama/dasllama   // nolint:STYLE029 — the public facade (engine + a
 require dasllama/dasllama_math   // set_wscale_f16 — the wscale matrix axis
 require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor transform
 require dasllama/dasllama_parity   // nolint:STYLE030 — cached_ids/cached_vals (CPU references mapped like .dlim images), used only inside the Apple static_if half
-require ?das_metal dasllama/dasllama_metal_llama  // nolint:STYLE030 — stats/declines/shutdown rails
+require ?das_metal dasllama/dasllama_metal_decode  // nolint:STYLE030 — stats/declines/shutdown rails
 require ?das_metal dasllama/dasllama_metal_prefill  // nolint:STYLE030 — prefill stats/declines rails
 require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — device probe + metal_live_object_count
 require daslib/jobque_boost

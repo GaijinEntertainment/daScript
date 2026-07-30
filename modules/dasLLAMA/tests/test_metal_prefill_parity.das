@@ -7,7 +7,7 @@ require dasllama/dasllama   // the public facade — pulls the engine + arch reg
 require dasllama/dasllama_math   // set_wscale_f16 — the resident path reads the f32 scale plane
 require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor transform
 require ?das_metal dasllama/dasllama_metal_prefill  // nolint:STYLE030 — min-npos setter + stats + the shutdown/leak rail
-require ?das_metal dasllama/dasllama_metal_llama  // nolint:STYLE030 — decode shutdown (the kq/quantized-KV arms touch the decode driver)
+require ?das_metal dasllama/dasllama_metal_decode  // nolint:STYLE030 — decode shutdown (the kq/quantized-KV arms touch the decode driver)
 require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — metal_live_object_count for the leak gate
 require daslib/jobque_boost
 require daslib/fio  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
