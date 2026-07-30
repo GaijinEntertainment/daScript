@@ -227,15 +227,14 @@ fail bar as "suspicious — verify"). Exit is nonzero on any FAIL.
   (`DAS_TUNE_MODE=tune DAS_TUNE_MANIFEST=<box manifest> bin/daslang -jit
   modules/dasLLAMA/harness/dasllama_tuner.das`) and check the fresh winners against the stored
   rows' `tune` stamps before trusting deltas.
-- ⚠ A PARITY_FULL family-suite run PURGES the bench-flavor images: `dlim_identity` folds
-  `cpu.backend`, and the metal suites pin `portable` (the blob donor contract) before loading —
-  so a suite child's identity can NEVER equal the rig's `arm64-gen` identity (no tune pinning
-  aligns them), it mints its own image, and the image GC removes every foreign-identity sibling
-  `.dlim` as dead. The next oracle leg then FAILs those models with "cell did not measure" (the
-  frozen child refuses to re-mint, by design). Re-mint with a minimal unfrozen run per model
-  (`bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m <gguf> --ngl 99 -p 16
-  -n 4 -r 1`), then re-run the cells with `-o <substr>`. The GC-vs-foreign-identity policy is
-  an open design question.
+- ⚠ If a rig model FAILs a cell with "cell did not measure" and its `.dlim` is missing, the
+  image was purged by a foreign-identity mint's GC pass: `dlim_identity` folds `cpu.backend`
+  and the box knobs, and any rail load under a different pin set mints its own flavor, then
+  removes every foreign-identity sibling as dead (the frozen bench child refuses to re-mint,
+  by design). Test suites no longer ride the image rail (CODEREVIEW rule 20), which removes
+  the routine trigger; the recovery stands for any other cause: re-mint with a minimal
+  unfrozen run per model (`bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das --
+  -m <gguf> --ngl 99 -p 16 -n 4 -r 1`), then re-run the cells with `-o <substr>`.
 - **A verdict on a long board's tail cells is not evidence — re-run the cell solo.** Three
   times observed on the m1 (2026-07-30): the last cell of an 8-cell keep-going sweep under-read
   −6.5% pp (solo re-run: dead-on the store); the last model of the hours-long Jul-28 rig

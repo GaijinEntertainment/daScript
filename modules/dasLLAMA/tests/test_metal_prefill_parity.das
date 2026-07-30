@@ -136,7 +136,7 @@ def test_metal_prefill_parity(t : T?) {
             let prior_backend = active_kernel_backend()     // (both exit paths run through the restore)
             set_wscale_f16(false)       // the resident path reads the f32 scale plane (declines on s16)
             pin_kernel_backend("portable")  // ...and ROW-MAJOR weights — a repack backend's layout is unreadable (5c donor contract)
-            var tr <- load_model(path, QuantMode.q8)
+            var tr <- load_model_(path, QuantMode.q8)
             if (tr.config.seq_len > 2048l) {
                 tr.config.seq_len = 2048l
             }
@@ -173,7 +173,7 @@ def test_metal_prefill_parity(t : T?) {
             if (arm_on(t, "s16")) {
                 set_wscale_f16(true)
                 pin_kernel_backend("portable")
-                var tr16 <- load_model(path, QuantMode.q8)
+                var tr16 <- load_model_(path, QuantMode.q8)
                 if (tr16.config.seq_len > 2048l) {
                     tr16.config.seq_len = 2048l
                 }
@@ -203,7 +203,7 @@ def test_metal_prefill_parity(t : T?) {
             } elif (stat(kpath).is_valid) {
                 set_wscale_f16(false)
                 pin_kernel_backend("portable")
-                var trk <- load_model(kpath, QuantMode.q8)
+                var trk <- load_model_(kpath, QuantMode.q8)
                 if (trk.config.seq_len > 2048l) {
                     trk.config.seq_len = 2048l
                 }
@@ -234,7 +234,7 @@ def test_metal_prefill_parity(t : T?) {
             if (arm_on(t, "cont")) {
                 set_wscale_f16(false)
                 pin_kernel_backend("portable")
-                var trc <- load_model(path, QuantMode.q8)
+                var trc <- load_model_(path, QuantMode.q8)
                 if (trc.config.seq_len > 2048l) {
                     trc.config.seq_len = 2048l
                 }
@@ -274,7 +274,7 @@ def test_metal_prefill_parity(t : T?) {
                 if (model_available(t, path8)) {
                     set_wscale_f16(false)
                     pin_kernel_backend("portable")
-                    var tr8 <- load_model(path8, QuantMode.q8)
+                    var tr8 <- load_model_(path8, QuantMode.q8)
                     if (tr8.config.seq_len > 2048l) {
                         tr8.config.seq_len = 2048l
                     }
@@ -303,7 +303,7 @@ def test_metal_prefill_parity(t : T?) {
             if (arm_on(t, "qkv")) {
                 set_wscale_f16(false)
                 pin_kernel_backend("portable")
-                var trq <- load_model(path, QuantMode.q8)
+                var trq <- load_model_(path, QuantMode.q8)
                 if (trq.config.seq_len > 2048l) {
                     trq.config.seq_len = 2048l
                 }

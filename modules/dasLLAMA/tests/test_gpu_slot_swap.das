@@ -5,7 +5,6 @@ options stack = 524288
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration
 require dasllama/dasllama_math
-require dasllama/dasllama_image   // load_model_cached — the .dlim rail
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030 — only used inside the builtin_module_exists(vulkan) static_if; dead on a no-vulkan lint binary
 require _model_tier
@@ -72,7 +71,7 @@ def private slot_swap_cycle(path : string) : SwapResult {
     moe_gpu_tier_arm()
     with_job_que() {
         setup_dasllama_jobque_()
-        var tr <- load_model_cached(path, QuantMode.q8)
+        var tr <- load_model_(path, QuantMode.q8)
         r.armed0 = moe_gpu_resident_active()
         if (r.armed0) {
             let plen = 64l

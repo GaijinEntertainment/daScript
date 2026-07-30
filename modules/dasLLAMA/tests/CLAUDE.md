@@ -75,9 +75,20 @@ The `coverage` suite (test_kernel_coverage, arm `coverage`) is the KERNEL COVERA
 (CODEREVIEW rule 17): the small-model zoo swept across format/graph/batch/KV axes, then a
 report of per-kernel dispatch counts with LOUD WARNINGS for compiled-but-never-dispatched
 kernels — never an auto-dead verdict. Run it BEFORE deleting any kernel; a NEW kernel's
-small-model run joins it. Small-tier warnings for MoE/mx4/PLE-batch/MTP kernels are expected
-(their carriers sit above the tier). The vulkan half here is the device-free rail unit; the
-serving vulkan census runs on the PC box.
+small-model run joins it. Small-tier warnings for kernels whose carriers sit above the tier
+(MoE/mx4/suppress) are expected — their census rows serve only under `DASLLAMA_PARITY_FULL=1`;
+the served-count floor is asserted only on family-unfiltered runs. The vulkan half here is
+the device-free rail unit; the serving vulkan census runs on the PC box.
+
+## Model loads — never the image rail (CODEREVIEW rule 20)
+
+Suites load models with `load_model_` (the direct gguf load) — never `load_model` /
+`load_model_cached` (the `.dlim` image rail). The rail stamps every mint with the box
+identity (backend pin, wscale, tune manifest) and GC-purges sibling flavors; a suite child's
+pinned identity differs from the serving rig's, so a suite on the rail both re-mints multi-GB
+images the rig cannot use and purges the flavors the rig depends on. Image-rail coverage
+(mint, map, GC, flavors) lives in the image suites alone (`test_model_image`,
+`test_model_image_vulkan`).
 
 ## Blob-only Metal fixtures (the two-model pattern)
 
@@ -100,7 +111,8 @@ model blocks tagged with a listed family run — `family_on(t, name)` in
 (the `kernels` suite, the image `mechanics` arm) carry no tag and always run. Family tokens
 today: `llama` (all four metal suites + the image smol arm), `qwen2`, `qwen3`, `phi3`,
 `gemma2`, `gemma3`, `gemma4`, `qwen3moe`, `gemma4moe`, `gptoss`, `qwen35`, `qwen35moe`, `qwen2moe` (the support-matrix family cells), `gemma`,
-`ultravox`, `whisper`, `voxtral`, `parakeet`, `qwen3a`, `canary`, `gemma4a` (image suite arms).
+`ultravox`, `whisper`, `voxtral`, `parakeet`, `qwen3a`, `canary`, `gemma4a` (image suite arms),
+`gemma4e` (the coverage-census E4B row).
 When profiling one family across formats, gate each round with
 `--arm <arms> --family <fam>` instead of the whole zoo. Tag every NEW model-loading block
 with its family or it silently joins every family's gate.

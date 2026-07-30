@@ -608,9 +608,9 @@ def private gemma4_counting_prompt() : string {
 }
 
 // Text-prompt variant of parity_ok for fixtures that encode in-test (needs the tokenizer, so
-// load_model instead of load_gguf); same seq cap + pinned bit-exact kernels via parity_gen_ok.
+// load_model_ instead of load_gguf); same seq cap + pinned bit-exact kernels via parity_gen_ok.
 def private parity_text_ok(path : string; quant : QuantMode; text : string; want : array<int64>) : bool {
-    var tr <- load_model(path, quant)
+    var tr <- load_model_(path, quant)
     if (tr.config.seq_len > 2048l) {
         tr.config.seq_len = 2048l
     }
@@ -761,7 +761,7 @@ def test_parity_gptoss_20b(t : T?) {
         }
         let path = path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf")
         if (!model_available(t, path)) return
-        var tr <- load_model(path, QuantMode.q8)
+        var tr <- load_model_(path, QuantMode.q8)
         if (tr.config.seq_len > 2048l) {
             tr.config.seq_len = 2048l
         }

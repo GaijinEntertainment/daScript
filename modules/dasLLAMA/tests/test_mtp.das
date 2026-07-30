@@ -189,7 +189,7 @@ def test_mtp_output_invariance(t : T?) {
         }
         let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
         if (!model_available(t, path)) return
-        var tr <- load_model(path, QuantMode.q8)   // load_model: the prose arm encodes in-test
+        var tr <- load_model_(path, QuantMode.q8)   // load_model: the prose arm encodes in-test
         tr.config.seq_len = 2048l
         with_pinned_kernels() {
             // the counting fixture is accept-heavy: exercises the 2-row batched accept path + backfill
@@ -272,7 +272,7 @@ def test_mtp_invariance_glm(t : T?) {
         }
         let path = path_join(models_dir(), "glm45air/Q4_K_M/GLM-4.5-Air-Q4_K_M-00001-of-00002.gguf")
         if (!model_available(t, path)) return
-        var tr <- load_model(path, QuantMode.q8)   // load_model: this arm encodes its prompt in-test
+        var tr <- load_model_(path, QuantMode.q8)   // load_model: this arm encodes its prompt in-test
         t |> equal(tr.config.n_layer_nextn, 1l)    // head ENABLED, not disabled over the table copies
         t |> equal(tr.config.n_layers, 46l)        // block_count 47 - nextn 1
         // the two properties that make this arm load-bearing — asserted so a future file losing

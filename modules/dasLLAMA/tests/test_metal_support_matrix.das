@@ -293,7 +293,7 @@ def test_metal_support_matrix(t : T?) {
 
             // ===== q8 weights, f32 scale plane =====
             set_wscale_f16(false)
-            var tr <- load_model(path, QuantMode.q8)
+            var tr <- load_model_(path, QuantMode.q8)
             tr.config.seq_len = min(tr.config.seq_len, 512l)
             var trg <- blob_twin(t, path, 512l)
             if (arm_on(t, "cells-q8")) {
@@ -404,7 +404,7 @@ def test_metal_support_matrix(t : T?) {
             if (!arm_on(t, "kq")) {
                 // filtered — the skip is already registered
             } elif (stat(kpath).is_valid) {
-                var trk <- load_model(kpath, QuantMode.q8)
+                var trk <- load_model_(kpath, QuantMode.q8)
                 trk.config.seq_len = min(trk.config.seq_len, 512l)
                 t |> success(trk.kquant_native, "Q4_K_M under a q8-mode load keeps native K-quant planes")
                 var trkg <- blob_twin(t, kpath, 512l)
@@ -616,7 +616,7 @@ def private family_cells(t : T?; path, family, tag : string; expect_needs : uint
         if (!family_on(t, family) || !arm_on(t, "fam-{family}") || !model_available(t, path)) {
             return
         }
-        var tr <- load_model(path, QuantMode.q8)
+        var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         let derived = metal_needs(tr)
         let expected = MetalNeed(expect_needs)   // nolint:LINT005 — uint→named-bitfield relabel so the message prints bit NAMES
@@ -682,7 +682,7 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
         if (!family_on(t, family) || !arm_on(t, "fam-{family}") || !model_available(t, path)) {
             return
         }
-        var tr <- load_model(path, QuantMode.q8)
+        var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         let derived = metal_needs(tr)
         let expected = MetalNeed(expect_needs)   // nolint:LINT005 — uint→named-bitfield relabel so the message prints bit NAMES
@@ -782,7 +782,7 @@ def private qwen2moe_row(t : T?; path : string) {
         if (!family_on(t, "qwen2moe") || !arm_on(t, "fam-qwen2moe") || !model_available(t, path)) {
             return
         }
-        var tr <- load_model(path, QuantMode.q8)
+        var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         let derived = metal_needs(tr)
         t |> success((uint(derived) & uint(MetalNeed.neox | MetalNeed.qkv_bias)) == uint(MetalNeed.neox | MetalNeed.qkv_bias),
@@ -888,7 +888,7 @@ def private gemma4e_row(t : T?; path : string) {
         if (!family_on(t, "gemma4e") || !arm_on(t, "fam-gemma4e") || !model_available(t, path)) {
             return
         }
-        var tr <- load_model(path, QuantMode.q8)
+        var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         let want_bits = (MetalNeed.neox | MetalNeed.qk_norm | MetalNeed.v_norm | MetalNeed.attn_scale |
             MetalNeed.sliding | MetalNeed.pre_post_norm | MetalNeed.out_scale | MetalNeed.geglu |
@@ -1004,7 +1004,7 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
         if (!family_on(t, "gemma4moe") || !arm_on(t, "fam-gemma4moe") || !model_available(t, path)) {
             return
         }
-        var tr <- load_model(path, QuantMode.q8)
+        var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         let c = tr.config
         t |> success(c.moe && c.moe_dense_shexp && c.n_expert == 128l && c.n_expert_used == 8l,
@@ -1085,7 +1085,7 @@ def private gptoss_row(t : T?; path : string) {
         if (!family_on(t, "gptoss") || !arm_on(t, "fam-gptoss") || !model_available(t, path)) {
             return
         }
-        var tr <- load_model(path, QuantMode.q8)
+        var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         let c = tr.config
         t |> success(c.moe && tr.experts_mx4 && c.attn_sinks && c.n_expert == 32l && c.n_expert_used == 4l,
@@ -1166,7 +1166,7 @@ def private gemma2_window_row(t : T?; path : string) {
         if (!family_on(t, "gemma2") || !arm_on(t, "fam-gemma2") || !model_available(t, path)) {
             return
         }
-        var tr <- load_model(path, QuantMode.q8)
+        var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         tr.config.sliding_window = 160l
         var trg <- blob_twin(t, path, 512l)
@@ -1321,7 +1321,7 @@ def private gemma4_hetero_q8_row(t : T?; path : string) {
         if (!family_on(t, "gemma4") || !arm_on(t, "fam-gemma4") || !model_available(t, path)) {
             return
         }
-        var tr <- load_model(path, QuantMode.q8)
+        var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         var trg <- blob_twin(t, path, 512l)
         let count_prompt <- encode(tr, counting_prompt(1, 30), true, false)
@@ -1415,7 +1415,7 @@ def private gemma4_hetero_row(t : T?; path : string) {
         if (!family_on(t, "gemma4") || !arm_on(t, "fam-gemma4") || !model_available(t, path)) {
             return
         }
-        var tr <- load_model(path, QuantMode.q8)
+        var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         let derived = metal_needs(tr)
         let want_bits = (MetalNeed.neox | MetalNeed.qk_norm | MetalNeed.sliding | MetalNeed.pre_post_norm |

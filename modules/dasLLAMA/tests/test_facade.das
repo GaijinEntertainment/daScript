@@ -96,13 +96,13 @@ def test_facade_bpe(t : T?) {
 
 [test]
 def test_facade_model(t : T?) {
-    t |> run("load_model owns the tokenizer; model facade delegates") @(t : T?) {
+    t |> run("load_model_ owns the tokenizer; model facade delegates") @(t : T?) {
         let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> skip("{path} not present")
             return
         }
-        var m <- load_model(path, QuantMode.q8)
+        var m <- load_model_(path, QuantMode.q8)
         let text = "Hello, world"
         let via_model <- encode(m, text, true, false)
         let via_tok <- encode(m.tok, text, true, false)

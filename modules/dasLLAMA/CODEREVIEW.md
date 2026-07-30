@@ -46,6 +46,13 @@
     entry retire to a list released only at quiesce boundaries: unretained command buffers may
     still bind them. A new address-keyed cache without span+form in its identity is a review
     defect.
+20. **Test suites load models with `load_model_` — never the image rail.** `load_model` /
+    `load_model_cached` mint identity-stamped `.dlim` flavors and GC-purge siblings; a suite
+    child's pinned identity (backend pin, wscale, tune manifest) differs from the serving
+    rig's, so a suite on the rail both re-mints multi-GB images the rig cannot use and purges
+    the flavors the rig depends on. Image-rail coverage (mint, map, GC, flavors) belongs to
+    the image suites alone (`test_model_image`, `test_model_image_vulkan`). A non-image suite
+    calling the image rail is a review defect.
 
 ## Structure
 

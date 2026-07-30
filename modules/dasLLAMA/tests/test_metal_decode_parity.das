@@ -494,7 +494,7 @@ def test_metal_batch_decode_parity(t : T?) {
             let prior_backend = active_kernel_backend()
             set_wscale_f16(false)
             pin_kernel_backend("portable")   // row-major weights (the resident drivers' donor contract)
-            var tr <- load_model(path, QuantMode.q8)
+            var tr <- load_model_(path, QuantMode.q8)
             tr.config.seq_len = min(tr.config.seq_len, 512l)   // batch arms hold up to 12 sessions
             var trg <- blob_twin(t, path, 512l)
             var prompts3 <- [ <- encode(tr, counting_prompt(1, 60), true, false),
@@ -585,7 +585,7 @@ def test_metal_batch_decode_parity(t : T?) {
 
             // arm B6: wscale_f16 model — the dual-view s16 scale reads on both batch paths
             set_wscale_f16(true)
-            var tr16 <- load_model(path, QuantMode.q8)
+            var tr16 <- load_model_(path, QuantMode.q8)
             tr16.config.seq_len = min(tr16.config.seq_len, 512l)
             var tr16g <- blob_twin(t, path, 512l)
             var prompts16 <- [ <- encode(tr16, counting_prompt(1, 44), true, false),
@@ -614,7 +614,7 @@ def test_metal_batch_decode_parity(t : T?) {
             let path3b = path_join(models_dir(), "Llama-3.2-3B-Instruct-Q8_0.gguf")
             if (arm_on(t, "batchB7-partd")) {
                 if (stat(path3b).is_valid) {
-                    var tr3 <- load_model(path3b, QuantMode.q8)
+                    var tr3 <- load_model_(path3b, QuantMode.q8)
                     tr3.config.seq_len = min(tr3.config.seq_len, 512l)
                     var tr3g <- blob_twin(t, path3b, 512l)
                     var promptsd <- [ <- encode(tr3, counting_prompt(1, 48), true, false),
@@ -643,7 +643,7 @@ def test_metal_batch_decode_parity(t : T?) {
             let kpath_b = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q4_K_M.gguf")
             if (arm_on(t, "batchB8-kq")) {
                 if (stat(kpath_b).is_valid) {
-                    var trkb <- load_model(kpath_b, QuantMode.q8)
+                    var trkb <- load_model_(kpath_b, QuantMode.q8)
                     trkb.config.seq_len = min(trkb.config.seq_len, 512l)
                     var trkbg <- blob_twin(t, kpath_b, 512l)
                     var promptsk <- [ <- encode(trkb, counting_prompt(1, 52), true, false),
@@ -684,7 +684,7 @@ def test_metal_batch_decode_parity(t : T?) {
             let kpath_5 = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q5_K_M.gguf")
             if (arm_on(t, "batchB8-kq")) {
                 if (stat(kpath_5).is_valid) {
-                    var trk5 <- load_model(kpath_5, QuantMode.q8)
+                    var trk5 <- load_model_(kpath_5, QuantMode.q8)
                     trk5.config.seq_len = min(trk5.config.seq_len, 512l)
                     var trk5g <- blob_twin(t, kpath_5, 512l)
                     var prompts5 <- [ <- encode(trk5, counting_prompt(2, 47), true, false),
@@ -741,7 +741,7 @@ def test_metal_decode_parity(t : T?) {
             let prior_backend = active_kernel_backend()     // (every exit path runs the restore)
             set_wscale_f16(false)       // the resident path reads the f32 scale plane (declines on s16)
             pin_kernel_backend("portable")  // ...and ROW-MAJOR weights (same donor contract as prefill)
-            var tr <- load_model(path, QuantMode.q8)
+            var tr <- load_model_(path, QuantMode.q8)
             if (tr.config.seq_len > 2048l) {
                 tr.config.seq_len = 2048l
             }
@@ -898,7 +898,7 @@ def test_metal_decode_parity(t : T?) {
             // plane (llama.cpp q8_0 byte parity); a fresh load owns fresh weight regions
             if (arm_on(t, "arm8-s16")) {
                 set_wscale_f16(true)
-                var tr16 <- load_model(path, QuantMode.q8)
+                var tr16 <- load_model_(path, QuantMode.q8)
                 if (tr16.config.seq_len > 2048l) {
                     tr16.config.seq_len = 2048l
                 }
@@ -920,7 +920,7 @@ def test_metal_decode_parity(t : T?) {
             // addresses, and a stale cache hit serves the DEAD model's buffers (pre-W4 this
             // produced silent garbage continuations; the load-epoch flush is the fix)
             if (arm_on(t, "arm9-reload")) {
-                var trr <- load_model(path, QuantMode.q8)
+                var trr <- load_model_(path, QuantMode.q8)
                 if (trr.config.seq_len > 2048l) {
                     trr.config.seq_len = 2048l
                 }
@@ -944,7 +944,7 @@ def test_metal_decode_parity(t : T?) {
             let kpath = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q4_K_M.gguf")
             if (arm_on(t, "arm10-kq")) {
                 if (stat(kpath).is_valid) {
-                    var trk <- load_model(kpath, QuantMode.q8)
+                    var trk <- load_model_(kpath, QuantMode.q8)
                     if (trk.config.seq_len > 2048l) {
                         trk.config.seq_len = 2048l
                     }
@@ -970,7 +970,7 @@ def test_metal_decode_parity(t : T?) {
             // (1B, hs=64) scans the full depth. f16 + q8_0 mirrors (block-codec row offsets at
             // depth). The CPU control is depth-unbounded by construction.
             if (arm_on(t, "arm11-depth")) {
-                var trd <- load_model(path, QuantMode.q8)
+                var trd <- load_model_(path, QuantMode.q8)
                 trd.config.seq_len = min(trd.config.seq_len, 2176l)
                 var trdg <- blob_twin(t, path, 2176l)
                 var deep_p <- encode(trd, counting_prompt(1, 700), true, false)
@@ -997,7 +997,7 @@ def test_metal_decode_parity(t : T?) {
                 // other attention shape that never ran past the old cap
                 let path3d = path_join(models_dir(), "Llama-3.2-3B-Instruct-Q8_0.gguf")
                 if (stat(path3d).is_valid) {
-                    var trd3 <- load_model(path3d, QuantMode.q8)
+                    var trd3 <- load_model_(path3d, QuantMode.q8)
                     // seq 4224 makes the mirror slice ~470MB: the fresh 256MB arena MUST grow
                     // (M2.7 grow-on-demand exercised under parity — the rebuild re-mirrors)
                     trd3.config.seq_len = min(trd3.config.seq_len, 4224l)
@@ -1029,7 +1029,7 @@ def test_metal_decode_parity(t : T?) {
             if (arm_on(t, "arm12-dim")) {
                 let path8 = path_join(models_dir(), "Meta-Llama-3.1-8B-Instruct-Q8_0.gguf")
                 if (model_available(t, path8)) {
-                    var tr8 <- load_model(path8, QuantMode.q8)
+                    var tr8 <- load_model_(path8, QuantMode.q8)
                     tr8.config.seq_len = min(tr8.config.seq_len, 512l)
                     var tr8g <- blob_twin(t, path8, 512l)
                     batch_step_gate(t, tr8, tr8g, 8, KVDtype.f16, 0.5, 0.25, "B=8 dim4096 f16", [plen = 12])
@@ -1157,7 +1157,7 @@ def test_metal_prefill_poison(t : T?) {
             let prior_backend = active_kernel_backend()
             set_wscale_f16(false)
             pin_kernel_backend("portable")
-            var tr <- load_model(path, QuantMode.q8)
+            var tr <- load_model_(path, QuantMode.q8)
             tr.config.seq_len = min(tr.config.seq_len, 512l)
             var trg <- blob_twin(t, path, 512l)
             let prompt <- encode(tr, counting_prompt(1, 30), true, false)
@@ -1175,7 +1175,7 @@ def test_metal_prefill_poison(t : T?) {
             t |> success(d_clean < 4.0, "clean control: forced-feed GPU decode within 4 of CPU (measured {d_clean})")
             // fresh loads move the weights epoch — the first driver entry flushes g_regions,
             // so the poison below stands alone
-            var tr2 <- load_model(path, QuantMode.q8)
+            var tr2 <- load_model_(path, QuantMode.q8)
             tr2.config.seq_len = min(tr2.config.seq_len, 512l)
             var trg2 <- blob_twin(t, path, 512l)
             foreign_gpu_prefill(tr2, trg2)

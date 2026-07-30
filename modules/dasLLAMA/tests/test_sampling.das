@@ -51,7 +51,7 @@ def test_sampling_greedy_matches_oracle(t : T?) {
             t |> skip("{path} not present")
             return
         }
-        var m <- load_model(path, QuantMode.q8)
+        var m <- load_model_(path, QuantMode.q8)
         // Token-exact oracle gate: pin bit-exact classic attention + scalar activations (same reason
         // as test_parity — the flash / exp4 defaults are within tolerance but not bit-exact).
         let pa = get_prefill_attn_mode()
@@ -220,7 +220,7 @@ def test_sampling_deterministic(t : T?) {
             t |> skip("{path} not present")
             return
         }
-        var m <- load_model(path, QuantMode.q8)
+        var m <- load_model_(path, QuantMode.q8)
         let params = SamplingParams(temp = 0.8, top_k = 40l)
         let n = 16l
         var a : array<int64>

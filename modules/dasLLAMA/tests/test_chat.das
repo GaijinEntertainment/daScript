@@ -51,7 +51,7 @@ def private same(a, b : array<uint8>) : bool {
 // Load capped to a tiny context: these cases only render prompts, and the session's KV cache is sized
 // to config.seq_len — Phi/Llama-3's native 131072 would allocate ~64GB.
 def private load_capped(path : string) : Model {
-    var m <- load_model(path, QuantMode.q8)
+    var m <- load_model_(path, QuantMode.q8)
     m.config.seq_len = min(m.config.seq_len, 512l)
     return <- m
 }
@@ -214,7 +214,7 @@ def test_chat_end_to_end(t : T?) {
             t |> skip("{path} not present")
             return
         }
-        var m <- load_model(path, QuantMode.q8)
+        var m <- load_model_(path, QuantMode.q8)
         m.config.seq_len = min(m.config.seq_len, 512l)
         var reply = ""
         var ntok = 0l
