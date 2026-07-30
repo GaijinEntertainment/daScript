@@ -14,6 +14,7 @@
 #include "daScript/misc/performance_time.h"
 #include "daScript/misc/sysos.h"
 #include "daScript/misc/string_writer.h"   // LOG / LogLevel — env-gated module-load trace
+#include "daScript/misc/env_cfg.h"
 
 #include <sstream>
 #include <chrono>
@@ -416,7 +417,7 @@ namespace das {
             return int32_t(ws.ws_col);
         }
 #endif
-        if ( const char * cols = getenv("COLUMNS") ) {
+        if ( const char * cols = get_columns() ) {
             int32_t w = atoi(cols);
             if ( w>0 ) return w;
         }
@@ -1788,13 +1789,13 @@ namespace das {
 
     bool has_env_variable ( const char * var, Context * , LineInfoArg * ) {
         if ( !var ) return false;
-        auto res = getenv(var);
+        auto res = das_getenv(var);
         return res != nullptr;
     }
 
     char * get_env_variable ( const char * var, Context * context, LineInfoArg * at ) {
         if ( !var ) return nullptr;
-        auto res = getenv(var);
+        auto res = das_getenv(var);
         if ( !res ) return nullptr;
         return context->allocateString(res, at);
     }
@@ -1802,11 +1803,7 @@ namespace das {
     void set_env_variable ( const char * var, const char * value, Context *, LineInfoArg * ) {
         // process-wide; children spawned via popen/popen_argv inherit it
         if ( !var || !*var ) return;
-#ifdef _WIN32
-        _putenv_s(var, value ? value : "");
-#else
-        setenv(var, value ? value : "", 1);
-#endif
+        das_setenv(var, value);
     }
 
     enum class RegisterOnError {
@@ -1828,7 +1825,7 @@ namespace das {
     // 'missing prerequisite' into a visible "FAILED — <dlerror>" line.
     static bool trace_module_load() {
         static const bool on = []{
-            const char * e = getenv("DAS_TRACE_MODULE_LOAD");
+            const char * e = get_dasenv_trace_module_load();
             return e && e[0] && e[0] != '0';
         }();
         return on;

@@ -82,8 +82,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/imgui_migration.md` | Migrating v1 `imgui_boost` code to the v2 boost layer — the v1→v2 mapping table (`imgui_lint` IMGUI002 points here) |
 | `skills/imgui_playwright.md` | Writing/editing `modules/dasImgui/tests` playwright tests — the async rule (gate on the effect), the `wait_*` family, one-host-per-9090 |
 | `skills/imgui_recording.md` | Recording tutorial videos — `record_*.das` drivers, prepare → record → convert pipeline, `docs-assets` release upload |
-| `skills/environment_variables.md` | Reading or ADDING any environment variable — the full daslang set, plus the read-once/typed-default rules a new one must follow. dasLLAMA's own ~130 knobs are generated into `modules/dasLLAMA/ENVIRONMENT.md` |
-| `skills/perf_lint.md` | Adding rules to `daslib/perf_lint.das` — **and before declaring any hot path off-limits to allocation**: `[hot_path]` / `[no_alloc]` / `[no_env]` / `[no_io]` contracts (PERF026-028), `[cold_path]` to prune, `@scratch` to declare a reused buffer |
+| `skills/environment_variables.md` | Reading or ADDING any environment variable — the full daslang set, plus the read-once/typed-default rules a new one must follow, plus the C++ `env_cfg` accessor rail. dasLLAMA's own ~130 knobs are generated into `modules/| `skills/perf_lint.md` | Adding rules to `daslib/perf_lint.das` — **and before declaring any hot path off-limits to allocation**: `[hot_path]` / `[no_alloc]` / `[no_env]` / `[no_io]` contracts (PERF026-028), `[cold_path]` to prune, `@scratch` to declare a reused buffer |
 | `skills/style_lint.md` | Adding rules to `daslib/style_lint.das` |
 | `skills/strings.md` | Any `.das` string operation — `find`/`replace`/`split`/parsing/`build_string`/`peek_data` (covers `strings`, `daslib/strings_boost`, `daslib/strings_convert`) |
 | `skills/regex.md` | Writing regular expressions in `.das` code |
