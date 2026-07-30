@@ -1,6 +1,7 @@
 options gen2
 options indenting = 4
 options persistent_heap
+options gc
 options no_global_variables = false
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
@@ -499,7 +500,7 @@ def load_sf2_once() {
 }
 
 [export]
-def update() {
+def update() { // nolint:STYLE038 — linear per-frame UI flow
     if (!live_begin_frame()) {
         return
     }
@@ -643,6 +644,7 @@ def main {
     init()
     while (!exit_requested()) {
         update()
+        maybe_collect_gc()
     }
     shutdown()
 }

@@ -608,6 +608,61 @@ under ``modules/dasImgui/examples/tutorial/`` with prose narrating the
 construction, and most embed a recorded video of the running app.
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
-   tutorials/imgui/index.rst
+   tutorials/imgui/application_lifecycle.rst
+   tutorials/imgui/boost_basics.rst
+   tutorials/imgui/widgets_tour.rst
+   tutorials/imgui/display_widgets.rst
+   tutorials/imgui/narrative_widgets.rst
+   tutorials/imgui/custom_widgets.rst
+   tutorials/imgui/layout.rst
+   tutorials/imgui/layout_primitives.rst
+   tutorials/imgui/docking.rst
+   tutorials/imgui/with_style.rst
+   tutorials/imgui/with_id.rst
+   tutorials/imgui/with_disabled.rst
+   tutorials/imgui/state_telemetry.rst
+   tutorials/imgui/containers.rst
+   tutorials/imgui/child.rst
+   tutorials/imgui/group.rst
+   tutorials/imgui/tree_node.rst
+   tutorials/imgui/collapsing_header.rst
+   tutorials/imgui/tab_bar.rst
+   tutorials/imgui/popup_modal.rst
+   tutorials/imgui/main_menu_bar.rst
+   tutorials/imgui/popup_window.rst
+   tutorials/imgui/flat_tooltips.rst
+   tutorials/imgui/drag_drop.rst
+   tutorials/imgui/live_reload.rst
+   tutorials/imgui/driving_outside.rst
+   tutorials/imgui/visual_aids_tour.rst
+   tutorials/imgui/narrative_layout_tour.rst
+   tutorials/imgui/edit_external_tour.rst
+   tutorials/imgui/recording.rst
+   tutorials/imgui/harness_headless_mode.rst
+   tutorials/imgui/data_table.rst
+   tutorials/imgui/file_dialog.rst
+   tutorials/imgui/window_size_constraints.rst
+   tutorials/imgui/with_tab_stop.rst
+   tutorials/imgui/color_button_hover.rst
+   tutorials/imgui/selectable_hover.rst
+   tutorials/imgui/drawlist.rst
+   tutorials/imgui/drag.rst
+   tutorials/imgui/slider.rst
+   tutorials/imgui/input_numeric.rst
+   tutorials/imgui/input_text.rst
+   tutorials/imgui/toggles.rst
+   tutorials/imgui/dropdown_select.rst
+   tutorials/imgui/color.rst
+   tutorials/imgui/buttons.rst
+   tutorials/imgui/plot.rst
+   tutorials/imgui/tree_image_misc.rst
+   tutorials/imgui/popups.rst
+   tutorials/imgui/edit_tab_item.rst
+   tutorials/imgui/icons.rst
+   tutorials/imgui/wrap_tab_bar.rst
+   tutorials/imgui/dynamic_fonts.rst
+   tutorials/imgui/texture_ref.rst
+   tutorials/imgui/item_flags.rst
+   tutorials/imgui/log_capture.rst

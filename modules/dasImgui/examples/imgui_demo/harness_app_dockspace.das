@@ -1,5 +1,6 @@
 options gen2
 options _comment_hygiene = true
+options gc
 
 require imgui/imgui_harness
 require app_dockspace
@@ -40,6 +41,7 @@ def main() {
     init()
     while (!exit_requested()) {
         update()
+        harness_maybe_collect_gc()
     }
     shutdown()
 }

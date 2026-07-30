@@ -8,7 +8,6 @@ class GlfwGen : CppGenBind {
     override func_to_stdout = false
     override generate_constant_decl = true
     glfw_skip_func : table<string; bool>
-    glfw_emscripten_skip : table<string>
     def GlfwGen {
         bind_root = "{get_das_root()}/modules/dasGlfw/src"
         bind_module = "dasGLFW"
@@ -30,18 +29,12 @@ class GlfwGen : CppGenBind {
         glfw_skip_func <- {
             "glfwDestroyWindow" => true
         }
-        // GLFW functions emscripten's library_glfw.js (a GLFW 3.3.8 subset) does not
-        // provide: the 3.4 additions plus a few 3.3 funcs left unimplemented. All are
-        // unused across the codebase + consumers (audited), so skip-on-web is fail-closed.
-        glfw_emscripten_skip <- {
-            "glfwGetError", "glfwGetGamepadName", "glfwGetGamepadState",
-            "glfwGetMonitorUserPointer", "glfwGetPlatform", "glfwGetWindowTitle",
-            "glfwInitAllocator", "glfwInitHint", "glfwPlatformSupported",
-            "glfwSetMonitorUserPointer", "glfwUpdateGamepadMappings"
-        }
-    }
-    def override emscripten_skip_function(function_name : string) : bool {
-        return key_exists(glfw_emscripten_skip, function_name)
+        // No emscripten_skip_function override: the 11 GLFW functions emcc's JS GLFW
+        // (library_glfw.js) does not provide are implemented as honest C stubs in
+        // src/glfw_emscripten_stubs.c, so the full 3.4 surface registers on web too.
+        // Skipping registration is NOT fail-closed there — a host-cross-compiled card
+        // resolves referenced externs by mangled name at startup, and a das-visible
+        // function missing from the wasm-side module is a startup fatal.
     }
     def override skip_const(name : string) : bool {
         return name |> starts_with("GL_")

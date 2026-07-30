@@ -629,6 +629,11 @@ ENDMACRO()
 
 ADD_EXAMPLE_RUN("${PROJECT_SOURCE_DIR}/examples/dasbind/dasbind_example.das")
 
+# The canonical application template (init/update/shutdown + main with the GC
+# boundary) — running it per-PR keeps the shape everyone copies compiling and
+# terminating. exe=FALSE: interpreted run is the point, not another AOT exe.
+ADD_EXAMPLE_RUN("${PROJECT_SOURCE_DIR}/examples/application/main.das" FALSE)
+
 # CPU path tracer — headless render smoke (no GPU/GUI). Compat gate for the OpenGL<->Vulkan shader
 # harmonization arc (modules/dasOpenGL/HARMONIZATION_PLAN.md section 8.1): the GL path tracers share
 # this CPU rail, so a regression in the shared shader builtins surfaces here. exe=FALSE → interpreted
@@ -2109,14 +2114,13 @@ install(FILES ${DAS_DEBUGAPI_EXAMPLES}
 # Each per-example subdir (furier/, path_tracer_lab/, physarum_lab/) is a daspkg
 # -project-root: its own .das_package names the package and points release_main at the
 # shared source one level up, so those manifests are load-bearing for the cross-compile
-# path and must ship beside the .das. modules/ holds daspkg-installed deps (gitignored
-# build artifacts), so it stays excluded. dasImgui itself is in-tree now.
+# path and must ship beside the .das. The manifests declare no deps (dasImgui is
+# in-tree); the modules/ EXCLUDE guards against stale local daspkg installs.
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/graphics/
     DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/graphics
     FILES_MATCHING
         PATTERN "*.das"
         PATTERN ".das_package"
-        PATTERN ".gitignore"
         PATTERN "README.md"
     PATTERN "modules" EXCLUDE
     PATTERN ".daspkg_cache" EXCLUDE

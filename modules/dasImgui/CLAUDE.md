@@ -2,7 +2,7 @@
 
 dasImgui is the daslang binding + boost-v2 wrapper layer for [Dear ImGui](https://github.com/ocornut/imgui), **in-tree at `modules/dasImgui/`** and built by default (root CMake option `DAS_IMGUI_DISABLED`, default `OFF`; needs the in-tree dasGlfw + dasClipboard). It ships the C++ native binding (`bind/`, `src/`; also a `dasModuleImgui.shared_module` for DLL builds), the boost-v2 wrapper layer (`widgets/` — `[widget]` / `[container]` / `with_*` macros, telemetry, default-on lint), the `imguiApp` (windowed GLFW+GL) and `imguiAppHeadless` (no display, real ImGui ctx, CPU font atlas) harness backends, and examples under `examples/`.
 
-The old standalone repo (borisbat/dasImgui) is archived with full history. `daspkg` recognizes `require_package("dasImgui")` as in-tree and reports *part of this daslang tree — nothing to install*; example `.das_package` manifests deliberately KEEP the declaration (the wasm release flow needs it).
+The old standalone repo (borisbat/dasImgui) is archived with full history. `daspkg` recognizes `require_package("dasImgui")` as in-tree and reports *part of this daslang tree — nothing to install*; in-repo example `.das_package` manifests do NOT declare it (`daspkg release` — native and wasm — discovers module archives from the compiled require chain via `daslang -exe --list-shared-modules`; the manifest `dependencies()` section drives only the install flow, which has nothing to install for an in-tree module).
 
 ## Locations
 

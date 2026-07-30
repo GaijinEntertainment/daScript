@@ -1,5 +1,6 @@
 options gen2
 options _comment_hygiene = true
+options gc
 
 require math
 require strings
@@ -158,6 +159,7 @@ def main() {
     init()
     while (!exit_requested()) {
         update()
+        maybe_collect_gc()
     }
     shutdown()
 }

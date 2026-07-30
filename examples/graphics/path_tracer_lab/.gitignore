@@ -1,3 +1,0 @@
-# daspkg install (or a local dev junction) populates modules/ with the dasImgui dep;
-# it's a build artifact, resolved from the package index / .das_package at release time.
-modules/

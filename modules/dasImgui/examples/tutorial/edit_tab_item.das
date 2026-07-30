@@ -1,5 +1,6 @@
 options gen2
 options _comment_hygiene = true
+options gc
 
 require daslib/safe_addr
 require imgui
@@ -135,6 +136,7 @@ def main() {
     init()
     while (!exit_requested()) {
         update()
+        maybe_collect_gc()
     }
     shutdown()
 }

@@ -18,7 +18,7 @@ related **families** — each gated into the v2 surface through the allow-lists 
 "binding is usable" gate, not just "it compiles").
 
 This is custom-widget territory: reach for these when the boost widget layer
-(see :doc:`/reference/tutorials/imgui/index`) doesn't expose what you need and you want to build a
+(see :ref:`tutorials_imgui`) doesn't expose what you need and you want to build a
 widget from the same parts ImGui itself uses.
 
 **Surface conventions.** Each family is exposed in one of three shapes:

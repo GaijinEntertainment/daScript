@@ -5,6 +5,7 @@ options _comment_hygiene = true
 // per-file so the educational `text((text=...))` line below renders instead
 // of becoming a hard build error.
 options _allow_imgui_legacy = true
+options gc
 
 require imgui/imgui_harness
 
@@ -60,6 +61,7 @@ def main() {
     init()
     while (!exit_requested()) {
         update()
+        harness_maybe_collect_gc()
     }
     shutdown()
 }

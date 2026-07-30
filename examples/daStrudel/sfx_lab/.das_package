@@ -14,7 +14,6 @@ def package() {
 
 [export]
 def dependencies(version : string) {
-    require_package("dasImgui")
     require_package("dasImguiImplot")
 }
 

@@ -90,6 +90,9 @@
   .dl-bar-row { display: flex; align-items: center; gap: 14px; padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.03); }
   .dl-bar-row:last-child { border-bottom: 0; }
   .dl-bar-row:hover { background: rgba(232, 161, 58, 0.04); }
+  /* bars mode carries the same click-to-expand receipt as the table rows */
+  .dl-bar-row.js-bar-expand { cursor: pointer; }
+  .dl-bar-receipt { padding: 4px 0 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.03); }
   .dl-bar-label { flex: 0 0 250px; overflow: hidden; color: var(--fg); line-height: 1.35; }
   .dl-bar-label .dl-dim2 { display: block; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .dl-bar-pair { flex: 1 1 auto; min-width: 220px; display: flex; flex-direction: column; gap: 3px; }
@@ -166,9 +169,9 @@
   /* annotated row: the mark says "there is a hand-written note in this receipt" */
   .dl-note-mark { color: var(--amber); font-size: 11px; }
   .dl-bench-receipt .dl-receipt-note { color: var(--amber); }   /* the hand-written note stands out from the receipt plumbing */
-  /* the note itself, instantly, from anywhere in the model cell — not a delayed balloon on a 10px glyph */
-  td[data-note] { position: relative; cursor: help; }
-  td[data-note]:hover::after {
+  /* the note itself, instantly, from anywhere in the model cell (or the bar label) — not a delayed balloon on a 10px glyph */
+  td[data-note], .dl-bar-label[data-note] { position: relative; cursor: help; }
+  td[data-note]:hover::after, .dl-bar-label[data-note]:hover::after {
     content: attr(data-note);
     position: absolute; left: 12px; top: calc(100% - 4px); z-index: 40;
     width: max-content; max-width: 460px;
