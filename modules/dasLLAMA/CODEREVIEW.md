@@ -91,3 +91,13 @@
     contract, never rename it. Matching responsibilities get MATCHING file names across
     backends (kernels/common/decode/prefill/shapes/lens); a backend-only capability lives in
     its matching role file, never a new grab-bag.
+16. **Vulkan descriptor sets build through `vk_set6`/`vk_write6`; kernel stages through the
+    shared helpers.** A hand-rolled `write_buf_desc` six-pack (+ `update_descriptor_sets` +
+    `hz_set_bits`) is a review defect — `vk_set6` allocates-and-writes, `vk_write6` rewrites in
+    place. Likewise a new kernel that re-pastes a stage an existing helper covers (`wg_rms_inv`,
+    `q8_blk_pack`/`q8k_*`, `kq_bt_*`, `kq_gemv_dm`/`q40_blk_d`, `fa_*`, `vk_region_rec`) is a
+    review defect — extend the helper family instead. Two hard constraints on such helpers: the
+    shader-function ABI takes only scalars/vectors/matrices/plain structs (fixed-array params
+    are error 50501 — restructure per-element), and float op ORDER is contractual (keep the
+    caller's `+=` granularity; never fold a sum before the accumulate). Deliberate variants
+    (coopmat pair, h128 flash twin, per-format scale folds) stay separate — don't "unify" them.
