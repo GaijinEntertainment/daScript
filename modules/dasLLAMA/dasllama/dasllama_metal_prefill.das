@@ -2158,9 +2158,7 @@ class MetalDnBa {
 // Registered as prefill override "metal" (DASLLAMA_PIN_PREFILL). One command buffer per prefill;
 // ONE commit+wait, then unified-memory readback hands x_b + per-layer roped-K/raw-V back to the CPU.
 
-var private g_pf_dev : MetalDevice?
-var private g_pf_queue : MetalCommandQueue?
-var private g_pf_failed = false
+var private g_pf_failed = false   // prefill PSO bring-up failed (the device latch is common's g_failed)
 var private @scratch g_pf_regions : table<uint64; MetalBuffer?>    // base address -> resident region; upload-once, steady-state [] is a hit
 // per-prefill transients, reused across calls (prefill orchestration is serial)
 var private @scratch g_pf_bks : array<MetalBuffer?>
@@ -2535,21 +2533,13 @@ def public metal_prefill_shutdown {
         metal_release(g_pf_pso_avmm)
         g_pf_pso_avmm = null
     }
-    if (g_pf_queue != null) {
-        metal_release(g_pf_queue)
-        g_pf_queue = null
-    }
-    if (g_pf_dev != null) {
-        metal_release(g_pf_dev)
-        g_pf_dev = null
-    }
     g_pf_failed = false
 }
 
 [cold_path]   // PSO compilation happens once per pipeline
 def private pf_compile_pso(source, entry : string; fastmath : bool; var ok : bool&) : MetalComputePipeline? {
     var err : string
-    var pso = pipeline_from_source(g_pf_dev, source, entry, fastmath, err)
+    var pso = pipeline_from_source(g_dev, source, entry, fastmath, err)
     if (pso == null) {
         to_log(LOG_ERROR, "dasLLAMA metal prefill: `{entry}` compile failed — {err}\n")
         ok = false
@@ -2565,13 +2555,11 @@ def private metal_prefill_init : bool {
     if (g_pf_failed) {
         return false
     }
-    g_pf_dev = metal_create_system_default_device()
-    if (g_pf_dev == null) {
+    if (!metal_common_init()) {   // ONE device + queue for the whole family (M3) — this also arms the hazard-rail knobs on prefill-first runs
         to_log(LOG_WARNING, "dasLLAMA metal prefill: no Metal device — prefill stays on the CPU\n")
         g_pf_failed = true
         return false
     }
-    g_pf_queue = metal_new_command_queue(g_pf_dev)
     var ok = true
     g_pf_pso_rms = pf_compile_pso(metal_rmsnorm_msl, metal_rmsnorm_msl_entry, metal_rmsnorm_msl_fastmath, ok)
     g_pf_pso_rope = pf_compile_pso(metal_rope_msl, metal_rope_msl_entry, metal_rope_msl_fastmath, ok)
@@ -2581,12 +2569,12 @@ def private metal_prefill_init : bool {
     g_pf_pso_softmax = pf_compile_pso(metal_attn_softmax_msl, metal_attn_softmax_msl_entry, metal_attn_softmax_msl_fastmath, ok)
     g_pf_pso_av = pf_compile_pso(metal_attn_av_msl, metal_attn_av_msl_entry, metal_attn_av_msl_fastmath, ok)
     g_pf_pso_swiglu = pf_compile_pso(metal_swiglu_msl, metal_swiglu_msl_entry, metal_swiglu_msl_fastmath, ok)
-    g_pf_one = metal_new_buffer(g_pf_dev, 4ul)
+    g_pf_one = metal_new_buffer(g_dev, 4ul)
     unsafe {
         var onep = reinterpret<float?>(metal_buffer_contents(g_pf_one))
         onep[0] = 1.0
     }
-    g_pf_zero = metal_new_buffer(g_pf_dev, 4ul)
+    g_pf_zero = metal_new_buffer(g_dev, 4ul)
     unsafe {
         var zp = reinterpret<uint?>(metal_buffer_contents(g_pf_zero))
         zp[0] = 0u
@@ -2667,7 +2655,7 @@ def private metal_prefill_init : bool {
     g_pf_pso_dn_ba = pf_compile_pso(metal_dn_ba_msl, metal_dn_ba_msl_entry, metal_dn_ba_msl_fastmath, ok)
     g_pf_pso_sigmul = pf_compile_pso(metal_sigmul_msl, metal_sigmul_msl_entry, metal_sigmul_msl_fastmath, ok)
     g_pf_pso_axpy_sig = pf_compile_pso(metal_axpy_sig_msl, metal_axpy_sig_msl_entry, metal_axpy_sig_msl_fastmath, ok)
-    g_pf_mx4_vtab = metal_new_buffer(g_pf_dev, 64ul)
+    g_pf_mx4_vtab = metal_new_buffer(g_dev, 64ul)
     unsafe {
         var vp = reinterpret<float?>(metal_buffer_contents(g_pf_mx4_vtab))
         let mags = fixed_array(0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0)
@@ -2680,7 +2668,7 @@ def private metal_prefill_init : bool {
         g_pf_failed = true
         return false
     }
-    to_log(LOG_INFO, "dasLLAMA metal prefill: resident path live on {metal_device_name(g_pf_dev)}\n")
+    to_log(LOG_INFO, "dasLLAMA metal prefill: resident path live on {metal_device_name(g_dev)}\n")
     return true
 }
 
@@ -2691,7 +2679,7 @@ def private pf_upload_region(src : void?; bytes : uint64) : MetalBuffer? {
         return g_pf_regions[key]
     }
     // UNTRACKED: weights are GPU-read-only (written once, before any commit) — tracking ~450 of them made scheduler dependency analysis the dominant non-GPU cost (~70ms/prefill on 3B)
-    var buf = metal_new_buffer_untracked(g_pf_dev, bytes)
+    var buf = metal_new_buffer_untracked(g_dev, bytes)
     unsafe {
         memcpy(metal_buffer_contents(buf), src, bytes)
     }
@@ -2701,22 +2689,22 @@ def private pf_upload_region(src : void?; bytes : uint64) : MetalBuffer? {
 
 // one tensor's slice of the whole-model blob on THIS driver's device (blob_of's pf twin)
 def private pf_blob_of(t : Model; off : int64) : tuple<buf : MetalBuffer?; boff : uint64> {
-    return blob_of(g_pf_dev, t, off)
+    return blob_of(g_dev, t, off)
 }
 
 def private pf_bf16_of(t : Model; off : int64) : tuple<buf : MetalBuffer?; boff : uint64> {
-    return bf16_of(g_pf_dev, t, off)
+    return bf16_of(g_dev, t, off)
 }
 
 def private pf_uniform_u32(v : uint) : MetalBuffer? {
-    var buf = pool_acquire_untracked(g_pf_upool, g_pf_dev, 4ul)
+    var buf = pool_acquire_untracked(g_pf_upool, g_dev, 4ul)
     var p = unsafe(reinterpret<uint?>(metal_buffer_contents(buf)))
     unsafe(p[0]) = v
     return buf
 }
 
 def private pf_uniform_f32(v : float) : MetalBuffer? {
-    var buf = pool_acquire_untracked(g_pf_upool, g_pf_dev, 4ul)
+    var buf = pool_acquire_untracked(g_pf_upool, g_dev, 4ul)
     var p = unsafe(reinterpret<float?>(metal_buffer_contents(buf)))
     unsafe(p[0]) = v
     return buf
@@ -2828,8 +2816,8 @@ def private enc_gemm_mm(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff
 // + the f16 d tail at doff). Same grid/tgmem as enc_gemm_mm.
 def private pf_enc_kq_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows : int64;
                               bx, by, bk, bn : MetalBuffer?; mp : int64; yoff : uint64 = 0ul) {
-    let bq = kq_quants_of(g_pf_dev, t, fmt, woff)
-    let bs = kq_scales_of(g_pf_dev, t, fmt, woff)
+    let bq = kq_quants_of(g_dev, t, fmt, woff)
+    let bs = kq_scales_of(g_dev, t, fmt, woff)
     if (fmt == KqFmt.k6) {
         let twin6 = g_pf_kq_mm6_tensor && g_pf_pso_kq_mm6_t != null
         kn_pipeline(enc, twin6 ? g_pf_pso_kq_mm6_t : g_pf_pso_kq_mm6)
@@ -2862,8 +2850,8 @@ def private pf_enc_kq_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt
 // kernels' PSOs, prefill-owned twins
 def private pf_enc_kq_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows : int64;
                            bx : MetalBuffer?; xoff : uint64; by, bn, bd : MetalBuffer?) {
-    let bq = kq_quants_of(g_pf_dev, t, fmt, woff)
-    let bs = kq_scales_of(g_pf_dev, t, fmt, woff)
+    let bq = kq_quants_of(g_dev, t, fmt, woff)
+    let bs = kq_scales_of(g_dev, t, fmt, woff)
     if (fmt == KqFmt.k6) {
         kn_pipeline(enc, g_pf_pso_kq6)
         kn_buffer(enc, bs.buf, bs.doff, 0)
@@ -3024,7 +3012,7 @@ def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; st
         hz_gate(enc)
         kn_dispatch(enc, uint3(uint(tiles), uint(rows / 64l), uint(ne)), uint3(128u, 1u, 1u))
     } elif (fmt == KqFmt.q51) {
-        let qp = q51_planes_of(g_pf_dev, t, stack_off)
+        let qp = q51_planes_of(g_dev, t, stack_off)
         kn_pipeline(enc, g_pf_pso_moe_mm_q51)
         kn_tgmem(enc, metal_moe_mulmm_q51_msl_tgmem, 0)
         kn_buffer(enc, qp.sbuf, qp.soff, 0)
@@ -3047,8 +3035,8 @@ def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; st
         hz_gate(enc)
         kn_dispatch(enc, uint3(uint(tiles), uint(rows / 64l), uint(ne)), uint3(128u, 1u, 1u))
     } else {
-        let bq = kq_quants_of(g_pf_dev, t, fmt, stack_off)
-        let bs = kq_scales_of(g_pf_dev, t, fmt, stack_off)
+        let bq = kq_quants_of(g_dev, t, fmt, stack_off)
+        let bs = kq_scales_of(g_dev, t, fmt, stack_off)
         if (fmt == KqFmt.k6) {
             kn_pipeline(enc, g_pf_pso_moe_mm_k6)
             kn_tgmem(enc, metal_moe_mulmm_k6_msl_tgmem, 0)
@@ -3091,7 +3079,7 @@ def private pf_enc_moe_mm_mx4(enc : MetalComputeEncoder?; t : Model; stack_off, 
                               contiguous : bool = false) {
     let tiles = (npos + 31l) / 32l
     let ne = t.config.n_expert
-    let mp = mx4_of(g_pf_dev, t, stack_off)
+    let mp = mx4_of(g_dev, t, stack_off)
     let twin = g_pf_moe_mm_mx4_tensor && contiguous && g_pf_pso_moe_mm_mx4_t != null
     kn_pipeline(enc, twin ? g_pf_pso_moe_mm_mx4_t : g_pf_pso_moe_mm_mx4)
     kn_tgmem(enc, twin ? metal_moe_mulmm_mx4_t_msl_tgmem : metal_moe_mulmm_mx4_msl_tgmem, 0)
@@ -3581,10 +3569,6 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var dn_state_base = 0ul
     var dn_conv_base = 0ul
     if (dn) {
-        if (!metal_common_init()) {   // the mirror allocates on the shared decode-side device
-            decline(MetalPrefillDecline.device)
-            return false
-        }
         var dm = dn_mirror_prepare(s, start_pos, dn_mirror_regions(t))
         if (!dm.ok) {
             decline(MetalPrefillDecline.dn_state)
@@ -3625,12 +3609,12 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let bytes_att = uint64(n_heads * mp * nk64 * 4l)   // per-head score slabs: mp queries x nk64 keys
     let bytes_tab = uint64(npos * half * 4l)
     let bytes_tab_sw = uint64(npos * half_sw * 4l)   // the swa pair's row width is ITS class's hs/2
-    var bx = pool_acquire(g_pf_pool, g_pf_dev, bytes_x)
-    var bxb = pool_acquire(g_pf_pool, g_pf_dev, bytes_xb)
-    var bxb2 = pool_acquire(g_pf_pool, g_pf_dev, bytes_x)
-    var bq = pool_acquire(g_pf_pool, g_pf_dev, bytes_q)
-    var bhb = pool_acquire(g_pf_pool, g_pf_dev, bytes_h)
-    var bhb2 = pool_acquire(g_pf_pool, g_pf_dev, bytes_h)
+    var bx = pool_acquire(g_pf_pool, g_dev, bytes_x)
+    var bxb = pool_acquire(g_pf_pool, g_dev, bytes_xb)
+    var bxb2 = pool_acquire(g_pf_pool, g_dev, bytes_x)
+    var bq = pool_acquire(g_pf_pool, g_dev, bytes_q)
+    var bhb = pool_acquire(g_pf_pool, g_dev, bytes_h)
+    var bhb2 = pool_acquire(g_pf_pool, g_dev, bytes_h)
     // MoE (Wave C stage 2b): per-position routing + padded bucket panels (32-row tiles/expert);
     // g4moe adds the router-input/acc panel (bxb2 doubles as the pre_ffn2 expert input — the
     // serial encoder makes the reuse safe)
@@ -3645,16 +3629,16 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let bytes_minv = uint64(mtot * 4l)
     let bytes_mg = uint64(mpad * c.n_ff_exp * 4l)
     let bytes_mdn = uint64(mpad * dim * 4l)
-    var bmlg = moe ? pool_acquire(g_pf_pool, g_pf_dev, bytes_mlg) : null
-    var bmsel = moe ? pool_acquire(g_pf_pool, g_pf_dev, bytes_msel) : null
-    var bmcnt = moe ? pool_acquire(g_pf_pool, g_pf_dev, bytes_mcsr) : null
-    var bmbase = moe ? pool_acquire(g_pf_pool, g_pf_dev, bytes_mcsr) : null
-    var bmbkt = moe ? pool_acquire(g_pf_pool, g_pf_dev, bytes_mbkt) : null
-    var bminv = moe ? pool_acquire(g_pf_pool, g_pf_dev, bytes_minv) : null
-    var bmg = moe ? pool_acquire(g_pf_pool, g_pf_dev, bytes_mg) : null
-    var bmg2 = moe ? pool_acquire(g_pf_pool, g_pf_dev, bytes_mg) : null
-    var bmdn = moe ? pool_acquire(g_pf_pool, g_pf_dev, bytes_mdn) : null
-    var bmg4rt = g4moe ? pool_acquire(g_pf_pool, g_pf_dev, bytes_x) : null
+    var bmlg = moe ? pool_acquire(g_pf_pool, g_dev, bytes_mlg) : null
+    var bmsel = moe ? pool_acquire(g_pf_pool, g_dev, bytes_msel) : null
+    var bmcnt = moe ? pool_acquire(g_pf_pool, g_dev, bytes_mcsr) : null
+    var bmbase = moe ? pool_acquire(g_pf_pool, g_dev, bytes_mcsr) : null
+    var bmbkt = moe ? pool_acquire(g_pf_pool, g_dev, bytes_mbkt) : null
+    var bminv = moe ? pool_acquire(g_pf_pool, g_dev, bytes_minv) : null
+    var bmg = moe ? pool_acquire(g_pf_pool, g_dev, bytes_mg) : null
+    var bmg2 = moe ? pool_acquire(g_pf_pool, g_dev, bytes_mg) : null
+    var bmdn = moe ? pool_acquire(g_pf_pool, g_dev, bytes_mdn) : null
+    var bmg4rt = g4moe ? pool_acquire(g_pf_pool, g_dev, bytes_x) : null
     // deltanet scratch (recurrent layers) — GEMM outputs pad to mp rows like every panel
     let cd_dn = dn ? dn_conv_dim(c) : 0l
     let di_dn = dn ? c.ssm_d_inner : 0l
@@ -3663,20 +3647,20 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let bytes_dn_di = uint64(mp * di_dn * 4l)
     let bytes_dn_h = uint64(mp * nvh_dn * 4l)
     let bytes_dn_qg = uint64(mp * 2l * qd * 4l)
-    var bdnqkv = dn ? pool_acquire(g_pf_pool, g_pf_dev, bytes_dn_cd) : null
-    var bdncv = dn ? pool_acquire(g_pf_pool, g_pf_dev, bytes_dn_cd) : null
-    var bdnz = dn ? pool_acquire(g_pf_pool, g_pf_dev, bytes_dn_di) : null
-    var bdno = dn ? pool_acquire(g_pf_pool, g_pf_dev, bytes_dn_di) : null
-    var bdnb = dn ? pool_acquire(g_pf_pool, g_pf_dev, bytes_dn_h) : null
-    var bdng = dn ? pool_acquire(g_pf_pool, g_pf_dev, bytes_dn_h) : null
-    var bdnqg = c.q_gated ? pool_acquire(g_pf_pool, g_pf_dev, bytes_dn_qg) : null
-    var bdngate = c.q_gated ? pool_acquire(g_pf_pool, g_pf_dev, bytes_q) : null
-    var batt = pool_acquire(g_pf_pool, g_pf_dev, bytes_att)
-    var bcos = pool_acquire_untracked(g_pf_upool, g_pf_dev, bytes_tab)
-    var bsin = pool_acquire_untracked(g_pf_upool, g_pf_dev, bytes_tab)
+    var bdnqkv = dn ? pool_acquire(g_pf_pool, g_dev, bytes_dn_cd) : null
+    var bdncv = dn ? pool_acquire(g_pf_pool, g_dev, bytes_dn_cd) : null
+    var bdnz = dn ? pool_acquire(g_pf_pool, g_dev, bytes_dn_di) : null
+    var bdno = dn ? pool_acquire(g_pf_pool, g_dev, bytes_dn_di) : null
+    var bdnb = dn ? pool_acquire(g_pf_pool, g_dev, bytes_dn_h) : null
+    var bdng = dn ? pool_acquire(g_pf_pool, g_dev, bytes_dn_h) : null
+    var bdnqg = c.q_gated ? pool_acquire(g_pf_pool, g_dev, bytes_dn_qg) : null
+    var bdngate = c.q_gated ? pool_acquire(g_pf_pool, g_dev, bytes_q) : null
+    var batt = pool_acquire(g_pf_pool, g_dev, bytes_att)
+    var bcos = pool_acquire_untracked(g_pf_upool, g_dev, bytes_tab)
+    var bsin = pool_acquire_untracked(g_pf_upool, g_dev, bytes_tab)
     let dual_rope = has_dual_rope(c)
-    var bcos_swa = dual_rope ? pool_acquire_untracked(g_pf_upool, g_pf_dev, bytes_tab_sw) : null
-    var bsin_swa = dual_rope ? pool_acquire_untracked(g_pf_upool, g_pf_dev, bytes_tab_sw) : null
+    var bcos_swa = dual_rope ? pool_acquire_untracked(g_pf_upool, g_dev, bytes_tab_sw) : null
+    var bsin_swa = dual_rope ? pool_acquire_untracked(g_pf_upool, g_dev, bytes_tab_sw) : null
     var bks & = unsafe(g_pf_bks)
     var bvs & = unsafe(g_pf_bvs)
     bks |> clear()
@@ -3696,8 +3680,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
             continue
         }
         let bytes_kv_l = uint64(kvrows * layer_kv_dim(c, l) * 4l)   // per-layer panels: each class's width
-        bks |> push(pool_acquire(g_pf_pool, g_pf_dev, bytes_kv_l))
-        bvs |> push(pool_acquire(g_pf_pool, g_pf_dev, bytes_kv_l))
+        bks |> push(pool_acquire(g_pf_pool, g_dev, bytes_kv_l))
+        bvs |> push(pool_acquire(g_pf_pool, g_dev, bytes_kv_l))
     }
     // E-series PLE: side input uploaded LAYER-major ([l][p][ple] — the flat geglu ⊙ reads layer l's
     // block at one offset); gate outputs pad to mp rows like every GEMM panel
@@ -3713,11 +3697,11 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var bple_proj : MetalBuffer?
     var bple_tok : MetalBuffer?
     if (plef) {
-        bpleg = pool_acquire(g_pf_pool, g_pf_dev, bytes_ple_g)
+        bpleg = pool_acquire(g_pf_pool, g_dev, bytes_ple_g)
         if (ple_gpu) {
-            bple = pool_acquire(g_pf_pool, g_pf_dev, bytes_ple_side)
-            bple_proj = pool_acquire(g_pf_pool, g_pf_dev, bytes_ple_proj)
-            bple_tok = pool_acquire_untracked(g_pf_upool, g_pf_dev, uint64(npos * 4l))
+            bple = pool_acquire(g_pf_pool, g_dev, bytes_ple_side)
+            bple_proj = pool_acquire(g_pf_pool, g_dev, bytes_ple_proj)
+            bple_tok = pool_acquire_untracked(g_pf_upool, g_dev, uint64(npos * 4l))
             unsafe {
                 var tp = reinterpret<uint?>(metal_buffer_contents(bple_tok))
                 for (p in range64(npos)) {
@@ -3725,7 +3709,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 }
             }
         } else {
-            bple = pool_acquire_untracked(g_pf_upool, g_pf_dev, bytes_ple_side)
+            bple = pool_acquire_untracked(g_pf_upool, g_dev, bytes_ple_side)
             unsafe {
                 // transpose s.ple_inp (position-major, p*all + l*ple) into layer-major blocks
                 var dst = reinterpret<float?>(metal_buffer_contents(bple))
@@ -3871,8 +3855,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let gpu_logits = (!g_pf_logits_cpu && g_pf_env_logits &&
         !tied_f32 &&
         t.wcls_off >= 0l)
-    var bxf = gpu_logits ? pool_acquire(g_pf_pool, g_pf_dev, uint64(dim * 4l)) : null
-    var blog = gpu_logits ? pool_acquire(g_pf_pool, g_pf_dev, uint64(c.vocab_size * 4l)) : null
+    var bxf = gpu_logits ? pool_acquire(g_pf_pool, g_dev, uint64(dim * 4l)) : null
+    var blog = gpu_logits ? pool_acquire(g_pf_pool, g_dev, uint64(c.vocab_size * 4l)) : null
     var u_vocab = gpu_logits ? pf_uniform_u32(uint(c.vocab_size)) : null
     var u_flcap = (gpu_logits && c.final_logit_softcap > 0.0) ? pf_uniform_f32(c.final_logit_softcap) : null
     // suppressed token ids pin to -1e30 AFTER the cap (gemma4) — the CPU classifier's order
@@ -3880,7 +3864,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var bsupp : MetalBuffer?
     var u_nsupp : MetalBuffer?
     if (gpu_logits && nsupp > 0l) {
-        bsupp = pool_acquire_untracked(g_pf_upool, g_pf_dev, uint64(nsupp * 4l))
+        bsupp = pool_acquire_untracked(g_pf_upool, g_dev, uint64(nsupp * 4l))
         unsafe {
             var sp = reinterpret<uint?>(metal_buffer_contents(bsupp))
             for (i in range64(nsupp)) {
@@ -3902,10 +3886,10 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var u_dim2 : MetalBuffer?
     var u_wm_tot : MetalBuffer?
     if (warm) {
-        bwm_res = pool_acquire(g_pf_pool, g_pf_dev, uint64(npos * dim * 4l))
-        bwm_emb = pool_acquire(g_pf_pool, g_pf_dev, uint64(npos * dim * 4l))
-        bwm_cat = pool_acquire(g_pf_pool, g_pf_dev, uint64(mp * 2l * dim * 4l))
-        bwm_tmp = pool_acquire(g_pf_pool, g_pf_dev, uint64(npos * dim * 4l))
+        bwm_res = pool_acquire(g_pf_pool, g_dev, uint64(npos * dim * 4l))
+        bwm_emb = pool_acquire(g_pf_pool, g_dev, uint64(npos * dim * 4l))
+        bwm_cat = pool_acquire(g_pf_pool, g_dev, uint64(mp * 2l * dim * 4l))
+        bwm_tmp = pool_acquire(g_pf_pool, g_dev, uint64(npos * dim * 4l))
         u_dim2 = pf_uniform_u32(uint(2l * dim))
         u_wm_tot = pf_uniform_u32(uint(npos * dim))
         // shifted embeds: row p pairs the NEXT position's embed with hidden p — s.x_b still
@@ -3953,7 +3937,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     metal_commit(cb)
                     cbs |> push(cb)
                 }
-                cb = unret ? metal_new_command_buffer_unretained(g_pf_queue) : metal_new_command_buffer(g_pf_queue)
+                cb = unret ? metal_new_command_buffer_unretained(g_queue) : metal_new_command_buffer(g_queue)
                 enc = cap ? metal_new_compute_encoder_concurrent(cb) : metal_new_compute_encoder(cb)
                 if (cap) {
                     gr_arm(true)
