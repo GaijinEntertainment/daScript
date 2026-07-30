@@ -89,6 +89,12 @@ None of the following is mechanical, and each has bitten this tree:
    general-reader prose and the comment-hygiene rules in `CLAUDE.md`.
 6. **Do the commands actually run?** Paste them. `bin/daslang …` from the bundle root is
    the shipped form.
+7. **Are the rules general?** A skill states the rule and the mechanism that makes it
+   true — never the incident that taught it. No PR numbers, no dates, no machine-local
+   paths, no session war stories ("cost 20 minutes on #NNNN"). Incidents age into noise
+   and pin the reader to a context they don't have; the mechanism ("fail-fast:false
+   matrices stay in_progress around dead jobs") is what transfers. Provenance belongs in
+   memory or the PR description, not the skill.
 
 ## Registering it
 
