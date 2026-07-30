@@ -11,6 +11,8 @@ require dasllama/dasllama_rope       // the RoPE angle/table generation (Model-f
 require dasllama/dasllama_gpu_tier   // the device-cooperation seam (hooks the loader/dispatch arms call)
 require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs and false-flags this as unused
 require dasllama/dasllama_math
+require dasllama/dasllama_kv_codec  // the KV-cache codec families — kv_store_row/kv_load_row/kv_dot/kv_axpy dispatch into them
+require dasllama/dasllama_convert   // cvt_f32_to_f16/cvt_f16_to_f32 — the f16 rows (wscale plane + the f16 KV codec)
 require dasllama/dasllama_math_default  // registers the portable Q8·Q8 backend at [init] (the fallback everywhere)
 require dasllama/dasllama_math_aarch64_neon  // registers the arm64 SDOT Q8·Q8 backend at [init]; no-op off-ARM
 require ?llvm/daslib/llvm_tune dasllama/dasllama_math_gen  // nolint:STYLE030 — [init]-only: registers "arm64-gen" (the generated GEMM family, arm64 load-select tier). PATH guard: the module hard-requires llvm_tune, so it loads exactly when dasLLVM is mounted

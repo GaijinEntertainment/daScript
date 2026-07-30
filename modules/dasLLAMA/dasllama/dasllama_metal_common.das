@@ -10,6 +10,7 @@ require dasllama/dasllama_env  // env_int/env_flag: the shared typed readers + t
 require metal/das_metal_boost
 require dasllama/dasllama_common
 require dasllama/dasllama_math
+require dasllama/dasllama_kv_codec  // tq4_fill_signs — GPU and CPU must share the exact sign vector
 require dasllama/dasllama_metal_shapes public   // the extracted portable shape gates — re-exported so the driver family keeps its names
 
 // Shared infrastructure for the dasMetal resident drivers (the format-matrix arc's W1 split):

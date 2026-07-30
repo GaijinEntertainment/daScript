@@ -47,7 +47,8 @@
 9. **All new conversions go into `dasllama_convert.das`.** Any tensor format conversion —
    quantize/dequantize/transcode/encode, byte readers for a codec, numeric widen/narrow —
    lands there, regardless of platform or which loader wants it; a conversion implemented
-   anywhere else is a review defect.
+   anywhere else is a review defect. ONE carve-out: a conversion that is a KV-cache format's
+   store/read half belongs to its codec family — rule 13.
 10. **All RoPE angle/table generation goes into `dasllama_rope.das`.** The theta schedule,
     the `rope_freqs` divisor, fscale/mscale, and every materialized layout (two-tab tables,
     row tables, the packed device row). A fresh `1/pow(theta, 2j/hs)` loop anywhere else is
@@ -68,3 +69,16 @@
     fresh `if (fmt == ...)` ladder, never a second format-id space, never a local stride
     constant. An `int` carrying a format id crossing a module boundary is a review defect
     (pass the enum; cast at the IR/kernel-param boundary only).
+13. **The KV-cache runtime codec lives in `dasllama_kv_codec.das` — families stay WHOLE.**
+    A new cache format lands there as a complete family: store (quantize), read (dequant),
+    score dot, V-accumulate axpy — its block geometry constants shared inside the module. A
+    cache-format kernel implemented elsewhere, or a family member split across modules (an
+    encode in one module writing block bytes a dot in another reads), is a review defect.
+    Dispatch (`KVDtype`) stays at common's `kv_store_row`/`kv_load_row`/`kv_dot`/`kv_axpy`
+    seam. Load-time tensor conversion is rule 9's territory; per-token cache codecs are
+    this rule's.
+14. **A module gaining its first `[tuned]`/`[tune]` kernel joins the `[tune_scope]`
+    `covers=` list** (`dasllama_math_gen.das`) in the same change — otherwise the scope's
+    completeness check silently stops demanding sidecar entries for those kernels and tune
+    drift goes dark. Sidecars key kernels by BARE name, so MOVING a kernel between covered
+    modules needs no re-tune and no sidecar edit.

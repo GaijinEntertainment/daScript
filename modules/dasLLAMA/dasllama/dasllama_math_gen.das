@@ -51,7 +51,7 @@ require math
 // (tune_kernels). covers= names the modules whose [tuned] kernels this scope demands sidecar
 // entries for (the completeness set — drift shows up as a loud "missing:" list at startup).
 [tune_scope(name = "dasllama", tuner = "../harness/dasllama_tuner.das",
-            covers = "dasllama_math;dasllama_math_default;dasllama_quant;dasllama_math_aarch64_neon")]
+            covers = "dasllama_math;dasllama_math_default;dasllama_quant;dasllama_math_aarch64_neon;dasllama_kv_codec;dasllama_convert")]
 struct private DasllamaTuneScope {}
 
 //! The layout companion (six-function stamp): the repack interleave (mr) the stamped tile reads.

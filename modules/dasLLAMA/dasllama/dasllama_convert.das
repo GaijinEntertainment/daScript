@@ -10,6 +10,7 @@ require dasllama/dasllama_par        // maybe_parallel_for
 require dasllama/dasllama_math       // count_inline_run/count_parallel_dispatch_thru — the par macro's counters (same inversion dasllama_quant documents)
 require dasllama/dasllama_quant      // quantize_q8_0_into_ptr / quantize_q8_k_into_ptr — the requant row kernels
 require dasllama/dasllama_kqformat public   // KqFmt + the plane stride truth (K4_QSB et al.) — re-exported down the gguf chain
+require dasllama/dasllama_tune       // [tuned]: the f16 row converts carry per-box loop hints
 
 // Tensor format conversion, platform-neutral: the pure codec layer — LE byte readers, K-quant
 // superblock dequants (+ pointer twins), superblock->plane transcodes, plane dequants, the
@@ -651,7 +652,35 @@ def guard_dst(name : string; what : string; off, need, have : int64) {
     }
 }
 
-// Shared header for the three file-level transcodes: locate + type-check + bounds-check, return
+// ===== f16 row converts (generic f32 <-> binary16-in-uint16, [tuned]) =====
+// Dual-use and HOT: the f16 KV-cache codec's store/read (per token), the weight-scale plane
+// convert and gguf's bulk f16 dequant (load), and the Accelerate batch prep (per prefill chunk).
+
+//! f32 -> f16 row convert. Clamps to ±65504 so inf can NEVER enter a cache/plane —
+//! O(kv_dim) per token at the KV store seam, free next to the reads.
+[hint(unsafe_range_check, noalias = d, noalias = s)]
+def template cvt_f32_to_f16_template(var d : uint16 ?; s : float const ?; n : int64) : void {
+    for [tune = 1] (j in range64(n)) {
+        unsafe {
+            d[j] = uint16(f32_to_f16(clamp(s[j], -65504.0, 65504.0)))
+        }
+    }
+}
+[hint(unsafe_range_check, noalias = d, noalias = s), tuned]
+def cvt_f32_to_f16(var d : uint16?; s : float const?; n : int64) {}
+
+//! f16 -> f32 row convert (bulk dequant into f32 scratch).
+[hint(unsafe_range_check, noalias = d, noalias = s)]
+def template cvt_f16_to_f32_template(var d : float ?; s : uint16 const ?; n : int64) : void {
+    for [tune = 1] (j in range64(n)) {
+        unsafe {
+            d[j] = f16_to_f32(uint(s[j]))
+        }
+    }
+}
+[hint(unsafe_range_check, noalias = d, noalias = s), tuned]
+def cvt_f16_to_f32(var d : float?; s : uint16 const?; n : int64) {}
+
 // ===== batch activation requant (token-major image -> per-row Q8 planes) =====
 
 //! Threaded per-row Q8_0 requant of a token-major activation image (row p at x[p*n..] ->

@@ -6,6 +6,7 @@ require daslib/fio
 require math
 require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration
 require dasllama/dasllama_math
+require dasllama/dasllama_kv_codec  // quantize_tq4kv_row/cvt_tq4kv_to_f32 — the codec under probe
 require dasllama/dasllama_tokenizer
 require llvm/daslib/f16_cvt
 
