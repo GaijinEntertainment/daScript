@@ -5,6 +5,7 @@ require daslib/toml
 require daslib/json
 require daslib/json_boost   // ?["key"] ?? default lookups in the write_toml round-trip checks
 require daslib/math_bits
+require math            // is_finite / is_nan, for the finite-math host probe below
 require strings
 
 // IEEE-754 bit-pattern constants, same as daslib/toml.das uses internally —
@@ -222,8 +223,20 @@ def test_array_of_tables(t : T?) {
     }
 }
 
+// A host built -ffinite-math-only folds is_nan/is_finite and the nan compares, so a nan
+// round-trip cannot be observed there - the three tests below skip on such a host.
+def private host_folds_non_finite() : bool {
+    let inf = 1.0 / 0.0     // nolint:LINT006 — deliberate: the probe needs a real inf
+    return is_finite(inf) || !is_nan(-(inf / inf))  // nolint:LINT007 — inf/inf is how a nan is produced here
+}
+
 [test]
 def test_inf_nan(t : T?) {
+    if (host_folds_non_finite()) {
+        t |> skip("host runtime is built -ffinite-math-only: nan/inf values fold")
+        return
+    }
+
     t |> run("inf, -inf, nan") @@(t : T?) {
         var v : JsonValue? = expect_ok(t, "inf_nan", "p = inf\nm = -inf\nn = nan\n")
         var p : JsonValue? = get_object_field(v, "p")
@@ -322,6 +335,11 @@ def test_alphanum_bare_key(t : T?) {
 
 [test]
 def test_inf_nan_still_work_as_values(t : T?) {
+    if (host_folds_non_finite()) {
+        t |> skip("host runtime is built -ffinite-math-only: nan/inf values fold")
+        return
+    }
+
     t |> run("'x = inf' / 'x = -inf' / 'x = nan' still interpret as float values") @@(t : T?) {
         var v : JsonValue? = expect_ok(t, "inf_val", "p = inf\nm = -inf\nq = nan\n")
         var p : JsonValue? = get_object_field(v, "p")
@@ -671,6 +689,11 @@ def test_write_toml_tiny_huge_floats(t : T?) {
 
 [test]
 def test_write_toml_non_finite(t : T?) {
+    if (host_folds_non_finite()) {
+        t |> skip("host runtime is built -ffinite-math-only: nan/inf values fold")
+        return
+    }
+
     t |> run("inf / -inf / nan emit as TOML keywords") @@(t : T?) {
         var v = expect_ok(t, "wt_inf", "a = inf\nb = -inf\nc = nan\n")
         var err : string
