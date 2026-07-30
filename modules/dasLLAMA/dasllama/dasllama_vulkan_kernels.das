@@ -92,16 +92,24 @@ var @workgroup bt_ww4 : uint4[544]   // w tile: 32 cols x 16 chunks, stride 17. 
 var @workgroup bt_xs : float[256]    // x scales per (block, row); kq kernels use [row] only (per-256)
 var @workgroup bt_ws : float[256]    // w scales per (block, col)
 
+// this workgroup's region record from the batch meta's per-wg region map (word [3] points at it;
+// records are 4 words): x = weight base (per-format units), y = window-relative activation row
+// base, z = row count, w = the wg's tile index rebased to the region
+def private vk_region_rec : uint4 {
+    let rid = vk_meta[vk_meta[3u] + gl_WorkGroupID.x]
+    let rb = 4u + rid * 4u
+    return uint4(vk_meta[rb], vk_meta[rb + 1u], vk_meta[rb + 2u], gl_WorkGroupID.x - vk_meta[rb + 3u])
+}
+
 [compute_shader(local_size_x=256, name="q8_moe_batch_spv")]
 def q8_moe_batch {
     let n = vk_meta[0u]
     let d = vk_meta[1u]
-    let rid = vk_meta[vk_meta[3u] + gl_WorkGroupID.x]
-    let rb = 4u + rid * 4u
-    let wblk0 = vk_meta[rb]
-    let row0 = vk_meta[rb + 1u]
-    let cnt = vk_meta[rb + 2u]
-    let tix = gl_WorkGroupID.x - vk_meta[rb + 3u]
+    let reg = vk_region_rec()
+    let wblk0 = reg.x
+    let row0 = reg.y
+    let cnt = reg.z
+    let tix = reg.w
     let wtiles = (d + 31u) / 32u
     let xt = tix / wtiles
     let wt = tix % wtiles
@@ -205,12 +213,11 @@ var @workgroup cm_out : float[1024]    // 4 subgroups x 16x16 f32 scratch (bound
 def q8_moe_batch_cmf16 {
     let n = vk_meta[0u]
     let d = vk_meta[1u]
-    let rid = vk_meta[vk_meta[3u] + gl_WorkGroupID.x]
-    let rb = 4u + rid * 4u
-    let wblk0 = vk_meta[rb]
-    let row0 = vk_meta[rb + 1u]
-    let cnt = vk_meta[rb + 2u]
-    let tix = gl_WorkGroupID.x - vk_meta[rb + 3u]
+    let reg = vk_region_rec()
+    let wblk0 = reg.x
+    let row0 = reg.y
+    let cnt = reg.z
+    let tix = reg.w
     let wtiles = (d + 31u) / 32u
     let xt = tix / wtiles
     let wt = tix % wtiles
@@ -308,12 +315,11 @@ var @workgroup cmi_acc : float[1024]   // 4 subgroups x 16x16 f32 accumulator
 def q8_moe_batch_cmi8 {
     let n = vk_meta[0u]
     let d = vk_meta[1u]
-    let rid = vk_meta[vk_meta[3u] + gl_WorkGroupID.x]
-    let rb = 4u + rid * 4u
-    let wblk0 = vk_meta[rb]
-    let row0 = vk_meta[rb + 1u]
-    let cnt = vk_meta[rb + 2u]
-    let tix = gl_WorkGroupID.x - vk_meta[rb + 3u]
+    let reg = vk_region_rec()
+    let wblk0 = reg.x
+    let row0 = reg.y
+    let cnt = reg.z
+    let tix = reg.w
     let wtiles = (d + 31u) / 32u
     let xt = tix / wtiles
     let wt = tix % wtiles
@@ -376,12 +382,11 @@ var @workgroup cml_o : float16[1024]  // 4 warps x 16x16 f16-acc store bounce (e
 def q8_moe_batch_mm {
     let n = vk_meta[0u]
     let d = vk_meta[1u]
-    let rid = vk_meta[vk_meta[3u] + gl_WorkGroupID.x]
-    let rb = 4u + rid * 4u
-    let wblk0 = vk_meta[rb]
-    let row0 = vk_meta[rb + 1u]
-    let cnt = vk_meta[rb + 2u]
-    let tix = gl_WorkGroupID.x - vk_meta[rb + 3u]
+    let reg = vk_region_rec()
+    let wblk0 = reg.x
+    let row0 = reg.y
+    let cnt = reg.z
+    let tix = reg.w
     let wtiles = (d + 127u) / 128u
     let xt = tix / wtiles             // token (B) tile
     let wt = tix % wtiles             // weight (A) tile
@@ -584,11 +589,10 @@ var @workgroup cma_b : uint[2560]     // B tile: 128 token rows x one block
 def q8_moe_batch_mm_a {
     let n = vk_meta[0u]
     let d = vk_meta[1u]
-    let rid = vk_meta[vk_meta[3u] + gl_WorkGroupID.x]
-    let rb = 4u + rid * 4u
-    let wblk0 = vk_meta[rb]
-    let row0 = vk_meta[rb + 1u]
-    let tix = gl_WorkGroupID.x - vk_meta[rb + 3u]
+    let reg = vk_region_rec()
+    let wblk0 = reg.x
+    let row0 = reg.y
+    let tix = reg.w
     let wtiles = (d + 127u) / 128u
     let xt = tix / wtiles             // token (B) tile
     let wt = tix % wtiles             // weight (A) tile
@@ -729,12 +733,11 @@ var @workgroup cmm_b : uint[1280]     // B tile: 64 token rows x one block
 def q8_moe_batch_mm_m {
     let n = vk_meta[0u]
     let d = vk_meta[1u]
-    let rid = vk_meta[vk_meta[3u] + gl_WorkGroupID.x]
-    let rb = 4u + rid * 4u
-    let wblk0 = vk_meta[rb]
-    let row0 = vk_meta[rb + 1u]
-    let cnt = vk_meta[rb + 2u]
-    let tix = gl_WorkGroupID.x - vk_meta[rb + 3u]
+    let reg = vk_region_rec()
+    let wblk0 = reg.x
+    let row0 = reg.y
+    let cnt = reg.z
+    let tix = reg.w
     let wtiles = (d + 63u) / 64u
     let xt = tix / wtiles             // token (B) tile
     let wt = tix % wtiles             // weight (A) tile
@@ -846,12 +849,11 @@ def q8_moe_batch_mm_m {
 def kq_moe_batch_q40_cmf16 {
     let n = vk_meta[0u]
     let d = vk_meta[1u]
-    let rid = vk_meta[vk_meta[3u] + gl_WorkGroupID.x]
-    let rb = 4u + rid * 4u
-    let wsb0 = vk_meta[rb]
-    let row0 = vk_meta[rb + 1u]
-    let cnt = vk_meta[rb + 2u]
-    let tix = gl_WorkGroupID.x - vk_meta[rb + 3u]
+    let reg = vk_region_rec()
+    let wsb0 = reg.x
+    let row0 = reg.y
+    let cnt = reg.z
+    let tix = reg.w
     let wtiles = (d + 31u) / 32u
     let xt = tix / wtiles
     let wt = tix % wtiles
@@ -966,12 +968,11 @@ def decode_q8n(blk : VkBlockQ8N; bc, cib : uint2) : float16 {
 def q8n_moe_batch_cm2 {
     let n = vk_meta[0u]
     let d = vk_meta[1u]
-    let rid = vk_meta[vk_meta[3u] + gl_WorkGroupID.x]
-    let rb = 4u + rid * 4u
-    let wblk0 = vk_meta[rb]           // region base in 32-weight blocks (= 34B array elements)
-    let row0 = vk_meta[rb + 1u]       // window-relative activation row base
-    let cnt = vk_meta[rb + 2u]
-    let tix = gl_WorkGroupID.x - vk_meta[rb + 3u]
+    let reg = vk_region_rec()
+    let wblk0 = reg.x
+    let row0 = reg.y
+    let cnt = reg.z
+    let tix = reg.w
     let ttiles = (cnt + 127u) / 128u
     let xt = tix % ttiles             // token 128-tile (fastest)
     let wt = tix / ttiles             // weight 64-tile
@@ -3193,12 +3194,11 @@ def private kq_bt_store_y(xrow, cnt, row0, d, wt, word : uint; f : float4) {
 def kq_moe_batch_k4 {
     let n = vk_meta[0u]
     let d = vk_meta[1u]
-    let rid = vk_meta[vk_meta[3u] + gl_WorkGroupID.x]
-    let rb = 4u + rid * 4u
-    let wsb0 = vk_meta[rb]
-    let row0 = vk_meta[rb + 1u]
-    let cnt = vk_meta[rb + 2u]
-    let tix = gl_WorkGroupID.x - vk_meta[rb + 3u]
+    let reg = vk_region_rec()
+    let wsb0 = reg.x
+    let row0 = reg.y
+    let cnt = reg.z
+    let tix = reg.w
     let wtiles = (d + 31u) / 32u
     let xt = tix / wtiles
     let wt = tix % wtiles
@@ -3231,12 +3231,11 @@ def kq_moe_batch_k4 {
 def kq_moe_batch_q40 {
     let n = vk_meta[0u]
     let d = vk_meta[1u]
-    let rid = vk_meta[vk_meta[3u] + gl_WorkGroupID.x]
-    let rb = 4u + rid * 4u
-    let wsb0 = vk_meta[rb]
-    let row0 = vk_meta[rb + 1u]
-    let cnt = vk_meta[rb + 2u]
-    let tix = gl_WorkGroupID.x - vk_meta[rb + 3u]
+    let reg = vk_region_rec()
+    let wsb0 = reg.x
+    let row0 = reg.y
+    let cnt = reg.z
+    let tix = reg.w
     let wtiles = (d + 31u) / 32u
     let xt = tix / wtiles
     let wt = tix % wtiles
@@ -3276,12 +3275,11 @@ def kq_moe_batch_q40 {
 def kq_moe_batch_k5 {
     let n = vk_meta[0u]
     let d = vk_meta[1u]
-    let rid = vk_meta[vk_meta[3u] + gl_WorkGroupID.x]
-    let rb = 4u + rid * 4u
-    let wsb0 = vk_meta[rb]
-    let row0 = vk_meta[rb + 1u]
-    let cnt = vk_meta[rb + 2u]
-    let tix = gl_WorkGroupID.x - vk_meta[rb + 3u]
+    let reg = vk_region_rec()
+    let wsb0 = reg.x
+    let row0 = reg.y
+    let cnt = reg.z
+    let tix = reg.w
     let wtiles = (d + 31u) / 32u
     let xt = tix / wtiles
     let wt = tix % wtiles
@@ -3315,12 +3313,11 @@ def kq_moe_batch_k5 {
 def kq_moe_batch_k6 {
     let n = vk_meta[0u]
     let d = vk_meta[1u]
-    let rid = vk_meta[vk_meta[3u] + gl_WorkGroupID.x]
-    let rb = 4u + rid * 4u
-    let wsb0 = vk_meta[rb]
-    let row0 = vk_meta[rb + 1u]
-    let cnt = vk_meta[rb + 2u]
-    let tix = gl_WorkGroupID.x - vk_meta[rb + 3u]
+    let reg = vk_region_rec()
+    let wsb0 = reg.x
+    let row0 = reg.y
+    let cnt = reg.z
+    let tix = reg.w
     let wtiles = (d + 31u) / 32u
     let xt = tix / wtiles
     let wt = tix % wtiles
