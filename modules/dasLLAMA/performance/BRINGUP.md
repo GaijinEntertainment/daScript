@@ -223,6 +223,13 @@ fail bar as "suspicious — verify"). Exit is nonzero on any FAIL.
   (`DAS_TUNE_MODE=tune DAS_TUNE_MANIFEST=<box manifest> bin/daslang -jit
   modules/dasLLAMA/harness/dasllama_tuner.das`) and check the fresh winners against the stored
   rows' `tune` stamps before trusting deltas.
+- ⚠ A PARITY_FULL family-suite run PURGES the bench-flavor images: the suite saves its own
+  flavor (test-config identity hash) and the image GC removes every other sibling `.dlim` as
+  dead — the next oracle leg then FAILs those models with "cell did not measure" (the frozen
+  child refuses to re-mint, by design). Observed 2026-07-30: `--arm fam-gemma4` freed 34 GB of
+  "dead siblings" and blinded all three gemma cells. Re-mint with a minimal unfrozen run per
+  model (`lcpp_bench -- -m <gguf> --ngl 99 -p 16 -n 4 -r 1`), then re-run the cells with
+  `-o <substr>`. The GC-vs-foreign-flavor policy itself is an open design question.
 - **A verdict on a long board's tail cells is not evidence — re-run the cell solo.** Three
   times observed on the m1 (2026-07-30): the last cell of an 8-cell keep-going sweep under-read
   −6.5% pp (solo re-run: dead-on the store); the last model of the hours-long Jul-28 rig
