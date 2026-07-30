@@ -75,3 +75,21 @@ def test_find_regex_and_errors(t : T?) {
     t |> equal(state.error, "", "zero-width filtering is not an error")
     text_find_dispose(state)
 }
+
+[test]
+def test_find_reopen_rearms_jump(t : T?) {
+    var state = TextFindState()
+    text_find_open(state)
+    t |> equal(state.jump_revision, 0, "opening with no matches does not arm a jump")
+    state.query = "aa"
+    let _ = text_find_rebuild(state, "aa..aa", 1)
+    text_find_step(state, 1)
+    let jump_before = state.jump_revision
+    text_find_close(state)
+    text_find_open(state)
+    t |> equal(state.jump_revision, jump_before + 1, "reopening re-arms the jump")
+    t |> equal(state.current, 1, "reopening keeps the current match")
+    text_find_open(state)
+    t |> equal(state.jump_revision, jump_before + 1, "open while already open does not re-arm")
+    text_find_dispose(state)
+}

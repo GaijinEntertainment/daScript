@@ -482,6 +482,14 @@ def private ic_close(var ctx : IconCtx) { L(ctx, 6.0f, 6.0f, 18.0f, 18.0f); L(ct
 def private ic_check(var ctx : IconCtx) { L(ctx, 5.0f, 12.0f, 10.0f, 17.0f); L(ctx, 10.0f, 17.0f, 19.0f, 6.0f) }
 def private ic_chevron_right(var ctx : IconCtx) { L(ctx, 10.0f, 6.0f, 16.0f, 12.0f); L(ctx, 16.0f, 12.0f, 10.0f, 18.0f) }
 def private ic_chevron_down(var ctx : IconCtx) { L(ctx, 6.0f, 10.0f, 12.0f, 16.0f); L(ctx, 12.0f, 16.0f, 18.0f, 10.0f) }
+def private ic_chevron_up(var ctx : IconCtx) { L(ctx, 6.0f, 14.0f, 12.0f, 8.0f); L(ctx, 12.0f, 8.0f, 18.0f, 14.0f) }
+def private ic_regex(var ctx : IconCtx) {
+    // Asterisk top-right + dot bottom-left — the conventional regex mark.
+    L(ctx, 15.0f, 4.5f, 15.0f, 11.5f)
+    L(ctx, 12.0f, 6.25f, 18.0f, 9.75f)
+    L(ctx, 18.0f, 6.25f, 12.0f, 9.75f)
+    Disc(ctx, 7.0f, 17.5f, 1.8f)
+}
 def private ic_grip(var ctx : IconCtx) {
     Disc(ctx, 9.0f, 7.0f, 1.4f); Disc(ctx, 9.0f, 12.0f, 1.4f); Disc(ctx, 9.0f, 17.0f, 1.4f)
     Disc(ctx, 15.0f, 7.0f, 1.4f); Disc(ctx, 15.0f, 12.0f, 1.4f); Disc(ctx, 15.0f, 17.0f, 1.4f)
@@ -628,6 +636,8 @@ let private CATALOG <- [
     IconDef(name="check",         category="General",          draw=@@ ic_check),
     IconDef(name="chevron-right", category="General",          draw=@@ ic_chevron_right),
     IconDef(name="chevron-down",  category="General",          draw=@@ ic_chevron_down),
+    IconDef(name="chevron-up",    category="General",          draw=@@ ic_chevron_up),
+    IconDef(name="regex",         category="General",          draw=@@ ic_regex),
     IconDef(name="grip",          category="General",          draw=@@ ic_grip),
     IconDef(name="minus",         category="General",          draw=@@ ic_minus),
     IconDef(name="palette",       category="General",          draw=@@ ic_palette),

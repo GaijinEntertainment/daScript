@@ -8,6 +8,7 @@ require imgui public
 require imgui/imgui_boost_runtime public
 require imgui/imgui_boost_v2 public
 require imgui/imgui_widgets_builtin public
+require imgui/imgui_style_builtin
 require imgui/imgui_text_source_model public
 require daslib/regex
 require math
@@ -35,6 +36,11 @@ struct public TextFindState {
 }
 
 def public text_find_open(var state : TextFindState) {
+    // Reopening re-arms the jump: whatever cleared the view selection while
+    // the bar was closed, the current match gets re-selected and re-scrolled.
+    if (!state.open && state.current >= 0 && state.current < length(state.matches)) {
+        state.jump_revision++
+    }
     state.open = true
     state.focus_pending = true
 }
@@ -171,7 +177,7 @@ def public text_find_rebuild(var state : TextFindState;
 // ===== The find bar =====
 
 var private FIND_INPUT : table<int; InputTextState>
-var private FIND_REGEX : table<int; ToggleState>
+var private FIND_REGEX : table<int; ClickState>
 var private FIND_PREV : table<int; ClickState>
 var private FIND_NEXT : table<int; ClickState>
 var private FIND_CLOSE : table<int; ClickState>
@@ -197,28 +203,34 @@ def public text_find_bar(strip : int; var state : TextFindState) {
     if (!synced) {
         state.query = FIND_INPUT[strip].value
     }
-    same_line(FIND_JOIN[strip * 4])
-    checkbox(FIND_REGEX[strip], (text = ".*"))
     if (synced) {
-        // Push the programmatic query AFTER the widgets drew once: the input's
-        // working buffer is allocated on its first frame, and the pending
-        // mechanism writes into that buffer on the next one.
+        // Push the programmatic query AFTER the input drew once: its working
+        // buffer is allocated on the first frame, and the pending mechanism
+        // writes into that buffer on the next one.
         unsafe {
             FIND_INPUT[strip].has_pending = true
             FIND_INPUT[strip].pending_value = state.pending_widget_query
-            FIND_REGEX[strip].value = state.use_regex
         }
         state.pending_widget_valid = false
-    } else {
-        state.use_regex = FIND_REGEX[strip].value
+    }
+    same_line(FIND_JOIN[strip * 4])
+    let regex_color = GetStyleColorVec4(state.use_regex
+        ? ImGuiCol.ButtonActive : ImGuiCol.Button)
+    with_style((ImGuiCol.Button, regex_color)) {
+        if (icon_button(FIND_REGEX[strip], (glyph = "regex",
+                tip = "Regular expression", size = 16.0f))) {
+            state.use_regex = !state.use_regex
+        }
     }
     let count = length(state.matches)
     same_line(FIND_JOIN[strip * 4 + 1])
-    if (small_button(FIND_PREV[strip], (text = "<"))) {
+    if (icon_button(FIND_PREV[strip], (glyph = "chevron-up",
+            tip = "Previous match (Shift+Enter)", size = 16.0f))) {
         text_find_step(state, -1)
     }
     same_line(FIND_JOIN[strip * 4 + 2])
-    if (small_button(FIND_NEXT[strip], (text = ">"))) {
+    if (icon_button(FIND_NEXT[strip], (glyph = "chevron-down",
+            tip = "Next match (Enter)", size = 16.0f))) {
         text_find_step(state, 1)
     }
     same_line(FIND_JOIN[strip * 4 + 3])
@@ -234,7 +246,8 @@ def public text_find_bar(strip : int; var state : TextFindState) {
             (color = float4(0.95f, 0.55f, 0.35f, 1.0f), text = "no matches"))
     }
     same_line()
-    if (small_button(FIND_CLOSE[strip], (text = "x"))) {
+    if (icon_button(FIND_CLOSE[strip], (glyph = "close",
+            tip = "Close (Esc)", size = 16.0f))) {
         text_find_close(state)
     }
     if (input_done && IsKeyPressed(ImGuiKey.Escape, false)) {

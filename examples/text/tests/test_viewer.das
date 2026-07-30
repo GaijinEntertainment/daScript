@@ -525,3 +525,80 @@ def test_text_viewer_find_scrolls_to_match(t : T?) { // nolint:STYLE038
     }
     rmdir_rec_result(temp_dir)
 }
+
+[test]
+def test_text_viewer_find_icons_and_reopen(t : T?) { // nolint:STYLE038
+    with_imgui_app(FEATURE) $(app) {
+        let ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["ok"] ?? false) && (state?["render_revision"] ?? 0) > 0)
+        }
+        t |> success(ready, "welcome document renders")
+        if (!ready) return
+        let fixture = "{get_das_root()}/examples/text/syntax_highlighting.md"
+        let opened = post_command(app, "text_viewer_open", JV((path = fixture)))
+        t |> success(opened?["ok"] ?? false, "fixture opens")
+
+        let found = post_command(app, "text_viewer_find", JV((query = "tree-sitter")))
+        t |> success((found?["match_count"] ?? 0) >= 2, "query matches")
+        let bar = "DOCK_ROOT/g_document_windows[1]"
+        let bar_rendered = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var snap = snapshot(app)
+            return widget_rendered(snap, "{bar}/FIND_NEXT[1]")
+        }
+        t |> success(bar_rendered, "find bar renders")
+        if (!bar_rendered) return
+
+        // Every bar button is an icon button with the intended glyph family.
+        var snap = snapshot(app)
+        t |> equal(find_widget(snap, "{bar}/FIND_PREV[1]")?["kind"] ?? "?",
+                   "icon_button", "previous-match is an icon button")
+        t |> equal(find_widget(snap, "{bar}/FIND_NEXT[1]")?["kind"] ?? "?",
+                   "icon_button", "next-match is an icon button")
+        t |> equal(find_widget(snap, "{bar}/FIND_CLOSE[1]")?["kind"] ?? "?",
+                   "icon_button", "close is an icon button")
+        t |> equal(find_widget(snap, "{bar}/FIND_REGEX[1]")?["kind"] ?? "?",
+                   "icon_button", "regex toggle is an icon button")
+
+        // Close, clear the selection, reopen through the Ctrl+F command path:
+        // the current match must come back selected.
+        let _step = post_command(app, "text_viewer_find_step", JV((delta = 1)))
+        var recorded_start = -1
+        var recorded_end = -1
+        let selected = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            recorded_start = state?["markdown_selection_start"] ?? -1
+            recorded_end = state?["markdown_selection_end"] ?? -1
+            return ((state?["find_applied_jump"] ?? -1) == (state?["find_jump_revision"] ?? -2)
+                && recorded_end > recorded_start && recorded_start >= 0)
+        }
+        t |> success(selected, "stepped match is selected before the close")
+        if (!selected) return
+
+        let closed = post_command(app, "text_viewer_find_close", null)
+        t |> success(closed?["ok"] ?? false, "find closes")
+        let _clear = post_command(app, "text_viewer_command",
+                                  JV((id = "edit.clear_selection")))
+        let cleared = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return (!(state?["find_open"] ?? true)
+                && (state?["markdown_selection_end"] ?? 0)
+                    <= (state?["markdown_selection_start"] ?? 0))
+        }
+        t |> success(cleared, "selection clears while find is closed")
+
+        let _reopen = post_command(app, "text_viewer_command", JV((id = "find.open")))
+        let restored = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["find_open"] ?? false)
+                && (state?["find_applied_jump"] ?? -1) == (state?["find_jump_revision"] ?? -2)
+                && (state?["markdown_selection_start"] ?? -1) == recorded_start
+                && (state?["markdown_selection_end"] ?? -1) == recorded_end)
+        }
+        t |> success(restored, "reopening find re-selects the current match")
+        var after = viewer_state(app)
+        t |> equal(after?["find_current"] ?? -1, 1, "current match survives the close")
+        t |> equal(after?["find_match_count"] ?? -1, found?["match_count"] ?? -2,
+                   "match count survives the close")
+    }
+}
