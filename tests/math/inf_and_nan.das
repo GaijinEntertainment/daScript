@@ -2,10 +2,17 @@ options gen2
 require dastest/testing_boost
 require daslib/math_boost
 
-let inf = 1.0 / 0.0
-let neg_inf = -1.0 / 0.0
-let neg_nan = inf / inf
-let nan = -(inf / inf)
+let inf = 1.0 / 0.0         // nolint:LINT006 — deliberate: this test is about IEEE inf/nan
+let neg_inf = -1.0 / 0.0    // nolint:LINT006
+let neg_nan = inf / inf     // nolint:LINT007 — inf/inf is how a nan is produced here
+let nan = -(inf / inf)      // nolint:LINT007
+
+// A host may build the runtime with -ffinite-math-only (dagor does). That folds the
+// is_finite / is_nan builtins and every nan comparison to a constant, so the IEEE
+// semantics below are not the ones that host asked for - detect it and skip.
+def private host_folds_non_finite() : bool {
+    return is_finite(inf) || !is_nan(nan)
+}
 
 [sideeffects]
 def eq(a, b) {
@@ -39,6 +46,10 @@ def geq(a, b) {
 
 [test]
 def test_inf_and_nan(t : T?) {
+    if (host_folds_non_finite()) {
+        t |> skip("host runtime is built -ffinite-math-only: is_finite/is_nan and nan compares fold")
+        return
+    }
     t |> run("inf and neg inf") @@(t : T?) {
         t |> strictEqual(100.0 / 0.0, inf)
         t |> strictEqual(-100.0 / 0.0, neg_inf)
