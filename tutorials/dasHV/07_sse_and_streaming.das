@@ -22,6 +22,8 @@ options gc
 
 require dashv/dashv_boost public
 require daslib/jobque_boost
+require live/live_gc
+require live_host
 require strings
 require daslib/fio
 
@@ -89,6 +91,7 @@ def with_server(port : int; blk : block<(base_url : string) : void>) {
                     started |> notify_and_release
                     while (stop_flag |> get == 0) {
                         server->tick()
+                        maybe_collect_gc()  // the thread owns this context's heap; collect between ticks
                         sleep(10u)
                     }
                     server->stop()
@@ -151,7 +154,7 @@ def example_raw_streaming(base_url : string) {
         req.method = http_method.GET
         req.url := "{base_url}/events"
         var total_bytes = 0
-        request_cb(req, $(data; var size : int) {
+        request_cb(req, $(_data; var size : int) {
             total_bytes += size
         }) $(var resp : HttpResponse?) {
             print("  status: {int(resp.status_code)}\n")

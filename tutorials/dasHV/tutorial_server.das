@@ -28,6 +28,8 @@ options gen2
 
 require dashv/dashv_boost public
 require daslib/jobque_boost
+require live/live_gc
+require live_host
 require daslib/fio
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -62,6 +64,12 @@ class TutorialServer : HvWebServer {
 // with_tutorial_server starts the server on a dedicated thread that ticks
 // in a loop, runs the user's block, then shuts everything down.
 //
+// TEST SCAFFOLDING, not an application skeleton: the threaded tick loop exists
+// so the tutorial's client script can run against a live server in ONE process.
+// A real server uses the canonical application shape — [export] init/update/
+// shutdown + a standalone main with the GC boundary — see
+// examples/hv/ws_chat_server.das (that shape also live-reloads; this one can't).
+//
 // Internally hv::WebSocketServer::start() creates network accept/worker
 // threads, and tick() processes the WebSocket event queue + calls onTick.
 // We run the tick loop on a separate OS thread via new_thread so the
@@ -84,6 +92,7 @@ def with_tutorial_server(port : int; blk : block<(base_url : string) : void>) {
                     started |> notify_and_release   // signal: server is listening
                     while (stop_flag |> get == 0) {
                         server->tick()
+                        maybe_collect_gc()  // the thread owns this context's heap; collect between ticks
                         sleep(10u)
                     }
                     server->stop()
