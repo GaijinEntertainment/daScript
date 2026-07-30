@@ -2,7 +2,7 @@ options gen2
 require dastest/testing_boost public
 require dasllama/dasllama_math_gen
 require dasllama/dasllama_repack
-require dasllama/dasllama_quant
+require dasllama/dasllama_convert
 
 // The kg8 plane rail (slice J — the smmla stamp's row-pair layout): repack_q8q8_grp with
 // kgroup=8 must write [kg8][r][8 bytes] groups, and q8q8_token_grp_generic must read kg4 and

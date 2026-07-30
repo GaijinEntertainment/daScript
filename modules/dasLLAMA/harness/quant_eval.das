@@ -3,7 +3,7 @@ options stack = 65536   // dasLLAMA program-root convention (options stack does 
 
 require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_tokenizer
-require dasllama/dasllama_quant
+require dasllama/dasllama_convert
 require daslib/jobque_boost
 require math
 

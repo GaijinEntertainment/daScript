@@ -7,7 +7,7 @@ require dasllama/dasllama_math_default
 require dasllama/dasllama_math_aarch64_neon
 require dasllama/dasllama_math_gen  // registers the arm64-gen/x64-gen repack tier — without it the repack half runs portable
 require ?das_metal dasllama/dasllama_math_metal  // nolint:STYLE030 — registers the "metal" GPU batch donor (DASLLAMA_PIN_BATCH_BACKEND=metal) on Apple builds
-require dasllama/dasllama_quant
+require dasllama/dasllama_convert
 require daslib/jobque_boost
 require daslib/fio
 require math

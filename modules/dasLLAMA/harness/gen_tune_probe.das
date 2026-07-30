@@ -36,7 +36,7 @@ require dasllama/dasllama_math_aarch64_neon
 require dasllama/dasllama_math_gen
 require dasllama/dasllama_repack
 require dasllama/dasllama_gemm_schema
-require dasllama/dasllama_quant
+require dasllama/dasllama_convert
 require dasllama/dasllama_gguf   // transcode_q*k_superblock — the kq fixture pack rail
 require llvm/daslib/f16_cvt   // f32_to_f16 — the kq fixtures pack disk superblock headers
 require llvm/daslib/llvm_tune

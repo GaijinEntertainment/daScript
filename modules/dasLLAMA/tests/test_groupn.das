@@ -4,7 +4,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default        // portable backend + dot_mx4q8_scalar
 require dasllama/dasllama_math_aarch64_neon   // arm64 backends (registered under arm64 + JIT only)
-require dasllama/dasllama_quant               // quantize_q8_0 (deterministic Q8 fixtures)
+require dasllama/dasllama_convert               // quantize_q8_0 (deterministic Q8 fixtures)
 require math
 
 // Region-list (groupN) GEMVs — the MoE decode dispatch fuse: N same-shape [d x n] projections in

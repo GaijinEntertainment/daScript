@@ -13,7 +13,7 @@ options gen2
 require dasllama/dasllama_common // nolint:STYLE030 — [init]-only: registers the q8 kernel backends (arm64-gen/sdot + portable)
 require dasllama/dasllama_math
 require dasllama/dasllama_audio
-require dasllama/dasllama_quant
+require dasllama/dasllama_convert
 require daslib/jobque_boost
 require daslib/clargs
 require math

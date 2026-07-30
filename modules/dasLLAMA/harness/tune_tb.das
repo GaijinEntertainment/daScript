@@ -19,7 +19,7 @@ options gen2
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default          // nolint:STYLE030 — portable fallback + [init] ordering
 require dasllama/dasllama_math_gen               // nolint:STYLE030 — registers the arm64-gen/x64-gen repack backends at [init]
-require dasllama/dasllama_quant
+require dasllama/dasllama_convert
 require daslib/jobque_boost
 require math
 

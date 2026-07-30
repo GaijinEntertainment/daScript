@@ -834,29 +834,6 @@ def public effective_token_block(tb, n : int64) : int64 {
     return clamp(tb, 1l, max(1l, g_q8_l2_budget / max(n, 1l)))   // floor 1 (a 0 block width infinite-loops the kernel)
 }
 
-// ===== dispatch observability (jobs-per-section profiling) =====
-// maybe_parallel_for's macro emits these on every decision, so a side-by-side vs llama.cpp can
-// compare dispatch counts and chunk granularity, not just time. Counters live on the MAIN context.
-var g_disp_count = 0l    // parallel_for dispatches taken
-var g_disp_chunks = 0l   // chunks (jobs) pushed across those dispatches
-var g_disp_inline = 0l   // maybe_parallel_for calls that ran inline instead
-def count_parallel_dispatch(njobs : int) {
-    g_disp_count++
-    g_disp_chunks += int64(njobs)
-}
-// pass-through flavor for maybe_parallel_for: profiles the exact value the dispatch receives
-// while keeping num_jobs a single evaluation (callers pass shaper calls)
-def count_parallel_dispatch_thru(njobs : int) : int {
-    count_parallel_dispatch(njobs)
-    return njobs
-}
-def count_inline_run() {
-    g_disp_inline++
-}
-def get_disp_count() : int64 => g_disp_count
-def get_disp_chunks() : int64 => g_disp_chunks
-def get_disp_inline() : int64 => g_disp_inline
-
 // ===== Q8·Q8 matmul: pluggable kernel-backend registry =====
 // A *backend* (KernelBackend) is a named kernel-set + weight repack, registered per ISA at [init];
 // row-major backends auto-activate, repack backends (arm64 laneq) activate only at load (pin_kernel_backend forces one for A/B).

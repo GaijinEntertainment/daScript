@@ -17,7 +17,6 @@ options gen2
 require dasllama/dasllama_math   // nolint:STYLE030 — side-effect: loads the *_template kernels for the cross-module scan
 require dasllama/dasllama_math_default   // nolint:STYLE030 — dot_q8q8_template lives here
 require dasllama/dasllama_math_aarch64_neon   // laneq4x4 template (the repack backend "arm64-gen" registers via dasllama_common's math_gen require)
-require dasllama/dasllama_quant  // quantize templates + the Q4/Q8 reference quantizers
 require dasllama/dasllama_kv_codec   // nolint:STYLE030 — side-effect: the KV-codec *_template kernels for the cross-module scan
 require dasllama/dasllama_convert    // nolint:STYLE030 — side-effect: the f16 row-convert templates for the cross-module scan
 require dasllama/dasllama_common // the runtime-knob getters (the profile's "runtime" section snapshots them)

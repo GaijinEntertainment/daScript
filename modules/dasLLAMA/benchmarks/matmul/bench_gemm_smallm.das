@@ -15,7 +15,7 @@ options gen2
 require dasllama/dasllama_common // nolint:STYLE030 — [init]-only: registers the q8 kernel backends
 require dasllama/dasllama_math
 require dasllama/dasllama_audio
-require dasllama/dasllama_quant
+require dasllama/dasllama_convert
 require dasllama/dasllama_par
 require daslib/jobque_boost
 require daslib/clargs

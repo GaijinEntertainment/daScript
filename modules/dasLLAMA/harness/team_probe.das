@@ -14,7 +14,7 @@ options persistent_heap = true
 
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default
-require dasllama/dasllama_quant
+require dasllama/dasllama_convert
 require daslib/jobque_boost
 require math
 

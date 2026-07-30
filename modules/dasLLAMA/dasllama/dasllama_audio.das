@@ -13,7 +13,7 @@ require daslib/archive
 require dasllama/dasllama_math
 require dasllama/dasllama_par
 require dasllama/dasllama_gguf
-require dasllama/dasllama_quant
+require dasllama/dasllama_convert
 require dasllama/dasllama_common   // apply_box_profile_runtime for the tower-image identity
 require dasllama/dasllama_image
 

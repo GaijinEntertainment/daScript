@@ -20,7 +20,7 @@ require dasllama/dasllama_math_default
 require dasllama/dasllama_math_aarch64_neon
 require dasllama/dasllama_math_gen
 require dasllama/dasllama_repack
-require dasllama/dasllama_quant
+require dasllama/dasllama_convert
 require math
 
 let CLOSE_REL = 1e-4

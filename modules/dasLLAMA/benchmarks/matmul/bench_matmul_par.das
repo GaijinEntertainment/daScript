@@ -3,7 +3,7 @@ options persistent_heap
 
 require dastest/testing_boost
 require matmul_variants
-require dasllama/dasllama_quant
+require dasllama/dasllama_convert
 require daslib/jobque_boost
 require math
 

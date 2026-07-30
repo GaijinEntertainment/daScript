@@ -3,7 +3,7 @@ options persistent_heap
 
 require dastest/testing_boost
 require matmul_variants
-require dasllama/dasllama_quant
+require dasllama/dasllama_convert
 require math
 
 // Deterministic fill — values don't matter, only that they're non-trivial.

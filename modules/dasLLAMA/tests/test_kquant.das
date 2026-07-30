@@ -5,7 +5,7 @@ options persistent_heap   // the layout arm loads a multi-GB model; explicit del
 require dastest/testing_boost public
 require _model_tier
 require dasllama/dasllama_gguf
-require dasllama/dasllama_quant
+require dasllama/dasllama_convert
 require dasllama/dasllama_math   // pin_kernel_backend — the layout arm needs disk-order planes
 require dasllama/dasllama_math_default   // dot_k4q8/k5/k6/q40q8 — the kernel arms gate them vs the plane dequant
 require dasllama/dasllama_math_gen   // kq_grp_row_dot — the stage-4 repack oracle

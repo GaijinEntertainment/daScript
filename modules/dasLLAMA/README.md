@@ -100,7 +100,13 @@ modules/dasLLAMA/
                               #  archived under history/dasLLAMA/)
   dasllama/                   # the module — require dasllama/<name>
     dasllama_env.das          #   the env-var registry + the typed readers every knob goes through (ENVIRONMENT.md is generated from it)
-    dasllama_math.das         #   numeric primitives + matmul/dot kernels (fp32, Q8, Q4) + Q8·Q8 kernel-backend registry
+    dasllama_math.das         #   numeric primitives + matmul/dot kernels + Q8·Q8 kernel-backend registry + dispatch shaping
+    dasllama_kv_codec.das     #   the KV-cache codec — per cache format (f16/q8_0/tq4) the WHOLE family: store/read/dot/axpy (+ tq4 FWHT rotation)
+    dasllama_kqformat.das     #   format identity — the KqFmt enum, per-format strides/geometry/stream codes, the one enum->kernel-id bridge
+    dasllama_rope.das         #   RoPE angle/table generation (theta schedule, rope_freqs, every materialized layout)
+    dasllama_gpu_tier.das     #   the device-cooperation SPI — hook types, install slots, want/status (vulkan implements; metal uses common's override registries)
+    dasllama_repack.das       #   disk-order -> compute-order kernel-layout transforms (grp<mr> interleaves, extractors, panel unpacks)
+    dasllama_convert.das      #   tensor format conversion — codec byte readers, superblock dequants, transcodes, Q5_K encoder, the fp32->Q8/Q4 quantizers, f16 rows
     dasllama_math_default.das #   the portable Q8·Q8 kernel backend (the fallback; platform backends out-rank it)
     dasllama_math_aarch64_neon.das # arm64 SDOT row-major Q8·Q8 backend + the laneq dot leaves the gen tier composes ([init]-registered; no-op off-ARM)
     dasllama_math_accelerate.das #  the "+AMX" float tier — Accelerate BLAS (AMX on M1-M3, SME on M4+) over the float-plane batch shapes
@@ -121,8 +127,7 @@ modules/dasLLAMA/
     dasllama_par.das          #   maybe_parallel_for threading macro
     dasllama_tune.das         #   per-box kernel loop-hint tuner — [tuned] / [dasllama_grid] (see tune_for_this_box.md)
     dasllama_parity.das       #   CPU-reference caches for the parity instruments (the metal suites, batch_parity_probe)
-    dasllama_quant.das        #   Q8_0 / Q4_0 (de)quantization
-    dasllama_gguf.das         #   GGUF container parser + tensor transcode
+    dasllama_gguf.das         #   GGUF container parser + tensor read drivers (codecs live in dasllama_convert)
     dasllama_layout.das       #   disk-format -> compute-layout transforms (the blob transform, the CPU repack walkers, the GPU tier gathers)
     dasllama_config.das       #   DlimConfiguration — every input that changes .dlim image BYTES, in one struct (+ the identity formatter)
     dasllama_image.das        #   the .dlim prepared-model image — post-load planes dumped once, mapped back with zero O(model) copying

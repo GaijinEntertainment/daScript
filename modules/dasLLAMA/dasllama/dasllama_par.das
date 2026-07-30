@@ -43,6 +43,29 @@ def maybe_parallel_for_indexed(range_begin, range_end : int; num_jobs : int;
     //! stub — rewritten by MaybeParallelForIndexedMacro into a runtime if/else
 }
 
+// ===== dispatch observability (jobs-per-section profiling) =====
+// The macro arms emit these on every decision. MAIN-context counters; they live HERE because
+// emitted calls resolve in the CALLER's scope — and every mpf caller already requires this module.
+var g_disp_count = 0l    // parallel_for dispatches taken
+var g_disp_chunks = 0l   // chunks (jobs) pushed across those dispatches
+var g_disp_inline = 0l   // maybe_parallel_for calls that ran inline instead
+def count_parallel_dispatch(njobs : int) {
+    g_disp_count++
+    g_disp_chunks += int64(njobs)
+}
+// pass-through flavor for maybe_parallel_for: profiles the exact value the dispatch receives
+// while keeping num_jobs a single evaluation (callers pass shaper calls)
+def count_parallel_dispatch_thru(njobs : int) : int {
+    count_parallel_dispatch(njobs)
+    return njobs
+}
+def count_inline_run() {
+    g_disp_inline++
+}
+def get_disp_count() : int64 => g_disp_count
+def get_disp_chunks() : int64 => g_disp_chunks
+def get_disp_inline() : int64 => g_disp_inline
+
 // Shared arm bodies — ONE source of truth for both lowerings so the arms can't drift.
 // parallel: team mode → team_parallel_for (self-serve off one atomic); off → parallel_for (fifo
 // job/chunk + notify). inline: invoke on the calling thread; wrapper names avoid shadowing user params.
