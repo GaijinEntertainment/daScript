@@ -14,6 +14,8 @@
 
 using namespace das;
 
+#if DAS_CRASH_HANDLER_PLATFORM_SUPPORTED
+
 // Separate function because C++ objects (std::string) cannot coexist with
 // __try/__except on MSVC.
 static void print_das_stack_walk(void * ctxPtr) {
@@ -30,8 +32,6 @@ static void print_das_stack_walk(void * ctxPtr) {
 static bool das_crash_frame_filter(const char * symbolName) {
     return strstr(symbolName, "SimNode") != nullptr;
 }
-
-#if DAS_CRASH_HANDLER_PLATFORM_SUPPORTED
 
 // ---- Platform-specific safe memory reads --------------------------------
 

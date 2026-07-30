@@ -1,13 +1,19 @@
 #include "daScript/misc/crash_handler.h"
 
+// Only the supported-platform body below uses these, and <csignal> does not exist
+// on every libc we build for (PS5 has none), so it must not be included blindly.
+#if DAS_CRASH_HANDLER_PLATFORM_SUPPORTED
 #include <cstdio>
 #include <csignal>
 #include <cstdlib>
 #include <exception>
+#endif
 
 namespace das {
     namespace {
+#if DAS_CRASH_HANDLER_PLATFORM_SUPPORTED
         constexpr int DAS_CRASH_HANDLER_MAX_STACK_FRAMES = 64;
+#endif
 
         CrashHandlerFrameFilterFunc g_crash_handler_frame_filter = nullptr;
         CrashHandlerExtraInfoFunc g_crash_handler_extra_info = nullptr;
