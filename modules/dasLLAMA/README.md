@@ -87,6 +87,7 @@ modules/dasLLAMA/
   tune_for_this_box.md        # per-box tuning + the measurement discipline (SDK-installed)
   ENVIRONMENT.md              # GENERATED from dasllama_env's registry (`--dump-env`) — every knob
   THINKING.md                 # design notes and open questions
+  followup_vulkan.md          # PLANNED: grow the vulkan resident driver to Metal's contract shape
   whisper_plan.md             # per-family bring-up records + findings:
   qwen2_audio_plan.md         #   whisper, qwen2-audio, parakeet, silero-vad
   parakeet_plan.md
