@@ -121,6 +121,11 @@ struct public TextSourceViewState {
     //! Layout line index -> unwrapped source row (identity when nothing is
     //! collapsed). Line numbers, marks, and fold handles map through it.
     visible_rows : array<int>
+    //! Unfiltered flow snapshot: a fold toggle restores from here and
+    //! re-applies the filter instead of re-running the whole text flow.
+    base_lines : array<TextFlowLine>
+    base_fragments : array<TextFlowFragment>
+    base_size : float2
 
     anchor_byte : int = -1
     focus_byte : int = -1
@@ -158,13 +163,17 @@ def private source_font(var style : TextSourceViewStyle; var fallback : ImFont?)
     return style.fonts.monospace != null ? style.fonts.monospace : fallback
 }
 
-def private same_layout_key(a, b : TextSourceLayoutKey const) : bool {
+def private same_flow_key(a, b : TextSourceLayoutKey const) : bool {
+    // Fold state deliberately excluded: a fold toggle restores the cached flow.
     return (a.document_revision == b.document_revision
         && a.max_width == b.max_width && a.font_size == b.font_size
         && a.line_height == b.line_height && a.cell_width == b.cell_width
         && a.font_id == b.font_id && a.wrap == b.wrap
-        && a.tab_cells == b.tab_cells
-        && a.fold_revision == b.fold_revision)
+        && a.tab_cells == b.tab_cells)
+}
+
+def private same_layout_key(a, b : TextSourceLayoutKey const) : bool {
+    return same_flow_key(a, b) && a.fold_revision == b.fold_revision
 }
 
 def private selected_source(state : TextSourceViewState const) : TextSourceRange {
@@ -260,6 +269,8 @@ def public text_source_view_invalidate(var state : TextSourceViewState) {
     delete state.virtual_line_starts
     delete state.collapsed_folds
     delete state.visible_rows
+    delete state.base_lines
+    delete state.base_fragments
     state.cells_first_line = -1
     state.cells_last_line = -1
     state.virtual_document_revision = -1
@@ -559,6 +570,17 @@ def private ensure_layout(document : TextSourceDocument const;
         state.layout_hits++
         return
     }
+    if (state.layout_valid && same_flow_key(state.key, key) && !key.wrap) {
+        // Fold-only change: restore the cached flow and re-filter — no reflow.
+        state.layout.lines := state.base_lines
+        state.layout.fragments := state.base_fragments
+        state.layout.size = state.base_size
+        apply_fold_filter(document, state)
+        state.key = key
+        state.cells_first_line = -1
+        state.cells_last_line = -1
+        return
+    }
     delete state.layout.lines
     delete state.layout.fragments
     var spans : array<TextFlowSpan>
@@ -574,6 +596,9 @@ def private ensure_layout(document : TextSourceDocument const;
         }
     delete spans
     if (!key.wrap) {
+        state.base_lines := state.layout.lines
+        state.base_fragments := state.layout.fragments
+        state.base_size = state.layout.size
         apply_fold_filter(document, state)
     }
     state.key = key

@@ -1792,19 +1792,23 @@ def private draw_code_block_icons(node_index : int;
                                   var state : MarkdownViewState;
                                   style : MarkdownViewStyle const;
                                   collapsed : bool) {
-    // Fold toggle + copy-all; collapsed bars always show their icons.
-    return if (!collapsed && !IsWindowHovered(ImGuiHoveredFlags.None))
+    // AllowWhenBlockedByActiveItem: plain IsWindowHovered flips false the frame OUR button activates, unsubmitting it mid-click.
+    return if (!collapsed
+        && !IsWindowHovered(ImGuiHoveredFlags.AllowWhenBlockedByActiveItem))
     let zoom = view_zoom(style)
     let size = 12.0f * zoom
     let pad = GetStyle().FramePadding
     let slot = size + pad.x * 2.0f + 2.0f * zoom
-    let right = GetWindowSize().x - GetStyle().WindowPadding.x
-    SetCursorPos(float2(right - slot * 2.0f, 3.0f * zoom))
-    if (icon_button_draw("##md_code_fold", collapsed ? "chevron-down" : "chevron-up", size)) {
+    let window_pos = GetWindowPos()
+    let right = window_pos.x + GetWindowSize().x - GetStyle().WindowPadding.x
+    let top = window_pos.y + 3.0f * zoom
+    if (icon_button_draw_at("##md_code_fold",
+            collapsed ? "chevron-down" : "chevron-up",
+            float2(right - slot * 2.0f, top), size)) {
         let _ = markdown_view_set_code_collapsed(state, node_index, !collapsed)
     }
-    SetCursorPos(float2(right - slot, 3.0f * zoom))
-    if (icon_button_draw("##md_code_copy", "copy", size)) {
+    if (icon_button_draw_at("##md_code_copy", "copy",
+            float2(right - slot, top), size)) {
         let content & = unsafe(state.nodes[node_index].content)
         copy_code_block(state, node_index, content.text, style.write_system_clipboard)
     }
