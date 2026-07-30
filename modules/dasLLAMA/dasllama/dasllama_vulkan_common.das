@@ -1103,6 +1103,27 @@ def write_buf_desc(var writes : array<WriteDescriptorSet>; set_ : VkDescriptorSe
     writes |> emplace(w)
 }
 
+// (re)write all six bindings of a set + declare its hazard region bits — every dispatchable set
+// in the family is built through here (or vk_set6, which allocates first)
+def vk_write6(set_ : VkDescriptorSet; b0, b1, b2, b3, b4, b5 : uint64; s0, s1, s2, s3, s4, s5 : int64; gbits : uint[6]) {
+    var writes : array<WriteDescriptorSet>
+    write_buf_desc(writes, set_, 0u, b0, s0)
+    write_buf_desc(writes, set_, 1u, b1, s1)
+    write_buf_desc(writes, set_, 2u, b2, s2)
+    write_buf_desc(writes, set_, 3u, b3, s3)
+    write_buf_desc(writes, set_, 4u, b4, s4)
+    write_buf_desc(writes, set_, 5u, b5, s5)
+    let no_copies : array<CopyDescriptorSet>
+    update_descriptor_sets(g_gpu.device, writes, no_copies)
+    hz_set_bits(set_, gbits)
+}
+
+def vk_set6(b0, b1, b2, b3, b4, b5 : uint64; s0, s1, s2, s3, s4, s5 : int64; gbits : uint[6]) : VkDescriptorSet {
+    var set_ = alloc_desc_set()
+    vk_write6(set_, b0, b1, b2, b3, b4, b5, s0, s1, s2, s3, s4, s5, gbits)
+    return set_
+}
+
 // weight plane byte sizes for one [rows x n] stack in the tier's device layout
 def stack_plane_bytes(n, rows : int64; fmt : int) : tuple<wq : int64; ws : int64> {
     let nb = arena_blocks_for(n, rows, fmt)   // strides live in arena_block_bytes — one source
@@ -1131,23 +1152,16 @@ def ensure_gemv_scratch(si : int) {
     if (g_gpu.stacks[si].gemv_made) {
         return
     }
-    g_gpu.stacks[si].raw_set = alloc_desc_set()
     g_gpu.stacks[si].meta = make_host_buf(META_BYTES, true)
     g_gpu.stacks[si].xq = make_host_buf(XQ_BYTES, true)
     g_gpu.stacks[si].xs = make_host_buf(XS_BYTES, true)
     g_gpu.stacks[si].y = make_host_buf(Y_BYTES, false, [cached = true])
     g_gpu.stacks[si].y_dev = make_device_buf(Y_BYTES)
-    var writes : array<WriteDescriptorSet>
-    write_buf_desc(writes, g_gpu.stacks[si].raw_set, 0u, g_gpu.stacks[si].wqbuf, g_gpu.stacks[si].wqbytes)
-    write_buf_desc(writes, g_gpu.stacks[si].raw_set, 1u, g_gpu.stacks[si].wsbuf, ws_range(si))
-    write_buf_desc(writes, g_gpu.stacks[si].raw_set, 2u, g_gpu.stacks[si].meta.buf, META_BYTES)
-    write_buf_desc(writes, g_gpu.stacks[si].raw_set, 3u, g_gpu.stacks[si].xq.buf, XQ_BYTES)
-    write_buf_desc(writes, g_gpu.stacks[si].raw_set, 4u, g_gpu.stacks[si].xs.buf, XS_BYTES)
-    write_buf_desc(writes, g_gpu.stacks[si].raw_set, 5u, g_gpu.stacks[si].y_dev, Y_BYTES)
-    let no_copies : array<CopyDescriptorSet>
-    update_descriptor_sets(g_gpu.device, writes, no_copies)
     // default y role; role-fluid chains (gate/up pair, qkv group, dn step) re-declare before recording
-    hz_set_bits(g_gpu.stacks[si].raw_set, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
+    g_gpu.stacks[si].raw_set = vk_set6(g_gpu.stacks[si].wqbuf, g_gpu.stacks[si].wsbuf,
+        g_gpu.stacks[si].meta.buf, g_gpu.stacks[si].xq.buf, g_gpu.stacks[si].xs.buf, g_gpu.stacks[si].y_dev,
+        g_gpu.stacks[si].wqbytes, ws_range(si), META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES,
+        fixed_array(0u, 0u, 0u, 0u, 0u, VHG_Y1))
     g_gpu.stacks[si].gemv_made = true
 }
 
@@ -1664,17 +1678,9 @@ def arena_ensure_scratch(fmt : int) {
         a.xs = make_host_buf(XS_BYTES, true)
         a.y = make_host_buf(Y_BYTES, false, [cached = true])
         a.y_dev = make_device_buf(Y_BYTES)
-        a.raw_set = alloc_desc_set()
-        var writes : array<WriteDescriptorSet>
-        write_buf_desc(writes, a.raw_set, 0u, a.wqbuf, a.wqbytes)
-        write_buf_desc(writes, a.raw_set, 1u, a.wsbuf, a.wsbytes)
-        write_buf_desc(writes, a.raw_set, 2u, a.meta.buf, META_BYTES)
-        write_buf_desc(writes, a.raw_set, 3u, a.xq.buf, XQ_BYTES)
-        write_buf_desc(writes, a.raw_set, 4u, a.xs.buf, XS_BYTES)
-        write_buf_desc(writes, a.raw_set, 5u, a.y_dev, Y_BYTES)
-        let no_copies : array<CopyDescriptorSet>
-        update_descriptor_sets(g_gpu.device, writes, no_copies)
-        hz_set_bits(a.raw_set, 0u, 0u, 0u, 0u, 0u, VHG_YO)
+        a.raw_set = vk_set6(a.wqbuf, a.wsbuf, a.meta.buf, a.xq.buf, a.xs.buf, a.y_dev,
+            a.wqbytes, a.wsbytes, META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES,
+            fixed_array(0u, 0u, 0u, 0u, 0u, VHG_YO))
         a.ready = true
     }
 }
@@ -1692,17 +1698,9 @@ def ensure_ar_state {
     g_gpu.ar_meta = make_host_buf(META_BYTES, true)
     g_gpu.ar_scal = make_host_buf(XS_BYTES, true)
     g_gpu.ar_host = make_host_buf(bytes, false, [cached = true])   // x and y readback
-    g_gpu.ar_set = alloc_desc_set()
-    var writes : array<WriteDescriptorSet>
-    write_buf_desc(writes, g_gpu.ar_set, 0u, g_gpu.ar_x_dev, bytes)
-    write_buf_desc(writes, g_gpu.ar_set, 1u, g_gpu.ar_a_dev, bytes)
-    write_buf_desc(writes, g_gpu.ar_set, 2u, g_gpu.ar_meta.buf, META_BYTES)
-    write_buf_desc(writes, g_gpu.ar_set, 3u, g_gpu.ar_w_dev, bytes)
-    write_buf_desc(writes, g_gpu.ar_set, 4u, g_gpu.ar_scal.buf, XS_BYTES)
-    write_buf_desc(writes, g_gpu.ar_set, 5u, g_gpu.ar_y_dev, bytes)
-    let no_copies : array<CopyDescriptorSet>
-    update_descriptor_sets(g_gpu.device, writes, no_copies)
-    hz_set_bits(g_gpu.ar_set, VHG_X, 0u, 0u, 0u, 0u, VHG_YO)   // a/w/meta/scal fill pre-cmd
+    g_gpu.ar_set = vk_set6(g_gpu.ar_x_dev, g_gpu.ar_a_dev, g_gpu.ar_meta.buf, g_gpu.ar_w_dev, g_gpu.ar_scal.buf, g_gpu.ar_y_dev,
+        bytes, bytes, META_BYTES, bytes, XS_BYTES, bytes,
+        fixed_array(VHG_X, 0u, 0u, 0u, 0u, VHG_YO))   // a/w/meta/scal fill pre-cmd
     g_gpu.ar_ready = true
 }
 
@@ -1764,47 +1762,22 @@ def ensure_af_state(f1, f3, f2 : int) {
     g_gpu.af_yb_dev = make_device_buf(Y_BYTES)
     g_gpu.af_yo_dev = make_device_buf(Y_BYTES)
     g_gpu.af_yo_host = make_host_buf(Y_BYTES, false, [cached = true])
-    g_gpu.af_gate_set = alloc_desc_set()
-    g_gpu.af_up_set = alloc_desc_set()
-    g_gpu.af_actrq_set = alloc_desc_set()
-    g_gpu.af_down_set = alloc_desc_set()
-    var writes : array<WriteDescriptorSet>
-    unsafe {
-        var a1 & = g_gpu.arenas[f1]
-        var a3 & = g_gpu.arenas[f3]
-        var a2 & = g_gpu.arenas[f2]
-        write_buf_desc(writes, g_gpu.af_gate_set, 0u, a1.wqbuf, a1.wqbytes)
-        write_buf_desc(writes, g_gpu.af_gate_set, 1u, a1.wsbuf, a1.wsbytes)
-        write_buf_desc(writes, g_gpu.af_up_set, 0u, a3.wqbuf, a3.wqbytes)
-        write_buf_desc(writes, g_gpu.af_up_set, 1u, a3.wsbuf, a3.wsbytes)
-        write_buf_desc(writes, g_gpu.af_down_set, 0u, a2.wqbuf, a2.wqbytes)
-        write_buf_desc(writes, g_gpu.af_down_set, 1u, a2.wsbuf, a2.wsbytes)
-        // the act+requant set has no weights: up@0, gate@5, hq/hs out (binding 1 is filler)
-        write_buf_desc(writes, g_gpu.af_actrq_set, 0u, g_gpu.af_yb_dev, Y_BYTES)
-        write_buf_desc(writes, g_gpu.af_actrq_set, 1u, a1.wsbuf, a1.wsbytes)
-        write_buf_desc(writes, g_gpu.af_actrq_set, 5u, g_gpu.af_ya_dev, Y_BYTES)
-    }
-    write_buf_desc(writes, g_gpu.af_gate_set, 2u, g_gpu.af_meta_g.buf, META_BYTES)
-    write_buf_desc(writes, g_gpu.af_gate_set, 3u, g_gpu.af_xq.buf, XQ_BYTES)
-    write_buf_desc(writes, g_gpu.af_gate_set, 4u, g_gpu.af_xs.buf, XS_BYTES)
-    write_buf_desc(writes, g_gpu.af_gate_set, 5u, g_gpu.af_ya_dev, Y_BYTES)
-    write_buf_desc(writes, g_gpu.af_up_set, 2u, g_gpu.af_meta_u.buf, META_BYTES)
-    write_buf_desc(writes, g_gpu.af_up_set, 3u, g_gpu.af_xq.buf, XQ_BYTES)
-    write_buf_desc(writes, g_gpu.af_up_set, 4u, g_gpu.af_xs.buf, XS_BYTES)
-    write_buf_desc(writes, g_gpu.af_up_set, 5u, g_gpu.af_yb_dev, Y_BYTES)
-    write_buf_desc(writes, g_gpu.af_actrq_set, 2u, g_gpu.ffn_meta_dev, FFN_META_BYTES)
-    write_buf_desc(writes, g_gpu.af_actrq_set, 3u, g_gpu.hq_dev, BATCH_HQ_BYTES)
-    write_buf_desc(writes, g_gpu.af_actrq_set, 4u, g_gpu.hs_dev, BATCH_HS_BYTES)
-    write_buf_desc(writes, g_gpu.af_down_set, 2u, g_gpu.af_meta_d.buf, META_BYTES)
-    write_buf_desc(writes, g_gpu.af_down_set, 3u, g_gpu.hq_dev, BATCH_HQ_BYTES)
-    write_buf_desc(writes, g_gpu.af_down_set, 4u, g_gpu.hs_dev, BATCH_HS_BYTES)
-    write_buf_desc(writes, g_gpu.af_down_set, 5u, g_gpu.af_yo_dev, Y_BYTES)
-    let no_copies : array<CopyDescriptorSet>
-    update_descriptor_sets(g_gpu.device, writes, no_copies)
-    hz_set_bits(g_gpu.af_gate_set, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
-    hz_set_bits(g_gpu.af_up_set, 0u, 0u, 0u, 0u, 0u, VHG_Y2)
-    hz_set_bits(g_gpu.af_actrq_set, VHG_Y2, 0u, VHG_META, VHG_HQ, VHG_HQ, VHG_Y1)
-    hz_set_bits(g_gpu.af_down_set, 0u, 0u, 0u, VHG_HQ, VHG_HQ, VHG_YO)
+    let a1 = arena_planes(f1)
+    let a3 = arena_planes(f3)
+    let a2 = arena_planes(f2)
+    g_gpu.af_gate_set = vk_set6(a1.wq, a1.ws, g_gpu.af_meta_g.buf, g_gpu.af_xq.buf, g_gpu.af_xs.buf, g_gpu.af_ya_dev,
+        a1.wqb, a1.wsb, META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES,
+        fixed_array(0u, 0u, 0u, 0u, 0u, VHG_Y1))
+    g_gpu.af_up_set = vk_set6(a3.wq, a3.ws, g_gpu.af_meta_u.buf, g_gpu.af_xq.buf, g_gpu.af_xs.buf, g_gpu.af_yb_dev,
+        a3.wqb, a3.wsb, META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES,
+        fixed_array(0u, 0u, 0u, 0u, 0u, VHG_Y2))
+    // the act+requant set has no weights: up@0, gate@5, hq/hs out (binding 1 is filler)
+    g_gpu.af_actrq_set = vk_set6(g_gpu.af_yb_dev, a1.ws, g_gpu.ffn_meta_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_gpu.af_ya_dev,
+        Y_BYTES, a1.wsb, FFN_META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, Y_BYTES,
+        fixed_array(VHG_Y2, 0u, VHG_META, VHG_HQ, VHG_HQ, VHG_Y1))
+    g_gpu.af_down_set = vk_set6(a2.wq, a2.ws, g_gpu.af_meta_d.buf, g_gpu.hq_dev, g_gpu.hs_dev, g_gpu.af_yo_dev,
+        a2.wqb, a2.wsb, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, Y_BYTES,
+        fixed_array(0u, 0u, 0u, VHG_HQ, VHG_HQ, VHG_YO))
     g_gpu.af_ready = true
 }
 
@@ -1841,17 +1814,10 @@ def ensure_rks_state {
     g_gpu.rks_meta = make_host_buf(META_BYTES, true)
     g_gpu.rks_q_host = make_host_buf(RKS_MAX_QD * 4l, false, [cached = true])
     g_gpu.rks_kv_host = make_host_buf(2l * RKS_MAX_KVD * 4l, false, [cached = true])
-    g_gpu.rks_set = alloc_desc_set()
-    var writes : array<WriteDescriptorSet>
-    write_buf_desc(writes, g_gpu.rks_set, 0u, g_gpu.rks_qkv_dev, (RKS_MAX_QD + 2l * RKS_MAX_KVD) * 4l)
-    write_buf_desc(writes, g_gpu.rks_set, 1u, g_gpu.rks_k_dev, RKS_MAX_CTX * RKS_MAX_KVD * 4l)
-    write_buf_desc(writes, g_gpu.rks_set, 2u, g_gpu.rks_meta.buf, META_BYTES)
-    write_buf_desc(writes, g_gpu.rks_set, 3u, g_gpu.rks_v_dev, RKS_MAX_CTX * RKS_MAX_KVD * 4l)
-    write_buf_desc(writes, g_gpu.rks_set, 4u, g_gpu.rks_scal.buf, XS_BYTES)
-    write_buf_desc(writes, g_gpu.rks_set, 5u, g_gpu.rks_q_dev, RKS_MAX_QD * 4l)
-    let no_copies : array<CopyDescriptorSet>
-    update_descriptor_sets(g_gpu.device, writes, no_copies)
-    hz_set_bits(g_gpu.rks_set, 0u, VHG_Y2, 0u, VHG_Y3, 0u, VHG_Y1)   // K mirror / V mirror / roped q
+    g_gpu.rks_set = vk_set6(g_gpu.rks_qkv_dev, g_gpu.rks_k_dev, g_gpu.rks_meta.buf, g_gpu.rks_v_dev, g_gpu.rks_scal.buf, g_gpu.rks_q_dev,
+        (RKS_MAX_QD + 2l * RKS_MAX_KVD) * 4l, RKS_MAX_CTX * RKS_MAX_KVD * 4l, META_BYTES,
+        RKS_MAX_CTX * RKS_MAX_KVD * 4l, XS_BYTES, RKS_MAX_QD * 4l,
+        fixed_array(0u, VHG_Y2, 0u, VHG_Y3, 0u, VHG_Y1))   // K mirror / V mirror / roped q
     g_gpu.rks_ready = true
 }
 
@@ -1866,17 +1832,10 @@ def ensure_da_state {
     g_gpu.da_scal = make_host_buf(XS_BYTES, true)
     g_gpu.da_meta = make_host_buf(META_BYTES, true)
     g_gpu.da_out_host = make_host_buf(RKS_MAX_QD * 4l, false, [cached = true])
-    g_gpu.da_set = alloc_desc_set()
-    var writes : array<WriteDescriptorSet>
-    write_buf_desc(writes, g_gpu.da_set, 0u, g_gpu.da_q_dev, RKS_MAX_QD * 4l)
-    write_buf_desc(writes, g_gpu.da_set, 1u, g_gpu.rks_k_dev, RKS_MAX_CTX * RKS_MAX_KVD * 4l)
-    write_buf_desc(writes, g_gpu.da_set, 2u, g_gpu.da_meta.buf, META_BYTES)
-    write_buf_desc(writes, g_gpu.da_set, 3u, g_gpu.rks_v_dev, RKS_MAX_CTX * RKS_MAX_KVD * 4l)
-    write_buf_desc(writes, g_gpu.da_set, 4u, g_gpu.da_scal.buf, XS_BYTES)
-    write_buf_desc(writes, g_gpu.da_set, 5u, g_gpu.da_out_dev, RKS_MAX_QD * 4l)
-    let no_copies : array<CopyDescriptorSet>
-    update_descriptor_sets(g_gpu.device, writes, no_copies)
-    hz_set_bits(g_gpu.da_set, 0u, 0u, 0u, 0u, 0u, VHG_YO)   // q/mirrors fill pre-cmd (fence-ordered)
+    g_gpu.da_set = vk_set6(g_gpu.da_q_dev, g_gpu.rks_k_dev, g_gpu.da_meta.buf, g_gpu.rks_v_dev, g_gpu.da_scal.buf, g_gpu.da_out_dev,
+        RKS_MAX_QD * 4l, RKS_MAX_CTX * RKS_MAX_KVD * 4l, META_BYTES,
+        RKS_MAX_CTX * RKS_MAX_KVD * 4l, XS_BYTES, RKS_MAX_QD * 4l,
+        fixed_array(0u, 0u, 0u, 0u, 0u, VHG_YO))   // q/mirrors fill pre-cmd (fence-ordered)
     g_gpu.da_ready = true
 }
 
@@ -2049,21 +2008,6 @@ struct RDec {
 let PF_WINDOW = 512l   // prefill activation-buffer rows; longer prompts run as sequential windows
 
 var g_rd : RDec?
-
-def rd_set6(b0, b1, b2, b3, b4, b5 : uint64; s0, s1, s2, s3, s4, s5 : int64; gbits : uint[6]) : VkDescriptorSet {
-    var set = alloc_desc_set()
-    var writes : array<WriteDescriptorSet>
-    write_buf_desc(writes, set, 0u, b0, s0)
-    write_buf_desc(writes, set, 1u, b1, s1)
-    write_buf_desc(writes, set, 2u, b2, s2)
-    write_buf_desc(writes, set, 3u, b3, s3)
-    write_buf_desc(writes, set, 4u, b4, s4)
-    write_buf_desc(writes, set, 5u, b5, s5)
-    let no_copies : array<CopyDescriptorSet>
-    update_descriptor_sets(g_gpu.device, writes, no_copies)
-    hz_set_bits(set, gbits)
-    return set
-}
 
 // a small host-visible meta buffer (uint words), contents filled per token during recording
 def rd_meta() : HostBuf => make_host_buf(META_BYTES, true)
@@ -2680,36 +2624,18 @@ def ensure_dn_state {
     g_gpu.dn_tail_host = make_host_buf(DN_TAIL_BYTES, true, [cached = true])
     g_gpu.dn_state_dev = make_device_buf(DN_STATE_BYTES)
     g_gpu.dn_ws_dev = make_device_buf(DN_WS_BYTES)
-    g_gpu.dn_conv_set = alloc_desc_set()
-    g_gpu.dn_scan_set = alloc_desc_set()
-    g_gpu.dn_rq_set = alloc_desc_set()
-    var writes : array<WriteDescriptorSet>
     // conv bindings: qkv@5, conv output@0 (vk_upf view of hq_dev), smalls@4, params@2; 1/3 fillers
-    write_buf_desc(writes, g_gpu.dn_conv_set, 0u, g_gpu.hq_dev, BATCH_HQ_BYTES)
-    write_buf_desc(writes, g_gpu.dn_conv_set, 1u, g_gpu.dn_meta_dev, DN_META_BYTES)
-    write_buf_desc(writes, g_gpu.dn_conv_set, 2u, g_gpu.dn_meta_dev, DN_META_BYTES)
-    write_buf_desc(writes, g_gpu.dn_conv_set, 3u, g_gpu.dn_meta_dev, DN_META_BYTES)
-    write_buf_desc(writes, g_gpu.dn_conv_set, 4u, g_gpu.dn_smalls_dev, DN_SMALLS_BYTES)
-    write_buf_desc(writes, g_gpu.dn_conv_set, 5u, g_gpu.batch_y1_dev, BATCH_Y_BYTES)
+    g_gpu.dn_conv_set = vk_set6(g_gpu.hq_dev, g_gpu.dn_meta_dev, g_gpu.dn_meta_dev, g_gpu.dn_meta_dev, g_gpu.dn_smalls_dev, g_gpu.batch_y1_dev,
+        BATCH_HQ_BYTES, DN_META_BYTES, DN_META_BYTES, DN_META_BYTES, DN_SMALLS_BYTES, BATCH_Y_BYTES,
+        fixed_array(VHB_HQ, 0u, VHB_META, 0u, VHB_SM, VHB_Y1))
     // scan bindings: conv rows@0, state@1, slabs/o@3, smalls@4, z rows@5, params@2
-    write_buf_desc(writes, g_gpu.dn_scan_set, 0u, g_gpu.hq_dev, BATCH_HQ_BYTES)
-    write_buf_desc(writes, g_gpu.dn_scan_set, 1u, g_gpu.dn_state_dev, DN_STATE_BYTES)
-    write_buf_desc(writes, g_gpu.dn_scan_set, 2u, g_gpu.dn_meta_dev, DN_META_BYTES)
-    write_buf_desc(writes, g_gpu.dn_scan_set, 3u, g_gpu.dn_ws_dev, DN_WS_BYTES)
-    write_buf_desc(writes, g_gpu.dn_scan_set, 4u, g_gpu.dn_smalls_dev, DN_SMALLS_BYTES)
-    write_buf_desc(writes, g_gpu.dn_scan_set, 5u, g_gpu.batch_y2_dev, BATCH_Y_BYTES)
-    // requant bindings: o rows@0, quant words@3, scales@4 (out-proj activation image), params@2
-    write_buf_desc(writes, g_gpu.dn_rq_set, 0u, g_gpu.dn_ws_dev, DN_WS_BYTES)
-    write_buf_desc(writes, g_gpu.dn_rq_set, 1u, g_gpu.dn_meta_dev, DN_META_BYTES)
-    write_buf_desc(writes, g_gpu.dn_rq_set, 2u, g_gpu.dn_meta_dev, DN_META_BYTES)
-    write_buf_desc(writes, g_gpu.dn_rq_set, 3u, g_gpu.hq_dev, BATCH_HQ_BYTES)
-    write_buf_desc(writes, g_gpu.dn_rq_set, 4u, g_gpu.hs_dev, BATCH_HS_BYTES)
-    write_buf_desc(writes, g_gpu.dn_rq_set, 5u, g_gpu.dn_meta_dev, DN_META_BYTES)
-    let no_copies : array<CopyDescriptorSet>
-    update_descriptor_sets(g_gpu.device, writes, no_copies)
-    hz_set_bits(g_gpu.dn_conv_set, VHB_HQ, 0u, VHB_META, 0u, VHB_SM, VHB_Y1)   // 1/3 = untouched fillers
-    hz_set_bits(g_gpu.dn_scan_set, VHB_HQ, VHB_ST, VHB_META, VHB_WS, VHB_SM, VHB_Y2)
-    hz_set_bits(g_gpu.dn_rq_set, VHB_WS, 0u, VHB_META, VHB_HQ, VHB_HQ, 0u)     // 1/5 = untouched fillers
+    g_gpu.dn_scan_set = vk_set6(g_gpu.hq_dev, g_gpu.dn_state_dev, g_gpu.dn_meta_dev, g_gpu.dn_ws_dev, g_gpu.dn_smalls_dev, g_gpu.batch_y2_dev,
+        BATCH_HQ_BYTES, DN_STATE_BYTES, DN_META_BYTES, DN_WS_BYTES, DN_SMALLS_BYTES, BATCH_Y_BYTES,
+        fixed_array(VHB_HQ, VHB_ST, VHB_META, VHB_WS, VHB_SM, VHB_Y2))
+    // requant bindings: o rows@0, quant words@3, scales@4 (out-proj activation image), params@2; 1/5 fillers
+    g_gpu.dn_rq_set = vk_set6(g_gpu.dn_ws_dev, g_gpu.dn_meta_dev, g_gpu.dn_meta_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_gpu.dn_meta_dev,
+        DN_WS_BYTES, DN_META_BYTES, DN_META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, DN_META_BYTES,
+        fixed_array(VHB_WS, 0u, VHB_META, VHB_HQ, VHB_HQ, 0u))
     g_gpu.dn_ready = true
     to_log(LOG_INFO, "dasLLAMA vulkan tier: deltanet chain engaged\n")
 }
@@ -2726,18 +2652,10 @@ def ensure_batch_state {
     g_gpu.batch_y1 = make_host_buf(BATCH_Y_BYTES, true, [cached = true])
     g_gpu.batch_y2 = make_host_buf(BATCH_Y_BYTES, true, [cached = true])
     g_gpu.batch_cmd = alloc_cmd()
-    g_gpu.batch_actrq_set = alloc_desc_set()
-    var writes : array<WriteDescriptorSet>
     // fused act+requant bindings: up@0, params@2, hq/hs@3/4, gate@5; binding 1 is unused filler
-    write_buf_desc(writes, g_gpu.batch_actrq_set, 0u, g_gpu.batch_y2_dev, BATCH_Y_BYTES)
-    write_buf_desc(writes, g_gpu.batch_actrq_set, 1u, g_gpu.batch_xs_dev, BATCH_XS_BYTES)
-    write_buf_desc(writes, g_gpu.batch_actrq_set, 2u, g_gpu.ffn_meta_dev, FFN_META_BYTES)
-    write_buf_desc(writes, g_gpu.batch_actrq_set, 3u, g_gpu.hq_dev, BATCH_HQ_BYTES)
-    write_buf_desc(writes, g_gpu.batch_actrq_set, 4u, g_gpu.hs_dev, BATCH_HS_BYTES)
-    write_buf_desc(writes, g_gpu.batch_actrq_set, 5u, g_gpu.batch_y1_dev, BATCH_Y_BYTES)
-    let no_copies : array<CopyDescriptorSet>
-    update_descriptor_sets(g_gpu.device, writes, no_copies)
-    hz_set_bits(g_gpu.batch_actrq_set, VHB_Y2, 0u, VHB_META, VHB_HQ, VHB_HQ, VHB_Y1)
+    g_gpu.batch_actrq_set = vk_set6(g_gpu.batch_y2_dev, g_gpu.batch_xs_dev, g_gpu.ffn_meta_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_gpu.batch_y1_dev,
+        BATCH_Y_BYTES, BATCH_XS_BYTES, FFN_META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, BATCH_Y_BYTES,
+        fixed_array(VHB_Y2, 0u, VHB_META, VHB_HQ, VHB_HQ, VHB_Y1))
     g_gpu.resident_bytes += BATCH_XQ_BYTES + BATCH_XS_BYTES
     g_gpu.batch_ready = true
     to_log(LOG_INFO, "dasLLAMA vulkan tier: prefill batch tier engaged\n")

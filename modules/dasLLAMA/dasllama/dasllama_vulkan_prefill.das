@@ -32,7 +32,7 @@ require math
 let private PF_ROLES = 16l   // quant_xb q k v rope attn quant_at wo addr_ffn quant_xb2 gate up actrq down addr_next qkn
 
 def private pf_bind(idx : int; b0, b1, b2, b3, b4, b5 : uint64; s0, s1, s2, s3, s4, s5 : int64; gbits : uint[6]) {
-    g_rd.pf_sets[idx] = rd_set6(b0, b1, b2, b3, b4, b5, s0, s1, s2, s3, s4, s5, gbits)
+    g_rd.pf_sets[idx] = vk_set6(b0, b1, b2, b3, b4, b5, s0, s1, s2, s3, s4, s5, gbits)
 }
 
 def private pf_setup {
@@ -439,17 +439,9 @@ def private arena_ensure_batch(fmt : int) {
         }
         ensure_batch_state()
         a.batch_meta = make_host_buf(BATCH_META_BYTES, true)
-        a.batch_set = alloc_desc_set()
-        var writes : array<WriteDescriptorSet>
-        write_buf_desc(writes, a.batch_set, 0u, a.wqbuf, a.wqbytes)
-        write_buf_desc(writes, a.batch_set, 1u, a.wsbuf, a.wsbytes)
-        write_buf_desc(writes, a.batch_set, 2u, a.batch_meta.buf, BATCH_META_BYTES)
-        write_buf_desc(writes, a.batch_set, 3u, g_gpu.batch_xq_dev, BATCH_XQ_BYTES)
-        write_buf_desc(writes, a.batch_set, 4u, g_gpu.batch_xs_dev, BATCH_XS_BYTES)
-        write_buf_desc(writes, a.batch_set, 5u, g_gpu.batch_y1_dev, BATCH_Y_BYTES)
-        let no_copies : array<CopyDescriptorSet>
-        update_descriptor_sets(g_gpu.device, writes, no_copies)
-        hz_set_bits(a.batch_set, 0u, 0u, 0u, 0u, 0u, VHG_YO)   // meta/acts fill pre-cmd
+        a.batch_set = vk_set6(a.wqbuf, a.wsbuf, a.batch_meta.buf, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, g_gpu.batch_y1_dev,
+            a.wqbytes, a.wsbytes, BATCH_META_BYTES, BATCH_XQ_BYTES, BATCH_XS_BYTES, BATCH_Y_BYTES,
+            fixed_array(0u, 0u, 0u, 0u, 0u, VHG_YO))   // meta/acts fill pre-cmd
         a.batch_ready = true
     }
 }
@@ -530,27 +522,14 @@ def private ensure_cm2_batch {
     ensure_batch_state()
     g_gpu.batch_xf_dev = make_device_buf(2l * BATCH_XQ_BYTES)
     g_gpu.batch_hf_dev = make_device_buf(2l * BATCH_HQ_BYTES)
-    g_gpu.batch_xf_set = alloc_desc_set()
-    g_gpu.batch_hf_set = alloc_desc_set()
-    var writes : array<WriteDescriptorSet>
     // dequant bindings: f16 out@0, params@2, xq/xs@3/4; 1/5 unused filler
-    write_buf_desc(writes, g_gpu.batch_xf_set, 0u, g_gpu.batch_xf_dev, 2l * BATCH_XQ_BYTES)
-    write_buf_desc(writes, g_gpu.batch_xf_set, 1u, g_gpu.batch_xs_dev, BATCH_XS_BYTES)
-    write_buf_desc(writes, g_gpu.batch_xf_set, 2u, g_gpu.ffn_meta_dev, FFN_META_BYTES)
-    write_buf_desc(writes, g_gpu.batch_xf_set, 3u, g_gpu.batch_xq_dev, BATCH_XQ_BYTES)
-    write_buf_desc(writes, g_gpu.batch_xf_set, 4u, g_gpu.batch_xs_dev, BATCH_XS_BYTES)
-    write_buf_desc(writes, g_gpu.batch_xf_set, 5u, g_gpu.batch_y1_dev, BATCH_Y_BYTES)
+    g_gpu.batch_xf_set = vk_set6(g_gpu.batch_xf_dev, g_gpu.batch_xs_dev, g_gpu.ffn_meta_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, g_gpu.batch_y1_dev,
+        2l * BATCH_XQ_BYTES, BATCH_XS_BYTES, FFN_META_BYTES, BATCH_XQ_BYTES, BATCH_XS_BYTES, BATCH_Y_BYTES,
+        fixed_array(VHB_XF, 0u, VHB_META, VHB_ACT, VHB_ACT, 0u))
     // act-f16 bindings mirror actrq: up@0, params@2, f16 hidden out@3, gate@5; 1/4 unused filler
-    write_buf_desc(writes, g_gpu.batch_hf_set, 0u, g_gpu.batch_y2_dev, BATCH_Y_BYTES)
-    write_buf_desc(writes, g_gpu.batch_hf_set, 1u, g_gpu.batch_xs_dev, BATCH_XS_BYTES)
-    write_buf_desc(writes, g_gpu.batch_hf_set, 2u, g_gpu.ffn_meta_dev, FFN_META_BYTES)
-    write_buf_desc(writes, g_gpu.batch_hf_set, 3u, g_gpu.batch_hf_dev, 2l * BATCH_HQ_BYTES)
-    write_buf_desc(writes, g_gpu.batch_hf_set, 4u, g_gpu.hs_dev, BATCH_HS_BYTES)
-    write_buf_desc(writes, g_gpu.batch_hf_set, 5u, g_gpu.batch_y1_dev, BATCH_Y_BYTES)
-    let no_copies : array<CopyDescriptorSet>
-    update_descriptor_sets(g_gpu.device, writes, no_copies)
-    hz_set_bits(g_gpu.batch_xf_set, VHB_XF, 0u, VHB_META, VHB_ACT, VHB_ACT, 0u)
-    hz_set_bits(g_gpu.batch_hf_set, VHB_Y2, 0u, VHB_META, VHB_HF, 0u, VHB_Y1)
+    g_gpu.batch_hf_set = vk_set6(g_gpu.batch_y2_dev, g_gpu.batch_xs_dev, g_gpu.ffn_meta_dev, g_gpu.batch_hf_dev, g_gpu.hs_dev, g_gpu.batch_y1_dev,
+        BATCH_Y_BYTES, BATCH_XS_BYTES, FFN_META_BYTES, 2l * BATCH_HQ_BYTES, BATCH_HS_BYTES, BATCH_Y_BYTES,
+        fixed_array(VHB_Y2, 0u, VHB_META, VHB_HF, 0u, VHB_Y1))
     g_gpu.resident_bytes += 2l * BATCH_XQ_BYTES + 2l * BATCH_HQ_BYTES
     g_gpu.cm2_batch_ready = true
     to_log(LOG_INFO, "dasLLAMA vulkan tier: cm2 prefill chain engaged (decode-in-load, f16 activations)\n")
@@ -565,18 +544,10 @@ def private ensure_comb_state {
     g_gpu.comb_inv_dev = make_device_buf(COMB_WI_BYTES)
     g_gpu.comb_y_dev = make_device_buf(BATCH_Y_BYTES)
     g_gpu.comb_y = make_host_buf(BATCH_Y_BYTES, true, [cached = true])
-    g_gpu.comb_set = alloc_desc_set()
-    var writes : array<WriteDescriptorSet>
     // combine bindings: output@0, params@2, bucket map@3, weights@4, down rows@5; binding 1 unused
-    write_buf_desc(writes, g_gpu.comb_set, 0u, g_gpu.comb_y_dev, BATCH_Y_BYTES)
-    write_buf_desc(writes, g_gpu.comb_set, 1u, g_gpu.comb_w_dev, COMB_WI_BYTES)
-    write_buf_desc(writes, g_gpu.comb_set, 2u, g_gpu.ffn_meta_dev, FFN_META_BYTES)
-    write_buf_desc(writes, g_gpu.comb_set, 3u, g_gpu.comb_inv_dev, COMB_WI_BYTES)
-    write_buf_desc(writes, g_gpu.comb_set, 4u, g_gpu.comb_w_dev, COMB_WI_BYTES)
-    write_buf_desc(writes, g_gpu.comb_set, 5u, g_gpu.batch_y1_dev, BATCH_Y_BYTES)
-    let no_copies : array<CopyDescriptorSet>
-    update_descriptor_sets(g_gpu.device, writes, no_copies)
-    hz_set_bits(g_gpu.comb_set, VHB_CY, VHB_COMB, VHB_META, VHB_COMB, VHB_COMB, VHB_Y1)
+    g_gpu.comb_set = vk_set6(g_gpu.comb_y_dev, g_gpu.comb_w_dev, g_gpu.ffn_meta_dev, g_gpu.comb_inv_dev, g_gpu.comb_w_dev, g_gpu.batch_y1_dev,
+        BATCH_Y_BYTES, COMB_WI_BYTES, FFN_META_BYTES, COMB_WI_BYTES, COMB_WI_BYTES, BATCH_Y_BYTES,
+        fixed_array(VHB_CY, VHB_COMB, VHB_META, VHB_COMB, VHB_COMB, VHB_Y1))
     g_gpu.comb_ready = true
     to_log(LOG_INFO, "dasLLAMA vulkan tier: device-side moe combine engaged\n")
 }
@@ -594,16 +565,10 @@ def private ensure_batch_set(si : int; ybuf, xqbuf, xsbuf : uint64; xqbytes, xsb
         g_gpu.stacks[si].batch_set = alloc_desc_set()
         g_gpu.stacks[si].batch_made = true
     }
-    var writes : array<WriteDescriptorSet>
-    write_buf_desc(writes, g_gpu.stacks[si].batch_set, 0u, g_gpu.stacks[si].wqbuf, g_gpu.stacks[si].wqbytes)
-    write_buf_desc(writes, g_gpu.stacks[si].batch_set, 1u, g_gpu.stacks[si].wsbuf, ws_range(si))
-    write_buf_desc(writes, g_gpu.stacks[si].batch_set, 2u, g_gpu.stacks[si].batch_meta_dev, BATCH_META_BYTES)
-    write_buf_desc(writes, g_gpu.stacks[si].batch_set, 3u, xqbuf, xqbytes)
-    write_buf_desc(writes, g_gpu.stacks[si].batch_set, 4u, xsbuf, xsbytes)
-    write_buf_desc(writes, g_gpu.stacks[si].batch_set, 5u, ybuf, ybytes)
-    let no_copies : array<CopyDescriptorSet>
-    update_descriptor_sets(g_gpu.device, writes, no_copies)
-    hz_set_bits(g_gpu.stacks[si].batch_set, 0u, 0u, VHB_META, xbit, xbit, ybit)
+    vk_write6(g_gpu.stacks[si].batch_set,
+        g_gpu.stacks[si].wqbuf, g_gpu.stacks[si].wsbuf, g_gpu.stacks[si].batch_meta_dev, xqbuf, xsbuf, ybuf,
+        g_gpu.stacks[si].wqbytes, ws_range(si), BATCH_META_BYTES, xqbytes, xsbytes, ybytes,
+        fixed_array(0u, 0u, VHB_META, xbit, xbit, ybit))
     g_gpu.stacks[si].batch_y = ybuf
     g_gpu.stacks[si].batch_xq = xqbuf
 }
@@ -1107,45 +1072,22 @@ def private ensure_at_state {
     g_gpu.at_v_dev = make_device_buf(AT_CTX * AT_MAX_KV * 4l)
     g_gpu.at_vraw_dev = make_device_buf(AT_WINDOW * AT_MAX_KV * 4l)
     g_gpu.at_kv_host = make_host_buf(2l * AT_WINDOW * AT_MAX_KV * 4l, true, [cached = true])
-    g_gpu.at_prep_q_set = alloc_desc_set()
-    g_gpu.at_prep_k_set = alloc_desc_set()
-    g_gpu.at_attn_set = alloc_desc_set()
-    g_gpu.at_rq_set = alloc_desc_set()
-    var writes : array<WriteDescriptorSet>
     // prep-q bindings: q|gate GEMM rows@5, q out@0, gate out@3, smalls@4, params@2; 1 filler
-    write_buf_desc(writes, g_gpu.at_prep_q_set, 0u, g_gpu.at_q_dev, AT_WINDOW * AT_MAX_QD * 4l)
-    write_buf_desc(writes, g_gpu.at_prep_q_set, 1u, g_gpu.at_meta_dev, AT_META_BYTES)
-    write_buf_desc(writes, g_gpu.at_prep_q_set, 2u, g_gpu.at_meta_dev, AT_META_BYTES)
-    write_buf_desc(writes, g_gpu.at_prep_q_set, 3u, g_gpu.at_g_dev, AT_WINDOW * AT_MAX_QD * 4l)
-    write_buf_desc(writes, g_gpu.at_prep_q_set, 4u, g_gpu.at_smalls_dev, AT_SMALLS_BYTES)
-    write_buf_desc(writes, g_gpu.at_prep_q_set, 5u, g_gpu.batch_y1_dev, BATCH_Y_BYTES)
+    g_gpu.at_prep_q_set = vk_set6(g_gpu.at_q_dev, g_gpu.at_meta_dev, g_gpu.at_meta_dev, g_gpu.at_g_dev, g_gpu.at_smalls_dev, g_gpu.batch_y1_dev,
+        AT_WINDOW * AT_MAX_QD * 4l, AT_META_BYTES, AT_META_BYTES, AT_WINDOW * AT_MAX_QD * 4l, AT_SMALLS_BYTES, BATCH_Y_BYTES,
+        fixed_array(VHB_ATQ, 0u, VHB_META, VHB_ATG, VHB_SM, VHB_Y1))
     // prep-k: roped k out@0 lands at ABSOLUTE positions; the gate view@3 never fires for a k row
-    write_buf_desc(writes, g_gpu.at_prep_k_set, 0u, g_gpu.at_k_dev, AT_CTX * AT_MAX_KV * 4l)
-    write_buf_desc(writes, g_gpu.at_prep_k_set, 1u, g_gpu.at_meta_dev, AT_META_BYTES)
-    write_buf_desc(writes, g_gpu.at_prep_k_set, 2u, g_gpu.at_meta_dev, AT_META_BYTES)
-    write_buf_desc(writes, g_gpu.at_prep_k_set, 3u, g_gpu.at_meta_dev, AT_META_BYTES)
-    write_buf_desc(writes, g_gpu.at_prep_k_set, 4u, g_gpu.at_smalls_dev, AT_SMALLS_BYTES)
-    write_buf_desc(writes, g_gpu.at_prep_k_set, 5u, g_gpu.batch_y2_dev, BATCH_Y_BYTES)
+    g_gpu.at_prep_k_set = vk_set6(g_gpu.at_k_dev, g_gpu.at_meta_dev, g_gpu.at_meta_dev, g_gpu.at_meta_dev, g_gpu.at_smalls_dev, g_gpu.batch_y2_dev,
+        AT_CTX * AT_MAX_KV * 4l, AT_META_BYTES, AT_META_BYTES, AT_META_BYTES, AT_SMALLS_BYTES, BATCH_Y_BYTES,
+        fixed_array(VHB_ATK, 0u, VHB_META, 0u, VHB_SM, VHB_Y2))   // 3 = the never-fired gate view
     // attn bindings: q@0, k@1, gate in/o out@3, smalls@4, v@5, params@2
-    write_buf_desc(writes, g_gpu.at_attn_set, 0u, g_gpu.at_q_dev, AT_WINDOW * AT_MAX_QD * 4l)
-    write_buf_desc(writes, g_gpu.at_attn_set, 1u, g_gpu.at_k_dev, AT_CTX * AT_MAX_KV * 4l)
-    write_buf_desc(writes, g_gpu.at_attn_set, 2u, g_gpu.at_meta_dev, AT_META_BYTES)
-    write_buf_desc(writes, g_gpu.at_attn_set, 3u, g_gpu.at_g_dev, AT_WINDOW * AT_MAX_QD * 4l)
-    write_buf_desc(writes, g_gpu.at_attn_set, 4u, g_gpu.at_smalls_dev, AT_SMALLS_BYTES)
-    write_buf_desc(writes, g_gpu.at_attn_set, 5u, g_gpu.at_v_dev, AT_CTX * AT_MAX_KV * 4l)
+    g_gpu.at_attn_set = vk_set6(g_gpu.at_q_dev, g_gpu.at_k_dev, g_gpu.at_meta_dev, g_gpu.at_g_dev, g_gpu.at_smalls_dev, g_gpu.at_v_dev,
+        AT_WINDOW * AT_MAX_QD * 4l, AT_CTX * AT_MAX_KV * 4l, AT_META_BYTES, AT_WINDOW * AT_MAX_QD * 4l, AT_SMALLS_BYTES, AT_CTX * AT_MAX_KV * 4l,
+        fixed_array(VHB_ATQ, VHB_ATK, VHB_META, VHB_ATG, VHB_SM, VHB_ATV))
     // requant bindings: o rows@0, quant words@3, scales@4 (wo GEMM activation image), params@2
-    write_buf_desc(writes, g_gpu.at_rq_set, 0u, g_gpu.at_g_dev, AT_WINDOW * AT_MAX_QD * 4l)
-    write_buf_desc(writes, g_gpu.at_rq_set, 1u, g_gpu.at_meta_dev, AT_META_BYTES)
-    write_buf_desc(writes, g_gpu.at_rq_set, 2u, g_gpu.at_meta_dev, AT_META_BYTES)
-    write_buf_desc(writes, g_gpu.at_rq_set, 3u, g_gpu.hq_dev, BATCH_HQ_BYTES)
-    write_buf_desc(writes, g_gpu.at_rq_set, 4u, g_gpu.hs_dev, BATCH_HS_BYTES)
-    write_buf_desc(writes, g_gpu.at_rq_set, 5u, g_gpu.at_meta_dev, AT_META_BYTES)
-    let no_copies : array<CopyDescriptorSet>
-    update_descriptor_sets(g_gpu.device, writes, no_copies)
-    hz_set_bits(g_gpu.at_prep_q_set, VHB_ATQ, 0u, VHB_META, VHB_ATG, VHB_SM, VHB_Y1)
-    hz_set_bits(g_gpu.at_prep_k_set, VHB_ATK, 0u, VHB_META, 0u, VHB_SM, VHB_Y2)   // 3 = the never-fired gate view
-    hz_set_bits(g_gpu.at_attn_set, VHB_ATQ, VHB_ATK, VHB_META, VHB_ATG, VHB_SM, VHB_ATV)
-    hz_set_bits(g_gpu.at_rq_set, VHB_ATG, 0u, VHB_META, VHB_HQ, VHB_HQ, 0u)
+    g_gpu.at_rq_set = vk_set6(g_gpu.at_g_dev, g_gpu.at_meta_dev, g_gpu.at_meta_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_gpu.at_meta_dev,
+        AT_WINDOW * AT_MAX_QD * 4l, AT_META_BYTES, AT_META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, AT_META_BYTES,
+        fixed_array(VHB_ATG, 0u, VHB_META, VHB_HQ, VHB_HQ, 0u))
     g_gpu.at_ready = true
     to_log(LOG_INFO, "dasLLAMA vulkan tier: attention chain engaged\n")
 }

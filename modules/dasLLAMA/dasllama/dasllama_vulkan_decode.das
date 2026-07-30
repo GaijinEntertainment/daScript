@@ -149,23 +149,23 @@ def vk_rdec_set_layer(l : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv,
         L.m_addr_ffn = rd_meta(); L.m_quant_xb2 = rd_meta(); L.m_gate = rd_meta(); L.m_up = rd_meta()
         L.m_actrq = rd_meta(); L.m_down = rd_meta(); L.m_addr_next = rd_meta()
         // quantize xb -> xq/xs (dn_requant: in vk_upf@0, meta@2, xq@3, xs@4)
-        L.s_quant_xb = rd_set6(g_rd.xb_dev, g_rd.dummy, L.m_quant_xb.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.dummy,
+        L.s_quant_xb = vk_set6(g_rd.xb_dev, g_rd.dummy, L.m_quant_xb.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.dummy,
             dim * 4l, 256l, META_BYTES, dim, (dim / 32l) * 4l, 256l,
             fixed_array(VHZ_XB, 0u, 0u, VHZ_XQ, VHZ_XQ, 0u))
         // q/k/v GEMV: arena[f] planes @0/1, meta@2, xq@3, xs@4, out@5
-        L.s_q = rd_set6(pq.wq, pq.ws, L.m_q.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.q_dev,
+        L.s_q = vk_set6(pq.wq, pq.ws, L.m_q.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.q_dev,
             pq.wqb, pq.wsb, META_BYTES, dim, (dim / 32l) * 4l, qd * 4l,
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_Q))
-        L.s_k = rd_set6(pk.wq, pk.ws, L.m_k.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.kv_dev,
+        L.s_k = vk_set6(pk.wq, pk.ws, L.m_k.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.kv_dev,
             pk.wqb, pk.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l,
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_KVK))
-        L.s_v = rd_set6(pv.wq, pv.ws, L.m_v.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.kv_dev,
+        L.s_v = vk_set6(pv.wq, pv.ws, L.m_v.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.kv_dev,
             pv.wqb, pv.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l,
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_KVV))
         // same-format k/v share arena planes — one two-region dispatch fills both kv halves
         L.kv_merged = fk == fv
         if (L.kv_merged) {
-            L.s_kv = rd_set6(pk.wq, pk.ws, L.m_k.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.kv_dev,
+            L.s_kv = vk_set6(pk.wq, pk.ws, L.m_k.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.kv_dev,
                 pk.wqb, pk.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l,
                 fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_KVK | VHZ_KVV))
         }
@@ -173,65 +173,65 @@ def vk_rdec_set_layer(l : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv,
         let mirbytes = g_rd.n_layers * g_rd.seq_cap * kvd * 4l
         if (g_rd.qk_norm) {
             L.m_qkn = rd_meta()
-            L.s_qkn = rd_set6(g_rd.q_dev, g_rd.dummy, L.m_qkn.buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.kv_dev,
+            L.s_qkn = vk_set6(g_rd.q_dev, g_rd.dummy, L.m_qkn.buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.kv_dev,
                 qd * 4l, 256l, META_BYTES, g_rd.norms_bytes, 64l, (qd + 2l * kvd) * 4l,
                 fixed_array(VHZ_Q, 0u, 0u, 0u, 0u, VHZ_KVK))
             // the fused twin: rope's own binding plan, with the rms rows riding the cos buffer
             L.m_qkr = rd_meta()
-            L.s_qkn_rope = rd_set6(g_rd.kv_dev, g_rd.k_mirror, L.m_qkr.buf, g_rd.v_mirror, g_rd.cos_dev, g_rd.q_dev,
+            L.s_qkn_rope = vk_set6(g_rd.kv_dev, g_rd.k_mirror, L.m_qkr.buf, g_rd.v_mirror, g_rd.cos_dev, g_rd.q_dev,
                 (qd + 2l * kvd) * 4l, mirbytes, META_BYTES, mirbytes, g_rd.cos_elems * 4l, qd * 4l,
                 fixed_array(VHZ_KVK | VHZ_KVV, VHZ_MIR, 0u, VHZ_MIR, VHZ_COS, VHZ_Q))
         }
         // rope+store: kv@0, Kmirror@1, meta@2, Vmirror@3, cossin@4, q@5
-        L.s_rope = rd_set6(g_rd.kv_dev, g_rd.k_mirror, L.m_rope.buf, g_rd.v_mirror, g_rd.cos_dev, g_rd.q_dev,
+        L.s_rope = vk_set6(g_rd.kv_dev, g_rd.k_mirror, L.m_rope.buf, g_rd.v_mirror, g_rd.cos_dev, g_rd.q_dev,
             (qd + 2l * kvd) * 4l, mirbytes, META_BYTES, mirbytes, g_rd.head_size * 4l, qd * 4l,
             fixed_array(VHZ_KVK | VHZ_KVV, VHZ_MIR, 0u, VHZ_MIR, VHZ_COS, VHZ_Q))
         // attn: q@0, Kmirror@1, meta@2, Vmirror@3, scale@4, out@5
-        L.s_attn = rd_set6(g_rd.q_dev, g_rd.k_mirror, L.m_attn.buf, g_rd.v_mirror, g_rd.scal_dev, g_rd.attn_dev,
+        L.s_attn = vk_set6(g_rd.q_dev, g_rd.k_mirror, L.m_attn.buf, g_rd.v_mirror, g_rd.scal_dev, g_rd.attn_dev,
             qd * 4l, mirbytes, META_BYTES, mirbytes, 64l, qd * 4l,
             fixed_array(VHZ_Q, VHZ_MIR, 0u, VHZ_MIR, 0u, VHZ_ATT))
         // quantize attn -> aq/as
-        L.s_quant_at = rd_set6(g_rd.attn_dev, g_rd.dummy, L.m_quant_at.buf, g_rd.aq_dev, g_rd.as_dev, g_rd.dummy,
+        L.s_quant_at = vk_set6(g_rd.attn_dev, g_rd.dummy, L.m_quant_at.buf, g_rd.aq_dev, g_rd.as_dev, g_rd.dummy,
             qd * 4l, 256l, META_BYTES, qd, (qd / 32l) * 4l, 256l,
             fixed_array(VHZ_ATT, 0u, 0u, VHZ_AQ, VHZ_AQ, 0u))
         // wo GEMV -> xb2
-        L.s_wo = rd_set6(po.wq, po.ws, L.m_wo.buf, g_rd.aq_dev, g_rd.as_dev, g_rd.xb2_dev,
+        L.s_wo = vk_set6(po.wq, po.ws, L.m_wo.buf, g_rd.aq_dev, g_rd.as_dev, g_rd.xb2_dev,
             po.wqb, po.wsb, META_BYTES, qd, (qd / 32l) * 4l, dim * 4l,
             fixed_array(0u, 0u, 0u, VHZ_AQ, VHZ_AQ, VHZ_XB2))
         // addrms: x@0 += xb2@1, meta@2, norms@3, scalars@4, xb@5
-        L.s_addr_ffn = rd_set6(g_rd.x_dev, g_rd.xb2_dev, L.m_addr_ffn.buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.xb_dev,
+        L.s_addr_ffn = vk_set6(g_rd.x_dev, g_rd.xb2_dev, L.m_addr_ffn.buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.xb_dev,
             dim * 4l, dim * 4l, META_BYTES, g_rd.norms_bytes, 64l, dim * 4l,
             fixed_array(VHZ_X, VHZ_XB2, 0u, 0u, 0u, VHZ_XB))
         // fused twin: the normed row quantizes in place of the xb store (xs@4, xq@5)
-        L.s_addr_ffn_rq = rd_set6(g_rd.x_dev, g_rd.xb2_dev, L.m_addr_ffn.buf, g_rd.norms_dev, g_rd.xs_dev, g_rd.xq_dev,
+        L.s_addr_ffn_rq = vk_set6(g_rd.x_dev, g_rd.xb2_dev, L.m_addr_ffn.buf, g_rd.norms_dev, g_rd.xs_dev, g_rd.xq_dev,
             dim * 4l, dim * 4l, META_BYTES, g_rd.norms_bytes, (dim / 32l) * 4l, dim,
             fixed_array(VHZ_X, VHZ_XB2, 0u, 0u, VHZ_XQ, VHZ_XQ))
         // quantize xb (post-ffn-norm) -> xq/xs
-        L.s_quant_xb2 = rd_set6(g_rd.xb_dev, g_rd.dummy, L.m_quant_xb2.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.dummy,
+        L.s_quant_xb2 = vk_set6(g_rd.xb_dev, g_rd.dummy, L.m_quant_xb2.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.dummy,
             dim * 4l, 256l, META_BYTES, dim, (dim / 32l) * 4l, 256l,
             fixed_array(VHZ_XB, 0u, 0u, VHZ_XQ, VHZ_XQ, 0u))
         // gate/up GEMV
-        L.s_gate = rd_set6(p1.wq, p1.ws, L.m_gate.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.gate_dev,
+        L.s_gate = vk_set6(p1.wq, p1.ws, L.m_gate.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.gate_dev,
             p1.wqb, p1.wsb, META_BYTES, dim, (dim / 32l) * 4l, hid * 4l,
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_GATE))
-        L.s_up = rd_set6(p3.wq, p3.ws, L.m_up.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.up_dev,
+        L.s_up = vk_set6(p3.wq, p3.ws, L.m_up.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.up_dev,
             p3.wqb, p3.wsb, META_BYTES, dim, (dim / 32l) * 4l, hid * 4l,
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_UP))
         // act+requant: up@0, filler@1, ffn_meta@2, hq@3, hs@4, gate@5
-        L.s_actrq = rd_set6(g_rd.up_dev, g_rd.dummy, g_gpu.ffn_meta_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.gate_dev,
+        L.s_actrq = vk_set6(g_rd.up_dev, g_rd.dummy, g_gpu.ffn_meta_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.gate_dev,
             hid * 4l, 256l, FFN_META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, hid * 4l,
             fixed_array(VHZ_UP, 0u, VHZ_META, VHZ_HQ, VHZ_HQ, VHZ_GATE))
         // down GEMV -> ffnout
-        L.s_down = rd_set6(p2.wq, p2.ws, L.m_down.buf, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.ffnout_dev,
+        L.s_down = vk_set6(p2.wq, p2.ws, L.m_down.buf, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.ffnout_dev,
             p2.wqb, p2.wsb, META_BYTES, hid, (hid / 32l) * 4l, dim * 4l,
             fixed_array(0u, 0u, 0u, VHZ_HQ, VHZ_HQ, VHZ_FFO))
         // addrms next: x@0 += ffnout@1, norms@3, xb@5
-        L.s_addr_next = rd_set6(g_rd.x_dev, g_rd.ffnout_dev, L.m_addr_next.buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.xb_dev,
+        L.s_addr_next = vk_set6(g_rd.x_dev, g_rd.ffnout_dev, L.m_addr_next.buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.xb_dev,
             dim * 4l, dim * 4l, META_BYTES, g_rd.norms_bytes, 64l, dim * 4l,
             fixed_array(VHZ_X, VHZ_FFO, 0u, 0u, 0u, VHZ_XB))
         // fused twin — on the last layer this also serves the final norm, so the split rail's
         // separate quant_final dispatch has no fused counterpart
-        L.s_addr_next_rq = rd_set6(g_rd.x_dev, g_rd.ffnout_dev, L.m_addr_next.buf, g_rd.norms_dev, g_rd.xs_dev, g_rd.xq_dev,
+        L.s_addr_next_rq = vk_set6(g_rd.x_dev, g_rd.ffnout_dev, L.m_addr_next.buf, g_rd.norms_dev, g_rd.xs_dev, g_rd.xq_dev,
             dim * 4l, dim * 4l, META_BYTES, g_rd.norms_bytes, (dim / 32l) * 4l, dim,
             fixed_array(VHZ_X, VHZ_FFO, 0u, 0u, VHZ_XQ, VHZ_XQ))
         L.made = true
@@ -254,20 +254,20 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int) {
         g_rd.m_quant_final = rd_meta()
         g_rd.cls_meta_dev = make_device_buf(CLS_META_BYTES)
         // prologue: xb = rms_att[0](x), add off
-        g_rd.s_prologue = rd_set6(g_rd.x_dev, g_rd.dummy, g_rd.m_prologue.buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.xb_dev,
+        g_rd.s_prologue = vk_set6(g_rd.x_dev, g_rd.dummy, g_rd.m_prologue.buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.xb_dev,
             dim * 4l, 256l, META_BYTES, g_rd.norms_bytes, 64l, dim * 4l,
             fixed_array(VHZ_X, 0u, 0u, 0u, 0u, VHZ_XB))
         // fused twin — subsumes layer 0's quant_xb
-        g_rd.s_prologue_rq = rd_set6(g_rd.x_dev, g_rd.dummy, g_rd.m_prologue.buf, g_rd.norms_dev, g_rd.xs_dev, g_rd.xq_dev,
+        g_rd.s_prologue_rq = vk_set6(g_rd.x_dev, g_rd.dummy, g_rd.m_prologue.buf, g_rd.norms_dev, g_rd.xs_dev, g_rd.xq_dev,
             dim * 4l, 256l, META_BYTES, g_rd.norms_bytes, (dim / 32l) * 4l, dim,
             fixed_array(VHZ_X, 0u, 0u, 0u, VHZ_XQ, VHZ_XQ))
         // quantize final xb
-        g_rd.s_quant_final = rd_set6(g_rd.xb_dev, g_rd.dummy, g_rd.m_quant_final.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.dummy,
+        g_rd.s_quant_final = vk_set6(g_rd.xb_dev, g_rd.dummy, g_rd.m_quant_final.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.dummy,
             dim * 4l, 256l, META_BYTES, dim, (dim / 32l) * 4l, 256l,
             fixed_array(VHZ_XB, 0u, 0u, VHZ_XQ, VHZ_XQ, 0u))
         // cls GEMV: arena[fmt]@0/1, device meta@2, xq@3, xs@4, logits@5
         let pc = arena_planes(cls_fmt)
-        g_rd.cls_set = rd_set6(pc.wq, pc.ws, g_rd.cls_meta_dev, g_rd.xq_dev, g_rd.xs_dev, g_rd.logits_dev,
+        g_rd.cls_set = vk_set6(pc.wq, pc.ws, g_rd.cls_meta_dev, g_rd.xq_dev, g_rd.xs_dev, g_rd.logits_dev,
             pc.wqb, pc.wsb, CLS_META_BYTES, dim, (dim / 32l) * 4l, vocab * 4l,
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_LOG))
         // cls meta is constant (block base, n=dim, d=vocab) — device-filled once
@@ -633,39 +633,25 @@ def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
     }
     var st = DnStep(state_dev = make_device_buf(nvh * ds * ds * 4l),
                     smalls_dev = make_device_buf(DND_SMALLS_BYTES),
-                    z_set = alloc_desc_set(), fused_set = alloc_desc_set(), out_set = alloc_desc_set(),
                     cmd = alloc_cmd(), s_qkv = s_qkv, s_z = s_z, s_o = s_o,
                     state_bytes = nvh * ds * ds * 4l, ring_bytes = cd * taps * 4l,
                     parity = 0, valid = false, dirty = false)
-    var writes : array<WriteDescriptorSet>
     // z GEMV: z planes/meta (y base cd), the qkv stack's SHARED acts image and y buffer — the fused kernel sees qkv rows AND the z row on one binding
-    write_buf_desc(writes, st.z_set, 0u, g_gpu.stacks[s_z].wqbuf, g_gpu.stacks[s_z].wqbytes)
-    write_buf_desc(writes, st.z_set, 1u, g_gpu.stacks[s_z].wsbuf, g_gpu.stacks[s_z].wsbytes)
-    write_buf_desc(writes, st.z_set, 2u, g_gpu.stacks[s_z].meta.buf, META_BYTES)
-    write_buf_desc(writes, st.z_set, 3u, g_gpu.stacks[s_qkv].xq.buf, XQ_BYTES)
-    write_buf_desc(writes, st.z_set, 4u, g_gpu.stacks[s_qkv].xs.buf, XS_BYTES)
-    write_buf_desc(writes, st.z_set, 5u, g_gpu.stacks[s_qkv].y_dev, Y_BYTES)
+    st.z_set = vk_set6(g_gpu.stacks[s_z].wqbuf, g_gpu.stacks[s_z].wsbuf, g_gpu.stacks[s_z].meta.buf,
+        g_gpu.stacks[s_qkv].xq.buf, g_gpu.stacks[s_qkv].xs.buf, g_gpu.stacks[s_qkv].y_dev,
+        g_gpu.stacks[s_z].wqbytes, g_gpu.stacks[s_z].wsbytes, META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES,
+        fixed_array(0u, 0u, 0u, 0u, 0u, VHG_Y2))
     // fused step: o scales@0, THIS in-place state@1 (residency IS this binding), o quants@3, parity-ring smalls@4, the shared y@5
-    write_buf_desc(writes, st.fused_set, 0u, g_gpu.dnd_os_dev, DND_OS_BYTES)
-    write_buf_desc(writes, st.fused_set, 1u, st.state_dev, st.state_bytes)
-    write_buf_desc(writes, st.fused_set, 2u, g_gpu.dn_meta_dev, DN_META_BYTES)
-    write_buf_desc(writes, st.fused_set, 3u, g_gpu.dnd_oq_dev, DND_OQ_BYTES)
-    write_buf_desc(writes, st.fused_set, 4u, st.smalls_dev, DND_SMALLS_BYTES)
-    write_buf_desc(writes, st.fused_set, 5u, g_gpu.stacks[s_qkv].y_dev, Y_BYTES)
+    st.fused_set = vk_set6(g_gpu.dnd_os_dev, st.state_dev, g_gpu.dn_meta_dev, g_gpu.dnd_oq_dev, st.smalls_dev, g_gpu.stacks[s_qkv].y_dev,
+        DND_OS_BYTES, st.state_bytes, DN_META_BYTES, DND_OQ_BYTES, DND_SMALLS_BYTES, Y_BYTES,
+        fixed_array(VHG_WS, VHG_ST, VHG_META, VHG_WS, VHG_SM, VHG_Y1 | VHG_Y2))
     // out GEMV: out planes@0/1, the stack's once-filled host meta@2, the o image@3/4, its y_dev@5
-    write_buf_desc(writes, st.out_set, 0u, g_gpu.stacks[s_o].wqbuf, g_gpu.stacks[s_o].wqbytes)
-    write_buf_desc(writes, st.out_set, 1u, g_gpu.stacks[s_o].wsbuf, g_gpu.stacks[s_o].wsbytes)
-    write_buf_desc(writes, st.out_set, 2u, g_gpu.stacks[s_o].meta.buf, META_BYTES)
-    write_buf_desc(writes, st.out_set, 3u, g_gpu.dnd_oq_dev, DND_OQ_BYTES)
-    write_buf_desc(writes, st.out_set, 4u, g_gpu.dnd_os_dev, DND_OS_BYTES)
-    write_buf_desc(writes, st.out_set, 5u, g_gpu.stacks[s_o].y_dev, Y_BYTES)
-    let no_copies : array<CopyDescriptorSet>
-    update_descriptor_sets(g_gpu.device, writes, no_copies)
+    st.out_set = vk_set6(g_gpu.stacks[s_o].wqbuf, g_gpu.stacks[s_o].wsbuf, g_gpu.stacks[s_o].meta.buf,
+        g_gpu.dnd_oq_dev, g_gpu.dnd_os_dev, g_gpu.stacks[s_o].y_dev,
+        g_gpu.stacks[s_o].wqbytes, g_gpu.stacks[s_o].wsbytes, META_BYTES, DND_OQ_BYTES, DND_OS_BYTES, Y_BYTES,
+        fixed_array(0u, 0u, 0u, VHG_WS, VHG_WS, VHG_YO))
     // the qkv stack's raw_set plays Y1 in this chain (role-fluid sets re-declare per record)
     hz_set_bits(g_gpu.stacks[s_qkv].raw_set, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
-    hz_set_bits(st.z_set, 0u, 0u, 0u, 0u, 0u, VHG_Y2)
-    hz_set_bits(st.fused_set, VHG_WS, VHG_ST, VHG_META, VHG_WS, VHG_SM, VHG_Y1 | VHG_Y2)
-    hz_set_bits(st.out_set, 0u, 0u, 0u, VHG_WS, VHG_WS, VHG_YO)
     let raw = st.cmd
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw, begin), null)
@@ -811,25 +797,15 @@ def vk_dn_step_invalidate {
 def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64) : VkCommandBuffer {
     let key = (int64(s1) * int64(MAX_STACKS) + int64(s3)) * int64(MAX_STACKS) + int64(s2)
     if (!key_exists(g_gpu.ffn_cmds, key)) {
-        var fc = FfnCmd(cmd = alloc_cmd(), actrq_set = alloc_desc_set(),
-                        down_set = alloc_desc_set(), nrows = 0l)
-        var writes : array<WriteDescriptorSet>
+        var fc = FfnCmd(cmd = alloc_cmd(), nrows = 0l)
         // fused act+requant bindings: up@0, params@2, hq/hs@3/4, gate@5; binding 1 is unused filler
-        write_buf_desc(writes, fc.actrq_set, 0u, g_gpu.stacks[s3].y_dev, Y_BYTES)
-        write_buf_desc(writes, fc.actrq_set, 1u, g_gpu.stacks[s1].wsbuf, ws_range(s1))
-        write_buf_desc(writes, fc.actrq_set, 2u, g_gpu.ffn_meta_dev, FFN_META_BYTES)
-        write_buf_desc(writes, fc.actrq_set, 3u, g_gpu.hq_dev, BATCH_HQ_BYTES)
-        write_buf_desc(writes, fc.actrq_set, 4u, g_gpu.hs_dev, BATCH_HS_BYTES)
-        write_buf_desc(writes, fc.actrq_set, 5u, g_gpu.stacks[s1].y_dev, Y_BYTES)
+        fc.actrq_set = vk_set6(g_gpu.stacks[s3].y_dev, g_gpu.stacks[s1].wsbuf, g_gpu.ffn_meta_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_gpu.stacks[s1].y_dev,
+            Y_BYTES, ws_range(s1), FFN_META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, Y_BYTES,
+            fixed_array(VHG_Y2, 0u, VHG_META, VHG_HQ, VHG_HQ, VHG_Y1))
         // down: its own planes + host-visible meta, hq/hs as the activation image, its y_dev
-        write_buf_desc(writes, fc.down_set, 0u, g_gpu.stacks[s2].wqbuf, g_gpu.stacks[s2].wqbytes)
-        write_buf_desc(writes, fc.down_set, 1u, g_gpu.stacks[s2].wsbuf, ws_range(s2))
-        write_buf_desc(writes, fc.down_set, 2u, g_gpu.stacks[s2].meta.buf, META_BYTES)
-        write_buf_desc(writes, fc.down_set, 3u, g_gpu.hq_dev, BATCH_HQ_BYTES)
-        write_buf_desc(writes, fc.down_set, 4u, g_gpu.hs_dev, BATCH_HS_BYTES)
-        write_buf_desc(writes, fc.down_set, 5u, g_gpu.stacks[s2].y_dev, Y_BYTES)
-        let no_copies : array<CopyDescriptorSet>
-        update_descriptor_sets(g_gpu.device, writes, no_copies)
+        fc.down_set = vk_set6(g_gpu.stacks[s2].wqbuf, g_gpu.stacks[s2].wsbuf, g_gpu.stacks[s2].meta.buf, g_gpu.hq_dev, g_gpu.hs_dev, g_gpu.stacks[s2].y_dev,
+            g_gpu.stacks[s2].wqbytes, ws_range(s2), META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, Y_BYTES,
+            fixed_array(0u, 0u, 0u, VHG_HQ, VHG_HQ, VHG_YO))
         g_gpu.ffn_cmds |> insert(key, fc)
     }
     var fc = g_gpu.ffn_cmds[key]
@@ -844,8 +820,6 @@ def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64) : VkCommandBuff
         // gate/up roles on the two stacks' raw_sets, this chain's view (re-declared per record)
         hz_set_bits(g_gpu.stacks[s1].raw_set, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
         hz_set_bits(g_gpu.stacks[s3].raw_set, 0u, 0u, 0u, 0u, 0u, VHG_Y2)
-        hz_set_bits(fc.actrq_set, VHG_Y2, 0u, VHG_META, VHG_HQ, VHG_HQ, VHG_Y1)
-        hz_set_bits(fc.down_set, 0u, 0u, 0u, VHG_HQ, VHG_HQ, VHG_YO)
         var h : VkHaz
         vhz_dep(raw, h, 0u, VHG_META, true)
         cmd_copy_whole(raw, g_gpu.ffn_meta.buf, g_gpu.ffn_meta_dev, FFN_META_BYTES)
@@ -940,34 +914,25 @@ def private qkv_cmd_make(sq, sk, sv : int; woq, wok, wov : int64; n, dq, dk, dv 
         fill_stack_meta_rows(sk, addr(kreg[0]), 1l, n, dk, 1l, 0l, dq)
         fill_stack_meta_rows(sv, addr(vreg[0]), 1l, n, dv, 1l, 0l, dq + dk)
     }
-    var qc = QkvCmd(cmd = alloc_cmd(), k_set = alloc_desc_set(), v_set = alloc_desc_set(),
-                    sq = sq, ybytes = (dq + dk + dv) * 4l)
+    var qc = QkvCmd(cmd = alloc_cmd(), sq = sq, ybytes = (dq + dk + dv) * 4l)
     assert(qc.ybytes <= Y_BYTES, "dasLLAMA vulkan tier: qkv group exceeds output capacity")
-    var writes : array<WriteDescriptorSet>
-    write_buf_desc(writes, qc.k_set, 0u, g_gpu.stacks[sk].wqbuf, g_gpu.stacks[sk].wqbytes)
-    write_buf_desc(writes, qc.k_set, 1u, g_gpu.stacks[sk].wsbuf, g_gpu.stacks[sk].wsbytes)
-    write_buf_desc(writes, qc.k_set, 2u, g_gpu.stacks[sk].meta.buf, META_BYTES)
-    write_buf_desc(writes, qc.k_set, 3u, g_gpu.stacks[sq].xq.buf, XQ_BYTES)
-    write_buf_desc(writes, qc.k_set, 4u, g_gpu.stacks[sq].xs.buf, XS_BYTES)
-    write_buf_desc(writes, qc.k_set, 5u, g_gpu.stacks[sq].y_dev, Y_BYTES)
-    write_buf_desc(writes, qc.v_set, 0u, g_gpu.stacks[sv].wqbuf, g_gpu.stacks[sv].wqbytes)
-    write_buf_desc(writes, qc.v_set, 1u, g_gpu.stacks[sv].wsbuf, g_gpu.stacks[sv].wsbytes)
-    write_buf_desc(writes, qc.v_set, 2u, g_gpu.stacks[sv].meta.buf, META_BYTES)
-    write_buf_desc(writes, qc.v_set, 3u, g_gpu.stacks[sq].xq.buf, XQ_BYTES)
-    write_buf_desc(writes, qc.v_set, 4u, g_gpu.stacks[sq].xs.buf, XS_BYTES)
-    write_buf_desc(writes, qc.v_set, 5u, g_gpu.stacks[sq].y_dev, Y_BYTES)
-    let no_copies : array<CopyDescriptorSet>
-    update_descriptor_sets(g_gpu.device, writes, no_copies)
+    // three disjoint row levels on the shared y (Y1/Y2/Y3): k/v sets ride the q stack's acts image
+    qc.k_set = vk_set6(g_gpu.stacks[sk].wqbuf, g_gpu.stacks[sk].wsbuf, g_gpu.stacks[sk].meta.buf,
+        g_gpu.stacks[sq].xq.buf, g_gpu.stacks[sq].xs.buf, g_gpu.stacks[sq].y_dev,
+        g_gpu.stacks[sk].wqbytes, g_gpu.stacks[sk].wsbytes, META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES,
+        fixed_array(0u, 0u, 0u, 0u, 0u, VHG_Y2))
+    qc.v_set = vk_set6(g_gpu.stacks[sv].wqbuf, g_gpu.stacks[sv].wsbuf, g_gpu.stacks[sv].meta.buf,
+        g_gpu.stacks[sq].xq.buf, g_gpu.stacks[sq].xs.buf, g_gpu.stacks[sq].y_dev,
+        g_gpu.stacks[sv].wqbytes, g_gpu.stacks[sv].wsbytes, META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES,
+        fixed_array(0u, 0u, 0u, 0u, 0u, VHG_Y3))
     let raw = qc.cmd
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw, begin), null)
     let fq = g_gpu.stacks[sq].fmt
     let fk = g_gpu.stacks[sk].fmt
     let fv = g_gpu.stacks[sv].fmt
-    // three disjoint row levels on the shared y — the q stack's raw_set plays Y1 in this chain
+    // the q stack's raw_set plays Y1 in this chain (role-fluid, re-declared per record)
     hz_set_bits(g_gpu.stacks[sq].raw_set, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
-    hz_set_bits(qc.k_set, 0u, 0u, 0u, 0u, 0u, VHG_Y2)
-    hz_set_bits(qc.v_set, 0u, 0u, 0u, 0u, 0u, VHG_Y3)
     var h : VkHaz
     hz_dispatch(raw, h, gemv_pipe(fq), g_gpu.stacks[sq].raw_set, uint((dq + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
     hz_dispatch(raw, h, gemv_pipe(fk), qc.k_set, uint((dk + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
@@ -1184,20 +1149,13 @@ def private ensure_cls(si : int; woff, n, d : int64) {
     }
     g_gpu.stacks[si].cls_meta_dev = make_device_buf(CLS_META_BYTES)
     staged_upload(g_gpu.stacks[si].cls_meta_dev, 0l, CLS_META_BYTES)
-    g_gpu.stacks[si].cls_set = alloc_desc_set()
-    var writes : array<WriteDescriptorSet>
-    write_buf_desc(writes, g_gpu.stacks[si].cls_set, 0u, g_gpu.stacks[si].wqbuf, g_gpu.stacks[si].wqbytes)
-    write_buf_desc(writes, g_gpu.stacks[si].cls_set, 1u, g_gpu.stacks[si].wsbuf, g_gpu.stacks[si].wsbytes)
-    write_buf_desc(writes, g_gpu.stacks[si].cls_set, 2u, g_gpu.stacks[si].cls_meta_dev, CLS_META_BYTES)
-    write_buf_desc(writes, g_gpu.stacks[si].cls_set, 3u, g_gpu.stacks[si].xq.buf, XQ_BYTES)
-    write_buf_desc(writes, g_gpu.stacks[si].cls_set, 4u, g_gpu.stacks[si].xs.buf, XS_BYTES)
-    write_buf_desc(writes, g_gpu.stacks[si].cls_set, 5u, g_gpu.stacks[si].y_dev, Y_BYTES)
-    let no_copies : array<CopyDescriptorSet>
-    update_descriptor_sets(g_gpu.device, writes, no_copies)
+    g_gpu.stacks[si].cls_set = vk_set6(g_gpu.stacks[si].wqbuf, g_gpu.stacks[si].wsbuf, g_gpu.stacks[si].cls_meta_dev,
+        g_gpu.stacks[si].xq.buf, g_gpu.stacks[si].xs.buf, g_gpu.stacks[si].y_dev,
+        g_gpu.stacks[si].wqbytes, g_gpu.stacks[si].wsbytes, CLS_META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES,
+        fixed_array(0u, 0u, 0u, 0u, 0u, VHG_YO))
     var raw = alloc_cmd()
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw, begin), null)
-    hz_set_bits(g_gpu.stacks[si].cls_set, 0u, 0u, 0u, 0u, 0u, VHG_YO)
     var h : VkHaz
     hz_dispatch(raw, h, gemv_pipe(g_gpu.stacks[si].fmt), g_gpu.stacks[si].cls_set,
         uint((d + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
