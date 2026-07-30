@@ -20,6 +20,10 @@
   transform (grp<mr> interleaves, disk-order extractors, panel unpacks), regardless of format or
   platform. Number sources (tune stamps, bake overrides) stay with their owners and pass plain
   parameters in.
+- **Conversions live under `dasllama_convert.das`** — every tensor format conversion
+  (quantize/dequantize/transcode/encode, codec byte readers, numeric widen/narrow), regardless of
+  platform or caller. Metadata-coupled drivers (GGUF lookup, threading, guards) stay with their
+  containers and dispatch into the codec.
 - **Every extraction ships targeted tests for the extracted bits themselves** — unit-level on the
   moved surface, not "run an LLM and see if it still talks". The end-to-end oracles stay the
   bit-identity gate; they are not the extraction's test.

@@ -38,3 +38,7 @@
 8. **All new repacks go into `dasllama_repack.das`.** Any disk-order → compute-order
    kernel-layout transform (grp interleave, extractor, panel unpack — any format, any
    platform) lands there; a repack implemented anywhere else is a review defect.
+9. **All new conversions go into `dasllama_convert.das`.** Any tensor format conversion —
+   quantize/dequantize/transcode/encode, byte readers for a codec, numeric widen/narrow —
+   lands there, regardless of platform or which loader wants it; a conversion implemented
+   anywhere else is a review defect.
