@@ -1,33 +1,34 @@
 #!/usr/bin/env pwsh
 # rerecord_all.ps1 — sequentially re-record every APNG under
-# doc/source/_static/tutorials/.
+# modules/dasImgui/doc/source/_static/tutorials/.
 #
-# All `tests/integration/record_*.das` drivers spawn their own daslang-live on
+# All `tests/dasImgui/record_*.das` drivers spawn their own daslang-live on
 # port 9090, so the sweep is strictly serial. Full pass takes ~20 minutes for
 # 37+ drivers; cross-cutting visual changes (narrate placement, theme, font
 # scale) typically need it. Per-driver runtime = its with_recording_app
 # max_seconds + ~3s host boot/drain.
 #
-# After re-recording, .apng files land in doc/source/_static/tutorials/
-# (gitignored -- the intermediate artifact, not the deliverable). Convert
-# each to .mp4 via ffmpeg before committing. PowerShell equivalent of
-# the bash loop in tests/integration/README.md:
+# After re-recording, .apng files land in modules/dasImgui/doc/source/_static/
+# tutorials/ (gitignored -- the intermediate artifact, not the deliverable).
+# Convert each to .mp4 via ffmpeg:
 #
-#   Set-Location doc/source/_static/tutorials
+#   Set-Location modules/dasImgui/doc/source/_static/tutorials
 #   Get-ChildItem *.apng | ForEach-Object {
 #       $base = $_.BaseName
 #       ffmpeg -y -loglevel error -i $_.Name -c:v libx264 -crf 23 `
 #              -pix_fmt yuv420p -movflags +faststart "$base.mp4"
 #   }
 #
-# Then `git add doc/source/_static/tutorials/*.mp4` and push.
+# MP4s are NOT committed -- they ship as assets on the rolling `docs-assets`
+# GitHub release (utils/docs_assets/fetch.ps1 stages them for docs builds):
+#   gh release upload docs-assets *.mp4 --clobber
 #
 # Run:
-#   pwsh modules/dasImgui/tests/integration/rerecord_all.ps1 -DaslangExe D:/Work/daScript/bin/Release/daslang.exe
+#   pwsh tests/dasImgui/rerecord_all.ps1 -DaslangExe bin/Release/daslang.exe
 #
 # Or set once:
-#   $env:DASLANG_EXE = "D:/Work/daScript/bin/Release/daslang.exe"
-#   pwsh modules/dasImgui/tests/integration/rerecord_all.ps1
+#   $env:DASLANG_EXE = "bin/Release/daslang.exe"
+#   pwsh tests/dasImgui/rerecord_all.ps1
 #
 # Flags:
 #   -DaslangExe <path>  daslang.exe; defaults to $env:DASLANG_EXE.

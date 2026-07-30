@@ -40,6 +40,21 @@ def can_visit_folder(folder_name : string; var result : bool?) {
         *result = has_module("minfft")
         return
     }
+    // dasImgui playwright suite: 151 subprocess integration tests (each spawns a
+    // daslang-live host). Nightly-only — the per-PR `--test tests/` sweeps skip it
+    // unless the caller opts in with `--imgui` (nightly_imgui.yml passes it).
+    if (folder_name == "dasImgui") {
+        *result = false
+        if (!has_module("imgui")) return
+        let args <- get_command_line_arguments()
+        for (arg in args) {
+            if (arg == "--imgui") {
+                *result = true
+                return
+            }
+        }
+        return
+    }
     if (folder_name == "live_host") {
         *result = has_module("live_host")
         return

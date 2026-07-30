@@ -5,18 +5,22 @@ Two complementary test surfaces live in this directory.
 ## 1. dastest integration suite — daslang-native, full coverage
 
 `test_*.das` files exercised by daslang's `dastest` runner. Each test spawns
-`daslang-live` against a feature app under `../../examples/features/` (or
-`../../examples/save_demo/`), drives it via `require imgui/imgui_playwright`,
+`daslang-live` against a feature app under `modules/dasImgui/examples/features/`
+(or `.../save_demo/`), drives it via `require imgui/imgui_playwright`,
 and asserts behavior. This is the canonical regression suite.
+
+The suite is **nightly-only in CI** (`nightly_imgui.yml`): the `tests/.das_test`
+gate skips this directory unless the runner passes `--imgui`, so per-PR
+`--test tests/` sweeps never pay for the 151 subprocess spawns.
 
 Run from the daScript repo root:
 
 ```
-daslang.exe dastest/dastest.das -- --test modules/dasImgui/tests/integration
+daslang.exe dastest/dastest.das -- --test tests/dasImgui --imgui --headless
 ```
 
-Expect ~28 tests, ~130s wall time on a developer box (one daslang-live
-subprocess per test, ~4-5s each).
+Expect ~151 tests (one daslang-live subprocess per test, ~4-5s each; add
+`--isolated-mode --isolated-mode-threads 4` to parallelize).
 
 ## 2. Curl smoke — mechanism-level, tool-agnostic
 
@@ -26,8 +30,8 @@ NO dastest. They cover one happy path: spawn → ready → snapshot → click
 SAVE_BTN → poll STATUS_TEXT.value == "saved" → shutdown.
 
 ```
-powershell -ExecutionPolicy Bypass -File modules/dasImgui/tests/integration/smoke_curl.ps1
-bash       modules/dasImgui/tests/integration/smoke_curl.sh
+powershell -ExecutionPolicy Bypass -File tests/dasImgui/smoke_curl.ps1
+bash       tests/dasImgui/smoke_curl.sh
 ```
 
 `smoke_curl.sh` requires `curl` and `jq` on PATH.
@@ -50,15 +54,16 @@ bash       modules/dasImgui/tests/integration/smoke_curl.sh
 are NOT in CI; they're one-shell driver scripts that spawn their own
 `daslang-live` host via `with_recording_app`, post a narrate/click/drag
 timeline, and save an `.apng`. A single ffmpeg pass converts each
-`.apng` to the shipped `.mp4` (~300× smaller). The `.mp4` files live
-in-tree under `doc/source/_static/tutorials/` (~5 MB total for the full
-set) and are referenced by tutorial RST pages.
+`.apng` to the shipped `.mp4` (~300× smaller). The `.mp4` files are NOT
+committed — they ship as assets on the rolling `docs-assets` GitHub
+release; docs builds stage them via `utils/docs_assets/fetch.ps1` before
+sphinx runs.
 
 ### The script
 
 | Script | Purpose | When to run |
 |---|---|---|
-| `rerecord_all.ps1` | Sequentially re-record every `record_*.das` driver. Writes intermediate APNGs to the gitignored `doc/source/_static/tutorials/`. ~20 min. | After cross-cutting visual changes (theme, font, narrate placement) or after touching multiple drivers. |
+| `rerecord_all.ps1` | Sequentially re-record every `record_*.das` driver. Writes intermediate APNGs to the gitignored `modules/dasImgui/doc/source/_static/tutorials/`. ~20 min. | After cross-cutting visual changes (theme, font, narrate placement) or after touching multiple drivers. |
 
 After re-recording, convert APNGs to MP4 via ffmpeg (the deliverables).
 
@@ -67,22 +72,22 @@ After re-recording, convert APNGs to MP4 via ffmpeg (the deliverables).
 Step 1 — generate APNGs locally (PowerShell):
 
 ```powershell
-# One-time setup — point at your daslang build
-$env:DASLANG_EXE = "D:/Work/daScript/bin/Release/daslang.exe"
+# One-time setup — point at your daslang build (repo-root relative works)
+$env:DASLANG_EXE = "bin/Release/daslang.exe"
 
 # Whole sweep (all drivers found via glob, ~20 min):
-pwsh tests/integration/rerecord_all.ps1
+pwsh tests/dasImgui/rerecord_all.ps1
 # OR single driver (uses the env var set above; works whether or
 # not daslang.exe is on PATH):
-& $env:DASLANG_EXE -project_root . tests/integration/record_X.das
+& $env:DASLANG_EXE -project_root . tests/dasImgui/record_X.das
 ```
 
 Step 2 — eyeball-review the resulting `.apng` files in
-`doc/source/_static/tutorials/`. Extract individual frames if needed
-(bash; on PowerShell call `bash -c '<the command>'` or use WSL):
+`modules/dasImgui/doc/source/_static/tutorials/`. Extract individual frames
+if needed (bash; on PowerShell call `bash -c '<the command>'` or use WSL):
 
 ```bash
-ffmpeg -i doc/source/_static/tutorials/X.apng \
+ffmpeg -i modules/dasImgui/doc/source/_static/tutorials/X.apng \
     -vf "select=eq(n\,200)" -frames:v 1 -update 1 frame200.png -y
 ```
 
@@ -90,15 +95,7 @@ Step 3 — convert `.apng` → `.mp4` (the deliverable). Single recording
 works in either shell:
 
 ```bash
-ffmpeg -y -loglevel error -i doc/source/_static/tutorials/X.apng \
-    -c:v libx264 -crf 23 -pix_fmt yuv420p -movflags +faststart \
-    doc/source/_static/tutorials/X.mp4
-```
-
-Bulk-convert every `.apng` in the dir — bash:
-
-```bash
-cd doc/source/_static/tutorials
+cd modules/dasImgui/doc/source/_static/tutorials
 for f in *.apng; do
     base="${f%.apng}"
     ffmpeg -y -loglevel error -i "$f" -c:v libx264 -crf 23 \
@@ -109,7 +106,7 @@ done
 Bulk-convert — PowerShell equivalent:
 
 ```powershell
-Set-Location doc/source/_static/tutorials
+Set-Location modules/dasImgui/doc/source/_static/tutorials
 Get-ChildItem *.apng | ForEach-Object {
     $base = $_.BaseName
     ffmpeg -y -loglevel error -i $_.Name -c:v libx264 -crf 23 `
@@ -117,35 +114,37 @@ Get-ChildItem *.apng | ForEach-Object {
 }
 ```
 
-Step 4 — stage, commit, push:
+Step 4 — upload to the rolling `docs-assets` release (MP4s are not in git):
 
 ```bash
-git add doc/source/_static/tutorials/*.mp4
-git commit -m "docs: re-record tutorial videos"
-git push -u origin <branch>
+cd modules/dasImgui/doc/source/_static/tutorials
+gh release upload docs-assets *.mp4 --clobber
 ```
 
 ### CI integration
 
-`.github/workflows/docs.yml` checks out the source — `.mp4` files are
-already in the tree, no fetch step. CI uses `-W` (warnings-as-errors)
-on sphinx, so an RST `.. video::` cite referencing a missing `.mp4` fails
-the build. Implication for a new tutorial PR: commit the `.mp4`
-ahead of the RST cite to keep CI passing.
+The main-repo docs builds (`doc.yml`, `pages.yml`) run
+`utils/docs_assets/fetch.ps1` to stage the release MP4s before sphinx.
+Sphinx runs with `-W` and the video role checks file existence, so an RST
+citing a missing `.mp4` fails the build. Implication for a new tutorial PR:
+upload the `.mp4` to `docs-assets` ahead of the RST cite to keep CI passing.
 
 ### Adding a new recording
 
 For a new tutorial `foo`:
 
-1. Write `examples/tutorial/foo.das` and `tests/integration/record_foo.das`
-   (see [`../../skills/recording.md`](../../skills/recording.md) for the
+1. Write `modules/dasImgui/examples/tutorial/foo.das` and
+   `tests/dasImgui/record_foo.das` (see `skills/imgui_recording.md` for the
    driver template).
-2. `daslang.exe -project_root . tests/integration/record_foo.das` —
-   produces `doc/source/_static/tutorials/foo.apng` (gitignored).
+2. `daslang.exe -project_root . tests/dasImgui/record_foo.das` —
+   produces `modules/dasImgui/doc/source/_static/tutorials/foo.apng`
+   (gitignored).
 3. Eyeball-review. ffmpeg-extract frames if needed.
 4. ffmpeg-convert `foo.apng` → `foo.mp4` (see step 3 of the workflow above).
-5. Write `doc/source/tutorials/foo.rst` + add to `index.rst` toctree.
-6. Stage + commit + push: `git add foo.mp4 record_foo.das foo.rst index.rst`,
+5. `gh release upload docs-assets foo.mp4`.
+6. Write `doc/source/reference/tutorials/imgui/foo.rst` + add to the
+   tutorials toctree.
+7. Stage + commit + push: `git add record_foo.das foo.rst`,
    `git commit -m "tutorial: foo"`, `git push -u origin <branch>`.
 
 ### Historical note: orphan `assets` branch

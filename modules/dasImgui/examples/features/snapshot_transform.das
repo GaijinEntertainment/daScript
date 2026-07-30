@@ -12,7 +12,7 @@ require imgui/imgui_boost_runtime
 //            - widget under the transform: bbox = local*scale + offset, plus a
 //              canvas_bbox carrying the original (screen-native) rect;
 //            - widgets before the push / after the pop: screen-native bbox, no canvas_bbox.
-// DRIVE:   tests/integration/test_snapshot_transform.das
+// DRIVE:   tests/dasImgui/test_snapshot_transform.das
 // STANDALONE: daslang.exe modules/dasImgui/examples/features/snapshot_transform.das
 // =============================================================================
 

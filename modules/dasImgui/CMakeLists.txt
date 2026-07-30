@@ -108,6 +108,12 @@ FetchContent_Declare(md4c_src
 )
 FetchContent_MakeAvailable(md4c_src)
 SET(MD4C_INCLUDE_DIR ${md4c_src_SOURCE_DIR}/src)
+IF(MSVC)
+    # md4c trips C4201 (nameless struct/union), C4701/C4703 (potentially
+    # uninitialized local), and C4702 (unreachable code), which the superbuild's
+    # /WX turns fatal — suppress on this file only, it is not ours to fix.
+    SET_SOURCE_FILES_PROPERTIES(${MD4C_INCLUDE_DIR}/md4c.c PROPERTIES COMPILE_OPTIONS "/wd4201;/wd4701;/wd4702;/wd4703")
+ENDIF()
 
 # imgui via FetchContent
 SET(IMGUI_VERSION "1.92.6-docking")
