@@ -74,7 +74,11 @@ GPU-less boxes), and the flavor image round-trips the plan verbatim.
 The `coverage` suite (test_kernel_coverage, arm `coverage`) is the KERNEL COVERAGE census
 (CODEREVIEW rule 17): the small-model zoo swept across format/graph/batch/KV axes, then a
 report of per-kernel dispatch counts with LOUD WARNINGS for compiled-but-never-dispatched
-kernels — never an auto-dead verdict. Run it BEFORE deleting any kernel; a NEW kernel's
+kernels — never an auto-dead verdict. A zero means "nothing THIS zoo runs dispatched it",
+never "unreachable": the deletion gate is a reachability AUDIT of the kernel's dispatch
+predicate (can any servable model / quant / shape satisfy the guard — models and quants not
+stocked locally count, and so does any family registered later); the census only proves local
+coverage and points the audit. Run it BEFORE deleting any kernel; a NEW kernel's
 small-model run joins it. Small-tier warnings for kernels whose carriers sit above the tier
 (MoE/mx4/suppress) are expected — their census rows serve only under `DASLLAMA_PARITY_FULL=1`;
 the served-count floor is asserted only on family-unfiltered runs. The vulkan half here is

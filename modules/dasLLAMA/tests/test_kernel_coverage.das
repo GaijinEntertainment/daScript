@@ -18,9 +18,11 @@ require _model_tier
 
 // The KERNEL COVERAGE census (CODEREVIEW rule 17): drive the small-model zoo across the
 // format / graph / batch-shape / KV-codec axes and report which compiled kernels were never
-// dispatched — LOUD WARNINGS, never an auto-dead verdict. This suite is the gate a kernel
-// deletion must run before ("was it ever dispatched by anything?") and the home a NEW kernel's
-// small-model run joins. Expected warnings on the small tier: MoE / mx4 / suppress and other
+// dispatched — LOUD WARNINGS, never an auto-dead verdict. A zero means "nothing this zoo runs
+// dispatched it", never "unreachable" — deleting a kernel additionally needs a reachability
+// audit of its dispatch predicate (models/quants/shapes not stocked here still count). This
+// suite is the gate a kernel deletion must run before ("was it ever dispatched by anything
+// we run?") and the home a NEW kernel's small-model run joins. Expected warnings on the small tier: MoE / mx4 / suppress and other
 // kernels whose carriers sit above the tier (their census rows serve under
 // DASLLAMA_PARITY_FULL=1); the report stays honest about what THIS run covered. The vulkan
 // half here is the device-free rail unit (spec parse + zero table); the serving vulkan census
