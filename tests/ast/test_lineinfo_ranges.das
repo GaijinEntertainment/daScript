@@ -20,7 +20,7 @@ require strings
 //! 3. Class-method bodies are wrapped in a synthesized ExprBlock/ExprWith that
 //!    was stamped with the method-NAME token range instead of the body's span.
 
-let FIXTURE = "tests/ast/_lineinfo_ranges_fixture.das"
+let FIXTURE = "{get_das_root()}/tests/ast/_lineinfo_ranges_fixture.das"
 
 
 class RangeChecker : AstVisitor {

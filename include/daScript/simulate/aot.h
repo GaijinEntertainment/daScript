@@ -2403,7 +2403,9 @@ namespace das {
             Prologue * pp = (Prologue *)context->stack.sp();
             pp->info = nullptr;
             pp->fileName = fn;
+            pp->functionLine = nullptr;
             pp->stackSize = stackSize;
+            pp->flags = 0;      // stack memory is not zeroed; a stale is_jit sends the walker down the JIT path
 #endif
         }
         __forceinline ~das_stack_prologue () {
