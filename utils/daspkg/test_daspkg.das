@@ -271,6 +271,23 @@ def test_lockfile_roundtrip(t : T?) {
 }
 
 [test]
+def test_in_tree_module_satisfies_install(t : T?) {
+    t |> run("explicit install of an in-tree module is a no-op") @(t : T?) {
+        // dasGlfw is a tracked in-tree module: present at <das_root>/modules/
+        // and never in the global lock file. cmd_install must recognize it,
+        // return 0 without touching the index or the network, and create no
+        // project-local shadow clone.
+        let tmp_root = "{get_das_root()}/_daspkg_test_intree"
+        mkdir(tmp_root)
+        let rc = cmd_install(tmp_root, "dasGlfw", false)
+        t |> equal(rc, 0)
+        t |> success(!fexist("{tmp_root}/modules/dasGlfw"))
+        // cleanup (no lock file is written on the no-op path)
+        rmdir(tmp_root)
+    }
+}
+
+[test]
 def test_install_local(t : T?) {
     t |> run("installs and records in lockfile") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_root"
