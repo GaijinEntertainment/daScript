@@ -126,6 +126,10 @@ struct public TextSourceViewState {
     base_lines : array<TextFlowLine>
     base_fragments : array<TextFlowFragment>
     base_size : float2
+    //! Screen X range of the fold-handle strip (stamped per draw; zero width
+    //! when the document has no folds or the presentation cannot fold).
+    fold_strip_x0 : float = 0.0f
+    fold_strip_x1 : float = 0.0f
 
     anchor_byte : int = -1
     focus_byte : int = -1
@@ -332,6 +336,26 @@ def public text_source_view_expand_for_byte(document : TextSourceDocument const;
 
 def public text_source_view_collapsed_count(state : TextSourceViewState const) : int {
     return length(state.collapsed_folds)
+}
+
+def public text_source_view_fold_handle_pos(
+                                            document : TextSourceDocument const;
+                                            state : TextSourceViewState const;
+                                            fold_index : int) : tuple<valid : bool; x : float; y : float> {
+    //! Screen center of one fold's gutter chevron — the click target for
+    //! tests and tooling. Valid only after a draw with an active fold strip.
+    if (fold_index < 0 || fold_index >= length(document.folds)
+            || state.fold_strip_x1 <= state.fold_strip_x0) {
+        return (valid = false, x = 0.0f, y = 0.0f)
+    }
+    let header_line = layout_line_for_row(state, document.folds[fold_index].header_row)
+    if (header_line < 0 || header_line >= length(state.layout.lines)) {
+        return (valid = false, x = 0.0f, y = 0.0f)
+    }
+    let line = state.layout.lines[header_line]
+    return (valid = true,
+        x = (state.fold_strip_x0 + state.fold_strip_x1) * 0.5f,
+        y = state.screen_origin.y + line.y + line.height * 0.5f)
 }
 
 def public text_source_view_dispose(var state : TextSourceViewState) {
@@ -1254,6 +1278,8 @@ def public text_source_view(id : string; document : TextSourceDocument const; //
                 style.line_number_color)
         }
     }
+    state.fold_strip_x0 = fold_space > 0.0f ? gutter_origin.x + number_width : 0.0f
+    state.fold_strip_x1 = fold_space > 0.0f ? state.fold_strip_x0 + fold_space : 0.0f
     if (fold_space > 0.0f) {
         draw_fold_handles(document, state, dl, gutter_origin, number_width,
                           fold_space, visible_min.y, visible_max.y, style)

@@ -197,6 +197,10 @@ struct public MarkdownNodeViewCache {
     screen_alignment : RichAlignment = RichAlignment.default_
     control_screen_valid : bool = false
     control_screen_rect : float4
+    //! Last drawn hover-chrome rects (code blocks): click targets for tests.
+    icon_rects_valid : bool = false
+    fold_icon_rect : float4
+    copy_icon_rect : float4
 }
 
 struct public MarkdownViewState {
@@ -1802,6 +1806,14 @@ def private draw_code_block_icons(node_index : int;
     let window_pos = GetWindowPos()
     let right = window_pos.x + GetWindowSize().x - GetStyle().WindowPadding.x
     let top = window_pos.y + 3.0f * zoom
+    let full = size + pad.x * 2.0f
+    let full_y = size + pad.y * 2.0f
+    var entry & = unsafe(state.nodes[node_index])
+    entry.icon_rects_valid = true
+    entry.fold_icon_rect = float4(right - slot * 2.0f, top,
+                                  right - slot * 2.0f + full, top + full_y)
+    entry.copy_icon_rect = float4(right - slot, top,
+                                  right - slot + full, top + full_y)
     if (icon_button_draw_at("##md_code_fold",
             collapsed ? "chevron-down" : "chevron-up",
             float2(right - slot * 2.0f, top), size)) {

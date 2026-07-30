@@ -728,3 +728,156 @@ def test_text_viewer_folding_and_code_copy(t : T?) { // nolint:STYLE038
                      "copied text carries the block's content")
     }
 }
+
+[test]
+def test_text_viewer_fold_clicks_and_no_reflow(t : T?) { // nolint:STYLE038
+    with_imgui_app(FEATURE) $(app) {
+        let ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["ok"] ?? false) && (state?["render_revision"] ?? 0) > 0)
+        }
+        t |> success(ready, "welcome document renders")
+        if (!ready) return
+
+        // ---- rendered markdown: click the hover chrome itself ----
+        let md_fixture = "{get_das_root()}/examples/text/syntax_highlighting.md"
+        let opened = post_command(app, "text_viewer_open", JV((path = md_fixture)))
+        t |> success(opened?["ok"] ?? false, "markdown fixture opens")
+        var first_node = -1
+        var hover_x = -1.0f
+        var hover_y = -1.0f
+        let md_ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var blocks = post_command(app, "text_viewer_md_code_blocks", null)
+            first_node = blocks?["blocks"]?[0]?["node"] ?? -1
+            hover_x = (blocks?["blocks"]?[0]?["screen_x"] ?? -100.0f) + 40.0f
+            hover_y = (blocks?["blocks"]?[0]?["screen_y"] ?? -100.0f) + 30.0f
+            return first_node >= 0 && hover_x > 0.0f && hover_y > 0.0f
+        }
+        t |> success(md_ready, "first code block reports its screen origin")
+        if (!md_ready) return
+
+        // Hovering the block content makes the chrome appear and stamps rects.
+        post_command(app, "imgui_mouse_pos", JV((x = hover_x, y = hover_y)))
+        var fold_x = -1.0f
+        var fold_y = -1.0f
+        var copy_x = -1.0f
+        var copy_y = -1.0f
+        let icons_shown = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var blocks = post_command(app, "text_viewer_md_code_blocks", null)
+            fold_x = blocks?["blocks"]?[0]?["fold_icon_x"] ?? -1.0f
+            fold_y = blocks?["blocks"]?[0]?["fold_icon_y"] ?? -1.0f
+            copy_x = blocks?["blocks"]?[0]?["copy_icon_x"] ?? -1.0f
+            copy_y = blocks?["blocks"]?[0]?["copy_icon_y"] ?? -1.0f
+            return ((blocks?["blocks"]?[0]?["icons_valid"] ?? false)
+                && fold_x > 0.0f && copy_x > fold_x)
+        }
+        t |> success(icons_shown, "hover reveals the fold and copy icons")
+        if (!icons_shown) return
+
+        // THE regression: clicking the fold icon on an EXPANDED block must
+        // collapse it (the active-item hover gate used to drop the release).
+        post_command(app, "imgui_mouse_click_at",
+                     JV((x = fold_x, y = fold_y, button = 0, travel_ms = 80.0f)))
+        let collapsed_by_click = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var blocks = post_command(app, "text_viewer_md_code_blocks", null)
+            return (blocks?["blocks"]?[0]?["collapsed"] ?? false)
+        }
+        t |> success(collapsed_by_click, "clicking the fold icon collapses the block")
+
+        // The collapsed bar reports icons too; its chevron expands it back.
+        var bar_fold_x = -1.0f
+        var bar_fold_y = -1.0f
+        let bar_icons = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var blocks = post_command(app, "text_viewer_md_code_blocks", null)
+            bar_fold_x = blocks?["blocks"]?[0]?["fold_icon_x"] ?? -1.0f
+            bar_fold_y = blocks?["blocks"]?[0]?["fold_icon_y"] ?? -1.0f
+            return (blocks?["blocks"]?[0]?["icons_valid"] ?? false) && bar_fold_x > 0.0f
+        }
+        t |> success(bar_icons, "collapsed bar reports its icons")
+        post_command(app, "imgui_mouse_click_at",
+                     JV((x = bar_fold_x, y = bar_fold_y, button = 0, travel_ms = 80.0f)))
+        let expanded_by_click = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var blocks = post_command(app, "text_viewer_md_code_blocks", null)
+            return !(blocks?["blocks"]?[0]?["collapsed"] ?? true)
+        }
+        t |> success(expanded_by_click, "clicking the bar icon expands the block")
+
+        // Copy icon click routes to the copy action.
+        post_command(app, "imgui_mouse_pos", JV((x = hover_x, y = hover_y)))
+        let icons_again = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var blocks = post_command(app, "text_viewer_md_code_blocks", null)
+            copy_x = blocks?["blocks"]?[0]?["copy_icon_x"] ?? -1.0f
+            copy_y = blocks?["blocks"]?[0]?["copy_icon_y"] ?? -1.0f
+            return (blocks?["blocks"]?[0]?["icons_valid"] ?? false) && copy_x > 0.0f
+        }
+        t |> success(icons_again, "expanded block re-reports its icons")
+        post_command(app, "imgui_mouse_click_at",
+                     JV((x = copy_x, y = copy_y, button = 0, travel_ms = 80.0f)))
+        let copied = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["code_copy_revision"] ?? 0) >= 1
+                && (state?["code_copy_bytes"] ?? 0) > 0)
+        }
+        t |> success(copied, "clicking the copy icon captures the block text")
+
+        // ---- das source: gutter chevron click + toggle-without-reflow ----
+        let das_fixture = "{get_das_root()}/examples/text/main.das"
+        let das_opened = post_command(app, "text_viewer_open", JV((path = das_fixture)))
+        t |> success(das_opened?["ok"] ?? false, ".das fixture opens")
+        var handle_x = -1.0f
+        var handle_y = -1.0f
+        var handle_index = -1
+        var lines_before = 0
+        let das_ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            lines_before = state?["visible_line_count"] ?? 0
+            if ((state?["mode"] ?? "") != "plain" || lines_before == 0) return false
+            let view_top = state?["content_view_top"] ?? 0.0f
+            let view_bottom = state?["content_view_bottom"] ?? 0.0f
+            var folds = post_command(app, "text_viewer_folds", null)
+            let count = folds?["fold_count"] ?? 0
+            for (index in range(count)) {
+                let fold = folds?["folds"]?[index]
+                let handle_row_y = fold?["handle_y"] ?? -1.0f
+                // The handle must be ON SCREEN for a synthetic click to land.
+                if ((fold?["handle_valid"] ?? false)
+                        && (fold?["end_row"] ?? 0) - (fold?["header_row"] ?? 0) >= 2
+                        && handle_row_y > view_top + 10.0f && handle_row_y < view_bottom - 10.0f) {
+                    handle_index = fold?["index"] ?? -1
+                    handle_x = fold?["handle_x"] ?? -1.0f
+                    handle_y = handle_row_y
+                    return true
+                }
+            }
+            return false
+        }
+        t |> success(das_ready, "a das fold reports a visible gutter handle")
+        if (!das_ready) return
+
+        let misses_before = viewer_state(app)?["source_layout_misses"] ?? -1
+        post_command(app, "imgui_mouse_click_at",
+                     JV((x = handle_x, y = handle_y, button = 0, travel_ms = 80.0f)))
+        let gutter_collapsed = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["fold_collapsed_count"] ?? 0) == 1
+                && (state?["visible_line_count"] ?? lines_before) < lines_before)
+        }
+        t |> success(gutter_collapsed, "clicking the gutter chevron collapses the region")
+
+        for (_toggle in range(3)) {
+            let _1 = post_command(app, "text_viewer_fold",
+                                  JV((index = handle_index, collapsed = false)))
+            let _2 = post_command(app, "text_viewer_fold",
+                                  JV((index = handle_index, collapsed = true)))
+        }
+        let settled = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["fold_collapsed_count"] ?? 0) == 1
+                && (state?["visible_line_count"] ?? lines_before) < lines_before)
+        }
+        t |> success(settled, "toggle burst settles collapsed")
+        let misses_after = viewer_state(app)?["source_layout_misses"] ?? -2
+        t |> equal(misses_after, misses_before,
+                   "fold toggles reuse the cached flow instead of reflowing")
+    }
+}

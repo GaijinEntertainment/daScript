@@ -1195,8 +1195,16 @@ def text_viewer_md_code_blocks(_input : JsonValue?) : JsonValue? {
     var blocks : array<JsonValue?>
     for (index in range(length(doc.document.nodes))) {
         continue if (doc.document.nodes[index].kind != RichNodeKind.code_block)
+        let entry & = unsafe(doc.markdown_view.nodes[index])
         blocks |> push(JV((node = index,
-            collapsed = markdown_view_code_collapsed(doc.markdown_view, index))))
+            collapsed = markdown_view_code_collapsed(doc.markdown_view, index),
+            screen_x = entry.screen_origin.x,
+            screen_y = entry.screen_origin.y,
+            icons_valid = entry.icon_rects_valid,
+            fold_icon_x = (entry.fold_icon_rect.x + entry.fold_icon_rect.z) * 0.5f,
+            fold_icon_y = (entry.fold_icon_rect.y + entry.fold_icon_rect.w) * 0.5f,
+            copy_icon_x = (entry.copy_icon_rect.x + entry.copy_icon_rect.z) * 0.5f,
+            copy_icon_y = (entry.copy_icon_rect.y + entry.copy_icon_rect.w) * 0.5f)))
     }
     return JV((ok = true, count = length(blocks), blocks = JV(blocks)))
 }
@@ -1246,7 +1254,13 @@ def text_viewer_folds(_input : JsonValue?) : JsonValue? {
             start_byte = doc.source_document.folds[index].start_byte,
             end_byte = doc.source_document.folds[index].end_byte,
             collapsed = text_source_view_fold_collapsed(
-                doc.source_document, doc.source_view, index)))]
+                doc.source_document, doc.source_view, index),
+            handle_valid = text_source_view_fold_handle_pos(
+                doc.source_document, doc.source_view, index).valid,
+            handle_x = text_source_view_fold_handle_pos(
+                doc.source_document, doc.source_view, index).x,
+            handle_y = text_source_view_fold_handle_pos(
+                doc.source_document, doc.source_view, index).y))]
     return JV((ok = true, fold_count = length(doc.source_document.folds),
                folds = JV(regions)))
 }
