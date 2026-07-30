@@ -112,4 +112,6 @@ all — a single point to return "unset" from.
 Adding one: declare it in that header and implement it in `src/misc/env_cfg.cpp` alongside the
 others, one line each.
 
-Writes go through `das_setenv` from the same header, a no-op on PS.
+Writes go through `das_setenv` from the same header, a no-op on PS. Host configs may poison
+`getenv`/`setenv`/`putenv` outside `src/misc/env_cfg.cpp` (dagor's CI config does), so a direct
+call at a use site fails to compile.
