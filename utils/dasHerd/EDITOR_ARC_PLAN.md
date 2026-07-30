@@ -49,17 +49,15 @@ proves insufficient in use.
 
 - Component home: `modules/dasImgui/text/imgui_text_source_edit.das`,
   the editing sibling of `imgui_text_source_view`.
-- **Both examples live in daslang `/examples`** (settled 2026-07-29):
-  `examples/editor/markdown/` — editor pane + live preview via the
-  existing `markdown_view`, debounced re-parse on edit — and
-  `examples/editor/code/` — editor + syntax + LSP hover / definition /
-  diagnostics via `utils/lsp/subtools`.
-- Context that settles it: **dasImgui is being merged into the main
-  repository before the next release** — it is the one module that keeps
-  getting pulled back in, and keeping it separate has stopped paying.
-  Until the merge lands, the markdown example simply requires the
-  installed dasImgui like every other imgui consumer in the tree; after
-  it, "self-contained in dasImgui" stops meaning anything.
+- **The example home is `examples/text` (amended 2026-07-30, Boris).**
+  The existing viewer — already a docked multi-document app with both
+  presentations (rendered Markdown + syntax-highlighted source), command
+  registry, live rails, and a dastest suite — is the parallel preview app
+  for every feature slice: search, LSP, editing. It accretes the arc
+  instead of new `examples/editor/*` apps being built beside it; whether a
+  separate minimal code-editor example is still worth shipping is decided
+  at E5, not before. (The dasImgui merge landed 2026-07-30 — one repo,
+  the old staging caveat is gone.)
 
 ## The component, in detail
 
@@ -133,9 +131,11 @@ proves insufficient in use.
 - **E3** Search/replace/replace-all (the standing rule lands here, not
   later).
 - **E4** Syntax-while-editing (fallback immediate + debounced full pass).
-- **E5** The two examples assembled: markdown split-view editor
-  (dasImgui), das code editor (daslang /examples). Both carry save,
-  dirty-state, and the find widget.
+- **E5** `examples/text` becomes an honest editor: the component wired
+  into both its presentations (markdown source with live preview beside
+  it, plain/code source), carrying save, dirty-state, and the find
+  widget. Decide HERE whether a separate minimal code-editor example
+  still earns its keep or the viewer covers it.
 - **E6** LSP in the code editor: hover + definition reuse the viewing
   arc's spawn-per-request transport verbatim (`nav.das`, overlay = the
   unsaved buffer — the SAME `--overlay` flag, no new machinery);

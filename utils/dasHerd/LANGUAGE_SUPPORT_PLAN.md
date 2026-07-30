@@ -4,6 +4,15 @@ Status: PLANNED 2026-07-29, not started. Written to be implementable from
 cold context: every file, tool and flag it names was verified against the
 tree on the day it was written.
 
+**Amendment 2026-07-30 (Boris): `examples/text` is the parallel preview
+app.** The existing text/Markdown viewer (brought up to date the same day:
+new-lint clean, suite green) previews EVERY feature this arc and the editor
+arc add — search, LSP hover/definition, editing — in parallel with the
+dasHerd integration. Each slice lands in the reusable module component,
+shows up in `examples/text`, and then dasHerd binds it; the example is the
+demo and the test bench, not an afterthought. dasImgui is in-tree now, so
+this is all one repo.
+
 Where this comes from. Boris, reviewing the changelist arc live: "when i
 review changes - in .das file - i'd like at least a viewing experience -
 similar to what i get in vscode with our plugin. i mouse over - i get hint.

@@ -400,7 +400,7 @@ def private parse_command_line() {
         } elif (arg == "--markdown") {
             g_initial_mode_override = int(TextViewMode.markdown)
         } elif (!starts_with(arg, "--") && empty(g_initial_path)) {
-            g_initial_path := arg
+            g_initial_path = arg
         }
     }
 }
@@ -506,10 +506,50 @@ def private update_command_state() {
         has_active && g_documents[active].mode == TextViewMode.plain_text)
 }
 
+def private dispatch_document_command(command_id : string; active : int) : bool {
+    if (active < 0) return false
+    if (command_id == CMD_VIEW_MARKDOWN) {
+        set_mode(g_documents[active], TextViewMode.markdown)
+    } elif (command_id == CMD_VIEW_PLAIN) {
+        set_mode(g_documents[active], TextViewMode.plain_text)
+    } elif (command_id == CMD_VIEW_TOGGLE) {
+        set_mode(g_documents[active], g_documents[active].mode == TextViewMode.markdown
+            ? TextViewMode.plain_text : TextViewMode.markdown)
+    } elif (command_id == CMD_VIEW_ZOOM_IN) {
+        g_documents[active].zoom_step = min(g_documents[active].zoom_step + 1, 60)
+    } elif (command_id == CMD_VIEW_ZOOM_OUT) {
+        g_documents[active].zoom_step = max(g_documents[active].zoom_step - 1, 10)
+    } elif (command_id == CMD_VIEW_ZOOM_RESET) {
+        set_zoom_percent(g_documents[active], 100)
+    } elif (command_id == CMD_EDIT_COPY) {
+        if (g_documents[active].mode == TextViewMode.markdown) {
+            markdown_view_request_copy(g_documents[active].markdown_view)
+        } else {
+            text_source_view_request_copy(g_documents[active].source_view)
+        }
+    } elif (command_id == CMD_EDIT_SELECT_ALL) {
+        if (g_documents[active].mode == TextViewMode.markdown) {
+            let _ = markdown_view_select_all(g_documents[active].markdown_view)
+        } else {
+            text_source_view_select_all(g_documents[active].source_document,
+                                        g_documents[active].source_view)
+        }
+    } elif (command_id == CMD_EDIT_CLEAR_SELECTION) {
+        if (g_documents[active].mode == TextViewMode.markdown) {
+            markdown_view_clear_selection(g_documents[active].markdown_view)
+        } else {
+            text_source_view_clear_selection(g_documents[active].source_view)
+        }
+    } else {
+        return false
+    }
+    return true
+}
+
 def private dispatch_commands() {
     var invocation = CommandInvocation()
     while (command_take(g_commands, invocation)) {
-        g_last_command := invocation.command_id
+        g_last_command = invocation.command_id
         g_command_revision++
         let active = active_document_index()
         if (invocation.command_id == CMD_FILE_OPEN) {
@@ -524,40 +564,10 @@ def private dispatch_commands() {
             let _ = load_path(g_documents[active], path)
         } elif (invocation.command_id == CMD_APP_QUIT) {
             request_exit()
-        } elif (invocation.command_id == CMD_VIEW_MARKDOWN && active >= 0) {
-            set_mode(g_documents[active], TextViewMode.markdown)
-        } elif (invocation.command_id == CMD_VIEW_PLAIN && active >= 0) {
-            set_mode(g_documents[active], TextViewMode.plain_text)
-        } elif (invocation.command_id == CMD_VIEW_TOGGLE && active >= 0) {
-            set_mode(g_documents[active], g_documents[active].mode == TextViewMode.markdown
-                ? TextViewMode.plain_text : TextViewMode.markdown)
-        } elif (invocation.command_id == CMD_VIEW_ZOOM_IN && active >= 0) {
-            g_documents[active].zoom_step = min(g_documents[active].zoom_step + 1, 60)
-        } elif (invocation.command_id == CMD_VIEW_ZOOM_OUT && active >= 0) {
-            g_documents[active].zoom_step = max(g_documents[active].zoom_step - 1, 10)
-        } elif (invocation.command_id == CMD_VIEW_ZOOM_RESET && active >= 0) {
-            set_zoom_percent(g_documents[active], 100)
-        } elif (invocation.command_id == CMD_EDIT_COPY && active >= 0) {
-            if (g_documents[active].mode == TextViewMode.markdown) {
-                markdown_view_request_copy(g_documents[active].markdown_view)
-            } else {
-                text_source_view_request_copy(g_documents[active].source_view)
-            }
-        } elif (invocation.command_id == CMD_EDIT_SELECT_ALL && active >= 0) {
-            if (g_documents[active].mode == TextViewMode.markdown) {
-                let _ = markdown_view_select_all(g_documents[active].markdown_view)
-            } else {
-                text_source_view_select_all(g_documents[active].source_document,
-                                            g_documents[active].source_view)
-            }
-        } elif (invocation.command_id == CMD_EDIT_CLEAR_SELECTION && active >= 0) {
-            if (g_documents[active].mode == TextViewMode.markdown) {
-                markdown_view_clear_selection(g_documents[active].markdown_view)
-            } else {
-                text_source_view_clear_selection(g_documents[active].source_view)
-            }
         } elif (invocation.command_id == CMD_EDIT_BINDINGS) {
             g_bindings_editor.open = true
+        } else {
+            let _ = dispatch_document_command(invocation.command_id, active)
         }
     }
 }
@@ -611,6 +621,10 @@ def private draw_menu_bar() {
         }
     }
 
+    dispatch_menu_clicks()
+}
+
+def private dispatch_menu_clicks() {
     if (FILE_OPEN.click_count > g_open_clicks) {
         g_open_clicks = FILE_OPEN.click_count
         open_file_dialog()
