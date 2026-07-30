@@ -8,6 +8,7 @@ require dasllama/dasllama_env  // the shared typed env readers + the knob regist
 require dasllama/dasllama_config  // DlimConfiguration — this module registers the cpu/metal sources
 require dasllama/dasllama_kqformat public   // KqFmt + kq_sb + the stride truth — re-exported so every requirer keeps seeing the enum
 require dasllama/dasllama_rope       // the RoPE angle/table generation (Model-facing wrappers below pass config params in)
+require dasllama/dasllama_gpu_tier   // the device-cooperation seam (hooks the loader/dispatch arms call)
 require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs and false-flags this as unused
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default  // registers the portable Q8·Q8 backend at [init] (the fallback everywhere)

@@ -6,6 +6,7 @@ options _cyclomatic_complexity = 0   // GPU kernel emitters/dispatch ladders are
 options _function_length = 0   // same
 
 require dasllama/dasllama_math
+require dasllama/dasllama_gpu_tier  // the device-cooperation seam this tier implements (hook installs at registration)
 require dasllama/dasllama_gemm_schema  // kq_qsb/kq_ssb + the q8/kq plane consts — the stride source
 require dasllama/dasllama_env  // the shared typed env readers + the knob registry
 require dasllama/dasllama_config  // DlimConfiguration — this module registers the vulkan source

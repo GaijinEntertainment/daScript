@@ -55,7 +55,14 @@
     `rope_scaled_*` leaves, the Metal/Vulkan fused rope-store kernels) — their per-shape
     specialization is deliberate hot-loop design; do NOT hand-merge them. Float multiply
     order in the builders is contractual (parity-pinned) — never "unify" it.
-11. **All format identity lives in `dasllama_kqformat.das`.** The `KqFmt` enum, the
+11. **GPU cooperation goes through `dasllama_gpu_tier.das`.** A GPU backend that cooperates
+    with the CPU forward (per-op offload, resident-driver plumbing) implements THAT seam —
+    hook types, install slots, want/status — never fresh function-pointer globals elsewhere.
+    Whole-forward ownership goes through common's override registries (the contract Metal
+    uses; Vulkan's resident driver registers there too). A backend reaching into the engine
+    around these two seams — or the engine reaching into a backend — is a review defect.
+    Direction between the styles: `followup_vulkan.md`.
+12. **All format identity lives in `dasllama_kqformat.das`.** The `KqFmt` enum, the
     per-format descriptor table (strides, block geometry, stream codes), and format
     predicates. A new weight format = a new enum member + descriptor row THERE — never a
     fresh `if (fmt == ...)` ladder, never a second format-id space, never a local stride
