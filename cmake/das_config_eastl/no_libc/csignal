@@ -1,0 +1,6 @@
+#pragma once
+// Shadows <csignal> for the no_fileio lane. The PS SDK ships <signal.h> but not the
+// C++ <csignal> wrapper, so an include that is not behind
+// DAS_CRASH_HANDLER_PLATFORM_SUPPORTED (or an equally narrow guard) breaks that
+// build. Fail here instead, where the log is readable.
+#error "<csignal> does not exist on every target (PS has only <signal.h>) - guard the include, or use <signal.h>"

@@ -256,6 +256,8 @@ namespace das {
     // no usable context to report on: return an empty result / no-op (never crash)
 #define GENERATE_IO_STUB {}
 #define GENERATE_IO_STUB_RET { return {}; }
+    // vec4f is __m128 on SIMD targets, which has no brace-init - it needs v_zero()
+#define GENERATE_IO_STUB_VEC { return v_zero(); }
     void builtin_sleep ( uint32_t ) GENERATE_IO_STUB
     const FILE * builtin_stdin() GENERATE_IO_STUB_RET
     const FILE * builtin_stdout() GENERATE_IO_STUB_RET
@@ -264,11 +266,11 @@ namespace das {
     int32_t builtin_terminal_width () GENERATE_IO_STUB_RET
     bool builtin_feof(const FILE*) GENERATE_IO_STUB_RET
     const FILE * builtin_fopen  ( const char *, const char *, Context *, LineInfoArg * ) GENERATE_IO_STUB_RET
-    vec4f builtin_read ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_RET
-    vec4f builtin_write ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_RET
-    vec4f builtin_read64 ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_RET
-    vec4f builtin_write64 ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_RET
-    vec4f builtin_load ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_RET
+    vec4f builtin_read ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_VEC
+    vec4f builtin_write ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_VEC
+    vec4f builtin_read64 ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_VEC
+    vec4f builtin_write64 ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_VEC
+    vec4f builtin_load ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_VEC
     bool builtin_stat ( const char *, FStat & ) GENERATE_IO_STUB_RET
     bool builtin_chdir ( const char * ) GENERATE_IO_STUB_RET
     bool builtin_mkdir ( const char * ) GENERATE_IO_STUB_RET
@@ -286,6 +288,7 @@ namespace das {
 
 #undef GENERATE_IO_STUB
 #undef GENERATE_IO_STUB_RET
+#undef GENERATE_IO_STUB_VEC
 
 }
 #else // DAS_NO_FILEIO
