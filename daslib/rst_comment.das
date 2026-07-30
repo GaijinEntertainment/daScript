@@ -39,9 +39,9 @@ enum ParserState {
 let private DEBUG_COMMENT_READER = false;
 
 [macro_function]
-def private debug_rst ( s : string ) {
+def private debug_rst ( _s : string ) {
     if (DEBUG_COMMENT_READER) {
-        print("{s}\n")
+        print("{_s}\n")
     }
 }
 
