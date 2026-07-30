@@ -60,8 +60,9 @@ let Q40_SSB = 16l   // Q4_0 scale plane: 8 x f16 d, verbatim
 let Q51_QB = 20l    // q5_1 quant plane PER 32-BLOCK: 16 nibble bytes (k/k+16 pairing) + 4 qh
 let Q51_SB = 4l     // q5_1 scale plane PER 32-BLOCK: f16 d + f16 m
 
-//! Quant-plane bytes per stride unit for a kq superblock format — the typed stride surface.
-//! Unknown formats panic instead of silently walking another format's stride.
+//! Quant-plane bytes per stride unit — the typed stride surface. The stride unit is one
+//! 256-weight superblock for the kq lattice and one 32-weight block for q51 (see kq_elems).
+//! q8/q8n panic (their planes are byte-per-elem / 34B-block forms, not stride-walked here).
 def kq_qsb(f : KqFmt) : int64 {
     if (f == KqFmt.k4 || f == KqFmt.q40) {
         return K4_QSB
@@ -72,11 +73,14 @@ def kq_qsb(f : KqFmt) : int64 {
     if (f == KqFmt.k6) {
         return K6_QSB
     }
-    panic("kq_qsb: not a kq superblock format")
+    if (f == KqFmt.q51) {
+        return Q51_QB
+    }
+    panic("kq_qsb: no plane stride for this format")
     return 0l
 }
 
-//! Scale-plane bytes per stride unit for a kq superblock format (see kq_qsb).
+//! Scale-plane bytes per stride unit (see kq_qsb for the unit).
 def kq_ssb(f : KqFmt) : int64 {
     if (f == KqFmt.k4 || f == KqFmt.k5) {
         return K4_SSB
@@ -87,7 +91,10 @@ def kq_ssb(f : KqFmt) : int64 {
     if (f == KqFmt.q40) {
         return Q40_SSB
     }
-    panic("kq_ssb: not a kq superblock format")
+    if (f == KqFmt.q51) {
+        return Q51_SB
+    }
+    panic("kq_ssb: no plane stride for this format")
     return 0l
 }
 

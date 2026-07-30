@@ -1783,35 +1783,20 @@ def private stream_field_of(t : Model; fmt : KqFmt) : string {
     return ""
 }
 
-// (q plane bytes, scale plane bytes, region fmt id) for one streamed job
+// (q plane bytes, scale plane bytes, region fmt id) for one streamed job — pure taxonomy reads
 [unused_argument(t)]
 def private stream_job_shape(t : Model; j : FillJob) : tuple<qb : int64; sb : int64; rfmt : int> {
-    if (j.fmt == KqFmt.k4) {
-        return (qb = (j.n / 256l) * K4_QSB, sb = (j.n / 256l) * K4_SSB, rfmt = 4)
-    } elif (j.fmt == KqFmt.k5) {
-        return (qb = (j.n / 256l) * K5_QSB, sb = (j.n / 256l) * K5_SSB, rfmt = 5)
-    } elif (j.fmt == KqFmt.k6) {
-        return (qb = (j.n / 256l) * K6_QSB, sb = (j.n / 256l) * K6_SSB, rfmt = 6)
-    } elif (j.fmt == KqFmt.q40) {
-        return (qb = (j.n / 256l) * Q40_QSB, sb = (j.n / 256l) * Q40_SSB, rfmt = 40)
-    } elif (j.fmt == KqFmt.q51) {
-        return (qb = (j.n / 32l) * Q51_QB, sb = (j.n / 32l) * Q51_SB, rfmt = 2)
+    if (kq_sb(j.fmt) || j.fmt == KqFmt.q51) {
+        let e = kq_elems(j.fmt)
+        return (qb = (j.n / e) * kq_qsb(j.fmt), sb = (j.n / e) * kq_ssb(j.fmt), rfmt = kq_stream_code(j.fmt))
     }
     return (qb = j.n, sb = 0l, rfmt = 0)   // q8: 1 byte/elem quants; scales handled as floats
 }
 
-// a job's byte offset within its plane (woff is elems; kq/q51 planes stride per superblock)
+// a job's byte offset within its plane (woff is elems; kq/q51 planes stride per superblock/block)
 def private stream_job_qoff(j : FillJob) : int64 {
-    if (j.fmt == KqFmt.k4) {
-        return (j.woff / 256l) * K4_QSB
-    } elif (j.fmt == KqFmt.k5) {
-        return (j.woff / 256l) * K5_QSB
-    } elif (j.fmt == KqFmt.k6) {
-        return (j.woff / 256l) * K6_QSB
-    } elif (j.fmt == KqFmt.q40) {
-        return (j.woff / 256l) * Q40_QSB
-    } elif (j.fmt == KqFmt.q51) {
-        return (j.woff / 32l) * Q51_QB
+    if (kq_sb(j.fmt) || j.fmt == KqFmt.q51) {
+        return (j.woff / kq_elems(j.fmt)) * kq_qsb(j.fmt)
     }
     return j.woff
 }

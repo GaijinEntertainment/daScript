@@ -47,6 +47,8 @@ def test_kqfmt_strides(t : T?) {
         t |> equal(kq_ssb(KqFmt.k6), 18l)     // 16 sub-scales + f16 d
         t |> equal(kq_qsb(KqFmt.q40), 128l)   // k4 tiling
         t |> equal(kq_ssb(KqFmt.q40), 16l)    // 8 x f16 d
+        t |> equal(kq_qsb(KqFmt.q51), 20l)    // per 32-BLOCK: 16 nibbles + 4 qh
+        t |> equal(kq_ssb(KqFmt.q51), 4l)     // per 32-BLOCK: f16 d + f16 m
     }
     t |> run("named constants agree with the literals") @(t : T?) {
         t |> equal(K4_QSB, 128l)
