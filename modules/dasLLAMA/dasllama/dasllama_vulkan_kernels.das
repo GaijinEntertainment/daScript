@@ -1889,6 +1889,74 @@ var @workgroup fa_m : float[8]
 var @workgroup fa_l : float[8]
 var @workgroup fa_a : float[8]
 
+// ===== the flash Q-tile core (at_attn and da_attn_b share it; the h128 coopmat twin does not) =====
+
+// stage the 8-query tile and reset the online-softmax state
+def private fa_load_q(q0, nrows, qd, h, hs : uint) {
+    let tid = gl_LocalInvocationID.x
+    var i = tid
+    while (i < 8u * hs) {
+        let qr = q0 + i / hs
+        fa_q[i] = qr < nrows ? vk_upf[qr * qd + h * hs + i % hs] : 0.0
+        i += 256u
+    }
+    if (tid < 8u) {
+        fa_m[tid] = -3.0e38
+        fa_l[tid] = 0.0
+    }
+}
+
+// stage one 32-position K tile from vk_wsf at kbase (the V reuse of this staging loads per-kernel —
+// the two kernels' V planes live on different bindings)
+def private fa_load_k(k0, kend, kbase, kvd, kvh, hs : uint) {
+    var i = gl_LocalInvocationID.x
+    while (i < 32u * hs) {
+        let kr = k0 + i / hs
+        fa_kv[(i / hs) * 257u + i % hs] = kr < kend ? vk_wsf[kbase + kr * kvd + kvh * hs + i % hs] : 0.0
+        i += 256u
+    }
+}
+
+// tile QK^T: lane (r, c) scores query r against position k0+c, causal-masked into fa_p
+def private fa_qk_score(r, c, hs, k0, gq, q0, nrows : uint; scale : float) {
+    var s = 0.0
+    var j = 0u
+    while (j < hs) {   // 4-wide manual unroll (hs % 32 == 0)
+        s += fa_q[r * hs + j] * fa_kv[c * 257u + j]
+        s += fa_q[r * hs + j + 1u] * fa_kv[c * 257u + j + 1u]
+        s += fa_q[r * hs + j + 2u] * fa_kv[c * 257u + j + 2u]
+        s += fa_q[r * hs + j + 3u] * fa_kv[c * 257u + j + 3u]
+        j += 4u
+    }
+    let gk = k0 + c
+    fa_p[r * 32u + c] = (gk <= gq && q0 + r < nrows) ? s * scale : -3.0e38
+}
+
+// per-row online-softmax update: max, rescale, exponentiate in place (thread tid owns row tid)
+def private fa_softmax_update {
+    let tid = gl_LocalInvocationID.x
+    if (tid < 8u) {
+        var mt = fa_m[tid]
+        var j2 = 0u
+        while (j2 < 32u) {
+            mt = max(mt, fa_p[tid * 32u + j2])
+            j2++
+        }
+        let alpha = exp(fa_m[tid] - mt)
+        var lsum = 0.0
+        j2 = 0u
+        while (j2 < 32u) {
+            let e = exp(fa_p[tid * 32u + j2] - mt)
+            fa_p[tid * 32u + j2] = e
+            lsum += e
+            j2++
+        }
+        fa_l[tid] = fa_l[tid] * alpha + lsum
+        fa_m[tid] = mt
+        fa_a[tid] = alpha
+    }
+}
+
 // one workgroup per (head, 8-query tile); lane c owns output dims c + 32*jj (strided — keeps
 // the AV shared reads conflict-free). The V tile REUSES the K tile's staging in shared.
 [compute_shader(local_size_x=256, name="at_attn_spv")]
@@ -1909,16 +1977,7 @@ def at_attn {
     let r = tid / 32u
     let c = tid % 32u
     let kvh = h / kv_mul
-    var i = tid
-    while (i < 8u * hs) {
-        let qr = q0 + i / hs
-        fa_q[i] = qr < rows ? vk_upf[qr * qd + h * hs + i % hs] : 0.0
-        i += 256u
-    }
-    if (tid < 8u) {
-        fa_m[tid] = -3.0e38
-        fa_l[tid] = 0.0
-    }
+    fa_load_q(q0, rows, qd, h, hs)
     var o0 = 0.0
     var o1 = 0.0
     var o2 = 0.0
@@ -1930,47 +1989,14 @@ def at_attn {
     barrier()
     let gq = w0 + q0 + r
     let kend = w0 + min(q0 + 8u, rows)   // causal bound (exclusive) of the tile's last valid row
+    var i = tid
     var k0 = 0u
     while (k0 < kend) {
-        i = tid
-        while (i < 32u * hs) {
-            let kr = k0 + i / hs
-            fa_kv[(i / hs) * 257u + i % hs] = kr < kend ? vk_wsf[kr * kvd + kvh * hs + i % hs] : 0.0
-            i += 256u
-        }
+        fa_load_k(k0, kend, 0u, kvd, kvh, hs)
         barrier()
-        var s = 0.0
-        var j = 0u
-        while (j < hs) {   // 4-wide manual unroll (hs % 32 == 0)
-            s += fa_q[r * hs + j] * fa_kv[c * 257u + j]
-            s += fa_q[r * hs + j + 1u] * fa_kv[c * 257u + j + 1u]
-            s += fa_q[r * hs + j + 2u] * fa_kv[c * 257u + j + 2u]
-            s += fa_q[r * hs + j + 3u] * fa_kv[c * 257u + j + 3u]
-            j += 4u
-        }
-        let gk = k0 + c
-        fa_p[r * 32u + c] = (gk <= gq && q0 + r < rows) ? s * scale : -3.0e38
+        fa_qk_score(r, c, hs, k0, gq, q0, rows, scale)
         barrier()
-        if (tid < 8u) {   // per-row online-softmax update: max, rescale, exponentiate in place
-            var mt = fa_m[tid]
-            var j2 = 0u
-            while (j2 < 32u) {
-                mt = max(mt, fa_p[tid * 32u + j2])
-                j2++
-            }
-            let alpha = exp(fa_m[tid] - mt)
-            var lsum = 0.0
-            j2 = 0u
-            while (j2 < 32u) {
-                let e = exp(fa_p[tid * 32u + j2] - mt)
-                fa_p[tid * 32u + j2] = e
-                lsum += e
-                j2++
-            }
-            fa_l[tid] = fa_l[tid] * alpha + lsum
-            fa_m[tid] = mt
-            fa_a[tid] = alpha
-        }
+        fa_softmax_update()
         barrier()
         let av = fa_a[r]
         o0 *= av
@@ -2379,16 +2405,7 @@ def da_attn_b {
     let r = tid / 32u
     let c = tid % 32u
     let kvh = h / kv_mul
-    var i = tid
-    while (i < 8u * hs) {
-        let qr = q0 + i / hs
-        fa_q[i] = qr < npos ? vk_upf[qr * qd + h * hs + i % hs] : 0.0
-        i += 256u
-    }
-    if (tid < 8u) {
-        fa_m[tid] = -3.0e38
-        fa_l[tid] = 0.0
-    }
+    fa_load_q(q0, npos, qd, h, hs)
     var o0 = 0.0
     var o1 = 0.0
     var o2 = 0.0
@@ -2400,47 +2417,14 @@ def da_attn_b {
     barrier()
     let gq = w0 + q0 + r
     let kend = w0 + min(q0 + 8u, npos)   // causal bound (exclusive) of the tile's last valid row
+    var i = tid
     var k0 = 0u
     while (k0 < kend) {
-        i = tid
-        while (i < 32u * hs) {
-            let kr = k0 + i / hs
-            fa_kv[(i / hs) * 257u + i % hs] = kr < kend ? vk_wsf[kbase + kr * kvd + kvh * hs + i % hs] : 0.0
-            i += 256u
-        }
+        fa_load_k(k0, kend, kbase, kvd, kvh, hs)
         barrier()
-        var s = 0.0
-        var j = 0u
-        while (j < hs) {   // 4-wide manual unroll (hs % 32 == 0)
-            s += fa_q[r * hs + j] * fa_kv[c * 257u + j]
-            s += fa_q[r * hs + j + 1u] * fa_kv[c * 257u + j + 1u]
-            s += fa_q[r * hs + j + 2u] * fa_kv[c * 257u + j + 2u]
-            s += fa_q[r * hs + j + 3u] * fa_kv[c * 257u + j + 3u]
-            j += 4u
-        }
-        let gk = k0 + c
-        fa_p[r * 32u + c] = (gk <= gq && q0 + r < npos) ? s * scale : -3.0e38
+        fa_qk_score(r, c, hs, k0, gq, q0, npos, scale)
         barrier()
-        if (tid < 8u) {   // per-row online-softmax update: max, rescale, exponentiate in place
-            var mt = fa_m[tid]
-            var j2 = 0u
-            while (j2 < 32u) {
-                mt = max(mt, fa_p[tid * 32u + j2])
-                j2++
-            }
-            let alpha = exp(fa_m[tid] - mt)
-            var lsum = 0.0
-            j2 = 0u
-            while (j2 < 32u) {
-                let e = exp(fa_p[tid * 32u + j2] - mt)
-                fa_p[tid * 32u + j2] = e
-                lsum += e
-                j2++
-            }
-            fa_l[tid] = fa_l[tid] * alpha + lsum
-            fa_m[tid] = mt
-            fa_a[tid] = alpha
-        }
+        fa_softmax_update()
         barrier()
         let av = fa_a[r]
         o0 *= av
