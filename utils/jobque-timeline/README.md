@@ -7,15 +7,9 @@ per-stage shading, unit markers (`token` / `layer` / `step`), computed stats (id
 parallelism, busy by category), multi-file compare with shared zoom/timer, and a launch
 rail that reruns your trace-producing app and auto-refreshes on save.
 
-## Setup
-
-The viewer needs dasImgui (external package), installed into this tool's root:
-
-```
-bin/Release/daslang.exe utils/daspkg/main.das -- install --root utils/jobque-timeline
-```
-
 ## Run
+
+The viewer needs dasImgui, which ships in-tree (`modules/dasImgui`) — nothing to install.
 
 ```
 bin/Release/daslang.exe -project_root utils/jobque-timeline utils/jobque-timeline/main.das -- a.trace.json b.trace.json

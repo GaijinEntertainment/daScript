@@ -15,7 +15,6 @@ def package() {
 [export]
 def dependencies(version : string) {
     require_package("dasVulkan")
-    require_package("dasImgui")
 }
 
 [export]

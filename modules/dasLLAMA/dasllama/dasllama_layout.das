@@ -2,6 +2,8 @@ options gen2
 options _comment_hygiene = true
 
 module dasllama_layout shared public
+options _cyclomatic_complexity = 0   // format/schema dispatch ladders are the domain shape
+options _function_length = 0   // same
 
 require dasllama/dasllama_common
 require dasllama/dasllama_math          // g_repack_* backend pointers + active_* layout knobs
@@ -214,10 +216,11 @@ def private repack_regions(var t : Model; regs : array<StreamReg>) {
     if (empty(regs)) {
         return
     }
-    let rq8 = g_repack_q8q8
-    let rkq = g_repack_kq
-    let rmx = g_repack_mx4
-    let rq51 = active_repack_q51()   // override-aware: a cross-box q51 target needs the gen generic
+    // hoisted as VALUES on the arming thread — lanes can't read math's globals
+    let rq8 = active_repack_q8q8()
+    let rkq = active_repack_kq()
+    let rmx = active_repack_mx4()
+    let rq51 = active_repack_q51()
     unsafe {
         var qbp : int8? = null
         var qsp : float? = null
@@ -520,13 +523,14 @@ def private repack_q51_stacks(var t : Model) {
 // StreamRepackFn: one region through the active backend's repack, on caller-supplied pointers
 // (the streamed fill biases the q pointer into its temp; scales stay in the RAM plane)
 def private stream_repack_one(fmt : int; qp, sp : void?; n, d : int64) {
+    // inline on the loader/converter thread — the override-aware selectors are safe here
     unsafe {
         if (fmt == 0) {
-            invoke(g_repack_q8q8, reinterpret<int8?>(qp), reinterpret<float?>(sp), n, d)
+            invoke(active_repack_q8q8(), reinterpret<int8?>(qp), reinterpret<float?>(sp), n, d)
         } elif (fmt == 2) {
             invoke(active_repack_q51(), reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
         } else {
-            invoke(g_repack_kq, fmt, reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
+            invoke(active_repack_kq(), fmt, reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
         }
     }
 }

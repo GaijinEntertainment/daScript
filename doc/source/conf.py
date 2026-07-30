@@ -37,6 +37,10 @@ extensions = [
   # `.. include:: ... :parser: myst_parser.sphinx_`. Those pages keep ONE source
   # file, read both by daslang.io and by the SDK bundle (install/skills.list).
   'myst_parser',
+  # dasImgui docs (merged in-tree): `.. video::` tutorial recordings staged
+  # from the docs-assets release, and the `:icon:` role over _static/icons/.
+  'tutorial_video',
+  'icon_role',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -290,6 +294,9 @@ latex_elements = {
 \DeclareUnicodeCharacter{221E}{\ensuremath{\infty}}
 \DeclareUnicodeCharacter{2227}{\ensuremath{\wedge}}
 \DeclareUnicodeCharacter{2228}{\ensuremath{\vee}}
+\DeclareUnicodeCharacter{2022}{\textbullet}
+\DeclareUnicodeCharacter{2192}{\ensuremath{\rightarrow}}
+\DeclareUnicodeCharacter{25BC}{\ensuremath{\blacktriangledown}}
 ''',
 
 # Latex figure (float) alignment

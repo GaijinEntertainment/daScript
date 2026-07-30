@@ -2,6 +2,7 @@ options gen2
 options _comment_hygiene = true
 
 module dasllama_math_gen shared public
+options _function_length = 0   // kernel generator bodies are the domain shape
 
 require dasllama/dasllama_math
 require dasllama/dasllama_math_aarch64_neon
@@ -523,6 +524,11 @@ def q8q8_tile_gen(var yp : float?; wg : int8 const?; sg : float const?; xqp : in
 //! reproduces the old hand arm64-laneq interleave byte-for-byte). Group bytes biased by wbias
 //! (bias128 stamps bake w^0x80); tail rows stay row-major AND unbiased. Runs once per tensor at load.
 def repack_q8q8_grp(var wp : int8?; var sp : float?; n, d, mr : int64; wbias : int64 = 0l; kgroup : int64 = 4l) {
+    // a zero here means the caller read layout numbers a lane context cannot see — name the
+    // failure instead of a bare div0 (2026-07-28)
+    if (mr <= 0l || kgroup <= 0l) {
+        panic("repack_q8q8_grp: mr={mr} kgroup={kgroup} — layout numbers unreadable (pool-lane context globals?)")
+    }
     let nb = n / 32l
     let ng = d / mr
     let ncg = n / kgroup
@@ -569,10 +575,15 @@ def repack_q8q8_grp(var wp : int8?; var sp : float?; n, d, mr : int64; wbias : i
     delete ts
 }
 
-// the backend repack slot. Numbers come through math's active_* getters — value-identical to
-// the stamped companions during normal serving (activation caches from them), and the
-// cross-box bake override's one seam
+// the backend repack slot — STAMPED companions only, NO math globals: the eager loader fans
+// these across pool lanes whose contexts can't read math's globals (the div0 of 2026-07-28);
+// cross-box bakes use the _bake twins via math's selectors, inline on the converter main thread
 def private repack_q8q8_gen(var wp : int8?; var sp : float?; n, d : int64) {
+    repack_q8q8_grp(wp, sp, n, d, int64(q8q8_layout_gen()), int64(q8q8_wbias_gen()), int64(q8q8_kgroup_gen()))
+}
+
+// the cross-box bake twin: the TARGET's numbers via math's override getters (main thread only)
+def private repack_q8q8_bake(var wp : int8?; var sp : float?; n, d : int64) {
     repack_q8q8_grp(wp, sp, n, d, active_q8_layout_mr(), active_q8_wbias(), active_q8_kgroup())
 }
 
@@ -624,8 +635,12 @@ def repack_mx4_grp(var np : uint8?; var ep : uint8?; n, d, mr : int64) {
 }
 
 // the backend mx4 repack slot: same layout companion as the Q8 repack — planes and weights
-// interleave at the ONE stamped mr
+// interleave at the ONE stamped mr. Stamped only; bake twin below (see repack_q8q8_gen).
 def private repack_mx4_gen(var np : uint8?; var ep : uint8?; n, d : int64) {
+    repack_mx4_grp(np, ep, n, d, int64(q8q8_layout_gen()))
+}
+
+def private repack_mx4_bake(var np : uint8?; var ep : uint8?; n, d : int64) {
     repack_mx4_grp(np, ep, n, d, active_q8_layout_mr())
 }
 
@@ -691,8 +706,13 @@ def repack_q51_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64) {
     delete ts
 }
 
-// the backend q51 repack slot: the family's layout number via math's override-aware getter
+// the backend q51 repack slot: stamped only; the bake twin below is what set_bake_q51_repack
+// registers (see repack_q8q8_gen — lanes cannot read math's globals)
 def private repack_q51_gen(var qp : uint8?; var sp : uint8?; n, d : int64) {
+    repack_q51_grp(qp, sp, n, d, int64(q51q8_layout_gen()))
+}
+
+def private repack_q51_bake(var qp : uint8?; var sp : uint8?; n, d : int64) {
     repack_q51_grp(qp, sp, n, d, active_q51_layout_mr())
 }
 
@@ -1133,8 +1153,21 @@ def kq_grp_row_dot_b(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, mr 
     return acc
 }
 
-// the backend kq repack slot: same layout companion as the Q8/mx4 repacks — one stamped mr
+// the backend kq repack slot: per-format stamped companions only; bake twin below (see
+// repack_q8q8_gen — lanes cannot read math's globals)
 def private repack_kq_gen(fmt : int; var kq : uint8?; var ks : uint8?; n, d : int64) {
+    if (fmt == 4) {
+        repack_k4_grp(kq, ks, n, d, kq_layout_of(4))
+    } elif (fmt == 5) {
+        repack_k5_grp(kq, ks, n, d, kq_layout_of(5))
+    } elif (fmt == 40) {
+        repack_q40_grp(kq, ks, n, d, kq_layout_of(40))
+    } else {
+        repack_k6_grp(kq, ks, n, d, kq_layout_of(6))
+    }
+}
+
+def private repack_kq_bake(fmt : int; var kq : uint8?; var ks : uint8?; n, d : int64) {
     if (fmt == 4) {
         repack_k4_grp(kq, ks, n, d, active_kq_layout_mr(4))
     } elif (fmt == 5) {
@@ -2111,7 +2144,10 @@ def private q8q8_groupn_s16_gen(var yp : float?; wp : int8 const?; sp : uint16 c
 def dasllama_math_gen_register() {
     // the cross-box override's q51 reach: x64-gen keeps disk-order q51 slots, so the generic
     // grp<mr> q51 repack registers here for bakes whose TARGET has grp q51 planes
-    set_bake_q51_repack(@@repack_q51_gen)
+    set_bake_q51_repack(@@repack_q51_bake)
+    set_bake_q8q8_repack(@@repack_q8q8_bake)
+    set_bake_mx4_repack(@@repack_mx4_bake)
+    set_bake_kq_repack(@@repack_kq_bake)
     // needs_repack keeps this out of auto-select (direct callers stay on arm64-sdot). q8_layout
     // must be evaluated at selection time, not [init] — [init]s run before the JIT installs
     // generated code (the slice C mr8 bug); arm64 needs no availability predicate.

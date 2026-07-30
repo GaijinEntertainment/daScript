@@ -20,6 +20,8 @@ options gc
 
 require dashv/dashv_boost public
 require daslib/jobque_boost
+require live/live_gc
+require live_host
 require daslib/json_boost
 require daslib/fio
 
@@ -192,6 +194,7 @@ def with_advanced_server(port : int; static_root : string; blk : block<(base_url
                     started |> notify_and_release
                     while (stop_flag |> get == 0) {
                         server->tick()
+                        maybe_collect_gc()  // the thread owns this context's heap; collect between ticks
                         sleep(10u)
                     }
                     server->stop()
@@ -228,7 +231,7 @@ def with_advanced_server(port : int; static_root : string; blk : block<(base_url
 //  set_content_type(resp, content_type)     Set Content-Type header
 
 [export]
-def main() {
+def main() { // nolint:STYLE038 — tutorial client script, linear by design
     let static_root = "{get_das_root()}/tutorials/dasHV/_static_test"
     create_test_files(static_root)
 

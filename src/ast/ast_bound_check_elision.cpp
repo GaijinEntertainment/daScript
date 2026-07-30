@@ -127,6 +127,13 @@ namespace das {
             Variable * idx = nullptr;
             Variable * lenOf = nullptr;
             int64_t    hi = 0;
+            struct Hash {
+                size_t operator () ( const UB & u ) const {
+                    size_t h = das::hash<Variable *>()(u.idx);
+                    h = h*31 + das::hash<Variable *>()(u.lenOf);
+                    return h*31 + das::hash<int64_t>()(u.hi);
+                }
+            };
             bool operator < ( const UB & o ) const {
                 if ( idx != o.idx ) return idx < o.idx;
                 if ( lenOf != o.lenOf ) return lenOf < o.lenOf;
@@ -137,14 +144,20 @@ namespace das {
             }
         };
         struct FactSet {
-            std::set<UB>          ub;   // proven idx < bound
-            std::set<Variable *>  nn;   // proven idx >= 0
-            bool operator == ( const FactSet & o ) const { return ub==o.ub && nn==o.nn; }
+            das_set<UB, UB::Hash> ub;   // proven idx < bound
+            das_set<Variable *>   nn;   // proven idx >= 0
+            template <typename ST>
+            static bool setEq ( const ST & a, const ST & b ) {
+                if ( a.size() != b.size() ) return false;
+                for ( auto & e : a ) if ( !b.count(e) ) return false;
+                return true;
+            }
+            bool operator == ( const FactSet & o ) const { return setEq(ub,o.ub) && setEq(nn,o.nn); }
         };
         static FactSet meet ( const FactSet & a, const FactSet & b ) {
             FactSet r;
-            std::set_intersection(a.ub.begin(),a.ub.end(),b.ub.begin(),b.ub.end(),std::inserter(r.ub,r.ub.end()));
-            std::set_intersection(a.nn.begin(),a.nn.end(),b.nn.begin(),b.nn.end(),std::inserter(r.nn,r.nn.end()));
+            for ( auto & u : a.ub ) if ( b.ub.count(u) ) r.ub.insert(u);
+            for ( auto & v : a.nn ) if ( b.nn.count(v) ) r.nn.insert(v);
             return r;
         }
 

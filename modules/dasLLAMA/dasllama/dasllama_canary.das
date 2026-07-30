@@ -2,15 +2,22 @@ options gen2
 options _comment_hygiene = true
 
 module dasllama_canary shared public
+options _cyclomatic_complexity = 0   // model forward/serialize walks mirror the model schema
+options _function_length = 0   // same
 
 require math
 require daslib/fio
 require strings
 require daslib/strings_boost
 require daslib/array_boost
+require daslib/apply
+require daslib/archive
+require dasllama/dasllama_env
 require dasllama/dasllama_math
 require dasllama/dasllama_gguf
 require dasllama/dasllama_audio
+require dasllama/dasllama_common   // apply_box_profile_runtime for the canary-image identity
+require dasllama/dasllama_image
 
 // Canary-Qwen 2.5B audio front end: the FastConformer-32 encoder + the perception.proj
 // linear (audio d_model 1024 -> Qwen3 hidden 2048), read from a self-describing named-tensor
@@ -71,6 +78,72 @@ struct CanaryEncoder {
     pre_w : int64; pre_b : int64
     layers : array<CanaryLayerOffs>
     proj_w : int64; proj_b : int64
+    image_map : void?         // non-null when the planes borrow a mapped .dlim (dasllama_image)
+    image_bytes : uint64
+}
+
+def finalize(var t : CanaryEncoder) {
+    apply(t) $ [unused_argument(name)] (name : string; var field) {
+        static_if (typeinfo is_array(field)) {
+            if (lock_count(field) != 0) {
+                unsafe {
+                    _builtin_forget_temp_array(field)
+                }
+            } else {
+                delete field
+            }
+        }
+    }
+    if (t.image_map != null) {
+        unsafe {
+            fmap_close(t.image_map, t.image_bytes)
+        }
+        t.image_map = null
+        t.image_bytes = 0ul
+    }
+}
+
+// the tripwire: serialize_image_meta(CanaryEncoder) covers 26 fields; image_map + image_bytes
+// are deliberate skips (layers is a POD-struct array — it rides as a plane).
+let private CANARY_META_FIELDS = 26 + 2
+
+// every meta-carried CanaryEncoder field, explicitly, both directions (see dasllama_image)
+def private serialize_image_meta(var arch : Archive; var t : CanaryEncoder) {
+    verify(count_meta_fields(t) == CANARY_META_FIELDS)   // grew CanaryEncoder? extend this list
+    arch |> serialize_raw(t.d_model)
+    arch |> serialize_raw(t.n_layer)
+    arch |> serialize_raw(t.n_head)
+    arch |> serialize_raw(t.n_ff)
+    arch |> serialize_raw(t.n_mel)
+    arch |> serialize_raw(t.n_fft)
+    arch |> serialize_raw(t.subsampling)
+    arch |> serialize_raw(t.n_sub_ch)
+    arch |> serialize_raw(t.conv_kernel)
+    arch |> serialize_raw(t.proj_dim)
+    arch |> serialize_raw(t.n_fb)
+    arch |> serialize_raw(t.eps)
+    arch |> serialize_raw(t.c0_w)
+    arch |> serialize_raw(t.c0_b)
+    arch |> serialize_raw(t.c2_w)
+    arch |> serialize_raw(t.c2_b)
+    arch |> serialize_raw(t.c3_w)
+    arch |> serialize_raw(t.c3_b)
+    arch |> serialize_raw(t.c5_w)
+    arch |> serialize_raw(t.c5_b)
+    arch |> serialize_raw(t.c6_w)
+    arch |> serialize_raw(t.c6_b)
+    arch |> serialize_raw(t.pre_w)
+    arch |> serialize_raw(t.pre_b)
+    arch |> serialize_raw(t.proj_w)
+    arch |> serialize_raw(t.proj_b)
+}
+
+[unused_argument(t)]
+def private image_post_load(var t : CanaryEncoder) {}   // no derived state — offsets ARE the meta
+
+[init]
+def private register_canary_image_tags {
+    register_image_family_tag("canary-f32")
 }
 
 //! Every hot-path buffer of the canary encode, so a transcribe allocates nothing per call.
@@ -167,8 +240,44 @@ def private cn_fold_bn(var blob : array<float>; w, b, mean, vr, dwb, d : int64; 
     }
 }
 
-//! Load a canary encoder bin (convert_canary_to_ggml.py output; magic "CNRY", all-f32).
+//! Load a canary encoder bin (convert_canary_to_ggml.py output; magic "CNRY", all-f32). Like
+//! ``load_model``, caches a box/knob-specific PREPARED IMAGE for fast reload;
+//! ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
 def load_canary_encoder(path : string) : CanaryEncoder {
+    let tag = "canary-f32"
+    if (path |> ends_with(".dlim")) {
+        // named directly — no source bin to regenerate from, so a wrong identity panics
+        apply_box_profile_runtime()
+        let ts_img = ref_time_ticks()
+        var t = CanaryEncoder()
+        if (!load_image(path, t, tag)) {
+            panic("dasLLAMA: '{path}' is not a prepared canary-encoder image for this box/knobs (identity {image_identity(tag)}) — regenerate it from the source bin")
+        }
+        to_log(LOG_INFO, "dasLLAMA: prepared canary-encoder image mapped in {get_time_usec(ts_img) / 1000} ms — {path}\n")
+        return <- t
+    }
+    if (env_flag("DASLLAMA_IMAGE", true)) {
+        apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
+        let img = image_path_for(path, tag)
+        let ts_img = ref_time_ticks()
+        var t = CanaryEncoder()
+        if (load_image(img, t, tag)) {
+            to_log(LOG_INFO, "dasLLAMA: prepared canary-encoder image mapped in {get_time_usec(ts_img) / 1000} ms — {img}\n")
+            return <- t
+        }
+        var m <- load_canary_encoder_(path)
+        let ts_save = ref_time_ticks()
+        if (save_image(m, img, tag)) {
+            to_log(LOG_INFO, "dasLLAMA: prepared canary-encoder image saved in {get_time_usec(ts_save) / 1000} ms — {img}\n")
+        }
+        dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
+        return <- m
+    }
+    return <- load_canary_encoder_(path)
+}
+
+//! The CNRY-bin reader proper — the eager (no image cache) load; ``load_canary_encoder`` wraps it.
+def load_canary_encoder_(path : string) : CanaryEncoder {
     var m = CanaryEncoder()
     let n_bytes = int64(stat(path).size)
     let f = fopen(path, "rb")

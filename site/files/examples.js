@@ -81,11 +81,11 @@
             controls: 'drag to attract the slime · imgui widgets · worker-thread slider',
             poster: 'files/examples/physarum_lab-poster.jpg',
             aspect: 1024 / 1024,
-            // Same wasm64-only / external-dasImgui story as the path tracer: the in-page player is
+            // Same wasm64-only / native-dasImgui story as the path tracer: the in-page player is
             // the threaded (-pthread) wasm64 build bundling dasImgui + dasAudio, on real Web Workers
             // and crossOriginIsolated (coi-serviceworker.js). The playground hosts the same sample on
-            // the threaded daslang_static interpreter (playgroundSlug), which binds dasImgui and the
-            // in-tree dasAudio/strudel.
+            // the threaded daslang_static interpreter (playgroundSlug), which binds the in-tree
+            // dasImgui and dasAudio/strudel.
             wasm64Only: true,
             playgroundSlug: 'physarum_lab',
             src: 'examples/graphics/physarum_lab_opengl_imgui_example.das',
@@ -97,7 +97,8 @@
         ex.srcUrl = ex.src ? (REPO_ROOT + ex.src) : (REPO_BLOB + ex.id + '/main.das');
         // Examples registered as playground samples get an "open in playground" link.
         // playgroundSlug names the data.json sample to deep-link (?example=<slug>). The
-        // ImGui showcases set it explicitly: they bind the external dasImgui module, so
+        // ImGui showcases set it explicitly: they bind the native dasImgui module (in-tree
+        // since the dasImgui merge), so
         // their in-page player is wasm64-only, but the threaded daslang_static
         // interpreter now hosts them in the playground. A plain (non-wasm64-only) sample
         // defaults to its id; a wasm64-only card with no slug has no playground link.
@@ -249,7 +250,7 @@
     }
     function viewportHTML(ex) {
         // wasm64-only example on an engine without memory64: there is no interpreted
-        // fallback (the external native module can't run in the interpreter), so show
+        // fallback (the native module can't run in the interpreter), so show
         // a clear note instead of an iframe that would never load.
         if (ex.wasm64Only && !USE_WASM64) {
             return '<div class="forge-ex-player__fallback">' +

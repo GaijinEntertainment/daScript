@@ -63,24 +63,26 @@ The `--root` flag sets the project root directory (default: current directory). 
 
 ## Global Modules
 
-Large packages (e.g. dasImgui) can be installed **globally** — once under `{das_root}/modules/` — and shared across all projects using that daScript SDK. This avoids redundant clones and builds.
+Large packages (e.g. dasVulkan) can be installed **globally** — once under `{das_root}/modules/` — and shared across all projects using that daScript SDK. This avoids redundant clones and builds.
+
+Note: **in-tree modules satisfy `require_package` automatically** — a package depending on dasImgui resolves against `modules/dasImgui` ("part of this daslang tree — nothing to install").
 
 ### Usage
 
 ```bash
 # Install globally (to das_root/modules/)
-daspkg install --global dasImgui
-daspkg install --global github.com/user/dasImgui@1.0
+daspkg install --global dasVulkan
+daspkg install --global github.com/user/dasVulkan@1.0
 
 # List globally installed packages
 daspkg list --global
 
 # Update/upgrade globally
-daspkg update --global dasImgui
-daspkg upgrade --global dasImgui
+daspkg update --global dasVulkan
+daspkg upgrade --global dasVulkan
 
 # Remove globally
-daspkg remove --global dasImgui
+daspkg remove --global dasVulkan
 
 # Build all global native packages
 daspkg build --global
@@ -101,7 +103,7 @@ daspkg check --global
 A package can exist both locally and globally. The C++ runtime (`require_dynamic_modules`) handles this via **shadow detection**:
 
 - If the same module directory exists in both `{das_root}/modules/` and `{project_root}/modules/`, the **local version wins**
-- A warning is printed: `"Warning: local 'dasImgui' shadows global — using local"`
+- A warning is printed: `"Warning: local 'dasVulkan' shadows global — using local"`
 - This is safe — removing the local copy seamlessly falls back to the global one
 
 ### Remove behavior
@@ -111,7 +113,7 @@ A package can exist both locally and globally. The C++ runtime (`require_dynamic
 
 ### CMake integration
 
-Global packages that use `cmake_build()` or `custom_build()` get a `.daspkg_standalone` marker file. The main daScript `CMakeLists.txt` skips directories with this marker during auto-discovery, preventing `FATAL_ERROR` from standalone CMakeLists.txt files (e.g. dasImgui requires `DASLANG_DIR` to be set explicitly).
+Global packages that use `cmake_build()` or `custom_build()` get a `.daspkg_standalone` marker file. The main daScript `CMakeLists.txt` skips directories with this marker during auto-discovery, preventing `FATAL_ERROR` from standalone CMakeLists.txt files (e.g. dasVulkan requires `DASLANG_DIR` to be set explicitly).
 
 ## `.das_package` Manifest
 

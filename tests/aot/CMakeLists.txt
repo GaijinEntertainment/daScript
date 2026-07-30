@@ -27,12 +27,10 @@ ENDIF()
 # regen commands (daslib/*.das is already a global dependency inside DAS_AOT_EXT).
 SET(DAS_AOT_DASSPIRV_MODULE_DEPENDS ${DASSPIRV_AOT_DEPENDS})
 SET(DAS_AOT_DASMETAL_MODULE_DEPENDS ${DASMETAL_AOT_DEPENDS})
-SET(DAS_AOT_DASLLAMA_MODULE_DEPENDS ${DASLLAMA_AOT_DEPENDS})
 
 # Module-lib AOT sources are owned by each module (set in modules/<M>/CMakeLists.txt, empty when
 # the module is disabled). Bridge them to the suite-named vars the loops below consume. spirv/msl
 # also pull one test-side fixture; dasMetal/dasSpirv are always enabled so no gate is needed.
-SET(AOT_DASLLAMA_MODULE_FILES ${DASLLAMA_AOT_FILES})
 SET(AOT_STBIMAGE_MODULE_FILES ${DASSTBIMAGE_AOT_FILES})
 SET(AOT_SPIRV_MODULE_FILES ${DASSPIRV_AOT_FILES} tests/spirv/_spirv_common.das)
 SET(AOT_MSL_MODULE_FILES ${DASMETAL_AOT_FILES} tests/msl/_msl_common.das)
@@ -52,23 +50,10 @@ FILE(GLOB AOT_DASPEG_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tes
 
 FILE(GLOB AOT_DASGLTF_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/dasGLTF/*.das")
 
-FILE(GLOB AOT_DASLLAMA_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "modules/dasLLAMA/tests/*.das")
-# _*.das are shared fixture modules (AOT'd via AOT_DASLLAMA_MODULE_FILES below), not scripts
-list(FILTER AOT_DASLLAMA_FILES EXCLUDE REGEX "/_")
-
-# dasLLAMA shared-module library files (required by the tests; AOT'd as a lib so the
-# shared-module functions get one canonical AOT registration matching the runtime).
-# Leaf modules first so cross-module deps resolve.
-IF(APPLE)
-    # the Metal GPU offload modules hard-require the APPLE-gated das_metal C++ module; the
-    # tests reach them behind `require ?das_metal`, so off-Apple no stubs are needed
-    LIST(APPEND AOT_DASLLAMA_MODULE_FILES
-        modules/dasLLAMA/dasllama/dasllama_math_metal.das
-        modules/dasLLAMA/dasllama/dasllama_metal_common.das
-        modules/dasLLAMA/dasllama/dasllama_metal_kernels.das
-        modules/dasLLAMA/dasllama/dasllama_metal_prefill.das
-        modules/dasLLAMA/dasllama/dasllama_metal_llama.das)
-ENDIF()
+# dasLLAMA IS NEVER AOT'D. No dasLLAMA test — old or new — joins test_aot: the engine is
+# -jit only (its AOT story ends at the generic compile of the tree), and its require graph
+# reaches modules that live in SEPARATE REPOSITORIES (dasVulkan), whose AOT TUs cannot build
+# from this one. Do not re-register it here.
 
 FILE(GLOB AOT_DECS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/decs/*.das")
 # Exclude expect-error tests (they intentionally fail to compile)
@@ -286,6 +271,9 @@ FILE(GLOB AOT_METAL_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "test
 list(FILTER AOT_METAL_FILES EXCLUDE REGEX "/_")
 SET(AOT_METAL_MODULE_FILES
     tests/metal/_metal_common.das
+    # f16_cvt is a generic dasLLVM daslib helper the tensor-ops test requires; it used to ride
+    # the (deleted) dasLLAMA module lib — dasLLAMA itself is NEVER AOT'd (see above)
+    modules/dasLLVM/daslib/f16_cvt.das
 )
 IF(APPLE)
     # das_metal_boost hard-requires the APPLE-gated das_metal C++ module; the GPU-behavioral
@@ -375,9 +363,6 @@ SET(AOT_LANGUAGE_MODULE_FILES
     tests/language/_string_clone_init_helper.das
 )
 
-# dasLLAMA tests require the dasllama module stack, and dasllama_math_metal pulls in the
-# dasMetal macro modules — both are regen inputs
-
 # Single source of truth for the per-suite AOT scaffolding. Two loops build the uniform suites;
 # a third, data-driven loop builds the irregular ones (per-module IF guards, shader-generator
 # EXTRA_DEPENDS, the lib-only testing suite, and the subset-only daslib modules). All accumulate
@@ -429,8 +414,6 @@ endforeach()
 # one row per irregular suite:  name | flavor(reg/mod/lib) | guard(- none) | EXTRA_DEPENDS vars(- none) | accumulate(1/0)
 set(DAS_AOT_IRREGULAR
     "testing|lib|-|-|1"
-    "dasllama|reg|-|DAS_AOT_DASLLAMA_MODULE_DEPENDS DAS_AOT_DASMETAL_MODULE_DEPENDS|1"
-    "dasllama|mod|-|DAS_AOT_DASLLAMA_MODULE_DEPENDS DAS_AOT_DASMETAL_MODULE_DEPENDS|1"
     "spirv|reg|-|DAS_AOT_DASSPIRV_MODULE_DEPENDS|1"
     "spirv|mod|-|DAS_AOT_DASSPIRV_MODULE_DEPENDS|1"
     "msl|reg|-|DAS_AOT_DASMETAL_MODULE_DEPENDS|1"

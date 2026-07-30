@@ -2,13 +2,19 @@ options gen2
 options _comment_hygiene = true
 
 module dasllama_gemma4a shared public
+options _function_length = 0   // model forward/serialize walks mirror the model schema
 
 require math
 require daslib/fio
 require strings
+require daslib/apply
+require daslib/archive
+require dasllama/dasllama_env
 require dasllama/dasllama_math
 require dasllama/dasllama_gguf
 require dasllama/dasllama_audio
+require dasllama/dasllama_common   // apply_box_profile_runtime for the gemma4a-image identity
+require dasllama/dasllama_image
 
 // Gemma-4 E-series audio front end: the `gemma4a` Conformer encoder + the audio multimodal
 // embedder, read straight from the bf16 audio mmproj GGUF (mmproj-gemma-4-E{2,4}B-it-bf16.gguf,
@@ -92,6 +98,65 @@ struct Gemma4aEncoder {
     outproj_w : int64; outproj_b : int64
     mmproj_w : int64
     layers : array<G4aLayer>
+    image_map : void?         // non-null when the planes borrow a mapped .dlim (dasllama_image)
+    image_bytes : uint64
+}
+
+def finalize(var t : Gemma4aEncoder) {
+    apply(t) $ [unused_argument(name)] (name : string; var field) {
+        static_if (typeinfo is_array(field)) {
+            if (lock_count(field) != 0) {
+                unsafe {
+                    _builtin_forget_temp_array(field)
+                }
+            } else {
+                delete field
+            }
+        }
+    }
+    if (t.image_map != null) {
+        unsafe {
+            fmap_close(t.image_map, t.image_bytes)
+        }
+        t.image_map = null
+        t.image_bytes = 0ul
+    }
+}
+
+// the tripwire: serialize_image_meta(Gemma4aEncoder) covers 19 fields; image_map + image_bytes
+// are deliberate skips (layers is a POD-struct array — it rides as a plane).
+let private GEMMA4A_META_FIELDS = 19 + 2
+
+// every meta-carried Gemma4aEncoder field, explicitly, both directions (see dasllama_image)
+def private serialize_image_meta(var arch : Archive; var t : Gemma4aEncoder) {
+    verify(count_meta_fields(t) == GEMMA4A_META_FIELDS)   // grew Gemma4aEncoder? extend this list
+    arch |> serialize_raw(t.d_model)
+    arch |> serialize_raw(t.n_layer)
+    arch |> serialize_raw(t.n_head)
+    arch |> serialize_raw(t.n_ff)
+    arch |> serialize_raw(t.n_mel)
+    arch |> serialize_raw(t.d_head)
+    arch |> serialize_raw(t.proj_dim)
+    arch |> serialize_raw(t.sub_ch0)
+    arch |> serialize_raw(t.sub_ch1)
+    arch |> serialize_raw(t.n_bins)
+    arch |> serialize_raw(t.eps)
+    arch |> serialize_raw(t.c0_w)
+    arch |> serialize_raw(t.norm0_w)
+    arch |> serialize_raw(t.c1_w)
+    arch |> serialize_raw(t.norm1_w)
+    arch |> serialize_raw(t.inproj_w)
+    arch |> serialize_raw(t.outproj_w)
+    arch |> serialize_raw(t.outproj_b)
+    arch |> serialize_raw(t.mmproj_w)
+}
+
+[unused_argument(t)]
+def private image_post_load(var t : Gemma4aEncoder) {}   // no derived state — offsets ARE the meta
+
+[init]
+def private register_gemma4a_image_tags {
+    register_image_family_tag("gemma4a-f32")
 }
 
 //! Hot-path scratch for one clip encode — a transcribe allocates nothing per call.
@@ -189,8 +254,43 @@ def private g4a_htk_filterbank(n_mel, n_fft, sample_rate : int64) : array<float>
 }
 
 //! Load a gemma4a audio mmproj GGUF (projector type `gemma4a`, bf16 tensors). Reads only the
-//! `a.*` / `mm.a.*` audio tensors (the vision tower is ignored) into one fp32 blob.
+//! `a.*` / `mm.a.*` audio tensors (the vision tower is ignored) into one fp32 blob. Like
+//! ``load_model``, caches a box/knob-specific PREPARED IMAGE for fast reload; ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
 def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
+    let tag = "gemma4a-f32"
+    if (path |> ends_with(".dlim")) {
+        // named directly — no mmproj to regenerate from, so a wrong identity panics
+        apply_box_profile_runtime()
+        let ts_img = ref_time_ticks()
+        var t = Gemma4aEncoder()
+        if (!load_image(path, t, tag)) {
+            panic("dasLLAMA: '{path}' is not a prepared gemma4a-encoder image for this box/knobs (identity {image_identity(tag)}) — regenerate it from the source mmproj gguf")
+        }
+        to_log(LOG_INFO, "dasLLAMA: prepared gemma4a-encoder image mapped in {get_time_usec(ts_img) / 1000} ms — {path}\n")
+        return <- t
+    }
+    if (env_flag("DASLLAMA_IMAGE", true)) {
+        apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
+        let img = image_path_for(path, tag)
+        let ts_img = ref_time_ticks()
+        var t = Gemma4aEncoder()
+        if (load_image(img, t, tag)) {
+            to_log(LOG_INFO, "dasLLAMA: prepared gemma4a-encoder image mapped in {get_time_usec(ts_img) / 1000} ms — {img}\n")
+            return <- t
+        }
+        var m <- load_gemma4a_encoder_(path)
+        let ts_save = ref_time_ticks()
+        if (save_image(m, img, tag)) {
+            to_log(LOG_INFO, "dasLLAMA: prepared gemma4a-encoder image saved in {get_time_usec(ts_save) / 1000} ms — {img}\n")
+        }
+        dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
+        return <- m
+    }
+    return <- load_gemma4a_encoder_(path)
+}
+
+//! The mmproj-gguf reader proper — the eager (no image cache) load; ``load_gemma4a_encoder`` wraps it.
+def load_gemma4a_encoder_(path : string) : Gemma4aEncoder {
     var enc = Gemma4aEncoder()
     let f = fopen(path, "rb")
     if (f == null) {

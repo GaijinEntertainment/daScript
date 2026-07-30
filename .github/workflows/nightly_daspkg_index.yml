@@ -49,7 +49,7 @@ jobs:
     - name: "Install: Required Dev Packages"
       # mirrors extended_checks' linux lane: apt.llvm.org for llvm-22-dev
       # (release_modules.txt flips DAS_LLVM_DISABLED=OFF), mesa/glfw/x11 for
-      # the dasImgui-family native package builds
+      # the in-tree dasImgui build + its external dependents (ImPlot/NodeEditor)
       run: |
         set -eux
         wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
@@ -101,8 +101,8 @@ jobs:
       # default-branch HEAD (not release-tag resolution): release tags lag
       # legitimately after an ABI sweep until externals re-release; branch
       # HEAD is the externals-merge-first invariant this nightly monitors.
-      # Index order puts dasImgui before its dependents, so dependency
-      # installs reuse the branch-HEAD copy instead of re-resolving.
+      # dasImgui itself is in-tree now — its dependents (dasImguiImplot,
+      # dasImguiNodeEditor) resolve the dep against modules/dasImgui directly.
       # Resolution goes over the git protocol (ls-remote --symref), not the
       # GitHub API: anonymous, no rate limits on shared runner IPs, and the
       # same transport the install's clone uses anyway.

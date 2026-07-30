@@ -9,9 +9,10 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 	SET(DAS_GLFW_BIND_DIR ${DAS_GLFW_DIR})
 
 	# libDasModuleGlfw binding sources — the generated C++ wrappers that call glfw*
-	# directly. Shared verbatim by the desktop and web branches below; the ~11
-	# functions emcc's library_glfw.js does not implement are #ifndef __EMSCRIPTEN__-
-	# guarded inside the generated code, so the same TU set compiles for both.
+	# directly. Shared verbatim by the desktop and web branches below; the 11
+	# functions emcc's library_glfw.js does not implement resolve on web via the
+	# honest C stubs in src/glfw_emscripten_stubs.c (added in the EMSCRIPTEN branch),
+	# so the same TU set registers the full GLFW 3.4 surface on both.
 	SET(DAS_GLFW_BIND_MODULE_SRC
 		${DAS_GLFW_BIND_DIR}/src/aot_dasGLFW.h
 		${DAS_GLFW_BIND_DIR}/src/cb_dasGLFW.h
@@ -55,7 +56,12 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 		ADD_MODULE_CPP(dasGLFW)
 		ADD_MODULE_DAS(glfw dasglfw glfw_boost)
 		ADD_MODULE_DAS(live dasglfw glfw_live)
-		ADD_DAS_STATIC_MODULE_LIB(libDasModuleGlfw ${DAS_GLFW_BIND_MODULE_SRC})
+		# glfw_emscripten_stubs.c backfills the GLFW 3.4 entry points missing from
+		# emcc's JS GLFW so the binding's unconditional registrations link — a
+		# das-visible function absent from the wasm-side module is a startup fatal
+		# for cross-compiled cards (mangled-name extern resolution).
+		ADD_DAS_STATIC_MODULE_LIB(libDasModuleGlfw ${DAS_GLFW_BIND_MODULE_SRC}
+			${DAS_GLFW_BIND_DIR}/src/glfw_emscripten_stubs.c)
 		TARGET_INCLUDE_DIRECTORIES(libDasModuleGlfw PRIVATE ${GLFW_INCLUDE_DIR})
 		SETUP_CPP11(libDasModuleGlfw)
 	ELSE()

@@ -1,0 +1,29 @@
+[
+ {
+  "gguf": "Qwen3-4B-Instruct-2507-Q8_0.gguf",
+  "box": "zen2",
+  "engine": "das",
+  "backend": "vulkan",
+  "flavor": "tuned",
+  "comment": "Config: resident model memory, 6000 MB VRAM budget, ReBAR direct uploads, vec4 GEMV + merged-KV shaders. The reference is stock llama.cpp Vulkan, which selects NV_coopmat2 matrix cores on this GPU; das's shaders are KHR-coopmat-class - a control build with coopmat2 disabled (GGML_VK_DISABLE_COOPMAT2=1) measured llama.cpp at 3790.9 pp512. Early numbers; the Vulkan lane is an active work area."
+ },
+ {
+  "gguf": "canary-qwen-2.5b-decoder-f16.gguf",
+  "engine": "das",
+  "comment": "The decoder runs un-quantized fp32 - the token-parity configuration; long clips pay the most for it. Quantizing the decoder is open work."
+ },
+ {
+  "gguf": "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf",
+  "box": "m4",
+  "engine": "llama-mtmd-cli",
+  "workload": "audio-chat",
+  "comment": "On jfk.wav the reference's decode phase runs away (41.7 s of generation vs 30 ms on jfk3.wav; reproduced 3x with --temp 0 --reasoning off) - the two engines emit different amounts of text there, so that clip's ratio is a behavior difference, not a speed measurement."
+ },
+ {
+  "gguf": "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf",
+  "box": "zen2",
+  "engine": "llama-mtmd-cli",
+  "workload": "audio-chat",
+  "comment": "Same jfk.wav decode runaway as on the M4 box (the reference generates at length on that clip despite --temp 0 --reasoning off), amplified by CPU-only decode - a behavior difference, not a speed measurement."
+ }
+]

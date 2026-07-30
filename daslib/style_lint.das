@@ -42,15 +42,26 @@ module style_lint shared private
 //!   STYLE033 — run of >=2 'push_from' / 'push_clone_from' from arrays; into a fresh-empty array that is a concatenation (use 'var c <- concat(s1, s2, ...)', needs 'require daslib/linq'; cloneable elements only, as STYLE032); into an existing array — plain var or a pure chain like 'obj.arr' / 'bags[0].nums' — collapse to one variadic call of the same name ('dst |> push_from(...)' or 'dst |> push_clone_from(...)')
 //!   STYLE034 — reinterpret<T?>(addr(x)) — use addr<T?>(x); one unsafe() covers both halves (pointer targets only; the sugar's own desugared output is exempt via fromAddrSugar)
 //!   STYLE035 — non-int numeric variable compared with a built-in numeric cast of '<char>' — make the variable int and compare directly with the character literal
+//!   STYLE036 — type contract ('-const', '-&', '-[]', '-#', '==const', '==&') on an already-resolved cast/reinterpret/upcast/addr target does nothing — drop it
+//!   STYLE037 — function or closure cyclomatic complexity exceeds the limit (override per module with 'options _cyclomatic_complexity = N'; 0 disables) — split it into smaller functions
+//!   STYLE038 — function exceeds the line-count limit (physical lines; override per module with 'options _function_length = N'; 0 disables) — split it into smaller functions
 
 require daslib/ast_boost
 require daslib/is_local
 require daslib/lint_config
+require math
 require strings
 
 // STYLE033 arity caps — never suggest a call shape with no matching overload.
 let MAX_CONCAT_ARITY = 8         // linq `concat` tops out at 8 sources (PR #3224)
 let MAX_VARIADIC_PUSH_ARITY = 4  // builtin push_from/push_clone_from fixed-arity 2..4 (PR #3230)
+
+// STYLE037 default ceiling — override per module with `options _cyclomatic_complexity = N`; 0 disables.
+let STYLE037_DEFAULT_MAX = 20
+
+// STYLE038 default ceiling (physical lines, def line through closing brace) — override per module
+// with `options _function_length = N`; 0 disables. 80 ≈ p97 of the tree's function-length distribution.
+let STYLE038_DEFAULT_MAX_LINES = 80
 
 // ---------------------------------------------------------------------------
 // Visitor
@@ -82,6 +93,11 @@ class StyleLintVisitor : AstVisitor {
     @do_not_delete unsafeExprs : table<Expression?; UnsafeFrame>
     unsafe_stack : array<UnsafeFrame>
     unsafe_block_stack : array<int>
+    // STYLE037 — one counter per function/closure level (same shape as unsafe_block_stack), base score 1
+    complexity_stack : array<int>
+    max_complexity : int = STYLE037_DEFAULT_MAX
+    // STYLE038 — physical-line ceiling for functions and block-argument closures
+    max_function_length : int = STYLE038_DEFAULT_MAX_LINES
     // STYLE029 — transitive-only require detection. Enabled only when linting the
     // root module. `used_modules` collects names of modules with >=1 direct
     // reference from code written in `this_module`.
@@ -161,6 +177,7 @@ class StyleLintVisitor : AstVisitor {
     def override preVisitFunction(var fn : FunctionPtr) : void {
         current_function = fn
         unsafe_block_stack |> push(0)
+        complexity_stack |> push(1)
         check_defer_pipe(fn)
         if (analyze_requires && fn._module == this_module) {
             for (a in fn.annotations) {
@@ -209,9 +226,68 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def override visitFunction(var fn : FunctionPtr) : FunctionPtr {
+        st037_pop_and_check("function '{fn.name}'", "split it into smaller functions", fn.at)
+        if (fn.body != null) {
+            st038_check_length("function '{fn.name}'", "split it into smaller functions", fn.at, fn.body.at)
+        }
         current_function = null
         unsafe_block_stack |> pop
         return <- fn
+    }
+
+    // ===== STYLE038 — function length =====
+    // Functions only: a closure's physical span is always inside its host's, so the host
+    // always trips first — a separate closure check would only ever double-report.
+
+    def st038_check_length(what : string; fix : string; at : LineInfo; body_at : LineInfo) : void {
+        // max_function_length == 0 disables the rule (per-module `options _function_length = 0`)
+        if (max_function_length <= 0 || at.line == 0u || foreign_module_code()) return
+        let nlines = int(body_at.last_line) - int(at.line) + 1
+        if (nlines > max_function_length) {
+            style_warning("STYLE038: {what} is {nlines} lines long (max {max_function_length}); {fix}", at)
+        }
+    }
+
+    // ===== STYLE037 — cyclomatic complexity =====
+
+    def st037_bump() : void {
+        let n = length(complexity_stack)
+        if (n > 0) complexity_stack[n - 1]++
+    }
+
+    def foreign_module_code() : bool {
+        // metric rules skip other modules' generics instanced here — the user can't fix library code
+        if (current_function == null || this_module == null) return false
+        if (current_function._module != this_module) return true
+        // [template] generics instantiate INTO the caller's module — attribute by the template origin
+        var root = current_function.fromGeneric
+        while (root != null && root.fromGeneric != null) {
+            root = root.fromGeneric
+        }
+        return root != null && root._module != this_module
+    }
+
+    def st037_pop_and_check(what : string; fix : string; at : LineInfo) : void {
+        let n = length(complexity_stack)
+        if (n == 0) return
+        let cc = complexity_stack[n - 1]
+        complexity_stack |> pop
+        // max_complexity == 0 disables the rule (per-module `options _cyclomatic_complexity = 0`)
+        if (max_complexity > 0 && cc > max_complexity && !foreign_module_code()) {
+            style_warning("STYLE037: {what} has cyclomatic complexity {cc} (max {max_complexity}); {fix}", at)
+        }
+    }
+
+    def override preVisitExprWhile(expr : ExprWhile?) : void {
+        if (!expr.genFlags.generated) st037_bump()
+    }
+
+    def override preVisitExprFor(expr : ExprFor?) : void {
+        if (!expr.genFlags.generated) st037_bump()
+    }
+
+    def override preVisitExprTryCatch(expr : ExprTryCatch?) : void {
+        if (!expr.genFlags.generated) st037_bump()
     }
 
     // --- STYLE001/002/003/011: pipe and redundant $() on block arguments ---
@@ -784,6 +860,7 @@ class StyleLintVisitor : AstVisitor {
 
     def override preVisitExprIfThenElse(ifte : ExprIfThenElse?) : void {
         if (ifte.if_flags.isStatic || ifte.genFlags.generated) return  // macro-made ifs are not user style
+        st037_bump()
         // STYLE010: if (true) { ... }
         var cond = ifte.cond
         if (cond is ExprConstBool) {
@@ -853,6 +930,8 @@ class StyleLintVisitor : AstVisitor {
     def override preVisitExprBlock(blk : ExprBlock?) : void {
         if (blk.blockFlags.isClosure) {
             unsafe_block_stack |> push(0)
+            // STYLE037: generated closures bill the host — counts must not depend on whether the optimizer inlines them
+            if (!blk.genFlags.generated) complexity_stack |> push(1)
         }
         check_style012_chain_runs(blk)
         check_style033_existing_runs(blk)
@@ -890,6 +969,9 @@ class StyleLintVisitor : AstVisitor {
     def override visitExprBlock(var blk : ExprBlock?) : ExpressionPtr {
         if (blk.blockFlags.isClosure) {
             unsafe_block_stack |> pop
+            if (!blk.genFlags.generated) {
+                st037_pop_and_check("closure", "extract it into a named function", blk.at)
+            }
         }
         return blk
     }
@@ -1652,7 +1734,7 @@ class StyleLintVisitor : AstVisitor {
         return (lhs as ExprAt).index
     }
 
-    def const_key_repr(key0 : Expression?) : string {
+    def const_key_repr(key0 : Expression?) : string {  // nolint:STYLE037 — `is` on handled types is exact-type, so one arm per const class is irreducible
         //! Type-tagged stringification of the key when it is a constant literal;
         var key = key0
         if (key != null && key is ExprRef2Value) {
@@ -1669,6 +1751,43 @@ class StyleLintVisitor : AstVisitor {
         if (key is ExprConstBool) return "b:{(key as ExprConstBool).value}"
         if (key is ExprConstEnumeration) return "e:{(key as ExprConstEnumeration).value}"
         return ""
+    }
+
+    def st031_scan_insert_run(blk : ExprBlock?; idx, n : int; v : VariablePtr; isSet : bool; var dup_const_key : bool&) : int {
+        // Length of the contiguous insert/`[]=` run into `v` starting at idx+1; flags a repeated constant key.
+        var count = 0
+        var seen_keys : table<string>
+        for (j in range(idx + 1, n)) {
+            let stmt = blk.list[j]
+            var key : Expression? = null
+            if (stmt is ExprCall && is_table_insert_of(stmt as ExprCall, v, isSet ? 2 : 3)) {
+                key = (stmt as ExprCall).arguments[1]
+            } elif (!isSet && is_at_assign_of(stmt, v)) {
+                key = at_assign_key(stmt)
+            } else {
+                break
+            }
+            let repr = const_key_repr(key)
+            if (repr != "") {
+                if (key_exists(seen_keys, repr)) {
+                    dup_const_key = true
+                }
+                seen_keys |> insert(repr)
+            }
+            count++
+        }
+        delete seen_keys
+        return count
+    }
+
+    def st031_jv_const_key_run(blk : ExprBlock?; idx, n : int; v : VariablePtr) : int {
+        var jv = 0
+        for (j in range(idx + 1, n)) {
+            let stmt = blk.list[j]
+            if (!(stmt is ExprCall) || !is_insert_of_const_key(stmt as ExprCall, v)) break
+            jv++
+        }
+        return jv
     }
 
     def check_style031_table_init(blk : ExprBlock?; elet : ExprLet?) : void {
@@ -1689,42 +1808,13 @@ class StyleLintVisitor : AstVisitor {
                 || v.flags.generated || v.flags.inScope
                 || v._type == null || v._type.baseType != Type.tTable) continue
             let isSet = v._type.secondType == null || v._type.secondType.baseType == Type.tVoid
-            var count = 0
             var dup_const_key = false
-            {
-                var seen_keys : table<string>
-                for (j in range(idx + 1, n)) {
-                    let stmt = blk.list[j]
-                    var key : Expression? = null
-                    if (stmt is ExprCall && is_table_insert_of(stmt as ExprCall, v, isSet ? 2 : 3)) {
-                        key = (stmt as ExprCall).arguments[1]
-                    } elif (!isSet && is_at_assign_of(stmt, v)) {
-                        key = at_assign_key(stmt)
-                    } else {
-                        break
-                    }
-                    let repr = const_key_repr(key)
-                    if (repr != "") {
-                        if (key_exists(seen_keys, repr)) {
-                            dup_const_key = true
-                        }
-                        seen_keys |> insert(repr)
-                    }
-                    count++
-                }
-                delete seen_keys
-            }
+            let count = st031_scan_insert_run(blk, idx, n, v, isSet, dup_const_key)
             // Duplicate constant keys stay silent: sequential inserts overwrite (last wins), but a literal rejects them at compile time (error 30706).
             if (count < 2 || dup_const_key) continue
             // STYLE021 owns the table<string; JsonValue?> const-key run (the JV((k1=..., k2=...)) form is the stronger suggestion).
             if (is_jv_table_type(v._type)) {
-                var jv = 0
-                for (j in range(idx + 1, n)) {
-                    let stmt = blk.list[j]
-                    if (!(stmt is ExprCall) || !is_insert_of_const_key(stmt as ExprCall, v)) break
-                    jv++
-                }
-                continue if (jv >= 2)
+                continue if (st031_jv_const_key_run(blk, idx, n, v) >= 2)
             }
             if (isSet) {
                 style_warning("STYLE031: table<K> set initialized by a run of insert calls; use a set literal move-assign `var {v.name} <- \{k1, k2, ...\}`", v.at)
@@ -1963,6 +2053,21 @@ class StyleLintVisitor : AstVisitor {
         }
     }
 
+    def note_decl_span(var file_first_decl : table<string; uint>; var file_max_line : table<string; uint>;
+                       fname : string; s, e : uint) : void {
+        if (file_first_decl |> key_exists(fname)) {
+            if (s < file_first_decl[fname]) {
+                file_first_decl[fname] = s
+            }
+            if (e > file_max_line[fname]) {
+                file_max_line[fname] = e
+            }
+        } else {
+            file_first_decl |> insert(fname, s)
+            file_max_line |> insert(fname, e)
+        }
+    }
+
     def scan_long_comment_blocks(prog : ProgramPtr) : void {
         let mod = prog.getThisModule
         if (mod == null) return
@@ -1979,17 +2084,7 @@ class StyleLintVisitor : AstVisitor {
             let fname = string(fn.at.fileInfo.name)
             let s = fn.at.line
             let e = fn.body.at.last_line
-            if (file_first_decl |> key_exists(fname)) {
-                if (s < file_first_decl[fname]) {
-                    file_first_decl[fname] = s
-                }
-                if (e > file_max_line[fname]) {
-                    file_max_line[fname] = e
-                }
-            } else {
-                file_first_decl |> insert(fname, s)
-                file_max_line |> insert(fname, e)
-            }
+            note_decl_span(file_first_decl, file_max_line, fname, s, e)
             fn_file |> push(fname)
             fn_starts |> push(s)
             fn_ends |> push(e)
@@ -2004,67 +2099,31 @@ class StyleLintVisitor : AstVisitor {
             }
             if (is_template_instance) return
             let fname = string(st.at.fileInfo.name)
-            let s = st.at.line
-            if (file_first_decl |> key_exists(fname)) {
-                if (s < file_first_decl[fname]) {
-                    file_first_decl[fname] = s
-                }
-                if (s > file_max_line[fname]) {
-                    file_max_line[fname] = s
-                }
-            } else {
-                file_first_decl |> insert(fname, s)
-                file_max_line |> insert(fname, s)
-            }
+            note_decl_span(file_first_decl, file_max_line, fname, st.at.line, st.at.line)
         }
         for_each_enumeration(mod) $(var en) {
             if (en.at.fileInfo == null || en.at.line == 0u) return
             let fname = string(en.at.fileInfo.name)
-            let s = en.at.line
-            if (file_first_decl |> key_exists(fname)) {
-                if (s < file_first_decl[fname]) {
-                    file_first_decl[fname] = s
-                }
-                if (s > file_max_line[fname]) {
-                    file_max_line[fname] = s
-                }
-            } else {
-                file_first_decl |> insert(fname, s)
-                file_max_line |> insert(fname, s)
-            }
+            note_decl_span(file_first_decl, file_max_line, fname, en.at.line, en.at.line)
         }
         for_each_global(mod) $(var v) {
             if (v.at.fileInfo == null || v.at.line == 0u || v.flags.generated) return
             let fname = string(v.at.fileInfo.name)
-            let s = v.at.line
-            if (file_first_decl |> key_exists(fname)) {
-                if (s < file_first_decl[fname]) {
-                    file_first_decl[fname] = s
-                }
-                if (s > file_max_line[fname]) {
-                    file_max_line[fname] = s
-                }
-            } else {
-                file_first_decl |> insert(fname, s)
-                file_max_line |> insert(fname, s)
-            }
+            note_decl_span(file_first_decl, file_max_line, fname, v.at.line, v.at.line)
         }
         for_each_typedef(mod) $(_name, value) {
             if (value.at.fileInfo == null || value.at.line == 0u) return
             let fname = string(value.at.fileInfo.name)
-            let s = value.at.line
-            if (file_first_decl |> key_exists(fname)) {
-                if (s < file_first_decl[fname]) {
-                    file_first_decl[fname] = s
-                }
-                if (s > file_max_line[fname]) {
-                    file_max_line[fname] = s
-                }
-            } else {
-                file_first_decl |> insert(fname, s)
-                file_max_line |> insert(fname, s)
-            }
+            note_decl_span(file_first_decl, file_max_line, fname, value.at.line, value.at.line)
         }
+        scan_collected_files(mod, file_first_decl, file_max_line, fn_file, fn_starts, fn_ends, fn_private)
+    }
+
+    def scan_collected_files(mod : Module?;
+                             var file_first_decl : table<string; uint>; var file_max_line : table<string; uint>;
+                             fn_file : array<string>; fn_starts, fn_ends : array<uint>;
+                             fn_private : array<bool>) : void {
+        // One line-scan per unique source file; any declaration kind may be the file's first sighting.
         var seen : table<string; bool>
         for_each_function(mod, "") $(var fn) {
             if (fn.at.fileInfo == null || fn._module != mod
@@ -2461,6 +2520,7 @@ class StyleLintVisitor : AstVisitor {
     }
     def override preVisitExprOp3(expr : ExprOp3?) : void {
         st029_record_func(expr.func)
+        if (!expr.genFlags.generated) st037_bump()  // ternary `?:` is a branch
         if (!expr.genFlags.generated
                 && call_func_needs_unsafe(expr.func, expr.flags.isForLoopSource)) {
             mark_unsafe_in_stack()
@@ -2537,6 +2597,18 @@ def private comment_hygiene_for(prog : ProgramPtr; requested : bool) : bool {
     return starts_with(file, "daslib/") || find(file, "/daslib/") >= 0
 }
 
+def private max_complexity_for(prog : ProgramPtr) : int {
+    // 0 (or negative) disables STYLE037 for the module
+    let configured = prog._options |> find_arg("_cyclomatic_complexity") ?as tInt ?? STYLE037_DEFAULT_MAX
+    return max(configured, 0)
+}
+
+def private max_function_length_for(prog : ProgramPtr) : int {
+    // 0 (or negative) disables STYLE038 for the module
+    let configured = prog._options |> find_arg("_function_length") ?as tInt ?? STYLE038_DEFAULT_MAX_LINES
+    return max(configured, 0)
+}
+
 def public style_lint(prog : ProgramPtr; compile_time_errors : bool; comment_hygiene : bool = false) : int {
     //! Runs the style lint visitor on the compiled program.
     //! Returns the number of warnings found.
@@ -2552,6 +2624,8 @@ def public style_lint(prog : ProgramPtr; compile_time_errors : bool; disabled_co
     let hygiene = comment_hygiene_for(prog, comment_hygiene)
     var astVisitor = new StyleLintVisitor(compile_time_errors = compile_time_errors, comment_hygiene = hygiene)
     astVisitor.disabled_codes := disabled_codes
+    astVisitor.max_complexity = max_complexity_for(prog)
+    astVisitor.max_function_length = max_function_length_for(prog)
     astVisitor.this_module = prog.getThisModule
     let empty_enabled : table<string>
     astVisitor.analyze_requires = astVisitor.this_module != null && require_analysis_enabled(disabled_codes, empty_enabled)
@@ -2588,6 +2662,8 @@ def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>;
     var astVisitor = new StyleLintVisitor(compile_time_errors = false, collect_warnings = true, comment_hygiene = hygiene)
     astVisitor.disabled_codes := disabled_codes
     astVisitor.enabled_codes := enabled_codes
+    astVisitor.max_complexity = max_complexity_for(prog)
+    astVisitor.max_function_length = max_function_length_for(prog)
     astVisitor.this_module = prog.getThisModule
     astVisitor.analyze_requires = astVisitor.this_module != null && require_analysis_enabled(disabled_codes, enabled_codes)
     make_visitor(*astVisitor) $(astVisitorAdapter) {
@@ -2616,6 +2692,8 @@ def public style_lint_collect_issues(prog : ProgramPtr; var issues : array<LintI
     var astVisitor = new StyleLintVisitor(compile_time_errors = false, collect_warnings = true, comment_hygiene = hygiene)
     astVisitor.disabled_codes := disabled_codes
     astVisitor.enabled_codes := enabled_codes
+    astVisitor.max_complexity = max_complexity_for(prog)
+    astVisitor.max_function_length = max_function_length_for(prog)
     astVisitor.this_module = prog.getThisModule
     astVisitor.analyze_requires = astVisitor.this_module != null && require_analysis_enabled(disabled_codes, enabled_codes)
     make_visitor(*astVisitor) $(astVisitorAdapter) {

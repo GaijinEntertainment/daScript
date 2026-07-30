@@ -8,6 +8,8 @@ require strings
 // Merge every per-box record store (performance/records/<box>.json) into the one file the site
 // renders: site/files/dasllama/bench_records.json. Boxes never collide on the run key (box is part
 // of it), so the merge is a pure upsert; run after any gen_bench_records sweep, commit both.
+// Hand-authored annotations (records/annotations.json) merge LAST — they live outside the sweep
+// output so a re-profile can never wipe an explanation.
 //   bin/daslang modules/dasLLAMA/performance/gen_site_records.das
 
 let RECORDS_DIR = "modules/dasLLAMA/performance/records"
@@ -43,6 +45,12 @@ def main : int {
         for (m in models) {
             upsert_bench_model(merged, m)
         }
+    }
+    var annos : array<BenchAnnotation>
+    if (read_annotations(annos)) {
+        apply_annotations(merged, annos)
+        let n = length(annos)
+        to_log(LOG_INFO, "gen_site_records: applied {n} annotation(s)\n")
     }
     write_bench_records(SITE_PATH, merged)
     let total = length(merged)

@@ -163,13 +163,14 @@ add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../modules/dasG
 add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../modules/dasAudio/audio@modules/dasAudio/audio")
 add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../modules/dasAudio/strudel@modules/dasAudio/strudel")
 
-# The imgui family (EXTERNAL modules) bound into the interpreter — the furier +
-# path_tracer_lab playground cards run their .das in the interpreter-in-wasm. Clone
-# dasImgui / dasImguiImplot / dasImguiNodeEditor into modules/ (fresh clone = no
-# .daspkg_standalone marker) and the root modules glob absorbs their both-worlds
-# CMakeLists: the superbuild branch registers the C++ modules + `imgui/<name>` boost
-# paths and builds the static archives from source in-build (linked into
-# daslang_static via DAS_MODULES_LIBS — no prebuilt-archive wiring). Here we embed
+# The imgui family bound into the interpreter — the furier + path_tracer_lab
+# playground cards run their .das in the interpreter-in-wasm. dasImgui is in-tree;
+# dasImguiImplot / dasImguiNodeEditor are still external (cloned into modules/;
+# fresh clone = no .daspkg_standalone marker) and the root modules glob absorbs
+# their both-worlds CMakeLists: the superbuild branch registers the C++ modules +
+# `imgui/<name>` boost paths and builds the static archives from source in-build
+# (linked into daslang_static via DAS_MODULES_LIBS — no prebuilt-archive wiring
+# — dasImgui's own superbuild branch does the same in-tree). Here we embed
 # the matching .das halves at the paths the superbuild registrations resolve
 # (modules/<dir>/<subfolder>/<name>.das), plus the harness font and the dasLiveHost
 # live/* halves the imgui harness requires (in-tree, registered but not embedded

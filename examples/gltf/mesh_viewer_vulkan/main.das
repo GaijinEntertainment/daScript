@@ -1,6 +1,7 @@
 options gen2
 options indenting = 4
 options persistent_heap = true
+options gc
 
 require vulkan public
 require vulkan/vulkan_boost public
@@ -13,6 +14,7 @@ require spirv/spirv_reflect
 require imgui/imgui_file_dialog
 require daslib/safe_addr
 require daslib/fio
+require live/live_gc
 require math
 require daslib/math_boost
 require strings
@@ -465,6 +467,7 @@ def main {
     init()
     while (!exit_requested()) {
         update()
+        maybe_collect_gc()
     }
     shutdown()
 }

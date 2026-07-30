@@ -1,6 +1,7 @@
 options gen2
 options indenting = 4
 options persistent_heap = true
+options gc
 options _allow_glfw_calls = true
 
 require imgui/imgui_harness
@@ -8,10 +9,8 @@ require imgui/imgui_live
 require opengl/opengl_boost
 require glfw/glfw_boost
 require live/glfw_live
-require imgui_app
 require daslib/safe_addr
 require daslib/math_boost
-require daslib/strings
 
 // Custom 3D + ImGui hybrid: the harness gives us the boost-v2 widget surface
 // (window/edit_*/text) and the daslang theme via live_imgui_init, but we
@@ -143,6 +142,7 @@ def main() {
     init()
     while (!exit_requested()) {
         update()
+        maybe_collect_gc()
     }
     shutdown()
 }
@@ -244,6 +244,7 @@ def create_gl_objects {
         glGenBuffers(1, safe_addr(vbo_circle))
         glBindBuffer(GL_ARRAY_BUFFER, vbo_circle)
         var vertices : array<Vertex>
+        vertices |> reserve(360)
         for (t in range(360)) {
             let T = float(t) * 2.0 * PI / 360.0
             vertices |> push(Vertex(xy = float2(cos(T), sin(T))))
@@ -302,6 +303,7 @@ def compute_fn(t : float) {
 
 def compute_graph {
     var vertices : array<Vertex>
+    vertices |> reserve(NGRAPH)
     for (t in range(NGRAPH)) {
         let T = float(t) / float(NGRAPH)
         let p = compute_fn(T)

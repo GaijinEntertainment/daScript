@@ -989,6 +989,13 @@ jobs:
       # is where libclang/cbind is available (same reason as the self-binder).
       run: ./bin/daslang.exe modules/dasClangBind/tests/test_const_preproc.das
 
+    # TODO: bind_imgui.das self-binder freshness doesn't run on mingw — same
+    # msys2 libclang gap as bind_llvm above (parsing imgui.h dies on
+    # `fatal error: 'float.h' file not found`; needs explicit -resource-dir /
+    # -isystem injection). Until that lands, dasImgui binding freshness is a
+    # local-regen discipline (run bind/bind_imgui.das before committing a bump),
+    # like it was in the module's standalone-repo era.
+
   build_windows_clangcl:
   ###########################################################
   # Catches clang-cl build regressions. Builds with Ninja driving clang-cl directly
@@ -1103,7 +1110,7 @@ jobs:
   # (glibc warn_unused_result on chdir/etc., -Wstringop-overflow / -Warray-bounds
   # / -Wmaybe-uninitialized false positives under -O3) are invisible to our own
   # CI and only ever surface downstream, where external module repos build
-  # daslang from source with the default system g++ (e.g. dasImgui's
+  # daslang from source with the default system g++ (e.g. dasImguiNodeEditor's
   # ubuntu-latest job). This job closes that gap. Compile-only: the clang lanes
   # already run the test sweeps; the point here is the strict-warning gate.
   #

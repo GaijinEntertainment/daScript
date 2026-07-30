@@ -1,6 +1,7 @@
 options gen2
 options persistent_heap   // + explicit deletes: each arm frees its model before the next loads
 options stack = 131072
+options _function_length = 0   // test bodies enumerate the fixture arms
 
 require dastest/testing_boost public
 require dasllama/dasllama            // the facade: load_model's image cache is the surface under test
@@ -665,5 +666,179 @@ def test_whisper_image_roundtrip(t : T?) {
         t |> success(!empty(a.text), "non-empty transcript")
         t |> success(a.text == b.text, "transcripts match")
         delete samples
+    }
+}
+
+def private parakeet_transcribe_text(path : string; samples : array<float>) : tuple<text : string; mapped : bool> {
+    var m <- load_asr_model(path)
+    var text = ""
+    with_job_que() {
+        setup_dasllama_jobque()
+        var s <- create_session(m, "en")
+        text = transcribe(m, s, samples)
+        delete s
+    }
+    let mapped = m.pk.image_map != null
+    delete m
+    return (text = text, mapped = mapped)
+}
+
+[test]
+def test_parakeet_image_roundtrip(t : T?) {
+    t |> run("parakeet v3: bin load vs mapped image, transcript-exact") @(t : T?) {
+        if (!family_on(t, "parakeet")) return
+        if (!arm_on(t, "parakeet")) return
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
+        if (!model_available(t, path)) {
+            return
+        }
+        var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+        if (empty(samples)) {
+            t |> skip("jfk.wav not present")
+            return
+        }
+        let img = image_path_for(path, "parakeet-q8")
+        remove(img)
+        let a = parakeet_transcribe_text(path, samples)
+        t |> success(!a.mapped, "cold load is bin-backed")
+        t |> success(stat(img).is_valid, "cold load saved an image")
+        let b = parakeet_transcribe_text(path, samples)
+        t |> success(b.mapped, "warm load is image-backed")
+        t |> success(!empty(a.text), "non-empty transcript")
+        t |> success(a.text == b.text, "transcripts match")
+        delete samples
+    }
+}
+
+[test]
+def test_qwen3a_tower_image_roundtrip(t : T?) {
+    t |> run("qwen3a 0.6B tower: mapped image planes are element-exact vs gguf") @(t : T?) {
+        if (!family_on(t, "qwen3a")) return
+        if (!arm_on(t, "qwen3a")) return
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
+        if (!model_available(t, path)) {
+            return
+        }
+        let img = image_path_for(path, "qwen3a-f32")
+        remove(img)
+        var a <- load_qwen3a_tower(path)
+        t |> success(a.image_map == null, "cold load is gguf-backed")
+        t |> success(stat(img).is_valid, "cold load saved an image")
+        var b <- load_qwen3a_tower(path)
+        t |> success(b.image_map != null, "warm load is image-backed")
+        t |> equal(b.core.d_model, a.core.d_model)
+        t |> equal(b.core.n_layer, a.core.n_layer)
+        t |> equal(b.core.n_ctx, a.core.n_ctx)
+        t |> equal(b.proj_dim, a.proj_dim)
+        t |> equal(b.n_ch, a.n_ch)
+        t |> equal(count_mismatch(a.core.fblob, b.core.fblob), 0l, "core.fblob element-exact")
+        t |> equal(count_mismatch(a.cblob, b.cblob), 0l, "cblob element-exact")
+        delete a
+        delete b
+    }
+}
+
+[test]
+def test_canary_encoder_image_roundtrip(t : T?) {
+    t |> run("canary encoder: mapped image planes are element-exact vs bin") @(t : T?) {
+        if (!family_on(t, "canary")) return
+        if (!arm_on(t, "canary")) return
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
+        if (!model_available(t, path)) {
+            return
+        }
+        let img = image_path_for(path, "canary-f32")
+        remove(img)
+        var a <- load_canary_encoder(path)
+        t |> success(a.image_map == null, "cold load is bin-backed")
+        t |> success(stat(img).is_valid, "cold load saved an image")
+        var b <- load_canary_encoder(path)
+        t |> success(b.image_map != null, "warm load is image-backed")
+        t |> equal(b.d_model, a.d_model)
+        t |> equal(b.n_layer, a.n_layer)
+        t |> equal(b.proj_dim, a.proj_dim)
+        t |> equal(long_length(b.layers), long_length(a.layers))
+        t |> equal(count_mismatch(a.blob, b.blob), 0l, "blob element-exact")
+        t |> equal(count_mismatch(a.filters, b.filters), 0l, "filters element-exact")
+        delete a
+        delete b
+    }
+}
+
+[test]
+def test_gemma4a_encoder_image_roundtrip(t : T?) {
+    t |> run("gemma4a encoder: mapped image planes are element-exact vs gguf") @(t : T?) {
+        if (!family_on(t, "gemma4a")) return
+        if (!arm_on(t, "gemma4a")) return
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
+        if (!model_available(t, path)) {
+            return
+        }
+        let img = image_path_for(path, "gemma4a-f32")
+        remove(img)
+        var a <- load_gemma4a_encoder(path)
+        t |> success(a.image_map == null, "cold load is gguf-backed")
+        t |> success(stat(img).is_valid, "cold load saved an image")
+        var b <- load_gemma4a_encoder(path)
+        t |> success(b.image_map != null, "warm load is image-backed")
+        t |> equal(b.d_model, a.d_model)
+        t |> equal(b.n_layer, a.n_layer)
+        t |> equal(b.proj_dim, a.proj_dim)
+        t |> equal(long_length(b.layers), long_length(a.layers))
+        t |> equal(count_mismatch(a.blob, b.blob), 0l, "blob element-exact")
+        t |> equal(count_mismatch(a.twiddles, b.twiddles), 0l, "twiddles element-exact")
+        delete a
+        delete b
+    }
+}
+
+[test]
+def test_fp32_decoder_image_roundtrip(t : T?) {
+    t |> run("canary decoder fp32: gguf load vs mapped image, token-for-token") @(t : T?) {
+        if (!family_on(t, "canary")) return
+        if (!arm_on(t, "canary-dec")) return
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = path_join(models_dir(), "canary-qwen-2.5b-decoder-f16.gguf")
+        if (!model_available(t, path)) {
+            return
+        }
+        // the fp32 rail is opt-in (image_fp32) — the parity-pinned ASR decoders' lane
+        let img = image_path_for(path, "", "fp32")
+        remove(img)
+        var a <- load_model_cached(path, QuantMode.fp32, planar_only = true, image_fp32 = true)
+        t |> success(a.image_map == null, "cold load is gguf-backed")
+        t |> success(stat(img).is_valid, "cold load saved an image")
+        a.config.seq_len = min(a.config.seq_len, 2048l)
+        var prompt <- encode(a, "Once upon a time")
+        var ga <- gen_ids(a, prompt, 16)
+        delete a
+        var b <- load_model_cached(path, QuantMode.fp32, planar_only = true, image_fp32 = true)
+        t |> success(b.image_map != null, "warm load is image-backed")
+        b.config.seq_len = min(b.config.seq_len, 2048l)
+        var gb <- gen_ids(b, prompt, 16)
+        t |> success(!empty(ga) && count_mismatch(ga, gb) == 0l, "gguf vs image tokens")
+        delete b
+        delete ga
+        delete gb
+        delete prompt
     }
 }

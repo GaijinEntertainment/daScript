@@ -1,0 +1,118 @@
+diff --git a/common/arg.cpp b/common/arg.cpp
+index 841ca3c..673c1ce 100644
+--- a/common/arg.cpp
++++ b/common/arg.cpp
+@@ -3280,7 +3280,7 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
+                     string_format("error: unknown value for --reasoning: '%s'\n", value.c_str()));
+             }
+         }
+-    ).set_examples({LLAMA_EXAMPLE_SERVER, LLAMA_EXAMPLE_COMPLETION, LLAMA_EXAMPLE_CLI}).set_env("LLAMA_ARG_REASONING"));
++    ).set_examples({LLAMA_EXAMPLE_SERVER, LLAMA_EXAMPLE_COMPLETION, LLAMA_EXAMPLE_CLI, LLAMA_EXAMPLE_MTMD}).set_env("LLAMA_ARG_REASONING"));
+     add_opt(common_arg(
+         {"--reasoning-budget"}, "N",
+         "token budget for thinking: -1 for unrestricted, 0 for immediate end, N>0 for token budget (default: -1)",
+@@ -3288,7 +3288,7 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
+             if (value < -1) { throw std::invalid_argument("invalid value"); }
+             params.sampling.reasoning_budget_tokens = value;
+         }
+-    ).set_examples({LLAMA_EXAMPLE_SERVER, LLAMA_EXAMPLE_COMPLETION, LLAMA_EXAMPLE_CLI}).set_env("LLAMA_ARG_THINK_BUDGET"));
++    ).set_examples({LLAMA_EXAMPLE_SERVER, LLAMA_EXAMPLE_COMPLETION, LLAMA_EXAMPLE_CLI, LLAMA_EXAMPLE_MTMD}).set_env("LLAMA_ARG_THINK_BUDGET"));
+     add_opt(common_arg(
+         {"--reasoning-budget-message"}, "MESSAGE",
+         "message injected before the end-of-thinking tag when reasoning budget is exhausted (default: none)",
+diff --git a/common/chat.cpp b/common/chat.cpp
+index 0cee804..955fdf0 100644
+--- a/common/chat.cpp
++++ b/common/chat.cpp
+@@ -608,9 +608,11 @@ std::string common_chat_format_single(const struct common_chat_templates * tmpls
+                                       const std::vector<common_chat_msg> & past_msg,
+                                       const common_chat_msg &              new_msg,
+                                       bool                                 add_ass,
+-                                      bool                                 use_jinja) {
++                                      bool                                 use_jinja,
++                                      bool                                 enable_thinking) {
+     common_chat_templates_inputs inputs;
+     inputs.use_jinja = use_jinja;
++    inputs.enable_thinking = enable_thinking;
+     inputs.add_bos   = tmpls->add_bos;
+     inputs.add_eos   = tmpls->add_eos;
+ 
+diff --git a/common/chat.h b/common/chat.h
+index 7898f16..7ea9844 100644
+--- a/common/chat.h
++++ b/common/chat.h
+@@ -329,7 +329,8 @@ std::string common_chat_format_single(const struct common_chat_templates * tmpls
+                                       const std::vector<common_chat_msg> & past_msg,
+                                       const common_chat_msg &              new_msg,
+                                       bool                                 add_ass,
+-                                      bool                                 use_jinja);
++                                      bool                                 use_jinja,
++                                      bool                                 enable_thinking = true);
+ 
+ // Returns an example of formatted chat
+ std::string common_chat_format_example(const struct common_chat_templates *       tmpls,
+diff --git a/tools/mtmd/mtmd-cli.cpp b/tools/mtmd/mtmd-cli.cpp
+index 8704ea7..cb7ea3e 100644
+--- a/tools/mtmd/mtmd-cli.cpp
++++ b/tools/mtmd/mtmd-cli.cpp
+@@ -1,3 +1,4 @@
++#include <chrono>
+ #include "arg.h"
+ #include "debug.h"
+ #include "log.h"
+@@ -93,6 +94,7 @@ struct mtmd_cli_context {
+     common_chat_templates_ptr tmpls;
+     std::vector<common_chat_msg> chat_history;
+     bool use_jinja = false;
++    bool enable_thinking = true;   // false when the user passes --reasoning off (no-think turn)
+     // TODO: support for --system-prompt with /clear command
+ 
+     // support for legacy templates (models not having EOT token)
+@@ -126,6 +128,7 @@ struct mtmd_cli_context {
+ 
+         tmpls = common_chat_templates_init(model, params.chat_template);
+         use_jinja = params.use_jinja;
++        enable_thinking = (params.enable_reasoning != 0);   // --reasoning off => suppress the thinking channel
+         chat_history.clear();
+         LOG_INF("%s: chat template example:\n%s\n", __func__, common_chat_format_example(tmpls.get(), params.use_jinja, params.default_template_kwargs).c_str());
+ 
+@@ -223,6 +226,10 @@ static int generate_response(mtmd_cli_context & ctx, int n_predict) {
+         }
+     }
+ 
++    fprintf(stderr, "DASLLAMA_IDS:");
++    for (auto tid : generated_tokens) { fprintf(stderr, " %d", (int) tid); }
++    fprintf(stderr, "\n");
++
+     std::string generated_text = common_detokenize(ctx.lctx, generated_tokens);
+     common_chat_msg msg;
+     msg.role    = "assistant";
+@@ -237,7 +244,7 @@ static std::string chat_add_and_format(mtmd_cli_context & ctx, common_chat_msg &
+         new_msg.role.c_str(), new_msg.content.c_str());
+     auto formatted = common_chat_format_single(ctx.tmpls.get(), ctx.chat_history,
+         new_msg, new_msg.role == "user",
+-        ctx.use_jinja);
++        ctx.use_jinja, ctx.enable_thinking);
+     ctx.chat_history.push_back(new_msg);
+     return formatted;
+ }
+@@ -453,12 +460,19 @@ int main(int argc, char ** argv) {
+                 return 1; // error is already printed by libmtmd
+             }
+         }
++        auto _t_enc0 = std::chrono::high_resolution_clock::now();
+         if (eval_message(ctx, msg)) {
+             return 1;
+         }
++        auto _t_enc1 = std::chrono::high_resolution_clock::now();
+         if (!g_is_interrupted && generate_response(ctx, n_predict)) {
+             return 1;
+         }
++        auto _t_dec1 = std::chrono::high_resolution_clock::now();
++        double _enc_ms = std::chrono::duration<double, std::milli>(_t_enc1 - _t_enc0).count();
++        double _dec_ms = std::chrono::duration<double, std::milli>(_t_dec1 - _t_enc1).count();
++        fprintf(stderr, "MTMD_TIMING encode_prefill_ms %.1f decode_ms %.1f total_ms %.1f\n",
++                _enc_ms, _dec_ms, _enc_ms + _dec_ms);
+ 
+     } else {
+         LOG("\n Running in chat mode, available commands:");

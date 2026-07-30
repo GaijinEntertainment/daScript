@@ -118,7 +118,7 @@ def run_argv(args : array<string>; timeout : float) : tuple<rc : int; out : stri
     var output : string
     let rc = unsafe(popen_argv(args, timeout) $(f) {
         if (f != null) {
-            output := unsafe(fread_to_eof(f))
+            output = unsafe(fread_to_eof(f))
         }
     })
     return (rc = rc, out = output)
@@ -408,7 +408,7 @@ def gate_lint(ctx : PreflightCtx) : GateResult {
         output = r.out)
 }
 
-def gate_cpp_syntax(ctx : PreflightCtx) : GateResult {
+def gate_cpp_syntax(ctx : PreflightCtx) : GateResult { // nolint:STYLE038
     let t0 = ref_time_ticks()
     if (empty(ctx.changed_cpp) && ctx.changed_hdr == 0) {
         return GateResult(name = "cpp-syntax", status = GateStatus.Skip, seconds = seconds_since(t0),
@@ -535,7 +535,7 @@ def docs_skip_all(reason : string; var results : array<GateResult>&) {
     skip_gates(["docs/das2rst", "docs/stubs", "docs/uncategorized", "docs/untracked", "docs/sphinx-latex", "docs/sphinx-html", "docs/pdflatex"], reason, results)
 }
 
-def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) {
+def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:STYLE037
     var t0 = ref_time_ticks()
     // gate 1: das2rst runs clean (positional handmade-doc validation)
     let r1 = run_argv([ctx.daslang, "-documentation", "doc/reflections/das2rst.das"])
@@ -867,6 +867,32 @@ def gate_sequence(ctx : PreflightCtx) : GateResult {
     return run_test_gate("sequence", args, "sequence smoke failed (examples/games/sequence/ci_smoke_test.*)")
 }
 
+def gate_imgui(ctx : PreflightCtx) : GateResult {
+    let t0 = ref_time_ticks()
+    if (empty(ctx.build_dir)) {
+        return GateResult(name = "imgui", status = GateStatus.Skip, seconds = seconds_since(t0),
+            detail = "no configured build dir — cmake -B build first")
+    }
+    let b = run_argv(["cmake", "--build", ctx.build_dir, "--config", ctx.config, "--target",
+        "daslang-live", "dasModuleLiveHost", "dasModuleGlfw", "dasModuleHV", "dasModuleClipboard",
+        "dasModulePUGIXML", "dasModuleStbImage", "dasModuleImgui", "imguiApp", "imguiAppHeadless", "--parallel"])
+    if (b.rc != 0) {
+        let lower = to_lower(b.out)
+        if (find(lower, "unknown target") >= 0 || find(lower, "no rule to make target") >= 0 || find(lower, "does not exist") >= 0) {
+            return GateResult(name = "imgui", status = GateStatus.Skip, seconds = seconds_since(t0),
+                detail = "imgui module targets missing — configure with DAS_IMGUI_DISABLED=OFF (needs dasGlfw + dasClipboard on)", output = b.out)
+        }
+        return classify_build_fail("imgui", "imgui module build failed", b, ctx.daslang, t0)
+    }
+    // Direct folder targeting bypasses the tests/.das_test nightly gate by
+    // design — no --imgui flag needed here (that opt-in is for full sweeps).
+    return run_test_gate("imgui",
+        [ctx.daslang, "dastest/dastest.das", "--", "--test", "modules/dasImgui/tests", "--headless",
+         "--isolated-mode", "--isolated-mode-threads", "4", "--timeout", "600", "--failures-only",
+         "--exclude", "glfw_synth", "--exclude", "key_hud", "--exclude", "embedded_terminal"],
+        "dasImgui playwright suite failed (nightly_imgui.yml is its only CI lane — this local gate is the pre-push mirror)")
+}
+
 // ===== orchestration =====
 
 struct GateInfo {
@@ -887,7 +913,8 @@ def gate_table() : array<GateInfo> {
         GateInfo(name = "tests-interp", full_only = true, doc = "full interpreter suite"),
         GateInfo(name = "tests-jit", full_only = true, doc = "full JIT suite (skips when dasLLVM absent)"),
         GateInfo(name = "tests-aot", full_only = true, doc = "build test_aot + full AOT suite"),
-        GateInfo(name = "sequence", full_only = true, doc = "sequence game release smoke (only pre-merge compile of GLFW-gated das)")
+        GateInfo(name = "sequence", full_only = true, doc = "sequence game release smoke (only pre-merge compile of GLFW-gated das)"),
+        GateInfo(name = "imgui", full_only = true, doc = "dasImgui playwright suite (nightly-only CI — this local mirror is the only pre-push gate for it)")
     ]
 }
 
@@ -983,7 +1010,7 @@ def clear_preflight_token() {
 }
 
 [export]
-def main() : int {
+def main() : int { // nolint:STYLE037
     var args_r <- parse_args(type<Config>)
     if (args_r |> is_err) {
         to_log(LOG_ERROR, "error: {args_r |> unwrap_err}\n\n")
@@ -1102,6 +1129,8 @@ def main() : int {
                 r <- gate_tests_aot(ctx)
             } elif (info.name == "sequence") {
                 r <- gate_sequence(ctx)
+            } elif (info.name == "imgui") {
+                r <- gate_imgui(ctx)
             }
             report_gate(r, cfg.verbose)
             results |> emplace(r)

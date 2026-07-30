@@ -1,6 +1,8 @@
 options gen2
 options indenting = 4
 options solid_context
+options persistent_heap
+options gc
 
 // One source, four engines. The SAME pt_core path tracer — scene, camera, RNG, materials,
 // integrator — runs on four execution tiers, live-switchable from an imgui_boost_v2 panel rendered
@@ -32,6 +34,7 @@ require vulkan/vulkan_reflect
 require daslib/safe_addr
 require daslib/jobque_boost
 require daslib/clargs
+require live/live_gc
 require math
 require strings
 
@@ -680,6 +683,7 @@ def main() {
     init()
     while (!exit_requested()) {
         update()
+        maybe_collect_gc()
     }
     shutdown()
 }

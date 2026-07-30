@@ -1,8 +1,11 @@
 options gen2
+options gc
+options persistent_heap
 require glfw/glfw_boost
 require opengl/opengl_boost
 require math
 require daslib/safe_addr
+require live/live_gc
 
 // 02 - The Mandelbrot Set (OpenGL / WebGL2 tutorial)
 //
@@ -209,6 +212,7 @@ def shutdown {
 def main {
     init()
     while (update()) {
+        maybe_collect_gc()
     }
     shutdown()
 }

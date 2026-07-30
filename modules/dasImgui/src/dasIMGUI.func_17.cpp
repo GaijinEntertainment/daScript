@@ -1,0 +1,102 @@
+// this file is generated via Daslang automatic binder
+// all user modifications will be lost after this file is re-generated
+
+#include "daScript/misc/platform.h"
+#include "daScript/ast/ast.h"
+#include "daScript/ast/ast_interop.h"
+#include "daScript/ast/ast_handle.h"
+#include "daScript/ast/ast_typefactory_bind.h"
+#include "daScript/simulate/bind_enum.h"
+#include "dasIMGUI.h"
+#include "need_dasIMGUI.h"
+namespace das {
+#include "dasIMGUI.func.aot.decl.inc"
+void Module_dasIMGUI::initFunctions_17() {
+// from imgui.h:1076:37
+	makeExtern< ImDrawListSharedData * (*)() , ImGui::GetDrawListSharedData , SimNode_ExtFuncCall , imguiTempFn>(lib,"GetDrawListSharedData","ImGui::GetDrawListSharedData")
+		->addToModule(*this, SideEffects::worstDefault);
+// from imgui.h:1077:29
+	makeExtern< const char * (*)(int) , ImGui::GetStyleColorName , SimNode_ExtFuncCall , imguiTempFn>(lib,"GetStyleColorName","ImGui::GetStyleColorName")
+		->args({"idx"})
+		->arg_type(0,makeType<ImGuiCol_>(lib))
+		->addToModule(*this, SideEffects::worstDefault);
+// from imgui.h:1078:29
+	makeExtern< void (*)(ImGuiStorage *) , ImGui::SetStateStorage , SimNode_ExtFuncCall , imguiTempFn>(lib,"SetStateStorage","ImGui::SetStateStorage")
+		->args({"storage"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from imgui.h:1079:29
+	makeExtern< ImGuiStorage * (*)() , ImGui::GetStateStorage , SimNode_ExtFuncCall , imguiTempFn>(lib,"GetStateStorage","ImGui::GetStateStorage")
+		->addToModule(*this, SideEffects::worstDefault);
+// from imgui.h:1085:29
+	makeExtern< ImVec4 (*)(unsigned int) , ImGui::ColorConvertU32ToFloat4 , SimNode_ExtFuncCall , imguiTempFn>(lib,"ColorConvertU32ToFloat4","ImGui::ColorConvertU32ToFloat4")
+		->args({"in"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from imgui.h:1086:29
+	makeExtern< unsigned int (*)(const ImVec4 &) , ImGui::ColorConvertFloat4ToU32 , SimNode_ExtFuncCall , imguiTempFn>(lib,"ColorConvertFloat4ToU32","ImGui::ColorConvertFloat4ToU32")
+		->args({"in"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from imgui.h:1087:29
+	makeExtern< void (*)(float,float,float,float &,float &,float &) , ImGui::ColorConvertRGBtoHSV , SimNode_ExtFuncCall , imguiTempFn>(lib,"ColorConvertRGBtoHSV","ImGui::ColorConvertRGBtoHSV")
+		->args({"r","g","b","out_h","out_s","out_v"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from imgui.h:1088:29
+	makeExtern< void (*)(float,float,float,float &,float &,float &) , ImGui::ColorConvertHSVtoRGB , SimNode_ExtFuncCall , imguiTempFn>(lib,"ColorConvertHSVtoRGB","ImGui::ColorConvertHSVtoRGB")
+		->args({"h","s","v","out_r","out_g","out_b"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from imgui.h:1094:29
+	makeExtern< bool (*)(ImGuiKey) , ImGui::IsKeyDown , SimNode_ExtFuncCall , imguiTempFn>(lib,"IsKeyDown","ImGui::IsKeyDown")
+		->args({"key"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from imgui.h:1095:29
+	makeExtern< bool (*)(ImGuiKey,bool) , ImGui::IsKeyPressed , SimNode_ExtFuncCall , imguiTempFn>(lib,"IsKeyPressed","ImGui::IsKeyPressed")
+		->args({"key","repeat"})
+		->arg_init(1,new ExprConstBool(true))
+		->addToModule(*this, SideEffects::worstDefault);
+// from imgui.h:1096:29
+	makeExtern< bool (*)(ImGuiKey) , ImGui::IsKeyReleased , SimNode_ExtFuncCall , imguiTempFn>(lib,"IsKeyReleased","ImGui::IsKeyReleased")
+		->args({"key"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from imgui.h:1097:29
+	makeExtern< bool (*)(int) , ImGui::IsKeyChordPressed , SimNode_ExtFuncCall , imguiTempFn>(lib,"IsKeyChordPressed","ImGui::IsKeyChordPressed")
+		->args({"key_chord"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from imgui.h:1098:29
+	makeExtern< int (*)(ImGuiKey,float,float) , ImGui::GetKeyPressedAmount , SimNode_ExtFuncCall , imguiTempFn>(lib,"GetKeyPressedAmount","ImGui::GetKeyPressedAmount")
+		->args({"key","repeat_delay","rate"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from imgui.h:1099:29
+	makeExtern< const char * (*)(ImGuiKey) , ImGui::GetKeyName , SimNode_ExtFuncCall , imguiTempFn>(lib,"GetKeyName","ImGui::GetKeyName")
+		->args({"key"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from imgui.h:1100:29
+	makeExtern< void (*)(bool) , ImGui::SetNextFrameWantCaptureKeyboard , SimNode_ExtFuncCall , imguiTempFn>(lib,"SetNextFrameWantCaptureKeyboard","ImGui::SetNextFrameWantCaptureKeyboard")
+		->args({"want_capture_keyboard"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from imgui.h:1122:29
+	makeExtern< bool (*)(int,int) , ImGui::Shortcut , SimNode_ExtFuncCall , imguiTempFn>(lib,"Shortcut","ImGui::Shortcut")
+		->args({"key_chord","flags"})
+		->arg_init(1,new ExprConstInt(0))
+		->addToModule(*this, SideEffects::worstDefault);
+// from imgui.h:1123:29
+	makeExtern< void (*)(int,int) , ImGui::SetNextItemShortcut , SimNode_ExtFuncCall , imguiTempFn>(lib,"SetNextItemShortcut","ImGui::SetNextItemShortcut")
+		->args({"key_chord","flags"})
+		->arg_init(1,new ExprConstInt(0))
+		->addToModule(*this, SideEffects::worstDefault);
+// from imgui.h:1131:29
+	makeExtern< void (*)(ImGuiKey) , ImGui::SetItemKeyOwner , SimNode_ExtFuncCall , imguiTempFn>(lib,"SetItemKeyOwner","ImGui::SetItemKeyOwner")
+		->args({"key"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from imgui.h:1137:29
+	makeExtern< bool (*)(int) , ImGui::IsMouseDown , SimNode_ExtFuncCall , imguiTempFn>(lib,"IsMouseDown","ImGui::IsMouseDown")
+		->args({"button"})
+		->arg_type(0,makeType<ImGuiMouseButton_>(lib))
+		->addToModule(*this, SideEffects::worstDefault);
+// from imgui.h:1138:29
+	makeExtern< bool (*)(int,bool) , ImGui::IsMouseClicked , SimNode_ExtFuncCall , imguiTempFn>(lib,"IsMouseClicked","ImGui::IsMouseClicked")
+		->args({"button","repeat"})
+		->arg_type(0,makeType<ImGuiMouseButton_>(lib))
+		->arg_init(1,new ExprConstBool(false))
+		->addToModule(*this, SideEffects::worstDefault);
+}
+}
+

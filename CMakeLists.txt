@@ -31,6 +31,7 @@ option(DAS_LLVM_DISABLED "Disable dasLLVM (llvm bindings)" ON)
 option(DAS_SMT_DISABLED "Disable dasSMT (Z3 SMT solver bindings)" ON)
 option(DAS_HV_DISABLED "Disable dasHV (websokets,http server and client)" OFF)
 option(DAS_GLFW_DISABLED "Disable dasGLFW (GLFW window for graphics apps)" OFF)
+option(DAS_IMGUI_DISABLED "Disable dasImgui (Dear ImGui bindings + widget DSL; needs dasGlfw + dasClipboard)" OFF)
 option(DAS_AUDIO_DISABLED "Disable dasAudio (Miniaudio sound library)" OFF)
 option(DAS_STDDLG_DISABLED "Disable dasStdDlg (File new,open,save etc dialogs)" OFF)
 option(DAS_STBIMAGE_DISABLED "Disable dasStbImage (StbImage bindings, image loading and saving)" OFF)
@@ -627,6 +628,11 @@ MACRO(ADD_EXAMPLE_RUN das_file)
 ENDMACRO()
 
 ADD_EXAMPLE_RUN("${PROJECT_SOURCE_DIR}/examples/dasbind/dasbind_example.das")
+
+# The canonical application template (init/update/shutdown + main with the GC
+# boundary) — running it per-PR keeps the shape everyone copies compiling and
+# terminating. exe=FALSE: interpreted run is the point, not another AOT exe.
+ADD_EXAMPLE_RUN("${PROJECT_SOURCE_DIR}/examples/application/main.das" FALSE)
 
 # CPU path tracer — headless render smoke (no GPU/GUI). Compat gate for the OpenGL<->Vulkan shader
 # harmonization arc (modules/dasOpenGL/HARMONIZATION_PLAN.md section 8.1): the GL path tracers share
@@ -2108,14 +2114,13 @@ install(FILES ${DAS_DEBUGAPI_EXAMPLES}
 # Each per-example subdir (furier/, path_tracer_lab/, physarum_lab/) is a daspkg
 # -project-root: its own .das_package names the package and points release_main at the
 # shared source one level up, so those manifests are load-bearing for the cross-compile
-# path and must ship beside the .das. modules/ holds the daspkg-installed dasImgui dep
-# (a gitignored build artifact), so it stays excluded.
+# path and must ship beside the .das. The manifests declare no deps (dasImgui is
+# in-tree); the modules/ EXCLUDE guards against stale local daspkg installs.
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/graphics/
     DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/graphics
     FILES_MATCHING
         PATTERN "*.das"
         PATTERN ".das_package"
-        PATTERN ".gitignore"
         PATTERN "README.md"
     PATTERN "modules" EXCLUDE
     PATTERN ".daspkg_cache" EXCLUDE
@@ -2216,8 +2221,8 @@ install(FILES ${PROJECT_SOURCE_DIR}/examples/gltf/GLTF_SAMPLE_ASSETS.LICENSE
     DESTINATION ${DAS_INSTALL_DOCDIR}
 )
 
-# dasGLTF ImGui mesh viewer. The dasImgui dep is daspkg-installed into modules/ (gitignored) from the
-# .das_package; run with -project_root examples/gltf/mesh_viewer_opengl. Ships source + manifest only.
+# dasGLTF ImGui mesh viewer. dasImgui is in-tree; run with
+# -project_root examples/gltf/mesh_viewer_opengl. Ships source + manifest only.
 file(GLOB DAS_GLTF_VIEWER_EXAMPLE
     ${PROJECT_SOURCE_DIR}/examples/gltf/mesh_viewer_opengl/*.das
     ${PROJECT_SOURCE_DIR}/examples/gltf/mesh_viewer_opengl/.das_package
@@ -2228,8 +2233,8 @@ install(FILES ${DAS_GLTF_VIEWER_EXAMPLE}
     DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/gltf/mesh_viewer_opengl
 )
 
-# dasGLTF Vulkan ImGui mesh viewer (vulkan_gltf sibling of the above). The dasVulkan + dasImgui deps
-# are daspkg-installed into modules/ (gitignored) from the .das_package; run with
+# dasGLTF Vulkan ImGui mesh viewer (vulkan_gltf sibling of the above). The dasVulkan dep is
+# daspkg-installed into modules/ (gitignored) from the .das_package (dasImgui is in-tree); run with
 # -project_root examples/gltf/mesh_viewer_vulkan. Ships source + manifest only.
 file(GLOB DAS_GLTF_VIEWER_VULKAN_EXAMPLE
     ${PROJECT_SOURCE_DIR}/examples/gltf/mesh_viewer_vulkan/*.das

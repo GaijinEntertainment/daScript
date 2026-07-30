@@ -73,6 +73,10 @@ jobs:
           bin
           modules/dasGlfw/dasModuleGlfw.shared_module
           modules/dasOpenGL/dasModuleOpenGL.shared_module
+          modules/dasClipboard/dasModuleClipboard.shared_module
+          modules/dasImgui/dasModuleImgui.shared_module
+          modules/dasImgui/imguiApp.shared_module
+          modules/dasImgui/imguiAppHeadless.shared_module
           web/output
           web/output64
           site/playground/samples
@@ -125,6 +129,18 @@ jobs:
         set -eux
         ./bin/daslang -documentation doc/reflections/das2rst.das
 
+    - name: "Run imgui2rst"
+      # dasImgui's stdlib pages (doc/source/stdlib/generated/imgui_*.rst) come
+      # from its own generator; the host above builds with dasGlfw+dasImgui ON.
+      run: ./bin/daslang modules/dasImgui/utils/imgui2rst.das
+
+    - name: "Stage tutorial recordings (docs-assets release)"
+      # The `.. video::` directive fails the -W sphinx build on any recording
+      # missing from _static/tutorials/, so staging must precede sphinx.
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: bash utils/docs_assets/fetch.sh
+
     - name: "Build Sphinx HTML"
       run: |
         sphinx-build -W --keep-going -b html -d doc/sphinx-build doc/source build/site
@@ -163,32 +179,19 @@ jobs:
         set -eux
         REPO="$PWD"
 
-        # daspkg install builds a dep's NATIVE module (dasImgui -> dasModuleImgui.shared_module)
-        # via plain `cmake`, and the HOST daslang dlopen's that module during the wasm cross-compile
-        # (release wasm) to resolve `require imgui`. So it must be built with the SAME C++ ABI as the
-        # host — which is libc++ + exceptions (see the host build step). In this emsdk-activated step,
-        # an unpinned `cmake` grabs emsdk's clang + default libstdc++ instead -> ABI mismatch -> the
-        # host can't load the module -> the cross-compile fails `error[20605] missing prerequisite 'imgui'`.
-        # Pin the host ABI for install only; the emcmake builds below set their own (emscripten) toolchain.
-        das_install() {
-            env CC=/usr/bin/clang CXX=/usr/bin/clang++ \
-                CFLAGS="-DDAS_ENABLE_EXCEPTIONS=1" \
-                CXXFLAGS="-stdlib=libc++ -DDAS_ENABLE_EXCEPTIONS=1 -D_LIBCPP_DISABLE_DEPRECATION_WARNINGS" \
-                LDFLAGS="-stdlib=libc++" \
-                ./bin/daslang utils/daspkg/main.das -- install "$@"
-        }
-
-        # 0. The imgui family for the playground showcases (furier, path_tracer_lab):
-        #    clone dasImgui + dasImguiImplot + dasImguiNodeEditor into modules/ — the
-        #    root modules glob absorbs their both-worlds CMakeLists (the superbuild-
-        #    emscripten arm), so the playground build below compiles + statically links
-        #    them from source into the threaded daslang_static and embeds their .das
-        #    halves (web/CMakeLists EXISTS gates). No daspkg index or prebuilt archives
-        #    involved; the wasmboy CI lane gates this exact wiring on every PR. The
-        #    clones are REMOVED right after the playground build — the wasm64 daspkg
-        #    release flow (steps 2+) uses the externals' STANDALONE emscripten branches
-        #    via the package index and must not absorb the clones into web/build64.
-        git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasImgui.git          modules/dasImgui
+        # 0. The imgui-family dependents for the playground showcases (furier,
+        #    path_tracer_lab): dasImgui itself is IN-TREE now; clone only
+        #    dasImguiImplot + dasImguiNodeEditor into modules/ — the root modules
+        #    glob absorbs their both-worlds CMakeLists (the superbuild-emscripten
+        #    arm), so the playground build below compiles + statically links them
+        #    from source into the threaded daslang_static and embeds their .das
+        #    halves (web/CMakeLists EXISTS gates). No daspkg index or prebuilt
+        #    archives involved; the wasmboy CI lane gates this exact wiring on
+        #    every PR. The clones are REMOVED right after the playground build —
+        #    the wasm64 daspkg release flow (steps 2+) uses the externals'
+        #    STANDALONE emscripten branches and must not absorb the clones into
+        #    web/build64 (in-tree dasImgui stays put; its wasm64 archives build
+        #    on demand via its .das_package release_wasm_build).
         git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasImguiImplot.git    modules/dasImguiImplot
         git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasImguiNodeEditor.git modules/dasImguiNodeEditor
 
@@ -208,10 +211,10 @@ jobs:
         }
         if ! build_playground; then
             echo "WARNING: imgui-family playground build failed — rebuilding plain threaded daslang_static; the furier + path_tracer_lab playground samples will not run this deploy."
-            rm -rf modules/dasImgui modules/dasImguiImplot modules/dasImguiNodeEditor web/build
+            rm -rf modules/dasImguiImplot modules/dasImguiNodeEditor web/build
             build_playground
         fi
-        rm -rf modules/dasImgui modules/dasImguiImplot modules/dasImguiNodeEditor
+        rm -rf modules/dasImguiImplot modules/dasImguiNodeEditor
 
         # 2. wasm64 archives + compute samples + games. Configure web/build64 with
         #    the prebuilt host (so the compute foreach reuses it instead of
@@ -248,48 +251,43 @@ jobs:
             fi
         done
 
-        # 5. /examples furier — the ImGui-in-wasm showcase. Unlike the games (all
-        #    in-tree modules), furier pulls the EXTERNAL dasImgui module: install
-        #    its deps from the package index into the package dir, then release.
-        #    dasImgui's own .das_package builds its 3 wasm64 archives on demand
-        #    (release_wasm_build). Non-fatal — it depends on dasImgui shipping the
-        #    wasm-support release in the package index, so a dep/index hiccup must
-        #    not red the whole deploy; the furier card is skipped at stage time
-        #    below (examples.js shows a "needs memory64" note when the iframe is
-        #    unavailable).
-        if das_install --root examples/graphics/furier \
-           && ./bin/daslang utils/daspkg/main.das -- \
+        # 5. /examples furier — the ImGui-in-wasm showcase. dasImgui is in-tree;
+        #    `release wasm` discovers it from the compiled require chain and
+        #    drives its .das_package release_wasm_build to produce the 3 wasm64
+        #    archives on demand — no daspkg install step (the example declares
+        #    no deps). Non-fatal — a wasm-build hiccup must not red the whole
+        #    deploy; the furier card is skipped at stage time below (examples.js
+        #    shows a "needs memory64" note when the iframe is unavailable).
+        if ./bin/daslang utils/daspkg/main.das -- \
                 release wasm --root examples/graphics/furier --out "$REPO/web/output64/examples"; then
             echo "furier wasm build OK"
         else
-            echo "WARNING: furier wasm build failed (dasImgui wasm release not in the package index yet?) — its examples card will be skipped this deploy."
+            echo "WARNING: furier wasm build failed — its examples card will be skipped this deploy."
         fi
 
-        # 6. /examples path_tracer_lab — the jobque + OpenGL showcase. Same external
-        #    dasImgui dependency as furier; the threaded daspkg wasm pipeline (always
+        # 6. /examples path_tracer_lab — the jobque + OpenGL showcase. Same in-tree
+        #    dasImgui require as furier; the threaded daspkg wasm pipeline (always
         #    -pthread, see step 2) maps its new_thread / JobQue modes to real Web
         #    Workers. Non-fatal for the same reason as furier; staged below only when
         #    all three outputs are present. The page serves it cross-origin-isolated
         #    via coi-serviceworker.js (required for the -pthread module to instantiate).
-        if das_install --root examples/graphics/path_tracer_lab \
-           && ./bin/daslang utils/daspkg/main.das -- \
+        if ./bin/daslang utils/daspkg/main.das -- \
                 release wasm --root examples/graphics/path_tracer_lab --out "$REPO/web/output64/examples"; then
             echo "path_tracer_lab wasm build OK"
         else
-            echo "WARNING: path_tracer_lab wasm build failed (dasImgui wasm release not in the package index yet?) — its examples card will be skipped this deploy."
+            echo "WARNING: path_tracer_lab wasm build failed — its examples card will be skipped this deploy."
         fi
 
-        # 7. /examples physarum_lab — the threads + audio showcase. Same external dasImgui dependency
-        #    as the path tracer (installed under its own package dir); the threaded daspkg wasm
+        # 7. /examples physarum_lab — the threads + audio showcase. Same in-tree dasImgui require
+        #    as the path tracer; the threaded daspkg wasm
         #    pipeline maps its worker threads to Web Workers, and the daspkg wasm link's AudioWorklet
         #    flags carry the strudel soundtrack. Non-fatal; staged below only when all three outputs
         #    are present. Served cross-origin-isolated (coi-serviceworker.js).
-        if das_install --root examples/graphics/physarum_lab \
-           && ./bin/daslang utils/daspkg/main.das -- \
+        if ./bin/daslang utils/daspkg/main.das -- \
                 release wasm --root examples/graphics/physarum_lab --out "$REPO/web/output64/examples"; then
             echo "physarum_lab wasm build OK"
         else
-            echo "WARNING: physarum_lab wasm build failed (dasImgui wasm release not in the package index yet?) — its examples card will be skipped this deploy."
+            echo "WARNING: physarum_lab wasm build failed — its examples card will be skipped this deploy."
         fi
 
     - name: "Verify wasm example artifacts (catch silent fallbacks)"
@@ -452,7 +450,7 @@ jobs:
             cp modules/dasStbImage/fonts/droidsansmono.ttf         "_site/examples/$g/"
         done
 
-        # furier — the ImGui-in-wasm showcase. wasm64-only: it bundles the external
+        # furier — the ImGui-in-wasm showcase. wasm64-only: it bundles the compiled
         # dasImgui module, which the universal interpreter can't bind, so there is NO
         # interpreted fallback (no .das sources to stage). The card is always listed
         # in examples.js, so stage the compiled build only when ALL THREE outputs are
@@ -487,7 +485,7 @@ jobs:
             printf '%s' '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Path Tracer Lab — building</title><style>html,body{margin:0;height:100%}body{background:#0d0c0a;color:#cfc8bb;font-family:ui-monospace,Menlo,Consolas,monospace;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}p{max-width:30rem;line-height:1.6}</style></head><body><p>This example is being rebuilt and will be available shortly.</p></body></html>' > _site/examples/path_tracer_lab/path_tracer_lab.html
         fi
 
-        # physarum_lab — the threads + audio showcase. Same wasm64-only / external dasImgui story as
+        # physarum_lab — the threads + audio showcase. Same wasm64-only / in-tree dasImgui story as
         # the path tracer (no interpreted fallback in the iframe): stage the compiled build only when
         # all three outputs are present, else a "being rebuilt" placeholder so the card never 404s.
         mkdir -p _site/examples/physarum_lab

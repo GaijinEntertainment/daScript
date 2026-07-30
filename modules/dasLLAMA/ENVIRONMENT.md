@@ -143,6 +143,7 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 
 | Variable | Type | Default | Effect |
 |---|---|---|---|
+| `DASLLAMA_ALLOW_UNTUNED` | flag | off | Let a bench cell measure on fallback/absent tune winners. The gate exists because a stale sidecar silently downgrades every kernel and the whole board sandbags; only set for dev runs whose numbers are never published. |
 | `DASLLAMA_BENCH_MODEL` | text | tinyllama | Model name for the isolated GEMM bench. |
 | `DASLLAMA_BENCH_NTOK` | number | unset | Token count for the isolated GEMM bench. |
 | `DASLLAMA_BENCH_SKIP_ROWMAJOR` | flag | off | Skip the row-major arm of the isolated GEMM bench. |
@@ -173,6 +174,7 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 | `WHISPER_CPP` | path | unset | whisper.cpp checkout used for ASR reference baselines. |
 | `WHISPER_CPP_MODELS` | path | unset | Directory of whisper.cpp models for ASR reference baselines. |
 | `MTMD_BIN` | path | unset | llama-mtmd-cli binary for multimodal reference baselines. |
+| `DASLLAMA_BASE_PYTHON` | path | unset | Base CPython 3.10-3.12 for creating the ASR oracle venvs, when neither PATH names nor uv resolve one in range. |
 | `NEMO_PY` | path | unset | Python interpreter of the NeMo oracle venv, for canary/parakeet baselines. |
 | `ONNX_PY` | path | unset | Python interpreter of the ONNX oracle venv, for parakeet baselines. |
 | `OS` | text | set by Windows | Read to detect Windows (Windows_NT); set by the OS, not by dasLLAMA. |

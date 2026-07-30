@@ -41,7 +41,19 @@ def main():
     ap.add_argument("--wav", action="append", required=True)
     ap.add_argument("--reps", type=int, default=1)
     ap.add_argument("--text", action="store_true", help="print last transcription")
+    ap.add_argument("--out", default=None,
+                    help="also write every row to this file — some loaders wreck the stdout "
+                         "pipe on Windows (observed: parakeet variants deliver ~1 byte then "
+                         "EOF to the parent), and a plain file cannot be wrecked")
     args = ap.parse_args()
+
+    sink = open(args.out, "w", encoding="utf-8") if args.out else None
+
+    def emit(line):
+        print(line)
+        if sink:
+            sink.write(line + "\n")
+            sink.flush()
 
     import onnx_asr
     import onnxruntime as ort
@@ -56,7 +68,7 @@ def main():
     t0 = time.perf_counter()
     model = onnx_asr.load_model(hf_id, quantization=quant,
                                 providers=["CPUExecutionProvider"], sess_options=so)
-    print(f"LOAD\t{hf_id}\t{(time.perf_counter() - t0) * 1000.0:.3f}")
+    emit(f"LOAD\t{hf_id}\t{(time.perf_counter() - t0) * 1000.0:.3f}")
 
     name = f"onnx-{args.variant}"
     for wav in args.wav:
@@ -66,7 +78,7 @@ def main():
         # (verified: hp0 returns empty text in 230 ms, jfk3 truncates at ~30 s). A longer
         # clip would bench a silent truncation, not a transcription.
         if args.variant.startswith("whisper") and dur > 30.0:
-            print(f"SKIP\t{name}\t{base}\tsingle-window adapter: {dur:.0f}s > 30s")
+            emit(f"SKIP\t{name}\t{base}\tsingle-window adapter: {dur:.0f}s > 30s")
             continue
         text = ""
         for rep in range(1, args.reps + 1):
@@ -76,12 +88,12 @@ def main():
             except Exception as e:
                 # the exports bake a max input length (hp0x2 overflows the rel-pos
                 # table); an over-long clip is a missing cell, not a dead sweep
-                print(f"SKIP\t{name}\t{base}\t{type(e).__name__}: {str(e).splitlines()[-1][:120]}")
+                emit(f"SKIP\t{name}\t{base}\t{type(e).__name__}: {str(e).splitlines()[-1][:120]}")
                 break
             ms = (time.perf_counter() - t0) * 1000.0
-            print(f"BENCH\t{name}\t{base}\t{dur:.3f}\t{rep}\t{ms:.3f}\t{dur * 1000.0 / ms:.3f}")
+            emit(f"BENCH\t{name}\t{base}\t{dur:.3f}\t{rep}\t{ms:.3f}\t{dur * 1000.0 / ms:.3f}")
         if args.text:
-            print(f"TEXT\t{base}\t{text}")
+            emit(f"TEXT\t{base}\t{text}")
 
 
 if __name__ == "__main__":

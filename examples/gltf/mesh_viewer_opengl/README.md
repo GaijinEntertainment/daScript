@@ -7,13 +7,9 @@ transform, animation playback and lighting from two ImGui windows.
 
 ## Run
 
-dasImgui is an external dependency, pulled via daspkg from this example's `.das_package`:
+dasImgui ships in-tree with daslang — no package install needed, a bare build suffices:
 
 ```sh
-# once — installs dasImgui into ./modules (gitignored), built against your daslang SDK
-daslang utils/daspkg/main.das -- install --root examples/gltf/mesh_viewer_opengl
-
-# then run the viewer, rooted here so the dasImgui dep resolves
 daslang -project_root examples/gltf/mesh_viewer_opengl examples/gltf/mesh_viewer_opengl/main.das
 ```
 
