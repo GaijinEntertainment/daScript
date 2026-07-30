@@ -122,10 +122,13 @@ reads like a regression but is pure port contention. A timed-out dastest also le
 child holding 9090; sweep before re-running:
 
 ```powershell
-Get-Process -Name daslang,daslang-live -ErrorAction SilentlyContinue | Stop-Process -Force
+# By PATH, never bare by name - a bare name-kill also murders the dasHerd
+# watcher and every other tree's daslang (observed 2026-07-29).
+Get-Process -Name daslang,daslang-live -ErrorAction SilentlyContinue |
+  Where-Object { $_.Path -like "<your-tree>\*" } | Stop-Process -Force
 ```
 ```bash
-pkill -9 -f daslang          # WSL / POSIX
+pkill -9 -f "<your-tree>.*daslang"          # WSL / POSIX, path-scoped
 ```
 
 Run dual-platform verification **sequentially** — one platform fully finished before the other starts.

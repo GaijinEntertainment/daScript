@@ -67,46 +67,113 @@ def private das_identifier_continue(value : int) : bool {
     return das_identifier_start(value) || is_number(value)
 }
 
+// One hash lookup instead of ~100 string compares per identifier; longest
+// key is "uninitialized" (13), longer identifiers skip lookup AND slice.
+let private DAS_KEYWORD_MAX_BYTES = 13
+
+var private g_das_keyword_styles : table<string; TextSourceSyntaxStyle>
+
+def private ensure_das_keyword_styles { // nolint:STYLE038
+    if (!empty(g_das_keyword_styles)) return
+    g_das_keyword_styles <- {
+        "true" => TextSourceSyntaxStyle.number,
+        "false" => TextSourceSyntaxStyle.number,
+        "null" => TextSourceSyntaxStyle.constant,
+        "bool" => TextSourceSyntaxStyle.type_,
+        "void" => TextSourceSyntaxStyle.type_,
+        "string" => TextSourceSyntaxStyle.type_,
+        "auto" => TextSourceSyntaxStyle.type_,
+        "int" => TextSourceSyntaxStyle.type_,
+        "int8" => TextSourceSyntaxStyle.type_,
+        "int16" => TextSourceSyntaxStyle.type_,
+        "int64" => TextSourceSyntaxStyle.type_,
+        "uint" => TextSourceSyntaxStyle.type_,
+        "uint8" => TextSourceSyntaxStyle.type_,
+        "uint16" => TextSourceSyntaxStyle.type_,
+        "uint64" => TextSourceSyntaxStyle.type_,
+        "float" => TextSourceSyntaxStyle.type_,
+        "double" => TextSourceSyntaxStyle.type_,
+        "range" => TextSourceSyntaxStyle.type_,
+        "urange" => TextSourceSyntaxStyle.type_,
+        "block" => TextSourceSyntaxStyle.type_,
+        "function" => TextSourceSyntaxStyle.type_,
+        "lambda" => TextSourceSyntaxStyle.type_,
+        "array" => TextSourceSyntaxStyle.type_,
+        "table" => TextSourceSyntaxStyle.type_,
+        "tuple" => TextSourceSyntaxStyle.type_,
+        "variant" => TextSourceSyntaxStyle.type_,
+        "iterator" => TextSourceSyntaxStyle.type_,
+        "smart_ptr" => TextSourceSyntaxStyle.type_,
+        "typedecl" => TextSourceSyntaxStyle.type_,
+        "if" => TextSourceSyntaxStyle.keyword,
+        "elif" => TextSourceSyntaxStyle.keyword,
+        "else" => TextSourceSyntaxStyle.keyword,
+        "static_if" => TextSourceSyntaxStyle.keyword,
+        "static_elif" => TextSourceSyntaxStyle.keyword,
+        "for" => TextSourceSyntaxStyle.keyword,
+        "while" => TextSourceSyntaxStyle.keyword,
+        "break" => TextSourceSyntaxStyle.keyword,
+        "continue" => TextSourceSyntaxStyle.keyword,
+        "def" => TextSourceSyntaxStyle.keyword,
+        "return" => TextSourceSyntaxStyle.keyword,
+        "yield" => TextSourceSyntaxStyle.keyword,
+        "try" => TextSourceSyntaxStyle.keyword,
+        "recover" => TextSourceSyntaxStyle.keyword,
+        "struct" => TextSourceSyntaxStyle.keyword,
+        "class" => TextSourceSyntaxStyle.keyword,
+        "enum" => TextSourceSyntaxStyle.keyword,
+        "typedef" => TextSourceSyntaxStyle.keyword,
+        "bitfield" => TextSourceSyntaxStyle.keyword,
+        "let" => TextSourceSyntaxStyle.keyword,
+        "var" => TextSourceSyntaxStyle.keyword,
+        "const" => TextSourceSyntaxStyle.keyword,
+        "override" => TextSourceSyntaxStyle.keyword,
+        "sealed" => TextSourceSyntaxStyle.keyword,
+        "abstract" => TextSourceSyntaxStyle.keyword,
+        "static" => TextSourceSyntaxStyle.keyword,
+        "public" => TextSourceSyntaxStyle.keyword,
+        "private" => TextSourceSyntaxStyle.keyword,
+        "shared" => TextSourceSyntaxStyle.keyword,
+        "inscope" => TextSourceSyntaxStyle.keyword,
+        "implicit" => TextSourceSyntaxStyle.keyword,
+        "explicit" => TextSourceSyntaxStyle.keyword,
+        "module" => TextSourceSyntaxStyle.keyword,
+        "require" => TextSourceSyntaxStyle.keyword,
+        "include" => TextSourceSyntaxStyle.keyword,
+        "options" => TextSourceSyntaxStyle.keyword,
+        "expect" => TextSourceSyntaxStyle.keyword,
+        "assume" => TextSourceSyntaxStyle.keyword,
+        "with" => TextSourceSyntaxStyle.keyword,
+        "where" => TextSourceSyntaxStyle.keyword,
+        "label" => TextSourceSyntaxStyle.keyword,
+        "goto" => TextSourceSyntaxStyle.keyword,
+        "pass" => TextSourceSyntaxStyle.keyword,
+        "delete" => TextSourceSyntaxStyle.keyword,
+        "new" => TextSourceSyntaxStyle.keyword,
+        "deref" => TextSourceSyntaxStyle.keyword,
+        "addr" => TextSourceSyntaxStyle.keyword,
+        "cast" => TextSourceSyntaxStyle.keyword,
+        "upcast" => TextSourceSyntaxStyle.keyword,
+        "reinterpret" => TextSourceSyntaxStyle.keyword,
+        "typeinfo" => TextSourceSyntaxStyle.keyword,
+        "type" => TextSourceSyntaxStyle.keyword,
+        "unsafe" => TextSourceSyntaxStyle.keyword,
+        "finally" => TextSourceSyntaxStyle.keyword,
+        "in" => TextSourceSyntaxStyle.keyword,
+        "is" => TextSourceSyntaxStyle.keyword,
+        "as" => TextSourceSyntaxStyle.keyword,
+        "aka" => TextSourceSyntaxStyle.keyword,
+        "operator" => TextSourceSyntaxStyle.keyword,
+        "template" => TextSourceSyntaxStyle.keyword,
+        "default" => TextSourceSyntaxStyle.keyword,
+        "uninitialized" => TextSourceSyntaxStyle.keyword,
+        "generator" => TextSourceSyntaxStyle.keyword,
+        "capture" => TextSourceSyntaxStyle.keyword
+    }
+}
+
 def private das_keyword_style(word : string) : TextSourceSyntaxStyle {
-    if (word == "true" || word == "false") return TextSourceSyntaxStyle.number
-    if (word == "null") return TextSourceSyntaxStyle.constant
-    if (word == "bool" || word == "void" || word == "string"
-            || word == "auto" || word == "int" || word == "int8"
-            || word == "int16" || word == "int64" || word == "uint"
-            || word == "uint8" || word == "uint16" || word == "uint64"
-            || word == "float" || word == "double" || word == "range"
-            || word == "urange" || word == "block" || word == "function"
-            || word == "lambda" || word == "array" || word == "table"
-            || word == "tuple" || word == "variant" || word == "iterator"
-            || word == "smart_ptr" || word == "typedecl") {
-        return TextSourceSyntaxStyle.type_
-    }
-    if (word == "if" || word == "elif" || word == "else"
-            || word == "static_if" || word == "static_elif"
-            || word == "for" || word == "while" || word == "break"
-            || word == "continue" || word == "def" || word == "return"
-            || word == "yield" || word == "try" || word == "recover"
-            || word == "struct" || word == "class" || word == "enum"
-            || word == "typedef" || word == "bitfield" || word == "let"
-            || word == "var" || word == "const" || word == "override"
-            || word == "sealed" || word == "abstract" || word == "static"
-            || word == "public" || word == "private" || word == "shared"
-            || word == "inscope" || word == "implicit" || word == "explicit"
-            || word == "module" || word == "require" || word == "include"
-            || word == "options" || word == "expect" || word == "assume"
-            || word == "with" || word == "where" || word == "label"
-            || word == "goto" || word == "pass" || word == "delete"
-            || word == "new" || word == "deref" || word == "addr"
-            || word == "cast" || word == "upcast" || word == "reinterpret"
-            || word == "typeinfo" || word == "type" || word == "unsafe"
-            || word == "finally" || word == "in" || word == "is"
-            || word == "as" || word == "aka" || word == "operator"
-            || word == "template" || word == "default"
-            || word == "uninitialized" || word == "generator"
-            || word == "capture") {
-        return TextSourceSyntaxStyle.keyword
-    }
-    return TextSourceSyntaxStyle.none
+    return g_das_keyword_styles?[word] ?? TextSourceSyntaxStyle.none
 }
 
 def private push_das_fallback(var spans : array<TextSourceSpan>;
@@ -123,6 +190,7 @@ def private das_lexical_fallback(source : string) : array<TextSourceSpan> { // n
     var result : array<TextSourceSpan>
     var expect_function = false
     var expect_type = false
+    ensure_das_keyword_styles()
     peek_data(source) $(bytes) {
         var at = 0
         while (at < length(bytes)) {
@@ -188,7 +256,11 @@ def private das_lexical_fallback(source : string) : array<TextSourceSpan> { // n
                         && das_identifier_continue(int(bytes[at]))) {
                     at++
                 }
-                let word = slice(source, start, at)
+                // Expect flags below still style a long name after `def`.
+                var word = ""
+                if (at - start <= DAS_KEYWORD_MAX_BYTES) {
+                    word = slice(source, start, at)
+                }
                 var style = das_keyword_style(word)
                 if (style == TextSourceSyntaxStyle.none && expect_function) {
                     style = TextSourceSyntaxStyle.function_
@@ -371,20 +443,27 @@ def public tree_sitter_source_document(source, language : string;
         return <- plain_source_document(source, revision)
     }
 
+    // length(string) is a strlen: per-token calls made token_count x
+    // file_size byte scans — 7.6 s on a 716 KB file, 11 ms hoisted.
+    let source_length = length(source)
     var covered_until = 0
+    document.spans |> reserve(2 * length(tokens) + 1)
     for (token in tokens) {
         let syntax_style = source_syntax_style(token.role)
         if (syntax_style == TextSourceSyntaxStyle.none) continue
-        let start_byte = clamp(token.start_byte, covered_until, length(source))
-        let end_byte = clamp(token.end_byte, start_byte, length(source))
+        let start_byte = clamp(token.start_byte, covered_until, source_length)
+        let end_byte = clamp(token.end_byte, start_byte, source_length)
         push_source_syntax_span(document, covered_until, start_byte,
                                 TextSourceSyntaxStyle.none)
         push_source_syntax_span(document, start_byte, end_byte, syntax_style)
         covered_until = end_byte
     }
-    push_source_syntax_span(document, covered_until, length(source),
+    push_source_syntax_span(document, covered_until, source_length,
                             TextSourceSyntaxStyle.none)
-    if (canonical == "daslang") {
+    // The fallback fills gaps in INCOMPLETE snippets (compact hunks); on a
+    // big full document tree-sitter is authoritative and this scan cost
+    // a measured 2.4 s of a 711 KB file's 2.7 s total.
+    if (canonical == "daslang" && source_length <= 128 * 1024) {
         var fallback <- das_lexical_fallback(source)
         apply_syntax_fallback(document, fallback)
         delete fallback
