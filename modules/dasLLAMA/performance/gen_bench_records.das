@@ -84,6 +84,9 @@ struct Args {
     @clarg_doc = "Oracle: FAIL when a cell lands this far below its stored mean, percent (default: 5)"
     oracle_fail : float = 5.0
 
+    @clarg_doc = "Oracle: seconds to idle before the automatic solo re-run of a FAILED cell, whose verdict then stands (default: 60; 0 disables) — board-tail cells under-read on a hot chip (−6.5%..−34% observed), a solo re-run after settle reads true"
+    oracle_retry_settle : int = 60
+
     @clarg_short = "?"
     @clarg_doc = "Show this help and exit"
     help : bool
@@ -319,7 +322,15 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
             }
             cells++
             settle(cfg)
-            let v = oracle_cell(m.gguf, be, tag, accel, sr, cfg, threads, cellPath, board)
+            var v = oracle_cell(m.gguf, be, tag, accel, sr, cfg, threads, cellPath, board)
+            if (v == OracleVerdict.fail && cfg.oracle_retry_settle > 0) {
+                // a tail-of-board FAIL is a re-run instruction, never a verdict (BRINGUP): the
+                // solo re-run after settle is automatic, and ITS verdict stands
+                to_log(LOG_WARNING, "gen_bench_records: ORACLE FAIL {m.gguf} — auto solo re-run after {cfg.oracle_retry_settle}s settle (the retry is the verdict)\n")
+                board |> push("  ^ suspect FAIL — the auto solo re-run below is the verdict")
+                sleep(uint(cfg.oracle_retry_settle * 1000))
+                v = oracle_cell(m.gguf, be, tag, accel, sr, cfg, threads, cellPath, board)
+            }
             if (v == OracleVerdict.fail) {
                 fails++
                 if (!cfg.oracle_keep_going) {

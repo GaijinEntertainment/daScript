@@ -219,6 +219,10 @@ fail bar as "suspicious — verify"). Exit is nonzero on any FAIL.
   instead of minting), step-zero GC is skipped, and the store is never written.
 - Default is stop-at-first-FAIL (fail fast mid-refactor); `--oracle-keep-going` runs the full
   board. `-o substr` narrows to one model; ASR legs are excluded (their das cells are CPU-path).
+- A FAIL auto-triggers ONE solo re-run of that cell after `--oracle-retry-settle` seconds
+  (default 60; 0 disables), and the RETRY verdict stands — the board shows both attempts. This
+  is the tail-cell discipline (below) as tool behavior; a FAIL that survives its solo retry is
+  a real regression.
 - The tune gate applies unchanged: a manifest older than the binary fails every cell — re-mint
   (`DAS_TUNE_MODE=tune DAS_TUNE_MANIFEST=<box manifest> bin/daslang -jit
   modules/dasLLAMA/harness/dasllama_tuner.das`) and check the fresh winners against the stored
