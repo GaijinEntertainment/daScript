@@ -1457,16 +1457,15 @@ def herder_file_inspector_mode(input : JsonValue?) : JsonValue? {
     return JV((ok = true, mode = mode))
 }
 
-[live_command(description = "Open find in the file inspector with a query; regex optional. Matches rebuild against the active tab (View text, or the diff AFTER pane).")]
+[live_command(description = "Open find in the file inspector with a query; regex optional. Matches search the WHOLE file in every mode; a diff jump lands in the AFTER pane or reveals the match in View.")]
 def herder_inspector_find(input : JsonValue?) : JsonValue? {
     if (!g_inspector.prepare.has_retained_content) {
         return JV((ok = false, error = "no file is inspected"))
     }
     let args = from_JV(input, type<HerderInspectorFindArgs>)
     text_find_set_query(g_inspector.find, args.query, args.regex)
-    let diff_mode = g_inspector.mode == GitInspectorMode.diff
-    let _ = text_find_rebuild(g_inspector.find,
-        inspector_find_source(diff_mode), inspector_find_revision(diff_mode))
+    let _ = text_find_rebuild(g_inspector.find, inspector_find_source(),
+        g_inspector.revision)
     return JV((ok = true, query = g_inspector.find.query,
                regex = g_inspector.find.use_regex,
                match_count = length(g_inspector.find.matches),

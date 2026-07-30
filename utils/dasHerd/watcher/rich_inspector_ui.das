@@ -360,32 +360,56 @@ def private inspector_markdown_shown() : bool {
         && !g_inspector.focus_document_valid)
 }
 
-def private diff_row_for_byte(byte_offset : int) : int {
-    // new_line_starts is ascending aligned-row starts; the greatest start
-    // <= byte_offset is the row the byte renders on.
+def public inspector_find_source : string {
+    // Whole-file search in EVERY mode: the compact diff's aligned text hides
+    // most of the file, so searching it answers "not found" for text plainly
+    // in the file (the VSCode diff-search trap). The AFTER pane text is the
+    // fallback when the full View text is unavailable (binary transport).
+    return (empty(g_inspector.view_source)
+        ? g_inspector.new_document.source : g_inspector.view_source)
+}
+
+def private file_line_for_byte(byte_offset : int) : int {
+    // Greatest view_line_starts entry <= byte_offset; index i is 1-based
+    // file line i+1 (the focus overlay's convention).
     var low = 0
-    var high = length(g_inspector.new_line_starts) - 1
-    var row = 0
+    var high = length(g_inspector.view_line_starts) - 1
+    var line = 1
     while (low <= high) {
         let mid = (low + high) / 2
-        if (g_inspector.new_line_starts[mid] <= byte_offset) {
-            row = mid
+        if (g_inspector.view_line_starts[mid] <= byte_offset) {
+            line = mid + 1
             low = mid + 1
         } else {
             high = mid - 1
         }
     }
-    return row
+    return line
 }
 
-def public inspector_find_source(diff_mode : bool) : string {
-    return diff_mode ? g_inspector.new_document.source : g_inspector.view_source
-}
-
-def public inspector_find_revision(diff_mode : bool) : int {
-    // The two tabs search different texts under one find state; tagging the
-    // mode into the revision forces a rebuild when the user switches tabs.
-    return g_inspector.revision * 2 + (diff_mode ? 1 : 0)
+def private diff_pane_match(found : TextSourceRange) : tuple<row : int; pane : TextSourceRange> {
+    // Map a whole-file match onto the AFTER pane: file line, then the aligned
+    // row showing that line, then the byte offset within the row (clamped to
+    // the pane's line end). row -1 = the line is not in the visible diff.
+    let file_line = file_line_for_byte(found.start_byte)
+    if (file_line >= 1 && file_line <= length(g_inspector.view_line_starts)) {
+        for (row in range(length(g_inspector.new_document.line_numbers))) {
+            continue if (g_inspector.new_document.line_numbers[row] != file_line)
+            break if (row >= length(g_inspector.new_line_starts))
+            let line_start = g_inspector.view_line_starts[file_line - 1]
+            let pane_line_start = g_inspector.new_line_starts[row]
+            let pane_line_end = (row + 1 < length(g_inspector.new_line_starts)
+                ? max(pane_line_start, g_inspector.new_line_starts[row + 1] - 1)
+                : length(g_inspector.new_document.source))
+            let pane_start = min(pane_line_end,
+                pane_line_start + (found.start_byte - line_start))
+            let pane_end = min(pane_line_end,
+                pane_line_start + (found.end_byte - line_start))
+            return (row = row, pane = TextSourceRange(
+                start_byte = pane_start, end_byte = pane_end))
+        }
+    }
+    return (row = -1, pane = TextSourceRange(start_byte = -1, end_byte = -1))
 }
 
 def public inspector_apply_find_jump(diff_mode : bool) {
@@ -394,15 +418,23 @@ def public inspector_apply_find_jump(diff_mode : bool) {
     let found = text_find_current(g_inspector.find)
     return if (found.start_byte < 0)
     if (diff_mode) {
-        // The AFTER pane is the search target; both panes share diff_scroll_y,
-        // so the hunk-jump scroll machinery lands the aligned row in view.
-        text_source_view_select_range(g_inspector.new_document,
-            g_inspector.new_view, found.start_byte, found.end_byte)
-        let row = diff_row_for_byte(found.start_byte)
-        g_inspector.diff_scroll_y = max(0.0f, (float(row) - 6.0f) * max(
-            GetTextLineHeight(), g_inspector.new_view.key.line_height))
-        g_inspector.diff_scroll_jump_pending = true
-    } elif (inspector_markdown_shown()) {
+        let mapped = diff_pane_match(found)
+        if (mapped.row >= 0) {
+            // Both panes share diff_scroll_y, so the hunk-jump scroll
+            // machinery lands the aligned row in view.
+            text_source_view_select_range(g_inspector.new_document,
+                g_inspector.new_view, mapped.pane.start_byte, mapped.pane.end_byte)
+            g_inspector.diff_scroll_y = max(0.0f, (float(mapped.row) - 6.0f) * max(
+                GetTextLineHeight(), g_inspector.new_view.key.line_height))
+            g_inspector.diff_scroll_jump_pending = true
+            return
+        }
+        // The match is real but outside the visible diff: reveal it in the
+        // View tab instead of pretending it is not there - the diff analog
+        // of fold auto-expand.
+        INSPECTOR_VIEW_TAB.pending_select = true
+    }
+    if (inspector_markdown_shown()) {
         g_inspector.find_scroll_markdown = markdown_view_select_source_range(
             g_inspector.markdown_view, found.start_byte, found.end_byte)
     } else {
@@ -417,8 +449,8 @@ def public inspector_apply_find_jump(diff_mode : bool) {
 def private draw_inspector_find(diff_mode : bool) {
     return if (!g_inspector.find.open)
     text_find_bar(1, g_inspector.find)
-    let _ = text_find_rebuild(g_inspector.find,
-        inspector_find_source(diff_mode), inspector_find_revision(diff_mode))
+    let _ = text_find_rebuild(g_inspector.find, inspector_find_source(),
+        g_inspector.revision)
     inspector_apply_find_jump(diff_mode)
     if (g_inspector.find.open
             && IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)
@@ -430,15 +462,17 @@ def private draw_inspector_find(diff_mode : bool) {
 def private apply_inspector_find_scroll() {
     // Inside the view child. No GetScrollMaxY clamp: it reports LAST frame's
     // range; ImGui clamps SetScrollY against the real height at frame end.
+    // A jump that arrives before the View tab first laid out stays pending
+    // (line_top < 0) and lands on the next frame - the diff-to-View reveal
+    // path switches tabs and jumps in the same act.
     return if (g_inspector.find_scroll_byte < 0)
     let line_top = text_source_view_line_top(g_inspector.view,
         g_inspector.find_scroll_byte)
-    if (line_top >= 0.0f) {
-        let height = GetWindowSize().y
-        let local_top = line_top - GetScrollY()
-        if (local_top < height * 0.1f || local_top > height * 0.9f) {
-            SetScrollY(max(0.0f, line_top - height * 0.35f))
-        }
+    return if (line_top < 0.0f)
+    let height = GetWindowSize().y
+    let local_top = line_top - GetScrollY()
+    if (local_top < height * 0.1f || local_top > height * 0.9f) {
+        SetScrollY(max(0.0f, line_top - height * 0.35f))
     }
     g_inspector.find_scroll_byte = -1
 }

@@ -89,11 +89,16 @@ auto-expand), and Diff mode (matches over the AFTER pane's aligned text,
 jump rides the shared hunk-scroll). Ctrl+F opens, Esc closes, one query
 survives a tab switch. Rails: `herder_inspector_find` / `_step` /
 `_close`, plus find/fold/md-collapse fields on
-`herder_file_inspector_state`. Remaining gaps against the rule: **case /
+`herder_file_inspector_state`. Diff-mode find searches the **whole
+file** (Boris's live-review catch: searching only the compact aligned
+text answered "not found" for text plainly in the file — the VSCode
+diff-search trap); a jump lands in the AFTER pane when the match's line
+is in the diff, else it reveals the match in the View tab — the diff
+analog of fold auto-expand. Remaining gaps against the rule: **case /
 whole-word toggles** (component has regex only — add in the component,
-both apps inherit), F3/Shift+F3 bindings, and diff search covers the
-AFTER pane only (BEFORE-pane occurrences of removed text are not found;
-needs a per-pane or merged-results design).
+both apps inherit), F3/Shift+F3 bindings, and REMOVED text (BEFORE-pane
+only) is still not searched — it exists only in the old pane's aligned
+text; needs a per-pane or merged-results design.
 
 **Editors get replace from day one** — search / replace / replace-all
 within the file is part of the editor component's core surface, not a
