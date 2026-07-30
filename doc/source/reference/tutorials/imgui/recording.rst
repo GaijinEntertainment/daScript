@@ -252,4 +252,4 @@ go-to once the tutorials are familiar.
 
    Previous tutorial: :ref:`tutorial_visual_aids_tour`
 
-   Curriculum top: :ref:`tutorials_dasimgui`
+   Curriculum top: :ref:`tutorials_imgui`
