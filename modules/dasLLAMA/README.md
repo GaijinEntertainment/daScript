@@ -110,7 +110,7 @@ modules/dasLLAMA/
     dasllama_math_default.das #   the portable Q8·Q8 kernel backend (the fallback; platform backends out-rank it)
     dasllama_math_aarch64_neon.das # arm64 SDOT row-major Q8·Q8 backend + the laneq dot leaves the gen tier composes ([init]-registered; no-op off-ARM)
     dasllama_math_accelerate.das #  the "+AMX" float tier — Accelerate BLAS (AMX on M1-M3, SME on M4+) over the float-plane batch shapes
-    dasllama_math_metal.das   #   Metal GPU prefill-GEMM backend (batch-only donor; decode GEMV stays CPU)
+    dasllama_metal_gemm.das   #   Metal GPU prefill-GEMM backend (batch-only donor; decode GEMV stays CPU)
     dasllama_metal_prefill.das #  Metal full-GPU-resident prefill kernel set (requant, rmsnorm, rope, attention)
     dasllama_metal_decode.das  #   Metal GPU-resident DECODE driver — one command buffer per token step, the layer stack as fused dispatches
     dasllama_metal_kernels.das #  the family-agnostic Metal kernel + PSO registry (GEMV/GEMM forms, single-query attn per KV codec, fused rope+KV-store)

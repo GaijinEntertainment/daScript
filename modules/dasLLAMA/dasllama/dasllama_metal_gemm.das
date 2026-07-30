@@ -2,7 +2,7 @@ options gen2
 options _comment_hygiene = true
 options _metal_manual_dispatch = true   // PERMANENT opt-out: single-dispatch synchronous donor BELOW the engine-graph layer (kn_*/hz live in dasllama_metal_common, which requires dasllama_common -> this module — a cycle). No graph, no intra-encoder hazard surface. Moving kn_* into das_metal_boost would lift this.
 
-module dasllama_math_metal shared public
+module dasllama_metal_gemm shared public
 
 require dasllama/dasllama_math
 require metal/msl_shader
@@ -433,7 +433,7 @@ def private metal_no_group3(var y0p : float?; var y1p : float?; var y2p : float?
 def private metal_repack_noop(var wp : int8?; var sp : float?; n, d : int64) {}
 
 [init]
-def dasllama_math_metal_register() {
+def dasllama_metal_gemm_register() {
     // priority -1: never wins auto- or load-select (even registering first); reachable only by
     // name — select_batch_backend("metal") — with the device probe as the availability witness
     register_kernel_backend(KernelBackend(name = "metal", mm = @@metal_no_gemv, batch = @@metal_q8q8_batch,

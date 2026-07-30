@@ -87,8 +87,10 @@
     command plumbing, rails, shared lazy-state builders → `dasllama_<gpu>_common`; the resident
     token-step driver + decode arms → `dasllama_<gpu>_decode`; the batched prefill driver +
     batch arms → `dasllama_<gpu>_prefill`; portable servability gates → `dasllama_<gpu>_shapes`;
-    probe/arm/routers/`[init]` → `dasllama_math_<gpu>` — whose NAME is common's `?<gpu>` require
-    contract, never rename it. Matching responsibilities get MATCHING file names across
+    vulkan's probe/arm/routers/`[init]` → `dasllama_math_vulkan` — whose NAME is common's
+    `?vulkan` require contract, never rename it (metal has no math_ entry: transformer +
+    shapes are its doors, and `dasllama_metal_gemm` is the below-common batch-GEMM donor,
+    not a facade). Matching responsibilities get MATCHING file names across
     backends (kernels/common/decode/prefill/shapes/lens); a backend-only capability lives in
     its matching role file, never a new grab-bag. Metal specifics: the `[metal_dispatch]`
     lens generates enc_* builders and MSL globals into the module the class COMPILES in, so

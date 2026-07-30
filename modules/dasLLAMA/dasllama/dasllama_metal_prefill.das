@@ -11,7 +11,6 @@ require metal/msl_shader
 require metal/das_metal_boost
 require dasllama/dasllama_common
 require dasllama/dasllama_math
-require dasllama/dasllama_math_metal
 require dasllama/dasllama_metal_common   // decline enums/tables + the shared block_q8_0 blob cache (W1 split)
 require dasllama/dasllama_metal_kernels   // the family-shared [metal_kernel] classes both drivers dispatch (M1 move)
 require dasllama/dasllama_metal_lens   // census policing — no [metal_dispatch] classes remain here (they live in kernels)

@@ -190,7 +190,7 @@ what it costs today and what the fix would change.
   dispatches (~2 extra dispatches/layer on those rails), and the legacy quantized-X
   prefill rail is DELETED (the `!mm` serving arms, the fused add+rms+quant/swiglu+quant/
   rope_qk kernels + PSOs, enc_gemm, and the X-quant pools — ~350 lines; the mulmm_legacy
-  knob survives as the required-mode forced-decline test switch, and dasllama_math_metal's
+  knob survives as the required-mode forced-decline test switch, and dasllama_metal_gemm's
   planar GEMM donor is untouched — it serves CPU-flavor models' batch offload).
 
 - **QK-norm rope-store fusion — the f16 single-stream H-form SHIPPED (wave A chase round 2);

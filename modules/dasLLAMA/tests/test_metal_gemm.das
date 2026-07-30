@@ -3,7 +3,7 @@ options gen2
 require dastest/testing_boost public
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default        // registers the "portable" backend at [init] (the oracle + fallback)
-require ?das_metal dasllama/dasllama_math_metal  // nolint:STYLE030 — registers the "metal" batch donor on Apple builds
+require ?das_metal dasllama/dasllama_metal_gemm  // nolint:STYLE030 — registers the "metal" batch donor on Apple builds
 require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — metal_live_object_count for the leak gate
 require math  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
 

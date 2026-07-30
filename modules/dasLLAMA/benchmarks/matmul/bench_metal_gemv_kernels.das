@@ -5,7 +5,7 @@ require dastest/testing_boost
 require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
 require metal/msl_shader
 require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — GPU driver half, Apple builds only
-require ?das_metal dasllama/dasllama_math_metal  // nolint:STYLE030 — the production 32x32 GEMM MSL (the batch-crossover row)
+require ?das_metal dasllama/dasllama_metal_gemm  // nolint:STYLE030 — the production 32x32 GEMM MSL (the batch-crossover row)
 require dasllama/dasllama_metal_kernels  // nolint:STYLE030 — the production GEMV MSL (v0 baseline)
 require llvm/daslib/f16_cvt  // f16 bit converts for the K-quant superblock fills
 require daslib/fio
