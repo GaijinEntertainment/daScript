@@ -41,8 +41,9 @@ def can_visit_folder(folder_name : string; var result : bool?) {
         return
     }
     // dasImgui playwright suite: 151 subprocess integration tests (each spawns a
-    // daslang-live host). Nightly-only — the per-PR `--test tests/` sweeps skip it
-    // unless the caller opts in with `--imgui` (nightly_imgui.yml passes it).
+    // daslang-live host). Nightly-only — `--test tests/` sweeps skip it unless the
+    // caller opts in with `--imgui`. Direct `--test tests/dasImgui` targeting
+    // (nightly_imgui.yml, local runs) bypasses this gate entirely by design.
     if (folder_name == "dasImgui") {
         *result = false
         if (!has_module("imgui")) return

@@ -361,19 +361,12 @@ jobs:
     # worker (build.yml build_windows_mingw) — see comment on the linux
     # build step above for why dasClangBind can't be enabled here.
 
-    - name: "Install dasImgui (daspkg)"
-      run: |
-        set -eux
-        $BIN/daslang utils/daspkg/main.das -- install dasImgui --branch master
-
-    # Disabled — dasImgui will land its own self-binder freshness check inside its own repo's CI.
-    # - name: "Run self-binder (bind_imgui.das)"
-    #   if: matrix.target == 'linux'
-    #   run: |
-    #     set -eux
-    #     $BIN/daslang modules/dasImgui/bind/bind_imgui.das
-    #     cd modules/dasImgui && git diff --exit-code -- src/ \
-    #       || (echo "ERROR: dasImgui generated files are out of date. Run './bin/daslang modules/dasImgui/bind/bind_imgui.das' locally and commit the result." && exit 1)
+    # dasImgui is in-tree (modules/dasImgui) and builds in this lane like any
+    # other default-ON module — the old `daspkg install dasImgui` externals-
+    # coupling gate is gone. Its self-binder freshness check (bind_imgui.das)
+    # lives on the mingw nightly worker beside bind_clangbind.das — cbind/
+    # libclang is unavailable here (libclang.so → libLLVM collision with
+    # dasLLVM, see the build-step comment above).
 
     - name: "Coverage"
       if: matrix.target == 'linux'

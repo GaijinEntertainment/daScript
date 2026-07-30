@@ -1,0 +1,138 @@
+name: nightly dasImgui integration
+
+# The dasImgui playwright suite (tests/dasImgui, 151 tests): each test spawns a
+# daslang-live subprocess hosting a feature app from modules/dasImgui/examples/
+# and drives it over the HTTP live API. Runs NIGHTLY, not per-PR — the suite is
+# gated in tests/.das_test behind the --imgui opt-in this workflow passes, so
+# per-PR `--test tests/` sweeps never pay for the subprocess spawns. Manual
+# workflow_dispatch runs it on demand for any branch (imgui-touching PRs).
+#
+# Fully headless: the harness's --headless arm creates an ImGui context with a
+# CPU font atlas — no GLFW window, no GL context, no xvfb. libglfw3-dev is still
+# required because imguiApp.shared_module is dlopened (the loader resolves GLFW
+# imports; no glfw function is called under --headless).
+#
+# windows-latest is deliberately absent: the suite fastfails (0xC0000409) only
+# on the CI Windows runner, and libhv's Windows event loop stalls after 16
+# POST /command round-trips per subprocess. Re-add when both are fixed; the
+# per-OS recipe lived in the old borisbat/dasImgui tests.yml (archived).
+#
+# The record_*.das drivers beside the tests are def-main scripts (not [test]s);
+# dastest skips them. Recordings need a real windowed GL host and cannot run on
+# CI runners (macOS: NSGL "Failed to find a suitable pixel format").
+
+on:
+  schedule:
+    # 03:00 UTC — staggered after build.yml's 02:00 nightly and the 02:30
+    # daspkg-index sweep so the three never compete for runners.
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    # the nightly cron only runs on the canonical repo — forks don't run it.
+    # Manual workflow_dispatch still works anywhere.
+    if: github.event_name != 'schedule' || github.repository == 'GaijinEntertainment/daScript'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: "SCM Checkout"
+        uses: actions/checkout@v4
+
+      - name: "Install system dependencies (Linux)"
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libglfw3-dev \
+            libfreetype6-dev \
+            mesa-common-dev \
+            xorg-dev
+
+      - name: "Install system dependencies (macOS)"
+        if: matrix.os == 'macos-latest'
+        # bison: macOS ships v2.3, daslang's ds_parser.ypp needs bison 3+.
+        run: |
+          brew install glfw freetype bison
+          echo "/opt/homebrew/opt/bison/bin" >> "$GITHUB_PATH"
+
+      - name: "Install CMake and Ninja"
+        uses: lukka/get-cmake@latest
+
+      - name: "Set up sccache"
+        uses: mozilla-actions/sccache-action@v0.0.10
+
+      - name: "Build daslang + daslang-live + shared modules"
+        run: |
+          set -eux
+          cmake --no-warn-unused-cli -B./build \
+            -DCMAKE_BUILD_TYPE:STRING=Release \
+            -DDAS_HV_DISABLED=OFF \
+            -DDAS_PUGIXML_DISABLED=OFF \
+            -DDAS_LLVM_DISABLED=ON \
+            -DDAS_GLFW_DISABLED=OFF \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            -G Ninja
+          # daslang + daslang-live plus the shared modules daslang-live dlopens
+          # at runtime: LiveHost (lifecycle API), Glfw (dlopened, no glfw call
+          # under --headless), HV (the live HTTP API), Clipboard/PUGIXML/
+          # StbImage (rendering deps), and the dasImgui trio.
+          cmake --build ./build --parallel --target \
+            daslang daslang-live \
+            dasModuleLiveHost dasModuleGlfw dasModuleHV dasModuleClipboard \
+            dasModulePUGIXML dasModuleStbImage \
+            dasModuleImgui imguiApp imguiAppHeadless
+          sccache --show-stats
+
+      - name: "Run integration tests (headless)"
+        # --test targets the folder DIRECTLY, which bypasses the tests/.das_test
+        # gate by design (the gate only guards `--test tests/` full sweeps; its
+        # --imgui opt-in is for those). No flag needed here.
+        # ubuntu: --isolated-mode, 4 workers on ports 9090-9093 (dastest brands
+        # each subprocess with --worker-index; playwright derives the port).
+        # macOS: SERIAL — the ~3-vCPU runner starves parallel hosts until
+        # /status races the 10s request timeout; serial removes the contention,
+        # so its sweep timeout is bumped instead.
+        # Excludes (all platforms): synth-IO-through-GLFW tests cannot pass
+        # headless (no GLFW event queue) — glfw_synth, key_hud; and
+        # embedded_terminal needs the Windows-only ConPTY backend.
+        env:
+          DASLIVE_HV_LOG: stderr
+          # Surface dlopen failures before they collapse into a misleading
+          # missing-prerequisite cascade in dastest output.
+          DAS_TRACE_MODULE_LOAD: "1"
+          DASLIVE_HV_LOG_LEVEL: DEBUG
+        run: |
+          set -eux
+          DASTEST_TIMEOUT=600
+          ISOLATED="--isolated-mode --isolated-mode-threads 4"
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            ISOLATED=""          # serial: one daslang-live at a time, no host starvation
+            DASTEST_TIMEOUT=1800 # serial is slower than 4-way; give the sweep headroom
+          fi
+          ./bin/daslang dastest/dastest.das -- \
+            --test tests/dasImgui \
+            --timeout $DASTEST_TIMEOUT \
+            $ISOLATED \
+            --exclude glfw_synth \
+            --exclude key_hud \
+            --exclude embedded_terminal \
+            --headless

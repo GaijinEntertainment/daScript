@@ -295,6 +295,73 @@ IF(COMMAND ADD_MODULE_CPP)
     IF(NOT EMSCRIPTEN)
         FIND_PACKAGE(OpenGL REQUIRED)
         TARGET_LINK_LIBRARIES(libImguiApp PUBLIC ${OPENGL_LIBRARIES})
+
+        # ===== shared twins =====
+        # The default daslang/daslang-live host is the DYNAMIC flavor: it loads
+        # {module}/dasModule*.shared_module per .das_module registration, so the
+        # static halves above are invisible to it (they serve daslang_static and
+        # embedders). Mirror the standalone desktop targets below, but link
+        # in-tree CMake targets instead of SDK file paths. Each DLL is its own
+        # link unit, so no DAS_IMGUI_APP_EXTERN_GLFW_TYPE_FACTORY here and
+        # IMGUI_API exports flow dasModuleImgui -> app backends via import libs.
+        IF(WIN32)
+            SET(IMGUI_PUBLIC_ATTR "__declspec\(dllexport\)")
+        ELSE()
+            SET(IMGUI_PUBLIC_ATTR "__attribute__\(\(visibility\(\"default\"\)\)\)")
+        ENDIF()
+
+        ADD_DAS_SHARED_MODULE_LIB(dasModuleImgui ${DAS_IMGUI_BIND_SRC} ${DAS_IMGUI_SRC})
+        TARGET_COMPILE_DEFINITIONS(dasModuleImgui
+            PUBLIC ${DAS_IMGUI_COMMON_DEFS}
+            PRIVATE DAS_ENABLE_DLL=1 DAS_CLIPBOARD_IMPORTS=1 IMGUI_API=${IMGUI_PUBLIC_ATTR})
+        TARGET_INCLUDE_DIRECTORIES(dasModuleImgui PRIVATE
+            ${imgui_INCLUDE_DIR}
+            ${MD4C_INCLUDE_DIR}
+            ${DAS_IMGUI_DIR}/src
+            ${DAS_IMGUI_CLIPBOARD_ROOT}/src)
+        TARGET_LINK_LIBRARIES(dasModuleImgui PRIVATE freetype dasModuleClipboard)
+        SETUP_CPP11(dasModuleImgui)
+
+        ADD_DAS_SHARED_MODULE_LIB(imguiApp ${DAS_IMGUI_APP_SRC})
+        TARGET_COMPILE_DEFINITIONS(imguiApp
+            PUBLIC ${DAS_IMGUI_COMMON_DEFS}
+            PRIVATE DAS_ENABLE_DLL=1
+            IMGUI_API=${IMGUI_PUBLIC_ATTR}
+            IMGUI_IMPL_API=${IMGUI_PUBLIC_ATTR}
+            IMGUI_IMPL_OPENGL_LOADER_GL3W)
+        TARGET_INCLUDE_DIRECTORIES(imguiApp PRIVATE
+            ${imgui_INCLUDE_DIR}
+            ${GLFW_INCLUDE_DIR}
+            ${DAS_IMGUI_DIR}/gl3w
+            ${DAS_IMGUI_DIR}/src
+            ${DAS_IMGUI_GLFW_ROOT}/src)
+        TARGET_LINK_LIBRARIES(imguiApp PRIVATE dasModuleImgui ${OPENGL_LIBRARIES})
+        IF(WIN32)
+            TARGET_LINK_LIBRARIES(imguiApp PRIVATE ${DAS_IMGUI_GLFW_ROOT}/glfw_dyn/$<CONFIG>/lib/glfw3dll.lib)
+        ELSEIF(APPLE)
+            FIND_LIBRARY(COCOA_LIBRARY Cocoa REQUIRED)
+            FIND_LIBRARY(COREFOUNDATION_LIBRARY CoreFoundation REQUIRED)
+            TARGET_LINK_LIBRARIES(imguiApp PRIVATE
+                ${DAS_IMGUI_GLFW_ROOT}/glfw_dyn/$<CONFIG>/lib/libglfw.dylib
+                ${COCOA_LIBRARY} ${COREFOUNDATION_LIBRARY})
+        ELSE()
+            TARGET_LINK_LIBRARIES(imguiApp PRIVATE
+                ${DAS_IMGUI_GLFW_ROOT}/glfw_dyn/$<CONFIG>/lib/libglfw.so
+                X11)
+        ENDIF()
+        # glfw_dyn import lib comes from dasGlfw's ExternalProject — order after it
+        ADD_DEPENDENCIES(imguiApp GLFW3_DYN)
+        SETUP_CPP11(imguiApp)
+
+        ADD_DAS_SHARED_MODULE_LIB(imguiAppHeadless ${DAS_IMGUI_DIR}/src/module_imgui_app_headless.cpp)
+        TARGET_COMPILE_DEFINITIONS(imguiAppHeadless
+            PUBLIC ${DAS_IMGUI_COMMON_DEFS}
+            PRIVATE DAS_ENABLE_DLL=1 IMGUI_API=${IMGUI_PUBLIC_ATTR})
+        TARGET_INCLUDE_DIRECTORIES(imguiAppHeadless PRIVATE
+            ${imgui_INCLUDE_DIR}
+            ${DAS_IMGUI_DIR}/src)
+        TARGET_LINK_LIBRARIES(imguiAppHeadless PRIVATE dasModuleImgui)
+        SETUP_CPP11(imguiAppHeadless)
     ENDIF()
 
 ELSEIF(EMSCRIPTEN)

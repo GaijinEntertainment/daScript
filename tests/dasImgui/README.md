@@ -10,13 +10,15 @@ Two complementary test surfaces live in this directory.
 and asserts behavior. This is the canonical regression suite.
 
 The suite is **nightly-only in CI** (`nightly_imgui.yml`): the `tests/.das_test`
-gate skips this directory unless the runner passes `--imgui`, so per-PR
-`--test tests/` sweeps never pay for the 151 subprocess spawns.
+gate skips this directory in `--test tests/` full sweeps unless the runner
+passes `--imgui`, so per-PR sweeps never pay for the 151 subprocess spawns.
+Targeting the folder directly (as below and as the nightly does) bypasses the
+gate — no flag needed.
 
 Run from the daScript repo root:
 
 ```
-daslang.exe dastest/dastest.das -- --test tests/dasImgui --imgui --headless
+daslang.exe dastest/dastest.das -- --test tests/dasImgui --headless
 ```
 
 Expect ~151 tests (one daslang-live subprocess per test, ~4-5s each; add

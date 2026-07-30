@@ -989,6 +989,17 @@ jobs:
       # is where libclang/cbind is available (same reason as the self-binder).
       run: ./bin/daslang.exe modules/dasClangBind/tests/test_const_preproc.das
 
+    - name: "Run self-binder (bind_imgui.das)"
+      # dasImgui's generated bindings freshness gate — same rail as
+      # bind_clangbind above (cbind/libclang works on this worker; the linux
+      # extended_checks lane can't load libclang beside dasLLVM). The imgui/
+      # source dir is populated by the configure step's FetchContent.
+      run: |
+        set -eux
+        ./bin/daslang.exe modules/dasImgui/bind/bind_imgui.das
+        git diff --exit-code -- modules/dasImgui/src/ \
+          || (echo "ERROR: dasImgui generated files are out of date. Run './bin/daslang modules/dasImgui/bind/bind_imgui.das' locally and commit the result." && exit 1)
+
   build_windows_clangcl:
   ###########################################################
   # Catches clang-cl build regressions. Builds with Ninja driving clang-cl directly
@@ -1103,7 +1114,7 @@ jobs:
   # (glibc warn_unused_result on chdir/etc., -Wstringop-overflow / -Warray-bounds
   # / -Wmaybe-uninitialized false positives under -O3) are invisible to our own
   # CI and only ever surface downstream, where external module repos build
-  # daslang from source with the default system g++ (e.g. dasImgui's
+  # daslang from source with the default system g++ (e.g. dasImguiNodeEditor's
   # ubuntu-latest job). This job closes that gap. Compile-only: the clang lanes
   # already run the test sweeps; the point here is the strict-warning gate.
   #
