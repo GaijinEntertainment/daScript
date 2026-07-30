@@ -32,6 +32,13 @@
    (`model_available` + `DASLLAMA_PARITY_FULL=1` — see `tests/_model_tier.das` and
    `tests/CLAUDE.md`) and runs only as the FINAL pre-PR gate, never in the iteration
    loop. A new test that loads a big model ungated is a review defect.
+18. **Every logits-checking test also logs decoded TEXT.** Any cell that compares logits
+    (tolerance compares, teacher-forced feeds) `to_log`s a decoded-text form of both sides
+    (the forced stream plus the GPU's greedy would-be picks, or at minimum both next-token
+    pieces), and every token-for-token generate cell logs both decoded streams
+    (`log_gen_texts` in `tests/_model_tier.das`) — a red, or a suspicious green, must be
+    eyeball-able as text in the log, not just an id/float diff. A numeric-only parity cell
+    is a review defect.
 
 ## Structure
 
@@ -97,8 +104,11 @@
     a kernel class carries its whole dispatch surface wherever it's placed — "the builder
     needs the driver module" is never a reason to put a kernel in prefill/decode. A NEW
     `[metal_kernel]` class goes in `dasllama_metal_kernels`; the 33 prefill-only classes
-    still sitting in `dasllama_metal_prefill` are ledgered debt (ARCHITECTURE.md M1 row),
-    not precedent — don't add beside them.
+    still sitting in `dasllama_metal_prefill` are convergence debt, not precedent — don't
+    add beside them.
+
+## Implementation
+
 16. **Vulkan descriptor sets build through `vk_set6`/`vk_write6`; kernel stages through the
     shared helpers.** A hand-rolled `write_buf_desc` six-pack (+ `update_descriptor_sets` +
     `hz_set_bits`) is a review defect — `vk_set6` allocates-and-writes, `vk_write6` rewrites in
@@ -109,3 +119,9 @@
     are error 50501 — restructure per-element), and float op ORDER is contractual (keep the
     caller's `+=` granularity; never fold a sum before the accumulate). Deliberate variants
     (coopmat pair, h128 flash twin, per-format scale folds) stay separate — don't "unify" them.
+17. **A new GPU kernel ships with a small model in the kernel coverage oracle.** When a
+    change adds a kernel (a `[metal_kernel]` class, a vulkan `[compute_shader]`), the kernel
+    coverage suite (small-model dispatch census, metal + vulkan) gains a run that actually
+    DISPATCHES it — the smallest model/shape that reaches the kernel. A kernel no covered
+    run dispatches surfaces as a LOUD warning, never an auto-dead verdict; adding a kernel
+    without extending the coverage oracle is a review defect.

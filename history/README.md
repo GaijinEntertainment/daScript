@@ -111,3 +111,4 @@ listed in the log below — search it first when hunting for a doc.
 - 2026-07-29 `modules/dasLLAMA/turboquant_research.md` → `history/dasLLAMA/turboquant_research.md` — tq4 research briefs (verdicts → modules/dasLLAMA/ARCHITECTURE.md)
 - 2026-07-29 `modules/dasLLAMA/audio_models_plan.md` → `history/dasLLAMA/audio_models_plan.md` — audio-wave tracker, sessions A–F all shipped (findings transferred; open Mistral [INST] item → PERF_LEDGER.md)
 - 2026-07-29 `modules/dasLLAMA/box_profile.epyc9654.json` → `history/dasLLAMA/box_profile.epyc9654.json` — EPYC 9654 tune sidecar, beside its measurements doc
+- 2026-07-30 `modules/dasLLAMA/ARCHITECTURE.md` (extraction-ledger section) → `history/dasLLAMA/reorg_extraction_ledger.md` — the reorg's per-move record; ARCHITECTURE.md now carries placement rules only (no historical data, per its header note)

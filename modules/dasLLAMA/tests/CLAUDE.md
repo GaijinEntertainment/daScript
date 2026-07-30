@@ -114,6 +114,11 @@ Always capture COMPLETE logs (the runner does this); grep afterwards, never at c
 a capture-time filter once hid the exact proof line a verification run existed to produce.
 When a fixture claims a size/depth property ("2030 tokens", "crosses 2048"), assert the
 actual number in the test; a resize cap is not evidence.
+THE EYEBALL RAIL (CODEREVIEW rule 18): every token-for-token generate cell logs both decoded
+streams (`log_gen_texts` in `_model_tier.das`), and every logits-tolerance cell logs a decoded
+text form (forced stream + the GPU's greedy would-be picks, or both next-token pieces) — read
+the text before trusting a red or a suspicious green; a near-tie synonym flip and real garbage
+look identical as id diffs and completely different as text.
 
 ## Stale truth caches (`<model>.ref.<key>.tsv`)
 
@@ -124,5 +129,10 @@ with the GPU side actually CORRECT (it matches today's CPU). Before declaring a 
 regression: (1) stash + clean-tree rerun (same red ⇒ not your diff), (2) `mv` the cell's `.ref`
 tsv aside and rerun — a fresh-truth green means stale cache, keep the refreshed tsv. Counting
 caches are tie-proof by construction and should NOT move; a counting-cache mismatch is a real
-red. (2026-07-21: gemma4-12b/k4 `gen_free_n24` flipped at token 22 after the #3518/#3530 window
-while both counting caches held.)
+red.
+
+Freeform TOKEN-parity cells are contract-breaking and banned: new freeform coverage uses the
+FORCED-FEED logits-tolerance form (the k4 freeform cell, cached stream `gen_free_n128`), never
+token equality. For that form the cache is a FEED, not a truth: both sides force through the
+same tokens, so a stale feed stays a valid instrument and the stale-cache red class does not
+exist for it. Counting cells stay token-exact.

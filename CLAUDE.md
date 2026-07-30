@@ -117,6 +117,14 @@ When you discover something new about daslang syntax, semantics, or conventions 
 
 **Syntax and factual corrections are fix-in-place, always.** If a compiler error, probe, or user correction shows that a claim in CLAUDE.md or `skills/*.md` is wrong, incomplete, or stale, fix it in the same session and flag the edit in the end-of-turn summary — never defer it to a proposal. Verify the corrected claim before writing it (grammar truth is `src/parser/ds2_parser.ypp`; behavior truth is a probe-compile with the current binary).
 
+**Rule files carry rules, not history.** CLAUDE.md files, `skills/*.md`, and per-module rule
+docs (CODEREVIEW.md-style checklists) state the CURRENT contract only — no incident anecdotes,
+no PR/issue numbers, no dated rulings, no "as of" changelog entries. History lives in git,
+`/history`, and memory. When a rule changes, replace the old text outright instead of
+appending a dated entry; state the timeless WHY, and if the motivating incident is worth
+keeping, archive it in `/history`. (Carve-out: `probe-verified <date>` tags on syntax/behavior
+claims are verification provenance, not history — they stay.)
+
 **Doc improvements at stopping points.** Propose-first applies only to what's left: restructuring, removing existing guidance, **or proposing a new skill file when you see a recurring pattern that no existing skill covers**. Doc edits direct future Claude behavior, so structural diffs still get review — but factual drift must be self-healing, not queued behind it.
 
 ### Writing a new skill
