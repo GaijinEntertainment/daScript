@@ -200,6 +200,30 @@ bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- --workload all
 - The store (`performance/records/<box>.json`) persists after every cell — a crash costs at
   most the in-flight cell. Re-runs upsert in place.
 
+### Oracle mode — the tables as a regression tripwire
+
+```sh
+# per refactor step on this box (das-only, minutes): re-verify the stored metal rows
+bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- --oracle --legs metal
+```
+
+`--oracle` inverts the sweep into a pure check: the work list is the STORE's das LLM rows for
+this box (a stored row whose model or `.dlim` is gone is a loud FAIL, not a skip), each row
+re-measures ONCE and gates one-sided against its stored mean — drop past `--oracle-fail`
+(default 5%) fails, past `--oracle-warn` (default 3%) warns, gains report (flagged past the
+fail bar as "suspicious — verify"). Exit is nonzero on any FAIL.
+
+- GATE 1 — llama.cpp never re-measures: no ref runs, ref binaries not even required.
+- GATE 2 — one das pass per row. The >3% cv warm-retry stays: it REPLACES a bad cold measure.
+- GATE 3 — frozen artifacts: the child runs `lcpp_bench --frozen` (a missing `.dlim` panics
+  instead of minting), step-zero GC is skipped, and the store is never written.
+- Default is stop-at-first-FAIL (fail fast mid-refactor); `--oracle-keep-going` runs the full
+  board. `-o substr` narrows to one model; ASR legs are excluded (their das cells are CPU-path).
+- The tune gate applies unchanged: a manifest older than the binary fails every cell — re-mint
+  (`DAS_TUNE_MODE=tune DAS_TUNE_MANIFEST=<box manifest> bin/daslang -jit
+  modules/dasLLAMA/harness/dasllama_tuner.das`) and check the fresh winners against the stored
+  rows' `tune` stamps before trusting deltas.
+
 ## 5. Publish
 
 ```sh

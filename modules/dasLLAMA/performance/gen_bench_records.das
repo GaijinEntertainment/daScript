@@ -20,6 +20,8 @@ require math
 //           Metal op-offload from serving 'CPU' rows on the GPU; nopo == nometal-build)
 //   asr   : das cpu (asr_bench_cell) vs each catalog reference tool, per clip
 //   bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- [-o substr] [--workload llm|asr|all]
+// --oracle inverts the rig into a regression tripwire: the stored das LLM rows re-measure once
+// each (frozen artifacts, no refs, store never written) and gate against their stored means.
 // Ref binaries come from setup_lcpp_ref: --ref-clean/--ref-stock or LLAMA_BENCH_CLEAN/LLAMA_BENCH_STOCK.
 // ASR references resolve via WHISPER_CPP / MTMD_BIN / ONNX_PY / NEMO_PY (profile_common).
 
@@ -69,6 +71,18 @@ struct Args {
     @clarg_name = "asr-reps"
     @clarg_doc = "Timed repetitions per ASR clip, best kept (default: 2 — clips are minutes, not seconds)"
     asr_reps : int = 2
+
+    @clarg_doc = "Verify instead of measure: re-run each stored das LLM row once (frozen artifacts — .dlim must exist) and gate it against the store. No refs, no store writes. Stops at the first FAIL"
+    oracle : bool
+
+    @clarg_doc = "Oracle: run every row and report the full board instead of stopping at the first FAIL"
+    oracle_keep_going : bool
+
+    @clarg_doc = "Oracle: WARN when a cell lands this far below its stored mean, percent (default: 3)"
+    oracle_warn : float = 3.0
+
+    @clarg_doc = "Oracle: FAIL when a cell lands this far below its stored mean, percent (default: 5)"
+    oracle_fail : float = 5.0
 
     @clarg_short = "?"
     @clarg_doc = "Show this help and exit"
@@ -136,23 +150,24 @@ def private settle(cfg : Args) {
     }
 }
 
-def private das_cell(file, path, be : string; accel : bool; cfg : Args; threads : int; cellPath, note, store : string;
-                     var models : array<BenchModel>; var failed : array<string>) {
+// One lcpp_bench child with the cold-map cv retry — the shared engine of das_cell and the oracle
+// cells. Fills `cell` from the child's --json-path records; false = the child failed or its
+// records did not parse (already logged).
+def private run_das_child(file, path, be, tag : string; accel, frozen : bool; cfg : Args; threads : int;
+                          cellPath : string; var cell : array<BenchModel>) : bool {
     let t0 = ref_time_ticks()
-    let tag = accel ? "{be} accel" : be
-    to_log(LOG_INFO, "gen_bench_records: START {file} das {tag}\n")
-    logger_info("bench.records", "cell start", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(tag)}))
     var args <- [daslang_bin(), "-jit", "modules/dasLLAMA/benchmarks/lcpp_bench.das", "--",
                  "-m", path, "-p", "{cfg.plen}", "-n", "{cfg.ngen}", "-r", "{cfg.reps}",
                  "-t", "{threads}", "-o", "json", "--json-path", cellPath]
     if (be == "metal") {
-        args |> push("--ngl")
-        args |> push("99")
+        args |> push_from(["--ngl", "99"])
     }
     if (accel) {
         args |> push("--accel")
     }
-    var cell : array<BenchModel>
+    if (frozen) {
+        args |> push("--frozen")
+    }
     for (attempt in range(2)) {
         var out = ""
         let rc = run_and_stream(args, out)
@@ -161,8 +176,7 @@ def private das_cell(file, path, be : string; accel : bool; cfg : Args; threads 
             let tail = slice(out, max(0, length(out) - 400))
             to_log(LOG_ERROR, "gen_bench_records: FAILED {file} das {tag} rc={rc} ({elapsed_ms(t0)} ms) — tail: {tail}\n")
             logger_error("bench.records", "cell FAILED", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(tag), "rc" => JV(rc), "elapsed_ms" => JV(elapsed_ms(t0))}))
-            failed |> push("{file} das {tag}")
-            return
+            return false
         }
         // variance tripwire, self-healing: the FIRST das process on a cold/churned .dlim map
         // warms across its reps (2026-07-24 35B: 150->198 monotone, mean 177 ± 21, while the
@@ -193,10 +207,141 @@ def private das_cell(file, path, be : string; accel : bool; cfg : Args; threads 
             to_log(LOG_WARNING, "gen_bench_records: STILL HIGH VARIANCE {file} das {tag} (cv {worst * 100.0lf:.1f}%) after a warm re-run — keeping it, treat with suspicion\n")
         }
     }
+    return true
+}
+
+def private das_cell(file, path, be : string; accel : bool; cfg : Args; threads : int; cellPath, note, store : string;
+                     var models : array<BenchModel>; var failed : array<string>) {
+    let t0 = ref_time_ticks()
+    let tag = accel ? "{be} accel" : be
+    to_log(LOG_INFO, "gen_bench_records: START {file} das {tag}\n")
+    logger_info("bench.records", "cell start", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(tag)}))
+    var cell : array<BenchModel>
+    if (!run_das_child(file, path, be, tag, accel, false, cfg, threads, cellPath, cell)) {
+        failed |> push("{file} das {tag}")
+        return
+    }
     absorb_cell(models, cell, store, note)
     remove(cellPath)
     to_log(LOG_INFO, "gen_bench_records: DONE {file} das {tag} ({elapsed_ms(t0)} ms)\n")
     logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(tag), "elapsed_ms" => JV(elapsed_ms(t0))}))
+}
+
+// ===== Oracle mode (--oracle: the store rows ARE the oracle) =====
+
+// One oracle cell: re-measure the stored row's leg under frozen artifacts and gate against it.
+// The verdict line lands on the board; per-test detail logs live.
+def private oracle_cell(gguf, be, tag : string; accel : bool; stored : BenchRun; cfg : Args; threads : int;
+                        cellPath : string; var board : array<string>) : OracleVerdict {
+    let path = "{models_dir()}{gguf}"
+    if (!stat(path).is_valid) {
+        let miss = "FAIL {gguf} das {tag} — model file missing: {path}"
+        to_log(LOG_ERROR, "gen_bench_records: ORACLE {miss}\n")
+        board |> push(miss)
+        return OracleVerdict.fail
+    }
+    to_log(LOG_INFO, "gen_bench_records: ORACLE START {gguf} das {tag}\n")
+    logger_info("bench.records", "oracle cell start", JV({"model" => JV(gguf), "leg" => JV(tag)}))
+    var cell : array<BenchModel>
+    if (!run_das_child(gguf, path, be, tag, accel, true, cfg, threads, cellPath, cell)) {
+        board |> push("FAIL {gguf} das {tag} — cell did not measure (missing .dlim, unfit tune, or crash — see the log)")
+        return OracleVerdict.fail
+    }
+    remove(cellPath)
+    var verdict = OracleVerdict.fail
+    var detail = "no das run in the fresh cell records"
+    for (c in cell) {
+        if (c.gguf != gguf) {
+            continue
+        }
+        for (r in c.runs) {
+            if (r.engine != "das") {
+                continue
+            }
+            var lines : array<string>
+            verdict = oracle_compare(r, stored, double(cfg.oracle_warn), double(cfg.oracle_fail), lines)
+            detail = join(lines, "; ")
+            delete lines
+        }
+    }
+    let line = "{oracle_verdict_str(verdict)} {gguf} das {tag}: {detail}"
+    let level = verdict == OracleVerdict.fail ? LOG_ERROR : (verdict == OracleVerdict.warn ? LOG_WARNING : LOG_INFO)
+    to_log(level, "gen_bench_records: ORACLE {line}\n")
+    logger_info("bench.records", "oracle cell done", JV({"model" => JV(gguf), "leg" => JV(tag), "verdict" => JV(oracle_verdict_str(verdict))}))
+    board |> push(line)
+    return verdict
+}
+
+// The --oracle driver: the work list is the STORE's das LLM rows for this box (the published
+// tables re-verify; coverage gaps fail loudly), each re-measured once and gated one-sided
+// against its stored mean. Pure check — the store is never written.
+def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : array<BenchModel>;
+                        threads : int; cellPath : string) : int {
+    let box = box_name()
+    var board : array<string>
+    var cells = 0
+    var warns = 0
+    var fails = 0
+    var stopped = false
+    for (m in models) {
+        break if (stopped)
+        if (!empty(cfg.only) && find(m.gguf, cfg.only) < 0) {
+            continue
+        }
+        for (sr in m.runs) {
+            break if (stopped)
+            if (sr.engine != "das" || sr.box != box || !empty(sr.workload)) {
+                continue
+            }
+            var be = ""
+            var tag = ""
+            var accel = false
+            var want = false
+            if (sr.backend == "metal" && sr.flavor == "tuned") {
+                be = "metal"
+                tag = "metal"
+                want = legMetal
+            } elif (sr.backend == "cpu" && sr.flavor == "tuned") {
+                be = "cpu"
+                tag = "neon"
+                want = legNeon
+            } elif (sr.backend == "cpu" && sr.flavor == "accel") {
+                be = "cpu"
+                tag = "amx"
+                accel = true
+                want = legAmx
+            } else {
+                to_log(LOG_WARNING, "gen_bench_records: ORACLE skips stored run {m.gguf} {sr.backend}/{sr.flavor} — no rig leg produces it\n")
+                continue
+            }
+            if (!want) {
+                continue
+            }
+            cells++
+            settle(cfg)
+            let v = oracle_cell(m.gguf, be, tag, accel, sr, cfg, threads, cellPath, board)
+            if (v == OracleVerdict.fail) {
+                fails++
+                if (!cfg.oracle_keep_going) {
+                    to_log(LOG_ERROR, "gen_bench_records: ORACLE stopping at the first FAIL (--oracle-keep-going runs the full board)\n")
+                    stopped = true
+                }
+            } elif (v == OracleVerdict.warn) {
+                warns++
+            }
+        }
+    }
+    to_log(LOG_INFO, "gen_bench_records: ===== ORACLE BOARD ({box}) =====\n")
+    for (line in board) {
+        to_log(LOG_INFO, "gen_bench_records:   {line}\n")
+    }
+    if (cells == 0) {
+        to_log(LOG_ERROR, "gen_bench_records: ORACLE found no stored das rows for the selected legs on {box} — nothing verified\n")
+        return 1
+    }
+    let early = stopped ? " — STOPPED EARLY" : ""
+    to_log(fails > 0 ? LOG_ERROR : LOG_INFO, "gen_bench_records: ORACLE {cells} cell(s): {fails} FAIL, {warns} WARN{early}\n")
+    return fails > 0 ? 1 : 0
 }
 
 def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; cfg : Args; threads : int;
@@ -480,14 +625,17 @@ def main : int {
     }
     // STEP ZERO, automatic: GC image siblings that can never load again (BROKEN/version-stale)
     // across the dirs this sweep reads — a box once carried 274 GB of them. OTHER stays.
-    let gc_llm = dlim_clean(models_dir(), true)
-    if (gc_llm.removed > 0) {
-        to_log(LOG_INFO, "gen_bench_records: GC freed {gc_llm.freed >> 20l} MB — {gc_llm.removed} stale image(s) in {models_dir()}\n")
-    }
-    if (cfg.workload == "asr" || cfg.workload == "all") {
-        let gc_w = dlim_clean(whisper_models_dir(), true)
-        if (gc_w.removed > 0) {
-            to_log(LOG_INFO, "gen_bench_records: GC freed {gc_w.freed >> 20l} MB — {gc_w.removed} stale image(s) in {whisper_models_dir()}\n")
+    // --oracle skips it: the artifact set is frozen for the whole check.
+    if (!cfg.oracle) {
+        let gc_llm = dlim_clean(models_dir(), true)
+        if (gc_llm.removed > 0) {
+            to_log(LOG_INFO, "gen_bench_records: GC freed {gc_llm.freed >> 20l} MB — {gc_llm.removed} stale image(s) in {models_dir()}\n")
+        }
+        if (cfg.workload == "asr" || cfg.workload == "all") {
+            let gc_w = dlim_clean(whisper_models_dir(), true)
+            if (gc_w.removed > 0) {
+                to_log(LOG_INFO, "gen_bench_records: GC freed {gc_w.freed >> 20l} MB — {gc_w.removed} stale image(s) in {whisper_models_dir()}\n")
+            }
         }
     }
     let apple = is_apple_box()
@@ -532,6 +680,23 @@ def main : int {
     if (!(legNeon || legAmx || legMetal)) {
         to_log(LOG_ERROR, "gen_bench_records: no legs selected (--backend {cfg.backend} --legs {cfg.legs})\n")
         return 1
+    }
+    if (cfg.oracle) {
+        // GATE 1: no refs run (binaries not even required); GATE 2: one das pass per stored row
+        // (the cv warm-retry stays — it REPLACES a bad cold measure); GATE 3: frozen artifacts.
+        if (cfg.workload == "asr") {
+            to_log(LOG_ERROR, "gen_bench_records: --oracle covers the LLM legs only — the asr das cells are CPU-path (they join when a phase touches the ASR path)\n")
+            return 1
+        }
+        let ostore = bench_records_path()
+        var omodels : array<BenchModel>
+        if (!read_bench_records(ostore, omodels)) {
+            to_log(LOG_ERROR, "gen_bench_records: --oracle needs an existing store — {ostore} is absent/unreadable\n")
+            return 1
+        }
+        let othreads = cfg.threads > 0 ? cfg.threads : profile_threads()
+        return oracle_main(cfg, legNeon, legAmx, legMetal, omodels,
+            othreads, "modules/dasLLAMA/performance/records/_cell_{box_name()}.json")
     }
     var refClean = empty(cfg.ref_clean) ? get_env_variable("LLAMA_BENCH_CLEAN") : cfg.ref_clean
     var refStock = empty(cfg.ref_stock) ? get_env_variable("LLAMA_BENCH_STOCK") : cfg.ref_stock

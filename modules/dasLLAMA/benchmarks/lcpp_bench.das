@@ -101,6 +101,9 @@ struct Args {
     @clarg_doc = "A/B MTP/NextN self-speculation in-process, OFF then ON (needs a NextN head in the GGUF). Runs the tg-real row, NOT the llama-bench tg row — acceptance is meaningless on synthetic ids. Reports the draft accept rate; mutually exclusive with the other A/B levers"
     mtp_ab : bool
 
+    @clarg_doc = "Refuse to mint artifacts: load only an existing prepared .dlim image, panic otherwise (the gen_bench_records --oracle contract)"
+    frozen : bool
+
     @clarg_doc = "Prompt corpus for the tg-real row (segments split on lines of two percent signs; default: data/wikitext2_prompts.txt beside this bench)"
     prompts : string = ""
 
@@ -299,6 +302,9 @@ def main() {
     }
     if (gpu) {
         set_metal_mode(MetalMode.required)   // before load_model — pins the portable backend, activates the metal overrides
+    }
+    if (cfg.frozen) {
+        set_image_artifacts_frozen(true)   // fail on a missing .dlim instead of minting one
     }
     // an unarmed lever silently measures the SAME thing twice — the one A/B failure that looks
     // like a real result, so it warns rather than being left to the reader

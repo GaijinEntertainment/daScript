@@ -1781,6 +1781,64 @@ def upsert_bench_model(var models : array<BenchModel>; var incoming : BenchModel
     models |> emplace(incoming)
 }
 
+// ===== Oracle mode (gen_bench_records --oracle: the stored rows re-verify against fresh cells) =====
+
+//! Worst-case cell verdict of an oracle comparison — ``fail`` drives the nonzero exit.
+enum OracleVerdict {
+    ok
+    warn
+    fail
+}
+
+def oracle_verdict_str(v : OracleVerdict) : string {
+    return v == OracleVerdict.fail ? "FAIL" : (v == OracleVerdict.warn ? "WARN" : "OK")
+}
+
+//! Gate a fresh das run against its stored row, one line per stored tok/s test key. One-sided:
+//! a drop past ``fail_pct`` fails, past ``warn_pct`` warns; a gain reports (flagged as
+//! suspicious past ``fail_pct``, but never failed). A stored key missing from the fresh run —
+//! and a stored row with no tok/s tests at all — is a fail: the stored row is the coverage
+//! contract. Returns the worst verdict across keys.
+def oracle_compare(fresh, stored : BenchRun; warn_pct, fail_pct : double; var lines : array<string>) : OracleVerdict {
+    var worst = OracleVerdict.ok
+    var compared = 0
+    var tkeys <- [for (k in keys(stored.tests)); k]
+    sort(tkeys)
+    for (k in tkeys) {
+        let s_tok = stored.tests?[k]?.tok_s ?? 0.0lf
+        if (s_tok <= 0.0lf) {   // ms-shaped (ASR) or empty rows sit outside the tok/s gate
+            continue
+        }
+        compared++
+        let f_tok = fresh.tests?[k]?.tok_s ?? 0.0lf
+        if (f_tok <= 0.0lf) {
+            lines |> push("{k} MISSING from the fresh run (stored {s_tok:.1f})")
+            worst = OracleVerdict.fail
+            continue
+        }
+        let s_sd = stored.tests?[k]?.stddev ?? 0.0lf
+        let delta = (f_tok - s_tok) * 100.0lf / s_tok
+        var v = OracleVerdict.ok
+        if (delta < -fail_pct) {
+            v = OracleVerdict.fail
+        } elif (delta < -warn_pct) {
+            v = OracleVerdict.warn
+        }
+        let note = (v == OracleVerdict.ok && delta > fail_pct) ? " (suspicious gain — verify the cell)" : ""
+        let sign = delta < 0.0lf ? "" : "+"
+        lines |> push("{k} {f_tok:.1f} vs {s_tok:.1f}±{s_sd:.1f} ({sign}{delta:.1f}%) {oracle_verdict_str(v)}{note}")
+        if (int(v) > int(worst)) {
+            worst = v
+        }
+    }
+    delete tkeys
+    if (compared == 0) {
+        lines |> push("no comparable tok/s tests in the stored row")
+        worst = OracleVerdict.fail
+    }
+    return worst
+}
+
 // ===== llama-bench invocation (shared by lcpp_bench --ref and the establisher) =====
 
 //! One llama-bench `-o json` result row (prefill rows have n_gen=0, decode rows n_prompt=0).

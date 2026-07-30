@@ -135,6 +135,15 @@ struct DlimImageInfo {
 // registers its own, so inventory/GC verdicts recognize those images as CURRENT
 var private g_family_tags : array<string>
 
+var private g_image_frozen = false
+
+//! Artifact-frozen mode — the perf-oracle contract: ``load_model_cached`` loads ONLY existing
+//! prepared images, and any load that would mint/bake a flavor panics instead of falling
+//! through to the gguf. Arms via lcpp_bench ``--frozen``.
+def set_image_artifacts_frozen(frozen : bool) {
+    g_image_frozen = frozen
+}
+
 //! Register an image family/flavor tag (call from the family module's [init]) so
 //! ``dlim_current_identities`` — and with it every list/GC verdict — covers its images.
 def register_image_family_tag(tag : string) {
@@ -1147,6 +1156,9 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                 return <- t
             }
             vulkan_bake_disarm()
+            if (g_image_frozen) {
+                panic("dasLLAMA: no prepared vulkan image for '{path}' ({image_path_for(path, vk_tag)}) and artifacts are frozen — pre-mint it")
+            }
             vulkan_bake_begin()   // whatever loads below runs the GPU walk — collect and bake
         }
         let img = image_path_for(path, "", qs)
@@ -1167,7 +1179,14 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
             }
             // a planar image of a metal-servable config under metal mode — drop the mapping
             // and regenerate the blob flavor (the planar file stays for CPU-mode loads)
+            if (g_image_frozen) {
+                panic("dasLLAMA: '{img}' is planar but this run needs the metal blob flavor, and artifacts are frozen — pre-mint {image_path_for(path, METAL_IMAGE_TAG)}")
+            }
             delete t
+        }
+        if (g_image_frozen) {
+            let want = want_metal ? image_path_for(path, METAL_IMAGE_TAG) : img
+            panic("dasLLAMA: no prepared image for '{path}' ({want}) and artifacts are frozen — pre-mint it")
         }
         guard_interp_gguf_load(path)
         var m <- load_model_(path, mode)
@@ -1195,6 +1214,9 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
         }
         dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
         return <- m
+    }
+    if (g_image_frozen) {
+        panic("dasLLAMA: the image rail is off/ineligible for '{path}' (mode {qs}) and artifacts are frozen — the oracle contract needs a prepared image")
     }
     guard_interp_gguf_load(path)
     var m <- load_model_(path, mode)
