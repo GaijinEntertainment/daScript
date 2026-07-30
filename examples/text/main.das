@@ -10,6 +10,7 @@ require imgui/imgui_icons
 require imgui/imgui_commands
 require imgui/imgui_markdown_tree_sitter
 require imgui/imgui_document_model
+require imgui/imgui_text_find
 require imgui/imgui_text_source_view
 require imgui/imgui_text_tree_sitter
 require imgui/imgui_theme_daslang
@@ -67,6 +68,15 @@ struct TextViewerCommandArgs {
     id : string
 }
 
+struct TextViewerFindArgs {
+    query : string
+    regex : bool = false
+}
+
+struct TextViewerFindStepArgs {
+    delta : int = 1
+}
+
 struct TextViewerDocument {
     id : int
     pending_dock : bool = true
@@ -83,6 +93,9 @@ struct TextViewerDocument {
     mode_override : int = -1
     syntax_mode : int = 0
     zoom_step : int = 20       // 10..60 maps to 50%..300% in exact 5% steps
+    find : TextFindState = TextFindState()
+    find_applied_jump : int = 0
+    find_scroll_byte : int = -1
 }
 
 var private g_fonts = FontRoleSet()
@@ -110,6 +123,9 @@ var private g_edit_copy_clicks = 0
 var private g_edit_select_all_clicks = 0
 var private g_edit_clear_clicks = 0
 var private g_edit_bindings_clicks = 0
+var private g_edit_find_clicks = 0
+var private g_edit_find_next_clicks = 0
+var private g_edit_find_prev_clicks = 0
 
 let SYNTAX_MODE_LABELS : array<string> <- [
     "Auto", "Plain", "daScript", "C", "C++", "Markdown"
@@ -133,6 +149,9 @@ let CMD_EDIT_COPY = "edit.copy"
 let CMD_EDIT_SELECT_ALL = "edit.select_all"
 let CMD_EDIT_CLEAR_SELECTION = "edit.clear_selection"
 let CMD_EDIT_BINDINGS = "preferences.edit_bindings"
+let CMD_FIND = "find.open"
+let CMD_FIND_NEXT = "find.next"
+let CMD_FIND_PREV = "find.prev"
 
 def private mode_name(doc : TextViewerDocument const) : string {
     return doc.mode == TextViewMode.markdown ? "markdown" : "plain"
@@ -176,6 +195,7 @@ def private dispose_document(var doc : TextViewerDocument) {
     markdown_tree_sitter_dispose(doc.markdown_syntax)
     markdown_view_dispose(doc.markdown_view)
     text_source_view_dispose(doc.source_view)
+    text_find_dispose(doc.find)
     release_document_content(doc)
 }
 
@@ -405,6 +425,24 @@ def private parse_command_line() {
     }
 }
 
+def private define_find_commands() {
+    command_define(g_commands, CommandDefinition(
+        id = CMD_FIND, title = "Find...", category = "Edit",
+        scope = CommandScope.document),
+        command_binding(CMD_FIND, ImGuiKey.F, primary = true,
+                        scope = CommandScope.document))
+    command_define(g_commands, CommandDefinition(
+        id = CMD_FIND_NEXT, title = "Find Next", category = "Edit",
+        scope = CommandScope.document),
+        command_binding(CMD_FIND_NEXT, ImGuiKey.F3,
+                        scope = CommandScope.document, repeat = true))
+    command_define(g_commands, CommandDefinition(
+        id = CMD_FIND_PREV, title = "Find Previous", category = "Edit",
+        scope = CommandScope.document),
+        command_binding(CMD_FIND_PREV, ImGuiKey.F3, shift = true,
+                        scope = CommandScope.document, repeat = true))
+}
+
 def private define_commands() {
     // ImGuiKey's digit enumerators cannot be named directly in daslang because
     // `.0` parses as a float literal. ImGui keeps the digit row immediately
@@ -466,6 +504,7 @@ def private define_commands() {
     command_define(g_commands, CommandDefinition(
         id = CMD_EDIT_CLEAR_SELECTION, title = "Clear Selection", category = "Edit",
         scope = CommandScope.component))
+    define_find_commands()
     command_define(g_commands, CommandDefinition(
         id = CMD_EDIT_BINDINGS, title = "Edit Bindings...", category = "Preferences"))
     if (!harness_is_headless() && fexist(g_commands.config_path)) {
@@ -500,6 +539,9 @@ def private update_command_state() {
     command_set_enabled(g_commands, CMD_EDIT_COPY, has_selection)
     command_set_enabled(g_commands, CMD_EDIT_SELECT_ALL, has_active)
     command_set_enabled(g_commands, CMD_EDIT_CLEAR_SELECTION, has_selection)
+    command_set_enabled(g_commands, CMD_FIND, has_active)
+    command_set_enabled(g_commands, CMD_FIND_NEXT, has_active)
+    command_set_enabled(g_commands, CMD_FIND_PREV, has_active)
     command_set_selected(g_commands, CMD_VIEW_MARKDOWN,
         has_active && g_documents[active].mode == TextViewMode.markdown)
     command_set_selected(g_commands, CMD_VIEW_PLAIN,
@@ -540,6 +582,12 @@ def private dispatch_document_command(command_id : string; active : int) : bool 
         } else {
             text_source_view_clear_selection(g_documents[active].source_view)
         }
+    } elif (command_id == CMD_FIND) {
+        text_find_open(g_documents[active].find)
+    } elif (command_id == CMD_FIND_NEXT) {
+        text_find_step(g_documents[active].find, 1)
+    } elif (command_id == CMD_FIND_PREV) {
+        text_find_step(g_documents[active].find, -1)
     } else {
         return false
     }
@@ -602,6 +650,16 @@ def private draw_menu_bar() {
                 enabled = has_active))
             menu_label(EDIT_CLEAR_SELECTION, (text = "Clear Selection", shortcut = "",
                 enabled = command_enabled(g_commands, CMD_EDIT_CLEAR_SELECTION)))
+            separator(EDIT_FIND_SEPARATOR)
+            menu_label(EDIT_FIND, (text = "Find...",
+                shortcut = command_shortcut_text(g_commands, CMD_FIND),
+                enabled = has_active))
+            menu_label(EDIT_FIND_NEXT, (text = "Find Next",
+                shortcut = command_shortcut_text(g_commands, CMD_FIND_NEXT),
+                enabled = has_active))
+            menu_label(EDIT_FIND_PREV, (text = "Find Previous",
+                shortcut = command_shortcut_text(g_commands, CMD_FIND_PREV),
+                enabled = has_active))
             separator(EDIT_SEPARATOR)
             menu_label(EDIT_BINDINGS, (text = "Edit Bindings...", shortcut = ""))
         }
@@ -665,13 +723,60 @@ def private dispatch_menu_clicks() {
         g_edit_clear_clicks = EDIT_CLEAR_SELECTION.click_count
         let _ = command_invoke(g_commands, CMD_EDIT_CLEAR_SELECTION, CommandSource.menu)
     }
+    if (EDIT_FIND.click_count > g_edit_find_clicks) {
+        g_edit_find_clicks = EDIT_FIND.click_count
+        let _ = command_invoke(g_commands, CMD_FIND, CommandSource.menu)
+    }
+    if (EDIT_FIND_NEXT.click_count > g_edit_find_next_clicks) {
+        g_edit_find_next_clicks = EDIT_FIND_NEXT.click_count
+        let _ = command_invoke(g_commands, CMD_FIND_NEXT, CommandSource.menu)
+    }
+    if (EDIT_FIND_PREV.click_count > g_edit_find_prev_clicks) {
+        g_edit_find_prev_clicks = EDIT_FIND_PREV.click_count
+        let _ = command_invoke(g_commands, CMD_FIND_PREV, CommandSource.menu)
+    }
     if (EDIT_BINDINGS.click_count > g_edit_bindings_clicks) {
         g_edit_bindings_clicks = EDIT_BINDINGS.click_count
         let _ = command_invoke(g_commands, CMD_EDIT_BINDINGS, CommandSource.menu)
     }
 }
 
+def private draw_document_find(var doc : TextViewerDocument) {
+    return if (!doc.find.open)
+    text_find_bar(doc.id, doc.find)
+    let _ = text_find_rebuild(doc.find, doc.source.text, doc.source.revision)
+    if (doc.find.jump_revision != doc.find_applied_jump) {
+        doc.find_applied_jump = doc.find.jump_revision
+        let found = text_find_current(doc.find)
+        if (found.start_byte >= 0) {
+            if (doc.mode == TextViewMode.markdown) {
+                let _jumped = markdown_view_select_source_range(
+                    doc.markdown_view, found.start_byte, found.end_byte)
+            } else {
+                text_source_view_select_range(doc.source_document, doc.source_view,
+                                              found.start_byte, found.end_byte)
+                doc.find_scroll_byte = found.start_byte
+            }
+        }
+    }
+    if (doc.find.open && IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)
+            && IsKeyPressed(ImGuiKey.Escape, false)) {
+        text_find_close(doc.find)
+    }
+}
+
+def private apply_find_scroll(var doc : TextViewerDocument) {
+    return if (doc.find_scroll_byte < 0)
+    let line_top = text_source_view_line_top(doc.source_view, doc.find_scroll_byte)
+    if (line_top >= 0.0f) {
+        SetScrollY(clamp(line_top - GetWindowSize().y * 0.35f,
+                         0.0f, GetScrollMaxY()))
+    }
+    doc.find_scroll_byte = -1
+}
+
 def private draw_document(var doc : TextViewerDocument) {
+    draw_document_find(doc)
     let footer_height = GetFrameHeightWithSpacing()
     child(DOCUMENT_CONTENT,
           (text = "document content",
@@ -700,6 +805,7 @@ def private draw_document(var doc : TextViewerDocument) {
                 write_system_clipboard = !harness_is_headless())
             doc.source_result <- text_source_view("text source", doc.source_document,
                                                   doc.source_view, source_style)
+            apply_find_scroll(doc)
         }
     }
 
@@ -848,6 +954,19 @@ def text_viewer_state(_input : JsonValue?) : JsonValue? {
         source_selection_has_markers = doc.source_result.selection.styles.has_markers,
         markdown_selection_copy_revision = doc.markdown_view.selection_copy_revision,
         source_selection_copy_revision = doc.source_view.selection_copy_revision,
+        markdown_selection_revision = doc.markdown_view.selection_revision,
+        markdown_selection_start = md_text_selection_range(
+            doc.markdown_view.selection_anchor, doc.markdown_view.selection_focus).start_byte,
+        markdown_selection_end = md_text_selection_range(
+            doc.markdown_view.selection_anchor, doc.markdown_view.selection_focus).end_byte,
+        find_open = doc.find.open,
+        find_query = doc.find.query,
+        find_regex = doc.find.use_regex,
+        find_match_count = length(doc.find.matches),
+        find_current = doc.find.current,
+        find_error = doc.find.error,
+        find_jump_revision = doc.find.jump_revision,
+        find_applied_jump = doc.find_applied_jump,
         command_revision = g_command_revision,
         last_command = g_last_command,
         bindings_editor_open = g_bindings_editor.open,
@@ -1003,6 +1122,40 @@ def text_viewer_set_zoom(input : JsonValue?) : JsonValue? {
     let args = from_JV(input, type<TextViewerZoomArgs>)
     set_zoom_percent(g_documents[active], args.percent)
     return JV((ok = true, zoom_percent = zoom_percent(g_documents[active])))
+}
+
+[live_command(description = "Open find in the active document with a query; regex optional.")]
+def text_viewer_find(input : JsonValue?) : JsonValue? {
+    let active = active_document_index()
+    if (active < 0) return JV((ok = false, error = "no document is open"))
+    let args = from_JV(input, type<TextViewerFindArgs>)
+    var doc & = unsafe(g_documents[active])
+    text_find_set_query(doc.find, args.query, args.regex)
+    let _ = text_find_rebuild(doc.find, doc.source.text, doc.source.revision)
+    return JV((ok = true, query = doc.find.query, regex = doc.find.use_regex,
+               match_count = length(doc.find.matches),
+               current = doc.find.current, error = doc.find.error,
+               jump_revision = doc.find.jump_revision))
+}
+
+[live_command(description = "Step the active document's find selection by delta.")]
+def text_viewer_find_step(input : JsonValue?) : JsonValue? {
+    let active = active_document_index()
+    if (active < 0) return JV((ok = false, error = "no document is open"))
+    let args = from_JV(input, type<TextViewerFindStepArgs>)
+    var doc & = unsafe(g_documents[active])
+    text_find_step(doc.find, args.delta)
+    return JV((ok = true, match_count = length(doc.find.matches),
+               current = doc.find.current,
+               jump_revision = doc.find.jump_revision))
+}
+
+[live_command(description = "Close find in the active document.")]
+def text_viewer_find_close(_input : JsonValue?) : JsonValue? {
+    let active = active_document_index()
+    if (active < 0) return JV((ok = false, error = "no document is open"))
+    text_find_close(g_documents[active].find)
+    return JV((ok = true))
 }
 
 [live_command(description = "Invoke a semantic viewer command by stable ID.")]

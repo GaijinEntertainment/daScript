@@ -334,6 +334,62 @@ def public markdown_view_select_all(var state : MarkdownViewState) : bool {
     return state.selection_anchor.valid && state.selection_focus.valid
 }
 
+def private source_byte_position(state : MarkdownViewState const;
+                                 byte_offset : int;
+                                 trailing : bool) : RichTextPosition {
+    // Never-rendered bytes (markers, fence syntax) snap forward to the next rendered run.
+    for (index in range(length(state.nodes))) {
+        let entry & = unsafe(state.nodes[index])
+        continue if (!entry.content_valid || empty(entry.content.text))
+        for (run in entry.content.runs) {
+            let inside = (trailing
+                ? byte_offset > run.source.start_byte && byte_offset <= run.source.end_byte
+                : byte_offset >= run.source.start_byte && byte_offset < run.source.end_byte)
+            if (inside) {
+                let display_size = run.display.end_byte - run.display.start_byte
+                let source_size = run.source.end_byte - run.source.start_byte
+                var display = run.display.start_byte
+                if (run.source_exact && display_size == source_size) {
+                    display += byte_offset - run.source.start_byte
+                } elif (trailing) {
+                    display = run.display.end_byte
+                }
+                return md_inline_position(entry.content, index, display, trailing)
+            }
+        }
+    }
+    for (index in range(length(state.nodes))) {
+        let entry & = unsafe(state.nodes[index])
+        continue if (!entry.content_valid || empty(entry.content.text))
+        for (run in entry.content.runs) {
+            if (run.source.start_byte >= byte_offset) {
+                return md_inline_position(entry.content, index,
+                                          run.display.start_byte, trailing)
+            }
+        }
+    }
+    return RichTextPosition()
+}
+
+def public markdown_view_select_source_range(var state : MarkdownViewState;
+                                             start_byte, end_byte : int) : bool {
+    //! Programmatic selection of a source byte range (find, navigation).
+    //! Requires laid-out content (any frame after the document rendered once);
+    //! scrolls the selection focus into view on the next frame.
+    let anchor = source_byte_position(state, start_byte, false)
+    let focus = source_byte_position(state, end_byte, true)
+    if (!anchor.valid || !focus.valid) return false
+    state.selection_anchor = anchor
+    state.selection_focus = focus
+    state.selection_dragging = false
+    state.selection_changed = true
+    state.selection_revision++
+    state.selection_commit_revision++
+    state.navigation_revision++
+    state.navigation_needs_scroll = true
+    return true
+}
+
 def public markdown_view_invalidate(var state : MarkdownViewState) {
     //! Deterministically release all retained strings and arrays. The outer
     //! cache capacity is retained for a same-sized replacement document.

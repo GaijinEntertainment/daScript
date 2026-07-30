@@ -24,7 +24,7 @@ def private source_range(app : ImguiApp; text : string) : JsonValue? {
 }
 
 [test]
-def test_text_viewer_open_modes_and_zoom(t : T?) {
+def test_text_viewer_open_modes_and_zoom(t : T?) { // nolint:STYLE038
     with_imgui_app(FEATURE) $(app) {
         var initial : JsonValue?
         let ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
@@ -230,7 +230,7 @@ def test_text_viewer_open_modes_and_zoom(t : T?) {
 }
 
 [test]
-def test_text_viewer_checkbox_save_reload_roundtrip(t : T?) {
+def test_text_viewer_checkbox_save_reload_roundtrip(t : T?) { // nolint:STYLE038
     var temp_error : string
     let temp_dir = create_temp_directory("das_text_viewer_roundtrip", temp_error)
     t |> success(empty(temp_error) && !empty(temp_dir),
@@ -324,4 +324,102 @@ def test_text_viewer_checkbox_save_reload_roundtrip(t : T?) {
         }
     }
     rmdir_rec_result(temp_dir)
+}
+
+[test]
+def test_text_viewer_find_both_modes(t : T?) { // nolint:STYLE038
+    with_imgui_app(FEATURE) $(app) {
+        let ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["ok"] ?? false) && (state?["render_revision"] ?? 0) > 0)
+        }
+        t |> success(ready, "welcome document renders before find drives it")
+        if (!ready) return
+
+        let fixture = "{get_das_root()}/examples/text/syntax_highlighting.md"
+        let opened = post_command(app, "text_viewer_open", JV((path = fixture)))
+        t |> success(opened?["ok"] ?? false, "syntax fixture opens for find coverage")
+        let markdown_ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["path"] ?? "") == fixture
+                && (state?["mode"] ?? "") == "markdown"
+                && (state?["render_revision"] ?? 0) > 0)
+        }
+        t |> success(markdown_ready, "fixture renders as Markdown")
+        if (!markdown_ready) return
+
+        // Case-insensitive literal find in RENDERED markdown selects the match.
+        let found = post_command(app, "text_viewer_find", JV((query = "tree-sitter")))
+        t |> success(found?["ok"] ?? false, "find command is accepted")
+        t |> success((found?["match_count"] ?? 0) >= 2,
+                     "case-insensitive literal matches Tree-sitter occurrences")
+        let markdown_jumped = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["find_open"] ?? false)
+                && (state?["find_applied_jump"] ?? -1) == (state?["find_jump_revision"] ?? -2)
+                && (state?["markdown_selection_end"] ?? -1)
+                    > (state?["markdown_selection_start"] ?? -1))
+        }
+        t |> success(markdown_jumped, "find selects the current match in rendered Markdown")
+
+        let selection_before = viewer_state(app)?["markdown_selection_start"] ?? -1
+        let stepped = post_command(app, "text_viewer_find_step", JV((delta = 1)))
+        t |> equal(stepped?["current"] ?? -1, 1, "find next advances the current match")
+        let markdown_moved = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["find_applied_jump"] ?? -1) == (state?["find_jump_revision"] ?? -2)
+                && (state?["markdown_selection_start"] ?? -1) != selection_before
+                && (state?["markdown_selection_start"] ?? -1) >= 0)
+        }
+        t |> success(markdown_moved, "find next moves the rendered selection")
+
+        // Plain mode: the same find surface selects exact source bytes.
+        let plain_mode = post_command(app, "text_viewer_set_mode", JV((mode = "plain")))
+        t |> success(plain_mode?["ok"] ?? false, "plain mode accepts the switch")
+        let plain_found = post_command(app, "text_viewer_find", JV((query = "require")))
+        t |> success((plain_found?["match_count"] ?? 0) >= 1,
+                     "literal find matches inside the plain source")
+        let plain_jumped = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            let start = state?["source_selection_start"] ?? -1
+            let end = state?["source_selection_end"] ?? -1
+            return ((state?["find_applied_jump"] ?? -1) == (state?["find_jump_revision"] ?? -2)
+                && start >= 0 && end - start == length("require"))
+        }
+        t |> success(plain_jumped, "find selects exactly the matched bytes in source view")
+
+        // Regex option: pattern matches, invalid pattern reports without matches.
+        let rx = post_command(app, "text_viewer_find",
+                              JV((query = "requ[a-z]+e", regex = true)))
+        t |> success((rx?["match_count"] ?? 0) >= 1, "regex find matches require")
+        t |> equal(rx?["error"] ?? "?", "", "valid regex reports no error")
+        let bad = post_command(app, "text_viewer_find", JV((query = "[", regex = true)))
+        t |> equal(bad?["match_count"] ?? -1, 0, "invalid regex yields no matches")
+        t |> success(!empty(bad?["error"] ?? ""), "invalid regex reports an error")
+
+        let closed = post_command(app, "text_viewer_find_close", null)
+        t |> success(closed?["ok"] ?? false, "find close command is accepted")
+        let close_observed = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            return !(viewer_state(app)?["find_open"] ?? true)
+        }
+        t |> success(close_observed, "find bar reports closed")
+
+        // .das support: opening a daslang file colors it via tree-sitter.
+        let das_fixture = "{get_das_root()}/examples/text/main.das"
+        let das_opened = post_command(app, "text_viewer_open", JV((path = das_fixture)))
+        t |> success(das_opened?["ok"] ?? false, ".das file opens")
+        let das_ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["path"] ?? "") == das_fixture
+                && (state?["mode"] ?? "") == "plain"
+                && (state?["source_render_revision"] ?? 0) > 0
+                && (state?["source_cell_count"] ?? 0) > 0)
+        }
+        t |> success(das_ready, ".das file renders as plain source")
+        if (!das_ready) return
+        let das_keyword = source_range(app, "options gen2")
+        t |> success(das_keyword?["ok"] ?? false, ".das keyword range is inspectable")
+        t |> success((das_keyword?["syntax_cells"] ?? 0) > 0,
+                     ".das source carries tree-sitter syntax styling")
+    }
 }

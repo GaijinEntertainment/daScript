@@ -196,6 +196,53 @@ def public text_source_view_select_all(document : TextSourceDocument const;
     state.selection_commit_revision++
 }
 
+def public text_source_view_select_range(document : TextSourceDocument const;
+                                         var state : TextSourceViewState;
+                                         start_byte, end_byte : int) {
+    //! Programmatic selection of a source byte range (find, navigation).
+    let source_length = length(document.source)
+    state.anchor_byte = clamp(start_byte, 0, source_length)
+    state.focus_byte = clamp(end_byte, 0, source_length)
+    state.selection_dragging = false
+    state.selection_changed = true
+    state.selection_revision++
+    state.selection_commit_revision++
+}
+
+def public text_source_view_line_top(state : TextSourceViewState const;
+                                     byte_offset : int) : float {
+    //! Content-space Y of the line holding `byte_offset`, for the host's
+    //! SetScrollY. Returns -1.0 before the first layout pass.
+    if (state.virtual_mode) {
+        let count = length(state.virtual_line_starts)
+        if (count == 0 || state.key.line_height <= 0.0f) return -1.0f
+        var lo = 0
+        var hi = count
+        while (lo < hi) {
+            let mid = (lo + hi) / 2
+            if (state.virtual_line_starts[mid] <= byte_offset) {
+                lo = mid + 1
+            } else {
+                hi = mid
+            }
+        }
+        return float(max(lo - 1, 0)) * state.key.line_height
+    }
+    let count = length(state.layout.lines)
+    if (count == 0) return -1.0f
+    var lo = 0
+    var hi = count
+    while (lo < hi) {
+        let mid = (lo + hi) / 2
+        if (state.layout.lines[mid].source.start_byte <= byte_offset) {
+            lo = mid + 1
+        } else {
+            hi = mid
+        }
+    }
+    return state.layout.lines[max(lo - 1, 0)].y
+}
+
 def public text_source_view_invalidate(var state : TextSourceViewState) {
     delete state.layout.lines
     delete state.layout.fragments
