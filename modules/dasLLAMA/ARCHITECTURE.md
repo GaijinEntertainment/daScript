@@ -8,8 +8,9 @@
 ## Placement rules
 
 - **Tests live under `modules/dasLLAMA/tests/` — all of them.** `/tests/dasLLAMA` must not exist.
-  dasLLAMA is **NEVER AOT'd**: no dasLLAMA test joins `test_aot`/`test_aot_subset`, and every suite
-  runs `-jit` (through `tests/run.das`, per `tests/CLAUDE.md`).
+  dasLLAMA runs **`-jit` only** — never interpreted, never AOT (no dasLLAMA test joins
+  `test_aot`/`test_aot_subset`); every suite runs `-jit` through `tests/run.das`, per
+  `tests/CLAUDE.md`. The library itself panics on a non-`-jit` run (see Inherited invariants).
 - **Shared functionality gets pulled into small, correctly-named, single-purpose modules** —
   `dasllama_repack.das` (kernel data repacking), `dasllama_convert.das` (tensor format conversion).
   Never a grab-bag `common`/`families_common`: a module whose name doesn't say what it does is the
@@ -36,17 +37,19 @@ Durable "why it is built this way" facts harvested from the design docs, which a
 
 **From `x64_arch.md`:**
 
-- **Always `-jit`.** Perf work is JIT-tier only — loop hints and intrinsic lowering don't exist in
-  the interpreter, and interpreted model runs are orders of magnitude too slow to mean anything.
+- **`-jit` is the ONLY execution tier — hard stop, not a preference.** dasLLAMA is NEVER run
+  interpreted and NEVER AOT-compiled. The library checks at load and **panics** when not under
+  `-jit`. Loop hints and intrinsic lowering exist only in the JIT, and the JIT tier is the only
+  one the oracles gate — an interpreted or AOT run is not "slow but correct", it is out of
+  contract. (The x64-era "fallback rail" framing — AOT/interp as correct-but-untuned tiers — is
+  retired; intrinsic fallback bodies exist for off-ARCH correctness *inside* the JIT, not as
+  runnable tiers.)
 - **Correctness before speed, token-for-token.** The engine is validated against external oracles
   (llama2.c + llama.cpp `simple_ids`) plus per-arch parity fixtures. A new kernel passes the suite
   *and* the oracles with the new backend active before any perf claim.
 - **Token-exact oracle tests pin the bit-exact path** (classic attention, scalar activation);
   approximate/fast paths get separate tolerance tests. Rerouting an oracle test through a
   non-bit-exact default makes it pass on the machine it was frozen on and flip elsewhere.
-- **AOT/interp are correct-but-untuned BY DESIGN** — the AOT C++ emitter drops loop hints entirely
-  and intrinsics compile as their portable fallback bodies. That is what makes the fallback rail
-  safe; it also means an AOT number is never a tuning datum.
 - **The three-layer safety model that makes a new ISA free:** (1) *registration gate* — an ISA's
   `[init]` never fires off-arch, so `portable` stays active and every run is correct; (2) *scalar
   fallbacks* — an intrinsic called off-target computes the right answer from its fallback body, only
