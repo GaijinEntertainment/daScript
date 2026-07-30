@@ -25,9 +25,11 @@ static void *get_proc(const char *proc)
 {
 	void *res;
 
-	res = wglGetProcAddress(proc);
+	// explicit casts: clang-mingw rejects the implicit function-pointer ->
+	// void* conversions MSVC tolerates (this TU compiles as C++)
+	res = reinterpret_cast<void *>(wglGetProcAddress(proc));
 	if (!res)
-		res = GetProcAddress(libgl, proc);
+		res = reinterpret_cast<void *>(GetProcAddress(libgl, proc));
 	return res;
 }
 #elif defined(__APPLE__) || defined(__APPLE_CC__)
