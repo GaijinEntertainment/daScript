@@ -13,7 +13,14 @@ IF(NOT COMMAND ADD_MODULE_CPP)
     project(dasImgui CXX C)
 ENDIF()
 
-IF((NOT DAS_IMGUI_INCLUDED) AND ((NOT ${DAS_IMGUI_DISABLED}) OR (NOT DEFINED DAS_IMGUI_DISABLED)))
+# Derived gate: dasImgui needs dasGlfw (headers/backend) and dasClipboard, so a
+# superbuild that disables either also drops dasImgui (the dasOPENAI-off-dasHV
+# pattern). Standalone configures never define the sibling options — the
+# NOT DEFINED arms keep the module on there.
+IF((NOT DAS_IMGUI_INCLUDED)
+        AND ((NOT ${DAS_IMGUI_DISABLED}) OR (NOT DEFINED DAS_IMGUI_DISABLED))
+        AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_GLFW_DISABLED))
+        AND ((NOT ${DAS_CLIPBOARD_DISABLED}) OR (NOT DEFINED DAS_CLIPBOARD_DISABLED)))
 SET(DAS_IMGUI_INCLUDED TRUE)
 MESSAGE(STATUS "dasImgui module included.")
 
@@ -237,6 +244,9 @@ IF(COMMAND ADD_MODULE_CPP)
         GET_FILENAME_COMPONENT(_n "${_f}" NAME_WE)
         ADD_MODULE_DAS(imgui terminal ${_n})
     ENDFOREACH()
+    # Legacy v1 surface (daslib/imgui_boost.das) — registered but not part of the
+    # v2 glob dirs; keep in sync with .das_module.
+    ADD_MODULE_DAS(imgui daslib imgui_boost)
 
     # Static halves only — no ADD_MODULE_LIB shared twins. In a superbuild the DLL
     # flavor comes from this module's own standalone build (daspkg); the twins would
