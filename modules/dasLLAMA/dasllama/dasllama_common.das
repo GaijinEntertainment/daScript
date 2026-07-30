@@ -1895,50 +1895,15 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
         cursor = stream_job_qoff(j) + sh.qb
         temp_q |> resize(int(sh.qb))
         let t0 = g_conv_prof ? ref_time_ticks() : 0l
-        var kind = "q8 transcode (Q8_0 verbatim)"
-        if (j.fmt == KqFmt.k4) {
+        var kind = ""
+        if (kq_sb(j.fmt) || j.fmt == KqFmt.q51) {
             temp_s |> resize(int(sh.sb))
-            gguf_transcode_q4k(m, bytes, j.name, temp_q, temp_s, 0l, j.n, j.src_off)
-            kind = "k4 transcode (Q4_K)"
-        } elif (j.fmt == KqFmt.k5) {
-            temp_s |> resize(int(sh.sb))
-            if (gguf_tensor_type(m, j.name) == GGML_TYPE_Q5_K) {
-                gguf_transcode_q5k(m, bytes, j.name, temp_q, temp_s, 0l, j.n, j.src_off)
-                kind = "k5 transcode (Q5_K)"
-            } else {
-                scratch |> resize(int(j.n))
-                gguf_read_tensor_f32(m, bytes, j.name, scratch, 0l, j.n, j.src_off)
-                quantize_k5_plane(scratch, j.n, temp_q, temp_s, 0l)
-                kind = "k5 RE-ENCODE (Q5_0 dequant+quant)"
-            }
-        } elif (j.fmt == KqFmt.k6) {
-            temp_s |> resize(int(sh.sb))
-            gguf_transcode_q6k(m, bytes, j.name, temp_q, temp_s, 0l, j.n, j.src_off)
-            kind = "k6 transcode (Q6_K)"
-        } elif (j.fmt == KqFmt.q40) {
-            temp_s |> resize(int(sh.sb))
-            gguf_transcode_q40(m, bytes, j.name, temp_q, temp_s, 0l, j.n, j.src_off)
-            kind = "q40 transcode (Q4_0)"
-        } elif (j.fmt == KqFmt.q51) {
-            temp_s |> resize(int(sh.sb))
-            gguf_transcode_q51(m, bytes, j.name, temp_q, temp_s, 0l, j.n, j.src_off)
-            kind = "q51 transcode (Q5_1)"
+            kind = transcode_kq_tensor(m, bytes, j.name, j.fmt, temp_q, temp_s, 0l, j.n, j.src_off, scratch)
         } else {
             // q8 family: scales are FLOATS; the epilogue converts the whole plane at the end
             temp_q8 |> resize(int(j.n))
             temp_sf |> resize(int(j.n / 32l))
-            let gt = gguf_tensor_type(m, j.name)
-            if (gt == GGML_TYPE_Q8_0) {
-                gguf_transcode_q8_0(m, bytes, j.name, temp_q8, temp_sf, 0l, 0l, j.n, j.src_off)
-            } elif (gt == GGML_TYPE_Q5_0) {
-                gguf_transcode_q5_0_to_q8(m, bytes, j.name, temp_q8, temp_sf, 0l, 0l, j.n, j.src_off)
-                kind = "q8 transcode (Q5_0 exact)"
-            } else {
-                scratch |> resize(int(j.n))
-                gguf_read_tensor_f32(m, bytes, j.name, scratch, 0l, j.n, j.src_off)
-                quantize_q8_0_into(scratch, j.n, temp_q8, temp_sf, 0l, 0l)
-                kind = "q8 REQUANT (dequant+quant)"
-            }
+            kind = transcode_q8_tensor(m, bytes, j.name, temp_q8, temp_sf, 0l, 0l, j.n, j.src_off, scratch)
         }
         conv_note(kind, t0, j.n)
         // land the scale half at its real offset (RAM-resident plane)
@@ -2023,6 +1988,54 @@ def fill_plan_take(var out : array<FillJob>) {
     out <- g_fill_plan
 }
 
+// ONE source for the (fmt, disk type) -> kq transcode decision. load_big and fill_stream_plane
+// used to carry this tree as two independent copies that could drift; both now dispatch here.
+// Destinations are caller-picked (Model planes at eloff=woff, or stream temps at eloff=0).
+def private transcode_kq_tensor(m : GGUFMeta; bytes : array<uint8> | #; name : string; fmt : KqFmt;
+                                var kq : array<uint8>; var ks : array<uint8>; eloff, n, src_off : int64;
+                                var scratch : array<float>) : string {
+    if (fmt == KqFmt.k4) {
+        gguf_transcode_q4k(m, bytes, name, kq, ks, eloff, n, src_off)
+        return "k4 transcode (Q4_K)"
+    } elif (fmt == KqFmt.k5) {
+        if (gguf_tensor_type(m, name) == GGML_TYPE_Q5_K) {
+            gguf_transcode_q5k(m, bytes, name, kq, ks, eloff, n, src_off)
+            return "k5 transcode (Q5_K)"
+        }
+        // Q5_0 source: no exact embedding exists, so dequant and re-encode (lossy)
+        scratch |> resize(int(n))
+        gguf_read_tensor_f32(m, bytes, name, scratch, 0l, n, src_off)
+        quantize_k5_plane(scratch, n, kq, ks, eloff)
+        return "k5 RE-ENCODE (Q5_0 dequant+quant)"
+    } elif (fmt == KqFmt.k6) {
+        gguf_transcode_q6k(m, bytes, name, kq, ks, eloff, n, src_off)
+        return "k6 transcode (Q6_K)"
+    } elif (fmt == KqFmt.q40) {
+        gguf_transcode_q40(m, bytes, name, kq, ks, eloff, n, src_off)
+        return "q40 transcode (Q4_0)"
+    }
+    gguf_transcode_q51(m, bytes, name, kq, ks, eloff, n, src_off)
+    return "q51 transcode (Q5_1)"
+}
+
+// The q8-family half of the same tree: verbatim Q8_0, exact Q5_0->Q8, or dequant+requant.
+def private transcode_q8_tensor(m : GGUFMeta; bytes : array<uint8> | #; name : string;
+                                var q : array<int8>; var s : array<float>; qoff, soff, n, src_off : int64;
+                                var scratch : array<float>) : string {
+    let gt = gguf_tensor_type(m, name)
+    if (gt == GGML_TYPE_Q8_0) {
+        gguf_transcode_q8_0(m, bytes, name, q, s, qoff, soff, n, src_off)
+        return "q8 transcode (Q8_0 verbatim)"
+    } elif (gt == GGML_TYPE_Q5_0) {
+        gguf_transcode_q5_0_to_q8(m, bytes, name, q, s, qoff, soff, n, src_off)
+        return "q8 transcode (Q5_0 exact)"
+    }
+    scratch |> resize(int(n))
+    gguf_read_tensor_f32(m, bytes, name, scratch, 0l, n, src_off)
+    quantize_q8_0_into(scratch, n, q, s, qoff, soff)
+    return "q8 REQUANT (dequant+quant)"
+}
+
 def private load_big(m : GGUFMeta; bytes : array<uint8> | #; name : string; var t : Model; woff, n : int64; var scratch : array<float>; src_off : int64 = 0l; fmt : KqFmt = KqFmt.q8) {
     if (g_fill_plan_mode) {
         g_fill_plan |> push(FillJob(name = name, woff = woff, n = n, src_off = src_off, fmt = fmt))
@@ -2031,41 +2044,17 @@ def private load_big(m : GGUFMeta; bytes : array<uint8> | #; name : string; var 
     let t0 = g_conv_prof ? ref_time_ticks() : 0l
     var kind = "f32 read (no quant)"
     if (fmt == KqFmt.k4) {
-        gguf_transcode_q4k(m, bytes, name, t.k4q, t.k4s, woff, n, src_off)
-        kind = "k4 transcode (Q4_K)"
+        kind = transcode_kq_tensor(m, bytes, name, fmt, t.k4q, t.k4s, woff, n, src_off, scratch)
     } elif (fmt == KqFmt.k5) {
-        if (gguf_tensor_type(m, name) == GGML_TYPE_Q5_K) {
-            gguf_transcode_q5k(m, bytes, name, t.k5q, t.k5s, woff, n, src_off)
-            kind = "k5 transcode (Q5_K)"
-        } else {   // Q5_0 source: no exact embedding exists, so dequant and re-encode (lossy)
-            scratch |> resize(n)
-            gguf_read_tensor_f32(m, bytes, name, scratch, 0l, n, src_off)
-            quantize_k5_plane(scratch, n, t.k5q, t.k5s, woff)
-            kind = "k5 RE-ENCODE (Q5_0 dequant+quant)"
-        }
+        kind = transcode_kq_tensor(m, bytes, name, fmt, t.k5q, t.k5s, woff, n, src_off, scratch)
     } elif (fmt == KqFmt.k6) {
-        gguf_transcode_q6k(m, bytes, name, t.k6q, t.k6s, woff, n, src_off)
-        kind = "k6 transcode (Q6_K)"
+        kind = transcode_kq_tensor(m, bytes, name, fmt, t.k6q, t.k6s, woff, n, src_off, scratch)
     } elif (fmt == KqFmt.q40) {
-        gguf_transcode_q40(m, bytes, name, t.q40q, t.q40s, woff, n, src_off)
-        kind = "q40 transcode (Q4_0)"
+        kind = transcode_kq_tensor(m, bytes, name, fmt, t.q40q, t.q40s, woff, n, src_off, scratch)
     } elif (fmt == KqFmt.q51) {
-        gguf_transcode_q51(m, bytes, name, t.q51q, t.q51s, woff, n, src_off)
-        kind = "q51 transcode (Q5_1)"
+        kind = transcode_kq_tensor(m, bytes, name, fmt, t.q51q, t.q51s, woff, n, src_off, scratch)
     } elif (t.quant == QuantMode.q8) {
-        let gt = gguf_tensor_type(m, name)
-        if (gt == GGML_TYPE_Q8_0) {
-            gguf_transcode_q8_0(m, bytes, name, t.qblob, t.qscales, woff, woff / 32l, n, src_off)
-            kind = "q8 transcode (Q8_0 verbatim)"
-        } elif (gt == GGML_TYPE_Q5_0) {
-            gguf_transcode_q5_0_to_q8(m, bytes, name, t.qblob, t.qscales, woff, woff / 32l, n, src_off)
-            kind = "q8 transcode (Q5_0 exact)"
-        } else {
-            scratch |> resize(n)
-            gguf_read_tensor_f32(m, bytes, name, scratch, 0l, n, src_off)
-            quantize_q8_0_into(scratch, n, t.qblob, t.qscales, woff, woff / 32l)
-            kind = "q8 REQUANT (dequant+quant)"
-        }
+        kind = transcode_q8_tensor(m, bytes, name, t.qblob, t.qscales, woff, woff / 32l, n, src_off, scratch)
     } elif (t.quant == QuantMode.q4_0) {
         if (gguf_tensor_type(m, name) == GGML_TYPE_Q4_0) {
             gguf_transcode_q4_0(m, bytes, name, t.q4blob, t.q4scales, woff / 2l, woff / 32l, n, src_off)
