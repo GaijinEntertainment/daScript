@@ -2842,6 +2842,20 @@ def private k6_blk_dot(wv, xl, xh, qhl, qhh : uint4; shift : uint) : int4 {
                 sdot4(xh.x, KQ_ONES) + sdot4(xh.y, KQ_ONES) + sdot4(xh.z, KQ_ONES) + sdot4(xh.w, KQ_ONES))
 }
 
+// the Q4_K/Q5_K per-block scale fold: d*sc*idot - dmin*mn*bsum, int products kept exact
+def private kq_gemv_dm(wsb, blk : uint; idot, bs : int) : float {
+    let dm = unpackHalf2x16(vk_wsu[wsb * 5u])
+    let sc = int((vk_wsu[wsb * 5u + 1u + blk / 4u] >> ((blk % 4u) * 8u)) & 0xFF)
+    let mn = int((vk_wsu[wsb * 5u + 3u + blk / 4u] >> ((blk % 4u) * 8u)) & 0xFF)
+    return dm.x * float(sc * idot) - dm.y * float(mn * bs)
+}
+
+// one Q4_0 f16 d per 32-block, 8 packed as half pairs in the superblock's wsu words 0..3
+def private q40_blk_d(wsb, blk : uint) : float {
+    let dp = unpackHalf2x16(vk_wsu[wsb * 5u + blk / 2u])
+    return blk % 2u == 0u ? dp.x : dp.y
+}
+
 // Q5_K's dot: the same fold with the 5th bit deposited from the block's qh word, byte j serving
 // weight word j (low nibble -> lo half, high nibble -> hi half)
 def private k5_blk_dot(wv, xl, xh : uint4; qh : uint) : int {
@@ -2886,11 +2900,7 @@ def kq_moe_gemv_k4 {
                 let xl = vk_xq4[xb4]
                 let xh = vk_xq4[xb4 + 1u]
                 let idot = kq_blk_dot(vk_wq4[wsb * 8u + blk], xl, xh)
-                let bs = kq_blk_sum(xl, xh)
-                let dm = unpackHalf2x16(vk_wsu[wsb * 5u])
-                let sc = int((vk_wsu[wsb * 5u + 1u + blk / 4u] >> ((blk % 4u) * 8u)) & 0xFF)
-                let mn = int((vk_wsu[wsb * 5u + 3u + blk / 4u] >> ((blk % 4u) * 8u)) & 0xFF)
-                acc += vk_xs[xsb0 + sb] * (dm.x * float(sc * idot) - dm.y * float(mn * bs))
+                acc += vk_xs[xsb0 + sb] * kq_gemv_dm(wsb, blk, idot, kq_blk_sum(xl, xh))
             }
             b0 += gl_SubgroupSize
         }
@@ -2929,9 +2939,7 @@ def kq_moe_gemv_q40 {
                 let xl = vk_xq4[xb4]
                 let xh = vk_xq4[xb4 + 1u]
                 let idot = kq_blk_dot(vk_wq4[wsb * 8u + blk], xl, xh)
-                let dp = unpackHalf2x16(vk_wsu[wsb * 5u + blk / 2u])   // 8 f16 d packed in words 0..3
-                let dv = blk % 2u == 0u ? dp.x : dp.y
-                acc += vk_xs[xsb0 + sb] * dv * float(idot - 8 * kq_blk_sum(xl, xh))
+                acc += vk_xs[xsb0 + sb] * q40_blk_d(wsb, blk) * float(idot - 8 * kq_blk_sum(xl, xh))
             }
             b0 += gl_SubgroupSize
         }
@@ -2969,11 +2977,7 @@ def kq_moe_gemv_k5 {
                 let xl = vk_xq4[xb4]
                 let xh = vk_xq4[xb4 + 1u]
                 let idot = k5_blk_dot(vk_wq4[wsb * 10u + blk], xl, xh, vk_wq[wsb * 40u + 32u + blk])
-                let bs = kq_blk_sum(xl, xh)
-                let dm = unpackHalf2x16(vk_wsu[wsb * 5u])
-                let sc = int((vk_wsu[wsb * 5u + 1u + blk / 4u] >> ((blk % 4u) * 8u)) & 0xFF)
-                let mn = int((vk_wsu[wsb * 5u + 3u + blk / 4u] >> ((blk % 4u) * 8u)) & 0xFF)
-                acc += vk_xs[xsb0 + sb] * (dm.x * float(sc * idot) - dm.y * float(mn * bs))
+                acc += vk_xs[xsb0 + sb] * kq_gemv_dm(wsb, blk, idot, kq_blk_sum(xl, xh))
             }
             b0 += gl_SubgroupSize
         }
@@ -3297,12 +3301,10 @@ def kq_moe_batch_q40 {
         kq_bt_load_x(row0, xrow, cnt, nsb, s, word, grp)
         kq_bt_load_w4(wsb0, wcol, d, nsb, s, word, grp)
         kq_bt_load_xs(row0, xt, cnt, nsb, s, tid)
-        // q40's scale stage: one f16 d per (block, col), 8 per block packed as half pairs
+        // q40's scale stage: one f16 d per (block, col)
         var sa = 0.0
         if (wt * 32u + slane < d) {
-            let wsb = wsb0 + (wt * 32u + slane) * nsb + s
-            let dp = unpackHalf2x16(vk_wsu[wsb * 5u + sblk / 2u])
-            sa = sblk % 2u == 0u ? dp.x : dp.y
+            sa = q40_blk_d(wsb0 + (wt * 32u + slane) * nsb + s, sblk)
         }
         bt_ws[sblk * 32u + slane] = sa
         barrier()
