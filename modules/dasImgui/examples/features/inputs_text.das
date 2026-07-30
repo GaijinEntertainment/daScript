@@ -2,7 +2,6 @@ options gen2
 options _comment_hygiene = true
 
 require imgui/imgui_harness
-require strings
 require math
 
 // =============================================================================
@@ -31,8 +30,8 @@ let FONTS = ["Sans", "Serif", "Mono", "Cursive", "Display"]
 [export]
 def init() {
     harness_init("Phase 0b.4 — text inputs", 760, 620)
-    var io & = unsafe(GetIO())
-    unsafe(GetStyle()).FontScaleMain = 1.5
+    let io & = unsafe(GetIO())
+    GetStyle().FontScaleMain = 1.5
 }
 
 [export]

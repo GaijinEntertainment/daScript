@@ -444,7 +444,7 @@ def private dispatch_input(terminal : Terminal const; text : string;
 def private send_special(terminal : Terminal const; key : ImGuiKey;
                          terminal_key : TerminalKey; io : ImGuiIO const;
                          external_input : bool; var output : string&) : bool {
-    // Printable keys repeat through InputQueueCharacters. Special terminal keys
+    // nolint:STYLE015 — Printable keys repeat through InputQueueCharacters. Special terminal keys
     // need ImGui's repeat path explicitly or a held Backspace/Delete/arrow only
     // emits its initial press.
     if (!IsKeyPressed(key, true)) return false
@@ -541,7 +541,7 @@ def private refresh_terminal_cache(terminal : Terminal const; scroll_offset : in
     return true
 }
 
-def public imgui_terminal(id : string; var terminal : Terminal;
+def public imgui_terminal(id : string; var terminal : Terminal; // nolint:STYLE037
                           var state : ImGuiTerminalState;
                           var cache : ImGuiTerminalCache;
                           style : ImGuiTerminalStyle = ImGuiTerminalStyle()) : ImGuiTerminalResult {
@@ -624,7 +624,7 @@ def public imgui_terminal(id : string; var terminal : Terminal;
     }
     let io & = unsafe(GetIO())
     let local_mouse = io.MousePos - content_origin
-    // When the child asked for mouse tracking (alt-screen TUIs: Claude Code,
+    // nolint:STYLE014 — When the child asked for mouse tracking (alt-screen TUIs: Claude Code,
     // vim), plain wheel and clicks belong to the CHILD - it scrolls its own
     // transcript, exactly like a real terminal (note 42). Shift reserves the
     // local gestures (scrollback scroll, text selection); Ctrl+wheel stays
@@ -639,7 +639,7 @@ def public imgui_terminal(id : string; var terminal : Terminal;
                 0, snapshot.columns - 1)
             let notches = clamp(int(round(abs(io.MouseWheel))), 1, 8)
             for (_notch in range(notches)) {
-                mouse_report += terminal_encode_mouse(terminal,
+                mouse_report += terminal_encode_mouse(terminal, // nolint:PERF001 — at most 8 wheel notches
                     io.MouseWheel > 0.0f ? 64 : 65, wheel_column, wheel_row, true)
             }
         } else {
@@ -653,7 +653,7 @@ def public imgui_terminal(id : string; var terminal : Terminal;
     } else {
         state.scroll_offset = clamp(state.scroll_offset, 0, buffer.scrollback_rows)
     }
-    // Scrollback scrollbar: a thin right-edge track, visible only when
+    // nolint:STYLE014 — Scrollback scrollbar: a thin right-edge track, visible only when
     // history exists. Claims clicks in its band so text selection never
     // starts from a scrollbar drag.
     // Inset from the widget edge: the dock splitter's grab zone claims hover

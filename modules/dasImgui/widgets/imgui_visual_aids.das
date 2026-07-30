@@ -524,7 +524,7 @@ def private paint_click_flash {
     *dl |> AddCircle(effective_cursor_pos(), radius, color, 24, click_flash_thickness)
 }
 
-def private glyph_for_codepoint(cp : uint) : string {
+def private glyph_for_codepoint(cp : uint) : string { // nolint:STYLE035 — codepoint source global is uint
     if (cp == uint('\n') || cp == uint('\r')) return "Enter"
     if (cp == uint('\t')) return "Tab"
     if (cp == uint(' ')) return "Space"
@@ -536,7 +536,7 @@ def private glyph_for_codepoint(cp : uint) : string {
     }
 }
 
-def private glyph_for_imgui_key(kc : int) : string {
+def private glyph_for_imgui_key(kc : int) : string { // nolint:STYLE037
     if (kc == int(ImGuiKey.Enter)) return "Enter"
     if (kc == int(ImGuiKey.Tab)) return "Tab"
     if (kc == int(ImGuiKey.Backspace)) return "Bksp"
@@ -562,7 +562,7 @@ def private glyph_for_imgui_key(kc : int) : string {
     return ""    // unknown — caller skips the trace
 }
 
-def private paint_key_hud {
+def private paint_key_hud { // nolint:STYLE038
     return if (!key_hud_enabled)
 
     // 1) Pull new synth events into traces. Codepoint takes priority (a typed char already includes the glyph); modifier-only keystrokes fall to the keycode branch.

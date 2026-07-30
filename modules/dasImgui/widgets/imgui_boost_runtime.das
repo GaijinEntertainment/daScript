@@ -1729,7 +1729,7 @@ def private scroll_target_into_view(target : string) : float {
     let r = widget_rect(target)
     if (!r._0) return 0.0f
     let bb = r._1                                     // (x0=left, y0=top, x1=right, y1=bottom)
-    var ws = unsafe(reinterpret<WindowState? -const>(meta.state_addr))
+    var ws = unsafe(reinterpret<WindowState?>(meta.state_addr))
     if (ws == null) return 0.0f
     let visible_top = ws.pos.y + GetFrameHeight()     // content top, below the title bar
     let visible_bottom = ws.pos.y + ws.size.y

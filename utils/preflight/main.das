@@ -118,7 +118,7 @@ def run_argv(args : array<string>; timeout : float) : tuple<rc : int; out : stri
     var output : string
     let rc = unsafe(popen_argv(args, timeout) $(f) {
         if (f != null) {
-            output := unsafe(fread_to_eof(f))
+            output = unsafe(fread_to_eof(f))
         }
     })
     return (rc = rc, out = output)
@@ -408,7 +408,7 @@ def gate_lint(ctx : PreflightCtx) : GateResult {
         output = r.out)
 }
 
-def gate_cpp_syntax(ctx : PreflightCtx) : GateResult {
+def gate_cpp_syntax(ctx : PreflightCtx) : GateResult { // nolint:STYLE038
     let t0 = ref_time_ticks()
     if (empty(ctx.changed_cpp) && ctx.changed_hdr == 0) {
         return GateResult(name = "cpp-syntax", status = GateStatus.Skip, seconds = seconds_since(t0),
@@ -535,7 +535,7 @@ def docs_skip_all(reason : string; var results : array<GateResult>&) {
     skip_gates(["docs/das2rst", "docs/stubs", "docs/uncategorized", "docs/untracked", "docs/sphinx-latex", "docs/sphinx-html", "docs/pdflatex"], reason, results)
 }
 
-def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) {
+def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:STYLE037
     var t0 = ref_time_ticks()
     // gate 1: das2rst runs clean (positional handmade-doc validation)
     let r1 = run_argv([ctx.daslang, "-documentation", "doc/reflections/das2rst.das"])
@@ -1010,7 +1010,7 @@ def clear_preflight_token() {
 }
 
 [export]
-def main() : int {
+def main() : int { // nolint:STYLE037
     var args_r <- parse_args(type<Config>)
     if (args_r |> is_err) {
         to_log(LOG_ERROR, "error: {args_r |> unwrap_err}\n\n")

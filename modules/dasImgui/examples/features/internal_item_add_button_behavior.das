@@ -63,8 +63,8 @@ def private custom_button(str_id : string; w, h : float; flags : ImGuiButtonFlag
 [export]
 def init() {
     harness_init("internal_item_add_button_behavior - hand-rolled button from primitives", 760, 560)
-    var io & = unsafe(GetIO())
-    unsafe(GetStyle()).FontScaleMain = 1.25
+    let io & = unsafe(GetIO())
+    GetStyle().FontScaleMain = 1.25
 }
 
 [export]

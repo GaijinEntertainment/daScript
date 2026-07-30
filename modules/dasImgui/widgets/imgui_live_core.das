@@ -326,7 +326,7 @@ def private needs_shift_ascii(c : int) : bool {
          || c == '?')
 }
 
-def private base_key_ascii(c : int) : int {
+def private base_key_ascii(c : int) : int { // nolint:STYLE037
     // ImGuiKey (int) for the base key producing `c` on US layout. `.0` reads as a float literal in daslang so digit enums don't parse — anchor the digit base on `ImGuiKey.A - 10`.
     let key_a = int(ImGuiKey.A)
     let key_0 = key_a - 10

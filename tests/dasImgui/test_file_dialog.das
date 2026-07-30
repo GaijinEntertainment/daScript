@@ -84,7 +84,7 @@ def private first_row(var snap : JsonValue?; want_folder : bool) : string {
 def private find_folder_row(app : ImguiApp) : string => first_row(snapshot(app), true)
 
 [test]
-def test_file_dialog(t : T?) {
+def test_file_dialog(t : T?) { // nolint:STYLE038
     with_imgui_app(FILE_DIALOG_FEATURE) $(d) {
         // demo window + the three trigger buttons render
         var snap = wait_for_widget(d, "FDLG_WIN/BTN_OPEN", 15.0f)

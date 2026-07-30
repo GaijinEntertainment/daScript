@@ -9,7 +9,7 @@ require imgui/imgui_lint
 
 [export]
 def main() {
-    unsafe(GetStyle()).FontScaleMain = 1.0f    // imgui 1.92: FontGlobalScale moved to style.FontScaleMain
+    GetStyle().FontScaleMain = 1.0f    // imgui 1.92: FontGlobalScale moved to style.FontScaleMain
     // Read-only style allow-listed via GetStyleColorName in ALLOWED_IMGUI. Drawlist queries
     // (GetWindowDrawList / AddRect / AddLine / GetForegroundDrawList) were dropped from
     // ALLOWED_IMGUI by PR-B1 in favor of the with_*_drawlist rail.

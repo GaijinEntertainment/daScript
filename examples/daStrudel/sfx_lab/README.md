@@ -23,9 +23,9 @@ or the whole mix, and watch the rendered **waveform + spectrum** (ImPlot) update
 
 ## Running the GUI
 
-The GUI depends on two external modules — [dasImgui](https://github.com/borisbat/dasImgui)
-and [dasImguiImplot](https://github.com/borisbat/dasImguiImplot) — declared as package
-dependencies in `.das_package`. Install them once with `daspkg` (clones + builds the C++
+The GUI depends on the external [dasImguiImplot](https://github.com/borisbat/dasImguiImplot)
+module, declared as a package dependency in `.das_package` (dasImgui ships in-tree with
+daslang — nothing to install for it). Install it once with `daspkg` (clones + builds the C++
 shared modules into `modules/`):
 
 ```

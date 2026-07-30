@@ -28,8 +28,8 @@ var SHIRT_ROW : table<int; ClickState>
 [export]
 def init() {
     harness_init("Phase 0b.2 — choice inputs", 720, 500)
-    var io & = unsafe(GetIO())
-    unsafe(GetStyle()).FontScaleMain = 1.5
+    let io & = unsafe(GetIO())
+    GetStyle().FontScaleMain = 1.5
 }
 
 [export]

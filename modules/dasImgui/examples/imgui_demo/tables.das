@@ -1,6 +1,8 @@
 options gen2
 options _comment_hygiene = true
 options indenting = 4
+// 1:1 port of C++ imgui_demo sections — function shape mirrors upstream
+options _function_length = 0
 
 module tables
 
@@ -510,7 +512,7 @@ def seed_padding_cells() {
     // text_bufs + init flag). The boost init= named-tuple sugar isn't supported on
     // the indexed [widget] form, so a direct field set in [init] is the workaround.
     for (i in range(15)) {
-        TABLES_PAD2_CELL_IT[i].value := "edit me"
+        TABLES_PAD2_CELL_IT[i].value = "edit me"
     }
 }
 
@@ -544,7 +546,7 @@ def private rebuild_adv_items() {
     for (n in range(want)) {
         let template_n = n % template_count
         TABLES_ADV_ITEMS[n].id = n
-        TABLES_ADV_ITEMS[n].name := TABLES_SORT_TEMPLATE_NAMES[template_n]
+        TABLES_ADV_ITEMS[n].name = TABLES_SORT_TEMPLATE_NAMES[template_n]
         // cpp:5879 — only templates 3/4 get non-zero defaults.
         var qty = 0
         if (template_n == 3) {

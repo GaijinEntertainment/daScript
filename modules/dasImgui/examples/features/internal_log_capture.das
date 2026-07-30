@@ -53,8 +53,8 @@ def private render_report(logging : bool) {
 [export]
 def init() {
     harness_init("internal_log_capture - LogBegin / LogRenderedText / decoration", 700, 560)
-    var io & = unsafe(GetIO())
-    unsafe(GetStyle()).FontScaleMain = 1.2
+    let io & = unsafe(GetIO())
+    GetStyle().FontScaleMain = 1.2
 }
 
 [export]
@@ -88,7 +88,7 @@ def update() {
             with_log(ImGuiLogFlags.OutputClipboard, -1) {
                 render_report(true)
             }
-            g_last_clip := GetClipboardText()
+            g_last_clip = GetClipboardText()
         } else {
             render_report(false)
         }

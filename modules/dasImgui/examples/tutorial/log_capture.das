@@ -82,7 +82,7 @@ def update() {
                 text("  Apple, Banana, Cherry")
                 LogRenderedText("(injected via LogRenderedText - capture #{g_capture_count})")
             }
-            g_last_clip := GetClipboardText()
+            g_last_clip = GetClipboardText()
         } else {
             text("=== Daslang Widget Report ===")
             text("Section: Fruits")

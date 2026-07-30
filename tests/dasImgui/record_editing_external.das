@@ -39,7 +39,7 @@ def field_click(bb : float4) : tuple<float; float> {
 }
 
 [export]
-def main {
+def main { // nolint:STYLE038
     with_recording_app("examples/tutorial/editing_external.das",
                        "edit_external_tour.apng", 90) $(app) {
         let T_VOL     = "EDITOR_WIN/VOL_SLIDER"

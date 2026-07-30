@@ -1317,13 +1317,13 @@ def private sync_buffer_from_value(var state : InputTextState) {
 def private sync_value_from_buffer(var state : InputTextState) {
     unsafe {
         let pbuf = addr(state.buffer[0])
-        state.value := clone_string(reinterpret<string>(pbuf))
+        state.value = clone_string(reinterpret<string>(pbuf))
     }
 }
 
 def private apply_pending_text(var state : InputTextState) {
     if (state.has_pending) {
-        state.value := state.pending_value
+        state.value = state.pending_value
         state.has_pending = false
         sync_buffer_from_value(state)
     }

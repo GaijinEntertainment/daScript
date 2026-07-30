@@ -2045,7 +2045,7 @@ def test_cmd_release_transitive_dep(t : T?) {
 def private add_external_lc_rpaths(path : string; var leaks : array<string>) {
     for (rp in list_lc_rpaths(path)) {
         if (is_external_rpath(rp)) {
-            leaks |> push_clone("{path}: {rp}")
+            leaks |> push("{path}: {rp}")
         }
     }
 }
@@ -2062,7 +2062,7 @@ def private add_external_lc_rpaths(path : string; var leaks : array<string>) {
 // is what makes the symlink alias load-bearing. The test discovers both names
 // at runtime rather than hardcoding versions, so it survives GLFW bumps.
 [test]
-def test_cmd_release_portable_on_macos(t : T?) {
+def test_cmd_release_portable_on_macos(t : T?) { // nolint:STYLE038
     if (get_platform_name() != "darwin") {
         t |> run("skipped — macOS-only audit (otool/install_name_tool)") @(tt : T?) {
             tt |> success(true)

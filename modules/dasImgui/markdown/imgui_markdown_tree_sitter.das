@@ -65,7 +65,7 @@ def public markdown_tree_sitter_set_default(var state : MarkdownTreeSitterState;
                                             language : string) : bool {
     let normalized = normalized_markdown_language(language)
     if (state.default_language == normalized) return false
-    state.default_language := normalized
+    state.default_language = normalized
     state.revision++
     return true
 }
@@ -93,7 +93,7 @@ def public markdown_tree_sitter_set_override(var state : MarkdownTreeSitterState
     let index = override_index(state, document_revision, node_index)
     if (index >= 0) {
         if (state.overrides[index].language == normalized) return false
-        state.overrides[index].language := normalized
+        state.overrides[index].language = normalized
     } else {
         state.overrides |> push(MarkdownTreeSitterOverride(
             document_revision = document_revision,
@@ -105,15 +105,15 @@ def public markdown_tree_sitter_set_override(var state : MarkdownTreeSitterState
 }
 
 def public markdown_tree_sitter_override_language(
-        state : MarkdownTreeSitterState const;
-        document_revision, node_index : int) : string {
+                                                  state : MarkdownTreeSitterState const;
+                                                  document_revision, node_index : int) : string {
     let index = override_index(state, document_revision, node_index)
     return index >= 0 ? state.overrides[index].language : "inherit"
 }
 
 def public markdown_tree_sitter_effective_language(
-        doc : RichDocument const; state : MarkdownTreeSitterState const;
-        document_revision, node_index : int) : string {
+                                                   doc : RichDocument const; state : MarkdownTreeSitterState const;
+                                                   document_revision, node_index : int) : string {
     if (node_index < 0 || node_index >= length(doc.nodes)) return ""
     let index = override_index(state, document_revision, node_index)
     let policy = (index >= 0
@@ -252,7 +252,7 @@ def public markdown_tree_sitter_prepare(doc : RichDocument const;
         delete projected
 
         if (old_index >= 0) {
-            provider.applied[old_index].language := language
+            provider.applied[old_index].language = language
         } else {
             provider.applied |> push(MarkdownTreeSitterApplied(
                 document_revision = document_revision,

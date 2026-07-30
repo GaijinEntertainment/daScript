@@ -209,12 +209,12 @@ class ImguiLintVisitor : AstVisitor {
         if (mname == "imgui_boost") {
             let fname = string(expr.func.name)
             compiling_program() |> macro_error(expr.at,
-                "IMGUI001: legacy imgui_boost::{fname} is dead — use the v2 wrapper in modules/dasImgui/widgets/. See modules/dasImgui/skills/migration.md for the v1->v2 mapping table.")
+                "IMGUI001: legacy imgui_boost::{fname} is dead — use the v2 wrapper in modules/dasImgui/widgets/. See skills/imgui_migration.md for the v1->v2 mapping table.")
         } elif (mname == "imgui") {
             let fname = string(expr.func.name)
             if (!key_exists(ALLOWED_IMGUI, fname)) {
                 compiling_program() |> macro_error(expr.at,
-                    "IMGUI002: raw imgui::{fname} is forbidden — add a [widget]/[container]/with_* wrapper in modules/dasImgui/widgets/, or extend ALLOWED_IMGUI in imgui_lint.das if {fname} is genuinely host-agnostic. Per-file escape: `options _allow_imgui_legacy = true`. See modules/dasImgui/skills/migration.md for the v1->v2 mapping table.")
+                    "IMGUI002: raw imgui::{fname} is forbidden — add a [widget]/[container]/with_* wrapper in modules/dasImgui/widgets/, or extend ALLOWED_IMGUI in imgui_lint.das if {fname} is genuinely host-agnostic. Per-file escape: `options _allow_imgui_legacy = true`. See skills/imgui_migration.md for the v1->v2 mapping table.")
             }
         }
     }

@@ -40,8 +40,8 @@ def private color_swatch(i : int) : uint {
 [export]
 def init() {
     harness_init("internal_combo - BeginComboPopup / custom-preview combo", 760, 520)
-    var io & = unsafe(GetIO())
-    unsafe(GetStyle()).FontScaleMain = 1.25
+    let io & = unsafe(GetIO())
+    GetStyle().FontScaleMain = 1.25
 }
 
 [export]

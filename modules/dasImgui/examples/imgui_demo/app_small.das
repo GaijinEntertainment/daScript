@@ -277,7 +277,7 @@ def ShowExampleAppLongText() : bool {
             let base = lines_n
             for (i in range(1000)) {
                 let n = base + i
-                SMALL_LONG_LINES_BUF |> push_clone(
+                SMALL_LONG_LINES_BUF |> push(
                     "{n} The quick brown fox jumps over the lazy dog")
             }
         }

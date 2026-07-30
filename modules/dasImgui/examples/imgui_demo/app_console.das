@@ -1,6 +1,9 @@
 options gen2
 options _comment_hygiene = true
 options indenting = 4
+// 1:1 port of C++ imgui_demo sections — function shape mirrors upstream
+options _function_length = 0
+options _cyclomatic_complexity = 0
 
 module app_console
 
@@ -70,7 +73,7 @@ def public take_close_request() : bool {
 // =============================================================================
 
 def private add_log(line : string) {
-    CONSOLE_ITEMS |> push_clone(line)
+    CONSOLE_ITEMS |> push(line)
 }
 
 def private clear_log() {
@@ -91,7 +94,7 @@ def private exec_command(cmd : string) {
             break
         }
     }
-    CONSOLE_HISTORY |> push_clone(cmd)
+    CONSOLE_HISTORY |> push(cmd)
 
     if (upper_cmd == "CLEAR") {
         clear_log()
@@ -340,7 +343,7 @@ def ShowExampleAppConsole() {
                 exec_command(cmd)
             }
             // Clear the input buffer for the next entry.
-            CONSOLE_INPUT.pending_value := ""
+            CONSOLE_INPUT.pending_value = ""
             CONSOLE_INPUT.has_pending = true
             reclaim_focus = true
         }

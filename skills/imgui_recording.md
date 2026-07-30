@@ -1,13 +1,13 @@
 # Recording tutorial videos
 
-dasImgui ships its tutorial site at `doc/source/` with an MP4 per tutorial page (`doc/source/_static/tutorials/*.mp4`). Recordings are produced by **one-shell driver scripts** under `tests/integration/record_*.das` that spawn their own `daslang-live` host and drive it over HTTP. A recording carries a **voiceover + music soundtrack** and is **also an integration test** — every interaction it narrates is performed for real and verified.
+The dasImgui tutorial pages live in the main Sphinx tree at `doc/source/reference/tutorials/imgui/`, with an MP4 per page. Recordings are produced by **one-shell driver scripts** under `tests/dasImgui/record_*.das` that spawn their own `daslang-live` host and drive it over HTTP. A recording carries a **voiceover + music soundtrack** and is **also an integration test** — every interaction it narrates is performed for real and verified.
 
 This page is the recipe. Read it before writing or revising any `record_*.das` driver. It builds on
-`skills/playwright.md` — read that first for the foundation: a recording is a playwright driver, so the
+`skills/imgui_playwright.md` — read that first for the foundation: a recording is a playwright driver, so the
 **async rule applies** (every interaction must be gated on its observable effect, never a frame/sleep
 guess; `hold_through_voice`/`verify_click_effect` are the recording-side enforcement of exactly that).
 
-Recording is NOT in CI — drivers are manually-driven artifact producers. The pipeline is three tools (below); the deliverable is one `.mp4` per scene, committed alongside the driver.
+Recording is NOT in CI — drivers are manually-driven artifact producers. The pipeline is three tools (below); the deliverable is one `.mp4` per scene, uploaded to the rolling `docs-assets` GitHub release (`gh release upload docs-assets <scene>.mp4 --clobber`) — MP4s are NOT committed to git; docs builds stage them via `utils/docs_assets/fetch.{sh,ps1}` before sphinx runs.
 
 ## The three hard requirements (REQUIRED)
 
@@ -24,7 +24,7 @@ These are not style preferences. A recording that violates any of them is wrong 
 
 Plus one constraint that bites silently: **captions and voice strings must be ASCII.** The bundled ImGui font has no em-dash / arrow / smart-quote glyph — non-ASCII renders as `?` in the caption box. Write `-` not `—`, `->` not `→`.
 
-`tests/integration/record_buttons.das` and `record_toggles.das` are the canonical exemplars of all three rules — read them before writing a new driver.
+`tests/dasImgui/record_buttons.das` and `record_toggles.das` are the canonical exemplars of all three rules — read them before writing a new driver.
 
 > **Retrofit mandate:** these rules apply to **every** recording, including the legacy set. Drivers still using the pre-voice `imgui_narrate` + fixed-`sleep` + `click_at` pattern (most of `record_*.das`) must be re-recorded under the current model. That is an active backlog, not an exemption — do not author a new driver in the legacy style, and prefer to upgrade a legacy driver whenever you touch its scene.
 
@@ -37,7 +37,7 @@ A tutorial's `.mp4` ships only when ALL of these hold. The first three are the h
 - [ ] **Paced by the voice** — dwell = the voiceover wav length (`say_begin` returns it, `hold_through_voice` splits it); no hand-tuned `sleep`. *(req 3)*
 - [ ] **Caption/voice decoupled, ear-first** — terse on-screen caption (`text`) vs a natural spoken sentence (`voice`, which keys the TTS line and drives dwell). **ASCII only** — the font has no em-dash / arrow / smart-quote glyph.
 - [ ] **Example is correct** — the feature `.das` compiles, runs, and demonstrates the widget without bugs (fix what's broken in this pass).
-- [ ] **Page is accurate** — the RST describes the current behavior and `.. video::`-cites an existing, fresh `.mp4`.
+- [ ] **Page is accurate** — the RST describes the current behavior and `.. video::`-cites a fresh `.mp4` that exists on the `docs-assets` release.
 - [ ] **Recording is clean** — `dropped = 0`, sidecar frame count == APNG `nb_read_frames`, voice + music bed muxed, ffprobe `video.dur ≈ audio.dur`, mp4 ≈ 50–300 KB, **eyeballed and approved**.
 
 A dasImgui/node-editor library bug surfaced while fixing a tutorial ships as its **own immediate PR**, not buried in the recording commit.
@@ -46,10 +46,10 @@ A dasImgui/node-editor library bug surfaced while fixing a tutorial ships as its
 
 Driving a widget "like a human" only works if the synthetic gesture actually lands — a guessed click point or drag path that misses is a dud (and now a teardown-panic failure). **Don't guess the sequence; determine it live against a running host, then bake the proven sequence into the driver.**
 
-Build `daslang-live` once, launch the tutorial's feature file, and probe it through the MCP live API:
+Build `daslang-live` once, launch the tutorial's feature file, and probe it through the MCP live API (from the repo root):
 
 ```bash
-<daslang>/bin/Release/daslang-live -project_root <dasimgui> examples/tutorial/<scene>.das
+bin/Release/daslang-live -project_root . modules/dasImgui/examples/tutorial/<scene>.das
 ```
 
 - **FIRST, `mcp__daslang__live_command name="set_user_control" args='{"enabled":false}'`** — a manually-launched probe host has user-control ON, so the real OS cursor races GLFW's poll and clobbers `io.MousePos`; your synth gesture then lands at the wrong place (or not at all) and the snapshot's `mouse_pos` reads the OS cursor, not your synth pos. `with_recording_app` posts this for you; a manual probe host does NOT — set it by hand before any `imgui_mouse_play` / `imgui_click`.
@@ -58,35 +58,34 @@ Build `daslang-live` once, launch the tutorial's feature file, and probe it thro
 - `mcp__daslang__live_command name="screenshot"` → `Read` the PNG — confirm the gesture produced the effect (handle moved, counter ticked, menu opened).
 - Iterate until the gesture reliably drives the widget; **full-restart the host between tries** (interactive state contaminates the next probe). Then transcribe the proven coords/sequence into the `record_*.das` driver.
 
-Essential for **drags** (the value follows track geometry, so a guessed end-point lands on the wrong value) and **menus/popups** (open-then-click must be one bundled `imgui_mouse_play` stream before the auto-close timer fires). The probes obey the async rule in `skills/playwright.md` — gate each step on the snapshot, not a sleep.
+Essential for **drags** (the value follows track geometry, so a guessed end-point lands on the wrong value) and **menus/popups** (open-then-click must be one bundled `imgui_mouse_play` stream before the auto-close timer fires). The probes obey the async rule in `skills/imgui_playwright.md` — gate each step on the snapshot, not a sleep.
 
 ## The pipeline: prepare → record → convert
 
-Three tools under `utils/`, run in order. `<daslang>` = a daslang build tree, `<dasimgui>` = this repo (append `.exe` on Windows).
+Three tools (the drivers plus `modules/dasImgui/utils/{prepare,convert}_recording.das`), run in order from the daScript repo root (append `.exe` on Windows).
 
 **1. `prepare_recording` — pre-render the voiceover.** Compiles the driver (same module resolution as running it — if it won't compile, there is no recording), AST-scans it for every `say()` / `say_begin()` literal (caption + voice) plus the APNG basename, synthesizes each unique spoken line to a wav via an OpenAI-compatible TTS server (Kokoro, voice `bf_emma` by default), measures durations, and writes `voiceover/<stem>.manifest.json` beside where the APNG will land.
 
 ```bash
-<daslang>/bin/Release/daslang -project_root <dasimgui> \
-    <dasimgui>/utils/prepare_recording.das -- \
-    --driver <dasimgui>/tests/integration/record_buttons.das
+bin/Release/daslang -project_root . \
+    modules/dasImgui/utils/prepare_recording.das -- \
+    --driver tests/dasImgui/record_buttons.das --asset-root .
 ```
 
-Needs a running TTS server at `--base-url` (default `http://127.0.0.1:8880/v1`). Re-running skips lines whose wav already exists (hash-named), so it's cheap to re-prepare after editing one line. Captions/voice must be ASCII (see above) — they're scanned verbatim.
+Needs a running TTS server at `--base-url` (default `http://127.0.0.1:8880/v1`). Re-running skips lines whose wav already exists (hash-named), so it's cheap to re-prepare after editing one line. Captions/voice must be ASCII (see above) — they're scanned verbatim. Pass `--asset-root .` so the manifest + wavs land beside the APNG in the main doc tree (`doc/source/_static/tutorials/voiceover/`); the tool's default still points at the module root, a pre-merge leftover.
 
 **2. `record_X.das` — capture.** Run the driver. `with_recording_app` auto-detects the manifest (`arm_voiceovers`), so `say_begin` returns each line's real wav duration as the dwell. On `record_stop` it writes `voiceover/<stem>.sidecar.json` (clip length + the frame each caption appeared on). When voiceovers are armed, the recorder's `max_seconds` cap is **auto-extended** by the summed wav dwell (+ a margin), so a voiced body can't be cut off mid-stage by the silent-mode budget — leave `max_seconds` sized for the silent run.
 
 ```bash
-<daslang>/bin/Release/daslang -project_root <dasimgui> \
-    <dasimgui>/tests/integration/record_buttons.das
+bin/Release/daslang -project_root . tests/dasImgui/record_buttons.das
 ```
 
 **3. `convert_recording` — soundtrack + mux to MP4.** Reads the sidecar, renders the daStrudel music bed to exactly the clip length, then runs one ffmpeg pass that muxes: APNG → H.264 video, a faded low-volume music bed (default `-13 dB`), and each voiceover wav delayed to the frame its caption appeared on. The video is forced onto a constant frames/duration grid (`-r fps_eff`, where `fps_eff = frames/duration`) and each voiceover is anchored to its frame on that *same* grid, so caption and voice share one clock. (Why `fps_eff` and not the nominal fps: the APNG writer is **synchronous** — every frame is captured, none dropped — but it blocks the GL thread during zlib, so a windowed capture's *effective* fps runs below nominal while frames stay evenly spaced. Reclocking onto the real rate keeps the per-frame voiceover anchors true; without it the captions race ahead of their voice.) The exact ffmpeg command is saved to `<out>.mp4.ffmpeg.txt`.
 
 ```bash
-<daslang>/bin/Release/daslang -project_root <dasimgui> \
-    <dasimgui>/utils/convert_recording.das -- \
-    --apng <dasimgui>/doc/source/_static/tutorials/buttons.apng
+bin/Release/daslang -project_root . \
+    modules/dasImgui/utils/convert_recording.das -- \
+    --apng doc/source/_static/tutorials/buttons.apng
 ```
 
 Mostly-static recordings (a plot with a brief gesture) land ~0.5–0.8 MB at the defaults. A
@@ -96,23 +95,23 @@ H.264 inter-frame compression and runs several MB. Shrink it the lossless way �
 (which trades away the quality the clip needs). `--crf` stays at the clean default `23`; both are
 knobs only for this case.
 
-Only the resulting `.mp4` is tracked. The `.apng`, `voiceover/*.wav`, `*.manifest.json`, `*.sidecar.json`, `*_music.wav`, and `*.mp4.ffmpeg.txt` are all intermediates and gitignored.
+Nothing under `doc/source/_static/tutorials/` is tracked in git. The `.apng`, `voiceover/*.wav`, `*.manifest.json`, `*.sidecar.json`, `*_music.wav`, and `*.mp4.ffmpeg.txt` are intermediates; the `.mp4` is the deliverable, shipped by uploading to the rolling release: `gh release upload docs-assets <scene>.mp4 --clobber`.
 
 ## Mental model
 
 A recording has three independent layers:
 
-1. **Host**: `daslang-live.exe` running a feature file (`examples/tutorial/X.das` or `examples/features/X.das`). It opens a window, runs `update()` at 60 fps, listens for live-commands on port 9090. `with_recording_app` **spawns it for you** with `--imgui-content-scale=1.0` + `--no-hdpi-framebuffer` so the framebuffer + ImGui style stay at logical resolution (encoder-friendly APNGs on retina). It also posts `set_user_control(false)` so the real OS cursor can't clobber synth input.
-2. **Driver**: `daslang.exe tests/integration/record_X.das` runs once. `with_recording_app(feature, output, max_seconds [, fps]) $(app) { ... }` spawns the host, waits ready, arms voiceovers from the manifest, enables `imgui_cursor_sprite` + `imgui_mouse_trail`, posts `record_start`, invokes the body, posts `record_stop`, writes the sidecar, disables the aids, and `/shutdown`s the host. If the body left any verification failures, it panics with them after teardown.
+1. **Host**: `daslang-live.exe` running a feature file (`modules/dasImgui/examples/tutorial/X.das` or `.../examples/features/X.das`). It opens a window, runs `update()` at 60 fps, listens for live-commands on port 9090. `with_recording_app` **spawns it for you** with `--imgui-content-scale=1.0` + `--no-hdpi-framebuffer` so the framebuffer + ImGui style stay at logical resolution (encoder-friendly APNGs on retina). It also posts `set_user_control(false)` so the real OS cursor can't clobber synth input.
+2. **Driver**: `daslang.exe tests/dasImgui/record_X.das` runs once. `with_recording_app(feature, output, max_seconds [, fps]) $(app) { ... }` spawns the host, waits ready, arms voiceovers from the manifest, enables `imgui_cursor_sprite` + `imgui_mouse_trail`, posts `record_start`, invokes the body, posts `record_stop`, writes the sidecar, disables the aids, and `/shutdown`s the host. If the body left any verification failures, it panics with them after teardown.
 3. **Visual overlays**: `imgui_cursor_sprite` (red+white circle at synth pos) + `imgui_mouse_trail` (fading dotted line) paint to the foreground draw list during `end_of_frame()`. The helper toggles them around the body; tour-specific overlays (`imgui_key_hud`, `imgui_focus_rect`) are body-managed (see `record_visual_aids.das`).
 
 The recorder captures the host's framebuffer at `fps` Hz from `record_start` to `record_stop`, saving an APNG.
 
 ## Host pre-requisites
 
-If the host is a **tutorial** (`examples/tutorial/*.das`, `live_*` lifecycle): nothing extra — these already call `apply_synth_io_override()` between `ImGui_ImplGlfw_NewFrame()` and `NewFrame()`. That override drains BOTH the synth-IO timelines AND `advance_coroutines` — the latter is what advances `imgui_click`'s animated `click_at_coro`; without it, a hand-rolled tutorial loop's synth clicks silently no-op.
+If the host is a **tutorial** (`modules/dasImgui/examples/tutorial/*.das`, `live_*` lifecycle): nothing extra — these already call `apply_synth_io_override()` between `ImGui_ImplGlfw_NewFrame()` and `NewFrame()`. That override drains BOTH the synth-IO timelines AND `advance_coroutines` — the latter is what advances `imgui_click`'s animated `click_at_coro`; without it, a hand-rolled tutorial loop's synth clicks silently no-op.
 
-If the host is a **harness** (`examples/features/*.das`, `harness_*` lifecycle): nothing extra — `harness_new_frame()` runs `imgui_synth_tick()` built-in (between the backend `*_NewFrame()` and ImGui's `NewFrame()`), so synth IO drains on every harness app with no opt-in. (Earlier versions required a separate `harness_apply_synth_io()` call; it was folded into `harness_new_frame()` and no longer exists.) Without that tick, `synth_cursor_owned` would stay false (GLFW's poll wins the race), the cursor sprite + trail would paint at the off-window OS cursor, and synth clicks would never reach ImGui's hover/active state — but `harness_new_frame()` already prevents all of that.
+If the host is a **harness** (`modules/dasImgui/examples/features/*.das`, `harness_*` lifecycle): nothing extra — `harness_new_frame()` runs `imgui_synth_tick()` built-in (between the backend `*_NewFrame()` and ImGui's `NewFrame()`), so synth IO drains on every harness app with no opt-in. (Earlier versions required a separate `harness_apply_synth_io()` call; it was folded into `harness_new_frame()` and no longer exists.) Without that tick, `synth_cursor_owned` would stay false (GLFW's poll wins the race), the cursor sprite + trail would paint at the off-window OS cursor, and synth clicks would never reach ImGui's hover/active state — but `harness_new_frame()` already prevents all of that.
 
 ## Driver model (current)
 
@@ -207,7 +206,7 @@ Beyond the built-in self-verification, two probes for diagnosing the visual path
 
 ```
 mcp__daslang__live_command name="imgui_mouse_play" args='{"events":[{"t_ms":0,"kind":"move","x":50,"y":15},{"t_ms":1000,"kind":"move","x":300,"y":300}]}'
-mcp__daslang__live_command name="screenshot" args='{"file":"<dasimgui>/diag.png"}'
+mcp__daslang__live_command name="screenshot" args='{"file":"<repo-root>/diag.png"}'
 ```
 
 `Read` the PNG. If the screenshot shows what you expect but the APNG doesn't, the bug is in the recording path; if neither shows it, the synth IO isn't draining (a harness host drains it in `harness_new_frame()`; a `live_*` host must call `apply_synth_io_override()`).
@@ -222,7 +221,7 @@ ffmpeg -i scene.apng -vf "select=eq(n\,80)" -frames:v 1 -update 1 frame80.png -y
 
 ## Where recordings land
 
-`doc/source/_static/tutorials/`. `with_recording_app` writes the absolute path via `dir_name(get_this_module_dir()) / RECORD_ASSET_REL`, so caller cwd is irrelevant. When dasImgui is daspkg-installed under `daScript/modules/dasImgui/`, the APNG lands in that install copy — for source-repo workflows (preferred), launch with `-project_root <dasimgui-source>` so the loaded copy IS the source repo (the helper forwards `-project_root` to the spawned host).
+`doc/source/_static/tutorials/` in the main doc tree (the whole directory is gitignored). `with_recording_app` writes the absolute path via `get_das_root() / RECORD_ASSET_REL`, so caller cwd is irrelevant (the helper forwards `-project_root` to the spawned host). Tutorial RST pages live at `doc/source/reference/tutorials/imgui/`.
 
 Each tutorial RST cites its video via the local `video` directive (`doc/source/tutorial_video.py`, listed in `conf.py` extensions):
 
@@ -232,7 +231,7 @@ Each tutorial RST cites its video via the local `video` directive (`doc/source/t
 
 It emits `<video controls preload="metadata" playsinline>` — starts paused, native play/pause + scrubber + volume + fullscreen, audio on, no autoplay, no loop. Change player chrome once in `tutorial_video.py`, not per page.
 
-CI's sphinx step uses `-W`, so an RST citing a missing `.mp4` fails the build — commit the `.mp4` ahead of (or with) the RST cite. A voiced `.mp4` (video + voice + music) is typically ~0.5–1.5 MB for a 30–75 s clip (buttons ≈ 1.4 MB, toggles ≈ 0.7 MB, selectable_hover ≈ 0.6 MB); a silent quick-convert is much smaller. Far outside that is suspicious — too small = failed encode. Size is NOT a frame-drop signal: the synchronous writer never drops, so trust `dropped == 0` from `record_stop`, not the byte count.
+The docs builds (`doc.yml`, `pages.yml`) stage the `docs-assets` release MP4s via `utils/docs_assets/fetch.{sh,ps1}` before sphinx, and sphinx runs with `-W`, so an RST citing an `.mp4` missing from the release fails the build — upload the `.mp4` to `docs-assets` ahead of (or with) the RST cite. A voiced `.mp4` (video + voice + music) is typically ~0.5–1.5 MB for a 30–75 s clip (buttons ≈ 1.4 MB, toggles ≈ 0.7 MB, selectable_hover ≈ 0.6 MB); a silent quick-convert is much smaller. Far outside that is suspicious — too small = failed encode. Size is NOT a frame-drop signal: the synchronous writer never drops, so trust `dropped == 0` from `record_stop`, not the byte count.
 
 ## Manual ffmpeg conversion (no soundtrack)
 
@@ -258,9 +257,9 @@ Older drivers (e.g. the original `record_with_id.das`) use the **pre-voice patte
 
 For scene `foo`:
 
-1. Author/upgrade `tests/integration/record_foo.das` (voiced, self-verifying, do-what-it-teaches).
+1. Author/upgrade `tests/dasImgui/record_foo.das` (voiced, self-verifying, do-what-it-teaches).
 2. Run prepare → record → convert; **eyeball-review** the resulting `.mp4`.
-3. Commit: `recording: foo` — `record_foo.das` + `doc/source/_static/tutorials/foo.mp4`. (The `.apng`/`voiceover/*`/`*.ffmpeg.txt` intermediates are gitignored — don't commit them.)
-4. Commit: `tutorial: foo RST page` — `doc/source/tutorials/foo.rst` (`.. video:: foo.mp4`) + the `index.rst` toctree entry.
+3. Upload the deliverable: `gh release upload docs-assets foo.mp4 --clobber` (MP4s are NOT committed; everything under `doc/source/_static/tutorials/` is gitignored).
+4. Commit: `recording: foo` — `record_foo.das`; and `tutorial: foo RST page` — `doc/source/reference/tutorials/imgui/foo.rst` (`.. video:: foo.mp4`) + its toctree entry. Upload the `.mp4` before pushing the RST cite, or the `-W` docs build goes red.
 
-If recording multiple scenes in one PR, repeat per scene with a PAUSE for eyeball review between scenes. Project workflow: eyeball-only review, no Copilot, branches as backup. Recording is interactive and one-at-a-time — concurrent driver runs collide on port 9090.
+If recording multiple scenes in one PR, repeat per scene with a PAUSE for eyeball review between scenes. Recording is interactive and one-at-a-time — concurrent driver runs collide on port 9090.

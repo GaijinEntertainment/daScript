@@ -46,8 +46,8 @@ var g_last_menu_action = "(none yet)"
 [export]
 def init() {
     harness_init("internal_popup_menu_ex - imgui_internal.h popup / tooltip / menu *Ex", 780, 600)
-    var io & = unsafe(GetIO())
-    unsafe(GetStyle()).FontScaleMain = 1.25
+    let io & = unsafe(GetIO())
+    GetStyle().FontScaleMain = 1.25
 }
 
 [export]

@@ -1,6 +1,8 @@
 options gen2
 options _comment_hygiene = true
 options indenting = 4
+// 1:1 port of C++ imgui_demo sections — function shape mirrors upstream
+options _function_length = 0
 
 module inputs
 

@@ -171,13 +171,13 @@ def private restore_imgui_ctx() {
 
 [init]
 def private wire_glfw_real_input_toggle() {
-    // boost owns set_user_control + the synth tick but is backend-agnostic. It
+    // nolint:STYLE015 — boost owns set_user_control + the synth tick but is backend-agnostic. It
     // exposes register_real_input_toggle so a backend can suppress real input at
     // the source. Here the windowed GLFW backend (native imgui_app) fills it, so
     // set_user_control(false) detaches the GLFW input callbacks. Non-GLFW hosts
     // simply never register, and user control then governs only synth ownership.
     register_real_input_toggle(@@(enabled : bool) {
-        // Two gates: detach the ImGui backend's GLFW callbacks AND mute the
+        // nolint:STYLE015 — Two gates: detach the ImGui backend's GLFW callbacks AND mute the
         // DasGlfw chain's real entries. The chain re-arms its GLFW slots on any
         // glfw_post_* (keeping captured prev callbacks), so detaching alone
         // leaves a route real events can leak through while control is off.

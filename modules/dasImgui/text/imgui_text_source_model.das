@@ -110,13 +110,13 @@ def private push_marker(var document : TextSourceDocument; var covered_until : i
     covered_until = end_byte
 }
 
-def public markdown_source_document(source : string;
+def public markdown_source_document(source : string; // nolint:STYLE038
                                     revision : int = 0) : TextSourceDocument {
     //! Lightweight Markdown lexical styling for source presentation. Not a second Markdown parser:
     //! it recognizes delimiter tokens while leaving all bytes visible. Structural MD4C parsing
     //! remains the authority for rendered Markdown.
     var document = TextSourceDocument(source = source, revision = revision)
-    peek_data(source) $(bytes) {
+    peek_data(source) $(bytes) { // nolint:STYLE037
         let n = length(bytes)
         var at = 0
         var line_start = 0

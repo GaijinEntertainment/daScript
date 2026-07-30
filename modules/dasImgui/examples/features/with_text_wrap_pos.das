@@ -20,8 +20,8 @@ let LIPSUM = ("Lorem ipsum dolor sit amet, consectetur adipiscing elit, "
 [export]
 def init() {
     harness_init("with_text_wrap_pos — scope wrapper", 720, 540)
-    var io & = unsafe(GetIO())
-    unsafe(GetStyle()).FontScaleMain = 1.5
+    let io & = unsafe(GetIO())
+    GetStyle().FontScaleMain = 1.5
 }
 
 [export]

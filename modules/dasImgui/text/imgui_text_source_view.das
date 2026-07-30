@@ -246,7 +246,7 @@ def private source_color(style_id : int;
 
 def private range_columns(source : string; start_byte, end_byte, tab_cells : int) : int {
     if (end_byte <= start_byte) return 0
-    var value := slice(source, start_byte, end_byte)
+    let value = slice(source, start_byte, end_byte)
     var graphemes <- text_graphemes(value)
     var columns = 0
     for (grapheme in graphemes) {
@@ -286,7 +286,7 @@ def private rebuild_cells(document : TextSourceDocument const;
                                          line.first_fragment + line.fragment_count)) {
                 let fragment = state.layout.fragments[fragment_index]
                 if (fragment.is_control) continue
-                var value := slice(document.source,
+                let value = slice(document.source,
                     fragment.source.start_byte, fragment.source.end_byte)
                 var graphemes <- text_graphemes(value)
                 var x = fragment.rect.x
@@ -322,7 +322,7 @@ def private rebuild_cells(document : TextSourceDocument const;
 
 def private ensure_layout(document : TextSourceDocument const;
                           var state : TextSourceViewState;
-                          var style : TextSourceViewStyle;
+                          style : TextSourceViewStyle;
                           available_width : float;
                           var font : ImFont?) {
     let zoom = source_zoom(style)
@@ -332,7 +332,7 @@ def private ensure_layout(document : TextSourceDocument const;
     let cell_width = max(1.0f,
         CalcTextSizeForFontRange(font, font_size, "M", 1, 0, 1).x)
     let max_width = style.wrap ? max(available_width, cell_width) : 100000000.0f
-    var key = TextSourceLayoutKey(
+    let key = TextSourceLayoutKey(
         document_revision = document.revision,
         max_width = max_width,
         font_size = font_size,
@@ -354,7 +354,7 @@ def private ensure_layout(document : TextSourceDocument const;
     }
     state.layout <- layout_text_flow_styled_ranges(document.source, spans,
         key.max_width, key.line_height) $(text : string;
-                                          start_byte, end_byte, measured_style : int) : float {
+                                          start_byte, end_byte, _measured_style : int) : float {
             return range_width(text, start_byte, end_byte,
                                key.tab_cells, key.cell_width)
         }
@@ -721,7 +721,7 @@ def private virtual_hit_byte(document : TextSourceDocument const;
     return result
 }
 
-def private text_source_virtual_view(id : string;
+def private text_source_virtual_view(id : string; // nolint:STYLE037
                                      document : TextSourceDocument const;
                                      var state : TextSourceViewState;
                                      var style : TextSourceViewStyle) : TextSourceViewResult {
@@ -867,9 +867,9 @@ def private text_source_virtual_view(id : string;
     state.selection_copy_pending = false
     if (has_selection && copy_requested) {
         result.selection_copy_requested = true
-        result.selection_copy_text := slice(document.source,
+        result.selection_copy_text = slice(document.source,
             selection.start_byte, selection.end_byte)
-        state.selection_copy_text := result.selection_copy_text
+        state.selection_copy_text = result.selection_copy_text
         state.selection_copy_revision++
         if (style.write_system_clipboard) {
             result.selection_copied = (clipboard_set_text(result.selection_copy_text)
@@ -896,7 +896,7 @@ def private text_source_virtual_view(id : string;
     return <- result
 }
 
-def public text_source_view(id : string; document : TextSourceDocument const;
+def public text_source_view(id : string; document : TextSourceDocument const; // nolint:STYLE037
                             var state : TextSourceViewState;
                             var style : TextSourceViewStyle) : TextSourceViewResult {
     if (!style.wrap && length(document.source) >= 128 * 1024) {
@@ -1076,9 +1076,9 @@ def public text_source_view(id : string; document : TextSourceDocument const;
     state.selection_copy_pending = false
     if (has_selection && copy_requested) {
         result.selection_copy_requested = true
-        result.selection_copy_text := slice(document.source,
+        result.selection_copy_text = slice(document.source,
             selection.start_byte, selection.end_byte)
-        state.selection_copy_text := result.selection_copy_text
+        state.selection_copy_text = result.selection_copy_text
         state.selection_copy_revision++
         if (style.write_system_clipboard) {
             result.selection_copied = (clipboard_set_text(result.selection_copy_text)

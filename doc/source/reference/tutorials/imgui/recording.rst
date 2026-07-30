@@ -164,11 +164,11 @@ After the recorder finishes, one ffmpeg pass converts to the shipped
           -movflags +faststart recording.mp4
 
 Typical UI recording: 50-300 KB MP4 (vs 50-100 MB APNG, ~300x smaller).
-The :code:`.mp4` is what RSTs reference and what ships in source.
+The :code:`.mp4` is what RSTs reference; it ships on the rolling docs-assets GitHub release, not in git.
 
 If you want to iterate without re-recording the host's state, drive a
 manually-launched host via :code:`mcp__daslang__live_command` instead
-(see "Verifying a recording" in :code:`skills/recording.md`). The
+(see "Verifying a recording" in :code:`skills/imgui_recording.md`). The
 driver script is for the canonical artifact pass.
 
 Stop conditions

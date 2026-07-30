@@ -11,7 +11,7 @@ options rtti                                 // dasOPENAI needs rtti so @optiona
 // durations, and writes voiceover/<stem>.manifest.json beside where the APNG will land.
 // with_recording_app auto-detects that manifest at record time (see imgui_playwright.das).
 
-require imgui                              // umbrella — drivers `require imgui`; load it (shared) so compile_file reuses it
+require imgui                              // nolint:STYLE030 — side-effect require: drivers `require imgui`; load it (shared) so compile_file reuses it
 require imgui/imgui_playwright              // VoEntry / VoManifest / say_hash / RECORD_ASSET_REL / dasimgui_module_root
 require openai/openai_audio                 // speech / SpeechRequest / openai_client
 require daslib/ast_boost                    // compile_file / VisitorAdapter / visit
@@ -157,10 +157,10 @@ def main : int {
     }
     to_log(LOG_INFO, "[prepare] scanned {cfg.driver}: apng={g_apng}, {length(g_lines)} say() line(s)\n")
     let apng_stem = stem(g_apng)
-    // Manifest + wavs must land beside where the APNG will be written (arm_voiceovers reads
-    // dir_name(apng)/voiceover at record time). dasImgui drivers root it under dasImgui's module
-    // root; a consumer package roots it under its own and passes --asset-root to redirect there.
-    let root = empty(cfg.asset_root) ? dasimgui_module_root() : cfg.asset_root
+    // Manifest + wavs must land beside the APNG (arm_voiceovers reads dir_name(apng)/voiceover
+    // at record time); with_recording_app roots in-tree recordings at get_das_root() since the
+    // merge, and a consumer package passes --asset-root to redirect under its own tree.
+    let root = empty(cfg.asset_root) ? get_das_root() : cfg.asset_root
     let vo_dir = path_join(path_join(root, RECORD_ASSET_REL), "voiceover")
     mkdir_rec(vo_dir)
     let client = openai_client(cfg.base_url)

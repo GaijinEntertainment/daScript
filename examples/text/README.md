@@ -1,6 +1,6 @@
 # Text viewer
 
-A small Unicode plain-text and Markdown viewer built with dasImgui.
+A small Unicode plain-text and Markdown viewer built with the in-tree dasImgui module.
 
 ```text
 daslang examples/text/main.das -- README.md

@@ -115,7 +115,7 @@ def public command_define(var registry : CommandRegistry;
     registry.definitions |> push_clone(definition)
     if (default_binding.key != 0) {
         var binding := default_binding
-        binding.command_id := definition.id
+        binding.command_id = definition.id
         binding.scope = definition.scope
         registry.default_bindings |> push_clone(binding)
         registry.bindings |> push_clone(binding)
@@ -143,6 +143,7 @@ def public command_enabled(registry : CommandRegistry const; id : string) : bool
     return index >= 0 && registry.definitions[index].enabled
 }
 
+[unused_argument(registry)]
 def public command_begin_frame(var registry : CommandRegistry) {
     // Deliberately retain queued invocations. Live/API producers may enqueue
     // between rendered frames; command_take drains them after UI submission.
@@ -159,7 +160,7 @@ def public command_invoke(var registry : CommandRegistry; id : string;
 
 def public command_take(var registry : CommandRegistry;
                         var invocation : CommandInvocation) : bool {
-    if (length(registry.invocations) == 0) return false
+    if (empty(registry.invocations)) return false
     invocation <- registry.invocations[0]
     registry.invocations |> erase(0)
     return true
@@ -167,7 +168,7 @@ def public command_take(var registry : CommandRegistry;
 
 def private command_uses_macos_behaviors() : bool {
     if (GetCurrentContext() != null) {
-        return unsafe(GetIO()).ConfigMacOSXBehaviors
+        return GetIO().ConfigMacOSXBehaviors
     }
     return get_platform_name() == "darwin"
 }
@@ -231,9 +232,7 @@ def public command_poll_scope(var registry : CommandRegistry;
 
 def public command_reset_bindings(var registry : CommandRegistry) {
     delete registry.bindings
-    for (binding in registry.default_bindings) {
-        registry.bindings |> push_clone(binding)
-    }
+    registry.bindings |> push_clone_from(registry.default_bindings)
     registry.revision++
     registry.status = "Restored default bindings."
 }
@@ -290,9 +289,7 @@ def public command_save_bindings(var registry : CommandRegistry) : bool {
         return false
     }
     var config = CommandBindingsFile()
-    for (binding in registry.bindings) {
-        config.bindings |> push_clone(binding)
-    }
+    config.bindings |> push_clone_from(registry.bindings)
     let ok = fwrite(registry.config_path, write_json(JV(config)))
     delete config.bindings
     if (!ok) {
@@ -352,6 +349,7 @@ def public command_default_config_path(app_name : string) : string {
 }
 
 def public command_capture_tick(var registry : CommandRegistry) {
+    //!@nolint
     //! Advance an armed binding capture (``registry.capture_command_id``):
     //! Escape cancels, the first pressed non-modifier key plus current
     //! modifiers becomes the binding. Call once per frame; the built-in
@@ -369,7 +367,7 @@ def public command_capture_tick(var registry : CommandRegistry) {
     }
     let io & = unsafe(GetIO())
     for (key in type<ImGuiKey>) {
-        // Skip the side-modifier keys themselves (LeftCtrl..RightSuper are
+        // nolint:STYLE014 — Skip the side-modifier keys themselves (LeftCtrl..RightSuper are
         // contiguous): a chord's modifiers press first, and binding on their
         // own down-frame would capture "Ctrl+LeftCtrl" before the real key
         // arrives. Modifiers are read from io.Key* when the non-modifier

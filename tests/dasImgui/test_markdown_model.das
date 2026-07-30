@@ -79,7 +79,7 @@ def test_tight_list_direct_inline_content(t : T?) {
 }
 
 [test]
-def test_markdown_gfm_model(t : T?) {
+def test_markdown_gfm_model(t : T?) { // nolint:STYLE038
     let source = %stringify~# Unicode Привет 文档
 
 Text with *emphasis*, **strong**, [named](https://example.com/a?x=1&amp;y=2 "Example &copy;"), https://dascript.org and &amp; &copy; &#x1F680;.

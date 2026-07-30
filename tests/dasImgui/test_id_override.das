@@ -15,7 +15,7 @@ require daslib/json_boost public
 let ID_OVERRIDE_FEATURE = "modules/dasImgui/examples/features/id_override.das"
 
 [test]
-def test_id_override(t : T?) {
+def test_id_override(t : T?) { // nolint:STYLE038
     with_imgui_app(ID_OVERRIDE_FEATURE) $(d) {
         t |> run("with_id_distinct_scopes") <| @(t : T?) {
             // Wait for the deepest leaf to land — proves the entire with_id chain

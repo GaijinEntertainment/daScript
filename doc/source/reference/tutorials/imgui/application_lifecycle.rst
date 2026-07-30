@@ -142,5 +142,5 @@ Run modes
 
    * :ref:`tutorial_live_reload` for reload state and lifecycle hooks.
    * :ref:`tutorial_harness_headless_mode` for the harness backend split.
-   * ``skills/application.md`` for the implementation checklist used when
+   * ``skills/imgui_application.md`` for the implementation checklist used when
      creating or reviewing an application.

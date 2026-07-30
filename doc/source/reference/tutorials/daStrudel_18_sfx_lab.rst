@@ -28,12 +28,12 @@ a dasImgui / ImPlot GUI.  The tool lives at
 Running it
 ==========
 
-The GUI depends on two daspkg packages — `dasImgui
-<https://github.com/borisbat/dasImgui>`_ and `dasImguiImplot
-<https://github.com/borisbat/dasImguiImplot>`_ — declared in the tool's
-``.das_package``.  Install them once (this clones and builds the C++ shared
-modules into ``modules/``), then run the tool with no ``-load_module``
-flags:
+The GUI depends on the `dasImguiImplot
+<https://github.com/borisbat/dasImguiImplot>`_ daspkg package, declared in
+the tool's ``.das_package`` (dasImgui itself ships in-tree with daslang —
+nothing to install for it).  Install it once (this clones and builds the
+C++ shared modules into ``modules/``), then run the tool with no
+``-load_module`` flags:
 
 .. code-block:: text
 

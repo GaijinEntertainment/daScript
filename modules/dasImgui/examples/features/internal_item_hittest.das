@@ -30,8 +30,8 @@ def private box(var dl : ImDrawList?; x, y, w, h : float; edge : uint) {
 [export]
 def init() {
     harness_init("internal_item_hittest - imgui_internal.h item hit-test / geometry", 760, 560)
-    var io & = unsafe(GetIO())
-    unsafe(GetStyle()).FontScaleMain = 1.25
+    let io & = unsafe(GetIO())
+    GetStyle().FontScaleMain = 1.25
 }
 
 [export]

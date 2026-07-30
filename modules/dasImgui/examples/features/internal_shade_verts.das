@@ -25,8 +25,8 @@ require math
 [export]
 def init() {
     harness_init("internal_shade_verts - imgui_internal.h ShadeVerts* family", 760, 470)
-    var io & = unsafe(GetIO())
-    unsafe(GetStyle()).FontScaleMain = 1.25
+    let io & = unsafe(GetIO())
+    GetStyle().FontScaleMain = 1.25
 }
 
 [export]

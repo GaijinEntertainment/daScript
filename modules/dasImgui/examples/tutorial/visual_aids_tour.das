@@ -51,7 +51,7 @@ def init() {
 }
 
 [export]
-def update() {
+def update() { // nolint:STYLE038
     if (!live_begin_frame()) return
     begin_frame()
 

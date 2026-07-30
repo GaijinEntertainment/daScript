@@ -20,8 +20,8 @@ require imgui/imgui_harness
 [export]
 def init() {
     harness_init("§4.7 — with_style", 640, 480)
-    var io & = unsafe(GetIO())
-    unsafe(GetStyle()).FontScaleMain = 1.5
+    let io & = unsafe(GetIO())
+    GetStyle().FontScaleMain = 1.5
 }
 
 [export]

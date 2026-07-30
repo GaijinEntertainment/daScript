@@ -26,8 +26,8 @@ require imgui/imgui_harness
 [export]
 def init() {
     harness_init("internal_render_text - imgui_internal.h Render* text helpers", 760, 540)
-    var io & = unsafe(GetIO())
-    unsafe(GetStyle()).FontScaleMain = 1.25
+    let io & = unsafe(GetIO())
+    GetStyle().FontScaleMain = 1.25
 }
 
 def private box(var dl : ImDrawList?; x, y, w, h : float; edge : uint) {

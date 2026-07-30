@@ -67,7 +67,7 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/daspkg.md` | Creating `.das_package` manifests, daspkg commands |
 | `skills/clargs_usage.md` | Writing daslang CLI tools — declarative argv parsing via `daslib/clargs` |
 | `skills/dynamic_modules.md` | `.das_module` descriptors, module resolution, `register_native_path` |
-| `skills/external_module_debugging.md` | Iterating on a daslang module outside the SDK tree (dasImgui, dasCards, or your own daspkg package) — run/lint/test from a standalone `daslang` or via MCP without a full `daspkg install` (junction pattern + `project_root` MCP arg) |
+| `skills/external_module_debugging.md` | Iterating on a daslang module outside the SDK tree (dasImguiNodeEditor, dasCards, or your own daspkg package) — run/lint/test from a standalone `daslang` or via MCP without a full `daspkg install` (junction pattern + `project_root` MCP arg) |
 | `skills/daslang_live.md` | `daslang-live` lifecycle, REST API, `[live_command]`, persistent state |
 | `skills/imgui_ui_debugging.md` | Diagnosing or fixing any dasImgui UI / interaction bug — the discipline: reproduce → make it observable in `imgui_snapshot` → fix → prove via snapshot + test. Never claim a UI fix works from logic or a screenshot alone |
 | `skills/json.md` | Reading/writing JSON (`sprint_json`/`sscan_json`, `JV`, manual `JsonValue?`) |

@@ -535,7 +535,7 @@ def private uri_break_after(cp : int) : bool {
 def private make_units(source : string; spans : array<TextFlowSpan> const;
                        line_height : float;
                        measure : block<(text : string; start_byte : int;
-                                        end_byte : int; style_id : int) : float>) : array<TextFlowUnit> {
+                         end_byte : int; style_id : int) : float>) : array<TextFlowUnit> {
     var units : array<TextFlowUnit>
     let source_len = length(source)
     units |> reserve(source_len + length(spans) * 2)
@@ -765,8 +765,8 @@ def public text_flow_hit_test_ranges(source : string;
                                      layout : TextFlowLayout const;
                                      point : float2;
                                      measure : block<(text : string;
-                                         start_byte : int; end_byte : int;
-                                         style_id : int) : float>) : TextFlowHit {
+                                       start_byte : int; end_byte : int;
+                                       style_id : int) : float>) : TextFlowHit {
     //! Map a local screen point to the nearest caret within the text fragment
     //! under it. Carets are emitted only at grapheme boundaries. Inline
     //! controls deliberately do not participate in text selection.
@@ -818,8 +818,8 @@ def public layout_text_flow_styled_ranges(source : string;
                                           spans : array<TextFlowSpan> const;
                                           max_width, line_height : float;
                                           measure : block<(text : string;
-                                              start_byte : int; end_byte : int;
-                                              style_id : int) : float>) : TextFlowLayout {
+                                            start_byte : int; end_byte : int;
+                                            style_id : int) : float>) : TextFlowLayout {
     //! Greedy inline layout with style-aware measurement. Text is never split
     //! inside a grapheme cluster; the measured style is carried unchanged into
     //! each emitted fragment so rendering can use the identical font role.

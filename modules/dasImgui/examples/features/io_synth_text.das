@@ -23,8 +23,8 @@ var auto_focused = false
 [export]
 def init() {
     harness_init("Phase 2.2 — io_synth_text", 800, 600)
-    var io & = unsafe(GetIO())
-    unsafe(GetStyle()).FontScaleMain = 1.5
+    let io & = unsafe(GetIO())
+    GetStyle().FontScaleMain = 1.5
 }
 
 [export]

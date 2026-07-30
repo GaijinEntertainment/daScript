@@ -89,7 +89,7 @@ def private bind_demo_image(width, height : float;
                             resource_revision : int) : bool {
     let node_index = first_image_node()
     if (node_index < 0) return false
-    let atlas_id = image_texture_id(unsafe(GetIO()).Fonts.TexRef)
+    let atlas_id = image_texture_id(GetIO().Fonts.TexRef)
     return markdown_view_bind_image(g_view, MarkdownImageBinding(
         document_revision = 0,
         node_index = node_index,
@@ -99,7 +99,7 @@ def private bind_demo_image(width, height : float;
 }
 
 [live_command(description = "Inspect Markdown render, hover, selection, and event revisions without a screenshot.")]
-def markdown_probe_state(_input : JsonValue?) : JsonValue? {
+def markdown_probe_state(_input : JsonValue?) : JsonValue? { // nolint:STYLE038
     let s = g_last_selection
     let io & = unsafe(GetIO())
     let copy_modifier_down = io.ConfigMacOSXBehaviors ? io.KeySuper : io.KeyCtrl
@@ -419,7 +419,7 @@ Entities decode for display while retaining source bytes: &amp; &copy; &#x1f680;
 }
 
 [export]
-def update() {
+def update() { // nolint:STYLE038
     if (!harness_begin_frame()) return
     harness_new_frame()
     command_begin_frame(g_commands)

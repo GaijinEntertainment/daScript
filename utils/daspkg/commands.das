@@ -232,7 +232,7 @@ def resolve_dep_source(root, source : string) : string {
     return source
 }
 
-def install_dependencies(root, pkg_name : string; var lf : LockFile; var visiting : table<string; bool>; is_global : bool = false) {
+def install_dependencies(root, pkg_name : string; var lf : LockFile; var visiting : table<string; bool>; is_global : bool = false) { // nolint:STYLE038
     // `visiting` is a STACK of pkgs currently in flight on the install chain, not
     // a "visited" set — we erase pkg_name before returning so a sibling dep
     // (diamond graph) sees it via has_package, not via the cycle path.
@@ -361,7 +361,7 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; is_
     return install_git(root, pkg_name, source, version, lf, visiting, [is_root = is_root, is_global = is_global, branch = branch])
 }
 
-def install_git(root, pkg_name, source, version : string; var lf : LockFile; var visiting : table<string; bool>; is_root : bool = true; is_global : bool = false; branch : string = "") {
+def install_git(root, pkg_name, source, version : string; var lf : LockFile; var visiting : table<string; bool>; is_root : bool = true; is_global : bool = false; branch : string = "") { // nolint:STYLE037
     let modules_dir = is_global ? "{get_das_root()}/modules" : "{root}/modules"
     let tmp_dir = "{modules_dir}/.daspkg_tmp/{pkg_name}"
     let target_dir = "{modules_dir}/{pkg_name}"
@@ -535,7 +535,7 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
     return 0
 }
 
-def cmd_install(root, spec : string; force : bool; is_global : bool = false; version_constraint : string = ""; branch : string = "") {
+def cmd_install(root, spec : string; force : bool; is_global : bool = false; version_constraint : string = ""; branch : string = "") { // nolint:STYLE037
     // parse spec: name[@version]
     var source = spec
     var version = ""
@@ -747,7 +747,7 @@ def cmd_remove(root, name : string; is_global : bool = false) {
     return 0
 }
 
-def cmd_update(root, name : string; is_global : bool = false) {
+def cmd_update(root, name : string; is_global : bool = false) { // nolint:STYLE037
     var lf : LockFile
     if (is_global) {
         if (!read_global_lock_file(lf)) {
@@ -1057,7 +1057,7 @@ def cmd_build(root : string; is_global : bool = false) {
 // that `daspkg release wasm` links against, and consolidate them into <lib_dir>
 // (default <das_root>/web/output64/lib). Requires an activated emscripten SDK
 // (emcc + cmake on PATH); CI activates emsdk_env before invoking.
-def cmd_build_wasm(_root : string; lib_dir_override : string) : int {
+def cmd_build_wasm(_root : string; lib_dir_override : string) : int { // nolint:STYLE038
     let das_root = get_das_root()
     let lib_dir = empty(lib_dir_override) ? "{das_root}/web/output64/lib" : lib_dir_override
     let build_dir = "{das_root}/web/build64"
@@ -1316,7 +1316,7 @@ def private is_safe_pkg_name(name : string) : bool {
     return !(find(name, "/") >= 0 || find(name, "\\") >= 0)
 }
 
-def cmd_cleanup(root : string; force : bool; is_global : bool = false) : int {
+def cmd_cleanup(root : string; force : bool; is_global : bool = false) : int { // nolint:STYLE038
     if (is_global) {
         if (!force) {
             to_log(LOG_ERROR, "Error: --global cleanup requires --force (removes every globally-installed daspkg package)\n")
@@ -2089,7 +2089,7 @@ def private get_daslang_path() : string {
     return get_platform_name() == "windows" ? replace(joined, "/", "\\") : joined
 }
 
-def cmd_release(root : string; out_dir : string; tune_fast = false) : int {
+def cmd_release(root : string; out_dir : string; tune_fast = false) : int { // nolint:STYLE037
     let release_t0 = ref_time_ticks()
     // Reset the patchelf availability cache so a daspkg process that releases
     // multiple bundles can pick up a patchelf install between calls.
@@ -2603,7 +2603,7 @@ def private ensure_external_wasm_archives(pkg_dir, wasm_lib_dir : string; var bu
 }
 
 // Build one app: cross-compile → discover modules → emcc-link → stage assets.
-def private release_one_wasm_app(root, out_dir, app_name, main_script : string;
+def private release_one_wasm_app(root, out_dir, app_name, main_script : string; // nolint:STYLE037
                                  wasm_lib_dir, runtime_archive, shell_path : string;
                                  include_globs, exclude_globs : array<string>) : int {
     if (!is_safe_pkg_name(app_name)) {

@@ -482,12 +482,8 @@ def public markdown_view_dispose(var state : MarkdownViewState) {
 
 def private retain_image_bindings(var state : MarkdownViewState;
                                   document_revision : int) {
-    var retained : array<MarkdownImageBinding>
-    for (binding in state.image_bindings) {
-        if (binding.document_revision == document_revision) {
-            retained |> push(binding)
-        }
-    }
+    var retained <- [for (binding in state.image_bindings); binding;
+                     where binding.document_revision == document_revision]
     if (length(retained) != length(state.image_bindings)) {
         delete state.image_bindings
         state.image_bindings <- retained
@@ -518,8 +514,8 @@ def private retain_syntax_bindings(var state : MarkdownViewState;
         state.syntax_bindings <- retained
         state.syntax_bindings_revision++
     } else {
-        for (i in range(length(retained))) {
-            delete retained[i].tokens
+        for (binding in retained) {
+            delete binding.tokens
         }
         delete retained
     }
@@ -837,7 +833,7 @@ def private vertical_text_position(var state : MarkdownViewState;
                               hit.byte_offset, hit.trailing)
 }
 
-def private navigate_selection_keyboard(var state : MarkdownViewState;
+def private navigate_selection_keyboard(var state : MarkdownViewState; // nolint:STYLE037
                                         var style : MarkdownViewStyle) {
     if (!state.selection_focus.valid
             || !IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)
@@ -967,7 +963,7 @@ def private same_layout_key(a, b : MarkdownLayoutKey) : bool {
         && a.monospace_id == b.monospace_id && a.fallback_id == b.fallback_id)
 }
 
-def private ensure_layout(doc : RichDocument const; node_index : int;
+def private ensure_layout(doc : RichDocument const; node_index : int; // nolint:STYLE038
                           var state : MarkdownViewState;
                           key : MarkdownLayoutKey;
                           var style : MarkdownViewStyle;
@@ -1062,7 +1058,7 @@ def private ensure_layout(doc : RichDocument const; node_index : int;
     state.layout_misses++
 }
 
-def private render_inline(doc : RichDocument const; node_index : int;
+def private render_inline(doc : RichDocument const; node_index : int; // nolint:STYLE037
                           var state : MarkdownViewState; max_width : float;
                           var style : MarkdownViewStyle;
                           font_scale : float; forced_style : int;
@@ -1094,7 +1090,7 @@ def private render_inline(doc : RichDocument const; node_index : int;
                 + state.image_bindings[binding_index].view_revision)
         }
     }
-    var key = MarkdownLayoutKey(
+    let key = MarkdownLayoutKey(
         max_width = available, line_height = line_height, font_size = font_size,
         inline_code_scale = has_style(forced_style, STYLE_CODE)
             ? 1.0f : max(style.typography.inline_code_scale, 0.1f),
@@ -1200,7 +1196,7 @@ def private render_inline(doc : RichDocument const; node_index : int;
                 && markdown_view_image_bound(state, state.document_revision,
                                              result.hovered_node))
         }
-        result.target := link_target(doc, content, hovered)
+        result.target = link_target(doc, content, hovered)
     }
 
     var dl = GetWindowDrawList()
@@ -1210,7 +1206,7 @@ def private render_inline(doc : RichDocument const; node_index : int;
         let screen_rect = markdown_cached_fragment_rect(cache, fragment)
         let p0 = float2(screen_rect.x, screen_rect.y)
         let p1 = float2(screen_rect.z, screen_rect.w)
-        let hot_link = fragment.semantic_id >= 0 && fragment.semantic_id == hovered
+        let _hot_link = fragment.semantic_id >= 0 && fragment.semantic_id == hovered
         if (has_style(fragment.style_id, STYLE_IMAGE)) {
             *dl |> AddRectFilled(p0 - float2(1.0f * zoom, 0.0f),
                                  p1 + float2(3.0f * zoom, 0.0f),
@@ -1373,7 +1369,7 @@ def private render_inline(doc : RichDocument const; node_index : int;
                     && markdown_view_image_bound(state, state.document_revision,
                                                  result.activated_node))
             }
-            result.target := link_target(doc, content, hovered)
+            result.target = link_target(doc, content, hovered)
         }
     }
     for (fragment in layout.fragments) {
@@ -1435,13 +1431,13 @@ def private render_inline(doc : RichDocument const; node_index : int;
                 let run_index = link_run_index(doc, content, control_id)
                 let target = link_target(doc, content, control_id)
                 result.copy_requested = true
-                result.copy_text := target
+                result.copy_text = target
                 result.copied_node = (run_index >= 0
                     ? content.runs[run_index].semantic_node : -1)
                 if (run_index >= 0) {
                     result.source = content.runs[run_index].source
                 }
-                result.target := target
+                result.target = target
                 if (style.write_system_clipboard) {
                     result.copied = (markdown_copy_uri_to_clipboard(target) == ClipboardStatus.ok)
                 }
@@ -1469,7 +1465,7 @@ def private render_inline(doc : RichDocument const; node_index : int;
     PopID()
 }
 
-def private block_spacing(var style : MarkdownViewStyle; amount : float) {
+def private block_spacing(style : MarkdownViewStyle; amount : float) {
     if (amount > 0.0f) Dummy(float2(0.0f, zoomed(style, amount)))
 }
 
@@ -1484,7 +1480,7 @@ def private render_children(doc : RichDocument const; node_index : int;
     }
 }
 
-def private render_list(doc : RichDocument const; node_index : int;
+def private render_list(doc : RichDocument const; node_index : int; // nolint:STYLE038
                         var state : MarkdownViewState;
                         var style : MarkdownViewStyle;
                         var result : MarkdownViewResult) {
@@ -1712,6 +1708,7 @@ def private render_block(doc : RichDocument const; node_index : int;
     }
 }
 
+[unused_argument(doc)]
 def private finish_selection(doc : RichDocument const;
                              var state : MarkdownViewState;
                              var result : MarkdownViewResult) {
@@ -1774,7 +1771,7 @@ def public markdown_selection_export(state : MarkdownViewState const) : MdSelect
     return <- result
 }
 
-def public markdown_view(id : string; doc : RichDocument const;
+def public markdown_view(id : string; doc : RichDocument const; // nolint:STYLE038
                          var state : MarkdownViewState;
                          var style : MarkdownViewStyle;
                          document_revision : int = 0) : MarkdownViewResult {
@@ -1840,16 +1837,16 @@ def public markdown_view(id : string; doc : RichDocument const;
     let copy_requested = state.selection_copy_pending
     state.selection_copy_pending = false
     if (result.selection.active && copy_requested) {
-        var copy <- markdown_selection_export(state)
+        let copy <- markdown_selection_export(state)
         result.selection_copy_requested = true
-        result.selection_copy_text := copy.plain_text
-        result.selection_copy_markdown := copy.markdown
-        result.selection_copy_html := copy.html
-        result.selection_copy_uri_list := copy.uri_list
-        state.selection_copy_text := copy.plain_text
-        state.selection_copy_markdown := copy.markdown
-        state.selection_copy_html := copy.html
-        state.selection_copy_uri_list := copy.uri_list
+        result.selection_copy_text = copy.plain_text
+        result.selection_copy_markdown = copy.markdown
+        result.selection_copy_html = copy.html
+        result.selection_copy_uri_list = copy.uri_list
+        state.selection_copy_text = copy.plain_text
+        state.selection_copy_markdown = copy.markdown
+        state.selection_copy_html = copy.html
+        state.selection_copy_uri_list = copy.uri_list
         state.selection_copy_revision++
         if (style.write_system_clipboard) {
             var content = ClipboardContent(

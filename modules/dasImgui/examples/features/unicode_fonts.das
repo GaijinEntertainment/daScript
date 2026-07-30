@@ -39,7 +39,7 @@ def init() {
 }
 
 [export]
-def update() {
+def update() { // nolint:STYLE038
     if (!harness_begin_frame()) return
     harness_new_frame()
 

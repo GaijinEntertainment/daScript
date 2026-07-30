@@ -43,8 +43,8 @@ def private same_rect(var a : JsonValue?; var b : JsonValue?) : bool {
 }
 
 [test]
-def test_markdown_view_event_driven_interactions(t : T?) {
-    with_imgui_app(FEATURE) $(app) {
+def test_markdown_view_event_driven_interactions(t : T?) { // nolint:STYLE038
+    with_imgui_app(FEATURE) $(app) { // nolint:STYLE037
         // Application readiness is the first rendered Markdown revision, not
         // a boot delay and not a frame count.
         var ready_state : JsonValue?

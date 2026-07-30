@@ -13,7 +13,7 @@ require daslib/json_boost public
 //! Drives `examples/features/edit_menu_item.das` — verifies the menu bar +
 //! its registered menu containers exist. Menu_items themselves only emit
 //! bbox entries while their parent menu is OPEN (matching the pattern
-//! documented in skills/recording.md), so existence-only smoke is the
+//! documented in skills/imgui_recording.md), so existence-only smoke is the
 //! headless gate. Click + toggle are exercised by record_main_menu_bar.
 
 let FEATURE = "modules/dasImgui/examples/features/edit_menu_item.das"

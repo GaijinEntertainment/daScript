@@ -48,7 +48,7 @@ def private fragment_max(origin : float2; fragment : TextFlowFragment) : float2 
     return origin + float2(fragment.rect.z, fragment.rect.w)
 }
 
-def public markdown_uri_paragraph(id : string; prefix, display_text, suffix, target : string;
+def public markdown_uri_paragraph(id : string; prefix, display_text, suffix, target : string; // nolint:STYLE038
                                   max_width : float = 0.0f;
                                   style : MarkdownUriStyle = MarkdownUriStyle()) : MarkdownUriResult {
     //! Draw one source-mapped inline paragraph. The copy button is only visible
@@ -62,7 +62,7 @@ def public markdown_uri_paragraph(id : string; prefix, display_text, suffix, tar
         style.copy_icon_size + GetStyle().FramePadding.x * 2.0f,
         style.copy_icon_size + GetStyle().FramePadding.y * 2.0f)
 
-    var spans = [
+    let spans = [
         TextFlowSpan(
             source = TextSourceRange(start_byte = 0, end_byte = uri_start),
             style_id = 0),

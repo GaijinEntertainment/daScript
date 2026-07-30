@@ -28,7 +28,7 @@ def widget_bbox(var snap : JsonValue?; ident : string) : float4 {
 }
 
 [export]
-def main {
+def main { // nolint:STYLE038
     with_recording_app("examples/tutorial/tab_bar.das",
                        "tab_bar.apng", 60) $(app) {
         let T_GENERAL = "TB_WIN/MAIN_TABS/GENERAL_TAB"

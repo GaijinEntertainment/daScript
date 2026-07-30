@@ -28,12 +28,12 @@ var TASK_ROW : table<int; ClickState>
 [export]
 def init() {
     harness_init("Phase 0b.3 — containers (overlay family)", 800, 640)
-    var io & = unsafe(GetIO())
-    unsafe(GetStyle()).FontScaleMain = 1.5
+    let io & = unsafe(GetIO())
+    GetStyle().FontScaleMain = 1.5
 }
 
 [export]
-def update() {
+def update() { // nolint:STYLE038
     if (!harness_begin_frame()) return
     harness_new_frame()
 

@@ -35,6 +35,7 @@ the CI ref, never a working-tree copy.
 |---|---|---|
 | `build.yml` (per-PR) | every PR commit (via `pull_request`) + pushes to `master` | `build` matrix (5 targets × Debug/Release/RelWithDebInfo × sanitizers), `bundle_smoke`, `build_linux_gcc` |
 | `build.yml` (nightly) | the `schedule` cron (daily 02:00 UTC) | `build_windows_mingw` + `build_windows_clangcl` (the two toolchain long-poles, gated OFF per-PR CI — alt-toolchain, lowest per-PR signal) **plus the full build matrix — its Release cells (sanitizers included) run the full AOT sweep** ("Slow Release Tests"). A break in any of these surfaces within ~24 h, not at PR time. |
+| `nightly_imgui.yml` | the `schedule` cron (daily 03:00 UTC) + `workflow_dispatch` | dasImgui playwright suite (`tests/dasImgui`, ~151 daslang-live-subprocess tests, fully headless) on ubuntu + macos — see its section below |
 | `extended_checks.yml` | every PR | linux + darwin15-arm64 + windows, ALL release modules ON |
 | `wasm_build.yml` | every PR | emscripten build of `web/` on 3 OSes + `wasm_cross` |
 | `build_eastl.yml` | every PR | EASTL shadow-config build + no-fileio build (linux clang) |
@@ -149,7 +150,7 @@ cmake -B build -DDAS_HV_DISABLED=OFF -DDAS_LLVM_DISABLED=OFF -DDAS_AUDIO_DISABLE
 | daslang_static sweep | `cmake --build build --config Release --target daslang_static`, then `bin/Release/daslang_static.exe dastest/dastest.das -- --color --failures-only --test tests` | rarely built locally; catches static-registration / no-dynamic-modules divergence |
 | Ser/deser sweep | `<daslang> dastest/dastest.das -- --test tests --ser serialized.bin` then `... --deser serialized.bin` | run after touching AST serialization (`ast_serializer.cpp`, flag-bit additions) |
 | MCP tools test | `<daslang> dastest/dastest.das -- --color --failures-only --test utils/mcp/test_tools.das` | linux-only in CI but runs anywhere; MCP signature changes break it silently — run after editing `utils/mcp/` |
-| dasImgui install | `<daslang> utils/daspkg/main.das -- install dasImgui --branch master` | **the externals-coupling gate**: CI builds external dasImgui from ITS master against YOUR branch — an ABI break vs externals reds this on an unrelated-looking step. See `skills/abi_break_sweep.md` |
+| dasImgui build | nothing to install — dasImgui is in-tree (`modules/dasImgui`) and builds in this lane like any other default-ON module | the old `daspkg install dasImgui` externals-coupling gate is gone; the external ABI canaries (dasImguiImplot, dasImguiNodeEditor + the rest of the daspkg-index) now run in `nightly_daspkg_index.yml`. See `skills/abi_break_sweep.md` |
 | Coverage | `<daslang> dastest/dastest.das -- --cov-path coverage.lcov --color --test tests/language --timeout 1800` + `dascov` | rarely needed locally |
 
 ## doc.yml — the seven gates
@@ -198,3 +199,26 @@ second time with `DAS_NO_FILEIO=1`, where a shadow `<filesystem>` header
 outside fio, new vsnprintf/locale dependencies, or touching
 `cmake/das_config*`. WSL-mirrorable with the workflow's exact commands;
 otherwise just keep `<filesystem>` includes inside the fio layer.
+
+## nightly_imgui.yml
+
+**Runs nightly, not per-PR** — the cron `schedule` (03:00 UTC) fires it, so it
+won't gate your PR; a break surfaces within ~24 h. To exercise it on a branch
+(imgui-touching PRs), manually dispatch `nightly_imgui.yml` itself.
+
+The dasImgui playwright suite (`tests/dasImgui`, ~151 tests; ubuntu + macos,
+fully headless): each test spawns a `daslang-live` subprocess hosting a feature
+app from `modules/dasImgui/examples/` and drives it over the HTTP live API. The
+`tests/.das_test` gate keeps the directory out of per-PR `--test tests/` full
+sweeps; targeting the folder directly (as the nightly and the mirror below do)
+bypasses the gate.
+
+Local mirror (also automated as `preflight --full`'s `imgui` gate — nightly CI
+is this suite's only lane, so that gate is its only pre-push check):
+
+```bash
+cmake --build build --config Release --target daslang daslang-live
+bin/Release/daslang dastest/dastest.das -- --test tests/dasImgui --headless \
+  --isolated-mode --isolated-mode-threads 4 --timeout 600 \
+  --exclude glfw_synth --exclude key_hud --exclude embedded_terminal
+```

@@ -3,7 +3,6 @@ options _comment_hygiene = true
 
 require imgui/imgui_harness
 require imgui/imgui_table_builtin
-require strings
 
 // =============================================================================
 // FEATURE: sort_specs — sortable inventory table.

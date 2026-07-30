@@ -34,8 +34,8 @@ var g_selected_text : string = ""
 [export]
 def init() {
     harness_init("narrate placement test", int(VIEW_W), int(VIEW_H))
-    var io & = unsafe(GetIO())
-    unsafe(GetStyle()).FontScaleMain = 1.2
+    let io & = unsafe(GetIO())
+    GetStyle().FontScaleMain = 1.2
 }
 
 def private grid_pos(r : int; c : int) : float2 {

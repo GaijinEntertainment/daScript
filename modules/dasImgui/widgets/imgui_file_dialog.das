@@ -486,7 +486,7 @@ def public file_dialog_set_last_dir(dir : string) {
 }
 
 //! Render the modal if open and return this frame's result. Call every frame.
-def public file_dialog_draw() : FileDialogResult {
+def public file_dialog_draw() : FileDialogResult { // nolint:STYLE038
     var result = FileDialogResult.none
     // A row double-click navigates / confirms, both of which rebuild
     // entries/view — deferred out of the row loop (mutating mid-iteration
@@ -494,7 +494,7 @@ def public file_dialog_draw() : FileDialogResult {
     var nav_to = ""
     var confirm_path = ""
     SetNextWindowSize(ImVec2(720.0f, 520.0f), ImGuiCond.FirstUseEver)
-    popup_modal(FILEDLG, (text = g_fd.title, closable = false, flags = ImGuiWindowFlags.None)) {
+    popup_modal(FILEDLG, (text = g_fd.title, closable = false, flags = ImGuiWindowFlags.None)) { // nolint:STYLE037
         // PATH_FIELD's focus is sampled at the END of the body; capture last frame's
         // value now so the Enter handler (also at the end) can route Enter to path-nav
         // vs confirm even though the input deactivates itself on the Enter keystroke.

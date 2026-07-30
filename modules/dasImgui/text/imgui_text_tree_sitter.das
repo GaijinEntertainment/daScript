@@ -118,7 +118,7 @@ def private push_das_fallback(var spans : array<TextSourceSpan>;
         syntax_style = style))
 }
 
-def private das_lexical_fallback(source : string) : array<TextSourceSpan> {
+def private das_lexical_fallback(source : string) : array<TextSourceSpan> { // nolint:STYLE038
     // Fills query gaps from incomplete snippets / recovery nodes (common in compact Git hunks); tree-sitter stays authoritative.
     var result : array<TextSourceSpan>
     var expect_function = false

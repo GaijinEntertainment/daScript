@@ -137,7 +137,7 @@ def private parser_flags(parse_options : MdParseOptions const) : int {
     return int(flags)
 }
 
-def private attach_node(var doc : RichDocument; var stack : array<int>;
+def private attach_node(var doc : RichDocument; stack : array<int>;
                         var node : RichNode) : int {
     let index = length(doc.nodes)
     if (!empty(stack)) {
@@ -165,7 +165,7 @@ def private apply_block_detail(var node : RichNode; kind, flags, offset, size,
         node.marker = aux1
     } elif (kind == 4) {
         node.is_task = flags != 0
-        node.is_checked = node.is_task && aux0 != int(' ')
+        node.is_checked = node.is_task && aux0 != ' '
         node.marker = aux0
         if (node.is_task && offset >= 0) {
             node.control_source = TextSourceRange(
@@ -176,8 +176,8 @@ def private apply_block_detail(var node : RichNode; kind, flags, offset, size,
         node.level = aux0
     } elif (kind == 7) {
         node.marker = aux0
-        node.info := text
-        node.language := text2
+        node.info = text
+        node.language = text2
     } elif (kind == 10) {
         node.column_count = aux0
         node.head_row_count = aux1
@@ -190,11 +190,11 @@ def private apply_block_detail(var node : RichNode; kind, flags, offset, size,
 def private apply_span_detail(var node : RichNode; kind, flags : int;
                               text, text2 : string) {
     if (kind == 2 || kind == 3) {
-        node.destination := text
-        node.title := text2
+        node.destination = text
+        node.title = text2
         node.is_autolink = kind == 2 && flags != 0
     } elif (kind == 8) {
-        node.destination := text
+        node.destination = text
     }
 }
 
@@ -239,7 +239,7 @@ def public md_node_display_text(doc : RichDocument const; node_index : int) : st
     return md_node_text(doc, node_index)
 }
 
-def private collect_inline(doc : RichDocument const; node_index : int;
+def private collect_inline(doc : RichDocument const; node_index : int; // nolint:STYLE038
                            var content : RichInlineContent;
                            strong, emphasis, code, strike : bool;
                            semantic_node : int) {
@@ -260,7 +260,7 @@ def private collect_inline(doc : RichDocument const; node_index : int;
                            false, false, -1)
             child = doc.nodes[child].next_sibling
         }
-        var alt := alt_content.text
+        let alt = alt_content.text
         delete alt_content.runs
         let display_alt = empty(alt) ? "Image" : alt
         let start = length(content.text)
@@ -318,8 +318,8 @@ def private collect_inline(doc : RichDocument const; node_index : int;
             is_strikethrough = next_strike,
             is_link = next_semantic >= 0)
         if (next_semantic >= 0) {
-            run.destination := doc.nodes[next_semantic].destination
-            run.title := doc.nodes[next_semantic].title
+            run.destination = doc.nodes[next_semantic].destination
+            run.title = doc.nodes[next_semantic].title
         }
         content.runs |> push(<- run)
         return
@@ -335,6 +335,7 @@ def private collect_inline(doc : RichDocument const; node_index : int;
 
 def private split_plain_uris(doc : RichDocument const; var content : RichInlineContent) {
     var split_runs : array<RichInlineRun>
+    split_runs |> reserve(length(content.runs))
     for (i in range(length(content.runs))) {
         var base <- content.runs[i]
         let can_detect = (!base.is_link && base.source_exact
@@ -373,7 +374,7 @@ def private split_plain_uris(doc : RichDocument const; var content : RichInlineC
             linked.is_automatic_uri = true
             linked.semantic_node = -1
             let display_uri = slice(value, uri.source.start_byte, uri.source.end_byte)
-            linked.destination := (uri.kind == TextUriKind.www
+            linked.destination = (uri.kind == TextUriKind.www
                 ? "https://" + display_uri : display_uri)
             split_runs |> push(<- linked)
             cursor = uri.source.end_byte
@@ -688,7 +689,7 @@ def public md_source_text(doc : RichDocument const; source : TextSourceRange con
 def public md_parse(source : string;
                     parse_options : MdParseOptions = MdParseOptions()) : RichDocument {
     var doc = RichDocument()
-    doc.source := source
+    doc.source = source
     if (!is_utf8_string_valid(source)) {
         doc.error = "Markdown source is not valid UTF-8"
         return <- doc
@@ -696,7 +697,7 @@ def public md_parse(source : string;
 
     var stack : array<int>
     var callback_error = false
-    var status : int = _markdown_parse_events(doc.source, length(doc.source),
+    let status : int = _markdown_parse_events(doc.source, length(doc.source),
         parser_flags(parse_options)) $(var event, kind, flags, offset, size,
                                        aux0, aux1 : int; text, text2 : string) {
             if (event == 0) { // enter block
@@ -724,15 +725,15 @@ def public md_parse(source : string;
                         start_byte = offset, end_byte = offset + size)
                     node.source_exact = true
                 } else {
-                    node.literal := text
+                    node.literal = text
                 }
                 if (node.kind == RichNodeKind.entity || node.kind == RichNodeKind.null_character) {
-                    node.literal := text
+                    node.literal = text
                 }
                 attach_node(doc, stack, node)
             } elif (event == 5) { // debug/error diagnostic
                 callback_error = true
-                doc.error := text
+                doc.error = text
             }
         }
 

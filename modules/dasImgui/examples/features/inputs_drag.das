@@ -23,8 +23,8 @@ require imgui/imgui_harness
 [export]
 def init() {
     harness_init("Phase 0b.2 — drag inputs", 800, 700)
-    var io & = unsafe(GetIO())
-    unsafe(GetStyle()).FontScaleMain = 1.5
+    let io & = unsafe(GetIO())
+    GetStyle().FontScaleMain = 1.5
 }
 
 [export]

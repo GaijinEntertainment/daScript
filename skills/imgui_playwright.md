@@ -1,14 +1,15 @@
 # Driving a headless ImGui app: playwright
 
-`widgets/imgui_playwright.das` is the test/recording driver layer over daslang-live's HTTP
-live-command API. A driver process (`daslang.exe`) spawns a `daslang-live` **host** running a
+`modules/dasImgui/widgets/imgui_playwright.das` is the test/recording driver layer over daslang-live's
+HTTP live-command API. A driver process (`daslang.exe`) spawns a `daslang-live` **host** running a
 feature file, then drives it with verbs (`click`, `right_click`, `drag`, `type_text`,
 `imgui_key_chord`, `force_set`) and reads it back with `snapshot` + the `wait_*` family. Every
-`tests/integration/test_*.das` and `record_*.das` is a playwright driver. The node-editor layer
-`imgui_editor_playwright.das` (in dasImguiNodeEditor) adds an `EditorSession` + `ne_*` helpers on top.
+`tests/dasImgui/test_*.das` and `record_*.das` is a playwright driver. The node-editor layer
+`imgui_editor_playwright.das` (in the external dasImguiNodeEditor package) adds an `EditorSession` +
+`ne_*` helpers on top.
 
 Read this before writing or revising any playwright test or driver. For the recording-specific layer
-(voiceover/music/self-verify), read `skills/recording.md` — it sits on top of everything here.
+(voiceover/music/self-verify), read `skills/imgui_recording.md` — it sits on top of everything here.
 
 ## The one rule: playwright is ASYNCHRONOUS — gate on the effect, never on a guess (REQUIRED)
 
@@ -96,9 +97,9 @@ inject the editor handle into the live commands. The effect gates:
 | `ne_wait_shortcut(s, action)` | the editor served the injected/real chord (`last_shortcut_action`) |
 
 When you add a new public `ne_*` (or any documented-module public function), **add it by name to the
-matching `group_by_regex()` in `utils/node_editor2rst.das`** — the groups use explicit name lists, not
-`ne_*` wildcards, so a new helper otherwise lands in an "Uncategorized" doc section and the Pages
-**build job fails** at the uncategorized-gate.
+matching `group_by_regex()` in `utils/node_editor2rst.das`** (in the dasImguiNodeEditor repo) — the
+groups use explicit name lists, not `ne_*` wildcards, so a new helper otherwise lands in an
+"Uncategorized" doc section and that repo's Pages **build job fails** at the uncategorized-gate.
 
 ## One live host per port (REQUIRED)
 
@@ -133,5 +134,5 @@ Run dual-platform verification **sequentially** — one platform fully finished 
 
 Driver process (`daslang.exe test_X.das`) ⇄ HTTP/9090 ⇄ host process (`daslang-live feature.das`,
 its own frame loop). Verbs POST and return on *queue*; effects land *later*; the `wait_*` family is how
-you observe an effect before depending on it. Recordings (`skills/recording.md`) are playwright drivers
-that additionally self-verify each interaction and carry a voiceover/music soundtrack.
+you observe an effect before depending on it. Recordings (`skills/imgui_recording.md`) are playwright
+drivers that additionally self-verify each interaction and carry a voiceover/music soundtrack.

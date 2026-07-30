@@ -1,49 +1,28 @@
 # dasImgui
 
-[![tests](https://github.com/borisbat/dasImgui/actions/workflows/tests.yml/badge.svg)](https://github.com/borisbat/dasImgui/actions/workflows/tests.yml)
-[![docs](https://github.com/borisbat/dasImgui/actions/workflows/docs.yml/badge.svg)](https://github.com/borisbat/dasImgui/actions/workflows/docs.yml)
-[![docs site](https://img.shields.io/badge/docs-live-blue)](https://borisbat.github.io/dasImgui)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
-[Dear ImGui](https://github.com/ocornut/imgui) bindings for [daslang](https://dascript.org/).
+[Dear ImGui](https://github.com/ocornut/imgui) bindings for [daslang](https://daslang.io/) —
+part of the daslang tree, built in by default.
 
 Provides the `imgui` binding, the v2 `widgets/` macro layer (`[widget]`/`[container]`/`with_*`), and the `imgui_harness` runtime for building GUI applications with daslang.
 
-## Install
+## Part of the daslang tree
 
-```bash
-daslang.exe utils/daspkg/main.das -- install github.com/borisbat/dasImgui
-```
+dasImgui lives at `modules/dasImgui` and builds with the normal daslang build —
+no package install. It is enabled by default (root CMake option
+`DAS_IMGUI_DISABLED`, default `OFF`) and needs the in-tree dasGlfw and
+dasClipboard modules (also on by default).
 
-Or add to your project's `.das_package`:
+Projects whose `.das_package` declares `require_package("dasImgui")` keep
+working unchanged: `daspkg install` recognizes the in-tree module and reports
+it as *part of this daslang tree — nothing to install*.
 
-```das
-[export]
-def dependencies(version : string) {
-    require_package("github.com/borisbat/dasImgui")
-}
-```
-
-Then run `daspkg install`.
-
-## Build
-
-The C++ build step runs automatically during `daspkg install`. To rebuild manually:
-
-```bash
-daspkg build dasImgui
-```
-
-Or with CMake directly:
-
-```bash
-cmake -B modules/dasImgui/_build -S modules/dasImgui -DDASLANG_DIR=<path-to-daslang-root>
-cmake --build modules/dasImgui/_build --config Release
-```
+The previous standalone repo ([github.com/borisbat/dasImgui](https://github.com/borisbat/dasImgui))
+is archived with full history; development continues in the daslang tree.
 
 ### Requirements
 
-- daslang SDK (built with `DAS_GLFW_DISABLED=OFF`)
 - CMake 3.16+
 - C++17 compiler (MSVC, GCC, Clang)
 - OpenGL
@@ -52,7 +31,7 @@ cmake --build modules/dasImgui/_build --config Release
 
 The canonical pattern uses `imgui/imgui_harness` — it hides the GLFW/GL backend
 boilerplate behind five helpers, re-exports the backend-agnostic v2 stack, and
-supports `--headless` for tests and CI. See the [dasImgui tutorials](https://borisbat.github.io/dasImgui/tutorials/index.html)
+supports `--headless` for tests and CI. See the [imgui tutorials](https://daslang.io/doc/reference/tutorials/imgui/index.html)
 starting at `boost_basics` for a complete walkthrough.
 
 ```das
@@ -94,16 +73,14 @@ daslang.exe my_example.das -- --headless --headless-frames=600
 Headless mode skips the GLFW + OpenGL chain entirely (the harness uses a
 parallel `imguiAppHeadless.shared_module` C++ backend with a CPU-only
 font atlas). `--headless-frames=N` auto-exits after `N` frames; omit it
-when the script's own logic calls `request_exit()`. See
-[doc/source/tutorials/harness_headless_mode.rst](doc/source/tutorials/harness_headless_mode.rst)
+when the script's own logic calls `request_exit()`. See the
+[headless-mode tutorial](https://daslang.io/doc/reference/tutorials/imgui/harness_headless_mode.html)
 for what gets dispatched in either mode and the limits (`screenshot` /
 `record_*` and the live-API HTTP endpoint stay windowed-only).
 
-Run with `-project_root` pointing to the directory containing `modules/`:
-
-```bash
-daslang.exe -project_root . my_app.das
-```
+Run scripts with the tree's `daslang` binary from the daslang repo root
+(the in-tree recipes pass `-project_root .`); external daspkg projects keep
+the usual `-project_root <project>` invocation.
 
 ## Modules
 
@@ -118,11 +95,16 @@ daslang.exe -project_root . my_app.das
 ## Examples
 
 - `examples/features/embedded_terminal.das` - live PowerShell/ConPTY terminal view (also runs through the headless harness)
-- `examples/features/with_indent.das` — smallest single-file harness example (drives [test_with_indent.das](tests/integration/test_with_indent.das))
+- `examples/features/with_indent.das` — smallest single-file harness example (drives [test_with_indent.das](../../tests/dasImgui/test_with_indent.das))
 - `examples/features/` — 90+ small focused demos, one widget/helper per file
 - `examples/imgui_demo/imgui_demo.das` — full Dear ImGui demo port (90+ scenes)
-- `examples/tutorial/` — annotated step-by-step tutorials matching the [docs site](https://borisbat.github.io/dasImgui/tutorials/index.html)
+- `examples/tutorial/` — annotated step-by-step tutorials matching the [docs site](https://daslang.io/doc/reference/tutorials/imgui/index.html)
 - `examples/save_demo/` — save/load round-trip demo
+
+## Tests
+
+Tests live at the repo root under [`tests/dasImgui/`](../../tests/dasImgui/)
+and run in the nightly CI lane (`nightly_imgui.yml`).
 
 ## imgui version
 
@@ -130,26 +112,26 @@ v1.92.6-docking (fetched via CMake FetchContent at build time).
 
 ## Documentation
 
-Published at https://borisbat.github.io/dasImgui (built by `.github/workflows/docs.yml` on push to master).
+Published at [daslang.io/doc](https://daslang.io/doc) as part of the main
+daslang Sphinx tree: the [GUI stdlib section](https://daslang.io/doc/stdlib/sec_imgui.html)
+and the [imgui tutorials](https://daslang.io/doc/reference/tutorials/imgui/index.html)
+(sources under `doc/source/stdlib/` and `doc/source/reference/tutorials/imgui/`).
 
-Local build:
+Local build, from the daslang root:
 
 ```bash
-daslang.exe utils/imgui2rst.das -- --detail_output doc/source/stdlib/generated
+daslang modules/dasImgui/utils/imgui2rst.das
 sphinx-build -b html doc/source doc/_build/html
 ```
 
-The first step runs the RST emitter (parallel to daslang's `das2rst`); the
-`--detail_output` flag points the per-function `//!` detail files at this
-tree's `generated/detail/` so module pages render the captured docstrings.
-The second step invokes Sphinx.
-
-`doc/source/stdlib/generated/` and `doc/_build/` are gitignored. Tracked
-inputs are `doc/source/conf.py`, `daslang.py`, `index.rst`, the section
-landings (`sec_*.rst`), `external_types.rst`, `handmade/module-*.rst`,
-`tutorials/`, and the emitter itself (`utils/imgui2rst.das`).
-
-Re-run `utils/imgui2rst.das` whenever a public `//!` comment changes. CI runs `-W` (warnings-as-errors); the local `--keep-going` invocation is enough for spot-checking.
+The first step runs the RST emitter (parallel to daslang's `das2rst`) — the
+imgui modules carry macro-generated surfaces das2rst's reflection pass can't
+group — writing the GUI stdlib pages into `doc/source/stdlib/generated/`
+(gitignored). Re-run it whenever a public `//!` comment changes. Tutorial
+recordings are not in git; they stage from the rolling `docs-assets` GitHub
+release via `utils/docs_assets/fetch.sh` / `fetch.ps1`. CI builds Sphinx with
+`-W` (warnings-as-errors); a local `--keep-going` invocation is enough for
+spot-checking.
 
 ## License
 

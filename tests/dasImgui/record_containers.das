@@ -22,7 +22,7 @@ require daslib/json_boost public
 //!   5. item_tooltip - hover the button; the tooltip body runs while hovered
 
 [export]
-def main {
+def main { // nolint:STYLE038
     with_recording_app("examples/tutorial/containers.das",
                        "containers.apng", 80) $(app) {
         let T_AUDIO   = "CONT_WIN/MAIN_TABS/AUDIO_TAB"

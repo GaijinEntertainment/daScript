@@ -27,7 +27,7 @@ require daslib/json_boost public
 let FEATURE = "modules/dasImgui/examples/features/glfw_synth_keys.das"
 
 [test]
-def test_imgui_synth_ctrl_shortcuts(t : T?) {
+def test_imgui_synth_ctrl_shortcuts(t : T?) { // nolint:STYLE038
     with_imgui_app(FEATURE) $(d) {
         //! End-to-end: imgui_focus → imgui_key_type "Hi" → expect buffer "Hi".
         //! Same shape as test_key_type_lands_in_input but routed through the

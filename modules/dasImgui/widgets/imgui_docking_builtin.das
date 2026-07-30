@@ -11,7 +11,6 @@ require imgui/imgui_boost_runtime public
 require imgui/imgui_boost_v2 public
 require daslib/json public
 require daslib/json_boost
-require math
 
 //! Phase 7 docking — boost wrappers around ImGui's native DockSpace + Begin/End
 //! dockable windows. `dockspace(NAME, ...)` creates a full-viewport dockspace

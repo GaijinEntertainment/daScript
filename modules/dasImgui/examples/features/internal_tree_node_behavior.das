@@ -31,8 +31,8 @@ def private custom_tree(lbl : string; flags : ImGuiTreeNodeFlags) : bool {
 [export]
 def init() {
     harness_init("internal_tree_node_behavior - hand-rolled tree from primitives", 760, 560)
-    var io & = unsafe(GetIO())
-    unsafe(GetStyle()).FontScaleMain = 1.25
+    let io & = unsafe(GetIO())
+    GetStyle().FontScaleMain = 1.25
 }
 
 [export]

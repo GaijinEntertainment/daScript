@@ -23,8 +23,8 @@ require imgui/imgui_harness
 [export]
 def init() {
     harness_init("Phase 1.4 — text_show", 800, 600)
-    var io & = unsafe(GetIO())
-    unsafe(GetStyle()).FontScaleMain = 1.5
+    let io & = unsafe(GetIO())
+    GetStyle().FontScaleMain = 1.5
 }
 
 [export]
@@ -48,7 +48,7 @@ def update() {
 
         // Lets the demo loop touch STATUS_LINE programmatically.
         if (button(BUMP_BTN, (text = "bump status"))) {
-            STATUS_LINE.value := "bumped at frame {g_frame}"
+            STATUS_LINE.value = "bumped at frame {g_frame}"
         }
     }
 

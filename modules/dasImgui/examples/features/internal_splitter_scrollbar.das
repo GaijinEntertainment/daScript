@@ -28,8 +28,8 @@ var g_scroll = int64(0)
 [export]
 def init() {
     harness_init("internal_splitter_scrollbar - splitter + scrollbar behaviors", 820, 600)
-    var io & = unsafe(GetIO())
-    unsafe(GetStyle()).FontScaleMain = 1.25
+    let io & = unsafe(GetIO())
+    GetStyle().FontScaleMain = 1.25
 }
 
 [export]

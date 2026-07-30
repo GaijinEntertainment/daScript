@@ -68,7 +68,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/writing_benchmarks.md` | Writing/running `benchmarks/` files |
 | `skills/daspkg.md` | Running daspkg commands, `.das_package` manifests |
 | `skills/dynamic_modules.md` | `.das_module` descriptors, adding modules under `modules/` |
-| `skills/external_module_debugging.md` | Working on an external daslang module (dasImgui, dasPUGIXML, dasSQLITE, etc.) locally — need to run/lint/test from a standalone daslang.exe or via MCP before push-to-CI. Covers the `<DummyRoot>/modules/<your-module>` junction pattern + `project_root` MCP arg |
+| `skills/external_module_debugging.md` | Working on an external daslang module (dasImguiNodeEditor, dasImguiImplot, dasCards, etc.) locally — need to run/lint/test from a standalone daslang.exe or via MCP before push-to-CI. Covers the `<DummyRoot>/modules/<your-module>` junction pattern + `project_root` MCP arg |
 | `skills/install_instructions.md` | Updating `install/CLAUDE.md` or `install/skills/` for the shipped SDK |
 | `skills/writing_skills.md` | Adding a `skills/*.md` file, moving content between skills, or reviewing a skill change — the audience decision (SDK vs repo-only), the shipping gate, and the review checklist for what the gate can't check |
 | `skills/aot_testing.md` | AOT test files, `test_aot` binary, `Module::aotRequire()`, AOT hash mismatches |
@@ -78,6 +78,10 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/daslang_lsp.md` | Working on `utils/lsp/` (the LSP server for Claude Code / stdio clients) — locked architecture, coordinate conventions, CC wire facts, headless dev rig, protocol tests |
 | `utils/dasHerd/dasherder.md` | Running INSIDE a dasHerd-managed agent session (any `DASHERD_SESSION_ID` env var set) — the session cooperation contract: inbox/outbox mailbox, declaring participating repositories, Review Bundles, the `dasherd.ps1` CLI |
 | `skills/imgui_ui_debugging.md` | **CRITICAL UI SKILL** — diagnosing/fixing ANY dasImgui UI or interaction bug. The discipline: reproduce + screenshot → make it observable in `imgui_snapshot` (fix the inspection if it isn't) → fix → prove via snapshot + test → 'after' screenshot. UI is hard; **never claim a UI fix works from logic or a screenshot — only from structured snapshot state.** |
+| `skills/imgui_application.md` | Building any dasImgui application — harness lifecycle (`init`/`update`/`shutdown`, `harness_*` frame calls), the headless arm, heap/GC ownership contract |
+| `skills/imgui_migration.md` | Migrating v1 `imgui_boost` code to the v2 boost layer — the v1→v2 mapping table (`imgui_lint` IMGUI002 points here) |
+| `skills/imgui_playwright.md` | Writing/editing `tests/dasImgui` playwright tests — the async rule (gate on the effect), the `wait_*` family, one-host-per-9090 |
+| `skills/imgui_recording.md` | Recording tutorial videos — `record_*.das` drivers, prepare → record → convert pipeline, `docs-assets` release upload |
 | `skills/environment_variables.md` | Reading or ADDING any environment variable — the full daslang set, plus the read-once/typed-default rules a new one must follow. dasLLAMA's own ~130 knobs are generated into `modules/dasLLAMA/ENVIRONMENT.md` |
 | `skills/perf_lint.md` | Adding rules to `daslib/perf_lint.das` — **and before declaring any hot path off-limits to allocation**: `[hot_path]` / `[no_alloc]` / `[no_env]` / `[no_io]` contracts (PERF026-028), `[cold_path]` to prune, `@scratch` to declare a reused buffer |
 | `skills/style_lint.md` | Adding rules to `daslib/style_lint.das` |

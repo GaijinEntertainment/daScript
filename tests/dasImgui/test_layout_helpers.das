@@ -23,7 +23,7 @@ require math
 let LAYOUT_FEATURE = "modules/dasImgui/examples/features/layout_helpers.das"
 
 [test]
-def test_layout_helpers(t : T?) {
+def test_layout_helpers(t : T?) { // nolint:STYLE038
     with_imgui_app(LAYOUT_FEATURE) $(d) {
         t |> run("smoke") <| @(t : T?) {
             // All four leaves register through their containers / splits / dock.

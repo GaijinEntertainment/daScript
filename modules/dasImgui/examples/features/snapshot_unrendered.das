@@ -21,8 +21,8 @@ require imgui/imgui_harness
 [export]
 def init() {
     harness_init("Phase 1.1 — snapshot unrendered", 800, 600)
-    var io & = unsafe(GetIO())
-    unsafe(GetStyle()).FontScaleMain = 1.5
+    let io & = unsafe(GetIO())
+    GetStyle().FontScaleMain = 1.5
 }
 
 // Never called at runtime, but the [widget] macro fires at COMPILE time on the

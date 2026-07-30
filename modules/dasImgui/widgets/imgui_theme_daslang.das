@@ -43,7 +43,7 @@ let private amberSoft   = float4(0.910f, 0.631f, 0.227f, 0.27f)
 let private fg          = float4(0.910f, 0.886f, 0.824f, 1.0f)  // #e8e2d2
 let private fgFaint     = float4(0.357f, 0.333f, 0.278f, 1.0f)  // #5b5547
 
-def public apply_daslang_theme(var style : ImGuiStyle) {
+def public apply_daslang_theme(var style : ImGuiStyle) { // nolint:STYLE038
     //! Apply the daslang.io theme to ``style`` in-place — sets every
     //! ``ImGuiCol_*`` slot, every rounding/border value, and the tighter
     //! padding/spacing that matches the site's information density.

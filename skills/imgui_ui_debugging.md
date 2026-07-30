@@ -62,6 +62,8 @@ non-negotiables that keep you honest. Read it before touching imgui UI behavior.
   running instance.
 - The boost widget DSL registers each widget at a stable path — `CONTAINER/WIDGET`, indexed tables as
   `TABLE[key]` (string or int key). That path is what `find_widget` / `imgui_click` / snapshot keys use.
+- Full driver-layer reference (verbs, the `wait_*` family, one-host-per-port): `skills/imgui_playwright.md`.
+  App lifecycle/harness contract: `skills/imgui_application.md`.
 
 ## Do NOT clobber a live session a human is using
 

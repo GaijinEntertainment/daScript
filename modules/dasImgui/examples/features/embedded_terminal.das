@@ -40,7 +40,7 @@ def init() {
 }
 
 [export]
-def update() {
+def update() { // nolint:STYLE038
     if (!harness_begin_frame()) return
     // Keep live control responsive even when the child produces output faster
     // than one frame can render. Remaining bytes stay in the PTY pipe.

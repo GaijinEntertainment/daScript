@@ -24,8 +24,8 @@ require imgui/imgui_harness
 [export]
 def init() {
     harness_init("save_demo — playwright spec §7.1", 600, 240)
-    var io & = unsafe(GetIO())
-    unsafe(GetStyle()).FontScaleMain = 1.5
+    let io & = unsafe(GetIO())
+    GetStyle().FontScaleMain = 1.5
 }
 
 [export]
@@ -38,7 +38,7 @@ def update() {
                       flags = ImGuiWindowFlags.None)) {
         input_text(NAME_INPUT, (text = "Name"))
         if (button(SAVE_BTN, (text = "Save"))) {
-            STATUS_TEXT.value := "saved"
+            STATUS_TEXT.value = "saved"
         }
         text_show(STATUS_TEXT)
     }

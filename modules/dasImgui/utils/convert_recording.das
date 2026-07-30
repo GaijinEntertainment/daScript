@@ -72,7 +72,7 @@ def join_command(args : array<string>) : string {
 }
 
 [export]
-def main : int {
+def main : int { // nolint:STYLE038
     var args_r <- parse_args(type<Config>)
     if (args_r |> is_err) {
         to_log(LOG_ERROR, "[convert] {args_r |> unwrap_err}\n")

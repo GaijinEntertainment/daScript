@@ -3,7 +3,7 @@
 Use this recipe when creating or reviewing a dasImgui program that runs as a
 standalone `daslang` process, under `daslang-live`, or both. The production
 reference for heap ownership is `utils/dasllama-server/main.das`; the compact UI
-reference is `examples/tutorial/application_lifecycle.das`.
+reference is `modules/dasImgui/examples/tutorial/application_lifecycle.das`.
 
 ## Required lifecycle
 

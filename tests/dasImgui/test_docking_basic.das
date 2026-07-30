@@ -33,7 +33,7 @@ let DOCK_FEATURE = "modules/dasImgui/examples/features/dock_basic.das"
 // nests to `MAIN_WIN/SIDEBAR/BTN` in test_layout_helpers.
 
 [test]
-def test_docking_basic(t : T?) {
+def test_docking_basic(t : T?) { // nolint:STYLE038
     with_imgui_app(DOCK_FEATURE) $(d) {
         t |> run("registration") <| @(t : T?) {
             var snap = wait_for_widget(d, "DOCK_ROOT/EXPLORER", 15.0f)

@@ -111,10 +111,10 @@ def update() {
         text_show(STATUS_TEXT)
 
         // The bump button writes a computed string into STATUS_TEXT.value.
-        // Both `:= "..."` (clone-string) and external imgui_force_set work; the
+        // Both `= "..."` and external imgui_force_set work; the
         // snapshot reflects whichever ran most recently.
         if (button(BUMP_STATUS, (text = "bump status"))) {
-            STATUS_TEXT.value := "saved at frame {get_uptime()}"
+            STATUS_TEXT.value = "saved at frame {get_uptime()}"
         }
     }
 

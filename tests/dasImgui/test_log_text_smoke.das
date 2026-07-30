@@ -1,7 +1,6 @@
 options gen2
 options _comment_hygiene = true
 
-require imgui
 require imgui/imgui_widgets_builtin
 require imgui/imgui_lint
 

@@ -8,7 +8,6 @@ require imgui public
 require imgui/imgui_playwright public
 require daslib/json public
 require daslib/json_boost public
-require strings
 require math
 
 //! Driver: record input_text.apng against examples/tutorial/input_text.das.

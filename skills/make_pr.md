@@ -192,7 +192,7 @@ bin/Release/daslang.exe -jit tests/decs/test_bulk_create.das 2>&1 | grep -iE "ve
 If the PR changes the type system, generic binding rules, AST node layout, or widely-instantiated daslib generics (`builtin.das`, `safe_addr.das`, …), two CI gates have no overlap with the standard test suite:
 
 1. **Sequence smoke** — the only pre-merge lane that compiles GLFW-gated `.das` (dasOpenGL helpers etc.). Build the runtime module targets and run `examples/games/sequence/ci_smoke_test.ps1` (`.sh` on POSIX) — exact commands in `skills/preflight.md`.
-2. **Externals sweep** — `extended_checks` installs external dasImgui from ITS master against your branch; an ABI break vs external repos reds CI on an unrelated-looking step. Follow `skills/abi_break_sweep.md` (both-worlds spellings, externals-merge-first ordering, daspkg-index scope).
+2. **Externals sweep** — the external ABI canaries (dasImguiImplot, dasImguiNodeEditor, and the rest of the daspkg-index) build against daslang master in `nightly_daspkg_index.yml`; an ABI break reds that sweep on an unrelated-looking step (dispatch it from your branch for a pre-merge check). Follow `skills/abi_break_sweep.md` (both-worlds spellings, externals-merge-first ordering, daspkg-index scope).
 
 Skip for changes that can't alter what external/module-gated code sees (tests-only, docs-only, tool-local).
 

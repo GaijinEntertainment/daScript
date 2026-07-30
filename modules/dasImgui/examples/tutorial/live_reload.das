@@ -148,7 +148,7 @@ def update() {
 
         // Mirror the @live counter into text_show so the snapshot can address it;
         // g_custom_counter stays the plain @live var, this is just the readout.
-        CTR_TEXT.value := "g_custom_counter = {g_custom_counter}"
+        CTR_TEXT.value = "g_custom_counter = {g_custom_counter}"
         text_show(CTR_TEXT)
         text("  - @live, preserved across reload")
         text("  - mutated externally by `bump_counter` / `reset_counter`")

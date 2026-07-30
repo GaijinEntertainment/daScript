@@ -21,8 +21,8 @@ require imgui/imgui_harness
 [export]
 def init() {
     harness_init("internal_render - imgui_internal.h Render* family", 760, 470)
-    var io & = unsafe(GetIO())
-    unsafe(GetStyle()).FontScaleMain = 1.25
+    let io & = unsafe(GetIO())
+    GetStyle().FontScaleMain = 1.25
 }
 
 [export]
