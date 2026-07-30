@@ -1,4 +1,6 @@
 options gen2
+options gc
+options persistent_heap
 require glfw/glfw_boost
 require opengl/opengl_boost
 require geometry/geom_gen
@@ -6,6 +8,7 @@ require stbimage
 require math
 require daslib/math_boost
 require daslib/safe_addr
+require live/live_gc
 
 // 10 - Deferred Shading + MRT (OpenGL / WebGL2 tutorial)
 //
@@ -256,7 +259,7 @@ def point_light(lp, lcol : float3; p, nrm, vdir : float3; shininess, spec_i, rng
 }
 
 [fragment_program]
-def lighting_fs {
+def lighting_fs { // nolint:STYLE038 — deferred lighting shader, linear by design
     // ----- bottom filmstrip: raw G-buffer (albedo / normal / world-pos) + SSAO + shadow -----
     let TH = 0.18
     let GAP = 0.012
@@ -597,7 +600,7 @@ def draw_scene_geometry {
 }
 
 [export]
-def update : bool {
+def update : bool { // nolint:STYLE038 — one frame of the tutorial pipeline
     time += 1.0 / 60.0
     let t = time
     var dw, dh : int
@@ -704,6 +707,7 @@ def shutdown {
 def main {
     init()
     while (update()) {
+        maybe_collect_gc()
     }
     shutdown()
 }
