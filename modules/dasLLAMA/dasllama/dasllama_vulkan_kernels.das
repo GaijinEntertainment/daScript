@@ -2038,60 +2038,31 @@ var @workgroup ar_row : float[4096]   // AR_MAX_DIM — staged so the reread aft
 var @workgroup ar_part : float[64]    // one partial per subgroup — 64 covers subgroupSize >= 4 (256/4), the Vulkan floor
 var @workgroup ar_inv : float[1]
 
-[compute_shader(local_size_x=256, name="ar_add_rms_spv")]
-def ar_add_rms {
-    let dim = vk_meta[0u]
-    let add_on = vk_meta[1u]
-    let woff = vk_meta[2u]   // norm-weight row base (resident driver shares one norms buffer)
-    let eps = vk_xs[0u]
-    let ascale = vk_xs[1u]
-    let tid = gl_LocalInvocationID.x
-    var ss = 0.0
-    var k = tid
-    while (k < dim) {
-        let vv = add_on != 0u ? (vk_upf[k] + vk_wsf[k]) * ascale : vk_upf[k]
-        vk_upf[k] = vv
-        ar_row[k] = vv
-        ss += vv * vv
-        k += 256u
-    }
-    ss = subgroupAdd(ss)
+// workgroup-wide rms inverse from per-thread sum-of-squares partials, via ar_part/ar_inv.
+// Op order is contractual — the fused twins (ar_add_rms_rq, qkn_rope_kv) promise BIT-IDENTICAL.
+def private wg_rms_inv(ss0 : float; n : uint; eps : float) : float {
+    let ss = subgroupAdd(ss0)
     if (gl_SubgroupInvocationID == 0u) {
         ar_part[gl_SubgroupID] = ss
     }
     barrier()
-    if (tid == 0u) {
+    if (gl_LocalInvocationID.x == 0u) {
         var tot = 0.0
         var sgi = 0u
         while (sgi < gl_NumSubgroups) {
             tot += ar_part[sgi]
             sgi++
         }
-        ar_inv[0u] = 1.0 / sqrt(tot / float(dim) + eps)   // the CPU rmsnorm's own form, not rsqrt
+        ar_inv[0u] = 1.0 / sqrt(tot / float(n) + eps)   // the CPU rmsnorm's own form, not rsqrt
     }
     barrier()
-    let inv = ar_inv[0u]
-    k = tid
-    while (k < dim) {
-        vk_y[k] = vk_xqf[woff + k] * (ar_row[k] * inv)
-        k += 256u
-    }
+    return ar_inv[0u]
 }
 
-// batched add+rmsnorm: one workgroup per row (@workgroup arrays are per-wg, rows independent).
-// Same math as ar_add_rms; row = gl_WorkGroupID.x offsets x/a/y by row*dim. Norm weight is shared.
-[compute_shader(local_size_x=256, name="ar_add_rms_b_spv")]
-def ar_add_rms_b {
-    let dim = vk_meta[0u]
-    let add_on = vk_meta[1u]
-    let woff = vk_meta[2u]
-    let eps = vk_xs[0u]
-    let ascale = vk_xs[1u]
-    let row = gl_WorkGroupID.x
-    let base = row * dim
-    let tid = gl_LocalInvocationID.x
+// the residual add + ar_row stash + sum-of-squares pass over one row at `base`
+def private ar_accum_row(base, dim, add_on : uint; ascale : float) : float {
     var ss = 0.0
-    var k = tid
+    var k = gl_LocalInvocationID.x
     while (k < dim) {
         let vv = add_on != 0u ? (vk_upf[base + k] + vk_wsf[base + k]) * ascale : vk_upf[base + k]
         vk_upf[base + k] = vv
@@ -2099,23 +2070,19 @@ def ar_add_rms_b {
         ss += vv * vv
         k += 256u
     }
-    ss = subgroupAdd(ss)
-    if (gl_SubgroupInvocationID == 0u) {
-        ar_part[gl_SubgroupID] = ss
-    }
-    barrier()
-    if (tid == 0u) {
-        var tot = 0.0
-        var sgi = 0u
-        while (sgi < gl_NumSubgroups) {
-            tot += ar_part[sgi]
-            sgi++
-        }
-        ar_inv[0u] = 1.0 / sqrt(tot / float(dim) + eps)
-    }
-    barrier()
-    let inv = ar_inv[0u]
-    k = tid
+    return ss
+}
+
+// add+rmsnorm, one workgroup per row (@workgroup arrays are per-wg, rows independent); row =
+// gl_WorkGroupID.x offsets x/a/y by row*dim. The decode seams dispatch it with ONE workgroup.
+[compute_shader(local_size_x=256, name="ar_add_rms_b_spv")]
+def ar_add_rms_b {
+    let dim = vk_meta[0u]
+    let woff = vk_meta[2u]   // norm-weight row base (resident driver shares one norms buffer)
+    let base = gl_WorkGroupID.x * dim
+    let ss = ar_accum_row(base, dim, vk_meta[1u], vk_xs[1u])
+    let inv = wg_rms_inv(ss, dim, vk_xs[0u])
+    var k = gl_LocalInvocationID.x
     while (k < dim) {
         vk_y[base + k] = vk_xqf[woff + k] * (ar_row[k] * inv)
         k += 256u
@@ -2131,34 +2098,9 @@ def ar_add_rms_rq {
     let add_on = vk_meta[1u]
     let woff = vk_meta[2u]
     let soff = vk_meta[3u]
-    let eps = vk_xqf[soff]
-    let ascale = vk_xqf[soff + 1u]
     let tid = gl_LocalInvocationID.x
-    var ss = 0.0
-    var k = tid
-    while (k < dim) {
-        let vv = add_on != 0u ? (vk_upf[k] + vk_wsf[k]) * ascale : vk_upf[k]
-        vk_upf[k] = vv
-        ar_row[k] = vv
-        ss += vv * vv
-        k += 256u
-    }
-    ss = subgroupAdd(ss)
-    if (gl_SubgroupInvocationID == 0u) {
-        ar_part[gl_SubgroupID] = ss
-    }
-    barrier()
-    if (tid == 0u) {
-        var tot = 0.0
-        var sgi = 0u
-        while (sgi < gl_NumSubgroups) {
-            tot += ar_part[sgi]
-            sgi++
-        }
-        ar_inv[0u] = 1.0 / sqrt(tot / float(dim) + eps)   // the CPU rmsnorm's own form, not rsqrt
-    }
-    barrier()
-    let inv = ar_inv[0u]
+    let ss = ar_accum_row(0u, dim, add_on, vk_xqf[soff + 1u])
+    let inv = wg_rms_inv(ss, dim, vk_xqf[soff])
     // quantize the normed row instead of storing it: 8 lanes per 32-block, 32 blocks per pass. The
     // 8 lanes of a block are consecutive AND 8-aligned, so the xor-1/2/4 fold only ever exchanges
     // with co-active lanes even when other groups in the subgroup have left the loop.
@@ -2210,23 +2152,8 @@ def qk_rms {
         let v = is_q ? vk_upf[base + tid] : vk_y[base + tid]
         ss = v * v
     }
-    ss = subgroupAdd(ss)
-    if (gl_SubgroupInvocationID == 0u) {
-        ar_part[gl_SubgroupID] = ss
-    }
-    barrier()
-    if (tid == 0u) {
-        var tot = 0.0
-        var sgi = 0u
-        while (sgi < gl_NumSubgroups) {
-            tot += ar_part[sgi]
-            sgi++
-        }
-        ar_inv[0u] = 1.0 / sqrt(tot / float(hs) + vk_xs[0u])
-    }
-    barrier()
+    let inv = wg_rms_inv(ss, hs, vk_xs[0u])
     if (tid < hs) {
-        let inv = ar_inv[0u]
         let w = vk_xqf[wbase + tid]
         if (is_q) {
             vk_upf[base + tid] = w * (vk_upf[base + tid] * inv)
@@ -2300,24 +2227,10 @@ def qkn_rope_kv {
     if (tid < hs) {
         v = is_k ? vk_upf[sbase + tid] : vk_y[sbase + tid]
     }
-    var ss = tid < hs ? v * v : 0.0
-    ss = subgroupAdd(ss)
-    if (gl_SubgroupInvocationID == 0u) {
-        ar_part[gl_SubgroupID] = ss
-    }
-    barrier()
-    if (tid == 0u) {
-        var tot = 0.0
-        var sgi = 0u
-        while (sgi < gl_NumSubgroups) {
-            tot += ar_part[sgi]
-            sgi++
-        }
-        ar_inv[0u] = 1.0 / sqrt(tot / float(hs) + vk_xs[vk_meta[11u]])
-    }
-    barrier()
+    let ss = tid < hs ? v * v : 0.0
+    let inv = wg_rms_inv(ss, hs, vk_xs[vk_meta[11u]])
     if (tid < hs) {
-        qr_row[tid] = vk_xs[(is_k ? vk_meta[10u] : vk_meta[9u]) + tid] * (v * ar_inv[0u])
+        qr_row[tid] = vk_xs[(is_k ? vk_meta[10u] : vk_meta[9u]) + tid] * (v * inv)
     }
     barrier()
     // rope this head's pairs off the normed row. NORM (llama): adjacent pair (2j, 2j+1).

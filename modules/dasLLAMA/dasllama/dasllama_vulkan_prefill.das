@@ -287,7 +287,7 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
             let ropewg = uint((wlen * pairs + int64(WG_X) - 1l) / int64(WG_X))
             let fa128 = g_gpu.has_coopmat && g_rd.head_size == 128l && vk_fa_on()
             let attnwg = uint(fa128 ? g_rd.n_heads * ((wlen + 31l) / 32l) : g_rd.n_heads * ((wlen + 7l) / 8l))
-            rd_dispatch(raw, g_gpu.ar_pipeline_b, g_rd.pf_sets[bp + 0], uint(wlen), h)   // prologue norm
+            rd_dispatch(raw, g_gpu.ar_pipeline, g_rd.pf_sets[bp + 0], uint(wlen), h)   // prologue norm
             for (l in range64(g_rd.n_layers)) {
                 let b = int(l * PF_ROLES)
                 // fmt-6 (cm2) roles: f32->f16 convert feeds the decode-in-load twin; the fill's fmt
@@ -310,13 +310,13 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 rd_dispatch(raw, weak_copy(fa128 ? g_gpu.da_b128_pipeline : g_gpu.da_b_pipeline), g_rd.pf_sets[b + 5], attnwg, h)
                 rd_dispatch(raw, weak_copy(fo6 ? g_gpu.f16cvt_pipeline : g_gpu.dn_rq_pipeline), g_rd.pf_sets[b + 6], uint((wlen * qd / 4l + 255l) / 256l), h)
                 rd_dispatch(raw, pf_gemm_pipe(fo6, dim, wlen), g_rd.pf_sets[b + 7], fill_arena_batch_meta(g_rd.pf_meta[b + 7], qd, dim, g_rd.layers[l].bo, wlen, fo6 ? 6 : 0), h)
-                rd_dispatch(raw, g_gpu.ar_pipeline_b, g_rd.pf_sets[b + 8], uint(wlen), h)
+                rd_dispatch(raw, g_gpu.ar_pipeline, g_rd.pf_sets[b + 8], uint(wlen), h)
                 rd_dispatch(raw, weak_copy(gu6 ? g_gpu.f16cvt_pipeline : g_gpu.dn_rq_pipeline), g_rd.pf_sets[b + 9], uint((wlen * dim / 4l + 255l) / 256l), h)
                 rd_dispatch(raw, pf_gemm_pipe(gu6, hid, wlen), g_rd.pf_sets[b + 10], fill_arena_batch_meta(g_rd.pf_meta[b + 10], dim, hid, g_rd.layers[l].b1, wlen, gu6 ? 6 : 0), h)
                 rd_dispatch(raw, pf_gemm_pipe(gu6, hid, wlen), g_rd.pf_sets[b + 11], fill_arena_batch_meta(g_rd.pf_meta[b + 11], dim, hid, g_rd.layers[l].b3, wlen, gu6 ? 6 : 0), h)
                 rd_dispatch(raw, weak_copy(dn6 ? g_gpu.actf16_pipeline : g_gpu.actrq_pipeline), g_rd.pf_sets[b + 12], uint((wlen * hid / 4l + 255l) / 256l), h)
                 rd_dispatch(raw, pf_gemm_pipe(dn6, dim, wlen), g_rd.pf_sets[b + 13], fill_arena_batch_meta(g_rd.pf_meta[b + 13], hid, dim, g_rd.layers[l].b2, wlen, dn6 ? 6 : 0), h)
-                rd_dispatch(raw, g_gpu.ar_pipeline_b, g_rd.pf_sets[b + 14], uint(wlen), h)
+                rd_dispatch(raw, g_gpu.ar_pipeline, g_rd.pf_sets[b + 14], uint(wlen), h)
             }
             if (last) {
                 rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[bp + 1], uint((dim / 4l + 255l) / 256l), h)

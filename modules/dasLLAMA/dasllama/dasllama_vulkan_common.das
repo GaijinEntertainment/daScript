@@ -353,12 +353,11 @@ struct GpuState {
     at_prep_k_pipeline : Pipeline   // attention k rms + rope, written at absolute batch positions
     at_attn_pipeline : Pipeline     // flash-style causal attention (GQA, online softmax, out-gate)
     q8k_rq_pipeline : Pipeline      // plain Q8_K requant (the kq wo GEMM's activation image)
-    ar_pipeline : Pipeline          // resident driver: fused residual-add + RMSNorm (meta[1]=0 = norm only)
+    ar_pipeline : Pipeline          // add + RMSNorm, one wg per row (meta[1]=0 = norm only); decode dispatches 1 wg
     ar_rq_pipeline : Pipeline       // resident driver: the above + the Q8_0 requant, one pass (DASLLAMA_VK_FUSE)
     rks_pipeline : Pipeline         // resident driver: fused rope + KV-row store (f32 mirror)
     qkn_rope_pipeline : Pipeline    // resident driver: per-head q/k rmsnorm + rope + KV store, one pass
     da_pipeline : Pipeline          // resident driver: decode attention over the f32 KV mirror
-    ar_pipeline_b : Pipeline        // prefill: batched add+rmsnorm
     rks_b_pipeline : Pipeline       // prefill: batched rope + KV-store
     da_b_pipeline : Pipeline        // prefill: batched causal attention (generic hs)
     da_b128_pipeline : Pipeline     // prefill: the hs=128 coopmat flash-attention twin (coopmat devices)
@@ -1014,10 +1013,9 @@ def vk_moe_init : bool {
         set_moe_gpu_attn_route(false)
     }
     g_gpu.q8k_rq_pipeline <- make_kernel_pipe("q8k_requant", q8k_requant_spv)
-    g_gpu.ar_pipeline <- make_kernel_pipe("ar_add_rms", ar_add_rms_spv)
+    g_gpu.ar_pipeline <- make_kernel_pipe("ar_add_rms_b", ar_add_rms_b_spv)   // decode seams dispatch it 1-wg
     g_gpu.rks_pipeline <- make_kernel_pipe("rope_kv_store", rope_kv_store_spv)
     g_gpu.da_pipeline <- make_kernel_pipe("da_attn", da_attn_spv)
-    g_gpu.ar_pipeline_b <- make_kernel_pipe("ar_add_rms_b", ar_add_rms_b_spv)
     g_gpu.rks_b_pipeline <- make_kernel_pipe("rope_kv_store_b", rope_kv_store_b_spv)
     g_gpu.da_b_pipeline <- make_kernel_pipe("da_attn_b", da_attn_b_spv)
     if (g_gpu.has_coopmat) {
