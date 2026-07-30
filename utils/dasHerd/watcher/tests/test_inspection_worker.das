@@ -284,6 +284,33 @@ def test_inspection_prepare_worker(t : T?) {
         tt |> equal(inspector_prepare_worker_shutdown(worker), true)
         destroy_job_que()
     }
+    t |> run("View documents carry fold regions; aligned diff panes never do") <| @(tt : T?) {
+        create_job_que()
+        var worker = InspectorPrepareWorker()
+        tt |> equal(inspector_prepare_worker_start(worker), true)
+        let view = "options gen2\n\ndef answer(sample : int) : int \{\n    var total = sample\n    total += 1\n    return total\n\}\n"
+        let patch = "diff --git a/a.das b/a.das\n--- a/a.das\n+++ b/a.das\n@@ -5 +5 @@\n-    total += 2\n+    total += 1\n"
+        tt |> equal(inspector_prepare_worker_queue(worker, 19, patch, view, "das"),
+            true)
+        var completed = false
+        let wait_started = ref_time_ticks()
+        while (!completed && int64(get_time_usec(wait_started)) < 5000000l) {
+            inspector_prepare_worker_try_event(worker) $(event : InspectorPrepareEvent const) {
+                if (event.kind == InspectorPrepareEventKind.completed) {
+                    completed = true
+                    tt |> success(length(event.view_document.folds) > 0,
+                        "the View document lists foldable regions")
+                    tt |> equal(length(event.old_document.folds), 0,
+                        "the BEFORE pane stays fold-free")
+                    tt |> equal(length(event.new_document.folds), 0,
+                        "the AFTER pane stays fold-free")
+                }
+            }
+        }
+        tt |> equal(completed, true)
+        tt |> equal(inspector_prepare_worker_shutdown(worker), true)
+        destroy_job_que()
+    }
     t |> run("Git-binary UTF-8 bytes prepare as source View") <| @(tt : T?) {
         let source = "// generated source\nint answer = 42;\n"
         let encoded = base64_encode(source)

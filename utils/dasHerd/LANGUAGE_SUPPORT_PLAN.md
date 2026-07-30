@@ -79,10 +79,21 @@ C++ bindings. So resolution is per-request, from the worktree being viewed:
 Declared during the first full in-app plan review: **any text view of any
 kind — rich or plain, diff or not — gets IDE-quality search.** Copy the
 VSCode find widget: input, regex / case / whole-word toggles, match count,
-prev/next (F3 / Shift+F3), Ctrl+F opens, Esc closes, full dialog. Today
-`draw_inspector_search` exists but only for NON-markdown View — the
-markdown branch (where the plan was reviewed) and the whole Diff mode have
-none; both are gaps against the rule, fix inside the viewing steps.
+prev/next (F3 / Shift+F3), Ctrl+F opens, Esc closes, full dialog.
+
+**Status (2026-07-30, herder bring-up shipped):** the shared
+`imgui_text_find` component (proven in examples/text) replaced
+`draw_inspector_search` and now serves ALL THREE inspector surfaces —
+source View (with fold auto-expand on navigate), markdown View (code-block
+auto-expand), and Diff mode (matches over the AFTER pane's aligned text,
+jump rides the shared hunk-scroll). Ctrl+F opens, Esc closes, one query
+survives a tab switch. Rails: `herder_inspector_find` / `_step` /
+`_close`, plus find/fold/md-collapse fields on
+`herder_file_inspector_state`. Remaining gaps against the rule: **case /
+whole-word toggles** (component has regex only — add in the component,
+both apps inherit), F3/Shift+F3 bindings, and diff search covers the
+AFTER pane only (BEFORE-pane occurrences of removed text are not found;
+needs a per-pane or merged-results design).
 
 **Editors get replace from day one** — search / replace / replace-all
 within the file is part of the editor component's core surface, not a

@@ -15,6 +15,7 @@ require imgui/imgui_docking_builtin
 require imgui/imgui_table_builtin
 require imgui/imgui_markdown_tree_sitter
 require imgui/imgui_text_source_view
+require imgui/imgui_text_find
 require dashv/dashv_boost
 require daslib/safe_addr
 require daslib/json_boost
@@ -984,6 +985,7 @@ def shutdown() {
     text_source_view_dispose(g_inspector.old_view)
     text_source_view_dispose(g_inspector.new_view)
     text_source_view_dispose(g_inspector.view)
+    text_find_dispose(g_inspector.find)
     terminal_viewport_snapshot_dispose(g_terminal_cache.snapshot)
     terminal_dispose(g_terminal)
     delete g_font_sources

@@ -15,6 +15,7 @@ require imgui/imgui_table_builtin
 require imgui/imgui_markdown_tree_sitter
 require imgui/imgui_text_source_view
 require imgui/imgui_text_tree_sitter
+require imgui/imgui_text_find
 require clipboard/clipboard
 require daslib/safe_addr
 require daslib/json_boost
@@ -256,6 +257,7 @@ def draw_side_by_side_diff() {
     text_disabled(DIFF_CHANGE_POSITION, (text = hunk_count > 0
         ? "Change {g_inspector.diff_current_hunk + 1} of {hunk_count}"
         : "No text changes"))
+    draw_inspector_find(true)
 
     let available = GetContentRegionAvail()
     let splitter_width = 8.0f
@@ -351,81 +353,109 @@ def draw_side_by_side_diff() {
     g_inspector.diff_scroll_jump_pending = false
 }
 
-var g_search_matches : array<int>
-var g_search_current : int
-var g_search_identity : string
-
-// Find matches (case-insensitive) in the view text; one peek pass assigns a
-// 0-based line to each match offset.
-def private rebuild_inspector_search(text, query : string) {
-    delete g_search_matches
-    g_search_current = 0
-    return if (empty(query) || empty(text))
-    let hay = to_lower(text)
-    let needle = to_lower(query)
-    var inscope offsets : array<int>
-    var start = 0
-    while (true) {
-        let at = find(hay, needle, start)
-        break if (at < 0)
-        offsets |> push(at)
-        start = at + max(1, length(needle))
-    }
-    return if (empty(offsets))
-    peek_data(hay) $(arr) {
-        var line = 0
-        var next = 0
-        for (index in range(length(arr))) {
-            if (next < length(offsets) && index == offsets[next]) {
-                g_search_matches |> push(line)
-                next++
-            }
-            if (int(arr[index]) == '\n') line++
-        }
-    }
+def private inspector_markdown_shown() : bool {
+    // Must match draw_file_view's presentation choice: an active focus target
+    // renders markdown as source, and find jumps must land in the same view.
+    return (g_inspector.resolved_language == "markdown"
+        && !g_inspector.focus_document_valid)
 }
 
-def private inspector_search_jump() {
-    return if (empty(g_search_matches) || g_search_current < 0
-        || g_search_current >= length(g_search_matches))
-    let row = g_search_matches[g_search_current]
-    g_focus_view_scroll_y = (float(row) * max(GetTextLineHeight(),
-        g_inspector.view.key.line_height))
-    g_focus_view_scroll_pending = true
-}
-
-// View-mode search (note 13). Diff panes align virtual rows, so a text-line
-// jump would land wrong there — diff search waits on a line->row map.
-def private draw_inspector_search() {
-    SetNextItemWidth(220.0f)
-    let _changed = input_text_growable(INSPECTOR_SEARCH, (text = "Find"))
-    let query = strip(INSPECTOR_SEARCH.value)
-    let identity = "{g_inspector.revision}:{g_inspector.installed_file_path}:{query}"
-    if (identity != g_search_identity) {
-        g_search_identity = identity
-        rebuild_inspector_search(g_inspector.view_source, query)
-        if (!empty(g_search_matches)) inspector_search_jump()
-    }
-    let matches = length(g_search_matches)
-    same_line()
-    if (small_button(INSPECTOR_SEARCH_PREV, (text = "<", enabled = matches > 1))) {
-        g_search_current = (g_search_current + matches - 1) % matches
-        inspector_search_jump()
-    }
-    same_line()
-    if (small_button(INSPECTOR_SEARCH_NEXT, (text = ">", enabled = matches > 1))) {
-        g_search_current = (g_search_current + 1) % matches
-        inspector_search_jump()
-    }
-    if (!empty(query)) {
-        same_line()
-        if (matches > 0) {
-            text_disabled(INSPECTOR_SEARCH_COUNT,
-                (text = "{g_search_current + 1} of {matches}"))
+def private diff_row_for_byte(byte_offset : int) : int {
+    // new_line_starts is ascending aligned-row starts; the greatest start
+    // <= byte_offset is the row the byte renders on.
+    var low = 0
+    var high = length(g_inspector.new_line_starts) - 1
+    var row = 0
+    while (low <= high) {
+        let mid = (low + high) / 2
+        if (g_inspector.new_line_starts[mid] <= byte_offset) {
+            row = mid
+            low = mid + 1
         } else {
-            text_colored(INSPECTOR_SEARCH_NONE,
-                (color = token_warning_color(), text = "no matches"))
+            high = mid - 1
         }
+    }
+    return row
+}
+
+def public inspector_find_source(diff_mode : bool) : string {
+    return diff_mode ? g_inspector.new_document.source : g_inspector.view_source
+}
+
+def public inspector_find_revision(diff_mode : bool) : int {
+    // The two tabs search different texts under one find state; tagging the
+    // mode into the revision forces a rebuild when the user switches tabs.
+    return g_inspector.revision * 2 + (diff_mode ? 1 : 0)
+}
+
+def public inspector_apply_find_jump(diff_mode : bool) {
+    return if (g_inspector.find.jump_revision == g_inspector.find_applied_jump)
+    g_inspector.find_applied_jump = g_inspector.find.jump_revision
+    let found = text_find_current(g_inspector.find)
+    return if (found.start_byte < 0)
+    if (diff_mode) {
+        // The AFTER pane is the search target; both panes share diff_scroll_y,
+        // so the hunk-jump scroll machinery lands the aligned row in view.
+        text_source_view_select_range(g_inspector.new_document,
+            g_inspector.new_view, found.start_byte, found.end_byte)
+        let row = diff_row_for_byte(found.start_byte)
+        g_inspector.diff_scroll_y = max(0.0f, (float(row) - 6.0f) * max(
+            GetTextLineHeight(), g_inspector.new_view.key.line_height))
+        g_inspector.diff_scroll_jump_pending = true
+    } elif (inspector_markdown_shown()) {
+        g_inspector.find_scroll_markdown = markdown_view_select_source_range(
+            g_inspector.markdown_view, found.start_byte, found.end_byte)
+    } else {
+        let _expanded = text_source_view_expand_for_byte(
+            g_inspector.view_document, g_inspector.view, found.start_byte)
+        text_source_view_select_range(g_inspector.view_document,
+            g_inspector.view, found.start_byte, found.end_byte)
+        g_inspector.find_scroll_byte = found.start_byte
+    }
+}
+
+def private draw_inspector_find(diff_mode : bool) {
+    return if (!g_inspector.find.open)
+    text_find_bar(1, g_inspector.find)
+    let _ = text_find_rebuild(g_inspector.find,
+        inspector_find_source(diff_mode), inspector_find_revision(diff_mode))
+    inspector_apply_find_jump(diff_mode)
+    if (g_inspector.find.open
+            && IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)
+            && IsKeyPressed(ImGuiKey.Escape, false)) {
+        text_find_close(g_inspector.find)
+    }
+}
+
+def private apply_inspector_find_scroll() {
+    // Inside the view child. No GetScrollMaxY clamp: it reports LAST frame's
+    // range; ImGui clamps SetScrollY against the real height at frame end.
+    return if (g_inspector.find_scroll_byte < 0)
+    let line_top = text_source_view_line_top(g_inspector.view,
+        g_inspector.find_scroll_byte)
+    if (line_top >= 0.0f) {
+        let height = GetWindowSize().y
+        let local_top = line_top - GetScrollY()
+        if (local_top < height * 0.1f || local_top > height * 0.9f) {
+            SetScrollY(max(0.0f, line_top - height * 0.35f))
+        }
+    }
+    g_inspector.find_scroll_byte = -1
+}
+
+def private apply_inspector_markdown_find_scroll() {
+    // The view's caret-visible pass edge-scrolls at best; a find jump places
+    // the selection focus in the comfortable band instead.
+    return if (!g_inspector.find_scroll_markdown)
+    g_inspector.find_scroll_markdown = false
+    let focus = markdown_view_selection_focus_screen_y(g_inspector.markdown_view)
+    return if (!focus.valid)
+    let view_top = GetWindowPos().y
+    let height = GetWindowSize().y
+    if (focus.y < view_top + height * 0.1f
+            || focus.y > view_top + height * 0.9f) {
+        SetScrollY(max(0.0f, GetScrollY() + focus.y
+            - (view_top + height * 0.35f)))
     }
 }
 
@@ -434,15 +464,12 @@ def draw_file_view() {
         draw_binary_preview()
         return
     }
-    if (g_inspector.resolved_language != "markdown") {
-        draw_inspector_search()
-    }
+    draw_inspector_find(false)
     child(FILE_VIEW_PANE, (text = "file view", size = float2(0.0f, 0.0f),
             child_flags = ImGuiChildFlags.None,
             window_flags = ImGuiWindowFlags.HorizontalScrollbar)) {
         content_zoom_wheel(CONTENT_VIEW)
-        if (g_inspector.resolved_language == "markdown"
-                && !g_inspector.focus_document_valid) {
+        if (inspector_markdown_shown()) {
             var style = MarkdownViewStyle(
                 fonts = g_fonts,
                 typography = MarkdownTypography(
@@ -454,6 +481,7 @@ def draw_file_view() {
                 style, g_inspector.revision, g_inspector.changed_source_ranges,
                 g_inspector.markdown_gutter_segments,
                 max(1.0f, 2.0f * content_zoom_scale(CONTENT_VIEW)))
+            apply_inspector_markdown_find_scroll()
         } else {
             if (g_focus_view_scroll_pending) {
                 SetScrollY(max(0.0f, g_focus_view_scroll_y))
@@ -462,6 +490,7 @@ def draw_file_view() {
             var style = source_view_style(CONTENT_VIEW)
             let result <- text_source_view("git file view",
                 g_inspector.view_document, g_inspector.view, style)
+            apply_inspector_find_scroll()
             draw_active_focus_overlay(g_inspector.view,
                 g_inspector.view_document, false)
             if (result.selection_context_requested) {
@@ -844,6 +873,13 @@ def draw_file_inspector_content() {
 }
 
 def draw_file_inspector_window() {
+    if (IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)) {
+        let io & = unsafe(GetIO())
+        let command_down = io.ConfigMacOSXBehaviors ? io.KeySuper : io.KeyCtrl
+        if (command_down && IsKeyPressed(ImGuiKey.F, false)) {
+            text_find_open(g_inspector.find)
+        }
+    }
     child(FILE_INSPECTOR_CONTENT, (text = "inspector content",
             size = float2(0.0f, -GetFrameHeightWithSpacing()),
             child_flags = ImGuiChildFlags.None,
@@ -868,7 +904,6 @@ def draw_file_inspector_window() {
 def inspector_ui_init() {
     DIFF_SYNTAX.value = 0
     DIFF_CONTEXT.value = 0
-    INSPECTOR_SEARCH.capacity = 256
 }
 
 def draw_file_inspector_dock() {

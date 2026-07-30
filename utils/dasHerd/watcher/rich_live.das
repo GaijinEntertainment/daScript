@@ -15,6 +15,7 @@ require imgui/imgui_table_builtin
 require imgui/imgui_markdown_tree_sitter
 require imgui/imgui_text_source_view
 require imgui/imgui_text_tree_sitter
+require imgui/imgui_text_find
 require clipboard/clipboard
 require daslib/safe_addr
 require daslib/json
@@ -54,6 +55,25 @@ struct HerderInspectorOpenArgs {
 
 struct HerderInspectorModeArgs {
     mode : string
+}
+
+struct HerderInspectorFindArgs {
+    query : string
+    regex : bool = false
+}
+
+struct HerderInspectorFindStepArgs {
+    delta : int = 1
+}
+
+struct HerderInspectorFoldArgs {
+    index : int = -1
+    collapsed : bool = true
+}
+
+struct HerderInspectorMdFoldArgs {
+    node : int = -1
+    collapsed : bool = true
 }
 
 struct HerderGitWorktreeArgs {
@@ -1356,7 +1376,25 @@ def herder_file_inspector_state(_input : JsonValue?) : JsonValue? {
         markdown_changed_layout_count = markdown_view_changed_layout_count(
             g_inspector.markdown_document, g_inspector.markdown_view,
             g_inspector.changed_source_ranges),
-        markdown_gutter_segments = g_inspector.markdown_gutter_segments))
+        markdown_gutter_segments = g_inspector.markdown_gutter_segments,
+        find_open = g_inspector.find.open,
+        find_query = g_inspector.find.query,
+        find_regex = g_inspector.find.use_regex,
+        find_match_count = length(g_inspector.find.matches),
+        find_current = g_inspector.find.current,
+        find_error = g_inspector.find.error,
+        find_jump_revision = g_inspector.find.jump_revision,
+        find_applied_jump = g_inspector.find_applied_jump,
+        view_fold_count = length(g_inspector.view_document.folds),
+        view_fold_collapsed_count = text_source_view_collapsed_count(
+            g_inspector.view),
+        view_fold_revision = g_inspector.view.fold_revision,
+        view_visible_line_count = length(g_inspector.view.layout.lines),
+        old_fold_count = length(g_inspector.old_document.folds),
+        new_fold_count = length(g_inspector.new_document.folds),
+        markdown_code_collapsed_count = markdown_view_collapsed_count(
+            g_inspector.markdown_view),
+        markdown_code_copy_revision = g_inspector.markdown_view.code_copy_revision))
 }
 
 [live_command(description = "Open a changed Git file immediately. Args: repository_id, worktree_path, file_path, comparison, optional revision for commit.")]
@@ -1417,6 +1455,115 @@ def herder_file_inspector_mode(input : JsonValue?) : JsonValue? {
         return JV((ok = false, error = "mode must be diff or view"))
     }
     return JV((ok = true, mode = mode))
+}
+
+[live_command(description = "Open find in the file inspector with a query; regex optional. Matches rebuild against the active tab (View text, or the diff AFTER pane).")]
+def herder_inspector_find(input : JsonValue?) : JsonValue? {
+    if (!g_inspector.prepare.has_retained_content) {
+        return JV((ok = false, error = "no file is inspected"))
+    }
+    let args = from_JV(input, type<HerderInspectorFindArgs>)
+    text_find_set_query(g_inspector.find, args.query, args.regex)
+    let diff_mode = g_inspector.mode == GitInspectorMode.diff
+    let _ = text_find_rebuild(g_inspector.find,
+        inspector_find_source(diff_mode), inspector_find_revision(diff_mode))
+    return JV((ok = true, query = g_inspector.find.query,
+               regex = g_inspector.find.use_regex,
+               match_count = length(g_inspector.find.matches),
+               current = g_inspector.find.current,
+               error = g_inspector.find.error,
+               jump_revision = g_inspector.find.jump_revision))
+}
+
+[live_command(description = "Step the inspector find selection by delta.")]
+def herder_inspector_find_step(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<HerderInspectorFindStepArgs>)
+    text_find_step(g_inspector.find, args.delta == 0 ? 1 : args.delta)
+    return JV((ok = true, current = g_inspector.find.current,
+               match_count = length(g_inspector.find.matches),
+               jump_revision = g_inspector.find.jump_revision))
+}
+
+[live_command(description = "Close find in the file inspector.")]
+def herder_inspector_find_close(_input : JsonValue?) : JsonValue? {
+    text_find_close(g_inspector.find)
+    return JV((ok = true))
+}
+
+[live_command(description = "List fold regions of the inspector View document's source view.")]
+def herder_inspector_folds(_input : JsonValue?) : JsonValue? {
+    var regions <- [for (index in range(length(g_inspector.view_document.folds)));
+        JV((index = index,
+            kind = g_inspector.view_document.folds[index].kind,
+            header_row = g_inspector.view_document.folds[index].header_row,
+            end_row = g_inspector.view_document.folds[index].end_row,
+            start_byte = g_inspector.view_document.folds[index].start_byte,
+            end_byte = g_inspector.view_document.folds[index].end_byte,
+            collapsed = text_source_view_fold_collapsed(
+                g_inspector.view_document, g_inspector.view, index),
+            handle_valid = text_source_view_fold_handle_pos(
+                g_inspector.view_document, g_inspector.view, index).valid,
+            handle_x = text_source_view_fold_handle_pos(
+                g_inspector.view_document, g_inspector.view, index).x,
+            handle_y = text_source_view_fold_handle_pos(
+                g_inspector.view_document, g_inspector.view, index).y))]
+    return JV((ok = true,
+               fold_count = length(g_inspector.view_document.folds),
+               folds = JV(regions)))
+}
+
+[live_command(description = "Collapse or expand one inspector View fold region by index.")]
+def herder_inspector_fold(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<HerderInspectorFoldArgs>)
+    let changed = text_source_view_set_fold(
+        g_inspector.view_document, g_inspector.view, args.index, args.collapsed)
+    return JV((ok = changed, index = args.index, collapsed = args.collapsed,
+               fold_revision = g_inspector.view.fold_revision,
+               fold_collapsed_count = text_source_view_collapsed_count(
+                   g_inspector.view)))
+}
+
+[live_command(description = "List the inspector markdown view's rendered code blocks: collapsed state, screen origin, and hover icon centers.")]
+def herder_inspector_md_code_blocks(_input : JsonValue?) : JsonValue? {
+    var blocks : array<JsonValue?>
+    for (index in range(length(g_inspector.markdown_document.nodes))) {
+        continue if (g_inspector.markdown_document.nodes[index].kind
+            != RichNodeKind.code_block)
+        let entry & = unsafe(g_inspector.markdown_view.nodes[index])
+        blocks |> push(JV((node = index,
+            collapsed = markdown_view_code_collapsed(
+                g_inspector.markdown_view, index),
+            screen_x = entry.screen_origin.x,
+            screen_y = entry.screen_origin.y,
+            icons_valid = entry.icon_rects_valid,
+            fold_icon_x = (entry.fold_icon_rect.x + entry.fold_icon_rect.z) * 0.5f,
+            fold_icon_y = (entry.fold_icon_rect.y + entry.fold_icon_rect.w) * 0.5f,
+            copy_icon_x = (entry.copy_icon_rect.x + entry.copy_icon_rect.z) * 0.5f,
+            copy_icon_y = (entry.copy_icon_rect.y + entry.copy_icon_rect.w) * 0.5f)))
+    }
+    return JV((ok = true, count = length(blocks), blocks = JV(blocks)))
+}
+
+[live_command(description = "Collapse or expand one inspector markdown code block by node index.")]
+def herder_inspector_md_fold(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<HerderInspectorMdFoldArgs>)
+    let changed = markdown_view_set_code_collapsed(
+        g_inspector.markdown_view, args.node, args.collapsed)
+    return JV((ok = changed, node = args.node, collapsed = args.collapsed,
+               md_fold_revision = g_inspector.markdown_view.fold_revision,
+               md_code_collapsed_count = markdown_view_collapsed_count(
+                   g_inspector.markdown_view)))
+}
+
+[live_command(description = "Copy one inspector markdown code block to the clipboard by node index.")]
+def herder_inspector_md_copy_code(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<HerderInspectorMdFoldArgs>)
+    let copied = markdown_view_copy_code_block(g_inspector.markdown_view,
+        args.node, !harness_is_headless())
+    return JV((ok = copied,
+               code_copy_revision = g_inspector.markdown_view.code_copy_revision,
+               code_copy_node = g_inspector.markdown_view.code_copy_node,
+               code_copy_bytes = length(g_inspector.markdown_view.code_copy_text)))
 }
 
 [live_command(description = "Inspect persistent, non-modal agent Attention and active Focus Set state.")]

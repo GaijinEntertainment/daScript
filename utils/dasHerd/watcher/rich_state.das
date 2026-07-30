@@ -15,6 +15,7 @@ require imgui/imgui_table_builtin
 require imgui/imgui_markdown_tree_sitter
 require imgui/imgui_text_source_view
 require imgui/imgui_text_tree_sitter
+require imgui/imgui_text_find
 require clipboard/clipboard
 require daslib/safe_addr
 require daslib/json_boost
@@ -294,6 +295,12 @@ struct GitInspectorState {
     diff_left_rect : float4
     diff_right_rect : float4
     diff_scrollbar_rect : float4
+    // One find state serves both tabs (the query survives a mode switch);
+    // matches rebuild against the active tab's text via a mode-tagged revision.
+    find : TextFindState = TextFindState()
+    find_applied_jump : int
+    find_scroll_byte : int = -1
+    find_scroll_markdown : bool
 }
 
 struct GitWindowStatus {
