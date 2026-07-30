@@ -2311,6 +2311,7 @@ def public metal_prefill_stats() : tuple<prefills : int64; declines : int64> {
 //! refilled weight arrays, same contract as metal_gemm_shutdown). Lazily re-initializes on the
 //! next served prefill.
 def public metal_prefill_shutdown {
+    kcov_fold()   // PSO pointers recycle across re-init — counts fold into names first
     pool_drain(g_pf_pool)
     pool_drain(g_pf_upool)
     if (g_pf_pso_moe_mm_q8_t != null) {

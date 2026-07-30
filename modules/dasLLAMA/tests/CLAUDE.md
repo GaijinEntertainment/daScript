@@ -71,6 +71,13 @@ The `image-vulkan` suite (test_model_image_vulkan, arm `vulkan`) covers the OFFL
 bake: the runner arms DASLLAMA_GPU + a small VRAM budget so the probed config carries a
 vulkan section, the DRY tier collects a role-stamped plan with no device calls (safe on
 GPU-less boxes), and the flavor image round-trips the plan verbatim.
+The `coverage` suite (test_kernel_coverage, arm `coverage`) is the KERNEL COVERAGE census
+(CODEREVIEW rule 17): the small-model zoo swept across format/graph/batch/KV axes, then a
+report of per-kernel dispatch counts with LOUD WARNINGS for compiled-but-never-dispatched
+kernels — never an auto-dead verdict. Run it BEFORE deleting any kernel; a NEW kernel's
+small-model run joins it. Small-tier warnings for MoE/mx4/PLE-batch/MTP kernels are expected
+(their carriers sit above the tier). The vulkan half here is the device-free rail unit; the
+serving vulkan census runs on the PC box.
 
 ## Blob-only Metal fixtures (the two-model pattern)
 

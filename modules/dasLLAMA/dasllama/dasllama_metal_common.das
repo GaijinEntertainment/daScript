@@ -49,7 +49,7 @@ struct private RegionEntry {
 
 var @scratch g_regions : table<uint64; RegionEntry>  // base address -> resident PLAIN region; upload-once, steady-state [] is a hit
 var @scratch g_regions_cat3 : table<uint64; RegionEntry>  // first-piece base -> resident CONCAT region
-var g_region_retire : array<MetalBuffer?>  // grown-out buffers: unretained cbs may still bind them — released only at the quiesce boundaries
+var @scratch g_region_retire : array<MetalBuffer?>  // grown-out buffers: unretained cbs may still bind them — released only at the quiesce boundaries
 var g_pool : MetalBufferPool
 var g_upool : MetalBufferPool                // UNTRACKED pool: uniforms + rope rows (GPU-read-only)
 var g_decodes = 0l
@@ -1249,8 +1249,71 @@ var @scratch g_gr_binds : array<KBind>
 var @scratch g_gr_ranges : array<MemRange>
 var g_gr_open = false            // a node is being built (kn_pipeline .. kn_dispatch)
 
+// ===== the kernel coverage census (CODEREVIEW rule 17) =====
+// Dispatches count under the PSO pointer; compile_pso registers pointer -> MSL entry name, and
+// releases FOLD live counts into names first (PSO pointers recycle across shutdown/reinit).
+var @scratch g_kcov : table<uint64; int64>          // pso pointer -> dispatches since last fold
+var @scratch g_kcov_names : table<uint64; string>   // pso pointer -> MSL entry name
+var @scratch g_kcov_folded : table<string; int64>   // survives PSO release cycles
+
+def kcov_register(pso : MetalComputePipeline?; entry : string) {
+    g_kcov_names[intptr(pso)] = entry
+}
+
+[cold_path]   // shutdown/release only — live pointer counts fold into names before reuse
+def kcov_fold {
+    for (k, n in keys(g_kcov), values(g_kcov)) {
+        g_kcov_folded[g_kcov_names?[k] ?? "pso_{k}"] += n
+    }
+    g_kcov |> clear()
+}
+
+//! Per-kernel dispatch counts (name -> count) since process start or the last reset — every
+//! COMPILED kernel appears, so a 0 row is "compiled but never dispatched" (the coverage census).
+def public metal_kernel_coverage() : table<string; int64> {
+    var out : table<string; int64>
+    for (name, k in values(g_kcov_names), keys(g_kcov_names)) {
+        out[name] += g_kcov?[k] ?? 0l
+    }
+    for (name, n in keys(g_kcov_folded), values(g_kcov_folded)) {
+        out[name] += n
+    }
+    return <- out
+}
+
+def public metal_kernel_coverage_reset {
+    g_kcov |> clear()
+    g_kcov_folded |> clear()
+}
+
+//! Log the census: dispatched kernels with counts, then a LOUD WARNING per compiled-but-never-
+//! dispatched kernel. A zero row is a coverage gap or a dead kernel — a human call, never automatic.
+def public metal_kernel_coverage_report {
+    var cov <- metal_kernel_coverage()
+    var names <- [for (name in keys(cov)); name]
+    names |> sort()
+    var served = 0
+    for (name in names) {
+        if (cov[name] > 0l) {
+            served++
+            to_log(LOG_INFO, "metal kernel coverage: {name} = {cov[name]}\n")
+        }
+    }
+    var dead = 0
+    for (name in names) {
+        if (cov[name] == 0l) {
+            dead++
+            to_log(LOG_WARNING, "metal kernel coverage: {name} NEVER DISPATCHED this run — coverage gap or dead kernel (human call)\n")
+        }
+    }
+    to_log(LOG_INFO, "metal kernel coverage: {served} dispatched, {dead} never-dispatched of {length(names)} compiled\n")
+    delete names
+    delete cov
+}
+
 def kn_pipeline(enc : MetalComputeEncoder?; pso : MetalComputePipeline?) {
     if (!g_gr_on) {
+        g_kcov[intptr(pso)]++
         metal_set_pipeline(enc, pso)
         return
     }
@@ -1309,6 +1372,7 @@ def private gr_encode_node(enc : MetalComputeEncoder?; n : KNode) {
     for (r in range(n.nrange)) {
         g_hz_stage |> push(g_gr_ranges[n.range0 + r])
     }
+    g_kcov[intptr(n.pso)]++
     metal_set_pipeline(enc, n.pso)
     if (n.tgmem > 0ul) {
         metal_set_threadgroup_memory_length(enc, n.tgmem, 0)
@@ -1704,6 +1768,7 @@ def weight_caches_flush_on_reload {
 }
 
 def metal_common_release {
+    kcov_fold()   // PSO pointers recycle across re-init — counts fold into names first
     // schedules key on PSO pointers — a re-init reallocates PSOs, so cached classes would lie
     unsafe {
         delete g_gr_scheds

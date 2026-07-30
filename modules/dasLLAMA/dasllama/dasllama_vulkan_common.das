@@ -2231,6 +2231,8 @@ struct VkHaz {
 var g_kernel_access : table<string; uint2>   // kernel name -> (read-bindings, write-bindings)
 var g_pipe_access : table<uint64; uint2>     // VkPipeline -> (read-bindings, write-bindings)
 var g_set_bits : table<uint64; SetBits>      // VkDescriptorSet -> per-binding region-bit masks
+var @scratch g_pipe_names : table<uint64; string>   // VkPipeline -> kernel name (the coverage census)
+var @scratch g_vk_kcov : table<uint64; int64>       // VkPipeline -> dispatches (CODEREVIEW rule 17)
 
 struct SetBits {
     b : uint[6]
@@ -2277,6 +2279,7 @@ def hz_pipe_register(pipe : Pipeline; kernel : string) {
         panic("dasLLAMA vulkan lens: no derived access for kernel {kernel}")
     }
     g_pipe_access[intptr(boost_value_to_vk(pipe))] = g_kernel_access[kernel]
+    g_pipe_names[intptr(boost_value_to_vk(pipe))] = kernel
 }
 
 // create a kernel's pipeline and register its lens-derived access masks (the shader-module local
@@ -2318,9 +2321,50 @@ def hz_masks(pipe : Pipeline; var set_ : VkDescriptorSet) : tuple<r : uint; w : 
 // the derived-mask dispatch node: declare via the composed masks, bind, dispatch
 def hz_dispatch(raw : VkCommandBuffer; var h : VkHaz; pipe : Pipeline; var set_ : VkDescriptorSet; groups : uint) {
     let m = hz_masks(pipe, set_)
+    g_vk_kcov[intptr(boost_value_to_vk(pipe))]++
     vhz_dep(raw, h, m.r, m.w)
     cmd_bind_pipeline(vk_value_to_boost(raw), pipe, VkPipelineBindPoint.COMPUTE)
     cmd_bind_dispatch(raw, set_, groups)
+}
+
+//! Per-kernel dispatch counts (name -> count) — every kernel in the lens spec appears, so a 0
+//! row is "spec'd but never dispatched" (the coverage census, CODEREVIEW rule 17).
+def public vk_kernel_coverage() : table<string; int64> {
+    ensure_kernel_access()
+    var out <- {for (name in keys(g_kernel_access)); name => 0l}
+    for (k, n in keys(g_vk_kcov), values(g_vk_kcov)) {
+        out[g_pipe_names?[k] ?? "pipe_{k}"] += n
+    }
+    return <- out
+}
+
+def public vk_kernel_coverage_reset {
+    g_vk_kcov |> clear()
+}
+
+//! Log the census: dispatched kernels with counts, then a LOUD WARNING per spec'd-but-never-
+//! dispatched kernel. A zero row is a coverage gap or a dead kernel — a human call, never automatic.
+def public vk_kernel_coverage_report {
+    var cov <- vk_kernel_coverage()
+    var names <- [for (name in keys(cov)); name]
+    names |> sort()
+    var served = 0
+    for (name in names) {
+        if (cov[name] > 0l) {
+            served++
+            to_log(LOG_INFO, "vulkan kernel coverage: {name} = {cov[name]}\n")
+        }
+    }
+    var dead = 0
+    for (name in names) {
+        if (cov[name] == 0l) {
+            dead++
+            to_log(LOG_WARNING, "vulkan kernel coverage: {name} NEVER DISPATCHED this run — coverage gap or dead kernel (human call)\n")
+        }
+    }
+    to_log(LOG_INFO, "vulkan kernel coverage: {served} dispatched, {dead} never-dispatched of {length(names)} in the lens spec\n")
+    delete names
+    delete cov
 }
 
 var g_vhz_paranoid = -1   // DASLLAMA_VK_HAZARD_PARANOID: barrier before every node
