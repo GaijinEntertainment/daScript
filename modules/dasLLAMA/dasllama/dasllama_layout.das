@@ -18,17 +18,6 @@ require math
 // walkers, and the GPU tier gathers. Requires dasllama_common back for Model/KqFmt; the loader
 // reaches the entry points through the hooks registered at [init] (register_model_layout).
 
-//! KqFmt -> the gemm_schema kq format id space (4/5/6/40) — the ONE bridge between the enum
-//! and the stride tables. q8/q51 are not kq superblock formats and panic.
-def kq_schema_id(f : KqFmt) : int {
-    if (f == KqFmt.k4) return 4
-    if (f == KqFmt.k5) return 5
-    if (f == KqFmt.k6) return 6
-    if (f == KqFmt.q40) return 40
-    panic("kq_schema_id: not a kq superblock format")
-    return 0
-}
-
 // ===== metal-flavor blob transform (the blob-only .dlim redesign) =====
 
 // A q8 region's blob bind offset (off/32)*34 lands 16B-aligned iff off % 256 == 0; a k6
@@ -676,9 +665,8 @@ def moe_gpu_gather_stack_q8n(t : Model; woff : int64; n, rows, slice_rows : int6
 def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_rows : int64;
                             repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
     let nsb = n / KQ_SUPERBLOCK_ELEMS
-    let sid = kq_schema_id(fmt)
-    let qsb = kq_qsb(sid)    // quant plane stride per superblock (disk == device for quants)
-    let dssb = kq_ssb(sid)   // disk/plane scale stride; device rows decode to KQ_DEV_SSB
+    let qsb = kq_qsb(fmt)    // quant plane stride per superblock (disk == device for quants)
+    let dssb = kq_ssb(fmt)   // disk/plane scale stride; device rows decode to KQ_DEV_SSB
     assert(n % KQ_SUPERBLOCK_ELEMS == 0l, "GPU MoE kq gather: row length must be a superblock multiple")
     assert(rows * nsb * qsb <= 2147483647l, "GPU MoE kq stack exceeds the int32 gather-buffer rail")
     wq |> resize(int(rows * nsb * qsb))

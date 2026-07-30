@@ -9,6 +9,7 @@ require daslib/jobque_boost public   // quantize_k5_plane threads its superblock
 require dasllama/dasllama_par        // maybe_parallel_for
 require dasllama/dasllama_math       // count_inline_run/count_parallel_dispatch_thru — the par macro's counters (same inversion dasllama_quant documents)
 require dasllama/dasllama_quant      // quantize_q8_0_into_ptr / quantize_q8_k_into_ptr — the requant row kernels
+require dasllama/dasllama_kqformat public   // KqFmt + the plane stride truth (K4_QSB et al.) — re-exported down the gguf chain
 
 // Tensor format conversion, platform-neutral: the pure codec layer — LE byte readers, K-quant
 // superblock dequants (+ pointer twins), superblock->plane transcodes, plane dequants, the
@@ -639,20 +640,6 @@ def dequant_q51_plane_block(kq : array<uint8> | #; kqo : int64; ks : array<uint8
         dst[doff + k + 16l] = d * float((b >> 4) | h1) + m
     }
 }
-
-// K-quant plane strides (bytes per 256-weight superblock)
-let K4_QSB = 128l
-let K4_SSB = 20l   // kq v2: 16B verbatim disk scale block + 4B pad (repack decodes in place)
-let K5_QSB = 160l
-let K5_SSB = 20l   // kq v2: 16B verbatim disk scale block + 4B pad (the k4 form)
-let K6_QSB = 192l
-let K6_SSB = 18l
-let Q40_QSB = 128l   // q40 tier: 8 x 16 nibble bytes (the k4 pairing, k / k+16 per 32-block)
-let Q40_SSB = 16l    // 8 x f16 d, verbatim disk halfwords
-// q51 tier strides are per 32-block, NOT per superblock: Q5_1 exists precisely for rows that are
-// % 32 but not % 256 (llama.cpp's quantizer fallback), so the planes carry no superblock structure
-let Q51_QB = 20l   // 16 nibble bytes (k / k+16 pairing) + 4 qh bytes, verbatim disk splits
-let Q51_SB = 4l    // d, m f16 halfwords, verbatim
 
 // Raw byte copy via unaligned u64 moves + byte tail — the workhorse of the pointerized transcode
 

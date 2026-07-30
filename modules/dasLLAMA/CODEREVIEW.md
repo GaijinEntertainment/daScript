@@ -35,6 +35,12 @@
 
 ## Structure
 
+0. **THE PATTERN: a new module lands with its records, from the get-go.** Every new
+   `dasllama_*.das` ships in the same change with (a) an ARCHITECTURE.md placement rule
+   saying what belongs there, (b) a CODEREVIEW.md rule below so review catches strays,
+   and (c) targeted tests. A module without its records is a review defect — that is how
+   "things go where they belong" stays true after the reorg.
+
 8. **All new repacks go into `dasllama_repack.das`.** Any disk-order → compute-order
    kernel-layout transform (grp interleave, extractor, panel unpack — any format, any
    platform) lands there; a repack implemented anywhere else is a review defect.
@@ -42,3 +48,9 @@
    quantize/dequantize/transcode/encode, byte readers for a codec, numeric widen/narrow —
    lands there, regardless of platform or which loader wants it; a conversion implemented
    anywhere else is a review defect.
+10. **All format identity lives in `dasllama_kqformat.das`.** The `KqFmt` enum, the
+    per-format descriptor table (strides, block geometry, stream codes), and format
+    predicates. A new weight format = a new enum member + descriptor row THERE — never a
+    fresh `if (fmt == ...)` ladder, never a second format-id space, never a local stride
+    constant. An `int` carrying a format id crossing a module boundary is a review defect
+    (pass the enum; cast at the IR/kernel-param boundary only).

@@ -6,6 +6,7 @@ module dasllama_common shared public
 require daslib/fio
 require dasllama/dasllama_env  // the shared typed env readers + the knob registry
 require dasllama/dasllama_config  // DlimConfiguration — this module registers the cpu/metal sources
+require dasllama/dasllama_kqformat public   // KqFmt + kq_sb + the stride truth — re-exported so every requirer keeps seeing the enum
 require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs and false-flags this as unused
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default  // registers the portable Q8·Q8 backend at [init] (the fallback everywhere)
@@ -42,24 +43,6 @@ enum QuantMode {
     q8
     q4_0
 }
-
-//! Per-weight storage format under a q8-mode load with native planes: q8 = qblob/qscales;
-//! k4/k5/k6/q40 = superblock plane pairs (mixed PER TENSOR); q51 = native Q5_1 per-32 planes;
-//! q8n = q8 as gguf-native 34B interleaved blocks (ONE plane, the cm2 GPU-tier tag, never disk).
-enum KqFmt : uint8 {
-    q8
-    k4
-    k5
-    k6
-    q40
-    q51
-    q8n
-}
-
-// The superblock-lattice formats (Q8_K-form activations, % 256 rows, repack + stamped kq
-// kernels). q51 deliberately fails this: it rides per-32 planes with Q8_0-form activations —
-// a `fmt != KqFmt.q8` test no longer implies the kq lattice; branch on kq_sb where it does.
-def private kq_sb(f : KqFmt) : bool => f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.q40
 
 //! FFN gate activation: silu = SwiGLU (Llama family), gelu = GeGLU (Gemma), swiglu_oai = the
 //! clamped SwiGLU with +1 on the up branch (gpt-oss).
@@ -2537,10 +2520,9 @@ def private wscale_convert_f16(var t : Model) {
 
 // ===== GPU MoE tier upload (post-prepare, loader-agnostic) =====
 
-def private moe_gpu_fmt_kq(f : KqFmt) : bool => f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.q40
 
 // a plane the dense rail can serve: a format the tier has kernels for, repacked if native-kq
-def private dense_plane_ok(t : Model; f : KqFmt) : bool => (f == KqFmt.q8 || moe_gpu_fmt_kq(f)) && kq_servable(t, f)
+def private dense_plane_ok(t : Model; f : KqFmt) : bool => (f == KqFmt.q8 || kq_sb(f)) && kq_servable(t, f)
 
 // layer l carries a parallel-dense shared expert whose whole w1/w3/w2 triple the tier can serve
 def private dense_shexp_uploadable(t : Model; l : int64) : bool {
@@ -3286,7 +3268,7 @@ def moe_gpu_upload_resident(t : Model) {
     // every token). One slice: the repack groups the plane globally, tail rows disk-order.
     // DASLLAMA_GPU_CLS=0 keeps it on the CPU (A/B lever).
     let cls_fmt = t.config.shared_weights ? t.emb_fmt : t.wcls_fmt
-    let cls_servable = cls_fmt == KqFmt.q8 ? (t.cls_q8 || !t.config.shared_weights) : moe_gpu_fmt_kq(cls_fmt)
+    let cls_servable = cls_fmt == KqFmt.q8 ? (t.cls_q8 || !t.config.shared_weights) : kq_sb(cls_fmt)
     vulkan_bake_role(VkBakeRole.cls)
     if (cls_servable && gpu_want_cls_upload()
             && moe_gpu_gather_upload(t, cls_fmt, t.wcls_off, dim, t.config.vocab_size, t.config.vocab_size, mr, kgroup, wbias, wq, ws)) {
@@ -3314,7 +3296,7 @@ def moe_gpu_upload_resident(t : Model) {
                 let fq = fmt_at(t.wq_fmt, l)
                 let fo = fmt_at(t.wo_fmt, l)
                 if (gpu_want_dense_attn() && t.wq_offs[l] >= 0l && t.wo_offs[l] >= 0l
-                        && (fq == KqFmt.q8 || moe_gpu_fmt_kq(fq)) && (fo == KqFmt.q8 || moe_gpu_fmt_kq(fo))
+                        && (fq == KqFmt.q8 || kq_sb(fq)) && (fo == KqFmt.q8 || kq_sb(fo))
                         && kq_servable(t, fq) && kq_servable(t, fo)) {
                     uploads |> push((f = fq, woff = t.wq_offs[l], n = dim, rows = t.config.q_gated ? 2l * qd : qd))
                     uploads |> push((f = fo, woff = t.wo_offs[l], n = qd, rows = dim))
@@ -3450,7 +3432,7 @@ def moe_gpu_upload_resident(t : Model) {
             let kq_cls = fq != KqFmt.q8
             var fmts_ok = (fk != KqFmt.q8) == kq_cls && (fv != KqFmt.q8) == kq_cls
             for (f in [fq, fk, fv, fo]) {
-                fmts_ok = fmts_ok && (f == KqFmt.q8 || moe_gpu_fmt_kq(f)) && kq_servable(t, f)
+                fmts_ok = fmts_ok && (f == KqFmt.q8 || kq_sb(f)) && kq_servable(t, f)
             }
             continue if (!fmts_ok || !(hs == 128l || hs == 256l) || qd > 8192l || kvd > 1024l
                 || c.n_heads > 64l || rot % 2l != 0l || rot > hs || kvd % 32l != 0l
@@ -3537,8 +3519,8 @@ def moe_gpu_upload_resident(t : Model) {
         // recipe bumps ffn_down_exps to Q5_0/Q8_0, so k4/k4/q8 is the COMMON shape (glm4moe,
         // gemma). The walk stops on refusal so the resident set stays contiguous from the end.
         let gu_ok = ((f1 == KqFmt.q8) == (f3 == KqFmt.q8)
-            && (f1 == KqFmt.q8 || (moe_gpu_fmt_kq(f1) && moe_gpu_fmt_kq(f3))))
-        let dn_ok = f2 == KqFmt.q8 || moe_gpu_fmt_kq(f2)
+            && (f1 == KqFmt.q8 || (kq_sb(f1) && kq_sb(f3))))
+        let dn_ok = f2 == KqFmt.q8 || kq_sb(f2)
         if (l < t.config.n_layer_dense_lead || t.we1_offs[l] < 0l || !(gu_ok && dn_ok)) {
             break
         }
@@ -3578,8 +3560,8 @@ def moe_gpu_upload_resident(t : Model) {
         let f3 = fmt_at(t.we3_fmt, l)
         // same rule as the resident walk: gate/up share one activation image, down is free
         let gu_ok = ((f1 == KqFmt.q8) == (f3 == KqFmt.q8)
-            && (f1 == KqFmt.q8 || (moe_gpu_fmt_kq(f1) && moe_gpu_fmt_kq(f3))))
-        if (!(gu_ok && (f2 == KqFmt.q8 || moe_gpu_fmt_kq(f2)))) {
+            && (f1 == KqFmt.q8 || (kq_sb(f1) && kq_sb(f3))))
+        if (!(gu_ok && (f2 == KqFmt.q8 || kq_sb(f2)))) {
             break
         }
         var got = 0
@@ -8456,8 +8438,8 @@ def private heat_advise_layer(t : Model; l : int64; h : HeatLayer) {
     let hf1 = fmt_at(t.we1_fmt, l)
     let hf2 = fmt_at(t.we2_fmt, l)
     let hf3 = fmt_at(t.we3_fmt, l)
-    if (!((hf1 == KqFmt.q8 || moe_gpu_fmt_kq(hf1)) && (hf2 == KqFmt.q8 || moe_gpu_fmt_kq(hf2))
-            && (hf3 == KqFmt.q8 || moe_gpu_fmt_kq(hf3)))) {
+    if (!((hf1 == KqFmt.q8 || kq_sb(hf1)) && (hf2 == KqFmt.q8 || kq_sb(hf2))
+            && (hf3 == KqFmt.q8 || kq_sb(hf3)))) {
         return
     }
     var ids <- [for (i in range(length(h.cnt))); int64(i)]
