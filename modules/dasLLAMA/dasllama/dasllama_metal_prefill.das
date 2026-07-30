@@ -2838,8 +2838,6 @@ def private enc_gemm_mm(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff
     kn_dispatch(enc, uint3(uint(mp / 32l), uint(d / 64l), 1u), uint3(128u, 1u, 1u))
 }
 
-def private pf_fmt_at(a : array<KqFmt>; l : int64) : KqFmt => empty(a) ? KqFmt.q8 : a[l]
-
 // one kq weight site on the prefill mul_mm path: the format's mul_mm twin over the whole-plane
 // binds (kq_quants_of / kq_scales_of — k6 binds its split scale plane twice, sub-scales at soff
 // + the f16 d tail at doff). Same grid/tgmem as enc_gemm_mm.
@@ -4136,9 +4134,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 if (!recr && g_pf_skip != "gemm") {
                     // K-quant tensors take their mul_mm twins per tensor (the gate pins the
                     // mm shape for kquant loads); q8-tagged tensors keep the blob path
-                    let fq = pf_fmt_at(t.wq_fmt, l)
-                    let fk = pf_fmt_at(t.wk_fmt, l)
-                    let fv = has_wv ? pf_fmt_at(t.wv_fmt, l) : KqFmt.q8
+                    let fq = fmt_at(t.wq_fmt, l)
+                    let fk = fmt_at(t.wk_fmt, l)
+                    let fv = has_wv ? fmt_at(t.wv_fmt, l) : KqFmt.q8
                     if (fq != KqFmt.q8 || fk != KqFmt.q8 || fv != KqFmt.q8) {
                         if (c.q_gated) {
                             // 2x-wide packed [q|gate] projection, deinterleaved into the q panel + gate rows
@@ -4274,7 +4272,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     pf_enc_ew2(enc, g_pf_pso_sigmul, bxb, bdngate, u_qtot, npos * qd)
                 }
                 if (!recr && g_pf_skip != "gemm") {
-                    let fo = pf_fmt_at(t.wo_fmt, l)
+                    let fo = fmt_at(t.wo_fmt, l)
                     if (fo != KqFmt.q8) {
                         pf_enc_kq_site_mm(enc, t, fo, t.wo_offs[l], dim, bxb, bxb2, u_qd_l, u_dim, mp)
                     } else {
@@ -4301,8 +4299,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     // MoE FFN (Wave C stage 2b): per-position routing + CSR, then one gathered
                     // mul_mm per projection over the touched experts; ordered reduce into bxb
                     // (g4: its own router norm + pre_ffn2 input via bxb2, reduce into bmg4rt)
-                    let fe1 = pf_fmt_at(t.we1_fmt, l)
-                    let fe3 = pf_fmt_at(t.we3_fmt, l)
+                    let fe1 = fmt_at(t.we1_fmt, l)
+                    let fe3 = fmt_at(t.we3_fmt, l)
                     if (g4moe) {
                         var bw_p2 = pf_upload_region(unsafe(addr < void? >(t.fblob[t.rms_pre_ffn2_off + l * dim])), uint64(dim * 4l))
                         pf_enc_rms(enc, bx, bw_p2, bxb2, u_dim, u_eps, npos)
@@ -4363,7 +4361,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     }
                 }
                 if (moe && g_pf_skip != "gemm" && g_pf_skip != "moe") {
-                    let fe2 = pf_fmt_at(t.we2_fmt, l)
+                    let fe2 = fmt_at(t.we2_fmt, l)
                     if (!pf_skip_moe_mm()) {
                         if (t.experts_mx4) {
                             var bhasb = g_pf_skip == "moe_bias" ? u_moe_g0 : u_moe_g1
@@ -4393,8 +4391,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     }
                 }
                 if ((!moe || g4moe) && g_pf_skip != "gemm") {   // g4: the dense parallel shared branch
-                    let f1 = pf_fmt_at(t.w1_fmt, l)
-                    let f3 = pf_fmt_at(t.w3_fmt, l)
+                    let f1 = fmt_at(t.w1_fmt, l)
+                    let f3 = fmt_at(t.w3_fmt, l)
                     if (f1 != KqFmt.q8 || f3 != KqFmt.q8) {
                         if (f1 != KqFmt.q8) {
                             pf_enc_kq_site_mm(enc, t, f1, t.w1_offs[l], hidden, bxb, bhb, u_dim, u_hidden, mp)
@@ -4419,7 +4417,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     pf_enc_ew2(enc, c.ffn_act != FfnAct.silu ? g_pf_pso_geglu : g_pf_pso_swiglu, bhb, bhb2, u_total_h, npos * hidden)
                 }
                 if ((!moe || g4moe) && g_pf_skip != "gemm") {
-                    let f2 = pf_fmt_at(t.w2_fmt, l)
+                    let f2 = fmt_at(t.w2_fmt, l)
                     if (f2 != KqFmt.q8) {
                         pf_enc_kq_site_mm(enc, t, f2, t.w2_offs[l], dim, bhb, bxb, u_hidden, u_dim, mp)
                     } else {

@@ -1076,8 +1076,6 @@ def signs_buffer() : MetalBuffer? {
 // tq4-mirror rope+store: one threadgroup per head (the FWHT spans it); mirror rows bind twice
 // each (half-scale + byte views at the same row offset)
 
-def private moe_fmt_at(a : array<KqFmt>; l : int64) : KqFmt => empty(a) ? KqFmt.q8 : a[l]
-
 // one MoE weight stack's (fmt, offset) serve check: base offset = the format's BIND alignment
 // (q8/k4/k5 %256, k6's d-plane pair %512); per-expert stride = the in-kernel index unit
 

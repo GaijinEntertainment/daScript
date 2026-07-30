@@ -87,8 +87,6 @@ def private decode_decline(t : Model; s : Session; pos : int64) : MetalDecodeDec
     return MetalDecodeDecline.none
 }
 
-def private kq_fmt_at(a : array<KqFmt>; l : int64) : KqFmt => empty(a) ? KqFmt.q8 : a[l]
-
 
 // Can the speculative chain feed itself on this model? It needs a GPU embed gather for the
 // argmax winner: the q8 linear copy (cls_q8), or a tied k6 classifier (every K-quant file on
@@ -556,9 +554,9 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
     unsafe {
         let recr = layer_is_recurrent(c, l)
         // attention: fused QKV GEMV -> single-query attention -> out-proj -> fused add+norm; K-quant sites (mixed PER TENSOR formats) split into per-tensor plane GEMVs
-        let fq = kq_fmt_at(t.wq_fmt, l)
-        let fk = kq_fmt_at(t.wk_fmt, l)
-        let fv = kq_fmt_at(t.wv_fmt, l)
+        let fq = fmt_at(t.wq_fmt, l)
+        let fk = fmt_at(t.wk_fmt, l)
+        let fv = fmt_at(t.wv_fmt, l)
         let qkv_q8 = fq == KqFmt.q8 && fk == KqFmt.q8 && fv == KqFmt.q8
         // sliding layers: the swa rope row + the window/chlo binds below; hetero models (gemma4) also swap the whole class geometry
         let lsl = layer_is_sliding(c, l)
@@ -750,7 +748,7 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
             enc_ew2(enc, g_pso_sigmul, r.bxb, 0ul, r.bdn_gate, 0ul, u_qd_l, qd)
         }
         if (!recr && g_skip != "gemv" && g_skip != "wo") {   // recurrent layers have no wo — ssm_out (already in bxb2) is their out projection
-            enc_site_gemv(enc, t, kq_fmt_at(t.wo_fmt, l), t.wo_offs[l], dim, qd, r.bxb, r.bxb2, u_qd_l, r.u_dim)
+            enc_site_gemv(enc, t, fmt_at(t.wo_fmt, l), t.wo_offs[l], dim, qd, r.bxb, r.bxb2, u_qd_l, r.u_dim)
             if (c.attn_out_bias) {
                 var bwo_b = upload_region(addr < void? >(t.bo[l * dim]), uint64(dim * 4l))
                 enc_ew2(enc, g_pso_add, r.bxb2, 0ul, bwo_b, 0ul, r.u_dim, dim)
@@ -776,9 +774,9 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
             // router -> select -> experts -> combine; g4 = gemma4's parallel-dense form
             let knfe = c.n_expert_used * c.n_ff_exp
             let g4 = c.moe_dense_shexp
-            let fe1 = kq_fmt_at(t.we1_fmt, l)
-            let fe3 = kq_fmt_at(t.we3_fmt, l)
-            let fe2 = kq_fmt_at(t.we2_fmt, l)
+            let fe1 = fmt_at(t.we1_fmt, l)
+            let fe3 = fmt_at(t.we3_fmt, l)
+            let fe2 = fmt_at(t.we2_fmt, l)
             var bmx = r.bxb   // expert input: plain = the rms_ffn norm-out; g4 = pre_ffn2
             if (g4 && g_skip != "ew") {
                 var bw_p2 = upload_region(addr < void? >(t.fblob[t.rms_pre_ffn2_off + l * dim]), uint64(dim * 4l))
@@ -869,7 +867,7 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                     var bw_pf2 = upload_region(addr < void? >(t.fblob[t.rms_post_ffn2_off + l * dim]), uint64(dim * 4l))
                     enc_rms(enc, r.bmoe_rt, bw_pf2, r.bmoe_rt, r.u_dim, r.u_eps)
                 }
-                let sh_w13_q8 = kq_fmt_at(t.w1_fmt, l) == KqFmt.q8 && kq_fmt_at(t.w3_fmt, l) == KqFmt.q8
+                let sh_w13_q8 = fmt_at(t.w1_fmt, l) == KqFmt.q8 && fmt_at(t.w3_fmt, l) == KqFmt.q8
                 if (g_skip != "gemv" && g_skip != "moe_sh") {
                     if (sh_w13_q8) {
                         // fused shared-branch gate+up + gelu (extends the dense w13sw fusion to the g4 shexp)
@@ -877,15 +875,15 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                         enc_gemv_w13sw(enc, bw1.buf, bw1.boff, uint64((t.w3_offs[l] / 32l) * 34l),
                             r.bxb, r.bh12s, r.u_dim, r.u_hidden, hidden, geglu ? r.u_one32 : r.u_zero32)
                     } else {
-                        enc_site_gemv(enc, t, kq_fmt_at(t.w1_fmt, l), t.w1_offs[l], hidden, dim, r.bxb, r.bh12s, r.u_dim, r.u_hidden)
-                        enc_site_gemv(enc, t, kq_fmt_at(t.w3_fmt, l), t.w3_offs[l], hidden, dim, r.bxb, r.bh12s, r.u_dim, r.u_hidden, uint64(hidden * 4l))
+                        enc_site_gemv(enc, t, fmt_at(t.w1_fmt, l), t.w1_offs[l], hidden, dim, r.bxb, r.bh12s, r.u_dim, r.u_hidden)
+                        enc_site_gemv(enc, t, fmt_at(t.w3_fmt, l), t.w3_offs[l], hidden, dim, r.bxb, r.bh12s, r.u_dim, r.u_hidden, uint64(hidden * 4l))
                     }
                 }
                 if (g_skip != "ew" && !sh_w13_q8) {
                     enc_ew2(enc, g_pso_geglu, r.bh12s, 0ul, r.bh12s, uint64(hidden * 4l), r.u_hidden, hidden)
                 }
                 if (g_skip != "gemv" && g_skip != "moe_sh") {
-                    enc_site_gemv(enc, t, kq_fmt_at(t.w2_fmt, l), t.w2_offs[l], dim, hidden, r.bh12s, r.bxb, r.u_hidden, r.u_dim)
+                    enc_site_gemv(enc, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], dim, hidden, r.bh12s, r.bxb, r.u_hidden, r.u_dim)
                 }
                 if (g_skip != "ew") {
                     var bw_pf1 = upload_region(addr < void? >(t.fblob[t.rms_post_ffn1_off + l * dim]), uint64(dim * 4l))
@@ -894,8 +892,8 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                 }
             }
         } else {
-            let f1 = kq_fmt_at(t.w1_fmt, l)
-            let f3 = kq_fmt_at(t.w3_fmt, l)
+            let f1 = fmt_at(t.w1_fmt, l)
+            let f3 = fmt_at(t.w3_fmt, l)
             let w13_q8 = f1 == KqFmt.q8 && f3 == KqFmt.q8
             if (g_skip != "gemv") {
                 if (w13_q8) {
@@ -912,7 +910,7 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                 enc_ew2(enc, geglu ? g_pso_geglu : g_pso_swiglu, r.bh12, 0ul, r.bh12, uint64(hidden * 4l), r.u_hidden, hidden)
             }
             if (g_skip != "gemv") {
-                enc_site_gemv(enc, t, kq_fmt_at(t.w2_fmt, l), t.w2_offs[l], dim, hidden, r.bh12, r.bxb, r.u_hidden, r.u_dim)
+                enc_site_gemv(enc, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], dim, hidden, r.bh12, r.bxb, r.u_hidden, r.u_dim)
             }
         }
         if (g_skip != "ew") {
@@ -1198,16 +1196,16 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
                     addr < void? >(t.bv[l * kv_dim]), uint64(kv_dim * 4l))
             }
             if (c.q_gated) {
-                enc_verify_site(t, r, enc, kq_fmt_at(t.wq_fmt, l), t.wq_offs[l], 2l * qd, dim, 2l * qd,
+                enc_verify_site(t, r, enc, fmt_at(t.wq_fmt, l), t.wq_offs[l], 2l * qd, dim, 2l * qd,
                     r.bxb, r.bdn_qg, r.u_dim, r.u_dn_qd2, r.u_dn_qd2)
                 enc_dn_deint(enc, r.bdn_qg, r.bqkv, r.bdn_gate, r.u_hs, r.u_qd, r.u_qkvd, qd, 2l)
             } else {
-                enc_verify_site(t, r, enc, kq_fmt_at(t.wq_fmt, l), t.wq_offs[l], qd, dim, qkvd,
+                enc_verify_site(t, r, enc, fmt_at(t.wq_fmt, l), t.wq_offs[l], qd, dim, qkvd,
                     r.bxb, r.bqkv, r.u_dim, r.u_qd, r.u_qkvd)
             }
-            enc_verify_site(t, r, enc, kq_fmt_at(t.wk_fmt, l), t.wk_offs[l], kv_dim, dim, qkvd,
+            enc_verify_site(t, r, enc, fmt_at(t.wk_fmt, l), t.wk_offs[l], kv_dim, dim, qkvd,
                 r.bxb, r.bqkv, r.u_dim, r.u_kvd, r.u_qkvd, [ycol = qd])
-            enc_verify_site(t, r, enc, kq_fmt_at(t.wv_fmt, l), t.wv_offs[l], kv_dim, dim, qkvd,
+            enc_verify_site(t, r, enc, fmt_at(t.wv_fmt, l), t.wv_offs[l], kv_dim, dim, qkvd,
                 r.bxb, r.bqkv, r.u_dim, r.u_kvd, r.u_qkvd, [ycol = qd + kv_dim])
             if (c.qk_norm) {
                 var bqkw = upload_region_cat3(
@@ -1229,7 +1227,7 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
             if (c.q_gated) {
                 enc_ew2(enc, g_pso_sigmul, r.bxb, 0ul, r.bdn_gate, 0ul, r.u_total_qd, 2l * qd)
             }
-            enc_verify_site(t, r, enc, kq_fmt_at(t.wo_fmt, l), t.wo_offs[l], dim, qd, dim,
+            enc_verify_site(t, r, enc, fmt_at(t.wo_fmt, l), t.wo_offs[l], dim, qd, dim,
                 r.bxb, r.bxb2, r.u_qd, r.u_dim, r.u_dim)
             if (c.attn_out_bias) {
                 var bwo_b = upload_region(addr < void? >(t.bo[l * dim]), uint64(dim * 4l))
@@ -1246,9 +1244,9 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
         if (r.moe) {
             // router -> select -> experts -> combine at two streams; shexp rides the fixed-B2 q8 forms
             let knfe = c.n_expert_used * c.n_ff_exp
-            let fe1 = kq_fmt_at(t.we1_fmt, l)
-            let fe3 = kq_fmt_at(t.we3_fmt, l)
-            let fe2 = kq_fmt_at(t.we2_fmt, l)
+            let fe1 = fmt_at(t.we1_fmt, l)
+            let fe3 = fmt_at(t.we3_fmt, l)
+            let fe2 = fmt_at(t.we2_fmt, l)
             var bw_rt = upload_region(addr < void? >(t.fblob[t.router_off + l * c.n_expert * dim]), uint64(c.n_expert * dim * 4l))
             var brb : MetalBuffer? = g_one
             var bhrb = r.u_zero32
@@ -1287,9 +1285,9 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
                 enc_axpy_sig(enc, r.bxb, r.bxb2, r.bmoe_lg, r.u_total_dim, r.u_dim, 2l * dim)
             }
         } else {
-            let f1 = kq_fmt_at(t.w1_fmt, l)
-            let f2 = kq_fmt_at(t.w2_fmt, l)
-            let f3 = kq_fmt_at(t.w3_fmt, l)
+            let f1 = fmt_at(t.w1_fmt, l)
+            let f2 = fmt_at(t.w2_fmt, l)
+            let f3 = fmt_at(t.w3_fmt, l)
             if (f1 == KqFmt.q8 && f2 == KqFmt.q8 && f3 == KqFmt.q8) {
                 let bw1 = blob_of(g_dev, t, t.w1_offs[l])
                 let bw3 = blob_of(g_dev, t, t.w3_offs[l])
@@ -2102,14 +2100,14 @@ def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : arra
             }
         }
         for (l in range64(t.config.n_layers)) {
-            let kq_qkv = kq_fmt_at(t.wq_fmt, l) != KqFmt.q8
+            let kq_qkv = fmt_at(t.wq_fmt, l) != KqFmt.q8
             // no-wv layers (gemma4 global: V = the K projection) have no attn_v format to match
-            if ((kq_fmt_at(t.wk_fmt, l) != KqFmt.q8) != kq_qkv ||
-                    (t.wv_offs[l] >= 0l && (kq_fmt_at(t.wv_fmt, l) != KqFmt.q8) != kq_qkv)) {
+            if ((fmt_at(t.wk_fmt, l) != KqFmt.q8) != kq_qkv ||
+                    (t.wv_offs[l] >= 0l && (fmt_at(t.wv_fmt, l) != KqFmt.q8) != kq_qkv)) {
                 return MetalDecodeDecline.kquant_native
             }
-            let kq_w13 = kq_fmt_at(t.w1_fmt, l) != KqFmt.q8
-            if ((kq_fmt_at(t.w3_fmt, l) != KqFmt.q8) != kq_w13) {
+            let kq_w13 = fmt_at(t.w1_fmt, l) != KqFmt.q8
+            if ((fmt_at(t.w3_fmt, l) != KqFmt.q8) != kq_w13) {
                 return MetalDecodeDecline.kquant_native
             }
         }
@@ -2541,16 +2539,16 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             // attention: QKV (one concat stream) -> per-row rope + KV store -> per-row attention
             // over [0, cnt_b) -> out-proj -> fused residual add + ffn norm. K-quant sites take
             // nrows per-stream plane GEMVs (class-uniformity per site gated at the decline).
-            let fq = kq_fmt_at(t.wq_fmt, l)
-            let fo = kq_fmt_at(t.wo_fmt, l)
-            let f1 = kq_fmt_at(t.w1_fmt, l)
-            let f2 = kq_fmt_at(t.w2_fmt, l)
+            let fq = fmt_at(t.wq_fmt, l)
+            let fo = fmt_at(t.wo_fmt, l)
+            let f1 = fmt_at(t.w1_fmt, l)
+            let f2 = fmt_at(t.w2_fmt, l)
             if (g_skip != "gemv") {
                 if (fq != KqFmt.q8) {
                     enc_kq_site_b(enc, t, fq, t.wq_offs[l], qd_l, dim, bxb, dim, bqkv, qkvd_l, 0l, u_dim, u_qd_l, u_qkvd_l, u_nrows_kq, nrows, mp)
-                    enc_kq_site_b(enc, t, kq_fmt_at(t.wk_fmt, l), t.wk_offs[l], kvd_l, dim, bxb, dim, bqkv, qkvd_l, qd_l, u_dim, u_kvd_l, u_qkvd_l, u_nrows_kq, nrows, mp)
+                    enc_kq_site_b(enc, t, fmt_at(t.wk_fmt, l), t.wk_offs[l], kvd_l, dim, bxb, dim, bqkv, qkvd_l, qd_l, u_dim, u_kvd_l, u_qkvd_l, u_nrows_kq, nrows, mp)
                     if (has_wv) {
-                        enc_kq_site_b(enc, t, kq_fmt_at(t.wv_fmt, l), t.wv_offs[l], kvd_l, dim, bxb, dim, bqkv, qkvd_l, qd_l + kvd_l, u_dim, u_kvd_l, u_qkvd_l, u_nrows_kq, nrows, mp)
+                        enc_kq_site_b(enc, t, fmt_at(t.wv_fmt, l), t.wv_offs[l], kvd_l, dim, bxb, dim, bqkv, qkvd_l, qd_l + kvd_l, u_dim, u_kvd_l, u_qkvd_l, u_nrows_kq, nrows, mp)
                     }
                 } elif (use_mm) {
                     // three per-tensor blob dispatches into the ONE fused QKV buffer — y binds at
@@ -2755,8 +2753,8 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             if (moe && g_skip != "gemv") {
                 // MoE FFN (Wave C): per-row router -> select -> expert gate/up (grid (nfe, k,
                 // rows)) -> act over rows*k*nfe -> expert down -> per-row weighted combine
-                let fe1 = kq_fmt_at(t.we1_fmt, l)
-                let fe3 = kq_fmt_at(t.we3_fmt, l)
+                let fe1 = fmt_at(t.we1_fmt, l)
+                let fe3 = fmt_at(t.we3_fmt, l)
                 var bw_rt = upload_region(addr < void? >(t.fblob[t.router_off + l * c.n_expert * dim]), uint64(c.n_expert * dim * 4l))
                 var brb : MetalBuffer? = g_one
                 var bhrb = u_zero32
@@ -2801,7 +2799,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                 enc_ew2(enc, pso_act, bgh, 0ul, bgh2, 0ul, u_moe_tot, nrows * knfe)
             }
             if (moe && g_skip != "gemv") {
-                let fe2 = kq_fmt_at(t.we2_fmt, l)
+                let fe2 = fmt_at(t.we2_fmt, l)
                 if (t.experts_mx4) {
                     var bwb2 = upload_region(addr < void? >(t.fblob[t.web2_off + l * c.n_expert * dim]), uint64(c.n_expert * dim * 4l))
                     enc_moe_gemv_mx4(enc, t, t.we2_offs[l], dim, c.n_expert_used, nrows, bgh, bmdn,
@@ -2823,7 +2821,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                     // gate + up into DISJOINT bhb/bhb2 — the ew2 swiglu below fuses them
                     // (fuse13 stands down on kq loads)
                     enc_kq_site_b(enc, t, f1, t.w1_offs[l], hidden, dim, bxb, dim, bhb, hidden, 0l, u_dim, u_hidden, u_hidden, u_nrows_kq, nrows, mp)
-                    enc_kq_site_b(enc, t, kq_fmt_at(t.w3_fmt, l), t.w3_offs[l], hidden, dim, bxb, dim, bhb2, hidden, 0l, u_dim, u_hidden, u_hidden, u_nrows_kq, nrows, mp)
+                    enc_kq_site_b(enc, t, fmt_at(t.w3_fmt, l), t.w3_offs[l], hidden, dim, bxb, dim, bhb2, hidden, 0l, u_dim, u_hidden, u_hidden, u_nrows_kq, nrows, mp)
                 } elif (use_mm) {
                     let bw1 = blob_of(g_dev, t, t.w1_offs[l])
                     let bw3 = blob_of(g_dev, t, t.w3_offs[l])

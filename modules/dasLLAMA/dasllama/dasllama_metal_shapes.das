@@ -193,8 +193,6 @@ def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
     return false
 }
 
-def private moe_fmt_at(a : array<KqFmt>; l : int64) : KqFmt => empty(a) ? KqFmt.q8 : a[l]
-
 // The MoE serve gate — covered graph shapes: plain routed FFN (qwen3moe, silu, no biases)
 // + optional sigmoid-gated shared expert (qwen35moe), gemma4's dense-shared dual branch, and
 // gpt-oss's mx4 experts (softmax_weight, biases, disk-order). No dense-lead / selection bias.
@@ -262,9 +260,9 @@ def moe_metal_ok(t : Model) : bool {
         return true
     }
     for (l in range64(c.n_layers)) {
-        let f1 = moe_fmt_at(t.we1_fmt, l)
-        let f2 = moe_fmt_at(t.we2_fmt, l)
-        let f3 = moe_fmt_at(t.we3_fmt, l)
+        let f1 = fmt_at(t.we1_fmt, l)
+        let f2 = fmt_at(t.we2_fmt, l)
+        let f3 = fmt_at(t.we3_fmt, l)
         // per-site alignment + reduction dims: superblock kq kernels iterate whole 256-rows,
         // q51 whole 32-blocks (+ the mul_mm's 64-col output tiles)
         let sb1 = f1 == KqFmt.k4 || f1 == KqFmt.k5 || f1 == KqFmt.k6
