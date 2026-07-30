@@ -9,7 +9,6 @@ require dasllama/dasllama_env  // env_int/env_flag/env_str: the shared typed rea
 require metal/das_metal_boost
 require dasllama/dasllama_common
 require dasllama/dasllama_math
-require dasllama/dasllama_metal_prefill
 require dasllama/dasllama_metal_common public
 require dasllama/dasllama_metal_kernels public
 

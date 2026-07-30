@@ -6,7 +6,7 @@ require dasllama/dasllama_env  // env_int: the shared typed readers + the knob r
 require metal/msl_shader
 require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — GPU driver half, Apple builds only
 require ?das_metal dasllama/dasllama_math_metal  // nolint:STYLE030 — the production kernel MSL (v0 baseline)
-require dasllama/dasllama_metal_prefill  // nolint:STYLE030 — the production mul_mm companions (v25 = zero copy drift)
+require dasllama/dasllama_metal_kernels  // nolint:STYLE030 — the production mul_mm companions (v25 = zero copy drift)
 require daslib/fio
 require math  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
 require strings

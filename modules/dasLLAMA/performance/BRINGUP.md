@@ -223,11 +223,15 @@ fail bar as "suspicious — verify"). Exit is nonzero on any FAIL.
   (`DAS_TUNE_MODE=tune DAS_TUNE_MANIFEST=<box manifest> bin/daslang -jit
   modules/dasLLAMA/harness/dasllama_tuner.das`) and check the fresh winners against the stored
   rows' `tune` stamps before trusting deltas.
-- **A verdict on a long board's tail cells is not evidence — re-run the cell solo.** Twice
-  observed on the m1 (2026-07-30): the last cell of an 8-cell keep-going sweep under-read
-  −6.5% pp (solo re-run: dead-on the store), and the last model of the hours-long Jul-28 rig
+- **A verdict on a long board's tail cells is not evidence — re-run the cell solo.** Three
+  times observed on the m1 (2026-07-30): the last cell of an 8-cell keep-going sweep under-read
+  −6.5% pp (solo re-run: dead-on the store); the last model of the hours-long Jul-28 rig
   sweep stored tg absolutes ~20-25% low on BOTH engines (the adjacent pairing kept the ratio
-  honest; the oracle later read the das side as a +20% "suspicious gain"). Discriminating an
+  honest; the oracle later read the das side as a +20% "suspicious gain"); and the M1-refactor
+  gate's 8th cell read −34% RELATIVE TO TRUE (a hard oracle FAIL at −15/−21% vs store — the
+  solo re-run landed dead-on the same morning's pre-refactor fresh reads). The phantom can
+  exceed the fail bar by 4×; a tail FAIL is a re-run instruction, never a verdict.
+  Discriminating an
   anomaly: probe the stored row's `sha` (code), the `.dlim` mtimes (artifacts), the `tune`
   stamps, and re-run the stored `cmd` of the ADJACENT ref on a quiet chip — if the ref moved
   too, the state was environmental and only the absolutes are stale.

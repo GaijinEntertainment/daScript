@@ -90,7 +90,13 @@
     probe/arm/routers/`[init]` → `dasllama_math_<gpu>` — whose NAME is common's `?<gpu>` require
     contract, never rename it. Matching responsibilities get MATCHING file names across
     backends (kernels/common/decode/prefill/shapes/lens); a backend-only capability lives in
-    its matching role file, never a new grab-bag.
+    its matching role file, never a new grab-bag. Metal specifics: the `[metal_dispatch]`
+    lens generates enc_* builders and MSL globals into the module the class COMPILES in, so
+    a kernel class carries its whole dispatch surface wherever it's placed — "the builder
+    needs the driver module" is never a reason to put a kernel in prefill/decode. A NEW
+    `[metal_kernel]` class goes in `dasllama_metal_kernels`; the 33 prefill-only classes
+    still sitting in `dasllama_metal_prefill` are ledgered debt (ARCHITECTURE.md M1 row),
+    not precedent — don't add beside them.
 16. **Vulkan descriptor sets build through `vk_set6`/`vk_write6`; kernel stages through the
     shared helpers.** A hand-rolled `write_buf_desc` six-pack (+ `update_descriptor_sets` +
     `hz_set_bits`) is a review defect — `vk_set6` allocates-and-writes, `vk_write6` rewrites in

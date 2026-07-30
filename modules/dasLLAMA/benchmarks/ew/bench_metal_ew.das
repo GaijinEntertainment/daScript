@@ -6,7 +6,7 @@ require dasllama/dasllama_env  // env_int: the shared typed readers + the knob r
 require metal/msl_shader
 require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — GPU driver half, Apple builds only
 require dasllama/dasllama_metal_decode  // nolint:STYLE030 — the production batch add+rms MSL (zero copy drift)
-require dasllama/dasllama_metal_prefill  // the production swiglu MSL (zero copy drift)
+require dasllama/dasllama_metal_kernels  // the production swiglu MSL (zero copy drift)
 require math
 require strings
 

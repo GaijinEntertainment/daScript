@@ -5,7 +5,8 @@ options stack = 65536
 require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — GPU driver half, Apple builds only
 require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
 require metal/msl_shader
-require dasllama/dasllama_metal_prefill   // the production MoE GEMV MSL (zero copy drift)
+require dasllama/dasllama_metal_prefill   // the production MoE mul_mm MSL (zero copy drift)
+require dasllama/dasllama_metal_kernels   // the production MoE GEMV + geglu MSL (zero copy drift)
 require llvm/daslib/f16_cvt
 require daslib/fio   // nolint:STYLE030 — used only inside the Apple static_if half
 require math   // nolint:STYLE030 — used only inside the Apple static_if half
