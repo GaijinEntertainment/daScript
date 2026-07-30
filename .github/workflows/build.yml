@@ -989,16 +989,12 @@ jobs:
       # is where libclang/cbind is available (same reason as the self-binder).
       run: ./bin/daslang.exe modules/dasClangBind/tests/test_const_preproc.das
 
-    - name: "Run self-binder (bind_imgui.das)"
-      # dasImgui's generated bindings freshness gate — same rail as
-      # bind_clangbind above (cbind/libclang works on this worker; the linux
-      # extended_checks lane can't load libclang beside dasLLVM). The imgui/
-      # source dir is populated by the configure step's FetchContent.
-      run: |
-        set -eux
-        ./bin/daslang.exe modules/dasImgui/bind/bind_imgui.das
-        git diff --exit-code -- modules/dasImgui/src/ \
-          || (echo "ERROR: dasImgui generated files are out of date. Run './bin/daslang modules/dasImgui/bind/bind_imgui.das' locally and commit the result." && exit 1)
+    # TODO: bind_imgui.das self-binder freshness doesn't run on mingw — same
+    # msys2 libclang gap as bind_llvm above (parsing imgui.h dies on
+    # `fatal error: 'float.h' file not found`; needs explicit -resource-dir /
+    # -isystem injection). Until that lands, dasImgui binding freshness is a
+    # local-regen discipline (run bind/bind_imgui.das before committing a bump),
+    # like it was in the module's standalone-repo era.
 
   build_windows_clangcl:
   ###########################################################
