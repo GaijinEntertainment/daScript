@@ -262,12 +262,13 @@ namespace das {
                 else if ( name.compare(0,3,"_::")==0 ) ofs = 3;
                 if ( !ofs ) return;
                 // locked instance names ("__::mod`fn`hash") re-resolve through the
-                // locked-name origin fallback and stay exempt. "_::" has no such
-                // fallback: a mangled _:: name (a [template] product, class-method
+                // locked-name origin fallback and stay exempt - but that fallback reads
+                // fromGeneric, and a constant_expression clone carries none. "_::" has no
+                // such fallback: a mangled _:: name (a [template] product, class-method
                 // dispatch) binds the program module before AND after the splice -
                 // it stops the splice exactly like a user-spelled escape (proven:
                 // sqlite_boost's ok() template products, sql tutorial dry-runs)
-                if ( ofs==4 && name.find('`', ofs)!=string::npos ) return;
+                if ( ofs==4 && name.find('`', ofs)!=string::npos && fn && fn->fromGeneric ) return;
                 // machinery-manufactured _:: whose target re-resolves identically from
                 // the destination stays exempt: public, non-generic, module visible
                 // (coverage instrumentation - _::add_func_coverage in every body - is
