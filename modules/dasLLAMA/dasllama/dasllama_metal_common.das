@@ -507,6 +507,7 @@ def upload_region(src : void?; bytes : uint64) : MetalBuffer? {
     if (key_exists(g_regions, key)) {
         return g_regions[key]
     }
+    // UNTRACKED: weights are GPU-read-only (written once, before any commit) — tracking ~450 of them made scheduler dependency analysis the dominant non-GPU cost (~70ms/prefill on 3B)
     var buf = metal_new_buffer_untracked(g_dev, bytes)
     unsafe {
         memcpy(metal_buffer_contents(buf), src, bytes)
