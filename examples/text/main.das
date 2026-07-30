@@ -787,16 +787,16 @@ def private apply_find_scroll(var doc : TextViewerDocument) {
 def private apply_markdown_find_scroll(var doc : TextViewerDocument) {
     // The view's own caret-visible pass bails when the focus position misses
     // a fragment boundary and only edge-scrolls; a find jump places the
-    // SELECTION bounds in the comfortable band instead.
+    // selection focus in the comfortable band instead.
     return if (!doc.find_scroll_markdown)
     doc.find_scroll_markdown = false
-    return if (!doc.markdown_view.selection_screen_valid)
+    let focus = markdown_view_selection_focus_screen_y(doc.markdown_view)
+    return if (!focus.valid)
     let view_top = GetWindowPos().y
     let height = GetWindowSize().y
-    let selection_top = doc.markdown_view.selection_screen_bounds.y
-    if (selection_top < view_top + height * 0.1f
-            || selection_top > view_top + height * 0.9f) {
-        SetScrollY(max(0.0f, GetScrollY() + selection_top
+    if (focus.y < view_top + height * 0.1f
+            || focus.y > view_top + height * 0.9f) {
+        SetScrollY(max(0.0f, GetScrollY() + focus.y
             - (view_top + height * 0.35f)))
     }
 }
@@ -987,6 +987,10 @@ def text_viewer_state(_input : JsonValue?) : JsonValue? {
         markdown_selection_screen_valid = doc.markdown_view.selection_screen_valid,
         markdown_selection_screen_y0 = doc.markdown_view.selection_screen_bounds.y,
         markdown_selection_screen_y1 = doc.markdown_view.selection_screen_bounds.w,
+        markdown_focus_screen_valid = markdown_view_selection_focus_screen_y(
+            doc.markdown_view).valid,
+        markdown_focus_screen_y = markdown_view_selection_focus_screen_y(
+            doc.markdown_view).y,
         source_selection_screen_valid = doc.source_view.selection_screen_valid,
         source_selection_screen_y0 = doc.source_view.selection_screen_bounds.y,
         source_selection_screen_y1 = doc.source_view.selection_screen_bounds.w,

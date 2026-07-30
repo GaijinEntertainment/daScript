@@ -438,7 +438,8 @@ def test_text_viewer_find_scrolls_to_match(t : T?) { // nolint:STYLE038
         for (index in range(200)) {
             writer |> write("Paragraph number {index} keeps the page long.\n\n")
         }
-        writer |> write("zebra closes the document.\n")
+        writer |> write("zebra closes the document.\n\n")
+        writer |> write("```\nzebra hides inside a code fence.\n```\n")
     }
     t |> success(fwrite(fixture, body), "long fixture is written")
 
@@ -455,7 +456,7 @@ def test_text_viewer_find_scrolls_to_match(t : T?) { // nolint:STYLE038
         if (!markdown_ready) return
 
         let found = post_command(app, "text_viewer_find", JV((query = "zebra")))
-        t |> equal(found?["match_count"] ?? 0, 2, "both distant matches are found")
+        t |> equal(found?["match_count"] ?? 0, 3, "all distant matches are found")
         let first_visible = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
             var state = viewer_state(app)
             return ((state?["find_applied_jump"] ?? -1) == (state?["find_jump_revision"] ?? -2)
@@ -479,6 +480,22 @@ def test_text_viewer_find_scrolls_to_match(t : T?) { // nolint:STYLE038
         }
         t |> success(far_visible,
                      "find next scrolls the far match into the rendered viewport")
+
+        // The third match lives inside a code fence: no inline selection
+        // paint exists there, so the jump anchors on the focus node's flow
+        // line instead (the fallback under test).
+        let _fence = post_command(app, "text_viewer_find_step", JV((delta = 1)))
+        let fence_visible = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["find_applied_jump"] ?? -1) == (state?["find_jump_revision"] ?? -2)
+                && (state?["markdown_focus_screen_valid"] ?? false)
+                && (state?["markdown_focus_screen_y"] ?? -1.0f)
+                    >= (state?["content_view_top"] ?? 1e9f)
+                && (state?["markdown_focus_screen_y"] ?? 1e9f)
+                    <= (state?["content_view_bottom"] ?? -1.0f))
+        }
+        t |> success(fence_visible,
+                     "find next scrolls a code-fence match into the rendered viewport")
 
         let plain_mode = post_command(app, "text_viewer_set_mode", JV((mode = "plain")))
         t |> success(plain_mode?["ok"] ?? false, "plain mode accepts the switch")

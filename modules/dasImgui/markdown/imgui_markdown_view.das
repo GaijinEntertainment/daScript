@@ -371,6 +371,34 @@ def private source_byte_position(state : MarkdownViewState const;
     return RichTextPosition()
 }
 
+def public markdown_view_selection_focus_screen_y(
+                                                  state : MarkdownViewState const) : tuple<valid : bool; y : float> {
+    //! Screen Y of the selection focus for scroll-into-view. Falls back from
+    //! the caret to the focus node's flow line, so node kinds without inline
+    //! selection paint (code blocks) still report an exact position.
+    if (state.caret_screen_valid) {
+        return (valid = true, y = state.caret_screen_pos.y)
+    }
+    let focus = state.selection_focus
+    if (focus.valid && focus.inline_node >= 0
+            && focus.inline_node < length(state.nodes)) {
+        let entry & = unsafe(state.nodes[focus.inline_node])
+        if (entry.layout_valid) {
+            for (line in entry.layout.lines) {
+                if (focus.display_byte >= line.source.start_byte
+                        && focus.display_byte <= line.source.end_byte) {
+                    return (valid = true, y = entry.screen_origin.y + line.y)
+                }
+            }
+            return (valid = true, y = entry.screen_origin.y)
+        }
+    }
+    if (state.selection_screen_valid) {
+        return (valid = true, y = state.selection_screen_bounds.y)
+    }
+    return (valid = false, y = 0.0f)
+}
+
 def public markdown_view_select_source_range(var state : MarkdownViewState;
                                              start_byte, end_byte : int) : bool {
     //! Programmatic selection of a source byte range (find, navigation).

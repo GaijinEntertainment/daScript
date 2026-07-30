@@ -121,6 +121,13 @@ proves insufficient in use.
   with line numbers; current-line tint; selection rects; a blinking
   cursor drawn from the style's cursor color.
 
+**Known view gap (found 2026-07-30, find slice):** code-block nodes in the
+markdown view have NO inline selection paint and no caret — selection
+positions map (runs exist) but nothing draws, and `selection_screen_valid`
+stays false. Find scroll-anchors through the focus node's flow line
+(`markdown_view_selection_focus_screen_y`) as the fallback; the visible
+highlight inside code blocks lands with the selection work in E2/E4.
+
 ## Order of work (basic editing before LSP, as suspected)
 
 - **E1** Buffer + cursor + virtualised render + typed input. A file
