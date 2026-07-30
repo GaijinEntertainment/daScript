@@ -398,8 +398,19 @@ def private counting_ids(tr : Model) : array<int64> {
 // breakage moves logits 15+; measured cross-backend noise here is ~0.75). With metal mode
 // on, the planar model CPU-serves (the gates decline `planar`) and the blob model GPU-serves
 // — no override juggling.
-def private forced_logits_maxd(tc, tg : Model; prompt, teach : array<int64>) : float {
+def private top_id(lg : array<float>) : int64 {
+    var best = 0l
+    for (v in range64(1l, long_length(lg))) {
+        if (lg[v] > lg[best]) {
+            best = v
+        }
+    }
+    return best
+}
+
+def private forced_logits_maxd(tc, tg : Model; prompt, teach : array<int64>; tag : string) : float {
     var maxd = 0.0
+    var picks : array<int64>   // the GPU's greedy would-be choice per teach position — eyeball rail
     with_job_que() {
         setup_dasllama_jobque()
         var sa = make_run_state(tc.config)
@@ -410,6 +421,7 @@ def private forced_logits_maxd(tc, tg : Model; prompt, teach : array<int64>) : f
             maxd = max(maxd, abs(a - b))
         }
         for (tok in teach) {
+            picks |> push(top_id(sb.logits))
             var one : array<int64>
             one |> push(tok)
             eval_(tc, sa, one)
@@ -422,6 +434,9 @@ def private forced_logits_maxd(tc, tg : Model; prompt, teach : array<int64>) : f
         delete sa
         delete sb
     }
+    to_log(LOG_INFO, "{tag} eyeball — prompt: {eyeball_text(tc, prompt)}\n")
+    to_log(LOG_INFO, "{tag} eyeball — CPU cont: {eyeball_text(tc, teach)} | GPU greedy-would-be: {eyeball_text(tc, picks)}\n")
+    delete picks
     return maxd
 }
 
@@ -468,9 +483,11 @@ def test_metal_flavor_image(tst : T?) {
             // teacher-forced parity vs a fresh planar CPU control (engine entry, no image
             // cache) — probe-measured noise ~0.75, breakage class 15+; 4.0 = ~4x SNR
             var tp <- load_model_(path, QuantMode.q8)
+            // generate's echo is np-1 tokens (BOS dropped), so the continuation starts at
+            // np-1 — slicing from np skipped the first generated token and denatured the feed
             let np = long_length(prompt)
-            var teach <- [for (i in range64(np, long_length(g_cpu))); g_cpu[i]]
-            let maxd = forced_logits_maxd(tp, tm, prompt, teach)
+            var teach <- [for (i in range64(np - 1l, long_length(g_cpu))); g_cpu[i]]
+            let maxd = forced_logits_maxd(tp, tm, prompt, teach, "SmolLM2 metal forced")
             t |> success(maxd < 4.0, "teacher-forced GPU logits within 4.0 of the CPU control (maxd {maxd})")
             delete teach
             delete tp
