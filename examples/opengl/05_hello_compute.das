@@ -148,7 +148,7 @@ def update() {
     e_mat.b_times_a = e_mat.b * e_mat.a
     e_mat.a_times_1234 = e_mat.a * float4(1, 2, 3, 4)
     e_mat.b_times_1234 = e_mat.b * float4(1, 2, 3, 4)
-    // compare CPU computations with GPU computaions
+    // compare CPU computations with GPU computations
     assert(e_mat.a_times_b == c_mat.a_times_b)
     assert(e_mat.b_times_a == c_mat.b_times_a)
     assert(e_mat.a_times_1234 == c_mat.a_times_1234)
@@ -169,7 +169,10 @@ def update() {
 
 [export]
 def shutdown() {
-    glfwDestroyWindow(window)
+    if (window != null) {
+        glfwDestroyWindow(window)
+        window = null
+    }
     glfwTerminate()
 }
 

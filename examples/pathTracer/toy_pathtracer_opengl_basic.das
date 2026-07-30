@@ -126,7 +126,10 @@ def update {
 
 [export]
 def shutdown {
-    glfwDestroyWindow(window)
+    if (window != null) {
+        glfwDestroyWindow(window)
+        window = null
+    }
     glfwTerminate()
 }
 

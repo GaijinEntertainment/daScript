@@ -401,8 +401,14 @@ def update { // nolint:STYLE038 — linear per-frame UI flow
 [export]
 def shutdown {
     audio_system_finalize(asch.command, asch.next_sid)
-    unsafe(lock_box_remove(stats_box))
-    glfwDestroyWindow(window)
+    if (stats_box != null) {
+        unsafe(lock_box_remove(stats_box))
+        stats_box = null
+    }
+    if (window != null) {
+        glfwDestroyWindow(window)
+        window = null
+    }
     glfwTerminate()
 }
 

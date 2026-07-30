@@ -134,7 +134,7 @@ def update {
     glfwPollEvents()
     var display_w, display_h : int
     glfwGetFramebufferSize(window, display_w, display_h)
-    // copmute next iteration of tracing
+    // compute next iteration of tracing
     glUseProgram(compute_program)
     c_destTex := texture
     compute_effect_bind_uniform(compute_program)
@@ -157,7 +157,10 @@ def update {
 
 [export]
 def shutdown {
-    glfwDestroyWindow(window)
+    if (window != null) {
+        glfwDestroyWindow(window)
+        window = null
+    }
     glfwTerminate()
 }
 

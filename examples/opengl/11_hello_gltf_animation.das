@@ -153,7 +153,10 @@ def shutdown() {
     delete renderer
     delete model
     delete scene
-    glfwDestroyWindow(window)
+    if (window != null) {
+        glfwDestroyWindow(window)
+        window = null
+    }
     glfwTerminate()
 }
 

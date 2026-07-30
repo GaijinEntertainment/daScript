@@ -106,14 +106,17 @@ def update() {
     glBindVertexArray(vao)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, null)
-    // swap buffersa
+    // swap buffers
     glfwMakeContextCurrent(window)
     glfwSwapBuffers(window)
 }
 
 [export]
 def shutdown() {
-    glfwDestroyWindow(window)
+    if (window != null) {
+        glfwDestroyWindow(window)
+        window = null
+    }
     glfwTerminate()
 }
 
