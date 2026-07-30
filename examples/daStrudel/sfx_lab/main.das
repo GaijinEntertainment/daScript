@@ -5,6 +5,7 @@
 //
 // Run: daslang -load_module <dasImgui> -load_module <dasImguiImplot> examples/daStrudel/sfx_lab/main.das
 options gen2
+options gc   // persistent_heap cascades from imgui_harness; gc must be declared by the entry program
 options _allow_imgui_legacy = true   // raw GetActiveID (host-agnostic) for the undo coalesce key
 
 require imgui/imgui_harness
@@ -1661,6 +1662,7 @@ def main() {
     init()
     while (!exit_requested()) {
         update()
+        harness_maybe_collect_gc()
     }
     shutdown()
 }

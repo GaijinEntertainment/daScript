@@ -1,6 +1,7 @@
 options gen2
 options indenting = 4
 options persistent_heap = true
+options gc
 options _allow_glfw_calls = true
 
 require imgui/imgui_harness
@@ -303,6 +304,7 @@ def main {
     init()
     while (!exit_requested()) {
         update()
+        maybe_collect_gc()
     }
     shutdown()
 }

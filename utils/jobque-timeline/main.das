@@ -1,5 +1,6 @@
 options gen2
 options stack = 65536
+options gc
 
 require imgui/imgui_harness
 require daslib/jobque_boost
@@ -219,7 +220,7 @@ def init() {
 }
 
 [export]
-def update() {
+def update() { // nolint:STYLE038 — one frame of immediate-mode UI, splitting is noise
     if (!harness_begin_frame()) {
         return
     }
@@ -633,6 +634,7 @@ def main() {
     init()
     while (!exit_requested()) {
         update()
+        harness_maybe_collect_gc()
     }
     shutdown()
 }

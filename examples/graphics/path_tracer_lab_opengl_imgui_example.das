@@ -1,6 +1,7 @@
 options gen2
 options indenting = 4
 options persistent_heap = true
+options gc
 options _allow_glfw_calls = true
 options _allow_imgui_legacy = true
 
@@ -491,6 +492,7 @@ def main {
     var frame = 0
     while (!exit_requested()) {
         update()
+        maybe_collect_gc()
         frame++
         if (max_frames > 0) {
             if (frame == max_frames - 1) {

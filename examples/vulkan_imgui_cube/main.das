@@ -1,5 +1,7 @@
 options gen2
 options indenting = 4
+options persistent_heap
+options gc
 
 // Spinning cube rendered with dasVulkan, with a Dear ImGui control panel whose slider drives the
 // rotation speed -- UI built with the imgui_boost_v2 widget DSL and rasterized by a renderer backend
@@ -19,6 +21,7 @@ require vulkan/vulkan_imgui_app
 require vulkan/vulkan_reflect
 require cube_shaders
 require daslib/safe_addr
+require live/live_gc
 require math
 
 let WIN_W = 1100
@@ -275,6 +278,7 @@ def main() {
     init()
     while (!exit_requested()) {
         update()
+        maybe_collect_gc()
     }
     shutdown()
 }
