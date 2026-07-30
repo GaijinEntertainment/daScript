@@ -602,3 +602,129 @@ def test_text_viewer_find_icons_and_reopen(t : T?) { // nolint:STYLE038
                    "match count survives the close")
     }
 }
+
+[test]
+def test_text_viewer_folding_and_code_copy(t : T?) { // nolint:STYLE038
+    with_imgui_app(FEATURE) $(app) {
+        let ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["ok"] ?? false) && (state?["render_revision"] ?? 0) > 0)
+        }
+        t |> success(ready, "welcome document renders")
+        if (!ready) return
+
+        // ---- das source folding ----
+        let das_fixture = "{get_das_root()}/examples/text/main.das"
+        let opened = post_command(app, "text_viewer_open", JV((path = das_fixture)))
+        t |> success(opened?["ok"] ?? false, ".das fixture opens")
+        var lines_before = 0
+        let das_ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            lines_before = state?["visible_line_count"] ?? 0
+            return ((state?["mode"] ?? "") == "plain"
+                && (state?["source_render_revision"] ?? 0) > 0
+                && (state?["fold_count"] ?? 0) > 20 && lines_before > 0)
+        }
+        t |> success(das_ready, ".das source reports tree-sitter fold regions")
+        if (!das_ready) return
+
+        let found = post_command(app, "text_viewer_find", JV((query = "harness_init")))
+        t |> success((found?["match_count"] ?? 0) >= 1, "target text is found")
+        var match_start = -1
+        let selected = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            match_start = state?["source_selection_start"] ?? -1
+            return ((state?["find_applied_jump"] ?? -1) == (state?["find_jump_revision"] ?? -2)
+                && match_start >= 0)
+        }
+        t |> success(selected, "match is selected before the collapse")
+        if (!selected) return
+
+        var folds = post_command(app, "text_viewer_folds", null)
+        let fold_count = folds?["fold_count"] ?? 0
+        var target_fold = -1
+        var target_size = int(0x7fffffff)
+        for (index in range(fold_count)) {
+            let fold = folds?["folds"]?[index]
+            let start = fold?["start_byte"] ?? -1
+            let end = fold?["end_byte"] ?? -1
+            if (match_start >= start && match_start < end && end - start < target_size) {
+                target_fold = fold?["index"] ?? -1
+                target_size = end - start
+            }
+        }
+        t |> success(target_fold >= 0, "a fold region contains the match")
+        if (target_fold < 0) return
+
+        let collapsed = post_command(app, "text_viewer_fold",
+                                     JV((index = target_fold, collapsed = true)))
+        t |> success(collapsed?["ok"] ?? false, "collapse command is accepted")
+        let hidden = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["fold_collapsed_count"] ?? 0) == 1
+                && (state?["visible_line_count"] ?? lines_before) < lines_before)
+        }
+        t |> success(hidden, "collapsing hides the region's body lines")
+
+        let _step = post_command(app, "text_viewer_find_step", JV((delta = 1)))
+        let expanded = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["fold_collapsed_count"] ?? 1) == 0
+                && (state?["visible_line_count"] ?? 0) == lines_before
+                && (state?["source_selection_screen_valid"] ?? false)
+                && (state?["source_selection_screen_y0"] ?? -1.0f)
+                    >= (state?["content_view_top"] ?? 1e9f)
+                && (state?["source_selection_screen_y1"] ?? 1e9f)
+                    <= (state?["content_view_bottom"] ?? -1.0f))
+        }
+        t |> success(expanded,
+                     "find jump auto-expands the fold and shows the match")
+
+        // ---- markdown code-block collapse + copy ----
+        let md_fixture = "{get_das_root()}/examples/text/syntax_highlighting.md"
+        let md_opened = post_command(app, "text_viewer_open", JV((path = md_fixture)))
+        t |> success(md_opened?["ok"] ?? false, "markdown fixture opens")
+        let md_ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["path"] ?? "") == md_fixture
+                && (state?["mode"] ?? "") == "markdown"
+                && (state?["render_revision"] ?? 0) > 0)
+        }
+        t |> success(md_ready, "markdown fixture renders")
+        if (!md_ready) return
+
+        var blocks = post_command(app, "text_viewer_md_code_blocks", null)
+        let block_count = blocks?["count"] ?? 0
+        t |> success(block_count >= 3, "fixture carries several code blocks")
+        for (index in range(block_count)) {
+            let node = blocks?["blocks"]?[index]?["node"] ?? -1
+            let _fold = post_command(app, "text_viewer_md_fold",
+                                     JV((node = node, collapsed = true)))
+        }
+        let md_hidden = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return (state?["md_code_collapsed_count"] ?? 0) == block_count
+        }
+        t |> success(md_hidden, "every code block collapses")
+
+        let md_found = post_command(app, "text_viewer_find", JV((query = "recipient")))
+        t |> success((md_found?["match_count"] ?? 0) >= 1,
+                     "query hits text inside a collapsed block")
+        let md_expanded = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["md_code_collapsed_count"] ?? block_count) < block_count
+                && (state?["markdown_selection_end"] ?? -1)
+                    > (state?["markdown_selection_start"] ?? -1))
+        }
+        t |> success(md_expanded,
+                     "find jump expands the collapsed block and selects the match")
+
+        let first_node = blocks?["blocks"]?[0]?["node"] ?? -1
+        let copied = post_command(app, "text_viewer_md_copy_code",
+                                  JV((node = first_node)))
+        t |> success(copied?["ok"] ?? false, "copy command is accepted")
+        t |> equal(copied?["code_copy_revision"] ?? 0, 1, "copy action is observable")
+        t |> success((copied?["code_copy_bytes"] ?? 0) > 0,
+                     "copied text carries the block's content")
+    }
+}

@@ -96,6 +96,7 @@ struct public TextSourceLayoutKey {
     font_id : uint64 = 0uL
     wrap : bool = false
     tab_cells : int = 4
+    fold_revision : int = 0
 }
 
 struct public TextSourceViewState {
@@ -114,6 +115,12 @@ struct public TextSourceViewState {
     virtual_mode : bool
     screen_origin : float2
     screen_size : float2
+
+    collapsed_folds : table<int; bool>
+    fold_revision : int = 0
+    //! Layout line index -> unwrapped source row (identity when nothing is
+    //! collapsed). Line numbers, marks, and fold handles map through it.
+    visible_rows : array<int>
 
     anchor_byte : int = -1
     focus_byte : int = -1
@@ -156,7 +163,8 @@ def private same_layout_key(a, b : TextSourceLayoutKey const) : bool {
         && a.max_width == b.max_width && a.font_size == b.font_size
         && a.line_height == b.line_height && a.cell_width == b.cell_width
         && a.font_id == b.font_id && a.wrap == b.wrap
-        && a.tab_cells == b.tab_cells)
+        && a.tab_cells == b.tab_cells
+        && a.fold_revision == b.fold_revision)
 }
 
 def private selected_source(state : TextSourceViewState const) : TextSourceRange {
@@ -250,6 +258,8 @@ def public text_source_view_invalidate(var state : TextSourceViewState) {
     delete state.line_first_cell
     delete state.line_cell_count
     delete state.virtual_line_starts
+    delete state.collapsed_folds
+    delete state.visible_rows
     state.cells_first_line = -1
     state.cells_last_line = -1
     state.virtual_document_revision = -1
@@ -257,8 +267,60 @@ def public text_source_view_invalidate(var state : TextSourceViewState) {
     state.virtual_visible_syntax_runs = 0
     state.virtual_mode = false
     state.layout_valid = false
+    state.fold_revision = 0
     state.key = TextSourceLayoutKey()
     text_source_view_clear_selection(state)
+}
+
+def public text_source_view_fold_collapsed(document : TextSourceDocument const;
+                                           state : TextSourceViewState const;
+                                           fold_index : int) : bool {
+    if (fold_index < 0 || fold_index >= length(document.folds)) return false
+    return state.collapsed_folds?[document.folds[fold_index].start_byte] ?? false
+}
+
+def public text_source_view_set_fold(document : TextSourceDocument const;
+                                     var state : TextSourceViewState;
+                                     fold_index : int; collapsed : bool) : bool {
+    //! Collapse/expand one region. Folding is layout-level: it only takes
+    //! effect in the laid-out (non-virtual, non-wrap) presentation.
+    if (fold_index < 0 || fold_index >= length(document.folds)) return false
+    let key = document.folds[fold_index].start_byte
+    let now = state.collapsed_folds?[key] ?? false
+    if (now == collapsed) return false
+    if (collapsed) {
+        state.collapsed_folds[key] = true
+    } else {
+        state.collapsed_folds |> erase(key)
+    }
+    state.fold_revision++
+    return true
+}
+
+def public text_source_view_toggle_fold(document : TextSourceDocument const;
+                                        var state : TextSourceViewState;
+                                        fold_index : int) : bool {
+    return text_source_view_set_fold(document, state, fold_index,
+        !text_source_view_fold_collapsed(document, state, fold_index))
+}
+
+def public text_source_view_expand_for_byte(document : TextSourceDocument const;
+                                            var state : TextSourceViewState;
+                                            byte_offset : int) : bool {
+    //! Expand every collapsed region containing `byte_offset` (find jumps,
+    //! go-to-line). Returns true when anything expanded.
+    var expanded = false
+    for (index in range(length(document.folds))) {
+        let fold & = unsafe(document.folds[index])
+        if (byte_offset >= fold.start_byte && byte_offset < fold.end_byte) {
+            expanded = text_source_view_set_fold(document, state, index, false) || expanded
+        }
+    }
+    return expanded
+}
+
+def public text_source_view_collapsed_count(state : TextSourceViewState const) : int {
+    return length(state.collapsed_folds)
 }
 
 def public text_source_view_dispose(var state : TextSourceViewState) {
@@ -367,6 +429,110 @@ def private rebuild_cells(document : TextSourceDocument const;
     state.cells_last_line = last_line
 }
 
+def private apply_fold_filter(document : TextSourceDocument const;
+                              var state : TextSourceViewState) {
+    // Drops hidden rows, restacks y, re-points fragments; identity map when nothing hides.
+    delete state.visible_rows
+    let total = length(state.layout.lines)
+    state.visible_rows |> reserve(total)
+    var inscope hidden : array<bool>
+    hidden |> resize(total)
+    var any_hidden = false
+    for (fold in document.folds) {
+        continue if (!(state.collapsed_folds?[fold.start_byte] ?? false))
+        for (row in range(fold.header_row + 1, min(fold.end_row + 1, total))) {
+            hidden[row] = true
+            any_hidden = true
+        }
+    }
+    if (!any_hidden) {
+        for (row in range(total)) {
+            state.visible_rows |> push(row)
+        }
+        return
+    }
+    var write_index = 0
+    var y = 0.0f
+    for (row in range(total)) {
+        continue if (hidden[row])
+        var line = state.layout.lines[row]
+        let delta = line.y - y
+        line.y = y
+        for (fragment_index in range(line.first_fragment,
+                                     line.first_fragment + line.fragment_count)) {
+            state.layout.fragments[fragment_index].rect.y -= delta
+            state.layout.fragments[fragment_index].rect.w -= delta
+            state.layout.fragments[fragment_index].line_index = write_index
+        }
+        state.layout.lines[write_index] = line
+        state.visible_rows |> push(row)
+        y += line.height
+        write_index++
+    }
+    state.layout.lines |> resize(write_index)
+    state.layout.size.y = y
+}
+
+def private layout_line_for_row(state : TextSourceViewState const; row : int) : int {
+    // Sorted binary search; -1 when hidden; identity when wrap never built the map.
+    if (empty(state.visible_rows)) return row
+    var lo = 0
+    var hi = length(state.visible_rows)
+    while (lo < hi) {
+        let mid = (lo + hi) / 2
+        if (state.visible_rows[mid] < row) {
+            lo = mid + 1
+        } else {
+            hi = mid
+        }
+    }
+    return (lo < length(state.visible_rows) && state.visible_rows[lo] == row) ? lo : -1
+}
+
+def private draw_fold_handles(document : TextSourceDocument const;
+                              var state : TextSourceViewState;
+                              var dl : ImDrawList?;
+                              gutter_origin : float2;
+                              number_width, fold_space : float;
+                              visible_top, visible_bottom : float;
+                              style : TextSourceViewStyle const) {
+    // Collapsed chevrons always show (they mark hidden content); expanded ones on hover.
+    let hovered = IsWindowHovered(ImGuiHoveredFlags.None)
+    let mouse = GetMousePos()
+    let strip_x = gutter_origin.x + number_width
+    let clicked = hovered && IsMouseClicked(ImGuiMouseButton.Left, false)
+    for (fold_index in range(length(document.folds))) {
+        let fold & = unsafe(document.folds[fold_index])
+        let header_line = layout_line_for_row(state, fold.header_row)
+        if (header_line < 0 || header_line >= length(state.layout.lines)) continue
+        let collapsed = state.collapsed_folds?[fold.start_byte] ?? false
+        if (!collapsed && !hovered) continue
+        let line = state.layout.lines[header_line]
+        let top = gutter_origin.y + line.y
+        if (top + line.height < visible_top || top > visible_bottom) continue
+        let size = min(fold_space - 4.0f, line.height - 4.0f)
+        let cx = strip_x + fold_space * 0.5f
+        let cy = top + line.height * 0.5f
+        let half = size * 0.5f
+        let color = GetColorU32(style.line_number_color)
+        if (collapsed) {
+            *dl |> AddTriangleFilled(
+                float2(cx - half * 0.5f, cy - half),
+                float2(cx - half * 0.5f, cy + half),
+                float2(cx + half, cy), color)
+        } else {
+            *dl |> AddTriangleFilled(
+                float2(cx - half, cy - half * 0.5f),
+                float2(cx + half, cy - half * 0.5f),
+                float2(cx, cy + half), color)
+        }
+        if (clicked && mouse.x >= strip_x && mouse.x <= strip_x + fold_space
+                && mouse.y >= top && mouse.y <= top + line.height) {
+            let _ = text_source_view_toggle_fold(document, state, fold_index)
+        }
+    }
+}
+
 def private ensure_layout(document : TextSourceDocument const;
                           var state : TextSourceViewState;
                           style : TextSourceViewStyle;
@@ -387,7 +553,8 @@ def private ensure_layout(document : TextSourceDocument const;
         cell_width = cell_width,
         font_id = unsafe(reinterpret<uint64>(font)),
         wrap = style.wrap,
-        tab_cells = max(style.tab_cells, 1))
+        tab_cells = max(style.tab_cells, 1),
+        fold_revision = state.fold_revision)
     if (state.layout_valid && same_layout_key(state.key, key)) {
         state.layout_hits++
         return
@@ -406,6 +573,9 @@ def private ensure_layout(document : TextSourceDocument const;
                                key.tab_cells, key.cell_width)
         }
     delete spans
+    if (!key.wrap) {
+        apply_fold_filter(document, state)
+    }
     state.key = key
     state.layout_valid = true
     state.cells_first_line = -1
@@ -962,7 +1132,9 @@ def public text_source_view(id : string; document : TextSourceDocument const; //
         ? max(1.0f, style.line_mark_width * zoom) : 0.0f)
     let mark_space = (gutter_width > 0.0f
         ? gutter_width + max(4.0f, GetStyle().ItemSpacing.x) : 0.0f)
-    let gutter_space = number_width + mark_space
+    let fold_space = (!style.wrap && !empty(document.folds)
+        ? 14.0f * zoom : 0.0f)
+    let gutter_space = number_width + fold_space + mark_space
     let available = max(GetContentRegionAvail().x - gutter_space, 1.0f)
     ensure_layout(document, state, style, available, font)
     state.render_revision++
@@ -1028,8 +1200,9 @@ def public text_source_view(id : string; document : TextSourceDocument const; //
         && selection.end_byte > selection.start_byte)
     var dl = GetWindowDrawList()
     for (mark in document.line_marks) {
-        if (mark.line_index < 0 || mark.line_index >= length(state.layout.lines)) continue
-        let line = state.layout.lines[mark.line_index]
+        let mark_line = layout_line_for_row(state, mark.line_index)
+        if (mark_line < 0 || mark_line >= length(state.layout.lines)) continue
+        let line = state.layout.lines[mark_line]
         let p0 = gutter_origin + float2(0.0f, line.y)
         let p1 = origin + float2(state.screen_size.x, line.y + line.height)
         if (p1.y < visible_min.y || p0.y > visible_max.y) continue
@@ -1039,20 +1212,26 @@ def public text_source_view(id : string; document : TextSourceDocument const; //
             background.w = style.line_mark_background_alpha
             *dl |> AddRectFilled(p0, p1, GetColorU32(background), 0.0f, ImDrawFlags.None)
         }
-        *dl |> AddRectFilled(float2(p0.x + number_width, p0.y),
-            float2(p0.x + number_width + gutter_width, p1.y),
+        *dl |> AddRectFilled(float2(p0.x + number_width + fold_space, p0.y),
+            float2(p0.x + number_width + fold_space + gutter_width, p1.y),
             GetColorU32(color), 0.0f, ImDrawFlags.None)
     }
     if (number_width > 0.0f) {
-        for (line_index in range(min(length(document.line_numbers),
-                length(state.layout.lines)))) {
+        for (line_index in range(length(state.layout.lines))) {
+            let row = (line_index < length(state.visible_rows)
+                ? state.visible_rows[line_index] : line_index)
+            if (row < 0 || row >= length(document.line_numbers)) continue
             let line = state.layout.lines[line_index]
             let p0 = gutter_origin + float2(0.0f, line.y)
             if (p0.y + line.height < visible_min.y || p0.y > visible_max.y) continue
             draw_line_number(dl, gutter_origin, line.y, number_width,
-                document.line_numbers[line_index], font, state.key.font_size,
+                document.line_numbers[row], font, state.key.font_size,
                 style.line_number_color)
         }
+    }
+    if (fold_space > 0.0f) {
+        draw_fold_handles(document, state, dl, gutter_origin, number_width,
+                          fold_space, visible_min.y, visible_max.y, style)
     }
     var first_visible_cell = 0
     var visible_hi = length(state.cells)

@@ -430,6 +430,53 @@ def private json_lexical_source_document(source : string;
     return <- document
 }
 
+// Foldable node types per canonical language. A fold keeps its header line
+// visible and hides the body rows; single-line nodes never reach this table
+// (the native walk reports multi-line nodes only).
+var private g_fold_types : table<string; table<string>>
+
+def private ensure_fold_types {
+    return if (!empty(g_fold_types))
+    g_fold_types["daslang"] <- {
+        "function_declaration", "structure_declaration", "enum_declaration",
+        "variant_alias_declaration", "bitfield_alias_declaration",
+        "typedef_declaration", "structure_method", "block_comment"
+    }
+    g_fold_types["c"] <- {
+        "function_definition", "struct_specifier", "enum_specifier",
+        "union_specifier", "comment"
+    }
+    g_fold_types["cpp"] <- {
+        "function_definition", "struct_specifier", "enum_specifier",
+        "union_specifier", "class_specifier", "namespace_definition", "comment"
+    }
+    g_fold_types["markdown"] <- {
+        "fenced_code_block", "section"
+    }
+}
+
+def public tree_sitter_collect_folds(var document : TextSourceDocument;
+                                     canonical, source : string) {
+    //! Fill `document.folds` from the parse-tree outline. No-op for
+    //! languages without a fold table or when the walk fails.
+    ensure_fold_types()
+    if (!key_exists(g_fold_types, canonical)) return
+    var spans : array<SyntaxNodeSpan>
+    if (syntax_structure(canonical, source, spans) == SyntaxHighlightStatus.ok) {
+        let types & = unsafe(g_fold_types[canonical])
+        for (span in spans) {
+            continue if (!key_exists(types, span.node_type))
+            document.folds |> push(TextSourceFoldRegion(
+                start_byte = span.start_byte,
+                end_byte = span.end_byte,
+                header_row = span.start_row,
+                end_row = span.end_row,
+                kind = span.node_type))
+        }
+    }
+    delete spans
+}
+
 def public tree_sitter_source_document(source, language : string;
                                        revision : int = 0) : TextSourceDocument {
     let canonical = syntax_canonical_language(language)
@@ -469,5 +516,6 @@ def public tree_sitter_source_document(source, language : string;
         delete fallback
     }
     delete tokens
+    tree_sitter_collect_folds(document, canonical, source)
     return <- document
 }

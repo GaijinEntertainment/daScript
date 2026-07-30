@@ -77,6 +77,11 @@ struct TextViewerFindStepArgs {
     delta : int = 1
 }
 
+struct TextViewerFoldArgs {
+    index : int = -1
+    collapsed : bool = true
+}
+
 struct TextViewerDocument {
     id : int
     pending_dock : bool = true
@@ -211,6 +216,9 @@ def private install_document(var viewer : TextViewerDocument;
         : tree_sitter_source_document(next_source.text,
                                       extension(next_source.path),
                                       next_source.revision))
+    if (markdown_path(next_source.path)) {
+        tree_sitter_collect_folds(next_source_document, "markdown", next_source.text)
+    }
     release_document_content(viewer)
     viewer.source <- next_source
     viewer.document <- next_document
@@ -237,6 +245,9 @@ def private rebuild_projection(var viewer : TextViewerDocument) {
         : tree_sitter_source_document(viewer.source.text,
                                       extension(viewer.source.path),
                                       viewer.source.revision))
+    if (markdown_path(viewer.source.path)) {
+        tree_sitter_collect_folds(next_source_document, "markdown", viewer.source.text)
+    }
     release_document_content(viewer)
     viewer.document <- next_document
     viewer.projection <- next_projection
@@ -756,6 +767,8 @@ def private draw_document_find(var doc : TextViewerDocument) {
                 doc.find_scroll_markdown = markdown_view_select_source_range(
                     doc.markdown_view, found.start_byte, found.end_byte)
             } else {
+                let _expanded = text_source_view_expand_for_byte(
+                    doc.source_document, doc.source_view, found.start_byte)
                 text_source_view_select_range(doc.source_document, doc.source_view,
                                               found.start_byte, found.end_byte)
                 doc.find_scroll_byte = found.start_byte
@@ -943,7 +956,7 @@ def private remove_closed_documents() {
 }
 
 [live_command(description = "Inspect the text viewer without a screenshot.")]
-def text_viewer_state(_input : JsonValue?) : JsonValue? {
+def text_viewer_state(_input : JsonValue?) : JsonValue? { // nolint:STYLE038
     let active = active_document_index()
     if (active < 0) return JV((ok = false, error = "no document is open",
                                document_count = 0, active_document_id = 0))
@@ -1000,6 +1013,15 @@ def text_viewer_state(_input : JsonValue?) : JsonValue? {
             doc.markdown_view.selection_anchor, doc.markdown_view.selection_focus).start_byte,
         markdown_selection_end = md_text_selection_range(
             doc.markdown_view.selection_anchor, doc.markdown_view.selection_focus).end_byte,
+        fold_count = length(doc.source_document.folds),
+        fold_collapsed_count = text_source_view_collapsed_count(doc.source_view),
+        fold_revision = doc.source_view.fold_revision,
+        visible_line_count = length(doc.source_view.layout.lines),
+        md_code_collapsed_count = markdown_view_collapsed_count(doc.markdown_view),
+        md_fold_revision = doc.markdown_view.fold_revision,
+        code_copy_revision = doc.markdown_view.code_copy_revision,
+        code_copy_node = doc.markdown_view.code_copy_node,
+        code_copy_bytes = length(doc.markdown_view.code_copy_text),
         find_open = doc.find.open,
         find_query = doc.find.query,
         find_regex = doc.find.use_regex,
@@ -1163,6 +1185,83 @@ def text_viewer_set_zoom(input : JsonValue?) : JsonValue? {
     let args = from_JV(input, type<TextViewerZoomArgs>)
     set_zoom_percent(g_documents[active], args.percent)
     return JV((ok = true, zoom_percent = zoom_percent(g_documents[active])))
+}
+
+[live_command(description = "List rendered code-block nodes and their collapsed state.")]
+def text_viewer_md_code_blocks(_input : JsonValue?) : JsonValue? {
+    let active = active_document_index()
+    if (active < 0) return JV((ok = false, error = "no document is open"))
+    let doc & = unsafe(g_documents[active])
+    var blocks : array<JsonValue?>
+    for (index in range(length(doc.document.nodes))) {
+        continue if (doc.document.nodes[index].kind != RichNodeKind.code_block)
+        blocks |> push(JV((node = index,
+            collapsed = markdown_view_code_collapsed(doc.markdown_view, index))))
+    }
+    return JV((ok = true, count = length(blocks), blocks = JV(blocks)))
+}
+
+struct TextViewerMdFoldArgs {
+    node : int = -1
+    collapsed : bool = true
+}
+
+[live_command(description = "Collapse or expand one rendered code block by node index.")]
+def text_viewer_md_fold(input : JsonValue?) : JsonValue? {
+    let active = active_document_index()
+    if (active < 0) return JV((ok = false, error = "no document is open"))
+    let args = from_JV(input, type<TextViewerMdFoldArgs>)
+    var doc & = unsafe(g_documents[active])
+    let changed = markdown_view_set_code_collapsed(
+        doc.markdown_view, args.node, args.collapsed)
+    return JV((ok = changed, node = args.node, collapsed = args.collapsed,
+               md_fold_revision = doc.markdown_view.fold_revision,
+               md_code_collapsed_count = markdown_view_collapsed_count(doc.markdown_view)))
+}
+
+[live_command(description = "Copy one rendered code block to the clipboard by node index.")]
+def text_viewer_md_copy_code(input : JsonValue?) : JsonValue? {
+    let active = active_document_index()
+    if (active < 0) return JV((ok = false, error = "no document is open"))
+    let args = from_JV(input, type<TextViewerMdFoldArgs>)
+    var doc & = unsafe(g_documents[active])
+    let copied = markdown_view_copy_code_block(doc.markdown_view, args.node,
+        !harness_is_headless())
+    return JV((ok = copied,
+               code_copy_revision = doc.markdown_view.code_copy_revision,
+               code_copy_node = doc.markdown_view.code_copy_node,
+               code_copy_bytes = length(doc.markdown_view.code_copy_text)))
+}
+
+[live_command(description = "List fold regions of the active document's source view.")]
+def text_viewer_folds(_input : JsonValue?) : JsonValue? {
+    let active = active_document_index()
+    if (active < 0) return JV((ok = false, error = "no document is open"))
+    let doc & = unsafe(g_documents[active])
+    var regions <- [for (index in range(length(doc.source_document.folds)));
+        JV((index = index,
+            kind = doc.source_document.folds[index].kind,
+            header_row = doc.source_document.folds[index].header_row,
+            end_row = doc.source_document.folds[index].end_row,
+            start_byte = doc.source_document.folds[index].start_byte,
+            end_byte = doc.source_document.folds[index].end_byte,
+            collapsed = text_source_view_fold_collapsed(
+                doc.source_document, doc.source_view, index)))]
+    return JV((ok = true, fold_count = length(doc.source_document.folds),
+               folds = JV(regions)))
+}
+
+[live_command(description = "Collapse or expand one fold region by index.")]
+def text_viewer_fold(input : JsonValue?) : JsonValue? {
+    let active = active_document_index()
+    if (active < 0) return JV((ok = false, error = "no document is open"))
+    let args = from_JV(input, type<TextViewerFoldArgs>)
+    var doc & = unsafe(g_documents[active])
+    let changed = text_source_view_set_fold(
+        doc.source_document, doc.source_view, args.index, args.collapsed)
+    return JV((ok = changed, index = args.index, collapsed = args.collapsed,
+               fold_revision = doc.source_view.fold_revision,
+               fold_collapsed_count = text_source_view_collapsed_count(doc.source_view)))
 }
 
 [live_command(description = "Open find in the active document with a query; regex optional.")]

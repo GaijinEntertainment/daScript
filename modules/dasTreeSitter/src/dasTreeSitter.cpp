@@ -411,6 +411,62 @@ bool builtin_tree_sitter_language_available(const char * language) {
     return state && ensureQuery(*state);
 }
 
+int32_t builtin_tree_sitter_structure(
+    const char * language,
+    const char * source,
+    int32_t source_size,
+    const TBlock<void, TTemporary<const char *>, int32_t, int32_t, int32_t, int32_t> & block,
+    Context * context,
+    LineInfoArg * at) {
+    // Named-node walk for structure consumers (folding, future decorations).
+    // Only multi-line nodes are reported; single-line nodes cannot fold and
+    // filtering here keeps the das-side callback volume proportional to the
+    // outline, not the token count.
+    QueryState * state = resolveLanguage(language);
+    if (!state) return highlight_unknown_language;
+    if (!source || source_size < 0) return highlight_invalid_source;
+
+    bool compatible = false;
+    TSTree * tree = parseSource(
+        state->language_fn(), source, static_cast<uint32_t>(source_size), compatible);
+    if (!compatible) return highlight_incompatible_language;
+    if (!tree) return highlight_parse_error;
+
+    TSTreeCursor cursor = ts_tree_cursor_new(ts_tree_root_node(tree));
+    bool descending = true;
+    while (true) {
+        if (descending) {
+            const TSNode node = ts_tree_cursor_current_node(&cursor);
+            const TSPoint startPoint = ts_node_start_point(node);
+            const TSPoint endPoint = ts_node_end_point(node);
+            if (ts_node_is_named(node) && endPoint.row > startPoint.row) {
+                das_invoke<void>::invoke<const char *, int32_t, int32_t, int32_t, int32_t>(
+                    context, at, block,
+                    ts_node_type(node),
+                    static_cast<int32_t>(ts_node_start_byte(node)),
+                    static_cast<int32_t>(std::min(
+                        ts_node_end_byte(node), static_cast<uint32_t>(source_size))),
+                    static_cast<int32_t>(startPoint.row),
+                    static_cast<int32_t>(endPoint.row));
+            }
+            // A single-line node cannot contain a multi-line child.
+            if (endPoint.row > startPoint.row && ts_tree_cursor_goto_first_child(&cursor)) {
+                continue;
+            }
+        }
+        if (ts_tree_cursor_goto_next_sibling(&cursor)) {
+            descending = true;
+        } else if (ts_tree_cursor_goto_parent(&cursor)) {
+            descending = false;
+        } else {
+            break;
+        }
+    }
+    ts_tree_cursor_delete(&cursor);
+    ts_tree_delete(tree);
+    return highlight_ok;
+}
+
 int32_t builtin_tree_sitter_highlight(
     const char * language,
     const char * source,
@@ -451,6 +507,10 @@ public:
         addExtern<DAS_BIND_FUN(builtin_tree_sitter_highlight)>(
             *this, lib, "_tree_sitter_highlight", SideEffects::invoke,
             "builtin_tree_sitter_highlight")
+                ->args({"language", "source", "source_size", "block", "context", "at"});
+        addExtern<DAS_BIND_FUN(builtin_tree_sitter_structure)>(
+            *this, lib, "_tree_sitter_structure", SideEffects::invoke,
+            "builtin_tree_sitter_structure")
                 ->args({"language", "source", "source_size", "block", "context", "at"});
 
         verifyBuiltinNames(uint32_t(VerifyBuiltinFlags::verifyAll));

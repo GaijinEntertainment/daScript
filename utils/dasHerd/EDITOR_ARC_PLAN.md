@@ -36,6 +36,23 @@ per-line lexical fallback — so the risk stays theoretical. If profiling
 ever demands incremental parsing, that is the moment Boris hears about a
 .cpp change, before it happens.
 
+**.cpp change record (2026-07-30, fold slice):** the fold feature needed
+node-level access the native surface lacked — ONE new extern in
+dasTreeSitter (`_tree_sitter_structure`: parse + cursor walk, callback per
+named multi-line node with type/bytes/rows, mirroring `_tree_sitter_highlight`'s
+shape) + its `syntax_structure` das wrapper. Foldable node types stay
+das-side data (`g_fold_types` per language in `imgui_text_tree_sitter`) —
+the "config" Boris asked about is a table in the module, not a file.
+
+**Fold slice status (shipped 2026-07-30):** source view folds das/C/C++/
+markdown regions (gutter chevrons, hidden rows, line numbers keep true
+values); markdown view collapses code blocks (hover chevron + copy-all
+icon, one-line stand-in bar); find auto-expands through collapsed regions
+in both views. Known v1 bounds: no folding in the VIRTUAL source path
+(files >= 128 KB) and none in wrap mode; collapse state resets when the
+document revision changes; code-block interiors still have no selection
+highlight (the E2/E4 gap above).
+
 ## Shape: ONE component, one arc, two skins
 
 One arc, not two. The editing core — buffer, cursor, selection, undo,
