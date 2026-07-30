@@ -1656,9 +1656,6 @@ def set_conv_profile(on : bool) {
     g_conv |> clear()
 }
 
-//! Current state of the [[set_conv_profile]] gate.
-def get_conv_profile() : bool => g_conv_prof
-
 def private conv_note(kind : string; t0, n : int64) {
     if (!g_conv_prof) {
         return
@@ -2535,9 +2532,7 @@ def private moe_gpu_gather_upload(t : Model; f : KqFmt; woff : int64; n, rows, s
         moe_gpu_gather_stack_q8n(t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq)
         ws |> resize(0)   // no scale plane — the tier takes an EMPTY ws for fmt 6
     } else {
-        let kmr = t.kq_repacked ? (f == KqFmt.k4 ? t.kq_repack_mr4
-            : (f == KqFmt.k5 ? t.kq_repack_mr5
-            : (f == KqFmt.k6 ? t.kq_repack_mr6 : t.kq_repack_mr40))) : 1l
+        let kmr = kq_active_mr(t, f)
         moe_gpu_gather_stack_kq(t, f, woff, n, rows, slice_rows, t.kq_repacked, kmr, wq, ws)
     }
     let ok = moe_gpu_upload_stack(wq, ws, woff, n, rows, int(f), stream)
@@ -2668,9 +2663,7 @@ def private resident_place(t : Model; f : KqFmt; woff : int64; n, rows : int64;
     } elif (f == KqFmt.q8) {
         moe_gpu_gather_stack(t, woff, n, rows, rows, mr, kgroup, wbias, wq, ws)
     } else {
-        let kmr = t.kq_repacked ? (f == KqFmt.k4 ? t.kq_repack_mr4
-            : (f == KqFmt.k5 ? t.kq_repack_mr5
-            : (f == KqFmt.k6 ? t.kq_repack_mr6 : t.kq_repack_mr40))) : 1l
+        let kmr = kq_active_mr(t, f)
         moe_gpu_gather_stack_kq(t, f, woff, n, rows, rows, t.kq_repacked, kmr, wq, ws)
     }
     let blk = rdec_place(wq, ws, n, rows, int(f))
@@ -2847,6 +2840,31 @@ def resident_upload(t : Model; seq_cap : int64) : bool {
     return true
 }
 
+// One position's packed rope row for the resident device kernels: cos[half] then sin[half] in
+// ONE array at `base` (a DIFFERENT layout from build_decode_rope_row's two tabs), including the
+// NTK rope_freqs divisor and mscale. The one source for every resident-override rope row.
+def private rdec_rope_row(t : Model; pos, hs, half : int64; var dst : array<float>; base : int64) {
+    let c = t.config
+    let theta = c.rope_freq_base
+    for (j in range64(half)) {
+        var freq = 1.0 / pow(theta, float(2l * j) / float(hs))
+        if (!empty(t.rope_freqs)) {
+            freq /= t.rope_freqs[j]
+        }
+        let ang = float(pos) * freq * c.rope_freq_scale
+        dst[int(base + j)] = cos(ang) * c.rope_mscale
+        dst[int(base + half + j)] = sin(ang) * c.rope_mscale
+    }
+}
+
+// the active grp<mr> interleave of a repacked kq plane (1 = disk order / not repacked)
+def private kq_active_mr(t : Model; f : KqFmt) : int64 {
+    if (!t.kq_repacked) {
+        return 1l
+    }
+    return f == KqFmt.k4 ? t.kq_repack_mr4 : (f == KqFmt.k5 ? t.kq_repack_mr5 : (f == KqFmt.k6 ? t.kq_repack_mr6 : t.kq_repack_mr40))
+}
+
 //! The resident whole-stack decode override (registered as "vulkan"): embeds the token, builds this
 //! position's rope row, runs the whole forward on device, produces s.logits. Decode-from-scratch
 //! for now — the mirror builds as positions arrive (prefix-KV sync is a follow-up).
@@ -2882,16 +2900,7 @@ def private vulkan_resident_decode(t : Model; var s : Session; token, pos : int6
     let half = hs / 2l
     var cossin : array<float>
     cossin |> resize(int(hs))
-    let theta = c.rope_freq_base
-    for (j in range64(half)) {
-        var freq = 1.0 / pow(theta, float(2l * j) / float(hs))
-        if (!empty(t.rope_freqs)) {
-            freq /= t.rope_freqs[j]
-        }
-        let ang = float(pos) * freq * c.rope_freq_scale
-        cossin[int(j)] = cos(ang) * c.rope_mscale
-        cossin[int(half + j)] = sin(ang) * c.rope_mscale
-    }
+    rdec_rope_row(t, pos, hs, half, cossin, 0l)
     let cnt = pos + 1l
     rdec_token(x, cossin, pos, cnt, s.logits)
     delete x
@@ -2899,45 +2908,6 @@ def private vulkan_resident_decode(t : Model; var s : Session; token, pos : int6
     g_rdec_cnt = pos + 1l   // mirror continuity: rows [0, pos] are now live
     s.rdec_hydrated = false   // the mirror advanced past any earlier hydration
     decode_override_logits_done()   // logits produced on device
-    return true
-}
-
-//! Resident prefill: embed all `npos` prompt tokens, build per-position rope rows, run the batched
-//! forward on device -> the LAST token's logits in s.logits, and the mirror filled for [0, npos).
-//! Returns false when the driver isn't armed (caller keeps the CPU prefill path).
-def resident_prefill(t : Model; var s : Session; tokens : array<int64>; npos : int64) : bool {
-    if (!g_rdec_active) {
-        return false
-    }
-    let c = t.config
-    let dim = c.dim
-    let hs = layer_head_size(c, 0l)
-    let half = hs / 2l
-    var xb : array<float>
-    xb |> resize(int(npos * dim))
-    var cb : array<float>
-    cb |> resize(int(npos * hs))
-    for (p in range64(npos)) {
-        unsafe {
-            embed_row(t, tokens[p], addr(xb[p * dim]))
-        }
-        if (c.embed_scale != 1.0) {
-            scale_inplace(unsafe(addr(xb[p * dim])), c.embed_scale, dim)
-        }
-        let theta = c.rope_freq_base
-        for (j in range64(half)) {
-            var freq = 1.0 / pow(theta, float(2l * j) / float(hs))
-            if (!empty(t.rope_freqs)) {
-                freq /= t.rope_freqs[j]
-            }
-            let ang = float(p) * freq * c.rope_freq_scale
-            cb[int(p * hs + j)] = cos(ang) * c.rope_mscale
-            cb[int(p * hs + half + j)] = sin(ang) * c.rope_mscale
-        }
-    }
-    rdec_prefill(xb, cb, npos, s.logits)
-    delete xb
-    delete cb
     return true
 }
 
@@ -2967,16 +2937,7 @@ def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos 
     var cb : array<float>
     cb |> resize(int(npos * hs))
     for (p in range64(npos)) {
-        let theta = c.rope_freq_base
-        for (j in range64(half)) {
-            var freq = 1.0 / pow(theta, float(2l * j) / float(hs))
-            if (!empty(t.rope_freqs)) {
-                freq /= t.rope_freqs[j]
-            }
-            let ang = float(p) * freq * c.rope_freq_scale
-            cb[int(p * hs + j)] = cos(ang) * c.rope_mscale
-            cb[int(p * hs + half + j)] = sin(ang) * c.rope_mscale
-        }
+        rdec_rope_row(t, p, hs, half, cb, p * hs)
     }
     rdec_prefill(s.x_b, cb, npos, s.logits)
     delete cb
@@ -3030,16 +2991,7 @@ def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var
         for (k in range64(dim)) {
             x[int(k)] = ws.scr.x_b[i * dim + k]
         }
-        let theta = c.rope_freq_base
-        for (j in range64(half)) {
-            var freq = 1.0 / pow(theta, float(2l * j) / float(hs))
-            if (!empty(t.rope_freqs)) {
-                freq /= t.rope_freqs[j]
-            }
-            let ang = float(pos) * freq * c.rope_freq_scale
-            cossin[int(j)] = cos(ang) * c.rope_mscale
-            cossin[int(half + j)] = sin(ang) * c.rope_mscale
-        }
+        rdec_rope_row(t, pos, hs, half, cossin, 0l)
         rdec_token(x, cossin, pos, pos + 1l, tmp)
         // write the new token's K/V back to this session's cache at pos, then scatter logits
         for (l in range64(c.n_layers)) {
@@ -8398,13 +8350,6 @@ def heat_report(verbose : bool = false) {
     to_log(LOG_INFO, "heat MEAN hit {double(hits) * 100.0lf / double(picks):.1f}% ({hits}/{picks} picks over {nl} layers)\n")
 }
 
-def heat_report_reset() {
-    for (h in g_heat) {
-        h.hits = 0l
-        h.picks = 0l
-    }
-}
-
 [cold_path]   // one-time env resolution; heat_armed is a global test after the first call
 def private load_heat_want() {
     g_heat_want = max(gpu_want_heat(), 0l)
@@ -8599,24 +8544,6 @@ def expert_reuse_report(verbose : bool = true) {
 //! Drop all accumulated expert-reuse data (phase separation in probes).
 def expert_reuse_reset() {
     delete g_reuse
-}
-
-//! Top-``n`` expert ids for layer ``li`` by recorded pick frequency — the pinning candidate set.
-def expert_reuse_top(li : int; n : int) : array<int64> {
-    var res : array<int64>
-    if (li < 0 || li >= length(g_reuse)) {
-        return <- res
-    }
-    let r & = unsafe(g_reuse[li])
-    var ids <- [for (i in range(length(r.freq))); int64(i)]
-    ids |> sort() $(a, b) => r.freq[a] > r.freq[b]
-    for (i in range(min(n, length(ids)))) {
-        if (r.freq[ids[i]] > 0l) {
-            res |> push(ids[i])
-        }
-    }
-    delete ids
-    return <- res
 }
 
 // Can the routed mx4 experts run as the fused 2-stage chain? Q8 pre-quant, mx4 expert planes,
@@ -9468,9 +9395,7 @@ def private embed_row(t : Model; token : int64; var dst : float?) {
             dequant_q8_row(t, t.emb_q8_off + token * dim, dim, dst)
         }
     } elif (cls_kq(t)) {
-        let mr = (t.emb_fmt == KqFmt.k4 ? t.kq_repack_mr4
-            : (t.emb_fmt == KqFmt.k5 ? t.kq_repack_mr5
-            : (t.emb_fmt == KqFmt.k6 ? t.kq_repack_mr6 : t.kq_repack_mr40)))
+        let mr = kq_active_mr(t, t.emb_fmt)   // 1 when not repacked — unread past the guard then
         if (t.kq_repacked && token < (t.config.vocab_size / mr) * mr) {
             // repacked plane: gather via the grp<mr> layout (tail rows below stay disk-order, verbatim)
             unsafe {
