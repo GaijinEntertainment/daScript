@@ -35,7 +35,7 @@ the CI ref, never a working-tree copy.
 |---|---|---|
 | `build.yml` (per-PR) | every PR commit (via `pull_request`) + pushes to `master` | `build` matrix (5 targets × Debug/Release/RelWithDebInfo × sanitizers), `bundle_smoke`, `build_linux_gcc` |
 | `build.yml` (nightly) | the `schedule` cron (daily 02:00 UTC) | `build_windows_mingw` + `build_windows_clangcl` (the two toolchain long-poles, gated OFF per-PR CI — alt-toolchain, lowest per-PR signal) **plus the full build matrix — its Release cells (sanitizers included) run the full AOT sweep** ("Slow Release Tests"). A break in any of these surfaces within ~24 h, not at PR time. |
-| `nightly_imgui.yml` | the `schedule` cron (daily 03:00 UTC) + `workflow_dispatch` | dasImgui playwright suite (`tests/dasImgui`, ~151 daslang-live-subprocess tests, fully headless) on ubuntu + macos — see its section below |
+| `nightly_imgui.yml` | the `schedule` cron (daily 03:00 UTC) + `workflow_dispatch` | dasImgui playwright suite (`modules/dasImgui/tests`, ~151 daslang-live-subprocess tests, fully headless) on ubuntu + macos — see its section below |
 | `extended_checks.yml` | every PR | linux + darwin15-arm64 + windows, ALL release modules ON |
 | `wasm_build.yml` | every PR | emscripten build of `web/` on 3 OSes + `wasm_cross` |
 | `build_eastl.yml` | every PR | EASTL shadow-config build + no-fileio build (linux clang) |
@@ -206,7 +206,7 @@ otherwise just keep `<filesystem>` includes inside the fio layer.
 won't gate your PR; a break surfaces within ~24 h. To exercise it on a branch
 (imgui-touching PRs), manually dispatch `nightly_imgui.yml` itself.
 
-The dasImgui playwright suite (`tests/dasImgui`, ~151 tests; ubuntu + macos,
+The dasImgui playwright suite (`modules/dasImgui/tests`, ~151 tests; ubuntu + macos,
 fully headless): each test spawns a `daslang-live` subprocess hosting a feature
 app from `modules/dasImgui/examples/` and drives it over the HTTP live API. The
 `tests/.das_test` gate keeps the directory out of per-PR `--test tests/` full
@@ -218,7 +218,7 @@ is this suite's only lane, so that gate is its only pre-push check):
 
 ```bash
 cmake --build build --config Release --target daslang daslang-live
-bin/Release/daslang dastest/dastest.das -- --test tests/dasImgui --headless \
+bin/Release/daslang dastest/dastest.das -- --test modules/dasImgui/tests --headless \
   --isolated-mode --isolated-mode-threads 4 --timeout 600 \
   --exclude glfw_synth --exclude key_hud --exclude embedded_terminal
 ```

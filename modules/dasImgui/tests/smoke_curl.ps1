@@ -7,14 +7,14 @@
 # wiring, not the underlying daslang-live + dasImgui plumbing. If THIS
 # script fails, the wiring is broken at a deeper layer.
 #
-# Run: pwsh tests/dasImgui/smoke_curl.ps1
+# Run: pwsh modules/dasImgui/tests/smoke_curl.ps1
 # Override exe:  $env:DASLANG_LIVE_EXE = "..." ; pwsh smoke_curl.ps1
 
 $ErrorActionPreference = "Stop"
 
 # ===== Paths =====
 $scriptDir   = Split-Path -Parent $MyInvocation.MyCommand.Path
-$repoRoot    = Resolve-Path (Join-Path $scriptDir "..\..")
+$repoRoot    = Resolve-Path (Join-Path $scriptDir "..\..\..")
 $defaultExe  = Join-Path $repoRoot "bin\Release\daslang-live.exe"
 $liveExe     = if ($env:DASLANG_LIVE_EXE) { $env:DASLANG_LIVE_EXE } else { $defaultExe }
 $featureApp  = Resolve-Path (Join-Path $repoRoot "modules\dasImgui\examples\save_demo\main.das")

@@ -60,7 +60,7 @@ site/doc/
 doc/sphinx-build/
 doc/sphinx-build-latex/
 doc/source/stdlib/generated/
-# Tutorial recordings: APNG intermediates land here from tests/dasImgui
+# Tutorial recordings: APNG intermediates land here from modules/dasImgui/tests
 # record_* drivers; the MP4 deliverables are staged here from the docs-assets
 # GitHub release by utils/docs_assets/fetch — neither is tracked.
 doc/source/_static/tutorials/

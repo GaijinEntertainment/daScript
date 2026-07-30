@@ -1,6 +1,6 @@
 # Recording tutorial videos
 
-The dasImgui tutorial pages live in the main Sphinx tree at `doc/source/reference/tutorials/imgui/`, with an MP4 per page. Recordings are produced by **one-shell driver scripts** under `tests/dasImgui/record_*.das` that spawn their own `daslang-live` host and drive it over HTTP. A recording carries a **voiceover + music soundtrack** and is **also an integration test** — every interaction it narrates is performed for real and verified.
+The dasImgui tutorial pages live in the main Sphinx tree at `doc/source/reference/tutorials/imgui/`, with an MP4 per page. Recordings are produced by **one-shell driver scripts** under `modules/dasImgui/tests/record_*.das` that spawn their own `daslang-live` host and drive it over HTTP. A recording carries a **voiceover + music soundtrack** and is **also an integration test** — every interaction it narrates is performed for real and verified.
 
 This page is the recipe. Read it before writing or revising any `record_*.das` driver. It builds on
 `skills/imgui_playwright.md` — read that first for the foundation: a recording is a playwright driver, so the
@@ -24,7 +24,7 @@ These are not style preferences. A recording that violates any of them is wrong 
 
 Plus one constraint that bites silently: **captions and voice strings must be ASCII.** The bundled ImGui font has no em-dash / arrow / smart-quote glyph — non-ASCII renders as `?` in the caption box. Write `-` not `—`, `->` not `→`.
 
-`tests/dasImgui/record_buttons.das` and `record_toggles.das` are the canonical exemplars of all three rules — read them before writing a new driver.
+`modules/dasImgui/tests/record_buttons.das` and `record_toggles.das` are the canonical exemplars of all three rules — read them before writing a new driver.
 
 > **Retrofit mandate:** these rules apply to **every** recording, including the legacy set. Drivers still using the pre-voice `imgui_narrate` + fixed-`sleep` + `click_at` pattern (most of `record_*.das`) must be re-recorded under the current model. That is an active backlog, not an exemption — do not author a new driver in the legacy style, and prefer to upgrade a legacy driver whenever you touch its scene.
 
@@ -69,7 +69,7 @@ Three tools (the drivers plus `modules/dasImgui/utils/{prepare,convert}_recordin
 ```bash
 bin/Release/daslang -project_root . \
     modules/dasImgui/utils/prepare_recording.das -- \
-    --driver tests/dasImgui/record_buttons.das --asset-root .
+    --driver modules/dasImgui/tests/record_buttons.das --asset-root .
 ```
 
 Needs a running TTS server at `--base-url` (default `http://127.0.0.1:8880/v1`). Re-running skips lines whose wav already exists (hash-named), so it's cheap to re-prepare after editing one line. Captions/voice must be ASCII (see above) — they're scanned verbatim. Pass `--asset-root .` so the manifest + wavs land beside the APNG in the main doc tree (`doc/source/_static/tutorials/voiceover/`); the tool's default still points at the module root, a pre-merge leftover.
@@ -77,7 +77,7 @@ Needs a running TTS server at `--base-url` (default `http://127.0.0.1:8880/v1`).
 **2. `record_X.das` — capture.** Run the driver. `with_recording_app` auto-detects the manifest (`arm_voiceovers`), so `say_begin` returns each line's real wav duration as the dwell. On `record_stop` it writes `voiceover/<stem>.sidecar.json` (clip length + the frame each caption appeared on). When voiceovers are armed, the recorder's `max_seconds` cap is **auto-extended** by the summed wav dwell (+ a margin), so a voiced body can't be cut off mid-stage by the silent-mode budget — leave `max_seconds` sized for the silent run.
 
 ```bash
-bin/Release/daslang -project_root . tests/dasImgui/record_buttons.das
+bin/Release/daslang -project_root . modules/dasImgui/tests/record_buttons.das
 ```
 
 **3. `convert_recording` — soundtrack + mux to MP4.** Reads the sidecar, renders the daStrudel music bed to exactly the clip length, then runs one ffmpeg pass that muxes: APNG → H.264 video, a faded low-volume music bed (default `-13 dB`), and each voiceover wav delayed to the frame its caption appeared on. The video is forced onto a constant frames/duration grid (`-r fps_eff`, where `fps_eff = frames/duration`) and each voiceover is anchored to its frame on that *same* grid, so caption and voice share one clock. (Why `fps_eff` and not the nominal fps: the APNG writer is **synchronous** — every frame is captured, none dropped — but it blocks the GL thread during zlib, so a windowed capture's *effective* fps runs below nominal while frames stay evenly spaced. Reclocking onto the real rate keeps the per-frame voiceover anchors true; without it the captions race ahead of their voice.) The exact ffmpeg command is saved to `<out>.mp4.ffmpeg.txt`.
@@ -102,7 +102,7 @@ Nothing under `doc/source/_static/tutorials/` is tracked in git. The `.apng`, `v
 A recording has three independent layers:
 
 1. **Host**: `daslang-live.exe` running a feature file (`modules/dasImgui/examples/tutorial/X.das` or `.../examples/features/X.das`). It opens a window, runs `update()` at 60 fps, listens for live-commands on port 9090. `with_recording_app` **spawns it for you** with `--imgui-content-scale=1.0` + `--no-hdpi-framebuffer` so the framebuffer + ImGui style stay at logical resolution (encoder-friendly APNGs on retina). It also posts `set_user_control(false)` so the real OS cursor can't clobber synth input.
-2. **Driver**: `daslang.exe tests/dasImgui/record_X.das` runs once. `with_recording_app(feature, output, max_seconds [, fps]) $(app) { ... }` spawns the host, waits ready, arms voiceovers from the manifest, enables `imgui_cursor_sprite` + `imgui_mouse_trail`, posts `record_start`, invokes the body, posts `record_stop`, writes the sidecar, disables the aids, and `/shutdown`s the host. If the body left any verification failures, it panics with them after teardown.
+2. **Driver**: `daslang.exe modules/dasImgui/tests/record_X.das` runs once. `with_recording_app(feature, output, max_seconds [, fps]) $(app) { ... }` spawns the host, waits ready, arms voiceovers from the manifest, enables `imgui_cursor_sprite` + `imgui_mouse_trail`, posts `record_start`, invokes the body, posts `record_stop`, writes the sidecar, disables the aids, and `/shutdown`s the host. If the body left any verification failures, it panics with them after teardown.
 3. **Visual overlays**: `imgui_cursor_sprite` (red+white circle at synth pos) + `imgui_mouse_trail` (fading dotted line) paint to the foreground draw list during `end_of_frame()`. The helper toggles them around the body; tour-specific overlays (`imgui_key_hud`, `imgui_focus_rect`) are body-managed (see `record_visual_aids.das`).
 
 The recorder captures the host's framebuffer at `fps` Hz from `record_start` to `record_stop`, saving an APNG.
@@ -257,7 +257,7 @@ Older drivers (e.g. the original `record_with_id.das`) use the **pre-voice patte
 
 For scene `foo`:
 
-1. Author/upgrade `tests/dasImgui/record_foo.das` (voiced, self-verifying, do-what-it-teaches).
+1. Author/upgrade `modules/dasImgui/tests/record_foo.das` (voiced, self-verifying, do-what-it-teaches).
 2. Run prepare → record → convert; **eyeball-review** the resulting `.mp4`.
 3. Upload the deliverable: `gh release upload docs-assets foo.mp4 --clobber` (MP4s are NOT committed; everything under `doc/source/_static/tutorials/` is gitignored).
 4. Commit: `recording: foo` — `record_foo.das`; and `tutorial: foo RST page` — `doc/source/reference/tutorials/imgui/foo.rst` (`.. video:: foo.mp4`) + its toctree entry. Upload the `.mp4` before pushing the RST cite, or the `-W` docs build goes red.

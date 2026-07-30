@@ -4,7 +4,7 @@
 HTTP live-command API. A driver process (`daslang.exe`) spawns a `daslang-live` **host** running a
 feature file, then drives it with verbs (`click`, `right_click`, `drag`, `type_text`,
 `imgui_key_chord`, `force_set`) and reads it back with `snapshot` + the `wait_*` family. Every
-`tests/dasImgui/test_*.das` and `record_*.das` is a playwright driver. The node-editor layer
+`modules/dasImgui/tests/test_*.das` and `record_*.das` is a playwright driver. The node-editor layer
 `imgui_editor_playwright.das` (in the external dasImguiNodeEditor package) adds an `EditorSession` +
 `ne_*` helpers on top.
 

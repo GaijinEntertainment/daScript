@@ -129,6 +129,6 @@ quantizes the result.
    imgui_demo.cpp:7885-7978) exercises 9 constraint options across both
    overload forms: ``examples/imgui_demo/app_small.das``.
 
-   Integration test: ``tests/dasImgui/test_app_small_constrained_resize.das``.
+   Integration test: ``modules/dasImgui/tests/test_app_small_constrained_resize.das``.
 
    :ref:`Boost macros <stdlib_imgui_boost_section>` — the macro layer.

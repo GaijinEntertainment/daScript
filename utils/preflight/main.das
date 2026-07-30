@@ -887,7 +887,7 @@ def gate_imgui(ctx : PreflightCtx) : GateResult {
     // Direct folder targeting bypasses the tests/.das_test nightly gate by
     // design — no --imgui flag needed here (that opt-in is for full sweeps).
     return run_test_gate("imgui",
-        [ctx.daslang, "dastest/dastest.das", "--", "--test", "tests/dasImgui", "--headless",
+        [ctx.daslang, "dastest/dastest.das", "--", "--test", "modules/dasImgui/tests", "--headless",
          "--isolated-mode", "--isolated-mode-threads", "4", "--timeout", "600", "--failures-only",
          "--exclude", "glfw_synth", "--exclude", "key_hud", "--exclude", "embedded_terminal"],
         "dasImgui playwright suite failed (nightly_imgui.yml is its only CI lane — this local gate is the pre-push mirror)")

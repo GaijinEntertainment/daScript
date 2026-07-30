@@ -142,7 +142,7 @@ focus to live-reload internals.
 
    Full source: :download:`modules/dasImgui/examples/features/drag_drop.das <../../../../../modules/dasImgui/examples/features/drag_drop.das>`
 
-   Integration test: ``tests/dasImgui/test_drag_drop.das``.
+   Integration test: ``modules/dasImgui/tests/test_drag_drop.das``.
 
    :ref:`Boost macros <stdlib_imgui_boost_section>` — the macro layer.
 

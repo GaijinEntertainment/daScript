@@ -81,7 +81,7 @@ Live (with reload):
    daslang-live modules/dasImgui/examples/tutorial/editing_external.das
 
 The recorded tour above is captured by
-``tests/dasImgui/record_editing_external.das``, which drives every
+``modules/dasImgui/tests/record_editing_external.das``, which drives every
 widget with real synthetic input -- a drag, a type, a click, a popup pick
 -- and asserts each bound ``var private`` actually moved (the recording is
 also a test). Nothing is ``force_set``: binding to your data is the
@@ -96,7 +96,7 @@ subject of :ref:`Driving outside <tutorial_driving_outside>`.
 
    Full source: :download:`modules/dasImgui/examples/tutorial/editing_external.das <../../../../../modules/dasImgui/examples/tutorial/editing_external.das>`
 
-   Recording driver: ``tests/dasImgui/record_editing_external.das``.
+   Recording driver: ``modules/dasImgui/tests/record_editing_external.das``.
 
    :ref:`State telemetry <tutorial_state_telemetry>` — the snapshot
    path that ``edit_*`` widgets register under.

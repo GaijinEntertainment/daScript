@@ -95,7 +95,7 @@ the usual `-project_root <project>` invocation.
 ## Examples
 
 - `examples/features/embedded_terminal.das` - live PowerShell/ConPTY terminal view (also runs through the headless harness)
-- `examples/features/with_indent.das` — smallest single-file harness example (drives [test_with_indent.das](../../tests/dasImgui/test_with_indent.das))
+- `examples/features/with_indent.das` — smallest single-file harness example (drives [test_with_indent.das](../../modules/dasImgui/tests/test_with_indent.das))
 - `examples/features/` — 90+ small focused demos, one widget/helper per file
 - `examples/imgui_demo/imgui_demo.das` — full Dear ImGui demo port (90+ scenes)
 - `examples/tutorial/` — annotated step-by-step tutorials matching the [docs site](https://daslang.io/doc/reference/tutorials/imgui/index.html)
@@ -103,7 +103,7 @@ the usual `-project_root <project>` invocation.
 
 ## Tests
 
-Tests live at the repo root under [`tests/dasImgui/`](../../tests/dasImgui/)
+Tests live at the repo root under [`modules/dasImgui/tests/`](../../modules/dasImgui/tests/)
 and run in the nightly CI lane (`nightly_imgui.yml`).
 
 ## imgui version

@@ -24,7 +24,7 @@ Source files:
 * ``modules/dasImgui/examples/tutorial/recording.das`` — the subject: a one-slider
   one-button window. Tiny on purpose so every frame in the APNG
   corresponds to one specific driver call.
-* ``tests/dasImgui/record_recording.das`` — the driver. Walked
+* ``modules/dasImgui/tests/record_recording.das`` — the driver. Walked
   through below.
 
 ************
@@ -50,7 +50,7 @@ on itself. It drags ``Volume`` (asserting the value moved) and clicks ``Save``
 (asserting the click landed), narrating the recipe as it goes; a silently-broken
 beat would abort the recording instead of shipping.
 
-.. literalinclude:: ../../../../../tests/dasImgui/record_recording.das
+.. literalinclude:: ../../../../../modules/dasImgui/tests/record_recording.das
    :language: das
    :linenos:
 
@@ -148,7 +148,7 @@ One shell, one command:
 .. code-block:: bash
 
    bin/Release/daslang.exe -project_root <dasimgui> \
-       <dasimgui>/tests/dasImgui/record_recording.das
+       <dasimgui>/modules/dasImgui/tests/record_recording.das
 
 The helper spawns daslang-live, runs the body, posts :code:`/shutdown`,
 drains stdout. Wall time = :code:`max_seconds` + ~3s headroom. The APNG
@@ -241,7 +241,7 @@ go-to once the tutorials are familiar.
 
    Subject source: :download:`modules/dasImgui/examples/tutorial/recording.das <../../../../../modules/dasImgui/examples/tutorial/recording.das>`
 
-   Driver source: :download:`tests/dasImgui/record_recording.das <../../../../../tests/dasImgui/record_recording.das>`
+   Driver source: :download:`modules/dasImgui/tests/record_recording.das <../../../../../modules/dasImgui/tests/record_recording.das>`
 
    Recorder implementation: ``modules/dasOpenGL/opengl/opengl_live.das``
    (``record_start`` / ``record_stop`` plus the PBO ring).

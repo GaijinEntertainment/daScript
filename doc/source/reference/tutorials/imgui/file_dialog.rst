@@ -200,7 +200,7 @@ on source edits.
 
    Full source: :download:`modules/dasImgui/examples/tutorial/file_dialog.das <../../../../../modules/dasImgui/examples/tutorial/file_dialog.das>`
 
-   Integration test: ``tests/dasImgui/test_file_dialog.das`` — drives the
+   Integration test: ``modules/dasImgui/tests/test_file_dialog.das`` — drives the
    dialog through ``imgui_playwright`` (open → cancel, save → type → confirm).
 
    :ref:`data_table <tutorial_data_table>` — the sortable table the file list is

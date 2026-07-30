@@ -72,6 +72,6 @@ Same convention as the other widget tutorials.
 
    Full source: :download:`modules/dasImgui/examples/tutorial/selectable_hover.das <../../../../../modules/dasImgui/examples/tutorial/selectable_hover.das>`
 
-   Integration test: ``tests/dasImgui/test_selectable_hover.das``.
+   Integration test: ``modules/dasImgui/tests/test_selectable_hover.das``.
 
    :ref:`Boost macros <stdlib_imgui_boost_section>` — the macro layer.

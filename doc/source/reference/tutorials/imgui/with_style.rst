@@ -122,7 +122,7 @@ restructuring the call hierarchy.
    Richer reference: ``modules/dasImgui/examples/features/style_override.das`` — the
    features-side demo with the same surface plus a baseline-restore check.
 
-   Integration test: ``tests/dasImgui/test_style_with_style.das``.
+   Integration test: ``modules/dasImgui/tests/test_style_with_style.das``.
 
    Previous tutorial: :ref:`tutorial_docking`
 

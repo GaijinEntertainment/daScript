@@ -214,7 +214,7 @@ the keyboard tour) through the playwright transport instead of curl.
 
    Full source: :download:`modules/dasImgui/examples/tutorial/visual_aids_tour.das <../../../../../modules/dasImgui/examples/tutorial/visual_aids_tour.das>`
 
-   Driver: :download:`tests/dasImgui/record_visual_aids_tour.das <../../../../../tests/dasImgui/record_visual_aids_tour.das>` — the voiced, self-verifying tour that walks every aid in turn.
+   Driver: :download:`modules/dasImgui/tests/record_visual_aids_tour.das <../../../../../modules/dasImgui/tests/record_visual_aids_tour.das>` — the voiced, self-verifying tour that walks every aid in turn.
 
    Implementation: ``modules/dasImgui/widgets/imgui_visual_aids.das`` —
    the full surface plus narrate auto-fit, key HUD, focus rect.

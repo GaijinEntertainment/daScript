@@ -368,6 +368,15 @@ jobs:
     # libclang is unavailable here (libclang.so → libLLVM collision with
     # dasLLVM, see the build-step comment above).
 
+    - name: "Compile CI-only das surface (ci_only_das.txt)"
+      # Compile-only sweep of the das surface no default local build compiles:
+      # dasOpenGL's GLFW-gated files and the imgui-consuming tools
+      # (jobque-timeline, the dasHerd UI root). Single source of truth with the
+      # local mirror: utils/preflight's ci-das gate reads the same list file.
+      run: |
+        set -eux
+        $BIN/daslang utils/preflight/main.das -- --only ci-das
+
     - name: "Coverage"
       if: matrix.target == 'linux'
       run: |

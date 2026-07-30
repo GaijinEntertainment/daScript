@@ -78,6 +78,6 @@ and reloads on source edits.
 
    Full source: :download:`modules/dasImgui/examples/tutorial/with_tab_stop.das <../../../../../modules/dasImgui/examples/tutorial/with_tab_stop.das>`
 
-   Integration test: ``tests/dasImgui/test_with_tab_stop.das``.
+   Integration test: ``modules/dasImgui/tests/test_with_tab_stop.das``.
 
    :ref:`Boost macros <stdlib_imgui_boost_section>` — the macro layer.

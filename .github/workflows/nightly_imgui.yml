@@ -1,11 +1,11 @@
 name: nightly dasImgui integration
 
-# The dasImgui playwright suite (tests/dasImgui, 151 tests): each test spawns a
+# The dasImgui playwright suite (modules/dasImgui/tests, 151 tests): each test spawns a
 # daslang-live subprocess hosting a feature app from modules/dasImgui/examples/
-# and drives it over the HTTP live API. Runs NIGHTLY, not per-PR — the suite is
-# gated in tests/.das_test behind the --imgui opt-in this workflow passes, so
-# per-PR `--test tests/` sweeps never pay for the subprocess spawns. Manual
-# workflow_dispatch runs it on demand for any branch (imgui-touching PRs).
+# and drives it over the HTTP live API. Runs NIGHTLY, not per-PR — the suite
+# lives under modules/, which the per-PR `--test tests/` sweeps never enter, so
+# only this lane (and explicit local runs) pays for the subprocess spawns.
+# Manual workflow_dispatch runs it on demand for any branch (imgui-touching PRs).
 #
 # Fully headless: the harness's --headless arm creates an ImGui context with a
 # CPU font atlas — no GLFW window, no GL context, no xvfb. libglfw3-dev is still
@@ -103,9 +103,6 @@ jobs:
           sccache --show-stats
 
       - name: "Run integration tests (headless)"
-        # --test targets the folder DIRECTLY, which bypasses the tests/.das_test
-        # gate by design (the gate only guards `--test tests/` full sweeps; its
-        # --imgui opt-in is for those). No flag needed here.
         # ubuntu: --isolated-mode, 4 workers on ports 9090-9093 (dastest brands
         # each subprocess with --worker-index; playwright derives the port).
         # macOS: SERIAL — the ~3-vCPU runner starves parallel hosts until
@@ -129,7 +126,7 @@ jobs:
             DASTEST_TIMEOUT=1800 # serial is slower than 4-way; give the sweep headroom
           fi
           ./bin/daslang dastest/dastest.das -- \
-            --test tests/dasImgui \
+            --test modules/dasImgui/tests \
             --timeout $DASTEST_TIMEOUT \
             $ISOLATED \
             --exclude glfw_synth \

@@ -294,6 +294,9 @@ latex_elements = {
 \DeclareUnicodeCharacter{221E}{\ensuremath{\infty}}
 \DeclareUnicodeCharacter{2227}{\ensuremath{\wedge}}
 \DeclareUnicodeCharacter{2228}{\ensuremath{\vee}}
+\DeclareUnicodeCharacter{2022}{\textbullet}
+\DeclareUnicodeCharacter{2192}{\ensuremath{\rightarrow}}
+\DeclareUnicodeCharacter{25BC}{\ensuremath{\blacktriangledown}}
 ''',
 
 # Latex figure (float) alignment

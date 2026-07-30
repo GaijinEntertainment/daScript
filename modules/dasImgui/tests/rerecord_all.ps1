@@ -2,7 +2,7 @@
 # rerecord_all.ps1 — sequentially re-record every APNG under
 # doc/source/_static/tutorials/.
 #
-# All `tests/dasImgui/record_*.das` drivers spawn their own daslang-live on
+# All `modules/dasImgui/tests/record_*.das` drivers spawn their own daslang-live on
 # port 9090, so the sweep is strictly serial. Full pass takes ~20 minutes for
 # 37+ drivers; cross-cutting visual changes (narrate placement, theme, font
 # scale) typically need it. Per-driver runtime = its with_recording_app
@@ -24,11 +24,11 @@
 #   gh release upload docs-assets *.mp4 --clobber
 #
 # Run:
-#   pwsh tests/dasImgui/rerecord_all.ps1 -DaslangExe bin/Release/daslang.exe
+#   pwsh modules/dasImgui/tests/rerecord_all.ps1 -DaslangExe bin/Release/daslang.exe
 #
 # Or set once:
 #   $env:DASLANG_EXE = "bin/Release/daslang.exe"
-#   pwsh tests/dasImgui/rerecord_all.ps1
+#   pwsh modules/dasImgui/tests/rerecord_all.ps1
 #
 # Flags:
 #   -DaslangExe <path>  daslang.exe; defaults to $env:DASLANG_EXE.
@@ -60,7 +60,7 @@ if (-not (Test-Path $DaslangExe)) {
 }
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$repoRoot  = (Resolve-Path (Join-Path $scriptDir "..\..")).Path
+$repoRoot  = (Resolve-Path (Join-Path $scriptDir "..\..\..")).Path
 
 Write-Host "[rerecord_all] daslang:      $DaslangExe"
 Write-Host "[rerecord_all] project_root: $repoRoot"

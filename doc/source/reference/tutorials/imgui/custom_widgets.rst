@@ -185,7 +185,7 @@ rename one action key.
 
    Full source: :download:`modules/dasImgui/examples/tutorial/custom_widgets.das <../../../../../modules/dasImgui/examples/tutorial/custom_widgets.das>`
 
-   Driver script: ``tests/dasImgui/record_custom_widgets.das``
+   Driver script: ``modules/dasImgui/tests/record_custom_widgets.das``
    — same two-shell pattern as :ref:`tutorial_recording`.
 
    Previous tutorial: :ref:`tutorial_widgets_tour`

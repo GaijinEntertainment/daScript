@@ -8,13 +8,13 @@
 # the wiring is broken at a deeper layer.
 #
 # Requires: curl, jq.
-# Run: bash tests/dasImgui/smoke_curl.sh
+# Run: bash modules/dasImgui/tests/smoke_curl.sh
 # Override exe: DASLANG_LIVE_EXE=/path/to/daslang-live bash smoke_curl.sh
 
 set -u
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-repo_root="$(cd "$script_dir/../.." && pwd)"
+repo_root="$(cd "$script_dir/../../.." && pwd)"
 default_exe="$repo_root/bin/Release/daslang-live"
 [ -e "${default_exe}.exe" ] && default_exe="${default_exe}.exe"
 live_exe="${DASLANG_LIVE_EXE:-$default_exe}"

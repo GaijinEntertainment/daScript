@@ -81,6 +81,6 @@ source edits — drag the slider to watch the whole frame rescale live.
 
    Full source: :download:`modules/dasImgui/examples/tutorial/dynamic_fonts.das <../../../../../modules/dasImgui/examples/tutorial/dynamic_fonts.das>`
 
-   Integration test: ``tests/dasImgui/test_dynamic_font_scale.das``.
+   Integration test: ``modules/dasImgui/tests/test_dynamic_font_scale.das``.
 
    :ref:`Boost macros <stdlib_imgui_boost_section>` — the macro layer.

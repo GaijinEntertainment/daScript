@@ -18,7 +18,7 @@ gate — no flag needed.
 Run from the daScript repo root:
 
 ```
-daslang.exe dastest/dastest.das -- --test tests/dasImgui --headless
+daslang.exe dastest/dastest.das -- --test modules/dasImgui/tests --headless
 ```
 
 Expect ~151 tests (one daslang-live subprocess per test, ~4-5s each; add
@@ -32,8 +32,8 @@ NO dastest. They cover one happy path: spawn → ready → snapshot → click
 SAVE_BTN → poll STATUS_TEXT.value == "saved" → shutdown.
 
 ```
-powershell -ExecutionPolicy Bypass -File tests/dasImgui/smoke_curl.ps1
-bash       tests/dasImgui/smoke_curl.sh
+powershell -ExecutionPolicy Bypass -File modules/dasImgui/tests/smoke_curl.ps1
+bash       modules/dasImgui/tests/smoke_curl.sh
 ```
 
 `smoke_curl.sh` requires `curl` and `jq` on PATH.
@@ -78,10 +78,10 @@ Step 1 — generate APNGs locally (PowerShell):
 $env:DASLANG_EXE = "bin/Release/daslang.exe"
 
 # Whole sweep (all drivers found via glob, ~20 min):
-pwsh tests/dasImgui/rerecord_all.ps1
+pwsh modules/dasImgui/tests/rerecord_all.ps1
 # OR single driver (uses the env var set above; works whether or
 # not daslang.exe is on PATH):
-& $env:DASLANG_EXE -project_root . tests/dasImgui/record_X.das
+& $env:DASLANG_EXE -project_root . modules/dasImgui/tests/record_X.das
 ```
 
 Step 2 — eyeball-review the resulting `.apng` files in
@@ -136,9 +136,9 @@ upload the `.mp4` to `docs-assets` ahead of the RST cite to keep CI passing.
 For a new tutorial `foo`:
 
 1. Write `modules/dasImgui/examples/tutorial/foo.das` and
-   `tests/dasImgui/record_foo.das` (see `skills/imgui_recording.md` for the
+   `modules/dasImgui/tests/record_foo.das` (see `skills/imgui_recording.md` for the
    driver template).
-2. `daslang.exe -project_root . tests/dasImgui/record_foo.das` —
+2. `daslang.exe -project_root . modules/dasImgui/tests/record_foo.das` —
    produces `doc/source/_static/tutorials/foo.apng`
    (gitignored).
 3. Eyeball-review. ffmpeg-extract frames if needed.

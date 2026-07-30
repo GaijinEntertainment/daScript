@@ -60,7 +60,7 @@ Live (with reload):
    daslang-live modules/dasImgui/examples/tutorial/narrative_layout_tour.das
 
 The standalone form opens a window with the static layout. The driver
-under ``tests/dasImgui/record_narrative_layout_tour.das`` spawns it,
+under ``modules/dasImgui/tests/record_narrative_layout_tour.das`` spawns it,
 speaks a line per group while pointing the cursor, and verifies each
 widget — see :doc:`recording`.
 
@@ -78,7 +78,7 @@ Stable idents keep the driver-script paths file-edit-resistant.
 
    Full source: :download:`modules/dasImgui/examples/tutorial/narrative_layout_tour.das <../../../../../modules/dasImgui/examples/tutorial/narrative_layout_tour.das>`
 
-   Recording driver: ``tests/dasImgui/record_narrative_layout_tour.das``.
+   Recording driver: ``modules/dasImgui/tests/record_narrative_layout_tour.das``.
 
    :ref:`Containers <tutorial_containers>` — the ``[container]`` family
    counterpart (these are flat ``[widget]`` calls; no body).

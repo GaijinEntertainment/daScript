@@ -6,7 +6,7 @@
 # (doc.yml, pages.yml) and local sphinx runs call this before sphinx — the
 # `.. video::` directive fails a -W build on any recording that is not staged.
 #
-# Re-record workflow: tests/dasImgui/rerecord_all.ps1 regenerates APNGs, ffmpeg
+# Re-record workflow: modules/dasImgui/tests/rerecord_all.ps1 regenerates APNGs, ffmpeg
 # converts to MP4, then `gh release upload docs-assets *.mp4 --clobber`.
 #
 # Requires: gh (authenticated in CI via GH_TOKEN; the repo is public, so any

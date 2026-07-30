@@ -58,7 +58,7 @@ def private file_lines(path : string; var lines : array<string>) : bool {
 [test]
 def test_imgui_visual_aids_has_no_direct_glfw_require(t : T?) {
     // Resolve the target via the das root, not cwd: the module is in-tree at
-    // modules/dasImgui since the merge (the test itself lives in tests/dasImgui).
+    // modules/dasImgui since the merge (the test itself lives in modules/dasImgui/tests).
     // Must be inside a function (-exe top-level let baking).
     let target = "{get_das_root()}/modules/dasImgui/widgets/imgui_visual_aids.das"
     var lines : array<string>

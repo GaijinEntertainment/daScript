@@ -126,6 +126,6 @@ Same convention as the other tutorials.
 
    Features-side demo: ``modules/dasImgui/examples/features/popup_window.das``.
 
-   Integration test: ``tests/dasImgui/test_popup_window.das``.
+   Integration test: ``modules/dasImgui/tests/test_popup_window.das``.
 
    :ref:`Boost macros <stdlib_imgui_boost_section>` — the macro layer.

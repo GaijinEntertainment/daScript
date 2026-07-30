@@ -14,6 +14,14 @@
 # DAS_IMGUI_DISABLED builds). Don't "fix" that by removing it.
 modules/dasOpenGL/opengl/*.das | glfw, opengl, imgui | rebuild with -DDAS_GLFW_DISABLED=OFF (dasImgui builds in-tree by default)
 modules/dasOpenGL/glsl/*.das | glfw, opengl | rebuild with -DDAS_GLFW_DISABLED=OFF
+# imgui-consuming tools: no default local build compiles these unless
+# dasGlfw/dasImgui are on; CI sweeps them per-PR via the extended_checks
+# "Compile CI-only das surface" step (this same list). The dasImgui examples
+# themselves are deliberately NOT here — the nightly playwright suite
+# compiles AND runs them as spawned daslang-live apps, and a per-PR compile
+# of all ~200 would cost minutes per lane for signal the nightly already has.
+utils/jobque-timeline/*.das | imgui, dashv | rebuild with -DDAS_GLFW_DISABLED=OFF (dasImgui builds in-tree by default)
+utils/dasHerd/watcher/rich_client.das | imgui, dashv | rebuild with -DDAS_GLFW_DISABLED=OFF (the dasHerd UI graph root)
 # GL path tracers (OpenGL<->Vulkan harmonization compat, HARMONIZATION_PLAN.md section 8.1): GLFW-gated
 # and need a GPU to run, so compile-only. The CPU rail (toy_path_tracer.das) is a run gate via ADD_EXAMPLE_RUN.
 examples/pathTracer/*opengl*.das | glfw, opengl | rebuild with -DDAS_GLFW_DISABLED=OFF

@@ -133,6 +133,6 @@ visible alongside the menu interactions.
 
    Full source: :download:`modules/dasImgui/examples/tutorial/main_menu_bar.das <../../../../../modules/dasImgui/examples/tutorial/main_menu_bar.das>`
 
-   Integration tests: ``tests/dasImgui/test_menu_main.das`` and ``tests/dasImgui/test_menu_label_static.das``.
+   Integration tests: ``modules/dasImgui/tests/test_menu_main.das`` and ``modules/dasImgui/tests/test_menu_label_static.das``.
 
    :ref:`Boost macros <stdlib_imgui_boost_section>` — the macro layer.

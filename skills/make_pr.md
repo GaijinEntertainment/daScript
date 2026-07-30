@@ -21,6 +21,23 @@ After the rebase, every file in `git diff --name-only origin/master..HEAD` shoul
 
 If a rebase produces conflicts on files that were independently changed on origin/master, resolve them by keeping origin/master's version (your branch's "modification" was an outdated copy of the same change) — verify with `git show origin/master:<path>` that the merged version subsumes yours.
 
+### 0a. Folder-scoped review rules — CODEREVIEW.md discovery
+
+Right after the rebase, discover folder-scoped review rules for the changed set:
+for each file in `git diff --name-only origin/master..HEAD`, walk up its parent
+directories and collect every `CODEREVIEW.md` found (deduplicated). If any turn
+up, initiate the code review with those files' rules **listed explicitly** in the
+review context — they are binding for the folders they cover, on top of the
+repo-wide checklist below. One command finds them all:
+
+```bash
+git diff --name-only origin/master..HEAD | xargs -I{} dirname {} | sort -u \
+  | while read d; do while [ "$d" != "." ]; do [ -f "$d/CODEREVIEW.md" ] && echo "$d/CODEREVIEW.md"; d=$(dirname "$d"); done; done | sort -u
+```
+
+Worked example: `modules/dasImgui/CODEREVIEW.md` (tests placement + pre-PR suite
+run + multiplatform-tests rules for anything touching that module).
+
 ### 0b. Build-config drift — nuke `build/` only when you see it
 
 The "never `rm -rf build`" rule stands, and there is **no per-PR clean-build step**: the drift a proactive nuke would pre-empt is rare (it needs configure args or `ExternalProject` inputs to actually change), heavily MSVC-skewed, and fixed reactively at the same cost. Nuke and reconfigure **only on these symptoms**:

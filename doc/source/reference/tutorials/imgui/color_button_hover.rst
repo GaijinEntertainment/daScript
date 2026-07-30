@@ -77,6 +77,6 @@ Same convention as the other widget tutorials.
 
    Full source: :download:`modules/dasImgui/examples/tutorial/color_button_hover.das <../../../../../modules/dasImgui/examples/tutorial/color_button_hover.das>`
 
-   Integration test: ``tests/dasImgui/test_color_button_hover.das``.
+   Integration test: ``modules/dasImgui/tests/test_color_button_hover.das``.
 
    :ref:`Boost macros <stdlib_imgui_boost_section>` — the macro layer.

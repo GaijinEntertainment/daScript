@@ -22,7 +22,7 @@ require imgui/imgui_visual_aids
 // A single panel that shows narrative + layout + display + flat-tooltip
 // widgets together, sized for an APNG recording. Paired driver:
 //
-//   tests/dasImgui/record_narrative_layout_tour.das
+//   modules/dasImgui/tests/record_narrative_layout_tour.das
 //
 // All idents are intentionally short and stable so the driver can grab their
 // bboxes by name. The driver narrates each stage with imgui_narrate; this

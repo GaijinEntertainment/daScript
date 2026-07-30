@@ -210,7 +210,7 @@ across a sub-tree of widgets, balanced pop, and how nesting stacks.
    Richer reference: ``modules/dasImgui/examples/features/dock_basic.das`` — same boost
    surface with a 4-panel initial layout and a wider widget set.
 
-   Integration test: ``tests/dasImgui/test_docking_basic.das`` —
+   Integration test: ``modules/dasImgui/tests/test_docking_basic.das`` —
    registration, initial-layout geometry, and live-command round-trips.
 
    Previous tutorial: :ref:`tutorial_layout`

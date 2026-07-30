@@ -150,8 +150,8 @@ open and reloads on source edits.
    Sortable inventory example: :download:`modules/dasImgui/examples/features/sort_specs.das <../../../../../modules/dasImgui/examples/features/sort_specs.das>`
    — the canonical ``sort_specs()`` reference with a multi-key comparator.
 
-   Integration tests: ``tests/dasImgui/test_app_small_property_editor.das``
+   Integration tests: ``modules/dasImgui/tests/test_app_small_property_editor.das``
    (uses the same ``data_table`` container surface) and
-   ``tests/dasImgui/test_sort_specs.das`` (smoke for the sortable rail).
+   ``modules/dasImgui/tests/test_sort_specs.das`` (smoke for the sortable rail).
 
    :ref:`Boost macros <stdlib_imgui_boost_section>` — the macro layer.

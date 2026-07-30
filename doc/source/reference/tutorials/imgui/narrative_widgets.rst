@@ -132,8 +132,8 @@ the line.
 
    Full source: :download:`modules/dasImgui/examples/tutorial/narrative_widgets.das <../../../../../modules/dasImgui/examples/tutorial/narrative_widgets.das>`
 
-   Integration tests: ``tests/dasImgui/test_narrative_text.das``,
-   ``tests/dasImgui/test_narrative_bullet.das``,
-   ``tests/dasImgui/test_narrative_separator.das``.
+   Integration tests: ``modules/dasImgui/tests/test_narrative_text.das``,
+   ``modules/dasImgui/tests/test_narrative_bullet.das``,
+   ``modules/dasImgui/tests/test_narrative_separator.das``.
 
    :ref:`Boost macros <stdlib_imgui_boost_section>` — the macro layer.

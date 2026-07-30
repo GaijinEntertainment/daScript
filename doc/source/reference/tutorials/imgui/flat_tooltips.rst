@@ -86,6 +86,6 @@ snapshot for downstream playwright tests.
 
    Full source: :download:`modules/dasImgui/examples/tutorial/flat_tooltips.das <../../../../../modules/dasImgui/examples/tutorial/flat_tooltips.das>`
 
-   Integration test: ``tests/dasImgui/test_tooltip_flat.das``.
+   Integration test: ``modules/dasImgui/tests/test_tooltip_flat.das``.
 
    :ref:`Boost macros <stdlib_imgui_boost_section>` — the macro layer.
