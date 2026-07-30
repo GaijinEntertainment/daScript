@@ -3034,6 +3034,203 @@ def kq_moe_gemv_k6 {
 
 var @workgroup bt_wsb : float[256]   // second per-(block, col) scale plane (bt_ws carries the first)
 
+// ===== the kq tile's shared stages =====
+// The four kq_moe_batch_* kernels are one 32x32 tile shape; only the w-nibble compose, the scale
+// stage, and the per-block FMA (float order contractual per format) differ. Everything else is here.
+
+// x tile stage: this thread's two uint4 chunks of the Q8_K activation rows
+def private kq_bt_load_x(row0, xrow, cnt, nsb, s, word, grp : uint) {
+    for (ki in range(2)) {
+        let k = word + uint(ki) * 8u
+        let bu = k / 2u
+        let hh = k % 2u          // 0 = lo-nibble words 0..3 of the block, 1 = hi words 4..7
+        var xv = uint4(0u)
+        if (xrow < cnt) {
+            let xb4 = ((row0 + xrow) * nsb + s) * 64u + bu * 8u + hh * 4u
+            xv = uint4(vk_xq[xb4], vk_xq[xb4 + 1u], vk_xq[xb4 + 2u], vk_xq[xb4 + 3u])
+        }
+        bt_xw4[grp * 17u + k] = xv
+    }
+}
+
+// w tile stage, 4-bit nibble compose (Q4_K's 32B/block plane; Q4_0 shares the layout)
+def private kq_bt_load_w4(wsb0, wcol, d, nsb, s, word, grp : uint) {
+    for (ki in range(2)) {
+        let k = word + uint(ki) * 8u
+        let bu = k / 2u
+        let hh = k % 2u
+        var wv = uint4(0u)
+        if (wcol < d) {
+            let wsb = wsb0 + wcol * nsb + s
+            let rb4 = wsb * 32u + bu * 4u
+            let r0 = vk_wq[rb4]
+            let r1 = vk_wq[rb4 + 1u]
+            let r2 = vk_wq[rb4 + 2u]
+            let r3 = vk_wq[rb4 + 3u]
+            if (hh == 0u) {
+                wv = uint4(r0 & 0x0F0F0F0F, r1 & 0x0F0F0F0F, r2 & 0x0F0F0F0F, r3 & 0x0F0F0F0F)
+            } else {
+                wv = uint4((r0 >> 4u) & 0x0F0F0F0F, (r1 >> 4u) & 0x0F0F0F0F,
+                    (r2 >> 4u) & 0x0F0F0F0F, (r3 >> 4u) & 0x0F0F0F0F)
+            }
+        }
+        bt_ww4[grp * 17u + k] = wv
+    }
+}
+
+// w tile stage, Q5_K: the k4 compose with the 5th bit OR'd in from the 40B block's qh words
+def private kq_bt_load_w5(wsb0, wcol, d, nsb, s, word, grp : uint) {
+    for (ki in range(2)) {
+        let k = word + uint(ki) * 8u
+        let bu = k / 2u
+        let hh = k % 2u
+        var wv = uint4(0u)
+        if (wcol < d) {
+            let wsb = wsb0 + wcol * nsb + s
+            let rb4 = wsb * 40u + bu * 4u
+            let r0 = vk_wq[rb4]
+            let r1 = vk_wq[rb4 + 1u]
+            let r2 = vk_wq[rb4 + 2u]
+            let r3 = vk_wq[rb4 + 3u]
+            let hbw = vk_wq[wsb * 40u + 32u + bu]
+            let h0 = hbw & 0xFF
+            let h1 = (hbw >> 8u) & 0xFF
+            let h2 = (hbw >> 16u) & 0xFF
+            let h3 = (hbw >> 24u) & 0xFF
+            if (hh == 0u) {
+                wv = uint4((r0 & 0x0F0F0F0F) | k5_dep(h0 & 0xF), (r1 & 0x0F0F0F0F) | k5_dep(h1 & 0xF),
+                    (r2 & 0x0F0F0F0F) | k5_dep(h2 & 0xF), (r3 & 0x0F0F0F0F) | k5_dep(h3 & 0xF))
+            } else {
+                wv = uint4(((r0 >> 4u) & 0x0F0F0F0F) | k5_dep(h0 >> 4u), ((r1 >> 4u) & 0x0F0F0F0F) | k5_dep(h1 >> 4u),
+                    ((r2 >> 4u) & 0x0F0F0F0F) | k5_dep(h2 >> 4u), ((r3 >> 4u) & 0x0F0F0F0F) | k5_dep(h3 >> 4u))
+            }
+        }
+        bt_ww4[grp * 17u + k] = wv
+    }
+}
+
+// w tile stage, Q6_K: 48B/block, the 2-bit highs deposited per 16-half (the lo/hi word split IS
+// the sub-scale split)
+def private kq_bt_load_w6(wsb0, wcol, d, nsb, s, word, grp : uint) {
+    for (ki in range(2)) {
+        let k = word + uint(ki) * 8u
+        let bu = k / 2u
+        let hh = k % 2u
+        var wv = uint4(0u)
+        if (wcol < d) {
+            let wsb = wsb0 + wcol * nsb + s
+            let rb4 = wsb * 48u + bu * 4u
+            let r0 = vk_wq[rb4]
+            let r1 = vk_wq[rb4 + 1u]
+            let r2 = vk_wq[rb4 + 2u]
+            let r3 = vk_wq[rb4 + 3u]
+            let qb4 = wsb * 48u + 32u + (bu / 4u) * 8u + hh * 4u   // words w and w+4 qh adjoin
+            let q0 = vk_wq[qb4]
+            let q1 = vk_wq[qb4 + 1u]
+            let q2 = vk_wq[qb4 + 2u]
+            let q3 = vk_wq[qb4 + 3u]
+            let shift = (bu % 4u) * 2u
+            if (hh == 0u) {
+                wv = uint4((r0 & 0x0F0F0F0F) | (((q0 >> shift) & 0x03030303) << 4u),
+                    (r1 & 0x0F0F0F0F) | (((q1 >> shift) & 0x03030303) << 4u),
+                    (r2 & 0x0F0F0F0F) | (((q2 >> shift) & 0x03030303) << 4u),
+                    (r3 & 0x0F0F0F0F) | (((q3 >> shift) & 0x03030303) << 4u))
+            } else {
+                wv = uint4(((r0 >> 4u) & 0x0F0F0F0F) | (((q0 >> shift) & 0x03030303) << 4u),
+                    ((r1 >> 4u) & 0x0F0F0F0F) | (((q1 >> shift) & 0x03030303) << 4u),
+                    ((r2 >> 4u) & 0x0F0F0F0F) | (((q2 >> shift) & 0x03030303) << 4u),
+                    ((r3 >> 4u) & 0x0F0F0F0F) | (((q3 >> shift) & 0x03030303) << 4u))
+            }
+        }
+        bt_ww4[grp * 17u + k] = wv
+    }
+}
+
+// x-scale stage: one Q8_K d per (row, superblock), threads 0..31 cover the 32 tile rows
+def private kq_bt_load_xs(row0, xt, cnt, nsb, s, tid : uint) {
+    if (tid < 32u) {
+        var xs = 0.0
+        if (xt * 32u + tid < cnt) {
+            xs = vk_xs[(row0 + xt * 32u + tid) * nsb + s]
+        }
+        bt_xs[tid] = xs
+    }
+}
+
+// w-scale stage for the d/min pair form (Q4_K/Q5_K share the 5-word wsu layout)
+def private kq_bt_load_dm(wsb0, wt, d, nsb, s, slane, sblk : uint) {
+    var sa = 0.0
+    var sbv = 0.0
+    if (wt * 32u + slane < d) {
+        let wsb = wsb0 + (wt * 32u + slane) * nsb + s
+        let dm = unpackHalf2x16(vk_wsu[wsb * 5u])
+        let sc = int((vk_wsu[wsb * 5u + 1u + sblk / 4u] >> ((sblk % 4u) * 8u)) & 0xFF)
+        let mn = int((vk_wsu[wsb * 5u + 3u + sblk / 4u] >> ((sblk % 4u) * 8u)) & 0xFF)
+        sa = dm.x * float(sc)
+        sbv = dm.y * float(mn)
+    }
+    bt_ws[sblk * 32u + slane] = sa
+    bt_wsb[sblk * 32u + slane] = sbv
+}
+
+// one 32-weight block's integer tile dots: this thread's 4 output columns + the x block sum
+def private kq_bt_dots(bu, grp, word : uint; var i : int4&) : int {
+    var bs = 0
+    for (kk in range(2)) {
+        let k = bu * 2u + uint(kk)
+        let xw = bt_xw4[grp * 17u + k]
+        let wv0 = bt_ww4[word * 17u + k]
+        let wv1 = bt_ww4[(word + 8u) * 17u + k]
+        let wv2 = bt_ww4[(word + 16u) * 17u + k]
+        let wv3 = bt_ww4[(word + 24u) * 17u + k]
+        bs += sdot4(xw.x, 0x01010101) + sdot4(xw.y, 0x01010101) + sdot4(xw.z, 0x01010101) + sdot4(xw.w, 0x01010101)
+        i.x += sdot4(wv0.x, xw.x) + sdot4(wv0.y, xw.y) + sdot4(wv0.z, xw.z) + sdot4(wv0.w, xw.w)
+        i.y += sdot4(wv1.x, xw.x) + sdot4(wv1.y, xw.y) + sdot4(wv1.z, xw.z) + sdot4(wv1.w, xw.w)
+        i.z += sdot4(wv2.x, xw.x) + sdot4(wv2.y, xw.y) + sdot4(wv2.z, xw.z) + sdot4(wv2.w, xw.w)
+        i.w += sdot4(wv3.x, xw.x) + sdot4(wv3.y, xw.y) + sdot4(wv3.z, xw.z) + sdot4(wv3.w, xw.w)
+    }
+    return bs
+}
+
+// per-block FMA, d/min form: xscl * (d*sc*idot - dmin*mn*bsum), lane-wise = the scalar quadruple
+def private kq_bt_fma_dm(bu, grp, word : uint; xscl : float) : float4 {
+    var i = int4(0)
+    let bs = kq_bt_dots(bu, grp, word, i)
+    let ws = float4(bt_ws[bu * 32u + word], bt_ws[bu * 32u + word + 8u],
+        bt_ws[bu * 32u + word + 16u], bt_ws[bu * 32u + word + 24u])
+    let wsb = float4(bt_wsb[bu * 32u + word], bt_wsb[bu * 32u + word + 8u],
+        bt_wsb[bu * 32u + word + 16u], bt_wsb[bu * 32u + word + 24u])
+    return xscl * (ws * float4(i) - wsb * float(bs))
+}
+
+// per-block FMA, Q4_0 form: xscl * d * (idot - 8*bsum) — the int offset subtracts before the cast
+def private kq_bt_fma_q40(bu, grp, word : uint; xscl : float) : float4 {
+    var i = int4(0)
+    let bs = kq_bt_dots(bu, grp, word, i)
+    let ws = float4(bt_ws[bu * 32u + word], bt_ws[bu * 32u + word + 8u],
+        bt_ws[bu * 32u + word + 16u], bt_ws[bu * 32u + word + 24u])
+    return xscl * ws * float4(i - int4(8 * bs))
+}
+
+// y epilogue: this thread's 4 output columns, each edge-guarded
+def private kq_bt_store_y(xrow, cnt, row0, d, wt, word : uint; f : float4) {
+    if (xrow < cnt) {
+        let yb = (row0 + xrow) * d + wt * 32u + word
+        if (wt * 32u + word < d) {
+            vk_y[yb] = f.x
+        }
+        if (wt * 32u + word + 8u < d) {
+            vk_y[yb + 8u] = f.y
+        }
+        if (wt * 32u + word + 16u < d) {
+            vk_y[yb + 16u] = f.z
+        }
+        if (wt * 32u + word + 24u < d) {
+            vk_y[yb + 24u] = f.w
+        }
+    }
+}
+
 // Q4_K tile: per block acc += xs * (d*sc*idot - dmin*mn*bsum)
 [compute_shader(local_size_x=256, name="kq_moe_batch_k4_spv")]
 def kq_moe_batch_k4 {
@@ -3054,105 +3251,22 @@ def kq_moe_batch_k4 {
     let grp = tid / 8u
     let xrow = xt * 32u + grp
     let wcol = wt * 32u + grp
-    let slane = tid % 32u
-    let sblk = tid / 32u
-    var f0 = 0.0
-    var f1 = 0.0
-    var f2 = 0.0
-    var f3 = 0.0
+    var f = float4(0.0)
     var s = 0u
     while (s < nsb) {
-        for (ki in range(2)) {
-            let k = word + uint(ki) * 8u
-            let bu = k / 2u
-            let hh = k % 2u          // 0 = lo-nibble words 0..3 of the block, 1 = hi words 4..7
-            var xv = uint4(0u)
-            if (xrow < cnt) {
-                let xb4 = ((row0 + xrow) * nsb + s) * 64u + bu * 8u + hh * 4u
-                xv = uint4(vk_xq[xb4], vk_xq[xb4 + 1u], vk_xq[xb4 + 2u], vk_xq[xb4 + 3u])
-            }
-            bt_xw4[grp * 17u + k] = xv
-            var wv = uint4(0u)
-            if (wcol < d) {
-                let wsb = wsb0 + wcol * nsb + s
-                let rb4 = wsb * 32u + bu * 4u
-                let r0 = vk_wq[rb4]
-                let r1 = vk_wq[rb4 + 1u]
-                let r2 = vk_wq[rb4 + 2u]
-                let r3 = vk_wq[rb4 + 3u]
-                if (hh == 0u) {
-                    wv = uint4(r0 & 0x0F0F0F0F, r1 & 0x0F0F0F0F, r2 & 0x0F0F0F0F, r3 & 0x0F0F0F0F)
-                } else {
-                    wv = uint4((r0 >> 4u) & 0x0F0F0F0F, (r1 >> 4u) & 0x0F0F0F0F,
-                        (r2 >> 4u) & 0x0F0F0F0F, (r3 >> 4u) & 0x0F0F0F0F)
-                }
-            }
-            bt_ww4[grp * 17u + k] = wv
-        }
-        if (tid < 32u) {
-            var xs = 0.0
-            if (xt * 32u + tid < cnt) {
-                xs = vk_xs[(row0 + xt * 32u + tid) * nsb + s]
-            }
-            bt_xs[tid] = xs
-        }
-        var sa = 0.0
-        var sbv = 0.0
-        if (wt * 32u + slane < d) {
-            let wsb = wsb0 + (wt * 32u + slane) * nsb + s
-            let dm = unpackHalf2x16(vk_wsu[wsb * 5u])
-            let sc = int((vk_wsu[wsb * 5u + 1u + sblk / 4u] >> ((sblk % 4u) * 8u)) & 0xFF)
-            let mn = int((vk_wsu[wsb * 5u + 3u + sblk / 4u] >> ((sblk % 4u) * 8u)) & 0xFF)
-            sa = dm.x * float(sc)
-            sbv = dm.y * float(mn)
-        }
-        bt_ws[sblk * 32u + slane] = sa
-        bt_wsb[sblk * 32u + slane] = sbv
+        kq_bt_load_x(row0, xrow, cnt, nsb, s, word, grp)
+        kq_bt_load_w4(wsb0, wcol, d, nsb, s, word, grp)
+        kq_bt_load_xs(row0, xt, cnt, nsb, s, tid)
+        kq_bt_load_dm(wsb0, wt, d, nsb, s, tid % 32u, tid / 32u)
         barrier()
         let xscl = bt_xs[grp]
         for (bb in range(8)) {
-            let bu = uint(bb)
-            var i0 = 0
-            var i1 = 0
-            var i2 = 0
-            var i3 = 0
-            var bs = 0
-            for (kk in range(2)) {
-                let k = bu * 2u + uint(kk)
-                let xw = bt_xw4[grp * 17u + k]
-                let wv0 = bt_ww4[word * 17u + k]
-                let wv1 = bt_ww4[(word + 8u) * 17u + k]
-                let wv2 = bt_ww4[(word + 16u) * 17u + k]
-                let wv3 = bt_ww4[(word + 24u) * 17u + k]
-                bs += sdot4(xw.x, 0x01010101) + sdot4(xw.y, 0x01010101) + sdot4(xw.z, 0x01010101) + sdot4(xw.w, 0x01010101)
-                i0 += sdot4(wv0.x, xw.x) + sdot4(wv0.y, xw.y) + sdot4(wv0.z, xw.z) + sdot4(wv0.w, xw.w)
-                i1 += sdot4(wv1.x, xw.x) + sdot4(wv1.y, xw.y) + sdot4(wv1.z, xw.z) + sdot4(wv1.w, xw.w)
-                i2 += sdot4(wv2.x, xw.x) + sdot4(wv2.y, xw.y) + sdot4(wv2.z, xw.z) + sdot4(wv2.w, xw.w)
-                i3 += sdot4(wv3.x, xw.x) + sdot4(wv3.y, xw.y) + sdot4(wv3.z, xw.z) + sdot4(wv3.w, xw.w)
-            }
-            f0 += xscl * (bt_ws[bu * 32u + word] * float(i0) - bt_wsb[bu * 32u + word] * float(bs))
-            f1 += xscl * (bt_ws[bu * 32u + word + 8u] * float(i1) - bt_wsb[bu * 32u + word + 8u] * float(bs))
-            f2 += xscl * (bt_ws[bu * 32u + word + 16u] * float(i2) - bt_wsb[bu * 32u + word + 16u] * float(bs))
-            f3 += xscl * (bt_ws[bu * 32u + word + 24u] * float(i3) - bt_wsb[bu * 32u + word + 24u] * float(bs))
+            f += kq_bt_fma_dm(uint(bb), grp, word, xscl)
         }
         barrier()
         s++
     }
-    if (xrow < cnt) {
-        let yb = (row0 + xrow) * d + wt * 32u + word
-        if (wt * 32u + word < d) {
-            vk_y[yb] = f0
-        }
-        if (wt * 32u + word + 8u < d) {
-            vk_y[yb + 8u] = f1
-        }
-        if (wt * 32u + word + 16u < d) {
-            vk_y[yb + 16u] = f2
-        }
-        if (wt * 32u + word + 24u < d) {
-            vk_y[yb + 24u] = f3
-        }
-    }
+    kq_bt_store_y(xrow, cnt, row0, d, wt, word, f)
 }
 
 // Q4_0 tile: the k4 staging with one scale plane — per block acc += xs * d * (idot - 8*bsum)
@@ -3177,46 +3291,13 @@ def kq_moe_batch_q40 {
     let wcol = wt * 32u + grp
     let slane = tid % 32u
     let sblk = tid / 32u
-    var f0 = 0.0
-    var f1 = 0.0
-    var f2 = 0.0
-    var f3 = 0.0
+    var f = float4(0.0)
     var s = 0u
     while (s < nsb) {
-        for (ki in range(2)) {
-            let k = word + uint(ki) * 8u
-            let bu = k / 2u
-            let hh = k % 2u          // 0 = lo-nibble words 0..3 of the block, 1 = hi words 4..7
-            var xv = uint4(0u)
-            if (xrow < cnt) {
-                let xb4 = ((row0 + xrow) * nsb + s) * 64u + bu * 8u + hh * 4u
-                xv = uint4(vk_xq[xb4], vk_xq[xb4 + 1u], vk_xq[xb4 + 2u], vk_xq[xb4 + 3u])
-            }
-            bt_xw4[grp * 17u + k] = xv
-            var wv = uint4(0u)
-            if (wcol < d) {
-                let wsb = wsb0 + wcol * nsb + s
-                let rb4 = wsb * 32u + bu * 4u
-                let r0 = vk_wq[rb4]
-                let r1 = vk_wq[rb4 + 1u]
-                let r2 = vk_wq[rb4 + 2u]
-                let r3 = vk_wq[rb4 + 3u]
-                if (hh == 0u) {
-                    wv = uint4(r0 & 0x0F0F0F0F, r1 & 0x0F0F0F0F, r2 & 0x0F0F0F0F, r3 & 0x0F0F0F0F)
-                } else {
-                    wv = uint4((r0 >> 4u) & 0x0F0F0F0F, (r1 >> 4u) & 0x0F0F0F0F,
-                        (r2 >> 4u) & 0x0F0F0F0F, (r3 >> 4u) & 0x0F0F0F0F)
-                }
-            }
-            bt_ww4[grp * 17u + k] = wv
-        }
-        if (tid < 32u) {
-            var xs = 0.0
-            if (xt * 32u + tid < cnt) {
-                xs = vk_xs[(row0 + xt * 32u + tid) * nsb + s]
-            }
-            bt_xs[tid] = xs
-        }
+        kq_bt_load_x(row0, xrow, cnt, nsb, s, word, grp)
+        kq_bt_load_w4(wsb0, wcol, d, nsb, s, word, grp)
+        kq_bt_load_xs(row0, xt, cnt, nsb, s, tid)
+        // q40's scale stage: one f16 d per (block, col), 8 per block packed as half pairs
         var sa = 0.0
         if (wt * 32u + slane < d) {
             let wsb = wsb0 + (wt * 32u + slane) * nsb + s
@@ -3227,49 +3308,12 @@ def kq_moe_batch_q40 {
         barrier()
         let xscl = bt_xs[grp]
         for (bb in range(8)) {
-            let bu = uint(bb)
-            var i0 = 0
-            var i1 = 0
-            var i2 = 0
-            var i3 = 0
-            var bs = 0
-            for (kk in range(2)) {
-                let k = bu * 2u + uint(kk)
-                let xw = bt_xw4[grp * 17u + k]
-                let wv0 = bt_ww4[word * 17u + k]
-                let wv1 = bt_ww4[(word + 8u) * 17u + k]
-                let wv2 = bt_ww4[(word + 16u) * 17u + k]
-                let wv3 = bt_ww4[(word + 24u) * 17u + k]
-                bs += sdot4(xw.x, 0x01010101) + sdot4(xw.y, 0x01010101) + sdot4(xw.z, 0x01010101) + sdot4(xw.w, 0x01010101)
-                i0 += sdot4(wv0.x, xw.x) + sdot4(wv0.y, xw.y) + sdot4(wv0.z, xw.z) + sdot4(wv0.w, xw.w)
-                i1 += sdot4(wv1.x, xw.x) + sdot4(wv1.y, xw.y) + sdot4(wv1.z, xw.z) + sdot4(wv1.w, xw.w)
-                i2 += sdot4(wv2.x, xw.x) + sdot4(wv2.y, xw.y) + sdot4(wv2.z, xw.z) + sdot4(wv2.w, xw.w)
-                i3 += sdot4(wv3.x, xw.x) + sdot4(wv3.y, xw.y) + sdot4(wv3.z, xw.z) + sdot4(wv3.w, xw.w)
-            }
-            let off = 8 * bs
-            f0 += xscl * bt_ws[bu * 32u + word] * float(i0 - off)
-            f1 += xscl * bt_ws[bu * 32u + word + 8u] * float(i1 - off)
-            f2 += xscl * bt_ws[bu * 32u + word + 16u] * float(i2 - off)
-            f3 += xscl * bt_ws[bu * 32u + word + 24u] * float(i3 - off)
+            f += kq_bt_fma_q40(uint(bb), grp, word, xscl)
         }
         barrier()
         s++
     }
-    if (xrow < cnt) {
-        let yb = (row0 + xrow) * d + wt * 32u + word
-        if (wt * 32u + word < d) {
-            vk_y[yb] = f0
-        }
-        if (wt * 32u + word + 8u < d) {
-            vk_y[yb + 8u] = f1
-        }
-        if (wt * 32u + word + 16u < d) {
-            vk_y[yb + 16u] = f2
-        }
-        if (wt * 32u + word + 24u < d) {
-            vk_y[yb + 24u] = f3
-        }
-    }
+    kq_bt_store_y(xrow, cnt, row0, d, wt, word, f)
 }
 
 // Q5_K tile: the k4 compose with the 5th bit OR'd in from the qh region
@@ -3292,111 +3336,22 @@ def kq_moe_batch_k5 {
     let grp = tid / 8u
     let xrow = xt * 32u + grp
     let wcol = wt * 32u + grp
-    let slane = tid % 32u
-    let sblk = tid / 32u
-    var f0 = 0.0
-    var f1 = 0.0
-    var f2 = 0.0
-    var f3 = 0.0
+    var f = float4(0.0)
     var s = 0u
     while (s < nsb) {
-        for (ki in range(2)) {
-            let k = word + uint(ki) * 8u
-            let bu = k / 2u
-            let hh = k % 2u
-            var xv = uint4(0u)
-            if (xrow < cnt) {
-                let xb4 = ((row0 + xrow) * nsb + s) * 64u + bu * 8u + hh * 4u
-                xv = uint4(vk_xq[xb4], vk_xq[xb4 + 1u], vk_xq[xb4 + 2u], vk_xq[xb4 + 3u])
-            }
-            bt_xw4[grp * 17u + k] = xv
-            var wv = uint4(0u)
-            if (wcol < d) {
-                let wsb = wsb0 + wcol * nsb + s
-                let rb4 = wsb * 40u + bu * 4u
-                let r0 = vk_wq[rb4]
-                let r1 = vk_wq[rb4 + 1u]
-                let r2 = vk_wq[rb4 + 2u]
-                let r3 = vk_wq[rb4 + 3u]
-                let hbw = vk_wq[wsb * 40u + 32u + bu]
-                let h0 = hbw & 0xFF
-                let h1 = (hbw >> 8u) & 0xFF
-                let h2 = (hbw >> 16u) & 0xFF
-                let h3 = (hbw >> 24u) & 0xFF
-                if (hh == 0u) {
-                    wv = uint4((r0 & 0x0F0F0F0F) | k5_dep(h0 & 0xF), (r1 & 0x0F0F0F0F) | k5_dep(h1 & 0xF),
-                        (r2 & 0x0F0F0F0F) | k5_dep(h2 & 0xF), (r3 & 0x0F0F0F0F) | k5_dep(h3 & 0xF))
-                } else {
-                    wv = uint4(((r0 >> 4u) & 0x0F0F0F0F) | k5_dep(h0 >> 4u), ((r1 >> 4u) & 0x0F0F0F0F) | k5_dep(h1 >> 4u),
-                        ((r2 >> 4u) & 0x0F0F0F0F) | k5_dep(h2 >> 4u), ((r3 >> 4u) & 0x0F0F0F0F) | k5_dep(h3 >> 4u))
-                }
-            }
-            bt_ww4[grp * 17u + k] = wv
-        }
-        if (tid < 32u) {
-            var xs = 0.0
-            if (xt * 32u + tid < cnt) {
-                xs = vk_xs[(row0 + xt * 32u + tid) * nsb + s]
-            }
-            bt_xs[tid] = xs
-        }
-        var sa = 0.0
-        var sbv = 0.0
-        if (wt * 32u + slane < d) {
-            let wsb = wsb0 + (wt * 32u + slane) * nsb + s
-            let dm = unpackHalf2x16(vk_wsu[wsb * 5u])
-            let sc = int((vk_wsu[wsb * 5u + 1u + sblk / 4u] >> ((sblk % 4u) * 8u)) & 0xFF)
-            let mn = int((vk_wsu[wsb * 5u + 3u + sblk / 4u] >> ((sblk % 4u) * 8u)) & 0xFF)
-            sa = dm.x * float(sc)
-            sbv = dm.y * float(mn)
-        }
-        bt_ws[sblk * 32u + slane] = sa
-        bt_wsb[sblk * 32u + slane] = sbv
+        kq_bt_load_x(row0, xrow, cnt, nsb, s, word, grp)
+        kq_bt_load_w5(wsb0, wcol, d, nsb, s, word, grp)
+        kq_bt_load_xs(row0, xt, cnt, nsb, s, tid)
+        kq_bt_load_dm(wsb0, wt, d, nsb, s, tid % 32u, tid / 32u)
         barrier()
         let xscl = bt_xs[grp]
         for (bb in range(8)) {
-            let bu = uint(bb)
-            var i0 = 0
-            var i1 = 0
-            var i2 = 0
-            var i3 = 0
-            var bs = 0
-            for (kk in range(2)) {
-                let k = bu * 2u + uint(kk)
-                let xw = bt_xw4[grp * 17u + k]
-                let wv0 = bt_ww4[word * 17u + k]
-                let wv1 = bt_ww4[(word + 8u) * 17u + k]
-                let wv2 = bt_ww4[(word + 16u) * 17u + k]
-                let wv3 = bt_ww4[(word + 24u) * 17u + k]
-                bs += sdot4(xw.x, 0x01010101) + sdot4(xw.y, 0x01010101) + sdot4(xw.z, 0x01010101) + sdot4(xw.w, 0x01010101)
-                i0 += sdot4(wv0.x, xw.x) + sdot4(wv0.y, xw.y) + sdot4(wv0.z, xw.z) + sdot4(wv0.w, xw.w)
-                i1 += sdot4(wv1.x, xw.x) + sdot4(wv1.y, xw.y) + sdot4(wv1.z, xw.z) + sdot4(wv1.w, xw.w)
-                i2 += sdot4(wv2.x, xw.x) + sdot4(wv2.y, xw.y) + sdot4(wv2.z, xw.z) + sdot4(wv2.w, xw.w)
-                i3 += sdot4(wv3.x, xw.x) + sdot4(wv3.y, xw.y) + sdot4(wv3.z, xw.z) + sdot4(wv3.w, xw.w)
-            }
-            f0 += xscl * (bt_ws[bu * 32u + word] * float(i0) - bt_wsb[bu * 32u + word] * float(bs))
-            f1 += xscl * (bt_ws[bu * 32u + word + 8u] * float(i1) - bt_wsb[bu * 32u + word + 8u] * float(bs))
-            f2 += xscl * (bt_ws[bu * 32u + word + 16u] * float(i2) - bt_wsb[bu * 32u + word + 16u] * float(bs))
-            f3 += xscl * (bt_ws[bu * 32u + word + 24u] * float(i3) - bt_wsb[bu * 32u + word + 24u] * float(bs))
+            f += kq_bt_fma_dm(uint(bb), grp, word, xscl)
         }
         barrier()
         s++
     }
-    if (xrow < cnt) {
-        let yb = (row0 + xrow) * d + wt * 32u + word
-        if (wt * 32u + word < d) {
-            vk_y[yb] = f0
-        }
-        if (wt * 32u + word + 8u < d) {
-            vk_y[yb + 8u] = f1
-        }
-        if (wt * 32u + word + 16u < d) {
-            vk_y[yb + 16u] = f2
-        }
-        if (wt * 32u + word + 24u < d) {
-            vk_y[yb + 24u] = f3
-        }
-    }
+    kq_bt_store_y(xrow, cnt, row0, d, wt, word, f)
 }
 
 // Q6_K tile: composed 6-bit quants in [0, 63], the -32 folded per 16-half as slo/shi vs the
@@ -3428,51 +3383,10 @@ def kq_moe_batch_k6 {
     var f3 = 0.0
     var s = 0u
     while (s < nsb) {
-        for (ki in range(2)) {
-            let k = word + uint(ki) * 8u
-            let bu = k / 2u
-            let hh = k % 2u
-            var xv = uint4(0u)
-            if (xrow < cnt) {
-                let xb4 = ((row0 + xrow) * nsb + s) * 64u + bu * 8u + hh * 4u
-                xv = uint4(vk_xq[xb4], vk_xq[xb4 + 1u], vk_xq[xb4 + 2u], vk_xq[xb4 + 3u])
-            }
-            bt_xw4[grp * 17u + k] = xv
-            var wv = uint4(0u)
-            if (wcol < d) {
-                let wsb = wsb0 + wcol * nsb + s
-                let rb4 = wsb * 48u + bu * 4u
-                let r0 = vk_wq[rb4]
-                let r1 = vk_wq[rb4 + 1u]
-                let r2 = vk_wq[rb4 + 2u]
-                let r3 = vk_wq[rb4 + 3u]
-                let qb4 = wsb * 48u + 32u + (bu / 4u) * 8u + hh * 4u   // words w and w+4 qh adjoin
-                let q0 = vk_wq[qb4]
-                let q1 = vk_wq[qb4 + 1u]
-                let q2 = vk_wq[qb4 + 2u]
-                let q3 = vk_wq[qb4 + 3u]
-                let shift = (bu % 4u) * 2u
-                if (hh == 0u) {
-                    wv = uint4((r0 & 0x0F0F0F0F) | (((q0 >> shift) & 0x03030303) << 4u),
-                        (r1 & 0x0F0F0F0F) | (((q1 >> shift) & 0x03030303) << 4u),
-                        (r2 & 0x0F0F0F0F) | (((q2 >> shift) & 0x03030303) << 4u),
-                        (r3 & 0x0F0F0F0F) | (((q3 >> shift) & 0x03030303) << 4u))
-                } else {
-                    wv = uint4(((r0 >> 4u) & 0x0F0F0F0F) | (((q0 >> shift) & 0x03030303) << 4u),
-                        ((r1 >> 4u) & 0x0F0F0F0F) | (((q1 >> shift) & 0x03030303) << 4u),
-                        ((r2 >> 4u) & 0x0F0F0F0F) | (((q2 >> shift) & 0x03030303) << 4u),
-                        ((r3 >> 4u) & 0x0F0F0F0F) | (((q3 >> shift) & 0x03030303) << 4u))
-                }
-            }
-            bt_ww4[grp * 17u + k] = wv
-        }
-        if (tid < 32u) {
-            var xs = 0.0
-            if (xt * 32u + tid < cnt) {
-                xs = vk_xs[(row0 + xt * 32u + tid) * nsb + s]
-            }
-            bt_xs[tid] = xs
-        }
+        kq_bt_load_x(row0, xrow, cnt, nsb, s, word, grp)
+        kq_bt_load_w6(wsb0, wcol, d, nsb, s, word, grp)
+        kq_bt_load_xs(row0, xt, cnt, nsb, s, tid)
+        // k6's scale stage: signed i8 sub-scales per 16-half against one block d
         var sa = 0.0
         var sbv = 0.0
         if (wt * 32u + slane < d) {
@@ -3520,21 +3434,7 @@ def kq_moe_batch_k6 {
         barrier()
         s++
     }
-    if (xrow < cnt) {
-        let yb = (row0 + xrow) * d + wt * 32u + word
-        if (wt * 32u + word < d) {
-            vk_y[yb] = f0
-        }
-        if (wt * 32u + word + 8u < d) {
-            vk_y[yb + 8u] = f1
-        }
-        if (wt * 32u + word + 16u < d) {
-            vk_y[yb + 16u] = f2
-        }
-        if (wt * 32u + word + 24u < d) {
-            vk_y[yb + 24u] = f3
-        }
-    }
+    kq_bt_store_y(xrow, cnt, row0, d, wt, word, float4(f0, f1, f2, f3))
 }
 
 // vk_kernel_access_spec is a [call_macro] over the CALLING module's globals + kernels — it must
