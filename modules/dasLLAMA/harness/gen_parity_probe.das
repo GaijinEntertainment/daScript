@@ -19,6 +19,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_math_default
 require dasllama/dasllama_math_aarch64_neon
 require dasllama/dasllama_math_gen
+require dasllama/dasllama_repack
 require dasllama/dasllama_quant
 require math
 

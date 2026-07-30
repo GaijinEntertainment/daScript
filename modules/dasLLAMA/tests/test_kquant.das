@@ -8,7 +8,8 @@ require dasllama/dasllama_gguf
 require dasllama/dasllama_quant
 require dasllama/dasllama_math   // pin_kernel_backend — the layout arm needs disk-order planes
 require dasllama/dasllama_math_default   // dot_k4q8/k5/k6/q40q8 — the kernel arms gate them vs the plane dequant
-require dasllama/dasllama_math_gen   // repack_k4/k5/k6/q40_grp + kq_grp_row_dot — the stage-4 repack oracle
+require dasllama/dasllama_math_gen   // kq_grp_row_dot — the stage-4 repack oracle
+require dasllama/dasllama_repack     // repack_k4/k5/k6/q40_grp + repack_q51_grp
 require dasllama/dasllama_gemm_schema   // kq_qsb/kq_ssb — the fmt-id plane strides
 require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration for load_gguf
 require math

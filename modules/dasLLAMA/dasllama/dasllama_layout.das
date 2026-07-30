@@ -8,6 +8,7 @@ options _function_length = 0   // same
 require dasllama/dasllama_common
 require dasllama/dasllama_math          // g_repack_* backend pointers + active_* layout knobs
 require dasllama/dasllama_math_default  // k4_sc_mn — the k4 6-bit sc/mn decoder
+require dasllama/dasllama_repack        // k45_nib/k5_hbit/k6_nib — the disk-order K-quant accessors
 require dasllama/dasllama_gguf          // K6_SSB — the k6 disk scale stride
 require dasllama/dasllama_gemm_schema   // kq_qsb/kq_ssb — the fmt-id plane strides
 require dasllama/dasllama_par           // maybe_parallel_for + jobque probes
@@ -669,33 +670,6 @@ def moe_gpu_gather_stack_q8n(t : Model; woff : int64; n, rows, slice_rows : int6
     }
 }
 
-// Disk-order K-quant plane accessors for the kq gather's un-repacked/tail rows (source of
-// truth: the private twins beside repack_k4/k5/k6_grp in dasllama_math_gen.das — replicated
-// because math_gen mounts conditionally behind the dasLLVM guard).
-
-// low 4 bits of weight k off a disk-order k4/k5 nibble row (128 bytes per superblock)
-def private kq_disk_nib45(rowq : uint8 const?; k : int64) : uint {
-    let js = k / 64l
-    let rem = k % 64l
-    let b = uint(unsafe(rowq[js * 32l + rem % 32l]))
-    return rem < 32l ? b & 15u : b >> 4u
-}
-
-// the 5th bit of weight k off a disk-order k5 qh row (32 bytes per superblock)
-def private kq_disk_hbit5(rowh : uint8 const?; k : int64) : uint {
-    let js = k / 64l
-    let rem = k % 64l
-    return (uint(unsafe(rowh[rem % 32l])) >> uint(2l * js + (rem < 32l ? 0l : 1l))) & 1u
-}
-
-// low 4 bits of weight k off a disk-order k6 ql row (128 bytes per superblock)
-def private kq_disk_nib6(rowq : uint8 const?; k : int64) : uint {
-    let h = k / 128l
-    let g = (k % 128l) / 32l
-    let b = uint(unsafe(rowq[h * 64l + (g % 2l) * 32l + k % 32l]))
-    return g < 2l ? b & 15u : b >> 4u
-}
-
 // Gather one PREPARED K-quant weight stack into the GPU tier's device planes — quant payloads
 // row-major per superblock in the k/k+16 nibble pairing, plus DECODED 20B scale rows. Reads
 // whatever the load prepared (grp<mr> interleave or disk-order); device bytes are identical either way.
@@ -788,8 +762,8 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                 } else {
                                     for (m in range64(128l)) {   // re-pair disk k/k+32 nibbles to k/k+16
                                         let k = (m / 16l) * 32l + m % 16l
-                                        let lo = fmt == KqFmt.k6 ? kq_disk_nib6(rq, k) : kq_disk_nib45(rq, k)
-                                        let hi = fmt == KqFmt.k6 ? kq_disk_nib6(rq, k + 16l) : kq_disk_nib45(rq, k + 16l)
+                                        let lo = fmt == KqFmt.k6 ? k6_nib(rq, k) : k45_nib(rq, k)
+                                        let hi = fmt == KqFmt.k6 ? k6_nib(rq, k + 16l) : k45_nib(rq, k + 16l)
                                         dq[m] = uint8(lo | (hi << 4u))
                                     }
                                 }
@@ -798,8 +772,8 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                         let k = (bj / 4l) * 32l + (bj % 4l) * 4l
                                         var hb = 0u
                                         for (tt in range64(4l)) {
-                                            hb |= kq_disk_hbit5(rq + 128l, k + tt) << uint(tt)
-                                            hb |= kq_disk_hbit5(rq + 128l, k + 16l + tt) << uint(4l + tt)
+                                            hb |= k5_hbit(rq + 128l, k + tt) << uint(tt)
+                                            hb |= k5_hbit(rq + 128l, k + 16l + tt) << uint(4l + tt)
                                         }
                                         dq[128l + bj] = uint8(hb)
                                     }

@@ -28,8 +28,7 @@
 
 | date | new home | what moved in | pulled from | notes / why |
 |---|---|---|---|---|
-
-*(empty — the first extraction PR adds the first row)*
+| 2026-07-29 | `dasllama/dasllama_repack.das` | the 7 `repack_*_grp` transforms (q8q8/mx4/q51/k4/k5/k6/q40), the disk-order extractors `k45_nib`/`k5_hbit`/`k6_nib`, `unpack_kq_panel_grp` | `dasllama_math_gen.das` (implementations); `dasllama_layout.das` (byte-identical extractor duplicates, deleted) | Pure transforms parameterized by `(mr, wbias, kgroup)` — number sources stayed with their owners (`_gen` twins in math_gen read tune stamps; `_bake` selectors in math read override getters; lane contexts can't read math's globals). Scratch pre-copies became `memcpy`. `k4_sc_mn` deliberately stayed in `math_default` — hot in the kq dots and auto-inline is same-module-only. Gated by `tests/test_repack.das`: semantics-first extractor writers, inverse-map byte checks, the cross-reader dequant gate (grp reader vs disk reader), chained repack→unpack. |
 
 ## Inherited invariants
 
