@@ -27,3 +27,14 @@
    `modules/dasLLAMA/tests/run.das` / dastest only.
 6. **Run tests under `-jit` — never the interpreter, never AOT.** A test invocation
    without `-jit` is a review defect even if it happens to pass.
+7. **Review test COST before running.** Know what a test loads before launching it: a
+   test that loads a large GGUF (the >6 GiB tier) must sit behind the large-model gate
+   (`model_available` + `DASLLAMA_PARITY_FULL=1` — see `tests/_model_tier.das` and
+   `tests/CLAUDE.md`) and runs only as the FINAL pre-PR gate, never in the iteration
+   loop. A new test that loads a big model ungated is a review defect.
+
+## Structure
+
+8. **All new repacks go into `dasllama_repack.das`.** Any disk-order → compute-order
+   kernel-layout transform (grp interleave, extractor, panel unpack — any format, any
+   platform) lands there; a repack implemented anywhere else is a review defect.

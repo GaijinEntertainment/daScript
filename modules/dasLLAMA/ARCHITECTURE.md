@@ -16,6 +16,10 @@
   `dasllama_repack.das` (kernel data repacking), `dasllama_convert.das` (tensor format conversion).
   Never a grab-bag `common`/`families_common`: a module whose name doesn't say what it does is the
   failure mode being unwound.
+- **Repacks live under `dasllama_repack.das`** — every disk-order → compute-order kernel-layout
+  transform (grp<mr> interleaves, disk-order extractors, panel unpacks), regardless of format or
+  platform. Number sources (tune stamps, bake overrides) stay with their owners and pass plain
+  parameters in.
 - **Every extraction ships targeted tests for the extracted bits themselves** — unit-level on the
   moved surface, not "run an LLM and see if it still talks". The end-to-end oracles stay the
   bit-identity gate; they are not the extraction's test.
