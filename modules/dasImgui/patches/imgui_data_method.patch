@@ -1,0 +1,12 @@
+--- a/imgui.h
++++ b/imgui.h
+@@ -2025,6 +2025,9 @@
+     inline T*           begin()                             { return Data; }
+     inline const T*     begin() const                       { return Data; }
+     inline T*           end()                               { return Data + Size; }
++    // MODIFIED BY GAIJIN: added data(). It is needed by ast_handle.h.
++    inline T*           data()                              { return Data; }
++    inline const T*     data() const                        { return Data; }
+     inline const T*     end() const                         { return Data + Size; }
+     inline T&           front()                             { IM_ASSERT(Size > 0); return Data[0]; }
+     inline const T&     front() const                       { IM_ASSERT(Size > 0); return Data[0]; }
