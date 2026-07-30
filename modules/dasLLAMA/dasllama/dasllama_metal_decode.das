@@ -96,46 +96,6 @@ def private spec_cls_capable(t : Model) : bool {
     return (t.cls_q8 || (t.config.shared_weights && t.emb_fmt == KqFmt.k6)) && t.config.recr_mask == 0ul
 }
 
-// One weight site's GEMV — a q8-tagged tensor rides the planar q8 kernels, a kq tensor the
-// plane GEMVs (kq_quants_of/kq_scales_of + enc_kq_gemv). yoff places the k/v/w3 output segments.
-def private enc_site_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows, n : int64; bx, by, bn, bd : MetalBuffer?; yoff : uint64 = 0ul) {
-    if (fmt == KqFmt.q8) {
-        let bw = blob_of(g_dev, t, woff)
-        enc_gemv(enc, bw.buf, bw.boff, bx, by, bn, bd, rows, yoff)
-    } else {
-        let bq = kq_quants_of(g_dev, t, fmt, woff)
-        let bs = kq_scales_of(g_dev, t, fmt, woff)
-        enc_kq_gemv(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, bn, bd, rows, n, yoff)
-    }
-}
-
-// One kq weight site in a batched step. B <= 8: nrows separate single-stream plane GEMVs (the
-// kq GEMV is ALU-bound, so this matches the lcpp kq batch wall). B >= 9: the kq mul_mm twin over
-// the M-padded x panel. Disjoint y rows/columns: the caller's one barrier covers the whole group.
-def private enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows, n : int64;
-                          bx : MetalBuffer?; xstride : int64; by : MetalBuffer?; ystride, ycol : int64;
-                          bn, bd, bys, bnr : MetalBuffer?; nrows, mp : int64) {
-    let bq = kq_quants_of(g_dev, t, fmt, woff)
-    let bs = kq_scales_of(g_dev, t, fmt, woff)
-    if (nrows > 8l) {
-        enc_kq_gemm_mm_b(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, uint64(ycol * 4l), bn, bys, mp, rows)
-        return
-    }
-    // B = 2..8: the ext small-batch twins — one weight pass per R-column group instead of B per-stream passes (-25..-40% at the 3B sites)
-    if (nrows >= 2l && bnr != null) {
-        assert(xstride == n)
-        enc_kq_mvb(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, uint64(ycol * 4l), bn, bd, bys, bnr, rows, nrows)
-        return
-    }
-    for (b in range64(nrows)) {
-        enc_kq_gemv(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, bn, bd, rows, n,
-            uint64((b * ystride + ycol) * 4l), uint64(b * xstride * 4l))
-    }
-}
-
-// Evict least-recently-used mirrors (never `keep`, never a pinned batch row) until the resident
-// bytes fit the cap.
-
 // ===== the per-step resource bundle + encode-ahead pipelining =====
 
 // Everything one step's command buffer owns. The encode-ahead rail (g_pre) keeps ONE pre-encoded

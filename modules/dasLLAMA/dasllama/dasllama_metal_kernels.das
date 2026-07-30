@@ -6142,6 +6142,43 @@ def enc_kq_gemm_mm_b(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?;
     kn_dispatch(enc, uint3(uint(mp / 32l), uint(rows / 64l), 1u), uint3(128u, 1u, 1u))
 }
 
+// One weight site's GEMV — a q8-tagged tensor rides the planar q8 kernels, a kq tensor the
+// plane GEMVs (kq_quants_of/kq_scales_of + enc_kq_gemv). yoff places the k/v/w3 output segments.
+def enc_site_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows, n : int64; bx, by, bn, bd : MetalBuffer?; yoff : uint64 = 0ul) {
+    if (fmt == KqFmt.q8) {
+        let bw = blob_of(g_dev, t, woff)
+        enc_gemv(enc, bw.buf, bw.boff, bx, by, bn, bd, rows, yoff)
+    } else {
+        let bq = kq_quants_of(g_dev, t, fmt, woff)
+        let bs = kq_scales_of(g_dev, t, fmt, woff)
+        enc_kq_gemv(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, bn, bd, rows, n, yoff)
+    }
+}
+
+// One kq weight site in a batched step. B <= 8: nrows separate single-stream plane GEMVs (the
+// kq GEMV is ALU-bound, so this matches the lcpp kq batch wall). B >= 9: the kq mul_mm twin over
+// the M-padded x panel. Disjoint y rows/columns: the caller's one barrier covers the whole group.
+def enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows, n : int64;
+                  bx : MetalBuffer?; xstride : int64; by : MetalBuffer?; ystride, ycol : int64;
+                  bn, bd, bys, bnr : MetalBuffer?; nrows, mp : int64) {
+    let bq = kq_quants_of(g_dev, t, fmt, woff)
+    let bs = kq_scales_of(g_dev, t, fmt, woff)
+    if (nrows > 8l) {
+        enc_kq_gemm_mm_b(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, uint64(ycol * 4l), bn, bys, mp, rows)
+        return
+    }
+    // B = 2..8: the ext small-batch twins — one weight pass per R-column group instead of B per-stream passes (-25..-40% at the 3B sites)
+    if (nrows >= 2l && bnr != null) {
+        assert(xstride == n)
+        enc_kq_mvb(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, uint64(ycol * 4l), bn, bd, bys, bnr, rows, nrows)
+        return
+    }
+    for (b in range64(nrows)) {
+        enc_kq_gemv(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, bn, bd, rows, n,
+            uint64((b * ystride + ycol) * 4l), uint64(b * xstride * 4l))
+    }
+}
+
 // fused rope + KV-row store: the v source binds the SAME QKV buffer at its v byte offset
 def enc_rope_store(enc : MetalComputeEncoder?; f16 : bool; bqkv : MetalBuffer?; vsoff : uint64;
                    kmb, vmb : MetalBuffer?; koff, voff : uint64;
