@@ -336,20 +336,19 @@ IF(COMMAND ADD_MODULE_CPP)
             ${DAS_IMGUI_DIR}/src
             ${DAS_IMGUI_GLFW_ROOT}/src)
         TARGET_LINK_LIBRARIES(imguiApp PRIVATE dasModuleImgui ${OPENGL_LIBRARIES})
-        IF(WIN32)
-            TARGET_LINK_LIBRARIES(imguiApp PRIVATE ${DAS_IMGUI_GLFW_ROOT}/glfw_dyn/$<CONFIG>/lib/glfw3dll.lib)
-        ELSEIF(APPLE)
+        IF(APPLE)
             FIND_LIBRARY(COCOA_LIBRARY Cocoa REQUIRED)
             FIND_LIBRARY(COREFOUNDATION_LIBRARY CoreFoundation REQUIRED)
-            TARGET_LINK_LIBRARIES(imguiApp PRIVATE
-                ${DAS_IMGUI_GLFW_ROOT}/glfw_dyn/$<CONFIG>/lib/libglfw.dylib
-                ${COCOA_LIBRARY} ${COREFOUNDATION_LIBRARY})
-        ELSE()
-            TARGET_LINK_LIBRARIES(imguiApp PRIVATE
-                ${DAS_IMGUI_GLFW_ROOT}/glfw_dyn/$<CONFIG>/lib/libglfw.so
-                X11)
+            TARGET_LINK_LIBRARIES(imguiApp PRIVATE ${COCOA_LIBRARY} ${COREFOUNDATION_LIBRARY})
+        ELSEIF(NOT WIN32)
+            TARGET_LINK_LIBRARIES(imguiApp PRIVATE X11)
         ENDIF()
-        # glfw_dyn import lib comes from dasGlfw's ExternalProject — order after it
+        # Link the GLFW dyn flavor via the exact byproduct path dasGlfw's
+        # ExternalProject declares (set in root scope by its CMakeLists, like
+        # GLFW_INCLUDE_DIR) — Ninja's build graph only has a rule for the
+        # declared byproduct, not the unversioned symlinks install also lays
+        # down (libglfw.so vs libglfw.so.3.4 broke the doc lane).
+        TARGET_LINK_LIBRARIES(imguiApp PRIVATE ${DAS_GLFW_DYN_PATH})
         ADD_DEPENDENCIES(imguiApp GLFW3_DYN)
         SETUP_CPP11(imguiApp)
 
