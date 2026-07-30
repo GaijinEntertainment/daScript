@@ -82,3 +82,12 @@
     completeness check silently stops demanding sidecar entries for those kernels and tune
     drift goes dark. Sidecars key kernels by BARE name, so MOVING a kernel between covered
     modules needs no re-tune and no sidecar edit.
+15. **GPU backend code goes in its ROLE file.** Kernel source → `dasllama_<gpu>_kernels` (a
+    `[compute_shader]`/MSL kernel in a driver file is a review defect); device state, buffer/
+    command plumbing, rails, shared lazy-state builders → `dasllama_<gpu>_common`; the resident
+    token-step driver + decode arms → `dasllama_<gpu>_decode`; the batched prefill driver +
+    batch arms → `dasllama_<gpu>_prefill`; portable servability gates → `dasllama_<gpu>_shapes`;
+    probe/arm/routers/`[init]` → `dasllama_math_<gpu>` — whose NAME is common's `?<gpu>` require
+    contract, never rename it. Matching responsibilities get MATCHING file names across
+    backends (kernels/common/decode/prefill/shapes/lens); a backend-only capability lives in
+    its matching role file, never a new grab-bag.
