@@ -53,6 +53,8 @@ The two heavy Windows toolchain builds (`build_windows_mingw`, `build_windows_cl
 
 **Status commands per tick:**
 - `gh pr checks <PR>` — CI status (pending / pass / fail), or `gh api repos/<owner>/<repo>/commits/<tip>/check-runs` filtered to `status!="completed"` (pending) and `conclusion` ∈ {`failure`, `cancelled`, `timed_out`, `action_required`} (reds — don't match only `failure`; a cancelled or timed-out lane is red too)
+- **NEVER tick on `gh run list` — it is workflow-granular and goes blind on matrix reds.** build.yml's matrix runs `fail-fast: false`, so a dead job (e.g. `build (windows, 64, Debug, none)` at minute 15) leaves the workflow `in_progress` for the surviving siblings' full hour — `gh run list` reports "nothing red" the entire time while the PR checks page shows the failure. Only the two job-granular forms above see it. (Cost a real ~20-minute blind spot on #3592, 2026-07-30.)
+- A detached `workflow_dispatch` run is NOT in `gh pr checks` (no PR association) — job-level poll it separately: `gh run view <runID> --json jobs --jq '.jobs[] | select(.conclusion != null and .conclusion != "success" and .conclusion != "skipped") | .name + " " + .conclusion'` (empty output = no reds yet).
 - `gh api repos/<owner>/<repo>/pulls/<PR>/reviews` — Copilot's latest review; check its `commit_id` matches your tip (confirms it reviewed the latest code, not a stale commit)
 - unresolved threads via GraphQL `reviewThreads(first:100){pageInfo{hasNextPage endCursor} nodes{isResolved …}}`, paginated when needed and filtered to `isResolved==false`
 

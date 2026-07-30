@@ -93,6 +93,16 @@ FetchContent_Declare(freetype_src
 )
 FetchContent_MakeAvailable(freetype_src)
 SET_TARGET_PROPERTIES(freetype PROPERTIES POSITION_INDEPENDENT_CODE ON)
+IF(WIN32)
+    # CMakeCommon's ADD_DEFINITIONS(/W4, /arch:*) leak into the RC language
+    # under Ninja (cmcldeps hands directory flags to rc.exe -> RC1106), and
+    # ftver.rc is the first .rc the superbuild ever compiles. The version
+    # resource is dead weight in a static lib — drop it rather than touch the
+    # repo-wide flag plumbing.
+    GET_TARGET_PROPERTY(_ft_sources freetype SOURCES)
+    LIST(FILTER _ft_sources EXCLUDE REGEX "ftver\\.rc$")
+    SET_PROPERTY(TARGET freetype PROPERTY SOURCES ${_ft_sources})
+ENDIF()
 
 # MD4C is the semantic Markdown parser used by the view-independent model in
 # markdown/. Pull only its parser/entity C translation units instead of importing the
