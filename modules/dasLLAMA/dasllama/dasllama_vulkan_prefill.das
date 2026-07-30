@@ -10,7 +10,6 @@ require dasllama/dasllama_vulkan_decode   // vk_moe_dn_step — the dn chain's n
 require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_math
-require dasllama/dasllama_par
 require math
 
 // The Vulkan PREFILL + batch driver (dasllama_metal_prefill's twin): the resident batched
@@ -375,9 +374,9 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
     ensure_af_state(f1, f3, f2)
     let xunit = fmt_unit(f1)
     let dkq = !vk_fmt_b32(f2)
-    fill_af_meta(g_gpu.af_meta_g, n, nfe, blk1)
-    fill_af_meta(g_gpu.af_meta_u, n, nfe, blk3)
-    fill_af_meta(g_gpu.af_meta_d, nfe, n, blk2)
+    fill_gemv_meta(g_gpu.af_meta_g, n, nfe, 0l, blk1)
+    fill_gemv_meta(g_gpu.af_meta_u, n, nfe, 0l, blk3)
+    fill_gemv_meta(g_gpu.af_meta_d, nfe, n, 0l, blk2)
     fill_ffn_meta(nfe, nfe / (dkq ? 256l : 32l), is_gelu)
     unsafe {
         memcpy(g_gpu.af_xq.mapped, addr<void?>(xq[0]), n)
@@ -406,12 +405,9 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
 // single-region batch-GEMM meta over an arena block: all tiles map to region 0. Returns the
 // dispatch workgroup count. Mirrors fill_batch_meta for one region [0, npos).
 def private fill_arena_batch_meta(hb : HostBuf; n, d, blk, npos : int64; fmt : int) : uint {
-    let tile = fmt == 0 ? q8_batch_tile_for(d, npos) : BATCH_TILE
-    // the cm2 twin tiles 64 weight-rows x 128 tokens per workgroup (fill_batch_meta's rule)
-    let tile_d = fmt == 6 ? 64l : tile
-    let tile_c = fmt == 6 ? 128l : tile
-    let wtiles = (d + tile_d - 1l) / tile_d
-    let rtiles = (npos + tile_c - 1l) / tile_c
+    let te = batch_tile_edges(fmt, d, npos)
+    let wtiles = (d + te.td - 1l) / te.td
+    let rtiles = (npos + te.tc - 1l) / te.tc
     let total = rtiles * wtiles
     assert((8l + total) * 4l <= BATCH_META_BYTES, "dasLLAMA vulkan arena: batch meta exceeds capacity")
     unsafe {
@@ -507,11 +503,6 @@ def vk_arena_gemv(var y : array<float>; blk : int64; n, d : int64; fmt : int; xq
 }
 
 // ===== prefill batch dispatch (the FFN's batched-GEMM arm) =====
-
-
-// hazard bits for the cm2 chain's two f16 planes
-let private VHB_XF = 0x8000u      // f16 gathered-activation plane (dequant out, gate/up twin B)
-let private VHB_HF = 0x10000u     // f16 hidden plane (actf16 out, down twin B)
 
 // cm2 batch state: the two f16 planes (2 bytes per element — 2x the q8 image caps bound the
 // same chunk rows) and the dequant/act convert sets. Mode 4 + fmt-6 stacks only.
@@ -627,14 +618,12 @@ def private fill_batch_meta(si : int; offs : int64 const?; nregions : int64; n, 
                 all128 = all128 && (b1 - b0) % 128l == 0l
             }
         }
-        // route the tile on the AVERAGE rows per active region; the cm2 twin tiles 64w x 128t
-        let tile = fmt == 0 ? q8_batch_tile_for(d, nrc > 0l ? nrows / nrc : r1 - r0) : BATCH_TILE
-        let tile_d = fmt == 6 ? 64l : tile
-        let tile_c = fmt == 6 ? 128l : tile
-        g_gpu.stacks[si].batch_tile = tile
-        g_gpu.stacks[si].batch_aligned = fmt == 0 && tile == 128l && d % 128l == 0l && all128
-        let wtiles = (d + tile_d - 1l) / tile_d
-        let wg_bound = ((r1 - r0 + tile_c - 1l) / tile_c + nrc) * wtiles
+        // route the tile on the AVERAGE rows per active region
+        let te = batch_tile_edges(fmt, d, nrc > 0l ? nrows / nrc : r1 - r0)
+        g_gpu.stacks[si].batch_tile = te.tile
+        g_gpu.stacks[si].batch_aligned = fmt == 0 && te.tile == 128l && d % 128l == 0l && all128
+        let wtiles = (d + te.td - 1l) / te.td
+        let wg_bound = ((r1 - r0 + te.tc - 1l) / te.tc + nrc) * wtiles
         assert((4l + nrc * 4l + wg_bound) * 4l <= BATCH_META_BYTES, "dasLLAMA vulkan tier: batch meta exceeds capacity")
         let map_off = 4l + nrc * 4l
         mp[0] = uint(n)
@@ -656,7 +645,7 @@ def private fill_batch_meta(si : int; offs : int64 const?; nregions : int64; n, 
             mp[mb + 1l] = uint(rb0 - r0)
             mp[mb + 2l] = uint(rb1 - rb0)
             mp[mb + 3l] = uint(wg)
-            let rwg = ((rb1 - rb0 + tile_c - 1l) / tile_c) * wtiles
+            let rwg = ((rb1 - rb0 + te.tc - 1l) / te.tc) * wtiles
             for (g in range64(rwg)) {
                 mp[map_off + wg + g] = uint(ri)
             }
@@ -672,12 +661,6 @@ def private cmd_copy_batch_meta(raw : VkCommandBuffer; si : int) {
     regions |> push(BufferCopy(srcOffset = 0ul, dstOffset = 0ul, size = uint64(BATCH_META_BYTES)))
     cmd_copy_buffer(vk_value_to_boost(raw), nonowning_buf(g_gpu.stacks[si].batch_meta.buf),
                     nonowning_buf(g_gpu.stacks[si].batch_meta_dev), regions)
-}
-
-def private cmd_copy_at(raw : VkCommandBuffer; src : uint64; src_off : int64; dst : uint64; bytes : int64) {
-    var regions : array<BufferCopy>
-    regions |> push(BufferCopy(srcOffset = uint64(src_off), dstOffset = 0ul, size = uint64(bytes)))
-    cmd_copy_buffer(vk_value_to_boost(raw), nonowning_buf(src), nonowning_buf(dst), regions)
 }
 
 // one reusable cmd buffer, re-recorded per submit — prefill submits are few and multi-ms, so
@@ -703,7 +686,7 @@ def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, 
     if (comb_npos > 0u && comb_first) {
         vhz_dep(raw, h, 0u, VHB_COMB, true)
         cmd_copy_whole(raw, g_gpu.comb_stage.buf, g_gpu.comb_w_dev, comb_wi_bytes)
-        cmd_copy_at(raw, g_gpu.comb_stage.buf, COMB_WI_BYTES, g_gpu.comb_inv_dev, comb_wi_bytes)
+        cmd_copy_range(raw, g_gpu.comb_stage.buf, COMB_WI_BYTES, g_gpu.comb_inv_dev, 0l, comb_wi_bytes)
     }
     if (g_gpu.stacks[s1].fmt == 6) {   // the cm2 chain: dequant feed, twin GEMMs, f16 mid-step
         hz_dispatch(raw, h, weak_copy(g_gpu.xf16_pipeline), g_gpu.batch_xf_set,
@@ -883,32 +866,6 @@ def vk_moe_dense(var yp : float?; woff : int64; xqp : int8 const?; xsp : float c
 
 
 
-def private fill_dn_meta(npos_w, cd, kd, di, nvh, nkh, ds, dconv : int64; hist_mode : int; nblocks : int64) {
-    unsafe {
-        var mp = reinterpret<uint?>(g_gpu.dn_meta.mapped)
-        mp[0] = uint(npos_w)
-        mp[1] = uint(cd)
-        mp[2] = uint(kd)
-        mp[3] = uint(di)
-        mp[4] = uint(nvh)
-        mp[5] = uint(nkh)
-        mp[6] = uint(ds)
-        mp[7] = uint(dconv)
-        mp[8] = uint(hist_mode)
-        mp[9] = uint(DN_SLAB)
-        mp[10] = uint(DN_O_OFF)
-        mp[11] = uint(DN_SM_BETA)
-        mp[12] = uint(DN_SM_G)
-        mp[13] = uint(DN_SM_TAPS)
-        mp[14] = uint(DN_SM_WNORM)
-        mp[15] = uint(DN_SM_A)
-        mp[16] = uint(DN_SM_DT)
-        mp[17] = uint(DN_SM_HIST)
-        mp[18] = uint(nblocks)
-        mp[19] = uint(DN_P2_OFF)
-    }
-}
-
 // one deltanet window: acts/meta/smalls staging copies, qkv + z tiles, conv, scan, the conv-tail
 // extraction (before out-proj overwrites the qkv rows in y1), o requant, out-proj tile, y DMA;
 // the state uploads on the first window and reads back on the last
@@ -1034,7 +991,8 @@ def vk_moe_dn(var yp : float?; woq, woz, woo : int64;
             par_memcpy(reinterpret<void?>(sp + DN_SM_BETA), reinterpret<void?>(bp + r0 * nvh), rows * nvh * 4l)
             par_memcpy(reinterpret<void?>(sp + DN_SM_G), reinterpret<void?>(gp + r0 * nvh), rows * nvh * 4l)
         }
-        fill_dn_meta(rows, cd, kd, di, nvh, nkh, ds, dconv, r0 == 0l ? 1 : 2, rows * di / 32l)
+        fill_dn_meta(g_gpu.dn_meta, rows, cd, kd, di, nvh, nkh, ds, dconv, r0 == 0l ? 1 : 2,
+            DN_SLAB, DN_O_OFF, rows * di / 32l, DN_P2_OFF)
         let ts1 = ref_time_ticks()
         record_dn_cmd(s_qkv, s_z, s_o, nwg_qkv, nwg_z, nwg_out, rows, cd, di, dim, taps, nvh, ds,
             rows * dim, rows * (dim / 32l) * 4l, r0 == 0l, r0 + rows == npos)

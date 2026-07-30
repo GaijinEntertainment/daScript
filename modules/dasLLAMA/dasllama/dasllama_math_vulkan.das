@@ -15,7 +15,6 @@ require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_env
 require dasllama/dasllama_config
-require dasllama/dasllama_par
 
 // dasLLAMA Vulkan GPU tier — the backend ENTRY: capability probe + arm, the dry-bake arm, the
 // .dlim identity source, the FFN router, and the [init] that installs every hook. The backend
@@ -77,13 +76,7 @@ def vk_moe_ffn(var goutp : float?; offs1 : int64 const?; offs3 : int64 const?; o
     ensure_ffn_state()
     if (find_stack_idx(unsafe(offs1[0]), f1) < 0) {
         let w0 = unsafe(offs1[0])
-        var g = -1
-        for (i in range(length(g_gpu.stream_stacks) / 3)) {
-            if (g_gpu.stream_stacks[i * 3].fmt == f1 && w0 >= g_gpu.stream_stacks[i * 3].base
-                    && w0 < g_gpu.stream_stacks[i * 3].base + g_gpu.stream_stacks[i * 3].elems) {
-                g = i
-            }
-        }
+        let g = find_stream_group(w0, f1)
         if (g < 0) {
             panic("dasLLAMA vulkan tier: dispatch against a region that is neither resident nor streamed (fmt {f1} element offset {w0})")
         }

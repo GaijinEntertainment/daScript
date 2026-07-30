@@ -10,7 +10,6 @@ require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
-require dasllama/dasllama_par
 require math
 require daslib/strings_boost
 
@@ -111,10 +110,7 @@ def vk_rdec_upload_norms(norms : array<float>) {
         upload_region_at(g_rd.cos_dev, g_rd.qkn_eps_off * 4l, unsafe(addr<uint8 const?>(pair[0])), 4l)
     }
     // norms are the last upload of the resident arm sequence — report the accumulated cost
-    if (g_vk_upload_us > 0l) {
-        let gbps = double(g_vk_upload_bytes) / (double(g_vk_upload_us) * 1000.0lf)
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: uploads {g_vk_upload_bytes / 1000000l} MB in {g_vk_upload_us / 1000l} ms ({gbps} GB/s, {key_exists(g_gpu.dev_mapped, g_rd.norms_dev) ? "direct" : "staged"})\n")
-    }
+    vk_upload_report(key_exists(g_gpu.dev_mapped, g_rd.norms_dev))
 }
 
 //! Register a dense layer's arena block indices + formats and build its descriptor sets. Called
@@ -589,32 +585,6 @@ def private ensure_dnd_state {
     to_log(LOG_INFO, "dasLLAMA vulkan tier: deltanet decode step engaged\n")
 }
 
-def private fill_dnd_meta(cd, kd, di, nvh, nkh, ds, dconv : int64) {
-    unsafe {
-        var mp = reinterpret<uint?>(g_gpu.dnd_meta.mapped)
-        mp[0] = 1u
-        mp[1] = uint(cd)
-        mp[2] = uint(kd)
-        mp[3] = uint(di)
-        mp[4] = uint(nvh)
-        mp[5] = uint(nkh)
-        mp[6] = uint(ds)
-        mp[7] = uint(dconv)
-        mp[8] = 0u
-        mp[9] = 0u
-        mp[10] = 0u
-        mp[11] = uint(DN_SM_BETA)
-        mp[12] = uint(DN_SM_G)
-        mp[13] = uint(DN_SM_TAPS)
-        mp[14] = uint(DN_SM_WNORM)
-        mp[15] = uint(DN_SM_A)
-        mp[16] = uint(DN_SM_DT)
-        mp[17] = uint(DN_SM_HIST)
-        mp[18] = 0u
-        mp[19] = 0u
-    }
-}
-
 // create one layer's step chain: per-layer state/smalls buffers, the three sets, the once-filled
 // GEMV metas (dn stacks never serve FFN GEMVs, so their host metas are ours to pin), and the
 // warm cmd — per token only acts/β/γ refresh and the cmd resubmits as-is.
@@ -714,7 +684,7 @@ def vk_moe_dn_step(var yp : float?; s_qkv, s_z, s_o : int; woq, woz, woo : int64
         "dasLLAMA vulkan tier: deltanet geometry outside step capacity")
     ensure_dnd_state()
     if (!key_exists(g_gpu.dnd_steps, woq)) {
-        fill_dnd_meta(cd, kd, di, nvh, nkh, ds, dconv)
+        fill_dn_meta(g_gpu.dnd_meta, 1l, cd, kd, di, nvh, nkh, ds, dconv, 0)
         dnd_step_make(s_qkv, s_z, s_o, woq, woz, woo, dim, cd, di, nvh, ds, taps)
     }
     var st = g_gpu.dnd_steps[woq]
@@ -1135,18 +1105,11 @@ def private ensure_cls(si : int; woff, n, d : int64) {
         return
     }
     ensure_gemv_scratch(si)
-    let unit = g_gpu.stacks[si].fmt != 0 ? 256l : 32l
+    // fmt_unit, not `fmt != 0`: a q8n cls plane (fmt 6, retagged on q8n boxes) counts 32-blocks
+    let unit = fmt_unit(g_gpu.stacks[si].fmt)
     let rel = woff - g_gpu.stacks[si].base
     assert(rel % unit == 0l, "dasLLAMA vulkan tier: unaligned classifier plane offset")
-    unsafe {
-        var mp = reinterpret<uint?>(g_gpu.staging.mapped)
-        mp[0] = uint(n)
-        mp[1] = uint(d)
-        mp[2] = 1u
-        mp[3] = 0u
-        mp[4] = uint(rel / unit)
-        mp[5] = 0u
-    }
+    fill_gemv_meta(g_gpu.staging, n, d, 0l, rel / unit)
     g_gpu.stacks[si].cls_meta_dev = make_device_buf(CLS_META_BYTES)
     staged_upload(g_gpu.stacks[si].cls_meta_dev, 0l, CLS_META_BYTES)
     g_gpu.stacks[si].cls_set = vk_set6(g_gpu.stacks[si].wqbuf, g_gpu.stacks[si].wsbuf, g_gpu.stacks[si].cls_meta_dev,

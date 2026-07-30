@@ -104,6 +104,14 @@ def q8_batch_aligned(d, cnt : int64) : bool
 def q8_batch_pipe_for(d, cnt : int64) : Pipeline
     => q8_batch_pipe(q8_batch_tile_for(d, cnt), q8_batch_aligned(d, cnt))
 
+// a batch dispatch's tile pick + (rows, cols) edges: the cm2 twin (fmt 6) tiles 64w x 128t, q8
+// rides the router above, kq the fixed BATCH_TILE — one source so wg counts, meta fills, and the
+// pipe pick can never disagree
+def batch_tile_edges(fmt : int; d, cnt : int64) : tuple<tile : int64; td : int64; tc : int64> {
+    let tile = fmt == 0 ? q8_batch_tile_for(d, cnt) : BATCH_TILE
+    return (tile = tile, td = fmt == 6 ? 64l : tile, tc = fmt == 6 ? 128l : tile)
+}
+
 // resident prefill GEMM pipe: a fmt-6 role rides the cm2 twin, everything else the q8 tile router
 def pf_gemm_pipe(fmt6 : bool; d, cnt : int64) : Pipeline {
     if (fmt6) {
@@ -532,17 +540,8 @@ var g_gpu : GpuState?
 var g_init_failed = false
 var g_vk_prof = false      // DASLLAMA_GPU_PROF=1: per-piece batch-chain timing to log
 var g_vk_prof_probed = false
-var g_vk_dispatches = 0ul
-var g_vk_submits = 0ul
 var g_vk_upload_us = 0l
 var g_vk_upload_bytes = 0l
-
-//! Lifetime vkCmdDispatch calls the tier RECORDS (not executions — a re-submitted pre-recorded
-//! cmd does not advance it). Pair with vk_submit_count for per-step encode-cost deltas.
-def vk_dispatch_count : uint64 => g_vk_dispatches
-
-//! Lifetime queue submissions (real cmds + staging round-trips).
-def vk_submit_count : uint64 => g_vk_submits
 
 def vk_prof : bool {
     if (!g_vk_prof_probed) {
@@ -1046,7 +1045,6 @@ def staged_upload(dst : uint64; dst_off : int64; bytes : int64) {
     var regions : array<BufferCopy>
     let rc = BufferCopy(srcOffset = 0ul, dstOffset = uint64(dst_off), size = uint64(bytes))
     regions |> push(rc)
-    g_vk_submits++
     run_cmd_sync(g_gpu.device, g_gpu.pool, g_gpu.queue) $(cmd) {
         cmd_copy_buffer(cmd, nonowning_buf(g_gpu.staging.buf), nonowning_buf(dst), regions)
     }
@@ -1078,6 +1076,14 @@ def upload_region_at(dst : uint64; dst_off : int64; src : uint8 const?; total : 
 
 def upload_region(dst : uint64; src : uint8 const?; total : int64) {
     upload_region_at(dst, 0l, src, total)
+}
+
+// report the accumulated upload cost (the counters above); `direct` = the caller's mapped-vs-staged tag
+def vk_upload_report(direct : bool) {
+    if (g_vk_upload_us > 0l) {
+        let gbps = double(g_vk_upload_bytes) / (double(g_vk_upload_us) * 1000.0lf)
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: uploads {g_vk_upload_bytes / 1000000l} MB in {g_vk_upload_us / 1000l} ms ({gbps} GB/s, {direct ? "direct" : "staged"})\n")
+    }
 }
 
 def alloc_desc_set : VkDescriptorSet {
@@ -1522,6 +1528,17 @@ def find_stack_idx(w0 : int64; fmt : int) : int {
     return -1
 }
 
+// the streamed twin: which 3-stack layer group (gate/up/down) holds this gate offset, or -1
+def find_stream_group(w0 : int64; fmt : int) : int {
+    for (i in range(length(g_gpu.stream_stacks) / 3)) {
+        if (g_gpu.stream_stacks[i * 3].fmt == fmt && w0 >= g_gpu.stream_stacks[i * 3].base
+                && w0 < g_gpu.stream_stacks[i * 3].base + g_gpu.stream_stacks[i * 3].elems) {
+            return i
+        }
+    }
+    return -1
+}
+
 def find_stack(w0 : int64; fmt : int) : int {
     let i = find_stack_idx(w0, fmt)
     if (i < 0) {
@@ -1779,18 +1796,6 @@ def ensure_af_state(f1, f3, f2 : int) {
     g_gpu.af_ready = true
 }
 
-def fill_af_meta(hb : HostBuf; n, d, blk : int64) {
-    unsafe {
-        var mp = reinterpret<uint?>(hb.mapped)
-        mp[0] = uint(n)
-        mp[1] = uint(d)
-        mp[2] = 1u          // one region — a dense plane, not a routed expert set
-        mp[3] = 0u
-        mp[4] = uint(blk)   // the arena block index
-        mp[5] = 0u
-    }
-}
-
 //! True when a Vulkan device is up (probes lazily). Non-panicking — the resident-driver seams that
 //! `verify(vk_moe_init())` are fine on this hardware, but a test wants to feint on a headless box.
 def vk_device_ready() : bool => vk_moe_init()
@@ -1912,7 +1917,7 @@ def vk_rope_kv_store(var qkv : array<float>; var qout : array<float>; var krow :
     }
 }
 
-// ===== the resident whole-stack decode driver =====
+// ===== resident-driver state + the fill-meta family (the driver itself is decode/prefill) =====
 // One cb/token: residual + KV mirror stay device-side, host only uploads x + rope row, reads logits.
 // v1 re-records per token (still 1 submit). Activations quantized on-device before each GEMV.
 
@@ -2195,6 +2200,8 @@ let VHB_ATG = 0x800u      // at gate/o rows
 let VHB_ATK = 0x1000u     // at roped-k panel
 let VHB_ATV = 0x2000u     // at v panel (absolute positions)
 let VHB_VRAW = 0x4000u    // at raw-v window
+let VHB_XF = 0x8000u      // cm2: f16 gathered-activation plane (dequant out, gate/up twin B)
+let VHB_HF = 0x10000u     // cm2: f16 hidden plane (actf16 out, down twin B)
 
 // serial-seam region bits (decode GEMV preps, arena + standalone seams) — third namespace, same rail
 let VHG_META = 0x1u       // ffn/dn params staged to device
@@ -2240,14 +2247,6 @@ def ensure_kernel_access {
         let nv <- split(ent, "=")
         let rw <- split(nv[1], ",")
         g_kernel_access |> insert(nv[0], uint2(uint(to_int(rw[0])), uint(to_int(rw[1]))))
-    }
-}
-
-//! Debug: log the lens-derived per-kernel binding access masks (bindings 0-5, hex bit masks).
-def vk_dump_kernel_access {
-    ensure_kernel_access()
-    for (k, v in keys(g_kernel_access), values(g_kernel_access)) {
-        to_log(LOG_INFO, "vk_access {k} r={v.x} w={v.y}\n")
     }
 }
 
@@ -2326,7 +2325,6 @@ def hz_dispatch(raw : VkCommandBuffer; var h : VkHaz; pipe : Pipeline; var set_ 
 
 var g_vhz_paranoid = -1   // DASLLAMA_VK_HAZARD_PARANOID: barrier before every node
 var g_vhz_trace = -1      // DASLLAMA_VK_HAZARD_TRACE: log every declared node (schedule oracle)
-var g_mm_m_logged = false   // one-time mul_mm M-tile engagement log
 
 def vhz_paranoid : bool {
     if (g_vhz_paranoid < 0) {
@@ -2453,7 +2451,6 @@ def cmd_bind_dispatch(raw : VkCommandBuffer; var set_ : VkDescriptorSet; groups 
     unsafe {
         vkCmdBindDescriptorSets(raw, VkPipelineBindPoint.COMPUTE, boost_value_to_vk(g_gpu.pipe_layout), 0u, 1u, addr(set_), 0u, null)
     }
-    g_vk_dispatches++
     vkCmdDispatch(raw, groups, 1u, 1u)
 }
 
@@ -2475,6 +2472,8 @@ def gemv_pipe(fmt : int) : Pipeline {
     panic("dasLLAMA vulkan tier: no GEMV kernel for stack format {fmt}")
     return weak_copy(g_gpu.pipeline)
 }
+
+var g_mm_m_logged = false   // one-time mul_mm M-tile engagement log
 
 // The Q8_0 prefill batch pipeline, switched to the tensor-core coopmat variant when DASLLAMA_COOPMAT
 // selected one (weak alias — g_gpu owns). `tile` = the edge the caller's meta used; picks L vs M in mm mode.
@@ -2519,7 +2518,6 @@ def batch_pipe(fmt : int; tile : int64; aligned : bool = false) : Pipeline {
 }
 
 def submit_nowait(var raw : VkCommandBuffer) {
-    g_vk_submits++
     var submit = VkSubmitInfo()
     submit.commandBufferCount = 1u
     let fence = g_gpu.fence
@@ -2670,6 +2668,35 @@ def fill_ffn_meta(elems, nblocks : int64; is_gelu : bool; comb_n : int64 = 0l; c
         mp[5] = uint(comb_k)
         mp[6] = uint(comb_r0)
         mp[7] = uint(comb_r1)
+    }
+}
+
+// the 20-word deltanet params block — ONE layout for the prefill window chain (dn_meta) and the
+// decode step (dnd_meta, npos_w = 1 and the slab/history words zeroed): the dn kernels' contract
+def fill_dn_meta(hb : HostBuf; npos_w, cd, kd, di, nvh, nkh, ds, dconv : int64; hist_mode : int;
+                 slab : int64 = 0l; o_off : int64 = 0l; nblocks : int64 = 0l; p2_off : int64 = 0l) {
+    unsafe {
+        var mp = reinterpret<uint?>(hb.mapped)
+        mp[0] = uint(npos_w)
+        mp[1] = uint(cd)
+        mp[2] = uint(kd)
+        mp[3] = uint(di)
+        mp[4] = uint(nvh)
+        mp[5] = uint(nkh)
+        mp[6] = uint(ds)
+        mp[7] = uint(dconv)
+        mp[8] = uint(hist_mode)
+        mp[9] = uint(slab)
+        mp[10] = uint(o_off)
+        mp[11] = uint(DN_SM_BETA)
+        mp[12] = uint(DN_SM_G)
+        mp[13] = uint(DN_SM_TAPS)
+        mp[14] = uint(DN_SM_WNORM)
+        mp[15] = uint(DN_SM_A)
+        mp[16] = uint(DN_SM_DT)
+        mp[17] = uint(DN_SM_HIST)
+        mp[18] = uint(nblocks)
+        mp[19] = uint(p2_off)
     }
 }
 
