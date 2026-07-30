@@ -7,6 +7,7 @@ require daslib/fio
 require dasllama/dasllama_env  // the shared typed env readers + the knob registry
 require dasllama/dasllama_config  // DlimConfiguration — this module registers the cpu/metal sources
 require dasllama/dasllama_kqformat public   // KqFmt + kq_sb + the stride truth — re-exported so every requirer keeps seeing the enum
+require dasllama/dasllama_rope       // the RoPE angle/table generation (Model-facing wrappers below pass config params in)
 require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs and false-flags this as unused
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default  // registers the portable Q8·Q8 backend at [init] (the fallback everywhere)
@@ -2840,21 +2841,12 @@ def resident_upload(t : Model; seq_cap : int64) : bool {
     return true
 }
 
-// One position's packed rope row for the resident device kernels: cos[half] then sin[half] in
-// ONE array at `base` (a DIFFERENT layout from build_decode_rope_row's two tabs), including the
-// NTK rope_freqs divisor and mscale. The one source for every resident-override rope row.
+// One position's packed rope row for the resident device kernels (see build_rope_row_packed —
+// the one source for every resident-override rope row).
+[unused_argument(half)]
 def private rdec_rope_row(t : Model; pos, hs, half : int64; var dst : array<float>; base : int64) {
     let c = t.config
-    let theta = c.rope_freq_base
-    for (j in range64(half)) {
-        var freq = 1.0 / pow(theta, float(2l * j) / float(hs))
-        if (!empty(t.rope_freqs)) {
-            freq /= t.rope_freqs[j]
-        }
-        let ang = float(pos) * freq * c.rope_freq_scale
-        dst[int(base + j)] = cos(ang) * c.rope_mscale
-        dst[int(base + half + j)] = sin(ang) * c.rope_mscale
-    }
+    build_rope_row_packed(dst, base, pos, hs, c.rope_freq_base, c.rope_freq_scale, c.rope_mscale, t.rope_freqs)
 }
 
 // the active grp<mr> interleave of a repacked kq plane (1 = disk order / not repacked)
@@ -5370,28 +5362,8 @@ def private rope_batch(var q_b : array<float>; var k_b : array<float>; t : Model
 // sin likewise. freq[j] is position-independent (hoisted out of the position loop); mscale folds
 // in here. Built once before the layer loop, reused across all heads/layers. Bit-identical to classic.
 def private build_rope_table(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>; t : Model; theta, fscale : float; start_pos, npos, head_size : int64; use_ff : bool = true) {
-    let c = t.config
-    let half = head_size / 2l
-    let scale = c.rope_mscale   // scales cos/sin — ggml applies mscale to NORM and NEOX alike (mistral3 YaRN)
-    let has_ff = use_ff && !empty(t.rope_freqs)
-    cos_tab |> resize(npos * half)   // nolint:PERF026 — session scratch; same size every decode step, so this allocates once
-    sin_tab |> resize(npos * half)   // nolint:PERF026 — see above
-    unsafe {
-        var cp = addr(cos_tab[0])
-        var sp = addr(sin_tab[0])
-        let ffp = has_ff ? addr < float const? >(t.rope_freqs[0]) : null
-        for (j in range64(half)) {
-            var freq = 1.0 / pow(theta, float(2l * j) / float(head_size))
-            if (has_ff) {
-                freq /= ffp[j]
-            }
-            for (pi in range64(npos)) {
-                let angle = float(start_pos + pi) * fscale * freq
-                cp[pi * half + j] = cos(angle) * scale
-                sp[pi * half + j] = sin(angle) * scale
-            }
-        }
-    }
+    build_rope_tabs(cos_tab, sin_tab, theta, fscale, t.config.rope_mscale, t.rope_freqs, use_ff,
+                    start_pos, npos, head_size)
 }
 
 // build_rope_table's batched-decode twin: row pi's angle uses positions[pi] instead of start_pos+pi
@@ -5400,29 +5372,8 @@ def private build_rope_table(@scratch var cos_tab : array<float>; @scratch var s
 def private build_rope_table_rows(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>; t : Model;
                                   theta, fscale : float; positions : array<int64>; nrows, head_size : int64;
                                   use_ff : bool = true) {
-    let c = t.config
-    let half = head_size / 2l
-    let scale = c.rope_mscale
-    let has_ff = use_ff && !empty(t.rope_freqs)
-    cos_tab |> resize(nrows * half)
-    sin_tab |> resize(nrows * half)
-    unsafe {
-        var cp = addr(cos_tab[0])
-        var sp = addr(sin_tab[0])
-        let pp = addr < int64 const? >(positions[0])
-        let ffp = has_ff ? addr < float const? >(t.rope_freqs[0]) : null
-        for (j in range64(half)) {
-            var freq = 1.0 / pow(theta, float(2l * j) / float(head_size))
-            if (has_ff) {
-                freq /= ffp[j]
-            }
-            for (pi in range64(nrows)) {
-                let angle = float(pp[pi]) * fscale * freq
-                cp[pi * half + j] = cos(angle) * scale
-                sp[pi * half + j] = sin(angle) * scale
-            }
-        }
-    }
+    build_rope_tabs_rows(cos_tab, sin_tab, theta, fscale, t.config.rope_mscale, t.rope_freqs, use_ff,
+                         positions, nrows, head_size)
 }
 
 // Table-driven prefill RoPE: rope q_b[p*qd..] and k_b[p*kv_dim..] in place using the precomputed
