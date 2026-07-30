@@ -83,7 +83,7 @@ def main() {
     // Section 4 — Adding a real architecture to the module
     // ──────────────────────────────────────────────────────────────────────────
     //
-    // The in-tree recipe (see modules/dasLLAMA/API_REWORK.md's model-support waves
+    // The in-tree recipe (see history/dasLLAMA/API_REWORK.md's model-support waves
     // for worked examples, from Qwen3's two flags to gpt-oss's MoE-with-sinks):
     //   1. modules/dasLLAMA/dasllama/dasllama_arch_<name>.das — configure + blocks +
     //      chat template, self-registered in an [init] function

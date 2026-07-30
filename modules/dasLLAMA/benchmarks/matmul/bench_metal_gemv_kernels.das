@@ -581,7 +581,7 @@ class MetalGemvLabB4C8 {
     }
 }
 
-// X-staged batched gemv (the API_REWORK ledger's candidate (a)): the tg's 4 rows all dot the SAME
+// X-staged batched gemv (the PERF_LEDGER candidate (a)): the tg's 4 rows all dot the SAME
 // B x-vectors, so stage a k-chunk of the X panel in threadgroup memory ONCE per tg (cooperative
 // 128-thread load, 4x fewer device x loads) and the per-lane inner-loop x reads become tgmem hits.
 // W stays strided/coalesced. Chunk = 64 float4s per stream (4KB tgmem at B=4). Barrier-safe by

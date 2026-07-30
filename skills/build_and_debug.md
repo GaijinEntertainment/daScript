@@ -61,6 +61,7 @@ bin/Release/daslang.exe -jit -jit-stack path/to/main.das -- --jit-debug
 - `-jit-stack` is a host flag placed before the script. It retains a logical daslang frame for every generated function and block so `Context::getStackWalk()` has useful JIT state.
 - `--jit-debug` is an LLVM JIT option passed after the script separator. It emits CodeView/PDB debug information, generated function names, and `.das` file/line locations. On Windows the PDB lands beside the content-addressed DLL under `.jitted_scripts/`.
 - `--jit-opt-level=0` disables the LLVM IR pass pipeline and is useful when inspecting generated code, but codegen-side target optimization is still pinned at level 3; it is not yet a true end-to-end O0 build.
+- **JIT DLL cache staleness** — the cache key folds the codegen version, per-function AOT hashes, loop hints, and fast-math, so `LLVM_JIT_CODEGEN_VERSION` bumps and tune-sidecar edits re-key automatically. Blunt fallback when behavior looks stale anyway: delete `.jitted_scripts/`. Always wipe it before declaring a JIT regression.
 - JIT crash bundles should preserve the matching `.dll`, `.pdb`, `.map`, and retained `.o` together. The content hash changes when debug info is toggled, so artifacts from a non-debug cache entry do not decode a debug run.
 - Windows Release C/C++ builds use `/Z7` plus linker `/DEBUG /OPT:REF /OPT:ICF`, producing side PDBs without changing optimized code. Keep the PDB that matches every shipped exe/DLL when diagnosing native runtime frames.
 

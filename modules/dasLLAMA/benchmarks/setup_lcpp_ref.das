@@ -5,7 +5,7 @@ require daslib/clargs
 require strings
 require daslib/strings_boost
 
-// The reference supply chain (modules/dasLLAMA/PUBLIC_BENCH_PLAN.md): build pinned llama-bench
+// The reference supply chain (history/dasLLAMA/PUBLIC_BENCH_PLAN.md): build pinned llama-bench
 // binaries per build flavor, so every box — and any community user who wants our exact reference —
 // benches against the identical binary. One git worktree at the pinned sha, one build dir per flavor:
 //   clean-cpu: -DGGML_ACCELERATE=OFF -DGGML_BLAS=OFF -DGGML_METAL=OFF — kernel-vs-kernel fair

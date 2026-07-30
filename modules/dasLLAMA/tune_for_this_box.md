@@ -6,7 +6,7 @@ without fooling yourself. The second part is the important one: **the make-or-br
 tuner is measurement, not codegen.** Every "breakthrough" we later retracted was a
 measurement artifact; every real win survived the discipline below.
 
-Companion docs: `x64_arch.md` (what's universal vs per-box), `get_x64_going.md` (bring-up —
+Companion docs (archived in the daslang repo under `history/dasLLAMA/`): `x64_arch.md` (what's universal vs per-box), `get_x64_going.md` (bring-up —
 finish it first; tuning an incorrect kernel is worse than pointless). For the tune *framework*
 itself (the `[tune]`/`[tune_scope]`/`[tune_policy]` annotations, the manifest format, the mode
 contract) see `doc/source/reference/tune.rst`; this doc is the dasLLAMA-specific application of
@@ -42,8 +42,9 @@ The tuner benches declined perms ONCE (they share the reference body) — a fore
 noise-lottery tickets for one body.
 
 This zero-config path covers only the **gen GEMM manifest** (`gen_tune_probe`). The
-`[tuned]` loop-hint kernels (`box_profile.json`, below), the backend/thread/token-block runtime
-knobs, and the measurement discipline are still the manual, hands-on story — read on.
+`[tuned]` loop-hint kernels (the `"kernels"` section of the same `<app>.tune.json` sidecar,
+below), the backend/thread/token-block runtime knobs, and the measurement discipline are still
+the manual, hands-on story — read on.
 
 ---
 
@@ -53,7 +54,7 @@ knobs, and the measurement discipline are still the manual, hands-on story — r
 |---|---|---|---|
 | Kernel backend (ISA) | auto by priority; `pin_kernel_backend(name)` for A/B; loader picks repack backends; profile `runtime.backend` pins | runtime | `matmul_q8q8*` wrappers |
 | Batch backend (hybrid) | `select_batch_backend(name)` / profile `runtime.batch_backend` / env `DASLLAMA_PIN_BATCH_BACKEND` (benches) — overrides ONLY the batch-shaped slots (prefill GEMM + mx4 batch) from a layout-compatible donor, GEMV slots stay with `runtime.backend`. For boxes where decode and prefill prefer different backends (e.g. portable GEMV + a row-major donor's batch). Survives load-time re-select | runtime | the batch matmul wrappers |
-| Loop hints per kernel (`vectorize_width` × `unroll_count`) | `box_profile.json` flat keys, read at **compile time** by `[tuned]` | compile (JIT re-keys automatically) | all 16 `[tuned]` kernels: dot, axpy, add/mul/scale_inplace, copy_floats, softmax(+_sink), rmsnorm, dot_q4, dot_q8q8, dot_mx4q8, quantize_q8_0_into_ptr, rope_scaled_neox_tab, gemm_f32_uk_4x16, dot_q8q8_laneq4x4 |
+| Loop hints per kernel (`vectorize_width` × `unroll_count`) | the sidecar's `"kernels"` keys, read at **compile time** by `[tuned]` | compile (JIT re-keys automatically) | all 25 swept `[tuned]` kernels: dot, axpy, add/mul/scale_inplace, copy_floats, softmax(+_sink — mirrored, not swept separately), rmsnorm, dot_q4, dot_q8q8, dot_mx4q8, quantize_q8_0_into_ptr, quantize_q8_0_bs_into_ptr, rope_scaled_neox_tab, gemm_f32_uk_4x16, dot_q8q8_laneq4x4, the f16 codec set (dot_f16, axpy_f16, cvt_f32_to_f16, cvt_f16_to_f32), and the q8 KV-codec set (dot_q8kv, dot_q8q8kv, axpy_q8kv, cvt_q8kv_to_f32, quantize_q8kv_row) |
 | Gen GEMM tile family (manifest) | `gen_tune_probe` (the `[tune_scope(name="dasllama")]` tuner — run by `dasllama-server`'s `policy=auto` / `--tune`, or by hand with `DAS_TUNE_MODE=tune`) benches the `[tune_perm]` grid and writes the winner to `<das_root>/dasllama.tune.json` — **guarded by the e2e confirm pass**: a winner that diverges from the per-ISA fallback must beat it in a real-model prefill A/B (`DASLLAMA_CONFIRM_MODEL=<q8 gguf>`, interleaved, challenger needs >×1.02, else the fallback stays pinned). The guard exists because the 1-core fixture regime CAN crown an e2e loser (SPR: amx won the tile bench, lost prefill ~2×; M1: a +3.3%-iso shape made only +2.0% e2e — rejected) | compile (stamp at `[tune]`) | `q8q8_tile_gen` + companions (the gen batch/gemv kernels) |
 | K-quant tile families (manifest, per format) | the same `gen_tune_probe` tune run benches each kq family's own grid (mr × nrsplit per ISA tier) and writes `k4q8_tile_gen` / `k5q8_tile_gen` / `k6q8_tile_gen` entries — tile-best wins (the kq gemv is nrsplit-independent; same-mr rows share its plane), no child confirm pass (the stamp only moves that format's plane interleave, decode stays DRAM-bound — e2e-validated when the split landed: M1 mr4 = pp +10/+26/+22% on Q4_K_M/Q5_K_M/Q6_K, tg flat, MoE pp −3%; kq v2 lifted k4 pp512 to 0.88–0.95× lcpp on a CLEAN box (das 151–163 vs lcpp 172 — the earlier 158-vs-158 'parity' was two load-depressed reads coinciding) and MoE to 1.34×; the k5/k6 v2 port took Q5/Q6 pp to 0.84×/0.80×; kq v3 (panel-scratch byte-expanded tiles, 2026-07-12 PM) then took Q5 pp to 150–168 (1.14–1.28× lcpp) and Q6 to 140–143 (1.01–1.03×), tg at v2 parity — the tile reads a byte panel unpacked per (group, token-block) while the DRAM planes stay packed (decode is model-level DRAM-bound: pure byte planes cost tg −30%). Iso (M1): tile k4 95 / k5 89 / k6 76 GMAC/s at the probe's ×16 amortization, gemv 64 / 27.5 / 34.5 unchanged) | compile (stamp at `[tune]`) | `k{4,5,6}q8_tile_gen` + their gemv/layout companions (each format's planes take their OWN mr) |
 | Token block `TB` | `set_q8_token_block(n)` (default 128) / profile `runtime.q8_token_block` | runtime | the repack-tier batch kernel only |
@@ -103,6 +104,12 @@ stale — every reader treats it as absent, and the next tuner write resets it.
    believing a bottleneck story (see the ggml patch below).
 6. **Quiet machine for absolute numbers** — no remote-desktop/streaming session, cool box.
    CPU wall-clock is immune to GPU theft but not to CPU theft or thermal throttling.
+7. **Never benchmark interpreted — always `-jit`.** If a number looks ~100× off, check the flag
+   first. The benches self-skip off-JIT and say so; heed the message rather than reading the
+   fallback body's throughput as a result.
+8. **ISA-pinned harnesses skip off their arch** (`tune_tb.das` pattern) — a clean skip, not a
+   zero. Gate any new arch-specific bench the same way so the other box skips instead of
+   silently measuring the portable fallback.
 
 ---
 
@@ -118,8 +125,9 @@ bin/daslang -jit modules/dasLLAMA/harness/tune_kernels.das -- --tune-fast
 bin/daslang -jit modules/dasLLAMA/harness/dasllama_tuner.das -- --tune-fast
 ```
 
-Sweeps every `[tuned]` kernel (15: the float elementwise set, softmax, rmsnorm, the quantized
-dots, the activation requant, the NEOX rope-table leaf, the fp32 GEMM tile, and — arm64+JIT
+Sweeps every `[tuned]` kernel (25 — `TUNED_KERNEL_COUNT`, one `[dasllama_grid]` each: the float
+elementwise set, softmax, rmsnorm, the quantized dots, the two activation requants, the NEOX
+rope-table leaf, the fp32 GEMM tile, the f16 codec set, the q8 KV-codec set, and — arm64+JIT
 only, clean skip elsewhere — the laneq4x4 tile) across the 20-permutation grid
 (`{plain, u2, u4, u8} ∪ {vec4,vec8,vec16,vec32} × {-, u2, u4, u8}`), interleaved best-of-N.
 The default screens the full valid grid for 20 rounds, retains the four fastest rows plus
@@ -262,7 +270,7 @@ other models. This is the kernel scoreboard; `benchmarks/lcpp_bench.das` is the 
    `bench_gemm_iso`) — establishes the parallel ceiling everything else is measured under.
    Record the winner in the profile's `runtime.threads` (advisory — `load_model` logs a
    recommendation when the live count differs).
-2. `tune_kernels.das` → the complete `box_profile.json` (kernel perms + runtime snapshot) →
+2. `tune_kernels.das` → the complete `<app>.tune.json` sidecar (kernel perms + runtime snapshot) →
    recompile a consumer and confirm the `dasllama_tune:` log lines → re-run an end-to-end
    bench to see if it moved anything. **A "neutral" verdict here is only valid per-backend:
    `[tuned]` perms bite ONLY on the portable-tier kernels, so an intrinsic auto-backend
@@ -280,5 +288,5 @@ other models. This is the kernel scoreboard; `benchmarks/lcpp_bench.das` is the 
 **When to stop:** GEMM at isolated parity with llama.cpp is the floor, not a lever; ≤2-3%
 candidates are noise; on M1 the campaign ended at ~100-108% of llama.cpp prefill with the
 remaining serial inches (pack loops) judged diminishing returns. The goal of this doc is that
-the x64 box reaches its *own* floor with defaults that are data (`box_profile.json`, TB,
-budget, threads) — not another fork of the kernels.
+the x64 box reaches its *own* floor with defaults that are data (the `<app>.tune.json` sidecar,
+TB, budget, threads) — not another fork of the kernels.

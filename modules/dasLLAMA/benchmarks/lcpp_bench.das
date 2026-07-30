@@ -24,7 +24,7 @@ require math
 //       (llama-bench never samples — sampling cost is excluded by design)
 //   ours:   bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m <model.gguf>
 //   theirs: --ref <llama-bench> runs it on the same GGUF with the same -t/-p/-n/-r/--ngl
-// `-o json` emits public bench records (PUBLIC_BENCH_PLAN.md) on stdout — progress goes to
+// `-o json` emits public bench records (schema: METHODOLOGY.md "The record") on stdout — progress goes to
 // stderr then, like llama-bench itself. `--ngl` != 0 is the whole graph on Metal
 // (MetalMode.required — a CPU fallback fails the run, never silently mismeasures).
 

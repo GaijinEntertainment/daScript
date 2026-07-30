@@ -12,9 +12,11 @@ Process and criteria: `skills/doc_archiving.md`.
 - `ci/` — process/coverage analyses (the local-vs-CI coverage gap plan; its stage 4 lives
   on as the nightly daspkg-index cron)
 - `dasLLAMA/` — closed dasLLAMA arc docs (superseded hand-written AVX tier matrix, EPYC
-  fleet measurements, the model-expansion wave plan); `dasLLAMA/benchmarks/` — retired
-  model-speed bench scripts, all superseded by the one bench
-  (`modules/dasLLAMA/benchmarks/lcpp_bench.das`, 2026-07-25 unification)
+  fleet measurements, the model-expansion wave plan; the 2026-07-29 doc-reorg sweep added
+  the API_REWORK plan half — its living ledger split to `modules/dasLLAMA/PERF_LEDGER.md` —
+  plus the public-bench, GEMM-generator, x64, KV-codec, lens and audio-wave plan/research
+  docs); `dasLLAMA/benchmarks/` — retired model-speed bench scripts, all superseded by the
+  one bench (`modules/dasLLAMA/benchmarks/lcpp_bench.das`, 2026-07-25 unification)
 - `dasSQLITE/` — the typed-SQL API rework corpus (`API_*.md`, `TUTORIALS.md`, the
   `tutorial-mockup/` design artifacts); the living contract stays at
   `modules/dasSQLITE/PROVIDER_CONTRACT.md`
@@ -99,3 +101,13 @@ listed in the log below — search it first when hunting for a doc.
 - 2026-07-25 `modules/dasLLAMA/benchmarks/bench_metal_framing.das` -> `history/dasLLAMA/benchmarks/bench_metal_framing.das` - Metal framing-overhead bench (arc shipped)
 - 2026-07-25 `modules/dasLLAMA/benchmarks/gguf_perf.das` -> `history/dasLLAMA/benchmarks/gguf_perf.das` - gguf load-time bench (the .dlim rail made it moot)
 - 2026-07-27 `modules/dasLLVM/TUNE_PROGRESS_PLAN.md` -> `history/compiler/TUNE_PROGRESS_UX.md` - tune progress-display design (events + single renderer; arc shipped, operative content in skills/tune.md)
+- 2026-07-29 `modules/dasLLAMA/API_REWORK.md` → `history/dasLLAMA/API_REWORK.md` — API + backend-seam plan (Phases 1–7 shipped); the living perf ledger split out to `modules/dasLLAMA/PERF_LEDGER.md`
+- 2026-07-29 `modules/dasLLAMA/PUBLIC_BENCH_PLAN.md` → `history/dasLLAMA/PUBLIC_BENCH_PLAN.md` — public-bench build plan (shipped); record schema now in `modules/dasLLAMA/METHODOLOGY.md`
+- 2026-07-29 `modules/dasLLAMA/gemm_generator_plan.md` → `history/dasLLAMA/gemm_generator_plan.md` — [llvm_code] GEMM generator plan + M0–M4 measurement record (shipped; open items → PERF_LEDGER.md)
+- 2026-07-29 `modules/dasLLAMA/x64_arch.md` → `history/dasLLAMA/x64_arch.md` — x64 port seam map (self-marked HISTORICAL; durable ground rules → modules/dasLLAMA/ARCHITECTURE.md)
+- 2026-07-29 `modules/dasLLAMA/get_x64_going.md` → `history/dasLLAMA/get_x64_going.md` — x64 bring-up runbook (steps describe deleted hand backends; gotcha ledger transferred to skills + tune_for_this_box.md)
+- 2026-07-29 `modules/dasLLAMA/kernel_access_lens_metal.md` → `history/dasLLAMA/kernel_access_lens_metal.md` — @role lens design postmortem (implemented #3570; macro lessons → skills/das_macros.md)
+- 2026-07-29 `modules/dasLLAMA/kv_cache_compression.md` → `history/dasLLAMA/kv_cache_compression.md` — KV codec design (f16/q8_0/tq4 shipped; layout invariants + verdicts → modules/dasLLAMA/ARCHITECTURE.md)
+- 2026-07-29 `modules/dasLLAMA/turboquant_research.md` → `history/dasLLAMA/turboquant_research.md` — tq4 research briefs (verdicts → modules/dasLLAMA/ARCHITECTURE.md)
+- 2026-07-29 `modules/dasLLAMA/audio_models_plan.md` → `history/dasLLAMA/audio_models_plan.md` — audio-wave tracker, sessions A–F all shipped (findings transferred; open Mistral [INST] item → PERF_LEDGER.md)
+- 2026-07-29 `modules/dasLLAMA/box_profile.epyc9654.json` → `history/dasLLAMA/box_profile.epyc9654.json` — EPYC 9654 tune sidecar, beside its measurements doc

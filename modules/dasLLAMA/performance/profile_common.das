@@ -553,7 +553,7 @@ def gather_platform(threads : int; llama_cpp, date, box_profile : string; parsec
         tune = tune_summary())
 }
 
-// ===== Hardware block (public bench records — see modules/dasLLAMA/PUBLIC_BENCH_PLAN.md) =====
+// ===== Hardware block (public bench records — schema in modules/dasLLAMA/METHODOLOGY.md) =====
 
 //! Auto-gathered hardware identity for a public bench record. Always probed, never typed by the
 //! submitter — community records depend on this block being trustworthy. Probes are best-effort
@@ -1515,7 +1515,7 @@ def upsert_asr(var tests : array<AsrRec>; var rec : AsrRec) {
     tests |> emplace(rec)
 }
 
-// ===== Public bench records (modules/dasLLAMA/PUBLIC_BENCH_PLAN.md) =====
+// ===== Public bench records (schema: modules/dasLLAMA/METHODOLOGY.md "The record") =====
 
 //! One measured test row, keyed in `BenchRun.tests` by the llama-bench test name
 //! ("pp512", "tg128", ...) for LLM runs, or by clip ("asr:jfk.wav") for ASR runs.

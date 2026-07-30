@@ -77,7 +77,7 @@ From here, ``load_model`` on a GGUF whose ``general.architecture`` says
 Adding a real architecture to the module
 ========================================
 
-The in-tree recipe (see ``modules/dasLLAMA/API_REWORK.md``'s model-support
+The in-tree recipe (see ``history/dasLLAMA/API_REWORK.md``'s model-support
 waves for worked examples, from Qwen3's two flags to gpt-oss's
 MoE-with-sinks):
 

@@ -4,7 +4,7 @@
 ; (use the LLVM version dasLLVM pins — 22.1.5; brew llvm matches. opt first: llc alone
 ; does not run the inliner, dotD's helper stays an outlined call and spills.)
 ;
-; FINDINGS (2026-07-04, LLVM 22.1.5, full table in ../../gemm_generator_plan.md):
+; FINDINGS (2026-07-04, LLVM 22.1.5, full table in ../../../../history/dasLLAMA/gemm_generator_plan.md):
 ;   arm64: A → sdot+addv; B → a SINGLE sdot; D → tight hand-shaped loop, zero spills.
 ;          C: the lane splat lowers to dup + plain sdot — the INDEXED sdot form only comes
 ;          from the target intrinsic (see dot_intrin_lane below), costing generic IR one dup
