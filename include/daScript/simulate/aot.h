@@ -938,6 +938,7 @@ namespace das {
             const ETNC * s = (const ETNC *) &val;
             ETNC * d = (ETNC *) &res;
             constexpr int idx[] = { f... };
+            static_assert(sizeof(ResT) >= sizeof...(f)*sizeof(ETNC), "swizzle writes more elements than the result holds");
             for ( size_t i = 0; i != sizeof...(f); ++i ) d[i] = s[idx[i]];
             return res;
         }
