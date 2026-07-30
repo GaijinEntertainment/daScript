@@ -57,10 +57,10 @@ def private file_lines(path : string; var lines : array<string>) : bool {
 
 [test]
 def test_imgui_visual_aids_has_no_direct_glfw_require(t : T?) {
-    // Resolve the target off this file's own location, not cwd: get_this_module_dir() returns
-    // <root>/tests/integration, so two dir_name hops give the module root (works under both CI's
-    // junction layout and a local -load_module). Must be inside a function (-exe top-level let baking).
-    let target = "{dir_name(dir_name(get_this_module_dir()))}/widgets/imgui_visual_aids.das"
+    // Resolve the target via the das root, not cwd: the module is in-tree at
+    // modules/dasImgui since the merge (the test itself lives in tests/dasImgui).
+    // Must be inside a function (-exe top-level let baking).
+    let target = "{get_das_root()}/modules/dasImgui/widgets/imgui_visual_aids.das"
     var lines : array<string>
     let ok = file_lines(target, lines)
     t |> success(ok, "open {target}")
