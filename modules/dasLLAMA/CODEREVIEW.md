@@ -14,8 +14,11 @@
    that silently vanishes on one platform is a review defect.
 3. **All dasLLAMA tests live under `modules/dasLLAMA/tests/`.** `/tests/dasLLAMA` must
    not exist; anything and everything intended there goes under `modules/dasLLAMA/tests`.
-   dasLLAMA runs **`-jit` only** — never interpreted, never AOT; nothing here registers
-   with `test_aot`, and the library panics (hard stop) on a non-`-jit` run.
+   dasLLAMA inference runs **`-jit` only** — never interpreted, never AOT; nothing here
+   registers with `test_aot`. The distinction is LIBRARY vs SCAFFOLDING: the library
+   panics (hard stop) on a non-`-jit` model run; tools that only convert, drive, or
+   debug (`.dlim` bake, batch runners spawning the real runner as a child) may run
+   interpreted.
 4. **Every moved or extracted bit ships with targeted tests for the bit itself** —
    unit-level (feed the function, check the bytes), in `modules/dasLLAMA/tests/`.
    "The LLM still runs" is not a test surface for a move.

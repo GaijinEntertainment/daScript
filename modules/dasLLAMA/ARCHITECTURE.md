@@ -8,9 +8,10 @@
 ## Placement rules
 
 - **Tests live under `modules/dasLLAMA/tests/` — all of them.** `/tests/dasLLAMA` must not exist.
-  dasLLAMA runs **`-jit` only** — never interpreted, never AOT (no dasLLAMA test joins
+  dasLLAMA inference runs **`-jit` only** — never interpreted, never AOT (no dasLLAMA test joins
   `test_aot`/`test_aot_subset`); every suite runs `-jit` through `tests/run.das`, per
-  `tests/CLAUDE.md`. The library itself panics on a non-`-jit` run (see Inherited invariants).
+  `tests/CLAUDE.md`. The library panics on a non-`-jit` model run; scaffolding tools (converters,
+  batch drivers, debug scripts) may run interpreted (see Inherited invariants).
 - **Shared functionality gets pulled into small, correctly-named, single-purpose modules** —
   `dasllama_repack.das` (kernel data repacking), `dasllama_convert.das` (tensor format conversion).
   Never a grab-bag `common`/`families_common`: a module whose name doesn't say what it does is the
@@ -37,13 +38,18 @@ Durable "why it is built this way" facts harvested from the design docs, which a
 
 **From `x64_arch.md`:**
 
-- **`-jit` is the ONLY execution tier — hard stop, not a preference.** dasLLAMA is NEVER run
-  interpreted and NEVER AOT-compiled. The library checks at load and **panics** when not under
-  `-jit`. Loop hints and intrinsic lowering exist only in the JIT, and the JIT tier is the only
-  one the oracles gate — an interpreted or AOT run is not "slow but correct", it is out of
-  contract. (The x64-era "fallback rail" framing — AOT/interp as correct-but-untuned tiers — is
-  retired; intrinsic fallback bodies exist for off-ARCH correctness *inside* the JIT, not as
-  runnable tiers.)
+- **The LIBRARY never runs interpreted or AOT — the scaffolding may.** Inference — anything that
+  runs a model (eval / decode / prefill / generate) — is `-jit`-only, hard stop: an interpreted or
+  AOT model run is not "slow but correct", it is out of contract, and the library panics on it.
+  Loop hints and intrinsic lowering exist only in the JIT, and the JIT tier is the only one the
+  oracles gate. **Scaffolding is exempt:** conversion utilities (`.dlim` bake, image processing),
+  debug scripts, and batch/driver tools that spawn the real runner as a child may run interpreted.
+  Interim enforcement is `guard_interp_gguf_load` (`dasllama_image.das` — big-load panic +
+  `DASLLAMA_ALLOW_INTERP_LOAD` escape for the conversion path); the unconditional library-seam
+  check lands with the tuning rework, after the repack/convert pulls make that seam clean. (The
+  x64-era "fallback rail" framing — AOT/interp as correct-but-untuned tiers — is retired;
+  intrinsic fallback bodies exist for off-ARCH correctness *inside* the JIT, not as runnable
+  tiers.)
 - **Correctness before speed, token-for-token.** The engine is validated against external oracles
   (llama2.c + llama.cpp `simple_ids`) plus per-arch parity fixtures. A new kernel passes the suite
   *and* the oracles with the new backend active before any perf claim.
