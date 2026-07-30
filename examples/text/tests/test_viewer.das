@@ -881,3 +881,66 @@ def test_text_viewer_fold_clicks_and_no_reflow(t : T?) { // nolint:STYLE038
                    "fold toggles reuse the cached flow instead of reflowing")
     }
 }
+
+[test]
+def test_text_viewer_single_scroller(t : T?) { // nolint:STYLE038
+    //! The content child is the only scroller: the dock window must never grow
+    //! its own scrollbar, and the right-aligned zoom cluster must fit at any
+    //! zoom value (both regressed together as "two scrollbars + clipped 100%").
+    with_imgui_app(FEATURE) $(app) {
+        let ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["ok"] ?? false)
+                && (state?["render_revision"] ?? 0) > 0
+                && (state?["window_docked"] ?? false))
+        }
+        t |> success(ready, "welcome document renders docked")
+        if (!ready) return
+
+        let md_clean = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["window_scroll_max_y"] ?? -1.0f) == 0.0f
+                && (state?["footer_overflow_x"] ?? -1.0f) == 0.0f)
+        }
+        t |> success(md_clean,
+                     "rendered mode: no window scrollbar and the footer fits")
+
+        for (percent in [300, 50]) {
+            let zoomed = post_command(app, "text_viewer_set_zoom",
+                                      JV((percent = percent)))
+            t |> success(zoomed?["ok"] ?? false, "zoom command accepts the extreme")
+            let zoom_clean = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+                var state = viewer_state(app)
+                return ((state?["zoom_percent"] ?? 0) == percent
+                    && (state?["window_scroll_max_y"] ?? -1.0f) == 0.0f
+                    && (state?["footer_overflow_x"] ?? -1.0f) == 0.0f)
+            }
+            t |> success(zoom_clean,
+                         "extreme zoom keeps the footer inside the window")
+        }
+        let _zoom_back = post_command(app, "text_viewer_set_zoom",
+                                      JV((percent = 100)))
+
+        let plain = post_command(app, "text_viewer_set_mode", JV((mode = "plain")))
+        t |> success(plain?["ok"] ?? false, "mode command accepts plain text")
+        let plain_clean = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["mode"] ?? "") == "plain"
+                && (state?["window_scroll_max_y"] ?? -1.0f) == 0.0f
+                && (state?["footer_overflow_x"] ?? -1.0f) == 0.0f)
+        }
+        t |> success(plain_clean,
+                     "source mode: no window scrollbar and the footer fits")
+
+        let found = post_command(app, "text_viewer_find", JV((query = "the")))
+        t |> success(found?["ok"] ?? false, "find opens in the source document")
+        let find_clean = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["find_open"] ?? false)
+                && (state?["window_scroll_max_y"] ?? -1.0f) == 0.0f
+                && (state?["footer_overflow_x"] ?? -1.0f) == 0.0f)
+        }
+        t |> success(find_clean, "an open find bar does not overflow the window")
+        let _closed = post_command(app, "text_viewer_find_close", null)
+    }
+}

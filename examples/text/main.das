@@ -103,6 +103,8 @@ struct TextViewerDocument {
     find_scroll_byte : int = -1
     find_scroll_markdown : bool = false
     content_view_top : float = 0.0f
+    window_scroll_max : float = 0.0f
+    footer_overflow : float = 0.0f
     content_view_bottom : float = 0.0f
 }
 
@@ -134,6 +136,8 @@ var private g_edit_bindings_clicks = 0
 var private g_edit_find_clicks = 0
 var private g_edit_find_next_clicks = 0
 var private g_edit_find_prev_clicks = 0
+
+let FOOTER_ICON_SIZE = 18.0f
 
 let SYNTAX_MODE_LABELS : array<string> <- [
     "Auto", "Plain", "daScript", "C", "C++", "Markdown"
@@ -816,7 +820,12 @@ def private apply_markdown_find_scroll(var doc : TextViewerDocument) {
 
 def private draw_document(var doc : TextViewerDocument) {
     draw_document_find(doc)
-    let footer_height = GetFrameHeightWithSpacing()
+    // The footer's icon button stands taller than a text frame; reserving only
+    // GetFrameHeightWithSpacing() overflows the dock window by the difference,
+    // growing a phantom second scrollbar beside the content child's.
+    let ui_style & = GetStyle()
+    let footer_height = max(GetFrameHeightWithSpacing(),
+        FOOTER_ICON_SIZE + ui_style.FramePadding.y * 2.0f + ui_style.ItemSpacing.y)
     child(DOCUMENT_CONTENT,
           (text = "document content",
            size = float2(0.0f, -footer_height),
@@ -851,11 +860,16 @@ def private draw_document(var doc : TextViewerDocument) {
         }
     }
 
+    draw_document_footer(doc)
+}
+
+def private draw_document_footer(var doc : TextViewerDocument) {
+    let ui_style & = GetStyle()
     let rendered = doc.mode == TextViewMode.markdown
     if (icon_button(MODE_TOGGLE,
             (glyph = rendered ? "edit" : "visible",
              tip = rendered ? "Show Markdown source" : "Render Markdown",
-             size = 18.0f, weight = 1.0f))) {
+             size = FOOTER_ICON_SIZE, weight = 1.0f))) {
         let _ = command_invoke(g_commands, CMD_VIEW_TOGGLE,
                                CommandSource.toolbar, "{doc.id}")
     }
@@ -877,7 +891,13 @@ def private draw_document(var doc : TextViewerDocument) {
     text_disabled(STATUS, (text = doc.status))
 
     let right_edge = GetCursorPosX() + GetContentRegionAvail().x
-    let zoom_width = 245.0f
+    let zoom_value_text = "{zoom_percent(doc)}%"
+    // Measured, not hardcoded: the cluster width varies with the zoom value
+    // text, and an underestimate pushed the reset button past the window edge.
+    let zoom_width = (CalcTextSize("Zoom").x + 150.0f
+        + CalcTextSize(zoom_value_text).x
+        + CalcTextSize("100%").x + ui_style.FramePadding.x * 2.0f
+        + ui_style.ItemSpacing.x * 3.0f)
     same_line()
     SetCursorPosX(max(GetCursorPosX(), right_edge - zoom_width))
     text(ZOOM_LABEL, (text = "Zoom"))
@@ -887,12 +907,14 @@ def private draw_document(var doc : TextViewerDocument) {
         (id = "TEXT_VIEWER_ZOOM", text = "##zoom", v_min = 10,
          v_max = 60, format = ""))
     same_line()
-    text_disabled(ZOOM_VALUE, (text = "{zoom_percent(doc)}%"))
+    text_disabled(ZOOM_VALUE, (text = zoom_value_text))
     same_line()
     if (small_button(ZOOM_RESET, (text = "100%"))) {
         let _ = command_invoke(g_commands, CMD_VIEW_ZOOM_RESET,
                                CommandSource.toolbar, "{doc.id}")
     }
+    doc.footer_overflow = max(0.0f,
+        (GetItemRectMax().x - GetWindowPos().x) - right_edge)
 }
 
 def private handle_global_shortcuts() {
@@ -926,12 +948,18 @@ def private draw_document_window(var doc : TextViewerDocument; dock_id : uint) {
     // Triple-hash keeps the ImGui window identity stable when a welcome
     // document is loaded from disk and its visible title becomes a filename.
     let title = "{visible_title}###text_document_{doc.id}"
+    // The content child is the only intended scroller; the window itself must
+    // never scroll (a scrolled window would carry the footer off-screen).
     dock_window(g_document_windows[doc.id],
                 (text = title, closable = true,
-                 flags = ImGuiWindowFlags.NoCollapse)) {
+                 flags = ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar
+                     | ImGuiWindowFlags.NoScrollWithMouse)) {
         if (IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)) {
             g_active_document_id = doc.id
         }
+        // Nonzero means the dock window itself overflowed (a phantom second
+        // scrollbar); the content child is the only intended scroller.
+        doc.window_scroll_max = GetScrollMaxY()
         handle_document_shortcuts(doc)
         draw_document(doc)
     }
@@ -1009,6 +1037,8 @@ def text_viewer_state(_input : JsonValue?) : JsonValue? { // nolint:STYLE038
         source_selection_screen_y1 = doc.source_view.selection_screen_bounds.w,
         content_view_top = doc.content_view_top,
         content_view_bottom = doc.content_view_bottom,
+        window_scroll_max_y = doc.window_scroll_max,
+        footer_overflow_x = doc.footer_overflow,
         markdown_selection_start = md_text_selection_range(
             doc.markdown_view.selection_anchor, doc.markdown_view.selection_focus).start_byte,
         markdown_selection_end = md_text_selection_range(
