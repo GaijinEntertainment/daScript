@@ -595,3 +595,19 @@ Run any tutorial from the project root::
    tutorials/dasPEG_05_json_parser.rst
    tutorials/dasPEG_06_debugging.rst
    tutorials/dasPEG_07_basic_interpreter.rst
+
+.. _tutorials_imgui:
+
+dasImgui Tutorials
+==================
+
+Step-by-step walkthroughs of dasImgui's v2 widget DSL — application lifecycle,
+widgets, containers, layout and docking, live reload, the playwright testing
+harness, and tutorial recording. Each tutorial pairs an annotated source file
+under ``modules/dasImgui/examples/tutorial/`` with prose narrating the
+construction, and most embed a recorded video of the running app.
+
+.. toctree::
+   :maxdepth: 2
+
+   tutorials/imgui/index.rst

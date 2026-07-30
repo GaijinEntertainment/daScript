@@ -28,8 +28,8 @@ watertight-traversal edges.
 
 ## Running
 
-The example depends on [dasVulkan](https://github.com/borisbat/dasVulkan) and
-[dasImgui](https://github.com/borisbat/dasImgui), declared in `.das_package`. Install once:
+The example depends on [dasVulkan](https://github.com/borisbat/dasVulkan), declared in
+`.das_package` (dasImgui ships in-tree — nothing to install for it). Install once:
 
 ```
 cd examples/vulkan/one_source_path_tracer

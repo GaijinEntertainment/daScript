@@ -82,7 +82,8 @@ All examples require `options debugger = true`.
 ## pathTracer/ — Path Tracer Demo
 
 A toy path tracer implemented in daslang, with OpenGL visualization variants.
-Requires the `stbimage` module and (for OpenGL variants) `dasGlfw` / `dasImgui`.
+Requires the `stbimage` module and (for OpenGL variants) `dasGlfw` / `dasImgui` —
+all ship in-tree, so a default build has them.
 
 | File | Description |
 |------|-------------|
@@ -223,11 +224,11 @@ daslang.exe ../../utils/daspkg/main.das -- install
 
 ## graphics/ — ImGui Examples
 
-ImGui examples using the `dasImgui` daspkg package. Requires setup:
+ImGui examples using the in-tree `dasImgui` module — it ships built-in, so no
+package install is needed:
 
 ```
 cd examples/graphics
-daslang.exe ../../utils/daspkg/main.das -- install
 daslang.exe -project_root . furier_opengl_imgui_example.das
 ```
 
@@ -238,7 +239,8 @@ daslang.exe -project_root . furier_opengl_imgui_example.das
 ## node-editor/ — Node Editor Example
 
 [imgui-node-editor](https://github.com/thedmd/imgui-node-editor) example using
-`dasImguiNodeEditor` and `dasImgui` daspkg packages. Requires setup:
+the `dasImguiNodeEditor` daspkg package (`dasImgui` itself ships built-in).
+Requires setup:
 
 ```
 cd examples/node-editor

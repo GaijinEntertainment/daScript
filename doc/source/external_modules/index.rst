@@ -8,7 +8,6 @@ module does and where its docs live.
 .. toctree::
    :maxdepth: 1
 
-   dasimgui
    dasimguinodeeditor
    dasimguiimplot
    dasvulkan

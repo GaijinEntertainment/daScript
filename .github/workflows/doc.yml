@@ -10,12 +10,14 @@ on:
       - 'daslib/**'
       - 'src/builtin/**'
       - 'modules/dasLLAMA/dasllama/**'
+      - 'modules/dasImgui/**'
   pull_request:
     paths:
       - 'doc/**'
       - 'daslib/**'
       - 'src/builtin/**'
       - 'modules/dasLLAMA/dasllama/**'
+      - 'modules/dasImgui/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -35,7 +37,16 @@ jobs:
     - name: "Install CMake and Ninja"
       uses: lukka/get-cmake@latest
 
-    - name: "Build: Daslang (for das2rst)"
+    # GL/X11 dev headers: the doc host now builds with dasGlfw + dasImgui ON so
+    # imgui2rst can load the imgui modules and generate the GUI stdlib pages.
+    - name: "Install GL + X11 dev libraries"
+      run: |
+        sudo apt-get update
+        sudo apt-get install --no-install-recommends -y \
+          mesa-common-dev libglu1-mesa-dev libgl1-mesa-dev libglfw3-dev \
+          libx11-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev
+
+    - name: "Build: Daslang (for das2rst + imgui2rst)"
       run: |
         set -eux
         mkdir build
@@ -44,13 +55,26 @@ jobs:
           -DDAS_HV_DISABLED=OFF \
           -DDAS_PUGIXML_DISABLED=OFF \
           -DDAS_LLVM_DISABLED=ON \
-          -DDAS_GLFW_DISABLED=ON \
+          -DDAS_GLFW_DISABLED=OFF \
           -DDAS_BUILD_DOCUMENTATION=ON \
           -G Ninja
         cmake --build ./build --target daslang
 
     - name: "Run das2rst"
       run: cmake --build ./build --target check_docs_generated
+
+    - name: "Run imgui2rst"
+      # dasImgui's stdlib pages (doc/source/stdlib/generated/imgui_*.rst) come
+      # from its own generator — the imgui modules carry macro-generated
+      # surfaces das2rst's reflection pass can't group.
+      run: ./bin/daslang modules/dasImgui/utils/imgui2rst.das
+
+    - name: "Stage tutorial recordings (docs-assets release)"
+      # The `.. video::` directive fails the -W sphinx build on any recording
+      # missing from _static/tutorials/, so staging must precede build_doc.
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: bash utils/docs_assets/fetch.sh
 
     - name: "Check for // `stub` in handmade docs"
       run: |

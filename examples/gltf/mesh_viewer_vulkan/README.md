@@ -11,10 +11,11 @@ no depth attachment), which a fullscreen triangle composites under the UI each f
 
 ## Run
 
-dasVulkan and dasImgui are external dependencies, pulled via daspkg from this example's `.das_package`:
+dasVulkan is an external dependency, pulled via daspkg from this example's `.das_package`
+(dasImgui ships in-tree with daslang — nothing to install for it):
 
 ```sh
-# once — installs dasVulkan + dasImgui into ./modules (gitignored), built against your daslang SDK
+# once — installs dasVulkan into ./modules (gitignored), built against your daslang SDK
 daslang utils/daspkg/main.das -- install --root examples/gltf/mesh_viewer_vulkan
 
 # then run the viewer, rooted here so the deps resolve

@@ -21,6 +21,23 @@ After the rebase, every file in `git diff --name-only origin/master..HEAD` shoul
 
 If a rebase produces conflicts on files that were independently changed on origin/master, resolve them by keeping origin/master's version (your branch's "modification" was an outdated copy of the same change) — verify with `git show origin/master:<path>` that the merged version subsumes yours.
 
+### 0a. Folder-scoped review rules — CODEREVIEW.md discovery
+
+Right after the rebase, discover folder-scoped review rules for the changed set:
+for each file in `git diff --name-only origin/master..HEAD`, walk up its parent
+directories and collect every `CODEREVIEW.md` found (deduplicated). If any turn
+up, initiate the code review with those files' rules **listed explicitly** in the
+review context — they are binding for the folders they cover, on top of the
+repo-wide checklist below. One command finds them all:
+
+```bash
+git diff --name-only origin/master..HEAD | xargs -I{} dirname {} | sort -u \
+  | while read d; do while [ "$d" != "." ]; do [ -f "$d/CODEREVIEW.md" ] && echo "$d/CODEREVIEW.md"; d=$(dirname "$d"); done; done | sort -u
+```
+
+Worked example: `modules/dasImgui/CODEREVIEW.md` (tests placement + pre-PR suite
+run + multiplatform-tests rules for anything touching that module).
+
 ### 0b. Build-config drift — nuke `build/` only when you see it
 
 The "never `rm -rf build`" rule stands, and there is **no per-PR clean-build step**: the drift a proactive nuke would pre-empt is rare (it needs configure args or `ExternalProject` inputs to actually change), heavily MSVC-skewed, and fixed reactively at the same cost. Nuke and reconfigure **only on these symptoms**:
@@ -192,7 +209,7 @@ bin/Release/daslang.exe -jit tests/decs/test_bulk_create.das 2>&1 | grep -iE "ve
 If the PR changes the type system, generic binding rules, AST node layout, or widely-instantiated daslib generics (`builtin.das`, `safe_addr.das`, …), two CI gates have no overlap with the standard test suite:
 
 1. **Sequence smoke** — the only pre-merge lane that compiles GLFW-gated `.das` (dasOpenGL helpers etc.). Build the runtime module targets and run `examples/games/sequence/ci_smoke_test.ps1` (`.sh` on POSIX) — exact commands in `skills/preflight.md`.
-2. **Externals sweep** — `extended_checks` installs external dasImgui from ITS master against your branch; an ABI break vs external repos reds CI on an unrelated-looking step. Follow `skills/abi_break_sweep.md` (both-worlds spellings, externals-merge-first ordering, daspkg-index scope).
+2. **Externals sweep** — the external ABI canaries (dasImguiImplot, dasImguiNodeEditor, and the rest of the daspkg-index) build against daslang master in `nightly_daspkg_index.yml`; an ABI break reds that sweep on an unrelated-looking step (dispatch it from your branch for a pre-merge check). Follow `skills/abi_break_sweep.md` (both-worlds spellings, externals-merge-first ordering, daspkg-index scope).
 
 Skip for changes that can't alter what external/module-gated code sees (tests-only, docs-only, tool-local).
 

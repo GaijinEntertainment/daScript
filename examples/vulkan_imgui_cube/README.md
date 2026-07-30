@@ -31,9 +31,9 @@ Two opt-in modules ship with [dasVulkan](https://github.com/borisbat/dasVulkan):
 
 ## Running
 
-The example depends on two external modules — [dasVulkan](https://github.com/borisbat/dasVulkan) and
-[dasImgui](https://github.com/borisbat/dasImgui) — declared in `.das_package`. Install them once with
-`daspkg` (clones + builds the native modules into `modules/`):
+The example depends on the external [dasVulkan](https://github.com/borisbat/dasVulkan) module,
+declared in `.das_package` (dasImgui ships in-tree with daslang — nothing to install for it).
+Install it once with `daspkg` (clones + builds the native module into `modules/`):
 
 ```
 cd examples/vulkan_imgui_cube

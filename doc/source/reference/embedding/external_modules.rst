@@ -222,9 +222,9 @@ Complete examples
    [export]
    def initialize(project_path : string) {
        if (das_is_dll_build()) {
-           register_dynamic_module("{project_path}/dasModuleImgui.shared_module", "Module_dasIMGUI")
-           register_dynamic_module("{project_path}/dasModuleImgui.shared_module", "Module_dasIMGUI_NODE_EDITOR")
-           register_dynamic_module("{project_path}/imguiApp.shared_module", "Module_imgui_app")
+           register_dynamic_module("{project_path}/dasModuleImguiNodeEditor.shared_module", "Module_dasIMGUI_NODE_EDITOR")
+           register_dynamic_module("{project_path}/dasModuleImguiNodeEditor.shared_module", "Module_dasIMGUI_NODE_EDITOR_APP")
+           register_dynamic_module("{project_path}/editorApp.shared_module", "Module_editor_app")
        }
    }
 
