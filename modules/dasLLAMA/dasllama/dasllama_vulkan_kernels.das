@@ -1094,6 +1094,52 @@ def private act_mul(v, u : float; gelu : uint) : float => (
     gelu != 0u ? (0.5 * v * (1.0 + tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)))) * u
         : (v / (1.0 + exp(-v))) * u)
 
+// 8-lane Q8_0 block quantize: xor-1/2/4 amax fold over the block's 8 co-active lanes (must be
+// 8-aligned), d to vk_xs[b], returns this lane's packed word — the caller stores it to its plane
+def private q8_blk_pack(b, lane8 : uint; v0, v1, v2, v3 : float) : uint {
+    var m = max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3)))
+    m = max(m, subgroupShuffleXor(m, 1u))
+    m = max(m, subgroupShuffleXor(m, 2u))
+    m = max(m, subgroupShuffleXor(m, 4u))
+    let d = m / 127.0
+    let id = d != 0.0 ? 1.0 / d : 0.0
+    if (lane8 == 0u) {
+        vk_xs[b] = d
+    }
+    let q0 = int(round(v0 * id))
+    let q1 = int(round(v1 * id))
+    let q2 = int(round(v2 * id))
+    let q3 = int(round(v3 * id))
+    return ((uint(q0) & 0xFFu) | ((uint(q1) & 0xFFu) << 8u)
+        | ((uint(q2) & 0xFFu) << 16u) | ((uint(q3) & 0xFFu) << 24u))
+}
+
+// whole-subgroup Q8_K amax: 5-shuffle fold, d to vk_xs[b], returns id (the quantize multiplier)
+def private q8k_blk_scale(b, lane : uint; m0 : float) : float {
+    var m = m0
+    m = max(m, subgroupShuffleXor(m, 1u))
+    m = max(m, subgroupShuffleXor(m, 2u))
+    m = max(m, subgroupShuffleXor(m, 4u))
+    m = max(m, subgroupShuffleXor(m, 8u))
+    m = max(m, subgroupShuffleXor(m, 16u))
+    let d = m / 127.0
+    if (lane == 0u) {
+        vk_xs[b] = d
+    }
+    return d != 0.0 ? 1.0 / d : 0.0
+}
+
+// butterfly byte pack of one quantized round: lanes 4j..4j+3 fold into the superblock's word j
+def private q8k_pack_word(b, r, lane : uint; v, id : float) {
+    let q = int(round(v * id))
+    let b8 = uint(q) & 0xFFu
+    let p = b8 | (subgroupShuffleXor(b8, 1u) << 8u)
+    let w = p | (subgroupShuffleXor(p, 2u) << 16u)
+    if (lane % 4u == 0u) {
+        vk_xq[b * 64u + r * 8u + lane / 4u] = w
+    }
+}
+
 // fused act + q8_0 requant of the hidden rows (gate floats in vk_y, up in vk_upf -> vk_xq
 // words + vk_xs per-32 scales). Subgroup per 4 blocks, word per lane: coalesced loads,
 // single-pass act, 8-lane shuffle amax (xor 1/2/4); bit-identical to the thread-per-block form.
@@ -1110,22 +1156,7 @@ def q8_moe_actrq {
         let v1 = act_mul(vk_y[eb + 1u], vk_upf[eb + 1u], gelu)
         let v2 = act_mul(vk_y[eb + 2u], vk_upf[eb + 2u], gelu)
         let v3 = act_mul(vk_y[eb + 3u], vk_upf[eb + 3u], gelu)
-        var m = max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3)))
-        m = max(m, subgroupShuffleXor(m, 1u))
-        m = max(m, subgroupShuffleXor(m, 2u))
-        m = max(m, subgroupShuffleXor(m, 4u))
-        let d = m / 127.0
-        let id = d != 0.0 ? 1.0 / d : 0.0
-        if (lane % 8u == 0u) {
-            vk_xs[b] = d
-        }
-        let q0 = int(round(v0 * id))
-        let q1 = int(round(v1 * id))
-        let q2 = int(round(v2 * id))
-        let q3 = int(round(v3 * id))
-        let w = ((uint(q0) & 0xFFu) | ((uint(q1) & 0xFFu) << 8u)
-            | ((uint(q2) & 0xFFu) << 16u) | ((uint(q3) & 0xFFu) << 24u))
-        vk_xq[b * 8u + lane % 8u] = w
+        vk_xq[b * 8u + lane % 8u] = q8_blk_pack(b, lane % 8u, v0, v1, v2, v3)
     }
 }
 
@@ -1148,24 +1179,9 @@ def q8k_moe_actrq {
             vals[r] = v
             m = max(m, abs(v))
         }
-        m = max(m, subgroupShuffleXor(m, 1u))
-        m = max(m, subgroupShuffleXor(m, 2u))
-        m = max(m, subgroupShuffleXor(m, 4u))
-        m = max(m, subgroupShuffleXor(m, 8u))
-        m = max(m, subgroupShuffleXor(m, 16u))
-        let d = m / 127.0
-        let id = d != 0.0 ? 1.0 / d : 0.0
-        if (lane == 0u) {
-            vk_xs[b] = d
-        }
+        let id = q8k_blk_scale(b, lane, m)
         for [unroll] (r in range(8)) {
-            let q = int(round(vals[r] * id))
-            let b8 = uint(q) & 0xFFu
-            let p = b8 | (subgroupShuffleXor(b8, 1u) << 8u)
-            let w = p | (subgroupShuffleXor(p, 2u) << 16u)
-            if (lane % 4u == 0u) {
-                vk_xq[b * 64u + uint(r) * 8u + lane / 4u] = w
-            }
+            q8k_pack_word(b, uint(r), lane, vals[r], id)
         }
     }
 }
@@ -1776,26 +1792,8 @@ def dn_requant {
     let b = sg * 4u + lane / 8u
     if (b < vk_meta[18u]) {
         let eb = vk_meta[10u] + sg * 128u + lane * 4u
-        let v0 = vk_upf[eb]
-        let v1 = vk_upf[eb + 1u]
-        let v2 = vk_upf[eb + 2u]
-        let v3 = vk_upf[eb + 3u]
-        var m = max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3)))
-        m = max(m, subgroupShuffleXor(m, 1u))
-        m = max(m, subgroupShuffleXor(m, 2u))
-        m = max(m, subgroupShuffleXor(m, 4u))
-        let d = m / 127.0
-        let id = d != 0.0 ? 1.0 / d : 0.0
-        if (lane % 8u == 0u) {
-            vk_xs[b] = d
-        }
-        let q0 = int(round(v0 * id))
-        let q1 = int(round(v1 * id))
-        let q2 = int(round(v2 * id))
-        let q3 = int(round(v3 * id))
-        let w = ((uint(q0) & 0xFFu) | ((uint(q1) & 0xFFu) << 8u)
-            | ((uint(q2) & 0xFFu) << 16u) | ((uint(q3) & 0xFFu) << 24u))
-        vk_xq[b * 8u + lane % 8u] = w
+        vk_xq[b * 8u + lane % 8u] = q8_blk_pack(b, lane % 8u,
+            vk_upf[eb], vk_upf[eb + 1u], vk_upf[eb + 2u], vk_upf[eb + 3u])
     }
 }
 
@@ -2113,21 +2111,7 @@ def ar_add_rms_rq {
         let v1 = vk_xqf[woff + base + 1u] * (ar_row[base + 1u] * inv)
         let v2 = vk_xqf[woff + base + 2u] * (ar_row[base + 2u] * inv)
         let v3 = vk_xqf[woff + base + 3u] * (ar_row[base + 3u] * inv)
-        var m = max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3)))
-        m = max(m, subgroupShuffleXor(m, 1u))
-        m = max(m, subgroupShuffleXor(m, 2u))
-        m = max(m, subgroupShuffleXor(m, 4u))
-        let d = m / 127.0
-        let id = d != 0.0 ? 1.0 / d : 0.0
-        if (lane8 == 0u) {
-            vk_xs[b] = d
-        }
-        let q0 = int(round(v0 * id))
-        let q1 = int(round(v1 * id))
-        let q2 = int(round(v2 * id))
-        let q3 = int(round(v3 * id))
-        vk_yq[b * 8u + lane8] = ((uint(q0) & 0xFFu) | ((uint(q1) & 0xFFu) << 8u)
-            | ((uint(q2) & 0xFFu) << 16u) | ((uint(q3) & 0xFFu) << 24u))
+        vk_yq[b * 8u + lane8] = q8_blk_pack(b, lane8, v0, v1, v2, v3)
         b += 32u
     }
 }
@@ -2770,24 +2754,9 @@ def q8k_requant {
             vals[r] = v
             m = max(m, abs(v))
         }
-        m = max(m, subgroupShuffleXor(m, 1u))
-        m = max(m, subgroupShuffleXor(m, 2u))
-        m = max(m, subgroupShuffleXor(m, 4u))
-        m = max(m, subgroupShuffleXor(m, 8u))
-        m = max(m, subgroupShuffleXor(m, 16u))
-        let d = m / 127.0
-        let id = d != 0.0 ? 1.0 / d : 0.0
-        if (lane == 0u) {
-            vk_xs[b] = d
-        }
+        let id = q8k_blk_scale(b, lane, m)
         for [unroll] (r in range(8)) {
-            let q = int(round(vals[r] * id))
-            let b8 = uint(q) & 0xFFu
-            let p = b8 | (subgroupShuffleXor(b8, 1u) << 8u)
-            let w = p | (subgroupShuffleXor(p, 2u) << 16u)
-            if (lane % 4u == 0u) {
-                vk_xq[b * 64u + uint(r) * 8u + lane / 4u] = w
-            }
+            q8k_pack_word(b, uint(r), lane, vals[r], id)
         }
     }
 }
