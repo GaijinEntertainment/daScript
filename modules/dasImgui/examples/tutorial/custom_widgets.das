@@ -5,6 +5,7 @@ options _comment_hygiene = true
 // (text/spacing/separator/same_line). Opt out of the default-on lint until
 // that pass lands so the file stays compileable.
 options _allow_imgui_legacy = true
+options gc
 
 require imgui
 require imgui_app
@@ -215,6 +216,7 @@ def main() {
     init()
     while (!exit_requested()) {
         update()
+        maybe_collect_gc()
     }
     shutdown()
 }

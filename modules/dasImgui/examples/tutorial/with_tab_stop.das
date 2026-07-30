@@ -1,5 +1,6 @@
 options gen2
 options _comment_hygiene = true
+options gc
 
 require imgui
 require imgui_app
@@ -90,6 +91,7 @@ def main() {
     init()
     while (!exit_requested()) {
         update()
+        maybe_collect_gc()
     }
     shutdown()
 }

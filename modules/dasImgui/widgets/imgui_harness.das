@@ -9,6 +9,9 @@ options _allow_imgui_legacy = true
 // Same pattern as `_allow_imgui_legacy = true` on widgets/imgui_lint.das.
 options _allow_glfw_calls = true
 options persistent_heap   // collectable heap so per-frame JsonValue churn is reclaimed; unifies program-wide
+// NOTE: `options gc` deliberately NOT here — it does not cascade from a required
+// module (probe-verified): the ENTRY program must declare `options gc` itself to
+// make the harness_maybe_collect_gc boundary legal. persistent_heap does cascade.
 
 module imgui_harness shared public
 
@@ -224,9 +227,11 @@ def public harness_begin_frame() : bool {
 }
 
 def public harness_maybe_collect_gc() {
+    //!@nolint
     //! Standalone GC boundary — call from ``main`` right after ``update()`` returns, never inside a frame.
     //! JIT collection can't trace collectable values in stack locals, so ``main`` must keep none across this
-    //! call. Entry program needs ``options persistent_heap`` + ``options gc``. No-op under daslang-live (host collects).
+    //! call. Entry program needs ``options gc`` (``persistent_heap`` cascades from this module; ``gc`` does
+    //! not cascade — probe-verified). No-op under daslang-live (host collects).
     maybe_collect_gc()
 }
 
