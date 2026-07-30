@@ -29,7 +29,7 @@ Walkthrough
 
 .. video:: icons.mp4
 
-.. literalinclude:: ../../../examples/tutorial/icons.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/icons.das
    :language: das
    :linenos:
 

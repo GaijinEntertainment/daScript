@@ -29,7 +29,7 @@ Walkthrough
 
 .. video:: color_button_hover.mp4
 
-.. literalinclude:: ../../../examples/tutorial/color_button_hover.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/color_button_hover.das
    :language: das
    :linenos:
 

@@ -23,7 +23,7 @@ then clicks ``Bump`` twice and verifies each click registered
 (``hold_through_voice``). A slider that stopped tracking or a button that stopped
 counting would abort the recording.
 
-.. literalinclude:: ../../../examples/tutorial/boost_basics.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/boost_basics.das
    :language: das
    :linenos:
 

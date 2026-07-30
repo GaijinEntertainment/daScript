@@ -31,7 +31,7 @@ Walkthrough
 
 .. video:: input_numeric.mp4
 
-.. literalinclude:: ../../../examples/tutorial/input_numeric.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/input_numeric.das
    :language: das
    :linenos:
 

@@ -43,7 +43,7 @@ kind family, since drawlist call sites register under synthesized path keys
 rather than caller idents) plus the window / foreground-label widgets on screen.
 A rail that stopped painting would abort the recording.
 
-.. literalinclude:: ../../../examples/tutorial/drawlist.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/drawlist.das
    :language: das
    :linenos:
 

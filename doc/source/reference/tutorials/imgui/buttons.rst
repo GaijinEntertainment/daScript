@@ -28,7 +28,7 @@ Walkthrough
 
 .. video:: buttons.mp4
 
-.. literalinclude:: ../../../examples/tutorial/buttons.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/buttons.das
    :language: das
    :linenos:
 

@@ -38,7 +38,7 @@ then wheel-scrolls the horizontal child **C** sideways, asserting
 layer's per-frame ``scroll`` telemetry directly — a no-op scroll (cursor
 not over the child, wheel not attributed) would abort the recording.
 
-.. literalinclude:: ../../../examples/tutorial/child.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/child.das
    :language: das
    :linenos:
 

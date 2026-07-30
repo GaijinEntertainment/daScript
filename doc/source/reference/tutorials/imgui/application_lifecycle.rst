@@ -19,7 +19,7 @@ the next frame creates collectable locals.
 
 Source: ``modules/dasImgui/examples/tutorial/application_lifecycle.das``.
 
-.. literalinclude:: ../../../examples/tutorial/application_lifecycle.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/application_lifecycle.das
    :language: das
    :linenos:
 

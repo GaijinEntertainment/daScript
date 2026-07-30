@@ -10,7 +10,9 @@ def package() {
 
 [export]
 def dependencies(version : string) {
-    require_package("github.com/borisbat/dasImgui")
+    // Satisfied by the in-tree modules/dasImgui (daspkg no-ops on it); the
+    // declaration stays so a release/wasm build knows to stage its archives.
+    require_package("dasImgui")
 }
 
 [export]

@@ -32,7 +32,7 @@ Each drag asserts the layout actually moved (the resized pane's ``size`` changed
 the re-docked panel's ``dock_id`` changed); a no-op drag aborts the recording at
 teardown rather than shipping a clip where nothing happened.
 
-.. literalinclude:: ../../../examples/tutorial/docking.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/docking.das
    :language: das
    :linenos:
 

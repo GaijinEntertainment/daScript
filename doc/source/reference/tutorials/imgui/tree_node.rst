@@ -29,7 +29,7 @@ Walkthrough
 
 .. video:: tree_node.mp4
 
-.. literalinclude:: ../../../examples/tutorial/tree_node.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/tree_node.das
    :language: das
    :linenos:
 

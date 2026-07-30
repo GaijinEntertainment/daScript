@@ -37,7 +37,7 @@ the second scope. Each open is verified against the popup body's
 rendered-this-frame state and each pick against the status line, so a
 trigger that failed to open or close the popup would abort the recording.
 
-.. literalinclude:: ../../../examples/tutorial/popup_window.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/popup_window.das
    :language: das
    :linenos:
 

@@ -24,7 +24,7 @@ Walkthrough
 
 .. video:: toggles.mp4
 
-.. literalinclude:: ../../../examples/tutorial/toggles.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/toggles.das
    :language: das
    :linenos:
 

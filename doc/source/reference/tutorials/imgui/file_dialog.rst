@@ -45,7 +45,7 @@ can't be stored across frames). The flow is three calls:
 3. on ``confirmed``, the chosen path(s) are read with
    ``file_dialog_selection()`` / ``file_dialog_selected_path()``.
 
-.. literalinclude:: ../../../examples/tutorial/file_dialog.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/file_dialog.das
    :language: das
    :linenos:
 

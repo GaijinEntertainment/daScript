@@ -26,7 +26,7 @@ rose). Each handle surfaces its own bbox as a ``<container>/HANDLE`` alias in th
 snapshot, so the cursor targets the real 8 px ``InvisibleButton``; a drag that
 moved nothing aborts the recording at teardown.
 
-.. literalinclude:: ../../../examples/tutorial/layout.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/layout.das
    :language: das
    :linenos:
 

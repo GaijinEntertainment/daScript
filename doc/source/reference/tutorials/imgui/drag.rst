@@ -30,7 +30,7 @@ Walkthrough
 
 .. video:: drag.mp4
 
-.. literalinclude:: ../../../examples/tutorial/drag.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/drag.das
    :language: das
    :linenos:
 

@@ -35,7 +35,7 @@ reads against the whole group's bounding box. Finally it drags the row's slider
 and the value updates on the line below. Every step is a real synth gesture the
 recording asserts landed.
 
-.. literalinclude:: ../../../examples/tutorial/group.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/group.das
    :language: das
    :linenos:
 

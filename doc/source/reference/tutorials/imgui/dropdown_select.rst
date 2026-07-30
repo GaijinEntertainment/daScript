@@ -26,7 +26,7 @@ Walkthrough
 
 .. video:: dropdown_select.mp4
 
-.. literalinclude:: ../../../examples/tutorial/dropdown_select.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/dropdown_select.das
    :language: das
    :linenos:
 

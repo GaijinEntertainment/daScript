@@ -30,7 +30,7 @@ moves to the display-only ``image``. The expand is verified against that open
 flag and the image against its on-screen presence, so a click that failed to
 open the node would abort the recording.
 
-.. literalinclude:: ../../../examples/tutorial/tree_image_misc.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/tree_image_misc.das
    :language: das
    :linenos:
 

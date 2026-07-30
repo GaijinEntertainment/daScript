@@ -39,7 +39,7 @@ Walkthrough
 
 .. video:: dynamic_fonts.mp4
 
-.. literalinclude:: ../../../examples/tutorial/dynamic_fonts.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/dynamic_fonts.das
    :language: das
    :linenos:
 

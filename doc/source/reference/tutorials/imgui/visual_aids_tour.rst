@@ -50,7 +50,7 @@ change), and typing into ``NAME_INPUT`` then clearing it with Ctrl+A /
 Backspace (the buffer must end empty). A silently broken beat aborts the
 recording at teardown instead of shipping.
 
-.. literalinclude:: ../../../examples/tutorial/visual_aids_tour.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/visual_aids_tour.das
    :language: das
    :linenos:
 

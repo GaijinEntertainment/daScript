@@ -867,6 +867,32 @@ def gate_sequence(ctx : PreflightCtx) : GateResult {
     return run_test_gate("sequence", args, "sequence smoke failed (examples/games/sequence/ci_smoke_test.*)")
 }
 
+def gate_imgui(ctx : PreflightCtx) : GateResult {
+    let t0 = ref_time_ticks()
+    if (empty(ctx.build_dir)) {
+        return GateResult(name = "imgui", status = GateStatus.Skip, seconds = seconds_since(t0),
+            detail = "no configured build dir — cmake -B build first")
+    }
+    let b = run_argv(["cmake", "--build", ctx.build_dir, "--config", ctx.config, "--target",
+        "daslang-live", "dasModuleLiveHost", "dasModuleGlfw", "dasModuleHV", "dasModuleClipboard",
+        "dasModulePUGIXML", "dasModuleStbImage", "dasModuleImgui", "imguiApp", "imguiAppHeadless", "--parallel"])
+    if (b.rc != 0) {
+        let lower = to_lower(b.out)
+        if (find(lower, "unknown target") >= 0 || find(lower, "no rule to make target") >= 0 || find(lower, "does not exist") >= 0) {
+            return GateResult(name = "imgui", status = GateStatus.Skip, seconds = seconds_since(t0),
+                detail = "imgui module targets missing — configure with DAS_IMGUI_DISABLED=OFF (needs dasGlfw + dasClipboard on)", output = b.out)
+        }
+        return classify_build_fail("imgui", "imgui module build failed", b, ctx.daslang, t0)
+    }
+    // Direct folder targeting bypasses the tests/.das_test nightly gate by
+    // design — no --imgui flag needed here (that opt-in is for full sweeps).
+    return run_test_gate("imgui",
+        [ctx.daslang, "dastest/dastest.das", "--", "--test", "tests/dasImgui", "--headless",
+         "--isolated-mode", "--isolated-mode-threads", "4", "--timeout", "600", "--failures-only",
+         "--exclude", "glfw_synth", "--exclude", "key_hud", "--exclude", "embedded_terminal"],
+        "dasImgui playwright suite failed (nightly_imgui.yml is its only CI lane — this local gate is the pre-push mirror)")
+}
+
 // ===== orchestration =====
 
 struct GateInfo {
@@ -887,7 +913,8 @@ def gate_table() : array<GateInfo> {
         GateInfo(name = "tests-interp", full_only = true, doc = "full interpreter suite"),
         GateInfo(name = "tests-jit", full_only = true, doc = "full JIT suite (skips when dasLLVM absent)"),
         GateInfo(name = "tests-aot", full_only = true, doc = "build test_aot + full AOT suite"),
-        GateInfo(name = "sequence", full_only = true, doc = "sequence game release smoke (only pre-merge compile of GLFW-gated das)")
+        GateInfo(name = "sequence", full_only = true, doc = "sequence game release smoke (only pre-merge compile of GLFW-gated das)"),
+        GateInfo(name = "imgui", full_only = true, doc = "dasImgui playwright suite (nightly-only CI — this local mirror is the only pre-push gate for it)")
     ]
 }
 
@@ -1102,6 +1129,8 @@ def main() : int {
                 r <- gate_tests_aot(ctx)
             } elif (info.name == "sequence") {
                 r <- gate_sequence(ctx)
+            } elif (info.name == "imgui") {
+                r <- gate_imgui(ctx)
             }
             report_gate(r, cfg.verbose)
             results |> emplace(r)

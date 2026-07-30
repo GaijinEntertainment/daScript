@@ -29,7 +29,7 @@ Walkthrough
 
 .. video:: with_id.mp4
 
-.. literalinclude:: ../../../examples/tutorial/with_id.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/with_id.das
    :language: das
    :linenos:
 

@@ -31,7 +31,7 @@ Walkthrough
 
 .. video:: slider.mp4
 
-.. literalinclude:: ../../../examples/tutorial/slider.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/slider.das
    :language: das
    :linenos:
 

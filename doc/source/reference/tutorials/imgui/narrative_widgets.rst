@@ -47,7 +47,7 @@ the widget rendered and echoed its call-site string into the snapshot — the
 "the label says what I expect" claim made concrete. A missing or wrong value
 aborts the recording at teardown instead of shipping.
 
-.. literalinclude:: ../../../examples/tutorial/narrative_widgets.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/narrative_widgets.das
    :language: das
    :linenos:
 

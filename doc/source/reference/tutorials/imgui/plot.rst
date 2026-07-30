@@ -31,7 +31,7 @@ Walkthrough
 
 .. video:: plot.mp4
 
-.. literalinclude:: ../../../examples/tutorial/plot.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/plot.das
    :language: das
    :linenos:
 

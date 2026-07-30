@@ -39,7 +39,7 @@ the string, then clicks ``bump`` and verifies the app rewrote ``STATUS_TEXT.valu
 from inside (``record_check_changed``). Any channel that stopped reaching the
 snapshot would abort the recording.
 
-.. literalinclude:: ../../../examples/tutorial/state_telemetry.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/state_telemetry.das
    :language: das
    :linenos:
 

@@ -49,7 +49,7 @@ button under ``with_button_repeat`` and asserts the counter climbs *twice*
 under the single hold — a genuine repeat stream, not one click. Any step
 that failed to land would abort the recording.
 
-.. literalinclude:: ../../../examples/tutorial/with_disabled.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/with_disabled.das
    :language: das
    :linenos:
 

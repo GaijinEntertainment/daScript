@@ -22,7 +22,7 @@ Walkthrough
 
 .. video:: with_style.mp4
 
-.. literalinclude:: ../../../examples/tutorial/with_style.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/with_style.das
    :language: das
    :linenos:
 

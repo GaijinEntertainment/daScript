@@ -32,7 +32,7 @@ Walkthrough
 
 .. video:: flat_tooltips.mp4
 
-.. literalinclude:: ../../../examples/tutorial/flat_tooltips.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/flat_tooltips.das
    :language: das
    :linenos:
 

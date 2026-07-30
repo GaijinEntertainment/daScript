@@ -31,7 +31,7 @@ Walkthrough
 
 .. video:: input_text.mp4
 
-.. literalinclude:: ../../../examples/tutorial/input_text.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/input_text.das
    :language: das
    :linenos:
 

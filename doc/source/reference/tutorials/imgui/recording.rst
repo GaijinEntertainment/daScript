@@ -31,7 +31,7 @@ Source files:
 The subject
 ************
 
-.. literalinclude:: ../../../examples/tutorial/recording.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/recording.das
    :language: das
    :linenos:
 
@@ -50,7 +50,7 @@ on itself. It drags ``Volume`` (asserting the value moved) and clicks ``Save``
 (asserting the click landed), narrating the recipe as it goes; a silently-broken
 beat would abort the recording instead of shipping.
 
-.. literalinclude:: ../../../tests/dasImgui/record_recording.das
+.. literalinclude:: ../../../../../tests/dasImgui/record_recording.das
    :language: das
    :linenos:
 

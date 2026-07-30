@@ -44,7 +44,7 @@ springs to a 400x400 square; the second, dragged tall, collapses to 480x270
 snapped size is asserted - a drag that didn't resize, or a callback that
 didn't reshape the request, aborts the recording.
 
-.. literalinclude:: ../../../examples/tutorial/window_size_constraints.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/window_size_constraints.das
    :language: das
    :linenos:
 

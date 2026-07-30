@@ -42,7 +42,7 @@ right-click the button / empty space yourself:
 
    bin/Release/daslang-live modules/dasImgui/examples/tutorial/popups.das
 
-.. literalinclude:: ../../../examples/tutorial/popups.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/popups.das
    :language: das
    :linenos:
 

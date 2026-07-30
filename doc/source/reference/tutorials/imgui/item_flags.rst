@@ -38,7 +38,7 @@ Walkthrough
 
 .. video:: item_flags.mp4
 
-.. literalinclude:: ../../../examples/tutorial/item_flags.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/item_flags.das
    :language: das
    :linenos:
 

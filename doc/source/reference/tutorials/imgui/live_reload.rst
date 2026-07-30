@@ -49,7 +49,7 @@ and ``reset_counter`` ``[live_command]`` endpoints from outside and verifies the
 counter climbs to 7 and back to 0 (``record_check_value`` on the snapshot readout).
 A command that stopped reaching the running program would abort the recording.
 
-.. literalinclude:: ../../../examples/tutorial/live_reload.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/live_reload.das
    :language: das
    :linenos:
 

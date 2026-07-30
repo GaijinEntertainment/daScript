@@ -45,7 +45,7 @@ popup's own ``Close`` button (asserting the body stops), and finally hovers
 the button to bring up the ``item_tooltip``. Any step that failed to land
 aborts the recording.
 
-.. literalinclude:: ../../../examples/tutorial/containers.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/containers.das
    :language: das
    :linenos:
 

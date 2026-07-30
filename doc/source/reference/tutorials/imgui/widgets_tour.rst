@@ -26,7 +26,7 @@ picker is mouse-only, so the tour drives it via ``force_set`` and verifies the
 swatch took), and clicking *Save* (click must register). A silently broken
 stage aborts the recording at teardown instead of shipping.
 
-.. literalinclude:: ../../../examples/tutorial/widgets_tour.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/widgets_tour.das
    :language: das
    :linenos:
 

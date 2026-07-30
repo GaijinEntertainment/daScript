@@ -30,7 +30,7 @@ Walkthrough
 
 .. video:: collapsing_header.mp4
 
-.. literalinclude:: ../../../examples/tutorial/collapsing_header.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/collapsing_header.das
    :language: das
    :linenos:
 

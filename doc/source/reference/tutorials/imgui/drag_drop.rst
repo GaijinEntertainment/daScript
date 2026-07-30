@@ -31,7 +31,7 @@ real drag of the source onto the target. On release the target accepts the
 synth-mouse pipeline a test would use, and the recording asserts the drop
 actually landed (see *Driving from outside* below).
 
-.. literalinclude:: ../../../examples/features/drag_drop.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/features/drag_drop.das
    :language: das
    :linenos:
 

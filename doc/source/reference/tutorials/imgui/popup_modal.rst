@@ -34,7 +34,7 @@ Walkthrough
 
 .. video:: popup_modal.mp4
 
-.. literalinclude:: ../../../examples/tutorial/popup_modal.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/popup_modal.das
    :language: das
    :linenos:
 

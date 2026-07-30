@@ -33,7 +33,7 @@ Walkthrough
 
 .. video:: color.mp4
 
-.. literalinclude:: ../../../examples/tutorial/color.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/color.das
    :language: das
    :linenos:
 

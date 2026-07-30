@@ -50,7 +50,7 @@ buttons and both ``same_line`` markers are on screen, then the ``spacing`` and
 ``new_line`` markers in turn (``record_check_rendered`` on each). A marker that
 silently dropped out of the layout would abort the recording.
 
-.. literalinclude:: ../../../examples/tutorial/layout_primitives.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/layout_primitives.das
    :language: das
    :linenos:
 

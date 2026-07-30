@@ -29,7 +29,7 @@ operate on the custom widget unchanged. (The arc drag rides a radius-25
 circle around the knob disc's centre, which sits in the top third of the
 hitbox — ``bbox.x + 36, bbox.y + 36`` — clear of the bottom dead zone.)
 
-.. literalinclude:: ../../../examples/tutorial/custom_widgets.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/custom_widgets.das
    :language: das
    :linenos:
 

@@ -46,7 +46,7 @@ screen, and the driven bar's ``fraction`` is asserted to *change* over time -
 so a bar that stopped rendering or a sine that stopped sweeping would abort the
 recording.
 
-.. literalinclude:: ../../../examples/tutorial/display_widgets.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/display_widgets.das
    :language: das
    :linenos:
 

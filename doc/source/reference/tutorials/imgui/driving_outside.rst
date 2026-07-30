@@ -32,7 +32,7 @@ Walkthrough
 
 .. video:: driving_outside.mp4
 
-.. literalinclude:: ../../../examples/tutorial/driving_outside.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/driving_outside.das
    :language: das
    :linenos:
 

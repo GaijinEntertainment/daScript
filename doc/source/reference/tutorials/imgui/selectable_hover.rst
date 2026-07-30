@@ -30,7 +30,7 @@ Walkthrough
 
 .. video:: selectable_hover.mp4
 
-.. literalinclude:: ../../../examples/tutorial/selectable_hover.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/selectable_hover.das
    :language: das
    :linenos:
 

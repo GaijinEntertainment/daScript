@@ -27,7 +27,7 @@ Walkthrough
 
 .. video:: with_tab_stop.mp4
 
-.. literalinclude:: ../../../examples/tutorial/with_tab_stop.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/with_tab_stop.das
    :language: das
    :linenos:
 

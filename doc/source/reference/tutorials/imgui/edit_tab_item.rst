@@ -41,7 +41,7 @@ checkbox write the very same bool. Finally it ticks both boxes back on and
 every tab returns. Each step is asserted - a checkbox that didn't flip, a tab
 that didn't hide, or an X that didn't back-propagate would abort the recording.
 
-.. literalinclude:: ../../../examples/tutorial/edit_tab_item.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/edit_tab_item.das
    :language: das
    :linenos:
 

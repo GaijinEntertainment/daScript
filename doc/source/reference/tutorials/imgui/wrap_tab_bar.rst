@@ -40,7 +40,7 @@ Walkthrough
 
 .. video:: wrap_tab_bar.mp4
 
-.. literalinclude:: ../../../examples/tutorial/wrap_tab_bar.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/wrap_tab_bar.das
    :language: das
    :linenos:
 

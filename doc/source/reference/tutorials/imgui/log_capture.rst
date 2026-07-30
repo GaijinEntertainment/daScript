@@ -32,7 +32,7 @@ Walkthrough
 
 .. video:: log_capture.mp4
 
-.. literalinclude:: ../../../examples/tutorial/log_capture.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/log_capture.das
    :language: das
    :linenos:
 

@@ -41,7 +41,7 @@ Walkthrough
 
 .. video:: texture_ref.mp4
 
-.. literalinclude:: ../../../examples/tutorial/texture_ref.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/texture_ref.das
    :language: das
    :linenos:
 

@@ -45,7 +45,7 @@ Walkthrough
 
 .. video:: main_menu_bar.mp4
 
-.. literalinclude:: ../../../examples/tutorial/main_menu_bar.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/main_menu_bar.das
    :language: das
    :linenos:
 

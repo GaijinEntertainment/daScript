@@ -35,7 +35,7 @@ clicking ``Name`` flips the active sort ascending to descending; clicking
 rows break ties by value. Each click is verified against the re-rendered cell
 text, so a header click that failed to re-sort would abort the recording.
 
-.. literalinclude:: ../../../examples/tutorial/data_table.das
+.. literalinclude:: ../../../../../modules/dasImgui/examples/tutorial/data_table.das
    :language: das
    :linenos:
 
