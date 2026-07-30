@@ -1503,13 +1503,14 @@ def public with_recording_app(feature_path : string;
                               max_seconds : int;
                               fps : int;
                               body : block<(app : ImguiApp) : void>) {
-    //! dasImgui-only form — feature + assets rooted under dasImgui, no extra
-    //! modules. Delegates to the full form below; another package
-    //! (dasImguiNodeEditor) calls the full form directly with its own roots.
+    //! dasImgui-only form — features rooted under the module, recordings landing
+    //! in the main doc tree's _static (docs live there since the in-tree merge;
+    //! MP4s ship via the docs-assets release). Delegates to the full form below;
+    //! another package (dasImguiNodeEditor) calls the full form directly with
+    //! its own roots.
     let no_extra : array<string>
-    let root = dasimgui_module_root()
     with_recording_app(feature_path, output_apng_basename, max_seconds, fps,
-                       no_extra, root, root, body)
+                       no_extra, dasimgui_module_root(), get_das_root(), body)
 }
 
 def public with_recording_app(feature_path : string;

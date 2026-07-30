@@ -65,7 +65,7 @@ sphinx runs.
 
 | Script | Purpose | When to run |
 |---|---|---|
-| `rerecord_all.ps1` | Sequentially re-record every `record_*.das` driver. Writes intermediate APNGs to the gitignored `modules/dasImgui/doc/source/_static/tutorials/`. ~20 min. | After cross-cutting visual changes (theme, font, narrate placement) or after touching multiple drivers. |
+| `rerecord_all.ps1` | Sequentially re-record every `record_*.das` driver. Writes intermediate APNGs to the gitignored `doc/source/_static/tutorials/`. ~20 min. | After cross-cutting visual changes (theme, font, narrate placement) or after touching multiple drivers. |
 
 After re-recording, convert APNGs to MP4 via ffmpeg (the deliverables).
 
@@ -85,11 +85,11 @@ pwsh tests/dasImgui/rerecord_all.ps1
 ```
 
 Step 2 — eyeball-review the resulting `.apng` files in
-`modules/dasImgui/doc/source/_static/tutorials/`. Extract individual frames
+`doc/source/_static/tutorials/`. Extract individual frames
 if needed (bash; on PowerShell call `bash -c '<the command>'` or use WSL):
 
 ```bash
-ffmpeg -i modules/dasImgui/doc/source/_static/tutorials/X.apng \
+ffmpeg -i doc/source/_static/tutorials/X.apng \
     -vf "select=eq(n\,200)" -frames:v 1 -update 1 frame200.png -y
 ```
 
@@ -97,7 +97,7 @@ Step 3 — convert `.apng` → `.mp4` (the deliverable). Single recording
 works in either shell:
 
 ```bash
-cd modules/dasImgui/doc/source/_static/tutorials
+cd doc/source/_static/tutorials
 for f in *.apng; do
     base="${f%.apng}"
     ffmpeg -y -loglevel error -i "$f" -c:v libx264 -crf 23 \
@@ -108,7 +108,7 @@ done
 Bulk-convert — PowerShell equivalent:
 
 ```powershell
-Set-Location modules/dasImgui/doc/source/_static/tutorials
+Set-Location doc/source/_static/tutorials
 Get-ChildItem *.apng | ForEach-Object {
     $base = $_.BaseName
     ffmpeg -y -loglevel error -i $_.Name -c:v libx264 -crf 23 `
@@ -119,7 +119,7 @@ Get-ChildItem *.apng | ForEach-Object {
 Step 4 — upload to the rolling `docs-assets` release (MP4s are not in git):
 
 ```bash
-cd modules/dasImgui/doc/source/_static/tutorials
+cd doc/source/_static/tutorials
 gh release upload docs-assets *.mp4 --clobber
 ```
 
@@ -139,7 +139,7 @@ For a new tutorial `foo`:
    `tests/dasImgui/record_foo.das` (see `skills/imgui_recording.md` for the
    driver template).
 2. `daslang.exe -project_root . tests/dasImgui/record_foo.das` —
-   produces `modules/dasImgui/doc/source/_static/tutorials/foo.apng`
+   produces `doc/source/_static/tutorials/foo.apng`
    (gitignored).
 3. Eyeball-review. ffmpeg-extract frames if needed.
 4. ffmpeg-convert `foo.apng` → `foo.mp4` (see step 3 of the workflow above).
@@ -159,7 +159,7 @@ can be deleted; nothing references it.
 
 Detailed driver-authoring guidance, pacing constants, menu-interaction
 gotchas, and visual aid recipes live in
-[`../../skills/recording.md`](../../skills/recording.md).
+[`skills/imgui_recording.md`](../../skills/imgui_recording.md).
 
 ## Notes
 

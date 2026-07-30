@@ -73,6 +73,10 @@ jobs:
           bin
           modules/dasGlfw/dasModuleGlfw.shared_module
           modules/dasOpenGL/dasModuleOpenGL.shared_module
+          modules/dasClipboard/dasModuleClipboard.shared_module
+          modules/dasImgui/dasModuleImgui.shared_module
+          modules/dasImgui/imguiApp.shared_module
+          modules/dasImgui/imguiAppHeadless.shared_module
           web/output
           web/output64
           site/playground/samples
@@ -124,6 +128,18 @@ jobs:
       run: |
         set -eux
         ./bin/daslang -documentation doc/reflections/das2rst.das
+
+    - name: "Run imgui2rst"
+      # dasImgui's stdlib pages (doc/source/stdlib/generated/imgui_*.rst) come
+      # from its own generator; the host above builds with dasGlfw+dasImgui ON.
+      run: ./bin/daslang modules/dasImgui/utils/imgui2rst.das
+
+    - name: "Stage tutorial recordings (docs-assets release)"
+      # The `.. video::` directive fails the -W sphinx build on any recording
+      # missing from _static/tutorials/, so staging must precede sphinx.
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: bash utils/docs_assets/fetch.sh
 
     - name: "Build Sphinx HTML"
       run: |

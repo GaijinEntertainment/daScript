@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 # rerecord_all.ps1 — sequentially re-record every APNG under
-# modules/dasImgui/doc/source/_static/tutorials/.
+# doc/source/_static/tutorials/.
 #
 # All `tests/dasImgui/record_*.das` drivers spawn their own daslang-live on
 # port 9090, so the sweep is strictly serial. Full pass takes ~20 minutes for
@@ -8,11 +8,11 @@
 # scale) typically need it. Per-driver runtime = its with_recording_app
 # max_seconds + ~3s host boot/drain.
 #
-# After re-recording, .apng files land in modules/dasImgui/doc/source/_static/
+# After re-recording, .apng files land in doc/source/_static/
 # tutorials/ (gitignored -- the intermediate artifact, not the deliverable).
 # Convert each to .mp4 via ffmpeg:
 #
-#   Set-Location modules/dasImgui/doc/source/_static/tutorials
+#   Set-Location doc/source/_static/tutorials
 #   Get-ChildItem *.apng | ForEach-Object {
 #       $base = $_.BaseName
 #       ffmpeg -y -loglevel error -i $_.Name -c:v libx264 -crf 23 `

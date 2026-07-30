@@ -194,15 +194,6 @@ def document_module_imgui_transport() {
 }
 
 
-// dasImgui repo root, derived from a loaded module's own source path so docs
-// generate correctly under both -load_module (dev) and daspkg-install (CI),
-// without assuming dasImgui lives under <das_root>/modules/.
-def dasimgui_root() : string {
-    let m = find_module("imgui_boost_v2")
-    assert(m != null, "imgui_boost_v2 not loaded — cannot locate dasImgui root")
-    return dir_name(dir_name(string(m.fileName)))
-}
-
 // dasImgui icon catalog — a hand-built visual reference page. imgui_icons draws runtime vector
 // geometry (no asset files), so catalog images are rendered offline by utils/make_icon_doc.das into
 // _static/icons/ (committed); enumeration uses the module's catalog accessors so the page can't drift.
@@ -260,9 +251,11 @@ def main {
     disable_profiler(this_context())
     disable_profiler_log(this_context())
     ast_gc_guard() {
-        let dasimgui_doc = dasimgui_root() + "/doc/source/stdlib"
-        topic_root = "{dasimgui_doc}/generated"
-        handmade_root = dasimgui_doc
+        // dasImgui docs live in the main doc tree; generated pages join
+        // das2rst's output under doc/source/stdlib/generated/.
+        let doc_stdlib = get_das_root() + "/doc/source/stdlib"
+        topic_root = "{doc_stdlib}/generated"
+        handmade_root = doc_stdlib
 
         document_module_imgui_boost_v2()
         document_module_imgui_boost_runtime()

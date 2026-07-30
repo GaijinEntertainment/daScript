@@ -41,5 +41,6 @@ THE SOFTWARE.
    sec_audio.rst
    sec_ai.rst
    sec_strudel.rst
+   sec_imgui.rst
 
 

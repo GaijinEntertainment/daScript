@@ -3,9 +3,9 @@ dasImguiImplot
 
 dasImguiImplot is the daslang binding for `ImPlot
 <https://github.com/epezent/implot>`_, the immediate-mode plotting library for
-Dear ImGui. Like :doc:`dasimguinodeeditor`, it sits beside :doc:`dasimgui` as an
-ImGui-extension binding — it depends on dasImgui and loads alongside it, without
-modifying it.
+Dear ImGui. Like :doc:`dasimguinodeeditor`, it extends the in-tree
+:ref:`dasImgui module <stdlib_imgui_section>` — it depends on dasImgui and loads
+alongside it, without modifying it.
 
 Where to go
 -----------
