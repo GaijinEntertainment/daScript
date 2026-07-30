@@ -6,6 +6,7 @@ options no_unused_function_arguments = false
 require dastest/testing_boost public
 require imgui/imgui_playwright public
 require daslib/fio public
+require strings
 require daslib/json public
 require daslib/json_boost public
 
@@ -422,4 +423,88 @@ def test_text_viewer_find_both_modes(t : T?) { // nolint:STYLE038
         t |> success((das_keyword?["syntax_cells"] ?? 0) > 0,
                      ".das source carries tree-sitter syntax styling")
     }
+}
+
+[test]
+def test_text_viewer_find_scrolls_to_match(t : T?) { // nolint:STYLE038
+    var temp_error : string
+    let temp_dir = create_temp_directory("das_text_viewer_find_scroll", temp_error)
+    t |> success(empty(temp_error) && !empty(temp_dir),
+                 "scroll test receives a dedicated temporary directory")
+    if (!empty(temp_error) || empty(temp_dir)) return
+    let fixture = path_join(temp_dir, "long.md")
+    let body = build_string() $(var writer) {
+        writer |> write("# Scroll fixture\n\nzebra opens the document.\n\n")
+        for (index in range(200)) {
+            writer |> write("Paragraph number {index} keeps the page long.\n\n")
+        }
+        writer |> write("zebra closes the document.\n")
+    }
+    t |> success(fwrite(fixture, body), "long fixture is written")
+
+    with_imgui_app(FEATURE) $(app) {
+        let opened = post_command(app, "text_viewer_open", JV((path = fixture)))
+        t |> success(opened?["ok"] ?? false, "long fixture opens")
+        let markdown_ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["path"] ?? "") == fixture
+                && (state?["mode"] ?? "") == "markdown"
+                && (state?["render_revision"] ?? 0) > 0)
+        }
+        t |> success(markdown_ready, "long fixture renders as Markdown")
+        if (!markdown_ready) return
+
+        let found = post_command(app, "text_viewer_find", JV((query = "zebra")))
+        t |> equal(found?["match_count"] ?? 0, 2, "both distant matches are found")
+        let first_visible = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["find_applied_jump"] ?? -1) == (state?["find_jump_revision"] ?? -2)
+                && (state?["markdown_selection_screen_valid"] ?? false)
+                && (state?["markdown_selection_screen_y0"] ?? -1.0f)
+                    >= (state?["content_view_top"] ?? 1e9f)
+                && (state?["markdown_selection_screen_y1"] ?? 1e9f)
+                    <= (state?["content_view_bottom"] ?? -1.0f))
+        }
+        t |> success(first_visible, "first match is on screen in rendered Markdown")
+
+        let _ = post_command(app, "text_viewer_find_step", JV((delta = 1)))
+        let far_visible = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["find_applied_jump"] ?? -1) == (state?["find_jump_revision"] ?? -2)
+                && (state?["markdown_selection_screen_valid"] ?? false)
+                && (state?["markdown_selection_screen_y0"] ?? -1.0f)
+                    >= (state?["content_view_top"] ?? 1e9f)
+                && (state?["markdown_selection_screen_y1"] ?? 1e9f)
+                    <= (state?["content_view_bottom"] ?? -1.0f))
+        }
+        t |> success(far_visible,
+                     "find next scrolls the far match into the rendered viewport")
+
+        let plain_mode = post_command(app, "text_viewer_set_mode", JV((mode = "plain")))
+        t |> success(plain_mode?["ok"] ?? false, "plain mode accepts the switch")
+        let _2 = post_command(app, "text_viewer_find_step", JV((delta = 1)))
+        let plain_first = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["find_applied_jump"] ?? -1) == (state?["find_jump_revision"] ?? -2)
+                && (state?["source_selection_screen_valid"] ?? false)
+                && (state?["source_selection_screen_y0"] ?? -1.0f)
+                    >= (state?["content_view_top"] ?? 1e9f)
+                && (state?["source_selection_screen_y1"] ?? 1e9f)
+                    <= (state?["content_view_bottom"] ?? -1.0f))
+        }
+        t |> success(plain_first, "wrapped match is on screen in source view")
+
+        let _3 = post_command(app, "text_viewer_find_step", JV((delta = 1)))
+        let plain_far = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["find_applied_jump"] ?? -1) == (state?["find_jump_revision"] ?? -2)
+                && (state?["source_selection_screen_valid"] ?? false)
+                && (state?["source_selection_screen_y0"] ?? -1.0f)
+                    >= (state?["content_view_top"] ?? 1e9f)
+                && (state?["source_selection_screen_y1"] ?? 1e9f)
+                    <= (state?["content_view_bottom"] ?? -1.0f))
+        }
+        t |> success(plain_far, "find next scrolls the far match into the source viewport")
+    }
+    rmdir_rec_result(temp_dir)
 }

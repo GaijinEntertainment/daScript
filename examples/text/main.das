@@ -96,6 +96,9 @@ struct TextViewerDocument {
     find : TextFindState = TextFindState()
     find_applied_jump : int = 0
     find_scroll_byte : int = -1
+    find_scroll_markdown : bool = false
+    content_view_top : float = 0.0f
+    content_view_bottom : float = 0.0f
 }
 
 var private g_fonts = FontRoleSet()
@@ -750,7 +753,7 @@ def private draw_document_find(var doc : TextViewerDocument) {
         let found = text_find_current(doc.find)
         if (found.start_byte >= 0) {
             if (doc.mode == TextViewMode.markdown) {
-                let _jumped = markdown_view_select_source_range(
+                doc.find_scroll_markdown = markdown_view_select_source_range(
                     doc.markdown_view, found.start_byte, found.end_byte)
             } else {
                 text_source_view_select_range(doc.source_document, doc.source_view,
@@ -766,13 +769,36 @@ def private draw_document_find(var doc : TextViewerDocument) {
 }
 
 def private apply_find_scroll(var doc : TextViewerDocument) {
+    // No GetScrollMaxY clamp: it reports LAST frame's range (0 on a fresh
+    // layout, silently pinning the jump to the top); ImGui clamps SetScrollY
+    // against the real content height at frame end.
     return if (doc.find_scroll_byte < 0)
     let line_top = text_source_view_line_top(doc.source_view, doc.find_scroll_byte)
     if (line_top >= 0.0f) {
-        SetScrollY(clamp(line_top - GetWindowSize().y * 0.35f,
-                         0.0f, GetScrollMaxY()))
+        let height = GetWindowSize().y
+        let local_top = line_top - GetScrollY()
+        if (local_top < height * 0.1f || local_top > height * 0.9f) {
+            SetScrollY(max(0.0f, line_top - height * 0.35f))
+        }
     }
     doc.find_scroll_byte = -1
+}
+
+def private apply_markdown_find_scroll(var doc : TextViewerDocument) {
+    // The view's own caret-visible pass bails when the focus position misses
+    // a fragment boundary and only edge-scrolls; a find jump places the
+    // SELECTION bounds in the comfortable band instead.
+    return if (!doc.find_scroll_markdown)
+    doc.find_scroll_markdown = false
+    return if (!doc.markdown_view.selection_screen_valid)
+    let view_top = GetWindowPos().y
+    let height = GetWindowSize().y
+    let selection_top = doc.markdown_view.selection_screen_bounds.y
+    if (selection_top < view_top + height * 0.1f
+            || selection_top > view_top + height * 0.9f) {
+        SetScrollY(max(0.0f, GetScrollY() + selection_top
+            - (view_top + height * 0.35f)))
+    }
 }
 
 def private draw_document(var doc : TextViewerDocument) {
@@ -783,6 +809,8 @@ def private draw_document(var doc : TextViewerDocument) {
            size = float2(0.0f, -footer_height),
            child_flags = ImGuiChildFlags.None,
            window_flags = ImGuiWindowFlags.HorizontalScrollbar)) {
+        doc.content_view_top = GetWindowPos().y
+        doc.content_view_bottom = GetWindowPos().y + GetWindowSize().y
         if (doc.mode == TextViewMode.markdown) {
             var style = MarkdownViewStyle(
                 fonts = g_fonts,
@@ -797,6 +825,7 @@ def private draw_document(var doc : TextViewerDocument) {
             if (view_result.control_event.active) {
                 let _ = apply_control_event(doc, view_result.control_event)
             }
+            apply_markdown_find_scroll(doc)
         } else {
             var source_style = TextSourceViewStyle(
                 fonts = g_fonts,
@@ -955,6 +984,14 @@ def text_viewer_state(_input : JsonValue?) : JsonValue? {
         markdown_selection_copy_revision = doc.markdown_view.selection_copy_revision,
         source_selection_copy_revision = doc.source_view.selection_copy_revision,
         markdown_selection_revision = doc.markdown_view.selection_revision,
+        markdown_selection_screen_valid = doc.markdown_view.selection_screen_valid,
+        markdown_selection_screen_y0 = doc.markdown_view.selection_screen_bounds.y,
+        markdown_selection_screen_y1 = doc.markdown_view.selection_screen_bounds.w,
+        source_selection_screen_valid = doc.source_view.selection_screen_valid,
+        source_selection_screen_y0 = doc.source_view.selection_screen_bounds.y,
+        source_selection_screen_y1 = doc.source_view.selection_screen_bounds.w,
+        content_view_top = doc.content_view_top,
+        content_view_bottom = doc.content_view_bottom,
         markdown_selection_start = md_text_selection_range(
             doc.markdown_view.selection_anchor, doc.markdown_view.selection_focus).start_byte,
         markdown_selection_end = md_text_selection_range(
