@@ -1,4 +1,6 @@
 options gen2
+options gc
+options persistent_heap
 require glfw/glfw_boost
 require opengl/opengl_boost
 require gltf/gltf_boost
@@ -7,6 +9,7 @@ require stbimage
 require math
 require daslib/math_boost
 require daslib/safe_addr
+require live/live_gc
 
 // 12 - glTF PBR Capstone: deferred + HDR + bloom (OpenGL / WebGL2 tutorial)
 //
@@ -842,7 +845,7 @@ def draw_fullscreen {
 }
 
 [export]
-def update : bool {
+def update : bool { // nolint:STYLE038 — one frame of the tutorial pipeline
     time += 1.0 / 60.0
     let t = time
     var display_w, display_h : int
@@ -1006,6 +1009,7 @@ def shutdown {
 def main {
     init()
     while (update()) {
+        maybe_collect_gc()
     }
     shutdown()
 }

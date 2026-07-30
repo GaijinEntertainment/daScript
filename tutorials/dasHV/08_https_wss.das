@@ -20,6 +20,8 @@ options gc
 
 require dashv/dashv_boost public
 require daslib/jobque_boost
+require live/live_gc
+require live_host
 require daslib/json_boost
 require daslib/fio
 
@@ -57,6 +59,7 @@ def with_wss_server(port, https_port : int; blk : block<(https_url : string) : v
                     started |> notify_and_release
                     while (stop_flag |> get == 0) {
                         server->tick()
+                        maybe_collect_gc()  // the thread owns this context's heap; collect between ticks
                         sleep(10u)
                     }
                     server->stop()

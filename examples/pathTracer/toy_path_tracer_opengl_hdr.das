@@ -1,11 +1,12 @@
 options gen2
+options persistent_heap
+options gc
 require glfw/glfw_boost
 
 require opengl/opengl_boost
 
 require glsl/glsl_opengl
 
-require daslib/defer
 require daslib/unroll
 require math
 
@@ -14,6 +15,7 @@ require daslib/random
 
 require path_tracer
 require daslib/clargs
+require live/live_gc
 
 let TRACE_WIDTH = 1024
 let TRACE_HEIGHT = 1024
@@ -21,6 +23,7 @@ let TRACE_HEIGHT = 1024
 [CommandLineArgs]
 struct PathTracerArgs {
     @clarg_short = "f"
+    @clarg_name = "max-frames"
     @clarg_doc = "Render this many frames, then exit 0 (0 = run until the window closes). Lets the demo double as a headless smoke test."
     frames : int
 
@@ -157,6 +160,7 @@ def bloom_effect_h {
 
 var bloom_program_copy, bloom_program_h, bloom_program_v : uint
 var bloom_texture : uint[2]
+var window : GLFWwindow?
 
 [vertex_buffer]
 struct EffectVertex {
@@ -205,6 +209,92 @@ def create_gl_objects {
 }
 
 [export]
+def init {
+    if (glfwInit() == 0) {
+        panic("can't init glfw")
+    }
+    glfwInitOpenGL(4, 3)
+    window = glfwCreateWindow(TRACE_WIDTH, TRACE_HEIGHT, "OpenGL Path tracer with bloom", null, null)
+    if (window == null) {
+        panic("can't create window")
+    }
+    glfwSetWindowSize(window, TRACE_WIDTH, TRACE_HEIGHT)
+    glfwMakeContextCurrent(window)
+    create_gl_objects()
+}
+
+[export]
+def update {
+    glfwPollEvents()
+    var display_w, display_h : int
+    glfwGetFramebufferSize(window, display_w, display_h)
+    // compute next iteration of tracing
+    glUseProgram(compute_program)
+    c_destTex := texture
+    compute_effect_bind_uniform(compute_program)
+    glDispatchCompute(uint(TRACE_WIDTH / 16), uint(TRACE_HEIGHT / 16), 1u)
+    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
+    c_frame++
+    // bloom weights
+    let sigma = 4.0
+    c_bloom_weights = fixed_array<float>(
+        gaussian(-4., sigma),   gaussian(-3., sigma),   gaussian(-2., sigma),   gaussian(-1., sigma),
+        gaussian(0., sigma),
+        gaussian(1., sigma),   gaussian(2., sigma),   gaussian(3., sigma),   gaussian(4., sigma)
+    )
+    c_bloom_iweights_summ = 0.
+    for (w in c_bloom_weights) {
+        c_bloom_iweights_summ += w
+    }
+    c_bloom_iweights_summ = 1.0 / c_bloom_iweights_summ
+    // bloom copy
+    glUseProgram(bloom_program_copy)
+    c_bloom_source := texture
+    c_bloom_vtex := bloom_texture[0]
+    c_bloom_htex := bloom_texture[1]
+    bloom_effect_copy_bind_uniform(bloom_program_copy)
+    glDispatchCompute(uint(TRACE_WIDTH / 16 / BLOOM_SCALE), uint(TRACE_HEIGHT / 16 / BLOOM_SCALE), 1u)
+    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
+    // bloom v
+    glUseProgram(bloom_program_v)
+    c_bloom_source := texture
+    c_bloom_vtex := bloom_texture[0]
+    c_bloom_htex := bloom_texture[1]
+    bloom_effect_v_bind_uniform(bloom_program_v)
+    glDispatchCompute(uint(TRACE_WIDTH / 16 / BLOOM_SCALE), uint(TRACE_HEIGHT / 16 / BLOOM_SCALE), 1u)
+    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
+    // bloom h
+    glUseProgram(bloom_program_h)
+    c_bloom_source := texture
+    c_bloom_vtex := bloom_texture[0]
+    c_bloom_htex := bloom_texture[1]
+    bloom_effect_h_bind_uniform(bloom_program_h)
+    glDispatchCompute(uint(TRACE_WIDTH / 16 / BLOOM_SCALE), uint(TRACE_HEIGHT / 16 / BLOOM_SCALE), 1u)
+    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
+    // display it
+    glViewport(0, 0, display_w, display_h)
+    glUseProgram(display_program)
+    f_tex := texture
+    f_bloom := c_bloom_vtex
+    vs_effect_bind_uniform(display_program)
+    fs_effect_bind_uniform(display_program)
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, null)
+    // swap buffers
+    glfwMakeContextCurrent(window)
+    glfwSwapBuffers(window)
+}
+
+[export]
+def shutdown {
+    if (window != null) {
+        glfwDestroyWindow(window)
+        window = null
+    }
+    glfwTerminate()
+}
+
+[export]
 def main {
     var r <- parse_args(type<PathTracerArgs>)
     if (r |> is_err) {
@@ -217,84 +307,15 @@ def main {
         print_help(get_command_info(type<PathTracerArgs>), "toy_path_tracer_opengl_hdr")
         return
     }
-    if (glfwInit() == 0) {
-        panic("can't init glfw")
-    }
-    defer() {
-        glfwTerminate()
-    }
-    glfwInitOpenGL(4, 3)
-    var window = glfwCreateWindow(TRACE_WIDTH, TRACE_HEIGHT, "OpenGL Path tracer with bloom", null, null)
-    if (window == null) {
-        panic("can't create window")
-    }
-    defer() {
-        glfwDestroyWindow(window)
-    }
-    glfwSetWindowSize(window, TRACE_WIDTH, TRACE_HEIGHT)
-    glfwMakeContextCurrent(window)
-    create_gl_objects()
+    init()
+    var frame_count = 0
     while (glfwWindowShouldClose(window) == 0) {
-        glfwPollEvents()
-        var display_w, display_h : int
-        glfwGetFramebufferSize(window, display_w, display_h)
-        // copmute next iteration of tracing
-        glUseProgram(compute_program)
-        c_destTex := texture
-        compute_effect_bind_uniform(compute_program)
-        glDispatchCompute(uint(TRACE_WIDTH / 16), uint(TRACE_HEIGHT / 16), 1u)
-        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
-        c_frame++
-        // bloom weights
-        let sigma = 4.0
-        c_bloom_weights = fixed_array<float>(
-            gaussian(-4., sigma),   gaussian(-3., sigma),   gaussian(-2., sigma),   gaussian(-1., sigma),
-            gaussian(0., sigma),
-            gaussian(1., sigma),   gaussian(2., sigma),   gaussian(3., sigma),   gaussian(4., sigma)
-        )
-        c_bloom_iweights_summ = 0.
-        for (w in c_bloom_weights) {
-            c_bloom_iweights_summ += w
-        }
-        c_bloom_iweights_summ = 1.0 / c_bloom_iweights_summ
-        // bloom copy
-        glUseProgram(bloom_program_copy)
-        c_bloom_source := texture
-        c_bloom_vtex := bloom_texture[0]
-        c_bloom_htex := bloom_texture[1]
-        bloom_effect_copy_bind_uniform(bloom_program_copy)
-        glDispatchCompute(uint(TRACE_WIDTH / 16 / BLOOM_SCALE), uint(TRACE_HEIGHT / 16 / BLOOM_SCALE), 1u)
-        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
-        // bloom v
-        glUseProgram(bloom_program_v)
-        c_bloom_source := texture
-        c_bloom_vtex := bloom_texture[0]
-        c_bloom_htex := bloom_texture[1]
-        bloom_effect_v_bind_uniform(bloom_program_v)
-        glDispatchCompute(uint(TRACE_WIDTH / 16 / BLOOM_SCALE), uint(TRACE_HEIGHT / 16 / BLOOM_SCALE), 1u)
-        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
-        // bloom h
-        glUseProgram(bloom_program_h)
-        c_bloom_source := texture
-        c_bloom_vtex := bloom_texture[0]
-        c_bloom_htex := bloom_texture[1]
-        bloom_effect_h_bind_uniform(bloom_program_h)
-        glDispatchCompute(uint(TRACE_WIDTH / 16 / BLOOM_SCALE), uint(TRACE_HEIGHT / 16 / BLOOM_SCALE), 1u)
-        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
-        // display it
-        glViewport(0, 0, display_w, display_h)
-        glUseProgram(display_program)
-        f_tex := texture
-        f_bloom := c_bloom_vtex
-        vs_effect_bind_uniform(display_program)
-        fs_effect_bind_uniform(display_program)
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, null)
-        // swap buffers
-        glfwMakeContextCurrent(window)
-        glfwSwapBuffers(window)
-        if (cfg.frames > 0 && c_frame >= cfg.frames) {
+        update()
+        maybe_collect_gc()
+        frame_count++
+        if (cfg.frames > 0 && frame_count >= cfg.frames) {
             break   // headless smoke / test mode: stop after the requested frame count
         }
     }
+    shutdown()
 }

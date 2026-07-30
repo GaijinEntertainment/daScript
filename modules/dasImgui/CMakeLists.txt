@@ -296,6 +296,11 @@ IF(COMMAND ADD_MODULE_CPP)
     ENDMACRO()
     FOREACH(_t ${_IMGUI_SUPER_TARGETS})
         SETUP_IMGUI(${_t})
+        # order after the GLFW3 ExternalProject: GLFW_INCLUDE_DIR is its install
+        # tree; compiled too early, the include falls back to a system GLFW 3.3
+        IF(TARGET GLFW3)
+            ADD_DEPENDENCIES(${_t} GLFW3)
+        ENDIF()
     ENDFOREACH()
     # the imgui core symbols live in libDasModuleImgui; the app backends use them
     TARGET_LINK_LIBRARIES(libImguiApp PUBLIC libDasModuleImgui)
