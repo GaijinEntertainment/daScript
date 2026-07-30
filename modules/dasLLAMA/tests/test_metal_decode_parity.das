@@ -1079,3 +1079,116 @@ def test_metal_decode_parity(t : T?) {
         }
     }
 }
+
+// forced-feed decode parity for the poison gate: CPU-prefill both states on the planar model,
+// then force the CPU side's live greedy continuation through both decoders, comparing full
+// logits each step — near-tie flips can't red it, weight corruption can't hide from it
+def private forced_maxd_pair(tr, trg : Model; prompt : array<int64>; nsteps : int) : float {
+    var maxd = 0.0
+    with_job_que() {
+        setup_dasllama_jobque()
+        var sa = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
+        var sb = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+        eval_(tr, sa, prompt)
+        eval_(tr, sb, prompt)
+        select_decode_override("metal")
+        let vocab = tr.config.vocab_size
+        for (_i in range(nsteps)) {
+            let tok = greedy_top(sa.logits, vocab)
+            for (a, b in sa.logits, sb.logits) {
+                maxd = max(maxd, abs(a - b))
+            }
+            var one <- [tok]
+            eval_(tr, sa, one)
+            eval_(trg, sb, one)
+            delete one
+        }
+        for (a, b in sa.logits, sb.logits) {
+            maxd = max(maxd, abs(a - b))
+        }
+        select_decode_override("")
+        delete sa
+        delete sb
+    }
+    return maxd
+}
+
+// one GPU prefill on a throwaway session — the poison: prefill's PLAIN per-tensor region
+// uploads claim g_regions entries the decode drivers later look up as cat3 CONCATS
+def private foreign_gpu_prefill(tr, trg : Model) {
+    with_job_que() {
+        setup_dasllama_jobque()
+        var s = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+        let p <- encode(tr, counting_prompt(3, 44), true, false)
+        select_prefill_override("metal")
+        set_metal_prefill_min_npos(1l)
+        eval_(trg, s, p)
+        set_metal_prefill_min_npos(64l)
+        select_prefill_override("")
+        delete s
+    }
+}
+
+// The shared-region collision gate: metal PREFILL uploads several weight regions PLAIN
+// (per-tensor spans) that the DECODE drivers upload as cat3 CONCATS keyed by the SAME host
+// base address — the [bq|bk|bv] bias triple (qkv_bias families, this fixture) and the
+// [rms_q|rms_k] gamma pair (qk_norm families). g_regions keys by host address alone, so
+// whichever driver runs first owns the entry: prefill-first caches the SHORT plain buffer and
+// decode's concat lookup reads past its end — garbage K/V bias on every layer. The gate runs
+// the same forced-feed measure twice: on a fresh pair (sanity control), then on fresh loads
+// (the weights-epoch flush isolates) after ONE foreign GPU prefill.
+[test]
+def test_metal_prefill_poison(t : T?) {
+    t |> run("GPU decode after a foreign GPU prefill: shared-region collision (Qwen2.5-0.5B Q8)") <| @(t : T?) {
+        if (!family_on(t, "qwen2")) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!arm_on(t, "arm14-poison")) {
+                return
+            }
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
+            if (!model_available(t, path)) {
+                return
+            }
+            let prior_wscale = get_wscale_f16()
+            let prior_backend = active_kernel_backend()
+            set_wscale_f16(false)
+            pin_kernel_backend("portable")
+            var tr <- load_model(path, QuantMode.q8)
+            tr.config.seq_len = min(tr.config.seq_len, 512l)
+            var trg <- blob_twin(t, path, 512l)
+            let prompt <- encode(tr, counting_prompt(1, 30), true, false)
+            let de0 = metal_decode_stats().decodes
+            let d_clean = forced_maxd_pair(tr, trg, prompt, 8)
+            delete tr
+            delete trg
+            if (metal_decode_stats().decodes - de0 == 0l) {
+                clear_kernel_backend_pin()
+                select_kernel_backend(prior_backend)
+                set_wscale_f16(prior_wscale)
+                feint("metal decode declined (no Metal device?); poison gate skipped\n")
+                return
+            }
+            t |> success(d_clean < 4.0, "clean control: forced-feed GPU decode within 4 of CPU (measured {d_clean})")
+            // fresh loads move the weights epoch — the first driver entry flushes g_regions,
+            // so the poison below stands alone
+            var tr2 <- load_model(path, QuantMode.q8)
+            tr2.config.seq_len = min(tr2.config.seq_len, 512l)
+            var trg2 <- blob_twin(t, path, 512l)
+            foreign_gpu_prefill(tr2, trg2)
+            let d_poison = forced_maxd_pair(tr2, trg2, prompt, 8)
+            to_log(LOG_INFO, "arm14-poison eyeball: clean maxd {d_clean} vs poisoned {d_poison}\n")
+            t |> success(d_poison < 4.0, "after a foreign GPU prefill: forced-feed GPU decode still within 4 of CPU (measured {d_poison})")
+            delete tr2
+            delete trg2
+            clear_kernel_backend_pin()
+            select_kernel_backend(prior_backend)
+            set_wscale_f16(prior_wscale)
+        } else {
+            feint("das_metal is not built on this platform; nothing to compare\n")
+        }
+    }
+}

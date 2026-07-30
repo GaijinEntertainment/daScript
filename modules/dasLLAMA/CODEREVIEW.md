@@ -39,6 +39,13 @@
     (`log_gen_texts` in `tests/_model_tier.das`) — a red, or a suspicious green, must be
     eyeball-able as text in the log, not just an id/float diff. A numeric-only parity cell
     is a review defect.
+19. **Never key a GPU-resident cache by host address alone.** An address-keyed entry carries
+    its SPAN, a hit must cover the request (a shorter first upload must never serve a wider
+    later one), and different upload FORMS (plain span vs concat) live in separate tables so
+    they can never alias — the metal `RegionEntry` rail is the model. Buffers grown out of an
+    entry retire to a list released only at quiesce boundaries: unretained command buffers may
+    still bind them. A new address-keyed cache without span+form in its identity is a review
+    defect.
 
 ## Structure
 

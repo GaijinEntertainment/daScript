@@ -39,7 +39,17 @@ let ADD_RMS_MAX_DIM = 4096l
 var g_dev : MetalDevice?
 var g_queue : MetalCommandQueue?
 var g_failed = false
-var @scratch g_regions : table<uint64; MetalBuffer?>  // base address -> resident region; upload-once, steady-state [] is a hit
+// a resident copy of host bytes [base, base+bytes) — span-aware: a hit must COVER the request
+// (a shorter first upload must never serve a wider later one); concats keep their OWN table so
+// a plain span and a cat3 at the same base never alias (the prefill-plain vs decode-cat3 bug)
+struct private RegionEntry {
+    @do_not_delete buf : MetalBuffer?   // released explicitly (flush/release/retire)
+    bytes : uint64
+}
+
+var @scratch g_regions : table<uint64; RegionEntry>  // base address -> resident PLAIN region; upload-once, steady-state [] is a hit
+var @scratch g_regions_cat3 : table<uint64; RegionEntry>  // first-piece base -> resident CONCAT region
+var g_region_retire : array<MetalBuffer?>  // grown-out buffers: unretained cbs may still bind them — released only at the quiesce boundaries
 var g_pool : MetalBufferPool
 var g_upool : MetalBufferPool                // UNTRACKED pool: uniforms + rope rows (GPU-read-only)
 var g_decodes = 0l
@@ -502,28 +512,34 @@ def mirror_release(var mr : KVMirror) {
 //! re-initializes on the next served step; all mirrors rebuild from the CPU caches on demand.
 
 
-def upload_region(src : void?; bytes : uint64) : MetalBuffer? {
-    let key = intptr(src)
-    if (key_exists(g_regions, key)) {
-        return g_regions[key]
-    }
+[cold_path]   // first touch (or a wider re-touch) of a region — the upload, not the per-dispatch path
+def private region_upload_new(key : uint64; src : void?; bytes : uint64) : MetalBuffer? {
     // UNTRACKED: weights are GPU-read-only (written once, before any commit) — tracking ~450 of them made scheduler dependency analysis the dominant non-GPU cost (~70ms/prefill on 3B)
     var buf = metal_new_buffer_untracked(g_dev, bytes)
     unsafe {
         memcpy(metal_buffer_contents(buf), src, bytes)
     }
-    g_regions[key] = buf
+    g_regions[key] = RegionEntry(buf = buf, bytes = bytes)
     return buf
 }
 
-// lazily upload up to three CONSECUTIVE-ROW regions as ONE resident buffer, keyed by the first
-// piece's base address — the fused QKV / W1W3 GEMV streams (one dispatch, continuous row
-// indexing). Load-once-stable like upload_region; b2 == 0 makes it a two-piece concat.
-def upload_region_cat3(p0 : void?; b0 : uint64; p1 : void?; b1 : uint64; p2 : void?; b2 : uint64) : MetalBuffer? {
-    let key = intptr(p0)
+def upload_region(src : void?; bytes : uint64) : MetalBuffer? {
+    let key = intptr(src)
     if (key_exists(g_regions, key)) {
-        return g_regions[key]
+        var cached = g_regions[key]
+        if (cached.bytes >= bytes) {
+            return cached.buf
+        }
+        // a wider span at a shorter entry's base: the old buffer may be bound in an in-flight
+        // unretained cb — retire it, re-upload the full span
+        g_region_retire |> push(cached.buf)
     }
+    return region_upload_new(key, src, bytes)
+}
+
+[cold_path]
+def private region_upload_cat3_new(key : uint64; p0 : void?; b0 : uint64; p1 : void?; b1 : uint64;
+                                   p2 : void?; b2 : uint64) : MetalBuffer? {
     var buf = metal_new_buffer_untracked(g_dev, b0 + b1 + b2)
     unsafe {
         var d = reinterpret<uint8?>(metal_buffer_contents(buf))
@@ -533,8 +549,23 @@ def upload_region_cat3(p0 : void?; b0 : uint64; p1 : void?; b1 : uint64; p2 : vo
             memcpy(reinterpret<void?>(d + (b0 + b1)), p2, b2)
         }
     }
-    g_regions[key] = buf
+    g_regions_cat3[key] = RegionEntry(buf = buf, bytes = b0 + b1 + b2)
     return buf
+}
+
+// lazily upload up to three CONSECUTIVE-ROW regions as ONE resident buffer, keyed by the first
+// piece's base address — the fused QKV / W1W3 GEMV streams (one dispatch, continuous row
+// indexing). Load-once-stable like upload_region; b2 == 0 makes it a two-piece concat.
+def upload_region_cat3(p0 : void?; b0 : uint64; p1 : void?; b1 : uint64; p2 : void?; b2 : uint64) : MetalBuffer? {
+    let key = intptr(p0)
+    if (key_exists(g_regions_cat3, key)) {
+        var cached = g_regions_cat3[key]
+        if (cached.bytes >= b0 + b1 + b2) {
+            return cached.buf
+        }
+        g_region_retire |> push(cached.buf)
+    }
+    return region_upload_cat3_new(key, p0, b0, p1, b1, p2, b2)
 }
 
 // ===== the whole-plane resident buffers (blob-only models) =====
@@ -544,7 +575,11 @@ def upload_region_cat3(p0 : void?; b0 : uint64; p1 : void?; b1 : uint64; p2 : vo
 def private plane_buffer(dev : MetalDevice?; base : void?; bytes : uint64; mapped : bool) : MetalBuffer? {
     let key = intptr(base)
     if (key_exists(g_regions, key)) {
-        return g_regions[key]
+        var cached = g_regions[key]
+        if (cached.bytes >= bytes) {
+            return cached.buf
+        }
+        g_region_retire |> push(cached.buf)   // plane requests are whole-tensor constants — grow never fires in practice
     }
     var buf : MetalBuffer?
     if (mapped) {
@@ -563,7 +598,7 @@ def private plane_buffer(dev : MetalDevice?; base : void?; bytes : uint64; mappe
             }
         }
     }
-    g_regions[key] = buf
+    g_regions[key] = RegionEntry(buf = buf, bytes = bytes)
     return buf
 }
 
@@ -1622,12 +1657,40 @@ def metal_common_init : bool {
 }
 
 // ===== the weights-epoch guard =====
-// g_regions/g_cat_blobs key by host address; a model reload makes those keys lie (see
+// g_regions keys by host address; a model reload makes those keys lie (see
 // weights_epoch). Drivers flush at entry when the epoch moved, after quiescing in-flight work.
 var g_weight_cache_epoch = -1l
 
 def weight_caches_stale() : bool {
     return weights_epoch() != g_weight_cache_epoch
+}
+
+[cold_path]   // regions release + retire drain — the shared tail of the flush/teardown legs
+def private regions_release_all {
+    for (e in values(g_regions)) {
+        if (e.buf != null) {
+            metal_release(e.buf)
+        }
+        e.buf = null
+    }
+    unsafe {
+        delete g_regions
+    }
+    for (e in values(g_regions_cat3)) {
+        if (e.buf != null) {
+            metal_release(e.buf)
+        }
+        e.buf = null
+    }
+    unsafe {
+        delete g_regions_cat3
+    }
+    for (b in g_region_retire) {
+        if (b != null) {
+            metal_release(b)
+        }
+    }
+    g_region_retire |> clear()   // released above — delete of array<T?> would double-free the pointees
 }
 
 [cold_path]   // live-reload only
@@ -1636,15 +1699,7 @@ def weight_caches_flush_on_reload {
         return
     }
     finish_pending_step()
-    for (buf in values(g_regions)) {
-        if (buf != null) {
-            metal_release(buf)
-        }
-        buf = null
-    }
-    unsafe {
-        delete g_regions
-    }
+    regions_release_all()
     g_weight_cache_epoch = weights_epoch()
 }
 
@@ -1673,15 +1728,7 @@ def metal_common_release {
     }
     g_arena_bytes = 0ul
     g_arena_free |> clear()
-    for (buf in values(g_regions)) {
-        if (buf != null) {
-            metal_release(buf)
-        }
-        buf = null
-    }
-    unsafe {
-        delete g_regions
-    }
+    regions_release_all()
     pool_drain(g_pool)
     pool_drain(g_upool)
     if (g_signs != null) {

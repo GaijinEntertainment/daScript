@@ -24,3 +24,15 @@
    §2566), or carries a comment naming why it must stay scalar (bit-exactness contract with a
    parity oracle — the "NOT bit-exact" caveat on the fast forms is the known constraint; decide
    per call site which side of the contract it sits on).
+
+3. **The pipelined batch-decode landing holds borrowed Session pointers across the caller's
+   deletes.** `finish_pending_step` (dasllama_metal_common) lands the in-flight batch step by
+   memcpy-ing KV rows and logits through `g_lp_sessions[i]` — raw borrowed pointers. Nothing
+   quiesces on session death, `metal_decode_flush` (the public landing call) has zero callers,
+   and every test helper deletes its sessions right after `eval_batch_` with a step potentially
+   pending — a landing after those deletes writes into freed heap. Empirically quiet today
+   (probed 2026-07-30: batch-only prelude showed no corruption), but it is a lifetime landmine,
+   and the server would inherit it if a chat session ever dies mid-pipeline. Done = a session
+   retirement seam the drivers hook (land or abandon pending steps that reference the dying
+   session), or the landing rail stops holding raw session pointers; plus `metal_decode_flush`
+   calls at the test helpers' teardown as the interim belt.
