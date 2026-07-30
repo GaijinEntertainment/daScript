@@ -36,3 +36,13 @@
    retirement seam the drivers hook (land or abandon pending steps that reference the dying
    session), or the landing rail stops holding raw session pointers; plus `metal_decode_flush`
    calls at the test helpers' teardown as the interim belt.
+
+4. **The GPU-PLE prefill pre-step never engages on the E4B even though the model qualifies.**
+   The census (family-scoped E4B row, metal prefill serving on device — `attn_qk_mm` counted)
+   shows `metal_ple_gather_q8`, `metal_ple_finish`, and `metal_bf16_mulmm` at zero, yet every
+   static leg of `metal_ple_pre_gpu_gate` holds for the E4B gguf: `per_layer_model_proj` is
+   native BF16, `per_layer_token_embd` is Q8_0, ple=256 passes the shape gates, and the prefill
+   itself did not decline. So the gate returns false on a dynamic leg (consult-time override /
+   `prefill_decline` / `metal_prefill_init` ordering) — the PLE pre-step silently runs its CPU
+   fallback (`ple_pre_prefill`) on every metal prefill window. Done = instrument the gate legs,
+   find the refusing one, fix or document it, and the census E4B row counts all three kernels.

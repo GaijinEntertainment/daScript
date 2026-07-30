@@ -20,10 +20,11 @@ require _model_tier
 // format / graph / batch-shape / KV-codec axes and report which compiled kernels were never
 // dispatched — LOUD WARNINGS, never an auto-dead verdict. This suite is the gate a kernel
 // deletion must run before ("was it ever dispatched by anything?") and the home a NEW kernel's
-// small-model run joins. Expected warnings on the small tier: the MoE / mx4 / PLE-batch / MTP
-// and 70B-class kernels — their models sit above the small tier; the report stays honest about
-// what THIS run covered. The vulkan half here is the device-free rail unit (spec parse + zero
-// table); the serving vulkan census runs on the PC box beside the vulkan tier suites.
+// small-model run joins. Expected warnings on the small tier: MoE / mx4 / suppress and other
+// kernels whose carriers sit above the tier (their census rows serve under
+// DASLLAMA_PARITY_FULL=1); the report stays honest about what THIS run covered. The vulkan
+// half here is the device-free rail unit (spec parse + zero table); the serving vulkan census
+// runs on the PC box beside the vulkan tier suites.
 
 def private counting_prompt(start, last : int) : string {
     return build_string() $(var w) {
@@ -76,6 +77,11 @@ def private cov_model(t : T?; path, family : string; kdts : array<KVDtype>; nbs 
                     delete one
                     cur = greedy_top(s.logits, vocab)
                 }
+                // continuation prefill (start_pos > 0) — the pf window-landing utilities only
+                // serve when a second window lands on an already-warm cache
+                var p2 <- encode(tr, counting_prompt(50, 90), false, false)
+                eval_(tr, s, p2)
+                delete p2
                 delete s
                 for (nb in nbs) {
                     var ss : array<Session>
@@ -109,6 +115,47 @@ def private cov_model(t : T?; path, family : string; kdts : array<KVDtype>; nbs 
     }
 }
 
+def private census_zoo(t : T?) {
+    // llama: the dim-ladder base — all three KV codecs, the B=2/4/8 batch shapes
+    cov_model(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf"), "llama",
+        [KVDtype.f16, KVDtype.q8_0, KVDtype.tq4], [2, 4, 8])
+    // the s16 axis (f16 weight-scale plane) on the same carrier
+    set_wscale_f16(true)
+    cov_model(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf"), "llama",
+        [KVDtype.f16], [2])
+    set_wscale_f16(false)
+    // the q5_K tail on the same carrier — Q5_K_M rows drive the k5 GEMV/mulmm/batch tiles
+    cov_model(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q5_K_M.gguf"), "llama",
+        [KVDtype.f16], [2, 4, 8])
+    // gemma2: K-quant weights x softcap/sliding/geglu/wide heads; B=4/8 drive the
+    // k4/k6 batch tiles
+    cov_model(t, path_join(models_dir(), "gemma-2-2b-it-Q4_K_M.gguf"), "gemma2",
+        [KVDtype.f16, KVDtype.q8_0], [2, 4, 8])
+    // qwen3: qk_norm + qd != dim
+    cov_model(t, path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf"), "qwen3",
+        [KVDtype.f16, KVDtype.tq4], [2])
+    // qwen2: qkv_bias
+    cov_model(t, path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf"), "qwen2",
+        [KVDtype.f16, KVDtype.q8_0], [2])
+    // qwen3.5: the DeltaNet hybrid (batch = per-row fallback by design — still coverage)
+    cov_model(t, path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf"), "qwen35",
+        [KVDtype.f16], [2])
+    // gemma4e: PLE + V-from-K (no PLE batch arm — a blob-twin CPU batch fallback
+    // would trip the blob-only panic, so no batch shapes here); large tier
+    let none : array<int>
+    cov_model(t, path_join(models_dir(), "gemma-4-E4B-it-Q8_0.gguf"), "gemma4e",
+        [KVDtype.f16], none)
+    // gemma4: the checkpoint suppress list (suppress_tokens metadata rides the 12B
+    // family, NOT the E-series) + K-quant at 12B shapes; large tier
+    cov_model(t, path_join(models_dir(), "gemma-4-12B-it-Q4_K_M.gguf"), "gemma4",
+        [KVDtype.f16], [2])
+    // qwen3moe: the whole-graph GPU MoE family (router/bucket/select/combine +
+    // expert GEMV/GEMMs); no batch shapes — MoE batch declines are graph-level and a
+    // blob-twin CPU batch fallback would trip the blob-only panic; large tier
+    cov_model(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf"), "qwen3moe",
+        [KVDtype.f16], none)
+}
+
 [test]
 def test_metal_kernel_coverage(tst : T?) {
     tst |> run("Metal kernel coverage census: the small-model zoo across format/graph/batch/KV axes") <| @(t : T?) {
@@ -131,31 +178,7 @@ def test_metal_kernel_coverage(tst : T?) {
             set_wscale_f16(false)
             pin_kernel_backend("portable")   // row-major weights — the blob transform's donor contract
             metal_kernel_coverage_reset()
-            // llama: the dim-ladder base — all three KV codecs, the B=2/4/8 batch shapes
-            cov_model(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf"), "llama",
-                [KVDtype.f16, KVDtype.q8_0, KVDtype.tq4], [2, 4, 8])
-            // the s16 axis (f16 weight-scale plane) on the same carrier
-            set_wscale_f16(true)
-            cov_model(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf"), "llama",
-                [KVDtype.f16], [2])
-            set_wscale_f16(false)
-            // gemma2: K-quant weights x softcap/sliding/geglu/wide heads
-            cov_model(t, path_join(models_dir(), "gemma-2-2b-it-Q4_K_M.gguf"), "gemma2",
-                [KVDtype.f16, KVDtype.q8_0], [2])
-            // qwen3: qk_norm + qd != dim
-            cov_model(t, path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf"), "qwen3",
-                [KVDtype.f16, KVDtype.tq4], [2])
-            // qwen2: qkv_bias
-            cov_model(t, path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf"), "qwen2",
-                [KVDtype.f16, KVDtype.q8_0], [2])
-            // qwen3.5: the DeltaNet hybrid (batch = per-row fallback by design — still coverage)
-            cov_model(t, path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf"), "qwen35",
-                [KVDtype.f16], [2])
-            // gemma4e: PLE + V-from-K + suppress (no PLE batch arm — a blob-twin CPU batch
-            // fallback would trip the blob-only panic, so no batch shapes here)
-            let none : array<int>
-            cov_model(t, path_join(models_dir(), "gemma-4-E4B-it-Q8_0.gguf"), "gemma4e",
-                [KVDtype.f16], none)
+            census_zoo(t)
             // the census verdict: the report prints counts + LOUD WARNINGS for the zeros;
             // the assert pins only that the RAIL counts — coverage gaps are human calls
             metal_kernel_coverage_report()
@@ -166,8 +189,14 @@ def test_metal_kernel_coverage(tst : T?) {
                     served++
                 }
             }
-            t |> success(served >= 40,
-                "the census counted {served} distinct dispatched kernels (rail floor 40)")
+            let famfilter = get_env_variable("DASLLAMA_TEST_FAMILY")
+            if (empty(famfilter)) {
+                t |> success(served >= 40,
+                    "the census counted {served} distinct dispatched kernels (rail floor 40)")
+            } else {
+                // a family filter narrows the zoo by design — the floor only holds unfiltered
+                to_log(LOG_INFO, "census floor not asserted (family filter '{famfilter}'): {served} served\n")
+            }
             delete cov
             metal_decode_shutdown()
             clear_kernel_backend_pin()
