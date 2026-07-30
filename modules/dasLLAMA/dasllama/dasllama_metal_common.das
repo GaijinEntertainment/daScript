@@ -1698,36 +1698,12 @@ def metal_common_release {
     g_failed = false
 }
 
-// ===== the prefill path's decline machinery + the shared block_q8_0 blob cache =====
-// (moved from dasllama_metal_prefill in the W1 split: the stage report above reads these, and
-// prefill requires THIS module for its decline enum — the reverse call would be a cycle)
+// ===== the prefill path's decline counters + the shared block_q8_0 blob cache =====
+// (the stage report above reads these; the MetalPrefillDecline enum itself lives in
+// dasllama_metal_shapes beside its decode twin — M5)
 
-// why a prefill declined to the CPU path — the FIRST failing gate clause (the decode enum's
-// twin; the support-matrix test asserts these names as strings)
-enum MetalPrefillDecline {
-    none                // supported — the prefill runs on the GPU
-    start_pos           // RETIRED (M2.5): a continuation chunk gathers the session's existing
-                        // rows into the K/V panels and shifts the causal diagonal by start_pos
-    npos_window         // npos below g_min_npos or above g_max_npos
-    quant_mode          // weights not loaded under QuantMode.q8
-    kquant_native       // per-tensor K-quant planes: not readable as qblob offsets (kernels = W4)
-    wscale_f16          // f16 scale plane (the load DEFAULT) — GPU prefill needs the s16 path (W2)
-    arch                // RETIRED (family waves A): the arch-name check is gone — non-std block
-                        // sets decline `graph`, feature-flag configs decline `feature` per bit
-    backend_repack      // repack backend: interleaved weight layout unreadable by the GEMM kernel
-    config              // RETIRED (family waves A): split into `feature` + the per-need
-                        // `need_*` keys in the declines-by-reason table
-    graph               // block set is not the std dense stack (MoE / recurrent / custom attn)
-    feature             // the model needs layer-stack features this path's kernels don't
-                        // implement — each missing bit records a `need_*` key alongside
-    shape               // head/dim alignment outside the kernel grids
-    layers              // per-layer non-uniformity (kv_dim/head_size/hidden/sliding/missing wv)
-    rope_rows           // the window's rope table not built
-    device              // metal_prefill_init failed (no device / PSO build failure)
-    gpu_error           // dispatch failed at execution time
-    planar              // weights not in the blob-image form (the drivers are blob-only)
-    dn_state            // recurrent state not GPU-resident and no CPU prefix to sync from
-}
+// The MetalPrefillDecline enum lives in dasllama_metal_shapes beside its decode twin (M5);
+// the counting machinery for both paths stays here (require_or_panic + the reason tables).
 
 var g_prefill_declines = 0l
 var g_prefill_declines_by_reason : table<string; int64>
