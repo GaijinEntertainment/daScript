@@ -2,17 +2,23 @@ options gen2
 options _comment_hygiene = true
 
 module dasllama_parakeet shared public
+options _function_length = 0   // model forward/serialize walks mirror the model schema
 
 require math
 require daslib/fio
 require strings
 require daslib/strings_boost
 require daslib/array_boost
+require daslib/apply
+require daslib/archive
+require dasllama/dasllama_env
 require dasllama/dasllama_math
 require dasllama/dasllama_gguf
 require dasllama/dasllama_audio
 require dasllama/dasllama_quant
 require dasllama/dasllama_par
+require dasllama/dasllama_common   // apply_box_profile_runtime for the parakeet-image identity
+require dasllama/dasllama_image
 
 // Parakeet-TDT (NVIDIA FastConformer + LSTM predictor + Token-and-Duration Transducer),
 // read from whisper.cpp's converted ggml bin. Oracle = whisper.cpp's in-tree parakeet-cli
@@ -125,6 +131,91 @@ struct ParakeetModel {
     q8 : bool
     qblob : array<int8>
     qscales : array<float>
+    image_map : void?         // non-null when the planes borrow a mapped .dlim (dasllama_image)
+    image_bytes : uint64
+}
+
+def finalize(var t : ParakeetModel) {
+    apply(t) $ [unused_argument(name)] (name : string; var field) {
+        static_if (typeinfo is_array(field)) {
+            if (lock_count(field) != 0) {
+                unsafe {
+                    _builtin_forget_temp_array(field)
+                }
+            } else {
+                delete field
+            }
+        } static_elif (typeinfo is_struct(field)) {
+            delete field
+        }
+    }
+    if (t.image_map != null) {
+        unsafe {
+            fmap_close(t.image_map, t.image_bytes)
+        }
+        t.image_map = null
+        t.image_bytes = 0ul
+    }
+}
+
+// the tripwire: serialize_image_meta(ParakeetModel) covers 40 fields (vocab rides the meta
+// blob — string arrays can't be raw planes); fft (rebuilt at load) + image_map + image_bytes
+// are deliberate skips.
+let private PARAKEET_META_FIELDS = 40 + 3
+
+// every meta-carried ParakeetModel field, explicitly, both directions (see dasllama_image)
+def private serialize_image_meta(var arch : Archive; var t : ParakeetModel) {
+    verify(count_meta_fields(t) == PARAKEET_META_FIELDS)   // grew ParakeetModel? extend this list
+    arch |> serialize_raw(t.n_vocab)
+    arch |> serialize_raw(t.n_state)
+    arch |> serialize_raw(t.n_head)
+    arch |> serialize_raw(t.n_layer)
+    arch |> serialize_raw(t.n_mel)
+    arch |> serialize_raw(t.n_fft)
+    arch |> serialize_raw(t.subsampling)
+    arch |> serialize_raw(t.n_sub_ch)
+    arch |> serialize_raw(t.n_conv_kernel)
+    arch |> serialize_raw(t.n_pred_dim)
+    arch |> serialize_raw(t.n_pred_layers)
+    arch |> serialize_raw(t.n_durations)
+    arch |> serialize_raw(t.n_max_tokens)
+    arch |> serialize_raw(t.eps)
+    arch |> serialize_raw(t.blank_id)
+    serialize_strings(arch, t.vocab)
+    arch |> serialize_raw(t.c0_w)
+    arch |> serialize_raw(t.c0_b)
+    arch |> serialize_raw(t.c2_w)
+    arch |> serialize_raw(t.c2_b)
+    arch |> serialize_raw(t.c3_w)
+    arch |> serialize_raw(t.c3_b)
+    arch |> serialize_raw(t.c5_w)
+    arch |> serialize_raw(t.c5_b)
+    arch |> serialize_raw(t.c6_w)
+    arch |> serialize_raw(t.c6_b)
+    arch |> serialize_raw(t.pre_w)
+    arch |> serialize_raw(t.pre_b)
+    arch |> serialize_raw(t.layers_off)
+    arch |> serialize_raw(t.layer_stride)
+    arch |> serialize_raw(t.aux_layers_off)
+    arch |> serialize_raw(t.aux_layer_stride)
+    arch |> serialize_raw(t.embed_off)
+    arch |> serialize_raw(t.joint_enc_w)
+    arch |> serialize_raw(t.joint_enc_b)
+    arch |> serialize_raw(t.joint_pred_w)
+    arch |> serialize_raw(t.joint_pred_b)
+    arch |> serialize_raw(t.joint_net_w)
+    arch |> serialize_raw(t.joint_net_b)
+    arch |> serialize_raw(t.q8)
+}
+
+def private image_post_load(var t : ParakeetModel) {
+    t.fft <- build_fft_plan(t.n_fft)   // derived tables — the parse-at-load carve-out
+}
+
+[init]
+def private register_parakeet_image_tags {
+    register_image_family_tag("parakeet-q8")
+    register_image_family_tag("parakeet-f32")
 }
 
 def private pk_layer_offsets(m : ParakeetModel; l : int64) : PkLayerOffs {
@@ -408,9 +499,43 @@ def private pk_read_gemm(recs : table<string; PkTensorRec>; b : array<uint8> | #
 }
 
 //! Loads a converted Parakeet-TDT ggml bin (convert-parakeet-to-ggml.py output; f32 or f16).
-//! With ``q8`` the encoder/joint GEMM weights transcode to Q8_0 straight from the mapped file
-//! (~4x CPU fast path); conv im2col, depthwise, LSTM, and joint_net stay fp32 (a few % of encode).
+//! With ``q8`` the encoder/joint GEMM weights transcode to Q8_0 straight from the mapped file (~4x CPU fast path); conv im2col, depthwise, LSTM, and joint_net stay fp32 (a few % of encode).
+//! Like ``load_model``, caches a box/knob-specific PREPARED IMAGE for fast reload; ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
 def load_parakeet_model(path : string; q8 : bool = false) : ParakeetModel {
+    let tag = q8 ? "parakeet-q8" : "parakeet-f32"
+    if (path |> ends_with(".dlim")) {
+        // named directly — no source bin to regenerate from, so a wrong identity panics
+        apply_box_profile_runtime()
+        let ts_img = ref_time_ticks()
+        var t = ParakeetModel()
+        if (!load_image(path, t, tag)) {
+            panic("dasLLAMA: '{path}' is not a prepared parakeet image for this box/knobs (identity {image_identity(tag)}) — regenerate it from the source model")
+        }
+        to_log(LOG_INFO, "dasLLAMA: prepared parakeet image mapped in {get_time_usec(ts_img) / 1000} ms — {path}\n")
+        return <- t
+    }
+    if (env_flag("DASLLAMA_IMAGE", true)) {
+        apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
+        let img = image_path_for(path, tag)
+        let ts_img = ref_time_ticks()
+        var t = ParakeetModel()
+        if (load_image(img, t, tag)) {
+            to_log(LOG_INFO, "dasLLAMA: prepared parakeet image mapped in {get_time_usec(ts_img) / 1000} ms — {img}\n")
+            return <- t
+        }
+        var m <- load_parakeet_model_(path, q8)
+        let ts_save = ref_time_ticks()
+        if (save_image(m, img, tag)) {
+            to_log(LOG_INFO, "dasLLAMA: prepared parakeet image saved in {get_time_usec(ts_save) / 1000} ms — {img}\n")
+        }
+        dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
+        return <- m
+    }
+    return <- load_parakeet_model_(path, q8)
+}
+
+//! The ggml-bin reader proper — the eager (no image cache) load; ``load_parakeet_model`` wraps it.
+def load_parakeet_model_(path : string; q8 : bool = false) : ParakeetModel {
     var m = ParakeetModel()
     m.q8 = q8
     let n_bytes = int64(stat(path).size)

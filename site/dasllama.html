@@ -3,15 +3,15 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>dasLLAMA — CPU inference benchmarks · daslang</title>
-    <meta name="description" content="dasLLAMA — a CPU LLM + speech-to-text inference engine written in daslang and JIT-compiled. Measured CPU-only benchmarks vs llama.cpp, whisper.cpp, parakeet, ONNX-Runtime and NeMo, on Apple M1 and AMD Threadripper." />
-    <meta name="keywords" content="daslang, dasLLAMA, llama.cpp, CPU inference, local LLM, LLM benchmark, whisper, parakeet, speech to text, ASR, omni model" />
+    <title>dasLLAMA — LLM inference benchmarks · daslang</title>
+    <meta name="description" content="dasLLAMA — an LLM + speech-to-text inference engine written in daslang and JIT-compiled. LLM benchmarks vs llama.cpp on CPU and Metal across Apple M1 Max, M4 Pro and M3 Air; speech-to-text vs whisper.cpp, parakeet, ONNX-Runtime and NeMo on M1 Max and AMD Threadripper." />
+    <meta name="keywords" content="daslang, dasLLAMA, llama.cpp, local LLM, LLM benchmark, Metal inference, whisper, parakeet, speech to text, ASR, omni model" />
     <link rel="canonical" href="https://daslang.io/dasllama.html" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://daslang.io/dasllama.html" />
     <meta property="og:site_name" content="daslang" />
-    <meta property="og:title" content="dasLLAMA — local LLMs with audio in, up to 6× faster on CPU" />
-    <meta property="og:description" content="A CPU LLM + speech-to-text stack written in daslang, JIT-compiled. Auto-tuned kernels beat llama.cpp's on most LLMs; audio/omni workloads run up to ~6× faster. Measured CPU-only benchmarks, methodology included." />
+    <meta property="og:title" content="dasLLAMA — local LLMs with audio in, faster than llama.cpp" />
+    <meta property="og:description" content="An LLM + speech-to-text stack written in daslang, JIT-compiled. Auto-tuned kernels beat llama.cpp's on CPU and on Metal; audio-in chat models run up to 6× faster than llama.cpp's multimodal CLI. Every number ships with its reference pair, methodology included." />
     <meta name="twitter:card" content="summary" />
 
     <link rel="icon" type="image/svg+xml" href="files/daslang-favicon.svg" />
@@ -52,100 +52,132 @@
   .dl-run .amber { color: var(--amber); }
   .dl-run .metric { color: var(--fg); }
 
-  /* toggles */
-  .dl-toggles { display: flex; flex-wrap: wrap; gap: 22px; align-items: center; margin: 8px 0 26px; }
-  .dl-seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
-  .dl-seg button {
-    font-family: var(--font-mono); font-size: 12px; color: var(--fg-dim);
-    background: transparent; border: 0; padding: 8px 15px; cursor: pointer;
-    transition: background 80ms ease, color 80ms ease; white-space: nowrap;
-  }
-  .dl-seg button + button { border-left: 1px solid var(--rule); }
-  .dl-seg button:hover { color: var(--fg); }
-  .dl-seg button.is-active { background: var(--amber); color: #17130a; }
-  .dl-seg__caption { font-family: var(--font-mono); font-size: 10.5px; color: var(--fg-faint); text-transform: uppercase; letter-spacing: 0.1em; }
-
-  /* diverging ratio bars (LLM) */
-  .dl-bars { display: flex; flex-direction: column; gap: 7px; }
-  .dl-bar { display: grid; grid-template-columns: 172px 1fr 58px; align-items: center; gap: 14px; }
-  .dl-bar__label { font-family: var(--font-mono); font-size: 12px; color: var(--fg-dim); text-align: right; }
-  .dl-bar__track { position: relative; height: 20px; background: var(--bg-2); border: 1px solid var(--rule); border-radius: 4px; }
-  .dl-bar__center { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--fg-faint); opacity: 0.7; }
-  .dl-bar__fill { position: absolute; top: 2px; bottom: 2px; border-radius: 2px; }
-  .dl-bar--win .dl-bar__fill { background: var(--amber); }
-  .dl-bar--loss .dl-bar__fill { background: #7a4a3c; }
-  .dl-bar__val { font-family: var(--font-mono); font-size: 12px; text-align: left; }
-  .dl-bar--win .dl-bar__val { color: var(--amber); }
-  .dl-bar--loss .dl-bar__val { color: var(--fg-dim); }
-  .dl-bar--tie .dl-bar__fill { background: var(--fg-faint); }
-  .dl-bar--tie .dl-bar__val { color: var(--fg-dim); }
   .dl-caption { font-family: var(--font-mono); font-size: 12px; color: var(--fg-dim); margin-top: 18px; }
-  .dl-axis { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 10px; color: var(--fg-faint); margin: 10px 0 0; padding: 0 58px 0 172px; }
-
-  .dl-win { color: var(--amber); }
-  .dl-loss { color: var(--fg-dim); }
+  /* the compound selectors out-rank .dl-num (source order put it later, same specificity) —
+     losses are data, not shame: visible teal, distinct from the amber wins */
+  .dl-win, .dl-num.dl-win { color: var(--amber); }
+  .dl-loss, .dl-num.dl-loss { color: var(--dl-teal); }
+  :root { --dl-teal: #4fb8a8; }
 
   /* data table */
-  .dl-table-wrap { margin-top: 34px; border: 1px solid var(--rule); border-radius: 8px; overflow-x: auto; }
+  .dl-table-wrap { margin-top: 34px; border: 1px solid var(--rule); border-radius: 8px; overflow-x: auto; scrollbar-width: thin; }
   table.dl-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 12px; min-width: 720px; }
   .dl-table thead th {
-    text-align: right; padding: 12px 14px; color: var(--fg-faint); font-weight: 400;
+    text-align: right; padding: 12px 10px; color: var(--fg-faint); font-weight: 400;
     font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--rule);
     background: var(--bg-2); white-space: nowrap;
   }
   .dl-table thead th:first-child { text-align: left; }
   .dl-table thead th.dl-grp { color: var(--amber); }
-  .dl-table tbody td { padding: 9px 14px; border-bottom: 1px solid var(--rule); }
+  .dl-table tbody td { padding: 9px 10px; border-bottom: 1px solid var(--rule); }
   .dl-table tbody tr:last-child td { border-bottom: 0; }
   .dl-table tbody tr:hover td { background: rgba(232,161,58,0.04); }
   .dl-num { text-align: right; color: var(--fg); }
   .dl-dim { color: var(--fg-faint); }
-  .dl-td-model { color: var(--fg); }
-  .dl-plat { font-family: var(--font-mono); font-size: 11px; color: var(--fg-faint); margin-top: 14px; }
+  .dl-td-model { color: var(--fg); max-width: 300px; }   /* long model names wrap at hyphens instead of forcing the ratio columns off-screen */
 
-  /* per-model benchmark leaderboard */
-  .dl-bench-model { border: 1px solid var(--rule); border-radius: 8px; background: var(--bg-2); margin-top: 18px; padding: 18px 20px; }
-  .dl-bench-model__head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; }
-  .dl-bench-model__name { font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--fg); overflow-wrap: anywhere; }
-  .dl-bench-model__meta { font-family: var(--font-mono); font-size: 11px; color: var(--fg-faint); }
-  .dl-bench-model__note { font-family: var(--font-mono); font-size: 10.5px; color: var(--amber-dim); margin-top: 6px; }
-  .dl-bench-box { margin-top: 14px; }
-  .dl-bench-box__name { font-family: var(--font-mono); font-size: 11px; color: var(--fg-dim); margin-bottom: 4px; }
-  .dl-bench-cols, .dl-bench-row { display: grid; grid-template-columns: 210px 1fr 84px 84px 72px; gap: 12px; align-items: center; padding: 4px 8px; }
-  .dl-bench-cols { font-family: var(--font-mono); font-size: 10px; color: var(--fg-faint); }
-  .dl-bench-cols span:nth-child(n+3) { text-align: right; }
-  .dl-bench-row { border-radius: 4px; cursor: pointer; }
-  .dl-bench-row:hover { background: rgba(232,161,58,0.05); }
-  .dl-bench-row__eng { font-family: var(--font-mono); font-size: 12px; color: var(--fg-dim); }
-  .dl-bench-row--das .dl-bench-row__eng { color: var(--amber); }
-  .dl-bench-row--win .dl-bench-row__eng { font-weight: 700; }
-  .dl-bench-row__tags { color: var(--fg-faint); font-size: 10px; }
-  .dl-bench-row__track { height: 13px; background: var(--bg-3); border-radius: 3px; overflow: hidden; }
-  .dl-bench-row__fill { height: 100%; border-radius: 3px; background: var(--fg-faint); }
-  .dl-bench-row--das .dl-bench-row__fill { background: var(--amber); }
-  .dl-bench-row__num, .dl-bench-row__ratio { font-family: var(--font-mono); font-size: 12px; text-align: right; color: var(--fg); }
-  .dl-bench-receipt { font-family: var(--font-mono); font-size: 10.5px; line-height: 1.6; color: var(--fg-dim); background: var(--bg-3); border-radius: 6px; padding: 10px 12px; margin: 4px 0 8px; overflow-x: auto; white-space: pre; }
+  /* § 01 view toggle + mirrored bar chart: teal reference grows left, amber das grows right,
+     each pair normalized to its own max — the longer side is the winner, the gap is the ratio */
+  .dl-viewbar { margin-top: 26px; display: flex; gap: 14px; align-items: center; }
+  .dl-seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+  .dl-seg button {
+    background: none; border: 0; color: var(--fg-faint); font-family: var(--font-mono);
+    font-size: 11px; padding: 6px 14px; cursor: pointer; letter-spacing: 0.04em;
+  }
+  .dl-seg button + button { border-left: 1px solid var(--rule); }
+  .dl-seg button.is-on { color: var(--amber); background: rgba(232, 161, 58, 0.07); }
+  .dl-bars { margin-top: 14px; border: 1px solid var(--rule); border-radius: 8px; padding: 12px 16px; font-family: var(--font-mono); font-size: 12px; }
+  .dl-bar-row { display: flex; align-items: center; gap: 14px; padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.03); }
+  .dl-bar-row:last-child { border-bottom: 0; }
+  .dl-bar-row:hover { background: rgba(232, 161, 58, 0.04); }
+  .dl-bar-label { flex: 0 0 250px; overflow: hidden; color: var(--fg); line-height: 1.35; }
+  .dl-bar-label .dl-dim2 { display: block; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dl-bar-pair { flex: 1 1 auto; min-width: 220px; display: flex; flex-direction: column; gap: 3px; }
+  .dl-bar-line { display: flex; align-items: center; gap: 8px; height: 10px; }
+  .dl-bar-das, .dl-bar-ref { height: 8px; border-radius: 2px; flex: 0 0 auto; }
+  .dl-bar-das { background: var(--amber); opacity: 0.55; }
+  .dl-bar-ref { background: var(--dl-teal); opacity: 0.45; }
+  .dl-bar-row:hover .dl-bar-das, .dl-bar-row:hover .dl-bar-ref { opacity: 0.95; }   /* the hovered pair lights up; the field stays quiet */
+  .dl-bar-val { color: var(--fg-faint); font-size: 11px; white-space: nowrap; }
+  .dl-bar-val--das { color: var(--fg); }
+  .dl-bar-line .dl-bar-das, .dl-bar-line .dl-bar-ref { max-width: calc(100% - 58px); }   /* the value label always fits after the bar */
+  .dl-bar-ratio { flex: 0 0 52px; text-align: right; }
+  @media (max-width: 860px) { .dl-bar-label { flex-basis: 150px; } .dl-bar-pair { min-width: 120px; } }
 
-  /* ASR */
-  .dl-asr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
-  .dl-asr-model { border: 1px solid var(--rule); border-radius: 8px; padding: 20px 22px; background: var(--bg-2); }
-  .dl-asr-model__head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; }
-  .dl-asr-model__name { font-family: var(--font-sans); font-size: 17px; font-weight: 600; color: var(--fg); }
-  .dl-asr-model__ref { font-family: var(--font-mono); font-size: 10.5px; color: var(--fg-faint); }
-  .dl-asr-row { display: grid; grid-template-columns: 120px 1fr 108px; align-items: center; gap: 12px; padding: 5px 0; }
-  .dl-asr-row__file { font-family: var(--font-mono); font-size: 11.5px; color: var(--fg-dim); display: flex; justify-content: space-between; padding-right: 6px; }
-  .dl-asr-row__dur { color: var(--fg-faint); }
-  .dl-asr-row__track { height: 14px; background: var(--bg-3); border-radius: 3px; overflow: hidden; }
-  .dl-asr-row__fill { height: 100%; background: var(--green); border-radius: 3px; }
-  .dl-asr-row__speed { font-family: var(--font-mono); font-size: 12px; color: var(--green); text-align: right; }
-  .dl-asr-row__xrt { color: var(--fg-faint); font-size: 10px; }
+  /* the bridge: the tables convince, this points at the reason — the language */
+  .dl-bridge { margin-top: 30px; padding: 18px 22px; border: 1px solid var(--rule); border-left: 2px solid var(--amber); border-radius: 8px; max-width: 780px; }
+  .dl-bridge p { margin: 0; color: var(--fg-dim); font-size: 14px; line-height: 1.6; }
+  .dl-bridge__links { margin-top: 10px !important; display: flex; gap: 26px; flex-wrap: wrap; }
 
-  /* blowout callouts */
-  .dl-blowouts { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 8px; }
-  .dl-blowout { border: 1px solid var(--amber-dim); border-radius: 10px; padding: 26px 28px; background: linear-gradient(180deg, rgba(232,161,58,0.06), transparent); }
-  .dl-blowout__n { font-family: var(--font-sans); font-size: 52px; font-weight: 600; letter-spacing: -0.03em; color: var(--amber); line-height: 1; }
-  .dl-blowout__t { font-family: var(--font-sans); font-size: 16px; font-weight: 600; color: var(--fg); margin-top: 12px; }
-  .dl-blowout__s { font-family: var(--font-mono); font-size: 11px; color: var(--fg-faint); margin-top: 6px; }
+  /* pair tables — one row per das measurement ÷ its reference (§ 01 LLM, § 02 ASR, § 03 audio in) */
+  .forge-p--wide { max-width: 780px; }
+
+  .dl-lanes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 28px; margin: 26px 0 4px; }
+  .dl-lanes > div { border-top: 1px solid var(--rule); padding: 12px 0 0; }
+  .dl-lanes dt { font-family: var(--font-mono); font-size: 11.5px; color: var(--amber); margin-bottom: 5px; }
+  .dl-lanes dd { margin: 0; font-size: 13px; line-height: 1.5; color: var(--fg-dim); }
+  .dl-lanes code { font-family: var(--font-mono); font-size: 11.5px; color: var(--fg); }
+
+  .dl-filters { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; margin: 26px 0 0; }
+  .dl-filters label {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--font-mono); font-size: 10.5px; color: var(--fg-faint);
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .dl-filters select {
+    font-family: var(--font-mono); font-size: 12px; color: var(--fg);
+    background: var(--bg-2); border: 1px solid var(--rule); border-radius: 6px;
+    padding: 7px 10px; cursor: pointer; text-transform: none; letter-spacing: 0;
+    max-width: 260px;
+  }
+  .dl-filters select:hover { border-color: var(--amber-dim); }
+  .dl-filters select:focus-visible { outline: 1px solid var(--amber); outline-offset: 1px; }
+  .dl-filters__reset {
+    font-family: var(--font-mono); font-size: 11px; color: var(--fg-faint);
+    background: transparent; border: 1px solid var(--rule); border-radius: 6px;
+    padding: 7px 12px; cursor: pointer;
+  }
+  .dl-filters__reset:hover { color: var(--fg); border-color: var(--amber-dim); }
+
+  .dl-table--bench thead th { cursor: pointer; user-select: none; }
+  .dl-table--bench thead th:hover { color: var(--fg); }
+  .dl-table--bench thead th::after { content: ''; }
+  .dl-table--bench thead th.is-sorted { color: var(--amber); }
+  .dl-table--bench thead th.is-sorted::after { content: ' ▲'; font-size: 8px; }
+  .dl-table--bench thead th.is-sorted.is-desc::after { content: ' ▼'; }
+  .dl-table--bench tbody tr.dl-row { cursor: pointer; }
+  .dl-table--bench tbody tr.dl-row--flat { cursor: default; }
+  .dl-table--bench tbody td { padding: 8px 9px; white-space: nowrap; }
+  .dl-table--bench thead th { padding: 12px 9px; }
+  /* group boundary: a hairline before each metric block, so "das | ref | ratio" reads as a unit */
+  .dl-table--bench th.dl-grp-start, .dl-table--bench td.dl-grp-start { border-left: 1px solid var(--rule); }
+  .dl-table--bench .dl-dim2 { color: var(--fg-dim); }
+  .dl-table--bench .dl-model-sub { color: var(--fg-faint); font-size: 10.5px; }
+  .dl-table--bench tbody tr[data-receipt] td { padding: 0 11px; }
+  /* pre-wrap + break-anywhere, NOT `pre`: a receipt's longest command line would otherwise set the
+     table's min-content width and shove every numeric column out of the viewport when expanded. */
+  .dl-bench-receipt {
+    font-family: var(--font-mono); font-size: 10.5px; line-height: 1.65; color: var(--fg-dim);
+    background: var(--bg-3); border-radius: 6px; padding: 12px 14px; margin: 2px 0 8px;
+    white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .dl-bench-receipt b { color: var(--amber); font-weight: 400; }
+  .dl-empty { font-family: var(--font-mono); font-size: 12px; color: var(--fg-faint); padding: 22px 14px; text-align: center; }
+  /* annotated row: the mark says "there is a hand-written note in this receipt" */
+  .dl-note-mark { color: var(--amber); font-size: 11px; }
+  .dl-bench-receipt .dl-receipt-note { color: var(--amber); }   /* the hand-written note stands out from the receipt plumbing */
+  /* the note itself, instantly, from anywhere in the model cell — not a delayed balloon on a 10px glyph */
+  td[data-note] { position: relative; cursor: help; }
+  td[data-note]:hover::after {
+    content: attr(data-note);
+    position: absolute; left: 12px; top: calc(100% - 4px); z-index: 40;
+    width: max-content; max-width: 460px;
+    background: var(--bg-2); border: 1px solid var(--rule); border-left: 2px solid var(--amber);
+    border-radius: 6px; padding: 10px 12px;
+    color: var(--fg); font-size: 11.5px; line-height: 1.55;
+    white-space: pre-line; text-transform: none; letter-spacing: normal;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+  }
 
   /* caveats */
   .dl-caveats { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 40px; }
@@ -154,10 +186,9 @@
   .dl-caveat__v { font-size: 14px; line-height: 1.55; color: var(--fg-dim); }
 
   @media (max-width: 900px) {
-    .dl-asr-grid, .dl-blowouts, .dl-caveats { grid-template-columns: 1fr; }
-    .dl-bar { grid-template-columns: 110px 1fr 52px; }
-    .dl-bench-cols, .dl-bench-row { grid-template-columns: 128px 1fr 60px 60px 48px; gap: 8px; }
-    .dl-axis { padding: 0 52px 0 110px; }
+    .dl-caveats, .dl-lanes { grid-template-columns: 1fr; }
+    .dl-filters label { width: 100%; }
+    .dl-filters select { flex: 1; max-width: none; }
   }
 </style>
 </head>
@@ -180,7 +211,7 @@
                         <button class="forge-nav__trigger" type="button">performance <span class="forge-nav__chev">▾</span></button>
                         <div class="forge-nav__menu">
                             <a href="index.html#benchmarks"><span class="forge-nav__menu-label">benchmarks</span><span class="forge-nav__menu-desc">Cross-language CPU speed — interpreter &amp; JIT.</span></a>
-                            <a href="dasllama.html" class="is-active"><span class="forge-nav__menu-label">dasLLAMA <span class="forge-nav__menu-new">NEW</span></span><span class="forge-nav__menu-desc">CPU LLM + speech-to-text, das vs llama.cpp.</span></a>
+                            <a href="dasllama.html" class="is-active"><span class="forge-nav__menu-label">dasLLAMA <span class="forge-nav__menu-new">NEW</span></span><span class="forge-nav__menu-desc">LLM + speech-to-text, das vs llama.cpp.</span></a>
                         </div>
                     </div>
                     <div class="forge-nav__group">
@@ -216,24 +247,19 @@
     <section class="forge-hero">
         <div class="forge-container forge-hero__grid">
             <div>
-                <span class="dl-hero__badge"><span class="dot"></span>dasLLAMA · CPU inference</span>
-                <h1>Local LLMs with audio in — <em>up to 6× faster on CPU.</em></h1>
+                <span class="dl-hero__badge"><span class="dot"></span>dasLLAMA · local inference</span>
+                <h1>Local LLMs with audio in — <em>up to <span id="dl-hero-x">6</span>× faster.</em></h1>
                 <p class="forge-hero__lede">
                     dasLLAMA is an LLM + speech-to-text stack written entirely in daslang and
                     JIT-compiled — no hand-written assembly. Its auto-tuned JIT kernels consistently
-                    outperform llama.cpp's hand-written universal kernels — up to 30% faster on most
-                    LLMs — and the advantage grows with batching and with audio input (Whisper,
-                    Parakeet) or omni models (Gemma, Qwen), reaching ~6× llama.cpp. CPU-only
-                    comparisons; llama.cpp's GPU backends are out of scope here.
+                    outperform llama.cpp's hand-written universal kernels, on the CPU path and on
+                    Metal alike. llama.cpp has no speech-to-text engine, so Whisper and Parakeet are
+                    measured against the dedicated ones instead — whisper.cpp, parakeet, ONNX Runtime,
+                    NeMo — and lead most of those rows too. Every number below is a measured pair.
                 </p>
                 <div class="forge-hero__ctas">
-                    <a class="forge-btn-primary" href="#llm">$ view the scoreboard →</a>
+                    <a class="forge-btn-primary" href="#bench">$ view the scoreboard →</a>
                     <a class="forge-btn-secondary" href="#method">methodology</a>
-                </div>
-                <div class="forge-stats">
-                    <div class="forge-stat"><div class="forge-stat__n" id="stat-prefill-n">up to 2.25×</div><div class="forge-stat__l" id="stat-prefill-l">LLM prefill vs llama.cpp · Voxtral-Small-24B-q4k, Ryzen Threadripper 3990X</div></div>
-                    <div class="forge-stat"><div class="forge-stat__n" id="stat-wins-n">57 / 60</div><div class="forge-stat__l" id="stat-wins-l">runs das ≥ llama.cpp · 30 models × both phases, 3990X</div></div>
-                    <div class="forge-stat"><div class="forge-stat__n" id="stat-audio-n">~6×</div><div class="forge-stat__l">Qwen3-Omni audio vs mtmd, CPU-only (M1)</div></div>
                 </div>
             </div>
 
@@ -248,7 +274,7 @@ require daslib/jobque_boost
 
 [export]
 def main() {
-    let path = "Llama-3.1-8B.gguf"
+    let path = "model.gguf"
     var m &lt;- load_model(path, QuantMode.q8)
     let ids &lt;- encode(m, "Summarize the results:")
     with_job_que() {
@@ -261,117 +287,100 @@ def main() {
         }
     }
 }</code></pre>
+                <!-- a REAL row from bench_records.json — the strongest un-annotated pair, re-derived
+                     at render time (mountHero); the static text is that same row at commit time -->
                 <div class="forge-output">
                     <div class="dl-run">
                         <div><span class="prompt">$</span> daslang -jit dasllama.das</div>
-                        <div class="dim">  loaded Llama-3.1-8B · q8 · 8.03B active · CPU / 16 threads, pinned</div>
-                        <div><span class="metric">prefill</span> <span class="amber">99.8 tok/s</span> <span class="dim">· das/llama.cpp 1.51×</span></div>
-                        <div><span class="metric">decode&nbsp;</span> <span class="amber">6.9 tok/s</span> <span class="dim">· das/llama.cpp 1.03×</span></div>
-                        <div class="ok">  ✓ no hand-written assembly · Threadripper 3990X</div>
+                        <div class="dim" id="dl-mock-load">  loaded Qwen3-30B-A3B-Instruct-2507-Q4_K_M · q8 · 17.3 GB · cpu + accel / 10 threads</div>
+                        <div><span class="metric">prefill</span> <span class="amber" id="dl-mock-pp">301.5 tok/s</span> <span class="dim" id="dl-mock-ppr">· das/llama.cpp 1.78×</span></div>
+                        <div><span class="metric">decode&nbsp;</span> <span class="amber" id="dl-mock-tg">85.2 tok/s</span> <span class="dim" id="dl-mock-tgr">· das/llama.cpp 1.11×</span></div>
+                        <div class="ok" id="dl-mock-foot">  ✓ no hand-written assembly · Apple M4 Pro · measured 2026-07-26</div>
                     </div>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- § 01 LLM -->
-    <section class="forge-section" id="llm">
-        <div class="forge-container">
-            <div class="forge-section-label"><span class="forge-section-label__num">§ 01</span><span class="forge-section-label__rule"></span><span>llm cpu scoreboard</span></div>
-            <h2 class="forge-h2">das ÷ llama.cpp, CPU only.</h2>
-            <p class="forge-p">A like-for-like CPU comparison: llama.cpp built with no Accelerate/AMX BLAS, so this reflects scalar/SIMD kernels — not its GPU backends, which are out of scope here. pp512 = prefill over a 512-token prompt; tg128 = greedy generation of 128 tokens. Weights are Q8_0 or Q4_K_M — the quant column says which.</p>
-
-            <div class="dl-toggles">
-                <span class="dl-seg__caption">machine</span>
-                <div class="dl-seg">
-                    <button class="js-llm-box" data-box="m1" type="button">Apple M1 Max</button>
-                    <button class="js-llm-box is-active" data-box="zen2" type="button">Threadripper 3990X</button>
-                </div>
-                <span class="dl-seg__caption">phase</span>
-                <div class="dl-seg">
-                    <button class="js-llm-phase is-active" data-phase="prefill" type="button">prefill (pp512)</button>
-                    <button class="js-llm-phase" data-phase="emission" type="button">decode (tg128)</button>
-                </div>
-            </div>
-
-            <div class="dl-bars" id="llm-bars"></div>
-            <div class="dl-axis"><span>0.5× (llama.cpp 2× faster)</span><span>1.0×</span><span>2.0× (das 2× faster)</span></div>
-            <div class="dl-caption" id="llm-caption"></div>
-
-            <div class="dl-table-wrap">
-                <table class="dl-table">
-                    <thead>
-                        <tr>
-                            <th>model</th><th>active B</th><th>quant</th>
-                            <th class="dl-grp">pp512 das</th><th>pp512 lcpp</th><th class="dl-grp">das/lcpp</th>
-                            <th class="dl-grp">tg128 das</th><th>tg128 lcpp</th><th class="dl-grp">das/lcpp</th>
-                        </tr>
-                    </thead>
-                    <tbody id="llm-table-body"></tbody>
-                </table>
-            </div>
-            <div class="dl-plat" id="llm-plat"></div>
-        </div>
-    </section>
-
-    <!-- § 02 per-model benchmarks (leaderboard from bench_records.json; hidden until records exist) -->
+    <!-- § 01 per-model benchmarks (from bench_records.json; hidden until records exist) -->
     <section class="forge-section forge-section--alt" id="bench" hidden>
         <div class="forge-container">
-            <div class="forge-section-label"><span class="forge-section-label__num">§ 02</span><span class="forge-section-label__rule"></span><span>per-model benchmarks</span></div>
-            <h2 class="forge-h2">Every engine, every machine, one list.</h2>
-            <p class="forge-p">One group per model &times; machine, every configuration a row, sorted by measured speed. The ratio column pairs each das configuration with its matched llama.cpp build &mdash; three like-for-like comparisons: <em>generic neon-64</em> (das portable CPU vs <em>clean-cpu</em>, no Accelerate/BLAS and no GPU &mdash; kernel vs kernel on any 64-bit NEON core), <em>cpu&nbsp;+&nbsp;AMX</em> (das with its Accelerate tier vs <em>stock</em> at <code>-ngl 0 -nopo 1</code> &mdash; Accelerate on both sides, and <code>-nopo</code> keeps llama.cpp's Metal op-offload from quietly serving &ldquo;CPU&rdquo; rows on the GPU), and <em>as shipped</em> (das Metal vs <em>stock</em> Metal at <code>-ngl 99</code>). Click a row for its receipt: the exact command lines, commits, tune state, and auto-probed hardware. pp512 = 512-token prefill, tg128 = 128-token greedy decode, tok/s, higher is better.</p>
+            <div class="forge-section-label"><span class="forge-section-label__num">§ 01</span><span class="forge-section-label__rule"></span><span>per-model benchmarks</span></div>
+            <h2 class="forge-h2">Every run, paired with its yardstick.</h2>
+            <p class="forge-p forge-p--wide">Every row is one das configuration and the matched llama.cpp build it is measured against &mdash; same model, same machine, same category. A das number never appears without its reference. Filter and sort any column; click a row for the receipt: both command lines, commits, tune state, and auto-probed hardware. pp512 = 512-token prefill, tg128 = 128-token greedy decode, tok/s, higher is better.</p>
 
-            <div class="dl-toggles">
-                <span class="dl-seg__caption">sort by</span>
-                <div class="dl-seg">
-                    <button class="js-bench-sort is-active" data-sort="tg128" type="button">decode (tg128)</button>
-                    <button class="js-bench-sort" data-sort="pp512" type="button">prefill (pp512)</button>
+            <dl class="dl-lanes">
+                <div><dt>cpu</dt><dd>Portable CPU kernels on both sides &mdash; no vendor math library, no GPU. llama.cpp is a <em>clean-cpu</em> build at <code>-ngl 0</code>. Kernel against kernel.</dd></div>
+                <div><dt>cpu + accel</dt><dd>Both sides get whatever accelerated math path the box has &mdash; Accelerate on Apple, MKL or AOCL elsewhere. <code>-nopo 1</code> stops llama.cpp quietly serving &ldquo;CPU&rdquo; rows off the GPU.</dd></div>
+                <div><dt>gpu</dt><dd>Both engines in their default GPU configuration at <code>-ngl 99</code>. Which backend ran &mdash; Metal, Vulkan &mdash; is in the row's receipt.</dd></div>
+            </dl>
+
+            <div class="dl-filters" id="bench-filters"></div>
+            <div class="dl-viewbar">
+                <div class="dl-seg" id="bench-view">
+                    <button class="is-on" data-view="bars">bars</button><button data-view="table">table</button>
+                </div>
+                <div class="dl-seg" id="bench-metric">
+                    <button class="is-on" data-metric="pp">pp512</button><button data-metric="tg">tg128</button>
                 </div>
             </div>
+            <div class="dl-bars" id="bench-bars"></div>
+            <div class="dl-table-wrap" id="bench-table-wrap" hidden><table class="dl-table dl-table--bench" id="bench-table"></table></div>
+            <div class="dl-caption" id="bench-caption"></div>
 
-            <div id="bench-groups"></div>
+            <div class="dl-bridge">
+                <p>Every kernel, loader and scheduler behind these numbers is daslang &mdash; JIT-compiled, no C++ in the hot path. The speed is the language: auto-tuned generic kernels, one codebase from GGUF parsing to Metal dispatch.</p>
+                <p class="dl-bridge__links">
+                    <a class="forge-link-amber" href="doc/reference/tutorials/dasLLAMA_00_problem_statement.html">how dasLLAMA is built &rarr;</a>
+                    <a class="forge-link-amber" href="doc/index.html">the daslang reference &rarr;</a>
+                    <a class="forge-link-amber" href="https://github.com/GaijinEntertainment/daScript">source &rarr;</a>
+                </p>
+            </div>
         </div>
     </section>
 
-    <!-- § 03 ASR -->
-    <section class="forge-section">
+    <!-- § 02 speech-to-text (pair table from profile_asr_<box>.json) -->
+    <section class="forge-section" id="asr" hidden>
         <div class="forge-container">
-            <div class="forge-section-label"><span class="forge-section-label__num">§ 03</span><span class="forge-section-label__rule"></span><span>speech-to-text</span></div>
-            <h2 class="forge-h2">Competitive with the dedicated engines on CPU.</h2>
-            <p class="forge-p">Transcription time, CPU only, greedy decode. Bars show speed relative to the reference CLI (longer = faster); the small figure is real-time factor — seconds of audio per second of compute. Note the macOS *-cli tools do get Apple's AMX matrix unit here, so this isn't scalar-only on their side.</p>
+            <div class="forge-section-label"><span class="forge-section-label__num">§ 02</span><span class="forge-section-label__rule"></span><span>speech-to-text</span></div>
+            <h2 class="forge-h2">Transcription, clip by clip.</h2>
+            <p class="forge-p forge-p--wide">llama.cpp has no speech-to-text engine, so every row here is paired with a dedicated one instead &mdash; whisper.cpp, <code>parakeet-cli</code>, ONNX Runtime or NeMo. One row per clip per reference: das wall time, the reference's wall time on the same clip, the speedup, and the real-time factor. CPU only, greedy decode; the macOS <code>*-cli</code> tools do get Apple's AMX matrix unit, so this is not scalar-only on their side.</p>
 
-            <div class="dl-toggles">
-                <span class="dl-seg__caption">machine</span>
-                <div class="dl-seg">
-                    <button class="js-asr-box" data-box="m1" type="button">Apple M1 Max</button>
-                    <button class="js-asr-box is-active" data-box="zen2" type="button">Threadripper 3990X</button>
+            <div class="dl-filters" id="asr-filters"></div>
+            <div class="dl-viewbar">
+                <div class="dl-seg" id="asr-view">
+                    <button class="is-on" data-view="bars">bars</button><button data-view="table">table</button>
                 </div>
             </div>
-
-            <div class="dl-asr-grid" id="asr-models"></div>
-            <div class="dl-plat" id="asr-plat"></div>
+            <div class="dl-bars" id="asr-bars"></div>
+            <div class="dl-table-wrap" id="asr-table-wrap" hidden><table class="dl-table dl-table--bench" id="asr-table"></table></div>
+            <div class="dl-caption" id="asr-caption"></div>
         </div>
     </section>
 
-    <!-- § 03 audio-chat blowout -->
-    <section class="forge-section">
+    <!-- § 03 audio in — omni chat models, reference is llama.cpp's mtmd -->
+    <section class="forge-section" id="audiochat" hidden>
         <div class="forge-container">
-            <div class="forge-section-label"><span class="forge-section-label__num">§ 04</span><span class="forge-section-label__rule"></span><span>audio-chat models</span></div>
-            <div class="forge-bench__grid">
-                <div>
-                    <h2 class="forge-h2">Where the CPU-only gap is widest: audio chat.</h2>
-                    <p class="forge-p">This is a narrow, CPU-only slice: llama.cpp's Conformer/AuT audio encoders don't route through BLAS/AMX on CPU, so the reference spends ~99% of its time in the audio encoder. das's optimized fp32 scalar encoder comes out well ahead on that path — a GPU build of llama.cpp would tell a different story.</p>
-                    <p class="forge-p" style="color:var(--fg-faint);font-size:13px">Canary-Qwen 2.5B (the only engine with a SALM reference, NeMo) — das leads on short dictation clips: 0.66× on jfk, 0.77× on jfk3. It trails on a 3-minute clip where it runs an un-quantized fp32 decoder — a known follow-up.</p>
+            <div class="forge-section-label"><span class="forge-section-label__num">§ 03</span><span class="forge-section-label__rule"></span><span>audio in</span></div>
+            <h2 class="forge-h2">Omni models, audio straight into the prompt.</h2>
+            <p class="forge-p forge-p--wide">The one audio workload llama.cpp does cover: omni chat models taking audio in, run through <code>llama-mtmd-cli</code>. This is a narrow CPU-only slice &mdash; llama.cpp's Conformer/AuT audio encoders don't route through BLAS/AMX on CPU, so the reference spends ~99% of its time in the audio encoder, and das's optimized fp32 encoder comes out well ahead on that path.</p>
+
+            <div class="dl-filters" id="audiochat-filters"></div>
+            <div class="dl-viewbar">
+                <div class="dl-seg" id="audiochat-view">
+                    <button class="is-on" data-view="bars">bars</button><button data-view="table">table</button>
                 </div>
-                <div class="dl-blowouts" id="audiochat-cards"></div>
             </div>
+            <div class="dl-bars" id="audiochat-bars"></div>
+            <div class="dl-table-wrap" id="audiochat-table-wrap" hidden><table class="dl-table dl-table--bench" id="audiochat-table"></table></div>
+            <div class="dl-caption" id="audiochat-caption"></div>
         </div>
     </section>
 
     <!-- § 04 supported model families -->
     <section class="forge-section" id="models">
         <div class="forge-container">
-            <div class="forge-section-label"><span class="forge-section-label__num">§ 05</span><span class="forge-section-label__rule"></span><span>supported model families</span></div>
+            <div class="forge-section-label"><span class="forge-section-label__num">§ 04</span><span class="forge-section-label__rule"></span><span>supported model families</span></div>
             <h2 class="forge-h2">One engine, twelve architectures.</h2>
             <p class="forge-p">Everything below loads from stock GGUF (llama2.c <code>.bin</code> for the toy), auto-detected from metadata, and is verified token-for-token against its reference engine. Weights: F32 / F16 / Q8_0 / Q4_0 / MXFP4 read directly; K-quant files (Q4_K_M / Q5_K_M / Q6_K) run on native K-quant kernels; bf16 audio towers read exactly.</p>
             <div class="dl-caveats">
@@ -391,16 +400,15 @@ def main() {
     <!-- § 05 methodology -->
     <section class="forge-section forge-section--alt" id="method">
         <div class="forge-container">
-            <div class="forge-section-label"><span class="forge-section-label__num">§ 06</span><span class="forge-section-label__rule"></span><span>methodology &amp; honest caveats</span></div>
-            <h2 class="forge-h2" style="margin-bottom:36px">The framing, in full.</h2>
+            <div class="forge-section-label"><span class="forge-section-label__num">§ 05</span><span class="forge-section-label__rule"></span><span>methodology</span></div>
+            <h2 class="forge-h2" style="margin-bottom:36px">The method, stated in full.</h2>
             <div class="dl-caveats">
-                <div class="dl-caveat"><div class="dl-caveat__k">what das is</div><div class="dl-caveat__v">An LLM + ASR inference engine written entirely in daslang and JIT-compiled — no hand-written SIMD/assembly. The point is narrow but real: a scripting language keeping pace with hand-tuned C++ on the CPU path.</div></div>
-                <div class="dl-caveat"><div class="dl-caveat__k">apples-to-apples</div><div class="dl-caveat__v">Everything here is CPU. The llama.cpp reference is built with no Accelerate/AMX BLAS on M1 (pure NEON/i8mm) for a like-for-like kernel comparison — not a comment on its GPU backends, which are broader and out of scope. Where a reference does get AMX (ASR *-cli on macOS), that's noted.</div></div>
-                <div class="dl-caveat"><div class="dl-caveat__k">prefill vs decode</div><div class="dl-caveat__v">das wins prompt-processing (compute-bound) across the board. Single-token generation (memory-bandwidth-bound) is a win-or-tie on the pinned x86 box and a near-tie on M1. The toggle above shows both.</div></div>
-                <div class="dl-caveat"><div class="dl-caveat__k">quantization</div><div class="dl-caveat__v">LLM numbers are Q8_0 or Q4_K_M (the quant column; K-quant files run on native K-quant kernels). ASR is q8 encoder/decoder except audio-chat and Canary, which run fp32 for correctness. das output is verified token-for-token against each reference.</div></div>
-                <div class="dl-caveat"><div class="dl-caveat__k">core pinning</div><div class="dl-caveat__v">On the Threadripper both sides pin 16 physical cores — das via the jobque's hard affinity mask, llama-bench via <code>--cpu-mask 0x55555555 --cpu-strict 1</code>. Unpinned, the OS placement lottery lands lanes on SMT siblings and halves lockstep prefill.</div></div>
-                <div class="dl-caveat"><div class="dl-caveat__k">two machines</div><div class="dl-caveat__v">An Arm laptop (Apple M1 Max) and an x86 workstation (Ryzen Threadripper 3990X) show the same pattern — that's the point; it's not one lucky box.</div></div>
-                <div class="dl-caveat"><div class="dl-caveat__k">dates &amp; versions</div><div class="dl-caveat__v">daslang 0.6.3, Parsec off. M1 measured 2026-07-13 (llama.cpp ebd048f); Threadripper 2026-07-13 (llama.cpp fdb1db877). Raw data lives in the JSON these charts render from.</div></div>
+                <div class="dl-caveat"><div class="dl-caveat__k">what das is</div><div class="dl-caveat__v">An LLM + speech-to-text engine written entirely in daslang and JIT-compiled — no hand-written SIMD/assembly; the Metal kernels are emitted from daslang too.</div></div>
+                <div class="dl-caveat"><div class="dl-caveat__k">the pairing rule</div><div class="dl-caveat__v">A das measurement is published only next to a reference run of the same model, machine and category from the same session. No pair, no row.</div></div>
+                <div class="dl-caveat"><div class="dl-caveat__k">what is timed</div><div class="dl-caveat__v">llama-bench semantics for LLMs (pp512 / tg128, mean ± stdev over 5 reps); total transcription time for audio, engine-internal, load excluded on every path.</div></div>
+                <div class="dl-caveat"><div class="dl-caveat__k">threads</div><div class="dl-caveat__v">min(16, physical performance cores), same count both engines, pinned. Fixed by policy — no per-engine detection.</div></div>
+                <div class="dl-caveat"><div class="dl-caveat__k">identity</div><div class="dl-caveat__v">Every row records both command lines, engine commits/versions, input-file SHA-256s and the probed hardware — machine-captured, in the row's receipt.</div></div>
+                <div class="dl-caveat"><div class="dl-caveat__k">the full method</div><div class="dl-caveat__v">Categories, tuning rules, anomaly policy, what is not claimed, and how to reproduce a box from zero: <a href="doc/reference/dasllama_methodology.html">the methodology page</a>.</div></div>
             </div>
         </div>
     </section>

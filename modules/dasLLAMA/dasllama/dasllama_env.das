@@ -300,6 +300,8 @@ def private reg_harness(var o : array<EnvKnob>) {
 }
 
 def private reg_benchmark(var o : array<EnvKnob>) {
+    k(o, "DASLLAMA_ALLOW_UNTUNED", EnvKind.flag, EnvArea.benchmark, "off",
+      "Let a bench cell measure on fallback/absent tune winners. The gate exists because a stale sidecar silently downgrades every kernel and the whole board sandbags; only set for dev runs whose numbers are never published.")
     k(o, "DASLLAMA_BENCH_MODEL", EnvKind.text, EnvArea.benchmark, "tinyllama",
       "Model name for the isolated GEMM bench.")
     k(o, "DASLLAMA_BENCH_NTOK", EnvKind.number, EnvArea.benchmark, "",
@@ -351,6 +353,8 @@ def private reg_profiling(var o : array<EnvKnob>) {
       "Directory of whisper.cpp models for ASR reference baselines.")
     k(o, "MTMD_BIN", EnvKind.path, EnvArea.profiling, "",
       "llama-mtmd-cli binary for multimodal reference baselines.")
+    k(o, "DASLLAMA_BASE_PYTHON", EnvKind.path, EnvArea.profiling, "",
+      "Base CPython 3.10-3.12 for creating the ASR oracle venvs, when neither PATH names nor uv resolve one in range.")
     k(o, "NEMO_PY", EnvKind.path, EnvArea.profiling, "",
       "Python interpreter of the NeMo oracle venv, for canary/parakeet baselines.")
     k(o, "ONNX_PY", EnvKind.path, EnvArea.profiling, "",

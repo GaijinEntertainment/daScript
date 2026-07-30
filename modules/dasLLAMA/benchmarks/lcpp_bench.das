@@ -1,6 +1,8 @@
 options gen2
 options stack = 65536   // dasLLAMA program-root convention (options stack does not unify up from libs)
 options _jit_fast_math = true   // ggml-parity FP laxity — matches how llama.cpp is benched
+options _cyclomatic_complexity = 0   // bench cell main = the measurement protocol ladder
+options _function_length = 0   // same
 
 require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + apply_box_profile_runtime (engine-level, not re-exported)
@@ -280,6 +282,9 @@ def main() {
         set_jobque_affinity(2)   // 2 = hard mask, the llama-bench --cpu-strict mirror (mode 1 re-rolls SMT placement)
     }
     apply_box_profile_runtime()   // the tuned per-box stack — what load_model users get
+    if (!tune_gate()) {   // never measure on fallback winners — the whole board would sandbag
+        return
+    }
     if (cfg.accel && gpu) {
         print("--accel is a CPU-tier lever — drop it or run with -ngl 0\n")
         return
@@ -482,10 +487,14 @@ def main() {
         var refRows : array<LlamaBenchRow>
         var refCmd = ""
         if (!empty(cfg.ref)) {
-            let aff = (!gpu && affinity_on()) ? lcpp_affinity_args(threads) : ""
-            refCmd = "\"{cfg.ref}\" -m \"{mpath}\" -ngl {cfg.ngl} -t {threads}{aff} -p {cfg.plen} -n {cfg.ngen} -r {reps} -o json"
+            var refArgs <- [cfg.ref, "-m", mpath, "-ngl", "{cfg.ngl}", "-t", "{threads}"]
+            if (!gpu) {
+                refArgs |> push_from(lcpp_affinity_argv(threads))
+            }
+            refArgs |> push_from(["-p", "{cfg.plen}", "-n", "{cfg.ngen}", "-r", "{reps}", "-o", "json"])
+            refCmd = argv_line(refArgs)
             say(fmt, "ref: {refCmd}\n")
-            if (!run_llama_bench(refCmd, refRows)) {
+            if (!run_llama_bench(refArgs, refRows)) {
                 say(fmt, "warning: llama-bench run/parse failed — no ref rows\n")
             }
             for (rr in refRows) {
@@ -537,12 +546,13 @@ def main() {
         date = date,
         cmd = bench_cmd_line(),
         env = bench_env_line(),
-        sha = run_capture("git rev-parse --short HEAD", true),
+        sha = run_capture("git rev-parse --short=9 HEAD", true),
         version = das_version(),
         tune = tune_summary(),
         exec_fmt = execFmt,
         hardware = hw,
         tests <- tests_of(results))
+    dr.files |> emplace(file_identity(mpath, "weights"))
     m.runs |> emplace(dr)
     if (!empty(refRows)) {
         var rr = BenchRun(
@@ -556,6 +566,7 @@ def main() {
             sha = refRows[0].build_commit,
             exec_fmt = lcpp_exec_fmt(backend),
             hardware = hw)
+        rr.files |> emplace(file_identity(mpath, "weights"))
         for (row in refRows) {
             let tag = row.n_gen == 0 ? "pp{row.n_prompt}" : "tg{row.n_gen}"
             rr.tests |> insert(tag, BenchTest(tok_s = row.avg_ts, stddev = row.stddev_ts))

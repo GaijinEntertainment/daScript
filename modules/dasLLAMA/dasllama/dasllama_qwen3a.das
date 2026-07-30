@@ -2,12 +2,19 @@ options gen2
 options _comment_hygiene = true
 
 module dasllama_qwen3a shared public
+options _function_length = 0   // model forward/serialize walks mirror the model schema
 
 require math
 require daslib/fio
+require strings
+require daslib/apply
+require daslib/archive
+require dasllama/dasllama_env
 require dasllama/dasllama_math
 require dasllama/dasllama_gguf
 require dasllama/dasllama_audio
+require dasllama/dasllama_common   // apply_box_profile_runtime for the qwen3a-image identity
+require dasllama/dasllama_image
 
 // Qwen3-ASR audio encoder (mtmd projector type `qwen3a`): 128-mel input processed in
 // 100-frame chunks — 3 stride-2 conv2d blocks per chunk (100×128×1 -> 13×16×480), features
@@ -42,10 +49,104 @@ struct Qwen3aTower {
     mm1_b_off : int64
     mm2_w_off : int64
     mm2_b_off : int64
+    image_map : void?                  // non-null when the planes borrow a mapped .dlim (dasllama_image)
+    image_bytes : uint64
 }
 
-//! Load a Qwen3-ASR mmproj GGUF (projector type `qwen3a`, bf16/f16/f32 tensors).
+def finalize(var t : Qwen3aTower) {
+    apply(t) $ [unused_argument(name)] (name : string; var field) {
+        static_if (typeinfo is_array(field)) {
+            if (lock_count(field) != 0) {
+                unsafe {
+                    _builtin_forget_temp_array(field)
+                }
+            } else {
+                delete field
+            }
+        } static_elif (typeinfo is_struct(field)) {
+            delete field   // core's own finalizer forgets ITS borrowed planes
+        }
+    }
+    if (t.image_map != null) {
+        unsafe {
+            fmap_close(t.image_map, t.image_bytes)
+        }
+        t.image_map = null
+        t.image_bytes = 0ul
+    }
+}
+
+// the tripwire: serialize_image_meta(Qwen3aTower) covers 16 fields (core reuses AudioTower's
+// list); image_map + image_bytes are deliberate skips.
+let private QWEN3A_TOWER_META_FIELDS = 16 + 2
+
+// every meta-carried Qwen3aTower field, explicitly, both directions (see dasllama_image)
+def private serialize_image_meta(var arch : Archive; var t : Qwen3aTower) {
+    verify(count_meta_fields(t) == QWEN3A_TOWER_META_FIELDS)   // grew Qwen3aTower? extend this list
+    serialize_image_meta(arch, t.core)
+    arch |> serialize_raw(t.proj_dim)
+    arch |> serialize_raw(t.n_ch)
+    arch |> serialize_raw(t.c1_w_off)
+    arch |> serialize_raw(t.c1_b_off)
+    arch |> serialize_raw(t.c2_w_off)
+    arch |> serialize_raw(t.c2_b_off)
+    arch |> serialize_raw(t.c3_w_off)
+    arch |> serialize_raw(t.c3_b_off)
+    arch |> serialize_raw(t.cout_w_off)
+    arch |> serialize_raw(t.cout_b_off)
+    arch |> serialize_raw(t.pos_off)
+    arch |> serialize_raw(t.mm1_w_off)
+    arch |> serialize_raw(t.mm1_b_off)
+    arch |> serialize_raw(t.mm2_w_off)
+    arch |> serialize_raw(t.mm2_b_off)
+}
+
+[unused_argument(t)]
+def private image_post_load(var t : Qwen3aTower) {}   // no derived state — offsets ARE the meta
+
+[init]
+def private register_qwen3a_image_tags {
+    register_image_family_tag("qwen3a-f32")
+}
+
+//! Load a Qwen3-ASR mmproj GGUF (projector type `qwen3a`, bf16/f16/f32 tensors). Like
+//! ``load_model``, caches a box/knob-specific PREPARED IMAGE for fast reload;
+//! ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
 def load_qwen3a_tower(path : string) : Qwen3aTower {
+    let tag = "qwen3a-f32"
+    if (path |> ends_with(".dlim")) {
+        // named directly — no mmproj to regenerate from, so a wrong identity panics
+        apply_box_profile_runtime()
+        let ts_img = ref_time_ticks()
+        var t = Qwen3aTower()
+        if (!load_image(path, t, tag)) {
+            panic("dasLLAMA: '{path}' is not a prepared qwen3a-tower image for this box/knobs (identity {image_identity(tag)}) — regenerate it from the source mmproj gguf")
+        }
+        to_log(LOG_INFO, "dasLLAMA: prepared qwen3a-tower image mapped in {get_time_usec(ts_img) / 1000} ms — {path}\n")
+        return <- t
+    }
+    if (env_flag("DASLLAMA_IMAGE", true)) {
+        apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
+        let img = image_path_for(path, tag)
+        let ts_img = ref_time_ticks()
+        var t = Qwen3aTower()
+        if (load_image(img, t, tag)) {
+            to_log(LOG_INFO, "dasLLAMA: prepared qwen3a-tower image mapped in {get_time_usec(ts_img) / 1000} ms — {img}\n")
+            return <- t
+        }
+        var m <- load_qwen3a_tower_(path)
+        let ts_save = ref_time_ticks()
+        if (save_image(m, img, tag)) {
+            to_log(LOG_INFO, "dasLLAMA: prepared qwen3a-tower image saved in {get_time_usec(ts_save) / 1000} ms — {img}\n")
+        }
+        dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
+        return <- m
+    }
+    return <- load_qwen3a_tower_(path)
+}
+
+//! The mmproj-gguf reader proper — the eager (no image cache) load; ``load_qwen3a_tower`` wraps it.
+def load_qwen3a_tower_(path : string) : Qwen3aTower {
     var t = Qwen3aTower()
     let f = fopen(path, "rb")
     if (f == null) {

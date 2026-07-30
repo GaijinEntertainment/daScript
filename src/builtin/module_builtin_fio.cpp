@@ -2905,7 +2905,12 @@ void * das_dwrite_open ( const char * path, uint64_t total_bytes, uint64_t band_
 static bool das_dwrite_raw ( DasDirectWriter * w, const uint8_t * src, uint64_t bytes ) {
     uint64_t at = 0;
     while ( at < bytes ) {
-        ssize_t wrote = write(w->fd, src + at, (size_t)(bytes - at));
+        // chunk like the Windows path: macOS write(2) REJECTS nbyte > INT_MAX with EINVAL
+        // (Linux merely truncates, which is why the unchunked loop survived there) — an 11 GB
+        // plane append otherwise dies instantly and reads as "disk full"
+        uint64_t left = bytes - at;
+        size_t chunk = (size_t)(left < (uint64_t)(1u << 30) ? left : (uint64_t)(1u << 30));
+        ssize_t wrote = write(w->fd, src + at, chunk);
         if ( wrote <= 0 ) {
             if ( errno == EINTR ) continue;
             return false;
