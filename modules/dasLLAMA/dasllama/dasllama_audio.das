@@ -802,23 +802,10 @@ def layernorm_batch(var out : array<float>; src : array<float>; blob : array<flo
     }
 }
 
-//! Threaded per-row Q8_0 requant of a token-major activation image — the audio-side twin of the
-//! decoder's requant_rows_q8 (private to dasllama_common). Feeds matmul_q8q8_batch/group3.
+//! Threaded per-row Q8_0 requant of a token-major activation image — the shared
+//! dasllama_convert requant, always thread-eligible here. Feeds matmul_q8q8_batch/group3.
 def asr_requant_rows_q8(x : array<float>; n, npos : int64; var xqb : array<int8>; var xsb : array<float>) {
-    let nb = n / 32l
-    unsafe {
-        let xp = addr<float const?>(x[0])
-        var qp = addr(xqb[0])
-        var sp = addr(xsb[0])
-        maybe_parallel_for(0, int(npos), get_dispatch_lanes()) $(rb, re) {
-            unsafe {
-                for (p in range(rb, re)) {
-                    let pp = int64(p)
-                    quantize_q8_0_into_ptr(xp + pp * n, n, qp, sp, pp * n, pp * nb)
-                }
-            }
-        }
-    }
+    requant_rows_q8(x, n, npos, xqb, xsb, true)
 }
 
 //! y[p] += blob[b_off .. b_off+d) for every row (projection bias). float4 bulk + scalar

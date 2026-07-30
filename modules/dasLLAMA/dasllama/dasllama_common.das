@@ -6747,46 +6747,16 @@ def private mm(var y : array<float>; t : Model; woff : int64; x : array<float>; 
 // independent per position, so thread it (was the largest serial bucket once attention + GEMM
 // threaded). Same per-row quants as the single-row quantize_q8_0_into.
 def private requant_rows_q8(x : array<float>; n, npos : int64; var xqb : array<int8>; var xsb : array<float>) {
-    let nb = n / 32l
     let ts_rq = ref_time_ticks()
-    unsafe {
-        let xp = addr < float const? >(x[0])
-        var qp = addr(xqb[0])
-        var sp = addr(xsb[0])
-        let rq_par = n * npos >= g_requant_par_threshold
-        maybe_parallel_for(rq_par, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
-            unsafe {
-                for (p in range(rb, re)) {
-                    let pp = int64(p)
-                    quantize_q8_0_into_ptr(xp + pp * n, n, qp, sp, pp * n, pp * nb)
-                }
-            }
-        }
-    }
+    requant_rows_q8(x, n, npos, xqb, xsb, n * npos >= g_requant_par_threshold)
     prof_add("mm_requant", ts_rq)
 }
 
 // Q8_K-form batch requant (kq v2): per-256 scales + per-16 sums of the per-256-scaled
 // quants. k4-weight batch matmuls and MoE gathers consume these rows.
 def private requant_rows_q8k_bs(x : array<float>; n, npos : int64; var xqb : array<int8>; var xsb : array<float>; var xbsb : array<int>) {
-    let nsb = n / 256l
-    let nh = n / 16l
     let ts_rq = ref_time_ticks()
-    unsafe {
-        let xp = addr < float const? >(x[0])
-        var qp = addr(xqb[0])
-        var sp = addr(xsb[0])
-        var bp = addr(xbsb[0])
-        let rq_par = n * npos >= g_requant_par_threshold
-        maybe_parallel_for(rq_par, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
-            unsafe {
-                for (p in range(rb, re)) {
-                    let pp = int64(p)
-                    quantize_q8_k_into_ptr(xp + pp * n, n, qp, sp, bp, pp * n, pp * nsb, pp * nh)
-                }
-            }
-        }
-    }
+    requant_rows_q8k_bs(x, n, npos, xqb, xsb, xbsb, n * npos >= g_requant_par_threshold)
     prof_add("mm_requant", ts_rq)
 }
 

@@ -8,6 +8,7 @@ require llvm/daslib/f16_cvt   // f16<->f32 halfword codecs — the Q5_K encoder 
 require daslib/jobque_boost public   // quantize_k5_plane threads its superblock loop
 require dasllama/dasllama_par        // maybe_parallel_for
 require dasllama/dasllama_math       // count_inline_run/count_parallel_dispatch_thru — the par macro's counters (same inversion dasllama_quant documents)
+require dasllama/dasllama_quant      // quantize_q8_0_into_ptr / quantize_q8_k_into_ptr — the requant row kernels
 
 // Tensor format conversion, platform-neutral: the pure codec layer — LE byte readers, K-quant
 // superblock dequants (+ pointer twins), superblock->plane transcodes, plane dequants, the
@@ -664,3 +665,45 @@ def guard_dst(name : string; what : string; off, need, have : int64) {
 }
 
 // Shared header for the three file-level transcodes: locate + type-check + bounds-check, return
+// ===== batch activation requant (token-major image -> per-row Q8 planes) =====
+
+//! Threaded per-row Q8_0 requant of a token-major activation image (row p at x[p*n..] ->
+//! xqb[p*n..]). Feeds matmul_q8q8_batch/group3; `par` gates the thread fan-out (callers own
+//! their threshold policy).
+def requant_rows_q8(x : array<float>; n, npos : int64; var xqb : array<int8>; var xsb : array<float>; par : bool) {
+    let nb = n / 32l
+    unsafe {
+        let xp = addr<float const?>(x[0])
+        var qp = addr(xqb[0])
+        var sp = addr(xsb[0])
+        maybe_parallel_for(par, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
+            unsafe {
+                for (p in range(rb, re)) {
+                    let pp = int64(p)
+                    quantize_q8_0_into_ptr(xp + pp * n, n, qp, sp, pp * n, pp * nb)
+                }
+            }
+        }
+    }
+}
+
+//! Q8_K-form batch requant (kq v2): per-256 scales + per-16 sums of the per-256-scaled quants.
+//! k4-weight batch matmuls and MoE gathers consume these rows.
+def requant_rows_q8k_bs(x : array<float>; n, npos : int64; var xqb : array<int8>; var xsb : array<float>; var xbsb : array<int>; par : bool) {
+    let nsb = n / 256l
+    let nh = n / 16l
+    unsafe {
+        let xp = addr<float const?>(x[0])
+        var qp = addr(xqb[0])
+        var sp = addr(xsb[0])
+        var bp = addr(xbsb[0])
+        maybe_parallel_for(par, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
+            unsafe {
+                for (p in range(rb, re)) {
+                    let pp = int64(p)
+                    quantize_q8_k_into_ptr(xp + pp * n, n, qp, sp, bp, pp * n, pp * nsb, pp * nh)
+                }
+            }
+        }
+    }
+}
