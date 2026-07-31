@@ -274,6 +274,50 @@ def test_image_mechanics(t : T?) {
         t |> success(caught, "forget on an owned locked array is a loud error")
         delete owned
     }
+    t |> run("synthetic carrier: the cold rail builds in memory, tees to disk, serves the chunk") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        var terr : string
+        let tmp = temp_directory(terr)
+        let path = path_join(empty(tmp) ? "." : tmp, "dasllama_img_chunk_{ref_time_ticks()}.dlim")
+        var truth <- make_probe()   // the off-rail reference, untouched by the build
+        var src <- make_probe()
+        var cold = ImgProbe()
+        let epoch0 = weights_epoch()
+        t |> success(image_from_carrier(src, cold, path, "img-probe"), "cold build + adopt")
+        t |> success(cold.image_map != null, "the cold load serves an image, not the carrier")
+        t |> success(weights_epoch() > epoch0, "a chunk adopt moves the weights epoch too")
+        t |> success(long_length(src.plane_f) == 0l, "the build consumed the source planes")
+        delete src
+        t |> equal(cold.tagv, truth.tagv)
+        t |> equal(cold.name, truth.name)
+        t |> equal(length(cold.labels), 3)
+        t |> equal(cold.nested.k, 99l)
+        t |> equal(count_mismatch(cold.plane_f, truth.plane_f), 0l, "chunk plane_f element-exact")
+        t |> equal(count_mismatch(cold.nested.blob, truth.nested.blob), 0l, "chunk nested.blob element-exact")
+
+        // the tee: what landed on disk must be the very image being served
+        t |> success(stat(path).is_valid, "the cold build wrote the .dlim")
+        t |> equal(stat(path).size, cold.image_bytes, "the file is exactly the chunk")
+        var warm = ImgProbe()
+        t |> success(load_image(path, warm, "img-probe"), "the tee'd file maps")
+        t |> equal(count_mismatch(warm.plane_f, cold.plane_f), 0l, "mapped vs chunk plane_f")
+        t |> equal(count_mismatch(warm.nested.blob, cold.nested.blob), 0l, "mapped vs chunk nested.blob")
+        delete warm
+        delete cold   // frees the chunk (image_chunk_free), not an unmap
+        remove(path)
+
+        // no path = no file: the image still gets built and served, nothing lands on disk
+        var src2 <- make_probe()
+        var mem_only = ImgProbe()
+        t |> success(image_from_carrier(src2, mem_only, "", "img-probe"), "build with no save target")
+        t |> success(mem_only.image_map != null, "still image-backed")
+        t |> equal(count_mismatch(mem_only.plane_f, truth.plane_f), 0l, "memory-only plane_f element-exact")
+        delete src2
+        delete mem_only
+        delete truth
+    }
     t |> run("DlimConfiguration JSON round-trips with the identity intact") @(t : T?) {
         if (!arm_on(t, "mechanics")) {
             return
@@ -330,16 +374,26 @@ def private config_diff_field(a, b : Config) : string {
 
 def private text_image_roundtrip(t : T?; path : string; n_gen : int) {
     let img = image_path_for(path)
-    remove(img)   // cold start: the first facade load must regenerate + save
+    remove(img)   // cold start: the first facade load must build + save
+    // the truth is the OFF-RAIL gguf read: cold and warm are both image-backed now, so a
+    // cold-vs-warm compare alone would only prove the file matches the chunk it came from
+    var g <- load_model_(path, QuantMode.q8)
+    var cfg_a := g.config   // kept past delete for the round-trip compare
+    if (g.config.seq_len > 2048l) {
+        g.config.seq_len = 2048l
+    }
+    var prompt <- encode(g, "Once upon a time")
+    var ga <- gen_ids(g, prompt, n_gen)
+    delete g
     var a <- load_model(path, QuantMode.q8)
-    t |> success(a.image_map == null, "cold load is gguf-backed")
+    t |> success(a.image_map != null, "cold load serves the image it built")
     t |> success(stat(img).is_valid, "cold load saved an image")
-    var cfg_a := a.config   // the gguf truth, kept past delete for the round-trip compare
     if (a.config.seq_len > 2048l) {
         a.config.seq_len = 2048l
     }
-    var prompt <- encode(a, "Once upon a time")
-    var ga <- gen_ids(a, prompt, n_gen)
+    var gcold <- gen_ids(a, prompt, n_gen)
+    t |> success(!empty(ga) && count_mismatch(ga, gcold) == 0l, "gguf vs cold-built image tokens")
+    delete gcold
     delete a
     var b <- load_model(path, QuantMode.q8)
     t |> success(b.image_map != null, "warm load is image-backed")
@@ -475,7 +529,7 @@ def test_metal_flavor_image(tst : T?) {
             set_metal_mode(MetalMode.when_available)
             var tm <- load_model(path, QuantMode.q8)
             t |> success(tm.metal_blob, "metal-mode load is blob-form")
-            t |> success(tm.image_map == null, "cold metal load is gguf-backed")
+            t |> success(tm.image_map != null, "cold metal load serves the image it built")
             t |> success(stat(img_m).is_valid, "cold metal load saved the metal-flavor image")
             t |> success(length(tm.qblob) == 0, "planar q8 planes are gone")
             var g_mint <- gen_ids(tm, prompt, 16)   // a blob model CANNOT silently CPU-serve —
@@ -584,9 +638,14 @@ def test_tower_image_roundtrip(t : T?) {
         }
         let img = image_path_for(path, "tower-f32")
         remove(img)
-        var a <- load_audio_tower(path)
-        t |> success(a.image_map == null, "cold load is gguf-backed")
+        // the truth is the OFF-RAIL gguf read: cold and warm are both image-backed now, so a
+        // cold-vs-warm compare alone would only prove the file matches the chunk it came from
+        var a <- load_audio_tower_(path)
+        var cold <- load_audio_tower(path)
+        t |> success(cold.image_map != null, "cold load serves the image it built")
         t |> success(stat(img).is_valid, "cold load saved an image")
+        t |> equal(count_mismatch(a.fblob, cold.fblob), 0l, "cold-built fblob element-exact")
+        delete cold
         var b <- load_audio_tower(path)
         t |> success(b.image_map != null, "warm load is image-backed")
         t |> equal(b.d_model, a.d_model)
@@ -637,8 +696,13 @@ def private read_wav_pcm16_mono(path : string) : array<float> {
     return <- out
 }
 
-def private whisper_transcribe_text(path : string; samples : array<float>) : tuple<text : string; mapped : bool> {
-    var w <- load_whisper_model(path)
+def private whisper_transcribe_text(path : string; samples : array<float>; cached : bool = true) : tuple<text : string; mapped : bool> {
+    var w = WhisperModel()
+    if (cached) {
+        w <- load_whisper_model(path)
+    } else {
+        w <- load_whisper_model_(path)   // the off-rail control
+    }
     var text = ""
     with_job_que() {
         setup_dasllama_jobque()
@@ -675,19 +739,27 @@ def test_whisper_image_roundtrip(t : T?) {
         }
         let img = image_path_for(path, "whisper-f32")
         remove(img)
+        // off-rail truth: both cached loads are image-backed, so they cannot check each other
+        let g = whisper_transcribe_text(path, samples, cached = false)
         let a = whisper_transcribe_text(path, samples)
-        t |> success(!a.mapped, "cold load is gguf-backed")
+        t |> success(a.mapped, "cold load serves the image it built")
         t |> success(stat(img).is_valid, "cold load saved an image")
         let b = whisper_transcribe_text(path, samples)
         t |> success(b.mapped, "warm load is image-backed")
-        t |> success(!empty(a.text), "non-empty transcript")
-        t |> success(a.text == b.text, "transcripts match")
+        t |> success(!g.mapped && !empty(g.text), "non-empty transcript off the rail")
+        t |> success(g.text == a.text, "bin vs cold-built image transcript")
+        t |> success(g.text == b.text, "bin vs mapped image transcript")
         delete samples
     }
 }
 
-def private parakeet_transcribe_text(path : string; samples : array<float>) : tuple<text : string; mapped : bool> {
-    var m <- load_asr_model(path)
+def private parakeet_transcribe_text(path : string; samples : array<float>; cached : bool = true) : tuple<text : string; mapped : bool> {
+    var m = AsrModel()
+    if (cached) {
+        m <- load_asr_model(path)
+    } else {
+        m.pk <- load_parakeet_model_(path)   // the off-rail control
+    }
     var text = ""
     with_job_que() {
         setup_dasllama_jobque()
@@ -720,13 +792,16 @@ def test_parakeet_image_roundtrip(t : T?) {
         }
         let img = image_path_for(path, "parakeet-q8")
         remove(img)
+        // off-rail truth: both cached loads are image-backed, so they cannot check each other
+        let g = parakeet_transcribe_text(path, samples, cached = false)
         let a = parakeet_transcribe_text(path, samples)
-        t |> success(!a.mapped, "cold load is bin-backed")
+        t |> success(a.mapped, "cold load serves the image it built")
         t |> success(stat(img).is_valid, "cold load saved an image")
         let b = parakeet_transcribe_text(path, samples)
         t |> success(b.mapped, "warm load is image-backed")
-        t |> success(!empty(a.text), "non-empty transcript")
-        t |> success(a.text == b.text, "transcripts match")
+        t |> success(!g.mapped && !empty(g.text), "non-empty transcript off the rail")
+        t |> success(g.text == a.text, "bin vs cold-built image transcript")
+        t |> success(g.text == b.text, "bin vs mapped image transcript")
         delete samples
     }
 }
@@ -746,9 +821,13 @@ def test_qwen3a_tower_image_roundtrip(t : T?) {
         }
         let img = image_path_for(path, "qwen3a-f32")
         remove(img)
-        var a <- load_qwen3a_tower(path)
-        t |> success(a.image_map == null, "cold load is gguf-backed")
+        // off-rail truth: both cached loads are image-backed, so they cannot check each other
+        var a <- load_qwen3a_tower_(path)
+        var cold <- load_qwen3a_tower(path)
+        t |> success(cold.image_map != null, "cold load serves the image it built")
         t |> success(stat(img).is_valid, "cold load saved an image")
+        t |> equal(count_mismatch(a.cblob, cold.cblob), 0l, "cold-built cblob element-exact")
+        delete cold
         var b <- load_qwen3a_tower(path)
         t |> success(b.image_map != null, "warm load is image-backed")
         t |> equal(b.core.d_model, a.core.d_model)
@@ -778,9 +857,13 @@ def test_canary_encoder_image_roundtrip(t : T?) {
         }
         let img = image_path_for(path, "canary-f32")
         remove(img)
-        var a <- load_canary_encoder(path)
-        t |> success(a.image_map == null, "cold load is bin-backed")
+        // off-rail truth: both cached loads are image-backed, so they cannot check each other
+        var a <- load_canary_encoder_(path)
+        var cold <- load_canary_encoder(path)
+        t |> success(cold.image_map != null, "cold load serves the image it built")
         t |> success(stat(img).is_valid, "cold load saved an image")
+        t |> equal(count_mismatch(a.blob, cold.blob), 0l, "cold-built blob element-exact")
+        delete cold
         var b <- load_canary_encoder(path)
         t |> success(b.image_map != null, "warm load is image-backed")
         t |> equal(b.d_model, a.d_model)
@@ -809,9 +892,13 @@ def test_gemma4a_encoder_image_roundtrip(t : T?) {
         }
         let img = image_path_for(path, "gemma4a-f32")
         remove(img)
-        var a <- load_gemma4a_encoder(path)
-        t |> success(a.image_map == null, "cold load is gguf-backed")
+        // off-rail truth: both cached loads are image-backed, so they cannot check each other
+        var a <- load_gemma4a_encoder_(path)
+        var cold <- load_gemma4a_encoder(path)
+        t |> success(cold.image_map != null, "cold load serves the image it built")
         t |> success(stat(img).is_valid, "cold load saved an image")
+        t |> equal(count_mismatch(a.blob, cold.blob), 0l, "cold-built blob element-exact")
+        delete cold
         var b <- load_gemma4a_encoder(path)
         t |> success(b.image_map != null, "warm load is image-backed")
         t |> equal(b.d_model, a.d_model)
@@ -841,12 +928,19 @@ def test_fp32_decoder_image_roundtrip(t : T?) {
         // the fp32 rail is opt-in (image_fp32) — the parity-pinned ASR decoders' lane
         let img = image_path_for(path, "", "fp32")
         remove(img)
+        // off-rail truth: both cached loads are image-backed, so they cannot check each other
+        var g <- load_model_(path, QuantMode.fp32)
+        g.config.seq_len = min(g.config.seq_len, 2048l)
+        var prompt <- encode(g, "Once upon a time")
+        var ga <- gen_ids(g, prompt, 16)
+        delete g
         var a <- load_model_cached(path, QuantMode.fp32, planar_only = true, image_fp32 = true)
-        t |> success(a.image_map == null, "cold load is gguf-backed")
+        t |> success(a.image_map != null, "cold load serves the image it built")
         t |> success(stat(img).is_valid, "cold load saved an image")
         a.config.seq_len = min(a.config.seq_len, 2048l)
-        var prompt <- encode(a, "Once upon a time")
-        var ga <- gen_ids(a, prompt, 16)
+        var gcold <- gen_ids(a, prompt, 16)
+        t |> success(!empty(ga) && count_mismatch(ga, gcold) == 0l, "gguf vs cold-built image tokens")
+        delete gcold
         delete a
         var b <- load_model_cached(path, QuantMode.fp32, planar_only = true, image_fp32 = true)
         t |> success(b.image_map != null, "warm load is image-backed")

@@ -131,7 +131,7 @@ struct ParakeetModel {
     q8 : bool
     qblob : array<int8>
     qscales : array<float>
-    image_map : void?         // non-null when the planes borrow a mapped .dlim (dasllama_image)
+    image_map : void?         // non-null when the planes borrow a .dlim image (dasllama_image)
     image_bytes : uint64
 }
 
@@ -150,9 +150,7 @@ def finalize(var t : ParakeetModel) {
         }
     }
     if (t.image_map != null) {
-        unsafe {
-            fmap_close(t.image_map, t.image_bytes)
-        }
+        image_backing_release(t.image_map, t.image_bytes)
         t.image_map = null
         t.image_bytes = 0ul
     }
@@ -524,12 +522,11 @@ def load_parakeet_model(path : string; q8 : bool = false) : ParakeetModel {
             return <- t
         }
         var m <- load_parakeet_model_(path, q8)
-        let ts_save = ref_time_ticks()
-        if (save_image(m, img, tag)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared parakeet image saved in {get_time_usec(ts_save) / 1000} ms — {img}\n")
-        }
+        var built = ParakeetModel()
+        cache_via_image(m, built, img, tag)
+        delete m
         dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
-        return <- m
+        return <- built
     }
     return <- load_parakeet_model_(path, q8)
 }

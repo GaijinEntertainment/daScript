@@ -279,12 +279,11 @@ def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
             return <- t
         }
         var m <- load_gemma4a_encoder_(path)
-        let ts_save = ref_time_ticks()
-        if (save_image(m, img, tag)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared gemma4a-encoder image saved in {get_time_usec(ts_save) / 1000} ms — {img}\n")
-        }
+        var built = Gemma4aEncoder()
+        cache_via_image(m, built, img, tag)
+        delete m
         dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
-        return <- m
+        return <- built
     }
     return <- load_gemma4a_encoder_(path)
 }

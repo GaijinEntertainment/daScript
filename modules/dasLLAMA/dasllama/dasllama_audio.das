@@ -983,12 +983,11 @@ def load_audio_tower(path : string; q8 : bool = false) : AudioTower {
             return <- t
         }
         var m <- load_audio_tower_(path, q8)
-        let ts_save = ref_time_ticks()
-        if (save_image(m, img, tag)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared tower image saved in {get_time_usec(ts_save) / 1000} ms — {img}\n")
-        }
+        var built = AudioTower()
+        cache_via_image(m, built, img, tag)
+        delete m
         dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
-        return <- m
+        return <- built
     }
     return <- load_audio_tower_(path, q8)
 }

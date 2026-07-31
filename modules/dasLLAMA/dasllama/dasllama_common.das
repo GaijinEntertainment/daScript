@@ -1083,15 +1083,70 @@ struct Model {
     embq : array<uint8>
     embs : array<uint8>
     // prepared-model image backing (dasllama_image): when set, every locked array field above
-    // is a borrowed VIEW into this mapping (zero-copy) and the finalizer below unmaps it.
+    // is a borrowed VIEW into this image (zero-copy) and the finalizer below releases it.
     // Both fields are skipped by the image save/load field walk.
     image_map : void?
     image_bytes : uint64
 }
 
+// ===== prepared-image backing =====
+
+// A carrier's planes borrow either a mapped .dlim or a chunk this process built. Owned chunks
+// live here, keyed by the ALIGNED base image_map holds, so telling the two apart is one lookup
+// and no carrier needs a second field: a miss means "mapping".
+var private g_image_chunks : table<uint64; array<uint8>>
+
+def private ptr_key(p : void?) : uint64 {
+    return unsafe(reinterpret<uint64>(p))
+}
+
+//! Allocate an image chunk of `bytes`, its base aligned to `align` — the in-memory twin of
+//! ``fmap_open``. Uninitialized by design: a multi-GB image is fully overwritten by the build
+//! walk (padding gaps zero-fill explicitly), and pre-touching it would commit every page twice.
+def image_chunk_alloc(bytes : uint64; align : uint64) : void? {
+    var raw : array<uint8>
+    let total = int64(bytes + align)
+    raw |> resize_no_init(total)
+    if (long_length(raw) != total) {
+        delete raw
+        return null
+    }
+    var base : void?
+    unsafe {
+        let a = reinterpret<uint64>(addr(raw[0]))
+        base = reinterpret<void?>((a + align - 1ul) / align * align)
+    }
+    g_image_chunks[ptr_key(base)] <- raw
+    return base
+}
+
+//! Release an owned image chunk by base; false = not one of ours, i.e. the caller holds a mapping
+//! and unmaps instead. This is how every carrier's finalizer tells the two backings apart.
+def image_chunk_free(base : void?) : bool {
+    let key = ptr_key(base)
+    if (base == null || !key_exists(g_image_chunks, key)) {
+        return false
+    }
+    var raw <- g_image_chunks[key]
+    g_image_chunks |> erase(key)
+    delete raw
+    return true
+}
+
+//! Let go of a carrier's image backing, chunk or mapping — the ONE release. Every weight
+//! carrier's finalizer routes here; nothing else may call ``fmap_close`` on an image.
+def image_backing_release(map : void?; bytes : uint64) {
+    if (map == null || image_chunk_free(map)) {
+        return
+    }
+    unsafe {
+        fmap_close(map, bytes)
+    }
+}
+
 // Model's finalizer (every `delete model` lowers to _::finalize and lands here): image-backed
-// models hold locked BORROWED views over the mapping — those must be forgotten (reset without
-// freeing) before the mapping unmaps; everything owned deletes as usual.
+// models hold locked BORROWED views over the image — those must be forgotten (reset without
+// freeing) before the backing goes; everything owned deletes as usual.
 def finalize(var t : Model) {
     apply(t) $ [unused_argument(name)] (name : string; var field) {
         static_if (typeinfo is_array(field)) {
@@ -1107,11 +1162,9 @@ def finalize(var t : Model) {
         }
     }
     if (t.image_map != null) {
-        // imported device memory over this mapping (P2 mirrors) must release BEFORE the unmap
+        // imported device memory over this image (P2 mirrors) must release BEFORE the backing does
         moe_gpu_unmap_notify(t.image_map, t.image_bytes)
-        unsafe {
-            fmap_close(t.image_map, t.image_bytes)
-        }
+        image_backing_release(t.image_map, t.image_bytes)
         t.image_map = null
         t.image_bytes = 0ul
     }

@@ -63,7 +63,7 @@ struct WhisperModel {
     d_ln_b_off : int64
     dlayers_off : int64
     dlayer_stride : int64
-    image_map : void?         // non-null when the planes borrow a mapped .dlim (dasllama_image)
+    image_map : void?         // non-null when the planes borrow a .dlim image (dasllama_image)
     image_bytes : uint64
 }
 
@@ -82,9 +82,7 @@ def finalize(var t : WhisperModel) {
         }
     }
     if (t.image_map != null) {
-        unsafe {
-            fmap_close(t.image_map, t.image_bytes)
-        }
+        image_backing_release(t.image_map, t.image_bytes)
         t.image_map = null
         t.image_bytes = 0ul
     }
@@ -349,12 +347,11 @@ def load_whisper_model(path : string; q8 : bool = false) : WhisperModel {
             return <- t
         }
         var m <- load_whisper_model_(path, q8)
-        let ts_save = ref_time_ticks()
-        if (save_image(m, img, tag)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared whisper image saved in {get_time_usec(ts_save) / 1000} ms — {img}\n")
-        }
+        var built = WhisperModel()
+        cache_via_image(m, built, img, tag)
+        delete m
         dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
-        return <- m
+        return <- built
     }
     return <- load_whisper_model_(path, q8)
 }
