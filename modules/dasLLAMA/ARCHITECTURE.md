@@ -261,9 +261,9 @@ still bind them.
 
 STYLE037 (cyclomatic) and STYLE038 (line count) are prompts to look, not orders to refactor. This
 module has shapes that are irreducible by design and they take `// nolint:STYLE03x` with a one-line
-reason: flat one-call-per-item runs (per-kernel `compile_pso` lists, `release_pso` lists), and GPU
-kernel bodies whose phases are coupled by `barrier()`, simdgroup ops or register residency and so
-cannot cross a function boundary without changing the shader.
+reason: flat one-call-per-item runs (a registration or release list with one line per kernel), and
+GPU kernel bodies whose phases are coupled by barriers, cooperative-matrix ops or register
+residency and so cannot cross a function boundary without changing the shader.
 
 Split only where a real seam exists — genuine duplication, a distinct phase, a self-contained arm —
 and only when the extracted helper stands on its own. Two corollaries this module keeps tripping

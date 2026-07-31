@@ -1,269 +1,198 @@
 # dasLLAMA Code Review Checklist
 
-> Run this list on EVERY dasLLAMA change before it ships. It grows as the reorg settles
-> more rules — when a review argument gets settled, the outcome lands here as a rule.
+Run this list on every dasLLAMA change before it ships.
+
+**What stays in this document:** criteria that can be checked against a diff. Nothing else.
+A reader must be able to apply every entry below **without reading the code, without prior
+knowledge of the module, and without opening another document.** If an entry needs any of
+those, it is not a review criterion — move it to `ARCHITECTURE.md` and leave a one-line
+criterion here.
+
+**Form, and it is a hard limit:**
+
+- **One rule is one short paragraph.** An entry that needs more than that is describing how to
+  write code, not how to review it. Split it or move it.
+- **No numbers.** These are criteria, not a spec, and numbering invites citation. Anything that
+  needs a stable reference lives in `ARCHITECTURE.md`, which is numbered for that purpose.
+- **Cite files by name; cite `ARCHITECTURE.md` by section.** Never cite an entry in this file.
+- **No examples naming current functions, kernels, or types.** Nothing keeps them in sync with
+  the code, so a stale example is worse than none. State the shape, not an instance.
+- **No history, no rationale, no direction of travel.** The reason lives in `ARCHITECTURE.md`;
+  planned work lives in the follow-up ledgers.
+
+---
 
 ## Tests
 
-1. **Run `modules/dasLLAMA/tests` before any PR.** Model/Metal suites go through the
-   sanctioned scoped runner (`modules/dasLLAMA/tests/run.das` — invocation discipline in
-   `modules/dasLLAMA/tests/CLAUDE.md`); never invoke dastest directly on the metal suites.
-2. **Keep the tests multiplatform.** A test must pass — or skip *explicitly* through a
-   capability/model gate (`_model_tier.das`, `builtin_module_exists`, format-support
-   predicates) — on both the mac boxes (arm64 / Metal) and the PC (x64 / Vulkan). A test
-   that silently vanishes on one platform is a review defect.
-3. **All dasLLAMA tests live under `modules/dasLLAMA/tests/`.** `/tests/dasLLAMA` must
-   not exist; anything and everything intended there goes under `modules/dasLLAMA/tests`.
-   dasLLAMA inference runs **`-jit` only** — never interpreted, never AOT; nothing here
-   registers with `test_aot`. The distinction is LIBRARY vs SCAFFOLDING: the library
-   panics (hard stop) on a non-`-jit` model run; tools that only convert, drive, or
-   debug (`.dlim` bake, batch runners spawning the real runner as a child) may run
-   interpreted.
-4. **Every moved or extracted bit ships with targeted tests for the bit itself** —
-   unit-level (feed the function, check the bytes), in `modules/dasLLAMA/tests/`.
-   "The LLM still runs" is not a test surface for a move.
-5. **Do not add tests to cmake.** dasLLAMA tests are never registered in any
-   `CMakeLists.txt` — no AOT registration, no ctest wiring. They run through
-   `modules/dasLLAMA/tests/run.das` / dastest only.
-6. **Run tests under `-jit` — never the interpreter, never AOT.** A test invocation
-   without `-jit` is a review defect even if it happens to pass.
-7. **Review test COST before running.** Know what a test loads before launching it: a
-   test that loads a large GGUF (the >6 GiB tier) must sit behind the large-model gate
-   (`model_available` + `DASLLAMA_PARITY_FULL=1` — see `tests/_model_tier.das` and
-   `tests/CLAUDE.md`) and runs only as the FINAL pre-PR gate, never in the iteration
-   loop. A new test that loads a big model ungated is a review defect.
-18. **Every logits-checking test also logs decoded TEXT.** Any cell that compares logits
-    (tolerance compares, teacher-forced feeds) `to_log`s a decoded-text form of both sides
-    (the forced stream plus the GPU's greedy would-be picks, or at minimum both next-token
-    pieces), and every token-for-token generate cell logs both decoded streams
-    (`log_gen_texts` in `tests/_model_tier.das`) — a red, or a suspicious green, must be
-    eyeball-able as text in the log, not just an id/float diff. A numeric-only parity cell
-    is a review defect.
-19. **Never key a GPU-resident cache by host address alone.** An address-keyed entry carries
-    its SPAN, a hit must cover the request (a shorter first upload must never serve a wider
-    later one), and different upload FORMS (plain span vs concat) live in separate tables so
-    they can never alias — the metal `RegionEntry` rail is the model. Buffers grown out of an
-    entry retire to a list released only at quiesce boundaries: unretained command buffers may
-    still bind them. A new address-keyed cache without span+form in its identity is a review
-    defect.
-20. **Test suites load models with `load_model_` — never the image rail.** `load_model` /
-    `load_model_cached` mint identity-stamped `.dlim` flavors and GC-purge siblings; a suite
-    child's pinned identity (backend pin, wscale, tune manifest) differs from the serving
-    rig's, so a suite on the rail both re-mints multi-GB images the rig cannot use and purges
-    the flavors the rig depends on. Image-rail coverage (mint, map, GC, flavors) belongs to
-    the image suites alone (`test_model_image`, `test_model_image_vulkan`). A non-image suite
-    calling the image rail is a review defect.
+**Run `modules/dasLLAMA/tests` before any PR.** Model and GPU suites go through the scoped
+runner `modules/dasLLAMA/tests/run.das`; invoking dastest directly on those suites is a defect,
+because the runner's environment is part of the suite's contract.
 
-## Structure
+**Every test runs under `-jit`.** Never the interpreter, never AOT. A test invocation without
+`-jit` is a defect even if it passes.
 
-0. **THE PATTERN: a new module lands with its records, from the get-go.** Every new
-   `dasllama_*.das` ships in the same change with (a) an ARCHITECTURE.md placement rule
-   saying what belongs there, (b) a CODEREVIEW.md rule below so review catches strays,
-   and (c) targeted tests. A module without its records is a review defect — that is how
-   "things go where they belong" stays true after the reorg.
+**All dasLLAMA tests live under `modules/dasLLAMA/tests/`.** No dasLLAMA test is registered in
+any `CMakeLists.txt` — no AOT registration, no ctest wiring.
 
-8. **All new repacks go into `dasllama_repack.das`.** Any disk-order → compute-order
-   kernel-layout transform (grp interleave, extractor, panel unpack — any format, any
-   platform) lands there; a repack implemented anywhere else is a review defect.
-9. **All new conversions go into `dasllama_convert.das`.** Any tensor format conversion —
-   quantize/dequantize/transcode/encode, byte readers for a codec, numeric widen/narrow —
-   lands there, regardless of platform or which loader wants it; a conversion implemented
-   anywhere else is a review defect. ONE carve-out: a conversion that is a KV-cache format's
-   store/read half belongs to its codec family — rule 13.
-10. **All RoPE angle/table generation goes into `dasllama_rope.das`.** The theta schedule,
-    the `rope_freqs` divisor, fscale/mscale, and every materialized layout (two-tab tables,
-    row tables, the packed device row). A fresh `1/pow(theta, 2j/hs)` loop anywhere else is
-    a review defect. APPLICATION kernels stay with their backends (dasllama_math's
-    `rope_scaled_*` leaves, the Metal/Vulkan fused rope-store kernels) — their per-shape
-    specialization is deliberate hot-loop design; do NOT hand-merge them. Float multiply
-    order in the builders is contractual (parity-pinned) — never "unify" it.
-11. **GPU cooperation goes through `dasllama_gpu_tier.das`.** A GPU backend that cooperates
-    with the CPU forward (per-op offload, resident-driver plumbing) implements THAT seam —
-    hook types, install slots, want/status — never fresh function-pointer globals elsewhere.
-    Whole-forward ownership goes through common's override registries (the contract Metal
-    uses; Vulkan's resident driver registers there too). A backend reaching into the engine
-    around these two seams — or the engine reaching into a backend — is a review defect.
-    Direction between the styles: `followup_vulkan.md`.
-12. **All format identity lives in `dasllama_kqformat.das`.** The `KqFmt` enum, the
-    per-format descriptor table (strides, block geometry, stream codes), and format
-    predicates. A new weight format = a new enum member + descriptor row THERE — never a
-    fresh `if (fmt == ...)` ladder, never a second format-id space, never a local stride
-    constant. An `int` carrying a format id crossing a module boundary is a review defect
-    (pass the enum; cast at the IR/kernel-param boundary only).
-13. **The KV-cache runtime codec lives in `dasllama_kv_codec.das` — families stay WHOLE.**
-    A new cache format lands there as a complete family: store (quantize), read (dequant),
-    score dot, V-accumulate axpy — its block geometry constants shared inside the module. A
-    cache-format kernel implemented elsewhere, or a family member split across modules (an
-    encode in one module writing block bytes a dot in another reads), is a review defect.
-    Dispatch (`KVDtype`) stays at common's `kv_store_row`/`kv_load_row`/`kv_dot`/`kv_axpy`
-    seam. Load-time tensor conversion is rule 9's territory; per-token cache codecs are
-    this rule's.
-14. **A module gaining its first `[tuned]`/`[tune]` kernel joins the `[tune_scope]`
-    `covers=` list** (`dasllama_math_gen.das`) in the same change — otherwise the scope's
-    completeness check silently stops demanding sidecar entries for those kernels and tune
-    drift goes dark. Sidecars key kernels by BARE name, so MOVING a kernel between covered
-    modules needs no re-tune and no sidecar edit.
-15. **GPU backend code goes in its ROLE file.** Kernel source → `dasllama_<gpu>_kernels` (a
-    `[compute_shader]`/MSL kernel in a driver file is a review defect); device state, buffer/
-    command plumbing, rails, shared lazy-state builders → `dasllama_<gpu>_common`; the resident
-    token-step driver + decode arms → `dasllama_<gpu>_decode`; the batched prefill driver +
-    batch arms → `dasllama_<gpu>_prefill`; portable servability gates → `dasllama_<gpu>_shapes`;
-    vulkan's probe/arm/routers/`[init]` → `dasllama_math_vulkan` — whose NAME is common's
-    `?vulkan` require contract, never rename it (metal has no math_ entry: transformer +
-    shapes are its doors, and `dasllama_metal_gemm` is the below-common batch-GEMM donor,
-    not a facade). Matching responsibilities get MATCHING file names across
-    backends (kernels/common/decode/prefill/shapes/lens); a backend-only capability lives in
-    its matching role file, never a new grab-bag. Metal specifics: the `[metal_dispatch]`
-    lens generates enc_* builders and MSL globals into the module the class COMPILES in, so
-    a kernel class carries its whole dispatch surface wherever it's placed — "the builder
-    needs the driver module" is never a reason to put a kernel in prefill/decode. A NEW
-    `[metal_kernel]` class goes in `dasllama_metal_kernels`; the 33 prefill-only classes
-    still sitting in `dasllama_metal_prefill` are convergence debt, not precedent — don't
-    add beside them.
+**A test passes or skips explicitly on every platform.** A skip goes through a capability or
+model gate. A test that silently vanishes on one platform is a defect.
+
+**A test that loads a model over the large-model threshold sits behind the large-model gate**
+and runs only as a final pre-PR gate, never in the iteration loop. Check what a test loads
+before launching it.
+
+**Every moved or extracted bit ships a test for the bit itself** — feed the function, check the
+bytes. "The model still runs" is not a test for a move.
+
+**Every test that compares logits also logs decoded text for both sides.** A red, or a
+suspicious green, must be readable as text in the log, not only as an id or float difference.
+
+**A new GPU kernel ships with a small model in the kernel coverage suite** that dispatches it.
+A kernel no suite reaches is unreviewable.
+
+**A test suite loads models with `load_model_`, never the image rail.** Image-rail coverage
+belongs to the image suites alone. See `ARCHITECTURE.md` §2.1.
+
+---
+
+## Placement — one file, one rule
+
+Every file states what it holds. Code that belongs to a file and is written anywhere else is a
+defect, and this section is the whole test — a rule here names only its own file's contents,
+never where a neighbouring concern lives. `ARCHITECTURE.md` §1 carries the boundaries and the
+carve-outs.
+
+**A new file ships with its rule here, its charter in `ARCHITECTURE.md` §1, and its tests, in
+the same change.** A file without its records is a defect.
+
+### Engine
+
+- `dasllama.das` — the public API surface and its re-exports.
+- `dasllama_common.das` — engine types, forward loops, override registries, the load walk. No
+  platform-specific code.
+- `dasllama_transformer.das` — block composition.
+- `dasllama_config.das` — every input that changes `.dlim` image bytes, and its identity
+  formatter.
+- `dasllama_chat.das` — conversation turns and chat-template application.
+- `dasllama_par.das` — the parallel-for macro.
+- `dasllama_prefix.das` — the prefix cache for evaluated token history.
+- `dasllama_parity.das` — CPU reference caches for parity instruments.
+
+### Formats and data movement
+
+- `dasllama_kqformat.das` — format identity: the format enum, per-format descriptors, format
+  predicates.
+- `dasllama_convert.das` — every tensor format conversion, any platform, any caller.
+- `dasllama_repack.das` — every disk-order to compute-order kernel-layout transform.
+- `dasllama_kv_codec.das` — the KV-cache runtime codec: one family per cache format, kept whole.
+- `dasllama_rope.das` — RoPE angle and table generation.
+- `dasllama_gguf.das` — the GGUF container and its byte readers.
+- `dasllama_layout.das` — disk-format to compute-layout transforms at load scope.
+- `dasllama_image.das` — the prepared-model image rail.
+- `dasllama_tokenizer.das` — the SentencePiece tokenizer.
+- `dasllama_bpe.das` — the byte-level BPE tokenizer.
+
+### CPU kernel tiers
+
+- `dasllama_math.das` — the numeric abstraction: typedefs, active backend pointers, public
+  wrappers. No kernel bodies.
+- `dasllama_math_default.das` — the portable kernel backend.
+- `dasllama_math_aarch64_neon.das` — the arm64 kernel backend.
+- `dasllama_math_accelerate.das` — the Accelerate/BNNS float tier.
+- `dasllama_math_gen.das` — the generated GEMM tier's runtime registration.
+- `dasllama_gemm_gen.das` — the GEMM tile generator.
+- `dasllama_gemm_schema.das` — the layout and permutation schema shared by generator and runtime.
+- `dasllama_gemm_register.das` — tune-family registration.
+- `dasllama_tune.das` — per-box kernel tuning policy. Tuned values live in the box sidecar, never
+  in source.
+
+### GPU
+
+A backend is a family of role files, and the role names the contents. `<gpu>` is `metal` or
+`vulkan`.
+
+- `dasllama_<gpu>_kernels.das` — kernel source and the dispatch census. No device state.
+- `dasllama_<gpu>_common.das` — device state, buffer and command plumbing, the hazard and capture
+  rail, the profiler.
+- `dasllama_<gpu>_decode.das` — the resident token-step driver and its decode-time arms.
+- `dasllama_<gpu>_prefill.das` — the batched prefill driver and its batch arms.
+- `dasllama_<gpu>_shapes.das` — model-shape servability gates, portable: no GPU requires, so any
+  box can bake.
+- `dasllama_<gpu>_lens.das` — the kernel-access macro.
+- `dasllama_math_vulkan.das` — the Vulkan family entry: probe, arm, image identity, routers,
+  init hooks. Its name is a require contract; renaming it is a defect.
+- `dasllama_metal_gemm.das` — the Metal batch-GEMM donor.
+- `dasllama_gpu_tier.das` — the device-cooperation SPI: hook types, install slots, status.
+- `dasllama_kernel_access.das` — the shared body-walk read/write classifier both lenses run on.
+
+A backend-only capability goes in that backend's matching role file. A new grab-bag file for it
+is a defect.
+
+### Model families
+
+- `dasllama_arch_*.das` — one file per architecture family, declarative registration only: build
+  the descriptor, register it at init. An architecture that changes a forward loop, or a name
+  test on a shared path, is a defect.
+
+### Audio and ASR
+
+- `dasllama_audio.das` — the shared audio tower.
+- `dasllama_audio_io.das` — audio decode to PCM. The only file that talks to the audio library.
+- `dasllama_asr.das` — the ASR facade and capability declaration.
+- `dasllama_whisper.das`, `dasllama_parakeet.das`, `dasllama_canary.das`, `dasllama_qwen3a.das`,
+  `dasllama_gemma4a.das` — one file per model family: its weights, its decode loop, its quirks.
+  Shared tower pieces move up into `dasllama_audio.das`, never sideways between families.
+- `dasllama_vad.das` — voice-activity detection weights and stream state.
+
+### Generated
+
+- `dasllama_env.das`, `dasllama_unicode.das` — generated. Editing one by hand is a defect; edit
+  its generator.
+
+---
 
 ## Implementation
 
-16. **Vulkan descriptor sets build through `vk_set6`/`vk_write6`; kernel stages through the
-    shared helpers.** A hand-rolled `write_buf_desc` six-pack (+ `update_descriptor_sets` +
-    `hz_set_bits`) is a review defect — `vk_set6` allocates-and-writes, `vk_write6` rewrites in
-    place. Likewise a new kernel that re-pastes a stage an existing helper covers (`wg_rms_inv`,
-    `q8_blk_pack`/`q8k_*`, `kq_bt_*`, `kq_gemv_dm`/`q40_blk_d`, `fa_*`, `vk_region_rec`) is a
-    review defect — extend the helper family instead. Two hard constraints on such helpers: the
-    shader-function ABI takes only scalars/vectors/matrices/plain structs (fixed-array params
-    are error 50501 — restructure per-element), and float op ORDER is contractual (keep the
-    caller's `+=` granularity; never fold a sum before the accumulate). Deliberate variants
-    (coopmat pair, h128 flash twin, per-format scale folds) stay separate — don't "unify" them.
-17. **A new GPU kernel ships with a small model in the kernel coverage oracle.** When a
-    change adds a kernel (a `[metal_kernel]` class, a vulkan `[compute_shader]`), the kernel
-    coverage suite (small-model dispatch census, metal + vulkan) gains a run that actually
-    DISPATCHES it — the smallest model/shape that reaches the kernel. A kernel no covered
-    run dispatches surfaces as a LOUD warning, never an auto-dead verdict; adding a kernel
-    without extending the coverage oracle is a review defect.
-21. **No dynamic dispatch in a kernel: SHAPE is compile-time, only DATA is runtime.** The test
-    is one question — *for a given compiled kernel, can this value change between dispatches?*
-    If yes it is DATA (context depth, row counts, buffer offsets, `kv_dim`, scales, head
-    counts) and belongs in a uniform or a kargs struct. If no, it is SHAPE (a codec's block
-    stride, a scale-plane stride, a lane width, an unroll factor, a format selector) and must
-    NOT reach the kernel as a uniform, a kargs field, or a helper parameter. Shape belongs to
-    the specialization: a separate kernel class and PSO, a per-codec overload, a monomorphized
-    generic, or a `static_if` on a compile-time witness. Handing a shape constant over as a
-    value and trusting the shader compiler to inline-and-fold it back is an assumption, not a
-    guarantee, and it is worth nothing in the kernels that matter. The same rule bans
-    indirection in a kernel body — no function pointers, no vtables; class methods devirtualize
-    statically or the emitter refuses them.
+**A kernel's shape is compile-time; only its data is runtime.** The test is one question: for a
+given compiled kernel, can this value change between dispatches? If yes it is data and belongs in
+a uniform or a kargs struct. If no it is shape — a block stride, a lane width, an unroll factor,
+a format selector — and it must not reach the kernel as a uniform, a kargs field, or a helper
+parameter. See `ARCHITECTURE.md` §2.2.
 
-    **Verify against the EMITTED shader, never the das source.** Read the `*_msl` global (or
-    the SPIR-V dump) and confirm the constant is literal there: `blk * 34u`, not `blk * bstr`.
-    A helper that looks specialized in das can still lower to a runtime multiply.
+**A kernel body contains no indirection.** No function pointers, no vtables.
 
-    **One family, one kargs struct, one slot — and no value reaches an encoder twice.** Twins of
-    a family (a codec zoo, a B=2/B=4 pair) bind the SAME kargs type at the SAME binding, even
-    where one twin ignores a field; a twin that carries an extra scalar must not shift the others
-    to different slots, because that asymmetry propagates into the encoder as a per-form branch.
-    The tell that a fold is overdue is a scalar uniform BUFFER passed alongside the identical
-    value as an `int64` parameter (`bd` next to `d`, `bys` next to `ys`, `bnr` next to `nrows`) —
-    the buffer is pooled, uploaded and released per step to carry a number the encoder already
-    holds. Build the kargs from the parameters and delete the buffer; a pooled scalar that
-    survives must be one a DIFFERENT encoder still binds.
+**Claims about a shape constant are checked against the emitted shader, not the das source.**
+A helper that looks specialized in das can still lower to a runtime multiply.
 
-    **Nothing dispatches a kernel except its `enc_*` builder.** A hand-rolled bind list elsewhere —
-    a tune-race harness, a benchmark, a one-off probe — duplicates the builder and desyncs the
-    moment the family's args change, silently: the slots still exist, the types still compile, and
-    the kernel reads a struct out of a 4-byte buffer. The census only catches a builder that binds
-    kargs on some paths and not others (`nkargs > 0 && nkargs != ndispatch`); a duplicate that
-    binds NO kargs is invisible to it. So when a race must drive two PSOs itself, it builds the
-    SAME kargs value the encoder builds and binds it next to its own `kn_dispatch` — never a
-    private set of scalar uniform buffers.
+**Twins of a kernel family bind the same kargs type at the same binding**, even where one twin
+ignores a field. A twin that shifts the other's fields to different slots is a defect.
 
-    **A field that is a function of other fields is DERIVED in the builder, not passed in.** Ask
-    of every kargs field whether the ones beside it already determine it. An expert plane's block
-    stride is `kdim * ndim / blocksize`; a padded extent is a rounded row count; a reciprocal
-    scale is `1/sqrt(dim)`. Each one passed separately is a second place to get it wrong and,
-    usually, a pooled uniform buffer allocated per step to carry it. Derive it once in the
-    builder and the call sites stop choosing — the MoE mul_mm sites' hand-rolled
-    `fmt == q8 || fmt == q51 ? eblk : esb` became `kq_sb(fmt) ? 256 : 32` inside `moe_mm_ka`,
-    which is also the predicate `dasllama_kqformat.das` documents for exactly that question.
-    Same for the dispatch: when a kernel's grid IS the geometry it reads, take the grid off the
-    kargs (`kn_dispatch(enc, uint3(ka.nlayers, ka.npos, 1u), …)`) rather than re-passing the
-    same three numbers as parameters.
+**No value reaches an encoder twice.** A scalar uniform buffer passed alongside the identical
+value as a parameter is a defect; so is a kargs field the fields beside it already determine.
 
-22. **Complexity/length lint: suppress an honest shape, never force a split.** STYLE037
-    (cyclomatic) and STYLE038 (line count) are prompts to look, not orders to refactor. This
-    module has shapes that are irreducible by design and they take `// nolint:STYLE03x` on the
-    `def` line with a one-line reason: the flat one-call-per-item runs (`metal_decode_init`'s
-    per-kernel `compile_pso` list, `metal_kernels_release`'s `release_pso` list), and GPU kernel
-    bodies whose phases are coupled by `barrier()`, simdgroup ops or register residency and so
-    cannot cross a function boundary without changing the shader. Split only where a real seam
-    exists — genuine duplication (two near-identical kernel bodies that should share stages, the
-    way the split-K family shares `sqd_*`), a distinct phase, a self-contained arm — and only
-    when the extracted helper stands on its own as a function.
+**Nothing dispatches a kernel except its builder.** A hand-rolled bind list anywhere else is a
+defect — it duplicates the builder and desyncs silently when the family's arguments change.
 
-    Two corollaries this module keeps tripping over. **A kargs fold that grows an already-over-cap
-    kernel body is not a reason to abandon the fold**: unpacking N fields adds N lines, and if
-    each field is read several times, inlining `ka.field` at every use is noisier rather than
-    shorter — take the growth and either suppress or ledger the real seam. And **never suppress a
-    function you have just argued is reducible** — if it is on the follow-up ledger as wanting a
-    dedup, it keeps its warning until the dedup lands.
+**A cache keyed by a host address carries the span and the form in its key.** A hit must cover
+the request, and different upload forms live in separate tables.
 
-23. **THERE IS ONE WAY TO LOAD A MODEL. Any other is a review FAIL.** A weight carrier becomes
-    a live struct through exactly two functions in `dasllama_image.das`, and nothing else may
-    read weights into one:
+**There is one way to load a model.** Nothing outside the image rail may read weights into a
+live carrier or release an image backing. See `ARCHITECTURE.md` §2.1.
 
-    - **`build_image`** walks a carrier's planes into a sink — a `.dlim` file or a page-aligned
-      memory chunk. Every prepared image in the process comes out of this walk. A second walk
-      that emits image bytes is a review defect; the streaming form is a plane HOOK on this
-      walk, not a copy of it (that is precisely the drift this rule exists to prevent — the
-      streaming twin had already lost the nested-weight-carrier arm before they were merged).
-    - **`parse_image`** turns `(base, bytes)` into borrowed-plane fields. It does not know or
-      care where the bytes came from. `load_image` (mmap a file) and `adopt_image` (a chunk this
-      process built) are its only two wrappers, and both exist so the release side stays honest.
+**A predicate answering "can this run" must not also answer "is this ready".** A caller that
+runs before setup finishes gets a permanent no, and the feature silently never runs.
 
-    So **a cold load and a warm load produce the same struct**: planes borrowed over a prepared
-    image, `image_map` non-null, released through `image_backing_release`. Cold reaches it by
-    building the image and handing off through the file (write, drop the model, map); warm by
-    mapping the file it finds. `cache_via_image` is that handoff for every carrier — audio,
-    whisper, parakeet, canary, qwen3a, gemma4a and Model all call it, and a new carrier that
-    hand-rolls "load eagerly, save, return the eager struct" is a review FAIL.
+**Peak memory wins ties against cold-start latency.** A change going the other way ships the
+measured pair — peak and wall-clock — and an explicit call, not an assumption that faster is
+better.
 
-    Why the rule is this strict: that hand-rolled tail is what the module had, six times over,
-    and it meant the mapped path only ever ran on a SECOND load — so on Metal it had never run
-    at all. A forked loader does not fail loudly; it silently halves your coverage.
+**A complexity or length warning is a prompt to look, not an order to split.** An irreducible
+shape takes a suppression with a one-line reason. Splitting where no seam exists — helpers that
+exist only to lower a number — is a defect, and so is suppressing a function already ledgered as
+wanting a dedup.
 
-    Two contracts the rule carries:
+**New code meets the complexity and length limits from the first line.** The suppression is for
+shapes that cannot reduce, not for code written oversized.
 
-    - **Never hold the model and its image at once.** The file is the handoff for that reason,
-      and the close/re-map it costs is the accepted price — see rule 24. Building into a chunk
-      keeps the largest plane live in both places while it is copied between them; measured on an
-      8 GB gguf that is 12.3 GB → 20.5 GB of peak footprint. Only take the chunk when there is
-      nowhere to write (`DASLLAMA_IMAGE_SAVE=0`).
-    - **Prefer the streamed source.** `save_model_image_streaming` /
-      `image_from_model_streaming` transcode planes from the gguf mapping straight into the
-      image, so the planes never materialize — 12.3 GB → 4.0 GB on the same model. Only the
-      blob flavors take the eager rail, and only because their transforms need whole planes.
-
-    Test-side: the image suites assert a cold load is image-backed. That assertion IS the rule —
-    if a change makes it fail, a second rail has grown back. Since cold and warm can no longer
-    check each other, every round-trip cell also loads OFF the rail (`load_model_`,
-    `load_whisper_model_`, …) for the gguf-vs-image compare; a cell that drops that control is
-    comparing an image to itself.
-
-24. **Peak memory wins ties against cold-start latency, and going the other way needs both
-    numbers.** The engine's standing tiebreak (ARCHITECTURE, "Peak memory before cold-start
-    latency"): overshooting RAM on a big model is fatal, a slower load costs seconds once per
-    process, and the warm path pays nothing either way. So a change that trades footprint for
-    load speed — serving a copy already in RAM instead of re-mapping, caching a plane "since we
-    have it", keeping a staging buffer alive past its use — is a review defect **unless it comes
-    with the measured pair (peak footprint AND wall clock, both rails) and an explicit decision
-    to spend the memory**. "It is faster" on its own is not the case for the change; neither is
-    "it is only N hundred MB" on a rail that runs against 30 GB models.
-
-    Measure peak with `footprint -p <pid>` (`phys_footprint_peak`) on macOS — `ps rss` does not
-    see wired or mapped GPU memory and reads near zero here. One model per process, and quote the
-    cold and warm numbers separately: they move independently and a cold-path change that leaves
-    the warm path alone is the normal case, not a suspicious one.
-
-    `phys_footprint_peak` is a kernel high-water mark, so one *late* sample is exact — but an
-    external poller that never samples after the peak silently reports a number that is too low,
-    and a run shorter than the poll interval can report a peak BELOW the heap the program itself
-    printed. That contradiction is the tell. Poll sub-second and have the probe hold briefly before
-    exit; a peak that is not obviously above the reported heap is a broken measurement, not a win.
+**Platform backends implement narrow registered contracts.** Platform-specific code in a
+platform-neutral file is a defect.
