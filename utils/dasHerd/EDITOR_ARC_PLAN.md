@@ -303,6 +303,18 @@ highlight inside code blocks lands with the selection work in E2/E4.
 - **E4-follow-up (recorded, not pressing): LLM completion tier.** Own
   section when it comes: API port setting, async request, model picked
   for fill speed, model-per-language setting; basic-basic completion.
+- **E4-follow-up (Boris, 2026-07-31, "feels later"): snippets +
+  format-on-type.** The observed gap: an accepted completion lands
+  unformatted next to auto-closed braces (no space after `{`). Two
+  standard mechanisms, both recorded: (1) TextMate-style snippet
+  completions (tab stops/placeholders — the format VS Code and LSP
+  adopted verbatim; slots into the provider interface as items carrying
+  templates instead of words); (2) format-on-type — reformat the
+  construct just closed (on `}` / Enter). (2) is uniquely cheap here:
+  we OWN das_source_formatter in-process, no LSP hop — "least
+  keystrokes to formatted code" (Boris's energy-compaction framing;
+  the KLM/GOMS literature is the study lineage) likely lands as
+  format-on-type first, snippets second.
 - **Post-LSP tail (Boris): block/column selection** — Alt+mouse drag +
   multi-line insert. Deliberately late: the undo journal already carries
   multi-op units and selection lives inside TextEditState, so nothing
