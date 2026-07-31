@@ -727,6 +727,66 @@ def test_edit_find_sync_no_replace_loop(t : T?) {
 }
 
 [test]
+def test_edit_lexical_syntax(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "def foo() \{ // note\n\tlet s = \"str\" + 42\n\}")
+    text_edit_set_language(ed, "das")
+    t |> equal(length(ed.line_styles), 3, "every line gets a style entry")
+    t |> success(!empty(ed.line_styles[0].runs), "line 0 lexes")
+    t |> equal(int(ed.line_styles[0].runs[0].style), int(TextSourceSyntaxStyle.keyword),
+        "def is a keyword run")
+    let l0_last = length(ed.line_styles[0].runs) - 1
+    t |> equal(int(ed.line_styles[0].runs[l0_last].style),
+        int(TextSourceSyntaxStyle.comment), "the trailing line comment styles")
+    t |> equal(ed.line_styles[0].runs[l0_last].end_byte, length(ed.lines[0]),
+        "the line comment runs to end of line")
+    t |> equal(length(ed.line_styles[1].runs), 3, "line 1: let, string, number")
+    t |> equal(int(ed.line_styles[1].runs[1].style), int(TextSourceSyntaxStyle.string_),
+        "the string literal styles")
+    t |> equal(int(ed.line_styles[1].runs[2].style), int(TextSourceSyntaxStyle.number),
+        "the number styles")
+    text_edit_set_language(ed, "")
+    t |> success(empty(ed.line_styles), "clearing the language drops the styles")
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_edit_block_comment_carry(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "aa\nbb\ncc")
+    text_edit_set_language(ed, "das")
+    t |> success(empty(ed.line_styles[1].runs), "plain identifiers get no runs")
+    text_edit_set_cursor(ed, 0, 2)
+    text_edit_insert(ed, " /*")
+    t |> success(ed.line_styles[1].in_block_comment, "open comment carries into line 1")
+    t |> success(ed.line_styles[2].in_block_comment, "and into line 2")
+    t |> equal(int(ed.line_styles[2].runs[0].style), int(TextSourceSyntaxStyle.comment),
+        "downstream lines restyle as comment")
+    text_edit_set_cursor(ed, 1, length(ed.lines[1]))
+    text_edit_insert(ed, "*/")
+    t |> success(!ed.line_styles[2].in_block_comment, "closing it restyles downstream")
+    t |> success(empty(ed.line_styles[2].runs), "line 2 is plain again")
+    t |> success(text_edit_undo(ed), "undo the close")
+    t |> success(ed.line_styles[2].in_block_comment, "undo restyles downstream too")
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_edit_syntax_tracks_line_edits(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "def a\ndef b")
+    text_edit_set_language(ed, "das")
+    text_edit_set_cursor(ed, 0, 5)
+    text_edit_newline(ed)
+    t |> equal(length(ed.line_styles), 3, "split keeps entries aligned")
+    t |> equal(int(ed.line_styles[2].runs[0].style), int(TextSourceSyntaxStyle.keyword),
+        "the shifted line keeps its keyword run")
+    text_edit_backspace(ed)
+    t |> equal(length(ed.line_styles), 2, "join keeps entries aligned")
+    text_edit_dispose(ed)
+}
+
+[test]
 def test_edit_find_sync_regex_groups(t : T?) {
     var ed = TextEditState()
     var find = TextFindState()

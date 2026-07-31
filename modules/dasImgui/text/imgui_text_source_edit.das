@@ -12,6 +12,7 @@ require imgui/imgui_boost_runtime public
 require imgui/imgui_text_source_view public
 require imgui/imgui_text_flow public
 require imgui/imgui_text_find public
+require imgui/imgui_text_language public
 require imgui/imgui_commands public
 require clipboard/clipboard
 require math
@@ -64,6 +65,19 @@ struct public TextEditRange {
     end_column : int
 }
 
+struct public TextEditStyleRun {
+    //! Byte range within one line painted with a syntax style.
+    start_byte : int
+    end_byte : int
+    style : TextSourceSyntaxStyle
+}
+
+struct public TextEditLineStyle {
+    runs : array<TextEditStyleRun>
+    //! Whether the line BEGINS inside a block comment (the lexical carry).
+    in_block_comment : bool
+}
+
 struct public TextEditState {
     lines : array<string>
     crlf : bool = false
@@ -99,6 +113,14 @@ struct public TextEditState {
     pending_scroll_lines : int = 0
     //! Host-fed ranges painted under the text (find matches); keep ascending.
     highlight_ranges : array<TextEditRange>
+    //! Canonical language for styling ("" = plain); text_edit_set_language.
+    language : string
+    //! Per-line style runs, kept aligned with `lines` through every edit.
+    line_styles : array<TextEditLineStyle>
+    //! Seconds since the last edit — drives the full-parse debounce.
+    syntax_idle : float = 0.0f
+    //! Buffer revision the last FULL parse styled (-1 = lexical only).
+    syntax_revision : int = -1
     // widget layout cache + per-draw stamps for live inspection
     layout_revision : int = -1
     max_line_bytes : int = 0
@@ -117,6 +139,7 @@ def public text_edit_dispose(var ed : TextEditState) {
     delete ed.undo_stack
     delete ed.redo_stack
     delete ed.highlight_ranges
+    delete ed.line_styles
     ed = TextEditState()
 }
 
@@ -139,10 +162,14 @@ def public text_edit_load(var ed : TextEditState; source : string) {
     delete ed.undo_stack
     delete ed.redo_stack
     delete ed.highlight_ranges
+    delete ed.line_styles
     ed.undo_open = false
     ed.dirty = false
     ed.revision++
     ed.follow_revision++
+    ed.syntax_revision = -1
+    ed.syntax_idle = 0.0f
+    restyle_lines(ed, 0, length(ed.lines) - 1)
 }
 
 def public text_edit_source(ed : TextEditState const) : string {
@@ -188,6 +215,147 @@ def private ensure_line(var ed : TextEditState) {
     }
     ed.cursor_line = clamp(ed.cursor_line, 0, length(ed.lines) - 1)
     ed.cursor_column = clamp(ed.cursor_column, 0, length(ed.lines[ed.cursor_line]))
+}
+
+// ===== Syntax (lexical tier) =====
+
+def private lex_push(var runs : array<TextEditStyleRun>; start_byte, end_byte : int;
+                     syntax : TextSourceSyntaxStyle) {
+    return if (end_byte <= start_byte)
+    runs |> push(TextEditStyleRun(start_byte = start_byte, end_byte = end_byte,
+        style = syntax))
+}
+
+def private bytes_match(line : string; at : int; needle : string) : bool {
+    let needle_length = length(needle)
+    return false if (needle_length == 0 || at + needle_length > length(line))
+    return slice(line, at, at + needle_length) == needle
+}
+
+def private byte_in(set_bytes : string; b : int) : bool {
+    var hit = false
+    peek_data(set_bytes) $(bytes) {
+        for (value in bytes) {
+            if (int(value) == b) {
+                hit = true
+                break
+            }
+        }
+    }
+    return hit
+}
+
+def private lex_line(profile : TextLanguageProfile const; line : string; // nolint:STYLE037
+                     entry_comment : bool;
+                     var runs : array<TextEditStyleRun>) : bool {
+    // returns whether the NEXT line starts inside a block comment
+    runs |> clear()
+    return entry_comment if (empty(line))
+    var in_comment = entry_comment
+    let n = length(line)
+    let has_block = !empty(profile.block_comment_open)
+    let lc_first = empty(profile.line_comment) ? -1 : first_character(profile.line_comment)
+    let bo_first = has_block ? first_character(profile.block_comment_open) : -1
+    peek_data(line) $(bytes) {
+        var at = 0
+        if (in_comment) {
+            let close_at = has_block ? find(line, profile.block_comment_close) : -1
+            if (close_at < 0) {
+                lex_push(runs, 0, n, TextSourceSyntaxStyle.comment)
+                at = n
+            } else {
+                at = close_at + length(profile.block_comment_close)
+                lex_push(runs, 0, at, TextSourceSyntaxStyle.comment)
+                in_comment = false
+            }
+        }
+        while (at < n) {
+            let b = int(bytes[at])
+            if (b == lc_first && bytes_match(line, at, profile.line_comment)) {
+                lex_push(runs, at, n, TextSourceSyntaxStyle.comment)
+                at = n
+            } elif (b == bo_first && bytes_match(line, at, profile.block_comment_open)) {
+                let close_at = find(line, profile.block_comment_close,
+                    at + length(profile.block_comment_open))
+                if (close_at < 0) {
+                    lex_push(runs, at, n, TextSourceSyntaxStyle.comment)
+                    in_comment = true
+                    at = n
+                } else {
+                    let after = close_at + length(profile.block_comment_close)
+                    lex_push(runs, at, after, TextSourceSyntaxStyle.comment)
+                    at = after
+                }
+            } elif (byte_in(profile.string_delimiters, b)) {
+                var end_ = at + 1
+                while (end_ < n) {
+                    let c = int(bytes[end_])
+                    if (c == '\\') {
+                        end_ += 2
+                    } elif (c == b) {
+                        end_++
+                        break
+                    } else {
+                        end_++
+                    }
+                }
+                lex_push(runs, at, min(end_, n), TextSourceSyntaxStyle.string_)
+                at = min(end_, n)
+            } elif (is_alpha(b) || b == '_' || b >= 0x80) {
+                let start = at
+                while (at < n && byte_word_class(int(bytes[at])) == 1) {
+                    at++
+                }
+                if (find_index(profile.keywords, slice(line, start, at)) >= 0) {
+                    lex_push(runs, start, at, TextSourceSyntaxStyle.keyword)
+                }
+            } elif (is_number(b)) {
+                let start = at
+                while (at < n && (is_number(int(bytes[at])) || is_alpha(int(bytes[at]))
+                        || int(bytes[at]) == '.')) {
+                    at++
+                }
+                lex_push(runs, start, at, TextSourceSyntaxStyle.number)
+            } else {
+                at++
+            }
+        }
+    }
+    return in_comment
+}
+
+def private restyle_lines(var ed : TextEditState; first_line, last_forced : int) {
+    return if (empty(ed.language))
+    // align the per-line entries with the buffer at the edit point
+    while (length(ed.line_styles) < length(ed.lines)) {
+        var blank = TextEditLineStyle()
+        ed.line_styles |> emplace(blank, clamp(first_line, 0, length(ed.line_styles)))
+    }
+    while (length(ed.line_styles) > length(ed.lines)) {
+        ed.line_styles |> erase(clamp(first_line, 0, length(ed.line_styles) - 1))
+    }
+    return if (empty(ed.lines))
+    text_language_profile(ed.language) $(profile) {
+        // start one line ABOVE the change: lexing it recovers the valid carry
+        var at = clamp(first_line - 1, 0, length(ed.lines) - 1)
+        var carry = at == 0 ? false : ed.line_styles[at].in_block_comment
+        while (at < length(ed.lines)) {
+            // converged: an untouched line already starts in this state
+            break if (at > last_forced && ed.line_styles[at].in_block_comment == carry)
+            ed.line_styles[at].in_block_comment = carry
+            carry = lex_line(profile, ed.lines[at], carry, ed.line_styles[at].runs)
+            at++
+        }
+    }
+}
+
+def public text_edit_set_language(var ed : TextEditState; language : string) {
+    //! Language for syntax styling (and E4 indent/brackets): a name or file
+    //! extension, canonicalized per `syntax_canonical_language`; "" clears.
+    ed.language = empty(language) ? "" : syntax_canonical_language(language)
+    ed.syntax_revision = -1
+    delete ed.line_styles
+    restyle_lines(ed, 0, length(ed.lines) - 1)
 }
 
 // ===== Selection =====
@@ -397,6 +565,7 @@ def private commit_edit(var ed : TextEditState; kind : TextEditUndoKind;
     last.after_cursor_column = ed.cursor_column
     ed.undo_open = true
     touch_edit(ed)
+    restyle_lines(ed, min(line, ed.cursor_line), max(line, ed.cursor_line))
 }
 
 def private restore_unit_cursor(var ed : TextEditState;
@@ -436,6 +605,7 @@ def public text_edit_undo(var ed : TextEditState) : bool {
     ed.revision++
     ed.follow_revision++
     ed.blink_time = 0.0f
+    restyle_lines(ed, 0, length(ed.lines) - 1)
     return true
 }
 
@@ -460,6 +630,7 @@ def public text_edit_redo(var ed : TextEditState) : bool {
     ed.revision++
     ed.follow_revision++
     ed.blink_time = 0.0f
+    restyle_lines(ed, 0, length(ed.lines) - 1)
     return true
 }
 
@@ -608,6 +779,7 @@ def private touch_edit(var ed : TextEditState) {
     ed.preferred_column = -1
     ed.follow_revision++
     ed.blink_time = 0.0f
+    ed.syntax_idle = 0.0f
 }
 
 def private touch_move(var ed : TextEditState) {
@@ -1240,6 +1412,7 @@ def public text_edit_replace_all(var ed : TextEditState;
     last.end_column = ed.cursor_column
     ed.undo_open = false
     touch_edit(ed)
+    restyle_lines(ed, 0, length(ed.lines) - 1)
     return count_
 }
 
@@ -1743,6 +1916,7 @@ def private draw_edit_content(var ed : TextEditState; m : EditMetrics;
         0, draw_count - 1)
     let io & = unsafe(GetIO())
     ed.blink_time += io.DeltaTime
+    ed.syntax_idle += io.DeltaTime
     draw_edit_highlights(ed, m, style, font, dl, first_visible, last_visible)
     let has_selection = text_edit_has_selection(ed)
     let sel = text_edit_selection(ed)
@@ -1778,10 +1952,7 @@ def private draw_edit_content(var ed : TextEditState; m : EditMetrics;
             row_number, length(row_number), 0, length(row_number))
         let line = ed.lines[row]
         if (!empty(line)) {
-            let _ = text_source_draw_range(dl, font, m.font_size,
-                float2(row_origin.x + m.gutter_space, row_origin.y),
-                style.text_color, line, 0, length(line),
-                m.cell_width, style.tab_cells)
+            draw_edit_line(ed, row, line, m, style, font, dl, row_origin)
         }
     }
     if (ed.focused && ed.cursor_line >= first_visible && ed.cursor_line <= last_visible
@@ -1799,6 +1970,53 @@ def private draw_edit_content(var ed : TextEditState; m : EditMetrics;
         *dl |> AddRectFilled(float2(caret_x, caret_y),
             float2(caret_x + caret_width, caret_y + m.line_height),
             GetColorU32(caret_color), 0.0f, ImDrawFlags.None)
+    }
+}
+
+def private edit_syntax_color(style : TextSourceViewStyle const; // nolint:STYLE037
+                              syntax : TextSourceSyntaxStyle) : float4 {
+    if (syntax == TextSourceSyntaxStyle.comment) return style.syntax_comment_color
+    if (syntax == TextSourceSyntaxStyle.string_) return style.syntax_string_color
+    if (syntax == TextSourceSyntaxStyle.number) return style.syntax_number_color
+    if (syntax == TextSourceSyntaxStyle.keyword) return style.syntax_keyword_color
+    if (syntax == TextSourceSyntaxStyle.type_) return style.syntax_type_color
+    if (syntax == TextSourceSyntaxStyle.function_) return style.syntax_function_color
+    if (syntax == TextSourceSyntaxStyle.variable) return style.syntax_variable_color
+    if (syntax == TextSourceSyntaxStyle.property) return style.syntax_property_color
+    if (syntax == TextSourceSyntaxStyle.constant) return style.syntax_constant_color
+    if (syntax == TextSourceSyntaxStyle.operator_) return style.syntax_operator_color
+    if (syntax == TextSourceSyntaxStyle.punctuation) return style.syntax_punctuation_color
+    return style.text_color
+}
+
+def private draw_edit_line(ed : TextEditState const; row : int; line : string;
+                           m : EditMetrics; style : TextSourceViewStyle const;
+                           var font : ImFont?; var dl : ImDrawList?;
+                           row_origin : float2) {
+    var x = row_origin.x + m.gutter_space
+    let position_y = row_origin.y
+    if (row >= length(ed.line_styles) || empty(ed.line_styles[row].runs)) {
+        let _ = text_source_draw_range(dl, font, m.font_size, float2(x, position_y),
+            style.text_color, line, 0, length(line), m.cell_width, style.tab_cells)
+        return
+    }
+    var covered = 0
+    for (run in ed.line_styles[row].runs) {
+        if (run.start_byte > covered) {
+            x += text_source_draw_range(dl, font, m.font_size, float2(x, position_y),
+                style.text_color, line, covered, run.start_byte,
+                m.cell_width, style.tab_cells)
+        }
+        let run_end = min(run.end_byte, length(line))
+        x += text_source_draw_range(dl, font, m.font_size, float2(x, position_y),
+            edit_syntax_color(style, run.style), line, run.start_byte, run_end,
+            m.cell_width, style.tab_cells)
+        covered = run_end
+    }
+    if (covered < length(line)) {
+        let _ = text_source_draw_range(dl, font, m.font_size, float2(x, position_y),
+            style.text_color, line, covered, length(line),
+            m.cell_width, style.tab_cells)
     }
 }
 

@@ -18,11 +18,12 @@ var private g_bindings_editor = CommandBindingsEditorState()
 var private g_fonts = FontRoleSet()
 var private g_font_sources : array<string>
 
-let private SAMPLE = ("The text editor arc, step E1.\n"
+// keep line 0 starting "The" and six lines total — the smoke suite counts on both
+let private SAMPLE = ("The text editor arc, now with syntax. // E4\n"
     + "\n"
-    + "Type here: buffer, cursor, virtualised render.\n"
-    + "\tTabs advance a fixed number of cells.\n"
-    + "Unicode: héllo — 你好 🌍\n")
+    + "def greet(name : string) : int \{\n"
+    + "\treturn print(\"héllo — 你好 \{name\}\") // 42 keywords, strings\n"
+    + "\}\n")
 
 [export]
 def init() {
@@ -31,6 +32,7 @@ def init() {
     text_edit_register_commands(g_commands)
     g_commands.config_path = command_default_config_path("text_edit_demo")
     text_edit_load(g_edit, SAMPLE)
+    text_edit_set_language(g_edit, "das")
 }
 
 [export]
