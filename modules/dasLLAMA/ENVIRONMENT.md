@@ -19,6 +19,7 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | Variable | Type | Default | Effect |
 |---|---|---|---|
 | `DASLLAMA_IMAGE` | flag | on | Use the prepared-image cache beside a .gguf for millisecond reloads; 0 forces a full parse. |
+| `DASLLAMA_IMAGE_SAVE` | flag | on | Persist the prepared image beside the source; 0 builds it in memory and serves that, leaving no .dlim behind. |
 | `DASLLAMA_CPU_PREFILL` | flag | off | Allow the CPU prefill path even when a GPU prefill override is registered. |
 | `DASLLAMA_PIN_PREFILL` | text | unset | Pin prefill to one registered override by name (e.g. metal, vulkan); anything else declines before upload. |
 | `DASLLAMA_PIN_BACKEND` | text | unset | Pin the matmul backend by name, bypassing the measured auto-selection. |

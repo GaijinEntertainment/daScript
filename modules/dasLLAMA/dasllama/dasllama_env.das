@@ -94,6 +94,8 @@ def private k(var out : array<EnvKnob>; name : string; kind : EnvKind; area : En
 def private reg_engine(var o : array<EnvKnob>) {
     k(o, "DASLLAMA_IMAGE", EnvKind.flag, EnvArea.engine, "on",
       "Use the prepared-image cache beside a .gguf for millisecond reloads; 0 forces a full parse.")
+    k(o, "DASLLAMA_IMAGE_SAVE", EnvKind.flag, EnvArea.engine, "on",
+      "Persist the prepared image beside the source; 0 builds it in memory and serves that, leaving no .dlim behind.")
     k(o, "DASLLAMA_CPU_PREFILL", EnvKind.flag, EnvArea.engine, "off",
       "Allow the CPU prefill path even when a GPU prefill override is registered.")
     k(o, "DASLLAMA_PIN_PREFILL", EnvKind.text, EnvArea.engine, "",

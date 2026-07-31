@@ -13,6 +13,7 @@ require dasllama/dasllama_tokenizer   // Tokenizer — the bulk tokenizer serial
 require daslib/archive
 require daslib/array_boost   // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs (same note as dasllama_common)
 require dasllama/dasllama_common
+require dasllama/dasllama_gguf   // GGUFMeta — the streamed cold build's block signature names it
 require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor image transform
 require dasllama/dasllama_math   // active_kernel_backend — half the image identity
 require dasllama/dasllama_config   // DlimConfiguration + dlim_identity — the identity formatter
@@ -1073,14 +1074,12 @@ def private adopt_image(base : void?; msize : uint64; src : string; var t; tag :
     return false
 }
 
-//! THE cold load: build `t`'s image once into one page-aligned chunk, optionally write it to
-//! `save_to`, then serve `out` from that chunk — the same borrowed-plane struct the mapped rail
-//! yields. `t`'s planes free as they land, so this never holds two copies; `t` ends up spent.
-def image_from_carrier(var t; var out; save_to : string; tag : string = ""; quant : string = "q8") : bool {
+// The chunk rail's body: build into a chunk, tee it to `save_to`, adopt it into `out`. Both cold
+// entries below are this with a different plane hook.
+def private chunk_rail(var t; var out; save_to : string; extra : uint64; tag : string; quant : string;
+                       plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : bool {
     let ts = ref_time_ticks()
-    var w = build_image(t, "", true, 0ul, tag, quant, true) $(name : string; var wr : ImgWriter; var sections : array<ImgSection>) {
-        return false
-    }
+    var w = build_image(t, "", true, extra, tag, quant, true, plane)
     if (!w.ok) {
         // failing to get the chunk is the only decline that precedes the walk — `t` is whole and
         // the caller can still serve it. Failing after it means the sizing pass and the walk
@@ -1089,7 +1088,7 @@ def image_from_carrier(var t; var out; save_to : string; tag : string = ""; quan
             return false
         }
         image_chunk_free(w.mem)
-        panic("dasLLAMA: the image build overran its chunk after consuming the model — see the error above")
+        panic("dasLLAMA: the image build failed after it began consuming the model — see the error above")
     }
     to_log(LOG_INFO, "dasLLAMA image: built in memory in {get_time_usec(ts) / 1000} ms ({int64(w.cur) >> 20l} MB)\n")
     // the save is a courtesy to the NEXT run — a full disk must not cost this one its model
@@ -1102,15 +1101,68 @@ def image_from_carrier(var t; var out; save_to : string; tag : string = ""; quan
     return true
 }
 
-//! The cold half of a cached load, for any carrier: build `m`'s image, write it to `img`, and put
-//! the image-served struct in `out`. `m` is spent on success (the caller deletes it); on a decline
-//! `m` moves into `out` whole, so a caller always ends up with something it can serve.
+//! THE cold load: build `t`'s image once into one page-aligned chunk, optionally write it to
+//! `save_to`, then serve `out` from that chunk — the same borrowed-plane struct the mapped rail
+//! yields. `t`'s planes free as they land, so this never holds two copies; `t` ends up spent.
+def image_from_carrier(var t; var out; save_to : string; tag : string = ""; quant : string = "q8") : bool {
+    return chunk_rail(t, out, save_to, 0ul, tag, quant) $(name : string; var w : ImgWriter; var sections : array<ImgSection>) {
+        return false
+    }
+}
+
+//! image_from_carrier's STREAMING form: a plane with a recorded FillJob is transcoded from the
+//! gguf mapping DIRECTLY into the image and never becomes a model plane — the difference between
+//! peaking at one copy of the model and two. Call inside load_gguf_streaming's block.
+def image_from_model_streaming(var t : Model; var out : Model; m : GGUFMeta; bytes : array<uint8> | #;
+                               var jobs : array<FillJob>; save_to : string;
+                               tag : string = ""; quant : string = "q8") : bool {
+    var regs : array<StreamReg>
+    stream_collect_regions(t, regs)
+    let ok = chunk_rail(t, out, save_to, stream_extra_bytes(t, jobs), tag, quant) $(name : string;
+            var w : ImgWriter; var sections : array<ImgSection>) {
+        if (stream_plane_bytes(t, jobs, name) <= 0l) {
+            return false   // not a streamed plane — the walk writes it from RAM
+        }
+        w_zeros(w, pad_to_page(w.cur) - w.cur)
+        let at = w.cur
+        if (!fill_stream_plane(m, bytes, t, name, jobs, regs) $(p : void?; nb : uint64) { w_append(w, p, nb) }) {
+            to_log(LOG_ERROR, "dasLLAMA image: streamed fill of plane '{name}' failed — image build aborted\n")
+            w.ok = false
+        }
+        sections |> push(ImgSection(name = name, off = at, bytes = w.cur - at))
+        return true
+    }
+    delete regs
+    return ok
+}
+
+//! Whether a cold build persists its image. Off = build it in memory and serve that, leaving no
+//! .dlim behind; the run pays a second copy of the model for it, so on by default.
+def image_save_enabled : bool {
+    return env_flag("DASLLAMA_IMAGE_SAVE", true)
+}
+
+//! The cold half of a cached load, for any carrier: turn the freshly-loaded `m` into its prepared
+//! image and put the image-served struct in `out`. With a target path the FILE is the handoff (`m`
+//! is dropped between write and map); without one the image is built in memory. `m` is spent.
 def cache_via_image(var m; var out; img : string; tag : string = ""; quant : string = "q8") {
-    if (image_from_carrier(m, out, img, tag, quant)) {
+    if (img == "" || !image_save_enabled()) {
+        if (!image_from_carrier(m, out, "", tag, quant)) {
+            out <- m
+        }
         return
     }
-    to_log(LOG_WARNING, "dasLLAMA: no prepared image for '{img}' — serving the carrier as loaded\n")
-    out <- m
+    let ts = ref_time_ticks()
+    if (!save_image(m, img, tag, quant)) {
+        to_log(LOG_WARNING, "dasLLAMA: could not write '{img}' — serving the carrier as loaded\n")
+        out <- m
+        return
+    }
+    to_log(LOG_INFO, "dasLLAMA: prepared image written in {get_time_usec(ts) / 1000} ms — {img}\n")
+    delete m   // before the map, not after: holding both is what makes a cold load peak twice
+    if (!load_image(img, out, tag, quant)) {
+        panic("dasLLAMA: '{img}' was just written and verified, and will not map back — see the decline above")
+    }
 }
 
 // interp-load guard: the gguf path's O(model) das loops run ~10x slower interpreted (tinyllama
@@ -1243,6 +1295,40 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
             panic("dasLLAMA: no prepared image for '{path}' ({want}) and artifacts are frozen — pre-mint it")
         }
         guard_interp_gguf_load(path)
+        // the planar flavor streams, so its cold build peaks at ONE copy of the model; the blob
+        // flavors cannot (their transforms need the whole plane in RAM) and take the eager rail
+        // below, as does any model that will not stream
+        if (!want_metal && vk_tag == "") {
+            var mt = Model()
+            var jobs : array<FillJob>
+            var streamed = Model()
+            var served = false
+            let ts_s = ref_time_ticks()
+            let save = image_save_enabled()
+            let ran = load_gguf_streaming(path, mode, mt, jobs) $(gm : GGUFMeta; gbytes : array<uint8>) {
+                served = (save ? save_model_image_streaming(mt, gm, gbytes, jobs, img, "", qs)
+                    : image_from_model_streaming(mt, streamed, gm, gbytes, jobs, "", "", qs))
+                return served
+            }
+            delete jobs
+            delete mt   // the streamed planes never became model planes; the rest goes now
+            if (served && save) {
+                to_log(LOG_INFO, "dasLLAMA: prepared image streamed in {get_time_usec(ts_s) / 1000} ms — {img}\n")
+                if (!load_image(img, streamed, "", qs)) {
+                    panic("dasLLAMA: '{img}' was just streamed out and will not map back — see the decline above")
+                }
+                dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
+            }
+            if (served) {
+                // the GPU MoE tier gathers from the PREPARED planes, same as the mapped rail
+                moe_gpu_upload_resident(streamed)
+                return <- streamed
+            }
+            delete streamed
+            if (ran) {
+                to_log(LOG_WARNING, "dasLLAMA: the streamed cold build declined for '{path}' — taking the eager rail\n")
+            }
+        }
         var m <- load_model_(path, mode)
         let metal_flavor = want_metal && metal_model_servable(m) && convert_model_to_metal_blob(m)
         if (!metal_flavor && vk_tag != "" && vulkan_bake_take(m)) {
