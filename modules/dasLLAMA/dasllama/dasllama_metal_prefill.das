@@ -2033,16 +2033,15 @@ var private g_min_npos = 64l
 var private g_max_npos = 2048l          // naive-attention P footprint cap: heads x npos^2 floats
 var private g_prefills = 0l
 var private g_pf_pso_dn_ba : MetalComputePipeline?
-var private g_pf_pso_rms : MetalComputePipeline?
+var private g_pf_inited = false
 var private g_pf_pso_rope : MetalComputePipeline?
 var private g_pf_pso_addbias : MetalComputePipeline?
-var private g_pf_pso_qknorm : MetalComputePipeline?
 var private g_pf_pso_qk : MetalComputePipeline?
 var private g_pf_pso_softmax : MetalComputePipeline?
 var private g_pf_pso_av : MetalComputePipeline?
 var private g_pf_pso_copy : MetalComputePipeline?
 var private g_pf_pso_cat2 : MetalComputePipeline?
-var private g_pf_pso_mm : MetalComputePipeline?    // the production das mul_mm (34B q8 blocks + f32 X)
+var private g_pf_pso_mm_t : MetalComputePipeline?  // the mul_mm TENSOR twin; the base is the shared g_pso_mm
 var private g_pf_pso_bf16_mm : MetalComputePipeline?   // native-BF16 A twin (E-series model_proj)
 var private g_pf_bf16_mm_tensor : bool   // crowned tensor twin selected (no tgmem bind)
 var private g_pf_mm_tensor : bool        // ditto for the production q8 mul_mm
@@ -2064,12 +2063,6 @@ var private g_pf_pso_ple_gather : MetalComputePipeline?   // PLE pre-step: q8 to
 var private g_pf_pso_ple_finish : MetalComputePipeline?   // PLE pre-step: rms + combine, in place
 var private g_pf_pso_qkmm : MetalComputePipeline?
 var private g_pf_pso_avmm : MetalComputePipeline?
-var private g_pf_pso_kq_mm4 : MetalComputePipeline?       // K-quant mul_mm twins (W4/M2)
-var private g_pf_pso_kq_mm5 : MetalComputePipeline?
-var private g_pf_pso_kq_mm6 : MetalComputePipeline?
-var private g_pf_pso_kq4 : MetalComputePipeline?       // ... and the kq classifier GEMVs
-var private g_pf_pso_kq5 : MetalComputePipeline?
-var private g_pf_pso_kq6 : MetalComputePipeline?      // classifier GEMV (logits-on-GPU)
 var private g_pf_pso_moe_router_b : MetalComputePipeline?   // position-blocked prefill router
 var private g_pf_pso_moe_count : MetalComputePipeline?
 var private g_pf_pso_moe_bucket : MetalComputePipeline?
@@ -2192,10 +2185,7 @@ def public metal_prefill_shutdown {
         metal_release(g_pf_pso_kq_mm6_t)
         g_pf_pso_kq_mm6_t = null
     }
-    if (g_pf_pso_rms != null) {
-        metal_release(g_pf_pso_rms)
-        g_pf_pso_rms = null
-    }
+    g_pf_inited = false
     if (g_pf_pso_rope != null) {
         metal_release(g_pf_pso_rope)
         g_pf_pso_rope = null
@@ -2207,10 +2197,6 @@ def public metal_prefill_shutdown {
     if (g_pf_pso_addbias != null) {
         metal_release(g_pf_pso_addbias)
         g_pf_pso_addbias = null
-    }
-    if (g_pf_pso_qknorm != null) {
-        metal_release(g_pf_pso_qknorm)
-        g_pf_pso_qknorm = null
     }
     if (g_pf_pso_qk != null) {
         metal_release(g_pf_pso_qk)
@@ -2232,9 +2218,9 @@ def public metal_prefill_shutdown {
         metal_release(g_pf_pso_cat2)
         g_pf_pso_cat2 = null
     }
-    if (g_pf_pso_mm != null) {
-        metal_release(g_pf_pso_mm)
-        g_pf_pso_mm = null
+    if (g_pf_pso_mm_t != null) {
+        metal_release(g_pf_pso_mm_t)
+        g_pf_pso_mm_t = null
     }
     if (g_pf_pso_bf16_mm != null) {
         metal_release(g_pf_pso_bf16_mm)
@@ -2248,8 +2234,7 @@ def public metal_prefill_shutdown {
         metal_release(g_pf_pso_ple_finish)
         g_pf_pso_ple_finish = null
     }
-    for (pso in [g_pf_pso_kq_mm4, g_pf_pso_kq_mm5, g_pf_pso_kq_mm6, g_pf_pso_kq4, g_pf_pso_kq5, g_pf_pso_kq6,
-                 g_pf_pso_moe_router_b, g_pf_pso_moe_count,
+    for (pso in [g_pf_pso_moe_router_b, g_pf_pso_moe_count,
                  g_pf_pso_moe_bucket, g_pf_pso_moe_reduce, g_pf_pso_moe_mm_q8, g_pf_pso_moe_mm_k4,
                  g_pf_pso_moe_mm_k5, g_pf_pso_moe_mm_k6, g_pf_pso_swiglu_oai,
                  g_pf_pso_moe_mm_mx4, g_pf_pso_moe_mm_q51]) {
@@ -2257,12 +2242,6 @@ def public metal_prefill_shutdown {
             metal_release(pso)
         }
     }
-    g_pf_pso_kq_mm4 = null
-    g_pf_pso_kq_mm5 = null
-    g_pf_pso_kq_mm6 = null
-    g_pf_pso_kq4 = null
-    g_pf_pso_kq5 = null
-    g_pf_pso_kq6 = null
     g_pf_pso_moe_router_b = null
     g_pf_pso_moe_count = null
     g_pf_pso_moe_bucket = null
@@ -2295,7 +2274,7 @@ def public metal_prefill_shutdown {
 
 [cold_path]   // one-time device/PSO bring-up, guarded by its own inited flag
 def private metal_prefill_init : bool {
-    if (g_pf_pso_rms != null) {
+    if (g_pf_inited) {
         return true
     }
     if (g_pf_failed) {
@@ -2311,43 +2290,35 @@ def private metal_prefill_init : bool {
         return false
     }
     var ok = true
-    g_pf_pso_rms = compile_pso(metal_rmsnorm_msl, metal_rmsnorm_msl_entry, metal_rmsnorm_msl_fastmath, ok)
     g_pf_pso_rope = compile_pso(metal_rope_msl, metal_rope_msl_entry, metal_rope_msl_fastmath, ok)
     g_pf_pso_addbias = compile_pso(metal_add_bias_rows_msl, metal_add_bias_rows_msl_entry, metal_add_bias_rows_msl_fastmath, ok)
-    g_pf_pso_qknorm = compile_pso(metal_qk_norm_msl, metal_qk_norm_msl_entry, metal_qk_norm_msl_fastmath, ok)
     g_pf_pso_qk = compile_pso(metal_attn_qk_msl, metal_attn_qk_msl_entry, metal_attn_qk_msl_fastmath, ok)
     g_pf_pso_softmax = compile_pso(metal_attn_softmax_msl, metal_attn_softmax_msl_entry, metal_attn_softmax_msl_fastmath, ok)
     g_pf_pso_av = compile_pso(metal_attn_av_msl, metal_attn_av_msl_entry, metal_attn_av_msl_fastmath, ok)
     g_pf_pso_copy = compile_pso(metal_pf_copy_msl, metal_pf_copy_msl_entry, metal_pf_copy_msl_fastmath, ok)
     g_pf_pso_cat2 = compile_pso(metal_pf_cat2_msl, metal_pf_cat2_msl_entry, metal_pf_cat2_msl_fastmath, ok)
     g_pf_mm_tensor = metal_tensor_crowned("mulmm_q8")
-    g_pf_pso_mm = (g_pf_mm_tensor
-        ? compile_pso(metal_q8_mulmm_t_msl, metal_q8_mulmm_t_msl_entry, metal_q8_mulmm_t_msl_fastmath, ok)
-        : compile_pso(metal_q8_mulmm_msl, metal_q8_mulmm_msl_entry, metal_q8_mulmm_msl_fastmath, ok))
+    if (g_pf_mm_tensor) {
+        g_pf_pso_mm_t = compile_pso(metal_q8_mulmm_t_msl, metal_q8_mulmm_t_msl_entry, metal_q8_mulmm_t_msl_fastmath, ok)
+    }
     g_pf_bf16_mm_tensor = metal_tensor_crowned("mulmm_bf16")
     g_pf_pso_bf16_mm = (g_pf_bf16_mm_tensor
         ? compile_pso(metal_bf16_mulmm_t_msl, metal_bf16_mulmm_t_msl_entry, metal_bf16_mulmm_t_msl_fastmath, ok)
         : compile_pso(metal_bf16_mulmm_msl, metal_bf16_mulmm_msl_entry, metal_bf16_mulmm_msl_fastmath, ok))
     g_pf_pso_ple_gather = compile_pso(metal_ple_gather_q8_msl, metal_ple_gather_q8_msl_entry, metal_ple_gather_q8_msl_fastmath, ok)
     g_pf_pso_ple_finish = compile_pso(metal_ple_finish_msl, metal_ple_finish_msl_entry, metal_ple_finish_msl_fastmath, ok)
-    g_pf_pso_kq_mm4 = compile_pso(metal_kq_mulmm_k4_msl, metal_kq_mulmm_k4_msl_entry, metal_kq_mulmm_k4_msl_fastmath, ok)
     g_pf_kq_mm4_tensor = metal_tensor_crowned("kq_mulmm_k4")
     if (g_pf_kq_mm4_tensor) {
         g_pf_pso_kq_mm4_t = compile_pso(metal_kq_mulmm_k4_t_msl, metal_kq_mulmm_k4_t_msl_entry, metal_kq_mulmm_k4_t_msl_fastmath, ok)
     }
-    g_pf_pso_kq_mm5 = compile_pso(metal_kq_mulmm_k5_msl, metal_kq_mulmm_k5_msl_entry, metal_kq_mulmm_k5_msl_fastmath, ok)
     g_pf_kq_mm5_tensor = metal_tensor_crowned("kq_mulmm_k5")
     if (g_pf_kq_mm5_tensor) {
         g_pf_pso_kq_mm5_t = compile_pso(metal_kq_mulmm_k5_t_msl, metal_kq_mulmm_k5_t_msl_entry, metal_kq_mulmm_k5_t_msl_fastmath, ok)
     }
-    g_pf_pso_kq_mm6 = compile_pso(metal_kq_mulmm_k6_msl, metal_kq_mulmm_k6_msl_entry, metal_kq_mulmm_k6_msl_fastmath, ok)
     g_pf_kq_mm6_tensor = metal_tensor_crowned("kq_mulmm_k6")
     if (g_pf_kq_mm6_tensor) {
         g_pf_pso_kq_mm6_t = compile_pso(metal_kq_mulmm_k6_t_msl, metal_kq_mulmm_k6_t_msl_entry, metal_kq_mulmm_k6_t_msl_fastmath, ok)
     }
-    g_pf_pso_kq4 = compile_pso(metal_kq_gemv_k4_msl, metal_kq_gemv_k4_msl_entry, metal_kq_gemv_k4_msl_fastmath, ok)
-    g_pf_pso_kq5 = compile_pso(metal_kq_gemv_k5_msl, metal_kq_gemv_k5_msl_entry, metal_kq_gemv_k5_msl_fastmath, ok)
-    g_pf_pso_kq6 = compile_pso(metal_kq_gemv_k6_msl, metal_kq_gemv_k6_msl_entry, metal_kq_gemv_k6_msl_fastmath, ok)
     g_pf_pso_qkmm = compile_pso(metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, ok)
     g_pf_pso_avmm = compile_pso(metal_attn_av_mm_msl, metal_attn_av_mm_msl_entry, metal_attn_av_mm_msl_fastmath, ok)
     g_pf_qkmm_tensor = metal_tensor_crowned("attn_qkmm")
@@ -2384,6 +2355,7 @@ def private metal_prefill_init : bool {
         return false
     }
     to_log(LOG_INFO, "dasLLAMA metal prefill: resident path live on {metal_device_name(g_dev)}\n")
+    g_pf_inited = true
     return true
 }
 
@@ -2485,7 +2457,7 @@ def private prefill_decline_caps(t : Model; npos : int64) : MetalPrefillDecline 
 // grid (mp/32 token tiles, d/64 output tiles). Requires d % 64 == 0 and mp % 64 == 0.
 // yoff places the K/V outputs past a continuation's existing panel rows.
 def private enc_gemm_mm(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64; bx, by, bk, bn : MetalBuffer?; mp, d : int64; yoff : uint64 = 0ul) {
-    kn_pipeline(enc, g_pf_pso_mm)
+    kn_pipeline(enc, g_pf_mm_tensor ? g_pf_pso_mm_t : g_pso_mm)
     if (!g_pf_mm_tensor) {
         kn_tgmem(enc, metal_q8_mulmm_msl_tgmem, 0)
     }
@@ -2510,17 +2482,17 @@ def private pf_enc_kq_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt
     let bs = kq_scales_of(g_dev, t, fmt, woff)
     if (fmt == KqFmt.k6) {
         let twin6 = g_pf_kq_mm6_tensor && g_pf_pso_kq_mm6_t != null
-        kn_pipeline(enc, twin6 ? g_pf_pso_kq_mm6_t : g_pf_pso_kq_mm6)
+        kn_pipeline(enc, twin6 ? g_pf_pso_kq_mm6_t : g_pso_kq_mm_b6)
         kn_tgmem(enc, twin6 ? metal_kq_mulmm_k6_t_msl_tgmem : metal_kq_mulmm_k6_msl_tgmem, 0)
         kn_buffer(enc, bs.buf, bs.doff, 0)
     } elif (fmt == KqFmt.k4) {
         let twin4 = g_pf_kq_mm4_tensor && g_pf_pso_kq_mm4_t != null
-        kn_pipeline(enc, twin4 ? g_pf_pso_kq_mm4_t : g_pf_pso_kq_mm4)
+        kn_pipeline(enc, twin4 ? g_pf_pso_kq_mm4_t : g_pso_kq_mm_b4)
         kn_tgmem(enc, twin4 ? metal_kq_mulmm_k4_t_msl_tgmem : metal_kq_mulmm_k4_msl_tgmem, 0)
         kn_buffer(enc, bs.buf, bs.soff, 0)
     } else {
         let twin5 = g_pf_kq_mm5_tensor && g_pf_pso_kq_mm5_t != null
-        kn_pipeline(enc, twin5 ? g_pf_pso_kq_mm5_t : g_pf_pso_kq_mm5)
+        kn_pipeline(enc, twin5 ? g_pf_pso_kq_mm5_t : g_pso_kq_mm_b5)
         kn_tgmem(enc, twin5 ? metal_kq_mulmm_k5_t_msl_tgmem : metal_kq_mulmm_k5_msl_tgmem, 0)
         kn_buffer(enc, bs.buf, bs.soff, 0)
     }
@@ -2543,10 +2515,10 @@ def private pf_enc_kq_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; w
     let bq = kq_quants_of(g_dev, t, fmt, woff)
     let bs = kq_scales_of(g_dev, t, fmt, woff)
     if (fmt == KqFmt.k6) {
-        kn_pipeline(enc, g_pf_pso_kq6)
+        kn_pipeline(enc, g_pso_kq_k6)
         kn_buffer(enc, bs.buf, bs.doff, 0)
     } else {
-        kn_pipeline(enc, fmt == KqFmt.k4 ? g_pf_pso_kq4 : g_pf_pso_kq5)
+        kn_pipeline(enc, fmt == KqFmt.k4 ? g_pso_kq_k4 : g_pso_kq_k5)
         kn_buffer(enc, bs.buf, bs.soff, 0)
     }
     kn_buffer(enc, bs.buf, bs.soff, 1)
@@ -2563,7 +2535,7 @@ def private pf_enc_kq_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; w
 
 
 def private pf_enc_rms(enc : MetalComputeEncoder?; bx, bw, by, bdim, beps : MetalBuffer?; nrows : int64) {
-    kn_pipeline(enc, g_pf_pso_rms)
+    kn_pipeline(enc, g_pso_rms)
     kn_tgmem(enc, metal_rmsnorm_msl_tgmem, 0)
     kn_buffer(enc, bx, 0ul, 0)
     kn_buffer(enc, bw, 0ul, 1)
@@ -2578,7 +2550,7 @@ def private pf_enc_rms(enc : MetalComputeEncoder?; bx, bw, by, bdim, beps : Meta
 
 // the final rmsnorm on ONE row: bx bound at the last position's byte offset (one threadgroup)
 def private enc_rms_last(enc : MetalComputeEncoder?; bx : MetalBuffer?; xoff : uint64; bw, by, bdim, beps : MetalBuffer?) {
-    kn_pipeline(enc, g_pf_pso_rms)
+    kn_pipeline(enc, g_pso_rms)
     kn_tgmem(enc, metal_rmsnorm_msl_tgmem, 0)
     kn_buffer(enc, bx, xoff, 0)
     kn_buffer(enc, bw, 0ul, 1)
@@ -2813,7 +2785,7 @@ def private enc_add_bias_rows(enc : MetalComputeEncoder?; bx, bb, bn, btotal : M
 }
 
 def private enc_qk_norm_pf(enc : MetalComputeEncoder?; bx, bw : MetalBuffer?; var ka : QkNormArgs; ntg, nrows, hs : int64; off : uint64 = 0ul) {
-    kn_pipeline(enc, g_pf_pso_qknorm)
+    kn_pipeline(enc, g_pso_qknorm)
     kn_tgmem(enc, metal_qk_norm_msl_tgmem, 0)
     kn_buffer(enc, bx, off, 0)
     kn_buffer(enc, bw, 0ul, 1)
