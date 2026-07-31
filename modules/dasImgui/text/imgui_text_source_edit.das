@@ -348,9 +348,15 @@ def private restyle_lines(var ed : TextEditState; first_line, last_forced : int)
     }
     return if (empty(ed.lines))
     text_language_profile(ed.language) $(profile) {
-        // start one line ABOVE the change: lexing it recovers the valid carry
-        var at = clamp(first_line - 1, 0, length(ed.lines) - 1)
-        var carry = at == 0 ? false : ed.line_styles[at].in_block_comment
+        // scratch-lex the line above for its carry - never replace its runs
+        var at = clamp(first_line, 0, length(ed.lines) - 1)
+        var carry = false
+        if (at > 0 && at - 1 < length(ed.line_styles)) {
+            var scratch : array<TextEditStyleRun>
+            carry = lex_line(profile, ed.lines[at - 1],
+                ed.line_styles[at - 1].in_block_comment, scratch)
+            delete scratch
+        }
         while (at < length(ed.lines)) {
             // converged: an untouched line already starts in this state
             break if (at > last_forced && ed.line_styles[at].in_block_comment == carry)

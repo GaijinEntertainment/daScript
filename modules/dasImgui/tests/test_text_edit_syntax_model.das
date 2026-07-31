@@ -54,6 +54,14 @@ def test_parse_styles_survive_same_line_edits(t : T?) {
     t |> equal(int(ed.line_styles[1].runs[0].style),
         int(TextSourceSyntaxStyle.variable), "bar keeps its parse style")
     t |> equal(ed.line_styles[1].runs[0].start_byte, 6, "bar shifted by the insert")
+    // typing on the NEXT line must not wipe this line either (the carry
+    // recovery used to re-lex the line above the edit, dropping its styles)
+    text_edit_set_cursor(ed, 2, 1)
+    text_edit_type(ed, "x")
+    t |> equal(length(ed.line_styles[1].runs), 1,
+        "the line above the edit keeps its parse styles")
+    t |> equal(int(ed.line_styles[1].runs[0].style),
+        int(TextSourceSyntaxStyle.variable), "still the parse style, not re-lexed")
     delete tokens
     text_edit_dispose(ed)
 }
