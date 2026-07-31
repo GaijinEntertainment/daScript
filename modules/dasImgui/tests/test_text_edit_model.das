@@ -625,6 +625,28 @@ def test_edit_goto_line(t : T?) {
 }
 
 [test]
+def test_edit_color_literals(t : T?) {
+    // scan: 6 or 8 hex digits at ident boundaries only
+    var hit = text_edit_scan_color("let c = 0x12AF2A // tint", 0)
+    t |> equal(hit, int2(8, 6), "a 6-digit literal scans")
+    hit = text_edit_scan_color("x = 0x80FF8040", 0)
+    t |> equal(hit, int2(4, 8), "an 8-digit literal scans")
+    hit = text_edit_scan_color("mask = 0x3F", 0)
+    t |> equal(hit.x, -1, "short hex is not a color")
+    hit = text_edit_scan_color("a0xFFFFFF", 0)
+    t |> equal(hit.x, -1, "glued to an identifier is not a color")
+    hit = text_edit_scan_color("0xAABBCCDDEE", 0)
+    t |> equal(hit.x, -1, "wrong digit counts decline")
+    // parse and round-trip
+    let rgb = text_edit_color_value("0x12AF2A", 0, 6)
+    t |> success(rgb.w == 1.0f, "6 digits mean opaque")
+    t |> equal(text_edit_color_text(rgb, 6), "0x12AF2A", "RGB round-trips")
+    let argb = text_edit_color_value("0x80FF8040", 0, 8)
+    t |> success(argb.w > 0.49f && argb.w < 0.51f, "8 digits carry alpha")
+    t |> equal(text_edit_color_text(argb, 8), "0x80FF8040", "ARGB round-trips")
+}
+
+[test]
 def test_edit_join_lines(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "one  \n\ttwo\nthree")

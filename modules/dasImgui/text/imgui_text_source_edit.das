@@ -162,6 +162,13 @@ struct public TextEditState {
     //! Press inside the selection = a possible drag-and-drop of it.
     drag_move_pending : bool = false
     drag_move_active : bool = false
+    //! Inline color embed: picker session over a 0xRRGGBB / 0xAARRGGBB
+    //! literal; color_undo_mark makes the write-backs roll into ONE unit.
+    color_open : bool = false
+    color_line : int = 0
+    color_start : int = 0
+    color_digits : int = 0
+    color_undo_mark : int = -1
     //! Completion LIST under the caret (top candidates). list_index -1 =
     //! visible but the keyboard is still in the editor (Down enters).
     list_items : array<string>
@@ -2551,8 +2558,10 @@ def private handle_edit_mouse(var ed : TextEditState; m : EditMetrics;
                               var font : ImFont?) {
     let io & = unsafe(GetIO())
     if (hovered && IsMouseClicked(ImGuiMouseButton.Left, false)) {
-        handle_edit_click(ed, edit_hit_position(ed, m, style, font),
-            GetMouseClickedCount(ImGuiMouseButton.Left), io.KeyShift)
+        if (!swatch_at_mouse(ed, m, style, font)) {
+            handle_edit_click(ed, edit_hit_position(ed, m, style, font),
+                GetMouseClickedCount(ImGuiMouseButton.Left), io.KeyShift)
+        }
     } elif ((ed.selection_dragging || ed.drag_move_pending)
             && IsMouseDown(ImGuiMouseButton.Left)) {
         let hit = edit_hit_position(ed, m, style, font)
@@ -2669,20 +2678,7 @@ def private draw_edit_content(var ed : TextEditState; m : EditMetrics;
                 GetColorU32(style.current_line_color), 0.0f, ImDrawFlags.None)
         }
         if (has_selection && row >= sel.start_line && row <= sel.end_line) {
-            let row_line = ed.lines[row]
-            let from_column = row == sel.start_line ? sel.start_column : 0
-            let to_column = row == sel.end_line ? sel.end_column : length(row_line)
-            let x0 = (m.gutter_space + text_source_range_width(row_line, 0,
-                from_column, font, m.font_size, m.cell_width, style.tab_cells))
-            var x1 = (m.gutter_space + text_source_range_width(row_line, 0,
-                to_column, font, m.font_size, m.cell_width, style.tab_cells))
-            if (row < sel.end_line) {
-                x1 += m.cell_width * 0.5f // the selected newline shows as a nub
-            }
-            *dl |> AddRectFilled(
-                float2(row_origin.x + x0, row_origin.y),
-                float2(row_origin.x + max(x1, x0 + 1.0f), row_origin.y + m.line_height),
-                GetColorU32(style.selection_color), 0.0f, ImDrawFlags.None)
+            draw_row_selection(ed, m, style, font, dl, row, row_origin, sel)
         }
         let row_number = "{row + 1}"
         let row_number_width = CalcTextSizeForFontRange(font, m.font_size,
@@ -2699,6 +2695,7 @@ def private draw_edit_content(var ed : TextEditState; m : EditMetrics;
             } else {
                 draw_edit_line(ed, row, line, m, style, font, dl, row_origin)
             }
+            draw_color_swatches(ed, m, style, font, dl, row)
         }
     }
     if (ed.focused && !empty(ed.ghost_text) && !has_selection
@@ -2893,6 +2890,41 @@ def private draw_edit_list(ed : TextEditState const; m : EditMetrics;
     }
 }
 
+def private draw_row_selection(ed : TextEditState const; m : EditMetrics;
+                               style : TextSourceViewStyle const;
+                               var font : ImFont?; var dl : ImDrawList?;
+                               row : int; row_origin : float2;
+                               sel : TextEditRange) {
+    let row_line = ed.lines[row]
+    let from_column = row == sel.start_line ? sel.start_column : 0
+    let to_column = row == sel.end_line ? sel.end_column : length(row_line)
+    let x0 = (m.gutter_space + text_source_range_width(row_line, 0,
+        from_column, font, m.font_size, m.cell_width, style.tab_cells))
+    var x1 = (m.gutter_space + text_source_range_width(row_line, 0,
+        to_column, font, m.font_size, m.cell_width, style.tab_cells))
+    if (row < sel.end_line) {
+        x1 += m.cell_width * 0.5f // the selected newline shows as a nub
+    }
+    *dl |> AddRectFilled(
+        float2(row_origin.x + x0, row_origin.y),
+        float2(row_origin.x + max(x1, x0 + 1.0f), row_origin.y + m.line_height),
+        GetColorU32(style.selection_color), 0.0f, ImDrawFlags.None)
+}
+
+def private draw_edit_overlays(var ed : TextEditState; m : EditMetrics;
+                               style : TextSourceViewStyle const;
+                               var font : ImFont?) {
+    if (ed.drag_move_active) {
+        draw_drag_preview(ed, m, style, font)
+    }
+    if (ed.goto_open) {
+        draw_goto_overlay(ed)
+    }
+    if (ed.color_open) {
+        draw_color_dialog(ed)
+    }
+}
+
 def private draw_edit_ghost(ed : TextEditState const; m : EditMetrics;
                             style : TextSourceViewStyle const;
                             var font : ImFont?; var dl : ImDrawList?) {
@@ -3080,12 +3112,7 @@ def private text_source_edit_impl(id : string; var ed : TextEditState;
     // recount after input: a line-join edit shrinks the buffer mid-frame
     refresh_layout_cache(ed)
     draw_edit_content(ed, m, style, font)
-    if (ed.drag_move_active) {
-        draw_drag_preview(ed, m, style, font)
-    }
-    if (ed.goto_open) {
-        draw_goto_overlay(ed)
-    }
+    draw_edit_overlays(ed, m, style, font)
     PopID()
     result.focused = ed.focused
     result.edited = ed.revision != revision_before
@@ -3153,6 +3180,180 @@ def private draw_goto_overlay(var ed : TextEditState) {
         } elif (IsMouseClicked(ImGuiMouseButton.Left, false)
                 && !IsWindowHovered(ImGuiHoveredFlags.None)) {
             ed.goto_open = false // clicking away dismisses
+        }
+    }
+    End()
+}
+
+// ===== Inline color embed =====
+
+var private COLOR_STATE = ColorState4()
+
+def private hex_digit(b : int) : int {
+    return b - '0' if (is_number(b))
+    return b - 'a' + 10 if (b >= 'a' && b <= 'f')
+    return b - 'A' + 10 if (b >= 'A' && b <= 'F')
+    return -1
+}
+
+def public text_edit_scan_color(line : string; from : int) : int2 {
+    //! Next `0x` + exactly 6 (RRGGBB) or 8 (AARRGGBB) hex digits at ident
+    //! boundaries -> (start, digit_count); (-1, 0) when none.
+    var found = int2(-1, 0)
+    peek_data(line) $(bytes) {
+        var at = max(from, 0)
+        let n = length(bytes)
+        while (at + 8 <= n) { // 0x + at least 6 digits
+            if (int(bytes[at]) == '0' && (int(bytes[at + 1]) == 'x'
+                    || int(bytes[at + 1]) == 'X')
+                    && (at == 0 || byte_word_class(int(bytes[at - 1])) != 1)) {
+                var digits = 0
+                while (at + 2 + digits < n
+                        && hex_digit(int(bytes[at + 2 + digits])) >= 0) {
+                    digits++
+                }
+                let boundary = (at + 2 + digits >= n
+                    || byte_word_class(int(bytes[at + 2 + digits])) != 1)
+                if ((digits == 6 || digits == 8) && boundary) {
+                    found = int2(at, digits)
+                    break
+                }
+                at += 2 + max(digits, 1)
+            } else {
+                at++
+            }
+        }
+    }
+    return found
+}
+
+def public text_edit_color_value(line : string; start, digits : int) : float4 {
+    //! Parse the literal at (start, digits) -> RGBA floats (alpha 1 for 6).
+    var value = 0u
+    peek_data(line) $(bytes) {
+        for (at in range(start + 2, start + 2 + digits)) {
+            value = value * 16u + uint(hex_digit(int(bytes[at])))
+        }
+    }
+    let r = float((value >> 16u) & 0xFF) / 255.0f
+    let g = float((value >> 8u) & 0xFF) / 255.0f
+    let b = float(value & 0xFF) / 255.0f
+    let a = digits == 8 ? float((value >> 24u) & 0xFF) / 255.0f : 1.0f
+    return float4(r, g, b, a)
+}
+
+def public text_edit_color_text(value : float4; digits : int) : string {
+    //! Rebuild the literal (0x + 6 or 8 uppercase digits, AARRGGBB layout).
+    var packed = ((uint(clamp(value.x, 0.0f, 1.0f) * 255.0f + 0.5f) << 16u)
+        | (uint(clamp(value.y, 0.0f, 1.0f) * 255.0f + 0.5f) << 8u)
+        | uint(clamp(value.z, 0.0f, 1.0f) * 255.0f + 0.5f))
+    if (digits == 8) {
+        packed |= uint(clamp(value.w, 0.0f, 1.0f) * 255.0f + 0.5f) << 24u
+    }
+    let hex_chars = "0123456789ABCDEF"
+    return build_string() $(var writer) {
+        writer |> write("0x")
+        var shift = (digits - 1) * 4
+        while (shift >= 0) {
+            let nibble = int((packed >> uint(shift)) & 0xF)
+            writer |> write(slice(hex_chars, nibble, nibble + 1))
+            shift -= 4
+        }
+    }
+}
+
+def private swatch_rect(ed : TextEditState const; m : EditMetrics;
+                        style : TextSourceViewStyle const; var font : ImFont?;
+                        row, end_byte : int) : float4 {
+    // (x0, y0, x1, y1) of the swatch drawn right after the literal
+    let x = (m.origin.x + m.gutter_space + text_source_range_width(ed.lines[row],
+        0, end_byte, font, m.font_size, m.cell_width, style.tab_cells) + 3.0f)
+    let y = m.origin.y + float(row) * m.line_height + 2.0f
+    let size = m.line_height - 4.0f
+    return float4(x, y, x + size, y + size)
+}
+
+def private draw_color_swatches(ed : TextEditState const; m : EditMetrics;
+                                style : TextSourceViewStyle const;
+                                var font : ImFont?; var dl : ImDrawList?;
+                                row : int) {
+    let line = ed.lines[row]
+    var at = 0
+    while (true) {
+        let hit = text_edit_scan_color(line, at)
+        break if (hit.x < 0)
+        let end_ = hit.x + 2 + hit.y
+        let rect = swatch_rect(ed, m, style, font, row, end_)
+        *dl |> AddRectFilled(float2(rect.x, rect.y), float2(rect.z, rect.w),
+            GetColorU32(text_edit_color_value(line, hit.x, hit.y)), 2.0f,
+            ImDrawFlags.None)
+        *dl |> AddRect(float2(rect.x, rect.y), float2(rect.z, rect.w),
+            GetColorU32(style.line_number_color), 2.0f, ImDrawFlags.None, 1.0f)
+        at = end_
+    }
+}
+
+def private swatch_at_mouse(var ed : TextEditState; m : EditMetrics;
+                            style : TextSourceViewStyle const;
+                            var font : ImFont?) : bool {
+    // a click on a swatch opens the picker session instead of moving the caret
+    let mouse = GetMousePos()
+    let row = int(floor((mouse.y - m.origin.y) / m.line_height))
+    return false if (row < 0 || row >= length(ed.lines))
+    let line = ed.lines[row]
+    var at = 0
+    while (true) {
+        let hit = text_edit_scan_color(line, at)
+        return false if (hit.x < 0)
+        let end_ = hit.x + 2 + hit.y
+        let rect = swatch_rect(ed, m, style, font, row, end_)
+        if (mouse.x >= rect.x && mouse.x <= rect.z
+                && mouse.y >= rect.y && mouse.y <= rect.w) {
+            ed.color_open = true
+            ed.color_line = row
+            ed.color_start = hit.x
+            ed.color_digits = hit.y
+            ed.color_undo_mark = -1
+            unsafe {
+                COLOR_STATE.has_pending = true
+                COLOR_STATE.pending_value = text_edit_color_value(line, hit.x, hit.y)
+            }
+            return true
+        }
+        at = end_
+    }
+    return false
+}
+
+def private color_write_back(var ed : TextEditState) {
+    return if (ed.color_line >= length(ed.lines))
+    // rolling ONE undo unit: undo this session's previous write first
+    if (ed.color_undo_mark >= 0 && length(ed.undo_stack) == ed.color_undo_mark) {
+        let _ = text_edit_undo(ed)
+    }
+    let line = ed.lines[ed.color_line]
+    let end_ = ed.color_start + 2 + ed.color_digits
+    return if (end_ > length(line))
+    commit_edit(ed, TextEditUndoKind.other, ed.color_line, ed.color_start,
+        slice(line, ed.color_start, end_),
+        text_edit_color_text(COLOR_STATE.value, ed.color_digits))
+    ed.color_undo_mark = length(ed.undo_stack)
+    text_edit_push_undo_stop(ed)
+}
+
+def private draw_color_dialog(var ed : TextEditState) {
+    SetNextWindowPos(GetMousePos() + float2(16.0f, -40.0f), ImGuiCond.Appearing)
+    let flags = (ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.AlwaysAutoResize
+        | ImGuiWindowFlags.NoSavedSettings)
+    var keep_open : bool?
+    if (Begin("##text_edit_color", keep_open, flags)) {
+        if (color_picker4(COLOR_STATE, "##embed_color")) {
+            color_write_back(ed)
+        }
+        if (IsKeyPressed(ImGuiKey.Escape, false)
+                || (IsMouseClicked(ImGuiMouseButton.Left, false)
+                    && !IsWindowHovered(ImGuiHoveredFlags.None))) {
+            ed.color_open = false
         }
     }
     End()

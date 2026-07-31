@@ -30,7 +30,7 @@ var private g_font_sources : array<string>
 let private SAMPLE = ("The text editor arc, now with syntax. // E4\n"
     + "\n"
     + "def greet(name : string) : int \{\n"
-    + "\treturn print(\"héllo — 你好 \{name\}\") // 42 keywords, strings\n"
+    + "\treturn print(\"héllo — 你好 \{name\}\") // 0x12AF2A 0x80FF8040\n"
     + "\}\n")
 
 let private SAMPLE_CPP = ("// The text editor arc - C++ mode, checked by clang\n"
