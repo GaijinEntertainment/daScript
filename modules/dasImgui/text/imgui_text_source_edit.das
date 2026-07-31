@@ -3269,12 +3269,12 @@ def public text_edit_color_text(value : float4; digits : int) : string {
 def private swatch_rect(ed : TextEditState const; m : EditMetrics;
                         style : TextSourceViewStyle const; var font : ImFont?;
                         row, end_byte : int) : float4 {
-    // (x0, y0, x1, y1) of the swatch drawn right after the literal
+    // one cell after the literal: the usual trailing space renders empty
     let x = (m.origin.x + m.gutter_space + text_source_range_width(ed.lines[row],
-        0, end_byte, font, m.font_size, m.cell_width, style.tab_cells) + 3.0f)
+        0, end_byte, font, m.font_size, m.cell_width, style.tab_cells) + 1.0f)
     let y = m.origin.y + float(row) * m.line_height + 2.0f
-    let size = m.line_height - 4.0f
-    return float4(x, y, x + size, y + size)
+    return float4(x, y, x + max(m.cell_width - 2.0f, 4.0f),
+        y + m.line_height - 4.0f)
 }
 
 def private draw_color_swatches(ed : TextEditState const; m : EditMetrics;
