@@ -81,3 +81,12 @@
    information a CPU backend wants for aliasing, and what any target with more than one memory
    wants), but it reaches inference, mangling, and every cast, so it is a language design task
    and not a step in this arc. Parked deliberately, not forgotten.
+
+8. **Two MoE mul_mm formats stayed out of the family, for the same reason.** The k4/k5/q51 kernels
+   now share `MetalMoeMulMmBase` — one tile loop, two overrides (the k-block decode and the
+   expert-plane origin it addresses from). K6 and Q8 could not join: both carry state ACROSS loop
+   iterations that a per-iteration override cannot hold — k6 caches the superblock scalars
+   (`sv`/`dall`, reloaded every 8th k-block), q8 walks advancing weight pointers (`scur`/`qp`).
+   Both become expressible the moment a helper can take a pointer or a thread-space reference it
+   may advance, which is the annotation work already ruled in (`@threadgroup p : float4?` and its
+   `device` default). Done = k6 and q8 derive from the same base, and the family is five for five.

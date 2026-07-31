@@ -300,6 +300,22 @@ class private AccessVisitor : AstVisitor {
         }
     }
 
+    // POST-infer a method call is an ExprInvoke, not an ExprCall — the kernel body's `run()`
+    // never reaches preVisitExprCall. Record the method name so the driver follows it.
+    def override preVisitExprInvoke(expr : ExprInvoke?) : void {
+        if (!fieldMode || !expr.isInvokeMethod || empty(expr.arguments)) {
+            return
+        }
+        var a0 = expr.arguments[0]
+        if (a0 is ExprRef2Value) {
+            a0 = (a0 as ExprRef2Value).subexpr
+        }
+        let ef = a0 ?as ExprField
+        if (ef != null) {
+            callees |> insert(string(ef.name))
+        }
+    }
+
     def override visitExprVar(var expr : ExprVar?) : ExpressionPtr {
         if (is_tracked(expr.name) && !key_exists(claimed, "{expr.name}:{expr.at.line}:{expr.at.column}")) {
             reads |> insert(string(expr.name))
@@ -368,8 +384,15 @@ def private class_method(mod : Module?; st : StructurePtr; mname : string) : Fun
     if (st == null) {
         return null
     }
+    // a method call is spelled bare pre-infer (`run`) and mangled after (`Class`run`), and this
+    // classifier runs at both times — match the field against either
+    var short = mname
+    let tick = find(short, "`")
+    if (tick >= 0) {
+        short = slice(short, tick + 1)
+    }
     for (fld in st.fields) {
-        continue if (fld.name != mname)
+        continue if (fld.name != mname && fld.name != short)
         var ie = fld.init
         while (ie != null) {
             if (ie is ExprRef2Value) {
