@@ -642,12 +642,13 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
             if (fused_qkv && t.wv_offs[l] >= 0l) {
                 // one dispatch over all three segments — the kernel binds each tensor's blob slice separately (kind-major layout keeps q/k/v apart)
                 let bwq_ = blob_of(g_dev, t, t.wq_offs[l])
+                var fka = Q8QkvRsArgs(ndim = r.k_dim, ddim = r.k_qkvd, qd = r.k_qd, kvd = r.k_kvd,
+                    hs = r.k_hs, neox = r.k_neox, has_bias = r.k_hasb)
                 enc_gemv_qkv_rs(enc, f16v, bwq_.buf, bwq_.boff,
                     uint64((t.wk_offs[l] / 32l) * 34l), uint64((t.wv_offs[l] / 32l) * 34l),
                     r.bxb, r.bqkv, g_arena, g_arena,
                     lkoff + uint64(pos * rowb), lvoff + uint64(pos * rowb),
-                    bcos_l, bsin_l, r.u_dim, r.u_qkvd, r.u_qd, r.u_kvd, r.u_hs, r.u_neox,
-                    bbias, r.u_hasb, qkvd)
+                    bcos_l, bsin_l, bbias, fka, qkvd)
             } else {
                 if (c.q_gated) {
                     // 2x-wide packed [q|gate] projection, deinterleaved into the qkv q segment + gate rows

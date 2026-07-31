@@ -155,3 +155,21 @@
     **Verify against the EMITTED shader, never the das source.** Read the `*_msl` global (or
     the SPIR-V dump) and confirm the constant is literal there: `blk * 34u`, not `blk * bstr`.
     A helper that looks specialized in das can still lower to a runtime multiply.
+
+22. **Complexity/length lint: suppress an honest shape, never force a split.** STYLE037
+    (cyclomatic) and STYLE038 (line count) are prompts to look, not orders to refactor. This
+    module has shapes that are irreducible by design and they take `// nolint:STYLE03x` on the
+    `def` line with a one-line reason: the flat one-call-per-item runs (`metal_decode_init`'s
+    per-kernel `compile_pso` list, `metal_kernels_release`'s `release_pso` list), and GPU kernel
+    bodies whose phases are coupled by `barrier()`, simdgroup ops or register residency and so
+    cannot cross a function boundary without changing the shader. Split only where a real seam
+    exists — genuine duplication (two near-identical kernel bodies that should share stages, the
+    way the split-K family shares `sqd_*`), a distinct phase, a self-contained arm — and only
+    when the extracted helper stands on its own as a function.
+
+    Two corollaries this module keeps tripping over. **A kargs fold that grows an already-over-cap
+    kernel body is not a reason to abandon the fold**: unpacking N fields adds N lines, and if
+    each field is read several times, inlining `ka.field` at every use is noisier rather than
+    shorter — take the growth and either suppress or ledger the real seam. And **never suppress a
+    function you have just argued is reducible** — if it is on the follow-up ledger as wanting a
+    dedup, it keeps its warning until the dedup lands.

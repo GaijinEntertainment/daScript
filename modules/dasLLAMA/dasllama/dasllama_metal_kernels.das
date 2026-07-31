@@ -876,21 +876,22 @@ class MetalQ8GemvQkvRsF16 {
     @ssbo @binding = 5 @off = "voff" vd : array<float16>
     @ssbo @binding = 6 @role = "weight" tcos : array<float>  // [hs/2] this position's rope row
     @ssbo @binding = 7 @role = "weight" tsin : array<float>
-    @uniform @binding = 8 ndim : uint
-    @uniform @binding = 9 ddim : uint       // qd + 2*kvd
-    @uniform @binding = 10 qd : uint
-    @uniform @binding = 11 kvd : uint
-    @uniform @binding = 12 hs : uint
-    @uniform @binding = 13 neox : uint      // rope pair = rows (r, r+hs/2) instead of (2p, 2p+1)
-    @ssbo @binding = 14 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
-    @uniform @binding = 15 has_bias : uint
-    @ssbo @binding = 16 @role = "weight" @off = "wkoff" wqbk : array<int8>  // wk blob views
-    @ssbo @binding = 17 @role = "weight" @off = "wkoff" wshk : array<float16>
-    @ssbo @binding = 18 @role = "weight" @off = "wvoff" wqbv : array<int8>  // wv blob views
-    @ssbo @binding = 19 @role = "weight" @off = "wvoff" wshv : array<float16>
+    @ssbo @binding = 8 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
+    @ssbo @binding = 9 @role = "weight" @off = "wkoff" wqbk : array<int8>  // wk blob views
+    @ssbo @binding = 10 @role = "weight" @off = "wkoff" wshk : array<float16>
+    @ssbo @binding = 11 @role = "weight" @off = "wvoff" wqbv : array<int8>  // wv blob views
+    @ssbo @binding = 12 @role = "weight" @off = "wvoff" wshv : array<float16>
+    @uniform @binding = 13 ka : Q8QkvRsArgs
 
     [metal_kernel(name="metal_q8_gemv_qkv_rs16_msl")]
     def metal_q8_gemv_qkv_rs16 {
+        let ndim = ka.ndim
+        let ddim = ka.ddim
+        let qd = ka.qd
+        let kvd = ka.kvd
+        let hs = ka.hs
+        let neox = ka.neox
+        let has_bias = ka.has_bias
         let pr = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
         if (pr * 2u >= ddim) {
             return
@@ -997,21 +998,22 @@ class MetalQ8GemvQkvRsF32 {
     @ssbo @binding = 5 @off = "voff" vd : array<float>
     @ssbo @binding = 6 @role = "weight" tcos : array<float>
     @ssbo @binding = 7 @role = "weight" tsin : array<float>
-    @uniform @binding = 8 ndim : uint
-    @uniform @binding = 9 ddim : uint
-    @uniform @binding = 10 qd : uint
-    @uniform @binding = 11 kvd : uint
-    @uniform @binding = 12 hs : uint
-    @uniform @binding = 13 neox : uint
-    @ssbo @binding = 14 @role = "weight" bias : array<float>
-    @uniform @binding = 15 has_bias : uint
-    @ssbo @binding = 16 @role = "weight" @off = "wkoff" wqbk : array<int8>
-    @ssbo @binding = 17 @role = "weight" @off = "wkoff" wshk : array<float16>
-    @ssbo @binding = 18 @role = "weight" @off = "wvoff" wqbv : array<int8>
-    @ssbo @binding = 19 @role = "weight" @off = "wvoff" wshv : array<float16>
+    @ssbo @binding = 8 @role = "weight" bias : array<float>
+    @ssbo @binding = 9 @role = "weight" @off = "wkoff" wqbk : array<int8>
+    @ssbo @binding = 10 @role = "weight" @off = "wkoff" wshk : array<float16>
+    @ssbo @binding = 11 @role = "weight" @off = "wvoff" wqbv : array<int8>
+    @ssbo @binding = 12 @role = "weight" @off = "wvoff" wshv : array<float16>
+    @uniform @binding = 13 ka : Q8QkvRsArgs
 
     [metal_kernel(name="metal_q8_gemv_qkv_rs32_msl")]
     def metal_q8_gemv_qkv_rs32 {
+        let ndim = ka.ndim
+        let ddim = ka.ddim
+        let qd = ka.qd
+        let kvd = ka.kvd
+        let hs = ka.hs
+        let neox = ka.neox
+        let has_bias = ka.has_bias
         let pr = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
         if (pr * 2u >= ddim) {
             return
@@ -3361,6 +3363,18 @@ struct DnArgs {
     mid : uint
 }
 
+// The fused q8 QKV-GEMV + rope + KV-store twins share one kargs — f16 and f32 mirrors differ
+// only in the destination views, never in the geometry.
+struct Q8QkvRsArgs {
+    ndim : uint
+    ddim : uint
+    qd : uint
+    kvd : uint
+    hs : uint
+    neox : uint
+    has_bias : uint
+}
+
 // Per-head RMSNorm's uniforms as ONE kargs value. `soffe` is the READ offset and `koffe` the
 // WRITE one — equal for the in-place QK-norm, different where the no-wv V fusion reads the
 // pre-norm K slice and writes the v segment.
@@ -4295,7 +4309,7 @@ def compile_pso(source, entry : string; fastmath : bool; var ok : bool&) : Metal
 
 
 [cold_path]   // one-time PSO/device bring-up, guarded by its own inited flag
-def metal_decode_init : bool {
+def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per kernel; no seam to split on
     if (g_pso_add != null) {
         return true
     }
@@ -4650,14 +4664,14 @@ def enc_rope_store_q8(enc : MetalComputeEncoder?; bqkv : MetalBuffer?; vsoff : u
 // the fused QKV+rope+store dispatch (2 rows per simdgroup — grid covers ddim/2 pairs)
 def enc_gemv_qkv_rs(enc : MetalComputeEncoder?; f16 : bool; bw : MetalBuffer?; wqoff, wkoff, wvoff : uint64;
                     bx, bq : MetalBuffer?; kmb, vmb : MetalBuffer?; koff, voff : uint64;
-                    bcos, bsin, bn, bd, bqd, bkvd, bhs, bneox, bbias, bhasb : MetalBuffer?; d : int64) {
+                    bcos, bsin, bbias : MetalBuffer?; var ka : Q8QkvRsArgs; d : int64) {
     let pairs = d / 2l
     if (f16) {
         enc_qkvrs16_c(enc, bw, wqoff, bw, bx, bq, kmb, koff, vmb, voff, bcos, bsin,
-            bn, bd, bqd, bkvd, bhs, bneox, bbias, bhasb, bw, wkoff, bw, bw, wvoff, bw, pairs)
+            bbias, bw, wkoff, bw, bw, wvoff, bw, ka, pairs)
     } else {
         enc_qkvrs32_c(enc, bw, wqoff, bw, bx, bq, kmb, koff, vmb, voff, bcos, bsin,
-            bn, bd, bqd, bkvd, bhs, bneox, bbias, bhasb, bw, wkoff, bw, bw, wvoff, bw, pairs)
+            bbias, bw, wkoff, bw, bw, wvoff, bw, ka, pairs)
     }
 }
 
@@ -5303,7 +5317,7 @@ def enc_rms_b(enc : MetalComputeEncoder?; bx, bw, by, bdim, beps : MetalBuffer?;
 
 //! Release every PSO the registry compiled (the PSO half of metal_decode_shutdown — runs
 //! before the shared device goes).
-def metal_kernels_release {
+def metal_kernels_release {   // nolint:STYLE037 — a flat release_pso per kernel; no seam to split on
     if (g_pso_gemv != null) {
         metal_release(g_pso_gemv)
         g_pso_gemv = null

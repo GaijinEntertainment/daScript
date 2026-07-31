@@ -101,3 +101,26 @@
    explicit rule that a stage-local PSO is the intended shape. Until that is settled, a lensed
    class whose builder both stages could use still gets a hand-written twin on the prefill side.
    Done = the rule is written in CODEREVIEW.md, and the twins either share a PSO or say why not.
+
+10. **The two fused QKV-GEMV twins are a D-family-shaped dedup that has not happened.**
+    `MetalQ8GemvQkvRsF16` and `MetalQ8GemvQkvRsF32` are ~95 lines of near-identical body that
+    differ only in the mirror's destination views — the same shape the split-K attention family
+    had before it was split into `sqd_*` stages. Both are over the STYLE038 80-line cap and the
+    kargs fold pushed them further (the seven unpacked fields are each used 3-19 times, so
+    inlining `ka.field` instead would be noisier, not shorter). Done = the pair shares its GEMV,
+    rope and store stages the way the D family shares `sqd_score_blk`/`sqd_vacc_blk`, and both
+    bodies come back under the cap.
+
+11. **One 21 GB model costs ~70 GB of physical footprint at load — ~3.3x its own size.**
+    Measured on the 64 GB M1 laptop running the qwen35moe-35b cell ALONE (`footprint -p`:
+    phys_footprint 69 GB, peak 70 GB; 17 GB of swap in use at the peak, released on exit). The
+    cell passes, but only because macOS swaps through it; add any other model to the same
+    process and it crosses the jetsam threshold and dies with SIGKILL (exit 137) — which is what
+    makes the big rows look like "the box is too small" when the box is not.
+    Suspected composition, in load order: the source `mmap` made fully resident by
+    `source prefetch armed (21109 MB)`, the metal-blob transform's output buffer, and the Metal
+    buffer the blob is uploaded into — three ~21 GB copies alive at once. Done = the source
+    mapping is released (or `madvise`-d away) once the blob exists, and the blob is wrapped
+    no-copy into the Metal buffer where the platform allows, so peak lands near 1-2x. Until
+    then: run big-model cells ONE model per process, and never read peak RSS from `ps`
+    (`rss` shows ~1 MB here — use `footprint -p <pid>`).

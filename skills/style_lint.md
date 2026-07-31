@@ -97,21 +97,36 @@ For EXISTING code, a hit is a prompt to look, not an order to refactor. Never re
 working function (let alone a file's worth of them) just to get under the limit:
 mechanical extract-a-helper splits that hide control flow behind single-caller helpers
 make the code *worse*, and a wide refactor of working code is riskier than the
-complexity or length it removes. Resolution order:
+complexity or length it removes.
 
-1. **Split only along a natural seam** — a self-contained arm (a character-class
+**Suppression is a first-class answer, not a last resort.** If the function honestly
+should not be reduced, say so on the `def` line and move on — a forced split where one
+does not belong is the worse outcome, and leaving a known-honest warning to accumulate
+just trains everyone to ignore the rule. 1 and 2 below are peers: pick by whether a
+natural seam exists, not by trying 1 first and settling for 2.
+
+1. **Split when there is a natural seam** — a self-contained arm (a character-class
    matcher inside a glob loop), a repeated pattern collapsible into one helper (a
    strip-modifiers loop copy-pasted across arms), a distinct phase of a multi-phase
-   function (collect → scan), or genuinely duplicated logic worth deduplicating. The
-   extracted helper must make sense as a function on its own; if its only virtue is
-   "the caller's number went down", don't extract it.
+   function (collect → scan), or genuinely duplicated logic worth deduplicating (two
+   near-identical kernel bodies that should share stages). The extracted helper must
+   make sense as a function on its own; if its only virtue is "the caller's number went
+   down", don't extract it.
 2. **`// nolint:STYLE037` / `// nolint:STYLE038` on the `def` line** (with a short
    tail-comment reason) when the shape is irreducible by design: exact-type `is` ladders
    over handled AST types, visitor/dispatch tables, flat CLI-argument handling, flat
-   one-call-per-item dispatch lists.
+   one-call-per-item lists (PSO compile/release runs, registration tables), and GPU
+   kernel bodies whose phases are coupled by barriers, simdgroup ops or register
+   residency and cannot cross a function boundary without changing the shader.
 3. **`options _cyclomatic_complexity = N` / `options _function_length = N`** per module
    when a whole file is legitimately dense (codegen emitters, parsers, ported code);
    `= 0` disables that rule for the module entirely.
+
+**A refactor that grows an already-over-cap function is not automatically wrong.** Folding
+N scalar parameters into one struct adds N unpack lines to the body; if every field is
+used several times, inlining `ka.field` at each use is noisier, not shorter. Take the
+growth, and either suppress (2) or ledger the real seam — don't abandon the refactor to
+protect a number, and don't suppress a function you have just argued is reducible.
 
 ## How to Add a New Rule
 
