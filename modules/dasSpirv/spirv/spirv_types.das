@@ -27,7 +27,8 @@ def public emit_type(var m : SpirvModule; t : TypeDecl?) : uint {
     if (mi.ok) {
         return type_matrix(m, type_vector(m, type_float(m, 32u), mi.width), mi.cols)
     }
-    let bt = t.baseType
+    // an enum lowers as its own underlying integer, so it lands on that integer's branch below
+    let bt = value_base_type(t)
     if (bt == Type.tVoid) return type_void(m)
     if (bt == Type.tBool) return type_bool(m)
     if (bt == Type.tInt) return type_int(m, 32u, 1u)

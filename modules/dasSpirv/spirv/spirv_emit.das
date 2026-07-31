@@ -638,7 +638,7 @@ def private tensor_object_type_of(var m : SpirvModule; t : TypeDecl?) : tuple<id
 def private is_emittable_value_type(t : TypeDecl?) : bool {
     if (t == null) return false
     if (matrix_info(t).ok) return true
-    let bt = t.baseType
+    let bt = value_base_type(t)
     if (bt == Type.tFixedArray && t.firstType != null) return is_emittable_value_type(t.firstType)
     // The 16/32-bit numerics and the 64-bit float carry a value; arith_width_ok is the one place that
     // line is drawn, so the value rail and the arithmetic rail never disagree. A 64-bit INT lowers as
@@ -2458,6 +2458,19 @@ def private ext_op_broadcasts_scalar(op : GLSLstd450) : bool {
         || op == GLSLstd450.Step   || op == GLSLstd450.SmoothStep)
 }
 
+// An enum constant names its ENTRY; the integer behind it is that entry's own initializer, which
+// already carries the enum's underlying type -- so re-entering emit_const yields a constant of
+// exactly the type emit_type lowered the enum to, without transcribing that width/signedness rule
+// twice.
+def private emit_const_enum(var m : SpirvModule; cen : ExprConstEnumeration?; var errors : array<string>) : tuple<ok : bool; id : uint> {
+    if (cen.enumType == null) return (ok = false, id = 0u)
+    for (ee in cen.enumType.list) {
+        if (ee.name == cen.value) return emit_const(m, ee.value, errors)
+    }
+    errors |> push("enum '{cen.enumType.name}' has no entry '{cen.value}'")
+    return (ok = false, id = 0u)
+}
+
 // ===== compile-time constants: scalars, all-const vector constructors, const arrays =====
 // Produces a deduped OpConstant / OpConstantComposite for a fully-constant expression. Used for
 // array literals (which must be constant initializers for now) and their constituents. ok=false =>
@@ -2487,6 +2500,8 @@ def private emit_const(var m : SpirvModule; e : ExpressionPtr; var errors : arra
     if (ci8 != null) return (ok = true, id = const_int8(m, int(ci8.value)))
     let cu8 = e ?as ExprConstUInt8
     if (cu8 != null) return (ok = true, id = const_uint8(m, uint(cu8.value)))
+    let cen = e ?as ExprConstEnumeration
+    if (cen != null) return emit_const_enum(m, cen, errors)
     // unary minus on a constant: depending on fold state `-0.6` can arrive as ExprOp1("-", const)
     // rather than a folded negative literal. Fold it here so both shapes produce the same constant.
     let neg = e ?as ExprOp1
@@ -2745,7 +2760,13 @@ def private emit_mul(var m : SpirvModule; op2 : ExprOp2?; e : ExpressionPtr; l, 
 // function-scoped, not block-scoped) BEFORE emitting any body code, declaring an OpVariable for each
 // mutable local (`var`) and loop-induction variable. Reads/writes then resolve to OpLoad/OpStore.
 def private declare_local_var(var m : SpirvModule; var ctx : EmitCtx; v : VariablePtr; var errors : array<string>) {
-    if (key_exists(ctx.local_vars, intptr(v))) return
+    // A REFERENCE local aliases storage that already has an address, so it gets no OpVariable of its
+    // own: visitExprLetVariable binds it to the pointer its initializer lowered to. Declaring one
+    // here would make every write through the alias land in that private copy and leave the aliased
+    // element untouched. The inliner emits these whenever an inlined call's result is assigned to an
+    // lvalue (`var __inl_pre : float& = p[i]; … ; __inl_pre = __inl_res`), which is the shape a
+    // helper reached across a require arrives in.
+    if (key_exists(ctx.local_vars, intptr(v)) || v._type.flags.ref) return
     let bt = v._type.baseType
     // rayQueryEXT: an opaque ray-query OBJECT (SPV_KHR_ray_query) lives in a Function-storage local,
     // NOT a descriptor. It is declared here, initialized by rayQueryInitializeEXT and stepped by
@@ -3286,6 +3307,18 @@ class SpirvEmit : AstVisitor {
         e2id[intptr(expr)] = const_uint8(bm, uint(expr.value))
         return expr
     }
+    // An enum value is an integer constant of the enum's underlying type. The failure this reports is
+    // the 64-bit-based enum: its entry constant has no shader lowering, exactly as a bare int64 has none.
+    def override visitExprConstEnumeration(var expr : ExprConstEnumeration?) : ExpressionPtr {
+        var bm & = unsafe(*m)
+        let cr = emit_const(bm, expr, errs)
+        if (!cr.ok) {
+            errs |> push("unsupported enum constant '{expr.value}' ({expr._type.baseType})")
+            return expr
+        }
+        e2id[intptr(expr)] = cr.id
+        return expr
+    }
 
     // Folded vector constants (float2(0.5,0.5) etc. fold to ExprConstFloatN/IntN/UIntN at patch time)
     // are leaf rvalues with no scalar-style visit registration. emit_const already lowers each to an
@@ -3686,7 +3719,8 @@ class SpirvEmit : AstVisitor {
             }
             return expr
         }
-        let cls = arith_class(expr.left._type.baseType)
+        let lbt = value_base_type(expr.left._type)
+        let cls = arith_class(lbt)
         let l = value_of(expr.left)
         let r = value_of(expr.right)
         if (l == 0u || r == 0u) return expr
@@ -3706,7 +3740,7 @@ class SpirvEmit : AstVisitor {
             // component-wise compare op produces a bvecN — reduce it to the scalar with OpAll
             // (`==`: all lanes equal) / OpAny (`!=`: any lane differs), matching what glslang emits.
             // A scalar-bool-typed OpFOrdEqual on vector operands is invalid SPIR-V (drivers reject it).
-            let dn = arith_lanes(expr.left._type.baseType)
+            let dn = arith_lanes(lbt)
             if (dn > 1) {
                 let bvec = type_vector(bm, bt, dn)
                 let cmp = alloc_id(bm)
@@ -3763,7 +3797,7 @@ class SpirvEmit : AstVisitor {
             errs |> push("unsupported ternary operator '{expr.op}'")
             return expr
         }
-        let n = component_count(expr._type.baseType)
+        let n = component_count(value_base_type(expr._type))
         if (n == 0) {
             errs |> push("unsupported ternary result type {expr._type.baseType}")
             return expr
@@ -3845,9 +3879,25 @@ class SpirvEmit : AstVisitor {
         }
     }
 
-    // ----- let: memory local -> store init; value-let -> bind SSA id -----
+    // ----- let: memory local -> store init; value-let -> bind SSA id; reference local -> alias -----
     def override visitExprLetVariable(cexpr : ExprLet?; var arg : VariablePtr; lastArg : bool) : VariablePtr {
         var bm & = unsafe(*m)
+        // A reference local IS the pointer its initializer lowered to, so it binds that pointer
+        // rather than storing through one of its own -- reads and writes through the alias then
+        // reach the aliased element like any other addressable local.
+        if (arg._type.flags.ref) {
+            if (arg.init == null) {
+                errs |> push("reference local '{arg.name}' has no initializer to bind")
+                return arg
+            }
+            let rp = ptr_of(arg.init)
+            if (rp.id == 0u) {
+                errs |> push("reference local '{arg.name}' must bind an addressable expression (a global, a `var` local, or an SSBO / UBO element)")
+                return arg
+            }
+            ctx.local_vars |> insert(intptr(arg), LocalVar(ptr_id = rp.id, value_type = rp.pty))
+            return arg
+        }
         if (arg.init == null) {
             // daslang DROPS an initializer it proves dead -- a `var` that every path assigns before
             // it is ever read (`var l = 0.0; if (..) { l = a } else { l = b }`) reaches us with no
@@ -5275,7 +5325,7 @@ class SpirvEmit : AstVisitor {
         let dst = scalar_type_name_class(name)
         if (dst.cls >= 0 && length(expr.arguments) == 1) {
             let a0 = expr.arguments[0]
-            let sn = numeric_info(a0._type.baseType)
+            let sn = numeric_info(value_base_type(a0._type))
             if (!sn.ok || sn.lanes != 1) {
                 errs |> push("{name}: cannot convert from {a0._type.baseType} (numeric scalar only)")
                 return expr
