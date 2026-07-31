@@ -10,8 +10,8 @@ require daslib/json_boost public
 require daslib/strings_boost
 
 let EDIT_FEATURE = "modules/dasImgui/examples/features/text_edit.das"
-let EDIT_TARGET = "EDIT_WIN/EDIT_CONTENT/editor"
-let EDIT_PROBE = "EDIT_WIN/EDIT_PROBE"
+let EDIT_TARGET = "EDIT_DOCK/EDIT_WIN/EDIT_CONTENT/editor"
+let EDIT_PROBE = "EDIT_DOCK/EDIT_WIN/EDIT_PROBE"
 
 [test]
 def test_text_edit_keystrokes_reach_buffer(t : T?) {

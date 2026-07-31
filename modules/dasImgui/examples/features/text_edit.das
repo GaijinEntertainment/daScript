@@ -33,6 +33,8 @@ let private SAMPLE = ("The text editor arc, now with syntax. // E4\n"
 [export]
 def init() {
     harness_init("text_edit", 960, 640)
+    var io & = unsafe(GetIO())
+    io.ConfigFlags |= ImGuiConfigFlags.DockingEnable
     g_fonts = load_unicode_font_roles(16.0f, g_font_sources)
     text_edit_register_commands(g_commands)
     g_commands.config_path = command_default_config_path("text_edit_demo")
