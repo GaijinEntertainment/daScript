@@ -24,6 +24,15 @@ def public matrix_info(t : TypeDecl?) : tuple<ok : bool; width : int; cols : int
     return (ok = false, width = 0, cols = 0)
 }
 
+// The base type a VALUE of this declaration carries: an enum has none of its own and lowers to the
+// OpTypeInt of its underlying integer, which the Type-keyed classifiers below cannot reach. A
+// 64-bit-based enum peels to tInt64/tUInt64, so arith_width_ok refuses it exactly like a bare one.
+def public value_base_type(t : TypeDecl?) : Type {
+    if (t == null) return Type.none
+    if (t.isEnum && t.enumType != null) return t.enumType.baseType
+    return t.baseType
+}
+
 // The whole 16/8-bit type set of the shader arc: the lattice proper (contiguous appended
 // block in the Type enum) PLUS the pre-lattice small scalars, which live in the enum's old
 // region (near tInt) and are NOT covered by the range check.

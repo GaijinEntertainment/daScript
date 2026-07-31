@@ -638,7 +638,7 @@ def private tensor_object_type_of(var m : SpirvModule; t : TypeDecl?) : tuple<id
 def private is_emittable_value_type(t : TypeDecl?) : bool {
     if (t == null) return false
     if (matrix_info(t).ok) return true
-    let bt = t.baseType
+    let bt = value_base_type(t)
     if (bt == Type.tFixedArray && t.firstType != null) return is_emittable_value_type(t.firstType)
     // The 16/32-bit numerics and the 64-bit float carry a value; arith_width_ok is the one place that
     // line is drawn, so the value rail and the arithmetic rail never disagree. A 64-bit INT lowers as
@@ -2487,6 +2487,18 @@ def private emit_const(var m : SpirvModule; e : ExpressionPtr; var errors : arra
     if (ci8 != null) return (ok = true, id = const_int8(m, int(ci8.value)))
     let cu8 = e ?as ExprConstUInt8
     if (cu8 != null) return (ok = true, id = const_uint8(m, uint(cu8.value)))
+    // An enum constant names its ENTRY; the integer behind it is that entry's own initializer, which
+    // already carries the enum's underlying type -- so re-entering here yields a constant of exactly
+    // the type emit_type lowered the enum to, without transcribing that width/signedness rule twice.
+    let cen = e ?as ExprConstEnumeration
+    if (cen != null) {
+        if (cen.enumType == null) return (ok = false, id = 0u)
+        for (ee in cen.enumType.list) {
+            if (ee.name == cen.value) return emit_const(m, ee.value, errors)
+        }
+        errors |> push("enum '{cen.enumType.name}' has no entry '{cen.value}'")
+        return (ok = false, id = 0u)
+    }
     // unary minus on a constant: depending on fold state `-0.6` can arrive as ExprOp1("-", const)
     // rather than a folded negative literal. Fold it here so both shapes produce the same constant.
     let neg = e ?as ExprOp1
@@ -3286,6 +3298,18 @@ class SpirvEmit : AstVisitor {
         e2id[intptr(expr)] = const_uint8(bm, uint(expr.value))
         return expr
     }
+    // An enum value is an integer constant of the enum's underlying type. The failure this reports is
+    // the 64-bit-based enum: its entry constant has no shader lowering, exactly as a bare int64 has none.
+    def override visitExprConstEnumeration(var expr : ExprConstEnumeration?) : ExpressionPtr {
+        var bm & = unsafe(*m)
+        let cr = emit_const(bm, expr, errs)
+        if (!cr.ok) {
+            errs |> push("unsupported enum constant '{expr.value}' ({expr._type.baseType})")
+            return expr
+        }
+        e2id[intptr(expr)] = cr.id
+        return expr
+    }
 
     // Folded vector constants (float2(0.5,0.5) etc. fold to ExprConstFloatN/IntN/UIntN at patch time)
     // are leaf rvalues with no scalar-style visit registration. emit_const already lowers each to an
@@ -3686,7 +3710,8 @@ class SpirvEmit : AstVisitor {
             }
             return expr
         }
-        let cls = arith_class(expr.left._type.baseType)
+        let lbt = value_base_type(expr.left._type)
+        let cls = arith_class(lbt)
         let l = value_of(expr.left)
         let r = value_of(expr.right)
         if (l == 0u || r == 0u) return expr
@@ -3706,7 +3731,7 @@ class SpirvEmit : AstVisitor {
             // component-wise compare op produces a bvecN — reduce it to the scalar with OpAll
             // (`==`: all lanes equal) / OpAny (`!=`: any lane differs), matching what glslang emits.
             // A scalar-bool-typed OpFOrdEqual on vector operands is invalid SPIR-V (drivers reject it).
-            let dn = arith_lanes(expr.left._type.baseType)
+            let dn = arith_lanes(lbt)
             if (dn > 1) {
                 let bvec = type_vector(bm, bt, dn)
                 let cmp = alloc_id(bm)
@@ -3763,7 +3788,7 @@ class SpirvEmit : AstVisitor {
             errs |> push("unsupported ternary operator '{expr.op}'")
             return expr
         }
-        let n = component_count(expr._type.baseType)
+        let n = component_count(value_base_type(expr._type))
         if (n == 0) {
             errs |> push("unsupported ternary result type {expr._type.baseType}")
             return expr
@@ -5275,7 +5300,7 @@ class SpirvEmit : AstVisitor {
         let dst = scalar_type_name_class(name)
         if (dst.cls >= 0 && length(expr.arguments) == 1) {
             let a0 = expr.arguments[0]
-            let sn = numeric_info(a0._type.baseType)
+            let sn = numeric_info(value_base_type(a0._type))
             if (!sn.ok || sn.lanes != 1) {
                 errs |> push("{name}: cannot convert from {a0._type.baseType} (numeric scalar only)")
                 return expr

@@ -245,6 +245,9 @@ Type and layout mapping
    * - ``bool``
      - ``OpTypeBool``
      - no physical interface-block layout
+   * - ``enum`` over an 8/16/32-bit int
+     - the ``OpTypeInt`` of that base type
+     - as that integer; not an interface-block member
    * - ``int2..4`` / ``float2..4`` …
      - ``OpTypeVector``
      - component-wise
