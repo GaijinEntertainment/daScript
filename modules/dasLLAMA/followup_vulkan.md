@@ -52,6 +52,18 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
 8. **Compile-time dispatch census** — Metal's `[lint_macro]` manual-dispatch census
    cross-checks every `@role`; Vulkan has only the runtime `hz_masks` panic. Port the census
    to the vulkan lens.
+9. **Class-level vulkan kernels (SEPARATE ARC, separate PR — Boris ruling: not part of the
+   reorg megarefactor).** Investigate porting the Metal kernel model to the SPIR-V emitter:
+   a kernel is a class with `@ssbo`/`@uniform`/`@workgroup` members and ordinary methods,
+   free functions and inheritance lower 1:1 (the msl_emit Phase-0 machinery is the model).
+   The module-global bindings are the root cause of the hand-written `vk_set6` ladders (no
+   per-kernel interface to generate an encoder from), the `vk_meta` word-map convention
+   (no named per-kernel params), whole-module binding-slot coupling, and global-state CPU
+   oracles. SPIR-V has no classes, so members lower to per-kernel global `OpVariable`s under
+   the hood — the class is the namespacing + interface surface, which then makes a generated
+   set-builder lens possible. Cost to weigh: per-class descriptor-set layouts replace the one
+   shared `VkDescriptorSetLayout`/pool — a real host-side rework. End state across both
+   backends: one way to write a kernel in daslang; the backend is a target, not a dialect.
 
 ## Sequencing
 
