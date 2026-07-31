@@ -113,6 +113,15 @@ within the file is part of the editor component's core surface, not a
 follow-up. Follow-up (its own slice): search per TREE — project-wide
 search across the selected worktree.
 
+## Follow-up (recorded 2026-07-30, Boris): side-by-side RICH diff
+
+Markdown files in Diff mode show source panes today; the follow-up is a
+side-by-side **rendered** diff — two markdown views, change-aligned like
+the source panes, gutter marks on changed blocks. Builds on the aligned
+row model plus `markdown_view_with_change_gutter`; needs a block-level
+alignment map (source rows → layout nodes both sides). Not scheduled —
+after the editor arc unless review pain promotes it.
+
 ## Step 1 — hover in the View tab (the walking skeleton)
 
 Smallest end-to-end slice, all plumbing proven before any diff complexity:
