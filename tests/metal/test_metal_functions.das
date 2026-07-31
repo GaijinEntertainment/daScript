@@ -31,6 +31,23 @@ def private fk_store(var dst : array<float>; i : uint; v : float) {
     dst[i] = v
 }
 
+// the staged shape: a helper fills the caller's @workgroup slab, rendezvouses inside, and a
+// second helper reads it back const — what dasLLAMA's attention softmax halves do
+def private fk_fill_tg(var tile : float[64]; v : float; lid : uint) {
+    tile[lid] = v
+    barrier()
+}
+
+def private fk_sum_tg(tile : float[64]; n : uint) : float {
+    var s = 0.0
+    var k = 0u
+    while (k < n) {
+        s += tile[k]
+        k++
+    }
+    return s
+}
+
 class FnBase {
     @ssbo @binding = 0 fa : array<float>
     @ssbo @binding = 1 fc : array<float>
@@ -70,6 +87,22 @@ class FnKern {
         fk_accum(acc, fk_mix(a[i], b[i]))
         fk_store(c, i, acc + fk_pick(a, i))
         e[i] = fk_pick(d, i) + 1
+    }
+}
+
+// The threadgroup-slab scenario gets its own kernel: a group-wide slab does not replay through
+// the sequential CPU oracle (a barrier has no width-1 meaning), so its expectation is computed
+// directly — lane i sums its OWN group's inputs, in the helper's ascending order.
+class FnTg {
+    @ssbo @binding = 0 ta : array<float>
+    @ssbo @binding = 1 to_ : array<float>
+    @workgroup tile : float[64]
+
+    [metal_kernel(name="fntg_msl"), marker(no_coverage)]
+    def fntg {
+        let i = gl_GlobalInvocationID.x
+        fk_fill_tg(tile, ta[i], gl_LocalInvocationID.x)   // writes the slab, barriers inside
+        to_[i] = fk_sum_tg(tile, gl_WorkGroupSize.x)      // reads it back const
     }
 }
 
@@ -150,6 +183,74 @@ def test_functions_gpu_vs_cpu(t : T?) {
         }
         unsafe {
             delete oracle
+        }
+    }
+}
+
+[test]
+def test_threadgroup_param_gpu(t : T?) {
+    t |> run("writable threadgroup-slab parameter + barrier inside a helper: group sums match") <| @(t : T?) {
+        var src : array<float>
+        src |> resize(N)
+        for (i in range(N)) {
+            src[i] = float(i % 5 + 1)
+        }
+        // lane i sums its own group's inputs, summed ascending — the helper's exact order
+        var want : array<float>
+        want |> resize(N)
+        for (i in range(N)) {
+            let g0 = (i / int(TPG)) * int(TPG)
+            var s = 0.0
+            for (k in range(g0, g0 + int(TPG))) {
+                s += src[k]
+            }
+            want[i] = s
+        }
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            var gpu_bad = -1
+            with_metal_device() <| $(dev : MetalDevice?) {
+                if (dev == null) {
+                    feint("no Metal device on this box; GPU compare skipped\n")
+                    return
+                }
+                var perr : string
+                var pso = pipeline_from_source(dev, fntg_msl, fntg_msl_entry, fntg_msl_fastmath, perr)
+                t |> success(pso != null, "pipeline_from_source: {perr}")
+                if (pso == null) {
+                    return
+                }
+                var queue = metal_new_command_queue(dev)
+                var ba = buf_upload(dev, src)
+                var bo = buf_fill(dev, N, -1000.0)
+                var bufs <- [ba, bo]
+                var rerr : string
+                let ran = run_compute_1d(queue, pso, bufs, uint(N), TPG, rerr, fntg_msl_tgmem)
+                t |> success(ran, "run_compute_1d: {rerr}")
+                if (ran) {
+                    gpu_bad = 0
+                    var go <- buf_download(bo, N, type<float>)
+                    for (i in range(N)) {
+                        if (go[i] != want[i]) {
+                            gpu_bad++
+                        }
+                    }
+                    delete go
+                }
+                bufs |> clear()             // non-owning handles — clear() skips pointee finalize
+                unsafe {
+                    delete bufs
+                }
+                metal_release(ba)
+                metal_release(bo)
+                metal_release(pso)
+                metal_release(queue)
+            }
+            if (gpu_bad >= 0) {
+                t |> equal(gpu_bad, 0)
+            }
+            t |> equal(metal_live_object_count(), 0l)
+        } else {
+            feint("das_metal is not built on this platform; the MSL text twin covers the emission\n")
         }
     }
 }

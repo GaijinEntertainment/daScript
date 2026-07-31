@@ -94,8 +94,40 @@ def private tmm2d_c_arg(cname : string) : int {
     return cname |> ends_with("tmm2d_q8_f32") || cname |> ends_with("tmm2d_q8_f16s") ? 11 : -1
 }
 
+// Direction of the `idx`-th parameter of the same-module helper named `cname`: "write" when the
+// parameter is `var` (the callee may store through it), "read" otherwise — the same rule the MSL
+// and SPIR-V emitters lower to `device` vs `device const`. Returns "" when the name does not
+// resolve to exactly one declaration (overloads included), which keeps the ratchet's refusal.
+def private scan_param_dir(cfn : Function?; cname : string; idx : int; var dir : string&; var nfound : int&) {
+    return if (cfn.name != cname || idx >= length(cfn.arguments))
+    nfound++
+    let pt = cfn.arguments[idx]._type
+    dir = pt != null && !pt.flags.constant ? "write" : "read"
+}
+
+def private callee_param_dir(mod : Module?; cname : string; idx : int) : string {
+    var dir = ""
+    var nfound = 0
+    mod |> for_each_function(cname) $(cfn) {
+        scan_param_dir(cfn, cname, idx, dir, nfound)
+    }
+    mod |> for_each_generic(cname) $(cfn) {
+        scan_param_dir(cfn, cname, idx, dir, nfound)
+    }
+    return nfound == 1 ? dir : ""
+}
+
+// one tracked buffer handed WHOLE to a helper — the driver resolves the direction, since the
+// module handle it needs for that lookup does not survive into an AstVisitor field
+struct private WholeArg {
+    buf : string
+    callee : string
+    idx : int
+}
+
 class private AccessVisitor : AstVisitor {
     tracked : table<string>
+    whole : array<WholeArg>        // buffers passed whole to a helper (see WholeArg)
     fieldMode : bool               // tracked names are class FIELDS (metal): match self.<name>
                                    // ExprField accesses only (see is_self_field)
     reads : table<string>
@@ -244,23 +276,27 @@ class private AccessVisitor : AstVisitor {
             return
         }
         callees |> insert(cname)
-        // the ratchet: a tracked buffer passed WHOLE to a call we do not model could be written
-        // through a var parameter — refuse to guess. In field mode `self` passed whole is the
-        // same hole (a class-method helper could touch any field), and field-mode analysis does
-        // NOT recurse into free callees (bare-name matching would collide with their locals).
-        for (a in expr.arguments) {
+        // A tracked buffer passed WHOLE takes its direction from the callee's parameter — that is
+        // what the emitters lower it to — so it is banked for the driver to resolve. In field mode
+        // `self` passed whole stays refused (a class-method helper could touch any field), and
+        // field-mode analysis does NOT recurse into free callees (bare-name matching would collide
+        // with their locals).
+        for (aidx, a in range(length(expr.arguments)), expr.arguments) {
             var cur = a
             if (cur is ExprRef2Value) {
                 cur = (cur as ExprRef2Value).subexpr
             }
-            let escape = fieldMode ? "declare the @role (access_force)" : "declare [vk_access]"
+            var bname = ""
             if (cur is ExprVar && is_tracked((cur as ExprVar).name)) {
-                err = "tracked buffer '{(cur as ExprVar).name}' passed whole to call '{cname}' — teach the intrinsic table or {escape}"
+                bname = string((cur as ExprVar).name)
             } elif (fieldMode && cur is ExprField && is_self_field(cur as ExprField, tracked)) {
-                err = "tracked buffer '{(cur as ExprField).name}' passed whole to call '{cname}' — teach the intrinsic table or {escape}"
+                bname = string((cur as ExprField).name)
             } elif (fieldMode && cur is ExprVar && (cur as ExprVar).name == "self") {
                 err = "'self' passed whole to call '{cname}' — the classifier cannot see through method helpers; use access_force with declared roles"
             }
+            continue if (empty(bname))
+            claimed |> insert("{bname}:{cur.at.line}:{cur.at.column}")
+            whole |> emplace(WholeArg(buf = bname, callee = cname, idx = aidx))
         }
     }
 
@@ -288,7 +324,7 @@ class private AccessVisitor : AstVisitor {
     }
 }
 
-def private analyze_one(fn : Function?; tracked : table<string>; fieldMode : bool; var res : AccessResult; var callees : table<string>) {
+def private analyze_one(fn : Function?; mod : Module?; tracked : table<string>; fieldMode : bool; var res : AccessResult; var callees : table<string>) {
     var astVisitor = new AccessVisitor()
     astVisitor.tracked := tracked
     astVisitor.fieldMode = fieldMode
@@ -300,6 +336,19 @@ def private analyze_one(fn : Function?; tracked : table<string>; fieldMode : boo
     }
     for (w in keys(astVisitor.writes)) {
         res.writes |> insert(w)
+    }
+    // buffers handed whole to a helper: the callee's parameter decides. A name that does not
+    // resolve to exactly one declaration keeps the ratchet — it could be written through.
+    for (wa in astVisitor.whole) {
+        let dir = callee_param_dir(mod, wa.callee, wa.idx)
+        if (empty(dir)) {
+            let escape = fieldMode ? "declare the @role (access_force)" : "declare [vk_access]"
+            astVisitor.err = "tracked buffer '{wa.buf}' passed whole to call '{wa.callee}' — teach the intrinsic table or {escape}"
+        } elif (dir == "write") {
+            res.writes |> insert(wa.buf)
+        } else {
+            res.reads |> insert(wa.buf)
+        }
     }
     for (c in keys(astVisitor.callees)) {
         callees |> insert(c)
@@ -317,7 +366,7 @@ def private classify_access(fn : Function?; mod : Module?; tracked : table<strin
     var pending : table<string>
     var visited : table<string>
     var callees : table<string>
-    analyze_one(fn, tracked, fieldMode, res, callees)
+    analyze_one(fn, mod, tracked, fieldMode, res, callees)
     visited |> insert(string(fn.name))
     // field mode is intra-body only: free callees are shader intrinsics whose das shims would
     // false-positive on bare-name matching, and self-helpers hit the ratchet instead
@@ -340,7 +389,7 @@ def private classify_access(fn : Function?; mod : Module?; tracked : table<strin
         var next : table<string>
         mod |> for_each_function(name) $(cfn) {
             if (cfn.name == name) {
-                analyze_one(cfn, tracked, fieldMode, res, next)
+                analyze_one(cfn, mod, tracked, fieldMode, res, next)
             }
         }
         for (c in keys(next)) {

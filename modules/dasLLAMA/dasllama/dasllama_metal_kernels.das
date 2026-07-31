@@ -21,6 +21,389 @@ require dasllama/dasllama_metal_lens
 // prefill module's, verbatim (own PSOs, zero copy drift). Kernel-shape rationale lives with
 // each class; the driver contracts live in dasllama_metal_decode's header.
 
+// ===== single-query attention: the shared stages =====
+
+// The sq_attn family is ONE algorithm in four KV codecs (f16/f32/q8_0/tq4) across four dispatch
+// shapes (single-tg, split-K chunk, batched, batched split-K). The codec axis changes only how a
+// K/V element is loaded; the shape axis is pure addressing — a row-table base, a chunk origin,
+// whether attention sinks fold in, and where the result lands. So all sixteen kernels below are
+// these five stages with different arguments. They lower to plain MSL functions (one copy per
+// kernel, since each kernel emits its own source), and every float operation stays in the order
+// the hand-written bodies had it.
+//
+// Conventions: `row0` is the first context row this dispatch owns (0 unless split-K), `n` the row
+// count, and the `*base` arguments the row-table byte/halfword/element offsets (0 unless batched).
+// `scores`/`red` are the caller's @workgroup slabs; `red` is written by both softmax halves, so
+// the caller must barrier between them.
+
+// f16/f32 codecs — one generic, instantiated per KV element type.
+def private sq_fill_scores(kc : array<auto(KT)>; q : array<float>; var scores : auto(SS);
+                           kbase, row0, n, kv_dim, khoff, qoff, hs : uint; scale, softcap : float) {
+    // simdgroup sg dots q[head] against K row j so every K load coalesces; the lane's q elements
+    // are loop-invariant and hoist to registers (device loads can't — buffers may alias)
+    let sg = gl_SubgroupID
+    let sl = gl_SubgroupInvocationID
+    let epl = hs / 32u              // elements per lane in the row run
+    let qb = qoff + sl * epl
+    let q0 = q[qb]
+    let q1 = epl > 1u ? q[qb + 1u] : 0.0
+    let q2 = epl > 2u ? q[qb + 2u] : 0.0
+    let q3 = epl > 3u ? q[qb + 3u] : 0.0
+    let q4 = epl > 4u ? q[qb + 4u] : 0.0
+    let q5 = epl > 5u ? q[qb + 5u] : 0.0
+    let q6 = epl > 6u ? q[qb + 6u] : 0.0
+    let q7 = epl > 7u ? q[qb + 7u] : 0.0
+    let q8 = epl > 8u ? q[qb + 8u] : 0.0
+    let q9 = epl > 9u ? q[qb + 9u] : 0.0
+    let q10 = epl > 10u ? q[qb + 10u] : 0.0
+    let q11 = epl > 11u ? q[qb + 11u] : 0.0
+    let q12 = epl > 12u ? q[qb + 12u] : 0.0
+    let q13 = epl > 13u ? q[qb + 13u] : 0.0
+    let q14 = epl > 14u ? q[qb + 14u] : 0.0
+    let q15 = epl > 15u ? q[qb + 15u] : 0.0
+    var j = sg
+    while (j < n) {
+        let kb = kbase + (row0 + j) * kv_dim + khoff + sl * epl
+        var s = q0 * float(kc[kb])
+        if (epl > 1u) {
+            s += q1 * float(kc[kb + 1u])
+        }
+        if (epl > 2u) {
+            s += q2 * float(kc[kb + 2u])
+        }
+        if (epl > 3u) {
+            s += q3 * float(kc[kb + 3u])
+        }
+        if (epl > 4u) {
+            s += q4 * float(kc[kb + 4u])
+        }
+        if (epl > 5u) {
+            s += q5 * float(kc[kb + 5u])
+        }
+        if (epl > 6u) {
+            s += q6 * float(kc[kb + 6u])
+        }
+        if (epl > 7u) {
+            s += q7 * float(kc[kb + 7u])
+        }
+        if (epl > 8u) {
+            s += q8 * float(kc[kb + 8u])
+            s += q9 * float(kc[kb + 9u])
+            s += q10 * float(kc[kb + 10u])
+            s += q11 * float(kc[kb + 11u])
+        }
+        if (epl > 12u) {
+            s += q12 * float(kc[kb + 12u])
+            s += q13 * float(kc[kb + 13u])
+            s += q14 * float(kc[kb + 14u])
+            s += q15 * float(kc[kb + 15u])
+        }
+        s = simd_sum(s)
+        if (sl == 0u) {
+            scores[j] = sq_score_entry(s, scale, softcap)
+        }
+        j += gl_NumSubgroups
+    }
+}
+
+// q8_0 codec — 34B blocks read through the dual view (half scale + byte quants); the lane's epl
+// elements sit in ONE block, so the scale is loaded once per row and rides the simd sum.
+def private sq_fill_scores_q8(ksh : array<float16>; kqb : array<int8>; q : array<float>; var scores : auto(SS);
+                              kb0h, kb0b, row0, n, nblk, khblk, qoff, hs : uint; scale, softcap : float) {
+    let sg = gl_SubgroupID
+    let sl = gl_SubgroupInvocationID
+    let epl = hs / 32u
+    let qb = qoff + sl * epl
+    let q0 = q[qb]
+    let q1 = epl > 1u ? q[qb + 1u] : 0.0
+    let q2 = epl > 2u ? q[qb + 2u] : 0.0
+    let q3 = epl > 3u ? q[qb + 3u] : 0.0
+    let q4 = epl > 4u ? q[qb + 4u] : 0.0
+    let q5 = epl > 5u ? q[qb + 5u] : 0.0
+    let q6 = epl > 6u ? q[qb + 6u] : 0.0
+    let q7 = epl > 7u ? q[qb + 7u] : 0.0
+    let q8 = epl > 8u ? q[qb + 8u] : 0.0
+    let q9 = epl > 9u ? q[qb + 9u] : 0.0
+    let q10 = epl > 10u ? q[qb + 10u] : 0.0
+    let q11 = epl > 11u ? q[qb + 11u] : 0.0
+    let q12 = epl > 12u ? q[qb + 12u] : 0.0
+    let q13 = epl > 13u ? q[qb + 13u] : 0.0
+    let q14 = epl > 14u ? q[qb + 14u] : 0.0
+    let q15 = epl > 15u ? q[qb + 15u] : 0.0
+    let hb = (sl * epl) / 32u               // lane's block within the head
+    let ib = (sl * epl) % 32u               // lane's quant offset within the block
+    var j = sg
+    while (j < n) {
+        let blk = (row0 + j) * nblk + khblk + hb
+        let d = float(ksh[kb0h + blk * 17u])
+        let kb = kb0b + blk * 34u + 2u + ib
+        var s = q0 * float(kqb[kb])
+        if (epl > 1u) {
+            s += q1 * float(kqb[kb + 1u])
+        }
+        if (epl > 2u) {
+            s += q2 * float(kqb[kb + 2u])
+        }
+        if (epl > 3u) {
+            s += q3 * float(kqb[kb + 3u])
+        }
+        if (epl > 4u) {
+            s += q4 * float(kqb[kb + 4u])
+        }
+        if (epl > 5u) {
+            s += q5 * float(kqb[kb + 5u])
+        }
+        if (epl > 6u) {
+            s += q6 * float(kqb[kb + 6u])
+        }
+        if (epl > 7u) {
+            s += q7 * float(kqb[kb + 7u])
+        }
+        if (epl > 8u) {
+            s += q8 * float(kqb[kb + 8u])
+            s += q9 * float(kqb[kb + 9u])
+            s += q10 * float(kqb[kb + 10u])
+            s += q11 * float(kqb[kb + 11u])
+        }
+        if (epl > 12u) {
+            s += q12 * float(kqb[kb + 12u])
+            s += q13 * float(kqb[kb + 13u])
+            s += q14 * float(kqb[kb + 14u])
+            s += q15 * float(kqb[kb + 15u])
+        }
+        s = simd_sum(s * d)
+        if (sl == 0u) {
+            scores[j] = sq_score_entry(s, scale, softcap)
+        }
+        j += gl_NumSubgroups
+    }
+}
+
+// tq4 codec — 18B rotated 4-bit blocks; q arrives already rotated, so this runs in the rotated
+// basis and yo needs one fwht-unsign pass downstream. epl == 1 reads a single nibble by parity.
+def private sq_fill_scores_tq4(ksh : array<float16>; kqb : array<uint8>; q : array<float>; var scores : auto(SS);
+                               kb0h, kb0b, row0, n, nblk, khblk, qoff, hs : uint; scale, softcap : float) {
+    let sg = gl_SubgroupID
+    let sl = gl_SubgroupInvocationID
+    let epl = hs / 32u
+    let qb = qoff + sl * epl
+    let q0 = q[qb]
+    let q1 = epl > 1u ? q[qb + 1u] : 0.0
+    let q2 = epl > 2u ? q[qb + 2u] : 0.0
+    let q3 = epl > 3u ? q[qb + 3u] : 0.0
+    let q4 = epl > 4u ? q[qb + 4u] : 0.0
+    let q5 = epl > 5u ? q[qb + 5u] : 0.0
+    let q6 = epl > 6u ? q[qb + 6u] : 0.0
+    let q7 = epl > 7u ? q[qb + 7u] : 0.0
+    let q8 = epl > 8u ? q[qb + 8u] : 0.0
+    let q9 = epl > 9u ? q[qb + 9u] : 0.0
+    let q10 = epl > 10u ? q[qb + 10u] : 0.0
+    let q11 = epl > 11u ? q[qb + 11u] : 0.0
+    let q12 = epl > 12u ? q[qb + 12u] : 0.0
+    let q13 = epl > 13u ? q[qb + 13u] : 0.0
+    let q14 = epl > 14u ? q[qb + 14u] : 0.0
+    let q15 = epl > 15u ? q[qb + 15u] : 0.0
+    let hb = (sl * epl) / 32u
+    let inb = (sl * epl) % 32u          // this lane's element offset inside its block
+    var j = sg
+    while (j < n) {
+        let blk = (row0 + j) * nblk + khblk + hb
+        let d = float(ksh[kb0h + blk * 9u])
+        let kb = kb0b + blk * 18u + 2u + inb / 2u
+        let by0 = uint(kqb[kb])
+        var s = 0.0
+        if (epl == 1u) {
+            let nib = (inb & 1u) == 1u ? (by0 >> 4u) : (by0 & 15u)
+            s = q0 * float(int(nib) - 8)
+        } else {
+            s = q0 * float(int(by0 & 15u) - 8)
+            s += q1 * float(int(by0 >> 4u) - 8)
+            if (epl > 2u) {
+                let by1 = uint(kqb[kb + 1u])
+                s += q2 * float(int(by1 & 15u) - 8)
+                s += q3 * float(int(by1 >> 4u) - 8)
+            }
+            if (epl > 4u) {
+                let by2 = uint(kqb[kb + 2u])
+                s += q4 * float(int(by2 & 15u) - 8)
+                s += q5 * float(int(by2 >> 4u) - 8)
+            }
+            if (epl > 6u) {
+                let by3 = uint(kqb[kb + 3u])
+                s += q6 * float(int(by3 & 15u) - 8)
+                s += q7 * float(int(by3 >> 4u) - 8)
+            }
+            if (epl > 8u) {
+                let by4 = uint(kqb[kb + 4u])
+                let by5 = uint(kqb[kb + 5u])
+                s += q8 * float(int(by4 & 15u) - 8)
+                s += q9 * float(int(by4 >> 4u) - 8)
+                s += q10 * float(int(by5 & 15u) - 8)
+                s += q11 * float(int(by5 >> 4u) - 8)
+            }
+            if (epl > 12u) {
+                let by6 = uint(kqb[kb + 6u])
+                let by7 = uint(kqb[kb + 7u])
+                s += q12 * float(int(by6 & 15u) - 8)
+                s += q13 * float(int(by6 >> 4u) - 8)
+                s += q14 * float(int(by7 & 15u) - 8)
+                s += q15 * float(int(by7 >> 4u) - 8)
+            }
+        }
+        s = simd_sum(s * d)
+        if (sl == 0u) {
+            scores[j] = sq_score_entry(s, scale, softcap)
+        }
+        j += gl_NumSubgroups
+    }
+}
+
+// tanh via the exp identity (the CPU softcap4's form) — Metal tanh NaNs past ~44, while exp
+// saturates: exp(INF) -> denom INF -> the term is 0.
+def private sq_score_entry(s, scale, softcap : float) : float {
+    let sc = s * scale
+    return softcap > 0.0 ? softcap * (1.0 - 2.0 / (1.0 + exp(sc * 2.0 / softcap))) : sc
+}
+
+// Sliding window (gemma2): rows below the span start are masked out of this chunk. The guard is
+// threadgroup-uniform, so the barrier inside it is safe.
+def private sq_mask_window(var scores : auto(SS); c0, n, wstart, lid, nt : uint) {
+    if (wstart > c0) {
+        var jm = lid
+        while (jm < n) {
+            if (c0 + jm < wstart) {
+                scores[jm] = -3.0e38
+            }
+            jm += nt
+        }
+        barrier()
+    }
+}
+
+// Softmax half 1: row max — strided local, simd butterfly, cross-simdgroup partials through red[].
+def private sq_score_max(scores : auto(SS); var red : float[16]; n, lid, nt : uint) : float {
+    var m = -3.0e38
+    var j = lid
+    while (j < n) {
+        m = max(m, scores[j])
+        j += nt
+    }
+    m = max(m, simd_shuffle_xor(m, 16u))
+    m = max(m, simd_shuffle_xor(m, 8u))
+    m = max(m, simd_shuffle_xor(m, 4u))
+    m = max(m, simd_shuffle_xor(m, 2u))
+    m = max(m, simd_shuffle_xor(m, 1u))
+    if (gl_SubgroupInvocationID == 0u) {
+        red[gl_SubgroupID] = m
+    }
+    barrier()
+    var mm = red[0]
+    var sgi = 1u
+    while (sgi < gl_NumSubgroups) {
+        mm = max(mm, red[sgi])
+        sgi++
+    }
+    return mm
+}
+
+// Softmax half 2: exp in place + the weight sum. Reuses red[], so callers barrier between halves.
+def private sq_exp_sum(var scores : auto(SS); var red : float[16]; mm : float; n, lid, nt : uint) : float {
+    var l = 0.0
+    var j = lid
+    while (j < n) {
+        let w = exp(scores[j] - mm)
+        scores[j] = w
+        l += w
+        j += nt
+    }
+    l += simd_shuffle_xor(l, 16u)
+    l += simd_shuffle_xor(l, 8u)
+    l += simd_shuffle_xor(l, 4u)
+    l += simd_shuffle_xor(l, 2u)
+    l += simd_shuffle_xor(l, 1u)
+    if (gl_SubgroupInvocationID == 0u) {
+        red[gl_SubgroupID] = l
+    }
+    barrier()
+    var tot = red[0]
+    var sgi = 1u
+    while (sgi < gl_NumSubgroups) {
+        tot += red[sgi]
+        sgi++
+    }
+    return tot
+}
+
+// Lane `lid` owns one V column; 4 rows in flight so device-load latency overlaps. Returns the
+// unnormalized column sum — the caller divides (single/batched) or banks it as a partial (split-K).
+def private sq_vacc(vc : array<auto(VT)>; scores : auto(SS); vbase, row0, n, kv_dim, khoff, lid : uint) : float {
+    var acc0 = 0.0
+    var acc1 = 0.0
+    var acc2 = 0.0
+    var acc3 = 0.0
+    var j = 0u
+    while (j + 4u <= n) {
+        acc0 += scores[j] * float(vc[vbase + (row0 + j) * kv_dim + khoff + lid])
+        acc1 += scores[j + 1u] * float(vc[vbase + (row0 + j + 1u) * kv_dim + khoff + lid])
+        acc2 += scores[j + 2u] * float(vc[vbase + (row0 + j + 2u) * kv_dim + khoff + lid])
+        acc3 += scores[j + 3u] * float(vc[vbase + (row0 + j + 3u) * kv_dim + khoff + lid])
+        j += 4u
+    }
+    while (j < n) {
+        acc0 += scores[j] * float(vc[vbase + (row0 + j) * kv_dim + khoff + lid])
+        j++
+    }
+    return acc0 + acc1 + acc2 + acc3
+}
+
+// q8_0 twin — dequant rides the weighted sum.
+def private sq_vacc_q8(vsh : array<float16>; vqb : array<int8>; scores : auto(SS);
+                       vb0h, vb0b, row0, n, nblk, khblk, lid : uint) : float {
+    let vblk0 = khblk + lid / 32u
+    let vin = lid % 32u
+    var acc0 = 0.0
+    var acc1 = 0.0
+    var acc2 = 0.0
+    var acc3 = 0.0
+    var j = 0u
+    while (j + 4u <= n) {
+        let b0 = (row0 + j) * nblk + vblk0
+        let b1 = (row0 + j + 1u) * nblk + vblk0
+        let b2 = (row0 + j + 2u) * nblk + vblk0
+        let b3 = (row0 + j + 3u) * nblk + vblk0
+        acc0 += scores[j] * float(vqb[vb0b + b0 * 34u + 2u + vin]) * float(vsh[vb0h + b0 * 17u])
+        acc1 += scores[j + 1u] * float(vqb[vb0b + b1 * 34u + 2u + vin]) * float(vsh[vb0h + b1 * 17u])
+        acc2 += scores[j + 2u] * float(vqb[vb0b + b2 * 34u + 2u + vin]) * float(vsh[vb0h + b2 * 17u])
+        acc3 += scores[j + 3u] * float(vqb[vb0b + b3 * 34u + 2u + vin]) * float(vsh[vb0h + b3 * 17u])
+        j += 4u
+    }
+    while (j < n) {
+        let b0 = (row0 + j) * nblk + vblk0
+        acc0 += scores[j] * float(vqb[vb0b + b0 * 34u + 2u + vin]) * float(vsh[vb0h + b0 * 17u])
+        j++
+    }
+    return acc0 + acc1 + acc2 + acc3
+}
+
+// tq4 twin — nibble parity picks the half-byte; one row in flight (the nibble unpack already
+// serializes the dependent loads, so the 4-way form measured no better).
+def private sq_vacc_tq4(vsh : array<float16>; vqb : array<uint8>; scores : auto(SS);
+                        vb0h, vb0b, row0, n, nblk, khblk, lid : uint) : float {
+    let vblk0 = khblk + lid / 32u
+    let vbyte = (lid % 32u) / 2u
+    let hi = (lid & 1u) == 1u
+    var acc0 = 0.0
+    var j = 0u
+    while (j < n) {
+        let blk = (row0 + j) * nblk + vblk0
+        let by = uint(vqb[vb0b + blk * 18u + 2u + vbyte])
+        let nib = hi ? (by >> 4u) : (by & 15u)
+        acc0 += scores[j] * float(int(nib) - 8) * float(vsh[vb0h + blk * 9u])
+        j++
+    }
+    return acc0
+}
+
 // ===== the new kernels =====
 
 // One threadgroup per (stream, head), head_size threads — lane owns one V column. Pass 1 scores
@@ -53,147 +436,18 @@ class MetalSqAttnF16 {
         let nt = gl_WorkGroupSize.x
         let khoff = (h / kv_mul) * hs
         let qoff = bb * (nheads * hs) + h * hs
-        // pass 1: simdgroup-cooperative score fill — simdgroup sg dots q[head] against K row j;
-        // the lane's q elements are loop-invariant, hoisted to registers (device loads can't be
-        // hoisted by the compiler — buffers may alias)
-        let sg = gl_SubgroupID
-        let sl = gl_SubgroupInvocationID
-        let epl = hs / 32u              // elements per lane in the row run
-        let qb = qoff + sl * epl
-        let q0 = q[qb]
-        let q1 = epl > 1u ? q[qb + 1u] : 0.0
-        let q2 = epl > 2u ? q[qb + 2u] : 0.0
-        let q3 = epl > 3u ? q[qb + 3u] : 0.0
-        let q4 = epl > 4u ? q[qb + 4u] : 0.0
-        let q5 = epl > 5u ? q[qb + 5u] : 0.0
-        let q6 = epl > 6u ? q[qb + 6u] : 0.0
-        let q7 = epl > 7u ? q[qb + 7u] : 0.0
-        let q8 = epl > 8u ? q[qb + 8u] : 0.0
-        let q9 = epl > 9u ? q[qb + 9u] : 0.0
-        let q10 = epl > 10u ? q[qb + 10u] : 0.0
-        let q11 = epl > 11u ? q[qb + 11u] : 0.0
-        let q12 = epl > 12u ? q[qb + 12u] : 0.0
-        let q13 = epl > 13u ? q[qb + 13u] : 0.0
-        let q14 = epl > 14u ? q[qb + 14u] : 0.0
-        let q15 = epl > 15u ? q[qb + 15u] : 0.0
-        var j = sg
-        while (j < cnt) {
-            let kb = j * kv_dim + khoff + sl * epl
-            var s = q0 * float(kc[kb])
-            if (epl > 1u) {
-                s += q1 * float(kc[kb + 1u])
-            }
-            if (epl > 2u) {
-                s += q2 * float(kc[kb + 2u])
-            }
-            if (epl > 3u) {
-                s += q3 * float(kc[kb + 3u])
-            }
-            if (epl > 4u) {
-                s += q4 * float(kc[kb + 4u])
-            }
-            if (epl > 5u) {
-                s += q5 * float(kc[kb + 5u])
-            }
-            if (epl > 6u) {
-                s += q6 * float(kc[kb + 6u])
-            }
-            if (epl > 7u) {
-                s += q7 * float(kc[kb + 7u])
-            }
-            if (epl > 8u) {
-                s += q8 * float(kc[kb + 8u])
-                s += q9 * float(kc[kb + 9u])
-                s += q10 * float(kc[kb + 10u])
-                s += q11 * float(kc[kb + 11u])
-            }
-            if (epl > 12u) {
-                s += q12 * float(kc[kb + 12u])
-                s += q13 * float(kc[kb + 13u])
-                s += q14 * float(kc[kb + 14u])
-                s += q15 * float(kc[kb + 15u])
-            }
-            s = simd_sum(s)
-            if (sl == 0u) {
-                let sc = s * scale
-                // tanh via the exp identity (the CPU softcap4's form) — Metal tanh NaNs past
-                // ~44, while exp saturates: exp(INF) -> denom INF -> the term is 0
-                scores[j] = softcap > 0.0 ? softcap * (1.0 - 2.0 / (1.0 + exp(sc * 2.0 / softcap))) : sc
-            }
-            j += gl_NumSubgroups
-        }
+        sq_fill_scores(kc, q, scores, 0u, 0u, cnt, kv_dim, khoff, qoff, hs, scale, softcap)
         barrier()
-        // pass 2a: max — strided local, simd butterfly, cross-simdgroup partials
-        var m = -3.0e38
-        j = lid
-        while (j < cnt) {
-            m = max(m, scores[j])
-            j += nt
-        }
-        m = max(m, simd_shuffle_xor(m, 16u))
-        m = max(m, simd_shuffle_xor(m, 8u))
-        m = max(m, simd_shuffle_xor(m, 4u))
-        m = max(m, simd_shuffle_xor(m, 2u))
-        m = max(m, simd_shuffle_xor(m, 1u))
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = m
-        }
-        barrier()
-        var mm = red[0]
-        var sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            mm = max(mm, red[sgi])
-            sgi++
-        }
+        var mm = sq_score_max(scores, red, cnt, lid, nt)
         if (hass != 0u) {
             mm = max(mm, sink[h])
         }
-        barrier()                           // red[] reused for the sum below
-        // pass 2b: exp in place + sum
-        var l = 0.0
-        j = lid
-        while (j < cnt) {
-            let w = exp(scores[j] - mm)
-            scores[j] = w
-            l += w
-            j += nt
-        }
-        l += simd_shuffle_xor(l, 16u)
-        l += simd_shuffle_xor(l, 8u)
-        l += simd_shuffle_xor(l, 4u)
-        l += simd_shuffle_xor(l, 2u)
-        l += simd_shuffle_xor(l, 1u)
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = l
-        }
-        barrier()
-        var tot = red[0]
-        sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            tot += red[sgi]
-            sgi++
-        }
+        barrier()                           // red[] is reused for the sum below
+        var tot = sq_exp_sum(scores, red, mm, cnt, lid, nt)
         if (hass != 0u) {
             tot += exp(max(sink[h] - mm, -80.0))
         }
-        // pass 3: lane owns V column `lid` — 4 rows in flight so device-load latency overlaps
-        var acc0 = 0.0
-        var acc1 = 0.0
-        var acc2 = 0.0
-        var acc3 = 0.0
-        j = 0u
-        while (j + 4u <= cnt) {
-            acc0 += scores[j] * float(vc[j * kv_dim + khoff + lid])
-            acc1 += scores[j + 1u] * float(vc[(j + 1u) * kv_dim + khoff + lid])
-            acc2 += scores[j + 2u] * float(vc[(j + 2u) * kv_dim + khoff + lid])
-            acc3 += scores[j + 3u] * float(vc[(j + 3u) * kv_dim + khoff + lid])
-            j += 4u
-        }
-        while (j < cnt) {
-            acc0 += scores[j] * float(vc[j * kv_dim + khoff + lid])
-            j++
-        }
-        yo[qoff + lid] = (acc0 + acc1 + acc2 + acc3) / tot
+        yo[qoff + lid] = sq_vacc(vc, scores, 0u, 0u, cnt, kv_dim, khoff, lid) / tot
     }
 }
 
@@ -225,141 +479,18 @@ class MetalSqAttnF32 {
         let nt = gl_WorkGroupSize.x
         let khoff = (h / kv_mul) * hs
         let qoff = bb * (nheads * hs) + h * hs
-        let sg = gl_SubgroupID
-        let sl = gl_SubgroupInvocationID
-        let epl = hs / 32u
-        let qb = qoff + sl * epl
-        let q0 = q[qb]
-        let q1 = epl > 1u ? q[qb + 1u] : 0.0
-        let q2 = epl > 2u ? q[qb + 2u] : 0.0
-        let q3 = epl > 3u ? q[qb + 3u] : 0.0
-        let q4 = epl > 4u ? q[qb + 4u] : 0.0
-        let q5 = epl > 5u ? q[qb + 5u] : 0.0
-        let q6 = epl > 6u ? q[qb + 6u] : 0.0
-        let q7 = epl > 7u ? q[qb + 7u] : 0.0
-        let q8 = epl > 8u ? q[qb + 8u] : 0.0
-        let q9 = epl > 9u ? q[qb + 9u] : 0.0
-        let q10 = epl > 10u ? q[qb + 10u] : 0.0
-        let q11 = epl > 11u ? q[qb + 11u] : 0.0
-        let q12 = epl > 12u ? q[qb + 12u] : 0.0
-        let q13 = epl > 13u ? q[qb + 13u] : 0.0
-        let q14 = epl > 14u ? q[qb + 14u] : 0.0
-        let q15 = epl > 15u ? q[qb + 15u] : 0.0
-        var j = sg
-        while (j < cnt) {
-            let kb = j * kv_dim + khoff + sl * epl
-            var s = q0 * kc[kb]
-            if (epl > 1u) {
-                s += q1 * kc[kb + 1u]
-            }
-            if (epl > 2u) {
-                s += q2 * kc[kb + 2u]
-            }
-            if (epl > 3u) {
-                s += q3 * kc[kb + 3u]
-            }
-            if (epl > 4u) {
-                s += q4 * kc[kb + 4u]
-            }
-            if (epl > 5u) {
-                s += q5 * kc[kb + 5u]
-            }
-            if (epl > 6u) {
-                s += q6 * kc[kb + 6u]
-            }
-            if (epl > 7u) {
-                s += q7 * kc[kb + 7u]
-            }
-            if (epl > 8u) {
-                s += q8 * kc[kb + 8u]
-                s += q9 * kc[kb + 9u]
-                s += q10 * kc[kb + 10u]
-                s += q11 * kc[kb + 11u]
-            }
-            if (epl > 12u) {
-                s += q12 * kc[kb + 12u]
-                s += q13 * kc[kb + 13u]
-                s += q14 * kc[kb + 14u]
-                s += q15 * kc[kb + 15u]
-            }
-            s = simd_sum(s)
-            if (sl == 0u) {
-                let sc = s * scale
-                // tanh via the exp identity (the CPU softcap4's form) — Metal tanh NaNs past
-                // ~44, while exp saturates: exp(INF) -> denom INF -> the term is 0
-                scores[j] = softcap > 0.0 ? softcap * (1.0 - 2.0 / (1.0 + exp(sc * 2.0 / softcap))) : sc
-            }
-            j += gl_NumSubgroups
-        }
+        sq_fill_scores(kc, q, scores, 0u, 0u, cnt, kv_dim, khoff, qoff, hs, scale, softcap)
         barrier()
-        var m = -3.0e38
-        j = lid
-        while (j < cnt) {
-            m = max(m, scores[j])
-            j += nt
-        }
-        m = max(m, simd_shuffle_xor(m, 16u))
-        m = max(m, simd_shuffle_xor(m, 8u))
-        m = max(m, simd_shuffle_xor(m, 4u))
-        m = max(m, simd_shuffle_xor(m, 2u))
-        m = max(m, simd_shuffle_xor(m, 1u))
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = m
-        }
-        barrier()
-        var mm = red[0]
-        var sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            mm = max(mm, red[sgi])
-            sgi++
-        }
+        var mm = sq_score_max(scores, red, cnt, lid, nt)
         if (hass != 0u) {
             mm = max(mm, sink[h])
         }
-        barrier()
-        var l = 0.0
-        j = lid
-        while (j < cnt) {
-            let w = exp(scores[j] - mm)
-            scores[j] = w
-            l += w
-            j += nt
-        }
-        l += simd_shuffle_xor(l, 16u)
-        l += simd_shuffle_xor(l, 8u)
-        l += simd_shuffle_xor(l, 4u)
-        l += simd_shuffle_xor(l, 2u)
-        l += simd_shuffle_xor(l, 1u)
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = l
-        }
-        barrier()
-        var tot = red[0]
-        sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            tot += red[sgi]
-            sgi++
-        }
+        barrier()                           // red[] is reused for the sum below
+        var tot = sq_exp_sum(scores, red, mm, cnt, lid, nt)
         if (hass != 0u) {
             tot += exp(max(sink[h] - mm, -80.0))
         }
-        var acc0 = 0.0
-        var acc1 = 0.0
-        var acc2 = 0.0
-        var acc3 = 0.0
-        j = 0u
-        while (j + 4u <= cnt) {
-            acc0 += scores[j] * vc[j * kv_dim + khoff + lid]
-            acc1 += scores[j + 1u] * vc[(j + 1u) * kv_dim + khoff + lid]
-            acc2 += scores[j + 2u] * vc[(j + 2u) * kv_dim + khoff + lid]
-            acc3 += scores[j + 3u] * vc[(j + 3u) * kv_dim + khoff + lid]
-            j += 4u
-        }
-        while (j < cnt) {
-            acc0 += scores[j] * vc[j * kv_dim + khoff + lid]
-            j++
-        }
-        yo[qoff + lid] = (acc0 + acc1 + acc2 + acc3) / tot
+        yo[qoff + lid] = sq_vacc(vc, scores, 0u, 0u, cnt, kv_dim, khoff, lid) / tot
     }
 }
 
@@ -395,156 +526,18 @@ class MetalSqAttnQ8 {
         let nt = gl_WorkGroupSize.x
         let khblk = (h / kv_mul) * (hs / 32u)   // kv head offset in BLOCKS
         let qoff = bb * (nheads * hs) + h * hs
-        // pass 1: simdgroup-cooperative score fill — lane sl's epl elements sit in ONE block
-        let sg = gl_SubgroupID
-        let sl = gl_SubgroupInvocationID
-        let epl = hs / 32u
-        let qb = qoff + sl * epl
-        let q0 = q[qb]
-        let q1 = epl > 1u ? q[qb + 1u] : 0.0
-        let q2 = epl > 2u ? q[qb + 2u] : 0.0
-        let q3 = epl > 3u ? q[qb + 3u] : 0.0
-        let q4 = epl > 4u ? q[qb + 4u] : 0.0
-        let q5 = epl > 5u ? q[qb + 5u] : 0.0
-        let q6 = epl > 6u ? q[qb + 6u] : 0.0
-        let q7 = epl > 7u ? q[qb + 7u] : 0.0
-        let q8 = epl > 8u ? q[qb + 8u] : 0.0
-        let q9 = epl > 9u ? q[qb + 9u] : 0.0
-        let q10 = epl > 10u ? q[qb + 10u] : 0.0
-        let q11 = epl > 11u ? q[qb + 11u] : 0.0
-        let q12 = epl > 12u ? q[qb + 12u] : 0.0
-        let q13 = epl > 13u ? q[qb + 13u] : 0.0
-        let q14 = epl > 14u ? q[qb + 14u] : 0.0
-        let q15 = epl > 15u ? q[qb + 15u] : 0.0
-        let hb = (sl * epl) / 32u               // lane's block within the head
-        let ib = (sl * epl) % 32u               // lane's quant offset within the block
-        var j = sg
-        while (j < cnt) {
-            let blk = j * nblk + khblk + hb
-            let d = float(ksh[blk * 17u])
-            let kb = blk * 34u + 2u + ib
-            var s = q0 * float(kqb[kb])
-            if (epl > 1u) {
-                s += q1 * float(kqb[kb + 1u])
-            }
-            if (epl > 2u) {
-                s += q2 * float(kqb[kb + 2u])
-            }
-            if (epl > 3u) {
-                s += q3 * float(kqb[kb + 3u])
-            }
-            if (epl > 4u) {
-                s += q4 * float(kqb[kb + 4u])
-            }
-            if (epl > 5u) {
-                s += q5 * float(kqb[kb + 5u])
-            }
-            if (epl > 6u) {
-                s += q6 * float(kqb[kb + 6u])
-            }
-            if (epl > 7u) {
-                s += q7 * float(kqb[kb + 7u])
-            }
-            if (epl > 8u) {
-                s += q8 * float(kqb[kb + 8u])
-                s += q9 * float(kqb[kb + 9u])
-                s += q10 * float(kqb[kb + 10u])
-                s += q11 * float(kqb[kb + 11u])
-            }
-            if (epl > 12u) {
-                s += q12 * float(kqb[kb + 12u])
-                s += q13 * float(kqb[kb + 13u])
-                s += q14 * float(kqb[kb + 14u])
-                s += q15 * float(kqb[kb + 15u])
-            }
-            s = simd_sum(s * d)
-            if (sl == 0u) {
-                let sc = s * scale
-                // tanh via the exp identity (the CPU softcap4's form) — Metal tanh NaNs past
-                // ~44, while exp saturates: exp(INF) -> denom INF -> the term is 0
-                scores[j] = softcap > 0.0 ? softcap * (1.0 - 2.0 / (1.0 + exp(sc * 2.0 / softcap))) : sc
-            }
-            j += gl_NumSubgroups
-        }
+        sq_fill_scores_q8(ksh, kqb, q, scores, 0u, 0u, 0u, cnt, nblk, khblk, qoff, hs, scale, softcap)
         barrier()
-        // pass 2a: max — strided local, simd butterfly, cross-simdgroup partials
-        var m = -3.0e38
-        j = lid
-        while (j < cnt) {
-            m = max(m, scores[j])
-            j += nt
-        }
-        m = max(m, simd_shuffle_xor(m, 16u))
-        m = max(m, simd_shuffle_xor(m, 8u))
-        m = max(m, simd_shuffle_xor(m, 4u))
-        m = max(m, simd_shuffle_xor(m, 2u))
-        m = max(m, simd_shuffle_xor(m, 1u))
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = m
-        }
-        barrier()
-        var mm = red[0]
-        var sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            mm = max(mm, red[sgi])
-            sgi++
-        }
+        var mm = sq_score_max(scores, red, cnt, lid, nt)
         if (hass != 0u) {
             mm = max(mm, sink[h])
         }
-        barrier()                           // red[] reused for the sum below
-        // pass 2b: exp in place + sum
-        var l = 0.0
-        j = lid
-        while (j < cnt) {
-            let w = exp(scores[j] - mm)
-            scores[j] = w
-            l += w
-            j += nt
-        }
-        l += simd_shuffle_xor(l, 16u)
-        l += simd_shuffle_xor(l, 8u)
-        l += simd_shuffle_xor(l, 4u)
-        l += simd_shuffle_xor(l, 2u)
-        l += simd_shuffle_xor(l, 1u)
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = l
-        }
-        barrier()
-        var tot = red[0]
-        sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            tot += red[sgi]
-            sgi++
-        }
+        barrier()                           // red[] is reused for the sum below
+        var tot = sq_exp_sum(scores, red, mm, cnt, lid, nt)
         if (hass != 0u) {
             tot += exp(max(sink[h] - mm, -80.0))
         }
-        // pass 3: lane owns V column `lid` — 4 rows in flight, dequant rides the weighted sum
-        let vb0 = khblk + lid / 32u
-        let vin = lid % 32u
-        var acc0 = 0.0
-        var acc1 = 0.0
-        var acc2 = 0.0
-        var acc3 = 0.0
-        j = 0u
-        while (j + 4u <= cnt) {
-            let b0 = j * nblk + vb0
-            let b1 = (j + 1u) * nblk + vb0
-            let b2 = (j + 2u) * nblk + vb0
-            let b3 = (j + 3u) * nblk + vb0
-            acc0 += scores[j] * float(vqb[b0 * 34u + 2u + vin]) * float(vsh[b0 * 17u])
-            acc1 += scores[j + 1u] * float(vqb[b1 * 34u + 2u + vin]) * float(vsh[b1 * 17u])
-            acc2 += scores[j + 2u] * float(vqb[b2 * 34u + 2u + vin]) * float(vsh[b2 * 17u])
-            acc3 += scores[j + 3u] * float(vqb[b3 * 34u + 2u + vin]) * float(vsh[b3 * 17u])
-            j += 4u
-        }
-        while (j < cnt) {
-            let b0 = j * nblk + vb0
-            acc0 += scores[j] * float(vqb[b0 * 34u + 2u + vin]) * float(vsh[b0 * 17u])
-            j++
-        }
-        yo[qoff + lid] = (acc0 + acc1 + acc2 + acc3) / tot
+        yo[qoff + lid] = sq_vacc_q8(vsh, vqb, scores, 0u, 0u, 0u, cnt, nblk, khblk, lid) / tot
     }
 }
 
@@ -579,148 +572,18 @@ class MetalSqAttnTq4 {
         let nt = gl_WorkGroupSize.x
         let khblk = (h / kv_mul) * (hs / 32u)
         let qoff = bb * (nheads * hs) + h * hs
-        let sg = gl_SubgroupID
-        let sl = gl_SubgroupInvocationID
-        let epl = hs / 32u
-        let qb = qoff + sl * epl
-        let q0 = q[qb]
-        let q1 = epl > 1u ? q[qb + 1u] : 0.0
-        let q2 = epl > 2u ? q[qb + 2u] : 0.0
-        let q3 = epl > 3u ? q[qb + 3u] : 0.0
-        let q4 = epl > 4u ? q[qb + 4u] : 0.0
-        let q5 = epl > 5u ? q[qb + 5u] : 0.0
-        let q6 = epl > 6u ? q[qb + 6u] : 0.0
-        let q7 = epl > 7u ? q[qb + 7u] : 0.0
-        let q8 = epl > 8u ? q[qb + 8u] : 0.0
-        let q9 = epl > 9u ? q[qb + 9u] : 0.0
-        let q10 = epl > 10u ? q[qb + 10u] : 0.0
-        let q11 = epl > 11u ? q[qb + 11u] : 0.0
-        let q12 = epl > 12u ? q[qb + 12u] : 0.0
-        let q13 = epl > 13u ? q[qb + 13u] : 0.0
-        let q14 = epl > 14u ? q[qb + 14u] : 0.0
-        let q15 = epl > 15u ? q[qb + 15u] : 0.0
-        let hb = (sl * epl) / 32u
-        let inb = (sl * epl) % 32u          // this lane's element offset inside its block
-        var j = sg
-        while (j < cnt) {
-            let blk = j * nblk + khblk + hb
-            let d = float(ksh[blk * 9u])
-            let kb = blk * 18u + 2u + inb / 2u
-            let by0 = uint(kqb[kb])
-            var s = 0.0
-            if (epl == 1u) {
-                let nib = (inb & 1u) == 1u ? (by0 >> 4u) : (by0 & 15u)
-                s = q0 * float(int(nib) - 8)
-            } else {
-                s = q0 * float(int(by0 & 15u) - 8)
-                s += q1 * float(int(by0 >> 4u) - 8)
-                if (epl > 2u) {
-                    let by1 = uint(kqb[kb + 1u])
-                    s += q2 * float(int(by1 & 15u) - 8)
-                    s += q3 * float(int(by1 >> 4u) - 8)
-                }
-                if (epl > 4u) {
-                    let by2 = uint(kqb[kb + 2u])
-                    s += q4 * float(int(by2 & 15u) - 8)
-                    s += q5 * float(int(by2 >> 4u) - 8)
-                }
-                if (epl > 6u) {
-                    let by3 = uint(kqb[kb + 3u])
-                    s += q6 * float(int(by3 & 15u) - 8)
-                    s += q7 * float(int(by3 >> 4u) - 8)
-                }
-                if (epl > 8u) {
-                    let by4 = uint(kqb[kb + 4u])
-                    let by5 = uint(kqb[kb + 5u])
-                    s += q8 * float(int(by4 & 15u) - 8)
-                    s += q9 * float(int(by4 >> 4u) - 8)
-                    s += q10 * float(int(by5 & 15u) - 8)
-                    s += q11 * float(int(by5 >> 4u) - 8)
-                }
-                if (epl > 12u) {
-                    let by6 = uint(kqb[kb + 6u])
-                    let by7 = uint(kqb[kb + 7u])
-                    s += q12 * float(int(by6 & 15u) - 8)
-                    s += q13 * float(int(by6 >> 4u) - 8)
-                    s += q14 * float(int(by7 & 15u) - 8)
-                    s += q15 * float(int(by7 >> 4u) - 8)
-                }
-            }
-            s = simd_sum(s * d)
-            if (sl == 0u) {
-                let sc = s * scale
-                // tanh via the exp identity (the CPU softcap4's form) — Metal tanh NaNs past
-                // ~44, while exp saturates: exp(INF) -> denom INF -> the term is 0
-                scores[j] = softcap > 0.0 ? softcap * (1.0 - 2.0 / (1.0 + exp(sc * 2.0 / softcap))) : sc
-            }
-            j += gl_NumSubgroups
-        }
+        sq_fill_scores_tq4(ksh, kqb, q, scores, 0u, 0u, 0u, cnt, nblk, khblk, qoff, hs, scale, softcap)
         barrier()
-        var m = -3.0e38
-        j = lid
-        while (j < cnt) {
-            m = max(m, scores[j])
-            j += nt
-        }
-        m = max(m, simd_shuffle_xor(m, 16u))
-        m = max(m, simd_shuffle_xor(m, 8u))
-        m = max(m, simd_shuffle_xor(m, 4u))
-        m = max(m, simd_shuffle_xor(m, 2u))
-        m = max(m, simd_shuffle_xor(m, 1u))
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = m
-        }
-        barrier()
-        var mm = red[0]
-        var sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            mm = max(mm, red[sgi])
-            sgi++
-        }
+        var mm = sq_score_max(scores, red, cnt, lid, nt)
         if (hass != 0u) {
             mm = max(mm, sink[h])
         }
-        barrier()                           // red[] reused for the sum below
-        var l = 0.0
-        j = lid
-        while (j < cnt) {
-            let w = exp(scores[j] - mm)
-            scores[j] = w
-            l += w
-            j += nt
-        }
-        l += simd_shuffle_xor(l, 16u)
-        l += simd_shuffle_xor(l, 8u)
-        l += simd_shuffle_xor(l, 4u)
-        l += simd_shuffle_xor(l, 2u)
-        l += simd_shuffle_xor(l, 1u)
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = l
-        }
-        barrier()
-        var tot = red[0]
-        sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            tot += red[sgi]
-            sgi++
-        }
+        barrier()                           // red[] is reused for the sum below
+        var tot = sq_exp_sum(scores, red, mm, cnt, lid, nt)
         if (hass != 0u) {
             tot += exp(max(sink[h] - mm, -80.0))
         }
-        // lane owns V column lid — nibble parity picks the half-byte
-        let vblk0 = khblk + lid / 32u
-        let vbyte = (lid % 32u) / 2u
-        let hi = (lid & 1u) == 1u
-        var acc = 0.0
-        j = 0u
-        while (j < cnt) {
-            let blk = j * nblk + vblk0
-            let by = uint(vqb[blk * 18u + 2u + vbyte])
-            let nib = hi ? (by >> 4u) : (by & 15u)
-            acc += scores[j] * float(int(nib) - 8) * float(vsh[blk * 9u])
-            j++
-        }
-        yo[qoff + lid] = acc / tot
+        yo[qoff + lid] = sq_vacc_tq4(vsh, vqb, scores, 0u, 0u, 0u, cnt, nblk, khblk, lid) / tot
     }
 }
 
@@ -764,152 +627,14 @@ class MetalSqAttnPartF16 {
         if (c1 <= wstart) {
             return
         }
-        // pass 1: simdgroup-cooperative score fill over this chunk's rows (coalesced K loads,
-        // loop-invariant q hoisted to registers)
-        let sg = gl_SubgroupID
-        let sl = gl_SubgroupInvocationID
-        let epl = hs / 32u
-        let qb = qoff + sl * epl
-        let q0 = q[qb]
-        let q1 = epl > 1u ? q[qb + 1u] : 0.0
-        let q2 = epl > 2u ? q[qb + 2u] : 0.0
-        let q3 = epl > 3u ? q[qb + 3u] : 0.0
-        let q4 = epl > 4u ? q[qb + 4u] : 0.0
-        let q5 = epl > 5u ? q[qb + 5u] : 0.0
-        let q6 = epl > 6u ? q[qb + 6u] : 0.0
-        let q7 = epl > 7u ? q[qb + 7u] : 0.0
-        let q8 = epl > 8u ? q[qb + 8u] : 0.0
-        let q9 = epl > 9u ? q[qb + 9u] : 0.0
-        let q10 = epl > 10u ? q[qb + 10u] : 0.0
-        let q11 = epl > 11u ? q[qb + 11u] : 0.0
-        let q12 = epl > 12u ? q[qb + 12u] : 0.0
-        let q13 = epl > 13u ? q[qb + 13u] : 0.0
-        let q14 = epl > 14u ? q[qb + 14u] : 0.0
-        let q15 = epl > 15u ? q[qb + 15u] : 0.0
-        var j = sg
-        while (j < nrows) {
-            let kb = (c0 + j) * kv_dim + khoff + sl * epl
-            var s = q0 * float(kc[kb])
-            if (epl > 1u) {
-                s += q1 * float(kc[kb + 1u])
-            }
-            if (epl > 2u) {
-                s += q2 * float(kc[kb + 2u])
-            }
-            if (epl > 3u) {
-                s += q3 * float(kc[kb + 3u])
-            }
-            if (epl > 4u) {
-                s += q4 * float(kc[kb + 4u])
-            }
-            if (epl > 5u) {
-                s += q5 * float(kc[kb + 5u])
-            }
-            if (epl > 6u) {
-                s += q6 * float(kc[kb + 6u])
-            }
-            if (epl > 7u) {
-                s += q7 * float(kc[kb + 7u])
-            }
-            if (epl > 8u) {
-                s += q8 * float(kc[kb + 8u])
-                s += q9 * float(kc[kb + 9u])
-                s += q10 * float(kc[kb + 10u])
-                s += q11 * float(kc[kb + 11u])
-            }
-            if (epl > 12u) {
-                s += q12 * float(kc[kb + 12u])
-                s += q13 * float(kc[kb + 13u])
-                s += q14 * float(kc[kb + 14u])
-                s += q15 * float(kc[kb + 15u])
-            }
-            s = simd_sum(s)
-            if (sl == 0u) {
-                let sc = s * scale
-                // tanh via the exp identity (the CPU softcap4's form) — Metal tanh NaNs past
-                // ~44, while exp saturates: exp(INF) -> denom INF -> the term is 0
-                scores[j] = softcap > 0.0 ? softcap * (1.0 - 2.0 / (1.0 + exp(sc * 2.0 / softcap))) : sc
-            }
-            j += gl_NumSubgroups
-        }
+        sq_fill_scores(kc, q, scores, 0u, c0, nrows, kv_dim, khoff, qoff, hs, scale, softcap)
         barrier()
-        // pass 2a: chunk max
-        if (wstart > c0) {
-            // boundary chunk: mask rows below the window start (uniform branch — barrier is safe)
-            var jm = lid
-            while (jm < nrows) {
-                if (c0 + jm < wstart) {
-                    scores[jm] = -3.0e38
-                }
-                jm += nt
-            }
-            barrier()
-        }
-        var m = -3.0e38
-        j = lid
-        while (j < nrows) {
-            m = max(m, scores[j])
-            j += nt
-        }
-        m = max(m, simd_shuffle_xor(m, 16u))
-        m = max(m, simd_shuffle_xor(m, 8u))
-        m = max(m, simd_shuffle_xor(m, 4u))
-        m = max(m, simd_shuffle_xor(m, 2u))
-        m = max(m, simd_shuffle_xor(m, 1u))
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = m
-        }
-        barrier()
-        var mm = red[0]
-        var sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            mm = max(mm, red[sgi])
-            sgi++
-        }
-        barrier()                           // red[] reused for the sum below
-        // pass 2b: exp in place + chunk expsum
-        var l = 0.0
-        j = lid
-        while (j < nrows) {
-            let w = exp(scores[j] - mm)
-            scores[j] = w
-            l += w
-            j += nt
-        }
-        l += simd_shuffle_xor(l, 16u)
-        l += simd_shuffle_xor(l, 8u)
-        l += simd_shuffle_xor(l, 4u)
-        l += simd_shuffle_xor(l, 2u)
-        l += simd_shuffle_xor(l, 1u)
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = l
-        }
-        barrier()
-        var tot = red[0]
-        sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            tot += red[sgi]
-            sgi++
-        }
-        // pass 3: lane owns V column `lid` — 4 rows in flight over this chunk's rows
-        var acc0 = 0.0
-        var acc1 = 0.0
-        var acc2 = 0.0
-        var acc3 = 0.0
-        j = 0u
-        while (j + 4u <= nrows) {
-            acc0 += scores[j] * float(vc[(c0 + j) * kv_dim + khoff + lid])
-            acc1 += scores[j + 1u] * float(vc[(c0 + j + 1u) * kv_dim + khoff + lid])
-            acc2 += scores[j + 2u] * float(vc[(c0 + j + 2u) * kv_dim + khoff + lid])
-            acc3 += scores[j + 3u] * float(vc[(c0 + j + 3u) * kv_dim + khoff + lid])
-            j += 4u
-        }
-        while (j < nrows) {
-            acc0 += scores[j] * float(vc[(c0 + j) * kv_dim + khoff + lid])
-            j++
-        }
+        sq_mask_window(scores, c0, nrows, wstart, lid, nt)
+        let mm = sq_score_max(scores, red, nrows, lid, nt)
+        barrier()                           // red[] is reused for the sum below
+        let tot = sq_exp_sum(scores, red, mm, nrows, lid, nt)
         let pbase = ((bb * nheads + h) * nchunks + ci) * (hs + 2u)
-        part[pbase + lid] = acc0 + acc1 + acc2 + acc3
+        part[pbase + lid] = sq_vacc(vc, scores, 0u, c0, nrows, kv_dim, khoff, lid)
         if (lid == 0u) {
             part[pbase + hs] = mm
             part[pbase + hs + 1u] = tot
@@ -955,147 +680,14 @@ class MetalSqAttnPartF32 {
         if (c1 <= wstart) {
             return
         }
-        let sg = gl_SubgroupID
-        let sl = gl_SubgroupInvocationID
-        let epl = hs / 32u
-        let qb = qoff + sl * epl
-        let q0 = q[qb]
-        let q1 = epl > 1u ? q[qb + 1u] : 0.0
-        let q2 = epl > 2u ? q[qb + 2u] : 0.0
-        let q3 = epl > 3u ? q[qb + 3u] : 0.0
-        let q4 = epl > 4u ? q[qb + 4u] : 0.0
-        let q5 = epl > 5u ? q[qb + 5u] : 0.0
-        let q6 = epl > 6u ? q[qb + 6u] : 0.0
-        let q7 = epl > 7u ? q[qb + 7u] : 0.0
-        let q8 = epl > 8u ? q[qb + 8u] : 0.0
-        let q9 = epl > 9u ? q[qb + 9u] : 0.0
-        let q10 = epl > 10u ? q[qb + 10u] : 0.0
-        let q11 = epl > 11u ? q[qb + 11u] : 0.0
-        let q12 = epl > 12u ? q[qb + 12u] : 0.0
-        let q13 = epl > 13u ? q[qb + 13u] : 0.0
-        let q14 = epl > 14u ? q[qb + 14u] : 0.0
-        let q15 = epl > 15u ? q[qb + 15u] : 0.0
-        var j = sg
-        while (j < nrows) {
-            let kb = (c0 + j) * kv_dim + khoff + sl * epl
-            var s = q0 * kc[kb]
-            if (epl > 1u) {
-                s += q1 * kc[kb + 1u]
-            }
-            if (epl > 2u) {
-                s += q2 * kc[kb + 2u]
-            }
-            if (epl > 3u) {
-                s += q3 * kc[kb + 3u]
-            }
-            if (epl > 4u) {
-                s += q4 * kc[kb + 4u]
-            }
-            if (epl > 5u) {
-                s += q5 * kc[kb + 5u]
-            }
-            if (epl > 6u) {
-                s += q6 * kc[kb + 6u]
-            }
-            if (epl > 7u) {
-                s += q7 * kc[kb + 7u]
-            }
-            if (epl > 8u) {
-                s += q8 * kc[kb + 8u]
-                s += q9 * kc[kb + 9u]
-                s += q10 * kc[kb + 10u]
-                s += q11 * kc[kb + 11u]
-            }
-            if (epl > 12u) {
-                s += q12 * kc[kb + 12u]
-                s += q13 * kc[kb + 13u]
-                s += q14 * kc[kb + 14u]
-                s += q15 * kc[kb + 15u]
-            }
-            s = simd_sum(s)
-            if (sl == 0u) {
-                let sc = s * scale
-                // tanh via the exp identity (the CPU softcap4's form) — Metal tanh NaNs past
-                // ~44, while exp saturates: exp(INF) -> denom INF -> the term is 0
-                scores[j] = softcap > 0.0 ? softcap * (1.0 - 2.0 / (1.0 + exp(sc * 2.0 / softcap))) : sc
-            }
-            j += gl_NumSubgroups
-        }
+        sq_fill_scores(kc, q, scores, 0u, c0, nrows, kv_dim, khoff, qoff, hs, scale, softcap)
         barrier()
-        if (wstart > c0) {
-            // boundary chunk: mask rows below the window start (uniform branch — barrier is safe)
-            var jm = lid
-            while (jm < nrows) {
-                if (c0 + jm < wstart) {
-                    scores[jm] = -3.0e38
-                }
-                jm += nt
-            }
-            barrier()
-        }
-        var m = -3.0e38
-        j = lid
-        while (j < nrows) {
-            m = max(m, scores[j])
-            j += nt
-        }
-        m = max(m, simd_shuffle_xor(m, 16u))
-        m = max(m, simd_shuffle_xor(m, 8u))
-        m = max(m, simd_shuffle_xor(m, 4u))
-        m = max(m, simd_shuffle_xor(m, 2u))
-        m = max(m, simd_shuffle_xor(m, 1u))
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = m
-        }
-        barrier()
-        var mm = red[0]
-        var sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            mm = max(mm, red[sgi])
-            sgi++
-        }
-        barrier()
-        var l = 0.0
-        j = lid
-        while (j < nrows) {
-            let w = exp(scores[j] - mm)
-            scores[j] = w
-            l += w
-            j += nt
-        }
-        l += simd_shuffle_xor(l, 16u)
-        l += simd_shuffle_xor(l, 8u)
-        l += simd_shuffle_xor(l, 4u)
-        l += simd_shuffle_xor(l, 2u)
-        l += simd_shuffle_xor(l, 1u)
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = l
-        }
-        barrier()
-        var tot = red[0]
-        sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            tot += red[sgi]
-            sgi++
-        }
-        var acc0 = 0.0
-        var acc1 = 0.0
-        var acc2 = 0.0
-        var acc3 = 0.0
-        j = 0u
-        while (j + 4u <= nrows) {
-            acc0 += scores[j] * vc[(c0 + j) * kv_dim + khoff + lid]
-            acc1 += scores[j + 1u] * vc[(c0 + j + 1u) * kv_dim + khoff + lid]
-            acc2 += scores[j + 2u] * vc[(c0 + j + 2u) * kv_dim + khoff + lid]
-            acc3 += scores[j + 3u] * vc[(c0 + j + 3u) * kv_dim + khoff + lid]
-            j += 4u
-        }
-        while (j < nrows) {
-            acc0 += scores[j] * vc[(c0 + j) * kv_dim + khoff + lid]
-            j++
-        }
+        sq_mask_window(scores, c0, nrows, wstart, lid, nt)
+        let mm = sq_score_max(scores, red, nrows, lid, nt)
+        barrier()                           // red[] is reused for the sum below
+        let tot = sq_exp_sum(scores, red, mm, nrows, lid, nt)
         let pbase = ((bb * nheads + h) * nchunks + ci) * (hs + 2u)
-        part[pbase + lid] = acc0 + acc1 + acc2 + acc3
+        part[pbase + lid] = sq_vacc(vc, scores, 0u, c0, nrows, kv_dim, khoff, lid)
         if (lid == 0u) {
             part[pbase + hs] = mm
             part[pbase + hs + 1u] = tot
@@ -1144,162 +736,14 @@ class MetalSqAttnPartQ8 {
         if (c1 <= wstart) {
             return
         }
-        // pass 1: simdgroup-cooperative score fill over this chunk's rows
-        let sg = gl_SubgroupID
-        let sl = gl_SubgroupInvocationID
-        let epl = hs / 32u
-        let qb = qoff + sl * epl
-        let q0 = q[qb]
-        let q1 = epl > 1u ? q[qb + 1u] : 0.0
-        let q2 = epl > 2u ? q[qb + 2u] : 0.0
-        let q3 = epl > 3u ? q[qb + 3u] : 0.0
-        let q4 = epl > 4u ? q[qb + 4u] : 0.0
-        let q5 = epl > 5u ? q[qb + 5u] : 0.0
-        let q6 = epl > 6u ? q[qb + 6u] : 0.0
-        let q7 = epl > 7u ? q[qb + 7u] : 0.0
-        let q8 = epl > 8u ? q[qb + 8u] : 0.0
-        let q9 = epl > 9u ? q[qb + 9u] : 0.0
-        let q10 = epl > 10u ? q[qb + 10u] : 0.0
-        let q11 = epl > 11u ? q[qb + 11u] : 0.0
-        let q12 = epl > 12u ? q[qb + 12u] : 0.0
-        let q13 = epl > 13u ? q[qb + 13u] : 0.0
-        let q14 = epl > 14u ? q[qb + 14u] : 0.0
-        let q15 = epl > 15u ? q[qb + 15u] : 0.0
-        let hb = (sl * epl) / 32u
-        let ib = (sl * epl) % 32u
-        var j = sg
-        while (j < nrows) {
-            let blk = (c0 + j) * nblk + khblk + hb
-            let d = float(ksh[blk * 17u])
-            let kb = blk * 34u + 2u + ib
-            var s = q0 * float(kqb[kb])
-            if (epl > 1u) {
-                s += q1 * float(kqb[kb + 1u])
-            }
-            if (epl > 2u) {
-                s += q2 * float(kqb[kb + 2u])
-            }
-            if (epl > 3u) {
-                s += q3 * float(kqb[kb + 3u])
-            }
-            if (epl > 4u) {
-                s += q4 * float(kqb[kb + 4u])
-            }
-            if (epl > 5u) {
-                s += q5 * float(kqb[kb + 5u])
-            }
-            if (epl > 6u) {
-                s += q6 * float(kqb[kb + 6u])
-            }
-            if (epl > 7u) {
-                s += q7 * float(kqb[kb + 7u])
-            }
-            if (epl > 8u) {
-                s += q8 * float(kqb[kb + 8u])
-                s += q9 * float(kqb[kb + 9u])
-                s += q10 * float(kqb[kb + 10u])
-                s += q11 * float(kqb[kb + 11u])
-            }
-            if (epl > 12u) {
-                s += q12 * float(kqb[kb + 12u])
-                s += q13 * float(kqb[kb + 13u])
-                s += q14 * float(kqb[kb + 14u])
-                s += q15 * float(kqb[kb + 15u])
-            }
-            s = simd_sum(s * d)
-            if (sl == 0u) {
-                let sc = s * scale
-                // tanh via the exp identity (the CPU softcap4's form) — Metal tanh NaNs past
-                // ~44, while exp saturates: exp(INF) -> denom INF -> the term is 0
-                scores[j] = softcap > 0.0 ? softcap * (1.0 - 2.0 / (1.0 + exp(sc * 2.0 / softcap))) : sc
-            }
-            j += gl_NumSubgroups
-        }
+        sq_fill_scores_q8(ksh, kqb, q, scores, 0u, 0u, c0, nrows, nblk, khblk, qoff, hs, scale, softcap)
         barrier()
-        // pass 2a: chunk max
-        if (wstart > c0) {
-            // boundary chunk: mask rows below the window start (uniform branch — barrier is safe)
-            var jm = lid
-            while (jm < nrows) {
-                if (c0 + jm < wstart) {
-                    scores[jm] = -3.0e38
-                }
-                jm += nt
-            }
-            barrier()
-        }
-        var m = -3.0e38
-        j = lid
-        while (j < nrows) {
-            m = max(m, scores[j])
-            j += nt
-        }
-        m = max(m, simd_shuffle_xor(m, 16u))
-        m = max(m, simd_shuffle_xor(m, 8u))
-        m = max(m, simd_shuffle_xor(m, 4u))
-        m = max(m, simd_shuffle_xor(m, 2u))
-        m = max(m, simd_shuffle_xor(m, 1u))
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = m
-        }
-        barrier()
-        var mm = red[0]
-        var sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            mm = max(mm, red[sgi])
-            sgi++
-        }
-        barrier()                           // red[] reused for the sum below
-        // pass 2b: exp in place + chunk expsum
-        var l = 0.0
-        j = lid
-        while (j < nrows) {
-            let w = exp(scores[j] - mm)
-            scores[j] = w
-            l += w
-            j += nt
-        }
-        l += simd_shuffle_xor(l, 16u)
-        l += simd_shuffle_xor(l, 8u)
-        l += simd_shuffle_xor(l, 4u)
-        l += simd_shuffle_xor(l, 2u)
-        l += simd_shuffle_xor(l, 1u)
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = l
-        }
-        barrier()
-        var tot = red[0]
-        sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            tot += red[sgi]
-            sgi++
-        }
-        // pass 3: lane owns V column `lid` — 4 rows in flight over this chunk's rows
-        let vb0 = khblk + lid / 32u
-        let vin = lid % 32u
-        var acc0 = 0.0
-        var acc1 = 0.0
-        var acc2 = 0.0
-        var acc3 = 0.0
-        j = 0u
-        while (j + 4u <= nrows) {
-            let b0 = (c0 + j) * nblk + vb0
-            let b1 = (c0 + j + 1u) * nblk + vb0
-            let b2 = (c0 + j + 2u) * nblk + vb0
-            let b3 = (c0 + j + 3u) * nblk + vb0
-            acc0 += scores[j] * float(vqb[b0 * 34u + 2u + vin]) * float(vsh[b0 * 17u])
-            acc1 += scores[j + 1u] * float(vqb[b1 * 34u + 2u + vin]) * float(vsh[b1 * 17u])
-            acc2 += scores[j + 2u] * float(vqb[b2 * 34u + 2u + vin]) * float(vsh[b2 * 17u])
-            acc3 += scores[j + 3u] * float(vqb[b3 * 34u + 2u + vin]) * float(vsh[b3 * 17u])
-            j += 4u
-        }
-        while (j < nrows) {
-            let b0 = (c0 + j) * nblk + vb0
-            acc0 += scores[j] * float(vqb[b0 * 34u + 2u + vin]) * float(vsh[b0 * 17u])
-            j++
-        }
+        sq_mask_window(scores, c0, nrows, wstart, lid, nt)
+        let mm = sq_score_max(scores, red, nrows, lid, nt)
+        barrier()                           // red[] is reused for the sum below
+        let tot = sq_exp_sum(scores, red, mm, nrows, lid, nt)
         let pbase = ((bb * nheads + h) * nchunks + ci) * (hs + 2u)
-        part[pbase + lid] = acc0 + acc1 + acc2 + acc3
+        part[pbase + lid] = sq_vacc_q8(vsh, vqb, scores, 0u, 0u, c0, nrows, nblk, khblk, lid)
         if (lid == 0u) {
             part[pbase + hs] = mm
             part[pbase + hs + 1u] = tot
@@ -1348,153 +792,14 @@ class MetalSqAttnPartTq4 {
         if (c1 <= wstart) {
             return
         }
-        let sg = gl_SubgroupID
-        let sl = gl_SubgroupInvocationID
-        let epl = hs / 32u
-        let qb = qoff + sl * epl
-        let q0 = q[qb]
-        let q1 = epl > 1u ? q[qb + 1u] : 0.0
-        let q2 = epl > 2u ? q[qb + 2u] : 0.0
-        let q3 = epl > 3u ? q[qb + 3u] : 0.0
-        let q4 = epl > 4u ? q[qb + 4u] : 0.0
-        let q5 = epl > 5u ? q[qb + 5u] : 0.0
-        let q6 = epl > 6u ? q[qb + 6u] : 0.0
-        let q7 = epl > 7u ? q[qb + 7u] : 0.0
-        let q8 = epl > 8u ? q[qb + 8u] : 0.0
-        let q9 = epl > 9u ? q[qb + 9u] : 0.0
-        let q10 = epl > 10u ? q[qb + 10u] : 0.0
-        let q11 = epl > 11u ? q[qb + 11u] : 0.0
-        let q12 = epl > 12u ? q[qb + 12u] : 0.0
-        let q13 = epl > 13u ? q[qb + 13u] : 0.0
-        let q14 = epl > 14u ? q[qb + 14u] : 0.0
-        let q15 = epl > 15u ? q[qb + 15u] : 0.0
-        let hb = (sl * epl) / 32u
-        let inb = (sl * epl) % 32u
-        var j = sg
-        while (j < nrows) {
-            let blk = (c0 + j) * nblk + khblk + hb
-            let d = float(ksh[blk * 9u])
-            let kb = blk * 18u + 2u + inb / 2u
-            let by0 = uint(kqb[kb])
-            var s = 0.0
-            if (epl == 1u) {
-                let nib = (inb & 1u) == 1u ? (by0 >> 4u) : (by0 & 15u)
-                s = q0 * float(int(nib) - 8)
-            } else {
-                s = q0 * float(int(by0 & 15u) - 8)
-                s += q1 * float(int(by0 >> 4u) - 8)
-                if (epl > 2u) {
-                    let by1 = uint(kqb[kb + 1u])
-                    s += q2 * float(int(by1 & 15u) - 8)
-                    s += q3 * float(int(by1 >> 4u) - 8)
-                }
-                if (epl > 4u) {
-                    let by2 = uint(kqb[kb + 2u])
-                    s += q4 * float(int(by2 & 15u) - 8)
-                    s += q5 * float(int(by2 >> 4u) - 8)
-                }
-                if (epl > 6u) {
-                    let by3 = uint(kqb[kb + 3u])
-                    s += q6 * float(int(by3 & 15u) - 8)
-                    s += q7 * float(int(by3 >> 4u) - 8)
-                }
-                if (epl > 8u) {
-                    let by4 = uint(kqb[kb + 4u])
-                    let by5 = uint(kqb[kb + 5u])
-                    s += q8 * float(int(by4 & 15u) - 8)
-                    s += q9 * float(int(by4 >> 4u) - 8)
-                    s += q10 * float(int(by5 & 15u) - 8)
-                    s += q11 * float(int(by5 >> 4u) - 8)
-                }
-                if (epl > 12u) {
-                    let by6 = uint(kqb[kb + 6u])
-                    let by7 = uint(kqb[kb + 7u])
-                    s += q12 * float(int(by6 & 15u) - 8)
-                    s += q13 * float(int(by6 >> 4u) - 8)
-                    s += q14 * float(int(by7 & 15u) - 8)
-                    s += q15 * float(int(by7 >> 4u) - 8)
-                }
-            }
-            s = simd_sum(s * d)
-            if (sl == 0u) {
-                let sc = s * scale
-                // tanh via the exp identity (the CPU softcap4's form) — Metal tanh NaNs past
-                // ~44, while exp saturates: exp(INF) -> denom INF -> the term is 0
-                scores[j] = softcap > 0.0 ? softcap * (1.0 - 2.0 / (1.0 + exp(sc * 2.0 / softcap))) : sc
-            }
-            j += gl_NumSubgroups
-        }
+        sq_fill_scores_tq4(ksh, kqb, q, scores, 0u, 0u, c0, nrows, nblk, khblk, qoff, hs, scale, softcap)
         barrier()
-        if (wstart > c0) {
-            // boundary chunk: mask rows below the window start (uniform branch — barrier is safe)
-            var jm = lid
-            while (jm < nrows) {
-                if (c0 + jm < wstart) {
-                    scores[jm] = -3.0e38
-                }
-                jm += nt
-            }
-            barrier()
-        }
-        var m = -3.0e38
-        j = lid
-        while (j < nrows) {
-            m = max(m, scores[j])
-            j += nt
-        }
-        m = max(m, simd_shuffle_xor(m, 16u))
-        m = max(m, simd_shuffle_xor(m, 8u))
-        m = max(m, simd_shuffle_xor(m, 4u))
-        m = max(m, simd_shuffle_xor(m, 2u))
-        m = max(m, simd_shuffle_xor(m, 1u))
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = m
-        }
-        barrier()
-        var mm = red[0]
-        var sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            mm = max(mm, red[sgi])
-            sgi++
-        }
-        barrier()                           // red[] reused for the sum below
-        var l = 0.0
-        j = lid
-        while (j < nrows) {
-            let w = exp(scores[j] - mm)
-            scores[j] = w
-            l += w
-            j += nt
-        }
-        l += simd_shuffle_xor(l, 16u)
-        l += simd_shuffle_xor(l, 8u)
-        l += simd_shuffle_xor(l, 4u)
-        l += simd_shuffle_xor(l, 2u)
-        l += simd_shuffle_xor(l, 1u)
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = l
-        }
-        barrier()
-        var tot = red[0]
-        sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            tot += red[sgi]
-            sgi++
-        }
-        let vblk0 = khblk + lid / 32u
-        let vbyte = (lid % 32u) / 2u
-        let hi = (lid & 1u) == 1u
-        var acc0 = 0.0
-        j = 0u
-        while (j < nrows) {
-            let blk = (c0 + j) * nblk + vblk0
-            let by = uint(vqb[blk * 18u + 2u + vbyte])
-            let nib = hi ? (by >> 4u) : (by & 15u)
-            acc0 += scores[j] * float(int(nib) - 8) * float(vsh[blk * 9u])
-            j++
-        }
+        sq_mask_window(scores, c0, nrows, wstart, lid, nt)
+        let mm = sq_score_max(scores, red, nrows, lid, nt)
+        barrier()                           // red[] is reused for the sum below
+        let tot = sq_exp_sum(scores, red, mm, nrows, lid, nt)
         let pbase = ((bb * nheads + h) * nchunks + ci) * (hs + 2u)
-        part[pbase + lid] = acc0
+        part[pbase + lid] = sq_vacc_tq4(vsh, vqb, scores, 0u, 0u, c0, nrows, nblk, khblk, lid)
         if (lid == 0u) {
             part[pbase + hs] = mm
             part[pbase + hs + 1u] = tot
@@ -3359,141 +2664,18 @@ class MetalSqAttnBF16 {
         let khoff = (h / kv_mul) * hs
         let qoff = bb * qstride + h * hs
         let yoff = bb * (nheads * hs) + h * hs
-        let sg = gl_SubgroupID
-        let sl = gl_SubgroupInvocationID
-        let epl = hs / 32u
-        let qb = qoff + sl * epl
-        let q0 = q[qb]
-        let q1 = epl > 1u ? q[qb + 1u] : 0.0
-        let q2 = epl > 2u ? q[qb + 2u] : 0.0
-        let q3 = epl > 3u ? q[qb + 3u] : 0.0
-        let q4 = epl > 4u ? q[qb + 4u] : 0.0
-        let q5 = epl > 5u ? q[qb + 5u] : 0.0
-        let q6 = epl > 6u ? q[qb + 6u] : 0.0
-        let q7 = epl > 7u ? q[qb + 7u] : 0.0
-        let q8 = epl > 8u ? q[qb + 8u] : 0.0
-        let q9 = epl > 9u ? q[qb + 9u] : 0.0
-        let q10 = epl > 10u ? q[qb + 10u] : 0.0
-        let q11 = epl > 11u ? q[qb + 11u] : 0.0
-        let q12 = epl > 12u ? q[qb + 12u] : 0.0
-        let q13 = epl > 13u ? q[qb + 13u] : 0.0
-        let q14 = epl > 14u ? q[qb + 14u] : 0.0
-        let q15 = epl > 15u ? q[qb + 15u] : 0.0
-        var j = sg
-        while (j < cnt) {
-            let kb = kb0 + j * kv_dim + khoff + sl * epl
-            var s = q0 * float(kc[kb])
-            if (epl > 1u) {
-                s += q1 * float(kc[kb + 1u])
-            }
-            if (epl > 2u) {
-                s += q2 * float(kc[kb + 2u])
-            }
-            if (epl > 3u) {
-                s += q3 * float(kc[kb + 3u])
-            }
-            if (epl > 4u) {
-                s += q4 * float(kc[kb + 4u])
-            }
-            if (epl > 5u) {
-                s += q5 * float(kc[kb + 5u])
-            }
-            if (epl > 6u) {
-                s += q6 * float(kc[kb + 6u])
-            }
-            if (epl > 7u) {
-                s += q7 * float(kc[kb + 7u])
-            }
-            if (epl > 8u) {
-                s += q8 * float(kc[kb + 8u])
-                s += q9 * float(kc[kb + 9u])
-                s += q10 * float(kc[kb + 10u])
-                s += q11 * float(kc[kb + 11u])
-            }
-            if (epl > 12u) {
-                s += q12 * float(kc[kb + 12u])
-                s += q13 * float(kc[kb + 13u])
-                s += q14 * float(kc[kb + 14u])
-                s += q15 * float(kc[kb + 15u])
-            }
-            s = simd_sum(s)
-            if (sl == 0u) {
-                let sc = s * scale
-                // tanh via the exp identity (the CPU softcap4's form) — Metal tanh NaNs past
-                // ~44, while exp saturates: exp(INF) -> denom INF -> the term is 0
-                scores[j] = softcap > 0.0 ? softcap * (1.0 - 2.0 / (1.0 + exp(sc * 2.0 / softcap))) : sc
-            }
-            j += gl_NumSubgroups
-        }
+        sq_fill_scores(kc, q, scores, kb0, 0u, cnt, kv_dim, khoff, qoff, hs, scale, softcap)
         barrier()
-        var m = -3.0e38
-        j = lid
-        while (j < cnt) {
-            m = max(m, scores[j])
-            j += nt
-        }
-        m = max(m, simd_shuffle_xor(m, 16u))
-        m = max(m, simd_shuffle_xor(m, 8u))
-        m = max(m, simd_shuffle_xor(m, 4u))
-        m = max(m, simd_shuffle_xor(m, 2u))
-        m = max(m, simd_shuffle_xor(m, 1u))
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = m
-        }
-        barrier()
-        var mm = red[0]
-        var sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            mm = max(mm, red[sgi])
-            sgi++
-        }
+        var mm = sq_score_max(scores, red, cnt, lid, nt)
         if (hass != 0u) {
             mm = max(mm, sink[h])
         }
-        barrier()                           // red[] reused for the sum below
-        var l = 0.0
-        j = lid
-        while (j < cnt) {
-            let w = exp(scores[j] - mm)
-            scores[j] = w
-            l += w
-            j += nt
-        }
-        l += simd_shuffle_xor(l, 16u)
-        l += simd_shuffle_xor(l, 8u)
-        l += simd_shuffle_xor(l, 4u)
-        l += simd_shuffle_xor(l, 2u)
-        l += simd_shuffle_xor(l, 1u)
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = l
-        }
-        barrier()
-        var tot = red[0]
-        sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            tot += red[sgi]
-            sgi++
-        }
+        barrier()                           // red[] is reused for the sum below
+        var tot = sq_exp_sum(scores, red, mm, cnt, lid, nt)
         if (hass != 0u) {
             tot += exp(max(sink[h] - mm, -80.0))
         }
-        var acc0 = 0.0
-        var acc1 = 0.0
-        var acc2 = 0.0
-        var acc3 = 0.0
-        j = 0u
-        while (j + 4u <= cnt) {
-            acc0 += scores[j] * float(vc[vb0 + j * kv_dim + khoff + lid])
-            acc1 += scores[j + 1u] * float(vc[vb0 + (j + 1u) * kv_dim + khoff + lid])
-            acc2 += scores[j + 2u] * float(vc[vb0 + (j + 2u) * kv_dim + khoff + lid])
-            acc3 += scores[j + 3u] * float(vc[vb0 + (j + 3u) * kv_dim + khoff + lid])
-            j += 4u
-        }
-        while (j < cnt) {
-            acc0 += scores[j] * float(vc[vb0 + j * kv_dim + khoff + lid])
-            j++
-        }
-        yo[yoff + lid] = (acc0 + acc1 + acc2 + acc3) / tot
+        yo[yoff + lid] = sq_vacc(vc, scores, vb0, 0u, cnt, kv_dim, khoff, lid) / tot
     }
 }
 
@@ -3531,141 +2713,18 @@ class MetalSqAttnBF32 {
         let khoff = (h / kv_mul) * hs
         let qoff = bb * qstride + h * hs
         let yoff = bb * (nheads * hs) + h * hs
-        let sg = gl_SubgroupID
-        let sl = gl_SubgroupInvocationID
-        let epl = hs / 32u
-        let qb = qoff + sl * epl
-        let q0 = q[qb]
-        let q1 = epl > 1u ? q[qb + 1u] : 0.0
-        let q2 = epl > 2u ? q[qb + 2u] : 0.0
-        let q3 = epl > 3u ? q[qb + 3u] : 0.0
-        let q4 = epl > 4u ? q[qb + 4u] : 0.0
-        let q5 = epl > 5u ? q[qb + 5u] : 0.0
-        let q6 = epl > 6u ? q[qb + 6u] : 0.0
-        let q7 = epl > 7u ? q[qb + 7u] : 0.0
-        let q8 = epl > 8u ? q[qb + 8u] : 0.0
-        let q9 = epl > 9u ? q[qb + 9u] : 0.0
-        let q10 = epl > 10u ? q[qb + 10u] : 0.0
-        let q11 = epl > 11u ? q[qb + 11u] : 0.0
-        let q12 = epl > 12u ? q[qb + 12u] : 0.0
-        let q13 = epl > 13u ? q[qb + 13u] : 0.0
-        let q14 = epl > 14u ? q[qb + 14u] : 0.0
-        let q15 = epl > 15u ? q[qb + 15u] : 0.0
-        var j = sg
-        while (j < cnt) {
-            let kb = kb0 + j * kv_dim + khoff + sl * epl
-            var s = q0 * kc[kb]
-            if (epl > 1u) {
-                s += q1 * kc[kb + 1u]
-            }
-            if (epl > 2u) {
-                s += q2 * kc[kb + 2u]
-            }
-            if (epl > 3u) {
-                s += q3 * kc[kb + 3u]
-            }
-            if (epl > 4u) {
-                s += q4 * kc[kb + 4u]
-            }
-            if (epl > 5u) {
-                s += q5 * kc[kb + 5u]
-            }
-            if (epl > 6u) {
-                s += q6 * kc[kb + 6u]
-            }
-            if (epl > 7u) {
-                s += q7 * kc[kb + 7u]
-            }
-            if (epl > 8u) {
-                s += q8 * kc[kb + 8u]
-                s += q9 * kc[kb + 9u]
-                s += q10 * kc[kb + 10u]
-                s += q11 * kc[kb + 11u]
-            }
-            if (epl > 12u) {
-                s += q12 * kc[kb + 12u]
-                s += q13 * kc[kb + 13u]
-                s += q14 * kc[kb + 14u]
-                s += q15 * kc[kb + 15u]
-            }
-            s = simd_sum(s)
-            if (sl == 0u) {
-                let sc = s * scale
-                // tanh via the exp identity (the CPU softcap4's form) — Metal tanh NaNs past
-                // ~44, while exp saturates: exp(INF) -> denom INF -> the term is 0
-                scores[j] = softcap > 0.0 ? softcap * (1.0 - 2.0 / (1.0 + exp(sc * 2.0 / softcap))) : sc
-            }
-            j += gl_NumSubgroups
-        }
+        sq_fill_scores(kc, q, scores, kb0, 0u, cnt, kv_dim, khoff, qoff, hs, scale, softcap)
         barrier()
-        var m = -3.0e38
-        j = lid
-        while (j < cnt) {
-            m = max(m, scores[j])
-            j += nt
-        }
-        m = max(m, simd_shuffle_xor(m, 16u))
-        m = max(m, simd_shuffle_xor(m, 8u))
-        m = max(m, simd_shuffle_xor(m, 4u))
-        m = max(m, simd_shuffle_xor(m, 2u))
-        m = max(m, simd_shuffle_xor(m, 1u))
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = m
-        }
-        barrier()
-        var mm = red[0]
-        var sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            mm = max(mm, red[sgi])
-            sgi++
-        }
+        var mm = sq_score_max(scores, red, cnt, lid, nt)
         if (hass != 0u) {
             mm = max(mm, sink[h])
         }
-        barrier()
-        var l = 0.0
-        j = lid
-        while (j < cnt) {
-            let w = exp(scores[j] - mm)
-            scores[j] = w
-            l += w
-            j += nt
-        }
-        l += simd_shuffle_xor(l, 16u)
-        l += simd_shuffle_xor(l, 8u)
-        l += simd_shuffle_xor(l, 4u)
-        l += simd_shuffle_xor(l, 2u)
-        l += simd_shuffle_xor(l, 1u)
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = l
-        }
-        barrier()
-        var tot = red[0]
-        sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            tot += red[sgi]
-            sgi++
-        }
+        barrier()                           // red[] is reused for the sum below
+        var tot = sq_exp_sum(scores, red, mm, cnt, lid, nt)
         if (hass != 0u) {
             tot += exp(max(sink[h] - mm, -80.0))
         }
-        var acc0 = 0.0
-        var acc1 = 0.0
-        var acc2 = 0.0
-        var acc3 = 0.0
-        j = 0u
-        while (j + 4u <= cnt) {
-            acc0 += scores[j] * vc[vb0 + j * kv_dim + khoff + lid]
-            acc1 += scores[j + 1u] * vc[vb0 + (j + 1u) * kv_dim + khoff + lid]
-            acc2 += scores[j + 2u] * vc[vb0 + (j + 2u) * kv_dim + khoff + lid]
-            acc3 += scores[j + 3u] * vc[vb0 + (j + 3u) * kv_dim + khoff + lid]
-            j += 4u
-        }
-        while (j < cnt) {
-            acc0 += scores[j] * vc[vb0 + j * kv_dim + khoff + lid]
-            j++
-        }
-        yo[yoff + lid] = (acc0 + acc1 + acc2 + acc3) / tot
+        yo[yoff + lid] = sq_vacc(vc, scores, vb0, 0u, cnt, kv_dim, khoff, lid) / tot
     }
 }
 
@@ -3709,152 +2768,18 @@ class MetalSqAttnBQ8 {
         let khblk = (h / kv_mul) * (hs / 32u)
         let qoff = bb * qstride + h * hs
         let yoff = bb * (nheads * hs) + h * hs
-        let sg = gl_SubgroupID
-        let sl = gl_SubgroupInvocationID
-        let epl = hs / 32u
-        let qb = qoff + sl * epl
-        let q0 = q[qb]
-        let q1 = epl > 1u ? q[qb + 1u] : 0.0
-        let q2 = epl > 2u ? q[qb + 2u] : 0.0
-        let q3 = epl > 3u ? q[qb + 3u] : 0.0
-        let q4 = epl > 4u ? q[qb + 4u] : 0.0
-        let q5 = epl > 5u ? q[qb + 5u] : 0.0
-        let q6 = epl > 6u ? q[qb + 6u] : 0.0
-        let q7 = epl > 7u ? q[qb + 7u] : 0.0
-        let q8 = epl > 8u ? q[qb + 8u] : 0.0
-        let q9 = epl > 9u ? q[qb + 9u] : 0.0
-        let q10 = epl > 10u ? q[qb + 10u] : 0.0
-        let q11 = epl > 11u ? q[qb + 11u] : 0.0
-        let q12 = epl > 12u ? q[qb + 12u] : 0.0
-        let q13 = epl > 13u ? q[qb + 13u] : 0.0
-        let q14 = epl > 14u ? q[qb + 14u] : 0.0
-        let q15 = epl > 15u ? q[qb + 15u] : 0.0
-        let hb = (sl * epl) / 32u
-        let ib = (sl * epl) % 32u
-        var j = sg
-        while (j < cnt) {
-            let blk = j * nblk + khblk + hb
-            let d = float(ksh[kb0h + blk * 17u])
-            let kb = kb0b + blk * 34u + 2u + ib
-            var s = q0 * float(kqb[kb])
-            if (epl > 1u) {
-                s += q1 * float(kqb[kb + 1u])
-            }
-            if (epl > 2u) {
-                s += q2 * float(kqb[kb + 2u])
-            }
-            if (epl > 3u) {
-                s += q3 * float(kqb[kb + 3u])
-            }
-            if (epl > 4u) {
-                s += q4 * float(kqb[kb + 4u])
-            }
-            if (epl > 5u) {
-                s += q5 * float(kqb[kb + 5u])
-            }
-            if (epl > 6u) {
-                s += q6 * float(kqb[kb + 6u])
-            }
-            if (epl > 7u) {
-                s += q7 * float(kqb[kb + 7u])
-            }
-            if (epl > 8u) {
-                s += q8 * float(kqb[kb + 8u])
-                s += q9 * float(kqb[kb + 9u])
-                s += q10 * float(kqb[kb + 10u])
-                s += q11 * float(kqb[kb + 11u])
-            }
-            if (epl > 12u) {
-                s += q12 * float(kqb[kb + 12u])
-                s += q13 * float(kqb[kb + 13u])
-                s += q14 * float(kqb[kb + 14u])
-                s += q15 * float(kqb[kb + 15u])
-            }
-            s = simd_sum(s * d)
-            if (sl == 0u) {
-                let sc = s * scale
-                // tanh via the exp identity (the CPU softcap4's form) — Metal tanh NaNs past
-                // ~44, while exp saturates: exp(INF) -> denom INF -> the term is 0
-                scores[j] = softcap > 0.0 ? softcap * (1.0 - 2.0 / (1.0 + exp(sc * 2.0 / softcap))) : sc
-            }
-            j += gl_NumSubgroups
-        }
+        sq_fill_scores_q8(ksh, kqb, q, scores, kb0h, kb0b, 0u, cnt, nblk, khblk, qoff, hs, scale, softcap)
         barrier()
-        var m = -3.0e38
-        j = lid
-        while (j < cnt) {
-            m = max(m, scores[j])
-            j += nt
-        }
-        m = max(m, simd_shuffle_xor(m, 16u))
-        m = max(m, simd_shuffle_xor(m, 8u))
-        m = max(m, simd_shuffle_xor(m, 4u))
-        m = max(m, simd_shuffle_xor(m, 2u))
-        m = max(m, simd_shuffle_xor(m, 1u))
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = m
-        }
-        barrier()
-        var mm = red[0]
-        var sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            mm = max(mm, red[sgi])
-            sgi++
-        }
+        var mm = sq_score_max(scores, red, cnt, lid, nt)
         if (hass != 0u) {
             mm = max(mm, sink[h])
         }
-        barrier()                           // red[] reused for the sum below
-        var l = 0.0
-        j = lid
-        while (j < cnt) {
-            let w = exp(scores[j] - mm)
-            scores[j] = w
-            l += w
-            j += nt
-        }
-        l += simd_shuffle_xor(l, 16u)
-        l += simd_shuffle_xor(l, 8u)
-        l += simd_shuffle_xor(l, 4u)
-        l += simd_shuffle_xor(l, 2u)
-        l += simd_shuffle_xor(l, 1u)
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = l
-        }
-        barrier()
-        var tot = red[0]
-        sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            tot += red[sgi]
-            sgi++
-        }
+        barrier()                           // red[] is reused for the sum below
+        var tot = sq_exp_sum(scores, red, mm, cnt, lid, nt)
         if (hass != 0u) {
             tot += exp(max(sink[h] - mm, -80.0))
         }
-        let vblk0 = khblk + lid / 32u
-        let vin = lid % 32u
-        var acc0 = 0.0
-        var acc1 = 0.0
-        var acc2 = 0.0
-        var acc3 = 0.0
-        j = 0u
-        while (j + 4u <= cnt) {
-            let b0 = j * nblk + vblk0
-            let b1 = (j + 1u) * nblk + vblk0
-            let b2 = (j + 2u) * nblk + vblk0
-            let b3 = (j + 3u) * nblk + vblk0
-            acc0 += scores[j] * float(vqb[vb0b + b0 * 34u + 2u + vin]) * float(vsh[vb0h + b0 * 17u])
-            acc1 += scores[j + 1u] * float(vqb[vb0b + b1 * 34u + 2u + vin]) * float(vsh[vb0h + b1 * 17u])
-            acc2 += scores[j + 2u] * float(vqb[vb0b + b2 * 34u + 2u + vin]) * float(vsh[vb0h + b2 * 17u])
-            acc3 += scores[j + 3u] * float(vqb[vb0b + b3 * 34u + 2u + vin]) * float(vsh[vb0h + b3 * 17u])
-            j += 4u
-        }
-        while (j < cnt) {
-            let b0 = j * nblk + vblk0
-            acc0 += scores[j] * float(vqb[vb0b + b0 * 34u + 2u + vin]) * float(vsh[vb0h + b0 * 17u])
-            j++
-        }
-        yo[yoff + lid] = (acc0 + acc1 + acc2 + acc3) / tot
+        yo[yoff + lid] = sq_vacc_q8(vsh, vqb, scores, vb0h, vb0b, 0u, cnt, nblk, khblk, lid) / tot
     }
 }
 
@@ -3897,147 +2822,18 @@ class MetalSqAttnBTq4 {
         let khblk = (h / kv_mul) * (hs / 32u)
         let qoff = bb * qstride + h * hs
         let yoff = bb * (nheads * hs) + h * hs
-        let sg = gl_SubgroupID
-        let sl = gl_SubgroupInvocationID
-        let epl = hs / 32u
-        let qb = qoff + sl * epl
-        let q0 = q[qb]
-        let q1 = epl > 1u ? q[qb + 1u] : 0.0
-        let q2 = epl > 2u ? q[qb + 2u] : 0.0
-        let q3 = epl > 3u ? q[qb + 3u] : 0.0
-        let q4 = epl > 4u ? q[qb + 4u] : 0.0
-        let q5 = epl > 5u ? q[qb + 5u] : 0.0
-        let q6 = epl > 6u ? q[qb + 6u] : 0.0
-        let q7 = epl > 7u ? q[qb + 7u] : 0.0
-        let q8 = epl > 8u ? q[qb + 8u] : 0.0
-        let q9 = epl > 9u ? q[qb + 9u] : 0.0
-        let q10 = epl > 10u ? q[qb + 10u] : 0.0
-        let q11 = epl > 11u ? q[qb + 11u] : 0.0
-        let q12 = epl > 12u ? q[qb + 12u] : 0.0
-        let q13 = epl > 13u ? q[qb + 13u] : 0.0
-        let q14 = epl > 14u ? q[qb + 14u] : 0.0
-        let q15 = epl > 15u ? q[qb + 15u] : 0.0
-        let hb = (sl * epl) / 32u
-        let inb = (sl * epl) % 32u
-        var j = sg
-        while (j < cnt) {
-            let blk = j * nblk + khblk + hb
-            let d = float(ksh[kb0h + blk * 9u])
-            let kb = kb0b + blk * 18u + 2u + inb / 2u
-            let by0 = uint(kqb[kb])
-            var s = 0.0
-            if (epl == 1u) {
-                let nib = (inb & 1u) == 1u ? (by0 >> 4u) : (by0 & 15u)
-                s = q0 * float(int(nib) - 8)
-            } else {
-                s = q0 * float(int(by0 & 15u) - 8)
-                s += q1 * float(int(by0 >> 4u) - 8)
-                if (epl > 2u) {
-                    let by1 = uint(kqb[kb + 1u])
-                    s += q2 * float(int(by1 & 15u) - 8)
-                    s += q3 * float(int(by1 >> 4u) - 8)
-                }
-                if (epl > 4u) {
-                    let by2 = uint(kqb[kb + 2u])
-                    s += q4 * float(int(by2 & 15u) - 8)
-                    s += q5 * float(int(by2 >> 4u) - 8)
-                }
-                if (epl > 6u) {
-                    let by3 = uint(kqb[kb + 3u])
-                    s += q6 * float(int(by3 & 15u) - 8)
-                    s += q7 * float(int(by3 >> 4u) - 8)
-                }
-                if (epl > 8u) {
-                    let by4 = uint(kqb[kb + 4u])
-                    let by5 = uint(kqb[kb + 5u])
-                    s += q8 * float(int(by4 & 15u) - 8)
-                    s += q9 * float(int(by4 >> 4u) - 8)
-                    s += q10 * float(int(by5 & 15u) - 8)
-                    s += q11 * float(int(by5 >> 4u) - 8)
-                }
-                if (epl > 12u) {
-                    let by6 = uint(kqb[kb + 6u])
-                    let by7 = uint(kqb[kb + 7u])
-                    s += q12 * float(int(by6 & 15u) - 8)
-                    s += q13 * float(int(by6 >> 4u) - 8)
-                    s += q14 * float(int(by7 & 15u) - 8)
-                    s += q15 * float(int(by7 >> 4u) - 8)
-                }
-            }
-            s = simd_sum(s * d)
-            if (sl == 0u) {
-                let sc = s * scale
-                // tanh via the exp identity (the CPU softcap4's form) — Metal tanh NaNs past
-                // ~44, while exp saturates: exp(INF) -> denom INF -> the term is 0
-                scores[j] = softcap > 0.0 ? softcap * (1.0 - 2.0 / (1.0 + exp(sc * 2.0 / softcap))) : sc
-            }
-            j += gl_NumSubgroups
-        }
+        sq_fill_scores_tq4(ksh, kqb, q, scores, kb0h, kb0b, 0u, cnt, nblk, khblk, qoff, hs, scale, softcap)
         barrier()
-        var m = -3.0e38
-        j = lid
-        while (j < cnt) {
-            m = max(m, scores[j])
-            j += nt
-        }
-        m = max(m, simd_shuffle_xor(m, 16u))
-        m = max(m, simd_shuffle_xor(m, 8u))
-        m = max(m, simd_shuffle_xor(m, 4u))
-        m = max(m, simd_shuffle_xor(m, 2u))
-        m = max(m, simd_shuffle_xor(m, 1u))
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = m
-        }
-        barrier()
-        var mm = red[0]
-        var sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            mm = max(mm, red[sgi])
-            sgi++
-        }
+        var mm = sq_score_max(scores, red, cnt, lid, nt)
         if (hass != 0u) {
             mm = max(mm, sink[h])
         }
-        barrier()                           // red[] reused for the sum below
-        var l = 0.0
-        j = lid
-        while (j < cnt) {
-            let w = exp(scores[j] - mm)
-            scores[j] = w
-            l += w
-            j += nt
-        }
-        l += simd_shuffle_xor(l, 16u)
-        l += simd_shuffle_xor(l, 8u)
-        l += simd_shuffle_xor(l, 4u)
-        l += simd_shuffle_xor(l, 2u)
-        l += simd_shuffle_xor(l, 1u)
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = l
-        }
-        barrier()
-        var tot = red[0]
-        sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            tot += red[sgi]
-            sgi++
-        }
+        barrier()                           // red[] is reused for the sum below
+        var tot = sq_exp_sum(scores, red, mm, cnt, lid, nt)
         if (hass != 0u) {
             tot += exp(max(sink[h] - mm, -80.0))
         }
-        let vblk0 = khblk + lid / 32u
-        let vbyte = (lid % 32u) / 2u
-        let hi = (lid & 1u) == 1u
-        var acc0 = 0.0
-        j = 0u
-        while (j < cnt) {
-            let blk = j * nblk + vblk0
-            let by = uint(vqb[vb0b + blk * 18u + 2u + vbyte])
-            let nib = hi ? (by >> 4u) : (by & 15u)
-            acc0 += scores[j] * float(int(nib) - 8) * float(vsh[vb0h + blk * 9u])
-            j++
-        }
-        yo[yoff + lid] = acc0 / tot
+        yo[yoff + lid] = sq_vacc_tq4(vsh, vqb, scores, vb0h, vb0b, 0u, cnt, nblk, khblk, lid) / tot
     }
 }
 
@@ -4086,147 +2882,14 @@ class MetalSqAttnPartBF16 {
         if (c1 <= wstart) {
             return
         }
-        let sg = gl_SubgroupID
-        let sl = gl_SubgroupInvocationID
-        let epl = hs / 32u
-        let qb = qoff + sl * epl
-        let q0 = q[qb]
-        let q1 = epl > 1u ? q[qb + 1u] : 0.0
-        let q2 = epl > 2u ? q[qb + 2u] : 0.0
-        let q3 = epl > 3u ? q[qb + 3u] : 0.0
-        let q4 = epl > 4u ? q[qb + 4u] : 0.0
-        let q5 = epl > 5u ? q[qb + 5u] : 0.0
-        let q6 = epl > 6u ? q[qb + 6u] : 0.0
-        let q7 = epl > 7u ? q[qb + 7u] : 0.0
-        let q8 = epl > 8u ? q[qb + 8u] : 0.0
-        let q9 = epl > 9u ? q[qb + 9u] : 0.0
-        let q10 = epl > 10u ? q[qb + 10u] : 0.0
-        let q11 = epl > 11u ? q[qb + 11u] : 0.0
-        let q12 = epl > 12u ? q[qb + 12u] : 0.0
-        let q13 = epl > 13u ? q[qb + 13u] : 0.0
-        let q14 = epl > 14u ? q[qb + 14u] : 0.0
-        let q15 = epl > 15u ? q[qb + 15u] : 0.0
-        var j = sg
-        while (j < nrows) {
-            let kb = kb0 + (c0 + j) * kv_dim + khoff + sl * epl
-            var s = q0 * float(kc[kb])
-            if (epl > 1u) {
-                s += q1 * float(kc[kb + 1u])
-            }
-            if (epl > 2u) {
-                s += q2 * float(kc[kb + 2u])
-            }
-            if (epl > 3u) {
-                s += q3 * float(kc[kb + 3u])
-            }
-            if (epl > 4u) {
-                s += q4 * float(kc[kb + 4u])
-            }
-            if (epl > 5u) {
-                s += q5 * float(kc[kb + 5u])
-            }
-            if (epl > 6u) {
-                s += q6 * float(kc[kb + 6u])
-            }
-            if (epl > 7u) {
-                s += q7 * float(kc[kb + 7u])
-            }
-            if (epl > 8u) {
-                s += q8 * float(kc[kb + 8u])
-                s += q9 * float(kc[kb + 9u])
-                s += q10 * float(kc[kb + 10u])
-                s += q11 * float(kc[kb + 11u])
-            }
-            if (epl > 12u) {
-                s += q12 * float(kc[kb + 12u])
-                s += q13 * float(kc[kb + 13u])
-                s += q14 * float(kc[kb + 14u])
-                s += q15 * float(kc[kb + 15u])
-            }
-            s = simd_sum(s)
-            if (sl == 0u) {
-                let sc = s * scale
-                // tanh via the exp identity (the CPU softcap4's form) — Metal tanh NaNs past
-                // ~44, while exp saturates: exp(INF) -> denom INF -> the term is 0
-                scores[j] = softcap > 0.0 ? softcap * (1.0 - 2.0 / (1.0 + exp(sc * 2.0 / softcap))) : sc
-            }
-            j += gl_NumSubgroups
-        }
+        sq_fill_scores(kc, q, scores, kb0, c0, nrows, kv_dim, khoff, qoff, hs, scale, softcap)
         barrier()
-        if (wstart > c0) {
-            // boundary chunk: mask rows below the window start (uniform branch — barrier is safe)
-            var jm = lid
-            while (jm < nrows) {
-                if (c0 + jm < wstart) {
-                    scores[jm] = -3.0e38
-                }
-                jm += nt
-            }
-            barrier()
-        }
-        var m = -3.0e38
-        j = lid
-        while (j < nrows) {
-            m = max(m, scores[j])
-            j += nt
-        }
-        m = max(m, simd_shuffle_xor(m, 16u))
-        m = max(m, simd_shuffle_xor(m, 8u))
-        m = max(m, simd_shuffle_xor(m, 4u))
-        m = max(m, simd_shuffle_xor(m, 2u))
-        m = max(m, simd_shuffle_xor(m, 1u))
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = m
-        }
-        barrier()
-        var mm = red[0]
-        var sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            mm = max(mm, red[sgi])
-            sgi++
-        }
-        barrier()                           // red[] reused for the sum below
-        var l = 0.0
-        j = lid
-        while (j < nrows) {
-            let w = exp(scores[j] - mm)
-            scores[j] = w
-            l += w
-            j += nt
-        }
-        l += simd_shuffle_xor(l, 16u)
-        l += simd_shuffle_xor(l, 8u)
-        l += simd_shuffle_xor(l, 4u)
-        l += simd_shuffle_xor(l, 2u)
-        l += simd_shuffle_xor(l, 1u)
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = l
-        }
-        barrier()
-        var tot = red[0]
-        sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            tot += red[sgi]
-            sgi++
-        }
-        var acc0 = 0.0
-        var acc1 = 0.0
-        var acc2 = 0.0
-        var acc3 = 0.0
-        j = 0u
-        while (j + 4u <= nrows) {
-            acc0 += scores[j] * float(vc[vb0 + (c0 + j) * kv_dim + khoff + lid])
-            acc1 += scores[j + 1u] * float(vc[vb0 + (c0 + j + 1u) * kv_dim + khoff + lid])
-            acc2 += scores[j + 2u] * float(vc[vb0 + (c0 + j + 2u) * kv_dim + khoff + lid])
-            acc3 += scores[j + 3u] * float(vc[vb0 + (c0 + j + 3u) * kv_dim + khoff + lid])
-            j += 4u
-        }
-        while (j < nrows) {
-            acc0 += scores[j] * float(vc[vb0 + (c0 + j) * kv_dim + khoff + lid])
-            j++
-        }
+        sq_mask_window(scores, c0, nrows, wstart, lid, nt)
+        let mm = sq_score_max(scores, red, nrows, lid, nt)
+        barrier()                           // red[] is reused for the sum below
+        let tot = sq_exp_sum(scores, red, mm, nrows, lid, nt)
         let pbase = ((bb * nheads + h) * nchmax + ci) * (hs + 2u)
-        part[pbase + lid] = acc0 + acc1 + acc2 + acc3
+        part[pbase + lid] = sq_vacc(vc, scores, vb0, c0, nrows, kv_dim, khoff, lid)
         if (lid == 0u) {
             part[pbase + hs] = mm
             part[pbase + hs + 1u] = tot
@@ -4280,147 +2943,14 @@ class MetalSqAttnPartBF32 {
         if (c1 <= wstart) {
             return
         }
-        let sg = gl_SubgroupID
-        let sl = gl_SubgroupInvocationID
-        let epl = hs / 32u
-        let qb = qoff + sl * epl
-        let q0 = q[qb]
-        let q1 = epl > 1u ? q[qb + 1u] : 0.0
-        let q2 = epl > 2u ? q[qb + 2u] : 0.0
-        let q3 = epl > 3u ? q[qb + 3u] : 0.0
-        let q4 = epl > 4u ? q[qb + 4u] : 0.0
-        let q5 = epl > 5u ? q[qb + 5u] : 0.0
-        let q6 = epl > 6u ? q[qb + 6u] : 0.0
-        let q7 = epl > 7u ? q[qb + 7u] : 0.0
-        let q8 = epl > 8u ? q[qb + 8u] : 0.0
-        let q9 = epl > 9u ? q[qb + 9u] : 0.0
-        let q10 = epl > 10u ? q[qb + 10u] : 0.0
-        let q11 = epl > 11u ? q[qb + 11u] : 0.0
-        let q12 = epl > 12u ? q[qb + 12u] : 0.0
-        let q13 = epl > 13u ? q[qb + 13u] : 0.0
-        let q14 = epl > 14u ? q[qb + 14u] : 0.0
-        let q15 = epl > 15u ? q[qb + 15u] : 0.0
-        var j = sg
-        while (j < nrows) {
-            let kb = kb0 + (c0 + j) * kv_dim + khoff + sl * epl
-            var s = q0 * kc[kb]
-            if (epl > 1u) {
-                s += q1 * kc[kb + 1u]
-            }
-            if (epl > 2u) {
-                s += q2 * kc[kb + 2u]
-            }
-            if (epl > 3u) {
-                s += q3 * kc[kb + 3u]
-            }
-            if (epl > 4u) {
-                s += q4 * kc[kb + 4u]
-            }
-            if (epl > 5u) {
-                s += q5 * kc[kb + 5u]
-            }
-            if (epl > 6u) {
-                s += q6 * kc[kb + 6u]
-            }
-            if (epl > 7u) {
-                s += q7 * kc[kb + 7u]
-            }
-            if (epl > 8u) {
-                s += q8 * kc[kb + 8u]
-                s += q9 * kc[kb + 9u]
-                s += q10 * kc[kb + 10u]
-                s += q11 * kc[kb + 11u]
-            }
-            if (epl > 12u) {
-                s += q12 * kc[kb + 12u]
-                s += q13 * kc[kb + 13u]
-                s += q14 * kc[kb + 14u]
-                s += q15 * kc[kb + 15u]
-            }
-            s = simd_sum(s)
-            if (sl == 0u) {
-                let sc = s * scale
-                // tanh via the exp identity (the CPU softcap4's form) — Metal tanh NaNs past
-                // ~44, while exp saturates: exp(INF) -> denom INF -> the term is 0
-                scores[j] = softcap > 0.0 ? softcap * (1.0 - 2.0 / (1.0 + exp(sc * 2.0 / softcap))) : sc
-            }
-            j += gl_NumSubgroups
-        }
+        sq_fill_scores(kc, q, scores, kb0, c0, nrows, kv_dim, khoff, qoff, hs, scale, softcap)
         barrier()
-        if (wstart > c0) {
-            // boundary chunk: mask rows below the window start (uniform branch — barrier is safe)
-            var jm = lid
-            while (jm < nrows) {
-                if (c0 + jm < wstart) {
-                    scores[jm] = -3.0e38
-                }
-                jm += nt
-            }
-            barrier()
-        }
-        var m = -3.0e38
-        j = lid
-        while (j < nrows) {
-            m = max(m, scores[j])
-            j += nt
-        }
-        m = max(m, simd_shuffle_xor(m, 16u))
-        m = max(m, simd_shuffle_xor(m, 8u))
-        m = max(m, simd_shuffle_xor(m, 4u))
-        m = max(m, simd_shuffle_xor(m, 2u))
-        m = max(m, simd_shuffle_xor(m, 1u))
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = m
-        }
-        barrier()
-        var mm = red[0]
-        var sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            mm = max(mm, red[sgi])
-            sgi++
-        }
-        barrier()
-        var l = 0.0
-        j = lid
-        while (j < nrows) {
-            let w = exp(scores[j] - mm)
-            scores[j] = w
-            l += w
-            j += nt
-        }
-        l += simd_shuffle_xor(l, 16u)
-        l += simd_shuffle_xor(l, 8u)
-        l += simd_shuffle_xor(l, 4u)
-        l += simd_shuffle_xor(l, 2u)
-        l += simd_shuffle_xor(l, 1u)
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = l
-        }
-        barrier()
-        var tot = red[0]
-        sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            tot += red[sgi]
-            sgi++
-        }
-        var acc0 = 0.0
-        var acc1 = 0.0
-        var acc2 = 0.0
-        var acc3 = 0.0
-        j = 0u
-        while (j + 4u <= nrows) {
-            acc0 += scores[j] * vc[vb0 + (c0 + j) * kv_dim + khoff + lid]
-            acc1 += scores[j + 1u] * vc[vb0 + (c0 + j + 1u) * kv_dim + khoff + lid]
-            acc2 += scores[j + 2u] * vc[vb0 + (c0 + j + 2u) * kv_dim + khoff + lid]
-            acc3 += scores[j + 3u] * vc[vb0 + (c0 + j + 3u) * kv_dim + khoff + lid]
-            j += 4u
-        }
-        while (j < nrows) {
-            acc0 += scores[j] * vc[vb0 + (c0 + j) * kv_dim + khoff + lid]
-            j++
-        }
+        sq_mask_window(scores, c0, nrows, wstart, lid, nt)
+        let mm = sq_score_max(scores, red, nrows, lid, nt)
+        barrier()                           // red[] is reused for the sum below
+        let tot = sq_exp_sum(scores, red, mm, nrows, lid, nt)
         let pbase = ((bb * nheads + h) * nchmax + ci) * (hs + 2u)
-        part[pbase + lid] = acc0 + acc1 + acc2 + acc3
+        part[pbase + lid] = sq_vacc(vc, scores, vb0, c0, nrows, kv_dim, khoff, lid)
         if (lid == 0u) {
             part[pbase + hs] = mm
             part[pbase + hs + 1u] = tot
@@ -4479,158 +3009,14 @@ class MetalSqAttnPartBQ8 {
         if (c1 <= wstart) {
             return
         }
-        let sg = gl_SubgroupID
-        let sl = gl_SubgroupInvocationID
-        let epl = hs / 32u
-        let qb = qoff + sl * epl
-        let q0 = q[qb]
-        let q1 = epl > 1u ? q[qb + 1u] : 0.0
-        let q2 = epl > 2u ? q[qb + 2u] : 0.0
-        let q3 = epl > 3u ? q[qb + 3u] : 0.0
-        let q4 = epl > 4u ? q[qb + 4u] : 0.0
-        let q5 = epl > 5u ? q[qb + 5u] : 0.0
-        let q6 = epl > 6u ? q[qb + 6u] : 0.0
-        let q7 = epl > 7u ? q[qb + 7u] : 0.0
-        let q8 = epl > 8u ? q[qb + 8u] : 0.0
-        let q9 = epl > 9u ? q[qb + 9u] : 0.0
-        let q10 = epl > 10u ? q[qb + 10u] : 0.0
-        let q11 = epl > 11u ? q[qb + 11u] : 0.0
-        let q12 = epl > 12u ? q[qb + 12u] : 0.0
-        let q13 = epl > 13u ? q[qb + 13u] : 0.0
-        let q14 = epl > 14u ? q[qb + 14u] : 0.0
-        let q15 = epl > 15u ? q[qb + 15u] : 0.0
-        let hb = (sl * epl) / 32u
-        let ib = (sl * epl) % 32u
-        var j = sg
-        while (j < nrows) {
-            let blk = (c0 + j) * nblk + khblk + hb
-            let d = float(ksh[kb0h + blk * 17u])
-            let kb = kb0b + blk * 34u + 2u + ib
-            var s = q0 * float(kqb[kb])
-            if (epl > 1u) {
-                s += q1 * float(kqb[kb + 1u])
-            }
-            if (epl > 2u) {
-                s += q2 * float(kqb[kb + 2u])
-            }
-            if (epl > 3u) {
-                s += q3 * float(kqb[kb + 3u])
-            }
-            if (epl > 4u) {
-                s += q4 * float(kqb[kb + 4u])
-            }
-            if (epl > 5u) {
-                s += q5 * float(kqb[kb + 5u])
-            }
-            if (epl > 6u) {
-                s += q6 * float(kqb[kb + 6u])
-            }
-            if (epl > 7u) {
-                s += q7 * float(kqb[kb + 7u])
-            }
-            if (epl > 8u) {
-                s += q8 * float(kqb[kb + 8u])
-                s += q9 * float(kqb[kb + 9u])
-                s += q10 * float(kqb[kb + 10u])
-                s += q11 * float(kqb[kb + 11u])
-            }
-            if (epl > 12u) {
-                s += q12 * float(kqb[kb + 12u])
-                s += q13 * float(kqb[kb + 13u])
-                s += q14 * float(kqb[kb + 14u])
-                s += q15 * float(kqb[kb + 15u])
-            }
-            s = simd_sum(s * d)
-            if (sl == 0u) {
-                let sc = s * scale
-                // tanh via the exp identity (the CPU softcap4's form) — Metal tanh NaNs past
-                // ~44, while exp saturates: exp(INF) -> denom INF -> the term is 0
-                scores[j] = softcap > 0.0 ? softcap * (1.0 - 2.0 / (1.0 + exp(sc * 2.0 / softcap))) : sc
-            }
-            j += gl_NumSubgroups
-        }
+        sq_fill_scores_q8(ksh, kqb, q, scores, kb0h, kb0b, c0, nrows, nblk, khblk, qoff, hs, scale, softcap)
         barrier()
-        if (wstart > c0) {
-            // boundary chunk: mask rows below the window start (uniform branch — barrier is safe)
-            var jm = lid
-            while (jm < nrows) {
-                if (c0 + jm < wstart) {
-                    scores[jm] = -3.0e38
-                }
-                jm += nt
-            }
-            barrier()
-        }
-        var m = -3.0e38
-        j = lid
-        while (j < nrows) {
-            m = max(m, scores[j])
-            j += nt
-        }
-        m = max(m, simd_shuffle_xor(m, 16u))
-        m = max(m, simd_shuffle_xor(m, 8u))
-        m = max(m, simd_shuffle_xor(m, 4u))
-        m = max(m, simd_shuffle_xor(m, 2u))
-        m = max(m, simd_shuffle_xor(m, 1u))
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = m
-        }
-        barrier()
-        var mm = red[0]
-        var sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            mm = max(mm, red[sgi])
-            sgi++
-        }
-        barrier()                           // red[] reused for the sum below
-        var l = 0.0
-        j = lid
-        while (j < nrows) {
-            let w = exp(scores[j] - mm)
-            scores[j] = w
-            l += w
-            j += nt
-        }
-        l += simd_shuffle_xor(l, 16u)
-        l += simd_shuffle_xor(l, 8u)
-        l += simd_shuffle_xor(l, 4u)
-        l += simd_shuffle_xor(l, 2u)
-        l += simd_shuffle_xor(l, 1u)
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = l
-        }
-        barrier()
-        var tot = red[0]
-        sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            tot += red[sgi]
-            sgi++
-        }
-        let vblk0 = khblk + lid / 32u
-        let vin = lid % 32u
-        var acc0 = 0.0
-        var acc1 = 0.0
-        var acc2 = 0.0
-        var acc3 = 0.0
-        j = 0u
-        while (j + 4u <= nrows) {
-            let b0 = (c0 + j) * nblk + vblk0
-            let b1 = (c0 + j + 1u) * nblk + vblk0
-            let b2 = (c0 + j + 2u) * nblk + vblk0
-            let b3 = (c0 + j + 3u) * nblk + vblk0
-            acc0 += scores[j] * float(vqb[vb0b + b0 * 34u + 2u + vin]) * float(vsh[vb0h + b0 * 17u])
-            acc1 += scores[j + 1u] * float(vqb[vb0b + b1 * 34u + 2u + vin]) * float(vsh[vb0h + b1 * 17u])
-            acc2 += scores[j + 2u] * float(vqb[vb0b + b2 * 34u + 2u + vin]) * float(vsh[vb0h + b2 * 17u])
-            acc3 += scores[j + 3u] * float(vqb[vb0b + b3 * 34u + 2u + vin]) * float(vsh[vb0h + b3 * 17u])
-            j += 4u
-        }
-        while (j < nrows) {
-            let b0 = (c0 + j) * nblk + vblk0
-            acc0 += scores[j] * float(vqb[vb0b + b0 * 34u + 2u + vin]) * float(vsh[vb0h + b0 * 17u])
-            j++
-        }
+        sq_mask_window(scores, c0, nrows, wstart, lid, nt)
+        let mm = sq_score_max(scores, red, nrows, lid, nt)
+        barrier()                           // red[] is reused for the sum below
+        let tot = sq_exp_sum(scores, red, mm, nrows, lid, nt)
         let pbase = ((bb * nheads + h) * nchmax + ci) * (hs + 2u)
-        part[pbase + lid] = acc0 + acc1 + acc2 + acc3
+        part[pbase + lid] = sq_vacc_q8(vsh, vqb, scores, vb0h, vb0b, c0, nrows, nblk, khblk, lid)
         if (lid == 0u) {
             part[pbase + hs] = mm
             part[pbase + hs + 1u] = tot
@@ -4688,153 +3074,14 @@ class MetalSqAttnPartBTq4 {
         if (c1 <= wstart) {
             return
         }
-        let sg = gl_SubgroupID
-        let sl = gl_SubgroupInvocationID
-        let epl = hs / 32u
-        let qb = qoff + sl * epl
-        let q0 = q[qb]
-        let q1 = epl > 1u ? q[qb + 1u] : 0.0
-        let q2 = epl > 2u ? q[qb + 2u] : 0.0
-        let q3 = epl > 3u ? q[qb + 3u] : 0.0
-        let q4 = epl > 4u ? q[qb + 4u] : 0.0
-        let q5 = epl > 5u ? q[qb + 5u] : 0.0
-        let q6 = epl > 6u ? q[qb + 6u] : 0.0
-        let q7 = epl > 7u ? q[qb + 7u] : 0.0
-        let q8 = epl > 8u ? q[qb + 8u] : 0.0
-        let q9 = epl > 9u ? q[qb + 9u] : 0.0
-        let q10 = epl > 10u ? q[qb + 10u] : 0.0
-        let q11 = epl > 11u ? q[qb + 11u] : 0.0
-        let q12 = epl > 12u ? q[qb + 12u] : 0.0
-        let q13 = epl > 13u ? q[qb + 13u] : 0.0
-        let q14 = epl > 14u ? q[qb + 14u] : 0.0
-        let q15 = epl > 15u ? q[qb + 15u] : 0.0
-        let hb = (sl * epl) / 32u
-        let inb = (sl * epl) % 32u
-        var j = sg
-        while (j < nrows) {
-            let blk = (c0 + j) * nblk + khblk + hb
-            let d = float(ksh[kb0h + blk * 9u])
-            let kb = kb0b + blk * 18u + 2u + inb / 2u
-            let by0 = uint(kqb[kb])
-            var s = 0.0
-            if (epl == 1u) {
-                let nib = (inb & 1u) == 1u ? (by0 >> 4u) : (by0 & 15u)
-                s = q0 * float(int(nib) - 8)
-            } else {
-                s = q0 * float(int(by0 & 15u) - 8)
-                s += q1 * float(int(by0 >> 4u) - 8)
-                if (epl > 2u) {
-                    let by1 = uint(kqb[kb + 1u])
-                    s += q2 * float(int(by1 & 15u) - 8)
-                    s += q3 * float(int(by1 >> 4u) - 8)
-                }
-                if (epl > 4u) {
-                    let by2 = uint(kqb[kb + 2u])
-                    s += q4 * float(int(by2 & 15u) - 8)
-                    s += q5 * float(int(by2 >> 4u) - 8)
-                }
-                if (epl > 6u) {
-                    let by3 = uint(kqb[kb + 3u])
-                    s += q6 * float(int(by3 & 15u) - 8)
-                    s += q7 * float(int(by3 >> 4u) - 8)
-                }
-                if (epl > 8u) {
-                    let by4 = uint(kqb[kb + 4u])
-                    let by5 = uint(kqb[kb + 5u])
-                    s += q8 * float(int(by4 & 15u) - 8)
-                    s += q9 * float(int(by4 >> 4u) - 8)
-                    s += q10 * float(int(by5 & 15u) - 8)
-                    s += q11 * float(int(by5 >> 4u) - 8)
-                }
-                if (epl > 12u) {
-                    let by6 = uint(kqb[kb + 6u])
-                    let by7 = uint(kqb[kb + 7u])
-                    s += q12 * float(int(by6 & 15u) - 8)
-                    s += q13 * float(int(by6 >> 4u) - 8)
-                    s += q14 * float(int(by7 & 15u) - 8)
-                    s += q15 * float(int(by7 >> 4u) - 8)
-                }
-            }
-            s = simd_sum(s * d)
-            if (sl == 0u) {
-                let sc = s * scale
-                // tanh via the exp identity (the CPU softcap4's form) — Metal tanh NaNs past
-                // ~44, while exp saturates: exp(INF) -> denom INF -> the term is 0
-                scores[j] = softcap > 0.0 ? softcap * (1.0 - 2.0 / (1.0 + exp(sc * 2.0 / softcap))) : sc
-            }
-            j += gl_NumSubgroups
-        }
+        sq_fill_scores_tq4(ksh, kqb, q, scores, kb0h, kb0b, c0, nrows, nblk, khblk, qoff, hs, scale, softcap)
         barrier()
-        if (wstart > c0) {
-            // boundary chunk: mask rows below the window start (uniform branch — barrier is safe)
-            var jm = lid
-            while (jm < nrows) {
-                if (c0 + jm < wstart) {
-                    scores[jm] = -3.0e38
-                }
-                jm += nt
-            }
-            barrier()
-        }
-        var m = -3.0e38
-        j = lid
-        while (j < nrows) {
-            m = max(m, scores[j])
-            j += nt
-        }
-        m = max(m, simd_shuffle_xor(m, 16u))
-        m = max(m, simd_shuffle_xor(m, 8u))
-        m = max(m, simd_shuffle_xor(m, 4u))
-        m = max(m, simd_shuffle_xor(m, 2u))
-        m = max(m, simd_shuffle_xor(m, 1u))
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = m
-        }
-        barrier()
-        var mm = red[0]
-        var sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            mm = max(mm, red[sgi])
-            sgi++
-        }
-        barrier()                           // red[] reused for the sum below
-        var l = 0.0
-        j = lid
-        while (j < nrows) {
-            let w = exp(scores[j] - mm)
-            scores[j] = w
-            l += w
-            j += nt
-        }
-        l += simd_shuffle_xor(l, 16u)
-        l += simd_shuffle_xor(l, 8u)
-        l += simd_shuffle_xor(l, 4u)
-        l += simd_shuffle_xor(l, 2u)
-        l += simd_shuffle_xor(l, 1u)
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = l
-        }
-        barrier()
-        var tot = red[0]
-        sgi = 1u
-        while (sgi < gl_NumSubgroups) {
-            tot += red[sgi]
-            sgi++
-        }
-        let vblk0 = khblk + lid / 32u
-        let vbyte = (lid % 32u) / 2u
-        let hi = (lid & 1u) == 1u
-        var acc0 = 0.0
-        j = 0u
-        while (j < nrows) {
-            let blk = (c0 + j) * nblk + vblk0
-            let by = uint(vqb[vb0b + blk * 18u + 2u + vbyte])
-            let nib = hi ? (by >> 4u) : (by & 15u)
-            acc0 += scores[j] * float(int(nib) - 8) * float(vsh[vb0h + blk * 9u])
-            j++
-        }
+        sq_mask_window(scores, c0, nrows, wstart, lid, nt)
+        let mm = sq_score_max(scores, red, nrows, lid, nt)
+        barrier()                           // red[] is reused for the sum below
+        let tot = sq_exp_sum(scores, red, mm, nrows, lid, nt)
         let pbase = ((bb * nheads + h) * nchmax + ci) * (hs + 2u)
-        part[pbase + lid] = acc0
+        part[pbase + lid] = sq_vacc_tq4(vsh, vqb, scores, vb0h, vb0b, c0, nrows, nblk, khblk, lid)
         if (lid == 0u) {
             part[pbase + hs] = mm
             part[pbase + hs + 1u] = tot

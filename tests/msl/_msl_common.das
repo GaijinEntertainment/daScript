@@ -569,6 +569,17 @@ def private ufx_sum_tg(part : float[32]; n : uint) : float {   // threadgroup-po
     return s
 }
 
+// a WRITABLE threadgroup slab param that also rendezvouses inside the helper — the shape a
+// staged kernel (dasLLAMA's attention softmax) hands its @workgroup scratch to
+def private ufx_scale_tg(var part : float[32]; k : float; lid, n : uint) {
+    var i = lid
+    while (i < n) {
+        part[i] *= k
+        i += n
+    }
+    barrier()
+}
+
 def private ufx_accum(var acc : float&; v : float) {   // thread-ref param
     acc += v
 }
@@ -587,6 +598,7 @@ class UserFns {
         part[lid] = ufx_twice(src, i)
         yoh[i] = ufx_twice(srch, i)
         barrier()
+        ufx_scale_tg(part, 0.5, lid, gl_WorkGroupSize.x)   // writes the slab, barriers inside
         var acc = 0.0
         ufx_accum(acc, ufx_shade(src[i], 3))
         if (lid == 0u) {
@@ -890,6 +902,7 @@ def public declared_msl_census : table<string> {
         "ufn.param.buffer",
         "ufn.param.buffer_const",
         "ufn.param.tg",
+        "ufn.param.tg_const",
         "ufn.param.ref",
         "ufn.param.value",
         "ufn.param.hidden_builtin",

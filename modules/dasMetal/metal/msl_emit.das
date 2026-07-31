@@ -2089,7 +2089,7 @@ def private ufn_param(var ctx : MslCtx; v : VariablePtr; at : LineInfo) : string
             err(ctx, at, "parameter `{dname}` element type has no MSL form")
             return ""
         }
-        note(ctx, "ufn.param.tg")
+        note(ctx, t.flags.constant ? "ufn.param.tg_const" : "ufn.param.tg")
         return t.flags.constant ? "threadgroup const {elem}* {name}" : "threadgroup {elem}* {name}"
     }
     if (reject_cpu_only_width(ctx, at, t)) {

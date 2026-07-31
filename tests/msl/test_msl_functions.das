@@ -40,8 +40,14 @@ def test_msl_functions(t : T?) {
         // read-only array param lowers device const — the generic's two instances split names
         has(t, "device const float* src")
         has(t, "device const half* src")
-        // threadgroup fixed-array param keeps its address space (const from the signature)
+        // threadgroup fixed-array param keeps its address space; `var` decides const, exactly
+        // as it does for a device buffer, and the helper may rendezvous inside
         has(t, "float ufx_sum_tg(threadgroup const float* part, uint n)")
+        has(t, "void ufx_scale_tg(threadgroup float* part, float k, uint lid, uint n)")
+        has(t, "part[i] *= k;")
+        let bar = find(userfns_msl, "void ufx_scale_tg(threadgroup float* part, float k, uint lid, uint n) \{")
+        t |> success(bar >= 0 && find(userfns_msl, "threadgroup_barrier(mem_flags::mem_threadgroup);", bar) > bar,
+            "barrier() inside a user function lowers in place")
         // thread-space reference param
         has(t, "void ufx_accum(thread float& acc, float v)")
         // prototypes precede bodies: the first ufx_sky mention ends with ';'

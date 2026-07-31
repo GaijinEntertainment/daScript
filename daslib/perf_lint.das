@@ -30,7 +30,7 @@ module perf_lint shared private
 //!   PERF017 — length(s) == 0 / != 0 — use empty(s) / !empty(s)
 //!   PERF018 — for (i in range(length(arr))) where i only indexes arr — use 'for (c in arr)'
 //!   PERF019 — int(T.a) | int(T.b) on bitfield-or-enum-with-operator-| — collapse to int(T.a | T.b)
-//!   PERF020 — T(x) where x is already T (workhorse type) — drop the redundant cast
+//!   PERF020 — T(x) where x is already T (workhorse type) — drop the redundant cast (non-generic bodies only)
 //!   PERF021 — cond ? T(a) : T(b) on workhorse cast T — hoist to T(cond ? a : b)
 //!   PERF022 — for (s in A) { B |> push(s) } / push_clone — use 'B |> push_from(A)' (bulk reserve+copy)
 //!   PERF023 — var X = clone_expression(E); ... $e(X) ... — qmacro splice already clones; drop the pre-clone
@@ -1449,7 +1449,9 @@ class PerfLintVisitor : AstVisitor {
     // --- PERF020: T(x) where x is already T — redundant workhorse cast ---
 
     def check_perf020_redundant_cast(call : ExprCall?) : void {
-        if (call == null || call.func == null || length(call.arguments) != 1) return
+        // a generic's one source line serves every instance — `float(x)` is a no-op where the element binds float and the required widen where it binds float16, so the verdict is not actionable there
+        if (call == null || call.func == null || length(call.arguments) != 1
+            || (current_function != null && current_function.fromGeneric != null)) return
         let fname = string(call.func.fromGeneric != null ? call.func.fromGeneric.name : call.func.name)
         let target = perf020_target_basetype(fname)
         if (target == Type.none) return
