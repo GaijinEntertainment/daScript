@@ -2458,6 +2458,19 @@ def private ext_op_broadcasts_scalar(op : GLSLstd450) : bool {
         || op == GLSLstd450.Step   || op == GLSLstd450.SmoothStep)
 }
 
+// An enum constant names its ENTRY; the integer behind it is that entry's own initializer, which
+// already carries the enum's underlying type -- so re-entering emit_const yields a constant of
+// exactly the type emit_type lowered the enum to, without transcribing that width/signedness rule
+// twice.
+def private emit_const_enum(var m : SpirvModule; cen : ExprConstEnumeration?; var errors : array<string>) : tuple<ok : bool; id : uint> {
+    if (cen.enumType == null) return (ok = false, id = 0u)
+    for (ee in cen.enumType.list) {
+        if (ee.name == cen.value) return emit_const(m, ee.value, errors)
+    }
+    errors |> push("enum '{cen.enumType.name}' has no entry '{cen.value}'")
+    return (ok = false, id = 0u)
+}
+
 // ===== compile-time constants: scalars, all-const vector constructors, const arrays =====
 // Produces a deduped OpConstant / OpConstantComposite for a fully-constant expression. Used for
 // array literals (which must be constant initializers for now) and their constituents. ok=false =>
@@ -2487,18 +2500,8 @@ def private emit_const(var m : SpirvModule; e : ExpressionPtr; var errors : arra
     if (ci8 != null) return (ok = true, id = const_int8(m, int(ci8.value)))
     let cu8 = e ?as ExprConstUInt8
     if (cu8 != null) return (ok = true, id = const_uint8(m, uint(cu8.value)))
-    // An enum constant names its ENTRY; the integer behind it is that entry's own initializer, which
-    // already carries the enum's underlying type -- so re-entering here yields a constant of exactly
-    // the type emit_type lowered the enum to, without transcribing that width/signedness rule twice.
     let cen = e ?as ExprConstEnumeration
-    if (cen != null) {
-        if (cen.enumType == null) return (ok = false, id = 0u)
-        for (ee in cen.enumType.list) {
-            if (ee.name == cen.value) return emit_const(m, ee.value, errors)
-        }
-        errors |> push("enum '{cen.enumType.name}' has no entry '{cen.value}'")
-        return (ok = false, id = 0u)
-    }
+    if (cen != null) return emit_const_enum(m, cen, errors)
     // unary minus on a constant: depending on fold state `-0.6` can arrive as ExprOp1("-", const)
     // rather than a folded negative literal. Fold it here so both shapes produce the same constant.
     let neg = e ?as ExprOp1
