@@ -62,8 +62,12 @@ struct public TextEditState {
     anchor_line : int = -1
     anchor_column : int = 0
     selection_dragging : bool = false
-    //! Grapheme index remembered across consecutive vertical moves; -1 = none.
+    //! VISUAL column remembered across consecutive vertical moves (tabs count
+    //! as `tab_cells`); -1 = none.
     preferred_column : int = -1
+    //! Visual width of a tab, synced from the style by the widget each frame
+    //! so pure verbs and the renderer agree.
+    tab_cells : int = 4
     revision : int = 0
     dirty : bool = false
     focused : bool = false
@@ -531,24 +535,32 @@ def private grapheme_next(line : string; column : int) : int {
     return line_length
 }
 
-def private grapheme_index_of(line : string; column : int) : int {
-    var index = 0
+def private visual_column_of(line : string; column, tab_cells : int) : int {
+    // tab advances its full visual width; every other grapheme counts 1
+    var visual = 0
     var inscope graphemes <- text_graphemes(line)
     for (grapheme in graphemes) {
-        break if (grapheme.source.end_byte > column)
-        index++
+        break if (grapheme.source.start_byte >= column)
+        visual += grapheme.first_codepoint == 0x0009u ? max(tab_cells, 1) : 1
     }
-    return index
+    return visual
 }
 
-def private grapheme_column_at(line : string; index : int) : int {
-    var at = 0
+def private column_at_visual(line : string; visual_target, tab_cells : int) : int {
+    // nearest grapheme boundary to the target visual column
+    var visual = 0
+    var result = length(line)
     var inscope graphemes <- text_graphemes(line)
     for (grapheme in graphemes) {
-        return grapheme.source.start_byte if (at == index)
-        at++
+        let width = grapheme.first_codepoint == 0x0009u ? max(tab_cells, 1) : 1
+        if (visual_target < visual + width) {
+            result = ((visual_target - visual) * 2 < width
+                ? grapheme.source.start_byte : grapheme.source.end_byte)
+            break
+        }
+        visual += width
     }
-    return length(line)
+    return result
 }
 
 // ===== Edits =====
@@ -714,9 +726,11 @@ def public text_edit_move_vertical(var ed : TextEditState; delta_lines : int;
         ed.preferred_column = -1
     } else {
         let preferred = (ed.preferred_column >= 0 ? ed.preferred_column
-            : grapheme_index_of(ed.lines[ed.cursor_line], ed.cursor_column))
+            : visual_column_of(ed.lines[ed.cursor_line], ed.cursor_column,
+                ed.tab_cells))
         ed.cursor_line = target
-        ed.cursor_column = grapheme_column_at(ed.lines[target], preferred)
+        ed.cursor_column = column_at_visual(ed.lines[target], preferred,
+            ed.tab_cells)
         ed.preferred_column = preferred
     }
     touch_move(ed)
@@ -1561,6 +1575,7 @@ def private text_source_edit_impl(id : string; var ed : TextEditState;
                                   use_registry : bool) : TextEditResult {
     var result = TextEditResult()
     ensure_line(ed)
+    ed.tab_cells = max(style.tab_cells, 1)
     refresh_layout_cache(ed)
     let revision_before = ed.revision
     let follow_before = ed.follow_revision

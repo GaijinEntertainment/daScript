@@ -576,3 +576,26 @@ def test_tab_smart_and_scroll_verb(t : T?) {
     t |> equal(ed.pending_scroll_lines, 2, "scroll requests accumulate for the widget")
     text_edit_dispose(ed)
 }
+
+[test]
+def test_vertical_moves_are_tab_visual(t : T?) {
+    var ed = TextEditState()
+    // tab_cells = 4: line 0 is [tab]X, so X starts at visual column 4.
+    text_edit_load(ed, "\tX\nabcdeY")
+    text_edit_set_cursor(ed, 0, 1)
+    text_edit_move_vertical(ed, 1)
+    t |> equal(ed.cursor_column, 4, "down from after-tab lands at visual column 4")
+    text_edit_move_vertical(ed, -1)
+    t |> equal(ed.cursor_column, 1, "up returns to the position after the tab")
+    text_edit_set_cursor(ed, 1, 1)
+    text_edit_move_vertical(ed, -1)
+    t |> equal(ed.cursor_column, 0, "visual column 1 rounds to the tab start")
+    text_edit_set_cursor(ed, 1, 3)
+    text_edit_move_vertical(ed, -1)
+    t |> equal(ed.cursor_column, 1, "visual column 3 rounds past the tab")
+    text_edit_set_cursor(ed, 1, 5)
+    text_edit_move_vertical(ed, -1, true)
+    t |> equal(ed.cursor_column, 2, "shift-up selects to the tab-adjusted spot")
+    t |> equal(text_edit_selected_text(ed), "\nabcde", "selection spans the visual landing")
+    text_edit_dispose(ed)
+}
