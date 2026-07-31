@@ -146,15 +146,32 @@
     reading on qwen35moe-35b was `load_model_`, the direct gguf path every non-image suite takes
     on purpose (`ab37e6984`), plus `DASLLAMA_PIN_PREFILL`'s readahead — not the rail.
 
-12. **The three tmm2d GEMM twins are unreachable on every box in the fleet, so that lane has no
-    runtime coverage at all.** `MetalQ8GemmBT` / `MetalQ8GemmBSkT` / `MetalQ8Gemm64BT` are selected
-    only when a tune manifest crowns their family (`metal_tensor_crowned("gemmb_q8")` /
-    `"gemmb_sk_q8"` / `"gemm64b_q8"` — `dasllama_metal_kernels.das` §4440–4452, crowns read from
-    the sidecar's `runtime.metal_tensor` field). No manifest sets them: the M1's sidecar is stale
-    so no crowns apply at all, and `m4.tune.json` crowns exactly `mulmm_bf16`. Their PSOs are
-    therefore never compiled and no suite dispatches them — a change to those bodies passes every
-    gate we have. (Their MSL is still checkable: dump the `*_t_msl` global and run
-    `xcrun metal -std=metal4.0 -c` on it, which is how the kargs fold was verified.) Done = either
-    a manifest crowns them on a tensor-capable box so the decode suite exercises them, or the
-    kernel-coverage census reports an uncrowned tensor family as a LOUD warning the way rule 17
-    already requires for a kernel no run dispatches — silence is what let this sit.
+12. **The tensor (tmm2d) kernel twins are never SELECTED, and the one path that does exercise
+    them is in no suite.** `MetalQ8GemmBT` / `MetalQ8GemmBSkT` / `MetalQ8Gemm64BT` (and the
+    prefill `MetalAttnQKMmT` / `MetalAttnAVMmT` / the moe and kq `*T` forms) are chosen for
+    serving only when a tune manifest crowns their family (`metal_tensor_crowned("gemmb_q8")` etc.
+    — `dasllama_metal_kernels.das` §4440–4452, crowns read from the sidecar's
+    `runtime.metal_tensor`). No manifest crowns them: the M1's sidecar is stale so no crowns apply,
+    and `m4.tune.json` crowns exactly `mulmm_bf16`. So no decode/prefill parity cell ever runs one.
+
+    They ARE compiled and dispatched by the tensor-race harnesses (`metal_tensor_race_decode` /
+    `metal_tensor_race`), which build both PSOs through `pipeline_from_source` independent of the
+    crowns and compare base-vs-twin output with `race_envelope_ok` — a real numeric check. But the
+    races run only under `--tune`, so nothing in `tests/` calls them. Done = the kernel-coverage
+    suite invokes both race entry points and asserts every family returns a non-empty `winner` with
+    an empty `note` (that pair means "both PSOs built, both dispatched, outputs within envelope").
+    That is a handful of lines and closes the whole tensor lane at once.
+
+13. **The kargs census checks one direction only, so a hand-rolled bind list can silently desync
+    from the family it duplicates.** `MetalManualDispatchCensus` (`dasllama_metal_lens.das` §557)
+    errors when `nkargs > 0 && nkargs != ndispatch` — a builder that binds kargs on some dispatch
+    paths but not all. It says nothing about `nkargs == 0 && ndispatch > 0`, which is exactly what
+    the tensor-race harnesses were: `race_gemmb_family` and `race_attn_pair` hand-bound the
+    families' old scalar uniforms at slots 5..12 instead of going through `enc_*`, so folding those
+    families to a kargs left them binding 4-byte buffers where the kernels now read a struct. Both
+    compiled clean and no suite runs them. Done = the census derives, per module, which kernel
+    classes declare a kargs uniform and which PSO global each is compiled into (the
+    `g_pso_X = compile_pso(metal_Y_msl, ...)` assignment plus the `[metal_kernel(name="metal_Y_msl")]`
+    annotation give the map), then errors on a function that `kn_pipeline`s such a PSO and
+    dispatches without a `kn_kargs`. Until then the rule is structural: a dispatch outside an
+    `enc_*` builder is a review defect — see CODEREVIEW rule 21.

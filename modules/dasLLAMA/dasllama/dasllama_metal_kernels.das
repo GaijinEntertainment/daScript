@@ -3144,15 +3144,15 @@ class MetalSqAttnCombB {
     }
 }
 
-// The batched q8 GEMM twins bind their uniforms as ONE kargs value: `ys` is the y TOKEN-row stride
-// (the fused-QKV row stride at a segment site), `ksplit` the k-slice count the split-K forms grid
-// on. Each form ignores the other's field, which is what lets all six share one slot.
 // The split-K reduce's own pair — `total` is the flat element count of one partial plane.
 struct SkReduceArgs {
     total : uint
     ksplit : uint
 }
 
+// The batched q8 GEMM twins bind their uniforms as ONE kargs value: `ys` is the y TOKEN-row stride
+// (the fused-QKV row stride at a segment site), `ksplit` the k-slice count the split-K forms grid
+// on. Each form ignores the other's field, which is what lets all six share one slot.
 struct Q8GemmArgs {
     kdim : uint
     ndim : uint
@@ -3160,8 +3160,7 @@ struct Q8GemmArgs {
     ksplit : uint
 }
 
-// the family's two shapes, named: the dense form carries a y row stride, the split-K form a
-// k-slice count. Both spell the reduction dim first, the way every call site reads
+// the family's two shapes: the dense form carries a y row stride, the split-K form a k-slice count
 def gemm_ka(kdim, ndim, ys : int64) : Q8GemmArgs => (
     Q8GemmArgs(kdim = uint(kdim), ndim = uint(ndim), ys = uint(ys)))
 
@@ -5514,6 +5513,7 @@ def metal_kernels_release {   // nolint:STYLE037 — a flat release_pso per kern
 def private race_gemmb_family(dev : MetalDevice?; queue : MetalCommandQueue?; family : string;
                               m, kdim, ndim, out_n : int; grid : uint3;
                               base_pso, twin_pso : MetalComputePipeline?; base_tgmem : uint64;
+                              var ka : Q8GemmArgs;
                               bind_extra : block<(enc : MetalComputeEncoder?; slot_y : MetalBuffer?) : void>) : MetalTensorRaceResult {
     var res = MetalTensorRaceResult(family = family, winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
     let nkb = kdim / 32
@@ -5531,6 +5531,7 @@ def private race_gemmb_family(dev : MetalDevice?; queue : MetalCommandQueue?; fa
         kn_buffer(enc, bw, 0ul, 2)
         kn_buffer(enc, bxa, 0ul, 3)
         invoke(bind_extra, enc, by_base)
+        kn_kargs(enc, ka, 5)
         kn_dispatch(enc, grid, tg)
     }, $(enc) {
         kn_pipeline(enc, twin_pso)
@@ -5538,6 +5539,7 @@ def private race_gemmb_family(dev : MetalDevice?; queue : MetalCommandQueue?; fa
         kn_buffer(enc, bw, 0ul, 2)
         kn_buffer(enc, bxa, 0ul, 3)
         invoke(bind_extra, enc, by_twin)
+        kn_kargs(enc, ka, 5)
         kn_dispatch(enc, grid, tg)
     })
     if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
@@ -5558,7 +5560,7 @@ def private race_gemmb_family(dev : MetalDevice?; queue : MetalCommandQueue?; fa
 def private race_decode_family(dev : MetalDevice?; queue : MetalCommandQueue?; family : string;
                                base_src, base_entry : string; base_fm : bool; base_tgmem : uint64;
                                twin_src, twin_entry : string; twin_fm : bool;
-                               m, kdim, ndim, out_n : int; grid : uint3;
+                               m, kdim, ndim, out_n : int; grid : uint3; var ka : Q8GemmArgs;
                                bind_extra : block<(enc : MetalComputeEncoder?; slot_y : MetalBuffer?) : void>) : MetalTensorRaceResult {
     var err = ""
     var base_pso = pipeline_from_source(dev, base_src, base_entry, base_fm, err)
@@ -5570,7 +5572,7 @@ def private race_decode_family(dev : MetalDevice?; queue : MetalCommandQueue?; f
         metal_release(base_pso)
         return MetalTensorRaceResult(family = family, winner = "simdgroup", base_ms = -1.0lf, twin_ms = -1.0lf, note = "twin pso: {err}")
     }
-    let res = race_gemmb_family(dev, queue, family, m, kdim, ndim, out_n, grid, base_pso, twin_pso, base_tgmem) $(enc, slot_y) {
+    let res = race_gemmb_family(dev, queue, family, m, kdim, ndim, out_n, grid, base_pso, twin_pso, base_tgmem, ka) $(enc, slot_y) {
         invoke(bind_extra, enc, slot_y)
     }
     metal_release(base_pso)
@@ -5588,40 +5590,28 @@ def metal_tensor_race_decode : array<MetalTensorRaceResult> {
     var queue = metal_new_command_queue(dev)
     let kdim = 2048
     let ndim = 1024
-    var bk = race_uniform_u32(dev, uint(kdim))
-    var bn = race_uniform_u32(dev, uint(ndim))
-    var bys = race_uniform_u32(dev, uint(ndim))
-    var bsk = race_uniform_u32(dev, 4u)
+    // the race binds the SAME kargs the encoders do — a hand-rolled bind list here silently
+    // desyncs the moment the family's args change, and no parity suite runs this path
+    var rka = gemm_ka(int64(kdim), int64(ndim), int64(ndim))
+    var rka_sk = gemm_sk_ka(int64(kdim), int64(ndim), 4l)
     results |> emplace(race_decode_family(dev, queue, "gemmb_q8",
         metal_q8_gemm_b_msl, metal_q8_gemm_b_msl_entry, metal_q8_gemm_b_msl_fastmath, metal_q8_gemm_b_msl_tgmem,
         metal_q8_gemm_b_t_msl, metal_q8_gemm_b_t_msl_entry, metal_q8_gemm_b_t_msl_fastmath,
-        32, kdim, ndim, 32 * ndim, uint3(uint(ndim / 32), 1u, 1u)) $(enc, slot_y) {
+        32, kdim, ndim, 32 * ndim, uint3(uint(ndim / 32), 1u, 1u), rka) $(enc, slot_y) {
         kn_buffer(enc, slot_y, 0ul, 4)
-        kn_buffer(enc, bk, 0ul, 5)
-        kn_buffer(enc, bn, 0ul, 6)
-        kn_buffer(enc, bys, 0ul, 7)
     })
     results |> emplace(race_decode_family(dev, queue, "gemmb_sk_q8",
         metal_q8_gemm_b_sk_msl, metal_q8_gemm_b_sk_msl_entry, metal_q8_gemm_b_sk_msl_fastmath, metal_q8_gemm_b_sk_msl_tgmem,
         metal_q8_gemm_b_sk_t_msl, metal_q8_gemm_b_sk_t_msl_entry, metal_q8_gemm_b_sk_t_msl_fastmath,
-        32, kdim, ndim, 4 * 32 * ndim, uint3(uint(ndim / 32), 4u, 1u)) $(enc, slot_y) {
+        32, kdim, ndim, 4 * 32 * ndim, uint3(uint(ndim / 32), 4u, 1u), rka_sk) $(enc, slot_y) {
         kn_buffer(enc, slot_y, 0ul, 4)
-        kn_buffer(enc, bk, 0ul, 5)
-        kn_buffer(enc, bn, 0ul, 6)
-        kn_buffer(enc, bsk, 0ul, 8)
     })
     results |> emplace(race_decode_family(dev, queue, "gemm64b_q8",
         metal_q8_gemm64_b_msl, metal_q8_gemm64_b_msl_entry, metal_q8_gemm64_b_msl_fastmath, metal_q8_gemm64_b_msl_tgmem,
         metal_q8_gemm64_b_t_msl, metal_q8_gemm64_b_t_msl_entry, metal_q8_gemm64_b_t_msl_fastmath,
-        64, kdim, ndim, 64 * ndim, uint3(uint(2 * (ndim / 64)), 1u, 1u)) $(enc, slot_y) {
+        64, kdim, ndim, 64 * ndim, uint3(uint(2 * (ndim / 64)), 1u, 1u), rka) $(enc, slot_y) {
         kn_buffer(enc, slot_y, 0ul, 4)
-        kn_buffer(enc, bk, 0ul, 5)
-        kn_buffer(enc, bn, 0ul, 6)
     })
-    metal_release(bk)
-    metal_release(bn)
-    metal_release(bys)
-    metal_release(bsk)
     metal_release(queue)
     metal_release(dev)
     return <- results

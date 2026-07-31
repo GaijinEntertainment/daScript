@@ -164,6 +164,15 @@
     the buffer is pooled, uploaded and released per step to carry a number the encoder already
     holds. Build the kargs from the parameters and delete the buffer; a pooled scalar that
     survives must be one a DIFFERENT encoder still binds.
+
+    **Nothing dispatches a kernel except its `enc_*` builder.** A hand-rolled bind list elsewhere —
+    a tune-race harness, a benchmark, a one-off probe — duplicates the builder and desyncs the
+    moment the family's args change, silently: the slots still exist, the types still compile, and
+    the kernel reads a struct out of a 4-byte buffer. The census only catches a builder that binds
+    kargs on some paths and not others (`nkargs > 0 && nkargs != ndispatch`); a duplicate that
+    binds NO kargs is invisible to it. So when a race must drive two PSOs itself, it builds the
+    SAME kargs value the encoder builds and binds it next to its own `kn_dispatch` — never a
+    private set of scalar uniform buffers.
     A helper that looks specialized in das can still lower to a runtime multiply.
 
 22. **Complexity/length lint: suppress an honest shape, never force a split.** STYLE037
