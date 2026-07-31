@@ -22,6 +22,7 @@ require daslib/ast_boost
 require daslib/rtti
 require daslib/strings_boost
 require strings
+require math
 
 struct public MslEmitConfig {
     kernel_name : string    // "" -> the method name (class-prefix stripped)
@@ -41,6 +42,16 @@ struct private MslMember {
     wg_off : uint64         // @workgroup member's offset inside the dynamic shmem buffer
 }
 
+// one discovered user function (Phase 0: free functions lower 1:1 as plain MSL functions)
+struct private UserFn {
+    @do_not_delete fn : FunctionPtr             // gc_node-owned AST — never finalized from here
+    msl_name : string
+    builtins : table<string>    // gl_* this fn's OWN body reads (hidden trailing params)
+    calls : array<int>          // ufn indices this fn's body calls (transitive builtin closure)
+    proto : string
+    text : string
+}
+
 struct private MslCtx {
     errors : array<string>
     census : table<string>
@@ -53,6 +64,11 @@ struct private MslCtx {
     scan_ptrs : table<string; string>           // scan-time pointer local -> member (write-set resolution)
     tg_accs : table<string; string>             // staged-GEMM acc local -> "m|n|sgs|kk" (decl suppressed on GPU)
     self_name : string
+    user_fns : table<string; int>               // ufn key -> ufns index
+    ufns : array<UserFn>
+    scan_stack : array<string>                  // discovery stack — recursion is a compile error
+    cur_ufn : int = -1                          // ufn being scanned/emitted; -1 = the kernel itself
+    fn_depth : int                              // > 0 while emitting a user function body
 }
 
 // MSL reserves the C++14 keyword set plus its own address-space/type keywords; colliding
@@ -282,6 +298,91 @@ def private mark_write_target(var ctx : MslCtx; e : Expression?) {
 // Pre-scan pass over the body: collects the member write-set (drives device vs device const) and
 // the referenced builtin set (drives the attributed parameters). Unhandled node classes are
 // reported by the emit pass — this scan stays permissive.
+// every das-coded name the emit ladders own — discovery must never lower these as user
+// functions (their CPU stub bodies are not MSL); C++ builtIns and ctor spellings need no
+// entry (the builtIn flag and the reserved type names already exclude them)
+let private MSL_LADDER_OWNED : table<string> <- {
+    "barrier", "memoryBarrierShared", "simdgroup_load", "simdgroup_store", "tg_store_half4",
+    "tg_store_float4", "simdgroup_multiply", "simdgroup_multiply_accumulate",
+    "make_filled_simdgroup_float8x8", "make_filled_simdgroup_half8x8",
+    "simd_sum", "simd_shuffle", "simd_shuffle_up", "simd_shuffle_down", "simd_shuffle_xor",
+    "sdot4", "usdot4", "i_das_ptr_add",
+    "tmm2d_f32_bf16_f32", "tmm2d_q8_f32", "tmm2d_q8_f16s", "tmm2d_q8b_f32",
+    "tmm2d_tg_begin", "tmm2d_tg_step", "tmm2d_tg_store",
+    "uint_bits_to_float", "int_bits_to_float", "float_bits_to_uint", "float_bits_to_int"
+}
+
+// A call the builtin ladder does NOT own: everything emit_call_value handles is either a
+// C++ builtIn (math, ctors, i_das_ptr_add), a ladder-owned das name, or lives in the marker
+// modules (metal_builtins, shader_lingua_franca — checked through fromGeneric, since generic
+// INSTANCES belong to the instantiating module) — anything else is the user's, and lowers 1:1
+def private is_user_fn(fn : FunctionPtr) : bool {
+    if (fn == null || fn.flags.builtIn || key_exists(MSL_LADDER_OWNED, call_base_name("{fn.name}"))) {
+        return false
+    }
+    let origin = fn.fromGeneric != null ? fn.fromGeneric : fn
+    let mname = origin._module != null ? string(origin._module.name) : ""
+    return mname != "metal_builtins" && mname != "shader_lingua_franca"
+}
+
+def private ufn_key(fn : FunctionPtr) : string {
+    return "{fn._module != null ? string(fn._module.name) : ""}::{fn.name}"
+}
+
+// MSL-safe, collision-free emitted name: the bare das name when free, else base_N
+def private ufn_msl_name(var ctx : MslCtx; fn : FunctionPtr) : string {
+    let base = msl_safe_name(call_base_name("{fn.name}"))
+    var taken = false
+    for (u in ctx.ufns) {
+        if (u.msl_name == base) {
+            taken = true
+        }
+    }
+    return taken ? "{base}_{length(ctx.ufns)}" : base
+}
+
+def private discover_user_fn(var ctx : MslCtx; fn : FunctionPtr; at : LineInfo) : int {
+    let key = ufn_key(fn)
+    if (key_exists(ctx.user_fns, key)) {
+        return ctx.user_fns[key]
+    }
+    let bn = call_base_name("{fn.name}")
+    for (s in ctx.scan_stack) {
+        if (s == key) {
+            err(ctx, at, "function `{bn}` is recursive — MSL forbids recursion")
+            return -1
+        }
+    }
+    if (fn.body == null) {
+        err(ctx, at, "function `{bn}` has no body to lower")
+        return -1
+    }
+    let idx = length(ctx.ufns)
+    ctx.user_fns[key] = idx
+    ctx.ufns |> emplace <| UserFn(fn = unsafe(reinterpret<FunctionPtr>(fn)),
+        msl_name = ufn_msl_name(ctx, fn))
+    ctx.scan_stack |> push(key)
+    let prev = ctx.cur_ufn
+    ctx.cur_ufn = idx
+    scan_body(ctx, fn.body)
+    ctx.cur_ufn = prev
+    ctx.scan_stack |> pop()
+    return idx
+}
+
+// a member passed to a callee's writable (non-const) array param is a write to that member
+def private mark_call_arg_writes(var ctx : MslCtx; fn : FunctionPtr; ec : ExprCall?) {
+    let na = length(ec.arguments)
+    let np = length(fn.arguments)
+    for (i in range(min(na, np))) {
+        let pt = fn.arguments[i]._type
+        if (pt != null && (pt.baseType == Type.tArray || pt.baseType == Type.tFixedArray || pt.flags.ref) &&
+                !pt.flags.constant) {
+            mark_write_target(ctx, ec.arguments[i])
+        }
+    }
+}
+
 def private scan_body(var ctx : MslCtx; e : Expression?) {
     if (e == null) {
         return
@@ -366,6 +467,15 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
                 ctx.tg_accs[string((acc0 as ExprVar).name)] = ""   // params fill at emit time
             }
         }
+        if (is_user_fn(ecs.func)) {
+            let ui = discover_user_fn(ctx, ecs.func, ecs.at)
+            if (ui >= 0) {
+                if (ctx.cur_ufn >= 0) {
+                    ctx.ufns[ctx.cur_ufn].calls |> push(ui)
+                }
+                mark_call_arg_writes(ctx, ecs.func, ecs)
+            }
+        }
         for (arg in ecs.arguments) {
             scan_body(ctx, arg)
         }
@@ -384,9 +494,38 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
             let bi = builtin_msl_info(string(ev.name))
             if (bi.ok) {
                 ctx.builtins_used |> insert(string(ev.name))
+                if (ctx.cur_ufn >= 0) {   // hidden trailing param on this function
+                    ctx.ufns[ctx.cur_ufn].builtins |> insert(string(ev.name))
+                }
             }
         }
     }
+}
+
+// builtins a user function needs = its own reads + every callee's, transitively; hidden
+// params thread them invisibly from the entry down. Sorted for a pinned signature order.
+def private ufn_all_builtins(ctx : MslCtx; idx : int; var seen : table<int>; var out : table<string>) {
+    if (key_exists(seen, idx)) {
+        return
+    }
+    seen |> insert(idx)
+    for (b in keys(ctx.ufns[idx].builtins)) {
+        out |> insert(b)
+    }
+    for (c in ctx.ufns[idx].calls) {
+        ufn_all_builtins(ctx, c, seen, out)
+    }
+}
+
+def private ufn_hidden_builtins(ctx : MslCtx; idx : int) : array<string> {
+    var seen : table<int>
+    var out : table<string>
+    ufn_all_builtins(ctx, idx, seen, out)
+    var names <- [for (b in keys(out)); b]
+    names |> sort()
+    delete seen
+    delete out
+    return <- names
 }
 
 // ===== expression emission (returns text; records census + errors in ctx) =====
@@ -932,7 +1071,33 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
             return "{msl_type_name(ec._type)}(clamp({v}, {lo}, {hi}))"
         }
     }
-    err(ctx, ec.at, "call `{cname}` is not a supported MSL builtin — user function calls do not lower (a kernel is a single function)")
+    if (is_user_fn(ec.func)) {
+        // Phase 0: a user function lowers 1:1 as a plain MSL function (emitted in the preamble);
+        // gl_* builtins it reaches thread through as hidden trailing arguments
+        let ui = ctx.user_fns?[ufn_key(ec.func)] ?? -1
+        if (ui < 0) {
+            err(ctx, ec.at, "internal: user function `{cname}` was not discovered at scan time")
+            return "/*call {cname}*/"
+        }
+        var args : array<string>
+        args |> reserve(na + 4)
+        for (i in range(na)) {
+            if (i < length(ec.func.arguments)) {
+                let pt = ec.func.arguments[i]._type
+                let wm = member_lookup(ctx, ec.arguments[i])
+                if (!empty(wm) && (ctx.members?[wm]?.workgroup ?? false) && pt != null && pt.flags.ref) {
+                    err(ctx, ec.at, "@workgroup member `{wm}` bound to a `&` parameter — address spaces differ; pass the fixed array itself")
+                }
+            }
+            args |> push(emit_value(ctx, ec.arguments[i]))
+        }
+        var hidden <- ufn_hidden_builtins(ctx, ui)
+        args |> push_from(hidden)   // in scope by the same name in the entry and in every helper
+        delete hidden
+        note(ctx, "call.user")
+        return "{ctx.ufns[ui].msl_name}({join(args, ", ")})"
+    }
+    err(ctx, ec.at, "call `{cname}` is not a supported MSL builtin and not a lowerable user function — kernels reach only the MSL subset")
     return "/*call {cname}*/"
 }
 
@@ -1578,6 +1743,9 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
             emit_tmm2d_tg_step(ctx, ec, indent, lines)
         } elif (cname == "tmm2d_tg_store") {
             emit_tmm2d_tg_store(ctx, ec, indent, lines)
+        } elif (is_user_fn(ec.func)) {
+            note(ctx, "stmt.call_user")
+            lines |> push("{indent}{emit_call_value(ctx, ec)};")
         } else {
             err(ctx, ec.at, "call `{cname}` as a statement has no MSL lowering — only barrier()/memoryBarrierShared() sync and the simdgroup_matrix ops are supported")
         }
@@ -1590,7 +1758,12 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
     } elif (e is ExprReturn) {
         let er = e as ExprReturn
         if (er.subexpr != null) {
-            err(ctx, er.at, "kernels return void — `return <value>` has no MSL form")
+            if (ctx.fn_depth == 0) {
+                err(ctx, er.at, "kernels return void — `return <value>` has no MSL form")
+                return
+            }
+            note(ctx, "stmt.return_value")
+            lines |> push("{indent}return {emit_value(ctx, er.subexpr)};")
             return
         }
         note(ctx, "stmt.return")
@@ -1703,6 +1876,140 @@ def private emit_for(var ctx : MslCtx; fr : ExprFor?; indent : string; var lines
     lines |> push("{indent}\}")
 }
 
+// ===== user-function emission (Phase 0) =====
+
+// MSL parameter for one das helper argument; "" = error already reported. Address space is
+// fully determined by the das type: array<T> can only be an @ssbo member (device), a fixed
+// array only a @workgroup member (threadgroup), everything else travels by value or thread-ref
+def private ufn_param(var ctx : MslCtx; v : VariablePtr; at : LineInfo) : string {
+    let dname = string(v.name)
+    let name = msl_safe_name(dname)
+    ctx.renames[dname] = name
+    let t = v._type
+    if (t == null) {
+        err(ctx, at, "parameter `{dname}` has no type")
+        return ""
+    }
+    if (t.baseType == Type.tArray) {
+        if (reject_cpu_only_width(ctx, at, t.firstType)) {
+            return ""
+        }
+        let elem = msl_buffer_elem_name(t.firstType)
+        if (empty(elem)) {
+            err(ctx, at, "parameter `{dname}` element type has no MSL form")
+            return ""
+        }
+        if (elem != msl_type_name(t.firstType)) {
+            err(ctx, at, "parameter `{dname}`: 3-lane packed elements do not lower through parameters")
+            return ""
+        }
+        note(ctx, t.flags.constant ? "ufn.param.buffer_const" : "ufn.param.buffer")
+        return t.flags.constant ? "device const {elem}* {name}" : "device {elem}* {name}"
+    }
+    if (t.baseType == Type.tFixedArray) {
+        if (reject_cpu_only_width(ctx, at, t.firstType)) {
+            return ""
+        }
+        let elem = msl_type_name(t.firstType)
+        if (empty(elem)) {
+            err(ctx, at, "parameter `{dname}` element type has no MSL form")
+            return ""
+        }
+        note(ctx, "ufn.param.tg")
+        return t.flags.constant ? "threadgroup const {elem}* {name}" : "threadgroup {elem}* {name}"
+    }
+    if (reject_cpu_only_width(ctx, at, t)) {
+        return ""
+    }
+    let tn = msl_type_name(t)
+    if (empty(tn)) {
+        err(ctx, at, "parameter `{dname}` type has no MSL form (scalars, their 2/3/4 vectors, array<T>, T[N])")
+        return ""
+    }
+    if (t.flags.ref && !t.flags.constant) {
+        note(ctx, "ufn.param.ref")
+        return "thread {tn}& {name}"
+    }
+    note(ctx, "ufn.param.value")
+    return "{tn} {name}"   // const refs on scalars degrade to by-value — semantically equal
+}
+
+def private emit_one_ufn(var ctx : MslCtx; idx : int) {
+    // per-function scope: the local-name state swaps out around the body emission
+    var save_renames <- ctx.renames
+    var save_ptrs <- ctx.ptrs
+    let save_self = ctx.self_name
+    ctx.self_name = ""   // free functions have no self; members cannot resolve here
+    let fn = ctx.ufns[idx].fn
+    var params : array<string>
+    params |> reserve(length(fn.arguments) + 4)
+    for (v in fn.arguments) {
+        let p = ufn_param(ctx, v, fn.at)
+        if (!empty(p)) {
+            params |> push(p)
+        }
+    }
+    var hidden <- ufn_hidden_builtins(ctx, idx)
+    for (b in hidden) {
+        let bi = builtin_msl_info(b)
+        note(ctx, "ufn.param.hidden_builtin")
+        params |> push("{bi.mslType} {b}")
+    }
+    delete hidden
+    var ret = "void"
+    if (fn.result != null && fn.result.baseType != Type.tVoid) {
+        if (!reject_cpu_only_width(ctx, fn.at, fn.result)) {
+            ret = msl_type_name(fn.result)
+            if (empty(ret)) {
+                err(ctx, fn.at, "return type of `{ctx.ufns[idx].msl_name}` has no MSL form")
+                ret = "void"
+            }
+        }
+    }
+    var body_lines : array<string>
+    ctx.fn_depth++
+    emit_stmt(ctx, fn.body, "    ", body_lines)
+    ctx.fn_depth--
+    note(ctx, "decl.user_fn")
+    let sig = "{ret} {ctx.ufns[idx].msl_name}({join(params, ", ")})"
+    ctx.ufns[idx].proto = "{sig};"
+    ctx.ufns[idx].text = build_string() $(var w) {
+        w |> write(sig)
+        w |> write(" \{\n")
+        w |> write(join(body_lines, "\n"))
+        w |> write("\n\}")
+    }
+    delete params
+    delete body_lines
+    ctx.self_name = save_self
+    ctx.renames <- save_renames
+    ctx.ptrs <- save_ptrs
+}
+
+// prototypes first, then bodies, both in pinned (name-sorted) order — call order can't bite
+def private emit_user_fns(var ctx : MslCtx) : string {
+    if (empty(ctx.ufns)) {
+        return ""
+    }
+    var order <- [for (i in range(length(ctx.ufns))); i]
+    order |> sort() $(a, b : int) : bool {
+        return ctx.ufns[a].msl_name < ctx.ufns[b].msl_name
+    }
+    for (i in order) {
+        emit_one_ufn(ctx, i)
+    }
+    return build_string() $(var w) {
+        for (i in order) {
+            w |> write(ctx.ufns[i].proto)
+            w |> write("\n")
+        }
+        for (i in order) {
+            w |> write(ctx.ufns[i].text)
+            w |> write("\n")
+        }
+    }
+}
+
 // ===== kernel signature + driver =====
 
 [macro_function]
@@ -1720,7 +2027,7 @@ def public kernel_entry_name(fn : FunctionPtr; cfg : MslEmitConfig) : string {
 //! explains; `census` collects the construct kinds emitted (gate B).
 [macro_function]
 def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslEmitConfig; var census : table<string>; var tgmem : uint64&) : string {
-    var ctx : MslCtx
+    var ctx = MslCtx()
     if (fn == null) {
         errors |> push("generate_msl: null function")
         return ""
@@ -1736,6 +2043,9 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
     ctx.self_name = string(fn.arguments[0].name)
     scan_members(ctx, fn)
     scan_body(ctx, fn.body)
+    // user functions discovered by the scan emit as plain MSL functions in the preamble
+    // (Phase 0); emission happens before the kernel body so each gets a fresh local scope
+    let user_fn_text = emit_user_fns(ctx)
 
     // @workgroup members lower to ONE dynamic [[threadgroup(0)]] buffer + derived pointers, NOT
     // static threadgroup arrays: the AGX backend constant-folds tile pointers into a static
@@ -1834,7 +2144,7 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
         }
     }
     let chunks = [
-        "#include <metal_stdlib>\nusing namespace metal;\n{mpp_include}{helper_text}kernel void {kernel_entry_name(fn, cfg)}(",
+        "#include <metal_stdlib>\nusing namespace metal;\n{mpp_include}{helper_text}{user_fn_text}kernel void {kernel_entry_name(fn, cfg)}(",
         join(params, ",\n        "),
         ") \{\n",
         empty(tg_lines) ? "" : join(tg_lines, "\n") + "\n",
