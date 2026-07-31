@@ -69,7 +69,7 @@ def update() { // nolint:STYLE037
         draw_editor_window()
         dock_window(ISSUES_WIN, (text = "Issues###ISSUES_WIN", closable = false,
                 flags = ImGuiWindowFlags.NoCollapse)) {
-            text_edit_issues_panel(g_edit)
+            text_edit_issues_panel(g_edit, TextSourceViewStyle())
         }
     }
     command_bindings_editor(g_commands, g_bindings_editor)

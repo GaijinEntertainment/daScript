@@ -23,8 +23,10 @@ struct public TextEditCompletion {
     request_line : int = -1
     request_column : int = -1
     prefix : string
-    //! Candidates so far, best first (full words, not suffixes).
+    //! Candidates so far, best first (full words, not suffixes) with their
+    //! rank tier: 0 = compiled symbols, 1 = document words, 2 = keywords.
     items : array<string>
+    item_tiers : array<int>
     //! The request came from an explicit trigger (`.`): the list opens
     //! immediately instead of waiting for the idle delay.
     explicit_trigger : bool = false
@@ -45,6 +47,7 @@ let public TEXT_EDIT_LIST_ROWS = 8
 
 def public text_edit_complete_dispose(var comp : TextEditCompletion) {
     delete comp.items
+    delete comp.item_tiers
     comp = TextEditCompletion()
 }
 
@@ -158,14 +161,28 @@ def private refresh_ghost(var ed : TextEditState; comp : TextEditCompletion cons
 
 def public text_edit_complete_offer(var ed : TextEditState;
                                     var comp : TextEditCompletion;
-                                    token : int; items : array<string>) {
-    //! Provider answer rail: candidates append (deduplicated) and the ghost
-    //! refreshes — an offer for a stale token is dropped whole.
+                                    token : int; items : array<string>;
+                                    tier : int = 1) {
+    //! Provider answer rail: candidates merge by rank tier (0 compiled, 1
+    //! document words, 2 keywords; stable within a tier, a better tier
+    //! promotes a duplicate); stale-token offers drop whole.
     return if (token != comp.token)
     for (item in items) {
-        if (find_index(comp.items, item) < 0) {
-            comp.items |> push(item)
+        let existing = find_index(comp.items, item)
+        if (existing >= 0) {
+            continue if (comp.item_tiers[existing] <= tier)
+            comp.items |> erase(existing)
+            comp.item_tiers |> erase(existing)
         }
+        var at = length(comp.items)
+        for (index in range(length(comp.item_tiers))) {
+            if (comp.item_tiers[index] > tier) {
+                at = index
+                break
+            }
+        }
+        comp.items |> push(item, at)
+        comp.item_tiers |> push(tier, at)
     }
     refresh_ghost(ed, comp)
     refresh_list(ed, comp, comp.explicit_trigger)
@@ -211,14 +228,17 @@ def public text_edit_complete_sync(var ed : TextEditState;
     comp.prefix = prefix
     comp.explicit_trigger = explicit_point && comp.typed
     delete comp.items
+    delete comp.item_tiers
     var inscope words : array<string>
     collect_document_words(ed, prefix, words)
+    text_edit_complete_offer(ed, comp, comp.token, words, 1)
+    var inscope keywords : array<string>
     text_language_profile(ed.language) $(profile) {
         for (keyword in profile.keywords) {
             if (keyword != prefix && starts_with(keyword, prefix)) {
-                words |> push(keyword)
+                keywords |> push(keyword)
             }
         }
     }
-    text_edit_complete_offer(ed, comp, comp.token, words)
+    text_edit_complete_offer(ed, comp, comp.token, keywords, 2)
 }

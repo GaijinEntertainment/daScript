@@ -2788,7 +2788,43 @@ def private text_source_edit_impl(id : string; var ed : TextEditState;
 var private ISSUE_HEADER : NarrativeState
 var private ISSUE_ROW : table<int; ToggleState>
 
-def public text_edit_issues_panel(var ed : TextEditState) {
+def private issue_segment(var dl : ImDrawList?; var x : float&; y : float;
+                          color : float4; text : string) {
+    return if (empty(text))
+    var font = GetFont()
+    let size = GetFontSize()
+    *dl |> AddTextRange(font, size, float2(x, y), GetColorU32(color),
+        text, length(text), 0, length(text))
+    x += CalcTextSizeForFontRange(font, size, text, length(text), 0,
+        length(text)).x
+}
+
+def private draw_issue_row(style : TextSourceViewStyle const;
+                           prefix, span, message : string) {
+    // colored segments over the blank selectable; quoted identifiers pop
+    var dl = GetWindowDrawList()
+    let top = GetItemRectMin()
+    var x = top.x + 4.0f
+    issue_segment(dl, x, top.y, style.syntax_function_color, prefix)
+    issue_segment(dl, x, top.y, style.line_number_color, span + "  ")
+    var at = 0
+    while (at < length(message)) {
+        let q1 = find(message, "'", at)
+        let q2 = q1 < 0 ? -1 : find(message, "'", q1 + 1)
+        if (q2 < 0) {
+            issue_segment(dl, x, top.y, style.text_color,
+                slice(message, at, length(message)))
+            break
+        }
+        issue_segment(dl, x, top.y, style.text_color, slice(message, at, q1))
+        issue_segment(dl, x, top.y, style.syntax_string_color,
+            slice(message, q1, q2 + 1))
+        at = q2 + 1
+    }
+}
+
+def public text_edit_issues_panel(var ed : TextEditState;
+                                  style : TextSourceViewStyle const) {
     //! Compiler findings as clickable rows, shown in the compiler's OWN
     //! convention (1-based line, 0-based column - matches the error text
     //! verbatim); a click navigates the editor there.
@@ -2806,8 +2842,7 @@ def public text_edit_issues_panel(var ed : TextEditState) {
             ? ed.diagnostics[index].file : ed.file_name)
         let prefix = empty(source_file) ? "" : source_file + ":"
         let row_span = issue_span_text(ed.diagnostics[index])
-        if (selectable(ISSUE_ROW[index], (text =
-                "{prefix}{row_span}  {ed.diagnostics[index].message}###issue_{index}"))) {
+        if (selectable(ISSUE_ROW[index], (text = "###issue_{index}"))) {
             // foreign-file findings show but cannot navigate this buffer
             if (empty(ed.diagnostics[index].file)) {
                 text_edit_set_cursor(ed, ed.diagnostics[index].line,
@@ -2815,6 +2850,7 @@ def public text_edit_issues_panel(var ed : TextEditState) {
                 ed.focused = true
             }
         }
+        draw_issue_row(style, prefix, row_span, ed.diagnostics[index].message)
     }
 }
 

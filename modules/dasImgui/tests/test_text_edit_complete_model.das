@@ -303,6 +303,37 @@ def test_multiline_diagnostic_spans(t : T?) {
 }
 
 [test]
+def test_complete_rank_tiers(t : T?) {
+    // Boris: ranking was backwards - compiled symbols arrived last and sat
+    // at the bottom. Tiers: 0 compiled beats 1 doc words beats 2 keywords.
+    var ed = TextEditState()
+    var comp = TextEditCompletion()
+    text_edit_load(ed, "re")
+    text_edit_set_language(ed, "das")
+    comp.token = 1
+    comp.request_revision = ed.revision
+    comp.prefix = "re"
+    comp.typed = true
+    var inscope keywords <- ["return"]
+    text_edit_complete_offer(ed, comp, 1, keywords, 2)
+    var inscope words <- ["retro"]
+    text_edit_complete_offer(ed, comp, 1, words, 1)
+    var inscope compiled <- ["real_fn"]
+    text_edit_complete_offer(ed, comp, 1, compiled, 0)
+    t |> equal(comp.items[0], "real_fn", "compiled symbols rank first")
+    t |> equal(comp.items[1], "retro", "document words second")
+    t |> equal(comp.items[2], "return", "keywords last")
+    t |> equal(ed.ghost_text, "al_fn", "the ghost takes the best tier")
+    // a duplicate arriving at a better tier promotes
+    var inscope promo <- ["retro"]
+    text_edit_complete_offer(ed, comp, 1, promo, 0)
+    t |> equal(comp.item_tiers[1], 0, "the doc word promoted to compiled")
+    t |> equal(length(comp.items), 3, "promotion does not duplicate")
+    text_edit_complete_dispose(comp)
+    text_edit_dispose(ed)
+}
+
+[test]
 def test_complete_offer_token_contract(t : T?) {
     var ed = TextEditState()
     var comp = TextEditCompletion()

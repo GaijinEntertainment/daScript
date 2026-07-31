@@ -269,7 +269,7 @@ def public text_edit_das_provider_sync(var ed : TextEditState;
             draining = provider.results |> try_pop_clone() $(res : DasCompleteResult#) {
                 var local : DasCompleteResult
                 local := res
-                text_edit_complete_offer(ed, comp, local.token, local.names)
+                text_edit_complete_offer(ed, comp, local.token, local.names, 0)
                 // the freshest compile always wins the diagnostics + status
                 text_edit_set_diagnostics(ed, local.diagnostics,
                     local.ok ? TextEditCompileStatus.ok : TextEditCompileStatus.failed)
