@@ -230,3 +230,9 @@
     see wired or mapped GPU memory and reads near zero here. One model per process, and quote the
     cold and warm numbers separately: they move independently and a cold-path change that leaves
     the warm path alone is the normal case, not a suspicious one.
+
+    `phys_footprint_peak` is a kernel high-water mark, so one *late* sample is exact — but an
+    external poller that never samples after the peak silently reports a number that is too low,
+    and a run shorter than the poll interval can report a peak BELOW the heap the program itself
+    printed. That contradiction is the tell. Poll sub-second and have the probe hold briefly before
+    exit; a peak that is not obviously above the reported heap is a broken measurement, not a win.

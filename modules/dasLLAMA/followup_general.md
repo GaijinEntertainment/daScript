@@ -111,21 +111,26 @@
     rope and store stages the way the D family shares `sqd_score_blk`/`sqd_vacc_blk`, and both
     bodies come back under the cap.
 
-11. **Metal on the .dlim rail is measured now; the eager cold flavors are what is left.**
-    Peak `phys_footprint` of one load, Meta-Llama-3.1-8B-Q8_0 (8 GB gguf → 9.6 GB image), M1 Max:
+11. **Only the vulkan bake still mints eagerly.** Peak `phys_footprint_peak` of one load,
+    Meta-Llama-3.1-8B-Q8_0 (8 GB gguf → 9.6 GB image), M1 Max:
 
-        cold planar (streamed)   4,029 MB
-        cold metal (eager)      19,456 MB
+        cold planar (streamed)   5,380 MB   4.5 s
+        cold metal  (streamed)   4,848 MB   3.1 s
         warm, either flavor        651 MB
 
-    So a mapped serve lands at ~0.07x the image, not 3x, and Metal wraps the mapping with
-    `metal_new_buffer_no_copy_untracked` exactly as Vulkan and the CPU did. What remains is the
-    cold blob flavors: they cannot stream, because `convert_model_to_metal_blob` (and the vulkan
-    bake's gather) need whole planes in RAM, so a metal mint still peaks at ~2x its image while a
-    planar mint peaks at ~0.4x. Done = the blob transform runs region-at-a-time off the gguf
-    mapping — the same shape `fill_stream_plane` already has for the quant planes — so the metal
-    cold path joins the planar one. Until then a big-model metal MINT is the memory-expensive
-    case; the serve is not.
+    A mapped serve lands at ~0.07x the image, and Metal wraps the mapping with
+    `metal_new_buffer_no_copy_untracked` exactly as Vulkan and the CPU do. The metal blob flavor
+    now streams like the planar one (it was 19,456 MB eager), and comes out *under* planar because
+    a blob forbids CPU repack and so never needs the resident `qscales` plane. What remains is the
+    **vulkan bake**: `vulkan_bake_take` collects its plan and blob from whole planes, so `-f vulkan`
+    still loads the model into RAM first. Done = the bake collects region-at-a-time off the gguf
+    mapping — the shape `fill_stream_plane` already has — and `--stream` covers every flavor.
+
+    A second, smaller item: the eager rail's own peak sits ~1.7 GB above the model's heap
+    (11,264 MB peak vs 9,636 MB heap on the 8B; ~1.9 GB on the 3B, so roughly constant rather than
+    proportional). That looks like the mapping's resident page window during the read, i.e.
+    reclaimable file cache, but it has not been confirmed — worth naming before anyone reads it as
+    an allocation the loader holds.
 
     Operationally, regardless: run big-model cells one model per process, and never read peak
     from `ps` (`rss` shows ~1 MB here — `footprint -p <pid>` is the metric). The earlier 70 GB

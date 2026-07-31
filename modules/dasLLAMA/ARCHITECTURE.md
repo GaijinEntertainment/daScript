@@ -125,11 +125,21 @@ Durable "why it is built this way" facts harvested from the design docs archived
   hardest and where the shape is set: a cold load writes its `.dlim`, drops the model, and maps the
   file back rather than serving the copy it already has in RAM. That is a real close/reopen and a
   real re-fault of a multi-GB file, and on an image larger than the page cache it is a re-read from
-  disk. Measured on Llama-3.1-8B-Q8_0 (9.6 GB image, M1 Max): planar cold **3.7 s → 4.5 s**, peak
-  **12.3 GB → 4.0 GB**; metal cold unchanged in both. We bought a 3x footprint cut with ~20% of one
-  cold start. Apply the same tiebreak everywhere — bake, convert, KV growth, GPU staging — and when
-  a change goes the other way, it needs the measured pair (peak AND wall) and an explicit call, not
-  an assumption that faster is better.
+  disk. Measured on Llama-3.1-8B-Q8_0 (9.6 GB image, M1 Max, `phys_footprint_peak`): planar cold
+  **3.7 s → 4.5 s**, peak **12.3 GB → 5.4 GB**. We bought a 2.3x footprint cut with ~20% of one cold
+  start. Apply the same tiebreak everywhere — bake, convert, KV growth, GPU staging — and when a
+  change goes the other way, it needs the measured pair (peak AND wall) and an explicit call, not an
+  assumption that faster is better.
+- **Cold builds STREAM; nothing materializes a model to write one.** The rail that makes the trade
+  above cheap: a cold build transcodes each plane from the gguf mapping straight into the image, so
+  the model never exists in RAM at all and the peak is a few per-tensor temps over the small
+  RAM-resident scale planes. This covers the planar flavor and the metal blob flavor alike — the
+  blob's gguf-native 34B blocks assemble per tensor on the way out, and because a blob forbids CPU
+  repack, it does not even need the resident `qscales` plane the planar stream keeps. Metal cold on
+  the 8B: **19.5 GB → 4.8 GB, 4.1 s → 3.1 s** (faster AND smaller — the eager rail had been
+  splitting gguf's interleaved blocks apart only to reassemble them). Only the vulkan bake stays
+  eager, because its plan collection needs whole planes; that is the one remaining exception and it
+  is a debt, not a design. A new flavor joins the streamed rail or explains why it cannot.
 - **Token-exact oracle tests pin the bit-exact path** (classic attention, scalar activation);
   approximate/fast paths get separate tolerance tests. Rerouting an oracle test through a
   non-bit-exact default makes it pass on the machine it was frozen on and flip elsewhere.
