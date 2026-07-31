@@ -8,6 +8,7 @@ require imgui public
 require imgui/imgui_boost_runtime public
 require imgui/imgui_text_source_view public
 require imgui/imgui_text_flow public
+require imgui/imgui_commands public
 require clipboard/clipboard
 require math
 require strings
@@ -994,6 +995,23 @@ def private editor_paste_from_clipboard(var ed : TextEditState; use_system : boo
     text_edit_paste(ed, text)
 }
 
+def private drain_typed_chars(var ed : TextEditState) : bool {
+    // typed characters NEVER route through bindings (IME/paste-as-typing safe)
+    let io & = unsafe(GetIO())
+    var typed_chars = false
+    if (!io.KeyCtrl && !io.KeyAlt) {
+        for (value in io.InputQueueCharacters) {
+            let codepoint = int(value)
+            if (codepoint >= 0x20 && codepoint != 0x7f && codepoint <= 0x10ffff) {
+                text_edit_type(ed, codepoint_utf8(codepoint))
+                ed.input_revision++
+                typed_chars = true
+            }
+        }
+    }
+    return typed_chars
+}
+
 def private nav_pressed(main_key, keypad_key : ImGuiKey; keypad_nav : bool) : bool {
     // every nav key answers for its numpad twin; twins mute while typing
     return (IsKeyPressed(main_key, true)
@@ -1006,18 +1024,7 @@ def private route_editor_keys(var ed : TextEditState; page_rows : int; // nolint
     let io & = unsafe(GetIO())
     let select = io.KeyShift
     // chars drain FIRST: a char-delivering frame types, keypad nav mutes
-    var typed_chars = false
-    if (!io.KeyCtrl && !io.KeyAlt) {
-        for (value in io.InputQueueCharacters) {
-            let codepoint = int(value)
-            if (codepoint >= 0x20 && codepoint != 0x7f && codepoint <= 0x10ffff) {
-                text_edit_type(ed, codepoint_utf8(codepoint))
-                ed.input_revision++
-                typed_chars = true
-            }
-        }
-    }
-    let keypad_nav = !typed_chars
+    let keypad_nav = !drain_typed_chars(ed)
     if (io.KeyCtrl && !io.KeyAlt) {
         if (nav_pressed(ImGuiKey.LeftArrow, ImGuiKey.Keypad4, keypad_nav)) {
             text_edit_move_word_left(ed, select)
@@ -1322,11 +1329,10 @@ def private draw_edit_content(var ed : TextEditState; m : EditMetrics;
     }
 }
 
-def public text_source_edit(id : string; var ed : TextEditState;
-                            var style : TextSourceViewStyle) : TextEditResult {
-    //! Draw + drive the editor as the sole content of a scrolling child window
-    //! (the host owns the child, like `text_source_view`). Returns what changed
-    //! this frame; the durable state lives in `ed`.
+def private text_source_edit_impl(id : string; var ed : TextEditState;
+                                  var style : TextSourceViewStyle;
+                                  var registry : CommandRegistry;
+                                  use_registry : bool) : TextEditResult {
     var result = TextEditResult()
     ensure_line(ed)
     refresh_layout_cache(ed)
@@ -1348,17 +1354,28 @@ def public text_source_edit(id : string; var ed : TextEditState;
     handle_edit_mouse(ed, m, style, hovered, font)
     let page_rows = max(1, int(floor(m.view_height / m.line_height)) - 1)
     ed.visible_rows = page_rows
-    // Keyboard arbitration: several editors may each remember focused=true
-    // (a click elsewhere is the only clearer), so the focused WINDOW picks
-    // which one hears keys; an active text input (find bar) mutes them all.
+    // keyboard arbitration: focused WINDOW picks the editor; WantTextInput mutes
     let io & = unsafe(GetIO())
     let window_focused = IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)
     if (ed.focused && window_focused && !io.WantTextInput) {
-        route_editor_keys(ed, page_rows, style.write_system_clipboard)
+        if (use_registry) {
+            // chars first (never binding-routed); char frames mute keypad chords
+            let typed = drain_typed_chars(ed)
+            command_set_enabled(registry, "edit.cancel", text_edit_has_selection(ed))
+            command_poll_scope(registry, CommandScope.component, id, typed)
+        } else {
+            route_editor_keys(ed, page_rows, style.write_system_clipboard)
+        }
+    }
+    if (use_registry) {
+        var invocation = CommandInvocation()
+        while (command_take_prefix(registry, "edit.", invocation)) {
+            dispatch_edit_command(ed, invocation.command_id, page_rows,
+                style.write_system_clipboard)
+        }
     }
     follow_edit_cursor(ed, m, style.tab_cells, font)
-    // Recount after input: an edit above may have grown or shrunk the buffer,
-    // and drawing against the pre-edit count indexes past a line join.
+    // recount after input: a line-join edit shrinks the buffer mid-frame
     refresh_layout_cache(ed)
     draw_edit_content(ed, m, style, font)
     PopID()
@@ -1366,4 +1383,186 @@ def public text_source_edit(id : string; var ed : TextEditState;
     result.edited = ed.revision != revision_before
     result.cursor_moved = ed.follow_revision != follow_before
     return result
+}
+
+// ===== Command registry keymap =====
+
+var private g_no_registry = CommandRegistry()
+
+def public text_source_edit(id : string; var ed : TextEditState;
+                            var style : TextSourceViewStyle) : TextEditResult {
+    //! Draw + drive the editor as the sole content of a scrolling child window
+    //! (the host owns the child, like `text_source_view`). This overload uses
+    //! the built-in keymap; pass a CommandRegistry for rebindable keys.
+    return text_source_edit_impl(id, ed, style, g_no_registry, false)
+}
+
+def public text_source_edit(id : string; var ed : TextEditState;
+                            var style : TextSourceViewStyle;
+                            var registry : CommandRegistry) : TextEditResult {
+    //! Registry-driven variant: every key routes through rebindable
+    //! imgui_commands bindings (call `text_edit_register_commands` once at
+    //! init; the bindings editor + JSON persistence come with the registry).
+    return text_source_edit_impl(id, ed, style, registry, true)
+}
+
+def private edit_define(var registry : CommandRegistry; id, title : string;
+                        binding : CommandBinding) {
+    command_define(registry, CommandDefinition(id = id, title = title,
+        category = "Editor", scope = CommandScope.component), binding)
+}
+
+def private edit_binding(id : string; key, keypad : ImGuiKey;
+                         primary, shift, rep : bool) : CommandBinding {
+    var binding = command_binding(id, key, primary, shift, false, false,
+        CommandScope.component, rep)
+    if (keypad != ImGuiKey.None) {
+        binding = with_alt_chord(binding, keypad, primary, shift)
+    }
+    return binding
+}
+
+def private edit_define_nav(var registry : CommandRegistry; id, title : string;
+                            key, keypad : ImGuiKey; primary : bool = false) {
+    // base + Shift select twin, numpad twins in the second chord slot
+    edit_define(registry, id, title,
+        edit_binding(id, key, keypad, primary, false, true))
+    edit_define(registry, id + ".select", title + " (select)",
+        edit_binding(id + ".select", key, keypad, primary, true, true))
+}
+
+def public text_edit_register_commands(var registry : CommandRegistry) { // nolint:STYLE038
+    //! Register the editor verb surface as rebindable commands with the spec
+    //! defaults (VS Code chords, CUA alternates, numpad twins). Idempotent.
+    edit_define_nav(registry, "edit.cursor_left", "Cursor left",
+        ImGuiKey.LeftArrow, ImGuiKey.Keypad4)
+    edit_define_nav(registry, "edit.cursor_right", "Cursor right",
+        ImGuiKey.RightArrow, ImGuiKey.Keypad6)
+    edit_define_nav(registry, "edit.cursor_up", "Cursor up",
+        ImGuiKey.UpArrow, ImGuiKey.Keypad8)
+    edit_define_nav(registry, "edit.cursor_down", "Cursor down",
+        ImGuiKey.DownArrow, ImGuiKey.Keypad2)
+    edit_define_nav(registry, "edit.page_up", "Page up",
+        ImGuiKey.PageUp, ImGuiKey.Keypad9)
+    edit_define_nav(registry, "edit.page_down", "Page down",
+        ImGuiKey.PageDown, ImGuiKey.Keypad3)
+    edit_define_nav(registry, "edit.home", "Line start",
+        ImGuiKey.Home, ImGuiKey.Keypad7)
+    edit_define_nav(registry, "edit.end", "Line end",
+        ImGuiKey.End, ImGuiKey.Keypad1)
+    edit_define_nav(registry, "edit.word_left", "Word left",
+        ImGuiKey.LeftArrow, ImGuiKey.Keypad4, true)
+    edit_define_nav(registry, "edit.word_right", "Word right",
+        ImGuiKey.RightArrow, ImGuiKey.Keypad6, true)
+    edit_define_nav(registry, "edit.document_start", "Document start",
+        ImGuiKey.Home, ImGuiKey.Keypad7, true)
+    edit_define_nav(registry, "edit.document_end", "Document end",
+        ImGuiKey.End, ImGuiKey.Keypad1, true)
+    edit_define(registry, "edit.newline", "New line",
+        edit_binding("edit.newline", ImGuiKey.Enter, ImGuiKey.KeypadEnter,
+            false, false, true))
+    edit_define(registry, "edit.backspace", "Delete left",
+        edit_binding("edit.backspace", ImGuiKey.Backspace, ImGuiKey.None,
+            false, false, true))
+    edit_define(registry, "edit.delete", "Delete right",
+        edit_binding("edit.delete", ImGuiKey.Delete, ImGuiKey.KeypadDecimal,
+            false, false, true))
+    edit_define(registry, "edit.delete_word_left", "Delete word left",
+        edit_binding("edit.delete_word_left", ImGuiKey.Backspace, ImGuiKey.None,
+            true, false, true))
+    edit_define(registry, "edit.delete_word_right", "Delete word right",
+        edit_binding("edit.delete_word_right", ImGuiKey.Delete,
+            ImGuiKey.KeypadDecimal, true, false, true))
+    edit_define(registry, "edit.tab", "Insert tab",
+        edit_binding("edit.tab", ImGuiKey.Tab, ImGuiKey.None, false, false, true))
+    edit_define(registry, "edit.select_all", "Select all",
+        edit_binding("edit.select_all", ImGuiKey.A, ImGuiKey.Keypad5,
+            true, false, false))
+    edit_define(registry, "edit.undo", "Undo",
+        with_alt_chord(command_binding("edit.undo", ImGuiKey.Z, true, false,
+            false, false, CommandScope.component, true),
+            ImGuiKey.Backspace, false, false, true))
+    edit_define(registry, "edit.redo", "Redo",
+        with_alt_chord(command_binding("edit.redo", ImGuiKey.Y, true, false,
+            false, false, CommandScope.component, true),
+            ImGuiKey.Z, true, true))
+    edit_define(registry, "edit.copy", "Copy",
+        with_alt_chord(command_binding("edit.copy", ImGuiKey.C, true, false,
+            false, false, CommandScope.component), ImGuiKey.Insert, true))
+    edit_define(registry, "edit.cut", "Cut",
+        with_alt_chord(command_binding("edit.cut", ImGuiKey.X, true, false,
+            false, false, CommandScope.component), ImGuiKey.Delete, false, true))
+    edit_define(registry, "edit.paste", "Paste",
+        with_alt_chord(command_binding("edit.paste", ImGuiKey.V, true, false,
+            false, false, CommandScope.component, true),
+            ImGuiKey.Insert, false, true))
+    edit_define(registry, "edit.toggle_overtype", "Toggle overtype",
+        edit_binding("edit.toggle_overtype", ImGuiKey.Insert, ImGuiKey.Keypad0,
+            false, false, false))
+    edit_define(registry, "edit.cancel", "Cancel selection",
+        edit_binding("edit.cancel", ImGuiKey.Escape, ImGuiKey.None,
+            false, false, false))
+}
+
+def private dispatch_edit_command(var ed : TextEditState; command_id : string; // nolint:STYLE037
+                                  page_rows : int; use_system_clipboard : bool) {
+    var select = false
+    var verb = command_id
+    if (ends_with(verb, ".select")) {
+        select = true
+        verb = slice(verb, 0, length(verb) - 7)
+    }
+    if (verb == "edit.cursor_left") {
+        text_edit_move_left(ed, select)
+    } elif (verb == "edit.cursor_right") {
+        text_edit_move_right(ed, select)
+    } elif (verb == "edit.cursor_up") {
+        text_edit_move_vertical(ed, -1, select)
+    } elif (verb == "edit.cursor_down") {
+        text_edit_move_vertical(ed, 1, select)
+    } elif (verb == "edit.page_up") {
+        text_edit_move_vertical(ed, -max(page_rows, 1), select)
+    } elif (verb == "edit.page_down") {
+        text_edit_move_vertical(ed, max(page_rows, 1), select)
+    } elif (verb == "edit.home") {
+        text_edit_move_home(ed, select)
+    } elif (verb == "edit.end") {
+        text_edit_move_end(ed, select)
+    } elif (verb == "edit.word_left") {
+        text_edit_move_word_left(ed, select)
+    } elif (verb == "edit.word_right") {
+        text_edit_move_word_right(ed, select)
+    } elif (verb == "edit.document_start") {
+        text_edit_move_document_start(ed, select)
+    } elif (verb == "edit.document_end") {
+        text_edit_move_document_end(ed, select)
+    } elif (verb == "edit.newline") {
+        text_edit_newline(ed)
+    } elif (verb == "edit.backspace") {
+        text_edit_backspace(ed)
+    } elif (verb == "edit.delete") {
+        text_edit_delete(ed)
+    } elif (verb == "edit.delete_word_left") {
+        text_edit_delete_word_left(ed)
+    } elif (verb == "edit.delete_word_right") {
+        text_edit_delete_word_right(ed)
+    } elif (verb == "edit.tab") {
+        text_edit_insert(ed, "\t")
+    } elif (verb == "edit.select_all") {
+        text_edit_select_all(ed)
+    } elif (verb == "edit.undo") {
+        let _ = text_edit_undo(ed)
+    } elif (verb == "edit.redo") {
+        let _ = text_edit_redo(ed)
+    } elif (verb == "edit.copy") {
+        editor_copy_to_clipboard(ed, use_system_clipboard)
+    } elif (verb == "edit.cut") {
+        editor_cut_to_clipboard(ed, use_system_clipboard)
+    } elif (verb == "edit.paste") {
+        editor_paste_from_clipboard(ed, use_system_clipboard)
+    } elif (verb == "edit.toggle_overtype") {
+        text_edit_toggle_overtype(ed)
+    } elif (verb == "edit.cancel") {
+        text_edit_clear_selection(ed)
+    }
 }

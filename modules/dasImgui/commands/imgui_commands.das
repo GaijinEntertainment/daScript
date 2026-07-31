@@ -3,7 +3,7 @@ options _comment_hygiene = true
 options indenting = 4
 options _allow_imgui_legacy = true
 
-module imgui_commands public
+module imgui_commands shared public
 
 require imgui public
 require daslib/enum_trait
@@ -53,6 +53,12 @@ struct CommandBinding {
     alt : bool = false
     secondary : bool = false
     repeat : bool = false
+    //! Optional second chord (numpad twins, CUA alternates); 0 = none.
+    @optional alt_key : int = 0
+    @optional alt_primary : bool = false
+    @optional alt_shift : bool = false
+    @optional alt_alt : bool = false
+    @optional alt_secondary : bool = false
 }
 
 struct CommandInvocation {
@@ -76,6 +82,8 @@ struct CommandRegistry {
     revision : int = 0
     saved_revision : int = 0
     capture_command_id : string
+    //! When true, the armed capture writes the binding's SECOND chord.
+    capture_alt : bool = false
 }
 
 struct CommandBindingsEditorState {
@@ -97,6 +105,20 @@ def public command_binding(command_id : string; key : ImGuiKey;
     return CommandBinding(command_id = command_id, scope = scope, key = int(key),
                           primary = primary, shift = shift, alt = alt,
                           secondary = secondary, repeat = repeat)
+}
+
+def public with_alt_chord(binding : CommandBinding; key : ImGuiKey;
+                          primary : bool = false; shift : bool = false;
+                          alt : bool = false;
+                          secondary : bool = false) : CommandBinding {
+    //! Attach the second chord to a binding (chainable at registration).
+    var result := binding
+    result.alt_key = int(key)
+    result.alt_primary = primary
+    result.alt_shift = shift
+    result.alt_alt = alt
+    result.alt_secondary = secondary
+    return result
 }
 
 def private definition_index(registry : CommandRegistry const; id : string) : int {
@@ -173,18 +195,30 @@ def private command_uses_macos_behaviors() : bool {
     return get_platform_name() == "darwin"
 }
 
-def public command_binding_chord(binding : CommandBinding const) : int {
-    var chord = binding.key
+def private make_chord(key : int; primary, shift, alt, secondary : bool) : int {
+    var chord = key
     let macos = command_uses_macos_behaviors()
-    if (binding.primary) {
+    if (primary) {
         chord = chord | (macos ? COMMAND_MOD_SUPER : COMMAND_MOD_CTRL)
     }
-    if (binding.shift) { chord = chord | COMMAND_MOD_SHIFT }
-    if (binding.alt) { chord = chord | COMMAND_MOD_ALT }
-    if (binding.secondary) {
+    if (shift) { chord = chord | COMMAND_MOD_SHIFT }
+    if (alt) { chord = chord | COMMAND_MOD_ALT }
+    if (secondary) {
         chord = chord | (macos ? COMMAND_MOD_CTRL : COMMAND_MOD_SUPER)
     }
     return chord
+}
+
+def public command_binding_chord(binding : CommandBinding const) : int {
+    return make_chord(binding.key, binding.primary, binding.shift,
+        binding.alt, binding.secondary)
+}
+
+def public command_binding_alt_chord(binding : CommandBinding const) : int {
+    //! The second chord, or 0 when the binding has none.
+    return 0 if (binding.alt_key == 0)
+    return make_chord(binding.alt_key, binding.alt_primary, binding.alt_shift,
+        binding.alt_alt, binding.alt_secondary)
 }
 
 def private primary_name() : string {
@@ -197,15 +231,25 @@ def private secondary_name() : string {
     return io.ConfigMacOSXBehaviors ? "Ctrl" : "Super"
 }
 
-def public command_binding_text(binding : CommandBinding const) : string {
-    if (binding.key == 0) return ""
+def private chord_text(key : int; primary, shift, alt, secondary : bool) : string {
+    if (key == 0) return ""
     var value : string
-    if (binding.primary) { value += primary_name() + "+" }
-    if (binding.shift) { value += "Shift+" }
-    if (binding.alt) { value += "Alt+" }
-    if (binding.secondary) { value += secondary_name() + "+" }
-    value += "{GetKeyName(unsafe(reinterpret<ImGuiKey>(binding.key)))}"
+    if (primary) { value += primary_name() + "+" }
+    if (shift) { value += "Shift+" }
+    if (alt) { value += "Alt+" }
+    if (secondary) { value += secondary_name() + "+" }
+    value += "{GetKeyName(unsafe(reinterpret<ImGuiKey>(key)))}"
     return value
+}
+
+def public command_binding_text(binding : CommandBinding const) : string {
+    return chord_text(binding.key, binding.primary, binding.shift,
+        binding.alt, binding.secondary)
+}
+
+def public command_binding_alt_text(binding : CommandBinding const) : string {
+    return chord_text(binding.alt_key, binding.alt_primary, binding.alt_shift,
+        binding.alt_alt, binding.alt_secondary)
 }
 
 def public command_shortcut_text(registry : CommandRegistry const;
@@ -216,18 +260,52 @@ def public command_shortcut_text(registry : CommandRegistry const;
     return index >= 0 ? command_binding_text(registry.bindings[index]) : ""
 }
 
+def private keypad_chord(chord : int) : bool {
+    let key = chord & ((1 << 12) - 1)
+    return key >= int(ImGuiKey.Keypad0) && key <= int(ImGuiKey.KeypadEqual)
+}
+
 def public command_poll_scope(var registry : CommandRegistry;
-                              scope : CommandScope; context : string = "") {
+                              scope : CommandScope; context : string = "";
+                              mute_keypad : bool = false) {
+    //! Poll every binding in `scope` via ImGui `Shortcut` routing. Both
+    //! chords are tested; a chord fires at most ONE command per frame.
+    //! `mute_keypad` skips keypad chords (the NumLock disambiguation).
     if (!empty(registry.capture_command_id)) return
+    var fired : array<int>
     for (binding in registry.bindings) {
-        if (binding.scope != scope || binding.key == 0
+        if (binding.scope != scope
                 || !command_enabled(registry, binding.command_id)) continue
         let flags = (scope == CommandScope.application ? COMMAND_ROUTE_GLOBAL : 0) | (binding.repeat ? COMMAND_REPEAT : 0)
-        if (Shortcut(command_binding_chord(binding), flags)) {
-            let _ = command_invoke(registry, binding.command_id,
-                                   CommandSource.keyboard, context)
+        for (chord_slot in range(2)) {
+            let chord = (chord_slot == 0 ? command_binding_chord(binding)
+                : command_binding_alt_chord(binding))
+            continue if ((chord & ((1 << 12) - 1)) == 0
+                || (mute_keypad && keypad_chord(chord))
+                || find_index(fired, chord) >= 0)
+            if (Shortcut(chord, flags)) {
+                fired |> push(chord)
+                let _ = command_invoke(registry, binding.command_id,
+                                       CommandSource.keyboard, context)
+            }
         }
     }
+    delete fired
+}
+
+def public command_take_prefix(var registry : CommandRegistry; prefix : string;
+                               var invocation : CommandInvocation) : bool {
+    //! Drain the first queued invocation whose id starts with `prefix`,
+    //! leaving the rest for the app's own dispatcher — how a component
+    //! (the editor) consumes only its commands from a shared registry.
+    for (index in range(length(registry.invocations))) {
+        if (starts_with(registry.invocations[index].command_id, prefix)) {
+            invocation <- registry.invocations[index]
+            registry.invocations |> erase(index)
+            return true
+        }
+    }
+    return false
 }
 
 def public command_reset_bindings(var registry : CommandRegistry) {
@@ -257,6 +335,11 @@ def public command_clear_binding(var registry : CommandRegistry; id : string;
         registry.bindings[index].shift = false
         registry.bindings[index].alt = false
         registry.bindings[index].secondary = false
+        registry.bindings[index].alt_key = 0
+        registry.bindings[index].alt_primary = false
+        registry.bindings[index].alt_shift = false
+        registry.bindings[index].alt_alt = false
+        registry.bindings[index].alt_secondary = false
     } else {
         registry.bindings |> push(CommandBinding(command_id = id, scope = scope))
     }
@@ -269,11 +352,17 @@ def public command_binding_conflict(registry : CommandRegistry const;
     let binding = registry.bindings[binding_index_]
     if (binding.key == 0) return ""
     let chord = command_binding_chord(binding)
+    let alt_chord = command_binding_alt_chord(binding)
     for (index in range(length(registry.bindings))) {
         if (index == binding_index_) continue
         let other = registry.bindings[index]
-        if (other.scope == binding.scope
-                && command_binding_chord(other) == chord) return other.command_id
+        continue if (other.scope != binding.scope)
+        let other_chord = command_binding_chord(other)
+        let other_alt = command_binding_alt_chord(other)
+        if (other_chord == chord || (alt_chord != 0 && other_chord == alt_chord)
+                || (other_alt != 0 && (other_alt == chord || other_alt == alt_chord))) {
+            return other.command_id
+        }
     }
     return ""
 }
@@ -375,14 +464,37 @@ def public command_capture_tick(var registry : CommandRegistry) {
         if (int(key) >= int(ImGuiKey.LeftCtrl)
                 && int(key) <= int(ImGuiKey.RightSuper)) continue
         let name = "{GetKeyName(key)}"
-        if (empty(name) || starts_with(name, "Mod") || starts_with(name, "Mouse")
+        // "None"/"Unknown" cover the enum's sentinel members — IsKeyPressed
+        // on those is out-of-bounds (asserts in Debug, OOB read in Release).
+        if (empty(name) || name == "None" || name == "Unknown"
+                || starts_with(name, "Mod") || starts_with(name, "Mouse")
                 || starts_with(name, "Gamepad") || !IsKeyPressed(key, false)) continue
         let primary_down = io.ConfigMacOSXBehaviors ? io.KeySuper : io.KeyCtrl
         let secondary_down = io.ConfigMacOSXBehaviors ? io.KeyCtrl : io.KeySuper
         let id = registry.capture_command_id
-        command_set_binding(registry, command_binding(id, key,
-            primary_down, io.KeyShift, io.KeyAlt, secondary_down,
-            registry.definitions[definition].scope))
+        let scope = registry.definitions[definition].scope
+        if (registry.capture_alt) {
+            let index = binding_index(registry, id, scope)
+            let binding := (index >= 0 ? registry.bindings[index]
+                : CommandBinding(command_id = id, scope = scope))
+            command_set_binding(registry, with_alt_chord(binding, key,
+                primary_down, io.KeyShift, io.KeyAlt, secondary_down))
+        } else {
+            var updated = command_binding(id, key,
+                primary_down, io.KeyShift, io.KeyAlt, secondary_down, scope)
+            let index = binding_index(registry, id, scope)
+            if (index >= 0) {
+                // keep the existing second chord across a primary rebind
+                updated.alt_key = registry.bindings[index].alt_key
+                updated.alt_primary = registry.bindings[index].alt_primary
+                updated.alt_shift = registry.bindings[index].alt_shift
+                updated.alt_alt = registry.bindings[index].alt_alt
+                updated.alt_secondary = registry.bindings[index].alt_secondary
+                updated.repeat = registry.bindings[index].repeat
+            }
+            command_set_binding(registry, updated)
+        }
+        registry.capture_alt = false
         registry.capture_command_id = ""
         registry.status = "Bound {id} to {command_shortcut_text(registry, id)}"
         return
@@ -426,7 +538,16 @@ def public command_bindings_editor(var registry : CommandRegistry;
             SameLine(360.0f)
             if (Button("{binding_text}##capture", ImVec2(180.0f, 0.0f))) {
                 registry.capture_command_id = definition.id
+                registry.capture_alt = false
                 registry.status = "Press a chord for {definition.title}..."
+            }
+            SameLine()
+            let alt_text = index >= 0 ? command_binding_alt_text(registry.bindings[index]) : ""
+            let alt_label = empty(alt_text) ? "+ alt" : alt_text
+            if (Button("{alt_label}##capture_alt", ImVec2(140.0f, 0.0f))) {
+                registry.capture_command_id = definition.id
+                registry.capture_alt = true
+                registry.status = "Press a SECOND chord for {definition.title}..."
             }
             SameLine()
             if (SmallButton("Clear")) {
