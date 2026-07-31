@@ -40,16 +40,42 @@ def init() {
     text_edit_set_language(g_edit, "das")
 }
 
+def private setup_layout(dock_id : uint) {
+    DockBuilderRemoveNode(dock_id)
+    DockBuilderAddDockSpaceNode(dock_id, ImGuiDockNodeFlags.None)
+    let viewport = GetMainViewport()
+    DockBuilderSetNodeSize(dock_id, viewport.Size)
+    var issues_id = 0u
+    var editor_id = 0u
+    DockBuilderSplitNode(dock_id, ImGuiDir.Down, 0.25f, issues_id, editor_id)
+    DockBuilderDockWindow("Editor###EDIT_WIN", editor_id)
+    DockBuilderDockWindow("Issues###ISSUES_WIN", issues_id)
+    DockBuilderFinish(dock_id)
+}
+
 [export]
-def update() {
+def update() { // nolint:STYLE037
     if (!harness_begin_frame()) return
     harness_new_frame()
     command_begin_frame(g_commands)
-    let viewport = GetMainViewport()
-    SetNextWindowPos(viewport.WorkPos, ImGuiCond.Always)
-    SetNextWindowSize(viewport.WorkSize, ImGuiCond.Always)
-    window(EDIT_WIN, (text = "text edit", closable = false,
-            flags = ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove)) {
+    dockspace(EDIT_DOCK, (flags = ImGuiDockNodeFlags.PassthruCentralNode)) {
+        if (!EDIT_DOCK.has_initial_layout && EDIT_DOCK.dock_id != 0u) {
+            setup_layout(EDIT_DOCK.dock_id)
+            EDIT_DOCK.has_initial_layout = true
+        }
+        draw_editor_window()
+        dock_window(ISSUES_WIN, (text = "Issues###ISSUES_WIN", closable = false,
+                flags = ImGuiWindowFlags.NoCollapse)) {
+            text_edit_issues_panel(g_edit)
+        }
+    }
+    command_bindings_editor(g_commands, g_bindings_editor)
+    harness_end_frame()
+}
+
+def private draw_editor_window() {
+    dock_window(EDIT_WIN, (text = "Editor###EDIT_WIN", closable = false,
+            flags = ImGuiWindowFlags.NoCollapse)) {
         var bar_rows = 2.0f
         if (g_find.open) {
             bar_rows += g_find.replace_open ? 2.0f : 1.0f
@@ -90,8 +116,7 @@ def update() {
         if (small_button(EDIT_BINDINGS, (text = "Bindings"))) {
             g_bindings_editor.open = true
         }
-        // Tail of the escaped buffer only: the full source would overflow the
-        // window and grow a phantom horizontal scrollbar.
+        // buffer tail only - the full source would overflow into a scrollbar
         var probe = replace(text_edit_source(g_edit), "\n", "\\n")
         let probe_length = length(probe)
         if (probe_length > 60) {
@@ -99,8 +124,6 @@ def update() {
         }
         text_show(EDIT_PROBE, probe)
     }
-    command_bindings_editor(g_commands, g_bindings_editor)
-    harness_end_frame()
 }
 
 [export]

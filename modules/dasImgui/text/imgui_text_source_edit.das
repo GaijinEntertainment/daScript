@@ -2748,6 +2748,36 @@ def private text_source_edit_impl(id : string; var ed : TextEditState;
     return result
 }
 
+// ===== Issues panel =====
+
+var private ISSUE_HEADER : NarrativeState
+var private ISSUE_ROW : table<int; ToggleState>
+
+def public text_edit_issues_panel(var ed : TextEditState) {
+    //! Compiler findings as clickable rows (raw 1-based ranges shown, the
+    //! compiler's own convention); a click navigates the editor there. The
+    //! host docks this panel wherever it likes.
+    var header = "no compile yet"
+    if (ed.compile_status == TextEditCompileStatus.compiling) {
+        header = "compiling..."
+    } elif (ed.compile_status == TextEditCompileStatus.ok) {
+        header = "0 issues - compiles"
+    } elif (ed.compile_status == TextEditCompileStatus.failed) {
+        header = "{length(ed.diagnostics)} issue(s)"
+    }
+    text_disabled(ISSUE_HEADER, (text = header))
+    for (index in range(length(ed.diagnostics))) {
+        let row_line = ed.diagnostics[index].line + 1
+        let row_column = ed.diagnostics[index].column + 1
+        if (selectable(ISSUE_ROW[index], (text =
+                "{row_line}:{row_column}  {ed.diagnostics[index].message}###issue_{index}"))) {
+            text_edit_set_cursor(ed, ed.diagnostics[index].line,
+                ed.diagnostics[index].column)
+            ed.focused = true
+        }
+    }
+}
+
 // ===== Command registry keymap =====
 
 var private g_no_registry = CommandRegistry()
