@@ -2323,3 +2323,10 @@ def public watcher_shutdown(terminate_running : bool = false) {
     g_sessions |> clear()
     unsafe { delete g_sessions }
 }
+
+def public option_value(prefix : string; fallback : string = "") : string {
+    for (argument in get_command_line_arguments()) {
+        if (starts_with(argument, prefix)) return slice(argument, length(prefix))
+    }
+    return fallback
+}

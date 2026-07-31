@@ -180,14 +180,14 @@ def public git_parsed_patch_dispose(var patch : GitParsedPatch) {
     patch = GitParsedPatch()
 }
 
-def private trim_cr(value : string) : string {
+def public trim_cr(value : string) : string {
     if (!empty(value) && ends_with(value, "\r")) {
         return slice(value, 0, length(value) - 1)
     }
     return value
 }
 
-def private byte_at(value : string; index : int) : int {
+def public byte_at(value : string; index : int) : int {
     var result = 0
     peek_data(value) $(data) {
         result = int(data[index])

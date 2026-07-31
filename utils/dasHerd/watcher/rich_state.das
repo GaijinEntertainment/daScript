@@ -734,13 +734,6 @@ var g_prepare_worker = InspectorPrepareWorker()
 
 var g_jobque_owned = false
 
-def option_value(prefix : string; fallback : string = "") : string {
-    for (argument in get_command_line_arguments()) {
-        if (starts_with(argument, prefix)) return slice(argument, length(prefix))
-    }
-    return fallback
-}
-
 def reset_terminal(columns : int = 100; rows : int = 30) {
     terminal_dispose(g_terminal)
     terminal_viewport_snapshot_dispose(g_terminal_cache.snapshot)

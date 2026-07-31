@@ -33,13 +33,6 @@ var private g_exit_after_ms = 0l
 let GC_PRESSURE_MIN_INTERVAL_SECONDS = 10l
 let GC_COMPACT_MIN_INTERVAL_SECONDS = 60l
 
-def private option_value(prefix : string; fallback : string = "") : string {
-    for (argument in get_command_line_arguments()) {
-        if (starts_with(argument, prefix)) return slice(argument, length(prefix))
-    }
-    return fallback
-}
-
 def private make_local_token : string {
     // This first slice is deliberately loopback-only. The token prevents an
     // accidental drive-by from another local page; remote deployment will use
@@ -149,7 +142,7 @@ def private sanitize_child_environment() {
 }
 
 [export]
-def init() {
+def init() { // nolint:STYLE038 — linear watcher-boot sequence
     if (!g_args_parsed) {
         parse_watcher_args()
     }

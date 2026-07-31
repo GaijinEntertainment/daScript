@@ -204,18 +204,10 @@ def private line_starts(source : string) : array<int> {
     return <- result
 }
 
-def private inspector_byte_at(source : string; index : int) : int {
-    var result = 0
-    peek_data(source) $(bytes) {
-        result = int(bytes[index])
-    }
-    return result
-}
-
 def private line_body_end(source : string; starts : array<int> const;
                           line_index : int) : int {
     var result = line_index + 1 < length(starts) ? starts[line_index + 1] - 1 : length(source)
-    if (result > starts[line_index] && inspector_byte_at(source, result - 1) == '\r') {
+    if (result > starts[line_index] && byte_at(source, result - 1) == '\r') {
         result--
     }
     return result

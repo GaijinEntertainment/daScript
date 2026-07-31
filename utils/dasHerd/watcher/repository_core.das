@@ -7,6 +7,7 @@ options indenting = 4
 module repository_core shared public
 
 require ./watcher_core.das public
+require ./file_inspection.das
 require daslib/command_line
 require daslib/fio public
 require daslib/json_boost public
@@ -1832,19 +1833,6 @@ def private launch_inventory(var runtime : RepositoryRuntime?) {
             "worktree", "list", "--porcelain"], "git-inventory",
         runtime.snapshot.record.checkout_path, launch_error)
     if (empty(runtime.refresh_session_id)) fail_refresh(runtime, launch_error)
-}
-
-def private trim_cr(value : string) : string {
-    if (!empty(value) && ends_with(value, "\r")) return slice(value, 0, length(value) - 1)
-    return value
-}
-
-def private byte_at(value : string; index : int) : int {
-    var result = 0
-    peek_data(value) $(data) {
-        result = int(data[index])
-    }
-    return result
 }
 
 def private append_worktree(var worktrees : array<WorktreeState>;
