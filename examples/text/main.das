@@ -1222,20 +1222,17 @@ def text_viewer_md_code_blocks(_input : JsonValue?) : JsonValue? {
     let active = active_document_index()
     if (active < 0) return JV((ok = false, error = "no document is open"))
     let doc & = unsafe(g_documents[active])
-    var blocks : array<JsonValue?>
-    for (index in range(length(doc.document.nodes))) {
-        continue if (doc.document.nodes[index].kind != RichNodeKind.code_block)
-        let entry & = unsafe(doc.markdown_view.nodes[index])
-        blocks |> push(JV((node = index,
-            collapsed = markdown_view_code_collapsed(doc.markdown_view, index),
-            screen_x = entry.screen_origin.x,
-            screen_y = entry.screen_origin.y,
-            icons_valid = entry.icon_rects_valid,
-            fold_icon_x = (entry.fold_icon_rect.x + entry.fold_icon_rect.z) * 0.5f,
-            fold_icon_y = (entry.fold_icon_rect.y + entry.fold_icon_rect.w) * 0.5f,
-            copy_icon_x = (entry.copy_icon_rect.x + entry.copy_icon_rect.z) * 0.5f,
-            copy_icon_y = (entry.copy_icon_rect.y + entry.copy_icon_rect.w) * 0.5f)))
-    }
+    var found <- markdown_view_code_blocks(doc.document, doc.markdown_view)
+    var blocks <- [for (code in found); JV((node = code.node,
+        collapsed = code.collapsed,
+        laid_out = code.laid_out,
+        screen_x = code.screen_origin.x,
+        screen_y = code.screen_origin.y,
+        icons_valid = code.icons_valid,
+        fold_icon_x = code.fold_icon_center.x,
+        fold_icon_y = code.fold_icon_center.y,
+        copy_icon_x = code.copy_icon_center.x,
+        copy_icon_y = code.copy_icon_center.y))]
     return JV((ok = true, count = length(blocks), blocks = JV(blocks)))
 }
 
