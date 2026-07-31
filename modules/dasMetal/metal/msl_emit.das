@@ -42,11 +42,13 @@ struct private MslMember {
     wg_off : uint64         // @workgroup member's offset inside the dynamic shmem buffer
 }
 
-// one discovered user function (Phase 0: free functions lower 1:1 as plain MSL functions)
+// one discovered user function (Phase 0: free functions lower 1:1 as plain MSL functions;
+// class methods lower as member functions of the ONE FLAT struct the kernel class emits as)
 struct private UserFn {
     @do_not_delete fn : FunctionPtr             // gc_node-owned AST — never finalized from here
     msl_name : string
-    builtins : table<string>    // gl_* this fn's OWN body reads (hidden trailing params)
+    is_method : bool            // member function of the kernel struct (self skipped, members visible)
+    builtins : table<string>    // gl_* this fn's OWN body reads (hidden trailing params; methods use struct fields)
     calls : array<int>          // ufn indices this fn's body calls (transitive builtin closure)
     proto : string
     text : string
@@ -69,6 +71,8 @@ struct private MslCtx {
     scan_stack : array<string>                  // discovery stack — recursion is a compile error
     cur_ufn : int = -1                          // ufn being scanned/emitted; -1 = the kernel itself
     fn_depth : int                              // > 0 while emitting a user function body
+    @do_not_delete kcls : StructurePtr          // the CONCRETE kernel class (devirtualization table)
+    has_methods : bool                          // any method call discovered -> the class emits as a struct
 }
 
 // MSL reserves the C++14 keyword set plus its own address-space/type keywords; colliding
@@ -339,10 +343,11 @@ def private ufn_key(fn : FunctionPtr) : string {
     }
 }
 
-// MSL-safe, collision-free emitted name: the bare das name when free, else base_N
-def private ufn_msl_name(var ctx : MslCtx; fn : FunctionPtr) : string {
-    let base = msl_safe_name(call_base_name("{fn.name}"))
-    var taken = false
+// MSL-safe, collision-free emitted name: the bare das name when free, else base_N. A method
+// spelled like its class would be a C++ constructor — force the suffix.
+def private ufn_msl_name(var ctx : MslCtx; base_name : string) : string {
+    let base = msl_safe_name(base_name)
+    var taken = ctx.kcls != null && ctx.kcls.name == base
     for (u in ctx.ufns) {
         if (u.msl_name == base) {
             taken = true
@@ -372,7 +377,7 @@ def private discover_user_fn(var ctx : MslCtx; fn : FunctionPtr; at : LineInfo) 
     let idx = length(ctx.ufns)
     ctx.user_fns[key] = idx
     ctx.ufns |> emplace <| UserFn(fn = unsafe(reinterpret<FunctionPtr>(fn)),
-        msl_name = ufn_msl_name(ctx, fn))
+        msl_name = ufn_msl_name(ctx, bn))
     ctx.scan_stack |> push(key)
     let prev = ctx.cur_ufn
     ctx.cur_ufn = idx
@@ -380,6 +385,95 @@ def private discover_user_fn(var ctx : MslCtx; fn : FunctionPtr; at : LineInfo) 
     ctx.cur_ufn = prev
     ctx.scan_stack |> pop()
     return idx
+}
+
+// Devirtualization: the concrete kernel class's method-field init IS the dispatch table — a
+// kernel object is the one exact instance self ever names, so the field init (inherited or
+// overriding) resolves every method call statically, matching the CPU vtable result.
+def private resolve_method(var ctx : MslCtx; mname : string; at : LineInfo) : FunctionPtr {
+    for (fld in ctx.kcls.fields) {
+        if (fld.name == mname) {
+            // an override's init casts the function address to the base field's signature —
+            // peel value/cast wrappers down to the address
+            var ie = fld.init
+            while (ie != null) {
+                if (ie is ExprRef2Value) {
+                    ie = (ie as ExprRef2Value).subexpr
+                } elif (ie is ExprCast) {
+                    ie = (ie as ExprCast).subexpr
+                } else {
+                    break
+                }
+            }
+            let ea = ie ?as ExprAddr
+            if (ea != null && ea.func != null) {
+                return unsafe(reinterpret<FunctionPtr>(ea.func))
+            }
+            err(ctx, at, "method `{mname}` of `{ctx.kcls.name}` has no resolvable body (abstract, or its field is not a plain method)")
+            return null
+        }
+    }
+    err(ctx, at, "method `{mname}` is not a member of `{ctx.kcls.name}`")
+    return null
+}
+
+def private discover_method(var ctx : MslCtx; mfn : FunctionPtr; mname : string; at : LineInfo) : int {
+    let key = ufn_key(mfn)
+    for (s in ctx.scan_stack) {
+        if (s == key) {
+            err(ctx, at, "method `{mname}` is recursive — MSL forbids recursion")
+            return -1
+        }
+    }
+    if (key_exists(ctx.user_fns, key)) {
+        return ctx.user_fns[key]
+    }
+    if (mfn.body == null) {
+        err(ctx, at, "method `{mname}` has no body to lower")
+        return -1
+    }
+    ctx.has_methods = true
+    let idx = length(ctx.ufns)
+    ctx.user_fns[key] = idx
+    ctx.ufns |> emplace <| UserFn(fn = unsafe(reinterpret<FunctionPtr>(mfn)),
+        msl_name = ufn_msl_name(ctx, mname), is_method = true)
+    ctx.scan_stack |> push(key)
+    let prev = ctx.cur_ufn
+    let prev_self = ctx.self_name
+    ctx.cur_ufn = idx
+    ctx.self_name = !empty(mfn.arguments) ? string(mfn.arguments[0].name) : ""
+    scan_body(ctx, mfn.body)
+    ctx.self_name = prev_self
+    ctx.cur_ufn = prev
+    ctx.scan_stack |> pop()
+    return idx
+}
+
+// the method-field reference of an invoke (arguments[0]), Ref2Value-peeled; null when the
+// invoke is not the `type<Cls>.method` shape
+def private invoke_method_field(e : Expression?) : ExprField? {
+    if (e == null) {
+        return null
+    }
+    if (e is ExprRef2Value) {
+        return invoke_method_field((e as ExprRef2Value).subexpr)
+    }
+    return e ?as ExprField
+}
+
+// receiver of a method call must peel down to self — kernels hold exactly one instance
+def private receiver_is_self(ctx : MslCtx; e : Expression?) : bool {
+    if (e == null) {
+        return false
+    }
+    if (e is ExprRef2Value) {
+        return receiver_is_self(ctx, (e as ExprRef2Value).subexpr)
+    }
+    if (e is ExprCast) {
+        return receiver_is_self(ctx, (e as ExprCast).subexpr)
+    }
+    let ev = e ?as ExprVar
+    return ev != null && ev.name == ctx.self_name
 }
 
 // a member passed to a callee's writable (non-const) array param is a write to that member
@@ -490,6 +584,35 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
         }
         for (arg in ecs.arguments) {
             scan_body(ctx, arg)
+        }
+    } elif (e is ExprInvoke) {
+        let ei = e as ExprInvoke
+        let mf = length(ei.arguments) >= 2 ? invoke_method_field(ei.arguments[0]) : null
+        if (ei.isInvokeMethod && mf != null && receiver_is_self(ctx, ei.arguments[1])) {
+            let mname = string(mf.name)
+            let mfn = resolve_method(ctx, mname, ei.at)
+            if (mfn != null) {
+                let ui = discover_method(ctx, mfn, mname, ei.at)
+                if (ui >= 0) {
+                    if (ctx.cur_ufn >= 0) {
+                        ctx.ufns[ctx.cur_ufn].calls |> push(ui)
+                    }
+                    // method params start at fn.arguments[1] (self); call args at arguments[2]
+                    let na = length(ei.arguments) - 2
+                    let np = length(mfn.arguments) - 1
+                    for (i in range(min(na, np))) {
+                        let pt = mfn.arguments[i + 1]._type
+                        if (pt != null && (pt.baseType == Type.tArray || pt.baseType == Type.tFixedArray ||
+                                pt.flags.ref) && !pt.flags.constant) {
+                            mark_write_target(ctx, ei.arguments[i + 2])
+                        }
+                    }
+                }
+            }
+        }
+        // args scan runs regardless — the emit pass reports unsupported invoke shapes
+        for (i in range(2, length(ei.arguments))) {
+            scan_body(ctx, ei.arguments[i])
         }
     } elif (e is ExprReturn) {
         scan_body(ctx, (e as ExprReturn).subexpr)
@@ -874,6 +997,8 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
         let fv = emit_value(ctx, op3.right)
         note(ctx, "op.select")
         return "({c} ? {tv} : {fv})"
+    } elif (e is ExprInvoke) {
+        return emit_invoke_value(ctx, e as ExprInvoke)
     } elif (e is ExprCall) {
         return emit_call_value(ctx, e as ExprCall)
     }
@@ -1111,6 +1236,40 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
     }
     err(ctx, ec.at, "call `{cname}` is not a supported MSL builtin and not a lowerable user function — kernels reach only the MSL subset")
     return "/*call {cname}*/"
+}
+
+// method call: mname(args) — inside the flat struct every method is a member function, and
+// the kernel body itself emits as one, so a plain call resolves in scope
+def private emit_invoke_value(var ctx : MslCtx; ei : ExprInvoke?) : string {
+    let mf = length(ei.arguments) >= 2 ? invoke_method_field(ei.arguments[0]) : null
+    if (!(ei.isInvokeMethod && mf != null && receiver_is_self(ctx, ei.arguments[1]))) {
+        err(ctx, ei.at, "invoke has no MSL lowering — only method calls on the kernel's own self lower")
+        return "/*invoke*/"
+    }
+    let mname = string(mf.name)
+    let mfn = resolve_method(ctx, mname, ei.at)
+    if (mfn == null) {
+        return "/*invoke {mname}*/"
+    }
+    let ui = ctx.user_fns?[ufn_key(mfn)] ?? -1
+    if (ui < 0) {
+        err(ctx, ei.at, "internal: method `{mname}` was not discovered at scan time")
+        return "/*invoke {mname}*/"
+    }
+    var args : array<string>
+    args |> reserve(length(ei.arguments))
+    for (i in range(2, length(ei.arguments))) {
+        if (i - 1 < length(mfn.arguments)) {
+            let pt = mfn.arguments[i - 1]._type
+            let wm = member_lookup(ctx, ei.arguments[i])
+            if (!empty(wm) && (ctx.members?[wm]?.workgroup ?? false) && pt != null && pt.flags.ref) {
+                err(ctx, ei.at, "@workgroup member `{wm}` bound to a `&` parameter — address spaces differ; pass the fixed array itself")
+            }
+        }
+        args |> push(emit_value(ctx, ei.arguments[i]))
+    }
+    note(ctx, "call.method")
+    return "{ctx.ufns[ui].msl_name}({join(args, ", ")})"
 }
 
 def private base_is_self(ctx : MslCtx; e : Expression?) : bool {
@@ -1726,6 +1885,9 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
         lines |> push("{indent}\}")
     } elif (e is ExprFor) {
         emit_for(ctx, e as ExprFor, indent, lines)
+    } elif (e is ExprInvoke) {
+        note(ctx, "stmt.call_method")
+        lines |> push("{indent}{emit_invoke_value(ctx, e as ExprInvoke)};")
     } elif (e is ExprCall) {
         let ec = e as ExprCall
         let cname = call_base_name("{ec.name}")
@@ -1951,23 +2113,33 @@ def private emit_one_ufn(var ctx : MslCtx; idx : int) {
     var save_renames <- ctx.renames
     var save_ptrs <- ctx.ptrs
     let save_self = ctx.self_name
-    ctx.self_name = ""   // free functions have no self; members cannot resolve here
+    let is_method = ctx.ufns[idx].is_method
     let fn = ctx.ufns[idx].fn
+    // a method's members resolve through ITS self name; a free function has none
+    ctx.self_name = is_method && !empty(fn.arguments) ? string(fn.arguments[0].name) : ""
     var params : array<string>
     params |> reserve(length(fn.arguments) + 4)
+    var first = true
     for (v in fn.arguments) {
+        if (first && is_method) {   // self becomes the implicit MSL `this`
+            first = false
+            continue
+        }
+        first = false
         let p = ufn_param(ctx, v, fn.at)
         if (!empty(p)) {
             params |> push(p)
         }
     }
-    var hidden <- ufn_hidden_builtins(ctx, idx)
-    for (b in hidden) {
-        let bi = builtin_msl_info(b)
-        note(ctx, "ufn.param.hidden_builtin")
-        params |> push("{bi.mslType} {b}")
+    if (!is_method) {   // methods read builtins as struct fields — no hidden threading
+        var hidden <- ufn_hidden_builtins(ctx, idx)
+        for (b in hidden) {
+            let bi = builtin_msl_info(b)
+            note(ctx, "ufn.param.hidden_builtin")
+            params |> push("{bi.mslType} {b}")
+        }
+        delete hidden
     }
-    delete hidden
     var ret = "void"
     if (fn.result != null && fn.result.baseType != Type.tVoid) {
         if (!reject_cpu_only_width(ctx, fn.at, fn.result)) {
@@ -1978,18 +2150,21 @@ def private emit_one_ufn(var ctx : MslCtx; idx : int) {
             }
         }
     }
+    let base_indent = is_method ? "    " : ""
     var body_lines : array<string>
     ctx.fn_depth++
-    emit_stmt(ctx, fn.body, "    ", body_lines)
+    emit_stmt(ctx, fn.body, base_indent + "    ", body_lines)
     ctx.fn_depth--
-    note(ctx, "decl.user_fn")
-    let sig = "{ret} {ctx.ufns[idx].msl_name}({join(params, ", ")})"
+    note(ctx, is_method ? "decl.method" : "decl.user_fn")
+    let sig = "{base_indent}{ret} {ctx.ufns[idx].msl_name}({join(params, ", ")})"
     ctx.ufns[idx].proto = "{sig};"
     ctx.ufns[idx].text = build_string() $(var w) {
         w |> write(sig)
         w |> write(" \{\n")
         w |> write(join(body_lines, "\n"))
-        w |> write("\n\}")
+        w |> write("\n")
+        w |> write(base_indent)
+        w |> write("\}")
     }
     delete params
     delete body_lines
@@ -1998,7 +2173,9 @@ def private emit_one_ufn(var ctx : MslCtx; idx : int) {
     ctx.ptrs <- save_ptrs
 }
 
-// prototypes first, then bodies, both in pinned (name-sorted) order — call order can't bite
+// free functions: prototypes first, then bodies, in pinned (name-sorted) order — call order
+// can't bite. Methods emit here too but their texts assemble into the struct (no prototypes:
+// C++ member functions see each other regardless of order).
 def private emit_user_fns(var ctx : MslCtx) : string {
     if (empty(ctx.ufns)) {
         return ""
@@ -2012,9 +2189,27 @@ def private emit_user_fns(var ctx : MslCtx) : string {
     }
     return build_string() $(var w) {
         for (i in order) {
-            w |> write(ctx.ufns[i].proto)
-            w |> write("\n")
+            if (!ctx.ufns[i].is_method) {
+                w |> write(ctx.ufns[i].proto)
+                w |> write("\n")
+            }
         }
+        for (i in order) {
+            if (!ctx.ufns[i].is_method) {
+                w |> write(ctx.ufns[i].text)
+                w |> write("\n")
+            }
+        }
+    }
+}
+
+// method bodies in pinned order, ready to sit inside the struct declaration
+def private method_texts(ctx : MslCtx) : string {
+    var order <- [for (i in range(length(ctx.ufns))); i; where ctx.ufns[i].is_method]
+    order |> sort() $(a, b : int) : bool {
+        return ctx.ufns[a].msl_name < ctx.ufns[b].msl_name
+    }
+    return build_string() $(var w) {
         for (i in order) {
             w |> write(ctx.ufns[i].text)
             w |> write("\n")
@@ -2053,11 +2248,9 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
         return ""
     }
     ctx.self_name = string(fn.arguments[0].name)
+    ctx.kcls = unsafe(reinterpret<StructurePtr>(fn.classParent))   // the devirtualization table
     scan_members(ctx, fn)
     scan_body(ctx, fn.body)
-    // user functions discovered by the scan emit as plain MSL functions in the preamble
-    // (Phase 0); emission happens before the kernel body so each gets a fresh local scope
-    let user_fn_text = emit_user_fns(ctx)
 
     // @workgroup members lower to ONE dynamic [[threadgroup(0)]] buffer + derived pointers, NOT
     // static threadgroup arrays: the AGX backend constant-folds tile pointers into a static
@@ -2065,10 +2258,16 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
     // the math-bound loop phase (ISA-measured on mul_mm: 40 vs 24 iadds/iteration, the das
     // kernel's whole residual vs llama.cpp). The opaque dynamic base keeps small carried
     // offsets. Layout: name-sorted, each member 16B-aligned; the total ships as the `_tgmem`
-    // companion and the dispatch sets setThreadgroupMemoryLength(index 0) with it.
-    var tg_lines : array<string>
+    // companion and the dispatch sets setThreadgroupMemoryLength(index 0) with it. In struct
+    // mode (the kernel calls methods) the derived pointers become struct fields filled at entry.
+    var tg_lines : array<string>       // flat mode: local declarations
+    var wg_fields : array<string>      // struct mode: pointer fields
+    var wg_fills : array<string>       // struct mode: entry fills
     var wg_names <- [for (name, m in keys(ctx.members), values(ctx.members)); name; where m.workgroup]
     wg_names |> sort()
+    tg_lines |> reserve(length(wg_names))
+    wg_fields |> reserve(length(wg_names))
+    wg_fills |> reserve(length(wg_names))
     tgmem = 0ul
     for (name in wg_names) {
         let moff = tgmem
@@ -2076,20 +2275,26 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
         let m = ctx.members[name]
         tgmem = (moff + m.wg_bytes + 15ul) & ~15ul
         let base = moff == 0ul ? "(shmem)" : "(shmem + {int64(moff)})"
+        var pname = m.msl_name
         if (m.wg_dim > 0) {
             note(ctx, "decl.shmem_ptr_array")
-            tg_lines |> push("    threadgroup {m.elem} * {m.msl_name} = (threadgroup {m.elem} *){base};")
         } else {
             // scalar member: the pointer takes a derived name and every access dereferences it
             note(ctx, "decl.shmem_ptr")
-            let pname = "{m.msl_name}_wg"
-            tg_lines |> push("    threadgroup {m.elem} * {pname} = (threadgroup {m.elem} *){base};")
+            pname = "{m.msl_name}_wg"
             ctx.members[name].msl_name = "(*{pname})"
         }
+        tg_lines |> push("    threadgroup {m.elem} * {pname} = (threadgroup {m.elem} *){base};")
+        wg_fields |> push("    threadgroup {m.elem} * {pname};")
+        wg_fills |> push("    self_.{pname} = (threadgroup {m.elem} *){base};")
     }
 
+    // user functions discovered by the scan emit after the tg rewrite (scalar-wg member reads
+    // inside method bodies need the derived-pointer spelling), before the kernel body
+    let user_fn_text = emit_user_fns(ctx)
+
     var body_lines : array<string>
-    emit_stmt(ctx, fn.body, "    ", body_lines)
+    emit_stmt(ctx, fn.body, ctx.has_methods ? "        " : "    ", body_lines)
 
     var params : array<string>
     params |> reserve((ctx.members |> length) + (ctx.builtins_used |> length))
@@ -2155,13 +2360,66 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
             }
         }
     }
+    if (!ctx.has_methods) {   // flat mode — kernels with no method calls emit exactly as before
+        let chunks = [
+            "#include <metal_stdlib>\nusing namespace metal;\n{mpp_include}{helper_text}{user_fn_text}kernel void {kernel_entry_name(fn, cfg)}(",
+            join(params, ",\n        "),
+            ") \{\n",
+            empty(tg_lines) ? "" : join(tg_lines, "\n") + "\n",
+            join(body_lines, "\n"),
+            "\n\}\n"
+        ]
+        for (kind in keys(ctx.census)) {
+            census |> insert(kind)
+        }
+        return join(chunks, "")
+    }
+
+    // struct mode: the kernel class emits as ONE FLAT MSL struct — members and every method
+    // (inherited or overriding, devirtualized) live in the concrete class; the entry keeps
+    // today's ABI, fills self, and calls the kernel method
+    note(ctx, "decl.class_struct")
+    note(ctx, "entry.self_fill")
+    let sname = msl_safe_name(string(ctx.kcls.name))
+    let kname = "{fn.name}"
+    let ktick = kname |> rfind("`")
+    let kmethod = msl_safe_name(ktick >= 0 ? (kname |> slice(ktick + 1)) : kname)
+    var field_lines : array<string>
+    var fill_lines : array<string>
+    field_lines |> reserve(length(ordered) + length(wg_fields) + length(bnames))
+    fill_lines |> reserve(length(ordered) + length(wg_fills) + length(bnames))
+    for (name in ordered) {
+        let m = ctx.members[name]
+        if (m.uniform) {
+            field_lines |> push("    {m.elem} {m.msl_name};")
+        } elif (m.written) {
+            field_lines |> push("    device {m.elem}* {m.msl_name};")
+        } else {
+            field_lines |> push("    device const {m.elem}* {m.msl_name};")
+        }
+        fill_lines |> push("    self_.{m.msl_name} = {m.msl_name};")
+    }
+    field_lines |> push_from(wg_fields)
+    fill_lines |> push_from(wg_fills)
+    for (name in bnames) {
+        let bi = builtin_msl_info(name)
+        field_lines |> push("    {bi.mslType} {name};")
+        fill_lines |> push("    self_.{name} = {name};")
+    }
     let chunks = [
-        "#include <metal_stdlib>\nusing namespace metal;\n{mpp_include}{helper_text}{user_fn_text}kernel void {kernel_entry_name(fn, cfg)}(",
-        join(params, ",\n        "),
-        ") \{\n",
-        empty(tg_lines) ? "" : join(tg_lines, "\n") + "\n",
+        "#include <metal_stdlib>\nusing namespace metal;\n{mpp_include}{helper_text}{user_fn_text}",
+        "struct {sname} \{\n",
+        join(field_lines, "\n"),
+        "\n",
+        method_texts(ctx),
+        "    void {kmethod}() \{\n",
         join(body_lines, "\n"),
-        "\n\}\n"
+        "\n    \}\n\};\n",
+        "kernel void {kernel_entry_name(fn, cfg)}(",
+        join(params, ",\n        "),
+        ") \{\n    {sname} self_;\n",
+        join(fill_lines, "\n"),
+        "\n    self_.{kmethod}();\n\}\n"
     ]
     for (kind in keys(ctx.census)) {
         census |> insert(kind)

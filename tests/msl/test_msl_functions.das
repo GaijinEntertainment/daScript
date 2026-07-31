@@ -18,6 +18,13 @@ def private has(t : T?; needle : string) {
     }
 }
 
+def private hasc(t : T?; needle : string) {
+    t |> success(find(ufxcls_msl, needle) >= 0, "emitted MSL carries `{needle}`")
+    if (find(ufxcls_msl, needle) < 0) {
+        to_log(LOG_ERROR, "MISSING `{needle}` in:\n{ufxcls_msl}\n")
+    }
+}
+
 [test]
 def test_msl_functions(t : T?) {
     t |> run("user functions lower 1:1 — signatures, address spaces, hidden builtins") <| @(t : T?) {
@@ -48,5 +55,29 @@ def test_msl_functions(t : T?) {
         let twin = find(userfns_msl, "half ufx_twice_")
         t |> success(base >= 0, "float instance emitted")
         t |> success(twin >= 0, "half instance emitted under a suffixed name")
+    }
+    t |> run("class methods + inheritance — the one flat struct, statically devirtualized") <| @(t : T?) {
+        // the class emits as one flat struct: inherited members and methods live in the
+        // concrete class; @uniform members become by-value fields; the entry fills self
+        hasc(t, "struct UfxKid \{")
+        hasc(t, "device const float* xs;")
+        hasc(t, "device float* ys;")           // written only through the store METHOD body
+        hasc(t, "float gain;")
+        hasc(t, "threadgroup float * tmp;")
+        hasc(t, "uint3 gl_GlobalInvocationID;")
+        // methods as member functions; the base skeleton calls the KID's override
+        hasc(t, "float combo(uint i) \{")
+        hasc(t, "return stage(pick(i));")
+        hasc(t, "return (xs[i] + zs[i]);")     // Kid's pick — the devirtualized body
+        t |> success(find(ufxcls_msl, "return xs[i];") < 0, "Base's un-overridden pick never emits")
+        // the kernel body itself is a member function; the entry fills self and calls it
+        hasc(t, "void ufxcls() \{")
+        hasc(t, "UfxKid self_;")
+        hasc(t, "self_.xs = xs;")
+        hasc(t, "self_.gain = gain;")
+        hasc(t, "self_.gl_GlobalInvocationID = gl_GlobalInvocationID;")
+        hasc(t, "self_.ufxcls();")
+        // a free function called from the kernel body still emits at global scope
+        hasc(t, "float ufx_sky(float d)")
     }
 }

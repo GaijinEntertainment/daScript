@@ -596,6 +596,38 @@ class UserFns {
     }
 }
 
+// ===== Phase 0: class methods + inheritance (the ONE FLAT struct emission) =====
+
+class UfxBase {
+    @ssbo @binding = 0 xs : array<float>
+    @ssbo @binding = 1 ys : array<float>
+    @uniform @binding = 2 gain : float
+
+    def stage(v : float) : float => v * gain
+    def pick(i : uint) : float => xs[i]
+    def combo(i : uint) : float => stage(pick(i))   // base skeleton calling the overridable stage
+}
+
+class UfxKid : UfxBase {
+    @ssbo @binding = 3 zs : array<float>
+    @workgroup tmp : float[16]
+
+    def override pick(i : uint) : float => xs[i] + zs[i]   // what combo must actually call
+
+    def store(i : uint; v : float) {   // member write through a method body
+        ys[i] = v
+    }
+
+    [metal_kernel(name="ufxcls_msl"), marker(no_coverage)]
+    def ufxcls {
+        let i = gl_GlobalInvocationID.x
+        let lid = gl_LocalInvocationID.x
+        tmp[lid] = combo(i)
+        barrier()
+        store(i, tmp[lid] + ufx_sky(xs[i]))
+    }
+}
+
 //! Gate B: exactly the construct kinds the fixture set must emit — the census meta-test
 //! asserts equality with the observed union in both directions.
 def public declared_msl_census : table<string> {
@@ -860,7 +892,13 @@ def public declared_msl_census : table<string> {
         "ufn.param.tg",
         "ufn.param.ref",
         "ufn.param.value",
-        "ufn.param.hidden_builtin"
+        "ufn.param.hidden_builtin",
+        // Phase 0: class methods + inheritance (the flat-struct emission)
+        "decl.class_struct",
+        "decl.method",
+        "call.method",
+        "stmt.call_method",
+        "entry.self_fill"
     }
 }
 
@@ -869,5 +907,6 @@ def public all_msl_censuses : array<string> {
     return <- [mul_ab_msl_census, uarith_msl_census, iarith_msl_census, farith_msl_census,
         vecarith_msl_census, control_msl_census, loops_msl_census, reduce_msl_census, simd_msl_census,
         halfarith_msl_census, latconv_msl_census, packed3_msl_census, sgmat_msl_census,
-        sgmat_tiled_msl_census, sgmat_rolled_msl_census, mathcalls_msl_census, userfns_msl_census]
+        sgmat_tiled_msl_census, sgmat_rolled_msl_census, mathcalls_msl_census, userfns_msl_census,
+        ufxcls_msl_census]
 }
