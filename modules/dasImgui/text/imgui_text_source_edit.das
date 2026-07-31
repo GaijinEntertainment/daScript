@@ -1848,15 +1848,18 @@ def private text_source_edit_impl(id : string; var ed : TextEditState;
             reinterpret<TypeInfo const?>(typeinfo rtti_typeinfo(type<TextEditState>)))
     }
     let hovered = IsItemHovered(ImGuiHoveredFlags.None)
+    // keyboard arbitration: focused WINDOW picks the editor; WantTextInput mutes
+    let io & = unsafe(GetIO())
+    let window_focused = IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)
     if (IsItemFocused()) {
         ed.focused = true
+    } elif (ed.focused && window_focused && !io.WantTextInput) {
+        // Shortcut routing follows item focus; the find bar keeps it on close — reclaim
+        FocusItem()
     }
     handle_edit_mouse(ed, m, style, hovered, font)
     let page_rows = max(1, int(floor(m.view_height / m.line_height)) - 1)
     ed.visible_rows = page_rows
-    // keyboard arbitration: focused WINDOW picks the editor; WantTextInput mutes
-    let io & = unsafe(GetIO())
-    let window_focused = IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)
     if (ed.focused && window_focused && !io.WantTextInput) {
         if (use_registry) {
             // chars first (never binding-routed); char frames mute keypad chords
