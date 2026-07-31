@@ -351,6 +351,9 @@ def private restyle_lines(var ed : TextEditState; first_line, last_forced : int)
 
 struct public TextEditBracketMatch {
     valid : bool = false
+    //! A bracket sits at the caret but its counterpart is missing; the lone
+    //! bracket's position is in open_line/open_column.
+    mismatch : bool = false
     open_line : int
     open_column : int
     close_line : int
@@ -434,6 +437,10 @@ def public text_edit_match_bracket(ed : TextEditState const) : TextEditBracketMa
                 result.open_column = opener ? column : other.y
                 result.close_line = opener ? other.x : line
                 result.close_column = opener ? other.y : column
+            } else {
+                result.mismatch = true
+                result.open_line = line
+                result.open_column = column
             }
         }
     }
@@ -2096,13 +2103,7 @@ def private draw_edit_content(var ed : TextEditState; m : EditMetrics;
     ed.syntax_idle += io.DeltaTime
     draw_edit_highlights(ed, m, style, font, dl, first_visible, last_visible)
     if (ed.focused) {
-        let matched = text_edit_match_bracket(ed)
-        if (matched.valid) {
-            draw_bracket_cell(ed, m, style, font, dl, matched.open_line,
-                matched.open_column, first_visible, last_visible)
-            draw_bracket_cell(ed, m, style, font, dl, matched.close_line,
-                matched.close_column, first_visible, last_visible)
-        }
+        draw_bracket_highlight(ed, m, style, font, dl, first_visible, last_visible)
     }
     let has_selection = text_edit_has_selection(ed)
     let sel = text_edit_selection(ed)
@@ -2206,10 +2207,30 @@ def private draw_edit_line(ed : TextEditState const; row : int; line : string;
     }
 }
 
+def private draw_bracket_highlight(ed : TextEditState const; m : EditMetrics;
+                                   style : TextSourceViewStyle const;
+                                   var font : ImFont?; var dl : ImDrawList?;
+                                   first_visible, last_visible : int) {
+    let matched = text_edit_match_bracket(ed)
+    if (matched.valid) {
+        draw_bracket_cell(ed, m, style, font, dl, matched.open_line,
+            matched.open_column, first_visible, last_visible,
+            style.bracket_match_color)
+        draw_bracket_cell(ed, m, style, font, dl, matched.close_line,
+            matched.close_column, first_visible, last_visible,
+            style.bracket_match_color)
+    } elif (matched.mismatch) {
+        draw_bracket_cell(ed, m, style, font, dl, matched.open_line,
+            matched.open_column, first_visible, last_visible,
+            style.bracket_mismatch_color)
+    }
+}
+
 def private draw_bracket_cell(ed : TextEditState const; m : EditMetrics;
                               style : TextSourceViewStyle const;
                               var font : ImFont?; var dl : ImDrawList?;
-                              line, column, first_visible, last_visible : int) {
+                              line, column, first_visible, last_visible : int;
+                              color : float4) {
     return if (line < first_visible || line > last_visible)
     let text = ed.lines[line]
     let x0 = (m.gutter_space + text_source_range_width(text, 0, column,
@@ -2220,7 +2241,7 @@ def private draw_bracket_cell(ed : TextEditState const; m : EditMetrics;
     let top = m.origin.y + float(line) * m.line_height
     *dl |> AddRectFilled(float2(m.origin.x + x0, top),
         float2(m.origin.x + max(x1, x0 + 2.0f), top + m.line_height),
-        GetColorU32(style.bracket_match_color), 0.0f, ImDrawFlags.None)
+        GetColorU32(color), 0.0f, ImDrawFlags.None)
 }
 
 def private draw_edit_highlights(ed : TextEditState const; m : EditMetrics;

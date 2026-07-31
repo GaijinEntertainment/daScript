@@ -828,6 +828,17 @@ def test_edit_bracket_match(t : T?) {
     text_edit_set_cursor(ed, 1, 2)
     matched = text_edit_match_bracket(ed)
     t |> success(!matched.valid, "no bracket near the caret, no match")
+    t |> success(!matched.mismatch, "and no mismatch either")
+    // an unbalanced opener reports a mismatch at its own position
+    text_edit_load(ed, "f(a\ng[b")
+    text_edit_set_language(ed, "das")
+    text_edit_set_cursor(ed, 0, 1)
+    matched = text_edit_match_bracket(ed)
+    t |> success(!matched.valid && matched.mismatch, "lone ( is a mismatch")
+    t |> equal(matched.open_column, 1, "at its own column")
+    text_edit_set_cursor(ed, 1, 2)
+    matched = text_edit_match_bracket(ed)
+    t |> success(matched.mismatch, "lone [ is a mismatch too")
     text_edit_dispose(ed)
 }
 
