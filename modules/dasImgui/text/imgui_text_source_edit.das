@@ -2507,6 +2507,21 @@ def private draw_edit_line(ed : TextEditState const; row : int; line : string;
     }
 }
 
+def private diagnostic_span(ed : TextEditState const; diag : TextEditDiagnostic;
+                            m : EditMetrics; style : TextSourceViewStyle const;
+                            var font : ImFont?) : float2 {
+    // (x0, x1) in widget space, gutter included - shared by squiggle + hover
+    let line = ed.lines[diag.line]
+    let column = clamp(diag.column, 0, max(length(line) - 1, 0))
+    var end_ = diag.length > 0 ? column + diag.length : word_run_at(line, column).y
+    end_ = clamp(end_, column + 1, length(line))
+    let x0 = (m.gutter_space + text_source_range_width(line, 0, column,
+        font, m.font_size, m.cell_width, style.tab_cells))
+    let x1 = (m.gutter_space + text_source_range_width(line, 0, end_,
+        font, m.font_size, m.cell_width, style.tab_cells))
+    return float2(x0, max(x1, x0 + m.cell_width))
+}
+
 def private draw_edit_diagnostics(ed : TextEditState const; m : EditMetrics;
                                   style : TextSourceViewStyle const;
                                   var font : ImFont?; var dl : ImDrawList?;
@@ -2515,15 +2530,9 @@ def private draw_edit_diagnostics(ed : TextEditState const; m : EditMetrics;
     for (diag in ed.diagnostics) {
         continue if (diag.line < first_visible || diag.line > last_visible
             || diag.line >= length(ed.lines))
-        let line = ed.lines[diag.line]
-        let column = clamp(diag.column, 0, max(length(line) - 1, 0))
-        var end_ = diag.length > 0 ? column + diag.length : word_run_at(line, column).y
-        end_ = clamp(end_, column + 1, length(line))
-        let x0 = (m.origin.x + m.gutter_space + text_source_range_width(line, 0,
-            column, font, m.font_size, m.cell_width, style.tab_cells))
-        var x1 = (m.origin.x + m.gutter_space + text_source_range_width(line, 0,
-            end_, font, m.font_size, m.cell_width, style.tab_cells))
-        x1 = max(x1, x0 + m.cell_width)
+        let span = diagnostic_span(ed, diag, m, style, font)
+        let x0 = m.origin.x + span.x
+        let x1 = m.origin.x + span.y
         let base_y = m.origin.y + float(diag.line + 1) * m.line_height - 2.0f
         // small zigzag underline
         var x = x0
@@ -2535,6 +2544,26 @@ def private draw_edit_diagnostics(ed : TextEditState const; m : EditMetrics;
             x = next
             up = !up
         }
+    }
+}
+
+def private edit_diagnostic_tooltip(ed : TextEditState const; m : EditMetrics;
+                                    style : TextSourceViewStyle const;
+                                    var font : ImFont?) {
+    let local = GetMousePos() - m.origin
+    let row = int(floor(local.y / m.line_height))
+    return if (row < 0 || row >= length(ed.lines))
+    var message = ""
+    for (diag in ed.diagnostics) {
+        continue if (diag.line != row)
+        let span = diagnostic_span(ed, diag, m, style, font)
+        if (local.x >= span.x - 2.0f && local.x <= span.y + 2.0f) {
+            message = empty(message) ? diag.message : message + "\n" + diag.message
+        }
+    }
+    if (!empty(message) && BeginTooltip()) {
+        TextUnformatted(message)
+        EndTooltip()
     }
 }
 
@@ -2676,6 +2705,9 @@ def private text_source_edit_impl(id : string; var ed : TextEditState;
         FocusItem()
     }
     handle_edit_mouse(ed, m, style, hovered, font)
+    if (hovered && !empty(ed.diagnostics)) {
+        edit_diagnostic_tooltip(ed, m, style, font)
+    }
     let page_rows = max(1, int(floor(m.view_height / m.line_height)) - 1)
     ed.visible_rows = page_rows
     if (ed.focused && window_focused && !io.WantTextInput) {
