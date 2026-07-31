@@ -584,7 +584,8 @@ def document_module_rst(_root : string) {
         group_by_regex("RST section makers", mod, %regex~make%%),
         group_by_regex("Documentation queries", mod, %regex~.+_needs%%),
         group_by_regex("Group operations", mod, %regex~.*group%%),
-        group_by_regex("Naming helpers", mod, %regex~(topic|module_name|function_name|safe_function_name)$%%)
+        group_by_regex("Naming helpers", mod, %regex~(topic|module_name|function_name|safe_function_name)$%%),
+        group_by_regex("Reference policy", mod, %regex~mark_module_pageless$%%)
     )
     document("Documentation generator", mod, "rst.rst", groups)
 }

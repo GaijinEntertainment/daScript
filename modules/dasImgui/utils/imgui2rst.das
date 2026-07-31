@@ -257,6 +257,10 @@ def main {
         topic_root = "{doc_stdlib}/generated"
         handmade_root = doc_stdlib
 
+        // the raw binding has no generated pages; signatures naming its types
+        // (ImGuiKey etc.) must print plain, or sphinx -W dies on the dead ref
+        mark_module_pageless("imgui")
+
         document_module_imgui_boost_v2()
         document_module_imgui_boost_runtime()
         document_module_imgui_widgets_builtin()
