@@ -19,12 +19,12 @@ state layout, not verb signatures).
 Research found exactly three places where the major editors genuinely
 diverge in SEMANTICS. Decisions of record:
 
-1. **Ctrl+Right lands at the START of the next word** (Windows convention:
-   documented `WB_MOVEWORDRIGHT` semantics, symmetric with Ctrl+Left; used
-   by Visual Studio, Word, Notepad, Chrome). VS Code's land-at-end is a
-   deliberate deviation with measured cost (7 presses vs 4 crossing
-   `this.is.a.test`). We keep BOTH primitives (`word start` and `word end`)
-   so the binding can be flipped later; the default follows Windows.
+1. **Ctrl+Right lands at the END of the word — VS Code semantics** (Boris,
+   2026-07-30: "we are copying vscode defaults"). Asymmetric like VS Code:
+   Ctrl+Left lands on word STARTS (with the fast rule — a lone single-char
+   separator between words gets no stop), Ctrl+Right on word ENDS. Both
+   primitives (`word start` / `word end`) exist as verbs regardless, so the
+   Windows-convention landing stays one rebind away.
 2. **Tab with a partial single-line selection REPLACES the selection**
    (VS Code's TabOperation); a full-line or multi-line selection
    block-indents. Empty selection inserts an indent unit (tab or spaces to
@@ -48,7 +48,7 @@ are rebindable in the standard bindings editor; JSON persistence as today.
 |---|---|---|
 | `cursor_left` / `cursor_right` | Left / Right (+Shift select) | ±1 grapheme; crosses lines; with a selection and no Shift, COLLAPSES to the selection edge (no move) |
 | `cursor_up` / `cursor_down` | Up / Down (+Shift) | ±1 line, preferred-column memory (E1 has this); collapses selection first |
-| `cursor_word_left` / `cursor_word_right` | Ctrl+Left / Ctrl+Right (+Shift) | to word START both directions (fork 1); single-separator runs are skipped (the `foo.bar` rule: a lone `.` between words gets no stop; `->`, `::` do); line end is a hard stop; at column 0 / line end the move wraps to the neighboring line |
+| `cursor_word_left` / `cursor_word_right` | Ctrl+Left / Ctrl+Right (+Shift) | VS Code semantics (fork 1): left to word START (single-separator runs skipped — a lone `.` between words gets no stop; `->`, `::` do), right to word END; at column 0 / line end the move wraps to the neighboring line |
 | `cursor_home` | Home (+Shift) | SMART: to first non-blank; if already there, to column 0 (toggles) |
 | `cursor_end` | End (+Shift) | to line end |
 | `cursor_document_start` / `_end` | Ctrl+Home / Ctrl+End (+Shift) | buffer start / end |
