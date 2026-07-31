@@ -48,6 +48,23 @@ def test_role_whole_buffer_rule(t : T?) {
             feint("das_metal is not built on this platform; the lens does not load\n")
         }
     }
+    t |> run("a POINTER into a tracked buffer takes the callee's pointee const") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            // an advancing `var p : T const?` is still a read; only a mutable POINTEE is a write.
+            // Keying on the pointer's own const would call the read side a write and miss this.
+            let good = compile_issues(fixture("_rf_ptr_through"))
+            t |> success(good.ok, "pointer local reads, inline addr() writes: {good.issues}")
+            let bad = compile_issues(fixture("_rf_ptr_wrong"))
+            t |> success(!bad.ok, "a mutable-pointee pointer derives 'write' — the declared 'read' must be refused")
+            t |> success(find(bad.issues, "declares @role='read' but the body derives 'write'") >= 0,
+                "the refusal names the contradiction")
+            if (bad.ok) {
+                to_log(LOG_ERROR, "ROLE-INFER: pointer write-through fixture compiled clean\n")
+            }
+        } else {
+            feint("das_metal is not built on this platform; the lens does not load\n")
+        }
+    }
     t |> run("a kernel body that delegates to methods derives roles through the chain") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             // the family shape: base loop + per-format override + a body that only calls run().

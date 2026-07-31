@@ -44,7 +44,7 @@ def private is_self_field(ef : ExprField const?; tracked : table<string>) : bool
     return base is ExprVar && (base as ExprVar).name == "self"
 }
 
-def private write_root_name(e : Expression?; tracked : table<string>; fieldMode : bool; var node : Expression const?&) : string {
+def private write_root_name(e : Expression const?; tracked : table<string>; fieldMode : bool; var node : Expression const?&) : string {
     var cur = e
     while (true) {
         if (cur is ExprAt) {
@@ -102,6 +102,12 @@ def private scan_param_dir(cfn : Function?; cname : string; idx : int; var dir :
     return if (cfn.name != cname || idx >= length(cfn.arguments))
     nfound++
     let pt = cfn.arguments[idx]._type
+    if (pt != null && pt.baseType == Type.tPointer) {
+        // for a pointer the POINTEE's const decides — the pointer's own const only says whether
+        // the callee may advance it, and an advancing read (`var p : T const?`) is still a read
+        dir = pt.firstType != null && !pt.firstType.flags.constant ? "write" : "read"
+        return
+    }
     dir = pt != null && !pt.flags.constant ? "write" : "read"
 }
 
@@ -187,6 +193,35 @@ class private AccessVisitor : AstVisitor {
             ptrs[string(v.name)] = name
             claimed |> insert("{name}:{node.at.line}:{node.at.column}")
         }
+    }
+
+    // A POINTER into a tracked buffer handed to a helper — a pointer local, or an inline
+    // `addr(buf[i])`. Direction comes from the callee's parameter, exactly as for a whole
+    // buffer; the node is claimed so the conservative read does not also fire.
+    def bank_ptr_arg(cur : Expression const?; cname : string; aidx : int) : bool {
+        var e = cur
+        if (e is ExprUnsafe) {   // pre-infer bodies keep the unsafe() wrapper node
+            e = (e as ExprUnsafe).body
+        }
+        if (e is ExprVar && key_exists(ptrs, string((e as ExprVar).name))) {
+            let pn = string((e as ExprVar).name)
+            claimed |> insert("{pn}:{e.at.line}:{e.at.column}")
+            whole |> emplace(WholeArg(buf = ptrs[pn], callee = cname, idx = aidx))
+            return true
+        }
+        var sub : Expression const?
+        if (e is ExprRef2Ptr) {
+            sub = (e as ExprRef2Ptr).subexpr
+        } elif (e is ExprCall && (e as ExprCall).name == "addr" && length((e as ExprCall).arguments) == 1) {
+            sub = (e as ExprCall).arguments[0]
+        }
+        return false if (sub == null || !(sub is ExprAt))
+        var node : Expression const?
+        let name = write_root_name(sub, tracked, fieldMode, node)
+        return false if (empty(name))
+        claimed |> insert("{name}:{node.at.line}:{node.at.column}")
+        whole |> emplace(WholeArg(buf = name, callee = cname, idx = aidx))
+        return true
     }
 
     def override preVisitExprCopy(expr : ExprCopy?) : void {
@@ -282,22 +317,27 @@ class private AccessVisitor : AstVisitor {
         // field-mode analysis does NOT recurse into free callees (bare-name matching would collide
         // with their locals).
         for (aidx, a in range(length(expr.arguments)), expr.arguments) {
-            var cur = a
-            if (cur is ExprRef2Value) {
-                cur = (cur as ExprRef2Value).subexpr
-            }
-            var bname = ""
-            if (cur is ExprVar && is_tracked((cur as ExprVar).name)) {
-                bname = string((cur as ExprVar).name)
-            } elif (fieldMode && cur is ExprField && is_self_field(cur as ExprField, tracked)) {
-                bname = string((cur as ExprField).name)
-            } elif (fieldMode && cur is ExprVar && (cur as ExprVar).name == "self") {
-                err = "'self' passed whole to call '{cname}' — the classifier cannot see through method helpers; use access_force with declared roles"
-            }
-            continue if (empty(bname))
-            claimed |> insert("{bname}:{cur.at.line}:{cur.at.column}")
-            whole |> emplace(WholeArg(buf = bname, callee = cname, idx = aidx))
+            bank_call_arg(a, cname, aidx)
         }
+    }
+
+    def bank_call_arg(a : Expression const?; cname : string; aidx : int) {
+        var cur = a
+        if (cur is ExprRef2Value) {
+            cur = (cur as ExprRef2Value).subexpr
+        }
+        return if (bank_ptr_arg(cur, cname, aidx))
+        var bname = ""
+        if (cur is ExprVar && is_tracked((cur as ExprVar).name)) {
+            bname = string((cur as ExprVar).name)
+        } elif (fieldMode && cur is ExprField && is_self_field(cur as ExprField, tracked)) {
+            bname = string((cur as ExprField).name)
+        } elif (fieldMode && cur is ExprVar && (cur as ExprVar).name == "self") {
+            err = "'self' passed whole to call '{cname}' — the classifier cannot see through method helpers; use access_force with declared roles"
+        }
+        return if (empty(bname))
+        claimed |> insert("{bname}:{cur.at.line}:{cur.at.column}")
+        whole |> emplace(WholeArg(buf = bname, callee = cname, idx = aidx))
     }
 
     // POST-infer a method call is an ExprInvoke, not an ExprCall — the kernel body's `run()`
