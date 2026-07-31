@@ -24,6 +24,10 @@ struct public TextEditState {
     cursor_line : int = 0
     //! Byte offset inside `lines[cursor_line]`; always a grapheme boundary.
     cursor_column : int = 0
+    //! Selection anchor; -1 line = no anchor. Selection = anchor..cursor.
+    anchor_line : int = -1
+    anchor_column : int = 0
+    selection_dragging : bool = false
     //! Grapheme index remembered across consecutive vertical moves; -1 = none.
     preferred_column : int = -1
     revision : int = 0
@@ -45,6 +49,14 @@ struct public TextEditResult {
     focused : bool
     edited : bool
     cursor_moved : bool
+}
+
+struct public TextEditRange {
+    //! Ordered (start <= end) line/byte-column selection range.
+    start_line : int
+    start_column : int
+    end_line : int
+    end_column : int
 }
 
 def public text_edit_dispose(var ed : TextEditState) {
@@ -84,6 +96,98 @@ def private ensure_line(var ed : TextEditState) {
     }
     ed.cursor_line = clamp(ed.cursor_line, 0, length(ed.lines) - 1)
     ed.cursor_column = clamp(ed.cursor_column, 0, length(ed.lines[ed.cursor_line]))
+}
+
+// ===== Selection =====
+
+def public text_edit_has_selection(ed : TextEditState const) : bool {
+    return (ed.anchor_line >= 0
+        && (ed.anchor_line != ed.cursor_line || ed.anchor_column != ed.cursor_column))
+}
+
+def public text_edit_selection(ed : TextEditState const) : TextEditRange {
+    //! Ordered selection range; collapses to the cursor when no selection.
+    if (!text_edit_has_selection(ed)) {
+        return TextEditRange(start_line = ed.cursor_line, start_column = ed.cursor_column,
+            end_line = ed.cursor_line, end_column = ed.cursor_column)
+    }
+    if (ed.anchor_line < ed.cursor_line
+            || (ed.anchor_line == ed.cursor_line && ed.anchor_column < ed.cursor_column)) {
+        return TextEditRange(start_line = ed.anchor_line, start_column = ed.anchor_column,
+            end_line = ed.cursor_line, end_column = ed.cursor_column)
+    }
+    return TextEditRange(start_line = ed.cursor_line, start_column = ed.cursor_column,
+        end_line = ed.anchor_line, end_column = ed.anchor_column)
+}
+
+def public text_edit_clear_selection(var ed : TextEditState) {
+    ed.anchor_line = -1
+    ed.anchor_column = 0
+}
+
+def public text_edit_select(var ed : TextEditState;
+                            anchor_line, anchor_column, line, column : int) {
+    //! Programmatic selection: anchor at (anchor_line, anchor_column), cursor
+    //! at (line, column); both clamped.
+    ensure_line(ed)
+    let last = length(ed.lines) - 1
+    ed.anchor_line = clamp(anchor_line, 0, last)
+    ed.anchor_column = clamp(anchor_column, 0, length(ed.lines[ed.anchor_line]))
+    ed.cursor_line = clamp(line, 0, last)
+    ed.cursor_column = clamp(column, 0, length(ed.lines[ed.cursor_line]))
+    ed.preferred_column = -1
+    touch_move(ed)
+}
+
+def public text_edit_select_all(var ed : TextEditState) {
+    ensure_line(ed)
+    let last = length(ed.lines) - 1
+    text_edit_select(ed, 0, 0, last, length(ed.lines[last]))
+}
+
+def public text_edit_selected_text(ed : TextEditState const) : string {
+    //! Selected text with LF newlines ("" when no selection).
+    return "" if (!text_edit_has_selection(ed))
+    let sel = text_edit_selection(ed)
+    if (sel.start_line == sel.end_line) {
+        return slice(ed.lines[sel.start_line], sel.start_column, sel.end_column)
+    }
+    return build_string() $(var writer) {
+        writer |> write(slice(ed.lines[sel.start_line], sel.start_column,
+            length(ed.lines[sel.start_line])))
+        for (line in range(sel.start_line + 1, sel.end_line)) {
+            writer |> write("\n")
+            writer |> write(ed.lines[line])
+        }
+        writer |> write("\n")
+        writer |> write(slice(ed.lines[sel.end_line], 0, sel.end_column))
+    }
+}
+
+def private begin_move(var ed : TextEditState; select : bool) {
+    //! Shift-move arms the anchor at the pre-move cursor; a plain move drops it.
+    if (select) {
+        if (ed.anchor_line < 0) {
+            ed.anchor_line = ed.cursor_line
+            ed.anchor_column = ed.cursor_column
+        }
+    } else {
+        text_edit_clear_selection(ed)
+    }
+}
+
+def private delete_selection(var ed : TextEditState) : bool {
+    return false if (!text_edit_has_selection(ed))
+    let sel = text_edit_selection(ed)
+    ed.lines[sel.start_line] = (slice(ed.lines[sel.start_line], 0, sel.start_column)
+        + slice(ed.lines[sel.end_line], sel.end_column, length(ed.lines[sel.end_line])))
+    if (sel.end_line > sel.start_line) {
+        ed.lines |> erase(sel.start_line + 1, sel.end_line - sel.start_line)
+    }
+    ed.cursor_line = sel.start_line
+    ed.cursor_column = sel.start_column
+    text_edit_clear_selection(ed)
+    return true
 }
 
 // ===== Grapheme boundaries =====
@@ -145,10 +249,14 @@ def private touch_move(var ed : TextEditState) {
 }
 
 def public text_edit_insert(var ed : TextEditState; text : string) {
-    //! Insert `text` at the cursor. Embedded newlines (any flavor) split lines;
-    //! the cursor lands after the inserted text.
+    //! Insert `text` at the cursor, replacing any selection. Embedded newlines
+    //! (any flavor) split lines; the cursor lands after the inserted text.
     return if (empty(text))
     ensure_line(ed)
+    if (delete_selection(ed)) {
+        ed.dirty = true
+        ed.revision++
+    }
     let normalized = replace(replace(text, "\r\n", "\n"), "\r", "\n")
     let line = ed.lines[ed.cursor_line]
     let left = slice(line, 0, ed.cursor_column)
@@ -178,6 +286,10 @@ def public text_edit_newline(var ed : TextEditState) {
 
 def public text_edit_backspace(var ed : TextEditState) {
     ensure_line(ed)
+    if (delete_selection(ed)) {
+        touch_edit(ed)
+        return
+    }
     if (ed.cursor_column > 0) {
         let line = ed.lines[ed.cursor_line]
         let previous = grapheme_prev(line, ed.cursor_column)
@@ -199,6 +311,10 @@ def public text_edit_backspace(var ed : TextEditState) {
 
 def public text_edit_delete(var ed : TextEditState) {
     ensure_line(ed)
+    if (delete_selection(ed)) {
+        touch_edit(ed)
+        return
+    }
     let line = ed.lines[ed.cursor_line]
     if (ed.cursor_column < length(line)) {
         let next = grapheme_next(line, ed.cursor_column)
@@ -215,34 +331,61 @@ def public text_edit_delete(var ed : TextEditState) {
 
 // ===== Cursor movement =====
 
-def public text_edit_move_left(var ed : TextEditState) {
+def public text_edit_move_left(var ed : TextEditState; select : bool = false) {
     ensure_line(ed)
-    if (ed.cursor_column > 0) {
-        ed.cursor_column = grapheme_prev(ed.lines[ed.cursor_line], ed.cursor_column)
-    } elif (ed.cursor_line > 0) {
-        ed.cursor_line--
-        ed.cursor_column = length(ed.lines[ed.cursor_line])
+    if (!select && text_edit_has_selection(ed)) {
+        // Plain arrow with a selection collapses to its edge without moving.
+        let sel = text_edit_selection(ed)
+        ed.cursor_line = sel.start_line
+        ed.cursor_column = sel.start_column
+        text_edit_clear_selection(ed)
+    } else {
+        begin_move(ed, select)
+        if (ed.cursor_column > 0) {
+            ed.cursor_column = grapheme_prev(ed.lines[ed.cursor_line], ed.cursor_column)
+        } elif (ed.cursor_line > 0) {
+            ed.cursor_line--
+            ed.cursor_column = length(ed.lines[ed.cursor_line])
+        }
     }
     ed.preferred_column = -1
     touch_move(ed)
 }
 
-def public text_edit_move_right(var ed : TextEditState) {
+def public text_edit_move_right(var ed : TextEditState; select : bool = false) {
     ensure_line(ed)
-    if (ed.cursor_column < length(ed.lines[ed.cursor_line])) {
-        ed.cursor_column = grapheme_next(ed.lines[ed.cursor_line], ed.cursor_column)
-    } elif (ed.cursor_line < length(ed.lines) - 1) {
-        ed.cursor_line++
-        ed.cursor_column = 0
+    if (!select && text_edit_has_selection(ed)) {
+        let sel = text_edit_selection(ed)
+        ed.cursor_line = sel.end_line
+        ed.cursor_column = sel.end_column
+        text_edit_clear_selection(ed)
+    } else {
+        begin_move(ed, select)
+        if (ed.cursor_column < length(ed.lines[ed.cursor_line])) {
+            ed.cursor_column = grapheme_next(ed.lines[ed.cursor_line], ed.cursor_column)
+        } elif (ed.cursor_line < length(ed.lines) - 1) {
+            ed.cursor_line++
+            ed.cursor_column = 0
+        }
     }
     ed.preferred_column = -1
     touch_move(ed)
 }
 
-def public text_edit_move_vertical(var ed : TextEditState; delta_lines : int) {
+def public text_edit_move_vertical(var ed : TextEditState; delta_lines : int;
+                                   select : bool = false) {
     //! Up/down/page moves. The grapheme column is remembered across
     //! consecutive vertical moves so short lines don't erode the target.
     ensure_line(ed)
+    if (!select && text_edit_has_selection(ed)) {
+        // Collapse to the direction's edge, then move from there.
+        let sel = text_edit_selection(ed)
+        ed.cursor_line = delta_lines < 0 ? sel.start_line : sel.end_line
+        ed.cursor_column = delta_lines < 0 ? sel.start_column : sel.end_column
+        ed.preferred_column = -1
+        text_edit_clear_selection(ed)
+    }
+    begin_move(ed, select)
     let target = clamp(ed.cursor_line + delta_lines, 0, length(ed.lines) - 1)
     if (target == ed.cursor_line) {
         // First/last line: clamp to the line boundary like every editor.
@@ -258,15 +401,48 @@ def public text_edit_move_vertical(var ed : TextEditState; delta_lines : int) {
     touch_move(ed)
 }
 
-def public text_edit_move_home(var ed : TextEditState) {
+def public text_edit_move_home(var ed : TextEditState; select : bool = false) {
+    //! Smart home: to the first non-blank column; if already there, column 0.
     ensure_line(ed)
+    begin_move(ed, select)
+    let line = ed.lines[ed.cursor_line]
+    var first_non_blank = 0
+    peek_data(line) $(bytes) {
+        while (first_non_blank < length(bytes)
+                && (int(bytes[first_non_blank]) == ' '
+                    || int(bytes[first_non_blank]) == '\t')) {
+            first_non_blank++
+        }
+    }
+    if (first_non_blank >= length(line)) {
+        first_non_blank = 0
+    }
+    ed.cursor_column = ed.cursor_column == first_non_blank ? 0 : first_non_blank
+    ed.preferred_column = -1
+    touch_move(ed)
+}
+
+def public text_edit_move_end(var ed : TextEditState; select : bool = false) {
+    ensure_line(ed)
+    begin_move(ed, select)
+    ed.cursor_column = length(ed.lines[ed.cursor_line])
+    ed.preferred_column = -1
+    touch_move(ed)
+}
+
+def public text_edit_move_document_start(var ed : TextEditState; select : bool = false) {
+    ensure_line(ed)
+    begin_move(ed, select)
+    ed.cursor_line = 0
     ed.cursor_column = 0
     ed.preferred_column = -1
     touch_move(ed)
 }
 
-def public text_edit_move_end(var ed : TextEditState) {
+def public text_edit_move_document_end(var ed : TextEditState; select : bool = false) {
     ensure_line(ed)
+    begin_move(ed, select)
+    ed.cursor_line = length(ed.lines) - 1
     ed.cursor_column = length(ed.lines[ed.cursor_line])
     ed.preferred_column = -1
     touch_move(ed)
@@ -274,10 +450,178 @@ def public text_edit_move_end(var ed : TextEditState) {
 
 def public text_edit_set_cursor(var ed : TextEditState; line, column : int) {
     ensure_line(ed)
+    text_edit_clear_selection(ed)
     ed.cursor_line = clamp(line, 0, length(ed.lines) - 1)
     ed.cursor_column = clamp(column, 0, length(ed.lines[ed.cursor_line]))
     ed.preferred_column = -1
     touch_move(ed)
+}
+
+// ===== Word boundaries =====
+
+def private byte_word_class(b : int) : int {
+    // ONE predicate for all four word ops: 0 ws, 1 word, 2 separator
+    return 0 if (b == ' ' || b == '\t')
+    return 1 if (is_alpha(b) || is_number(b) || b == '_' || b >= 0x80)
+    return 2
+}
+
+def private word_start_left(line : string; column : int; fast : bool) : int {
+    // fast = VS Code Ctrl+Left: a LONE separator between words gets no stop
+    var at = column
+    peek_data(line) $(bytes) {
+        while (at > 0 && byte_word_class(int(bytes[at - 1])) == 0) {
+            at--
+        }
+        if (at > 0) {
+            let cls = byte_word_class(int(bytes[at - 1]))
+            let run_end = at
+            while (at > 0 && byte_word_class(int(bytes[at - 1])) == cls) {
+                at--
+            }
+            if (fast && cls == 2 && run_end - at == 1
+                    && run_end < length(bytes)
+                    && byte_word_class(int(bytes[run_end])) == 1
+                    && at > 0 && byte_word_class(int(bytes[at - 1])) == 1) {
+                while (at > 0 && byte_word_class(int(bytes[at - 1])) == 1) {
+                    at--
+                }
+            }
+        }
+    }
+    return at
+}
+
+def private word_end_right(line : string; column : int; fast : bool) : int {
+    // VS Code Ctrl+Right lands on word ENDS (spec fork 1); mirrored fast skip
+    var at = column
+    peek_data(line) $(bytes) {
+        let n = length(bytes)
+        while (at < n && byte_word_class(int(bytes[at])) == 0) {
+            at++
+        }
+        if (at < n) {
+            let cls = byte_word_class(int(bytes[at]))
+            let run_start = at
+            while (at < n && byte_word_class(int(bytes[at])) == cls) {
+                at++
+            }
+            if (fast && cls == 2 && at - run_start == 1
+                    && at < n && byte_word_class(int(bytes[at])) == 1
+                    && run_start > 0
+                    && byte_word_class(int(bytes[run_start - 1])) == 1) {
+                while (at < n && byte_word_class(int(bytes[at])) == 1) {
+                    at++
+                }
+            }
+        }
+    }
+    return at
+}
+
+def private word_run_at(line : string; column : int) : int2 {
+    // same-class run containing column — double-click word selection
+    let line_length = length(line)
+    return int2(0, 0) if (line_length == 0)
+    var run = int2(0, line_length)
+    peek_data(line) $(bytes) {
+        let sample = clamp(column, 0, line_length - 1)
+        let cls = byte_word_class(int(bytes[sample]))
+        var start = sample
+        while (start > 0 && byte_word_class(int(bytes[start - 1])) == cls) {
+            start--
+        }
+        var end_ = sample
+        while (end_ < line_length && byte_word_class(int(bytes[end_])) == cls) {
+            end_++
+        }
+        run = int2(start, end_)
+    }
+    return run
+}
+
+def public text_edit_move_word_left(var ed : TextEditState; select : bool = false) {
+    ensure_line(ed)
+    begin_move(ed, select)
+    if (ed.cursor_column == 0) {
+        if (ed.cursor_line > 0) {
+            ed.cursor_line--
+            ed.cursor_column = length(ed.lines[ed.cursor_line])
+        }
+    } else {
+        ed.cursor_column = word_start_left(ed.lines[ed.cursor_line],
+            ed.cursor_column, true)
+    }
+    ed.preferred_column = -1
+    touch_move(ed)
+}
+
+def public text_edit_move_word_right(var ed : TextEditState; select : bool = false) {
+    ensure_line(ed)
+    begin_move(ed, select)
+    if (ed.cursor_column >= length(ed.lines[ed.cursor_line])) {
+        if (ed.cursor_line < length(ed.lines) - 1) {
+            ed.cursor_line++
+            ed.cursor_column = 0
+        }
+    } else {
+        ed.cursor_column = word_end_right(ed.lines[ed.cursor_line],
+            ed.cursor_column, true)
+    }
+    ed.preferred_column = -1
+    touch_move(ed)
+}
+
+def public text_edit_delete_word_left(var ed : TextEditState) {
+    //! Ctrl+Backspace. Whitespace heuristic: a run of 2+ spaces left of the
+    //! caret deletes alone; a single space goes with the word before it.
+    ensure_line(ed)
+    if (delete_selection(ed)) {
+        touch_edit(ed)
+        return
+    }
+    if (ed.cursor_column == 0) {
+        text_edit_backspace(ed)
+        return
+    }
+    let line = ed.lines[ed.cursor_line]
+    var ws_start = ed.cursor_column
+    peek_data(line) $(bytes) {
+        while (ws_start > 0 && byte_word_class(int(bytes[ws_start - 1])) == 0) {
+            ws_start--
+        }
+    }
+    let target = (ed.cursor_column - ws_start >= 2 ? ws_start
+        : word_start_left(line, ed.cursor_column, false))
+    ed.lines[ed.cursor_line] = (slice(line, 0, target)
+        + slice(line, ed.cursor_column, length(line)))
+    ed.cursor_column = target
+    touch_edit(ed)
+}
+
+def public text_edit_delete_word_right(var ed : TextEditState) {
+    //! Ctrl+Delete — the forward mirror.
+    ensure_line(ed)
+    if (delete_selection(ed)) {
+        touch_edit(ed)
+        return
+    }
+    let line = ed.lines[ed.cursor_line]
+    if (ed.cursor_column >= length(line)) {
+        text_edit_delete(ed)
+        return
+    }
+    var ws_end = ed.cursor_column
+    peek_data(line) $(bytes) {
+        while (ws_end < length(bytes) && byte_word_class(int(bytes[ws_end])) == 0) {
+            ws_end++
+        }
+    }
+    let target = (ws_end - ed.cursor_column >= 2 ? ws_end
+        : word_end_right(line, ed.cursor_column, false))
+    ed.lines[ed.cursor_line] = (slice(line, 0, ed.cursor_column)
+        + slice(line, target, length(line)))
+    touch_edit(ed)
 }
 
 // ===== The widget =====
@@ -317,33 +661,56 @@ def private refresh_layout_cache(var ed : TextEditState) {
     ed.max_line_bytes = longest
 }
 
-def private route_editor_keys(var ed : TextEditState; page_rows : int) {
+def private route_editor_keys(var ed : TextEditState; page_rows : int) { // nolint:STYLE037
+    // interim hardwired keymap — migrates to imgui_commands in the registry step
     let io & = unsafe(GetIO())
-    // Chords are the E2 keymap; E1 keeps Ctrl combinations untouched.
-    if (!io.KeyCtrl) {
+    let select = io.KeyShift
+    if (io.KeyCtrl && !io.KeyAlt) {
         if (IsKeyPressed(ImGuiKey.LeftArrow, true)) {
-            text_edit_move_left(ed)
+            text_edit_move_word_left(ed, select)
         }
         if (IsKeyPressed(ImGuiKey.RightArrow, true)) {
-            text_edit_move_right(ed)
-        }
-        if (IsKeyPressed(ImGuiKey.UpArrow, true)) {
-            text_edit_move_vertical(ed, -1)
-        }
-        if (IsKeyPressed(ImGuiKey.DownArrow, true)) {
-            text_edit_move_vertical(ed, 1)
-        }
-        if (IsKeyPressed(ImGuiKey.PageUp, true)) {
-            text_edit_move_vertical(ed, -max(page_rows, 1))
-        }
-        if (IsKeyPressed(ImGuiKey.PageDown, true)) {
-            text_edit_move_vertical(ed, max(page_rows, 1))
+            text_edit_move_word_right(ed, select)
         }
         if (IsKeyPressed(ImGuiKey.Home, true)) {
-            text_edit_move_home(ed)
+            text_edit_move_document_start(ed, select)
         }
         if (IsKeyPressed(ImGuiKey.End, true)) {
-            text_edit_move_end(ed)
+            text_edit_move_document_end(ed, select)
+        }
+        if (IsKeyPressed(ImGuiKey.Backspace, true)) {
+            text_edit_delete_word_left(ed)
+        }
+        if (IsKeyPressed(ImGuiKey.Delete, true)) {
+            text_edit_delete_word_right(ed)
+        }
+        if (IsKeyPressed(ImGuiKey.A, false)) {
+            text_edit_select_all(ed)
+        }
+    } elif (!io.KeyAlt) {
+        if (IsKeyPressed(ImGuiKey.LeftArrow, true)) {
+            text_edit_move_left(ed, select)
+        }
+        if (IsKeyPressed(ImGuiKey.RightArrow, true)) {
+            text_edit_move_right(ed, select)
+        }
+        if (IsKeyPressed(ImGuiKey.UpArrow, true)) {
+            text_edit_move_vertical(ed, -1, select)
+        }
+        if (IsKeyPressed(ImGuiKey.DownArrow, true)) {
+            text_edit_move_vertical(ed, 1, select)
+        }
+        if (IsKeyPressed(ImGuiKey.PageUp, true)) {
+            text_edit_move_vertical(ed, -max(page_rows, 1), select)
+        }
+        if (IsKeyPressed(ImGuiKey.PageDown, true)) {
+            text_edit_move_vertical(ed, max(page_rows, 1), select)
+        }
+        if (IsKeyPressed(ImGuiKey.Home, true)) {
+            text_edit_move_home(ed, select)
+        }
+        if (IsKeyPressed(ImGuiKey.End, true)) {
+            text_edit_move_end(ed, select)
         }
         if (IsKeyPressed(ImGuiKey.Enter, true) || IsKeyPressed(ImGuiKey.KeypadEnter, true)) {
             text_edit_newline(ed)
@@ -356,6 +723,9 @@ def private route_editor_keys(var ed : TextEditState; page_rows : int) {
         }
         if (IsKeyPressed(ImGuiKey.Tab, true)) {
             text_edit_insert(ed, "\t")
+        }
+        if (IsKeyPressed(ImGuiKey.Escape, false) && text_edit_has_selection(ed)) {
+            text_edit_clear_selection(ed)
         }
     }
     if (!io.KeyCtrl && !io.KeyAlt) {
@@ -406,20 +776,71 @@ def private compute_edit_metrics(ed : TextEditState const;
         view_height = GetWindowHeight())
 }
 
+def private edit_hit_position(ed : TextEditState const; m : EditMetrics;
+                              style : TextSourceViewStyle const;
+                              var font : ImFont?) : int2 {
+    let local = GetMousePos() - m.origin
+    let row = clamp(int(floor(local.y / m.line_height)), 0, length(ed.lines) - 1)
+    let column = edit_hit_column(ed.lines[row], local.x - m.gutter_space,
+        font, m.font_size, m.cell_width, style.tab_cells)
+    return int2(row, column)
+}
+
 def private handle_edit_mouse(var ed : TextEditState; m : EditMetrics;
                               style : TextSourceViewStyle const; hovered : bool;
                               var font : ImFont?) {
+    let io & = unsafe(GetIO())
     if (hovered && IsMouseClicked(ImGuiMouseButton.Left, false)) {
         ed.focused = true
-        let local = GetMousePos() - m.origin
-        let row = clamp(int(floor(local.y / m.line_height)), 0, length(ed.lines) - 1)
-        ed.cursor_line = row
-        ed.cursor_column = edit_hit_column(ed.lines[row], local.x - m.gutter_space,
-            font, m.font_size, m.cell_width, style.tab_cells)
+        let hit = edit_hit_position(ed, m, style, font)
+        let clicks = GetMouseClickedCount(ImGuiMouseButton.Left)
+        if (io.KeyShift) {
+            // Shift+click extends from the current caret (or existing anchor).
+            if (ed.anchor_line < 0) {
+                ed.anchor_line = ed.cursor_line
+                ed.anchor_column = ed.cursor_column
+            }
+            ed.cursor_line = hit.x
+            ed.cursor_column = hit.y
+        } elif (clicks >= 3) {
+            // Triple-click: whole line including its newline.
+            ed.anchor_line = hit.x
+            ed.anchor_column = 0
+            if (hit.x < length(ed.lines) - 1) {
+                ed.cursor_line = hit.x + 1
+                ed.cursor_column = 0
+            } else {
+                ed.cursor_line = hit.x
+                ed.cursor_column = length(ed.lines[hit.x])
+            }
+        } elif (clicks == 2) {
+            let run = word_run_at(ed.lines[hit.x], hit.y)
+            ed.anchor_line = hit.x
+            ed.anchor_column = run.x
+            ed.cursor_line = hit.x
+            ed.cursor_column = run.y
+        } else {
+            ed.cursor_line = hit.x
+            ed.cursor_column = hit.y
+            // Anchor arms at the click point; dragging grows the selection.
+            ed.anchor_line = hit.x
+            ed.anchor_column = hit.y
+            ed.selection_dragging = true
+        }
         ed.preferred_column = -1
         ed.blink_time = 0.0f
+    } elif (ed.selection_dragging && IsMouseDown(ImGuiMouseButton.Left)) {
+        let hit = edit_hit_position(ed, m, style, font)
+        ed.cursor_line = hit.x
+        ed.cursor_column = hit.y
     } elif (!hovered && IsMouseClicked(ImGuiMouseButton.Left, false)) {
         ed.focused = false
+    }
+    if (ed.selection_dragging && IsMouseReleased(ImGuiMouseButton.Left)) {
+        ed.selection_dragging = false
+        if (!text_edit_has_selection(ed)) {
+            text_edit_clear_selection(ed)
+        }
     }
 }
 
@@ -460,12 +881,30 @@ def private draw_edit_content(var ed : TextEditState; m : EditMetrics;
         0, draw_count - 1)
     let io & = unsafe(GetIO())
     ed.blink_time += io.DeltaTime
+    let has_selection = text_edit_has_selection(ed)
+    let sel = text_edit_selection(ed)
     for (row in range(first_visible, last_visible + 1)) {
         let row_origin = float2(m.origin.x, m.origin.y + float(row) * m.line_height)
-        if (row == ed.cursor_line && ed.focused) {
+        if (row == ed.cursor_line && ed.focused && !has_selection) {
             *dl |> AddRectFilled(row_origin,
                 row_origin + float2(m.extent.x, m.line_height),
                 GetColorU32(style.current_line_color), 0.0f, ImDrawFlags.None)
+        }
+        if (has_selection && row >= sel.start_line && row <= sel.end_line) {
+            let row_line = ed.lines[row]
+            let from_column = row == sel.start_line ? sel.start_column : 0
+            let to_column = row == sel.end_line ? sel.end_column : length(row_line)
+            let x0 = (m.gutter_space + text_source_range_width(row_line, 0,
+                from_column, font, m.font_size, m.cell_width, style.tab_cells))
+            var x1 = (m.gutter_space + text_source_range_width(row_line, 0,
+                to_column, font, m.font_size, m.cell_width, style.tab_cells))
+            if (row < sel.end_line) {
+                x1 += m.cell_width * 0.5f // the selected newline shows as a nub
+            }
+            *dl |> AddRectFilled(
+                float2(row_origin.x + x0, row_origin.y),
+                float2(row_origin.x + max(x1, x0 + 1.0f), row_origin.y + m.line_height),
+                GetColorU32(style.selection_color), 0.0f, ImDrawFlags.None)
         }
         let row_number = "{row + 1}"
         let row_number_width = CalcTextSizeForFontRange(font, m.font_size,
