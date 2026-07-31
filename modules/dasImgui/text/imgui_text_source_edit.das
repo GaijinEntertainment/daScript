@@ -3154,6 +3154,15 @@ def public text_edit_goto_query(var ed : TextEditState; query : string) : bool {
     return true
 }
 
+def private mouse_in_current_window() : bool {
+    let win_pos = GetWindowPos()
+    let win_size = GetWindowSize()
+    let mouse = GetMousePos()
+    return (mouse.x >= win_pos.x && mouse.y >= win_pos.y
+        && mouse.x <= win_pos.x + win_size.x
+        && mouse.y <= win_pos.y + win_size.y)
+}
+
 def private draw_goto_overlay(var ed : TextEditState) {
     // a real floating window: own hit-test space, clean keyboard focus
     let width = 150.0f
@@ -3182,7 +3191,7 @@ def private draw_goto_overlay(var ed : TextEditState) {
             ed.goto_open = false
             ed.focused = true // the jump hands the keyboard back
         } elif (IsMouseClicked(ImGuiMouseButton.Left, false)
-                && !IsWindowHovered(ImGuiHoveredFlags.None)) {
+                && !mouse_in_current_window()) {
             ed.goto_open = false // clicking away dismisses
         }
     }
@@ -3360,7 +3369,8 @@ def private draw_color_dialog(var ed : TextEditState) {
         if (IsMouseClicked(ImGuiMouseButton.Left, false)) {
             if (ed.color_ignore_click) {
                 ed.color_ignore_click = false // the opening click
-            } elif (!IsWindowHovered(ImGuiHoveredFlags.None)) {
+            } elif (!mouse_in_current_window()) {
+                // geometric: IsWindowHovered lies while a drag holds the active id
                 ed.color_open = false
             }
         }
