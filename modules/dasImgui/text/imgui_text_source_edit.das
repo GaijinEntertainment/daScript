@@ -2907,6 +2907,49 @@ def private draw_edit_ghost(ed : TextEditState const; m : EditMetrics;
         m.cell_width, style.tab_cells)
 }
 
+def private preview_snippet(text : string) : string {
+    let cut = find(text, "\n")
+    var snippet = cut >= 0 ? slice(text, 0, cut) : text
+    var trimmed = cut >= 0
+    if (length(snippet) > 32) {
+        // cut on a grapheme boundary so the preview never garbles
+        var end_ = 0
+        var inscope graphemes <- text_graphemes(snippet)
+        for (grapheme in graphemes) {
+            break if (grapheme.source.end_byte > 32)
+            end_ = grapheme.source.end_byte
+        }
+        snippet = slice(snippet, 0, end_)
+        trimmed = true
+    }
+    return trimmed ? snippet + "..." : snippet
+}
+
+def private draw_drag_preview(ed : TextEditState const; m : EditMetrics;
+                              style : TextSourceViewStyle const;
+                              var font : ImFont?) {
+    // the payload rides the mouse; a drop caret marks the would-be target
+    var dl = GetWindowDrawList()
+    let hit = edit_hit_position(ed, m, style, font)
+    let drop_x = (m.origin.x + m.gutter_space
+        + text_source_range_width(ed.lines[hit.x], 0, hit.y, font,
+            m.font_size, m.cell_width, style.tab_cells))
+    let drop_y = m.origin.y + float(hit.x) * m.line_height
+    *dl |> AddRectFilled(float2(drop_x, drop_y),
+        float2(drop_x + max(1.0f, 1.5f * m.zoom), drop_y + m.line_height),
+        GetColorU32(style.caret_color), 0.0f, ImDrawFlags.None)
+    let text = preview_snippet(text_edit_selected_text(ed))
+    return if (empty(text))
+    let pos = GetMousePos() + float2(14.0f, 10.0f)
+    let text_width = CalcTextSizeForFontRange(font, m.font_size, text,
+        length(text), 0, length(text)).x
+    *dl |> AddRectFilled(pos - float2(4.0f, 2.0f),
+        pos + float2(text_width + 4.0f, m.line_height + 2.0f),
+        GetColorU32(style.list_bg_color), 3.0f, ImDrawFlags.None)
+    *dl |> AddTextRange(font, m.font_size, pos,
+        GetColorU32(style.text_color), text, length(text), 0, length(text))
+}
+
 def private draw_bracket_highlight(ed : TextEditState const; m : EditMetrics;
                                    style : TextSourceViewStyle const;
                                    var font : ImFont?; var dl : ImDrawList?;
@@ -3037,6 +3080,9 @@ def private text_source_edit_impl(id : string; var ed : TextEditState;
     // recount after input: a line-join edit shrinks the buffer mid-frame
     refresh_layout_cache(ed)
     draw_edit_content(ed, m, style, font)
+    if (ed.drag_move_active) {
+        draw_drag_preview(ed, m, style, font)
+    }
     if (ed.goto_open) {
         draw_goto_overlay(ed)
     }
