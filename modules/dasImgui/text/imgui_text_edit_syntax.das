@@ -47,9 +47,9 @@ def public text_edit_apply_syntax(var ed : TextEditState;
     while (length(ed.line_styles) > length(ed.lines)) {
         ed.line_styles |> erase(length(ed.line_styles) - 1)
     }
-    for (index in range(length(ed.line_styles))) {
-        ed.line_styles[index].runs |> clear()
-    }
+    // build into scratch: the parse must never DOWNGRADE the lexical tier
+    var inscope scratch : array<TextEditLineStyle>
+    scratch |> resize(length(ed.lines))
     var line = 0
     var line_start = 0
     for (token in tokens) {
@@ -70,7 +70,7 @@ def public text_edit_apply_syntax(var ed : TextEditState;
             let line_end = span_start + length(ed.lines[span_line])
             let piece_end = min(token.end_byte, line_end)
             if (piece_end > at) {
-                ed.line_styles[span_line].runs |> push(TextEditStyleRun(
+                scratch[span_line].runs |> push(TextEditStyleRun(
                     start_byte = at - span_start, end_byte = piece_end - span_start,
                     style = style))
             }
@@ -78,6 +78,29 @@ def public text_edit_apply_syntax(var ed : TextEditState;
             span_start = line_end + 1
             span_line++
             at = span_start
+        }
+    }
+    // quality bar: a fragment that error-recovers to almost nothing (prose,
+    // mid-edit breakage) keeps the lexical styling wholesale
+    var parse_bytes = 0
+    var lexical_bytes = 0
+    for (entry in scratch) {
+        for (run in entry.runs) {
+            parse_bytes += run.end_byte - run.start_byte
+        }
+    }
+    for (entry in ed.line_styles) {
+        for (run in entry.runs) {
+            lexical_bytes += run.end_byte - run.start_byte
+        }
+    }
+    if (parse_bytes * 2 >= lexical_bytes) {
+        // per line: the parse wins only where it produced runs
+        for (index in range(length(ed.lines))) {
+            if (!empty(scratch[index].runs)) {
+                delete ed.line_styles[index].runs
+                ed.line_styles[index].runs <- scratch[index].runs
+            }
         }
     }
     ed.syntax_revision = revision
