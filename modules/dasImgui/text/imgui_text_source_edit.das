@@ -150,6 +150,9 @@ struct public TextEditState {
     //! Display/overlay name for the buffer ("" = unnamed scratch); the das
     //! provider compiles under this name, so errors carry it.
     file_name : string
+    //! Go-to-line overlay (Ctrl+G): component-owned, no host wiring.
+    goto_open : bool = false
+    goto_focus : bool = false
     //! Completion LIST under the caret (top candidates). list_index -1 =
     //! visible but the keyboard is still in the editor (Down enters).
     list_items : array<string>
@@ -1763,6 +1766,24 @@ def public text_edit_set_file_name(var ed : TextEditState; name : string) {
     ed.file_name = name
 }
 
+def public text_edit_goto_line(var ed : TextEditState; line : int;
+                               column : int = 1) {
+    //! User-facing navigation: 1-BASED line and column (what the go-to-line
+    //! dialog and the Ln/Col chrome speak); clamps and reveals.
+    ensure_line(ed)
+    text_edit_set_cursor(ed, line - 1, max(column - 1, 0))
+}
+
+def public text_edit_open_goto(var ed : TextEditState) {
+    ed.goto_open = true
+    ed.goto_focus = true
+    // fresh dialog, fresh query
+    unsafe {
+        GOTO_INPUT.has_pending = true
+        GOTO_INPUT.pending_value = ""
+    }
+}
+
 def public text_edit_diagnostic_row_span(ed : TextEditState const;
                                          diag : TextEditDiagnostic const;
                                          row : int) : int2 {
@@ -2189,6 +2210,9 @@ def private route_editor_keys(var ed : TextEditState; page_rows : int; // nolint
         if (IsKeyPressed(ImGuiKey.A, false)
                 || (keypad_nav && IsKeyPressed(ImGuiKey.Keypad5, false))) {
             text_edit_select_all(ed)
+        }
+        if (IsKeyPressed(ImGuiKey.G, false)) {
+            text_edit_open_goto(ed)
         }
         if (IsKeyPressed(ImGuiKey.Z, true)) {
             let _ = io.KeyShift ? text_edit_redo(ed) : text_edit_undo(ed)
@@ -2822,11 +2846,61 @@ def private text_source_edit_impl(id : string; var ed : TextEditState;
     // recount after input: a line-join edit shrinks the buffer mid-frame
     refresh_layout_cache(ed)
     draw_edit_content(ed, m, style, font)
+    if (ed.goto_open) {
+        draw_goto_overlay(ed, style)
+    }
     PopID()
     result.focused = ed.focused
     result.edited = ed.revision != revision_before
     result.cursor_moved = ed.follow_revision != follow_before
     return result
+}
+
+// ===== Go-to-line overlay =====
+
+var private GOTO_INPUT = InputTextState()
+
+def private apply_goto(var ed : TextEditState; query : string) {
+    var line_text = query
+    var column_text = ""
+    var sep = find(query, ":")
+    if (sep < 0) {
+        sep = find(query, ",")
+    }
+    if (sep >= 0) {
+        line_text = slice(query, 0, sep)
+        column_text = slice(query, sep + 1, length(query))
+    }
+    let line = to_int(line_text)
+    return if (line <= 0) // garbage input keeps the position
+    text_edit_goto_line(ed, line, max(to_int(column_text), 1))
+}
+
+def private draw_goto_overlay(var ed : TextEditState;
+                              style : TextSourceViewStyle const) {
+    let width = 150.0f
+    let pos = float2(GetWindowPos().x + GetWindowWidth() - width - 24.0f,
+        GetWindowPos().y + 6.0f)
+    var dl = GetWindowDrawList()
+    *dl |> AddRectFilled(pos - float2(6.0f, 4.0f),
+        pos + float2(width + 6.0f, GetFrameHeight() + 4.0f),
+        GetColorU32(style.list_bg_color), 4.0f, ImDrawFlags.None)
+    SetCursorScreenPos(pos)
+    if (ed.goto_focus && !GOTO_INPUT.has_pending) {
+        set_keyboard_focus_here(0)
+        ed.goto_focus = false
+    }
+    SetNextItemWidth(width)
+    input_text(GOTO_INPUT, (text = "##goto_line"))
+    let active = IsItemActive()
+    let done = IsItemDeactivated()
+    if (done && IsKeyPressed(ImGuiKey.Escape, false)) {
+        ed.goto_open = false
+    } elif ((active || done) && (IsKeyPressed(ImGuiKey.Enter, false)
+            || IsKeyPressed(ImGuiKey.KeypadEnter, false))) {
+        apply_goto(ed, GOTO_INPUT.value)
+        ed.goto_open = false
+    }
 }
 
 // ===== Issues panel =====
@@ -2973,6 +3047,8 @@ def public text_edit_register_commands(var registry : CommandRegistry) { // noli
         edit_binding("find.next", ImGuiKey.F3, ImGuiKey.None, false, false, true))
     edit_define(registry, "find.prev", "Find previous",
         edit_binding("find.prev", ImGuiKey.F3, ImGuiKey.None, false, true, true))
+    edit_define(registry, "edit.goto", "Go to line",
+        edit_binding("edit.goto", ImGuiKey.G, ImGuiKey.None, true, false, false))
     edit_define_nav(registry, "edit.cursor_left", "Cursor left",
         ImGuiKey.LeftArrow, ImGuiKey.Keypad4)
     edit_define_nav(registry, "edit.cursor_right", "Cursor right",
@@ -3171,6 +3247,8 @@ def private dispatch_edit_command(var ed : TextEditState; command_id : string; /
         editor_paste_from_clipboard(ed, use_system_clipboard)
     } elif (verb == "edit.toggle_overtype") {
         text_edit_toggle_overtype(ed)
+    } elif (verb == "edit.goto") {
+        text_edit_open_goto(ed)
     } elif (verb == "edit.cancel") {
         if (ed.list_open) {
             text_edit_close_list(ed)

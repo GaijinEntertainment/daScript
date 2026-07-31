@@ -601,6 +601,20 @@ def test_vertical_moves_are_tab_visual(t : T?) {
 }
 
 [test]
+def test_edit_goto_line(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "one\ntwo\nthree four\nfive")
+    text_edit_goto_line(ed, 3, 7)
+    t |> equal(ed.cursor_line, 2, "goto speaks 1-based lines")
+    t |> equal(ed.cursor_column, 6, "and 1-based columns")
+    text_edit_goto_line(ed, 99)
+    t |> equal(ed.cursor_line, 3, "past-the-end clamps to the last line")
+    text_edit_goto_line(ed, 2)
+    t |> equal(ed.cursor_column, 0, "no column means column one")
+    text_edit_dispose(ed)
+}
+
+[test]
 def test_edit_byte_mapping(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "ab\r\ncd\r\né")
