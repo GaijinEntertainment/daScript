@@ -154,6 +154,7 @@
 
     **Verify against the EMITTED shader, never the das source.** Read the `*_msl` global (or
     the SPIR-V dump) and confirm the constant is literal there: `blk * 34u`, not `blk * bstr`.
+    A helper that looks specialized in das can still lower to a runtime multiply.
 
     **One family, one kargs struct, one slot — and no value reaches an encoder twice.** Twins of
     a family (a codec zoo, a B=2/B=4 pair) bind the SAME kargs type at the SAME binding, even
@@ -173,7 +174,18 @@
     binds NO kargs is invisible to it. So when a race must drive two PSOs itself, it builds the
     SAME kargs value the encoder builds and binds it next to its own `kn_dispatch` — never a
     private set of scalar uniform buffers.
-    A helper that looks specialized in das can still lower to a runtime multiply.
+
+    **A field that is a function of other fields is DERIVED in the builder, not passed in.** Ask
+    of every kargs field whether the ones beside it already determine it. An expert plane's block
+    stride is `kdim * ndim / blocksize`; a padded extent is a rounded row count; a reciprocal
+    scale is `1/sqrt(dim)`. Each one passed separately is a second place to get it wrong and,
+    usually, a pooled uniform buffer allocated per step to carry it. Derive it once in the
+    builder and the call sites stop choosing — the MoE mul_mm sites' hand-rolled
+    `fmt == q8 || fmt == q51 ? eblk : esb` became `kq_sb(fmt) ? 256 : 32` inside `moe_mm_ka`,
+    which is also the predicate `dasllama_kqformat.das` documents for exactly that question.
+    Same for the dispatch: when a kernel's grid IS the geometry it reads, take the grid off the
+    kargs (`kn_dispatch(enc, uint3(ka.nlayers, ka.npos, 1u), …)`) rather than re-passing the
+    same three numbers as parameters.
 
 22. **Complexity/length lint: suppress an honest shape, never force a split.** STYLE037
     (cyclomatic) and STYLE038 (line count) are prompts to look, not orders to refactor. This
