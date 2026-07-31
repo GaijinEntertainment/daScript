@@ -203,5 +203,26 @@ def test_text_edit_find_replace(t : T?) {
             return line == "zzdone zzfind zzfind"
         }
         t |> success(undone != null, "one undo reverts the whole replace-all")
+
+        smoke_goto_flow(t, d)
     }
+}
+
+def private smoke_goto_flow(t : T?; d : ImguiApp) {
+    // Ctrl+G: the dialog takes the keyboard, Enter jumps and hands it back
+    key_chord_tap(d, ["Ctrl"], int(ImGuiKey.G))
+    t |> success(wait_for_key_idle(d, 6.0f), "Ctrl+G drains")
+    t |> success(wait_for_bool_value(d, EDIT_TARGET, "goto_open", true, 300),
+        "the go-to dialog opens")
+    let goto_typed = post_command(d, "imgui_key_type", JV((text = "4:2")))
+    t |> success(goto_typed != null, "goto query accepted")
+    t |> success(wait_for_key_idle(d, 6.0f), "goto typing drains")
+    key_tap(d, int(ImGuiKey.Enter))
+    t |> success(wait_for_key_idle(d, 6.0f), "goto Enter drains")
+    t |> success(wait_for_int_value(d, EDIT_TARGET, "cursor_line", 3, 300),
+        "the jump lands on line 4")
+    t |> success(wait_for_int_value(d, EDIT_TARGET, "cursor_column", 1, 300),
+        "at column 2")
+    t |> success(wait_for_bool_value(d, EDIT_TARGET, "goto_open", false, 300),
+        "the dialog closes after the jump")
 }

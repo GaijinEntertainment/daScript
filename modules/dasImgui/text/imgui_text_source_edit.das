@@ -2394,7 +2394,8 @@ def private handle_edit_mouse(var ed : TextEditState; m : EditMetrics;
         let hit = edit_hit_position(ed, m, style, font)
         ed.cursor_line = hit.x
         ed.cursor_column = hit.y
-    } elif (!hovered && IsMouseClicked(ImGuiMouseButton.Left, false)) {
+    } elif (!hovered && !ed.goto_open
+            && IsMouseClicked(ImGuiMouseButton.Left, false)) {
         if (window_hovered) {
             // dead area past the buffer: land on the clamped last-line hit
             ed.focused = true
@@ -2847,7 +2848,7 @@ def private text_source_edit_impl(id : string; var ed : TextEditState;
     refresh_layout_cache(ed)
     draw_edit_content(ed, m, style, font)
     if (ed.goto_open) {
-        draw_goto_overlay(ed, style)
+        draw_goto_overlay(ed)
     }
     PopID()
     result.focused = ed.focused
@@ -2860,7 +2861,9 @@ def private text_source_edit_impl(id : string; var ed : TextEditState;
 
 var private GOTO_INPUT = InputTextState()
 
-def private apply_goto(var ed : TextEditState; query : string) {
+def public text_edit_goto_query(var ed : TextEditState; query : string) : bool {
+    //! The go-to dialog's parse: `line`, `line:col` or `line,col` (1-based);
+    //! garbage keeps the position and returns false.
     var line_text = query
     var column_text = ""
     var sep = find(query, ":")
@@ -2872,35 +2875,39 @@ def private apply_goto(var ed : TextEditState; query : string) {
         column_text = slice(query, sep + 1, length(query))
     }
     let line = to_int(line_text)
-    return if (line <= 0) // garbage input keeps the position
+    return false if (line <= 0)
     text_edit_goto_line(ed, line, max(to_int(column_text), 1))
+    return true
 }
 
-def private draw_goto_overlay(var ed : TextEditState;
-                              style : TextSourceViewStyle const) {
+def private draw_goto_overlay(var ed : TextEditState) {
+    // a real floating window: own hit-test space, clean keyboard focus
     let width = 150.0f
-    let pos = float2(GetWindowPos().x + GetWindowWidth() - width - 24.0f,
-        GetWindowPos().y + 6.0f)
-    var dl = GetWindowDrawList()
-    *dl |> AddRectFilled(pos - float2(6.0f, 4.0f),
-        pos + float2(width + 6.0f, GetFrameHeight() + 4.0f),
-        GetColorU32(style.list_bg_color), 4.0f, ImDrawFlags.None)
-    SetCursorScreenPos(pos)
-    if (ed.goto_focus && !GOTO_INPUT.has_pending) {
-        set_keyboard_focus_here(0)
-        ed.goto_focus = false
+    SetNextWindowPos(float2(GetWindowPos().x + GetWindowWidth() - width - 40.0f,
+        GetWindowPos().y + 4.0f), ImGuiCond.Always)
+    let flags = (ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoResize
+        | ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoMove
+        | ImGuiWindowFlags.NoSavedSettings)
+    var keep_open : bool?
+    if (Begin("##text_edit_goto", keep_open, flags)) {
+        if (ed.goto_focus && !GOTO_INPUT.has_pending) {
+            set_keyboard_focus_here(0)
+            ed.goto_focus = false
+        }
+        SetNextItemWidth(width)
+        input_text(GOTO_INPUT, (text = "##goto_line"))
+        let active = IsItemActive()
+        let done = IsItemDeactivated()
+        if (done && IsKeyPressed(ImGuiKey.Escape, false)) {
+            ed.goto_open = false
+        } elif ((active || done) && (IsKeyPressed(ImGuiKey.Enter, false)
+                || IsKeyPressed(ImGuiKey.KeypadEnter, false))) {
+            let _ = text_edit_goto_query(ed, GOTO_INPUT.value)
+            ed.goto_open = false
+            ed.focused = true // the jump hands the keyboard back
+        }
     }
-    SetNextItemWidth(width)
-    input_text(GOTO_INPUT, (text = "##goto_line"))
-    let active = IsItemActive()
-    let done = IsItemDeactivated()
-    if (done && IsKeyPressed(ImGuiKey.Escape, false)) {
-        ed.goto_open = false
-    } elif ((active || done) && (IsKeyPressed(ImGuiKey.Enter, false)
-            || IsKeyPressed(ImGuiKey.KeypadEnter, false))) {
-        apply_goto(ed, GOTO_INPUT.value)
-        ed.goto_open = false
-    }
+    End()
 }
 
 // ===== Issues panel =====

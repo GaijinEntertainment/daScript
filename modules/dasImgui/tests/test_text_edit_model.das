@@ -611,6 +611,16 @@ def test_edit_goto_line(t : T?) {
     t |> equal(ed.cursor_line, 3, "past-the-end clamps to the last line")
     text_edit_goto_line(ed, 2)
     t |> equal(ed.cursor_column, 0, "no column means column one")
+    // the dialog's query parse
+    t |> success(text_edit_goto_query(ed, "3:7"), "line:col parses")
+    t |> equal(ed.cursor_line, 2, "query moved the line")
+    t |> equal(ed.cursor_column, 6, "query moved the column")
+    t |> success(text_edit_goto_query(ed, "1,2"), "comma works too")
+    t |> equal(ed.cursor_line, 0, "comma query moved")
+    t |> success(!text_edit_goto_query(ed, "banana"), "garbage declines")
+    t |> equal(ed.cursor_line, 0, "and keeps the position")
+    text_edit_open_goto(ed)
+    t |> success(ed.goto_open && ed.goto_focus, "open arms the dialog + focus")
     text_edit_dispose(ed)
 }
 
