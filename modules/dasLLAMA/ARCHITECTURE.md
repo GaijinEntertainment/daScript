@@ -40,10 +40,12 @@
   is nowhere to write); `parse_image` turns `(base, bytes)` back into borrowed-plane fields and
   does not know which sink produced them. Cold and warm therefore yield the SAME struct, and a
   cold load reaches it by building the image and handing off through the file — write, drop the
-  model, map — so the model and its image are never both resident. `cache_via_image` is that
-  handoff for every weight carrier; the streaming forms transcode planes from the gguf mapping
-  straight into the image so they never materialize at all. Nothing outside this file may read
-  weights into a live carrier, and nothing outside it may release an image backing (CODEREVIEW 23).
+  model, map — so the model and its image are never both resident. That handoff costs a close and
+  a re-map of a multi-GB file and is the *slower* cold start on purpose, under "peak memory before
+  cold-start latency" below. `cache_via_image` is that handoff for every weight carrier; the
+  streaming forms transcode planes from the gguf mapping straight into the image so they never
+  materialize at all. Nothing outside this file may read weights into a live carrier, and nothing
+  outside it may release an image backing (CODEREVIEW 23).
 - **Format identity lives under `dasllama_kqformat.das`** — the `KqFmt` enum, the per-format
   descriptor table (plane strides, block geometry, stream codes), and format predicates. It
   requires nothing dasllama (it is the taxonomy everything else keys off): convert reads it for
@@ -115,6 +117,19 @@ Durable "why it is built this way" facts harvested from the design docs archived
 - **Correctness before speed, token-for-token.** The engine is validated against external oracles
   (llama2.c + llama.cpp `simple_ids`) plus per-arch parity fixtures. A new kernel passes the suite
   *and* the oracles with the new backend active before any perf claim.
+- **Peak memory before cold-start latency — a DELIBERATE trade, and the standing tiebreak.** When a
+  load-time choice pits footprint against wall-clock, dasLLAMA takes the smaller footprint. The
+  asymmetry is not close: overshooting RAM on a big model is fatal (the OOM killer, or swap that
+  makes the whole box unusable), while a slower cold start costs seconds *once per process* and
+  costs the warm path — the common one — nothing at all. The prepared-image rail is where this bites
+  hardest and where the shape is set: a cold load writes its `.dlim`, drops the model, and maps the
+  file back rather than serving the copy it already has in RAM. That is a real close/reopen and a
+  real re-fault of a multi-GB file, and on an image larger than the page cache it is a re-read from
+  disk. Measured on Llama-3.1-8B-Q8_0 (9.6 GB image, M1 Max): planar cold **3.7 s → 4.5 s**, peak
+  **12.3 GB → 4.0 GB**; metal cold unchanged in both. We bought a 3x footprint cut with ~20% of one
+  cold start. Apply the same tiebreak everywhere — bake, convert, KV growth, GPU staging — and when
+  a change goes the other way, it needs the measured pair (peak AND wall) and an explicit call, not
+  an assumption that faster is better.
 - **Token-exact oracle tests pin the bit-exact path** (classic attention, scalar activation);
   approximate/fast paths get separate tolerance tests. Rerouting an oracle test through a
   non-bit-exact default makes it pass on the machine it was frozen on and flip elsewhere.

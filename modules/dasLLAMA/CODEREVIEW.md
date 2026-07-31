@@ -200,10 +200,11 @@
 
     Two contracts the rule carries:
 
-    - **Never hold the model and its image at once.** The file is the handoff for that reason.
-      Building into a chunk keeps the largest plane live in both places while it is copied
-      between them; measured on an 8 GB gguf that is 12.3 GB → 20.5 GB of peak footprint. Only
-      take the chunk when there is nowhere to write (`DASLLAMA_IMAGE_SAVE=0`).
+    - **Never hold the model and its image at once.** The file is the handoff for that reason,
+      and the close/re-map it costs is the accepted price — see rule 24. Building into a chunk
+      keeps the largest plane live in both places while it is copied between them; measured on an
+      8 GB gguf that is 12.3 GB → 20.5 GB of peak footprint. Only take the chunk when there is
+      nowhere to write (`DASLLAMA_IMAGE_SAVE=0`).
     - **Prefer the streamed source.** `save_model_image_streaming` /
       `image_from_model_streaming` transcode planes from the gguf mapping straight into the
       image, so the planes never materialize — 12.3 GB → 4.0 GB on the same model. Only the
@@ -214,3 +215,18 @@
     check each other, every round-trip cell also loads OFF the rail (`load_model_`,
     `load_whisper_model_`, …) for the gguf-vs-image compare; a cell that drops that control is
     comparing an image to itself.
+
+24. **Peak memory wins ties against cold-start latency, and going the other way needs both
+    numbers.** The engine's standing tiebreak (ARCHITECTURE, "Peak memory before cold-start
+    latency"): overshooting RAM on a big model is fatal, a slower load costs seconds once per
+    process, and the warm path pays nothing either way. So a change that trades footprint for
+    load speed — serving a copy already in RAM instead of re-mapping, caching a plane "since we
+    have it", keeping a staging buffer alive past its use — is a review defect **unless it comes
+    with the measured pair (peak footprint AND wall clock, both rails) and an explicit decision
+    to spend the memory**. "It is faster" on its own is not the case for the change; neither is
+    "it is only N hundred MB" on a rail that runs against 30 GB models.
+
+    Measure peak with `footprint -p <pid>` (`phys_footprint_peak`) on macOS — `ps rss` does not
+    see wired or mapped GPU memory and reads near zero here. One model per process, and quote the
+    cold and warm numbers separately: they move independently and a cold-path change that leaves
+    the warm path alone is the normal case, not a suspicious one.
