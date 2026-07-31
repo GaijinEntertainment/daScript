@@ -2467,12 +2467,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     var u_nch = (!use_attn_d && chunked) ? uniform_u32(uint(nchmax)) : null
     var u_nsgs = use_attn_d ? uniform_u32(uint(d_nsgs)) : null
     var u_vocab = gpu_logits ? uniform_u32(uint(c.vocab_size)) : null
-    var u_sk_qkv = qkv_sk > 0l ? uniform_u32(uint(qkv_sk)) : null
-    var u_sk_wo = wo_sk > 0l ? uniform_u32(uint(wo_sk)) : null
-    var u_sk_w2 = w2_sk > 0l ? uniform_u32(uint(w2_sk)) : null
-    var u_skt_qkv = qkv_sk > 0l ? uniform_u32(uint(32l * qkvd)) : null
-    var u_skt_qkv_sw = (qkv_sk > 0l && hetero) ? uniform_u32(uint(32l * qkvd_sw)) : null   // the sliding class's reduce stride
-    var u_skt_dim = (wo_sk > 0l || w2_sk > 0l) ? uniform_u32(uint(32l * dim)) : null
     unsafe {
         memcpy(metal_buffer_contents(bx), addr < void? >(ws.scr.x_b[0]), nrows * dim * 4l)
         memcpy(metal_buffer_contents(bcos), addr < void? >(ws.scr.rope_cos[0]), bytes_tab)
@@ -2573,11 +2567,11 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                     let bwq_ = blob_of(g_dev, t, t.wq_offs[l])
                     let bwk_ = blob_of(g_dev, t, t.wk_offs[l])
                     if (use_gemm) {
-                        enc_gemm_b(enc, bwq_.buf, bwq_.boff, bxb, bqkv, u_dim, u_qd_l, u_qkvd_l, mp, qd_l)
-                        enc_gemm_b(enc, bwk_.buf, bwk_.boff, bxb, bqkv, u_dim, u_kvd_l, u_qkvd_l, mp, kvd_l, uint64(qd_l * 4l))
+                        enc_gemm_b(enc, bwq_.buf, bwq_.boff, bxb, bqkv, gemm_ka(dim, qd_l, qkvd_l), mp, qd_l)
+                        enc_gemm_b(enc, bwk_.buf, bwk_.boff, bxb, bqkv, gemm_ka(dim, kvd_l, qkvd_l), mp, kvd_l, uint64(qd_l * 4l))
                         if (has_wv) {
                             let bwv_ = blob_of(g_dev, t, t.wv_offs[l])
-                            enc_gemm_b(enc, bwv_.buf, bwv_.boff, bxb, bqkv, u_dim, u_kvd_l, u_qkvd_l, mp, kvd_l, uint64((qd_l + kvd_l) * 4l))
+                            enc_gemm_b(enc, bwv_.buf, bwv_.boff, bxb, bqkv, gemm_ka(dim, kvd_l, qkvd_l), mp, kvd_l, uint64((qd_l + kvd_l) * 4l))
                         }
                     } else {
                         enc_gemv_b(enc, nrows > 2l, bwq_.buf, bwq_.boff, bxb, bqkv, u_dim, u_qd_l, u_qkvd_l, qd_l)
@@ -2725,10 +2719,10 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                 } else {
                     let bwo = blob_of(g_dev, t, t.wo_offs[l])
                     if (wo_sk > 0l) {
-                        enc_gemm_sk_b(enc, bwo.buf, bwo.boff, bxb, bpsk, u_qd_l, u_dim, u_sk_wo, dim, wo_sk)
-                        enc_sk_reduce_b(enc, bpsk, bxb2, u_skt_dim, u_sk_wo, 32l * dim)
+                        enc_gemm_sk_b(enc, bwo.buf, bwo.boff, bxb, bpsk, gemm_sk_ka(qd_l, dim, wo_sk), dim, wo_sk)
+                        enc_sk_reduce_b(enc, bpsk, bxb2, 32l * dim, wo_sk)
                     } elif (use_gemm) {
-                        enc_gemm_b(enc, bwo.buf, bwo.boff, bxb, bxb2, u_qd_l, u_dim, u_dim, mp, dim)
+                        enc_gemm_b(enc, bwo.buf, bwo.boff, bxb, bxb2, gemm_ka(qd_l, dim, dim), mp, dim)
                     } else {
                         enc_gemv_b(enc, nrows > 2l, bwo.buf, bwo.boff, bxb, bxb2, u_qd_l, u_dim, u_dim, dim)
                     }
@@ -2856,8 +2850,8 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                         // W1 and W3 both read the ffn-norm output and write DISJOINT buffers (bhb / bhb2)
                         // — one barrier (bxb RAW) covers both; they then run concurrently
                         if (use_gemm) {
-                            enc_gemm_b(enc, bw1.buf, bw1.boff, bxb, bhb, u_dim, u_hidden, u_hidden, mp, hidden)
-                            enc_gemm_b(enc, bw3.buf, bw3.boff, bxb, bhb2, u_dim, u_hidden, u_hidden, mp, hidden)
+                            enc_gemm_b(enc, bw1.buf, bw1.boff, bxb, bhb, gemm_ka(dim, hidden, hidden), mp, hidden)
+                            enc_gemm_b(enc, bw3.buf, bw3.boff, bxb, bhb2, gemm_ka(dim, hidden, hidden), mp, hidden)
                         } else {
                             enc_gemv_b(enc, nrows > 2l, bw1.buf, bw1.boff, bxb, bhb, u_dim, u_hidden, u_hidden, hidden)
                             enc_gemv_b(enc, nrows > 2l, bw3.buf, bw3.boff, bxb, bhb2, u_dim, u_hidden, u_hidden, hidden)
@@ -2882,10 +2876,10 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                 } else {
                     let bw2 = blob_of(g_dev, t, t.w2_offs[l])
                     if (w2_sk > 0l) {
-                        enc_gemm_sk_b(enc, bw2.buf, bw2.boff, bhb, bpsk, u_hidden, u_dim, u_sk_w2, dim, w2_sk)
-                        enc_sk_reduce_b(enc, bpsk, bxb, u_skt_dim, u_sk_w2, 32l * dim)
+                        enc_gemm_sk_b(enc, bw2.buf, bw2.boff, bhb, bpsk, gemm_sk_ka(hidden, dim, w2_sk), dim, w2_sk)
+                        enc_sk_reduce_b(enc, bpsk, bxb, 32l * dim, w2_sk)
                     } elif (use_gemm) {
-                        enc_gemm_b(enc, bw2.buf, bw2.boff, bhb, bxb, u_hidden, u_dim, u_dim, mp, dim)
+                        enc_gemm_b(enc, bw2.buf, bw2.boff, bhb, bxb, gemm_ka(hidden, dim, dim), mp, dim)
                     } else {
                         enc_gemv_b(enc, nrows > 2l, bw2.buf, bw2.boff, bhb, bxb, u_hidden, u_dim, u_dim, dim)
                     }
@@ -2953,9 +2947,9 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             } else {
                 let bwc = blob_of(g_dev, t, t.wcls_off)
                 if (cls64) {
-                    enc_gemm64_b(enc, bwc.buf, bwc.boff, bxf, blog, u_dim, u_vocab, mp, c.vocab_size)
+                    enc_gemm64_b(enc, bwc.buf, bwc.boff, bxf, blog, gemm_ka(dim, c.vocab_size, 0l), mp, c.vocab_size)
                 } elif (use_gemm) {
-                    enc_gemm_b(enc, bwc.buf, bwc.boff, bxf, blog, u_dim, u_vocab, u_vocab, mp, c.vocab_size)
+                    enc_gemm_b(enc, bwc.buf, bwc.boff, bxf, blog, gemm_ka(dim, c.vocab_size, c.vocab_size), mp, c.vocab_size)
                 } else {
                     enc_gemv_b(enc, nrows > 2l, bwc.buf, bwc.boff, bxf, blog, u_dim, u_vocab, u_vocab, c.vocab_size)
                 }
@@ -3073,22 +3067,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     }
     g_lp_upooled |> push((buf = u_softcap, size = 4ul))
     g_lp_upooled |> push((buf = u_zero32, size = 4ul))
-    if (qkv_sk > 0l) {
-        g_lp_upooled |> push((buf = u_sk_qkv, size = 4ul))
-        g_lp_upooled |> push((buf = u_skt_qkv, size = 4ul))
-        if (u_skt_qkv_sw != null) {
-            g_lp_upooled |> push((buf = u_skt_qkv_sw, size = 4ul))
-        }
-    }
-    if (wo_sk > 0l) {
-        g_lp_upooled |> push((buf = u_sk_wo, size = 4ul))
-    }
-    if (w2_sk > 0l) {
-        g_lp_upooled |> push((buf = u_sk_w2, size = 4ul))
-    }
-    if (wo_sk > 0l || w2_sk > 0l) {
-        g_lp_upooled |> push((buf = u_skt_dim, size = 4ul))
-    }
     g_lp_upooled |> push((buf = bcos, size = bytes_tab))
     g_lp_upooled |> push((buf = bsin, size = bytes_tab))
     if (dual_rope) {

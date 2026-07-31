@@ -145,3 +145,16 @@
     from `ps` (`rss` shows ~1 MB here — `footprint -p <pid>` is the metric). The earlier 70 GB
     reading on qwen35moe-35b was `load_model_`, the direct gguf path every non-image suite takes
     on purpose (`ab37e6984`), plus `DASLLAMA_PIN_PREFILL`'s readahead — not the rail.
+
+12. **The three tmm2d GEMM twins are unreachable on every box in the fleet, so that lane has no
+    runtime coverage at all.** `MetalQ8GemmBT` / `MetalQ8GemmBSkT` / `MetalQ8Gemm64BT` are selected
+    only when a tune manifest crowns their family (`metal_tensor_crowned("gemmb_q8")` /
+    `"gemmb_sk_q8"` / `"gemm64b_q8"` — `dasllama_metal_kernels.das` §4440–4452, crowns read from
+    the sidecar's `runtime.metal_tensor` field). No manifest sets them: the M1's sidecar is stale
+    so no crowns apply at all, and `m4.tune.json` crowns exactly `mulmm_bf16`. Their PSOs are
+    therefore never compiled and no suite dispatches them — a change to those bodies passes every
+    gate we have. (Their MSL is still checkable: dump the `*_t_msl` global and run
+    `xcrun metal -std=metal4.0 -c` on it, which is how the kargs fold was verified.) Done = either
+    a manifest crowns them on a tensor-capable box so the decode suite exercises them, or the
+    kernel-coverage census reports an uncrowned tensor family as a LOUD warning the way rule 17
+    already requires for a kernel no run dispatches — silence is what let this sit.

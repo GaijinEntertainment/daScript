@@ -2271,10 +2271,7 @@ class MetalQ8GemmB {
     @ssbo @binding = 2 @role = "weight" wsh : array<float16> // the same buffer, half-scale view (block b at 17*b)
     @ssbo @binding = 3 @role = "read" x : array<float4>    // X [M' x n] f32 rows (M' = 32-padded B)
     @ssbo @binding = 4 @role = "write" y : array<float>     // Y [M' x d]
-    @uniform @binding = 5 kdim : uint       // n (K)
-    @uniform @binding = 6 ndim : uint       // d (N)
-    @uniform @binding = 7 ys : uint         // y TOKEN-row stride (== ndim dense; qkvd at the
-                                            // fused-QKV segment sites, y bound at the column offset)
+    @uniform @binding = 5 ka : Q8GemmArgs
     @workgroup tw : float16[1024]           // W: 4 k-tiles x 4 row-tiles of 8x8, (k row, wrow col)
     @workgroup tx : float16[1024]           // X: 4 k-tiles x 4 token-tiles of 8x8, (token row, k col)
 
@@ -2282,14 +2279,14 @@ class MetalQ8GemmB {
     def metal_q8_gemm_b {
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
-        let ntileN = ndim / 32u
+        let ntileN = ka.ndim / 32u
         let mBase = (gl_WorkGroupID.x / ntileN) * 32u
         let nBase = (gl_WorkGroupID.x % ntileN) * 32u
         var mc : simdgroup_float8x8[4]      // this simdgroup's 16x16 quadrant: 2 token x 2 wrow tiles
         var ma : simdgroup_half8x8[2]
         var mb : simdgroup_half8x8[2]
-        let kdim4 = kdim / 4u
-        let nkb = kdim / 32u
+        let kdim4 = ka.kdim / 4u
+        let nkb = ka.kdim / 32u
         // staging split: thread handles row lr (0..31) x k-eighth il (0..3) — 8 elems of W AND X
         let lr = lid / 4u
         let il = lid % 4u
@@ -2348,10 +2345,10 @@ class MetalQ8GemmB {
         }
         let row0 = mBase + (sg / 2u) * 16u
         let col0 = nBase + (sg % 2u) * 16u
-        simdgroup_store(mc[0], y, row0 * ys + col0, ys)
-        simdgroup_store(mc[1], y, row0 * ys + (col0 + 8u), ys)
-        simdgroup_store(mc[2], y, (row0 + 8u) * ys + col0, ys)
-        simdgroup_store(mc[3], y, (row0 + 8u) * ys + (col0 + 8u), ys)
+        simdgroup_store(mc[0], y, row0 * ka.ys + col0, ka.ys)
+        simdgroup_store(mc[1], y, row0 * ka.ys + (col0 + 8u), ka.ys)
+        simdgroup_store(mc[2], y, (row0 + 8u) * ka.ys + col0, ka.ys)
+        simdgroup_store(mc[3], y, (row0 + 8u) * ka.ys + (col0 + 8u), ka.ys)
     }
 }
 
@@ -2363,9 +2360,7 @@ class MetalQ8GemmBSk {
     @ssbo @binding = 2 @role = "weight" wsh : array<float16> // the same buffer, half-scale view (block b at 17*b)
     @ssbo @binding = 3 @role = "read" x : array<float4>    // X [32 x n] f32 rows
     @ssbo @binding = 4 @role = "write" part : array<float>  // [ksplit x 32 x d] partial-C planes
-    @uniform @binding = 5 kdim : uint       // n (K)
-    @uniform @binding = 6 ndim : uint       // d (N)
-    @uniform @binding = 8 ksplit : uint
+    @uniform @binding = 5 ka : Q8GemmArgs
     @workgroup tw : float16[1024]           // W: 4 k-tiles x 4 row-tiles of 8x8, (k row, wrow col)
     @workgroup tx : float16[1024]           // X: 4 k-tiles x 4 token-tiles of 8x8, (token row, k col)
 
@@ -2373,16 +2368,16 @@ class MetalQ8GemmBSk {
     def metal_q8_gemm_b_sk {
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
-        let ntileN = ndim / 32u
+        let ntileN = ka.ndim / 32u
         let mBase = (gl_WorkGroupID.x / ntileN) * 32u
         let nBase = (gl_WorkGroupID.x % ntileN) * 32u
         let sl = gl_WorkGroupID.y
         var mc : simdgroup_float8x8[4]      // this simdgroup's 16x16 quadrant: 2 token x 2 wrow tiles
         var ma : simdgroup_half8x8[2]
         var mb : simdgroup_half8x8[2]
-        let kdim4 = kdim / 4u
-        let nkb = kdim / 32u
-        let kbn = nkb / ksplit
+        let kdim4 = ka.kdim / 4u
+        let nkb = ka.kdim / 32u
+        let kbn = nkb / ka.ksplit
         let kb0 = sl * kbn
         // staging split: thread handles row lr (0..31) x k-eighth il (0..3) — 8 elems of W AND X
         let lr = lid / 4u
@@ -2440,13 +2435,13 @@ class MetalQ8GemmBSk {
             xp = unsafe(xp + 8u)
             kb++
         }
-        let pbase = sl * 32u * ndim
+        let pbase = sl * 32u * ka.ndim
         let row0 = mBase + (sg / 2u) * 16u
         let col0 = nBase + (sg % 2u) * 16u
-        simdgroup_store(mc[0], part, pbase + row0 * ndim + col0, ndim)
-        simdgroup_store(mc[1], part, pbase + row0 * ndim + (col0 + 8u), ndim)
-        simdgroup_store(mc[2], part, pbase + (row0 + 8u) * ndim + col0, ndim)
-        simdgroup_store(mc[3], part, pbase + (row0 + 8u) * ndim + (col0 + 8u), ndim)
+        simdgroup_store(mc[0], part, pbase + row0 * ka.ndim + col0, ka.ndim)
+        simdgroup_store(mc[1], part, pbase + row0 * ka.ndim + (col0 + 8u), ka.ndim)
+        simdgroup_store(mc[2], part, pbase + (row0 + 8u) * ka.ndim + col0, ka.ndim)
+        simdgroup_store(mc[3], part, pbase + (row0 + 8u) * ka.ndim + (col0 + 8u), ka.ndim)
     }
 }
 
@@ -2455,19 +2450,18 @@ class MetalQ8GemmBSk {
 class MetalSkReduce {
     @ssbo @binding = 0 @role = "read" part : array<float>
     @ssbo @binding = 1 @role = "write" y : array<float>
-    @uniform @binding = 2 total : uint
-    @uniform @binding = 3 ksplit : uint
+    @uniform @binding = 2 ka : SkReduceArgs
 
     [metal_kernel(name="metal_sk_reduce_msl")]
     def metal_sk_reduce {
         let gid = gl_GlobalInvocationID.x
-        if (gid >= total) {
+        if (gid >= ka.total) {
             return
         }
         var acc = 0.0
         var s = 0u
-        while (s < ksplit) {
-            acc += part[s * total + gid]
+        while (s < ka.ksplit) {
+            acc += part[s * ka.total + gid]
             s++
         }
         y[gid] = acc
@@ -2482,21 +2476,19 @@ class MetalQ8GemmBT {
     @ssbo @binding = 2 wsh : array<float16> // the same buffer, half-scale view
     @ssbo @binding = 3 x : array<float>     // X [M' x n] f32 rows
     @ssbo @binding = 4 y : array<float>     // Y [M' x d]
-    @uniform @binding = 5 kdim : uint
-    @uniform @binding = 6 ndim : uint
-    @uniform @binding = 7 ys : uint
+    @uniform @binding = 5 ka : Q8GemmArgs
 
     [metal_kernel(name="metal_q8_gemm_b_t_msl")]
     def metal_q8_gemm_b_t {
-        let ntileN = ndim / 32u
+        let ntileN = ka.ndim / 32u
         let mBase = (gl_WorkGroupID.x / ntileN) * 32u
         let nBase = (gl_WorkGroupID.x % ntileN) * 32u
-        let nkb = kdim / 32u
+        let nkb = ka.kdim / 32u
         var sp = unsafe(addr(wsh[(nBase * nkb) * 17u]))
         var wp = unsafe(addr(wqb[(nBase * nkb) * 34u + 2u]))
-        var ap = unsafe(addr(x[mBase * kdim]))
-        var cp = unsafe(addr(y[mBase * ys + nBase]))
-        tmm2d_q8b_f32(32u, 32u, 4u, sp, wp, ap, kdim, cp, ys, kdim, nkb)
+        var ap = unsafe(addr(x[mBase * ka.kdim]))
+        var cp = unsafe(addr(y[mBase * ka.ys + nBase]))
+        tmm2d_q8b_f32(32u, 32u, 4u, sp, wp, ap, ka.kdim, cp, ka.ys, ka.kdim, nkb)
     }
 }
 
@@ -2505,24 +2497,22 @@ class MetalQ8GemmBSkT {
     @ssbo @binding = 2 wsh : array<float16> // the same buffer, half-scale view
     @ssbo @binding = 3 x : array<float>     // X [32 x n] f32 rows
     @ssbo @binding = 4 part : array<float>  // [ksplit x 32 x d] partial-C planes
-    @uniform @binding = 5 kdim : uint
-    @uniform @binding = 6 ndim : uint
-    @uniform @binding = 8 ksplit : uint
+    @uniform @binding = 5 ka : Q8GemmArgs
 
     [metal_kernel(name="metal_q8_gemm_b_sk_t_msl")]
     def metal_q8_gemm_b_sk_t {
-        let ntileN = ndim / 32u
+        let ntileN = ka.ndim / 32u
         let mBase = (gl_WorkGroupID.x / ntileN) * 32u
         let nBase = (gl_WorkGroupID.x % ntileN) * 32u
         let sl = gl_WorkGroupID.y
-        let nkb = kdim / 32u
-        let kbn = nkb / ksplit
+        let nkb = ka.kdim / 32u
+        let kbn = nkb / ka.ksplit
         let kb0 = sl * kbn
         var sp = unsafe(addr(wsh[(nBase * nkb + kb0) * 17u]))
         var wp = unsafe(addr(wqb[(nBase * nkb + kb0) * 34u + 2u]))
-        var ap = unsafe(addr(x[mBase * kdim + kb0 * 32u]))
-        var cp = unsafe(addr(part[sl * 32u * ndim + mBase * ndim + nBase]))
-        tmm2d_q8b_f32(32u, 32u, 4u, sp, wp, ap, kdim, cp, ndim, kbn * 32u, nkb)
+        var ap = unsafe(addr(x[mBase * ka.kdim + kb0 * 32u]))
+        var cp = unsafe(addr(part[sl * 32u * ka.ndim + mBase * ka.ndim + nBase]))
+        tmm2d_q8b_f32(32u, 32u, 4u, sp, wp, ap, ka.kdim, cp, ka.ndim, kbn * 32u, nkb)
     }
 }
 
@@ -2531,20 +2521,19 @@ class MetalQ8Gemm64BT {
     @ssbo @binding = 2 wsh : array<float16> // the same buffer, half-scale view
     @ssbo @binding = 3 x : array<float>     // X [M' x n] f32 rows
     @ssbo @binding = 4 y : array<float>     // Y [M' x d]
-    @uniform @binding = 5 kdim : uint
-    @uniform @binding = 6 ndim : uint
+    @uniform @binding = 5 ka : Q8GemmArgs
 
     [metal_kernel(name="metal_q8_gemm64_b_t_msl")]
     def metal_q8_gemm64_b_t {
-        let ntileN = ndim / 64u
+        let ntileN = ka.ndim / 64u
         let mBase = (gl_WorkGroupID.x / ntileN) * 32u
         let nBase = (gl_WorkGroupID.x % ntileN) * 64u
-        let nkb = kdim / 32u
+        let nkb = ka.kdim / 32u
         var sp = unsafe(addr(wsh[(nBase * nkb) * 17u]))
         var wp = unsafe(addr(wqb[(nBase * nkb) * 34u + 2u]))
-        var ap = unsafe(addr(x[mBase * kdim]))
-        var cp = unsafe(addr(y[mBase * ndim + nBase]))
-        tmm2d_q8b_f32(32u, 64u, 4u, sp, wp, ap, kdim, cp, ndim, kdim, nkb)
+        var ap = unsafe(addr(x[mBase * ka.kdim]))
+        var cp = unsafe(addr(y[mBase * ka.ndim + nBase]))
+        tmm2d_q8b_f32(32u, 64u, 4u, sp, wp, ap, ka.kdim, cp, ka.ndim, ka.kdim, nkb)
     }
 }
 
@@ -2556,8 +2545,7 @@ class MetalQ8Gemm64B {
     @ssbo @binding = 2 @role = "weight" wsh : array<float16> // the same buffer, half-scale view (block b at 17*b)
     @ssbo @binding = 3 @role = "read" x : array<float4>    // X [M' x n] f32 rows (M' = 32-padded B)
     @ssbo @binding = 4 @role = "write" y : array<float>     // Y [M' x d]
-    @uniform @binding = 5 kdim : uint       // n (K)
-    @uniform @binding = 6 ndim : uint       // d (N)
+    @uniform @binding = 5 ka : Q8GemmArgs
     @workgroup tw : float16[2048]           // W: 4 k-tiles x 8 row-tiles of 8x8, (k row, wrow col)
     @workgroup tx : float16[1024]           // X: 4 k-tiles x 4 token-tiles of 8x8, (token row, k col)
 
@@ -2565,15 +2553,15 @@ class MetalQ8Gemm64B {
     def metal_q8_gemm64_b {
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
-        let ntileN = ndim / 64u
+        let ntileN = ka.ndim / 64u
         let mBase = (gl_WorkGroupID.x / ntileN) * 32u
         let nBase = (gl_WorkGroupID.x % ntileN) * 64u
         var mc : simdgroup_float8x8[8]      // this simdgroup's 16x32 quadrant: 2 token x 4 wrow tiles
         var ma : simdgroup_half8x8[4]
         var mb : simdgroup_half8x8[2]
         var va : float16[16]                // dequantized W staging regs (this thread's k-half)
-        let kdim4 = kdim / 4u
-        let nkb = kdim / 32u
+        let kdim4 = ka.kdim / 4u
+        let nkb = ka.kdim / 32u
         // W split: thread stages 16 elems — row lr0 (0..63), k-half il0 (0..1)
         let lr0 = lid / 2u
         let il0 = lid % 2u
@@ -2631,7 +2619,7 @@ class MetalQ8Gemm64B {
         let row0 = mBase + (sg / 2u) * 16u
         let col0 = nBase + (sg % 2u) * 32u
         for [unroll_full] (i in range(8)) {
-            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ndim + col0 + uint(i % 4) * 8u, ndim)
+            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ka.ndim + col0 + uint(i % 4) * 8u, ka.ndim)
         }
     }
 }
@@ -3155,6 +3143,30 @@ class MetalSqAttnCombB {
         yo[bb * (nheads * hs) + h * hs + lid] = acc / l
     }
 }
+
+// The batched q8 GEMM twins bind their uniforms as ONE kargs value: `ys` is the y TOKEN-row stride
+// (the fused-QKV row stride at a segment site), `ksplit` the k-slice count the split-K forms grid
+// on. Each form ignores the other's field, which is what lets all six share one slot.
+// The split-K reduce's own pair — `total` is the flat element count of one partial plane.
+struct SkReduceArgs {
+    total : uint
+    ksplit : uint
+}
+
+struct Q8GemmArgs {
+    kdim : uint
+    ndim : uint
+    ys : uint
+    ksplit : uint
+}
+
+// the family's two shapes, named: the dense form carries a y row stride, the split-K form a
+// k-slice count. Both spell the reduction dim first, the way every call site reads
+def gemm_ka(kdim, ndim, ys : int64) : Q8GemmArgs => (
+    Q8GemmArgs(kdim = uint(kdim), ndim = uint(ndim), ys = uint(ys)))
+
+def gemm_sk_ka(kdim, ndim, ksplit : int64) : Q8GemmArgs => (
+    Q8GemmArgs(kdim = uint(kdim), ndim = uint(ndim), ksplit = uint(ksplit)))
 
 // The mul_mv-shape fixed-B GEMV twins bind their uniforms as ONE kargs value. `xs4` is the x row
 // stride in float4s; `ys` the y ROW stride (ddim dense, or the fused-QKV row stride at a segment
@@ -4963,7 +4975,7 @@ def enc_gemm_mm_b(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uin
 
 // the M-pad-32 GEMM (B >= 5): raw f32 X, dual-view blob W at the tensor's byte offset
 def enc_gemm_b(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64;
-               bx, by, bk, bn, bys : MetalBuffer?; mp32, d : int64; yoff : uint64 = 0ul) {
+               bx, by : MetalBuffer?; var ka : Q8GemmArgs; mp32, d : int64; yoff : uint64 = 0ul) {
     kn_pipeline(enc, g_pso_gemm_b)
     if (!g_gemm_b_tensor) {
         kn_tgmem(enc, metal_q8_gemm_b_msl_tgmem, 0)
@@ -4972,9 +4984,7 @@ def enc_gemm_b(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64;
     kn_buffer(enc, bw, boff, 2)   // half-scale view
     kn_buffer(enc, bx, 0ul, 3)
     kn_buffer(enc, by, yoff, 4)
-    kn_buffer(enc, bk, 0ul, 5)
-    kn_buffer(enc, bn, 0ul, 6)
-    kn_buffer(enc, bys, 0ul, 7)
+    kn_kargs(enc, ka, 5)
     hz_read(bx)
     hz_write(by)
     hz_gate(enc)
@@ -4985,7 +4995,7 @@ def enc_gemm_b(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64;
 // in bpart, and the reduce sums them into y — the serial encoder orders the two dispatches.
 // Planes and grids assume mp == 32 (the policy gate).
 def enc_gemm_sk_b(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64;
-                  bx, bpart, bk, bn, bsk : MetalBuffer?; d, nsk : int64) {
+                  bx, bpart : MetalBuffer?; var ka : Q8GemmArgs; d, nsk : int64) {
     kn_pipeline(enc, g_pso_gemm_b_sk)
     if (!g_gemm_b_sk_tensor) {
         kn_tgmem(enc, metal_q8_gemm_b_sk_msl_tgmem, 0)
@@ -4994,21 +5004,19 @@ def enc_gemm_sk_b(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64;
     kn_buffer(enc, bw, boff, 2)   // half-scale view
     kn_buffer(enc, bx, 0ul, 3)
     kn_buffer(enc, bpart, 0ul, 4)
-    kn_buffer(enc, bk, 0ul, 5)
-    kn_buffer(enc, bn, 0ul, 6)
-    kn_buffer(enc, bsk, 0ul, 8)
+    kn_kargs(enc, ka, 5)
     hz_read(bx)
     hz_write(bpart)
     hz_gate(enc)
     kn_dispatch(enc, uint3(uint(d / 32l), uint(nsk), 1u), uint3(128u, 1u, 1u))
 }
 
-def enc_sk_reduce_b(enc : MetalComputeEncoder?; bpart, by, btot, bsk : MetalBuffer?; total : int64) {
+def enc_sk_reduce_b(enc : MetalComputeEncoder?; bpart, by : MetalBuffer?; total, nsk : int64) {
+    var ka = SkReduceArgs(total = uint(total), ksplit = uint(nsk))
     kn_pipeline(enc, g_pso_skred)
     kn_buffer(enc, bpart, 0ul, 0)
     kn_buffer(enc, by, 0ul, 1)
-    kn_buffer(enc, btot, 0ul, 2)
-    kn_buffer(enc, bsk, 0ul, 3)
+    kn_kargs(enc, ka, 2)
     hz_read(bpart)
     hz_write(by)
     hz_gate(enc)
@@ -5017,7 +5025,7 @@ def enc_sk_reduce_b(enc : MetalComputeEncoder?; bpart, by, btot, bsk : MetalBuff
 
 // the 64-wide N tile (classifier site): the caller gates d % 64 == 0
 def enc_gemm64_b(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64;
-                 bx, by, bk, bn : MetalBuffer?; mp32, d : int64) {
+                 bx, by : MetalBuffer?; var ka : Q8GemmArgs; mp32, d : int64) {
     kn_pipeline(enc, g_pso_gemm64_b)
     if (!g_gemm64_b_tensor) {
         kn_tgmem(enc, metal_q8_gemm64_b_msl_tgmem, 0)
@@ -5026,8 +5034,7 @@ def enc_gemm64_b(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64;
     kn_buffer(enc, bw, boff, 2)   // half-scale view
     kn_buffer(enc, bx, 0ul, 3)
     kn_buffer(enc, by, 0ul, 4)
-    kn_buffer(enc, bk, 0ul, 5)
-    kn_buffer(enc, bn, 0ul, 6)
+    kn_kargs(enc, ka, 5)
     hz_read(bx)
     hz_write(by)
     hz_gate(enc)
