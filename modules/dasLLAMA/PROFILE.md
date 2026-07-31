@@ -5,10 +5,19 @@ that measures dasLLAMA performance, and no second harness gets written.
 
 ---
 
-## Before either: the box manifest must be newer than the binary
+## Before either: the box manifest, and the env that selects it
 
-A manifest older than `bin/daslang` fails every oracle cell, and an untuned run re-execs into a
-full retune instead of measuring. Re-minting takes a couple of minutes:
+**Every command below is prefixed with its environment. Without it the run tunes a per-SCRIPT
+sidecar instead of using the box manifest, and spends minutes doing it before it measures
+anything.**
+
+```sh
+export DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/<box>.tune.json
+export DASLLAMA_BOX=<box>
+```
+
+The manifest must also be newer than `bin/daslang` — an older one fails every oracle cell.
+Re-minting takes a few minutes:
 
 ```sh
 DAS_TUNE_MODE=tune DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/<box>.tune.json \
@@ -16,7 +25,8 @@ DAS_TUNE_MODE=tune DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/<box>.tune.jso
 ```
 
 Then check the fresh winners against the stored rows' `tune` stamps before trusting any delta —
-a manifest that picked different winners moves the numbers on its own.
+a manifest that picked different winners moves the numbers on its own, and the comparison is
+only clean when they match.
 
 ---
 
@@ -27,7 +37,8 @@ runs, the store is never written, artifacts are frozen (a missing `.dlim` panics
 minting).
 
 ```sh
-bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- --oracle --legs metal
+DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/<box>.tune.json DASLLAMA_BOX=<box> \
+  bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- --oracle --legs metal
 ```
 
 - Stops at the first FAIL; `--oracle-keep-going` runs the whole board.
@@ -45,7 +56,8 @@ bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- --oracle --leg
 Measures both engines and writes `performance/records/<box>.json`.
 
 ```sh
-bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- --legs metal \
+DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/<box>.tune.json DASLLAMA_BOX=<box> \
+  bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- --legs metal \
   --ref-clean <llama-bench clean-cpu build> --ref-stock <llama-bench stock build>
 ```
 
