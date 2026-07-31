@@ -222,24 +222,44 @@ highlight inside code blocks lands with the selection work in E2/E4.
 - **E3** Search/replace/replace-all (the standing rule lands here, not
   later).
 - **E4** Syntax-while-editing (fallback immediate + debounced full pass)
-  **plus editing polish (amended 2026-07-30, Boris: "particularly
-  interesting is E4 really... polish of E1/2/3... stuff before
-  completion/lsp")**: where the new line lands on Enter (auto-indent from
-  the previous line's leading whitespace, tabs preserved as typed),
-  bracket/brace/paren match highlighting at the cursor, and the rest of
-  the smart-editor behaviors below completion — the list grows as E1-E3
-  use surfaces items. (Most Tier-2 commands were pulled forward on
-  2026-07-30 after Boris's live chord audit, commit 0320dcfd4:
-  move/duplicate/delete lines, insert line above/below with indent,
-  block indent/outdent + smart Tab, expand-line-selection, scroll-
-  without-caret, and the Ctrl+Shift vertical-select double-bindings
-  VS Code carries. Still E4: join lines, goto-line UI, drag-and-drop
-  selection move, auto-indent on Enter, bracket matching.)
+  plus editing polish — scope set by Boris's brain dump (2026-07-30):
+  1. **Language profile** (the mechanism the rest hangs off): per-language
+     editor settings — indent rules, bracket pairs, keyword list, fold
+     kinds. NOT keybindings (those stay global). Hardcoded first-class
+     das/C++/md profiles are fine; data-driven-ness is an open question,
+     not a requirement.
+  2. **Bracket-aware auto-indent on Enter**: new line lands indented;
+     counts `{ }` — deeper after `{`, and typing `}` dedents the line.
+     Per-language on/off + which symbols (md: off; some languages may
+     indent with no symbol at all).
+  3. **Bracket-pair highlight**: cursor on `[ ( {` or a closer highlights
+     the counterpart; pairs come from the language profile.
+  4. **Basic completion, from the get go**: candidates = words in this
+     document + the language's keyword list (+ words across the
+     language's open documents); ghost-text as-you-type (type `hel`,
+     greyed completion shows), Tab accepts. LSP tier waits for E6; LLM
+     tier is a recorded follow-up (below), not pressing.
+  5. **Go-to-line dialog** (very important) + permanent Ln/Col readout in
+     the editor chrome.
+  6. Leftover Tier-2: join lines, double-click-drag word-granular extend,
+     drag-and-drop selection move.
+  7. **Inline color embed** (tail of E4): `0x12AF2A` literals (with and
+     without alpha) get a swatch + real ImGui color dialog writing back —
+     the proof case that the editor embeds live widgets over source
+     ranges.
+- **E4-follow-up (recorded, not pressing): LLM completion tier.** Own
+  section when it comes: API port setting, async request, model picked
+  for fill speed, model-per-language setting; basic-basic completion.
+- **Post-LSP tail (Boris): block/column selection** — Alt+mouse drag +
+  multi-line insert. Deliberately late: the undo journal already carries
+  multi-op units and selection lives inside TextEditState, so nothing
+  architectural forces it early.
 - **E5** `examples/text` becomes an honest editor: the component wired
   into both its presentations (markdown source with live preview beside
-  it, plain/code source), carrying save, dirty-state, and the find
-  widget. Decide HERE whether a separate minimal code-editor example
-  still earns its keep or the viewer covers it.
+  it, plain/code source), carrying save/load, dirty-state (undo back to
+  the save point clears dirty), and the find widget. Decide HERE whether
+  a separate minimal code-editor example still earns its keep or the
+  viewer covers it.
 - **E6** LSP in the code editor: hover + definition reuse the viewing
   arc's spawn-per-request transport verbatim (`nav.das`, overlay = the
   unsaved buffer — the SAME `--overlay` flag, no new machinery);
@@ -247,10 +267,13 @@ highlight inside code blocks lands with the selection work in E2/E4.
   span layer. Completion stays in LANGUAGE_SUPPORT_PLAN step 6 with the
   profelis floor.
 - **E7** dasHerd binds it: PR body (markdown instance, no preview pane
-  needed at first) and conflict resolution (ours / base / theirs +
+  needed at first), conflict resolution (ours / base / theirs +
   editable result, per-conflict accept-ours / accept-theirs / edit,
   save writes and stages — the changelist already refuses to discard
-  conflicts).
+  conflicts), and the **git change gutter** (Boris): green/red/modified
+  line marks against HEAD beside the editable buffer, updating as you
+  type — the viewer's line-mark gutter + the inspector's diff pipeline
+  already produce exactly these marks.
 
 Each step ends the usual way: lint clean, suite green, live drive of the
 example through the rails, commit.
