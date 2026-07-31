@@ -90,6 +90,32 @@ under NumLock-ON Windows fake-Shift not yet probed on hardware;
 multi-editor invocation routing by context field deferred; the base
 (registry-less) overload keeps the built-in keymap by design.
 
+**E3 status (SHIPPED 2026-07-30, commits ce7cb09d8 + 93a921cbd):**
+replace rides the find bar. Find module: replace row (toggle chevron,
+input, Replace/All buttons; Enter = replace one, Ctrl+Alt+Enter =
+replace all; Esc closes), request counters the host applies, per-match
+template expansion in regex mode ($0/$&, $1-$9, ${n}/${name}, $$ —
+mirrors daslib/regex's private expand_replacement). Editor: byte↔
+(line,column) mapping over the LF-joined `text_edit_text` domain,
+`text_edit_replace_range` / `text_edit_replace_all` (ascending spans
+applied back-to-front as ONE undo unit), match highlights painted under
+the text (`match_color`), and `text_edit_find_sync` — the one-call pure
+glue (rebuild, apply requests, select current match, refresh
+highlights; replace-one resumes PAST its insertion so self-matching
+replacements can't pin). find.* commands in the registry (Ctrl+F seeds
+from single-line selection, Ctrl+H opens replace focused, F3/Shift+F3,
+Escape closes BEFORE edit.cancel — registration order is the Escape
+chain). Bug found by the smoke and fixed: component-scope Shortcut
+routing follows ImGui item focus, which the bar's inputs kept after
+close — the editor now reclaims item focus (FocusItem) whenever its
+model owns the keyboard, which is also VS Code's Escape-returns-focus
+behavior. Tests: edit model 32, find model 9, smoke 3 — all green.
+Known E3 residuals: F3 doesn't step while typing in a bar input (Enter
+covers it); Ctrl+F/Ctrl+H only fire while the editor is focused
+(component scope — application-scope twins are a host decision); no
+case/whole-word toggles yet (find bar is case-insensitive literal or
+regex, as shipped in the viewer arc).
+
 ## Shape: ONE component, one arc, two skins
 
 One arc, not two. The editing core — buffer, cursor, selection, undo,
@@ -272,6 +298,15 @@ highlight inside code blocks lands with the selection work in E2/E4.
   diagnostics via `validate.das` on the debounce, squiggles from the
   span layer. Completion stays in LANGUAGE_SUPPORT_PLAN step 6 with the
   profelis floor.
+  **Provider abstraction (Boris, 2026-07-30, dropped mid-E3): the editor
+  talks to an LSP-LIKE interface, not to LSP.** One abstracted
+  language-intelligence surface (hover / definition / diagnostics /
+  completion verbs); per-language providers plug in behind it — for .das
+  some requests answer from tree-sitter, others from the compiler; C++
+  may route to a real LSP server, and even .das could. Completion goes
+  through the SAME route: the E4 document-words/keywords tier, the LSP
+  tier, and the LLM follow-up are providers behind one interface, not
+  special cases.
 - **E7** dasHerd binds it: PR body (markdown instance, no preview pane
   needed at first), conflict resolution (ours / base / theirs +
   editable result, per-conflict accept-ours / accept-theirs / edit,
