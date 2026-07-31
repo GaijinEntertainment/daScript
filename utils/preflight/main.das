@@ -634,9 +634,11 @@ def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:
     // tree — any staged .mp4 counts, so no per-run re-download; a stale set
     // after a re-record still surfaces as an honest latex warning.
     var staged_recordings = false
-    dir("doc/source/_static/tutorials") $(name) {
-        if (extension(name) == ".mp4") {
-            staged_recordings = true
+    if (stat("doc/source/_static/tutorials").is_valid) {
+        dir("doc/source/_static/tutorials") $(name) {
+            if (extension(name) == ".mp4") {
+                staged_recordings = true
+            }
         }
     }
     if (!staged_recordings) {

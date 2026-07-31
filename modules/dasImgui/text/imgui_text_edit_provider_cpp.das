@@ -164,12 +164,27 @@ def public text_edit_parse_clang_output(output, overlay : string; // nolint:STYL
 }
 
 def private run_cpp_check(job : CppCheckJob; var result : CppCheckResult) {
-    let scratch = ("{get_das_root()}/_dasimgui_cpp_check_{job.revision}"
-        + text_edit_cpp_scratch_suffix(job.language))
+    // system temp + unique name: no repo-root scratch, no concurrent collision
+    var scratch_error : string
+    let scratch = create_temp_file("dasimgui_cpp_check",
+        text_edit_cpp_scratch_suffix(job.language), scratch_error)
+    if (empty(scratch)) {
+        result.diagnostics |> push(TextEditDiagnostic(
+            message = "cpp check scratch file failed: {scratch_error}"))
+        return
+    }
+    var wrote = false
     fopen(scratch, "wb") $(f) {
         if (f != null) {
             f |> fwrite(job.source + "\n")
+            wrote = true
         }
+    }
+    if (!wrote) {
+        result.diagnostics |> push(TextEditDiagnostic(
+            message = "cpp check scratch file not writable: {scratch}"))
+        remove(scratch)
+        return
     }
     // popen_argv merges stdout+stderr; a pipe has no stat size, so plain fread reads nothing
     var output = ""
