@@ -93,11 +93,13 @@ def private collect_compiled(source, prefix : string; // nolint:STYLE037
     set_file_source(access, COMPLETION_OVERLAY, source + "\n")
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
+            // lint/MCP introspection model: unfolded, uninlined, source-faithful AST
             cop.threadlock_context = true
             cop.ignore_shared_modules = true
             cop.export_all = true
             cop.no_optimizations = true
             cop.no_infer_time_folding = true
+            cop.auto_inline_functions = false
             compile_file(COMPLETION_OVERLAY, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
                 result.ok = ok && program != null
                 if (!result.ok) {
