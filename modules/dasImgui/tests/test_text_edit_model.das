@@ -803,6 +803,35 @@ def test_edit_auto_indent_on_enter(t : T?) {
 }
 
 [test]
+def test_edit_bracket_match(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "def f(a : int) \{\n\tx = g(\"\}\")\n\}")
+    text_edit_set_language(ed, "das")
+    // caret ON the opener at end of line 0 matches the closer on line 2
+    text_edit_set_cursor(ed, 0, 15)
+    var matched = text_edit_match_bracket(ed)
+    t |> success(matched.valid, "the opener matches")
+    t |> equal(matched.close_line, 2, "its closer sits on the last line")
+    t |> equal(matched.close_column, 0, "at column 0")
+    // the } inside the string on line 1 was skipped
+    text_edit_set_cursor(ed, 2, 1)
+    matched = text_edit_match_bracket(ed)
+    t |> success(matched.valid, "caret AFTER the closer matches back")
+    t |> equal(matched.open_line, 0, "back to the line 0 opener")
+    t |> equal(matched.open_column, 15, "at the brace")
+    // nested parens: caret on ( of g(...) matches its own )
+    text_edit_set_cursor(ed, 1, 6)
+    matched = text_edit_match_bracket(ed)
+    t |> success(matched.valid, "nested paren matches")
+    t |> equal(matched.close_line, 1, "on the same line")
+    // no bracket at the caret
+    text_edit_set_cursor(ed, 1, 2)
+    matched = text_edit_match_bracket(ed)
+    t |> success(!matched.valid, "no bracket near the caret, no match")
+    text_edit_dispose(ed)
+}
+
+[test]
 def test_edit_syntax_tracks_line_edits(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "def a\ndef b")

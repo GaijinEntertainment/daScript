@@ -349,6 +349,106 @@ def private restyle_lines(var ed : TextEditState; first_line, last_forced : int)
     }
 }
 
+struct public TextEditBracketMatch {
+    valid : bool = false
+    open_line : int
+    open_column : int
+    close_line : int
+    close_column : int
+}
+
+def private code_byte(ed : TextEditState const; line, column : int) : int {
+    // out of range, or inside a comment/string run = not code
+    return -1 if (line < 0 || line >= length(ed.lines) || column < 0
+        || column >= length(ed.lines[line])
+        || (line < length(ed.line_styles)
+            && run_covers(ed.line_styles[line].runs, column)))
+    var value = -1
+    peek_data(ed.lines[line]) $(bytes) {
+        value = int(bytes[column])
+    }
+    return value
+}
+
+def private scan_bracket(ed : TextEditState const; line, column : int; // nolint:STYLE037
+                         open_byte, close_byte : int; forward : bool) : int2 {
+    var depth = 1
+    var at_line = line
+    var at = column
+    var scanned = 0
+    while (scanned < 2000) {
+        if (forward) {
+            at++
+            if (at >= length(ed.lines[at_line])) {
+                at_line++
+                scanned++
+                return int2(-1, -1) if (at_line >= length(ed.lines))
+                at = -1
+                continue
+            }
+        } else {
+            at--
+            if (at < 0) {
+                at_line--
+                scanned++
+                return int2(-1, -1) if (at_line < 0)
+                at = length(ed.lines[at_line])
+                continue
+            }
+        }
+        let b = code_byte(ed, at_line, at)
+        continue if (b < 0)
+        if (b == (forward ? open_byte : close_byte)) {
+            depth++
+        } elif (b == (forward ? close_byte : open_byte)) {
+            depth--
+            return int2(at_line, at) if (depth == 0)
+        }
+    }
+    return int2(-1, -1)
+}
+
+def public text_edit_match_bracket(ed : TextEditState const) : TextEditBracketMatch {
+    //! The bracket pair at the caret (the byte AT the caret, else the byte
+    //! BEFORE it) — comments/strings skipped, pairs from the language
+    //! profile. Scan bounded to 2000 lines each way.
+    var result = TextEditBracketMatch()
+    return result if (empty(ed.language) || empty(ed.lines))
+    text_language_profile(ed.language) $(profile) {
+        let line = ed.cursor_line
+        var column = ed.cursor_column
+        var b = code_byte(ed, line, column)
+        var pair_index = bracket_pair_index(profile, b)
+        if (pair_index < 0 && column > 0) {
+            column--
+            b = code_byte(ed, line, column)
+            pair_index = bracket_pair_index(profile, b)
+        }
+        if (pair_index >= 0) {
+            let pair = profile.bracket_pairs[pair_index]
+            let opener = b == pair.x
+            let other = scan_bracket(ed, line, column, pair.x, pair.y, opener)
+            if (other.x >= 0) {
+                result.valid = true
+                result.open_line = opener ? line : other.x
+                result.open_column = opener ? column : other.y
+                result.close_line = opener ? other.x : line
+                result.close_column = opener ? other.y : column
+            }
+        }
+    }
+    return result
+}
+
+def private bracket_pair_index(profile : TextLanguageProfile const; b : int) : int {
+    return -1 if (b < 0)
+    for (index in range(length(profile.bracket_pairs))) {
+        let pair = profile.bracket_pairs[index]
+        return index if (b == pair.x || b == pair.y)
+    }
+    return -1
+}
+
 def public text_edit_set_language(var ed : TextEditState; language : string) {
     //! Language for syntax styling (and E4 indent/brackets): a name or file
     //! extension, canonicalized per `syntax_canonical_language`; "" clears.
@@ -1995,6 +2095,15 @@ def private draw_edit_content(var ed : TextEditState; m : EditMetrics;
     ed.blink_time += io.DeltaTime
     ed.syntax_idle += io.DeltaTime
     draw_edit_highlights(ed, m, style, font, dl, first_visible, last_visible)
+    if (ed.focused) {
+        let matched = text_edit_match_bracket(ed)
+        if (matched.valid) {
+            draw_bracket_cell(ed, m, style, font, dl, matched.open_line,
+                matched.open_column, first_visible, last_visible)
+            draw_bracket_cell(ed, m, style, font, dl, matched.close_line,
+                matched.close_column, first_visible, last_visible)
+        }
+    }
     let has_selection = text_edit_has_selection(ed)
     let sel = text_edit_selection(ed)
     for (row in range(first_visible, last_visible + 1)) {
@@ -2095,6 +2204,23 @@ def private draw_edit_line(ed : TextEditState const; row : int; line : string;
             style.text_color, line, covered, length(line),
             m.cell_width, style.tab_cells)
     }
+}
+
+def private draw_bracket_cell(ed : TextEditState const; m : EditMetrics;
+                              style : TextSourceViewStyle const;
+                              var font : ImFont?; var dl : ImDrawList?;
+                              line, column, first_visible, last_visible : int) {
+    return if (line < first_visible || line > last_visible)
+    let text = ed.lines[line]
+    let x0 = (m.gutter_space + text_source_range_width(text, 0, column,
+        font, m.font_size, m.cell_width, style.tab_cells))
+    let x1 = (m.gutter_space + text_source_range_width(text, 0,
+        min(column + 1, length(text)), font, m.font_size, m.cell_width,
+        style.tab_cells))
+    let top = m.origin.y + float(line) * m.line_height
+    *dl |> AddRectFilled(float2(m.origin.x + x0, top),
+        float2(m.origin.x + max(x1, x0 + 2.0f), top + m.line_height),
+        GetColorU32(style.bracket_match_color), 0.0f, ImDrawFlags.None)
 }
 
 def private draw_edit_highlights(ed : TextEditState const; m : EditMetrics;
