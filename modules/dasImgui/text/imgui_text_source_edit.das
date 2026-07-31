@@ -73,11 +73,14 @@ enum public TextEditCompileStatus {
 }
 
 struct public TextEditDiagnostic {
-    //! One compiler finding at (line, column), 0-based bytes; length 0 =
-    //! underline the word at that position.
+    //! One compiler finding: [start..end) positions, 0-based bytes; end ==
+    //! start = width unknown (underline the word there). `file` "" = THIS
+    //! buffer; a foreign path shows in Issues but never underlines here.
     line : int
     column : int
-    length : int
+    end_line : int
+    end_column : int
+    file : string
     message : string
 }
 
@@ -144,6 +147,9 @@ struct public TextEditState {
     //! lag edits until the next compile) + the compile state for chrome.
     diagnostics : array<TextEditDiagnostic>
     compile_status : TextEditCompileStatus = TextEditCompileStatus.unknown
+    //! Display/overlay name for the buffer ("" = unnamed scratch); the das
+    //! provider compiles under this name, so errors carry it.
+    file_name : string
     //! Completion LIST under the caret (top candidates). list_index -1 =
     //! visible but the keyboard is still in the editor (Down enters).
     list_items : array<string>
@@ -1753,6 +1759,33 @@ def public text_edit_outdent_lines(var ed : TextEditState) {
     reindent_block(ed, true)
 }
 
+def public text_edit_set_file_name(var ed : TextEditState; name : string) {
+    ed.file_name = name
+}
+
+def public text_edit_diagnostic_row_span(ed : TextEditState const;
+                                         diag : TextEditDiagnostic const;
+                                         row : int) : int2 {
+    //! The byte range a finding covers on `row`, (-1,-1) when none — the
+    //! squiggle painter, the hover hit-test, and the tests all share this.
+    return int2(-1, -1) if (!empty(diag.file) || row < diag.line
+        || row >= length(ed.lines))
+    let last_line = max(diag.end_line, diag.line)
+    return int2(-1, -1) if (row > last_line)
+    let text = ed.lines[row]
+    if (last_line == diag.line
+            && (diag.end_column <= diag.column || diag.end_line < diag.line)) {
+        // width unknown: the word at the position
+        return int2(0, 0) if (empty(text))
+        let column = clamp(diag.column, 0, length(text) - 1)
+        let word_end = clamp(word_run_at(text, column).y, column + 1, length(text))
+        return int2(column, word_end)
+    }
+    let from = row == diag.line ? clamp(diag.column, 0, length(text)) : 0
+    let to = row == last_line ? clamp(diag.end_column, 0, length(text)) : length(text)
+    return int2(from, max(to, from))
+}
+
 def public text_edit_set_diagnostics(var ed : TextEditState;
                                      var diags : array<TextEditDiagnostic>;
                                      status : TextEditCompileStatus) {
@@ -2507,17 +2540,17 @@ def private draw_edit_line(ed : TextEditState const; row : int; line : string;
     }
 }
 
-def private diagnostic_span(ed : TextEditState const; diag : TextEditDiagnostic;
-                            m : EditMetrics; style : TextSourceViewStyle const;
-                            var font : ImFont?) : float2 {
-    // (x0, x1) in widget space, gutter included - shared by squiggle + hover
-    let line = ed.lines[diag.line]
-    let column = clamp(diag.column, 0, max(length(line) - 1, 0))
-    var end_ = diag.length > 0 ? column + diag.length : word_run_at(line, column).y
-    end_ = clamp(end_, column + 1, length(line))
-    let x0 = (m.gutter_space + text_source_range_width(line, 0, column,
+def private diagnostic_row_pixels(ed : TextEditState const;
+                                  diag : TextEditDiagnostic const; row : int;
+                                  m : EditMetrics; style : TextSourceViewStyle const;
+                                  var font : ImFont?) : float2 {
+    // (x0, x1) in widget space for one row; x1 < x0 = nothing on this row
+    let span = text_edit_diagnostic_row_span(ed, diag, row)
+    return float2(1.0f, 0.0f) if (span.x < 0)
+    let text = ed.lines[row]
+    let x0 = (m.gutter_space + text_source_range_width(text, 0, span.x,
         font, m.font_size, m.cell_width, style.tab_cells))
-    let x1 = (m.gutter_space + text_source_range_width(line, 0, end_,
+    let x1 = (m.gutter_space + text_source_range_width(text, 0, span.y,
         font, m.font_size, m.cell_width, style.tab_cells))
     return float2(x0, max(x1, x0 + m.cell_width))
 }
@@ -2528,21 +2561,23 @@ def private draw_edit_diagnostics(ed : TextEditState const; m : EditMetrics;
                                   first_visible, last_visible : int) {
     let color = GetColorU32(style.error_underline_color)
     for (diag in ed.diagnostics) {
-        continue if (diag.line < first_visible || diag.line > last_visible
-            || diag.line >= length(ed.lines))
-        let span = diagnostic_span(ed, diag, m, style, font)
-        let x0 = m.origin.x + span.x
-        let x1 = m.origin.x + span.y
-        let base_y = m.origin.y + float(diag.line + 1) * m.line_height - 2.0f
-        // small zigzag underline
-        var x = x0
-        var up = true
-        while (x < x1) {
-            let next = min(x + 3.0f, x1)
-            *dl |> AddLine(float2(x, up ? base_y + 1.5f : base_y),
-                float2(next, up ? base_y : base_y + 1.5f), color, 1.0f)
-            x = next
-            up = !up
+        let last_line = max(diag.end_line, diag.line)
+        continue if (last_line < first_visible || diag.line > last_visible)
+        for (row in range(max(diag.line, first_visible),
+                min(last_line, last_visible) + 1)) {
+            let px = diagnostic_row_pixels(ed, diag, row, m, style, font)
+            continue if (px.y < px.x)
+            let base_y = m.origin.y + float(row + 1) * m.line_height - 2.0f
+            var x = m.origin.x + px.x
+            let x_end = m.origin.x + px.y
+            var up = true
+            while (x < x_end) {
+                let next = min(x + 3.0f, x_end)
+                *dl |> AddLine(float2(x, up ? base_y + 1.5f : base_y),
+                    float2(next, up ? base_y : base_y + 1.5f), color, 1.0f)
+                x = next
+                up = !up
+            }
         }
     }
 }
@@ -2555,9 +2590,9 @@ def private edit_diagnostic_tooltip(ed : TextEditState const; m : EditMetrics;
     return if (row < 0 || row >= length(ed.lines))
     var message = ""
     for (diag in ed.diagnostics) {
-        continue if (diag.line != row)
-        let span = diagnostic_span(ed, diag, m, style, font)
-        if (local.x >= span.x - 2.0f && local.x <= span.y + 2.0f) {
+        let px = diagnostic_row_pixels(ed, diag, row, m, style, font)
+        continue if (px.y < px.x)
+        if (local.x >= px.x - 2.0f && local.x <= px.y + 2.0f) {
             message = empty(message) ? diag.message : message + "\n" + diag.message
         }
     }
@@ -2767,18 +2802,31 @@ def public text_edit_issues_panel(var ed : TextEditState) {
     }
     text_disabled(ISSUE_HEADER, (text = header))
     for (index in range(length(ed.diagnostics))) {
-        let row_line = ed.diagnostics[index].line + 1
-        let row_column = ed.diagnostics[index].column
-        let row_span = (ed.diagnostics[index].length > 0
-            ? "{row_line}:{row_column}-{row_column + ed.diagnostics[index].length}"
-            : "{row_line}:{row_column}")
+        let source_file = (!empty(ed.diagnostics[index].file)
+            ? ed.diagnostics[index].file : ed.file_name)
+        let prefix = empty(source_file) ? "" : source_file + ":"
+        let row_span = issue_span_text(ed.diagnostics[index])
         if (selectable(ISSUE_ROW[index], (text =
-                "{row_span}  {ed.diagnostics[index].message}###issue_{index}"))) {
-            text_edit_set_cursor(ed, ed.diagnostics[index].line,
-                ed.diagnostics[index].column)
-            ed.focused = true
+                "{prefix}{row_span}  {ed.diagnostics[index].message}###issue_{index}"))) {
+            // foreign-file findings show but cannot navigate this buffer
+            if (empty(ed.diagnostics[index].file)) {
+                text_edit_set_cursor(ed, ed.diagnostics[index].line,
+                    ed.diagnostics[index].column)
+                ed.focused = true
+            }
         }
     }
+}
+
+def private issue_span_text(diag : TextEditDiagnostic const) : string {
+    let from_line = diag.line + 1
+    if (diag.end_line > diag.line) {
+        return "{from_line}:{diag.column}-{diag.end_line + 1}:{diag.end_column}"
+    }
+    if (diag.end_column > diag.column) {
+        return "{from_line}:{diag.column}-{diag.end_column}"
+    }
+    return "{from_line}:{diag.column}"
 }
 
 // ===== Command registry keymap =====

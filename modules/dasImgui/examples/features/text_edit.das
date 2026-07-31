@@ -40,6 +40,7 @@ def init() {
     g_commands.config_path = command_default_config_path("text_edit_demo")
     text_edit_load(g_edit, SAMPLE)
     text_edit_set_language(g_edit, "das")
+    text_edit_set_file_name(g_edit, "sample.das")
 }
 
 def private setup_layout(dock_id : uint) {

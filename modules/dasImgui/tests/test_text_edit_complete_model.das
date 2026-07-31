@@ -213,10 +213,18 @@ def test_das_issue_parsing(t : T?) {
     t |> equal(length(out), 2, "both findings parse")
     t |> equal(out[0].line, 1, "line converts to 0-based")
     t |> equal(out[0].column, 10, "printed columns are ALREADY 0-based")
-    t |> equal(out[0].length, 3, "the caret width becomes the range length")
+    t |> equal(out[0].end_column, 13, "the caret width becomes the range end")
+    t |> equal(out[0].file, "", "the edited buffer's findings carry no path")
     t |> success(find(out[0].message, "can't locate") >= 0, "the message rides along")
     t |> equal(out[1].line, 0, "the second finding pins its own line")
-    t |> equal(out[1].length, 0, "no caret line means unknown length")
+    t |> equal(out[1].end_column, out[1].column, "no caret line means unknown width")
+    // a finding in a REQUIRED file keeps its path
+    var foreign : array<TextEditDiagnostic>
+    text_edit_parse_das_issues("error[30001]: broken elsewhere\n"
+        + "daslib/foo.das:7:4\n", "text_edit_completion_overlay.das", foreign)
+    t |> equal(length(foreign), 1, "foreign findings parse too")
+    t |> equal(foreign[0].file, "daslib/foo.das", "and keep their path")
+    delete foreign
     delete out
 }
 
@@ -227,6 +235,7 @@ def test_das_provider_reports_diagnostics(t : T?) {
     var provider = TextEditDasProvider()
     text_edit_load(ed, "def broken( \{")
     text_edit_set_language(ed, "das")
+    text_edit_set_file_name(ed, "hello.das") // errors anchor on the real name
     ed.syntax_idle = 1.0f // the idle diagnostics kick, no completion needed
     text_edit_das_provider_sync(ed, comp, provider)
     t |> equal(int(ed.compile_status), int(TextEditCompileStatus.compiling),
@@ -240,6 +249,8 @@ def test_das_provider_reports_diagnostics(t : T?) {
     t |> equal(int(ed.compile_status), int(TextEditCompileStatus.failed),
         "a broken buffer reports failed")
     t |> success(!empty(ed.diagnostics), "the findings underline")
+    t |> equal(ed.diagnostics[0].file, "",
+        "a named buffer's own findings still carry no path")
     // fix the buffer: the next idle compile turns it ok and clears findings
     // (the array literal is gen2-only - proves options-less buffers parse gen2)
     text_edit_load(ed, "var g <- [1, 2, 3]\ndef fine() \{\}")
@@ -257,6 +268,37 @@ def test_das_provider_reports_diagnostics(t : T?) {
     t |> success(empty(ed.diagnostics), "the findings clear")
     text_edit_das_provider_stop(provider)
     text_edit_complete_dispose(comp)
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_multiline_diagnostic_spans(t : T?) {
+    // squiggles across lines: first row from the column, middle rows whole,
+    // last row to the end column; nothing outside; foreign files never span
+    var ed = TextEditState()
+    text_edit_load(ed, "aaaa\nbbbb\ncccc\ndddd")
+    let diag = TextEditDiagnostic(line = 1, column = 2, end_line = 3,
+        end_column = 1, file = "", message = "spans")
+    t |> equal(text_edit_diagnostic_row_span(ed, diag, 0), int2(-1, -1),
+        "no span above the range")
+    t |> equal(text_edit_diagnostic_row_span(ed, diag, 1), int2(2, 4),
+        "first row runs from the start column to line end")
+    t |> equal(text_edit_diagnostic_row_span(ed, diag, 2), int2(0, 4),
+        "middle rows cover the whole line")
+    t |> equal(text_edit_diagnostic_row_span(ed, diag, 3), int2(0, 1),
+        "last row stops at the end column")
+    t |> equal(text_edit_diagnostic_row_span(ed, diag, 4), int2(-1, -1),
+        "no span below the range")
+    // width-unknown single position falls back to the word
+    let point = TextEditDiagnostic(line = 0, column = 1, end_line = 0,
+        end_column = 1, file = "", message = "point")
+    t |> equal(text_edit_diagnostic_row_span(ed, point, 0), int2(1, 4),
+        "unknown width underlines from the position to the word end")
+    // foreign findings never underline this buffer
+    let foreign = TextEditDiagnostic(line = 1, column = 0, end_line = 1,
+        end_column = 4, file = "daslib/foo.das", message = "elsewhere")
+    t |> equal(text_edit_diagnostic_row_span(ed, foreign, 1), int2(-1, -1),
+        "foreign files draw nothing here")
     text_edit_dispose(ed)
 }
 

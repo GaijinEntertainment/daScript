@@ -28,6 +28,8 @@ struct private DasCompleteJob {
     token : int
     prefix : string
     source : string
+    //! Overlay filename the buffer compiles under (its display name).
+    overlay : string
 }
 
 [safe_when_uninitialized]
@@ -61,27 +63,56 @@ def private offer_name(var names : array<string>; name, prefix : string) {
     names |> push(name)
 }
 
-def public text_edit_parse_das_issues(issues, file : string;
+def private all_digits(text : string) : bool {
+    return false if (empty(text))
+    var digits = true
+    peek_data(text) $(bytes) {
+        for (b in bytes) {
+            if (!is_number(int(b))) {
+                digits = false
+                break
+            }
+        }
+    }
+    return digits
+}
+
+def private parse_location(line, anchor : string;
+                           var out : array<TextEditDiagnostic>;
+                           message : string) : bool {
+    // FILE:LINE:COL split from the right - paths keep their colons
+    let c2 = rfind(line, ":")
+    return false if (c2 <= 0)
+    let c1 = rfind(slice(line, 0, c2), ":")
+    return false if (c1 <= 0)
+    let line_text = slice(line, c1 + 1, c2)
+    let column_text = slice(line, c2 + 1, length(line))
+    return false if (!all_digits(line_text) || !all_digits(column_text))
+    let source_file = slice(line, 0, c1)
+    let from_line = max(to_int(line_text) - 1, 0)
+    let from_column = max(to_int(column_text), 0)
+    out |> push(TextEditDiagnostic(line = from_line, column = from_column,
+        end_line = from_line, end_column = from_column,
+        file = source_file == anchor ? "" : source_file, message = message))
+    return true
+}
+
+def public text_edit_parse_das_issues(issues, file : string; // nolint:STYLE037
                                       var out : array<TextEditDiagnostic>) {
-    //! Compiler issue text -> per-position findings: a `file:LINE:COL` line
-    //! pins the preceding error/warning message. Printed lines are 1-based
-    //! but columns 0-BASED (probe-verified); both store 0-based.
+    //! Issue text -> findings: the first column-0 `FILE:LINE:COL` after an
+    //! error/warning pins its message (1-based lines, 0-BASED columns); the
+    //! ^^^ caret line supplies the width; foreign files keep their path.
     var message = ""
     var pending_caret = 0
     var inscope lines <- split(issues, "\n")
-    let anchor = file + ":"
     for (line in lines) {
         if (starts_with(line, "error[") || starts_with(line, "warning[")) {
             let sep = find(line, "]: ")
             message = sep >= 0 ? slice(line, sep + 3, length(line)) : line
             pending_caret = 0
-        } elif (starts_with(line, anchor) && !empty(message)) {
-            var inscope parts <- split(slice(line, length(anchor), length(line)), ":")
-            if (length(parts) >= 2) {
-                out |> push(TextEditDiagnostic(
-                    line = max(to_int(parts[0]) - 1, 0),
-                    column = max(to_int(parts[1]), 0),
-                    message = message))
+        } elif (!empty(message) && !starts_with(line, "\t")
+                && !starts_with(line, " ")) {
+            if (parse_location(line, file, out, message)) {
                 message = ""
                 pending_caret = 2 // source echo next, then the caret line
             }
@@ -89,7 +120,7 @@ def public text_edit_parse_das_issues(issues, file : string;
             pending_caret = 1
         } elif (pending_caret == 1) {
             pending_caret = 0
-            // the ^^^ width under the source echo IS the finding's length
+            // the ^^^ width under the source echo IS the finding's width
             var carets = 0
             var caret_line = true
             peek_data(line) $(bytes) {
@@ -102,17 +133,18 @@ def public text_edit_parse_das_issues(issues, file : string;
                 }
             }
             if (caret_line && carets > 0 && !empty(out)) {
-                out[length(out) - 1].length = carets
+                let last = length(out) - 1
+                out[last].end_column = out[last].column + carets
             }
         }
     }
 }
 
-def private collect_compiled(source, prefix : string; // nolint:STYLE037
+def private collect_compiled(source, prefix, overlay : string; // nolint:STYLE037
                              var result : DasCompleteResult) {
     var inscope access <- make_file_access("")
     // the parser wants a final newline; mid-edit buffers rarely have one
-    set_file_source(access, COMPLETION_OVERLAY, source + "\n")
+    set_file_source(access, overlay, source + "\n")
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
             // introspection model; gen2 default lives in the CLI, not the struct
@@ -123,10 +155,10 @@ def private collect_compiled(source, prefix : string; // nolint:STYLE037
             cop.no_optimizations = true
             cop.no_infer_time_folding = true
             cop.auto_inline_functions = false
-            compile_file(COMPLETION_OVERLAY, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
+            compile_file(overlay, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
                 result.ok = ok && program != null
                 if (!result.ok) {
-                    text_edit_parse_das_issues("{issues}", COMPLETION_OVERLAY,
+                    text_edit_parse_das_issues("{issues}", overlay,
                         result.diagnostics)
                 }
                 if (result.ok) {
@@ -179,7 +211,8 @@ def private das_complete_worker(var jobs : Channel?&; var results : Channel?&) {
                 return
             }
             var result = DasCompleteResult(token = job.token)
-            collect_compiled(job.source, job.prefix, result)
+            collect_compiled(job.source, job.prefix,
+                empty(job.overlay) ? COMPLETION_OVERLAY : job.overlay, result)
             results |> push_clone(result)
             delete result
             delete job
@@ -250,7 +283,7 @@ def public text_edit_das_provider_sync(var ed : TextEditState;
         provider.compiled_revision = ed.revision
         ed.compile_status = TextEditCompileStatus.compiling
         var job = DasCompleteJob(token = comp.token, prefix = comp.prefix,
-            source = text_edit_text(ed))
+            source = text_edit_text(ed), overlay = ed.file_name)
         provider.jobs |> push_clone(job)
         delete job
         return
@@ -261,7 +294,7 @@ def public text_edit_das_provider_sync(var ed : TextEditState;
         provider.compiled_revision = ed.revision
         ed.compile_status = TextEditCompileStatus.compiling
         var job = DasCompleteJob(token = -1, prefix = "",
-            source = text_edit_text(ed))
+            source = text_edit_text(ed), overlay = ed.file_name)
         provider.jobs |> push_clone(job)
         delete job
     }
