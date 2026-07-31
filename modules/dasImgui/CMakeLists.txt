@@ -120,9 +120,11 @@ FetchContent_MakeAvailable(md4c_src)
 SET(MD4C_INCLUDE_DIR ${md4c_src_SOURCE_DIR}/src)
 IF(MSVC)
     # md4c trips C4201 (nameless struct/union), C4701/C4703 (potentially
-    # uninitialized local), and C4702 (unreachable code), which the superbuild's
-    # /WX turns fatal — suppress on this file only, it is not ours to fix.
-    SET_SOURCE_FILES_PROPERTIES(${MD4C_INCLUDE_DIR}/md4c.c PROPERTIES COMPILE_OPTIONS "/wd4201;/wd4701;/wd4702;/wd4703")
+    # uninitialized local), C4702 (unreachable code), C4200 (zero-sized array)
+    # and C4127 (constant conditional), which the superbuild's /WX turns fatal
+    # — suppress on this file only, it is not ours to fix.  The last two fire on
+    # VS 2019 but not on the newer toolset CI runs.
+    SET_SOURCE_FILES_PROPERTIES(${MD4C_INCLUDE_DIR}/md4c.c PROPERTIES COMPILE_OPTIONS "/wd4127;/wd4200;/wd4201;/wd4701;/wd4702;/wd4703")
 ENDIF()
 
 # imgui via FetchContent
