@@ -1,101 +1,288 @@
-# dasLLAMA Architecture — what goes where
+# dasLLAMA Architecture
 
-> Companion to `INVENTORY.md` (the as-is census). This document records where functionality
-> **BELONGS** and why — placement rules only. **Historical data stays OUT of this file**: no
-> move ledgers, dates, PR/commit references, or incident anecdotes — the per-move record lives
-> in `history/dasLLAMA/reorg_extraction_ledger.md` and git. When an extraction settles a
-> placement rule, the rule lands here, stated timelessly.
+**Who reads this: me.** It is the memory that survives a compaction, a new session, or a
+hand-off — the thing to read when the answer to "where does this code go, and why is it shaped
+like this" is no longer in context. It must therefore be readable cold, with no session state:
+durable facts only, no history, no PR numbers, no "recently".
 
-## Placement rules
+The three documents divide as follows, and the division is load-bearing — the same fact written
+in two of them will drift:
 
-- **Tests live under `modules/dasLLAMA/tests/` — all of them.** `/tests/dasLLAMA` must not exist.
-  dasLLAMA inference runs **`-jit` only** — never interpreted, never AOT (no dasLLAMA test joins
-  `test_aot`/`test_aot_subset`); every suite runs `-jit` through `tests/run.das`, per
-  `tests/CLAUDE.md`. The library panics on a non-`-jit` model run; scaffolding tools (converters,
-  batch drivers, debug scripts) may run interpreted (see Inherited invariants).
-- **Shared functionality gets pulled into small, correctly-named, single-purpose modules** —
-  `dasllama_repack.das` (kernel data repacking), `dasllama_convert.das` (tensor format conversion).
-  Never a grab-bag `common`/`families_common`: a module whose name doesn't say what it does is the
-  failure mode being unwound.
-- **Repacks live under `dasllama_repack.das`** — every disk-order → compute-order kernel-layout
-  transform (grp<mr> interleaves, disk-order extractors, panel unpacks), regardless of format or
-  platform. Number sources (tune stamps, bake overrides) stay with their owners and pass plain
-  parameters in.
-- **Conversions live under `dasllama_convert.das`** — every tensor format conversion
-  (quantize/dequantize/transcode/encode, codec byte readers, numeric widen/narrow), regardless of
-  platform or caller. Metadata-coupled drivers (GGUF lookup, threading, guards) stay with their
-  containers and dispatch into the codec. The KV-cache runtime codec is the one carve-out (next
-  rule): a conversion that IS a cache format's store/read half lives with its dot/axpy family.
-- **The KV-cache runtime codec lives under `dasllama_kv_codec.das`** — one family per cache
-  format, kept WHOLE: store (quantize), read (dequant), the attention score dot, and the
-  V-accumulate axpy share the format's block byte geometry (34B/17-uint16 q8_0, 18B/9-uint16
-  tq4), so a layout change can never span modules. These run per token (store) and per token ×
-  cached position (dot/axpy) — `[tuned]` hot kernels, not load-time converters. The tq4 FWHT
-  rotation + sign vector live with their family. Codec DISPATCH (`KVDtype`) stays at common's
-  `kv_store_row`/`kv_load_row`/`kv_dot`/`kv_axpy` seam; the f16 family's row converts are the
-  generic pair in `dasllama_convert` (dual-use beyond the cache: gguf load, wscale plane,
-  Accelerate batch prep).
-- **The prepared-image rail lives under `dasllama_image.das`, and it is ONE rail** — `build_image`
-  walks a carrier's planes into a sink (a `.dlim` file, or a page-aligned memory chunk when there
-  is nowhere to write); `parse_image` turns `(base, bytes)` back into borrowed-plane fields and
-  does not know which sink produced them. Cold and warm therefore yield the SAME struct, and a
-  cold load reaches it by building the image and handing off through the file — write, drop the
-  model, map — so the model and its image are never both resident. That handoff costs a close and
-  a re-map of a multi-GB file and is the *slower* cold start on purpose, under "peak memory before
-  cold-start latency" below. `cache_via_image` is that handoff for every weight carrier; the
-  streaming forms transcode planes from the gguf mapping straight into the image so they never
-  materialize at all. Nothing outside this file may read weights into a live carrier, and nothing
-  outside it may release an image backing (CODEREVIEW 23).
-- **Format identity lives under `dasllama_kqformat.das`** — the `KqFmt` enum, the per-format
-  descriptor table (plane strides, block geometry, stream codes), and format predicates. It
-  requires nothing dasllama (it is the taxonomy everything else keys off): convert reads it for
-  codec strides, repack for layouts, layout/common for the loader walks, gemm_schema for the
-  kernel side. ONE id space — the enum; int ids exist only at the IR/kernel-param boundary.
-- **RoPE angle/table generation lives under `dasllama_rope.das`** — the theta schedule +
-  `rope_freqs`/fscale/mscale in every materialized layout, pure functions over plain params;
-  Model-facing wrappers stay in common. Application kernels stay with their backends: the CPU
-  `rope_scaled_*` variants and the GPU fused rope-store kernels are shape-specialized on purpose
-  (hot-loop branch elimination / fusion) — single-sourcing them is generator-rail work, not a
-  hand-merge.
-- **A GPU backend is a FAMILY of role files — matching things in matching files across
-  backends.** The roles: `dasllama_<gpu>_kernels` (kernel source + the derived-access/PSO census
-  — no device state, no engine types), `dasllama_<gpu>_common` (device state, buffer/command
-  plumbing, the hazard/capture rail, profiler, shared lazy-state builders; module-level state
-  deliberately NON-private — the drivers assign it), `dasllama_<gpu>_decode` (the resident
-  token-step driver + decode-time arms), `dasllama_<gpu>_prefill` (the batched prefill driver +
-  batch arms), `dasllama_<gpu>_shapes` (PORTABLE servability gates — no GPU C++ requires),
-  `dasllama_<gpu>_lens` (the kernel-access macro), and — VULKAN ONLY — the entry
-  `dasllama_math_vulkan` (capability probe/arm, `.dlim` identity source, cross-arm routers, the
-  `[init]` hook installs — re-exports the family `public`, and its NAME is common's `?vulkan`
-  require contract: never rename it). Metal has NO math_ entry: the family enters via the
-  transformer's `?das_metal` requires + unconditional shapes, and its below-common piece is
-  `dasllama_metal_gemm` (the batch-GEMM donor common requires `?das_metal` — own device by
-  necessity: metal_common → dasllama_common → metal_gemm would cycle). Backend-only
-  capabilities (vulkan: weight arena, streamed mirrors, heat cache, host-import, coopmat;
-  metal: blob transform, MTP) live in their matching ROLE file, not in new grab-bags. Vulkan
-  is the deliberately-designed model; metal converges as it's touched. Family-shared kernel
-  classes live in `dasllama_metal_kernels` — the `[metal_dispatch]` lens generates enc_*
-  builders and MSL globals into the module the class COMPILES in, so co-location follows the
-  class ("the builder needs the driver module" is never a placement reason). Prefill's 33
-  prefill-only classes are the remaining convergence debt, not precedent.
-- **GPU cooperation lives under `dasllama_gpu_tier.das`** — the device-cooperation SPI: hook
-  types, install/unset slots, route/mark/want/status state, engine-facing forwarders. Vulkan
-  implements it (per-op offload + resident plumbing); Metal deliberately does not — UMA makes
-  residency moot there, and Metal integrates as a whole-forward driver through common's override
-  registries (which Vulkan's resident driver also registers with). The two-contract reality and
-  the direction of travel are recorded in `followup_vulkan.md`; the override registry itself is
-  a future seam extraction alongside the loader pull.
-- **A new module lands with its records** — the placement rule here, the matching CODEREVIEW.md
-  rule, and targeted tests, all in the same change (CODEREVIEW.md "THE PATTERN").
-- **Every extraction ships targeted tests for the extracted bits themselves** — unit-level on the
-  moved surface, not "run an LLM and see if it still talks". The end-to-end oracles stay the
-  bit-identity gate; they are not the extraction's test.
-- **Platform backends implement narrow registered contracts** — `KernelBackend` slots, MoE-GPU-tier
-  hooks, layout/stream hooks. Platform-specific code must not live in a platform-neutral module (the
-  Vulkan bake state machine and Metal knobs now sitting in `dasllama_common.das` are debt, not
-  precedent).
+| doc | audience | carries |
+|---|---|---|
+| `README.md` | users | what each file *is*, one line, plus how to run things |
+| `ARCHITECTURE.md` | me | what *belongs* in each file and why the system is shaped this way |
+| `CODEREVIEW.md` | `/code-review`, and us while writing | criteria checkable against a diff |
 
-## Inherited invariants
+**References flow one way: CODEREVIEW cites ARCHITECTURE, never the reverse.** Sections here are
+numbered so they can be cited (`ARCHITECTURE §2.2`). Nothing here may cite a CODEREVIEW rule —
+those are unnumbered review criteria by design, and a citation to one is a dangling pointer the
+moment the checklist is reordered.
+
+**Charters below are boundaries, not descriptions.** README already says what every file is;
+repeating that here is the failure mode this split exists to prevent. An entry earns its place by
+answering a question a description cannot: what does NOT go here, and where does the adjacent
+thing live instead. Files with no contested edge get one short line.
+
+---
+
+## 1. File charters
+
+Every non-generated file under `dasllama/` appears here. `dasllama_env.das` and
+`dasllama_unicode.das` are generated and have no charter — edit their generators.
+
+### 1.1 Engine core
+
+- **`dasllama.das`** — the public API facade and nothing else: `load_model` → `create_session` →
+  generate, re-exported names, the doc surface. No engine logic; a function that does work belongs
+  in the module that owns the concern, and the facade re-exports it.
+- **`dasllama_common.das`** — the engine: `Model`/`Session`/`Config`, the forward loops, the
+  override registries, the load walk. It is also the module's debt sink (13k lines): the Vulkan
+  bake state machine and the Metal knobs sitting here are debt, **not precedent**. Nothing
+  platform-specific may be added; new shared concerns get their own file rather than another
+  thousand lines here.
+- **`dasllama_transformer.das`** — the block-composition seam only.
+- **`dasllama_config.das`** — `DlimConfiguration`: every input that changes `.dlim` image BYTES,
+  in one struct, plus its identity formatter. A knob that does not change image bytes does not
+  belong here; a knob that does and is missing is an image-aliasing bug.
+- **`dasllama_chat.das`** — conversation turns and chat-template application. Per-arch template
+  *content* is registered by the arch file (§1.6), not written here.
+- **`dasllama_par.das`** — `maybe_parallel_for` and nothing else. Threading policy (job counts,
+  thresholds) belongs to the caller that knows the shape.
+
+### 1.2 Formats and data movement
+
+These five own the module's data-shape vocabulary. The boundaries between them are the ones most
+often gotten wrong, so each says explicitly where the neighbouring half goes.
+
+- **`dasllama_kqformat.das`** — format IDENTITY: the `KqFmt` enum, the per-format descriptor table
+  (plane strides, block geometry, stream codes), format predicates. It requires nothing else in
+  dasllama, because it is the taxonomy everything keys off. ONE id space — the enum; integer ids
+  exist only at the IR/kernel-param boundary. `kq_sb` is the superblock-lattice predicate: a
+  `fmt != q8` test does not imply the lattice, so branch on the predicate.
+- **`dasllama_convert.das`** — every tensor format CONVERSION: quantize/dequantize/transcode/encode,
+  codec byte readers, numeric widen/narrow — regardless of platform or caller. Metadata-coupled
+  drivers (GGUF lookup, threading, guards) stay with their containers and dispatch in. ONE
+  carve-out: a conversion that IS a KV-cache format's store/read half lives with its codec family
+  (§ below).
+- **`dasllama_repack.das`** — every disk-order → compute-order kernel-LAYOUT transform (grp
+  interleaves, disk-order extractors, panel unpacks), any format, any platform. Number sources
+  (tune stamps, bake overrides) stay with their owners and pass plain parameters in.
+- **`dasllama_kv_codec.das`** — the KV-cache runtime codec, one family per cache format, kept
+  WHOLE: store (quantize), read (dequant), the attention score dot, and the V-accumulate axpy all
+  share the format's block byte geometry, so a layout change can never span modules. These are
+  per-token and per-token×position `[tuned]` hot kernels, not load-time converters. The tq4 FWHT
+  rotation and sign vector live with their family. Codec DISPATCH (`KVDtype`) stays at common's
+  `kv_store_row`/`kv_load_row`/`kv_dot`/`kv_axpy` seam; the f16 row converts are the generic pair
+  in `dasllama_convert` because they are dual-use beyond the cache.
+- **`dasllama_rope.das`** — RoPE angle and TABLE GENERATION: the theta schedule, `rope_freqs`,
+  fscale/mscale, every materialized layout — pure functions over plain parameters. Model-facing
+  wrappers stay in common. APPLICATION kernels stay with their backends: the CPU `rope_scaled_*`
+  leaves and the GPU fused rope-store kernels are shape-specialized deliberately, and
+  single-sourcing them is generator-rail work, never a hand-merge. Float multiply order in the
+  builders is contractual (parity-pinned) — never "unify" it.
+- **`dasllama_gguf.das`** — the GGUF container: KV/tensor descriptors, the byte-level reader, the
+  mapping. Codecs live in `dasllama_convert`; this file finds bytes, it does not decode them.
+- **`dasllama_layout.das`** — disk-format → compute-layout transforms at LOAD scope: the blob
+  transform, the CPU repack walkers, the GPU tier gathers, and the refusal half (`can this model
+  take the blob form`) split out so the image writer can commit without loading.
+- **`dasllama_tokenizer.das`** — SentencePiece (Llama-2 family, Phi-3, Gemma).
+- **`dasllama_bpe.das`** — byte-level BPE / tiktoken (Llama-3, Qwen2 pre-tokenizers). Two files
+  because the two algorithms share no state; a third tokenizer family gets a third file.
+
+### 1.3 The load and image rail
+
+- **`dasllama_image.das`** — the prepared-model `.dlim` rail, and it is ONE rail (§2.1). Nothing
+  outside this file may read weights into a live carrier, and nothing outside it may release an
+  image backing.
+
+### 1.4 CPU kernel tiers
+
+- **`dasllama_math.das`** — the numeric ABSTRACTION: typedefs, active backend pointers, public
+  wrappers, dispatch shaping. Kernels themselves live in a tier file; a kernel body here is a
+  placement defect.
+- **`dasllama_math_default.das`** — the portable backend, always registered, always correct,
+  out-ranked by any platform tier.
+- **`dasllama_math_aarch64_neon.das`** — the arm64 SDOT/tbl tier. Its `[init]` never fires
+  off-arch (§3, three-layer safety model), so an intrinsic here needs a correct scalar fallback
+  body, not a guard at the call site.
+- **`dasllama_math_accelerate.das`** — the Accelerate/BNNS float tier (AMX on M1–M3, SME on M4+),
+  for genuinely-float planes only. BLAS-for-quant is ruled out structurally (§3).
+- **`dasllama_math_gen.das`** / **`dasllama_gemm_gen.das`** / **`dasllama_gemm_schema.das`** /
+  **`dasllama_gemm_register.das`** — the generated GEMM tier: the runtime registration, the tile
+  generator, the layout/perm schema shared by generator and runtime, and the `[tune]` family
+  registration. A hand-written tile that the generator could emit belongs in the generator.
+- **`dasllama_tune.das`** — the per-box loop-hint tuner (`[tuned]` / `[dasllama_grid]`). Tuning
+  POLICY lives here; tuned VALUES live in the box's sidecar, never in source.
+
+### 1.5 GPU backends
+
+A GPU backend is a FAMILY of role files — matching things in matching files across backends, so
+that a question answered for one backend has an obvious address in the other. The roles:
+
+| role | holds | must not hold |
+|---|---|---|
+| `dasllama_<gpu>_kernels`<br>`dasllama_metal_kernels`, `dasllama_vulkan_kernels` | kernel source, the derived-access/PSO census | device state, engine types |
+| `dasllama_<gpu>_common`<br>`dasllama_metal_common`, `dasllama_vulkan_common` | device state, buffer/command plumbing, hazard + capture rail, profiler | driver policy |
+| `dasllama_<gpu>_decode`<br>`dasllama_metal_decode`, `dasllama_vulkan_decode` | the resident token-step driver + decode-time arms | kernel bodies |
+| `dasllama_<gpu>_prefill`<br>`dasllama_metal_prefill`, `dasllama_vulkan_prefill` | the batched prefill driver + batch arms | kernel bodies |
+| `dasllama_<gpu>_shapes`<br>`dasllama_metal_shapes` | PORTABLE servability gates — no GPU C++ require, so any box can bake | device calls |
+| `dasllama_<gpu>_lens`<br>`dasllama_metal_lens`, `dasllama_vulkan_lens` | the kernel-access macro | anything else |
+
+- **Vulkan additionally has an ENTRY, `dasllama_math_vulkan.das`** — capability probe/arm, `.dlim`
+  identity source, cross-arm routers, the `[init]` installs. It re-exports the family `public`,
+  and its NAME is common's `?vulkan` require contract: **never rename it.**
+- **Metal has NO `math_` entry** — the family enters via the transformer's `?das_metal` requires
+  plus unconditional shapes. Its below-common piece is **`dasllama_metal_gemm.das`** (the batch
+  GEMM donor that common requires `?das_metal`), which owns its device by necessity:
+  metal_common → dasllama_common → metal_gemm would cycle.
+- **Backend-only capabilities live in their matching ROLE file, not in new grab-bags** — vulkan's
+  weight arena, streamed mirrors, heat cache, host-import, coopmat; metal's blob transform and MTP.
+- **Family-shared kernel classes live in `dasllama_metal_kernels`.** The `[metal_dispatch]` lens
+  generates `enc_*` builders and MSL globals into the module the class COMPILES in, so co-location
+  follows the class — "the builder needs the driver module" is never a placement reason. Prefill's
+  prefill-only classes are convergence debt, not precedent.
+- **`dasllama_gpu_tier.das`** — the device-cooperation SPI: hook types, install/unset slots,
+  route/mark/want/status state, engine-facing forwarders. Vulkan implements it (per-op offload plus
+  resident plumbing); Metal deliberately does not, because UMA makes residency moot there and Metal
+  integrates as a whole-forward driver through common's override registries.
+- **`dasllama_kernel_access.das`** — the shared body-walk read/write classifier both GPU lenses run
+  on. Backend-specific lowering stays in that backend's lens.
+
+Vulkan is the deliberately-designed model of this shape; Metal converges as it is touched.
+
+### 1.6 Architecture registrations
+
+Thirteen files registering eighteen names:
+`dasllama_arch_llama.das` · `dasllama_arch_phi3.das` · `dasllama_arch_qwen2.das` · `dasllama_arch_qwen2moe.das` · `dasllama_arch_qwen3.das` · `dasllama_arch_qwen3moe.das` · `dasllama_arch_qwen35.das` · `dasllama_arch_gemma2.das` · `dasllama_arch_gemma3.das` · `dasllama_arch_gemma4.das` · `dasllama_arch_glm4moe.das` · `dasllama_arch_gptoss.das` · `dasllama_arch_mistral3.das`. They are DECLARATIVE: an arch
+file builds an `ArchDesc` (name · `configure` · the `ArchBlocks` fn-ptr quad · `ChatTemplate` ·
+`LlmCaps`) and calls `register_arch` at `[init]`. Adding an arch touches no forward loop.
+
+Family behavior is distributed by `Config` flag, not dispatched by name — an `if (arch == "...")`
+on a shared path is the anti-pattern. Only a genuinely new dataflow earns its own block pointer.
+`register_arch` MOVES the descriptor, so an alias must clone the template first (§3).
+
+### 1.7 Audio and ASR
+
+- **`dasllama_audio.das`** — the shared audio tower: mel front-end, encoder blocks, the pieces every
+  audio model composes.
+- **`dasllama_audio_io.das`** — decode-any-format → 16 kHz mono f32 PCM. The only file that talks to
+  miniaudio.
+- **`dasllama_asr.das`** — the ASR facade: capability declaration, timestamp granularity, the
+  backend-neutral entry points.
+- **`dasllama_whisper.das`** / **`dasllama_parakeet.das`** / **`dasllama_canary.das`** /
+  **`dasllama_qwen3a.das`** / **`dasllama_gemma4a.das`** — one file per model family, each owning its
+  weights, its decode loop, and its quirks. Shared tower pieces go up into `dasllama_audio`, not
+  sideways between families.
+- **`dasllama_vad.das`** — Silero-VAD weights and per-stream state.
+
+### 1.8 Instrumentation and support
+
+- **`dasllama_parity.das`** — CPU-reference caches for the parity instruments. Test-facing, but
+  library-side because the caches outlive a single suite.
+- **`dasllama_prefix.das`** — the prefix/page cache for evaluated token history.
+
+---
+
+## 2. Mechanisms
+
+The "why" behind criteria that CODEREVIEW states in one line each.
+
+### 2.1 There is ONE way to load a model
+
+A weight carrier becomes a live struct through exactly two functions here, and nothing else may
+read weights into one:
+
+- **`build_image`** walks a carrier's planes into a sink — a `.dlim` file, or a page-aligned memory
+  chunk when there is nowhere to write.
+- **`parse_image`** turns `(base, bytes)` back into borrowed-plane fields, and does not know which
+  sink produced them.
+
+Cold and warm therefore yield the SAME struct. A cold load reaches it by building the image and
+handing off *through the file* — write, drop the model, map — so the model and its image are never
+both resident. That handoff costs a close and a re-map of a multi-GB file and is the *slower* cold
+start on purpose, under the tiebreak in §3. `cache_via_image` is that handoff for every weight
+carrier; the streaming forms transcode planes from the gguf mapping straight into the image so they
+never materialize at all.
+
+**Suites load with `load_model_`, never the image rail.** `load_model` / `load_model_cached` mint
+identity-stamped `.dlim` flavors and GC-purge siblings. A suite child's pinned identity (backend
+pin, wscale, tune manifest) differs from the serving rig's, so a suite on the rail both re-mints
+multi-GB images the rig cannot use and purges the flavors the rig depends on. Image-rail coverage
+belongs to the image suites alone.
+
+### 2.2 Kernel SHAPE is compile-time; only DATA is runtime
+
+The test is one question: *for a given compiled kernel, can this value change between dispatches?*
+
+- **Yes → DATA.** Context depth, row counts, buffer offsets, `kv_dim`, scales, head counts. It
+  belongs in a uniform or a kargs struct.
+- **No → SHAPE.** A codec's block stride, a scale-plane stride, a lane width, an unroll factor, a
+  format selector. It must NOT reach the kernel as a uniform, a kargs field, or a helper parameter.
+
+Shape belongs to the specialization: a separate kernel class and PSO, a per-codec overload, a
+monomorphized generic, or a `static_if` on a compile-time witness. Handing a shape constant over as
+a value and trusting the shader compiler to fold it back is an assumption, not a guarantee, and it
+is worth nothing in the kernels that matter. The same rule bans indirection in a kernel body — no
+function pointers, no vtables.
+
+**Verify against the EMITTED shader, never the das source.** Read the `*_msl` global or the SPIR-V
+dump and confirm the constant is literal there: `blk * 34u`, not `blk * bstr`. A helper that looks
+specialized in das can still lower to a runtime multiply.
+
+**kargs structure.** Twins of a family bind the SAME kargs type at the SAME binding, even where one
+twin ignores a field. A twin that carries an extra scalar must not shift the others to different
+slots, because that asymmetry propagates into the encoder as a per-form branch. Two tells that a
+fold is overdue:
+
+1. *A value reaches the encoder twice* — a pooled scalar uniform BUFFER passed alongside the
+   identical value as a parameter (`bd` next to `d`). The buffer is uploaded and released per step
+   to carry a number the encoder already holds.
+2. *A field is a function of the fields beside it.* An expert plane's block stride is
+   `kdim * ndim / blocksize`; a reciprocal scale is `1/sqrt(dim)`. Derive it in the builder — each
+   one passed separately is a second place to get it wrong. Likewise, when a kernel's grid IS the
+   geometry it reads, take the grid off the kargs rather than re-passing the numbers.
+
+**Nothing dispatches a kernel except its `enc_*` builder.** A hand-rolled bind list elsewhere — a
+tune-race harness, a benchmark, a probe — duplicates the builder and desyncs the moment the
+family's args change, silently: the slots still exist, the types still compile, and the kernel
+reads a struct out of a 4-byte buffer. The dispatch census only catches a builder that binds kargs
+on some paths and not others; a duplicate that binds NO kargs is invisible to it.
+
+### 2.3 GPU-resident cache identity
+
+An address-keyed entry carries its SPAN, and a hit must cover the request — a shorter first upload
+must never serve a wider later one. Different upload FORMS (plain span vs concat) live in separate
+tables so they can never alias; the metal `RegionEntry` rail is the model. Buffers grown out of an
+entry retire to a list released only at quiesce boundaries, because unretained command buffers may
+still bind them.
+
+### 2.4 Complexity and length lint
+
+STYLE037 (cyclomatic) and STYLE038 (line count) are prompts to look, not orders to refactor. This
+module has shapes that are irreducible by design and they take `// nolint:STYLE03x` with a one-line
+reason: flat one-call-per-item runs (per-kernel `compile_pso` lists, `release_pso` lists), and GPU
+kernel bodies whose phases are coupled by `barrier()`, simdgroup ops or register residency and so
+cannot cross a function boundary without changing the shader.
+
+Split only where a real seam exists — genuine duplication, a distinct phase, a self-contained arm —
+and only when the extracted helper stands on its own. Two corollaries this module keeps tripping
+over: **a kargs fold that grows an already-over-cap kernel body is not a reason to abandon the
+fold** (unpacking N fields adds N lines; take the growth and ledger the real seam), and **never
+suppress a function you have just argued is reducible** — if it is on the follow-up ledger wanting a
+dedup, it keeps its warning until the dedup lands.
+
+### 2.5 Capability questions and readiness questions are different questions
+
+A predicate that mixes them cannot be reused. `prefill_decline` answers "can metal serve this
+model" (capability) *and* "is this window staged" (readiness — are the rope tables built). A caller
+that runs before the window is staged must ask the capability half only, or it gets "not yet"
+forever and its feature silently never runs. Split such predicates rather than reordering the
+caller; an optimistic capability answer is safe when the late path has a fallback, and here it does.
+
+---
+
+## 3. Inherited invariants
 
 Durable "why it is built this way" facts harvested from the design docs archived under
 `history/dasLLAMA/`. Violating one of these is a bug, not a style choice.
