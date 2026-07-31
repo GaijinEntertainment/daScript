@@ -58,6 +58,12 @@ var HERD_MENU_CLOSE : table<int; ToggleState>
 
 var HERD_MENU_DELETE : table<int; ToggleState>
 
+var HERD_MENU_RESTORE : table<int; ToggleState>
+
+var HERD_RETIRE_WORKTREE : table<int; ToggleState>
+
+var HERD_RETIRE_WORKTREE_WHY : table<int; NarrativeState>
+
 var HERD_RELAUNCH_BUTTON : table<int; ClickState>
 
 var SESSION_STATE_JOIN : table<int; EmptyMarkerState>
@@ -306,7 +312,7 @@ def elide_to_avail(value : string) : string {
     return low <= 0 ? "..." : slice(value, 0, low) + "..."
 }
 
-def draw_herd_cards() {
+def draw_herd_cards() { // nolint:STYLE037
     if (g_client == null) return
     let line = GetTextLineHeight()
     // A PTY selection made outside the cards (task rows, auto-attach)
@@ -325,6 +331,17 @@ def draw_herd_cards() {
         g_selected_herd_id = owner_id
     }
     var visible = 0
+    // Archived sessions are hidden, not gone — the toggle is the "still
+    // retrievable" half of the archive rule, and it only appears when there
+    // is something to retrieve.
+    var archived_count = 0
+    for (record in g_client.herd_sessions) {
+        if (record.archived) archived_count++
+    }
+    if (archived_count > 0) {
+        checkbox(HERD_SHOW_ARCHIVED,
+            (text = "Show {archived_count} archived"))
+    }
     // Alive sessions first; registry order within each state group. Widget
     // state stays keyed by the registry index, so reordering cannot swap
     // per-card identity when a session exits.
@@ -340,7 +357,8 @@ def draw_herd_cards() {
     }
     for (index in order) {
         let record & = unsafe(g_client.herd_sessions[index])
-        if (record.state == "closed") continue
+        if ((record.state == "closed" && !record.archived)
+            || (record.archived && !HERD_SHOW_ARCHIVED.value)) continue
         visible++
         var profile_agent = false
         for (profile in g_client.herd_profiles) {
@@ -451,11 +469,16 @@ def draw_herd_cards() {
                 open_destructive_confirm("herd_close", record.id,
                     "Close session '{record.name}' and terminate its PTY?")
             }
-            if (menu_item(HERD_MENU_DELETE[index], (text = "Delete session...",
-                    shortcut = "", enabled = record.state != "running"))) {
-                open_destructive_confirm("herd_delete", record.id,
-                    "Delete session '{record.name}' and remove its worktrees? " +
-                    "Worktrees in use or with uncommitted changes are kept.")
+            if (menu_item(HERD_MENU_DELETE[index], (text = "Retire session...",
+                    shortcut = "",
+                    enabled = record.state != "running" && !record.archived))) {
+                open_herd_retire(record.id, record.name)
+            }
+            if (record.archived) {
+                if (menu_item(HERD_MENU_RESTORE[index], (text = "Restore session",
+                        shortcut = "", enabled = true))) {
+                    g_client->request_herd_restore(record.id)
+                }
             }
         }
         if (record.state == "exited") {
@@ -467,13 +490,15 @@ def draw_herd_cards() {
         }
         let satellite_hint = (!empty(record.satellites)
             ? "  +{length(record.satellites)} repos" : "")
+        let archived_hint = record.archived ? "ARCHIVED | " : ""
         // Output age (note 29): time since the terminal actually produced
         // bytes, beside the registry age.
         let output_wall = g_session_output_wall?[record.pty_session_id] ?? 0l
         let output_hint = (output_wall > 0l
             ? " | output {herd_age_label(output_wall)}" : "")
         text_disabled(HERD_CARD_DETAIL[index],
-            (text = elide_to_avail("      {record.profile_id} | {record.workflow} | " +
+            (text = elide_to_avail("      {archived_hint}{record.profile_id} | " +
+                "{record.workflow} | " +
                 "{base_name(record.worktree_path)}{satellite_hint} | " +
                 "{herd_age_label(record.updated_wall_s)}{output_hint}")))
         // The card's own Attention and Review Bundles as subtree children
@@ -494,6 +519,119 @@ def draw_herd_cards() {
         text_disabled(NO_HERD_LABEL,
             (text = "No sessions yet. Commands > New Session..."))
     }
+}
+
+// Retiring a session (note 60): the record is ARCHIVED, never erased, and its
+// worktrees are OFFERED rather than taken. The offer holds only ids — each
+// worktree's verdict is re-read live, same as the worktree checklist.
+var g_herd_retire_id : string
+var g_herd_retire_name : string
+var g_herd_retire_open = false
+
+def open_herd_retire(herd_id, name : string) {
+    g_herd_retire_id = herd_id
+    g_herd_retire_name = name
+    g_herd_retire_open = true
+    // Fresh offer every time: a tick left over from the last session must
+    // never pre-arm a delete for this one.
+    for (state in values(HERD_RETIRE_WORKTREE)) {
+        state.value = false
+    }
+}
+
+def private herd_retire_worktree_paths(record : HerdSession const;
+                                       var paths : array<string>) {
+    if (!empty(record.worktree_path)) paths |> push(record.worktree_path)
+    for (entry in record.satellites) {
+        if (!empty(entry.worktree_path)) paths |> push(entry.worktree_path)
+    }
+}
+
+def draw_herd_retire_popup() {
+    if (g_herd_retire_open) {
+        g_herd_retire_open = false
+        open_popup(HERD_RETIRE_DIALOG)
+    }
+    popup_modal(HERD_RETIRE_DIALOG.PUBLIC, (text = "Retire session",
+            closable = true, flags = ImGuiWindowFlags.AlwaysAutoResize)) {
+        text(HERD_RETIRE_NAME, (text = g_herd_retire_name))
+        // The wording IS the contract: a control that archives must not say
+        // "delete", and the user must be told the record survives.
+        text_disabled(HERD_RETIRE_WHAT, (text =
+            "The session record is archived, not deleted: it leaves the list " +
+            "but its events, mailbox, bundles and terminal journal stay on " +
+            "disk and stay reachable. Restore brings it back."))
+        var inscope paths : array<string>
+        let index = (g_client == null ? -1 : herd_index_by_id(g_herd_retire_id))
+        if (index >= 0) {
+            herd_retire_worktree_paths(g_client.herd_sessions[index], paths)
+        }
+        if (empty(paths)) {
+            text_disabled(HERD_RETIRE_NO_WORKTREES,
+                (text = "This session has no worktrees."))
+        } else {
+            text(HERD_RETIRE_WORKTREE_HEADER,
+                (text = "Also delete its worktrees?"))
+        }
+        for (row, path in count(), paths) {
+            var worktree = WorktreeState()
+            let observed = find_worktree_state("", path, worktree)
+            let claimed_by = herd_session_claiming(path, g_herd_retire_id)
+            let tier = (observed
+                ? repository_worktree_delete_tier(worktree, claimed_by)
+                : WORKTREE_TIER_DIRTY)
+            let deletable = (observed && tier != WORKTREE_TIER_IN_USE
+                && tier != WORKTREE_TIER_MAIN && tier != WORKTREE_TIER_DIRTY)
+            with_disabled(!deletable) {
+                checkbox(HERD_RETIRE_WORKTREE[row], (text = base_name(path)))
+            }
+            if (!deletable) {
+                HERD_RETIRE_WORKTREE[row].value = false
+            }
+            with_style((ImGuiCol.Text, deletable
+                    ? token_muted_color() : token_warning_color())) {
+                text(HERD_RETIRE_WORKTREE_WHY[row],
+                    (text = "    {herd_retire_worktree_reason(worktree, observed, tier, claimed_by)}"))
+            }
+        }
+        if (button(HERD_RETIRE_OK, (text = "Archive session",
+                enabled = g_client != null && !empty(g_herd_retire_id)))) {
+            var inscope accepted : array<string>
+            for (row, path in count(), paths) {
+                if (HERD_RETIRE_WORKTREE[row].value) accepted |> push(path)
+            }
+            g_client->request_herd_archive(g_herd_retire_id, accepted)
+            close_current_popup(HERD_RETIRE_DIALOG)
+        }
+        same_line()
+        if (button(HERD_RETIRE_CANCEL, (text = "Cancel"))) {
+            close_current_popup(HERD_RETIRE_DIALOG)
+        }
+    }
+}
+
+def private herd_retire_worktree_reason(worktree : WorktreeState const;
+                                        observed : bool; tier : string;
+                                        claimed_by : string) : string {
+    if (!observed) return "not in the Git inventory — retire it from the Git panel"
+    if (tier == WORKTREE_TIER_IN_USE) return "another session works here: {claimed_by}"
+    if (tier == WORKTREE_TIER_MAIN) return "the main checkout is never deleted"
+    if (tier == WORKTREE_TIER_DIRTY) {
+        return "uncommitted work — retire it from the Git panel to rescue it"
+    }
+    if (tier == WORKTREE_TIER_WARN) {
+        return ("{worktree.unmerged_commits} commits exist only here; " +
+            "the branch {worktree.branch} keeps them")
+    }
+    return "clean"
+}
+
+def private herd_index_by_id(herd_id : string) : int {
+    if (g_client == null) return -1
+    for (index, record in count(), g_client.herd_sessions) {
+        if (record.id == herd_id) return index
+    }
+    return -1
 }
 
 var g_confirm_kind : string
@@ -525,8 +663,6 @@ def draw_destructive_confirm_popup() {
                 }
             } elif (g_confirm_kind == "herd_close") {
                 g_client->request_herd_close(g_confirm_target)
-            } elif (g_confirm_kind == "herd_delete") {
-                g_client->request_herd_delete(g_confirm_target)
             } elif (g_confirm_kind == "worktree_delete") {
                 g_client->request_worktree_delete(g_confirm_repository,
                     g_confirm_target)
@@ -570,7 +706,7 @@ def private herd_owns_pty(session_id : string) : bool {
     return false
 }
 
-def draw_session_list() {
+def draw_session_list() { // nolint:STYLE038
     g_bundle_participant_row = 0
     g_bundle_file_row = 0
     g_attention_target_row = 0
@@ -709,9 +845,7 @@ def draw_sessions_dock() {
         : "Sessions & Activity###SessionsActivity")
     dock_window(SESSIONS_WIN.PUBLIC, (text = sessions_title, closable = true,
             flags = ImGuiWindowFlags.None)) {
-        window_zoom_scope("sessions") {
-            draw_session_list()
-        }
+        draw_session_list()
     }
 }
 

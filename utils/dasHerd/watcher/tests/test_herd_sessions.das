@@ -33,7 +33,7 @@ def private wait_for_pty(session_id, state : string; timeout_ms : int64) : bool 
 }
 
 [test]
-def test_herd_registry(t : T?) {
+def test_herd_registry(t : T?) { // nolint:STYLE038
     t |> run("registry persists durable sessions across watcher restarts") <| @(t : T?) {
         let temp = create_temp_directory_result("dasherd_herd_registry_")
         if (!(temp is value)) {
@@ -155,8 +155,8 @@ def test_herd_registry(t : T?) {
             "closing the other attendees clears the advisory flag")
         herd_shutdown()
     }
-    t |> run("delete removes records under guard; worktree-user lookup respects state") <| @(t : T?) {
-        let temp = create_temp_directory_result("dasherd_herd_delete_")
+    t |> run("archive retires records without erasing them; worktree-user lookup respects state") <| @(t : T?) {
+        let temp = create_temp_directory_result("dasherd_herd_archive_")
         if (!(temp is value)) {
             t |> failure("could not create temporary test directory")
             return
@@ -173,26 +173,35 @@ def test_herd_registry(t : T?) {
         t |> equal(herd_worktree_user(root, herd_id), "",
             "the exclusion id frees the lookup")
 
-        var inscope removed = HerdSession()
-        t |> success(!empty(herd_delete("nope", removed)),
+        var inscope archived = HerdSession()
+        t |> success(!empty(herd_archive("nope", archived)),
             "unknown ids are rejected")
         t |> equal(herd_link_pty(herd_id, "pty_live"), "")
-        t |> success(!empty(herd_delete(herd_id, removed)),
-            "running sessions never delete")
+        t |> success(!empty(herd_archive(herd_id, archived)),
+            "running sessions never archive")
         var pty_to_terminate : string
         t |> equal(herd_close(herd_id, pty_to_terminate), "")
         t |> equal(herd_worktree_user(root), "",
             "closed sessions do not hold the worktree")
-        t |> equal(herd_delete(herd_id, removed), "")
-        t |> equal(removed.name, "victim")
-        t |> equal(removed.worktree_path, herd_display_worktree(root))
+        t |> equal(herd_archive(herd_id, archived), "")
+        t |> equal(archived.name, "victim")
+        t |> equal(archived.worktree_path, herd_display_worktree(root))
+        // The whole point of note 60: the story stays. The record survives
+        // archiving, so its events, mailbox and journal keep an owner.
         var inscope record = HerdSession()
-        t |> success(!herd_get(herd_id, record), "deleted records are gone")
-        // Deletion is durable: a restart must not resurrect the record.
+        t |> success(herd_get(herd_id, record) && record.archived,
+            "an archived record is still there, marked archived")
+        t |> success(record.archived_wall_s > 0l, "archiving is stamped")
         herd_shutdown()
         t |> equal(herd_init(path_join(root, "_registry.json"),
             path_join(root, "profiles.json")), "")
-        t |> success(!herd_get(herd_id, record), "deletion survives a restart")
+        t |> success(herd_get(herd_id, record) && record.archived,
+            "archiving survives a restart")
+        t |> equal(herd_worktree_user(root), "",
+            "an archived session holds no worktree")
+        t |> equal(herd_restore(herd_id), "")
+        t |> success(herd_get(herd_id, record) && !record.archived,
+            "restore brings an archived session back")
         herd_shutdown()
     }
     t |> run("profile intro lines ride the initial launch request") <| @(t : T?) {
@@ -223,7 +232,7 @@ def test_herd_registry(t : T?) {
 }
 
 [test]
-def test_herd_lifecycle(t : T?) {
+def test_herd_lifecycle(t : T?) { // nolint:STYLE038
     if (get_platform_name() != "windows") return
     t |> run("durable sessions launch, exit, relaunch, and close over real PTYs") <| @(t : T?) {
         let temp = create_temp_directory_result("dasherd_herd_lifecycle_")

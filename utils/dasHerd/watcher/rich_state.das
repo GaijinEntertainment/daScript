@@ -15,6 +15,7 @@ require imgui/imgui_table_builtin
 require imgui/imgui_markdown_tree_sitter
 require imgui/imgui_text_source_view
 require imgui/imgui_text_tree_sitter
+require imgui/imgui_text_find
 require clipboard/clipboard
 require daslib/safe_addr
 require daslib/json_boost
@@ -22,6 +23,7 @@ require daslib/jobque_boost
 require daslib/strings_boost
 require live/live_commands
 require ./rich_tokens.das public
+require ./changelist_selection.das public
 require ./watcher_core.das
 require ./repository_core.das
 require ./herd_sessions.das
@@ -89,18 +91,37 @@ struct WatcherWorktreeDeleteResult {
     worktree_path : string
 }
 
-struct WatcherHerdDeleteKept {
+struct WatcherWorktreeOperationEnvelope {
+    @rename = "type" _type : string
+    data : WorktreeOperation = WorktreeOperation()
+}
+
+struct WatcherHerdArchiveOffer {
     path : string
     repository_id : string
-    reason : string
+}
+
+struct WatcherWorktreeCommitWipResult {
+    @rename = "type" _type : string
+    ok : bool
     detail : string
+    repository_id : string
+    worktree_path : string
+}
+
+struct WatcherChangelistActionResult {
+    @rename = "type" _type : string
+    ok : bool
+    detail : string
+    action : string
+    repository_id : string
+    worktree_path : string
 }
 
 struct WatcherHerdDeleteResult {
     @rename = "type" _type : string
     herd_session_id : string
-    removed : array<string>
-    kept : array<WatcherHerdDeleteKept>
+    offered : array<WatcherHerdArchiveOffer>
 }
 
 struct WatcherMailboxMessageEnvelope {
@@ -238,6 +259,7 @@ struct GitInspectorState {
     old_document : TextSourceDocument = TextSourceDocument()
     new_document : TextSourceDocument = TextSourceDocument()
     view_document : TextSourceDocument = TextSourceDocument()
+    old_line_starts : array<int>
     new_line_starts : array<int>
     view_line_starts : array<int>
     focus_document_valid : bool
@@ -250,6 +272,9 @@ struct GitInspectorState {
     changed_source_ranges : array<TextSourceRange>
     view_source : string
     view_prepared : bool
+    // The highlight gate dropped a resolvable language (size/line shape) —
+    // shown as "SYNTAX OFF" so plain text reads as a decision, not a break.
+    syntax_capped : bool
     markdown_gutter_segments : int
     source_patch : string
     source_view_text : string
@@ -271,6 +296,19 @@ struct GitInspectorState {
     diff_left_rect : float4
     diff_right_rect : float4
     diff_scrollbar_rect : float4
+    // One find state serves both tabs; matches always search the whole file.
+    find : TextFindState = TextFindState()
+    find_applied_jump : int
+    find_scroll_byte : int = -1
+    find_scroll_markdown : bool
+    // New-file line windows the diff additionally displays because find
+    // navigated into them. They accumulate per inspected file (identity
+    // below) and ride every re-prepare, so revealed regions stay revealed.
+    find_windows : array<int2>
+    find_windows_identity : string
+    // Parallel to find.matches: true = the match lives in the BEFORE pane's
+    // aligned text (a removed row), false = whole-new-file bytes.
+    find_match_old_side : array<bool>
 }
 
 struct GitWindowStatus {
@@ -491,7 +529,12 @@ struct HerdUiSettings {
     show_exited : bool = false
     show_tasks : bool = false
     layout_preset : int = 0
-    window_zoom : table<string; int>
+    // Per-CONTENT text scale, keyed "terminal" | "view" | "diff" (Boris,
+    // 2026-07-27). Chrome — titles, status bars, labels, panel rows — is
+    // ui_zoom_percent alone, everywhere; each content kind owns its own text
+    // size and answers Ctrl+wheel over itself. Replaces the old per-window
+    // chrome zoom, which scaled the frame around the content instead.
+    content_zoom : table<string; int>
     // Project tab: sort mode (0 folders-first, 1 name, 2 largest, 3 newest)
     // and the optional size/modified columns.
     project_sort : int = 0
@@ -541,17 +584,39 @@ struct PendingSay {
 }
 var g_input_queue : array<PendingSay>
 
-// A blocked worktree delete (in_use / dirty / main / error). The frame loop
-// opens the block modal when active; "dirty" adds the offer to launch a
-// resolver session briefed with the blocking state.
-struct WorktreeDeleteBlock {
+// The retire-a-worktree checklist (note 58). One dialog for both entry doors:
+// a worktree row and a session card. It holds only the IDENTITY of what is
+// being retired — the facts and the verdict are re-read from the live snapshot
+// every frame, so the checklist can never show a state the repository left.
+struct WorktreeRetirePrompt {
     active : bool
     repository_id : string
     worktree_path : string
-    reason : string
-    detail : string
+    // Set when this retire is part of retiring a SESSION: the worktree is
+    // offered alongside the session record, not deleted on its own.
+    herd_session_id : string
+    herd_session_name : string
+    // The user ticked the explicit "delete anyway" escape past the working
+    // tree. Reset every time the dialog opens; never sticky.
+    force_acknowledged : bool
+    // A refusal that came back from the watcher, which re-checks every guard.
+    server_reason : string
+    server_detail : string
+    // Result of the last rescue action, shown in place until the next one.
+    notice : string
+    // The user passed the checklist and confirmed. Nothing destructive is
+    // sent before this flips, and it resets every time the dialog opens.
+    confirming : bool
 }
-var g_worktree_delete_block = WorktreeDeleteBlock()
+var g_worktree_retire = WorktreeRetirePrompt()
+
+// Worktrees a session retire handed back, drained one at a time through the
+// same operation rail so each gets the same progress and cancel treatment.
+struct WorktreeRetireQueueEntry {
+    repository_id : string
+    worktree_path : string
+}
+var g_worktree_retire_queue : array<WorktreeRetireQueueEntry>
 
 // Deferred launcher open for the resolver offer: open_popup from inside the
 // block modal would nest the launcher under the popup being closed, so the
@@ -620,16 +685,57 @@ var g_tree_focus_ref : string
 
 var g_inspector = GitInspectorState()
 
+// The Changelist multiselect (changelist_selection.das) — one set, scoped to
+// the worktree the Changes view is showing.
+var g_changelist_selection = GitChangelistSelection()
+
+// The repositories message the selection was last pruned against.
+var g_changelist_pruned_revision = -1l
+
+// The discard confirmation. Discard is the FIRST genuinely unrecoverable
+// action in the app — everything retire touches survives somewhere; discard
+// destroys the only copy. The prompt snapshots WHAT will be discarded (per
+// class, because each class runs a different git command) and measures it in
+// files and bytes, expanding untracked directories so the count is per-file
+// truth rather than one "dir/" row.
+struct GitDiscardPrompt {
+    pending_open : bool
+    repository_id : string
+    worktree_path : string
+    branch : string
+    modified_paths : array<string>
+    staged_paths : array<string>
+    untracked_paths : array<string>
+    // The expanded per-file list shown to the user (untracked dirs walked).
+    display_paths : array<string>
+    conflicted_count : int
+    file_count : int
+    total_bytes : int64
+    walked_dirs : int
+    confirming : bool
+}
+
+var g_git_discard = GitDiscardPrompt()
+
+// Non-zero while a Changelist commit is in flight: the operation revision at
+// click time. The message box clears only when THAT commit lands ok — never
+// on a stale success from an earlier operation.
+var g_commit_clear_watch : int64
+
+// The Git Activity perspective and the Changelist view, as plain state
+// driven by segmented switches — imgui tab bars couldn't SHOW which tab was
+// active (the live-review complaint), and implicit tab-selected coupling
+// made the state invisible to the rails.
+var g_git_perspective = "pr"
+
+// "changes" | "pr"; re-defaulted per worktree — dirty opens Changes, a
+// clean tree opens PR result (where its committed files live).
+var g_changelist_view = "changes"
+var g_changelist_view_worktree : string
+
 var g_prepare_worker = InspectorPrepareWorker()
 
 var g_jobque_owned = false
-
-def option_value(prefix : string; fallback : string = "") : string {
-    for (argument in get_command_line_arguments()) {
-        if (starts_with(argument, prefix)) return slice(argument, length(prefix))
-    }
-    return fallback
-}
 
 def reset_terminal(columns : int = 100; rows : int = 30) {
     terminal_dispose(g_terminal)
@@ -675,8 +781,10 @@ def release_inspector_content() {
     text_source_document_dispose(g_inspector.old_document)
     text_source_document_dispose(g_inspector.new_document)
     text_source_document_dispose(g_inspector.view_document)
+    delete g_inspector.old_line_starts
     delete g_inspector.new_line_starts
     delete g_inspector.view_line_starts
+    delete g_inspector.find_match_old_side
     g_inspector.focus_document_valid = false
     g_inspector.focus_start_byte = -1
     markdown_view_dispose(g_inspector.markdown_view)
@@ -698,18 +806,34 @@ def release_inspector_content() {
     g_inspector.diff_scrollbar_rect = float4()
 }
 
+def inspector_find_identity : string {
+    // The REQUESTED file identity (not the installed one): windows must reset
+    // the moment a different file's prepare is queued, before it installs.
+    return "{g_inspector.repository_id}|{g_inspector.worktree_path}|{g_inspector.file_path}|{g_inspector.comparison}|{g_inspector.git_revision}"
+}
+
+def inspector_reset_find_windows_if_stale() {
+    let identity = inspector_find_identity()
+    if (identity != g_inspector.find_windows_identity) {
+        g_inspector.find_windows_identity = identity
+        delete g_inspector.find_windows
+    }
+}
+
 def queue_inspector_prepare(status : string) {
+    inspector_reset_find_windows_if_stale()
     let choice = clamp(g_inspector.syntax_choice, 0,
         length(INSPECTOR_SYNTAX_VALUES) - 1)
     g_inspector.prepare_language = inspector_language_for_path(
         g_inspector.file_path, INSPECTOR_SYNTAX_VALUES[choice])
     let generation = inspector_load_queue(g_inspector.prepare, status)
     g_inspector.error = ""
-    if (!inspector_prepare_worker_queue(g_prepare_worker, generation,
+    if (!inspector_prepare_worker_queue_windows(g_prepare_worker, generation,
             g_inspector.source_patch, g_inspector.source_view_text,
             g_inspector.prepare_language, g_inspector.source_view_base64,
             g_inspector.source_view_byte_count,
-            g_inspector.source_view_available)) {
+            g_inspector.source_view_available,
+            g_inspector.find_windows)) {
         let failure = "File inspection preparation worker is unavailable"
         inspector_load_fail(g_inspector.prepare, generation,
             failure)
@@ -764,6 +888,8 @@ def drain_inspector_prepare_events() {
             g_inspector.old_document <- event.old_document
             g_inspector.new_document <- event.new_document
             g_inspector.view_document <- event.view_document
+            append_line_starts(g_inspector.old_document.source,
+                g_inspector.old_line_starts)
             append_line_starts(g_inspector.new_document.source,
                 g_inspector.new_line_starts)
             append_line_starts(g_inspector.view_document.source,
@@ -773,6 +899,7 @@ def drain_inspector_prepare_events() {
             g_inspector.changed_source_ranges <- event.changed_source_ranges
             g_inspector.view_source = clone_string(event.view_source)
             g_inspector.view_prepared = event.view_text_ready
+            g_inspector.syntax_capped = event.syntax_capped
             g_inspector.installed_repository_id = g_inspector.repository_id
             g_inspector.installed_worktree_path = g_inspector.worktree_path
             g_inspector.installed_file_path = g_inspector.file_path
@@ -781,7 +908,8 @@ def drain_inspector_prepare_events() {
             g_inspector.installed_diff_context = g_inspector.diff_context
             g_inspector.installed_diff_context_choice = g_inspector.diff_context_choice
             g_inspector.installed_syntax_choice = g_inspector.syntax_choice
-            g_inspector.resolved_language = g_inspector.prepare_language
+            g_inspector.resolved_language = inspector_resolved_language(
+                g_inspector.prepare_language, g_inspector.syntax_capped)
             g_inspector.pending_widget_sync = true
             if (g_inspector.pending_select_diff) {
                 let clean_view = (empty(g_inspector.parsed.hunks)
@@ -882,36 +1010,39 @@ def draw_git_path_text(path : string; p0, p1 : float2;
     }
 }
 
-def window_zoom_percent(name : string) : int {
-    return clamp(g_ui_settings.window_zoom?[name] ?? 100, 50, 300)
+// The content kinds that own their own text size. Chrome is not on this
+// list on purpose: one UI scale in Settings drives every title, status bar,
+// label and panel row, everywhere.
+let CONTENT_TERMINAL = "terminal"
+let CONTENT_VIEW = "view"
+let CONTENT_DIFF = "diff"
+
+def content_zoom_percent(kind : string) : int {
+    return clamp(g_ui_settings.content_zoom?[kind] ?? 100, 50, 300)
 }
 
-def set_window_zoom(name : string; percent : int) {
+def content_zoom_scale(kind : string) : float {
+    return float(content_zoom_percent(kind)) * 0.01f
+}
+
+def set_content_zoom(kind : string; percent : int) {
     let clamped = clamp(percent, 50, 300)
-    if (window_zoom_percent(name) == clamped) return
-    g_ui_settings.window_zoom[name] = clamped
+    if (content_zoom_percent(kind) == clamped) return
+    g_ui_settings.content_zoom[kind] = clamped
     settings_save()
 }
 
-// Per-window zoom (notes 12/24): wraps a dock window's content in a resized
-// font (children inherit the push) and claims Ctrl+wheel for THIS window
-// only. The base UI zoom lives in Settings; the two compose.
-def window_zoom_scope(name : string; blk : block) {
+// Ctrl+wheel scales the CONTENT under the cursor and nothing else. Call it
+// inside the content's own child window, so the hover test is that content's
+// rectangle rather than the whole dock window (chrome must never move — the
+// single UI scale in Settings owns it).
+def content_zoom_wheel(kind : string) {
     var io & = unsafe(GetIO())
-    if (io.KeyCtrl && io.MouseWheel != 0.0f
-            && IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows)) {
-        set_window_zoom(name, window_zoom_percent(name)
-            + (io.MouseWheel > 0.0f ? 10 : -10))
-        io.MouseWheel = 0.0f
-    }
-    let percent = window_zoom_percent(name)
-    if (percent == 100) {
-        invoke(blk)
-    } else {
-        with_font(null, UI_BASE_FONT_SIZE * float(percent) * 0.01f) {
-            invoke(blk)
-        }
-    }
+    if (!io.KeyCtrl || io.MouseWheel == 0.0f
+            || !IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows)) return
+    set_content_zoom(kind, content_zoom_percent(kind)
+        + (io.MouseWheel > 0.0f ? 10 : -10))
+    io.MouseWheel = 0.0f
 }
 
 def set_ui_zoom(percent : int) {
@@ -961,6 +1092,37 @@ def git_file_in_group(file : GitFileState const; group : int) : bool {
 
 def git_group_scope(group : int) : string {
     return group == 1 ? "staged" : "working"
+}
+
+def prune_changelist_selection(repositories : array<RepositorySnapshot> const) {
+    //! Re-derive the keys the LIVE status list offers for the selection's own
+    //! scope and drop everything else. Called once per repositories snapshot,
+    //! not per frame, and not from the Changes view — the live rail acts on
+    //! the same set with the view closed.
+    return if (selection_count(g_changelist_selection) == 0)
+    var inscope live : table<string>
+    for (repository in repositories) {
+        if (repository.record.id != g_changelist_selection.repository_id) continue
+        for (file in repository.files) {
+            if (file.worktree_path != g_changelist_selection.worktree_path) continue
+            for (group in range(4)) {
+                if (!git_file_in_group(file, group)) continue
+                live |> insert(selection_key(git_group_scope(group), file.path))
+            }
+        }
+    }
+    selection_prune(g_changelist_selection, live)
+}
+
+def worktree_identity_label(branch, worktree_path : string) : string {
+    //! ONE spelling of a worktree's identity, everywhere a surface names it:
+    //! the branch AND the folder. The two drift apart in practice
+    //! (codex/dictation-transcripts-unthreaded lives in dictation-bot), and a
+    //! surface showing only one of them reads as a different thing than the
+    //! surface showing the other — the live-review confusion.
+    let folder = base_name(worktree_path)
+    if (empty(branch)) return "detached @ {folder}"
+    return "{branch} @ {folder}"
 }
 
 def git_status_file_code(repository : RepositorySnapshot const;

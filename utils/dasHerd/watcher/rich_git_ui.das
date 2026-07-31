@@ -31,13 +31,14 @@ require ./rich_commands.das
 require ./herd_sessions.das
 require ./rich_inspector_ui.das
 require ./rich_files_ui.das
-require ./rich_sessions_ui.das
 
 var WORKTREE_ROW : table<int; ToggleState>
 
 var WORKTREE_CONFLICT_JOIN : table<int; EmptyMarkerState>
 
 var WORKTREE_ACTIVE_JOIN : table<int; EmptyMarkerState>
+
+var WORKTREE_ROW_TOOLTIP : table<int; NarrativeState>
 
 var WORKTREE_POPUP : table<int; PopupContextItemState>
 
@@ -50,6 +51,42 @@ var WORKTREE_MENU_DELETE : table<int; ToggleState>
 var REPOSITORY_FOLDER_JOIN : table<int; EmptyMarkerState>
 
 var GIT_FILE_ROW : table<int; ToggleState>
+
+// Changes-view rows keep their OWN identity tables — sharing GIT_FILE_ROW
+// with the PR views would collide two widgets on one identity the frame the
+// user switches tabs.
+var GIT_STATUS_ROW : table<int; ToggleState>
+
+// Segmented view switches share one identity table; each strip owns a base
+// offset (widget-state tables must be referenced as module globals, so the
+// switch cannot take them as parameters).
+var VIEW_SWITCH_BTN : table<int; ClickState>
+
+var VIEW_SWITCH_JOIN : table<int; EmptyMarkerState>
+
+var GIT_NET_ICON : table<int; ClickState>
+
+var GIT_NET_ICON_JOIN : table<int; EmptyMarkerState>
+
+var GIT_NET_COUNT_JOIN : table<int; EmptyMarkerState>
+
+var GIT_NET_COUNT : table<int; NarrativeState>
+
+var GIT_STATUS_ROW_POPUP : table<int; PopupContextItemState>
+
+var GIT_STATUS_STAGE_MENU : table<int; ToggleState>
+
+var GIT_STATUS_UNSTAGE_MENU : table<int; ToggleState>
+
+var GIT_GROUP_CHECK : table<int; ToggleState>
+
+var GIT_GROUP_CHECK_JOIN : table<int; EmptyMarkerState>
+
+var GIT_STATUS_DISCARD_MENU : table<int; ToggleState>
+
+var GIT_STATUS_DELETE_MENU : table<int; ToggleState>
+
+var GIT_DISCARD_LIST_ROW : table<int; NarrativeState>
 
 var GIT_COMMIT_TITLE_TEXT : table<int; NarrativeState>
 
@@ -99,17 +136,23 @@ var REPOSITORY_ERROR_COPY : table<int; ToggleState>
 
 var REPOSITORY_ERROR_SEND : table<int; ToggleState>
 
+var REPOSITORY_ERROR_FIX : table<int; ToggleState>
+
 var CHANGELIST_ERROR_POPUP : PopupContextItemState
 
 var CHANGELIST_ERROR_COPY : ToggleState
 
 var CHANGELIST_ERROR_SEND : ToggleState
 
+var CHANGELIST_ERROR_FIX : ToggleState
+
 var ACTIVITY_ERROR_POPUP : PopupContextItemState
 
 var ACTIVITY_ERROR_COPY : ToggleState
 
 var ACTIVITY_ERROR_SEND : ToggleState
+
+var ACTIVITY_ERROR_FIX : ToggleState
 
 // Index of a non-closed herd session claiming this worktree, or -1. A running
 // session prefers over an exited one so the marker reflects the live claimant.
@@ -118,6 +161,7 @@ def private active_herd_for_worktree(worktree_path : string) : int {
     let canonical = herd_canonical_worktree(worktree_path)
     var found = -1
     for (index, record in count(), g_client.herd_sessions) {
+        if (record.archived) continue
         if (record.state != "closed"
                 && herd_canonical_worktree(record.worktree_path) == canonical) {
             if (record.state == "running") return index
@@ -127,6 +171,36 @@ def private active_herd_for_worktree(worktree_path : string) : int {
         }
     }
     return found
+}
+
+// The "is it safe to delete this?" answer, on the row where the question is
+// asked (note 58). Every count names the ref it was measured against, because
+// a bare number against an unnamed base is what made the answer unreadable.
+def private worktree_retire_hint(worktree : WorktreeState const;
+                                 active_herd : int) : string {
+    let claimed_by = (active_herd >= 0
+        ? g_client.herd_sessions[active_herd].name : "")
+    let tier = repository_worktree_delete_tier(worktree, claimed_by)
+    if (tier == WORKTREE_TIER_MAIN) return "Main checkout — never deleted."
+    if (tier == WORKTREE_TIER_IN_USE) {
+        return "In use by session '{claimed_by}' — retire the session first."
+    }
+    let dirty = (worktree.staged + worktree.unstaged + worktree.untracked
+        + worktree.conflicted)
+    if (tier == WORKTREE_TIER_DIRTY) {
+        return ("{dirty} uncommitted files live only in this folder — " +
+            "retire offers to commit them to {worktree.branch} first.")
+    }
+    if (tier == WORKTREE_TIER_WARN) {
+        return ("Safe to delete. {worktree.unmerged_commits} commits vs " +
+            "{worktree.unmerged_base_ref} exist only on this machine — the " +
+            "branch {worktree.branch} keeps them either way.")
+    }
+    if (!worktree.unmerged_known) {
+        return "Safe to delete. Unmerged count unknown: no base ref resolved."
+    }
+    return ("Safe to delete. Nothing here that " +
+        "{worktree.unmerged_base_ref} does not already have.")
 }
 
 // Worktree -> session navigation (note 18): raise Sessions and attach the
@@ -148,7 +222,7 @@ def private navigate_to_herd(record_index : int) {
     }
 }
 
-def draw_repositories_window() {
+def draw_repositories_window() { // nolint:STYLE037
     text_disabled("Target: Local")
     separator()
     input_text_growable(ADD_REPOSITORY_PATH, (text = "Repository checkout"))
@@ -175,7 +249,8 @@ def draw_repositories_window() {
                     REPOSITORY_ERROR_COPY[repository_row],
                     REPOSITORY_ERROR_SEND[repository_row],
                     "repository_error_{repository_row}", "Repository",
-                    repository.error)
+                    repository.error,
+                    REPOSITORY_ERROR_FIX[repository_row])
             }
             for (worktree in repository.worktrees) {
                 var branch = worktree.branch
@@ -203,16 +278,33 @@ def draw_repositories_window() {
                             ? "Session '{g_client.herd_sessions[active_herd].name}' is running here"
                             : "Session '{g_client.herd_sessions[active_herd].name}' is attached here (not running)"))
                     }
-                    same_line(WORKTREE_ACTIVE_JOIN[row])
+                } else {
+                    // An empty space is indistinguishable from a feature that
+                    // was never built — which is exactly the confusion note 58
+                    // was filed about. "No session" gets its own mark.
+                    icon_tinted("minus", GetTextLineHeight(), token_muted_color())
+                    if (IsItemHovered()) {
+                        set_tooltip(WORKTREE_ICON_TOOLTIP,
+                            "No session works here")
+                    }
                 }
+                same_line(WORKTREE_ACTIVE_JOIN[row])
                 // Transparent label keeps the row id + snapshot text; the
                 // overlay draws MAIN / slash-tinted branch / amber dirty in
                 // the shared token palette (notes 18/20).
-                let row_label = "{prefix}{branch}{dirty_label}##{repository.record.id}:{worktree.path}"
+                // The folder rides every row: branch and folder names drift
+                // apart, and a row naming only the branch leaves "which
+                // folder is that" unanswerable (the live-review confusion).
+                let folder_tag = " @ {base_name(worktree.path)}"
+                let row_label = "{prefix}{branch}{dirty_label}{folder_tag}##{repository.record.id}:{worktree.path}"
                 WORKTREE_ROW[row].value = (repository.record.id == g_selected_repository_id && worktree.path == g_selected_worktree_path)
                 var row_clicked = false
                 with_style((ImGuiCol.Text, float4(0.0f, 0.0f, 0.0f, 0.0f))) {
                     row_clicked = selectable(WORKTREE_ROW[row], (text = row_label))
+                }
+                if (IsItemHovered()) {
+                    set_tooltip(WORKTREE_ROW_TOOLTIP[row],
+                        worktree_retire_hint(worktree, active_herd))
                 }
                 if (row_clicked) {
                     ui_event("worktree-row-click {worktree.path}")
@@ -249,6 +341,12 @@ def draw_repositories_window() {
                                 GetColorU32(token_warning_color()), dirty_label)
                         }
                     }
+                    with_window_drawlist() $(var dl) {
+                        dl |> add_text(
+                            float2(branch_x + CalcTextSize(branch).x
+                                + CalcTextSize(dirty_label).x, text_y),
+                            GetColorU32(token_muted_color()), folder_tag)
+                    }
                 }
                 popup_context_item(WORKTREE_POPUP[row],
                         (str_id = "worktree:{worktree.path}",
@@ -271,37 +369,15 @@ def draw_repositories_window() {
                         }
                     }
                     if (menu_item(WORKTREE_MENU_DELETE[row],
-                            (text = "Delete worktree...", shortcut = "",
+                            (text = "Retire worktree...", shortcut = "",
                              enabled = g_client != null && g_client.connected
                                 && !worktree.is_main))) {
-                        // Client-side pre-guards give the block dialog without
-                        // a round trip; the watcher re-checks on the request.
-                        let change_count = (worktree.staged + worktree.unstaged
-                            + worktree.untracked + worktree.conflicted)
-                        if (active_herd >= 0) {
-                            g_worktree_delete_block = WorktreeDeleteBlock(
-                                active = true,
-                                repository_id = repository.record.id,
-                                worktree_path = worktree.path,
-                                reason = "in_use",
-                                detail = "in use by session " +
-                                    "'{g_client.herd_sessions[active_herd].name}'")
-                        } elif (change_count > 0) {
-                            g_worktree_delete_block = WorktreeDeleteBlock(
-                                active = true,
-                                repository_id = repository.record.id,
-                                worktree_path = worktree.path,
-                                reason = "dirty",
-                                detail = "{worktree.staged} staged, " +
-                                    "{worktree.unstaged} unstaged, " +
-                                    "{worktree.untracked} untracked, " +
-                                    "{worktree.conflicted} conflicted")
-                        } else {
-                            g_confirm_repository = repository.record.id
-                            open_destructive_confirm("worktree_delete",
-                                worktree.path,
-                                "Delete worktree {worktree.path}?")
-                        }
+                        // Always the checklist: the verdict is what the user
+                        // came for, so it is shown BEFORE the attempt rather
+                        // than after a refusal (note 58's whole complaint).
+                        g_worktree_retire = WorktreeRetirePrompt(active = true,
+                            repository_id = repository.record.id,
+                            worktree_path = worktree.path)
                     }
                 }
                 if (worktree.is_main) separator(WORKTREE_SEPARATOR[row])
@@ -330,42 +406,500 @@ def focused_file_label(repository_id, worktree_path,
         ? "[AGENT] {file_path}" : file_path)
 }
 
-def draw_git_file_group(repository : RepositorySnapshot const;
+def view_switch(strip_base : int; base_id : string; labels : array<string>;
+                active : int) : int {
+    //! Segmented view switch: the ACTIVE segment is filled, inactive ones
+    //! are quiet text. Replaces the imgui tab bars that could not show which
+    //! view was live (the live-review complaint). strip_base spaces strips
+    //! apart in the shared identity table.
+    var clicked = -1
+    for (index in range(length(labels))) {
+        let slot = strip_base + index
+        if (index > 0) {
+            same_line(VIEW_SWITCH_JOIN[slot])
+        }
+        let is_active = index == active
+        with_style((ImGuiCol.Button, is_active
+                ? token_branch_color(0.40f)
+                : float4(0.0f, 0.0f, 0.0f, 0.0f)),
+                (ImGuiCol.Text, is_active
+                    ? token_title_color()
+                    : token_muted_color())) {
+            if (button(VIEW_SWITCH_BTN[slot],
+                    (text = "{labels[index]}##{base_id}:{index}"))) {
+                clicked = index
+            }
+        }
+    }
+    return clicked
+}
+
+def changelist_rail_busy : bool {
+    // The operation rail is one slot, and the PR view's single-flight action
+    // takes the same index lock — either one running disables the verbs.
+    return (g_client != null
+        && (g_client.git_action_loading || g_client.operation.state == "running"))
+}
+
+def changelist_selection_actions(repository : RepositorySnapshot const;
+                                 worktree : WorktreeState const;
+                                 var stage_paths : array<string>&;
+                                 var unstage_paths : array<string>&) {
+    //! Splits the current selection into what each verb can act on: stage
+    //! takes CONFLICTS (that is how a resolution is marked), MODIFIED and
+    //! UNTRACKED; unstage takes STAGED. Groups are re-derived from the LIVE
+    //! status codes, never cached — a refresh may have reclassified a row.
+    delete stage_paths
+    delete unstage_paths
+    for (file in repository.files) {
+        if (file.worktree_path != worktree.path) continue
+        // No early break: an "MM" file sits in BOTH the staged and modified
+        // groups, and each row's selection feeds its own verb.
+        for (group in range(4)) {
+            if (!git_file_in_group(file, group)) continue
+            if (selection_contains(g_changelist_selection,
+                    selection_key(git_group_scope(group), file.path))) {
+                if (group == 1) {
+                    unstage_paths |> push(file.path)
+                } else {
+                    stage_paths |> push(file.path)
+                }
+            }
+        }
+    }
+}
+
+def changelist_selection_discards(repository : RepositorySnapshot const;
+                                  worktree : WorktreeState const;
+                                  var modified_paths : array<string>&;
+                                  var staged_paths : array<string>&;
+                                  var untracked_paths : array<string>&;
+                                  var conflicted : int&) {
+    //! Splits the selection into the three discard classes — each runs a
+    //! DIFFERENT git command. Conflicts are counted, never listed: discarding
+    //! one side of a conflict is a separate decision, out of scope here.
+    delete modified_paths
+    delete staged_paths
+    delete untracked_paths
+    conflicted = 0
+    for (file in repository.files) {
+        if (file.worktree_path != worktree.path) continue
+        for (group in range(4)) {
+            if (!git_file_in_group(file, group)
+                    || !selection_contains(g_changelist_selection,
+                        selection_key(git_group_scope(group), file.path))) continue
+            if (group == 0) {
+                conflicted++
+            } elif (group == 1) {
+                staged_paths |> push(file.path)
+            } elif (group == 2) {
+                modified_paths |> push(file.path)
+            } else {
+                untracked_paths |> push(file.path)
+            }
+        }
+    }
+}
+
+def discard_measure_file(base, rel : string) {
+    let st = stat(path_join(base, rel))
+    g_git_discard.display_paths |> push(rel)
+    g_git_discard.file_count++
+    if (st.is_valid && !st.is_dir) {
+        g_git_discard.total_bytes += int64(st.size)
+    }
+}
+
+def discard_measure_walk(base, rel : string) {
+    let clean_rel = ends_with(rel, "/") ? slice(rel, 0, length(rel) - 1) : rel
+    let full = path_join(base, clean_rel)
+    let st = stat(full)
+    if (!st.is_valid || !st.is_dir) {
+        discard_measure_file(base, clean_rel)
+        return
+    }
+    g_git_discard.walked_dirs++
+    var inscope names : array<string>
+    dir(full) $(name) {
+        if (name != "." && name != "..") {
+            names |> push(clone_string(name))
+        }
+    }
+    for (name in names) {
+        discard_measure_walk(base, "{clean_rel}/{name}")
+    }
+}
+
+def open_discard_prompt(repository : RepositorySnapshot const;
+                        worktree : WorktreeState const;
+                        scope : string = "all") {
+    //! scope narrows the prompt to one class of the selection: "tracked"
+    //! (revert staged + unstaged edits) or "untracked" (delete files) — the
+    //! two menu verbs — while "all" keeps every discardable row.
+    delete g_git_discard.modified_paths
+    delete g_git_discard.staged_paths
+    delete g_git_discard.untracked_paths
+    delete g_git_discard.display_paths
+    g_git_discard.repository_id = repository.record.id
+    g_git_discard.worktree_path = worktree.path
+    g_git_discard.branch = worktree.branch
+    g_git_discard.conflicted_count = 0
+    g_git_discard.file_count = 0
+    g_git_discard.total_bytes = 0l
+    g_git_discard.walked_dirs = 0
+    g_git_discard.confirming = false
+    changelist_selection_discards(repository, worktree,
+        g_git_discard.modified_paths, g_git_discard.staged_paths,
+        g_git_discard.untracked_paths, g_git_discard.conflicted_count)
+    if (scope == "tracked") {
+        delete g_git_discard.untracked_paths
+    } elif (scope == "untracked") {
+        delete g_git_discard.modified_paths
+        delete g_git_discard.staged_paths
+    }
+    var inscope measured : table<string>
+    for (path in g_git_discard.staged_paths) {
+        measured |> insert(path)
+        discard_measure_file(worktree.path, path)
+    }
+    for (path in g_git_discard.modified_paths) {
+        // An "MM" file sits in BOTH lists, and the staged step's `checkout
+        // HEAD` already covers both its sides — measuring it twice would
+        // inflate the file count and byte total the user confirms against.
+        if (key_exists(measured, path)) continue
+        discard_measure_file(worktree.path, path)
+    }
+    // Untracked entries can be whole directories ("dir/" rows) — walk them so
+    // the confirmation names every file git clean will actually delete.
+    for (path in g_git_discard.untracked_paths) {
+        discard_measure_walk(worktree.path, path)
+    }
+    g_git_discard.pending_open = true
+}
+
+def discard_bytes_label(total : int64) : string {
+    if (total >= 1048576l) {
+        return "{total / 1048576l} MB"
+    }
+    if (total >= 1024l) {
+        return "{total / 1024l} KB"
+    }
+    return "{total} bytes"
+}
+
+def draw_git_discard_popup() { // nolint:STYLE038
+    if (g_git_discard.pending_open) {
+        g_git_discard.pending_open = false
+        open_popup(GIT_DISCARD_DIALOG)
+    }
+    popup_modal(GIT_DISCARD_DIALOG.PUBLIC, (text = "Discard changes",
+            closable = true, flags = ImGuiWindowFlags.AlwaysAutoResize)) {
+        let modified = length(g_git_discard.modified_paths)
+        let staged = length(g_git_discard.staged_paths)
+        let untracked = length(g_git_discard.untracked_paths)
+        text_disabled(GIT_DISCARD_PATH, (text = g_git_discard.worktree_path))
+        if (staged > 0) {
+            text(GIT_DISCARD_STAGED_LINE, (text =
+                "{staged} staged {staged == 1 ? "file" : "files"} — index AND working tree reset to HEAD"))
+        }
+        if (modified > 0) {
+            text(GIT_DISCARD_MODIFIED_LINE, (text =
+                "{modified} edited {modified == 1 ? "file" : "files"} — unstaged edits restored from the index"))
+        }
+        if (untracked > 0) {
+            let walked = (g_git_discard.walked_dirs > 0
+                ? " ({g_git_discard.walked_dirs} {g_git_discard.walked_dirs == 1 ? "folder" : "folders"} expanded)"
+                : "")
+            text(GIT_DISCARD_UNTRACKED_LINE, (text =
+                "{untracked} untracked {untracked == 1 ? "entry" : "entries"} deleted from disk{walked}"))
+        }
+        if (g_git_discard.conflicted_count > 0) {
+            text_disabled(GIT_DISCARD_CONFLICT_NOTE, (text =
+                "{g_git_discard.conflicted_count} conflicted " +
+                "{g_git_discard.conflicted_count == 1 ? "file stays" : "files stay"}: " +
+                "discarding one side of a conflict is its own decision — " +
+                "resolve or stage the resolution instead."))
+        }
+        separator(GIT_DISCARD_LIST_SEPARATOR)
+        var shown = 0
+        for (path in g_git_discard.display_paths) {
+            if (shown >= 20) {
+                text_disabled(GIT_DISCARD_MORE, (text =
+                    "+{length(g_git_discard.display_paths) - 20} more"))
+                break
+            }
+            text_disabled(GIT_DISCARD_LIST_ROW[shown], (text = path))
+            shown++
+        }
+        with_style((ImGuiCol.Text, token_warning_color())) {
+            text(GIT_DISCARD_SENTENCE, (text =
+                "{g_git_discard.file_count} {g_git_discard.file_count == 1 ? "file" : "files"}, " +
+                "{discard_bytes_label(g_git_discard.total_bytes)}. These changes " +
+                "exist nowhere else and cannot be recovered."))
+        }
+        // The non-destructive alternative comes FIRST, because it exists and
+        // is one command. A user who wanted the folder clean, not the work
+        // gone, should not have to know the difference.
+        if (button(GIT_DISCARD_COMMIT_WIP, (text = "Commit WIP to the branch instead",
+                enabled = g_client != null && !empty(g_git_discard.branch)))
+                && g_client != null) {
+            g_client->request_worktree_commit_wip(g_git_discard.repository_id,
+                g_git_discard.worktree_path,
+                "WIP: work in progress on {g_git_discard.branch}")
+            close_current_popup(GIT_DISCARD_DIALOG)
+        }
+        if (button(GIT_DISCARD_ARM, (text =
+                "Discard {g_git_discard.file_count} {g_git_discard.file_count == 1 ? "file" : "files"}...",
+                enabled = g_client != null && !changelist_rail_busy()))) {
+            g_git_discard.confirming = true
+        }
+        same_line()
+        if (button(GIT_DISCARD_CANCEL, (text = "Cancel"))) {
+            g_git_discard.confirming = false
+            close_current_popup(GIT_DISCARD_DIALOG)
+        }
+        if (g_git_discard.confirming) {
+            separator(GIT_DISCARD_CONFIRM_SEPARATOR)
+            with_style((ImGuiCol.Text, token_warning_color())) {
+                text(GIT_DISCARD_CONFIRM_TEXT, (text =
+                    "Destroy these changes? There is no undo."))
+            }
+            if (button(GIT_DISCARD_CONFIRM_GO, (text = "Yes, discard"))
+                    && g_client != null) {
+                g_git_discard.confirming = false
+                g_client->changelist_discard(g_git_discard.repository_id,
+                    g_git_discard.worktree_path, g_git_discard.modified_paths,
+                    g_git_discard.staged_paths, g_git_discard.untracked_paths)
+                selection_clear(g_changelist_selection)
+                close_current_popup(GIT_DISCARD_DIALOG)
+            }
+            same_line()
+            if (button(GIT_DISCARD_CONFIRM_NO, (text = "No"))) {
+                g_git_discard.confirming = false
+            }
+        }
+    }
+}
+
+def draw_changelist_row_menu(repository : RepositorySnapshot const;
+                             worktree : WorktreeState const;
+                             file_row : int; busy : bool) {
+    var stage_paths : array<string>
+    var unstage_paths : array<string>
+    changelist_selection_actions(repository, worktree, stage_paths,
+        unstage_paths)
+    let stage_count = length(stage_paths)
+    let unstage_count = length(unstage_paths)
+    let stage_word = stage_count == 1 ? "file" : "files"
+    let unstage_word = unstage_count == 1 ? "file" : "files"
+    if (menu_item(GIT_STATUS_STAGE_MENU[file_row],
+            (text = "Stage {stage_count} {stage_word}", shortcut = "",
+            enabled = !busy && stage_count > 0)) && g_client != null) {
+        g_client->changelist_action(repository.record.id, worktree.path,
+            "stage", stage_paths)
+    }
+    if (menu_item(GIT_STATUS_UNSTAGE_MENU[file_row],
+            (text = "Unstage {unstage_count} {unstage_word}", shortcut = "",
+            enabled = !busy && unstage_count > 0)) && g_client != null) {
+        g_client->changelist_action(repository.record.id, worktree.path,
+            "unstage", unstage_paths)
+    }
+    var modified_paths : array<string>
+    var staged_paths : array<string>
+    var untracked_paths : array<string>
+    var conflicted = 0
+    changelist_selection_discards(repository, worktree, modified_paths,
+        staged_paths, untracked_paths, conflicted)
+    let tracked_count = length(modified_paths) + length(staged_paths)
+    let untracked_count = length(untracked_paths)
+    let tracked_word = tracked_count == 1 ? "file" : "files"
+    let untracked_word = untracked_count == 1 ? "file" : "files"
+    // The destructive verbs live ONLY here, never on a one-pixel icon, and
+    // speak per class: reverting tracked edits and deleting untracked files
+    // are different acts. The ellipsis is honest: it opens the confirmation,
+    // it does not act.
+    if (menu_item(GIT_STATUS_DISCARD_MENU[file_row],
+            (text = "Discard changes - {tracked_count} tracked {tracked_word}...",
+            shortcut = "", enabled = !busy && tracked_count > 0))) {
+        open_discard_prompt(repository, worktree, "tracked")
+    }
+    if (menu_item(GIT_STATUS_DELETE_MENU[file_row],
+            (text = "Delete {untracked_count} untracked {untracked_word}...",
+            shortcut = "", enabled = !busy && untracked_count > 0))) {
+        open_discard_prompt(repository, worktree, "untracked")
+    }
+}
+
+def draw_git_file_group(repository : RepositorySnapshot const; // nolint:STYLE037
                         worktree : WorktreeState const;
                         group : int; var file_row : int&) : int {
-    var count = 0
-    for (file in repository.files) {
-        if (file.worktree_path == worktree.path && git_file_in_group(file, group)) count++
-    }
+    let comparison = git_group_scope(group)
+    let group_keys <- [for (file in repository.files);
+        selection_key(comparison, file.path);
+        where file.worktree_path == worktree.path && git_file_in_group(file, group)]
+    let count = length(group_keys)
     if (count == 0) return 0
+    let busy = changelist_rail_busy()
+    // Tri-state select-all: a click on ALL clears, anything else selects all.
+    let group_state = selection_group_state(g_changelist_selection, group_keys)
+    GIT_GROUP_CHECK[group].value = group_state == 2
+    var check_clicked = false
+    if (group_state == 1) {
+        with_item_flag(ImGuiItemFlags.None | ImGuiItemFlagsPrivate.MixedValue, true) {
+            check_clicked = checkbox(GIT_GROUP_CHECK[group], "##group-check-{group}")
+        }
+    } else {
+        check_clicked = checkbox(GIT_GROUP_CHECK[group], "##group-check-{group}")
+    }
+    if (check_clicked) {
+        selection_set_group(g_changelist_selection, repository.record.id,
+            worktree.path, group, group_keys, GIT_GROUP_CHECK[group].value)
+    }
+    same_line(GIT_GROUP_CHECK_JOIN[group])
     let title = group == 0 ? "CONFLICTS" : (group == 1 ? "STAGED"
         : (group == 2 ? "MODIFIED" : "UNTRACKED"))
     text(GIT_GROUP_TITLE[group], (text = "{title}  {count}"))
     separator(GIT_GROUP_SEPARATOR[group])
-    let comparison = git_group_scope(group)
     for (file in repository.files) {
         if (file.worktree_path != worktree.path || !git_file_in_group(file, group)) continue
-        GIT_FILE_ROW[file_row].value = (g_inspector.repository_id == repository.record.id
-            && g_inspector.worktree_path == worktree.path
-            && g_inspector.file_path == file.path
-            && g_inspector.comparison == comparison)
+        let key = selection_key(comparison, file.path)
+        GIT_STATUS_ROW[file_row].value = selection_contains(
+            g_changelist_selection, key)
         let old_label = !empty(file.old_path) ? "  (from {file.old_path})" : ""
         let display_path = focused_file_label(
             repository.record.id, worktree.path, file.path)
-        if (selectable(GIT_FILE_ROW[file_row],
-                (text = "{file.code}  {display_path}{old_label}##{comparison}:{file.path}"))) {
+        let row_text = "{file.code}  {display_path}{old_label}"
+        var selected = false
+        with_item_flag(ImGuiItemFlags.None | ImGuiItemFlagsPrivate.AllowOverlap, true) {
+            with_style((ImGuiCol.Text, float4(0.0f, 0.0f, 0.0f, 0.0f))) {
+                selected = selectable(GIT_STATUS_ROW[file_row],
+                    (text = "{row_text}##status:{comparison}:{file.path}"))
+            }
+        }
+        // Right-click on an unselected row selects it first (the file-manager
+        // convention), so the menu always acts on what the user is over.
+        if (IsItemClicked(ImGuiMouseButton.Right)
+                && !selection_contains(g_changelist_selection, key)) {
+            selection_plain_click(g_changelist_selection, repository.record.id,
+                worktree.path, group, key)
+        }
+        // The popup must attach HERE: BeginPopupContextItem binds to the LAST
+        // submitted item, and decorate_git_file_row submits an overlay icon
+        // button — attached after it, right-click only worked on the tiny
+        // icon (the live-review "menu is missing" bug).
+        popup_context_item(GIT_STATUS_ROW_POPUP[file_row],
+                (str_id = "status-menu:{comparison}:{file.path}",
+                flags = ImGuiPopupFlags.MouseButtonRight)) {
+            draw_changelist_row_menu(repository, worktree, file_row, busy)
+        }
+        var action_clicked = false
+        decorate_git_file_row("status:{comparison}:{file.path}", row_text,
+            file.added_lines, file.deleted_lines, file.stats_known,
+            file.binary, group != 1,
+            busy ? "" : (group == 1 ? "minus" : "add"),
+            group == 1 ? "Unstage this file"
+                : (group == 0 ? "Stage the resolution" : "Stage this file"),
+            action_clicked)
+        if (action_clicked && g_client != null) {
+            var single <- [file.path]
+            g_client->changelist_action(repository.record.id, worktree.path,
+                group == 1 ? "unstage" : "stage", single)
+        } elif (selected) {
             ui_event("status-file-click {comparison}:{file.path}")
-            if (g_client != null) {
-                g_client->inspect_file(repository.record.id, worktree.path,
-                    file.path, comparison)
-                FILE_INSPECTOR_WIN.open = true
-                FILE_INSPECTOR_WIN.pending_raise = true
+            let io & = unsafe(GetIO())
+            if (io.KeyShift) {
+                selection_range_click(g_changelist_selection,
+                    repository.record.id, worktree.path, group, group_keys, key)
+            } elif (io.KeyCtrl) {
+                selection_toggle_click(g_changelist_selection,
+                    repository.record.id, worktree.path, group, key)
+            } else {
+                selection_plain_click(g_changelist_selection,
+                    repository.record.id, worktree.path, group, key)
+                if (g_client != null) {
+                    g_client->inspect_file(repository.record.id, worktree.path,
+                        file.path, comparison)
+                    FILE_INSPECTOR_WIN.open = true
+                    FILE_INSPECTOR_WIN.pending_raise = true
+                }
             }
         }
         file_row++
     }
     dummy(GIT_GROUP_SPACING[group], (size = float2(0.0f, GetStyle().ItemSpacing.y)))
     return count
+}
+
+def draw_git_status_groups(repository : RepositorySnapshot const;
+                           worktree : WorktreeState const) {
+    //! The Changes view: CONFLICTS / STAGED / MODIFIED / UNTRACKED with
+    //! multiselect, per-row stage/unstage, the row context menu, and the
+    //! commit box under the groups.
+    selection_scope(g_changelist_selection, repository.record.id, worktree.path)
+    var file_row = 0
+    var total = 0
+    for (group in range(4)) {
+        total += draw_git_file_group(repository, worktree, group, file_row)
+    }
+    if (total == 0) {
+        text_disabled("Working tree is clean - nothing to stage, discard, or commit")
+        text_disabled(GIT_CHANGES_CLEAN_HINT, (text =
+            "The branch's outgoing files are under the PR result tab"))
+    }
+    draw_changelist_commit_box(repository, worktree)
+}
+
+def changelist_commit_message : string {
+    // The widget global is module-private; the live rail reads through this.
+    return COMMIT_MESSAGE_INPUT.value
+}
+
+def draw_changelist_commit_box(repository : RepositorySnapshot const;
+                               worktree : WorktreeState const) {
+    // The box clears only when ITS commit lands ok, watched by operation
+    // revision — a stale success from an earlier operation never eats a
+    // message the user is still writing.
+    if (g_commit_clear_watch != 0l && g_client != null
+            && g_client.operation.kind == "changelist_commit"
+            && g_client.operation.revision > g_commit_clear_watch) {
+        if (g_client.operation.state == "ok") {
+            COMMIT_MESSAGE_INPUT.pending_value = ""
+            COMMIT_MESSAGE_INPUT.has_pending = true
+            g_commit_clear_watch = 0l
+        } elif (g_client.operation.state != "running") {
+            // Failed or cancelled: the message stays, ready to retry.
+            g_commit_clear_watch = 0l
+        }
+    }
+    separator(GIT_COMMIT_SEPARATOR)
+    input_text_multiline(COMMIT_MESSAGE_INPUT, (text = "##commit-message",
+        size = float2(-1.0f, GetTextLineHeight() * 4.0f)))
+    let staged = worktree.staged
+    let busy = changelist_rail_busy()
+    let message_ready = !empty(strip(COMMIT_MESSAGE_INPUT.value))
+    let detached = empty(worktree.branch)
+    if (button(GIT_COMMIT_GO, (text =
+            "Commit {staged} staged {staged == 1 ? "file" : "files"}",
+            enabled = !busy && staged > 0 && message_ready && !detached
+                && g_client != null))
+            && g_client != null) {
+        g_commit_clear_watch = g_client.operation.revision
+        g_client->changelist_commit(repository.record.id, worktree.path,
+            strip(COMMIT_MESSAGE_INPUT.value))
+    }
+    // A disabled button explains itself, or it teaches nothing.
+    if (detached) {
+        same_line()
+        text_disabled(GIT_COMMIT_WHY, (text =
+            "detached HEAD: a commit here would not be on any branch"))
+    } elif (staged == 0) {
+        same_line()
+        text_disabled(GIT_COMMIT_WHY, (text =
+            "nothing is staged; commit takes the STAGED group only"))
+    } elif (!message_ready) {
+        same_line()
+        text_disabled(GIT_COMMIT_WHY, (text = "write a commit message"))
+    }
 }
 
 
@@ -660,7 +1194,7 @@ def draw_commit_files(repository : RepositorySnapshot const;
     }
 }
 
-def draw_history_commits(repository : RepositorySnapshot const;
+def draw_history_commits(repository : RepositorySnapshot const; // nolint:STYLE038
                          worktree : WorktreeState const) {
     var inscope commit_indices : array<int>
     commit_indices |> reserve(length(repository.history_commits))
@@ -856,7 +1390,7 @@ def draw_git_tree_vectors(anchor_x, row_zero_y, row_height,
     }
 }
 
-def draw_tree_commits(repository : RepositorySnapshot const;
+def draw_tree_commits(repository : RepositorySnapshot const; // nolint:STYLE038
                       worktree : WorktreeState const) {
     ensure_tree_model(repository, worktree)
     let sha_width = (CalcTextSize("000000000").x
@@ -983,7 +1517,7 @@ def git_activity_status(repository : RepositorySnapshot const;
     if (g_client == null || !g_client.connected) {
         return GitWindowStatus(text = "WATCHER DISCONNECTED - reconnecting...", error = true)
     }
-    if (GIT_TREE_TAB.selected) {
+    if (g_git_perspective == "tree") {
         if (!empty(worktree.refs_error)) {
             return GitWindowStatus(text = worktree.refs_error, error = true)
         }
@@ -1002,7 +1536,7 @@ def git_activity_status(repository : RepositorySnapshot const;
         }
         return GitWindowStatus(text = "TREE {mode}   COMMITS {length(g_tree_model.nodes)}   REFS {g_tree_model.included_ref_count}")
     }
-    if (GIT_HISTORY_TAB.selected) {
+    if (g_git_perspective == "history") {
         if (!empty(worktree.history_error)) {
             return GitWindowStatus(text = worktree.history_error, error = true)
         }
@@ -1011,7 +1545,7 @@ def git_activity_status(repository : RepositorySnapshot const;
         }
         return GitWindowStatus(text = "COMMITS ON {worktree.history_ref}  {git_history_commit_count(repository, worktree)}")
     }
-    if (GIT_PROJECT_TAB.selected) {
+    if (g_git_perspective == "project") {
         if (!empty(g_worktree_files_error)) {
             return GitWindowStatus(text = g_worktree_files_error, error = true)
         }
@@ -1048,10 +1582,23 @@ def git_changelist_status(repository : RepositorySnapshot const;
             ? "Running Git..." : g_client.git_action_status)
         return GitWindowStatus(text = action, busy = true)
     }
+    if (g_client != null && !empty(g_client.changelist_notice)) {
+        return GitWindowStatus(text = g_client.changelist_notice, error = true)
+    }
+    if (g_client != null && starts_with(g_client.operation.kind, "changelist_")) {
+        if (g_client.operation.state == "running") {
+            return GitWindowStatus(text = g_client.operation.step, busy = true)
+        }
+        if (g_client.operation.state == "failed") {
+            // The rail's failure, with git's words; the hint rides the error
+            // context menu the status line already offers.
+            return GitWindowStatus(text = g_client.operation.error, error = true)
+        }
+    }
     if (repository.refreshing) {
         return GitWindowStatus(text = "Refreshing repository...", busy = true)
     }
-    if (GIT_HISTORY_TAB.selected || GIT_TREE_TAB.selected) {
+    if (g_git_perspective == "history" || g_git_perspective == "tree") {
         if (!empty(worktree.history_error)) {
             return GitWindowStatus(text = worktree.history_error, error = true)
         }
@@ -1076,7 +1623,75 @@ def git_changelist_status(repository : RepositorySnapshot const;
     return GitWindowStatus(text = "staged {worktree.staged}   unstaged {worktree.unstaged}   untracked {worktree.untracked}   conflicted {worktree.conflicted}{ahead_behind}")
 }
 
-def draw_git_changelist_window() {
+def network_ready : bool {
+    return (g_client != null && g_client.connected && !changelist_rail_busy())
+}
+
+def network_icon(index : int; glyph, tip : string;
+                 enabled : bool; count : int) : bool {
+    // One network verb: icon + optional count, the words in the tooltip.
+    // Indexed identity throughout: this body runs four times per frame.
+    same_line(GIT_NET_ICON_JOIN[index])
+    var clicked = false
+    if (enabled) {
+        clicked = icon_button(GIT_NET_ICON[index], (glyph = glyph, tip = tip,
+            size = GetTextLineHeight()))
+    } else {
+        icon_tinted(glyph, GetTextLineHeight(), token_muted_color(0.45f))
+        if (IsItemHovered()) {
+            set_tooltip(GIT_HOVER_TOOLTIP, tip)
+        }
+    }
+    if (count > 0) {
+        same_line(GIT_NET_COUNT_JOIN[index])
+        text_disabled(GIT_NET_COUNT[index], (text = "{count}"))
+    }
+    return clicked
+}
+
+def draw_changelist_network_row(repository : RepositorySnapshot const;
+                                worktree : WorktreeState const) {
+    //! The network four as icons on the title row, counts beside pull/push,
+    //! full verbs in the tooltips; a branch with no upstream turns Push into
+    //! an explicit Publish naming the remote it will create.
+    let has_upstream = !empty(worktree.upstream_ref)
+    let detached = empty(worktree.branch)
+    if (network_icon(0, "import",
+            "Fetch from the remote (--prune); always safe",
+            network_ready(), 0) && g_client != null) {
+        g_client->changelist_network(repository.record.id, worktree.path,
+            "fetch")
+    }
+    if (network_icon(1, "chevron-down",
+            has_upstream
+                ? "Pull {worktree.behind} (fast-forward only, never a surprise merge)"
+                : "Pull - no upstream to pull from",
+            network_ready() && has_upstream, worktree.behind)
+            && g_client != null) {
+        g_client->changelist_network(repository.record.id, worktree.path,
+            "pull")
+    }
+    let push_tip = (detached ? "detached HEAD - nothing to push"
+        : (has_upstream ? "Push {worktree.ahead} to {worktree.upstream_ref}"
+            : "Publish branch - creates origin/{worktree.branch}"))
+    if (network_icon(2, "export", push_tip,
+            network_ready() && !detached
+                && (!has_upstream || worktree.ahead > 0),
+            has_upstream ? worktree.ahead : 0)
+            && g_client != null) {
+        g_client->changelist_network(repository.record.id, worktree.path,
+            "push")
+    }
+    if (network_icon(3, "loop",
+            "Sync: fetch, then pull --ff-only, then push",
+            network_ready() && has_upstream && !detached, 0)
+            && g_client != null) {
+        g_client->changelist_network(repository.record.id, worktree.path,
+            "sync")
+    }
+}
+
+def draw_git_changelist_window() { // nolint:STYLE038
     var status = GitWindowStatus(text = "No worktree selected")
     var found = false
     child(GIT_CHANGELIST_CONTENT, (text = "changelist content",
@@ -1089,7 +1704,9 @@ def draw_git_changelist_window() {
                 for (worktree in repository.worktrees) {
                     if (worktree.path != g_selected_worktree_path) continue
                     found = true
-                    let title = worktree.is_main ? "MAIN - {worktree.branch}" : worktree.branch
+                    let identity = worktree_identity_label(worktree.branch,
+                        worktree.path)
+                    let title = worktree.is_main ? "MAIN - {identity}" : identity
                     text(GIT_TITLE, (text = title))
                     same_line()
                     if (icon_button(REFRESH_GIT, (glyph = "refresh",
@@ -1104,18 +1721,43 @@ def draw_git_changelist_window() {
                         g_client->request_repository_refs(
                             repository.record.id, worktree.path)
                     }
+                    draw_changelist_network_row(repository, worktree)
                     text_disabled(GIT_WORKTREE_PATH, (text = worktree.path))
                     separator()
-                    if (GIT_HISTORY_TAB.selected || GIT_TREE_TAB.selected) {
+                    if (g_git_perspective == "history"
+                            || g_git_perspective == "tree") {
                         draw_commit_files(repository, worktree)
                     } else {
-                        draw_shared_pr_files(repository, worktree)
+                        // Default per worktree: dirty opens Changes, a clean
+                        // tree opens PR result — where its committed files
+                        // live (the "my plan file disappeared" review find).
+                        if (g_changelist_view_worktree != worktree.path) {
+                            g_changelist_view_worktree = worktree.path
+                            let dirt = (worktree.staged + worktree.unstaged
+                                + worktree.untracked + worktree.conflicted)
+                            g_changelist_view = dirt > 0 ? "changes" : "pr"
+                        }
+                        let view_labels <- ["Changes", "PR result"]
+                        let switched = view_switch(0, "changelist-view",
+                            view_labels,
+                            g_changelist_view == "changes" ? 0 : 1)
+                        if (switched == 0) {
+                            g_changelist_view = "changes"
+                        } elif (switched == 1) {
+                            g_changelist_view = "pr"
+                        }
+                        if (g_changelist_view == "changes") {
+                            draw_git_status_groups(repository, worktree)
+                        } else {
+                            draw_shared_pr_files(repository, worktree)
+                        }
                     }
                     status = git_changelist_status(repository, worktree)
                 }
             }
         }
         if (!found) text_disabled("Select a worktree to inspect its changelist")
+        draw_git_discard_popup()
     }
     separator(GIT_CHANGELIST_STATUS_SEPARATOR)
     if (status.error || status.busy) {
@@ -1127,7 +1769,7 @@ def draw_git_changelist_window() {
     if (status.error) {
         draw_error_context(CHANGELIST_ERROR_POPUP, CHANGELIST_ERROR_COPY,
             CHANGELIST_ERROR_SEND, "changelist_error", "Git Changelist",
-            status.text)
+            status.text, CHANGELIST_ERROR_FIX, g_selected_worktree_path)
     }
 }
 
@@ -1144,25 +1786,39 @@ def draw_git_activity_window() {
                 for (worktree in repository.worktrees) {
                     if (worktree.path != g_selected_worktree_path) continue
                     found = true
-                    tab_bar(GIT_PERSPECTIVE_TABS,
-                        (text = "Git perspectives", flags = ImGuiTabBarFlags.None)) {
-                        tab_item(GIT_PR_TAB.PUBLIC, (text = "PR", closable = false,
-                            flags = ImGuiTabItemFlags.None)) {
-                            draw_pr_review(repository, worktree)
+                    let perspective_labels <- ["PR", "History", "Tree", "Project"]
+                    var active = 0
+                    if (g_git_perspective == "history") {
+                        active = 1
+                    } elif (g_git_perspective == "tree") {
+                        active = 2
+                    } elif (g_git_perspective == "project") {
+                        active = 3
+                    }
+                    let switched = view_switch(16, "activity-view",
+                        perspective_labels, active)
+                    if (switched == 0) {
+                        g_git_perspective = "pr"
+                    } elif (switched == 1) {
+                        g_git_perspective = "history"
+                    } elif (switched == 2) {
+                        g_git_perspective = "tree"
+                        if (g_client != null && g_client.connected) {
+                            g_client->request_repository_history(
+                                repository.record.id, worktree.path, "__all__")
                         }
-                        tab_item(GIT_HISTORY_TAB.PUBLIC, (text = "History", closable = false,
-                            flags = ImGuiTabItemFlags.None)) {
-                            draw_history_review(repository, worktree)
-                        }
-                        tab_item(GIT_TREE_TAB.PUBLIC, (text = "Tree", closable = false,
-                            flags = ImGuiTabItemFlags.None)) {
-                            draw_tree_review(repository, worktree)
-                        }
-                        tab_item(GIT_PROJECT_TAB.PUBLIC, (text = "Project", closable = false,
-                            flags = ImGuiTabItemFlags.None)) {
-                            draw_perspective_banner("PROJECT", worktree.path)
-                            draw_project_files()
-                        }
+                    } elif (switched == 3) {
+                        g_git_perspective = "project"
+                    }
+                    if (g_git_perspective == "history") {
+                        draw_history_review(repository, worktree)
+                    } elif (g_git_perspective == "tree") {
+                        draw_tree_review(repository, worktree)
+                    } elif (g_git_perspective == "project") {
+                        draw_perspective_banner("PROJECT", worktree.path)
+                        draw_project_files()
+                    } else {
+                        draw_pr_review(repository, worktree)
                     }
                     status = git_activity_status(repository, worktree)
                 }
@@ -1180,18 +1836,20 @@ def draw_git_activity_window() {
     if (status.error) {
         draw_error_context(ACTIVITY_ERROR_POPUP, ACTIVITY_ERROR_COPY,
             ACTIVITY_ERROR_SEND, "activity_error", "Git Activity",
-            status.text)
+            status.text, ACTIVITY_ERROR_FIX, g_selected_worktree_path)
     }
 }
 
 def git_ui_init() {
     GIT_TREE_FILTER.value = 0
+    // Commit messages outgrow the 256-byte default; sized before first frame.
+    COMMIT_MESSAGE_INPUT.capacity = 4096
 }
 
 def draw_repositories_dock() {
     dock_window(REPOSITORIES_WIN.PUBLIC, (text = "Git Repositories & Worktrees###Repositories", closable = true,
             flags = ImGuiWindowFlags.None)) {
-        window_zoom_scope("repositories") {
+        {
             draw_repositories_window()
         }
     }
@@ -1200,7 +1858,7 @@ def draw_repositories_dock() {
 def draw_git_activity_dock() {
     dock_window(GIT_ACTIVITY_WIN.PUBLIC, (text = "Git Activity", closable = true,
             flags = ImGuiWindowFlags.None)) {
-        window_zoom_scope("git-activity") {
+        {
             draw_git_activity_window()
         }
     }
@@ -1209,7 +1867,7 @@ def draw_git_activity_dock() {
 def draw_git_changelist_dock() {
     dock_window(GIT_CHANGELIST_WIN.PUBLIC, (text = "Git Changelist", closable = true,
             flags = ImGuiWindowFlags.None)) {
-        window_zoom_scope("git-changelist") {
+        {
             draw_git_changelist_window()
         }
     }

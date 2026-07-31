@@ -16,6 +16,7 @@ require imgui/imgui_boost_runtime public   // synth primitives + tick + hook reg
 require daslib/json public
 require daslib/json_boost public
 require daslib/utf8_utils
+require daslib/enum_trait
 require live/live_commands
 require live_host
 require math
@@ -427,6 +428,16 @@ def imgui_key_chord(input : JsonValue?) : JsonValue? {
     var target_key = 0
     if (length(args.key) == 1) {
         target_key = base_key_ascii(first_character(args.key))
+    }
+    if (target_key == 0) {
+        // named-key fallback: "RightArrow", "Home", "Keypad4", "F3"...
+        for (key in type<ImGuiKey>) {
+            let name = "{GetKeyName(key)}"
+            if (name == args.key && name != "None" && name != "Unknown") {
+                target_key = int(key)
+                break
+            }
+        }
     }
     return JV((error = "unsupported chord key", key = args.key)) if (target_key == 0)
     // Validate mod names up front.

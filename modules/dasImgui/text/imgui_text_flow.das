@@ -6,6 +6,7 @@ options no_unused_function_arguments = false
 module imgui_text_flow shared
 
 require math
+require strings
 require daslib/strings_boost
 
 //! View-independent UTF-8 inline-flow primitives used by dasImgui's Markdown,
@@ -848,4 +849,27 @@ def public layout_text_flow(source : string; spans : array<TextFlowSpan> const;
         $(text : string; _style_id : int) : float {
             return invoke(measure, text)
         })
+}
+
+def private byte_char(value : int) : string {
+    return to_char(value & 255)
+}
+
+def public codepoint_utf8(codepoint : int) : string {
+    //! Encode one Unicode codepoint as a UTF-8 string. Shared by the terminal
+    //! and editor typed-input paths (`io.InputQueueCharacters` consumers).
+    if (codepoint <= 0x7f) return byte_char(codepoint)
+    if (codepoint <= 0x7ff) {
+        return (byte_char(0xc0 | (codepoint >> 6)) +
+            byte_char(0x80 | (codepoint & 0x3f)))
+    }
+    if (codepoint <= 0xffff) {
+        return (byte_char(0xe0 | (codepoint >> 12)) +
+            byte_char(0x80 | ((codepoint >> 6) & 0x3f)) +
+            byte_char(0x80 | (codepoint & 0x3f)))
+    }
+    return (byte_char(0xf0 | (codepoint >> 18)) +
+        byte_char(0x80 | ((codepoint >> 12) & 0x3f)) +
+        byte_char(0x80 | ((codepoint >> 6) & 0x3f)) +
+        byte_char(0x80 | (codepoint & 0x3f)))
 }

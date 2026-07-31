@@ -119,6 +119,8 @@ Multiple skill files may apply to a single task. For example, creating a new das
 
 When you discover something new about daslang syntax, semantics, or conventions — whether through compiler errors, user corrections, or experimentation — **update this file** with the new knowledge. If it relates to a specific skill area, update the relevant `skills/*.md` file instead.
 
+**Lint opportunities are reportable findings — don't hold back.** When a bug, review note, or probe reveals a pattern a lint rule could catch (especially one that has bitten more than once), SAY SO in the end-of-turn summary and propose the rule. The lint suite keeps paying for itself precisely because rules keep getting added; candidates go to Boris (rules land in `daslib/*_lint.das`, documented via `skills/perf_lint.md` / `skills/style_lint.md`).
+
 **Syntax and factual corrections are fix-in-place, always.** If a compiler error, probe, or user correction shows that a claim in CLAUDE.md or `skills/*.md` is wrong, incomplete, or stale, fix it in the same session and flag the edit in the end-of-turn summary — never defer it to a proposal. Verify the corrected claim before writing it (grammar truth is `src/parser/ds2_parser.ypp`; behavior truth is a probe-compile with the current binary).
 
 **Doc improvements at stopping points.** Propose-first applies only to what's left: restructuring, removing existing guidance, **or proposing a new skill file when you see a recurring pattern that no existing skill covers**. Doc edits direct future Claude behavior, so structural diffs still get review — but factual drift must be self-healing, not queued behind it.

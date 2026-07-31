@@ -50,6 +50,13 @@ struct private WatcherWsMessage {
     repository_id : string
     repository_path : string
     worktree_path : string
+    // Archiving a session OFFERS its worktrees rather than taking them: the
+    // client names the ones the user accepted, and an empty list keeps them.
+    worktree_paths : array<string>
+    // The discard classes ride separately — each needs a different git
+    // command, and conflating them destroys staged work (changelist_discard).
+    staged_paths : array<string>
+    untracked_paths : array<string>
     new_worktree_path : string
     branch : string
     base_ref : string
@@ -67,6 +74,9 @@ struct private WatcherWsMessage {
     timeout_ms : int64
     control : bool
     raw : bool
+    // The explicit "delete anyway, N files lost" escape past the dirty guard.
+    // Never defaulted on: the client has to say it every time.
+    force : bool
     direction : string
     sender : string = ""
     subject : string
@@ -170,6 +180,7 @@ class private WatcherClient {
     raw : bool
     raw_offset : int64
     repository_revision : int64 = -1l
+    operation_revision : int64 = -1l
     herd_revision : int64 = -1l
     mailbox_revision : int64 = -1l
     bundles_revision : int64 = -1l
@@ -333,7 +344,7 @@ class DasHerdWatcherServer : HvWebServer {
         }
     }
 
-    def override onInit {
+    def override onInit { // nolint:STYLE038
         GET("/") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             if (!self.require_auth(req, resp)) return http_status.UNAUTHORIZED
             return resp |> SERVE_FILE(self.control_html)
@@ -585,6 +596,18 @@ class DasHerdWatcherServer : HvWebServer {
             ws_opcode.WS_OPCODE_TEXT, true)
     }
 
+    def send_worktree_operation(var client : WatcherClient?; force : bool = false) {
+        //! Pushes the running operation's step and log so the dialog can show
+        //! progress instead of freezing on a click.
+        if (client == null) return
+        let revision = repository_operation_revision()
+        if (!force && client.operation_revision == revision) return
+        client.operation_revision = revision
+        send(client.channel, "\{\"type\":\"worktree_operation\"," +
+            "\"data\":{repository_operation_json()}\}",
+            ws_opcode.WS_OPCODE_TEXT, true)
+    }
+
     def send_herd_sessions(var client : WatcherClient?; force : bool = false) {
         if (client == null) return
         let revision = herd_revision()
@@ -813,6 +836,20 @@ class DasHerdWatcherServer : HvWebServer {
         if (!client.action_delivered) {
             self.send_git_file_action(client, false, "failed",
                 "another Git file action is still running")
+            return
+        }
+        // The operation rail may be mid-`git add`; a second git would fight
+        // it over .git/index.lock. Refuse rather than queue: the click is
+        // cheap to repeat, a wedged index lock is not.
+        if (repository_operation_busy()) {
+            client.action_request_id = incoming.request_id
+            client.action_repository_id = incoming.repository_id
+            client.action_worktree_path = incoming.worktree_path
+            client.action_file_path = incoming.file_path
+            client.action = incoming.action
+            client.action_session_id = ""
+            self.send_git_file_action(client, false, "failed",
+                "a worktree operation is running; try again when it finishes")
             return
         }
         client.action_request_id = incoming.request_id
@@ -1189,7 +1226,7 @@ class DasHerdWatcherServer : HvWebServer {
             "Computing {client.inspection_diff_context} Git diff (15 second limit)...")
     }
 
-    def poll_file_inspection(var client : WatcherClient?) {
+    def poll_file_inspection(var client : WatcherClient?) { // nolint:STYLE038
         if (client == null || client.inspection_delivered
                 || empty(client.inspection_session_id)) return
         var info = WatcherSessionInfo()
@@ -1328,7 +1365,7 @@ class DasHerdWatcherServer : HvWebServer {
         if (client == null || !client.raw || empty(client.session_id)) return
         var inscope chunk <- watcher_output_since(client.session_id, client.raw_offset)
         if (chunk.reset) {
-            let start_offset = chunk.next_offset - int64(length(chunk.bytes))
+            let start_offset = chunk.next_offset - long_length(chunk.bytes)
             send(client.channel, "\{\"type\":\"raw_reset\",\"offset\":{start_offset}\}",
                 ws_opcode.WS_OPCODE_TEXT, true)
         }
@@ -1389,6 +1426,10 @@ class DasHerdWatcherServer : HvWebServer {
             ws_opcode.WS_OPCODE_TEXT, true)
         send_sessions(channel)
         send_repositories(clients[length(clients) - 1], true)
+        // Force the operation too: a client that connects (or live-reloads)
+        // while one is running would otherwise show nothing until the next
+        // revision bump, and a finished one would never arrive at all.
+        send_worktree_operation(clients[length(clients) - 1], true)
         send_herd_sessions(clients[length(clients) - 1], true)
     }
 
@@ -1406,7 +1447,7 @@ class DasHerdWatcherServer : HvWebServer {
         print("dasHerd watcher: client {client_id} disconnected\n")
     }
 
-    def override onWsMessage(channel : WebSocketChannel; message : string#) {
+    def override onWsMessage(channel : WebSocketChannel; message : string#) { // nolint:STYLE037
         let index = find_client(channel)
         if (index < 0) return
         var inscope incoming = WatcherWsMessage()
@@ -1610,8 +1651,17 @@ class DasHerdWatcherServer : HvWebServer {
                 reason = "in_use"
                 detail = "in use by session '{running_user}'"
             } else {
-                ok = repository_remove_worktree(incoming.repository_id,
-                    incoming.worktree_path, reason, detail)
+                // Starts the operation on the task-session rail and returns at
+                // once; the outcome rides the worktree_operation broadcast, so
+                // a tree that takes seconds to delete never stalls the watcher.
+                let start_error = repository_operation_remove_worktree(
+                    incoming.repository_id, incoming.worktree_path,
+                    incoming.force)
+                ok = empty(start_error)
+                if (!ok) {
+                    reason = "error"
+                    detail = start_error
+                }
             }
             send(channel, "\{\"type\":\"worktree_delete_result\",\"ok\":{ok}," +
                 "\"reason\":{sprint_json(reason, false)}," +
@@ -1619,58 +1669,100 @@ class DasHerdWatcherServer : HvWebServer {
                 "\"repository_id\":{sprint_json(incoming.repository_id, false)}," +
                 "\"worktree_path\":{sprint_json(incoming.worktree_path, false)}\}",
                 ws_opcode.WS_OPCODE_TEXT, true)
-        } elif (incoming.op == "herd_delete") {
-            var inscope removed = HerdSession()
-            let delete_error = herd_delete(incoming.herd_session_id, removed)
-            if (!empty(delete_error)) {
-                send_error(channel, delete_error)
+        } elif (incoming.op == "herd_archive") {
+            var inscope archived = HerdSession()
+            let archive_error = herd_archive(incoming.herd_session_id, archived)
+            if (!empty(archive_error)) {
+                send_error(channel, archive_error)
                 return
             }
-            // The record is gone; now try each of its worktrees under the
-            // same guards as a direct worktree delete. Blocked ones stay on
-            // disk and are reported with the reason.
-            var inscope targets : array<tuple<string; string>>
-            if (!empty(removed.worktree_path)) {
-                targets |> push(removed.repository_id => removed.worktree_path)
+            // Archiving the record is instant — it is a registry write. The
+            // worktrees are NOT deleted here: each one is a git operation that
+            // can take seconds, so the client drives them one at a time
+            // through the worktree operation rail, where the dialog can show
+            // progress and offer cancel. This handler only reports which
+            // worktrees it is handing back.
+            var inscope offered_parts : array<string>
+            offered_parts |> reserve(length(incoming.worktree_paths))
+            for (target_path in incoming.worktree_paths) {
+                let repository_id = herd_session_repository_for(archived,
+                    target_path)
+                offered_parts |> push("\{\"path\":{sprint_json(target_path, false)}"
+                    + ",\"repository_id\":{sprint_json(repository_id, false)}\}")
             }
-            for (entry in removed.satellites) {
-                if (!empty(entry.worktree_path)) {
-                    targets |> push(entry.repository_id => entry.worktree_path)
-                }
-            }
-            var inscope removed_parts : array<string>
-            var inscope kept_parts : array<string>
-            for (target in targets) {
-                var reason : string
-                var detail : string
-                var ok = false
-                let herd_user = herd_worktree_user(target._1)
-                let running_user = (empty(herd_user)
-                    ? watcher_running_worktree_user(target._1) : herd_user)
-                if (!empty(running_user)) {
-                    reason = "in_use"
-                    detail = "in use by session '{running_user}'"
-                } else {
-                    ok = repository_remove_worktree(target._0, target._1,
-                        reason, detail)
-                }
-                if (ok) {
-                    removed_parts |> push(sprint_json(target._1, false))
-                } else {
-                    kept_parts |> push("\{\"path\":{sprint_json(target._1, false)}"
-                        + ",\"repository_id\":{sprint_json(target._0, false)}"
-                        + ",\"reason\":{sprint_json(reason, false)}"
-                        + ",\"detail\":{sprint_json(detail, false)}\}")
-                }
-            }
-            let removed_list = join(removed_parts, ",")
-            let kept_list = join(kept_parts, ",")
-            send(channel, "\{\"type\":\"herd_delete_result\"," +
+            let offered_list = join(offered_parts, ",")
+            send(channel, "\{\"type\":\"herd_archive_result\"," +
                 "\"herd_session_id\":{sprint_json(incoming.herd_session_id, false)}," +
-                "\"removed\":[{removed_list}],\"kept\":[{kept_list}]\}",
+                "\"offered\":[{offered_list}]\}",
                 ws_opcode.WS_OPCODE_TEXT, true)
             send_sessions(channel)
             send_herd_sessions(client, true)
+        } elif (incoming.op == "herd_restore") {
+            let restore_error = herd_restore(incoming.herd_session_id)
+            if (!empty(restore_error)) {
+                send_error(channel, restore_error)
+                return
+            }
+            send_herd_sessions(client, true)
+        } elif (incoming.op == "changelist_action") {
+            // Multi-file stage/unstage on the operation rail: one serialized
+            // git per repository, progress and failure ride the operation
+            // broadcast the retire dialog already watches.
+            let start_error = repository_operation_changelist(
+                incoming.repository_id, incoming.worktree_path,
+                incoming.action, incoming.worktree_paths)
+            let ok = empty(start_error)
+            send(channel, "\{\"type\":\"changelist_action_result\",\"ok\":{ok}," +
+                "\"detail\":{sprint_json(start_error, false)}," +
+                "\"action\":{sprint_json(incoming.action, false)}," +
+                "\"repository_id\":{sprint_json(incoming.repository_id, false)}," +
+                "\"worktree_path\":{sprint_json(incoming.worktree_path, false)}\}",
+                ws_opcode.WS_OPCODE_TEXT, true)
+        } elif (incoming.op == "changelist_discard") {
+            let start_error = repository_operation_discard(
+                incoming.repository_id, incoming.worktree_path,
+                incoming.worktree_paths, incoming.staged_paths,
+                incoming.untracked_paths)
+            let ok = empty(start_error)
+            send(channel, "\{\"type\":\"changelist_action_result\",\"ok\":{ok}," +
+                "\"detail\":{sprint_json(start_error, false)}," +
+                "\"action\":\"discard\"," +
+                "\"repository_id\":{sprint_json(incoming.repository_id, false)}," +
+                "\"worktree_path\":{sprint_json(incoming.worktree_path, false)}\}",
+                ws_opcode.WS_OPCODE_TEXT, true)
+        } elif (incoming.op == "changelist_commit") {
+            let start_error = repository_operation_commit(
+                incoming.repository_id, incoming.worktree_path, incoming.text)
+            let ok = empty(start_error)
+            send(channel, "\{\"type\":\"changelist_action_result\",\"ok\":{ok}," +
+                "\"detail\":{sprint_json(start_error, false)}," +
+                "\"action\":\"commit\"," +
+                "\"repository_id\":{sprint_json(incoming.repository_id, false)}," +
+                "\"worktree_path\":{sprint_json(incoming.worktree_path, false)}\}",
+                ws_opcode.WS_OPCODE_TEXT, true)
+        } elif (incoming.op == "changelist_network") {
+            let start_error = repository_operation_network(
+                incoming.repository_id, incoming.worktree_path,
+                incoming.action)
+            let ok = empty(start_error)
+            send(channel, "\{\"type\":\"changelist_action_result\",\"ok\":{ok}," +
+                "\"detail\":{sprint_json(start_error, false)}," +
+                "\"action\":{sprint_json(incoming.action, false)}," +
+                "\"repository_id\":{sprint_json(incoming.repository_id, false)}," +
+                "\"worktree_path\":{sprint_json(incoming.worktree_path, false)}\}",
+                ws_opcode.WS_OPCODE_TEXT, true)
+        } elif (incoming.op == "worktree_commit_wip") {
+            let detail = repository_operation_commit_wip(incoming.repository_id,
+                incoming.worktree_path, incoming.text)
+            let ok = empty(detail)
+            send(channel, "\{\"type\":\"worktree_commit_wip_result\",\"ok\":{ok}," +
+                "\"detail\":{sprint_json(detail, false)}," +
+                "\"repository_id\":{sprint_json(incoming.repository_id, false)}," +
+                "\"worktree_path\":{sprint_json(incoming.worktree_path, false)}\}",
+                ws_opcode.WS_OPCODE_TEXT, true)
+        } elif (incoming.op == "worktree_operation_cancel") {
+            let cancel_error = repository_operation_cancel()
+            if (!empty(cancel_error)) send_error(channel, cancel_error)
         } elif (incoming.op == "attach") {
             if (watcher_find_session(incoming.session_id) < 0) {
                 send_error(channel, "unknown session")
@@ -1763,6 +1855,7 @@ class DasHerdWatcherServer : HvWebServer {
             send_snapshot(client)
             send_raw_output(client)
             send_repositories(client)
+            send_worktree_operation(client)
             send_herd_sessions(client)
             send_mailbox(client)
             send_bundles(client)

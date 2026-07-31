@@ -74,18 +74,27 @@ struct public SyntaxToken {
     language : string
 }
 
+struct public SyntaxNodeSpan {
+    //! One named multi-line parse node from `syntax_structure` — the outline
+    //! granularity used for folding and structural decorations.
+    start_byte : int
+    end_byte : int
+    start_row : int
+    end_row : int
+    node_type : string
+}
+
 def public syntax_canonical_language(language : string) : string {
-    let value = to_lower(language)
-    if (value == "das" || value == "daslang" || value == "dascript"
-            || value == ".das") return "daslang"
-    if (value == "c" || value == ".c") return "c"
+    // Hosts pass `extension()` straight through and it keeps the leading dot;
+    // strip it once here so every language matches by bare name.
+    let lowered = to_lower(language)
+    let value = starts_with(lowered, ".") ? slice(lowered, 1) : lowered
+    if (value == "das" || value == "daslang" || value == "dascript") return "daslang"
+    if (value == "c") return "c"
     if (value == "cpp" || value == "c++" || value == "cc" || value == "cxx"
-            || value == "h" || value == "hh" || value == "hpp" || value == "hxx"
-            || value == ".cc" || value == ".cpp" || value == ".cxx"
-            || value == ".h" || value == ".hh" || value == ".hpp"
-            || value == ".hxx") return "cpp"
-    if (value == "md" || value == "markdown" || value == ".md"
-            || value == ".markdown") return "markdown"
+            || value == "h" || value == "hh" || value == "hpp"
+            || value == "hxx") return "cpp"
+    if (value == "md" || value == "markdown") return "markdown"
     return value
 }
 
@@ -93,7 +102,7 @@ def public syntax_language_available(language : string) : bool {
     return _tree_sitter_language_available(language)
 }
 
-def public syntax_role_for_capture(capture_name : string) : SyntaxRole {
+def public syntax_role_for_capture(capture_name : string) : SyntaxRole { // nolint:STYLE037
     if (capture_name == "none") return SyntaxRole.none
     if (starts_with(capture_name, "comment")) return SyntaxRole.comment
     if (starts_with(capture_name, "string.escape") || capture_name == "escape"
@@ -148,6 +157,25 @@ def public syntax_kind_for_capture(capture_name : string) : SyntaxKind {
         return SyntaxKind.markup
     }
     return SyntaxKind.unknown
+}
+
+def public syntax_structure(language, source : string;
+                            var spans : array<SyntaxNodeSpan>) : SyntaxHighlightStatus {
+    //! Collect every named MULTI-LINE parse node (type + byte range + rows).
+    //! Consumers filter by `node_type` — e.g. the fold tables in
+    //! `imgui/imgui_text_tree_sitter`.
+    delete spans
+    if (!is_utf8_string_valid(source)) return SyntaxHighlightStatus.invalid_source
+    let canonical = syntax_canonical_language(language)
+    let raw_status = _tree_sitter_structure(canonical, source, length(source)) $(node_type : string const#; start_byte, end_byte, start_row, end_row : int) {
+        spans |> push(SyntaxNodeSpan(
+            start_byte = start_byte,
+            end_byte = end_byte,
+            start_row = start_row,
+            end_row = end_row,
+            node_type = "{node_type}"))
+    }
+    return unsafe(reinterpret<SyntaxHighlightStatus>(raw_status))
 }
 
 def public syntax_highlight(language, source : string;

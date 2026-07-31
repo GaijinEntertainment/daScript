@@ -611,6 +611,43 @@ def public key_tap(app : ImguiApp; key : int; hold_frames : int = 2) {
     ])))
 }
 
+def public key_chord_tap(app : ImguiApp; mods : array<string>; key : int;
+                         hold_frames : int = 2) {
+    //! Frame-paced chord: modifier keys press first, the target key taps, mods release —
+    //! what ``imgui_key_chord`` can't express for non-ASCII keys (arrows, Home, Keypad*).
+    //! ``mods`` entries: "Ctrl" | "Shift" | "Alt". Use ``int(ImGuiKey.RightArrow)`` etc.
+    var events : array<JsonValue?>
+    events |> reserve(length(mods) * 2 + 2)
+    var at = 0
+    for (mod in mods) {
+        events |> push(JV((t_ms = at, kind = "press", key = modifier_key_code(mod))))
+    }
+    at++
+    events |> push(JV((t_ms = at, kind = "press", key = key)))
+    at += hold_frames
+    events |> push(JV((t_ms = at, kind = "release", key = key)))
+    at++
+    for (mod in mods) {
+        events |> push(JV((t_ms = at, kind = "release", key = modifier_key_code(mod))))
+    }
+    post_command(app, "imgui_key_play", JV((frame_paced = true, events = events)))
+}
+
+def private modifier_key_code(mod : string) : int {
+    // driver process has no imgui module: ImGuiKey.LeftCtrl/LeftShift/LeftAlt
+    return mod == "Ctrl" ? 527 : (mod == "Shift" ? 528 : 529)
+}
+
+def public key_hold(app : ImguiApp; key : int; hold_ms : int = 800) {
+    //! WALL-CLOCK key hold for repeat tests — crosses ImGui's 275 ms repeat
+    //! delay (frame-paced never does on fast headless frames). Repeat counts
+    //! are timing-dependent: assert a monotonic delta, never an exact count.
+    post_command(app, "imgui_key_play", JV((events = [
+        JV((t_ms = 0,       kind = "press",   key = key)),
+        JV((t_ms = hold_ms, kind = "release", key = key))
+    ])))
+}
+
 // ===== Voiceover sync (record-time, opt-in via a prepared manifest) =====
 
 // prepare_recording.das pre-renders each say() line to a wav + a voiceover/<stem>.manifest.json;

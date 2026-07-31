@@ -1294,6 +1294,10 @@ def color_button_hover(var state : EmptyMarkerState; desc_id : string;
 // (dropped on hot-reload), so the init below covers both first-frame and post-reload restore.
 
 def private input_text_buffer_init(var state : InputTextState) {
+    // Indexed-table first touch (TABLE[k]) zero-inits the state past the field default.
+    if (state.capacity <= 0) {
+        state.capacity = 256
+    }
     if (length(state.buffer) != state.capacity) {
         state.buffer |> resize(state.capacity)
         sync_buffer_from_value(state)

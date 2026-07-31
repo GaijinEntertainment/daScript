@@ -15,6 +15,7 @@ require imgui/imgui_table_builtin
 require imgui/imgui_markdown_tree_sitter
 require imgui/imgui_text_source_view
 require imgui/imgui_text_tree_sitter
+require imgui/imgui_text_find
 require clipboard/clipboard
 require daslib/safe_addr
 require daslib/json
@@ -54,6 +55,25 @@ struct HerderInspectorOpenArgs {
 
 struct HerderInspectorModeArgs {
     mode : string
+}
+
+struct HerderInspectorFindArgs {
+    query : string
+    regex : bool = false
+}
+
+struct HerderInspectorFindStepArgs {
+    delta : int = 1
+}
+
+struct HerderInspectorFoldArgs {
+    index : int = -1
+    collapsed : bool = true
+}
+
+struct HerderInspectorMdFoldArgs {
+    node : int = -1
+    collapsed : bool = true
 }
 
 struct HerderGitWorktreeArgs {
@@ -143,6 +163,32 @@ def herder_client_state(_input : JsonValue?) : JsonValue? {
 def herder_reset_layout(_input : JsonValue?) : JsonValue? {
     reset_layout()
     return JV((ok = true))
+}
+
+struct HerderContentZoomArgs {
+    kind : string
+    percent : int
+}
+
+[live_command(description = "Read or set a content text scale, the target of Ctrl+wheel over that content. Args: kind = terminal | view | diff; optional percent (50-300) to set it. Chrome is not here: one ui_zoom setting drives every title, status bar and label.")]
+def herder_content_zoom(input : JsonValue?) : JsonValue? {
+    //! Parity rail (note 56): the content scales were mouse-only - adjustable
+    //! but neither commandable nor readable, so nothing could verify them.
+    let args = from_JV(input, type<HerderContentZoomArgs>)
+    if (args.kind != CONTENT_TERMINAL && args.kind != CONTENT_VIEW
+            && args.kind != CONTENT_DIFF) {
+        return JV((ok = false,
+            error = "kind must be terminal, view, or diff"))
+    }
+    if (args.percent != 0) {
+        set_content_zoom(args.kind, args.percent)
+    }
+    return JV((ok = true, kind = args.kind,
+        percent = content_zoom_percent(args.kind),
+        ui_zoom_percent = g_zoom_percent,
+        terminal = content_zoom_percent(CONTENT_TERMINAL),
+        view = content_zoom_percent(CONTENT_VIEW),
+        diff = content_zoom_percent(CONTENT_DIFF)))
 }
 
 struct HerderCommandArgs {
@@ -310,6 +356,420 @@ def herder_close_session(input : JsonValue?) : JsonValue? {
     if (!known) return JV((ok = false, error = "unknown herd session '{args.herd_id}'"))
     g_client->request_herd_close(args.herd_id)
     return JV((ok = true, herd_id = args.herd_id))
+}
+
+struct HerderRetireWorktreeArgs {
+    repository_id : string
+    worktree_path : string
+    force : bool
+}
+
+struct HerderRetireSessionArgs {
+    herd_id : string
+    worktree_paths : array<string>
+    force : bool
+}
+
+def private worktree_verdict_jv(repository_id, worktree_path : string) : JsonValue? {
+    var worktree = WorktreeState()
+    if (!find_worktree_state(repository_id, worktree_path, worktree)) {
+        return JV((ok = false, error = "unknown worktree '{worktree_path}'"))
+    }
+    let claimed_by = herd_session_claiming(worktree_path)
+    // Every number names the ref it was measured against — an unqualified
+    // count is the exact ambiguity note 58 was filed about.
+    return JV((ok = true, worktree_path = worktree_path,
+        branch = worktree.branch, is_main = worktree.is_main,
+        tier = repository_worktree_delete_tier(worktree, claimed_by),
+        claimed_by = claimed_by,
+        staged = worktree.staged, unstaged = worktree.unstaged,
+        untracked = worktree.untracked, conflicted = worktree.conflicted,
+        unmerged_known = worktree.unmerged_known,
+        unmerged_commits = worktree.unmerged_commits,
+        unmerged_base_ref = worktree.unmerged_base_ref,
+        upstream_ref = worktree.upstream_ref, ahead = worktree.ahead,
+        only_here = repository_worktree_only_here(worktree)))
+}
+
+[live_command(description = "Read the retire-a-worktree verdict and every fact behind it: tier (in_use | main | dirty | warn | green), claiming session, working-tree counts, and unmerged commits WITH the base ref they were measured against. Args: repository_id, worktree_path.")]
+def herder_worktree_retire_state(input : JsonValue?) : JsonValue? {
+    if (g_client == null) return JV((ok = false, error = "no client"))
+    let args = from_JV(input, type<HerderRetireWorktreeArgs>)
+    if (empty(args.worktree_path)) {
+        return JV((ok = false, error = "worktree_path is required"))
+    }
+    return worktree_verdict_jv(args.repository_id, args.worktree_path)
+}
+
+[live_command(description = "Open the retire-a-worktree checklist dialog on a worktree, exactly as the row's context menu does. Args: repository_id, worktree_path.")]
+def herder_worktree_retire_open(input : JsonValue?) : JsonValue? {
+    if (g_client == null) return JV((ok = false, error = "no client"))
+    let args = from_JV(input, type<HerderRetireWorktreeArgs>)
+    var worktree = WorktreeState()
+    if (!find_worktree_state(args.repository_id, args.worktree_path, worktree)) {
+        return JV((ok = false, error = "unknown worktree '{args.worktree_path}'"))
+    }
+    g_worktree_retire = WorktreeRetirePrompt(active = true,
+        repository_id = clone_string(args.repository_id),
+        worktree_path = clone_string(args.worktree_path))
+    return JV((ok = true, worktree_path = args.worktree_path))
+}
+
+[live_command(description = "Retire (delete) a worktree. Blocked while a session holds it or the working tree is dirty; force = true is the explicit 'delete anyway, N files lost' escape. The branch and its commits are never touched. Args: repository_id, worktree_path, force.")]
+def herder_worktree_retire(input : JsonValue?) : JsonValue? {
+    if (g_client == null || !g_client.connected) {
+        return JV((ok = false, error = "watcher is not connected"))
+    }
+    let args = from_JV(input, type<HerderRetireWorktreeArgs>)
+    var worktree = WorktreeState()
+    if (!find_worktree_state(args.repository_id, args.worktree_path, worktree)) {
+        return JV((ok = false, error = "unknown worktree '{args.worktree_path}'"))
+    }
+    let claimed_by = herd_session_claiming(args.worktree_path)
+    let tier = repository_worktree_delete_tier(worktree, claimed_by)
+    if (tier == WORKTREE_TIER_IN_USE || tier == WORKTREE_TIER_MAIN) {
+        return JV((ok = false, tier = tier,
+            error = "{args.worktree_path} cannot be retired: {tier}"))
+    }
+    if (tier == WORKTREE_TIER_DIRTY && !args.force) {
+        return JV((ok = false, tier = tier,
+            error = "working tree is dirty; pass force to delete anyway"))
+    }
+    g_client->request_worktree_delete(args.repository_id, args.worktree_path,
+        args.force)
+    return JV((ok = true, tier = tier, worktree_path = args.worktree_path))
+}
+
+[live_command(description = "Read the running worktree operation the retire dialog shows: kind, state (idle|running|ok|failed|cancelled), current step, and the full command log.")]
+def herder_worktree_operation_state(_input : JsonValue?) : JsonValue? {
+    if (g_client == null) return JV((ok = false, error = "no client"))
+    var log <- [for (line in g_client.operation.log); JV(line)]
+    return JV((ok = true, kind = g_client.operation.kind,
+        state = g_client.operation.state,
+        worktree_path = g_client.operation.worktree_path,
+        step = g_client.operation.step,
+        step_index = g_client.operation.step_index,
+        step_count = g_client.operation.step_count,
+        error = g_client.operation.error,
+        hint = g_client.operation.hint,
+        retryable = g_client.operation.retryable,
+        session_id = g_client.operation.session_id,
+        revision = g_client.operation.revision,
+        queued = length(g_worktree_retire_queue),
+        log <- log))
+}
+
+[live_command(description = "Cancel the running worktree operation. Stops the run; whatever already completed stays done and stays in the log.")]
+def herder_worktree_operation_cancel(_input : JsonValue?) : JsonValue? {
+    if (g_client == null || !g_client.connected) {
+        return JV((ok = false, error = "watcher is not connected"))
+    }
+    if (g_client.operation.state != "running") {
+        return JV((ok = false, error = "no operation is running"))
+    }
+    g_client->request_worktree_operation_cancel()
+    return JV((ok = true))
+}
+
+[live_command(description = "Rescue a dirty worktree mechanically: stage everything and commit it to the branch, which outlives the worktree. Args: repository_id, worktree_path.")]
+def herder_worktree_commit_wip(input : JsonValue?) : JsonValue? {
+    if (g_client == null || !g_client.connected) {
+        return JV((ok = false, error = "watcher is not connected"))
+    }
+    let args = from_JV(input, type<HerderRetireWorktreeArgs>)
+    var worktree = WorktreeState()
+    if (!find_worktree_state(args.repository_id, args.worktree_path, worktree)) {
+        return JV((ok = false, error = "unknown worktree '{args.worktree_path}'"))
+    }
+    if (empty(worktree.branch)) {
+        return JV((ok = false,
+            error = "detached HEAD: a commit here would not be on any branch"))
+    }
+    g_client->request_worktree_commit_wip(args.repository_id,
+        args.worktree_path, "WIP: work in progress on {worktree.branch}")
+    return JV((ok = true, branch = worktree.branch))
+}
+
+struct HerderChangelistArgs {
+    repository_id : string
+    worktree_path : string
+    mode : string
+    group : int = -1
+    path : string
+    selected : bool
+    action : string
+    paths : array<string>
+    message : string
+}
+
+def private changelist_target(var args : HerderChangelistArgs) {
+    // Empty scope means "the worktree the Changelist is showing".
+    if (empty(args.repository_id)) {
+        args.repository_id = g_selected_repository_id
+    }
+    if (empty(args.worktree_path)) {
+        args.worktree_path = g_selected_worktree_path
+    }
+}
+
+def private changelist_group_keys(repository : RepositorySnapshot const;
+                                  worktree_path : string; group : int) : array<string> {
+    return <- [for (file in repository.files);
+        selection_key(git_group_scope(group), file.path);
+        where file.worktree_path == worktree_path
+            && git_file_in_group(file, group)]
+}
+
+[live_command(description = "Read the Changelist Changes view: every status row (path, code, group 0-3 = conflicts/staged/modified/untracked, selected), the selection set, what stage/unstage would act on, and whether the rail is busy. Args: repository_id, worktree_path (empty = the shown worktree).")]
+def herder_changelist_state(input : JsonValue?) : JsonValue? {
+    if (g_client == null) return JV((ok = false, error = "no client"))
+    var args = from_JV(input, type<HerderChangelistArgs>)
+    changelist_target(args)
+    for (repository in g_client.repositories) {
+        if (repository.record.id != args.repository_id) continue
+        for (worktree in repository.worktrees) {
+            if (worktree.path != args.worktree_path) continue
+            var rows : array<JsonValue?>
+            for (group in range(4)) {
+                let comparison = git_group_scope(group)
+                for (file in repository.files) {
+                    if (file.worktree_path != worktree.path
+                            || !git_file_in_group(file, group)) continue
+                    rows |> push(JV((path = file.path, code = file.code,
+                        group = group,
+                        selected = selection_contains(g_changelist_selection,
+                            selection_key(comparison, file.path)))))
+                }
+            }
+            var stage_paths : array<string>
+            var unstage_paths : array<string>
+            changelist_selection_actions(repository, worktree, stage_paths,
+                unstage_paths)
+            var modified_paths : array<string>
+            var staged_paths : array<string>
+            var untracked_paths : array<string>
+            var conflicted = 0
+            changelist_selection_discards(repository, worktree,
+                modified_paths, staged_paths, untracked_paths, conflicted)
+            var stage_list <- [for (p in stage_paths); JV(p)]
+            var unstage_list <- [for (p in unstage_paths); JV(p)]
+            var discard_modified <- [for (p in modified_paths); JV(p)]
+            var discard_staged <- [for (p in staged_paths); JV(p)]
+            var discard_untracked <- [for (p in untracked_paths); JV(p)]
+            return JV((ok = true, repository_id = args.repository_id,
+                worktree_path = args.worktree_path,
+                selection_count = selection_count(g_changelist_selection),
+                busy = changelist_rail_busy(),
+                notice = g_client.changelist_notice,
+                stage_eligible <- stage_list,
+                unstage_eligible <- unstage_list,
+                discard_modified <- discard_modified,
+                discard_staged <- discard_staged,
+                discard_untracked <- discard_untracked,
+                discard_conflicted_held = conflicted,
+                discard_prompt_open = (GIT_DISCARD_DIALOG.open
+                    || g_git_discard.pending_open),
+                discard_prompt_files = g_git_discard.file_count,
+                discard_prompt_bytes = g_git_discard.total_bytes,
+                discard_prompt_armed = g_git_discard.confirming,
+                staged_count = worktree.staged,
+                commit_message = changelist_commit_message(),
+                commit_in_flight = g_commit_clear_watch != 0l,
+                rows <- rows))
+        }
+    }
+    return JV((ok = false, error = "unknown worktree '{args.worktree_path}'"))
+}
+
+[live_command(description = "Drive the Changelist selection exactly as the mouse would. Args: repository_id, worktree_path (empty = shown), mode = plain|toggle|range|group|clear, group (0-3), path (file path for plain/toggle/range), selected (for group).")]
+def herder_changelist_select(input : JsonValue?) : JsonValue? {
+    if (g_client == null) return JV((ok = false, error = "no client"))
+    var args = from_JV(input, type<HerderChangelistArgs>)
+    changelist_target(args)
+    if (args.mode == "clear") {
+        selection_clear(g_changelist_selection)
+        return JV((ok = true, selection_count = 0))
+    }
+    for (repository in g_client.repositories) {
+        if (repository.record.id != args.repository_id) continue
+        if (args.group < 0 || args.group > 3) {
+            return JV((ok = false, error = "group must be 0-3"))
+        }
+        let key = selection_key(git_group_scope(args.group), args.path)
+        if (args.mode == "plain") {
+            selection_plain_click(g_changelist_selection, args.repository_id,
+                args.worktree_path, args.group, key)
+        } elif (args.mode == "toggle") {
+            selection_toggle_click(g_changelist_selection, args.repository_id,
+                args.worktree_path, args.group, key)
+        } elif (args.mode == "range") {
+            let group_keys <- changelist_group_keys(repository,
+                args.worktree_path, args.group)
+            selection_range_click(g_changelist_selection, args.repository_id,
+                args.worktree_path, args.group, group_keys, key)
+        } elif (args.mode == "group") {
+            let group_keys <- changelist_group_keys(repository,
+                args.worktree_path, args.group)
+            selection_set_group(g_changelist_selection, args.repository_id,
+                args.worktree_path, args.group, group_keys, args.selected)
+        } else {
+            return JV((ok = false, error = "unknown mode '{args.mode}'"))
+        }
+        return JV((ok = true,
+            selection_count = selection_count(g_changelist_selection)))
+    }
+    return JV((ok = false, error = "unknown repository '{args.repository_id}'"))
+}
+
+[live_command(description = "Run a Changelist action on the watcher's operation rail, as the row menu would. Args: repository_id, worktree_path (empty = shown), action = stage|unstage|discard, paths (empty = derive from the current selection; discard ALWAYS derives, split by class). Discard is unrecoverable — this rail IS the explicit second confirmation. Outcome rides herder_worktree_operation_state.")]
+def herder_changelist_action(input : JsonValue?) : JsonValue? { // nolint:STYLE037
+    if (g_client == null || !g_client.connected) {
+        return JV((ok = false, error = "watcher is not connected"))
+    }
+    var args = from_JV(input, type<HerderChangelistArgs>)
+    changelist_target(args)
+    if (args.action == "discard") {
+        if (changelist_rail_busy()) {
+            return JV((ok = false, error = "the operation rail is busy"))
+        }
+        for (repository in g_client.repositories) {
+            if (repository.record.id != args.repository_id) continue
+            for (worktree in repository.worktrees) {
+                if (worktree.path != args.worktree_path) continue
+                var modified_paths : array<string>
+                var staged_paths : array<string>
+                var untracked_paths : array<string>
+                var conflicted = 0
+                changelist_selection_discards(repository, worktree,
+                    modified_paths, staged_paths, untracked_paths, conflicted)
+                let total = (length(modified_paths) + length(staged_paths)
+                    + length(untracked_paths))
+                if (total == 0) {
+                    return JV((ok = false,
+                        error = "nothing discardable is selected"))
+                }
+                g_client->changelist_discard(args.repository_id,
+                    args.worktree_path, modified_paths, staged_paths,
+                    untracked_paths)
+                return JV((ok = true, action = "discard",
+                    modified = length(modified_paths),
+                    staged = length(staged_paths),
+                    untracked = length(untracked_paths),
+                    conflicted_held = conflicted))
+            }
+        }
+        return JV((ok = false,
+            error = "unknown worktree '{args.worktree_path}'"))
+    }
+    if (args.action == "commit") {
+        if (empty(strip(args.message))) {
+            return JV((ok = false, error = "a commit message is required"))
+        }
+        if (changelist_rail_busy()) {
+            return JV((ok = false, error = "the operation rail is busy"))
+        }
+        g_client->changelist_commit(args.repository_id, args.worktree_path,
+            strip(args.message))
+        return JV((ok = true, action = "commit"))
+    }
+    if (args.action != "stage" && args.action != "unstage") {
+        return JV((ok = false, error = "unknown action '{args.action}'"))
+    }
+    var paths : array<string>
+    if (!empty(args.paths)) {
+        paths := args.paths
+    } else {
+        for (repository in g_client.repositories) {
+            if (repository.record.id != args.repository_id) continue
+            for (worktree in repository.worktrees) {
+                if (worktree.path != args.worktree_path) continue
+                var stage_paths : array<string>
+                var unstage_paths : array<string>
+                changelist_selection_actions(repository, worktree,
+                    stage_paths, unstage_paths)
+                if (args.action == "stage") {
+                    paths <- stage_paths
+                } else {
+                    paths <- unstage_paths
+                }
+            }
+        }
+    }
+    if (empty(paths)) {
+        return JV((ok = false,
+            error = "nothing the action could apply to; select rows or pass paths"))
+    }
+    if (changelist_rail_busy()) {
+        return JV((ok = false, error = "the operation rail is busy"))
+    }
+    g_client->changelist_action(args.repository_id, args.worktree_path,
+        args.action, paths)
+    var acted <- [for (p in paths); JV(p)]
+    return JV((ok = true, action = args.action, paths <- acted))
+}
+
+[live_command(description = "Run a network git operation on the rail: fetch (always safe), pull (--ff-only, never a surprise merge), push (or publish when no upstream), sync (fetch then pull then push). Args: repository_id, worktree_path (empty = shown), action. Outcome rides herder_worktree_operation_state.")]
+def herder_git_sync(input : JsonValue?) : JsonValue? {
+    if (g_client == null || !g_client.connected) {
+        return JV((ok = false, error = "watcher is not connected"))
+    }
+    var args = from_JV(input, type<HerderChangelistArgs>)
+    changelist_target(args)
+    if (args.action != "fetch" && args.action != "pull"
+            && args.action != "push" && args.action != "sync") {
+        return JV((ok = false, error = "unknown network action '{args.action}'"))
+    }
+    if (changelist_rail_busy()) {
+        return JV((ok = false, error = "the operation rail is busy"))
+    }
+    var worktree = WorktreeState()
+    if (!find_worktree_state(args.repository_id, args.worktree_path, worktree)) {
+        return JV((ok = false, error = "unknown worktree '{args.worktree_path}'"))
+    }
+    g_client->changelist_network(args.repository_id, args.worktree_path,
+        args.action)
+    return JV((ok = true, action = args.action, branch = worktree.branch,
+        upstream_ref = worktree.upstream_ref, ahead = worktree.ahead,
+        behind = worktree.behind))
+}
+
+[live_command(description = "Retire a durable session: the record is ARCHIVED, never erased — it leaves the default list, keeps its events/mailbox/bundles/journal, and herder_session_restore brings it back. worktree_paths names the session's worktrees to delete in the same act (empty keeps them all). Args: herd_id, worktree_paths, force.")]
+def herder_session_retire(input : JsonValue?) : JsonValue? {
+    if (g_client == null || !g_client.connected) {
+        return JV((ok = false, error = "watcher is not connected"))
+    }
+    let args = from_JV(input, type<HerderRetireSessionArgs>)
+    if (empty(args.herd_id)) return JV((ok = false, error = "herd_id is required"))
+    for (record in g_client.herd_sessions) {
+        if (record.id != args.herd_id) continue
+        if (record.state == "running") {
+            return JV((ok = false,
+                error = "session is running; close it before retiring"))
+        }
+        g_client->request_herd_archive(args.herd_id, args.worktree_paths,
+            args.force)
+        return JV((ok = true, herd_id = args.herd_id,
+            archived = true, worktrees_offered = length(args.worktree_paths)))
+    }
+    return JV((ok = false, error = "unknown herd session '{args.herd_id}'"))
+}
+
+[live_command(description = "Bring an archived session back to the default list. Args: herd_id.")]
+def herder_session_restore(input : JsonValue?) : JsonValue? {
+    if (g_client == null || !g_client.connected) {
+        return JV((ok = false, error = "watcher is not connected"))
+    }
+    let args = from_JV(input, type<HerderRetireSessionArgs>)
+    if (empty(args.herd_id)) return JV((ok = false, error = "herd_id is required"))
+    for (record in g_client.herd_sessions) {
+        if (record.id != args.herd_id) continue
+        if (!record.archived) {
+            return JV((ok = false, error = "session is not archived"))
+        }
+        g_client->request_herd_restore(args.herd_id)
+        return JV((ok = true, herd_id = args.herd_id))
+    }
+    return JV((ok = false, error = "unknown herd session '{args.herd_id}'"))
 }
 
 struct HerderTerminalInputArgs {
@@ -504,7 +964,8 @@ def herder_terminal_state(input : JsonValue?) : JsonValue? {
         scroll_offset = g_terminal_view.scroll_offset,
         scrollback_rows = g_terminal_view.scrollback_rows,
         content_revision = g_terminal_view.content_revision,
-        zoom_percent = g_zoom_percent,
+        zoom_percent = content_zoom_percent(CONTENT_TERMINAL),
+        ui_zoom_percent = g_zoom_percent,
         screen_text = g_terminal_view.screen_text))
 }
 
@@ -750,23 +1211,18 @@ def herder_git_clipboard_state(_input : JsonValue?) : JsonValue? {
 def herder_git_perspective(input : JsonValue?) : JsonValue? {
     let args = from_JV(input, type<HerderGitPerspectiveArgs>)
     let perspective = to_lower(args.perspective)
-    if (perspective == "pr") {
-        GIT_PR_TAB.pending_select = true
-    } elif (perspective == "history") {
-        GIT_HISTORY_TAB.pending_select = true
-    } elif (perspective == "tree") {
-        GIT_TREE_TAB.pending_select = true
+    if (perspective == "tree") {
         if (g_client != null && g_client.connected
                 && !empty(g_selected_repository_id)
                 && !empty(g_selected_worktree_path)) {
             g_client->request_repository_history(g_selected_repository_id,
                 g_selected_worktree_path, "__all__")
         }
-    } elif (perspective == "project") {
-        GIT_PROJECT_TAB.pending_select = true
-    } else {
+    } elif (perspective != "pr" && perspective != "history"
+            && perspective != "project") {
         return JV((ok = false, error = "perspective must be pr, history, tree, or project"))
     }
+    g_git_perspective = perspective
     GIT_CHANGELIST_WIN.open = true
     GIT_ACTIVITY_WIN.open = true
     GIT_ACTIVITY_WIN.pending_raise = true
@@ -778,7 +1234,7 @@ def herder_project_state(_input : JsonValue?) : JsonValue? {
     var folders, files, dirty : int
     project_model_counts(folders, files, dirty)
     return JV((ok = empty(g_worktree_files_error),
-        selected = GIT_PROJECT_TAB.selected,
+        selected = g_git_perspective == "project",
         loading = g_worktree_files_loading,
         error = g_worktree_files_error,
         file_count = length(g_worktree_files),
@@ -813,7 +1269,7 @@ def herder_git_file_action(input : JsonValue?) : JsonValue? {
 }
 
 [live_command(description = "Inspect the selected Git file, comparison, render mode, and changed-line telemetry.")]
-def herder_file_inspector_state(_input : JsonValue?) : JsonValue? {
+def herder_file_inspector_state(_input : JsonValue?) : JsonValue? { // nolint:STYLE038
     let view_selection = text_source_view_selection(g_inspector.view)
     return JV((
         ok = g_inspector.prepare.has_retained_content,
@@ -830,7 +1286,9 @@ def herder_file_inspector_state(_input : JsonValue?) : JsonValue? {
         installed_diff_context = g_inspector.installed_diff_context,
         replacement_busy = (g_inspector.loading
             || g_inspector.prepare.request != InspectorRequestState.idle),
-        zoom_percent = g_zoom_percent,
+        zoom_percent = content_zoom_percent(
+            g_inspector.mode == GitInspectorMode.view ? CONTENT_VIEW : CONTENT_DIFF),
+        ui_zoom_percent = g_zoom_percent,
         diff_context = g_inspector.diff_context,
         diff_context_choice = g_inspector.diff_context_choice,
         mode = g_inspector.mode == GitInspectorMode.diff ? "diff" : "view",
@@ -874,6 +1332,7 @@ def herder_file_inspector_state(_input : JsonValue?) : JsonValue? {
             g_inspector.new_document.source),
         view_byte_count = length(g_inspector.view_source),
         view_prepared = g_inspector.view_prepared,
+        syntax_capped = g_inspector.syntax_capped,
         old_line_mark_count = length(g_inspector.old_document.line_marks),
         new_line_mark_count = length(g_inspector.new_document.line_marks),
         old_line_number_count = length(g_inspector.old_document.line_numbers),
@@ -917,7 +1376,32 @@ def herder_file_inspector_state(_input : JsonValue?) : JsonValue? {
         markdown_changed_layout_count = markdown_view_changed_layout_count(
             g_inspector.markdown_document, g_inspector.markdown_view,
             g_inspector.changed_source_ranges),
-        markdown_gutter_segments = g_inspector.markdown_gutter_segments))
+        markdown_gutter_segments = g_inspector.markdown_gutter_segments,
+        find_open = g_inspector.find.open,
+        find_query = g_inspector.find.query,
+        find_regex = g_inspector.find.use_regex,
+        find_match_count = length(g_inspector.find.matches),
+        find_current = g_inspector.find.current,
+        find_current_old_side = (g_inspector.find.current >= 0
+            && g_inspector.find.current < length(g_inspector.find_match_old_side)
+            && g_inspector.find_match_old_side[g_inspector.find.current]),
+        diff_before_selection_start = text_source_view_selection(
+            g_inspector.old_view).start_byte,
+        diff_before_selection_end = text_source_view_selection(
+            g_inspector.old_view).end_byte,
+        find_error = g_inspector.find.error,
+        find_jump_revision = g_inspector.find.jump_revision,
+        find_applied_jump = g_inspector.find_applied_jump,
+        view_fold_count = length(g_inspector.view_document.folds),
+        view_fold_collapsed_count = text_source_view_collapsed_count(
+            g_inspector.view),
+        view_fold_revision = g_inspector.view.fold_revision,
+        view_visible_line_count = length(g_inspector.view.layout.lines),
+        old_fold_count = length(g_inspector.old_document.folds),
+        new_fold_count = length(g_inspector.new_document.folds),
+        markdown_code_collapsed_count = markdown_view_collapsed_count(
+            g_inspector.markdown_view),
+        markdown_code_copy_revision = g_inspector.markdown_view.code_copy_revision))
 }
 
 [live_command(description = "Open a changed Git file immediately. Args: repository_id, worktree_path, file_path, comparison, optional revision for commit.")]
@@ -978,6 +1462,118 @@ def herder_file_inspector_mode(input : JsonValue?) : JsonValue? {
         return JV((ok = false, error = "mode must be diff or view"))
     }
     return JV((ok = true, mode = mode))
+}
+
+[live_command(description = "Open find in the file inspector with a query; regex optional. Matches search the WHOLE file in every mode; a diff jump to a hidden match expands the diff with a context window around it and lands there.")]
+def herder_inspector_find(input : JsonValue?) : JsonValue? {
+    if (!g_inspector.prepare.has_retained_content) {
+        return JV((ok = false, error = "no file is inspected"))
+    }
+    let args = from_JV(input, type<HerderInspectorFindArgs>)
+    text_find_set_query(g_inspector.find, args.query, args.regex)
+    inspector_find_rebuild(g_inspector.mode == GitInspectorMode.diff)
+    var removed_matches = 0
+    for (old_side in g_inspector.find_match_old_side) {
+        if (old_side) removed_matches++
+    }
+    return JV((ok = true, query = g_inspector.find.query,
+               regex = g_inspector.find.use_regex,
+               match_count = length(g_inspector.find.matches),
+               removed_match_count = removed_matches,
+               current = g_inspector.find.current,
+               error = g_inspector.find.error,
+               jump_revision = g_inspector.find.jump_revision))
+}
+
+[live_command(description = "Step the inspector find selection by delta.")]
+def herder_inspector_find_step(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<HerderInspectorFindStepArgs>)
+    text_find_step(g_inspector.find, args.delta == 0 ? 1 : args.delta)
+    return JV((ok = true, current = g_inspector.find.current,
+               match_count = length(g_inspector.find.matches),
+               jump_revision = g_inspector.find.jump_revision))
+}
+
+[live_command(description = "Close find in the file inspector.")]
+def herder_inspector_find_close(_input : JsonValue?) : JsonValue? {
+    text_find_close(g_inspector.find)
+    return JV((ok = true))
+}
+
+[live_command(description = "List fold regions of the inspector View document's source view.")]
+def herder_inspector_folds(_input : JsonValue?) : JsonValue? {
+    var regions <- [for (index in range(length(g_inspector.view_document.folds)));
+        JV((index = index,
+            kind = g_inspector.view_document.folds[index].kind,
+            header_row = g_inspector.view_document.folds[index].header_row,
+            end_row = g_inspector.view_document.folds[index].end_row,
+            start_byte = g_inspector.view_document.folds[index].start_byte,
+            end_byte = g_inspector.view_document.folds[index].end_byte,
+            collapsed = text_source_view_fold_collapsed(
+                g_inspector.view_document, g_inspector.view, index),
+            handle_valid = text_source_view_fold_handle_pos(
+                g_inspector.view_document, g_inspector.view, index).valid,
+            handle_x = text_source_view_fold_handle_pos(
+                g_inspector.view_document, g_inspector.view, index).x,
+            handle_y = text_source_view_fold_handle_pos(
+                g_inspector.view_document, g_inspector.view, index).y))]
+    return JV((ok = true,
+               fold_count = length(g_inspector.view_document.folds),
+               folds = JV(regions)))
+}
+
+[live_command(description = "Collapse or expand one inspector View fold region by index.")]
+def herder_inspector_fold(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<HerderInspectorFoldArgs>)
+    let changed = text_source_view_set_fold(
+        g_inspector.view_document, g_inspector.view, args.index, args.collapsed)
+    return JV((ok = changed, index = args.index, collapsed = args.collapsed,
+               fold_revision = g_inspector.view.fold_revision,
+               fold_collapsed_count = text_source_view_collapsed_count(
+                   g_inspector.view)))
+}
+
+[live_command(description = "List the inspector markdown view's rendered code blocks: collapsed state, screen origin, and hover icon centers.")]
+def herder_inspector_md_code_blocks(_input : JsonValue?) : JsonValue? {
+    var blocks : array<JsonValue?>
+    for (index in range(length(g_inspector.markdown_document.nodes))) {
+        continue if (g_inspector.markdown_document.nodes[index].kind
+            != RichNodeKind.code_block)
+        let entry & = unsafe(g_inspector.markdown_view.nodes[index])
+        blocks |> push(JV((node = index,
+            collapsed = markdown_view_code_collapsed(
+                g_inspector.markdown_view, index),
+            screen_x = entry.screen_origin.x,
+            screen_y = entry.screen_origin.y,
+            icons_valid = entry.icon_rects_valid,
+            fold_icon_x = (entry.fold_icon_rect.x + entry.fold_icon_rect.z) * 0.5f,
+            fold_icon_y = (entry.fold_icon_rect.y + entry.fold_icon_rect.w) * 0.5f,
+            copy_icon_x = (entry.copy_icon_rect.x + entry.copy_icon_rect.z) * 0.5f,
+            copy_icon_y = (entry.copy_icon_rect.y + entry.copy_icon_rect.w) * 0.5f)))
+    }
+    return JV((ok = true, count = length(blocks), blocks = JV(blocks)))
+}
+
+[live_command(description = "Collapse or expand one inspector markdown code block by node index.")]
+def herder_inspector_md_fold(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<HerderInspectorMdFoldArgs>)
+    let changed = markdown_view_set_code_collapsed(
+        g_inspector.markdown_view, args.node, args.collapsed)
+    return JV((ok = changed, node = args.node, collapsed = args.collapsed,
+               md_fold_revision = g_inspector.markdown_view.fold_revision,
+               md_code_collapsed_count = markdown_view_collapsed_count(
+                   g_inspector.markdown_view)))
+}
+
+[live_command(description = "Copy one inspector markdown code block to the clipboard by node index.")]
+def herder_inspector_md_copy_code(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<HerderInspectorMdFoldArgs>)
+    let copied = markdown_view_copy_code_block(g_inspector.markdown_view,
+        args.node, !harness_is_headless())
+    return JV((ok = copied,
+               code_copy_revision = g_inspector.markdown_view.code_copy_revision,
+               code_copy_node = g_inspector.markdown_view.code_copy_node,
+               code_copy_bytes = length(g_inspector.markdown_view.code_copy_text)))
 }
 
 [live_command(description = "Inspect persistent, non-modal agent Attention and active Focus Set state.")]
@@ -1137,6 +1733,26 @@ def private draw_shortcuts_tab() {
     }
 }
 
+// Settings mirrors of the content scales. Declared explicitly because the
+// slider state is passed into a shared helper rather than named at the call
+// site, so the widget macro cannot emit these globals itself.
+var SETTINGS_TERMINAL_ZOOM : SliderStateInt
+
+var SETTINGS_VIEW_ZOOM : SliderStateInt
+
+var SETTINGS_DIFF_ZOOM : SliderStateInt
+
+var SETTINGS_ZOOM_HINT : NarrativeState
+
+def draw_content_zoom_slider(var state : SliderStateInt; kind, caption : string) {
+    state.bounds = (50, 300)
+    state.value = content_zoom_percent(kind)
+    SetNextItemWidth(240.0f)
+    if (slider_int(state, (text = caption))) {
+        set_content_zoom(kind, state.value)
+    }
+}
+
 def draw_settings_window() {
     tab_bar(SETTINGS_TABS, (text = "Settings sections", flags = ImGuiTabBarFlags.None)) {
         tab_item(SETTINGS_GENERAL_TAB, (text = "General", closable = false,
@@ -1147,6 +1763,16 @@ def draw_settings_window() {
             if (slider_int(SETTINGS_UI_ZOOM, (text = "UI zoom %"))) {
                 set_ui_zoom(SETTINGS_UI_ZOOM.value)
             }
+            text_disabled(SETTINGS_ZOOM_HINT,
+                (text = "UI zoom sizes every title, status bar and label. " +
+                    "Each content below has its own size, also set by " +
+                    "Ctrl+wheel over it."))
+            draw_content_zoom_slider(SETTINGS_TERMINAL_ZOOM, CONTENT_TERMINAL,
+                "Terminal text %")
+            draw_content_zoom_slider(SETTINGS_VIEW_ZOOM, CONTENT_VIEW,
+                "View text %")
+            draw_content_zoom_slider(SETTINGS_DIFF_ZOOM, CONTENT_DIFF,
+                "Diff text %")
             SETTINGS_SHOW_EXITED.value = g_show_exited
             if (checkbox(SETTINGS_SHOW_EXITED, (text = "Show exited sessions"))) {
                 g_show_exited = SETTINGS_SHOW_EXITED.value

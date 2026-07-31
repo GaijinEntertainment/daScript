@@ -594,3 +594,159 @@ Deferred — nice-to-have, never over real work (Boris, 2026-07-25):
 - mcp_supervisor.py cannot answer ping while a tool call blocks
   (single-threaded stdin loop); mcp_main.das query values not
   URL-encoded (watcher-generated ids/tokens are URL-safe).
+
+## Block: dogfood round 2 (2026-07-27, rig-start intake)
+
+Found while bringing the rig up on freshly built binaries (master with the
+whole arc merged), BEFORE Boris's play session — filed, not fixed.
+
+- 52: the terminal pane keeps rendering a DEAD session's restored content
+  while its own header says "No session selected". Repro: restart the
+  watcher under an attached client — the client reconnects, the session is
+  gone (attached=false, session_id=""), but g_terminal still holds the
+  checkpoint-restored screen, so the pane shows a ghost until the client
+  restarts. Structured proof: herder_terminal_state reported attached=false
+  with 36 non-empty rows, footer "Terminal restored at byte 89489". Fix
+  shape: clear the terminal model on detach / on a reconnect that does not
+  re-establish the session (reset_terminal exists; the detach path never
+  calls it).
+- 53: note 47 had a SECOND cause, still open. A checkpoint restored into a
+  terminal of a DIFFERENT width strands each wrapped line's first character
+  in its own column: observed 'C' at column 119 with "hecking for updates"
+  at column 0 on every row, in a 176-column terminal restored from a
+  ~120-column checkpoint. That is exactly Boris's original note-47 sighting
+  ("stray letters in a one-character column"); the panel-eliding fix covered
+  only the Sessions-panel half. Fix shape: the checkpoint ANSI carries its
+  own geometry — resize to it before feeding, or reflow after.
+- 55: (Boris, live) File Inspector View mode on a .md file — Ctrl+wheel
+  "zooms the wrong thing: status bar, not rich text". Mechanism: the
+  per-window zoom (window_zoom_scope("inspector"), rich_state.das:899)
+  only pushes an ImGui font, which sizes the window's CHROME — labels,
+  search box, status line. The content renderers size themselves from an
+  explicit `zoom` argument that reads the GLOBAL base zoom instead:
+  markdown at rich_inspector_ui.das:415 and its gutter width at :421,
+  source/diff views via source_view_style at :84 — all
+  `float(g_zoom_percent) / 100.0f`. So Ctrl+wheel over the inspector
+  resizes everything EXCEPT the content the window exists to show.
+  Not markdown-specific: code in View mode and both Diff panes inherit
+  the same miss. FIXED (2026-07-27): the three sites now read
+  inspector_zoom() = window_zoom_percent("inspector"), because the base
+  zoom already reaches the content through FontScaleMain — passing it
+  explicitly applied it TWICE. Measured before: markdown glyphs 1.71x the
+  chrome glyphs at base 150%. Measured after: content tracks the window
+  zoom (90% -> 19 text lines in an 790px band; 180% -> 8 lines, inked
+  rows 202 -> 483) and matches chrome size at the same setting.
+  SIBLING, still open: rich_git_ui.das:864 lane_spacing sizes the commit
+  graph from the base zoom inside window_zoom_scope("git-activity") —
+  same miss, drawn geometry rather than text.
+- 55b: (Boris, same session) the first fix was still wrong in MODEL: it made
+  Ctrl+wheel scale the whole inspector WINDOW, chrome included. "nop. only
+  rich text should. text in status bars, titles, etc - that is controlled by
+  one UI scale setting in settings. terminal scale in the other. size of text
+  in view mode - in separate one. diff - in separate one." REBUILT
+  (2026-07-27) to exactly four scales: ONE ui_zoom for all chrome everywhere
+  (Settings only), plus a per-CONTENT scale for terminal / view / diff, each
+  moved by Ctrl+wheel over that content and by its own Settings slider. The
+  old per-window chrome zoom (window_zoom_scope, notes 12/24) is deleted -
+  it scaled the frame around the content instead of the content. Proven:
+  view 100%->200% doubled content glyph runs (median 10px -> 21px) while the
+  chrome path line stayed 15px in both; terminal 100%->200% halved the grid
+  (108x66 -> 56x33) with ui untouched; setting any one scale to 170% left
+  the other three unmoved.
+- 57: (Boris, live) Git Activity: the selection bar blocks the Tree view.
+  The perspective banner + the Branches/Focus row sit above the graph and
+  eat the vertical space Tree needs — and Tree is the one perspective whose
+  whole value is seeing the shape at once.
+- 58: (Boris, live) THE DELETE-SAFETY GAP — second roadblock in the
+  delete-unused-worktrees-and-sessions scenario (the first was note 41).
+  On the codex/fix-ci-30233791631 worktree: "there are no UI indications of
+  sessions. how do i know if its safe to delete - i.e. if there are changes
+  which have not been merged into master? It shows 3 commits on a purple
+  line - it shows other lines - but i have no idea."
+  Ground truth measured 2026-07-27: 0 commits outside origin/master,
+  upstream borisbat/codex/fix-ci-30233791631 exists, working tree clean,
+  0 stashes, 0 herd sessions referencing it => SAFE TO DELETE.
+  THE TRAP that makes this a real design problem, not a missing label:
+  against LOCAL master that same branch shows 45 unmerged commits, because
+  local master is 108 behind origin/master. A merged-check against the
+  wrong baseline reports the exact OPPOSITE of the truth. Design proposal
+  in the block below.
+- 61: (Boris, live) SWITCHING TO A BIG FILE TOOK 21 SECONDS. Clicking
+  codex.cmd then utils/dasFormatter/ds_parser.cpp: "it takes forever to
+  switch." Measured on the perf rail, which answered it outright —
+  `inspect_ready prep_ms=21662` and `21029` for ds_parser.cpp against
+  `prep_ms=0` for codex.cmd. The inspector state named the cause:
+  `view_syntax_span_count 148590` on a 716,680-byte file that git reports
+  `binary: true`, for a diff with `diff_row_count: 0`. It is 716 KB across
+  SEVEN lines (generated parser tables), which is the worst possible shape for
+  tree-sitter. Worse, the view renders anything over 128 KB through the
+  virtualised path and draws only visible runs, so nearly all 148,590 spans
+  were computed and thrown away. FIXED: a 256 KB cap drops the language before
+  the two tree_sitter_source_document calls (and the markdown pass), which
+  yields the same document with no parse and no spans. Measured after:
+  prep 21029 ms -> 327 ms, ready 24788 ms -> 617 ms, view text still fully
+  present at 737,857 characters. Every hand-written source file in the tree is
+  well under the cap and still highlights.
+- 58/60 FIXED 2026-07-27 (not yet proven live). 58: the facts exist now —
+  `upstream_ref` off the status branch line, `unmerged_*` against
+  origin/master with an origin/main retry and an honest "unknown", and a
+  `repository_worktree_delete_tier` verdict on the row, in its tooltip, in
+  the checklist, and on the `herder_worktree_retire_state` rail. The trap is
+  reproduced in-repo: codex/dogfood-round-2 reads 81 unmerged against local
+  master and 9 against origin/master (local master 108 behind). 60:
+  `herd_archive` / `herd_restore` replace `herd_delete`; nothing erases a
+  record any more, and the control says "Retire", never "Delete". The note's
+  second half — moving the per-session jsonl files beside the archived host
+  files — was dropped, and Boris confirmed it: the files were orphaned BECAUSE
+  the record was erased, so a surviving record re-owns them; the move was only
+  tidying and it would fight restore, since the watcher holds live paths to
+  them. They stay put.
+- 60: herd_delete ERASES a session record — against the standing rule
+  Boris set the same day: "if u ever hear 'delete' from me - slap me.
+  boris never delets. boris may forget to save, but stories stay."
+  Today (herd_sessions.das:492) it does `g_herd |> erase(index)` and
+  saves, so the session vanishes from the registry while its artifacts —
+  events.jsonl, mailbox.jsonl, bundles.jsonl, the ptyhost journal and
+  host log — stay on disk ORPHANED: still written, no longer reachable
+  through the app. That is the worst of both. Fix: retiring a session
+  ARCHIVES it — the record keeps existing in an archived state (hidden
+  from the default list, still retrievable), artifacts move beside the
+  other archived host files rather than being stranded. The UI wording
+  follows the same rule: a control that archives must not say "Delete".
+- 59: IGNORED FILES ARE SILENTLY DESTROYED by worktree removal — found
+  while Boris challenged the note-58 "recoverable" tier ("worktree yes,
+  branch no is how?"). Proven in an isolated probe repo (2026-07-27):
+  a worktree holding only an ignored file reports NOTHING in
+  `git status --porcelain`, so the dirty guard calls it clean; then
+  `git worktree remove` (exactly what repository_remove_worktree runs)
+  deletes the directory and the ignored file with it.
+  DOWNGRADED the same day (Boris): "herder files belong to a session, and
+  we can't delete a session's worktree anyways. so no need to worry for
+  gitignore" — correct, and verified: the watcher's log root is
+  get_das_root()/logs/dasHerd/**, i.e. the tree the WATCHER runs in, never
+  the session worktrees, so no delete can reach the journals or session
+  records; and a live session's worktree is hard-blocked regardless. What
+  is actually left in a session worktree's ignored set is reproducible
+  build output (bin/, build/, .jitted_scripts). So: keep the fact, drop
+  the alarm — surface an ignored-file count in the delete checklist if it
+  is free, never gate on it.
+  SAME PROBE corrected note 58's tiers: `git worktree remove` never
+  touches the branch, so committed work is NEVER at risk from it (the
+  probe's unmerged commit survived intact on its branch). The
+  destructive / recoverable / safe ladder applies to BRANCH deletion,
+  which dasHerd does not offer today; for worktree removal the unmerged
+  count is an "is this workspace still carrying unfinished work" signal,
+  not a data-loss gate.
+- 56: per-window zoom was mouse-only — Ctrl+wheel adjusted it, but no
+  command could set or read it and no state dump exposed it, so neither a
+  test nor an agent could verify note 55 either way (parity rule:
+  editable-but-not-commandable is a bug). FIXED (2026-07-27): new
+  herder_content_zoom rail reads any content scale and optionally sets it,
+  reporting all four numbers together; the terminal and inspector state
+  rails now report the content scale they describe plus the UI scale.
+- 54: closing a herd session ORPHANS its PTY into the raw session list when
+  that PTY ended in a non-exited terminal state. herd_owns_pty skips closed
+  records (rich_sessions_ui.das:566) so the PTY reads as "unowned", and the
+  raw list hides only the "exited" state, not "failed" — leaving a bare
+  warning-glyph row with no context. Seen after closing two probe sessions
+  whose hosts had been killed (state=failed, reason=host_lost).

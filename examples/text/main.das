@@ -10,6 +10,7 @@ require imgui/imgui_icons
 require imgui/imgui_commands
 require imgui/imgui_markdown_tree_sitter
 require imgui/imgui_document_model
+require imgui/imgui_text_find
 require imgui/imgui_text_source_view
 require imgui/imgui_text_tree_sitter
 require imgui/imgui_theme_daslang
@@ -67,6 +68,20 @@ struct TextViewerCommandArgs {
     id : string
 }
 
+struct TextViewerFindArgs {
+    query : string
+    regex : bool = false
+}
+
+struct TextViewerFindStepArgs {
+    delta : int = 1
+}
+
+struct TextViewerFoldArgs {
+    index : int = -1
+    collapsed : bool = true
+}
+
 struct TextViewerDocument {
     id : int
     pending_dock : bool = true
@@ -83,6 +98,14 @@ struct TextViewerDocument {
     mode_override : int = -1
     syntax_mode : int = 0
     zoom_step : int = 20       // 10..60 maps to 50%..300% in exact 5% steps
+    find : TextFindState = TextFindState()
+    find_applied_jump : int = 0
+    find_scroll_byte : int = -1
+    find_scroll_markdown : bool = false
+    content_view_top : float = 0.0f
+    window_scroll_max : float = 0.0f
+    footer_overflow : float = 0.0f
+    content_view_bottom : float = 0.0f
 }
 
 var private g_fonts = FontRoleSet()
@@ -110,6 +133,11 @@ var private g_edit_copy_clicks = 0
 var private g_edit_select_all_clicks = 0
 var private g_edit_clear_clicks = 0
 var private g_edit_bindings_clicks = 0
+var private g_edit_find_clicks = 0
+var private g_edit_find_next_clicks = 0
+var private g_edit_find_prev_clicks = 0
+
+let FOOTER_ICON_SIZE = 18.0f
 
 let SYNTAX_MODE_LABELS : array<string> <- [
     "Auto", "Plain", "daScript", "C", "C++", "Markdown"
@@ -133,6 +161,9 @@ let CMD_EDIT_COPY = "edit.copy"
 let CMD_EDIT_SELECT_ALL = "edit.select_all"
 let CMD_EDIT_CLEAR_SELECTION = "edit.clear_selection"
 let CMD_EDIT_BINDINGS = "preferences.edit_bindings"
+let CMD_FIND = "find.open"
+let CMD_FIND_NEXT = "find.next"
+let CMD_FIND_PREV = "find.prev"
 
 def private mode_name(doc : TextViewerDocument const) : string {
     return doc.mode == TextViewMode.markdown ? "markdown" : "plain"
@@ -176,6 +207,7 @@ def private dispose_document(var doc : TextViewerDocument) {
     markdown_tree_sitter_dispose(doc.markdown_syntax)
     markdown_view_dispose(doc.markdown_view)
     text_source_view_dispose(doc.source_view)
+    text_find_dispose(doc.find)
     release_document_content(doc)
 }
 
@@ -188,6 +220,9 @@ def private install_document(var viewer : TextViewerDocument;
         : tree_sitter_source_document(next_source.text,
                                       extension(next_source.path),
                                       next_source.revision))
+    if (markdown_path(next_source.path)) {
+        tree_sitter_collect_folds(next_source_document, "markdown", next_source.text)
+    }
     release_document_content(viewer)
     viewer.source <- next_source
     viewer.document <- next_document
@@ -214,6 +249,9 @@ def private rebuild_projection(var viewer : TextViewerDocument) {
         : tree_sitter_source_document(viewer.source.text,
                                       extension(viewer.source.path),
                                       viewer.source.revision))
+    if (markdown_path(viewer.source.path)) {
+        tree_sitter_collect_folds(next_source_document, "markdown", viewer.source.text)
+    }
     release_document_content(viewer)
     viewer.document <- next_document
     viewer.projection <- next_projection
@@ -400,9 +438,27 @@ def private parse_command_line() {
         } elif (arg == "--markdown") {
             g_initial_mode_override = int(TextViewMode.markdown)
         } elif (!starts_with(arg, "--") && empty(g_initial_path)) {
-            g_initial_path := arg
+            g_initial_path = arg
         }
     }
+}
+
+def private define_find_commands() {
+    command_define(g_commands, CommandDefinition(
+        id = CMD_FIND, title = "Find...", category = "Edit",
+        scope = CommandScope.document),
+        command_binding(CMD_FIND, ImGuiKey.F, primary = true,
+                        scope = CommandScope.document))
+    command_define(g_commands, CommandDefinition(
+        id = CMD_FIND_NEXT, title = "Find Next", category = "Edit",
+        scope = CommandScope.document),
+        command_binding(CMD_FIND_NEXT, ImGuiKey.F3,
+                        scope = CommandScope.document, repeat = true))
+    command_define(g_commands, CommandDefinition(
+        id = CMD_FIND_PREV, title = "Find Previous", category = "Edit",
+        scope = CommandScope.document),
+        command_binding(CMD_FIND_PREV, ImGuiKey.F3, shift = true,
+                        scope = CommandScope.document, repeat = true))
 }
 
 def private define_commands() {
@@ -466,6 +522,7 @@ def private define_commands() {
     command_define(g_commands, CommandDefinition(
         id = CMD_EDIT_CLEAR_SELECTION, title = "Clear Selection", category = "Edit",
         scope = CommandScope.component))
+    define_find_commands()
     command_define(g_commands, CommandDefinition(
         id = CMD_EDIT_BINDINGS, title = "Edit Bindings...", category = "Preferences"))
     if (!harness_is_headless() && fexist(g_commands.config_path)) {
@@ -500,16 +557,65 @@ def private update_command_state() {
     command_set_enabled(g_commands, CMD_EDIT_COPY, has_selection)
     command_set_enabled(g_commands, CMD_EDIT_SELECT_ALL, has_active)
     command_set_enabled(g_commands, CMD_EDIT_CLEAR_SELECTION, has_selection)
+    command_set_enabled(g_commands, CMD_FIND, has_active)
+    command_set_enabled(g_commands, CMD_FIND_NEXT, has_active)
+    command_set_enabled(g_commands, CMD_FIND_PREV, has_active)
     command_set_selected(g_commands, CMD_VIEW_MARKDOWN,
         has_active && g_documents[active].mode == TextViewMode.markdown)
     command_set_selected(g_commands, CMD_VIEW_PLAIN,
         has_active && g_documents[active].mode == TextViewMode.plain_text)
 }
 
+def private dispatch_document_command(command_id : string; active : int) : bool {
+    if (active < 0) return false
+    if (command_id == CMD_VIEW_MARKDOWN) {
+        set_mode(g_documents[active], TextViewMode.markdown)
+    } elif (command_id == CMD_VIEW_PLAIN) {
+        set_mode(g_documents[active], TextViewMode.plain_text)
+    } elif (command_id == CMD_VIEW_TOGGLE) {
+        set_mode(g_documents[active], g_documents[active].mode == TextViewMode.markdown
+            ? TextViewMode.plain_text : TextViewMode.markdown)
+    } elif (command_id == CMD_VIEW_ZOOM_IN) {
+        g_documents[active].zoom_step = min(g_documents[active].zoom_step + 1, 60)
+    } elif (command_id == CMD_VIEW_ZOOM_OUT) {
+        g_documents[active].zoom_step = max(g_documents[active].zoom_step - 1, 10)
+    } elif (command_id == CMD_VIEW_ZOOM_RESET) {
+        set_zoom_percent(g_documents[active], 100)
+    } elif (command_id == CMD_EDIT_COPY) {
+        if (g_documents[active].mode == TextViewMode.markdown) {
+            markdown_view_request_copy(g_documents[active].markdown_view)
+        } else {
+            text_source_view_request_copy(g_documents[active].source_view)
+        }
+    } elif (command_id == CMD_EDIT_SELECT_ALL) {
+        if (g_documents[active].mode == TextViewMode.markdown) {
+            let _ = markdown_view_select_all(g_documents[active].markdown_view)
+        } else {
+            text_source_view_select_all(g_documents[active].source_document,
+                                        g_documents[active].source_view)
+        }
+    } elif (command_id == CMD_EDIT_CLEAR_SELECTION) {
+        if (g_documents[active].mode == TextViewMode.markdown) {
+            markdown_view_clear_selection(g_documents[active].markdown_view)
+        } else {
+            text_source_view_clear_selection(g_documents[active].source_view)
+        }
+    } elif (command_id == CMD_FIND) {
+        text_find_open(g_documents[active].find)
+    } elif (command_id == CMD_FIND_NEXT) {
+        text_find_step(g_documents[active].find, 1)
+    } elif (command_id == CMD_FIND_PREV) {
+        text_find_step(g_documents[active].find, -1)
+    } else {
+        return false
+    }
+    return true
+}
+
 def private dispatch_commands() {
     var invocation = CommandInvocation()
     while (command_take(g_commands, invocation)) {
-        g_last_command := invocation.command_id
+        g_last_command = invocation.command_id
         g_command_revision++
         let active = active_document_index()
         if (invocation.command_id == CMD_FILE_OPEN) {
@@ -524,40 +630,10 @@ def private dispatch_commands() {
             let _ = load_path(g_documents[active], path)
         } elif (invocation.command_id == CMD_APP_QUIT) {
             request_exit()
-        } elif (invocation.command_id == CMD_VIEW_MARKDOWN && active >= 0) {
-            set_mode(g_documents[active], TextViewMode.markdown)
-        } elif (invocation.command_id == CMD_VIEW_PLAIN && active >= 0) {
-            set_mode(g_documents[active], TextViewMode.plain_text)
-        } elif (invocation.command_id == CMD_VIEW_TOGGLE && active >= 0) {
-            set_mode(g_documents[active], g_documents[active].mode == TextViewMode.markdown
-                ? TextViewMode.plain_text : TextViewMode.markdown)
-        } elif (invocation.command_id == CMD_VIEW_ZOOM_IN && active >= 0) {
-            g_documents[active].zoom_step = min(g_documents[active].zoom_step + 1, 60)
-        } elif (invocation.command_id == CMD_VIEW_ZOOM_OUT && active >= 0) {
-            g_documents[active].zoom_step = max(g_documents[active].zoom_step - 1, 10)
-        } elif (invocation.command_id == CMD_VIEW_ZOOM_RESET && active >= 0) {
-            set_zoom_percent(g_documents[active], 100)
-        } elif (invocation.command_id == CMD_EDIT_COPY && active >= 0) {
-            if (g_documents[active].mode == TextViewMode.markdown) {
-                markdown_view_request_copy(g_documents[active].markdown_view)
-            } else {
-                text_source_view_request_copy(g_documents[active].source_view)
-            }
-        } elif (invocation.command_id == CMD_EDIT_SELECT_ALL && active >= 0) {
-            if (g_documents[active].mode == TextViewMode.markdown) {
-                let _ = markdown_view_select_all(g_documents[active].markdown_view)
-            } else {
-                text_source_view_select_all(g_documents[active].source_document,
-                                            g_documents[active].source_view)
-            }
-        } elif (invocation.command_id == CMD_EDIT_CLEAR_SELECTION && active >= 0) {
-            if (g_documents[active].mode == TextViewMode.markdown) {
-                markdown_view_clear_selection(g_documents[active].markdown_view)
-            } else {
-                text_source_view_clear_selection(g_documents[active].source_view)
-            }
         } elif (invocation.command_id == CMD_EDIT_BINDINGS) {
             g_bindings_editor.open = true
+        } else {
+            let _ = dispatch_document_command(invocation.command_id, active)
         }
     }
 }
@@ -592,6 +668,16 @@ def private draw_menu_bar() {
                 enabled = has_active))
             menu_label(EDIT_CLEAR_SELECTION, (text = "Clear Selection", shortcut = "",
                 enabled = command_enabled(g_commands, CMD_EDIT_CLEAR_SELECTION)))
+            separator(EDIT_FIND_SEPARATOR)
+            menu_label(EDIT_FIND, (text = "Find...",
+                shortcut = command_shortcut_text(g_commands, CMD_FIND),
+                enabled = has_active))
+            menu_label(EDIT_FIND_NEXT, (text = "Find Next",
+                shortcut = command_shortcut_text(g_commands, CMD_FIND_NEXT),
+                enabled = has_active))
+            menu_label(EDIT_FIND_PREV, (text = "Find Previous",
+                shortcut = command_shortcut_text(g_commands, CMD_FIND_PREV),
+                enabled = has_active))
             separator(EDIT_SEPARATOR)
             menu_label(EDIT_BINDINGS, (text = "Edit Bindings...", shortcut = ""))
         }
@@ -611,6 +697,10 @@ def private draw_menu_bar() {
         }
     }
 
+    dispatch_menu_clicks()
+}
+
+def private dispatch_menu_clicks() {
     if (FILE_OPEN.click_count > g_open_clicks) {
         g_open_clicks = FILE_OPEN.click_count
         open_file_dialog()
@@ -651,19 +741,98 @@ def private draw_menu_bar() {
         g_edit_clear_clicks = EDIT_CLEAR_SELECTION.click_count
         let _ = command_invoke(g_commands, CMD_EDIT_CLEAR_SELECTION, CommandSource.menu)
     }
+    if (EDIT_FIND.click_count > g_edit_find_clicks) {
+        g_edit_find_clicks = EDIT_FIND.click_count
+        let _ = command_invoke(g_commands, CMD_FIND, CommandSource.menu)
+    }
+    if (EDIT_FIND_NEXT.click_count > g_edit_find_next_clicks) {
+        g_edit_find_next_clicks = EDIT_FIND_NEXT.click_count
+        let _ = command_invoke(g_commands, CMD_FIND_NEXT, CommandSource.menu)
+    }
+    if (EDIT_FIND_PREV.click_count > g_edit_find_prev_clicks) {
+        g_edit_find_prev_clicks = EDIT_FIND_PREV.click_count
+        let _ = command_invoke(g_commands, CMD_FIND_PREV, CommandSource.menu)
+    }
     if (EDIT_BINDINGS.click_count > g_edit_bindings_clicks) {
         g_edit_bindings_clicks = EDIT_BINDINGS.click_count
         let _ = command_invoke(g_commands, CMD_EDIT_BINDINGS, CommandSource.menu)
     }
 }
 
+def private draw_document_find(var doc : TextViewerDocument) {
+    return if (!doc.find.open)
+    text_find_bar(doc.id, doc.find)
+    let _ = text_find_rebuild(doc.find, doc.source.text, doc.source.revision)
+    if (doc.find.jump_revision != doc.find_applied_jump) {
+        doc.find_applied_jump = doc.find.jump_revision
+        let found = text_find_current(doc.find)
+        if (found.start_byte >= 0) {
+            if (doc.mode == TextViewMode.markdown) {
+                doc.find_scroll_markdown = markdown_view_select_source_range(
+                    doc.markdown_view, found.start_byte, found.end_byte)
+            } else {
+                let _expanded = text_source_view_expand_for_byte(
+                    doc.source_document, doc.source_view, found.start_byte)
+                text_source_view_select_range(doc.source_document, doc.source_view,
+                                              found.start_byte, found.end_byte)
+                doc.find_scroll_byte = found.start_byte
+            }
+        }
+    }
+    if (doc.find.open && IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)
+            && IsKeyPressed(ImGuiKey.Escape, false)) {
+        text_find_close(doc.find)
+    }
+}
+
+def private apply_find_scroll(var doc : TextViewerDocument) {
+    // No GetScrollMaxY clamp: it reports LAST frame's range (0 on a fresh
+    // layout, silently pinning the jump to the top); ImGui clamps SetScrollY
+    // against the real content height at frame end.
+    return if (doc.find_scroll_byte < 0)
+    let line_top = text_source_view_line_top(doc.source_view, doc.find_scroll_byte)
+    if (line_top >= 0.0f) {
+        let height = GetWindowSize().y
+        let local_top = line_top - GetScrollY()
+        if (local_top < height * 0.1f || local_top > height * 0.9f) {
+            SetScrollY(max(0.0f, line_top - height * 0.35f))
+        }
+    }
+    doc.find_scroll_byte = -1
+}
+
+def private apply_markdown_find_scroll(var doc : TextViewerDocument) {
+    // The view's own caret-visible pass bails when the focus position misses
+    // a fragment boundary and only edge-scrolls; a find jump places the
+    // selection focus in the comfortable band instead.
+    return if (!doc.find_scroll_markdown)
+    doc.find_scroll_markdown = false
+    let focus = markdown_view_selection_focus_screen_y(doc.markdown_view)
+    return if (!focus.valid)
+    let view_top = GetWindowPos().y
+    let height = GetWindowSize().y
+    if (focus.y < view_top + height * 0.1f
+            || focus.y > view_top + height * 0.9f) {
+        SetScrollY(max(0.0f, GetScrollY() + focus.y
+            - (view_top + height * 0.35f)))
+    }
+}
+
 def private draw_document(var doc : TextViewerDocument) {
-    let footer_height = GetFrameHeightWithSpacing()
+    draw_document_find(doc)
+    // The footer's icon button stands taller than a text frame; reserving only
+    // GetFrameHeightWithSpacing() overflows the dock window by the difference,
+    // growing a phantom second scrollbar beside the content child's.
+    let ui_style & = GetStyle()
+    let footer_height = max(GetFrameHeightWithSpacing(),
+        FOOTER_ICON_SIZE + ui_style.FramePadding.y * 2.0f + ui_style.ItemSpacing.y)
     child(DOCUMENT_CONTENT,
           (text = "document content",
            size = float2(0.0f, -footer_height),
            child_flags = ImGuiChildFlags.None,
            window_flags = ImGuiWindowFlags.HorizontalScrollbar)) {
+        doc.content_view_top = GetWindowPos().y
+        doc.content_view_bottom = GetWindowPos().y + GetWindowSize().y
         if (doc.mode == TextViewMode.markdown) {
             var style = MarkdownViewStyle(
                 fonts = g_fonts,
@@ -678,6 +847,7 @@ def private draw_document(var doc : TextViewerDocument) {
             if (view_result.control_event.active) {
                 let _ = apply_control_event(doc, view_result.control_event)
             }
+            apply_markdown_find_scroll(doc)
         } else {
             var source_style = TextSourceViewStyle(
                 fonts = g_fonts,
@@ -686,14 +856,20 @@ def private draw_document(var doc : TextViewerDocument) {
                 write_system_clipboard = !harness_is_headless())
             doc.source_result <- text_source_view("text source", doc.source_document,
                                                   doc.source_view, source_style)
+            apply_find_scroll(doc)
         }
     }
 
+    draw_document_footer(doc)
+}
+
+def private draw_document_footer(var doc : TextViewerDocument) {
+    let ui_style & = GetStyle()
     let rendered = doc.mode == TextViewMode.markdown
     if (icon_button(MODE_TOGGLE,
             (glyph = rendered ? "edit" : "visible",
              tip = rendered ? "Show Markdown source" : "Render Markdown",
-             size = 18.0f, weight = 1.0f))) {
+             size = FOOTER_ICON_SIZE, weight = 1.0f))) {
         let _ = command_invoke(g_commands, CMD_VIEW_TOGGLE,
                                CommandSource.toolbar, "{doc.id}")
     }
@@ -715,7 +891,13 @@ def private draw_document(var doc : TextViewerDocument) {
     text_disabled(STATUS, (text = doc.status))
 
     let right_edge = GetCursorPosX() + GetContentRegionAvail().x
-    let zoom_width = 245.0f
+    let zoom_value_text = "{zoom_percent(doc)}%"
+    // Measured, not hardcoded: the cluster width varies with the zoom value
+    // text, and an underestimate pushed the reset button past the window edge.
+    let zoom_width = (CalcTextSize("Zoom").x + 150.0f
+        + CalcTextSize(zoom_value_text).x
+        + CalcTextSize("100%").x + ui_style.FramePadding.x * 2.0f
+        + ui_style.ItemSpacing.x * 3.0f)
     same_line()
     SetCursorPosX(max(GetCursorPosX(), right_edge - zoom_width))
     text(ZOOM_LABEL, (text = "Zoom"))
@@ -725,12 +907,14 @@ def private draw_document(var doc : TextViewerDocument) {
         (id = "TEXT_VIEWER_ZOOM", text = "##zoom", v_min = 10,
          v_max = 60, format = ""))
     same_line()
-    text_disabled(ZOOM_VALUE, (text = "{zoom_percent(doc)}%"))
+    text_disabled(ZOOM_VALUE, (text = zoom_value_text))
     same_line()
     if (small_button(ZOOM_RESET, (text = "100%"))) {
         let _ = command_invoke(g_commands, CMD_VIEW_ZOOM_RESET,
                                CommandSource.toolbar, "{doc.id}")
     }
+    doc.footer_overflow = max(0.0f,
+        (GetItemRectMax().x - GetWindowPos().x) - right_edge)
 }
 
 def private handle_global_shortcuts() {
@@ -764,12 +948,18 @@ def private draw_document_window(var doc : TextViewerDocument; dock_id : uint) {
     // Triple-hash keeps the ImGui window identity stable when a welcome
     // document is loaded from disk and its visible title becomes a filename.
     let title = "{visible_title}###text_document_{doc.id}"
+    // The content child is the only intended scroller; the window itself must
+    // never scroll (a scrolled window would carry the footer off-screen).
     dock_window(g_document_windows[doc.id],
                 (text = title, closable = true,
-                 flags = ImGuiWindowFlags.NoCollapse)) {
+                 flags = ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar
+                     | ImGuiWindowFlags.NoScrollWithMouse)) {
         if (IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)) {
             g_active_document_id = doc.id
         }
+        // Nonzero means the dock window itself overflowed (a phantom second
+        // scrollbar); the content child is the only intended scroller.
+        doc.window_scroll_max = GetScrollMaxY()
         handle_document_shortcuts(doc)
         draw_document(doc)
     }
@@ -794,7 +984,7 @@ def private remove_closed_documents() {
 }
 
 [live_command(description = "Inspect the text viewer without a screenshot.")]
-def text_viewer_state(_input : JsonValue?) : JsonValue? {
+def text_viewer_state(_input : JsonValue?) : JsonValue? { // nolint:STYLE038
     let active = active_document_index()
     if (active < 0) return JV((ok = false, error = "no document is open",
                                document_count = 0, active_document_id = 0))
@@ -834,6 +1024,42 @@ def text_viewer_state(_input : JsonValue?) : JsonValue? {
         source_selection_has_markers = doc.source_result.selection.styles.has_markers,
         markdown_selection_copy_revision = doc.markdown_view.selection_copy_revision,
         source_selection_copy_revision = doc.source_view.selection_copy_revision,
+        markdown_selection_revision = doc.markdown_view.selection_revision,
+        markdown_selection_screen_valid = doc.markdown_view.selection_screen_valid,
+        markdown_selection_screen_y0 = doc.markdown_view.selection_screen_bounds.y,
+        markdown_selection_screen_y1 = doc.markdown_view.selection_screen_bounds.w,
+        markdown_focus_screen_valid = markdown_view_selection_focus_screen_y(
+            doc.markdown_view).valid,
+        markdown_focus_screen_y = markdown_view_selection_focus_screen_y(
+            doc.markdown_view).y,
+        source_selection_screen_valid = doc.source_view.selection_screen_valid,
+        source_selection_screen_y0 = doc.source_view.selection_screen_bounds.y,
+        source_selection_screen_y1 = doc.source_view.selection_screen_bounds.w,
+        content_view_top = doc.content_view_top,
+        content_view_bottom = doc.content_view_bottom,
+        window_scroll_max_y = doc.window_scroll_max,
+        footer_overflow_x = doc.footer_overflow,
+        markdown_selection_start = md_text_selection_range(
+            doc.markdown_view.selection_anchor, doc.markdown_view.selection_focus).start_byte,
+        markdown_selection_end = md_text_selection_range(
+            doc.markdown_view.selection_anchor, doc.markdown_view.selection_focus).end_byte,
+        fold_count = length(doc.source_document.folds),
+        fold_collapsed_count = text_source_view_collapsed_count(doc.source_view),
+        fold_revision = doc.source_view.fold_revision,
+        visible_line_count = length(doc.source_view.layout.lines),
+        md_code_collapsed_count = markdown_view_collapsed_count(doc.markdown_view),
+        md_fold_revision = doc.markdown_view.fold_revision,
+        code_copy_revision = doc.markdown_view.code_copy_revision,
+        code_copy_node = doc.markdown_view.code_copy_node,
+        code_copy_bytes = length(doc.markdown_view.code_copy_text),
+        find_open = doc.find.open,
+        find_query = doc.find.query,
+        find_regex = doc.find.use_regex,
+        find_match_count = length(doc.find.matches),
+        find_current = doc.find.current,
+        find_error = doc.find.error,
+        find_jump_revision = doc.find.jump_revision,
+        find_applied_jump = doc.find_applied_jump,
         command_revision = g_command_revision,
         last_command = g_last_command,
         bindings_editor_open = g_bindings_editor.open,
@@ -989,6 +1215,131 @@ def text_viewer_set_zoom(input : JsonValue?) : JsonValue? {
     let args = from_JV(input, type<TextViewerZoomArgs>)
     set_zoom_percent(g_documents[active], args.percent)
     return JV((ok = true, zoom_percent = zoom_percent(g_documents[active])))
+}
+
+[live_command(description = "List rendered code-block nodes and their collapsed state.")]
+def text_viewer_md_code_blocks(_input : JsonValue?) : JsonValue? {
+    let active = active_document_index()
+    if (active < 0) return JV((ok = false, error = "no document is open"))
+    let doc & = unsafe(g_documents[active])
+    var blocks : array<JsonValue?>
+    for (index in range(length(doc.document.nodes))) {
+        continue if (doc.document.nodes[index].kind != RichNodeKind.code_block)
+        let entry & = unsafe(doc.markdown_view.nodes[index])
+        blocks |> push(JV((node = index,
+            collapsed = markdown_view_code_collapsed(doc.markdown_view, index),
+            screen_x = entry.screen_origin.x,
+            screen_y = entry.screen_origin.y,
+            icons_valid = entry.icon_rects_valid,
+            fold_icon_x = (entry.fold_icon_rect.x + entry.fold_icon_rect.z) * 0.5f,
+            fold_icon_y = (entry.fold_icon_rect.y + entry.fold_icon_rect.w) * 0.5f,
+            copy_icon_x = (entry.copy_icon_rect.x + entry.copy_icon_rect.z) * 0.5f,
+            copy_icon_y = (entry.copy_icon_rect.y + entry.copy_icon_rect.w) * 0.5f)))
+    }
+    return JV((ok = true, count = length(blocks), blocks = JV(blocks)))
+}
+
+struct TextViewerMdFoldArgs {
+    node : int = -1
+    collapsed : bool = true
+}
+
+[live_command(description = "Collapse or expand one rendered code block by node index.")]
+def text_viewer_md_fold(input : JsonValue?) : JsonValue? {
+    let active = active_document_index()
+    if (active < 0) return JV((ok = false, error = "no document is open"))
+    let args = from_JV(input, type<TextViewerMdFoldArgs>)
+    var doc & = unsafe(g_documents[active])
+    let changed = markdown_view_set_code_collapsed(
+        doc.markdown_view, args.node, args.collapsed)
+    return JV((ok = changed, node = args.node, collapsed = args.collapsed,
+               md_fold_revision = doc.markdown_view.fold_revision,
+               md_code_collapsed_count = markdown_view_collapsed_count(doc.markdown_view)))
+}
+
+[live_command(description = "Copy one rendered code block to the clipboard by node index.")]
+def text_viewer_md_copy_code(input : JsonValue?) : JsonValue? {
+    let active = active_document_index()
+    if (active < 0) return JV((ok = false, error = "no document is open"))
+    let args = from_JV(input, type<TextViewerMdFoldArgs>)
+    var doc & = unsafe(g_documents[active])
+    let copied = markdown_view_copy_code_block(doc.markdown_view, args.node,
+        !harness_is_headless())
+    return JV((ok = copied,
+               code_copy_revision = doc.markdown_view.code_copy_revision,
+               code_copy_node = doc.markdown_view.code_copy_node,
+               code_copy_bytes = length(doc.markdown_view.code_copy_text)))
+}
+
+[live_command(description = "List fold regions of the active document's source view.")]
+def text_viewer_folds(_input : JsonValue?) : JsonValue? {
+    let active = active_document_index()
+    if (active < 0) return JV((ok = false, error = "no document is open"))
+    let doc & = unsafe(g_documents[active])
+    var regions <- [for (index in range(length(doc.source_document.folds)));
+        JV((index = index,
+            kind = doc.source_document.folds[index].kind,
+            header_row = doc.source_document.folds[index].header_row,
+            end_row = doc.source_document.folds[index].end_row,
+            start_byte = doc.source_document.folds[index].start_byte,
+            end_byte = doc.source_document.folds[index].end_byte,
+            collapsed = text_source_view_fold_collapsed(
+                doc.source_document, doc.source_view, index),
+            handle_valid = text_source_view_fold_handle_pos(
+                doc.source_document, doc.source_view, index).valid,
+            handle_x = text_source_view_fold_handle_pos(
+                doc.source_document, doc.source_view, index).x,
+            handle_y = text_source_view_fold_handle_pos(
+                doc.source_document, doc.source_view, index).y))]
+    return JV((ok = true, fold_count = length(doc.source_document.folds),
+               folds = JV(regions)))
+}
+
+[live_command(description = "Collapse or expand one fold region by index.")]
+def text_viewer_fold(input : JsonValue?) : JsonValue? {
+    let active = active_document_index()
+    if (active < 0) return JV((ok = false, error = "no document is open"))
+    let args = from_JV(input, type<TextViewerFoldArgs>)
+    var doc & = unsafe(g_documents[active])
+    let changed = text_source_view_set_fold(
+        doc.source_document, doc.source_view, args.index, args.collapsed)
+    return JV((ok = changed, index = args.index, collapsed = args.collapsed,
+               fold_revision = doc.source_view.fold_revision,
+               fold_collapsed_count = text_source_view_collapsed_count(doc.source_view)))
+}
+
+[live_command(description = "Open find in the active document with a query; regex optional.")]
+def text_viewer_find(input : JsonValue?) : JsonValue? {
+    let active = active_document_index()
+    if (active < 0) return JV((ok = false, error = "no document is open"))
+    let args = from_JV(input, type<TextViewerFindArgs>)
+    var doc & = unsafe(g_documents[active])
+    text_find_set_query(doc.find, args.query, args.regex)
+    let _ = text_find_rebuild(doc.find, doc.source.text, doc.source.revision)
+    return JV((ok = true, query = doc.find.query, regex = doc.find.use_regex,
+               match_count = length(doc.find.matches),
+               current = doc.find.current, error = doc.find.error,
+               jump_revision = doc.find.jump_revision))
+}
+
+[live_command(description = "Step the active document's find selection by delta.")]
+def text_viewer_find_step(input : JsonValue?) : JsonValue? {
+    let active = active_document_index()
+    if (active < 0) return JV((ok = false, error = "no document is open"))
+    let args = from_JV(input, type<TextViewerFindStepArgs>)
+    var doc & = unsafe(g_documents[active])
+    text_find_step(doc.find, args.delta)
+    return JV((ok = true, match_count = length(doc.find.matches),
+               current = doc.find.current,
+               jump_revision = doc.find.jump_revision))
+}
+
+[live_command(description = "Close find in the active document.")]
+def text_viewer_find_close(_input : JsonValue?) : JsonValue? {
+    let active = active_document_index()
+    if (active < 0) return JV((ok = false, error = "no document is open"))
+    text_find_close(g_documents[active].find)
+    return JV((ok = true))
 }
 
 [live_command(description = "Invoke a semantic viewer command by stable ID.")]

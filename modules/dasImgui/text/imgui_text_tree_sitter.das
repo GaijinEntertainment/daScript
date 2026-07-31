@@ -5,6 +5,7 @@ options indenting = 4
 module imgui_text_tree_sitter shared
 
 require imgui/imgui_text_source_model public
+require imgui/imgui_text_language public
 require tree_sitter/tree_sitter public
 require math
 require strings
@@ -67,46 +68,46 @@ def private das_identifier_continue(value : int) : bool {
     return das_identifier_start(value) || is_number(value)
 }
 
-def private das_keyword_style(word : string) : TextSourceSyntaxStyle {
+let private DAS_TYPE_WORDS : table<string> <- {
+    "array", "auto", "block", "bool", "double", "float", "float2", "float3",
+    "float4", "function", "int", "int16", "int2", "int3", "int4", "int64",
+    "int8", "iterator", "lambda", "range", "smart_ptr", "string", "table",
+    "tuple", "typedecl", "uint", "uint16", "uint2", "uint3", "uint4",
+    "uint64", "uint8", "urange", "variant", "void"
+}
+
+var private g_das_keyword_styles : table<string; TextSourceSyntaxStyle>
+// One hash lookup instead of ~100 string compares per identifier; longer
+// identifiers than the longest keyword skip the lookup AND the slice.
+var private g_das_keyword_max_bytes = 0
+
+def private das_word_style(word : string) : TextSourceSyntaxStyle {
     if (word == "true" || word == "false") return TextSourceSyntaxStyle.number
     if (word == "null") return TextSourceSyntaxStyle.constant
-    if (word == "bool" || word == "void" || word == "string"
-            || word == "auto" || word == "int" || word == "int8"
-            || word == "int16" || word == "int64" || word == "uint"
-            || word == "uint8" || word == "uint16" || word == "uint64"
-            || word == "float" || word == "double" || word == "range"
-            || word == "urange" || word == "block" || word == "function"
-            || word == "lambda" || word == "array" || word == "table"
-            || word == "tuple" || word == "variant" || word == "iterator"
-            || word == "smart_ptr" || word == "typedecl") {
-        return TextSourceSyntaxStyle.type_
+    return (key_exists(DAS_TYPE_WORDS, word) ? TextSourceSyntaxStyle.type_
+        : TextSourceSyntaxStyle.keyword)
+}
+
+def private ensure_das_keyword_styles { // nolint:STYLE038
+    if (!empty(g_das_keyword_styles)) return
+    // imgui_text_language owns the keyword SET; only the styling lives here.
+    text_language_profile("daslang") $(profile) {
+        for (word in profile.keywords) {
+            g_das_keyword_styles[word] = das_word_style(word)
+            g_das_keyword_max_bytes = max(g_das_keyword_max_bytes, length(word))
+        }
     }
-    if (word == "if" || word == "elif" || word == "else"
-            || word == "static_if" || word == "static_elif"
-            || word == "for" || word == "while" || word == "break"
-            || word == "continue" || word == "def" || word == "return"
-            || word == "yield" || word == "try" || word == "recover"
-            || word == "struct" || word == "class" || word == "enum"
-            || word == "typedef" || word == "bitfield" || word == "let"
-            || word == "var" || word == "const" || word == "override"
-            || word == "sealed" || word == "abstract" || word == "static"
-            || word == "public" || word == "private" || word == "shared"
-            || word == "inscope" || word == "implicit" || word == "explicit"
-            || word == "module" || word == "require" || word == "include"
-            || word == "options" || word == "expect" || word == "assume"
-            || word == "with" || word == "where" || word == "label"
-            || word == "goto" || word == "pass" || word == "delete"
-            || word == "new" || word == "deref" || word == "addr"
-            || word == "cast" || word == "upcast" || word == "reinterpret"
-            || word == "typeinfo" || word == "type" || word == "unsafe"
-            || word == "finally" || word == "in" || word == "is"
-            || word == "as" || word == "aka" || word == "operator"
-            || word == "template" || word == "default"
-            || word == "uninitialized" || word == "generator"
-            || word == "capture") {
-        return TextSourceSyntaxStyle.keyword
-    }
-    return TextSourceSyntaxStyle.none
+}
+
+def private das_keyword_style(word : string) : TextSourceSyntaxStyle {
+    return g_das_keyword_styles?[word] ?? TextSourceSyntaxStyle.none
+}
+
+def public text_source_das_keyword_style(word : string) : TextSourceSyntaxStyle {
+    //! Fallback-lexer style for a daslang word; `none` when it is not one of
+    //! the daslang profile's keywords.
+    ensure_das_keyword_styles()
+    return das_keyword_style(word)
 }
 
 def private push_das_fallback(var spans : array<TextSourceSpan>;
@@ -123,6 +124,7 @@ def private das_lexical_fallback(source : string) : array<TextSourceSpan> { // n
     var result : array<TextSourceSpan>
     var expect_function = false
     var expect_type = false
+    ensure_das_keyword_styles()
     peek_data(source) $(bytes) {
         var at = 0
         while (at < length(bytes)) {
@@ -188,7 +190,11 @@ def private das_lexical_fallback(source : string) : array<TextSourceSpan> { // n
                         && das_identifier_continue(int(bytes[at]))) {
                     at++
                 }
-                let word = slice(source, start, at)
+                // Expect flags below still style a long name after `def`.
+                var word = ""
+                if (at - start <= g_das_keyword_max_bytes) {
+                    word = slice(source, start, at)
+                }
                 var style = das_keyword_style(word)
                 if (style == TextSourceSyntaxStyle.none && expect_function) {
                     style = TextSourceSyntaxStyle.function_
@@ -358,6 +364,35 @@ def private json_lexical_source_document(source : string;
     return <- document
 }
 
+def private collect_profile_folds(var document : TextSourceDocument;
+                                  profile : TextLanguageProfile const;
+                                  canonical, source : string) {
+    var spans : array<SyntaxNodeSpan>
+    if (syntax_structure(canonical, source, spans) == SyntaxHighlightStatus.ok) {
+        for (span in spans) {
+            continue if (!key_exists(profile.fold_kinds, span.node_type))
+            document.folds |> push(TextSourceFoldRegion(
+                start_byte = span.start_byte,
+                end_byte = span.end_byte,
+                header_row = span.start_row,
+                end_row = span.end_row,
+                kind = span.node_type))
+        }
+    }
+    delete spans
+}
+
+def public tree_sitter_collect_folds(var document : TextSourceDocument;
+                                     canonical, source : string) {
+    //! Fill `document.folds` from the parse-tree outline. No-op for
+    //! languages whose profile folds nothing, or when the walk fails.
+    text_language_profile(canonical) $(profile) {
+        if (!empty(profile.fold_kinds)) {
+            collect_profile_folds(document, profile, canonical, source)
+        }
+    }
+}
+
 def public tree_sitter_source_document(source, language : string;
                                        revision : int = 0) : TextSourceDocument {
     let canonical = syntax_canonical_language(language)
@@ -371,24 +406,32 @@ def public tree_sitter_source_document(source, language : string;
         return <- plain_source_document(source, revision)
     }
 
+    // length(string) is a strlen: per-token calls made token_count x
+    // file_size byte scans — 7.6 s on a 716 KB file, 11 ms hoisted.
+    let source_length = length(source)
     var covered_until = 0
+    document.spans |> reserve(2 * length(tokens) + 1)
     for (token in tokens) {
         let syntax_style = source_syntax_style(token.role)
         if (syntax_style == TextSourceSyntaxStyle.none) continue
-        let start_byte = clamp(token.start_byte, covered_until, length(source))
-        let end_byte = clamp(token.end_byte, start_byte, length(source))
+        let start_byte = clamp(token.start_byte, covered_until, source_length)
+        let end_byte = clamp(token.end_byte, start_byte, source_length)
         push_source_syntax_span(document, covered_until, start_byte,
                                 TextSourceSyntaxStyle.none)
         push_source_syntax_span(document, start_byte, end_byte, syntax_style)
         covered_until = end_byte
     }
-    push_source_syntax_span(document, covered_until, length(source),
+    push_source_syntax_span(document, covered_until, source_length,
                             TextSourceSyntaxStyle.none)
-    if (canonical == "daslang") {
+    // The fallback fills gaps in INCOMPLETE snippets (compact hunks); on a
+    // big full document tree-sitter is authoritative and this scan cost
+    // a measured 2.4 s of a 711 KB file's 2.7 s total.
+    if (canonical == "daslang" && source_length <= 128 * 1024) {
         var fallback <- das_lexical_fallback(source)
         apply_syntax_fallback(document, fallback)
         delete fallback
     }
     delete tokens
+    tree_sitter_collect_folds(document, canonical, source)
     return <- document
 }

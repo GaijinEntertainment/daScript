@@ -197,6 +197,10 @@ struct public MarkdownNodeViewCache {
     screen_alignment : RichAlignment = RichAlignment.default_
     control_screen_valid : bool = false
     control_screen_rect : float4
+    //! Last drawn hover-chrome rects (code blocks): click targets for tests.
+    icon_rects_valid : bool = false
+    fold_icon_rect : float4
+    copy_icon_rect : float4
 }
 
 struct public MarkdownViewState {
@@ -256,6 +260,13 @@ struct public MarkdownViewState {
     viewport_bottom : float = 0.0f
     control_activation_revision : int = 0
     activated_control_id : int = -1
+    //! Collapsed code-block nodes (keyed by node index, stable per document
+    //! revision) + the hover copy action's observable state.
+    collapsed_nodes : table<int; bool>
+    fold_revision : int = 0
+    code_copy_revision : int = 0
+    code_copy_node : int = -1
+    code_copy_text : string
 }
 
 let private STYLE_STRONG = 1
@@ -334,6 +345,116 @@ def public markdown_view_select_all(var state : MarkdownViewState) : bool {
     return state.selection_anchor.valid && state.selection_focus.valid
 }
 
+def private source_byte_position(state : MarkdownViewState const;
+                                 byte_offset : int;
+                                 trailing : bool) : RichTextPosition {
+    // Never-rendered bytes (markers, fence syntax) snap forward to the next rendered run.
+    for (index in range(length(state.nodes))) {
+        let entry & = unsafe(state.nodes[index])
+        continue if (!entry.content_valid || empty(entry.content.text))
+        for (run in entry.content.runs) {
+            let inside = (trailing
+                ? byte_offset > run.source.start_byte && byte_offset <= run.source.end_byte
+                : byte_offset >= run.source.start_byte && byte_offset < run.source.end_byte)
+            if (inside) {
+                let display_size = run.display.end_byte - run.display.start_byte
+                let source_size = run.source.end_byte - run.source.start_byte
+                var display = run.display.start_byte
+                if (run.source_exact && display_size == source_size) {
+                    display += byte_offset - run.source.start_byte
+                } elif (trailing) {
+                    display = run.display.end_byte
+                }
+                return md_inline_position(entry.content, index, display, trailing)
+            }
+        }
+    }
+    for (index in range(length(state.nodes))) {
+        let entry & = unsafe(state.nodes[index])
+        continue if (!entry.content_valid || empty(entry.content.text))
+        for (run in entry.content.runs) {
+            if (run.source.start_byte >= byte_offset) {
+                return md_inline_position(entry.content, index,
+                                          run.display.start_byte, trailing)
+            }
+        }
+    }
+    return RichTextPosition()
+}
+
+def public markdown_view_selection_focus_screen_y(
+                                                  state : MarkdownViewState const) : tuple<valid : bool; y : float> {
+    //! Screen Y of the selection focus for scroll-into-view. Falls back from
+    //! the caret to the focus node's flow line, so node kinds without inline
+    //! selection paint (code blocks) still report an exact position.
+    if (state.caret_screen_valid) {
+        return (valid = true, y = state.caret_screen_pos.y)
+    }
+    let focus = state.selection_focus
+    if (focus.valid && focus.inline_node >= 0
+            && focus.inline_node < length(state.nodes)) {
+        let entry & = unsafe(state.nodes[focus.inline_node])
+        if (entry.layout_valid) {
+            for (line in entry.layout.lines) {
+                if (focus.display_byte >= line.source.start_byte
+                        && focus.display_byte <= line.source.end_byte) {
+                    return (valid = true, y = entry.screen_origin.y + line.y)
+                }
+            }
+            return (valid = true, y = entry.screen_origin.y)
+        }
+    }
+    if (state.selection_screen_valid) {
+        return (valid = true, y = state.selection_screen_bounds.y)
+    }
+    return (valid = false, y = 0.0f)
+}
+
+def public markdown_view_expand_for_byte(var state : MarkdownViewState;
+                                         byte_offset : int) : bool {
+    //! Expand any collapsed code block whose content covers `byte_offset`
+    //! (find jumps land inside hidden blocks). Returns true when expanded.
+    // Collect first: `keys()` locks the table against the erase inside set.
+    var doomed : array<int>
+    for (node_index in keys(state.collapsed_nodes)) {
+        continue if (node_index < 0 || node_index >= length(state.nodes))
+        let entry & = unsafe(state.nodes[node_index])
+        continue if (!entry.content_valid)
+        for (run in entry.content.runs) {
+            if (byte_offset >= run.source.start_byte && byte_offset < run.source.end_byte) {
+                doomed |> push(node_index)
+                break
+            }
+        }
+    }
+    for (node_index in doomed) {
+        let _ = markdown_view_set_code_collapsed(state, node_index, false)
+    }
+    let expanded = !empty(doomed)
+    delete doomed
+    return expanded
+}
+
+def public markdown_view_select_source_range(var state : MarkdownViewState;
+                                             start_byte, end_byte : int) : bool {
+    //! Programmatic selection of a source byte range (find, navigation).
+    //! Requires laid-out content (any frame after the document rendered once);
+    //! scrolls the selection focus into view on the next frame.
+    let _expanded = markdown_view_expand_for_byte(state, start_byte)
+    let anchor = source_byte_position(state, start_byte, false)
+    let focus = source_byte_position(state, end_byte, true)
+    if (!anchor.valid || !focus.valid) return false
+    state.selection_anchor = anchor
+    state.selection_focus = focus
+    state.selection_dragging = false
+    state.selection_changed = true
+    state.selection_revision++
+    state.selection_commit_revision++
+    state.navigation_revision++
+    state.navigation_needs_scroll = true
+    return true
+}
+
 def public markdown_view_invalidate(var state : MarkdownViewState) {
     //! Deterministically release all retained strings and arrays. The outer
     //! cache capacity is retained for a same-sized replacement document.
@@ -343,7 +464,47 @@ def public markdown_view_invalidate(var state : MarkdownViewState) {
     }
     state.document_revision = -1
     state.node_count = 0
+    delete state.collapsed_nodes
+    state.fold_revision = 0
+    state.code_copy_revision = 0
+    state.code_copy_node = -1
+    state.code_copy_text = ""
     clear_selection(state)
+}
+
+def public markdown_view_code_collapsed(state : MarkdownViewState const;
+                                        node_index : int) : bool {
+    return state.collapsed_nodes?[node_index] ?? false
+}
+
+def public markdown_view_set_code_collapsed(var state : MarkdownViewState;
+                                            node_index : int;
+                                            collapsed : bool) : bool {
+    let now = state.collapsed_nodes?[node_index] ?? false
+    if (now == collapsed) return false
+    if (collapsed) {
+        state.collapsed_nodes[node_index] = true
+    } else {
+        state.collapsed_nodes |> erase(node_index)
+    }
+    state.fold_revision++
+    return true
+}
+
+def public markdown_view_collapsed_count(state : MarkdownViewState const) : int {
+    return length(state.collapsed_nodes)
+}
+
+def public markdown_view_copy_code_block(var state : MarkdownViewState;
+                                         node_index : int;
+                                         write_clipboard : bool) : bool {
+    //! The copy-icon action, rail-driveable: stashes the block's display text
+    //! in `code_copy_text` and optionally writes the system clipboard.
+    if (node_index < 0 || node_index >= length(state.nodes)) return false
+    let entry & = unsafe(state.nodes[node_index])
+    if (!entry.content_valid) return false
+    copy_code_block(state, node_index, entry.content.text, write_clipboard)
+    return true
 }
 
 def private image_binding_index(state : MarkdownViewState const;
@@ -1618,6 +1779,65 @@ def private render_table(doc : RichDocument const; node_index : int;
     block_spacing(style, style.block_spacing)
 }
 
+def private copy_code_block(var state : MarkdownViewState; node_index : int;
+                            text : string; write_clipboard : bool) {
+    state.code_copy_text = text
+    state.code_copy_node = node_index
+    state.code_copy_revision++
+    if (write_clipboard) {
+        var clip_content = ClipboardContent(plain_text = text)
+        clip_content.formats.plain_text = true
+        let _ = clipboard_set_content(clip_content)
+        clipboard_dispose_content(clip_content)
+    }
+}
+
+def private draw_code_block_icons(node_index : int;
+                                  var state : MarkdownViewState;
+                                  style : MarkdownViewStyle const;
+                                  collapsed : bool) {
+    // AllowWhenBlockedByActiveItem: plain IsWindowHovered flips false the frame OUR button activates, unsubmitting it mid-click.
+    return if (!collapsed
+        && !IsWindowHovered(ImGuiHoveredFlags.AllowWhenBlockedByActiveItem))
+    let zoom = view_zoom(style)
+    let size = 12.0f * zoom
+    let pad = GetStyle().FramePadding
+    let slot = size + pad.x * 2.0f + 2.0f * zoom
+    let window_pos = GetWindowPos()
+    let right = window_pos.x + GetWindowSize().x - GetStyle().WindowPadding.x
+    let top = window_pos.y + 3.0f * zoom
+    let full = size + pad.x * 2.0f
+    let full_y = size + pad.y * 2.0f
+    var entry & = unsafe(state.nodes[node_index])
+    entry.icon_rects_valid = true
+    entry.fold_icon_rect = float4(right - slot * 2.0f, top,
+                                  right - slot * 2.0f + full, top + full_y)
+    entry.copy_icon_rect = float4(right - slot, top,
+                                  right - slot + full, top + full_y)
+    if (icon_button_draw_at("##md_code_fold",
+            collapsed ? "chevron-down" : "chevron-up",
+            float2(right - slot * 2.0f, top), size)) {
+        let _ = markdown_view_set_code_collapsed(state, node_index, !collapsed)
+    }
+    if (icon_button_draw_at("##md_code_copy", "copy",
+            float2(right - slot, top), size)) {
+        let content & = unsafe(state.nodes[node_index].content)
+        copy_code_block(state, node_index, content.text, style.write_system_clipboard)
+    }
+}
+
+def private code_block_line_count(text : string) : int {
+    var lines = 1
+    peek_data(text) $(bytes) {
+        for (b in bytes) {
+            if (int(b) == '\n') {
+                lines++
+            }
+        }
+    }
+    return lines
+}
+
 def private render_code_block(doc : RichDocument const; node_index : int;
                               var state : MarkdownViewState;
                               var style : MarkdownViewStyle;
@@ -1629,15 +1849,38 @@ def private render_code_block(doc : RichDocument const; node_index : int;
     let font_size = (style.fonts.size_px > 0.0f
         ? style.fonts.size_px : GetFontSize()) * zoom * code_scale
     let padding = style.code_padding * zoom
-    var mono = style.fonts.monospace != null ? style.fonts.monospace : GetFont()
-    let measured = CalcTextSizeForFont(mono, font_size, content.text)
+    let collapsed = state.collapsed_nodes?[node_index] ?? false
     let child_border = GetStyle().ChildBorderSize
     let window_padding = GetStyle().WindowPadding.y
+    PushStyleColor(ImGuiCol.ChildBg, style.code_background)
+    PushID(node_index)
+    if (collapsed) {
+        // One-line stand-in bar: line count + expand/copy icons.
+        let height = (font_size + padding * 2.0f + child_border * 2.0f
+            + window_padding * 2.0f)
+        let open = BeginChild("##markdown_code",
+            float2(0.0f, height), ImGuiChildFlags.Borders,
+            ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
+        if (open) {
+            var entry & = unsafe(state.nodes[node_index])
+            entry.screen_origin = GetWindowPos()
+            entry.screen_revision = state.render_revision
+            SetCursorPos(GetCursorPos() + float2(padding, padding))
+            TextColored(style.marker_color,
+                        "code · {code_block_line_count(content.text)} lines")
+            draw_code_block_icons(node_index, state, style, true)
+        }
+        EndChild()
+        PopID()
+        PopStyleColor(1)
+        block_spacing(style, style.block_spacing)
+        return
+    }
+    var mono = style.fonts.monospace != null ? style.fonts.monospace : GetFont()
+    let measured = CalcTextSizeForFont(mono, font_size, content.text)
     let height = max(font_size * 2.0f,
         measured.y + padding * 2.0f + child_border * 2.0f
         + window_padding * 2.0f + GetStyle().ItemSpacing.y + 2.0f * zoom)
-    PushStyleColor(ImGuiCol.ChildBg, style.code_background)
-    PushID(node_index)
     let open = BeginChild("##markdown_code",
         float2(0.0f, height), ImGuiChildFlags.Borders,
         ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
@@ -1650,6 +1893,7 @@ def private render_code_block(doc : RichDocument const; node_index : int;
         render_inline(doc, node_index, state, max(content_width, 1.0f),
                       code_style, code_scale, STYLE_CODE,
                       RichAlignment.default_, result)
+        draw_code_block_icons(node_index, state, style, false)
     }
     EndChild()
     PopID()

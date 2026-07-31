@@ -153,7 +153,7 @@ def document_module_imgui_playwright() {
     var groups <- array<DocGroup>(
         group_by_regex("App lifecycle",     mod, %regex~^(with_imgui_app|launch_imgui_app|shutdown|with_recording_app).*%%),
         group_by_regex("Locators / queries", mod, %regex~^(find_widget|widget_exists|widget_payload_field|widget_rendered|widget_click_point|widget_component_point|get_text)$%%),
-        group_by_regex("Actions",           mod, %regex~^(click|double_click|click_at|right_click|type_text|key_tap|force_set_value|force_set_verified|drag|drag_along|drag_to|focus|open_widget|close_widget|select_widget|reload|reset|move_to|reset_cursor_pos|resize_window)$%%),
+        group_by_regex("Actions",           mod, %regex~^(click|double_click|click_at|right_click|type_text|key_tap|key_chord_tap|key_hold|force_set_value|force_set_verified|drag|drag_along|drag_to|focus|open_widget|close_widget|select_widget|reload|reset|move_to|reset_cursor_pos|resize_window)$%%),
         group_by_regex("Recording / narration", mod, %regex~^(say|say_begin|say_hash|hold_through_voice|drag_through_voice|type_into_voice|combo_pick_voice|toggle_tree_voice|close_button_voice|click_render_voice|menu_pick_voice|record_check_value|record_check_changed|record_check_unchanged|record_check_rendered|record_check_kind_count|record_check)$%%),
         group_by_regex("Content-time gating", mod, %regex~^(wait_content_frames|hold_content|record_frame_count|hold_remainder_content)$%%),
         group_by_regex("Snapshots",         mod, %regex~^(snapshot|log_snapshot|expect_value|expect_render).*%%),

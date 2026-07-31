@@ -50,6 +50,17 @@ struct public TextSourceSpan {
     syntax_style : TextSourceSyntaxStyle = TextSourceSyntaxStyle.none
 }
 
+struct public TextSourceFoldRegion {
+    //! One collapsible region: the header row stays visible, rows
+    //! `header_row + 1 .. end_row` hide when collapsed. Rows are 0-based
+    //! unwrapped source lines; byte range covers the whole region.
+    start_byte : int
+    end_byte : int
+    header_row : int
+    end_row : int
+    kind : string
+}
+
 struct public TextSourceDocument {
     source : string
     spans : array<TextSourceSpan>
@@ -57,6 +68,7 @@ struct public TextSourceDocument {
     //! Optional display numbers per unwrapped visual line. Negative entries
     //! reserve an aligned gap without drawing a number (side-by-side diffs).
     line_numbers : array<int>
+    folds : array<TextSourceFoldRegion>
     revision : int = 0
     marker_count : int = 0
 }
@@ -65,7 +77,26 @@ def public text_source_document_dispose(var document : TextSourceDocument) {
     delete document.spans
     delete document.line_marks
     delete document.line_numbers
+    delete document.folds
     document = TextSourceDocument()
+}
+
+def public text_source_fold_at(document : TextSourceDocument const;
+                               byte_offset : int) : int {
+    //! Index of the INNERMOST fold region containing `byte_offset`, or -1.
+    var best = -1
+    var best_size = int(0x7fffffff)
+    for (index in range(length(document.folds))) {
+        let fold & = unsafe(document.folds[index])
+        if (byte_offset >= fold.start_byte && byte_offset < fold.end_byte) {
+            let size = fold.end_byte - fold.start_byte
+            if (size < best_size) {
+                best = index
+                best_size = size
+            }
+        }
+    }
+    return best
 }
 
 def public plain_source_document(source : string;

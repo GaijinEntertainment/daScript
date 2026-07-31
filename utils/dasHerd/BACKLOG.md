@@ -5,6 +5,173 @@ HERDER_FIXROUND.md; arc designs in PTY_HOST_DESIGN.md and
 AGENT_REVIEW_WORKFLOWS.md. Rule of the round stands: bugs over everything;
 review capacity is the bottleneck the arcs exist to fix.
 
+## Filed 2026-07-29 (live review round 2)
+
+- **Watcher died SILENTLY with exit 1 after ~3h (observed live).** The
+  log ends mid-GC-line: no panic text, no error, nothing — the same
+  silent-exit(1) class the crash-capture arc left open for
+  dasllama-server, now observed in the watcher. The watcher needs the
+  crash-capture treatment: last-words handler + the exit reason in the
+  log, always. (New watcher token after restart:
+  0x63ad4756-0xce6172c6-0x664a86cd-0xd313c828.)
+- **GC: strings-only collection when the overflow is in strings (Boris,
+  design note — do not code yet).** das strings are immutable; the last
+  generated string rides a special temp list and is collected
+  immediately, but that fundamentally addresses nothing for churn like
+  the watcher's. The collecting loop can be adjusted to collect ONLY the
+  string heap when the overflow is in the string heap — skipping the das
+  heap walk should make the per-cycle cost markedly cheaper. Runtime
+  change (main repo), pairs with hunting the churn source itself.
+- **SECOND silent death, same signature (09:17:47, ~5 h after restart).**
+  Identical shape: log ends mid-GC-line, exit 1, no words; heap totals
+  FLAT to the end (das 0x11b5130 constant, string heap bounded) — no
+  leak, no growth, healthy 8 ms GC cycles right up to termination.
+  Sudden stop mid-healthy-loop still reads external. Supporting datum:
+  a daslang.exe SURVIVED both deaths in Session 0 ("Services",
+  PID 53472, 463 MB) — a user-level `taskkill /IM daslang.exe` kills
+  user-session processes but gets access-denied on Session 0, which is
+  exactly the survivor pattern observed. Sibling sessions loaded the
+  OLD kill-by-name skills before today's fix, so repeat deaths are
+  expected until those sessions cycle; the tombstone will classify.
+  (Also: what IS the Session-0 daslang? 463 MB, running as a service —
+  identify it.)
+- **VERDICT CONFIRMED (Boris checked): other sessions killed the watcher
+  with `taskkill daslang.exe` — "because fuck u thats why".** Both
+  deaths. Not a crash, not the GC. Mitigations already landed: every
+  kill ritual in both repos' skills + the private playbook now kills by
+  PATH; running sessions carry the old instructions until they cycle, so
+  the watcher may die again before the fleet turns over. The tombstone
+  below stays worth building — next time the classification should take
+  one glance, not an investigation.
+- **Death verdict was: probably taskkill, not a crash.** No log
+  tail + exit code 1 is exactly what `taskkill /F` (TerminateProcess)
+  leaves; the likely killer is ANOTHER session clearing daslang.exe by
+  IMAGE NAME before a build — the standard kill-before-link ritual,
+  aimed imprecisely. Two mitigations, different owners: (1) sessions
+  must kill by PATH (their own tree's binaries), never by name — a
+  discipline fix; (2) the watcher gets a tombstone protocol — heartbeat
+  file each tick + an explicit goodbye on graceful exit; next start,
+  heartbeat-without-goodbye = "died unclean at T", and the parent task
+  record's exit code separates kill (1, silent) from crash (panic text /
+  0xC0000005-class codes). TerminateProcess is UNDETECTABLE from inside
+  the dying process — no handler runs, ever — so detection is
+  post-mortem inference plus, if wanted, OS-level attribution (audit
+  4688 / Sysmon records the `taskkill /IM daslang.exe` invocation and
+  its parent; that names the killer, not just the death).
+- **Idle GC churn in the watcher (probable cause-adjacent).** With the
+  client CLOSED and zero user activity, the dead run logged 253
+  string_fragmentation GC cycles — one per second, ~70 ms each, string
+  heap swinging 0xa0b7c → 0x2d0000 every cycle, allocation counters
+  climbing ~30K strings/s. Something in the idle observation loop
+  (repository polling most likely) allocates furiously with nobody
+  listening. Find it with `-das-profiler` / allocation tracking; an idle
+  watcher should be SILENT. Churn at this rate is also the prime suspect
+  for whatever killed it.
+
+- **Search by file name, across worktrees.** The Project tab's filter only
+  narrows the SELECTED worktree's tree. Boris looked for
+  LANGUAGE_SUPPORT_PLAN.md and could not find it — it existed one worktree
+  over. Wanted: a name search over ALL worktrees of the repository (each
+  worktree is a branch, so this is cross-branch by construction), results
+  labeled with the branch @ folder identity, click = select that worktree
+  and open the file.
+- **Which Changelist tab is home?** Boris's mental model of "the
+  changelist" includes the branch's COMMITTED files (the PR result view);
+  the arc's tab split made Changes (working-tree dirt) the default, so a
+  committed file "disappeared" from the window he was looking at. Interim:
+  the clean-tree message now points at the PR result tab. To discuss:
+  default to PR result when the tree is clean, merge the two views into
+  one grouped list (CONFLICTS/STAGED/MODIFIED/UNTRACKED + COMMITTED vs
+  base), or keep tabs and remember the last choice.
+- **Comment on a selection, addressed to an agent.** Reading a doc in the
+  inspector, Boris can select text but cannot SAY anything about it. Wanted:
+  select (in View, rich markdown or plain source) → right-click → "Leave a
+  comment" → typed note travels with the byte-range focus target to an
+  agent, riding the existing Look-at-that mailbox shape. Prerequisite worth
+  doing at the same time: the session DRIVING dasHerd development (this
+  Claude Code session) is not herd-managed, so there is nobody to address —
+  adopt the already-running external terminal as a herd session so the
+  reviewer can talk back to the builder. Filed 2026-07-29, deliberately not
+  built yet — more feedback incoming.
+- **STANDING RULE: every text view gets IDE-quality search.** Rich or
+  plain, diff or not. VSCode find-widget feature set (regex/case/word,
+  count, prev/next, Ctrl+F/Esc). Current gaps: the markdown View branch
+  skips draw_inspector_search entirely (where Boris reviewed the plan),
+  and Diff mode has no search at all. Editors additionally get
+  search/replace/replace-all from day one; per-tree search is the
+  follow-up slice. Declared 2026-07-29 after the first full in-app plan
+  review — the first real win.
+- **Inspector auto-reload on change.** The inspector captures content at
+  inspect time and never watches the disk; a refresh icon on the header
+  ships today (2026-07-29). The real fix: when a repository refresh lands
+  and the INSTALLED file's status row changed (code or stats), re-inspect
+  automatically with the installed identity — stale-while-revalidate
+  already keeps the swap flicker-free. Watch generation guards: a user
+  click mid-auto-reload must win.
+- **Terminal file-link navigation (PLAN T3, now with concrete shape).**
+  When a session's terminal shows a path (agents print them constantly),
+  clicking it opens the file in the inspector, resolved against THAT
+  session's worktree — many trees exist, the session's own tree is the
+  answer. Detection: worktree-relative or absolute paths in terminal text,
+  the linkifying done in the renderer's visible viewport only.
+- **Right-click → Find in the terminal (the fallback door).** Select text
+  in any terminal (ours or an adopted external one) → right-click → Find:
+  treat the selection as a file-name query against the session's worktree
+  (the cross-worktree search above, seeded and scoped). Deliberately
+  duplicates the click-a-link path — selection survives even when the
+  linkifier fails to recognise a path.
+- **Drag-and-drop: the herder HOLDS the payload (Boris's design turn,
+  2026-07-29).** Do not squeeze anything through the PTY beyond a
+  reference. A drop (or paste) onto a session becomes a herder-held
+  artifact: stored in that session's space (beside events/mailbox/
+  bundles, same durability rules), then DELIVERED as a reference — the
+  path typed into the PTY, or an inbox message carrying it with
+  provenance. Images just work everywhere because agents read files by
+  path (Claude Code reads PNGs natively); "or anything else" holds — any
+  payload is a held file plus a reference. This also unlocks: clipboard
+  image paste into a session, Look-at-that with an attachment, and
+  agent→agent artifact handoff through the same store. Baseline
+  fallback for plain shells: quoted path typed into the PTY. GLFW gives
+  the host the drop callback; the watcher owns storage + delivery.
+- **Voice: hook up ASR and TTS (filed 2026-07-29, for later).** The
+  pieces exist in-house — whisper/Voxtral ASR + Silero-VAD (the Telegram
+  dictation bot is this exact flow running daily) and the Kokoro TTS rail
+  from the tutorial recordings. The scenario that earns it: saying "look
+  at that" WITHOUT interrupting the workflow — voice as the hands-free
+  door to the mailbox verbs. Design notes from Boris, to honor: (1)
+  listening may come FIRST — he suspects he'd enjoy TTS (agent replies,
+  attention summaries read aloud) before he's comfortable speaking; ship
+  the ears before demanding the voice. (2) "what is said vs what is
+  printed" is a first-class design topic, as big as the plumbing — the
+  spoken channel is a SUMMARY channel with its own editorial rules, not a
+  screen reader. Adoption is allowed to be gradual; the feature must not
+  assume the user talks. (3) The PROVEN mode from the Telegram bot: speech
+  → ASR → LLM cleanup → readable text, because reading is faster than
+  listening and speech is full of filler. dasHerd voice input rides that
+  exact pipeline — a muttered "look at that ..." arrives at the agent as
+  a crisp written message; the cleanup pass IS the feature. Telegram's
+  builtin transcription is the cautionary counterexample (meh). (4) The
+  cleanup model is SMALL and fast — the job is paragraphs, not reasoning.
+  (5) Every voice file is KEPT and logged (archive-never-delete, as
+  everywhere in the herder): the recordings plus their cleaned outputs
+  are the training corpus for later fine-tuning a local model on the
+  clean-text-and-commands half specifically — the ASR stays stock, the
+  domain fit goes into the language side.
+- **"Where is the file, really?"** A file's location is three-dimensional
+  (repository, worktree/branch, path) and the app shows only the path. Any
+  file surface should answer: which worktrees contain this path, which is
+  the one I am looking at, and does the content differ between them. First
+  slice: the search above listing every worktree that has the file.
+
+- **Input lock must be visible in the title bar.** When @live synth input
+  holds the app (`set_user_control(false)` — which `imgui_click` takes
+  implicitly), the window title must read
+  "dasHerd - is being controlled by @live"; today the app just feels dead
+  until control is handed back, and Boris hit exactly that. Title reverts
+  when `user_control` returns true. Consider the same marker in
+  `herder_client_state`. (Also a driver-discipline rule for Claude:
+  every synthetic interaction ends with `set_user_control {enabled:true}`.)
+
 ## Phase 0 — deploy and prove — PROVEN LIVE 2026-07-26 (accidentally)
 
 The goal-round rig ran the current branch; the watcher died mid-flight
@@ -120,3 +287,250 @@ finish; nothing else depends on it.
    visible; the observer pays down review capacity. Plan assumes external
    first (it is smaller and Phase 3's reviewer summons benefit from it).
 3. **When ssh becomes real** — pull Phase 5 forward or leave it parked.
+
+## NEXT ARC — the Changelist becomes a working surface (Boris, 2026-07-27)
+
+PLANNED IN FULL: **CHANGELIST_ACTIONS_PLAN.md** — read that before starting;
+it carries the git command table, the discard semantics per group, the test
+plan, and the ordered checkpoints.
+
+Where the retire scenario LEADS. Boris, coming out of it: "im going from
+delete scenario - but it brings 'ok, unstaged files, uncommited files - what do
+i do'." The delete flow answers "is it safe"; it then hands the user a dirty
+worktree and no way to act on it. Today the Changelist has exactly one control:
+Refresh.
+
+His list, in his order: stage/unstage/discard with multiselect and
+confirmations; commit; fetch/push/pull/sync.
+
+Three things the plan settles that are easy to get wrong:
+
+- A prerequisite refactor comes FIRST: `advance_operation`'s per-kind phase
+  ladder becomes a step list with a per-step failure policy. Nine more kinds on
+  the current shape would rot it.
+- **Discard is the first genuinely unrecoverable action in the app** — retire
+  never loses a commit, archive comes back, worktree removal keeps the branch.
+  Discard destroys the only copy, so it names the count, offers the WIP-commit
+  rescue first, and arms in two steps. Stage/unstage get NO confirmation.
+- `git pull` is never bare — `--ff-only`, because a surprise merge commit is
+  the same class of silent lie this round kept removing.
+
+## Retiring a workspace — BUILT 2026-07-27 (design below stands as the record)
+
+Both doors, the verdict, and the archive rule are in the build:
+
+- WorktreeState carries the delete-safety facts: `upstream_ref` (free, parsed
+  off the status branch line), `unmerged_commits` / `unmerged_base_ref` /
+  `unmerged_known` measured in a new refresh phase against the AUTHORITATIVE
+  base (`origin/master`, one retry on `origin/main`, then "unknown" — never
+  local master, never a silent zero).
+- `repository_worktree_delete_tier` is the settled ladder: in_use / main /
+  dirty / warn / green. `repository_worktree_only_here` needs BOTH unmerged
+  and unpushed, and an unknown count never manufactures a warning.
+- Door 1 (worktree): "Retire worktree..." always opens the CHECKLIST — the
+  verdict comes before the attempt, not after a refusal. Escapes: commit WIP
+  to the branch (`repository_commit_worktree_wip`, refused on detached HEAD),
+  the note-41 resolver session, and an explicit "delete anyway" that names the
+  files it loses (`--force`, never defaulted).
+- Door 2 (session): "Retire session..." archives the record and OFFERS each
+  worktree with its own verdict; blocked ones are checkboxes you cannot tick.
+- `herd_archive` / `herd_restore` replace `herd_delete` — note 60 closed. The
+  record survives archived, hidden behind a "Show N archived" toggle, and
+  holds no worktree while archived.
+- Rails, so the verdict is inspectable and every action commandable:
+  `herder_worktree_retire_state` (tier + every fact + the base ref each was
+  measured against), `herder_worktree_retire`, `herder_worktree_commit_wip`,
+  `herder_session_retire`, `herder_session_restore`.
+- Rows answer the question where it is asked: a muted "no session" mark (an
+  empty space read as an unbuilt feature) plus a row tooltip carrying the
+  verdict in words.
+
+SETTLED (Boris, 2026-07-27): archiving does NOT move the session's
+`events.jsonl` / `mailbox.jsonl` / `bundles.jsonl`. They stay where they are.
+Note 60 asked for two things — keep the record AND move the files beside the
+archived host files — and only the first one was load-bearing: the files were
+orphaned BECAUSE the record was erased, so a surviving record gives them an
+owner again. The move was tidying, and it would fight restore, which is the
+point of archiving: the watcher holds live paths to those files, so moving
+them can break reads and restore would have to move them back. Leaving them
+costs nothing. (The host stamp, journal and log still self-archive on host
+exit, as they always did.)
+
+NOT PROVEN LIVE yet: unit tests + lint are green and the base-ref trap is
+reproduced (this worktree reads 81 unmerged vs local master, 9 vs
+origin/master, local master 108 behind), but no dialog has been driven in a
+running herder. UI is never proven from logic — that is the next session.
+
+## Retiring a workspace — the two scenarios (Boris, 2026-07-27)
+
+Boris named the shape: two entry doors into ONE operation, because a
+session and its worktree are a pair and a live session's worktree is
+hard-blocked anyway.
+
+### Scenario 1 — worktree first: "is it safe to delete?"
+
+The question is "is there work in here that will be lost". Two layers,
+and only one of them is loss:
+
+- WORKING TREE (uncommitted + untracked) — genuinely lost on delete.
+- BRANCH (commits not in the base) — NOT lost; the branch survives
+  `git worktree remove`. It means "unfinished", not "at risk".
+
+So the offer is a verdict with an escape hatch per tier:
+
+- clean -> **Delete** (green; nothing to lose).
+- dirty -> a MECHANICAL rescue that needs no judgment, then delete. The
+  cheapest complete one is committing the WIP to the branch: the branch
+  outlives the worktree, keeps its name, and stays visible in the branch
+  list. (`git stash -u` also survives — stashes are repo-level, not
+  per-worktree — but it is easy to forget a stash and hard to find it
+  later; prefer the named branch.)
+- dirty and interesting -> **"Start a session to sort it out"**, which
+  ALREADY EXISTS (note 41): the blocked-delete dialog briefs a resolver
+  session with the exact blocking state. What is missing is that it is
+  REACTIVE — you only meet it after a delete attempt is refused. It
+  should be offered from the verdict, before you try.
+- unknown -> **"Start a session to figure out what is here"** — the same
+  launcher with an investigate brief instead of a resolve brief.
+
+Open question for Boris: "move changes to main" — main = the master
+BRANCH (put the work on master) or the main CHECKOUT (move the files to
+D:/Work/daScript)? Deciding what belongs on master is judgment, so that
+one reads like the agent path rather than a button; committing to the
+branch is the button.
+
+### Scenario 2 — session first: "delete this session"
+
+Offer to delete its worktree in the same act. Mostly built already:
+herd_delete removes the record and then attempts each worktree under the
+same guards, reporting removed/kept. What is missing is that it ACTS
+instead of OFFERING — it should present the same verdict/checklist and
+let the user choose, and it should say what happens to the session's own
+artifacts (records, journal, host log): deleted with it, or archived.
+
+Consequence Boris drew, and it retires the note-59 alarm: herder files
+belong to the SESSION, live in the watcher's tree, and a live session's
+worktree cannot be deleted — so worktree deletion never endangers them.
+
+### SETTLED RULES (Boris, 2026-07-27)
+
+Two entry doors, one operation:
+1. kill/close the session, which then offers to delete its worktree;
+2. delete a worktree directly — the same operation, blocked while a
+   session holds it.
+
+| condition | outcome |
+|---|---|
+| a session holds the worktree | BLOCK — retire the session first (door 1) |
+| uncommitted OR untracked present | BLOCK, with rescue: commit WIP to the branch, launch a resolver session, or an explicit "delete anyway, N files lost" |
+| commits exist only on this machine (unmerged AND unpushed) | WARN only; a push helper comes later |
+| otherwise | GREEN |
+
+ARTIFACTS — settled, and it is a standing rule, not a preference for this
+feature (Boris, 2026-07-27): "if u ever hear 'delete' from me - slap me.
+boris never delets. boris may forget to save, but stories stay." So
+retiring a session ARCHIVES it: the record survives in an archived state,
+hidden from the default list but retrievable, and its artifacts move
+beside the other archived host files. Nothing about retiring a workspace
+destroys history. See note 60 — today's herd_delete violates this by
+erasing the record and orphaning the files it leaves on disk. The wording
+follows too: a control that archives must not be labelled "Delete".
+
+SCOPE (Boris, 2026-07-27): no "move to main" button — if someone wants the
+work they check the branch out. Two adjacent scenarios are explicitly
+SEPARATE and LATER, not part of this one:
+
+- "show me uncommitted branches" (which branches carry work that exists
+  nowhere else);
+- "delete local branches no longer in use" — where the destructive /
+  recoverable / safe ladder further down finally applies.
+
+Two wording rules that keep it honest:
+
+- The unpushed WARNING is about REDUNDANCY, not risk. Deleting a worktree
+  cannot lose commits — the branch keeps them. Phrase it "N commits here
+  exist only on this machine; deleting this folder will not lose them,
+  nothing else has a copy." A warning that implies the delete destroys
+  them would be a lie, which is the class of bug this round keeps finding.
+- Untracked-as-blocker needs a way through. Untracked is usually junk, and
+  a block with no escape sends the user to clean by hand or spawn an agent
+  for nothing. List the files and let them proceed explicitly.
+
+### The leftover
+
+Neither scenario deletes the BRANCH, so retired workspaces leave their
+branches behind. That is where the destructive / recoverable / safe
+ladder below actually applies, if we ever offer it.
+
+## Design: worktree/session deletion safety (note 58, 2026-07-27)
+
+Boris hit a wall twice trying to retire an unused worktree: the app knows
+nothing he needs and shows nothing he can act on. The answer is not a
+label — it is a computed VERDICT carrying its reasons.
+
+### The question a user actually asks
+
+"If I delete this, do I lose anything?" It decomposes into five facts,
+every one of them cheap:
+
+| Fact | Source | Meaning when bad |
+|---|---|---|
+| in use | herd registry + running PTYs (already known) | someone is working there NOW |
+| dirty | status porcelain (already counted per worktree) | uncommitted edits die |
+| untracked | same (already counted) | files git never saw die |
+| stashed | stash list filtered to that worktree | stashed work dies |
+| unmerged | rev-list count BASE..head | commits exist nowhere else |
+
+### CORRECTION (2026-07-27, after Boris asked "worktree yes, branch no is how?")
+
+The tiers below were written for the wrong operation. Proven in an isolated
+probe: `git worktree remove` — the only thing dasHerd runs — never touches
+the branch, so committed work is never at risk from it. What the probe DID
+destroy: an ignored file, silently, while `status --porcelain` reported the
+tree clean (note 59). So for worktree removal:
+
+- committed work: never at risk (the branch keeps it)
+- uncommitted / untracked: already blocked by the dirty guard
+- IGNORED files: silently destroyed — the only real loss, and unguarded
+
+The unmerged count therefore is NOT a safety gate for removing a worktree;
+it answers "is this workspace still carrying unfinished work" — an
+abandonment signal, which is what "is this still needed?" really asks.
+The destructive/recoverable/safe ladder below is correct only for BRANCH
+deletion, which dasHerd does not offer yet. If we add it (retiring a
+branch+worktree pair together is the natural user intent), the ladder and
+its base-selection trap apply exactly as written.
+
+### The trap: which BASE
+
+WorktreeState's ahead/behind are measured against the branch's own
+UPSTREAM — that answers "is it pushed", NOT "is it merged". Both matter,
+and together they give a three-tier verdict:
+
+- unmerged AND unpushed: deleting DESTROYS work. Red.
+- unmerged but pushed: the remote still has it; the worktree is
+  disposable, the branch is not. Amber, with the recovery command.
+- merged into the integration ref: nothing to lose. Green.
+
+The base must be the AUTHORITATIVE ref (origin/master), never local
+master. Measured live: codex/fix-ci-30233791631 reads 45 unmerged against
+local master and 0 against origin/master, because local master sat 108
+behind. The convenient base inverts the answer.
+
+### Proposal
+
+1. Extend WorktreeState with unmerged_commits, merge_base_ref,
+   has_upstream, stash_count, claimed_by (session name or ""), and a
+   derived delete_safety = safe | recoverable | destructive | in_use.
+2. Put the verdict where the decision happens: a badge on every worktree
+   row and session card, colored by tier, tooltip listing the reasons.
+   Absence of a session marker must READ as "no session" — an empty space
+   is indistinguishable from an unimplemented feature, which is exactly
+   the confusion Boris hit.
+3. Make delete a CHECKLIST, not a confirm: the five facts with pass/fail,
+   the tier verdict, and the literal recovery command for the amber case.
+   Blocked cases keep note 41's resolver-session offer.
+4. Tree/History: mark commits already contained in the base, so "3
+   commits on a purple line" reads as "3 commits, all in origin/master".
+5. Recompute on the git observer's cadence, and ALWAYS name the base in
+   the UI ("vs origin/master") so no number is ever ambiguous.
