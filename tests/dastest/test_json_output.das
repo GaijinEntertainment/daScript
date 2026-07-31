@@ -23,25 +23,24 @@ struct JsonReport {
 
 def run_dastest(fixture : string; extra_args : string = "") : JsonReport {
     let das_root = get_das_root()
-    let compiler = get_command_line_arguments()[0]
     let dastest_path = "{das_root}/dastest/dastest.das"
     let json_file = "{das_root}/tests/dastest/_temp_{fixture}.json"
     let test_file = "{das_root}/tests/dastest/_fixture_{fixture}.das"
-    let cmd = "{compiler} -dasroot {das_root} {dastest_path} -- --test {test_file} --json-file {json_file} {extra_args}"
-    var exitCode = 0
-    let output = build_string() $(writer) {
-        unsafe {
-            exitCode = popen(cmd) $(f) {
-                if (f != null) {
-                    while (!feof(f)) {
-                        writer |> write <| fgets(f)
-                    }
-                } else {
-                    writer |> write <| "Failed to execute command via popen: {cmd}\n"
-                }
-            }
-        }
+    // argv, not a shell command line: cmd.exe /c strips the first and last quote
+    // of a line that starts with one, which unquotes the interpreter path
+    var args <- [
+        get_command_line_arguments()[0],
+        "-dasroot", das_root,
+        dastest_path,
+        "--",
+        "--test", test_file,
+        "--json-file", json_file
+    ]
+    if (!empty(extra_args)) {
+        args |> push_from(split(extra_args, " "))
     }
+    var output : string
+    let exitCode = run_and_capture(args, output)
     var json_text = ""
     fopen(json_file, "rb") $(f) {
         if (f != null) {

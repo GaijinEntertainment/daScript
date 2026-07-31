@@ -1207,10 +1207,10 @@ namespace das {
         return true;
     }
 
-    bool aotModuleHasModuleDecl ( ProgramPtr program, const ModuleInfo & mod ) {
+    bool aotModuleHasName ( ProgramPtr program, const ModuleInfo & mod ) {
         if ( bool no_aot = program->options.getBoolOption("no_aot",false); no_aot )
             return true;
-        if ( program->thisModule->isModule )
+        if ( !program->thisModule->name.empty() )
             return true;
         program->error("Module " + mod.moduleName + " is not setup correctly for AOT",
             "module " + mod.moduleName + " is required", "", LineInfo(),
@@ -1537,7 +1537,7 @@ namespace das {
                 if ( program->failed() ) {
                     return program;
                 }
-                if ( policies.fail_on_lack_of_aot_export && !aotModuleHasModuleDecl(program, mod) ) {
+                if ( policies.fail_on_lack_of_aot_export && !aotModuleHasName(program, mod) ) {
                     return program;
                 }
                 if ( program->thisModule->name.empty() ) {

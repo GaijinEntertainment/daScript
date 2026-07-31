@@ -5,6 +5,7 @@
 #include "daScript/simulate/debug_info.h"
 #include "daScript/simulate/aot_builtin_jobque.h"
 #include "daScript/misc/string_writer.h"
+#include "daScript/misc/env_cfg.h"
 
 #if defined(__APPLE__)
 #include <sys/sysctl.h>
@@ -88,7 +89,7 @@ namespace das {
     // "t=1" as 2 lanes — every baseline built on it was inflated 2x.
     static int jobque_thread_count(int hw) {
         static int forced = []{
-            const char * e = getenv("DAS_JOBQUE_THREADS");
+            const char * e = get_dasenv_jobque_threads();
             if ( !e || !*e ) return 0;   // exported-but-empty behaves like unset (CI environments do this)
             int v = atoi(e);
             if ( v <= 1 ) {
@@ -198,15 +199,15 @@ namespace das {
         , mThreadCount( 0 )
         , mJobsRunning(0) {
         mThreadCount = get_num_threads();
-        const char * teamProfEnv = getenv("DAS_TEAM_PROF");   // =0 / empty is off, matching the documented =1 contract
+        const char * teamProfEnv = get_dasenv_team_prof();   // =0 / empty is off, matching the documented =1 contract
         mTeamProf = teamProfEnv != nullptr && atoi(teamProfEnv) != 0;
-        const char * limitOrderEnv = getenv("DAS_JOBQUE_LIMIT_ORDER");   // "spread" = golden-stride worker-limit eligibility
+        const char * limitOrderEnv = get_dasenv_jobque_limit_order();   // "spread" = golden-stride worker-limit eligibility
         mLimitOrderSpread = limitOrderEnv != nullptr && strcmp(limitOrderEnv, "spread") == 0;
-        const char * rankGateEnv = getenv("DAS_JOBQUE_TEAM_RANK_GATE");   // =1: per-op worker participation gate (see setTeamRankGate)
+        const char * rankGateEnv = get_dasenv_jobque_team_rank_gate();   // =1: per-op worker participation gate (see setTeamRankGate)
         mTeamRankGate = (rankGateEnv != nullptr && atoi(rankGateEnv) != 0) ? 1 : 0;
-        const char * eagerExitEnv = getenv("DAS_JOBQUE_TEAM_EAGER_EXIT");   // =0 re-enables the final-barrier spin (see setTeamEagerExit)
+        const char * eagerExitEnv = get_dasenv_jobque_team_eager_exit();   // =0 re-enables the final-barrier spin (see setTeamEagerExit)
         mTeamEagerExit = (eagerExitEnv != nullptr) ? ((atoi(eagerExitEnv) != 0) ? 1 : 0) : 1;
-        const char * affinityEnv = getenv("DAS_JOBQUE_AFFINITY");   // 0 off (default) / 1 ideal-CPU hint / 2 hard mask; overrides the app's set_default_affinity
+        const char * affinityEnv = get_dasenv_jobque_affinity();   // 0 off (default) / 1 ideal-CPU hint / 2 hard mask; overrides the app's set_default_affinity
         int affinityMode = affinityEnv ? atoi(affinityEnv) : (max)(0, get_default_affinity());
         SetCurrentThreadPriority(JobPriority::High);
         jobque_apply_affinity_slot(0, affinityMode);   // the que creator = the dispatch caller
@@ -1319,6 +1320,7 @@ namespace das {
 #elif defined(__linux__) || defined __HAIKU__
 
 #include <pthread.h>
+#include <sched.h>
 
 namespace das
 {
@@ -1345,7 +1347,9 @@ namespace das
         cpu_set_t cs;
         CPU_ZERO(&cs);
         CPU_SET(cpu, &cs);
-        pthread_setaffinity_np(pthread_self(), sizeof(cs), &cs);
+        // pid 0 means the calling thread, same as pthread_setaffinity_np(pthread_self(), ...),
+        // which bionic does not declare
+        sched_setaffinity(0, sizeof(cs), &cs);
     }
 #endif
 }

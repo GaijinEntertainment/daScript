@@ -26,6 +26,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(DAS_FLEX_BISON_DISABLED "Disable FLEX/BISON stage" OFF)
+option(DAS_STRICT_ALIASING "Keep gcc strict aliasing on (exposes type-pun bugs)" OFF)
 option(DAS_CLANG_BIND_DISABLED "Disable dasClangBind (libclang bindings, C/C++ parsing)" ON)
 option(DAS_LLVM_DISABLED "Disable dasLLVM (llvm bindings)" ON)
 option(DAS_SMT_DISABLED "Disable dasSMT (Z3 SMT solver bindings)" ON)
@@ -988,6 +989,8 @@ include/daScript/misc/job_que.h
 include/daScript/misc/handle_registry.h
 include/daScript/misc/uric.h
 include/daScript/misc/lexer_alloc_track.h
+include/daScript/misc/env_cfg.h
+src/misc/env_cfg.cpp
 src/misc/das_common.cpp
 src/misc/gc_node.cpp
 src/misc/globals.cpp
@@ -1636,6 +1639,7 @@ SET(DAS_RELEASE_MISC_INCLUDE
     include/daScript/misc/das_common.h
     include/daScript/misc/debug_break.h
     include/daScript/misc/enums.h
+    include/daScript/misc/env_cfg.h
     include/daScript/misc/fpe.h
     include/daScript/misc/free_list.h
     include/daScript/misc/gc_node.h

@@ -938,6 +938,7 @@ namespace das {
             const ETNC * s = (const ETNC *) &val;
             ETNC * d = (ETNC *) &res;
             constexpr int idx[] = { f... };
+            static_assert(sizeof(ResT) >= sizeof...(f)*sizeof(ETNC), "swizzle writes more elements than the result holds");
             for ( size_t i = 0; i != sizeof...(f); ++i ) d[i] = s[idx[i]];
             return res;
         }
@@ -2402,7 +2403,9 @@ namespace das {
             Prologue * pp = (Prologue *)context->stack.sp();
             pp->info = nullptr;
             pp->fileName = fn;
+            pp->functionLine = nullptr;
             pp->stackSize = stackSize;
+            pp->flags = 0;      // stack memory is not zeroed; a stale is_jit sends the walker down the JIT path
 #endif
         }
         __forceinline ~das_stack_prologue () {

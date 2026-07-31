@@ -3,6 +3,7 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_gc_report.h"
+#include "daScript/misc/env_cfg.h"
 
 #include <algorithm>
 #include <stdlib.h>
@@ -138,7 +139,7 @@ namespace das {
 
     bool gcStageReportEnabled () {
         static int cached = -1;
-        if ( cached < 0 ) cached = getenv("DAS_GC_STAGE_REPORT") ? 1 : 0;
+        if ( cached < 0 ) cached = get_dasenv_gc_stage_report() ? 1 : 0;
         return cached != 0;
     }
 

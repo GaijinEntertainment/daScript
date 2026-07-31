@@ -14,6 +14,7 @@
 #include "daScript/misc/performance_time.h"
 #include "daScript/misc/sysos.h"
 #include "daScript/misc/string_writer.h"   // LOG / LogLevel — env-gated module-load trace
+#include "daScript/misc/env_cfg.h"
 
 #include <sstream>
 #include <chrono>
@@ -255,6 +256,8 @@ namespace das {
     // no usable context to report on: return an empty result / no-op (never crash)
 #define GENERATE_IO_STUB {}
 #define GENERATE_IO_STUB_RET { return {}; }
+    // vec4f is __m128 on SIMD targets, which has no brace-init - it needs v_zero()
+#define GENERATE_IO_STUB_VEC { return v_zero(); }
     void builtin_sleep ( uint32_t ) GENERATE_IO_STUB
     const FILE * builtin_stdin() GENERATE_IO_STUB_RET
     const FILE * builtin_stdout() GENERATE_IO_STUB_RET
@@ -263,11 +266,11 @@ namespace das {
     int32_t builtin_terminal_width () GENERATE_IO_STUB_RET
     bool builtin_feof(const FILE*) GENERATE_IO_STUB_RET
     const FILE * builtin_fopen  ( const char *, const char *, Context *, LineInfoArg * ) GENERATE_IO_STUB_RET
-    vec4f builtin_read ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_RET
-    vec4f builtin_write ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_RET
-    vec4f builtin_read64 ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_RET
-    vec4f builtin_write64 ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_RET
-    vec4f builtin_load ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_RET
+    vec4f builtin_read ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_VEC
+    vec4f builtin_write ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_VEC
+    vec4f builtin_read64 ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_VEC
+    vec4f builtin_write64 ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_VEC
+    vec4f builtin_load ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_VEC
     bool builtin_stat ( const char *, FStat & ) GENERATE_IO_STUB_RET
     bool builtin_chdir ( const char * ) GENERATE_IO_STUB_RET
     bool builtin_mkdir ( const char * ) GENERATE_IO_STUB_RET
@@ -285,6 +288,7 @@ namespace das {
 
 #undef GENERATE_IO_STUB
 #undef GENERATE_IO_STUB_RET
+#undef GENERATE_IO_STUB_VEC
 
 }
 #else // DAS_NO_FILEIO
@@ -416,7 +420,7 @@ namespace das {
             return int32_t(ws.ws_col);
         }
 #endif
-        if ( const char * cols = getenv("COLUMNS") ) {
+        if ( const char * cols = get_columns() ) {
             int32_t w = atoi(cols);
             if ( w>0 ) return w;
         }
@@ -1788,13 +1792,13 @@ namespace das {
 
     bool has_env_variable ( const char * var, Context * , LineInfoArg * ) {
         if ( !var ) return false;
-        auto res = getenv(var);
+        auto res = das_getenv(var);
         return res != nullptr;
     }
 
     char * get_env_variable ( const char * var, Context * context, LineInfoArg * at ) {
         if ( !var ) return nullptr;
-        auto res = getenv(var);
+        auto res = das_getenv(var);
         if ( !res ) return nullptr;
         return context->allocateString(res, at);
     }
@@ -1802,11 +1806,7 @@ namespace das {
     void set_env_variable ( const char * var, const char * value, Context *, LineInfoArg * ) {
         // process-wide; children spawned via popen/popen_argv inherit it
         if ( !var || !*var ) return;
-#ifdef _WIN32
-        _putenv_s(var, value ? value : "");
-#else
-        setenv(var, value ? value : "", 1);
-#endif
+        das_setenv(var, value);
     }
 
     enum class RegisterOnError {
@@ -1828,7 +1828,7 @@ namespace das {
     // 'missing prerequisite' into a visible "FAILED — <dlerror>" line.
     static bool trace_module_load() {
         static const bool on = []{
-            const char * e = getenv("DAS_TRACE_MODULE_LOAD");
+            const char * e = get_dasenv_trace_module_load();
             return e && e[0] && e[0] != '0';
         }();
         return on;

@@ -115,7 +115,7 @@ def private twin_bodies(t : T?; path : string) : table<string; string> {
 }
 
 [test]
-def test_flatten_fold(t : T?) {
+def test_flatten_fold(t : T?) {  // nolint:STYLE038 — flat list of independent `t |> run` corpora, one per flatten pass
     let root = get_das_root()
     t |> run("[flatten] reveal-cascade corpus folds clean") @(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/no_aot/_fold_fixtures.das")
@@ -361,6 +361,12 @@ def test_flatten_fold(t : T?) {
     t |> run("every example shader folds clean (pixel_shader path)") @(t : T?) {
         let proj = "{root}/examples/flatten/flatten_shaders.das_project"
         let base = "{root}/examples/flatten/shaders"
+        // an embedder may vendor the sources without examples/ (dagor does) - there is no
+        // corpus to fold there, and asserting a shader count would just report the absence
+        if (!stat(base).is_dir) {
+            t |> success(true, "examples/flatten corpus is not vendored here - nothing to fold")
+            return
+        }
         var total = 0
         fio::dir(base) $(dirname) {
             let sub = "{base}/{dirname}"

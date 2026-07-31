@@ -1185,14 +1185,14 @@ namespace das {
         }                                                                                       \
         __forceinline CTYPE compute ( Context & context ) {                                     \
             DAS_PROFILE_NODE \
-            auto vec = value->eval(context);                                                    \
+            union { vec4f v; CTYPE T[sizeof(vec4f)/sizeof(CTYPE)]; } vec;                       \
+            vec.v = value->eval(context);                                                       \
             int32_t idx = index->evalInt(context);                                              \
             if (idx<0 || uint32_t(idx) >= range) {                                              \
                 context.throw_error_at(debugInfo,"vector index out of range, %d of %u%s", idx, range, errorMessage); \
                 return (CTYPE) 0;                                                               \
             } else {                                                                            \
-                CTYPE * pv = (CTYPE *) &vec;                                                    \
-                return pv[idx];                                                                 \
+                return vec.T[idx];                                                              \
             }                                                                                   \
         }                                                                                       \
         DAS_NODE(TYPE, CTYPE)                                                                   \
@@ -1213,10 +1213,10 @@ namespace das {
         }                                                                                       \
         __forceinline CTYPE compute ( Context & context ) {                                     \
             DAS_PROFILE_NODE \
-            auto vec = value->eval(context);                                                    \
+            union { vec4f v; CTYPE T[sizeof(vec4f)/sizeof(CTYPE)]; } vec;                       \
+            vec.v = value->eval(context);                                                       \
             uint32_t idx = uint32_t(index->evalInt(context));                                   \
-            CTYPE * pv = (CTYPE *) &vec;                                                         \
-            return pv[idx];                                                                      \
+            return vec.T[idx];                                                                  \
         }                                                                                       \
         DAS_NODE(TYPE, CTYPE)                                                                   \
         SimNode * value, * index;                                                               \
@@ -1246,14 +1246,14 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
-            auto vec = value->eval(context);
+            union { vec4f v; TT T[sizeof(vec4f)/sizeof(TT)]; } vec;
+            vec.v = value->eval(context);
             int32_t idx = index->evalInt(context);
             if (idx<0 || uint32_t(idx) >= range) {
                 context.throw_error_at(debugInfo,"vector index out of range, %d of %u%s", idx, range, errorMessage);
                 return v_zero();
             }
-            TT * pv = (TT *) &vec;
-            return cast<TT>::from(pv[idx]);
+            return cast<TT>::from(vec.T[idx]);
         }
         SimNode * value, * index;
         uint32_t  range;
@@ -1272,10 +1272,10 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
-            auto vec = value->eval(context);
+            union { vec4f v; TT T[sizeof(vec4f)/sizeof(TT)]; } vec;
+            vec.v = value->eval(context);
             uint32_t idx = uint32_t(index->evalInt(context));
-            TT * pv = (TT *) &vec;
-            return cast<TT>::from(pv[idx]);
+            return cast<TT>::from(vec.T[idx]);
         }
         SimNode * value, * index;
         uint32_t  range;
