@@ -62,6 +62,7 @@ struct public TextSourceViewStyle {
     match_color : float4 = float4(0.97f, 0.76f, 0.34f, 0.28f)
     bracket_match_color : float4 = float4(0.55f, 0.65f, 0.85f, 0.35f)
     bracket_mismatch_color : float4 = float4(0.90f, 0.30f, 0.30f, 0.45f)
+    list_bg_color : float4 = float4(0.11f, 0.12f, 0.14f, 0.97f)
     caret_color : float4 = float4(0.92f, 0.92f, 0.94f, 1.0f)
     current_line_color : float4 = float4(1.0f, 1.0f, 1.0f, 0.045f)
     added_line_color : float4 = float4(0.20f, 0.72f, 0.38f, 0.92f)

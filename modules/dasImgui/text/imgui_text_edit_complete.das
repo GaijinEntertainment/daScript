@@ -5,6 +5,7 @@ options indenting = 4
 module imgui_text_edit_complete shared
 
 require imgui/imgui_text_source_edit public
+require math
 require strings
 require daslib/strings_boost
 
@@ -24,7 +25,15 @@ struct public TextEditCompletion {
     prefix : string
     //! Candidates so far, best first (full words, not suffixes).
     items : array<string>
+    //! The request came from an explicit trigger (`.`): the list opens
+    //! immediately instead of waiting for the idle delay.
+    explicit_trigger : bool = false
 }
+
+//! Idle seconds before the candidate LIST pops (the ghost is instant).
+let public TEXT_EDIT_LIST_DELAY = 0.35f
+//! Rows shown in the list.
+let public TEXT_EDIT_LIST_ROWS = 8
 
 def public text_edit_complete_dispose(var comp : TextEditCompletion) {
     delete comp.items
@@ -33,6 +42,18 @@ def public text_edit_complete_dispose(var comp : TextEditCompletion) {
 
 def private ident_byte(b : int) : bool {
     return is_alpha(b) || is_number(b) || b == '_' || b >= 0x80
+}
+
+def private byte_before_caret(ed : TextEditState const) : int {
+    return -1 if (empty(ed.lines) || ed.cursor_line >= length(ed.lines)
+        || ed.cursor_column <= 0)
+    var value = -1
+    peek_data(ed.lines[ed.cursor_line]) $(bytes) {
+        if (ed.cursor_column <= length(bytes)) {
+            value = int(bytes[ed.cursor_column - 1])
+        }
+    }
+    return value
 }
 
 def private word_prefix_at(ed : TextEditState const) : string {
@@ -89,6 +110,26 @@ def private collect_document_words(ed : TextEditState const; prefix : string;
     delete counts
 }
 
+def private refresh_list(var ed : TextEditState; comp : TextEditCompletion const;
+                         open_now : bool) {
+    return if (!ed.list_open && !open_now)
+    if (empty(comp.items)) {
+        text_edit_close_list(ed)
+        return
+    }
+    ed.list_open = true
+    ed.list_prefix_bytes = length(comp.prefix)
+    delete ed.list_items
+    let count = min(length(comp.items), TEXT_EDIT_LIST_ROWS)
+    ed.list_items |> reserve(count)
+    for (index in range(count)) {
+        ed.list_items |> push(comp.items[index])
+    }
+    if (ed.list_index >= count) {
+        ed.list_index = count - 1
+    }
+}
+
 def private refresh_ghost(var ed : TextEditState; comp : TextEditCompletion const) {
     var ghost = ""
     for (item in comp.items) {
@@ -112,6 +153,7 @@ def public text_edit_complete_offer(var ed : TextEditState;
         }
     }
     refresh_ghost(ed, comp)
+    refresh_list(ed, comp, comp.explicit_trigger)
 }
 
 def public text_edit_complete_sync(var ed : TextEditState;
@@ -126,18 +168,30 @@ def public text_edit_complete_sync(var ed : TextEditState;
         }
     }
     let prefix = enabled && !text_edit_has_selection(ed) ? word_prefix_at(ed) : ""
-    if (empty(prefix)) {
+    // `foo.` is an explicit completion point: empty prefix, list opens now
+    let explicit_point = (enabled && empty(prefix)
+        && byte_before_caret(ed) == '.')
+    if (empty(prefix) && !explicit_point) {
         comp.request_revision = -1
+        text_edit_close_list(ed)
         return
     }
-    return if (comp.request_revision == ed.revision
-        && comp.request_line == ed.cursor_line
-        && comp.request_column == ed.cursor_column && comp.prefix == prefix)
+    if (comp.request_revision == ed.revision
+            && comp.request_line == ed.cursor_line
+            && comp.request_column == ed.cursor_column && comp.prefix == prefix) {
+        // unchanged request: the list still pops once the caret sits idle
+        if (!ed.list_open && length(comp.items) > 1
+                && ed.syntax_idle >= TEXT_EDIT_LIST_DELAY) {
+            refresh_list(ed, comp, true)
+        }
+        return
+    }
     comp.token++
     comp.request_revision = ed.revision
     comp.request_line = ed.cursor_line
     comp.request_column = ed.cursor_column
     comp.prefix = prefix
+    comp.explicit_trigger = explicit_point
     delete comp.items
     var inscope words : array<string>
     collect_document_words(ed, prefix, words)

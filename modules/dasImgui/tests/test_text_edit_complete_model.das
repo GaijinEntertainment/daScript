@@ -49,6 +49,56 @@ def test_complete_keywords_and_kill_switch(t : T?) {
 }
 
 [test]
+def test_complete_list_flow(t : T?) {
+    var ed = TextEditState()
+    var comp = TextEditCompletion()
+    text_edit_load(ed, "grease greet greed\ngre")
+    text_edit_set_language(ed, "das")
+    text_edit_move_document_end(ed)
+    text_edit_complete_sync(ed, comp)
+    t |> success(!ed.list_open, "the list waits for the idle delay")
+    ed.syntax_idle = 1.0f
+    text_edit_complete_sync(ed, comp)
+    t |> success(ed.list_open, "idle pops the list")
+    t |> equal(length(ed.list_items), 3, "all three candidates show")
+    t |> equal(ed.list_index, -1, "the keyboard is still in the editor")
+    // Down enters, Down steps, Up walks back out
+    t |> success(text_edit_list_next(ed), "Down enters the list")
+    t |> equal(ed.list_index, 0, "at the first row")
+    let _ = text_edit_list_next(ed)
+    t |> equal(ed.list_index, 1, "Down steps")
+    let _2 = text_edit_list_prev(ed)
+    t |> success(text_edit_list_prev(ed), "Up walks back out")
+    t |> equal(ed.list_index, -1, "back in the editor, list still visible")
+    t |> success(!text_edit_list_accept(ed), "Enter with no row selected declines")
+    // enter a row and accept it
+    let _3 = text_edit_list_next(ed)
+    let _4 = text_edit_list_next(ed)
+    t |> success(text_edit_list_accept(ed), "Enter accepts the selected row")
+    t |> equal(ed.lines[1], "greet", "the second-ranked candidate landed")
+    t |> success(!ed.list_open, "accepting closes the list")
+    text_edit_complete_dispose(comp)
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_complete_explicit_dot_trigger(t : T?) {
+    var ed = TextEditState()
+    var comp = TextEditCompletion()
+    text_edit_load(ed, "foo bar baz\nfoo.")
+    text_edit_set_language(ed, "das")
+    text_edit_move_document_end(ed)
+    text_edit_complete_sync(ed, comp)
+    t |> success(ed.list_open, "a dot opens the list immediately")
+    t |> success(length(ed.list_items) >= 3, "all document words offer after the dot")
+    t |> equal(ed.list_prefix_bytes, 0, "empty prefix - the whole word inserts")
+    text_edit_close_list(ed)
+    t |> success(!ed.list_open, "Escape path closes it")
+    text_edit_complete_dispose(comp)
+    text_edit_dispose(ed)
+}
+
+[test]
 def test_complete_offer_token_contract(t : T?) {
     var ed = TextEditState()
     var comp = TextEditCompletion()

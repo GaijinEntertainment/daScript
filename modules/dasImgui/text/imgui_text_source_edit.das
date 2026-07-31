@@ -124,6 +124,13 @@ struct public TextEditState {
     //! Ghost completion drawn after the caret; Tab accepts it. Cleared by
     //! every edit/move — the completion sync re-offers next frame.
     ghost_text : string
+    //! Completion LIST under the caret (top candidates). list_index -1 =
+    //! visible but the keyboard is still in the editor (Down enters).
+    list_items : array<string>
+    list_open : bool = false
+    list_index : int = -1
+    //! Byte length of the request prefix — accepting inserts the remainder.
+    list_prefix_bytes : int = 0
     // widget layout cache + per-draw stamps for live inspection
     layout_revision : int = -1
     max_line_bytes : int = 0
@@ -143,6 +150,7 @@ def public text_edit_dispose(var ed : TextEditState) {
     delete ed.redo_stack
     delete ed.highlight_ranges
     delete ed.line_styles
+    delete ed.list_items
     ed = TextEditState()
 }
 
@@ -166,6 +174,7 @@ def public text_edit_load(var ed : TextEditState; source : string) {
     delete ed.redo_stack
     delete ed.highlight_ranges
     delete ed.line_styles
+    text_edit_close_list(ed)
     ed.undo_open = false
     ed.dirty = false
     ed.revision++
@@ -897,6 +906,7 @@ def private touch_move(var ed : TextEditState) {
     ed.follow_revision++
     ed.blink_time = 0.0f
     ed.ghost_text = ""
+    text_edit_close_list(ed)
 }
 
 def public text_edit_insert(var ed : TextEditState; text : string) {
@@ -1543,6 +1553,39 @@ def public text_edit_set_ghost(var ed : TextEditState; text : string) {
     ed.ghost_text = text
 }
 
+def public text_edit_close_list(var ed : TextEditState) {
+    ed.list_open = false
+    ed.list_index = -1
+    delete ed.list_items
+}
+
+def public text_edit_list_next(var ed : TextEditState) : bool {
+    //! Down while the list shows: enter it (from -1) or step down. Returns
+    //! false when the list is closed — the caller moves the caret instead.
+    return false if (!ed.list_open || empty(ed.list_items))
+    ed.list_index = min(ed.list_index + 1, length(ed.list_items) - 1)
+    return true
+}
+
+def public text_edit_list_prev(var ed : TextEditState) : bool {
+    //! Up inside the list; stepping past the top (-1) returns the keyboard
+    //! to the editor, the list stays visible.
+    return false if (!ed.list_open || ed.list_index < 0)
+    ed.list_index--
+    return true
+}
+
+def public text_edit_list_accept(var ed : TextEditState) : bool {
+    //! Enter on a selected list row: insert the remainder of that candidate.
+    return false if (!ed.list_open || ed.list_index < 0
+        || ed.list_index >= length(ed.list_items))
+    let item = ed.list_items[ed.list_index]
+    let tail = slice(item, min(ed.list_prefix_bytes, length(item)), length(item))
+    text_edit_close_list(ed)
+    text_edit_insert(ed, tail)
+    return true
+}
+
 def public text_edit_tab(var ed : TextEditState) {
     //! Tab accepts a visible ghost completion first (the VS Code rule); else
     //! per spec fork 2: multi-line or full-line selection block indents; a
@@ -1929,10 +1972,14 @@ def private route_editor_keys(var ed : TextEditState; page_rows : int; // nolint
             text_edit_move_right(ed, select)
         }
         if (nav_pressed(ImGuiKey.UpArrow, ImGuiKey.Keypad8, keypad_nav)) {
-            text_edit_move_vertical(ed, -1, select)
+            if (select || !text_edit_list_prev(ed)) {
+                text_edit_move_vertical(ed, -1, select)
+            }
         }
         if (nav_pressed(ImGuiKey.DownArrow, ImGuiKey.Keypad2, keypad_nav)) {
-            text_edit_move_vertical(ed, 1, select)
+            if (select || !text_edit_list_next(ed)) {
+                text_edit_move_vertical(ed, 1, select)
+            }
         }
         if (nav_pressed(ImGuiKey.PageUp, ImGuiKey.Keypad9, keypad_nav)) {
             text_edit_move_vertical(ed, -max(page_rows, 1), select)
@@ -1947,7 +1994,9 @@ def private route_editor_keys(var ed : TextEditState; page_rows : int; // nolint
             text_edit_move_end(ed, select)
         }
         if (IsKeyPressed(ImGuiKey.Enter, true) || IsKeyPressed(ImGuiKey.KeypadEnter, true)) {
-            text_edit_newline(ed)
+            if (!text_edit_list_accept(ed)) {
+                text_edit_newline(ed)
+            }
         }
         if (IsKeyPressed(ImGuiKey.Backspace, true)) {
             text_edit_backspace(ed)
@@ -1969,8 +2018,12 @@ def private route_editor_keys(var ed : TextEditState; page_rows : int; // nolint
         if (IsKeyPressed(ImGuiKey.Tab, true)) {
             text_edit_insert(ed, "\t")
         }
-        if (IsKeyPressed(ImGuiKey.Escape, false) && text_edit_has_selection(ed)) {
-            text_edit_clear_selection(ed)
+        if (IsKeyPressed(ImGuiKey.Escape, false)) {
+            if (ed.list_open) {
+                text_edit_close_list(ed)
+            } elif (text_edit_has_selection(ed)) {
+                text_edit_clear_selection(ed)
+            }
         }
     }
 }
@@ -2179,6 +2232,9 @@ def private draw_edit_content(var ed : TextEditState; m : EditMetrics;
             float2(caret_x + caret_width, caret_y + m.line_height),
             GetColorU32(caret_color), 0.0f, ImDrawFlags.None)
     }
+    if (ed.focused && ed.list_open && !empty(ed.list_items)) {
+        draw_edit_list(ed, m, style, font, dl)
+    }
 }
 
 def private edit_syntax_color(style : TextSourceViewStyle const; // nolint:STYLE037
@@ -2225,6 +2281,37 @@ def private draw_edit_line(ed : TextEditState const; row : int; line : string;
         let _ = text_source_draw_range(dl, font, m.font_size, float2(x, position_y),
             style.text_color, line, covered, length(line),
             m.cell_width, style.tab_cells)
+    }
+}
+
+def private draw_edit_list(ed : TextEditState const; m : EditMetrics;
+                           style : TextSourceViewStyle const;
+                           var font : ImFont?; var dl : ImDrawList?) {
+    // suggest rows under the caret; selection_color marks the entered row
+    let anchor_x = (m.origin.x + m.gutter_space
+        + text_source_range_width(ed.lines[ed.cursor_line], 0,
+            ed.cursor_column - min(ed.list_prefix_bytes, ed.cursor_column),
+            font, m.font_size, m.cell_width, style.tab_cells))
+    var width = m.cell_width * 8.0f
+    for (item in ed.list_items) {
+        width = max(width, CalcTextSizeForFontRange(font, m.font_size,
+            item, length(item), 0, length(item)).x + m.cell_width * 2.0f)
+    }
+    let top = m.origin.y + float(ed.cursor_line + 1) * m.line_height
+    let bottom = top + float(length(ed.list_items)) * m.line_height
+    *dl |> AddRectFilled(float2(anchor_x, top), float2(anchor_x + width, bottom),
+        GetColorU32(style.list_bg_color), 0.0f, ImDrawFlags.None)
+    for (index in range(length(ed.list_items))) {
+        let row_top = top + float(index) * m.line_height
+        if (index == ed.list_index) {
+            *dl |> AddRectFilled(float2(anchor_x, row_top),
+                float2(anchor_x + width, row_top + m.line_height),
+                GetColorU32(style.selection_color), 0.0f, ImDrawFlags.None)
+        }
+        let item = ed.list_items[index]
+        let _ = text_source_draw_range(dl, font, m.font_size,
+            float2(anchor_x + m.cell_width, row_top), style.text_color,
+            item, 0, length(item), m.cell_width, style.tab_cells)
     }
 }
 
@@ -2341,7 +2428,8 @@ def private text_source_edit_impl(id : string; var ed : TextEditState;
         if (use_registry) {
             // chars first (never binding-routed); char frames mute keypad chords
             let typed = drain_typed_chars(ed)
-            command_set_enabled(registry, "edit.cancel", text_edit_has_selection(ed))
+            command_set_enabled(registry, "edit.cancel",
+                text_edit_has_selection(ed) || ed.list_open)
             command_poll_scope(registry, CommandScope.component, id, typed)
         } else {
             route_editor_keys(ed, page_rows, style.write_system_clipboard)
@@ -2579,9 +2667,13 @@ def private dispatch_edit_command(var ed : TextEditState; command_id : string; /
     } elif (verb == "edit.cursor_right") {
         text_edit_move_right(ed, select)
     } elif (verb == "edit.cursor_up") {
-        text_edit_move_vertical(ed, -1, select)
+        if (select || !text_edit_list_prev(ed)) {
+            text_edit_move_vertical(ed, -1, select)
+        }
     } elif (verb == "edit.cursor_down") {
-        text_edit_move_vertical(ed, 1, select)
+        if (select || !text_edit_list_next(ed)) {
+            text_edit_move_vertical(ed, 1, select)
+        }
     } elif (verb == "edit.page_up") {
         text_edit_move_vertical(ed, -max(page_rows, 1), select)
     } elif (verb == "edit.page_down") {
@@ -2599,7 +2691,9 @@ def private dispatch_edit_command(var ed : TextEditState; command_id : string; /
     } elif (verb == "edit.document_end") {
         text_edit_move_document_end(ed, select)
     } elif (verb == "edit.newline") {
-        text_edit_newline(ed)
+        if (!text_edit_list_accept(ed)) {
+            text_edit_newline(ed)
+        }
     } elif (verb == "edit.backspace") {
         text_edit_backspace(ed)
     } elif (verb == "edit.delete") {
@@ -2625,7 +2719,11 @@ def private dispatch_edit_command(var ed : TextEditState; command_id : string; /
     } elif (verb == "edit.toggle_overtype") {
         text_edit_toggle_overtype(ed)
     } elif (verb == "edit.cancel") {
-        text_edit_clear_selection(ed)
+        if (ed.list_open) {
+            text_edit_close_list(ed)
+        } else {
+            text_edit_clear_selection(ed)
+        }
     } else {
         dispatch_edit_line_command(ed, verb)
     }
