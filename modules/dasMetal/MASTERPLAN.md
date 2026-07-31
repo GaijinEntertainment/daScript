@@ -1077,28 +1077,35 @@ tgmem param / builtin-using helper / uniform-reading method; negative gates for 
 method-field reassignment, unsupported param types. First consumer: the dasLLAMA SqAttn family
 dedup (16-of-20 twins share one skeleton; stage helpers + one uniform struct per family).
 
-## Phase 0 follow-on: pointer parameters (OPEN — needs a ruling)
+## Phase 0 follow-on: pointer parameters
 
-The SqAttn dedup landed on Phase 0 as designed, and surveying the rest of the dasLLAMA kernel
-zoo found exactly one emitter gap blocking further factoring: **a helper cannot take a raw
-pointer.** The kernels that stream `unsafe(addr(buf[i]))` through a loop (the split-K "D"
-attention family, the K-quant mul_mm trio) can share their skeletons only if `T?` lowers as a
-parameter, and today it does not.
+A helper takes a raw pointer: `def stage(var p : half4 const?; n : uint)`. This is what lets the
+kernels that stream `unsafe(addr(buf[i]))` through a loop — the split-K "D" attention family, the
+K-quant mul_mm trio — share a skeleton at all, since the advancing pointer is the shape and
+rewriting it as index math changes AGX register allocation.
 
-The obstacle is real, not an oversight: **MSL requires an address space in the signature**
-(`device half4*` vs `threadgroup half4*`) and the das type `half4?` does not carry one — the
-same pointer type can name an @ssbo interior or a @workgroup interior. Three candidate rules,
-in order of how much they'd cost:
+**MSL requires an address space in the signature** (`device half4*` vs `threadgroup half4*`) and
+the das type `half4?` carries none — the same type can name an @ssbo interior or a @workgroup
+interior. The parameter declares it and the call site proves it:
 
-1. **Device-only**: `T?` lowers as `device T*`; a pointer whose provenance is a @workgroup
-   member is a compile error naming both. Covers every case in the zoo today (the streams are
-   all device), costs one provenance walk at the call site, fails closed on the rest.
-2. **Infer from call sites**: collect the provenance of every call, require agreement, and
-   emit one function per address space when they differ. More faithful, more machinery, and
-   the diagnostic when two call sites disagree is harder to phrase.
-3. **Spell it in das**: a marker on the parameter (`@device p : T?`). Explicit and cheap to
-   implement, but it is EDSL grammar the user has to learn — against the Phase 0 ruling that
-   kernel code should read as ordinary das.
+- **Unmarked is `device`.** Every pointer stream in the zoo is device, so the common case is
+  plain das with no marker to learn.
+- **`@threadgroup p : T?`** opts into threadgroup memory. Parameter annotations already parse
+  and keep their values, so this needs no grammar.
+- **The emitter derives the space from the argument's provenance and cross-checks it** — an
+  inline `addr(member[i])`, a pointer local, a pointer parameter being forwarded, or `p + n`
+  over any of those. Disagreement is a das error naming both sides; provenance it cannot trace
+  (a thread-space local) is refused rather than guessed. The declared space is never trusted on
+  its own, so a wrong marker cannot reach the runtime MSL compile as a null pipeline.
+- **The POINTEE's const is the MSL const.** `T const?` lowers `device const T*` and reads only;
+  `T?` lowers `device T*` and marks the source member written, exactly as a `var array<T>`
+  parameter does. (Writing through it in das additionally needs the handle non-const — `var o :
+  T?` — because das flows the handle's const onto the dereference.)
 
-(1) is the recommendation: it is the smallest rule that unblocks the zoo, and it can grow into
-(2) later without changing any code that already compiles.
+Long-term this is a shortcut for **pointer families** as a language-level feature — a real type
+axis rather than an annotation. Parked on `modules/dasLLAMA/followup_general.md`.
+
+Tests: `tests/msl/_msl_common.das` + `test_msl_functions.das` (signatures, forwarding, inline
+`addr` arguments, census), `tests/metal/test_metal_functions.das` (GPU advancing dot + threadgroup
+slab max vs a directly-computed expectation), `tests/msl/_fail_closed/_fc_ptr_space_{tg,dev}.das`
+and `_fc_ptr_untraceable.das` (both mismatch directions + the untraceable case).

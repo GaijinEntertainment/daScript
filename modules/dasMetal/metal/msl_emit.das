@@ -61,6 +61,7 @@ struct private MslCtx {
     builtins_used : table<string>               // referenced builtin globals (gl_*)
     renames : table<string; string>             // das identifier -> MSL-safe identifier
     ptrs : table<string; string>                // pointer local (addr(member[..])) -> its member (das names)
+    ptr_space : table<string; string>           // pointer local/param -> "device" | "threadgroup" (call-site check)
     helpers : table<string>                     // preamble helper functions referenced by lowered calls
     gen_helpers : table<string; string>         // GENERATED preamble helpers (tensor ops): mangled name -> text
     scan_ptrs : table<string; string>           // scan-time pointer local -> member (write-set resolution)
@@ -278,6 +279,10 @@ def private mark_write_target(var ctx : MslCtx; e : Expression?) {
     }
     if (e is ExprRef2Value) {
         mark_write_target(ctx, (e as ExprRef2Value).subexpr)
+    } elif (e is ExprRef2Ptr) {   // `addr(member[i])` handed to a writable pointer parameter
+        mark_write_target(ctx, (e as ExprRef2Ptr).subexpr)
+    } elif (e is ExprCall && call_base_name("{(e as ExprCall).name}") == "i_das_ptr_add") {
+        mark_write_target(ctx, (e as ExprCall).arguments[0])
     } elif (e is ExprAt) {
         mark_write_target(ctx, (e as ExprAt).subexpr)
     } elif (e is ExprSwizzle) {
@@ -477,13 +482,23 @@ def private receiver_is_self(ctx : MslCtx; e : Expression?) : bool {
 }
 
 // a member passed to a callee's writable (non-const) array param is a write to that member
+// a parameter the callee may store through: a mutable buffer/tile/ref, or a pointer whose
+// POINTEE is mutable (`T?`; `T const?` is read-only — the pointer's own const says nothing)
+def private param_is_written(pt : TypeDecl?) : bool {
+    if (pt == null) {
+        return false
+    }
+    if (pt.baseType == Type.tPointer) {
+        return pt.firstType != null && !pt.firstType.flags.constant
+    }
+    return (pt.baseType == Type.tArray || pt.baseType == Type.tFixedArray || pt.flags.ref) && !pt.flags.constant
+}
+
 def private mark_call_arg_writes(var ctx : MslCtx; fn : FunctionPtr; ec : ExprCall?) {
     let na = length(ec.arguments)
     let np = length(fn.arguments)
     for (i in range(min(na, np))) {
-        let pt = fn.arguments[i]._type
-        if (pt != null && (pt.baseType == Type.tArray || pt.baseType == Type.tFixedArray || pt.flags.ref) &&
-                !pt.flags.constant) {
+        if (param_is_written(fn.arguments[i]._type)) {
             mark_write_target(ctx, ec.arguments[i])
         }
     }
@@ -601,9 +616,7 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
                     let na = length(ei.arguments) - 2
                     let np = length(mfn.arguments) - 1
                     for (i in range(min(na, np))) {
-                        let pt = mfn.arguments[i + 1]._type
-                        if (pt != null && (pt.baseType == Type.tArray || pt.baseType == Type.tFixedArray ||
-                                pt.flags.ref) && !pt.flags.constant) {
+                        if (param_is_written(mfn.arguments[i + 1]._type)) {
                             mark_write_target(ctx, ei.arguments[i + 2])
                         }
                     }
@@ -616,6 +629,8 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
         }
     } elif (e is ExprReturn) {
         scan_body(ctx, (e as ExprReturn).subexpr)
+    } elif (e is ExprRef2Ptr) {
+        scan_body(ctx, (e as ExprRef2Ptr).subexpr)
     } elif (e is ExprAt) {
         scan_body(ctx, (e as ExprAt).subexpr)
         scan_body(ctx, (e as ExprAt).index)
@@ -877,6 +892,23 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
         let pc = e as ExprCall
         note(ctx, "op.ptr_add")
         return "({emit_value(ctx, pc.arguments[0])} + ({emit_value(ctx, pc.arguments[1])}))"
+    } elif (e is ExprRef2Ptr) {
+        // `addr(member[i])` spelled inline at a call site — the same lowering the pointer-local
+        // declaration gets, minus the local. Address-space agreement is check_ptr_arg's job
+        let sub = (e as ExprRef2Ptr).subexpr
+        let pat = sub ?as ExprAt
+        let pmem = pat != null ? member_lookup(ctx, pat.subexpr) : ""
+        if (empty(pmem)) {
+            err(ctx, e.at, "addr() in a kernel must take a kernel-class member element (addr(member[expr]))")
+            return "/*addr*/"
+        }
+        let pm = ctx.members[pmem]
+        if (pm.uniform || pm.packed) {
+            err(ctx, e.at, "addr() over a @uniform or packed 3-lane member has no MSL pointer form")
+            return "/*addr*/"
+        }
+        note(ctx, pm.workgroup ? "expr.addr.tg" : "expr.addr.dev")
+        return "({pm.msl_name} + ({emit_value(ctx, pat.index)}))"
     } elif (e is ExprAt) {
         let ea = e as ExprAt
         let pm = member_lookup(ctx, ea.subexpr)
@@ -1225,6 +1257,7 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
                 if (!empty(wm) && (ctx.members?[wm]?.workgroup ?? false) && pt != null && pt.flags.ref) {
                     err(ctx, ec.at, "@workgroup member `{wm}` bound to a `&` parameter — address spaces differ; pass the fixed array itself")
                 }
+                check_ptr_arg(ctx, ec.func.arguments[i], ec.arguments[i], ec.at)
             }
             args |> push(emit_value(ctx, ec.arguments[i]))
         }
@@ -1265,6 +1298,7 @@ def private emit_invoke_value(var ctx : MslCtx; ei : ExprInvoke?) : string {
             if (!empty(wm) && (ctx.members?[wm]?.workgroup ?? false) && pt != null && pt.flags.ref) {
                 err(ctx, ei.at, "@workgroup member `{wm}` bound to a `&` parameter — address spaces differ; pass the fixed array itself")
             }
+            check_ptr_arg(ctx, mfn.arguments[i - 1], ei.arguments[i], ei.at)
         }
         args |> push(emit_value(ctx, ei.arguments[i]))
     }
@@ -1297,6 +1331,53 @@ def private member_lookup(ctx : MslCtx; e : Expression?) : string {
     }
     let name = string(ef.name)
     return key_exists(ctx.members, name) ? name : ""
+}
+
+// The address space a pointer ARGUMENT actually points into, "" when the shape says nothing.
+// Walks the three ways a kernel spells one: an inline `addr(member[i])`, a pointer local or
+// parameter already banked in ptr_space, and `p + n` on top of either.
+def private ptr_arg_space(ctx : MslCtx; e : Expression?) : string {
+    if (e == null) {
+        return ""
+    }
+    if (e is ExprRef2Value) {
+        return ptr_arg_space(ctx, (e as ExprRef2Value).subexpr)
+    }
+    if (e is ExprCast) {
+        return ptr_arg_space(ctx, (e as ExprCast).subexpr)
+    }
+    if (e is ExprRef2Ptr) {
+        let sub = (e as ExprRef2Ptr).subexpr
+        let mem = member_lookup(ctx, sub is ExprAt ? (sub as ExprAt).subexpr : sub)
+        if (empty(mem)) {
+            return ""
+        }
+        return (ctx.members?[mem]?.workgroup ?? false) ? "threadgroup" : "device"
+    }
+    if (e is ExprCall && call_base_name("{(e as ExprCall).name}") == "i_das_ptr_add") {
+        return ptr_arg_space(ctx, (e as ExprCall).arguments[0])
+    }
+    if (e is ExprVar) {
+        return ctx.ptr_space?[string((e as ExprVar).name)] ?? ""
+    }
+    return ""
+}
+
+// A pointer parameter declares its address space (unmarked = device); the argument's provenance
+// derives one. They must agree — MSL has no conversion between spaces, and a mismatch would
+// otherwise surface as a null pipeline at model load instead of a das error here.
+def private check_ptr_arg(var ctx : MslCtx; pv : VariablePtr; arg : Expression?; at : LineInfo) {
+    let pt = pv._type
+    if (pt == null || pt.baseType != Type.tPointer) {
+        return
+    }
+    let want = ptr_param_space(pv)
+    let got = ptr_arg_space(ctx, arg)
+    if (empty(got)) {
+        err(ctx, at, "argument bound to pointer parameter `{pv.name}` has no traceable address space — pass `addr(member[i])`, a pointer local, or a pointer parameter")
+    } elif (got != want) {
+        err(ctx, at, "pointer parameter `{pv.name}` is `{want}` but the argument points into {got} memory — {want == "device" ? "mark it `@threadgroup`" : "drop the `@threadgroup`"} or pass a {want} pointer")
+    }
 }
 
 // true when `e` (Ref2Value-peeled) indexes a packed 3-lane buffer member
@@ -1767,6 +1848,7 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
                 ctx.ptrs[pname0] = pmem
                 let base = emit_value(ctx, pat.index)
                 let space = pm.workgroup ? "threadgroup" : (pm.written ? "device" : "device const")
+                ctx.ptr_space[pname0] = pm.workgroup ? "threadgroup" : "device"
                 note(ctx, pm.workgroup ? "decl.ptr.tg" : "decl.ptr.dev")
                 lines |> push("{indent}{space} {pm.elem} * {ctx.renames[pname0]} = {pm.msl_name} + ({base});")
                 continue
@@ -2052,6 +2134,45 @@ def private emit_for(var ctx : MslCtx; fr : ExprFor?; indent : string; var lines
 
 // ===== user-function emission (Phase 0) =====
 
+// The address space a pointer PARAMETER declares: unmarked is `device`, `@threadgroup` opts into
+// threadgroup memory. das `T?` carries no space of its own, and every call site is cross-checked
+// against this against the provenance of the pointer it passes.
+def private ptr_param_space(v : VariablePtr) : string {
+    for (a in v.annotation) {
+        if (a.name == "threadgroup") {
+            return "threadgroup"
+        }
+    }
+    return "device"
+}
+
+def private ufn_param_ptr(var ctx : MslCtx; v : VariablePtr; t : TypeDecl?;
+                          dname, name : string; at : LineInfo) : string {
+    let pt = t.firstType
+    if (pt == null) {
+        err(ctx, at, "parameter `{dname}` is a void pointer — MSL needs an element type")
+        return ""
+    }
+    if (reject_cpu_only_width(ctx, at, pt)) {
+        return ""
+    }
+    let elem = msl_buffer_elem_name(pt)
+    if (empty(elem)) {
+        err(ctx, at, "parameter `{dname}` pointee type has no MSL form")
+        return ""
+    }
+    if (elem != msl_type_name(pt)) {
+        err(ctx, at, "parameter `{dname}`: 3-lane packed elements do not lower through pointer parameters")
+        return ""
+    }
+    let space = ptr_param_space(v)
+    ctx.ptr_space[dname] = space
+    // the POINTEE's const is the MSL const — `T const?` is read-only, `T?` may be stored through
+    let isc = pt.flags.constant
+    note(ctx, isc ? "ufn.param.ptr.{space}_const" : "ufn.param.ptr.{space}")
+    return isc ? "{space} const {elem}* {name}" : "{space} {elem}* {name}"
+}
+
 // MSL parameter for one das helper argument; "" = error already reported. Address space is
 // fully determined by the das type: array<T> can only be an @ssbo member (device), a fixed
 // array only a @workgroup member (threadgroup), everything else travels by value or thread-ref
@@ -2092,6 +2213,9 @@ def private ufn_param(var ctx : MslCtx; v : VariablePtr; at : LineInfo) : string
         note(ctx, t.flags.constant ? "ufn.param.tg_const" : "ufn.param.tg")
         return t.flags.constant ? "threadgroup const {elem}* {name}" : "threadgroup {elem}* {name}"
     }
+    if (t.baseType == Type.tPointer) {
+        return ufn_param_ptr(ctx, v, t, dname, name, at)
+    }
     if (reject_cpu_only_width(ctx, at, t)) {
         return ""
     }
@@ -2112,6 +2236,7 @@ def private emit_one_ufn(var ctx : MslCtx; idx : int) {
     // per-function scope: the local-name state swaps out around the body emission
     var save_renames <- ctx.renames
     var save_ptrs <- ctx.ptrs
+    var save_ptr_space <- ctx.ptr_space
     let save_self = ctx.self_name
     let is_method = ctx.ufns[idx].is_method
     let fn = ctx.ufns[idx].fn
@@ -2171,6 +2296,7 @@ def private emit_one_ufn(var ctx : MslCtx; idx : int) {
     ctx.self_name = save_self
     ctx.renames <- save_renames
     ctx.ptrs <- save_ptrs
+    ctx.ptr_space <- save_ptr_space
 }
 
 // free functions: prototypes first, then bodies, in pinned (name-sorted) order — call order

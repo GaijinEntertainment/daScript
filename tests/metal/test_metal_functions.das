@@ -11,6 +11,7 @@ require dastest/testing_boost public
 require metal/msl_shader
 require ?das_metal metal/das_metal_boost
 require _metal_common
+require math
 
 let N = 256
 let TPG = 64u
@@ -46,6 +47,52 @@ def private fk_sum_tg(tile : float[64]; n : uint) : float {
         k++
     }
     return s
+}
+
+// pointer parameters: `T?` names no address space in das, so the parameter declares it
+// (unmarked = device, `@threadgroup` opts in) and the emitter checks it against the provenance
+// of every pointer handed over. This is the split-K attention shape — advance, don't index.
+def private fk_ptr_dot(var p : float const?; var q : float const?; n : uint) : float {
+    var s = 0.0
+    var k = 0u
+    while (k < n) {
+        s += unsafe(p[0]) * unsafe(q[0])
+        p = unsafe(p + 1)
+        q = unsafe(q + 1)
+        k++
+    }
+    return s
+}
+
+def private fk_ptr_tg_max(@threadgroup p : float const?; n : uint) : float {
+    var m = -1.0e30
+    var k = 0u
+    while (k < n) {
+        m = max(m, unsafe(p[k]))
+        k++
+    }
+    return m
+}
+
+def private fk_ptr_store(var o : float?; i : uint; v : float) {
+    unsafe(o[i]) = v
+}
+
+class FnPtr {
+    @ssbo @binding = 0 pa : array<float>
+    @ssbo @binding = 1 pb : array<float>
+    @ssbo @binding = 2 pc : array<float>
+    @workgroup ptile : float[64]
+
+    [metal_kernel(name="fnptr_msl"), marker(no_coverage)]
+    def fnptr {
+        let i = gl_GlobalInvocationID.x
+        ptile[gl_LocalInvocationID.x] = pa[i]
+        barrier()
+        let d = fk_ptr_dot(unsafe(addr(pa[i * 4u])), unsafe(addr(pb[i * 4u])), 4u)
+        let m = fk_ptr_tg_max(unsafe(addr(ptile[0])), gl_WorkGroupSize.x)
+        fk_ptr_store(unsafe(addr(pc[0])), i, d + m)
+    }
 }
 
 class FnBase {
@@ -242,6 +289,86 @@ def test_threadgroup_param_gpu(t : T?) {
                 }
                 metal_release(ba)
                 metal_release(bo)
+                metal_release(pso)
+                metal_release(queue)
+            }
+            if (gpu_bad >= 0) {
+                t |> equal(gpu_bad, 0)
+            }
+            t |> equal(metal_live_object_count(), 0l)
+        } else {
+            feint("das_metal is not built on this platform; the MSL text twin covers the emission\n")
+        }
+    }
+}
+
+[test]
+def test_pointer_param_gpu(t : T?) {
+    t |> run("device + threadgroup pointer parameters: advancing dot and slab max match") <| @(t : T?) {
+        let W = N * 4
+        var pa : array<float>
+        var pb : array<float>
+        pa |> resize(W)
+        pb |> resize(W)
+        for (k in range(W)) {
+            pa[k] = float(k % 9)
+            pb[k] = float(k % 5 + 1)
+        }
+        // the group-wide slab has no width-1 CPU replay (a barrier means nothing at width 1),
+        // so the expectation is computed directly: per-lane dot over its own 4 elements, plus
+        // the max of pa over the lane's whole threadgroup
+        var want : array<float>
+        want |> resize(N)
+        for (i in range(N)) {
+            var d = 0.0
+            for (k in range(i * 4, i * 4 + 4)) {
+                d += pa[k] * pb[k]
+            }
+            let g0 = (i / int(TPG)) * int(TPG)
+            var m = -1.0e30
+            for (k in range(g0, g0 + int(TPG))) {
+                m = max(m, pa[k])
+            }
+            want[i] = d + m
+        }
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            var gpu_bad = -1
+            with_metal_device() <| $(dev : MetalDevice?) {
+                if (dev == null) {
+                    feint("no Metal device on this box; GPU compare skipped\n")
+                    return
+                }
+                var perr : string
+                var pso = pipeline_from_source(dev, fnptr_msl, fnptr_msl_entry, fnptr_msl_fastmath, perr)
+                t |> success(pso != null, "pipeline_from_source: {perr}")
+                if (pso == null) {
+                    return
+                }
+                var queue = metal_new_command_queue(dev)
+                var ba = buf_upload(dev, pa)
+                var bb = buf_upload(dev, pb)
+                var bc = buf_fill(dev, N, -1000.0)
+                var bufs <- [ba, bb, bc]
+                var rerr : string
+                let ran = run_compute_1d(queue, pso, bufs, uint(N), TPG, rerr, fnptr_msl_tgmem)
+                t |> success(ran, "run_compute_1d: {rerr}")
+                if (ran) {
+                    gpu_bad = 0
+                    var gc <- buf_download(bc, N, type<float>)
+                    for (i in range(N)) {
+                        if (gc[i] != want[i]) {
+                            gpu_bad++
+                        }
+                    }
+                    delete gc
+                }
+                bufs |> clear()             // non-owning handles — clear() skips pointee finalize
+                unsafe {
+                    delete bufs
+                }
+                metal_release(ba)
+                metal_release(bb)
+                metal_release(bc)
                 metal_release(pso)
                 metal_release(queue)
             }

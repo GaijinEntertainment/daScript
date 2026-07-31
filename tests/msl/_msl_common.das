@@ -584,11 +584,42 @@ def private ufx_accum(var acc : float&; v : float) {   // thread-ref param
     acc += v
 }
 
+// Pointer parameters. das `T?` names no address space, so the parameter declares it — unmarked
+// is `device`, `@threadgroup` opts in — and every call site is checked against the provenance
+// of the pointer it hands over. The pointee's const is the MSL const, exactly as for a buffer.
+def private ufx_ptr_walk(var p : float const?; n : uint) : float {
+    var s = 0.0
+    var k = 0u
+    while (k < n) {
+        s += unsafe(p[0])
+        p = unsafe(p + 1)   // the advancing-pointer shape the split-K attention kernels stream
+        k++
+    }
+    return s
+}
+
+def private ufx_ptr_fwd(var p : float const?; n : uint) : float => ufx_ptr_walk(p, n)   // space propagates
+
+def private ufx_ptr_store(var o : float?; i : uint; v : float) {
+    unsafe(o[i]) = v
+}
+
+def private ufx_ptr_tg(@threadgroup p : float const?; n : uint) : float {
+    var s = 0.0
+    var k = 0u
+    while (k < n) {
+        s += unsafe(p[k])
+        k++
+    }
+    return s
+}
+
 class UserFns {
     @ssbo @binding = 0 src : array<float>
     @ssbo @binding = 1 srch : array<float16>
     @ssbo @binding = 2 yo : array<float>
     @ssbo @binding = 3 yoh : array<float16>
+    @ssbo @binding = 4 yp : array<float>
     @workgroup part : float[32]
 
     [metal_kernel(name="userfns_msl"), marker(no_coverage)]
@@ -603,7 +634,11 @@ class UserFns {
         ufx_accum(acc, ufx_shade(src[i], 3))
         if (lid == 0u) {
             acc += ufx_sum_tg(part, gl_WorkGroupSize.x)
+            acc += ufx_ptr_tg(unsafe(addr(part[0])), gl_WorkGroupSize.x)
         }
+        var sp = unsafe(addr(src[0]))
+        acc += ufx_ptr_walk(sp, 2u) + ufx_ptr_fwd(unsafe(sp + i), 2u)
+        ufx_ptr_store(unsafe(addr(yp[0])), i, acc)
         ufx_splat(yo, i, acc)
     }
 }
@@ -835,6 +870,8 @@ def public declared_msl_census : table<string> {
         "stmt.for.unroll",
         "decl.ptr.tg",
         "decl.ptr.dev",
+        "expr.addr.tg",
+        "expr.addr.dev",
         "op.ptr_add",
         "call.sgmat_load_ptr.f16",
         "call.sgmat_fill.f32",
@@ -903,6 +940,9 @@ def public declared_msl_census : table<string> {
         "ufn.param.buffer_const",
         "ufn.param.tg",
         "ufn.param.tg_const",
+        "ufn.param.ptr.device",
+        "ufn.param.ptr.device_const",
+        "ufn.param.ptr.threadgroup_const",
         "ufn.param.ref",
         "ufn.param.value",
         "ufn.param.hidden_builtin",

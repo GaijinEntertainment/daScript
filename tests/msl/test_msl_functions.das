@@ -50,6 +50,19 @@ def test_msl_functions(t : T?) {
             "barrier() inside a user function lowers in place")
         // thread-space reference param
         has(t, "void ufx_accum(thread float& acc, float v)")
+        // pointer params: unmarked is device, @threadgroup opts in, the POINTEE's const is the
+        // MSL const, and an inline addr(member[i]) argument lowers to plain pointer arithmetic
+        has(t, "float ufx_ptr_walk(device const float* p, uint n)")
+        has(t, "void ufx_ptr_store(device float* o, uint i, float v)")
+        has(t, "float ufx_ptr_tg(threadgroup const float* p, uint n)")
+        has(t, "ufx_ptr_tg((part + (0)), gl_WorkGroupSize.x)")
+        has(t, "ufx_ptr_store((yp + (0)), i, acc);")
+        // the space propagates through a forwarding helper — its own param declares device too
+        has(t, "float ufx_ptr_fwd(device const float* p, uint n)")
+        has(t, "return ufx_ptr_walk(p, n);")
+        // a written-through member stays non-const; the read-only source keeps its const
+        has(t, "device float* yp")
+        has(t, "device const float * sp = src + (0);")
         // prototypes precede bodies: the first ufx_sky mention ends with ';'
         let proto = find(userfns_msl, "float ufx_sky(float d);")
         let body = find(userfns_msl, "float ufx_sky(float d) \{")
