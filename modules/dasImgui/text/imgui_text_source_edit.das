@@ -514,14 +514,18 @@ def public text_source_edit(id : string; var ed : TextEditState;
             reinterpret<TypeInfo const?>(typeinfo rtti_typeinfo(type<TextEditState>)))
     }
     let hovered = IsItemHovered(ImGuiHoveredFlags.None)
-    let self_active = IsItemActive()
     if (IsItemFocused()) {
         ed.focused = true
     }
     handle_edit_mouse(ed, m, style, hovered, font)
     let page_rows = max(1, int(floor(m.view_height / m.line_height)) - 1)
     ed.visible_rows = page_rows
-    if (ed.focused && (self_active || !IsAnyItemActive())) {
+    // Keyboard arbitration: several editors may each remember focused=true
+    // (a click elsewhere is the only clearer), so the focused WINDOW picks
+    // which one hears keys; an active text input (find bar) mutes them all.
+    let io & = unsafe(GetIO())
+    let window_focused = IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)
+    if (ed.focused && window_focused && !io.WantTextInput) {
         route_editor_keys(ed, page_rows)
     }
     follow_edit_cursor(ed, m, style.tab_cells, font)
