@@ -2398,12 +2398,31 @@ def private pf_mm_shape64(t : Model) : bool {
         ((c.n_heads * hs_sw) % 64l) == 0l && ((kvh_sw * hs_sw) % 64l) == 0l)
 }
 
+// The window-READINESS leg: are THIS window's rope tables built yet? forward_prefill builds them
+// AFTER it consults the PLE gate, so a capability question must not ask this one.
+def private rope_rows_ready(t : Model; s : Session; npos : int64) : bool {
+    let c = t.config
+    let swa_hs = c.head_size_swa > 0l ? c.head_size_swa : c.head_size
+    return (long_length(s.rope_cos) >= npos * ((c.rope_dim > 0l ? c.rope_dim : c.head_size) / 2l) &&
+        (!has_dual_rope(c) || long_length(s.rope_cos_swa) >= npos * (swa_hs / 2l)))
+}
+
 // the std dense stack + PF_NEEDS_OK features are wired — anything else declines to the CPU
 // loop. Returns the FIRST failing clause; .none = supported.
 [unused_argument(start_pos)]   // start_pos > 0 (a continuation chunk) is served (M2.5): the
 // existing rows gather into the K/V panels and the causal diagonal shifts by qoff — the gate
 // keeps the argument so future clauses can window it
 def private prefill_decline(t : Model; s : Session; npos, start_pos : int64) : MetalPrefillDecline {
+    let why = prefill_decline_caps(t, npos)
+    if (why != MetalPrefillDecline.none) return why
+    // rope tables are the hook's input (partial rope: rows rope_dim/2 wide; dual-rope: swa class width)
+    return rope_rows_ready(t, s, npos) ? MetalPrefillDecline.none : MetalPrefillDecline.rope_rows
+}
+
+// Everything a model either can or cannot do, independent of how far THIS window has been set up.
+// Callers that run before the window is staged (the PLE gpu gate) ask this one; a window that then
+// turns out not to be ready declines later, and metal_prefill_forward's fallback covers it.
+def private prefill_decline_caps(t : Model; npos : int64) : MetalPrefillDecline {
     // npos window is a POLICY decline (short prefills were cheaper on CPU); blob-only has no CPU path, so any npos serves
     if (!t.metal_blob && (npos < g_min_npos || npos > g_max_npos)) {
         return MetalPrefillDecline.npos_window
@@ -2457,12 +2476,6 @@ def private prefill_decline(t : Model; s : Session; npos, start_pos : int64) : M
     if (!t.metal_blob || g_mm_legacy || !g_pf_env_mulmm ||
             !pf_mm_shape64(t)) {
         return MetalPrefillDecline.planar
-    }
-    // rope tables are the hook's input (partial rope: rows rope_dim/2 wide; dual-rope: swa class width)
-    let swa_hs = c.head_size_swa > 0l ? c.head_size_swa : c.head_size
-    if (long_length(s.rope_cos) < npos * ((c.rope_dim > 0l ? c.rope_dim : c.head_size) / 2l) ||
-            (has_dual_rope(c) && long_length(s.rope_cos_swa) < npos * (swa_hs / 2l))) {
-        return MetalPrefillDecline.rope_rows
     }
     return MetalPrefillDecline.none
 }
@@ -2958,14 +2971,16 @@ def private pf_enc_swiglu_oai(enc : MetalComputeEncoder?; bg, bu, btot, bcnt, bb
 
 // GPU-PLE gate (register_ple_gpu_gate): true iff THIS window's metal prefill will engage AND
 // the pre-step kernels cover the model — q8 emb table, kept-bf16 model_proj, slice/shape gates.
+[unused_argument(s, start_pos)]
 def private metal_ple_pre_gpu_gate(t : Model; s : Session; npos, start_pos : int64) : bool {
     if (active_prefill_override() != "metal" ||
             !t.metal_blob || t.ple_emb_fmt != KqFmt.q8 || !t.ple_model_bf16) {
         return false
     }
     let ple = t.config.n_embd_per_layer
+    // CAPABILITY only — the rope-rows leg would answer "not yet" every time at this point
     if (ple % 32l != 0l || ple > 1024l || (t.config.n_layers * ple) % 64l != 0l ||
-            prefill_decline(t, s, npos, start_pos) != MetalPrefillDecline.none) {
+            prefill_decline_caps(t, npos) != MetalPrefillDecline.none) {
         return false
     }
     return metal_prefill_init()
