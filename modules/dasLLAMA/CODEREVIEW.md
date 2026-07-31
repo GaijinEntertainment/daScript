@@ -154,6 +154,16 @@
 
     **Verify against the EMITTED shader, never the das source.** Read the `*_msl` global (or
     the SPIR-V dump) and confirm the constant is literal there: `blk * 34u`, not `blk * bstr`.
+
+    **One family, one kargs struct, one slot — and no value reaches an encoder twice.** Twins of
+    a family (a codec zoo, a B=2/B=4 pair) bind the SAME kargs type at the SAME binding, even
+    where one twin ignores a field; a twin that carries an extra scalar must not shift the others
+    to different slots, because that asymmetry propagates into the encoder as a per-form branch.
+    The tell that a fold is overdue is a scalar uniform BUFFER passed alongside the identical
+    value as an `int64` parameter (`bd` next to `d`, `bys` next to `ys`, `bnr` next to `nrows`) —
+    the buffer is pooled, uploaded and released per step to carry a number the encoder already
+    holds. Build the kargs from the parameters and delete the buffer; a pooled scalar that
+    survives must be one a DIFFERENT encoder still binds.
     A helper that looks specialized in das can still lower to a runtime multiply.
 
 22. **Complexity/length lint: suppress an honest shape, never force a split.** STYLE037

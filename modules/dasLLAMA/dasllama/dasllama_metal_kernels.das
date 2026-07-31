@@ -2005,29 +2005,25 @@ class MetalQ8MvB2 {
     @ssbo @binding = 1 @role = "weight" wqb : array<int8>    // the same blob buffer, byte view (quants at 34*b + 2)
     @ssbo @binding = 2 @role = "read" x : array<float4>    // [B rows x xs4 float4-stride] f32 rows
     @ssbo @binding = 3 @role = "write" y : array<float>     // [B x ddim]
-    @uniform @binding = 4 ndim : uint
-    @uniform @binding = 5 ddim : uint
-    @uniform @binding = 6 xs4 : uint        // x row stride in float4s (ndim/4 = dense)
-    @uniform @binding = 7 ys : uint         // y ROW stride (== ddim dense; qkvd at the fused-QKV
-                                            // segment sites — the kq mv twins' bys contract)
+    @uniform @binding = 4 ka : Q8MvArgs
 
     [metal_kernel(name="metal_q8_mv_b2_msl")]
     def metal_q8_mv_b2 {
         let lane = gl_SubgroupInvocationID
         let tx = lane % 16u
         let row0 = gl_WorkGroupID.x * 4u + gl_SubgroupID * 2u + lane / 16u
-        let row = min(row0, ddim - 1u)      // clamp, not return — keeps the shuffle groups full
-        let nb = ndim / 32u
+        let row = min(row0, ka.ddim - 1u)      // clamp, not return — keeps the shuffle groups full
+        let nb = ka.ndim / 32u
         let blk = row * nb + tx / 8u
         let cq = 4u * (tx % 4u) + 16u * ((tx % 8u) / 4u)   // quant offset of chunk tx%8 in its block
         var sp = unsafe(addr(wsh[blk * 17u]))
         var qp = unsafe(addr(wqb[blk * 34u + 2u + cq]))
         var x0 = unsafe(addr(x[tx]))
-        var x1 = unsafe(addr(x[xs4 + tx]))
+        var x1 = unsafe(addr(x[ka.xs4 + tx]))
         var acc : float[2]
         var lw : float4[4]
         var ich = tx
-        while (4u * ich < ndim) {
+        while (4u * ich < ka.ndim) {
             // all 4 chunk dequants batch AHEAD of the fma chains — the load batching that makes
             // this shape win (interleaved dequant+fma measured +0.09 GPU-ms/step)
             for [unroll_full] (c in range(4)) {
@@ -2054,8 +2050,8 @@ class MetalQ8MvB2 {
             s += simd_shuffle_down(s, 4u)
             s += simd_shuffle_down(s, 2u)
             s += simd_shuffle_down(s, 1u)
-            if (tx == 0u && row0 < ddim) {
-                y[uint(b) * ys + row0] = s
+            if (tx == 0u && row0 < ka.ddim) {
+                y[uint(b) * ka.ys + row0] = s
             }
         }
     }
@@ -2069,31 +2065,27 @@ class MetalQ8MvB4 {
     @ssbo @binding = 1 @role = "weight" wqb : array<int8>
     @ssbo @binding = 2 @role = "read" x : array<float4>
     @ssbo @binding = 3 @role = "write" y : array<float>
-    @uniform @binding = 4 ndim : uint
-    @uniform @binding = 5 ddim : uint
-    @uniform @binding = 6 nrows : uint
-    @uniform @binding = 7 xs4 : uint
-    @uniform @binding = 8 ys : uint         // y ROW stride (== ddim dense)
+    @uniform @binding = 4 ka : Q8MvArgs
 
     [metal_kernel(name="metal_q8_mv_b4_msl")]
     def metal_q8_mv_b4 {
         let lane = gl_SubgroupInvocationID
         let tx = lane % 8u
         let row0 = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + lane / 8u
-        let row = min(row0, ddim - 1u)
-        let nb = ndim / 32u
+        let row = min(row0, ka.ddim - 1u)
+        let nb = ka.ndim / 32u
         let blk = row * nb
         let cq = 4u * (tx % 4u) + 16u * (tx / 4u)   // quant offset of chunk tx in its block
         var sp = unsafe(addr(wsh[blk * 17u]))
         var qp = unsafe(addr(wqb[blk * 34u + 2u + cq]))
         var x0 = unsafe(addr(x[tx]))
-        var x1 = unsafe(addr(x[xs4 + tx]))
-        var x2 = unsafe(addr(x[min(2u, nrows - 1u) * xs4 + tx]))
-        var x3 = unsafe(addr(x[min(3u, nrows - 1u) * xs4 + tx]))
+        var x1 = unsafe(addr(x[ka.xs4 + tx]))
+        var x2 = unsafe(addr(x[min(2u, ka.nrows - 1u) * ka.xs4 + tx]))
+        var x3 = unsafe(addr(x[min(3u, ka.nrows - 1u) * ka.xs4 + tx]))
         var acc : float[4]
         var lw : float4[4]
         var ich = tx
-        while (4u * ich < ndim) {
+        while (4u * ich < ka.ndim) {
             for [unroll_full] (c in range(4)) {
                 let d = float(unsafe(sp[uint(c) * 17u]))   // chunk c sits 1 block (17 halves) on
                 let qb = uint(c) * 34u
@@ -2124,8 +2116,8 @@ class MetalQ8MvB4 {
             s += simd_shuffle_down(s, 4u)
             s += simd_shuffle_down(s, 2u)
             s += simd_shuffle_down(s, 1u)
-            if (tx == 0u && row0 < ddim && uint(b) < nrows) {
-                y[uint(b) * ys + row0] = s
+            if (tx == 0u && row0 < ka.ddim && uint(b) < ka.nrows) {
+                y[uint(b) * ka.ys + row0] = s
             }
         }
     }
@@ -3162,6 +3154,27 @@ class MetalSqAttnCombB {
         }
         yo[bb * (nheads * hs) + h * hs + lid] = acc / l
     }
+}
+
+// The mul_mv-shape fixed-B GEMV twins bind their uniforms as ONE kargs value. `xs4` is the x row
+// stride in float4s; `ys` the y ROW stride (ddim dense, or the fused-QKV row stride at a segment
+// site). Sharing it lets both twins bind at one slot — the split forms shifted xs4/ys past nrows.
+struct Q8MvArgs {
+    ndim : uint
+    ddim : uint
+    nrows : uint
+    xs4 : uint
+    ys : uint
+}
+
+// The K-quant small-batch mv family (9 twins: B = 2|4|8 x k4|k5|k6) binds its uniforms as ONE
+// kargs value. `ys` is the y ROW stride in elements; `nr` the live column count the stores gate
+// on — the pad columns of a partial group compute and discard.
+struct KqMvArgs {
+    ndim : uint
+    ddim : uint
+    ys : uint
+    nr : uint
 }
 
 // The MoE GEMV family's uniforms as ONE kargs value. `eplane` is the per-expert plane's block
@@ -4500,7 +4513,7 @@ def enc_kq_gemv(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff
 
 // K-quant small-batch mv (B = 2..8): R=4 column groups via grid.y, R=2 via the B2 PSO; B = 5..8
 // rides the single-pass B8 twin (requires the mp == 8 pad the driver guarantees at nlive >= 5;
-// DASLLAMA_METAL_KQ_B8=0 = the A/B rail). bys = y ROW-stride; bnr = live columns (stores gate).
+// DASLLAMA_METAL_KQ_B8=0 = the A/B rail).
 var private g_kq_b8_mode = -1
 
 [cold_path]   // one-time env resolution; kq_b8_on is a global test after the first call
@@ -4517,7 +4530,7 @@ def private kq_b8_on : bool {
 
 def enc_kq_mvb(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff : uint64;
                bs : MetalBuffer?; soff, doff : uint64; bx, by : MetalBuffer?; yoff : uint64;
-               bn, bd, bys, bnr : MetalBuffer?; rows, nlive : int64) {
+               var ka : KqMvArgs; rows, nlive : int64) {
     let two = nlive == 2l
     let b8 = nlive >= 5l && kq_b8_on()
     if (fmt == KqFmt.k6) {
@@ -4543,10 +4556,7 @@ def enc_kq_mvb(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff 
     kn_buffer(enc, bq, qoff, 2)
     kn_buffer(enc, bx, 0ul, 3)
     kn_buffer(enc, by, yoff, 4)
-    kn_buffer(enc, bn, 0ul, 5)
-    kn_buffer(enc, bd, 0ul, 6)
-    kn_buffer(enc, bys, 0ul, 7)
-    kn_buffer(enc, bnr, 0ul, 8)
+    kn_kargs(enc, ka, 5)
     let gcols = (two || b8) ? 1l : (nlive + 3l) / 4l
     hz_read(bx)
     hz_write(by)
@@ -4598,7 +4608,7 @@ def enc_site_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows
 // the M-padded x panel. Disjoint y rows/columns: the caller's one barrier covers the whole group.
 def enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows, n : int64;
                   bx : MetalBuffer?; xstride : int64; by : MetalBuffer?; ystride, ycol : int64;
-                  bn, bd, bys, bnr : MetalBuffer?; nrows, mp : int64) {
+                  bn, bd, bys : MetalBuffer?; nrows, mp : int64) {
     let bq = kq_quants_of(g_dev, t, fmt, woff)
     let bs = kq_scales_of(g_dev, t, fmt, woff)
     if (nrows > 8l) {
@@ -4606,9 +4616,10 @@ def enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows
         return
     }
     // B = 2..8: the ext small-batch twins — one weight pass per R-column group instead of B per-stream passes (-25..-40% at the 3B sites)
-    if (nrows >= 2l && bnr != null) {
+    if (nrows >= 2l) {
         assert(xstride == n)
-        enc_kq_mvb(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, uint64(ycol * 4l), bn, bd, bys, bnr, rows, nrows)
+        var ka = KqMvArgs(ndim = uint(n), ddim = uint(rows), ys = uint(ystride), nr = uint(nrows))
+        enc_kq_mvb(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, uint64(ycol * 4l), ka, rows, nrows)
         return
     }
     for (b in range64(nrows)) {
@@ -4875,45 +4886,38 @@ def enc_gemv_b(enc : MetalComputeEncoder?; four : bool; bw : MetalBuffer?; boff 
 }
 
 // the mul_mv-shape fixed-B GEMV on an interleaved 34B blob (dual views of the SAME buffer);
-// bxs = x row stride in float4s; bnr = the nrows uniform, four-form only; xoff/yoff = the
-// column-tile byte offsets (B > 4 streams the weights once per 4-column tile)
+// xoff/yoff = the column-tile byte offsets (B > 4 streams the weights once per 4-column tile)
 def enc_mv_b(enc : MetalComputeEncoder?; four : bool; bwblob : MetalBuffer?; wboff : uint64;
-             bx, by, bn, bd, bxs, bys : MetalBuffer?; d : int64;
-             bnr : MetalBuffer? = null; xoff : uint64 = 0ul; yoff : uint64 = 0ul) {
+             bx, by : MetalBuffer?; var ka : Q8MvArgs;
+             xoff : uint64 = 0ul; yoff : uint64 = 0ul) {
     kn_pipeline(enc, four ? g_pso_mv_b4 : g_pso_mv_b2)
     kn_buffer(enc, bwblob, wboff, 0)
     kn_buffer(enc, bwblob, wboff, 1)
     kn_buffer(enc, bx, xoff, 2)
     kn_buffer(enc, by, yoff, 3)
-    kn_buffer(enc, bn, 0ul, 4)
-    kn_buffer(enc, bd, 0ul, 5)
-    if (four) {
-        kn_buffer(enc, bnr, 0ul, 6)
-        kn_buffer(enc, bxs, 0ul, 7)
-        kn_buffer(enc, bys, 0ul, 8)
-    } else {
-        kn_buffer(enc, bxs, 0ul, 6)
-        kn_buffer(enc, bys, 0ul, 7)
-    }
+    kn_kargs(enc, ka, 4)
     // b2 = 4 rows/tg (16 lanes/row); b4 = 8 rows/tg (8 lanes/row)
     hz_read(bx)
     hz_write(by)
     hz_gate(enc)
+    let d = int64(ka.ddim)
     kn_dispatch(enc, uint3(uint(four ? (d + 7l) / 8l : (d + 3l) / 4l), 1u, 1u), uint3(64u, 1u, 1u))
 }
 
 // one mv GEMV site: a single form dispatch at B <= 4, two 4-column tiles at B = 5..8 (the
 // reference's own shape — it never switches to GEMM below B = 9; the weights stream twice but
-// stay the fast skinny form). xrowb = the x row stride in bytes; bnr/bnr2 = per-tile nrows.
+// stay the fast skinny form). xrowb = the x row stride in bytes; the tiles differ only in nrows.
 def enc_mv_site(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64;
-                bx, by, bn, bd, bxs, bys : MetalBuffer?;
-                d, nrows, ys : int64; xrowb : uint64; bnr, bnr2 : MetalBuffer?;
+                bx, by : MetalBuffer?; n, xs4, d, nrows, ys : int64; xrowb : uint64;
                 yoff : uint64 = 0ul) {
-    enc_mv_b(enc, nrows > 2l, bwblob, wboff, bx, by, bn, bd, bxs, bys, d, bnr, 0ul, yoff)
+    var ka = Q8MvArgs(ndim = uint(n), ddim = uint(d), nrows = uint(min(nrows, 4l)),
+        xs4 = uint(xs4), ys = uint(ys))
+    enc_mv_b(enc, nrows > 2l, bwblob, wboff, bx, by, ka, 0ul, yoff)
     if (nrows > 4l) {
-        // the rows-5..8 dispatch offsets y by 4 rows of the SITE's y row stride (the ys
-        // uniform's value — fused-buffer segment sites included)
-        enc_mv_b(enc, true, bwblob, wboff, bx, by, bn, bd, bxs, bys, d, bnr2, 4ul * xrowb, yoff + uint64(4l * ys * 4l))
+        // the rows-5..8 dispatch offsets y by 4 rows of the SITE's y row stride — fused-buffer
+        // segment sites included
+        ka.nrows = uint(nrows - 4l)
+        enc_mv_b(enc, true, bwblob, wboff, bx, by, ka, 4ul * xrowb, yoff + uint64(4l * ys * 4l))
     }
 }
 
@@ -7233,10 +7237,7 @@ class MetalKqMvB2K4 {
     @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
     @ssbo @binding = 3 @role = "read" x : array<float4>
     @ssbo @binding = 4 @role = "write" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
-    @uniform @binding = 7 ys : uint         // y row stride, elements
-    @uniform @binding = 8 nr : uint         // live columns — stores gate on it
+    @uniform @binding = 5 ka : KqMvArgs
 
     [metal_kernel(name="metal_kq_mvb2_k4_msl")]
     def metal_kq_mvb2_k4 {
@@ -7244,13 +7245,13 @@ class MetalKqMvB2K4 {
         let tx = lane % 8u
         let ty = lane / 8u
         let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
-        let nb = ndim / 256u
+        let nb = ka.ndim / 256u
         let q4i = tx / 4u
         let hp = (tx % 4u) / 2u
         let lo = (tx % 2u) * 4u
         let jl = 2u * q4i + hp
         let nsh = (tx % 4u) < 2u ? 0u : 4u
-        let nb4 = ndim / 4u
+        let nb4 = ka.ndim / 4u
         var sumf : float[2]
         var sb = 0u
         while (sb < nb) {
@@ -7293,8 +7294,8 @@ class MetalKqMvB2K4 {
             s += simd_shuffle_down(s, 4u)
             s += simd_shuffle_down(s, 2u)
             s += simd_shuffle_down(s, 1u)
-            if (tx == 0u && row < ddim && uint(b) < nr) {
-                y[uint(b) * ys + row] = s
+            if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
+                y[uint(b) * ka.ys + row] = s
             }
         }
     }
@@ -7306,10 +7307,7 @@ class MetalKqMvB4K4 {
     @ssbo @binding = 2 @role = "weight" kqu : array<uint>
     @ssbo @binding = 3 @role = "read" x : array<float4>
     @ssbo @binding = 4 @role = "write" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
-    @uniform @binding = 7 ys : uint
-    @uniform @binding = 8 nr : uint
+    @uniform @binding = 5 ka : KqMvArgs
 
     [metal_kernel(name="metal_kq_mvb4_k4_msl")]
     def metal_kq_mvb4_k4 {
@@ -7318,13 +7316,13 @@ class MetalKqMvB4K4 {
         let ty = lane / 8u
         let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
         let colbase = gl_WorkGroupID.y * 4u
-        let nb = ndim / 256u
+        let nb = ka.ndim / 256u
         let q4i = tx / 4u
         let hp = (tx % 4u) / 2u
         let lo = (tx % 2u) * 4u
         let jl = 2u * q4i + hp
         let nsh = (tx % 4u) < 2u ? 0u : 4u
-        let nb4 = ndim / 4u
+        let nb4 = ka.ndim / 4u
         var sumf : float[4]
         var sb = 0u
         while (sb < nb) {
@@ -7367,8 +7365,8 @@ class MetalKqMvB4K4 {
             s += simd_shuffle_down(s, 4u)
             s += simd_shuffle_down(s, 2u)
             s += simd_shuffle_down(s, 1u)
-            if (tx == 0u && row < ddim && colbase + uint(b) < nr) {
-                y[(colbase + uint(b)) * ys + row] = s
+            if (tx == 0u && row < ka.ddim && colbase + uint(b) < ka.nr) {
+                y[(colbase + uint(b)) * ka.ys + row] = s
             }
         }
     }
@@ -7380,10 +7378,7 @@ class MetalKqMvB2K6 {
     @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k6 quant plane, uint view (ql at 48*blk, qh at 48*blk+32)
     @ssbo @binding = 3 @role = "read" x : array<float4>
     @ssbo @binding = 4 @role = "write" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
-    @uniform @binding = 7 ys : uint
-    @uniform @binding = 8 nr : uint
+    @uniform @binding = 5 ka : KqMvArgs
 
     [metal_kernel(name="metal_kq_mvb2_k6_msl")]
     def metal_kq_mvb2_k6 {
@@ -7391,13 +7386,13 @@ class MetalKqMvB2K6 {
         let tx = lane % 8u
         let ty = lane / 8u
         let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
-        let nb = ndim / 256u
+        let nb = ka.ndim / 256u
         let s = tx / 2u
         let o4 = (tx % 2u) * 4u             // 16B offset within the slot, in uints
         let qoff = (s % 2u) * 8u + o4       // ql uint offset within the 128-half's 16 uints
         let shr = s < 2u ? 0u : 4u
         let hsh = 2u * s
-        let nb4 = ndim / 4u
+        let nb4 = ka.ndim / 4u
         var sumf : float[2]
         var sb = 0u
         while (sb < nb) {
@@ -7440,8 +7435,8 @@ class MetalKqMvB2K6 {
             sm += simd_shuffle_down(sm, 4u)
             sm += simd_shuffle_down(sm, 2u)
             sm += simd_shuffle_down(sm, 1u)
-            if (tx == 0u && row < ddim && uint(b) < nr) {
-                y[uint(b) * ys + row] = sm
+            if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
+                y[uint(b) * ka.ys + row] = sm
             }
         }
     }
@@ -7453,10 +7448,7 @@ class MetalKqMvB4K6 {
     @ssbo @binding = 2 @role = "weight" kqu : array<uint>
     @ssbo @binding = 3 @role = "read" x : array<float4>
     @ssbo @binding = 4 @role = "write" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
-    @uniform @binding = 7 ys : uint
-    @uniform @binding = 8 nr : uint
+    @uniform @binding = 5 ka : KqMvArgs
 
     [metal_kernel(name="metal_kq_mvb4_k6_msl")]
     def metal_kq_mvb4_k6 {
@@ -7465,13 +7457,13 @@ class MetalKqMvB4K6 {
         let ty = lane / 8u
         let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
         let colbase = gl_WorkGroupID.y * 4u
-        let nb = ndim / 256u
+        let nb = ka.ndim / 256u
         let s = tx / 2u
         let o4 = (tx % 2u) * 4u
         let qoff = (s % 2u) * 8u + o4
         let shr = s < 2u ? 0u : 4u
         let hsh = 2u * s
-        let nb4 = ndim / 4u
+        let nb4 = ka.ndim / 4u
         var sumf : float[4]
         var sb = 0u
         while (sb < nb) {
@@ -7512,8 +7504,8 @@ class MetalKqMvB4K6 {
             sm += simd_shuffle_down(sm, 4u)
             sm += simd_shuffle_down(sm, 2u)
             sm += simd_shuffle_down(sm, 1u)
-            if (tx == 0u && row < ddim && colbase + uint(b) < nr) {
-                y[(colbase + uint(b)) * ys + row] = sm
+            if (tx == 0u && row < ka.ddim && colbase + uint(b) < ka.nr) {
+                y[(colbase + uint(b)) * ka.ys + row] = sm
             }
         }
     }
@@ -7528,10 +7520,7 @@ class MetalKqMvB2K5 {
     @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k5 plane, uint view (qs at 40*blk, qh at 40*blk+32)
     @ssbo @binding = 3 @role = "read" x : array<float4>
     @ssbo @binding = 4 @role = "write" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
-    @uniform @binding = 7 ys : uint         // y row stride, elements
-    @uniform @binding = 8 nr : uint         // live columns — stores gate on it
+    @uniform @binding = 5 ka : KqMvArgs
 
     [metal_kernel(name="metal_kq_mvb2_k5_msl")]
     def metal_kq_mvb2_k5 {
@@ -7539,14 +7528,14 @@ class MetalKqMvB2K5 {
         let tx = lane % 8u
         let ty = lane / 8u
         let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
-        let nb = ndim / 256u
+        let nb = ka.ndim / 256u
         let q4i = tx / 4u
         let hp = (tx % 4u) / 2u
         let lo = (tx % 2u) * 4u
         let jl = 2u * q4i + hp
         let nib = (tx % 4u) < 2u
         let nsh = nib ? 0u : 4u
-        let nb4 = ndim / 4u
+        let nb4 = ka.ndim / 4u
         var sumf : float[2]
         var sb = 0u
         while (sb < nb) {
@@ -7595,8 +7584,8 @@ class MetalKqMvB2K5 {
             s += simd_shuffle_down(s, 4u)
             s += simd_shuffle_down(s, 2u)
             s += simd_shuffle_down(s, 1u)
-            if (tx == 0u && row < ddim && uint(b) < nr) {
-                y[uint(b) * ys + row] = s
+            if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
+                y[uint(b) * ka.ys + row] = s
             }
         }
     }
@@ -7608,10 +7597,7 @@ class MetalKqMvB4K5 {
     @ssbo @binding = 2 @role = "weight" kqu : array<uint>
     @ssbo @binding = 3 @role = "read" x : array<float4>
     @ssbo @binding = 4 @role = "write" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
-    @uniform @binding = 7 ys : uint
-    @uniform @binding = 8 nr : uint
+    @uniform @binding = 5 ka : KqMvArgs
 
     [metal_kernel(name="metal_kq_mvb4_k5_msl")]
     def metal_kq_mvb4_k5 {
@@ -7620,14 +7606,14 @@ class MetalKqMvB4K5 {
         let ty = lane / 8u
         let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
         let colbase = gl_WorkGroupID.y * 4u
-        let nb = ndim / 256u
+        let nb = ka.ndim / 256u
         let q4i = tx / 4u
         let hp = (tx % 4u) / 2u
         let lo = (tx % 2u) * 4u
         let jl = 2u * q4i + hp
         let nib = (tx % 4u) < 2u
         let nsh = nib ? 0u : 4u
-        let nb4 = ndim / 4u
+        let nb4 = ka.ndim / 4u
         var sumf : float[4]
         var sb = 0u
         while (sb < nb) {
@@ -7676,8 +7662,8 @@ class MetalKqMvB4K5 {
             s += simd_shuffle_down(s, 4u)
             s += simd_shuffle_down(s, 2u)
             s += simd_shuffle_down(s, 1u)
-            if (tx == 0u && row < ddim && colbase + uint(b) < nr) {
-                y[(colbase + uint(b)) * ys + row] = s
+            if (tx == 0u && row < ka.ddim && colbase + uint(b) < ka.nr) {
+                y[(colbase + uint(b)) * ka.ys + row] = s
             }
         }
     }
@@ -7689,10 +7675,7 @@ class MetalKqMvB8K4 {
     @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
     @ssbo @binding = 3 @role = "read" x : array<float4>
     @ssbo @binding = 4 @role = "write" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
-    @uniform @binding = 7 ys : uint         // y row stride, elements
-    @uniform @binding = 8 nr : uint         // live columns — stores gate on it
+    @uniform @binding = 5 ka : KqMvArgs
     @workgroup txp : float4[512]            // [8 streams x 64 float4] one superblock's X panel
 
     [metal_kernel(name="metal_kq_mvb8_k4_msl")]
@@ -7702,14 +7685,14 @@ class MetalKqMvB8K4 {
         let tx = lane % 8u
         let ty = lane / 8u
         let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
-        let nb = ndim / 256u
+        let nb = ka.ndim / 256u
         let q4i = tx / 4u
         let hp = (tx % 4u) / 2u
         let lo = (tx % 2u) * 4u
         let jl = 2u * q4i + hp
         let nib = (tx % 4u) < 2u
         let nsh = nib ? 0u : 4u
-        let nb4 = ndim / 4u
+        let nb4 = ka.ndim / 4u
         var acc : float4[8]
         var sb = 0u
         while (sb < nb) {
@@ -7757,8 +7740,8 @@ class MetalKqMvB8K4 {
             s += simd_shuffle_down(s, 4u)
             s += simd_shuffle_down(s, 2u)
             s += simd_shuffle_down(s, 1u)
-            if (tx == 0u && row < ddim && uint(b) < nr) {
-                y[uint(b) * ys + row] = s
+            if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
+                y[uint(b) * ka.ys + row] = s
             }
         }
     }
@@ -7770,10 +7753,7 @@ class MetalKqMvB8K5 {
     @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k5 plane, uint view (qs at 40*blk, qh at 40*blk+32)
     @ssbo @binding = 3 @role = "read" x : array<float4>
     @ssbo @binding = 4 @role = "write" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
-    @uniform @binding = 7 ys : uint
-    @uniform @binding = 8 nr : uint
+    @uniform @binding = 5 ka : KqMvArgs
     @workgroup txp : float4[512]
 
     [metal_kernel(name="metal_kq_mvb8_k5_msl")]
@@ -7783,14 +7763,14 @@ class MetalKqMvB8K5 {
         let tx = lane % 8u
         let ty = lane / 8u
         let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
-        let nb = ndim / 256u
+        let nb = ka.ndim / 256u
         let q4i = tx / 4u
         let hp = (tx % 4u) / 2u
         let lo = (tx % 2u) * 4u
         let jl = 2u * q4i + hp
         let nib = (tx % 4u) < 2u
         let nsh = nib ? 0u : 4u
-        let nb4 = ndim / 4u
+        let nb4 = ka.ndim / 4u
         var acc : float4[8]
         var sb = 0u
         while (sb < nb) {
@@ -7844,8 +7824,8 @@ class MetalKqMvB8K5 {
             s += simd_shuffle_down(s, 4u)
             s += simd_shuffle_down(s, 2u)
             s += simd_shuffle_down(s, 1u)
-            if (tx == 0u && row < ddim && uint(b) < nr) {
-                y[uint(b) * ys + row] = s
+            if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
+                y[uint(b) * ka.ys + row] = s
             }
         }
     }
@@ -7857,10 +7837,7 @@ class MetalKqMvB8K6 {
     @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k6 quant plane, uint view (ql at 48*blk, qh at 48*blk+32)
     @ssbo @binding = 3 @role = "read" x : array<float4>
     @ssbo @binding = 4 @role = "write" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
-    @uniform @binding = 7 ys : uint
-    @uniform @binding = 8 nr : uint
+    @uniform @binding = 5 ka : KqMvArgs
     @workgroup txp : float4[512]
 
     [metal_kernel(name="metal_kq_mvb8_k6_msl")]
@@ -7870,13 +7847,13 @@ class MetalKqMvB8K6 {
         let tx = lane % 8u
         let ty = lane / 8u
         let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
-        let nb = ndim / 256u
+        let nb = ka.ndim / 256u
         let s = tx / 2u
         let o4 = (tx % 2u) * 4u
         let qoff = (s % 2u) * 8u + o4
         let shr = s < 2u ? 0u : 4u
         let hsh = 2u * s
-        let nb4 = ndim / 4u
+        let nb4 = ka.ndim / 4u
         var acc : float4[8]
         var sb = 0u
         while (sb < nb) {
@@ -7922,8 +7899,8 @@ class MetalKqMvB8K6 {
             sm += simd_shuffle_down(sm, 4u)
             sm += simd_shuffle_down(sm, 2u)
             sm += simd_shuffle_down(sm, 1u)
-            if (tx == 0u && row < ddim && uint(b) < nr) {
-                y[uint(b) * ys + row] = sm
+            if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
+                y[uint(b) * ka.ys + row] = sm
             }
         }
     }
