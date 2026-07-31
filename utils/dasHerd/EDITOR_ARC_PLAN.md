@@ -279,6 +279,16 @@ highlight inside code blocks lands with the selection work in E2/E4.
   lexical pass tells the indenter which braces are real (`// {` and
   `"{"` must not count); ghost-text completion defaults ON with a
   per-language kill switch. All revisable if it feels wrong in use.
+  Settled 2026-07-31 (Boris: "now, for sure"): the E6 provider interface
+  is built IN E4 as the completion carrier from day one —
+  document-words+keywords is provider #1; LSP and LLM slot in later
+  without touching the editor, and the interface grows hover/definition
+  arms in E6. The language profile ABSORBS the per-language data already
+  scattered in the tree — what's collapsible (`g_fold_types` in
+  imgui_text_tree_sitter), extension→language mapping, bracket pairs,
+  keyword lists — one home, the modules consume the profile instead of
+  private tables. Tab default: a visible ghost suggestion accepts on
+  Tab; otherwise Tab keeps its indent behavior (the VS Code rule).
 - **E4-follow-up (recorded, not pressing): LLM completion tier.** Own
   section when it comes: API port setting, async request, model picked
   for fill speed, model-per-language setting; basic-basic completion.
