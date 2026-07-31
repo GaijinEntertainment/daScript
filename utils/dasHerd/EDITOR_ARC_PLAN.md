@@ -67,6 +67,29 @@ view's tab-expanded draw/measure helpers went public
 smoke and fixed: drawing against the pre-input line count crashed on
 line-join edits — the draw section recounts after input runs.
 
+**E2 status (SHIPPED 2026-07-30, commits bcf40261f..dc9edcc8e):** the
+component is an honest plain-text editor with every binding editable.
+Landed per the spec: window-focus keyboard arbitration; selection model
+(Shift-nav select twins, collapse rules, mouse drag/double-word/
+triple-line select, per-row rects with newline nub); one-predicate word
+boundaries (Ctrl+Left word starts w/ lone-separator skip, Ctrl+Right
+word ENDS, whitespace-heuristic word deletes); the undo journal
+(commit_edit primitive, word-sized coalescing, adjacency break on caret
+jumps, Enter/paste fences, public push_undo_stop, selection restore,
+redo cleared on edit); clipboard verbs with line-mode copy/cut/paste +
+the six CUA/modern chords; numpad twins in ALL modifier combos with
+char-queue NumLock disambiguation; insert/overtype with block caret;
+and the keymap routed through imgui_commands (second-chord slot,
+collision-safe polling, capture-sentinel OOB fix, command_take_prefix,
+JSON-persisted bindings editor in the demo). Synth layer grew
+key_chord_tap / key_hold + named-key imgui_key_chord. Tests: edit model
+22, smoke 2 (registry-routed chords incl. keypad + overtype), commands
+3, viewer 8, terminal 1 — all green. Known E2 residuals: drag after
+double-click extends by characters (not words); Shift+keypad selection
+under NumLock-ON Windows fake-Shift not yet probed on hardware;
+multi-editor invocation routing by context field deferred; the base
+(registry-less) overload keeps the built-in keymap by design.
+
 ## Shape: ONE component, one arc, two skins
 
 One arc, not two. The editing core — buffer, cursor, selection, undo,
