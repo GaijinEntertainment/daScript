@@ -2860,10 +2860,11 @@ def private text_source_edit_impl(id : string; var ed : TextEditState;
 // ===== Go-to-line overlay =====
 
 var private GOTO_INPUT = InputTextState()
+var private GOTO_HINT : NarrativeState
 
-def public text_edit_goto_query(var ed : TextEditState; query : string) : bool {
-    //! The go-to dialog's parse: `line`, `line:col` or `line,col` (1-based);
-    //! garbage keeps the position and returns false.
+def public text_edit_parse_goto(query : string) : int2 {
+    //! `line`, `line:col` or `line,col` (1-based) -> (line, column);
+    //! line <= 0 = invalid input.
     var line_text = query
     var column_text = ""
     var sep = find(query, ":")
@@ -2874,9 +2875,15 @@ def public text_edit_goto_query(var ed : TextEditState; query : string) : bool {
         line_text = slice(query, 0, sep)
         column_text = slice(query, sep + 1, length(query))
     }
-    let line = to_int(line_text)
-    return false if (line <= 0)
-    text_edit_goto_line(ed, line, max(to_int(column_text), 1))
+    return int2(to_int(line_text), max(to_int(column_text), 1))
+}
+
+def public text_edit_goto_query(var ed : TextEditState; query : string) : bool {
+    //! The go-to dialog's action: parse + jump; garbage keeps the position
+    //! and returns false.
+    let target = text_edit_parse_goto(query)
+    return false if (target.x <= 0)
+    text_edit_goto_line(ed, target.x, target.y)
     return true
 }
 
@@ -2898,6 +2905,16 @@ def private draw_goto_overlay(var ed : TextEditState) {
         input_text(GOTO_INPUT, (text = "##goto_line"))
         let active = IsItemActive()
         let done = IsItemDeactivated()
+        // the VS Code hint line: a dry-run preview + the valid range
+        let target = text_edit_parse_goto(GOTO_INPUT.value)
+        let total = text_edit_line_count(ed)
+        if (target.x > 0) {
+            text_disabled(GOTO_HINT, (text = target.y > 1
+                ? "Go to line {min(target.x, total)}, column {target.y}"
+                : "Go to line {min(target.x, total)}"))
+        } else {
+            text_disabled(GOTO_HINT, (text = "Line 1..{total}"))
+        }
         if (done && IsKeyPressed(ImGuiKey.Escape, false)) {
             ed.goto_open = false
         } elif ((active || done) && (IsKeyPressed(ImGuiKey.Enter, false)
