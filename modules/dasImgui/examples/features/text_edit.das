@@ -78,6 +78,13 @@ def update() {
         if (g_edit.overtype) {
             status += " - OVR"
         }
+        if (g_edit.compile_status == TextEditCompileStatus.compiling) {
+            status += " - compiling..."
+        } elif (g_edit.compile_status == TextEditCompileStatus.ok) {
+            status += " - compiles"
+        } elif (g_edit.compile_status == TextEditCompileStatus.failed) {
+            status += " - {length(g_edit.diagnostics)} error(s)"
+        }
         text_show(EDIT_STATUS, status)
         same_line()
         if (small_button(EDIT_BINDINGS, (text = "Bindings"))) {

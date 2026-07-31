@@ -4,6 +4,7 @@ options indenting = 4
 require dastest/testing_boost public
 require imgui/imgui_text_edit_complete
 require imgui/imgui_text_edit_provider_das
+require strings
 
 //! Pure-logic coverage for the completion carrier + document-words provider.
 
@@ -194,6 +195,62 @@ def test_das_provider_compiles_symbols(t : T?) {
     t |> success(find_index(comp.items, "alpha_two") >= 0, "every function offers")
     t |> success(find_index(comp.items, "alpha_global") >= 0, "globals offer too")
     t |> equal(ed.ghost_text, "ha_one", "the offer refreshed the ghost")
+    text_edit_das_provider_stop(provider)
+    text_edit_complete_dispose(comp)
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_das_issue_parsing(t : T?) {
+    var out : array<TextEditDiagnostic>
+    let issues = ("error[30151]: syntax error, unexpected end of file\n"
+        + "text_edit_completion_overlay.das:3:19\n"
+        + "var alpha_global = 1\n"
+        + "error[30341]: no matching functions\n"
+        + "text_edit_completion_overlay.das:1:5\n")
+    text_edit_parse_das_issues(issues, "text_edit_completion_overlay.das", out)
+    t |> equal(length(out), 2, "both findings parse")
+    t |> equal(out[0].line, 2, "line converts to 0-based")
+    t |> equal(out[0].column, 18, "column converts to 0-based")
+    t |> success(find(out[0].message, "syntax error") >= 0, "the message rides along")
+    t |> equal(out[1].line, 0, "the second finding pins its own line")
+    delete out
+}
+
+[test]
+def test_das_provider_reports_diagnostics(t : T?) {
+    var ed = TextEditState()
+    var comp = TextEditCompletion()
+    var provider = TextEditDasProvider()
+    text_edit_load(ed, "def broken( \{")
+    text_edit_set_language(ed, "das")
+    ed.syntax_idle = 1.0f // the idle diagnostics kick, no completion needed
+    text_edit_das_provider_sync(ed, comp, provider)
+    t |> equal(int(ed.compile_status), int(TextEditCompileStatus.compiling),
+        "the kick marks the buffer compiling")
+    var waited = 0
+    while (ed.compile_status == TextEditCompileStatus.compiling && waited < 500) {
+        sleep(20u)
+        text_edit_das_provider_sync(ed, comp, provider)
+        waited++
+    }
+    t |> equal(int(ed.compile_status), int(TextEditCompileStatus.failed),
+        "a broken buffer reports failed")
+    t |> success(!empty(ed.diagnostics), "the findings underline")
+    // fix the buffer: the next idle compile turns it ok and clears findings
+    text_edit_load(ed, "def fine() \{\}")
+    text_edit_set_language(ed, "das")
+    ed.syntax_idle = 1.0f
+    text_edit_das_provider_sync(ed, comp, provider)
+    waited = 0
+    while (ed.compile_status != TextEditCompileStatus.ok && waited < 500) {
+        sleep(20u)
+        text_edit_das_provider_sync(ed, comp, provider)
+        waited++
+    }
+    t |> equal(int(ed.compile_status), int(TextEditCompileStatus.ok),
+        "a fixed buffer reports ok")
+    t |> success(empty(ed.diagnostics), "the findings clear")
     text_edit_das_provider_stop(provider)
     text_edit_complete_dispose(comp)
     text_edit_dispose(ed)

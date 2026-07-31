@@ -65,6 +65,22 @@ struct public TextEditRange {
     end_column : int
 }
 
+enum public TextEditCompileStatus {
+    unknown
+    compiling
+    ok
+    failed
+}
+
+struct public TextEditDiagnostic {
+    //! One compiler finding at (line, column), 0-based bytes; length 0 =
+    //! underline the word at that position.
+    line : int
+    column : int
+    length : int
+    message : string
+}
+
 struct public TextEditStyleRun {
     //! Byte range within one line painted with a syntax style.
     start_byte : int
@@ -124,6 +140,10 @@ struct public TextEditState {
     //! Ghost completion drawn after the caret; Tab accepts it. Cleared by
     //! every edit/move — the completion sync re-offers next frame.
     ghost_text : string
+    //! Compiler findings underlined in the text (provider-fed; positions may
+    //! lag edits until the next compile) + the compile state for chrome.
+    diagnostics : array<TextEditDiagnostic>
+    compile_status : TextEditCompileStatus = TextEditCompileStatus.unknown
     //! Completion LIST under the caret (top candidates). list_index -1 =
     //! visible but the keyboard is still in the editor (Down enters).
     list_items : array<string>
@@ -151,6 +171,7 @@ def public text_edit_dispose(var ed : TextEditState) {
     delete ed.highlight_ranges
     delete ed.line_styles
     delete ed.list_items
+    delete ed.diagnostics
     ed = TextEditState()
 }
 
@@ -174,6 +195,8 @@ def public text_edit_load(var ed : TextEditState; source : string) {
     delete ed.redo_stack
     delete ed.highlight_ranges
     delete ed.line_styles
+    delete ed.diagnostics
+    ed.compile_status = TextEditCompileStatus.unknown
     text_edit_close_list(ed)
     ed.undo_open = false
     ed.dirty = false
@@ -1730,6 +1753,15 @@ def public text_edit_outdent_lines(var ed : TextEditState) {
     reindent_block(ed, true)
 }
 
+def public text_edit_set_diagnostics(var ed : TextEditState;
+                                     var diags : array<TextEditDiagnostic>;
+                                     status : TextEditCompileStatus) {
+    //! Provider rail: replace the findings + compile state (diags move in).
+    delete ed.diagnostics
+    ed.diagnostics <- diags
+    ed.compile_status = status
+}
+
 def public text_edit_set_ghost(var ed : TextEditState; text : string) {
     //! Offer a ghost completion at the caret (single line; "" clears). The
     //! completion sync owns this; Tab accepts, any edit or move clears.
@@ -2357,6 +2389,9 @@ def private draw_edit_content(var ed : TextEditState; m : EditMetrics;
     if (ed.focused) {
         draw_bracket_highlight(ed, m, style, font, dl, first_visible, last_visible)
     }
+    if (!empty(ed.diagnostics)) {
+        draw_edit_diagnostics(ed, m, style, font, dl, first_visible, last_visible)
+    }
     let has_selection = text_edit_has_selection(ed)
     let sel = text_edit_selection(ed)
     for (row in range(first_visible, last_visible + 1)) {
@@ -2400,23 +2435,29 @@ def private draw_edit_content(var ed : TextEditState; m : EditMetrics;
     }
     if (ed.focused && ed.cursor_line >= first_visible && ed.cursor_line <= last_visible
             && fmod(ed.blink_time, 1.06f) < 0.53f) {
-        let caret_x = (m.origin.x + m.gutter_space
-            + text_source_range_width(ed.lines[ed.cursor_line], 0, ed.cursor_column,
-                font, m.font_size, m.cell_width, style.tab_cells))
-        let caret_y = m.origin.y + float(ed.cursor_line) * m.line_height
-        // overtype renders the block caret (translucent so the glyph reads)
-        let caret_width = ed.overtype ? m.cell_width : max(1.0f, 1.5f * m.zoom)
-        var caret_color = style.caret_color
-        if (ed.overtype) {
-            caret_color.w *= 0.55f
-        }
-        *dl |> AddRectFilled(float2(caret_x, caret_y),
-            float2(caret_x + caret_width, caret_y + m.line_height),
-            GetColorU32(caret_color), 0.0f, ImDrawFlags.None)
+        draw_edit_caret(ed, m, style, font, dl)
     }
     if (ed.focused && ed.list_open && !empty(ed.list_items)) {
         draw_edit_list(ed, m, style, font, dl)
     }
+}
+
+def private draw_edit_caret(ed : TextEditState const; m : EditMetrics;
+                            style : TextSourceViewStyle const;
+                            var font : ImFont?; var dl : ImDrawList?) {
+    let caret_x = (m.origin.x + m.gutter_space
+        + text_source_range_width(ed.lines[ed.cursor_line], 0, ed.cursor_column,
+            font, m.font_size, m.cell_width, style.tab_cells))
+    let caret_y = m.origin.y + float(ed.cursor_line) * m.line_height
+    // overtype renders the block caret (translucent so the glyph reads)
+    let caret_width = ed.overtype ? m.cell_width : max(1.0f, 1.5f * m.zoom)
+    var caret_color = style.caret_color
+    if (ed.overtype) {
+        caret_color.w *= 0.55f
+    }
+    *dl |> AddRectFilled(float2(caret_x, caret_y),
+        float2(caret_x + caret_width, caret_y + m.line_height),
+        GetColorU32(caret_color), 0.0f, ImDrawFlags.None)
 }
 
 def private edit_syntax_color(style : TextSourceViewStyle const; // nolint:STYLE037
@@ -2463,6 +2504,37 @@ def private draw_edit_line(ed : TextEditState const; row : int; line : string;
         let _ = text_source_draw_range(dl, font, m.font_size, float2(x, position_y),
             style.text_color, line, covered, length(line),
             m.cell_width, style.tab_cells)
+    }
+}
+
+def private draw_edit_diagnostics(ed : TextEditState const; m : EditMetrics;
+                                  style : TextSourceViewStyle const;
+                                  var font : ImFont?; var dl : ImDrawList?;
+                                  first_visible, last_visible : int) {
+    let color = GetColorU32(style.error_underline_color)
+    for (diag in ed.diagnostics) {
+        continue if (diag.line < first_visible || diag.line > last_visible
+            || diag.line >= length(ed.lines))
+        let line = ed.lines[diag.line]
+        let column = clamp(diag.column, 0, max(length(line) - 1, 0))
+        var end_ = diag.length > 0 ? column + diag.length : word_run_at(line, column).y
+        end_ = clamp(end_, column + 1, length(line))
+        let x0 = (m.origin.x + m.gutter_space + text_source_range_width(line, 0,
+            column, font, m.font_size, m.cell_width, style.tab_cells))
+        var x1 = (m.origin.x + m.gutter_space + text_source_range_width(line, 0,
+            end_, font, m.font_size, m.cell_width, style.tab_cells))
+        x1 = max(x1, x0 + m.cell_width)
+        let base_y = m.origin.y + float(diag.line + 1) * m.line_height - 2.0f
+        // small zigzag underline
+        var x = x0
+        var up = true
+        while (x < x1) {
+            let next = min(x + 3.0f, x1)
+            *dl |> AddLine(float2(x, up ? base_y + 1.5f : base_y),
+                float2(next, up ? base_y : base_y + 1.5f), color, 1.0f)
+            x = next
+            up = !up
+        }
     }
 }
 
