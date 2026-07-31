@@ -215,6 +215,16 @@ struct private StepRes {
     bmoe_rt : MetalBuffer?     // gemma4: router-input row, reused as the routed-branch acc
     u_moe_invd : MetalBuffer?  // gemma4: 1/sqrt(dim) router scale
     u_moe_gmode : MetalBuffer? // select gating mode (1 = gpt-oss softmax_weight)
+    // scalar twins of the MoE GEMV uniforms (see the k_hs family above — same discipline)
+    k_dim : uint
+    k_moe_nfe : uint
+    k_moe_eblk : uint
+    k_moe_esb : uint
+    k_moe_ss : uint
+    k_moe_knfe : uint
+    k_moe_kdim : uint
+    k_moe_xs_dn : uint
+    k_moe_gmode : uint
     u_moe_nsh : MetalBuffer?   // shexp width (qwen35moe; null = no shared expert)
     u_hass : MetalBuffer?      // attention sinks present (binds hass on the attn dispatches)
     // gemma-4 E-series per-layer embeddings — ple steps only; the CPU pre-step's side input
@@ -321,6 +331,7 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
         r.bsin_swa = pool_acquire_untracked(g_upool, g_dev, r.bytes_tab_sw)
     }
     r.u_dim = uniform_u32(uint(dim))
+    r.k_dim = uint(dim)
     r.u_qd = uniform_u32(uint(qd))
     r.u_kvd = uniform_u32(uint(kv_dim))
     r.u_qkvd = uniform_u32(uint(qkvd))
@@ -388,13 +399,20 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
         r.u_moe_ne = uniform_u32(uint(c.n_expert))
         r.u_moe_k = uniform_u32(uint(c.n_expert_used))
         r.u_moe_nfe = uniform_u32(uint(c.n_ff_exp))
+        r.k_moe_nfe = uint(c.n_ff_exp)
         r.u_moe_knfe = uniform_u32(uint(knfe))
+        r.k_moe_knfe = uint(knfe)
         r.u_moe_ss = uniform_u32(uint(2l * c.n_expert_used))
+        r.k_moe_ss = uint(2l * c.n_expert_used)
         r.u_moe_kdim = uniform_u32(uint(c.n_expert_used * dim))
+        r.k_moe_kdim = uint(c.n_expert_used * dim)
         r.u_moe_tot = uniform_u32(uint(nrows * knfe))
         r.u_moe_eblk = uniform_u32(uint(ege / 32l))
+        r.k_moe_eblk = uint(ege / 32l)
         r.u_moe_esb = uniform_u32(uint(ege / 256l))
+        r.k_moe_esb = uint(ege / 256l)
         r.u_moe_xs_dn = uniform_u32(uint(c.n_ff_exp))
+        r.k_moe_xs_dn = uint(c.n_ff_exp)
         if (c.moe_dense_shexp) {   // gemma4: router-input scratch + the 1/sqrt(dim) scale
             r.bmoe_rt = pool_acquire(g_pool, g_dev, r.bytes_x)
             r.u_moe_invd = uniform_f32(1.0 / sqrt(float(dim)))
@@ -407,6 +425,7 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
             r.bh12s = pool_acquire(g_pool, g_dev, r.bytes_h12s)
         }
         r.u_moe_gmode = uniform_u32(c.moe_gate == MoeGate.softmax_weight ? 1u : (c.norm_topk_prob ? 0u : 2u))
+        r.k_moe_gmode = c.moe_gate == MoeGate.softmax_weight ? 1u : (c.norm_topk_prob ? 0u : 2u)
     }
     if (c.attn_sinks) {
         r.u_hass = uniform_u32(1u)
@@ -799,19 +818,20 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                         // gpt-oss: mx4 expert planes + per-expert biases fold into the twins
                         var bwb1 = upload_region(addr < void? >(t.fblob[t.web1_off + l * c.n_expert * c.n_ff_exp]), uint64(c.n_expert * c.n_ff_exp * 4l))
                         var bwb3 = upload_region(addr < void? >(t.fblob[t.web3_off + l * c.n_expert * c.n_ff_exp]), uint64(c.n_expert * c.n_ff_exp * 4l))
+                        // gmode == 1 doubles as the has-bias flag (see enc_moe_select above)
+                        var mka = MoeGemvArgs(ndim = r.k_dim, ddim = r.k_moe_nfe, eplane = r.k_moe_eblk,
+                            xs = 0u, ss = 0u, bxs = 0u, bys = 0u, hasb = r.k_moe_gmode)
                         enc_moe_gemv_mx4(enc, t, t.we1_offs[l], c.n_ff_exp, c.n_expert_used, 1l, bmx, r.bh12,
-                            r.u_dim, r.u_moe_nfe, r.bmoe_sel, r.u_moe_eblk, r.u_zero32,
-                            r.u_zero32, r.u_zero32, r.u_zero32, bwb1, r.u_moe_gmode)
+                            r.bmoe_sel, bwb1, mka)
                         enc_moe_gemv_mx4(enc, t, t.we3_offs[l], c.n_ff_exp, c.n_expert_used, 1l, bmx, r.bh12,
-                            r.u_dim, r.u_moe_nfe, r.bmoe_sel, r.u_moe_eblk, r.u_zero32,
-                            r.u_zero32, r.u_zero32, r.u_zero32, bwb3, r.u_moe_gmode, uint64(knfe * 4l))
+                            r.bmoe_sel, bwb3, mka, uint64(knfe * 4l))
                     } else {
-                        enc_moe_gemv(enc, t, fe1, t.we1_offs[l], c.n_ff_exp, c.n_expert_used, 1l, bmx, r.bh12,
-                            r.u_dim, r.u_moe_nfe, r.bmoe_sel, fe1 == KqFmt.q8 || fe1 == KqFmt.q51 ? r.u_moe_eblk : r.u_moe_esb, r.u_zero32,
-                            r.u_zero32, r.u_zero32, r.u_zero32)
-                        enc_moe_gemv(enc, t, fe3, t.we3_offs[l], c.n_ff_exp, c.n_expert_used, 1l, bmx, r.bh12,
-                            r.u_dim, r.u_moe_nfe, r.bmoe_sel, fe3 == KqFmt.q8 || fe3 == KqFmt.q51 ? r.u_moe_eblk : r.u_moe_esb, r.u_zero32,
-                            r.u_zero32, r.u_zero32, r.u_zero32, uint64(knfe * 4l))
+                        var k1a = MoeGemvArgs(ndim = r.k_dim, ddim = r.k_moe_nfe, eplane = fe1 == KqFmt.q8 || fe1 == KqFmt.q51 ? r.k_moe_eblk : r.k_moe_esb,
+                            xs = 0u, ss = 0u, bxs = 0u, bys = 0u, hasb = 0u)
+                        enc_moe_gemv(enc, t, fe1, t.we1_offs[l], c.n_ff_exp, c.n_expert_used, 1l, bmx, r.bh12, r.bmoe_sel, k1a)
+                        var k3a = MoeGemvArgs(ndim = r.k_dim, ddim = r.k_moe_nfe, eplane = fe3 == KqFmt.q8 || fe3 == KqFmt.q51 ? r.k_moe_eblk : r.k_moe_esb,
+                            xs = 0u, ss = 0u, bxs = 0u, bys = 0u, hasb = 0u)
+                        enc_moe_gemv(enc, t, fe3, t.we3_offs[l], c.n_ff_exp, c.n_expert_used, 1l, bmx, r.bh12, r.bmoe_sel, k3a, uint64(knfe * 4l))
                     }
                 }
             }
@@ -823,13 +843,14 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                 if (g_skip != "moe_rt") {
                     if (t.experts_mx4) {
                         var bwb2 = upload_region(addr < void? >(t.fblob[t.web2_off + l * c.n_expert * dim]), uint64(c.n_expert * dim * 4l))
+                        var m2a = MoeGemvArgs(ndim = r.k_moe_nfe, ddim = r.k_dim, eplane = r.k_moe_eblk,
+                            xs = r.k_moe_xs_dn, ss = 0u, bxs = 0u, bys = 0u, hasb = r.k_moe_gmode)
                         enc_moe_gemv_mx4(enc, t, t.we2_offs[l], dim, c.n_expert_used, 1l, r.bh12, r.bmoe_dn,
-                            r.u_moe_nfe, r.u_dim, r.bmoe_sel, r.u_moe_eblk, r.u_moe_xs_dn,
-                            r.u_zero32, r.u_zero32, r.u_zero32, bwb2, r.u_moe_gmode)
+                            r.bmoe_sel, bwb2, m2a)
                     } else {
-                        enc_moe_gemv(enc, t, fe2, t.we2_offs[l], dim, c.n_expert_used, 1l, r.bh12, r.bmoe_dn,
-                            r.u_moe_nfe, r.u_dim, r.bmoe_sel, fe2 == KqFmt.q8 || fe2 == KqFmt.q51 ? r.u_moe_eblk : r.u_moe_esb, r.u_moe_xs_dn,
-                            r.u_zero32, r.u_zero32, r.u_zero32)
+                        var k2a = MoeGemvArgs(ndim = r.k_moe_nfe, ddim = r.k_dim, eplane = fe2 == KqFmt.q8 || fe2 == KqFmt.q51 ? r.k_moe_eblk : r.k_moe_esb,
+                            xs = r.k_moe_xs_dn, ss = 0u, bxs = 0u, bys = 0u, hasb = 0u)
+                        enc_moe_gemv(enc, t, fe2, t.we2_offs[l], dim, c.n_expert_used, 1l, r.bh12, r.bmoe_dn, r.bmoe_sel, k2a)
                     }
                 }
                 if (r.u_moe_nsh != null && g_skip != "moe_sh") {
@@ -1254,16 +1275,16 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
                 var bw_shg = upload_region(addr < void? >(t.fblob[t.shexp_gate_off + l * dim]), uint64(dim * 4l))
                 enc_moe_router(enc, bw_shg, r.bxb, r.bmoe_lg, r.u_dim, r.u_one32, r.u_dim, g_one, g_zero, 1l, 2l)
             }
-            enc_moe_gemv(enc, t, fe1, t.we1_offs[l], c.n_ff_exp, c.n_expert_used, 2l, r.bxb, r.bh12,
-                r.u_dim, r.u_moe_nfe, r.bmoe_sel, fe1 == KqFmt.q8 || fe1 == KqFmt.q51 ? r.u_moe_eblk : r.u_moe_esb, r.u_zero32,
-                r.u_moe_ss, r.u_dim, r.u_moe_knfe)
-            enc_moe_gemv(enc, t, fe3, t.we3_offs[l], c.n_ff_exp, c.n_expert_used, 2l, r.bxb, r.bh12,
-                r.u_dim, r.u_moe_nfe, r.bmoe_sel, fe3 == KqFmt.q8 || fe3 == KqFmt.q51 ? r.u_moe_eblk : r.u_moe_esb, r.u_zero32,
-                r.u_moe_ss, r.u_dim, r.u_moe_knfe, uint64(2l * knfe * 4l))
+            var v1a = MoeGemvArgs(ndim = r.k_dim, ddim = r.k_moe_nfe, eplane = fe1 == KqFmt.q8 || fe1 == KqFmt.q51 ? r.k_moe_eblk : r.k_moe_esb,
+                            xs = 0u, ss = r.k_moe_ss, bxs = r.k_dim, bys = r.k_moe_knfe, hasb = 0u)
+            enc_moe_gemv(enc, t, fe1, t.we1_offs[l], c.n_ff_exp, c.n_expert_used, 2l, r.bxb, r.bh12, r.bmoe_sel, v1a)
+            var v3a = MoeGemvArgs(ndim = r.k_dim, ddim = r.k_moe_nfe, eplane = fe3 == KqFmt.q8 || fe3 == KqFmt.q51 ? r.k_moe_eblk : r.k_moe_esb,
+                            xs = 0u, ss = r.k_moe_ss, bxs = r.k_dim, bys = r.k_moe_knfe, hasb = 0u)
+            enc_moe_gemv(enc, t, fe3, t.we3_offs[l], c.n_ff_exp, c.n_expert_used, 2l, r.bxb, r.bh12, r.bmoe_sel, v3a, uint64(2l * knfe * 4l))
             enc_ew2(enc, g_pso_swiglu, r.bh12, 0ul, r.bh12, uint64(2l * knfe * 4l), r.u_moe_tot, 2l * knfe)
-            enc_moe_gemv(enc, t, fe2, t.we2_offs[l], dim, c.n_expert_used, 2l, r.bh12, r.bmoe_dn,
-                r.u_moe_nfe, r.u_dim, r.bmoe_sel, fe2 == KqFmt.q8 || fe2 == KqFmt.q51 ? r.u_moe_eblk : r.u_moe_esb, r.u_moe_xs_dn,
-                r.u_moe_ss, r.u_moe_knfe, r.u_moe_kdim)
+            var v2a = MoeGemvArgs(ndim = r.k_moe_nfe, ddim = r.k_dim, eplane = fe2 == KqFmt.q8 || fe2 == KqFmt.q51 ? r.k_moe_eblk : r.k_moe_esb,
+                            xs = r.k_moe_xs_dn, ss = r.k_moe_ss, bxs = r.k_moe_knfe, bys = r.k_moe_kdim, hasb = 0u)
+            enc_moe_gemv(enc, t, fe2, t.we2_offs[l], dim, c.n_expert_used, 2l, r.bh12, r.bmoe_dn, r.bmoe_sel, v2a)
             if (r.u_moe_nsh != null) {
                 // shexp FFN reads bxb BEFORE combine overwrites it; bh12 is free after expert W2
                 let nsh = c.n_ff_shexp
@@ -2389,6 +2410,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     var bsin_swa = dual_rope ? pool_acquire_untracked(g_upool, g_dev, bytes_tab_sw) : null
     var brt = pool_acquire_untracked(g_upool, g_dev, bytes_rt)
     var u_dim = uniform_u32(uint(dim))
+    let k_dim = uint(dim)
     var u_qd = uniform_u32(uint(qd))
     var u_kvd = uniform_u32(uint(kv_dim))
     var u_qkvd = uniform_u32(uint(qkvd))
@@ -2442,15 +2464,23 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     var u_moe_ne = moe ? uniform_u32(uint(c.n_expert)) : null
     var u_moe_k = moe ? uniform_u32(uint(c.n_expert_used)) : null
     var u_moe_nfe = moe ? uniform_u32(uint(c.n_ff_exp)) : null
+    let k_moe_nfe = uint(c.n_ff_exp)
     var u_moe_eblk = moe ? uniform_u32(uint(dim * c.n_ff_exp / 32l)) : null
+    let k_moe_eblk = uint(dim * c.n_ff_exp / 32l)
     var u_moe_esb = moe ? uniform_u32(uint(dim * c.n_ff_exp / 256l)) : null
+    let k_moe_esb = uint(dim * c.n_ff_exp / 256l)
     var u_moe_ss = moe ? uniform_u32(uint(2l * c.n_expert_used)) : null
+    let k_moe_ss = uint(2l * c.n_expert_used)
     var u_moe_xs_dn = moe ? uniform_u32(uint(c.n_ff_exp)) : null
+    let k_moe_xs_dn = uint(c.n_ff_exp)
     var u_moe_knfe = moe ? uniform_u32(uint(knfe)) : null
+    let k_moe_knfe = uint(knfe)
     var u_moe_kdim = moe ? uniform_u32(uint(c.n_expert_used * dim)) : null
+    let k_moe_kdim = uint(c.n_expert_used * dim)
     var u_moe_tot = moe ? uniform_u32(uint(nrows * knfe)) : null
     var u_moe_invd = g4moe ? uniform_f32(1.0 / sqrt(float(dim))) : null
     var u_moe_gmode = moe ? uniform_u32(c.moe_gate == MoeGate.softmax_weight ? 1u : (c.norm_topk_prob ? 0u : 2u)) : null
+    let k_moe_gmode = c.moe_gate == MoeGate.softmax_weight ? 1u : (c.norm_topk_prob ? 0u : 2u)
     var u_hass = c.attn_sinks ? uniform_u32(1u) : null
     var u_xs4_dim = mv ? uniform_u32(uint(dim / 4l)) : null
     var u_xs4_qd = mv ? uniform_u32(uint(qd / 4l)) : null
@@ -2783,19 +2813,18 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                 if (t.experts_mx4) {
                     var bwb1 = upload_region(addr < void? >(t.fblob[t.web1_off + l * c.n_expert * c.n_ff_exp]), uint64(c.n_expert * c.n_ff_exp * 4l))
                     var bwb3 = upload_region(addr < void? >(t.fblob[t.web3_off + l * c.n_expert * c.n_ff_exp]), uint64(c.n_expert * c.n_ff_exp * 4l))
-                    enc_moe_gemv_mx4(enc, t, t.we1_offs[l], c.n_ff_exp, c.n_expert_used, nrows, bex, bgh,
-                        u_dim, u_moe_nfe, bmsel, u_moe_eblk, u_zero32,
-                        u_moe_ss, u_dim, u_moe_knfe, bwb1, u_moe_gmode)
-                    enc_moe_gemv_mx4(enc, t, t.we3_offs[l], c.n_ff_exp, c.n_expert_used, nrows, bex, bgh2,
-                        u_dim, u_moe_nfe, bmsel, u_moe_eblk, u_zero32,
-                        u_moe_ss, u_dim, u_moe_knfe, bwb3, u_moe_gmode)
+                    // gmode == 1 doubles as the has-bias flag (see enc_moe_select above)
+                    var bka = MoeGemvArgs(ndim = k_dim, ddim = k_moe_nfe, eplane = k_moe_eblk,
+                        xs = 0u, ss = k_moe_ss, bxs = k_dim, bys = k_moe_knfe, hasb = k_moe_gmode)
+                    enc_moe_gemv_mx4(enc, t, t.we1_offs[l], c.n_ff_exp, c.n_expert_used, nrows, bex, bgh, bmsel, bwb1, bka)
+                    enc_moe_gemv_mx4(enc, t, t.we3_offs[l], c.n_ff_exp, c.n_expert_used, nrows, bex, bgh2, bmsel, bwb3, bka)
                 } else {
-                    enc_moe_gemv(enc, t, fe1, t.we1_offs[l], c.n_ff_exp, c.n_expert_used, nrows, bex, bgh,
-                        u_dim, u_moe_nfe, bmsel, fe1 == KqFmt.q8 ? u_moe_eblk : u_moe_esb, u_zero32,
-                        u_moe_ss, u_dim, u_moe_knfe)
-                    enc_moe_gemv(enc, t, fe3, t.we3_offs[l], c.n_ff_exp, c.n_expert_used, nrows, bex, bgh2,
-                        u_dim, u_moe_nfe, bmsel, fe3 == KqFmt.q8 ? u_moe_eblk : u_moe_esb, u_zero32,
-                        u_moe_ss, u_dim, u_moe_knfe)
+                    var b1a = MoeGemvArgs(ndim = k_dim, ddim = k_moe_nfe, eplane = fe1 == KqFmt.q8 ? k_moe_eblk : k_moe_esb,
+                        xs = 0u, ss = k_moe_ss, bxs = k_dim, bys = k_moe_knfe, hasb = 0u)
+                    enc_moe_gemv(enc, t, fe1, t.we1_offs[l], c.n_ff_exp, c.n_expert_used, nrows, bex, bgh, bmsel, b1a)
+                    var b3a = MoeGemvArgs(ndim = k_dim, ddim = k_moe_nfe, eplane = fe3 == KqFmt.q8 ? k_moe_eblk : k_moe_esb,
+                        xs = 0u, ss = k_moe_ss, bxs = k_dim, bys = k_moe_knfe, hasb = 0u)
+                    enc_moe_gemv(enc, t, fe3, t.we3_offs[l], c.n_ff_exp, c.n_expert_used, nrows, bex, bgh2, bmsel, b3a)
                 }
             }
             if (moe && g_skip != "ew") {
@@ -2806,13 +2835,13 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                 let fe2 = fmt_at(t.we2_fmt, l)
                 if (t.experts_mx4) {
                     var bwb2 = upload_region(addr < void? >(t.fblob[t.web2_off + l * c.n_expert * dim]), uint64(c.n_expert * dim * 4l))
-                    enc_moe_gemv_mx4(enc, t, t.we2_offs[l], dim, c.n_expert_used, nrows, bgh, bmdn,
-                        u_moe_nfe, u_dim, bmsel, u_moe_eblk, u_moe_xs_dn,
-                        u_moe_ss, u_moe_knfe, u_moe_kdim, bwb2, u_moe_gmode)
+                    var b2m = MoeGemvArgs(ndim = k_moe_nfe, ddim = k_dim, eplane = k_moe_eblk,
+                        xs = k_moe_xs_dn, ss = k_moe_ss, bxs = k_moe_knfe, bys = k_moe_kdim, hasb = k_moe_gmode)
+                    enc_moe_gemv_mx4(enc, t, t.we2_offs[l], dim, c.n_expert_used, nrows, bgh, bmdn, bmsel, bwb2, b2m)
                 } else {
-                    enc_moe_gemv(enc, t, fe2, t.we2_offs[l], dim, c.n_expert_used, nrows, bgh, bmdn,
-                        u_moe_nfe, u_dim, bmsel, fe2 == KqFmt.q8 ? u_moe_eblk : u_moe_esb, u_moe_xs_dn,
-                        u_moe_ss, u_moe_knfe, u_moe_kdim)
+                    var b2a = MoeGemvArgs(ndim = k_moe_nfe, ddim = k_dim, eplane = fe2 == KqFmt.q8 ? k_moe_eblk : k_moe_esb,
+                        xs = k_moe_xs_dn, ss = k_moe_ss, bxs = k_moe_knfe, bys = k_moe_kdim, hasb = 0u)
+                    enc_moe_gemv(enc, t, fe2, t.we2_offs[l], dim, c.n_expert_used, nrows, bgh, bmdn, bmsel, b2a)
                 }
                 enc_moe_combine(enc, bmdn, bmsel, g4moe ? bmg4rt : bxb, u_dim, u_moe_k, dim, nrows)
                 if (g4moe && g_skip != "ew") {

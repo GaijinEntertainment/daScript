@@ -538,9 +538,17 @@ class MetalDispatch : AstStructureAnnotation {
 //      of the strictness ratchet (runtime STRICT covers only rail-side dispatches)
 
 class private MetalCensusVisitor : AstVisitor {
+    nkargs : int      // per-function tallies; the driver resets and checks them around each visit
+    ndispatch : int
     def override preVisitExprCall(var expr : ExprCall?) : void {
-        if ("{expr.name}" |> ends_with("metal_dispatch_threadgroups")) {
+        let base = callee_base_name("{expr.name}")
+        if (base == "metal_dispatch_threadgroups") {
             macro_error(compiling_program(), expr.at, "direct metal_dispatch_threadgroups in a dasLLAMA engine module — dispatch through the kn_*/[metal_dispatch] capture rail (migration opt-out: options _metal_manual_dispatch = true)")
+        }
+        if (base == "kn_kargs") {
+            nkargs++
+        } elif (base == "kn_dispatch") {
+            ndispatch++
         }
     }
 }
@@ -554,7 +562,15 @@ class MetalManualDispatchCensus : AstPassMacro {
         var v = new MetalCensusVisitor()
         make_visitor(*v) $(adapter) {
             for_each_function(mod, "") $(var fn) {
+                v.nkargs = 0
+                v.ndispatch = 0
                 visit(fn, adapter)
+                // A builder that binds kargs must bind them on EVERY dispatch path. A branch that
+                // loses its kn_kargs leaves the kernel reading an unbound argument buffer — the
+                // GPU produces garbage with no error anywhere.
+                if (v.nkargs > 0 && v.nkargs != v.ndispatch) {
+                    macro_error(prog, fn.at, "{fn.name}: {v.nkargs} kn_kargs for {v.ndispatch} kn_dispatch — every dispatch path must bind its kargs")
+                }
             }
         }
         unsafe {

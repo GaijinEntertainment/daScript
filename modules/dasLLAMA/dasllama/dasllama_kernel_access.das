@@ -111,7 +111,7 @@ def private all_digits(s : string) : bool {
 // The plain function name behind a resolved call. Post-infer a call carries the mangled form —
 // `__::<module>`<name>` for a plain function, plus a decimal instance hash for a generic
 // instance — and every instance of one generic shares its parameters' constness.
-def private callee_base_name(cname : string) : string {
+def public callee_base_name(cname : string) : string {
     var n = cname
     let cc = find(n, "::")
     if (cc >= 0) {

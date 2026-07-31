@@ -3157,6 +3157,20 @@ class MetalSqAttnCombB {
     }
 }
 
+// The MoE GEMV family's uniforms as ONE kargs value. `eplane` is the per-expert plane's block
+// count in whatever unit the codec counts in (34B blocks for q8_0/mx4, superblocks for k-quants);
+// `hasb` is read only by the format that carries per-expert bias rows.
+struct MoeGemvArgs {
+    ndim : uint
+    ddim : uint
+    eplane : uint
+    xs : uint
+    ss : uint
+    bxs : uint
+    bys : uint
+    hasb : uint
+}
+
 // The single-query attention family binds its uniforms as ONE kargs value. `kstride` is the
 // per-codec K-row stride: elements for f16/f32, 32-element blocks for q8_0/tq4.
 struct SqAttnArgs {
@@ -4542,7 +4556,7 @@ def enc_embed_k6(enc : MetalComputeEncoder?; bq : MetalBuffer?; qoff : uint64; b
 // grid.y = k slots, grid.z = streams; bes = blocks-per-expert (q8 ege/32, kq ege/256), bxs =
 // per-slot x stride, bss/bbxs/bbys = per-stream sel/x/y strides (single decode binds zeros)
 def enc_moe_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; stack_off, rows, k, nst : int64;
-                 bx, by, bn, bd, bsel, bes, bxs, bss, bbxs, bbys : MetalBuffer?; yoff : uint64 = 0ul) {
+                 bx, by, bsel : MetalBuffer?; var ka : MoeGemvArgs; yoff : uint64 = 0ul) {
     hz_read(bx)
     hz_read(bsel)
     hz_write(by, yoff, uint64(rows * k * nst * 4l))
@@ -4553,14 +4567,8 @@ def enc_moe_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; stack_off, 
         kn_buffer(enc, bw.buf, bw.boff, 1)
         kn_buffer(enc, bx, 0ul, 2)
         kn_buffer(enc, by, yoff, 3)
-        kn_buffer(enc, bn, 0ul, 4)
-        kn_buffer(enc, bd, 0ul, 5)
+        kn_kargs(enc, ka, 4)
         kn_buffer(enc, bsel, 0ul, 6)
-        kn_buffer(enc, bes, 0ul, 7)
-        kn_buffer(enc, bxs, 0ul, 8)
-        kn_buffer(enc, bss, 0ul, 9)
-        kn_buffer(enc, bbxs, 0ul, 10)
-        kn_buffer(enc, bbys, 0ul, 11)
         hz_gate(enc)
         kn_dispatch(enc, uint3(uint((rows + g_gemv_rows - 1l) / g_gemv_rows), uint(k), uint(nst)), uint3(uint(g_gemv_rows * 32l), 1u, 1u))
     } elif (fmt == KqFmt.q51) {
@@ -4570,14 +4578,8 @@ def enc_moe_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; stack_off, 
         kn_buffer(enc, qp.sbuf, qp.soff, 1)
         kn_buffer(enc, bx, 0ul, 2)
         kn_buffer(enc, by, yoff, 3)
-        kn_buffer(enc, bn, 0ul, 4)
-        kn_buffer(enc, bd, 0ul, 5)
+        kn_kargs(enc, ka, 4)
         kn_buffer(enc, bsel, 0ul, 6)
-        kn_buffer(enc, bes, 0ul, 7)
-        kn_buffer(enc, bxs, 0ul, 8)
-        kn_buffer(enc, bss, 0ul, 9)
-        kn_buffer(enc, bbxs, 0ul, 10)
-        kn_buffer(enc, bbys, 0ul, 11)
         hz_gate(enc)
         kn_dispatch(enc, uint3(uint((rows + 3l) / 4l), uint(k), uint(nst)), uint3(64u, 1u, 1u))
     } else {
@@ -4594,14 +4596,8 @@ def enc_moe_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; stack_off, 
         kn_buffer(enc, bq.buf, bq.qoff, 2)
         kn_buffer(enc, bx, 0ul, 3)
         kn_buffer(enc, by, yoff, 4)
-        kn_buffer(enc, bn, 0ul, 5)
-        kn_buffer(enc, bd, 0ul, 6)
+        kn_kargs(enc, ka, 5)
         kn_buffer(enc, bsel, 0ul, 7)
-        kn_buffer(enc, bes, 0ul, 8)
-        kn_buffer(enc, bxs, 0ul, 9)
-        kn_buffer(enc, bss, 0ul, 10)
-        kn_buffer(enc, bbxs, 0ul, 11)
-        kn_buffer(enc, bbys, 0ul, 12)
         hz_gate(enc)
         kn_dispatch(enc, uint3(uint((rows + 3l) / 4l), uint(k), uint(nst)), uint3(64u, 1u, 1u))
     }
@@ -4610,7 +4606,7 @@ def enc_moe_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; stack_off, 
 // the MXFP4 expert site (gpt-oss): the mx4 planes bind at the layer stack's byte offsets;
 // bwb/bhasb = the layer's per-expert bias slab (identity g_one + g_zero when absent)
 def enc_moe_gemv_mx4(enc : MetalComputeEncoder?; t : Model; stack_off, rows, k, nst : int64;
-                     bx, by, bn, bd, bsel, beblk, bxs, bss, bbxs, bbys, bwb, bhasb : MetalBuffer?; yoff : uint64 = 0ul) {
+                     bx, by, bsel, bwb : MetalBuffer?; var ka : MoeGemvArgs; yoff : uint64 = 0ul) {
     let mp = mx4_of(g_dev, t, stack_off)
     kn_pipeline(enc, g_pso_moe_gemv_mx4)
     kn_tgmem(enc, metal_moe_gemv_mx4_msl_tgmem, 0)
@@ -4618,16 +4614,9 @@ def enc_moe_gemv_mx4(enc : MetalComputeEncoder?; t : Model; stack_off, rows, k, 
     kn_buffer(enc, mp.sbuf, mp.soff, 1)
     kn_buffer(enc, bx, 0ul, 2)
     kn_buffer(enc, by, yoff, 3)
-    kn_buffer(enc, bn, 0ul, 4)
-    kn_buffer(enc, bd, 0ul, 5)
+    kn_kargs(enc, ka, 4)
     kn_buffer(enc, bsel, 0ul, 6)
-    kn_buffer(enc, beblk, 0ul, 7)
-    kn_buffer(enc, bxs, 0ul, 8)
-    kn_buffer(enc, bss, 0ul, 9)
-    kn_buffer(enc, bbxs, 0ul, 10)
-    kn_buffer(enc, bbys, 0ul, 11)
     kn_buffer(enc, bwb, 0ul, 12)
-    kn_buffer(enc, bhasb, 0ul, 13)
     kn_buffer(enc, g_mx4_vtab, 0ul, 15)
     hz_read(bx)
     hz_read(bsel)
@@ -6122,17 +6111,18 @@ class MetalMoeGemvQ8 {
     @ssbo @binding = 1 @role = "weight" wqb : array<int8>    // the same blob buffer, byte view
     @ssbo @binding = 2 @role = "read" x : array<float4>
     @ssbo @binding = 3 @role = "write" y : array<float>
-    @uniform @binding = 4 ndim : uint
-    @uniform @binding = 5 ddim : uint
+    @uniform @binding = 4 ka : MoeGemvArgs
     @ssbo @binding = 6 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
-    @uniform @binding = 7 eblk : uint       // 34B blocks per expert plane (ege / 32)
-    @uniform @binding = 8 xs : uint         // per-slot x stride, elements (0 = shared)
-    @uniform @binding = 9 ss : uint         // per-stream sel row stride, uints (2k; 0 single)
-    @uniform @binding = 10 bxs : uint       // per-stream x stride, elements (0 single)
-    @uniform @binding = 11 bys : uint       // per-stream y stride, elements (0 single)
 
     [metal_kernel(name="metal_moe_gemv_q8_msl")]
     def metal_moe_gemv_q8 {
+        let ndim = ka.ndim
+        let ddim = ka.ddim
+        let eblk = ka.eplane
+        let xs = ka.xs
+        let ss = ka.ss
+        let bxs = ka.bxs
+        let bys = ka.bys
         let row = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
         if (row >= ddim) {
             return
@@ -6191,17 +6181,18 @@ class MetalMoeGemvK4 {
     @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
     @ssbo @binding = 3 @role = "read" x4 : array<float4>   // activations, float4 view (every x stride is % 4)
     @ssbo @binding = 4 @role = "write" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
+    @uniform @binding = 5 ka : MoeGemvArgs
     @ssbo @binding = 7 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
-    @uniform @binding = 8 esb : uint        // superblocks per expert plane (ege / 256)
-    @uniform @binding = 9 xs : uint         // per-slot x stride, elements (0 = shared)
-    @uniform @binding = 10 ss : uint        // per-stream sel row stride, uints (2k; 0 single)
-    @uniform @binding = 11 bxs : uint       // per-stream x stride, elements (0 single)
-    @uniform @binding = 12 bys : uint       // per-stream y stride, elements (0 single)
 
     [metal_kernel(name="metal_moe_gemv_k4_msl")]
     def metal_moe_gemv_k4 {
+        let ndim = ka.ndim
+        let ddim = ka.ddim
+        let esb = ka.eplane
+        let xs = ka.xs
+        let ss = ka.ss
+        let bxs = ka.bxs
+        let bys = ka.bys
         let lane = gl_SubgroupInvocationID
         let ix = lane / 8u
         let it = lane % 8u
@@ -6304,17 +6295,18 @@ class MetalMoeGemvK5 {
     @ssbo @binding = 2 @role = "weight" kqb : array<uint8>   // k5 quant plane, byte view (qs at 160*blk, qh at +128)
     @ssbo @binding = 3 @role = "read" x : array<float>
     @ssbo @binding = 4 @role = "write" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
+    @uniform @binding = 5 ka : MoeGemvArgs
     @ssbo @binding = 7 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
-    @uniform @binding = 8 esb : uint        // superblocks per expert plane (ege / 256)
-    @uniform @binding = 9 xs : uint         // per-slot x stride, elements (0 = shared)
-    @uniform @binding = 10 ss : uint        // per-stream sel row stride, uints (2k; 0 single)
-    @uniform @binding = 11 bxs : uint       // per-stream x stride, elements (0 single)
-    @uniform @binding = 12 bys : uint       // per-stream y stride, elements (0 single)
 
     [metal_kernel(name="metal_moe_gemv_k5_msl")]
     def metal_moe_gemv_k5 {
+        let ndim = ka.ndim
+        let ddim = ka.ddim
+        let esb = ka.eplane
+        let xs = ka.xs
+        let ss = ka.ss
+        let bxs = ka.bxs
+        let bys = ka.bys
         let lane = gl_SubgroupInvocationID
         let tid = lane / 4u
         let ix = lane % 4u
@@ -6394,17 +6386,18 @@ class MetalMoeGemvK6 {
     @ssbo @binding = 2 @role = "weight" kqb : array<uint8>   // k6 quant plane, byte view (ql at 192*blk, qh at +128)
     @ssbo @binding = 3 @role = "read" x : array<float>
     @ssbo @binding = 4 @role = "write" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
+    @uniform @binding = 5 ka : MoeGemvArgs
     @ssbo @binding = 7 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
-    @uniform @binding = 8 esb : uint        // superblocks per expert plane (ege / 256)
-    @uniform @binding = 9 xs : uint         // per-slot x stride, elements (0 = shared)
-    @uniform @binding = 10 ss : uint        // per-stream sel row stride, uints (2k; 0 single)
-    @uniform @binding = 11 bxs : uint       // per-stream x stride, elements (0 single)
-    @uniform @binding = 12 bys : uint       // per-stream y stride, elements (0 single)
 
     [metal_kernel(name="metal_moe_gemv_k6_msl")]
     def metal_moe_gemv_k6 {
+        let ndim = ka.ndim
+        let ddim = ka.ddim
+        let esb = ka.eplane
+        let xs = ka.xs
+        let ss = ka.ss
+        let bxs = ka.bxs
+        let bys = ka.bys
         let lane = gl_SubgroupInvocationID
         let tid = lane / 2u
         let ix = lane % 2u
@@ -6471,21 +6464,22 @@ class MetalMoeGemvMx4 {
     @ssbo @binding = 1 @role = "weight" mxe : array<uint8>   // E8M0 plane, bound at off/32
     @ssbo @binding = 2 @role = "read" xf : array<float4>   // activations, float4 view (xoff always % 4)
     @ssbo @binding = 3 @role = "write" y : array<float>
-    @uniform @binding = 4 ndim : uint
-    @uniform @binding = 5 ddim : uint
+    @uniform @binding = 4 ka : MoeGemvArgs
     @ssbo @binding = 6 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
-    @uniform @binding = 7 eblk : uint       // 32-elem blocks per expert plane (ege / 32)
-    @uniform @binding = 8 xs : uint         // per-slot x stride, elements (0 = shared)
-    @uniform @binding = 9 ss : uint         // per-stream sel row stride, uints (2k; 0 single)
-    @uniform @binding = 10 bxs : uint       // per-stream x stride, elements (0 single)
-    @uniform @binding = 11 bys : uint       // per-stream y stride, elements (0 single)
     @ssbo @binding = 12 @role = "weight" wb : array<float>   // [ne x ddim] per-expert bias rows (hasb models)
-    @uniform @binding = 13 hasb : uint
     @ssbo @binding = 15 @role = "weight" vtab : array<float> // [16] signed doubled-e2m1 values (host-built)
     @workgroup vt : float[32]
 
     [metal_kernel(name="metal_moe_gemv_mx4_msl")]
     def metal_moe_gemv_mx4 {
+        let ndim = ka.ndim
+        let ddim = ka.ddim
+        let eblk = ka.eplane
+        let xs = ka.xs
+        let ss = ka.ss
+        let bxs = ka.bxs
+        let bys = ka.bys
+        let hasb = ka.hasb
         // the lcpp mul_mv_mxfp4 shape (moe-lab lcppe rung, 239->301 wGB/s at gpt-oss shapes):
         // 16 blocks in flight x 2 threads/block, yl[4] float4 x prefetch shared across both rows,
         // uint2 weight loads, tgmem value LUT, e8m0 scale computed in ALU (no dependent etab load)
@@ -6547,17 +6541,18 @@ class MetalMoeGemvQ51 {
     @ssbo @binding = 1 @role = "weight" wsh : array<float16> // scale plane (d at 2*blk, m at 2*blk+1)
     @ssbo @binding = 2 @role = "read" xf : array<float4>   // activations, float4 view (xoff always % 4)
     @ssbo @binding = 3 @role = "write" y : array<float>
-    @uniform @binding = 4 ndim : uint
-    @uniform @binding = 5 ddim : uint
+    @uniform @binding = 4 ka : MoeGemvArgs
     @ssbo @binding = 6 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
-    @uniform @binding = 7 eblk : uint       // 32-elem blocks per expert plane (ege / 32)
-    @uniform @binding = 8 xs : uint         // per-slot x stride, elements (0 = shared)
-    @uniform @binding = 9 ss : uint         // per-stream sel row stride, uints (2k; 0 single)
-    @uniform @binding = 10 bxs : uint       // per-stream x stride, elements (0 single)
-    @uniform @binding = 11 bys : uint       // per-stream y stride, elements (0 single)
 
     [metal_kernel(name="metal_moe_gemv_q51_msl")]
     def metal_moe_gemv_q51 {
+        let ndim = ka.ndim
+        let ddim = ka.ddim
+        let eblk = ka.eplane
+        let xs = ka.xs
+        let ss = ka.ss
+        let bxs = ka.bxs
+        let bys = ka.bys
         let lane = gl_SubgroupInvocationID
         let ix = lane / 8u    // 4-way block stride
         let it = lane % 8u    // 8 threads per block, one float4 (4 elems) each
