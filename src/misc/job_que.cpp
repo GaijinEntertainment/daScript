@@ -1320,6 +1320,7 @@ namespace das {
 #elif defined(__linux__) || defined __HAIKU__
 
 #include <pthread.h>
+#include <sched.h>
 
 namespace das
 {
@@ -1346,7 +1347,9 @@ namespace das
         cpu_set_t cs;
         CPU_ZERO(&cs);
         CPU_SET(cpu, &cs);
-        pthread_setaffinity_np(pthread_self(), sizeof(cs), &cs);
+        // pid 0 means the calling thread, same as pthread_setaffinity_np(pthread_self(), ...),
+        // which bionic does not declare
+        sched_setaffinity(0, sizeof(cs), &cs);
     }
 #endif
 }
