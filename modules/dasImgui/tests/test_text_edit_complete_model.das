@@ -3,6 +3,7 @@ options indenting = 4
 
 require dastest/testing_boost public
 require imgui/imgui_text_edit_complete
+require imgui/imgui_text_edit_provider_das
 
 //! Pure-logic coverage for the completion carrier + document-words provider.
 
@@ -94,6 +95,36 @@ def test_complete_explicit_dot_trigger(t : T?) {
     t |> equal(ed.list_prefix_bytes, 0, "empty prefix - the whole word inserts")
     text_edit_close_list(ed)
     t |> success(!ed.list_open, "Escape path closes it")
+    text_edit_complete_dispose(comp)
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_das_provider_compiles_symbols(t : T?) {
+    var ed = TextEditState()
+    var comp = TextEditCompletion()
+    var provider = TextEditDasProvider()
+    text_edit_load(ed, "def alpha_one() \{\}\ndef alpha_two() \{\}\nvar alpha_global = 1")
+    text_edit_set_language(ed, "das")
+    // hand-built request isolates the provider: document words never ran
+    comp.token = 5
+    comp.request_revision = ed.revision
+    comp.prefix = "alp"
+    text_edit_das_provider_sync(ed, comp, provider)
+    t |> equal(provider.sent_token, 5, "the worker got the request")
+    var found = false
+    var waited = 0
+    while (!found && waited < 500) {
+        sleep(20u)
+        text_edit_das_provider_sync(ed, comp, provider)
+        found = find_index(comp.items, "alpha_one") >= 0
+        waited++
+    }
+    t |> success(found, "compiled function names arrive through the offer rail")
+    t |> success(find_index(comp.items, "alpha_two") >= 0, "every function offers")
+    t |> success(find_index(comp.items, "alpha_global") >= 0, "globals offer too")
+    t |> equal(ed.ghost_text, "ha_one", "the offer refreshed the ghost")
+    text_edit_das_provider_stop(provider)
     text_edit_complete_dispose(comp)
     text_edit_dispose(ed)
 }
