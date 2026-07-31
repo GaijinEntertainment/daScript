@@ -79,7 +79,7 @@ Run from the repo root (full recipe + curl smoke + recording workflow: `modules/
 ./bin/daslang dastest/dastest.das -- --test modules/dasImgui/tests --headless
 ```
 
-- ~158 test files, one daslang-live subprocess each; add `--isolated-mode --isolated-mode-threads 4` to parallelize. **`--headless` is required** — without it the spawned subprocesses pop real GLFW windows and flake on focus/port-reuse.
+- ~159 test files, one daslang-live subprocess each; add `--isolated-mode --isolated-mode-threads 4` to parallelize. **`--headless` is required** — without it the spawned subprocesses pop real GLFW windows and flake on focus/port-reuse.
 - Nightly-only in CI (`nightly_imgui.yml`, ubuntu + macos): the `tests/.das_test` gate skips this dir in `--test tests/` full sweeps unless `--imgui` is passed; targeting the folder directly bypasses the gate. CI excludes `glfw_synth`, `key_hud`, `embedded_terminal`. Windows CI is deliberately absent (runner fastfail 0xC0000409 + libhv's 16-POST-per-subprocess stall); local Windows runs still need the high-POST excludes (`inputs_drag`, `inputs_numeric`, `inputs_slider`, `indexed_dynamic`, `inputs_color`, `inputs_choice`, `inputs_text`).
 - **Process cleanup between runs:** a killed dastest leaves a daslang-live child holding port 9090; sweep `daslang`/`daslang-live`/`dastest`/`imguiApp`/`imguiAppHeadless` processes before re-running — **by PATH, never bare by name** (a bare name-kill also murders the dasHerd watcher and every other tree's daslang; observed 2026-07-29). Sweep command: `skills/imgui_playwright.md`.
 - Families: `test_<feature>.das` (`with_imgui_app` playwright tests), `failed_imgui_*.das` (lint negative smokes), `record_<scene>.das` (recording drivers — NOT in CI).
