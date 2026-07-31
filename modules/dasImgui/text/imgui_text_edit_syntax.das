@@ -18,7 +18,7 @@ let public TEXT_EDIT_SYNTAX_DEBOUNCE = 0.3f
 //! Buffers above this size keep the lexical tier only (parse on demand).
 let public TEXT_EDIT_SYNTAX_MAX_BYTES = 262144
 
-def private role_style(role : SyntaxRole) : TextSourceSyntaxStyle { // nolint:STYLE037
+def private role_style(role : SyntaxRole) : TextSourceSyntaxStyle {
     if (role == SyntaxRole.comment) return TextSourceSyntaxStyle.comment
     if (role == SyntaxRole.string_ || role == SyntaxRole.character
             || role == SyntaxRole.escape) return TextSourceSyntaxStyle.string_

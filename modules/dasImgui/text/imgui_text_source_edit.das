@@ -309,7 +309,7 @@ def private byte_in(set_bytes : string; b : int) : bool {
     return hit
 }
 
-def private lex_line(profile : TextLanguageProfile const; line : string; // nolint:STYLE037
+def private lex_line(profile : TextLanguageProfile const; line : string;
                      entry_comment : bool;
                      var runs : array<TextEditStyleRun>) : bool {
     // returns whether the NEXT line starts inside a block comment
@@ -446,7 +446,7 @@ def private code_byte(ed : TextEditState const; line, column : int) : int {
     return value
 }
 
-def private scan_bracket(ed : TextEditState const; line, column : int; // nolint:STYLE037
+def private scan_bracket(ed : TextEditState const; line, column : int;
                          open_byte, close_byte : int; forward : bool) : int2 {
     var depth = 1
     var at_line = line
@@ -547,7 +547,7 @@ def private run_overlaps(runs : array<TextEditStyleRun>; start, end_ : int) : bo
     return false
 }
 
-def private merge_parse_styles(var ed : TextEditState; line : int; // nolint:STYLE037
+def private merge_parse_styles(var ed : TextEditState; line : int;
                                old_runs : array<TextEditStyleRun>;
                                edit_column, removed_bytes, inserted_bytes : int) {
     // anti-flicker: shift old parse-only runs across the edit into lexical gaps
@@ -1118,7 +1118,7 @@ def private surround_selection(var ed : TextEditState;
     return true
 }
 
-def private auto_close_pairs(var ed : TextEditState; text : string) : bool { // nolint:STYLE037
+def private auto_close_pairs(var ed : TextEditState; text : string) : bool {
     // openers close themselves, closers skip twins, selections surround
     return false if (empty(ed.language) || length(text) != 1 || ed.overtype)
     let b = first_character(text)
@@ -2402,7 +2402,7 @@ def private extend_line_drag(var ed : TextEditState; hit_line : int) {
     }
 }
 
-def private handle_edit_click(var ed : TextEditState; hit : int2; // nolint:STYLE037
+def private handle_edit_click(var ed : TextEditState; hit : int2;
                               clicks : int; shift : bool) {
     ed.focused = true
     if (shift) {
@@ -2622,7 +2622,7 @@ def private draw_edit_caret(ed : TextEditState const; m : EditMetrics;
         GetColorU32(caret_color), 0.0f, ImDrawFlags.None)
 }
 
-def private edit_syntax_color(style : TextSourceViewStyle const; // nolint:STYLE037
+def private edit_syntax_color(style : TextSourceViewStyle const;
                               syntax : TextSourceSyntaxStyle) : float4 {
     if (syntax == TextSourceSyntaxStyle.comment) return style.syntax_comment_color
     if (syntax == TextSourceSyntaxStyle.string_) return style.syntax_string_color
@@ -3403,7 +3403,7 @@ def private edit_define_nav(var registry : CommandRegistry; id, title : string;
         edit_binding(id + ".select", key, keypad, primary, true, true))
 }
 
-def public text_edit_register_commands(var registry : CommandRegistry) { // nolint:STYLE038
+def public text_edit_register_commands(var registry : CommandRegistry) { // nolint:STYLE038 — flat keymap table, one edit_define per verb; registration order IS the Escape-chain precedence
     //! Register the editor verb surface as rebindable commands with the spec
     //! defaults (VS Code chords, CUA alternates, numpad twins). Idempotent.
     // find.close registers BEFORE edit.cancel: the Escape chain closes the bar first
@@ -3555,7 +3555,7 @@ def private edit_define_ctrl_select(var registry : CommandRegistry;
             CommandScope.component, true), keypad, true, true))
 }
 
-def private dispatch_edit_command(var ed : TextEditState; command_id : string; // nolint:STYLE037
+def private dispatch_edit_command(var ed : TextEditState; command_id : string; // nolint:STYLE037 — one arm per command id; the verb ladder is flat, with the line ops already split off
                                   page_rows : int; use_system_clipboard : bool) {
     var select = false
     var verb = command_id

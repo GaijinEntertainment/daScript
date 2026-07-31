@@ -88,7 +88,7 @@ def private das_word_style(word : string) : TextSourceSyntaxStyle {
         : TextSourceSyntaxStyle.keyword)
 }
 
-def private ensure_das_keyword_styles { // nolint:STYLE038
+def private ensure_das_keyword_styles {
     if (!empty(g_das_keyword_styles)) return
     // imgui_text_language owns the keyword SET; only the styling lives here.
     text_language_profile("daslang") $(profile) {
@@ -119,7 +119,7 @@ def private push_das_fallback(var spans : array<TextSourceSpan>;
         syntax_style = style))
 }
 
-def private das_lexical_fallback(source : string) : array<TextSourceSpan> { // nolint:STYLE038
+def private das_lexical_fallback(source : string) : array<TextSourceSpan> { // nolint:STYLE038 — one-pass lexer; every token arm shares the byte cursor inside the peek_data block
     // Fills query gaps from incomplete snippets / recovery nodes (common in compact Git hunks); tree-sitter stays authoritative.
     var result : array<TextSourceSpan>
     var expect_function = false
