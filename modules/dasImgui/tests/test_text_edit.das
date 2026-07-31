@@ -126,5 +126,11 @@ def test_text_edit_numpad_and_overtype(t : T?) {
             return (widget_payload_field(snap, EDIT_TARGET, "anchor_line") ?? -1) >= 0
         }
         t |> success(selected != null, "Shift+End extends a selection via its own binding")
+
+        // Boris's live catch: VS Code double-binds vertical select on Ctrl+Shift.
+        key_chord_tap(d, ["Ctrl", "Shift"], int(ImGuiKey.DownArrow))
+        t |> success(wait_for_key_idle(d, 6.0f), "Ctrl+Shift+Down drains")
+        t |> success(wait_for_int_value(d, EDIT_TARGET, "cursor_line", 1, 300),
+            "Ctrl+Shift+Down extends the selection down a line")
     }
 }

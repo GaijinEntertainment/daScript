@@ -79,6 +79,8 @@ struct public TextEditState {
     redo_stack : array<TextEditUndoUnit>
     //! True while the newest undo unit still accepts coalescing appends.
     undo_open : bool = false
+    //! Viewport scroll request in lines (Ctrl+Up/Down); caret stays put.
+    pending_scroll_lines : int = 0
     // widget layout cache + per-draw stamps for live inspection
     layout_revision : int = -1
     max_line_bytes : int = 0
@@ -932,6 +934,230 @@ def public text_edit_delete_word_right(var ed : TextEditState) {
         slice(line, ed.cursor_column, target), "")
 }
 
+// ===== Line operations =====
+
+def private line_block(ed : TextEditState const) : int2 {
+    // touched lines; selection ending at column 0 excludes that line
+    let sel = text_edit_selection(ed)
+    var last = sel.end_line
+    if (last > sel.start_line && sel.end_column == 0) {
+        last--
+    }
+    return int2(sel.start_line, last)
+}
+
+def private block_text(ed : TextEditState const; first, last : int) : string {
+    return text_edit_range_text(ed, TextEditRange(start_line = first,
+        start_column = 0, end_line = last,
+        end_column = length(ed.lines[last])))
+}
+
+def private patch_unit_after(var ed : TextEditState) {
+    // line-op verbs place the cursor AFTER committing; keep redo in sync
+    return if (empty(ed.undo_stack))
+    var last & = unsafe(ed.undo_stack[length(ed.undo_stack) - 1])
+    last.after_cursor_line = ed.cursor_line
+    last.after_cursor_column = ed.cursor_column
+}
+
+def private leading_whitespace(line : string) : string {
+    var at = 0
+    peek_data(line) $(bytes) {
+        while (at < length(bytes)
+                && (int(bytes[at]) == ' ' || int(bytes[at]) == '\t')) {
+            at++
+        }
+    }
+    return slice(line, 0, at)
+}
+
+def public text_edit_scroll(var ed : TextEditState; delta_lines : int) {
+    //! Scroll the viewport WITHOUT moving the caret (Ctrl+Up/Down).
+    ed.pending_scroll_lines += delta_lines
+}
+
+def public text_edit_move_lines(var ed : TextEditState; delta : int) {
+    //! Move the lines touched by the selection one line up (-1) or down (+1);
+    //! no-op at buffer edges; cursor/selection follow the block; ONE undo unit.
+    ensure_line(ed)
+    let touched = line_block(ed)
+    return if ((delta < 0 && touched.x == 0)
+        || (delta > 0 && touched.y >= length(ed.lines) - 1))
+    let region_first = delta < 0 ? touched.x - 1 : touched.x
+    let region_last = delta < 0 ? touched.y : touched.y + 1
+    let neighbor = delta < 0 ? ed.lines[touched.x - 1] : ed.lines[touched.y + 1]
+    let moved = block_text(ed, touched.x, touched.y)
+    let old_text = block_text(ed, region_first, region_last)
+    let new_text = delta < 0 ? moved + "\n" + neighbor : neighbor + "\n" + moved
+    let cursor_line = ed.cursor_line
+    let cursor_column = ed.cursor_column
+    let anchor_line = ed.anchor_line
+    let anchor_column = ed.anchor_column
+    commit_edit(ed, TextEditUndoKind.other, region_first, 0, old_text, new_text)
+    ed.cursor_line = cursor_line + delta
+    ed.cursor_column = min(cursor_column, length(ed.lines[ed.cursor_line]))
+    if (anchor_line >= 0) {
+        ed.anchor_line = anchor_line + delta
+        ed.anchor_column = min(anchor_column, length(ed.lines[ed.anchor_line]))
+    }
+    patch_unit_after(ed)
+    ed.follow_revision++
+}
+
+def public text_edit_duplicate_lines(var ed : TextEditState; down : bool = true) {
+    //! Duplicate the touched lines; `down` puts the caret on the lower copy
+    //! (VS Code copyLinesDown), otherwise it stays on the upper one.
+    ensure_line(ed)
+    let touched = line_block(ed)
+    let copied = block_text(ed, touched.x, touched.y)
+    let cursor_line = ed.cursor_line
+    let cursor_column = ed.cursor_column
+    let anchor_line = ed.anchor_line
+    let anchor_column = ed.anchor_column
+    commit_edit(ed, TextEditUndoKind.other, touched.x, 0, "", copied + "\n")
+    let shift = down ? touched.y - touched.x + 1 : 0
+    ed.cursor_line = cursor_line + shift
+    ed.cursor_column = cursor_column
+    if (anchor_line >= 0) {
+        ed.anchor_line = anchor_line + shift
+        ed.anchor_column = anchor_column
+    }
+    patch_unit_after(ed)
+    ed.follow_revision++
+}
+
+def public text_edit_delete_lines(var ed : TextEditState) {
+    //! Delete every line touched by the selection, including its newline.
+    ensure_line(ed)
+    let touched = line_block(ed)
+    let column = text_edit_selection(ed).start_column
+    let removed = block_text(ed, touched.x, touched.y)
+    if (touched.y < length(ed.lines) - 1) {
+        commit_edit(ed, TextEditUndoKind.other, touched.x, 0, removed + "\n", "")
+    } elif (touched.x > 0) {
+        commit_edit(ed, TextEditUndoKind.other, touched.x - 1,
+            length(ed.lines[touched.x - 1]), "\n" + removed, "")
+        ed.cursor_line = min(touched.x, length(ed.lines) - 1)
+        ed.cursor_column = 0
+    } else {
+        commit_edit(ed, TextEditUndoKind.other, 0, 0, removed, "")
+    }
+    ed.cursor_column = min(column, length(ed.lines[ed.cursor_line]))
+    patch_unit_after(ed)
+}
+
+def public text_edit_insert_line_after(var ed : TextEditState) {
+    //! Open a blank line below (Ctrl+Enter) carrying the current indentation,
+    //! without splitting the current line.
+    ensure_line(ed)
+    let indent = leading_whitespace(ed.lines[ed.cursor_line])
+    text_edit_push_undo_stop(ed)
+    commit_edit(ed, TextEditUndoKind.insert_typing, ed.cursor_line,
+        length(ed.lines[ed.cursor_line]), "", "\n" + indent)
+}
+
+def public text_edit_insert_line_before(var ed : TextEditState) {
+    //! Open a blank line above (Ctrl+Shift+Enter) carrying the indentation.
+    ensure_line(ed)
+    let line = ed.cursor_line
+    let indent = leading_whitespace(ed.lines[line])
+    text_edit_push_undo_stop(ed)
+    commit_edit(ed, TextEditUndoKind.insert_typing, line, 0, "", indent + "\n")
+    ed.cursor_line = line
+    ed.cursor_column = length(indent)
+    patch_unit_after(ed)
+}
+
+def private reindent_block(var ed : TextEditState; outdent : bool) {
+    ensure_line(ed)
+    let touched = line_block(ed)
+    let had_selection = text_edit_has_selection(ed)
+    let old_text = block_text(ed, touched.x, touched.y)
+    let new_text = build_string() $(var writer) {
+        for (index in range(touched.x, touched.y + 1)) {
+            if (index > touched.x) {
+                writer |> write("\n")
+            }
+            let line = ed.lines[index]
+            if (outdent) {
+                writer |> write(outdent_line(line))
+            } elif (empty(line)) {
+                writer |> write(line) // empty lines are skipped on indent
+            } else {
+                writer |> write("\t")
+                writer |> write(line)
+            }
+        }
+    }
+    return if (new_text == old_text)
+    let cursor_line = ed.cursor_line
+    commit_edit(ed, TextEditUndoKind.other, touched.x, 0, old_text, new_text)
+    if (had_selection) {
+        // the block stays selected whole after a re-indent
+        ed.anchor_line = touched.x
+        ed.anchor_column = 0
+        ed.cursor_line = touched.y
+        ed.cursor_column = length(ed.lines[touched.y])
+    } else {
+        ed.cursor_line = cursor_line
+        ed.cursor_column = min(ed.cursor_column, length(ed.lines[cursor_line]))
+    }
+    patch_unit_after(ed)
+    ed.follow_revision++
+}
+
+def private outdent_line(line : string) : string {
+    return slice(line, 1, length(line)) if (starts_with(line, "\t"))
+    var spaces = 0
+    peek_data(line) $(bytes) {
+        while (spaces < 4 && spaces < length(bytes) && int(bytes[spaces]) == ' ') {
+            spaces++
+        }
+    }
+    return slice(line, spaces, length(line))
+}
+
+def public text_edit_indent_lines(var ed : TextEditState) {
+    reindent_block(ed, false)
+}
+
+def public text_edit_outdent_lines(var ed : TextEditState) {
+    reindent_block(ed, true)
+}
+
+def public text_edit_tab(var ed : TextEditState) {
+    //! Tab per the spec's fork 2: multi-line or full-line selection block
+    //! indents; a partial-line selection is replaced; else insert a tab.
+    ensure_line(ed)
+    if (text_edit_has_selection(ed)) {
+        let sel = text_edit_selection(ed)
+        if (sel.end_line > sel.start_line
+                || (sel.start_column == 0
+                    && sel.end_column == length(ed.lines[sel.start_line]))) {
+            text_edit_indent_lines(ed)
+            return
+        }
+    }
+    text_edit_insert(ed, "\t")
+}
+
+def public text_edit_expand_line_selection(var ed : TextEditState) {
+    //! Ctrl+L: select the current line incl. newline; repeat extends a line.
+    ensure_line(ed)
+    let sel = text_edit_selection(ed)
+    ed.anchor_line = sel.start_line
+    ed.anchor_column = 0
+    if (sel.end_line < length(ed.lines) - 1) {
+        ed.cursor_line = sel.end_line + 1
+        ed.cursor_column = 0
+    } else {
+        ed.cursor_line = sel.end_line
+        ed.cursor_column = length(ed.lines[sel.end_line])
+    }
+    ed.preferred_column = -1
+    touch_move(ed)
+}
+
 // ===== The widget =====
 
 def private edit_hit_column(line : string; local_x : float; var font : ImFont?;
@@ -1375,6 +1601,11 @@ def private text_source_edit_impl(id : string; var ed : TextEditState;
         }
     }
     follow_edit_cursor(ed, m, style.tab_cells, font)
+    if (ed.pending_scroll_lines != 0) {
+        SetScrollY(max(GetScrollY()
+            + float(ed.pending_scroll_lines) * m.line_height, 0.0f))
+        ed.pending_scroll_lines = 0
+    }
     // recount after input: a line-join edit shrinks the buffer mid-frame
     refresh_layout_cache(ed)
     draw_edit_content(ed, m, style, font)
@@ -1502,12 +1733,76 @@ def public text_edit_register_commands(var registry : CommandRegistry) { // noli
     edit_define(registry, "edit.cancel", "Cancel selection",
         edit_binding("edit.cancel", ImGuiKey.Escape, ImGuiKey.None,
             false, false, false))
+    // VS Code double-binds vertical selects on Ctrl+Shift too
+    edit_define_ctrl_select(registry, "edit.cursor_up", "Cursor up",
+        ImGuiKey.UpArrow, ImGuiKey.Keypad8)
+    edit_define_ctrl_select(registry, "edit.cursor_down", "Cursor down",
+        ImGuiKey.DownArrow, ImGuiKey.Keypad2)
+    edit_define_ctrl_select(registry, "edit.page_up", "Page up",
+        ImGuiKey.PageUp, ImGuiKey.Keypad9)
+    edit_define_ctrl_select(registry, "edit.page_down", "Page down",
+        ImGuiKey.PageDown, ImGuiKey.Keypad3)
+    // Tier-2 line operations (VS Code chords)
+    edit_define(registry, "edit.scroll_up", "Scroll up",
+        edit_binding("edit.scroll_up", ImGuiKey.UpArrow, ImGuiKey.Keypad8,
+            true, false, true))
+    edit_define(registry, "edit.scroll_down", "Scroll down",
+        edit_binding("edit.scroll_down", ImGuiKey.DownArrow, ImGuiKey.Keypad2,
+            true, false, true))
+    edit_define(registry, "edit.move_lines_up", "Move lines up",
+        with_alt_chord(command_binding("edit.move_lines_up", ImGuiKey.UpArrow,
+            false, false, true, false, CommandScope.component, true),
+            ImGuiKey.Keypad8, false, false, true))
+    edit_define(registry, "edit.move_lines_down", "Move lines down",
+        with_alt_chord(command_binding("edit.move_lines_down", ImGuiKey.DownArrow,
+            false, false, true, false, CommandScope.component, true),
+            ImGuiKey.Keypad2, false, false, true))
+    edit_define(registry, "edit.duplicate_lines_up", "Duplicate lines up",
+        with_alt_chord(command_binding("edit.duplicate_lines_up", ImGuiKey.UpArrow,
+            false, true, true, false, CommandScope.component),
+            ImGuiKey.Keypad8, false, true, true))
+    edit_define(registry, "edit.duplicate_lines_down", "Duplicate lines down",
+        with_alt_chord(command_binding("edit.duplicate_lines_down", ImGuiKey.DownArrow,
+            false, true, true, false, CommandScope.component),
+            ImGuiKey.Keypad2, false, true, true))
+    edit_define(registry, "edit.delete_lines", "Delete lines",
+        command_binding("edit.delete_lines", ImGuiKey.K, true, true, false,
+            false, CommandScope.component, true))
+    edit_define(registry, "edit.insert_line_after", "Insert line below",
+        with_alt_chord(command_binding("edit.insert_line_after", ImGuiKey.Enter,
+            true, false, false, false, CommandScope.component),
+            ImGuiKey.KeypadEnter, true))
+    edit_define(registry, "edit.insert_line_before", "Insert line above",
+        with_alt_chord(command_binding("edit.insert_line_before", ImGuiKey.Enter,
+            true, true, false, false, CommandScope.component),
+            ImGuiKey.KeypadEnter, true, true))
+    edit_define(registry, "edit.indent_lines", "Indent lines",
+        command_binding("edit.indent_lines", ImGuiKey.RightBracket, true,
+            false, false, false, CommandScope.component, true))
+    edit_define(registry, "edit.outdent_lines", "Outdent lines",
+        with_alt_chord(command_binding("edit.outdent_lines", ImGuiKey.LeftBracket,
+            true, false, false, false, CommandScope.component, true),
+            ImGuiKey.Tab, false, true))
+    edit_define(registry, "edit.expand_line_selection", "Select line",
+        command_binding("edit.expand_line_selection", ImGuiKey.L, true, false,
+            false, false, CommandScope.component, true))
+}
+
+def private edit_define_ctrl_select(var registry : CommandRegistry;
+                                    id, title : string; key, keypad : ImGuiKey) {
+    let row_id = id + ".select.2"
+    edit_define(registry, row_id, title + " (select, Ctrl)",
+        with_alt_chord(command_binding(row_id, key, true, true, false, false,
+            CommandScope.component, true), keypad, true, true))
 }
 
 def private dispatch_edit_command(var ed : TextEditState; command_id : string; // nolint:STYLE037
                                   page_rows : int; use_system_clipboard : bool) {
     var select = false
     var verb = command_id
+    if (ends_with(verb, ".2")) {
+        verb = slice(verb, 0, length(verb) - 2)
+    }
     if (ends_with(verb, ".select")) {
         select = true
         verb = slice(verb, 0, length(verb) - 7)
@@ -1547,7 +1842,7 @@ def private dispatch_edit_command(var ed : TextEditState; command_id : string; /
     } elif (verb == "edit.delete_word_right") {
         text_edit_delete_word_right(ed)
     } elif (verb == "edit.tab") {
-        text_edit_insert(ed, "\t")
+        text_edit_tab(ed)
     } elif (verb == "edit.select_all") {
         text_edit_select_all(ed)
     } elif (verb == "edit.undo") {
@@ -1564,5 +1859,35 @@ def private dispatch_edit_command(var ed : TextEditState; command_id : string; /
         text_edit_toggle_overtype(ed)
     } elif (verb == "edit.cancel") {
         text_edit_clear_selection(ed)
+    } else {
+        dispatch_edit_line_command(ed, verb)
+    }
+}
+
+def private dispatch_edit_line_command(var ed : TextEditState; verb : string) {
+    if (verb == "edit.scroll_up") {
+        text_edit_scroll(ed, -1)
+    } elif (verb == "edit.scroll_down") {
+        text_edit_scroll(ed, 1)
+    } elif (verb == "edit.move_lines_up") {
+        text_edit_move_lines(ed, -1)
+    } elif (verb == "edit.move_lines_down") {
+        text_edit_move_lines(ed, 1)
+    } elif (verb == "edit.duplicate_lines_up") {
+        text_edit_duplicate_lines(ed, false)
+    } elif (verb == "edit.duplicate_lines_down") {
+        text_edit_duplicate_lines(ed, true)
+    } elif (verb == "edit.delete_lines") {
+        text_edit_delete_lines(ed)
+    } elif (verb == "edit.insert_line_after") {
+        text_edit_insert_line_after(ed)
+    } elif (verb == "edit.insert_line_before") {
+        text_edit_insert_line_before(ed)
+    } elif (verb == "edit.indent_lines") {
+        text_edit_indent_lines(ed)
+    } elif (verb == "edit.outdent_lines") {
+        text_edit_outdent_lines(ed)
+    } elif (verb == "edit.expand_line_selection") {
+        text_edit_expand_line_selection(ed)
     }
 }
