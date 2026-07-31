@@ -93,7 +93,8 @@ def private collect_compiled(source, prefix : string; // nolint:STYLE037
     set_file_source(access, COMPLETION_OVERLAY, source + "\n")
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
-            // lint/MCP introspection model: unfolded, uninlined, source-faithful AST
+            // introspection model; gen2 default lives in the CLI, not the struct
+            cop.version_2_syntax = true
             cop.threadlock_context = true
             cop.ignore_shared_modules = true
             cop.export_all = true

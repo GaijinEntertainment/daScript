@@ -238,7 +238,8 @@ def test_das_provider_reports_diagnostics(t : T?) {
         "a broken buffer reports failed")
     t |> success(!empty(ed.diagnostics), "the findings underline")
     // fix the buffer: the next idle compile turns it ok and clears findings
-    text_edit_load(ed, "def fine() \{\}")
+    // (the array literal is gen2-only - proves options-less buffers parse gen2)
+    text_edit_load(ed, "var g <- [1, 2, 3]\ndef fine() \{\}")
     text_edit_set_language(ed, "das")
     ed.syntax_idle = 1.0f
     text_edit_das_provider_sync(ed, comp, provider)
