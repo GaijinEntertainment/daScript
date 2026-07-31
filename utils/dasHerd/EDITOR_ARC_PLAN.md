@@ -331,6 +331,12 @@ highlight inside code blocks lands with the selection work in E2/E4.
   diagnostics via `validate.das` on the debounce, squiggles from the
   span layer. Completion stays in LANGUAGE_SUPPORT_PLAN step 6 with the
   profelis floor.
+  **Completion plan of record (Boris, 2026-07-31, mid-E4): the daslang
+  VS Code plugin does completion amazingly well — EXTRACT that code,
+  generalize it into daslib somewhere, and use it in the LSP for
+  completion.** Until then the E4 heuristics (tiers, statement-start
+  keyword boost) are FROZEN — good enough, no more position jazz; that
+  intelligence belongs to the LSP tier when it lands.
   **Provider abstraction (Boris, 2026-07-30, dropped mid-E3): the editor
   talks to an LSP-LIKE interface, not to LSP.** One abstracted
   language-intelligence surface (hover / definition / diagnostics /

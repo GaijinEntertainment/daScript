@@ -8,6 +8,7 @@ require imgui/imgui_text_source_edit
 require imgui/imgui_text_edit_syntax
 require imgui/imgui_text_edit_complete
 require imgui/imgui_text_edit_provider_das
+require imgui/imgui_text_edit_provider_cpp
 require imgui/imgui_fonts
 require strings
 
@@ -18,6 +19,8 @@ var private g_edit = TextEditState()
 var private g_find = TextFindState()
 var private g_complete = TextEditCompletion()
 var private g_das_provider = TextEditDasProvider()
+var private g_cpp_provider = TextEditCppProvider()
+var private g_cpp_mode = false
 var private g_commands = CommandRegistry()
 var private g_bindings_editor = CommandBindingsEditorState()
 var private g_fonts = FontRoleSet()
@@ -28,6 +31,12 @@ let private SAMPLE = ("The text editor arc, now with syntax. // E4\n"
     + "\n"
     + "def greet(name : string) : int \{\n"
     + "\treturn print(\"héllo — 你好 \{name\}\") // 42 keywords, strings\n"
+    + "\}\n")
+
+let private SAMPLE_CPP = ("// The text editor arc - C++ mode, checked by clang\n"
+    + "\n"
+    + "static int add(int a, int b) \{\n"
+    + "\treturn a + b;\n"
     + "\}\n")
 
 [export]
@@ -99,6 +108,7 @@ def private draw_editor_window() {
         let _ = text_edit_syntax_sync(g_edit)
         text_edit_complete_sync(g_edit, g_complete)
         text_edit_das_provider_sync(g_edit, g_complete, g_das_provider)
+        text_edit_cpp_provider_sync(g_edit, g_cpp_provider)
         var status = ("Ln {g_edit.cursor_line + 1}, Col {g_edit.cursor_column + 1}"
             + " - {text_edit_line_count(g_edit)} lines")
         if (g_edit.dirty) {
@@ -119,6 +129,13 @@ def private draw_editor_window() {
         if (small_button(EDIT_BINDINGS, (text = "Bindings"))) {
             g_bindings_editor.open = true
         }
+        same_line()
+        if (small_button(EDIT_LANG, (text = g_cpp_mode ? "das###lang" : "cpp###lang"))) {
+            g_cpp_mode = !g_cpp_mode
+            text_edit_load(g_edit, g_cpp_mode ? SAMPLE_CPP : SAMPLE)
+            text_edit_set_language(g_edit, g_cpp_mode ? "cpp" : "das")
+            text_edit_set_file_name(g_edit, g_cpp_mode ? "sample.cpp" : "sample.das")
+        }
         // buffer tail only - the full source would overflow into a scrollbar
         var probe = replace(text_edit_source(g_edit), "\n", "\\n")
         let probe_length = length(probe)
@@ -132,6 +149,7 @@ def private draw_editor_window() {
 [export]
 def shutdown() {
     command_registry_dispose(g_commands)
+    text_edit_cpp_provider_stop(g_cpp_provider)
     text_edit_das_provider_stop(g_das_provider)
     text_edit_complete_dispose(g_complete)
     text_find_dispose(g_find)

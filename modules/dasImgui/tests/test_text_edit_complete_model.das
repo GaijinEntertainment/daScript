@@ -4,6 +4,8 @@ options indenting = 4
 require dastest/testing_boost public
 require imgui/imgui_text_edit_complete
 require imgui/imgui_text_edit_provider_das
+require imgui/imgui_text_edit_provider_cpp
+require daslib/fio
 require strings
 
 //! Pure-logic coverage for the completion carrier + document-words provider.
@@ -357,6 +359,72 @@ def test_complete_rank_tiers(t : T?) {
     t |> equal(comp.item_tiers[1], 0, "the doc word promoted to compiled")
     t |> equal(length(comp.items), 3, "promotion does not duplicate")
     text_edit_complete_dispose(comp)
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_clang_output_parsing(t : T?) {
+    var out : array<TextEditDiagnostic>
+    let output = ("C:/tmp/_check_1.cpp:2:13: error: use of undeclared identifier 'yyy'\n"
+        + "    2 |     int x = yyy;\n"
+        + "      |             ^~~\n"
+        + "C:/tmp/_check_1.cpp:3:13: error: expected ';' after return statement\n"
+        + "    3 |     return 0\n"
+        + "      |             ^\n"
+        + "include/some.h:9:1: warning: something odd\n"
+        + "2 errors generated.\n")
+    text_edit_parse_clang_output(output, "C:/tmp/_check_1.cpp", out)
+    t |> equal(length(out), 3, "errors and warnings parse")
+    t |> equal(out[0].line, 1, "clang lines convert to 0-based")
+    t |> equal(out[0].column, 12, "clang columns convert to 0-based")
+    t |> equal(out[0].end_column, 15, "caret plus tildes size the range")
+    t |> equal(out[0].file, "", "the checked buffer carries no path")
+    t |> equal(out[1].end_column, 13, "a lone caret is width one")
+    t |> equal(out[2].file, "include/some.h", "header findings keep their path")
+    delete out
+}
+
+[test]
+def test_cpp_provider_reports_diagnostics(t : T?) {
+    let compiler = text_edit_cpp_compiler_discover()
+    if (!fexist(compiler)) {
+        t |> success(true, "no clang on this box - provider skipped")
+        return
+    }
+    var ed = TextEditState()
+    var provider = TextEditCppProvider()
+    text_edit_load(ed, "int main() \{\n    int x = yyy;\n\}")
+    text_edit_set_language(ed, "cpp")
+    text_edit_set_file_name(ed, "hello.cpp")
+    ed.syntax_idle = 1.0f
+    text_edit_cpp_provider_sync(ed, provider)
+    t |> equal(int(ed.compile_status), int(TextEditCompileStatus.compiling),
+        "the kick marks the buffer compiling")
+    var waited = 0
+    while (ed.compile_status == TextEditCompileStatus.compiling && waited < 750) {
+        sleep(20u)
+        text_edit_cpp_provider_sync(ed, provider)
+        waited++
+    }
+    t |> equal(int(ed.compile_status), int(TextEditCompileStatus.failed),
+        "a broken buffer reports failed")
+    t |> success(!empty(ed.diagnostics), "clang findings arrive")
+    t |> equal(ed.diagnostics[0].line, 1, "the finding pins the yyy line")
+    t |> equal(ed.diagnostics[0].file, "", "buffer findings carry no path")
+    text_edit_load(ed, "static int add(int a, int b) \{\n    return a + b;\n\}")
+    text_edit_set_language(ed, "cpp")
+    ed.syntax_idle = 1.0f
+    text_edit_cpp_provider_sync(ed, provider)
+    waited = 0
+    while (ed.compile_status != TextEditCompileStatus.ok && waited < 750) {
+        sleep(20u)
+        text_edit_cpp_provider_sync(ed, provider)
+        waited++
+    }
+    t |> equal(int(ed.compile_status), int(TextEditCompileStatus.ok),
+        "a clean buffer reports ok")
+    t |> success(empty(ed.diagnostics), "the findings clear")
+    text_edit_cpp_provider_stop(provider)
     text_edit_dispose(ed)
 }
 
