@@ -92,13 +92,17 @@ survives a tab switch. Rails: `herder_inspector_find` / `_step` /
 `herder_file_inspector_state`. Diff-mode find searches the **whole
 file** (Boris's live-review catch: searching only the compact aligned
 text answered "not found" for text plainly in the file — the VSCode
-diff-search trap); a jump lands in the AFTER pane when the match's line
-is in the diff, else it reveals the match in the View tab — the diff
-analog of fold auto-expand. Remaining gaps against the rule: **case /
-whole-word toggles** (component has regex only — add in the component,
-both apps inherit), F3/Shift+F3 bindings, and REMOVED text (BEFORE-pane
-only) is still not searched — it exists only in the old pane's aligned
-text; needs a per-pane or merged-results design.
+diff-search trap), and it **stays in diff**: a jump to a match outside
+the visible rows makes the diff DISPLAY that region — a context window
+(±3 lines) injected as synthesized unchanged rows with true line
+numbers on both sides (`git_patch_inject_context`), riding the normal
+prepare pipeline so syntax colors and hunk navigation stay correct.
+Windows accumulate per inspected file, so revealed regions stay
+revealed. Remaining gaps against the rule: **case / whole-word
+toggles** (component has regex only — add in the component, both apps
+inherit), F3/Shift+F3 bindings, and REMOVED text (BEFORE-pane only) is
+still not searched — it exists only in the old pane's aligned text;
+needs a per-pane or merged-results design.
 
 **Editors get replace from day one** — search / replace / replace-all
 within the file is part of the editor component's core surface, not a

@@ -412,16 +412,55 @@ def private diff_pane_match(found : TextSourceRange) : tuple<row : int; pane : T
     return (row = -1, pane = TextSourceRange(start_byte = -1, end_byte = -1))
 }
 
+let FIND_CONTEXT_LINES = 3
+
+def private request_find_context_window(found : TextSourceRange) {
+    // The match is real but its region is not in the visible diff: ask the
+    // prepare to display a context window around it - the diff analog of
+    // fold auto-expand. The jump stays pending (not consumed) and lands once
+    // the re-prepared rows install. Windows accumulate, and every push
+    // re-queues, so when the prepare is idle every listed window is already
+    // in the installed rows.
+    inspector_reset_find_windows_if_stale()
+    let line = file_line_for_byte(found.start_byte)
+    for (existing in g_inspector.find_windows) {
+        if (line >= existing.x && line <= existing.y) {
+            // Already requested. Still in flight: keep the jump pending.
+            // Idle: the installed rows include this window yet the match
+            // still cannot map - consume the jump so it stops retrying.
+            if (!g_inspector.loading
+                    && g_inspector.prepare.request == InspectorRequestState.idle) {
+                g_inspector.find_applied_jump = g_inspector.find.jump_revision
+            }
+            return
+        }
+    }
+    g_inspector.find_windows |> push(int2(
+        max(1, line - FIND_CONTEXT_LINES), line + FIND_CONTEXT_LINES))
+    queue_inspector_prepare("Expanding diff for find...")
+}
+
 def public inspector_apply_find_jump(diff_mode : bool) {
     return if (g_inspector.find.jump_revision == g_inspector.find_applied_jump)
-    g_inspector.find_applied_jump = g_inspector.find.jump_revision
     let found = text_find_current(g_inspector.find)
-    return if (found.start_byte < 0)
+    if (found.start_byte < 0) {
+        g_inspector.find_applied_jump = g_inspector.find.jump_revision
+        return
+    }
     if (diff_mode) {
+        if (empty(g_inspector.view_source)) {
+            // Fallback search domain IS the aligned pane text - the match's
+            // bytes are already pane-local.
+            g_inspector.find_applied_jump = g_inspector.find.jump_revision
+            text_source_view_select_range(g_inspector.new_document,
+                g_inspector.new_view, found.start_byte, found.end_byte)
+            return
+        }
         let mapped = diff_pane_match(found)
         if (mapped.row >= 0) {
             // Both panes share diff_scroll_y, so the hunk-jump scroll
             // machinery lands the aligned row in view.
+            g_inspector.find_applied_jump = g_inspector.find.jump_revision
             text_source_view_select_range(g_inspector.new_document,
                 g_inspector.new_view, mapped.pane.start_byte, mapped.pane.end_byte)
             g_inspector.diff_scroll_y = max(0.0f, (float(mapped.row) - 6.0f) * max(
@@ -429,11 +468,10 @@ def public inspector_apply_find_jump(diff_mode : bool) {
             g_inspector.diff_scroll_jump_pending = true
             return
         }
-        // The match is real but outside the visible diff: reveal it in the
-        // View tab instead of pretending it is not there - the diff analog
-        // of fold auto-expand.
-        INSPECTOR_VIEW_TAB.pending_select = true
+        request_find_context_window(found)
+        return
     }
+    g_inspector.find_applied_jump = g_inspector.find.jump_revision
     if (inspector_markdown_shown()) {
         g_inspector.find_scroll_markdown = markdown_view_select_source_range(
             g_inspector.markdown_view, found.start_byte, found.end_byte)

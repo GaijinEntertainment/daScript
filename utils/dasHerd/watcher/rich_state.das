@@ -295,12 +295,16 @@ struct GitInspectorState {
     diff_left_rect : float4
     diff_right_rect : float4
     diff_scrollbar_rect : float4
-    // One find state serves both tabs (the query survives a mode switch);
-    // matches rebuild against the active tab's text via a mode-tagged revision.
+    // One find state serves both tabs; matches always search the whole file.
     find : TextFindState = TextFindState()
     find_applied_jump : int
     find_scroll_byte : int = -1
     find_scroll_markdown : bool
+    // New-file line windows the diff additionally displays because find
+    // navigated into them. They accumulate per inspected file (identity
+    // below) and ride every re-prepare, so revealed regions stay revealed.
+    find_windows : array<int2>
+    find_windows_identity : string
 }
 
 struct GitWindowStatus {
@@ -800,18 +804,34 @@ def release_inspector_content() {
     g_inspector.diff_scrollbar_rect = float4()
 }
 
+def inspector_find_identity : string {
+    // The REQUESTED file identity (not the installed one): windows must reset
+    // the moment a different file's prepare is queued, before it installs.
+    return "{g_inspector.repository_id}|{g_inspector.worktree_path}|{g_inspector.file_path}|{g_inspector.comparison}|{g_inspector.git_revision}"
+}
+
+def inspector_reset_find_windows_if_stale() {
+    let identity = inspector_find_identity()
+    if (identity != g_inspector.find_windows_identity) {
+        g_inspector.find_windows_identity = identity
+        delete g_inspector.find_windows
+    }
+}
+
 def queue_inspector_prepare(status : string) {
+    inspector_reset_find_windows_if_stale()
     let choice = clamp(g_inspector.syntax_choice, 0,
         length(INSPECTOR_SYNTAX_VALUES) - 1)
     g_inspector.prepare_language = inspector_language_for_path(
         g_inspector.file_path, INSPECTOR_SYNTAX_VALUES[choice])
     let generation = inspector_load_queue(g_inspector.prepare, status)
     g_inspector.error = ""
-    if (!inspector_prepare_worker_queue(g_prepare_worker, generation,
+    if (!inspector_prepare_worker_queue_windows(g_prepare_worker, generation,
             g_inspector.source_patch, g_inspector.source_view_text,
             g_inspector.prepare_language, g_inspector.source_view_base64,
             g_inspector.source_view_byte_count,
-            g_inspector.source_view_available)) {
+            g_inspector.source_view_available,
+            g_inspector.find_windows)) {
         let failure = "File inspection preparation worker is unavailable"
         inspector_load_fail(g_inspector.prepare, generation,
             failure)

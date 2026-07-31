@@ -1457,7 +1457,7 @@ def herder_file_inspector_mode(input : JsonValue?) : JsonValue? {
     return JV((ok = true, mode = mode))
 }
 
-[live_command(description = "Open find in the file inspector with a query; regex optional. Matches search the WHOLE file in every mode; a diff jump lands in the AFTER pane or reveals the match in View.")]
+[live_command(description = "Open find in the file inspector with a query; regex optional. Matches search the WHOLE file in every mode; a diff jump to a hidden match expands the diff with a context window around it and lands there.")]
 def herder_inspector_find(input : JsonValue?) : JsonValue? {
     if (!g_inspector.prepare.has_retained_content) {
         return JV((ok = false, error = "no file is inspected"))

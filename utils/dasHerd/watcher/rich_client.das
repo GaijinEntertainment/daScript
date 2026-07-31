@@ -986,6 +986,7 @@ def shutdown() {
     text_source_view_dispose(g_inspector.new_view)
     text_source_view_dispose(g_inspector.view)
     text_find_dispose(g_inspector.find)
+    delete g_inspector.find_windows
     terminal_viewport_snapshot_dispose(g_terminal_cache.snapshot)
     terminal_dispose(g_terminal)
     delete g_font_sources

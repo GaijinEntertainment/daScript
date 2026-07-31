@@ -241,6 +241,128 @@ def private append_change_rows(var result : GitParsedPatch;
     delete added_lines
 }
 
+def private hidden_window_lines(patch : GitParsedPatch;
+                                windows : array<int2> const;
+                                line_count : int) : array<int> {
+    // Window lines not already displayed, deduped and sorted.
+    var displayed : table<int>
+    for (row in patch.rows) {
+        if (row.new_line > 0) {
+            displayed |> insert(row.new_line)
+        }
+    }
+    var wanted : array<int>
+    for (window in windows) {
+        let lo = clamp(min(window.x, window.y), 1, line_count)
+        let hi = clamp(max(window.x, window.y), 1, line_count)
+        for (line in range(lo, hi + 1)) {
+            if (!key_exists(displayed, line)) {
+                wanted |> push(line)
+                displayed |> insert(line)
+            }
+        }
+    }
+    sort(wanted)
+    delete displayed
+    return <- wanted
+}
+
+def private synthesized_context_row(source_lines : array<string>;
+                                    line, old_offset : int) : GitDiffRow {
+    // Outside every hunk the two sides advance in lockstep, so the old line
+    // is the new line plus the offset after the last preceding row.
+    return GitDiffRow(
+        old_text = source_lines[line - 1],
+        new_text = source_lines[line - 1],
+        old_line = line + old_offset,
+        new_line = line,
+        old_kind = GitDiffLineKind.context,
+        new_kind = GitDiffLineKind.context)
+}
+
+def private realign_patch_text(var patch : GitParsedPatch) {
+    var inscope old_aligned : array<string>
+    var inscope new_aligned : array<string>
+    old_aligned |> reserve(length(patch.rows))
+    new_aligned |> reserve(length(patch.rows))
+    for (row in patch.rows) {
+        old_aligned |> push(row.old_text)
+        new_aligned |> push(row.new_text)
+    }
+    patch.old_aligned_text = join(old_aligned, "\n")
+    patch.new_aligned_text = join(new_aligned, "\n")
+}
+
+def public git_patch_inject_context(var patch : GitParsedPatch;
+                                    new_source : string;
+                                    windows : array<int2> const) {
+    //! Make the aligned Diff DISPLAY extra new-file regions (find reveals
+    //! matches in the diff): each window is a 1-based inclusive new-file line
+    //! range. Lines already displayed are skipped; the synthesized rows are
+    //! plain context (a hidden line is by definition unchanged), hunk row
+    //! offsets and both aligned texts are rebuilt. Hidden runs never split a
+    //! hunk - new-file lines inside a hunk are contiguous by construction.
+    return if (patch.binary || !empty(patch.error) || empty(windows))
+    var inscope source_lines <- split(new_source, "\n")
+    var line_count = length(source_lines)
+    if (line_count > 0 && empty(source_lines[line_count - 1])) {
+        line_count--
+    }
+    return if (line_count == 0)
+    var inscope wanted <- hidden_window_lines(patch, windows, line_count)
+    return if (empty(wanted))
+
+    // A hidden line must insert BEFORE the whole row group it precedes, even
+    // when that group opens with removed-only rows (new_line -1): flush
+    // against the NEXT new-file line at or after each row.
+    let row_count = length(patch.rows)
+    var inscope next_new_at : array<int>
+    next_new_at |> resize(row_count)
+    var upcoming = int(0x7fffffff)
+    var walk_back = row_count
+    while (walk_back > 0) {
+        walk_back--
+        if (patch.rows[walk_back].new_line > 0) {
+            upcoming = patch.rows[walk_back].new_line
+        }
+        next_new_at[walk_back] = upcoming
+    }
+
+    var inscope rebuilt : array<GitDiffRow>
+    rebuilt |> reserve(row_count + length(wanted))
+    var inscope new_index_of : array<int>
+    new_index_of |> resize(row_count)
+    var run_at = 0
+    var old_cursor = 0
+    var new_cursor = 0
+    for (row_index in range(row_count)) {
+        while (run_at < length(wanted) && wanted[run_at] < next_new_at[row_index]) {
+            rebuilt |> push(synthesized_context_row(source_lines,
+                wanted[run_at], old_cursor - new_cursor))
+            run_at++
+        }
+        new_index_of[row_index] = length(rebuilt)
+        rebuilt |> push(patch.rows[row_index])
+        if (patch.rows[row_index].old_line > 0) {
+            old_cursor = patch.rows[row_index].old_line
+        }
+        if (patch.rows[row_index].new_line > 0) {
+            new_cursor = patch.rows[row_index].new_line
+        }
+    }
+    while (run_at < length(wanted)) {
+        rebuilt |> push(synthesized_context_row(source_lines,
+            wanted[run_at], old_cursor - new_cursor))
+        run_at++
+    }
+    delete patch.rows
+    patch.rows <- rebuilt
+    for (hunk_index in range(length(patch.hunks))) {
+        patch.hunks[hunk_index].row_start = new_index_of[patch.hunks[hunk_index].row_start]
+    }
+    realign_patch_text(patch)
+}
+
 def private git_patch_line_is_binary(line : string) : bool {
     return (line == "GIT binary patch"
         || starts_with(line, "Binary files ") && ends_with(line, " differ"))

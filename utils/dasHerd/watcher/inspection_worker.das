@@ -65,6 +65,9 @@ struct public InspectorPrepareJob {
     view_available : bool
     language : string
     stop : bool
+    // Extra new-file line windows the aligned Diff must display (find
+    // reveals hidden matches in the diff); injected after parsing.
+    context_windows : array<int2>
 }
 
 [safe_when_uninitialized]
@@ -323,6 +326,8 @@ def private prepare_worker_main(var jobs : Channel?&;
             let job_view_text = clone_string(job.view_text)
             let view_base64 = clone_string(job.view_base64)
             let language = clone_string(job.language)
+            var inscope context_windows : array<int2>
+            context_windows := job.context_windows
             var failure = ""
             var parsed = GitParsedPatch()
             var old_document = TextSourceDocument()
@@ -385,6 +390,12 @@ def private prepare_worker_main(var jobs : Channel?&;
                     }
                     let old_source = inspector_reconstruct_old_source(
                         view_source, prepared_patch)
+                    // AFTER reconstruction (which must see the pristine parse):
+                    // make the diff display any find-revealed regions.
+                    if (view_text_ready && !empty(context_windows)) {
+                        git_patch_inject_context(prepared_patch, view_source,
+                            context_windows)
+                    }
                     // Past the cap, drop the language: tree_sitter_source_document
                     // with no language builds the same document without parsing
                     // or spans, so a pathological file opens instantly as plain
@@ -565,12 +576,29 @@ def public inspector_prepare_worker_queue(var worker : InspectorPrepareWorker;
                                           view_base64 : string = "";
                                           view_byte_count : int = 0;
                                           view_available : bool = false) : bool {
+    var inscope none : array<int2>
+    return inspector_prepare_worker_queue_windows(worker, generation, patch,
+        view_text, language, view_base64, view_byte_count, view_available, none)
+}
+
+def public inspector_prepare_worker_queue_windows(var worker : InspectorPrepareWorker;
+                                                  generation : int;
+                                                  patch : string;
+                                                  view_text : string;
+                                                  language : string;
+                                                  view_base64 : string;
+                                                  view_byte_count : int;
+                                                  view_available : bool;
+                                                  context_windows : array<int2> const) : bool {
     if (!worker.started || worker.stopped || worker.jobs == null) return false
-    worker.jobs |> push_clone(InspectorPrepareJob(
+    var job = InspectorPrepareJob(
         generation = generation, patch = patch, view_text = view_text,
         language = language, view_base64 = view_base64,
         view_byte_count = view_byte_count,
-        view_available = view_available))
+        view_available = view_available)
+    job.context_windows := context_windows
+    worker.jobs |> push_clone(job)
+    delete job.context_windows
     return true
 }
 
