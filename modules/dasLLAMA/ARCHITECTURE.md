@@ -35,6 +35,15 @@
   `kv_store_row`/`kv_load_row`/`kv_dot`/`kv_axpy` seam; the f16 family's row converts are the
   generic pair in `dasllama_convert` (dual-use beyond the cache: gguf load, wscale plane,
   Accelerate batch prep).
+- **The prepared-image rail lives under `dasllama_image.das`, and it is ONE rail** — `build_image`
+  walks a carrier's planes into a sink (a `.dlim` file, or a page-aligned memory chunk when there
+  is nowhere to write); `parse_image` turns `(base, bytes)` back into borrowed-plane fields and
+  does not know which sink produced them. Cold and warm therefore yield the SAME struct, and a
+  cold load reaches it by building the image and handing off through the file — write, drop the
+  model, map — so the model and its image are never both resident. `cache_via_image` is that
+  handoff for every weight carrier; the streaming forms transcode planes from the gguf mapping
+  straight into the image so they never materialize at all. Nothing outside this file may read
+  weights into a live carrier, and nothing outside it may release an image backing (CODEREVIEW 23).
 - **Format identity lives under `dasllama_kqformat.das`** — the `KqFmt` enum, the per-format
   descriptor table (plane strides, block geometry, stream codes), and format predicates. It
   requires nothing dasllama (it is the taxonomy everything else keys off): convert reads it for

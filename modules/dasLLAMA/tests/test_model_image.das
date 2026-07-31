@@ -758,7 +758,9 @@ def private parakeet_transcribe_text(path : string; samples : array<float>; cach
     if (cached) {
         m <- load_asr_model(path)
     } else {
-        m.pk <- load_parakeet_model_(path)   // the off-rail control
+        // the off-rail control, assembled exactly as load_asr_model's parakeet arm does
+        m = AsrModel(kind = AsrKind.parakeet)
+        m.pk <- load_parakeet_model_(path, true)
     }
     var text = ""
     with_job_que() {

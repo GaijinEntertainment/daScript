@@ -173,3 +173,44 @@
     shorter — take the growth and either suppress or ledger the real seam. And **never suppress a
     function you have just argued is reducible** — if it is on the follow-up ledger as wanting a
     dedup, it keeps its warning until the dedup lands.
+
+23. **THERE IS ONE WAY TO LOAD A MODEL. Any other is a review FAIL.** A weight carrier becomes
+    a live struct through exactly two functions in `dasllama_image.das`, and nothing else may
+    read weights into one:
+
+    - **`build_image`** walks a carrier's planes into a sink — a `.dlim` file or a page-aligned
+      memory chunk. Every prepared image in the process comes out of this walk. A second walk
+      that emits image bytes is a review defect; the streaming form is a plane HOOK on this
+      walk, not a copy of it (that is precisely the drift this rule exists to prevent — the
+      streaming twin had already lost the nested-weight-carrier arm before they were merged).
+    - **`parse_image`** turns `(base, bytes)` into borrowed-plane fields. It does not know or
+      care where the bytes came from. `load_image` (mmap a file) and `adopt_image` (a chunk this
+      process built) are its only two wrappers, and both exist so the release side stays honest.
+
+    So **a cold load and a warm load produce the same struct**: planes borrowed over a prepared
+    image, `image_map` non-null, released through `image_backing_release`. Cold reaches it by
+    building the image and handing off through the file (write, drop the model, map); warm by
+    mapping the file it finds. `cache_via_image` is that handoff for every carrier — audio,
+    whisper, parakeet, canary, qwen3a, gemma4a and Model all call it, and a new carrier that
+    hand-rolls "load eagerly, save, return the eager struct" is a review FAIL.
+
+    Why the rule is this strict: that hand-rolled tail is what the module had, six times over,
+    and it meant the mapped path only ever ran on a SECOND load — so on Metal it had never run
+    at all. A forked loader does not fail loudly; it silently halves your coverage.
+
+    Two contracts the rule carries:
+
+    - **Never hold the model and its image at once.** The file is the handoff for that reason.
+      Building into a chunk keeps the largest plane live in both places while it is copied
+      between them; measured on an 8 GB gguf that is 12.3 GB → 20.5 GB of peak footprint. Only
+      take the chunk when there is nowhere to write (`DASLLAMA_IMAGE_SAVE=0`).
+    - **Prefer the streamed source.** `save_model_image_streaming` /
+      `image_from_model_streaming` transcode planes from the gguf mapping straight into the
+      image, so the planes never materialize — 12.3 GB → 4.0 GB on the same model. Only the
+      blob flavors take the eager rail, and only because their transforms need whole planes.
+
+    Test-side: the image suites assert a cold load is image-backed. That assertion IS the rule —
+    if a change makes it fail, a second rail has grown back. Since cold and warm can no longer
+    check each other, every round-trip cell also loads OFF the rail (`load_model_`,
+    `load_whisper_model_`, …) for the gguf-vs-image compare; a cell that drops that control is
+    comparing an image to itself.

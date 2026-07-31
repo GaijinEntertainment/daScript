@@ -111,22 +111,23 @@
     rope and store stages the way the D family shares `sqd_score_blk`/`sqd_vacc_blk`, and both
     bodies come back under the cap.
 
-11. **Metal has never been measured on the .dlim rail — and the suites cannot measure it.**
-    Measuring the qwen35moe-35b matrix cell on the 64 GB M1 gave `footprint -p`: phys_footprint
-    69 GB, peak 70 GB for a 21 GB model, with 17 GB of swap at the peak (released on exit). That
-    number is NOT the load path: per `ab37e6984`, every non-image suite deliberately calls
-    `load_model_` — the direct gguf load — so that a suite child does not mint a `.dlim` under
-    its own identity and let the purge-by-default GC eat the serving rig's flavors. So the 70 GB
-    is the direct-gguf path the suites take ON PURPOSE, measured on a model that had no prepared
-    image at all, with `DASLLAMA_PIN_PREFILL`'s advisory readahead making the whole source
-    resident on top. It says nothing about `load_model_cached`.
+11. **Metal on the .dlim rail is measured now; the eager cold flavors are what is left.**
+    Peak `phys_footprint` of one load, Meta-Llama-3.1-8B-Q8_0 (8 GB gguf → 9.6 GB image), M1 Max:
 
-    What is genuinely untested is the Metal side of the real rail. The pieces are all present:
-    `.dlim` maps via `fmap_open`, `plane_buffer(mapped = true)` wraps it with
-    `metal_new_buffer_no_copy_untracked` (page-aligned, 16 KB round-up), and phase D
-    (`eb1925798`) gives a streaming fill so "big planes never in RAM" during a mint. The mapped
-    arm just has no Metal measurement behind it — the Vulkan and CPU sides were exercised, Metal
-    was not. Done = `test_model_image`'s metal flavor arm reports peak `footprint` for both a
-    cold mint and a warm map, and a mapped serve lands near 1x the image rather than 3x.
+        cold planar (streamed)   4,029 MB
+        cold metal (eager)      19,456 MB
+        warm, either flavor        651 MB
+
+    So a mapped serve lands at ~0.07x the image, not 3x, and Metal wraps the mapping with
+    `metal_new_buffer_no_copy_untracked` exactly as Vulkan and the CPU did. What remains is the
+    cold blob flavors: they cannot stream, because `convert_model_to_metal_blob` (and the vulkan
+    bake's gather) need whole planes in RAM, so a metal mint still peaks at ~2x its image while a
+    planar mint peaks at ~0.4x. Done = the blob transform runs region-at-a-time off the gguf
+    mapping — the same shape `fill_stream_plane` already has for the quant planes — so the metal
+    cold path joins the planar one. Until then a big-model metal MINT is the memory-expensive
+    case; the serve is not.
+
     Operationally, regardless: run big-model cells one model per process, and never read peak
-    from `ps` (`rss` shows ~1 MB here — `footprint -p <pid>` is the metric).
+    from `ps` (`rss` shows ~1 MB here — `footprint -p <pid>` is the metric). The earlier 70 GB
+    reading on qwen35moe-35b was `load_model_`, the direct gguf path every non-image suite takes
+    on purpose (`ab37e6984`), plus `DASLLAMA_PIN_PREFILL`'s readahead — not the rail.
