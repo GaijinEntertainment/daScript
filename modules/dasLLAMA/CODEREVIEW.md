@@ -15,8 +15,10 @@ criterion here.
 - **No numbers.** These are criteria, not a spec, and numbering invites citation. Anything that
   needs a stable reference lives in `ARCHITECTURE.md`, which is numbered for that purpose.
 - **Cite files by name; cite `ARCHITECTURE.md` by section.** Never cite an entry in this file.
-- **No examples naming current functions, kernels, or types.** Nothing keeps them in sync with
-  the code, so a stale example is worse than none. State the shape, not an instance.
+- **Name the API a rule is about; never name an example of it.** A rule governing specific
+  functions or files must name them or it cannot be checked — that name is the criterion. An
+  illustrative aside ("the way the X family does it") has no such excuse: nothing keeps it in
+  sync with the code, and a stale example is worse than none.
 - **No history, no rationale, no direction of travel.** The reason lives in `ARCHITECTURE.md`;
   planned work lives in the follow-up ledgers.
 
@@ -37,9 +39,9 @@ any `CMakeLists.txt` — no AOT registration, no ctest wiring.
 **A test passes or skips explicitly on every platform.** A skip goes through a capability or
 model gate. A test that silently vanishes on one platform is a defect.
 
-**A test that loads a model over the large-model threshold sits behind the large-model gate**
-and runs only as a final pre-PR gate, never in the iteration loop. Check what a test loads
-before launching it.
+**A test that loads a model over 6 GiB sits behind `model_available`**, which runs it only
+under `DASLLAMA_PARITY_FULL=1` — a final pre-PR gate, never the iteration loop. Check what a
+test loads before launching it.
 
 **Every moved or extracted bit ships a test for the bit itself** — feed the function, check the
 bytes. "The model still runs" is not a test for a move.
@@ -161,8 +163,9 @@ parameter. See `ARCHITECTURE.md` §2.2.
 
 **A kernel body contains no indirection.** No function pointers, no vtables.
 
-**Claims about a shape constant are checked against the emitted shader, not the das source.**
-A helper that looks specialized in das can still lower to a runtime multiply.
+**A claim about a shape constant is checked against the emitted shader, not the das source.**
+Read the generated `*_msl` global or the SPIR-V dump and confirm the constant is literal there;
+a helper that looks specialized in das can still lower to a runtime multiply.
 
 **Twins of a kernel family bind the same kargs type at the same binding**, even where one twin
 ignores a field. A twin that shifts the other's fields to different slots is a defect.
@@ -170,21 +173,26 @@ ignores a field. A twin that shifts the other's fields to different slots is a d
 **No value reaches an encoder twice.** A scalar uniform buffer passed alongside the identical
 value as a parameter is a defect; so is a kargs field the fields beside it already determine.
 
-**Nothing dispatches a kernel except its builder.** A hand-rolled bind list anywhere else is a
-defect — it duplicates the builder and desyncs silently when the family's arguments change.
+**Nothing dispatches a kernel except its `enc_*` builder.** A hand-rolled bind list anywhere
+else — a race harness, a benchmark, a probe — is a defect: it duplicates the builder and desyncs
+silently when the family's arguments change, because the slots still exist and the types still
+compile.
 
 **A cache keyed by a host address carries the span and the form in its key.** A hit must cover
 the request, and different upload forms live in separate tables.
 
-**There is one way to load a model.** Nothing outside the image rail may read weights into a
-live carrier or release an image backing. See `ARCHITECTURE.md` §2.1.
+**There is one way to load a model.** A weight carrier becomes live through `build_image` and
+`parse_image` in `dasllama_image.das`, and nothing else. Code anywhere else that reads weights
+into a live carrier, or releases an image backing, is a defect. See `ARCHITECTURE.md` §2.1.
 
 **A predicate answering "can this run" must not also answer "is this ready".** A caller that
 runs before setup finishes gets a permanent no, and the feature silently never runs.
 
-**Peak memory wins ties against cold-start latency.** A change going the other way ships the
-measured pair — peak and wall-clock — and an explicit call, not an assumption that faster is
-better.
+**Peak memory wins ties against the cost of loading a model.** Overshooting RAM on a big model
+kills the process or swaps the box; a slower load costs seconds once per process and costs the
+warm path nothing. So a load-time change that trades footprint for speed ships the measured pair
+— peak footprint and wall-clock — and an explicit call, not an assumption that faster is better.
+See `ARCHITECTURE.md` §3.
 
 **A complexity or length warning is a prompt to look, not an order to split.** An irreducible
 shape takes a suppression with a one-line reason. Splitting where no seam exists — helpers that

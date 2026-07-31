@@ -21,8 +21,9 @@ only when `--nreps` is passed explicitly (default 1, never best-of-N).
 ## The iteration loop
 
 1. Fixing/adding one arm → run exactly that arm: `--arm arm12 --suite decode` (~minutes).
-   Scratchpad probes that replicate one arm in isolation are encouraged for kernel/driver
-   fixes — cheaper still.
+   The gate is a cell in the suite, not a scratchpad probe: a probe proves nothing after the
+   session that wrote it, and its setup diverges from the suite's silently. If covering a path
+   needs a large model, it needs a large model — a slow gate beats an untested change.
 2. Batch every pending fix. Do NOT re-run a full suite per fix.
 3. The pre-commit gate is the `--arm` set covering every arm the batched fixes can affect
    (e.g. `--arm arm,batch --suite decode` + the touched suites' arms). `--full` is refused

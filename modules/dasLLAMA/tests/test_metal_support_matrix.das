@@ -9,6 +9,7 @@ require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-f
 require dasllama/dasllama_parity   // nolint:STYLE030 — cached_ids/cached_vals (CPU references mapped like .dlim images), used only inside the Apple static_if half
 require ?das_metal dasllama/dasllama_metal_decode  // nolint:STYLE030 — stats/declines/shutdown rails
 require ?das_metal dasllama/dasllama_metal_prefill  // nolint:STYLE030 — prefill stats/declines rails
+require ?das_metal dasllama/dasllama_metal_common  // nolint:STYLE030 — the kernel coverage census (tensor-twin cell)
 require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — device probe + metal_live_object_count
 require daslib/jobque_boost
 require daslib/fio  // nolint:STYLE030 — used only inside the Apple static_if half
@@ -767,6 +768,72 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
         if (cont_tol > 0.0) {
             cont_logits_cell(t, tr, trg, tag, cont_tol)
         }
+        delete trg
+        delete tr
+    }
+}
+
+// A Metal-4 tensor (tmm2d) twin SERVES only when the box's tune sidecar crowns its family, so a
+// box whose sidecar is stale or absent crowns nothing and every twin ships unexercised. Force the
+// crowns, recompile the PSOs, and assert the model still produces the CPU's tokens with twins in
+// the graph. A new tensor family joins CROWNED below.
+[unused_argument(t, path)]   // off-Apple the gated body is empty
+def private tensor_twin_row(t : T?; path, tag : string) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        if (!family_on(t, "llama") || !arm_on(t, "tensor") || !model_available(t, path)) {
+            return
+        }
+        let CROWNED = ("attn_avmm,attn_qkmm,gemm64b_q8,gemmb_q8,gemmb_sk_q8,kq_mulmm_k4," +
+            "kq_mulmm_k5,kq_mulmm_k6,moe_mulmm_mx4,moe_mulmm_q8,mulmm_bf16,mulmm_q8")
+        var tr <- load_model_(path, QuantMode.q8)
+        tr.config.seq_len = min(tr.config.seq_len, 512l)
+        var trg <- blob_twin(t, path, 512l)
+        let prompt <- encode(tr, counting_prompt(1, 30), true, false)
+        var cpu_ids : array<int64>
+        var gpu_ids : array<int64>
+        with_job_que() {
+            setup_dasllama_jobque()
+            var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
+            let ids <- generate(tr, s, prompt, length(prompt) + 8)
+            cpu_ids := ids
+            delete s
+            // crowns are read when the PSOs compile, so they must be set before the rebuild
+            set_metal_tensor_crowns(CROWNED)
+            metal_decode_shutdown()
+            metal_prefill_shutdown()
+            metal_kernel_coverage_reset()
+            select_decode_override("metal")
+            select_prefill_override("metal")
+            set_metal_prefill_min_npos(1l)
+            var s2 = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+            let ids2 <- generate(trg, s2, prompt, length(prompt) + 8)
+            gpu_ids := ids2
+            delete s2
+            set_metal_prefill_min_npos(64l)
+            select_decode_override("")
+            select_prefill_override("")
+        }
+        var twins = 0
+        var cov <- metal_kernel_coverage()
+        for (name in keys(cov)) {
+            // cov[name] would INSERT into a table keys() has locked — read through the safe form
+            let n = cov?[name] ?? 0l
+            if (n > 0l && ends_with(name, "_t")) {
+                twins++
+                to_log(LOG_INFO, "tensor twin served: {name} = {n}\n")
+            }
+        }
+        delete cov
+        // without this the cell passes vacuously the day crowning stops taking effect
+        t |> success(twins > 0, "{tag}: a crowned tmm2d twin actually served ({twins} of them)")
+        log_gen_texts(tr, tag, cpu_ids, gpu_ids)
+        t |> success(same(cpu_ids, gpu_ids),
+            "{tag}: crowned tmm2d generate matches the CPU truth token-for-token")
+        delete cpu_ids
+        delete gpu_ids
+        set_metal_tensor_crowns("")
+        metal_decode_shutdown()
+        metal_prefill_shutdown()
         delete trg
         delete tr
     }
@@ -1657,6 +1724,10 @@ def test_metal_family_matrix(t : T?) {
             // qwen2moe (Wave D ride-along): softmax-no-renorm select + sigmoid shexp on std
             // attention; batch declines by design. 15GB — DASLLAMA_PARITY_FULL-gated.
             qwen2moe_row(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf"))
+            // the Metal-4 tensor twins, forced into service on small carriers (--arm tensor):
+            // q8 drives the mulmm/attn twins, the K-quant row drives the kq mulmm twins
+            tensor_twin_row(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf"), "tensor-twins/q8")
+            tensor_twin_row(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q5_K_M.gguf"), "tensor-twins/k5")
             metal_decode_shutdown()
             metal_prefill_shutdown()
             t |> equal(metal_log_leaks_if_any(), 0l)
