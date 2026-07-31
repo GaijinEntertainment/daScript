@@ -203,17 +203,20 @@ def test_das_provider_compiles_symbols(t : T?) {
 [test]
 def test_das_issue_parsing(t : T?) {
     var out : array<TextEditDiagnostic>
-    let issues = ("error[30151]: syntax error, unexpected end of file\n"
-        + "text_edit_completion_overlay.das:3:19\n"
-        + "var alpha_global = 1\n"
+    let issues = ("error[30838]: can't locate variable 'zzz'\n"
+        + "text_edit_completion_overlay.das:2:10\n"
+        + "var bad = zzz\n"
+        + "          ^^^\n"
         + "error[30341]: no matching functions\n"
         + "text_edit_completion_overlay.das:1:5\n")
     text_edit_parse_das_issues(issues, "text_edit_completion_overlay.das", out)
     t |> equal(length(out), 2, "both findings parse")
-    t |> equal(out[0].line, 2, "line converts to 0-based")
-    t |> equal(out[0].column, 19, "printed columns are ALREADY 0-based")
-    t |> success(find(out[0].message, "syntax error") >= 0, "the message rides along")
+    t |> equal(out[0].line, 1, "line converts to 0-based")
+    t |> equal(out[0].column, 10, "printed columns are ALREADY 0-based")
+    t |> equal(out[0].length, 3, "the caret width becomes the range length")
+    t |> success(find(out[0].message, "can't locate") >= 0, "the message rides along")
     t |> equal(out[1].line, 0, "the second finding pins its own line")
+    t |> equal(out[1].length, 0, "no caret line means unknown length")
     delete out
 }
 

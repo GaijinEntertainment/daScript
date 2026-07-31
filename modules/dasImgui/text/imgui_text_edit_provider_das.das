@@ -67,12 +67,14 @@ def public text_edit_parse_das_issues(issues, file : string;
     //! pins the preceding error/warning message. Printed lines are 1-based
     //! but columns 0-BASED (probe-verified); both store 0-based.
     var message = ""
+    var pending_caret = 0
     var inscope lines <- split(issues, "\n")
     let anchor = file + ":"
     for (line in lines) {
         if (starts_with(line, "error[") || starts_with(line, "warning[")) {
             let sep = find(line, "]: ")
             message = sep >= 0 ? slice(line, sep + 3, length(line)) : line
+            pending_caret = 0
         } elif (starts_with(line, anchor) && !empty(message)) {
             var inscope parts <- split(slice(line, length(anchor), length(line)), ":")
             if (length(parts) >= 2) {
@@ -81,6 +83,26 @@ def public text_edit_parse_das_issues(issues, file : string;
                     column = max(to_int(parts[1]), 0),
                     message = message))
                 message = ""
+                pending_caret = 2 // source echo next, then the caret line
+            }
+        } elif (pending_caret == 2) {
+            pending_caret = 1
+        } elif (pending_caret == 1) {
+            pending_caret = 0
+            // the ^^^ width under the source echo IS the finding's length
+            var carets = 0
+            var caret_line = true
+            peek_data(line) $(bytes) {
+                for (b in bytes) {
+                    if (int(b) == '^') {
+                        carets++
+                    } elif (int(b) != ' ' && int(b) != '\t') {
+                        caret_line = false
+                    }
+                }
+            }
+            if (caret_line && carets > 0 && !empty(out)) {
+                out[length(out) - 1].length = carets
             }
         }
     }

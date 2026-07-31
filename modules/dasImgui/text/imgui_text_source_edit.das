@@ -2769,8 +2769,11 @@ def public text_edit_issues_panel(var ed : TextEditState) {
     for (index in range(length(ed.diagnostics))) {
         let row_line = ed.diagnostics[index].line + 1
         let row_column = ed.diagnostics[index].column
+        let row_span = (ed.diagnostics[index].length > 0
+            ? "{row_line}:{row_column}-{row_column + ed.diagnostics[index].length}"
+            : "{row_line}:{row_column}")
         if (selectable(ISSUE_ROW[index], (text =
-                "{row_line}:{row_column}  {ed.diagnostics[index].message}###issue_{index}"))) {
+                "{row_span}  {ed.diagnostics[index].message}###issue_{index}"))) {
             text_edit_set_cursor(ed, ed.diagnostics[index].line,
                 ed.diagnostics[index].column)
             ed.focused = true
