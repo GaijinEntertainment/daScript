@@ -111,5 +111,20 @@ def test_text_edit_numpad_and_overtype(t : T?) {
             t |> equal(widget_payload_field(overtyped, EDIT_TARGET, "line_count") ?? -1,
                 line_count_before, "overtype did not grow the buffer")
         }
+        key_tap(d, int(ImGuiKey.Insert)) // leave overtype before the chord tests
+        t |> success(wait_for_bool_value(d, EDIT_TARGET, "overtype", false, 300),
+            "overtype toggles back off")
+
+        // Registry chords: Ctrl+Right = word end, Shift+End = extend selection.
+        key_chord_tap(d, ["Ctrl"], int(ImGuiKey.RightArrow))
+        t |> success(wait_for_key_idle(d, 6.0f), "Ctrl+Right drains")
+        t |> success(wait_for_int_value(d, EDIT_TARGET, "cursor_column", 3, 300),
+            "Ctrl+Right lands at the first word end (VS Code semantics)")
+        key_chord_tap(d, ["Shift"], int(ImGuiKey.End))
+        t |> success(wait_for_key_idle(d, 6.0f), "Shift+End drains")
+        var selected = wait_until_sec(d, 5.0f) $(var snap) {
+            return (widget_payload_field(snap, EDIT_TARGET, "anchor_line") ?? -1) >= 0
+        }
+        t |> success(selected != null, "Shift+End extends a selection via its own binding")
     }
 }
