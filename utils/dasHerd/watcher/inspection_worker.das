@@ -24,8 +24,8 @@ let private MAX_BINARY_PREVIEW_PIXELS = 64l * 1024l * 1024l
 // generated C++): tree-sitter plus the two full-syntax projections took 21.0
 // SECONDS and produced 148,590 spans, for a diff with zero hunks. The view
 // renders anything over 128 KB through the virtualised path, drawing only the
-// visible runs, so nearly all of that work was thrown away. 256 KB keeps
-// highlighting for every hand-written source file in the tree.
+// visible runs, so nearly all of that work was thrown away. The size cap is a
+// generous 2 MiB backstop; the shape gate below does the real discrimination.
 let private MAX_SYNTAX_HIGHLIGHT_BYTES = 2 * 1024 * 1024
 let private MAX_SYNTAX_HIGHLIGHT_LINE_BYTES = 16 * 1024
 

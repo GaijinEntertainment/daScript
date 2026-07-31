@@ -128,30 +128,21 @@ def public text_edit_parse_clang_output(output, overlay : string; // nolint:STYL
 
 def private run_cpp_check(job : CppCheckJob; var result : CppCheckResult) {
     let scratch = "{get_das_root()}/_dasimgui_cpp_check_{job.token}.cpp"
-    let capture_path = "{scratch}.out.txt"
     fopen(scratch, "wb") $(f) {
         if (f != null) {
             f |> fwrite(job.source + "\n")
         }
     }
-    var full = "\"{job.compiler}\" -fsyntax-only -x c++ \"{scratch}\" > \"{capture_path}\" 2>&1"
-    if (get_platform_name() == "windows") {
-        // sacrificial outer quotes for cmd.exe (see daspkg run_cmd)
-        full = "\"{full}\""
-    }
-    let exit_code = unsafe(popen(full) $(f) {
+    // popen_argv merges stdout+stderr into one pipe — no shell, no quoting
+    var output = ""
+    let exit_code = unsafe(popen_argv([job.compiler, "-fsyntax-only", "-x", "c++", scratch], 60.0) $(f) {
         if (f != null) {
-            let _ = fread(f)
+            output = fread(f)
         }
     })
     result.ok = exit_code == 0
-    if (fexist(capture_path)) {
-        fopen(capture_path, "rb") $(f) {
-            if (f != null) {
-                text_edit_parse_clang_output(fread(f), scratch, result.diagnostics)
-            }
-        }
-        remove(capture_path)
+    if (!empty(output)) {
+        text_edit_parse_clang_output(output, scratch, result.diagnostics)
     }
     remove(scratch)
 }
