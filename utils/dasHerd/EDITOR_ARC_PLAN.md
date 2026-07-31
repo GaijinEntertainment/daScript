@@ -116,6 +116,35 @@ covers it); Ctrl+F/Ctrl+H only fire while the editor is focused
 case/whole-word toggles yet (find bar is case-insensitive literal or
 regex, as shipped in the viewer arc).
 
+**E4 status (SHIPPED 2026-07-31, ~30 commits a3fd66daa..59c82f373):**
+all eight slices landed, live-driven by Boris throughout (bug trail
+fixed same-session, each with a pinning test). (1) `imgui_text_language`
+profiles (fold kinds migrated in). (2) Syntax-while-editing: lexical
+tier (comment carry, anti-flicker merge — the carry-recovery scratch-lex
+was the second flicker root) + debounced tree-sitter refinement that
+never downgrades (quality bar). (3) Auto-indent (+ closer dedent, pair
+split on Enter, auto-closing pairs with quotes/surround/backspace-pair).
+(4) Bracket-pair highlight + red mismatch. (5) The completion carrier:
+async offer rail with rank tiers (compiled > words > keywords;
+statement-start boosts keywords — FROZEN until LSP), ghost (pushes the
+tail, never overwrites) + VS Code-style list (Down enters, sticky
+Escape, dot trigger), THREE providers: doc-words, .das in-process
+compiler (worker thread, gen2 policy fix — `version_2_syntax` lives in
+the CLI not the struct; latent in all das-side tool compiles, sweep
+pending), .cpp external clang (`-fsyntax-only`, SDK-sibling discovery).
+Diagnostics: squiggles with compiler-true ranges (das columns 0-based,
+clang 1-based — both probe-verified), multi-line spans, foreign-file
+findings, hover tooltip, compile status chrome, dockable Issues panel
+(colored rows, click-navigate). (6) Go-to-line (floating window,
+range hint, click-away). (7) Join lines, word/line drag extends,
+drag-and-drop selection with payload preview + drop caret. (8) Inline
+color embed: 0xRRGGBB/0xAARRGGBB swatches + picker dialog writing back
+as one rolling undo unit. Suites: edit model 42, complete 15, syntax 3,
+find 9, language 4, smoke 3 (incl. goto flow). Residuals: block/column
+selection post-LSP (confirmed); snippets + format-on-type recorded;
+`version_2_syntax` sweep of das-side tools; smoke re-run cadence
+whenever 9090 frees.
+
 ## Shape: ONE component, one arc, two skins
 
 One arc, not two. The editing core — buffer, cursor, selection, undo,
