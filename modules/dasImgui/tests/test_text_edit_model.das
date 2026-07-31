@@ -467,3 +467,30 @@ def test_clipboard_external_text_is_not_line_mode(t : T?) {
         "unrecognized text pastes at the caret, not as a line block")
     text_edit_dispose(ed)
 }
+
+[test]
+def test_overtype_mode(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "abcd")
+    text_edit_toggle_overtype(ed)
+    t |> success(ed.overtype, "overtype toggles on")
+    text_edit_type(ed, "X")
+    t |> equal(text_edit_source(ed), "Xbcd", "overtype replaces the next character")
+    t |> equal(ed.cursor_column, 1, "cursor advances past the replacement")
+    text_edit_type(ed, "Y")
+    t |> equal(text_edit_source(ed), "XYcd", "consecutive overtypes continue")
+    t |> equal(length(ed.undo_stack), 1, "overtype run coalesces into one unit")
+    let _ = text_edit_undo(ed)
+    t |> equal(text_edit_source(ed), "abcd", "overtype run undoes together")
+    text_edit_move_end(ed)
+    text_edit_type(ed, "Z")
+    t |> equal(text_edit_source(ed), "abcdZ", "overtype at line end falls back to insert")
+    text_edit_load(ed, "ab\ncd")
+    ed.overtype = true
+    text_edit_set_cursor(ed, 0, 2)
+    text_edit_type(ed, "Q")
+    t |> equal(text_edit_source(ed), "abQ\ncd", "overtype never eats the newline")
+    text_edit_toggle_overtype(ed)
+    t |> success(!ed.overtype, "overtype toggles off")
+    text_edit_dispose(ed)
+}

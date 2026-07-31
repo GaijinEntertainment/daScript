@@ -69,3 +69,47 @@ def test_text_edit_keystrokes_reach_buffer(t : T?) {
         t |> success(final_snap != null, "the join preserves the typed text")
     }
 }
+
+[test]
+def test_text_edit_numpad_and_overtype(t : T?) {
+    let no_modules : array<string>
+    with_imgui_app(EDIT_FEATURE, no_modules, "", "") $(d) {
+        var initial = wait_for_render(d, EDIT_TARGET, 15.0f)
+        t |> success(initial != null, "editor surface renders")
+        if (initial == null) return
+        click(d, EDIT_TARGET)
+        t |> success(wait_for_mouse_idle(d), "focus click timeline drains")
+        t |> success(wait_for_bool_value(d, EDIT_TARGET, "focused", true, 300),
+            "editor focused")
+
+        // Numpad twins: KP9 = PageUp (no char event = NumLock-off navigation).
+        key_tap(d, int(ImGuiKey.Keypad9))
+        t |> success(wait_for_key_idle(d, 6.0f), "Keypad9 drains")
+        t |> success(wait_for_int_value(d, EDIT_TARGET, "cursor_line", 0, 300),
+            "numpad PageUp navigates like the dedicated key")
+
+        // Numpad Home, Insert to overtype: a typed char replaces, not inserts.
+        key_tap(d, int(ImGuiKey.Keypad7))
+        t |> success(wait_for_key_idle(d, 6.0f), "Keypad7 drains")
+        t |> success(wait_for_int_value(d, EDIT_TARGET, "cursor_column", 0, 300),
+            "numpad Home navigates like the dedicated key")
+        key_tap(d, int(ImGuiKey.Insert))
+        t |> success(wait_for_key_idle(d, 6.0f), "Insert drains")
+        t |> success(wait_for_bool_value(d, EDIT_TARGET, "overtype", true, 300),
+            "Insert toggles overtype mode")
+        let line_count_before = widget_payload_field(initial, EDIT_TARGET,
+            "line_count") ?? 0
+        let typed = post_command(d, "imgui_key_type", JV((text = "Z")))
+        t |> success(typed != null, "overtype keystroke accepted")
+        t |> success(wait_for_key_idle(d, 6.0f), "overtype keystroke drains")
+        var overtyped = wait_until_sec(d, 5.0f) $(var snap) {
+            let lines = find_widget(snap, EDIT_TARGET)?["payload"]?["lines"]
+            return starts_with(lines?[0] ?? "", "Zhe")
+        }
+        t |> success(overtyped != null, "overtype replaced the first character")
+        if (overtyped != null) {
+            t |> equal(widget_payload_field(overtyped, EDIT_TARGET, "line_count") ?? -1,
+                line_count_before, "overtype did not grow the buffer")
+        }
+    }
+}

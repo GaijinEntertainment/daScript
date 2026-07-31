@@ -71,6 +71,9 @@ struct public TextEditState {
     follow_revision : int = 0
     followed_revision : int = 0
     input_revision : int = 0
+    //! Insert/overtype mode: typed characters replace the next grapheme
+    //! within the line (never the newline); paste still inserts.
+    overtype : bool = false
     undo_stack : array<TextEditUndoUnit>
     redo_stack : array<TextEditUndoUnit>
     //! True while the newest undo unit still accepts coalescing appends.
@@ -576,6 +579,29 @@ def public text_edit_insert(var ed : TextEditState; text : string) {
     }
 }
 
+def public text_edit_toggle_overtype(var ed : TextEditState) {
+    ed.overtype = !ed.overtype
+    ed.blink_time = 0.0f
+}
+
+def public text_edit_type(var ed : TextEditState; text : string) {
+    //! One typed keystroke: like insert, but honoring overtype mode —
+    //! replaces the next grapheme within the line, falls back to inserting
+    //! at the line end. Selections are replaced normally either way.
+    return if (empty(text))
+    ensure_line(ed)
+    if (ed.overtype && !text_edit_has_selection(ed) && find(text, "\n") < 0) {
+        let line = ed.lines[ed.cursor_line]
+        if (ed.cursor_column < length(line)) {
+            let next = grapheme_next(line, ed.cursor_column)
+            commit_edit(ed, space_kind_for(ed, text), ed.cursor_line,
+                ed.cursor_column, slice(line, ed.cursor_column, next), text)
+            return
+        }
+    }
+    text_edit_insert(ed, text)
+}
+
 def public text_edit_newline(var ed : TextEditState) {
     // E4 grows auto-indent here. Enter fences the undo unit (spec: break
     // BEFORE, so the following typing run coalesces on the new line).
@@ -968,31 +994,57 @@ def private editor_paste_from_clipboard(var ed : TextEditState; use_system : boo
     text_edit_paste(ed, text)
 }
 
+def private nav_pressed(main_key, keypad_key : ImGuiKey; keypad_nav : bool) : bool {
+    // every nav key answers for its numpad twin; twins mute while typing
+    return (IsKeyPressed(main_key, true)
+        || (keypad_nav && IsKeyPressed(keypad_key, true)))
+}
+
 def private route_editor_keys(var ed : TextEditState; page_rows : int; // nolint:STYLE037
                               use_system_clipboard : bool) {
     // interim hardwired keymap — migrates to imgui_commands in the registry step
     let io & = unsafe(GetIO())
     let select = io.KeyShift
+    // chars drain FIRST: a char-delivering frame types, keypad nav mutes
+    var typed_chars = false
+    if (!io.KeyCtrl && !io.KeyAlt) {
+        for (value in io.InputQueueCharacters) {
+            let codepoint = int(value)
+            if (codepoint >= 0x20 && codepoint != 0x7f && codepoint <= 0x10ffff) {
+                text_edit_type(ed, codepoint_utf8(codepoint))
+                ed.input_revision++
+                typed_chars = true
+            }
+        }
+    }
+    let keypad_nav = !typed_chars
     if (io.KeyCtrl && !io.KeyAlt) {
-        if (IsKeyPressed(ImGuiKey.LeftArrow, true)) {
+        if (nav_pressed(ImGuiKey.LeftArrow, ImGuiKey.Keypad4, keypad_nav)) {
             text_edit_move_word_left(ed, select)
         }
-        if (IsKeyPressed(ImGuiKey.RightArrow, true)) {
+        if (nav_pressed(ImGuiKey.RightArrow, ImGuiKey.Keypad6, keypad_nav)) {
             text_edit_move_word_right(ed, select)
         }
-        if (IsKeyPressed(ImGuiKey.Home, true)) {
+        if (nav_pressed(ImGuiKey.UpArrow, ImGuiKey.Keypad8, keypad_nav)) {
+            text_edit_move_vertical(ed, -1, select)
+        }
+        if (nav_pressed(ImGuiKey.DownArrow, ImGuiKey.Keypad2, keypad_nav)) {
+            text_edit_move_vertical(ed, 1, select)
+        }
+        if (nav_pressed(ImGuiKey.Home, ImGuiKey.Keypad7, keypad_nav)) {
             text_edit_move_document_start(ed, select)
         }
-        if (IsKeyPressed(ImGuiKey.End, true)) {
+        if (nav_pressed(ImGuiKey.End, ImGuiKey.Keypad1, keypad_nav)) {
             text_edit_move_document_end(ed, select)
         }
         if (IsKeyPressed(ImGuiKey.Backspace, true)) {
             text_edit_delete_word_left(ed)
         }
-        if (IsKeyPressed(ImGuiKey.Delete, true)) {
+        if (nav_pressed(ImGuiKey.Delete, ImGuiKey.KeypadDecimal, keypad_nav)) {
             text_edit_delete_word_right(ed)
         }
-        if (IsKeyPressed(ImGuiKey.A, false)) {
+        if (IsKeyPressed(ImGuiKey.A, false)
+                || (keypad_nav && IsKeyPressed(ImGuiKey.Keypad5, false))) {
             text_edit_select_all(ed)
         }
         if (IsKeyPressed(ImGuiKey.Z, true)) {
@@ -1001,7 +1053,8 @@ def private route_editor_keys(var ed : TextEditState; page_rows : int; // nolint
         if (IsKeyPressed(ImGuiKey.Y, true)) {
             let _ = text_edit_redo(ed)
         }
-        if (IsKeyPressed(ImGuiKey.C, false) || IsKeyPressed(ImGuiKey.Insert, false)) {
+        if (IsKeyPressed(ImGuiKey.C, false) || IsKeyPressed(ImGuiKey.Insert, false)
+                || (keypad_nav && IsKeyPressed(ImGuiKey.Keypad0, false))) {
             editor_copy_to_clipboard(ed, use_system_clipboard)
         }
         if (IsKeyPressed(ImGuiKey.X, false)) {
@@ -1016,28 +1069,28 @@ def private route_editor_keys(var ed : TextEditState; page_rows : int; // nolint
             let _ = io.KeyShift ? text_edit_redo(ed) : text_edit_undo(ed)
         }
     } elif (!io.KeyAlt) {
-        if (IsKeyPressed(ImGuiKey.LeftArrow, true)) {
+        if (nav_pressed(ImGuiKey.LeftArrow, ImGuiKey.Keypad4, keypad_nav)) {
             text_edit_move_left(ed, select)
         }
-        if (IsKeyPressed(ImGuiKey.RightArrow, true)) {
+        if (nav_pressed(ImGuiKey.RightArrow, ImGuiKey.Keypad6, keypad_nav)) {
             text_edit_move_right(ed, select)
         }
-        if (IsKeyPressed(ImGuiKey.UpArrow, true)) {
+        if (nav_pressed(ImGuiKey.UpArrow, ImGuiKey.Keypad8, keypad_nav)) {
             text_edit_move_vertical(ed, -1, select)
         }
-        if (IsKeyPressed(ImGuiKey.DownArrow, true)) {
+        if (nav_pressed(ImGuiKey.DownArrow, ImGuiKey.Keypad2, keypad_nav)) {
             text_edit_move_vertical(ed, 1, select)
         }
-        if (IsKeyPressed(ImGuiKey.PageUp, true)) {
+        if (nav_pressed(ImGuiKey.PageUp, ImGuiKey.Keypad9, keypad_nav)) {
             text_edit_move_vertical(ed, -max(page_rows, 1), select)
         }
-        if (IsKeyPressed(ImGuiKey.PageDown, true)) {
+        if (nav_pressed(ImGuiKey.PageDown, ImGuiKey.Keypad3, keypad_nav)) {
             text_edit_move_vertical(ed, max(page_rows, 1), select)
         }
-        if (IsKeyPressed(ImGuiKey.Home, true)) {
+        if (nav_pressed(ImGuiKey.Home, ImGuiKey.Keypad7, keypad_nav)) {
             text_edit_move_home(ed, select)
         }
-        if (IsKeyPressed(ImGuiKey.End, true)) {
+        if (nav_pressed(ImGuiKey.End, ImGuiKey.Keypad1, keypad_nav)) {
             text_edit_move_end(ed, select)
         }
         if (IsKeyPressed(ImGuiKey.Enter, true) || IsKeyPressed(ImGuiKey.KeypadEnter, true)) {
@@ -1046,23 +1099,25 @@ def private route_editor_keys(var ed : TextEditState; page_rows : int; // nolint
         if (IsKeyPressed(ImGuiKey.Backspace, true)) {
             text_edit_backspace(ed)
         }
-        if (IsKeyPressed(ImGuiKey.Delete, true)) {
-            text_edit_delete(ed)
+        if (nav_pressed(ImGuiKey.Delete, ImGuiKey.KeypadDecimal, keypad_nav)) {
+            if (select) {
+                editor_cut_to_clipboard(ed, use_system_clipboard) // Shift+Del = cut (CUA)
+            } else {
+                text_edit_delete(ed)
+            }
+        }
+        if (select && IsKeyPressed(ImGuiKey.Insert, false)) {
+            editor_paste_from_clipboard(ed, use_system_clipboard) // Shift+Ins = paste (CUA)
+        }
+        if (!select && (IsKeyPressed(ImGuiKey.Insert, false)
+                || (keypad_nav && IsKeyPressed(ImGuiKey.Keypad0, false)))) {
+            text_edit_toggle_overtype(ed)
         }
         if (IsKeyPressed(ImGuiKey.Tab, true)) {
             text_edit_insert(ed, "\t")
         }
         if (IsKeyPressed(ImGuiKey.Escape, false) && text_edit_has_selection(ed)) {
             text_edit_clear_selection(ed)
-        }
-    }
-    if (!io.KeyCtrl && !io.KeyAlt) {
-        for (value in io.InputQueueCharacters) {
-            let codepoint = int(value)
-            if (codepoint >= 0x20 && codepoint != 0x7f && codepoint <= 0x10ffff) {
-                text_edit_insert(ed, codepoint_utf8(codepoint))
-                ed.input_revision++
-            }
         }
     }
 }
@@ -1255,9 +1310,15 @@ def private draw_edit_content(var ed : TextEditState; m : EditMetrics;
             + text_source_range_width(ed.lines[ed.cursor_line], 0, ed.cursor_column,
                 font, m.font_size, m.cell_width, style.tab_cells))
         let caret_y = m.origin.y + float(ed.cursor_line) * m.line_height
+        // overtype renders the block caret (translucent so the glyph reads)
+        let caret_width = ed.overtype ? m.cell_width : max(1.0f, 1.5f * m.zoom)
+        var caret_color = style.caret_color
+        if (ed.overtype) {
+            caret_color.w *= 0.55f
+        }
         *dl |> AddRectFilled(float2(caret_x, caret_y),
-            float2(caret_x + max(1.0f, 1.5f * m.zoom), caret_y + m.line_height),
-            GetColorU32(style.caret_color), 0.0f, ImDrawFlags.None)
+            float2(caret_x + caret_width, caret_y + m.line_height),
+            GetColorU32(caret_color), 0.0f, ImDrawFlags.None)
     }
 }
 
