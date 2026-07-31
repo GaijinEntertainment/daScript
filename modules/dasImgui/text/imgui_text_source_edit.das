@@ -169,6 +169,8 @@ struct public TextEditState {
     color_start : int = 0
     color_digits : int = 0
     color_undo_mark : int = -1
+    //! The opening click must not count as a click-away on the first frame.
+    color_ignore_click : bool = false
     //! Completion LIST under the caret (top candidates). list_index -1 =
     //! visible but the keyboard is still in the editor (Down enters).
     list_items : array<string>
@@ -3310,6 +3312,7 @@ def private swatch_at_mouse(var ed : TextEditState; m : EditMetrics;
         if (mouse.x >= rect.x && mouse.x <= rect.z
                 && mouse.y >= rect.y && mouse.y <= rect.w) {
             ed.color_open = true
+            ed.color_ignore_click = true
             ed.color_line = row
             ed.color_start = hit.x
             ed.color_digits = hit.y
@@ -3350,9 +3353,14 @@ def private draw_color_dialog(var ed : TextEditState) {
         if (color_picker4(COLOR_STATE, "##embed_color")) {
             color_write_back(ed)
         }
-        if (IsKeyPressed(ImGuiKey.Escape, false)
-                || (IsMouseClicked(ImGuiMouseButton.Left, false)
-                    && !IsWindowHovered(ImGuiHoveredFlags.None))) {
+        if (IsMouseClicked(ImGuiMouseButton.Left, false)) {
+            if (ed.color_ignore_click) {
+                ed.color_ignore_click = false // the opening click
+            } elif (!IsWindowHovered(ImGuiHoveredFlags.None)) {
+                ed.color_open = false
+            }
+        }
+        if (IsKeyPressed(ImGuiKey.Escape, false)) {
             ed.color_open = false
         }
     }
