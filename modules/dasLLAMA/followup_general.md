@@ -162,16 +162,30 @@
     an empty `note` (that pair means "both PSOs built, both dispatched, outputs within envelope").
     That is a handful of lines and closes the whole tensor lane at once.
 
-13. **The kargs census checks one direction only, so a hand-rolled bind list can silently desync
-    from the family it duplicates.** `MetalManualDispatchCensus` (`dasllama_metal_lens.das` §557)
-    errors when `nkargs > 0 && nkargs != ndispatch` — a builder that binds kargs on some dispatch
-    paths but not all. It says nothing about `nkargs == 0 && ndispatch > 0`, which is exactly what
-    the tensor-race harnesses were: `race_gemmb_family` and `race_attn_pair` hand-bound the
-    families' old scalar uniforms at slots 5..12 instead of going through `enc_*`, so folding those
-    families to a kargs left them binding 4-byte buffers where the kernels now read a struct. Both
-    compiled clean and no suite runs them. Done = the census derives, per module, which kernel
-    classes declare a kargs uniform and which PSO global each is compiled into (the
-    `g_pso_X = compile_pso(metal_Y_msl, ...)` assignment plus the `[metal_kernel(name="metal_Y_msl")]`
-    annotation give the map), then errors on a function that `kn_pipeline`s such a PSO and
-    dispatches without a `kn_kargs`. Until then the rule is structural: a dispatch outside an
-    `enc_*` builder is a review defect — see CODEREVIEW rule 21.
+13. **The kargs census checks one direction only, and the obvious fix does NOT work — measured.**
+    `MetalManualDispatchCensus` (`dasllama_metal_lens.das` §557) errors when
+    `nkargs > 0 && nkargs != ndispatch` — a builder that binds kargs on some dispatch paths but not
+    all. It is silent on `nkargs == 0 && ndispatch > 0`, which is what the tensor-race harnesses
+    were: `race_gemmb_family` and `race_attn_pair` hand-bound their families' old scalar uniforms
+    instead of going through `enc_*`, so folding those families left them binding 4-byte buffers
+    where the kernels read a struct. Both compiled clean; only `--tune` runs them.
+
+    The natural fix — derive a PSO→class→has-kargs map from `g_pso_X = compile_pso(metal_Y_msl, …)`
+    plus `[metal_kernel(name=…)]`, then error on a function that pipelines a kargs-bearing PSO and
+    dispatches without binding — was PROTOTYPED and **does not catch this bug**. It builds a good
+    map (140 classes, 72 kargs-bearing, 133 PSO globals, 67 kargs-bearing) and the tree is green
+    under it, but it reports ZERO at the broken commit: `race_gemmb_family` takes
+    `base_pso, twin_pso : MetalComputePipeline?` as PARAMETERS, and their identity arrives through
+    two levels of argument passing (`race_decode_family`'s `base_src` string parameter, bound at the
+    top-level call site to `metal_q8_gemm_b_msl`). A per-function census cannot see that. Catching
+    it precisely needs interprocedural constant propagation through direct calls.
+
+    What IS checkable locally: **a dispatch site must NAME its PSO global.** `kn_pipeline(enc, X)`
+    where X is not a `g_*pso*` global is an opaque dispatch the census cannot map to a class, so it
+    cannot verify the kargs contract. Measured today: **17 of 89 dispatch sites are opaque, and 16
+    are race harnesses** (`base_pso`/`twin_pso`/`q_pso`/`qt_pso`/`a_pso`/`at_pso`); the seventeenth
+    is `enc_ew2`, which legitimately shares one builder across swiglu/geglu/add. Done = the census
+    errors on an opaque dispatch unless the function carries an explicit opt-out annotation, which
+    turns an invisible class of bug into an enumerated, reviewable list. Note this is ADVISORY — it
+    flags "this function hand-binds", not "this function is wrong". Until it exists the rule is
+    structural: nothing dispatches a kernel except its `enc_*` builder (CODEREVIEW rule 21).
