@@ -48,4 +48,22 @@ def test_role_whole_buffer_rule(t : T?) {
             feint("das_metal is not built on this platform; the lens does not load\n")
         }
     }
+    t |> run("a kernel body that delegates to methods derives roles through the chain") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            // the family shape: base loop + per-format override + a body that only calls run().
+            // Before the classifier followed methods this derived NOTHING — every field looked
+            // unused, so a class without declared roles would have been staged with no hazards.
+            let good = compile_issues(fixture("_rf_method_chain"))
+            t |> success(good.ok, "base member and override-only member both derived: {good.issues}")
+            let bad = compile_issues(fixture("_rf_method_wrong"))
+            t |> success(!bad.ok, "a read-only member declared 'write' must be refused through the chain")
+            t |> success(find(bad.issues, "declares @role='write' but the body derives 'read'") >= 0,
+                "the refusal names the contradiction")
+            if (bad.ok) {
+                to_log(LOG_ERROR, "ROLE-INFER: method-chain wrong-role fixture compiled clean\n")
+            }
+        } else {
+            feint("das_metal is not built on this platform; the lens does not load\n")
+        }
+    }
 }

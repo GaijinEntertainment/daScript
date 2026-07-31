@@ -361,17 +361,58 @@ def private analyze_one(fn : Function?; mod : Module?; tracked : table<string>; 
     }
 }
 
-def private classify_access(fn : Function?; mod : Module?; tracked : table<string>; fieldMode : bool) : AccessResult {
+// A kernel class's method, resolved the way the emitter resolves it: through the CONCRETE
+// class's field init, so an override wins over the base it replaces. Returns null for a name
+// that is not a method (a free call) or an abstract one.
+def private class_method(mod : Module?; st : StructurePtr; mname : string) : Function? {
+    if (st == null) {
+        return null
+    }
+    for (fld in st.fields) {
+        continue if (fld.name != mname)
+        var ie = fld.init
+        while (ie != null) {
+            if (ie is ExprRef2Value) {
+                ie = (ie as ExprRef2Value).subexpr
+            } elif (ie is ExprCast) {
+                ie = (ie as ExprCast).subexpr
+            } else {
+                break
+            }
+        }
+        // at structure-macro time the address is still unresolved — only the target NAME is
+        // set (`_::Class`method`), so the lookup goes through the module by name
+        let ea = ie ?as ExprAddr
+        return null if (ea == null)
+        var nm = string(ea.target)
+        let sep = find(nm, "::")
+        if (sep >= 0) {
+            nm = slice(nm, sep + 2)
+        }
+        var found : Function?
+        mod |> for_each_function(nm) $(cfn) {
+            if (cfn.name == nm) {
+                found = cfn
+            }
+        }
+        return found
+    }
+    return null
+}
+
+def private classify_access(fn : Function?; mod : Module?; st : StructurePtr; tracked : table<string>; fieldMode : bool) : AccessResult {
     var res : AccessResult
     var pending : table<string>
     var visited : table<string>
     var callees : table<string>
     analyze_one(fn, mod, tracked, fieldMode, res, callees)
     visited |> insert(string(fn.name))
-    // field mode is intra-body only: free callees are shader intrinsics whose das shims would
-    // false-positive on bare-name matching, and self-helpers hit the ratchet instead
+    // Field mode does not recurse into FREE callees — shader intrinsics have das shims whose
+    // locals would false-positive on bare-name matching. It DOES recurse into the kernel class's
+    // own METHODS: they touch members directly, so without this a method-shaped kernel body
+    // derives an empty access set and the lens stages no hazards at all.
     for (c in keys(callees)) {
-        if (!fieldMode) {
+        if (!fieldMode || class_method(mod, st, c) != null) {
             pending |> insert(c)
         }
     }
@@ -387,13 +428,18 @@ def private classify_access(fn : Function?; mod : Module?; tracked : table<strin
         }
         visited |> insert(name)
         var next : table<string>
-        mod |> for_each_function(name) $(cfn) {
-            if (cfn.name == name) {
-                analyze_one(cfn, mod, tracked, fieldMode, res, next)
+        let mfn = fieldMode ? class_method(mod, st, name) : null
+        if (mfn != null) {
+            analyze_one(mfn, mod, tracked, fieldMode, res, next)
+        } else {
+            mod |> for_each_function(name) $(cfn) {
+                if (cfn.name == name) {
+                    analyze_one(cfn, mod, tracked, fieldMode, res, next)
+                }
             }
         }
         for (c in keys(next)) {
-            if (!key_exists(visited, c)) {
+            if (!key_exists(visited, c) && (!fieldMode || class_method(mod, st, c) != null)) {
                 pending |> insert(c)
             }
         }
@@ -409,12 +455,15 @@ def private classify_access(fn : Function?; mod : Module?; tracked : table<strin
 //! (helpers access the globals directly; passing a tracked global BY ARGUMENT is refused — see
 //! AccessResult.err). Recursion is name-keyed over `mod`'s functions with a visited-set guard.
 def classify_global_access(fn : Function?; mod : Module?; tracked : table<string>) : AccessResult {
-    return <- classify_access(fn, mod, tracked, false)
+    var none : StructurePtr
+    return <- classify_access(fn, mod, none, tracked, false)
 }
 
 //! The field-mode twin for class-shaped kernels (metal): `tracked` names are the class's buffer
 //! FIELDS — pre-infer bodies spell them as bare names (or explicit self.<name>); member access
-//! on anything else (float4 components like wv.y) never matches.
-def classify_field_access(fn : Function?; mod : Module?; tracked : table<string>) : AccessResult {
-    return <- classify_access(fn, mod, tracked, true)
+//! on anything else (float4 components like wv.y) never matches. `st` is the kernel class, so a
+//! body that delegates to its own METHODS is followed through them (an override resolves against
+//! the concrete class, like the emitter does); free callees stay intra-body.
+def classify_field_access(fn : Function?; mod : Module?; st : StructurePtr; tracked : table<string>) : AccessResult {
+    return <- classify_access(fn, mod, st, tracked, true)
 }

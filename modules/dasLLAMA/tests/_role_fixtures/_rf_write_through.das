@@ -1,6 +1,8 @@
 options gen2
 options indenting = 4
 
+expect 20800   // the lens refuses this fixture BY DESIGN — see test_metal_role_infer.das
+
 require metal/msl_shader
 require dasllama/dasllama_metal_lens
 require dasllama/dasllama_metal_common   // hz_gate + the pso the generated builder binds

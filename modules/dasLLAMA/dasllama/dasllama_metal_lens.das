@@ -365,7 +365,7 @@ class MetalDispatch : AstStructureAnnotation {
                 delete tracked
                 return false
             }
-            var res <- classify_field_access(kfn, compiling_module(), tracked)
+            var res <- classify_field_access(kfn, compiling_module(), st, tracked)
             if (!empty(res.err)) {
                 errors := "[metal_dispatch] {fn_name}: {res.err} (or access_force=true + declared roles)"
                 delete res
@@ -556,7 +556,7 @@ class MetalManualDispatchCensus : AstPassMacro {
                 var nmatch = 0
                 kfn = find_kernel_fn(st, mod, nmatch)
                 if (kfn != null && nmatch == 1) {
-                    var res <- classify_field_access(kfn, mod, tracked)
+                    var res <- classify_field_access(kfn, mod, st, tracked)
                     if (empty(res.err)) {   // an unanalyzable body keeps the declared contract as-is
                         for (field in st.fields) {
                             let role = find_arg(field.annotation, "role") ?as tString ?? ""
