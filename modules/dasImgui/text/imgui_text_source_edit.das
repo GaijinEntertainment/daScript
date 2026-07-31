@@ -2394,8 +2394,7 @@ def private handle_edit_mouse(var ed : TextEditState; m : EditMetrics;
         let hit = edit_hit_position(ed, m, style, font)
         ed.cursor_line = hit.x
         ed.cursor_column = hit.y
-    } elif (!hovered && !ed.goto_open
-            && IsMouseClicked(ImGuiMouseButton.Left, false)) {
+    } elif (!hovered && IsMouseClicked(ImGuiMouseButton.Left, false)) {
         if (window_hovered) {
             // dead area past the buffer: land on the clamped last-line hit
             ed.focused = true
@@ -2407,7 +2406,8 @@ def private handle_edit_mouse(var ed : TextEditState; m : EditMetrics;
             ed.selection_dragging = true
             ed.preferred_column = -1
             ed.blink_time = 0.0f
-        } else {
+        } elif (!ed.goto_open) {
+            // clicks on the goto dialog itself never unfocus the editor
             ed.focused = false
         }
     }
@@ -2905,16 +2905,8 @@ def private draw_goto_overlay(var ed : TextEditState) {
         input_text(GOTO_INPUT, (text = "##goto_line"))
         let active = IsItemActive()
         let done = IsItemDeactivated()
-        // the VS Code hint line: a dry-run preview + the valid range
-        let target = text_edit_parse_goto(GOTO_INPUT.value)
-        let total = text_edit_line_count(ed)
-        if (target.x > 0) {
-            text_disabled(GOTO_HINT, (text = target.y > 1
-                ? "Go to line {min(target.x, total)}, column {target.y}"
-                : "Go to line {min(target.x, total)}"))
-        } else {
-            text_disabled(GOTO_HINT, (text = "Line 1..{total}"))
-        }
+        // the hint keeps the RANGE visible while typing (Boris: no preview)
+        text_disabled(GOTO_HINT, (text = "Line 1..{text_edit_line_count(ed)}"))
         if (done && IsKeyPressed(ImGuiKey.Escape, false)) {
             ed.goto_open = false
         } elif ((active || done) && (IsKeyPressed(ImGuiKey.Enter, false)
@@ -2922,6 +2914,9 @@ def private draw_goto_overlay(var ed : TextEditState) {
             let _ = text_edit_goto_query(ed, GOTO_INPUT.value)
             ed.goto_open = false
             ed.focused = true // the jump hands the keyboard back
+        } elif (IsMouseClicked(ImGuiMouseButton.Left, false)
+                && !IsWindowHovered(ImGuiHoveredFlags.None)) {
+            ed.goto_open = false // clicking away dismisses
         }
     }
     End()
