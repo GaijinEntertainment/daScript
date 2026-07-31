@@ -111,16 +111,22 @@
     rope and store stages the way the D family shares `sqd_score_blk`/`sqd_vacc_blk`, and both
     bodies come back under the cap.
 
-11. **One 21 GB model costs ~70 GB of physical footprint at load — ~3.3x its own size.**
-    Measured on the 64 GB M1 laptop running the qwen35moe-35b cell ALONE (`footprint -p`:
-    phys_footprint 69 GB, peak 70 GB; 17 GB of swap in use at the peak, released on exit). The
-    cell passes, but only because macOS swaps through it; add any other model to the same
-    process and it crosses the jetsam threshold and dies with SIGKILL (exit 137) — which is what
-    makes the big rows look like "the box is too small" when the box is not.
-    Suspected composition, in load order: the source `mmap` made fully resident by
-    `source prefetch armed (21109 MB)`, the metal-blob transform's output buffer, and the Metal
-    buffer the blob is uploaded into — three ~21 GB copies alive at once. Done = the source
-    mapping is released (or `madvise`-d away) once the blob exists, and the blob is wrapped
-    no-copy into the Metal buffer where the platform allows, so peak lands near 1-2x. Until
-    then: run big-model cells ONE model per process, and never read peak RSS from `ps`
-    (`rss` shows ~1 MB here — use `footprint -p <pid>`).
+11. **Metal has never been measured on the .dlim rail — and the suites cannot measure it.**
+    Measuring the qwen35moe-35b matrix cell on the 64 GB M1 gave `footprint -p`: phys_footprint
+    69 GB, peak 70 GB for a 21 GB model, with 17 GB of swap at the peak (released on exit). That
+    number is NOT the load path: per `ab37e6984`, every non-image suite deliberately calls
+    `load_model_` — the direct gguf load — so that a suite child does not mint a `.dlim` under
+    its own identity and let the purge-by-default GC eat the serving rig's flavors. So the 70 GB
+    is the direct-gguf path the suites take ON PURPOSE, measured on a model that had no prepared
+    image at all, with `DASLLAMA_PIN_PREFILL`'s advisory readahead making the whole source
+    resident on top. It says nothing about `load_model_cached`.
+
+    What is genuinely untested is the Metal side of the real rail. The pieces are all present:
+    `.dlim` maps via `fmap_open`, `plane_buffer(mapped = true)` wraps it with
+    `metal_new_buffer_no_copy_untracked` (page-aligned, 16 KB round-up), and phase D
+    (`eb1925798`) gives a streaming fill so "big planes never in RAM" during a mint. The mapped
+    arm just has no Metal measurement behind it — the Vulkan and CPU sides were exercised, Metal
+    was not. Done = `test_model_image`'s metal flavor arm reports peak `footprint` for both a
+    cold mint and a warm map, and a mapped serve lands near 1x the image rather than 3x.
+    Operationally, regardless: run big-model cells one model per process, and never read peak
+    from `ps` (`rss` shows ~1 MB here — `footprint -p <pid>` is the metric).
