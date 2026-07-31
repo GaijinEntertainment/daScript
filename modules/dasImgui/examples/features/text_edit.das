@@ -12,6 +12,7 @@ require strings
 //! single-line probe of the whole buffer so tests read keystroke effects back.
 
 var private g_edit = TextEditState()
+var private g_find = TextFindState()
 var private g_commands = CommandRegistry()
 var private g_bindings_editor = CommandBindingsEditorState()
 var private g_fonts = FontRoleSet()
@@ -42,8 +43,12 @@ def update() {
     SetNextWindowSize(viewport.WorkSize, ImGuiCond.Always)
     window(EDIT_WIN, (text = "text edit", closable = false,
             flags = ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove)) {
+        var bar_rows = 2.0f
+        if (g_find.open) {
+            bar_rows += g_find.replace_open ? 2.0f : 1.0f
+        }
         child(EDIT_CONTENT, (text = "editor content",
-              size = float2(0.0f, -(GetFrameHeightWithSpacing() * 2.0f)),
+              size = float2(0.0f, -(GetFrameHeightWithSpacing() * bar_rows)),
               child_flags = ImGuiChildFlags.None,
               window_flags = ImGuiWindowFlags.HorizontalScrollbar)) {
             var style = TextSourceViewStyle(
@@ -51,6 +56,10 @@ def update() {
                 write_system_clipboard = !harness_is_headless())
             let _ = text_source_edit("editor", g_edit, style, g_commands)
         }
+        if (g_find.open) {
+            text_find_bar(0, g_find)
+        }
+        text_edit_find_sync(g_edit, g_find, g_commands)
         var status = ("Ln {g_edit.cursor_line + 1}, Col {g_edit.cursor_column + 1}"
             + " - {text_edit_line_count(g_edit)} lines")
         if (g_edit.dirty) {
@@ -80,6 +89,7 @@ def update() {
 [export]
 def shutdown() {
     command_registry_dispose(g_commands)
+    text_find_dispose(g_find)
     text_edit_dispose(g_edit)
     harness_shutdown()
 }

@@ -33,6 +33,20 @@ struct public TextFindState {
     matched_revision : int = -1
     matched_query : string
     matched_regex : bool = false
+    replace_open : bool = false
+    replace_text : string
+    replace_focus_pending : bool = false
+    pending_replace_valid : bool = false
+    pending_replace_text : string
+    //! Replace request counters: the bar (or a live rail) bumps the producer,
+    //! the host applies the edit and advances the `applied_` twin.
+    replace_revision : int = 0
+    replace_all_revision : int = 0
+    applied_replace_revision : int = 0
+    applied_replace_all_revision : int = 0
+    //! Consumer-side jump tracker (`text_edit_find_sync` uses it; hosts with
+    //! their own glue may keep their own counter instead).
+    applied_jump_revision : int = 0
 }
 
 def public text_find_open(var state : TextFindState) {
@@ -79,6 +93,39 @@ def public text_find_set_query(var state : TextFindState;
     state.use_regex = use_regex
     state.pending_widget_valid = true
     state.pending_widget_query = query
+}
+
+def public text_find_open_replace(var state : TextFindState) {
+    //! Open the bar with the replace row visible; focus lands in the replace
+    //! input (Ctrl+H semantics).
+    text_find_open(state)
+    state.focus_pending = false
+    state.replace_open = true
+    state.replace_focus_pending = true
+}
+
+def public text_find_set_replace(var state : TextFindState; text : string) {
+    //! Programmatic replace text; same widget-sync rules as the query.
+    state.replace_open = true
+    state.replace_text = text
+    state.pending_replace_valid = true
+    state.pending_replace_text = text
+}
+
+def public text_find_request_replace(var state : TextFindState) {
+    state.replace_revision++
+}
+
+def public text_find_request_replace_all(var state : TextFindState) {
+    state.replace_all_revision++
+}
+
+def public text_find_needs_rebuild(state : TextFindState const;
+                                   revision : int) : bool {
+    //! True when `text_find_rebuild` would recompute — hosts check this to
+    //! skip joining a large source when nothing changed.
+    return (revision != state.matched_revision || state.query != state.matched_query
+        || state.use_regex != state.matched_regex)
 }
 
 def private fold_case(b : int) : int {
@@ -155,15 +202,106 @@ def public text_find_collect(query : string; use_regex : bool; source : string;
     return ""
 }
 
+def private group_by_reference(re : Regex; source, name : string;
+                               match_start, match_end : int) : string {
+    // ${...} resolves numeric first (${0} whole match, ${n} group n), then named
+    var numeric = !empty(name)
+    var group = 0
+    peek_data(name) $(bytes) {
+        for (b in bytes) {
+            if (!is_number(int(b))) {
+                numeric = false
+                break
+            }
+            group = group * 10 + (int(b) - '0')
+        }
+    }
+    if (numeric) {
+        return slice(source, match_start, match_end) if (group == 0)
+        return "" if (group >= length(re.groups))
+        let span = re.groups[group]._0
+        return slice(source, span.x, span.y)
+    }
+    let span = re[name]
+    return slice(source, span.x, span.y)
+}
+
+def private expand_match_template(re : Regex; source, replacement : string;
+                                  match_start, match_end : int) : string {
+    // mirrors daslib/regex expand_replacement, which is private there
+    return build_string() $(var writer) {
+        let replacement_length = length(replacement)
+        peek_data(replacement) $(bytes) {
+            var i = 0
+            while (i < replacement_length) {
+                let c = int(bytes[i])
+                if (c != '$' || i + 1 >= replacement_length) {
+                    writer |> write_char(c)
+                    i++
+                    continue
+                }
+                let next = int(bytes[i + 1])
+                if (next == '$') {
+                    writer |> write_char('$')
+                    i += 2
+                } elif (next == '&' || next == '0') {
+                    writer |> write(slice(source, match_start, match_end))
+                    i += 2
+                } elif (next >= '1' && next <= '9') {
+                    let group = next - '0'
+                    if (group < length(re.groups)) {
+                        let span = re.groups[group]._0
+                        writer |> write(slice(source, span.x, span.y))
+                    }
+                    i += 2
+                } elif (next == '{') {
+                    let close = find(replacement, "}", i + 2)
+                    if (close < 0) {
+                        writer |> write_char(c)
+                        i++
+                    } else {
+                        let name = slice(replacement, i + 2, close)
+                        writer |> write(group_by_reference(re, source, name,
+                            match_start, match_end))
+                        i = close + 1
+                    }
+                } else {
+                    writer |> write_char(c)
+                    i++
+                }
+            }
+        }
+    }
+}
+
+def public text_find_replacements(state : TextFindState const; source : string;
+                                  var texts : array<string>) {
+    //! One replacement string per `state.matches` entry: the literal replace
+    //! text, or (regex mode) the template expanded per match.
+    texts |> clear()
+    texts |> reserve(length(state.matches))
+    var re : Regex
+    let expand = (state.matched_regex && find(state.replace_text, "$") >= 0
+        && regex_compile(re, state.matched_query, true))
+    for (matched in state.matches) {
+        if (expand && regex_match(re, source, matched.start_byte) >= 0) {
+            texts |> push(expand_match_template(re, source, state.replace_text,
+                matched.start_byte, matched.end_byte))
+        } else {
+            texts |> push(state.replace_text)
+        }
+    }
+    unsafe {
+        delete re
+    }
+}
+
 def public text_find_rebuild(var state : TextFindState;
                              source : string; revision : int) : bool {
     //! Recompute matches when the query, the regex toggle, or the document
     //! revision changed. Keeps the current match sticky by position. Returns
     //! true when a recompute ran (jump_revision advanced).
-    if (revision == state.matched_revision && state.query == state.matched_query
-            && state.use_regex == state.matched_regex) {
-        return false
-    }
+    return false if (!text_find_needs_rebuild(state, revision))
     let previous_start = text_find_current(state).start_byte
     state.matched_revision = revision
     state.matched_query = state.query
@@ -188,21 +326,23 @@ def public text_find_rebuild(var state : TextFindState;
 // ===== The find bar =====
 
 var private FIND_INPUT : table<int; InputTextState>
+var private FIND_TOGGLE : table<int; ClickState>
 var private FIND_REGEX : table<int; ClickState>
 var private FIND_PREV : table<int; ClickState>
 var private FIND_NEXT : table<int; ClickState>
 var private FIND_CLOSE : table<int; ClickState>
 var private FIND_COUNT : table<int; NarrativeState>
 var private FIND_JOIN : table<int; EmptyMarkerState>
+var private REPLACE_TOGGLE : table<int; ClickState>
+var private REPLACE_INPUT : table<int; InputTextState>
+var private REPLACE_ONE : table<int; ClickState>
+var private REPLACE_ALL : table<int; ClickState>
+var private REPLACE_JOIN : table<int; EmptyMarkerState>
 
-def public text_find_bar(strip : int; var state : TextFindState) {
-    //! One-row find bar; call once per frame while `state.open`. `strip`
-    //! separates instances (one per document/view). Enter steps forward,
-    //! Shift+Enter back, Esc closes; the host binds any global shortcuts.
-    return if (!state.open)
+def private find_query_input(strip : int; var state : TextFindState) : int2 {
+    // returns (active, done) as 0/1 — the bar's Enter/Escape logic needs both
     let synced = state.pending_widget_valid
-    // Delay a refocus past a pending sync: ImGui re-reads the buffer on
-    // activation, so the focus frame must be the frame the value lands.
+    // a refocus must land the same frame as the value (ImGui re-reads on activation)
     if (state.focus_pending && !synced) {
         set_keyboard_focus_here(0)
         state.focus_pending = false
@@ -215,16 +355,31 @@ def public text_find_bar(strip : int; var state : TextFindState) {
         state.query = FIND_INPUT[strip].value
     }
     if (synced) {
-        // Push the programmatic query AFTER the input drew once: its working
-        // buffer is allocated on the first frame, and the pending mechanism
-        // writes into that buffer on the next one.
+        // pending write waits a frame — the input's working buffer must exist
         unsafe {
             FIND_INPUT[strip].has_pending = true
             FIND_INPUT[strip].pending_value = state.pending_widget_query
         }
         state.pending_widget_valid = false
     }
-    same_line(FIND_JOIN[strip * 4])
+    return int2(input_active ? 1 : 0, input_done ? 1 : 0)
+}
+
+def public text_find_bar(strip : int; var state : TextFindState) {
+    //! Find bar + replace row (while `state.replace_open`); call once per
+    //! frame while `state.open`; `strip` separates instances. Enter steps /
+    //! replaces, Ctrl+Alt+Enter replaces all, Esc closes; hosts apply requests.
+    return if (!state.open)
+    if (icon_button(FIND_TOGGLE[strip], (
+            glyph = state.replace_open ? "chevron-down" : "chevron-right",
+            tip = "Toggle replace (Ctrl+H)", size = 16.0f))) {
+        state.replace_open = !state.replace_open
+    }
+    same_line(FIND_JOIN[strip * 8 + 4])
+    let query_state = find_query_input(strip, state)
+    let input_active = query_state.x != 0
+    let input_done = query_state.y != 0
+    same_line(FIND_JOIN[strip * 8])
     let regex_color = GetStyleColorVec4(state.use_regex
         ? ImGuiCol.ButtonActive : ImGuiCol.Button)
     with_style((ImGuiCol.Button, regex_color)) {
@@ -234,17 +389,17 @@ def public text_find_bar(strip : int; var state : TextFindState) {
         }
     }
     let count = length(state.matches)
-    same_line(FIND_JOIN[strip * 4 + 1])
+    same_line(FIND_JOIN[strip * 8 + 1])
     if (icon_button(FIND_PREV[strip], (glyph = "chevron-up",
             tip = "Previous match (Shift+Enter)", size = 16.0f))) {
         text_find_step(state, -1)
     }
-    same_line(FIND_JOIN[strip * 4 + 2])
+    same_line(FIND_JOIN[strip * 8 + 2])
     if (icon_button(FIND_NEXT[strip], (glyph = "chevron-down",
             tip = "Next match (Enter)", size = 16.0f))) {
         text_find_step(state, 1)
     }
-    same_line(FIND_JOIN[strip * 4 + 3])
+    same_line(FIND_JOIN[strip * 8 + 3])
     if (!empty(state.error)) {
         text_colored(FIND_COUNT[strip],
             (color = float4(0.95f, 0.55f, 0.35f, 1.0f), text = state.error))
@@ -269,5 +424,57 @@ def public text_find_bar(strip : int; var state : TextFindState) {
         let io & = unsafe(GetIO())
         text_find_step(state, io.KeyShift ? -1 : 1)
         state.focus_pending = true
+    }
+    if (state.replace_open) {
+        text_find_replace_row(strip, state)
+    }
+}
+
+def private text_find_replace_row(strip : int; var state : TextFindState) {
+    if (icon_button(REPLACE_TOGGLE[strip], (glyph = "chevron-down",
+            tip = "Hide replace", size = 16.0f))) {
+        state.replace_open = false
+    }
+    same_line(REPLACE_JOIN[strip * 4])
+    let synced = state.pending_replace_valid
+    if (state.replace_focus_pending && !synced) {
+        set_keyboard_focus_here(0)
+        state.replace_focus_pending = false
+    }
+    SetNextItemWidth(240.0f)
+    input_text(REPLACE_INPUT[strip], (text = "##replace"))
+    let input_active = IsItemActive()
+    let input_done = IsItemDeactivated()
+    if (!synced) {
+        state.replace_text = REPLACE_INPUT[strip].value
+    }
+    if (synced) {
+        // same delayed-sync dance as the query input (see text_find_bar)
+        unsafe {
+            REPLACE_INPUT[strip].has_pending = true
+            REPLACE_INPUT[strip].pending_value = state.pending_replace_text
+        }
+        state.pending_replace_valid = false
+    }
+    same_line(REPLACE_JOIN[strip * 4 + 1])
+    if (small_button(REPLACE_ONE[strip], (text = "Replace##replace_one{strip}"))) {
+        text_find_request_replace(state)
+    }
+    same_line(REPLACE_JOIN[strip * 4 + 2])
+    if (small_button(REPLACE_ALL[strip], (text = "All##replace_all{strip}"))) {
+        text_find_request_replace_all(state)
+    }
+    if (input_done && IsKeyPressed(ImGuiKey.Escape, false)) {
+        text_find_close(state)
+    } elif ((input_active || input_done)
+            && (IsKeyPressed(ImGuiKey.Enter, false)
+                || IsKeyPressed(ImGuiKey.KeypadEnter, false))) {
+        let io & = unsafe(GetIO())
+        if (io.KeyCtrl && io.KeyAlt) {
+            text_find_request_replace_all(state)
+        } else {
+            text_find_request_replace(state)
+        }
+        state.replace_focus_pending = true
     }
 }

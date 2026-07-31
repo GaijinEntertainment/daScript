@@ -134,3 +134,74 @@ def test_text_edit_numpad_and_overtype(t : T?) {
             "Ctrl+Shift+Down extends the selection down a line")
     }
 }
+
+[test]
+def test_text_edit_find_replace(t : T?) {
+    let no_modules : array<string>
+    with_imgui_app(EDIT_FEATURE, no_modules, "", "") $(d) {
+        var initial = wait_for_render(d, EDIT_TARGET, 15.0f)
+        t |> success(initial != null, "editor surface renders")
+        if (initial == null) return
+        click(d, EDIT_TARGET)
+        t |> success(wait_for_mouse_idle(d), "focus click timeline drains")
+        t |> success(wait_for_bool_value(d, EDIT_TARGET, "focused", true, 300),
+            "editor focused")
+
+        // Deterministic fixture on the trailing empty line.
+        key_chord_tap(d, ["Ctrl"], int(ImGuiKey.End))
+        t |> success(wait_for_key_idle(d, 6.0f), "Ctrl+End drains")
+        let typed = post_command(d, "imgui_key_type",
+            JV((text = "zzfind zzfind zzfind")))
+        t |> success(typed != null, "fixture text accepted")
+        var seeded = wait_until_sec(d, 10.0f) $(var snap) {
+            let line = find_widget(snap, EDIT_TARGET)?["payload"]?["lines"]?[5] ?? ""
+            return line == "zzfind zzfind zzfind"
+        }
+        t |> success(seeded != null, "fixture line lands in the buffer")
+
+        // Ctrl+Shift+Left selects the last word; Ctrl+H seeds the query from
+        // it, opens the replace row, and focuses the replace input.
+        key_chord_tap(d, ["Ctrl", "Shift"], int(ImGuiKey.LeftArrow))
+        t |> success(wait_for_key_idle(d, 6.0f), "Ctrl+Shift+Left drains")
+        key_chord_tap(d, ["Ctrl"], int(ImGuiKey.H))
+        t |> success(wait_for_key_idle(d, 6.0f), "Ctrl+H drains")
+        var jumped = wait_until_sec(d, 10.0f) $(var snap) {
+            // seeded query rebuilt + jump applied: selection sits on match 1
+            return (widget_payload_field(snap, EDIT_TARGET, "anchor_line") ?? -1) >= 0
+        }
+        t |> success(jumped != null, "seeded find selects the first match")
+
+        // Replace text goes to the focused replace input; Enter = replace one.
+        let replacement = post_command(d, "imgui_key_type", JV((text = "zzdone")))
+        t |> success(replacement != null, "replacement text accepted")
+        t |> success(wait_for_key_idle(d, 6.0f), "replacement typing drains")
+        key_tap(d, int(ImGuiKey.Enter))
+        t |> success(wait_for_key_idle(d, 6.0f), "Enter drains")
+        var replaced_one = wait_until_sec(d, 10.0f) $(var snap) {
+            let line = find_widget(snap, EDIT_TARGET)?["payload"]?["lines"]?[5] ?? ""
+            return line == "zzdone zzfind zzfind"
+        }
+        t |> success(replaced_one != null, "Enter replaces exactly the current match")
+
+        // Ctrl+Alt+Enter = replace all remaining matches.
+        key_chord_tap(d, ["Ctrl", "Alt"], int(ImGuiKey.Enter))
+        t |> success(wait_for_key_idle(d, 6.0f), "Ctrl+Alt+Enter drains")
+        var replaced_all = wait_until_sec(d, 10.0f) $(var snap) {
+            let line = find_widget(snap, EDIT_TARGET)?["payload"]?["lines"]?[5] ?? ""
+            return line == "zzdone zzdone zzdone"
+        }
+        t |> success(replaced_all != null, "replace-all rewrites the remaining matches")
+
+        // Escape closes the bar; the editor takes chords again; ONE undo
+        // reverts the whole replace-all.
+        key_tap(d, int(ImGuiKey.Escape))
+        t |> success(wait_for_key_idle(d, 6.0f), "Escape drains")
+        key_chord_tap(d, ["Ctrl"], int(ImGuiKey.Z))
+        t |> success(wait_for_key_idle(d, 6.0f), "Ctrl+Z drains")
+        var undone = wait_until_sec(d, 10.0f) $(var snap) {
+            let line = find_widget(snap, EDIT_TARGET)?["payload"]?["lines"]?[5] ?? ""
+            return line == "zzdone zzfind zzfind"
+        }
+        t |> success(undone != null, "one undo reverts the whole replace-all")
+    }
+}

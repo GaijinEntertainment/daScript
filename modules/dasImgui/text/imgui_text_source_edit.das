@@ -1,6 +1,9 @@
 options gen2
 options _comment_hygiene = true
 options indenting = 4
+// custom-widget layer: raw drawlist/ID-stack by design (same as the view);
+// the find-bar require pulls imgui_lint into this chain, hence the opt-out
+options _allow_imgui_legacy = true
 
 module imgui_text_source_edit shared
 
@@ -8,6 +11,7 @@ require imgui public
 require imgui/imgui_boost_runtime public
 require imgui/imgui_text_source_view public
 require imgui/imgui_text_flow public
+require imgui/imgui_text_find public
 require imgui/imgui_commands public
 require clipboard/clipboard
 require math
@@ -52,6 +56,14 @@ struct public TextEditUndoUnit {
     end_column : int
 }
 
+struct public TextEditRange {
+    //! Ordered (start <= end) line/byte-column selection range.
+    start_line : int
+    start_column : int
+    end_line : int
+    end_column : int
+}
+
 struct public TextEditState {
     lines : array<string>
     crlf : bool = false
@@ -85,6 +97,8 @@ struct public TextEditState {
     undo_open : bool = false
     //! Viewport scroll request in lines (Ctrl+Up/Down); caret stays put.
     pending_scroll_lines : int = 0
+    //! Host-fed ranges painted under the text (find matches); keep ascending.
+    highlight_ranges : array<TextEditRange>
     // widget layout cache + per-draw stamps for live inspection
     layout_revision : int = -1
     max_line_bytes : int = 0
@@ -98,18 +112,11 @@ struct public TextEditResult {
     cursor_moved : bool
 }
 
-struct public TextEditRange {
-    //! Ordered (start <= end) line/byte-column selection range.
-    start_line : int
-    start_column : int
-    end_line : int
-    end_column : int
-}
-
 def public text_edit_dispose(var ed : TextEditState) {
     delete ed.lines
     delete ed.undo_stack
     delete ed.redo_stack
+    delete ed.highlight_ranges
     ed = TextEditState()
 }
 
@@ -131,6 +138,7 @@ def public text_edit_load(var ed : TextEditState; source : string) {
     // incremental programmatic edit participates).
     delete ed.undo_stack
     delete ed.redo_stack
+    delete ed.highlight_ranges
     ed.undo_open = false
     ed.dirty = false
     ed.revision++
@@ -139,6 +147,35 @@ def public text_edit_load(var ed : TextEditState; source : string) {
 
 def public text_edit_source(ed : TextEditState const) : string {
     return join(ed.lines, ed.crlf ? "\r\n" : "\n")
+}
+
+def public text_edit_text(ed : TextEditState const) : string {
+    //! LF-joined buffer text — the search / byte-mapping domain
+    //! (`text_edit_source` keeps the file's CRLF flavor for saving).
+    return join(ed.lines, "\n")
+}
+
+def public text_edit_position_of_byte(ed : TextEditState const;
+                                      byte_offset : int) : int2 {
+    //! Map a byte offset in the LF-joined text (`text_edit_text` domain) to
+    //! (line, column); out-of-range offsets clamp to the buffer ends.
+    return int2(0, 0) if (empty(ed.lines))
+    var remaining = max(byte_offset, 0)
+    for (index in range(length(ed.lines))) {
+        let line_length = length(ed.lines[index])
+        return int2(index, remaining) if (remaining <= line_length)
+        remaining -= line_length + 1
+    }
+    let last = length(ed.lines) - 1
+    return int2(last, length(ed.lines[last]))
+}
+
+def public text_edit_range_of_bytes(ed : TextEditState const;
+                                    start_byte, end_byte : int) : TextEditRange {
+    let head = text_edit_position_of_byte(ed, start_byte)
+    let tail = text_edit_position_of_byte(ed, max(end_byte, start_byte))
+    return TextEditRange(start_line = head.x, start_column = head.y,
+        end_line = tail.x, end_column = tail.y)
 }
 
 def public text_edit_line_count(ed : TextEditState const) : int {
@@ -1155,6 +1192,201 @@ def public text_edit_tab(var ed : TextEditState) {
     text_edit_insert(ed, "\t")
 }
 
+// ===== Find / replace =====
+
+def public text_edit_replace_range(var ed : TextEditState; span : TextEditRange;
+                                   text : string) {
+    //! Replace an ordered range with `text` as ONE undo unit (kind `other`
+    //! self-fences); the cursor lands after the inserted text.
+    ensure_line(ed)
+    let normalized = replace(replace(text, "\r\n", "\n"), "\r", "\n")
+    commit_edit(ed, TextEditUndoKind.other, span.start_line, span.start_column,
+        text_edit_range_text(ed, span), normalized)
+}
+
+def public text_edit_replace_all(var ed : TextEditState;
+                                 spans : array<TextEditRange>;
+                                 texts : array<string>) : int {
+    //! Replace every span (ascending, non-overlapping) with its text as ONE
+    //! undo unit — one undo reverts the whole replace-all. Returns the count.
+    ensure_line(ed)
+    let count_ = min(length(spans), length(texts))
+    return 0 if (count_ == 0)
+    delete ed.redo_stack
+    var unit = TextEditUndoUnit(kind = TextEditUndoKind.other,
+        before_cursor_line = ed.cursor_line, before_cursor_column = ed.cursor_column,
+        before_anchor_line = ed.anchor_line, before_anchor_column = ed.anchor_column)
+    ed.undo_stack |> emplace(unit)
+    let unit_index = length(ed.undo_stack) - 1
+    // back to front, so earlier spans stay valid while later ones change
+    var index = count_ - 1
+    while (index >= 0) {
+        let span = spans[index]
+        let inserted = replace(replace(texts[index], "\r\n", "\n"), "\r", "\n")
+        ed.undo_stack[unit_index].ops |> push(TextEditUndoOp(
+            line = span.start_line, column = span.start_column,
+            removed = text_edit_range_text(ed, span), inserted = inserted))
+        remove_range_raw(ed, span)
+        let _ = insert_raw(ed, span.start_line, span.start_column, inserted)
+        index--
+    }
+    text_edit_clear_selection(ed)
+    ed.cursor_line = clamp(ed.cursor_line, 0, length(ed.lines) - 1)
+    ed.cursor_column = clamp(ed.cursor_column, 0, length(ed.lines[ed.cursor_line]))
+    var last & = unsafe(ed.undo_stack[unit_index])
+    last.after_cursor_line = ed.cursor_line
+    last.after_cursor_column = ed.cursor_column
+    last.end_line = ed.cursor_line
+    last.end_column = ed.cursor_column
+    ed.undo_open = false
+    touch_edit(ed)
+    return count_
+}
+
+def public text_edit_set_highlights(var ed : TextEditState;
+                                    spans : array<TextEditRange>) {
+    //! Ranges painted under the text (find matches); keep them ascending.
+    delete ed.highlight_ranges
+    ed.highlight_ranges := spans
+}
+
+def public text_edit_clear_highlights(var ed : TextEditState) {
+    delete ed.highlight_ranges
+}
+
+def private refresh_find_highlights(var ed : TextEditState;
+                                    find : TextFindState const) {
+    var spans : array<TextEditRange>
+    spans |> reserve(length(find.matches))
+    for (matched in find.matches) {
+        spans |> push(text_edit_range_of_bytes(ed, matched.start_byte,
+            matched.end_byte))
+    }
+    delete ed.highlight_ranges
+    ed.highlight_ranges <- spans
+}
+
+def private apply_replace_current(var ed : TextEditState;
+                                  var find : TextFindState) : bool {
+    let found = text_find_current(find)
+    return false if (found.start_byte < 0)
+    var inscope texts : array<string>
+    text_find_replacements(find, text_edit_text(ed), texts)
+    let inserted = (find.current >= 0 && find.current < length(texts)
+        ? texts[find.current] : find.replace_text)
+    text_edit_replace_range(ed,
+        text_edit_range_of_bytes(ed, found.start_byte, found.end_byte), inserted)
+    // resume PAST the insertion so a self-matching replacement cannot pin here
+    let resume = found.start_byte + length(inserted)
+    let _ = text_find_rebuild(find, text_edit_text(ed), ed.revision)
+    if (!empty(find.matches)) {
+        var pick = 0
+        for (index in range(length(find.matches))) {
+            if (find.matches[index].start_byte >= resume) {
+                pick = index
+                break
+            }
+        }
+        find.current = pick
+        find.jump_revision++
+    }
+    return true
+}
+
+def private apply_replace_all(var ed : TextEditState;
+                              var find : TextFindState) : bool {
+    return false if (empty(find.matches))
+    let source = text_edit_text(ed)
+    var inscope texts : array<string>
+    text_find_replacements(find, source, texts)
+    var inscope spans : array<TextEditRange>
+    spans |> reserve(length(find.matches))
+    for (matched in find.matches) {
+        spans |> push(text_edit_range_of_bytes(ed, matched.start_byte,
+            matched.end_byte))
+    }
+    let _ = text_edit_replace_all(ed, spans, texts)
+    let _rebuilt = text_find_rebuild(find, text_edit_text(ed), ed.revision)
+    return true
+}
+
+def public text_edit_find_sync(var ed : TextEditState; var find : TextFindState) {
+    //! Per-frame glue between a buffer and its find/replace bar: rebuild on
+    //! change, apply replace requests through the undo journal (replace-all =
+    //! ONE undo unit), select the current match, refresh highlights. Pure state.
+    if (!find.open) {
+        text_edit_clear_highlights(ed)
+        return
+    }
+    var changed = false
+    if (text_find_needs_rebuild(find, ed.revision)) {
+        let _ = text_find_rebuild(find, text_edit_text(ed), ed.revision)
+        changed = true
+    }
+    if (find.replace_revision != find.applied_replace_revision) {
+        find.applied_replace_revision = find.replace_revision
+        changed = apply_replace_current(ed, find) || changed
+    }
+    if (find.replace_all_revision != find.applied_replace_all_revision) {
+        find.applied_replace_all_revision = find.replace_all_revision
+        changed = apply_replace_all(ed, find) || changed
+    }
+    if (find.jump_revision != find.applied_jump_revision) {
+        find.applied_jump_revision = find.jump_revision
+        let found = text_find_current(find)
+        if (found.start_byte >= 0) {
+            let span = text_edit_range_of_bytes(ed, found.start_byte,
+                found.end_byte)
+            text_edit_select(ed, span.start_line, span.start_column,
+                span.end_line, span.end_column)
+        }
+    }
+    if (changed || (empty(ed.highlight_ranges) && !empty(find.matches))) {
+        refresh_find_highlights(ed, find)
+    }
+}
+
+def private seed_find_from_selection(ed : TextEditState const;
+                                     var find : TextFindState) {
+    // VS Code seeds the query from a single-line selection
+    return if (!text_edit_has_selection(ed))
+    let sel = text_edit_selection(ed)
+    return if (sel.start_line != sel.end_line)
+    let text = text_edit_range_text(ed, sel)
+    return if (empty(text))
+    text_find_set_query(find, text, find.use_regex)
+}
+
+def private dispatch_find_command(ed : TextEditState;
+                                  var find : TextFindState; command_id : string) {
+    if (command_id == "find.open") {
+        seed_find_from_selection(ed, find)
+        text_find_open(find)
+    } elif (command_id == "find.replace") {
+        seed_find_from_selection(ed, find)
+        text_find_open_replace(find)
+    } elif (command_id == "find.next") {
+        text_find_step(find, 1)
+    } elif (command_id == "find.prev") {
+        text_find_step(find, -1)
+    } elif (command_id == "find.close") {
+        text_find_close(find)
+    }
+}
+
+def public text_edit_find_sync(var ed : TextEditState; var find : TextFindState;
+                               var registry : CommandRegistry) {
+    //! Registry variant: first drains the `find.` invocations queued by the
+    //! editor's component-scope poll (open / replace / next / prev / close),
+    //! then runs the pure sync.
+    var invocation = CommandInvocation()
+    while (command_take_prefix(registry, "find.", invocation)) {
+        dispatch_find_command(ed, find, invocation.command_id)
+    }
+    command_set_enabled(registry, "find.close", find.open)
+    text_edit_find_sync(ed, find)
+}
+
 def public text_edit_expand_line_selection(var ed : TextEditState) {
     //! Ctrl+L: select the current line incl. newline; repeat extends a line.
     ensure_line(ed)
@@ -1511,6 +1743,7 @@ def private draw_edit_content(var ed : TextEditState; m : EditMetrics;
         0, draw_count - 1)
     let io & = unsafe(GetIO())
     ed.blink_time += io.DeltaTime
+    draw_edit_highlights(ed, m, style, font, dl, first_visible, last_visible)
     let has_selection = text_edit_has_selection(ed)
     let sel = text_edit_selection(ed)
     for (row in range(first_visible, last_visible + 1)) {
@@ -1566,6 +1799,32 @@ def private draw_edit_content(var ed : TextEditState; m : EditMetrics;
         *dl |> AddRectFilled(float2(caret_x, caret_y),
             float2(caret_x + caret_width, caret_y + m.line_height),
             GetColorU32(caret_color), 0.0f, ImDrawFlags.None)
+    }
+}
+
+def private draw_edit_highlights(ed : TextEditState const; m : EditMetrics;
+                                 style : TextSourceViewStyle const;
+                                 var font : ImFont?; var dl : ImDrawList?;
+                                 first_visible, last_visible : int) {
+    return if (empty(ed.highlight_ranges))
+    let color = GetColorU32(style.match_color)
+    for (span in ed.highlight_ranges) {
+        continue if (span.end_line < first_visible)
+        break if (span.start_line > last_visible)
+        for (row in range(max(span.start_line, first_visible),
+                min(span.end_line, last_visible) + 1)) {
+            let row_line = ed.lines[row]
+            let from_column = row == span.start_line ? span.start_column : 0
+            let to_column = row == span.end_line ? span.end_column : length(row_line)
+            let x0 = (m.gutter_space + text_source_range_width(row_line, 0,
+                from_column, font, m.font_size, m.cell_width, style.tab_cells))
+            let x1 = (m.gutter_space + text_source_range_width(row_line, 0,
+                to_column, font, m.font_size, m.cell_width, style.tab_cells))
+            let row_top = m.origin.y + float(row) * m.line_height
+            *dl |> AddRectFilled(float2(m.origin.x + x0, row_top),
+                float2(m.origin.x + max(x1, x0 + 2.0f), row_top + m.line_height),
+                color, 0.0f, ImDrawFlags.None)
+        }
     }
 }
 
@@ -1680,6 +1939,19 @@ def private edit_define_nav(var registry : CommandRegistry; id, title : string;
 def public text_edit_register_commands(var registry : CommandRegistry) { // nolint:STYLE038
     //! Register the editor verb surface as rebindable commands with the spec
     //! defaults (VS Code chords, CUA alternates, numpad twins). Idempotent.
+    // find.close registers BEFORE edit.cancel: the Escape chain closes the bar first
+    edit_define(registry, "find.close", "Close find",
+        edit_binding("find.close", ImGuiKey.Escape, ImGuiKey.None,
+            false, false, false))
+    command_set_enabled(registry, "find.close", false)
+    edit_define(registry, "find.open", "Find",
+        edit_binding("find.open", ImGuiKey.F, ImGuiKey.None, true, false, false))
+    edit_define(registry, "find.replace", "Replace",
+        edit_binding("find.replace", ImGuiKey.H, ImGuiKey.None, true, false, false))
+    edit_define(registry, "find.next", "Find next",
+        edit_binding("find.next", ImGuiKey.F3, ImGuiKey.None, false, false, true))
+    edit_define(registry, "find.prev", "Find previous",
+        edit_binding("find.prev", ImGuiKey.F3, ImGuiKey.None, false, true, true))
     edit_define_nav(registry, "edit.cursor_left", "Cursor left",
         ImGuiKey.LeftArrow, ImGuiKey.Keypad4)
     edit_define_nav(registry, "edit.cursor_right", "Cursor right",

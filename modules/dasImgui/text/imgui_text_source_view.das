@@ -59,6 +59,7 @@ struct public TextSourceViewStyle {
     syntax_operator_color : float4 = float4(0.76f, 0.78f, 0.82f, 1.0f)
     syntax_punctuation_color : float4 = float4(0.62f, 0.65f, 0.70f, 1.0f)
     selection_color : float4 = float4(0.24f, 0.48f, 0.78f, 0.55f)
+    match_color : float4 = float4(0.97f, 0.76f, 0.34f, 0.28f)
     caret_color : float4 = float4(0.92f, 0.92f, 0.94f, 1.0f)
     current_line_color : float4 = float4(1.0f, 1.0f, 1.0f, 0.045f)
     added_line_color : float4 = float4(0.20f, 0.72f, 0.38f, 0.92f)

@@ -93,3 +93,75 @@ def test_find_reopen_rearms_jump(t : T?) {
     t |> equal(state.jump_revision, jump_before + 1, "open while already open does not re-arm")
     text_find_dispose(state)
 }
+
+[test]
+def test_find_replace_requests_and_open(t : T?) {
+    var state = TextFindState()
+    text_find_open_replace(state)
+    t |> success(state.open && state.replace_open, "Ctrl+H opens both rows")
+    t |> success(state.replace_focus_pending, "focus heads for the replace input")
+    t |> success(!state.focus_pending, "the find input does not steal it")
+    text_find_request_replace(state)
+    text_find_request_replace_all(state)
+    t |> equal(state.replace_revision, 1, "replace-one request counts")
+    t |> equal(state.replace_all_revision, 1, "replace-all request counts")
+    text_find_set_replace(state, "next")
+    t |> equal(state.replace_text, "next", "programmatic replace text lands")
+    t |> success(state.pending_replace_valid, "widget sync is armed")
+    text_find_dispose(state)
+}
+
+[test]
+def test_find_replacements_literal(t : T?) {
+    var state = TextFindState()
+    state.query = "aa"
+    state.replace_text = "$1"
+    let _ = text_find_rebuild(state, "aa..aa", 1)
+    var texts : array<string>
+    text_find_replacements(state, "aa..aa", texts)
+    t |> equal(length(texts), 2, "one replacement per match")
+    t |> equal(texts[0], "$1", "literal mode never expands templates")
+    delete texts
+    text_find_dispose(state)
+}
+
+[test]
+def test_find_replacements_regex_templates(t : T?) {
+    var state = TextFindState()
+    state.use_regex = true
+    state.query = "(\\w+)-(\\w+)"
+    let source = "foo-bar baz-qux"
+    let _ = text_find_rebuild(state, source, 1)
+    t |> equal(length(state.matches), 2, "regex matches both pairs")
+    var texts : array<string>
+    state.replace_text = "$2_$1"
+    text_find_replacements(state, source, texts)
+    t |> equal(texts[0], "bar_foo", "numbered groups expand per match")
+    t |> equal(texts[1], "qux_baz", "second match expands with ITS groups")
+    state.replace_text = "[$&] costs $$5 $\{2\}"
+    text_find_replacements(state, source, texts)
+    t |> equal(texts[0], "[foo-bar] costs $5 bar",
+        "whole match, literal dollar, and brace groups all expand")
+    state.replace_text = "$5x"
+    text_find_replacements(state, source, texts)
+    t |> equal(texts[0], "x", "out-of-range groups expand to nothing")
+    delete texts
+    text_find_dispose(state)
+}
+
+[test]
+def test_find_replacements_named_groups(t : T?) {
+    var state = TextFindState()
+    state.use_regex = true
+    state.query = "(?P<key>\\w+)=(?P<val>\\w+)"
+    let source = "a=1 b=2"
+    let _ = text_find_rebuild(state, source, 1)
+    t |> equal(length(state.matches), 2, "regex matches both assignments")
+    var texts : array<string>
+    state.replace_text = "$\{val\}:$\{key\}"
+    text_find_replacements(state, source, texts)
+    t |> equal(texts[0], "1:a", "named groups expand")
+    t |> equal(texts[1], "2:b", "named groups track each match")
+    delete texts
+    text_find_dispose(state)
+}

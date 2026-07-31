@@ -599,3 +599,148 @@ def test_vertical_moves_are_tab_visual(t : T?) {
     t |> equal(text_edit_selected_text(ed), "\nabcde", "selection spans the visual landing")
     text_edit_dispose(ed)
 }
+
+[test]
+def test_edit_byte_mapping(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "ab\r\ncd\r\né")
+    t |> equal(text_edit_text(ed), "ab\ncd\né", "text_edit_text joins with LF regardless of flavor")
+    var at = text_edit_position_of_byte(ed, 0)
+    t |> equal(at, int2(0, 0), "offset 0 is the buffer start")
+    at = text_edit_position_of_byte(ed, 2)
+    t |> equal(at, int2(0, 2), "offset at a line end stays on that line")
+    at = text_edit_position_of_byte(ed, 3)
+    t |> equal(at, int2(1, 0), "offset past the newline starts the next line")
+    at = text_edit_position_of_byte(ed, 6)
+    t |> equal(at, int2(2, 0), "offsets count LF newlines as one byte")
+    at = text_edit_position_of_byte(ed, 100)
+    t |> equal(at, int2(2, 2), "past-the-end offsets clamp to the buffer end")
+    let span = text_edit_range_of_bytes(ed, 1, 4)
+    t |> equal(span.start_line, 0, "range start maps by byte")
+    t |> equal(span.start_column, 1, "range start column maps by byte")
+    t |> equal(span.end_line, 1, "range end crosses the newline")
+    t |> equal(span.end_column, 1, "range end column maps by byte")
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_edit_replace_range_undo(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "hello world")
+    text_edit_replace_range(ed, text_edit_range_of_bytes(ed, 6, 11), "das")
+    t |> equal(text_edit_source(ed), "hello das", "replace swaps the range text")
+    t |> equal(ed.cursor_column, 9, "cursor lands after the inserted text")
+    t |> success(text_edit_undo(ed), "replace undoes")
+    t |> equal(text_edit_source(ed), "hello world", "undo restores the original")
+    t |> equal(ed.cursor_column, 0, "undo restores the pre-replace cursor")
+    t |> success(text_edit_redo(ed), "replace redoes")
+    t |> equal(text_edit_source(ed), "hello das", "redo reapplies the replacement")
+    // multi-line span replaced by multi-line text
+    text_edit_load(ed, "aa\nbb\ncc")
+    text_edit_replace_range(ed, TextEditRange(start_line = 0, start_column = 1,
+        end_line = 2, end_column = 1), "X\nY")
+    t |> equal(text_edit_source(ed), "aX\nYc", "multi-line replace splices lines")
+    t |> success(text_edit_undo(ed), "multi-line replace undoes")
+    t |> equal(text_edit_source(ed), "aa\nbb\ncc", "undo restores the multi-line original")
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_edit_replace_all_is_one_undo_unit(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "one two one\nthree one")
+    var spans <- [text_edit_range_of_bytes(ed, 0, 3),
+        text_edit_range_of_bytes(ed, 8, 11),
+        text_edit_range_of_bytes(ed, 18, 21)]
+    var texts <- ["first", "1", "1"]
+    t |> equal(text_edit_replace_all(ed, spans, texts), 3, "replace-all reports the count")
+    t |> equal(text_edit_source(ed), "first two 1\nthree 1",
+        "replacements land back-to-front so earlier spans stay valid")
+    t |> success(text_edit_undo(ed), "replace-all undoes")
+    t |> equal(text_edit_source(ed), "one two one\nthree one",
+        "ONE undo reverts the whole replace-all")
+    t |> success(!text_edit_can_undo(ed), "replace-all was a single undo unit")
+    t |> success(text_edit_redo(ed), "replace-all redoes")
+    t |> equal(text_edit_source(ed), "first two 1\nthree 1",
+        "ONE redo reapplies the whole replace-all")
+    delete spans
+    delete texts
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_edit_find_sync_flow(t : T?) {
+    var ed = TextEditState()
+    var find = TextFindState()
+    text_edit_load(ed, "alpha beta\ngamma alpha\nalpha")
+    text_find_set_query(find, "alpha", false)
+    text_edit_find_sync(ed, find)
+    t |> equal(length(find.matches), 3, "sync rebuilds matches from the buffer")
+    t |> equal(length(ed.highlight_ranges), 3, "every match paints a highlight")
+    var sel = text_edit_selection(ed)
+    t |> equal(sel.start_line, 0, "the current match is selected")
+    t |> equal(sel.end_column, 5, "selection covers the match")
+    text_find_step(find, 1)
+    text_edit_find_sync(ed, find)
+    sel = text_edit_selection(ed)
+    t |> equal(sel.start_line, 1, "stepping jumps the selection to the next match")
+    t |> equal(sel.start_column, 6, "the second match starts after 'gamma '")
+    text_find_set_replace(find, "X")
+    text_find_request_replace(find)
+    text_edit_find_sync(ed, find)
+    t |> equal(text_edit_source(ed), "alpha beta\ngamma X\nalpha",
+        "replace-one rewrites only the current match")
+    t |> equal(length(find.matches), 2, "matches recompute after the replace")
+    sel = text_edit_selection(ed)
+    t |> equal(sel.start_line, 2, "replace-one advances to the next match")
+    text_find_request_replace_all(find)
+    text_edit_find_sync(ed, find)
+    t |> equal(text_edit_source(ed), "X beta\ngamma X\nX",
+        "replace-all rewrites every remaining match")
+    t |> success(text_edit_undo(ed), "replace-all undoes")
+    t |> equal(text_edit_source(ed), "alpha beta\ngamma X\nalpha",
+        "one undo reverts only the replace-all unit")
+    text_find_close(find)
+    text_edit_find_sync(ed, find)
+    t |> equal(length(ed.highlight_ranges), 0, "closing find clears the highlights")
+    text_find_dispose(find)
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_edit_find_sync_no_replace_loop(t : T?) {
+    var ed = TextEditState()
+    var find = TextFindState()
+    text_edit_load(ed, "a b a")
+    text_find_set_query(find, "a", false)
+    text_find_set_replace(find, "aa")
+    text_edit_find_sync(ed, find)
+    t |> equal(length(find.matches), 2, "two single-letter matches")
+    text_find_request_replace(find)
+    text_edit_find_sync(ed, find)
+    t |> equal(text_edit_source(ed), "aa b a", "first match replaced")
+    let current = text_find_current(find)
+    t |> equal(current.start_byte, 5,
+        "replace-one resumes PAST its own insertion, not on it")
+    text_find_dispose(find)
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_edit_find_sync_regex_groups(t : T?) {
+    var ed = TextEditState()
+    var find = TextFindState()
+    text_edit_load(ed, "foo-bar baz-qux")
+    text_find_set_query(find, "(\\w+)-(\\w+)", true)
+    text_find_set_replace(find, "$2_$1")
+    text_edit_find_sync(ed, find)
+    t |> equal(length(find.matches), 2, "regex matches both pairs")
+    text_find_request_replace_all(find)
+    text_edit_find_sync(ed, find)
+    t |> equal(text_edit_source(ed), "bar_foo qux_baz",
+        "group templates expand per match")
+    t |> success(text_edit_undo(ed), "regex replace-all undoes")
+    t |> equal(text_edit_source(ed), "foo-bar baz-qux", "one undo restores it")
+    text_find_dispose(find)
+    text_edit_dispose(ed)
+}
