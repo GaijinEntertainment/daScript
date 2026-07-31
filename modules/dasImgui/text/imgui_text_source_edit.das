@@ -965,6 +965,7 @@ def public text_edit_type(var ed : TextEditState; text : string) {
     //! at the line end. Selections are replaced normally either way.
     return if (empty(text))
     ensure_line(ed)
+    ed.input_revision++
     return if (closer_dedents(ed, text))
     if (ed.overtype && !text_edit_has_selection(ed) && find(text, "\n") < 0) {
         let line = ed.lines[ed.cursor_line]
@@ -1893,7 +1894,6 @@ def private drain_typed_chars(var ed : TextEditState) : bool {
             let codepoint = int(value)
             if (codepoint >= 0x20 && codepoint != 0x7f && codepoint <= 0x10ffff) {
                 text_edit_type(ed, codepoint_utf8(codepoint))
-                ed.input_revision++
                 typed_chars = true
             }
         }

@@ -11,9 +11,11 @@ require imgui/imgui_text_edit_provider_das
 def test_complete_document_words_ghost(t : T?) {
     var ed = TextEditState()
     var comp = TextEditCompletion()
-    text_edit_load(ed, "greeting greeting grease\ngre")
+    text_edit_load(ed, "greeting greeting grease\ngr")
     text_edit_set_language(ed, "das")
     text_edit_move_document_end(ed)
+    text_edit_complete_sync(ed, comp) // baseline: syncs run per frame
+    text_edit_type(ed, "e")
     text_edit_complete_sync(ed, comp)
     t |> equal(comp.prefix, "gre", "the word before the caret is the prefix")
     t |> equal(ed.ghost_text, "eting", "the most frequent word wins the ghost")
@@ -34,15 +36,19 @@ def test_complete_document_words_ghost(t : T?) {
 def test_complete_keywords_and_kill_switch(t : T?) {
     var ed = TextEditState()
     var comp = TextEditCompletion()
-    text_edit_load(ed, "ret")
+    text_edit_load(ed, "re")
     text_edit_set_language(ed, "das")
     text_edit_move_end(ed)
     text_edit_complete_sync(ed, comp)
+    text_edit_type(ed, "t")
+    text_edit_complete_sync(ed, comp)
     t |> equal(ed.ghost_text, "urn", "profile keywords complete too")
     // plain profile has the ghost kill switch on
-    text_edit_load(ed, "returned ret")
+    text_edit_load(ed, "returned re")
     text_edit_set_language(ed, "txt")
     text_edit_move_end(ed)
+    text_edit_complete_sync(ed, comp)
+    text_edit_type(ed, "t")
     text_edit_complete_sync(ed, comp)
     t |> success(empty(ed.ghost_text), "plain text never ghosts")
     text_edit_complete_dispose(comp)
@@ -53,9 +59,11 @@ def test_complete_keywords_and_kill_switch(t : T?) {
 def test_complete_list_flow(t : T?) {
     var ed = TextEditState()
     var comp = TextEditCompletion()
-    text_edit_load(ed, "grease greet greed\ngre")
+    text_edit_load(ed, "grease greet greed\ngr")
     text_edit_set_language(ed, "das")
     text_edit_move_document_end(ed)
+    text_edit_complete_sync(ed, comp)
+    text_edit_type(ed, "e")
     text_edit_complete_sync(ed, comp)
     t |> success(!ed.list_open, "the list waits for the idle delay")
     ed.syntax_idle = 1.0f
@@ -83,12 +91,45 @@ def test_complete_list_flow(t : T?) {
 }
 
 [test]
+def test_complete_navigation_stays_silent(t : T?) {
+    // Boris's live catch: arrowing into a word must not ghost or pop the
+    // list - only TYPED requests offer.
+    var ed = TextEditState()
+    var comp = TextEditCompletion()
+    text_edit_load(ed, "grease greet greed\ngrease again")
+    text_edit_set_language(ed, "das")
+    text_edit_set_cursor(ed, 1, 3) // mid-word, by navigation
+    ed.syntax_idle = 10.0f // long-idle buffer, the old failure mode
+    text_edit_complete_sync(ed, comp)
+    t |> success(empty(ed.ghost_text), "no ghost from navigation")
+    t |> success(!ed.list_open, "no list from navigation")
+    text_edit_complete_sync(ed, comp)
+    t |> success(!ed.list_open, "the idle clock alone never opens it")
+    // navigating right after a dot is quiet too
+    text_edit_load(ed, "foo bar\nfoo.")
+    text_edit_set_language(ed, "das")
+    text_edit_move_document_end(ed)
+    ed.syntax_idle = 10.0f
+    text_edit_complete_sync(ed, comp)
+    t |> success(!ed.list_open, "navigating to a dot does not trigger")
+    // typing still offers
+    text_edit_set_cursor(ed, 0, 0)
+    text_edit_type(ed, "f")
+    text_edit_complete_sync(ed, comp)
+    t |> success(!empty(ed.ghost_text), "typing ghosts as before")
+    text_edit_complete_dispose(comp)
+    text_edit_dispose(ed)
+}
+
+[test]
 def test_complete_explicit_dot_trigger(t : T?) {
     var ed = TextEditState()
     var comp = TextEditCompletion()
-    text_edit_load(ed, "foo bar baz\nfoo.")
+    text_edit_load(ed, "foo bar baz\nfoo")
     text_edit_set_language(ed, "das")
     text_edit_move_document_end(ed)
+    text_edit_complete_sync(ed, comp)
+    text_edit_type(ed, ".")
     text_edit_complete_sync(ed, comp)
     t |> success(ed.list_open, "a dot opens the list immediately")
     t |> success(length(ed.list_items) >= 3, "all document words offer after the dot")
@@ -110,6 +151,7 @@ def test_das_provider_compiles_symbols(t : T?) {
     comp.token = 5
     comp.request_revision = ed.revision
     comp.prefix = "alp"
+    comp.typed = true
     text_edit_das_provider_sync(ed, comp, provider)
     t |> equal(provider.sent_token, 5, "the worker got the request")
     var found = false
@@ -133,9 +175,11 @@ def test_das_provider_compiles_symbols(t : T?) {
 def test_complete_offer_token_contract(t : T?) {
     var ed = TextEditState()
     var comp = TextEditCompletion()
-    text_edit_load(ed, "alp")
+    text_edit_load(ed, "al")
     text_edit_set_language(ed, "das")
     text_edit_move_end(ed)
+    text_edit_complete_sync(ed, comp)
+    text_edit_type(ed, "p")
     text_edit_complete_sync(ed, comp)
     let live_token = comp.token
     var inscope stale <- ["alpine"]

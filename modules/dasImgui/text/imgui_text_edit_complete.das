@@ -28,6 +28,11 @@ struct public TextEditCompletion {
     //! The request came from an explicit trigger (`.`): the list opens
     //! immediately instead of waiting for the idle delay.
     explicit_trigger : bool = false
+    //! input_revision at the previous sync; a request only ghosts /
+    //! auto-opens when born from TYPING between two syncs - navigating
+    //! into a word offers nothing. -1 = no sync seen yet.
+    seen_input : int = -1
+    typed : bool = false
 }
 
 //! Idle seconds before the candidate LIST pops (the ghost is instant).
@@ -131,6 +136,10 @@ def private refresh_list(var ed : TextEditState; comp : TextEditCompletion const
 }
 
 def private refresh_ghost(var ed : TextEditState; comp : TextEditCompletion const) {
+    if (!comp.typed) {
+        text_edit_set_ghost(ed, "")
+        return
+    }
     var ghost = ""
     for (item in comp.items) {
         if (item != comp.prefix && starts_with(item, comp.prefix)) {
@@ -161,6 +170,8 @@ def public text_edit_complete_sync(var ed : TextEditState;
     //! Frame tick: re-request when the caret/buffer moved, run the built-in
     //! document-words + profile-keywords provider, refresh the ghost. Hosts
     //! with async providers kick them off when this bumps `comp.token`.
+    let typed_now = comp.seen_input >= 0 && ed.input_revision != comp.seen_input
+    comp.seen_input = ed.input_revision
     var enabled = false
     if (!empty(ed.language)) {
         text_language_profile(ed.language) $(profile) {
@@ -179,19 +190,20 @@ def public text_edit_complete_sync(var ed : TextEditState;
     if (comp.request_revision == ed.revision
             && comp.request_line == ed.cursor_line
             && comp.request_column == ed.cursor_column && comp.prefix == prefix) {
-        // unchanged request: the list still pops once the caret sits idle
-        if (!ed.list_open && length(comp.items) > 1
+        // unchanged TYPED request: the list still pops once the caret idles
+        if (comp.typed && !ed.list_open && length(comp.items) > 1
                 && ed.syntax_idle >= TEXT_EDIT_LIST_DELAY) {
             refresh_list(ed, comp, true)
         }
         return
     }
     comp.token++
+    comp.typed = typed_now
     comp.request_revision = ed.revision
     comp.request_line = ed.cursor_line
     comp.request_column = ed.cursor_column
     comp.prefix = prefix
-    comp.explicit_trigger = explicit_point
+    comp.explicit_trigger = explicit_point && comp.typed
     delete comp.items
     var inscope words : array<string>
     collect_document_words(ed, prefix, words)
