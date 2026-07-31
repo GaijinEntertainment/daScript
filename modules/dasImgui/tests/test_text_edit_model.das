@@ -772,6 +772,37 @@ def test_edit_block_comment_carry(t : T?) {
 }
 
 [test]
+def test_edit_auto_indent_on_enter(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "def f() \{")
+    text_edit_set_language(ed, "das")
+    text_edit_move_end(ed)
+    text_edit_newline(ed)
+    t |> equal(ed.lines[1], "\t", "an unmatched opener indents the new line")
+    text_edit_insert(ed, "x = 1")
+    text_edit_newline(ed)
+    t |> equal(ed.lines[2], "\t", "a plain line carries its indentation")
+    // typing the closer on the fresh indented line dedents and lands it
+    text_edit_type(ed, "}")
+    t |> equal(ed.lines[2], "}", "the closer dedents its line")
+    t |> success(text_edit_undo(ed), "the dedent undoes")
+    t |> equal(ed.lines[2], "\t", "ONE undo removes the closer and restores indent")
+    // openers inside strings and comments do not count
+    text_edit_load(ed, "s = \"\{\" // \{")
+    text_edit_set_language(ed, "das")
+    text_edit_move_end(ed)
+    text_edit_newline(ed)
+    t |> equal(ed.lines[1], "", "braces in strings and comments never indent")
+    // markdown has no indent pairs: Enter stays plain
+    text_edit_load(ed, "\t- item \{")
+    text_edit_set_language(ed, "md")
+    text_edit_move_end(ed)
+    text_edit_newline(ed)
+    t |> equal(ed.lines[1], "", "markdown Enter does not auto-indent")
+    text_edit_dispose(ed)
+}
+
+[test]
 def test_edit_syntax_tracks_line_edits(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "def a\ndef b")

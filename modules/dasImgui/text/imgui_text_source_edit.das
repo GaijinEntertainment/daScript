@@ -808,12 +808,42 @@ def public text_edit_toggle_overtype(var ed : TextEditState) {
     ed.blink_time = 0.0f
 }
 
+def private closer_dedents(var ed : TextEditState; text : string) : bool {
+    // a closer typed at a whitespace-only line start dedents + lands, ONE unit
+    return false if (empty(ed.language) || length(text) != 1
+        || text_edit_has_selection(ed) || ed.cursor_column == 0)
+    let b = first_character(text)
+    let line = ed.lines[ed.cursor_line]
+    var handled = false
+    text_language_profile(ed.language) $(profile) {
+        var is_closer = false
+        for (pair in profile.indent_pairs) {
+            if (b == pair.y) {
+                is_closer = true
+            }
+        }
+        if (is_closer) {
+            let prefix = slice(line, 0, ed.cursor_column)
+            if (prefix == leading_whitespace(line)) {
+                let dedented = outdent_line(prefix)
+                if (dedented != prefix) {
+                    commit_edit(ed, TextEditUndoKind.other, ed.cursor_line, 0,
+                        prefix, dedented + text)
+                    handled = true
+                }
+            }
+        }
+    }
+    return handled
+}
+
 def public text_edit_type(var ed : TextEditState; text : string) {
     //! One typed keystroke: like insert, but honoring overtype mode —
     //! replaces the next grapheme within the line, falls back to inserting
     //! at the line end. Selections are replaced normally either way.
     return if (empty(text))
     ensure_line(ed)
+    return if (closer_dedents(ed, text))
     if (ed.overtype && !text_edit_has_selection(ed) && find(text, "\n") < 0) {
         let line = ed.lines[ed.cursor_line]
         if (ed.cursor_column < length(line)) {
@@ -826,11 +856,58 @@ def public text_edit_type(var ed : TextEditState; text : string) {
     text_edit_insert(ed, text)
 }
 
+def private run_covers(runs : array<TextEditStyleRun>; at : int) : bool {
+    // inside a comment/string run = not code (auto-indent must ignore it)
+    for (run in runs) {
+        continue if (run.style != TextSourceSyntaxStyle.comment
+            && run.style != TextSourceSyntaxStyle.string_)
+        return true if (at >= run.start_byte && at < run.end_byte)
+    }
+    return false
+}
+
+def private code_brace_delta(ed : TextEditState const;
+                             profile : TextLanguageProfile const;
+                             line_index, limit_column : int) : int {
+    var delta = 0
+    let has_runs = line_index < length(ed.line_styles)
+    peek_data(ed.lines[line_index]) $(bytes) {
+        for (at in range(min(limit_column, length(bytes)))) {
+            continue if (has_runs && run_covers(ed.line_styles[line_index].runs, at))
+            let b = int(bytes[at])
+            for (pair in profile.indent_pairs) {
+                if (b == pair.x) {
+                    delta++
+                } elif (b == pair.y) {
+                    delta = max(delta - 1, 0) // a closer never dedents PAST its line
+                }
+            }
+        }
+    }
+    return delta
+}
+
 def public text_edit_newline(var ed : TextEditState) {
-    // E4 grows auto-indent here. Enter fences the undo unit (spec: break
-    // BEFORE, so the following typing run coalesces on the new line).
+    //! Enter: split the line, carrying the indentation; an unmatched REAL
+    //! opener before the caret (comments/strings ignored) indents one deeper.
+    //! Fences the undo unit BEFORE, so typing coalesces on the new line.
     text_edit_push_undo_stop(ed)
-    text_edit_insert(ed, "\n")
+    ensure_line(ed)
+    var inserted = "\n"
+    if (!empty(ed.language)) {
+        let reference = text_edit_selection(ed)
+        text_language_profile(ed.language) $(profile) {
+            if (!empty(profile.indent_pairs)) {
+                var indent = leading_whitespace(ed.lines[reference.start_line])
+                if (code_brace_delta(ed, profile, reference.start_line,
+                        reference.start_column) > 0) {
+                    indent += "\t"
+                }
+                inserted = "\n" + indent
+            }
+        }
+    }
+    text_edit_insert(ed, inserted)
 }
 
 def public text_edit_backspace(var ed : TextEditState) {
