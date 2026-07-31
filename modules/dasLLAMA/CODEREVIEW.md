@@ -1,6 +1,6 @@
 # dasLLAMA Code Review Checklist
 
-Run this list on every dasLLAMA change before it ships.
+Run this list on every dasLLAMA change before it ships — including changes to this file.
 
 **What stays in this document:** criteria that can be checked against a diff. Nothing else.
 A reader must be able to apply every entry below **without reading the code, without prior
