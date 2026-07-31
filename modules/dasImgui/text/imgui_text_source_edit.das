@@ -8,6 +8,7 @@ require imgui public
 require imgui/imgui_boost_runtime public
 require imgui/imgui_text_source_view public
 require imgui/imgui_text_flow public
+require clipboard/clipboard
 require math
 require strings
 require daslib/strings_boost
@@ -413,6 +414,92 @@ def public text_edit_redo(var ed : TextEditState) : bool {
     ed.follow_revision++
     ed.blink_time = 0.0f
     return true
+}
+
+// ===== Clipboard =====
+
+// Internal clipboard record: carries the line-mode flag the system clipboard
+// cannot, and doubles as the paste source in headless runs. Paste compares the
+// incoming text against it (the VS Code mechanism).
+var private g_clip_text : string
+var private g_clip_line_mode : bool = false
+
+def public text_edit_clipboard_text() : string {
+    //! Last text copied/cut by ANY editor in this context — the paste source
+    //! when the system clipboard is unavailable (headless).
+    return g_clip_text
+}
+
+def public text_edit_copy(var ed : TextEditState) : string {
+    //! Copy verb: returns the text for the clipboard (the host writes the
+    //! system clipboard). Empty selection copies the WHOLE line incl. its
+    //! newline and arms line-mode paste.
+    ensure_line(ed)
+    var text : string
+    if (text_edit_has_selection(ed)) {
+        text = text_edit_selected_text(ed)
+        g_clip_line_mode = false
+    } else {
+        text = ed.lines[ed.cursor_line] + "\n"
+        g_clip_line_mode = true
+    }
+    g_clip_text = text
+    return text
+}
+
+def public text_edit_cut(var ed : TextEditState) : string {
+    //! Cut verb: copy + remove as one undo unit. Empty selection cuts the
+    //! whole line including its newline.
+    ensure_line(ed)
+    var text : string
+    if (text_edit_has_selection(ed)) {
+        let sel = text_edit_selection(ed)
+        text = text_edit_range_text(ed, sel)
+        g_clip_line_mode = false
+        g_clip_text = text
+        commit_edit(ed, TextEditUndoKind.other, sel.start_line, sel.start_column,
+            text, "")
+        return text
+    }
+    let line = ed.cursor_line
+    text = ed.lines[line] + "\n"
+    g_clip_line_mode = true
+    g_clip_text = text
+    if (line < length(ed.lines) - 1) {
+        commit_edit(ed, TextEditUndoKind.other, line, 0, text, "")
+    } elif (line > 0) {
+        // Last line: the removed newline sits BEFORE it.
+        commit_edit(ed, TextEditUndoKind.other, line - 1,
+            length(ed.lines[line - 1]), "\n" + ed.lines[line], "")
+    } else {
+        commit_edit(ed, TextEditUndoKind.other, 0, 0, ed.lines[0], "")
+    }
+    return text
+}
+
+def public text_edit_paste(var ed : TextEditState; text : string) {
+    //! Paste verb; always ONE undo unit (kind `other` self-fences). A
+    //! line-mode clip with no selection inserts at column 0 pushing the
+    //! current line down, caret position preserved (the VS Code rule).
+    return if (empty(text))
+    ensure_line(ed)
+    let normalized = replace(replace(text, "\r\n", "\n"), "\r", "\n")
+    if (!text_edit_has_selection(ed) && g_clip_line_mode
+            && normalized == g_clip_text) {
+        let line = ed.cursor_line
+        let column = ed.cursor_column
+        commit_edit(ed, TextEditUndoKind.other, line, 0, "", normalized)
+        ed.cursor_line = clamp(line + count(normalized, "\n"), 0,
+            length(ed.lines) - 1)
+        ed.cursor_column = clamp(column, 0, length(ed.lines[ed.cursor_line]))
+    } elif (text_edit_has_selection(ed)) {
+        let sel = text_edit_selection(ed)
+        commit_edit(ed, TextEditUndoKind.other, sel.start_line, sel.start_column,
+            text_edit_range_text(ed, sel), normalized)
+    } else {
+        commit_edit(ed, TextEditUndoKind.other, ed.cursor_line, ed.cursor_column,
+            "", normalized)
+    }
 }
 
 // ===== Grapheme boundaries =====
@@ -855,7 +942,34 @@ def private refresh_layout_cache(var ed : TextEditState) {
     ed.max_line_bytes = longest
 }
 
-def private route_editor_keys(var ed : TextEditState; page_rows : int) { // nolint:STYLE037
+def private editor_copy_to_clipboard(var ed : TextEditState; use_system : bool) {
+    let text = text_edit_copy(ed)
+    if (use_system && !empty(text)) {
+        let _ = clipboard_set_text(text)
+    }
+}
+
+def private editor_cut_to_clipboard(var ed : TextEditState; use_system : bool) {
+    let text = text_edit_cut(ed)
+    if (use_system && !empty(text)) {
+        let _ = clipboard_set_text(text)
+    }
+}
+
+def private editor_paste_from_clipboard(var ed : TextEditState; use_system : bool) {
+    var text = text_edit_clipboard_text()
+    if (use_system) {
+        var system_text = ""
+        if (clipboard_get_text(system_text) == ClipboardStatus.ok
+                && !empty(system_text)) {
+            text = system_text
+        }
+    }
+    text_edit_paste(ed, text)
+}
+
+def private route_editor_keys(var ed : TextEditState; page_rows : int; // nolint:STYLE037
+                              use_system_clipboard : bool) {
     // interim hardwired keymap — migrates to imgui_commands in the registry step
     let io & = unsafe(GetIO())
     let select = io.KeyShift
@@ -886,6 +1000,15 @@ def private route_editor_keys(var ed : TextEditState; page_rows : int) { // noli
         }
         if (IsKeyPressed(ImGuiKey.Y, true)) {
             let _ = text_edit_redo(ed)
+        }
+        if (IsKeyPressed(ImGuiKey.C, false) || IsKeyPressed(ImGuiKey.Insert, false)) {
+            editor_copy_to_clipboard(ed, use_system_clipboard)
+        }
+        if (IsKeyPressed(ImGuiKey.X, false)) {
+            editor_cut_to_clipboard(ed, use_system_clipboard)
+        }
+        if (IsKeyPressed(ImGuiKey.V, true)) {
+            editor_paste_from_clipboard(ed, use_system_clipboard)
         }
     } elif (io.KeyAlt && !io.KeyCtrl) {
         // Alt+Backspace undo, Shift+Alt+Backspace redo — the CUA legacy pair.
@@ -1170,7 +1293,7 @@ def public text_source_edit(id : string; var ed : TextEditState;
     let io & = unsafe(GetIO())
     let window_focused = IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)
     if (ed.focused && window_focused && !io.WantTextInput) {
-        route_editor_keys(ed, page_rows)
+        route_editor_keys(ed, page_rows, style.write_system_clipboard)
     }
     follow_edit_cursor(ed, m, style.tab_cells, font)
     // Recount after input: an edit above may have grown or shrunk the buffer,

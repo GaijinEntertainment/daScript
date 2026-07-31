@@ -404,3 +404,66 @@ def test_undo_multiline_insert(t : T?) {
     t |> equal(text_edit_source(ed), "headA\nB\nCtail", "and redoes cleanly")
     text_edit_dispose(ed)
 }
+
+[test]
+def test_clipboard_selection_round_trip(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "alpha beta")
+    text_edit_select(ed, 0, 0, 0, 5)
+    let copied = text_edit_copy(ed)
+    t |> equal(copied, "alpha", "copy returns the selected text")
+    t |> equal(text_edit_clipboard_text(), "alpha", "internal clipboard records it")
+    text_edit_set_cursor(ed, 0, 10)
+    text_edit_paste(ed, copied)
+    t |> equal(text_edit_source(ed), "alpha betaalpha", "paste inserts at the caret")
+    let _ = text_edit_undo(ed)
+    t |> equal(text_edit_source(ed), "alpha beta", "paste is one undo unit")
+    text_edit_select(ed, 0, 0, 0, 6)
+    let cut = text_edit_cut(ed)
+    t |> equal(cut, "alpha ", "cut returns the removed text")
+    t |> equal(text_edit_source(ed), "beta", "cut removes the selection")
+    let _2 = text_edit_undo(ed)
+    t |> equal(text_edit_source(ed), "alpha beta", "cut is one undo unit")
+    t |> equal(text_edit_selected_text(ed), "alpha ", "undo of cut restores the selection")
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_clipboard_line_mode(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "one\ntwo\nthree")
+    text_edit_set_cursor(ed, 1, 2)
+    let copied = text_edit_copy(ed)
+    t |> equal(copied, "two\n", "empty-selection copy takes the whole line")
+    text_edit_set_cursor(ed, 2, 3)
+    text_edit_paste(ed, copied)
+    t |> equal(text_edit_source(ed), "one\ntwo\ntwo\nthree",
+        "line-mode paste inserts ABOVE, pushing the line down")
+    t |> equal(ed.cursor_line, 3, "caret follows its text line down")
+    t |> equal(ed.cursor_column, 3, "caret column preserved")
+    let _ = text_edit_undo(ed)
+    t |> equal(text_edit_source(ed), "one\ntwo\nthree", "line-mode paste undoes as one unit")
+    text_edit_set_cursor(ed, 1, 1)
+    let cut = text_edit_cut(ed)
+    t |> equal(cut, "two\n", "empty-selection cut takes the line and newline")
+    t |> equal(text_edit_source(ed), "one\nthree", "cut line removed entirely")
+    let _2 = text_edit_undo(ed)
+    t |> equal(text_edit_source(ed), "one\ntwo\nthree", "line cut undoes")
+    text_edit_set_cursor(ed, 2, 0)
+    let last_cut = text_edit_cut(ed)
+    t |> equal(last_cut, "three\n", "cutting the last line still reports its newline")
+    t |> equal(text_edit_source(ed), "one\ntwo", "last-line cut removes the trailing newline")
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_clipboard_external_text_is_not_line_mode(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "one\ntwo")
+    text_edit_set_cursor(ed, 0, 1)
+    let _ = text_edit_copy(ed) // arms line mode with "one\n"
+    text_edit_paste(ed, "different\n")
+    t |> equal(text_edit_source(ed), "odifferent\nne\ntwo",
+        "unrecognized text pastes at the caret, not as a line block")
+    text_edit_dispose(ed)
+}
