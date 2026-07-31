@@ -18,6 +18,38 @@ require daslib/strings_boost
 //! widget owns focus, typed input, and scroll-follow. Selection, clipboard,
 //! and undo arrive in the next arc steps.
 
+enum public TextEditUndoKind {
+    other
+    insert_typing
+    insert_space_first
+    insert_space_run
+    delete_back
+    delete_forward
+}
+
+struct public TextEditUndoOp {
+    //! One reversible edit: at (line, column) `removed` became `inserted`.
+    line : int
+    column : int
+    removed : string
+    inserted : string
+}
+
+struct public TextEditUndoUnit {
+    ops : array<TextEditUndoOp>
+    kind : TextEditUndoKind = TextEditUndoKind.other
+    before_cursor_line : int
+    before_cursor_column : int
+    before_anchor_line : int = -1
+    before_anchor_column : int
+    after_cursor_line : int
+    after_cursor_column : int
+    //! Where the last edit left the cursor — the adjacency test (an edit
+    //! elsewhere starts a new unit, so caret jumps break typing runs).
+    end_line : int
+    end_column : int
+}
+
 struct public TextEditState {
     lines : array<string>
     crlf : bool = false
@@ -38,6 +70,10 @@ struct public TextEditState {
     follow_revision : int = 0
     followed_revision : int = 0
     input_revision : int = 0
+    undo_stack : array<TextEditUndoUnit>
+    redo_stack : array<TextEditUndoUnit>
+    //! True while the newest undo unit still accepts coalescing appends.
+    undo_open : bool = false
     // widget layout cache + per-draw stamps for live inspection
     layout_revision : int = -1
     max_line_bytes : int = 0
@@ -61,6 +97,8 @@ struct public TextEditRange {
 
 def public text_edit_dispose(var ed : TextEditState) {
     delete ed.lines
+    delete ed.undo_stack
+    delete ed.redo_stack
     ed = TextEditState()
 }
 
@@ -77,6 +115,12 @@ def public text_edit_load(var ed : TextEditState; source : string) {
     ed.cursor_line = 0
     ed.cursor_column = 0
     ed.preferred_column = -1
+    text_edit_clear_selection(ed)
+    // Wholesale replacement clears history (spec: SetText resets, an
+    // incremental programmatic edit participates).
+    delete ed.undo_stack
+    delete ed.redo_stack
+    ed.undo_open = false
     ed.dirty = false
     ed.revision++
     ed.follow_revision++
@@ -145,23 +189,28 @@ def public text_edit_select_all(var ed : TextEditState) {
     text_edit_select(ed, 0, 0, last, length(ed.lines[last]))
 }
 
-def public text_edit_selected_text(ed : TextEditState const) : string {
-    //! Selected text with LF newlines ("" when no selection).
-    return "" if (!text_edit_has_selection(ed))
-    let sel = text_edit_selection(ed)
-    if (sel.start_line == sel.end_line) {
-        return slice(ed.lines[sel.start_line], sel.start_column, sel.end_column)
+def public text_edit_range_text(ed : TextEditState const;
+                                span : TextEditRange) : string {
+    //! Text covered by an ordered range, with LF newlines.
+    if (span.start_line == span.end_line) {
+        return slice(ed.lines[span.start_line], span.start_column, span.end_column)
     }
     return build_string() $(var writer) {
-        writer |> write(slice(ed.lines[sel.start_line], sel.start_column,
-            length(ed.lines[sel.start_line])))
-        for (line in range(sel.start_line + 1, sel.end_line)) {
+        writer |> write(slice(ed.lines[span.start_line], span.start_column,
+            length(ed.lines[span.start_line])))
+        for (line in range(span.start_line + 1, span.end_line)) {
             writer |> write("\n")
             writer |> write(ed.lines[line])
         }
         writer |> write("\n")
-        writer |> write(slice(ed.lines[sel.end_line], 0, sel.end_column))
+        writer |> write(slice(ed.lines[span.end_line], 0, span.end_column))
     }
+}
+
+def public text_edit_selected_text(ed : TextEditState const) : string {
+    //! Selected text with LF newlines ("" when no selection).
+    return "" if (!text_edit_has_selection(ed))
+    return text_edit_range_text(ed, text_edit_selection(ed))
 }
 
 def private begin_move(var ed : TextEditState; select : bool) {
@@ -176,17 +225,193 @@ def private begin_move(var ed : TextEditState; select : bool) {
     }
 }
 
-def private delete_selection(var ed : TextEditState) : bool {
-    return false if (!text_edit_has_selection(ed))
-    let sel = text_edit_selection(ed)
-    ed.lines[sel.start_line] = (slice(ed.lines[sel.start_line], 0, sel.start_column)
-        + slice(ed.lines[sel.end_line], sel.end_column, length(ed.lines[sel.end_line])))
-    if (sel.end_line > sel.start_line) {
-        ed.lines |> erase(sel.start_line + 1, sel.end_line - sel.start_line)
+// ===== Buffer primitives (no undo recording) =====
+
+def private text_end_position(line, column : int; text : string) : int2 {
+    // end of LF text laid down at (line, column)
+    let breaks = count(text, "\n")
+    return int2(line, column + length(text)) if (breaks == 0)
+    let last_break = rfind(text, "\n")
+    return int2(line + breaks, length(text) - last_break - 1)
+}
+
+def private remove_range_raw(var ed : TextEditState; span : TextEditRange) {
+    ed.lines[span.start_line] = (slice(ed.lines[span.start_line], 0, span.start_column)
+        + slice(ed.lines[span.end_line], span.end_column, length(ed.lines[span.end_line])))
+    if (span.end_line > span.start_line) {
+        ed.lines |> erase(span.start_line + 1, span.end_line - span.start_line)
     }
-    ed.cursor_line = sel.start_line
-    ed.cursor_column = sel.start_column
+}
+
+def private insert_raw(var ed : TextEditState; line, column : int;
+                       text : string) : int2 {
+    return int2(line, column) if (empty(text))
+    let current = ed.lines[line]
+    let left = slice(current, 0, column)
+    let right = slice(current, column, length(current))
+    var inscope parts <- split(text, "\n")
+    if (length(parts) == 1) {
+        ed.lines[line] = left + parts[0] + right
+        return int2(line, column + length(parts[0]))
+    }
+    ed.lines |> reserve(length(ed.lines) + length(parts) - 1)
+    ed.lines[line] = left + parts[0]
+    for (index in range(1, length(parts) - 1)) {
+        ed.lines |> push(parts[index], line + index)
+    }
+    let last = length(parts) - 1
+    ed.lines |> push(parts[last] + right, line + last)
+    return int2(line + last, length(parts[last]))
+}
+
+// ===== Undo journal =====
+
+def public text_edit_push_undo_stop(var ed : TextEditState) {
+    //! Fence: the next edit starts a new undo unit. Every compound command
+    //! (paste, replace-all, line ops) brackets itself with this, so it undoes
+    //! as ONE step — never by heuristics.
+    ed.undo_open = false
+}
+
+def public text_edit_can_undo(ed : TextEditState const) : bool {
+    return !empty(ed.undo_stack)
+}
+
+def public text_edit_can_redo(ed : TextEditState const) : bool {
+    return !empty(ed.redo_stack)
+}
+
+def private space_kind_for(ed : TextEditState const; text : string) : TextEditUndoKind {
+    return TextEditUndoKind.insert_typing if (text != " ")
+    if (ed.undo_open && !empty(ed.undo_stack)) {
+        let last_kind = ed.undo_stack[length(ed.undo_stack) - 1].kind
+        if (last_kind == TextEditUndoKind.insert_space_first
+                || last_kind == TextEditUndoKind.insert_space_run) {
+            return TextEditUndoKind.insert_space_run
+        }
+    }
+    return TextEditUndoKind.insert_space_first
+}
+
+def private kind_bucket(kind : TextEditUndoKind) : int {
+    if (kind == TextEditUndoKind.insert_space_first
+            || kind == TextEditUndoKind.insert_space_run) {
+        return 100 // spaces share one bucket
+    }
+    return int(kind)
+}
+
+def private breaks_run(previous, current : TextEditUndoKind) : bool {
+    // first space after a word does not break: undo units are word-sized
+    return false if (previous == TextEditUndoKind.insert_space_first
+        && current == TextEditUndoKind.insert_typing)
+    return kind_bucket(previous) != kind_bucket(current)
+}
+
+def private commit_edit(var ed : TextEditState; kind : TextEditUndoKind;
+                        line, column : int; removed, inserted : string) {
+    // THE one recorded mutation: (removed -> inserted) at (line, column)
+    delete ed.redo_stack
+    var append_to_open = false
+    if (ed.undo_open && !empty(ed.undo_stack)
+            && kind != TextEditUndoKind.other) {
+        let last & = unsafe(ed.undo_stack[length(ed.undo_stack) - 1])
+        if (last.kind != TextEditUndoKind.other && !breaks_run(last.kind, kind)) {
+            // delete-back removals END at the caret; everything else STARTS there
+            let touch = (kind == TextEditUndoKind.delete_back
+                ? text_end_position(line, column, removed) : int2(line, column))
+            append_to_open = (touch.x == last.end_line && touch.y == last.end_column)
+        }
+    }
+    if (!append_to_open) {
+        var unit = TextEditUndoUnit(kind = kind,
+            before_cursor_line = ed.cursor_line, before_cursor_column = ed.cursor_column,
+            before_anchor_line = ed.anchor_line, before_anchor_column = ed.anchor_column)
+        ed.undo_stack |> emplace(unit)
+    }
+    let last_index = length(ed.undo_stack) - 1
+    ed.undo_stack[last_index].ops |> push(TextEditUndoOp(line = line, column = column,
+        removed = removed, inserted = inserted))
+    if (!empty(removed)) {
+        let removed_end = text_end_position(line, column, removed)
+        remove_range_raw(ed, TextEditRange(start_line = line, start_column = column,
+            end_line = removed_end.x, end_column = removed_end.y))
+    }
+    let end_position = insert_raw(ed, line, column, inserted)
+    ed.cursor_line = end_position.x
+    ed.cursor_column = end_position.y
     text_edit_clear_selection(ed)
+    var last & = unsafe(ed.undo_stack[last_index])
+    last.kind = kind
+    last.end_line = ed.cursor_line
+    last.end_column = ed.cursor_column
+    last.after_cursor_line = ed.cursor_line
+    last.after_cursor_column = ed.cursor_column
+    ed.undo_open = true
+    touch_edit(ed)
+}
+
+def private restore_unit_cursor(var ed : TextEditState;
+                                line, column, anchor_line, anchor_column : int) {
+    ed.cursor_line = clamp(line, 0, length(ed.lines) - 1)
+    ed.cursor_column = clamp(column, 0, length(ed.lines[ed.cursor_line]))
+    ed.anchor_line = anchor_line
+    ed.anchor_column = anchor_column
+    ed.preferred_column = -1
+}
+
+def public text_edit_undo(var ed : TextEditState) : bool {
+    //! Revert the newest undo unit; restores the pre-edit cursor + selection.
+    ed.undo_open = false
+    return false if (empty(ed.undo_stack))
+    let unit_index = length(ed.undo_stack) - 1
+    var unit <- ed.undo_stack[unit_index]
+    ed.undo_stack |> erase(unit_index)
+    var op_index = length(unit.ops) - 1
+    while (op_index >= 0) {
+        let op & = unsafe(unit.ops[op_index])
+        if (!empty(op.inserted)) {
+            let inserted_end = text_end_position(op.line, op.column, op.inserted)
+            remove_range_raw(ed, TextEditRange(start_line = op.line,
+                start_column = op.column,
+                end_line = inserted_end.x, end_column = inserted_end.y))
+        }
+        if (!empty(op.removed)) {
+            let _ = insert_raw(ed, op.line, op.column, op.removed)
+        }
+        op_index--
+    }
+    restore_unit_cursor(ed, unit.before_cursor_line, unit.before_cursor_column,
+        unit.before_anchor_line, unit.before_anchor_column)
+    ed.redo_stack |> emplace(unit)
+    ed.dirty = true
+    ed.revision++
+    ed.follow_revision++
+    ed.blink_time = 0.0f
+    return true
+}
+
+def public text_edit_redo(var ed : TextEditState) : bool {
+    ed.undo_open = false
+    return false if (empty(ed.redo_stack))
+    let unit_index = length(ed.redo_stack) - 1
+    var unit <- ed.redo_stack[unit_index]
+    ed.redo_stack |> erase(unit_index)
+    for (op in unit.ops) {
+        if (!empty(op.removed)) {
+            let removed_end = text_end_position(op.line, op.column, op.removed)
+            remove_range_raw(ed, TextEditRange(start_line = op.line,
+                start_column = op.column,
+                end_line = removed_end.x, end_column = removed_end.y))
+        }
+        let _ = insert_raw(ed, op.line, op.column, op.inserted)
+    }
+    restore_unit_cursor(ed, unit.after_cursor_line, unit.after_cursor_column, -1, 0)
+    ed.undo_stack |> emplace(unit)
+    ed.dirty = true
+    ed.revision++
+    ed.follow_revision++
+    ed.blink_time = 0.0f
     return true
 }
 
@@ -253,80 +478,60 @@ def public text_edit_insert(var ed : TextEditState; text : string) {
     //! (any flavor) split lines; the cursor lands after the inserted text.
     return if (empty(text))
     ensure_line(ed)
-    if (delete_selection(ed)) {
-        ed.dirty = true
-        ed.revision++
-    }
     let normalized = replace(replace(text, "\r\n", "\n"), "\r", "\n")
-    let line = ed.lines[ed.cursor_line]
-    let left = slice(line, 0, ed.cursor_column)
-    let right = slice(line, ed.cursor_column, length(line))
-    var inscope parts <- split(normalized, "\n")
-    if (length(parts) == 1) {
-        ed.lines[ed.cursor_line] = left + parts[0] + right
-        ed.cursor_column = length(left) + length(parts[0])
+    if (text_edit_has_selection(ed)) {
+        let sel = text_edit_selection(ed)
+        commit_edit(ed, TextEditUndoKind.other, sel.start_line, sel.start_column,
+            text_edit_range_text(ed, sel), normalized)
     } else {
-        ed.lines |> reserve(length(ed.lines) + length(parts) - 1)
-        ed.lines[ed.cursor_line] = left + parts[0]
-        for (index in range(1, length(parts) - 1)) {
-            ed.lines |> push(parts[index], ed.cursor_line + index)
-        }
-        let last = length(parts) - 1
-        ed.cursor_line += last
-        ed.cursor_column = length(parts[last])
-        ed.lines |> push(parts[last] + right, ed.cursor_line)
+        commit_edit(ed, space_kind_for(ed, normalized), ed.cursor_line,
+            ed.cursor_column, "", normalized)
     }
-    touch_edit(ed)
 }
 
 def public text_edit_newline(var ed : TextEditState) {
-    // E4 grows auto-indent here; E1 splits the line verbatim.
+    // E4 grows auto-indent here. Enter fences the undo unit (spec: break
+    // BEFORE, so the following typing run coalesces on the new line).
+    text_edit_push_undo_stop(ed)
     text_edit_insert(ed, "\n")
 }
 
 def public text_edit_backspace(var ed : TextEditState) {
     ensure_line(ed)
-    if (delete_selection(ed)) {
-        touch_edit(ed)
+    if (text_edit_has_selection(ed)) {
+        let sel = text_edit_selection(ed)
+        commit_edit(ed, TextEditUndoKind.delete_back, sel.start_line,
+            sel.start_column, text_edit_range_text(ed, sel), "")
         return
     }
     if (ed.cursor_column > 0) {
         let line = ed.lines[ed.cursor_line]
         let previous = grapheme_prev(line, ed.cursor_column)
-        ed.lines[ed.cursor_line] = (slice(line, 0, previous)
-            + slice(line, ed.cursor_column, length(line)))
-        ed.cursor_column = previous
+        commit_edit(ed, TextEditUndoKind.delete_back, ed.cursor_line, previous,
+            slice(line, previous, ed.cursor_column), "")
     } elif (ed.cursor_line > 0) {
-        let previous_length = length(ed.lines[ed.cursor_line - 1])
-        ed.lines[ed.cursor_line - 1] = (ed.lines[ed.cursor_line - 1]
-            + ed.lines[ed.cursor_line])
-        ed.lines |> erase(ed.cursor_line)
-        ed.cursor_line--
-        ed.cursor_column = previous_length
-    } else {
-        return
+        commit_edit(ed, TextEditUndoKind.delete_back, ed.cursor_line - 1,
+            length(ed.lines[ed.cursor_line - 1]), "\n", "")
     }
-    touch_edit(ed)
 }
 
 def public text_edit_delete(var ed : TextEditState) {
     ensure_line(ed)
-    if (delete_selection(ed)) {
-        touch_edit(ed)
+    if (text_edit_has_selection(ed)) {
+        let sel = text_edit_selection(ed)
+        commit_edit(ed, TextEditUndoKind.delete_forward, sel.start_line,
+            sel.start_column, text_edit_range_text(ed, sel), "")
         return
     }
     let line = ed.lines[ed.cursor_line]
     if (ed.cursor_column < length(line)) {
         let next = grapheme_next(line, ed.cursor_column)
-        ed.lines[ed.cursor_line] = (slice(line, 0, ed.cursor_column)
-            + slice(line, next, length(line)))
+        commit_edit(ed, TextEditUndoKind.delete_forward, ed.cursor_line,
+            ed.cursor_column, slice(line, ed.cursor_column, next), "")
     } elif (ed.cursor_line < length(ed.lines) - 1) {
-        ed.lines[ed.cursor_line] = line + ed.lines[ed.cursor_line + 1]
-        ed.lines |> erase(ed.cursor_line + 1)
-    } else {
-        return
+        commit_edit(ed, TextEditUndoKind.delete_forward, ed.cursor_line,
+            ed.cursor_column, "\n", "")
     }
-    touch_edit(ed)
 }
 
 // ===== Cursor movement =====
@@ -576,11 +781,7 @@ def public text_edit_delete_word_left(var ed : TextEditState) {
     //! Ctrl+Backspace. Whitespace heuristic: a run of 2+ spaces left of the
     //! caret deletes alone; a single space goes with the word before it.
     ensure_line(ed)
-    if (delete_selection(ed)) {
-        touch_edit(ed)
-        return
-    }
-    if (ed.cursor_column == 0) {
+    if (text_edit_has_selection(ed) || ed.cursor_column == 0) {
         text_edit_backspace(ed)
         return
     }
@@ -593,21 +794,15 @@ def public text_edit_delete_word_left(var ed : TextEditState) {
     }
     let target = (ed.cursor_column - ws_start >= 2 ? ws_start
         : word_start_left(line, ed.cursor_column, false))
-    ed.lines[ed.cursor_line] = (slice(line, 0, target)
-        + slice(line, ed.cursor_column, length(line)))
-    ed.cursor_column = target
-    touch_edit(ed)
+    commit_edit(ed, TextEditUndoKind.other, ed.cursor_line, target,
+        slice(line, target, ed.cursor_column), "")
 }
 
 def public text_edit_delete_word_right(var ed : TextEditState) {
     //! Ctrl+Delete — the forward mirror.
     ensure_line(ed)
-    if (delete_selection(ed)) {
-        touch_edit(ed)
-        return
-    }
     let line = ed.lines[ed.cursor_line]
-    if (ed.cursor_column >= length(line)) {
+    if (text_edit_has_selection(ed) || ed.cursor_column >= length(line)) {
         text_edit_delete(ed)
         return
     }
@@ -619,9 +814,8 @@ def public text_edit_delete_word_right(var ed : TextEditState) {
     }
     let target = (ws_end - ed.cursor_column >= 2 ? ws_end
         : word_end_right(line, ed.cursor_column, false))
-    ed.lines[ed.cursor_line] = (slice(line, 0, ed.cursor_column)
-        + slice(line, target, length(line)))
-    touch_edit(ed)
+    commit_edit(ed, TextEditUndoKind.other, ed.cursor_line, ed.cursor_column,
+        slice(line, ed.cursor_column, target), "")
 }
 
 // ===== The widget =====
@@ -686,6 +880,17 @@ def private route_editor_keys(var ed : TextEditState; page_rows : int) { // noli
         }
         if (IsKeyPressed(ImGuiKey.A, false)) {
             text_edit_select_all(ed)
+        }
+        if (IsKeyPressed(ImGuiKey.Z, true)) {
+            let _ = io.KeyShift ? text_edit_redo(ed) : text_edit_undo(ed)
+        }
+        if (IsKeyPressed(ImGuiKey.Y, true)) {
+            let _ = text_edit_redo(ed)
+        }
+    } elif (io.KeyAlt && !io.KeyCtrl) {
+        // Alt+Backspace undo, Shift+Alt+Backspace redo — the CUA legacy pair.
+        if (IsKeyPressed(ImGuiKey.Backspace, true)) {
+            let _ = io.KeyShift ? text_edit_redo(ed) : text_edit_undo(ed)
         }
     } elif (!io.KeyAlt) {
         if (IsKeyPressed(ImGuiKey.LeftArrow, true)) {

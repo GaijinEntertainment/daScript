@@ -277,3 +277,130 @@ def test_edit_smart_home(t : T?) {
     t |> equal(ed.cursor_column, 4, "and back")
     text_edit_dispose(ed)
 }
+
+[test]
+def test_undo_typing_coalesces(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "")
+    text_edit_insert(ed, "a")
+    text_edit_insert(ed, "b")
+    text_edit_insert(ed, "c")
+    t |> equal(length(ed.undo_stack), 1, "a typing run is one undo unit")
+    t |> success(text_edit_undo(ed), "undo runs")
+    t |> equal(text_edit_source(ed), "", "one undo reverts the whole run")
+    t |> success(!text_edit_can_undo(ed), "stack is empty")
+    t |> success(text_edit_can_redo(ed), "redo is armed")
+    t |> success(text_edit_redo(ed), "redo runs")
+    t |> equal(text_edit_source(ed), "abc", "redo restores the run")
+    t |> equal(ed.cursor_column, 3, "redo restores the after-cursor")
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_undo_word_sized_units(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "")
+    text_edit_insert(ed, "a")
+    text_edit_insert(ed, "b")
+    text_edit_insert(ed, " ")
+    text_edit_insert(ed, "c")
+    t |> equal(length(ed.undo_stack), 2, "space breaks before, not after (word units)")
+    let _ = text_edit_undo(ed)
+    t |> equal(text_edit_source(ed), "ab", "undo drops the space and what followed")
+    text_edit_insert(ed, "!")
+    t |> success(!text_edit_can_redo(ed), "a new edit clears the redo stack")
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_undo_breaks_on_kind_and_adjacency(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "")
+    text_edit_insert(ed, "a")
+    text_edit_backspace(ed)
+    t |> equal(length(ed.undo_stack), 2, "typing then backspace is two units")
+    text_edit_load(ed, "hello world")
+    text_edit_set_cursor(ed, 0, 5)
+    text_edit_insert(ed, "x")
+    text_edit_set_cursor(ed, 0, 0)
+    text_edit_insert(ed, "y")
+    t |> equal(length(ed.undo_stack), 2, "a caret jump breaks the typing run")
+    let _ = text_edit_undo(ed)
+    t |> equal(text_edit_source(ed), "hellox world", "first undo reverts only the last unit")
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_undo_backspace_run_and_joins(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "abcd")
+    text_edit_move_end(ed)
+    text_edit_backspace(ed)
+    text_edit_backspace(ed)
+    t |> equal(length(ed.undo_stack), 1, "a backspace run coalesces")
+    let _ = text_edit_undo(ed)
+    t |> equal(text_edit_source(ed), "abcd", "undo restores both characters")
+    text_edit_load(ed, "ab\ncd")
+    text_edit_set_cursor(ed, 1, 0)
+    text_edit_backspace(ed)
+    t |> equal(text_edit_source(ed), "abcd", "join happened")
+    let _2 = text_edit_undo(ed)
+    t |> equal(text_edit_source(ed), "ab\ncd", "undo restores the newline")
+    t |> equal(ed.cursor_line, 1, "and the pre-join cursor line")
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_undo_enter_fence_and_selection_restore(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "")
+    text_edit_insert(ed, "a")
+    text_edit_newline(ed)
+    text_edit_insert(ed, "b")
+    t |> equal(length(ed.undo_stack), 2, "Enter fences before itself")
+    let _ = text_edit_undo(ed)
+    t |> equal(text_edit_source(ed), "a", "newline and following typing undo together")
+    text_edit_load(ed, "alpha beta")
+    text_edit_select(ed, 0, 0, 0, 5)
+    text_edit_insert(ed, "X")
+    t |> equal(text_edit_source(ed), "X beta", "selection replaced")
+    let _2 = text_edit_undo(ed)
+    t |> equal(text_edit_source(ed), "alpha beta", "undo restores the replaced text")
+    t |> equal(text_edit_selected_text(ed), "alpha", "and the selection that was replaced")
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_undo_push_stop_and_word_delete(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "")
+    text_edit_insert(ed, "a")
+    text_edit_push_undo_stop(ed)
+    text_edit_insert(ed, "b")
+    t |> equal(length(ed.undo_stack), 2, "an explicit fence splits same-kind typing")
+    text_edit_load(ed, "one two")
+    text_edit_move_end(ed)
+    text_edit_delete_word_left(ed)
+    t |> equal(text_edit_source(ed), "one ", "word delete applied")
+    text_edit_delete_word_left(ed)
+    t |> equal(text_edit_source(ed), "", "second word delete applied")
+    t |> equal(length(ed.undo_stack), 2, "word deletes never coalesce")
+    let _ = text_edit_undo(ed)
+    t |> equal(text_edit_source(ed), "one ", "each word delete undoes alone")
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_undo_multiline_insert(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "headtail")
+    text_edit_set_cursor(ed, 0, 4)
+    text_edit_insert(ed, "A\nB\nC")
+    t |> equal(text_edit_source(ed), "headA\nB\nCtail", "multi-line insert applied")
+    let _ = text_edit_undo(ed)
+    t |> equal(text_edit_source(ed), "headtail", "multi-line insert undoes cleanly")
+    t |> equal(ed.cursor_column, 4, "cursor back at the insert point")
+    let _2 = text_edit_redo(ed)
+    t |> equal(text_edit_source(ed), "headA\nB\nCtail", "and redoes cleanly")
+    text_edit_dispose(ed)
+}
