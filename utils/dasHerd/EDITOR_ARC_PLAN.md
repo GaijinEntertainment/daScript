@@ -289,6 +289,17 @@ highlight inside code blocks lands with the selection work in E2/E4.
   keyword lists — one home, the modules consume the profile instead of
   private tables. Tab default: a visible ghost suggestion accepts on
   Tab; otherwise Tab keeps its indent behavior (the VS Code rule).
+  Settled 2026-07-31 (second round): the provider interface ships with
+  TWO REAL BACKENDS in E4, minimal but real, to keep it honest — .das
+  calls the compiler infrastructure borderline directly (in-process
+  worker, das data back, no protocol tax; utils/lsp internals minus the
+  protocol), .cpp does one honest textDocument/completion round-trip to
+  an external clangd. Each guards a different lie: the external one
+  forces spawn/lifecycle/latency/cancellation into the interface, the
+  local one forbids baking protocol assumptions in. Async-first shape
+  either way: request → token, poll/cancel, results land in the frame
+  loop (jobque worker + clone-back for the local provider). Depth and
+  quality stay E6; E4 proves the interface against both extremes.
 - **E4-follow-up (recorded, not pressing): LLM completion tier.** Own
   section when it comes: API port setting, async request, model picked
   for fill speed, model-per-language setting; basic-basic completion.
