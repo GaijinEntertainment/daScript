@@ -45,6 +45,7 @@ def initialize(project_path : string) {
     register_native_path("imgui", "imgui_text_find", "{project_path}/text/imgui_text_find.das")
     register_native_path("imgui", "imgui_text_source_edit", "{project_path}/text/imgui_text_source_edit.das")
     register_native_path("imgui", "imgui_text_language", "{project_path}/text/imgui_text_language.das")
+    register_native_path("imgui", "imgui_text_edit_syntax", "{project_path}/text/imgui_text_edit_syntax.das")
     register_native_path("imgui", "imgui_text_tree_sitter", "{project_path}/text/imgui_text_tree_sitter.das")
     // Semantic commands, scoped shortcuts and editable per-user bindings.
     register_native_path("imgui", "imgui_commands", "{project_path}/commands/imgui_commands.das")

@@ -5,6 +5,7 @@ options persistent_heap
 
 require imgui/imgui_harness
 require imgui/imgui_text_source_edit
+require imgui/imgui_text_edit_syntax
 require imgui/imgui_fonts
 require strings
 
@@ -62,6 +63,7 @@ def update() {
             text_find_bar(0, g_find)
         }
         text_edit_find_sync(g_edit, g_find, g_commands)
+        let _ = text_edit_syntax_sync(g_edit)
         var status = ("Ln {g_edit.cursor_line + 1}, Col {g_edit.cursor_column + 1}"
             + " - {text_edit_line_count(g_edit)} lines")
         if (g_edit.dirty) {
