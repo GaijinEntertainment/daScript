@@ -149,7 +149,7 @@ def private collect_compiled(source, prefix, overlay : string; // nolint:STYLE03
     set_file_source(access, overlay, source + "\n")
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
-            // introspection model; gen2 default lives in the CLI, not the struct
+            // introspection model; explicit gen2 keeps this correct on pre-flip cores
             cop.version_2_syntax = true
             cop.threadlock_context = true
             cop.ignore_shared_modules = true
