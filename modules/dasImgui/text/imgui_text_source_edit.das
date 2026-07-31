@@ -1025,6 +1025,83 @@ def private closer_dedents(var ed : TextEditState; text : string) : bool {
     return handled
 }
 
+def private line_byte(line : string; at : int) : int {
+    return -1 if (at < 0 || at >= length(line))
+    var value = -1
+    peek_data(line) $(bytes) {
+        value = int(bytes[at])
+    }
+    return value
+}
+
+def private pair_close_for(profile : TextLanguageProfile const; b : int) : int {
+    for (pair in profile.bracket_pairs) {
+        return pair.y if (b == pair.x)
+    }
+    return -1
+}
+
+def private is_pair_closer(profile : TextLanguageProfile const; b : int) : bool {
+    for (pair in profile.bracket_pairs) {
+        return true if (b == pair.y)
+    }
+    return false
+}
+
+def private surround_selection(var ed : TextEditState;
+                               close_b : int; text : string) : bool {
+    return false if (close_b < 0)
+    let sel = text_edit_selection(ed)
+    let inner = text_edit_range_text(ed, sel)
+    commit_edit(ed, TextEditUndoKind.other, sel.start_line, sel.start_column,
+        inner, text + inner + to_char(close_b))
+    // the content stays selected inside the fresh pair
+    let end_column = sel.end_line == sel.start_line ? sel.end_column + 1 : sel.end_column
+    text_edit_select(ed, sel.start_line, sel.start_column + 1,
+        sel.end_line, end_column)
+    patch_unit_after(ed)
+    return true
+}
+
+def private auto_close_pairs(var ed : TextEditState; text : string) : bool { // nolint:STYLE037
+    // openers close themselves, closers skip twins, selections surround
+    return false if (empty(ed.language) || length(text) != 1 || ed.overtype)
+    let b = first_character(text)
+    var handled = false
+    text_language_profile(ed.language) $(profile) {
+        let close_b = pair_close_for(profile, b)
+        if (text_edit_has_selection(ed)) {
+            handled = surround_selection(ed, close_b, text)
+        } else {
+            let line = ed.lines[ed.cursor_line]
+            let next_b = line_byte(line, ed.cursor_column)
+            let prev_b = line_byte(line, ed.cursor_column - 1)
+            let quote = byte_in(profile.string_delimiters, b)
+            let before_open = (next_b < 0 || next_b == ' ' || next_b == '\t'
+                || is_pair_closer(profile, next_b))
+            if (next_b == b && (is_pair_closer(profile, b) || quote)) {
+                // typing the closer that is already there: step over it
+                text_edit_move_right(ed)
+                handled = true
+            } elif (close_b >= 0 && before_open) {
+                commit_edit(ed, TextEditUndoKind.other, ed.cursor_line,
+                    ed.cursor_column, "", text + to_char(close_b))
+                ed.cursor_column--
+                patch_unit_after(ed)
+                handled = true
+            } elif (quote && before_open && byte_word_class(prev_b) != 1
+                    && prev_b != b) {
+                commit_edit(ed, TextEditUndoKind.other, ed.cursor_line,
+                    ed.cursor_column, "", text + text)
+                ed.cursor_column--
+                patch_unit_after(ed)
+                handled = true
+            }
+        }
+    }
+    return handled
+}
+
 def public text_edit_type(var ed : TextEditState; text : string) {
     //! One typed keystroke: like insert, but honoring overtype mode —
     //! replaces the next grapheme within the line, falls back to inserting
@@ -1032,7 +1109,7 @@ def public text_edit_type(var ed : TextEditState; text : string) {
     return if (empty(text))
     ensure_line(ed)
     ed.input_revision++
-    return if (closer_dedents(ed, text))
+    return if (closer_dedents(ed, text) || auto_close_pairs(ed, text))
     if (ed.overtype && !text_edit_has_selection(ed) && find(text, "\n") < 0) {
         let line = ed.lines[ed.cursor_line]
         if (ed.cursor_column < length(line)) {
@@ -1109,6 +1186,23 @@ def public text_edit_backspace(var ed : TextEditState) {
     }
     if (ed.cursor_column > 0) {
         let line = ed.lines[ed.cursor_line]
+        if (!empty(ed.language)) {
+            // inside an empty auto-closed pair, Backspace eats both halves
+            let prev_b = line_byte(line, ed.cursor_column - 1)
+            let next_b = line_byte(line, ed.cursor_column)
+            var pair_delete = false
+            text_language_profile(ed.language) $(profile) {
+                pair_delete = ((next_b >= 0 && pair_close_for(profile, prev_b) == next_b)
+                    || (prev_b >= 0 && prev_b == next_b
+                        && byte_in(profile.string_delimiters, prev_b)))
+            }
+            if (pair_delete) {
+                commit_edit(ed, TextEditUndoKind.delete_back, ed.cursor_line,
+                    ed.cursor_column - 1,
+                    slice(line, ed.cursor_column - 1, ed.cursor_column + 1), "")
+                return
+            }
+        }
         let previous = grapheme_prev(line, ed.cursor_column)
         commit_edit(ed, TextEditUndoKind.delete_back, ed.cursor_line, previous,
             slice(line, previous, ed.cursor_column), "")

@@ -803,6 +803,58 @@ def test_edit_auto_indent_on_enter(t : T?) {
 }
 
 [test]
+def test_edit_auto_close_pairs(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "")
+    text_edit_set_language(ed, "das")
+    // opener at EOL closes itself, caret lands between
+    text_edit_type(ed, "(")
+    t |> equal(ed.lines[0], "()", "the opener auto-closes")
+    t |> equal(ed.cursor_column, 1, "caret sits between the pair")
+    // typing the closer steps over the twin instead of inserting
+    text_edit_type(ed, ")")
+    t |> equal(ed.lines[0], "()", "the closer skips its twin")
+    t |> equal(ed.cursor_column, 2, "caret stepped over it")
+    // an opener BEFORE a word does not pair
+    text_edit_load(ed, "word")
+    text_edit_set_language(ed, "das")
+    text_edit_set_cursor(ed, 0, 0)
+    text_edit_type(ed, "\{")
+    t |> equal(ed.lines[0], "\{word", "no auto-close before an identifier")
+    // backspace inside an empty pair eats both halves
+    text_edit_load(ed, "")
+    text_edit_set_language(ed, "das")
+    text_edit_type(ed, "[")
+    t |> equal(ed.lines[0], "[]", "bracket pairs too")
+    text_edit_backspace(ed)
+    t |> equal(ed.lines[0], "", "backspace deletes the empty pair whole")
+    // quotes pair at word boundaries only
+    text_edit_type(ed, "\"")
+    t |> equal(ed.lines[0], "\"\"", "quote pairs at a boundary")
+    text_edit_type(ed, "\"")
+    t |> equal(ed.lines[0], "\"\"", "the second quote steps over")
+    t |> equal(ed.cursor_column, 2, "caret after the pair")
+    text_edit_type(ed, "s")
+    text_edit_type(ed, "'")
+    t |> equal(ed.lines[0], "\"\"s'", "no quote pair right after a word byte")
+    // surround: a selection wraps and stays selected inside
+    text_edit_load(ed, "abc")
+    text_edit_set_language(ed, "das")
+    text_edit_select(ed, 0, 0, 0, 3)
+    text_edit_type(ed, "(")
+    t |> equal(ed.lines[0], "(abc)", "the selection wraps in the pair")
+    t |> equal(text_edit_selected_text(ed), "abc", "the content stays selected")
+    t |> success(text_edit_undo(ed), "surround undoes")
+    t |> equal(ed.lines[0], "abc", "one undo unwraps")
+    // plain text pairs nothing (load keeps the language; clear it)
+    text_edit_load(ed, "")
+    text_edit_set_language(ed, "")
+    text_edit_type(ed, "(")
+    t |> equal(ed.lines[0], "(", "no language, no pairing")
+    text_edit_dispose(ed)
+}
+
+[test]
 def test_edit_bracket_match(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "def f(a : int) \{\n\tx = g(\"\}\")\n\}")
