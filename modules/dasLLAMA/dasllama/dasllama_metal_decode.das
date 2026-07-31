@@ -2618,17 +2618,22 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                     bsnk = upload_region(addr < void? >(t.fblob[t.sinks_off + l * n_heads]), uint64(n_heads * 4l))
                 }
                 if (use_attn_d) {
+                    // one kargs for the whole family — `kstride` is elements (f16/f32) or
+                    // 32-blocks (q8/tq4), the only field whose meaning follows the codec
+                    var dka = SqAttnDArgs(lay = uint(blockc ? kv_row_bytes(kdt, t.kv_row_prefix[l]) : t.kv_row_prefix[l]),
+                        kstride = uint(blockc ? kv_dim / 32l : kv_dim),
+                        nheads = uint(n_heads), kv_mul = uint(n_heads / c.n_kv_heads), hs = uint(head_size),
+                        scale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size)),
+                        qstride = uint(qkvd), nsgs = uint(d_nsgs))
                     if (tq4) {
-                        enc_attn_d_tq4(enc, bqkv, bpart, brt, ulay, u_nblk, u_nh, u_kvm, u_hs, u_scale, u_qkvd, u_nsgs,
-                            d_nsgs, nrows, n_heads)
+                        enc_attn_d_tq4(enc, bqkv, bpart, brt, dka, d_nsgs, nrows, n_heads)
                     } elif (blockc) {
-                        enc_attn_d_q8(enc, bqkv, bpart, brt, ulay, u_nblk, u_nh, u_kvm, u_hs, u_scale, u_qkvd, u_nsgs,
-                            d_nsgs, nrows, n_heads)
+                        enc_attn_d_q8(enc, bqkv, bpart, brt, dka, d_nsgs, nrows, n_heads)
                     } else {
-                        enc_attn_d(enc, f16, bqkv, bpart, brt, ulay, u_kvd, u_nh, u_kvm, u_hs, u_scale, u_qkvd, u_nsgs,
-                            d_nsgs, nrows, n_heads)
+                        enc_attn_d(enc, f16, bqkv, bpart, brt, dka, d_nsgs, nrows, n_heads)
                     }
-                    enc_attn_comb_d(enc, bpart, bxb, brt, u_nsgs, u_nh, u_hs, nrows, n_heads, head_size)
+                    var cka = SqAttnCombDArgs(nchmax = uint(d_nsgs), nheads = uint(n_heads), hs = uint(head_size))
+                    enc_attn_comb_d(enc, bpart, bxb, brt, cka, nrows, n_heads, head_size)
                 } elif (chunked) {
                     // sliding layers bind the span; each row's kernels derive wstart from its own
                     // cnt (per-row depths differ), and the comb skips that row's below-window chunks

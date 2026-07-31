@@ -3139,6 +3139,25 @@ class MetalSqAttnCombB {
     }
 }
 
+// The split-K "D" attention family binds its uniforms as ONE kargs value. `kstride` is the
+// per-codec K-row stride: elements for f16/f32, 32-element blocks for q8_0/tq4.
+struct SqAttnDArgs {
+    lay : uint
+    kstride : uint
+    nheads : uint
+    kv_mul : uint
+    hs : uint
+    scale : float
+    qstride : uint
+    nsgs : uint
+}
+
+struct SqAttnCombDArgs {
+    nchmax : uint
+    nheads : uint
+    hs : uint
+}
+
 // ===== the split-K "D" attention family: the stages that do not depend on the K/V codec =====
 // One simdgroup owns a 32-position slice and merges it online into its running state. Only the
 // score and V-accumulate steps read K/V, so only those stay per-codec in each kernel below.
@@ -3298,18 +3317,19 @@ class MetalSqAttnDF16 {
     @ssbo @binding = 2 @role = "read" q : array<float4>
     @ssbo @binding = 3 @role = "write" part : array<float>
     @ssbo @binding = 4 @role = "read" rt : array<uint4>
-    @uniform @binding = 5 lay : uint
-    @uniform @binding = 6 kv_dim : uint
-    @uniform @binding = 7 nheads : uint
-    @uniform @binding = 8 kv_mul : uint
-    @uniform @binding = 9 hs : uint
-    @uniform @binding = 10 scale : float
-    @uniform @binding = 11 qstride : uint
-    @uniform @binding = 12 nsgs : uint
+    @uniform @binding = 5 ka : SqAttnDArgs
     @workgroup wacc : float[512]
 
     [metal_kernel(name="metal_sq_attn_d16_msl")]
     def metal_sq_attn_d16 {
+        let lay = ka.lay
+        let kv_dim = ka.kstride
+        let nheads = ka.nheads
+        let kv_mul = ka.kv_mul
+        let hs = ka.hs
+        let scale = ka.scale
+        let qstride = ka.qstride
+        let nsgs = ka.nsgs
         let h = gl_WorkGroupID.x
         let bb = gl_WorkGroupID.z
         let gsg = gl_WorkGroupID.y * 4u + gl_SubgroupID
@@ -3356,18 +3376,19 @@ class MetalSqAttnDF32 {
     @ssbo @binding = 2 @role = "read" q : array<float4>
     @ssbo @binding = 3 @role = "write" part : array<float>
     @ssbo @binding = 4 @role = "read" rt : array<uint4>
-    @uniform @binding = 5 lay : uint
-    @uniform @binding = 6 kv_dim : uint
-    @uniform @binding = 7 nheads : uint
-    @uniform @binding = 8 kv_mul : uint
-    @uniform @binding = 9 hs : uint
-    @uniform @binding = 10 scale : float
-    @uniform @binding = 11 qstride : uint
-    @uniform @binding = 12 nsgs : uint
+    @uniform @binding = 5 ka : SqAttnDArgs
     @workgroup wacc : float[512]
 
     [metal_kernel(name="metal_sq_attn_d32_msl")]
     def metal_sq_attn_d32 {
+        let lay = ka.lay
+        let kv_dim = ka.kstride
+        let nheads = ka.nheads
+        let kv_mul = ka.kv_mul
+        let hs = ka.hs
+        let scale = ka.scale
+        let qstride = ka.qstride
+        let nsgs = ka.nsgs
         let h = gl_WorkGroupID.x
         let bb = gl_WorkGroupID.z
         let gsg = gl_WorkGroupID.y * 4u + gl_SubgroupID
@@ -3413,14 +3434,15 @@ class MetalSqAttnCombD {
     @ssbo @binding = 0 @role = "read" part : array<float4>
     @ssbo @binding = 1 @role = "write" yo : array<float>
     @ssbo @binding = 2 @role = "read" rt : array<uint4>
-    @uniform @binding = 3 nchmax : uint
-    @uniform @binding = 4 nheads : uint
-    @uniform @binding = 5 hs : uint
+    @uniform @binding = 3 ka : SqAttnCombDArgs
     @workgroup wacc : float[512]
     @workgroup wml : float[8]
 
     [metal_kernel(name="metal_sq_attn_comb_d_msl")]
     def metal_sq_attn_comb_d {
+        let nchmax = ka.nchmax
+        let nheads = ka.nheads
+        let hs = ka.hs
         let h = gl_WorkGroupID.x
         let bb = gl_WorkGroupID.y
         let sg = gl_SubgroupID
@@ -3606,18 +3628,19 @@ class MetalSqAttnDQ8 {
     @ssbo @binding = 4 @role = "read" q : array<float4>
     @ssbo @binding = 5 @role = "write" part : array<float>
     @ssbo @binding = 6 @role = "read" rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
-    @uniform @binding = 7 lay : uint
-    @uniform @binding = 8 nblk : uint
-    @uniform @binding = 9 nheads : uint
-    @uniform @binding = 10 kv_mul : uint
-    @uniform @binding = 11 hs : uint
-    @uniform @binding = 12 scale : float
-    @uniform @binding = 13 qstride : uint
-    @uniform @binding = 14 nsgs : uint
+    @uniform @binding = 7 ka : SqAttnDArgs
     @workgroup wacc : float[512]
 
     [metal_kernel(name="metal_sq_attn_d_q8_msl")]
     def metal_sq_attn_d_q8 {
+        let lay = ka.lay
+        let nblk = ka.kstride
+        let nheads = ka.nheads
+        let kv_mul = ka.kv_mul
+        let hs = ka.hs
+        let scale = ka.scale
+        let qstride = ka.qstride
+        let nsgs = ka.nsgs
         let h = gl_WorkGroupID.x
         let bb = gl_WorkGroupID.z
         let gsg = gl_WorkGroupID.y * 4u + gl_SubgroupID
@@ -3785,18 +3808,19 @@ class MetalSqAttnDTq4 {
     @ssbo @binding = 4 @role = "read" q : array<float4>
     @ssbo @binding = 5 @role = "write" part : array<float>
     @ssbo @binding = 6 @role = "read" rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
-    @uniform @binding = 7 lay : uint
-    @uniform @binding = 8 nblk : uint
-    @uniform @binding = 9 nheads : uint
-    @uniform @binding = 10 kv_mul : uint
-    @uniform @binding = 11 hs : uint
-    @uniform @binding = 12 scale : float
-    @uniform @binding = 13 qstride : uint
-    @uniform @binding = 14 nsgs : uint
+    @uniform @binding = 7 ka : SqAttnDArgs
     @workgroup wacc : float[512]
 
     [metal_kernel(name="metal_sq_attn_d_tq4_msl")]
     def metal_sq_attn_d_tq4 {
+        let lay = ka.lay
+        let nblk = ka.kstride
+        let nheads = ka.nheads
+        let kv_mul = ka.kv_mul
+        let hs = ka.hs
+        let scale = ka.scale
+        let qstride = ka.qstride
+        let nsgs = ka.nsgs
         let h = gl_WorkGroupID.x
         let bb = gl_WorkGroupID.z
         let gsg = gl_WorkGroupID.y * 4u + gl_SubgroupID
@@ -4895,7 +4919,7 @@ def enc_attn_part_b_tq4(enc : MetalComputeEncoder?; bq, bpart, brt, blay, bnblk,
     kn_dispatch(enc, uint3(uint(nheads * nchmax * nrows), 1u, 1u), uint3(uint(head_size), 1u, 1u))
 }
 
-def enc_attn_d_tq4(enc : MetalComputeEncoder?; bq, bpart, brt, blay, bnblk, bnh, bkvm, bhs, bscale, bqs, bnsg : MetalBuffer?; nsgs, nrows, nheads : int64) {
+def enc_attn_d_tq4(enc : MetalComputeEncoder?; bq, bpart, brt : MetalBuffer?; var ka : SqAttnDArgs; nsgs, nrows, nheads : int64) {
     kn_pipeline(enc, g_pso_attnd_tq4)
     kn_tgmem(enc, metal_sq_attn_d_tq4_msl_tgmem, 0)
     kn_buffer(enc, g_arena, 0ul, 0)
@@ -4905,14 +4929,7 @@ def enc_attn_d_tq4(enc : MetalComputeEncoder?; bq, bpart, brt, blay, bnblk, bnh,
     kn_buffer(enc, bq, 0ul, 4)
     kn_buffer(enc, bpart, 0ul, 5)
     kn_buffer(enc, brt, 0ul, 6)
-    kn_buffer(enc, blay, 0ul, 7)
-    kn_buffer(enc, bnblk, 0ul, 8)
-    kn_buffer(enc, bnh, 0ul, 9)
-    kn_buffer(enc, bkvm, 0ul, 10)
-    kn_buffer(enc, bhs, 0ul, 11)
-    kn_buffer(enc, bscale, 0ul, 12)
-    kn_buffer(enc, bqs, 0ul, 13)
-    kn_buffer(enc, bnsg, 0ul, 14)
+    kn_kargs(enc, ka, 7)
     // HEAD-FASTEST launch: consecutive tgs share position rows (SLC locality at depth)
     hz_read(g_arena)
     hz_read(bq)
@@ -4977,7 +4994,7 @@ def enc_attn_part_b_q8(enc : MetalComputeEncoder?; bq, bpart, brt, blay, bnblk, 
     kn_dispatch(enc, uint3(uint(nheads * nchmax * nrows), 1u, 1u), uint3(uint(head_size), 1u, 1u))
 }
 
-def enc_attn_d_q8(enc : MetalComputeEncoder?; bq, bpart, brt, blay, bnblk, bnh, bkvm, bhs, bscale, bqs, bnsg : MetalBuffer?; nsgs, nrows, nheads : int64) {
+def enc_attn_d_q8(enc : MetalComputeEncoder?; bq, bpart, brt : MetalBuffer?; var ka : SqAttnDArgs; nsgs, nrows, nheads : int64) {
     kn_pipeline(enc, g_pso_attnd_q8)
     kn_tgmem(enc, metal_sq_attn_d_q8_msl_tgmem, 0)
     kn_buffer(enc, g_arena, 0ul, 0)
@@ -4987,14 +5004,7 @@ def enc_attn_d_q8(enc : MetalComputeEncoder?; bq, bpart, brt, blay, bnblk, bnh, 
     kn_buffer(enc, bq, 0ul, 4)
     kn_buffer(enc, bpart, 0ul, 5)
     kn_buffer(enc, brt, 0ul, 6)
-    kn_buffer(enc, blay, 0ul, 7)
-    kn_buffer(enc, bnblk, 0ul, 8)
-    kn_buffer(enc, bnh, 0ul, 9)
-    kn_buffer(enc, bkvm, 0ul, 10)
-    kn_buffer(enc, bhs, 0ul, 11)
-    kn_buffer(enc, bscale, 0ul, 12)
-    kn_buffer(enc, bqs, 0ul, 13)
-    kn_buffer(enc, bnsg, 0ul, 14)
+    kn_kargs(enc, ka, 7)
     // HEAD-FASTEST launch: consecutive tgs share position rows (SLC locality at depth)
     hz_read(g_arena)
     hz_read(bq)
@@ -5020,7 +5030,7 @@ def enc_attn_comb_b(enc : MetalComputeEncoder?; bpart, by, brt, bnch, bnh, bhs, 
     kn_dispatch(enc, uint3(uint(nheads * nrows), 1u, 1u), uint3(uint(head_size), 1u, 1u))
 }
 
-def enc_attn_d(enc : MetalComputeEncoder?; f16 : bool; bq, bpart, brt, blay, bkvd, bnh, bkvm, bhs, bscale, bqs, bnsg : MetalBuffer?; nsgs, nrows, nheads : int64) {
+def enc_attn_d(enc : MetalComputeEncoder?; f16 : bool; bq, bpart, brt : MetalBuffer?; var ka : SqAttnDArgs; nsgs, nrows, nheads : int64) {
     kn_pipeline(enc, f16 ? g_pso_attnd16 : g_pso_attnd32)
     kn_tgmem(enc, f16 ? metal_sq_attn_d16_msl_tgmem : metal_sq_attn_d32_msl_tgmem, 0)
     kn_buffer(enc, g_arena, 0ul, 0)
@@ -5028,14 +5038,7 @@ def enc_attn_d(enc : MetalComputeEncoder?; f16 : bool; bq, bpart, brt, blay, bkv
     kn_buffer(enc, bq, 0ul, 2)
     kn_buffer(enc, bpart, 0ul, 3)
     kn_buffer(enc, brt, 0ul, 4)
-    kn_buffer(enc, blay, 0ul, 5)
-    kn_buffer(enc, bkvd, 0ul, 6)
-    kn_buffer(enc, bnh, 0ul, 7)
-    kn_buffer(enc, bkvm, 0ul, 8)
-    kn_buffer(enc, bhs, 0ul, 9)
-    kn_buffer(enc, bscale, 0ul, 10)
-    kn_buffer(enc, bqs, 0ul, 11)
-    kn_buffer(enc, bnsg, 0ul, 12)
+    kn_kargs(enc, ka, 5)
     // HEAD-FASTEST launch: consecutive tgs share position rows (SLC locality at depth)
     hz_read(g_arena)
     hz_read(bq)
@@ -5044,15 +5047,13 @@ def enc_attn_d(enc : MetalComputeEncoder?; f16 : bool; bq, bpart, brt, blay, bkv
     kn_dispatch(enc, uint3(uint(nheads), uint((nsgs + 3l) / 4l), uint(nrows)), uint3(128u, 1u, 1u))
 }
 
-def enc_attn_comb_d(enc : MetalComputeEncoder?; bpart, by, brt, bnsg, bnh, bhs : MetalBuffer?; nrows, nheads, head_size : int64) {
+def enc_attn_comb_d(enc : MetalComputeEncoder?; bpart, by, brt : MetalBuffer?; var ka : SqAttnCombDArgs; nrows, nheads, head_size : int64) {
     kn_pipeline(enc, g_pso_attncombd)
     kn_tgmem(enc, metal_sq_attn_comb_d_msl_tgmem, 0)
     kn_buffer(enc, bpart, 0ul, 0)
     kn_buffer(enc, by, 0ul, 1)
     kn_buffer(enc, brt, 0ul, 2)
-    kn_buffer(enc, bnsg, 0ul, 3)
-    kn_buffer(enc, bnh, 0ul, 4)
-    kn_buffer(enc, bhs, 0ul, 5)
+    kn_kargs(enc, ka, 3)
     hz_read(bpart)
     hz_write(by)
     hz_gate(enc)
