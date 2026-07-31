@@ -468,6 +468,56 @@ def private bracket_pair_index(profile : TextLanguageProfile const; b : int) : i
     return -1
 }
 
+def private parse_only_style(syntax : TextSourceSyntaxStyle) : bool {
+    // styles only the FULL parse produces; the lexical pass never emits them
+    return (syntax == TextSourceSyntaxStyle.type_
+        || syntax == TextSourceSyntaxStyle.function_
+        || syntax == TextSourceSyntaxStyle.variable
+        || syntax == TextSourceSyntaxStyle.property
+        || syntax == TextSourceSyntaxStyle.constant
+        || syntax == TextSourceSyntaxStyle.operator_
+        || syntax == TextSourceSyntaxStyle.punctuation)
+}
+
+def private run_overlaps(runs : array<TextEditStyleRun>; start, end_ : int) : bool {
+    for (run in runs) {
+        return true if (run.start_byte < end_ && run.end_byte > start)
+    }
+    return false
+}
+
+def private merge_parse_styles(var ed : TextEditState; line : int; // nolint:STYLE037
+                               old_runs : array<TextEditStyleRun>;
+                               edit_column, removed_bytes, inserted_bytes : int) {
+    // anti-flicker: shift old parse-only runs across the edit into lexical gaps
+    return if (line >= length(ed.line_styles) || line >= length(ed.lines))
+    let delta = inserted_bytes - removed_bytes
+    let line_length = length(ed.lines[line])
+    for (old in old_runs) {
+        continue if (!parse_only_style(old.style))
+        var start = old.start_byte
+        var end_ = old.end_byte
+        if (start >= edit_column + removed_bytes) {
+            start += delta
+            end_ += delta
+        } elif (end_ > edit_column) {
+            continue // the edit cut through it - the reparse will restyle
+        }
+        continue if (start < 0 || end_ > line_length || end_ <= start
+            || run_overlaps(ed.line_styles[line].runs, start, end_))
+        // keep the runs sorted by start byte - the painter fills gaps in order
+        var insert_at = length(ed.line_styles[line].runs)
+        for (index in range(length(ed.line_styles[line].runs))) {
+            if (ed.line_styles[line].runs[index].start_byte > start) {
+                insert_at = index
+                break
+            }
+        }
+        ed.line_styles[line].runs |> push(TextEditStyleRun(start_byte = start,
+            end_byte = end_, style = old.style), insert_at)
+    }
+}
+
 def public text_edit_set_language(var ed : TextEditState; language : string) {
     //! Language for syntax styling (and E4 indent/brackets): a name or file
     //! extension, canonicalized per `syntax_canonical_language`; "" clears.
@@ -646,6 +696,11 @@ def private breaks_run(previous, current : TextEditUndoKind) : bool {
 def private commit_edit(var ed : TextEditState; kind : TextEditUndoKind;
                         line, column : int; removed, inserted : string) {
     // THE one recorded mutation: (removed -> inserted) at (line, column)
+    let same_line = find(removed, "\n") < 0 && find(inserted, "\n") < 0
+    var preserved : array<TextEditStyleRun>
+    if (same_line && line < length(ed.line_styles)) {
+        preserved := ed.line_styles[line].runs
+    }
     delete ed.redo_stack
     var append_to_open = false
     if (ed.undo_open && !empty(ed.undo_stack)
@@ -685,6 +740,11 @@ def private commit_edit(var ed : TextEditState; kind : TextEditUndoKind;
     ed.undo_open = true
     touch_edit(ed)
     restyle_lines(ed, min(line, ed.cursor_line), max(line, ed.cursor_line))
+    if (same_line) {
+        merge_parse_styles(ed, line, preserved, column, length(removed),
+            length(inserted))
+    }
+    delete preserved
 }
 
 def private restore_unit_cursor(var ed : TextEditState;

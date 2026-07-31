@@ -30,6 +30,35 @@ def test_apply_syntax_maps_and_splits(t : T?) {
 }
 
 [test]
+def test_parse_styles_survive_same_line_edits(t : T?) {
+    // Boris's flicker catch: typing re-lexes the line and dropped
+    // parse-refined colors to plain until the reparse - blue/white/blue.
+    var ed = TextEditState()
+    text_edit_load(ed, "def foo() \{\n\tfoo(bar)\n\}")
+    text_edit_set_language(ed, "das")
+    var tokens <- [
+        SyntaxToken(start_byte = 13, end_byte = 16, role = SyntaxRole.function_),
+        SyntaxToken(start_byte = 17, end_byte = 20, role = SyntaxRole.variable)]
+    text_edit_apply_syntax(ed, tokens, ed.revision)
+    t |> equal(int(ed.line_styles[1].runs[0].style),
+        int(TextSourceSyntaxStyle.function_), "the parse styled foo")
+    // typing at the line end keeps both runs in place - no flicker
+    text_edit_set_cursor(ed, 1, 9)
+    text_edit_type(ed, ";")
+    t |> equal(length(ed.line_styles[1].runs), 2, "both parse runs survive the edit")
+    t |> equal(ed.line_styles[1].runs[0].start_byte, 1, "foo stays put before the edit")
+    // typing INSIDE foo cuts that run; bar shifts right and keeps its color
+    text_edit_set_cursor(ed, 1, 2)
+    text_edit_type(ed, "z")
+    t |> equal(length(ed.line_styles[1].runs), 1, "the cut run drops until reparse")
+    t |> equal(int(ed.line_styles[1].runs[0].style),
+        int(TextSourceSyntaxStyle.variable), "bar keeps its parse style")
+    t |> equal(ed.line_styles[1].runs[0].start_byte, 6, "bar shifted by the insert")
+    delete tokens
+    text_edit_dispose(ed)
+}
+
+[test]
 def test_syntax_sync_debounce_and_refine(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "def foo() \{\n\tlet x = 1\n\}")
