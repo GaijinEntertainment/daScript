@@ -2814,18 +2814,12 @@ def private enc_add_bias_rows(enc : MetalComputeEncoder?; bx, bb, bn, btotal : M
     kn_dispatch(enc, uint3(uint((total + 63l) / 64l), 1u, 1u), uint3(64u, 1u, 1u))
 }
 
-def private enc_qk_norm_pf(enc : MetalComputeEncoder?; bx, bw, bnq, bkoffe, brstride, bhs, bwoffe, beps, bsoffe : MetalBuffer?; ntg, nrows, hs : int64; off : uint64 = 0ul) {
+def private enc_qk_norm_pf(enc : MetalComputeEncoder?; bx, bw : MetalBuffer?; var ka : QkNormArgs; ntg, nrows, hs : int64; off : uint64 = 0ul) {
     kn_pipeline(enc, g_pf_pso_qknorm)
     kn_tgmem(enc, metal_qk_norm_msl_tgmem, 0)
     kn_buffer(enc, bx, off, 0)
     kn_buffer(enc, bw, 0ul, 1)
-    kn_buffer(enc, bnq, 0ul, 2)
-    kn_buffer(enc, bkoffe, 0ul, 3)
-    kn_buffer(enc, brstride, 0ul, 4)
-    kn_buffer(enc, bhs, 0ul, 5)
-    kn_buffer(enc, bwoffe, 0ul, 6)
-    kn_buffer(enc, beps, 0ul, 7)
-    kn_buffer(enc, bsoffe, 0ul, 8)
+    kn_kargs(enc, ka, 2)
     hz_write(bx)
     hz_gate(enc)
     kn_dispatch(enc, uint3(uint(ntg), uint(nrows), 1u), uint3(uint(hs), 1u, 1u))
@@ -3281,8 +3275,6 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var u_totkv = has_bias ? uniform_u32(uint(npos * kv_dim)) : null
     let has_qkn = c.qk_norm
     let vfromk = c.v_from_k_mask != 0ul
-    var u_nh_pf = has_qkn ? uniform_u32(uint(n_heads)) : null
-    var u_zero = (has_qkn || c.v_norm || vfromk) ? uniform_u32(0u) : null
     var u_total_dim = uniform_u32(uint(npos * dim))
     var u_total_h = uniform_u32(uint(npos * hidden))
     var u_moe_ne = moe ? uniform_u32(uint(c.n_expert)) : null
@@ -3311,12 +3303,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var u_dn_cd = dn ? uniform_u32(uint(cd_dn)) : null
     var u_dn_di = dn ? uniform_u32(uint(di_dn)) : null
     var u_dn_nvh = dn ? uniform_u32(uint(nvh_dn)) : null
-    var u_dn_kd = dn ? uniform_u32(uint(dn_key_dim(c))) : null
-    var u_dn_ds = dn ? uniform_u32(uint(c.ssm_d_state)) : null
-    var u_dn_nkh = dn ? uniform_u32(uint(c.ssm_n_group)) : null
-    var u_dn_dconv = dn ? uniform_u32(uint(c.ssm_d_conv)) : null
     var u_dn_np = dn ? uniform_u32(uint(npos)) : null
-    var u_dn_qscale = dn ? uniform_f32(1.0 / sqrt(float(c.ssm_d_state))) : null
     var u_dn_qd2 = c.q_gated ? uniform_u32(uint(2l * qd)) : null
     var u_qtot = c.q_gated ? uniform_u32(uint(npos * qd)) : null
     var u_rot = (c.rope_dim > 0l && c.rope_dim != head_size) ? uniform_u32(uint(c.rope_dim)) : null
@@ -3581,16 +3568,16 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         let soff = dn_state_base + uint64(dnli * nvh_dn * c.ssm_d_state * c.ssm_d_state * 4l)
                         let hoff = dn_conv_base + uint64(dnli * (c.ssm_d_conv - 1l) * cd_dn * 4l)
                         var bw_cv = upload_region(addr < void? >(t.fblob[t.dn_conv_off + l * c.ssm_d_conv * cd_dn]), uint64(c.ssm_d_conv * cd_dn * 4l))
-                        enc_dn_conv(enc, bdnqkv, bdn_state, hoff, bw_cv, bdncv, u_dn_cd, u_dn_dconv, u_dn_np, cd_dn, npos)
-                        enc_dn_conv_hist(enc, bdnqkv, bdn_state, hoff, u_dn_cd, u_dn_dconv, u_dn_np, bdn_state, hoff, u_win0, cd_dn)
-                        enc_dn_l2norm(enc, bdncv, u_dn_cd, u_dn_kd, u_dn_ds, u_eps, u_dn_qscale, 2l * c.ssm_n_group, npos)
+                        var dka = dn_args(c, npos, false)
+                        enc_dn_conv(enc, bdnqkv, bdn_state, hoff, bw_cv, bdncv, dka, cd_dn, npos)
+                        enc_dn_conv_hist(enc, bdnqkv, bdn_state, hoff, bdn_state, hoff, dka, cd_dn)
+                        enc_dn_l2norm(enc, bdncv, dka, 2l * c.ssm_n_group, npos)
                         var baa = upload_region(addr < void? >(t.fblob[t.dn_a_off + l * nvh_dn]), uint64(nvh_dn * 4l))
                         var bdt = upload_region(addr < void? >(t.fblob[t.dn_dt_off + l * nvh_dn]), uint64(nvh_dn * 4l))
                         enc_dn_scan(enc, bdncv, bdn_state, soff, bdnb, bdng, baa, bdt, bdno,
-                            u_dn_cd, u_dn_kd, u_dn_ds, u_dn_nvh, u_dn_nkh, u_dn_di, u_dn_np, bdn_state, soff, u_win0,
-                            c.ssm_d_state, nvh_dn)
+                            bdn_state, soff, dka, c.ssm_d_state, nvh_dn)
                         var bwn = upload_region(addr < void? >(t.fblob[t.dn_norm_off + l * c.ssm_d_state]), uint64(c.ssm_d_state * 4l))
-                        enc_dn_gate(enc, bdno, bdnz, bwn, u_dn_ds, u_dn_di, u_eps, nvh_dn, npos)
+                        enc_dn_gate(enc, bdno, bdnz, bwn, dka, nvh_dn, npos)
                     }
                     if (g_pf_skip != "gemm") {
                         let bwo = blob_of(g_dev, t, t.dnout_offs[l])
@@ -3613,7 +3600,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                                 let bwqb = blob_of(g_dev, t, t.wq_offs[l])
                                 enc_gemm_mm(enc, bwqb.buf, bwqb.boff, bxb, bdnqg, u_dim, u_dn_qd2, mp, 2l * qd_l)
                             }
-                            enc_dn_deint(enc, bdnqg, bq, bdngate, u_hs_l, u_qd_l, u_qd_l, qd_l, npos)
+                            enc_dn_deint(enc, bdnqg, bq, bdngate,
+                                DnDeintArgs(hs = uint(hs_l), qd = uint(qd_l), qs = uint(qd_l)), qd_l, npos)
                         } elif (fq != KqFmt.q8) {
                             pf_enc_kq_site_mm(enc, t, fq, t.wq_offs[l], qd_l, bxb, bq, u_dim, u_qd_l, mp)
                         } else {
@@ -3641,7 +3629,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         if (c.q_gated) {
                             // 2x-wide packed [q|gate] projection, deinterleaved into the q panel + gate rows
                             enc_gemm_mm(enc, bwqb.buf, bwqb.boff, bxb, bdnqg, u_dim, u_dn_qd2, mp, 2l * qd_l)
-                            enc_dn_deint(enc, bdnqg, bq, bdngate, u_hs_l, u_qd_l, u_qd_l, qd_l, npos)
+                            enc_dn_deint(enc, bdnqg, bq, bdngate,
+                                DnDeintArgs(hs = uint(hs_l), qd = uint(qd_l), qs = uint(qd_l)), qd_l, npos)
                         } else {
                             enc_gemm_mm(enc, bwqb.buf, bwqb.boff, bxb, bq, u_dim, u_qd_l, mp, qd_l)
                         }
@@ -3673,8 +3662,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         // MAX-width ones upload: the region cache is address-keyed and both
                         // classes read this one plane (the single-decode lesson)
                         var bones = upload_region(addr < void? >(t.fblob[t.rms_ones_off]), uint64(max_head_size(c) * 4l))
-                        enc_qk_norm_pf(enc, bvs[l], bones, u_zero, u_zero, u_kvd_l, u_hs_l, u_zero, u_eps,
-                            u_zero, kvd_l / hs_l, npos, hs_l, koff)
+                        var vka = QkNormArgs(nq = 0u, koffe = 0u, rstride = uint(kvd_l),
+                            hs = uint(hs_l), woffe = 0u, eps = c.norm_eps, soffe = 0u)
+                        enc_qk_norm_pf(enc, bvs[l], bones, vka, kvd_l / hs_l, npos, hs_l, koff)
                     }
                 }
                 if (!recr && has_bias && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
@@ -3691,11 +3681,14 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 if (!recr && has_qkn && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     // per-head QK-norm before rope — the chunk's q panel and its new K rows
                     var bqw = upload_region(addr < void? >(t.fblob[t.rms_q_offs[l]]), uint64(hs_l * 4l))
-                    enc_qk_norm_pf(enc, bq, bqw, u_nh_pf, u_qd_l, u_qd_l, u_hs_l, u_hs_l, u_eps, u_qd_l, n_heads, npos, hs_l)
+                    var qka = QkNormArgs(nq = uint(n_heads), koffe = uint(qd_l), rstride = uint(qd_l),
+                        hs = uint(hs_l), woffe = uint(hs_l), eps = c.norm_eps, soffe = uint(qd_l))
+                    enc_qk_norm_pf(enc, bq, bqw, qka, n_heads, npos, hs_l)
                     if (!kvsh) {
                         var bkw = upload_region(addr < void? >(t.fblob[t.rms_k_offs[l]]), uint64(hs_l * 4l))
-                        enc_qk_norm_pf(enc, bks[l], bkw, u_zero, u_zero, u_kvd_l, u_hs_l, u_zero, u_eps,
-                            u_zero, kvd_l / hs_l, npos, hs_l, koff)
+                        var kka = QkNormArgs(nq = 0u, koffe = 0u, rstride = uint(kvd_l),
+                            hs = uint(hs_l), woffe = 0u, eps = c.norm_eps, soffe = 0u)
+                        enc_qk_norm_pf(enc, bks[l], bkw, kka, kvd_l / hs_l, npos, hs_l, koff)
                     }
                 }
                 if (!recr && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
@@ -4090,12 +4083,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         pool_release(g_pf_upool, u_dn_cd, 4ul)
         pool_release(g_pf_upool, u_dn_di, 4ul)
         pool_release(g_pf_upool, u_dn_nvh, 4ul)
-        pool_release(g_pf_upool, u_dn_kd, 4ul)
-        pool_release(g_pf_upool, u_dn_ds, 4ul)
-        pool_release(g_pf_upool, u_dn_nkh, 4ul)
-        pool_release(g_pf_upool, u_dn_dconv, 4ul)
         pool_release(g_pf_upool, u_dn_np, 4ul)
-        pool_release(g_pf_upool, u_dn_qscale, 4ul)
     }
     if (c.q_gated) {
         pool_release(g_pf_pool, bdnqg, bytes_dn_qg)
@@ -4172,10 +4160,6 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         pool_release(g_pf_upool, u_totkv, 4ul)
     }
     if (has_qkn) {
-        pool_release(g_pf_upool, u_nh_pf, 4ul)
-    }
-    if (u_zero != null) {
-        pool_release(g_pf_upool, u_zero, 4ul)
     }
     if (hetero) {
         pool_release(g_pf_upool, u_qd_sw, 4ul)

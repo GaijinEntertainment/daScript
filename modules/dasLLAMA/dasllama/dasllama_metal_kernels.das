@@ -3345,6 +3345,51 @@ struct RopeStoreBTq4Args {
     has_bias : uint
 }
 
+// The DeltaNet layer's geometry as ONE kargs value: conv, history advance, per-head L2, the
+// fused scan and the gated out-norm are stages of one layer, so they share it.
+struct DnArgs {
+    cd : uint
+    dconv : uint
+    npos : uint
+    kd : uint
+    ds : uint
+    nvh : uint
+    nkh : uint
+    di : uint
+    eps : float
+    qscale : float
+    mid : uint
+}
+
+// Per-head RMSNorm's uniforms as ONE kargs value. `soffe` is the READ offset and `koffe` the
+// WRITE one — equal for the in-place QK-norm, different where the no-wv V fusion reads the
+// pre-norm K slice and writes the v segment.
+struct QkNormArgs {
+    nq : uint
+    koffe : uint
+    rstride : uint
+    hs : uint
+    woffe : uint
+    eps : float
+    soffe : uint
+}
+
+// The [q|gate] deinterleave is not DeltaNet-only (any q_gated model runs it), so it keeps its own.
+struct DnDeintArgs {
+    hs : uint
+    qd : uint
+    qs : uint
+}
+
+// The whole DeltaNet geometry derives from the config, so ONE place derives it and the three
+// sites (prefill window, single decode, the B=2 verify) differ only in `npos` and `mid`.
+def dn_args(c : Config; npos : int64; mid : bool) : DnArgs {
+    return DnArgs(cd = uint(dn_conv_dim(c)), dconv = uint(c.ssm_d_conv), npos = uint(npos),
+        kd = uint(dn_key_dim(c)), ds = uint(c.ssm_d_state), nvh = uint(c.ssm_dt_rank),
+        nkh = uint(c.ssm_n_group), di = uint(c.ssm_d_inner), eps = c.norm_eps,
+        qscale = 1.0 / sqrt(float(c.ssm_d_state)), mid = mid ? 1u : 0u)
+}
+
 // ===== the split-K "D" attention family: the stages that do not depend on the K/V codec =====
 // One simdgroup owns a 32-position slice and merges it online into its running state. Only the
 // score and V-accumulate steps read K/V, so only those stay per-codec in each kernel below.
@@ -7877,19 +7922,18 @@ class MetalKqMvB8K6 {
 class MetalQkNorm {
     @ssbo @binding = 0 x : array<float>     // bound at the panel offset; normalized in place
     @ssbo @binding = 1 @role = "weight" w : array<float>
-    @uniform @binding = 2 nq : uint         // q-head threadgroups before the k heads
-    @uniform @binding = 3 koffe : uint      // k region's element offset within a row (the WRITE side)
-    @uniform @binding = 4 rstride : uint    // row stride (qkvd / qd / kv_dim)
-    @uniform @binding = 5 hs : uint         // head size == the threadgroup width
-    @uniform @binding = 6 woffe : uint      // k plane's element offset in w
-    @uniform @binding = 7 eps : float
-    @uniform @binding = 8 soffe : uint      // READ offset — == koffe for in-place; the no-wv V
-                                            // fusion reads the pre-norm K slice and writes the v
-                                            // segment (the copy dispatch dissolves into this kernel)
+    @uniform @binding = 2 ka : QkNormArgs
     @workgroup part : float[16]     // one per simdgroup — hs <= 512 (gemma4 global heads)
 
     [metal_kernel(name="metal_qk_norm_msl")]
     def metal_qk_norm {
+        let nq = ka.nq
+        let koffe = ka.koffe
+        let rstride = ka.rstride
+        let hs = ka.hs
+        let woffe = ka.woffe
+        let eps = ka.eps
+        let soffe = ka.soffe
         let tgid = gl_WorkGroupID.x
         let lid = gl_LocalInvocationID.x
         let isK = tgid >= nq
@@ -8017,12 +8061,12 @@ class MetalDnConv {
     @ssbo @binding = 1 @off = "hoff" hist : array<float>  // [cd x taps] channel-major history (layer slice)
     @ssbo @binding = 2 @role = "weight" w : array<float>     // [cd x dconv] conv taps (raw fblob layout)
     @ssbo @binding = 3 y : array<float>     // [npos x cd] conv output, silu'd
-    @uniform @binding = 4 cd : uint
-    @uniform @binding = 5 dconv : uint
-    @uniform @binding = 6 npos : uint
+    @uniform @binding = 4 ka : DnArgs
 
     [metal_kernel(name="metal_dn_conv_msl")]
     def metal_dn_conv {
+        let cd = ka.cd
+        let dconv = ka.dconv
         let ch = gl_GlobalInvocationID.x
         let p = gl_GlobalInvocationID.y
         if (ch >= cd) {
@@ -8048,14 +8092,15 @@ class MetalDnConv {
 class MetalDnConvHist {
     @ssbo @binding = 0 x : array<float>     // [npos x cd] the window's fused qkv rows
     @ssbo @binding = 1 @off = "hoff" hist : array<float>  // [cd x taps] channel-major history (layer slice)
-    @uniform @binding = 2 cd : uint
-    @uniform @binding = 3 dconv : uint
-    @uniform @binding = 4 npos : uint
-    @ssbo @binding = 5 @role = "alias" @off = "hmoff" histm : array<float> // dual-store: the npos-1 window's history (verify shadow region)
-    @uniform @binding = 6 mid : uint        // 1 = also store the npos-1 window's history to histm
+    @ssbo @binding = 2 @role = "alias" @off = "hmoff" histm : array<float> // dual-store: the npos-1 window's history (verify shadow region)
+    @uniform @binding = 3 ka : DnArgs
 
     [metal_kernel(name="metal_dn_conv_hist_msl")]
     def metal_dn_conv_hist {
+        let cd = ka.cd
+        let dconv = ka.dconv
+        let npos = ka.npos
+        let mid = ka.mid
         let ch = gl_GlobalInvocationID.x
         if (ch >= cd) {
             return
@@ -8090,14 +8135,15 @@ class MetalDnConvHist {
 [metal_dispatch(name = "enc_dn_l2norm", pso = "g_pso_dn_l2", tg = 256, grid = "nblk/8, npos", params = "nblk : int64, npos : int64")]
 class MetalDnL2Norm {
     @ssbo @binding = 0 y : array<float>     // [npos x cd] conv rows: q at 0, k at kd
-    @uniform @binding = 1 cd : uint
-    @uniform @binding = 2 kd : uint         // key_dim = nkh * ds
-    @uniform @binding = 3 ds : uint         // 128 (gated)
-    @uniform @binding = 4 eps : float
-    @uniform @binding = 5 qscale : float    // 1/sqrt(ds); k blocks get 1
+    @uniform @binding = 1 ka : DnArgs
 
     [metal_kernel(name="metal_dn_l2norm_msl")]
     def metal_dn_l2norm {
+        let cd = ka.cd
+        let kd = ka.kd
+        let ds = ka.ds
+        let eps = ka.eps
+        let qscale = ka.qscale
         let blk = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
         let p = gl_WorkGroupID.y
         let nblk = (2u * kd) / ds
@@ -8132,18 +8178,19 @@ class MetalDnScan {
     @ssbo @binding = 4 @role = "weight" aa : array<float>    // [nvh] ssm_a = -exp(A_log) (fblob row)
     @ssbo @binding = 5 @role = "weight" dtb : array<float>   // [nvh] dt_bias (fblob row)
     @ssbo @binding = 6 o : array<float>     // [npos x di] delta-rule output rows
-    @uniform @binding = 7 cd : uint
-    @uniform @binding = 8 kd : uint
-    @uniform @binding = 9 ds : uint         // 128 (gated)
-    @uniform @binding = 10 nvh : uint
-    @uniform @binding = 11 nkh : uint
-    @uniform @binding = 12 di : uint        // nvh * ds
-    @uniform @binding = 13 npos : uint
-    @ssbo @binding = 14 @role = "alias" @off = "stmoff" stm : array<float>  // dual-store: post-token-(npos-2) state (verify shadow region)
-    @uniform @binding = 15 mid : uint       // 1 = store S after token npos-2 to stm
+    @ssbo @binding = 7 @role = "alias" @off = "stmoff" stm : array<float>  // dual-store: post-token-(npos-2) state (verify shadow region)
+    @uniform @binding = 8 ka : DnArgs
 
     [metal_kernel(name="metal_dn_scan_msl")]
     def metal_dn_scan {
+        let cd = ka.cd
+        let kd = ka.kd
+        let ds = ka.ds
+        let nvh = ka.nvh
+        let nkh = ka.nkh
+        let di = ka.di
+        let npos = ka.npos
+        let mid = ka.mid
         let j = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
         let h = gl_WorkGroupID.y
         if (j >= ds) {
@@ -8205,12 +8252,13 @@ class MetalDnGate {
     @ssbo @binding = 0 o : array<float>     // [npos x di] delta-rule output, gated in place
     @ssbo @binding = 1 z : array<float>     // [npos x di] raw gate projections
     @ssbo @binding = 2 @role = "weight" wn : array<float>    // [ds] shared norm weight (fblob row)
-    @uniform @binding = 3 ds : uint         // 128 (gated)
-    @uniform @binding = 4 di : uint
-    @uniform @binding = 5 eps : float
+    @uniform @binding = 3 ka : DnArgs
 
     [metal_kernel(name="metal_dn_gate_msl")]
     def metal_dn_gate {
+        let ds = ka.ds
+        let di = ka.di
+        let eps = ka.eps
         let h = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
         let p = gl_WorkGroupID.y
         if (h >= di / ds) {
@@ -8241,12 +8289,13 @@ class MetalDnDeint {
     @ssbo @binding = 0 qg : array<float>    // [npos x 2qd] packed [q|gate] projection rows
     @ssbo @binding = 1 q : array<float>     // qkv panel, q segment at row stride qs
     @ssbo @binding = 2 gt : array<float>    // [npos x qd] sigmoid-gate rows
-    @uniform @binding = 3 hs : uint
-    @uniform @binding = 4 qd : uint
-    @uniform @binding = 5 qs : uint         // q panel row stride, elements (qkvd; decode binds qd)
+    @uniform @binding = 3 ka : DnDeintArgs
 
     [metal_kernel(name="metal_dn_deint_msl")]
     def metal_dn_deint {
+        let hs = ka.hs
+        let qd = ka.qd
+        let qs = ka.qs
         let i = gl_GlobalInvocationID.x
         let p = gl_GlobalInvocationID.y
         if (i >= qd) {

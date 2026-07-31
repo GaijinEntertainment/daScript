@@ -148,7 +148,6 @@ struct private StepRes {
     u_qkvd : MetalBuffer?
     u_hidden : MetalBuffer?
     u_hs : MetalBuffer?
-    u_nh : MetalBuffer?
     u_cnt : MetalBuffer?
     u_scale : MetalBuffer?
     u_eps : MetalBuffer?
@@ -197,8 +196,10 @@ struct private StepRes {
     k_hasn : uint
     k_eps : float
     k_rot : uint      // partial rotary width; 0 = full, i.e. the layer's own head_size
-    u_voffe : MetalBuffer?     // v segment element offset (qd + kvd) — the v_norm/V-from-K sites
-    u_voffe_sw : MetalBuffer?
+    k_qkvd : uint
+    k_qkvd_sw : uint
+    k_voffe : uint    // v segment element offset (qd + kvd)
+    k_voffe_sw : uint
     u_embscale : MetalBuffer?  // sqrt(dim) embed scale on the spec chain's GPU gather (gemma)
     bsupp : MetalBuffer?       // suppressed token ids (u32) + count — the gemma4 logits pin
     u_nsupp : MetalBuffer?
@@ -257,13 +258,8 @@ struct private StepRes {
     bdn_qg : MetalBuffer?      // [2*qd] packed [q|gate] projection (gated-attention layers)
     bdn_gate : MetalBuffer?    // [qd] deinterleaved sigmoid-gate rows
     u_cd : MetalBuffer?
-    u_dn_kd : MetalBuffer?
-    u_ds : MetalBuffer?
     u_nvh : MetalBuffer?
-    u_nkh : MetalBuffer?
     u_di : MetalBuffer?
-    u_dconv : MetalBuffer?
-    u_qscale : MetalBuffer?
     u_one32 : MetalBuffer?     // constant 1 (dn npos, the shexp gate's 1-row GEMV) — unconditional
     u_dn_qd2 : MetalBuffer?    // 2*qd — the packed [q|gate] GEMV width
     bytes_dn_cd : uint64
@@ -344,9 +340,9 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
     r.u_kvd = uniform_u32(uint(kv_dim))
     r.k_kvd = uint(kv_dim)
     r.u_qkvd = uniform_u32(uint(qkvd))
+    r.k_qkvd = uint(qkvd)
     r.u_hidden = uniform_u32(uint(hidden))
     r.u_hs = uniform_u32(uint(head_size))
-    r.u_nh = uniform_u32(uint(n_heads))
     r.k_nh = uint(n_heads)
     r.u_cnt = uniform_u32(uint(pos + 1l))
     r.k_npq = uint(qd / 2l)
@@ -360,6 +356,12 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
     r.k_scale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size))
     r.u_eps = uniform_f32(c.norm_eps)
     r.k_eps = c.norm_eps
+    if (c.v_norm || c.v_from_k_mask != 0ul) {
+        r.k_voffe = uint(qd + kv_dim)
+        if (hetero) {
+            r.k_voffe_sw = uint(qd_sw + kvd_sw)
+        }
+    }
     if (hetero) {
         r.u_hs_sw = uniform_u32(uint(hs_sw))
         r.u_kvd_sw = uniform_u32(uint(kvd_sw))
@@ -367,6 +369,7 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
         r.u_qd_sw = uniform_u32(uint(qd_sw))
         r.k_qd_sw = uint(qd_sw)
         r.u_qkvd_sw = uniform_u32(uint(qkvd_sw))
+        r.k_qkvd_sw = uint(qkvd_sw)
         r.u_scale_sw = uniform_f32(c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs_sw)))
         r.k_hs_sw = uint(hs_sw)
         r.k_kstride_sw = uint(blockc0 ? kvd_sw / 32l : kvd_sw)
@@ -374,12 +377,6 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
         r.k_scale_sw = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs_sw))
         r.k_npq_sw = uint(qd_sw / 2l)
         r.k_npall_sw = uint((qd_sw + kvd_sw) / 2l)
-    }
-    if (c.v_norm || c.v_from_k_mask != 0ul) {
-        r.u_voffe = uniform_u32(uint(qd + kv_dim))
-        if (hetero) {
-            r.u_voffe_sw = uniform_u32(uint(qd_sw + kvd_sw))
-        }
     }
     r.u_neox = uniform_u32(c.rope_neox ? 1u : 0u)
     r.k_neox = c.rope_neox ? 1u : 0u
@@ -456,13 +453,8 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
         r.bdn_b = pool_acquire(g_pool, g_dev, r.bytes_dn_h)
         r.bdn_g = pool_acquire(g_pool, g_dev, r.bytes_dn_h)
         r.u_cd = uniform_u32(uint(cd))
-        r.u_dn_kd = uniform_u32(uint(dn_key_dim(c)))
-        r.u_ds = uniform_u32(uint(c.ssm_d_state))
         r.u_nvh = uniform_u32(uint(c.ssm_dt_rank))
-        r.u_nkh = uniform_u32(uint(c.ssm_n_group))
         r.u_di = uniform_u32(uint(di))
-        r.u_dconv = uniform_u32(uint(c.ssm_d_conv))
-        r.u_qscale = uniform_f32(1.0 / sqrt(float(c.ssm_d_state)))
     }
     if (c.q_gated) {
         r.bdn_qg = pool_acquire(g_pool, g_dev, 2ul * r.bytes_q)
@@ -586,7 +578,15 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
         var u_hs_l = het ? r.u_hs_sw : r.u_hs
         var u_kvd_l = het ? r.u_kvd_sw : r.u_kvd
         var u_qd_l = het ? r.u_qd_sw : r.u_qd
-        var u_qkvd_l = het ? r.u_qkvd_sw : r.u_qkvd
+        // the same per-layer selection on the kargs scalars, chosen ONCE beside the buffer twins
+        let k_hs_l = het ? r.k_hs_sw : r.k_hs
+        let k_qd_l = het ? r.k_qd_sw : r.k_qd
+        let k_qkvd_l = het ? r.k_qkvd_sw : r.k_qkvd
+        let k_kvm_l = het ? r.k_kvm_sw : r.k_kvm
+        let k_npq_l = het ? r.k_npq_sw : r.k_npq
+        let k_npall_l = het ? r.k_npall_sw : r.k_npall
+        let k_nblk_l = het ? r.k_nblk_sw : r.k_nblk
+        let k_voffe_l = het ? r.k_voffe_sw : r.k_voffe
         // E-series shared-KV layer: Q-only — lkoff/lvoff alias the source slab via kv_row_prefix
         let kvsh = kv_shared_layer(t, l)
         // qk_norm needs the head-wide prepass between GEMV and rope — the fused form stands down (hetero too: its row map bakes one class geometry); q_gated packs [q|gate] (deint first)
@@ -614,15 +614,16 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                 let soff = r.dn_state_base + uint64(dnli * nvh * c.ssm_d_state * c.ssm_d_state * 4l)
                 let hoff = r.dn_conv_base + uint64(dnli * (c.ssm_d_conv - 1l) * cd * 4l)
                 var bw_cv = upload_region(addr < void? >(t.fblob[t.dn_conv_off + l * c.ssm_d_conv * cd]), uint64(c.ssm_d_conv * cd * 4l))
-                enc_dn_conv(enc, r.bdn_qkv, r.bdn_state, hoff, bw_cv, r.bdn_cv, r.u_cd, r.u_dconv, r.u_one32, cd, 1l)
-                enc_dn_conv_hist(enc, r.bdn_qkv, r.bdn_state, hoff, r.u_cd, r.u_dconv, r.u_one32, r.bdn_state, hoff, r.u_zero32, cd)
-                enc_dn_l2norm(enc, r.bdn_cv, r.u_cd, r.u_dn_kd, r.u_ds, r.u_eps, r.u_qscale, 2l * c.ssm_n_group, 1l)
+                var dka = dn_args(c, 1l, false)
+                enc_dn_conv(enc, r.bdn_qkv, r.bdn_state, hoff, bw_cv, r.bdn_cv, dka, cd, 1l)
+                enc_dn_conv_hist(enc, r.bdn_qkv, r.bdn_state, hoff, r.bdn_state, hoff, dka, cd)
+                enc_dn_l2norm(enc, r.bdn_cv, dka, 2l * c.ssm_n_group, 1l)
                 var baa = upload_region(addr < void? >(t.fblob[t.dn_a_off + l * nvh]), uint64(nvh * 4l))
                 var bdt = upload_region(addr < void? >(t.fblob[t.dn_dt_off + l * nvh]), uint64(nvh * 4l))
                 enc_dn_scan(enc, r.bdn_cv, r.bdn_state, soff, r.bdn_b, r.bdn_g, baa, bdt, r.bdn_o,
-                    r.u_cd, r.u_dn_kd, r.u_ds, r.u_nvh, r.u_nkh, r.u_di, r.u_one32, r.bdn_state, soff, r.u_zero32, c.ssm_d_state, nvh)
+                    r.bdn_state, soff, dka, c.ssm_d_state, nvh)
                 var bwn = upload_region(addr < void? >(t.fblob[t.dn_norm_off + l * c.ssm_d_state]), uint64(c.ssm_d_state * 4l))
-                enc_dn_gate(enc, r.bdn_o, r.bdn_z, bwn, r.u_ds, r.u_di, r.u_eps, nvh, 1l)
+                enc_dn_gate(enc, r.bdn_o, r.bdn_z, bwn, dka, nvh, 1l)
             }
             if (g_skip != "gemv") {
                 enc_site_gemv(enc, t, KqFmt.q8, t.dnout_offs[l], dim, di, r.bdn_o, r.bxb2, r.u_di, r.u_dim)
@@ -651,7 +652,8 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                 if (c.q_gated) {
                     // 2x-wide packed [q|gate] projection, deinterleaved into the qkv q segment + gate rows
                     enc_site_gemv(enc, t, fq, t.wq_offs[l], 2l * qd, dim, r.bxb, r.bdn_qg, r.u_dim, r.u_dn_qd2)
-                    enc_dn_deint(enc, r.bdn_qg, r.bqkv, r.bdn_gate, u_hs_l, u_qd_l, u_qd_l, qd, 1l)
+                    enc_dn_deint(enc, r.bdn_qg, r.bqkv, r.bdn_gate,
+                        DnDeintArgs(hs = k_hs_l, qd = k_qd_l, qs = k_qd_l), qd, 1l)
                 } else {
                     enc_site_gemv(enc, t, fq, t.wq_offs[l], qd, dim, r.bxb, r.bqkv, r.u_dim, u_qd_l)
                 }
@@ -671,10 +673,10 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
             if (c.v_norm) {
                 // MAX-width upload: the region cache is address-keyed and both classes read this one plane — a narrower first upload starved the hs-512 class (Metal OOB reads are ZEROS)
                 var bones = upload_region(addr < void? >(t.fblob[t.rms_ones_off]), uint64(max_head_size(c) * 4l))
-                enc_qk_norm(enc, r.bqkv, bones, r.u_zero32, het ? r.u_voffe_sw : r.u_voffe,
-                    u_qkvd_l, u_hs_l, r.u_zero32, r.u_eps,
-                    t.wv_offs[l] < 0l ? u_qd_l : (het ? r.u_voffe_sw : r.u_voffe),
-                    kv_dim / head_size, 1l, head_size)
+                var vka = QkNormArgs(nq = 0u, koffe = k_voffe_l, rstride = k_qkvd_l,
+                    hs = k_hs_l, woffe = 0u, eps = r.k_eps,
+                    soffe = t.wv_offs[l] < 0l ? k_qd_l : k_voffe_l)
+                enc_qk_norm(enc, r.bqkv, bones, vka, kv_dim / head_size, 1l, head_size)
             }
         }
         if (!recr && c.qk_norm && g_skip != "ew" && !f16v) {
@@ -682,25 +684,23 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
             var bqkw = upload_region_cat3(
                 addr < void? >(t.fblob[t.rms_q_offs[l]]), uint64(head_size * 4l),
                 addr < void? >(t.fblob[t.rms_k_offs[l]]), uint64(head_size * 4l), null, 0ul)
-            enc_qk_norm(enc, r.bqkv, bqkw, r.u_nh, u_qd_l, u_qkvd_l, u_hs_l, u_hs_l, r.u_eps,
-                u_qd_l, kvsh ? n_heads : n_heads + kv_dim / head_size, 1l, head_size)
+            var qka = QkNormArgs(nq = r.k_nh, koffe = k_qd_l, rstride = k_qkvd_l,
+                hs = k_hs_l, woffe = k_hs_l, eps = r.k_eps, soffe = k_qd_l)
+            enc_qk_norm(enc, r.bqkv, bqkw, qka, kvsh ? n_heads : n_heads + kv_dim / head_size, 1l, head_size)
         }
         if (!recr && g_skip != "ew" && !fused_qkv) {
             // shared-KV layers dispatch the Q rows only — no K rope, no mirror row store
-            let rs_qd = het ? r.k_qd_sw : r.k_qd
-            let rs_hs = het ? r.k_hs_sw : r.k_hs
-            let rs_rot = r.k_rot != 0u ? r.k_rot : rs_hs   // 0 = full rope, i.e. this layer's head size
+            let rs_rot = r.k_rot != 0u ? r.k_rot : k_hs_l   // 0 = full rope, i.e. this layer's head size
             if (r.kdt == KVDtype.q8_0) {
-                var qka = RopeStoreQ8Args(qd = rs_qd, head_size = rs_hs,
-                    npairs_q = het ? r.k_npq_sw : r.k_npq, nblk = het ? r.k_nblk_sw : r.k_nblk,
-                    neox = r.k_neox, has_bias = r.k_hasb)
+                var qka = RopeStoreQ8Args(qd = k_qd_l, head_size = k_hs_l, npairs_q = k_npq_l,
+                    nblk = k_nblk_l, neox = r.k_neox, has_bias = r.k_hasb)
                 enc_rope_store_q8(enc, r.bqkv, uint64((qd + kv_dim) * 4l), g_arena, g_arena,
                     lkoff + uint64(pos * rowb), lvoff + uint64(pos * rowb),
                     bcos_l, bsin_l, bbias, qka,
                     kvsh ? qd / 2l : qd / 2l + 2l * (kv_dim / 32l))
             } elif (r.kdt == KVDtype.tq4) {
-                var tka = RopeStoreTq4Args(qd = rs_qd, head_size = rs_hs, nheads = r.k_nh,
-                    kv_mul = het ? r.k_kvm_sw : r.k_kvm, neox = r.k_neox, has_bias = r.k_hasb)
+                var tka = RopeStoreTq4Args(qd = k_qd_l, head_size = k_hs_l, nheads = r.k_nh,
+                    kv_mul = k_kvm_l, neox = r.k_neox, has_bias = r.k_hasb)
                 enc_rope_store_tq4(enc, r.bqkv, uint64((qd + kv_dim) * 4l), g_arena, g_arena,
                     lkoff + uint64(pos * rowb), lvoff + uint64(pos * rowb),
                     bcos_l, bsin_l, bbias, tka,
@@ -710,17 +710,16 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                 var bqkw = upload_region_cat3(
                     addr < void? >(t.fblob[t.rms_q_offs[l]]), uint64(head_size * 4l),
                     addr < void? >(t.fblob[t.rms_k_offs[l]]), uint64(head_size * 4l), null, 0ul)
-                var hka = RopeStoreHArgs(qd = rs_qd, head_size = rs_hs, nheads = r.k_nh,
-                    kv_mul = het ? r.k_kvm_sw : r.k_kvm, neox = r.k_neox, has_bias = r.k_hasb,
+                var hka = RopeStoreHArgs(qd = k_qd_l, head_size = k_hs_l, nheads = r.k_nh,
+                    kv_mul = k_kvm_l, neox = r.k_neox, has_bias = r.k_hasb,
                     has_norm = r.k_hasn, eps = r.k_eps, rot = rs_rot)
                 enc_rope_store_h16(enc, r.bqkv, uint64((qd + kv_dim) * 4l), g_arena, g_arena,
                     lkoff + uint64(pos * rowb), lvoff + uint64(pos * rowb),
                     bcos_l, bsin_l, bqkw, bbias, hka,
                     kvsh ? n_heads : n_heads + 2l * (kv_dim / head_size), head_size)
             } else {
-                var rka = RopeStoreArgs(qd = rs_qd, head_size = rs_hs,
-                    npairs_q = het ? r.k_npq_sw : r.k_npq, npairs = het ? r.k_npall_sw : r.k_npall,
-                    neox = r.k_neox, has_bias = r.k_hasb, rot = rs_rot)
+                var rka = RopeStoreArgs(qd = k_qd_l, head_size = k_hs_l, npairs_q = k_npq_l,
+                    npairs = k_npall_l, neox = r.k_neox, has_bias = r.k_hasb, rot = rs_rot)
                 enc_rope_store(enc, f16v, r.bqkv, uint64((qd + kv_dim) * 4l), g_arena, g_arena,
                     lkoff + uint64(pos * rowb), lvoff + uint64(pos * rowb),
                     bcos_l, bsin_l, bbias, rka,
@@ -1203,16 +1202,16 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
             let soff = r.dn_state_base + sslice
             let hoff = r.dn_conv_base + hslice
             var bw_cv = upload_region(addr < void? >(t.fblob[t.dn_conv_off + l * c.ssm_d_conv * cd]), uint64(c.ssm_d_conv * cd * 4l))
-            enc_dn_conv(enc, r.bdn_qkv, r.bdn_state, hoff, bw_cv, r.bdn_cv, r.u_cd, r.u_dconv, r.u_two32, cd, 2l)
-            enc_dn_conv_hist(enc, r.bdn_qkv, r.bdn_state, hoff, r.u_cd, r.u_dconv, r.u_two32, r.bdn_state, r.dn_conv_alt + hslice, r.u_one32, cd)
-            enc_dn_l2norm(enc, r.bdn_cv, r.u_cd, r.u_dn_kd, r.u_ds, r.u_eps, r.u_qscale, 2l * c.ssm_n_group, 2l)
+            var dka = dn_args(c, 2l, true)
+            enc_dn_conv(enc, r.bdn_qkv, r.bdn_state, hoff, bw_cv, r.bdn_cv, dka, cd, 2l)
+            enc_dn_conv_hist(enc, r.bdn_qkv, r.bdn_state, hoff, r.bdn_state, r.dn_conv_alt + hslice, dka, cd)
+            enc_dn_l2norm(enc, r.bdn_cv, dka, 2l * c.ssm_n_group, 2l)
             var baa = upload_region(addr < void? >(t.fblob[t.dn_a_off + l * nvh]), uint64(nvh * 4l))
             var bdt = upload_region(addr < void? >(t.fblob[t.dn_dt_off + l * nvh]), uint64(nvh * 4l))
             enc_dn_scan(enc, r.bdn_cv, r.bdn_state, soff, r.bdn_b, r.bdn_g, baa, bdt, r.bdn_o,
-                r.u_cd, r.u_dn_kd, r.u_ds, r.u_nvh, r.u_nkh, r.u_di, r.u_two32, r.bdn_state,
-                r.dn_state_alt + sslice, r.u_one32, c.ssm_d_state, nvh)
+                r.bdn_state, r.dn_state_alt + sslice, dka, c.ssm_d_state, nvh)
             var bwn = upload_region(addr < void? >(t.fblob[t.dn_norm_off + l * c.ssm_d_state]), uint64(c.ssm_d_state * 4l))
-            enc_dn_gate(enc, r.bdn_o, r.bdn_z, bwn, r.u_ds, r.u_di, r.u_eps, nvh, 2l)
+            enc_dn_gate(enc, r.bdn_o, r.bdn_z, bwn, dka, nvh, 2l)
             let bdno = blob_of(g_dev, t, t.dnout_offs[l])
             enc_gemv_b(enc, false, bdno.buf, bdno.boff, r.bdn_o, r.bxb2, r.u_di, r.u_dim, r.u_dim, dim)
             dnli++
@@ -1227,7 +1226,8 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
             if (c.q_gated) {
                 enc_verify_site(t, r, enc, fmt_at(t.wq_fmt, l), t.wq_offs[l], 2l * qd, dim, 2l * qd,
                     r.bxb, r.bdn_qg, r.u_dim, r.u_dn_qd2, r.u_dn_qd2)
-                enc_dn_deint(enc, r.bdn_qg, r.bqkv, r.bdn_gate, r.u_hs, r.u_qd, r.u_qkvd, qd, 2l)
+                enc_dn_deint(enc, r.bdn_qg, r.bqkv, r.bdn_gate,
+                    DnDeintArgs(hs = r.k_hs, qd = r.k_qd, qs = uint(qkvd)), qd, 2l)
             } else {
                 enc_verify_site(t, r, enc, fmt_at(t.wq_fmt, l), t.wq_offs[l], qd, dim, qkvd,
                     r.bxb, r.bqkv, r.u_dim, r.u_qd, r.u_qkvd)
@@ -1240,8 +1240,9 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
                 var bqkw = upload_region_cat3(
                     addr < void? >(t.fblob[t.rms_q_offs[l]]), uint64(head_size * 4l),
                     addr < void? >(t.fblob[t.rms_k_offs[l]]), uint64(head_size * 4l), null, 0ul)
-                enc_qk_norm(enc, r.bqkv, bqkw, r.u_nh, r.u_qd, r.u_qkvd, r.u_hs, r.u_hs, r.u_eps,
-                    r.u_qd, n_heads + kv_dim / head_size, 2l, head_size)
+                var qka = QkNormArgs(nq = r.k_nh, koffe = r.k_qd, rstride = r.k_qkvd,
+                    hs = r.k_hs, woffe = r.k_hs, eps = r.k_eps, soffe = r.k_qd)
+                enc_qk_norm(enc, r.bqkv, bqkw, qka, n_heads + kv_dim / head_size, 2l, head_size)
             }
             var vrka = RopeStoreBArgs(lay = 0u, kv_dim = r.k_kvd, qd = r.k_qd, head_size = r.k_hs,
                 npairs_q = r.k_npq, npairs = r.k_npall, qstride = uint(qkvd), neox = r.k_neox,
@@ -1793,7 +1794,6 @@ def private release_step(var r : StepRes) {
     pool_release(g_upool, r.u_qkvd, 4ul)
     pool_release(g_upool, r.u_hidden, 4ul)
     pool_release(g_upool, r.u_hs, 4ul)
-    pool_release(g_upool, r.u_nh, 4ul)
     pool_release(g_upool, r.u_cnt, 4ul)
     pool_release(g_upool, r.u_neox, 4ul)
     pool_release(g_upool, r.u_hasb, 4ul)
@@ -1817,12 +1817,6 @@ def private release_step(var r : StepRes) {
         pool_release(g_upool, r.u_qd_sw, 4ul)
         pool_release(g_upool, r.u_qkvd_sw, 4ul)
         pool_release(g_upool, r.u_scale_sw, 4ul)
-        if (r.u_voffe_sw != null) {
-            pool_release(g_upool, r.u_voffe_sw, 4ul)
-        }
-    }
-    if (r.u_voffe != null) {
-        pool_release(g_upool, r.u_voffe, 4ul)
     }
     if (r.u_embscale != null) {
         pool_release(g_upool, r.u_embscale, 4ul)
@@ -1865,13 +1859,8 @@ def private release_step(var r : StepRes) {
         pool_release(g_pool, r.bdn_b, r.bytes_dn_h)
         pool_release(g_pool, r.bdn_g, r.bytes_dn_h)
         pool_release(g_upool, r.u_cd, 4ul)
-        pool_release(g_upool, r.u_dn_kd, 4ul)
-        pool_release(g_upool, r.u_ds, 4ul)
         pool_release(g_upool, r.u_nvh, 4ul)
-        pool_release(g_upool, r.u_nkh, 4ul)
         pool_release(g_upool, r.u_di, 4ul)
-        pool_release(g_upool, r.u_dconv, 4ul)
-        pool_release(g_upool, r.u_qscale, 4ul)
         r.bdn_state = null   // mirror-owned
     }
     if (r.bdn_qg != null) {
@@ -2424,7 +2413,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     var u_qkvd = uniform_u32(uint(qkvd))
     var u_hidden = uniform_u32(uint(hidden))
     var u_hs = uniform_u32(uint(head_size))
-    var u_nh = uniform_u32(uint(n_heads))
     var u_eps = uniform_f32(c.norm_eps)
     var u_softcap = uniform_f32(c.attn_logit_softcap)
     var u_zero32 = uniform_u32(0u)
@@ -2435,9 +2423,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     var u_qkvd_sw = hetero ? uniform_u32(uint(qkvd_sw)) : null
     var u_hs_sw = hetero ? uniform_u32(uint(hs_sw)) : null
     // the V-from-K / v_norm sites: v segment element offset within a fused-QKV row, per class
-    let vfromk = c.v_from_k_mask != 0ul
-    var u_voffe = (c.v_norm || vfromk) ? uniform_u32(uint(qd + kv_dim)) : null
-    var u_voffe_sw = ((c.v_norm || vfromk) && hetero) ? uniform_u32(uint(qd_sw + kvd_sw)) : null
     // per-row depths differ, so the batch kernels derive wstart from `window` + their row's cnt
     var u_winsl = c.sliding_window > 0l ? uniform_u32(uint(c.sliding_window)) : null
     var u_flcap = (gpu_logits && c.final_logit_softcap > 0.0) ? uniform_f32(c.final_logit_softcap) : null
@@ -2628,10 +2613,11 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                     // MAX-width ones upload: the region cache is address-keyed and both classes
                     // read this one plane
                     var bones = upload_region(addr < void? >(t.fblob[t.rms_ones_off]), uint64(max_head_size(c) * 4l))
-                    enc_qk_norm(enc, bqkv, bones, u_zero32, het ? u_voffe_sw : u_voffe,
-                        u_qkvd_l, u_hs_l, u_zero32, u_eps,
-                        !has_wv ? u_qd_l : (het ? u_voffe_sw : u_voffe),
-                        kvd_l / hs_l, nrows, hs_l)
+                    let voffe_l = uint(qd_l + kvd_l)
+                    var vka = QkNormArgs(nq = 0u, koffe = voffe_l, rstride = uint(qkvd_l),
+                        hs = uint(hs_l), woffe = 0u, eps = c.norm_eps,
+                        soffe = !has_wv ? uint(qd_l) : voffe_l)
+                    enc_qk_norm(enc, bqkv, bones, vka, kvd_l / hs_l, nrows, hs_l)
                 }
             }
             if (c.qk_norm && g_skip != "ew") {
@@ -2639,8 +2625,9 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                 var bqkw = upload_region_cat3(
                     addr < void? >(t.fblob[t.rms_q_offs[l]]), uint64(hs_l * 4l),
                     addr < void? >(t.fblob[t.rms_k_offs[l]]), uint64(hs_l * 4l), null, 0ul)
-                enc_qk_norm(enc, bqkv, bqkw, u_nh, u_qd_l, u_qkvd_l, u_hs_l, u_hs_l, u_eps,
-                    u_qd_l, n_heads + kvd_l / hs_l, nrows, hs_l)
+                var qka = QkNormArgs(nq = uint(n_heads), koffe = uint(qd_l), rstride = uint(qkvd_l),
+                    hs = uint(hs_l), woffe = uint(hs_l), eps = c.norm_eps, soffe = uint(qd_l))
+                enc_qk_norm(enc, bqkv, bqkw, qka, n_heads + kvd_l / hs_l, nrows, hs_l)
             }
             if (g_skip != "ew") {
                 // rope reads+writes bqkv in place and writes the current KV row into the arena;
@@ -3094,12 +3081,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
         g_lp_upooled |> push((buf = u_qkvd_sw, size = 4ul))
         g_lp_upooled |> push((buf = u_hs_sw, size = 4ul))
     }
-    if (u_voffe != null) {
-        g_lp_upooled |> push((buf = u_voffe, size = 4ul))
-    }
-    if (u_voffe_sw != null) {
-        g_lp_upooled |> push((buf = u_voffe_sw, size = 4ul))
-    }
     g_lp_upooled |> push((buf = u_softcap, size = 4ul))
     g_lp_upooled |> push((buf = u_zero32, size = 4ul))
     if (qkv_sk > 0l) {
@@ -3151,7 +3132,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     g_lp_upooled |> push((buf = u_qkvd, size = 4ul))
     g_lp_upooled |> push((buf = u_hidden, size = 4ul))
     g_lp_upooled |> push((buf = u_hs, size = 4ul))
-    g_lp_upooled |> push((buf = u_nh, size = 4ul))
     g_lp_upooled |> push((buf = u_eps, size = 4ul))
     g_lp_upooled |> push((buf = u_s16, size = 4ul))
     g_lp_upooled |> push((buf = u_total_dim, size = 4ul))

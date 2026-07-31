@@ -90,3 +90,14 @@
    Both become expressible the moment a helper can take a pointer or a thread-space reference it
    may advance, which is the annotation work already ruled in (`@threadgroup p : float4?` and its
    `device` default). Done = k6 and q8 derive from the same base, and the family is five for five.
+
+9. **Prefill compiles its own PSO for kernels decode already has.** `enc_qk_norm_pf` in
+   dasllama_metal_prefill.das is `enc_qk_norm`'s body with `g_pf_pso_qknorm` in place of
+   `g_pso_qknorm` and a buffer offset on the x bind; `enc_rope` there is the same story. The MSL
+   source is one string in both cases, so the duplication is the PIPELINE object, not the shader —
+   prefill and decode own separate lifecycles (`metal_prefill_init` / `metal_decode_init`) and
+   each builds its own. The fix is not to merge the encoders but to decide who owns a PSO for a
+   kernel both stages dispatch: either a shared pipeline registry keyed by MSL source, or an
+   explicit rule that a stage-local PSO is the intended shape. Until that is settled, a lensed
+   class whose builder both stages could use still gets a hand-written twin on the prefill side.
+   Done = the rule is written in CODEREVIEW.md, and the twins either share a PSO or say why not.
