@@ -799,31 +799,37 @@ namespace  das {
     // layout). Division by zero follows IEEE (±inf/NaN), like float — no throw.
 #define DAS_FP16_OP1(OPNAME, EXPR)                                                          \
         static __forceinline vec4f OPNAME ( vec4f x, Context &, LineInfo * ) {              \
-            vec4f r = v_zero();                                                             \
-            const float16_t * px = (const float16_t *)&x;                                   \
-            float16_t * pr = (float16_t *)&r;                                               \
+            union { vec4f v; float16_t h[8]; } X, R;                                        \
+            X.v = x; R.v = v_zero();                                                        \
+            const float16_t * px = X.h;                                                     \
+            float16_t * pr = R.h;                                                           \
             for ( int i = 0; i != lanes; ++i ) { float xa = px[i].toFloat(); pr[i] = float16_t(EXPR); } \
-            return r;                                                                       \
+            return R.v;                                                                     \
         }
 #define DAS_FP16_OP2(OPNAME, OP)                                                            \
         static __forceinline vec4f OPNAME ( vec4f a, vec4f b, Context &, LineInfo * ) {     \
-            vec4f r = v_zero();                                                             \
-            const float16_t * pa = (const float16_t *)&a;                                   \
-            const float16_t * pb = (const float16_t *)&b;                                   \
-            float16_t * pr = (float16_t *)&r;                                               \
+            union { vec4f v; float16_t h[8]; } A, B, R;                                     \
+            A.v = a; B.v = b; R.v = v_zero();                                               \
+            const float16_t * pa = A.h;                                                     \
+            const float16_t * pb = B.h;                                                     \
+            float16_t * pr = R.h;                                                           \
             for ( int i = 0; i != lanes; ++i ) pr[i] = float16_t(OP);                       \
-            return r;                                                                       \
+            return R.v;                                                                     \
         }
 #define DAS_FP16_SET_OP2(OPNAME, OP)                                                        \
         static __forceinline void OPNAME ( char * a, vec4f b, Context &, LineInfo * ) {     \
+            union { vec4f v; float16_t h[8]; } B;                                           \
+            B.v = b;                                                                        \
             float16_t * pa = (float16_t *)a;                                                \
-            const float16_t * pb = (const float16_t *)&b;                                   \
+            const float16_t * pb = B.h;                                                     \
             for ( int i = 0; i != lanes; ++i ) pa[i] = float16_t(OP);                       \
         }
 #define DAS_FP16_BOOL_OP2(OPNAME, OP)                                                       \
         static __forceinline bool OPNAME ( vec4f a, vec4f b, Context &, LineInfo * ) {      \
-            const float16_t * pa = (const float16_t *)&a;                                   \
-            const float16_t * pb = (const float16_t *)&b;                                   \
+            union { vec4f v; float16_t h[8]; } A, B;                                        \
+            A.v = a; B.v = b;                                                               \
+            const float16_t * pa = A.h;                                                     \
+            const float16_t * pb = B.h;                                                     \
             for ( int i = 0; i != lanes; ++i ) if ( !(pa[i].toFloat() OP pb[i].toFloat()) ) return false; \
             return true;                                                                    \
         }

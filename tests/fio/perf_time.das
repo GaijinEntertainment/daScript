@@ -43,9 +43,7 @@ def test_ref_time_ticks_sleep_roundtrip(t : T?) {
     //! around 10 ms and we'd trip.
     let before = ref_time_ticks()
     sleep(100u)
-    let after = ref_time_ticks()
-    let delta_ns = after - before
-    let delta_ms = delta_ns / 1_000_000l
+    let delta_ms = get_time_nsec(before) / 1_000_000l
     t |> success(delta_ms >= 80l,
         "sleep(100ms) elapsed only {delta_ms}ms — ref_time_ticks may not be in ns")
     t |> success(delta_ms <= 500l,
@@ -60,7 +58,7 @@ def test_get_time_usec_agrees_with_ref_delta(t : T?) {
     let t0 = ref_time_ticks()
     sleep(50u)
     let usec_via_helper = int64(get_time_usec(t0))
-    let usec_via_delta = (ref_time_ticks() - t0) / 1_000l
+    let usec_via_delta = get_time_nsec(t0) / 1_000l
     let drift_us = int(abs(usec_via_delta - usec_via_helper))
     t |> success(drift_us <= 5_000,
         "get_time_usec={usec_via_helper} vs delta/1000={usec_via_delta} drift={drift_us}us")
@@ -68,10 +66,9 @@ def test_get_time_usec_agrees_with_ref_delta(t : T?) {
 
 [test]
 def test_ref_time_ticks_units_are_nanoseconds(t : T?) {
-    //! Sanity check that two sleep(100ms) calls in a row produce roughly
-    //! the same delta. If one platform reports µs and another reports ns,
-    //! repeated calls would diverge wildly. Same-platform tick uniformity
-    //! is also expected.
+    //! Sanity check that two sleep(100ms) calls in a row produce roughly the
+    //! same raw tick delta. Ticks are in the embedder's unit, so this pins rate
+    //! uniformity only - elapsed-time contracts live in get_time_nsec/usec above.
     var deltas : array<int64>
     deltas |> reserve(3)
     for (_i in range(3)) {

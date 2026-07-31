@@ -26,6 +26,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(DAS_FLEX_BISON_DISABLED "Disable FLEX/BISON stage" OFF)
+option(DAS_STRICT_ALIASING "Keep gcc strict aliasing on (exposes type-pun bugs)" OFF)
 option(DAS_CLANG_BIND_DISABLED "Disable dasClangBind (libclang bindings, C/C++ parsing)" ON)
 option(DAS_LLVM_DISABLED "Disable dasLLVM (llvm bindings)" ON)
 option(DAS_SMT_DISABLED "Disable dasSMT (Z3 SMT solver bindings)" ON)

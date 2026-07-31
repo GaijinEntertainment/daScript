@@ -8,8 +8,8 @@ on:
 
 # Compile-coverage for the dagor config: EASTL containers, dag::Vector as
 # das::vector (uint32_t size_type), ska::flat_hash_map as das_map, DAS_CUSTOM_HASH
-# undefined, no global new/delete. The headers come from a sparse DagorEngine
-# checkout, so container-API drift is caught against the real thing.
+# undefined, no global new/delete. Built with gcc, whose uninitialized analysis is
+# what this lane guards.
 # See cmake/das_config_eastl/daScript/das_config.h and ci/build_eastl_config.sh.
 jobs:
   build_eastl:
@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: lukka/get-cmake@latest
-      - run: sudo apt-get update -y && sudo apt-get install -y bison flex
+      - run: sudo apt-get update -y && sudo apt-get install -y bison flex g++
       - name: sparse-checkout dagor headers
         run: |
           git clone --depth 1 --filter=blob:none --sparse \

@@ -119,7 +119,12 @@ ENDMACRO()
 
 MACRO(SETUP_COMPILER)
     SETUP_SANITIZERS()
-    IF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    # DAS_STRICT_ALIASING keeps the optimization on, which is what makes gcc's
+    # uninitialized analysis see through vec4f puns. The warning itself stays off
+    # either way (the tree has known punning sites, a separate cleanup), but with
+    # the gate on it can only be silenced per target: -Wall re-enables it, and
+    # cmake de-duplicates a directory-level copy back to this early position.
+    IF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" AND NOT DAS_STRICT_ALIASING)
         # GNU uses strict aliasing optimizations too hard, which breaks our code
         ADD_COMPILE_OPTIONS(-Wno-strict-aliasing) # disable warnings
         ADD_COMPILE_OPTIONS(-fno-strict-aliasing) # disable strict aliasing optimizations
@@ -305,8 +310,10 @@ MACRO(DAS_APPLY_STRICT_WARNINGS _target)
             target_compile_options(${_target} PRIVATE
                 $<$<COMPILE_LANGUAGE:CXX>:-Woverloaded-virtual;-Wno-unqualified-std-cast-call>)
         ELSEIF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+            # -Wno-strict-aliasing has to come after -Wall, which re-enables the warning.
+            # The known punning sites are a separate cleanup; this lane guards uninitialized.
             target_compile_options(${_target} PRIVATE
-                $<$<COMPILE_LANGUAGE:CXX>:-Wno-overloaded-virtual;-Wno-array-bounds;-Wno-clobbered;-Wno-maybe-uninitialized;-Wno-stringop-overflow>)
+                $<$<COMPILE_LANGUAGE:CXX>:-Wno-overloaded-virtual;-Wno-array-bounds;-Wno-clobbered;-Wno-maybe-uninitialized;-Wno-stringop-overflow;-Wno-strict-aliasing>)
         ENDIF()
     ENDIF()
 ENDMACRO()
