@@ -8,6 +8,7 @@ require imgui public
 require terminal/terminal public
 require clipboard/clipboard
 require imgui/imgui_boost_runtime
+require imgui/imgui_text_flow
 require math
 require strings
 
@@ -92,27 +93,6 @@ struct public ImGuiTerminalResult {
     columns : int
     rows : int
     input_text : string  // Encoded keys/paste for an external transport when external_input is set.
-}
-
-def private byte_char(value : int) : string {
-    return to_char(value & 255)
-}
-
-def private codepoint_utf8(codepoint : int) : string {
-    if (codepoint <= 0x7f) return byte_char(codepoint)
-    if (codepoint <= 0x7ff) {
-        return (byte_char(0xc0 | (codepoint >> 6)) +
-            byte_char(0x80 | (codepoint & 0x3f)))
-    }
-    if (codepoint <= 0xffff) {
-        return (byte_char(0xe0 | (codepoint >> 12)) +
-            byte_char(0x80 | ((codepoint >> 6) & 0x3f)) +
-            byte_char(0x80 | (codepoint & 0x3f)))
-    }
-    return (byte_char(0xf0 | (codepoint >> 18)) +
-        byte_char(0x80 | ((codepoint >> 12) & 0x3f)) +
-        byte_char(0x80 | ((codepoint >> 6) & 0x3f)) +
-        byte_char(0x80 | (codepoint & 0x3f)))
 }
 
 def private indexed_color(index : int) : float4 {

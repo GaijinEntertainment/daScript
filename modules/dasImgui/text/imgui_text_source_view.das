@@ -60,6 +60,7 @@ struct public TextSourceViewStyle {
     syntax_punctuation_color : float4 = float4(0.62f, 0.65f, 0.70f, 1.0f)
     selection_color : float4 = float4(0.24f, 0.48f, 0.78f, 0.55f)
     caret_color : float4 = float4(0.92f, 0.92f, 0.94f, 1.0f)
+    current_line_color : float4 = float4(1.0f, 1.0f, 1.0f, 0.045f)
     added_line_color : float4 = float4(0.20f, 0.72f, 0.38f, 0.92f)
     removed_line_color : float4 = float4(0.88f, 0.28f, 0.32f, 0.92f)
     modified_line_color : float4 = float4(0.92f, 0.70f, 0.22f, 0.92f)
@@ -900,9 +901,11 @@ def private virtual_line_end(document : TextSourceDocument const;
     return result
 }
 
-def private virtual_range_width(source : string; start_byte, end_byte : int;
-                                var font : ImFont?; font_size, cell_width : float;
-                                tab_cells : int) : float {
+def public text_source_range_width(source : string; start_byte, end_byte : int;
+                                   var font : ImFont?; font_size, cell_width : float;
+                                   tab_cells : int) : float {
+    //! Pixel width of a tab-expanded UTF-8 byte range — the measurement twin of
+    //! `text_source_draw_range`. Shared with the editor's caret/hit-testing.
     if (end_byte <= start_byte) return 0.0f
     var width = 0.0f
     peek_data(source) $(bytes) {
@@ -924,10 +927,12 @@ def private virtual_range_width(source : string; start_byte, end_byte : int;
     return width
 }
 
-def private draw_virtual_range(var dl : ImDrawList?; var font : ImFont?;
-                               font_size : float; origin : float2; color : float4;
-                               source : string; start_byte, end_byte : int;
-                               cell_width : float; tab_cells : int) : float {
+def public text_source_draw_range(var dl : ImDrawList?; var font : ImFont?;
+                                  font_size : float; origin : float2; color : float4;
+                                  source : string; start_byte, end_byte : int;
+                                  cell_width : float; tab_cells : int) : float {
+    //! Drawlist text for a tab-expanded UTF-8 byte range; returns the advanced
+    //! width. One text run per tab-free stretch, tabs advance `tab_cells` cells.
     if (end_byte <= start_byte) return 0.0f
     var x = origin.x
     peek_data(source) $(bytes) {
@@ -1091,10 +1096,10 @@ def private text_source_virtual_view(id : string; // nolint:STYLE037
                     let selected_start = max(start_byte, selection.start_byte)
                     let selected_end = min(end_byte, selection.end_byte)
                     let selected_x0 = (row_origin.x + gutter_space
-                        + virtual_range_width(document.source, start_byte, selected_start,
+                        + text_source_range_width(document.source, start_byte, selected_start,
                             font, font_size, cell_width, style.tab_cells))
                     let selected_x1 = (row_origin.x + gutter_space
-                        + virtual_range_width(document.source, start_byte, selected_end,
+                        + text_source_range_width(document.source, start_byte, selected_end,
                             font, font_size, cell_width, style.tab_cells))
                     let selected_p0 = float2(selected_x0, row_origin.y)
                     let selected_p1 = float2(max(selected_x0 + 1.0f, selected_x1),
@@ -1115,7 +1120,7 @@ def private text_source_virtual_view(id : string; // nolint:STYLE037
                     let run_end = min(end_byte, span.source.end_byte)
                     if (run_end > run_start) {
                         let run_style = style_id(span)
-                        x += draw_virtual_range(dl, font, font_size,
+                        x += text_source_draw_range(dl, font, font_size,
                             float2(x, row_origin.y), source_color(run_style, style),
                             document.source, run_start, run_end,
                             cell_width, style.tab_cells)

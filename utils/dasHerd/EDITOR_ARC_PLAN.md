@@ -53,6 +53,20 @@ in both views. Known v1 bounds: no folding in the VIRTUAL source path
 document revision changes; code-block interiors still have no selection
 highlight (the E2/E4 gap above).
 
+**E1 status (shipped 2026-07-30):** `imgui_text_source_edit.das` carries the
+line-buffer core (load/source round-trip incl. CRLF flavor, grapheme-aware
+cursor + insert/backspace/delete, vertical moves with preferred column) and
+the widget (InvisibleButton hit target + own virtualised drawlist rows,
+terminal-pattern typed input, scroll-follow, blink caret, current-line tint,
+line-number gutter). Preview: `examples/features/text_edit.das`; tests:
+`test_text_edit_model` (pure logic) + `test_text_edit` (keystrokes → buffer
+via snapshot — the registered state serializes the whole `lines` array).
+`codepoint_utf8` moved to `imgui_text_flow` (terminal now shares it); the
+view's tab-expanded draw/measure helpers went public
+(`text_source_draw_range` / `text_source_range_width`). Bug found by the
+smoke and fixed: drawing against the pre-input line count crashed on
+line-join edits — the draw section recounts after input runs.
+
 ## Shape: ONE component, one arc, two skins
 
 One arc, not two. The editing core — buffer, cursor, selection, undo,
@@ -154,7 +168,14 @@ highlight inside code blocks lands with the selection work in E2/E4.
   now an honest plain-text editor.
 - **E3** Search/replace/replace-all (the standing rule lands here, not
   later).
-- **E4** Syntax-while-editing (fallback immediate + debounced full pass).
+- **E4** Syntax-while-editing (fallback immediate + debounced full pass)
+  **plus editing polish (amended 2026-07-30, Boris: "particularly
+  interesting is E4 really... polish of E1/2/3... stuff before
+  completion/lsp")**: where the new line lands on Enter (auto-indent from
+  the previous line's leading whitespace, tabs preserved as typed),
+  bracket/brace/paren match highlighting at the cursor, and the rest of
+  the smart-editor behaviors below completion — the list grows as E1-E3
+  use surfaces items.
 - **E5** `examples/text` becomes an honest editor: the component wired
   into both its presentations (markdown source with live preview beside
   it, plain/code source), carrying save, dirty-state, and the find
