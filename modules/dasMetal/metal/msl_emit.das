@@ -325,8 +325,18 @@ def private is_user_fn(fn : FunctionPtr) : bool {
     return mname != "metal_builtins" && mname != "shader_lingua_franca"
 }
 
+// generic INSTANCES can share a bare name — the parameter types join the key so every
+// instance emits as its own MSL function
 def private ufn_key(fn : FunctionPtr) : string {
-    return "{fn._module != null ? string(fn._module.name) : ""}::{fn.name}"
+    return build_string() $(var w) {
+        w |> write(fn._module != null ? string(fn._module.name) : "")
+        w |> write("::")
+        w |> write(fn.name)
+        for (v in fn.arguments) {
+            w |> write("|")
+            w |> write(v._type != null ? describe(v._type) : "?")
+        }
+    }
 }
 
 // MSL-safe, collision-free emitted name: the bare das name when free, else base_N
@@ -343,15 +353,17 @@ def private ufn_msl_name(var ctx : MslCtx; fn : FunctionPtr) : string {
 
 def private discover_user_fn(var ctx : MslCtx; fn : FunctionPtr; at : LineInfo) : int {
     let key = ufn_key(fn)
-    if (key_exists(ctx.user_fns, key)) {
-        return ctx.user_fns[key]
-    }
     let bn = call_base_name("{fn.name}")
+    // the stack check comes FIRST: a function registers before its body scans, so a
+    // recursive self-call would otherwise hit the fast path and lower silently
     for (s in ctx.scan_stack) {
         if (s == key) {
             err(ctx, at, "function `{bn}` is recursive — MSL forbids recursion")
             return -1
         }
+    }
+    if (key_exists(ctx.user_fns, key)) {
+        return ctx.user_fns[key]
     }
     if (fn.body == null) {
         err(ctx, at, "function `{bn}` has no body to lower")

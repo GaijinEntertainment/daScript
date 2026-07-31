@@ -537,6 +537,65 @@ class MathCalls {
     }
 }
 
+// ===== Phase 0: user-function lowering (free functions lower 1:1 as MSL functions) =====
+
+def private ufx_sky(d : float) : float => 0.5 * d + 0.5
+
+def private ufx_shade(d : float; bounce : int) : float {
+    var acc = ufx_sky(d)     // nested user call
+    for (_i in range(bounce)) {
+        acc *= 0.5
+    }
+    return acc
+}
+
+def private ufx_lane : uint => gl_GlobalInvocationID.x   // hidden-builtin threading
+
+def private ufx_splat(var yo : array<float>; i : uint; v : float) {   // write-through param
+    yo[i] = v
+}
+
+def private ufx_twice(src : array<auto(TT)>; i : uint) : TT {   // generic: 2 MSL instances
+    return src[i] + src[i]
+}
+
+def private ufx_sum_tg(part : float[32]; n : uint) : float {   // threadgroup-pointer param
+    var s = 0.0
+    var k = 0u
+    while (k < n) {
+        s += part[k]
+        k++
+    }
+    return s
+}
+
+def private ufx_accum(var acc : float&; v : float) {   // thread-ref param
+    acc += v
+}
+
+class UserFns {
+    @ssbo @binding = 0 src : array<float>
+    @ssbo @binding = 1 srch : array<float16>
+    @ssbo @binding = 2 yo : array<float>
+    @ssbo @binding = 3 yoh : array<float16>
+    @workgroup part : float[32]
+
+    [metal_kernel(name="userfns_msl"), marker(no_coverage)]
+    def userfns {
+        let i = ufx_lane()
+        let lid = gl_LocalInvocationID.x
+        part[lid] = ufx_twice(src, i)
+        yoh[i] = ufx_twice(srch, i)
+        barrier()
+        var acc = 0.0
+        ufx_accum(acc, ufx_shade(src[i], 3))
+        if (lid == 0u) {
+            acc += ufx_sum_tg(part, gl_WorkGroupSize.x)
+        }
+        ufx_splat(yo, i, acc)
+    }
+}
+
 //! Gate B: exactly the construct kinds the fixture set must emit — the census meta-test
 //! asserts equality with the observed union in both directions.
 def public declared_msl_census : table<string> {
@@ -790,7 +849,18 @@ def public declared_msl_census : table<string> {
         "stmt.for",
         "stmt.break",
         "stmt.continue",
-        "stmt.return"
+        "stmt.return",
+        // Phase 0: user-function lowering
+        "decl.user_fn",
+        "call.user",
+        "stmt.call_user",
+        "stmt.return_value",
+        "ufn.param.buffer",
+        "ufn.param.buffer_const",
+        "ufn.param.tg",
+        "ufn.param.ref",
+        "ufn.param.value",
+        "ufn.param.hidden_builtin"
     }
 }
 
@@ -799,5 +869,5 @@ def public all_msl_censuses : array<string> {
     return <- [mul_ab_msl_census, uarith_msl_census, iarith_msl_census, farith_msl_census,
         vecarith_msl_census, control_msl_census, loops_msl_census, reduce_msl_census, simd_msl_census,
         halfarith_msl_census, latconv_msl_census, packed3_msl_census, sgmat_msl_census,
-        sgmat_tiled_msl_census, sgmat_rolled_msl_census, mathcalls_msl_census]
+        sgmat_tiled_msl_census, sgmat_rolled_msl_census, mathcalls_msl_census, userfns_msl_census]
 }
