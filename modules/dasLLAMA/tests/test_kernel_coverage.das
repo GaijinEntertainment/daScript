@@ -156,6 +156,13 @@ def private census_zoo(t : T?) {
     // blob-twin CPU batch fallback would trip the blob-only panic; large tier
     cov_model(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf"), "qwen3moe",
         [KVDtype.f16], none)
+    // gptoss: the MXFP4 expert stacks + swiglu_oai + attention sinks — the only carrier for the
+    // mx4 expert kernels; no batch shapes for the same reason as the other MoE rows; large tier
+    cov_model(t, path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf"), "gptoss",
+        [KVDtype.f16], none)
+    // qwen2moe: q8 expert stacks + the sigmoid-gated shared expert on std attention; large tier
+    cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf"), "qwen2moe",
+        [KVDtype.f16], none)
 }
 
 [test]

@@ -117,7 +117,7 @@ model blocks tagged with a listed family run — `family_on(t, name)` in
 today: `llama` (all four metal suites + the image smol arm), `qwen2`, `qwen3`, `phi3`,
 `gemma2`, `gemma3`, `gemma4`, `qwen3moe`, `gemma4moe`, `gptoss`, `qwen35`, `qwen35moe`, `qwen2moe` (the support-matrix family cells), `gemma`,
 `ultravox`, `whisper`, `voxtral`, `parakeet`, `qwen3a`, `canary`, `gemma4a` (image suite arms),
-`gemma4e` (the coverage-census E4B row).
+`gemma4e` (the coverage-census E4B row; `gptoss`/`qwen2moe`/`qwen3moe` carry census rows too — all PARITY_FULL-gated).
 When profiling one family across formats, gate each round with
 `--arm <arms> --family <fam>` instead of the whole zoo. Tag every NEW model-loading block
 with its family or it silently joins every family's gate.
