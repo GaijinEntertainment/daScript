@@ -77,3 +77,57 @@ def test_vulkan_dry_bake(tst : T?) {
         }
     }
 }
+
+[test]
+def test_vulkan_inline_bake(tst : T?) {
+    tst |> run("SmolLM2 q8: a cold cached load bakes the vulkan flavor beside a PLANAR image") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!family_on(t, "llama")) return
+            if (!arm_on(t, "vulkan")) {
+                return
+            }
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
+            if (!model_available(t, path)) {
+                return
+            }
+            apply_box_profile_runtime()
+            let probed = dlim_config_current("q8")
+            if (!probed.vulkan_on) {
+                t |> skip("vulkan tier not armed (DASLLAMA_GPU) — run via run.das --suite image-vulkan")
+                return
+            }
+            if (!moe_gpu_dry_bake_arm(probed.vulkan)) {
+                t |> skip("dry bake declined to arm — see the log")
+                return
+            }
+            // the INLINE bake: load_model_cached mints both flavors off one cold load. The
+            // ordering matters — the vulkan flavor carries the collected planes, the planar one
+            // must not, and the load itself has to come back on the image rail like any other.
+            let vk_tag = moe_gpu_bake_tag()
+            let img_v = image_path_for(path, vk_tag)
+            let img_p = image_path_for(path, "", "q8")
+            remove(img_v)
+            remove(img_p)
+            var a = Model()
+            with_job_que() {
+                a <- load_model_cached(path, QuantMode.q8)
+            }
+            t |> success(a.image_map != null, "the cold cached load serves an image")
+            t |> success(stat(img_v).is_valid, "the vulkan flavor was baked")
+            t |> success(stat(img_p).is_valid, "the planar image was written")
+            t |> equal(long_length(a.vkblob), 0l, "the served planar image carries no bake blob")
+            delete a
+            // and the flavor file is the real thing, not an empty shell
+            var v = Model()
+            t |> success(load_model_image(img_v, v, vk_tag), "the baked flavor maps")
+            t |> success(long_length(v.vkplan) > 0l, "the baked flavor kept its plan ({long_length(v.vkplan)})")
+            t |> success(long_length(v.vkblob) > 0l, "the baked flavor kept its blob")
+            delete v
+            remove(img_v)
+        }
+    }
+}
