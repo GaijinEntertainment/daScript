@@ -46,6 +46,13 @@
    `prefill_decline` / `metal_prefill_init` ordering) — the PLE pre-step silently runs its CPU
    fallback (`ple_pre_prefill`) on every metal prefill window. Done = instrument the gate legs,
    find the refusing one, fix or document it, and the census E4B row counts all three kernels.
+   One hypothesis is ELIMINATED: the census is not blind to graph-captured dispatches —
+   `kn_pipeline` counts on the immediate path and `gr_encode_node` counts again on replay
+   (`dasllama_metal_common.das:1402`), so a captured dispatch is still tallied. The zero is real.
+   Consequence for reviewers: these three kernels have NO runtime coverage, so a change to them
+   (the PleArgs kargs fold is one) can only be verified structurally — emitted-MSL signature plus
+   bind-list-vs-signature match — until this gap closes or a synthetic gate lands the way
+   `moe_mulmm_q51_gate` does for the gathered q51 mul_mm.
 
 5. **The metal kernel zoo carries four different rope addressing schemes.** Factoring the
    sq_attn family showed the rope-store family does NOT share one skeleton the way attention
