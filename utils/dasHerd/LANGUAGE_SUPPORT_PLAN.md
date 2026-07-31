@@ -98,11 +98,15 @@ the visible rows makes the diff DISPLAY that region — a context window
 numbers on both sides (`git_patch_inject_context`), riding the normal
 prepare pipeline so syntax colors and hunk navigation stay correct.
 Windows accumulate per inspected file, so revealed regions stay
-revealed. Remaining gaps against the rule: **case / whole-word
-toggles** (component has regex only — add in the component, both apps
-inherit), F3/Shift+F3 bindings, and REMOVED text (BEFORE-pane only) is
-still not searched — it exists only in the old pane's aligned text;
-needs a per-pane or merged-results design.
+revealed. Diff find searches **both sides**: the whole new file plus
+the BEFORE pane's removed rows (deleted text exists nowhere else;
+context rows are skipped as duplicates), merged in visual diff order —
+`text_find_collect` is the component's pure per-domain collector, the
+merge and the `find_match_old_side` flags are the herder's. Old-side
+jumps select in the BEFORE pane; removed rows are always displayed, so
+they never need a window. Remaining gaps against the rule: **case /
+whole-word toggles** (component has regex only — add in the component,
+both apps inherit) and F3/Shift+F3 bindings.
 
 **Editors get replace from day one** — search / replace / replace-all
 within the file is part of the editor component's core surface, not a

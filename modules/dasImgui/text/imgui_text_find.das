@@ -85,9 +85,10 @@ def private fold_case(b : int) : int {
     return b >= 'A' && b <= 'Z' ? b + 32 : b
 }
 
-def private literal_matches(var state : TextFindState; source : string) {
+def private literal_matches(query : string; source : string;
+                            var matches : array<TextSourceRange>) {
     var needle : array<int>
-    peek_data(state.query) $(bytes) {
+    peek_data(query) $(bytes) {
         needle |> reserve(length(bytes))
         for (b in bytes) {
             needle |> push(fold_case(int(b)))
@@ -110,7 +111,7 @@ def private literal_matches(var state : TextFindState; source : string) {
                 }
             }
             if (hit) {
-                state.matches |> push(TextSourceRange(
+                matches |> push(TextSourceRange(
                     start_byte = at, end_byte = at + needle_length))
                 at += needle_length
             } else {
@@ -121,21 +122,37 @@ def private literal_matches(var state : TextFindState; source : string) {
     delete needle
 }
 
-def private regex_matches(var state : TextFindState; source : string) {
+def private regex_matches(query : string; source : string;
+                          var matches : array<TextSourceRange>) : string {
+    var error = ""
     var re : Regex
-    if (regex_compile(re, state.query, true)) {
+    if (regex_compile(re, query, true)) {
         var inscope found <- regex_match_all(re, source)
-        state.matches |> reserve(length(found))
+        matches |> reserve(length(matches) + length(found))
         for (at in found) {
             continue if (at.y <= at.x)
-            state.matches |> push(TextSourceRange(start_byte = at.x, end_byte = at.y))
+            matches |> push(TextSourceRange(start_byte = at.x, end_byte = at.y))
         }
     } else {
-        state.error = "invalid regular expression"
+        error = "invalid regular expression"
     }
     unsafe {
         delete re
     }
+    return error
+}
+
+def public text_find_collect(query : string; use_regex : bool; source : string;
+                             var matches : array<TextSourceRange>) : string {
+    //! Pure match collection - the searching half of `text_find_rebuild`,
+    //! appended to `matches`; returns the error text ("" when fine). Hosts
+    //! with several search domains (a diff's two panes) call this per domain.
+    return "" if (empty(query))
+    if (use_regex) {
+        return regex_matches(query, source, matches)
+    }
+    literal_matches(query, source, matches)
+    return ""
 }
 
 def public text_find_rebuild(var state : TextFindState;
@@ -151,16 +168,10 @@ def public text_find_rebuild(var state : TextFindState;
     state.matched_revision = revision
     state.matched_query = state.query
     state.matched_regex = state.use_regex
-    state.error = ""
     delete state.matches
     state.current = -1
-    if (!empty(state.query)) {
-        if (state.use_regex) {
-            regex_matches(state, source)
-        } else {
-            literal_matches(state, source)
-        }
-    }
+    state.error = text_find_collect(state.query, state.use_regex, source,
+        state.matches)
     if (!empty(state.matches)) {
         state.current = 0
         for (index in range(length(state.matches))) {

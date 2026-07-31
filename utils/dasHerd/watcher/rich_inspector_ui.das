@@ -414,6 +414,135 @@ def private diff_pane_match(found : TextSourceRange) : tuple<row : int; pane : T
 
 let FIND_CONTEXT_LINES = 3
 
+def private old_row_for_byte(byte_offset : int) : int {
+    // Greatest old_line_starts entry <= byte_offset = the BEFORE pane row.
+    var low = 0
+    var high = length(g_inspector.old_line_starts) - 1
+    var row = 0
+    while (low <= high) {
+        let mid = (low + high) / 2
+        if (g_inspector.old_line_starts[mid] <= byte_offset) {
+            row = mid
+            low = mid + 1
+        } else {
+            high = mid - 1
+        }
+    }
+    return row
+}
+
+def private removed_row_for_match(found : TextSourceRange) : int {
+    // The BEFORE-pane row this match sits on - only when the whole match is
+    // inside ONE row whose old side is a removed line. Context rows duplicate
+    // whole-file matches; multi-row regex spans have no single home.
+    let row = old_row_for_byte(found.start_byte)
+    return -1 if (row < 0 || row >= length(g_inspector.parsed.rows)
+        || g_inspector.parsed.rows[row].old_kind != GitDiffLineKind.removed)
+    let row_end = (row + 1 < length(g_inspector.old_line_starts)
+        ? g_inspector.old_line_starts[row + 1] - 1
+        : length(g_inspector.old_document.source))
+    return found.end_byte <= row_end ? row : -1
+}
+
+def private removed_row_anchor_line(row : int) : int {
+    // The new-file line the removed row visually follows: the nearest row at
+    // or above it that shows a new-file line.
+    var walk = min(row, length(g_inspector.new_document.line_numbers) - 1)
+    while (walk >= 0) {
+        let line = g_inspector.new_document.line_numbers[walk]
+        return line if (line > 0)
+        walk--
+    }
+    return 0
+}
+
+def private merge_find_matches(new_side, old_side : array<TextSourceRange>) {
+    // Both lists are ascending in their own domain, so ascending in their
+    // visual keys too - a two-pointer merge keeps diff order without a sort.
+    // Removed rows key just after the new-file line they follow.
+    let total = length(new_side) + length(old_side)
+    g_inspector.find.matches |> reserve(total)
+    g_inspector.find_match_old_side |> reserve(total)
+    var new_at = 0
+    var old_at = 0
+    while (new_at < length(new_side) || old_at < length(old_side)) {
+        var take_old = new_at >= length(new_side)
+        if (!take_old && old_at < length(old_side)) {
+            let new_key = file_line_for_byte(new_side[new_at].start_byte) * 2
+            let old_key = removed_row_anchor_line(
+                old_row_for_byte(old_side[old_at].start_byte)) * 2 + 1
+            take_old = old_key < new_key
+        }
+        if (take_old) {
+            g_inspector.find.matches |> push(old_side[old_at])
+            g_inspector.find_match_old_side |> push(true)
+            old_at++
+        } else {
+            g_inspector.find.matches |> push(new_side[new_at])
+            g_inspector.find_match_old_side |> push(false)
+            new_at++
+        }
+    }
+}
+
+def public inspector_find_rebuild(diff_mode : bool) {
+    //! The herder's dual-domain rebuild: the whole new file always, plus the
+    //! BEFORE pane's removed rows in diff mode (deleted text exists nowhere
+    //! else). Both lists merge in visual diff order; `find_match_old_side`
+    //! runs parallel to `find.matches` and names each match's pane.
+    let revision = g_inspector.revision * 2 + (diff_mode ? 1 : 0)
+    if (revision == g_inspector.find.matched_revision
+            && g_inspector.find.query == g_inspector.find.matched_query
+            && g_inspector.find.use_regex == g_inspector.find.matched_regex) {
+        return
+    }
+    var previous_start = -1
+    var previous_old = false
+    if (g_inspector.find.current >= 0
+            && g_inspector.find.current < length(g_inspector.find.matches)) {
+        previous_start = g_inspector.find.matches[g_inspector.find.current].start_byte
+        previous_old = (g_inspector.find.current < length(g_inspector.find_match_old_side)
+            && g_inspector.find_match_old_side[g_inspector.find.current])
+    }
+    g_inspector.find.matched_revision = revision
+    g_inspector.find.matched_query = g_inspector.find.query
+    g_inspector.find.matched_regex = g_inspector.find.use_regex
+    delete g_inspector.find.matches
+    delete g_inspector.find_match_old_side
+    g_inspector.find.current = -1
+
+    var inscope new_side : array<TextSourceRange>
+    let new_error = text_find_collect(g_inspector.find.query,
+        g_inspector.find.use_regex, inspector_find_source(), new_side)
+    var inscope old_side : array<TextSourceRange>
+    var old_error = ""
+    if (diff_mode && !empty(g_inspector.view_source)) {
+        var inscope raw_old : array<TextSourceRange>
+        old_error = text_find_collect(g_inspector.find.query,
+            g_inspector.find.use_regex, g_inspector.old_document.source, raw_old)
+        for (candidate in raw_old) {
+            if (removed_row_for_match(candidate) >= 0) {
+                old_side |> push(candidate)
+            }
+        }
+    }
+    g_inspector.find.error = empty(new_error) ? old_error : new_error
+    merge_find_matches(new_side, old_side)
+    if (!empty(g_inspector.find.matches)) {
+        g_inspector.find.current = 0
+        if (previous_start >= 0) {
+            for (index in range(length(g_inspector.find.matches))) {
+                if (g_inspector.find_match_old_side[index] == previous_old
+                        && g_inspector.find.matches[index].start_byte >= previous_start) {
+                    g_inspector.find.current = index
+                    break
+                }
+            }
+        }
+    }
+    g_inspector.find.jump_revision++
+}
+
 def private request_find_context_window(found : TextSourceRange) {
     // The match is real but its region is not in the visible diff: ask the
     // prepare to display a context window around it - the diff analog of
@@ -448,6 +577,22 @@ def public inspector_apply_find_jump(diff_mode : bool) {
         return
     }
     if (diff_mode) {
+        let old_side = (g_inspector.find.current >= 0
+            && g_inspector.find.current < length(g_inspector.find_match_old_side)
+            && g_inspector.find_match_old_side[g_inspector.find.current])
+        if (old_side) {
+            // Deleted text: the match bytes are BEFORE-pane-local already;
+            // removed rows are always displayed, so no window is ever needed.
+            g_inspector.find_applied_jump = g_inspector.find.jump_revision
+            text_source_view_clear_selection(g_inspector.new_view)
+            text_source_view_select_range(g_inspector.old_document,
+                g_inspector.old_view, found.start_byte, found.end_byte)
+            let row = old_row_for_byte(found.start_byte)
+            g_inspector.diff_scroll_y = max(0.0f, (float(row) - 6.0f) * max(
+                GetTextLineHeight(), g_inspector.old_view.key.line_height))
+            g_inspector.diff_scroll_jump_pending = true
+            return
+        }
         if (empty(g_inspector.view_source)) {
             // Fallback search domain IS the aligned pane text - the match's
             // bytes are already pane-local.
@@ -461,6 +606,7 @@ def public inspector_apply_find_jump(diff_mode : bool) {
             // Both panes share diff_scroll_y, so the hunk-jump scroll
             // machinery lands the aligned row in view.
             g_inspector.find_applied_jump = g_inspector.find.jump_revision
+            text_source_view_clear_selection(g_inspector.old_view)
             text_source_view_select_range(g_inspector.new_document,
                 g_inspector.new_view, mapped.pane.start_byte, mapped.pane.end_byte)
             g_inspector.diff_scroll_y = max(0.0f, (float(mapped.row) - 6.0f) * max(
@@ -487,8 +633,7 @@ def public inspector_apply_find_jump(diff_mode : bool) {
 def private draw_inspector_find(diff_mode : bool) {
     return if (!g_inspector.find.open)
     text_find_bar(1, g_inspector.find)
-    let _ = text_find_rebuild(g_inspector.find, inspector_find_source(),
-        g_inspector.revision)
+    inspector_find_rebuild(diff_mode)
     inspector_apply_find_jump(diff_mode)
     if (g_inspector.find.open
             && IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)

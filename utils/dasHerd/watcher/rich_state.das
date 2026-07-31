@@ -259,6 +259,7 @@ struct GitInspectorState {
     old_document : TextSourceDocument = TextSourceDocument()
     new_document : TextSourceDocument = TextSourceDocument()
     view_document : TextSourceDocument = TextSourceDocument()
+    old_line_starts : array<int>
     new_line_starts : array<int>
     view_line_starts : array<int>
     focus_document_valid : bool
@@ -305,6 +306,9 @@ struct GitInspectorState {
     // below) and ride every re-prepare, so revealed regions stay revealed.
     find_windows : array<int2>
     find_windows_identity : string
+    // Parallel to find.matches: true = the match lives in the BEFORE pane's
+    // aligned text (a removed row), false = whole-new-file bytes.
+    find_match_old_side : array<bool>
 }
 
 struct GitWindowStatus {
@@ -781,8 +785,10 @@ def release_inspector_content() {
     text_source_document_dispose(g_inspector.old_document)
     text_source_document_dispose(g_inspector.new_document)
     text_source_document_dispose(g_inspector.view_document)
+    delete g_inspector.old_line_starts
     delete g_inspector.new_line_starts
     delete g_inspector.view_line_starts
+    delete g_inspector.find_match_old_side
     g_inspector.focus_document_valid = false
     g_inspector.focus_start_byte = -1
     markdown_view_dispose(g_inspector.markdown_view)
@@ -886,6 +892,8 @@ def drain_inspector_prepare_events() {
             g_inspector.old_document <- event.old_document
             g_inspector.new_document <- event.new_document
             g_inspector.view_document <- event.view_document
+            append_line_starts(g_inspector.old_document.source,
+                g_inspector.old_line_starts)
             append_line_starts(g_inspector.new_document.source,
                 g_inspector.new_line_starts)
             append_line_starts(g_inspector.view_document.source,

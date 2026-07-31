@@ -1382,6 +1382,13 @@ def herder_file_inspector_state(_input : JsonValue?) : JsonValue? {
         find_regex = g_inspector.find.use_regex,
         find_match_count = length(g_inspector.find.matches),
         find_current = g_inspector.find.current,
+        find_current_old_side = (g_inspector.find.current >= 0
+            && g_inspector.find.current < length(g_inspector.find_match_old_side)
+            && g_inspector.find_match_old_side[g_inspector.find.current]),
+        diff_before_selection_start = text_source_view_selection(
+            g_inspector.old_view).start_byte,
+        diff_before_selection_end = text_source_view_selection(
+            g_inspector.old_view).end_byte,
         find_error = g_inspector.find.error,
         find_jump_revision = g_inspector.find.jump_revision,
         find_applied_jump = g_inspector.find_applied_jump,
@@ -1464,11 +1471,15 @@ def herder_inspector_find(input : JsonValue?) : JsonValue? {
     }
     let args = from_JV(input, type<HerderInspectorFindArgs>)
     text_find_set_query(g_inspector.find, args.query, args.regex)
-    let _ = text_find_rebuild(g_inspector.find, inspector_find_source(),
-        g_inspector.revision)
+    inspector_find_rebuild(g_inspector.mode == GitInspectorMode.diff)
+    var removed_matches = 0
+    for (old_side in g_inspector.find_match_old_side) {
+        if (old_side) removed_matches++
+    }
     return JV((ok = true, query = g_inspector.find.query,
                regex = g_inspector.find.use_regex,
                match_count = length(g_inspector.find.matches),
+               removed_match_count = removed_matches,
                current = g_inspector.find.current,
                error = g_inspector.find.error,
                jump_revision = g_inspector.find.jump_revision))
