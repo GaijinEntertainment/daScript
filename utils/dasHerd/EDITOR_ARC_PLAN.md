@@ -92,6 +92,24 @@ proves insufficient in use.
 
 ## The component, in detail
 
+> **EDITOR_EDITING_SPEC.md** (2026-07-30) is the spec of record for command
+> semantics, default chords, word-boundary rules, the undo model, numpad
+> aliasing, and the imgui_commands integration — research-backed (MS canon +
+> VS Code/VS/Sublime/JetBrains + our infra map). Where the sketches below
+> differ, the spec wins.
+
+### The API is the product (Boris, 2026-07-30)
+
+Every editing capability is a PUBLIC, programmatic verb on the state —
+`undo`, `redo`, `delete`, `select`, `type`/`insert`, `navigate_to`, word
+moves, line ops, search/replace — usable by anyone building their own
+editor on the component, with no ImGui frame required. The keymap is just
+one CLIENT of that verb surface (the live rails and tests are two more);
+a chord never carries logic of its own, it only names a verb. E1 set the
+shape (`text_edit_insert`/`text_edit_move_*`/... are public pure ops
+driven headless by tests); every E2+ capability lands verb-first, then
+gets its binding.
+
 ### Buffer
 
 - `array<string>` of lines, owned by the editor state. Edits are
@@ -164,8 +182,20 @@ highlight inside code blocks lands with the selection work in E2/E4.
 - **E1** Buffer + cursor + virtualised render + typed input. A file
   opens, you type, it shows. No selection yet. dasImgui example
   `features/`-style smoke proves keystrokes → buffer via imgui_snapshot.
-- **E2** Selection + clipboard + undo/redo + the keymap. The component is
-  now an honest plain-text editor.
+- **E2** Selection + clipboard + undo/redo + the keymap — per
+  EDITOR_EDITING_SPEC.md Tier 1. Work order within the slice (each
+  sub-step commits + tests headless): (1) key-owner focus fix
+  (`SetItemKeyOwner`, kills the two-editors-both-focused bug); (2)
+  selection model + Shift-extended nav + mouse word/line click-select;
+  (3) word boundaries (one predicate) + word moves/deletes; (4) undo
+  journal (fences, kind-coalescing, adjacency break, `push_undo_stop`
+  public from day one); (5) clipboard incl. the six chords + empty-
+  selection line mode; (6) the keymap through imgui_commands (registry
+  extensions: second chord per binding, collision safety, capture-tick
+  sentinel fix, ALLOWED_IMGUI additions) + numpad aliases + smart Home +
+  overtype; (7) synth-layer extensions (named-key chords, key_hold) so
+  the chord tests read cleanly. The component is then an honest
+  plain-text editor with every binding editable.
 - **E3** Search/replace/replace-all (the standing rule lands here, not
   later).
 - **E4** Syntax-while-editing (fallback immediate + debounced full pass)
@@ -173,9 +203,11 @@ highlight inside code blocks lands with the selection work in E2/E4.
   interesting is E4 really... polish of E1/2/3... stuff before
   completion/lsp")**: where the new line lands on Enter (auto-indent from
   the previous line's leading whitespace, tabs preserved as typed),
-  bracket/brace/paren match highlighting at the cursor, and the rest of
-  the smart-editor behaviors below completion — the list grows as E1-E3
-  use surfaces items.
+  bracket/brace/paren match highlighting at the cursor, the spec's Tier 2
+  commands (delete/move/duplicate/join lines, block indent Ctrl+]/[,
+  goto-line, scroll-without-caret, drag-and-drop selection move), and the
+  rest of the smart-editor behaviors below completion — the list grows as
+  E1-E3 use surfaces items.
 - **E5** `examples/text` becomes an honest editor: the component wired
   into both its presentations (markdown source with live preview beside
   it, plain/code source), carrying save, dirty-state, and the find
