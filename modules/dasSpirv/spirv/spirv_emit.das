@@ -2757,7 +2757,13 @@ def private emit_mul(var m : SpirvModule; op2 : ExprOp2?; e : ExpressionPtr; l, 
 // function-scoped, not block-scoped) BEFORE emitting any body code, declaring an OpVariable for each
 // mutable local (`var`) and loop-induction variable. Reads/writes then resolve to OpLoad/OpStore.
 def private declare_local_var(var m : SpirvModule; var ctx : EmitCtx; v : VariablePtr; var errors : array<string>) {
-    if (key_exists(ctx.local_vars, intptr(v))) return
+    // A REFERENCE local aliases storage that already has an address, so it gets no OpVariable of its
+    // own: visitExprLetVariable binds it to the pointer its initializer lowered to. Declaring one
+    // here would make every write through the alias land in that private copy and leave the aliased
+    // element untouched. The inliner emits these whenever an inlined call's result is assigned to an
+    // lvalue (`var __inl_pre : float& = p[i]; … ; __inl_pre = __inl_res`), which is the shape a
+    // helper reached across a require arrives in.
+    if (key_exists(ctx.local_vars, intptr(v)) || v._type.flags.ref) return
     let bt = v._type.baseType
     // rayQueryEXT: an opaque ray-query OBJECT (SPV_KHR_ray_query) lives in a Function-storage local,
     // NOT a descriptor. It is declared here, initialized by rayQueryInitializeEXT and stepped by
@@ -3870,9 +3876,25 @@ class SpirvEmit : AstVisitor {
         }
     }
 
-    // ----- let: memory local -> store init; value-let -> bind SSA id -----
+    // ----- let: memory local -> store init; value-let -> bind SSA id; reference local -> alias -----
     def override visitExprLetVariable(cexpr : ExprLet?; var arg : VariablePtr; lastArg : bool) : VariablePtr {
         var bm & = unsafe(*m)
+        // A reference local IS the pointer its initializer lowered to, so it binds that pointer
+        // rather than storing through one of its own -- reads and writes through the alias then
+        // reach the aliased element like any other addressable local.
+        if (arg._type.flags.ref) {
+            if (arg.init == null) {
+                errs |> push("reference local '{arg.name}' has no initializer to bind")
+                return arg
+            }
+            let rp = ptr_of(arg.init)
+            if (rp.id == 0u) {
+                errs |> push("reference local '{arg.name}' must bind an addressable expression (a global, a `var` local, or an SSBO / UBO element)")
+                return arg
+            }
+            ctx.local_vars |> insert(intptr(arg), LocalVar(ptr_id = rp.id, value_type = rp.pty))
+            return arg
+        }
         if (arg.init == null) {
             // daslang DROPS an initializer it proves dead -- a `var` that every path assigns before
             // it is ever read (`var l = 0.0; if (..) { l = a } else { l = b }`) reaches us with no
