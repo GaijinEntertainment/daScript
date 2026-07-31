@@ -171,6 +171,8 @@ struct public TextEditState {
     color_undo_mark : int = -1
     //! The opening click must not count as a click-away on the first frame.
     color_ignore_click : bool = false
+    //! Where the dialog anchors: under the literal's line, not the mouse.
+    color_anchor : float2
     //! Completion LIST under the caret (top candidates). list_index -1 =
     //! visible but the keyboard is still in the editor (Down enters).
     list_items : array<string>
@@ -3317,6 +3319,8 @@ def private swatch_at_mouse(var ed : TextEditState; m : EditMetrics;
             ed.color_start = hit.x
             ed.color_digits = hit.y
             ed.color_undo_mark = -1
+            ed.color_anchor = float2(rect.x,
+                m.origin.y + float(row + 1) * m.line_height + 2.0f)
             unsafe {
                 COLOR_STATE.has_pending = true
                 COLOR_STATE.pending_value = text_edit_color_value(line, hit.x, hit.y)
@@ -3345,7 +3349,7 @@ def private color_write_back(var ed : TextEditState) {
 }
 
 def private draw_color_dialog(var ed : TextEditState) {
-    SetNextWindowPos(GetMousePos() + float2(16.0f, -40.0f), ImGuiCond.Appearing)
+    SetNextWindowPos(ed.color_anchor, ImGuiCond.Appearing)
     let flags = (ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.AlwaysAutoResize
         | ImGuiWindowFlags.NoSavedSettings)
     var keep_open : bool?
