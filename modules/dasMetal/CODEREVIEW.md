@@ -17,3 +17,11 @@
 4. **Fail closed, specifically.** Anything outside the lowered subset must produce a
    clean compile error naming the construct — never a silently wrong kernel. New error
    paths get their needle asserted in `tests/msl/test_msl_fail_closed.das`.
+5. **An emitter feature must not make dynamic dispatch easy.** The consumer rule is
+   dasLLAMA CODEREVIEW #21 — kernel SHAPE is compile-time, only DATA is runtime — and the
+   emitter is where that is won or lost. A capability that carries a shape constant into
+   the kernel as a value (a size parameter, a selector field, anything the shader compiler
+   would have to inline-and-fold to recover) needs a specialization path beside it:
+   per-type overloads, monomorphized generics, `static_if` on a compile-time witness. Where
+   the emitter cannot specialize, say so in `MASTERPLAN.md` rather than shipping the value
+   form as the answer. Assert the LITERAL in an emitted-text fixture, not the das source.

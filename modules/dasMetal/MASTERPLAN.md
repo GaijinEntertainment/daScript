@@ -1094,6 +1094,14 @@ Host side: `run_compute_1d_kargs` for tests, and dasLLAMA's `kn_bytes` / `kn_kar
 capture rail — under graph capture the bytes are COPIED into a pool, since the caller's kargs is
 a stack local long gone by replay time.
 
+**It costs the GPU nothing.** Every field was already a runtime `constant uint&`; the fold trades
+N bindings for one argument-buffer read and the kernel branches on exactly the values it did
+before. Nothing about the *shape* of a kernel may become a kargs field, though: a block stride, a
+lane width, a codec selector belongs in a per-codec overload or a monomorphized generic, where it
+stays a literal in the emitted MSL. Passing one as a value and trusting Metal to inline-and-fold
+it back is an assumption, not a guarantee — and the assumption is worth nothing in the kernels
+that matter.
+
 Tests: `tests/msl/test_msl_uniform_struct.das` (definition placement, the single `constant&`
 parameter, no per-scalar parameter survives) and `tests/metal/test_metal_uniform_struct.das`
 (GPU vs CPU-oracle — the only thing that can prove the layout claim; mutation-verified by

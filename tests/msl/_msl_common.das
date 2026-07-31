@@ -643,6 +643,28 @@ class UserFns {
     }
 }
 
+// Shape stays compile-time (dasLLAMA CODEREVIEW #21): the per-type overload does the indexing
+// ITSELF, so the stride is a literal inside each instance and never crosses a call boundary as a
+// value. The array argument is the codec discriminator, not data — hence the unused annotation.
+[unused_argument(sel)]
+def private ufx_pick(sel : array<int8>; xs : array<float>; blk : uint) : float => xs[blk * 34u]
+
+[unused_argument(sel)]
+def private ufx_pick(sel : array<uint8>; xs : array<float>; blk : uint) : float => xs[blk * 18u]
+
+class UkStride {
+    @ssbo @binding = 0 xs : array<float>
+    @ssbo @binding = 1 sa : array<int8>
+    @ssbo @binding = 2 sb : array<uint8>
+    @ssbo @binding = 3 ys : array<float>
+
+    [metal_kernel(name="ukstride_msl"), marker(no_coverage)]
+    def ukstride {
+        let i = gl_GlobalInvocationID.x
+        ys[i] = ufx_pick(sa, xs, i) + ufx_pick(sb, xs, i)
+    }
+}
+
 // ===== @uniform structs (the kargs form) =====
 // A kernel with a dozen scalars costs a dozen binds; one struct costs one. Fields are 4-byte
 // scalars only, so the das layout IS the MSL layout and the host writes its struct straight
@@ -990,5 +1012,5 @@ def public all_msl_censuses : array<string> {
         vecarith_msl_census, control_msl_census, loops_msl_census, reduce_msl_census, simd_msl_census,
         halfarith_msl_census, latconv_msl_census, packed3_msl_census, sgmat_msl_census,
         sgmat_tiled_msl_census, sgmat_rolled_msl_census, mathcalls_msl_census, userfns_msl_census,
-        ufxcls_msl_census, ukargs_msl_census]
+        ufxcls_msl_census, ukargs_msl_census, ukstride_msl_census]
 }

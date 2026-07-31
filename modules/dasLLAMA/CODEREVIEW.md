@@ -139,3 +139,19 @@
     DISPATCHES it — the smallest model/shape that reaches the kernel. A kernel no covered
     run dispatches surfaces as a LOUD warning, never an auto-dead verdict; adding a kernel
     without extending the coverage oracle is a review defect.
+21. **No dynamic dispatch in a kernel: SHAPE is compile-time, only DATA is runtime.** The test
+    is one question — *for a given compiled kernel, can this value change between dispatches?*
+    If yes it is DATA (context depth, row counts, buffer offsets, `kv_dim`, scales, head
+    counts) and belongs in a uniform or a kargs struct. If no, it is SHAPE (a codec's block
+    stride, a scale-plane stride, a lane width, an unroll factor, a format selector) and must
+    NOT reach the kernel as a uniform, a kargs field, or a helper parameter. Shape belongs to
+    the specialization: a separate kernel class and PSO, a per-codec overload, a monomorphized
+    generic, or a `static_if` on a compile-time witness. Handing a shape constant over as a
+    value and trusting the shader compiler to inline-and-fold it back is an assumption, not a
+    guarantee, and it is worth nothing in the kernels that matter. The same rule bans
+    indirection in a kernel body — no function pointers, no vtables; class methods devirtualize
+    statically or the emitter refuses them.
+
+    **Verify against the EMITTED shader, never the das source.** Read the `*_msl` global (or
+    the SPIR-V dump) and confirm the constant is literal there: `blk * 34u`, not `blk * bstr`.
+    A helper that looks specialized in das can still lower to a runtime multiply.

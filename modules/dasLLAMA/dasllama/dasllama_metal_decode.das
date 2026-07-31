@@ -178,6 +178,17 @@ struct private StepRes {
     u_scale_sw : MetalBuffer?
     u_npq_sw : MetalBuffer?
     u_npall_sw : MetalBuffer?
+    // scalar twins of the attention uniforms, for the kargs binds. Set beside the buffers with
+    // the SAME expressions, so `het ? k_x_sw : k_x` mirrors `het ? u_x_sw : u_x` value for value.
+    k_hs : uint
+    k_hs_sw : uint
+    k_kstride : uint
+    k_kstride_sw : uint
+    k_kvm : uint
+    k_kvm_sw : uint
+    k_scale : float
+    k_scale_sw : float
+    k_chlo : uint     // first live chunk (sliding) — the comb's skip start
     u_voffe : MetalBuffer?     // v segment element offset (qd + kvd) — the v_norm/V-from-K sites
     u_voffe_sw : MetalBuffer?
     u_embscale : MetalBuffer?  // sqrt(dim) embed scale on the spec chain's GPU gather (gemma)
@@ -322,6 +333,11 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
     r.u_npall = uniform_u32(uint((qd + kv_dim) / 2l))
     // attn_scale overrides the 1/sqrt(hs) score scale (gemma4: 1.0 — QK-norm replaces it)
     r.u_scale = uniform_f32(c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size)))
+    let blockc0 = r.kdt == KVDtype.q8_0 || r.kdt == KVDtype.tq4
+    r.k_hs = uint(head_size)
+    r.k_kstride = uint(blockc0 ? kv_dim / 32l : kv_dim)
+    r.k_kvm = uint(n_heads / c.n_kv_heads)
+    r.k_scale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size))
     r.u_eps = uniform_f32(c.norm_eps)
     if (hetero) {
         r.u_hs_sw = uniform_u32(uint(hs_sw))
@@ -330,6 +346,10 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
         r.u_qkvd_sw = uniform_u32(uint(qkvd_sw))
         r.u_kvm_sw = uniform_u32(uint(n_heads / kvh_sw))
         r.u_scale_sw = uniform_f32(c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs_sw)))
+        r.k_hs_sw = uint(hs_sw)
+        r.k_kstride_sw = uint(blockc0 ? kvd_sw / 32l : kvd_sw)
+        r.k_kvm_sw = uint(n_heads / kvh_sw)
+        r.k_scale_sw = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs_sw))
         r.u_npq_sw = uniform_u32(uint(qd_sw / 2l))
         r.u_npall_sw = uniform_u32(uint((qd_sw + kvd_sw) / 2l))
     }
@@ -349,6 +369,7 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
         let wstart = pos + 1l > c.sliding_window ? pos + 1l - c.sliding_window : 0l
         r.u_winsl = uniform_u32(uint(c.sliding_window))
         r.u_chlo = uniform_u32(uint(wstart / ATTN_CHUNK_ROWS))
+        r.k_chlo = uint(wstart / ATTN_CHUNK_ROWS)
     }
     if (r.kdt == KVDtype.q8_0 || r.kdt == KVDtype.tq4) {
         r.u_nblk = uniform_u32(uint(kv_dim / 32l))
@@ -536,7 +557,6 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
         var u_qkvd_l = het ? r.u_qkvd_sw : r.u_qkvd
         var u_kvm_l = het ? r.u_kvm_sw : r.u_kvm
         var u_nblk_l = het ? r.u_nblk_sw : r.u_nblk
-        var u_scale_l = het ? r.u_scale_sw : r.u_scale
         var u_npq_l = het ? r.u_npq_sw : r.u_npq
         var u_npall_l = het ? r.u_npall_sw : r.u_npall
         // E-series shared-KV layer: Q-only — lkoff/lvoff alias the source slab via kv_row_prefix
@@ -667,35 +687,41 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
             }
         }
         if (!recr && g_skip != "attn") {
-            // sliding layers bind `window` (wstart = cnt - window) + the first-live-chunk comb start, global bind 0; sliding only surfaces chunked (the gate pins window >= 128 >= the single-form ceiling)
-            var bwin = lsl ? r.u_winsl : r.u_zero32
-            var bchlo = lsl ? r.u_chlo : r.u_zero32
+            // sliding only surfaces chunked (the gate pins window >= 128 >= the single-form ceiling)
             var bsnk : MetalBuffer?   // null = the enc defaults bind the identity
             if (c.attn_sinks) {
                 bsnk = upload_region(addr < void? >(t.fblob[t.sinks_off + l * n_heads]), uint64(n_heads * 4l))
             }
+            // one kargs per shape; `kstride` is elements (f16/f32) or 32-blocks (q8_0/tq4)
+            let kstride_l = het ? r.k_kstride_sw : r.k_kstride
+            let kvm_u = het ? r.k_kvm_sw : r.k_kvm
+            let scale_u = het ? r.k_scale_sw : r.k_scale
+            let hs_u = het ? r.k_hs_sw : r.k_hs
+            let hass_u = c.attn_sinks ? 1u : 0u
             if (r.chunked) {
+                var pka = SqAttnPartArgs(cnt = uint(pos + 1l), kstride = kstride_l, nheads = uint(n_heads),
+                    kv_mul = kvm_u, hs = hs_u, scale = scale_u, nchunks = uint(nchunks),
+                    softcap = c.attn_logit_softcap, window = lsl ? uint(c.sliding_window) : 0u)
                 if (r.kdt == KVDtype.q8_0) {
-                    enc_attn_part_q8(enc, g_arena, g_arena, lkoff, lvoff,
-                        r.bqkv, r.bpart, r.u_cnt, u_nblk_l, r.u_nh, u_kvm_l, u_hs_l, u_scale_l, r.u_nch, r.u_softcap, bwin, n_heads * nchunks, head_size)
+                    enc_attn_part_q8(enc, g_arena, g_arena, lkoff, lvoff, r.bqkv, r.bpart, pka, n_heads * nchunks, head_size)
                 } elif (r.kdt == KVDtype.tq4) {
-                    enc_attn_part_tq4(enc, g_arena, g_arena, lkoff, lvoff,
-                        r.bqkv, r.bpart, r.u_cnt, u_nblk_l, r.u_nh, u_kvm_l, u_hs_l, u_scale_l, r.u_nch, r.u_softcap, bwin, n_heads * nchunks, head_size)
+                    enc_attn_part_tq4(enc, g_arena, g_arena, lkoff, lvoff, r.bqkv, r.bpart, pka, n_heads * nchunks, head_size)
                 } else {
-                    enc_attn_part(enc, f16v, g_arena, g_arena, lkoff, lvoff,
-                        r.bqkv, r.bpart, r.u_cnt, u_kvd_l, r.u_nh, u_kvm_l, u_hs_l, u_scale_l, r.u_nch, r.u_softcap, bwin, n_heads * nchunks, head_size)
+                    enc_attn_part(enc, f16v, g_arena, g_arena, lkoff, lvoff, r.bqkv, r.bpart, pka, n_heads * nchunks, head_size)
                 }
-                enc_attn_comb(enc, r.bpart, r.bxb, r.u_nch, r.u_nh, u_hs_l, bchlo, n_heads, head_size, bsnk, r.u_hass)
+                var cka = SqAttnCombArgs(nchunks = uint(nchunks), nheads = uint(n_heads), hs = hs_u,
+                    chlo = lsl ? r.k_chlo : 0u, hass = hass_u)
+                enc_attn_comb(enc, r.bpart, r.bxb, cka, n_heads, head_size, bsnk)
             } else {
+                var ska = SqAttnArgs(cnt = uint(pos + 1l), kstride = kstride_l, nheads = uint(n_heads),
+                    kv_mul = kvm_u, hs = hs_u, scale = scale_u,
+                    softcap = c.attn_logit_softcap, hass = hass_u)
                 if (r.kdt == KVDtype.q8_0) {
-                    enc_attn_q8(enc, g_arena, g_arena, lkoff, lvoff,
-                        r.bqkv, r.bxb, r.u_cnt, u_nblk_l, r.u_nh, u_kvm_l, u_hs_l, u_scale_l, r.u_softcap, n_heads, head_size, bsnk, r.u_hass)
+                    enc_attn_q8(enc, g_arena, g_arena, lkoff, lvoff, r.bqkv, r.bxb, ska, n_heads, head_size, bsnk)
                 } elif (r.kdt == KVDtype.tq4) {
-                    enc_attn_tq4(enc, g_arena, g_arena, lkoff, lvoff,
-                        r.bqkv, r.bxb, r.u_cnt, u_nblk_l, r.u_nh, u_kvm_l, u_hs_l, u_scale_l, r.u_softcap, n_heads, head_size, bsnk, r.u_hass)
+                    enc_attn_tq4(enc, g_arena, g_arena, lkoff, lvoff, r.bqkv, r.bxb, ska, n_heads, head_size, bsnk)
                 } else {
-                    enc_attn(enc, f16v, g_arena, g_arena, lkoff, lvoff,
-                        r.bqkv, r.bxb, r.u_cnt, u_kvd_l, r.u_nh, u_kvm_l, u_hs_l, u_scale_l, r.u_softcap, n_heads, head_size, bsnk, r.u_hass)
+                    enc_attn(enc, f16v, g_arena, g_arena, lkoff, lvoff, r.bqkv, r.bxb, ska, n_heads, head_size, bsnk)
                 }
             }
             if (r.kdt == KVDtype.tq4) {
@@ -1176,13 +1202,21 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
             }
             enc_rope_store_b(enc, true, r.bqkv, r.bcos, r.bsin, brt, r.u_zero32, r.u_kvd, r.u_qd, r.u_hs, r.u_npq, r.u_npall, r.u_qkvd, r.u_neox,
                 bbias, r.u_hasb, (qd + kv_dim) / 2l, 2l, [rtoff = rtoff, brot = r.u_rot])
+            // the verify pass runs the base (non-sliding) geometry over layer 0's slab
+            let vscale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size))
             if (r.chunked) {
-                enc_attn_part_b(enc, true, r.bqkv, r.bpart, brt, r.u_zero32, r.u_kvd, r.u_nh, r.u_kvm, r.u_hs, r.u_scale, r.u_qkvd, r.u_nch,
-                    r.u_softcap, r.u_zero32, 2l, nchunks, n_heads, head_size, [rtoff = rtoff])
-                enc_attn_comb_b(enc, r.bpart, r.bxb, brt, r.u_nch, r.u_nh, r.u_hs, r.u_zero32, 2l, n_heads, head_size, [rtoff = rtoff])
+                var pka = SqAttnPartBArgs(lay = 0u, kstride = uint(kv_dim), nheads = uint(n_heads),
+                    kv_mul = uint(n_heads / c.n_kv_heads), hs = uint(head_size), scale = vscale,
+                    qstride = uint(qkvd), nchmax = uint(nchunks), softcap = c.attn_logit_softcap, window = 0u)
+                enc_attn_part_b(enc, true, r.bqkv, r.bpart, brt, pka, 2l, nchunks, n_heads, head_size, [rtoff = rtoff])
+                var cka = SqAttnCombBArgs(nchmax = uint(nchunks), nheads = uint(n_heads),
+                    hs = uint(head_size), window = 0u, hass = 0u)
+                enc_attn_comb_b(enc, r.bpart, r.bxb, brt, cka, 2l, n_heads, head_size, [rtoff = rtoff])
             } else {
-                enc_attn_b(enc, true, r.bqkv, r.bxb, brt, r.u_zero32, r.u_kvd, r.u_nh, r.u_kvm, r.u_hs, r.u_scale, r.u_qkvd,
-                    r.u_softcap, 2l, n_heads, head_size, [rtoff = rtoff])
+                var bka = SqAttnBArgs(lay = 0u, kstride = uint(kv_dim), nheads = uint(n_heads),
+                    kv_mul = uint(n_heads / c.n_kv_heads), hs = uint(head_size), scale = vscale,
+                    qstride = uint(qkvd), softcap = c.attn_logit_softcap, hass = 0u)
+                enc_attn_b(enc, true, r.bqkv, r.bxb, brt, bka, 2l, n_heads, head_size, [rtoff = rtoff])
             }
             if (c.q_gated) {
                 enc_ew2(enc, g_pso_sigmul, r.bxb, 0ul, r.bdn_gate, 0ul, r.u_total_qd, 2l * qd)
@@ -2362,7 +2396,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     var u_hs = uniform_u32(uint(head_size))
     var u_kvm = uniform_u32(uint(n_heads / c.n_kv_heads))
     var u_nh = uniform_u32(uint(n_heads))
-    var u_scale = uniform_f32(c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size)))
     var u_eps = uniform_f32(c.norm_eps)
     var u_npq = uniform_u32(uint(qd / 2l))
     var u_npall = uniform_u32(uint((qd + kv_dim) / 2l))
@@ -2377,7 +2410,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     var u_qkvd_sw = hetero ? uniform_u32(uint(qkvd_sw)) : null
     var u_hs_sw = hetero ? uniform_u32(uint(hs_sw)) : null
     var u_kvm_sw = hetero ? uniform_u32(uint(n_heads / kvh_sw)) : null
-    var u_scale_sw = hetero ? uniform_f32(c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs_sw))) : null
     var u_npq_sw = hetero ? uniform_u32(uint(qd_sw / 2l)) : null
     var u_npall_sw = hetero ? uniform_u32(uint((qd_sw + kvd_sw) / 2l)) : null
     var u_nblk_sw = (hetero && blockc) ? uniform_u32(uint(kvd_sw / 32l)) : null
@@ -2491,10 +2523,16 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             var u_qkvd_l = het ? u_qkvd_sw : u_qkvd
             var u_hs_l = het ? u_hs_sw : u_hs
             var u_kvm_l = het ? u_kvm_sw : u_kvm
-            var u_scale_l = het ? u_scale_sw : u_scale
             var u_npq_l = het ? u_npq_sw : u_npq
             var u_npall_l = het ? u_npall_sw : u_npall
             var u_nblk_l = het ? u_nblk_sw : u_nblk
+            // the same per-layer geometry as scalars, for the kargs binds
+            let lay_l = uint(blockc ? kv_row_bytes(kdt, t.kv_row_prefix[l]) : t.kv_row_prefix[l])
+            let kstride_l = uint(blockc ? kvd_l / 32l : kvd_l)
+            let kvm_l = uint(het ? n_heads / kvh_sw : n_heads / c.n_kv_heads)
+            let scale_l = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs_l))
+            let window_l = lsl && c.sliding_window > 0l ? uint(c.sliding_window) : 0u
+            let hass_u = c.attn_sinks ? 1u : 0u
             let has_wv = t.wv_offs[l] >= 0l
             // attention: QKV (one concat stream) -> per-row rope + KV store -> per-row attention
             // over [0, cnt_b) -> out-proj -> fused residual add + ffn norm. K-quant sites take
@@ -2635,30 +2673,31 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                     var cka = SqAttnCombDArgs(nchmax = uint(d_nsgs), nheads = uint(n_heads), hs = uint(head_size))
                     enc_attn_comb_d(enc, bpart, bxb, brt, cka, nrows, n_heads, head_size)
                 } elif (chunked) {
-                    // sliding layers bind the span; each row's kernels derive wstart from its own
+                    // sliding layers carry the span; each row's kernels derive wstart from its own
                     // cnt (per-row depths differ), and the comb skips that row's below-window chunks
-                    var bwin = lsl && u_winsl != null ? u_winsl : u_zero32
+                    var pka = SqAttnPartBArgs(lay = lay_l, kstride = kstride_l, nheads = uint(n_heads),
+                        kv_mul = kvm_l, hs = uint(hs_l), scale = scale_l, qstride = uint(qkvd_l),
+                        nchmax = uint(nchmax), softcap = c.attn_logit_softcap, window = window_l)
                     if (tq4) {
-                        enc_attn_part_b_tq4(enc, bqkv, bpart, brt, ulay, u_nblk_l, u_nh, u_kvm_l, u_hs_l, u_scale_l, u_qkvd_l, u_nch,
-                            u_softcap, bwin, nrows, nchmax, n_heads, hs_l)
+                        enc_attn_part_b_tq4(enc, bqkv, bpart, brt, pka, nrows, nchmax, n_heads, hs_l)
                     } elif (blockc) {
-                        enc_attn_part_b_q8(enc, bqkv, bpart, brt, ulay, u_nblk_l, u_nh, u_kvm_l, u_hs_l, u_scale_l, u_qkvd_l, u_nch,
-                            u_softcap, bwin, nrows, nchmax, n_heads, hs_l)
+                        enc_attn_part_b_q8(enc, bqkv, bpart, brt, pka, nrows, nchmax, n_heads, hs_l)
                     } else {
-                        enc_attn_part_b(enc, f16, bqkv, bpart, brt, ulay, u_kvd_l, u_nh, u_kvm_l, u_hs_l, u_scale_l, u_qkvd_l, u_nch,
-                            u_softcap, bwin, nrows, nchmax, n_heads, hs_l)
+                        enc_attn_part_b(enc, f16, bqkv, bpart, brt, pka, nrows, nchmax, n_heads, hs_l)
                     }
-                    enc_attn_comb_b(enc, bpart, bxb, brt, u_nch, u_nh, u_hs_l, bwin, nrows, n_heads, hs_l, bsnk, u_hass)
+                    var cka = SqAttnCombBArgs(nchmax = uint(nchmax), nheads = uint(n_heads),
+                        hs = uint(hs_l), window = window_l, hass = hass_u)
+                    enc_attn_comb_b(enc, bpart, bxb, brt, cka, nrows, n_heads, hs_l, bsnk)
                 } else {
+                    var bka = SqAttnBArgs(lay = lay_l, kstride = kstride_l, nheads = uint(n_heads),
+                        kv_mul = kvm_l, hs = uint(hs_l), scale = scale_l, qstride = uint(qkvd_l),
+                        softcap = c.attn_logit_softcap, hass = hass_u)
                     if (tq4) {
-                        enc_attn_b_tq4(enc, bqkv, bxb, brt, ulay, u_nblk_l, u_nh, u_kvm_l, u_hs_l, u_scale_l, u_qkvd_l,
-                            u_softcap, nrows, n_heads, hs_l, bsnk, u_hass)
+                        enc_attn_b_tq4(enc, bqkv, bxb, brt, bka, nrows, n_heads, hs_l, bsnk)
                     } elif (blockc) {
-                        enc_attn_b_q8(enc, bqkv, bxb, brt, ulay, u_nblk_l, u_nh, u_kvm_l, u_hs_l, u_scale_l, u_qkvd_l,
-                            u_softcap, nrows, n_heads, hs_l, bsnk, u_hass)
+                        enc_attn_b_q8(enc, bqkv, bxb, brt, bka, nrows, n_heads, hs_l, bsnk)
                     } else {
-                        enc_attn_b(enc, f16, bqkv, bxb, brt, ulay, u_kvd_l, u_nh, u_kvm_l, u_hs_l, u_scale_l, u_qkvd_l,
-                            u_softcap, nrows, n_heads, hs_l, bsnk, u_hass)
+                        enc_attn_b(enc, f16, bqkv, bxb, brt, bka, nrows, n_heads, hs_l, bsnk)
                     }
                 }
                 if (tq4) {
@@ -3029,7 +3068,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
         g_lp_upooled |> push((buf = u_qkvd_sw, size = 4ul))
         g_lp_upooled |> push((buf = u_hs_sw, size = 4ul))
         g_lp_upooled |> push((buf = u_kvm_sw, size = 4ul))
-        g_lp_upooled |> push((buf = u_scale_sw, size = 4ul))
         g_lp_upooled |> push((buf = u_npq_sw, size = 4ul))
         g_lp_upooled |> push((buf = u_npall_sw, size = 4ul))
         if (u_nblk_sw != null) {
@@ -3095,7 +3133,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     g_lp_upooled |> push((buf = u_hs, size = 4ul))
     g_lp_upooled |> push((buf = u_kvm, size = 4ul))
     g_lp_upooled |> push((buf = u_nh, size = 4ul))
-    g_lp_upooled |> push((buf = u_scale, size = 4ul))
     g_lp_upooled |> push((buf = u_eps, size = 4ul))
     g_lp_upooled |> push((buf = u_npq, size = 4ul))
     g_lp_upooled |> push((buf = u_npall, size = 4ul))
