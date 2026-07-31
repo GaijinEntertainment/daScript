@@ -247,6 +247,12 @@ highlight inside code blocks lands with the selection work in E2/E4.
      without alpha) get a swatch + real ImGui color dialog writing back —
      the proof case that the editor embeds live widgets over source
      ranges.
+  Settled in discussion (2026-07-30, no pushback): language profile is a
+  plain das struct with hardcoded das/cpp/md constructors (not
+  data-driven); syntax-while-editing lands BEFORE auto-indent so the
+  lexical pass tells the indenter which braces are real (`// {` and
+  `"{"` must not count); ghost-text completion defaults ON with a
+  per-language kill switch. All revisable if it feels wrong in use.
 - **E4-follow-up (recorded, not pressing): LLM completion tier.** Own
   section when it comes: API port setting, async request, model picked
   for fill speed, model-per-language setting; basic-basic completion.
