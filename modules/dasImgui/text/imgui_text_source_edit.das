@@ -2754,9 +2754,9 @@ var private ISSUE_HEADER : NarrativeState
 var private ISSUE_ROW : table<int; ToggleState>
 
 def public text_edit_issues_panel(var ed : TextEditState) {
-    //! Compiler findings as clickable rows (raw 1-based ranges shown, the
-    //! compiler's own convention); a click navigates the editor there. The
-    //! host docks this panel wherever it likes.
+    //! Compiler findings as clickable rows, shown in the compiler's OWN
+    //! convention (1-based line, 0-based column - matches the error text
+    //! verbatim); a click navigates the editor there.
     var header = "no compile yet"
     if (ed.compile_status == TextEditCompileStatus.compiling) {
         header = "compiling..."
@@ -2768,7 +2768,7 @@ def public text_edit_issues_panel(var ed : TextEditState) {
     text_disabled(ISSUE_HEADER, (text = header))
     for (index in range(length(ed.diagnostics))) {
         let row_line = ed.diagnostics[index].line + 1
-        let row_column = ed.diagnostics[index].column + 1
+        let row_column = ed.diagnostics[index].column
         if (selectable(ISSUE_ROW[index], (text =
                 "{row_line}:{row_column}  {ed.diagnostics[index].message}###issue_{index}"))) {
             text_edit_set_cursor(ed, ed.diagnostics[index].line,

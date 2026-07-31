@@ -211,7 +211,7 @@ def test_das_issue_parsing(t : T?) {
     text_edit_parse_das_issues(issues, "text_edit_completion_overlay.das", out)
     t |> equal(length(out), 2, "both findings parse")
     t |> equal(out[0].line, 2, "line converts to 0-based")
-    t |> equal(out[0].column, 18, "column converts to 0-based")
+    t |> equal(out[0].column, 19, "printed columns are ALREADY 0-based")
     t |> success(find(out[0].message, "syntax error") >= 0, "the message rides along")
     t |> equal(out[1].line, 0, "the second finding pins its own line")
     delete out

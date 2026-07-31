@@ -63,9 +63,9 @@ def private offer_name(var names : array<string>; name, prefix : string) {
 
 def public text_edit_parse_das_issues(issues, file : string;
                                       var out : array<TextEditDiagnostic>) {
-    //! Compiler issue text -> per-position findings: an `error[...]`/
-    //! `warning[...]` line carries the message, the following `file:LINE:COL`
-    //! line pins it (1-based in, 0-based out).
+    //! Compiler issue text -> per-position findings: a `file:LINE:COL` line
+    //! pins the preceding error/warning message. Printed lines are 1-based
+    //! but columns 0-BASED (probe-verified); both store 0-based.
     var message = ""
     var inscope lines <- split(issues, "\n")
     let anchor = file + ":"
@@ -78,7 +78,7 @@ def public text_edit_parse_das_issues(issues, file : string;
             if (length(parts) >= 2) {
                 out |> push(TextEditDiagnostic(
                     line = max(to_int(parts[0]) - 1, 0),
-                    column = max(to_int(parts[1]) - 1, 0),
+                    column = max(to_int(parts[1]), 0),
                     message = message))
                 message = ""
             }
