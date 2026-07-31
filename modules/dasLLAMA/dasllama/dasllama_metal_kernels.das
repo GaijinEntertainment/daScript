@@ -1438,17 +1438,18 @@ class MetalRopeStoreF16 {
     @ssbo @binding = 3 @off = "voff" vd : array<float16>
     @ssbo @binding = 4 @role = "weight" tcos : array<float>  // [head_size/2] this position's rope row
     @ssbo @binding = 5 @role = "weight" tsin : array<float>
-    @uniform @binding = 6 qd : uint
-    @uniform @binding = 7 head_size : uint
-    @uniform @binding = 8 npairs_q : uint   // qd/2 — the q half of the grid
-    @uniform @binding = 9 npairs : uint     // + kvd/2 — grid guard
-    @uniform @binding = 10 neox : uint      // pair (j, j+half) instead of (2j, 2j+1); same table row j
-    @ssbo @binding = 11 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
-    @uniform @binding = 12 has_bias : uint
-    @uniform @binding = 13 rot : uint       // partial rotary width (qwen35: 64 of 256); == head_size for full
+    @ssbo @binding = 6 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
+    @uniform @binding = 7 ka : RopeStoreArgs
 
     [metal_kernel(name="metal_rope_store16_msl")]
     def metal_rope_store16 {
+        let qd = ka.qd
+        let head_size = ka.head_size
+        let npairs_q = ka.npairs_q
+        let npairs = ka.npairs
+        let neox = ka.neox
+        let has_bias = ka.has_bias
+        let rot = ka.rot
         let gid = gl_GlobalInvocationID.x
         if (gid >= npairs) {
             return
@@ -1499,20 +1500,21 @@ class MetalRopeStoreHF16 {
     @ssbo @binding = 5 @role = "weight" tsin : array<float>
     @ssbo @binding = 6 @role = "weight" w : array<float>     // [qnorm | knorm] per-head RMS weights
     @ssbo @binding = 7 @role = "weight" bias : array<float>  // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
-    @uniform @binding = 8 qd : uint
-    @uniform @binding = 9 head_size : uint
-    @uniform @binding = 10 nheads : uint
-    @uniform @binding = 11 kv_mul : uint
-    @uniform @binding = 12 neox : uint
-    @uniform @binding = 13 has_bias : uint
-    @uniform @binding = 14 has_norm : uint
-    @uniform @binding = 15 eps : float
-    @uniform @binding = 16 rot : uint       // partial rotary width; == head_size for full
+    @uniform @binding = 8 ka : RopeStoreHArgs
     @workgroup buf : float[512]     // <= max head_size (gemma4 global heads are 512)
     @workgroup part : float[16]
 
     [metal_kernel(name="metal_rope_store_h16_msl")]
     def metal_rope_store_h16 {
+        let qd = ka.qd
+        let head_size = ka.head_size
+        let nheads = ka.nheads
+        let kv_mul = ka.kv_mul
+        let neox = ka.neox
+        let has_bias = ka.has_bias
+        let has_norm = ka.has_norm
+        let eps = ka.eps
+        let rot = ka.rot
         let tgid = gl_WorkGroupID.x
         let lid = gl_LocalInvocationID.x
         let hs = head_size
@@ -1572,17 +1574,18 @@ class MetalRopeStoreF32 {
     @ssbo @binding = 3 @off = "voff" vd : array<float>
     @ssbo @binding = 4 @role = "weight" tcos : array<float>
     @ssbo @binding = 5 @role = "weight" tsin : array<float>
-    @uniform @binding = 6 qd : uint
-    @uniform @binding = 7 head_size : uint
-    @uniform @binding = 8 npairs_q : uint
-    @uniform @binding = 9 npairs : uint
-    @uniform @binding = 10 neox : uint
-    @ssbo @binding = 11 @role = "weight" bias : array<float>
-    @uniform @binding = 12 has_bias : uint
-    @uniform @binding = 13 rot : uint       // partial rotary width; == head_size for full
+    @ssbo @binding = 6 @role = "weight" bias : array<float>
+    @uniform @binding = 7 ka : RopeStoreArgs
 
     [metal_kernel(name="metal_rope_store32_msl")]
     def metal_rope_store32 {
+        let qd = ka.qd
+        let head_size = ka.head_size
+        let npairs_q = ka.npairs_q
+        let npairs = ka.npairs
+        let neox = ka.neox
+        let has_bias = ka.has_bias
+        let rot = ka.rot
         let gid = gl_GlobalInvocationID.x
         if (gid >= npairs) {
             return
@@ -1628,16 +1631,17 @@ class MetalRopeStoreQ8 {
     @ssbo @binding = 5 @role = "alias" @off = "voff" vqb : array<int8>
     @ssbo @binding = 6 @role = "weight" tcos : array<float>  // [head_size/2] this position's rope row
     @ssbo @binding = 7 @role = "weight" tsin : array<float>
-    @uniform @binding = 8 qd : uint
-    @uniform @binding = 9 head_size : uint
-    @uniform @binding = 10 npairs_q : uint  // qd/2 — the q-rope half of the grid
-    @uniform @binding = 11 nblk : uint      // kv_dim/32 — K blocks (V adds the same again)
-    @uniform @binding = 12 neox : uint      // pair (j, j+half) instead of (2j, 2j+1); same table row j
-    @ssbo @binding = 13 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
-    @uniform @binding = 14 has_bias : uint
+    @ssbo @binding = 8 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
+    @uniform @binding = 9 ka : RopeStoreQ8Args
 
     [metal_kernel(name="metal_rope_store_q8_msl")]
     def metal_rope_store_q8 {
+        let qd = ka.qd
+        let head_size = ka.head_size
+        let npairs_q = ka.npairs_q
+        let nblk = ka.nblk
+        let neox = ka.neox
+        let has_bias = ka.has_bias
         let gid = gl_GlobalInvocationID.x
         if (gid >= npairs_q + 2u * nblk) {
             return
@@ -1739,17 +1743,18 @@ class MetalRopeStoreTq4 {
     @ssbo @binding = 6 @role = "weight" tcos : array<float>  // [head_size/2] this position's rope row
     @ssbo @binding = 7 @role = "weight" tsin : array<float>
     @ssbo @binding = 8 @role = "weight" signs : array<float> // the tq4 rotation signs (prefix per head_size)
-    @uniform @binding = 9 qd : uint
-    @uniform @binding = 10 head_size : uint
-    @uniform @binding = 11 nheads : uint
-    @uniform @binding = 12 kv_mul : uint
-    @uniform @binding = 13 neox : uint      // pair (j, j+half) instead of (2j, 2j+1); same table row j
-    @ssbo @binding = 14 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
-    @uniform @binding = 15 has_bias : uint
+    @ssbo @binding = 9 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
+    @uniform @binding = 10 ka : RopeStoreTq4Args
     @workgroup buf : float[512]     // <= max head_size (gemma4 global heads are 512)
 
     [metal_kernel(name="metal_rope_store_tq4_msl")]
     def metal_rope_store_tq4 {
+        let qd = ka.qd
+        let head_size = ka.head_size
+        let nheads = ka.nheads
+        let kv_mul = ka.kv_mul
+        let neox = ka.neox
+        let has_bias = ka.has_bias
         let tgid = gl_WorkGroupID.x
         let lid = gl_LocalInvocationID.x
         let hs = head_size
@@ -3258,6 +3263,88 @@ struct SqAttnCombDArgs {
     hs : uint
 }
 
+// The fused rope + KV-row store family binds its uniforms as ONE kargs value. `rot` is the
+// partial-rotary width (== head_size for full rope); the batched forms add the layer prefix and
+// `qstride`, the per-row stride of the fused QKV block.
+struct RopeStoreArgs {
+    qd : uint
+    head_size : uint
+    npairs_q : uint
+    npairs : uint
+    neox : uint
+    has_bias : uint
+    rot : uint
+}
+
+struct RopeStoreBArgs {
+    lay : uint
+    kv_dim : uint
+    qd : uint
+    head_size : uint
+    npairs_q : uint
+    npairs : uint
+    qstride : uint
+    neox : uint
+    has_bias : uint
+    rot : uint
+}
+
+// The head-cooperative form folds the per-head RMSNorm in, so it carries that norm's
+// weights-present flag and epsilon.
+struct RopeStoreHArgs {
+    qd : uint
+    head_size : uint
+    nheads : uint
+    kv_mul : uint
+    neox : uint
+    has_bias : uint
+    has_norm : uint
+    eps : float
+    rot : uint
+}
+
+// The q8_0 mirror counts its K/V work in 32-element blocks (`nblk`), not in rope pairs.
+struct RopeStoreQ8Args {
+    qd : uint
+    head_size : uint
+    npairs_q : uint
+    nblk : uint
+    neox : uint
+    has_bias : uint
+}
+
+struct RopeStoreBQ8Args {
+    lay : uint
+    nblk : uint
+    qd : uint
+    head_size : uint
+    npairs_q : uint
+    qstride : uint
+    neox : uint
+    has_bias : uint
+}
+
+// The tq4 mirror is head-cooperative (the FWHT spans a whole head), so it counts heads.
+struct RopeStoreTq4Args {
+    qd : uint
+    head_size : uint
+    nheads : uint
+    kv_mul : uint
+    neox : uint
+    has_bias : uint
+}
+
+struct RopeStoreBTq4Args {
+    lay : uint
+    qd : uint
+    head_size : uint
+    nheads : uint
+    kv_mul : uint
+    qstride : uint
+    neox : uint
+    has_bias : uint
+}
+
 // ===== the split-K "D" attention family: the stages that do not depend on the K/V codec =====
 // One simdgroup owns a 32-position slice and merges it online into its running state. Only the
 // score and V-accumulate steps read K/V, so only those stay per-codec in each kernel below.
@@ -3611,20 +3698,21 @@ class MetalRopeStoreBF16 {
     @ssbo @binding = 3 @role = "weight" tcos : array<float>  // [B x head_size/2] per-row rope rows
     @ssbo @binding = 4 @role = "weight" tsin : array<float>
     @ssbo @binding = 5 @role = "read" rt : array<uint4>
-    @uniform @binding = 6 lay : uint
-    @uniform @binding = 7 kv_dim : uint
-    @uniform @binding = 8 qd : uint
-    @uniform @binding = 9 head_size : uint
-    @uniform @binding = 10 npairs_q : uint  // qd/2 — the q half of the pair grid
-    @uniform @binding = 11 npairs : uint    // + kvd/2 — grid guard
-    @uniform @binding = 12 qstride : uint
-    @uniform @binding = 13 neox : uint      // pair (j, j+half) instead of (2j, 2j+1); same table row j
-    @ssbo @binding = 14 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
-    @uniform @binding = 15 has_bias : uint
-    @uniform @binding = 16 rot : uint       // partial rotary width; == head_size for full
+    @ssbo @binding = 6 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
+    @uniform @binding = 7 ka : RopeStoreBArgs
 
     [metal_kernel(name="metal_rope_store_b16_msl")]
     def metal_rope_store_b16 {
+        let lay = ka.lay
+        let kv_dim = ka.kv_dim
+        let qd = ka.qd
+        let head_size = ka.head_size
+        let npairs_q = ka.npairs_q
+        let npairs = ka.npairs
+        let qstride = ka.qstride
+        let neox = ka.neox
+        let has_bias = ka.has_bias
+        let rot = ka.rot
         let gid = gl_GlobalInvocationID.x
         if (gid >= npairs) {
             return
@@ -3674,20 +3762,21 @@ class MetalRopeStoreBF32 {
     @ssbo @binding = 3 @role = "weight" tcos : array<float>
     @ssbo @binding = 4 @role = "weight" tsin : array<float>
     @ssbo @binding = 5 @role = "read" rt : array<uint4>
-    @uniform @binding = 6 lay : uint
-    @uniform @binding = 7 kv_dim : uint
-    @uniform @binding = 8 qd : uint
-    @uniform @binding = 9 head_size : uint
-    @uniform @binding = 10 npairs_q : uint
-    @uniform @binding = 11 npairs : uint
-    @uniform @binding = 12 qstride : uint
-    @uniform @binding = 13 neox : uint
-    @ssbo @binding = 14 @role = "weight" bias : array<float>
-    @uniform @binding = 15 has_bias : uint
-    @uniform @binding = 16 rot : uint       // partial rotary width; == head_size for full
+    @ssbo @binding = 6 @role = "weight" bias : array<float>
+    @uniform @binding = 7 ka : RopeStoreBArgs
 
     [metal_kernel(name="metal_rope_store_b32_msl")]
     def metal_rope_store_b32 {
+        let lay = ka.lay
+        let kv_dim = ka.kv_dim
+        let qd = ka.qd
+        let head_size = ka.head_size
+        let npairs_q = ka.npairs_q
+        let npairs = ka.npairs
+        let qstride = ka.qstride
+        let neox = ka.neox
+        let has_bias = ka.has_bias
+        let rot = ka.rot
         let gid = gl_GlobalInvocationID.x
         if (gid >= npairs) {
             return
@@ -3800,18 +3889,19 @@ class MetalRopeStoreBQ8 {
     @ssbo @binding = 5 @role = "weight" tcos : array<float>  // [B x head_size/2] per-row rope rows
     @ssbo @binding = 6 @role = "weight" tsin : array<float>
     @ssbo @binding = 7 @role = "read" rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
-    @uniform @binding = 8 lay : uint
-    @uniform @binding = 9 nblk : uint       // kv_dim/32 — K blocks (V adds the same again)
-    @uniform @binding = 10 qd : uint
-    @uniform @binding = 11 head_size : uint
-    @uniform @binding = 12 npairs_q : uint  // qd/2 — the q-rope half of the grid
-    @uniform @binding = 13 qstride : uint
-    @uniform @binding = 14 neox : uint      // pair (j, j+half) instead of (2j, 2j+1); same table row j
-    @ssbo @binding = 15 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
-    @uniform @binding = 16 has_bias : uint
+    @ssbo @binding = 8 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
+    @uniform @binding = 9 ka : RopeStoreBQ8Args
 
     [metal_kernel(name="metal_rope_store_b_q8_msl")]
     def metal_rope_store_b_q8 {
+        let lay = ka.lay
+        let nblk = ka.nblk
+        let qd = ka.qd
+        let head_size = ka.head_size
+        let npairs_q = ka.npairs_q
+        let qstride = ka.qstride
+        let neox = ka.neox
+        let has_bias = ka.has_bias
         let gid = gl_GlobalInvocationID.x
         if (gid >= npairs_q + 2u * nblk) {
             return
@@ -3981,19 +4071,20 @@ class MetalRopeStoreBTq4 {
     @ssbo @binding = 6 @role = "weight" tsin : array<float>
     @ssbo @binding = 7 @role = "weight" signs : array<float>
     @ssbo @binding = 8 @role = "read" rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
-    @uniform @binding = 9 lay : uint
-    @uniform @binding = 10 qd : uint
-    @uniform @binding = 11 head_size : uint
-    @uniform @binding = 12 nheads : uint
-    @uniform @binding = 13 kv_mul : uint
-    @uniform @binding = 14 qstride : uint
-    @uniform @binding = 15 neox : uint      // pair (j, j+half) instead of (2j, 2j+1); same table row j
-    @ssbo @binding = 16 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
-    @uniform @binding = 17 has_bias : uint
+    @ssbo @binding = 9 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
+    @uniform @binding = 10 ka : RopeStoreBTq4Args
     @workgroup buf : float[512]     // <= max head_size (gemma4 global heads are 512)
 
     [metal_kernel(name="metal_rope_store_b_tq4_msl")]
     def metal_rope_store_b_tq4 {
+        let lay = ka.lay
+        let qd = ka.qd
+        let head_size = ka.head_size
+        let nheads = ka.nheads
+        let kv_mul = ka.kv_mul
+        let qstride = ka.qstride
+        let neox = ka.neox
+        let has_bias = ka.has_bias
         let tgid = gl_WorkGroupID.x
         let bb = gl_WorkGroupID.y
         let lid = gl_LocalInvocationID.x
@@ -4470,15 +4561,11 @@ def enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows
 // fused rope + KV-row store: the v source binds the SAME QKV buffer at its v byte offset
 def enc_rope_store(enc : MetalComputeEncoder?; f16 : bool; bqkv : MetalBuffer?; vsoff : uint64;
                    kmb, vmb : MetalBuffer?; koff, voff : uint64;
-                   bcos, bsin, bqd, bhs, bnpq, bnpall, bneox, bbias, bhasb : MetalBuffer?; npairs : int64;
-                   brot : MetalBuffer? = null) {
-    // rot defaults to head_size (full rope)
+                   bcos, bsin, bbias : MetalBuffer?; var ka : RopeStoreArgs; npairs : int64) {
     if (f16) {
-        enc_rpst16_c(enc, bqkv, bqkv, vsoff, kmb, koff, vmb, voff, bcos, bsin,
-            bqd, bhs, bnpq, bnpall, bneox, bbias, bhasb, brot != null ? brot : bhs, npairs)
+        enc_rpst16_c(enc, bqkv, bqkv, vsoff, kmb, koff, vmb, voff, bcos, bsin, bbias, ka, npairs)
     } else {
-        enc_rpst32_c(enc, bqkv, bqkv, vsoff, kmb, koff, vmb, voff, bcos, bsin,
-            bqd, bhs, bnpq, bnpall, bneox, bbias, bhasb, brot != null ? brot : bhs, npairs)
+        enc_rpst32_c(enc, bqkv, bqkv, vsoff, kmb, koff, vmb, voff, bcos, bsin, bbias, ka, npairs)
     }
 }
 
@@ -4486,11 +4573,9 @@ def enc_rope_store(enc : MetalComputeEncoder?; f16 : bool; bqkv : MetalBuffer?; 
 // threadgroups of head_size threads
 def enc_rope_store_h16(enc : MetalComputeEncoder?; bqkv : MetalBuffer?; vsoff : uint64;
                        kmb, vmb : MetalBuffer?; koff, voff : uint64;
-                       bcos, bsin, bqkw, bbias, bqd, bhs, bnh, bkvm, bneox, bhasb, bhasn, beps : MetalBuffer?;
-                       ntg, head_size : int64; brot : MetalBuffer? = null) {
-    // rot defaults to head_size (full rope)
-    enc_rpst_h16_c(enc, bqkv, bqkv, vsoff, kmb, koff, vmb, voff, bcos, bsin, bqkw, bbias,
-        bqd, bhs, bnh, bkvm, bneox, bhasb, bhasn, beps, brot != null ? brot : bhs, ntg, head_size)
+                       bcos, bsin, bqkw, bbias : MetalBuffer?; var ka : RopeStoreHArgs;
+                       ntg, head_size : int64) {
+    enc_rpst_h16_c(enc, bqkv, bqkv, vsoff, kmb, koff, vmb, voff, bcos, bsin, bqkw, bbias, ka, ntg, head_size)
 }
 
 // The tq4 rotation signs, uploaded once at max head size (smaller heads read a prefix — the
@@ -4498,9 +4583,9 @@ def enc_rope_store_h16(enc : MetalComputeEncoder?; bqkv : MetalBuffer?; vsoff : 
 
 def enc_rope_store_tq4(enc : MetalComputeEncoder?; bqkv : MetalBuffer?; vsoff : uint64;
                        kmb, vmb : MetalBuffer?; koff, voff : uint64;
-                       bcos, bsin, bqd, bhs, bnh, bkvm, bneox, bbias, bhasb : MetalBuffer?; ntg, head_size : int64) {
+                       bcos, bsin, bbias : MetalBuffer?; var ka : RopeStoreTq4Args; ntg, head_size : int64) {
     enc_rpst_tq4_c(enc, bqkv, bqkv, vsoff, kmb, koff, kmb, vmb, voff, vmb, bcos, bsin, signs_buffer(),
-        bqd, bhs, bnh, bkvm, bneox, bbias, bhasb, ntg, head_size)
+        bbias, ka, ntg, head_size)
 }
 
 // the tq4 attention-output un-rotate: one threadgroup per (head, row), row stride = qstride
@@ -4512,9 +4597,9 @@ def enc_fwht_unsign(enc : MetalComputeEncoder?; byo, bhs, bqs : MetalBuffer?; nh
 // same row offset); grid covers the q pairs + one thread per K/V 32-block
 def enc_rope_store_q8(enc : MetalComputeEncoder?; bqkv : MetalBuffer?; vsoff : uint64;
                       kmb, vmb : MetalBuffer?; koff, voff : uint64;
-                      bcos, bsin, bqd, bhs, bnpq, bnblk, bneox, bbias, bhasb : MetalBuffer?; nthreads : int64) {
+                      bcos, bsin, bbias : MetalBuffer?; var ka : RopeStoreQ8Args; nthreads : int64) {
     enc_rpst_q8_c(enc, bqkv, bqkv, vsoff, kmb, koff, kmb, vmb, voff, vmb, bcos, bsin,
-        bqd, bhs, bnpq, bnblk, bneox, bbias, bhasb, nthreads)
+        bbias, ka, nthreads)
 }
 
 // the fused QKV+rope+store dispatch (2 rows per simdgroup — grid covers ddim/2 pairs)
@@ -5081,7 +5166,7 @@ def enc_attn_comb_d(enc : MetalComputeEncoder?; bpart, by, brt : MetalBuffer?; v
     kn_dispatch(enc, uint3(uint(nheads), uint(nrows), 1u), uint3(uint(head_size), 1u, 1u))
 }
 
-def enc_rope_store_b(enc : MetalComputeEncoder?; f16 : bool; bqkv, bcos, bsin, brt, blay, bkvd, bqd, bhs, bnpq, bnpall, bqs, bneox, bbias, bhasb : MetalBuffer?; npairs, nrows : int64; rtoff : uint64 = 0ul; brot : MetalBuffer? = null) {
+def enc_rope_store_b(enc : MetalComputeEncoder?; f16 : bool; bqkv, bcos, bsin, brt, bbias : MetalBuffer?; var ka : RopeStoreBArgs; npairs, nrows : int64; rtoff : uint64 = 0ul) {
     kn_pipeline(enc, f16 ? g_pso_rpstb16 : g_pso_rpstb32)
     kn_buffer(enc, bqkv, 0ul, 0)
     kn_buffer(enc, g_arena, 0ul, 1)
@@ -5089,17 +5174,8 @@ def enc_rope_store_b(enc : MetalComputeEncoder?; f16 : bool; bqkv, bcos, bsin, b
     kn_buffer(enc, bcos, 0ul, 3)
     kn_buffer(enc, bsin, 0ul, 4)
     kn_buffer(enc, brt, rtoff, 5)
-    kn_buffer(enc, blay, 0ul, 6)
-    kn_buffer(enc, bkvd, 0ul, 7)
-    kn_buffer(enc, bqd, 0ul, 8)
-    kn_buffer(enc, bhs, 0ul, 9)
-    kn_buffer(enc, bnpq, 0ul, 10)
-    kn_buffer(enc, bnpall, 0ul, 11)
-    kn_buffer(enc, bqs, 0ul, 12)
-    kn_buffer(enc, bneox, 0ul, 13)
-    kn_buffer(enc, bbias, 0ul, 14)
-    kn_buffer(enc, bhasb, 0ul, 15)
-    kn_buffer(enc, brot != null ? brot : bhs, 0ul, 16)   // rot defaults to head_size (full rope)
+    kn_buffer(enc, bbias, 0ul, 6)
+    kn_kargs(enc, ka, 7)
     hz_write(bqkv)
     hz_write(g_arena)
     hz_gate(enc)
@@ -5107,7 +5183,7 @@ def enc_rope_store_b(enc : MetalComputeEncoder?; f16 : bool; bqkv, bcos, bsin, b
 }
 
 // tq4-mirror batched rope+store: one threadgroup per (head, batch row), arena bound four ways
-def enc_rope_store_b_tq4(enc : MetalComputeEncoder?; bqkv, bcos, bsin, brt, blay, bqd, bhs, bnh, bkvm, bqs, bneox, bbias, bhasb : MetalBuffer?; ntg, nrows, head_size : int64) {
+def enc_rope_store_b_tq4(enc : MetalComputeEncoder?; bqkv, bcos, bsin, brt, bbias : MetalBuffer?; var ka : RopeStoreBTq4Args; ntg, nrows, head_size : int64) {
     kn_pipeline(enc, g_pso_rpstb_tq4)
     kn_tgmem(enc, metal_rope_store_b_tq4_msl_tgmem, 0)
     kn_buffer(enc, bqkv, 0ul, 0)
@@ -5119,15 +5195,8 @@ def enc_rope_store_b_tq4(enc : MetalComputeEncoder?; bqkv, bcos, bsin, brt, blay
     kn_buffer(enc, bsin, 0ul, 6)
     kn_buffer(enc, signs_buffer(), 0ul, 7)
     kn_buffer(enc, brt, 0ul, 8)
-    kn_buffer(enc, blay, 0ul, 9)
-    kn_buffer(enc, bqd, 0ul, 10)
-    kn_buffer(enc, bhs, 0ul, 11)
-    kn_buffer(enc, bnh, 0ul, 12)
-    kn_buffer(enc, bkvm, 0ul, 13)
-    kn_buffer(enc, bqs, 0ul, 14)
-    kn_buffer(enc, bneox, 0ul, 15)
-    kn_buffer(enc, bbias, 0ul, 16)
-    kn_buffer(enc, bhasb, 0ul, 17)
+    kn_buffer(enc, bbias, 0ul, 9)
+    kn_kargs(enc, ka, 10)
     hz_write(bqkv)
     hz_write(g_arena)
     hz_gate(enc)
@@ -5136,7 +5205,7 @@ def enc_rope_store_b_tq4(enc : MetalComputeEncoder?; bqkv, bcos, bsin, brt, blay
 
 // q8_0-mirror batched rope+store: arena bound four ways (K/V x scale/byte views); grid covers
 // the q pairs + one thread per K/V 32-block, one grid row per batch row
-def enc_rope_store_b_q8(enc : MetalComputeEncoder?; bqkv, bcos, bsin, brt, blay, bnblk, bqd, bhs, bnpq, bqs, bneox, bbias, bhasb : MetalBuffer?; nthreads, nrows : int64) {
+def enc_rope_store_b_q8(enc : MetalComputeEncoder?; bqkv, bcos, bsin, brt, bbias : MetalBuffer?; var ka : RopeStoreBQ8Args; nthreads, nrows : int64) {
     kn_pipeline(enc, g_pso_rpstb_q8)
     kn_buffer(enc, bqkv, 0ul, 0)
     kn_buffer(enc, g_arena, 0ul, 1)
@@ -5146,15 +5215,8 @@ def enc_rope_store_b_q8(enc : MetalComputeEncoder?; bqkv, bcos, bsin, brt, blay,
     kn_buffer(enc, bcos, 0ul, 5)
     kn_buffer(enc, bsin, 0ul, 6)
     kn_buffer(enc, brt, 0ul, 7)
-    kn_buffer(enc, blay, 0ul, 8)
-    kn_buffer(enc, bnblk, 0ul, 9)
-    kn_buffer(enc, bqd, 0ul, 10)
-    kn_buffer(enc, bhs, 0ul, 11)
-    kn_buffer(enc, bnpq, 0ul, 12)
-    kn_buffer(enc, bqs, 0ul, 13)
-    kn_buffer(enc, bneox, 0ul, 14)
-    kn_buffer(enc, bbias, 0ul, 15)
-    kn_buffer(enc, bhasb, 0ul, 16)
+    kn_buffer(enc, bbias, 0ul, 8)
+    kn_kargs(enc, ka, 9)
     hz_write(bqkv)
     hz_write(g_arena)
     hz_gate(enc)
