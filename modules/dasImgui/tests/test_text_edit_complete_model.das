@@ -303,6 +303,33 @@ def test_multiline_diagnostic_spans(t : T?) {
 }
 
 [test]
+def test_complete_statement_start_prefers_keywords(t : T?) {
+    // Boris: typing re at statement start should offer return FIRST
+    var ed = TextEditState()
+    var comp = TextEditCompletion()
+    text_edit_load(ed, "retro retro retro\n\tr")
+    text_edit_set_language(ed, "das")
+    text_edit_move_document_end(ed)
+    text_edit_complete_sync(ed, comp)
+    text_edit_type(ed, "e")
+    text_edit_complete_sync(ed, comp)
+    t |> equal(comp.items[0], "recover", "statement start ranks keywords first")
+    t |> success(find_index(comp.items, "return") >= 0, "return is up there")
+    t |> success(comp.item_tiers[find_index(comp.items, "retro")] == 1,
+        "document words rank below")
+    // mid-expression the same prefix ranks words first
+    text_edit_load(ed, "retro retro retro\nx = r")
+    text_edit_set_language(ed, "das")
+    text_edit_move_document_end(ed)
+    text_edit_complete_sync(ed, comp)
+    text_edit_type(ed, "e")
+    text_edit_complete_sync(ed, comp)
+    t |> equal(comp.items[0], "retro", "mid-expression ranks document words first")
+    text_edit_complete_dispose(comp)
+    text_edit_dispose(ed)
+}
+
+[test]
 def test_complete_rank_tiers(t : T?) {
     // Boris: ranking was backwards - compiled symbols arrived last and sat
     // at the bottom. Tiers: 0 compiled beats 1 doc words beats 2 keywords.

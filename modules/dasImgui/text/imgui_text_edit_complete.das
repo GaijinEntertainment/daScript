@@ -229,9 +229,9 @@ def public text_edit_complete_sync(var ed : TextEditState;
     comp.explicit_trigger = explicit_point && comp.typed
     delete comp.items
     delete comp.item_tiers
-    var inscope words : array<string>
-    collect_document_words(ed, prefix, words)
-    text_edit_complete_offer(ed, comp, comp.token, words, 1)
+    // at STATEMENT START keywords are the likely intent (return, let, if) -
+    // they take the top tier there; mid-expression they rank last
+    let keyword_tier = statement_start_at(ed, length(prefix)) ? 0 : 2
     var inscope keywords : array<string>
     text_language_profile(ed.language) $(profile) {
         for (keyword in profile.keywords) {
@@ -240,5 +240,24 @@ def public text_edit_complete_sync(var ed : TextEditState;
             }
         }
     }
-    text_edit_complete_offer(ed, comp, comp.token, keywords, 2)
+    text_edit_complete_offer(ed, comp, comp.token, keywords, keyword_tier)
+    var inscope words : array<string>
+    collect_document_words(ed, prefix, words)
+    text_edit_complete_offer(ed, comp, comp.token, words, 1)
+}
+
+def private statement_start_at(ed : TextEditState const; prefix_bytes : int) : bool {
+    return false if (empty(ed.lines) || ed.cursor_line >= length(ed.lines))
+    let upto = ed.cursor_column - prefix_bytes
+    return false if (upto < 0)
+    var blank = true
+    peek_data(ed.lines[ed.cursor_line]) $(bytes) {
+        for (at in range(min(upto, length(bytes)))) {
+            if (int(bytes[at]) != ' ' && int(bytes[at]) != '\t') {
+                blank = false
+                break
+            }
+        }
+    }
+    return blank
 }
