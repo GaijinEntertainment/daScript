@@ -2323,7 +2323,8 @@ def private edit_hit_position(ed : TextEditState const; m : EditMetrics;
 }
 
 def private handle_edit_mouse(var ed : TextEditState; m : EditMetrics;
-                              style : TextSourceViewStyle const; hovered : bool;
+                              style : TextSourceViewStyle const;
+                              hovered, window_hovered : bool;
                               var font : ImFont?) {
     let io & = unsafe(GetIO())
     if (hovered && IsMouseClicked(ImGuiMouseButton.Left, false)) {
@@ -2370,7 +2371,20 @@ def private handle_edit_mouse(var ed : TextEditState; m : EditMetrics;
         ed.cursor_line = hit.x
         ed.cursor_column = hit.y
     } elif (!hovered && IsMouseClicked(ImGuiMouseButton.Left, false)) {
-        ed.focused = false
+        if (window_hovered) {
+            // dead area past the buffer: land on the clamped last-line hit
+            ed.focused = true
+            let hit = edit_hit_position(ed, m, style, font)
+            ed.cursor_line = hit.x
+            ed.cursor_column = hit.y
+            ed.anchor_line = hit.x
+            ed.anchor_column = hit.y
+            ed.selection_dragging = true
+            ed.preferred_column = -1
+            ed.blink_time = 0.0f
+        } else {
+            ed.focused = false
+        }
     }
     if (ed.selection_dragging && IsMouseReleased(ImGuiMouseButton.Left)) {
         ed.selection_dragging = false
@@ -2770,7 +2784,8 @@ def private text_source_edit_impl(id : string; var ed : TextEditState;
         // Shortcut routing follows item focus; the find bar keeps it on close — reclaim
         FocusItem()
     }
-    handle_edit_mouse(ed, m, style, hovered, font)
+    handle_edit_mouse(ed, m, style, hovered,
+        IsWindowHovered(ImGuiHoveredFlags.None), font)
     if (hovered && !empty(ed.diagnostics)) {
         edit_diagnostic_tooltip(ed, m, style, font)
     }
