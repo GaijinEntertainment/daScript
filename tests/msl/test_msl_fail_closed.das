@@ -48,7 +48,7 @@ def private check_rejects(t : T?; fixture, needle : string) {
 def test_fail_closed_rejections(t : T?) {
     t |> run("emitter rejects kernel-illegal constructs cleanly") <| @(t : T?) {
         check_rejects(t, "_fc_uniform_written", "@uniform member `n` is written")
-        check_rejects(t, "_fc_uniform_array", "@uniform member `xs` must be a scalar or vector value")
+        check_rejects(t, "_fc_uniform_array", "array members are @ssbo buffers")
         check_rejects(t, "_fc_return_value", "kernels return void")
         check_rejects(t, "_fc_recursion", "is recursive — MSL forbids recursion")
         check_rejects(t, "_fc_ufn_param", "type has no MSL form")
@@ -56,6 +56,8 @@ def test_fail_closed_rejections(t : T?) {
         check_rejects(t, "_fc_ptr_space_tg", "is `threadgroup` but the argument points into device memory")
         check_rejects(t, "_fc_ptr_space_dev", "is `device` but the argument points into threadgroup memory")
         check_rejects(t, "_fc_ptr_untraceable", "has no traceable address space")
+        check_rejects(t, "_fc_ustruct_field", "only int/uint/float fields lower")
+        check_rejects(t, "_fc_ustruct_nested", "only int/uint/float fields lower")
         check_rejects(t, "_fc_method_recursion", "method `mrec` is recursive")
         check_rejects(t, "_fc_method_abstract", "has no resolvable body")
         check_rejects(t, "_fc_wg_binding", "threadgroup memory is not a bindable buffer")

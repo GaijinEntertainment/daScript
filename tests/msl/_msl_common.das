@@ -643,6 +643,32 @@ class UserFns {
     }
 }
 
+// ===== @uniform structs (the kargs form) =====
+// A kernel with a dozen scalars costs a dozen binds; one struct costs one. Fields are 4-byte
+// scalars only, so the das layout IS the MSL layout and the host writes its struct straight
+// through setBytes.
+
+struct UkArgs {
+    n : uint
+    gain : float
+    bias : int
+}
+
+class UkKern {
+    @ssbo @binding = 0 xs : array<float>
+    @ssbo @binding = 1 ys : array<float>
+    @uniform @binding = 2 ka : UkArgs
+
+    [metal_kernel(name="ukargs_msl"), marker(no_coverage)]
+    def ukargs {
+        let i = gl_GlobalInvocationID.x
+        if (i >= ka.n) {
+            return
+        }
+        ys[i] = xs[i] * ka.gain + float(ka.bias)
+    }
+}
+
 // ===== Phase 0: class methods + inheritance (the ONE FLAT struct emission) =====
 
 class UfxBase {
@@ -815,6 +841,7 @@ def public declared_msl_census : table<string> {
         "cvt.i32.i16",
         "cvt.i16.i32",
         "cvt.i8.i32",
+        "cvt.i32.f32",
         "cvt.i32.u32",
         "cvt_sat.i32v.i8v",
         "cvt_sat.u32v.u16v",
@@ -868,6 +895,8 @@ def public declared_msl_census : table<string> {
         "stmt.var.sgmat_array.f16",
         "stmt.var.array",
         "stmt.for.unroll",
+        "decl.uniform_struct",
+        "expr.member.ustruct",
         "decl.ptr.tg",
         "decl.ptr.dev",
         "expr.addr.tg",
@@ -961,5 +990,5 @@ def public all_msl_censuses : array<string> {
         vecarith_msl_census, control_msl_census, loops_msl_census, reduce_msl_census, simd_msl_census,
         halfarith_msl_census, latconv_msl_census, packed3_msl_census, sgmat_msl_census,
         sgmat_tiled_msl_census, sgmat_rolled_msl_census, mathcalls_msl_census, userfns_msl_census,
-        ufxcls_msl_census]
+        ufxcls_msl_census, ukargs_msl_census]
 }

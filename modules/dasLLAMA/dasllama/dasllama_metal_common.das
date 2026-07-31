@@ -1237,15 +1237,20 @@ struct KNode {
     nrange : int
 }
 
+// One bind: either a buffer at `off`, or — when `nbytes` > 0 — inline kargs bytes living at
+// `off` in the capture's byte pool. The kargs a caller hands over is a stack local that is gone
+// by replay time, so capture COPIES it.
 struct KBind {
     buf : MetalBuffer?
     off : uint64
     slot : int
+    nbytes : uint64
 }
 
 var g_gr_on = false
 var @scratch g_gr_nodes : array<KNode>      // capture-rail arrays: grown once, clear()-recycled per capture
 var @scratch g_gr_binds : array<KBind>
+var @scratch g_gr_bytes : array<uint8>      // inline-kargs pool; KBind.off indexes it when nbytes > 0
 var @scratch g_gr_ranges : array<MemRange>
 var g_gr_open = false            // a node is being built (kn_pipeline .. kn_dispatch)
 
@@ -1332,6 +1337,27 @@ def kn_buffer(enc : MetalComputeEncoder?; b : MetalBuffer?; off : uint64; slot :
     g_gr_binds |> push(KBind(buf = unsafe(reinterpret<MetalBuffer?>(b)), off = off, slot = slot))
 }
 
+//! Bind `len` bytes of kargs inline at `slot` — one bind for a whole struct of scalars, instead
+//! of one bound buffer per scalar. Under capture the bytes are copied into the pool: the caller's
+//! kargs is a stack local, long gone by the time graph_flush replays.
+def kn_bytes(enc : MetalComputeEncoder?; data : void?; len : uint64; slot : int) {
+    if (!g_gr_on) {
+        metal_set_bytes(enc, data, len, slot)
+        return
+    }
+    let base = length(g_gr_bytes)
+    g_gr_bytes |> resize(base + int(len))
+    unsafe {
+        memcpy(addr<void?>(g_gr_bytes[base]), data, len)
+    }
+    g_gr_binds |> push(KBind(buf = null, off = uint64(base), slot = slot, nbytes = len))
+}
+
+//! kn_bytes over a kargs STRUCT — the emitter's `@uniform ka : KArgs` twin on the host side.
+def kn_kargs(enc : MetalComputeEncoder?; var ka : auto(KA); slot : int) {
+    kn_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(type<KA>)), slot)
+}
+
 def kn_tgmem(enc : MetalComputeEncoder?; bytes : uint64; idx : int) {
     if (!g_gr_on) {
         metal_set_threadgroup_memory_length(enc, bytes, idx)
@@ -1361,6 +1387,7 @@ def gr_arm(on : bool) {
     g_gr_on = on
     g_gr_nodes |> clear()
     g_gr_binds |> clear()
+    g_gr_bytes |> clear()
     g_gr_ranges |> clear()
     g_gr_open = false
     g_hz_stage |> clear()
@@ -1379,7 +1406,13 @@ def private gr_encode_node(enc : MetalComputeEncoder?; n : KNode) {
     }
     for (b in range(n.nbind)) {
         let kb = g_gr_binds[n.bind0 + b]
-        metal_set_buffer(enc, kb.buf, kb.off, kb.slot)
+        if (kb.nbytes > 0ul) {
+            unsafe {
+                metal_set_bytes(enc, addr<void?>(g_gr_bytes[int(kb.off)]), kb.nbytes, kb.slot)
+            }
+        } else {
+            metal_set_buffer(enc, kb.buf, kb.off, kb.slot)
+        }
     }
     hz_gate(enc)
     metal_dispatch_threadgroups(enc, n.grid, n.tg)

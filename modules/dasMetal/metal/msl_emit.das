@@ -37,6 +37,7 @@ struct private MslMember {
     uniform : bool
     workgroup : bool
     packed : bool           // elem != value_elem: 3-lane element behind a packed_T3 param
+    ustruct : bool          // @uniform STRUCT (kargs): one bound value holding many scalars
     wg_dim : int            // @workgroup fixed-array count; -1 = scalar/vector
     wg_bytes : uint64       // @workgroup member's MSL byte size (whole member)
     wg_off : uint64         // @workgroup member's offset inside the dynamic shmem buffer
@@ -62,6 +63,7 @@ struct private MslCtx {
     renames : table<string; string>             // das identifier -> MSL-safe identifier
     ptrs : table<string; string>                // pointer local (addr(member[..])) -> its member (das names)
     ptr_space : table<string; string>           // pointer local/param -> "device" | "threadgroup" (call-site check)
+    ustructs : table<string; string>            // @uniform struct name -> its MSL definition (preamble)
     helpers : table<string>                     // preamble helper functions referenced by lowered calls
     gen_helpers : table<string; string>         // GENERATED preamble helpers (tensor ops): mangled name -> text
     scan_ptrs : table<string; string>           // scan-time pointer local -> member (write-set resolution)
@@ -145,6 +147,45 @@ def private builtin_msl_info(name : string) : tuple<ok : bool; mslType : string;
 
 // ===== member + builtin scans =====
 
+// A struct bound as ONE @uniform value (the kargs form). Fields are restricted to 4-byte
+// scalars so the das layout and the MSL layout are the same bytes with no padding rules — the
+// host writes the das struct straight through setBytes. Returns "" (after err) if it cannot.
+def private uniform_struct(var ctx : MslCtx; st : StructurePtr; at : LineInfo) : string {
+    if (st == null) {
+        err(ctx, at, "@uniform struct member has no structure type")
+        return ""
+    }
+    let sname = msl_safe_name(string(st.name))
+    if (key_exists(ctx.ustructs, sname)) {
+        return sname
+    }
+    var lines : array<string>
+    var bad = false
+    for (f in st.fields) {
+        let ft = f._type
+        let tn = ft == null ? "" : msl_type_name(ft)
+        // int/uint/float only: every other MSL type either changes size across the seam or
+        // carries alignment padding, and then the host's byte image stops matching
+        if (empty(tn) || !(tn == "int" || tn == "uint" || tn == "float")) {
+            err(ctx, at, "@uniform struct `{st.name}` field `{f.name}` is {ft == null ? "?" : describe(ft)} — only int/uint/float fields lower (a 4-byte-scalar struct is the same bytes in das and MSL)")
+            bad = true
+            continue
+        }
+        lines |> push("    {tn} {msl_safe_name(string(f.name))};")
+    }
+    if (empty(lines) && !bad) {
+        err(ctx, at, "@uniform struct `{st.name}` has no fields")
+        bad = true
+    }
+    if (bad) {
+        delete lines
+        return ""
+    }
+    ctx.ustructs[sname] = "struct {sname} \{\n{join(lines, "\n")}\n\};"
+    delete lines
+    return sname
+}
+
 def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
     for (fld in fn.classParent.fields) {
         if ((fld.name == "__rtti" || fld.name == "__finalize") ||
@@ -220,6 +261,7 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
         }
         var elem = ""
         var valueElem = ""
+        var isUstruct = false
         if (isSsbo) {
             if (fld._type == null || fld._type.baseType != Type.tArray) {
                 err(ctx, fld.at, "@ssbo member `{fld.name}` must be array<T>; got {fld._type == null ? "?" : describe(fld._type)}")
@@ -234,9 +276,18 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
                 err(ctx, fld.at, "@ssbo member `{fld.name}` element type {describe(fld._type.firstType)} has no MSL form (int/uint/float scalars, the 16/8-bit lattice, their 2/3/4 vectors)")
                 continue
             }
+        } elif (fld._type != null && fld._type.baseType == Type.tStructure) {
+            // the kargs form: ONE bound value carrying many scalars, so a kernel with a dozen
+            // uniforms costs one bind instead of a dozen
+            elem = uniform_struct(ctx, fld._type.structType, fld.at)
+            if (empty(elem)) {
+                continue
+            }
+            valueElem = elem
+            isUstruct = true
         } else {
             if (fld._type != null && fld._type.baseType == Type.tArray) {
-                err(ctx, fld.at, "@uniform member `{fld.name}` must be a scalar or vector value — array members are @ssbo buffers")
+                err(ctx, fld.at, "@uniform member `{fld.name}` must be a scalar, vector, or a struct of 4-byte scalars — array members are @ssbo buffers")
                 continue
             }
             if (reject_cpu_only_width(ctx, fld.at, fld._type)) {
@@ -258,7 +309,7 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
         ctx.renames[fldName] = msl_safe_name(fldName)
         ctx.members[fldName] = MslMember(msl_name = msl_safe_name(fldName), elem = elem, value_elem = valueElem,
             binding = binding, written = false, uniform = isUniform, workgroup = false,
-            packed = elem != valueElem, wg_dim = -1)
+            packed = elem != valueElem, ustruct = isUstruct, wg_dim = -1)
     }
     var ssboCount = 0
     for (m in values(ctx.members)) {
@@ -884,7 +935,12 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
             note(ctx, "expr.member")
             return m.msl_name
         }
-        err(ctx, ef.at, "field access `.{fieldName}` is not a kernel-class member access — only self.<@ssbo/@uniform member> lowers to MSL")
+        let um = member_lookup(ctx, ef.value)   // `kargs.field` — one hop inside a @uniform struct
+        if (!empty(um) && ctx.members[um].ustruct) {
+            note(ctx, "expr.member.ustruct")
+            return "{ctx.members[um].msl_name}.{msl_safe_name(fieldName)}"
+        }
+        err(ctx, ef.at, "field access `.{fieldName}` is not a kernel-class member access — only self.<@ssbo/@uniform member> and one hop into a @uniform struct lower to MSL")
         return "/*.{fieldName}*/"
     } elif (e is ExprCall && call_base_name("{(e as ExprCall).name}") == "i_das_ptr_add") {
         // das pointer arithmetic (`p = unsafe(p + n)`): args = (ptr, elems, elem_size); MSL
@@ -2471,6 +2527,14 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
         var hs <- [for (h in keys(ctx.helpers)); MSL_DOT_HELPERS?[h] ?? ""]
         hs |> sort()    // table iteration order is hash-based — pin the emitted order
         helper_text = join(hs, "\n") + "\n"
+    }
+    if (!empty(ctx.ustructs)) {
+        // @uniform struct definitions come first — the kernel signature names them, and in
+        // struct mode the flat class holds one by value. Sorted: table order is hash-based
+        var us <- [for (v in values(ctx.ustructs)); v]
+        us |> sort()
+        note(ctx, "decl.uniform_struct")
+        helper_text = join(us, "\n") + "\n" + helper_text
     }
     var mpp_include = ""
     if (!empty(ctx.gen_helpers) || !empty(ctx.tg_accs)) {

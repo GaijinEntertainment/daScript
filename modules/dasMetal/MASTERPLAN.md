@@ -1077,6 +1077,28 @@ tgmem param / builtin-using helper / uniform-reading method; negative gates for 
 method-field reassignment, unsupported param types. First consumer: the dasLLAMA SqAttn family
 dedup (16-of-20 twins share one skeleton; stage helpers + one uniform struct per family).
 
+## @uniform structs — the kargs form
+
+A kernel with a dozen scalars used to cost a dozen binds. `@uniform @binding = N ka : KArgs`,
+where `KArgs` is a plain das struct, costs one: the struct definition emits into the MSL
+preamble, the member becomes `constant KArgs& ka [[buffer(N)]]`, and `ka.field` is one hop.
+
+**Fields are `int`/`uint`/`float` only.** That restriction is the whole feature: a struct of
+4-byte scalars is the same bytes in das and in MSL, with no padding rules to keep in sync, so
+the host writes its own struct straight through `setBytes` (`metal_set_bytes`, already bound —
+Metal caps it at 4KB and a kargs struct is well under). A `float4` field would be 16-byte
+aligned in MSL and shift every field after it; a nested struct brings its own alignment. Both
+are refused (`tests/msl/_fail_closed/_fc_ustruct_{field,nested}.das`).
+
+Host side: `run_compute_1d_kargs` for tests, and dasLLAMA's `kn_bytes` / `kn_kargs` on the
+capture rail — under graph capture the bytes are COPIED into a pool, since the caller's kargs is
+a stack local long gone by replay time.
+
+Tests: `tests/msl/test_msl_uniform_struct.das` (definition placement, the single `constant&`
+parameter, no per-scalar parameter survives) and `tests/metal/test_metal_uniform_struct.das`
+(GPU vs CPU-oracle — the only thing that can prove the layout claim; mutation-verified by
+inserting one pad field into the emitted struct).
+
 ## Phase 0 follow-on: pointer parameters
 
 A helper takes a raw pointer: `def stage(var p : half4 const?; n : uint)`. This is what lets the

@@ -44,12 +44,16 @@ def public pipeline_from_source(dev : MetalDevice?; source, entry : string; fast
 //! One 1D dispatch: encode pipeline + buffers (bound to [[buffer(0..N-1)]] in array order),
 //! dispatch ceil(threads/threads_per_group) threadgroups, commit, wait. Returns false with
 //! `error` filled when the command buffer reports a GPU-side failure.
-def public run_compute_1d(queue : MetalCommandQueue?; pso : MetalComputePipeline?; buffers : array<MetalBuffer?>; threads, threads_per_group : uint; var error : string&; tgmem : uint64 = 0ul) : bool {
+def public run_compute_1d(queue : MetalCommandQueue?; pso : MetalComputePipeline?; buffers : array<MetalBuffer?>; threads, threads_per_group : uint; var error : string&; tgmem : uint64 = 0ul;
+                          kargs : void? = null; kargs_len : uint64 = 0ul; kargs_slot : int = -1) : bool {
     let cb = metal_new_command_buffer(queue)
     let enc = metal_new_compute_encoder(cb)
     metal_set_pipeline(enc, pso)
     for (buf, index in buffers, range(length(buffers))) {
         metal_set_buffer(enc, buf, 0ul, index)
+    }
+    if (kargs != null && kargs_slot >= 0) {
+        metal_set_bytes(enc, kargs, kargs_len, kargs_slot)
     }
     if (tgmem > 0ul) {
         metal_set_threadgroup_memory_length(enc, tgmem, 0)
@@ -63,6 +67,16 @@ def public run_compute_1d(queue : MetalCommandQueue?; pso : MetalComputePipeline
     metal_release(enc)
     metal_release(cb)
     return empty(error)
+}
+
+//! run_compute_1d with a kargs STRUCT bound inline at `kargs_slot` — the host twin of the
+//! emitter's `@uniform ka : KArgs`. One bind for the whole struct; das and MSL agree byte for
+//! byte because kargs fields are 4-byte scalars.
+def public run_compute_1d_kargs(queue : MetalCommandQueue?; pso : MetalComputePipeline?; buffers : array<MetalBuffer?>;
+                                var ka : auto(KA); kargs_slot : int; threads, threads_per_group : uint;
+                                var error : string&; tgmem : uint64 = 0ul) : bool {
+    return run_compute_1d(queue, pso, buffers, threads, threads_per_group, error, tgmem,
+        unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(type<KA>)), kargs_slot)
 }
 
 //! The leak gate: call at the end of every tests/metal file — Metal objects are invisible to all
