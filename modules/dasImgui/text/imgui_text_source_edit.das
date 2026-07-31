@@ -2427,6 +2427,11 @@ def private draw_edit_content(var ed : TextEditState; m : EditMetrics;
     }
     let has_selection = text_edit_has_selection(ed)
     let sel = text_edit_selection(ed)
+    // the ghost pushes the tail of the caret row right, never over it
+    let ghost_active = ed.focused && !empty(ed.ghost_text) && !has_selection
+    let ghost_width = !ghost_active ? 0.0f : text_source_range_width(
+        ed.ghost_text, 0, length(ed.ghost_text), font, m.font_size,
+        m.cell_width, style.tab_cells)
     for (row in range(first_visible, last_visible + 1)) {
         let row_origin = float2(m.origin.x, m.origin.y + float(row) * m.line_height)
         if (row == ed.cursor_line && ed.focused && !has_selection) {
@@ -2459,7 +2464,12 @@ def private draw_edit_content(var ed : TextEditState; m : EditMetrics;
             row_number, length(row_number), 0, length(row_number))
         let line = ed.lines[row]
         if (!empty(line)) {
-            draw_edit_line(ed, row, line, m, style, font, dl, row_origin)
+            if (ghost_active && row == ed.cursor_line) {
+                draw_edit_line(ed, row, line, m, style, font, dl, row_origin,
+                    ed.cursor_column, ghost_width)
+            } else {
+                draw_edit_line(ed, row, line, m, style, font, dl, row_origin)
+            }
         }
     }
     if (ed.focused && !empty(ed.ghost_text) && !has_selection
@@ -2509,35 +2519,56 @@ def private edit_syntax_color(style : TextSourceViewStyle const; // nolint:STYLE
     return style.text_color
 }
 
+def private draw_line_piece(var dl : ImDrawList?; var font : ImFont?;
+                            m : EditMetrics; style : TextSourceViewStyle const;
+                            line : string; from, to : int; color : float4;
+                            var x : float&; y : float;
+                            gap_column : int; gap_width : float;
+                            var gap_pending : bool&) {
+    // the ghost's gap opens exactly once as the drawing crosses gap_column
+    return if (to <= from)
+    var start = from
+    if (gap_pending && gap_column <= start) {
+        x += gap_width
+        gap_pending = false
+    } elif (gap_pending && gap_column < to) {
+        x += text_source_draw_range(dl, font, m.font_size, float2(x, y), color,
+            line, start, gap_column, m.cell_width, style.tab_cells)
+        x += gap_width
+        gap_pending = false
+        start = gap_column
+    }
+    x += text_source_draw_range(dl, font, m.font_size, float2(x, y), color,
+        line, start, to, m.cell_width, style.tab_cells)
+}
+
 def private draw_edit_line(ed : TextEditState const; row : int; line : string;
                            m : EditMetrics; style : TextSourceViewStyle const;
                            var font : ImFont?; var dl : ImDrawList?;
-                           row_origin : float2) {
+                           row_origin : float2;
+                           gap_column : int = -1; gap_width : float = 0.0f) {
     var x = row_origin.x + m.gutter_space
     let position_y = row_origin.y
+    var gap_pending = gap_column >= 0
     if (row >= length(ed.line_styles) || empty(ed.line_styles[row].runs)) {
-        let _ = text_source_draw_range(dl, font, m.font_size, float2(x, position_y),
-            style.text_color, line, 0, length(line), m.cell_width, style.tab_cells)
+        draw_line_piece(dl, font, m, style, line, 0, length(line),
+            style.text_color, x, position_y, gap_column, gap_width, gap_pending)
         return
     }
     var covered = 0
     for (run in ed.line_styles[row].runs) {
         if (run.start_byte > covered) {
-            x += text_source_draw_range(dl, font, m.font_size, float2(x, position_y),
-                style.text_color, line, covered, run.start_byte,
-                m.cell_width, style.tab_cells)
+            draw_line_piece(dl, font, m, style, line, covered, run.start_byte,
+                style.text_color, x, position_y, gap_column, gap_width, gap_pending)
         }
         let run_end = min(run.end_byte, length(line))
-        x += text_source_draw_range(dl, font, m.font_size, float2(x, position_y),
-            edit_syntax_color(style, run.style), line, run.start_byte, run_end,
-            m.cell_width, style.tab_cells)
+        draw_line_piece(dl, font, m, style, line, run.start_byte, run_end,
+            edit_syntax_color(style, run.style), x, position_y,
+            gap_column, gap_width, gap_pending)
         covered = run_end
     }
-    if (covered < length(line)) {
-        let _ = text_source_draw_range(dl, font, m.font_size, float2(x, position_y),
-            style.text_color, line, covered, length(line),
-            m.cell_width, style.tab_cells)
-    }
+    draw_line_piece(dl, font, m, style, line, covered, length(line),
+        style.text_color, x, position_y, gap_column, gap_width, gap_pending)
 }
 
 def private diagnostic_row_pixels(ed : TextEditState const;
