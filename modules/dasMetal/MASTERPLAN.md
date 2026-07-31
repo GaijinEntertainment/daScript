@@ -1076,3 +1076,29 @@ Census grows matching kinds (gate B both-directions discipline). Tests:
 tgmem param / builtin-using helper / uniform-reading method; negative gates for recursion,
 method-field reassignment, unsupported param types. First consumer: the dasLLAMA SqAttn family
 dedup (16-of-20 twins share one skeleton; stage helpers + one uniform struct per family).
+
+## Phase 0 follow-on: pointer parameters (OPEN — needs a ruling)
+
+The SqAttn dedup landed on Phase 0 as designed, and surveying the rest of the dasLLAMA kernel
+zoo found exactly one emitter gap blocking further factoring: **a helper cannot take a raw
+pointer.** The kernels that stream `unsafe(addr(buf[i]))` through a loop (the split-K "D"
+attention family, the K-quant mul_mm trio) can share their skeletons only if `T?` lowers as a
+parameter, and today it does not.
+
+The obstacle is real, not an oversight: **MSL requires an address space in the signature**
+(`device half4*` vs `threadgroup half4*`) and the das type `half4?` does not carry one — the
+same pointer type can name an @ssbo interior or a @workgroup interior. Three candidate rules,
+in order of how much they'd cost:
+
+1. **Device-only**: `T?` lowers as `device T*`; a pointer whose provenance is a @workgroup
+   member is a compile error naming both. Covers every case in the zoo today (the streams are
+   all device), costs one provenance walk at the call site, fails closed on the rest.
+2. **Infer from call sites**: collect the provenance of every call, require agreement, and
+   emit one function per address space when they differ. More faithful, more machinery, and
+   the diagnostic when two call sites disagree is harder to phrase.
+3. **Spell it in das**: a marker on the parameter (`@device p : T?`). Explicit and cheap to
+   implement, but it is EDSL grammar the user has to learn — against the Phase 0 ruling that
+   kernel code should read as ordinary das.
+
+(1) is the recommendation: it is the smallest rule that unblocks the zoo, and it can grow into
+(2) later without changing any code that already compiles.
