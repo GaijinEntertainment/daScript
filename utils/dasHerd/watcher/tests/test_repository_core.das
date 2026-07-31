@@ -540,6 +540,55 @@ def test_repository_operation_step_lists(t : T?) { // nolint:STYLE038
         t |> equal(length(steps), 0)
         delete steps
     }
+    t |> run("a batch is checked against the observed status, path by path") <| @(t : T?) {
+        // `git add -- a.txt gone.txt c.txt` exits 128 and stages NOTHING, so
+        // one stale row would kill the whole batch with git's pathspec error.
+        var files <- [GitFileState(worktree_path = "D:/Work/tree",
+                code = " M", path = "a.txt"),
+            GitFileState(worktree_path = "D:/Work/tree",
+                code = "M ", path = "s.txt"),
+            GitFileState(worktree_path = "D:/Work/tree",
+                code = "MM", path = "both.txt"),
+            GitFileState(worktree_path = "D:/Work/tree",
+                code = "??", path = "new.txt"),
+            GitFileState(worktree_path = "D:/Work/other",
+                code = " M", path = "elsewhere.txt")]
+        let live <- ["a.txt", "both.txt", "new.txt"]
+        t |> equal(repository_changelist_status_error(files, "D:/Work/tree",
+            "stage", live), "", "every staged row carries a working change")
+        let with_stale <- ["a.txt", "gone.txt", "new.txt"]
+        let stale_error = repository_changelist_status_error(files,
+            "D:/Work/tree", "stage", with_stale)
+        t |> success(find(stale_error, "gone.txt") >= 0,
+            "the refusal NAMES the path git would have choked on")
+        t |> success(find(stale_error, "observed Git status") >= 0,
+            "and reads like the single-file rail's refusal")
+        // A row from ANOTHER worktree is a stale path here too.
+        let cross_tree <- ["elsewhere.txt"]
+        t |> success(!empty(repository_changelist_status_error(files,
+            "D:/Work/tree", "stage", cross_tree)))
+        // Per-file eligibility matches the single-file rail exactly.
+        let staged_only <- ["s.txt"]
+        t |> success(find(repository_changelist_status_error(files,
+            "D:/Work/tree", "stage", staged_only),
+            "no working-tree change") >= 0)
+        t |> equal(repository_changelist_status_error(files, "D:/Work/tree",
+            "unstage", staged_only), "")
+        let working_only <- ["a.txt"]
+        t |> success(find(repository_changelist_status_error(files,
+            "D:/Work/tree", "unstage", working_only),
+            "no staged change") >= 0)
+        let mm <- ["both.txt"]
+        t |> equal(repository_changelist_status_error(files, "D:/Work/tree",
+            "stage", mm), "", "an MM file can carry either verb")
+        t |> equal(repository_changelist_status_error(files, "D:/Work/tree",
+            "unstage", mm), "")
+        t |> equal(repository_file_action_status_error("??", "stage"), "",
+            "an untracked row stages")
+        t |> success(!empty(repository_file_action_status_error("??",
+            "unstage")))
+        delete files
+    }
     t |> run("the three discard spellings stay distinct - confusing them destroys staged work") <| @(t : T?) {
         var argv : array<string>
         let paths <- ["src/main.das"]
@@ -640,6 +689,58 @@ def test_repository_operation_step_lists(t : T?) { // nolint:STYLE038
             "teleport", "topic", "origin/topic", steps)),
             "unknown network actions error")
         delete steps
+    }
+    t |> run("sync on an unpublished branch skips the pull and publishes") <| @(t : T?) {
+        var steps : array<WorktreeOperationStep>
+        // There is nothing to pull FROM: `pull --ff-only` dies with "no
+        // tracking information" and sync would never reach the publish step
+        // that exists for exactly this branch.
+        t |> equal(repository_operation_network_steps("D:/Work/tree", "sync",
+            "topic", "", steps), "")
+        t |> equal(length(steps), 2, "fetch, then publish - no pull between")
+        t |> equal(steps[0].argv[3], "fetch")
+        t |> equal(steps[1].argv[3], "push")
+        t |> equal(steps[1].argv[4], "-u")
+        t |> equal(steps[1].argv[6], "topic")
+        // An explicit pull keeps its step, so git's own refusal reaches the
+        // user instead of an empty operation.
+        t |> equal(repository_operation_network_steps("D:/Work/tree", "pull",
+            "topic", "", steps), "")
+        t |> equal(length(steps), 1)
+        t |> equal(steps[0].argv[3], "pull")
+        delete steps
+    }
+    t |> run("the pull refusal on an unpublished branch classifies") <| @(t : T?) {
+        var hint : string
+        var retryable = true
+        // git pull says "no tracking information"; git push says "no upstream".
+        repository_classify_failure(
+            "There is no tracking information for the current branch.\n" +
+            "Please specify which branch you want to merge with.",
+            hint, retryable)
+        t |> success(!empty(hint), "the wording git PULL uses is recognised")
+        t |> success(find(hint, "ublish") >= 0,
+            "and points at Publish, the verb that fixes it")
+        t |> success(!retryable)
+    }
+    t |> run("a rev-list count refuses garbage rather than inventing a zero") <| @(t : T?) {
+        var count = -1
+        t |> success(repository_parse_rev_list_count("7\n", count))
+        t |> equal(count, 7)
+        t |> success(repository_parse_rev_list_count("0\r\n", count))
+        t |> equal(count, 0)
+        // The capture is a PTY, so git's stderr shares the stream - the count
+        // is still the last line.
+        t |> success(repository_parse_rev_list_count(
+            "warning: refname 'origin/master' is ambiguous.\n5\n", count))
+        t |> equal(count, 5)
+        // to_int would answer 0 here, and a fabricated 0 reads as "nothing
+        // lives only in this worktree" - the retire dialog's green light.
+        t |> success(!repository_parse_rev_list_count(
+            "fatal: bad revision 'origin/master..HEAD'\n", count))
+        t |> success(!repository_parse_rev_list_count("", count))
+        t |> success(!repository_parse_rev_list_count("   \n \n", count))
+        t |> success(!repository_parse_rev_list_count("3 commits\n", count))
     }
     t |> run("network failures classify: what happened, and whether retry helps") <| @(t : T?) {
         var hint : string

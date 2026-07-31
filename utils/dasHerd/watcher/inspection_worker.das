@@ -48,6 +48,24 @@ def public inspector_syntax_worth_highlighting(source : string) : bool {
     return worst <= MAX_SYNTAX_HIGHLIGHT_LINE_BYTES
 }
 
+def public inspector_highlight_language(language, view_source,
+                                        old_source : string) : string {
+    //! The ONE capped-language answer. Everything downstream keys on THIS, not
+    //! on the requested language: the highlighter, the markdown build gate,
+    //! and (through inspector_resolved_language) the view's renderer choice.
+    return (inspector_syntax_worth_highlighting(view_source)
+        && inspector_syntax_worth_highlighting(old_source)) ? language : ""
+}
+
+def public inspector_resolved_language(language : string;
+                                       syntax_capped : bool) : string {
+    //! What the VIEW renders with. A capped file has no markdown document
+    //! built for it, so its renderer must fall back to plain text too — the
+    //! .md that renders "Invalid Markdown document" the moment it crosses the
+    //! size or line-shape cap.
+    return syntax_capped ? "" : language
+}
+
 enum public InspectorPrepareEventKind {
     ready
     started
@@ -396,10 +414,8 @@ def private prepare_worker_main(var jobs : Channel?&; // nolint:STYLE038
                     // across SEVEN lines (generated parser tables); a normal
                     // 700 KB hand-written module parses in well under a second
                     // and keeps its colors (the live-review regression).
-                    let highlight_language = (
-                        inspector_syntax_worth_highlighting(view_source)
-                            && inspector_syntax_worth_highlighting(old_source)
-                        ? language : "")
+                    let highlight_language = inspector_highlight_language(
+                        language, view_source, old_source)
                     syntax_capped = !empty(language) && empty(highlight_language)
                     var full_old <- tree_sitter_source_document(
                         old_source, highlight_language, job.generation)

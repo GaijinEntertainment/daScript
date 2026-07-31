@@ -242,7 +242,12 @@ def public text_source_view_line_top(state : TextSourceViewState const;
     //! SetScrollY. Returns -1.0 before the first layout pass.
     if (state.virtual_mode) {
         let count = length(state.virtual_line_starts)
-        if (count == 0 || state.key.line_height <= 0.0f) return -1.0f
+        if (count == 0) return -1.0f
+        // the virtual path never fills state.key - recover the row pitch from
+        // the content height the last virtual draw stamped
+        let line_height = (state.screen_size.y > 0.0f
+            ? state.screen_size.y / float(count) : state.key.line_height)
+        if (line_height <= 0.0f) return -1.0f
         var lo = 0
         var hi = count
         while (lo < hi) {
@@ -253,7 +258,7 @@ def public text_source_view_line_top(state : TextSourceViewState const;
                 hi = mid
             }
         }
-        return float(max(lo - 1, 0)) * state.key.line_height
+        return float(max(lo - 1, 0)) * line_height
     }
     let count = length(state.layout.lines)
     if (count == 0) return -1.0f

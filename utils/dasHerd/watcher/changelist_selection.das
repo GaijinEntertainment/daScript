@@ -58,6 +58,24 @@ def public selection_scope(var sel : GitChangelistSelection;
     selection_clear(sel)
 }
 
+def public selection_prune(var sel : GitChangelistSelection;
+                           live_keys : table<string>) {
+    //! Called on every refreshed status list with the keys it actually offers.
+    //! A key whose row LEFT the list is dropped, so a file that later comes
+    //! back to that group (staged, then edited again into "MM") returns
+    //! UNSELECTED instead of silently riding the next stage or discard batch.
+    return if (empty(sel.keys))
+    var inscope stale <- [for (key in keys(sel.keys)); clone_string(key);
+        where !key_exists(live_keys, key)]
+    for (key in stale) {
+        sel.keys |> erase(key)
+    }
+    if (!empty(sel.anchor_key) && !key_exists(sel.keys, sel.anchor_key)) {
+        sel.anchor_key = ""
+        sel.anchor_group = -1
+    }
+}
+
 def public selection_plain_click(var sel : GitChangelistSelection;
                                  repository_id, worktree_path : string;
                                  group : int; key : string) {

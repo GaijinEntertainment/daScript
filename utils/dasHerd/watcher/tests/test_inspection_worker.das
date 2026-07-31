@@ -10,6 +10,7 @@ require daslib/utf8_utils
 require daslib/base64
 require daslib/fio
 require imgui/imgui_text_tree_sitter
+require daslib/strings_boost
 
 [test]
 def test_inspection_prepare_worker(t : T?) { // nolint:STYLE038
@@ -334,6 +335,66 @@ def test_inspection_prepare_worker(t : T?) { // nolint:STYLE038
                     tt |> equal(empty(event.preview_pixels), true)
                     tt |> success(length(event.view_document.spans) > 1,
                         "Git-binary source is syntax highlighted")
+                }
+            }
+        }
+        tt |> equal(completed, true)
+        tt |> equal(inspector_prepare_worker_shutdown(worker), true)
+        destroy_job_que()
+    }
+}
+
+[test]
+def test_inspector_capped_language(t : T?) {
+    //! The highlight cap and the VIEW's renderer choice must be one decision.
+    //! When they drifted apart, a .md past the cap routed to the markdown
+    //! renderer with no document built for it and drew "Invalid Markdown
+    //! document" - a file that rendered fine as plain text one byte earlier.
+    var inscope pieces : array<string>
+    pieces |> reserve(200)
+    for (_index in range(200)) {
+        pieces |> push("0123456789012345678901234567890123456789" +
+            "012345678901234567890123456789012345678901234567890123456789")
+    }
+    let long_line = join(pieces, "")
+    t |> run("a line past the shape cap drops the language") <| @(tt : T?) {
+        tt |> equal(length(long_line), 20000)
+        tt |> success(!inspector_syntax_worth_highlighting(long_line))
+        tt |> equal(inspector_highlight_language("markdown",
+            "# Title\n{long_line}\n", "# Old\n"), "",
+            "either side over the cap drops it")
+        tt |> equal(inspector_highlight_language("markdown",
+            "# New\n", "# Old\n{long_line}\n"), "")
+        tt |> equal(inspector_highlight_language("markdown",
+            "# New\n", "# Old\n"), "markdown")
+    }
+    t |> run("the renderer follows the same capped answer") <| @(tt : T?) {
+        tt |> equal(inspector_resolved_language("markdown", true), "",
+            "a capped .md renders as PLAIN TEXT, not as an empty markdown view")
+        tt |> equal(inspector_resolved_language("markdown", false), "markdown")
+        tt |> equal(inspector_resolved_language("", true), "")
+    }
+    t |> run("a capped Markdown job builds no document and reports capped") <| @(tt : T?) {
+        create_job_que()
+        var worker = InspectorPrepareWorker()
+        tt |> equal(inspector_prepare_worker_start(worker), true)
+        let patch = "diff --git a/big.md b/big.md\n--- a/big.md\n+++ b/big.md\n@@ -1 +1 @@\n-# Old\n+# New\n"
+        let view = "# New\n{long_line}\n"
+        tt |> equal(inspector_prepare_worker_queue(
+            worker, 31, patch, view, "markdown"), true)
+        var completed = false
+        let wait_started = ref_time_ticks()
+        while (!completed && int64(get_time_usec(wait_started)) < 5000000l) {
+            inspector_prepare_worker_try_event(worker) $(event : InspectorPrepareEvent const) {
+                if (event.kind == InspectorPrepareEventKind.completed) {
+                    completed = true
+                    tt |> success(event.syntax_capped,
+                        "the shape gate dropped the language")
+                    tt |> success(!event.markdown_document.ok,
+                        "no markdown document is built past the cap")
+                    tt |> equal(inspector_resolved_language("markdown",
+                        event.syntax_capped), "",
+                        "so the view must not choose the markdown renderer")
                 }
             }
         }

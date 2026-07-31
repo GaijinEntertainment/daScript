@@ -45,7 +45,10 @@ def public text_edit_apply_syntax(var ed : TextEditState;
         ed.line_styles |> emplace(blank)
     }
     while (length(ed.line_styles) > length(ed.lines)) {
-        ed.line_styles |> erase(length(ed.line_styles) - 1)
+        // erase does NOT finalize the element: free the nested runs first
+        let drop_at = length(ed.line_styles) - 1
+        delete ed.line_styles[drop_at].runs
+        ed.line_styles |> erase(drop_at)
     }
     // build into scratch: the parse must never DOWNGRADE the lexical tier
     var inscope scratch : array<TextEditLineStyle>

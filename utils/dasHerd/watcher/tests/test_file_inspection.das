@@ -140,6 +140,29 @@ def test_patch_context_injection(t : T?) {
 }
 
 [test]
+def test_patch_context_injection_empty_trailing_hunk(t : T?) {
+    t |> run("a bodyless trailing hunk survives the remap") <| @(tt : T?) {
+        // An `@@` header with NOTHING under it parks row_start one past the
+        // last row; remapping it through the row map used to read off the end
+        // and panic with "array index out of range".
+        let trailing = "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1,2 +1,2 @@\n one\n-two\n+TWO\n@@ -9,0 +9,0 @@\n"
+        let nine = "one\nTWO\nthree\nfour\nfive\nsix\nseven\neight\nnine\n"
+        var inscope parsed <- git_parse_unified_patch(trailing)
+        tt |> equal(parsed.error, "")
+        tt |> equal(length(parsed.hunks), 2)
+        tt |> equal(parsed.hunks[1].row_start, length(parsed.rows),
+            "the empty hunk starts one past the last row")
+        tt |> equal(parsed.hunks[1].row_count, 0)
+        git_patch_inject_context(parsed, nine, [int2(5, 6)])
+        tt |> equal(length(parsed.rows), 4)
+        tt |> equal(parsed.hunks[0].row_start, 0)
+        tt |> equal(parsed.hunks[1].row_start, length(parsed.rows),
+            "it keeps its empty span at the new end")
+        tt |> equal(parsed.hunks[1].row_count, 0)
+    }
+}
+
+[test]
 def test_binary_patch_detection(t : T?) {
     t |> run("binary markers are metadata lines, not text payload substrings") <| @(t : T?) {
         let text_patch = "diff --git a/note.txt b/note.txt\n@@ -1 +1 @@\n-old\n+Binary files are discussed here\n+GIT binary patch\n"

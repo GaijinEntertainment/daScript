@@ -19,14 +19,17 @@ require strings
 [safe_when_uninitialized]
 struct private CppCheckJob {
     stop : bool = false
-    token : int
+    revision : int
     source : string
     compiler : string
+    //! Buffer language ("cpp" or "c") - it picks the clang dialect.
+    language : string
 }
 
 [safe_when_uninitialized]
 struct private CppCheckResult {
-    token : int
+    //! Buffer revision the check ran on; a result only lands on that revision.
+    revision : int
     ok : bool = false
     diagnostics : array<TextEditDiagnostic>
 }
@@ -49,10 +52,39 @@ def public text_edit_cpp_compiler_discover : string {
     for (_step in range(6)) {
         at = dir_name(at)
         break if (empty(at) || at == "/" || ends_with(at, ":"))
-        let candidate = "{at}/libclang/bin/clang.exe"
-        return candidate if (fexist(candidate))
+        // .exe first for Windows, then the POSIX name
+        for (exe in ["clang.exe", "clang"]) {
+            let candidate = "{at}/libclang/bin/{exe}"
+            return candidate if (fexist(candidate))
+        }
     }
     return "clang"
+}
+
+def public text_edit_cpp_compiler_available(compiler : string) : bool {
+    //! Is this compiler usable? A discovered path answers by `fexist`, a bare
+    //! PATH name (the fallback, and the norm off Windows) only by running it.
+    return false if (empty(compiler))
+    return true if (fexist(compiler))
+    var ok = false
+    let exit_code = unsafe(popen_argv([compiler, "--version"], 30.0) $(f) {
+        if (f != null) {
+            ok = find(unsafe(fread_to_eof(f)), "clang") >= 0
+        }
+    })
+    return ok && exit_code == 0
+}
+
+def public text_edit_cpp_scratch_suffix(language : string) : string {
+    //! The scratch extension must agree with the `-x` dialect below.
+    return language == "c" ? ".c" : ".cpp"
+}
+
+def public text_edit_cpp_check_argv(compiler, language, scratch : string) : array<string> {
+    //! `c` buffers must check as C — `-x c++` rejects valid C (`void*` assigns
+    //! to any `T*` in C, not in C++).
+    return [compiler, "-fsyntax-only", "-x", language == "c" ? "c" : "c++",
+        scratch]
 }
 
 def private all_digits(text : string) : bool {
@@ -76,6 +108,11 @@ def private parse_clang_line(line, overlay : string;
     if (sep < 0) {
         sep = find(line, ": warning: ")
         msg_offset = 11
+    }
+    if (sep < 0) {
+        // a missing #include reports as ": fatal error: " and nothing else
+        sep = find(line, ": fatal error: ")
+        msg_offset = 15
     }
     return false if (sep < 0)
     let location = slice(line, 0, sep)
@@ -127,17 +164,19 @@ def public text_edit_parse_clang_output(output, overlay : string; // nolint:STYL
 }
 
 def private run_cpp_check(job : CppCheckJob; var result : CppCheckResult) {
-    let scratch = "{get_das_root()}/_dasimgui_cpp_check_{job.token}.cpp"
+    let scratch = ("{get_das_root()}/_dasimgui_cpp_check_{job.revision}"
+        + text_edit_cpp_scratch_suffix(job.language))
     fopen(scratch, "wb") $(f) {
         if (f != null) {
             f |> fwrite(job.source + "\n")
         }
     }
-    // popen_argv merges stdout+stderr into one pipe — no shell, no quoting
+    // popen_argv merges stdout+stderr; a pipe has no stat size, so plain fread reads nothing
     var output = ""
-    let exit_code = unsafe(popen_argv([job.compiler, "-fsyntax-only", "-x", "c++", scratch], 60.0) $(f) {
+    var inscope argv <- text_edit_cpp_check_argv(job.compiler, job.language, scratch)
+    let exit_code = unsafe(popen_argv(argv, 60.0) $(f) {
         if (f != null) {
-            output = fread(f)
+            output = unsafe(fread_to_eof(f))
         }
     })
     result.ok = exit_code == 0
@@ -167,15 +206,18 @@ def private cpp_check_worker(var jobs : Channel?&; var results : Channel?&) {
                 delete job
                 return
             }
-            var result = CppCheckResult(token = job.token)
+            var result = CppCheckResult(revision = job.revision)
             run_cpp_check(job, result)
             results |> push_clone(result)
             delete result
             delete job
         }
     }
-    jobs |> release
-    results |> release
+    // the host dropped its refs at stop: the worker is the last owner here
+    unsafe {
+        jobs |> channel_remove
+        results |> channel_remove
+    }
 }
 
 def public text_edit_cpp_provider_start(var provider : TextEditCppProvider) : bool {
@@ -193,19 +235,15 @@ def public text_edit_cpp_provider_start(var provider : TextEditCppProvider) : bo
 
 def public text_edit_cpp_provider_stop(var provider : TextEditCppProvider) {
     return if (!provider.started)
+    // Drop OUR refs before the sentinel, then let the worker remove the
+    // channels when it exits: a check in flight can outrun any wait here, and
+    // removing a channel the worker still holds panics.
+    let jobs_channel = provider.jobs
+    provider.jobs |> release
+    provider.results |> release
     var stop_job = CppCheckJob(stop = true)
-    provider.jobs |> push_clone(stop_job)
+    jobs_channel |> push_clone(stop_job)
     delete stop_job
-    // let the worker pop the stop sentinel and drop its refs before removal
-    sleep(150u)
-    unsafe {
-        if (provider.jobs != null) {
-            provider.jobs |> channel_remove
-        }
-        if (provider.results != null) {
-            provider.results |> channel_remove
-        }
-    }
     provider.jobs = null
     provider.results = null
     provider.started = false
@@ -216,29 +254,36 @@ def public text_edit_cpp_provider_sync(var ed : TextEditState;
                                        var provider : TextEditCppProvider) {
     //! Frame tick: poll finished checks into diagnostics/status and hand the
     //! worker a fresh check when the buffer sits idle at an unseen revision.
-    return if (ed.language != "cpp" && ed.language != "c")
-    if (!provider.discovered && empty(provider.compiler)) {
-        provider.compiler = text_edit_cpp_compiler_discover()
-        provider.discovered = true
-    }
+    //! Results the buffer moved past (or switched language away from) drop.
+    let active = ed.language == "cpp" || ed.language == "c"
     if (provider.started) {
         var draining = true
         while (draining) {
             draining = provider.results |> try_pop_clone() $(res : CppCheckResult#) {
                 var local : CppCheckResult
                 local := res
-                text_edit_set_diagnostics(ed, local.diagnostics,
-                    local.ok ? TextEditCompileStatus.ok : TextEditCompileStatus.failed)
+                if (active && local.revision == ed.revision) {
+                    text_edit_set_diagnostics(ed, local.diagnostics,
+                        local.ok ? TextEditCompileStatus.ok : TextEditCompileStatus.failed)
+                } else {
+                    // dropped: re-check from scratch when this buffer is current again
+                    provider.compiled_revision = -1
+                }
                 delete local
             }
         }
+    }
+    return if (!active)
+    if (!provider.discovered && empty(provider.compiler)) {
+        provider.compiler = text_edit_cpp_compiler_discover()
+        provider.discovered = true
     }
     if (provider.compiled_revision != ed.revision && ed.syntax_idle >= 0.3f) {
         let _ = text_edit_cpp_provider_start(provider)
         provider.compiled_revision = ed.revision
         ed.compile_status = TextEditCompileStatus.compiling
-        var job = CppCheckJob(token = ed.revision,
-            source = text_edit_text(ed), compiler = provider.compiler)
+        var job = CppCheckJob(revision = ed.revision, source = text_edit_text(ed),
+            compiler = provider.compiler, language = ed.language)
         provider.jobs |> push_clone(job)
         delete job
     }

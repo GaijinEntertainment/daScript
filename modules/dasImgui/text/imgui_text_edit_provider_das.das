@@ -10,7 +10,6 @@ require daslib/rtti
 require daslib/ast
 require daslib/ast_boost
 require daslib/jobque_boost
-require daslib/fio
 require daslib/strings_boost
 require math
 require strings
@@ -26,6 +25,7 @@ let private COMPLETION_OVERLAY = "text_edit_completion_overlay.das"
 struct private DasCompleteJob {
     stop : bool = false
     token : int
+    revision : int
     prefix : string
     source : string
     //! Overlay filename the buffer compiles under (its display name).
@@ -35,6 +35,8 @@ struct private DasCompleteJob {
 [safe_when_uninitialized]
 struct private DasCompleteResult {
     token : int
+    //! Buffer revision the compile ran on; a result only lands on that revision.
+    revision : int
     ok : bool = false
     names : array<string>
     diagnostics : array<TextEditDiagnostic>
@@ -210,7 +212,7 @@ def private das_complete_worker(var jobs : Channel?&; var results : Channel?&) {
                 delete job
                 return
             }
-            var result = DasCompleteResult(token = job.token)
+            var result = DasCompleteResult(token = job.token, revision = job.revision)
             collect_compiled(job.source, job.prefix,
                 empty(job.overlay) ? COMPLETION_OVERLAY : job.overlay, result)
             results |> push_clone(result)
@@ -218,8 +220,11 @@ def private das_complete_worker(var jobs : Channel?&; var results : Channel?&) {
             delete job
         }
     }
-    jobs |> release
-    results |> release
+    // the host dropped its refs at stop: the worker is the last owner here
+    unsafe {
+        jobs |> channel_remove
+        results |> channel_remove
+    }
 }
 
 def public text_edit_das_provider_start(var provider : TextEditDasProvider) : bool {
@@ -237,24 +242,20 @@ def public text_edit_das_provider_start(var provider : TextEditDasProvider) : bo
 
 def public text_edit_das_provider_stop(var provider : TextEditDasProvider) {
     return if (!provider.started)
+    // Drop OUR refs before the sentinel, then let the worker remove the
+    // channels when it exits: a compile in flight can outrun any wait here,
+    // and removing a channel the worker still holds panics.
+    let jobs_channel = provider.jobs
+    provider.jobs |> release
+    provider.results |> release
     var stop_job = DasCompleteJob(stop = true)
-    provider.jobs |> push_clone(stop_job)
+    jobs_channel |> push_clone(stop_job)
     delete stop_job
-    // let the worker pop the stop sentinel and drop its refs (50ms pop
-    // timeout) before the channels go away under it
-    sleep(150u)
-    unsafe {
-        if (provider.jobs != null) {
-            provider.jobs |> channel_remove
-        }
-        if (provider.results != null) {
-            provider.results |> channel_remove
-        }
-    }
     provider.jobs = null
     provider.results = null
     provider.started = false
     provider.sent_token = -1
+    provider.compiled_revision = -1
 }
 
 def public text_edit_das_provider_sync(var ed : TextEditState;
@@ -262,28 +263,36 @@ def public text_edit_das_provider_sync(var ed : TextEditState;
                                        var provider : TextEditDasProvider) {
     //! Frame tick: poll finished compiles into the offer rail (stale tokens
     //! drop there) and hand the worker new work when the request moved.
-    return if (ed.language != "daslang")
+    //! Results the buffer moved past (or switched language away from) drop.
+    let active = ed.language == "daslang"
     if (provider.started) {
         var draining = true
         while (draining) {
             draining = provider.results |> try_pop_clone() $(res : DasCompleteResult#) {
                 var local : DasCompleteResult
                 local := res
-                text_edit_complete_offer(ed, comp, local.token, local.names, 0)
-                // the freshest compile always wins the diagnostics + status
-                text_edit_set_diagnostics(ed, local.diagnostics,
-                    local.ok ? TextEditCompileStatus.ok : TextEditCompileStatus.failed)
+                if (active && local.revision == ed.revision) {
+                    text_edit_complete_offer(ed, comp, local.token, local.names, 0)
+                    // the freshest compile always wins the diagnostics + status
+                    text_edit_set_diagnostics(ed, local.diagnostics,
+                        local.ok ? TextEditCompileStatus.ok : TextEditCompileStatus.failed)
+                } else {
+                    // dropped: recompile from scratch when this buffer is current again
+                    provider.compiled_revision = -1
+                }
                 delete local
             }
         }
     }
+    return if (!active)
     if (comp.request_revision >= 0 && comp.token != provider.sent_token) {
         let _ = text_edit_das_provider_start(provider)
         provider.sent_token = comp.token
         provider.compiled_revision = ed.revision
         ed.compile_status = TextEditCompileStatus.compiling
-        var job = DasCompleteJob(token = comp.token, prefix = comp.prefix,
-            source = text_edit_text(ed), overlay = ed.file_name)
+        var job = DasCompleteJob(token = comp.token, revision = ed.revision,
+            prefix = comp.prefix, source = text_edit_text(ed),
+            overlay = ed.file_name)
         provider.jobs |> push_clone(job)
         delete job
         return
@@ -293,7 +302,7 @@ def public text_edit_das_provider_sync(var ed : TextEditState;
         let _ = text_edit_das_provider_start(provider)
         provider.compiled_revision = ed.revision
         ed.compile_status = TextEditCompileStatus.compiling
-        var job = DasCompleteJob(token = -1, prefix = "",
+        var job = DasCompleteJob(token = -1, revision = ed.revision, prefix = "",
             source = text_edit_text(ed), overlay = ed.file_name)
         provider.jobs |> push_clone(job)
         delete job

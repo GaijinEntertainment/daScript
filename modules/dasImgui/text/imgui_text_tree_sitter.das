@@ -68,113 +68,46 @@ def private das_identifier_continue(value : int) : bool {
     return das_identifier_start(value) || is_number(value)
 }
 
-// One hash lookup instead of ~100 string compares per identifier; longest
-// key is "uninitialized" (13), longer identifiers skip lookup AND slice.
-let private DAS_KEYWORD_MAX_BYTES = 13
+let private DAS_TYPE_WORDS : table<string> <- {
+    "array", "auto", "block", "bool", "double", "float", "float2", "float3",
+    "float4", "function", "int", "int16", "int2", "int3", "int4", "int64",
+    "int8", "iterator", "lambda", "range", "smart_ptr", "string", "table",
+    "tuple", "typedecl", "uint", "uint16", "uint2", "uint3", "uint4",
+    "uint64", "uint8", "urange", "variant", "void"
+}
 
 var private g_das_keyword_styles : table<string; TextSourceSyntaxStyle>
+// One hash lookup instead of ~100 string compares per identifier; longer
+// identifiers than the longest keyword skip the lookup AND the slice.
+var private g_das_keyword_max_bytes = 0
+
+def private das_word_style(word : string) : TextSourceSyntaxStyle {
+    if (word == "true" || word == "false") return TextSourceSyntaxStyle.number
+    if (word == "null") return TextSourceSyntaxStyle.constant
+    return (key_exists(DAS_TYPE_WORDS, word) ? TextSourceSyntaxStyle.type_
+        : TextSourceSyntaxStyle.keyword)
+}
 
 def private ensure_das_keyword_styles { // nolint:STYLE038
     if (!empty(g_das_keyword_styles)) return
-    g_das_keyword_styles <- {
-        "true" => TextSourceSyntaxStyle.number,
-        "false" => TextSourceSyntaxStyle.number,
-        "null" => TextSourceSyntaxStyle.constant,
-        "bool" => TextSourceSyntaxStyle.type_,
-        "void" => TextSourceSyntaxStyle.type_,
-        "string" => TextSourceSyntaxStyle.type_,
-        "auto" => TextSourceSyntaxStyle.type_,
-        "int" => TextSourceSyntaxStyle.type_,
-        "int8" => TextSourceSyntaxStyle.type_,
-        "int16" => TextSourceSyntaxStyle.type_,
-        "int64" => TextSourceSyntaxStyle.type_,
-        "uint" => TextSourceSyntaxStyle.type_,
-        "uint8" => TextSourceSyntaxStyle.type_,
-        "uint16" => TextSourceSyntaxStyle.type_,
-        "uint64" => TextSourceSyntaxStyle.type_,
-        "float" => TextSourceSyntaxStyle.type_,
-        "double" => TextSourceSyntaxStyle.type_,
-        "range" => TextSourceSyntaxStyle.type_,
-        "urange" => TextSourceSyntaxStyle.type_,
-        "block" => TextSourceSyntaxStyle.type_,
-        "function" => TextSourceSyntaxStyle.type_,
-        "lambda" => TextSourceSyntaxStyle.type_,
-        "array" => TextSourceSyntaxStyle.type_,
-        "table" => TextSourceSyntaxStyle.type_,
-        "tuple" => TextSourceSyntaxStyle.type_,
-        "variant" => TextSourceSyntaxStyle.type_,
-        "iterator" => TextSourceSyntaxStyle.type_,
-        "smart_ptr" => TextSourceSyntaxStyle.type_,
-        "typedecl" => TextSourceSyntaxStyle.type_,
-        "if" => TextSourceSyntaxStyle.keyword,
-        "elif" => TextSourceSyntaxStyle.keyword,
-        "else" => TextSourceSyntaxStyle.keyword,
-        "static_if" => TextSourceSyntaxStyle.keyword,
-        "static_elif" => TextSourceSyntaxStyle.keyword,
-        "for" => TextSourceSyntaxStyle.keyword,
-        "while" => TextSourceSyntaxStyle.keyword,
-        "break" => TextSourceSyntaxStyle.keyword,
-        "continue" => TextSourceSyntaxStyle.keyword,
-        "def" => TextSourceSyntaxStyle.keyword,
-        "return" => TextSourceSyntaxStyle.keyword,
-        "yield" => TextSourceSyntaxStyle.keyword,
-        "try" => TextSourceSyntaxStyle.keyword,
-        "recover" => TextSourceSyntaxStyle.keyword,
-        "struct" => TextSourceSyntaxStyle.keyword,
-        "class" => TextSourceSyntaxStyle.keyword,
-        "enum" => TextSourceSyntaxStyle.keyword,
-        "typedef" => TextSourceSyntaxStyle.keyword,
-        "bitfield" => TextSourceSyntaxStyle.keyword,
-        "let" => TextSourceSyntaxStyle.keyword,
-        "var" => TextSourceSyntaxStyle.keyword,
-        "const" => TextSourceSyntaxStyle.keyword,
-        "override" => TextSourceSyntaxStyle.keyword,
-        "sealed" => TextSourceSyntaxStyle.keyword,
-        "abstract" => TextSourceSyntaxStyle.keyword,
-        "static" => TextSourceSyntaxStyle.keyword,
-        "public" => TextSourceSyntaxStyle.keyword,
-        "private" => TextSourceSyntaxStyle.keyword,
-        "shared" => TextSourceSyntaxStyle.keyword,
-        "inscope" => TextSourceSyntaxStyle.keyword,
-        "implicit" => TextSourceSyntaxStyle.keyword,
-        "explicit" => TextSourceSyntaxStyle.keyword,
-        "module" => TextSourceSyntaxStyle.keyword,
-        "require" => TextSourceSyntaxStyle.keyword,
-        "include" => TextSourceSyntaxStyle.keyword,
-        "options" => TextSourceSyntaxStyle.keyword,
-        "expect" => TextSourceSyntaxStyle.keyword,
-        "assume" => TextSourceSyntaxStyle.keyword,
-        "with" => TextSourceSyntaxStyle.keyword,
-        "where" => TextSourceSyntaxStyle.keyword,
-        "label" => TextSourceSyntaxStyle.keyword,
-        "goto" => TextSourceSyntaxStyle.keyword,
-        "pass" => TextSourceSyntaxStyle.keyword,
-        "delete" => TextSourceSyntaxStyle.keyword,
-        "new" => TextSourceSyntaxStyle.keyword,
-        "deref" => TextSourceSyntaxStyle.keyword,
-        "addr" => TextSourceSyntaxStyle.keyword,
-        "cast" => TextSourceSyntaxStyle.keyword,
-        "upcast" => TextSourceSyntaxStyle.keyword,
-        "reinterpret" => TextSourceSyntaxStyle.keyword,
-        "typeinfo" => TextSourceSyntaxStyle.keyword,
-        "type" => TextSourceSyntaxStyle.keyword,
-        "unsafe" => TextSourceSyntaxStyle.keyword,
-        "finally" => TextSourceSyntaxStyle.keyword,
-        "in" => TextSourceSyntaxStyle.keyword,
-        "is" => TextSourceSyntaxStyle.keyword,
-        "as" => TextSourceSyntaxStyle.keyword,
-        "aka" => TextSourceSyntaxStyle.keyword,
-        "operator" => TextSourceSyntaxStyle.keyword,
-        "template" => TextSourceSyntaxStyle.keyword,
-        "default" => TextSourceSyntaxStyle.keyword,
-        "uninitialized" => TextSourceSyntaxStyle.keyword,
-        "generator" => TextSourceSyntaxStyle.keyword,
-        "capture" => TextSourceSyntaxStyle.keyword
+    // imgui_text_language owns the keyword SET; only the styling lives here.
+    text_language_profile("daslang") $(profile) {
+        for (word in profile.keywords) {
+            g_das_keyword_styles[word] = das_word_style(word)
+            g_das_keyword_max_bytes = max(g_das_keyword_max_bytes, length(word))
+        }
     }
 }
 
 def private das_keyword_style(word : string) : TextSourceSyntaxStyle {
     return g_das_keyword_styles?[word] ?? TextSourceSyntaxStyle.none
+}
+
+def public text_source_das_keyword_style(word : string) : TextSourceSyntaxStyle {
+    //! Fallback-lexer style for a daslang word; `none` when it is not one of
+    //! the daslang profile's keywords.
+    ensure_das_keyword_styles()
+    return das_keyword_style(word)
 }
 
 def private push_das_fallback(var spans : array<TextSourceSpan>;
@@ -259,7 +192,7 @@ def private das_lexical_fallback(source : string) : array<TextSourceSpan> { // n
                 }
                 // Expect flags below still style a long name after `def`.
                 var word = ""
-                if (at - start <= DAS_KEYWORD_MAX_BYTES) {
+                if (at - start <= g_das_keyword_max_bytes) {
                     word = slice(source, start, at)
                 }
                 var style = das_keyword_style(word)

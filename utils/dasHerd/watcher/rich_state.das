@@ -689,6 +689,9 @@ var g_inspector = GitInspectorState()
 // the worktree the Changes view is showing.
 var g_changelist_selection = GitChangelistSelection()
 
+// The repositories message the selection was last pruned against.
+var g_changelist_pruned_revision = -1l
+
 // The discard confirmation. Discard is the FIRST genuinely unrecoverable
 // action in the app — everything retire touches survives somewhere; discard
 // destroys the only copy. The prompt snapshots WHAT will be discarded (per
@@ -905,7 +908,8 @@ def drain_inspector_prepare_events() {
             g_inspector.installed_diff_context = g_inspector.diff_context
             g_inspector.installed_diff_context_choice = g_inspector.diff_context_choice
             g_inspector.installed_syntax_choice = g_inspector.syntax_choice
-            g_inspector.resolved_language = g_inspector.prepare_language
+            g_inspector.resolved_language = inspector_resolved_language(
+                g_inspector.prepare_language, g_inspector.syntax_capped)
             g_inspector.pending_widget_sync = true
             if (g_inspector.pending_select_diff) {
                 let clean_view = (empty(g_inspector.parsed.hunks)
@@ -1088,6 +1092,26 @@ def git_file_in_group(file : GitFileState const; group : int) : bool {
 
 def git_group_scope(group : int) : string {
     return group == 1 ? "staged" : "working"
+}
+
+def prune_changelist_selection(repositories : array<RepositorySnapshot> const) {
+    //! Re-derive the keys the LIVE status list offers for the selection's own
+    //! scope and drop everything else. Called once per repositories snapshot,
+    //! not per frame, and not from the Changes view — the live rail acts on
+    //! the same set with the view closed.
+    return if (selection_count(g_changelist_selection) == 0)
+    var inscope live : table<string>
+    for (repository in repositories) {
+        if (repository.record.id != g_changelist_selection.repository_id) continue
+        for (file in repository.files) {
+            if (file.worktree_path != g_changelist_selection.worktree_path) continue
+            for (group in range(4)) {
+                if (!git_file_in_group(file, group)) continue
+                live |> insert(selection_key(git_group_scope(group), file.path))
+            }
+        }
+    }
+    selection_prune(g_changelist_selection, live)
 }
 
 def worktree_identity_label(branch, worktree_path : string) : string {

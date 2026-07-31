@@ -26,7 +26,8 @@ struct public TextLanguageProfile {
     indent_pairs : array<int2>
     //! Tree-sitter node types that fold (multi-line nodes only).
     fold_kinds : table<string>
-    //! Completion candidates always offered alongside document words.
+    //! Completion candidates always offered alongside document words; also
+    //! THE keyword set for the per-line restyle and the fallback lexer.
     keywords : array<string>
     //! Ghost-text completion default (the per-language kill switch).
     ghost_completion : bool = true
@@ -48,22 +49,23 @@ def private profile_daslang : TextLanguageProfile {
             "typedef_declaration", "structure_method", "block_comment"
         },
         keywords <- [
-            "abstract", "addr", "aka", "array", "as", "assert", "auto",
-            "bitfield", "block", "bool", "break", "cast", "class", "const",
-            "continue", "def", "default", "defer", "delete", "distinct",
-            "double", "elif", "else", "enum", "explicit", "false", "finally",
-            "float", "float2", "float3", "float4", "for", "function",
-            "generator", "goto", "if", "implicit", "in", "int", "int2",
-            "int3", "int4", "int64", "int8", "int16", "is", "iterator",
-            "label", "lambda", "let", "module", "new", "null", "operator",
-            "options", "override", "panic", "pass", "private", "public",
-            "range", "recover", "reinterpret", "require", "return",
-            "safe_addr", "sealed", "shared", "smart_ptr", "static_if",
-            "static_elif", "string", "struct", "table", "true", "try",
-            "tuple", "type", "typedecl", "typedef", "typeinfo", "uint",
-            "uint2", "uint3", "uint4", "uint64", "uint8", "uint16", "unsafe",
-            "upcast", "urange", "var", "variant", "verify", "void", "where",
-            "while", "with", "yield"
+            "abstract", "addr", "aka", "array", "as", "assert", "assume",
+            "auto", "bitfield", "block", "bool", "break", "capture", "cast",
+            "class", "const", "continue", "def", "default", "defer", "delete",
+            "deref", "distinct", "double", "elif", "else", "enum", "expect",
+            "explicit", "false", "finally", "float", "float2", "float3",
+            "float4", "for", "function", "generator", "goto", "if",
+            "implicit", "in", "include", "inscope", "int", "int2", "int3",
+            "int4", "int8", "int16", "int64", "is", "iterator", "label",
+            "lambda", "let", "module", "new", "null", "operator", "options",
+            "override", "panic", "pass", "private", "public", "range",
+            "recover", "reinterpret", "require", "return", "safe_addr",
+            "sealed", "shared", "smart_ptr", "static", "static_if",
+            "static_elif", "string", "struct", "table", "template", "true",
+            "try", "tuple", "type", "typedecl", "typedef", "typeinfo",
+            "uint", "uint2", "uint3", "uint4", "uint8", "uint16", "uint64",
+            "uninitialized", "unsafe", "upcast", "urange", "var", "variant",
+            "verify", "void", "where", "while", "with", "yield"
         ])
 }
 

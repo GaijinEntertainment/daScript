@@ -385,9 +385,50 @@ def test_clang_output_parsing(t : T?) {
 }
 
 [test]
+def test_clang_output_parsing_posix_and_fatal(t : T?) {
+    // the location split counts colons, so a drive-letter path and a POSIX one
+    // must both parse; a missing #include only ever says "fatal error"
+    var out : array<TextEditDiagnostic>
+    let output = ("/tmp/_check_7.cpp:1:10: fatal error: 'nope.h' file not found\n"
+        + "    1 | #include \"nope.h\"\n"
+        + "      |          ^~~~~~~~\n"
+        + "/usr/include/stdio.h:4:2: error: broken header\n"
+        + "1 error generated.\n")
+    text_edit_parse_clang_output(output, "/tmp/_check_7.cpp", out)
+    t |> equal(length(out), 2, "POSIX paths parse")
+    t |> success(find(out[0].message, "file not found") >= 0,
+        "fatal errors are findings too")
+    t |> equal(out[0].line, 0, "the fatal-error line converts to 0-based")
+    t |> equal(out[0].column, 9, "and so does its column")
+    t |> equal(out[0].end_column, 17, "the caret run sizes the include span")
+    t |> equal(out[0].file, "", "the checked buffer carries no path")
+    t |> equal(out[1].file, "/usr/include/stdio.h", "foreign POSIX paths survive")
+    t |> equal(out[1].line, 3, "and pin their own line")
+    delete out
+}
+
+[test]
+def test_cpp_check_argv_selects_language(t : T?) {
+    // valid C fails the C++ front end, so a `c` buffer must not go through it
+    var inscope cpp_argv <- text_edit_cpp_check_argv("clang", "cpp", "/tmp/x.cpp")
+    t |> equal(cpp_argv[1], "-fsyntax-only", "the check is a syntax-only round trip")
+    t |> equal(cpp_argv[3], "c++", "cpp buffers check as C++")
+    t |> equal(cpp_argv[4], "/tmp/x.cpp", "the scratch file is the last argument")
+    t |> equal(text_edit_cpp_scratch_suffix("cpp"), ".cpp", "in a .cpp scratch")
+    var inscope c_argv <- text_edit_cpp_check_argv("clang", "c", "/tmp/x.c")
+    t |> equal(c_argv[3], "c", "c buffers check as C")
+    t |> equal(text_edit_cpp_scratch_suffix("c"), ".c", "in a .c scratch")
+    t |> success(!text_edit_cpp_compiler_available(""),
+        "an empty compiler is never available")
+    t |> success(!text_edit_cpp_compiler_available("dasimgui_no_such_clang"),
+        "and neither is a name that does not run")
+}
+
+[test]
 def test_cpp_provider_reports_diagnostics(t : T?) {
     let compiler = text_edit_cpp_compiler_discover()
-    if (!fexist(compiler)) {
+    // fexist alone would skip forever wherever clang lives on PATH
+    if (!text_edit_cpp_compiler_available(compiler)) {
         t |> success(true, "no clang on this box - provider skipped")
         return
     }
@@ -425,6 +466,90 @@ def test_cpp_provider_reports_diagnostics(t : T?) {
         "a clean buffer reports ok")
     t |> success(empty(ed.diagnostics), "the findings clear")
     text_edit_cpp_provider_stop(provider)
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_cpp_provider_c_buffer_uses_c_dialect(t : T?) {
+    let compiler = text_edit_cpp_compiler_discover()
+    if (!text_edit_cpp_compiler_available(compiler)) {
+        t |> success(true, "no clang on this box - provider skipped")
+        return
+    }
+    var ed = TextEditState()
+    var provider = TextEditCppProvider()
+    // legal C, rejected by C++: void* converts to any object pointer in C only
+    text_edit_load(ed, "int main(void) \{ void *v = 0; int *p = v; return p != 0; \}")
+    text_edit_set_language(ed, "c")
+    text_edit_set_file_name(ed, "hello.c")
+    ed.syntax_idle = 1.0f
+    text_edit_cpp_provider_sync(ed, provider)
+    var waited = 0
+    while (ed.compile_status == TextEditCompileStatus.compiling && waited < 750) {
+        sleep(20u)
+        text_edit_cpp_provider_sync(ed, provider)
+        waited++
+    }
+    t |> equal(int(ed.compile_status), int(TextEditCompileStatus.ok),
+        "a c buffer checks as C, not C++")
+    t |> success(empty(ed.diagnostics), "and reports nothing")
+    text_edit_cpp_provider_stop(provider)
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_das_provider_drops_stale_results(t : T?) {
+    // a compile finishing after the buffer moved must not paint its findings
+    // onto the newer content
+    var ed = TextEditState()
+    var comp = TextEditCompletion()
+    var provider = TextEditDasProvider()
+    text_edit_load(ed, "def broken( \{")
+    text_edit_set_language(ed, "das")
+    ed.syntax_idle = 1.0f
+    text_edit_das_provider_sync(ed, comp, provider) // kicks at this revision
+    text_edit_type(ed, "\}") // the buffer moves on while the compile runs
+    ed.syntax_idle = 0.0f // ... and stays busy, so no re-kick races the drop
+    var waited = 0
+    while (provider.compiled_revision != -1 && waited < 500) {
+        sleep(20u)
+        text_edit_das_provider_sync(ed, comp, provider)
+        waited++
+    }
+    t |> equal(provider.compiled_revision, -1, "the stale result drained and dropped")
+    t |> equal(int(ed.compile_status), int(TextEditCompileStatus.compiling),
+        "it never reported a status for content it never saw")
+    t |> success(empty(ed.diagnostics), "and never underlined the newer buffer")
+    text_edit_das_provider_stop(provider)
+    text_edit_complete_dispose(comp)
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_complete_list_survives_keywordless_prefix(t : T?) {
+    // the keyword tier is offered first and is often empty; an empty offer used
+    // to close the open list, so every such keystroke flickered it shut
+    var ed = TextEditState()
+    var comp = TextEditCompletion()
+    text_edit_load(ed, "grease greet greed\ngr")
+    text_edit_set_language(ed, "das")
+    text_edit_move_document_end(ed)
+    text_edit_complete_sync(ed, comp)
+    text_edit_type(ed, "e")
+    text_edit_complete_sync(ed, comp)
+    ed.syntax_idle = 1.0f
+    text_edit_complete_sync(ed, comp)
+    t |> success(ed.list_open, "typed + idle opens the list")
+    text_edit_type(ed, "e") // "gree" - no daslang keyword starts with it
+    text_edit_complete_sync(ed, comp)
+    t |> success(ed.list_open, "a keyword-less prefix keeps the list open")
+    t |> equal(length(ed.list_items), 2, "showing the narrowed candidates")
+    // a prefix nothing matches still closes it
+    text_edit_type(ed, "zz")
+    text_edit_complete_sync(ed, comp)
+    t |> success(!ed.list_open, "no candidates at all closes the list")
+    t |> success(empty(ed.ghost_text), "and clears the ghost")
+    text_edit_complete_dispose(comp)
     text_edit_dispose(ed)
 }
 

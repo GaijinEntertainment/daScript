@@ -1,6 +1,6 @@
 name: nightly dasImgui integration
 
-# The dasImgui playwright suite (modules/dasImgui/tests, 151 tests): each test spawns a
+# The dasImgui playwright suite (modules/dasImgui/tests, ~158 test files): each test spawns a
 # daslang-live subprocess hosting a feature app from modules/dasImgui/examples/
 # and drives it over the HTTP live API. Runs NIGHTLY, not per-PR — the suite
 # lives under modules/, which the per-PR `--test tests/` sweeps never enter, so

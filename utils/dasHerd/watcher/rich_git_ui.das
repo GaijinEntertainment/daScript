@@ -557,10 +557,16 @@ def open_discard_prompt(repository : RepositorySnapshot const;
         delete g_git_discard.modified_paths
         delete g_git_discard.staged_paths
     }
+    var inscope measured : table<string>
     for (path in g_git_discard.staged_paths) {
+        measured |> insert(path)
         discard_measure_file(worktree.path, path)
     }
     for (path in g_git_discard.modified_paths) {
+        // An "MM" file sits in BOTH lists, and the staged step's `checkout
+        // HEAD` already covers both its sides — measuring it twice would
+        // inflate the file count and byte total the user confirms against.
+        if (key_exists(measured, path)) continue
         discard_measure_file(worktree.path, path)
     }
     // Untracked entries can be whole directories ("dir/" rows) — walk them so

@@ -164,9 +164,9 @@ def public text_edit_complete_offer(var ed : TextEditState;
                                     token : int; items : array<string>;
                                     tier : int = 1) {
     //! Provider answer rail: candidates merge by rank tier (0 compiled, 1
-    //! document words, 2 keywords; stable within a tier, a better tier
-    //! promotes a duplicate); stale-token offers drop whole.
-    return if (token != comp.token)
+    //! document words, 2 keywords; a better tier promotes a duplicate). Stale
+    //! tokens drop; so do empty offers — a refresh on one closes an open list.
+    return if (token != comp.token || empty(items))
     for (item in items) {
         let existing = find_index(comp.items, item)
         if (existing >= 0) {
@@ -244,6 +244,11 @@ def public text_edit_complete_sync(var ed : TextEditState;
     var inscope words : array<string>
     collect_document_words(ed, prefix, words)
     text_edit_complete_offer(ed, comp, comp.token, words, 1)
+    if (empty(comp.items)) {
+        // nothing matches the new prefix, and no offer ran to say so
+        text_edit_set_ghost(ed, "")
+        text_edit_close_list(ed)
+    }
 }
 
 def private statement_start_at(ed : TextEditState const; prefix_bytes : int) : bool {

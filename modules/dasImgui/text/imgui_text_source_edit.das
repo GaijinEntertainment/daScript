@@ -396,7 +396,10 @@ def private restyle_lines(var ed : TextEditState; first_line, last_forced : int)
         ed.line_styles |> emplace(blank, clamp(first_line, 0, length(ed.line_styles)))
     }
     while (length(ed.line_styles) > length(ed.lines)) {
-        ed.line_styles |> erase(clamp(first_line, 0, length(ed.line_styles) - 1))
+        // erase does NOT finalize the element: free the nested runs first
+        let drop_at = clamp(first_line, 0, length(ed.line_styles) - 1)
+        delete ed.line_styles[drop_at].runs
+        ed.line_styles |> erase(drop_at)
     }
     return if (empty(ed.lines))
     text_language_profile(ed.language) $(profile) {
@@ -1748,6 +1751,8 @@ def private reindent_block(var ed : TextEditState; outdent : bool) {
     }
     return if (new_text == old_text)
     let cursor_line = ed.cursor_line
+    let cursor_column = ed.cursor_column
+    let cursor_line_bytes = length(ed.lines[cursor_line])
     commit_edit(ed, TextEditUndoKind.other, touched.x, 0, old_text, new_text)
     if (had_selection) {
         // the block stays selected whole after a re-indent
@@ -1756,8 +1761,11 @@ def private reindent_block(var ed : TextEditState; outdent : bool) {
         ed.cursor_line = touched.y
         ed.cursor_column = length(ed.lines[touched.y])
     } else {
+        // only leading whitespace moved: carry the caret by the line's delta
         ed.cursor_line = cursor_line
-        ed.cursor_column = min(ed.cursor_column, length(ed.lines[cursor_line]))
+        let shift = length(ed.lines[cursor_line]) - cursor_line_bytes
+        ed.cursor_column = clamp(cursor_column + shift, 0,
+            length(ed.lines[cursor_line]))
     }
     patch_unit_after(ed)
     ed.follow_revision++
@@ -1966,9 +1974,10 @@ def public text_edit_move_selection_to(var ed : TextEditState;
     var target_line = line
     var target_column = column
     if (pos_before(sel.end_line, sel.end_column, line, column)) {
+        // the removal splices the end-line tail onto start_column, single-
+        // and multi-line spans alike
         if (line == sel.end_line) {
-            target_column = (column - sel.end_column
-                + (sel.end_line == sel.start_line ? sel.start_column : 0))
+            target_column = column - sel.end_column + sel.start_column
         }
         target_line = line - (sel.end_line - sel.start_line)
     }
@@ -2015,6 +2024,19 @@ def public text_edit_set_highlights(var ed : TextEditState;
 
 def public text_edit_clear_highlights(var ed : TextEditState) {
     delete ed.highlight_ranges
+}
+
+def public text_edit_highlight_row_span(ed : TextEditState const;
+                                        span : TextEditRange const;
+                                        row : int) : int2 {
+    //! Byte range a highlight covers on `row`, (-1,-1) when none — clamped at
+    //! USE because host ranges go stale between an edit and the next find sync.
+    return int2(-1, -1) if (row < 0 || row >= length(ed.lines)
+        || row < span.start_line || row > span.end_line)
+    let bytes = length(ed.lines[row])
+    let from = row == span.start_line ? clamp(span.start_column, 0, bytes) : 0
+    let to = row == span.end_line ? clamp(span.end_column, 0, bytes) : bytes
+    return int2(from, max(to, from))
 }
 
 def private refresh_find_highlights(var ed : TextEditState;
@@ -3034,13 +3056,13 @@ def private draw_edit_highlights(ed : TextEditState const; m : EditMetrics;
         break if (span.start_line > last_visible)
         for (row in range(max(span.start_line, first_visible),
                 min(span.end_line, last_visible) + 1)) {
+            let columns = text_edit_highlight_row_span(ed, span, row)
+            continue if (columns.x < 0)
             let row_line = ed.lines[row]
-            let from_column = row == span.start_line ? span.start_column : 0
-            let to_column = row == span.end_line ? span.end_column : length(row_line)
             let x0 = (m.gutter_space + text_source_range_width(row_line, 0,
-                from_column, font, m.font_size, m.cell_width, style.tab_cells))
+                columns.x, font, m.font_size, m.cell_width, style.tab_cells))
             let x1 = (m.gutter_space + text_source_range_width(row_line, 0,
-                to_column, font, m.font_size, m.cell_width, style.tab_cells))
+                columns.y, font, m.font_size, m.cell_width, style.tab_cells))
             let row_top = m.origin.y + float(row) * m.line_height
             *dl |> AddRectFilled(float2(m.origin.x + x0, row_top),
                 float2(m.origin.x + max(x1, x0 + 2.0f), row_top + m.line_height),
@@ -3423,9 +3445,8 @@ def private draw_issue_row(style : TextSourceViewStyle const;
 
 def public text_edit_issues_panel(var ed : TextEditState;
                                   style : TextSourceViewStyle const) {
-    //! Compiler findings as clickable rows, shown in the compiler's OWN
-    //! convention (1-based line, 0-based column - matches the error text
-    //! verbatim); a click navigates the editor there.
+    //! Compiler findings as clickable rows, positioned in the compiler's OWN
+    //! convention (`text_edit_issue_span_text`); a click navigates there.
     var header = "no compile yet"
     if (ed.compile_status == TextEditCompileStatus.compiling) {
         header = "compiling..."
@@ -3439,7 +3460,7 @@ def public text_edit_issues_panel(var ed : TextEditState;
         let source_file = (!empty(ed.diagnostics[index].file)
             ? ed.diagnostics[index].file : ed.file_name)
         let prefix = empty(source_file) ? "" : source_file + ":"
-        let row_span = issue_span_text(ed.diagnostics[index])
+        let row_span = text_edit_issue_span_text(ed, ed.diagnostics[index])
         if (selectable(ISSUE_ROW[index], (text = "###issue_{index}"))) {
             // foreign-file findings show but cannot navigate this buffer
             if (empty(ed.diagnostics[index].file)) {
@@ -3452,15 +3473,22 @@ def public text_edit_issues_panel(var ed : TextEditState;
     }
 }
 
-def private issue_span_text(diag : TextEditDiagnostic const) : string {
+def public text_edit_issue_span_text(ed : TextEditState const;
+                                     diag : TextEditDiagnostic const) : string {
+    //! An Issues row's position in the COMPILER's own convention: lines are
+    //! always 1-based, columns follow the language (daslang 0-based, clang
+    //! 1-based) so the row matches the compiler's text verbatim.
     let from_line = diag.line + 1
+    let base = (ed.language == "cpp" || ed.language == "c") ? 1 : 0
+    let from_column = diag.column + base
+    let to_column = diag.end_column + base
     if (diag.end_line > diag.line) {
-        return "{from_line}:{diag.column}-{diag.end_line + 1}:{diag.end_column}"
+        return "{from_line}:{from_column}-{diag.end_line + 1}:{to_column}"
     }
     if (diag.end_column > diag.column) {
-        return "{from_line}:{diag.column}-{diag.end_column}"
+        return "{from_line}:{from_column}-{to_column}"
     }
-    return "{from_line}:{diag.column}"
+    return "{from_line}:{from_column}"
 }
 
 // ===== Command registry keymap =====

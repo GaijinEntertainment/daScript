@@ -85,17 +85,16 @@ struct public SyntaxNodeSpan {
 }
 
 def public syntax_canonical_language(language : string) : string {
-    let value = to_lower(language)
-    if (value == "das" || value == "daslang" || value == "dascript"
-            || value == ".das") return "daslang"
-    if (value == "c" || value == ".c") return "c"
+    // Hosts pass `extension()` straight through and it keeps the leading dot;
+    // strip it once here so every language matches by bare name.
+    let lowered = to_lower(language)
+    let value = starts_with(lowered, ".") ? slice(lowered, 1) : lowered
+    if (value == "das" || value == "daslang" || value == "dascript") return "daslang"
+    if (value == "c") return "c"
     if (value == "cpp" || value == "c++" || value == "cc" || value == "cxx"
-            || value == "h" || value == "hh" || value == "hpp" || value == "hxx"
-            || value == ".cc" || value == ".cpp" || value == ".cxx"
-            || value == ".h" || value == ".hh" || value == ".hpp"
-            || value == ".hxx") return "cpp"
-    if (value == "md" || value == "markdown" || value == ".md"
-            || value == ".markdown") return "markdown"
+            || value == "h" || value == "hh" || value == "hpp"
+            || value == "hxx") return "cpp"
+    if (value == "md" || value == "markdown") return "markdown"
     return value
 }
 

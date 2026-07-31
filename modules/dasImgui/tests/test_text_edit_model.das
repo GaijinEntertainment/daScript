@@ -547,6 +547,18 @@ def test_line_insert_indent_and_expand(t : T?) {
     text_edit_select(ed, 0, 0, 1, 4)
     text_edit_outdent_lines(ed)
     t |> equal(text_edit_source(ed), "four\ntab", "outdent strips a tab or up to 4 spaces")
+    // no selection: the caret rides the indent shift instead of jumping to EOL
+    text_edit_load(ed, "value")
+    text_edit_set_cursor(ed, 0, 2)
+    text_edit_indent_lines(ed)
+    t |> equal(text_edit_source(ed), "\tvalue", "single-line indent adds the tab")
+    t |> equal(ed.cursor_column, 3, "the caret follows its byte, not the line end")
+    text_edit_outdent_lines(ed)
+    t |> equal(ed.cursor_column, 2, "outdent carries the caret back")
+    text_edit_load(ed, "\tvalue")
+    text_edit_set_cursor(ed, 0, 0)
+    text_edit_outdent_lines(ed)
+    t |> equal(ed.cursor_column, 0, "an outdent past the caret clamps at zero")
     text_edit_load(ed, "ab\ncd\nef")
     text_edit_set_cursor(ed, 0, 1)
     text_edit_expand_line_selection(ed)
@@ -692,6 +704,25 @@ def test_edit_move_selection_to(t : T?) {
     text_edit_select(ed, 0, 0, 0, 4) // "one "
     t |> success(text_edit_move_selection_to(ed, 0, 8), "same-line drop after")
     t |> equal(ed.lines[0], "two one three", "the target adjusted for the removal")
+    // a MULTI-line selection dropped later on its OWN end line: the removal
+    // splices that line's tail onto the start column, so the target carries it
+    text_edit_load(ed, "abcdef\nghijkl")
+    text_edit_select(ed, 0, 2, 1, 3) // "cdef\nghi"
+    t |> success(text_edit_move_selection_to(ed, 1, 5), "multi-line end-line drop")
+    t |> equal(text_edit_source(ed), "abjkcdef\nghil",
+        "the end-line target keeps the start column offset")
+    t |> success(text_edit_undo(ed), "the multi-line move undoes")
+    t |> equal(text_edit_source(ed), "abcdef\nghijkl", "ONE undo restores")
+    // three lines, dropped at the very end of the end line
+    text_edit_load(ed, "abc\ndef\nghi")
+    text_edit_select(ed, 0, 1, 2, 1) // "bc\ndef\ng"
+    t |> success(text_edit_move_selection_to(ed, 2, 3), "three-line end-line drop")
+    t |> equal(text_edit_source(ed), "ahibc\ndef\ng", "the spliced tail stays put")
+    // a drop on a line PAST the selection only shifts the line index
+    text_edit_load(ed, "aa\nbb\ncc")
+    text_edit_select(ed, 0, 1, 1, 1) // "a\nb"
+    t |> success(text_edit_move_selection_to(ed, 2, 1), "drop past the end line")
+    t |> equal(text_edit_source(ed), "ab\nca\nbc", "the target line shifts up whole")
     // a drop inside the selection declines
     text_edit_load(ed, "abcdef")
     text_edit_select(ed, 0, 1, 0, 5)
@@ -1039,4 +1070,79 @@ def test_edit_find_sync_regex_groups(t : T?) {
     t |> equal(text_edit_source(ed), "foo-bar baz-qux", "one undo restores it")
     text_find_dispose(find)
     text_edit_dispose(ed)
+}
+
+[test]
+def test_edit_highlight_row_span_clamps(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "alpha beta\ngamma")
+    var spans <- [TextEditRange(start_line = 0, start_column = 6,
+        end_line = 0, end_column = 10)]
+    text_edit_set_highlights(ed, spans)
+    t |> equal(text_edit_highlight_row_span(ed, ed.highlight_ranges[0], 0),
+        int2(6, 10), "a fresh highlight passes through")
+    // the edit lands BEFORE the next find sync: the range is now stale
+    text_edit_select(ed, 0, 4, 0, 10)
+    text_edit_backspace(ed)
+    t |> equal(ed.lines[0], "alph", "the highlighted tail is gone")
+    let columns = text_edit_highlight_row_span(ed, ed.highlight_ranges[0], 0)
+    t |> equal(columns, int2(4, 4), "the stale range clamps to the shortened line")
+    t |> success(columns.y <= length(ed.lines[0]),
+        "so the draw-side geometry never reads past the line")
+    // a multi-line range only clamps its own end rows
+    var wide <- [TextEditRange(start_line = 0, start_column = 2,
+        end_line = 1, end_column = 99)]
+    text_edit_set_highlights(ed, wide)
+    t |> equal(text_edit_highlight_row_span(ed, ed.highlight_ranges[0], 1),
+        int2(0, 5), "the end row clamps to 'gamma'")
+    t |> equal(text_edit_highlight_row_span(ed, ed.highlight_ranges[0], 4),
+        int2(-1, -1), "a row outside the buffer has no span")
+    delete spans
+    delete wide
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_edit_issue_span_language_convention(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "int main() \{ return; \}")
+    var diag = TextEditDiagnostic(line = 3, column = 7, end_line = 3,
+        end_column = 7, message = "expected ';'")
+    text_edit_set_language(ed, "das")
+    t |> equal(text_edit_issue_span_text(ed, diag), "4:7",
+        "daslang prints 1-based lines and 0-based columns")
+    text_edit_set_language(ed, "cpp")
+    t |> equal(text_edit_issue_span_text(ed, diag), "4:8",
+        "clang's own text is 1-based BOTH")
+    diag.end_column = 12
+    t |> equal(text_edit_issue_span_text(ed, diag), "4:8-13",
+        "a width span shifts both ends")
+    diag.end_line = 5
+    t |> equal(text_edit_issue_span_text(ed, diag), "4:8-6:13",
+        "a multi-line span too")
+    text_edit_set_language(ed, "")
+    t |> equal(text_edit_issue_span_text(ed, diag), "4:7-6:12",
+        "plain buffers keep the 0-based column")
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_source_view_line_top_virtual_mode(t : T?) {
+    // the virtual path (>= 128 KB documents) never fills state.key, so the row
+    // pitch has to come from the content height the last draw stamped
+    var state = TextSourceViewState()
+    state.virtual_mode = true
+    state.virtual_line_starts <- [0, 10, 20, 30]
+    state.screen_size = float2(100.0f, 80.0f) // 4 rows at 20px
+    t |> equal(text_source_view_line_top(state, 0), 0.0f,
+        "the first line sits at the top")
+    t |> equal(text_source_view_line_top(state, 25), 40.0f,
+        "an interior byte lands on its own row")
+    t |> equal(text_source_view_line_top(state, 999), 60.0f,
+        "a past-the-end byte clamps to the last row")
+    // before the first draw there is nothing to derive from
+    state.screen_size = float2(0.0f, 0.0f)
+    t |> equal(text_source_view_line_top(state, 0), -1.0f,
+        "an unlaid-out virtual view still declines")
+    text_source_view_invalidate(state)
 }

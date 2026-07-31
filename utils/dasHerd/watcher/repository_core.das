@@ -12,6 +12,7 @@ require daslib/command_line
 require daslib/fio public
 require daslib/json_boost public
 require daslib/strings_boost
+require daslib/strings_convert
 require strings public
 
 let private REPOSITORY_CONFIG_VERSION = 1
@@ -695,13 +696,47 @@ def public repository_file_action_argv(repository_id : string;
         }
     }
     if (file_index < 0) return "file is not present in the observed Git status"
-    let code = runtime.snapshot.files[file_index].code
+    let status_error = repository_file_action_status_error(
+        runtime.snapshot.files[file_index].code, action)
+    if (!empty(status_error)) return status_error
+    return repository_build_file_action_argv(
+        worktree_path, file_path, action, argv)
+}
+
+def public repository_file_action_status_error(code, action : string) : string {
+    //! Whether ONE observed status code can carry a stage or an unstage. The
+    //! single-file rail and the multi-file rail share it so a batch can never
+    //! run what a single click would refuse.
     let staged = code != "??" && byte_at(code, 0) != ' '
     let working = code == "??" || byte_at(code, 1) != ' '
     if (action == "stage" && !working) return "file has no working-tree change"
     if (action == "unstage" && !staged) return "file has no staged change"
-    return repository_build_file_action_argv(
-        worktree_path, file_path, action, argv)
+    return ""
+}
+
+def public repository_changelist_status_error(files : array<GitFileState> const;
+                                              worktree_path, action : string;
+                                              paths : array<string>) : string {
+    //! The batch gate. `git add -- a.txt gone.txt c.txt` exits 128 and stages
+    //! NOTHING, so ONE row the refreshed status no longer carries kills the
+    //! whole batch with git's pathspec error. Name the offending path here
+    //! instead, precisely as the single-file rail does.
+    for (file_path in paths) {
+        var found = false
+        for (file in files) {
+            if (file.worktree_path != worktree_path
+                    || file.path != file_path) continue
+            found = true
+            let status_error = repository_file_action_status_error(file.code,
+                action)
+            if (!empty(status_error)) return "{status_error}: {file_path}"
+            break
+        }
+        if (!found) {
+            return "file is not present in the observed Git status: {file_path}"
+        }
+    }
+    return ""
 }
 
 def public repository_file_diff_argv(repository_id : string;
@@ -1030,8 +1065,11 @@ def private classify_failure(message : string; var hint : string&; // nolint:STY
             "again before that will fail the same way.")
         return
     }
+    // git pull says "no tracking information", git push says "no upstream" —
+    // same missing upstream, two different wordings.
     if (find(lower, "no upstream") >= 0
-            || find(lower, "has no upstream branch") >= 0) {
+            || find(lower, "has no upstream branch") >= 0
+            || find(lower, "no tracking information") >= 0) {
         hint = ("This branch has no upstream — there is nothing to pull from " +
             "or push to yet. Publish the branch instead; that creates the " +
             "upstream on origin.")
@@ -1052,10 +1090,6 @@ def private classify_failure(message : string; var hint : string&; // nolint:STY
             "repository one. Worth retrying.")
         retryable = true
         return
-    }
-    if (find(lower, "exited 1") >= 0 && empty(strip(message))) {
-        hint = "Git exited with an error but printed nothing. Open the terminal for the full output."
-        retryable = true
     }
 }
 
@@ -1334,6 +1368,10 @@ def public repository_operation_changelist(repository_id, worktree_path,
     if (find_worktree(g_repositories[repository_index], worktree_path) < 0) {
         return "unknown worktree"
     }
+    let status_error = repository_changelist_status_error(
+        g_repositories[repository_index].snapshot.files, worktree_path, action,
+        paths)
+    if (!empty(status_error)) return status_error
     var steps : array<WorktreeOperationStep>
     let steps_error = repository_operation_changelist_steps(worktree_path,
         action, paths, steps)
@@ -1406,7 +1444,11 @@ def public repository_operation_network_steps(worktree_path, action,
             "fetching from the remote", "git-net-fetch", "git fetch")
         steps |> emplace(fetch_step)
     }
-    if (action == "pull" || action == "sync") {
+    // An unpublished branch has nothing to pull FROM: `pull --ff-only` fails
+    // with "no tracking information" and sync would die there, never reaching
+    // the publish step built for exactly that branch. Explicit pull keeps its
+    // step so git's own refusal reaches the user.
+    if (action == "pull" || (action == "sync" && !publish)) {
         var pull_step <- network_step(worktree_path, ["pull", "--ff-only"],
             "pulling (fast-forward only)", "git-net-pull", "git pull")
         steps |> emplace(pull_step)
@@ -1537,6 +1579,9 @@ def private advance_operation() {
             g_operation_steps_done++
             var recovery_steps <- g_operation_recoveries[recover_name]
             g_operation_recoveries |> erase(recover_name)
+            // Move-assign overwrites; the list being replaced still owns its
+            // buffer and every step's argv/env arrays.
+            delete g_operation_steps
             g_operation_steps <- recovery_steps
             g_operation_cursor = 0
             g_operation.step_count = (g_operation_steps_done
@@ -1995,6 +2040,28 @@ def public repository_worktree_delete_tier(worktree : WorktreeState const;
             + worktree.untracked > 0) return WORKTREE_TIER_DIRTY
     if (repository_worktree_only_here(worktree)) return WORKTREE_TIER_WARN
     return WORKTREE_TIER_GREEN
+}
+
+def public repository_parse_rev_list_count(output : string;
+                                           var count : int&) : bool {
+    //! `git rev-list --count` prints ONE decimal, but the capture is a PTY:
+    //! git's stderr shares the stream, so a warning can precede the number.
+    //! Read the last non-empty line and REFUSE anything that is not a plain
+    //! count — `to_int` answers 0 for garbage, and a fabricated 0 reads as
+    //! "no commits live only here", which is the retire dialog's green light.
+    count = 0
+    var last = ""
+    for (raw_line in split(output, "\n")) {
+        let line = strip(trim_cr(raw_line))
+        if (!empty(line)) {
+            last = line
+        }
+    }
+    if (empty(last)) return false
+    let parsed = try_to_int(last)
+    if (!is_ok(parsed)) return false
+    count = parsed._value
+    return count >= 0
 }
 
 def public repository_default_base_ref(record : RepositoryRecord const) : string {
@@ -2798,6 +2865,23 @@ def private advance_worktree(var runtime : RepositoryRuntime?) {
     }
 }
 
+def private apply_unmerged_count(var runtime : RepositoryRuntime?;
+                                 output : string) {
+    let index = runtime.worktree_index
+    var unmerged = 0
+    if (!repository_parse_rev_list_count(output, unmerged)) {
+        // Output git printed but we cannot read is UNKNOWN, never a
+        // fabricated zero the retire verdict would read as "safe".
+        runtime.snapshot.worktrees[index].unmerged_commits = 0
+        runtime.snapshot.worktrees[index].unmerged_base_ref = ""
+        runtime.snapshot.worktrees[index].unmerged_known = false
+        return
+    }
+    runtime.snapshot.worktrees[index].unmerged_commits = unmerged
+    runtime.snapshot.worktrees[index].unmerged_base_ref = runtime.unmerged_base_ref
+    runtime.snapshot.worktrees[index].unmerged_known = true
+}
+
 def private advance_refresh(var runtime : RepositoryRuntime?) { // nolint:STYLE038
     if (runtime.refresh_phase == 0) {
         if (runtime.refresh_pending) launch_inventory(runtime)
@@ -2886,10 +2970,7 @@ def private advance_refresh(var runtime : RepositoryRuntime?) { // nolint:STYLE0
         return
     }
     if (runtime.refresh_phase == 11) {
-        let index = runtime.worktree_index
-        runtime.snapshot.worktrees[index].unmerged_commits = to_int(strip(output))
-        runtime.snapshot.worktrees[index].unmerged_base_ref = runtime.unmerged_base_ref
-        runtime.snapshot.worktrees[index].unmerged_known = true
+        apply_unmerged_count(runtime, output)
         advance_worktree(runtime)
         return
     }

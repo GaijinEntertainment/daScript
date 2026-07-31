@@ -38,9 +38,9 @@ let ICON_PX = 72.0f
 let BG = float4(0.0f, 0.0f, 0.0f, 0.0f)   // transparent attempt; falls back if FB has no alpha
 
 def icons_out_dir() : string {
-    let m = find_module("imgui_icons")
-    assert(m != null, "imgui_icons not loaded - wrong project_root?")
-    return dir_name(dir_name(string(m.fileName))) + "/doc/source/_static/icons"
+    // in-tree since the dasImgui merge: the PNGs live in the REPO doc tree,
+    // not under modules/dasImgui (the standalone-repo-era derivation)
+    return get_das_root() + "/doc/source/_static/icons"
 }
 
 def capture_png(fname : string) {
@@ -67,9 +67,12 @@ def capture_png(fname : string) {
             memcpy(addr(pixels[b]), addr(tmp[0]), row)
         }
     }
+    var written : int
     unsafe {
-        stbi_write_png(fname, w, h, 4, addr(pixels[0]), row)
+        written = stbi_write_png(fname, w, h, 4, addr(pixels[0]), row)
     }
+    // a silent write failure once shipped a "done" run that wrote nothing
+    if (written == 0) panic("stbi_write_png failed: {fname}")
     delete pixels
     delete tmp
 }

@@ -357,8 +357,14 @@ def public git_patch_inject_context(var patch : GitParsedPatch;
     }
     delete patch.rows
     patch.rows <- rebuilt
+    let rebuilt_count = length(patch.rows)
     for (hunk_index in range(length(patch.hunks))) {
-        patch.hunks[hunk_index].row_start = new_index_of[patch.hunks[hunk_index].row_start]
+        let start = patch.hunks[hunk_index].row_start
+        // A bodyless trailing hunk (an `@@` header with nothing under it) has
+        // row_start == row_count, one PAST the last mapped row; it keeps its
+        // empty span at the new end instead of indexing off the map.
+        patch.hunks[hunk_index].row_start = (start >= 0 && start < row_count
+            ? new_index_of[start] : rebuilt_count)
     }
     realign_patch_text(patch)
 }

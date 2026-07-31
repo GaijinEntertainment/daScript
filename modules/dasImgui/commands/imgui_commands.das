@@ -135,7 +135,8 @@ def public command_define(var registry : CommandRegistry;
                           default_binding : CommandBinding = CommandBinding()) {
     if (definition_index(registry, definition.id) >= 0) return
     registry.definitions |> push_clone(definition)
-    if (default_binding.key != 0) {
+    // either chord slot makes it a real binding - an alt-only default counts
+    if (default_binding.key != 0 || default_binding.alt_key != 0) {
         var binding := default_binding
         binding.command_id = definition.id
         binding.scope = definition.scope
@@ -210,6 +211,9 @@ def private make_chord(key : int; primary, shift, alt, secondary : bool) : int {
 }
 
 def public command_binding_chord(binding : CommandBinding const) : int {
+    //! The primary chord, or 0 when the binding has none. Modifiers alone
+    //! are not a chord, so an unbound key reports 0 rather than mod bits.
+    return 0 if (binding.key == 0)
     return make_chord(binding.key, binding.primary, binding.shift,
         binding.alt, binding.secondary)
 }
@@ -258,6 +262,16 @@ def public command_shortcut_text(registry : CommandRegistry const;
     if (definition < 0) return ""
     let index = binding_index(registry, id, registry.definitions[definition].scope)
     return index >= 0 ? command_binding_text(registry.bindings[index]) : ""
+}
+
+def private captured_chord_text(registry : CommandRegistry const; id : string;
+                                alt : bool) : string {
+    let definition = definition_index(registry, id)
+    if (definition < 0) return ""
+    let index = binding_index(registry, id, registry.definitions[definition].scope)
+    if (index < 0) return ""
+    return (alt ? command_binding_alt_text(registry.bindings[index])
+        : command_binding_text(registry.bindings[index]))
 }
 
 def private keypad_chord(chord : int) : bool {
@@ -350,17 +364,20 @@ def public command_binding_conflict(registry : CommandRegistry const;
                                     binding_index_ : int) : string {
     if (binding_index_ < 0 || binding_index_ >= length(registry.bindings)) return ""
     let binding = registry.bindings[binding_index_]
-    if (binding.key == 0) return ""
     let chord = command_binding_chord(binding)
     let alt_chord = command_binding_alt_chord(binding)
+    // Both slots are checked from every row: a binding whose ONLY chord is the
+    // second one still collides, and poll-time dedup drops the loser silently.
+    if (chord == 0 && alt_chord == 0) return ""
     for (index in range(length(registry.bindings))) {
         if (index == binding_index_) continue
         let other = registry.bindings[index]
         continue if (other.scope != binding.scope)
         let other_chord = command_binding_chord(other)
         let other_alt = command_binding_alt_chord(other)
-        if (other_chord == chord || (alt_chord != 0 && other_chord == alt_chord)
-                || (other_alt != 0 && (other_alt == chord || other_alt == alt_chord))) {
+        if ((chord != 0 && (chord == other_chord || chord == other_alt))
+                || (alt_chord != 0 && (alt_chord == other_chord
+                    || alt_chord == other_alt))) {
             return other.command_id
         }
     }
@@ -390,6 +407,20 @@ def public command_save_bindings(var registry : CommandRegistry) : bool {
     return true
 }
 
+def private overlay_alt_chord(loaded : CommandBinding const;
+                              current : CommandBinding const) : CommandBinding {
+    // An absent second chord keeps the current one; see command_load_bindings.
+    var result := loaded
+    if (loaded.alt_key == 0) {
+        result.alt_key = current.alt_key
+        result.alt_primary = current.alt_primary
+        result.alt_shift = current.alt_shift
+        result.alt_alt = current.alt_alt
+        result.alt_secondary = current.alt_secondary
+    }
+    return result
+}
+
 def public command_load_bindings(var registry : CommandRegistry) : bool {
     if (empty(registry.config_path) || !fexist(registry.config_path)) {
         registry.status = "Bindings config does not exist; using defaults."
@@ -407,12 +438,17 @@ def public command_load_bindings(var registry : CommandRegistry) : bool {
         delete config.bindings
         return false
     }
-    // Overlay saved choices on current defaults. This retains defaults for
-    // commands introduced after the config was written, while key=0 records
-    // an explicit user choice to leave an existing command unbound.
+    // Overlay saved choices on defaults: key=0 records "leave it unbound", but
+    // json_boost omits zero-valued @optional fields, so an absent SECOND chord
+    // keeps the default — clearing one persists only by rebinding it.
     command_reset_bindings(registry)
     for (binding in config.bindings) {
-        if (definition_index(registry, binding.command_id) >= 0) {
+        continue if (definition_index(registry, binding.command_id) < 0)
+        let index = binding_index(registry, binding.command_id, binding.scope)
+        if (index >= 0) {
+            command_set_binding(registry,
+                overlay_alt_chord(binding, registry.bindings[index]))
+        } else {
             command_set_binding(registry, binding)
         }
     }
@@ -473,7 +509,8 @@ def public command_capture_tick(var registry : CommandRegistry) {
         let secondary_down = io.ConfigMacOSXBehaviors ? io.KeyCtrl : io.KeySuper
         let id = registry.capture_command_id
         let scope = registry.definitions[definition].scope
-        if (registry.capture_alt) {
+        let alt_capture = registry.capture_alt
+        if (alt_capture) {
             let index = binding_index(registry, id, scope)
             let binding := (index >= 0 ? registry.bindings[index]
                 : CommandBinding(command_id = id, scope = scope))
@@ -496,7 +533,8 @@ def public command_capture_tick(var registry : CommandRegistry) {
         }
         registry.capture_alt = false
         registry.capture_command_id = ""
-        registry.status = "Bound {id} to {command_shortcut_text(registry, id)}"
+        // Report the slot that was just captured — the primary may be empty.
+        registry.status = "Bound {id} to {captured_chord_text(registry, id, alt_capture)}"
         return
     }
 }

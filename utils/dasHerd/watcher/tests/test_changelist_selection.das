@@ -101,6 +101,75 @@ def test_selection_group_checkbox(t : T?) {
 }
 
 [test]
+def test_selection_refresh_prune(t : T?) {
+    t |> run("a row that left the status list drops out of the set") <| @(t : T?) {
+        var sel = GitChangelistSelection()
+        selection_plain_click(sel, "repo", "D:/Work/tree", 2, "working:a.txt")
+        selection_toggle_click(sel, "repo", "D:/Work/tree", 2, "working:b.txt")
+        // a.txt was staged: its MODIFIED row is gone, b.txt's is not.
+        var live <- {"staged:a.txt", "working:b.txt"}
+        selection_prune(sel, live)
+        t |> equal(selection_count(sel), 1)
+        t |> success(!selection_contains(sel, "working:a.txt"))
+        t |> success(selection_contains(sel, "working:b.txt"))
+        t |> success(!selection_contains(sel, "staged:a.txt"),
+            "pruning never SELECTS a row, it only drops one")
+        selection_clear(sel)
+        delete live
+    }
+    t |> run("a file that comes back to a group comes back UNSELECTED") <| @(t : T?) {
+        var sel = GitChangelistSelection()
+        selection_plain_click(sel, "repo", "D:/Work/tree", 2, "working:a.txt")
+        var staged <- {"staged:a.txt"}
+        selection_prune(sel, staged)
+        t |> equal(selection_count(sel), 0)
+        // The user edits a.txt again: "MM" puts it back in MODIFIED. Without
+        // the prune above it would be pre-checked here and ride the next
+        // stage or DISCARD batch with no click.
+        var both <- {"staged:a.txt", "working:a.txt"}
+        selection_prune(sel, both)
+        t |> success(!selection_contains(sel, "working:a.txt"))
+        t |> equal(selection_count(sel), 0)
+        selection_clear(sel)
+        delete staged
+        delete both
+    }
+    t |> run("pruning away the anchor clears it, so no range starts from a ghost") <| @(t : T?) {
+        var sel = GitChangelistSelection()
+        selection_plain_click(sel, "repo", "D:/Work/tree", 2, "working:a.txt")
+        selection_toggle_click(sel, "repo", "D:/Work/tree", 2, "working:b.txt")
+        t |> equal(sel.anchor_key, "working:b.txt")
+        var live <- {"working:a.txt"}
+        selection_prune(sel, live)
+        t |> equal(sel.anchor_key, "")
+        t |> equal(sel.anchor_group, -1)
+        t |> equal(selection_count(sel), 1)
+        // A surviving anchor is left alone.
+        selection_toggle_click(sel, "repo", "D:/Work/tree", 2, "working:c.txt")
+        var wider <- {"working:a.txt", "working:c.txt"}
+        selection_prune(sel, wider)
+        t |> equal(sel.anchor_key, "working:c.txt")
+        selection_clear(sel)
+        delete live
+        delete wider
+    }
+    t |> run("an empty selection and an empty status list are both no-ops") <| @(t : T?) {
+        var sel = GitChangelistSelection()
+        var live <- {"working:a.txt"}
+        selection_prune(sel, live)
+        t |> equal(selection_count(sel), 0)
+        selection_plain_click(sel, "repo", "D:/Work/tree", 2, "working:a.txt")
+        var clean : table<string>
+        selection_prune(sel, clean)
+        t |> equal(selection_count(sel), 0,
+            "a clean working tree offers no keys, so nothing stays selected")
+        selection_clear(sel)
+        delete live
+        delete clean
+    }
+}
+
+[test]
 def test_selection_worktree_scope(t : T?) {
     t |> run("changing worktree or repository clears the set") <| @(t : T?) {
         var sel = GitChangelistSelection()

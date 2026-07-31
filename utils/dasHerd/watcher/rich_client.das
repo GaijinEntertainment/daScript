@@ -789,6 +789,13 @@ def update() { // nolint:STYLE037
     // renewal, and queued PTY output continue until the window is restored.
     if (g_client != null) g_client->pump()
     if (g_client != null) {
+        // Every refreshed status list re-scopes the Changelist selection: a row
+        // that left the list drops out, so a file that comes back to that group
+        // cannot arrive pre-selected and ride a stage or discard batch.
+        if (g_client.repository_message_count != g_changelist_pruned_revision) {
+            g_changelist_pruned_revision = g_client.repository_message_count
+            prune_changelist_selection(g_client.repositories)
+        }
         // Error ring (note 28): capture every transition to a new error text.
         if (g_client.error != g_last_seen_error) {
             g_last_seen_error = g_client.error
