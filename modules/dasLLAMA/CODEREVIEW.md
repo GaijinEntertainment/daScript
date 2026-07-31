@@ -59,7 +59,8 @@ belongs to the image suites alone. See `ARCHITECTURE.md` §2.1.
 `modules/dasLLAMA/benchmarks/lcpp_bench.das` — one cell directly, or a whole board through
 `performance/gen_bench_records.das`. A new timing harness, a one-off measurement script, or a
 revived rig is a defect: a number from a second rig cannot be compared against the stored
-records, and those records are the only baseline. See `ARCHITECTURE.md` §2.5.
+records, and those records are the only baseline. `PROFILE.md` carries the two commands; the
+rig's shape is `ARCHITECTURE.md` §2.5.
 
 ---
 

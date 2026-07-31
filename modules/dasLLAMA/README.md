@@ -83,6 +83,7 @@ modules/dasLLAMA/
   INVENTORY.md                # as-is census of the module
   CODEREVIEW.md               # the per-change review checklist
   METHODOLOGY.md              # how every published number is measured (the site's method page)
+  PROFILE.md                  # THE two profiling commands — the oracle, and the rig that publishes
   PERF_LEDGER.md              # the living perf backlog — parked ideas, not chased mid-wave
   tune_for_this_box.md        # per-box tuning + the measurement discipline (SDK-installed)
   ENVIRONMENT.md              # GENERATED from dasllama_env's registry (`--dump-env`) — every knob
