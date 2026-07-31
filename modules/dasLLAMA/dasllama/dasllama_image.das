@@ -1142,18 +1142,80 @@ def image_save_enabled : bool {
     return env_flag("DASLLAMA_IMAGE_SAVE", true)
 }
 
+// ===== the metal flavor, derived in the writer =====
+
+// ~36 MB of blob per band: big enough that the interleave amortizes and the writer sees bulk
+// appends, small enough that the staging cost does not register against the model.
+let private METAL_BAND_BLOCKS = 1048576l
+
+// Write mblob without it ever being a plane: interleave the planar planes band by band into a
+// staging buffer the writer consumes before the next band refills it. Runs at QBLOB's position in
+// the walk, not mblob's — on the consuming (chunk) rail qblob is freed the moment its field lands.
+def private write_metal_blob_plane(var t : Model; var w : ImgWriter; var sections : array<ImgSection>) {
+    let sh = metal_blob_shape(t)
+    if (sh.blocks <= 0l) {
+        return
+    }
+    let nbytes = uint64(sh.blocks * sh.stride)
+    let at = pad_to_page(w.cur)
+    w_zeros(w, at - w.cur)
+    let ts = ref_time_ticks()
+    var band : array<uint8>
+    band |> resize_no_init(min(sh.blocks, METAL_BAND_BLOCKS) * sh.stride)
+    var b0 = 0l
+    while (b0 < sh.blocks && w.ok) {
+        let n = min(METAL_BAND_BLOCKS, sh.blocks - b0)
+        metal_blob_fill_blocks(t, b0, n, band)
+        unsafe {
+            w_append(w, addr<void?>(band[0]), uint64(n * sh.stride))
+        }
+        b0 += n
+    }
+    delete band
+    if (!w.ok) {
+        to_log(LOG_ERROR, "dasLLAMA image: plane 'mblob' failed writing {int64(nbytes)} bytes at offset {int64(at)} — disk full? image save aborted\n")
+        return
+    }
+    let ms = int64(get_time_usec(ts)) / 1000l
+    let mb = int64(nbytes) >> 20l
+    to_log(LOG_INFO, "dasLLAMA image:   plane mblob {mb} MB derived+written in {ms} ms = {ms > 0l ? mb * 1000l / ms : 0l} MB/s\n")
+    sections |> push(ImgSection(name = "mblob", off = at, bytes = nbytes))
+}
+
+//! The metal flavor's plane hook: the blob layout IS qblob+qscales interleaved, so those three
+//! planar planes are not planes of a metal image — mblob stands in for all of them, derived at
+//! the first of the three so both sources are still live on the consuming rail.
+def private metal_derive_plane(var t : Model; name : string; var w : ImgWriter;
+                               var sections : array<ImgSection>) : bool {
+    if (name == "qblob") {
+        write_metal_blob_plane(t, w, sections)
+        return true
+    }
+    return name == "qscales" || name == "qscales16" || name == "mblob"
+}
+
 //! The cold half of a cached load, for any carrier: turn the freshly-loaded `m` into its prepared
 //! image and put the image-served struct in `out`. With a target path the FILE is the handoff (`m`
 //! is dropped between write and map); without one the image is built in memory. `m` is spent.
 def cache_via_image(var m; var out; img : string; tag : string = ""; quant : string = "q8") {
+    // no plane wants special handling — the walk writes them all from RAM
+    cache_via_image_(m, out, img, tag, quant) $(name : string; var w : ImgWriter; var sections : array<ImgSection>) {
+        return false
+    }
+}
+
+// cache_via_image with the walk's plane hook exposed — the metal flavor derives its blob plane
+// from the planar ones here instead of materializing it first (see metal_derive_plane).
+def private cache_via_image_(var m; var out; img : string; tag : string; quant : string;
+                             plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) {
     if (img == "" || !image_save_enabled()) {
-        if (!image_from_carrier(m, out, "", tag, quant)) {
+        if (!chunk_rail(m, out, "", 0ul, tag, quant, plane)) {
             out <- m
         }
         return
     }
     let ts = ref_time_ticks()
-    if (!save_image(m, img, tag, quant)) {
+    if (!save_image_to_file(m, img, 0ul, tag, quant, plane)) {
         to_log(LOG_WARNING, "dasLLAMA: could not write '{img}' — serving the carrier as loaded\n")
         out <- m
         return
@@ -1330,7 +1392,10 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
             }
         }
         var m <- load_model_(path, mode)
-        let metal_flavor = want_metal && metal_model_servable(m) && convert_model_to_metal_blob(m)
+        // COMMIT to the metal flavor, do not build it: the blob plane is the planar planes
+        // interleaved, and the writer derives it band by band — materializing it here is what
+        // used to make a metal mint peak at two copies of the weights
+        let metal_flavor = want_metal && metal_model_servable(m) && metal_blob_commit(m)
         if (!metal_flavor && vk_tag != "" && vulkan_bake_take(m)) {
             // a side artifact for the NEXT run: this one is already uploaded, and the image it
             // goes on to serve must stay planar — so the collected planes go out, then go away
@@ -1345,8 +1410,16 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
         // and now the load's own flavor, on the one rail: built once in memory, written out for
         // the next run, and served from the very bytes that were written
         var built = Model()
-        cache_via_image(m, built, metal_flavor ? image_path_for(path, METAL_IMAGE_TAG) : img,
-            metal_flavor ? METAL_IMAGE_TAG : "", metal_flavor ? "q8" : qs)
+        cache_via_image_(m, built, metal_flavor ? image_path_for(path, METAL_IMAGE_TAG) : img,
+            metal_flavor ? METAL_IMAGE_TAG : "", metal_flavor ? "q8" : qs) $(name : string;
+                var w : ImgWriter; var sections : array<ImgSection>) {
+            return metal_flavor && metal_derive_plane(m, name, w, sections)
+        }
+        if (metal_flavor && built.image_map == null) {
+            // the image declined and handed the carrier back committed but plane-less — finish
+            // the flavor in RAM, which is the one state that can still serve this run
+            convert_model_to_metal_blob(built)
+        }
         delete m
         dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
         // the GPU MoE tier gathered from planes the build just freed — re-gather from the image,

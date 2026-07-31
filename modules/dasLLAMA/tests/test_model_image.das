@@ -10,6 +10,7 @@ require dasllama/dasllama_gguf       // rd_u32/rd_u16 — the wav fixture reader
 require dasllama/dasllama_image
 require dasllama/dasllama_config     // DlimConfiguration — the peek/round-trip mechanics arms
 require dasllama/dasllama_math   // pin_kernel_backend — the metal-flavor arm's donor contract
+require dasllama/dasllama_layout // convert_model_to_metal_blob — the derive cell's in-RAM control
 require daslib/jobque_boost
 require daslib/archive
 require daslib/apply
@@ -572,6 +573,51 @@ def test_metal_flavor_image(tst : T?) {
             delete g_map
             delete g_dir
             delete prompt
+            clear_kernel_backend_pin()
+            select_kernel_backend(prior_backend)
+        }
+    }
+}
+
+// The blob plane exists on two rails: the in-RAM transform builds it, the image writer derives it
+// band by band from the planar planes so a cold metal mint never holds a second copy. They must
+// agree byte for byte — this is the only thing keeping the cheap rail honest.
+[test]
+def test_metal_flavor_derive(tst : T?) {
+    tst |> run("SmolLM2 q8: the derived blob plane equals the in-RAM transform's") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!family_on(t, "llama")) return
+            if (!arm_on(t, "metal")) {
+                return
+            }
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
+            if (!model_available(t, path)) {
+                return
+            }
+            let prior_backend = active_kernel_backend()
+            pin_kernel_backend("portable")
+            // the control: the in-RAM transform, which is what the writer must reproduce
+            var tr <- load_model_(path, QuantMode.q8)
+            t |> success(convert_model_to_metal_blob(tr), "in-RAM metal-blob transform")
+            // the derived image: a cold metal mint writes the plane straight out of the planar ones
+            let img_m = image_path_for(path, METAL_IMAGE_TAG)
+            remove(img_m)
+            set_metal_mode(MetalMode.when_available)
+            var tm <- load_model(path, QuantMode.q8)
+            t |> success(tm.image_map != null && tm.metal_blob, "cold metal mint serves a derived blob image")
+            t |> equal(long_length(tm.mblob), long_length(tr.mblob), "blob plane length")
+            t |> equal(count_mismatch(tr.mblob, tm.mblob), 0l, "derived blob plane is byte-identical")
+            // the kq scale strips take their device form on the same rail (empty on a pure q8)
+            t |> equal(count_mismatch(tr.k4s, tm.k4s), 0l, "k4 scale strip")
+            t |> equal(count_mismatch(tr.k5s, tm.k5s), 0l, "k5 scale strip")
+            t |> equal(count_mismatch(tr.k6s, tm.k6s), 0l, "k6 scale strip")
+            delete tm
+            delete tr
+            set_metal_mode(MetalMode.off)
             clear_kernel_backend_pin()
             select_kernel_backend(prior_backend)
         }

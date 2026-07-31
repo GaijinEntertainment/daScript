@@ -91,13 +91,9 @@ def private metal_blob_layout_ok(t : Model) : bool {
         (!t.cls_q8 || metal_blob_off_ok(t.emb_q8_off, KqFmt.q8)))
 }
 
-//! Convert a planar q8-mode Model to the metal-blob form IN PLACE (see the Model field doc).
-//! False = the model cannot take the blob form (not q8, repacked planes, or a bind-alignment
-//! violation) — the caller keeps the planar model. CPU inference on the converted model panics.
-def convert_model_to_metal_blob(var t : Model) : bool {
-    if (t.metal_blob) {
-        return true
-    }
+//! Can `t` take the blob form? The refusal half of the transform, split out so the image writer
+//! can commit to the metal flavor without first building the blob plane in RAM.
+def metal_blob_eligible(t : Model) : bool {
     if (t.quant != QuantMode.q8 || t.kq_repacked || t.mx4_repacked || kernel_backend_needs_repack(active_kernel_backend())) {
         return false
     }
@@ -111,37 +107,54 @@ def convert_model_to_metal_blob(var t : Model) : bool {
         to_log(LOG_WARNING, "dasLLAMA: metal-blob transform declined — a weight offset violates the GPU bind alignment\n")
         return false
     }
-    let ts = ref_time_ticks()
-    let nb = long_length(t.qblob) / Q8_BLOCK_ELEMS
-    let mbb = Q8_QPB + Q8_SPB   // the 34B gguf-native block_q8_0
-    if (nb > 0l) {
-        t.mblob |> resize(nb * mbb)
-        let s16 = t.wscale_f16
-        unsafe {
-            var dp = addr(t.mblob[0])
-            let qp = addr < int8 const? >(t.qblob[0])
-            var sp : float const?
-            var sp16 : uint16 const?
-            if (s16) {
-                sp16 = addr(t.qscales16[0])
-            } else {
-                sp = addr(t.qscales[0])
-            }
-            let nch = int(clamp(nb / 262144l, 1l, 64l))
-            maybe_parallel_for(0, int(nb / 32l) + (nb % 32l != 0l ? 1 : 0), is_job_que_available() ? nch : 1) $(cb, ce) {
-                unsafe {
-                    for (b in range64(int64(cb) * 32l, min(int64(ce) * 32l, nb))) {
-                        var ph = reinterpret<uint16?>(dp + b * mbb)
-                        ph[0] = s16 ? sp16[b] : uint16(f32_to_f16(clamp(sp[b], -65504.0, 65504.0)))
-                        memcpy(reinterpret<void?>(dp + b * mbb + Q8_SPB), reinterpret<void const?>(qp + b * Q8_QPB), 32)
-                    }
+    return true
+}
+
+//! Block count of the blob plane and its stride — the 34B gguf-native block_q8_0, which is the
+//! layout the planar load SPLIT into qblob+qscales when it read the file.
+def metal_blob_shape(t : Model) : tuple<blocks : int64; stride : int64> {
+    return (blocks = long_length(t.qblob) / Q8_BLOCK_ELEMS, stride = Q8_QPB + Q8_SPB)
+}
+
+//! Interleave blob blocks [b0, b0+nblk) from the planar planes into `dst` (>= nblk*34 bytes).
+//! The whole-plane call materializes mblob; the image writer calls it band by band instead, which
+//! is what keeps a cold metal mint from holding the weights twice.
+def metal_blob_fill_blocks(t : Model; b0, nblk : int64; var dst : array<uint8>) {
+    if (nblk <= 0l) {
+        return
+    }
+    let mbb = Q8_QPB + Q8_SPB
+    let s16 = t.wscale_f16
+    unsafe {
+        var dp = addr(dst[0])
+        let qp = addr < int8 const? >(t.qblob[b0 * Q8_BLOCK_ELEMS])
+        var sp : float const?
+        var sp16 : uint16 const?
+        if (s16) {
+            sp16 = addr(t.qscales16[b0])
+        } else {
+            sp = addr(t.qscales[b0])
+        }
+        let nch = int(clamp(nblk / 262144l, 1l, 64l))
+        maybe_parallel_for(0, int(nblk / 32l) + (nblk % 32l != 0l ? 1 : 0), is_job_que_available() ? nch : 1) $(cb, ce) {
+            unsafe {
+                for (b in range64(int64(cb) * 32l, min(int64(ce) * 32l, nblk))) {
+                    var ph = reinterpret<uint16?>(dp + b * mbb)
+                    ph[0] = s16 ? sp16[b] : uint16(f32_to_f16(clamp(sp[b], -65504.0, 65504.0)))
+                    memcpy(reinterpret<void?>(dp + b * mbb + Q8_SPB), reinterpret<void const?>(qp + b * Q8_QPB), 32)
                 }
             }
         }
     }
-    delete t.qblob
-    delete t.qscales
-    delete t.qscales16
+}
+
+//! Commit `t` to the metal blob flavor WITHOUT building the big plane: the kq scale strips take
+//! their device form and the flag flips, but mblob stays empty and qblob/qscales16 stay put. A
+//! committed model serves NOTHING — write its image and drop it, or finish the transform.
+def metal_blob_commit(var t : Model) : bool {
+    if (!metal_blob_eligible(t)) {
+        return false
+    }
     // k4/k5: the 16B verbatim disk scale block per superblock — the 4B pad is CPU-repack
     // scratch (see the plane-layout comment in dasllama_gguf) and a blob model never repacks
     if (!empty(t.k4s)) {
@@ -167,8 +180,38 @@ def convert_model_to_metal_blob(var t : Model) : bool {
         t.k6s <- k6c
     }
     t.metal_blob = true
-    to_log(LOG_INFO, "dasLLAMA: metal-blob transform ({nb} blocks) in {get_time_usec(ts) / 1000} ms\n")
     return true
+}
+
+//! Convert a planar q8-mode Model to the metal-blob form IN PLACE — the RAM-serving rail (a model
+//! bound for an image commits instead and lets the writer derive). False = cannot take the blob
+//! form (not q8, repacked, bind-misaligned); the caller keeps the planar model.
+def convert_model_to_metal_blob(var t : Model) : bool {
+    if (t.metal_blob) {
+        metal_blob_materialize(t)   // a COMMITTED model still owes its plane; a converted one is a no-op
+        return true
+    }
+    if (!metal_blob_commit(t)) {
+        return false
+    }
+    metal_blob_materialize(t)
+    return true
+}
+
+// Build the blob plane a committed model is still missing and retire the planar sources. The only
+// way a model reaches here already whole is the early return above, where qblob is long gone.
+def private metal_blob_materialize(var t : Model) {
+    let sh = metal_blob_shape(t)
+    if (sh.blocks <= 0l) {
+        return
+    }
+    let ts = ref_time_ticks()
+    t.mblob |> resize_no_init(sh.blocks * sh.stride)
+    metal_blob_fill_blocks(t, 0l, sh.blocks, t.mblob)
+    delete t.qblob
+    delete t.qscales
+    delete t.qscales16
+    to_log(LOG_INFO, "dasLLAMA: metal-blob transform ({sh.blocks} blocks) in {get_time_usec(ts) / 1000} ms\n")
 }
 
 // 20B -> 16B in place: keep bytes [0..16) of every superblock strip, then shrink. Forward
