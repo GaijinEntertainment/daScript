@@ -1038,3 +1038,41 @@ grew the batch arms — B=3 GEMV + mid-run shrink, B=6 GEMM, mixed batch/single 
 handoff), one-step logits+KV tolerance x {B3,B6}x{f16,f32}, paged multi-run gathers, wscale16
 both paths, leak gate; CPU batch suite 18/18.
 NEXT: P4 batched decode (gemm32 crossover, batch seam driver), P5 ship.
+
+**2026-07-30 — Phase 0 (dedup arc): FUNCTION + CLASS LOWERING in msl_emit — design (Boris-ruled).**
+Goal: kernels feel like normal das code — free functions, class methods, and inheritance lower
+1:1; no more "a kernel is a single function". Ruled: option 1 (proper MSL classes), tests are
+Phase 0's own gate set. Mechanics:
+1. **Free functions** lower as plain MSL functions (`def add(a, b : int) : int` →
+   `int add(int a, int b)`), any module the body reaches, one MSL function per GENERIC
+   instance (mangled name sanitized). Prototypes emit before bodies; recursion is a compile
+   error. Param mapping by das type: `array<T>` → `device T*` (`device const T*` without
+   `var`), fixed array `T[N]` → `threadgroup T*`, `var T&` → `thread T&` (thread-space
+   binders only), scalars/vectors by value; value returns legal (kernel entry stays void).
+   Free functions reading gl_* builtins get hidden trailing by-value params, threaded
+   automatically at call sites.
+2. **The kernel class emits as ONE FLAT MSL struct** — inherited members AND methods flatten
+   into the concrete class; an override wins; no MSL inheritance, no vtables. das inheritance
+   is source reuse; emission is always the concrete class. Struct fields: @ssbo → device
+   pointer, @uniform → BY-VALUE copy (sidesteps address-space reference members), @workgroup
+   → threadgroup pointer, used gl_* builtins → by-value fields. Methods emit as member
+   functions — member access needs zero rewriting.
+3. **The entry keeps today's ABI exactly** (same [[buffer(N)]] params, builtin params, shmem +
+   `_tgmem` companion — encoders and the [metal_dispatch] lens untouched): it fills `self`
+   (pointers, uniform copies, builtin copies, derived tgmem pointers) and calls the kernel
+   method.
+4. **Method calls devirtualize statically against the concrete kernel class.** Typed AST shape
+   (probe-verified 2026-07-30): `ExprInvoke` with `isInvokeMethod=true`, arguments[0] =
+   `ExprField(value = ExprTypeDecl, name = <method>)`, arguments[1] = (possibly ExprCast-
+   upcast) receiver, rest = params. Resolution: method name → the CONCRETE class's field-init
+   function — identical to CPU vtable results for kernel objects (one exact instance).
+   Reassigning a method field in kernel code is a compile error.
+5. **Write-set goes interprocedural by SIGNATURE at call sites** (a member passed to a
+   `var array<T>` param is written; const param = read) **and by recursive body scan for
+   methods** (they touch members directly).
+Census grows matching kinds (gate B both-directions discipline). Tests:
+`tests/metal/test_metal_functions.das` — CPU-oracle-vs-GPU for free fn / method / inheritance
++ override (base skeleton calls a derived-overridden stage) / generic ×2 instances / ref arg /
+tgmem param / builtin-using helper / uniform-reading method; negative gates for recursion,
+method-field reassignment, unsupported param types. First consumer: the dasLLAMA SqAttn family
+dedup (16-of-20 twins share one skeleton; stage helpers + one uniform struct per family).
