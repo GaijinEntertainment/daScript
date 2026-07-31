@@ -2123,7 +2123,12 @@ namespace das {
         if ( ec ) { error = ec_to_string(ec, ctx, at); return; }
         for ( auto & entry : it ) {
             if ( ec ) { ec.clear(); continue; }
-            auto rel = std::filesystem::relative(entry.path(), root, ec).string();
+            std::string rel;
+            try {
+                rel = std::filesystem::relative(entry.path(), root, ec).string();
+            } catch ( const std::system_error & ) {
+                continue;   // name not representable in the narrow encoding (MSVC path::string throws) — skip like an ec entry
+            }
             if ( ec ) { ec.clear(); continue; }
             bool is_dir = entry.is_directory(ec);
             if ( ec ) { ec.clear(); }
