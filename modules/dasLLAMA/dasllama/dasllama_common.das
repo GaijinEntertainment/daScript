@@ -1771,6 +1771,8 @@ struct StreamReg {
 
 typedef StreamCollectFn = function<(t : Model; var regs : array<StreamReg>) : void>
 typedef StreamRepackFn = function<(fmt : int; qp, sp : void?; n, d : int64) : void>
+typedef BlobEligibleFn = function<(t : Model) : bool>
+typedef BlobScalePlaneFn = function<(var t : Model; name : string) : bool>
 
 [unused_argument(t, regs)]
 def private stream_no_collect(t : Model; var regs : array<StreamReg>) {
@@ -1786,17 +1788,39 @@ var private g_stream_collect_q8 = @@stream_no_collect
 var private g_stream_collect_kq = @@stream_no_collect
 var private g_stream_collect_q51 = @@stream_no_collect
 var private g_stream_repack = @@stream_no_repack
+var private g_blob_eligible : BlobEligibleFn
+var private g_blob_scale_plane : BlobScalePlaneFn
+var private g_blob_hooks_set = false
 
 //! dasllama_layout registers the streaming-fill collaborators at [init]: the three region
-//! collectors (the repack walkers' build halves) and the single-region repack dispatcher.
-def register_stream_layout(cq8, ckq, cq51 : StreamCollectFn; rr : StreamRepackFn) {
+//! collectors (the repack walkers' build halves), the single-region repack dispatcher, and the
+//! metal-blob pair the streamed build consults to mint the blob flavor straight off the gguf.
+def register_stream_layout(cq8, ckq, cq51 : StreamCollectFn; rr : StreamRepackFn;
+                           be : BlobEligibleFn; bsp : BlobScalePlaneFn) {
     g_stream_collect_q8 = cq8
     g_stream_collect_kq = ckq
     g_stream_collect_q51 = cq51
     g_stream_repack = rr
+    g_blob_eligible = be
+    g_blob_scale_plane = bsp
+    g_blob_hooks_set = true
+}
+
+//! Can this model's streamed build mint the metal blob flavor? False on an unregistered layout
+//! module too — a caller without the hooks takes the planar rail rather than a wrong image.
+def blob_stream_eligible(t : Model) : bool {
+    return g_blob_hooks_set && invoke(g_blob_eligible, t)
+}
+
+//! Put one kq scale plane into its device form during a blob build (see metal_blob_scale_plane).
+def blob_stream_scale_plane(var t : Model; name : string) : bool {
+    return g_blob_hooks_set && invoke(g_blob_scale_plane, t, name)
 }
 
 var private g_fill_plan_mode = false
+// the streamed build should mint the METAL BLOB flavor, not the planar one. Set for the length of
+// one load_gguf_streaming call; the sizing pass turns it into t.metal_blob once offsets exist.
+var private g_stream_want_blob = false
 var private g_fill_plan : array<FillJob>
 // field -> the plane's LAYOUT byte total, recorded at sizing: a layout can hold allocated-but-
 // never-written holes (glm4moe's dense-lead shexp slices), so the streamed plane must be sized
@@ -1806,7 +1830,9 @@ var private g_stream_plane_total : table<string; int64>
 //! The regions the eager repack stage WOULD build for `t` — same gates, same walkers (the
 //! collector halves), so the streamed fill's per-job repack cannot drift from the eager one.
 def stream_collect_regions(t : Model; var regs : array<StreamReg>) {
-    if (t.quant != QuantMode.q8 || !select_matmul_backend_for_load()) {
+    // metal_blob first, and short-circuiting: the blob flavor is device-layout bytes, so a CPU
+    // repack has no place in it and the backend must not even be selected for one
+    if (t.metal_blob || t.quant != QuantMode.q8 || !select_matmul_backend_for_load()) {
         return
     }
     invoke(g_stream_collect_q8, t, regs)
@@ -1831,25 +1857,31 @@ def private stream_field_of(t : Model; fmt : KqFmt) : string {
     } elif (fmt == KqFmt.q51) {
         return "q51q"
     } elif (t.quant == QuantMode.q8) {
-        return "qblob"
+        // the blob flavor carries q8 as gguf-native 34B blocks in ONE plane, never the split pair
+        return t.metal_blob ? "mblob" : "qblob"
     }
     return ""
 }
 
 // (q plane bytes, scale plane bytes, region fmt id) for one streamed job — pure taxonomy reads
-[unused_argument(t)]
 def private stream_job_shape(t : Model; j : FillJob) : tuple<qb : int64; sb : int64; rfmt : int> {
     if (kq_sb(j.fmt) || j.fmt == KqFmt.q51) {
         let e = kq_elems(j.fmt)
         return (qb = (j.n / e) * kq_qsb(j.fmt), sb = (j.n / e) * kq_ssb(j.fmt), rfmt = kq_stream_code(j.fmt))
     }
+    if (t.metal_blob) {   // scale and quants land interleaved, so there is no separate scale half
+        return (qb = (j.n / Q8_BLOCK_ELEMS) * (Q8_QPB + Q8_SPB), sb = 0l, rfmt = 0)
+    }
     return (qb = j.n, sb = 0l, rfmt = 0)   // q8: 1 byte/elem quants; scales handled as floats
 }
 
 // a job's byte offset within its plane (woff is elems; kq/q51 planes stride per superblock/block)
-def private stream_job_qoff(j : FillJob) : int64 {
+def private stream_job_qoff(t : Model; j : FillJob) : int64 {
     if (kq_sb(j.fmt) || j.fmt == KqFmt.q51) {
         return (j.woff / kq_elems(j.fmt)) * kq_qsb(j.fmt)
+    }
+    if (t.metal_blob) {
+        return (j.woff / Q8_BLOCK_ELEMS) * (Q8_QPB + Q8_SPB)
     }
     return j.woff
 }
@@ -1907,13 +1939,15 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
     var temp_q8 : array<int8>   // the q8 family's quant temp (qblob is int8)
     var temp_s : array<uint8>
     var temp_sf : array<float>
+    var temp_m : array<uint8>   // the blob flavor's interleaved 34B blocks
+    var temp_s16 : array<uint16>
     var scratch : array<float>
     var zeros : array<uint8>
     var cursor = 0l   // plane bytes appended so far — layout holes between jobs zero-fill
     for (j in mine) {
         let sh = stream_job_shape(t, j)
-        stream_zero_fill(stream_job_qoff(j) - cursor, zeros, append)
-        cursor = stream_job_qoff(j) + sh.qb
+        stream_zero_fill(stream_job_qoff(t, j) - cursor, zeros, append)
+        cursor = stream_job_qoff(t, j) + sh.qb
         temp_q |> resize(int(sh.qb))
         let t0 = g_conv_prof ? ref_time_ticks() : 0l
         var kind = ""
@@ -1939,7 +1973,7 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
                 memcpy(addr<void?>(t.q40s[(j.woff / 256l) * Q40_SSB]), addr<void?>(temp_s[0]), sh.sb)
             } elif (j.fmt == KqFmt.q51) {
                 memcpy(addr<void?>(t.q51s[(j.woff / 32l) * Q51_SB]), addr<void?>(temp_s[0]), sh.sb)
-            } elif (sh.sb == 0l && j.n > 0l) {
+            } elif (sh.sb == 0l && j.n > 0l && !t.metal_blob) {
                 memcpy(addr<void?>(t.qscales[j.woff / 32l]), addr<void?>(temp_sf[0]), (j.n / 32l) * 4l)
             }
         }
@@ -1972,10 +2006,13 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
             }
         }
         unsafe {
-            if (sh.rfmt == 0) {
-                invoke(append, addr<void?>(temp_q8[0]), uint64(sh.qb))
-            } else {
+            if (sh.rfmt != 0) {
                 invoke(append, addr<void?>(temp_q[0]), uint64(sh.qb))
+            } elif (t.metal_blob) {
+                blob_pack_job(temp_q8, temp_sf, j.n / Q8_BLOCK_ELEMS, temp_m, temp_s16)
+                invoke(append, addr<void?>(temp_m[0]), uint64(sh.qb))
+            } else {
+                invoke(append, addr<void?>(temp_q8[0]), uint64(sh.qb))
             }
         }
     }
@@ -1991,9 +2028,40 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
     delete temp_q8
     delete temp_s
     delete temp_sf
+    delete temp_m
+    delete temp_s16
     delete scratch
     delete zeros
     return true
+}
+
+// One job's q8 temps -> the gguf-native 34B blocks the blob plane carries. Scales convert through
+// cvt_f32_to_f16, the same kernel wscale_convert_f16 uses, so a streamed blob plane is bit-equal
+// to one the in-RAM transform builds from an already-converted qscales16.
+def private blob_pack_job(q : array<int8>; s : array<float>; nblk : int64;
+                          var dst : array<uint8>; var s16 : array<uint16>) {
+    if (nblk <= 0l) {
+        return
+    }
+    let mbb = Q8_QPB + Q8_SPB
+    dst |> resize_no_init(nblk * mbb)
+    s16 |> resize_no_init(nblk)
+    unsafe {
+        cvt_f32_to_f16(addr(s16[0]), addr < float const? >(s[0]), nblk)
+        var dp = addr(dst[0])
+        let qp = addr < int8 const? >(q[0])
+        let sp = addr < uint16 const? >(s16[0])
+        let nch = int(clamp(nblk / 262144l, 1l, 64l))
+        maybe_parallel_for(0, int(nblk / 32l) + (nblk % 32l != 0l ? 1 : 0), is_job_que_available() ? nch : 1) $(cb, ce) {
+            unsafe {
+                for (b in range64(int64(cb) * 32l, min(int64(ce) * 32l, nblk))) {
+                    var ph = reinterpret<uint16?>(dp + b * mbb)
+                    ph[0] = sp[b]
+                    memcpy(reinterpret<void?>(dp + b * mbb + Q8_SPB), reinterpret<void const?>(qp + b * Q8_QPB), 32)
+                }
+            }
+        }
+    }
 }
 
 //! Arm plan recording: subsequent load_big calls append FillJobs instead of transcoding
@@ -3616,14 +3684,16 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
 //! mapping STILL ALIVE — the caller streams the save inside. Fails open (unstreamable models
 //! materialize + save eagerly through the same blk); split shards return false pre-blk.
 def load_gguf_streaming(path : string; mode : QuantMode; var t : Model; var jobs : array<FillJob>;
+                        want_blob : bool = false;
                         blk : block<(m : GGUFMeta; bytes : array<uint8>) : bool>) : bool {
     if (!is_job_que_available()) {
         var okj = false
         with_job_que() {
-            okj = load_gguf_streaming(path, mode, t, jobs, blk)
+            okj = load_gguf_streaming(path, mode, t, jobs, want_blob, blk)
         }
         return okj
     }
+    g_stream_want_blob = want_blob
     g_weights_epoch++
     t.quant = mode
     if (has_env_variable("DASLLAMA_CONV_PROF")) {
@@ -3667,6 +3737,7 @@ def load_gguf_streaming(path : string; mode : QuantMode; var t : Model; var jobs
         delete bases
         delete sizes
         delete shards
+        g_stream_want_blob = false
         return sok
     }
     delete shards
@@ -3696,6 +3767,7 @@ def load_gguf_streaming(path : string; mode : QuantMode; var t : Model; var jobs
         }
     }
     fclose(f)
+    g_stream_want_blob = false
     return ok
 }
 
@@ -4268,6 +4340,17 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         }
         // streaming: big q-halves never materialize (jobs stream them to the writer); scale
         // halves are small (6-16%) and stay in RAM. Unstreamable features disarmed above.
+        // the blob flavor decides HERE: offsets exist (the bind gate reads them), nothing is sized
+        // yet. A refusal disarms streaming outright — a planar image is the wrong metal artifact
+        if (g_fill_plan_mode && g_stream_want_blob) {
+            // both gates the eager rail applies: metal can serve this shape, AND the blob layout
+            // holds (bind alignment, no repack). Pure config/fmt reads, so they answer here
+            t.metal_blob = metal_model_servable(t) && blob_stream_eligible(t)
+            if (!t.metal_blob) {
+                to_log(LOG_INFO, "dasLLAMA: streaming plan disarmed — the metal blob flavor is unavailable for this model; converting eagerly\n")
+                g_fill_plan_mode = false
+            }
+        }
         let stream_q = g_fill_plan_mode
         if (stream_q) {
             // the streamed save sizes each q-plane from the LAYOUT (holes included), not the job sum
@@ -4277,7 +4360,9 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             g_stream_plane_total["k6q"] = (sz.k6_n / 256l) * K6_QSB
             g_stream_plane_total["q40q"] = (sz.q40_n / 256l) * Q40_QSB
             g_stream_plane_total["q51q"] = (sz.q51_n / 32l) * Q51_QB
-            g_stream_plane_total["qblob"] = mode == QuantMode.q8 ? sz.wblob_n : 0l
+            let wb = mode == QuantMode.q8 ? sz.wblob_n : 0l
+            g_stream_plane_total[t.metal_blob ? "mblob" : "qblob"] = (t.metal_blob
+                ? (wb / Q8_BLOCK_ELEMS) * (Q8_QPB + Q8_SPB) : wb)
         }
         if (sz.k4_n > 0l) {
             if (!stream_q) {
@@ -4324,8 +4409,10 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 t.qblob |> reserve(sz.wblob_n)
                 t.qblob |> resize(sz.wblob_n)
             }
-            t.qscales |> reserve(sz.wblob_n / 32l)
-            t.qscales |> resize(sz.wblob_n / 32l)
+            if (!t.metal_blob) {   // blob: scales ride inside mblob, so the split plane never exists
+                t.qscales |> reserve(sz.wblob_n / 32l)
+                t.qscales |> resize(sz.wblob_n / 32l)
+            }
         } elif (mode == QuantMode.q4_0) {
             t.q4blob |> reserve(sz.wblob_n / 2l)
             t.q4blob |> resize(sz.wblob_n / 2l)
@@ -4629,8 +4716,11 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         if (mode == QuantMode.q8 && g_wscale_f16) {
             if (g_fill_plan_mode) {
                 // streaming: the epilogue converts after qblob fills; pre-mark for the meta,
-                // mirroring the convert's own outcome (empty scales = nothing converts, no flag)
-                t.wscale_f16 = !empty(t.qscales) && kernel_backend_has_wscale16()
+                // mirroring the convert's own outcome (empty scales = nothing converts, no flag).
+                // A blob build has no scale plane, so it mirrors what the EAGER metal rail ends
+                // with — the drivers read this flag, so the two rails must not disagree
+                let have_q8 = t.metal_blob ? g_stream_plane_total?["mblob"] ?? 0l : long_length(t.qscales)
+                t.wscale_f16 = have_q8 > 0l && kernel_backend_has_wscale16()
             } else {
                 wscale_convert_f16(t)
             }

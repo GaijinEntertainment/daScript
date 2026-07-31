@@ -148,20 +148,26 @@ def metal_blob_fill_blocks(t : Model; b0, nblk : int64; var dst : array<uint8>) 
     }
 }
 
-//! Commit `t` to the metal blob flavor WITHOUT building the big plane: the kq scale strips take
-//! their device form and the flag flips, but mblob stays empty and qblob/qscales16 stay put. A
-//! committed model serves NOTHING — write its image and drop it, or finish the transform.
-def metal_blob_commit(var t : Model) : bool {
-    if (!metal_blob_eligible(t)) {
-        return false
-    }
+//! Put ONE kq scale plane into its metal device form, named by its Model field; false = not a kq
+//! scale plane. Per-plane because the streamed image walk applies each as its own turn comes,
+//! which is the only point where that plane's fills are done and its bytes are not yet written.
+def metal_blob_scale_plane(var t : Model; name : string) : bool {
     // k4/k5: the 16B verbatim disk scale block per superblock — the 4B pad is CPU-repack
     // scratch (see the plane-layout comment in dasllama_gguf) and a blob model never repacks
-    if (!empty(t.k4s)) {
-        compact_kq_scale_strip(t.k4s)
+    if (name == "k4s") {
+        if (!empty(t.k4s)) {
+            compact_kq_scale_strip(t.k4s)
+        }
+        return true
     }
-    if (!empty(t.k5s)) {
-        compact_kq_scale_strip(t.k5s)
+    if (name == "k5s") {
+        if (!empty(t.k5s)) {
+            compact_kq_scale_strip(t.k5s)
+        }
+        return true
+    }
+    if (name != "k6s") {
+        return false
     }
     // k6: the GPU split form — [nsb x 16B sub-scale strips][nsb x f16 d halfwords]
     if (!empty(t.k6s)) {
@@ -178,6 +184,19 @@ def metal_blob_commit(var t : Model) : bool {
             }
         }
         t.k6s <- k6c
+    }
+    return true
+}
+
+//! Commit `t` to the metal blob flavor WITHOUT building the big plane: the kq scale strips take
+//! their device form and the flag flips, but mblob stays empty and qblob/qscales16 stay put. A
+//! committed model serves NOTHING — write its image and drop it, or finish the transform.
+def metal_blob_commit(var t : Model) : bool {
+    if (!metal_blob_eligible(t)) {
+        return false
+    }
+    for (nm in ["k4s", "k5s", "k6s"]) {
+        metal_blob_scale_plane(t, nm)
     }
     t.metal_blob = true
     return true
@@ -845,5 +864,6 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
 def private register_layout_hooks {
     register_model_layout(@@repack_q8_weights, @@repack_kq_weights, @@repack_mx4_stacks, @@repack_q51_stacks,
         @@moe_gpu_gather_stack, @@moe_gpu_gather_stack_kq, @@moe_gpu_gather_stack_q8n)
-    register_stream_layout(@@collect_q8_regions, @@collect_kq_regions, @@collect_q51_regions, @@stream_repack_one)
+    register_stream_layout(@@collect_q8_regions, @@collect_kq_regions, @@collect_q51_regions, @@stream_repack_one,
+        @@metal_blob_eligible, @@metal_blob_scale_plane)
 }

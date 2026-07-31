@@ -835,7 +835,7 @@ def save_model_image(var t : Model; path : string; tag : string = ""; quant : st
 // qscales16 (absent until the epilogue). Over-reserve is free — dwrite_close truncates.
 def private stream_extra_bytes(t : Model; jobs : array<FillJob>) : uint64 {
     var extra = 0ul
-    for (fname in ["qblob", "k4q", "k5q", "k6q", "q40q", "q51q"]) {
+    for (fname in ["qblob", "mblob", "k4q", "k5q", "k6q", "q40q", "q51q"]) {
         let sb = stream_plane_bytes(t, jobs, fname)
         if (sb > 0l) {
             extra += uint64(sb) + uint64(IMAGE_PAGE)
@@ -857,6 +857,11 @@ def save_model_image_streaming(var t : Model; m : GGUFMeta; bytes : array<uint8>
     let ok = save_image_to_file(t, path, stream_extra_bytes(t, jobs), tag, quant) $(name : string;
             var w : ImgWriter; var sections : array<ImgSection>) {
         if (stream_plane_bytes(t, jobs, name) <= 0l) {
+            // a blob build's kq scale strips take their device form as each one's turn comes —
+            // its own fills are done by then and its bytes are not yet written
+            if (t.metal_blob) {
+                blob_stream_scale_plane(t, name)
+            }
             return false   // not a streamed plane — the walk writes it from RAM
         }
         w_zeros(w, pad_to_page(w.cur) - w.cur)
@@ -1121,6 +1126,9 @@ def image_from_model_streaming(var t : Model; var out : Model; m : GGUFMeta; byt
     let ok = chunk_rail(t, out, save_to, stream_extra_bytes(t, jobs), tag, quant) $(name : string;
             var w : ImgWriter; var sections : array<ImgSection>) {
         if (stream_plane_bytes(t, jobs, name) <= 0l) {
+            if (t.metal_blob) {   // the kq scale strips take their device form — see the file saver
+                blob_stream_scale_plane(t, name)
+            }
             return false   // not a streamed plane — the walk writes it from RAM
         }
         w_zeros(w, pad_to_page(w.cur) - w.cur)
@@ -1357,27 +1365,35 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
             panic("dasLLAMA: no prepared image for '{path}' ({want}) and artifacts are frozen — pre-mint it")
         }
         guard_interp_gguf_load(path)
-        // the planar flavor streams, so its cold build peaks at ONE copy of the model; the blob
-        // flavors cannot (their transforms need the whole plane in RAM) and take the eager rail
-        // below, as does any model that will not stream
-        if (!want_metal && vk_tag == "") {
+        // The cold build streams: planes go from the gguf mapping straight into the image and never
+        // become model planes, so it peaks well under one copy. The metal flavor streams too (its
+        // 34B blocks assemble per tensor); the vulkan bake needs whole planes, so it stays eager.
+        if (vk_tag == "") {
+            let s_tag = want_metal ? METAL_IMAGE_TAG : ""
+            let s_quant = want_metal ? "q8" : qs
+            let s_img = want_metal ? image_path_for(path, METAL_IMAGE_TAG) : img
             var mt = Model()
             var jobs : array<FillJob>
             var streamed = Model()
             var served = false
             let ts_s = ref_time_ticks()
             let save = image_save_enabled()
-            let ran = load_gguf_streaming(path, mode, mt, jobs) $(gm : GGUFMeta; gbytes : array<uint8>) {
-                served = (save ? save_model_image_streaming(mt, gm, gbytes, jobs, img, "", qs)
-                    : image_from_model_streaming(mt, streamed, gm, gbytes, jobs, "", "", qs))
+            let ran = load_gguf_streaming(path, mode, mt, jobs, want_metal) $(gm : GGUFMeta; gbytes : array<uint8>) {
+                // the sizing pass answers whether the blob flavor was available; a metal run that
+                // got the planar answer must not write a planar image under the metal identity
+                if (want_metal && !mt.metal_blob) {
+                    return false
+                }
+                served = (save ? save_model_image_streaming(mt, gm, gbytes, jobs, s_img, s_tag, s_quant)
+                    : image_from_model_streaming(mt, streamed, gm, gbytes, jobs, "", s_tag, s_quant))
                 return served
             }
             delete jobs
             delete mt   // the streamed planes never became model planes; the rest goes now
             if (served && save) {
-                to_log(LOG_INFO, "dasLLAMA: prepared image streamed in {get_time_usec(ts_s) / 1000} ms — {img}\n")
-                if (!load_image(img, streamed, "", qs)) {
-                    panic("dasLLAMA: '{img}' was just streamed out and will not map back — see the decline above")
+                to_log(LOG_INFO, "dasLLAMA: prepared image streamed in {get_time_usec(ts_s) / 1000} ms — {s_img}\n")
+                if (!load_image(s_img, streamed, s_tag, s_quant)) {
+                    panic("dasLLAMA: '{s_img}' was just streamed out and will not map back — see the decline above")
                 }
                 dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
             }
