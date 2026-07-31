@@ -532,7 +532,7 @@ def skip_sphinx_gates(reason : string; var results : array<GateResult>&) {
 }
 
 def docs_skip_all(reason : string; var results : array<GateResult>&) {
-    skip_gates(["docs/das2rst", "docs/stubs", "docs/uncategorized", "docs/untracked", "docs/sphinx-latex", "docs/sphinx-html", "docs/pdflatex"], reason, results)
+    skip_gates(["docs/das2rst", "docs/imgui2rst", "docs/stubs", "docs/uncategorized", "docs/untracked", "docs/sphinx-latex", "docs/sphinx-html", "docs/pdflatex"], reason, results)
 }
 
 def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:STYLE037
@@ -551,6 +551,21 @@ def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:
             ? "documentation compile entered llvm_tune — keep -documentation/is_building_documentation wired"
             : "handmade-doc validation panic — fix and re-run; CI stops at the FIRST panic, more may follow")),
         output = r1.out))
+
+    // gate 1b: imgui2rst — dasImgui's stdlib pages (doc.yml runs it right after
+    // das2rst; without them sphinx -W fails on the generated imgui toctree refs)
+    t0 = ref_time_ticks()
+    let r1b = run_argv([ctx.daslang, "modules/dasImgui/utils/imgui2rst.das"])
+    let imgui_pages_ok = r1b.rc == 0
+    if (!imgui_pages_ok && find(r1b.out, "missing prerequisite") >= 0) {
+        results |> emplace(GateResult(name = "docs/imgui2rst", status = GateStatus.Skip, seconds = seconds_since(t0),
+            detail = "daslang lacks dasImgui — rebuild with -DDAS_IMGUI_DISABLED=OFF", output = r1b.out))
+    } else {
+        results |> emplace(GateResult(name = "docs/imgui2rst", status = imgui_pages_ok ? GateStatus.Pass : GateStatus.Fail,
+            seconds = seconds_since(t0),
+            detail = imgui_pages_ok ? "" : "imgui2rst failed — the generated imgui stdlib pages are stale/missing",
+            output = r1b.out))
+    }
 
     // gate 2: no `// stub` in handmade docs
     t0 = ref_time_ticks()
@@ -602,6 +617,10 @@ def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:
         skip_sphinx_gates("sphinx-build not found (PATH, ~/Library/Python/*/bin, ~/.local/bin) — pip install -r doc/requirements.txt", results)
         return
     }
+    if (!imgui_pages_ok) {
+        skip_sphinx_gates("generated imgui pages unavailable (see docs/imgui2rst) — sphinx -W would red on their toctree refs", results)
+        return
+    }
     rmdir_rec("doc/sphinx-build")
     if (stat("doc/sphinx-build").is_valid) {
         // running sphinx against a cache we failed to delete would be an
@@ -609,10 +628,35 @@ def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:
         skip_sphinx_gates("cannot delete doc/sphinx-build (locked?) — remove it and re-run", results)
         return
     }
+
+    // doc.yml stages the docs-assets recordings before sphinx; the latex -W
+    // build reds on every missing video (html tolerates them). Stage once per
+    // tree — any staged .mp4 counts, so no per-run re-download; a stale set
+    // after a re-record still surfaces as an honest latex warning.
+    var staged_recordings = false
+    dir("doc/source/_static/tutorials") $(name) {
+        if (extension(name) == ".mp4") {
+            staged_recordings = true
+        }
+    }
+    if (!staged_recordings) {
+        let _ = mkdir("doc/source/_static/tutorials")
+        let rf = run_argv(["gh", "release", "download", "docs-assets", "--repo", "GaijinEntertainment/daScript",
+            "--pattern", "*.mp4", "--dir", "doc/source/_static/tutorials", "--clobber"], 600.0)
+        staged_recordings = rf.rc == 0
+    }
+
     t0 = ref_time_ticks()
-    let r5 = run_argv([sphinx, "-W", "--keep-going", "-b", "latex", "-d", "doc/sphinx-build", "doc/source", "build/latex"])
-    results |> emplace(GateResult(name = "docs/sphinx-latex", status = r5.rc == 0 ? GateStatus.Pass : GateStatus.Fail,
-        seconds = seconds_since(t0), detail = r5.rc == 0 ? "" : "latex builder warnings (warnings-as-errors)", output = r5.out))
+    var latex_ok = false
+    if (staged_recordings) {
+        let r5 = run_argv([sphinx, "-W", "--keep-going", "-b", "latex", "-d", "doc/sphinx-build", "doc/source", "build/latex"])
+        latex_ok = r5.rc == 0
+        results |> emplace(GateResult(name = "docs/sphinx-latex", status = latex_ok ? GateStatus.Pass : GateStatus.Fail,
+            seconds = seconds_since(t0), detail = latex_ok ? "" : "latex builder warnings (warnings-as-errors)", output = r5.out))
+    } else {
+        results |> emplace(GateResult(name = "docs/sphinx-latex", status = GateStatus.Skip,
+            detail = "tutorial recordings not staged and gh download failed — gh auth login, then utils/docs_assets/fetch"))
+    }
     t0 = ref_time_ticks()
     let r6 = run_argv([sphinx, "-W", "--keep-going", "-b", "html", "-d", "doc/sphinx-build", "doc/source", "build/site"])
     results |> emplace(GateResult(name = "docs/sphinx-html", status = r6.rc == 0 ? GateStatus.Pass : GateStatus.Fail,
@@ -622,9 +666,9 @@ def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:
     // build/latex so the sphinx .sty files resolve). CI marks these steps
     // continue-on-error, so an undeclared unicode char ships broken release PDFs
     // silently — locally it is a FAIL with a one-line remedy.
-    if (r5.rc != 0) {
+    if (!latex_ok) {
         results |> emplace(GateResult(name = "docs/pdflatex", status = GateStatus.Skip,
-            detail = "sphinx-latex failed — no .tex sources to compile"))
+            detail = "sphinx-latex did not produce .tex sources — nothing to compile"))
         return
     }
     let latexmk = find_latexmk()
@@ -908,7 +952,7 @@ def gate_table() : array<GateInfo> {
         GateInfo(name = "cpp-syntax", full_only = false, doc = "clang frontend pass on changed C++; header change → full src+tests-cpp sweep"),
         GateInfo(name = "dasgen", full_only = true, doc = "gen_bind.das freshness vs include/daScript/builtin/"),
         GateInfo(name = "ci-das", full_only = true, doc = "compile-only sweep of CI-only das surface (ci_only_das.txt)"),
-        GateInfo(name = "docs", full_only = true, doc = "the seven doc.yml gates (das2rst, stubs, uncategorized, untracked, sphinx ×2, pdflatex)"),
+        GateInfo(name = "docs", full_only = true, doc = "the eight doc.yml gates (das2rst, imgui2rst, stubs, uncategorized, untracked, sphinx ×2, pdflatex)"),
         GateInfo(name = "tests-cpp", full_only = true, doc = "ctest -L small"),
         GateInfo(name = "tests-interp", full_only = true, doc = "full interpreter suite"),
         GateInfo(name = "tests-jit", full_only = true, doc = "full JIT suite (skips when dasLLVM absent)"),
