@@ -121,6 +121,9 @@ struct public TextEditState {
     syntax_idle : float = 0.0f
     //! Buffer revision the last FULL parse styled (-1 = lexical only).
     syntax_revision : int = -1
+    //! Ghost completion drawn after the caret; Tab accepts it. Cleared by
+    //! every edit/move — the completion sync re-offers next frame.
+    ghost_text : string
     // widget layout cache + per-draw stamps for live inspection
     layout_revision : int = -1
     max_line_bytes : int = 0
@@ -887,11 +890,13 @@ def private touch_edit(var ed : TextEditState) {
     ed.follow_revision++
     ed.blink_time = 0.0f
     ed.syntax_idle = 0.0f
+    ed.ghost_text = ""
 }
 
 def private touch_move(var ed : TextEditState) {
     ed.follow_revision++
     ed.blink_time = 0.0f
+    ed.ghost_text = ""
 }
 
 def public text_edit_insert(var ed : TextEditState; text : string) {
@@ -1532,10 +1537,22 @@ def public text_edit_outdent_lines(var ed : TextEditState) {
     reindent_block(ed, true)
 }
 
+def public text_edit_set_ghost(var ed : TextEditState; text : string) {
+    //! Offer a ghost completion at the caret (single line; "" clears). The
+    //! completion sync owns this; Tab accepts, any edit or move clears.
+    ed.ghost_text = text
+}
+
 def public text_edit_tab(var ed : TextEditState) {
-    //! Tab per the spec's fork 2: multi-line or full-line selection block
-    //! indents; a partial-line selection is replaced; else insert a tab.
+    //! Tab accepts a visible ghost completion first (the VS Code rule); else
+    //! per spec fork 2: multi-line or full-line selection block indents; a
+    //! partial-line selection is replaced; else insert a tab.
     ensure_line(ed)
+    if (!empty(ed.ghost_text)) {
+        let accepted = ed.ghost_text
+        text_edit_insert(ed, accepted)
+        return
+    }
     if (text_edit_has_selection(ed)) {
         let sel = text_edit_selection(ed)
         if (sel.end_line > sel.start_line
@@ -2142,6 +2159,10 @@ def private draw_edit_content(var ed : TextEditState; m : EditMetrics;
             draw_edit_line(ed, row, line, m, style, font, dl, row_origin)
         }
     }
+    if (ed.focused && !empty(ed.ghost_text) && !has_selection
+            && ed.cursor_line >= first_visible && ed.cursor_line <= last_visible) {
+        draw_edit_ghost(ed, m, style, font, dl)
+    }
     if (ed.focused && ed.cursor_line >= first_visible && ed.cursor_line <= last_visible
             && fmod(ed.blink_time, 1.06f) < 0.53f) {
         let caret_x = (m.origin.x + m.gutter_space
@@ -2205,6 +2226,20 @@ def private draw_edit_line(ed : TextEditState const; row : int; line : string;
             style.text_color, line, covered, length(line),
             m.cell_width, style.tab_cells)
     }
+}
+
+def private draw_edit_ghost(ed : TextEditState const; m : EditMetrics;
+                            style : TextSourceViewStyle const;
+                            var font : ImFont?; var dl : ImDrawList?) {
+    let ghost_x = (m.origin.x + m.gutter_space
+        + text_source_range_width(ed.lines[ed.cursor_line], 0, ed.cursor_column,
+            font, m.font_size, m.cell_width, style.tab_cells))
+    var ghost_color = style.text_color
+    ghost_color.w *= 0.45f
+    let _ = text_source_draw_range(dl, font, m.font_size,
+        float2(ghost_x, m.origin.y + float(ed.cursor_line) * m.line_height),
+        ghost_color, ed.ghost_text, 0, length(ed.ghost_text),
+        m.cell_width, style.tab_cells)
 }
 
 def private draw_bracket_highlight(ed : TextEditState const; m : EditMetrics;
