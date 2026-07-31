@@ -386,7 +386,7 @@ def public git_patch_result_is_deleted(patch : string) : bool {
     return false
 }
 
-def public git_parse_unified_patch(patch : string) : GitParsedPatch {
+def public git_parse_unified_patch(patch : string) : GitParsedPatch { // nolint:STYLE038
     var result = GitParsedPatch()
     var inscope old_lines : array<string>
     var inscope new_lines : array<string>

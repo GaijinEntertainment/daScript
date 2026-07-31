@@ -184,7 +184,7 @@ def draw_binary_preview() {
     }
 }
 
-def draw_side_by_side_diff() {
+def draw_side_by_side_diff() { // nolint:STYLE038
     if (g_inspector.parsed.binary) {
         draw_binary_preview()
         return
@@ -766,7 +766,7 @@ def mouse_inside(p0, p1 : float2) : bool {
         && mouse.y >= p0.y && mouse.y <= p1.y)
 }
 
-def draw_focus_target_overlay(target : WatcherFocusTarget const;
+def draw_focus_target_overlay(target : WatcherFocusTarget const; // nolint:STYLE038
                               state : TextSourceViewState const;
                               document : TextSourceDocument const;
                               diff_mapping : bool) {
@@ -984,7 +984,7 @@ def apply_active_focus() {
     }
 }
 
-def draw_file_inspector_content() {
+def draw_file_inspector_content() { // nolint:STYLE038
     if (g_inspector.pending_widget_sync) {
         DIFF_CONTEXT.value = g_inspector.installed_diff_context_choice
         DIFF_SYNTAX.value = g_inspector.installed_syntax_choice

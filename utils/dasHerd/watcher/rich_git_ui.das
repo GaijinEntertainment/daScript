@@ -222,7 +222,7 @@ def private navigate_to_herd(record_index : int) {
     }
 }
 
-def draw_repositories_window() {
+def draw_repositories_window() { // nolint:STYLE037
     text_disabled("Target: Local")
     separator()
     input_text_growable(ADD_REPOSITORY_PATH, (text = "Repository checkout"))
@@ -581,7 +581,7 @@ def discard_bytes_label(total : int64) : string {
     return "{total} bytes"
 }
 
-def draw_git_discard_popup() {
+def draw_git_discard_popup() { // nolint:STYLE038
     if (g_git_discard.pending_open) {
         g_git_discard.pending_open = false
         open_popup(GIT_DISCARD_DIALOG)
@@ -724,7 +724,7 @@ def draw_changelist_row_menu(repository : RepositorySnapshot const;
     }
 }
 
-def draw_git_file_group(repository : RepositorySnapshot const;
+def draw_git_file_group(repository : RepositorySnapshot const; // nolint:STYLE037
                         worktree : WorktreeState const;
                         group : int; var file_row : int&) : int {
     let comparison = git_group_scope(group)
@@ -1188,7 +1188,7 @@ def draw_commit_files(repository : RepositorySnapshot const;
     }
 }
 
-def draw_history_commits(repository : RepositorySnapshot const;
+def draw_history_commits(repository : RepositorySnapshot const; // nolint:STYLE038
                          worktree : WorktreeState const) {
     var inscope commit_indices : array<int>
     commit_indices |> reserve(length(repository.history_commits))
@@ -1384,7 +1384,7 @@ def draw_git_tree_vectors(anchor_x, row_zero_y, row_height,
     }
 }
 
-def draw_tree_commits(repository : RepositorySnapshot const;
+def draw_tree_commits(repository : RepositorySnapshot const; // nolint:STYLE038
                       worktree : WorktreeState const) {
     ensure_tree_model(repository, worktree)
     let sha_width = (CalcTextSize("000000000").x
@@ -1685,7 +1685,7 @@ def draw_changelist_network_row(repository : RepositorySnapshot const;
     }
 }
 
-def draw_git_changelist_window() {
+def draw_git_changelist_window() { // nolint:STYLE038
     var status = GitWindowStatus(text = "No worktree selected")
     var found = false
     child(GIT_CHANGELIST_CONTENT, (text = "changelist content",

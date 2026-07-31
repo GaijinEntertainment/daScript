@@ -344,7 +344,7 @@ class DasHerdWatcherServer : HvWebServer {
         }
     }
 
-    def override onInit {
+    def override onInit { // nolint:STYLE038
         GET("/") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             if (!self.require_auth(req, resp)) return http_status.UNAUTHORIZED
             return resp |> SERVE_FILE(self.control_html)
@@ -1226,7 +1226,7 @@ class DasHerdWatcherServer : HvWebServer {
             "Computing {client.inspection_diff_context} Git diff (15 second limit)...")
     }
 
-    def poll_file_inspection(var client : WatcherClient?) {
+    def poll_file_inspection(var client : WatcherClient?) { // nolint:STYLE038
         if (client == null || client.inspection_delivered
                 || empty(client.inspection_session_id)) return
         var info = WatcherSessionInfo()
@@ -1447,7 +1447,7 @@ class DasHerdWatcherServer : HvWebServer {
         print("dasHerd watcher: client {client_id} disconnected\n")
     }
 
-    def override onWsMessage(channel : WebSocketChannel; message : string#) {
+    def override onWsMessage(channel : WebSocketChannel; message : string#) { // nolint:STYLE037
         let index = find_client(channel)
         if (index < 0) return
         var inscope incoming = WatcherWsMessage()

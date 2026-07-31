@@ -33,7 +33,7 @@ def private wait_for_pty(session_id, state : string; timeout_ms : int64) : bool 
 }
 
 [test]
-def test_herd_registry(t : T?) {
+def test_herd_registry(t : T?) { // nolint:STYLE038
     t |> run("registry persists durable sessions across watcher restarts") <| @(t : T?) {
         let temp = create_temp_directory_result("dasherd_herd_registry_")
         if (!(temp is value)) {
@@ -232,7 +232,7 @@ def test_herd_registry(t : T?) {
 }
 
 [test]
-def test_herd_lifecycle(t : T?) {
+def test_herd_lifecycle(t : T?) { // nolint:STYLE038
     if (get_platform_name() != "windows") return
     t |> run("durable sessions launch, exit, relaunch, and close over real PTYs") <| @(t : T?) {
         let temp = create_temp_directory_result("dasherd_herd_lifecycle_")

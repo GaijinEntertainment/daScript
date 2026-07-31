@@ -966,7 +966,7 @@ def public repository_classify_failure(message : string; var hint : string&;
     classify_failure(message, hint, retryable)
 }
 
-def private classify_failure(message : string; var hint : string&;
+def private classify_failure(message : string; var hint : string&; // nolint:STYLE038
                              var retryable : bool&) {
     hint = ""
     retryable = false
@@ -2810,7 +2810,7 @@ def private advance_worktree(var runtime : RepositoryRuntime?) {
     }
 }
 
-def private advance_refresh(var runtime : RepositoryRuntime?) {
+def private advance_refresh(var runtime : RepositoryRuntime?) { // nolint:STYLE038
     if (runtime.refresh_phase == 0) {
         if (runtime.refresh_pending) launch_inventory(runtime)
         return

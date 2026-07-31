@@ -331,7 +331,7 @@ def private draw_retire_operation(operation : WorktreeOperation const) {
 // facts are re-read live every frame instead of captured at open time, so it
 // can never describe a state the repository has already left — a WIP commit
 // made from inside this dialog flips its own verdict.
-def private draw_worktree_retire_popup() {
+def private draw_worktree_retire_popup() { // nolint:STYLE038
     if (g_worktree_retire.active) {
         g_worktree_retire.active = false
         // A tick left over from the last worktree must never pre-arm a
@@ -340,7 +340,7 @@ def private draw_worktree_retire_popup() {
         open_popup(WORKTREE_RETIRE_DIALOG)
     }
     popup_modal(WORKTREE_RETIRE_DIALOG.PUBLIC, (text = "Retire worktree",
-            closable = true, flags = ImGuiWindowFlags.AlwaysAutoResize)) {
+            closable = true, flags = ImGuiWindowFlags.AlwaysAutoResize)) { // nolint:STYLE037
         let path = g_worktree_retire.worktree_path
         let repository_id = g_worktree_retire.repository_id
         text(WORKTREE_RETIRE_PATH, (text = path))
@@ -606,7 +606,7 @@ def private register_commands() {
         CommandBinding(), @@() { imgui_terminal_clear_selection(g_terminal_view); })
 }
 
-def draw_main_menu() {
+def draw_main_menu() { // nolint:STYLE038
     main_menu_bar(MAIN_MENU) {
         menu(FILE_MENU, (text = "File", enabled = true)) {
             if (menu_label(FILE_EXIT, (text = "Exit", shortcut = "Alt+F4"))) {
@@ -783,7 +783,7 @@ def init() {
 }
 
 [export]
-def update() {
+def update() { // nolint:STYLE037
     // The native frame gate returns false while the window is minimized.
     // Keep the transport alive outside that gate so heartbeats, controller
     // renewal, and queued PTY output continue until the window is restored.

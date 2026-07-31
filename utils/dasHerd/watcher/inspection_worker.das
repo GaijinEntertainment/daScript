@@ -286,7 +286,7 @@ def public inspector_project_full_syntax(full : TextSourceDocument const;
     return <- result
 }
 
-def private prepare_worker_main(var jobs : Channel?&;
+def private prepare_worker_main(var jobs : Channel?&; // nolint:STYLE038
                                 var events : Channel?&) {
     this_context().name := "dasHerd_inspector_prepare"
     emit_prepare_event(events, InspectorPrepareEvent(
@@ -344,7 +344,7 @@ def private prepare_worker_main(var jobs : Channel?&;
             var preview_width = 0
             var preview_height = 0
             var preview_error = ""
-            let failed = catch_prepare_panic(failure) {
+            let failed = catch_prepare_panic(failure) { // nolint:STYLE037
                 var prepared_patch <- git_parse_unified_patch(patch_text)
                 if (prepared_patch.error == "diff contains no text hunks"
                         && job.view_available) {

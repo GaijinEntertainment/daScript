@@ -12,7 +12,7 @@ require daslib/fio
 require imgui/imgui_text_tree_sitter
 
 [test]
-def test_inspection_prepare_worker(t : T?) {
+def test_inspection_prepare_worker(t : T?) { // nolint:STYLE038
     t |> run("installed syntax providers highlight representative Diff sources") <| @(tt : T?) {
         var cpp <- tree_sitter_source_document(
             "#include <string>\n\nstatic std::string greeting() \{\n    const auto value = std::string\{\"working tree\"\};\n    return value;\n\}\n",

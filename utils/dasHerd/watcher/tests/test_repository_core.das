@@ -147,7 +147,7 @@ def test_repository_delete_safety_verdict(t : T?) {
 }
 
 [test]
-def test_repository_untracked_diff_contract(t : T?) {
+def test_repository_untracked_diff_contract(t : T?) { // nolint:STYLE038
     t |> run("Untracked diffs accept git --no-index exit 1") <| @(t : T?) {
         let file = GitFileState(code = "??", path = "new file.das")
         var argv : array<string>
@@ -261,7 +261,7 @@ def test_repository_untracked_diff_contract(t : T?) {
 }
 
 [test]
-def test_repository_review_parsing(t : T?) {
+def test_repository_review_parsing(t : T?) { // nolint:STYLE038
     t |> run("worktree PR commits retain descriptions and identity") <| @(t : T?) {
         var commits : array<GitCommitState>
         repository_parse_review_commits(
@@ -442,7 +442,7 @@ def test_repository_review_parsing(t : T?) {
 }
 
 [test]
-def test_repository_operation_step_lists(t : T?) {
+def test_repository_operation_step_lists(t : T?) { // nolint:STYLE038
     t |> run("retire builds the precheck/remove list with its recovery graph") <| @(t : T?) {
         var steps : array<WorktreeOperationStep>
         var recoveries : table<string; array<WorktreeOperationStep>>

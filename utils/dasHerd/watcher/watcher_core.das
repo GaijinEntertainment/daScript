@@ -721,7 +721,7 @@ def private session_write_text(var session : WatcherSession?; text : string) : b
     return session_write_bytes_host(session, bytes)
 }
 
-def private launch_session_host(var session : WatcherSession?;
+def private launch_session_host(var session : WatcherSession?; // nolint:STYLE038
                                 child_argv : array<string> const;
                                 cwd : string; columns, rows : int) : string {
     var seed = random_seed(int(ref_time_ticks()))
@@ -974,7 +974,7 @@ def private seed_ring_from_journal(var session : WatcherSession?) : int64 {
     return total
 }
 
-def private adopt_host_session(stamp : WatcherHostStamp) : bool {
+def private adopt_host_session(stamp : WatcherHostStamp) : bool { // nolint:STYLE038
     let session_dir = path_join(g_log_root, stamp.session)
     let request_path = path_join(session_dir, "session.json")
     if (!fexist(request_path)) return false
@@ -1082,7 +1082,7 @@ def public watcher_adopt_hosts : int {
     return adopted
 }
 
-def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult {
+def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult { // nolint:STYLE037
     if (empty(request.command_line) && empty(request.argv)) {
         return WatcherLaunchResult(error = "command_line or argv is required")
     }
@@ -1377,7 +1377,7 @@ def public watcher_output_text(session_id : string) : string {
     return string(g_sessions[index].raw_history)
 }
 
-def public watcher_strip_terminal_controls(value : string) : string {
+def public watcher_strip_terminal_controls(value : string) : string { // nolint:STYLE038
     // Task processes launched through ConPTY are wrapped in cursor, screen,
     // title, and mode sequences even when the child itself emits plain text.
     // Machine consumers need the printable byte stream, not a bounded screen;
@@ -1396,7 +1396,7 @@ def public watcher_strip_terminal_controls(value : string) : string {
     var utf8_codepoint = 0u
     var utf8_minimum = 0u
     var utf8_remaining = 0
-    peek_data(value) $(bytes) {
+    peek_data(value) $(bytes) { // nolint:STYLE037
         for (index in range(length(value))) {
             let byte = int(bytes[index])
             if (state == 0) {

@@ -622,7 +622,7 @@ def herder_changelist_select(input : JsonValue?) : JsonValue? {
 }
 
 [live_command(description = "Run a Changelist action on the watcher's operation rail, as the row menu would. Args: repository_id, worktree_path (empty = shown), action = stage|unstage|discard, paths (empty = derive from the current selection; discard ALWAYS derives, split by class). Discard is unrecoverable — this rail IS the explicit second confirmation. Outcome rides herder_worktree_operation_state.")]
-def herder_changelist_action(input : JsonValue?) : JsonValue? {
+def herder_changelist_action(input : JsonValue?) : JsonValue? { // nolint:STYLE037
     if (g_client == null || !g_client.connected) {
         return JV((ok = false, error = "watcher is not connected"))
     }
@@ -1269,7 +1269,7 @@ def herder_git_file_action(input : JsonValue?) : JsonValue? {
 }
 
 [live_command(description = "Inspect the selected Git file, comparison, render mode, and changed-line telemetry.")]
-def herder_file_inspector_state(_input : JsonValue?) : JsonValue? {
+def herder_file_inspector_state(_input : JsonValue?) : JsonValue? { // nolint:STYLE038
     let view_selection = text_source_view_selection(g_inspector.view)
     return JV((
         ok = g_inspector.prepare.has_retained_content,

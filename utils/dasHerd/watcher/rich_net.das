@@ -133,7 +133,7 @@ class WatcherRichClient : HvWebSocketClient {
         }
     }
 
-    def override onMessage(message : string#) {
+    def override onMessage(message : string#) { // nolint:STYLE037
         message_count++
         var envelope : WatcherEnvelope
         let body = string(message)

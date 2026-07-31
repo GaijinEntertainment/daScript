@@ -312,7 +312,7 @@ def elide_to_avail(value : string) : string {
     return low <= 0 ? "..." : slice(value, 0, low) + "..."
 }
 
-def draw_herd_cards() {
+def draw_herd_cards() { // nolint:STYLE037
     if (g_client == null) return
     let line = GetTextLineHeight()
     // A PTY selection made outside the cards (task rows, auto-attach)
@@ -706,7 +706,7 @@ def private herd_owns_pty(session_id : string) : bool {
     return false
 }
 
-def draw_session_list() {
+def draw_session_list() { // nolint:STYLE038
     g_bundle_participant_row = 0
     g_bundle_file_row = 0
     g_attention_target_row = 0

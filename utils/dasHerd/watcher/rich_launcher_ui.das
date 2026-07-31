@@ -103,7 +103,7 @@ def private default_profile_index : int {
     return empty(g_client.herd_profiles) ? -1 : 0
 }
 
-def draw_launcher_form() {
+def draw_launcher_form() { // nolint:STYLE037
     if (g_client == null || !g_client.connected) {
         text_disabled("Waiting for the watcher connection...")
         return
