@@ -55,6 +55,12 @@ A kernel no suite reaches is unreviewable.
 **A test suite loads models with `load_model_`, never the image rail.** Image-rail coverage
 belongs to the image suites alone. See `ARCHITECTURE.md` §2.1.
 
+**No new benchmark harness is written.** Performance is measured by
+`modules/dasLLAMA/benchmarks/lcpp_bench.das` — one cell directly, or a whole board through
+`performance/gen_bench_records.das`. A new timing harness, a one-off measurement script, or a
+revived rig is a defect: a number from a second rig cannot be compared against the stored
+records, and those records are the only baseline. See `ARCHITECTURE.md` §2.5.
+
 ---
 
 ## Placement — one file, one rule

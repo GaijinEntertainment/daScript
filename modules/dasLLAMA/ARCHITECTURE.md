@@ -272,7 +272,32 @@ fold** (unpacking N fields adds N lines; take the growth and ledger the real sea
 suppress a function you have just argued is reducible** — if it is on the follow-up ledger wanting a
 dedup, it keeps its warning until the dedup lands.
 
-### 2.5 Capability questions and readiness questions are different questions
+### 2.5 There is ONE benchmark rig, and the records are the baseline
+
+`benchmarks/lcpp_bench.das` is the only thing that measures performance. It is a *mirror* of
+llama.cpp's `llama-bench` — the same test shapes, rep counts and timing boundaries, applied to
+our engine — so `pp` is one batched prefill of `-p` tokens from an empty cache per rep and `tg`
+is `-n` single-token forwards with no logit read, each row one untimed warmup plus `-r` timed
+reps. The real `llama-bench` runs only when `--ref <path>` is passed; that is how the llama.cpp
+columns were produced, and they are pinned, not re-measured.
+
+`performance/gen_bench_records.das` sweeps a board by spawning that rig once per cell, and
+writes `performance/records/<box>.json`. `gen_site_records.das` merges those into the file the
+site renders. A stored row carries its own command, sha, version, tune stamp and exec format, so
+a number is self-describing rather than a bare figure in a table.
+
+**Regression checking inverts the same rig:** `gen_bench_records.das --oracle --legs metal`
+takes the store's das rows as the work list, re-measures each once, and gates one-sided against
+its stored mean (fail past 5%, warn past 3%, gains flagged as suspicious). llama.cpp never runs,
+the store is never written, and the child runs `--frozen` so a missing image panics instead of
+minting. A second harness would produce numbers that cannot be compared to any of this, which is
+why writing one is a review defect.
+
+**The tune stamp gates the comparison.** A manifest older than the binary fails every cell, and
+an untuned invocation re-execs into a full retune rather than measuring — so re-mint the box
+manifest and check its winners against the stored rows' `tune` stamps before trusting a delta.
+
+### 2.6 Capability questions and readiness questions are different questions
 
 A predicate that mixes them cannot be reused. `prefill_decline` answers "can metal serve this
 model" (capability) *and* "is this window staged" (readiness — are the rope tables built). A caller
