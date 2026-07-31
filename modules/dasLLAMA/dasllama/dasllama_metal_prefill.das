@@ -472,6 +472,28 @@ class MetalMoeRouterB {
     }
 }
 
+// The MoE gathered mul_mm family (mx4/q8 plus their tensor twins, and k4/k5/k6/q51) binds its
+// uniforms as ONE kargs value at slot 5 — each form ignores the fields it does not read: a tensor
+// twin serves contiguous sites only, and only the mx4 pair carries a per-expert bias.
+struct MoeMmArgs {
+    kdim : uint
+    ndim : uint
+    eplane : uint       // per-expert plane stride, in the format's own block unit (32 or 256 elems)
+    nk : uint
+    gather : uint       // 1 = bkt-indirect X rows (gate/up), 0 = contiguous bucket rows (down)
+    hasb : uint
+}
+
+// the plane IS kdim*ndim elements, so its block stride derives from the shape — no separate input
+def private moe_mm_ka(fmt : KqFmt; kdim, ndim, nk : int64; gather : bool) : MoeMmArgs => (
+    MoeMmArgs(kdim = uint(kdim), ndim = uint(ndim),
+        eplane = uint(kdim * ndim / (kq_sb(fmt) ? 256l : 32l)),
+        nk = uint(nk), gather = gather ? 1u : 0u))
+
+def private moe_mm_mx4_ka(kdim, ndim, nk : int64; gather, hasb : bool) : MoeMmArgs => (
+    MoeMmArgs(kdim = uint(kdim), ndim = uint(ndim), eplane = uint(kdim * ndim / 32l),
+        nk = uint(nk), gather = gather ? 1u : 0u, hasb = hasb ? 1u : 0u))
+
 // Metal-4 staged-tile twin of MetalMoeMulMmMx4 — CONTIGUOUS (down-site) shape: flat f16 tiles
 // per K-chunk (per-element LUT dequant), bias folded as one extra rank-1 chunk (f16-staged —
 // parity-tolerance vs the base's f32 seed).
@@ -480,14 +502,11 @@ class MetalMoeMulMmMx4T {
     @ssbo @binding = 1 mxe : array<uint8>   // e8m0 scale plane
     @ssbo @binding = 2 xf : array<float>
     @ssbo @binding = 3 y : array<float>
-    @uniform @binding = 4 kdim : uint
-    @uniform @binding = 5 ndim : uint
+    @uniform @binding = 5 ka : MoeMmArgs
     @ssbo @binding = 6 cnt : array<uint>
     @ssbo @binding = 7 basep : array<uint>
-    @uniform @binding = 9 eblk : uint
     @ssbo @binding = 12 wb : array<float>   // [ne x ndim] per-expert bias rows
     @ssbo @binding = 13 vtab : array<float> // [16] signed doubled-e2m1 values
-    @uniform @binding = 14 hasb : uint
     @workgroup twa : float16[1024]          // X chunk: 32 tokens x 32 k, flat row-major
     @workgroup twb : float16[2048]          // W chunk: 64 wrows x 32 k, flat row-major
 
@@ -501,23 +520,23 @@ class MetalMoeMulMmMx4T {
         }
         let rbase = basep[e]
         let nBase = gl_WorkGroupID.y * 64u
-        let nkb = kdim / 32u
+        let nkb = ka.kdim / 32u
         let lid = gl_LocalInvocationID.x
         var acc : float[2048]
-        var cp = unsafe(addr(y[(rbase + mBase) * ndim + nBase]))
+        var cp = unsafe(addr(y[(rbase + mBase) * ka.ndim + nBase]))
         tmm2d_tg_begin(acc, 32u, 64u, 4u, 32u)
         var kb = 0u
         while (kb < nkb) {
             var i = lid
             while (i < 1024u) {
-                twa[i] = float16(xf[(rbase + mBase + i / 32u) * kdim + kb * 32u + i % 32u])
+                twa[i] = float16(xf[(rbase + mBase + i / 32u) * ka.kdim + kb * 32u + i % 32u])
                 i += gl_WorkGroupSize.x
             }
             i = lid
             while (i < 2048u) {
                 let j = i / 32u
                 let k = i % 32u
-                let blk = e * eblk + (nBase + j) * nkb + kb
+                let blk = e * ka.eplane + (nBase + j) * nkb + kb
                 let sc = uint(mxe[blk])
                 let d = uint_bits_to_float(sc < 2u ? (0x00200000u << sc) : ((sc - 1u) << 23u))
                 let byi = k % 16u
@@ -532,7 +551,7 @@ class MetalMoeMulMmMx4T {
             barrier()
             kb++
         }
-        if (hasb != 0u) {
+        if (ka.hasb != 0u) {
             // rank-1 bias chunk: A col 0 = 1, W col 0 = wb[e][col]
             var i = lid
             while (i < 1024u) {
@@ -541,14 +560,14 @@ class MetalMoeMulMmMx4T {
             }
             i = lid
             while (i < 2048u) {
-                twb[i] = float16(i % 32u == 0u ? wb[e * ndim + nBase + i / 32u] : 0.0)
+                twb[i] = float16(i % 32u == 0u ? wb[e * ka.ndim + nBase + i / 32u] : 0.0)
                 i += gl_WorkGroupSize.x
             }
             barrier()
             tmm2d_tg_step(acc, twa, twb, 32u, 64u, 32u)
             barrier()
         }
-        tmm2d_tg_store(acc, cp, 32u, 64u, ndim)
+        tmm2d_tg_store(acc, cp, 32u, 64u, ka.ndim)
     }
 }
 
@@ -560,17 +579,12 @@ class MetalMoeMulMmMx4 {
     @ssbo @binding = 1 @role = "weight" mxe : array<uint8>
     @ssbo @binding = 2 @role = "read" xf : array<float4>
     @ssbo @binding = 3 @role = "write" y : array<float>
-    @uniform @binding = 4 kdim : uint
-    @uniform @binding = 5 ndim : uint
+    @uniform @binding = 5 ka : MoeMmArgs
     @ssbo @binding = 6 @role = "read" cnt : array<uint>
     @ssbo @binding = 7 @role = "read" basep : array<uint>
     @ssbo @binding = 8 @role = "read" bkt : array<uint>
-    @uniform @binding = 9 eblk : uint       // 32-elem blocks per expert plane (ege / 32)
-    @uniform @binding = 10 nk : uint
-    @uniform @binding = 11 gather : uint
     @ssbo @binding = 12 @role = "weight" wb : array<float>   // [ne x ndim] per-expert bias rows (hasb models)
     @ssbo @binding = 13 @role = "weight" vtab : array<float> // [16] signed doubled-e2m1 values (host-built)
-    @uniform @binding = 14 hasb : uint
     @workgroup ta : float16[2048]
     @workgroup tb : float16[1024]
     @workgroup vt : float[32]
@@ -592,10 +606,10 @@ class MetalMoeMulMmMx4 {
         let sg = gl_SubgroupID
         let nBase = gl_WorkGroupID.y * 64u
         var mc : simdgroup_float8x8[8]
-        if (hasb != 0u) {
+        if (ka.hasb != 0u) {
             // bias as the accumulator seed: every row of tile i gets wb[e][col] (stride-0 load);
             // padded ghost rows are harmlessly biased — never read
-            let wb0 = e * ndim + nBase + (sg % 2u) * 32u
+            let wb0 = e * ka.ndim + nBase + (sg % 2u) * 32u
             for [unroll_full] (i in range(8)) {
                 simdgroup_load(mc[i], wb, wb0 + uint(i % 4) * 8u, 0u)
             }
@@ -603,8 +617,8 @@ class MetalMoeMulMmMx4 {
         var ma : simdgroup_half8x8[4]
         var mb : simdgroup_half8x8[2]
         var va : float16[16]
-        let kdim4 = kdim / 4u
-        let nkb = kdim / 32u
+        let kdim4 = ka.kdim / 4u
+        let nkb = ka.kdim / 32u
         let lr0 = lid / 2u
         let il0 = lid % 2u
         let syA = lr0 / 8u
@@ -615,10 +629,10 @@ class MetalMoeMulMmMx4 {
         let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
         let aB = (sg % 2u) * 256u
         let bB = (sg / 2u) * 128u
-        let eb = e * eblk + (nBase + lr0) * nkb
+        let eb = e * ka.eplane + (nBase + lr0) * nkb
         var srcrow = rbase + mBase + lr1
-        if (gather != 0u) {
-            srcrow = bkt[rbase + min(mBase + lr1, ce - 1u)] / nk
+        if (ka.gather != 0u) {
+            srcrow = bkt[rbase + min(mBase + lr1, ce - 1u)] / ka.nk
         }
         var xcur = unsafe(addr(xf[srcrow * kdim4 + iy / 4u]))
         var kb = 0u
@@ -664,7 +678,7 @@ class MetalMoeMulMmMx4 {
         let row0 = rbase + mBase + (sg / 2u) * 16u
         let col0 = nBase + (sg % 2u) * 32u
         for [unroll_full] (i in range(8)) {
-            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ndim + col0 + uint(i % 4) * 8u, ndim)
+            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ka.ndim + col0 + uint(i % 4) * 8u, ka.ndim)
         }
     }
 }
@@ -832,11 +846,9 @@ class MetalMoeMulMmQ8T {
     @ssbo @binding = 1 wqb : array<int8>    // the same blob buffer, byte view
     @ssbo @binding = 2 xf : array<float>
     @ssbo @binding = 3 y : array<float>
-    @uniform @binding = 4 kdim : uint
-    @uniform @binding = 5 ndim : uint
+    @uniform @binding = 5 ka : MoeMmArgs
     @ssbo @binding = 6 cnt : array<uint>
     @ssbo @binding = 7 basep : array<uint>
-    @uniform @binding = 9 eblk : uint
 
     [metal_kernel(name="metal_moe_mulmm_q8_t_msl")]
     def metal_moe_mulmm_q8_t {
@@ -848,12 +860,12 @@ class MetalMoeMulMmQ8T {
         }
         let rbase = basep[e]
         let nBase = gl_WorkGroupID.y * 64u
-        let blk0 = e * eblk + nBase * (kdim / 32u)
+        let blk0 = e * ka.eplane + nBase * (ka.kdim / 32u)
         var sp = unsafe(addr(wsh[blk0 * 17u]))
         var wp = unsafe(addr(wqb[blk0 * 34u + 2u]))
-        var ap = unsafe(addr(xf[(rbase + mBase) * kdim]))
-        var cp = unsafe(addr(y[(rbase + mBase) * ndim + nBase]))
-        tmm2d_q8b_f32(32u, 64u, 4u, sp, wp, ap, kdim, cp, ndim, kdim, kdim / 32u)
+        var ap = unsafe(addr(xf[(rbase + mBase) * ka.kdim]))
+        var cp = unsafe(addr(y[(rbase + mBase) * ka.ndim + nBase]))
+        tmm2d_q8b_f32(32u, 64u, 4u, sp, wp, ap, ka.kdim, cp, ka.ndim, ka.kdim, ka.kdim / 32u)
     }
 }
 
@@ -865,14 +877,10 @@ class MetalMoeMulMmQ8 {
     @ssbo @binding = 1 @role = "weight" wqb : array<int8>    // the same blob buffer, byte view
     @ssbo @binding = 2 @role = "read" xf : array<float4>
     @ssbo @binding = 3 @role = "write" y : array<float>
-    @uniform @binding = 4 kdim : uint
-    @uniform @binding = 5 ndim : uint
+    @uniform @binding = 5 ka : MoeMmArgs
     @ssbo @binding = 6 @role = "read" cnt : array<uint>
     @ssbo @binding = 7 @role = "read" basep : array<uint>
     @ssbo @binding = 8 @role = "read" bkt : array<uint>
-    @uniform @binding = 9 eblk : uint       // 34B blocks per expert plane (ege / 32)
-    @uniform @binding = 10 nk : uint
-    @uniform @binding = 11 gather : uint    // 1 = bkt-indirect X (gate/up), 0 = contiguous (down)
     @workgroup ta : float16[2048]
     @workgroup tb : float16[1024]
 
@@ -892,8 +900,8 @@ class MetalMoeMulMmQ8 {
         var ma : simdgroup_half8x8[4]
         var mb : simdgroup_half8x8[2]
         var va : float16[16]
-        let kdim4 = kdim / 4u
-        let nkb = kdim / 32u
+        let kdim4 = ka.kdim / 4u
+        let nkb = ka.kdim / 32u
         let lr0 = lid / 2u
         let il0 = lid % 2u
         let syA = lr0 / 8u
@@ -904,10 +912,10 @@ class MetalMoeMulMmQ8 {
         let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
         let aB = (sg % 2u) * 256u
         let bB = (sg / 2u) * 128u
-        let blk0 = e * eblk + (nBase + lr0) * nkb
+        let blk0 = e * ka.eplane + (nBase + lr0) * nkb
         var srcrow = rbase + mBase + lr1
-        if (gather != 0u) {
-            srcrow = bkt[rbase + min(mBase + lr1, ce - 1u)] / nk
+        if (ka.gather != 0u) {
+            srcrow = bkt[rbase + min(mBase + lr1, ce - 1u)] / ka.nk
         }
         var scur = unsafe(addr(wsh[blk0 * 17u]))
         var qp = unsafe(addr(wqb[blk0 * 34u + 2u + il0 * 16u]))
@@ -950,7 +958,7 @@ class MetalMoeMulMmQ8 {
         let row0 = rbase + mBase + (sg / 2u) * 16u
         let col0 = nBase + (sg % 2u) * 32u
         for [unroll_full] (i in range(8)) {
-            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ndim + col0 + uint(i % 4) * 8u, ndim)
+            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ka.ndim + col0 + uint(i % 4) * 8u, ka.ndim)
         }
     }
 }
@@ -961,17 +969,14 @@ class MetalMoeMulMmQ8 {
 class MetalMoeMulMmBase {
     @ssbo @binding = 3 @role = "read" xf : array<float4>
     @ssbo @binding = 4 @role = "write" y : array<float>
-    @uniform @binding = 5 kdim : uint
-    @uniform @binding = 6 ndim : uint
+    @uniform @binding = 5 ka : MoeMmArgs
     @ssbo @binding = 7 @role = "read" cnt : array<uint>
     @ssbo @binding = 8 @role = "read" basep : array<uint>
     @ssbo @binding = 9 @role = "read" bkt : array<uint>
-    @uniform @binding = 11 nk : uint
-    @uniform @binding = 12 gather : uint
     @workgroup ta : float16[2048]
     @workgroup tb : float16[1024]
 
-    // a format owns bindings 0..2 (its weight views) and 10 (its per-expert plane stride)
+    // a format owns bindings 0..2 — its weight views; its plane stride rides ka.eplane
     def abstract wbase(e, nBase, lr0 : uint) : uint    // expert plane origin, in the format's block unit
     def abstract stage_a(wb, kb, il0, tA0 : uint) : void   // decode one k-block into the A tile
 
@@ -989,8 +994,8 @@ class MetalMoeMulMmBase {
         var mc : simdgroup_float8x8[8]
         var ma : simdgroup_half8x8[4]
         var mb : simdgroup_half8x8[2]
-        let kdim4 = kdim / 4u
-        let nkb = kdim / 32u
+        let kdim4 = ka.kdim / 4u
+        let nkb = ka.kdim / 32u
         let lr0 = lid / 2u
         let il0 = lid % 2u
         let syA = lr0 / 8u
@@ -1002,8 +1007,8 @@ class MetalMoeMulMmBase {
         let aB = (sg % 2u) * 256u
         let bB = (sg / 2u) * 128u
         var srcrow = rbase + mBase + lr1
-        if (gather != 0u) {
-            srcrow = bkt[rbase + min(mBase + lr1, ce - 1u)] / nk
+        if (ka.gather != 0u) {
+            srcrow = bkt[rbase + min(mBase + lr1, ce - 1u)] / ka.nk
         }
         var xcur = unsafe(addr(xf[srcrow * kdim4 + iy / 4u]))
         var kb = 0u
@@ -1036,7 +1041,7 @@ class MetalMoeMulMmBase {
         let row0 = rbase + mBase + (sg / 2u) * 16u
         let col0 = nBase + (sg % 2u) * 32u
         for [unroll_full] (i in range(8)) {
-            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ndim + col0 + uint(i % 4) * 8u, ndim)
+            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ka.ndim + col0 + uint(i % 4) * 8u, ka.ndim)
         }
     }
 }
@@ -1046,9 +1051,8 @@ class MetalMoeMulMmK4 : MetalMoeMulMmBase {
     @ssbo @binding = 0 @role = "weight" ksh : array<float16>
     @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>
     @ssbo @binding = 2 @role = "weight" kqu : array<uint>
-    @uniform @binding = 10 esb : uint       // superblocks per expert plane (ege / 256)
 
-    def override wbase(e, nBase, lr0 : uint) : uint => e * esb + (nBase + lr0) * (kdim / 256u)
+    def override wbase(e, nBase, lr0 : uint) : uint => e * ka.eplane + (nBase + lr0) * (ka.kdim / 256u)
 
     def override stage_a(wb, kb, il0, tA0 : uint) {
         var va : float16[16]
@@ -1095,9 +1099,8 @@ class MetalMoeMulMmK5 : MetalMoeMulMmBase {
     @ssbo @binding = 0 @role = "weight" ksh : array<float16>
     @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>
     @ssbo @binding = 2 @role = "weight" kqu : array<uint>
-    @uniform @binding = 10 esb : uint
 
-    def override wbase(e, nBase, lr0 : uint) : uint => e * esb + (nBase + lr0) * (kdim / 256u)
+    def override wbase(e, nBase, lr0 : uint) : uint => e * ka.eplane + (nBase + lr0) * (ka.kdim / 256u)
 
     def override stage_a(wb, kb, il0, tA0 : uint) {
         var va : float16[16]
@@ -1146,9 +1149,8 @@ class MetalMoeMulMmK5 : MetalMoeMulMmBase {
 class MetalMoeMulMmQ51 : MetalMoeMulMmBase {
     @ssbo @binding = 0 @role = "weight" wsh : array<float16> // scale plane (d at 2*blk, m at 2*blk+1)
     @ssbo @binding = 1 @role = "weight" wqu : array<uint>    // quant plane, uint view (block at 5*blk; qh at +4)
-    @uniform @binding = 10 eblk : uint       // 32-elem blocks per expert plane (ege / 32)
 
-    def override wbase(e, nBase, lr0 : uint) : uint => e * eblk + (nBase + lr0) * (kdim / 32u)
+    def override wbase(e, nBase, lr0 : uint) : uint => e * ka.eplane + (nBase + lr0) * (ka.kdim / 32u)
 
     def override stage_a(wb, kb, il0, tA0 : uint) {
         var va : float16[16]
@@ -1186,14 +1188,10 @@ class MetalMoeMulMmK6 {
     @ssbo @binding = 2 @role = "weight" kqu : array<uint>
     @ssbo @binding = 3 @role = "read" xf : array<float4>
     @ssbo @binding = 4 @role = "write" y : array<float>
-    @uniform @binding = 5 kdim : uint
-    @uniform @binding = 6 ndim : uint
+    @uniform @binding = 5 ka : MoeMmArgs
     @ssbo @binding = 7 @role = "read" cnt : array<uint>
     @ssbo @binding = 8 @role = "read" basep : array<uint>
     @ssbo @binding = 9 @role = "read" bkt : array<uint>
-    @uniform @binding = 10 esb : uint
-    @uniform @binding = 11 nk : uint
-    @uniform @binding = 12 gather : uint
     @workgroup ta : float16[2048]
     @workgroup tb : float16[1024]
 
@@ -1213,8 +1211,8 @@ class MetalMoeMulMmK6 {
         var ma : simdgroup_half8x8[4]
         var mb : simdgroup_half8x8[2]
         var va : float16[16]
-        let kdim4 = kdim / 4u
-        let nkb = kdim / 32u
+        let kdim4 = ka.kdim / 4u
+        let nkb = ka.kdim / 32u
         let lr0 = lid / 2u
         let il0 = lid % 2u
         let syA = lr0 / 8u
@@ -1225,11 +1223,11 @@ class MetalMoeMulMmK6 {
         let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
         let aB = (sg % 2u) * 256u
         let bB = (sg / 2u) * 128u
-        let nsb = kdim / 256u
-        let ewsb = e * esb + (nBase + lr0) * nsb
+        let nsb = ka.kdim / 256u
+        let ewsb = e * ka.eplane + (nBase + lr0) * nsb
         var srcrow = rbase + mBase + lr1
-        if (gather != 0u) {
-            srcrow = bkt[rbase + min(mBase + lr1, ce - 1u)] / nk
+        if (ka.gather != 0u) {
+            srcrow = bkt[rbase + min(mBase + lr1, ce - 1u)] / ka.nk
         }
         var xcur = unsafe(addr(xf[srcrow * kdim4 + iy / 4u]))
         var sv : uint4
@@ -1297,7 +1295,7 @@ class MetalMoeMulMmK6 {
         let row0 = rbase + mBase + (sg / 2u) * 16u
         let col0 = nBase + (sg % 2u) * 32u
         for [unroll_full] (i in range(8)) {
-            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ndim + col0 + uint(i % 4) * 8u, ndim)
+            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ka.ndim + col0 + uint(i % 4) * 8u, ka.ndim)
         }
     }
 }
@@ -2623,9 +2621,9 @@ def private pf_enc_moe_route(enc : MetalComputeEncoder?; t : Model; l : int64;
 }
 
 // one gathered expert mul_mm site: grid (ceil(npos/32) tiles, rows/64, ne experts); the twin
-// exits tiles past the expert's padded count. bgather = 1 (bkt-indirect X) / 0 (bucket rows).
+// exits tiles past the expert's padded count.
 def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; stack_off, rows, npos : int64;
-                          bx, by, bkdim, bndim, bcnt, bbase, bbkt, bes, bnk, bgather : MetalBuffer?;
+                          bx, by, bcnt, bbase, bbkt : MetalBuffer?; var ka : MoeMmArgs;
                           contiguous : bool = false) {
     let tiles = (npos + 31l) / 32l
     let ne = t.config.n_expert
@@ -2640,14 +2638,10 @@ def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; st
         kn_buffer(enc, bw.buf, bw.boff, 1)
         kn_buffer(enc, bx, 0ul, 2)
         kn_buffer(enc, by, 0ul, 3)
-        kn_buffer(enc, bkdim, 0ul, 4)
-        kn_buffer(enc, bndim, 0ul, 5)
+        kn_kargs(enc, ka, 5)
         kn_buffer(enc, bcnt, 0ul, 6)
         kn_buffer(enc, bbase, 0ul, 7)
         kn_buffer(enc, bbkt, 0ul, 8)
-        kn_buffer(enc, bes, 0ul, 9)
-        kn_buffer(enc, bnk, 0ul, 10)
-        kn_buffer(enc, bgather, 0ul, 11)
         hz_read(bx)
         hz_read(bcnt)
         hz_read(bbase)
@@ -2661,17 +2655,13 @@ def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; st
         kn_tgmem(enc, metal_moe_mulmm_q51_msl_tgmem, 0)
         kn_buffer(enc, qp.sbuf, qp.soff, 0)
         kn_buffer(enc, qp.qbuf, qp.qoff, 1)
-        // q51 binds at the MetalMoeMulMmBase family's numbers (3..12); 2 is the k-quant third view
+        // q51 binds at the MetalMoeMulMmBase family's numbers (3..9); 2 is the k-quant third view
         kn_buffer(enc, bx, 0ul, 3)
         kn_buffer(enc, by, 0ul, 4)
-        kn_buffer(enc, bkdim, 0ul, 5)
-        kn_buffer(enc, bndim, 0ul, 6)
+        kn_kargs(enc, ka, 5)
         kn_buffer(enc, bcnt, 0ul, 7)
         kn_buffer(enc, bbase, 0ul, 8)
         kn_buffer(enc, bbkt, 0ul, 9)
-        kn_buffer(enc, bes, 0ul, 10)
-        kn_buffer(enc, bnk, 0ul, 11)
-        kn_buffer(enc, bgather, 0ul, 12)
         hz_read(bx)
         hz_read(bcnt)
         hz_read(bbase)
@@ -2699,14 +2689,10 @@ def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; st
         kn_buffer(enc, bq.buf, bq.qoff, 2)
         kn_buffer(enc, bx, 0ul, 3)
         kn_buffer(enc, by, 0ul, 4)
-        kn_buffer(enc, bkdim, 0ul, 5)
-        kn_buffer(enc, bndim, 0ul, 6)
+        kn_kargs(enc, ka, 5)
         kn_buffer(enc, bcnt, 0ul, 7)
         kn_buffer(enc, bbase, 0ul, 8)
         kn_buffer(enc, bbkt, 0ul, 9)
-        kn_buffer(enc, bes, 0ul, 10)
-        kn_buffer(enc, bnk, 0ul, 11)
-        kn_buffer(enc, bgather, 0ul, 12)
         hz_read(bx)
         hz_read(bcnt)
         hz_read(bbase)
@@ -2720,7 +2706,7 @@ def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; st
 // gemma4 router-input norm rows (weightless rms * 1/sqrt(dim) * rscale, one tg per position)
 // the MXFP4 gathered expert mul_mm (gpt-oss)
 def private pf_enc_moe_mm_mx4(enc : MetalComputeEncoder?; t : Model; stack_off, rows, npos : int64;
-                              bx, by, bkdim, bndim, bcnt, bbase, bbkt, beblk, bnk, bgather, bwb, bhasb : MetalBuffer?;
+                              bx, by, bcnt, bbase, bbkt, bwb : MetalBuffer?; var ka : MoeMmArgs;
                               contiguous : bool = false) {
     let tiles = (npos + 31l) / 32l
     let ne = t.config.n_expert
@@ -2732,17 +2718,12 @@ def private pf_enc_moe_mm_mx4(enc : MetalComputeEncoder?; t : Model; stack_off, 
     kn_buffer(enc, mp.sbuf, mp.soff, 1)
     kn_buffer(enc, bx, 0ul, 2)
     kn_buffer(enc, by, 0ul, 3)
-    kn_buffer(enc, bkdim, 0ul, 4)
-    kn_buffer(enc, bndim, 0ul, 5)
+    kn_kargs(enc, ka, 5)
     kn_buffer(enc, bcnt, 0ul, 6)
     kn_buffer(enc, bbase, 0ul, 7)
     kn_buffer(enc, bbkt, 0ul, 8)
-    kn_buffer(enc, beblk, 0ul, 9)
-    kn_buffer(enc, bnk, 0ul, 10)
-    kn_buffer(enc, bgather, 0ul, 11)
     kn_buffer(enc, bwb, 0ul, 12)
     kn_buffer(enc, g_mx4_vtab, 0ul, 13)
-    kn_buffer(enc, bhasb, 0ul, 14)
     hz_read(bx)
     hz_read(bcnt)
     hz_read(bbase)
@@ -3205,10 +3186,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var u_moe_np = moe ? uniform_u32(uint(npos)) : null
     var u_moe_tot = moe ? uniform_u32(uint(mtot)) : null
     var u_moe_nfe = moe ? uniform_u32(uint(c.n_ff_exp)) : null
-    var u_moe_eblk = moe ? uniform_u32(uint(dim * c.n_ff_exp / 32l)) : null
-    var u_moe_esb = moe ? uniform_u32(uint(dim * c.n_ff_exp / 256l)) : null
     var u_moe_g0 = moe ? uniform_u32(0u) : null
-    var u_moe_g1 = moe ? uniform_u32(1u) : null
     var u_moe_ptot = moe ? uniform_u32(uint(mpad * c.n_ff_exp)) : null
     var u_moe_invd = g4moe ? uniform_f32(1.0 / sqrt(float(dim))) : null
     var u_moe_gmode = moe ? uniform_u32(c.moe_gate == MoeGate.softmax_weight ? 1u : (c.norm_topk_prob ? 0u : 2u)) : null
@@ -3709,18 +3687,19 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         if (t.experts_mx4) {
                             // per-expert bias folds into the mm accumulator seed (hasb); the
                             // moe_bias chase arm knocks the fold out for attribution
-                            var bhasb = g_pf_skip == "moe_bias" ? u_moe_g0 : u_moe_g1
+                            let hasb = g_pf_skip != "moe_bias"
                             var bwb1 = upload_region(unsafe(addr < void? >(t.fblob[t.web1_off + l * c.n_expert * c.n_ff_exp])), uint64(c.n_expert * c.n_ff_exp * 4l))
                             var bwb3 = upload_region(unsafe(addr < void? >(t.fblob[t.web3_off + l * c.n_expert * c.n_ff_exp])), uint64(c.n_expert * c.n_ff_exp * 4l))
+                            var kaup = moe_mm_mx4_ka(dim, c.n_ff_exp, c.n_expert_used, true, hasb)
                             pf_enc_moe_mm_mx4(enc, t, t.we1_offs[l], c.n_ff_exp, npos, g4moe ? bxb2 : bxb, bmg,
-                                u_dim, u_moe_nfe, bmcnt, bmbase, bmbkt, u_moe_eblk, u_moe_nk, u_moe_g1, bwb1, bhasb)
+                                bmcnt, bmbase, bmbkt, bwb1, kaup)
                             pf_enc_moe_mm_mx4(enc, t, t.we3_offs[l], c.n_ff_exp, npos, g4moe ? bxb2 : bxb, bmg2,
-                                u_dim, u_moe_nfe, bmcnt, bmbase, bmbkt, u_moe_eblk, u_moe_nk, u_moe_g1, bwb3, bhasb)
+                                bmcnt, bmbase, bmbkt, bwb3, kaup)
                         } else {
                             pf_enc_moe_mm(enc, t, fe1, t.we1_offs[l], c.n_ff_exp, npos, g4moe ? bxb2 : bxb, bmg,
-                                u_dim, u_moe_nfe, bmcnt, bmbase, bmbkt, fe1 == KqFmt.q8 || fe1 == KqFmt.q51 ? u_moe_eblk : u_moe_esb, u_moe_nk, u_moe_g1)
+                                bmcnt, bmbase, bmbkt, moe_mm_ka(fe1, dim, c.n_ff_exp, c.n_expert_used, true))
                             pf_enc_moe_mm(enc, t, fe3, t.we3_offs[l], c.n_ff_exp, npos, g4moe ? bxb2 : bxb, bmg2,
-                                u_dim, u_moe_nfe, bmcnt, bmbase, bmbkt, fe3 == KqFmt.q8 || fe3 == KqFmt.q51 ? u_moe_eblk : u_moe_esb, u_moe_nk, u_moe_g1)
+                                bmcnt, bmbase, bmbkt, moe_mm_ka(fe3, dim, c.n_ff_exp, c.n_expert_used, true))
                         }
                         if (nsh > 0l) {
                             // shexp gate/up: dense q8 mul_mm at the wsh planes (bhb/bhb2 sized max(hidden, nsh))
@@ -3745,13 +3724,15 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     let fe2 = fmt_at(t.we2_fmt, l)
                     if (!pf_skip_moe_mm()) {
                         if (t.experts_mx4) {
-                            var bhasb = g_pf_skip == "moe_bias" ? u_moe_g0 : u_moe_g1
                             var bwb2 = upload_region(unsafe(addr < void? >(t.fblob[t.web2_off + l * c.n_expert * dim])), uint64(c.n_expert * dim * 4l))
                             pf_enc_moe_mm_mx4(enc, t, t.we2_offs[l], dim, npos, bmg, bmdn,
-                                u_moe_nfe, u_dim, bmcnt, bmbase, bmbkt, u_moe_eblk, u_moe_nk, u_moe_g0, bwb2, bhasb, contiguous = true)
+                                bmcnt, bmbase, bmbkt, bwb2,
+                                moe_mm_mx4_ka(c.n_ff_exp, dim, c.n_expert_used, false, g_pf_skip != "moe_bias"),
+                                contiguous = true)
                         } else {
                             pf_enc_moe_mm(enc, t, fe2, t.we2_offs[l], dim, npos, bmg, bmdn,
-                                u_moe_nfe, u_dim, bmcnt, bmbase, bmbkt, fe2 == KqFmt.q8 || fe2 == KqFmt.q51 ? u_moe_eblk : u_moe_esb, u_moe_nk, u_moe_g0, contiguous = true)
+                                bmcnt, bmbase, bmbkt,
+                                moe_mm_ka(fe2, c.n_ff_exp, dim, c.n_expert_used, false), contiguous = true)
                         }
                         if (nsh > 0l) {
                             // shexp down into bxb2 (free post-residual) — bxb still feeds the reduce
@@ -4102,10 +4083,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         pool_release(g_pf_upool, u_moe_np, 4ul)
         pool_release(g_pf_upool, u_moe_tot, 4ul)
         pool_release(g_pf_upool, u_moe_nfe, 4ul)
-        pool_release(g_pf_upool, u_moe_eblk, 4ul)
-        pool_release(g_pf_upool, u_moe_esb, 4ul)
         pool_release(g_pf_upool, u_moe_g0, 4ul)
-        pool_release(g_pf_upool, u_moe_g1, 4ul)
         pool_release(g_pf_upool, u_moe_ptot, 4ul)
         if (g4moe) {
             pool_release(g_pf_upool, u_moe_invd, 4ul)
@@ -4345,11 +4323,8 @@ def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : 
     var bcnt = race_buf(dev, uint64(ne * 4), unsafe(addr<void?>(cnt[0])))
     var bbase = race_buf(dev, uint64(ne * 4), unsafe(addr<void?>(basep[0])))
     var bbkt = race_buf(dev, uint64(m * 4), unsafe(addr<void?>(bkt[0])))
-    var bk = race_uniform_u32(dev, uint(kdim))
-    var bn = race_uniform_u32(dev, uint(ndim))
-    var beblk = race_uniform_u32(dev, uint(eblk))
-    var bnk = race_uniform_u32(dev, 1u)
-    var bg0 = race_uniform_u32(dev, 0u)
+    // bind through the family's builder — a hand-rolled list here desyncs unseen by any suite
+    var rka = moe_mm_ka(KqFmt.q8, int64(kdim), int64(ndim), 1l, false)
     let grid = uint3(uint(rows_per / 32), uint(ndim / 64), uint(ne))
     let tg = uint3(128u, 1u, 1u)
     race_pair_ms(queue, 5, res.base_ms, res.twin_ms, $(enc) {
@@ -4359,14 +4334,10 @@ def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : 
         kn_buffer(enc, bw, 0ul, 1)
         kn_buffer(enc, bxa, 0ul, 2)
         kn_buffer(enc, by_base, 0ul, 3)
-        kn_buffer(enc, bk, 0ul, 4)
-        kn_buffer(enc, bn, 0ul, 5)
+        kn_kargs(enc, rka, 5)
         kn_buffer(enc, bcnt, 0ul, 6)
         kn_buffer(enc, bbase, 0ul, 7)
         kn_buffer(enc, bbkt, 0ul, 8)
-        kn_buffer(enc, beblk, 0ul, 9)
-        kn_buffer(enc, bnk, 0ul, 10)
-        kn_buffer(enc, bg0, 0ul, 11)
         kn_dispatch(enc, grid, tg)
     }, $(enc) {
         kn_pipeline(enc, twin_pso)
@@ -4374,11 +4345,9 @@ def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : 
         kn_buffer(enc, bw, 0ul, 1)
         kn_buffer(enc, bxa, 0ul, 2)
         kn_buffer(enc, by_twin, 0ul, 3)
-        kn_buffer(enc, bk, 0ul, 4)
-        kn_buffer(enc, bn, 0ul, 5)
+        kn_kargs(enc, rka, 5)
         kn_buffer(enc, bcnt, 0ul, 6)
         kn_buffer(enc, bbase, 0ul, 7)
-        kn_buffer(enc, beblk, 0ul, 9)
         kn_dispatch(enc, grid, tg)
     })
     if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
@@ -4396,11 +4365,6 @@ def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : 
     metal_release(bcnt)
     metal_release(bbase)
     metal_release(bbkt)
-    metal_release(bk)
-    metal_release(bn)
-    metal_release(beblk)
-    metal_release(bnk)
-    metal_release(bg0)
     metal_release(base_pso)
     metal_release(twin_pso)
     return res
@@ -4469,11 +4433,8 @@ def private race_moe_mulmm_mx4(dev : MetalDevice?; queue : MetalCommandQueue?) :
     var bcnt = race_buf(dev, uint64(ne * 4), unsafe(addr<void?>(cnt[0])))
     var bbase = race_buf(dev, uint64(ne * 4), unsafe(addr<void?>(basep[0])))
     var bbkt = race_buf(dev, uint64(m * 4), unsafe(addr<void?>(bkt[0])))
-    var bk = race_uniform_u32(dev, uint(kdim))
-    var bn = race_uniform_u32(dev, uint(ndim))
-    var beblk = race_uniform_u32(dev, uint(eblk))
-    var bnk = race_uniform_u32(dev, 1u)
-    var bg0 = race_uniform_u32(dev, 0u)
+    // same rule as the q8 race: bind through the family's builder, never a hand-rolled list
+    var rka = moe_mm_mx4_ka(int64(kdim), int64(ndim), 1l, false, false)
     let grid = uint3(uint(rows_per / 32), uint(ndim / 64), uint(ne))
     let tg = uint3(128u, 1u, 1u)
     race_pair_ms(queue, 5, res.base_ms, res.twin_ms, $(enc) {
@@ -4483,17 +4444,12 @@ def private race_moe_mulmm_mx4(dev : MetalDevice?; queue : MetalCommandQueue?) :
         kn_buffer(enc, bee, 0ul, 1)
         kn_buffer(enc, bxa, 0ul, 2)
         kn_buffer(enc, by_base, 0ul, 3)
-        kn_buffer(enc, bk, 0ul, 4)
-        kn_buffer(enc, bn, 0ul, 5)
+        kn_kargs(enc, rka, 5)
         kn_buffer(enc, bcnt, 0ul, 6)
         kn_buffer(enc, bbase, 0ul, 7)
         kn_buffer(enc, bbkt, 0ul, 8)
-        kn_buffer(enc, beblk, 0ul, 9)
-        kn_buffer(enc, bnk, 0ul, 10)
-        kn_buffer(enc, bg0, 0ul, 11)
         kn_buffer(enc, bwbb, 0ul, 12)
         kn_buffer(enc, bvt, 0ul, 13)
-        kn_buffer(enc, bg0, 0ul, 14)
         kn_dispatch(enc, grid, tg)
     }, $(enc) {
         kn_pipeline(enc, twin_pso)
@@ -4502,14 +4458,11 @@ def private race_moe_mulmm_mx4(dev : MetalDevice?; queue : MetalCommandQueue?) :
         kn_buffer(enc, bee, 0ul, 1)
         kn_buffer(enc, bxa, 0ul, 2)
         kn_buffer(enc, by_twin, 0ul, 3)
-        kn_buffer(enc, bk, 0ul, 4)
-        kn_buffer(enc, bn, 0ul, 5)
+        kn_kargs(enc, rka, 5)
         kn_buffer(enc, bcnt, 0ul, 6)
         kn_buffer(enc, bbase, 0ul, 7)
-        kn_buffer(enc, beblk, 0ul, 9)
         kn_buffer(enc, bwbb, 0ul, 12)
         kn_buffer(enc, bvt, 0ul, 13)
-        kn_buffer(enc, bg0, 0ul, 14)
         kn_dispatch(enc, grid, tg)
     })
     if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
@@ -4530,11 +4483,6 @@ def private race_moe_mulmm_mx4(dev : MetalDevice?; queue : MetalCommandQueue?) :
     metal_release(bcnt)
     metal_release(bbase)
     metal_release(bbkt)
-    metal_release(bk)
-    metal_release(bn)
-    metal_release(beblk)
-    metal_release(bnk)
-    metal_release(bg0)
     metal_release(base_pso)
     metal_release(twin_pso)
     return res
