@@ -625,6 +625,60 @@ def test_edit_goto_line(t : T?) {
 }
 
 [test]
+def test_edit_join_lines(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "one  \n\ttwo\nthree")
+    text_edit_set_cursor(ed, 0, 1)
+    text_edit_join_lines(ed)
+    t |> equal(ed.lines[0], "one two", "join collapses the seam to one space")
+    t |> equal(ed.cursor_line, 0, "caret stays on the joined line")
+    t |> equal(ed.cursor_column, 3, "caret sits at the seam")
+    t |> success(text_edit_undo(ed), "join undoes")
+    t |> equal(text_edit_source(ed), "one  \n\ttwo\nthree", "one undo restores")
+    // a selection joins ALL its lines in one unit
+    text_edit_select(ed, 0, 0, 2, 2)
+    text_edit_join_lines(ed)
+    t |> equal(ed.lines[0], "one two three", "the block joins whole")
+    t |> equal(length(ed.lines), 1, "into a single line")
+    t |> success(text_edit_undo(ed), "block join undoes")
+    t |> equal(length(ed.lines), 3, "one undo restores all lines")
+    // joining with an empty line adds no stray space
+    text_edit_load(ed, "aa\n\nbb")
+    text_edit_set_cursor(ed, 0, 0)
+    text_edit_join_lines(ed)
+    t |> equal(ed.lines[0], "aa", "empty next line joins clean")
+    t |> equal(length(ed.lines), 2, "and the line count drops")
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_edit_move_selection_to(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "alpha beta\ngamma")
+    text_edit_select(ed, 0, 0, 0, 5) // "alpha"
+    t |> success(text_edit_move_selection_to(ed, 1, 5), "drop after gamma")
+    t |> equal(text_edit_source(ed), " beta\ngammaalpha", "the text moved whole")
+    t |> equal(text_edit_selected_text(ed), "alpha", "and stays selected")
+    t |> success(text_edit_undo(ed), "the move undoes")
+    t |> equal(text_edit_source(ed), "alpha beta\ngamma", "ONE undo restores")
+    // dropping before the selection needs no adjustment
+    text_edit_select(ed, 0, 6, 0, 10) // "beta"
+    t |> success(text_edit_move_selection_to(ed, 0, 0), "drop at the start")
+    t |> equal(ed.lines[0], "betaalpha ", "moved ahead of alpha")
+    // a drop later on the SAME line: the removal shifts the target left
+    text_edit_load(ed, "one two three")
+    text_edit_select(ed, 0, 0, 0, 4) // "one "
+    t |> success(text_edit_move_selection_to(ed, 0, 8), "same-line drop after")
+    t |> equal(ed.lines[0], "two one three", "the target adjusted for the removal")
+    // a drop inside the selection declines
+    text_edit_load(ed, "abcdef")
+    text_edit_select(ed, 0, 1, 0, 5)
+    t |> success(!text_edit_move_selection_to(ed, 0, 3), "inside drop declines")
+    t |> equal(text_edit_source(ed), "abcdef", "and nothing changes")
+    text_edit_dispose(ed)
+}
+
+[test]
 def test_edit_byte_mapping(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "ab\r\ncd\r\né")

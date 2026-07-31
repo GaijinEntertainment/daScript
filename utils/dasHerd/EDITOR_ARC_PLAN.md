@@ -346,6 +346,11 @@ highlight inside code blocks lands with the selection work in E2/E4.
   through the SAME route: the E4 document-words/keywords tier, the LSP
   tier, and the LLM follow-up are providers behind one interface, not
   special cases.
+- **E7 synergy note (Boris, 2026-07-31): once the editor sits in herder
+  scenarios, git grows INTO the editor** — who-changed-this-line (blame)
+  populating as you navigate to a line, and the like; herder's
+  repository machinery already parses git, the editor's chrome/tooltip
+  rails exist, the join is the point.
 - **E7** dasHerd binds it: PR body (markdown instance, no preview pane
   needed at first), conflict resolution (ours / base / theirs +
   editable result, per-conflict accept-ours / accept-theirs / edit,

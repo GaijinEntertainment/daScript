@@ -153,6 +153,15 @@ struct public TextEditState {
     //! Go-to-line overlay (Ctrl+G): component-owned, no host wiring.
     goto_open : bool = false
     goto_focus : bool = false
+    //! Mouse-drag granularity from click count (0 char, 1 word, 2 line) +
+    //! the anchor run for word/line extends.
+    drag_mode : int = 0
+    drag_origin_line : int = 0
+    drag_origin_start : int = 0
+    drag_origin_end : int = 0
+    //! Press inside the selection = a possible drag-and-drop of it.
+    drag_move_pending : bool = false
+    drag_move_active : bool = false
     //! Completion LIST under the caret (top candidates). list_index -1 =
     //! visible but the keyboard is still in the editor (Down enters).
     list_items : array<string>
@@ -1929,6 +1938,63 @@ def public text_edit_replace_all(var ed : TextEditState;
     return count_
 }
 
+def private pos_before(a_line, a_column, b_line, b_column : int) : bool {
+    return a_line < b_line || (a_line == b_line && a_column < b_column)
+}
+
+def public text_edit_move_selection_to(var ed : TextEditState;
+                                       line, column : int) : bool {
+    //! Drag-and-drop: move the selected text to (line, column) as ONE undo
+    //! unit; the moved text stays selected. Declines inside the selection.
+    return false if (!text_edit_has_selection(ed))
+    let sel = text_edit_selection(ed)
+    return false if (!pos_before(line, column, sel.start_line, sel.start_column)
+        && !pos_before(sel.end_line, sel.end_column, line, column))
+    let moved = text_edit_range_text(ed, sel)
+    // removal shifts a target sitting past the selection
+    var target_line = line
+    var target_column = column
+    if (pos_before(sel.end_line, sel.end_column, line, column)) {
+        if (line == sel.end_line) {
+            target_column = (column - sel.end_column
+                + (sel.end_line == sel.start_line ? sel.start_column : 0))
+        }
+        target_line = line - (sel.end_line - sel.start_line)
+    }
+    delete ed.redo_stack
+    var unit = TextEditUndoUnit(kind = TextEditUndoKind.other,
+        before_cursor_line = ed.cursor_line, before_cursor_column = ed.cursor_column,
+        before_anchor_line = ed.anchor_line, before_anchor_column = ed.anchor_column)
+    ed.undo_stack |> emplace(unit)
+    let unit_index = length(ed.undo_stack) - 1
+    ed.undo_stack[unit_index].ops |> push(TextEditUndoOp(line = sel.start_line,
+        column = sel.start_column, removed = moved, inserted = ""))
+    remove_range_raw(ed, sel)
+    ed.undo_stack[unit_index].ops |> push(TextEditUndoOp(line = target_line,
+        column = target_column, removed = "", inserted = moved))
+    let landed = insert_raw(ed, target_line, target_column, moved)
+    // the moved text stays selected, caret at its end
+    ed.anchor_line = target_line
+    ed.anchor_column = target_column
+    ed.cursor_line = landed.x
+    ed.cursor_column = landed.y
+    var last & = unsafe(ed.undo_stack[unit_index])
+    last.after_cursor_line = ed.cursor_line
+    last.after_cursor_column = ed.cursor_column
+    last.end_line = ed.cursor_line
+    last.end_column = ed.cursor_column
+    ed.undo_open = false
+    ed.dirty = true
+    ed.revision++
+    ed.follow_revision++
+    ed.blink_time = 0.0f
+    ed.syntax_idle = 0.0f
+    ed.ghost_text = ""
+    ed.preferred_column = -1
+    restyle_lines(ed, 0, length(ed.lines) - 1)
+    return true
+}
+
 def public text_edit_set_highlights(var ed : TextEditState;
                                     spans : array<TextEditRange>) {
     //! Ranges painted under the text (find matches); keep them ascending.
@@ -2073,6 +2139,49 @@ def public text_edit_find_sync(var ed : TextEditState; var find : TextFindState;
     text_edit_find_sync(ed, find)
 }
 
+def private trim_right_ws(line : string) : string {
+    var end_ = length(line)
+    peek_data(line) $(bytes) {
+        while (end_ > 0 && (int(bytes[end_ - 1]) == ' '
+                || int(bytes[end_ - 1]) == '\t')) {
+            end_--
+        }
+    }
+    return slice(line, 0, end_)
+}
+
+def public text_edit_join_lines(var ed : TextEditState) {
+    //! Ctrl+J: join the selection's lines (or the current line with the
+    //! next) with single spaces, whitespace collapsed at the seams; ONE undo
+    //! unit, caret lands on the first seam.
+    ensure_line(ed)
+    let touched = line_block(ed)
+    let last = max(touched.y, touched.x + 1)
+    return if (last >= length(ed.lines))
+    let first_part = trim_right_ws(ed.lines[touched.x])
+    let seam = length(first_part)
+    let joined = build_string() $(var writer) {
+        writer |> write(first_part)
+        var wrote = !empty(first_part)
+        for (index in range(touched.x + 1, last + 1)) {
+            let line = ed.lines[index]
+            let tail = trim_right_ws(slice(line,
+                length(leading_whitespace(line)), length(line)))
+            continue if (empty(tail))
+            if (wrote) {
+                writer |> write(" ")
+            }
+            writer |> write(tail)
+            wrote = true
+        }
+    }
+    commit_edit(ed, TextEditUndoKind.other, touched.x, 0,
+        block_text(ed, touched.x, last), joined)
+    ed.cursor_line = touched.x
+    ed.cursor_column = min(seam, length(ed.lines[touched.x]))
+    patch_unit_after(ed)
+}
+
 def public text_edit_expand_line_selection(var ed : TextEditState) {
     //! Ctrl+L: select the current line incl. newline; repeat extends a line.
     ensure_line(ed)
@@ -2214,6 +2323,9 @@ def private route_editor_keys(var ed : TextEditState; page_rows : int; // nolint
         if (IsKeyPressed(ImGuiKey.G, false)) {
             text_edit_open_goto(ed)
         }
+        if (IsKeyPressed(ImGuiKey.J, true)) {
+            text_edit_join_lines(ed)
+        }
         if (IsKeyPressed(ImGuiKey.Z, true)) {
             let _ = io.KeyShift ? text_edit_redo(ed) : text_edit_undo(ed)
         }
@@ -2346,54 +2458,116 @@ def private edit_hit_position(ed : TextEditState const; m : EditMetrics;
     return int2(row, column)
 }
 
+def private inside_selection(ed : TextEditState const; hit : int2) : bool {
+    return false if (!text_edit_has_selection(ed))
+    let sel = text_edit_selection(ed)
+    return (!pos_before(hit.x, hit.y, sel.start_line, sel.start_column)
+        && pos_before(hit.x, hit.y, sel.end_line, sel.end_column))
+}
+
+def private extend_word_drag(var ed : TextEditState; hit : int2) {
+    // double-click drag grows by whole words around the origin word
+    let run = word_run_at(ed.lines[hit.x], hit.y)
+    if (pos_before(hit.x, run.x, ed.drag_origin_line, ed.drag_origin_start)) {
+        ed.anchor_line = ed.drag_origin_line
+        ed.anchor_column = ed.drag_origin_end
+        ed.cursor_line = hit.x
+        ed.cursor_column = run.x
+    } else {
+        ed.anchor_line = ed.drag_origin_line
+        ed.anchor_column = ed.drag_origin_start
+        ed.cursor_line = hit.x
+        ed.cursor_column = run.y
+    }
+}
+
+def private extend_line_drag(var ed : TextEditState; hit_line : int) {
+    // triple-click drag grows by whole lines around the origin line
+    if (hit_line < ed.drag_origin_line) {
+        let below = min(ed.drag_origin_line + 1, length(ed.lines) - 1)
+        ed.anchor_line = below
+        ed.anchor_column = below > ed.drag_origin_line ? 0 : length(ed.lines[below])
+        ed.cursor_line = hit_line
+        ed.cursor_column = 0
+    } else {
+        ed.anchor_line = ed.drag_origin_line
+        ed.anchor_column = 0
+        if (hit_line < length(ed.lines) - 1) {
+            ed.cursor_line = hit_line + 1
+            ed.cursor_column = 0
+        } else {
+            ed.cursor_line = hit_line
+            ed.cursor_column = length(ed.lines[hit_line])
+        }
+    }
+}
+
+def private handle_edit_click(var ed : TextEditState; hit : int2; // nolint:STYLE037
+                              clicks : int; shift : bool) {
+    ed.focused = true
+    if (shift) {
+        // Shift+click extends from the current caret (or existing anchor).
+        if (ed.anchor_line < 0) {
+            ed.anchor_line = ed.cursor_line
+            ed.anchor_column = ed.cursor_column
+        }
+        ed.cursor_line = hit.x
+        ed.cursor_column = hit.y
+    } elif (clicks >= 3) {
+        ed.drag_mode = 2
+        ed.drag_origin_line = hit.x
+        ed.selection_dragging = true
+        extend_line_drag(ed, hit.x)
+    } elif (clicks == 2) {
+        let run = word_run_at(ed.lines[hit.x], hit.y)
+        ed.drag_mode = 1
+        ed.drag_origin_line = hit.x
+        ed.drag_origin_start = run.x
+        ed.drag_origin_end = run.y
+        ed.selection_dragging = true
+        ed.anchor_line = hit.x
+        ed.anchor_column = run.x
+        ed.cursor_line = hit.x
+        ed.cursor_column = run.y
+    } elif (inside_selection(ed, hit)) {
+        // maybe a drag-and-drop of the selection; the caret waits for release
+        ed.drag_move_pending = true
+    } else {
+        ed.drag_mode = 0
+        ed.cursor_line = hit.x
+        ed.cursor_column = hit.y
+        // Anchor arms at the click point; dragging grows the selection.
+        ed.anchor_line = hit.x
+        ed.anchor_column = hit.y
+        ed.selection_dragging = true
+    }
+    ed.preferred_column = -1
+    ed.blink_time = 0.0f
+}
+
 def private handle_edit_mouse(var ed : TextEditState; m : EditMetrics;
                               style : TextSourceViewStyle const;
                               hovered, window_hovered : bool;
                               var font : ImFont?) {
     let io & = unsafe(GetIO())
     if (hovered && IsMouseClicked(ImGuiMouseButton.Left, false)) {
-        ed.focused = true
+        handle_edit_click(ed, edit_hit_position(ed, m, style, font),
+            GetMouseClickedCount(ImGuiMouseButton.Left), io.KeyShift)
+    } elif ((ed.selection_dragging || ed.drag_move_pending)
+            && IsMouseDown(ImGuiMouseButton.Left)) {
         let hit = edit_hit_position(ed, m, style, font)
-        let clicks = GetMouseClickedCount(ImGuiMouseButton.Left)
-        if (io.KeyShift) {
-            // Shift+click extends from the current caret (or existing anchor).
-            if (ed.anchor_line < 0) {
-                ed.anchor_line = ed.cursor_line
-                ed.anchor_column = ed.cursor_column
+        if (ed.drag_move_pending) {
+            if (IsMouseDragging(ImGuiMouseButton.Left, 4.0f)) {
+                ed.drag_move_active = true
             }
-            ed.cursor_line = hit.x
-            ed.cursor_column = hit.y
-        } elif (clicks >= 3) {
-            // Triple-click: whole line including its newline.
-            ed.anchor_line = hit.x
-            ed.anchor_column = 0
-            if (hit.x < length(ed.lines) - 1) {
-                ed.cursor_line = hit.x + 1
-                ed.cursor_column = 0
-            } else {
-                ed.cursor_line = hit.x
-                ed.cursor_column = length(ed.lines[hit.x])
-            }
-        } elif (clicks == 2) {
-            let run = word_run_at(ed.lines[hit.x], hit.y)
-            ed.anchor_line = hit.x
-            ed.anchor_column = run.x
-            ed.cursor_line = hit.x
-            ed.cursor_column = run.y
+        } elif (ed.drag_mode == 1) {
+            extend_word_drag(ed, hit)
+        } elif (ed.drag_mode == 2) {
+            extend_line_drag(ed, hit.x)
         } else {
             ed.cursor_line = hit.x
             ed.cursor_column = hit.y
-            // Anchor arms at the click point; dragging grows the selection.
-            ed.anchor_line = hit.x
-            ed.anchor_column = hit.y
-            ed.selection_dragging = true
         }
-        ed.preferred_column = -1
-        ed.blink_time = 0.0f
-    } elif (ed.selection_dragging && IsMouseDown(ImGuiMouseButton.Left)) {
-        let hit = edit_hit_position(ed, m, style, font)
-        ed.cursor_line = hit.x
-        ed.cursor_column = hit.y
     } elif (!hovered && IsMouseClicked(ImGuiMouseButton.Left, false)) {
         if (window_hovered) {
             // dead area past the buffer: land on the clamped last-line hit
@@ -2411,10 +2585,26 @@ def private handle_edit_mouse(var ed : TextEditState; m : EditMetrics;
             ed.focused = false
         }
     }
-    if (ed.selection_dragging && IsMouseReleased(ImGuiMouseButton.Left)) {
-        ed.selection_dragging = false
-        if (!text_edit_has_selection(ed)) {
-            text_edit_clear_selection(ed)
+    if (IsMouseReleased(ImGuiMouseButton.Left)) {
+        if (ed.drag_move_active) {
+            // drop the selection at the release point (declines inside it)
+            let hit = edit_hit_position(ed, m, style, font)
+            if (!text_edit_move_selection_to(ed, hit.x, hit.y)) {
+                text_edit_set_cursor(ed, hit.x, hit.y)
+            }
+        } elif (ed.drag_move_pending) {
+            // pressed inside the selection, never moved: a plain click
+            let hit = edit_hit_position(ed, m, style, font)
+            text_edit_set_cursor(ed, hit.x, hit.y)
+        }
+        ed.drag_move_pending = false
+        ed.drag_move_active = false
+        ed.drag_mode = 0
+        if (ed.selection_dragging) {
+            ed.selection_dragging = false
+            if (!text_edit_has_selection(ed)) {
+                text_edit_clear_selection(ed)
+            }
         }
     }
 }
@@ -3189,6 +3379,9 @@ def public text_edit_register_commands(var registry : CommandRegistry) { // noli
     edit_define(registry, "edit.expand_line_selection", "Select line",
         command_binding("edit.expand_line_selection", ImGuiKey.L, true, false,
             false, false, CommandScope.component, true))
+    edit_define(registry, "edit.join_lines", "Join lines",
+        command_binding("edit.join_lines", ImGuiKey.J, true, false,
+            false, false, CommandScope.component, true))
 }
 
 def private edit_define_ctrl_select(var registry : CommandRegistry;
@@ -3304,5 +3497,7 @@ def private dispatch_edit_line_command(var ed : TextEditState; verb : string) {
         text_edit_outdent_lines(ed)
     } elif (verb == "edit.expand_line_selection") {
         text_edit_expand_line_selection(ed)
+    } elif (verb == "edit.join_lines") {
+        text_edit_join_lines(ed)
     }
 }
