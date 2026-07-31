@@ -69,3 +69,15 @@
    specialize at emission (an unrolled generic, not a value parameter — a runtime width would
    delete the tuning). Done = decide whether msl_emit should specialize a compile-time constant
    parameter, then collapse the nine to three or record why not.
+
+7. **Pointer families — a language-level idea, parked.** (Boris, 2026-07-30: "interesting follow …
+   it maybe good - we are just not there yet.") Everything above about address spaces exists
+   because `float4?` says what a pointer points AT and nothing about where it lives. MSL needs
+   that (`device` vs `threadgroup` are different types there and do not implicitly convert), so
+   today a helper cannot take a pointer at all, and the near-term fix is a parameter annotation
+   the emitter cross-checks against the argument's provenance. The deeper version is to give
+   daslang pointer FAMILIES — the memory family as part of the pointer type, so the checking is
+   the type system's job rather than an emitter's. It would pay off beyond shaders (the same
+   information a CPU backend wants for aliasing, and what any target with more than one memory
+   wants), but it reaches inference, mangling, and every cast, so it is a language design task
+   and not a step in this arc. Parked deliberately, not forgotten.
