@@ -25,7 +25,7 @@ def private source_range(app : ImguiApp; text : string) : JsonValue? {
 }
 
 [test]
-def test_text_viewer_open_modes_and_zoom(t : T?) { // nolint:STYLE038
+def test_text_viewer_open_modes_and_zoom(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
     with_imgui_app(FEATURE) $(app) {
         var initial : JsonValue?
         let ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
@@ -231,7 +231,7 @@ def test_text_viewer_open_modes_and_zoom(t : T?) { // nolint:STYLE038
 }
 
 [test]
-def test_text_viewer_checkbox_save_reload_roundtrip(t : T?) { // nolint:STYLE038
+def test_text_viewer_checkbox_save_reload_roundtrip(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
     var temp_error : string
     let temp_dir = create_temp_directory("das_text_viewer_roundtrip", temp_error)
     t |> success(empty(temp_error) && !empty(temp_dir),
@@ -328,7 +328,7 @@ def test_text_viewer_checkbox_save_reload_roundtrip(t : T?) { // nolint:STYLE038
 }
 
 [test]
-def test_text_viewer_find_both_modes(t : T?) { // nolint:STYLE038
+def test_text_viewer_find_both_modes(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
     with_imgui_app(FEATURE) $(app) {
         let ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
             var state = viewer_state(app)
@@ -426,7 +426,7 @@ def test_text_viewer_find_both_modes(t : T?) { // nolint:STYLE038
 }
 
 [test]
-def test_text_viewer_find_scrolls_to_match(t : T?) { // nolint:STYLE038
+def test_text_viewer_find_scrolls_to_match(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
     var temp_error : string
     let temp_dir = create_temp_directory("das_text_viewer_find_scroll", temp_error)
     t |> success(empty(temp_error) && !empty(temp_dir),
@@ -527,7 +527,7 @@ def test_text_viewer_find_scrolls_to_match(t : T?) { // nolint:STYLE038
 }
 
 [test]
-def test_text_viewer_find_icons_and_reopen(t : T?) { // nolint:STYLE038
+def test_text_viewer_find_icons_and_reopen(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
     with_imgui_app(FEATURE) $(app) {
         let ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
             var state = viewer_state(app)
@@ -604,7 +604,7 @@ def test_text_viewer_find_icons_and_reopen(t : T?) { // nolint:STYLE038
 }
 
 [test]
-def test_text_viewer_folding_and_code_copy(t : T?) { // nolint:STYLE038
+def test_text_viewer_folding_and_code_copy(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
     with_imgui_app(FEATURE) $(app) {
         let ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
             var state = viewer_state(app)
@@ -730,7 +730,7 @@ def test_text_viewer_folding_and_code_copy(t : T?) { // nolint:STYLE038
 }
 
 [test]
-def test_text_viewer_fold_clicks_and_no_reflow(t : T?) { // nolint:STYLE038
+def test_text_viewer_fold_clicks_and_no_reflow(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
     with_imgui_app(FEATURE) $(app) {
         let ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
             var state = viewer_state(app)
@@ -883,7 +883,7 @@ def test_text_viewer_fold_clicks_and_no_reflow(t : T?) { // nolint:STYLE038
 }
 
 [test]
-def test_text_viewer_single_scroller(t : T?) { // nolint:STYLE038
+def test_text_viewer_single_scroller(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
     //! The content child is the only scroller: the dock window must never grow
     //! its own scrollbar, and the right-aligned zoom cluster must fit at any
     //! zoom value (both regressed together as "two scrollbars + clipped 100%").

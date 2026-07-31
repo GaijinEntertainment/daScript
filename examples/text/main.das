@@ -984,7 +984,7 @@ def private remove_closed_documents() {
 }
 
 [live_command(description = "Inspect the text viewer without a screenshot.")]
-def text_viewer_state(_input : JsonValue?) : JsonValue? { // nolint:STYLE038
+def text_viewer_state(_input : JsonValue?) : JsonValue? { // nolint:STYLE038 — one JV state snapshot, a field per line; splitting scatters the wire shape
     let active = active_document_index()
     if (active < 0) return JV((ok = false, error = "no document is open",
                                document_count = 0, active_document_id = 0))
