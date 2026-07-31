@@ -2428,6 +2428,10 @@ def private text_source_edit_impl(id : string; var ed : TextEditState;
         if (use_registry) {
             // chars first (never binding-routed); char frames mute keypad chords
             let typed = drain_typed_chars(ed)
+            // belt for Escape: closing the list never depends on chord routing
+            if (ed.list_open && IsKeyPressed(ImGuiKey.Escape, false)) {
+                text_edit_close_list(ed)
+            }
             command_set_enabled(registry, "edit.cancel",
                 text_edit_has_selection(ed) || ed.list_open)
             command_poll_scope(registry, CommandScope.component, id, typed)

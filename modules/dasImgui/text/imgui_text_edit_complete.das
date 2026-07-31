@@ -33,6 +33,9 @@ struct public TextEditCompletion {
     //! into a word offers nothing. -1 = no sync seen yet.
     seen_input : int = -1
     typed : bool = false
+    //! Token whose list already auto-opened once: Escape-dismissal STICKS
+    //! until a new typed request bumps the token.
+    list_shown_token : int = -1
 }
 
 //! Idle seconds before the candidate LIST pops (the ghost is instant).
@@ -115,13 +118,16 @@ def private collect_document_words(ed : TextEditState const; prefix : string;
     delete counts
 }
 
-def private refresh_list(var ed : TextEditState; comp : TextEditCompletion const;
+def private refresh_list(var ed : TextEditState; var comp : TextEditCompletion;
                          open_now : bool) {
-    return if (!ed.list_open && !open_now)
+    // a dismissed list stays dismissed for this request (once per token)
+    return if (!ed.list_open
+        && (!open_now || comp.token == comp.list_shown_token))
     if (empty(comp.items)) {
         text_edit_close_list(ed)
         return
     }
+    comp.list_shown_token = comp.token
     ed.list_open = true
     ed.list_prefix_bytes = length(comp.prefix)
     delete ed.list_items

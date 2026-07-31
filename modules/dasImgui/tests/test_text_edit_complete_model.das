@@ -122,6 +122,34 @@ def test_complete_navigation_stays_silent(t : T?) {
 }
 
 [test]
+def test_complete_escape_dismissal_sticks(t : T?) {
+    // Boris's live catch #2: Esc closed the list but the same idle request
+    // reopened it next frame - the menu looked immovable.
+    var ed = TextEditState()
+    var comp = TextEditCompletion()
+    text_edit_load(ed, "grease greet greed\ngr")
+    text_edit_set_language(ed, "das")
+    text_edit_move_document_end(ed)
+    text_edit_complete_sync(ed, comp)
+    text_edit_type(ed, "e")
+    text_edit_complete_sync(ed, comp)
+    ed.syntax_idle = 1.0f
+    text_edit_complete_sync(ed, comp)
+    t |> success(ed.list_open, "typed + idle opens the list")
+    text_edit_close_list(ed) // the Escape path
+    text_edit_complete_sync(ed, comp)
+    text_edit_complete_sync(ed, comp)
+    t |> success(!ed.list_open, "dismissal sticks across syncs")
+    text_edit_type(ed, "e") // "gree"
+    text_edit_complete_sync(ed, comp)
+    ed.syntax_idle = 1.0f
+    text_edit_complete_sync(ed, comp)
+    t |> success(ed.list_open, "the next typed request may open again")
+    text_edit_complete_dispose(comp)
+    text_edit_dispose(ed)
+}
+
+[test]
 def test_complete_explicit_dot_trigger(t : T?) {
     var ed = TextEditState()
     var comp = TextEditCompletion()
