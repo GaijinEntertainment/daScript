@@ -799,6 +799,19 @@ def test_edit_auto_indent_on_enter(t : T?) {
     text_edit_move_end(ed)
     text_edit_newline(ed)
     t |> equal(ed.lines[1], "", "markdown Enter does not auto-indent")
+    // Enter BETWEEN a pair: closer gets its own line, caret indented between
+    text_edit_load(ed, "\tfoo \{\}")
+    text_edit_set_language(ed, "das")
+    text_edit_set_cursor(ed, 0, 6)
+    text_edit_newline(ed)
+    t |> equal(length(ed.lines), 3, "the pair splits into three lines")
+    t |> equal(ed.lines[0], "\tfoo \{", "the opener line keeps its text")
+    t |> equal(ed.lines[1], "\t\t", "the middle line indents one deeper")
+    t |> equal(ed.lines[2], "\t\}", "the closer keeps the original indent")
+    t |> equal(ed.cursor_line, 1, "caret on the middle line")
+    t |> equal(ed.cursor_column, 2, "caret at the middle indent")
+    t |> success(text_edit_undo(ed), "the split undoes")
+    t |> equal(text_edit_source(ed), "\tfoo \{\}", "one undo restores the pair")
     text_edit_dispose(ed)
 }
 

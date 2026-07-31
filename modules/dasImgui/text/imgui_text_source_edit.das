@@ -1159,6 +1159,28 @@ def public text_edit_newline(var ed : TextEditState) {
     //! Fences the undo unit BEFORE, so typing coalesces on the new line.
     text_edit_push_undo_stop(ed)
     ensure_line(ed)
+    if (!empty(ed.language) && !text_edit_has_selection(ed)) {
+        // Enter between a pair: the closer gets its own line at the original
+        // indent, the caret lands indented on the middle line - ONE unit
+        let line = ed.lines[ed.cursor_line]
+        let prev_b = line_byte(line, ed.cursor_column - 1)
+        let next_b = line_byte(line, ed.cursor_column)
+        var between_pair = false
+        text_language_profile(ed.language) $(profile) {
+            between_pair = (prev_b >= 0 && next_b >= 0
+                && pair_close_for(profile, prev_b) == next_b)
+        }
+        if (between_pair) {
+            let indent = leading_whitespace(line)
+            let target_line = ed.cursor_line + 1
+            text_edit_insert(ed, "\n" + indent + "\t\n" + indent)
+            ed.cursor_line = target_line
+            ed.cursor_column = length(indent) + 1
+            patch_unit_after(ed)
+            ed.follow_revision++
+            return
+        }
+    }
     var inserted = "\n"
     if (!empty(ed.language)) {
         let reference = text_edit_selection(ed)
