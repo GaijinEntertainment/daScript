@@ -226,11 +226,15 @@ highlight inside code blocks lands with the selection work in E2/E4.
   interesting is E4 really... polish of E1/2/3... stuff before
   completion/lsp")**: where the new line lands on Enter (auto-indent from
   the previous line's leading whitespace, tabs preserved as typed),
-  bracket/brace/paren match highlighting at the cursor, the spec's Tier 2
-  commands (delete/move/duplicate/join lines, block indent Ctrl+]/[,
-  goto-line, scroll-without-caret, drag-and-drop selection move), and the
-  rest of the smart-editor behaviors below completion — the list grows as
-  E1-E3 use surfaces items.
+  bracket/brace/paren match highlighting at the cursor, and the rest of
+  the smart-editor behaviors below completion — the list grows as E1-E3
+  use surfaces items. (Most Tier-2 commands were pulled forward on
+  2026-07-30 after Boris's live chord audit, commit 0320dcfd4:
+  move/duplicate/delete lines, insert line above/below with indent,
+  block indent/outdent + smart Tab, expand-line-selection, scroll-
+  without-caret, and the Ctrl+Shift vertical-select double-bindings
+  VS Code carries. Still E4: join lines, goto-line UI, drag-and-drop
+  selection move, auto-indent on Enter, bracket matching.)
 - **E5** `examples/text` becomes an honest editor: the component wired
   into both its presentations (markdown source with live preview beside
   it, plain/code source), carrying save, dirty-state, and the find
