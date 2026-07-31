@@ -62,6 +62,8 @@ def private write_root_name(e : Expression const?; tracked : table<string>; fiel
             cur = (cur as ExprSwizzle).value
         } elif (cur is ExprRef2Value) {
             cur = (cur as ExprRef2Value).subexpr
+        } elif (cur is ExprCall && (cur as ExprCall).name |> ends_with("i_das_ptr_add")) {
+            cur = (cur as ExprCall).arguments[0]   // `(p + n)[i] = v` writes through p's buffer
         } else {
             break
         }
@@ -94,33 +96,68 @@ def private tmm2d_c_arg(cname : string) : int {
     return cname |> ends_with("tmm2d_q8_f32") || cname |> ends_with("tmm2d_q8_f16s") ? 11 : -1
 }
 
-// Direction of the `idx`-th parameter of the same-module helper named `cname`: "write" when the
-// parameter is `var` (the callee may store through it), "read" otherwise — the same rule the MSL
-// and SPIR-V emitters lower to `device` vs `device const`. Returns "" when the name does not
-// resolve to exactly one declaration (overloads included), which keeps the ratchet's refusal.
-def private scan_param_dir(cfn : Function?; cname : string; idx : int; var dir : string&; var nfound : int&) {
-    return if (cfn.name != cname || idx >= length(cfn.arguments))
-    nfound++
+def private all_digits(s : string) : bool {
+    var ok = !empty(s)
+    peek_data(s) $(bytes) {
+        for (b in bytes) {
+            if (!is_number(int(b))) {
+                ok = false
+            }
+        }
+    }
+    return ok
+}
+
+// The plain function name behind a resolved call. Post-infer a call carries the mangled form —
+// `__::<module>`<name>` for a plain function, plus a decimal instance hash for a generic
+// instance — and every instance of one generic shares its parameters' constness.
+def private callee_base_name(cname : string) : string {
+    var n = cname
+    let cc = find(n, "::")
+    if (cc >= 0) {
+        n = slice(n, cc + 2)
+    }
+    var tick = rfind(n, "`")
+    if (tick >= 0 && all_digits(slice(n, tick + 1))) {
+        n = slice(n, 0, tick)
+        tick = rfind(n, "`")
+    }
+    return tick >= 0 ? slice(n, tick + 1) : n
+}
+
+// Direction of the `idx`-th parameter of the same-module helper `cname`: "write" when the callee
+// may store through it, "read" otherwise — the same rule the MSL and SPIR-V emitters lower to
+// `device` vs `device const`. Every declaration matching the base name must AGREE; a genuine
+// overload set that does not keeps the ratchet's refusal.
+def private scan_param_dir(cfn : Function?; base : string; idx : int;
+                           var dir : string&; var found : bool&; var conflict : bool&) {
+    return if (callee_base_name("{cfn.name}") != base || idx >= length(cfn.arguments))
     let pt = cfn.arguments[idx]._type
+    var d = pt != null && !pt.flags.constant ? "write" : "read"
     if (pt != null && pt.baseType == Type.tPointer) {
         // for a pointer the POINTEE's const decides — the pointer's own const only says whether
         // the callee may advance it, and an advancing read (`var p : T const?`) is still a read
-        dir = pt.firstType != null && !pt.firstType.flags.constant ? "write" : "read"
-        return
+        d = pt.firstType != null && !pt.firstType.flags.constant ? "write" : "read"
     }
-    dir = pt != null && !pt.flags.constant ? "write" : "read"
+    if (found && dir != d) {
+        conflict = true
+    }
+    dir = d
+    found = true
 }
 
 def private callee_param_dir(mod : Module?; cname : string; idx : int) : string {
+    let base = callee_base_name(cname)
     var dir = ""
-    var nfound = 0
-    mod |> for_each_function(cname) $(cfn) {
-        scan_param_dir(cfn, cname, idx, dir, nfound)
+    var found = false
+    var conflict = false
+    mod |> for_each_function(base) $(cfn) {
+        scan_param_dir(cfn, base, idx, dir, found, conflict)
     }
-    mod |> for_each_generic(cname) $(cfn) {
-        scan_param_dir(cfn, cname, idx, dir, nfound)
+    mod |> for_each_generic(base) $(cfn) {
+        scan_param_dir(cfn, base, idx, dir, found, conflict)
     }
-    return nfound == 1 ? dir : ""
+    return found && !conflict ? dir : ""
 }
 
 // one tracked buffer handed WHOLE to a helper — the driver resolves the direction, since the
@@ -249,7 +286,9 @@ class private AccessVisitor : AstVisitor {
     }
 
     def override preVisitExprCall(expr : ExprCall?) : void {
-        let cname = string(expr.name)
+        // POST-infer a resolved call carries its mangled name (`__::<module>`<name>`<hash>`), so
+        // the intrinsic table below must match the base name or every entry misses on that pass
+        let cname = callee_base_name("{expr.name}")
         // GPU intrinsics that take a whole array and write (or only read) through it:
         // dasSpirv coopmat pair (+ the cm2 tensor-addressed forms) + the dasMetal simdgroup
         // pair store through arg 1; tg_store_float4(dst, idx, v) stores through arg 0
@@ -267,9 +306,11 @@ class private AccessVisitor : AstVisitor {
         }
         if (cname == "coopmatLoad" || cname == "simdgroup_load"
                 || cname == "coopmatLoadTensor" || cname == "coopmatLoadTensorDecode"
-                || cname |> ends_with("tmm2d_tg_begin") || cname |> ends_with("tmm2d_tg_step")) {
+                || cname |> ends_with("tmm2d_tg_begin") || cname |> ends_with("tmm2d_tg_step")
+                || cname |> ends_with("i_das_ptr_add")) {
             // plain reads (the generic pass records them) — or, for the staged-GEMM protocol
-            // begin/step, only untracked locals/@workgroup tiles
+            // begin/step, only untracked locals/@workgroup tiles. Pointer arithmetic is neither:
+            // the RESULT's use decides, and write_root_name peels back through it
             return
         }
         if (cname |> ends_with("tmm2d_tg_store")) {

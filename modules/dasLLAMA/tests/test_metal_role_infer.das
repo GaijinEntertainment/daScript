@@ -13,13 +13,14 @@ require strings
 // clean against its declared roles, the write fixture must be REFUSED because the declared
 // @role contradicts what the `var` parameter derives. Fixtures live in a non-globbed subdir.
 
-def private compile_issues(file_path : string) : tuple<ok : bool; issues : string> {
+def private compile_issues(file_path : string; lint : bool = false) : tuple<ok : bool; issues : string> {
     var okFlag = false
     var issuesText = ""
     var inscope access <- make_file_access("")
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
             cop.threadlock_context = true
+            cop.lint_check = lint   // the un-lensed census is a [lint_macro] — off on a plain compile
             compile_file(file_path, access, unsafe(addr(mg)), cop) $(ok, _program, issues) {
                 okFlag = ok
                 issuesText := issues
@@ -60,6 +61,25 @@ def test_role_whole_buffer_rule(t : T?) {
                 "the refusal names the contradiction")
             if (bad.ok) {
                 to_log(LOG_ERROR, "ROLE-INFER: pointer write-through fixture compiled clean\n")
+            }
+        } else {
+            feint("das_metal is not built on this platform; the lens does not load\n")
+        }
+    }
+    t |> run("a GENERIC helper resolves by base name, not by its mangled instance") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            // lensed: the classifier runs PRE-infer, so the call still carries its bare name
+            let bad = compile_issues(fixture("_rf_generic_wrong"))
+            t |> success(!bad.ok, "a `var` parameter on a generic still derives 'write'")
+            t |> success(find(bad.issues, "declares @role='read' but the body derives 'write'") >= 0,
+                "the refusal names the contradiction, not an unresolvable callee")
+            // un-lensed: the lint-time census runs POST-infer, where the call is mangled
+            let ubad = compile_issues(fixture("dasllama_metal_rf_unlensed"), true)
+            t |> success(!ubad.ok, "the un-lensed census resolves the mangled instance name too")
+            t |> success(find(ubad.issues, "derives 'write' — fix the stale declaration") >= 0,
+                "the census names the stale declaration")
+            if (bad.ok || ubad.ok) {
+                to_log(LOG_ERROR, "ROLE-INFER: generic-callee fixture compiled clean\n")
             }
         } else {
             feint("das_metal is not built on this platform; the lens does not load\n")

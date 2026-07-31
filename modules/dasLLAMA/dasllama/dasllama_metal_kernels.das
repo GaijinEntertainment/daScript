@@ -3139,6 +3139,156 @@ class MetalSqAttnCombB {
     }
 }
 
+// ===== the split-K "D" attention family: the stages that do not depend on the K/V codec =====
+// One simdgroup owns a 32-position slice and merges it online into its running state. Only the
+// score and V-accumulate steps read K/V, so only those stay per-codec in each kernel below.
+
+def private sqd_zero(var wacc : float[512]; wo : uint) {
+    wacc[wo] = 0.0
+    wacc[wo + 1u] = 0.0
+    wacc[wo + 2u] = 0.0
+    wacc[wo + 3u] = 0.0
+}
+
+def private sqd_block_max(keep : float) : float {
+    var bm = keep
+    bm = max(bm, simd_shuffle_xor(bm, 16u))
+    bm = max(bm, simd_shuffle_xor(bm, 8u))
+    bm = max(bm, simd_shuffle_xor(bm, 4u))
+    bm = max(bm, simd_shuffle_xor(bm, 2u))
+    bm = max(bm, simd_shuffle_xor(bm, 1u))
+    return bm
+}
+
+// The f16/f32 codec pair: K and V stream through an advancing pointer, and `float4()` over an
+// already-float4 element is the no-op that lets one source line serve both instances.
+
+// this lane's score for its own row of the 32-row block; invalid tail lanes keep the -inf seed
+def private sqd_score_blk(var kp : auto(KP) const?; q4 : float4; keep0 : float; nrows, kv4, sl : uint) : float {
+    var keep = keep0
+    if (nrows == 32u) {
+        for [unroll_full] (i in range(32)) {
+            let p = q4 * float4(unsafe(kp[uint(i) * kv4]))
+            let sc = simd_sum(p.x + p.y + p.z + p.w)
+            keep = uint(i) == sl ? sc : keep
+        }
+    } else {
+        var j = 0u
+        while (j < nrows) {
+            let p = q4 * float4(unsafe(kp[0]))
+            let sc = simd_sum(p.x + p.y + p.z + p.w)
+            keep = j == sl ? sc : keep
+            kp = unsafe(kp + kv4)
+            j++
+        }
+    }
+    return keep
+}
+
+// The block-quantized codec pair. The unpack owns its own block byte stride; `sstr` is the
+// scale plane's stride in f16 elements, the only other thing the block size changes.
+
+// this lane's 4 K/V elements of block `blk` — q8_0 blocks are 34B (f16 d, then 32 int8 quants)
+def private sqd_quants(qb : array<int8>; b0b, blk, inb : uint) : float4 {
+    let o = b0b + blk * 34u + 2u + inb
+    return float4(float(qb[o]), float(qb[o + 1u]), float(qb[o + 2u]), float(qb[o + 3u]))
+}
+
+// tq4 twin: 18B blocks, and the lane's 4 elements are the nibbles of 2 bytes
+def private sqd_quants(qb : array<uint8>; b0b, blk, inb : uint) : float4 {
+    let o = b0b + blk * 18u + 2u + inb
+    let by0 = uint(qb[o])
+    let by1 = uint(qb[o + 1u])
+    return float4(float(int(by0 & 15u) - 8), float(int(by0 >> 4u) - 8),
+        float(int(by1 & 15u) - 8), float(int(by1 >> 4u) - 8))
+}
+
+def private sqd_score_blk_q(qb : array<auto(QT)>; sh : array<float16>; q4 : float4; keep0 : float;
+                            c0, nrows, nblk, blkoff, b0b, b0h, inb, sstr, sl : uint) : float {
+    var keep = keep0
+    if (nrows == 32u) {
+        for [unroll_full] (i in range(32)) {
+            let blk = (c0 + uint(i)) * nblk + blkoff
+            let p = q4 * sqd_quants(qb, b0b, blk, inb)
+            let sc = simd_sum((p.x + p.y + p.z + p.w) * float(sh[b0h + blk * sstr]))
+            keep = uint(i) == sl ? sc : keep
+        }
+    } else {
+        var j = 0u
+        while (j < nrows) {
+            let blk = (c0 + j) * nblk + blkoff
+            let p = q4 * sqd_quants(qb, b0b, blk, inb)
+            let sc = simd_sum((p.x + p.y + p.z + p.w) * float(sh[b0h + blk * sstr]))
+            keep = j == sl ? sc : keep
+            j++
+        }
+    }
+    return keep
+}
+
+def private sqd_vacc_blk_q(qb : array<auto(QT)>; sh : array<float16>; w : float;
+                           c0, nrows, nblk, blkoff, b0b, b0h, inb, sstr : uint) : float4 {
+    var bacc = float4(0.0)
+    if (nrows == 32u) {
+        for [unroll_full] (i in range(32)) {
+            let blk = (c0 + uint(i)) * nblk + blkoff
+            bacc += (simd_shuffle(w, uint(i)) * float(sh[b0h + blk * sstr])) * sqd_quants(qb, b0b, blk, inb)
+        }
+    } else {
+        var j = 0u
+        while (j < nrows) {
+            let blk = (c0 + j) * nblk + blkoff
+            bacc += (simd_shuffle(w, j) * float(sh[b0h + blk * sstr])) * sqd_quants(qb, b0b, blk, inb)
+            j++
+        }
+    }
+    return bacc
+}
+
+def private sqd_vacc_blk(var vp : auto(VP) const?; w : float; nrows, kv4 : uint) : float4 {
+    var bacc = float4(0.0)
+    if (nrows == 32u) {
+        for [unroll_full] (i in range(32)) {
+            bacc += simd_shuffle(w, uint(i)) * float4(unsafe(vp[uint(i) * kv4]))
+        }
+    } else {
+        var j = 0u
+        while (j < nrows) {
+            bacc += simd_shuffle(w, j) * float4(unsafe(vp[0]))
+            vp = unsafe(vp + kv4)
+            j++
+        }
+    }
+    return bacc
+}
+
+// online merge into the running slice-group state (first pass: r1 = exp(-inf) = 0)
+def private sqd_merge(var wacc : float[512]; wo : uint; bacc : float4; bm, btot : float;
+                      var mm : float&; var tot : float&) {
+    let nm = max(mm, bm)
+    let r1 = exp(mm - nm)
+    let r2 = exp(bm - nm)
+    wacc[wo] = wacc[wo] * r1 + bacc.x * r2
+    wacc[wo + 1u] = wacc[wo + 1u] * r1 + bacc.y * r2
+    wacc[wo + 2u] = wacc[wo + 2u] * r1 + bacc.z * r2
+    wacc[wo + 3u] = wacc[wo + 3u] * r1 + bacc.w * r2
+    tot = tot * r1 + btot * r2
+    mm = nm
+}
+
+def private sqd_store(var part : array<float>; wacc : float[512]; pbase, wo, sl, hs : uint;
+                      mm, tot : float) {
+    let po = pbase + sl * 4u
+    part[po] = wacc[wo]
+    part[po + 1u] = wacc[wo + 1u]
+    part[po + 2u] = wacc[wo + 2u]
+    part[po + 3u] = wacc[wo + 3u]
+    if (sl == 0u) {
+        part[pbase + hs] = mm
+        part[pbase + hs + 1u] = tot
+    }
+}
+
 // Fused single-pass batched attention: beats llama.cpp fa_vec at every depth 512-16K. One
 // simdgroup per (row, head, 32-slice-group), scores kept in-register (no divergent store), V
 // accumulated lane-private (zero barriers). hs == 128 only; grid is HEAD-FASTEST for SLC locality.
@@ -3176,79 +3326,26 @@ class MetalSqAttnDF16 {
         let kv4 = kv_dim / 4u
         let q4 = float4(q[qoff / 4u + sl])
         let wo = gl_SubgroupID * 128u + sl * 4u
-        wacc[wo] = 0.0
-        wacc[wo + 1u] = 0.0
-        wacc[wo + 2u] = 0.0
-        wacc[wo + 3u] = 0.0
+        sqd_zero(wacc, wo)
         var mm = -3.0e38
         var tot = 0.0
         var ss = gsg
         while (ss * 32u < cnt) {
             let c0 = ss * 32u
             let nrows = min(c0 + 32u, cnt) - c0
-            var keep = -3.0e38
             var kp = unsafe(addr(kc[(kb0 + c0 * kv_dim + khoff) / 4u + sl]))
             var vp = unsafe(addr(vc[(vb0 + c0 * kv_dim + khoff) / 4u + sl]))
-            var bacc = float4(0.0)
-            if (nrows == 32u) {
-                for [unroll_full] (i in range(32)) {
-                    let p = q4 * float4(unsafe(kp[uint(i) * kv4]))
-                    let sc = simd_sum(p.x + p.y + p.z + p.w)
-                    keep = uint(i) == sl ? sc : keep
-                }
-            } else {
-                var j = 0u
-                while (j < nrows) {
-                    let p = q4 * float4(unsafe(kp[0]))
-                    let sc = simd_sum(p.x + p.y + p.z + p.w)
-                    keep = j == sl ? sc : keep
-                    kp = unsafe(kp + kv4)
-                    j++
-                }
-            }
-            keep *= scale   // invalid tail lanes stay hugely negative -> weight 0
-            var bm = keep
-            bm = max(bm, simd_shuffle_xor(bm, 16u))
-            bm = max(bm, simd_shuffle_xor(bm, 8u))
-            bm = max(bm, simd_shuffle_xor(bm, 4u))
-            bm = max(bm, simd_shuffle_xor(bm, 2u))
-            bm = max(bm, simd_shuffle_xor(bm, 1u))
+            // invalid tail lanes keep the -inf seed -> weight 0
+            let keep = sqd_score_blk(kp, q4, -3.0e38, nrows, kv4, sl) * scale
+            let bm = sqd_block_max(keep)
             let w = exp(keep - bm)
             let btot = simd_sum(w)
-            if (nrows == 32u) {
-                for [unroll_full] (i in range(32)) {
-                    bacc += simd_shuffle(w, uint(i)) * float4(unsafe(vp[uint(i) * kv4]))
-                }
-            } else {
-                var j = 0u
-                while (j < nrows) {
-                    bacc += simd_shuffle(w, j) * float4(unsafe(vp[0]))
-                    vp = unsafe(vp + kv4)
-                    j++
-                }
-            }
-            // online merge into the running slice-group state (first pass: r1 = exp(-inf) = 0)
-            let nm = max(mm, bm)
-            let r1 = exp(mm - nm)
-            let r2 = exp(bm - nm)
-            wacc[wo] = wacc[wo] * r1 + bacc.x * r2
-            wacc[wo + 1u] = wacc[wo + 1u] * r1 + bacc.y * r2
-            wacc[wo + 2u] = wacc[wo + 2u] * r1 + bacc.z * r2
-            wacc[wo + 3u] = wacc[wo + 3u] * r1 + bacc.w * r2
-            tot = tot * r1 + btot * r2
-            mm = nm
+            let bacc = sqd_vacc_blk(vp, w, nrows, kv4)
+            sqd_merge(wacc, wo, bacc, bm, btot, mm, tot)
             ss += nsgs
         }
         let pbase = ((bb * nheads + h) * nsgs + gsg) * (hs + 4u)
-        let po = pbase + sl * 4u
-        part[po] = wacc[wo]
-        part[po + 1u] = wacc[wo + 1u]
-        part[po + 2u] = wacc[wo + 2u]
-        part[po + 3u] = wacc[wo + 3u]
-        if (sl == 0u) {
-            part[pbase + hs] = mm
-            part[pbase + hs + 1u] = tot
-        }
+        sqd_store(part, wacc, pbase, wo, sl, hs, mm, tot)
     }
 }
 
@@ -3287,78 +3384,26 @@ class MetalSqAttnDF32 {
         let kv4 = kv_dim / 4u
         let q4 = float4(q[qoff / 4u + sl])
         let wo = gl_SubgroupID * 128u + sl * 4u
-        wacc[wo] = 0.0
-        wacc[wo + 1u] = 0.0
-        wacc[wo + 2u] = 0.0
-        wacc[wo + 3u] = 0.0
+        sqd_zero(wacc, wo)
         var mm = -3.0e38
         var tot = 0.0
         var ss = gsg
         while (ss * 32u < cnt) {
             let c0 = ss * 32u
             let nrows = min(c0 + 32u, cnt) - c0
-            var keep = -3.0e38
             var kp = unsafe(addr(kc[(kb0 + c0 * kv_dim + khoff) / 4u + sl]))
             var vp = unsafe(addr(vc[(vb0 + c0 * kv_dim + khoff) / 4u + sl]))
-            var bacc = float4(0.0)
-            if (nrows == 32u) {
-                for [unroll_full] (i in range(32)) {
-                    let p = q4 * unsafe(kp[uint(i) * kv4])
-                    let sc = simd_sum(p.x + p.y + p.z + p.w)
-                    keep = uint(i) == sl ? sc : keep
-                }
-            } else {
-                var j = 0u
-                while (j < nrows) {
-                    let p = q4 * unsafe(kp[0])
-                    let sc = simd_sum(p.x + p.y + p.z + p.w)
-                    keep = j == sl ? sc : keep
-                    kp = unsafe(kp + kv4)
-                    j++
-                }
-            }
-            keep *= scale
-            var bm = keep
-            bm = max(bm, simd_shuffle_xor(bm, 16u))
-            bm = max(bm, simd_shuffle_xor(bm, 8u))
-            bm = max(bm, simd_shuffle_xor(bm, 4u))
-            bm = max(bm, simd_shuffle_xor(bm, 2u))
-            bm = max(bm, simd_shuffle_xor(bm, 1u))
+            // invalid tail lanes keep the -inf seed -> weight 0
+            let keep = sqd_score_blk(kp, q4, -3.0e38, nrows, kv4, sl) * scale
+            let bm = sqd_block_max(keep)
             let w = exp(keep - bm)
             let btot = simd_sum(w)
-            if (nrows == 32u) {
-                for [unroll_full] (i in range(32)) {
-                    bacc += simd_shuffle(w, uint(i)) * unsafe(vp[uint(i) * kv4])
-                }
-            } else {
-                var j = 0u
-                while (j < nrows) {
-                    bacc += simd_shuffle(w, j) * unsafe(vp[0])
-                    vp = unsafe(vp + kv4)
-                    j++
-                }
-            }
-            let nm = max(mm, bm)
-            let r1 = exp(mm - nm)
-            let r2 = exp(bm - nm)
-            wacc[wo] = wacc[wo] * r1 + bacc.x * r2
-            wacc[wo + 1u] = wacc[wo + 1u] * r1 + bacc.y * r2
-            wacc[wo + 2u] = wacc[wo + 2u] * r1 + bacc.z * r2
-            wacc[wo + 3u] = wacc[wo + 3u] * r1 + bacc.w * r2
-            tot = tot * r1 + btot * r2
-            mm = nm
+            let bacc = sqd_vacc_blk(vp, w, nrows, kv4)
+            sqd_merge(wacc, wo, bacc, bm, btot, mm, tot)
             ss += nsgs
         }
         let pbase = ((bb * nheads + h) * nsgs + gsg) * (hs + 4u)
-        let po = pbase + sl * 4u
-        part[po] = wacc[wo]
-        part[po + 1u] = wacc[wo + 1u]
-        part[po + 2u] = wacc[wo + 2u]
-        part[po + 3u] = wacc[wo + 3u]
-        if (sl == 0u) {
-            part[pbase + hs] = mm
-            part[pbase + hs + 1u] = tot
-        }
+        sqd_store(part, wacc, pbase, wo, sl, hs, mm, tot)
     }
 }
 
@@ -3592,87 +3637,24 @@ class MetalSqAttnDQ8 {
         let blkoff = khblk + sl / 8u            // this lane's block within the row
         let inb = (sl % 8u) * 4u                // ... and its 4 quants' offset inside it
         let wo = gl_SubgroupID * 128u + sl * 4u
-        wacc[wo] = 0.0
-        wacc[wo + 1u] = 0.0
-        wacc[wo + 2u] = 0.0
-        wacc[wo + 3u] = 0.0
+        sqd_zero(wacc, wo)
         var mm = -3.0e38
         var tot = 0.0
         var ss = gsg
         while (ss * 32u < cnt) {
             let c0 = ss * 32u
             let nrows = min(c0 + 32u, cnt) - c0
-            var keep = -3.0e38
-            var bacc = float4(0.0)
-            if (nrows == 32u) {
-                for [unroll_full] (i in range(32)) {
-                    let blk = (c0 + uint(i)) * nblk + blkoff
-                    let kb = kb0b + blk * 34u + 2u + inb
-                    let dq = float4(float(kqb[kb]), float(kqb[kb + 1u]), float(kqb[kb + 2u]), float(kqb[kb + 3u]))
-                    let p = q4 * dq
-                    let sc = simd_sum((p.x + p.y + p.z + p.w) * float(ksh[kb0h + blk * 17u]))
-                    keep = uint(i) == sl ? sc : keep
-                }
-            } else {
-                var j = 0u
-                while (j < nrows) {
-                    let blk = (c0 + j) * nblk + blkoff
-                    let kb = kb0b + blk * 34u + 2u + inb
-                    let dq = float4(float(kqb[kb]), float(kqb[kb + 1u]), float(kqb[kb + 2u]), float(kqb[kb + 3u]))
-                    let p = q4 * dq
-                    let sc = simd_sum((p.x + p.y + p.z + p.w) * float(ksh[kb0h + blk * 17u]))
-                    keep = j == sl ? sc : keep
-                    j++
-                }
-            }
-            keep *= scale   // invalid tail lanes stay hugely negative -> weight 0
-            var bm = keep
-            bm = max(bm, simd_shuffle_xor(bm, 16u))
-            bm = max(bm, simd_shuffle_xor(bm, 8u))
-            bm = max(bm, simd_shuffle_xor(bm, 4u))
-            bm = max(bm, simd_shuffle_xor(bm, 2u))
-            bm = max(bm, simd_shuffle_xor(bm, 1u))
+            // invalid tail lanes keep the -inf seed -> weight 0
+            let keep = sqd_score_blk_q(kqb, ksh, q4, -3.0e38, c0, nrows, nblk, blkoff, kb0b, kb0h, inb, 17u, sl) * scale
+            let bm = sqd_block_max(keep)
             let w = exp(keep - bm)
             let btot = simd_sum(w)
-            if (nrows == 32u) {
-                for [unroll_full] (i in range(32)) {
-                    let blk = (c0 + uint(i)) * nblk + blkoff
-                    let vb = vb0b + blk * 34u + 2u + inb
-                    let dq = float4(float(vqb[vb]), float(vqb[vb + 1u]), float(vqb[vb + 2u]), float(vqb[vb + 3u]))
-                    bacc += (simd_shuffle(w, uint(i)) * float(vsh[vb0h + blk * 17u])) * dq
-                }
-            } else {
-                var j = 0u
-                while (j < nrows) {
-                    let blk = (c0 + j) * nblk + blkoff
-                    let vb = vb0b + blk * 34u + 2u + inb
-                    let dq = float4(float(vqb[vb]), float(vqb[vb + 1u]), float(vqb[vb + 2u]), float(vqb[vb + 3u]))
-                    bacc += (simd_shuffle(w, j) * float(vsh[vb0h + blk * 17u])) * dq
-                    j++
-                }
-            }
-            // online merge into the running slice-group state (first pass: r1 = exp(-inf) = 0)
-            let nm = max(mm, bm)
-            let r1 = exp(mm - nm)
-            let r2 = exp(bm - nm)
-            wacc[wo] = wacc[wo] * r1 + bacc.x * r2
-            wacc[wo + 1u] = wacc[wo + 1u] * r1 + bacc.y * r2
-            wacc[wo + 2u] = wacc[wo + 2u] * r1 + bacc.z * r2
-            wacc[wo + 3u] = wacc[wo + 3u] * r1 + bacc.w * r2
-            tot = tot * r1 + btot * r2
-            mm = nm
+            let bacc = sqd_vacc_blk_q(vqb, vsh, w, c0, nrows, nblk, blkoff, vb0b, vb0h, inb, 17u)
+            sqd_merge(wacc, wo, bacc, bm, btot, mm, tot)
             ss += nsgs
         }
         let pbase = ((bb * nheads + h) * nsgs + gsg) * (hs + 4u)
-        let po = pbase + sl * 4u
-        part[po] = wacc[wo]
-        part[po + 1u] = wacc[wo + 1u]
-        part[po + 2u] = wacc[wo + 2u]
-        part[po + 3u] = wacc[wo + 3u]
-        if (sl == 0u) {
-            part[pbase + hs] = mm
-            part[pbase + hs + 1u] = tot
-        }
+        sqd_store(part, wacc, pbase, wo, sl, hs, mm, tot)
     }
 }
 
@@ -3834,99 +3816,24 @@ class MetalSqAttnDTq4 {
         let blkoff = khblk + sl / 8u
         let inb = (sl % 8u) * 2u            // this lane's byte offset inside its block's nibbles
         let wo = gl_SubgroupID * 128u + sl * 4u
-        wacc[wo] = 0.0
-        wacc[wo + 1u] = 0.0
-        wacc[wo + 2u] = 0.0
-        wacc[wo + 3u] = 0.0
+        sqd_zero(wacc, wo)
         var mm = -3.0e38
         var tot = 0.0
         var ss = gsg
         while (ss * 32u < cnt) {
             let c0 = ss * 32u
             let nrows = min(c0 + 32u, cnt) - c0
-            var keep = -3.0e38
-            var bacc = float4(0.0)
-            if (nrows == 32u) {
-                for [unroll_full] (i in range(32)) {
-                    let blk = (c0 + uint(i)) * nblk + blkoff
-                    let kb = kb0b + blk * 18u + 2u + inb
-                    let by0 = uint(kqb[kb])
-                    let by1 = uint(kqb[kb + 1u])
-                    let dq = float4(float(int(by0 & 15u) - 8), float(int(by0 >> 4u) - 8),
-                        float(int(by1 & 15u) - 8), float(int(by1 >> 4u) - 8))
-                    let p = q4 * dq
-                    let sc = simd_sum((p.x + p.y + p.z + p.w) * float(ksh[kb0h + blk * 9u]))
-                    keep = uint(i) == sl ? sc : keep
-                }
-            } else {
-                var j = 0u
-                while (j < nrows) {
-                    let blk = (c0 + j) * nblk + blkoff
-                    let kb = kb0b + blk * 18u + 2u + inb
-                    let by0 = uint(kqb[kb])
-                    let by1 = uint(kqb[kb + 1u])
-                    let dq = float4(float(int(by0 & 15u) - 8), float(int(by0 >> 4u) - 8),
-                        float(int(by1 & 15u) - 8), float(int(by1 >> 4u) - 8))
-                    let p = q4 * dq
-                    let sc = simd_sum((p.x + p.y + p.z + p.w) * float(ksh[kb0h + blk * 9u]))
-                    keep = j == sl ? sc : keep
-                    j++
-                }
-            }
-            keep *= scale   // invalid tail lanes stay hugely negative -> weight 0
-            var bm = keep
-            bm = max(bm, simd_shuffle_xor(bm, 16u))
-            bm = max(bm, simd_shuffle_xor(bm, 8u))
-            bm = max(bm, simd_shuffle_xor(bm, 4u))
-            bm = max(bm, simd_shuffle_xor(bm, 2u))
-            bm = max(bm, simd_shuffle_xor(bm, 1u))
+            // invalid tail lanes keep the -inf seed -> weight 0
+            let keep = sqd_score_blk_q(kqb, ksh, q4, -3.0e38, c0, nrows, nblk, blkoff, kb0b, kb0h, inb, 9u, sl) * scale
+            let bm = sqd_block_max(keep)
             let w = exp(keep - bm)
             let btot = simd_sum(w)
-            if (nrows == 32u) {
-                for [unroll_full] (i in range(32)) {
-                    let blk = (c0 + uint(i)) * nblk + blkoff
-                    let vb = vb0b + blk * 18u + 2u + inb
-                    let by0 = uint(vqb[vb])
-                    let by1 = uint(vqb[vb + 1u])
-                    let dq = float4(float(int(by0 & 15u) - 8), float(int(by0 >> 4u) - 8),
-                        float(int(by1 & 15u) - 8), float(int(by1 >> 4u) - 8))
-                    bacc += (simd_shuffle(w, uint(i)) * float(vsh[vb0h + blk * 9u])) * dq
-                }
-            } else {
-                var j = 0u
-                while (j < nrows) {
-                    let blk = (c0 + j) * nblk + blkoff
-                    let vb = vb0b + blk * 18u + 2u + inb
-                    let by0 = uint(vqb[vb])
-                    let by1 = uint(vqb[vb + 1u])
-                    let dq = float4(float(int(by0 & 15u) - 8), float(int(by0 >> 4u) - 8),
-                        float(int(by1 & 15u) - 8), float(int(by1 >> 4u) - 8))
-                    bacc += (simd_shuffle(w, j) * float(vsh[vb0h + blk * 9u])) * dq
-                    j++
-                }
-            }
-            // online merge into the running slice-group state (first pass: r1 = exp(-inf) = 0)
-            let nm = max(mm, bm)
-            let r1 = exp(mm - nm)
-            let r2 = exp(bm - nm)
-            wacc[wo] = wacc[wo] * r1 + bacc.x * r2
-            wacc[wo + 1u] = wacc[wo + 1u] * r1 + bacc.y * r2
-            wacc[wo + 2u] = wacc[wo + 2u] * r1 + bacc.z * r2
-            wacc[wo + 3u] = wacc[wo + 3u] * r1 + bacc.w * r2
-            tot = tot * r1 + btot * r2
-            mm = nm
+            let bacc = sqd_vacc_blk_q(vqb, vsh, w, c0, nrows, nblk, blkoff, vb0b, vb0h, inb, 9u)
+            sqd_merge(wacc, wo, bacc, bm, btot, mm, tot)
             ss += nsgs
         }
         let pbase = ((bb * nheads + h) * nsgs + gsg) * (hs + 4u)
-        let po = pbase + sl * 4u
-        part[po] = wacc[wo]
-        part[po + 1u] = wacc[wo + 1u]
-        part[po + 2u] = wacc[wo + 2u]
-        part[po + 3u] = wacc[wo + 3u]
-        if (sl == 0u) {
-            part[pbase + hs] = mm
-            part[pbase + hs + 1u] = tot
-        }
+        sqd_store(part, wacc, pbase, wo, sl, hs, mm, tot)
     }
 }
 
