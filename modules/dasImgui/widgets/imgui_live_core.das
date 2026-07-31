@@ -421,6 +421,19 @@ struct KeyChordArgs {
     key  : string = ""
 }
 
+def public imgui_key_is_nameable(key : ImGuiKey) : bool {
+    //! Whether ``GetKeyName`` may be asked about this value. ImGuiKey mixes
+    //! three range markers in with the keys — ``NamedKey_END``, ``NamedKey_COUNT``
+    //! and ``ImGuiMod_Mask_`` — and ImGui asserts on all three.
+    let value = int(key)
+    if (value == 0
+        || (value >= int(ImGuiKey.NamedKey_BEGIN) && value < int(ImGuiKey.NamedKey_END))) {
+        return true
+    }
+    return (key == ImGuiKey.ImGuiMod_Ctrl || key == ImGuiKey.ImGuiMod_Shift
+        || key == ImGuiKey.ImGuiMod_Alt || key == ImGuiKey.ImGuiMod_Super)
+}
+
 [live_command(description="Synthetic chord via ImGui bypass. Args: mods (\"Ctrl\"|\"Shift\"|\"Alt\"|\"Super\"), key (single ASCII char)")]
 def imgui_key_chord(input : JsonValue?) : JsonValue? {
     let args = from_JV(input, type<KeyChordArgs>)
@@ -432,6 +445,7 @@ def imgui_key_chord(input : JsonValue?) : JsonValue? {
     if (target_key == 0) {
         // named-key fallback: "RightArrow", "Home", "Keypad4", "F3"...
         for (key in type<ImGuiKey>) {
+            continue if (!imgui_key_is_nameable(key))
             let name = "{GetKeyName(key)}"
             if (name == args.key && name != "None" && name != "Unknown") {
                 target_key = int(key)
