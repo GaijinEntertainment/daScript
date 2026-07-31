@@ -1144,6 +1144,22 @@ def image_from_model_streaming(var t : Model; var out : Model; m : GGUFMeta; byt
     return ok
 }
 
+// The vulkan flavor is a SECOND artifact baked off a model that is already SERVING: the GPU walk
+// that just uploaded from its planes also collected the device-layout bytes. Warm map and cold
+// stream both land here, which is why neither needs the model in RAM to bake one.
+def private vulkan_bake_flavor(var t : Model; path : string; vk_tag : string) {
+    if (vk_tag == "" || !vulkan_bake_take(t)) {
+        return
+    }
+    let ts = ref_time_ticks()
+    let img_v = image_path_for(path, vk_tag)
+    if (save_model_image(t, img_v, vk_tag)) {
+        to_log(LOG_INFO, "dasLLAMA: vulkan image baked in {get_time_usec(ts) / 1000} ms — {img_v}\n")
+    }
+    delete t.vkblob   // this run is already uploaded — the bake only serves the NEXT load
+    delete t.vkplan
+}
+
 //! Whether a cold build persists its image. Off = build it in memory and serve that, leaving no
 //! .dlim behind; the run pays a second copy of the model for it, so on by default.
 def image_save_enabled : bool {
@@ -1339,16 +1355,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
         }
         let img = image_path_for(path, "", qs)
         if (load_model_image(img, t, "", qs)) {
-            if (vk_tag != "" && vulkan_bake_take(t)) {
-                // the planar image served this run's uploads; bake the flavor for the next one
-                let ts_save = ref_time_ticks()
-                let img_v = image_path_for(path, vk_tag)
-                if (save_model_image(t, img_v, vk_tag)) {
-                    to_log(LOG_INFO, "dasLLAMA: vulkan image baked in {get_time_usec(ts_save) / 1000} ms — {img_v}\n")
-                }
-                delete t.vkblob   // this run is already uploaded — the bake only serves the NEXT load
-                delete t.vkplan
-            }
+            vulkan_bake_flavor(t, path, vk_tag)
             if (!(want_metal && metal_model_servable(t))) {
                 to_log(LOG_INFO, "dasLLAMA: prepared image mapped in {get_time_usec(ts_img) / 1000} ms — {img}\n")
                 return <- t
@@ -1365,10 +1372,10 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
             panic("dasLLAMA: no prepared image for '{path}' ({want}) and artifacts are frozen — pre-mint it")
         }
         guard_interp_gguf_load(path)
-        // The cold build streams: planes go from the gguf mapping straight into the image and never
-        // become model planes, so it peaks well under one copy. The metal flavor streams too (its
-        // 34B blocks assemble per tensor); the vulkan bake needs whole planes, so it stays eager.
-        if (vk_tag == "") {
+        // The cold build streams: planes go from the gguf mapping straight into the image, never
+        // becoming model planes. Every flavor rides it — the metal blob assembles per tensor, and
+        // the vulkan bake collects off the mapping the stream just produced (as the warm path does)
+        {
             let s_tag = want_metal ? METAL_IMAGE_TAG : ""
             let s_quant = want_metal ? "q8" : qs
             let s_img = want_metal ? image_path_for(path, METAL_IMAGE_TAG) : img
@@ -1398,8 +1405,10 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                 dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
             }
             if (served) {
-                // the GPU MoE tier gathers from the PREPARED planes, same as the mapped rail
+                // the GPU MoE tier gathers from the PREPARED planes, same as the mapped rail —
+                // and that walk is what collects the vulkan bake, so the flavor costs no reload
                 moe_gpu_upload_resident(streamed)
+                vulkan_bake_flavor(streamed, path, vk_tag)
                 return <- streamed
             }
             delete streamed
@@ -1412,16 +1421,10 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
         // interleaved, and the writer derives it band by band — materializing it here is what
         // used to make a metal mint peak at two copies of the weights
         let metal_flavor = want_metal && metal_model_servable(m) && metal_blob_commit(m)
-        if (!metal_flavor && vk_tag != "" && vulkan_bake_take(m)) {
-            // a side artifact for the NEXT run: this one is already uploaded, and the image it
-            // goes on to serve must stay planar — so the collected planes go out, then go away
-            let ts_vk = ref_time_ticks()
-            let img_v = image_path_for(path, vk_tag)
-            if (save_model_image(m, img_v, vk_tag)) {
-                to_log(LOG_INFO, "dasLLAMA: vulkan image baked in {get_time_usec(ts_vk) / 1000} ms — {img_v}\n")
-            }
-            delete m.vkblob
-            delete m.vkplan
+        if (!metal_flavor) {
+            // the stream declined for this model, so load_model_'s own GPU walk did the collecting;
+            // the image it goes on to serve must stay planar, so the flavor goes out and goes away
+            vulkan_bake_flavor(m, path, vk_tag)
         }
         // and now the load's own flavor, on the one rail: built once in memory, written out for
         // the next run, and served from the very bytes that were written

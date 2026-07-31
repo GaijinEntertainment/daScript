@@ -111,20 +111,29 @@
     rope and store stages the way the D family shares `sqd_score_blk`/`sqd_vacc_blk`, and both
     bodies come back under the cap.
 
-11. **Only the vulkan bake still mints eagerly.** Peak `phys_footprint_peak` of one load,
-    Meta-Llama-3.1-8B-Q8_0 (8 GB gguf → 9.6 GB image), M1 Max:
+11. **Every cold mint streams; what is left is the vulkan flavor's SIZE, not its peak.**
+    Peak `phys_footprint_peak` of one load, Meta-Llama-3.1-8B-Q8_0 (8 GB gguf → 9.6 GB image),
+    M1 Max:
 
         cold planar (streamed)   5,380 MB   4.5 s
         cold metal  (streamed)   4,848 MB   3.1 s
-        warm, either flavor        651 MB
+        cold vulkan (streamed)   6,570 MB   15.5 s   (mints TWO images)
+        warm, any flavor           651 MB
 
     A mapped serve lands at ~0.07x the image, and Metal wraps the mapping with
-    `metal_new_buffer_no_copy_untracked` exactly as Vulkan and the CPU do. The metal blob flavor
-    now streams like the planar one (it was 19,456 MB eager), and comes out *under* planar because
-    a blob forbids CPU repack and so never needs the resident `qscales` plane. What remains is the
-    **vulkan bake**: `vulkan_bake_take` collects its plan and blob from whole planes, so `-f vulkan`
-    still loads the model into RAM first. Done = the bake collects region-at-a-time off the gguf
-    mapping — the shape `fill_stream_plane` already has — and `--stream` covers every flavor.
+    `metal_new_buffer_no_copy_untracked` exactly as Vulkan and the CPU do. The metal blob comes out
+    *under* planar because a blob forbids CPU repack and so never needs the resident `qscales`
+    plane. The vulkan bake rides the GPU walk of the model that is already serving — the warm path
+    always did this off a mapping, and the cold path now does too instead of loading eagerly.
+
+    What remains is that a **vulkan cold mint writes ~22 GB to produce an 11.8 GB artifact**: the
+    planar image lands first (10.0 GB), then the flavor image re-writes all of that content plus
+    the 1.6 GB bake blob. The flavor is a superset of the planar image, so the second write copies
+    9.6 GB of bytes that already exist on disk a few hundred milliseconds earlier — 8.3 s of the
+    15.5 s total. Done = either the flavor image references the planar one for its shared planes,
+    or a vulkan mint skips writing the planar image it is about to supersede. Neither is a peak
+    problem (the peak is fine), so this is wall-clock and disk, and it wants a decision about
+    whether the two files should stay independently mappable before anything is built.
 
     A second, smaller item: the eager rail's own peak sits ~1.7 GB above the model's heap
     (11,264 MB peak vs 9,636 MB heap on the 8B; ~1.9 GB on the 3B, so roughly constant rather than

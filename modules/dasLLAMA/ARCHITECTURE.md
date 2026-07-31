@@ -137,9 +137,11 @@ Durable "why it is built this way" facts harvested from the design docs archived
   blob's gguf-native 34B blocks assemble per tensor on the way out, and because a blob forbids CPU
   repack, it does not even need the resident `qscales` plane the planar stream keeps. Metal cold on
   the 8B: **19.5 GB → 4.8 GB, 4.1 s → 3.1 s** (faster AND smaller — the eager rail had been
-  splitting gguf's interleaved blocks apart only to reassemble them). Only the vulkan bake stays
-  eager, because its plan collection needs whole planes; that is the one remaining exception and it
-  is a debt, not a design. A new flavor joins the streamed rail or explains why it cannot.
+  splitting gguf's interleaved blocks apart only to reassemble them). The vulkan flavor rides it
+  too: its bake collects from the GPU walk of a model that is **already serving**, so it needs a
+  mapping rather than a load — which is what the warm path always did, and now the cold path does
+  the same instead of loading eagerly (**15.4 GB → 6.6 GB**). A new flavor joins the streamed rail
+  or explains why it cannot.
 - **Token-exact oracle tests pin the bit-exact path** (classic attention, scalar activation);
   approximate/fast paths get separate tolerance tests. Rerouting an oracle test through a
   non-bit-exact default makes it pass on the machine it was frozen on and flip elsewhere.
