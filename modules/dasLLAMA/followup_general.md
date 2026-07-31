@@ -46,3 +46,26 @@
    `prefill_decline` / `metal_prefill_init` ordering) — the PLE pre-step silently runs its CPU
    fallback (`ple_pre_prefill`) on every metal prefill window. Done = instrument the gate legs,
    find the refusing one, fix or document it, and the census E4B row counts all three kernels.
+
+5. **The metal kernel zoo carries four different rope addressing schemes.** Factoring the
+   sq_attn family showed the rope-store family does NOT share one skeleton the way attention
+   did — its eleven kernels split four ways: pair-per-thread WITH partial rotation
+   (`rope_store16/32` + the b twins: `rot`/`halfr` with an identity-cover tail),
+   pair-per-thread WITHOUT it (`rope_store_q8` + `b_q8`: whole-head rotation, `half` only),
+   element-per-thread (`rope_store_tq4`/`b_tq4`/`h16`, threadgroup-wide, and `h16` restores
+   partial rotation), and the fused-GEMV form (`q8_gemv_qkv_rs16/32`, index derived from the
+   weight row). Only ~60 lines are mechanically shared, so deduping them buys little AND would
+   paper over the question worth answering: are four schemes load-bearing (each tuned to its
+   store) or is this drift that one scheme could serve? A wrong answer changes each kernel's
+   lane mapping, so it needs a measurement, not a refactor. Done = each scheme either justified
+   in a comment at its kernel or collapsed into the one that measures as fast.
+
+6. **The K-quant GEMV zoo is dedupable along its batch-width axis only.** Measured divergence
+   over stripped bodies: the FORMAT axis is genuinely different math (`kq_gemv_k4` vs `_k5` =
+   49% of lines differ; `kq_mvb2_k4` vs `_k6` = 43%) — those are separate block decodes and
+   must stay separate. The WIDTH axis is near-identical (`kq_mvb2_k4` vs `kq_mvb4_k4` = 11%,
+   and that 11% IS the unroll factor). So the nine `kq_mvb{2,4,8}_k{4,5,6}` kernels are three
+   families of three, each family one kernel with a compile-time width. That needs the width to
+   specialize at emission (an unrolled generic, not a value parameter — a runtime width would
+   delete the tuning). Done = decide whether msl_emit should specialize a compile-time constant
+   parameter, then collapse the nine to three or record why not.
