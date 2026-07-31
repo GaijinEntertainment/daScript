@@ -623,6 +623,9 @@ def private herd_retire_worktree_reason(worktree : WorktreeState const;
         return ("{worktree.unmerged_commits} commits exist only here; " +
             "the branch {worktree.branch} keeps them")
     }
+    if (tier == WORKTREE_TIER_UNKNOWN) {
+        return "unmerged count unknown — no base ref resolved"
+    }
     return "clean"
 }
 

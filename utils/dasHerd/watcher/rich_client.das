@@ -235,8 +235,14 @@ let private RETIRE_ROW_COMMITS = 2
 def private checklist_row(row : int; passing : bool; caption : string) {
     //! One fact, its pass/fail glyph, and what it means. Never a bare colour:
     //! the sentence has to carry the meaning on its own.
-    icon_tinted(passing ? "check" : "warning", GetTextLineHeight(),
-        passing ? token_added_color() : token_warning_color())
+    checklist_glyph_row(row, passing ? "check" : "warning",
+        passing ? token_added_color() : token_warning_color(), caption)
+}
+
+def private checklist_glyph_row(row : int; glyph : string; tint : float4;
+                                caption : string) {
+    // the third state: "help" carries a fact that could not be measured
+    icon_tinted(glyph, GetTextLineHeight(), tint)
     same_line(WORKTREE_RETIRE_ROW_JOIN[row])
     text(WORKTREE_RETIRE_ROW_TEXT[row], (text = caption))
 }
@@ -427,8 +433,10 @@ def private draw_worktree_retire_popup() { // nolint:STYLE038
         // The unpushed line is about REDUNDANCY, not risk: removing a worktree
         // cannot lose a commit, the branch keeps every one of them.
         if (!worktree.unmerged_known) {
-            checklist_row(RETIRE_ROW_COMMITS, true,
-                "Commits: no base ref to compare against — count unknown.")
+            checklist_glyph_row(RETIRE_ROW_COMMITS, "help",
+                token_warning_color(),
+                "Commits vs base: unknown — no base ref resolved, so " +
+                "redundancy cannot be confirmed. The branch keeps its commits.")
         } elif (worktree.unmerged_commits == 0) {
             checklist_row(RETIRE_ROW_COMMITS, true,
                 "Nothing here that {worktree.unmerged_base_ref} does not have.")

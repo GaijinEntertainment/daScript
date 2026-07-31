@@ -391,7 +391,7 @@ def private worktree_verdict_jv(repository_id, worktree_path : string) : JsonVal
         only_here = repository_worktree_only_here(worktree)))
 }
 
-[live_command(description = "Read the retire-a-worktree verdict and every fact behind it: tier (in_use | main | dirty | warn | green), claiming session, working-tree counts, and unmerged commits WITH the base ref they were measured against. Args: repository_id, worktree_path.")]
+[live_command(description = "Read the retire-a-worktree verdict and every fact behind it: tier (in_use | main | dirty | warn | unknown | green), claiming session, working-tree counts, and unmerged commits WITH the base ref they were measured against. Args: repository_id, worktree_path.")]
 def herder_worktree_retire_state(input : JsonValue?) : JsonValue? {
     if (g_client == null) return JV((ok = false, error = "no client"))
     let args = from_JV(input, type<HerderRetireWorktreeArgs>)
