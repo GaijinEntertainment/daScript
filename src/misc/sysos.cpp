@@ -190,7 +190,7 @@
         string normalizeFileName ( const char * fileName ) {
             // das strings are UTF-8; the ANSI variant misreads non-ANSI names, so go wide
             wchar_t wideName[MAX_PATH];
-            if ( !MultiByteToWideChar(CP_UTF8, 0, fileName ? fileName : "", -1, wideName, MAX_PATH) )
+            if ( !MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, fileName ? fileName : "", -1, wideName, MAX_PATH) )
                 return "";
             wchar_t buffer[MAX_PATH];
             auto ret = GetFullPathNameW(wideName, MAX_PATH, buffer, nullptr);
