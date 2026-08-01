@@ -5,30 +5,26 @@ that measures dasLLAMA performance, and no second harness gets written.
 
 ---
 
-## Before either: the box manifest, and the env that selects it
+## Before either: build the bench exe
 
-**Every command below is prefixed with its environment. Without it the run tunes a per-SCRIPT
-sidecar instead of using the box manifest, and spends minutes doing it before it measures
-anything.**
-
-```sh
-export DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/<box>.tune.json
-export DASLLAMA_BOX=<box>
-```
-
-The manifest must also be newer than `bin/daslang` — an older one fails every oracle cell.
-Re-minting takes a few minutes:
+Both rigs measure by spawning **the released `lcpp_bench` executable**, never a script. Its tune
+winners are baked in at build time, so no cell can tune, re-exec, or drift onto different winners
+mid-sweep. Build it once per box, and again whenever `benchmarks/lcpp_bench.das` changes:
 
 ```sh
-DAS_TUNE_MODE=tune DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/<box>.tune.json \
-  bin/daslang -jit modules/dasLLAMA/harness/dasllama_tuner.das
+bin/daslang utils/daspkg/main.das -- release --root modules/dasLLAMA/benchmarks \
+  --out modules/dasLLAMA/performance/_rig
 ```
 
-Then check the fresh winners against the stored rows' `tune` stamps before trusting any delta —
-a manifest that picked different winners moves the numbers on its own, and the comparison is
-only clean when they match.
+`daspkg release` tunes any incomplete scope, rebuilds so the exe bakes the winners, and ships the
+sidecar beside it. A missing exe — or one older than the bench source — is a hard stop with the
+build line printed; the rig never rebuilds silently, because that would put minutes of hidden work
+inside a measurement run.
 
----
+**Do NOT set `DAS_TUNE_MANIFEST`.** The exe carries its own winners, and the rig actively clears an
+inherited value. Pointing it at a shared box manifest re-opens exactly what the exe replaced: the
+manifest is older than a freshly built exe, the staleness rule drops every kernel to fallback, and
+the cell measures nothing real.
 
 ## 1. The oracle — after every code change
 
@@ -37,8 +33,7 @@ runs, the store is never written, artifacts are frozen (a missing `.dlim` panics
 minting).
 
 ```sh
-DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/<box>.tune.json DASLLAMA_BOX=<box> \
-  bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- --oracle --legs metal
+DASLLAMA_BOX=<box> bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- --oracle --legs metal
 ```
 
 - Stops at the first FAIL; `--oracle-keep-going` runs the whole board.
@@ -47,6 +42,8 @@ DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/<box>.tune.json DASLLAMA_BOX=<box
   report, and a gain past the fail bar is flagged suspicious — verify it.
 - A FAILED cell automatically re-runs solo after a settle and *that* verdict stands: a
   board-tail cell reads low on a hot chip.
+- Rebuild the bench exe before trusting a delta after any `lcpp_bench.das` change — the rig
+  refuses a stale one rather than measuring it.
 - Exit is nonzero on any FAIL.
 
 ---
@@ -56,8 +53,7 @@ DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/<box>.tune.json DASLLAMA_BOX=<box
 Measures both engines and writes `performance/records/<box>.json`.
 
 ```sh
-DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/<box>.tune.json DASLLAMA_BOX=<box> \
-  bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- --legs metal \
+DASLLAMA_BOX=<box> bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- --legs metal \
   --ref-clean <llama-bench clean-cpu build> --ref-stock <llama-bench stock build>
 ```
 
