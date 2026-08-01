@@ -63,10 +63,14 @@ def resize(var Arr : array<auto(numT)>; newSize : int) {
         resize_and_init(Arr, newSize)
     } static_elif (typeinfo is_unsafe_when_uninitialized(type<numT>)) {
         make_function_unsafe()
-        _finalize_shrunk(Arr, newSize)
+        static_if (typeinfo needs_container_finalize(type<numT>)) {
+            _finalize_shrunk(Arr, newSize)
+        }
         __builtin_array_resize(Arr, newSize, typeinfo sizeof(Arr[0]))
     } else {
-        _finalize_shrunk(Arr, newSize)
+        static_if (typeinfo needs_container_finalize(type<numT>)) {
+            _finalize_shrunk(Arr, newSize)
+        }
         __builtin_array_resize(Arr, newSize, typeinfo sizeof(Arr[0]))
     }
 }
@@ -76,10 +80,14 @@ def resize(var Arr : array<auto(numT)>; newSize : int64) {
         resize_and_init(Arr, newSize)
     } static_elif (typeinfo is_unsafe_when_uninitialized(type<numT>)) {
         make_function_unsafe()
-        _finalize_shrunk(Arr, newSize)
+        static_if (typeinfo needs_container_finalize(type<numT>)) {
+            _finalize_shrunk(Arr, newSize)
+        }
         __builtin_array_resize_i64(Arr, newSize, typeinfo sizeof(Arr[0]))
     } else {
-        _finalize_shrunk(Arr, newSize)
+        static_if (typeinfo needs_container_finalize(type<numT>)) {
+            _finalize_shrunk(Arr, newSize)
+        }
         __builtin_array_resize_i64(Arr, newSize, typeinfo sizeof(Arr[0]))
     }
 }
@@ -89,7 +97,9 @@ def resize_and_init(var Arr : array<auto(numT)>; newSize : int | int64) {
         // trivially-zero element types take the bare arm - the builtin resize already zeroes new slots
         static_if (typeinfo needs_nontrivial_init(type<numT>)) {
             let oldSize = length(Arr)
-            _finalize_shrunk(Arr, newSize)
+            static_if (typeinfo needs_container_finalize(type<numT>)) {
+                _finalize_shrunk(Arr, newSize)
+            }
             __builtin_array_resize(Arr, newSize, typeinfo sizeof(Arr[0]))
             for (i in range(oldSize, newSize)) {
                 static_if (typeinfo can_move(type<numT>)) {
@@ -101,13 +111,17 @@ def resize_and_init(var Arr : array<auto(numT)>; newSize : int | int64) {
                 }
             }
         } else {
-            _finalize_shrunk(Arr, newSize)
+            static_if (typeinfo needs_container_finalize(type<numT>)) {
+                _finalize_shrunk(Arr, newSize)
+            }
             __builtin_array_resize(Arr, newSize, typeinfo sizeof(Arr[0]))
         }
     } else {
         static_if (typeinfo needs_nontrivial_init(type<numT>)) {
             let oldSize = long_length(Arr)
-            _finalize_shrunk(Arr, newSize)
+            static_if (typeinfo needs_container_finalize(type<numT>)) {
+                _finalize_shrunk(Arr, newSize)
+            }
             __builtin_array_resize_i64(Arr, newSize, typeinfo sizeof(Arr[0]))
             for (i in range64(oldSize, newSize)) {
                 static_if (typeinfo can_move(type<numT>)) {
@@ -119,7 +133,9 @@ def resize_and_init(var Arr : array<auto(numT)>; newSize : int | int64) {
                 }
             }
         } else {
-            _finalize_shrunk(Arr, newSize)
+            static_if (typeinfo needs_container_finalize(type<numT>)) {
+                _finalize_shrunk(Arr, newSize)
+            }
             __builtin_array_resize_i64(Arr, newSize, typeinfo sizeof(Arr[0]))
         }
     }
@@ -128,7 +144,9 @@ def resize_and_init(var Arr : array<auto(numT)>; newSize : int | int64) {
 def resize_and_init(var Arr : array<auto(numT)>; newSize : int | int64; initValue : numT) {
     static_if (typeinfo is_int(newSize)) {
         let oldSize = length(Arr)
-        _finalize_shrunk(Arr, newSize)
+        static_if (typeinfo needs_container_finalize(type<numT>)) {
+            _finalize_shrunk(Arr, newSize)
+        }
         __builtin_array_resize(Arr, newSize, typeinfo sizeof(Arr[0]))
         for (i in range(oldSize, newSize)) {
             static_if (typeinfo can_copy(initValue)) {
@@ -139,7 +157,9 @@ def resize_and_init(var Arr : array<auto(numT)>; newSize : int | int64; initValu
         }
     } else {
         let oldSize = long_length(Arr)
-        _finalize_shrunk(Arr, newSize)
+        static_if (typeinfo needs_container_finalize(type<numT>)) {
+            _finalize_shrunk(Arr, newSize)
+        }
         __builtin_array_resize_i64(Arr, newSize, typeinfo sizeof(Arr[0]))
         for (i in range64(oldSize, newSize)) {
             static_if (typeinfo can_copy(initValue)) {
