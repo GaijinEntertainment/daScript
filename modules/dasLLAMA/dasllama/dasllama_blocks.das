@@ -5,6 +5,7 @@ module dasllama_blocks shared public
 
 require dasllama/dasllama_common
 require dasllama/dasllama_moe   // moe_select_core/moe_ffn_core/moe_shexp_gate — the router the MoE blocks drive
+require dasllama/dasllama_attn_prefill   // prefill_attention — the head-threaded prefill the std/dense blocks call
 require dasllama/dasllama_math
 require dasllama/dasllama_par
 require dasllama/dasllama_convert

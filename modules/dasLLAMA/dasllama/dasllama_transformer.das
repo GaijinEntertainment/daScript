@@ -11,6 +11,7 @@ require dasllama/dasllama_layout   // nolint:STYLE030 — [init]-only: registers
 require dasllama/dasllama_moe public   // the MoE router/expert dispatch the block kernels reach through
 require dasllama/dasllama_blocks public   // the transformer block kernels + the default block sets
 require dasllama/dasllama_batch public   // eval_batch_ + BatchWorkspace — the B-session decode step
+require dasllama/dasllama_attn_prefill public   // prefill_attention — the head-threaded prefill attention
 require dasllama/dasllama_sampling public   // generate_/sample_/set_seed_/stats_ — re-exported so the umbrella keeps the generation API
 require dasllama/dasllama_ple  // nolint:STYLE030 — [init]-only: registers the gemma-4 PLE pre-step hooks into dasllama_common; it requires the engine back, so the umbrella breaks the cycle
 require dasllama/dasllama_gpu_resident  // nolint:STYLE030 — [init]-only: registers the whole-model GPU residency rail (overrides "vulkan" + the upload hook). Like the metal drivers below it requires the engine back, so the umbrella breaks the cycle; no device module, so it compiles everywhere
