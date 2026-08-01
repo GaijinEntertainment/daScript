@@ -61,8 +61,9 @@ def test_policy_off_no_finalize_banner(t : T?) {
             delete tab
         }
     }
-    t |> run("the composite trait follows the policy") @(t : T?) {
-        t |> success(!typeinfo needs_container_finalize(type<Bag>), "policy off disables the banner")
+    t |> run("the composite trait follows its policy") @(t : T?) {
+        // the collect banner rides force_inscope_pod (default off) - not container init
+        t |> success(!typeinfo needs_container_finalize(type<Bag>), "banner off without force_inscope_pod")
         t |> success(typeinfo is_pod_delete(type<Bag>), "the pure predicate does not follow it")
     }
 }

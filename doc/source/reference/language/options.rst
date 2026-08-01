@@ -319,17 +319,10 @@ Safety and Strictness
        field initializers is still zero-initialized, because ``default<>`` of a
        composite is zero. Direct stores (``tab[key] = / <- / :=``) and
        ``addr(tab[key])`` keep the raw zeroed slot.
-       **Finalize**: ``erase`` / ``erase_if`` / ``clear`` / shrinking ``resize`` /
-       ``pop`` (arrays) and ``erase`` / ``clear`` (tables) finalize the elements they
-       drop — but only when the element's finalizer is fully generated, frees heap the element owns, and
-       deletes no pointees (``typeinfo is_pod_delete`` and ``is_safe_to_delete``). POD structs are excluded
-       (nothing to free — zero cost), user finalizers are never run implicitly
-       (``delete`` remains the full teardown that runs them), and raw pointers,
-       lambdas, and any composite carrying one keep the old drop-the-slot behavior,
-       so ``clear``-then-``delete`` remains the borrowed-pointer idiom.
-       When ``false``, the pre-0.6.5 behavior returns entire: zeroed slots,
-       ``resize`` of such element types requires ``unsafe``, and erase/clear drop
-       elements without finalizing.
+       The collect half of container lifetime — erase/clear/shrink freeing the owned
+       heap of dropped elements — rides ``force_inscope_pod``, not this option.
+       When ``false``, construction reverts to the pre-0.6.5 behavior: zeroed slots,
+       and ``resize`` of init-carrying element types requires ``unsafe``.
    * - ``unsafe_table_lookup``
      - bool
      - false
@@ -536,7 +529,15 @@ Miscellaneous
    * - ``force_inscope_pod``
      - bool
      - false
-     - Forces inscope lifetime semantics for POD-like types.
+     - Forces inscope lifetime semantics for POD-like types: move-assign and scope exit
+       collect the old contents via ``builtin_collect_local_and_zero``, and the container
+       collect banner arms — ``erase`` / ``erase_if`` / ``clear`` / shrinking ``resize`` /
+       ``pop`` (arrays) and ``erase`` / ``clear`` (tables) free the owned heap of the
+       elements they drop via ``builtin_collect_local`` (the GcPod walk, which cannot run
+       user code). The banner fires only when collection is fully generated, frees heap the
+       element owns, and deletes no pointees (``typeinfo is_pod_delete`` and
+       ``is_safe_to_delete``); user finalizers never run implicitly — ``delete`` remains the
+       full teardown that runs them.
    * - ``keep_alive``
      - bool
      - false

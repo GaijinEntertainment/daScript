@@ -41,7 +41,7 @@ def private _finalize_shrunk(var Arr : array<auto(numT)>; newSize : int) {
     static_if (typeinfo needs_container_finalize(type<numT>)) {
         if (newSize >= 0) {
             for (i in range(newSize, length(Arr))) {
-                delete Arr[i]
+                unsafe(builtin_collect_local(Arr[i], uint(typeinfo sizeof(Arr[0]))))
             }
         }
     }
@@ -52,7 +52,7 @@ def private _finalize_shrunk(var Arr : array<auto(numT)>; newSize : int64) {
     static_if (typeinfo needs_container_finalize(type<numT>)) {
         if (newSize >= 0_l) {
             for (i in range64(newSize, long_length(Arr))) {
-                delete Arr[i]
+                unsafe(builtin_collect_local(Arr[i], uint(typeinfo sizeof(Arr[0]))))
             }
         }
     }
@@ -722,7 +722,7 @@ def back(arr : auto(TT) ==const) : auto& const {
 def erase(var Arr : array<auto(numT)>; at : int) {
     static_if (typeinfo needs_container_finalize(type<numT>)) {
         if (uint(at) < uint(length(Arr))) {
-            delete Arr[at]
+            unsafe(builtin_collect_local(Arr[at], uint(typeinfo sizeof(Arr[0]))))
         }
     }
     __builtin_array_erase(Arr, at, typeinfo sizeof(Arr[0]))
@@ -731,7 +731,7 @@ def erase(var Arr : array<auto(numT)>; at : int) {
 def erase(var Arr : array<auto(numT)>; at : int64) {
     static_if (typeinfo needs_container_finalize(type<numT>)) {
         if (uint64(at) < uint64(long_length(Arr))) {
-            delete Arr[at]
+            unsafe(builtin_collect_local(Arr[at], uint(typeinfo sizeof(Arr[0]))))
         }
     }
     __builtin_array_erase_i64(Arr, at, typeinfo sizeof(Arr[0]))
@@ -741,7 +741,7 @@ def erase(var Arr : array<auto(numT)>; at : int; count : int) {
     static_if (typeinfo needs_container_finalize(type<numT>)) {
         if (at >= 0 && count >= 0 && int64(at) + int64(count) <= long_length(Arr)) {
             for (i in range(at, at + count)) {
-                delete Arr[i]
+                unsafe(builtin_collect_local(Arr[i], uint(typeinfo sizeof(Arr[0]))))
             }
         }
     }
@@ -753,7 +753,7 @@ def erase(var Arr : array<auto(numT)>; at : int64; count : int64) {
         // sum as uint64 AFTER the non-negativity checks - int64 at+count can wrap (mirrors builtin_array_erase_range_i64)
         if (at >= 0_l && count >= 0_l && uint64(at) + uint64(count) <= uint64(long_length(Arr))) {
             for (i in range64(at, at + count)) {
-                delete Arr[i]
+                unsafe(builtin_collect_local(Arr[i], uint(typeinfo sizeof(Arr[0]))))
             }
         }
     }
@@ -763,7 +763,7 @@ def erase(var Arr : array<auto(numT)>; at : int64; count : int64) {
 def clear(var Arr : array<auto(numT)>) {
     static_if (typeinfo needs_container_finalize(type<numT>)) {
         for (v in Arr) {
-            delete v
+            unsafe(builtin_collect_local(v, uint(typeinfo sizeof(v))))
         }
     }
     __builtin_array_clear(Arr)
@@ -780,7 +780,7 @@ def erase_if(var arr : array<auto(TT)>; blk : block<(key : TT) : bool> | block<(
             }
             static_if (typeinfo needs_container_finalize(type<TT>)) {
                 for (j in range(i + 1, endIndex + 1)) {
-                    delete arr[j]
+                    unsafe(builtin_collect_local(arr[j], uint(typeinfo sizeof(arr[0]))))
                 }
             }
             __builtin_array_erase_range(arr, i + 1, endIndex - i, typeinfo sizeof(arr[0]))
@@ -935,7 +935,7 @@ def erase(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #) : bool {
         var val = __builtin_table_find(Tab, at)
         if (val != null) {
             unsafe {
-                delete * (reinterpret<valT?>(val))
+                builtin_collect_local(*(reinterpret<valT?>(val)), uint(typeinfo sizeof(type<valT>)))
             }
         }
     }
@@ -2165,7 +2165,7 @@ def clear(var t : table<auto(KT); auto(VT)>) {
     // the finalize banner: release every value's heap (raw-pointer values carved out)
     static_if (typeinfo needs_container_finalize(type<VT>)) {
         for (v in values(t)) {
-            delete v
+            unsafe(builtin_collect_local(v, uint(typeinfo sizeof(v))))
         }
     }
     _builtin_table_clear(t)
