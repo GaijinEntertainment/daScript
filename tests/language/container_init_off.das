@@ -6,6 +6,9 @@ struct Foo {
     x : int = 7
 }
 
+// The Probe fixture deliberately mirrors container_finalize.das rather than sharing a
+// module: these two files are the policy-ON and policy-OFF halves of the same experiment,
+// and an identical fixture compiled under each is the point.
 var g_finalized = 0
 
 struct Probe {
