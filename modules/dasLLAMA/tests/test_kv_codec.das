@@ -1,6 +1,6 @@
 options gen2
 options persistent_heap   // the f16 model A/B holds two Sessions (see test_forward.das)
-options stack = 65536
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration

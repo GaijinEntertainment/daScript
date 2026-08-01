@@ -1,5 +1,5 @@
 options gen2
-options stack = 262144   // dasLLAMA program-root convention (options stack does not unify up from libs); load_model_cached's frame needs it
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _cyclomatic_complexity = 0   // orchestrator passes; reshaped by the single-rig consolidation
 options _function_length = 0   // same
 

@@ -1,5 +1,5 @@
 options gen2
-options stack = 524288   // the forward/prefill chain outgrows the 16K default when driven directly (the probes' value); the test file is the program root under dastest, so the option applies
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options persistent_heap   // + explicit deletes below: each test frees its model/session before the next loads, so multi-GB weights never accumulate in the process
 
 require dastest/testing_boost public

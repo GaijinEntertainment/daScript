@@ -1,6 +1,6 @@
 options gen2
 options persistent_heap   // + explicit deletes: the models free before the process exits
-options stack = 131072   // several by-value Sessions per batch shape (test_batch_decode sizing)
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
 require dasllama/dasllama   // nolint:STYLE029 — the public facade (engine + arch registrations + the metal overrides)

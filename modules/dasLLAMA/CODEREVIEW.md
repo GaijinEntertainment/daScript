@@ -211,3 +211,7 @@ shapes that cannot reduce, not for code written oversized.
 
 **Platform backends implement narrow registered contracts.** Platform-specific code in a
 platform-neutral file is a defect.
+
+**Every program root declares the same `options stack` budget.** A test, harness, benchmark, or
+tool that picks its own number — larger or smaller — is a defect, and so is a new root that omits
+the declaration. See `ARCHITECTURE.md` §2.7.

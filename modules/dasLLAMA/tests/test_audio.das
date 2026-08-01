@@ -1,6 +1,6 @@
 options gen2
 options persistent_heap   // model-scale allocations (2.5 GB mmproj tower) — freed per test
-options stack = 65536
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
 require dasllama/dasllama_audio

@@ -1,6 +1,6 @@
 options gen2
 options persistent_heap   // + explicit deletes below: each test frees its model/session before the next loads, so multi-GB weights never accumulate in the process
-options stack = 65536   // dastest harness + forward chain + by-value Session sits near the default 16KB; 4x headroom (test_sampling does the same)
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; load_checkpoint resolves "llama" from the registry

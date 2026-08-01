@@ -1,5 +1,5 @@
 options gen2
-options stack = 524288   // the forward/prefill chain needs more than the 16K default; the 122B/Coder-Next hybrid eval frames outgrew the old 64K (scratch probes needed 512K)
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _jit_fast_math = true   // ggml-parity FP laxity (non-bit-exact, ~+10%); the profile is a speed measurement
 options _function_length = 0   // legacy profiler main; superseded by gen_bench_records
 

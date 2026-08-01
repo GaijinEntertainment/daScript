@@ -305,6 +305,21 @@ that runs before the window is staged must ask the capability half only, or it g
 forever and its feature silently never runs. Split such predicates rather than reordering the
 caller; an optimistic capability answer is safe when the late path has a fallback, and here it does.
 
+### 2.7 Every program root declares the same stack budget
+
+`options stack` is main-module-only: it does not unify up from required modules, so no library in
+the forward chain can declare the depth it needs. Every program that drives the engine — each test,
+harness, benchmark, and tool — must therefore declare it, and dasLLAMA's frames are deep enough
+(by-value `Session`s, the forward/prefill chain, the generated kernel tier) that the default is
+never enough.
+
+The budget is **one number in every root**, currently 524288. Per-root numbers do not survive: a
+frame that grows past the smallest declared budget breaks only the program that declared least, so
+the limit is discovered by crashing — and the program that crashes is whichever one is run
+rarest. A measurement rig sized below a test suite is the worst case of this, because the suite
+stays green while the rig dies. The cost of the uniform number is reserved address space per
+context; the cost of per-root numbers is a runtime crash found by the least-covered program.
+
 ---
 
 ## 3. Inherited invariants

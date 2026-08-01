@@ -1,6 +1,6 @@
 options gen2
 options gc               // standalone JIT loop collects between update calls
-options stack = 262144   // the forward chain runs deep under the HTTP tick + C++->das handler bridge
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 // dasllama-server — an OpenAI-compatible HTTP server over the dasLLAMA facade.
 //

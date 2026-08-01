@@ -1,5 +1,5 @@
 options gen2
-options stack = 131072   // the ASR model structs (decoder + tower) need a deep stack (asr_bench parity)
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _function_length = 0   // cell main; absorbed into lcpp_bench by the single-rig consolidation
 
 // One ASR das cell for the record store — the audio sibling of lcpp_bench's --json-path protocol.

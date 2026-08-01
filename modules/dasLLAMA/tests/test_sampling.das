@@ -1,6 +1,6 @@
 options gen2
 options persistent_heap   // + explicit deletes below: each test frees its model/session before the next loads, so multi-GB weights never accumulate in the process
-options stack = 65536   // dastest harness + generate_ sampler + forward chain sits near the default 16KB; 4x headroom (dasPEG tests do the same)
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — public-path tests exercise the API through it (engine + arch registrations + chat)

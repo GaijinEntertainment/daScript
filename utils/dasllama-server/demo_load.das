@@ -1,5 +1,5 @@
 options gen2
-options stack = 262144   // dashv client + jobque threads run under the same deep forward chain as the server
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 // demo_load — a small load generator for dasllama-server, dogfooding the dashv client: worker
 // threads loop varied chat completions against a RUNNING server. The default STAGED RAMP

@@ -1,5 +1,5 @@
 options gen2
-options stack = 131072    // model frames: a Scheduler (workspace Session inline) + reference Sessions
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options persistent_heap   // each test frees its model/scheduler before the next loads
 
 require dastest/testing_boost public

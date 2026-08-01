@@ -1,5 +1,5 @@
 options gen2
-options stack = 65536     // the forward/prefill chain outgrows the 16K default on arm64
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options fast_math = true  // ggml-parity FP laxity — a serving benchmark, not the bit-exact suite
 
 // Serving-latency benchmark for llm_scheduler — drives the scheduler directly through the

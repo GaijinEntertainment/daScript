@@ -1,5 +1,5 @@
 options gen2
-options stack = 65536   // the forward/prefill chain + generated kernels need more than the 16K default on arm64
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options indenting = 4
 
 // Shared foundation for the dasLLAMA profiling suite: the model catalog, the small/large tier gate,

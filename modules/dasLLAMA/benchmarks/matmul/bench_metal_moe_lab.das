@@ -1,6 +1,6 @@
 options gen2
 options persistent_heap
-options stack = 65536
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — GPU driver half, Apple builds only
 require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
