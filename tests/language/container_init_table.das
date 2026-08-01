@@ -11,7 +11,7 @@ struct Bag {
 }
 
 def bump_x(var f : Foo) {
-    f.x += 1
+    f.x++
 }
 
 [test]
