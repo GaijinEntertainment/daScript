@@ -6,6 +6,7 @@ require dasllama/dasllama_common
 require dasllama/dasllama_math
 require daslib/jobque_boost
 require daslib/fio
+require dasllama/dasllama_load   // the GGUF load walk (load_gguf/load_model_/load_checkpoint)
 
 def bench(tr : Model; toks : array<int64>; dt : KVDtype) {
     var s <- make_run_state(tr.config, dt, dt)

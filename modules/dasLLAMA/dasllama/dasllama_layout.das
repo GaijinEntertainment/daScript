@@ -12,6 +12,7 @@ require dasllama/dasllama_repack        // k45_nib/k5_hbit/k6_nib — the disk-o
 require dasllama/dasllama_gguf          // K6_SSB — the k6 disk scale stride
 require dasllama/dasllama_gemm_schema   // kq_qsb/kq_ssb — the fmt-id plane strides
 require dasllama/dasllama_par           // maybe_parallel_for + jobque probes
+require dasllama/dasllama_load   // StreamReg + the streaming-fill hook contract this file registers into
 require math
 
 // Disk-format -> compute-layout transforms: the metal-flavor blob transform, the CPU repack

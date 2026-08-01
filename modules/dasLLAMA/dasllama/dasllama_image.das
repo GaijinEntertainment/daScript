@@ -19,6 +19,7 @@ require dasllama/dasllama_gpu_resident   // the flavor bake this file drives (vu
 require dasllama/dasllama_math   // active_kernel_backend — half the image identity
 require dasllama/dasllama_config   // DlimConfiguration + dlim_identity — the identity formatter
 require math
+require dasllama/dasllama_load   // the GGUF load walk (load_gguf/load_model_/load_checkpoint)
 
 // The prepared-model image (spec: fmap-model-image plan, locked 2026-07-16): the post-load
 // Model dumped once — planes POST-repack, page-aligned — then mapped back with zero O(model)

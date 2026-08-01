@@ -37,10 +37,11 @@ Every non-generated file under `dasllama/` appears here. `dasllama_env.das` and
   generate, re-exported names, the doc surface. No engine logic; a function that does work belongs
   in the module that owns the concern, and the facade re-exports it.
 - **`dasllama_common.das`** — the engine: `Model`/`Session`/`Config`, the forward loops, the
-  override registries, the load walk. It is also the module's debt sink (13k lines): the Vulkan
-  bake state machine and the Metal knobs sitting here are debt, **not precedent**. Nothing
-  platform-specific may be added; new shared concerns get their own file rather than another
-  thousand lines here.
+  override registries, the runtime knobs. **Not** the load walk (§1.3) and **not** GPU residency
+  (§1.5) — both left, and the seam each left behind is a registered hook, so neither comes back.
+  It remains the module's debt sink; what sits here that is family-specific or platform-specific is
+  debt, **not precedent**. Nothing platform-specific may be added; new shared concerns get their own
+  file rather than another thousand lines here.
 - **`dasllama_transformer.das`** — the block-composition seam only.
 - **`dasllama_config.das`** — `DlimConfiguration`: every input that changes `.dlim` image BYTES,
   in one struct, plus its identity formatter. A knob that does not change image bytes does not
@@ -91,6 +92,12 @@ often gotten wrong, so each says explicitly where the neighbouring half goes.
   because the two algorithms share no state; a third tokenizer family gets a third file.
 
 ### 1.3 The load and image rail
+
+**`dasllama_load.das`** is the GGUF load walk: metadata to `Config`, the plane layout, disk-format
+detection, the eager and streamed conversion ladders, and the load entry points. It owns nothing the
+forward path touches at run time — a loaded `Model` is the whole handoff — and it requires
+`dasllama_common` back for `Model`/`Session`, so the transformer umbrella requires it `public` and
+breaks the cycle. That re-export is what keeps every consumer on the facade.
 
 - **`dasllama_image.das`** — the prepared-model `.dlim` rail, and it is ONE rail (§2.1). Nothing
   outside this file may read weights into a live carrier, and nothing outside it may release an

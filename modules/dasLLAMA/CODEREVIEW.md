@@ -74,6 +74,12 @@ carve-outs.
 **A new file ships with its rule here, its charter in `ARCHITECTURE.md` §1, and its tests, in
 the same change.** A file without its records is a defect.
 
+**A consumer requires the facade, never an engine internal.** Tests, harnesses, benchmarks and
+tools require `dasllama/dasllama` or `dasllama/dasllama_transformer`, which re-export the engine;
+a direct require of an internal module from outside `dasllama/` is a defect. Engine internals may
+require each other. When a split moves a symbol, the facade keeps consumers working — adding
+requires across the tree means the re-export is missing, so fix that instead.
+
 **A new module file is registered in `.das_module` and `CMakeLists.txt` in the same change.**
 A file missing from either resolves for a direct compile and fails as `missing prerequisite` for
 every requirer, so a partial registration reads as working until something else requires it.
@@ -81,8 +87,10 @@ every requirer, so a partial registration reads as working until something else 
 ### Engine
 
 - `dasllama.das` — the public API surface and its re-exports.
-- `dasllama_common.das` — engine types, forward loops, override registries, the load walk. No
-  platform-specific code.
+- `dasllama_common.das` — engine types, forward loops, override registries, runtime knobs. No
+  platform-specific code, and no load walk.
+- `dasllama_load.das` — the GGUF load walk: metadata to `Config`, plane layout, format detection,
+  the eager and streamed conversion ladders, and the load entry points.
 - `dasllama_transformer.das` — block composition.
 - `dasllama_config.das` — every input that changes `.dlim` image bytes, and its identity
   formatter.
