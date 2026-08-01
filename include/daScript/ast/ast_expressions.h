@@ -145,7 +145,9 @@ namespace das
                 bool        underClone : 1;
                 bool        underDeref : 1;
                 bool        noBoundCheck : 1;
-                bool        noTableInit : 1;    // direct store target (tab[k] = / <- / :=) — skip the default_init_containers rewrite
+                bool        noTableInit : 1;    // direct store target (tab[k] = / <- / :=) — skip the default_init_containers rewrite.
+                                                // Re-derived from syntactic position by preVisit on every infer pass, so ExprAt::clone
+                                                // deliberately does NOT copy it: a clone lands in whatever position it lands in.
             };
             uint32_t atFlags = 0;
         };

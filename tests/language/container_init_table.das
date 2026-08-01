@@ -1,4 +1,5 @@
 options gen2
+options persistent_heap   // heap_bytes_allocated only tracks individual frees on the persistent heap
 require dastest/testing_boost public
 
 struct Foo {
@@ -57,6 +58,22 @@ def test_table_index_store_forms(t : T?) {
         tab["m"] <- src
         t |> equal(length(tab["m"].xs), 1)
         t |> equal(tab["m"].xs[0], 9)
+    }
+    t |> run("relaxed assign promotes to move without initializing first") @(t : T?) {
+        // `=` with a non-copyable RHS becomes `<-`, and that promotion CLONES the left
+        // ExprAt (dropping noTableInit). preVisit re-derives the mark next pass, so the
+        // slot must still not be initialized-then-overwritten - that would leak [1, 2].
+        var inscope tab : table<string; Bag>
+        var inscope other : table<string; Bag>
+        let base = heap_bytes_allocated()
+        var inscope src <- Bag(xs <- [9, 9, 9])
+        other["k"] <- src                      // control: explicit move
+        let net_move = int(heap_bytes_allocated()) - int(base)
+        let base2 = heap_bytes_allocated()
+        tab["k"] = Bag(xs <- [9, 9, 9])        // promoted to <-
+        let net_relaxed = int(heap_bytes_allocated()) - int(base2)
+        t |> equal(net_relaxed, net_move)
+        t |> equal(length(tab["k"].xs), 3)
     }
     t |> run("clone store preserves the source") @(t : T?) {
         var inscope tab : table<string; Bag>
