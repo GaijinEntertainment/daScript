@@ -321,9 +321,12 @@ Safety and Strictness
        ``addr(tab[key])`` keep the raw zeroed slot.
        **Finalize**: ``erase`` / ``erase_if`` / ``clear`` / shrinking ``resize`` /
        ``pop`` (arrays) and ``erase`` / ``clear`` (tables) finalize the elements they
-       drop — but only where finalizing frees memory the container owns. Raw
-       pointers, lambdas, and any composite carrying one are excluded, so
-       ``clear``-then-``delete`` remains the borrowed-pointer idiom.
+       drop — but only when the element's finalizer is fully generated, frees heap the element owns, and
+       deletes no pointees (``typeinfo is_pod_delete`` and ``is_safe_to_delete``). POD structs are excluded
+       (nothing to free — zero cost), user finalizers are never run implicitly
+       (``delete`` remains the full teardown that runs them), and raw pointers,
+       lambdas, and any composite carrying one keep the old drop-the-slot behavior,
+       so ``clear``-then-``delete`` remains the borrowed-pointer idiom.
        When ``false``, the pre-0.6.5 behavior returns entire: zeroed slots,
        ``resize`` of such element types requires ``unsafe``, and erase/clear drop
        elements without finalizing.

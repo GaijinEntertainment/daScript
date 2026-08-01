@@ -142,8 +142,25 @@ construct and finalize together:
 
 ```
 needs_container_finalize(elemT)
-  = default_init_containers && need_delete && is_safe_to_delete && !is_const
+  = default_init_containers && !is_const && is_pod_delete && is_safe_to_delete
 ```
+
+(AMENDED AGAIN after the deep review, Boris 2026-08-01: "there is
+InferTypes::isPodDelete and i think it borderline covers it".
+The prior `need_delete && is_safe_to_delete` gate was true for EVERY
+struct — `need_delete()` returns true for any structure — so a plain
+POD `struct Pt { x, y : float }` paid a per-element empty generated
+finalizer: measured 98x on clear (191982 vs 1960 usec, same bytes).
+`isPodDelete` is the honest predicate: finalize must be fully GENERATED
+(user finalizers never run implicitly — `delete` remains the teardown
+that runs them), must only free owned heap, and there must be some
+(`hasHeap`). Audit found one gap, fixed in place: `tFixedArray` was
+missing from its switch, so `array<int>[4]` inside a struct read as
+no-heap — a live `force_inscope_pod` leak-gap too. Top-level const is
+not isPodDelete's concern (its scope-exit callers collect const locals
+fine), so the trait keeps the `!is_const` leg. Post-fix measurement:
+`array<Pt>` clear 2264 vs 1964 usec — parity within noise. The helper
+instantiation guard survives at all 10 resize call sites.)
 
 (AMENDED during implementation. The planned `!is_pointer` carve-out was
 too narrow: linq's fold planner erases `array<tuple<ExprCall?; LinqCall?>>`

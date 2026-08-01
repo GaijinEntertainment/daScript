@@ -127,6 +127,11 @@ All ``typeinfo`` traits can operate on either an expression or a ``type<T>`` arg
 * ``typeinfo has_nontrivial_dtor(expr)`` — true if has non-trivial destructor
 * ``typeinfo has_nontrivial_copy(expr)`` — true if has non-trivial copy semantics
 * ``typeinfo is_unsafe_when_uninitialized(expr)`` — true if unsafe when uninitialized
+* ``typeinfo needs_nontrivial_init(expr)`` — true if zero-init is not full init (a ctor or field initializer exists); policy-free
+* ``typeinfo is_safe_to_delete(expr)`` — true if ``delete`` is safe without ``unsafe`` (false for raw pointers, lambdas, blocks, and composites carrying one)
+* ``typeinfo is_pod_delete(expr)`` — true if the finalizer is fully generated, frees only heap the value owns, and there is some (false for POD structs, user finalizers, pointers, lambdas, temporaries); policy-free
+* ``typeinfo needs_container_init(expr)`` — ``default_init_containers`` && ``needs_nontrivial_init``; gates container element construction
+* ``typeinfo needs_container_finalize(expr)`` — ``default_init_containers`` && not const && ``is_pod_delete`` && ``is_safe_to_delete``; gates the erase/clear/shrink finalize banner
 
 **Field and Annotation Traits** (see also :ref:`Annotations <annotations>`)
 
