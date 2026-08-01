@@ -91,7 +91,7 @@ call in a compiler-generated deref, so no `unsafe` surfaces in user
 code:
 
 ```
-def __table_index_and_init(var Tab : table<auto(KT); auto(VT)>; key : KT) : VT? {
+def _table_index_and_init(var Tab : table<auto(KT); auto(VT)>; key : KT) : VT? {
     let sz0 = length(Tab)              // O(1) size read
     var p = unsafe(addr(Tab[key]))     // ONE hash lookup; inserts zeroed slot if missing
     if (length(Tab) != sz0) {          // size grew ⇒ fresh slot ⇒ construct
@@ -105,7 +105,7 @@ C++ rewrite in the ExprAt table branch (ast_infer_type.cpp:3292): when
 ALL hold — policy on; `VT->unsafeInit()`; not a direct store target; not
 inside module builtin (the wrapper's own `Tab[key]` must not recurse);
 node is not ExprSafeAt (`tab?[k]` never inserts — untouched) — replace
-with `Ptr2Ref(Call __table_index_and_init(tab, key))` and
+with `Ptr2Ref(Call _table_index_and_init(tab, key))` and
 reportAstChanged. Same machinery as `:=` → `_::clone` emission.
 
 Store-target marking: preVisit of ExprCopy / ExprMove / ExprClone flags
@@ -130,8 +130,22 @@ Erase-family operations finalize the elements they drop, under one
 gate:
 
 ```
-need_delete(elemT) && !is_pointer(elemT)   // traits exist: ast_infer_type.cpp:2543, :2448
+need_delete(elemT) && is_safe_to_delete(elemT) && !is_const(elemT)
 ```
+
+(AMENDED during implementation. The planned `!is_pointer` carve-out was
+too narrow: linq's fold planner erases `array<tuple<ExprCall?; LinqCall?>>`
+slots whose pointees stay wired into the AST — a pointer-carrying
+COMPOSITE the pointer check missed, and finalizing it double-freed live
+AST nodes (13 suite files died on `not a chunk pointer`). The honest
+predicate already existed: `TypeDecl::isSafeToDelete()`
+(ast_typedecl.cpp:1630) — false for raw pointers, lambdas, blocks, and
+any composite carrying one — i.e. exactly "finalize would follow a raw
+pointer". Exposed as the new `is_safe_to_delete` typeinfo trait. The
+`!is_const` leg preserves the pre-existing no-finalize behavior for
+const-element arrays (`delete` of const is illegal, error 30917). Bonus:
+everything the gate admits deletes safely, so the banner needs no
+`unsafe` blocks except table-erase's `reinterpret`.)
 
 - Array: `erase(at)`, `erase(at, count)`, `clear`, SHRINKING `resize`
   (finalize `[newSize, oldSize)` before `__builtin_array_resize`);
@@ -182,13 +196,20 @@ time. Four files:
    push-through-index unchanged (array elements are trivially-zero — the
    negative case); variant/tuple values with inits; policy-off twin
    (zeros, today's behavior).
-4. **container_finalize.das** — heap-returns-to-baseline (interp is
-   deterministic) for erase / erase_range / clear / shrink-resize / pop
-   on `array<array<int>>`; survivor integrity after the erase memmove;
-   table erase + clear on `table<string; array<int>>`; the carve-out:
-   `array<Foo?>` and `table<string; Foo?>` holding borrowed pointers —
-   erase/clear leave the pointees alive and readable while `delete`
-   still frees them; locked-table erase/clear still error.
+4. **container_finalize.das** — counts finalizer calls (a `Probe` struct
+   with a user `finalize` bumping a module global) for erase /
+   erase_range / clear / shrink-resize / pop and table erase / clear /
+   missing-key erase; survivor integrity after the erase memmove; the
+   carve-out: borrowed `Foo?` pointers, the linq-planner
+   tuple-of-pointers shape, and `Probe?` (counter stays 0) all survive
+   erase/clear while `delete` still owns. One heap-delta assert anchors
+   actual release (array clear).
+   (AMENDED: heap-delta was the planned measurement everywhere, but
+   element-reached frees don't decrement `heap_bytes_allocated` in
+   daslib-compiled child contexts — i.e. under dastest. Pre-existing,
+   master-reproducible, accounting-only: `heap_total_allocated` proves
+   the freed block is reused. Repro harness kept in the session notes;
+   reported upstream rather than worked around in the runtime.)
 
 ## Docs and sweep
 
