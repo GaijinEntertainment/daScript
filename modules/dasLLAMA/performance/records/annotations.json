@@ -25,5 +25,13 @@
   "engine": "llama-mtmd-cli",
   "workload": "audio-chat",
   "comment": "Same jfk.wav decode runaway as on the M4 box (the reference generates at length on that clip despite --temp 0 --reasoning off), amplified by CPU-only decode - a behavior difference, not a speed measurement."
+ },
+ {
+  "gguf": "Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf",
+  "box": "m1",
+  "engine": "das",
+  "backend": "metal",
+  "flavor": "tuned",
+  "comment": "Re-recorded 2026-07-31. The previous row (125.4 pp512 / 16.9 tg128) read about 21% low on tg and was a measurement fault, not a code change: the pre-branch commit measures 133.4/20.6 and the current tree measures the same, solo and inside a full board, so nothing between the two recordings moved this model. The prior row came from a multi-cell sweep, where a board-tail cell under-reads on a hot chip. pp512 on this model carries genuine run-to-run variance (cv 4.4% on the re-record, flagged by the rig) - judge its pp with that in mind; tg is stable to a few hundredths. The llama.cpp column is unchanged and still the pinned 2026-07-28 measurement."
  }
 ]

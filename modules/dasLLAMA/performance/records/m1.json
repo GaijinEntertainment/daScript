@@ -1644,7 +1644,7 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
+        "date":"2026-07-31",
         "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
@@ -1658,20 +1658,19 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":125.39499599462943,
-            "stddev":5.0437283515930176
+            "tok_s":129.92160482053032,
+            "stddev":5.7702484130859375
           },
           "tg128":{
-            "tok_s":16.92048233367742,
-            "stddev":0.14842700958251953
+            "tok_s":20.502757713605376,
+            "stddev":0.16852478682994843
           }
         },
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"0de57fb39",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
         "exec_fmt":"weights k4/k6 native; q8 activations; f32 scales; metal blob",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/m1.tune.json DASLLAMA_BOX=m1",
         "files":[
           {
             "role":"weights",
