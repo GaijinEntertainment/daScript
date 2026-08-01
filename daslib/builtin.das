@@ -818,19 +818,21 @@ def reserve(var Tab : table<auto(keyT); auto>; newSize : int64) {
 
 // infer replaces a non-store tab[key] over an init-carrying value type with a call to this
 // (default_init_containers policy); a size bump across the index proves the slot is fresh
-def _table_index_and_init(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #) : valT? {
+def _table_index_and_init(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #) : valT& {
     let sz0 = length(Tab)
-    var p = unsafe(addr(Tab[at]))
+    var p & = unsafe(Tab[at])
     if (length(Tab) != sz0) {
         static_if (typeinfo can_move(type<valT>)) {
-            *p <- default<valT>
+            p <- default<valT>
         } static_elif (typeinfo can_copy(type<valT>)) {
-            *p = default<valT>
+            p = default<valT>
         } else {
-            *p := default<valT>
+            p := default<valT>
         }
     }
-    return p
+    unsafe {
+        return p
+    }
 }
 
 

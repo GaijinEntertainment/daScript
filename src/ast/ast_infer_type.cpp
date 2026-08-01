@@ -1228,8 +1228,7 @@ namespace das {
     }
     void InferTypes::preVisit(ExprRef2Ptr *expr) {
         Visitor::preVisit(expr);
-        // addr(tab[k]) is raw slot access — no default_init_containers rewrite. This is also
-        // what keeps _table_index_and_init's own Tab[at] (under addr) from recursing into itself.
+        // addr(tab[k]) is raw slot access — no default_init_containers rewrite
         if (expr->subexpr->rtti_isAt()) {
             static_cast<ExprAt*>(expr->subexpr)->noTableInit = true;
         }
@@ -3347,20 +3346,21 @@ namespace das {
                       expr->at, CompilationError::unsafe_table_index);
             }
             // default_init_containers: a non-store index over an init-carrying value type becomes
-            // *_table_index_and_init(tab,key) so a fresh slot runs its initializers (builtin.das owns
-            // the wrapper). Temporary tables keep the raw index - a # view is a borrowed shape whose
-            // indexed inserts panic on the lock at runtime anyway; rewriting it would only trade that
-            // for a compile error naming a compiler-internal generic.
+            // _table_index_and_init(tab,key) - a ref-returning wrapper - so a fresh slot runs its
+            // initializers (builtin.das owns the wrapper; its own body is exempt below, which is
+            // what keeps its Tab[at] from recursing into itself). Temporary tables keep the raw
+            // index - a # view is a borrowed shape whose indexed inserts panic on the lock at
+            // runtime anyway; rewriting it would only trade that for a compile error naming a
+            // compiler-internal generic.
             if (defaultInitContainers && !unsafeTableLookup && !expr->noTableInit
-                && !seT->temporary && seT->secondType->unsafeInit()) {
+                && !seT->temporary && seT->secondType->unsafeInit()
+                && !(func && func->fromGeneric && func->fromGeneric->name == "_table_index_and_init")) {
                 auto pCall = new ExprCall(expr->at, "_table_index_and_init");
                 pCall->arguments.push_back(expr->subexpr->clone());
                 pCall->arguments.push_back(expr->index->clone());
                 pCall->generated = true;
-                auto pDeref = new ExprPtr2Ref(expr->at, pCall);
-                pDeref->generated = true;
                 reportAstChanged();
-                return pDeref;
+                return pCall;
             }
             TypeDecl::clone(expr->type, seT->secondType);
             expr->type->ref = true;
