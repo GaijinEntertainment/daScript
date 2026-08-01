@@ -265,7 +265,7 @@ def private transcode_import_audio(cfg : TelegramRawAsrConfig; source, wav : str
                 "-i", source, "-ar", "16000", "-ac", "1", wav]
     let rc = unsafe(popen_argv(argv, 300.0) $(file) {
         if (file != null) {
-            unsafe(fread_to_eof(file))
+            fread(file)
         }
     })
     return rc == 0
@@ -295,7 +295,7 @@ def private request_raw_transcription(
                 "{cfg.Server}/v1/audio/transcriptions"]
     let rc = unsafe(popen_argv(argv, 3660.0) $(file) {
         if (file != null) {
-            unsafe(fread_to_eof(file))
+            fread(file)
         }
     })
     let response = fread(response_path)
