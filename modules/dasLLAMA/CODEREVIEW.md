@@ -175,6 +175,29 @@ is a defect.
 
 ---
 
+## File and memory model
+
+**Runtime serves weights out of a mapped `.dlim`.** A live weight carrier's planes point into the
+mapping `parse_image` produced, and going live does no significant work — repacking, quantizing,
+folding, and permuting belong to the mint. A transform on the path that makes a carrier live is a
+defect. See `ARCHITECTURE.md` §2.1.
+
+**A missing `.dlim` is minted first, and the model is served from what was minted.** A load path
+that falls back to reading weights out of the source file into a live carrier is a defect, and so
+is one that serves a carrier the mint did not produce.
+
+**There is one way to mint, and one way to load.** A weight carrier becomes live through
+`build_image` and `parse_image` in `dasllama_image.das`, and nothing else. Code anywhere else that
+reads weights into a live carrier, or releases an image backing, is a defect — and a second mint
+path, whether per family, per format, or per backend, is a defect even where it produces an
+identical file. See `ARCHITECTURE.md` §2.1.
+
+**A mint never holds the whole model.** It sizes the image before the first byte goes out and
+writes each plane as it is produced. Keeping the source model resident to write from is a defect,
+and a mint that is slower in exchange for a lower peak is correct. See `ARCHITECTURE.md` §3.
+
+---
+
 ## Implementation
 
 **A kernel's shape is compile-time; only its data is runtime.** The test is one question: for a
@@ -202,10 +225,6 @@ compile.
 
 **A cache keyed by a host address carries the span and the form in its key.** A hit must cover
 the request, and different upload forms live in separate tables.
-
-**There is one way to load a model.** A weight carrier becomes live through `build_image` and
-`parse_image` in `dasllama_image.das`, and nothing else. Code anywhere else that reads weights
-into a live carrier, or releases an image backing, is a defect. See `ARCHITECTURE.md` §2.1.
 
 **A predicate answering "can this run" must not also answer "is this ready".** A caller that
 runs before setup finishes gets a permanent no, and the feature silently never runs.
