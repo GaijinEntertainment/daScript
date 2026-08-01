@@ -115,6 +115,56 @@ namespace das {
                 propagateFunctionUse(fn);
             }
         }
+        // structure field initializers reference functions (typically generated ctors, e.g.
+        // `w : WithInit = WithInit()`) outside any function or global body, so the expression
+        // hooks above never record them. left unmarked, removeUnusedSymbols frees the function
+        // while the surviving structure's field-init expression keeps the raw pointer — and
+        // AST serialization then reads a dangling Function* (nondeterministic SIGSEGV in
+        // getMangledName). seed every such reference into the use-propagation.
+        void markStructureFieldInitFunctions ( ModuleLibrary & lib ) {
+            struct CollectFuncRefs : Visitor {
+                MarkSymbolUse * owner = nullptr;
+                virtual void preVisit ( ExprCall * call ) override {
+                    Visitor::preVisit(call);
+                    if ( call->func ) owner->propagateFunctionUse(call->func);
+                }
+                virtual void preVisit ( ExprMakeStruct * call ) override {
+                    Visitor::preVisit(call);
+                    if ( call->constructor ) owner->propagateFunctionUse(call->constructor);
+                }
+                virtual void preVisit ( ExprAddr * addr ) override {
+                    Visitor::preVisit(addr);
+                    if ( addr->func ) owner->propagateFunctionUse(addr->func);
+                }
+                virtual void preVisit ( ExprNew * enew ) override {
+                    Visitor::preVisit(enew);
+                    if ( enew->func ) owner->propagateFunctionUse(enew->func);
+                }
+                virtual void preVisit ( ExprOp1 * op ) override {
+                    Visitor::preVisit(op);
+                    if ( op->func ) owner->propagateFunctionUse(op->func);
+                }
+                virtual void preVisit ( ExprOp2 * op ) override {
+                    Visitor::preVisit(op);
+                    if ( op->func ) owner->propagateFunctionUse(op->func);
+                }
+                virtual void preVisit ( ExprOp3 * op ) override {
+                    Visitor::preVisit(op);
+                    if ( op->func ) owner->propagateFunctionUse(op->func);
+                }
+            };
+            CollectFuncRefs cvis;
+            cvis.owner = this;
+            lib.foreach([&](Module * pm) {
+                if ( pm->builtIn ) return true;
+                for ( auto & st : pm->structures.each() ) {
+                    for ( auto & fd : st->fields ) {
+                        if ( fd.init ) fd.init = fd.init->visit(cvis);
+                    }
+                }
+                return true;
+            }, "*");
+        }
         void RemoveUnusedSymbols ( Module & mod ) {
             auto functions = das::move(mod.functions);
             auto globals = das::move(mod.globals);
@@ -302,6 +352,7 @@ namespace das {
         MarkSymbolUse vis(false);
         vis.tw = logs;
         visit(vis);
+        vis.markStructureFieldInitFunctions(library);
         vis.markModuleUsedFunctions(library, thisModule.get());
         vis.markModuleVarsUsed(library, thisModule.get());
     }
@@ -312,6 +363,7 @@ namespace das {
         MarkSymbolUse vis(false);
         vis.tw = logs;
         visit(vis);
+        vis.markStructureFieldInitFunctions(library);
         vis.markUsedFunctions(library, false, true, thisModule.get());
         vis.markVarsUsed(library, false);
     }
@@ -321,6 +373,7 @@ namespace das {
         MarkSymbolUse vis(false);
         vis.tw = logs;
         visit(vis);
+        vis.markStructureFieldInitFunctions(library);
         vis.markUsedFunctions(library, false, false, nullptr);
         vis.markVarsUsed(library, false);
     }
@@ -340,6 +393,7 @@ namespace das {
         MarkSymbolUse vis(builtInSym);
         vis.tw = logs;
         visit(vis);
+        vis.markStructureFieldInitFunctions(library);
         vis.markUsedFunctions(library, forceAll, initThis, macroModule);
         vis.markVarsUsed(library, forceAll);
     }
