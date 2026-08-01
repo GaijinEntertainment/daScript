@@ -494,7 +494,6 @@ struct VkPlanEntry {
     ws_bytes : int64
 }
 
-
 def register_batch_decode_override(name : string; fn : BatchDecodeOverrideFn) {
     g_batch_decode_overrides[name] = fn
 }
@@ -1080,7 +1079,6 @@ def cls_kq(t : Model) : bool => t.kquant_native && t.config.shared_weights && t.
 // Format tag for layer l of a per-kind tag array; empty array (non-kq load) = q8.
 def fmt_at(a : array<KqFmt>; l : int64) : KqFmt => empty(a) ? KqFmt.q8 : a[l]
 
-
 // Reserve exact capacity then size — avoids the array allocator's power-of-2 rounding on big arrays.
 def reserve_resize(var a : array<float>; n : int64) {
     a |> reserve(n)
@@ -1092,7 +1090,6 @@ def copy_floats(src : array<float> | #; soff : int64; var dst : array<float>; do
         dst[doff + i] = src[soff + i]
     }
 }
-
 
 // ===== Arch registry =====
 // Each architecture self-registers its config setter, block kernels, and chat template at [init].
@@ -1416,7 +1413,6 @@ def wscale_convert_f16(var t : Model) {
     to_log(LOG_INFO, "dasLLAMA: weight-scale plane converted to f16 ({n} scales, -{n * 2l} bytes)\n")
 }
 
-
 // The device format of an EXPERT stack: q8 rides the cm2 native-block layout (q8n, fmt 6) when
 // the armed tier asks for it; every other format ships as-is. Upload and dispatch must agree on
 // the answer — both go through this one helper.
@@ -1429,7 +1425,6 @@ def kq_active_mr(t : Model; f : KqFmt) : int64 {
     }
     return f == KqFmt.k4 ? t.kq_repack_mr4 : (f == KqFmt.k5 ? t.kq_repack_mr5 : (f == KqFmt.k6 ? t.kq_repack_mr6 : t.kq_repack_mr40))
 }
-
 
 //! Load a llama-architecture GGUF into the split layout at the requested precision — straight into
 //! `mode`'s storage (pre-quantized tensors transcode block-for-block; a Q8/Q4 load never holds the
@@ -1962,7 +1957,6 @@ def eval_(t : Model; var s : Session; tokens : array<int64>) {
 }
 
 // ===== Per-app runtime profile (the tune sidecar's "runtime" section) =====
-
 
 // ===== Metal-4 tensor-lane crowns (the sidecar's "runtime"."metal_tensor" knob) =====
 // Comma-list of families whose TENSOR twin won this box's tune race; consulted once per
@@ -3312,7 +3306,7 @@ def mm_f(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x : array<f
 
 // Pre-quantized format router: q8-tagged weights consume the Q8_0-form scratch (xq/xs);
 // kq-tagged weights the Q8_K-form scratch (kxq/kxs/kxbs — kq v2, all three formats).
-def private mm_pre_f(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; kxq : array<int8>; kxs : array<float>; kxbs : array<int>; n, d : int64) {
+def mm_pre_f(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; kxq : array<int8>; kxs : array<float>; kxbs : array<int>; n, d : int64) {
     if (fmt == KqFmt.q8) {
         mm_at_q8_pre(y, t, woff, xq, xs, n, d)
     } else {
@@ -4474,102 +4468,6 @@ def hermes_tools(var ct : ChatTemplate) {
     ct.tool_resp_close = "</tool_response>"
 }
 
-
-
-
-// ===== block-family helpers the shared drivers also call (kept here; dasllama_blocks uses them) =====
-def dense_ffn_inplace(t : Model; var s : Session; l : int64) {
-    let c = t.config
-    let dim = c.dim
-    let hidden = layer_hidden(t, l)   // gemma-4 E2B varies FFN width per layer
-    let ts_ffn = ref_time_ticks()
-    let f1 = fmt_at(t.w1_fmt, l)
-    let f2 = fmt_at(t.w2_fmt, l)
-    let f3 = fmt_at(t.w3_fmt, l)
-    if (f1 != KqFmt.q8 || f2 != KqFmt.q8 || f3 != KqFmt.q8) {
-        // K-quant FFN (formats mix, e.g. Q4_K_M keeps ffn_down at Q6_K): one bs-quantize serves every format
-        if (f1 == KqFmt.q8 || f3 == KqFmt.q8) {
-            quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)
-        }
-        if (f1 != KqFmt.q8 || f3 != KqFmt.q8) {   // kq v2: every kq format reads the Q8_K form
-            quantize_q8_k_into(s.xb, dim, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)
-        }
-        mm_pre_f(s.hb, t, f1, t.w1_offs[l], s.xq, s.xs, s.kxq, s.kxs, s.kxbs, dim, hidden)
-        mm_pre_f(s.hb2, t, f3, t.w3_offs[l], s.xq, s.xs, s.kxq, s.kxs, s.kxbs, dim, hidden)
-        prof_add("mm_ffn", ts_ffn)
-        let ts_act = ref_time_ticks()
-        gate_batch(s.hb, s.hb2, c.ffn_act, hidden, 1l)
-        prof_add("act", ts_act)
-        let ts_down = ref_time_ticks()
-        if (f2 == KqFmt.q8) {
-            quantize_q8_0_into(s.hb, hidden, s.xq, s.xs, 0l, 0l)
-        } else {   // kq v2
-            quantize_q8_k_into(s.hb, hidden, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)
-        }
-        mm_pre_f(s.xb, t, f2, t.w2_offs[l], s.xq, s.xs, s.kxq, s.kxs, s.kxbs, hidden, dim)
-        prof_add("mm_ffn_down", ts_down)
-    } elif (t.quant == QuantMode.q8) {
-        // gate+up share the activation: ONE quantize + ONE region-list dispatch into ffn_gu's halves
-        quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)
-        s.ffn_offs[0] = t.w1_offs[l]
-        s.ffn_offs[1] = 0l
-        s.ffn_offs[2] = t.w3_offs[l]
-        s.ffn_offs[3] = 0l
-        mm_at_q8_groupn(s.ffn_gu, t, s.ffn_offs, 2l, s.xq, s.xs, dim, hidden)
-        prof_add("mm_ffn", ts_ffn)
-        let ts_act = ref_time_ticks()
-        unsafe {
-            gate_batch(addr(s.ffn_gu[0]), addr < float const? >(s.ffn_gu[hidden]), c.ffn_act, hidden, 1l)
-        }
-        prof_add("act", ts_act)
-        // down projection off the gated half
-        let ts_down = ref_time_ticks()
-        quantize_q8_0_into(s.ffn_gu, hidden, s.xq, s.xs, 0l, 0l)
-        mm_at_q8_pre(s.xb, t, t.w2_offs[l], s.xq, s.xs, hidden, dim)
-        prof_add("mm_ffn_down", ts_down)
-    } else {
-        mm(s.hb, t, t.w1_offs[l], s.xb, s.xq, s.xs, dim, hidden)
-        mm(s.hb2, t, t.w3_offs[l], s.xb, s.xq, s.xs, dim, hidden)
-        prof_add("mm_ffn", ts_ffn)
-        let ts_act = ref_time_ticks()
-        gate_batch(s.hb, s.hb2, c.ffn_act, hidden, 1l)   // fused act*gate; same kernel as prefill (npos=1 → inline)
-        prof_add("act", ts_act)
-        let ts_ffn2 = ref_time_ticks()
-        mm(s.xb, t, t.w2_offs[l], s.hb, s.xq, s.xs, hidden, dim)
-        prof_add("mm_ffn_down", ts_ffn2)
-    }
-}
-
-[no_alloc, no_env, no_io]
-def ffn_dense_decode(t : Model; var s : Session; l : int64) {
-    if (fused_ffn_ok(t, l)) {
-        ffn_chain_decode(t, s, l)
-        return
-    }
-    trace_tag(TRACE_TAG_FFN_STD)
-    let c = t.config
-    let dim = c.dim
-    // ffn rmsnorm
-    let ts_norm1 = ref_time_ticks()
-    rms_at(s.xb, t, t.rms_ffn_off + l * dim, s.x, dim)
-    prof_add("norm", ts_norm1)
-    // gated FFN: hb = act(W1·xb) * (W3·xb) — silu (SwiGLU) or gelu (GeGLU, Gemma2)
-    dense_ffn_inplace(t, s, l)
-    let ts_resid1 = ref_time_ticks()
-    if (c.pre_post_norm) {  // Gemma2: post-FFN RMSNorm before the residual add
-        rms_at(s.xb, t, t.rms_post_ffn_off + l * dim, s.xb, dim)
-    }
-    // gemma4: E-series applies layer-output scale AFTER its PLE block, so skip it here when PLE is on
-    if (c.layer_out_scale && !has_ple(c)) {
-        add_scale_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb[0])), t.fblob[t.out_scale_off + l], dim)
-    } else {
-        add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb[0])), dim)
-    }
-    prof_add("act_resid", ts_resid1)
-}
-
-
-
 // ===== std/dense block kernels (prefill, batched) =====
 // Batched counterparts to attention_std_decode / ffn_dense_decode; bit-for-bit identical to
 // calling forward() per position in sequence. Q4 has no batched kernel, falls back to per-token.
@@ -4762,7 +4660,6 @@ def forward_batch(t : Model; var s : Session; tokens : array<int64>; npos, start
     }
 }
 
-
 // the size threshold. pre_post_norm/layer_out_scale are handled: the chain defers the residual add
 // and the caller's serial tail runs post-norm and/or the fused add+scale after the rendezvous.
 def fused_ffn_ok(t : Model; l : int64) : bool {
@@ -4779,172 +4676,6 @@ def fused_ffn_ok(t : Model; l : int64) : bool {
         && get_jobque_team_mode() && kernel_backend_has_rows()
         && (!t.wscale_f16 || kernel_backend_has_rows16())
         && lanes_for_work(c.dim * layer_hidden(t, l), g_gemv_lane_cap) > 1)
-}
-
-// Fused dense FFN block: ONE team rendezvous runs [w1+w3 rows + act + requant] -> [w2 rows +
-// residual add] as two stages, gate/up rows PAIRED per chunk (requant lands in xq2/xs2, not
-// xq/xs — other stage-0 chunks still read the input quants). Bit-identical to ffn_dense_decode.
-def ffn_chain_decode(t : Model; var s : Session; l : int64) {
-    let c = t.config
-    let dim = c.dim
-    let hidden = layer_hidden(t, l)   // gemma-4 E2B varies FFN width per layer
-    // per-weight formats (kq layers reach here only off a repacked load — fused_ffn_ok)
-    let f1 = fmt_at(t.w1_fmt, l)
-    let f2 = fmt_at(t.w2_fmt, l)
-    let f3 = fmt_at(t.w3_fmt, l)
-    let any_kq = f1 != KqFmt.q8 || f2 != KqFmt.q8 || f3 != KqFmt.q8
-    let ts_norm1 = ref_time_ticks()
-    rms_at(s.xb, t, t.rms_ffn_off + l * dim, s.x, dim)
-    // one input quantize per consumed form: q8 gate/up read Q8_0, kq gate/up read Q8_K (kq v2)
-    if (f1 == KqFmt.q8 || f3 == KqFmt.q8) {
-        quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)
-    }
-    if (f1 != KqFmt.q8 || f3 != KqFmt.q8) {
-        quantize_q8_k_into(s.xb, dim, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)
-    }
-    prof_add("norm", ts_norm1)
-    let ts_chain = ref_time_ticks()
-    trace_tag(TRACE_TAG_FFN_CHAIN)
-    let mmrows = mm_q8q8_rows_fn()
-    let is_gelu = c.ffn_act == FfnAct.gelu
-    let is_oai = c.ffn_act == FfnAct.swiglu_oai
-    let vec = g_act_vec
-    // Gemma2/3 post-FFN norm is a whole-vector reduction, so the chain defers the residual add to a serial tail
-    let post_norm = c.pre_post_norm
-    let out_scale_here = c.layer_out_scale && !has_ple(c)
-    let defer_add = post_norm || out_scale_here
-    // stage-0 grain: 32 rows for a q8 down-proj; 256 for a kq one (Q8_K quantizes whole superblocks)
-    let grain0 = f2 != KqFmt.q8 ? 256l : 32l
-    let ngrp0 = int(hidden / grain0)
-    let ngrp1 = int(dim / 32l)
-    let n0 = chain_stage_chunks(ngrp0, int(hidden), 2l * dim * hidden)
-    let n1 = chain_stage_chunks(ngrp1, int(dim), hidden * dim)
-    s.chain_stages |> resize(2)
-    s.chain_stages[0] = int3(0, ngrp0, n0)
-    s.chain_stages[1] = int3(0, ngrp1, n1)
-    count_parallel_dispatch(min(n0, ngrp0) + min(n1, ngrp1))
-    unsafe {
-        var xp = addr(s.x[0])
-        var xbp = addr(s.xb[0])
-        var gup = addr(s.ffn_gu[0])
-        var xqp = addr(s.xq[0])
-        var xsp = addr(s.xs[0])
-        var xq2p = addr(s.xq2[0])
-        var xs2p = addr(s.xs2[0])
-        let f16w = t.wscale_f16
-        let mmrows16 = mm_q8q8_rows16_fn()
-        // all-kq layers skip the q8 bases — qblob/qscales can be EMPTY on an all-K-quant file
-        let has_q8w = f1 == KqFmt.q8 || f2 == KqFmt.q8 || f3 == KqFmt.q8
-        let wqb = has_q8w ? addr < int8 const? >(t.qblob[0]) : null
-        let w1o = t.w1_offs[l]
-        let w3o = t.w3_offs[l]
-        let w2o = t.w2_offs[l]
-        var ws1 : float const? = null
-        var ws3 : float const? = null
-        var ws2 : float const? = null
-        var ws116 : uint16 const? = null
-        var ws316 : uint16 const? = null
-        var ws216 : uint16 const? = null
-        if (f16w && has_q8w) {
-            let wsb16 = addr < uint16 const? >(t.qscales16[0])
-            ws116 = wsb16 + w1o / 32l
-            ws316 = wsb16 + w3o / 32l
-            ws216 = wsb16 + w2o / 32l
-        } elif (has_q8w) {
-            let wsb = addr < float const? >(t.qscales[0])
-            ws1 = wsb + w1o / 32l
-            ws3 = wsb + w3o / 32l
-            ws2 = wsb + w2o / 32l
-        }
-        let wp1 = wqb + w1o
-        let wp3 = wqb + w3o
-        let wp2 = wqb + w2o
-        // kq-tagged weights: plane bases + rows cores + the Q8_K activation image (kq v2); q8 rows cores keep Q8_0
-        var kxqp : int8? = any_kq ? addr(s.kxq[0]) : null
-        var kxsp : float? = any_kq ? addr(s.kxs[0]) : null
-        var kxbsp : int? = any_kq ? addr(s.kxbs[0]) : null
-        var xbs2w : int? = f2 != KqFmt.q8 ? addr(s.xbs2[0]) : null
-        let kqp1 = kq_plane_q(t, f1, w1o)
-        let ksp1 = kq_plane_s(t, f1, w1o)
-        let rows1 = kq_rows_for(f1)
-        let kqp3 = kq_plane_q(t, f3, w3o)
-        let ksp3 = kq_plane_s(t, f3, w3o)
-        let rows3 = kq_rows_for(f3)
-        let kqp2 = kq_plane_q(t, f2, w2o)
-        let ksp2 = kq_plane_s(t, f2, w2o)
-        let rows2 = kq_rows_for(f2)
-        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {   // nolint:PERF026 — dispatch-API lambda capture, see attention_chain_decode
-            unsafe {
-                let grain = stage == 0 ? grain0 : 32l
-                let r0 = int64(jb) * grain
-                let r1 = int64(je) * grain
-                if (stage == 0) {
-                    // paired gate/up rows, then act + requant on exactly these rows
-                    if (f1 != KqFmt.q8) {
-                        invoke(rows1, gup, kqp1, ksp1, kxqp, kxsp, kxbsp, dim, r0, r1)
-                    } elif (f16w) {
-                        invoke(mmrows16, gup, wp1, ws116, xqp, xsp, dim, r0, r1)
-                    } else {
-                        invoke(mmrows, gup, wp1, ws1, xqp, xsp, dim, r0, r1)
-                    }
-                    if (f3 != KqFmt.q8) {
-                        invoke(rows3, gup + hidden, kqp3, ksp3, kxqp, kxsp, kxbsp, dim, r0, r1)
-                    } elif (f16w) {
-                        invoke(mmrows16, gup + hidden, wp3, ws316, xqp, xsp, dim, r0, r1)
-                    } else {
-                        invoke(mmrows, gup + hidden, wp3, ws3, xqp, xsp, dim, r0, r1)
-                    }
-                    if (vec) {
-                        if (is_gelu) {
-                            geglu4(gup + r0, gup + hidden + r0, r1 - r0)
-                        } elif (is_oai) {
-                            swiglu_oai4(gup + r0, gup + hidden + r0, r1 - r0)
-                        } else {
-                            swiglu4(gup + r0, gup + hidden + r0, r1 - r0)
-                        }
-                    } else {
-                        if (is_gelu) {
-                            geglu(gup + r0, gup + hidden + r0, r1 - r0)
-                        } elif (is_oai) {
-                            swiglu_oai(gup + r0, gup + hidden + r0, r1 - r0)
-                        } else {
-                            swiglu(gup + r0, gup + hidden + r0, r1 - r0)
-                        }
-                    }
-                    if (f2 != KqFmt.q8) {   // kq down-proj: Q8_K requant, whole superblocks (grain 256)
-                        quantize_q8_k_into_ptr(gup + r0, r1 - r0, xq2p, xs2p, xbs2w, r0, r0 / 256l, r0 / 16l)
-                    } else {
-                        quantize_q8_0_into_ptr(gup + r0, r1 - r0, xq2p, xs2p, r0, r0 / 32l)
-                    }
-                } else {
-                    // down-projection rows + residual add (post-norm/layer_out_scale arches defer the add)
-                    if (f2 != KqFmt.q8) {
-                        invoke(rows2, xbp, kqp2, ksp2, xq2p, xs2p, xbs2w, hidden, r0, r1)
-                    } elif (f16w) {
-                        invoke(mmrows16, xbp, wp2, ws216, xq2p, xs2p, hidden, r0, r1)
-                    } else {
-                        invoke(mmrows, xbp, wp2, ws2, xq2p, xs2p, hidden, r0, r1)
-                    }
-                    if (!defer_add) {
-                        add_inplace(xp + r0, xbp + r0, r1 - r0)
-                    }
-                }
-            }
-        }
-    }
-    prof_add("ffn_chain", ts_chain)
-    if (defer_add) {  // same serial tail as the un-fused path (dim-sized, microseconds), bit-identical order
-        let ts_resid = ref_time_ticks()
-        if (post_norm) {  // Gemma2/3/4: post-FFN RMSNorm before the residual add
-            rms_at(s.xb, t, t.rms_post_ffn_off + l * dim, s.xb, dim)
-        }
-        if (out_scale_here) {  // gemma4 12B/31B: residual + per-layer output scale, one pass
-            add_scale_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb[0])), t.fblob[t.out_scale_off + l], dim)
-        } else {
-            add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb[0])), dim)
-        }
-        prof_add("act_resid", ts_resid)
-    }
 }
 
 [no_alloc, no_env, no_io]
