@@ -36,47 +36,84 @@ def intptr(p : smart_ptr<auto>) : uint64 {
     }
 }
 
-def resize(var Arr : array<auto(numT)>; newSize : int) {
-    static_if (typeinfo is_unsafe_when_uninitialized(type<numT>)) {
-        make_function_unsafe()
+[unused_argument(Arr, newSize)]
+def private _finalize_shrunk(var Arr : array<auto(numT)>; newSize : int) {
+    static_if (typeinfo need_delete(type<numT>) && typeinfo is_safe_to_delete(type<numT>) && !typeinfo is_const(type<numT>)) {
+        if (newSize >= 0) {
+            for (i in range(newSize, length(Arr))) {
+                delete Arr[i]
+            }
+        }
     }
-    __builtin_array_resize(Arr, newSize, typeinfo sizeof(Arr[0]))
+}
+
+[unused_argument(Arr, newSize)]
+def private _finalize_shrunk(var Arr : array<auto(numT)>; newSize : int64) {
+    static_if (typeinfo need_delete(type<numT>) && typeinfo is_safe_to_delete(type<numT>) && !typeinfo is_const(type<numT>)) {
+        if (newSize >= 0_l) {
+            for (i in range64(newSize, long_length(Arr))) {
+                delete Arr[i]
+            }
+        }
+    }
+}
+
+def resize(var Arr : array<auto(numT)>; newSize : int) {
+    static_if (typeinfo needs_container_init(type<numT>)) {
+        resize_and_init(Arr, newSize)
+    } static_elif (typeinfo is_unsafe_when_uninitialized(type<numT>)) {
+        make_function_unsafe()
+        _finalize_shrunk(Arr, newSize)
+        __builtin_array_resize(Arr, newSize, typeinfo sizeof(Arr[0]))
+    } else {
+        _finalize_shrunk(Arr, newSize)
+        __builtin_array_resize(Arr, newSize, typeinfo sizeof(Arr[0]))
+    }
 }
 
 def resize(var Arr : array<auto(numT)>; newSize : int64) {
-    static_if (typeinfo is_unsafe_when_uninitialized(type<numT>)) {
+    static_if (typeinfo needs_container_init(type<numT>)) {
+        resize_and_init(Arr, newSize)
+    } static_elif (typeinfo is_unsafe_when_uninitialized(type<numT>)) {
         make_function_unsafe()
+        _finalize_shrunk(Arr, newSize)
+        __builtin_array_resize_i64(Arr, newSize, typeinfo sizeof(Arr[0]))
+    } else {
+        _finalize_shrunk(Arr, newSize)
+        __builtin_array_resize_i64(Arr, newSize, typeinfo sizeof(Arr[0]))
     }
-    __builtin_array_resize_i64(Arr, newSize, typeinfo sizeof(Arr[0]))
 }
 
 def resize_and_init(var Arr : array<auto(numT)>; newSize : int | int64) {
     static_if (typeinfo is_int(newSize)) {
         let oldSize = length(Arr)
+        _finalize_shrunk(Arr, newSize)
         __builtin_array_resize(Arr, newSize, typeinfo sizeof(Arr[0]))
-        for (i in range(oldSize, newSize)) {
-            static_if (typeinfo is_workhorse(type<numT>)) {
-                Arr[i] = numT()
-            } static_elif (typeinfo can_move(type<numT>)) {
-                Arr[i] <- default<numT>
-            } static_elif (typeinfo can_copy(type<numT>)) {
-                Arr[i] = default<numT>
-            } else {
-                Arr[i] := default<numT>
+        // trivially-zero element types need no loop - the builtin resize already zeroed the new slots
+        static_if (typeinfo needs_nontrivial_init(type<numT>)) {
+            for (i in range(oldSize, newSize)) {
+                static_if (typeinfo can_move(type<numT>)) {
+                    Arr[i] <- default<numT>
+                } static_elif (typeinfo can_copy(type<numT>)) {
+                    Arr[i] = default<numT>
+                } else {
+                    Arr[i] := default<numT>
+                }
             }
         }
     } else {
         let oldSize = long_length(Arr)
+        _finalize_shrunk(Arr, newSize)
         __builtin_array_resize_i64(Arr, newSize, typeinfo sizeof(Arr[0]))
-        for (i in range64(oldSize, newSize)) {
-            static_if (typeinfo is_workhorse(type<numT>)) {
-                Arr[i] = numT()
-            } static_elif (typeinfo can_move(type<numT>)) {
-                Arr[i] <- default<numT>
-            } static_elif (typeinfo can_copy(type<numT>)) {
-                Arr[i] = default<numT>
-            } else {
-                Arr[i] := default<numT>
+        static_if (typeinfo needs_nontrivial_init(type<numT>)) {
+            for (i in range64(oldSize, newSize)) {
+                static_if (typeinfo can_move(type<numT>)) {
+                    Arr[i] <- default<numT>
+                } static_elif (typeinfo can_copy(type<numT>)) {
+                    Arr[i] = default<numT>
+                } else {
+                    Arr[i] := default<numT>
+                }
             }
         }
     }
@@ -85,6 +122,7 @@ def resize_and_init(var Arr : array<auto(numT)>; newSize : int | int64) {
 def resize_and_init(var Arr : array<auto(numT)>; newSize : int | int64; initValue : numT) {
     static_if (typeinfo is_int(newSize)) {
         let oldSize = length(Arr)
+        _finalize_shrunk(Arr, newSize)
         __builtin_array_resize(Arr, newSize, typeinfo sizeof(Arr[0]))
         for (i in range(oldSize, newSize)) {
             static_if (typeinfo can_copy(initValue)) {
@@ -95,6 +133,7 @@ def resize_and_init(var Arr : array<auto(numT)>; newSize : int | int64; initValu
         }
     } else {
         let oldSize = long_length(Arr)
+        _finalize_shrunk(Arr, newSize)
         __builtin_array_resize_i64(Arr, newSize, typeinfo sizeof(Arr[0]))
         for (i in range64(oldSize, newSize)) {
             static_if (typeinfo can_copy(initValue)) {
@@ -412,6 +451,7 @@ def push_from(var Arr : array<auto(numT)>; varr : numT[] -#) {
     }
 }
 
+//!@nolint
 //! Append a *nested* source: an `array<array<...numT>>` flattened into `Arr`,
 //! one array level per recursion (any depth). The single-level overloads above
 //! out-specialize this untyped form, so a flat `array<numT>` (and the
@@ -427,6 +467,7 @@ def push_from(var Arr : array<auto(numT)>; src) {
     }
 }
 
+//!@nolint
 //! Append several flat source arrays in one call — one combined `reserve(Σ)`
 //! up front, then unrolls to the single-source overload per arg. A *nested*
 //! source (`array<array<...>>`) goes through the recursive `push_from(Arr, src)`
@@ -530,6 +571,7 @@ def push_clone_from(var Arr : array<auto(numT)>; src) {
     }
 }
 
+//!@nolint
 //! Append several flat source arrays in one call via clone — one combined
 //! `reserve(Σ)` up front, then unrolls to the single-source overload per arg.
 //! Nested sources go through the recursive `push_clone_from(Arr, src)` overload
@@ -648,20 +690,56 @@ def back(arr : auto(TT) ==const) : auto& const {
     }
 }
 
+// the finalize banner: erase/clear/shrink release the elements they drop. Raw-pointer
+// elements are carved out - for them "finalize" means delete-the-pointee, and clear-then-delete
+// is the documented borrowed-pointer escape. delete stays the ownership teardown.
 def erase(var Arr : array<auto(numT)>; at : int) {
+    static_if (typeinfo need_delete(type<numT>) && typeinfo is_safe_to_delete(type<numT>) && !typeinfo is_const(type<numT>)) {
+        if (uint(at) < uint(length(Arr))) {
+            delete Arr[at]
+        }
+    }
     __builtin_array_erase(Arr, at, typeinfo sizeof(Arr[0]))
 }
 
 def erase(var Arr : array<auto(numT)>; at : int64) {
+    static_if (typeinfo need_delete(type<numT>) && typeinfo is_safe_to_delete(type<numT>) && !typeinfo is_const(type<numT>)) {
+        if (uint64(at) < uint64(long_length(Arr))) {
+            delete Arr[at]
+        }
+    }
     __builtin_array_erase_i64(Arr, at, typeinfo sizeof(Arr[0]))
 }
 
 def erase(var Arr : array<auto(numT)>; at : int; count : int) {
+    static_if (typeinfo need_delete(type<numT>) && typeinfo is_safe_to_delete(type<numT>) && !typeinfo is_const(type<numT>)) {
+        if (at >= 0 && count >= 0 && int64(at) + int64(count) <= long_length(Arr)) {
+            for (i in range(at, at + count)) {
+                delete Arr[i]
+            }
+        }
+    }
     __builtin_array_erase_range(Arr, at, count, typeinfo sizeof(Arr[0]))
 }
 
 def erase(var Arr : array<auto(numT)>; at : int64; count : int64) {
+    static_if (typeinfo need_delete(type<numT>) && typeinfo is_safe_to_delete(type<numT>) && !typeinfo is_const(type<numT>)) {
+        if (at >= 0_l && count >= 0_l && at + count <= long_length(Arr)) {
+            for (i in range64(at, at + count)) {
+                delete Arr[i]
+            }
+        }
+    }
     __builtin_array_erase_range_i64(Arr, at, count, typeinfo sizeof(Arr[0]))
+}
+
+def clear(var Arr : array<auto(numT)>) {
+    static_if (typeinfo need_delete(type<numT>) && typeinfo is_safe_to_delete(type<numT>) && !typeinfo is_const(type<numT>)) {
+        for (v in Arr) {
+            delete v
+        }
+    }
+    __builtin_array_clear(Arr)
 }
 
 
@@ -672,6 +750,11 @@ def erase_if(var arr : array<auto(TT)>; blk : block<(key : TT) : bool> | block<(
             let endIndex = i
             while (--i >= 0) {
                 break if (!invoke(blk, arr[i]))
+            }
+            static_if (typeinfo need_delete(type<TT>) && typeinfo is_safe_to_delete(type<TT>) && !typeinfo is_const(type<TT>)) {
+                for (j in range(i + 1, endIndex + 1)) {
+                    delete arr[j]
+                }
             }
             __builtin_array_erase_range(arr, i + 1, endIndex - i, typeinfo sizeof(arr[0]))
         }
@@ -704,6 +787,23 @@ def reserve(var Tab : table<auto(keyT); auto>; newSize : int) {
 def reserve(var Tab : table<auto(keyT); auto>; newSize : int64) {
     return if (newSize < 0_l)
     __builtin_table_reserve(Tab, uint64(newSize))
+}
+
+// infer replaces a non-store tab[key] over an init-carrying value type with a call to this
+// (default_init_containers policy); a size bump across the index proves the slot is fresh
+def _table_index_and_init(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #) : valT? {
+    let sz0 = length(Tab)
+    var p = unsafe(addr(Tab[at]))
+    if (length(Tab) != sz0) {
+        static_if (typeinfo can_move(type<valT>)) {
+            *p <- default<valT>
+        } static_elif (typeinfo can_copy(type<valT>)) {
+            *p = default<valT>
+        } else {
+            *p := default<valT>
+        }
+    }
+    return p
 }
 
 
@@ -797,10 +897,19 @@ def clone_value(var Tab : table<auto(keyT); smart_ptr<auto(valT)>>; at : keyT | 
 
 def erase(var Tab : table<auto(keyT); auto(valT)>; at : string#) : bool {
     let at_nt := at
-    return __builtin_table_erase(Tab, at_nt)
+    return erase(Tab, at_nt)
 }
 
 def erase(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #) : bool {
+    // the finalize banner: release the dropped value's heap (raw-pointer values carved out)
+    static_if (typeinfo need_delete(type<valT>) && typeinfo is_safe_to_delete(type<valT>) && !typeinfo is_const(type<valT>)) {
+        var val = __builtin_table_find(Tab, at)
+        if (val != null) {
+            unsafe {
+                delete * (reinterpret<valT?>(val))
+            }
+        }
+    }
     return __builtin_table_erase(Tab, at)
 }
 
@@ -1568,7 +1677,7 @@ def to_table_move(var a : array<auto(keyT)>) : table<keyT -const> {
     for (at in a) {
         __builtin_table_set_insert(tab, at)
     }
-    // Reclaim the (comprehension-owned) temp array; honors the "move" name and
+    // nolint:STYLE014 — Reclaim the (comprehension-owned) temp array; honors the "move" name and
     // frees what the table comprehension would otherwise orphan. tab clones
     // owned-heap keys (string/array/...) so delete must finalize those, but it
     // only aliases raw-pointer keys — null those first, or delete would free the
@@ -1619,7 +1728,7 @@ def to_table_move(var a : tuple<auto(keyT); auto(valT)>[]) : table<keyT -const; 
 def to_table_move(var a : array<tuple<auto(keyT); auto(valT)>>) : table<keyT -const; valT> {
     var tab : table<keyT -const; valT>
     static_if (typeinfo can_move(type<valT>)) {
-        // Always MOVE the value out (we own `a` and free it below). Moving —
+        // nolint:STYLE014 — Always MOVE the value out (we own `a` and free it below). Moving —
         // not copying — is what makes the source-free safe: a copy of a pointer
         // value would alias the same node, and `delete a` would then free the
         // node the table holds (use-after-free). After the move the element is
@@ -1634,7 +1743,7 @@ def to_table_move(var a : array<tuple<auto(keyT); auto(valT)>>) : table<keyT -co
     } else {
         concept_assert(false, "this array can't be copied or moved")
     }
-    // Moved-out values are already empty. Keys are copied into tab: owned-heap
+    // nolint:STYLE014 — Moved-out values are already empty. Keys are copied into tab: owned-heap
     // keys are cloned (delete must finalize the source copy) but raw-pointer keys
     // are only aliased — null those before delete so it frees just the temp
     // buffer, not the caller-owned pointee tab now references.
@@ -2024,6 +2133,12 @@ def move_to_ref(var a : auto&; var b) {
 }
 
 def clear(var t : table<auto(KT); auto(VT)>) {
+    // the finalize banner: release every value's heap (raw-pointer values carved out)
+    static_if (typeinfo need_delete(type<VT>) && typeinfo is_safe_to_delete(type<VT>) && !typeinfo is_const(type<VT>)) {
+        for (v in values(t)) {
+            delete v
+        }
+    }
     _builtin_table_clear(t)
 }
 
