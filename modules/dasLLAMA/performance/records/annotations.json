@@ -29,9 +29,6 @@
  {
   "gguf": "Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf",
   "box": "m1",
-  "engine": "das",
-  "backend": "metal",
-  "flavor": "tuned",
-  "comment": "Re-recorded 2026-07-31. The previous row (125.4 pp512 / 16.9 tg128) read about 21% low on tg and was a measurement fault, not a code change: the pre-branch commit measures 133.4/20.6 and the current tree measures the same, solo and inside a full board, so nothing between the two recordings moved this model. The prior row came from a multi-cell sweep, where a board-tail cell under-reads on a hot chip. pp512 on this model carries genuine run-to-run variance (cv 4.4% on the re-record, flagged by the rig) - judge its pp with that in mind; tg is stable to a few hundredths. The llama.cpp column is unchanged and still the pinned 2026-07-28 measurement."
+  "comment": "This cell is measured LAST in the m1 sweep and both of its engines read low: against the stored 2026-07-28 pair, das metal tg128 re-measures 20.6 against 16.92 and llama.cpp metal tg128 re-measures 16.87 against 13.48 - about +21% and +25%, on an unchanged llama.cpp binary. That is the board-tail thermal under-read the rig documents (-6.5% to -34%), not a code change; the same board showed gemma-4-26B at -18.7% as the final cell and -0.7% on a settled solo re-run. The pair is left as recorded because both sides are depressed together and their ratio is therefore still meaningful (1.26x); correcting one side alone would publish a wrong ratio. Both engines get re-measured together at the end of the refactor."
  }
 ]
