@@ -22,6 +22,7 @@ require strings
 require math
 require dasllama/dasllama_audio_io   // load_audio_16k_mono: any uploaded audio format -> 16 kHz mono f32
 require dasllama/dasllama_vad        // POST /vad: silero speech spans for the page's waveform overlay
+require dasllama/dasllama_gpu_resident   // multi-model slot switch (marks save/restore) + the resident-prefill pin
 
 // An OpenAI-compatible HTTP server over the dasLLAMA facade. The SERVING paths reach only public
 // facade verbs — no engine internals — which is the acceptance test for the API: if a full OpenAI

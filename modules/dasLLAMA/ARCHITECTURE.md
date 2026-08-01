@@ -146,6 +146,13 @@ that a question answered for one backend has an obvious address in the other. Th
   route/mark/want/status state, engine-facing forwarders. Vulkan implements it (per-op offload plus
   resident plumbing); Metal deliberately does not, because UMA makes residency moot there and Metal
   integrates as a whole-forward driver through common's override registries.
+- **`dasllama_gpu_resident.das`** — the WHOLE-MODEL residency rail: bake the device layout offline
+  into the flavor image, upload a model's stacks to the tier, and drive decode/prefill entirely on
+  device. It is device-AGNOSTIC — it holds no device call and requires no GPU module, reaching the
+  hardware only through the `dasllama_gpu_tier` SPI and entering the engine only through common's
+  override registries. `"vulkan"` is the tier string it registers under, not a dependency, which is
+  why it compiles on every box. It requires common back for `Model`/`Session`, so like the Metal
+  drivers it is required from the transformer umbrella, never from common.
 - **`dasllama_kernel_access.das`** — the shared body-walk read/write classifier both GPU lenses run
   on. Backend-specific lowering stays in that backend's lens.
 

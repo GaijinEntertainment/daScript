@@ -9,6 +9,7 @@ require dasllama/dasllama   // nolint:STYLE029,STYLE030 — umbrella fires each 
 require dasllama/dasllama_image   // nolint:STYLE030
 require dasllama/dasllama_config   // nolint:STYLE030
 require dasllama/dasllama_math
+require dasllama/dasllama_gpu_resident   // vulkan_bake_* — the offline flavor bake under test
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030
 require _model_tier

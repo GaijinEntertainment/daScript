@@ -15,6 +15,7 @@ require daslib/array_boost   // nolint:STYLE030 — temp_array is [template]; ST
 require dasllama/dasllama_common
 require dasllama/dasllama_gguf   // GGUFMeta — the streamed cold build's block signature names it
 require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor image transform
+require dasllama/dasllama_gpu_resident   // the flavor bake this file drives (vulkan_bake_*) + the residency upload each load arms
 require dasllama/dasllama_math   // active_kernel_backend — half the image identity
 require dasllama/dasllama_config   // DlimConfiguration + dlim_identity — the identity formatter
 require math

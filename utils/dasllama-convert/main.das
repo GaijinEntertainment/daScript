@@ -25,6 +25,7 @@ options _function_length = 0   // same
 require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration
 require dasllama/dasllama_math          // apply_box_profile_runtime + select_matmul_backend_for_load
 require dasllama/dasllama_image         // the .dlim rail itself
+require dasllama/dasllama_gpu_resident  // the vulkan flavor's bake arm + --trim
 require dasllama/dasllama_layout        // convert_model_to_metal_blob — the metal flavor's transform
 require dasllama/dasllama_config        // DlimConfiguration — --config / --dump-config
 require dasllama/dasllama_gguf          // GGUFMeta — the streaming block's mapping handle

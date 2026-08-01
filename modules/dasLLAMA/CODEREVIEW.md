@@ -74,6 +74,10 @@ carve-outs.
 **A new file ships with its rule here, its charter in `ARCHITECTURE.md` §1, and its tests, in
 the same change.** A file without its records is a defect.
 
+**A new module file is registered in `.das_module` and `CMakeLists.txt` in the same change.**
+A file missing from either resolves for a direct compile and fails as `missing prerequisite` for
+every requirer, so a partial registration reads as working until something else requires it.
+
 ### Engine
 
 - `dasllama.das` — the public API surface and its re-exports.
@@ -133,6 +137,9 @@ A backend is a family of role files, and the role names the contents. `<gpu>` is
 - `dasllama_metal_gemm.das` — the Metal batch-GEMM donor.
 - `dasllama_gpu_tier.das` — the device-cooperation SPI: hook types, install slots, status.
 - `dasllama_kernel_access.das` — the shared body-walk read/write classifier both lenses run on.
+- `dasllama_gpu_resident.das` — the whole-model GPU residency rail: the flavor bake, the stack
+  upload, and the device-resident decode/prefill overrides. No device call and no GPU require
+  belongs here; a device-specific arm is a defect. See `ARCHITECTURE.md` §1.5.
 
 A backend-only capability goes in that backend's matching role file. A new grab-bag file for it
 is a defect.
