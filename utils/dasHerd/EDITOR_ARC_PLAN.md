@@ -348,6 +348,11 @@ highlight inside code blocks lands with the selection work in E2/E4.
   multi-line insert. Deliberately late: the undo journal already carries
   multi-op units and selection lives inside TextEditState, so nothing
   architectural forces it early.
+- **E4.5 (language-core interlude, Boris 2026-07-31): container
+  default-init + finalize banner** — element-lifetime correctness in the
+  language core (resize/table-index construct their elements,
+  erase/clear finalize them) lands BEFORE the editor grows on top of it.
+  Plan of record: CONTAINER_INIT_PLAN.md (same directory).
 - **E5** `examples/text` becomes an honest editor: the component wired
   into both its presentations (markdown source with live preview beside
   it, plain/code source), carrying save/load, dirty-state (undo back to
