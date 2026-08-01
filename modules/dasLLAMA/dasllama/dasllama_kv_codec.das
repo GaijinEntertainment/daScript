@@ -5,6 +5,8 @@ module dasllama_kv_codec shared public
 
 require math
 require llvm/daslib/f16_cvt  // per-element f16 scale reads/writes inside the hot loops
+require dasllama/dasllama_math  // dot/axpy/copy_floats — the f32 arms of the dispatch below
+require dasllama/dasllama_convert  // cvt_f16_to_f32 — the bulk f16 row dequant
 require dasllama/dasllama_tune  // [tuned]: reconstitute kernels from templates with per-box loop hints
 
 // The KV-cache codec — one family per cache format, kept WHOLE: store (quantize), read (cvt
@@ -326,3 +328,113 @@ def template quantize_tq4kv_row_template(var dst : uint8 ?; src : float const ?;
 }
 [hint(unsafe_range_check, noalias = dst, noalias = src), tuned(fallback = "plain")]
 def quantize_tq4kv_row(var dst : uint8?; src : float const?; n : int64) {}
+
+// ===== per-dtype dispatch over the codec kernels above =====
+
+// tq4 cache-pointer dispatch tag: the read seam overloads on the cache pointer's element type, and
+// q8_0 already owns `uint8 const?` — a distinct newtype over uint8 gives tq4 its own overload
+// identity at zero runtime cost (byte-strided arithmetic, ABI identical to uint8).
+typedef distinct TQ4B = uint8
+
+// Read-side glue: overload per cache element type, resolved inside the monomorphized workers.
+def private kv_dot(a : float const?; b : float const?; n : int64) : float => dot(a, b, n)
+def kv_axpy(var d : float?; s : float const?; scale : float; n : int64) {
+    axpy(d, s, scale, n)
+}
+def kv_load(p : float const?; base, i : int64) : float => unsafe(p[base + i])
+def private kv_dot(a : float const?; b : uint16 const?; n : int64) : float => dot_f16(a, b, n)
+def kv_axpy(var d : float?; s : uint16 const?; scale : float; n : int64) {
+    axpy_f16(d, s, scale, n)
+}
+def kv_load(p : uint16 const?; base, i : int64) : float => f16_to_f32(uint(unsafe(p[base + i])))
+// q8_0: the cache pointer stays uint8 (byte units — the _d wrappers prescale stride/offset via
+// kv_side_off), so `base` here is a whole-block BYTE offset and `i` an element index within it
+def private kv_dot(a : float const?; b : uint8 const?; n : int64) : float => dot_q8kv(a, b, n)
+def kv_axpy(var d : float?; s : uint8 const?; scale : float; n : int64) {
+    axpy_q8kv(d, s, scale, n)
+}
+def kv_load(p : uint8 const?; base, i : int64) : float {
+    unsafe {
+        let blk = p + base + i / 32l * 34l
+        let b16 = reinterpret<uint16 const?>(blk)   // bind first: reinterpret would swallow the index
+        let bq = reinterpret<int8 const?>(blk)
+        return float(bq[2l + i % 32l]) * f16_to_f32(uint(b16[0]))
+    }
+}
+// tq4: dispatch rides the TQ4B distinct-pointer tag (q8_0 owns the raw uint8 overloads); the
+// kernels themselves are byte-typed, so each arm re-tags back to uint8. Values come out in the
+// ROTATED basis — kv_axpy accumulates rotated and the drivers un-rotate each head's output once.
+def kv_axpy(var d : float?; s : TQ4B const?; scale : float; n : int64) {
+    axpy_tq4kv(d, unsafe(reinterpret<uint8 const?>(s)), scale, n)
+}
+def kv_load(p : TQ4B const?; base, i : int64) : float {
+    unsafe {
+        let blk = reinterpret<uint8 const?>(p) + base + i / 32l * 18l
+        let b16 = reinterpret<uint16 const?>(blk)
+        let by = int(blk[2l + (i % 32l) / 2l])
+        let q = (i & 1l) == 0l ? (by & 15) : (by >> 4)
+        return float(q - 8) * f16_to_f32(uint(b16[0]))
+    }
+}
+// kv_side_off's pointer-typed twin for code that is generic over the cache element type (the
+// flash-decode witness): element offset -> the side's own addressing units
+[unused_argument(p)]
+def kv_head_off(p : float const?; elems : int64) : int64 => elems
+[unused_argument(p)]
+def kv_head_off(p : uint16 const?; elems : int64) : int64 => elems
+[unused_argument(p)]
+def kv_head_off(p : uint8 const?; elems : int64) : int64 => elems / 32l * 34l
+[unused_argument(p)]
+def kv_head_off(p : TQ4B const?; elems : int64) : int64 => elems / 32l * 18l
+
+// Bulk one-row dequant into f32 scratch — the flash pack's per-row primitive (and any future
+// codec's bulk-dequant seam: q8_0 adds a cvt overload here, never a new pack shape).
+def kv_row_to_f32(var d : float?; p : float const?; base, n : int64) {
+    unsafe {
+        copy_floats(d, p + base, n)
+    }
+}
+def kv_row_to_f32(var d : float?; p : uint16 const?; base, n : int64) {
+    unsafe {
+        cvt_f16_to_f32(d, p + base, n)
+    }
+}
+def kv_row_to_f32(var d : float?; p : uint8 const?; base, n : int64) {
+    unsafe {
+        cvt_q8kv_to_f32(d, p + base, n)
+    }
+}
+def kv_row_to_f32(var d : float?; p : TQ4B const?; base, n : int64) {
+    unsafe {
+        cvt_tq4kv_to_f32(d, reinterpret<uint8 const?>(p) + base, n)
+    }
+}
+
+// Decode-read score dot, resolved on the K-cache pointer type: scalar codecs dot the f32 query;
+// q8_0 dots the PRE-QUANTIZED query planes (qq/qs — filled once per token after RoPE) through the
+// int8×int8 kernel. Lets the flash-decode witness recompute scores exactly as the sliced path did.
+[unused_argument(qq, qs)]
+def kv_score(qp : float const?; qq : int8 const?; qs : float const?; kcp : float const?;
+                     koff, qoff, head_size : int64) : float {
+    return kv_dot(unsafe(qp + qoff), unsafe(kcp + koff), head_size)
+}
+[unused_argument(qq, qs)]
+def kv_score(qp : float const?; qq : int8 const?; qs : float const?; kcp : uint16 const?;
+                     koff, qoff, head_size : int64) : float {
+    return kv_dot(unsafe(qp + qoff), unsafe(kcp + koff), head_size)
+}
+[unused_argument(qp)]
+def kv_score(qp : float const?; qq : int8 const?; qs : float const?; kcp : uint8 const?;
+                     koff, qoff, head_size : int64) : float {
+    return dot_q8q8kv(unsafe(qq + qoff), unsafe(qs + qoff / 32l), unsafe(kcp + koff), head_size)
+}
+// tq4 K: same pre-quantized-query planes as q8_0 — the drivers fill them from the ROTATED query,
+// so the int8×int4 dot runs entirely in the rotated basis
+[unused_argument(qp)]
+def kv_score(qp : float const?; qq : int8 const?; qs : float const?; kcp : TQ4B const?;
+                     koff, qoff, head_size : int64) : float {
+    unsafe {
+        let kb = reinterpret<uint8 const?>(kcp)
+        return dot_q8tq4kv(qq + qoff, qs + qoff / 32l, kb + koff, head_size)
+    }
+}
