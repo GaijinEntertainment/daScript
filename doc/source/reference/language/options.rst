@@ -307,6 +307,22 @@ Safety and Strictness
      - bool
      - true
      - Disallows ``unsafe``-ly uninitialized structures.
+   * - ``default_init_containers``
+     - bool
+     - true
+     - Containers own their elements' lifetime, in both directions.
+       **Construct**: ``resize`` runs field initializers on new array slots (no
+       ``unsafe`` needed for init-carrying element types), and a fresh ``tab[key]``
+       slot of an init-carrying value type is initialized on insert; direct stores
+       (``tab[key] = / <- / :=``) and ``addr(tab[key])`` keep the raw zeroed slot.
+       **Finalize**: ``erase`` / ``erase_if`` / ``clear`` / shrinking ``resize`` /
+       ``pop`` (arrays) and ``erase`` / ``clear`` (tables) finalize the elements they
+       drop — but only where finalizing frees memory the container owns. Raw
+       pointers, lambdas, and any composite carrying one are excluded, so
+       ``clear``-then-``delete`` remains the borrowed-pointer idiom.
+       When ``false``, the pre-0.6.5 behavior returns entire: zeroed slots,
+       ``resize`` of such element types requires ``unsafe``, and erase/clear drop
+       elements without finalizing.
    * - ``unsafe_table_lookup``
      - bool
      - false

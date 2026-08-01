@@ -127,10 +127,14 @@ exactly as they are. A nontrivial VT pays one das call + two size reads
 ### Finalize banner (builtin.das)
 
 Erase-family operations finalize the elements they drop, under one
-gate:
+policy-composed trait — the SAME policy as the init half (Boris,
+2026-07-31: "fold it over. it needs the same guards"), so
+`default_init_containers = false` restores the whole pre-0.6.5 world,
+construct and finalize together:
 
 ```
-need_delete(elemT) && is_safe_to_delete(elemT) && !is_const(elemT)
+needs_container_finalize(elemT)
+  = default_init_containers && need_delete && is_safe_to_delete && !is_const
 ```
 
 (AMENDED during implementation. The planned `!is_pointer` carve-out was

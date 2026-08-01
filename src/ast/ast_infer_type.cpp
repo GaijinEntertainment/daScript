@@ -2564,6 +2564,14 @@ namespace das {
             } else if (expr->trait == "needs_container_init") {
                 reportAstChanged();
                 return new ExprConstBool(expr->at, defaultInitContainers && expr->typeexpr->unsafeInit());
+            } else if (expr->trait == "needs_container_finalize") {
+                // same policy as the init half: containers own their elements' lifetime.
+                // isSafeToDelete keeps raw pointers / lambdas / pointer-carrying composites out —
+                // for those, finalize would free memory the container only borrows.
+                reportAstChanged();
+                const auto & tt = expr->typeexpr;
+                return new ExprConstBool(expr->at, defaultInitContainers && tt->needDelete()
+                                                    && tt->isSafeToDelete() && !tt->isConst());
             } else if (expr->trait == "needs_nontrivial_init") {
                 reportAstChanged();
                 return new ExprConstBool(expr->at, expr->typeexpr->unsafeInit());

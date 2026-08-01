@@ -63,6 +63,11 @@ def test_needs_nontrivial_init(t : T?) {
         t |> success(typeinfo needs_container_init(type<WithInit>), "policy defaults on")
         t |> success(!typeinfo needs_container_init(type<int>), "trivial stays off")
     }
+    t |> run("needs_container_finalize composes the same policy") @(t : T?) {
+        t |> success(typeinfo needs_container_finalize(type<array<int>>), "owned composite, policy on")
+        t |> success(!typeinfo needs_container_finalize(type<PlainPod?>), "raw pointer never")
+        t |> success(!typeinfo needs_container_finalize(type<int>), "nothing to finalize")
+    }
     t |> run("is_safe_to_delete gates the finalize banner") @(t : T?) {
         t |> success(typeinfo is_safe_to_delete(type<array<int>>), "owned value composite")
         t |> success(!typeinfo is_safe_to_delete(type<PlainPod?>), "raw pointer")

@@ -38,7 +38,7 @@ def intptr(p : smart_ptr<auto>) : uint64 {
 
 [unused_argument(Arr, newSize)]
 def private _finalize_shrunk(var Arr : array<auto(numT)>; newSize : int) {
-    static_if (typeinfo need_delete(type<numT>) && typeinfo is_safe_to_delete(type<numT>) && !typeinfo is_const(type<numT>)) {
+    static_if (typeinfo needs_container_finalize(type<numT>)) {
         if (newSize >= 0) {
             for (i in range(newSize, length(Arr))) {
                 delete Arr[i]
@@ -49,7 +49,7 @@ def private _finalize_shrunk(var Arr : array<auto(numT)>; newSize : int) {
 
 [unused_argument(Arr, newSize)]
 def private _finalize_shrunk(var Arr : array<auto(numT)>; newSize : int64) {
-    static_if (typeinfo need_delete(type<numT>) && typeinfo is_safe_to_delete(type<numT>) && !typeinfo is_const(type<numT>)) {
+    static_if (typeinfo needs_container_finalize(type<numT>)) {
         if (newSize >= 0_l) {
             for (i in range64(newSize, long_length(Arr))) {
                 delete Arr[i]
@@ -86,11 +86,11 @@ def resize(var Arr : array<auto(numT)>; newSize : int64) {
 
 def resize_and_init(var Arr : array<auto(numT)>; newSize : int | int64) {
     static_if (typeinfo is_int(newSize)) {
-        let oldSize = length(Arr)
-        _finalize_shrunk(Arr, newSize)
-        __builtin_array_resize(Arr, newSize, typeinfo sizeof(Arr[0]))
-        // trivially-zero element types need no loop - the builtin resize already zeroed the new slots
+        // trivially-zero element types take the bare arm - the builtin resize already zeroes new slots
         static_if (typeinfo needs_nontrivial_init(type<numT>)) {
+            let oldSize = length(Arr)
+            _finalize_shrunk(Arr, newSize)
+            __builtin_array_resize(Arr, newSize, typeinfo sizeof(Arr[0]))
             for (i in range(oldSize, newSize)) {
                 static_if (typeinfo can_move(type<numT>)) {
                     Arr[i] <- default<numT>
@@ -100,12 +100,15 @@ def resize_and_init(var Arr : array<auto(numT)>; newSize : int | int64) {
                     Arr[i] := default<numT>
                 }
             }
+        } else {
+            _finalize_shrunk(Arr, newSize)
+            __builtin_array_resize(Arr, newSize, typeinfo sizeof(Arr[0]))
         }
     } else {
-        let oldSize = long_length(Arr)
-        _finalize_shrunk(Arr, newSize)
-        __builtin_array_resize_i64(Arr, newSize, typeinfo sizeof(Arr[0]))
         static_if (typeinfo needs_nontrivial_init(type<numT>)) {
+            let oldSize = long_length(Arr)
+            _finalize_shrunk(Arr, newSize)
+            __builtin_array_resize_i64(Arr, newSize, typeinfo sizeof(Arr[0]))
             for (i in range64(oldSize, newSize)) {
                 static_if (typeinfo can_move(type<numT>)) {
                     Arr[i] <- default<numT>
@@ -115,6 +118,9 @@ def resize_and_init(var Arr : array<auto(numT)>; newSize : int | int64) {
                     Arr[i] := default<numT>
                 }
             }
+        } else {
+            _finalize_shrunk(Arr, newSize)
+            __builtin_array_resize_i64(Arr, newSize, typeinfo sizeof(Arr[0]))
         }
     }
 }
@@ -694,7 +700,7 @@ def back(arr : auto(TT) ==const) : auto& const {
 // elements are carved out - for them "finalize" means delete-the-pointee, and clear-then-delete
 // is the documented borrowed-pointer escape. delete stays the ownership teardown.
 def erase(var Arr : array<auto(numT)>; at : int) {
-    static_if (typeinfo need_delete(type<numT>) && typeinfo is_safe_to_delete(type<numT>) && !typeinfo is_const(type<numT>)) {
+    static_if (typeinfo needs_container_finalize(type<numT>)) {
         if (uint(at) < uint(length(Arr))) {
             delete Arr[at]
         }
@@ -703,7 +709,7 @@ def erase(var Arr : array<auto(numT)>; at : int) {
 }
 
 def erase(var Arr : array<auto(numT)>; at : int64) {
-    static_if (typeinfo need_delete(type<numT>) && typeinfo is_safe_to_delete(type<numT>) && !typeinfo is_const(type<numT>)) {
+    static_if (typeinfo needs_container_finalize(type<numT>)) {
         if (uint64(at) < uint64(long_length(Arr))) {
             delete Arr[at]
         }
@@ -712,7 +718,7 @@ def erase(var Arr : array<auto(numT)>; at : int64) {
 }
 
 def erase(var Arr : array<auto(numT)>; at : int; count : int) {
-    static_if (typeinfo need_delete(type<numT>) && typeinfo is_safe_to_delete(type<numT>) && !typeinfo is_const(type<numT>)) {
+    static_if (typeinfo needs_container_finalize(type<numT>)) {
         if (at >= 0 && count >= 0 && int64(at) + int64(count) <= long_length(Arr)) {
             for (i in range(at, at + count)) {
                 delete Arr[i]
@@ -723,7 +729,7 @@ def erase(var Arr : array<auto(numT)>; at : int; count : int) {
 }
 
 def erase(var Arr : array<auto(numT)>; at : int64; count : int64) {
-    static_if (typeinfo need_delete(type<numT>) && typeinfo is_safe_to_delete(type<numT>) && !typeinfo is_const(type<numT>)) {
+    static_if (typeinfo needs_container_finalize(type<numT>)) {
         if (at >= 0_l && count >= 0_l && at + count <= long_length(Arr)) {
             for (i in range64(at, at + count)) {
                 delete Arr[i]
@@ -734,7 +740,7 @@ def erase(var Arr : array<auto(numT)>; at : int64; count : int64) {
 }
 
 def clear(var Arr : array<auto(numT)>) {
-    static_if (typeinfo need_delete(type<numT>) && typeinfo is_safe_to_delete(type<numT>) && !typeinfo is_const(type<numT>)) {
+    static_if (typeinfo needs_container_finalize(type<numT>)) {
         for (v in Arr) {
             delete v
         }
@@ -751,7 +757,7 @@ def erase_if(var arr : array<auto(TT)>; blk : block<(key : TT) : bool> | block<(
             while (--i >= 0) {
                 break if (!invoke(blk, arr[i]))
             }
-            static_if (typeinfo need_delete(type<TT>) && typeinfo is_safe_to_delete(type<TT>) && !typeinfo is_const(type<TT>)) {
+            static_if (typeinfo needs_container_finalize(type<TT>)) {
                 for (j in range(i + 1, endIndex + 1)) {
                     delete arr[j]
                 }
@@ -902,7 +908,7 @@ def erase(var Tab : table<auto(keyT); auto(valT)>; at : string#) : bool {
 
 def erase(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #) : bool {
     // the finalize banner: release the dropped value's heap (raw-pointer values carved out)
-    static_if (typeinfo need_delete(type<valT>) && typeinfo is_safe_to_delete(type<valT>) && !typeinfo is_const(type<valT>)) {
+    static_if (typeinfo needs_container_finalize(type<valT>)) {
         var val = __builtin_table_find(Tab, at)
         if (val != null) {
             unsafe {
@@ -2134,7 +2140,7 @@ def move_to_ref(var a : auto&; var b) {
 
 def clear(var t : table<auto(KT); auto(VT)>) {
     // the finalize banner: release every value's heap (raw-pointer values carved out)
-    static_if (typeinfo need_delete(type<VT>) && typeinfo is_safe_to_delete(type<VT>) && !typeinfo is_const(type<VT>)) {
+    static_if (typeinfo needs_container_finalize(type<VT>)) {
         for (v in values(t)) {
             delete v
         }
