@@ -374,7 +374,13 @@ def private oracle_prepare(gguf, be, tag, exe : string; accel : bool; threads : 
         to_log(LOG_WARNING, "gen_bench_records: ORACLE PREPARE {gguf} {tag} rc={rc} — the frozen cell below reports it\n")
         return
     }
-    to_log(LOG_INFO, "gen_bench_records: ORACLE PREPARE {gguf} {tag} — image ready and warm ({elapsed_ms(t0)} ms)\n")
+    // Minting means the image was ABSENT, so the frozen cell below can no longer prove the pin-set
+    // still matches the one the stored row used — say so rather than let prepare hide the drift.
+    if (find(out, "prepared image streamed") >= 0) {
+        to_log(LOG_WARNING, "gen_bench_records: ORACLE PREPARE {gguf} {tag} — image was ABSENT and got minted ({elapsed_ms(t0)} ms); a pin-set change would go undetected for this cell\n")
+        return
+    }
+    to_log(LOG_INFO, "gen_bench_records: ORACLE PREPARE {gguf} {tag} — image mapped and warm ({elapsed_ms(t0)} ms)\n")
 }
 
 // The --oracle driver: the work list is the STORE's das LLM rows for this box (the published
