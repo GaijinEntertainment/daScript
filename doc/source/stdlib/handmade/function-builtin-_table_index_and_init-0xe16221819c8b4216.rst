@@ -1,0 +1,1 @@
+Compiler-internal; not meant to be called directly. When ``default_init_containers`` is enabled and the table's value type carries field initializers, type inference rewrites a non-store ``tab[key]`` into a call to this function: it performs the lookup once and runs the value type's initializers only when the key was absent.

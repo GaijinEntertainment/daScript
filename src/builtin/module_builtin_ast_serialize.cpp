@@ -2742,6 +2742,7 @@ namespace das {
               << value.no_members_functions_in_struct
               << value.no_local_class_members
               << value.no_unsafe_uninitialized_structures
+              << value.default_init_containers
               << value.strict_properties
               << value.no_writing_to_nameless
               << value.no_optimizations

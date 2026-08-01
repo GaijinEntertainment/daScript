@@ -624,8 +624,15 @@ namespace das {
             return "";
         }
     }
+    // a direct store target (tab[k] = / <- / :=, incl. behind an unsafe() wrap) is fully overwritten —
+    // the default_init_containers rewrite must not init it first (init-then-move-over would leak)
+    static void markTableStoreTarget(Expression *left) {
+        if (left->rtti_isUnsafe()) left = static_cast<ExprUnsafe*>(left)->body;
+        if (left->rtti_isAt()) static_cast<ExprAt*>(left)->noTableInit = true;
+    }
     void InferTypes::preVisit(ExprMove *expr) {
         Visitor::preVisit(expr);
+        markTableStoreTarget(expr->left);
         markNoDiscard(expr->right);
     }
     ExpressionPtr InferTypes::visit(ExprMove *expr) {
@@ -720,6 +727,7 @@ namespace das {
     }
     void InferTypes::preVisit(ExprCopy *expr) {
         Visitor::preVisit(expr);
+        markTableStoreTarget(expr->left);
         if (!strictProperties) {
             if (expr->left->rtti_isField()) {
                 auto field = static_cast<ExprField*>(expr->left);
@@ -783,6 +791,7 @@ namespace das {
     }
     void InferTypes::preVisit(ExprClone *expr) {
         Visitor::preVisit(expr);
+        markTableStoreTarget(expr->left);
         if (expr->left->rtti_isField()) {
             auto field = static_cast<ExprField*>(expr->left);
             field->underClone = true;

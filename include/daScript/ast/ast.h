@@ -1598,6 +1598,7 @@ namespace das
         /*option*/ bool report_invisible_functions = true;         // report invisible functions (report functions not visible from current module)
         /*option*/ bool report_private_functions = true;           // report private functions (report functions which are not accessible due to private module)
         /*option*/ bool no_unsafe_uninitialized_structures = true; // if true, then unsafe uninitialized structures are not allowed
+        /*option*/ bool default_init_containers = true;            // if true, containers construct their elements (resize inits new slots, table index inits fresh slots)
         /*option*/ bool strict_properties = false;                 // if true, then properties are strict, i.e. a.prop = b does not get promoted to a.prop := b
         /*option*/ bool no_writing_to_nameless = true;             // if true, then writing to nameless variables (intermediate on the stack) is not allowed
     // environment

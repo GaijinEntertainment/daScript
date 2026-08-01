@@ -307,6 +307,29 @@ Safety and Strictness
      - bool
      - true
      - Disallows ``unsafe``-ly uninitialized structures.
+   * - ``default_init_containers``
+     - bool
+     - true
+     - Containers own their elements' lifetime, in both directions.
+       **Construct**: a new array slot from ``resize``, and a freshly inserted
+       ``tab[key]`` slot, are given ``default<T>`` of the element/value type — so a
+       struct gets its field initializers, and ``resize`` no longer needs ``unsafe``
+       for such element types. Note this is ``default<T>`` semantics, not "run every
+       initializer reachable inside T": a ``tuple`` or ``variant`` whose members carry
+       field initializers is still zero-initialized, because ``default<>`` of a
+       composite is zero. Direct stores (``tab[key] = / <- / :=``) and
+       ``addr(tab[key])`` keep the raw zeroed slot.
+       **Finalize**: ``erase`` / ``erase_if`` / ``clear`` / shrinking ``resize`` /
+       ``pop`` (arrays) and ``erase`` / ``clear`` (tables) finalize the elements they
+       drop — but only when the element's finalizer is fully generated, frees heap the element owns, and
+       deletes no pointees (``typeinfo is_pod_delete`` and ``is_safe_to_delete``). POD structs are excluded
+       (nothing to free — zero cost), user finalizers are never run implicitly
+       (``delete`` remains the full teardown that runs them), and raw pointers,
+       lambdas, and any composite carrying one keep the old drop-the-slot behavior,
+       so ``clear``-then-``delete`` remains the borrowed-pointer idiom.
+       When ``false``, the pre-0.6.5 behavior returns entire: zeroed slots,
+       ``resize`` of such element types requires ``unsafe``, and erase/clear drop
+       elements without finalizing.
    * - ``unsafe_table_lookup``
      - bool
      - false

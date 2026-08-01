@@ -174,6 +174,7 @@ def document_module_builtin(_root : string) {
         hide_group(group_by_regex("Internal pointer arithmetics", mod, %regex~i_das_%%)),
         hide_group(group_by_regex("Internal clone infrastructure", mod, %regex~clone%%)),
         hide_group(group_by_regex("Internal finalize infrastructure", mod, %regex~finalize%%)),
+        hide_group(group_by_regex("Internal container init infrastructure", mod, %regex~_table_index_and_init%%)),
         group_by_regex("Containers", mod, %regex~(capacity|clear|length|resize|resize_no_init|reserve|each|each_kv|emplace|emplace_from|erase|find|
 find_for_edit|find_if_exists|find_index|find_index_if|has_value|key_exists|keys|values|get_key|lock|each_enum|each_ref|
 find_for_edit_if_exists|lock_forever|next|nothing|pop|push|push_from|push_clone|push_clone_from|back|sort|stable_sort|to_array|to_table|to_array_move|

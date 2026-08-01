@@ -2565,7 +2565,26 @@ class StyleLintVisitor : AstVisitor {
                   blk.list[0] is ExprReturn ||
                   blk.list[0] is ExprNew)
                 && !frame.has_non_local_let_ref) {
-            style_warning("STYLE025: 'unsafe \{ ... }' block scope is too broad; only one operation requires unsafe — narrow to 'unsafe(<sub-expr>)' wrapping that operation", expr.at)
+            // a loop whose body is only delete statements can't narrow either — delete has no expression form
+            var narrowable = true
+            if (blk.list[0] is ExprFor) {
+                let fbody = (blk.list[0] as ExprFor).body
+                if (fbody != null && fbody is ExprBlock) {
+                    let fblk = fbody as ExprBlock
+                    var all_deletes = !empty(fblk.list)
+                    for (s in fblk.list) {
+                        if (!(s is ExprDelete)) {
+                            all_deletes = false
+                        }
+                    }
+                    if (all_deletes) {
+                        narrowable = false
+                    }
+                }
+            }
+            if (narrowable) {
+                style_warning("STYLE025: 'unsafe \{ ... }' block scope is too broad; only one operation requires unsafe — narrow to 'unsafe(<sub-expr>)' wrapping that operation", expr.at)
+            }
         }
         return expr
     }

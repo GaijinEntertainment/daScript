@@ -105,6 +105,26 @@ Useful flags: `--failures-only` to quieten passing output, `--color`, `--timeout
 and `--isolated-mode` to run each file in its own process (slower, but survives a crash in
 one file).
 
+## Measuring heap use — `options persistent_heap` is required
+
+`heap_bytes_allocated()` does **not** decrease when memory is freed on the
+default linear (bump) heap — the bump pointer never retreats, so a test that
+frees a buffer and expects the counter to drop sees no change and reads as a
+leak. Put `options persistent_heap` in the test file to get an allocator that
+tracks individual frees; the counter is then exact.
+
+```das
+options persistent_heap   // heap_bytes_allocated only tracks frees on the persistent heap
+
+let before = heap_bytes_allocated()
+container |> clear()
+t |> success(heap_bytes_allocated() < before, "buffers came back")
+```
+
+The trap is that the same code measured through the `daslang` CLI often *does*
+show the drop, so a probe run by hand disagrees with the test — the CLI is not
+using the linear heap.
+
 ## Testing non-copyable types
 
 When testing operations on types containing non-copyable fields (`array<T>`, `table<K;V>`):
