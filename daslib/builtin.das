@@ -750,7 +750,8 @@ def erase(var Arr : array<auto(numT)>; at : int; count : int) {
 
 def erase(var Arr : array<auto(numT)>; at : int64; count : int64) {
     static_if (typeinfo needs_container_finalize(type<numT>)) {
-        if (at >= 0_l && count >= 0_l && at + count <= long_length(Arr)) {
+        // sum as uint64 AFTER the non-negativity checks - int64 at+count can wrap (mirrors builtin_array_erase_range_i64)
+        if (at >= 0_l && count >= 0_l && uint64(at) + uint64(count) <= uint64(long_length(Arr))) {
             for (i in range64(at, at + count)) {
                 delete Arr[i]
             }

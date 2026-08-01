@@ -2564,14 +2564,20 @@ namespace das {
             } else if (expr->trait == "needs_container_init") {
                 reportAstChanged();
                 return new ExprConstBool(expr->at, defaultInitContainers && expr->typeexpr->unsafeInit());
+            } else if (expr->trait == "is_pod_delete") {
+                reportAstChanged();
+                return new ExprConstBool(expr->at, isPodDelete(expr->typeexpr));
             } else if (expr->trait == "needs_container_finalize") {
                 // same policy as the init half: containers own their elements' lifetime.
-                // isSafeToDelete keeps raw pointers / lambdas / pointer-carrying composites out —
-                // for those, finalize would free memory the container only borrows.
+                // isPodDelete: finalize must be fully GENERATED (user finalizers never run
+                // implicitly), must only free heap the value owns, and there must be some — so POD
+                // structs cost nothing. isSafeToDelete on top: a generated finalizer that would
+                // DELETE POINTEES (a struct with a raw-pointer field, e.g. sql_linq's JoinSpec) is
+                // unsafe to run implicitly — those keep the old drop-the-slot behavior.
                 reportAstChanged();
                 const auto & tt = expr->typeexpr;
-                return new ExprConstBool(expr->at, defaultInitContainers && tt->needDelete()
-                                                    && tt->isSafeToDelete() && !tt->isConst());
+                return new ExprConstBool(expr->at, defaultInitContainers && !tt->isConst()
+                                                    && isPodDelete(tt) && tt->isSafeToDelete());
             } else if (expr->trait == "needs_nontrivial_init") {
                 reportAstChanged();
                 return new ExprConstBool(expr->at, expr->typeexpr->unsafeInit());
@@ -3341,9 +3347,12 @@ namespace das {
                       expr->at, CompilationError::unsafe_table_index);
             }
             // default_init_containers: a non-store index over an init-carrying value type becomes
-            // *_table_index_and_init(tab,key) so a fresh slot runs its initializers (builtin.das owns the wrapper)
+            // *_table_index_and_init(tab,key) so a fresh slot runs its initializers (builtin.das owns
+            // the wrapper). Temporary tables keep the raw index - a # view is a borrowed shape whose
+            // indexed inserts panic on the lock at runtime anyway; rewriting it would only trade that
+            // for a compile error naming a compiler-internal generic.
             if (defaultInitContainers && !unsafeTableLookup && !expr->noTableInit
-                && seT->secondType->unsafeInit()) {
+                && !seT->temporary && seT->secondType->unsafeInit()) {
                 auto pCall = new ExprCall(expr->at, "_table_index_and_init");
                 pCall->arguments.push_back(expr->subexpr->clone());
                 pCall->arguments.push_back(expr->index->clone());
