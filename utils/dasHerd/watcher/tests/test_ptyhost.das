@@ -71,6 +71,73 @@ def private pump_until(var client : ProbeClient?; timeout_ms : int64;
     return false
 }
 
+// one adversarial client against the live host: connect, provoke, expect the rejection needle
+def private expect_rejected(t : T?; var probe : ProbeClient?; needle, why : string; pre_input : string = "") {
+    t |> equal(probe->init("ws://127.0.0.1:{TEST_PORT}/"), 0)
+    if (!empty(pre_input)) {
+        probe->send_input(pre_input)
+    }
+    t |> success(pump_until(probe, 10000l) $ {
+        return find(probe.last_error, needle) >= 0;
+    }, "{why}: {probe.last_error}")
+    probe->close()
+    probe->cleanup()
+    unsafe {
+        delete probe
+    }
+}
+
+def private probe_rejects_bad_clients(t : T?) {
+    expect_rejected(t, new ProbeClient(token = "wrong-token"), "bad token", "wrong token is rejected")
+    expect_rejected(t, new ProbeClient(token = "t1token", protocol = 99), "unsupported", "wrong protocol is rejected")
+    expect_rejected(t, new ProbeClient(token = "t1token", send_hello = false), "hello first", "pre-auth ops are rejected", pre_input = "dir\r\n")
+}
+
+def private wait_for_stamp(stamp_path : string) : bool {
+    let started = ref_time_ticks()
+    while (get_time_nsec(started) / 1000000l < 30000l) {
+        if (fexist(stamp_path)) return true
+        sleep(20u)
+    }
+    return false
+}
+
+// Stage 5: shutdown; the host writes the final stamp and exits.
+// Stage 6: death releases the lock, and the log tells the story.
+def private probe_shutdown_and_stamps(t : T?; var client : ProbeClient?; stamp_path, lock_path, journal_dir : string) {
+    client->send("\{\"op\":\"shutdown\"\}")
+    let shutdown_started = ref_time_ticks()
+    var final_stamp = ""
+    while (get_time_nsec(shutdown_started) / 1000000l < 15000l) {
+        client->process_event_que()
+        final_stamp = fread(stamp_path)
+        if (find(final_stamp, "\"exited\":true") >= 0
+                && find(final_stamp, "\"drained\":true") >= 0) break
+        sleep(20u)
+    }
+    t |> success(find(final_stamp, "\"exited\":true") >= 0
+            && find(final_stamp, "\"drained\":true") >= 0,
+        "final stamp records exited + drained: {final_stamp}")
+
+    var lock_released = false
+    let release_started = ref_time_ticks()
+    while (get_time_nsec(release_started) / 1000000l < 10000l) {
+        if (!fexist(lock_path)) {
+            lock_released = true
+            break
+        }
+        sleep(20u)
+    }
+    t |> success(lock_released, "clean exit removed the liveness lock")
+    let host_log_text = fread(path_join(journal_dir, "t1.log"))
+    t |> success(find(host_log_text, "child launched pid=") >= 0
+            && find(host_log_text, "client authorized") >= 0
+            && find(host_log_text, "client rejected: bad token") >= 0
+            && find(host_log_text, "shutdown requested") >= 0
+            && find(host_log_text, "host exit:") >= 0,
+        "host log recorded launch, auth, rejection, and shutdown: {host_log_text}")
+}
+
 [test]
 def test_ptyhost_lifecycle(t : T?) {
     if (get_platform_name() != "windows") return
@@ -112,16 +179,7 @@ def test_ptyhost_lifecycle(t : T?) {
 
         // Stage 2: the stamp appears while the spawner is already gone.
         let stamp_path = path_join(journal_dir, "t1.host.json")
-        var stamp_seen = false
-        let stamp_started = ref_time_ticks()
-        while (get_time_nsec(stamp_started) / 1000000l < 30000l) {
-            if (fexist(stamp_path)) {
-                stamp_seen = true
-                break
-            }
-            sleep(20u)
-        }
-        t |> success(stamp_seen, "host stamp appeared after spawner death")
+        t |> success(wait_for_stamp(stamp_path), "host stamp appeared after spawner death")
 
         // Stage 3: connect, authenticate, attach, drive the child.
         g_hello_seen = false
@@ -143,37 +201,7 @@ def test_ptyhost_lifecycle(t : T?) {
         let lock_path = path_join(journal_dir, "t1.lock")
         t |> success(fexist(lock_path) && !remove(lock_path),
             "host holds its liveness lock (remove fails while alive)")
-        var bad_token = new ProbeClient(token = "wrong-token")
-        t |> equal(bad_token->init("ws://127.0.0.1:{TEST_PORT}/"), 0)
-        t |> success(pump_until(bad_token, 10000l)
-                $() => find(bad_token.last_error, "bad token") >= 0,
-            "wrong token is rejected: {bad_token.last_error}")
-        bad_token->close()
-        bad_token->cleanup()
-        unsafe {
-            delete bad_token
-        }
-        var bad_protocol = new ProbeClient(token = "t1token", protocol = 99)
-        t |> equal(bad_protocol->init("ws://127.0.0.1:{TEST_PORT}/"), 0)
-        t |> success(pump_until(bad_protocol, 10000l)
-                $() => find(bad_protocol.last_error, "unsupported") >= 0,
-            "wrong protocol is rejected: {bad_protocol.last_error}")
-        bad_protocol->close()
-        bad_protocol->cleanup()
-        unsafe {
-            delete bad_protocol
-        }
-        var no_hello = new ProbeClient(token = "t1token", send_hello = false)
-        t |> equal(no_hello->init("ws://127.0.0.1:{TEST_PORT}/"), 0)
-        no_hello->send_input("dir\r\n")
-        t |> success(pump_until(no_hello, 10000l)
-                $() => find(no_hello.last_error, "hello first") >= 0,
-            "pre-auth ops are rejected: {no_hello.last_error}")
-        no_hello->close()
-        no_hello->cleanup()
-        unsafe {
-            delete no_hello
-        }
+        probe_rejects_bad_clients(t)
 
         // Stage 4: terminate the child; the host stamps the exit.
         client->send("\{\"op\":\"terminate\",\"exit_code\":0\}")
@@ -182,39 +210,7 @@ def test_ptyhost_lifecycle(t : T?) {
                 return find(g_last_stat, "\"exited\":true") >= 0
             }, "host observed child exit: {g_last_stat}")
 
-        // Stage 5: shutdown; the host writes the final stamp and exits.
-        client->send("\{\"op\":\"shutdown\"\}")
-        let shutdown_started = ref_time_ticks()
-        var final_stamp = ""
-        while (get_time_nsec(shutdown_started) / 1000000l < 15000l) {
-            client->process_event_que()
-            final_stamp = fread(stamp_path)
-            if (find(final_stamp, "\"exited\":true") >= 0
-                    && find(final_stamp, "\"drained\":true") >= 0) break
-            sleep(20u)
-        }
-        t |> success(find(final_stamp, "\"exited\":true") >= 0
-                && find(final_stamp, "\"drained\":true") >= 0,
-            "final stamp records exited + drained: {final_stamp}")
-
-        // Stage 6: death releases the lock, and the log tells the story.
-        var lock_released = false
-        let release_started = ref_time_ticks()
-        while (get_time_nsec(release_started) / 1000000l < 10000l) {
-            if (!fexist(lock_path)) {
-                lock_released = true
-                break
-            }
-            sleep(20u)
-        }
-        t |> success(lock_released, "clean exit removed the liveness lock")
-        let host_log_text = fread(path_join(journal_dir, "t1.log"))
-        t |> success(find(host_log_text, "child launched pid=") >= 0
-                && find(host_log_text, "client authorized") >= 0
-                && find(host_log_text, "client rejected: bad token") >= 0
-                && find(host_log_text, "shutdown requested") >= 0
-                && find(host_log_text, "host exit:") >= 0,
-            "host log recorded launch, auth, rejection, and shutdown: {host_log_text}")
+        probe_shutdown_and_stamps(t, client, stamp_path, lock_path, journal_dir)
         client->close()
         client->cleanup()
         unsafe {
