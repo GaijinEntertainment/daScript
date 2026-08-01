@@ -34,6 +34,22 @@ variant InitVariant {
     w : WithInit
 }
 
+struct BagLike {
+    xs : array<int>
+}
+
+struct UserFin {
+    xs : array<int>
+}
+
+def finalize(var u : UserFin) {
+    delete u.xs
+}
+
+struct HeapInFixed {
+    a : array<int>[2]
+}
+
 [test]
 def test_needs_nontrivial_init(t : T?) {
     t |> run("trivially-zero types") @(t : T?) {
@@ -65,10 +81,25 @@ def test_needs_nontrivial_init(t : T?) {
     }
     t |> run("needs_container_finalize composes the same policy") @(t : T?) {
         t |> success(typeinfo needs_container_finalize(type<array<int>>), "owned composite, policy on")
+        t |> success(typeinfo needs_container_finalize(type<BagLike>), "generated finalizer with heap")
+        t |> success(!typeinfo needs_container_finalize(type<PlainPod>), "POD struct - nothing to free, zero cost")
+        t |> success(!typeinfo needs_container_finalize(type<WithInit>), "field inits alone own no heap")
+        t |> success(!typeinfo needs_container_finalize(type<UserFin>), "user finalizers never run implicitly")
         t |> success(!typeinfo needs_container_finalize(type<PlainPod?>), "raw pointer never")
         t |> success(!typeinfo needs_container_finalize(type<int>), "nothing to finalize")
+        t |> success(!typeinfo needs_container_finalize(type<tuple<int; PlainPod?>>), "pointer-carrying tuple")
+        t |> success(typeinfo needs_container_finalize(type<tuple<int; array<int>>>), "heap-carrying tuple")
     }
-    t |> run("is_safe_to_delete gates the finalize banner") @(t : T?) {
+    t |> run("is_pod_delete is the pure predicate behind it") @(t : T?) {
+        t |> success(typeinfo is_pod_delete(type<array<int>>), "owned heap")
+        t |> success(typeinfo is_pod_delete(type<BagLike>), "struct owning heap, generated finalizer")
+        t |> success(typeinfo is_pod_delete(type<HeapInFixed>), "heap through a fixed array")
+        t |> success(!typeinfo is_pod_delete(type<PlainPod>), "no heap to free")
+        t |> success(!typeinfo is_pod_delete(type<UserFin>), "user finalizer disqualifies")
+        t |> success(!typeinfo is_pod_delete(type<PlainPod?>), "raw pointer")
+        t |> success(!typeinfo is_pod_delete(type<lambda<(arg : int) : void>>), "lambda")
+    }
+    t |> run("is_safe_to_delete stays the unsafe-delete predicate") @(t : T?) {
         t |> success(typeinfo is_safe_to_delete(type<array<int>>), "owned value composite")
         t |> success(!typeinfo is_safe_to_delete(type<PlainPod?>), "raw pointer")
         t |> success(!typeinfo is_safe_to_delete(type<tuple<PlainPod?; int>>), "pointer-carrying tuple")

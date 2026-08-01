@@ -1,55 +1,69 @@
 options gen2
 options default_init_containers = false
+options persistent_heap   // heap_bytes_allocated only tracks individual frees on the persistent heap
 require dastest/testing_boost public
 
 struct Foo {
     x : int = 7
 }
 
-// The Probe fixture deliberately mirrors container_finalize.das rather than sharing a
-// module: these two files are the policy-ON and policy-OFF halves of the same experiment,
-// and an identical fixture compiled under each is the point.
-var g_finalized = 0
-
-struct Probe {
+// Bag deliberately mirrors container_finalize.das rather than sharing a module: the two
+// files are the policy-ON and policy-OFF halves of the same experiment, and an identical
+// banner-eligible fixture compiled under each is the point.
+struct Bag {
     xs : array<int>
 }
 
-def finalize(var p : Probe) {
-    g_finalized++
-    delete p.xs
+def private make_bags(n : int) : array<Bag> {
+    var arr : array<Bag>
+    arr |> resize(n)
+    for (i in range(n)) {
+        arr[i].xs |> reserve(1024)
+        arr[i].xs |> push(i * 10)
+    }
+    return <- arr
 }
 
 [test]
 def test_policy_off_no_finalize_banner(t : T?) {
-    t |> run("erase does not finalize") @(t : T?) {
-        var inscope arr : array<Probe>
-        unsafe(resize(arr, 2))
-        g_finalized = 0
+    t |> run("erase drops the slot without releasing") @(t : T?) {
+        var arr <- make_bags(2)
+        let before = heap_bytes_allocated()
         arr |> erase(0)
-        t |> equal(g_finalized, 0)
-    }
-    t |> run("clear does not finalize") @(t : T?) {
-        var inscope arr : array<Probe>
-        unsafe(resize(arr, 2))
-        g_finalized = 0
+        let after = heap_bytes_allocated()
+        t |> equal(int(before), int(after))
         arr |> clear()
-        t |> equal(g_finalized, 0)
-    }
-    t |> run("table erase and clear do not finalize") @(t : T?) {
-        var inscope tab : table<string; Probe>
         unsafe {
-            tab["a"].xs |> push(1)
-            tab["b"].xs |> push(2)
+            delete arr
         }
-        g_finalized = 0
+    }
+    t |> run("clear drops every slot without releasing") @(t : T?) {
+        var arr <- make_bags(2)
+        let before = heap_bytes_allocated()
+        arr |> clear()
+        let after = heap_bytes_allocated()
+        t |> equal(int(before), int(after))
+        unsafe {
+            delete arr
+        }
+    }
+    t |> run("table erase and clear drop values without releasing") @(t : T?) {
+        var tab : table<string; Bag>
+        tab["a"].xs |> reserve(1024)
+        tab["a"].xs |> push(1)
+        tab["b"].xs |> push(2)
+        let before = heap_bytes_allocated()
         tab |> erase("a")
         tab |> clear()
-        t |> equal(g_finalized, 0)
+        let after = heap_bytes_allocated()
+        t |> equal(int(before), int(after))
+        unsafe {
+            delete tab
+        }
     }
     t |> run("the composite trait follows the policy") @(t : T?) {
-        t |> success(!typeinfo needs_container_finalize(type<Probe>), "policy off disables the banner")
-        t |> success(typeinfo is_safe_to_delete(type<Probe>), "the pure predicate does not follow it")
+        t |> success(!typeinfo needs_container_finalize(type<Bag>), "policy off disables the banner")
+        t |> success(typeinfo is_pod_delete(type<Bag>), "the pure predicate does not follow it")
     }
 }
 
