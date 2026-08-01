@@ -660,6 +660,7 @@ namespace das {
         auto lfn = lambdaName + "`function";
         auto pFunc = new Function();
         pFunc->generated = true;
+        pFunc->localFunction = true;
         pFunc->at = pFunc->atDecl = block->at;
         pFunc->name = lfn;
         pFunc->body = block->clone();
