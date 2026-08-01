@@ -8,6 +8,7 @@ module dasllama_transformer shared public
 // plus all registered arches; adding an architecture = a new dasllama_arch_*.das + one require here.
 require dasllama/dasllama_common public
 require dasllama/dasllama_layout   // nolint:STYLE030 — [init]-only: registers the disk->compute layout hooks (repacks + GPU gathers) into dasllama_common; unset hooks panic at load
+require dasllama/dasllama_moe public   // the MoE router/expert dispatch the block kernels reach through
 require dasllama/dasllama_blocks public   // the transformer block kernels + the default block sets
 require dasllama/dasllama_sampling public   // generate_/sample_/set_seed_/stats_ — re-exported so the umbrella keeps the generation API
 require dasllama/dasllama_ple  // nolint:STYLE030 — [init]-only: registers the gemma-4 PLE pre-step hooks into dasllama_common; it requires the engine back, so the umbrella breaks the cycle

@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_blocks shared public
 
 require dasllama/dasllama_common
+require dasllama/dasllama_moe   // moe_select_core/moe_ffn_core/moe_shexp_gate — the router the MoE blocks drive
 require dasllama/dasllama_math
 require dasllama/dasllama_par
 require dasllama/dasllama_convert
@@ -1598,6 +1599,32 @@ def embed_(m : Model; text : string) : array<float> {
     return <- out
 }
 
+
+// MoE FFN, decode: rmsnorm -> routed top-k + shared expert -> residual. Mirrors ffn_dense_decode's
+// optional post-norm / layer-output-scale steps so future MoE arches compose with them.
+[no_alloc, no_env, no_io]
+def ffn_moe_decode(t : Model; var s : Session; l : int64) {
+    let c = t.config
+    if (l < c.n_layer_dense_lead) {   // glm4moe: the leading layer(s) are plain dense FFN
+        ffn_dense_decode(t, s, l)
+        return
+    }
+    let dim = c.dim
+    let ts_norm = ref_time_ticks()
+    rms_at(s.xb, t, t.rms_ffn_off + l * dim, s.x, dim)
+    prof_add("norm", ts_norm)
+    moe_ffn_core(t, s, l)
+    let ts_resid = ref_time_ticks()
+    if (c.pre_post_norm) {
+        rms_at(s.moe_acc, t, t.rms_post_ffn_off + l * dim, s.moe_acc, dim)
+    }
+    if (c.layer_out_scale) {
+        add_scale_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.moe_acc[0])), t.fblob[t.out_scale_off + l], dim)
+    } else {
+        add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.moe_acc[0])), dim)
+    }
+    prof_add("act_resid", ts_resid)
+}
 def std_blocks() : ArchBlocks {
     return ArchBlocks(attn_decode = @@attention_std_decode, ffn_decode = @@ffn_dense_decode,
                       attn_prefill = @@attention_std_prefill, ffn_prefill = @@ffn_dense_prefill)
