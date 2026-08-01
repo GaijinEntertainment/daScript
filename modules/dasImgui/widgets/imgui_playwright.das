@@ -1498,16 +1498,16 @@ def public with_imgui_app(feature_path : string;
         return if (f == null)
         if (!wait_until_ready(app, ready_timeout_sec)) {
             unready = true
-            // Tell the host to exit so fread_to_eof returns once it drains, instead
+            // Tell the host to exit so fread returns once it drains, instead
             // of blocking until the test_timeout_sec popen watchdog (the readiness
             // decision was already made at ready_timeout_sec — don't waste the rest).
             post_signal(app, "/shutdown")
-            captured = unsafe(fread_to_eof(f))
+            captured = fread(f)
             return
         }
         invoke(body, app)
         post_signal(app, "/shutdown")
-        captured = unsafe(fread_to_eof(f))
+        captured = fread(f)
     }))
     if (unready) {
         panic("daslang-live not ready after {ready_timeout_sec}s.\nstdout/stderr:\n{captured}")
@@ -1642,7 +1642,7 @@ def public with_recording_app(feature_path : string; // nolint:STYLE038
         return if (f == null)
         if (!wait_until_ready(app, host_ready_timeout_sec())) {
             unready = true
-            captured = unsafe(fread_to_eof(f))
+            captured = fread(f)
             return
         }
         post_command(app, "imgui_mouse_trail",   JV((enabled = true)))
@@ -1671,7 +1671,7 @@ def public with_recording_app(feature_path : string; // nolint:STYLE038
         post_command(app, "imgui_cursor_sprite", JV((enabled = false)))
         post_command(app, "imgui_mouse_trail",   JV((enabled = false)))
         post_signal(app, "/shutdown")
-        captured = unsafe(fread_to_eof(f))
+        captured = fread(f)
     }))
     if (unready) {
         panic("daslang-live not ready after {host_ready_timeout_sec()}s.\nstdout/stderr:\n{captured}")

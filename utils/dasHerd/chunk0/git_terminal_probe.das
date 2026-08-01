@@ -112,7 +112,7 @@ def public run_direct_probe(command : GitProbeCommand const;
         if (first_count > 0) {
             sample.first_output_us = elapsed_us(started)
         }
-        remainder = unsafe(fread_to_eof(f))
+        remainder = fread(f)
     }))
     sample.exit_us = elapsed_us(started)
     sample.drained_us = sample.exit_us

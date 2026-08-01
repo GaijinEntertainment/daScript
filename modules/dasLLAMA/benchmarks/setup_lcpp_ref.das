@@ -40,13 +40,13 @@ struct Args {
     help : bool
 }
 
-// Run `cmd`, return its trimmed stdout (pipe-safe fread_to_eof; stderr stays on the console).
+// Run `cmd`, return its trimmed stdout (pipe-safe fread; stderr stays on the console).
 def private capture_out(cmd : string) : string {
     var out = ""
     unsafe {
         popen(cmd) $(f) {
             if (f != null) {   // popen returns null on spawn failure (missing git / bad PATH) — don't deref
-                out = fread_to_eof(f)
+                out = fread(f)
             }
         }
     }

@@ -118,7 +118,7 @@ def run_argv(args : array<string>; timeout : float) : tuple<rc : int; out : stri
     var output : string
     let rc = unsafe(popen_argv(args, timeout) $(f) {
         if (f != null) {
-            output = unsafe(fread_to_eof(f))
+            output = fread(f)
         }
     })
     return (rc = rc, out = output)

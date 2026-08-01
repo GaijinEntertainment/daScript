@@ -102,7 +102,7 @@ def test_ptyhost_lifecycle(t : T?) {
             "--child", "cmd.exe", "--child", "/q"]
         let launcher_exit = unsafe(popen_argv(launcher_argv, 60.0, $(file) {
             if (file != null) {
-                launcher_output = unsafe(fread_to_eof(file))
+                launcher_output = fread(file)
             }
         }))
         t |> equal(launcher_exit, 0, launcher_output)

@@ -18,7 +18,7 @@ def private run_protocol_test(var output : string&) : int {
         "-DaslangPath", compiler, "-Root", root]
     return unsafe(popen_argv(argv, 0.0, $(file) {
         if (file != null) {
-            output = unsafe(fread_to_eof(file))
+            output = fread(file)
         }
     }))
 }
