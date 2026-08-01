@@ -73,9 +73,12 @@ laundering, and a generic `apply` walk discriminates a plane by shape via
 belong: `durations`, `lstm_ih/hh/b` (offset lists), `layers` (POD offset structs). All are KB and
 already have `serialize_pod_array`.
 
-**Rule for hot code:** a hot loop takes `pl.p` once and does pointer math. It never indexes a
-`Plane` per element — `operator []` lives in a different module from the family files, and
-auto-inline is same-module only.
+**The accessor is free under `-jit`, measured.** A cache-resident 4-accumulator sum over 67.1 M
+elements, 7 interleaved reps: raw pointer 15.635 ms, plane accessor in the same module 15.619 ms,
+plane accessor in a *different* module 15.627 ms, cv ≤ 1.24 %. That is ~1.3 elements per cycle in
+all three arms, so the accessor inlines across the module boundary as well as within one — the
+das auto-inline pass being same-module-only does not govern this, because under `-jit` the program
+lowers to one LLVM module. Interpreted and AOT are untested and dasLLAMA runs neither.
 
 ## Staging is a separate type — this is the actual fix
 
