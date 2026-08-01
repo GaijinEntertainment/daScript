@@ -65,6 +65,10 @@ struct Args {
     @clarg_doc = "Timed repetitions per row (default: 5)"
     reps : int = 5
 
+    @clarg_name = "asr-tier"
+    @clarg_doc = "ASR model tier: small | large | all (default all). Declared per catalog entry, not derived from bytes — ASR cost is clip-duration x model-speed, and large-v3-turbo is SMALLER on disk than Parakeet yet 2.5x costlier"
+    asr_tier : string = "all"
+
     @clarg_short = "w"
     @clarg_doc = "Workloads to measure: llm | asr | all (default: all — absent models/tools skip with a warning)"
     workload : string = "all"
@@ -369,6 +373,51 @@ def private oracle_cell(gguf, be, tag, exe : string; accel : bool; stored : Benc
     return verdict
 }
 
+// The ASR twin of oracle_cell: re-measure one stored audio row and gate it against itself. No
+// reference tools run — this is the das side against its own record, like the LLM legs. The ms
+// metrics gate through the same oracle_compare, mirrored (for a duration, worse is HIGHER).
+def private oracle_asr_cell(spec : AsrModelSpec; stored : BenchRun; cfg : Args; threads : int;
+                            cellPath : string; var board : array<string>) : OracleVerdict {
+    let path = asr_model_path(spec)
+    if (!stat(path).is_valid) {
+        let miss = "FAIL {spec.display} das asr — model file missing: {path}"
+        to_log(LOG_ERROR, "gen_bench_records: ORACLE {miss}\n")
+        board |> push(miss)
+        return OracleVerdict.fail
+    }
+    to_log(LOG_INFO, "gen_bench_records: ORACLE START {spec.display} das asr\n")
+    logger_info("bench.records", "oracle asr cell start", JV({"model" => JV(spec.display)}))
+    let args <- [daslang_bin(), "-jit", "modules/dasLLAMA/benchmarks/asr/asr_bench_cell.das", "--",
+                 "-m", spec.das_model, "-r", "{cfg.asr_reps}", "-t", "{threads}",
+                 "--json-path", cellPath]
+    var out = ""
+    let rc = run_and_stream(args, out)
+    var cell : array<BenchModel>
+    if (rc != 0 || !read_bench_records(cellPath, cell)) {
+        board |> push("FAIL {spec.display} das asr — cell did not measure (rc={rc}, see the log)")
+        return OracleVerdict.fail
+    }
+    remove(cellPath)
+    var verdict = OracleVerdict.fail
+    var detail = "no das run in the fresh cell records"
+    for (c in cell) {
+        for (r in c.runs) {
+            if (r.engine != "das" || empty(r.workload)) {
+                continue
+            }
+            var lines : array<string>
+            verdict = oracle_compare(r, stored, double(cfg.oracle_warn), double(cfg.oracle_fail), lines)
+            detail = join(lines, "; ")
+            delete lines
+        }
+    }
+    let line = "{oracle_verdict_str(verdict)} {spec.display} das asr: {detail}"
+    let level = verdict == OracleVerdict.fail ? LOG_ERROR : (verdict == OracleVerdict.warn ? LOG_WARNING : LOG_INFO)
+    to_log(level, "gen_bench_records: ORACLE {line}\n")
+    board |> push(line)
+    return verdict
+}
+
 // The freeze exists so a cell cannot silently mint a DIFFERENT image and measure a config the
 // stored row never used — but an ABSENT image (GC'd) has no identity to protect, and freezing
 // there just makes the board unrunnable. The load walk mints it (never pre-mint by hand); this
@@ -408,6 +457,8 @@ def private oracle_prepare(gguf, be, tag, exe : string; accel : bool; threads : 
 def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : array<BenchModel>;
                         threads : int; cellPath, exe : string) : int {
     let box = box_name()
+    let doAsrOracle = cfg.workload != "llm"
+    let asrTier = parse_tier(cfg.asr_tier)
     var board : array<string>
     var cells = 0
     var warns = 0
@@ -420,7 +471,36 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
         }
         for (sr in m.runs) {
             break if (stopped)
-            if (sr.engine != "das" || sr.box != box || !empty(sr.workload)) {
+            if (sr.engine != "das" || sr.box != box) {
+                continue
+            }
+            if (!empty(sr.workload)) {   // audio row: its own cell, its own ms-shaped gate
+                if (!doAsrOracle) {
+                    continue
+                }
+                var spec = AsrModelSpec()
+                var found = false
+                for (s in asr_catalog()) {
+                    if (s.das_model == m.gguf && asr_model_selected(s, asrTier)) {
+                        spec := s
+                        found = true
+                    }
+                }
+                if (!found) {
+                    continue
+                }
+                cells++
+                settle(cfg)
+                let va = oracle_asr_cell(spec, sr, cfg, threads, cellPath, board)
+                if (va == OracleVerdict.fail) {
+                    fails++
+                    if (!cfg.oracle_keep_going) {
+                        to_log(LOG_ERROR, "gen_bench_records: ORACLE stopping at the first FAIL (--oracle-keep-going runs the full board)\n")
+                        stopped = true
+                    }
+                } elif (va == OracleVerdict.warn) {
+                    warns++
+                }
                 continue
             }
             var be = ""
@@ -834,10 +914,6 @@ def main : int {
     if (cfg.oracle) {
         // GATE 1: no refs run (binaries not even required); GATE 2: one das pass per stored row
         // (the cv warm-retry stays — it REPLACES a bad cold measure); GATE 3: frozen artifacts.
-        if (cfg.workload == "asr") {
-            to_log(LOG_ERROR, "gen_bench_records: --oracle covers the LLM legs only — the asr das cells are CPU-path (they join when a phase touches the ASR path)\n")
-            return 1
-        }
         let ostore = bench_records_path()
         var omodels : array<BenchModel>
         if (!read_bench_records(ostore, omodels)) {
@@ -845,9 +921,14 @@ def main : int {
             return 1
         }
         let othreads = cfg.threads > 0 ? cfg.threads : profile_threads()
-        let oexe = rig_exe_checked()
-        if (empty(oexe)) {
-            return 1
+        // an ASR-only oracle never touches the exe (its cells are their own child), so demanding a
+        // fresh one there would refuse a runnable board — gate the requirement on real LLM work
+        var oexe = ""
+        if (cfg.workload != "asr") {
+            oexe = rig_exe_checked()
+            if (empty(oexe)) {
+                return 1
+            }
         }
         return oracle_main(cfg, legNeon, legAmx, legMetal, omodels,
             othreads, "modules/dasLLAMA/performance/records/_cell_{box_name()}.json", oexe)
@@ -916,14 +997,19 @@ def main : int {
         }
     }
     if (doAsr) {
+        let asrTier = parse_tier(cfg.asr_tier)
         // per-tool version lines are session facts — capture once, not per model
         var toolVersions : table<string; string>
         for (spec in asr_catalog()) {
             if (!empty(cfg.only) && find(spec.display, cfg.only) < 0 && find(spec.das_model, cfg.only) < 0) {
                 continue
             }
-            if (!stat("{spec.root}{spec.das_model}").is_valid) {
+            if (!stat(asr_model_path(spec)).is_valid) {
                 to_log(LOG_WARNING, "gen_bench_records: SKIP {spec.display} — model not on this box\n")
+                continue
+            }
+            if (!asr_model_selected(spec, asrTier)) {
+                to_log(LOG_INFO, "gen_bench_records: SKIP {spec.display} — not in --asr-tier {cfg.asr_tier}\n")
                 continue
             }
             settle(cfg)

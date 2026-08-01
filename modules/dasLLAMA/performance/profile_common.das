@@ -1050,6 +1050,23 @@ struct AsrModelSpec {
     buckets : array<string>
     libri_short : string
     lang : string          // create_session language: "en" for the pure-ASR models, "auto" for audio-chat
+    // DECLARED, not derived from file size the way the LLM tier is: ASR cost is clip-duration x
+    // model-speed, and bytes mis-sort it — large-v3-turbo is 1.51 GB against Parakeet's 2.33 GB
+    // yet costs 97.5 s per rep against Parakeet's 38.6 s (m1, the five corpus buckets).
+    tier : Tier = Tier.small
+}
+
+//! Full path to the spec's das-side carrier — the one source for what four call sites spelled
+//! inline as "{spec.root}{spec.das_model}".
+def asr_model_path(spec : AsrModelSpec) : string => "{spec.root}{spec.das_model}"
+
+//! True when the model's carrier is on disk AND it is in the requested tier — the ASR twin of
+//! model_selected. The tier is the spec's own field; only presence is probed here.
+def asr_model_selected(spec : AsrModelSpec; tier : Tier) : bool {
+    if (!stat(asr_model_path(spec)).is_valid) {
+        return false
+    }
+    return tier == Tier.all || tier == spec.tier
 }
 
 // The audio models the suite profiles. Absent files are skipped at run time. The das side is uniform
@@ -1075,21 +1092,21 @@ def asr_catalog() : array<AsrModelSpec> {
         AsrModelSpec(display = "Whisper large-v3-turbo", das_model = "ggml-large-v3-turbo.bin",
             das_mmproj = "", root = wroot,
             refs <- [AsrRef(tool = "whisper-cli", handle = ""), AsrRef(tool = "onnx", handle = "whisper-turbo-int8")],
-            buckets <- corpus_buckets(), libri_short = "", lang = "en"),
+            buckets <- corpus_buckets(), libri_short = "", lang = "en", tier = Tier.large),
         AsrModelSpec(display = "Canary-Qwen 2.5B", das_model = "canary-qwen-2.5b-decoder-f16.gguf",
             das_mmproj = "canary-qwen-2.5b-encoder-f32.bin", root = lroot,
             refs <- [AsrRef(tool = "nemo", handle = "nvidia/canary-qwen-2.5b")],
-            buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"], libri_short = "", lang = "auto"),
+            buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"], libri_short = "", lang = "auto", tier = Tier.large),
         // jfk3 (33 s) replaced gemma4a_test2.wav — the one corpus clip with no traceable
         // provenance; every published input must be re-fetchable (B2/B3)
         AsrModelSpec(display = "Gemma-4 E2B audio", das_model = "gemma-4-E2B-it-Q8_0.gguf",
             das_mmproj = "mmproj-gemma-4-E2B-it-bf16.gguf", root = lroot,
             refs <- [AsrRef(tool = "mtmd", handle = "mmproj-gemma-4-E2B-it-bf16.gguf")],
-            buckets <- ["jfk3.wav"], libri_short = "", lang = "auto"),
+            buckets <- ["jfk3.wav"], libri_short = "", lang = "auto", tier = Tier.large),
         AsrModelSpec(display = "Qwen3-Omni-30B audio", das_model = "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf",
             das_mmproj = "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf", root = lroot,
             refs <- [AsrRef(tool = "mtmd", handle = "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf")],
-            buckets <- ["jfk.wav", "jfk3.wav"], libri_short = "", lang = "auto")
+            buckets <- ["jfk.wav", "jfk3.wav"], libri_short = "", lang = "auto", tier = Tier.large)
     ]
 }
 
@@ -1806,7 +1823,33 @@ def oracle_compare(fresh, stored : BenchRun; warn_pct, fail_pct : double; var li
     sort(tkeys)
     for (k in tkeys) {
         let s_tok = stored.tests?[k]?.tok_s ?? 0.0lf
-        if (s_tok <= 0.0lf) {   // ms-shaped (ASR) or empty rows sit outside the tok/s gate
+        if (s_tok <= 0.0lf) {
+            // ms-shaped (ASR): the SAME one-sided gate, mirrored — for a duration, worse is HIGHER,
+            // so the regression side is +delta. A row with neither metric stays uncomparable.
+            let s_ms = stored.tests?[k]?.ms ?? 0.0lf
+            if (s_ms <= 0.0lf) {
+                continue
+            }
+            compared++
+            let f_ms = fresh.tests?[k]?.ms ?? 0.0lf
+            if (f_ms <= 0.0lf) {
+                lines |> push("{k} MISSING from the fresh run (stored {s_ms:.1f} ms)")
+                worst = OracleVerdict.fail
+                continue
+            }
+            let d_ms = (f_ms - s_ms) * 100.0lf / s_ms
+            var vm = OracleVerdict.ok
+            if (d_ms > fail_pct) {
+                vm = OracleVerdict.fail
+            } elif (d_ms > warn_pct) {
+                vm = OracleVerdict.warn
+            }
+            let note_ms = (vm == OracleVerdict.ok && d_ms < -fail_pct) ? " (suspicious gain — verify the cell)" : ""
+            let sign_ms = d_ms < 0.0lf ? "" : "+"
+            lines |> push("{k} {f_ms:.1f} vs {s_ms:.1f} ms ({sign_ms}{d_ms:.1f}%) {oracle_verdict_str(vm)}{note_ms}")
+            if (int(vm) > int(worst)) {
+                worst = vm
+            }
             continue
         }
         compared++
@@ -1833,7 +1876,7 @@ def oracle_compare(fresh, stored : BenchRun; warn_pct, fail_pct : double; var li
     }
     delete tkeys
     if (compared == 0) {
-        lines |> push("no comparable tok/s tests in the stored row")
+        lines |> push("no comparable tok/s or ms tests in the stored row")
         worst = OracleVerdict.fail
     }
     return worst
@@ -1856,7 +1899,7 @@ struct LlamaBenchRow {
 //! `raw` keeps what the child actually printed: a failure here is otherwise indistinguishable
 //! from a silent one, and the caller has nothing to report but elapsed time.
 def run_llama_bench(args : array<string>; var rows : array<LlamaBenchRow>; var raw : string&) : bool {
-    raw := run_capture_argv(args)
+    raw = run_capture_argv(args)
     return sscan_json(raw, rows)
 }
 
