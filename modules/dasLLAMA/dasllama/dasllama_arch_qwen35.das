@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_arch_qwen35 shared public
 
 require dasllama/dasllama_common
+require dasllama/dasllama_blocks   // the gated-attention path shares the std attention + FFN block helpers
 require dasllama/dasllama_math   // the moved DeltaNet kernels call silu/softplus/l2_norm_rows/rope_*/get_dispatch_lanes
 require dasllama/dasllama_par    // maybe_parallel_for: the prefill kernels thread over rows
 require math

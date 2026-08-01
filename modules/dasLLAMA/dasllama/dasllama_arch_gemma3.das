@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_arch_gemma3 shared public
 
 require dasllama/dasllama_common
+require dasllama/dasllama_blocks   // std_blocks/moe_blocks — the default block sets this arch binds
 
 // Gemma-3 — Gemma-2's shape (GeGLU, 4 norms/layer, NEOX rope, √dim embed scale) minus the soft-caps,
 // plus Qwen3-style per-head QK-norm and the 5-local:1-global attention pattern with dual RoPE:

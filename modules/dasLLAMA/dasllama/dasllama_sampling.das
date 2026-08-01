@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_sampling shared public
 
 require dasllama/dasllama_common
+require dasllama/dasllama_blocks   // eval_embd_: the embedding-input forward the generator drives
 require dasllama/dasllama_math   // softmax/softcap on the logits row
 require daslib/random
 require math

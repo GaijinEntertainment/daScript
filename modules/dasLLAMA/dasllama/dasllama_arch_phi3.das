@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_arch_phi3 shared public
 
 require dasllama/dasllama_common
+require dasllama/dasllama_blocks   // std_blocks/moe_blocks — the default block sets this arch binds
 
 // Phi-3 — NEOX rope + LongRoPE, fused QKV + gate_up (split at load); <|user|> / <|assistant|> template.
 def private configure_phi3(var c : Config) {

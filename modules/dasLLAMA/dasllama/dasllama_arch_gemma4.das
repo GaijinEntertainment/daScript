@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_arch_gemma4 shared public
 
 require dasllama/dasllama_common
+require dasllama/dasllama_blocks   // attention_std_decode/prefill — gemma4 binds the standard attention with its own FFN
 require dasllama/dasllama_ple  // the PLE + gemma4 MoE kernels this arch binds into ArchBlocks
 
 // Gemma-4 (12B) — Gemma-3's shape (GeGLU, 4 norms/layer, NEOX rope, √dim embed scale, QK-norm,

@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_ple shared public
 
 require dasllama/dasllama_common
+require dasllama/dasllama_blocks   // the gemma4 MoE prefill shares the dense/grouped block helpers
 require dasllama/dasllama_math
 require dasllama/dasllama_par
 require dasllama/dasllama_convert
@@ -84,7 +85,7 @@ def private ple_pre_prefill_impl(t : Model; var s : Session; tokens : array<int6
 
 // Prefill-from-embeddings (multimodal) pre-step: no token ids, so the gather uses the padding token
 // (id 0) broadcast across positions — matching llama.cpp gemma4's build_inp_per_layer media branch.
-def private ple_pre_prefill_pad(t : Model; var s : Session; npos : int64) {
+def private ple_pre_prefill_pad_impl(t : Model; var s : Session; npos : int64) {
     let all = t.config.n_layers * t.config.n_embd_per_layer
     for (p in range64(npos)) {
         ple_gather_row(t, 0l, s.ple_inp, p * all)
@@ -285,7 +286,7 @@ def private gemma4_router_batch(t : Model; var rin : array<float>; src : array<f
 // gemma4 MoE prefill, grouped: batched twin of gemma4_moe_ffn (26B-A4B). Routes, buckets by expert,
 // runs one Q8 batch GEMM chain per touched expert, then the dense shared expert over all positions.
 // Bit-identical per row to the naive per-position path — g_moe_grouped_prefill is a pure perf lever.
-def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos : int64) {
+def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos : int64) { // nolint:STYLE037 — the grouped gemma4 MoE prefill is one bucketed pipeline; its stages share scratch and must stay together
     let c = t.config
     let dim = c.dim
     let hidden = c.hidden_dim
@@ -543,5 +544,5 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
 def private ple_hooks_register() {
     register_ple_pre_decode(@@ple_pre_decode)
     register_ple_pre_prefill(@@ple_pre_prefill_impl)
-    register_ple_pre_prefill_pad(@@ple_pre_prefill_pad)
+    register_ple_pre_prefill_pad(@@ple_pre_prefill_pad_impl)
 }

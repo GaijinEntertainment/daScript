@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_arch_qwen3 shared public
 
 require dasllama/dasllama_common
+require dasllama/dasllama_blocks   // std_blocks/moe_blocks — the default block sets this arch binds
 
 // Qwen3 — per-head RMSNorm on Q/K before RoPE (QK-norm) + NEOX rope; no QKV bias (unlike Qwen2).
 def private configure_qwen3(var c : Config) {

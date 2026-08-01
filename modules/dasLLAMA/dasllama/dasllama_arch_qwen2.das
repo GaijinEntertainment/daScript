@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_arch_qwen2 shared public
 
 require dasllama/dasllama_common
+require dasllama/dasllama_blocks   // std_blocks/moe_blocks — the default block sets this arch binds
 
 // Qwen2 — learned QKV bias + NEOX rope; ChatML template (<|im_start|> / <|im_end|>).
 def private configure_qwen2(var c : Config) {

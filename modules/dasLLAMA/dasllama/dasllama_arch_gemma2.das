@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_arch_gemma2 shared public
 
 require dasllama/dasllama_common
+require dasllama/dasllama_blocks   // std_blocks/moe_blocks — the default block sets this arch binds
 
 // Gemma-2 — GeGLU, dual logit soft-cap, sliding-window on even layers, 4 norms/layer, NEOX rope.
 // embed_scale (√dim), head_size (key_length) and the (1+w) norm weights are resolved in the loader

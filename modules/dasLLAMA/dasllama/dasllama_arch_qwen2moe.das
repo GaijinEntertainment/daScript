@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_arch_qwen2moe shared public
 
 require dasllama/dasllama_common
+require dasllama/dasllama_blocks   // std_blocks/moe_blocks — the default block sets this arch binds
 
 // Qwen1.5/Qwen2-MoE — Qwen2 attention (QKV bias + NEOX rope) with the routed-experts FFN:
 // softmax router -> top-k with un-renormalized weights, plus a sigmoid-gated shared expert.
