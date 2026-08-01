@@ -716,7 +716,7 @@ def back(arr : auto(TT) ==const) : auto& const {
     }
 }
 
-// the finalize banner: erase/clear/shrink release the elements they drop. Raw-pointer
+// the collect banner: erase/clear/shrink release the elements they drop. Raw-pointer
 // elements are carved out - for them "finalize" means delete-the-pointee, and clear-then-delete
 // is the documented borrowed-pointer escape. delete stays the ownership teardown.
 def erase(var Arr : array<auto(numT)>; at : int) {
@@ -930,7 +930,7 @@ def erase(var Tab : table<auto(keyT); auto(valT)>; at : string#) : bool {
 }
 
 def erase(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #) : bool {
-    // the finalize banner: release the dropped value's heap (raw-pointer values carved out)
+    // the collect banner: release the dropped value's heap (raw-pointer values carved out)
     static_if (typeinfo needs_container_finalize(type<valT>)) {
         var val = __builtin_table_find(Tab, at)
         if (val != null) {
@@ -2162,7 +2162,7 @@ def move_to_ref(var a : auto&; var b) {
 }
 
 def clear(var t : table<auto(KT); auto(VT)>) {
-    // the finalize banner: release every value's heap (raw-pointer values carved out)
+    // the collect banner: release every value's heap (raw-pointer values carved out)
     static_if (typeinfo needs_container_finalize(type<VT>)) {
         for (v in values(t)) {
             unsafe(builtin_collect_local(v, uint(typeinfo sizeof(v))))
