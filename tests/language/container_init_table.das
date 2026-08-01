@@ -83,6 +83,37 @@ def test_table_index_trivial_unchanged(t : T?) {
 }
 
 [test]
+def test_table_index_key_flavors(t : T?) {
+    t |> run("runtime-built key") @(t : T?) {
+        var inscope tab : table<string; Foo>
+        let k = "ab{1}"
+        tab[k].x += 5
+        t |> equal(tab[k].x, 12)
+    }
+    t |> run("temporary key from an iterator") @(t : T?) {
+        var inscope tab : table<string; Foo>
+        var inscope src : table<string; int>
+        src |> insert("zz", 1)
+        for (kk in keys(src)) {
+            tab[kk].x++
+        }
+        t |> equal(tab["zz"].x, 8)
+    }
+    t |> run("non-string key") @(t : T?) {
+        var inscope tab : table<int; Foo>
+        tab[3].x += 2
+        t |> equal(tab[3].x, 9)
+    }
+    t |> run("safe index never inserts, never initializes") @(t : T?) {
+        var inscope tab : table<int; Foo>
+        tab[1].x = 5
+        let missing = tab?[99] ?? Foo(x = -1)
+        t |> equal(missing.x, -1)
+        t |> equal(length(tab), 1)
+    }
+}
+
+[test]
 def test_table_index_composites(t : T?) {
     // default<tuple<...>> does NOT run member initializers (probe-verified) - the init path
     // fires for tuple values but lands zeros, same as before. Pinned so a future
