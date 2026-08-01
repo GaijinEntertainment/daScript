@@ -2,6 +2,7 @@ IF(NOT DAS_LLAMA_INCLUDED)
     SET(DAS_LLAMA_INCLUDED TRUE)
     MESSAGE(STATUS "dasLLAMA module included.")
 
+    ADD_MODULE_DAS(dasllama dasllama dasllama_plane)
     ADD_MODULE_DAS(dasllama dasllama dasllama_math)
     ADD_MODULE_DAS(dasllama dasllama dasllama_math_default)
     ADD_MODULE_DAS(dasllama dasllama dasllama_math_aarch64_neon)

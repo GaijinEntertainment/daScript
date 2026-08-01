@@ -110,6 +110,8 @@ every requirer, so a partial registration reads as working until something else 
 - `dasllama_gguf.das` — the GGUF container and its byte readers.
 - `dasllama_layout.das` — disk-format to compute-layout transforms at load scope.
 - `dasllama_image.das` — the prepared-model image rail.
+- `dasllama_plane.das` — the borrowed-plane types and their accessors, and nothing else. A
+  weight carrier holds planes; only this file knows how one is bound, read, or dropped.
 - `dasllama_tokenizer.das` — the SentencePiece tokenizer.
 - `dasllama_bpe.das` — the byte-level BPE tokenizer.
 
