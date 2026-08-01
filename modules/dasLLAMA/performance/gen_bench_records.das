@@ -11,7 +11,7 @@ require daslib/fio
 require math
 
 // The official record driver — ONE rig for every workload: loops the catalogs x pair legs, runs
-// the das side as a CHILD per cell (lcpp_bench for LLM, asr_bench_cell for audio; one model
+// the das side as a CHILD per cell (the ONE released lcpp_bench exe, --asr for audio; one model
 // process at a time), and upserts the --json-path records into the per-box store — written after
 // EVERY cell, so a crash never costs a measured cell. Each board ratio is one das cell + its
 // matched ref run ADJACENT:
@@ -19,7 +19,7 @@ require math
 //   neon  : das cpu              vs clean-cpu -ngl 0       ("cpu", kernel vs kernel)
 //   amx   : das cpu --accel      vs stock -ngl 0 -nopo 1   ("cpu + accel" — -nopo keeps lcpp's
 //           Metal op-offload from serving 'CPU' rows on the GPU; nopo == nometal-build)
-//   asr   : das cpu (asr_bench_cell) vs each catalog reference tool, per clip
+//   asr   : das cpu (lcpp_bench --asr) vs each catalog reference tool, per clip
 //   bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- [-o substr] [--workload llm|asr|all]
 // --oracle inverts the rig into a regression tripwire: the stored das LLM rows re-measure once
 // each (frozen artifacts, no refs, store never written) and gate against their stored means.
@@ -377,7 +377,7 @@ def private oracle_cell(gguf, be, tag, exe : string; accel : bool; stored : Benc
 // reference tools run — this is the das side against its own record, like the LLM legs. The ms
 // metrics gate through the same oracle_compare, mirrored (for a duration, worse is HIGHER).
 def private oracle_asr_cell(spec : AsrModelSpec; stored : BenchRun; cfg : Args; threads : int;
-                            cellPath : string; var board : array<string>) : OracleVerdict {
+                            cellPath, exe : string; var board : array<string>) : OracleVerdict {
     let path = asr_model_path(spec)
     if (!stat(path).is_valid) {
         let miss = "FAIL {spec.display} das asr — model file missing: {path}"
@@ -387,8 +387,7 @@ def private oracle_asr_cell(spec : AsrModelSpec; stored : BenchRun; cfg : Args; 
     }
     to_log(LOG_INFO, "gen_bench_records: ORACLE START {spec.display} das asr\n")
     logger_info("bench.records", "oracle asr cell start", JV({"model" => JV(spec.display)}))
-    let args <- [daslang_bin(), "-jit", "modules/dasLLAMA/benchmarks/asr/asr_bench_cell.das", "--",
-                 "-m", spec.das_model, "-r", "{cfg.asr_reps}", "-t", "{threads}",
+    let args <- [exe, "--", "--asr", "-m", spec.das_model, "-r", "{cfg.asr_reps}", "-t", "{threads}",
                  "--json-path", cellPath]
     var out = ""
     let rc = run_and_stream(args, out)
@@ -491,7 +490,7 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
                 }
                 cells++
                 settle(cfg)
-                let va = oracle_asr_cell(spec, sr, cfg, threads, cellPath, board)
+                let va = oracle_asr_cell(spec, sr, cfg, threads, cellPath, exe, board)
                 if (va == OracleVerdict.fail) {
                     fails++
                     if (!cfg.oracle_keep_going) {
@@ -623,14 +622,13 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
 
 // ===== ASR legs (the audio workloads, same adjacency discipline as the LLM legs) =====
 
-// das side: one asr_bench_cell child per catalog model, absorbed via the same cell protocol
-def private asr_das_cell(spec : AsrModelSpec; cfg : Args; threads : int; cellPath, store : string;
+// das side: one lcpp_bench --asr child per catalog model, absorbed via the same cell protocol
+def private asr_das_cell(spec : AsrModelSpec; cfg : Args; threads : int; cellPath, store, exe : string;
                          var models : array<BenchModel>; var failed : array<string>) {
     let t0 = ref_time_ticks()
     to_log(LOG_INFO, "gen_bench_records: START {spec.display} das asr\n")
     logger_info("bench.records", "cell start", JV({"model" => JV(spec.display), "engine" => JV("das"), "leg" => JV("asr")}))
-    let args <- [daslang_bin(), "-jit", "modules/dasLLAMA/benchmarks/asr/asr_bench_cell.das", "--",
-                 "-m", spec.das_model, "-r", "{cfg.asr_reps}", "-t", "{threads}",
+    let args <- [exe, "--", "--asr", "-m", spec.das_model, "-r", "{cfg.asr_reps}", "-t", "{threads}",
                  "--json-path", cellPath]
     var out = ""
     let rc = run_and_stream(args, out)
@@ -921,14 +919,9 @@ def main : int {
             return 1
         }
         let othreads = cfg.threads > 0 ? cfg.threads : profile_threads()
-        // an ASR-only oracle never touches the exe (its cells are their own child), so demanding a
-        // fresh one there would refuse a runnable board — gate the requirement on real LLM work
-        var oexe = ""
-        if (cfg.workload != "asr") {
-            oexe = rig_exe_checked()
-            if (empty(oexe)) {
-                return 1
-            }
+        let oexe = rig_exe_checked()
+        if (empty(oexe)) {
+            return 1
         }
         return oracle_main(cfg, legNeon, legAmx, legMetal, omodels,
             othreads, "modules/dasLLAMA/performance/records/_cell_{box_name()}.json", oexe)
@@ -1013,7 +1006,7 @@ def main : int {
                 continue
             }
             settle(cfg)
-            asr_das_cell(spec, cfg, threads, cellPath, store, models, failed)
+            asr_das_cell(spec, cfg, threads, cellPath, store, exe, models, failed)
             for (rf in spec.refs) {
                 if (!key_exists(toolVersions, rf.tool)) {
                     toolVersions |> insert(rf.tool, asr_ref_available(rf.tool) ? asr_tool_versions(rf.tool) : "")
