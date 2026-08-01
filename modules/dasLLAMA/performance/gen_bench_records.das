@@ -73,7 +73,7 @@ struct Args {
     @clarg_doc = "Timed repetitions per ASR clip, best kept (default: 2 — clips are minutes, not seconds)"
     asr_reps : int = 2
 
-    @clarg_doc = "Verify instead of measure: re-run each stored das LLM row once (frozen artifacts — .dlim must exist) and gate it against the store. No refs, no store writes. Stops at the first FAIL"
+    @clarg_doc = "Verify instead of measure: re-run each stored das LLM row once and gate it against the store. A missing .dlim is minted and warmed by a prepare pass first, so only the timed cell is frozen. No refs, no store writes. Stops at the first FAIL"
     oracle : bool
 
     @clarg_doc = "Oracle: run every row and report the full board instead of stopping at the first FAIL"
@@ -347,6 +347,33 @@ def private oracle_cell(gguf, be, tag, exe : string; accel : bool; stored : Benc
     return verdict
 }
 
+// The freeze exists so a cell cannot silently mint a DIFFERENT image and measure a config the
+// stored row never used — but an ABSENT image (GC'd) has no identity to protect, and freezing
+// there just makes the board unrunnable. The load walk mints it (never pre-mint by hand); this
+// also hands the timed cell a WARM map, worth more than the mint: see the cv retry below.
+def private oracle_prepare(gguf, be, tag, exe : string; accel : bool; threads : int; cellPath : string) {
+    let path = "{models_dir()}{gguf}"
+    return if (!stat(path).is_valid)   // the timed cell reports the missing model
+    var args <- [exe, "--",
+                 "-m", path, "-p", "8", "-n", "1", "-r", "1",
+                 "-t", "{threads}", "-o", "json", "--json-path", cellPath]
+    if (be == "metal") {
+        args |> push_from(["--ngl", "99"])
+    }
+    if (accel) {
+        args |> push("--accel")
+    }
+    let t0 = ref_time_ticks()
+    var out = ""
+    let rc = run_and_stream(args, out)
+    remove(cellPath)
+    if (rc != 0) {
+        to_log(LOG_WARNING, "gen_bench_records: ORACLE PREPARE {gguf} {tag} rc={rc} — the frozen cell below reports it\n")
+        return
+    }
+    to_log(LOG_INFO, "gen_bench_records: ORACLE PREPARE {gguf} {tag} — image ready and warm ({elapsed_ms(t0)} ms)\n")
+}
+
 // The --oracle driver: the work list is the STORE's das LLM rows for this box (the published
 // tables re-verify; coverage gaps fail loudly), each re-measured once and gated one-sided
 // against its stored mean. Pure check — the store is never written.
@@ -393,6 +420,7 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
                 continue
             }
             cells++
+            oracle_prepare(m.gguf, be, tag, exe, accel, threads, cellPath)
             settle(cfg)
             var v = oracle_cell(m.gguf, be, tag, exe, accel, sr, cfg, threads, cellPath, board)
             if (v == OracleVerdict.fail && cfg.oracle_retry_settle > 0) {
@@ -748,14 +776,17 @@ def main : int {
     if (!empty(cfg.legs)) {
         for (l in split(cfg.legs, ",")) {
             let tok = trim(l)
-            if (tok == "neon") {
+            if (tok == "cpu") {   // the documented alias: both CPU flavors, whatever the box has stored
+                legNeon = true
+                legAmx = true
+            } elif (tok == "neon") {
                 legNeon = true
             } elif (tok == "amx") {
                 legAmx = true
             } elif (tok == "metal") {
                 legMetal = true
             } elif (!empty(tok)) {
-                to_log(LOG_ERROR, "gen_bench_records: unknown leg `{tok}` (expected neon | amx | metal)\n")
+                to_log(LOG_ERROR, "gen_bench_records: unknown leg `{tok}` (expected cpu | neon | amx | metal)\n")
                 return 1
             }
         }
