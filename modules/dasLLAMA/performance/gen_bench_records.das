@@ -121,6 +121,7 @@ def private pub_catalog() : array<PubEntry> {
 // which would put minutes of hidden work inside a measurement run.
 let RIG_EXE_OUT = "modules/dasLLAMA/performance/_rig"
 let RIG_BENCH_SRC = "modules/dasLLAMA/benchmarks/lcpp_bench.das"
+let RIG_ENGINE_SRC = "modules/dasLLAMA/dasllama"
 
 def private rig_exe_path() : string {
     // macOS ships a clickable .app; every other platform gets <out>/<name>/<name>, .exe on Windows
@@ -136,8 +137,26 @@ def private rig_build_line() : string {
     return "bin/daslang utils/daspkg/main.das -- release --root modules/dasLLAMA/benchmarks --out {RIG_EXE_OUT}"
 }
 
-//! The exe must exist and be no older than the bench source. Returns "" (and logs the fix) when it
-//! is not usable — the caller aborts rather than measuring something stale.
+// The exe bakes the whole ENGINE, not just the bench driver, so the bench source alone is not the
+// staleness axis: a refactor under dasllama/ with an untouched driver leaves an exe that measures
+// the OLD engine and reports no regression. Newest source across both wins.
+def private rig_newest_source() : tuple<string; clock> {
+    var bestPath = RIG_BENCH_SRC
+    var best = stat(RIG_BENCH_SRC).mtime
+    dir(RIG_ENGINE_SRC) $(name : string) {
+        return if (!(name |> ends_with(".das")))
+        let full = path_join(RIG_ENGINE_SRC, name)
+        let s = stat(full)
+        if (s.is_valid && s.mtime > best) {
+            best = s.mtime
+            bestPath = full
+        }
+    }
+    return (bestPath, best)
+}
+
+//! The exe must exist and be no older than every source it bakes. Returns "" (and logs the fix)
+//! when it is not usable — the caller aborts rather than measuring something stale.
 def private rig_exe_checked() : string {
     let exe = rig_exe_path()
     let st = stat(exe)
@@ -145,9 +164,9 @@ def private rig_exe_checked() : string {
         to_log(LOG_ERROR, "gen_bench_records: no bench exe at {exe}\n  build it: {rig_build_line()}\n")
         return ""
     }
-    let src = stat(RIG_BENCH_SRC)
-    if (src.is_valid && src.mtime > st.mtime) {
-        to_log(LOG_ERROR, "gen_bench_records: bench exe is older than {RIG_BENCH_SRC} — its baked tune winners no longer match the source\n  rebuild: {rig_build_line()}\n")
+    let newest = rig_newest_source()
+    if (newest._1 > st.mtime) {
+        to_log(LOG_ERROR, "gen_bench_records: bench exe is older than {newest._0} — it bakes that source AND the tune winners, so it would measure stale code\n  rebuild: {rig_build_line()}\n")
         return ""
     }
     return exe
