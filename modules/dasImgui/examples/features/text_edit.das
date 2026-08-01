@@ -66,7 +66,7 @@ def private setup_layout(dock_id : uint) {
 }
 
 [export]
-def update() { // nolint:STYLE037
+def update() {
     if (!harness_begin_frame()) return
     harness_new_frame()
     command_begin_frame(g_commands)

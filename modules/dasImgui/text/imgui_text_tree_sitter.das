@@ -88,7 +88,7 @@ def private das_word_style(word : string) : TextSourceSyntaxStyle {
         : TextSourceSyntaxStyle.keyword)
 }
 
-def private ensure_das_keyword_styles { // nolint:STYLE038
+def private ensure_das_keyword_styles {
     if (!empty(g_das_keyword_styles)) return
     // imgui_text_language owns the keyword SET; only the styling lives here.
     text_language_profile("daslang") $(profile) {
@@ -119,7 +119,7 @@ def private push_das_fallback(var spans : array<TextSourceSpan>;
         syntax_style = style))
 }
 
-def private das_lexical_fallback(source : string) : array<TextSourceSpan> { // nolint:STYLE038
+def private das_lexical_fallback(source : string) : array<TextSourceSpan> { // nolint:STYLE038 — one-pass lexer; every token arm shares the byte cursor inside the peek_data block
     // Fills query gaps from incomplete snippets / recovery nodes (common in compact Git hunks); tree-sitter stays authoritative.
     var result : array<TextSourceSpan>
     var expect_function = false
@@ -364,20 +364,26 @@ def private json_lexical_source_document(source : string;
     return <- document
 }
 
+def private push_profile_folds(var document : TextSourceDocument;
+                               profile : TextLanguageProfile const;
+                               spans : array<SyntaxNodeSpan>) {
+    for (span in spans) {
+        continue if (!key_exists(profile.fold_kinds, span.node_type))
+        document.folds |> push(TextSourceFoldRegion(
+            start_byte = span.start_byte,
+            end_byte = span.end_byte,
+            header_row = span.start_row,
+            end_row = span.end_row,
+            kind = span.node_type))
+    }
+}
+
 def private collect_profile_folds(var document : TextSourceDocument;
                                   profile : TextLanguageProfile const;
                                   canonical, source : string) {
     var spans : array<SyntaxNodeSpan>
     if (syntax_structure(canonical, source, spans) == SyntaxHighlightStatus.ok) {
-        for (span in spans) {
-            continue if (!key_exists(profile.fold_kinds, span.node_type))
-            document.folds |> push(TextSourceFoldRegion(
-                start_byte = span.start_byte,
-                end_byte = span.end_byte,
-                header_row = span.start_row,
-                end_row = span.end_row,
-                kind = span.node_type))
-        }
+        push_profile_folds(document, profile, spans)
     }
     delete spans
 }
@@ -400,9 +406,20 @@ def public tree_sitter_source_document(source, language : string;
         return <- json_lexical_source_document(source, revision)
     }
     var document = TextSourceDocument(source = source, revision = revision)
+    // folds ride the SAME parse as highlighting when the profile wants them;
+    // a second full syntax_structure parse measured as pure loss on big files
+    var wants_folds = false
+    text_language_profile(canonical) $(profile) {
+        wants_folds = !empty(profile.fold_kinds)
+    }
     var tokens : array<SyntaxToken>
-    if (syntax_highlight(language, source, tokens) != SyntaxHighlightStatus.ok) {
+    var structure_spans : array<SyntaxNodeSpan>
+    let highlight_status = (wants_folds
+        ? syntax_highlight_and_structure(language, source, tokens, structure_spans)
+        : syntax_highlight(language, source, tokens))
+    if (highlight_status != SyntaxHighlightStatus.ok) {
         delete tokens
+        delete structure_spans
         return <- plain_source_document(source, revision)
     }
 
@@ -432,6 +449,11 @@ def public tree_sitter_source_document(source, language : string;
         delete fallback
     }
     delete tokens
-    tree_sitter_collect_folds(document, canonical, source)
+    if (wants_folds) {
+        text_language_profile(canonical) $(profile) {
+            push_profile_folds(document, profile, structure_spans)
+        }
+    }
+    delete structure_spans
     return <- document
 }

@@ -133,7 +133,7 @@ def private parse_clang_line(line, overlay : string;
     return true
 }
 
-def public text_edit_parse_clang_output(output, overlay : string; // nolint:STYLE037
+def public text_edit_parse_clang_output(output, overlay : string;
                                         var out : array<TextEditDiagnostic>) {
     //! Clang text -> findings: `FILE:LINE:COL: severity: message` one-liners
     //! (1-based both); the |-gutter caret line (`^~~~`) supplies the width.

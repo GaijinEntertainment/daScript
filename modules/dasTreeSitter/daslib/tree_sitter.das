@@ -102,7 +102,7 @@ def public syntax_language_available(language : string) : bool {
     return _tree_sitter_language_available(language)
 }
 
-def public syntax_role_for_capture(capture_name : string) : SyntaxRole { // nolint:STYLE037
+def public syntax_role_for_capture(capture_name : string) : SyntaxRole { // nolint:STYLE037 — ordered prefix ladder; a split hides that `string.escape` must be tested before `string`
     if (capture_name == "none") return SyntaxRole.none
     if (starts_with(capture_name, "comment")) return SyntaxRole.comment
     if (starts_with(capture_name, "string.escape") || capture_name == "escape"
@@ -192,6 +192,36 @@ def public syntax_highlight(language, source : string;
             role = syntax_role_for_capture(capture_value),
             capture_name = capture_value,
             language = canonical))
+    }
+    return unsafe(reinterpret<SyntaxHighlightStatus>(raw_status))
+}
+
+def public syntax_highlight_and_structure(language, source : string;
+                                          var tokens : array<SyntaxToken>;
+                                          var spans : array<SyntaxNodeSpan>) : SyntaxHighlightStatus {
+    //! `syntax_highlight` + `syntax_structure` from ONE parse of the source —
+    //! same results as the two split calls, minus the second full parse.
+    delete tokens
+    delete spans
+    if (!is_utf8_string_valid(source)) return SyntaxHighlightStatus.invalid_source
+    let canonical = syntax_canonical_language(language)
+    let raw_status = _tree_sitter_highlight_and_structure(canonical, source, length(source),
+        $(var start_byte, end_byte : int; capture_name : string const#) {
+            let capture_value = "{capture_name}"
+            tokens |> push(SyntaxToken(
+                start_byte = start_byte,
+                end_byte = end_byte,
+                kind = syntax_kind_for_capture(capture_value),
+                role = syntax_role_for_capture(capture_value),
+                capture_name = capture_value,
+                language = canonical))
+        }) $(node_type : string const#; start_byte, end_byte, start_row, end_row : int) {
+        spans |> push(SyntaxNodeSpan(
+            start_byte = start_byte,
+            end_byte = end_byte,
+            start_row = start_row,
+            end_row = end_row,
+            node_type = "{node_type}"))
     }
     return unsafe(reinterpret<SyntaxHighlightStatus>(raw_status))
 }

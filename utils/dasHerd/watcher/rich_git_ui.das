@@ -196,8 +196,10 @@ def private worktree_retire_hint(worktree : WorktreeState const;
             "{worktree.unmerged_base_ref} exist only on this machine — the " +
             "branch {worktree.branch} keeps them either way.")
     }
-    if (!worktree.unmerged_known) {
-        return "Safe to delete. Unmerged count unknown: no base ref resolved."
+    if (tier == WORKTREE_TIER_UNKNOWN) {
+        return ("Unmerged count unknown — no base ref resolved, so " +
+            "redundancy cannot be confirmed. The branch {worktree.branch} " +
+            "keeps its commits either way.")
     }
     return ("Safe to delete. Nothing here that " +
         "{worktree.unmerged_base_ref} does not already have.")

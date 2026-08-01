@@ -113,7 +113,16 @@ def test_repository_delete_safety_verdict(t : T?) {
         let unknown <- WorktreeState(unmerged_commits = 7)
         t |> success(!repository_worktree_only_here(unknown),
             "an unresolved base never manufactures a warning")
+        t |> equal(repository_worktree_delete_tier(unknown, ""),
+            WORKTREE_TIER_UNKNOWN,
+            "an unmeasured count is its own tier, never green")
+        t |> equal(repository_worktree_delete_tier(unknown, "dictation"),
+            WORKTREE_TIER_IN_USE, "a live session still outranks unknown")
     }
+}
+
+[test]
+def test_repository_delete_failure_explanations(t : T?) {
     t |> run("a recognised failure explains itself and says whether retrying helps") <| @(t : T?) {
         // The exact line git produced live on 2026-07-27, retiring
         // D:/Work/daScript-ci-30233791631: it emptied the folder, could not

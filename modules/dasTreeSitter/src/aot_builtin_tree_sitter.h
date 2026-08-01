@@ -22,4 +22,13 @@ int32_t builtin_tree_sitter_structure(
     Context * context,
     LineInfoArg * at);
 
+int32_t builtin_tree_sitter_highlight_and_structure(
+    const char * language,
+    const char * source,
+    int32_t source_size,
+    const TBlock<void, int32_t, int32_t, TTemporary<const char *>> & highlight_block,
+    const TBlock<void, TTemporary<const char *>, int32_t, int32_t, int32_t, int32_t> & structure_block,
+    Context * context,
+    LineInfoArg * at);
+
 }

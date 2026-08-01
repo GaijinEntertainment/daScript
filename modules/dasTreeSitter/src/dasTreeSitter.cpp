@@ -290,7 +290,8 @@ int32_t collectHighlights(
     QueryState & state,
     const char * source,
     uint32_t sourceSize,
-    std::vector<CaptureSpan> & captures) {
+    std::vector<CaptureSpan> & captures,
+    TSTree ** keep_tree = nullptr) {
     if (!ensureQuery(state)) return highlight_query_error;
     bool compatible = false;
     TSTree * tree = parseSource(state.language_fn(), source, sourceSize, compatible);
@@ -331,8 +332,59 @@ int32_t collectHighlights(
         }
     }
 
-    ts_tree_delete(tree);
+    if (keep_tree) {
+        *keep_tree = tree; // caller owns it — reused for the structure walk
+    } else {
+        ts_tree_delete(tree);
+    }
     return highlight_ok;
+}
+
+using HighlightBlock = TBlock<void, int32_t, int32_t, TTemporary<const char *>>;
+using StructureBlock =
+    TBlock<void, TTemporary<const char *>, int32_t, int32_t, int32_t, int32_t>;
+
+void walkStructure(
+    TSTree * tree,
+    int32_t source_size,
+    const StructureBlock & block,
+    Context * context,
+    LineInfoArg * at) {
+    // Named-node walk for structure consumers (folding, future decorations).
+    // Only multi-line nodes are reported; single-line nodes cannot fold and
+    // filtering here keeps the das-side callback volume proportional to the
+    // outline, not the token count.
+    TSTreeCursor cursor = ts_tree_cursor_new(ts_tree_root_node(tree));
+    bool descending = true;
+    while (true) {
+        if (descending) {
+            const TSNode node = ts_tree_cursor_current_node(&cursor);
+            const TSPoint startPoint = ts_node_start_point(node);
+            const TSPoint endPoint = ts_node_end_point(node);
+            if (ts_node_is_named(node) && endPoint.row > startPoint.row) {
+                das_invoke<void>::invoke<const char *, int32_t, int32_t, int32_t, int32_t>(
+                    context, at, block,
+                    ts_node_type(node),
+                    static_cast<int32_t>(ts_node_start_byte(node)),
+                    static_cast<int32_t>(std::min(
+                        ts_node_end_byte(node), static_cast<uint32_t>(source_size))),
+                    static_cast<int32_t>(startPoint.row),
+                    static_cast<int32_t>(endPoint.row));
+            }
+            // A single-line node cannot contain a multi-line child.
+            if (endPoint.row > startPoint.row && ts_tree_cursor_goto_first_child(&cursor)) {
+                continue;
+            }
+        }
+        if (ts_tree_cursor_goto_next_sibling(&cursor)) {
+            descending = true;
+        } else if (ts_tree_cursor_goto_parent(&cursor)) {
+            descending = false;
+        } else {
+            break;
+        }
+    }
+    ts_tree_cursor_delete(&cursor);
 }
 
 std::vector<FlatToken> flattenCaptures(const std::vector<CaptureSpan> & captures) {
@@ -404,6 +456,21 @@ std::vector<FlatToken> flattenCaptures(const std::vector<CaptureSpan> & captures
     return result;
 }
 
+void emitHighlights(
+    const std::vector<CaptureSpan> & captures,
+    const HighlightBlock & block,
+    Context * context,
+    LineInfoArg * at) {
+    const std::vector<FlatToken> tokens = flattenCaptures(captures);
+    for (const FlatToken & token : tokens) {
+        das_invoke<void>::invoke<int32_t, int32_t, const char *>(
+            context, at, block,
+            static_cast<int32_t>(token.start),
+            static_cast<int32_t>(token.end),
+            token.capture.c_str());
+    }
+}
+
 } // namespace
 
 bool builtin_tree_sitter_language_available(const char * language) {
@@ -418,10 +485,6 @@ int32_t builtin_tree_sitter_structure(
     const TBlock<void, TTemporary<const char *>, int32_t, int32_t, int32_t, int32_t> & block,
     Context * context,
     LineInfoArg * at) {
-    // Named-node walk for structure consumers (folding, future decorations).
-    // Only multi-line nodes are reported; single-line nodes cannot fold and
-    // filtering here keeps the das-side callback volume proportional to the
-    // outline, not the token count.
     QueryState * state = resolveLanguage(language);
     if (!state) return highlight_unknown_language;
     if (!source || source_size < 0) return highlight_invalid_source;
@@ -432,37 +495,7 @@ int32_t builtin_tree_sitter_structure(
     if (!compatible) return highlight_incompatible_language;
     if (!tree) return highlight_parse_error;
 
-    TSTreeCursor cursor = ts_tree_cursor_new(ts_tree_root_node(tree));
-    bool descending = true;
-    while (true) {
-        if (descending) {
-            const TSNode node = ts_tree_cursor_current_node(&cursor);
-            const TSPoint startPoint = ts_node_start_point(node);
-            const TSPoint endPoint = ts_node_end_point(node);
-            if (ts_node_is_named(node) && endPoint.row > startPoint.row) {
-                das_invoke<void>::invoke<const char *, int32_t, int32_t, int32_t, int32_t>(
-                    context, at, block,
-                    ts_node_type(node),
-                    static_cast<int32_t>(ts_node_start_byte(node)),
-                    static_cast<int32_t>(std::min(
-                        ts_node_end_byte(node), static_cast<uint32_t>(source_size))),
-                    static_cast<int32_t>(startPoint.row),
-                    static_cast<int32_t>(endPoint.row));
-            }
-            // A single-line node cannot contain a multi-line child.
-            if (endPoint.row > startPoint.row && ts_tree_cursor_goto_first_child(&cursor)) {
-                continue;
-            }
-        }
-        if (ts_tree_cursor_goto_next_sibling(&cursor)) {
-            descending = true;
-        } else if (ts_tree_cursor_goto_parent(&cursor)) {
-            descending = false;
-        } else {
-            break;
-        }
-    }
-    ts_tree_cursor_delete(&cursor);
+    walkStructure(tree, source_size, block, context, at);
     ts_tree_delete(tree);
     return highlight_ok;
 }
@@ -483,14 +516,34 @@ int32_t builtin_tree_sitter_highlight(
         *state, source, static_cast<uint32_t>(source_size), captures);
     if (status != highlight_ok) return status;
 
-    const std::vector<FlatToken> tokens = flattenCaptures(captures);
-    for (const FlatToken & token : tokens) {
-        das_invoke<void>::invoke<int32_t, int32_t, const char *>(
-            context, at, block,
-            static_cast<int32_t>(token.start),
-            static_cast<int32_t>(token.end),
-            token.capture.c_str());
-    }
+    emitHighlights(captures, block, context, at);
+    return highlight_ok;
+}
+
+int32_t builtin_tree_sitter_highlight_and_structure(
+    const char * language,
+    const char * source,
+    int32_t source_size,
+    const TBlock<void, int32_t, int32_t, TTemporary<const char *>> & highlight_block,
+    const TBlock<void, TTemporary<const char *>, int32_t, int32_t, int32_t, int32_t> & structure_block,
+    Context * context,
+    LineInfoArg * at) {
+    // One parse serves both consumers: highlight captures AND the multi-line
+    // structure outline (folds). Same results as calling the two split externs,
+    // minus the second full parse of the document.
+    QueryState * state = resolveLanguage(language);
+    if (!state) return highlight_unknown_language;
+    if (!source || source_size < 0) return highlight_invalid_source;
+
+    std::vector<CaptureSpan> captures;
+    TSTree * tree = nullptr;
+    const int32_t status = collectHighlights(
+        *state, source, static_cast<uint32_t>(source_size), captures, &tree);
+    if (status != highlight_ok) return status;
+
+    emitHighlights(captures, highlight_block, context, at);
+    walkStructure(tree, source_size, structure_block, context, at);
+    ts_tree_delete(tree);
     return highlight_ok;
 }
 
@@ -512,6 +565,11 @@ public:
             *this, lib, "_tree_sitter_structure", SideEffects::invoke,
             "builtin_tree_sitter_structure")
                 ->args({"language", "source", "source_size", "block", "context", "at"});
+        addExtern<DAS_BIND_FUN(builtin_tree_sitter_highlight_and_structure)>(
+            *this, lib, "_tree_sitter_highlight_and_structure", SideEffects::invoke,
+            "builtin_tree_sitter_highlight_and_structure")
+                ->args({"language", "source", "source_size", "highlight_block",
+                    "structure_block", "context", "at"});
 
         verifyBuiltinNames(uint32_t(VerifyBuiltinFlags::verifyAll));
         verifyAotReady();

@@ -309,7 +309,7 @@ def private byte_in(set_bytes : string; b : int) : bool {
     return hit
 }
 
-def private lex_line(profile : TextLanguageProfile const; line : string; // nolint:STYLE037
+def private lex_line(profile : TextLanguageProfile const; line : string;
                      entry_comment : bool;
                      var runs : array<TextEditStyleRun>) : bool {
     // returns whether the NEXT line starts inside a block comment
@@ -446,7 +446,7 @@ def private code_byte(ed : TextEditState const; line, column : int) : int {
     return value
 }
 
-def private scan_bracket(ed : TextEditState const; line, column : int; // nolint:STYLE037
+def private scan_bracket(ed : TextEditState const; line, column : int;
                          open_byte, close_byte : int; forward : bool) : int2 {
     var depth = 1
     var at_line = line
@@ -547,7 +547,7 @@ def private run_overlaps(runs : array<TextEditStyleRun>; start, end_ : int) : bo
     return false
 }
 
-def private merge_parse_styles(var ed : TextEditState; line : int; // nolint:STYLE037
+def private merge_parse_styles(var ed : TextEditState; line : int;
                                old_runs : array<TextEditStyleRun>;
                                edit_column, removed_bytes, inserted_bytes : int) {
     // anti-flicker: shift old parse-only runs across the edit into lexical gaps
@@ -1118,7 +1118,7 @@ def private surround_selection(var ed : TextEditState;
     return true
 }
 
-def private auto_close_pairs(var ed : TextEditState; text : string) : bool { // nolint:STYLE037
+def private auto_close_pairs(var ed : TextEditState; text : string) : bool {
     // openers close themselves, closers skip twins, selections surround
     return false if (empty(ed.language) || length(text) != 1 || ed.overtype)
     let b = first_character(text)
@@ -2311,139 +2311,6 @@ def private drain_typed_chars(var ed : TextEditState) : bool {
     return typed_chars
 }
 
-def private nav_pressed(main_key, keypad_key : ImGuiKey; keypad_nav : bool) : bool {
-    // every nav key answers for its numpad twin; twins mute while typing
-    return (IsKeyPressed(main_key, true)
-        || (keypad_nav && IsKeyPressed(keypad_key, true)))
-}
-
-def private route_editor_keys(var ed : TextEditState; page_rows : int; // nolint:STYLE037
-                              use_system_clipboard : bool) {
-    // interim hardwired keymap — migrates to imgui_commands in the registry step
-    let io & = unsafe(GetIO())
-    let select = io.KeyShift
-    // chars drain FIRST: a char-delivering frame types, keypad nav mutes
-    let keypad_nav = !drain_typed_chars(ed)
-    if (io.KeyCtrl && !io.KeyAlt) {
-        if (nav_pressed(ImGuiKey.LeftArrow, ImGuiKey.Keypad4, keypad_nav)) {
-            text_edit_move_word_left(ed, select)
-        }
-        if (nav_pressed(ImGuiKey.RightArrow, ImGuiKey.Keypad6, keypad_nav)) {
-            text_edit_move_word_right(ed, select)
-        }
-        if (nav_pressed(ImGuiKey.UpArrow, ImGuiKey.Keypad8, keypad_nav)) {
-            text_edit_move_vertical(ed, -1, select)
-        }
-        if (nav_pressed(ImGuiKey.DownArrow, ImGuiKey.Keypad2, keypad_nav)) {
-            text_edit_move_vertical(ed, 1, select)
-        }
-        if (nav_pressed(ImGuiKey.Home, ImGuiKey.Keypad7, keypad_nav)) {
-            text_edit_move_document_start(ed, select)
-        }
-        if (nav_pressed(ImGuiKey.End, ImGuiKey.Keypad1, keypad_nav)) {
-            text_edit_move_document_end(ed, select)
-        }
-        if (IsKeyPressed(ImGuiKey.Backspace, true)) {
-            text_edit_delete_word_left(ed)
-        }
-        if (nav_pressed(ImGuiKey.Delete, ImGuiKey.KeypadDecimal, keypad_nav)) {
-            text_edit_delete_word_right(ed)
-        }
-        if (IsKeyPressed(ImGuiKey.A, false)
-                || (keypad_nav && IsKeyPressed(ImGuiKey.Keypad5, false))) {
-            text_edit_select_all(ed)
-        }
-        if (IsKeyPressed(ImGuiKey.G, false)) {
-            text_edit_open_goto(ed)
-        }
-        if (IsKeyPressed(ImGuiKey.J, true)) {
-            text_edit_join_lines(ed)
-        }
-        if (IsKeyPressed(ImGuiKey.Z, true)) {
-            let _ = io.KeyShift ? text_edit_redo(ed) : text_edit_undo(ed)
-        }
-        if (IsKeyPressed(ImGuiKey.Y, true)) {
-            let _ = text_edit_redo(ed)
-        }
-        if (IsKeyPressed(ImGuiKey.C, false) || IsKeyPressed(ImGuiKey.Insert, false)
-                || (keypad_nav && IsKeyPressed(ImGuiKey.Keypad0, false))) {
-            editor_copy_to_clipboard(ed, use_system_clipboard)
-        }
-        if (IsKeyPressed(ImGuiKey.X, false)) {
-            editor_cut_to_clipboard(ed, use_system_clipboard)
-        }
-        if (IsKeyPressed(ImGuiKey.V, true)) {
-            editor_paste_from_clipboard(ed, use_system_clipboard)
-        }
-    } elif (io.KeyAlt && !io.KeyCtrl) {
-        // Alt+Backspace undo, Shift+Alt+Backspace redo — the CUA legacy pair.
-        if (IsKeyPressed(ImGuiKey.Backspace, true)) {
-            let _ = io.KeyShift ? text_edit_redo(ed) : text_edit_undo(ed)
-        }
-    } elif (!io.KeyAlt) {
-        if (nav_pressed(ImGuiKey.LeftArrow, ImGuiKey.Keypad4, keypad_nav)) {
-            text_edit_move_left(ed, select)
-        }
-        if (nav_pressed(ImGuiKey.RightArrow, ImGuiKey.Keypad6, keypad_nav)) {
-            text_edit_move_right(ed, select)
-        }
-        if (nav_pressed(ImGuiKey.UpArrow, ImGuiKey.Keypad8, keypad_nav)) {
-            if (select || !text_edit_list_prev(ed)) {
-                text_edit_move_vertical(ed, -1, select)
-            }
-        }
-        if (nav_pressed(ImGuiKey.DownArrow, ImGuiKey.Keypad2, keypad_nav)) {
-            if (select || !text_edit_list_next(ed)) {
-                text_edit_move_vertical(ed, 1, select)
-            }
-        }
-        if (nav_pressed(ImGuiKey.PageUp, ImGuiKey.Keypad9, keypad_nav)) {
-            text_edit_move_vertical(ed, -max(page_rows, 1), select)
-        }
-        if (nav_pressed(ImGuiKey.PageDown, ImGuiKey.Keypad3, keypad_nav)) {
-            text_edit_move_vertical(ed, max(page_rows, 1), select)
-        }
-        if (nav_pressed(ImGuiKey.Home, ImGuiKey.Keypad7, keypad_nav)) {
-            text_edit_move_home(ed, select)
-        }
-        if (nav_pressed(ImGuiKey.End, ImGuiKey.Keypad1, keypad_nav)) {
-            text_edit_move_end(ed, select)
-        }
-        if (IsKeyPressed(ImGuiKey.Enter, true) || IsKeyPressed(ImGuiKey.KeypadEnter, true)) {
-            if (!text_edit_list_accept(ed)) {
-                text_edit_newline(ed)
-            }
-        }
-        if (IsKeyPressed(ImGuiKey.Backspace, true)) {
-            text_edit_backspace(ed)
-        }
-        if (nav_pressed(ImGuiKey.Delete, ImGuiKey.KeypadDecimal, keypad_nav)) {
-            if (select) {
-                editor_cut_to_clipboard(ed, use_system_clipboard) // Shift+Del = cut (CUA)
-            } else {
-                text_edit_delete(ed)
-            }
-        }
-        if (select && IsKeyPressed(ImGuiKey.Insert, false)) {
-            editor_paste_from_clipboard(ed, use_system_clipboard) // Shift+Ins = paste (CUA)
-        }
-        if (!select && (IsKeyPressed(ImGuiKey.Insert, false)
-                || (keypad_nav && IsKeyPressed(ImGuiKey.Keypad0, false)))) {
-            text_edit_toggle_overtype(ed)
-        }
-        if (IsKeyPressed(ImGuiKey.Tab, true)) {
-            text_edit_insert(ed, "\t")
-        }
-        if (IsKeyPressed(ImGuiKey.Escape, false)) {
-            if (ed.list_open) {
-                text_edit_close_list(ed)
-            } elif (text_edit_has_selection(ed)) {
-                text_edit_clear_selection(ed)
-            }
-        }
-    }
-}
-
 struct private EditMetrics {
     zoom : float = 1.0f
     font_size : float = 0.0f
@@ -2535,7 +2402,7 @@ def private extend_line_drag(var ed : TextEditState; hit_line : int) {
     }
 }
 
-def private handle_edit_click(var ed : TextEditState; hit : int2; // nolint:STYLE037
+def private handle_edit_click(var ed : TextEditState; hit : int2;
                               clicks : int; shift : bool) {
     ed.focused = true
     if (shift) {
@@ -2755,7 +2622,7 @@ def private draw_edit_caret(ed : TextEditState const; m : EditMetrics;
         GetColorU32(caret_color), 0.0f, ImDrawFlags.None)
 }
 
-def private edit_syntax_color(style : TextSourceViewStyle const; // nolint:STYLE037
+def private edit_syntax_color(style : TextSourceViewStyle const;
                               syntax : TextSourceSyntaxStyle) : float4 {
     if (syntax == TextSourceSyntaxStyle.comment) return style.syntax_comment_color
     if (syntax == TextSourceSyntaxStyle.string_) return style.syntax_string_color
@@ -3073,8 +2940,7 @@ def private draw_edit_highlights(ed : TextEditState const; m : EditMetrics;
 
 def private text_source_edit_impl(id : string; var ed : TextEditState;
                                   var style : TextSourceViewStyle;
-                                  var registry : CommandRegistry;
-                                  use_registry : bool) : TextEditResult {
+                                  var registry : CommandRegistry) : TextEditResult {
     var result = TextEditResult()
     ensure_line(ed)
     ed.tab_cells = max(style.tab_cells, 1)
@@ -3108,26 +2974,20 @@ def private text_source_edit_impl(id : string; var ed : TextEditState;
     let page_rows = max(1, int(floor(m.view_height / m.line_height)) - 1)
     ed.visible_rows = page_rows
     if (ed.focused && window_focused && !io.WantTextInput) {
-        if (use_registry) {
-            // chars first (never binding-routed); char frames mute keypad chords
-            let typed = drain_typed_chars(ed)
-            // belt for Escape: closing the list never depends on chord routing
-            if (ed.list_open && IsKeyPressed(ImGuiKey.Escape, false)) {
-                text_edit_close_list(ed)
-            }
-            command_set_enabled(registry, "edit.cancel",
-                text_edit_has_selection(ed) || ed.list_open)
-            command_poll_scope(registry, CommandScope.component, id, typed)
-        } else {
-            route_editor_keys(ed, page_rows, style.write_system_clipboard)
+        // chars first (never binding-routed); char frames mute keypad chords
+        let typed = drain_typed_chars(ed)
+        // belt for Escape: closing the list never depends on chord routing
+        if (ed.list_open && IsKeyPressed(ImGuiKey.Escape, false)) {
+            text_edit_close_list(ed)
         }
+        command_set_enabled(registry, "edit.cancel",
+            text_edit_has_selection(ed) || ed.list_open)
+        command_poll_scope(registry, CommandScope.component, id, typed)
     }
-    if (use_registry) {
-        var invocation = CommandInvocation()
-        while (command_take_prefix(registry, "edit.", invocation)) {
-            dispatch_edit_command(ed, invocation.command_id, page_rows,
-                style.write_system_clipboard)
-        }
+    var invocation = CommandInvocation()
+    while (command_take_prefix(registry, "edit.", invocation)) {
+        dispatch_edit_command(ed, invocation.command_id, page_rows,
+            style.write_system_clipboard)
     }
     follow_edit_cursor(ed, m, style.tab_cells, font)
     if (ed.pending_scroll_lines != 0) {
@@ -3493,14 +3353,20 @@ def public text_edit_issue_span_text(ed : TextEditState const;
 
 // ===== Command registry keymap =====
 
-var private g_no_registry = CommandRegistry()
+// the no-registry overload owns this default-keymap registry (lazy-registered)
+var private g_builtin_registry = CommandRegistry()
+var private g_builtin_registered = false
 
 def public text_source_edit(id : string; var ed : TextEditState;
                             var style : TextSourceViewStyle) : TextEditResult {
     //! Draw + drive the editor as the sole content of a scrolling child window
-    //! (the host owns the child, like `text_source_view`). This overload uses
-    //! the built-in keymap; pass a CommandRegistry for rebindable keys.
-    return text_source_edit_impl(id, ed, style, g_no_registry, false)
+    //! (the host owns the child, like `text_source_view`). Runs a private
+    //! default-keymap registry; pass your own CommandRegistry for rebindable keys.
+    if (!g_builtin_registered) {
+        text_edit_register_commands(g_builtin_registry)
+        g_builtin_registered = true
+    }
+    return text_source_edit_impl(id, ed, style, g_builtin_registry)
 }
 
 def public text_source_edit(id : string; var ed : TextEditState;
@@ -3509,7 +3375,7 @@ def public text_source_edit(id : string; var ed : TextEditState;
     //! Registry-driven variant: every key routes through rebindable
     //! imgui_commands bindings (call `text_edit_register_commands` once at
     //! init; the bindings editor + JSON persistence come with the registry).
-    return text_source_edit_impl(id, ed, style, registry, true)
+    return text_source_edit_impl(id, ed, style, registry)
 }
 
 def private edit_define(var registry : CommandRegistry; id, title : string;
@@ -3537,7 +3403,7 @@ def private edit_define_nav(var registry : CommandRegistry; id, title : string;
         edit_binding(id + ".select", key, keypad, primary, true, true))
 }
 
-def public text_edit_register_commands(var registry : CommandRegistry) { // nolint:STYLE038
+def public text_edit_register_commands(var registry : CommandRegistry) { // nolint:STYLE038 — flat keymap table, one edit_define per verb; registration order IS the Escape-chain precedence
     //! Register the editor verb surface as rebindable commands with the spec
     //! defaults (VS Code chords, CUA alternates, numpad twins). Idempotent.
     // find.close registers BEFORE edit.cancel: the Escape chain closes the bar first
@@ -3689,7 +3555,7 @@ def private edit_define_ctrl_select(var registry : CommandRegistry;
             CommandScope.component, true), keypad, true, true))
 }
 
-def private dispatch_edit_command(var ed : TextEditState; command_id : string; // nolint:STYLE037
+def private dispatch_edit_command(var ed : TextEditState; command_id : string; // nolint:STYLE037 — one arm per command id; the verb ladder is flat, with the line ops already split off
                                   page_rows : int; use_system_clipboard : bool) {
     var select = false
     var verb = command_id

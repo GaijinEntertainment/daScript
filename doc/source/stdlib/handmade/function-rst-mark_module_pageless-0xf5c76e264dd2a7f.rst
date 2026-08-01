@@ -1,0 +1,1 @@
+Declares that a module (typically a raw native binding such as ``imgui``) gets no generated documentation pages. Signatures naming that module's types are then written as plain text instead of ``:ref:`` targets, which ``sphinx -W`` would otherwise fail on as undefined labels.

@@ -23,6 +23,7 @@ let public WORKTREE_TIER_IN_USE = "in_use"
 let public WORKTREE_TIER_MAIN = "main"
 let public WORKTREE_TIER_DIRTY = "dirty"
 let public WORKTREE_TIER_WARN = "warn"
+let public WORKTREE_TIER_UNKNOWN = "unknown"
 let public WORKTREE_TIER_GREEN = "green"
 let private GIT_TIMEOUT_MS = 15000l
 // Network git gets its own budget: a real push blows through the local 15s,
@@ -2039,6 +2040,8 @@ def public repository_worktree_delete_tier(worktree : WorktreeState const;
     if (worktree.staged + worktree.unstaged + worktree.conflicted
             + worktree.untracked > 0) return WORKTREE_TIER_DIRTY
     if (repository_worktree_only_here(worktree)) return WORKTREE_TIER_WARN
+    // an unmeasured count must not read as a clean bill of health
+    if (!worktree.unmerged_known) return WORKTREE_TIER_UNKNOWN
     return WORKTREE_TIER_GREEN
 }
 

@@ -25,6 +25,7 @@ require ./herd_sessions.das
 require ./git_graph_model.das
 require ./file_inspection.das
 require strings
+require ./destructive_confirm.das
 require ./rich_state.das
 require ./rich_net.das
 require ./rich_focus.das
@@ -623,6 +624,9 @@ def private herd_retire_worktree_reason(worktree : WorktreeState const;
         return ("{worktree.unmerged_commits} commits exist only here; " +
             "the branch {worktree.branch} keeps them")
     }
+    if (tier == WORKTREE_TIER_UNKNOWN) {
+        return "unmerged count unknown — no base ref resolved"
+    }
     return "clean"
 }
 
@@ -634,38 +638,31 @@ def private herd_index_by_id(herd_id : string) : int {
     return -1
 }
 
-var g_confirm_kind : string
-var g_confirm_target : string
-var g_confirm_text : string
-// Second capture slot for kinds whose action needs a repository id beside the
-// target (worktree_delete); captured at open time like the target.
-var g_confirm_repository : string
+var g_confirm = DestructiveConfirm()
 
-// Destructive actions (note 27) route through one confirmation modal. The
-// target is captured at open time and re-checked at confirm so a selection
-// change while the dialog sits open can't redirect the action.
-def open_destructive_confirm(kind, target, description : string) {
-    g_confirm_kind = kind
-    g_confirm_target = target
-    g_confirm_text = description
+// Destructive actions (note 27) route through one confirmation modal. What the
+// dialog names is captured at open time and is the only thing Confirm acts on:
+// the selection and the session list both move underneath an open modal.
+def open_destructive_confirm(kind, target, description : string;
+                             repository : string = "") {
+    g_confirm = destructive_confirm_open(kind, target, description, repository)
     open_popup(CONFIRM_DIALOG)
 }
 
 def draw_destructive_confirm_popup() {
     popup_modal(CONFIRM_DIALOG.PUBLIC, (text = "Are you sure?",
             closable = true, flags = ImGuiWindowFlags.None)) {
-        text(CONFIRM_TEXT, (text = g_confirm_text))
+        text(CONFIRM_TEXT, (text = g_confirm.text))
         text_disabled(CONFIRM_HINT, (text = "This cannot be undone."))
         if (button(CONFIRM_OK, (text = "Confirm", enabled = g_client != null))) {
-            if (g_confirm_kind == "terminate") {
-                if (g_client.selected_id == g_confirm_target) {
-                    g_client->terminate_selected()
-                }
-            } elif (g_confirm_kind == "herd_close") {
-                g_client->request_herd_close(g_confirm_target)
-            } elif (g_confirm_kind == "worktree_delete") {
-                g_client->request_worktree_delete(g_confirm_repository,
-                    g_confirm_target)
+            let action = destructive_confirm_action(g_confirm)
+            if (action.kind == "terminate") {
+                g_client->terminate_session(action.target)
+            } elif (action.kind == "herd_close") {
+                g_client->request_herd_close(action.target)
+            } elif (action.kind == "worktree_delete") {
+                g_client->request_worktree_delete(action.repository,
+                    action.target)
             }
             close_current_popup(CONFIRM_DIALOG)
         }

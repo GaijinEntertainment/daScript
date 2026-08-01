@@ -507,6 +507,45 @@ def public markdown_view_copy_code_block(var state : MarkdownViewState;
     return true
 }
 
+struct public MarkdownViewCodeBlock {
+    node : int = -1
+    collapsed : bool = false
+    //! False until the view has laid this node out; the geometry below is then
+    //! zero rather than absent, so a caller can report a block it cannot click.
+    laid_out : bool = false
+    icons_valid : bool = false
+    screen_origin : float2
+    fold_icon_center : float2
+    copy_icon_center : float2
+}
+
+def public markdown_view_code_blocks(doc : RichDocument const;
+                                     state : MarkdownViewState const) : array<MarkdownViewCodeBlock> {
+    //! Every code-block node of `doc` with its view-side readout. The node cache
+    //! is sized on the first render, so a block the view has not drawn reports
+    //! `laid_out = false` rather than indexing a cache that is too short.
+    var blocks : array<MarkdownViewCodeBlock>
+    for (index in range(length(doc.nodes))) {
+        continue if (doc.nodes[index].kind != RichNodeKind.code_block)
+        var code = MarkdownViewCodeBlock(node = index,
+            collapsed = markdown_view_code_collapsed(state, index))
+        if (index < length(state.nodes)) {
+            let entry & = unsafe(state.nodes[index])
+            code.laid_out = true
+            code.icons_valid = entry.icon_rects_valid
+            code.screen_origin = entry.screen_origin
+            code.fold_icon_center = float2(
+                (entry.fold_icon_rect.x + entry.fold_icon_rect.z) * 0.5f,
+                (entry.fold_icon_rect.y + entry.fold_icon_rect.w) * 0.5f)
+            code.copy_icon_center = float2(
+                (entry.copy_icon_rect.x + entry.copy_icon_rect.z) * 0.5f,
+                (entry.copy_icon_rect.y + entry.copy_icon_rect.w) * 0.5f)
+        }
+        blocks |> push(code)
+    }
+    return <- blocks
+}
+
 def private image_binding_index(state : MarkdownViewState const;
                                 document_revision, node_index : int) : int {
     for (i in range(length(state.image_bindings))) {

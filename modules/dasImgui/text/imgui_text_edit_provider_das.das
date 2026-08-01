@@ -99,7 +99,7 @@ def private parse_location(line, anchor : string;
     return true
 }
 
-def public text_edit_parse_das_issues(issues, file : string; // nolint:STYLE037
+def public text_edit_parse_das_issues(issues, file : string;
                                       var out : array<TextEditDiagnostic>) {
     //! Issue text -> findings: the first column-0 `FILE:LINE:COL` after an
     //! error/warning pins its message (1-based lines, 0-BASED columns); the
@@ -142,14 +142,14 @@ def public text_edit_parse_das_issues(issues, file : string; // nolint:STYLE037
     }
 }
 
-def private collect_compiled(source, prefix, overlay : string; // nolint:STYLE037
+def private collect_compiled(source, prefix, overlay : string;
                              var result : DasCompleteResult) {
     var inscope access <- make_file_access("")
     // the parser wants a final newline; mid-edit buffers rarely have one
     set_file_source(access, overlay, source + "\n")
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
-            // introspection model; gen2 default lives in the CLI, not the struct
+            // introspection model; explicit gen2 keeps this correct on pre-flip cores
             cop.version_2_syntax = true
             cop.threadlock_context = true
             cop.ignore_shared_modules = true
