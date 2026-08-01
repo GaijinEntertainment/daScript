@@ -123,10 +123,13 @@ let RIG_EXE_OUT = "modules/dasLLAMA/performance/_rig"
 let RIG_BENCH_SRC = "modules/dasLLAMA/benchmarks/lcpp_bench.das"
 
 def private rig_exe_path() : string {
-    // macOS ships a clickable .app; every other platform gets <out>/<name>/<name>
-    return (is_apple_box()
-        ? "{RIG_EXE_OUT}/dasllama-bench.app/Contents/MacOS/dasllama-bench"
-        : "{RIG_EXE_OUT}/dasllama-bench/dasllama-bench")
+    // macOS ships a clickable .app; every other platform gets <out>/<name>/<name>, .exe on Windows
+    if (is_apple_box()) {
+        return "{RIG_EXE_OUT}/dasllama-bench.app/Contents/MacOS/dasllama-bench"
+    }
+    // .exe is required because this path is STAT'd — CreateProcess appends it when spawning, stat does not
+    let ext = get_platform_name() == "windows" ? ".exe" : ""
+    return "{RIG_EXE_OUT}/dasllama-bench/dasllama-bench{ext}"
 }
 
 def private rig_build_line() : string {
