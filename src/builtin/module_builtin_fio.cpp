@@ -230,7 +230,6 @@ namespace das {
     char * builtin_fs_temp_directory ( char * & error, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * builtin_fs_create_temp_file ( const char * prefix, const char * ext, char * & error, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * builtin_fs_create_temp_directory ( const char * prefix, char * & error, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
-    char * builtin_fread_to_eof ( const FILE * f, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     int builtin_popen_argv ( const Array & args_arr, float timeout_sec, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     int builtin_popen_argv_pipe ( const Array & args_arr, const TBlock<void,const FILE *,const FILE *> & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     void * register_dynamic_module_silent ( const char * path, const char * mod_name, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
@@ -346,6 +345,18 @@ namespace das {
         return result;
     }
 
+    static std::string wide_file_path_to_utf8 ( const wchar_t * path ) {
+        if ( !path || !*path ) return std::string();
+        const int count = WideCharToMultiByte(CP_UTF8, 0, path, -1, nullptr, 0, nullptr, nullptr);
+        if ( count <= 0 ) return std::string();
+        std::string result(size_t(count), '\0');
+        if ( WideCharToMultiByte(CP_UTF8, 0, path, -1, result.data(), count, nullptr, nullptr) != count ) {
+            return std::string();
+        }
+        result.resize(size_t(count - 1));
+        return result;
+    }
+
     static FILE * das_fopen_utf8 ( const char * name, const char * mode ) {
         auto wideName = utf8_file_path_to_wide(name);
         if ( wideName.empty() ) return nullptr;
@@ -362,6 +373,28 @@ namespace das {
         return fopen(name, mode);
     }
 #endif
+
+    // das strings are UTF-8 by convention. On Windows both fs::path(char*) and
+    // path::string() convert through the ANSI codepage - misreading UTF-8 names on the
+    // way in, and throwing system_error on the way out for names the codepage cannot
+    // represent. Every std::filesystem boundary in this module goes through this pair.
+    // Invalid UTF-8 input yields an empty path (downstream calls fail with a clean ec);
+    // un-pairable UTF-16 in on-disk names degrades to U+FFFD instead of throwing.
+    static std::filesystem::path das_to_path ( const char * path ) {
+#if defined(_WIN32)
+        return std::filesystem::path(utf8_file_path_to_wide(path));
+#else
+        return std::filesystem::path(path ? path : "");
+#endif
+    }
+
+    static std::string path_to_das ( const std::filesystem::path & p ) {
+#if defined(_WIN32)
+        return wide_file_path_to_utf8(p.c_str());
+#else
+        return p.string();
+#endif
+    }
 
     const FILE * builtin_fopen  ( const char * name, const char * mode, Context * context, LineInfoArg * at ) {
         if ( !name ) context->throw_error_at(at, "can't fopen NULL name");
@@ -622,24 +655,21 @@ namespace das {
         das_filestat st;
         int fd = fileno((FILE*)f);
         if ( das_fstat64(fd, st) != 0 ) context->throw_error_at(at, "fread: can't stat file");
-        char * res = context->allocateString(nullptr, st.st_size,at);
-        fseek((FILE*)f, 0, SEEK_SET);
-        auto bytes = fread(res, 1, st.st_size, (FILE *)f);
-        if ( uint64_t(bytes) != uint64_t(st.st_size) ) {
-            context->throw_error_at(at, "incorrect fread result, expected %lu, got %lu bytes. read requires binary file mode",
-                (unsigned long)st.st_size, (unsigned long)bytes);
+        if ( (st.st_mode & S_IFMT) == S_IFREG && st.st_size > 0 ) {
+            // regular file with a known size: one exact-size read
+            char * res = context->allocateString(nullptr, st.st_size,at);
+            fseek((FILE*)f, 0, SEEK_SET);
+            auto bytes = fread(res, 1, st.st_size, (FILE *)f);
+            if ( uint64_t(bytes) != uint64_t(st.st_size) ) {
+                context->throw_error_at(at, "incorrect fread result, expected %lu, got %lu bytes. read requires binary file mode",
+                    (unsigned long)st.st_size, (unsigned long)bytes);
+            }
+            return res;
         }
-        return res;
-    }
-
-    // Read until EOF using a growing buffer. Works for streams without a
-    // known size (pipes, sockets, stdin) where `builtin_fread` returns ""
-    // because `fstat().st_size` is 0. 64 KB chunk matches the default Linux
-    // and macOS pipe capacity, so one syscall typically drains a kernel
-    // pipe buffer; for larger payloads `string::append` doubles capacity
-    // amortizing growth across O(log N) reallocations.
-    char * builtin_fread_to_eof ( const FILE * f, Context * context, LineInfoArg * at ) {
-        if ( !f ) context->throw_error_at(at, "can't fread NULL");
+        // pipes/sockets/consoles (and /proc-style size-0 regular files): st_size is not a
+        // length, so read to EOF with a growing buffer - the stat is already in hand, the
+        // detection is one bit-test. 64 KB chunk matches the default kernel pipe capacity,
+        // so one syscall typically drains a full pipe buffer.
         string buf;
         constexpr size_t CHUNK = 64 * 1024;
         vector<char> chunk(CHUNK);
@@ -822,19 +852,20 @@ namespace das {
 
      void builtin_dir ( const char * path, const Block & fblk, Context * context, LineInfoArg * at ) {
 #if defined(_WIN32)
-        _finddata_t c_file;
+        _wfinddata_t c_file;
         intptr_t hFile;
-        string findPath = string(path ? path : "") + "/*";
-        if ((hFile = _findfirst(findPath.c_str(), &c_file)) != -1L) {
+        auto findPath = utf8_file_path_to_wide((string(path ? path : "") + "/*").c_str());
+        if (!findPath.empty() && (hFile = _wfindfirst(findPath.c_str(), &c_file)) != -1L) {
             do {
-                char * fname = context->allocateString(c_file.name, uint32_t(strlen(c_file.name)),at);
+                auto name8 = wide_file_path_to_utf8(c_file.name);
+                char * fname = context->allocateString(name8.data(), uint32_t(name8.size()),at);
                 vec4f args[1] = {
                     cast<char *>::from(fname)
                 };
                 context->invoke(fblk, args, nullptr, at);
-            } while (_findnext(hFile, &c_file) == 0);
+            } while (_wfindnext(hFile, &c_file) == 0);
+            _findclose(hFile);
         }
-        _findclose(hFile);
  #else
         DIR *dir;
         struct dirent *ent;
@@ -856,7 +887,12 @@ namespace das {
         return false;
 #else
         if ( path ) {
+#if defined(_WIN32)
+            auto widePath = utf8_file_path_to_wide(path);
+            return !widePath.empty() && _wchdir(widePath.c_str()) == 0;
+#else
             return chdir(path) == 0;
+#endif
         } else {
             return false;
         }
@@ -867,6 +903,16 @@ namespace das {
 #if defined(_EMSCRIPTEN_VER)
         return nullptr;
 #else
+#if defined(_WIN32)
+        wchar_t * buf = _wgetcwd(nullptr, 0);
+        if ( buf ) {
+            auto cwd8 = wide_file_path_to_utf8(buf);
+            free(buf);
+            return context->allocateString(cwd8.data(), uint32_t(cwd8.size()), at);
+        } else {
+            return nullptr;
+        }
+#else
         char * buf = getcwd(nullptr, 0);
         if ( buf ) {
             char * res = context->allocateString(buf, uint32_t(strlen(buf)), at);
@@ -876,12 +922,14 @@ namespace das {
             return nullptr;
         }
 #endif
+#endif
     }
 
     bool builtin_mkdir ( const char * path ) {
         if ( path ) {
 #if defined(_WIN32)
-            return _mkdir(path) == 0;
+            auto widePath = utf8_file_path_to_wide(path);
+            return !widePath.empty() && _wmkdir(widePath.c_str()) == 0;
 #elif defined(_EMSCRIPTEN_VER)
             return mkdir(path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0;
 #else
@@ -1685,7 +1733,8 @@ namespace das {
     bool builtin_rmdir ( const char * path ) {
         if ( !path ) return false;
 #if defined(_WIN32)
-        return _rmdir(path) == 0;
+        auto widePath = utf8_file_path_to_wide(path);
+        return !widePath.empty() && _wrmdir(widePath.c_str()) == 0;
 #else
         return rmdir(path) == 0;
 #endif
@@ -1698,24 +1747,24 @@ namespace das {
     }
 
 #if defined(_WIN32)
-    static bool rmdir_rec_impl ( const string & path ) {
-        _finddata_t c_file;
+    static bool rmdir_rec_impl ( const std::wstring & path ) {
+        _wfinddata_t c_file;
         intptr_t hFile;
-        string findPath = path + "/*";
-        if ((hFile = _findfirst(findPath.c_str(), &c_file)) != -1L) {
+        std::wstring findPath = path + L"/*";
+        if ((hFile = _wfindfirst(findPath.c_str(), &c_file)) != -1L) {
             do {
-                if ( strcmp(c_file.name, ".") == 0 || strcmp(c_file.name, "..") == 0 ) continue;
-                string child = path + "/" + c_file.name;
+                if ( wcscmp(c_file.name, L".") == 0 || wcscmp(c_file.name, L"..") == 0 ) continue;
+                std::wstring child = path + L"/" + c_file.name;
                 if ( c_file.attrib & _A_SUBDIR ) {
                     if ( !rmdir_rec_impl(child) ) { _findclose(hFile); return false; }
                 } else {
-                    if ( c_file.attrib & _A_RDONLY ) _chmod(child.c_str(), _S_IREAD | _S_IWRITE);
-                    if ( remove(child.c_str()) != 0 ) { _findclose(hFile); return false; }
+                    if ( c_file.attrib & _A_RDONLY ) _wchmod(child.c_str(), _S_IREAD | _S_IWRITE);
+                    if ( _wremove(child.c_str()) != 0 ) { _findclose(hFile); return false; }
                 }
-            } while (_findnext(hFile, &c_file) == 0);
+            } while (_wfindnext(hFile, &c_file) == 0);
             _findclose(hFile);
         }
-        return _rmdir(path.c_str()) == 0;
+        return _wrmdir(path.c_str()) == 0;
     }
 #else
     static bool rmdir_rec_impl ( const string & path ) {
@@ -1740,7 +1789,12 @@ namespace das {
 
     bool builtin_rmdir_rec ( const char * path ) {
         if ( !path ) return false;
+#if defined(_WIN32)
+        auto widePath = utf8_file_path_to_wide(path);
+        return !widePath.empty() && rmdir_rec_impl(widePath);
+#else
         return rmdir_rec_impl(string(path));
+#endif
     }
 
     static char * errno_to_string ( Context * ctx, LineInfoArg * at ) {
@@ -1755,14 +1809,26 @@ namespace das {
     bool builtin_remove_file_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) {
         error = nullptr;
         if ( !path ) { error = empty_path_error(ctx, at); return false; }
+#if defined(_WIN32)
+        auto widePath = utf8_file_path_to_wide(path);
+        if ( widePath.empty() || _wremove(widePath.c_str()) != 0 ) { error = errno_to_string(ctx, at); return false; }
+#else
         if ( remove(path) != 0 ) { error = errno_to_string(ctx, at); return false; }
+#endif
         return true;
     }
 
     bool builtin_rename_file_ec ( const char * old_path, const char * new_path, char * & error, Context * ctx, LineInfoArg * at ) {
         error = nullptr;
         if ( !old_path || !new_path ) { error = empty_path_error(ctx, at); return false; }
+#if defined(_WIN32)
+        auto wideOld = utf8_file_path_to_wide(old_path);
+        auto wideNew = utf8_file_path_to_wide(new_path);
+        if ( wideOld.empty() || wideNew.empty()
+            || _wrename(wideOld.c_str(), wideNew.c_str()) != 0 ) { error = errno_to_string(ctx, at); return false; }
+#else
         if ( rename(old_path, new_path) != 0 ) { error = errno_to_string(ctx, at); return false; }
+#endif
         return true;
     }
 
@@ -1770,7 +1836,8 @@ namespace das {
         error = nullptr;
         if ( !path ) { error = empty_path_error(ctx, at); return false; }
 #if defined(_WIN32)
-        if ( _mkdir(path) != 0 ) { error = errno_to_string(ctx, at); return false; }
+        auto widePath = utf8_file_path_to_wide(path);
+        if ( widePath.empty() || _wmkdir(widePath.c_str()) != 0 ) { error = errno_to_string(ctx, at); return false; }
 #elif defined(_EMSCRIPTEN_VER)
         if ( mkdir(path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) != 0 ) { error = errno_to_string(ctx, at); return false; }
 #else
@@ -1783,7 +1850,8 @@ namespace das {
         error = nullptr;
         if ( !path ) { error = empty_path_error(ctx, at); return false; }
 #if defined(_WIN32)
-        if ( _rmdir(path) != 0 ) { error = errno_to_string(ctx, at); return false; }
+        auto widePath = utf8_file_path_to_wide(path);
+        if ( widePath.empty() || _wrmdir(widePath.c_str()) != 0 ) { error = errno_to_string(ctx, at); return false; }
 #else
         if ( rmdir(path) != 0 ) { error = errno_to_string(ctx, at); return false; }
 #endif
@@ -1991,51 +2059,51 @@ namespace das {
 
     char * builtin_fs_extension ( const char * path, Context * ctx, LineInfoArg * at ) {
         if ( !path ) return nullptr;
-        auto ext = std::filesystem::path(path).extension().string();
+        auto ext = path_to_das(das_to_path(path).extension());
         if ( ext.empty() ) return nullptr;
         return ctx->allocateString(ext.data(), uint32_t(ext.size()), at);
     }
 
     char * builtin_fs_stem ( const char * path, Context * ctx, LineInfoArg * at ) {
         if ( !path ) return nullptr;
-        auto s = std::filesystem::path(path).stem().string();
+        auto s = path_to_das(das_to_path(path).stem());
         if ( s.empty() ) return nullptr;
         return ctx->allocateString(s.data(), uint32_t(s.size()), at);
     }
 
     char * builtin_fs_replace_extension ( const char * path, const char * new_ext, Context * ctx, LineInfoArg * at ) {
         if ( !path ) return nullptr;
-        auto p = std::filesystem::path(path);
-        p.replace_extension(new_ext ? new_ext : "");
-        auto s = p.string();
+        auto p = das_to_path(path);
+        p.replace_extension(das_to_path(new_ext));
+        auto s = path_to_das(p);
         return ctx->allocateString(s.data(), uint32_t(s.size()), at);
     }
 
     char * builtin_fs_join ( const char * a, const char * b, Context * ctx, LineInfoArg * at ) {
         if ( !a && !b ) return nullptr;
-        std::filesystem::path pa = a ? a : "";
-        if ( b ) pa /= b;
-        auto s = pa.string();
+        auto pa = das_to_path(a);
+        if ( b ) pa /= das_to_path(b);
+        auto s = path_to_das(pa);
         return ctx->allocateString(s.data(), uint32_t(s.size()), at);
     }
 
     char * builtin_fs_normalize ( const char * path, Context * ctx, LineInfoArg * at ) {
         if ( !path ) return nullptr;
-        auto s = std::filesystem::path(path).lexically_normal().string();
+        auto s = path_to_das(das_to_path(path).lexically_normal());
         if ( s.empty() ) return nullptr;
         return ctx->allocateString(s.data(), uint32_t(s.size()), at);
     }
 
     bool builtin_fs_is_absolute ( const char * path ) {
         if ( !path ) return false;
-        return std::filesystem::path(path).is_absolute();
+        return das_to_path(path).is_absolute();
     }
 
     char * builtin_fs_relative ( const char * path, const char * base, char * & error, Context * ctx, LineInfoArg * at ) {
         error = nullptr;
         if ( !path || !base ) { error = empty_path_error(ctx, at); return nullptr; }
         std::error_code ec;
-        auto s = std::filesystem::relative(std::filesystem::path(path), std::filesystem::path(base), ec).string();
+        auto s = path_to_das(std::filesystem::relative(das_to_path(path), das_to_path(base), ec));
         if ( ec ) { error = ec_to_string(ec, ctx, at); return nullptr; }
         if ( s.empty() ) return nullptr;
         return ctx->allocateString(s.data(), uint32_t(s.size()), at);
@@ -2043,7 +2111,7 @@ namespace das {
 
     char * builtin_fs_parent ( const char * path, Context * ctx, LineInfoArg * at ) {
         if ( !path ) return nullptr;
-        auto s = std::filesystem::path(path).parent_path().string();
+        auto s = path_to_das(das_to_path(path).parent_path());
         if ( s.empty() ) return nullptr;
         return ctx->allocateString(s.data(), uint32_t(s.size()), at);
     }
@@ -2054,7 +2122,7 @@ namespace das {
         error = nullptr;
         if ( !path ) { error = empty_path_error(ctx, at); return -1; }
         std::error_code ec;
-        auto sz = std::filesystem::file_size(path, ec);
+        auto sz = std::filesystem::file_size(das_to_path(path), ec);
         if ( ec ) { error = ec_to_string(ec, ctx, at); return -1; }
         return static_cast<int64_t>(sz);
     }
@@ -2063,7 +2131,7 @@ namespace das {
         error = nullptr;
         if ( !a || !b ) { error = empty_path_error(ctx, at); return false; }
         std::error_code ec;
-        bool result = std::filesystem::equivalent(a, b, ec);
+        bool result = std::filesystem::equivalent(das_to_path(a), das_to_path(b), ec);
         if ( ec ) { error = ec_to_string(ec, ctx, at); return false; }
         return result;
     }
@@ -2072,17 +2140,7 @@ namespace das {
         error = nullptr;
         if ( !path || !path[0] ) { error = empty_path_error(ctx, at); return false; }
         std::error_code ec;
-#if defined(_WIN32)
-        auto widePath = utf8_file_path_to_wide(path);
-        if ( widePath.empty() ) {
-            static constexpr char invalidUtf8[] = "invalid UTF-8 file path";
-            error = ctx->allocateString(invalidUtf8, uint32_t(sizeof(invalidUtf8) - 1), at);
-            return false;
-        }
-        bool result = std::filesystem::is_symlink(std::filesystem::path(widePath), ec);
-#else
-        bool result = std::filesystem::is_symlink(path, ec);
-#endif
+        bool result = std::filesystem::is_symlink(das_to_path(path), ec);
         if ( ec ) { error = ec_to_string(ec, ctx, at); return false; }
         return result;
     }
@@ -2094,7 +2152,7 @@ namespace das {
         if ( !src || !dst ) { error = empty_path_error(ctx, at); return false; }
         std::error_code ec;
         auto opts = overwrite ? std::filesystem::copy_options::overwrite_existing : std::filesystem::copy_options::none;
-        bool result = std::filesystem::copy_file(src, dst, opts, ec);
+        bool result = std::filesystem::copy_file(das_to_path(src), das_to_path(dst), opts, ec);
         if ( ec ) { error = ec_to_string(ec, ctx, at); return false; }
         return result;
     }
@@ -2106,7 +2164,7 @@ namespace das {
         auto sys_time = std::chrono::system_clock::from_time_t(time.time);
         auto file_time = std::filesystem::file_time_type::clock::now() +
             (sys_time - std::chrono::system_clock::now());
-        std::filesystem::last_write_time(path, file_time, ec);
+        std::filesystem::last_write_time(das_to_path(path), file_time, ec);
         if ( ec ) { error = ec_to_string(ec, ctx, at); return false; }
         return true;
     }
@@ -2116,19 +2174,14 @@ namespace das {
     void builtin_fs_dir_rec ( const char * path, const TBlock<void, char *, bool> & blk, char * & error, Context * ctx, LineInfoArg * at ) {
         error = nullptr;
         if ( !path ) { error = empty_path_error(ctx, at); return; }
-        std::filesystem::path root(path);
+        std::filesystem::path root = das_to_path(path);
         std::error_code ec;
         auto it = std::filesystem::recursive_directory_iterator(root,
                 std::filesystem::directory_options::skip_permission_denied, ec);
         if ( ec ) { error = ec_to_string(ec, ctx, at); return; }
         for ( auto & entry : it ) {
             if ( ec ) { ec.clear(); continue; }
-            std::string rel;
-            try {
-                rel = std::filesystem::relative(entry.path(), root, ec).string();
-            } catch ( const std::system_error & ) {
-                continue;   // name not representable in the narrow encoding (MSVC path::string throws) — skip like an ec entry
-            }
+            std::string rel = path_to_das(std::filesystem::relative(entry.path(), root, ec));
             if ( ec ) { ec.clear(); continue; }
             bool is_dir = entry.is_directory(ec);
             if ( ec ) { ec.clear(); }
@@ -2146,7 +2199,7 @@ namespace das {
     char * builtin_fs_temp_directory ( char * & error, Context * ctx, LineInfoArg * at ) {
         error = nullptr;
         std::error_code ec;
-        auto s = std::filesystem::temp_directory_path(ec).string();
+        auto s = path_to_das(std::filesystem::temp_directory_path(ec));
         if ( ec ) { error = ec_to_string(ec, ctx, at); return nullptr; }
         return ctx->allocateString(s.data(), uint32_t(s.size()), at);
     }
@@ -2161,7 +2214,7 @@ namespace das {
             auto name = string(prefix ? prefix : "tmp") + "_" + das::to_string(dis(gen))
                 + (ext ? ext : "");
             // In order to support EASTL do not mix strings.
-            auto p = tmp / name.c_str();
+            auto p = tmp / das_to_path(name.c_str());
             if ( !std::filesystem::exists(p, ec) && !ec ) return p;
         }
         return {};
@@ -2210,7 +2263,7 @@ namespace das {
         error = nullptr;
         if ( !path ) { error = empty_path_error(ctx, at); return false; }
         std::error_code ec;
-        std::filesystem::remove_all(path, ec);
+        std::filesystem::remove_all(das_to_path(path), ec);
         if ( ec ) { error = ec_to_string(ec, ctx, at); return false; }
         return true;
     }
@@ -2520,9 +2573,6 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_popen_argv_pipe)>(*this, lib, "popen_argv_pipe",
                 SideEffects::modifyExternal, "builtin_popen_argv_pipe")
                     ->args({"args","scope","context","at"})->unsafeOperation = true;
-            addExtern<DAS_BIND_FUN(builtin_fread_to_eof)>(*this, lib, "fread_to_eof",
-                SideEffects::modifyExternal, "builtin_fread_to_eof")
-                    ->args({"f","context","at"})->unsafeOperation = true;
             addConstant<int32_t>(*this, "popen_timed_out", DAS_POPEN_TIMEOUT);
             addExtern<DAS_BIND_FUN(builtin_system)>(*this, lib, "system",
                 SideEffects::modifyExternal, "builtin_system")

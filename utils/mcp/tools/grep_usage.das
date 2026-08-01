@@ -16,7 +16,7 @@ def private try_ast_grep(cmd : string) : bool {
     var found = false
     let rc = unsafe(popen_argv([cmd, "--version"], 5.0, $(f) {
         if (f == null) return
-        let line = unsafe(fread_to_eof(f))
+        let line = fread(f)
         if (find(line, "ast-grep") >= 0) {
             found = true
         }
@@ -148,6 +148,10 @@ def do_grep_usage(symbol, directory, context_lines_str, glob_filter : string) : 
         }
     }
     unsafe { delete parsed; }
+    return make_tool_result(format_grep_matches(symbol, by_file, file_order))
+}
+
+def private format_grep_matches(symbol : string; var by_file : table<string; array<string>>; file_order : array<string>) : string {
     let total = length(by_file)
     var match_count = 0
     for (fp in file_order) {
@@ -155,7 +159,7 @@ def do_grep_usage(symbol, directory, context_lines_str, glob_filter : string) : 
             match_count += length(by_file[fp])
         }
     }
-    let output = build_string() $(var w) {
+    return build_string() $(var w) {
         write(w, "Found {match_count} match")
         if (match_count != 1) {
             write(w, "es")
@@ -175,5 +179,4 @@ def do_grep_usage(symbol, directory, context_lines_str, glob_filter : string) : 
             write(w, "\n")
         }
     }
-    return make_tool_result(output)
 }

@@ -915,7 +915,7 @@ def private git_capture(argv : array<string>; var output : string&) : int {
     output = ""
     return unsafe(popen_argv(argv, 30.0, $(file) {
         if (file != null) {
-            output = unsafe(fread_to_eof(file))
+            output = fread(file)
         }
     }))
 }

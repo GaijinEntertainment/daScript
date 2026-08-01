@@ -1,9 +1,10 @@
 options gen2
+options force_inscope_pod   // the collect banner rides the inscope-pod policy, not container init
 options persistent_heap   // heap_bytes_allocated only tracks individual frees on the persistent heap
 require dastest/testing_boost public
 
 // The banner's contract under the isPodDelete gate: erase/clear/shrink/pop release exactly
-// the heap a dropped element OWNS through its GENERATED finalizer - and nothing else.
+// the heap a dropped element OWNS through builtin_collect_local - and nothing else.
 // Proof per operation is the heap delta; the carve-outs assert the opposite: user finalizers
 // never run implicitly, pointees are never touched, and delete remains the full teardown.
 

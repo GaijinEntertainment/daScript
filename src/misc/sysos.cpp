@@ -188,11 +188,18 @@
             return msg;
         }
         string normalizeFileName ( const char * fileName ) {
-            char buffer[MAX_PATH ];
-            auto ret = GetFullPathNameA(fileName,MAX_PATH,buffer,nullptr);
-            if ( !ret ) return "";
-            string result = buffer;
-            // GetFullPathNameA may leave a trailing backslash for directory
+            // das strings are UTF-8; the ANSI variant misreads non-ANSI names, so go wide
+            wchar_t wideName[MAX_PATH];
+            if ( !MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, fileName ? fileName : "", -1, wideName, MAX_PATH) )
+                return "";
+            wchar_t buffer[MAX_PATH];
+            auto ret = GetFullPathNameW(wideName, MAX_PATH, buffer, nullptr);
+            if ( !ret || ret >= MAX_PATH ) return "";
+            char utf8[MAX_PATH * 4];
+            if ( !WideCharToMultiByte(CP_UTF8, 0, buffer, -1, utf8, int(sizeof(utf8)), nullptr, nullptr) )
+                return "";
+            string result = utf8;
+            // GetFullPathNameW may leave a trailing backslash for directory
             // paths (e.g. "./" -> "D:\foo\"). Trim it for consistency.
             if ( result.size()>3 && (result.back()=='\\' || result.back()=='/') )
                 result.pop_back();

@@ -2567,15 +2567,17 @@ namespace das {
                 reportAstChanged();
                 return new ExprConstBool(expr->at, isPodDelete(expr->typeexpr));
             } else if (expr->trait == "needs_container_finalize") {
-                // same policy as the init half: containers own their elements' lifetime.
-                // isPodDelete: finalize must be fully GENERATED (user finalizers never run
+                // the COLLECT half rides force_inscope_pod - the same policy that governs
+                // builtin_collect_local_and_zero on move-assign/scope-exit; container init
+                // (default_init_containers) is the construct half only, a separate knob.
+                // isPodDelete: collection must be fully GENERATED (user finalizers never run
                 // implicitly), must only free heap the value owns, and there must be some — so POD
                 // structs cost nothing. isSafeToDelete on top: a generated finalizer that would
                 // DELETE POINTEES (a struct with a raw-pointer field, e.g. sql_linq's JoinSpec) is
                 // unsafe to run implicitly — those keep the old drop-the-slot behavior.
                 reportAstChanged();
                 const auto & tt = expr->typeexpr;
-                return new ExprConstBool(expr->at, defaultInitContainers && !tt->isConst()
+                return new ExprConstBool(expr->at, forceInscopePod && !tt->isConst()
                                                     && isPodDelete(tt) && tt->isSafeToDelete());
             } else if (expr->trait == "needs_nontrivial_init") {
                 reportAstChanged();

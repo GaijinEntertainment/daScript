@@ -1,4 +1,5 @@
 options gen2
+options force_inscope_pod   // the needs_container_finalize rows ride the inscope-pod policy
 require dastest/testing_boost public
 
 struct PlainPod {
@@ -79,7 +80,7 @@ def test_needs_nontrivial_init(t : T?) {
         t |> success(typeinfo needs_container_init(type<WithInit>), "policy defaults on")
         t |> success(!typeinfo needs_container_init(type<int>), "trivial stays off")
     }
-    t |> run("needs_container_finalize composes the same policy") @(t : T?) {
+    t |> run("needs_container_finalize composes the inscope-pod policy") @(t : T?) {
         t |> success(typeinfo needs_container_finalize(type<array<int>>), "owned composite, policy on")
         t |> success(typeinfo needs_container_finalize(type<BagLike>), "generated finalizer with heap")
         t |> success(!typeinfo needs_container_finalize(type<PlainPod>), "POD struct - nothing to free, zero cost")

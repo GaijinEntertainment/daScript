@@ -122,7 +122,7 @@ def public launch_start(var L : LaunchRail) : bool {
         full |> push_from(argv)
         let rc = unsafe(popen_argv(full, 0.0, $(f) {
             if (f != null) {
-                outp = unsafe(fread_to_eof(f))
+                outp = fread(f)
             }
         }))
         var lines <- split(outp, "\n")

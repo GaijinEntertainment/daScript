@@ -345,8 +345,8 @@ def run_and_stream(args : array<string>; var tail_out : string&; keep_tail : int
 
 //! Capture twin of [[run_and_stream]] — argv spawn (no shell parse, the Windows cmd quoting
 //! traps can't bite), stdout+stderr merged by popen_argv, whole output returned trimmed.
-//! Reads via the same fgets loop as run_and_stream — fread_to_eof lost multi-KB pipe output
-//! on Windows (zen2: a 95-s onnx child's rows captured as empty; the line loop never has).
+//! Reads via the same fgets loop as run_and_stream — predates fread's pipe-safe EOF
+//! fallback, and the line loop has never dropped output, so it stays.
 def run_capture_argv(args : array<string>) : string {
     var acc = ""
     unsafe {
@@ -381,14 +381,14 @@ def argv_line(args : array<string>) : string {
     return "{line}"
 }
 
-// Run `cmd`, return its trimmed stdout (first line only when `first_line`). Uses fread_to_eof (fio's
-// pipe-safe reader) — fread(f) whole-file sizes via seek and returns empty on a non-seekable pipe.
+// Run `cmd`, return its trimmed stdout (first line only when `first_line`). fread reads a
+// pipe to EOF (the fio fallback for non-regular files), so the whole stream arrives.
 def run_capture(cmd : string; first_line : bool) : string {
     var out = ""
     unsafe {
         popen(cmd) $(f) {
             if (f != null) {   // popen can hand a null handle on spawn failure (bad binary path)
-                out = fread_to_eof(f)
+                out = fread(f)
             }
         }
     }

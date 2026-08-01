@@ -20,7 +20,7 @@ def das_exe() : string {
 def run_argv(args : array<string>; var output : string&) : int {
     return unsafe(popen_argv(args, 0.0, $(f) {
         if (f != null) {
-            output := unsafe(fread_to_eof(f))
+            output = fread(f)
         }
     }))
 }

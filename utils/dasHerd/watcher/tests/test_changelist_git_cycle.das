@@ -13,7 +13,7 @@ def private run_git(t : T?; argv : array<string>; tag : string) : string {
     var output = ""
     let exit_code = unsafe(popen_argv(argv, 30.0, $(file) {
         if (file != null) {
-            output = unsafe(fread_to_eof(file))
+            output = fread(file)
         }
     }))
     t |> equal(exit_code, 0, tag)

@@ -94,6 +94,34 @@ def private log_summary(log_path : string) : string {
 }
 
 [export]
+// CPU_PREFILL: the suites' CPU truth halves and parity controls prefill on the CPU by intent.
+// HAZARD_STRICT: the scheduling-unification ratchet's runtime half — an undeclared dispatch
+// on an armed hazard oracle PANICS here, so declaration gaps can never ship quietly.
+// cmd.exe has no VAR=val prefix — `set "VAR=val"&&` is the safe form (llvm_tune's tuner_cmd)
+def private build_env_prefix(cfg : RunArgs) : string {
+    let win = get_platform_name() == "windows"
+    var envs = ""
+    if (win) {
+        envs = ((cfg.full ? "set \"DASLLAMA_PARITY_FULL=1\"&& " : "set \"DASLLAMA_TEST_ARMS={cfg.arm}\"&& ")
+            + "set \"DASLLAMA_CPU_PREFILL=1\"&& set \"DASLLAMA_METAL_HAZARD_STRICT=1\"&& ")
+        if (!empty(cfg.family)) {   // composes with either mode: a family-scoped full gate is the profiling-cadence default
+            envs = "{envs}set \"DASLLAMA_TEST_FAMILY={cfg.family}\"&& "
+        }
+    } else {
+        envs = (cfg.full ? "DASLLAMA_PARITY_FULL=1" : "DASLLAMA_TEST_ARMS='{cfg.arm}'") + " DASLLAMA_CPU_PREFILL=1 DASLLAMA_METAL_HAZARD_STRICT=1 "
+        if (!empty(cfg.family)) {
+            envs = "DASLLAMA_TEST_FAMILY='{cfg.family}' {envs}"
+        }
+    }
+    if (cfg.suite == "image-vulkan") {
+        // the offline-bake suite: arm the tier so the probed config carries a vulkan section —
+        // the bake itself is DRY (no device calls), so this is safe on GPU-less boxes too
+        envs = (win ? "{envs}set \"DASLLAMA_GPU=1\"&& set \"DASLLAMA_GPU_VRAM_MB=2000\"&& "
+            : "DASLLAMA_GPU=1 DASLLAMA_GPU_VRAM_MB=2000 {envs}")
+    }
+    return envs
+}
+
 def main() : int {
     var r <- parse_args(type<RunArgs>)
     if (r |> is_err) {
@@ -126,30 +154,7 @@ def main() : int {
     if (empty(tmp)) {
         tmp = "/tmp"
     }
-    // CPU_PREFILL: the suites' CPU truth halves and parity controls prefill on the CPU by intent.
-    // HAZARD_STRICT: the scheduling-unification ratchet's runtime half — an undeclared dispatch
-    // on an armed hazard oracle PANICS here, so declaration gaps can never ship quietly.
-    // cmd.exe has no VAR=val prefix — `set "VAR=val"&&` is the safe form (llvm_tune's tuner_cmd)
-    let win = get_platform_name() == "windows"
-    var envs = ""
-    if (win) {
-        envs = ((cfg.full ? "set \"DASLLAMA_PARITY_FULL=1\"&& " : "set \"DASLLAMA_TEST_ARMS={cfg.arm}\"&& ")
-            + "set \"DASLLAMA_CPU_PREFILL=1\"&& set \"DASLLAMA_METAL_HAZARD_STRICT=1\"&& ")
-        if (!empty(cfg.family)) {   // composes with either mode: a family-scoped full gate is the profiling-cadence default
-            envs = "{envs}set \"DASLLAMA_TEST_FAMILY={cfg.family}\"&& "
-        }
-    } else {
-        envs = (cfg.full ? "DASLLAMA_PARITY_FULL=1" : "DASLLAMA_TEST_ARMS='{cfg.arm}'") + " DASLLAMA_CPU_PREFILL=1 DASLLAMA_METAL_HAZARD_STRICT=1 "
-        if (!empty(cfg.family)) {
-            envs = "DASLLAMA_TEST_FAMILY='{cfg.family}' {envs}"
-        }
-    }
-    if (cfg.suite == "image-vulkan") {
-        // the offline-bake suite: arm the tier so the probed config carries a vulkan section —
-        // the bake itself is DRY (no device calls), so this is safe on GPU-less boxes too
-        envs = (win ? "{envs}set \"DASLLAMA_GPU=1\"&& set \"DASLLAMA_GPU_VRAM_MB=2000\"&& "
-            : "DASLLAMA_GPU=1 DASLLAMA_GPU_VRAM_MB=2000 {envs}")
-    }
+    let envs = build_env_prefix(cfg)
     // the full gate holds the 8B/70B tails — the stock 1200s dastest wall is an arm-mode budget
     let tmo = cfg.full ? 3600 : 1200
     let reps = max(cfg.nreps, 1)
@@ -166,7 +171,7 @@ def main() : int {
             var rc = 0
             unsafe {
                 rc = popen(cmd) $(f) {
-                    let _drain = fread_to_eof(f)   // output is redirected; drain keeps the pipe contract
+                    let _drain = fread(f)   // output is redirected; drain keeps the pipe contract
                 }
             }
             let secs = double(get_time_usec(t0)) / 1000000.0lf

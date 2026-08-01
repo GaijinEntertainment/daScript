@@ -69,7 +69,7 @@ def public text_edit_cpp_compiler_available(compiler : string) : bool {
     var ok = false
     let exit_code = unsafe(popen_argv([compiler, "--version"], 30.0) $(f) {
         if (f != null) {
-            ok = find(unsafe(fread_to_eof(f)), "clang") >= 0
+            ok = find(fread(f), "clang") >= 0
         }
     })
     return ok && exit_code == 0
@@ -191,7 +191,7 @@ def private run_cpp_check(job : CppCheckJob; var result : CppCheckResult) {
     var inscope argv <- text_edit_cpp_check_argv(job.compiler, job.language, scratch)
     let exit_code = unsafe(popen_argv(argv, 60.0) $(f) {
         if (f != null) {
-            output = unsafe(fread_to_eof(f))
+            output = fread(f)
         }
     })
     result.ok = exit_code == 0

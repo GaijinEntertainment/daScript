@@ -40,13 +40,13 @@ struct Args {
     help : bool
 }
 
-// Run `cmd`, return its trimmed stdout (pipe-safe fread_to_eof; stderr stays on the console).
+// Run `cmd`, return its trimmed stdout (pipe-safe fread; stderr stays on the console).
 def private capture_out(cmd : string) : string {
     var out = ""
     unsafe {
         popen(cmd) $(f) {
             if (f != null) {   // popen returns null on spawn failure (missing git / bad PATH) — don't deref
-                out = fread_to_eof(f)
+                out = fread(f)
             }
         }
     }
@@ -141,29 +141,33 @@ def main : int {
     }
     var rc = 0
     for (f in flavors) {
-        let build_dir = path_join(dest, "build-{f}")
-        print("=== {f} -> {build_dir} (minutes-class: configure + build llama-bench)\n")
-        if (!fexist(path_join(build_dir, "CMakeCache.txt"))) {
-            let cfg_cmd = "cmake -S \"{dest}\" -B \"{build_dir}\" -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=OFF{flavor_flags(f)}"
-            if (run_visible(cfg_cmd) != 0) {
-                print("error: cmake configure failed for {f}\n")
-                rc = 1
-                continue
-            }
-        }
-        if (run_visible("cmake --build \"{build_dir}\" --config Release --target llama-bench -j {cfg.jobs}") != 0) {
-            print("error: build failed for {f}\n")
+        if (build_flavor(dest, f, short_sha, cfg.jobs) != 0) {
             rc = 1
-            continue
         }
-        let bench = locate_bench(build_dir)
-        if (empty(bench)) {
-            print("error: {f} built but llama-bench not found under {build_dir}\n")
-            rc = 1
-            continue
-        }
-        print("{f}: {bench} (llama.cpp {short_sha})\n")
-        print("    lcpp_bench: --ref \"{bench}\" --ref-flavor {f}\n")
     }
     return rc
+}
+
+def private build_flavor(dest, f, short_sha : string; jobs : int) : int {
+    let build_dir = path_join(dest, "build-{f}")
+    print("=== {f} -> {build_dir} (minutes-class: configure + build llama-bench)\n")
+    if (!fexist(path_join(build_dir, "CMakeCache.txt"))) {
+        let cfg_cmd = "cmake -S \"{dest}\" -B \"{build_dir}\" -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=OFF{flavor_flags(f)}"
+        if (run_visible(cfg_cmd) != 0) {
+            print("error: cmake configure failed for {f}\n")
+            return 1
+        }
+    }
+    if (run_visible("cmake --build \"{build_dir}\" --config Release --target llama-bench -j {jobs}") != 0) {
+        print("error: build failed for {f}\n")
+        return 1
+    }
+    let bench = locate_bench(build_dir)
+    if (empty(bench)) {
+        print("error: {f} built but llama-bench not found under {build_dir}\n")
+        return 1
+    }
+    print("{f}: {bench} (llama.cpp {short_sha})\n")
+    print("    lcpp_bench: --ref \"{bench}\" --ref-flavor {f}\n")
+    return 0
 }
