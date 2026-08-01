@@ -145,6 +145,7 @@ namespace das
                 bool        underClone : 1;
                 bool        underDeref : 1;
                 bool        noBoundCheck : 1;
+                bool        noTableInit : 1;    // direct store target (tab[k] = / <- / :=) — skip the default_init_containers rewrite
             };
             uint32_t atFlags = 0;
         };

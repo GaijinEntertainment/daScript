@@ -82,6 +82,7 @@ namespace das {
         bool relaxedAssign = false;
         bool relaxedPointerConst = false;
         bool unsafeTableLookup = false;
+        bool defaultInitContainers = true;
         bool withModuleIsUnsafe = false;
         bool debugInferFlag = false;
         bool forceInscopePod = false;
@@ -358,6 +359,7 @@ namespace das {
         // ExprPtr2Ref
         virtual ExpressionPtr visit(ExprPtr2Ref *expr) override;
         // ExprRef2Ptr
+        virtual void preVisit(ExprRef2Ptr *expr) override;
         virtual ExpressionPtr visit(ExprRef2Ptr *expr) override;
         // ExprNullCoalescing
         void propagateAlwaysSafe(ExpressionPtr expr);

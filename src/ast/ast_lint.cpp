@@ -1334,6 +1334,7 @@ namespace das {
         // disable_run registered via its CodeOfPolicies field
         "indenting",                    Type::tInt,
         "no_unsafe_uninitialized_structures", Type::tBool,
+        "default_init_containers",      Type::tBool,
     // version_2_syntax
         "gen2",                         Type::tBool,
     // deprecated

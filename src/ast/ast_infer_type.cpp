@@ -111,6 +111,7 @@ namespace das {
         relaxedAssign = prog->options.getBoolOption("relaxed_assign", prog->policies.relaxed_assign);
         relaxedPointerConst = prog->options.getBoolOption("relaxed_pointer_const", prog->policies.relaxed_pointer_const);
         unsafeTableLookup = prog->options.getBoolOption("unsafe_table_lookup", prog->policies.unsafe_table_lookup);
+        defaultInitContainers = prog->options.getBoolOption("default_init_containers", prog->policies.default_init_containers);
         withModuleIsUnsafe = prog->options.getBoolOption("with_module_is_unsafe", prog->policies.with_module_is_unsafe);
         forceInscopePod = prog->options.getBoolOption("force_inscope_pod", prog->policies.force_inscope_pod);
         logInscopePod = prog->options.getBoolOption("log_inscope_pod", prog->policies.log_inscope_pod);
@@ -1224,6 +1225,14 @@ namespace das {
             propagateTempType(expr->subexpr->type, expr->type); // deref(Foo#?) is Foo#
         }
         return Visitor::visit(expr);
+    }
+    void InferTypes::preVisit(ExprRef2Ptr *expr) {
+        Visitor::preVisit(expr);
+        // addr(tab[k]) is raw slot access — no default_init_containers rewrite. This is also
+        // what keeps _table_index_and_init's own Tab[at] (under addr) from recursing into itself.
+        if (expr->subexpr->rtti_isAt()) {
+            static_cast<ExprAt*>(expr->subexpr)->noTableInit = true;
+        }
     }
     ExpressionPtr InferTypes::visit(ExprRef2Ptr *expr) {
         if (!expr->subexpr->type)
@@ -2549,6 +2558,15 @@ namespace das {
             } else if (expr->trait == "is_unsafe_when_uninitialized") {
                 reportAstChanged();
                 return new ExprConstBool(expr->at, noUnsafeUninitializedStructs && expr->typeexpr->unsafeInit());
+            } else if (expr->trait == "is_safe_to_delete") {
+                reportAstChanged();
+                return new ExprConstBool(expr->at, expr->typeexpr->isSafeToDelete());
+            } else if (expr->trait == "needs_container_init") {
+                reportAstChanged();
+                return new ExprConstBool(expr->at, defaultInitContainers && expr->typeexpr->unsafeInit());
+            } else if (expr->trait == "needs_nontrivial_init") {
+                reportAstChanged();
+                return new ExprConstBool(expr->at, expr->typeexpr->unsafeInit());
             } else if (expr->trait == "has_nontrivial_ctor") {
                 reportAstChanged();
                 return new ExprConstBool(expr->at, expr->typeexpr->hasNonTrivialCtor());
@@ -3313,6 +3331,19 @@ namespace das {
             if (unsafeTableLookup && !safeExpression(expr)) {
                 error("table index requires unsafe", "use 'get_value', 'insert', 'insert_clone' or 'emplace' instead. consider 'get'", "",
                       expr->at, CompilationError::unsafe_table_index);
+            }
+            // default_init_containers: a non-store index over an init-carrying value type becomes
+            // *_table_index_and_init(tab,key) so a fresh slot runs its initializers (builtin.das owns the wrapper)
+            if (defaultInitContainers && !unsafeTableLookup && !expr->noTableInit
+                && seT->secondType->unsafeInit()) {
+                auto pCall = new ExprCall(expr->at, "_table_index_and_init");
+                pCall->arguments.push_back(expr->subexpr->clone());
+                pCall->arguments.push_back(expr->index->clone());
+                pCall->generated = true;
+                auto pDeref = new ExprPtr2Ref(expr->at, pCall);
+                pDeref->generated = true;
+                reportAstChanged();
+                return pDeref;
             }
             TypeDecl::clone(expr->type, seT->secondType);
             expr->type->ref = true;
