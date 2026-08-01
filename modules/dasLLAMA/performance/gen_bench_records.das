@@ -4,7 +4,8 @@ options _cyclomatic_complexity = 0   // orchestrator passes; reshaped by the sin
 options _function_length = 0   // same
 
 require profile_common
-require dasllama/dasllama_image   // dlim_clean — the automatic step-zero GC
+require dasllama/dasllama_image   // dlim_clean + dlim_inventory — step-zero GC and the re-mint tripwire
+require llvm/daslib/llvm_tune   // [tune_policy]: the orchestrator never measures — it must never self-tune
 require daslib/clargs
 require daslib/fio
 require math
@@ -114,6 +115,75 @@ def private pub_catalog() : array<PubEntry> {
     ]
 }
 
+// The measurement child is the RELEASED exe, never a script: its tune winners are baked in at
+// build time, so no cell can tune, re-exec, or drift onto different winners mid-sweep. Absent or
+// older than the bench source is a hard stop with the build line — never a silent rebuild here,
+// which would put minutes of hidden work inside a measurement run.
+let RIG_EXE_OUT = "modules/dasLLAMA/performance/_rig"
+let RIG_BENCH_SRC = "modules/dasLLAMA/benchmarks/lcpp_bench.das"
+
+def private rig_exe_path() : string {
+    // macOS ships a clickable .app; every other platform gets <out>/<name>/<name>
+    return (is_apple_box()
+        ? "{RIG_EXE_OUT}/dasllama-bench.app/Contents/MacOS/dasllama-bench"
+        : "{RIG_EXE_OUT}/dasllama-bench/dasllama-bench")
+}
+
+def private rig_build_line() : string {
+    return "bin/daslang utils/daspkg/main.das -- release --root modules/dasLLAMA/benchmarks --out {RIG_EXE_OUT}"
+}
+
+//! The exe must exist and be no older than the bench source. Returns "" (and logs the fix) when it
+//! is not usable — the caller aborts rather than measuring something stale.
+def private rig_exe_checked() : string {
+    let exe = rig_exe_path()
+    let st = stat(exe)
+    if (!st.is_valid) {
+        to_log(LOG_ERROR, "gen_bench_records: no bench exe at {exe}\n  build it: {rig_build_line()}\n")
+        return ""
+    }
+    let src = stat(RIG_BENCH_SRC)
+    if (src.is_valid && src.mtime > st.mtime) {
+        to_log(LOG_ERROR, "gen_bench_records: bench exe is older than {RIG_BENCH_SRC} — its baked tune winners no longer match the source\n  rebuild: {rig_build_line()}\n")
+        return ""
+    }
+    return exe
+}
+
+// Re-mint tripwire. Exactly one process may write a given .dlim during a sweep: a second write of
+// the SAME image means two cells disagreed about its identity, which silently re-measures one of
+// them against different bytes. Counting mtimes per image catches it; the first repeat is fatal.
+var private g_mint_seen : table<string; clock>
+var private g_mint_count : table<string; int>
+
+def private mint_snapshot(dir : string) {
+    for (im in dlim_inventory(dir)) {
+        let st = stat(im.path)
+        if (st.is_valid) {
+            g_mint_seen[im.path] = st.mtime
+        }
+    }
+}
+
+def private mint_check(dir, whose : string) {
+    for (im in dlim_inventory(dir)) {
+        let st = stat(im.path)
+        continue if (!st.is_valid)
+        // unseen path or a moved mtime = this cell wrote it
+        if (key_exists(g_mint_seen, im.path)) {
+            let prev = g_mint_seen[im.path]
+            continue if (prev == st.mtime)
+        }
+        g_mint_seen[im.path] = st.mtime
+        let n = (g_mint_count?[im.path] ?? 0) + 1
+        g_mint_count[im.path] = n
+        if (n > 1) {
+            panic("gen_bench_records: {im.path} was minted {n} times in one sweep (last by {whose}) — two cells disagree on its identity, so their numbers are not comparable")
+        }
+        to_log(LOG_INFO, "gen_bench_records: minted {im.file} ({im.bytes >> 20l} MB) during {whose}\n")
+    }
+}
+
 def private daslang_bin() : string {
     let env = get_env_variable("DASLANG_BIN")
     return empty(env) ? "bin/daslang" : env
@@ -156,10 +226,10 @@ def private settle(cfg : Args) {
 // One lcpp_bench child with the cold-map cv retry — the shared engine of das_cell and the oracle
 // cells. Fills `cell` from the child's --json-path records; false = the child failed or its
 // records did not parse (already logged).
-def private run_das_child(file, path, be, tag : string; accel, frozen : bool; cfg : Args; threads : int;
+def private run_das_child(file, path, be, tag, exe : string; accel, frozen : bool; cfg : Args; threads : int;
                           cellPath : string; var cell : array<BenchModel>) : bool {
     let t0 = ref_time_ticks()
-    var args <- [daslang_bin(), "-jit", "modules/dasLLAMA/benchmarks/lcpp_bench.das", "--",
+    var args <- [exe, "--",
                  "-m", path, "-p", "{cfg.plen}", "-n", "{cfg.ngen}", "-r", "{cfg.reps}",
                  "-t", "{threads}", "-o", "json", "--json-path", cellPath]
     if (be == "metal") {
@@ -213,17 +283,19 @@ def private run_das_child(file, path, be, tag : string; accel, frozen : bool; cf
     return true
 }
 
-def private das_cell(file, path, be : string; accel : bool; cfg : Args; threads : int; cellPath, note, store : string;
+def private das_cell(file, path, be, exe : string; accel : bool; cfg : Args; threads : int; cellPath, note, store : string;
                      var models : array<BenchModel>; var failed : array<string>) {
     let t0 = ref_time_ticks()
     let tag = accel ? "{be} accel" : be
     to_log(LOG_INFO, "gen_bench_records: START {file} das {tag}\n")
     logger_info("bench.records", "cell start", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(tag)}))
     var cell : array<BenchModel>
-    if (!run_das_child(file, path, be, tag, accel, false, cfg, threads, cellPath, cell)) {
+    mint_snapshot(models_dir())
+    if (!run_das_child(file, path, be, tag, exe, accel, false, cfg, threads, cellPath, cell)) {
         failed |> push("{file} das {tag}")
         return
     }
+    mint_check(models_dir(), "{file} das {tag}")
     absorb_cell(models, cell, store, note)
     remove(cellPath)
     to_log(LOG_INFO, "gen_bench_records: DONE {file} das {tag} ({elapsed_ms(t0)} ms)\n")
@@ -234,7 +306,7 @@ def private das_cell(file, path, be : string; accel : bool; cfg : Args; threads 
 
 // One oracle cell: re-measure the stored row's leg under frozen artifacts and gate against it.
 // The verdict line lands on the board; per-test detail logs live.
-def private oracle_cell(gguf, be, tag : string; accel : bool; stored : BenchRun; cfg : Args; threads : int;
+def private oracle_cell(gguf, be, tag, exe : string; accel : bool; stored : BenchRun; cfg : Args; threads : int;
                         cellPath : string; var board : array<string>) : OracleVerdict {
     let path = "{models_dir()}{gguf}"
     if (!stat(path).is_valid) {
@@ -246,7 +318,7 @@ def private oracle_cell(gguf, be, tag : string; accel : bool; stored : BenchRun;
     to_log(LOG_INFO, "gen_bench_records: ORACLE START {gguf} das {tag}\n")
     logger_info("bench.records", "oracle cell start", JV({"model" => JV(gguf), "leg" => JV(tag)}))
     var cell : array<BenchModel>
-    if (!run_das_child(gguf, path, be, tag, accel, true, cfg, threads, cellPath, cell)) {
+    if (!run_das_child(gguf, path, be, tag, exe, accel, true, cfg, threads, cellPath, cell)) {
         board |> push("FAIL {gguf} das {tag} — cell did not measure (missing .dlim, unfit tune, or crash — see the log)")
         return OracleVerdict.fail
     }
@@ -279,7 +351,7 @@ def private oracle_cell(gguf, be, tag : string; accel : bool; stored : BenchRun;
 // tables re-verify; coverage gaps fail loudly), each re-measured once and gated one-sided
 // against its stored mean. Pure check — the store is never written.
 def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : array<BenchModel>;
-                        threads : int; cellPath : string) : int {
+                        threads : int; cellPath, exe : string) : int {
     let box = box_name()
     var board : array<string>
     var cells = 0
@@ -322,14 +394,14 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
             }
             cells++
             settle(cfg)
-            var v = oracle_cell(m.gguf, be, tag, accel, sr, cfg, threads, cellPath, board)
+            var v = oracle_cell(m.gguf, be, tag, exe, accel, sr, cfg, threads, cellPath, board)
             if (v == OracleVerdict.fail && cfg.oracle_retry_settle > 0) {
                 // a tail-of-board FAIL is a re-run instruction, never a verdict (BRINGUP): the
                 // solo re-run after settle is automatic, and ITS verdict stands
                 to_log(LOG_WARNING, "gen_bench_records: ORACLE FAIL {m.gguf} — auto solo re-run after {cfg.oracle_retry_settle}s settle (the retry is the verdict)\n")
                 board |> push("  ^ suspect FAIL — the auto solo re-run below is the verdict")
                 sleep(uint(cfg.oracle_retry_settle * 1000))
-                v = oracle_cell(m.gguf, be, tag, accel, sr, cfg, threads, cellPath, board)
+                v = oracle_cell(m.gguf, be, tag, exe, accel, sr, cfg, threads, cellPath, board)
             }
             if (v == OracleVerdict.fail) {
                 fails++
@@ -378,8 +450,11 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
     to_log(LOG_INFO, "gen_bench_records: START {file} ref {flavor} {backend}\n")
     logger_info("bench.records", "cell start", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("{flavor} {backend}")}))
     var rows : array<LlamaBenchRow>
-    if (!run_llama_bench(args, rows) || empty(rows)) {
-        to_log(LOG_ERROR, "gen_bench_records: FAILED {file} ref {flavor} {backend} ({elapsed_ms(t0)} ms)\n")
+    var raw = ""
+    if (!run_llama_bench(args, rows, raw) || empty(rows)) {
+        // the tail is the whole diagnosis: a ref cell that dies has no other voice
+        let tail = slice(raw, max(0, length(raw) - 400))
+        to_log(LOG_ERROR, "gen_bench_records: FAILED {file} ref {flavor} {backend} ({elapsed_ms(t0)} ms) — cmd: {cmd}\n  tail: {tail}\n")
         logger_error("bench.records", "cell FAILED", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("{flavor} {backend}"), "elapsed_ms" => JV(elapsed_ms(t0))}))
         failed |> push("{file} ref {flavor} {backend}")
         return
@@ -610,7 +685,10 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
     logger_info("bench.records", "cell done", JV({"model" => JV(spec.display), "engine" => JV(asr_engine_name(ref.tool)), "leg" => JV("asr"), "clips" => JV(measured), "elapsed_ms" => JV(elapsed_ms(t0))}))
 }
 
-[export]
+// The orchestrator never measures: it spawns the released exe per cell and reads its JSON, so its
+// own kernels are irrelevant and tuning them would put minutes of hidden work in front of a
+// measurement run — the trap this rig exists to avoid.
+[export, tune_policy(missing = "fallback")]
 def main : int {
     var r <- parse_args(type<Args>)
     if (r |> is_err) {
@@ -627,12 +705,14 @@ def main : int {
     // the timestamped machine-readable record beside it
     logger_set_name(prof_log_name())
     to_log(LOG_INFO, "gen_bench_records: box={box_name()} workload={cfg.workload} — ndjson record: {logger_get_path()}\n")
-    // ONE tune per box: every child (das cells, converter runs) reads the same env-pointed
-    // manifest, so their image identities agree and the pre-bake serves every cell. Divergent
-    // per-script mints (near-tie winners flip) were observed to fork identities — B7.
-    if (empty(get_env_variable("DAS_TUNE_MANIFEST"))) {
-        set_env_variable("DAS_TUNE_MANIFEST", rig_tune_manifest())
-        to_log(LOG_INFO, "gen_bench_records: DAS_TUNE_MANIFEST={rig_tune_manifest()} (one tune per box)\n")
+    // The child exe owns its tune state: winners baked in at build time, sidecar shipped beside it.
+    // Pointing it at a shared box manifest re-opens exactly what that replaced — the manifest is
+    // older than a freshly built exe, the staleness rule drops every kernel to fallback, and the
+    // cell measures nothing real. So the rig CLEARS the override rather than setting one, and an
+    // inherited value from the caller's shell is cleared too.
+    if (!empty(get_env_variable("DAS_TUNE_MANIFEST"))) {
+        to_log(LOG_INFO, "gen_bench_records: clearing inherited DAS_TUNE_MANIFEST — the bench exe carries its own winners\n")
+        set_env_variable("DAS_TUNE_MANIFEST", "")
     }
     // STEP ZERO, automatic: GC image siblings that can never load again (BROKEN/version-stale)
     // across the dirs this sweep reads — a box once carried 274 GB of them. OTHER stays.
@@ -706,8 +786,12 @@ def main : int {
             return 1
         }
         let othreads = cfg.threads > 0 ? cfg.threads : profile_threads()
+        let oexe = rig_exe_checked()
+        if (empty(oexe)) {
+            return 1
+        }
         return oracle_main(cfg, legNeon, legAmx, legMetal, omodels,
-            othreads, "modules/dasLLAMA/performance/records/_cell_{box_name()}.json")
+            othreads, "modules/dasLLAMA/performance/records/_cell_{box_name()}.json", oexe)
     }
     var refClean = empty(cfg.ref_clean) ? get_env_variable("LLAMA_BENCH_CLEAN") : cfg.ref_clean
     var refStock = empty(cfg.ref_stock) ? get_env_variable("LLAMA_BENCH_STOCK") : cfg.ref_stock
@@ -718,6 +802,10 @@ def main : int {
     if (!empty(refStock) && !stat(refStock).is_valid) {
         to_log(LOG_WARNING, "gen_bench_records: stock ref `{refStock}` not found — no stock rows\n")
         refStock = ""
+    }
+    let exe = rig_exe_checked()
+    if (empty(exe)) {
+        return 1
     }
     mkdir_rec("modules/dasLLAMA/performance/records")
     let store = bench_records_path()
@@ -751,19 +839,19 @@ def main : int {
         // run independently of das-cell failures.
         if (legMetal) {
             settle(cfg)
-            das_cell(file, path, "metal", false, cfg, threads, cellPath, ent.note, store, models, failed)
+            das_cell(file, path, "metal", exe, false, cfg, threads, cellPath, ent.note, store, models, failed)
             settle(cfg)
             ref_pass(file, path, refStock, "stock", 99, false, cfg, threads, hw, box, date, ent.note, store, models, failed)
         }
         if (legNeon) {
             settle(cfg)
-            das_cell(file, path, "cpu", false, cfg, threads, cellPath, ent.note, store, models, failed)
+            das_cell(file, path, "cpu", exe, false, cfg, threads, cellPath, ent.note, store, models, failed)
             settle(cfg)
             ref_pass(file, path, refClean, "clean-cpu", 0, false, cfg, threads, hw, box, date, ent.note, store, models, failed)
         }
         if (legAmx) {
             settle(cfg)
-            das_cell(file, path, "cpu", true, cfg, threads, cellPath, ent.note, store, models, failed)
+            das_cell(file, path, "cpu", exe, true, cfg, threads, cellPath, ent.note, store, models, failed)
             settle(cfg)
             ref_pass(file, path, refStock, "stock", 0, true, cfg, threads, hw, box, date, ent.note, store, models, failed)
         }

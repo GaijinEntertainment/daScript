@@ -48,7 +48,7 @@ def box_name() : string {
 }
 
 //! The per-box shared tune manifest (`DAS_TUNE_MANIFEST` target): ONE tune per box, so every
-//! rig process — cells, converter pre-bakes — stamps the same winners and their .dlim image
+//! rig process — every cell — stamps the same winners and their .dlim image
 //! identities agree. Gitignored (machine-local; staleness = older than the binary).
 def public rig_tune_manifest() : string {
     return "modules/dasLLAMA/performance/{box_name()}.tune.json"
@@ -1853,6 +1853,14 @@ struct LlamaBenchRow {
 
 //! Run a llama-bench command line (must include `-o json`) and parse its rows. False on a run or
 //! parse failure. Stdout only — llama-bench keeps progress on stderr, so the pipe stays clean.
+//! `raw` keeps what the child actually printed: a failure here is otherwise indistinguishable
+//! from a silent one, and the caller has nothing to report but elapsed time.
+def run_llama_bench(args : array<string>; var rows : array<LlamaBenchRow>; var raw : string&) : bool {
+    raw := run_capture_argv(args)
+    return sscan_json(raw, rows)
+}
+
 def run_llama_bench(args : array<string>; var rows : array<LlamaBenchRow>) : bool {
-    return sscan_json(run_capture_argv(args), rows)
+    var raw = ""
+    return run_llama_bench(args, rows, raw)
 }
