@@ -281,7 +281,7 @@ A generic that should accept `array<T>`, `array<array<T>>`, … (any nesting) �
 
 ### Table operations
 
-- `table[key]` **inserts** a default entry if missing — use `table?[key] ?? default` for safe lookup. Under `default_init_containers` (policy, default ON) a fresh slot of an init-carrying value type runs its field initializers (infer rewrites the non-store index into `*_table_index_and_init(tab, key)`; direct stores `= / <- / :=` and `addr(tab[k])` keep the raw zeroed slot). Same policy makes `resize` construct new array elements — `arr |> resize(n)` on init-carrying element types no longer needs `unsafe` and yields initialized values
+- `table[key]` **inserts** a default entry if missing — use `table?[key] ?? default` for safe lookup. Under `default_init_containers` (policy, default ON) a freshly inserted slot is set to `default<VT>` (infer rewrites the non-store index into `*_table_index_and_init(tab, key)`; direct stores `= / <- / :=` and `addr(tab[k])` keep the raw zeroed slot). Same policy makes `resize` give new array elements `default<T>` — `arr |> resize(n)` on init-carrying element types no longer needs `unsafe`. **It is `default<T>` semantics, not deep-initialize:** a struct gets its field initializers, but a `tuple`/`variant` whose members carry initializers stays zeroed, since `default<>` of a composite is zero
 - `key_exists(table, key)` — check without inserting
 - `table |> insert(key, value)` / `table |> erase(key)`
 - **Never use two `[]` lookups on the same table in one expression** — re-hashing can invalidate references

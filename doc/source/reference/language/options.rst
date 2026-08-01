@@ -311,10 +311,14 @@ Safety and Strictness
      - bool
      - true
      - Containers own their elements' lifetime, in both directions.
-       **Construct**: ``resize`` runs field initializers on new array slots (no
-       ``unsafe`` needed for init-carrying element types), and a fresh ``tab[key]``
-       slot of an init-carrying value type is initialized on insert; direct stores
-       (``tab[key] = / <- / :=``) and ``addr(tab[key])`` keep the raw zeroed slot.
+       **Construct**: a new array slot from ``resize``, and a freshly inserted
+       ``tab[key]`` slot, are given ``default<T>`` of the element/value type — so a
+       struct gets its field initializers, and ``resize`` no longer needs ``unsafe``
+       for such element types. Note this is ``default<T>`` semantics, not "run every
+       initializer reachable inside T": a ``tuple`` or ``variant`` whose members carry
+       field initializers is still zero-initialized, because ``default<>`` of a
+       composite is zero. Direct stores (``tab[key] = / <- / :=``) and
+       ``addr(tab[key])`` keep the raw zeroed slot.
        **Finalize**: ``erase`` / ``erase_if`` / ``clear`` / shrinking ``resize`` /
        ``pop`` (arrays) and ``erase`` / ``clear`` (tables) finalize the elements they
        drop — but only where finalizing frees memory the container owns. Raw

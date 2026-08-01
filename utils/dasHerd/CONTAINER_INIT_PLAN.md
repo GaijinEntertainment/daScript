@@ -101,6 +101,14 @@ def _table_index_and_init(var Tab : table<auto(KT); auto(VT)>; key : KT) : VT? {
 }
 ```
 
+Known bound: initialization is `default<VT>`, NOT "run every initializer
+reachable inside VT". `default<>` of a struct applies its field
+initializers; `default<>` of a tuple/variant is zero even when its
+members carry them. So the rewrite fires for a composite value type (the
+`unsafeInit()` gate recurses) but lands zeros — pinned in
+container_init_table.das so a future `default<>`-for-composites change
+flips it consciously. Docs say `default<T>` semantics for this reason.
+
 C++ rewrite in the ExprAt table branch (ast_infer_type.cpp:3292): when
 ALL hold — policy on; `VT->unsafeInit()`; not a direct store target; not
 inside module builtin (the wrapper's own `Tab[key]` must not recurse);
