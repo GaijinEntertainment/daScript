@@ -1,11 +1,9 @@
 options gen2
+options persistent_heap   // heap_bytes_allocated only tracks individual frees on the persistent heap
 require dastest/testing_boost public
 
-// heap_bytes_allocated is NOT the measurement here: under dastest (a daslib-compiled child
-// context) an indexed `delete arr[i]` leaves the counter unchanged while a `for (v in arr)`
-// delete of the same elements decrements it; from the CLI both do. The memory is released
-// either way - heap_total_allocated shows the block being reused. Pre-existing, reproduced
-// on master. The banner's contract is "dropped elements get finalized", so count that.
+// Two independent signals per operation: the finalizer ran (counted), and the bytes came
+// back (heap delta). The carve-out cases assert the opposite of both.
 
 var g_finalized = 0
 
@@ -26,7 +24,7 @@ def private make_probes(n : int) : array<Probe> {
     var arr : array<Probe>
     arr |> resize(n)
     for (i in range(n)) {
-        arr[i].xs |> reserve(1)
+        arr[i].xs |> reserve(1024)
         arr[i].xs |> push(i * 10)
     }
     return <- arr
@@ -37,8 +35,11 @@ def test_erase_finalizes(t : T?) {
     t |> run("erase finalizes the removed element") @(t : T?) {
         var inscope arr <- make_probes(3)
         g_finalized = 0
+        let before = heap_bytes_allocated()
         arr |> erase(0)
+        let after = heap_bytes_allocated()
         t |> equal(g_finalized, 1)
+        t |> success(after < before, "the removed element's buffer came back")
         t |> equal(length(arr), 2)
         t |> equal(arr[0].xs[0], 10)
         t |> equal(arr[1].xs[0], 20)
@@ -46,36 +47,49 @@ def test_erase_finalizes(t : T?) {
     t |> run("erase_range finalizes each removed element") @(t : T?) {
         var inscope arr <- make_probes(4)
         g_finalized = 0
+        let before = heap_bytes_allocated()
         arr |> erase(1, 2)
+        let after = heap_bytes_allocated()
         t |> equal(g_finalized, 2)
+        t |> success(after < before, "both removed buffers came back")
         t |> equal(length(arr), 2)
         t |> equal(arr[1].xs[0], 30)
     }
     t |> run("clear finalizes every element") @(t : T?) {
         var inscope arr <- make_probes(2)
         g_finalized = 0
+        let before = heap_bytes_allocated()
         arr |> clear()
+        let after = heap_bytes_allocated()
         t |> equal(g_finalized, 2)
+        t |> success(after < before, "every element's buffer came back")
         t |> equal(length(arr), 0)
     }
     t |> run("shrinking resize finalizes the dropped tail") @(t : T?) {
         var inscope arr <- make_probes(3)
         g_finalized = 0
+        let before = heap_bytes_allocated()
         arr |> resize(1)
+        let after = heap_bytes_allocated()
         t |> equal(g_finalized, 2)
+        t |> success(after < before, "the dropped tail's buffers came back")
         t |> equal(arr[0].xs[0], 0)
     }
     t |> run("pop finalizes the popped element") @(t : T?) {
         var inscope arr <- make_probes(2)
         g_finalized = 0
+        let before = heap_bytes_allocated()
         arr |> pop()
+        let after = heap_bytes_allocated()
         t |> equal(g_finalized, 1)
+        t |> success(after < before, "the popped element's buffer came back")
     }
-    t |> run("clear releases nested container heap") @(t : T?) {
-        // the one heap-delta anchor: loop-shape frees DO account, even in child contexts
+    t |> run("plain nested containers release too, with no user finalizer") @(t : T?) {
         var inscope arr : array<array<int>>
         arr |> resize(2)
+        arr[0] |> reserve(1024)
         arr[0] |> push(1)
+        arr[1] |> reserve(1024)
         arr[1] |> push(2)
         let before = heap_bytes_allocated()
         arr |> clear()
@@ -175,11 +189,15 @@ def test_composite_carveout(t : T?) {
 def test_table_erase_finalizes(t : T?) {
     t |> run("table erase finalizes the dropped value") @(t : T?) {
         var inscope tab : table<string; Probe>
+        tab["a"].xs |> reserve(1024)
         tab["a"].xs |> push(1)
         tab["b"].xs |> push(2)
         g_finalized = 0
+        let before = heap_bytes_allocated()
         tab |> erase("a")
+        let after = heap_bytes_allocated()
         t |> equal(g_finalized, 1)
+        t |> success(after < before, "the dropped value's buffer came back")
         t |> equal(tab["b"].xs[0], 2)
     }
     t |> run("erase of a missing key finalizes nothing") @(t : T?) {
@@ -192,11 +210,16 @@ def test_table_erase_finalizes(t : T?) {
     }
     t |> run("table clear finalizes every value") @(t : T?) {
         var inscope tab : table<string; Probe>
+        tab["a"].xs |> reserve(1024)
         tab["a"].xs |> push(1)
+        tab["b"].xs |> reserve(1024)
         tab["b"].xs |> push(2)
         g_finalized = 0
+        let before = heap_bytes_allocated()
         tab |> clear()
+        let after = heap_bytes_allocated()
         t |> equal(g_finalized, 2)
+        t |> success(after < before, "every value's buffer came back")
         t |> equal(length(tab), 0)
     }
 }

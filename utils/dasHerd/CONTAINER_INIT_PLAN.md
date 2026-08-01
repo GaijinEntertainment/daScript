@@ -208,18 +208,15 @@ time. Four files:
    tuple-of-pointers shape, and `Probe?` (counter stays 0) all survive
    erase/clear while `delete` still owns. One heap-delta assert anchors
    actual release (array clear).
-   (AMENDED: heap-delta was the planned measurement everywhere, until
-   the probes turned up an accounting discrepancy worth reporting on its
-   own. In a daslib-compiled child context — i.e. anything under dastest
-   — `delete arr[i]` (indexed element) leaves `heap_bytes_allocated`
-   unchanged, while `for (v in arr) { delete v }` over the same elements
-   decrements it normally. Run identically from the CLI, both decrement.
-   The memory is genuinely freed either way: `heap_total_allocated` shows
-   zero growth when a same-size block is allocated right after, so the
-   block is reused — the discrepancy is in the counter, not the heap.
-   Pre-existing and master-reproducible via a
-   `compile_file` + `invoke_in_context` harness; not worked around in the
-   runtime, and worth its own look after this PR.)
+   (AMENDED: heap deltas first read as broken under dastest —
+   `delete arr[i]` moved `heap_bytes_allocated` not at all where the same
+   code from the CLI freed 4096. Not a bug: **the default linear (bump)
+   heap does not track individual frees**, and the CLI runs persistent
+   (Boris, 2026-07-31). `options persistent_heap` in the test file makes
+   the counter exact in both environments — probe: 0/0/4096 linear vs
+   4096/4096/4096 persistent, same code, same child context. So the file
+   carries that option and asserts BOTH signals per operation: the
+   finalizer ran, and the bytes came back.)
 
 ## Docs and sweep
 
