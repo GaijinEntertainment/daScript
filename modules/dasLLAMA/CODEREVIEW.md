@@ -198,6 +198,19 @@ and a mint that is slower in exchange for a lower peak is correct. See `ARCHITEC
 
 ---
 
+## Image identity and contents
+
+**A `.dlim` is box- and config-specific, not a portable format.** `image_identity` names the box
+profile, the knobs, and the flavor a file was baked for, and a mismatch declines loudly. A path
+that reinterprets a mismatched image, or widens an identity so that more files match, is a defect.
+
+**An image carries only what its flavor uses.** A plane the target platform or config never reads
+is not written — the mint decides that, not the load. A flavor takes its own file through
+`image_path_for` and its own tag through `register_image_family_tag`; carrying another flavor's
+planes alongside its own is a defect.
+
+---
+
 ## Implementation
 
 **A kernel's shape is compile-time; only its data is runtime.** The test is one question: for a
