@@ -1284,6 +1284,12 @@ namespace das {
         "heap_size_limit",              Type::tInt,
         "string_heap_size_limit",       Type::tInt,
         "gc",                           Type::tBool,
+        // documented in options.rst and /*option*/-tagged in ast.h, but were never registered —
+        // 'options gc_infer_collect = false' died with error 50100
+        "gc_infer_collect",             Type::tBool,
+        "gc_infer_collect_nodes",       Type::tInt,
+        "gc_infer_collect_pct",         Type::tInt,
+        "log_gc_infer_collect",         Type::tBool,
     // coverage
         "no_coverage",                  Type::tBool,
     // aot
