@@ -156,17 +156,23 @@ def private load_audio_16k_mono(path : string) : array<float> {
     return <- out
 }
 
-// Best-of-`reps` transcribe ms for one loaded model, from a warmed JIT + live jobque.
-def private measure_das(var m : AsrModel; samples : array<float>; reps : int; lang : string) : double {
+// Best-of-`reps` transcribe ms for one loaded model, from a warmed JIT + live jobque. `text`
+// receives the LAST rep's transcript: under fast-math a token flip is the thing that moves the
+// timing, so a run that reports only ms cannot tell a real speedup from a shorter decode.
+def private measure_das(var m : AsrModel; samples : array<float>; reps : int; lang : string;
+                        var text : string&) : double {
     var best = 1.0e30lf
     for (_rep in range(reps)) {
         var s <- create_session(m, lang)
+        var parts : array<string>
         let t0 = ref_time_ticks()
-        transcribe(m, s, samples) $(_seg) {
-            pass   // the timed boundary is the whole transcribe; segments are not consumed here
+        transcribe(m, s, samples) $(seg) {
+            parts |> push(seg.text)
         }
         let ms = double(get_time_usec(t0)) / 1000.0lf
         best = min(best, ms)
+        text = join(parts, "")
+        delete parts
         delete s
     }
     return best
@@ -179,7 +185,8 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
         ? load_asr_model(model_path)
         : load_asr_model(model_path, "{spec.root}{spec.das_mmproj}"))
     var warm <- load_audio_16k_mono("{asr_corpus_dir()}{spec.buckets[0]}")
-    measure_das(m, warm, 1, spec.lang)   // JIT compile + first-touch
+    var warm_text = ""
+    measure_das(m, warm, 1, spec.lang, warm_text)   // JIT compile + first-touch
     delete warm
     var run = BenchRun(engine = "das", backend = "cpu", flavor = "tuned",
         workload = asr_workload(spec), box = box_name(), threads = threads,
@@ -194,10 +201,12 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
     for (wav in spec.buckets) {
         var samples <- load_audio_16k_mono("{asr_corpus_dir()}{wav}")
         let audio_s = double(length(samples)) / double(AUDIO_SAMPLE_RATE)
-        let das_ms = measure_das(m, samples, reps, spec.lang)
-        run.tests |> insert("asr:{wav}", BenchTest(ms = das_ms, audio_s = audio_s))
+        var text = ""
+        let das_ms = measure_das(m, samples, reps, spec.lang, text)
+        run.tests |> insert("asr:{wav}", BenchTest(ms = das_ms, audio_s = audio_s, text = text))
         run.files |> emplace(file_identity("{asr_corpus_dir()}{wav}", "clip"))
         print("lcpp_bench --asr: {spec.display} {wav} {das_ms} ms ({audio_s} s audio)\n")
+        print("  text: {text}\n")
         delete samples
     }
     if (!empty(spec.libri_short)) {
@@ -212,7 +221,8 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
             for (wav in lib) {
                 var samples <- load_audio_16k_mono("{asr_corpus_dir()}{wav}")
                 lib_audio += double(length(samples)) / double(AUDIO_SAMPLE_RATE)
-                lib_ms += measure_das(m, samples, reps, spec.lang)
+                var ltext = ""
+                lib_ms += measure_das(m, samples, reps, spec.lang, ltext)
                 run.files |> emplace(file_identity("{asr_corpus_dir()}{wav}", "clip"))
                 delete samples
             }

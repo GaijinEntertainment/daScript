@@ -1543,6 +1543,10 @@ struct BenchTest {
     @optional stddev : double
     @optional ms : double
     @optional audio_s : double
+    // the ASR transcript. A duration alone cannot distinguish "faster" from "decoded fewer
+    // tokens", and under fast-math that is exactly the ambiguity — so the row carries the text
+    // the timing came from, and two rows can be diffed rather than trusted.
+    @optional text : string
 }
 
 //! One input file a run read, pinned by content hash. `sha256` comes from the `.sha` sidecar
