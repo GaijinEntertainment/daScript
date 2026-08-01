@@ -1,11 +1,11 @@
 options gen2
 require dastest/testing_boost public
 
-// heap_bytes_allocated is NOT the measurement here: element-reached frees don't decrement
-// it in child contexts (pre-existing accounting bug, reproduced on master with a daslib
-// compile_file+invoke_in_context harness - the memory IS released, heap_total_allocated
-// proves reuse). The banner's contract is "dropped elements get finalized", so the tests
-// count finalizer calls instead.
+// heap_bytes_allocated is NOT the measurement here: under dastest (a daslib-compiled child
+// context) an indexed `delete arr[i]` leaves the counter unchanged while a `for (v in arr)`
+// delete of the same elements decrements it; from the CLI both do. The memory is released
+// either way - heap_total_allocated shows the block being reused. Pre-existing, reproduced
+// on master. The banner's contract is "dropped elements get finalized", so count that.
 
 var g_finalized = 0
 
