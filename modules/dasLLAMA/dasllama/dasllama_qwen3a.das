@@ -7,14 +7,17 @@ options _function_length = 0   // model forward/serialize walks mirror the model
 require math
 require daslib/fio
 require strings
+require daslib/strings_boost
 require daslib/apply
 require daslib/archive
 require dasllama/dasllama_env
 require dasllama/dasllama_plane public   // PlaneF/PlaneI8 — the borrowed weight planes; re-exported for deleters
+require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — the shared ASR floor
 require dasllama/dasllama_math
 require dasllama/dasllama_gguf
 require dasllama/dasllama_audio
 require dasllama/dasllama_common   // apply_box_profile_runtime for the qwen3a-image identity
+require dasllama/dasllama_blocks   // embed_text_rows/eval_embd_ — the ASR turn drives the qwen3 decoder
 require dasllama/dasllama_image
 
 // Qwen3-ASR audio encoder (mtmd projector type `qwen3a`): 128-mel input processed in
@@ -376,7 +379,7 @@ def qwen3a_mel_window(m : WhisperMel; off : int64) : MelChunk {
 // conv2d k3 s2 p1 over one [W × H × C] block via im2col + gemm. Input rows [ih][iw][c]
 // (c fastest); output rows [oh][ow][c_out]. Weight flat [oc][ic][kh][kw] — the im2col column
 // order (ic, kh, kw) matches the file layout, no permute.
-def private conv2d_s2(var out : array<float>; var col : array<float>;
+def private conv2d_s2(@scratch var out : array<float>; @scratch var col : array<float>;
                       x : array<float>; blob : PlaneF; w_off, b_off : int64;
                       iw, ih, cin, cout : int64) {
     let ow = (iw - 1l) / 2l + 1l
@@ -408,18 +411,19 @@ def private conv2d_s2(var out : array<float>; var col : array<float>;
 
 //! Scratch for the qwen3a conv frontend (sized on first use, reused across windows/calls).
 struct Qwen3aConvState {
-    xin : array<float>    // chunk input [100·128] as [ih][iw][1]
+    @scratch xin : array<float>    // chunk input [100·128] as [ih][iw][1]
     col : array<float>
     y1 : array<float>
     y2 : array<float>
     y3 : array<float>
-    feat : array<float>   // [13 × 16·n_ch]
-    crow : array<float>   // conv_out rows for one chunk [13 × d_model]
+    @scratch feat : array<float>   // [13 × 16·n_ch]
+    @scratch crow : array<float>   // conv_out rows for one chunk [13 × d_model]
 }
 
 //! Encode one padded mel window (`qwen3a_mel_window` output) to soft tokens in ``s.out``:
 //! ``(n_len/100)·13`` rows × ``proj_dim``. Runs the conv2d frontend per 100-frame chunk,
 //! the shared transformer blocks over the window's positions, post-LN, and the MLP projector.
+[hot_path]
 def qwen3a_encode(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConvState; win : MelChunk) {
     let d = t.core.d_model
     let nm = t.core.n_mel
@@ -494,4 +498,192 @@ def qwen3a_encode_all(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConv
         off += QWEN3A_WINDOW
     }
     return total
+}
+
+//! One qwen3a/qwen3omni transcription stream: the decoder session + the chunked AuT tower scratch.
+struct Qwen3aAsrSession {
+    qctx : Session = Session()
+    qenc : EncoderState = EncoderState()
+    qcs : Qwen3aConvState = Qwen3aConvState()
+}
+
+//! Qwen3-ASR self-detects the language (``languages`` empty) and takes context biasing via the
+//! session's ``context``; Qwen3-Omni is a chat model driven as a transcription turn — no prompt.
+def qwen3a_asr_caps(omni : bool) : AsrCaps {
+    return <- AsrCaps(translate = false, timestamps = AsrTimestamps.none,
+                      streaming = false, prompt = !omni)
+}
+
+//! The facade's session arm: language validation (Qwen3-ASR only accepts "auto"), a fresh
+//! decoder session, and the tower's encoder scratch.
+def create_qwen3a_asr_session(dec : Model; t : Qwen3aTower; lang : string; omni : bool) : Qwen3aAsrSession {
+    if (!omni && lang != "auto") {
+        panic("dasLLAMA asr: Qwen3-ASR detects the language itself — create the session with lang=\"auto\"")
+    }
+    return <- Qwen3aAsrSession(qctx <- create_session_(dec), qenc <- make_encoder_state(t.core))
+}
+
+// The qwen3a transcription turn: chatml with the audio span in <|audio_start|>/<|audio_end|>,
+// the context text after it, greedy decode, and the model's `language {L}<asr_text>{text}`
+// response parsed into (detected_lang, text).
+def qwen3a_transcribe(dec : Model; t : Qwen3aTower; var s : Qwen3aAsrSession; context : string;
+                      samples : array<float> | #; blk : block<(seg : TranscribeSegment)>;
+                      var detected_lang : string&) : int {
+    let mel <- log_mel_qwen3a(samples, t.core.n_mel)
+    var rows : array<float>
+    let n_audio = qwen3a_encode_all(t, s.qenc, s.qcs, mel, rows)
+
+    let dim = dec.config.dim
+    let im_start = special_id(dec, "<|im_start|>")
+    let im_end = special_id(dec, "<|im_end|>")
+    var head : array<int64>
+    head |> push(im_start)
+    head |> push_from(encode_(dec, "user\n", false, false))
+    head |> push(special_id(dec, "<|audio_start|>"))
+    var tail : array<int64>
+    tail |> push(special_id(dec, "<|audio_end|>"))
+    if (!empty(context)) {
+        tail |> push_from(encode_(dec, context, false, false))
+    }
+    tail |> push(im_end)
+    tail |> push_from(encode_(dec, "\n", false, false))
+    tail |> push(im_start)
+    tail |> push_from(encode_(dec, "assistant\n", false, false))
+
+    let n_head = long_length(head)
+    let n_tail = long_length(tail)
+    let npos = n_head + n_audio + n_tail
+    var embd : array<float>
+    embd |> resize(int(npos * dim))
+    embed_text_rows(dec, head, embd, 0l)
+    for (i in range64(n_audio * dim)) {
+        embd[n_head * dim + i] = rows[i]
+    }
+    embed_text_rows(dec, tail, embd, n_head + n_audio)
+
+    s.qctx.n_past = 0l   // each transcribe is a fresh sequence; the KV rewinds to position 0
+    eval_embd_(dec, s.qctx, embd, npos)
+
+    let eot = special_id(dec, "<|endoftext|>")
+    let max_new = dec.config.seq_len - npos - 1l
+    var one : array<int64>
+    one |> resize(1)
+    var toks : array<int>
+    var plog_sum = 0.0lf
+    var raw : array<string>
+    for (_i in range64(max_new)) {
+        // greedy argmax + its logprob (logit − logsumexp) for the confidence signal
+        var best = 0
+        for (i in range(1, length(s.qctx.logits))) {
+            if (s.qctx.logits[i] > s.qctx.logits[best]) {
+                best = i
+            }
+        }
+        let mx = s.qctx.logits[best]
+        var lse = 0.0lf
+        for (v in s.qctx.logits) {
+            lse += double(exp(v - mx))
+        }
+        plog_sum += double(s.qctx.logits[best]) - (log(lse) + double(mx))
+        if (int64(best) == im_end || int64(best) == eot) {
+            break
+        }
+        toks |> push(best)
+        raw |> push(piece_(dec, int64(best)))
+        one[0] = int64(best)
+        eval_(dec, s.qctx, one)
+    }
+
+    // parse `language {L}<asr_text>{text}` (the marker may detokenize as text or be muted)
+    let full = join(raw, "")
+    var text = full
+    detected_lang = ""
+    let mark = find(full, "<asr_text>")
+    if (mark >= 0) {
+        let pre = slice(full, 0, mark)
+        if (starts_with(pre, "language ")) {
+            detected_lang = strip(slice(pre, length("language "), length(pre)))
+        }
+        text = slice(full, mark + length("<asr_text>"), length(full))
+    }
+    var seg = TranscribeSegment(t0 = 0l, t1 = long_length(samples) * 100l / AUDIO_SAMPLE_RATE, text = text)
+    seg.tokens := toks
+    if (!empty(toks)) {
+        seg.avg_logprob = float(plog_sum / double(length(toks) + 1))   // + the stop token's plog
+    }
+    blk |> invoke(seg)
+    return 1
+}
+
+// Qwen3-Omni-30B transcription: the SHARED qwen3a AuT tower encodes the clip; soft tokens splice
+// into a plain Qwen chatml turn, greedy-decoded until <|im_end|> (emitted into the ids — mtmd
+// convention). Token-for-token vs llama-mtmd-cli --temp 0 --jinja on the same Q8 thinker + bf16 mmproj.
+def qwen3omni_transcribe(dec : Model; t : Qwen3aTower; var s : Qwen3aAsrSession;
+                         samples : array<float> | #; blk : block<(seg : TranscribeSegment)>) : int {
+    let tp = ref_time_ticks()
+    let mel <- log_mel_qwen3a(samples, t.core.n_mel)
+    var arows : array<float>
+    let n_audio = qwen3a_encode_all(t, s.qenc, s.qcs, mel, arows)
+    asr_prof_add("q3o.encode", tp)
+
+    let dim = dec.config.dim
+    let im_start = special_id(dec, "<|im_start|>")
+    let im_end = special_id(dec, "<|im_end|>")   // = the EOG (151645)
+    var head : array<int64>
+    head |> push(im_start)
+    head |> push_from(encode_(dec, "user\n", false, false))
+    head |> push(special_id(dec, "<|audio_start|>"))
+    var tail : array<int64>
+    tail |> push(special_id(dec, "<|audio_end|>"))
+    tail |> push_from(encode_(dec, "Transcribe the audio.", false, false))
+    tail |> push(im_end)
+    tail |> push_from(encode_(dec, "\n", false, false))
+    tail |> push(im_start)
+    tail |> push_from(encode_(dec, "assistant\n", false, false))
+
+    let n_head = long_length(head)
+    let npos = n_head + n_audio + long_length(tail)
+    asr_ctx_guard(n_audio, npos, dec.config.seq_len)
+    var embd : array<float>
+    embd |> resize(int(npos * dim))
+    embed_text_rows(dec, head, embd, 0l)
+    for (i in range64(n_audio * dim)) {
+        embd[n_head * dim + i] = arows[i]
+    }
+    embed_text_rows(dec, tail, embd, n_head + n_audio)
+
+    s.qctx.n_past = 0l   // fresh sequence per transcribe
+    let td = ref_time_ticks()
+    eval_embd_(dec, s.qctx, embd, npos)
+
+    let eot = special_id(dec, "<|endoftext|>")
+    let max_new = dec.config.seq_len - npos - 1l
+    var one : array<int64>
+    one |> resize(1)
+    var toks : array<int>
+    var raw : array<string>
+    toks |> reserve(256)
+    raw |> reserve(256)
+    for (_i in range64(max_new)) {
+        var best = 0
+        for (i in range(1, length(s.qctx.logits))) {
+            if (s.qctx.logits[i] > s.qctx.logits[best]) {
+                best = i
+            }
+        }
+        toks |> push(best)
+        if (int64(best) == im_end || int64(best) == eot) {   // EOG: emitted into the ids, then stop
+            break
+        }
+        raw |> push(piece_(dec, int64(best)))
+        one[0] = int64(best)
+        eval_(dec, s.qctx, one)
+    }
+    asr_prof_add("q3o.decode", td)
+
+    var seg = TranscribeSegment(t0 = 0l, t1 = long_length(samples) * 100l / AUDIO_SAMPLE_RATE,
+        text = strip(join(raw, "")))
+    seg.tokens := toks
+    blk |> invoke(seg)
+    return 1
 }

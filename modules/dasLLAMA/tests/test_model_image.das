@@ -824,6 +824,7 @@ def test_whisper_image_roundtrip(t : T?) {
         t |> success(b.mapped, "warm load is image-backed")
         // every served model is image-backed now; the control differs by SINK, not by form —
         // it is minted into memory and never touches the canonical .dlim
+        to_log(LOG_INFO, "whisper image-roundtrip jfk eyeball: '{g.text}'\n")
         t |> success(g.mapped && !empty(g.text), "non-empty transcript from the in-memory mint")
         t |> success(g.text == a.text, "in-memory mint vs cold-built image transcript")
         t |> success(g.text == b.text, "in-memory mint vs mapped image transcript")
@@ -900,6 +901,7 @@ def test_parakeet_image_roundtrip(t : T?) {
         t |> success(b.mapped, "warm load is image-backed")
         // every served model is image-backed now; the control differs by SINK, not by form —
         // it is minted into memory and never touches the canonical .dlim
+        to_log(LOG_INFO, "parakeet image-roundtrip jfk eyeball: '{g.text}'\n")
         t |> success(g.mapped && !empty(g.text), "non-empty transcript from the in-memory mint")
         t |> success(g.text == a.text, "in-memory mint vs cold-built image transcript")
         t |> success(g.text == b.text, "in-memory mint vs mapped image transcript")

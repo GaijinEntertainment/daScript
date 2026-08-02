@@ -17,6 +17,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_par
 require dasllama/dasllama_gguf
 require dasllama/dasllama_convert
+require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — the shared ASR floor
 require dasllama/dasllama_audio
 require dasllama/dasllama_common   // apply_box_profile_runtime for the whisper-image identity
 require dasllama/dasllama_image
@@ -772,6 +773,7 @@ def private whisper_index(bytes : array<uint8> | #; n_bytes : int64; var st : Wh
 //! Whisper encoder over one 30 s mel window: the shared tower core (conv frontend + pos +
 //! pre-LN blocks) + ln_post. Output lands in ``s.xb``: ``n_ctx × d_model`` — the memory the
 //! decoder's cross-attention reads (via whisper_cross_kv).
+[hot_path]
 def whisper_encode(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     audio_encode_blocks(t, s, mel)
     layernorm_batch(s.xb, s.x, t.fblob, t.lnp_w_off, t.lnp_b_off, t.d_model, t.n_ctx, t.eps)
@@ -860,6 +862,7 @@ def make_decoder_state(w : WhisperModel) : DecoderState {
 //! Precompute the cross-attention memory for one encoded window (``enc_out`` =
 //! whisper_encode's ``s.xb``, ``n_ctx × d``): per layer K = W_k·enc (no bias, pre-scaled
 //! hs^-0.25), V = W_v·enc + b — whisper.cpp's build_graph_cross. Resets the sequence.
+[hot_path]
 def whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_out : array<float>) {
     let d = w.n_text_state
     let hh = w.n_text_head
@@ -1076,6 +1079,7 @@ def private dec_cross_attn(w : WhisperModel; var ds : DecoderState; l, n : int64
 //! Decode a batch of tokens at positions n_past..n_past+n-1 (prompt prefill and single-step
 //! generation share this path). Leaves next-token logits (for the LAST row, tied token
 //! embedding) in ``ds.logits`` and advances ``ds.n_past``.
+[hot_path]
 def whisper_decode_batch(w : WhisperModel; var ds : DecoderState; tokens : array<int> | #) {
     let n = long_length(tokens)
     let d = w.n_text_state
@@ -1173,17 +1177,6 @@ var private g_whisper_trace = false
 
 def set_whisper_trace(on : bool) {
     g_whisper_trace = on
-}
-
-//! One transcription segment: [t0, t1] centiseconds, text, raw token ids (whisper.cpp's
-//! result_all shape, timestamps+eot included), and mean per-token log-probability — a
-//! confidence signal, more negative = less certain.
-struct TranscribeSegment {
-    t0 : int64
-    t1 : int64
-    text : string
-    tokens : array<int>
-    avg_logprob : float = 0.0
 }
 
 // whisper.cpp's whisper_process_logits filter suite, in its exact order. ``n_sampled`` /
@@ -1704,4 +1697,35 @@ def whisper_lang_id(lang : string) : int {
         }
     }
     return -1
+}
+
+//! Whisper's capability sheet: its own language set, translation, segment timestamps.
+def whisper_asr_caps(w : WhisperModel) : AsrCaps {
+    var c = AsrCaps(translate = w.multilingual,
+                    timestamps = AsrTimestamps.segment,
+                    streaming = false,
+                    prompt = false)
+    if (w.multilingual) {
+        c.languages <- whisper_lang_list()
+        if (long_length(c.languages) > w.n_lang) {   // 99-lang models predate "yue"
+            c.languages |> resize(int(w.n_lang))
+        }
+    } else {
+        c.languages <- ["en"]
+    }
+    return <- c
+}
+
+//! The facade's transcribe arm: forward the shared options, transcribe, report the
+//! resolved language ("" until auto-detect ran).
+def whisper_asr_transcribe(w : WhisperModel; var s : WhisperSession; translate, no_timestamps : bool;
+                           samples : array<float> | #; blk : block<(seg : TranscribeSegment)>;
+                           var detected_lang : string&) : int {
+    s.translate = translate
+    s.no_timestamps = no_timestamps
+    let n = transcribe(w, s, samples, blk)
+    if (s.lang_id >= 0) {
+        detected_lang = whisper_lang_list()[s.lang_id]
+    }
+    return n
 }

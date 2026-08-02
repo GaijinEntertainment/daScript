@@ -7,13 +7,16 @@ options _function_length = 0   // model forward/serialize walks mirror the model
 require math
 require daslib/fio
 require strings
+require daslib/strings_boost
 require daslib/apply
 require daslib/archive
 require dasllama/dasllama_env
 require dasllama/dasllama_math
 require dasllama/dasllama_gguf
 require dasllama/dasllama_plane public   // PlaneF — the borrowed weight planes; re-exported so requirers can delete an encoder
+require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — the shared ASR floor
 require dasllama/dasllama_audio
+require dasllama/dasllama_blocks   // embed_text_rows/eval_embd_ — the ASR turn drives the Gemma-4 decoder
 require dasllama/dasllama_common   // apply_box_profile_runtime for the gemma4a-image identity
 require dasllama/dasllama_image
 
@@ -244,7 +247,7 @@ struct Gemma4aState {
     tmp : array<float>        // output-proj scratch [npos × proj_dim]
 }
 
-def private g4a_ensure(var a : array<float>; n : int64) {
+def private g4a_ensure(@scratch var a : array<float>; n : int64) {
     if (long_length(a) < n) {
         a |> reserve(int(n))
         a |> resize(int(n))
@@ -516,6 +519,7 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
 //! gemma4a log-mel for one ≤30 s chunk: semicausal left-pad (window/2) + right-pad to the PyTorch
 //! frame count, 512 Hann (320-front), magnitude spectrum, HTK mel dot, natural log(sum, floor
 //! 0.001). Frame-major ``[n_len × n_mel]``; ``n_len`` trimmed to the PyTorch frame count.
+[hot_path]
 def gemma4a_log_mel(enc : Gemma4aEncoder; samples : array<float> | #; off, len : int64; var st : Gemma4aState) {
     let n_mel = enc.n_mel
     let n_bins = enc.n_bins
@@ -677,6 +681,7 @@ def private g4a_ffn(enc : Gemma4aEncoder; var st : Gemma4aState; norm_off, up_of
 //! Encode ``st.mel`` (frame-major, one chunk) to soft tokens in ``st.out`` (``proj_dim`` wide);
 //! returns the token count = subsample(n_len). Subsample -> 12 Conformer blocks -> out proj ->
 //! RMSNorm -> mm input proj.
+[hot_path]
 def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
     let d = enc.d_model
     let ff = enc.n_ff
@@ -841,4 +846,110 @@ def gemma4a_encode_all(enc : Gemma4aEncoder; var st : Gemma4aState; samples : ar
         off += chunk
     }
     return total
+}
+
+//! One gemma4a transcription stream: the Gemma-4 decoder session + the Conformer encoder scratch.
+struct Gemma4aAsrSession {
+    qctx : Session = Session()
+    g4st : Gemma4aState = Gemma4aState()
+}
+
+//! Gemma-4 E-series audio: multimodal chat model; the ASR rail drives a greedy transcription
+//! turn. No timestamps; the model reasons then transcribes.
+def gemma4a_asr_caps() : AsrCaps {
+    var c = AsrCaps(translate = false, timestamps = AsrTimestamps.none,
+                    streaming = false, prompt = false)
+    c.languages <- ["en"]
+    return <- c
+}
+
+//! The facade's session arm: a fresh decoder session (no language conditioning).
+def create_gemma4a_asr_session(dec : Model) : Gemma4aAsrSession {
+    return <- Gemma4aAsrSession(qctx <- create_session_(dec))
+}
+
+// Gemma-4 E-series audio transcription: gemma4a Conformer encode + mm embedder, soft tokens spliced
+// into the gemma-4 chat template, greedy decode until `<turn|>`/`<eos>` (emitted into the ids). The
+// reasoning `<|channel>...<channel|>` prefix is stripped. Token-for-token vs llama-mtmd-cli --temp 0 --jinja.
+def gemma4a_transcribe(dec : Model; enc : Gemma4aEncoder; var s : Gemma4aAsrSession;
+                       samples : array<float> | #; blk : block<(seg : TranscribeSegment)>;
+                       var detected_lang : string&) : int {
+    var tp = ref_time_ticks()
+    var rows : array<float>
+    let n_audio = gemma4a_encode_all(enc, s.g4st, samples, rows)
+    asr_prof_add("g4a.encode", tp)
+
+    let dim = dec.config.dim
+    let nl = encode_(dec, "\n", false, false)
+    // no-think turn: a bare user turn (no system/`<|think|>`) yields a deterministic transcription
+    // — the reasoning channel is near-tie-brittle across float engines, so it is disabled here.
+    var head : array<int64>
+    head |> push(special_id(dec, "<bos>"))
+    head |> push(special_id(dec, "<|turn>"))
+    head |> push_from(encode_(dec, "user", false, false))
+    head |> push_from(nl)
+    head |> push(special_id(dec, "<|audio>"))
+    var tail : array<int64>
+    tail |> push(special_id(dec, "<audio|>"))
+    tail |> push_from(encode_(dec, "Transcribe this audio.", false, false))
+    tail |> push(special_id(dec, "<turn|>"))
+    tail |> push_from(nl)
+    tail |> push(special_id(dec, "<|turn>"))
+    tail |> push_from(encode_(dec, "model", false, false))
+    tail |> push_from(nl)
+
+    let n_head = long_length(head)
+    let npos = n_head + n_audio + long_length(tail)
+    asr_ctx_guard(n_audio, npos, dec.config.seq_len)
+    var embd : array<float>
+    embd |> resize(int(npos * dim))
+    embed_text_rows(dec, head, embd, 0l)
+    for (i in range64(n_audio * dim)) {
+        embd[n_head * dim + i] = rows[i]
+    }
+    embed_text_rows(dec, tail, embd, n_head + n_audio)
+
+    s.qctx.n_past = 0l   // fresh sequence per transcribe
+    tp = ref_time_ticks()
+    eval_embd_(dec, s.qctx, embd, npos)
+
+    let turn_end = special_id(dec, "<turn|>")
+    let eos = special_id(dec, "<eos>")
+    let max_new = dec.config.seq_len - npos - 1l
+    var one : array<int64>
+    one |> resize(1)
+    var toks : array<int>
+    var raw : array<string>
+    toks |> reserve(512)
+    raw |> reserve(512)
+    for (_i in range64(max_new)) {
+        var best = 0
+        for (i in range(1, length(s.qctx.logits))) {
+            if (s.qctx.logits[i] > s.qctx.logits[best]) {
+                best = i
+            }
+        }
+        toks |> push(best)
+        if (int64(best) == turn_end || int64(best) == eos) {   // EOG: emitted into the ids, then stop
+            break
+        }
+        raw |> push(piece_(dec, int64(best)))
+        one[0] = int64(best)
+        eval_(dec, s.qctx, one)
+    }
+    asr_prof_add("g4a.decode", tp)
+
+    // strip the reasoning channel: keep the text after the last `<channel|>` (the final transcription)
+    let full = join(raw, "")
+    var text = full
+    let mark = rfind(full, "<channel|>")
+    if (mark >= 0) {
+        text = slice(full, mark + length("<channel|>"), length(full))
+    }
+    var seg = TranscribeSegment(t0 = 0l, t1 = long_length(samples) * 100l / AUDIO_SAMPLE_RATE,
+        text = strip(text))
+    seg.tokens := toks
+    detected_lang = "en"
+    blk |> invoke(seg)
+    return 1
 }

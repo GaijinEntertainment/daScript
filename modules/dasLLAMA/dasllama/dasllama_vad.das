@@ -222,6 +222,7 @@ def private sv_sigmoid(x : float) : float {
 
 //! Advance one 512-sample chunk and return its speech probability, updating streaming state.
 //! `chunk` must hold exactly SV_CHUNK samples (16 kHz mono f32).
+[hot_path]
 def vad_chunk_prob(m : VadModel; var st : VadState; chunk : array<float> | #) : float {
     // 1. window = context ++ chunk, reflect-pad right 64 (left 0)
     for (i in range64(SV_CONTEXT)) { st.padded[i] = st.context[i] }

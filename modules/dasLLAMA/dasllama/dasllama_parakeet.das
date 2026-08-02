@@ -15,6 +15,7 @@ require dasllama/dasllama_env
 require dasllama/dasllama_math
 require dasllama/dasllama_gguf
 require dasllama/dasllama_plane public   // PlaneF/PlaneI8/PlaneI32/PlaneI64 — the borrowed weight planes
+require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — the shared ASR floor
 require dasllama/dasllama_audio
 require dasllama/dasllama_convert
 require dasllama/dasllama_par
@@ -356,20 +357,20 @@ struct ParakeetState {
     encp : array<float>
     joint : array<float>
     logits : array<float>
-    toks : array<ParakeetToken>
+    @scratch toks : array<ParakeetToken>
     pred : ParakeetPredState = ParakeetPredState()
 }
 
 // grow-only, reserve-exact (resize alone rounds the backing alloc up to pow2 — 2x waste
 // on the multi-MB encoder scratch)
-def private pk_ensure(var a : array<float>; n : int64) {
+def private pk_ensure(@scratch var a : array<float>; n : int64) {
     if (long_length(a) < n) {
         a |> reserve(int(n))
         a |> resize(int(n))
     }
 }
 
-def private pk_ensure(var a : array<int8>; n : int64) {
+def private pk_ensure(@scratch var a : array<int8>; n : int64) {
     if (long_length(a) < n) {
         a |> reserve(int(n))
         a |> resize(int(n))
@@ -396,7 +397,7 @@ def private pk_mm_rq(m : ParakeetModel; var y : array<float>; woff : int64; x : 
     pk_mm(m, y, woff, x, xq, xs, n, d, npos)
 }
 
-def private pk_requant(x : array<float>; n, npos : int64; var xq : array<int8>; var xs : array<float>) {
+def private pk_requant(x : array<float>; n, npos : int64; @scratch var xq : array<int8>; @scratch var xs : array<float>) {
     let need = npos * n
     if (long_length(xq) < need) {
         xq |> resize(int(need))
@@ -788,6 +789,7 @@ def stage_parakeet_model(path : string; q8 : bool = false) : ParakeetStaging {
 //! Parakeet's log-mel: preemphasis 0.97, zero center-pad n_fft/2, the file's STFT window, power
 //! spectra, mel dot, NATURAL log(sum + 2⁻²⁴), then per-feature mean/std normalization over the
 //! valid frames only (Bessel n−1, std + 1e-5), applied to all. FRAME-major ``[n_len][n_mel]``.
+[hot_path]
 def parakeet_log_mel(samples : array<float> | #; m : ParakeetModel; var st : ParakeetState) {
     let n_in = long_length(samples)
     pk_ensure(st.pre, n_in)
@@ -1082,6 +1084,7 @@ def private pk_bias_relu(var y : array<float>; blob : PlaneF; b_off, d, npos : i
 //! FastConformer encoder over the whole mel: conv subsampling, then 24 conformer blocks (macaron
 //! FFN, rel-pos attention, GLU+depthwise-conv+BN, post norm) — global attention only, panics past
 //! the oracle's 8192-frame local-attention switch. Reads ``st.mel``, leaves rows in ``st.x``.
+[hot_path]
 def parakeet_encode(m : ParakeetModel; var st : ParakeetState) : int64 {
     let d = m.n_state
     let nch = m.n_sub_ch
@@ -1186,7 +1189,7 @@ def parakeet_encode(m : ParakeetModel; var st : ParakeetState) : int64 {
             st.x[i] += 0.5 * st.xb[i]
         }
         asr_prof_add("pk.ffn.res", tf)
-        pk_scan("L{l}.ffn1", st.x, tt * d)
+        pk_scan("ffn1", l, st.x, tt * d)
         asr_prof_add("pk.ffn", tp)
 
         // rel-pos attention
@@ -1307,7 +1310,7 @@ def parakeet_encode(m : ParakeetModel; var st : ParakeetState) : int64 {
         tp = ref_time_ticks()
         pk_mm_rq(m, st.xb, lo.o_w, st.ao, st.xqi, st.xsi, d, d, tt)
         add_inplace_rows(st.x, st.xb, tt * d)
-        pk_scan("L{l}.attn", st.x, tt * d)
+        pk_scan("attn", l, st.x, tt * d)
         asr_prof_add("pk.attn_out", tp)
 
         // conv module
@@ -1406,7 +1409,7 @@ def parakeet_encode(m : ParakeetModel; var st : ParakeetState) : int64 {
         }
         pk_mm_rq(m, st.xb, lo.pw2_w, st.ao, st.xqi, st.xsi, d, d, tt)
         add_inplace_rows(st.x, st.xb, tt * d)
-        pk_scan("L{l}.conv", st.x, tt * d)
+        pk_scan("conv", l, st.x, tt * d)
         asr_prof_add("pk.conv_module", tp)
 
         // FFN2 (second macaron half)
@@ -1421,7 +1424,7 @@ def parakeet_encode(m : ParakeetModel; var st : ParakeetState) : int64 {
 
         // per-layer post norm
         layernorm_batch(st.x, st.x, m.blob, lo.nout_w, lo.nout_b, d, tt, m.eps)
-        pk_scan("L{l}.out", st.x, tt * d)
+        pk_scan("out", l, st.x, tt * d)
         asr_prof_add("pk.ffn", tp)
     }
 
@@ -1516,6 +1519,16 @@ def set_pk_nan_scan(on : bool) {
     g_pk_nan_scan = on
 }
 
+[cold_path]
+def private pk_scan(tag : string; l : int64; x : array<float>; n : int64) {
+    // layered spelling: the layer rides separately so the hot loop builds no string when off
+    if (!g_pk_nan_scan) {
+        return
+    }
+    pk_scan("L{l}.{tag}", x, n)
+}
+
+[cold_path]
 def private pk_scan(tag : string; x : array<float>; n : int64) {
     if (!g_pk_nan_scan) {
         return
@@ -1550,9 +1563,20 @@ def set_parakeet_trace(on : bool) {
     g_parakeet_trace = on
 }
 
+// the per-step TDT trace body (set_parakeet_trace) — opt-in debug leg, off the served path
+[cold_path]
+def private pk_trace_step(m : ParakeetModel; st : ParakeetState; t : int64; n_tok_logits, best, bdur : int; mx : float) {
+    print("  t={t} tok={best} durp=[")
+    for (i in range(int(m.n_durations))) {
+        print("{exp(st.logits[n_tok_logits + i] - mx)} ")
+    }
+    print("] -> {bdur}\n")
+}
+
 //! Greedy TDT decode over the encoder rows in ``st.x`` — whisper.cpp's parakeet_decode loop:
 //! joint softmax per frame, argmax token + duration, blank advances time, duration 0 caps at
 //! n_max_tokens/frame. Tokens land in ``st.toks``.
+[hot_path]
 def parakeet_tdt_decode(m : ParakeetModel; var st : ParakeetState; n_frames : int64) {
     st.toks |> clear()
     let d = m.n_state
@@ -1614,11 +1638,7 @@ def parakeet_tdt_decode(m : ParakeetModel; var st : ParakeetState; n_frames : in
         }
         var dur = m.durations[bdur]
         if (g_parakeet_trace) {
-            print("  t={t} tok={best} durp=[")
-            for (i in range(int(m.n_durations))) {
-                print("{exp(st.logits[n_tok_logits + i] - mx)} ")
-            }
-            print("] -> {bdur}\n")
+            pk_trace_step(m, st, t, n_tok_logits, best, bdur, mx)
         }
 
         if (best == m.blank_id) {
@@ -1675,4 +1695,61 @@ def parakeet_detokenize(m : ParakeetModel; toks : array<ParakeetToken> | #) : st
         idx++
     }
     return join(segs, "")
+}
+
+// v3 (25-lang) has an 8192-piece SPM vocab; v2 (English) 1024 — the multilingual threshold
+def pk_is_multilingual(m : ParakeetModel) : bool => m.n_vocab >= 8192l
+
+//! Parakeet's capability sheet: v2 English-only, v3 the 25 EU languages; segment timestamps.
+def parakeet_asr_caps(m : ParakeetModel) : AsrCaps {
+    var c = AsrCaps(translate = false, timestamps = AsrTimestamps.segment,
+                    streaming = false, prompt = false)
+    if (pk_is_multilingual(m)) {
+        c.languages <- ["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de",
+                        "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk",
+                        "sl", "es", "sv", "ru", "uk"]
+    } else {
+        c.languages <- ["en"]
+    }
+    return <- c
+}
+
+//! Session-create validation: parakeet has no language conditioning — the TDT decode
+//! transcribes whatever it hears; ``lang`` is checked against the model's set, then unused.
+def parakeet_check_lang(m : ParakeetModel; lang : string) {
+    if (lang != "auto" && !has_value(parakeet_asr_caps(m).languages, lang)) {
+        panic(pk_is_multilingual(m) ?
+            "dasLLAMA asr: '{lang}' is not one of this Parakeet model's 25 languages" :
+            "dasLLAMA asr: this Parakeet model is English-only")
+    }
+}
+
+//! The facade's transcribe arm: full-clip FastConformer encode + TDT greedy, one segment.
+def parakeet_transcribe(m : ParakeetModel; var st : ParakeetState; samples : array<float> | #;
+                        blk : block<(seg : TranscribeSegment)>; var detected_lang : string&) : int {
+    var tp = ref_time_ticks()
+    parakeet_log_mel(samples, m, st)
+    asr_prof_add("pk.mel", tp)
+    tp = ref_time_ticks()
+    let tt = parakeet_encode(m, st)
+    asr_prof_add("pk.encode_total", tp)
+    tp = ref_time_ticks()
+    parakeet_tdt_decode(m, st, tt)
+    asr_prof_add("pk.decode_total", tp)
+    var seg = TranscribeSegment(t0 = 0l, t1 = long_length(samples) * 100l / AUDIO_SAMPLE_RATE,
+        text = parakeet_detokenize(m, st.toks))
+    var plog_sum = 0.0lf
+    seg.tokens |> reserve(length(st.toks))
+    for (t in st.toks) {
+        seg.tokens |> push(t.id)
+        plog_sum += double(t.plog)
+    }
+    if (!empty(st.toks)) {
+        seg.avg_logprob = float(plog_sum / double(length(st.toks)))
+    }
+    if (!pk_is_multilingual(m)) {
+        detected_lang = "en"   // v3 transcribes without detecting/reporting a language
+    }
+    blk |> invoke(seg)
+    return 1
 }

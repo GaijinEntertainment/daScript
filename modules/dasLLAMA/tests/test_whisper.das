@@ -354,6 +354,7 @@ def test_parakeet_oracle(t : T?) {
             }
             // parakeet-cli -ng -ps (CPU, f32 self-convert): 33 tokens, these exact ends
             t |> equal(length(segs), 1)
+            to_log(LOG_INFO, "parakeet-v2 jfk eyeball: '{segs[0].text}'\n")
             t |> equal(length(segs[0].tokens), 33, "token count")
             t |> equal(segs[0].tokens[0], 123, "tok[0] '▁And'")
             t |> equal(segs[0].tokens[1], 96, "tok[1] '▁so'")
@@ -415,6 +416,7 @@ def test_parakeet_v3_oracle(t : T?) {
             // id-exact on jfk (durations too — gb1's 16/655 duration-only flips are the known
             // q8 divergence, ids/text exact there as well)
             t |> equal(length(segs), 1)
+            to_log(LOG_INFO, "parakeet-v3 jfk eyeball: '{segs[0].text}'\n")
             t |> equal(length(segs[0].tokens), 38, "token count")
             t |> equal(segs[0].tokens[0], 1976, "tok[0] '▁And'")
             t |> equal(segs[0].tokens[1], 547, "tok[1] '▁so'")
@@ -453,6 +455,7 @@ def test_whisper_transcribe_oracle(t : T?) {
             let want <- [50364, 400, 370, 452, 7177, 6280, 1029, 406, 437, 428, 1941, 393,
                          360, 337, 291, 11, 1029, 437, 291, 393, 360, 337, 428, 1941, 13, 50889]
             t |> equal(length(segs), 1)
+            to_log(LOG_INFO, "whisper-tiny jfk eyeball: '{segs[0].text}'\n")
             t |> equal(segs[0].t0, 0l)
             t |> equal(segs[0].t1, 1050l)
             t |> equal(length(segs[0].tokens), length(want))
@@ -535,6 +538,8 @@ def test_whisper_q8_gate(t : T?) {
                 fsegs |> push_clone(seg)
             }
             t |> equal(length(segs), length(fsegs), "segment count")
+            to_log(LOG_INFO, "whisper-tiny q8 jfk eyeball: '{segs[0].text}'\n")
+            to_log(LOG_INFO, "whisper-tiny f32 jfk eyeball: '{fsegs[0].text}'\n")
             var mismatches = 0
             var total = 0
             for (a, b in segs, fsegs) {
@@ -569,6 +574,7 @@ def private check_canary_clip(t : T?; m : AsrModel; wav : string; expected : arr
         segs |> push_clone(seg)
     }
     t |> equal(length(segs), 1, "{base_name(wav)}: one segment")
+    to_log(LOG_INFO, "canary {base_name(wav)} eyeball: '{segs[0].text}'\n")
     t |> equal(length(segs[0].tokens), length(expected), "{base_name(wav)}: token count")
     for (a, b in segs[0].tokens, expected) {
         t |> equal(a, b, "{base_name(wav)}: token id")
@@ -651,6 +657,7 @@ def test_gemma4a_audio_oracle(t : T?) {
                 segs |> push_clone(seg)
             }
             t |> equal(length(segs), 1, "one segment")
+            to_log(LOG_INFO, "gemma4a eyeball: '{segs[0].text}'\n")
             // frozen llama-mtmd-cli no-think greedy ids (first 40 tokens — the confident prefix
             // before the model's own ~0.6-logit near-tie at step 48). "The New York Times from
             // July 21st, 1969. This isn't just newsprint and ink. This is the moment when..."
@@ -686,6 +693,7 @@ def private check_q3omni_clip(t : T?; m : AsrModel; wav : string; expected : arr
         segs |> push_clone(seg)
     }
     t |> equal(length(segs), 1, "{base_name(wav)}: one segment")
+    to_log(LOG_INFO, "qwen3omni {base_name(wav)} eyeball: '{segs[0].text}'\n")
     t |> equal(length(segs[0].tokens), length(expected), "{base_name(wav)}: token count")
     for (a, b in segs[0].tokens, expected) {
         t |> equal(a, b, "{base_name(wav)}: token id")

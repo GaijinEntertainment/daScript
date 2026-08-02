@@ -27,8 +27,7 @@ criterion here.
 ## Tests
 
 **Run `modules/dasLLAMA/tests` before any PR.** Model and GPU suites go through the scoped
-runner `modules/dasLLAMA/tests/run.das`; invoking dastest directly on those suites is a defect,
-because the runner's environment is part of the suite's contract.
+runner `modules/dasLLAMA/tests/run.das`; invoking dastest directly on those suites is a defect.
 
 **Every test runs under `-jit`.** Never the interpreter, never AOT. A test invocation without
 `-jit` is a defect even if it passes.
@@ -50,7 +49,6 @@ bytes. "The model still runs" is not a test for a move.
 suspicious green, must be readable as text in the log, not only as an id or float difference.
 
 **A new GPU kernel ships with a small model in the kernel coverage suite** that dispatches it.
-A kernel no suite reaches is unreviewable.
 
 **A test suite loads models with `load_model_`, never the image rail.** Image-rail coverage
 belongs to the image suites alone. See `ARCHITECTURE.md` §2.1.
@@ -58,9 +56,8 @@ belongs to the image suites alone. See `ARCHITECTURE.md` §2.1.
 **No new benchmark harness is written.** Performance is measured by
 `modules/dasLLAMA/benchmarks/lcpp_bench.das` — one cell directly, or a whole board through
 `performance/gen_bench_records.das`. A new timing harness, a one-off measurement script, or a
-revived rig is a defect: a number from a second rig cannot be compared against the stored
-records, and those records are the only baseline. `PROFILE.md` carries the two commands; the
-rig's shape is `ARCHITECTURE.md` §2.5.
+revived rig is a defect. `PROFILE.md` carries the two commands; the rig's shape is
+`ARCHITECTURE.md` §2.5.
 
 ---
 
@@ -76,13 +73,11 @@ the same change.** A file without its records is a defect.
 
 **A consumer requires the facade, never an engine internal.** Tests, harnesses, benchmarks and
 tools require `dasllama/dasllama` or `dasllama/dasllama_transformer`, which re-export the engine;
-a direct require of an internal module from outside `dasllama/` is a defect. Engine internals may
-require each other. When a split moves a symbol, the facade keeps consumers working — adding
-requires across the tree means the re-export is missing, so fix that instead.
+a direct require of an internal module from outside `dasllama/` is a defect, and so is a split
+that adds requires across the tree instead of fixing the facade re-export. Engine internals may
+require each other.
 
 **A new module file is registered in `.das_module` and `CMakeLists.txt` in the same change.**
-A file missing from either resolves for a direct compile and fails as `missing prerequisite` for
-every requirer, so a partial registration reads as working until something else requires it.
 
 ### Engine
 
@@ -174,13 +169,36 @@ is a defect.
 
 ### Audio and ASR
 
-- `dasllama_audio.das` — the shared audio tower.
+- `dasllama_asr_types.das` — the shared ASR floor: `AsrCaps`/`AsrTimestamps`/`TranscribeSegment`.
+- `dasllama_audio.das` — the shared audio tower, the mel/FFT machinery, the encoder block loop.
 - `dasllama_audio_io.das` — audio decode to PCM. The only file that talks to the audio library.
-- `dasllama_asr.das` — the ASR facade and capability declaration.
+- `dasllama_asr.das` — the ASR facade: the sniffing loaders, the model/session unions, one-call
+  dispatch arms. Family names never appear in its public API.
 - `dasllama_whisper.das`, `dasllama_parakeet.das`, `dasllama_canary.das`, `dasllama_qwen3a.das`,
-  `dasllama_gemma4a.das` — one file per model family: its weights, its decode loop, its quirks.
-  Shared tower pieces move up into `dasllama_audio.das`, never sideways between families.
+  `dasllama_gemma4a.das` — one file per model family: its weights, its encoder, its session
+  bundle, its caps sheet, its transcribe driver, its quirks. Shared tower pieces move up into
+  `dasllama_audio.das`, never sideways between families.
 - `dasllama_vad.das` — voice-activity detection weights and stream state.
+
+**A verb arm in `dasllama_asr.das` is one forwarding call.** A new family touches the facade
+only at the union field, the finalize line, the `AsrKind` value, and the one-line arms; a
+prompt, a decode loop, a caps value, or a language rule in the facade is a defect.
+
+**A GEMM in a family file goes through a `*_mm` wrapper or `mm_blob_b`.** A hand-written
+dot-product loop beside them is a defect.
+
+**Every `*_encode` and `*_log_mel` carries `[hot_path]` and lints at zero.** Reused buffers
+take `@scratch`; debug and profiling legs take `[cold_path]`. A nolint where either annotation
+fits is a defect.
+
+**A mel frontend builds on the FFT-plan machinery in `dasllama_audio.das`.** A hand-rolled DFT
+in a family file is a defect.
+
+**Every family has a token-for-token oracle cell, and every oracle cell logs its transcript
+as an `eyeball:` line.** An id-only comparison is a defect.
+
+**An option `caps()` does not declare panics at the call site.** Silently ignoring one is a
+defect.
 
 ### Generated
 
@@ -246,21 +264,16 @@ ignores a field. A twin that shifts the other's fields to different slots is a d
 value as a parameter is a defect; so is a kargs field the fields beside it already determine.
 
 **Nothing dispatches a kernel except its `enc_*` builder.** A hand-rolled bind list anywhere
-else — a race harness, a benchmark, a probe — is a defect: it duplicates the builder and desyncs
-silently when the family's arguments change, because the slots still exist and the types still
-compile.
+else — a race harness, a benchmark, a probe — is a defect.
 
 **A cache keyed by a host address carries the span and the form in its key.** A hit must cover
 the request, and different upload forms live in separate tables.
 
-**A predicate answering "can this run" must not also answer "is this ready".** A caller that
-runs before setup finishes gets a permanent no, and the feature silently never runs.
+**A predicate answering "can this run" must not also answer "is this ready".**
 
-**Peak memory wins ties against the cost of loading a model.** Overshooting RAM on a big model
-kills the process or swaps the box; a slower load costs seconds once per process and costs the
-warm path nothing. So a load-time change that trades footprint for speed ships the measured pair
-— peak footprint and wall-clock — and an explicit call, not an assumption that faster is better.
-See `ARCHITECTURE.md` §3.
+**Peak memory wins ties against the cost of loading a model.** A load-time change that trades
+footprint for speed ships the measured pair — peak footprint and wall-clock — and an explicit
+call. See `ARCHITECTURE.md` §3.
 
 **A complexity or length warning is a prompt to look, not an order to split.** An irreducible
 shape takes a suppression with a one-line reason. Splitting where no seam exists — helpers that
@@ -273,6 +286,6 @@ shapes that cannot reduce, not for code written oversized.
 **Platform backends implement narrow registered contracts.** Platform-specific code in a
 platform-neutral file is a defect.
 
-**Every program root declares the same `options stack` budget.** A test, harness, benchmark, or
-tool that picks its own number — larger or smaller — is a defect, and so is a new root that omits
-the declaration. See `ARCHITECTURE.md` §2.7.
+**Every program root declares `options stack = 524288`.** A test, harness, benchmark, or tool
+that picks its own number — larger or smaller — is a defect, and so is a new root that omits the
+declaration. See `ARCHITECTURE.md` §2.7.

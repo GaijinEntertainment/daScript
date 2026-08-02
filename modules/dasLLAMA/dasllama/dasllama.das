@@ -10,7 +10,7 @@ options _comment_hygiene = true
 //!
 //! Run model programs with ``-jit`` (interpreted inference is far too slow), wrap the
 //! generation in ``with_job_que()`` from ``daslib/jobque_boost`` so the kernels can thread, and
-//! declare ``options stack = 65536`` — the forward chain outgrows the 16K default on arm64, and
+//! declare ``options stack = 524288`` — the forward chain outgrows the 16K default, and
 //! a required module cannot raise the program's stack for you. See ``examples/dasLLAMA/run.das``
 //! and ``chat.das`` for the canonical shape.
 

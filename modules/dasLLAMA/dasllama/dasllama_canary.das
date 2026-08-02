@@ -16,7 +16,9 @@ require dasllama/dasllama_env
 require dasllama/dasllama_math
 require dasllama/dasllama_gguf
 require dasllama/dasllama_plane public   // PlaneF — the borrowed weight planes; re-exported so requirers can delete an encoder
+require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — the shared ASR floor
 require dasllama/dasllama_audio
+require dasllama/dasllama_blocks   // embed_text_rows/eval_embd_ — the ASR turn drives the Qwen3 decoder
 require dasllama/dasllama_common   // apply_box_profile_runtime for the canary-image identity
 require dasllama/dasllama_image
 
@@ -239,7 +241,7 @@ struct CanaryState {
     out : array<float>        // projected soft tokens [tt × proj_dim]
 }
 
-def private cn_ensure(var a : array<float>; n : int64) {
+def private cn_ensure(@scratch var a : array<float>; n : int64) {
     if (long_length(a) < n) {
         a |> reserve(int(n))
         a |> resize(int(n))
@@ -447,6 +449,7 @@ def stage_canary_encoder(path : string) : CanaryStaging {
 //! Canary's log-mel: preemphasis 0.97, zero center-pad n_fft/2, STFT window, power spectra, mel dot,
 //! log(sum + 2⁻²⁴), then per-feature mean/std norm over valid frames (Bessel n−1, std + 1e-5);
 //! frames past ``valid`` are zeroed (NeMo's seq-len mask). FRAME-major ``[n_len × n_mel]``.
+[hot_path]
 def canary_log_mel(m : CanaryEncoder; samples : array<float> | #; var st : CanaryState) {
     let n_in = long_length(samples)
     cn_ensure(st.pre, n_in)
@@ -628,6 +631,7 @@ def private cn_conv_pw(m : CanaryEncoder; var out : array<float>; x : array<floa
 
 //! FastConformer-32 encode over ``st.mel`` (frame-major) + the perception.proj projector.
 //! Leaves the projected soft tokens (``proj_dim`` wide) in ``st.out``; returns the frame count.
+[hot_path]
 def canary_encode(m : CanaryEncoder; var st : CanaryState) : int64 {
     let d = m.d_model
     let ff = m.n_ff
@@ -812,4 +816,106 @@ def canary_encode(m : CanaryEncoder; var st : CanaryState) : int64 {
     mm_blob_b(st.out, m.blob, m.proj_w, st.x, d, m.proj_dim, tt)
     add_bias_rows(st.out, m.blob, m.proj_b, m.proj_dim, tt)
     return tt
+}
+
+//! One canary transcription stream: the Qwen3 decoder session + the FastConformer encoder scratch.
+struct CanaryAsrSession {
+    qctx : Session = Session()
+    cst : CanaryState = CanaryState()
+}
+
+//! Canary-Qwen's capability sheet: English, no timestamps, whole-clip.
+def canary_asr_caps() : AsrCaps {
+    var c = AsrCaps(translate = false, timestamps = AsrTimestamps.none,
+                    streaming = false, prompt = false)
+    c.languages <- ["en"]
+    return <- c
+}
+
+//! The facade's session arm: English-only validation, then a fresh decoder session.
+def create_canary_asr_session(dec : Model; lang : string) : CanaryAsrSession {
+    if (lang != "auto" && lang != "en") {
+        panic("dasLLAMA asr: this Canary-Qwen model is English-only — create the session with lang=\"en\" or \"auto\"")
+    }
+    return <- CanaryAsrSession(qctx <- create_session_(dec))
+}
+
+// Canary-Qwen transcription: FastConformer-32 encode + projector, the SALM/Qwen prompt with the
+// audio soft tokens spliced at the placeholder, greedy decode over the Qwen3-1.7B decoder until
+// the text EOS (151645, which is included in the emitted ids — the NeMo generate convention).
+def canary_transcribe(dec : Model; enc : CanaryEncoder; var s : CanaryAsrSession;
+                      samples : array<float> | #; blk : block<(seg : TranscribeSegment)>;
+                      var detected_lang : string&) : int {
+    let tp = ref_time_ticks()
+    canary_log_mel(enc, samples, s.cst)
+    let n_audio = canary_encode(enc, s.cst)   // s.cst.out holds [n_audio × proj_dim] soft tokens
+    asr_prof_add("cn.encode", tp)
+
+    let dim = dec.config.dim
+    let im_start = special_id(dec, "<|im_start|>")
+    let im_end = special_id(dec, "<|im_end|>")   // = the text EOS (151645)
+    // SALM "qwen" prompt: <|im_start|>user\nTranscribe the following: <AUDIO><|im_end|>\n<|im_start|>assistant\n
+    var head : array<int64>
+    head |> push(im_start)
+    head |> push_from(encode_(dec, "user\n", false, false))
+    head |> push_from(encode_(dec, "Transcribe the following: ", false, false))
+    var tail : array<int64>
+    tail |> push(im_end)
+    tail |> push_from(encode_(dec, "\n", false, false))
+    tail |> push(im_start)
+    tail |> push_from(encode_(dec, "assistant\n", false, false))
+
+    let n_head = long_length(head)
+    let npos = n_head + n_audio + long_length(tail)
+    asr_ctx_guard(n_audio, npos, dec.config.seq_len)
+    var embd : array<float>
+    embd |> resize(int(npos * dim))
+    embed_text_rows(dec, head, embd, 0l)
+    for (i in range64(n_audio * dim)) {
+        embd[n_head * dim + i] = s.cst.out[i]
+    }
+    embed_text_rows(dec, tail, embd, n_head + n_audio)
+
+    s.qctx.n_past = 0l   // fresh sequence per transcribe
+    eval_embd_(dec, s.qctx, embd, npos)
+
+    let max_new = dec.config.seq_len - npos - 1l
+    var one : array<int64>
+    one |> resize(1)
+    var toks : array<int>
+    var raw : array<string>
+    toks |> reserve(128)   // typical transcription length; grows if a clip runs longer
+    raw |> reserve(128)
+    var plog_sum = 0.0lf
+    for (_i in range64(max_new)) {
+        var best = 0
+        for (i in range(1, length(s.qctx.logits))) {
+            if (s.qctx.logits[i] > s.qctx.logits[best]) {
+                best = i
+            }
+        }
+        let mx = s.qctx.logits[best]
+        var lse = 0.0lf
+        for (v in s.qctx.logits) {
+            lse += double(exp(v - mx))
+        }
+        plog_sum += double(s.qctx.logits[best]) - (log(lse) + double(mx))
+        toks |> push(best)
+        if (int64(best) == im_end) {   // EOS: emitted into the ids, then stop
+            break
+        }
+        raw |> push(piece_(dec, int64(best)))
+        one[0] = int64(best)
+        eval_(dec, s.qctx, one)
+    }
+
+    var seg = TranscribeSegment(t0 = 0l, t1 = long_length(samples) * 100l / AUDIO_SAMPLE_RATE,
+        text = strip(join(raw, "")))
+    seg.tokens := toks
+    if (!empty(toks)) {
+        seg.avg_logprob = float(plog_sum / double(length(toks)))
+    }
+    detected_lang = "en"
+    blk |> invoke(seg)
+    return 1
 }

@@ -363,7 +363,8 @@ They are **audio-encoder tower loaders + forwards**, not decoder architectures �
 
 | file | lines | what |
 |---|---|---|
-| `dasllama_asr.das` | 770 | facade **and 4 of 6 pipelines in-file** (qwen3a/qwen3omni/canary/gemma4a transcribes = 290 lines ≈ 38% of the "facade") — whisper/parakeet keep theirs in their own modules. `AsrModel` = fat struct carrying all six backends by value; dispatch = if/elif on private `AsrKind` in FOUR places (caps/create_session/transcribe/feed-drain-flush). Model sniff: vocab<32768→parakeet, 51864–51999→whisper; mmproj tag/projector_type routes |
+| `dasllama_asr_types.das` | ~45 | the shared ASR floor: `AsrCaps`/`AsrTimestamps`/`TranscribeSegment` + `asr_ctx_guard` — what family files and the facade both see (arms-home move, 2026-08) |
+| `dasllama_asr.das` | ~330 | facade ONLY since the arms-home move: sniffing loaders + model/session unions + one-call dispatch arms (if/elif on private `AsrKind` in caps/create_session/transcribe/feed-drain-flush). Every pipeline lives in its family file. Model sniff: vocab<32768→parakeet, 51864–51999→whisper; mmproj tag/projector_type routes |
 | `dasllama_audio.das` | 1,565 | **the hub (20+ dependents)**: mel flavors ×2, FFT plan, `AudioTower`, shared row kernels, tower Q8 rail, loader, `EncoderState`, `enc_attention`, `encoder_blocks` (1422–1491 — the ONE shared transformer loop), 3 projector tails |
 | `dasllama_whisper.das` | 1,520 | whisper-proper over ggml-*.bin: decoder Q8 rail, cross-KV, self/cross attn, batch decode, greedy driver + whisper.cpp logit-filter suite, window driver, lang table |
 | `dasllama_parakeet.das` | 1,641 | Parakeet-TDT: FastConformer + LSTM predictor + TDT decode; frame-major mel; 4 hand-vectorized conv-subsample kernels; 24-block conformer loop |
@@ -383,7 +384,7 @@ They are **audio-encoder tower loaders + forwards**, not decoder architectures �
 - glm4moe: dense-lead, `exp_probs_b` sniff, NextN block + layout ×5.
 - phi3: LongRoPE synthesis 4174–4215. llama: the defaults ARE llama; only arch-name string literal in common is `resolve_arch(t,"llama")` L1641 (llama2.c path). mistral3: live chat template is NOT in its arch file (`mistral_v7_tekken_template` in chat.das:81–90; arch-file template reachable only when GGUF lacks `tokenizer.chat_template`).
 
-**ASR side: NO registry, NO interface, NO dispatch table** (zero `function<`/`variant` hits across all 6 files). Fat struct + if-chains in 4 places; image-tag registration is the only `[init]`; the only real shared contract is the `AudioTower`+`EncoderState`+`encoder_blocks` data shape (whisper + qwen3a use it; parakeet/canary/gemma4a/vad share only leaf kernels).
+**ASR side: family behavior lives in family files, the facade routes** (the arms-home move; CODEREVIEW §Audio carries the rules). Still no registry/interface — the union carrier + one-line if/elif arms in 4 verbs are the deliberate shape (a fn-pointer `AsrDesc` needs type erasure the union already provides for free); image-tag registration is the only `[init]`; the shared contracts are `dasllama_asr_types` (caps/segment) and the `AudioTower`+`EncoderState`+`encoder_blocks` data shape (whisper + qwen3a use it; parakeet/canary/gemma4a/vad share only leaf kernels).
 
 ### Cross-family duplication clusters
 

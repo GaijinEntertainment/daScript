@@ -93,6 +93,7 @@ def gelu_tanh_lut(var x : array<float> | #; size : int64) {
 // Built once, on first batch call, main thread — before any dispatch captures the pointer.
 var private g_gelu_lut : array<float>
 
+[cold_path]
 def private gelu_lut_ensure() {
     if (!empty(g_gelu_lut)) {
         return
@@ -479,6 +480,7 @@ def log_mel_whisper(samples : array<float> | #; plan : WhisperMelPlan; filters :
     log_mel_whisper_(samples, plan, unsafe(addr<float const?>(filters[0])), n_mel, padded, m)
 }
 
+[hot_path]
 def private log_mel_whisper_(samples : array<float> | #; plan : WhisperMelPlan; filters : float const?; n_mel : int64;
                              var padded : array<float>; var m : WhisperMel) {
     let n_in = long_length(samples)
@@ -1216,12 +1218,12 @@ struct EncoderState {
     kk : array<float>    // k token-major [T × d]
     vv : array<float>    // v token-major [T × d]
     hp : array<float>    // per-head packs q,kT,v,out: 4 × [T × d]
-    att : array<float>   // per-slot blocked scores [get_dispatch_slot_bound() × ATTN_ENC_QB × T]
+    @scratch att : array<float>   // per-slot blocked scores [get_dispatch_slot_bound() × ATTN_ENC_QB × T]
     h : array<float>     // ffn hidden [T × ff]
     pooled : array<float>// [T/2 × d]
-    ph : array<float>    // projector hidden [rows × mm1_out] (ultravox/voxtral)
+    @scratch ph : array<float>    // projector hidden [rows × mm1_out] (ultravox/voxtral)
     pg : array<float>    // ultravox swiglu output [rows × mm1_out/2]
-    out : array<float>   // projected soft tokens [tokens_per_chunk × proj_dim]
+    @scratch out : array<float>   // projected soft tokens [tokens_per_chunk × proj_dim]
     xqi : array<int8>    // q8 requant image [T × max(3d, ff)] (empty on fp32 towers)
     xsi : array<float>   // per-32-block scales for xqi
 }
@@ -1358,6 +1360,7 @@ def set_audio_encode_ref_dir(dir : string) {
     g_audio_ref_dir = dir
 }
 
+[cold_path]
 def private diff_stage(name : string; x : array<float>; n : int64) {
     if (empty(g_audio_ref_dir)) {
         return
@@ -1398,6 +1401,7 @@ def set_asr_prof(on : bool) {
 }
 
 //! Accumulate ``get_time_usec(t0)`` under ``name`` (no-op unless set_asr_prof(true)).
+[cold_path]
 def asr_prof_add(name : string; t0 : int64) {
     if (!g_asr_prof_on) {
         return
@@ -1597,6 +1601,7 @@ def private rms_rows_blob_at(var x : array<float>; wp : float const?; dim, rows 
 
 //! Runs the Whisper encoder + projector tail over one 30 s mel chunk; soft tokens land in ``s.out``.
 //! Stacking floors rows — ragged tail positions are dropped, not zero-padded (ggml build_stack view math).
+[hot_path]
 def audio_encode(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     audio_encode_blocks(t, s, mel)
     let tt = t.n_ctx

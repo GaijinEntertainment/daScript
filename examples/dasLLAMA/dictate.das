@@ -1,5 +1,5 @@
 options gen2
-options stack = 65536
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options fast_math = true   // ggml-parity FP laxity (non-bit-exact, ~+10%)
 options persistent_heap
 
