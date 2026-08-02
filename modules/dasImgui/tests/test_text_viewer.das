@@ -1081,7 +1081,13 @@ def test_text_viewer_edit_preview_and_watch(t : T?) { // nolint:STYLE038 — one
         let entered = post_command(app, "text_viewer_edit", JV((on = true)))
         t |> success(entered?["ok"] ?? false, "edit mode enters")
 
-        // markdown editing is side-by-side: editor pane + live preview
+        // live preview is the md editing default (E5.5); this scenario pins
+        // the SPLIT surface, so select it explicitly
+        let split = post_command(app, "text_viewer_command",
+            JV((id = "view.surface_split")))
+        t |> success(split?["ok"] ?? false, "split surface selects")
+
+        // markdown split editing is side-by-side: editor pane + live preview
         var surface = wait_for_render(app, EDIT_WIDGET, 15.0f)
         t |> success(surface != null, "editor pane renders")
         let preview_live = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
