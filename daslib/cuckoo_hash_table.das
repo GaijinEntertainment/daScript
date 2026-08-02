@@ -20,7 +20,7 @@ require strings public
 
 def public hash0(data) {
     //! this hash function converts and workhorse key to a 64 bit hash
-    let k64 = uint64(data)
+    let k64 = uint64(data)   // nolint:PERF020,LINT019 — generic over key types; cast is identity only for uint64 keys
     return k64 <= 2ul ? 0x9e3779b97f4a7c15ul : k64
 }
 

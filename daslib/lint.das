@@ -789,7 +789,7 @@ def public stale_nolint_collect(fname, source : string; disabled_codes, enabled_
         if (!self_suppressed) {
             issues |> reserve(length(issues) + length(stale_codes))
             for (code in stale_codes) {
-                let msg = "LINT019: stale nolint - {code} suppresses nothing on this line; remove it, or add LINT019 to the list if the rule fires only in downstream compiles (macro-template lines, option-gated rules)"
+                let msg = "LINT019: stale nolint - {code} suppresses nothing on this line; remove it, or add LINT019 to the list if the rule fires only in downstream compiles (generic bodies - instantiations elsewhere fire at the generic's line - macro-template lines, option-gated rules)"
                 issues |> push(LintIssue(code = "LINT019", message = msg, file = fname,
                     line = line_no, column = 0, last_line = line_no, last_column = 0))
                 count++

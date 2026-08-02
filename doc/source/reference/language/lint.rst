@@ -647,10 +647,17 @@ moving. The lint runner records every suppression the passes consume and reports
 leftovers after all passes complete.
 
 Two escape hatches for directives that are live only outside the current compile:
-add ``LINT019`` to the code list (``// nolint:LINT004,LINT019``) when the rule fires
-only in downstream compiles — macro-template lines whose diagnostics surface at
-expansion sites, or option-gated rules — and run-disabled codes are skipped
-automatically, since their rules never had the chance to prove the directive.
+add ``LINT019`` to the code list (``// nolint:PERF020,LINT019``) when the rule fires
+only in downstream compiles — **generic bodies** (instantiations elsewhere fire at the
+generic's own line: ``uint64(data)`` in a generic hash is a PERF020 hit only for the
+``uint64`` instantiation), macro-template lines whose diagnostics surface at expansion
+sites, or option-gated rules — and run-disabled codes are skipped automatically, since
+their rules never had the chance to prove the directive.
+
+Never *remove* a reported directive from a generic body on the scan's word alone —
+the per-file scan cannot see which instantiations elsewhere consume it. Tag it with
+``LINT019`` instead; removal is only safe where the author knows no other compile
+reaches the line.
 
 .. code-block:: das
 
