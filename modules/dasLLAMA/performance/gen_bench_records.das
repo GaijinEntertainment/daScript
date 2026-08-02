@@ -911,15 +911,17 @@ def main : int {
         set_env_variable("DAS_TUNE_MANIFEST", "")
     }
     // STEP ZERO, automatic: GC image siblings that can never load again (BROKEN/version-stale)
-    // across the dirs this sweep reads — a box once carried 274 GB of them. OTHER stays.
+    // across the dirs this sweep reads — a box once carried 274 GB of them. OTHER STAYS, and
+    // keep_other is what makes that true: the cells measure through the bench EXE (its own baked
+    // winners), so this orchestrator cannot recompute their identities and must not judge them.
     // --oracle skips it: the artifact set is frozen for the whole check.
     if (!cfg.oracle) {
-        let gc_llm = dlim_clean(models_dir(), true)
+        let gc_llm = dlim_clean(models_dir(), true, keep_other = true)
         if (gc_llm.removed > 0) {
             to_log(LOG_INFO, "gen_bench_records: GC freed {gc_llm.freed >> 20l} MB — {gc_llm.removed} stale image(s) in {models_dir()}\n")
         }
         if (cfg.workload == "asr" || cfg.workload == "all") {
-            let gc_w = dlim_clean(whisper_models_dir(), true)
+            let gc_w = dlim_clean(whisper_models_dir(), true, keep_other = true)
             if (gc_w.removed > 0) {
                 to_log(LOG_INFO, "gen_bench_records: GC freed {gc_w.freed >> 20l} MB — {gc_w.removed} stale image(s) in {whisper_models_dir()}\n")
             }
