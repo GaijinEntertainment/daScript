@@ -69,11 +69,17 @@ def private print_mint_diff(oldText, newText : string) {
     }
     var newK = newDoc?["kernels"]
     var flips = 0
+    var fresh = 0
     if (newK != null && newK.value is _object) {
         for (k, v in keys(unsafe(newK.value as _object)), values(unsafe(newK.value as _object))) {
             let newS = v ?? ""
             let oldS = oldDoc?["kernels"]?[k] ?? ""
-            if (empty(oldS) || empty(newS) || oldS == newS) {
+            if (empty(oldS)) {
+                // a stale/absent previous doc contributes no baseline — count, don't compare
+                fresh++
+                continue
+            }
+            if (empty(newS) || oldS == newS) {
                 continue
             }
             flips++
@@ -108,7 +114,8 @@ def private print_mint_diff(oldText, newText : string) {
     } elif (flips > 0) {
         print("dasllama_tuner: DIFF (no race tables in the previous sidecar — margins start next mint)\n")
     }
-    print("dasllama_tuner: DIFF {flips} winner change(s); uniform shift = box state, scattered past-floor flips = a noisy mint\n")
+    let freshTxt = fresh > 0 ? ", {fresh} entry(ies) with no previous baseline" : ""
+    print("dasllama_tuner: DIFF {flips} winner change(s){freshTxt}; uniform shift = box state, scattered past-floor flips = a noisy mint\n")
     delete ratios
     delete_json(oldDoc)
     delete_json(newDoc)
