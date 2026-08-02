@@ -148,7 +148,7 @@ configurations still in active development. Measured rows are annotated, not del
 
 ## Reproducing
 
-`modules/dasLLAMA/performance/BRINGUP.md` is the box checklist: build, models, reference
+`modules/dasLLAMA/BRINGUP.md` is the box checklist: build, models, reference
 engines (scripted, pinned commits, locked venvs), corpus fetch with manifest verification,
 pre-bake, sweep. The sweep writes a per-box record store after every cell; the site renders
 from the merged stores. Every tool narrates its progress on stdout as it runs.

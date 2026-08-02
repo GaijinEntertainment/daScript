@@ -330,6 +330,16 @@ why writing one is a review defect.
 an untuned invocation re-execs into a full retune rather than measuring — so re-mint the box
 manifest and check its winners against the stored rows' `tune` stamps before trusting a delta.
 
+**The retune re-exec bites scaffolding, and the pin for it is checked in.** Any bare `daslang`
+run that requires the engine — a probe, a one-off script, a REPL experiment — re-execs into a
+full retune when no manifest is armed. `performance/last_known_good_sidecar.json` exists for
+exactly that: a frozen copy of a complete, noise-gated mint, tracked in git (the `*.tune.json`
+ignore rule deliberately does not match it). Point `DAS_TUNE_MANIFEST` at it and the framework
+never retunes; on a different box the identity mismatch just serves fallbacks. That is the whole
+contract — it suppresses the re-exec, it does not tune the box, and a number measured under it
+is not a benchmark. Benches and the rig keep minting their own; refresh the copy when a
+paranoid re-mint moves the crowns.
+
 ### 2.6 Capability questions and readiness questions are different questions
 
 A predicate that mixes them cannot be reused. `prefill_decline` answers "can metal serve this
