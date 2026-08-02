@@ -77,8 +77,8 @@ DASLLAMA_BOX=<box> bin/daslang modules/dasLLAMA/performance/gen_bench_records.da
 - `-o <substring>` narrows to one model.
 - FAIL past 5% below the stored mean, WARN past 3% (`--oracle-fail` / `--oracle-warn`). Gains
   report, and a gain past the fail bar is flagged suspicious — verify it.
-- A FAILED cell automatically re-runs solo after a settle and *that* verdict stands: a
-  board-tail cell reads low on a hot chip.
+- A FAILED cell automatically re-runs solo after a settle (default 180 s — thermal recovery
+  takes ~3 minutes) and *that* verdict stands: a board-tail cell reads low on a hot chip.
 - Rebuild the bench exe before trusting a delta after any `lcpp_bench.das` change — the rig
   refuses a stale one rather than measuring it.
 - Exit is nonzero on any FAIL.
@@ -101,6 +101,12 @@ DASLLAMA_BOX=<box> bin/daslang modules/dasLLAMA/performance/gen_bench_records.da
   every other row in the store.
 - `--settle <seconds>` (default 12) idles between passes; a dead child's multi-GB map reclaims
   asynchronously and short cells otherwise bench into that churn.
+- `--das-settle <seconds>` (default 180) idles before every das cell — a different mechanism
+  than `--settle`. das tuned kernels run near the package power ceiling; on a heat-soaked box
+  they under-read with a CLEAN cv (gpt-oss tuned pp512 read −13.6% mid-board; 180 s of idle
+  restored it; llama.cpp refs never moved). The cv retry cannot catch a stable-low cell — only
+  cool-slot entry can. Refs get no cool slot on purpose: they are insensitive, and skipping it
+  saves hours.
 
 Then merge the per-box stores into the file the site renders:
 

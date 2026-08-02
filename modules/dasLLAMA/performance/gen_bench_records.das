@@ -41,6 +41,10 @@ struct Args {
     @clarg_doc = "Seconds to idle between passes (default: 12) — a dead child's 10-20GB map reclaims ASYNC after exit, and short cells bench right into that churn (12B pp ±33 at 0s settle, ±3 at 12s)"
     settle : int = 12
 
+    @clarg_name = "das-settle"
+    @clarg_doc = "Seconds to idle before each das cell (default: 180) — das tuned kernels run near the package power ceiling, and a heat-soaked box under-reads them with a CLEAN cv (gpt-oss tuned pp512 read −13.6% mid-board, 180s of idle restored it; llama.cpp refs were insensitive all along). The cv retry cannot catch a stable-low cell; only cool-slot entry can"
+    das_settle : int = 180
+
     @clarg_name = "ref-clean"
     @clarg_doc = "clean-cpu llama-bench binary (default: env LLAMA_BENCH_CLEAN)"
     ref_clean : string
@@ -89,8 +93,8 @@ struct Args {
     @clarg_doc = "Oracle: FAIL when a cell lands this far below its stored mean, percent (default: 5)"
     oracle_fail : float = 5.0
 
-    @clarg_doc = "Oracle: seconds to idle before the automatic solo re-run of a FAILED cell, whose verdict then stands (default: 60; 0 disables) — board-tail cells under-read on a hot chip (−6.5%..−34% observed), a solo re-run after settle reads true"
-    oracle_retry_settle : int = 60
+    @clarg_doc = "Oracle: seconds to idle before the automatic solo re-run of a FAILED cell, whose verdict then stands (default: 180; 0 disables) — board-tail cells under-read on a hot chip (−6.5%..−34% observed; thermal recovery takes ~3 min), a solo re-run after settle reads true"
+    oracle_retry_settle : int = 180
 
     @clarg_name = "oracle-allow-crossgen"
     @clarg_doc = "Oracle: compare across sidecar generations anyway (default: a tune_sha mismatch is INCOMPARABLE — the stored mean belongs to different winners — and fails the run)"
@@ -271,6 +275,13 @@ def private stamp_note(var models : array<BenchModel>; gguf, note : string) {
 def private settle(cfg : Args) {
     if (cfg.settle > 0) {
         sleep(uint(cfg.settle * 1000))
+    }
+}
+
+// cool-slot entry for das cells: thermal recovery, not map-reclaim churn — see --das-settle
+def private settle_das(cfg : Args) {
+    if (cfg.das_settle > 0) {
+        sleep(uint(cfg.das_settle * 1000))
     }
 }
 
@@ -1041,19 +1052,19 @@ def main : int {
         // state (27B: das 110.7 soaked vs 138.1 quiet — a phantom 0.91 board red). Refs still
         // run independently of das-cell failures.
         if (legMetal) {
-            settle(cfg)
+            settle_das(cfg)
             das_cell(file, path, "metal", exe, false, cfg, threads, cellPath, ent.note, store, models, failed)
             settle(cfg)
             ref_pass(file, path, refStock, "stock", 99, false, cfg, threads, hw, box, date, ent.note, store, models, failed)
         }
         if (legNeon) {
-            settle(cfg)
+            settle_das(cfg)
             das_cell(file, path, "cpu", exe, false, cfg, threads, cellPath, ent.note, store, models, failed)
             settle(cfg)
             ref_pass(file, path, refClean, "clean-cpu", 0, false, cfg, threads, hw, box, date, ent.note, store, models, failed)
         }
         if (legAmx) {
-            settle(cfg)
+            settle_das(cfg)
             das_cell(file, path, "cpu", exe, true, cfg, threads, cellPath, ent.note, store, models, failed)
             settle(cfg)
             ref_pass(file, path, refStock, "stock", 0, true, cfg, threads, hw, box, date, ent.note, store, models, failed)
@@ -1075,7 +1086,7 @@ def main : int {
                 to_log(LOG_INFO, "gen_bench_records: SKIP {spec.display} — not in --asr-tier {cfg.asr_tier}\n")
                 continue
             }
-            settle(cfg)
+            settle_das(cfg)
             asr_das_cell(spec, cfg, threads, cellPath, store, exe, models, failed)
             for (rf in spec.refs) {
                 if (!key_exists(toolVersions, rf.tool)) {

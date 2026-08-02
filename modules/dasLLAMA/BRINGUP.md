@@ -252,8 +252,12 @@ bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- --workload all
 
 - Thread policy is automatic: `min(16, physical performance cores)`, both engines, pinned on
   x86. Intel hybrid boxes fail loudly until P/E pinning exists — do not work around the panic.
-- One model process at a time, das cell and its reference adjacent, 12 s settle between passes —
-  the driver owns all of it. Wall-clock: hours; run under a keep-awake and off-hours.
+- One model process at a time, das cell and its reference adjacent, 12 s settle between passes,
+  180 s cool slot (`--das-settle`) before every das cell — the driver owns all of it. das tuned
+  kernels run near the package power ceiling and under-read with a clean cv on a heat-soaked
+  box; the references are insensitive. Wall-clock: hours; run under a keep-awake and off-hours.
+- On a laptop, sleep the display first (`pmset displaysleepnow` on macOS): a lit screen with an
+  animated wallpaper is a standing WindowServer tax on CPU and GPU alike.
 - The store (`performance/records/<box>.json`) persists after every cell — a crash costs at
   most the in-flight cell. Re-runs upsert in place.
 
@@ -277,7 +281,8 @@ fail bar as "suspicious — verify"). Exit is nonzero on any FAIL.
 - Default is stop-at-first-FAIL (fail fast mid-refactor); `--oracle-keep-going` runs the full
   board. `-o substr` narrows to one model; ASR legs are excluded (their das cells are CPU-path).
 - A FAIL auto-triggers ONE solo re-run of that cell after `--oracle-retry-settle` seconds
-  (default 60; 0 disables), and the RETRY verdict stands — the board shows both attempts. This
+  (default 180 — thermal recovery takes ~3 minutes; 0 disables), and the RETRY verdict stands —
+  the board shows both attempts. This
   is the tail-cell discipline (below) as tool behavior; a FAIL that survives its solo retry is
   a real regression.
 - The tune gate applies unchanged: a manifest older than the binary fails every cell — re-mint
