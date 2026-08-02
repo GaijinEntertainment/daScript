@@ -275,6 +275,17 @@ pin, wscale, tune manifest) differs from the serving rig's, so a suite on the ra
 multi-GB images the rig cannot use and purges the flavors the rig depends on. Image-rail coverage
 belongs to the image suites alone.
 
+**An image is judged only where its identity can be recomputed — the LANE rule.** An identity's
+(quant, tag) pair is its lane, and lanes coexist by design: a bake proves dead only its OWN lane's
+siblings, plus BROKEN and version-stale images anywhere. Everything else is `FOREIGN` — kept, and
+counted in the log. Two contexts produce lanes this process cannot reproduce: a GPU flavor (a blob
+bake selects its own backend and winners, so the string differs even where the tag matches:
+`portable|q8 mr4` against a planar `arm64-gen|q8 mr8`), and a family tag whose module is not loaded
+(the tag registry is filled by each family's `[init]`, so a process that never required whisper has
+no way to know a whisper image is current). A process that cannot recompute an identity has no
+standing to call it dead — the orchestrator of a sweep least of all, since its cells measure through
+an exe carrying its own baked winners.
+
 ### 2.2 Kernel SHAPE is compile-time; only DATA is runtime
 
 The test is one question: *for a given compiled kernel, can this value change between dispatches?*

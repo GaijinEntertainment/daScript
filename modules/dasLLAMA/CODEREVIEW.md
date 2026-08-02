@@ -53,6 +53,12 @@ suspicious green, must be readable as text in the log, not only as an id or floa
 **A test suite loads models with `load_model_`, never the image rail.** Image-rail coverage
 belongs to the image suites alone. See `ARCHITECTURE.md` §2.1.
 
+**A measured number proves its kernel provenance, in whatever world it ran.** The bench gate has
+one arm per world: a standalone exe checks the sidecar the release shipped beside it, a
+`DAS_TUNE_MANIFEST` run checks that file, a plain script checks that every `[tune]` row stamps a
+manifest winner. A rig invocation that no arm covers is a defect — it will refuse, or worse,
+measure on fallback kernels.
+
 **No new benchmark harness is written.** Performance is measured by
 `modules/dasLLAMA/benchmarks/lcpp_bench.das` — one cell directly, or a whole board through
 `performance/gen_bench_records.das`. A new timing harness, a one-off measurement script, or a
@@ -254,6 +260,11 @@ and a mint that is slower in exchange for a lower peak is correct. See `ARCHITEC
 **A `.dlim` is box- and config-specific, not a portable format.** `image_identity` names the box
 profile, the knobs, and the flavor a file was baked for, and a mismatch declines loudly. A path
 that reinterprets a mismatched image, or widens an identity so that more files match, is a defect.
+
+**A bake reaps only its own lane.** An identity's (quant, tag) pair is its lane; a save may drop
+that lane's dead siblings plus BROKEN/version-stale images in any lane, and nothing else. Code
+that reaps an image whose identity it cannot recompute — another flavor's, another family's, or
+any image seen from a sweep orchestrator — is a defect. See `ARCHITECTURE.md` §2.1.
 
 **An image carries only what its flavor uses.** A plane the target platform or config never reads
 is not written — the mint decides that, not the load. A flavor takes its own file through

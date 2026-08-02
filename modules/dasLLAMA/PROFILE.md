@@ -47,14 +47,21 @@ bin/daslang utils/daspkg/main.das -- release --root modules/dasLLAMA/benchmarks 
 ```
 
 `daspkg release` tunes any incomplete scope, rebuilds so the exe bakes the winners, and ships the
-sidecar beside it. A missing exe — or one older than the bench source — is a hard stop with the
-build line printed; the rig never rebuilds silently, because that would put minutes of hidden work
-inside a measurement run.
+sidecar beside it — which is also the exe's provenance: the tune gate checks that shipped sidecar,
+because `tune_status()` is empty by design in a standalone exe (the winners are compiled in, so the
+policy rail never runs). A missing exe — or one older than ANY dasLLAMA source it bakes — is a hard
+stop with the build line printed; the rig never rebuilds silently, because that would put minutes of
+hidden work inside a measurement run. Measured: `--paranoid` 886 s from cold, `--quick` 85 s.
 
-**Do NOT set `DAS_TUNE_MANIFEST`.** The exe carries its own winners, and the rig actively clears an
-inherited value. Pointing it at a shared box manifest re-opens exactly what the exe replaced: the
-manifest is older than a freshly built exe, the staleness rule drops every kernel to fallback, and
-the cell measures nothing real.
+**Do NOT set `DAS_TUNE_MANIFEST` for these rigs.** The exe carries its own winners, and the rig
+actively clears an inherited value. Pointing it at a shared box manifest re-opens exactly what the
+exe replaced: the manifest is older than a freshly built exe, the staleness rule drops every kernel
+to fallback, and the cell measures nothing real. It also pins the ORCHESTRATOR to winners its cells
+do not use, so the two disagree about every `.dlim` identity.
+
+**The converter is the opposite case** — `BRINGUP.md` §0 exports the manifest precisely so a
+pre-bake lands on the same winners the exe carries. Export it for the bake, leave it out of the
+sweep.
 
 ## Rig 2 — the oracle (the published board)
 
@@ -88,7 +95,8 @@ DASLLAMA_BOX=<box> bin/daslang modules/dasLLAMA/performance/gen_bench_records.da
 ```
 
 - Reference binaries also come from `LLAMA_BENCH_CLEAN` / `LLAMA_BENCH_STOCK`.
-- `--legs cpu|metal|all`, `-w llm|asr|all`, `-o <substring>` to narrow.
+- `--legs` takes a comma list of `cpu` (= neon + amx) / `neon` / `amx` / `metal`; there is no
+  `all`. The full Apple board is `--legs cpu,metal`. `-w llm|asr|all`, `-o <substring>` to narrow.
 - `-p 512 -n 128 -r 5` are the recorded shapes. Changing them makes the row incomparable to
   every other row in the store.
 - `--settle <seconds>` (default 12) idles between passes; a dead child's multi-GB map reclaims

@@ -18,6 +18,10 @@ The checklist a fresh box (rented or owned) follows to produce the full record b
 ASR — with receipts complete enough to publish. Every step is scripted; if a step needs
 laptop-local knowledge, that is a bug in this file (the zen2 pilot is the enforcement run).
 
+**This file is validated by execution, not by reading.** Every claim below either was run on a
+box or is marked as untested — a step that turns out to be wrong during a bring-up is fixed here
+in that session, from the transcript. The M1 run of 2026-08-02 is the most recent such pass.
+
 The published methodology lives in `modules/dasLLAMA/METHODOLOGY.md`; this file is the *doing*
 side. One rule from it matters here: **a das number never ships without its same-session
 reference pair**, so the reference engines are not optional.
@@ -41,10 +45,16 @@ The tuner is the detector, so the human never has to be. For a box with existing
    `~/.tune-history/<box>/` (failures too, marked). **Review the DIFF**: uniform time shift =
    box state; scattered past-floor flips = one of the mints was noisy; same-direction twin
    flips = an estimator change.
+   Measured on the M1 (2026-08-02): 886 s total — 72 s build, 732 s paranoid tune, 73 s rebuild.
 3. **Pre-bake images** (section 4), then **run the oracle set — LLM and audio — plus one big
    known-good model on CPU** (sections 5's oracle mode). Human + AI review of the board;
    anything out of the ordinary = stop and discuss. A FAIL after a re-mint is either a real
    regression or a generation change — the crossgen gate names which.
+
+   **Any dasLLAMA source edit between here and the sweep invalidates the exe** — it bakes both
+   the sources and the tune winners, so the rig refuses a stale one and prints the rebuild line.
+   Re-release with `--quick` (inherits the complete sidecar, ~85 s) and carry on; the paranoid
+   mint is not repeated for a code edit.
 4. **New box only:** the same big model vs llama.cpp (section 3 references) — when the
    absolutes have no history, the RATIO is the known quantity.
 
@@ -68,7 +78,13 @@ export DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/$DASLLAMA_BOX.tune.json
 
 `DAS_TUNE_MANIFEST` is the **one-tune-per-box** rule: every rig process (cells, converter
 pre-bakes) stamps winners from this single manifest, so their `.dlim` image identities agree
-and a pre-baked image serves every consumer. Without it each script mints its own sidecar and
+and a pre-baked image serves every consumer.
+
+**Scope, and it matters: export it for the CONVERTER, never for the board rigs.** The converter
+must bake under the same winners the exe carries, so it needs the manifest. The board rigs
+(`gen_bench_records`) measure through the released exe, which carries its own baked winners and
+actively clears an inherited value — see `PROFILE.md`. Setting it there pins the ORCHESTRATOR to
+different winners than its cells use; the two disagree about every image identity. Without it each script mints its own sidecar and
 near-tie winners flip between mints — observed to fork the identity (`q51 mr4` vs `mr8`),
 which makes every cell silently re-bake its own duplicate images. The orchestrator sets the
 env itself when unset, but the converter runs in step 4 need it exported in the shell.
@@ -175,17 +191,23 @@ memory than an in-load conversion), and every das cell then maps instead of conv
 removes the cold-map variance the tripwire otherwise fights. Bake AFTER the first tuned run
 exists (image identity is box- and knob-specific; the converter applies the box profile itself):
 
+**Bake the CATALOG, not the directory.** `for m in <models-dir>/*.gguf` bakes every file
+present — on a working box that is the whole model zoo (81 files / 860 GB of images here on
+2026-08-02, against a catalog of 8), and tokenizer fixtures (`ggml-vocab-*.gguf`) report as
+bake failures because they are not models. List the catalog models explicitly, or filter.
+
 ```sh
-# GC is AUTOMATIC: every image save sweeps its source's version-stale siblings, and
-# gen_bench_records GCs the models dirs at session start (one box carried 748 GB of stale
-# identities; another 274 GB). The manual form remains for ad-hoc checks — and ALWAYS check
-# space before a big bake: a 22 GB write once died mid-file on the ceiling
+# GC is AUTOMATIC: a save sweeps its own lane's dead siblings (and BROKEN/version-stale in any
+# lane); images from ANOTHER bake context — a GPU flavor, a family tag this process does not
+# register — are FOREIGN and kept, because their identities cannot be recomputed here. The
+# manual form remains for ad-hoc checks — and ALWAYS check space before a big bake: a 22 GB
+# write once died mid-file on the ceiling
 bin/daslang -jit utils/dasllama-convert/main.das -- -m <models-dir> --clean --apply
 df -h <models-dir>
 
 # smoke ONE small and ONE big model end-to-end before committing to the batch — the two
 # failure size-classes are different (a tiny model never exercises the >2 GiB plane paths)
-for m in <models-dir>/*.gguf; do
+for m in <the catalog models>; do
     bin/daslang -jit utils/dasllama-convert/main.das -- -m "$m"           # planar (CPU cells)
 done
 # Apple boxes additionally: -f metal for the gpu cells (some configs legitimately have no
@@ -268,14 +290,11 @@ fail bar as "suspicious — verify"). Exit is nonzero on any FAIL.
   different winners — and fails the run by name; `--oracle-allow-crossgen` forces the compare,
   legacy rows (no `tune_sha`) warn. After a deliberate re-mint, re-record the affected rows
   instead of arguing with the decline.
-- ⚠ If a rig model FAILs a cell with "cell did not measure" and its `.dlim` is missing, the
-  image was purged by a foreign-identity mint's GC pass: `dlim_identity` folds `cpu.backend`
-  and the box knobs, and any rail load under a different pin set mints its own flavor, then
-  removes every foreign-identity sibling as dead (the frozen bench child refuses to re-mint,
-  by design). Test suites no longer ride the image rail (CODEREVIEW rule 20), which removes
-  the routine trigger; the recovery stands for any other cause: re-mint with a minimal
-  unfrozen run per model (`bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das --
-  -m <gguf> --ngl 99 -p 16 -n 4 -r 1`), then re-run the cells with `-o <substr>`.
+- ⚠ A missing `.dlim` under a "cell did not measure" FAIL is now a real failure, not the
+  routine cross-identity reaping this note used to describe: a bake proves staleness only inside
+  its own (quant, tag) lane, and images it cannot recompute are kept as FOREIGN. If one does go
+  missing, re-bake it (`bin/daslang -jit utils/dasllama-convert/main.das -- -m <gguf>`) and
+  re-run the cells with `-o <substr>`.
 - **A verdict on a long board's tail cells is not evidence — re-run the cell solo.** Three
   times observed on the m1 (2026-07-30): the last cell of an 8-cell keep-going sweep under-read
   −6.5% pp (solo re-run: dead-on the store); the last model of the hours-long Jul-28 rig
