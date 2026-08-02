@@ -7,20 +7,47 @@ require imgui public
 require imgui/imgui_playwright public
 require daslib/json public
 require daslib/json_boost public
+require daslib/fio public
 require daslib/strings_boost
 
-let EDIT_FEATURE = "modules/dasImgui/examples/features/text_edit.das"
-let EDIT_TARGET = "EDIT_DOCK/EDIT_WIN/EDIT_CONTENT/editor"
-let EDIT_PROBE = "EDIT_DOCK/EDIT_WIN/EDIT_PROBE"
+// The editor smokes drive examples/text in edit mode - the viewer IS the
+// editor app since E5 (the standalone features demo folded into it).
+let EDIT_FEATURE = "examples/text/main.das"
+let EDIT_TARGET = "DOCK_ROOT/g_document_windows[1]/DOCUMENT_CONTENT/EDITOR_PANE/editor"
+
+// keep line 0 starting "The" and six lines total - the assertions count on both
+let SAMPLE = ("The text editor arc, now with syntax. // E4\n"
+    + "\n"
+    + "def greet(name : string) : int \{\n"
+    + "\treturn print(\"héllo — 你好 \{name\}\") // 0x12AF2A 0x80FF8040\n"
+    + "\}\n")
+
+def private open_edit_fixture(t : T?; d : ImguiApp; label_ : string;
+                              var temp_dir_out : string&) : bool {
+    var temp_error = ""
+    let temp_dir = create_temp_directory("das_text_edit_{label_}", temp_error)
+    t |> success(empty(temp_error) && !empty(temp_dir), "temp fixture dir created")
+    return false if (!empty(temp_error) || empty(temp_dir))
+    temp_dir_out = temp_dir
+    let fixture = path_join(temp_dir, "sample.das")
+    t |> success(fwrite(fixture, SAMPLE), "sample fixture is written")
+    let opened = post_command(d, "text_viewer_open", JV((path = fixture)))
+    t |> success(opened != null, "fixture opens in the viewer")
+    let entered = post_command(d, "text_viewer_edit", JV((on = true)))
+    t |> success(entered != null, "edit mode entered")
+    var initial = wait_for_render(d, EDIT_TARGET, 15.0f)
+    t |> success(initial != null, "editor surface renders")
+    return initial != null
+}
 
 [test]
 def test_text_edit_keystrokes_reach_buffer(t : T?) {
     let no_modules : array<string>
 
     with_imgui_app(EDIT_FEATURE, no_modules, "", "") $(d) {
+        var temp_dir = ""
+        return if (!open_edit_fixture(t, d, "keys", temp_dir))
         var initial = wait_for_render(d, EDIT_TARGET, 15.0f)
-        t |> success(initial != null, "editor surface renders")
-        if (initial == null) return
         t |> equal(widget_payload_field(initial, EDIT_TARGET, "line_count") ?? 0, 6,
             "sample buffer loads six lines")
         t |> success(!(widget_payload_field(initial, EDIT_TARGET, "dirty") ?? true),
@@ -43,8 +70,8 @@ def test_text_edit_keystrokes_reach_buffer(t : T?) {
         t |> success(typed != null, "editor accepts synthesized text")
         t |> success(wait_for_key_idle(d, 6.0f), "typing timeline drains")
         var after_type = wait_until_sec(d, 10.0f) $(var snap) {
-            let probe = widget_payload_field(snap, EDIT_PROBE, "value") ?? ""
-            return ends_with(probe, "abc")
+            let line = find_widget(snap, EDIT_TARGET)?["payload"]?["lines"]?[5] ?? ""
+            return line == "abc"
         }
         t |> success(after_type != null, "typed text lands at the buffer tail")
         if (after_type != null) {
@@ -63,10 +90,11 @@ def test_text_edit_keystrokes_reach_buffer(t : T?) {
         t |> success(wait_for_int_value(d, EDIT_TARGET, "line_count", 6, 300),
             "Backspace at column zero joins the lines back")
         var final_snap = wait_until_sec(d, 5.0f) $(var snap) {
-            let probe = widget_payload_field(snap, EDIT_PROBE, "value") ?? ""
-            return ends_with(probe, "abc")
+            let line = find_widget(snap, EDIT_TARGET)?["payload"]?["lines"]?[5] ?? ""
+            return line == "abc"
         }
         t |> success(final_snap != null, "the join preserves the typed text")
+        rmdir_rec_result(temp_dir)
     }
 }
 
@@ -74,9 +102,9 @@ def test_text_edit_keystrokes_reach_buffer(t : T?) {
 def test_text_edit_numpad_and_overtype(t : T?) {
     let no_modules : array<string>
     with_imgui_app(EDIT_FEATURE, no_modules, "", "") $(d) {
+        var temp_dir = ""
+        return if (!open_edit_fixture(t, d, "numpad", temp_dir))
         var initial = wait_for_render(d, EDIT_TARGET, 15.0f)
-        t |> success(initial != null, "editor surface renders")
-        if (initial == null) return
         click(d, EDIT_TARGET)
         t |> success(wait_for_mouse_idle(d), "focus click timeline drains")
         t |> success(wait_for_bool_value(d, EDIT_TARGET, "focused", true, 300),
@@ -132,6 +160,7 @@ def test_text_edit_numpad_and_overtype(t : T?) {
         t |> success(wait_for_key_idle(d, 6.0f), "Ctrl+Shift+Down drains")
         t |> success(wait_for_int_value(d, EDIT_TARGET, "cursor_line", 1, 300),
             "Ctrl+Shift+Down extends the selection down a line")
+        rmdir_rec_result(temp_dir)
     }
 }
 
@@ -139,9 +168,8 @@ def test_text_edit_numpad_and_overtype(t : T?) {
 def test_text_edit_find_replace(t : T?) {
     let no_modules : array<string>
     with_imgui_app(EDIT_FEATURE, no_modules, "", "") $(d) {
-        var initial = wait_for_render(d, EDIT_TARGET, 15.0f)
-        t |> success(initial != null, "editor surface renders")
-        if (initial == null) return
+        var temp_dir = ""
+        return if (!open_edit_fixture(t, d, "findrep", temp_dir))
         click(d, EDIT_TARGET)
         t |> success(wait_for_mouse_idle(d), "focus click timeline drains")
         t |> success(wait_for_bool_value(d, EDIT_TARGET, "focused", true, 300),
@@ -205,6 +233,7 @@ def test_text_edit_find_replace(t : T?) {
         t |> success(undone != null, "one undo reverts the whole replace-all")
 
         smoke_goto_flow(t, d)
+        rmdir_rec_result(temp_dir)
     }
 }
 

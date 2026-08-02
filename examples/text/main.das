@@ -1156,11 +1156,7 @@ def private draw_document_editor(var doc : TextViewerDocument) {
 }
 
 def private draw_document(var doc : TextViewerDocument) {
-    if (doc.editing) {
-        if (doc.find.open) {
-            text_find_bar(doc.id, doc.find)
-        }
-    } else {
+    if (!doc.editing) {
         draw_document_find(doc)
     }
     // The footer's icon button stands taller than a text frame; reserving only
@@ -1169,9 +1165,17 @@ def private draw_document(var doc : TextViewerDocument) {
     let ui_style & = GetStyle()
     let footer_height = max(GetFrameHeightWithSpacing(),
         FOOTER_ICON_SIZE + ui_style.FramePadding.y * 2.0f + ui_style.ItemSpacing.y)
+    // While editing, the find bar draws BELOW the editor (the demo order): the
+    // editor's FocusItem reclaim runs at its own draw, so a bar drawn earlier
+    // in the frame would lose the replace-input focus race every frame.
+    var bar_rows = 0.0f
+    if (doc.editing && doc.find.open) {
+        bar_rows = doc.find.replace_open ? 2.0f : 1.0f
+    }
+    let reserved = footer_height + GetFrameHeightWithSpacing() * bar_rows
     child(DOCUMENT_CONTENT,
           (text = "document content",
-           size = float2(0.0f, -footer_height),
+           size = float2(0.0f, -reserved),
            child_flags = ImGuiChildFlags.None,
            window_flags = doc.editing ? ImGuiWindowFlags.None
                : ImGuiWindowFlags.HorizontalScrollbar)) {
@@ -1207,7 +1211,10 @@ def private draw_document(var doc : TextViewerDocument) {
     }
 
     if (doc.editing) {
-        // the editor find/sync chain runs after the widget frame, demo order
+        // bar after the editor, then the sync chain - the demo order
+        if (doc.find.open) {
+            text_find_bar(doc.id, doc.find)
+        }
         text_edit_find_sync(doc.edit, doc.find, g_commands)
         let _ = text_edit_syntax_sync(doc.edit)
         text_edit_complete_sync(doc.edit, doc.edit_complete)

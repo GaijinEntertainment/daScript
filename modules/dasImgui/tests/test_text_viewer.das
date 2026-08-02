@@ -4,6 +4,7 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 
 require dastest/testing_boost public
+require imgui public
 require imgui/imgui_playwright public
 require daslib/fio public
 require strings
@@ -819,7 +820,18 @@ def test_text_viewer_fold_clicks_and_no_reflow(t : T?) { // nolint:STYLE038 — 
         t |> success(copied, "clicking the copy icon captures the block text")
 
         // ---- das source: gutter chevron click + toggle-without-reflow ----
-        let das_fixture = "{get_das_root()}/examples/text/main.das"
+        // A test-owned fixture keeps a foldable region on the FIRST screen —
+        // main.das made a poor fixture here: header growth kept pushing its
+        // first fold below the fold-handle visibility window.
+        var temp_error = ""
+        let temp_dir = create_temp_directory("das_text_viewer_folds", temp_error)
+        t |> success(empty(temp_error) && !empty(temp_dir), "fold temp dir created")
+        return if (!empty(temp_error) || empty(temp_dir))
+        let das_fixture = path_join(temp_dir, "folds.das")
+        t |> success(fwrite(das_fixture, ("options gen2\n\ndef alpha() \{\n"
+            + "    print(\"a\\n\")\n    print(\"b\\n\")\n    print(\"c\\n\")\n\}\n\n"
+            + "def beta() \{\n    print(\"d\\n\")\n    print(\"e\\n\")\n\}\n")),
+            "fold fixture written")
         let das_opened = post_command(app, "text_viewer_open", JV((path = das_fixture)))
         t |> success(das_opened?["ok"] ?? false, ".das fixture opens")
         var handle_x = -1.0f
@@ -877,6 +889,7 @@ def test_text_viewer_fold_clicks_and_no_reflow(t : T?) { // nolint:STYLE038 — 
         let misses_after = viewer_state(app)?["source_layout_misses"] ?? -2
         t |> equal(misses_after, misses_before,
                    "fold toggles reuse the cached flow instead of reflowing")
+        rmdir_rec_result(temp_dir)
     }
 }
 
@@ -940,5 +953,178 @@ def test_text_viewer_single_scroller(t : T?) {
         }
         t |> success(find_clean, "an open find bar does not overflow the window")
         let _closed = post_command(app, "text_viewer_find_close", null)
+    }
+}
+
+let EDIT_WIDGET = "DOCK_ROOT/g_document_windows[1]/DOCUMENT_CONTENT/EDITOR_PANE/editor"
+let EDIT_FIXTURE_TEXT = "# Edit probe\n\n- one\n- two\n- three\n\nTail paragraph.\n"
+
+def private edit_text_state(app : ImguiApp) : JsonValue? {
+    return post_command(app, "text_viewer_edit_text", null)
+}
+
+def private viewer_ready(t : T?; app : ImguiApp) : bool {
+    let ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+        var state = viewer_state(app)
+        return ((state?["ok"] ?? false)
+            && (state?["render_revision"] ?? 0) > 0
+            && (state?["window_docked"] ?? false))
+    }
+    t |> success(ready, "viewer starts docked and rendered")
+    return ready
+}
+
+[test]
+def test_text_viewer_edit_mode_save_point(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
+    with_imgui_app(FEATURE) $(app) {
+        return if (!viewer_ready(t, app))
+        var temp_error = ""
+        let temp_dir = create_temp_directory("das_text_viewer_edit", temp_error)
+        t |> success(empty(temp_error) && !empty(temp_dir), "temp dir created")
+        return if (!empty(temp_error) || empty(temp_dir))
+        let fixture = path_join(temp_dir, "edit.md")
+        t |> success(fwrite(fixture, EDIT_FIXTURE_TEXT), "edit fixture written")
+        let opened = post_command(app, "text_viewer_open", JV((path = fixture)))
+        t |> success(opened?["ok"] ?? false, "fixture opens")
+        let loaded = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["path"] ?? "") == fixture
+                && !(state?["editing"] ?? true)
+                && !(state?["read_only"] ?? true))
+        }
+        t |> success(loaded, "fixture is a viewable, editable document")
+
+        // the ruling: typing in the viewer makes it an editor
+        click(app, "DOCK_ROOT/g_document_windows[1]/MODE_LABEL")
+        t |> success(wait_for_mouse_idle(app), "focus click drains")
+        let typed = post_command(app, "imgui_key_type", JV((text = "X")))
+        t |> success(typed != null, "keystroke accepted")
+        let entered = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["editing"] ?? false)
+                && (state?["edit_dirty"] ?? false))
+        }
+        t |> success(entered, "a printable keystroke enters edit mode")
+        let landed_once = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var buffer = edit_text_state(app)
+            return starts_with(buffer?["text"] ?? "", "X# Edit probe")
+        }
+        t |> success(landed_once, "the keystroke lands in the buffer exactly once")
+
+        // save records the save point; undo back to it clears dirty
+        let saved = post_command(app, "text_viewer_save", JV((path = "")))
+        t |> success(saved?["ok"] ?? false, "save succeeds")
+        let clean = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return (!(state?["dirty"] ?? true) && !(state?["edit_dirty"] ?? true))
+        }
+        t |> success(clean, "save clears dirty")
+        let typed_more = post_command(app, "imgui_key_type", JV((text = "Y")))
+        t |> success(typed_more != null, "post-save keystroke accepted")
+        let dirty_again = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return (state?["edit_dirty"] ?? false)
+        }
+        t |> success(dirty_again, "typing after save is dirty")
+        key_chord_tap(app, ["Ctrl"], int(ImGuiKey.Z))
+        t |> success(wait_for_key_idle(app, 6.0f), "Ctrl+Z drains")
+        let back_clean = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return !(state?["edit_dirty"] ?? true)
+        }
+        t |> success(back_clean, "undo back to the save point clears dirty")
+        key_chord_tap(app, ["Ctrl"], int(ImGuiKey.Y))
+        t |> success(wait_for_key_idle(app, 6.0f), "Ctrl+Y drains")
+        let redo_dirty = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return (state?["edit_dirty"] ?? false)
+        }
+        t |> success(redo_dirty, "redo past the save point restores dirty")
+        key_chord_tap(app, ["Ctrl"], int(ImGuiKey.Z))
+        t |> success(wait_for_key_idle(app, 6.0f), "second Ctrl+Z drains")
+
+        // Done returns to the viewer with the edits synced and saved on disk
+        let left = post_command(app, "text_viewer_edit", JV((on = false)))
+        t |> success(left?["ok"] ?? false, "edit mode exits")
+        let viewing = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return (!(state?["editing"] ?? true) && !(state?["dirty"] ?? true))
+        }
+        t |> success(viewing, "back to a clean viewer")
+        t |> success(starts_with(fread(fixture), "X# Edit probe"),
+            "the saved file carries the edit")
+        rmdir_rec_result(temp_dir)
+    }
+}
+
+[test]
+def test_text_viewer_edit_preview_and_watch(t : T?) {
+    with_imgui_app(FEATURE) $(app) {
+        return if (!viewer_ready(t, app))
+        var temp_error = ""
+        let temp_dir = create_temp_directory("das_text_viewer_watch", temp_error)
+        t |> success(empty(temp_error) && !empty(temp_dir), "temp dir created")
+        return if (!empty(temp_error) || empty(temp_dir))
+        let fixture = path_join(temp_dir, "watch.md")
+        t |> success(fwrite(fixture, EDIT_FIXTURE_TEXT), "watch fixture written")
+        let opened = post_command(app, "text_viewer_open", JV((path = fixture)))
+        t |> success(opened?["ok"] ?? false, "fixture opens")
+        let entered = post_command(app, "text_viewer_edit", JV((on = true)))
+        t |> success(entered?["ok"] ?? false, "edit mode enters")
+
+        // markdown editing is side-by-side: editor pane + live preview
+        var surface = wait_for_render(app, EDIT_WIDGET, 15.0f)
+        t |> success(surface != null, "editor pane renders")
+        let preview_live = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["preview_stamp"] ?? 0) > 0
+                && (state?["preview_revision"] ?? -1)
+                    == (state?["edit_revision"] ?? -2))
+        }
+        t |> success(preview_live, "the preview parses the edit buffer")
+
+        // the preview follows the CURSOR, not just the scroll
+        click(app, EDIT_WIDGET)
+        t |> success(wait_for_mouse_idle(app), "editor focus click drains")
+        key_tap(app, int(ImGuiKey.DownArrow))
+        t |> success(wait_for_key_idle(app, 6.0f), "caret move drains")
+        let followed = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return (state?["preview_focus_valid"] ?? false)
+        }
+        t |> success(followed, "the preview maps the caret to a rendered position")
+
+        // external change: detect and warn, never auto-reload a dirty buffer
+        let before_lines = edit_text_state(app)?["text"] ?? ""
+        t |> success(fwrite(fixture, EDIT_FIXTURE_TEXT + "\nAppended outside.\n"),
+            "fixture changes on disk behind the app")
+        let flagged = wait_cond(app, 15.0f) $() : bool {
+            var state = viewer_state(app)
+            return (state?["external_change"] ?? false)
+        }
+        t |> success(flagged, "the 2s stat watch flags the external change")
+        t |> equal(edit_text_state(app)?["text"] ?? "", before_lines,
+            "the buffer is NOT auto-reloaded")
+
+        // explicit reload refreshes and re-seeds the editor
+        let reloaded = post_command(app, "text_viewer_command", JV((id = "file.reload")))
+        t |> success(reloaded?["ok"] ?? false, "reload command queues")
+        let refreshed = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            var buffer = edit_text_state(app)
+            return (!(state?["external_change"] ?? true)
+                && find(buffer?["text"] ?? "", "Appended outside.") >= 0)
+        }
+        t |> success(refreshed, "reload picks up the external content into the editor")
+
+        // the footer Done button leaves edit mode
+        click(app, "DOCK_ROOT/g_document_windows[1]/EDIT_TOGGLE")
+        t |> success(wait_for_mouse_idle(app), "Done click drains")
+        let viewing = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
+            var state = viewer_state(app)
+            return !(state?["editing"] ?? true)
+        }
+        t |> success(viewing, "Done returns to the viewer")
+        rmdir_rec_result(temp_dir)
     }
 }
