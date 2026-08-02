@@ -48,14 +48,14 @@ def read_wav_pcm16_mono(path : string) : array<float> {
         panic("cannot open '{path}'")
     }
     fmap(f) $(var bytes : array<uint8>#) {
-        let n = int64(length(bytes))
+        let n = long_length(bytes)
         var o = 12l                      // "RIFF" size "WAVE"
         while (o + 8l <= n) {
             let id = wav_u32(bytes, o)
             let sz = int64(wav_u32(bytes, o + 4l))
             if (id == 0x61746164u) {     // "data"
                 let cnt = min(sz, n - o - 8l) / 2l
-                out |> resize(int(cnt))
+                out |> resize(cnt)
                 for (i in range64(cnt)) {
                     let u = int(wav_u16(bytes, o + 8l + i * 2l))
                     out[int(i)] = float(u >= 32768 ? u - 65536 : u) / 32768.0

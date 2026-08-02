@@ -978,7 +978,7 @@ def private adopt_host_session(stamp : WatcherHostStamp) : bool { // nolint:STYL
     let session_dir = path_join(g_log_root, stamp.session)
     let request_path = path_join(session_dir, "session.json")
     if (!fexist(request_path)) return false
-    var inscope persisted = WatcherLaunchRequest()
+    var inscope persisted = WatcherLaunchRequest()  // nolint:PERF030 - decl-init, nothing to release
     if (!sscan_json(fread(request_path), persisted)) return false
     var visible_command = persisted.display_name
     if (empty(visible_command)) {
@@ -1009,7 +1009,7 @@ def private adopt_host_session(stamp : WatcherHostStamp) : bool { // nolint:STYL
     restore_session_records(session)
     g_next_session_id = max(g_next_session_id,
         numeric_id_suffix(slice(stamp.session, find(stamp.session, "_") + 1), ""))
-    var inscope model <- terminal_create(columns, rows)
+    var inscope model <- terminal_create(columns, rows)  // nolint:PERF030 - decl-init, nothing to release
     session.terminal := model
     // The lock probe answers dead-or-alive instantly and race-free; only a
     // held lock is worth the connect handshake (whose timeout stays as the
@@ -1160,7 +1160,7 @@ def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult 
     }
     let columns = clamp(request.columns, 20, 400)
     let rows = clamp(request.rows, 5, 512)
-    var inscope persisted_request := request
+    var inscope persisted_request := request  // nolint:PERF030 - decl-init, nothing to release
     persisted_request.columns = columns
     persisted_request.rows = rows
     persisted_request.agent_token = ""
@@ -1188,7 +1188,7 @@ def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult 
         append_event(session, "agent_bootstrap_prepared",
             "context={session.context_path}; skill={request.agent_skill_path}; " +
             "task_bytes={length(request.task_context)}")
-        child_argv <- agent_launch_argv(request, session_id, session.context_path)
+        child_argv <- agent_launch_argv(request, session_id, session.context_path)  // nolint:PERF030 - first assignment; declared empty above
     } else {
         child_argv := request.argv
     }
@@ -1342,7 +1342,7 @@ def public watcher_output_since(session_id : string; requested_offset : int64;
     let count = min(int64(clamp(maximum_bytes, 1024, 1024 * 1024)), available)
     if (count > 0l) {
         let source = int(offset - session.raw_history_start)
-        result.bytes |> resize(int(count))
+        result.bytes |> resize(count)
         unsafe {
             memcpy(addr(result.bytes[0]), addr(session.raw_history[source]), count)
         }
@@ -1554,7 +1554,7 @@ def public watcher_compact_session(session_id : string;
     let compact_rows = clamp(rows, 5, 512)
     if (session.terminal.transport == null && session.terminal.columns == compact_columns
             && session.terminal.rows == compact_rows) return true
-    var inscope compact <- terminal_create(compact_columns, compact_rows)
+    var inscope compact <- terminal_create(compact_columns, compact_rows)  // nolint:PERF030 - decl-init, nothing to release
     terminal_feed_bytes(compact, session.raw_history)
     terminal_dispose(session.terminal)
     session.terminal := compact

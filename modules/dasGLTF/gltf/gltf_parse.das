@@ -224,7 +224,7 @@ def private extension_supported(name : string) : bool => false
 // zero-filled (or skips the sparse/image patch) rather than panicking, keeping load_gltf's documented
 // fail-closed contract (return an empty scene on bad input).
 def private buffer_range_ok(buffers : array<array<uint8>>; bufIdx : int; base, span : int64) : bool {
-    return bufIdx >= 0 && bufIdx < length(buffers) && base >= 0l && base + span <= int64(length(buffers[bufIdx]))
+    return bufIdx >= 0 && bufIdx < length(buffers) && base >= 0l && base + span <= long_length(buffers[bufIdx])
 }
 
 def private decode_floats(gltf : JGltf; buffers : array<array<uint8>>; ai : int) : array<float4> {
@@ -394,7 +394,7 @@ def private decode_buffers(gltf : JGltf; var glbBin : array<uint8>; baseDir : st
         var b : array<uint8>
         if (empty(buf.uri)) {
             if (!glbUsed) {
-                b <- glbBin
+                b <- glbBin  // nolint:PERF030 - b is fresh this iteration
                 glbUsed = true
             }
         } elif (starts_with(buf.uri, "data:")) {
@@ -453,12 +453,12 @@ def private decode_image(gltf : JGltf; buffers : array<array<uint8>>; ji : JImag
 
 // ===== JGltf → GltfScene =====
 
-def private build_scene(gltf : JGltf; buffers : array<array<uint8>>; baseDir : string; var scene : GltfScene) {
+def private build_scene(gltf : JGltf; buffers : array<array<uint8>>; baseDir : string; var scene : GltfScene) {  // nolint:STYLE038 - one linear pass per scene facet
     // materials
     scene.materials |> reserve(length(gltf.materials))
     for (jm in gltf.materials) {
         var m = GltfMaterial()
-        m.name := jm.name
+        m.name = jm.name
         m.baseColorFactor = jm.pbrMetallicRoughness.baseColorFactor
         m.metallicFactor = jm.pbrMetallicRoughness.metallicFactor
         m.roughnessFactor = jm.pbrMetallicRoughness.roughnessFactor
@@ -479,7 +479,7 @@ def private build_scene(gltf : JGltf; buffers : array<array<uint8>>; baseDir : s
     scene.meshes |> reserve(length(gltf.meshes))
     for (jmesh in gltf.meshes) {
         var mesh = GltfMesh()
-        mesh.name := jmesh.name
+        mesh.name = jmesh.name
         mesh.primitives |> reserve(length(jmesh.primitives))
         for (jp in jmesh.primitives) {
             var prim = GltfPrimitive()
@@ -512,7 +512,7 @@ def private build_scene(gltf : JGltf; buffers : array<array<uint8>>; baseDir : s
     scene.nodes |> reserve(length(gltf.nodes))
     for (jn in gltf.nodes) {
         var n = GltfNode()
-        n.name := jn.name
+        n.name = jn.name
         n.translation = jn.translation
         n.rotation = jn.rotation
         n.scale = jn.scale
@@ -541,7 +541,7 @@ def private build_scene(gltf : JGltf; buffers : array<array<uint8>>; baseDir : s
     scene.animations |> reserve(length(gltf.animations))
     for (ja in gltf.animations) {
         var an = GltfAnimation()
-        an.name := ja.name
+        an.name = ja.name
         var maxT = 0.
         an.samplers |> reserve(length(ja.samplers))
         for (jsamp in ja.samplers) {
@@ -659,9 +659,9 @@ def private fill_color(gltf : JGltf; buffers : array<array<uint8>>; ai : int; va
 
 def private glb_chunk_string(bytes : array<uint8>; start : int64; len : int64) : string {
     var sub : array<uint8>
-    sub |> resize(int(len))
-    for (i in range(int(len))) {
-        sub[i] = bytes[start + int64(i)]
+    sub |> resize(len)
+    for (i in range64(len)) {
+        sub[i] = bytes[start + i]
     }
     let s = string(sub)
     delete sub
@@ -672,7 +672,7 @@ def private parse_glb(bytes : array<uint8>; var jsonText : string&; var binBytes
     // fail-closed: a malformed/hostile .glb can declare a total or chunk length past the actual
     // file; clamp the declared total to the real size and stop at the first chunk that runs past it,
     // so the header/chunk reads below never index out of bounds.
-    let n = int64(length(bytes))
+    let n = long_length(bytes)
     if (n < 12l) return
     let total = min(int64(gltf_rd_u32(bytes, 8l)), n)
     var off = 12l
@@ -684,9 +684,9 @@ def private parse_glb(bytes : array<uint8>; var jsonText : string&; var binBytes
         if (ctype == 0x4E4F534Au) {          // "JSON"
             jsonText = glb_chunk_string(bytes, dataStart, clen)
         } elif (ctype == 0x004E4942u) {       // "BIN\0"
-            binBytes |> resize(int(clen))
-            for (i in range(int(clen))) {
-                binBytes[i] = bytes[dataStart + int64(i)]
+            binBytes |> resize(clen)
+            for (i in range64(clen)) {
+                binBytes[i] = bytes[dataStart + i]
             }
         }
         off = dataStart + clen

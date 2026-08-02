@@ -17,7 +17,7 @@ def read_file_bytes(path : string) : array<uint8> {
         if (f != null) {
             let st = fstat(f)
             if (st.is_valid) {
-                result |> resize(int(st.size))
+                result |> resize(int64(st.size))
                 fread(f, result)
             }
         }

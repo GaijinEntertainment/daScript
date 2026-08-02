@@ -28,8 +28,8 @@ module perf_lint shared private
 //!   PERF015 — ternary min/max — use min(a, b) / max(a, b)
 //!   PERF016 — ternary abs — use abs(x)
 //!   PERF017 — length(s) == 0 / != 0 — use empty(s) / !empty(s)
-//!   PERF018 — for (i in range(length(arr))) where i only indexes arr — use 'for (c in arr)'
-//!   PERF029 — for (i in range(length(X))) subscripting sibling arrays in lockstep — zip: for (a, b in X, Y)
+//!   PERF018 — for (i in range(length(arr))) where i only indexes arr — use 'for (c in arr)'; also urange/range64/urange64 + long_length
+//!   PERF029 — for (i in range(length(X))) subscripting sibling arrays in lockstep — zip: for (a, b in X, Y); same range/length variants as PERF018
 //!   PERF030 — move-assign onto a live heap-carrying variable drops old contents — delete first or force_inscope_pod
 //!   PERF019 — int(T.a) | int(T.b) on bitfield-or-enum-with-operator-| — collapse to int(T.a | T.b)
 //!   PERF020 — T(x) where x is already T (workhorse type) — drop the redundant cast
@@ -1084,8 +1084,23 @@ class PerfLintVisitor : AstVisitor {
         return evar.variable
     }
 
+    def perf018_peel_index_cast(var e : ExpressionPtr) : ExpressionPtr {
+        //! One optional cast layer around range's argument: ExprCast, or a 1-arg workhorse int-cast call (int/uint/int64/uint64). Casts don't change what the loop iterates, so urange(uint(length(x))) reduces to the same length shape.
+        if (e == null) return e
+        if (e is ExprCast) return (e as ExprCast.subexpr)
+        if (e is ExprCall) {
+            var c = e as ExprCall
+            if (c.func != null && length(c.arguments) == 1
+                && (c.func.name == "int" || c.func.name == "uint"
+                    || c.func.name == "int64" || c.func.name == "uint64")) {
+                return c.arguments[0]
+            }
+        }
+        return e
+    }
+
     def perf018_record_source(src : ExpressionPtr) : void {
-        //! Called from preVisitExprForSource. Peels `range(length(<bareVar>))` (with one optional ExprCast on either layer) and, when matched, stamps the candidate's arr_var. Iter var arrives via perf018_record_var.
+        //! Called from preVisitExprForSource. Peels `range/urange/range64/urange64(length/long_length(<bareVar>))` (with one optional cast on either layer) and, when matched, stamps the candidate's arr_var. Iter var arrives via perf018_record_var.
         if (empty(perf018_stack)) return
         let top_idx = length(perf018_stack) - 1
         var state = perf018_stack[top_idx]
@@ -1105,22 +1120,20 @@ class PerfLintVisitor : AstVisitor {
             return
         }
         var rng = s as ExprCall
-        if (rng.func == null || rng.func.name != "range"
-            || length(rng.arguments) != 1) {
+        if (rng.func == null || length(rng.arguments) != 1
+            || (rng.func.name != "range" && rng.func.name != "urange"
+                && rng.func.name != "range64" && rng.func.name != "urange64")) {
             perf018_stack[top_idx] = state
             return
         }
-        var inner = rng.arguments[0]
-        if (inner is ExprCast) {
-            inner = (inner as ExprCast.subexpr)
-        }
+        var inner = perf018_peel_index_cast(rng.arguments[0])
         if (inner == null || !(inner is ExprCall)) {
             perf018_stack[top_idx] = state
             return
         }
         var len = inner as ExprCall
-        if (len.func == null || len.func.name != "length"
-            || length(len.arguments) != 1) {
+        if (len.func == null || length(len.arguments) != 1
+            || (len.func.name != "length" && len.func.name != "long_length")) {
             perf018_stack[top_idx] = state
             return
         }

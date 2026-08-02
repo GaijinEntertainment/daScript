@@ -682,8 +682,8 @@ def private erase_display(terminal : Terminal const; var buffer : TerminalBuffer
 }
 
 def private erase_cells(terminal : Terminal const; var buffer : TerminalBuffer; count : int) {
-    let last = clamp(int64(buffer.cursor.column) + int64(max(1, count)), 0l, int64(terminal.columns))
-    for (column in range(buffer.cursor.column, int(last))) {
+    let last = clamp(buffer.cursor.column + max(1, count), 0, terminal.columns)
+    for (column in range(buffer.cursor.column, last)) {
         clear_cell(terminal, buffer, buffer.cursor.row, column)
     }
 }
@@ -718,7 +718,7 @@ def private set_private_mode(var terminal : Terminal; mode : int; enabled : bool
     }
 }
 
-def private select_graphic_rendition(var buffer : TerminalBuffer;
+def private select_graphic_rendition(var buffer : TerminalBuffer;  // nolint:STYLE037 - one arm per SGR code
                                      parameters : array<int> const) {
     var index = 0
     while (index < length(parameters)) {
@@ -770,7 +770,7 @@ def private append_reply_text(var terminal : Terminal; text : string) {
     terminal.replies |> emplace(bytes)
 }
 
-def private process_csi(var terminal : Terminal; final_byte : int) {
+def private process_csi(var terminal : Terminal; final_byte : int) {  // nolint:STYLE037 - one arm per CSI final byte
     terminal.parse_state = TerminalParseState.ground
     var private_marker = 0
     var inscope parameters : array<int>
@@ -931,7 +931,7 @@ def private process_ground_byte(var terminal : Terminal; byte : int) {
     } else process_codepoint(terminal, 0xfffdu)
 }
 
-def private process_byte(var terminal : Terminal; byte : int) {
+def private process_byte(var terminal : Terminal; byte : int) {  // nolint:STYLE037 - one arm per parser state
     if (terminal.utf8_remaining > 0) {
         if ((byte & 0xc0) == 0x80) {
             terminal.utf8_codepoint = (terminal.utf8_codepoint << 6u) | uint(byte & 0x3f)
@@ -1230,12 +1230,12 @@ def public terminal_snapshot_dispose(var snapshot : TerminalSnapshot) {
     delete snapshot.alternate.cells
     delete snapshot.alternate.scrollback
     delete snapshot.unknown_sequences
-    snapshot = default<TerminalSnapshot>
+    snapshot = default<TerminalSnapshot>  // nolint:PERF030 - heap fields deleted above; this zeroes the shell
 }
 
 def public terminal_drain_replies_bytes(var terminal : Terminal;
                                         var replies : array<array<uint8>>) {
-    replies <- terminal.replies
+    replies <- terminal.replies  // nolint:PERF030 - drain-into out-param; caller owns what it passed
 }
 
 //! Compatibility boundary for callers which still consume terminal replies as
@@ -1251,7 +1251,7 @@ def public terminal_drain_replies(var terminal : Terminal; var replies : array<s
 }
 
 def public terminal_take_events(var terminal : Terminal; var events : array<string>) {
-    events <- terminal.events
+    events <- terminal.events  // nolint:PERF030 - drain-into out-param; caller owns what it passed
 }
 
 def private string_to_bytes(text : string; var bytes : array<uint8>) {
@@ -1301,7 +1301,7 @@ def private append_control_text(var output : array<uint8>; text : string) {
     else append_string_bytes(output, text)
 }
 
-def public terminal_encode_key_bytes(terminal : Terminal const;
+def public terminal_encode_key_bytes(terminal : Terminal const;  // nolint:STYLE037 - one arm per key class
                                      event : TerminalKeyEvent const;
                                      var output : array<uint8>) {
     output |> clear()
@@ -1768,5 +1768,5 @@ def public terminal_viewport_snapshot_dispose(var snapshot : TerminalViewportSna
     delete snapshot.buffer.cells
     delete snapshot.buffer.scrollback
     delete snapshot.text_runs
-    snapshot = default<TerminalViewportSnapshot>
+    snapshot = default<TerminalViewportSnapshot>  // nolint:PERF030 - heap fields deleted above; this zeroes the shell
 }

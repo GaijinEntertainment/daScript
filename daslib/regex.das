@@ -346,7 +346,7 @@ def private re_char(expr : string; offset : int) : MaybeReNode {
 }
 
 // <set-items> ::= <set-item> | <set-item> <set-items> <set-item> ::= <range> | <char> <range> ::= <char> "-" <char> <char> ::= any non metacharacter | "\" metacharacter
-def private re_set_items(expr : string; offset : int) : MaybeReNode {
+def private re_set_items(expr : string; offset : int) : MaybeReNode {  // nolint:STYLE038 - one arm per set-item grammar production
     trace("re_set_items", offset)
     if (eos(expr, offset)) return nada()
     var cset : CharSet
@@ -650,7 +650,7 @@ def private  re_re(expr : string; offset : int) : MaybeReNode {
 }
 
 // <basic-RE> ::= <star> | <plus> | <question> | <repeat> | <elementary-RE> <star> ::= <elementary-RE> "*" <plus> ::= <elementary-RE> "+" <question> ::= <elementary-RE> "?" <repeat> ::= <elementary-RE> "{" <n> "}" | <elementary-RE> "{" <n> "," "}" | <elementary-RE> "{" <n> "," <m> "}"
-def private re_basic(expr : string; offset : int) : MaybeReNode {
+def private re_basic(expr : string; offset : int) : MaybeReNode {  // nolint:STYLE037 - one arm per regex grammar production
     trace("re_basic", offset)
     if (eos(expr, offset)) return nada()
     var oelem = re_elementary(expr, offset)
@@ -814,8 +814,8 @@ def private re_assign_groups(var re : Regex) {
     matching
 */
 
-def private re_assign_match_functions(var re : Regex) {
-    visit_top_down(re.root) $(var node) {
+def private re_assign_match_functions(var re : Regex) {  // nolint:STYLE038 - one dispatch entry per node kind
+    visit_top_down(re.root) $(var node) {  // nolint:STYLE037 - the ladder IS the node-kind dispatch table
         if (node.op == ReOp.Char) {
             if (re.caseInsensitive) {
                 if (node.textLen == 1) {
@@ -909,7 +909,7 @@ def private re_assign_match_functions(var re : Regex) {
 
 def private ci_lower(ch : int) : int {
     //! Converts ASCII uppercase to lowercase for case-insensitive matching.
-    if (ch >= 'A' && ch <= 'Z') return ch + 32  // nolint:PERF014
+    if (ch >= 'A' && ch <= 'Z') return ch + 32
     return ch
 }
 
@@ -918,7 +918,7 @@ def private case_fold_set(var cset : CharSet) {
     for (ch in range(0, 256)) {
         if (is_char_in_set(ch, cset)) {
             let lo = ci_lower(ch)
-            let up = (lo >= 'a' && lo <= 'z') ? lo - 32 : lo  // nolint:PERF014
+            let up = (lo >= 'a' && lo <= 'z') ? lo - 32 : lo
             set_or_char(cset, lo)
             set_or_char(cset, up)
         }
@@ -1199,7 +1199,7 @@ def private re_match2_group(var regex : Regex; var node : ReNode?; str : uint8 c
     let osub = invoke(nsub.fun2, regex, nsub, str)
     if (osub == null) return null
     if (node.index >= 0) {
-        regex.groups[node.index]._0 = range(int(str - regex.match), int(node.subexpr.tail - regex.match))
+        regex.groups[node.index]._0 = range(int(str - regex.match), int(node.subexpr.tail - regex.match))  // nolint:LINT020 - group slots are `range`; spans fit int, string length is int-guarded
     }
     return osub
 }
@@ -1527,9 +1527,9 @@ def private re_early_out(var cset : CharSet; node : ReNode?) : bool {
         let fc = first_character(node.text)
         set_or_char(cset, fc)
         // if case-insensitive, also add the opposite-case first char
-        if (fc >= 'A' && fc <= 'Z') {  // nolint:PERF014
+        if (fc >= 'A' && fc <= 'Z') {
             set_or_char(cset, fc + 32)
-        } elif (fc >= 'a' && fc <= 'z') {  // nolint:PERF014
+        } elif (fc >= 'a' && fc <= 'z') {
             set_or_char(cset, fc - 32)
         }
         return false
@@ -1659,7 +1659,7 @@ def regex_foreach(var regex : Regex; str : string; blk : block<(at : range) : bo
                 if (is_char_in_set(Ch, regex.earlyOut)) {
                     let om = invoke(root.fun2, regex, root, cstr)
                     if (om != null) {
-                        if (!invoke(blk, range(int(cstr - pstr), int(om - pstr)))) break
+                        if (!invoke(blk, range(int(cstr - pstr), int(om - pstr)))) break  // nolint:LINT020 - block takes `range`; spans fit int
                         if (om == cstr) {
                             cstr++
                         } else {
@@ -1676,7 +1676,7 @@ def regex_foreach(var regex : Regex; str : string; blk : block<(at : range) : bo
             while (int(*cstr) != 0) {
                 let om = invoke(root.fun2, regex, root, cstr)
                 if (om != null) {
-                    if (!invoke(blk, range(int(cstr - pstr), int(om - pstr)))) break
+                    if (!invoke(blk, range(int(cstr - pstr), int(om - pstr)))) break  // nolint:LINT020 - block takes `range`; spans fit int
                     if (om == cstr) {
                         cstr++
                     } else {
@@ -1988,7 +1988,7 @@ def debug_set(cset : CharSet) {
     }
 }
 
-def private debug_re(node : ReNode?; tab : int) {
+def private debug_re(node : ReNode?; tab : int) {  // nolint:STYLE037 - one arm per node kind, print-only
     print("(")
     if (node != null) {
         print("#{node.id}")
