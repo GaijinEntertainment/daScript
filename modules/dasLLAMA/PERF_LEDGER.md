@@ -12,6 +12,19 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **Try the borrowed plane WITHOUT its bounds check, at profiling time (spotted 2026-08-01, audio
+  `.dlim` arc).** `PlaneF`/`PlaneI8` `operator []` in `dasllama_plane.das` guards every read with
+  one unsigned compare. **Costs nothing today, measured:** M1, `-jit`, cache-resident
+  4-accumulator sum, 67.1 M elements, 7 interleaved reps — raw pointer 15.608 ms, checked plane
+  15.611 ms, and the `array<float>` indexing it replaces 20.856 ms (cv ≤ 0.6% on every arm). So
+  the check ships. **What the removal would change:** in that microbenchmark, nothing — LLVM
+  folds the compare out of a loop whose bound it can prove. Real audio kernels index with computed
+  offsets (`blob[woff + i]`, layer strides, conv taps) where the bound is not provable, so the
+  compare may survive there and the microbenchmark does not answer it. The A/B to run once the
+  audio carriers are converted: an `unsafe`/unchecked accessor variant behind a build knob, A/B'd
+  on real encode/decode cells per family, interleaved, not on a synthetic sum. **Do not remove it
+  on the strength of the number above** — that number measures a loop the real kernels are not.
+
 - **gemma-4-26B-A4B tg 0.84x — routed k4 GEMV was load-issue-bound; float4-x fix SHIPPED, +8.7% tg
   (2026-07-23).** Chapter 1, knockout (new moe_rt/moe_sh arms, decode_metal_chase nomoert/nomoesh,
   Q4_K_M @512, best-of-3, clean window): full 18.80ms; routed k4/q51 expert GEMVs 5.48ms (29%) at

@@ -80,6 +80,12 @@ all three arms, so the accessor inlines across the module boundary as well as wi
 das auto-inline pass being same-module-only does not govern this, because under `-jit` the program
 lowers to one LLVM module. Interpreted and AOT are untested and dasLLAMA runs neither.
 
+**The bounds check is free too, so it ships.** Same rig: checked plane 15.611 ms against the raw
+pointer's 15.608 ms, and against 20.856 ms for the `array<float>` indexing it replaces — the plane
+is safer than a raw pointer and a quarter faster than the status quo, because array indexing pays
+an indirection through the header that an inlined pointer does not. Removing the check is a
+profiling-time question on real kernels, not a design one; it is banked in `PERF_LEDGER.md`.
+
 ## Staging is a separate type — this is the actual fix
 
 The root cause is one struct serving an owner and a borrower. Split them:
