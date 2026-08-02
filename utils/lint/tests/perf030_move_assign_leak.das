@@ -12,7 +12,7 @@ options gen2
 //   delete a
 //   a <- make_more()
 
-expect 31208:3
+expect 31208:4
 
 require daslib/perf_lint
 
@@ -48,6 +48,14 @@ def bad_table_reassign {
     delete t
 }
 
+def bad_fixed_array_reassign {
+    var a : array<int>[2]
+    a[0] |> push(1)
+    var b : array<int>[2]
+    a <- b                   // PERF030: the fixed array's element heap dropped
+    delete a
+}
+
 def good_pod_move {
     var x = 1
     var y = 2
@@ -67,6 +75,7 @@ def main {
     bad_array_reassign()
     bad_struct_reassign()
     bad_table_reassign()
+    bad_fixed_array_reassign()
     good_pod_move()
     good_element_target()
 }

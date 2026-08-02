@@ -209,6 +209,9 @@ def private perf030_needs_release(td : TypeDeclPtr) : bool {
     if (td == null) return false
     let bt = td.baseType
     if (bt == Type.tArray || bt == Type.tTable || bt == Type.tLambda) return true
+    // a fixed array's elements are live at init - their heap counts (the same blind
+    // spot the C++ isPodDelete audit fixed)
+    if (bt == Type.tFixedArray) return perf030_needs_release(td.firstType)
     if (bt == Type.tStructure && td.structType != null) {
         for (fld in td.structType.fields) {
             if (perf030_needs_release(fld._type)) return true
