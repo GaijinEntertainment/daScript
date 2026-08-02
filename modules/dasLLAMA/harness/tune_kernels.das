@@ -395,8 +395,12 @@ def private validate_check(kernel : string; names : array<string>; med : array<d
         let recorded = g_validate_med?[kernel] ?? med[ei]
         let gap = (wi >= 0 && med[wi] > 0.0lf) ? (med[ei] - med[wi]) / med[wi] * 100.0lf : 0.0lf
         let drift = recorded > 0.0lf ? abs(med[ei] - recorded) / recorded * 100.0lf : 0.0lf
-        if (wname != expect0 && gap > need) {
-            fail = "winner flipped {expect0} -> {wname} by {gap:0.2f}% (past the {need:0.2f}% floor)"
+        // the reproduce band sits ABOVE the tie floor: statistical twins drift up to ~1.2%
+        // between QUIET back-to-back mints (measured), and a twin flip says nothing about box
+        // noise — the drift bound below catches a winner minted during a burst
+        let band = max(need * 1.5lf, 1.0lf)
+        if (wname != expect0 && gap > band) {
+            fail = "winner flipped {expect0} -> {wname} by {gap:0.2f}% (past the {band:0.2f}% reproduce band)"
         } elif (drift > VALIDATE_DRIFT_PCT) {
             fail = "median drifted {drift:0.2f}% from the recorded race (bound {VALIDATE_DRIFT_PCT:0.1f}%)"
         } else {
