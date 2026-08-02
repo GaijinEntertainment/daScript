@@ -152,9 +152,15 @@ input, search/replace — is identical for markdown and code; only the
 presentation differs, and both presentations already exist as viewers.
 The **rich text editor edits markdown SOURCE with a live preview pane**
 (the existing markdown viewer) beside it — the shape every good md editor
-uses. True WYSIWYG editing inside the laid-out rich text is a different,
-much larger beast: named non-goal, revisit only if the split-view editor
-proves insufficient in use.
+uses. **Markdown end state (E5 discussion, 2026-08-01, Boris): THREE
+editing modes** — plain source, side-by-side (source + live preview), and
+rich-text. Rich-text arrives via the Obsidian/Typora "live preview"
+stepping stone: every block renders rich except the one owning the
+cursor, which shows as inline editable source — reuses the line editor
+(per block) and the markdown renderer unchanged; the render tree's
+per-node source indices are the block↔source map. Slotted as **E5.5**.
+Full in-place WYSIWYG (a rich cursor inside a styled run) stays gated
+behind "live preview proves insufficient in use".
 
 - Component home: `modules/dasImgui/text/imgui_text_source_edit.das`,
   the editing sibling of `imgui_text_source_view`.
@@ -163,10 +169,11 @@ proves insufficient in use.
   presentations (rendered Markdown + syntax-highlighted source), command
   registry, live rails, and a dastest suite — is the parallel preview app
   for every feature slice: search, LSP, editing. It accretes the arc
-  instead of new `examples/editor/*` apps being built beside it; whether a
-  separate minimal code-editor example is still worth shipping is decided
-  at E5, not before. (The dasImgui merge landed 2026-07-30 — one repo,
-  the old staging caveat is gone.)
+  instead of new `examples/editor/*` apps being built beside it; the
+  separate minimal code-editor example is FOLDED (E5 discussion,
+  2026-08-01, Boris) — `examples/features/text_edit.das` served its E1
+  preview purpose and retires when the viewer edits. (The dasImgui merge
+  landed 2026-07-30 — one repo, the old staging caveat is gone.)
 
 ## The component, in detail
 
@@ -356,9 +363,25 @@ highlight inside code blocks lands with the selection work in E2/E4.
 - **E5** `examples/text` becomes an honest editor: the component wired
   into both its presentations (markdown source with live preview beside
   it, plain/code source), carrying save/load, dirty-state (undo back to
-  the save point clears dirty), and the find widget. Decide HERE whether
-  a separate minimal code-editor example still earns its keep or the
-  viewer covers it.
+  the save point clears dirty), and the find widget. **Settled (E5
+  discussion, 2026-08-01, Boris):** (a) viewer IS editor — a document
+  opens as viewer, first edit makes it an editor, with visible
+  indication (read-only badge vs dirty marker); the standalone example
+  folds (see above). (b) Editable = has a write-back path: disk files
+  write via fio; git-backed surfaces with a write-back (e.g. the PR
+  body — save pushes the change) are editable too; diff panes never
+  edit. (c) External change under a dirty buffer: detect and warn,
+  never auto-reload; merge/reload UX deferred. (d) Save surface: Ctrl+S
+  + dirty marker, save-as included; the file-open dialog needs its own
+  slice regardless — low priority, not a blocker. (e) Side-by-side
+  preview follows the edit point: scrolls to the current line AND
+  indicates the cursor position in the rendered pane. (f) Save-point
+  dirty semantics are the VS Code ones — redo past the save point then
+  diverging makes it unreachable and dirty returns; pinned in tests
+  day one.
+- **E5.5** rich-text markdown mode — the live-preview model per the
+  Shape section, right after E5 while the markdown machinery is hot;
+  E6/E7 numbering unchanged.
 - **E6** LSP in the code editor: hover + definition reuse the viewing
   arc's spawn-per-request transport verbatim (`nav.das`, overlay = the
   unsaved buffer — the SAME `--overlay` flag, no new machinery);

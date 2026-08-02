@@ -45,6 +45,9 @@ struct public TextEditUndoOp {
 struct public TextEditUndoUnit {
     ops : array<TextEditUndoOp>
     kind : TextEditUndoKind = TextEditUndoKind.other
+    //! Monotonic id assigned at creation — the save-point identity test
+    //! (`text_edit_mark_saved`); survives undo/redo round-trips.
+    serial : int
     before_cursor_line : int
     before_cursor_column : int
     before_anchor_line : int = -1
@@ -114,6 +117,8 @@ struct public TextEditState {
     //! so pure verbs and the renderer agree.
     tab_cells : int = 4
     revision : int = 0
+    //! False when the journal position equals the save point (see
+    //! `text_edit_mark_saved`); undoing back to the save point clears it.
     dirty : bool = false
     focused : bool = false
     blink_time : float = 0.0f
@@ -128,6 +133,12 @@ struct public TextEditState {
     redo_stack : array<TextEditUndoUnit>
     //! True while the newest undo unit still accepts coalescing appends.
     undo_open : bool = false
+    //! Counter behind `TextEditUndoUnit.serial`; reset by `text_edit_load`.
+    undo_serial : int = 0
+    //! Serial of the unit on top of the undo stack at the last save (0 = the
+    //! pristine load state). Diverging after undoing past it makes the save
+    //! point unreachable, so `dirty` stays set — the VS Code rule.
+    saved_serial : int = 0
     //! Viewport scroll request in lines (Ctrl+Up/Down); caret stays put.
     pending_scroll_lines : int = 0
     //! Host-fed ranges painted under the text (find matches); keep ascending.
@@ -201,7 +212,7 @@ def public text_edit_dispose(var ed : TextEditState) {
     delete ed.line_styles
     delete ed.list_items
     delete ed.diagnostics
-    ed = TextEditState()
+    ed = TextEditState() // nolint:PERF030 (owned fields deleted above; the move target is already empty)
 }
 
 def public text_edit_load(var ed : TextEditState; source : string) {
@@ -228,6 +239,8 @@ def public text_edit_load(var ed : TextEditState; source : string) {
     ed.compile_status = TextEditCompileStatus.unknown
     text_edit_close_list(ed)
     ed.undo_open = false
+    ed.undo_serial = 0
+    ed.saved_serial = 0
     ed.dirty = false
     ed.revision++
     ed.follow_revision++
@@ -727,6 +740,23 @@ def public text_edit_can_redo(ed : TextEditState const) : bool {
     return !empty(ed.redo_stack)
 }
 
+def private journal_serial(ed : TextEditState const) : int {
+    return empty(ed.undo_stack) ? 0 : ed.undo_stack[length(ed.undo_stack) - 1].serial
+}
+
+def private refresh_dirty(var ed : TextEditState) {
+    ed.dirty = journal_serial(ed) != ed.saved_serial
+}
+
+def public text_edit_mark_saved(var ed : TextEditState) {
+    //! Record the current journal position as the save point: `dirty` clears
+    //! now and again whenever undo/redo returns here. Fences the open unit so
+    //! later typing cannot coalesce into pre-save history.
+    ed.undo_open = false
+    ed.saved_serial = journal_serial(ed)
+    ed.dirty = false
+}
+
 def private space_kind_for(ed : TextEditState const; text : string) : TextEditUndoKind {
     return TextEditUndoKind.insert_typing if (text != " ")
     if (ed.undo_open && !empty(ed.undo_stack)) {
@@ -775,7 +805,8 @@ def private commit_edit(var ed : TextEditState; kind : TextEditUndoKind;
         }
     }
     if (!append_to_open) {
-        var unit = TextEditUndoUnit(kind = kind,
+        ed.undo_serial++
+        var unit = TextEditUndoUnit(kind = kind, serial = ed.undo_serial,
             before_cursor_line = ed.cursor_line, before_cursor_column = ed.cursor_column,
             before_anchor_line = ed.anchor_line, before_anchor_column = ed.anchor_column)
         ed.undo_stack |> emplace(unit)
@@ -841,7 +872,7 @@ def public text_edit_undo(var ed : TextEditState) : bool {
     restore_unit_cursor(ed, unit.before_cursor_line, unit.before_cursor_column,
         unit.before_anchor_line, unit.before_anchor_column)
     ed.redo_stack |> emplace(unit)
-    ed.dirty = true
+    refresh_dirty(ed)
     ed.revision++
     ed.follow_revision++
     ed.blink_time = 0.0f
@@ -866,7 +897,7 @@ def public text_edit_redo(var ed : TextEditState) : bool {
     }
     restore_unit_cursor(ed, unit.after_cursor_line, unit.after_cursor_column, -1, 0)
     ed.undo_stack |> emplace(unit)
-    ed.dirty = true
+    refresh_dirty(ed)
     ed.revision++
     ed.follow_revision++
     ed.blink_time = 0.0f
@@ -1014,7 +1045,7 @@ def private column_at_visual(line : string; visual_target, tab_cells : int) : in
 // ===== Edits =====
 
 def private touch_edit(var ed : TextEditState) {
-    ed.dirty = true
+    refresh_dirty(ed)
     ed.revision++
     ed.preferred_column = -1
     ed.follow_revision++
@@ -1926,7 +1957,8 @@ def public text_edit_replace_all(var ed : TextEditState;
     let count_ = min(length(spans), length(texts))
     return 0 if (count_ == 0)
     delete ed.redo_stack
-    var unit = TextEditUndoUnit(kind = TextEditUndoKind.other,
+    ed.undo_serial++
+    var unit = TextEditUndoUnit(kind = TextEditUndoKind.other, serial = ed.undo_serial,
         before_cursor_line = ed.cursor_line, before_cursor_column = ed.cursor_column,
         before_anchor_line = ed.anchor_line, before_anchor_column = ed.anchor_column)
     ed.undo_stack |> emplace(unit)
@@ -1982,7 +2014,8 @@ def public text_edit_move_selection_to(var ed : TextEditState;
         target_line = line - (sel.end_line - sel.start_line)
     }
     delete ed.redo_stack
-    var unit = TextEditUndoUnit(kind = TextEditUndoKind.other,
+    ed.undo_serial++
+    var unit = TextEditUndoUnit(kind = TextEditUndoKind.other, serial = ed.undo_serial,
         before_cursor_line = ed.cursor_line, before_cursor_column = ed.cursor_column,
         before_anchor_line = ed.anchor_line, before_anchor_column = ed.anchor_column)
     ed.undo_stack |> emplace(unit)
@@ -2004,7 +2037,7 @@ def public text_edit_move_selection_to(var ed : TextEditState;
     last.end_line = ed.cursor_line
     last.end_column = ed.cursor_column
     ed.undo_open = false
-    ed.dirty = true
+    refresh_dirty(ed)
     ed.revision++
     ed.follow_revision++
     ed.blink_time = 0.0f
