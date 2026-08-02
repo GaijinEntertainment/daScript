@@ -1,11 +1,41 @@
 # THIS IS HOW TO PROFILE, NOTHING ELSE
 
-Two rigs, below. Both spawn `benchmarks/lcpp_bench.das` once per cell — that is the only thing
-that measures dasLLAMA performance, and no second harness gets written.
+Three rigs, below, and which one you want depends on the model size:
+
+| rig | models | measures against | when |
+|---|---|---|---|
+| **1. small tier** — `gen_profile.das -t small` | the catalog under 6 GiB | `profile_llm_<box>.json` + committed `baseline_llm_<box>.tsv` | **the routine check after a code change** |
+| **2. the oracle** — `gen_bench_records.das --oracle` | the published board (every stored row, 5-23 GB) | `records/<box>.json` stored means | before a PR, or when a big-model path changed |
+| **3. the publishing rig** — `gen_bench_records.das` | the published board, both engines | writes `records/<box>.json` | only to publish new numbers |
+
+Rigs 2 and 3 spawn `benchmarks/lcpp_bench.das` once per cell — that is the only thing that measures
+board performance, and no second harness gets written.
+
+**Reach for rig 1 first.** "Run the oracle" on the big board costs tens of minutes per box; the
+small tier answers the same question — did this change cost performance — in a fraction of it.
 
 ---
 
-## Before either: build the bench exe
+## Rig 1 — the small tier (the routine check)
+
+Measures prefill and emission tok/s for every catalog model under 6 GiB that exists on this box,
+merges each row into `performance/profile_llm_<box>.json`, and pulls the llama.cpp column from the
+committed `baseline_llm_<box>.tsv` (never re-measured here).
+
+```sh
+DASLLAMA_BOX=<box> bin/daslang -jit modules/dasLLAMA/performance/gen_profile.das -- -t small
+```
+
+- `-t small | large | all` picks the tier; the 6 GiB split is `LARGE_TIER_BYTES` in
+  `profile_common.das`. Absent models skip with a warning, so the catalog can list every box's.
+- `-o <substring>` narrows to one display name.
+- Rows merge update-or-insert, so a small run now and a large run later share one file without
+  clobbering each other.
+- **`-jit` is required** — this rig runs the engine in-process rather than spawning the bench exe.
+
+---
+
+## Rigs 2 and 3 — first, build the bench exe
 
 Both rigs measure by spawning **the released `lcpp_bench` executable**, never a script. Its tune
 winners are baked in at build time, so no cell can tune, re-exec, or drift onto different winners
@@ -26,7 +56,7 @@ inherited value. Pointing it at a shared box manifest re-opens exactly what the 
 manifest is older than a freshly built exe, the staleness rule drops every kernel to fallback, and
 the cell measures nothing real.
 
-## 1. The oracle — after every code change
+## Rig 2 — the oracle (the published board)
 
 Re-measures this box's stored rows and gates each against its recorded mean. llama.cpp never
 runs, the store is never written, artifacts are frozen (a missing `.dlim` panics rather than
@@ -48,7 +78,7 @@ DASLLAMA_BOX=<box> bin/daslang modules/dasLLAMA/performance/gen_bench_records.da
 
 ---
 
-## 2. The profiling rig — to publish new numbers
+## Rig 3 — the publishing rig
 
 Measures both engines and writes `performance/records/<box>.json`.
 
@@ -69,3 +99,25 @@ Then merge the per-box stores into the file the site renders:
 ```sh
 bin/daslang modules/dasLLAMA/performance/gen_site_records.das
 ```
+
+---
+
+## The tune generation — session cadence
+
+Every measurement above runs under a sidecar GENERATION, and the rails enforce it:
+
+- **Session start / external-box profiling:** mint PARANOID as part of building the exe —
+  `daspkg release ... --paranoid`. Release ALWAYS mints; the noise gates refuse a loud box
+  (nonzero, nothing written), validation re-races the winners, the previous sidecar snapshots
+  to `.bak` with a printed DIFF, and every mint archives to `~/.tune-history/<box>/`.
+- **Iteration rebuilds within a session:** `daspkg release ... --quick` — the ONLY path that
+  inherits, and only a complete fresh sidecar (incomplete or stale still mints). Forgetting
+  `--quick` costs one normal re-mint, never correctness.
+- **Collect and oracle are different scenarios.** Publishing (rig 3) wants a fresh paranoid
+  generation; the oracle (rig 2) verifies against the STORED rows' generation — rows carry
+  `tune_sha`, a mismatch is `INCOMPARABLE` by default (`--oracle-allow-crossgen` forces,
+  legacy rows warn), and each generation's full doc sits beside the store as
+  `records/<box>.tune.<sha12>.json`. After a deliberate re-mint, re-record the rows.
+- **Rig 1 is a relative instrument** (`-jit`, in-process): same-session comparisons only. The
+  board rigs' bench refuses `-jit` script runs outright unless `--for-debug-purposes`, and
+  stamps such output `debug-jit` — it can never enter records.

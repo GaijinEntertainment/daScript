@@ -22,6 +22,32 @@ The published methodology lives in `modules/dasLLAMA/METHODOLOGY.md`; this file 
 side. One rule from it matters here: **a das number never ships without its same-session
 reference pair**, so the reference engines are not optional.
 
+## The bring-up sequence
+
+The tuner is the detector, so the human never has to be. For a box with existing data:
+
+1. **Delete every `.dlim`** under the models dirs — the fresh generation re-bakes identities.
+2. **Mint PARANOID as part of building the exe**:
+   ```sh
+   bin/daslang utils/daspkg/main.das -- release --root modules/dasLLAMA/benchmarks \
+     --out modules/dasLLAMA/performance/_rig --paranoid
+   ```
+   Release ALWAYS mints (`--quick` is the sole inherit path, for later session iteration).
+   The mint refuses a noisy box (probe cv over the gate — quiet it and re-run; nothing was
+   written), self-validates (a heavy subset re-races and the winners must reproduce), and on
+   Apple runs the e2e confirm for divergent GEMM crowns — set
+   `DASLLAMA_CONFIRM_MODEL=<full path to a q8 gguf>` or such crowns pin the per-ISA fallback.
+   The previous sidecar snapshots to `.bak`, the DIFF prints, and the mint archives to
+   `~/.tune-history/<box>/` (failures too, marked). **Review the DIFF**: uniform time shift =
+   box state; scattered past-floor flips = one of the mints was noisy; same-direction twin
+   flips = an estimator change.
+3. **Pre-bake images** (section 4), then **run the oracle set — LLM and audio — plus one big
+   known-good model on CPU** (sections 5's oracle mode). Human + AI review of the board;
+   anything out of the ordinary = stop and discuss. A FAIL after a re-mint is either a real
+   regression or a generation change — the crossgen gate names which.
+4. **New box only:** the same big model vs llama.cpp (section 3 references) — when the
+   absolutes have no history, the RATIO is the known quantity.
+
 ## 0. Prerequisites
 
 - git, cmake, a C++ toolchain, **CPython 3.10–3.12** (the venv pins were frozen on 3.11;
@@ -50,12 +76,19 @@ env itself when unset, but the converter runs in step 4 need it exported in the 
 **Mint the tune BEFORE the pre-bake, and re-mint after ANY daslang rebuild.** The manifest is
 mtime-gated against the binary: a rebuild silently turns it stale and every kernel drops to
 its fallback winner — the m4 pilot pre-baked one identity, then swept a whole board on
-fallback kernels under a manifest one rebuild older. The bench cells now REFUSE to measure on
-non-manifest winners (`tune gate`; `DASLLAMA_ALLOW_UNTUNED=1` is the dev-run escape). The
-auto-tune policy does NOT mint into an env-pinned manifest — mint explicitly (~5 min):
+fallback kernels under a manifest one rebuild older. The bench cells REFUSE to measure on
+non-manifest winners (`tune gate`; `DASLLAMA_ALLOW_UNTUNED=1` is the dev-run escape).
+
+Minting goes through the hardened wrapper — noise gates at start/mid/end (a refusal exits
+nonzero and writes NOTHING), median ranking with deterministic tie-breaks inside the noise
+floor, a validation re-race (winners must reproduce or the mint fails), race tables +
+provenance (noise verdict, mode, engine sha, box, date) in the sidecar, `.bak` + printed
+DIFF on re-mint, and an archive in `~/.tune-history/<box>/`. Two budgets only: normal
+(minutes) and `--tune-paranoid` (~3x, 1% gate) — there is no fast race. Direct form when
+not going through `daspkg release`:
 
 ```sh
-DAS_TUNE_MODE=tune bin/daslang -jit modules/dasLLAMA/harness/dasllama_tuner.das -dasroot <repo>
+DAS_TUNE_MODE=tune bin/daslang modules/dasLLAMA/harness/dasllama_tuner.das -dasroot <repo> [-- --tune-paranoid]
 ```
 
 Order: build → mint → pre-bake → sweep.
@@ -189,7 +222,9 @@ from EVERY subsequent `--workload asr` sweep, which then maps all seven models i
 ## 5. Sweep
 
 ```sh
-# tune happens automatically on first run ([tune_policy missing=auto]); Parsec/remote-desktop OFF
+# the tune generation already exists (the release minted it); Parsec/remote-desktop OFF stays
+# good hygiene, but the noise gates now DETECT a loud box — a mint that succeeded is a mint
+# that measured, and the sidecar's provenance says under what conditions
 bin/daslang modules/dasLLAMA/performance/gen_bench_records.das -- --workload all
 ```
 
@@ -224,9 +259,15 @@ fail bar as "suspicious — verify"). Exit is nonzero on any FAIL.
   is the tail-cell discipline (below) as tool behavior; a FAIL that survives its solo retry is
   a real regression.
 - The tune gate applies unchanged: a manifest older than the binary fails every cell — re-mint
-  (`DAS_TUNE_MODE=tune DAS_TUNE_MANIFEST=<box manifest> bin/daslang -jit
+  (`DAS_TUNE_MODE=tune DAS_TUNE_MANIFEST=<box manifest> bin/daslang
   modules/dasLLAMA/harness/dasllama_tuner.das`) and check the fresh winners against the stored
   rows' `tune` stamps before trusting deltas.
+- **Sidecar generations**: every das row records `tune_sha` (the sidecar's shasum) and the
+  records dir archives each generation's full doc once (`records/<box>.tune.<sha12>.json`).
+  A stored row from a DIFFERENT generation is `INCOMPARABLE` — the stored mean belongs to
+  different winners — and fails the run by name; `--oracle-allow-crossgen` forces the compare,
+  legacy rows (no `tune_sha`) warn. After a deliberate re-mint, re-record the affected rows
+  instead of arguing with the decline.
 - ⚠ If a rig model FAILs a cell with "cell did not measure" and its `.dlim` is missing, the
   image was purged by a foreign-identity mint's GC pass: `dlim_identity` folds `cpu.backend`
   and the box knobs, and any rail load under a different pin set mints its own flavor, then
