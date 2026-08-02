@@ -122,6 +122,8 @@ struct TextViewerDocument {
     preview_stamp : int = 0
     preview_follow : bool = false
     preview_caret_applied : int = 0
+    preview_caret_byte : int = -1
+    preview_caret_stamp : int = -1
     disk_mtime : clock
     disk_size : uint64
     disk_check_accum : float = 0.0f
@@ -1086,38 +1088,41 @@ def private refresh_edit_preview(var doc : TextViewerDocument) {
 }
 
 def private apply_preview_caret(var doc : TextViewerDocument) {
-    // the preview follows the CURSOR, not just the scroll (E5 ruling): a
-    // collapsed selection at the caret byte marks the spot in the rendered pane
+    // the preview follows the CURSOR, not just the scroll (E5 ruling). The
+    // position resolves READ-ONLY - the preview's selection is never touched
+    // (even a zero-width selection painted arbitrary spans: the anchor/focus
+    // resolution flavors land on different runs around unrendered syntax)
     return if (doc.preview_revision != doc.edit.revision)
-    if (doc.preview_caret_applied != doc.edit.follow_revision) {
+    if (doc.preview_caret_applied != doc.edit.follow_revision
+            || doc.preview_caret_stamp != doc.preview_stamp) {
         doc.preview_caret_applied = doc.edit.follow_revision
-        // ZERO-width: a one-byte selection paints random spans when the caret
-        // sits on unrendered markdown syntax (anchor and focus each fall
-        // forward to different rendered runs). Collapsed resolves the position
-        // invisibly; the focus-line tint below is the visible indication. The
-        // walk covers end-of-document, where nothing is left to fall forward to
+        doc.preview_caret_stamp = doc.preview_stamp
+        // walk back for end-of-document, where nothing snaps forward
         let caret = text_edit_byte_of_position(doc.edit,
             doc.edit.cursor_line, doc.edit.cursor_column)
         var anchor = caret
         var tries = 0
+        doc.preview_caret_byte = -1
         while (tries < 64) {
-            let _sel = markdown_view_select_source_range(
-                doc.preview_view, anchor, anchor)
-            break if (markdown_view_selection_focus_screen_y(
-                doc.preview_view).valid || anchor == 0)
+            if (markdown_view_source_line(doc.preview_view, anchor).valid) {
+                doc.preview_caret_byte = anchor
+                break
+            }
+            break if (anchor == 0)
             anchor--
             tries++
         }
         doc.preview_follow = true
     }
-    return if (!doc.preview_follow)
+    return if (doc.preview_caret_byte < 0)
+    let line = markdown_view_source_line_tint(doc.preview_view,
+        doc.preview_caret_byte, TextSourceViewStyle().current_line_color)
+    return if (!doc.preview_follow || !line.valid)
     doc.preview_follow = false
-    let focus = markdown_view_selection_focus_screen_y(doc.preview_view)
-    return if (!focus.valid)
     let view_top = GetWindowPos().y
     let height = GetWindowSize().y
-    if (focus.y < view_top + height * 0.1f || focus.y > view_top + height * 0.9f) {
-        SetScrollY(max(0.0f, GetScrollY() + focus.y - (view_top + height * 0.35f)))
+    if (line.y < view_top + height * 0.1f || line.y > view_top + height * 0.9f) {
+        SetScrollY(max(0.0f, GetScrollY() + line.y - (view_top + height * 0.35f)))
     }
 }
 
@@ -1158,10 +1163,6 @@ def private draw_document_editor(var doc : TextViewerDocument) {
                 doc.status = "Preview checkboxes are read-only - edit the source."
             }
             apply_preview_caret(doc)
-            if (doc.preview_revision == doc.edit.revision) {
-                markdown_view_focus_line_tint(doc.preview_view,
-                    TextSourceViewStyle().current_line_color)
-            }
         }
     }
 }
@@ -1447,10 +1448,9 @@ def text_viewer_state(_input : JsonValue?) : JsonValue? { // nolint:STYLE038 —
         preview_revision = doc.preview_revision,
         preview_stamp = doc.preview_stamp,
         preview_selection_revision = doc.preview_view.selection_revision,
-        preview_focus_valid = markdown_view_selection_focus_screen_y(
-            doc.preview_view).valid,
-        preview_focus_y = markdown_view_selection_focus_screen_y(
-            doc.preview_view).y,
+        preview_focus_valid = doc.preview_caret_byte >= 0,
+        preview_focus_y = markdown_view_source_line(
+            doc.preview_view, max(doc.preview_caret_byte, 0)).y,
         preview_selection_start = md_text_selection_range(
             doc.preview_view.selection_anchor, doc.preview_view.selection_focus).start_byte,
         preview_selection_end = md_text_selection_range(

@@ -410,33 +410,48 @@ def public markdown_view_selection_focus_screen_y(
     return (valid = false, y = 0.0f)
 }
 
-def public markdown_view_focus_line_tint(state : MarkdownViewState const;
-                                         color : float4) {
-    //! Tint the selection-focus LINE across the current window — caret-follow
-    //! indication for live previews; pairs with a ZERO-width selection (a
-    //! one-byte one paints random spans on unrendered markdown syntax).
-    let focus = state.selection_focus
-    return if (!focus.valid || focus.inline_node < 0
-        || focus.inline_node >= length(state.nodes))
-    let entry & = unsafe(state.nodes[focus.inline_node])
-    return if (!entry.layout_valid)
+def public markdown_view_source_line(state : MarkdownViewState const;
+                                     source_byte : int) : tuple<valid : bool; y : float; height : float> {
+    //! READ-ONLY source byte -> rendered line (screen top + height); never
+    //! touches selection — even a zero-width one paints spans, since the
+    //! anchor/focus flavors land on different runs around unrendered syntax.
+    let position = source_byte_position(state, source_byte, false)
+    if (!position.valid || position.inline_node < 0
+            || position.inline_node >= length(state.nodes)) {
+        return (valid = false, y = 0.0f, height = 0.0f)
+    }
+    let entry & = unsafe(state.nodes[position.inline_node])
+    return (valid = false, y = 0.0f, height = 0.0f) if (!entry.layout_valid)
     var line_y = entry.screen_origin.y
     var line_height = GetTextLineHeight()
     for (line in entry.layout.lines) {
-        if (focus.display_byte >= line.source.start_byte
-                && focus.display_byte <= line.source.end_byte) {
+        if (position.display_byte >= line.source.start_byte
+                && position.display_byte <= line.source.end_byte) {
             line_y = entry.screen_origin.y + line.y
             line_height = max(line.height, 1.0f)
             break
         }
     }
+    return (valid = true, y = line_y, height = line_height)
+}
+
+def public markdown_view_source_line_tint(state : MarkdownViewState const;
+                                          source_byte : int;
+                                          color : float4) : tuple<valid : bool; y : float> {
+    //! Tint the rendered line holding `source_byte` (current-line style) —
+    //! the caret-follow indication; a pure overlay, no selection involved.
+    let line = markdown_view_source_line(state, source_byte)
+    return (valid = false, y = 0.0f) if (!line.valid)
     let window_pos = GetWindowPos()
     let window_size = GetWindowSize()
-    return if (line_y + line_height < window_pos.y || line_y > window_pos.y + window_size.y)
-    var dl = GetWindowDrawList()
-    *dl |> AddRectFilled(float2(window_pos.x, line_y),
-        float2(window_pos.x + window_size.x, line_y + line_height),
-        GetColorU32(color))
+    if (line.y + line.height >= window_pos.y
+            && line.y <= window_pos.y + window_size.y) {
+        var dl = GetWindowDrawList()
+        *dl |> AddRectFilled(float2(window_pos.x, line.y),
+            float2(window_pos.x + window_size.x, line.y + line.height),
+            GetColorU32(color))
+    }
+    return (valid = true, y = line.y)
 }
 
 def public markdown_view_expand_for_byte(var state : MarkdownViewState;
