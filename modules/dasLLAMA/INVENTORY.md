@@ -450,7 +450,7 @@ Rest: 2 tuners' wrappers (`dasllama_tuner.das` 81, `tuner_cli.das` 28), parity o
 
 Other: `gen_bench_records.das` 623 (the one-rig record driver, das cell as child, upsert-per-cell) · `gen_results.das` 358 (renders `results_llm.md` + GEN:asr blocks) · `gen_site_records.das` 59 · `gen_profile.das` 239 · `establish_baselines.das` 149 · `setup_asr_rig.das` 445 · `coopmat_mulmm_port.das` 561 + `coopmat_mulmm_reference.das` 419 (**"scratch probe" pair, Windows-only hardcoded paths, ~400 shared lines — parked in the publishable dir**) · `BRINGUP.md` 212.
 
-**Generated-vs-hand:** `results_llm.md` GENERATED (marker L3) · `benchmarks/asr/results.md` PARTLY generated (20 GEN:asr fences; prose hand) · `records/{m1,m4,zen2,m3air}.json` (10,684 lines) GENERATED-but-tracked, **no marker** · `annotations.json` hand by design · `profile_*.json`, `baseline_llm_*.tsv` generated · **`baseline_metal_*.tsv` (5) + `results_metal_{3b,gemma,qwen35,qwen3_4b,qwen3moe}.md` (5) HAND-AUTHORED despite "living doc — CURRENT numbers only" banners — no writer exists.**
+**Generated-vs-hand:** `results_llm.md` GENERATED (marker L3) · `benchmarks/asr/results.md` PARTLY generated (20 GEN:asr fences; prose hand) · `records/{m1,m4,zen2,m3air}.json` (10,684 lines) GENERATED-but-tracked, **no marker** · `annotations.json` hand by design · `profile_*.json`, `baseline_llm_*.tsv` generated · **`baseline_metal_*.tsv` (5) + `results_metal_{3b,gemma,qwen35,qwen3_4b,qwen3moe}.md` (5) were HAND-AUTHORED despite "living doc" banners with no writer — archived to `history/dasLLAMA/performance/` 2026-08-02.**
 
 ### benchmarks/ — 59 files, 7 subdirs (`.das_package` releases `lcpp_bench` as `dasllama-bench` exe)
 
@@ -499,7 +499,7 @@ Root: `lcpp_bench.das` 606 (llama-bench mirror, `-o json` records) · `setup_lcp
 | tests/run.das:117–120 | `--full` unconditionally rejected | but parsed and threaded through envs/tmo — dead-but-live path |
 | results_llm.md:5 | "daslang 0.6.3, 2026-07-22" | tree is 0.6.4; "CURRENT numbers only" banner |
 | benchmarks/asr/results.md:16 | "0.6.3, 2026-07-09" | same |
-| results_metal_*.md:1 ×5 | "living doc — CURRENT numbers only" | **no generator exists** — suspect by construction |
+| results_metal_*.md:1 ×5 | "living doc — CURRENT numbers only" | **no generator existed** — archived to history/dasLLAMA/performance/ |
 | harness/README.md | documents 7 of 78 files; "~9 minutes" 4k prefill; "11/11 SWA" | severely stale; perf claim predates flash prefill + metal override |
 | tests/README.md:5–7 | leads with the forbidden direct-dastest invocation | contradicts run.das:4 + tests/CLAUDE.md |
 | kv_cache_compression.md:30,150,325 | line refs into common.das + "re-verified 2026-07-09" | refs point at unrelated code now |
@@ -522,7 +522,7 @@ GGUF-superblock **layout knowledge re-encoded in ≥4 places in this slice** (ge
 ### Anomalies
 
 - **Generated-but-tracked, no marker:** records/*.json (10,684 lines), profile_*.json, baseline_llm_*.tsv — hand-edit undetectable.
-- **"Living docs" with no generator:** results_metal_*.md ×5, baseline_metal_*.tsv.
+- **"Living docs" with no generator:** results_metal_*.md ×5, baseline_metal_*.tsv — archived to history/dasLLAMA/performance/ 2026-08-02.
 - **Repo-tree venvs:** `benchmarks/asr/.venv-nemo/`, `.venv-onnx/` (~GB-class; gitignored via `.venv-*/`; recreated by `setup_asr_rig --venvs`).
 - **9 orphaned `.tune.json`** manifests naming deleted benchmarks (probe_logits_ab, batch_decode_perf, prefill_perf, prefill/decode_metal_chase, decode_real_bench, zz_attrib, kq_scale_bench, _argv_probe). `performance/m1.tune.json` NOT an orphan.
 - **Abandoned scripts:** zen2_sweep.sh; coopmat pair; ~29 harness files referenced nowhere (probes are expected unreferenced, but README covers 7/78 so live-vs-dead is undecidable).

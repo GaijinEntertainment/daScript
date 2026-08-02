@@ -97,7 +97,9 @@ modules/dasLLAMA/
                               #  kernel_access_lens_metal.md, kv_cache_compression.md,
                               #  turboquant_research.md, audio_models_plan.md,
                               #  box_profile.epyc9654.json, avx_kernel_matrix.md,
-                              #  epyc9654_measurements.md, model_expansion_plan.md — are
+                              #  epyc9654_measurements.md, model_expansion_plan.md,
+                              #  audio_image_plan.md, and the pre-board metal profiling
+                              #  set results_metal_*.md + baseline_metal_*.tsv — are
                               #  archived under history/dasLLAMA/)
   dasllama/                   # the module — require dasllama/<name>
     dasllama_env.das          #   the env-var registry + the typed readers every knob goes through (ENVIRONMENT.md is generated from it)

@@ -112,3 +112,10 @@ listed in the log below — search it first when hunting for a doc.
 - 2026-07-29 `modules/dasLLAMA/audio_models_plan.md` → `history/dasLLAMA/audio_models_plan.md` — audio-wave tracker, sessions A–F all shipped (findings transferred; open Mistral [INST] item → PERF_LEDGER.md)
 - 2026-07-29 `modules/dasLLAMA/box_profile.epyc9654.json` → `history/dasLLAMA/box_profile.epyc9654.json` — EPYC 9654 tune sidecar, beside its measurements doc
 - 2026-07-30 `modules/dasLLAMA/ARCHITECTURE.md` (extraction-ledger section) → `history/dasLLAMA/reorg_extraction_ledger.md` — the reorg's per-move record; ARCHITECTURE.md now carries placement rules only (no historical data, per its header note)
+- 2026-08-02 `modules/dasLLAMA/audio_image_plan.md` → `history/dasLLAMA/audio_image_plan.md` — audio .dlim borrowed-plane/map/stream plan (Phases 1–3 shipped; whisper streamed mint landed, gemma4a/canary mints deferred by measurement — the sizing lives in PERF_LEDGER.md)
+- 2026-08-02 `modules/dasLLAMA/performance/results_metal_3b.md` → `history/dasLLAMA/performance/results_metal_3b.md` — pre-board 3B metal profiling record (superseded by records/*.json + boards; "living doc" banner had no generator)
+- 2026-08-02 `modules/dasLLAMA/performance/results_metal_gemma.md` → `history/dasLLAMA/performance/results_metal_gemma.md` — pre-board gemma metal profiling record (same supersession)
+- 2026-08-02 `modules/dasLLAMA/performance/results_metal_qwen35.md` → `history/dasLLAMA/performance/results_metal_qwen35.md` — pre-board qwen3.5 metal profiling record (same supersession)
+- 2026-08-02 `modules/dasLLAMA/performance/results_metal_qwen3_4b.md` → `history/dasLLAMA/performance/results_metal_qwen3_4b.md` — pre-board qwen3-4B metal profiling record (same supersession)
+- 2026-08-02 `modules/dasLLAMA/performance/results_metal_qwen3moe.md` → `history/dasLLAMA/performance/results_metal_qwen3moe.md` — pre-board qwen3moe metal profiling record (same supersession)
+- 2026-08-02 `modules/dasLLAMA/performance/baseline_metal_{3b,gemma,qwen35,qwen3_4b,qwen3moe}_m1.tsv` → `history/dasLLAMA/performance/` — hand-authored companions of the results_metal set, moved with their docs

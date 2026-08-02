@@ -28,7 +28,7 @@ what it costs today and what the fix would change.
   present / cold=mint): whisper-turbo 1.48/5.29 GB (+3.81), parakeet-v3 6.69/6.84 (+0.15),
   gemma4a-E2B 4.27/5.42 (+1.15), canary 13.11/14.44 (+1.33).** Two findings. (1) The MINT spike
   is whisper-shaped: staging fp32 fblob+dblob plus the Q8 planes held at once — Phase 3
-  streaming (audio_image_plan.md) targets whisper first; parakeet's mint is immaterial.
+  streaming (history/dasLLAMA/audio_image_plan.md, shipped) targeted whisper first; parakeet's mint is immaterial.
   (2) **The SERVE peak on long clips dwarfs the mint everywhere else**: canary 13.1 GB warm on a
   2.5B (fp32 encoder + fp32 decoder + ~199 s-clip FastConformer scratch), parakeet 6.7 GB on a
   0.6B (546 s hp0x2 encoder scratch; attention terms scale with frame count, some quadratically).
