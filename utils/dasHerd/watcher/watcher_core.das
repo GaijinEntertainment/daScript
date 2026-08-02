@@ -978,7 +978,7 @@ def private adopt_host_session(stamp : WatcherHostStamp) : bool { // nolint:STYL
     let session_dir = path_join(g_log_root, stamp.session)
     let request_path = path_join(session_dir, "session.json")
     if (!fexist(request_path)) return false
-    var inscope persisted = WatcherLaunchRequest()  // nolint:PERF030 - decl-init, nothing to release
+    var inscope persisted = WatcherLaunchRequest()
     if (!sscan_json(fread(request_path), persisted)) return false
     var visible_command = persisted.display_name
     if (empty(visible_command)) {
@@ -1009,7 +1009,7 @@ def private adopt_host_session(stamp : WatcherHostStamp) : bool { // nolint:STYL
     restore_session_records(session)
     g_next_session_id = max(g_next_session_id,
         numeric_id_suffix(slice(stamp.session, find(stamp.session, "_") + 1), ""))
-    var inscope model <- terminal_create(columns, rows)  // nolint:PERF030 - decl-init, nothing to release
+    var inscope model <- terminal_create(columns, rows)
     session.terminal := model
     // The lock probe answers dead-or-alive instantly and race-free; only a
     // held lock is worth the connect handshake (whose timeout stays as the
@@ -1160,7 +1160,7 @@ def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult 
     }
     let columns = clamp(request.columns, 20, 400)
     let rows = clamp(request.rows, 5, 512)
-    var inscope persisted_request := request  // nolint:PERF030 - decl-init, nothing to release
+    var inscope persisted_request := request
     persisted_request.columns = columns
     persisted_request.rows = rows
     persisted_request.agent_token = ""
@@ -1554,7 +1554,7 @@ def public watcher_compact_session(session_id : string;
     let compact_rows = clamp(rows, 5, 512)
     if (session.terminal.transport == null && session.terminal.columns == compact_columns
             && session.terminal.rows == compact_rows) return true
-    var inscope compact <- terminal_create(compact_columns, compact_rows)  // nolint:PERF030 - decl-init, nothing to release
+    var inscope compact <- terminal_create(compact_columns, compact_rows)
     terminal_feed_bytes(compact, session.raw_history)
     terminal_dispose(session.terminal)
     session.terminal := compact
