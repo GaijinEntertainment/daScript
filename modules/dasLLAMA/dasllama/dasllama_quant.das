@@ -8,11 +8,9 @@ require dasllama/dasllama_tune  // [tuned]: reconstitute the activation-requant 
 require dasllama/dasllama_par   // maybe_parallel_for: the load-time bulk requant threads
 require dasllama/dasllama_math  // count_inline_run / count_parallel_dispatch_thru (the par macro's counters)
 
-// dasLLAMA quantization — curriculum step 6. Batch-1 inference is bandwidth-bound
-// (time ~= bytes_read / bandwidth), so the lever is reading FEWER bytes per weight.
-// Q8_0 stores 32 weights as int8 + one fp32 scale: 36 bytes vs 128 (~3.55x smaller).
-// This file is the FORMAT + a quant-quality detector; the fast dequant-in-dot kernel
-// comes after we can measure the loss.
+// The Q8_0 format itself — block geometry (32 weights as int8 + one fp32 scale) — and the
+// quantization-quality detector. Conversions that USE the format live in dasllama_convert;
+// the kernels that consume it live in the math tiers.
 
 let QK8 = 32l  // Q8_0 block size: 32 weights share one scale
 let QK4 = 32l  // Q4_0 block size: 32 weights share one scale

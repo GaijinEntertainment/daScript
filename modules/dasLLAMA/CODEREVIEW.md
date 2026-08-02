@@ -92,6 +92,16 @@ every requirer, so a partial registration reads as working until something else 
 - `dasllama_load.das` — the GGUF load walk: metadata to `Config`, plane layout, format detection,
   the eager and streamed conversion ladders, and the load entry points.
 - `dasllama_transformer.das` — block composition.
+- `dasllama_blocks.das` — the std/dense/MoE block kernels and the default block sets. `forward()`
+  reaches them only through the `ArchBlocks` pointers; a block kernel called by name from
+  `dasllama_common.das` is a defect.
+- `dasllama_moe.das` — MoE routing and expert dispatch, reached only through `moe_ffn_core`.
+- `dasllama_attn_prefill.das` — prefill attention. `prefill_attention` is the only entry; a caller
+  of a head kernel below it is a defect.
+- `dasllama_batch.das` — the batched decode step.
+- `dasllama_sampling.das` — sampling and the generation drivers; the engine never calls back in.
+- `dasllama_ple.das` — gemma-4 per-layer embeddings and its MoE FFN, reached only through the
+  hooks it registers.
 - `dasllama_config.das` — every input that changes `.dlim` image bytes, and its identity
   formatter.
 - `dasllama_chat.das` — conversation turns and chat-template application.
@@ -104,6 +114,8 @@ every requirer, so a partial registration reads as working until something else 
 - `dasllama_kqformat.das` — format identity: the format enum, per-format descriptors, format
   predicates.
 - `dasllama_convert.das` — every tensor format conversion, any platform, any caller.
+- `dasllama_quant.das` — what the Q8_0 format IS (block geometry, scales) and the quant-quality
+  detector; a conversion that uses the format belongs in `dasllama_convert.das`.
 - `dasllama_repack.das` — every disk-order to compute-order kernel-layout transform.
 - `dasllama_kv_codec.das` — the KV-cache runtime codec: one family per cache format, kept whole.
 - `dasllama_rope.das` — RoPE angle and table generation.

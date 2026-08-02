@@ -43,6 +43,22 @@ Every non-generated file under `dasllama/` appears here. `dasllama_env.das` and
   debt, **not precedent**. Nothing platform-specific may be added; new shared concerns get their own
   file rather than another thousand lines here.
 - **`dasllama_transformer.das`** — the block-composition seam only.
+- **`dasllama_blocks.das`** — the std/dense/MoE transformer block kernels, decode and prefill,
+  plus the two default block sets the arch files bind. `forward()` never names a kernel here — it
+  dispatches through the `ArchBlocks` function pointers, which is why the family lives outside the
+  hub with no hook.
+- **`dasllama_moe.das`** — MoE expert routing and dispatch: the top-k router, per-expert FFN
+  accumulation, the shared expert, and the decode instruments. The block kernels reach it only
+  through `moe_ffn_core`.
+- **`dasllama_attn_prefill.das`** — prefill attention, threaded over heads. `prefill_attention`
+  is the only entry; the classic/blocked/flash head kernels and their KV-codec ladders are its
+  implementation.
+- **`dasllama_batch.das`** — the batched decode step: one pass of the weights over B sessions,
+  GEMVs widened to B-row GEMMs, attention still per-(row, head) against each session's own cache.
+- **`dasllama_sampling.das`** — token sampling and the generation drivers. A leaf on top of
+  `forward`/`eval_batch`; the engine never calls back in.
+- **`dasllama_ple.das`** — gemma-4 E-series per-layer embeddings and the gemma4 MoE FFN. The
+  forward sequence reaches it only through the hooks it registers at init.
 - **`dasllama_config.das`** — `DlimConfiguration`: every input that changes `.dlim` image BYTES,
   in one struct, plus its identity formatter. A knob that does not change image bytes does not
   belong here; a knob that does and is missing is an image-aliasing bug.
@@ -66,6 +82,9 @@ often gotten wrong, so each says explicitly where the neighbouring half goes.
   drivers (GGUF lookup, threading, guards) stay with their containers and dispatch in. ONE
   carve-out: a conversion that IS a KV-cache format's store/read half lives with its codec family
   (§ below).
+- **`dasllama_quant.das`** — the Q8_0 format itself (block geometry, scale layout) and the
+  quantization-quality detector. Conversions that USE the format live in `dasllama_convert.das`;
+  this file owns what the format IS.
 - **`dasllama_repack.das`** — every disk-order → compute-order kernel-LAYOUT transform (grp
   interleaves, disk-order extractors, panel unpacks), any format, any platform. Number sources
   (tune stamps, bake overrides) stay with their owners and pass plain parameters in.

@@ -196,3 +196,12 @@
     turns an invisible class of bug into an enumerated, reviewable list. Note this is ADVISORY — it
     flags "this function hand-binds", not "this function is wrong". Until it exists the rule is
     structural: nothing dispatches a kernel except its `enc_*` builder (CODEREVIEW rule 21).
+
+14. **`dasllama_blocks` / `dasllama_moe` / `dasllama_ple` have no direct tests.** All three
+   are pointer-dispatched forward-loop internals moved out of `dasllama_common` during the reorg;
+   today their only coverage is the forward/family matrix — exactly the "the model still runs"
+   posture CODEREVIEW's Tests section calls out. Their siblings from the same wave have direct
+   suites (`test_batch_decode`/`test_batch_grid`, `test_prefill`/`test_flash`, `test_sampling`).
+   Done = each of the three gets a feed-the-function suite (a block kernel against a reference
+   forward step; `moe_ffn_core` routing against a hand-checked top-k case; the PLE pre-step
+   against a fixture), or a written carve-out on the rule for pointer-dispatched move-outs.
