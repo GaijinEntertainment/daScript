@@ -31,7 +31,7 @@ require math                     // mad (referenced by the cloned template bodie
 require daslib/json
 require daslib/json_boost
 require daslib/fio
-require daslib/strings_boost   // join — the metal_tensor crown list
+require daslib/strings_boost   // nolint:STYLE030,LINT019 — join for the metal_tensor crown list, only inside the das_metal static_if half
 
 // The shipped-fallback registry: dasllama_tuned_fallbacks() maps every [tuned] kernel to the
 // perm it falls back to ON THIS BOX, so report() never restates one as a literal.
@@ -2205,7 +2205,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
     // Metal-4 tensor twin race: each tensor pso twin runs against its shipped simdgroup kernel
     // on this box's GPU; winners join the runtime "metal_tensor" crown list (empty = simdgroup
     // everywhere — the pre-M5 expectation). Skips cleanly with no Metal device.
-    var metal_crowns : string
+    var metal_crowns : string   // nolint:LINT003,LINT019 — written by the das_metal arm
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var mt_wins : array<string>
         var mt_ran = false

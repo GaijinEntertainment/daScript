@@ -10,7 +10,7 @@ require ?das_metal dasllama/dasllama_metal_prefill  // min-npos setter + stats +
 require ?das_metal dasllama/dasllama_metal_decode  // decode shutdown (the kq/quantized-KV arms touch the decode driver)
 require ?das_metal metal/das_metal_boost  // metal_live_object_count for the leak gate
 require daslib/jobque_boost
-require daslib/fio  // used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
+require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
 require strings
 require math
 require _model_tier

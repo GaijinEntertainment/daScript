@@ -1116,16 +1116,18 @@ def private forced_maxd_pair(tr, trg : Model; prompt : array<int64>; nsteps : in
 // one GPU prefill on a throwaway session — the poison: prefill's PLAIN per-tensor region
 // uploads claim g_regions entries the decode drivers later look up as cat3 CONCATS
 def private foreign_gpu_prefill(tr, trg : Model) {
-    with_job_que() {
-        setup_dasllama_jobque()
-        var s = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
-        let p <- encode(tr, counting_prompt(3, 44), true, false)
-        select_prefill_override("metal")
-        set_metal_prefill_min_npos(1l)
-        eval_(trg, s, p)
-        set_metal_prefill_min_npos(64l)
-        select_prefill_override("")
-        delete s
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        with_job_que() {
+            setup_dasllama_jobque()
+            var s = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+            let p <- encode(tr, counting_prompt(3, 44), true, false)
+            select_prefill_override("metal")
+            set_metal_prefill_min_npos(1l)
+            eval_(trg, s, p)
+            set_metal_prefill_min_npos(64l)
+            select_prefill_override("")
+            delete s
+        }
     }
 }
 

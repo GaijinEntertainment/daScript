@@ -7,13 +7,13 @@ require dastest/testing_boost public
 require dasllama/dasllama   // the public facade (engine + arch registrations + the metal overrides); off-Apple the static_if halves compile out and only its dasllama_common re-export stays referenced
 require dasllama/dasllama_math   // set_wscale_f16 — the wscale matrix axis
 require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor transform
-require dasllama/dasllama_parity   // cached_ids/cached_vals (CPU references mapped like .dlim images), used only inside the Apple static_if half
+require dasllama/dasllama_parity   // nolint:STYLE030,LINT019 — cached_ids/cached_vals, used only inside the Apple static_if half
 require ?das_metal dasllama/dasllama_metal_decode  // stats/declines/shutdown rails
 require ?das_metal dasllama/dasllama_metal_prefill  // prefill stats/declines rails
 require ?das_metal dasllama/dasllama_metal_common  // the kernel coverage census (tensor-twin cell)
 require ?das_metal metal/das_metal_boost  // device probe + metal_live_object_count
 require daslib/jobque_boost
-require daslib/fio  // used only inside the Apple static_if half
+require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
 require math  // used only inside the Apple static_if half
 require strings
 require _model_tier
@@ -779,7 +779,7 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
 // crowns, recompile the PSOs, and assert the model still produces the CPU's tokens with twins in
 // the graph. A new tensor family joins CROWNED below.
 [unused_argument(t, path)]   // off-Apple the gated body is empty
-def private tensor_twin_row(t : T?; path, tag : string) {
+def private tensor_twin_row(t : T?; path, tag : string) {   // nolint:LINT012,LINT019 — tag is read by the das_metal arm
     static_if (typeinfo builtin_module_exists(das_metal)) {
         if (!family_on(t, "llama") || !arm_on(t, "tensor") || !model_available(t, path)) {
             return
@@ -1406,7 +1406,7 @@ def private gemma4_hetero_q8_row(t : T?; path : string) {
         var b4g : array<int64>
         with_job_que() {
             setup_dasllama_jobque()
-            cpu_ids <- cached_ids(path, "gen_c1_30_n8") $ {   // nolint:PERF030 — fresh empty target, single move
+            cpu_ids <- cached_ids(path, "gen_c1_30_n8") $ {   // nolint:PERF030,LINT019 — fresh empty target, single move; fires only on the das_metal arm
                 var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
                 var ids <- generate(tr, s, count_prompt, length(count_prompt) + 8)
                 delete s
@@ -1417,7 +1417,7 @@ def private gemma4_hetero_q8_row(t : T?; path : string) {
             gpu_ids := g2
             delete g2
             select_decode_override("")
-            cpu_b2 <- cached_ids(path, "b2pair_c1c7_n4") $ {   // nolint:PERF030 — fresh empty target, single move
+            cpu_b2 <- cached_ids(path, "b2pair_c1c7_n4") $ {   // nolint:PERF030,LINT019 — fresh empty target, single move; fires only on the das_metal arm
                 return <- batch_pair_steps(tr, tr, count_prompt, count_prompt2, 4)
             }
             var cpu_bl <- cached_vals(path, "b4forced_n4") $ {
@@ -1425,7 +1425,7 @@ def private gemma4_hetero_q8_row(t : T?; path : string) {
             }
             let ba0 = metal_batch_decode_stats().steps
             select_decode_override("metal")
-            gpu_b2 <- batch_pair_steps(tr, trg, count_prompt, count_prompt2, 4)   // nolint:PERF030 — fresh empty target, single move
+            gpu_b2 <- batch_pair_steps(tr, trg, count_prompt, count_prompt2, 4)   // nolint:PERF030,LINT019 — fresh empty target, single move; fires only on the das_metal arm
             var gpu_bl <- batch_quad_forced_logits(tr, trg, count_prompt, count_prompt2, count_prompt3, count_prompt4, 4)
             select_decode_override("")
             served_bat = metal_batch_decode_stats().steps - ba0
@@ -1508,13 +1508,13 @@ def private gemma4_hetero_row(t : T?; path : string) {
         var fmaxd = 0.0
         with_job_que() {
             setup_dasllama_jobque()
-            cpu_ids <- cached_ids(path, "gen_free_n128") $ {   // nolint:PERF030 — fresh empty target, single move
+            cpu_ids <- cached_ids(path, "gen_free_n128") $ {   // nolint:PERF030,LINT019 — fresh empty target, single move; fires only on the das_metal arm
                 var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
                 var ids <- generate(tr, s, prompt, length(prompt) + 128)
                 delete s
                 return <- ids
             }
-            cpu_cnt_ids <- cached_ids(path, "gen_c1_30_n8") $ {   // nolint:PERF030 — fresh empty target, single move
+            cpu_cnt_ids <- cached_ids(path, "gen_c1_30_n8") $ {   // nolint:PERF030,LINT019 — fresh empty target, single move; fires only on the das_metal arm
                 var sc = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
                 var idsc <- generate(tr, sc, count_prompt, length(count_prompt) + 8)
                 delete sc
@@ -1560,12 +1560,12 @@ def private gemma4_hetero_row(t : T?; path : string) {
             served_pf = metal_prefill_stats().prefills - pf0
             // B=2 batched-decode parity (counting margins — see the header note): CPU truth
             // then the batched metal override, 4 steps per stream over CPU-prefilled state
-            cpu_bat <- cached_ids(path, "b2pair_c1c7_n4") $ {   // nolint:PERF030 — fresh empty target, single move
+            cpu_bat <- cached_ids(path, "b2pair_c1c7_n4") $ {   // nolint:PERF030,LINT019 — fresh empty target, single move; fires only on the das_metal arm
                 return <- batch_pair_steps(tr, tr, count_prompt, count_prompt2, 4)
             }
             let ba0 = metal_batch_decode_stats().steps
             select_decode_override("metal")
-            gpu_bat <- batch_pair_steps(tr, trg, count_prompt, count_prompt2, 4)   // nolint:PERF030 — fresh empty target, single move
+            gpu_bat <- batch_pair_steps(tr, trg, count_prompt, count_prompt2, 4)   // nolint:PERF030,LINT019 — fresh empty target, single move; fires only on the das_metal arm
             select_decode_override("")
             served_bat = metal_batch_decode_stats().steps - ba0
         }

@@ -4,7 +4,7 @@ options no_aot     // invokes the compiler at runtime (compile_file) — not AOT
 
 require dastest/testing_boost public
 require daslib/ast
-require strings
+require strings   // nolint:STYLE030,LINT019 — used only inside the das_metal static_if half
 
 // The @role derivation's whole-buffer rule: a tracked buffer handed WHOLE to a same-module
 // helper takes its direction from the callee's PARAMETER — `var` means the callee may store
