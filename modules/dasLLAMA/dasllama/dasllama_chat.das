@@ -286,10 +286,10 @@ def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) {
     render_parts(m, c.tmpl.assistant_open.parts, "", out)
 }
 
-// Render an AUDIO turn's prefill as two spans around the soft-token splice point (head before,
-// tail after) — matches llama-mtmd-cli exactly, whose text chunks break at media boundaries so
-// BPE merges never cross the audio.
-def private render_prompt_audio(m : Model; c : ChatSession; var head : array<int64>; var tail : array<int64>) {
+//! Render an AUDIO turn's prefill as two spans around the soft-token splice point (head before,
+//! tail after) — matches llama-mtmd-cli exactly, whose text chunks break at media boundaries so
+//! BPE merges never cross the audio. Public with ``create_chat_renderer_``: the render-only seam.
+def render_prompt_audio(m : Model; c : ChatSession; var head : array<int64>; var tail : array<int64>) {
     if (c.first && c.tmpl.add_bos) {
         head |> push(bos_id(m))
     }

@@ -4381,9 +4381,9 @@ def hermes_tools(var ct : ChatTemplate) {
     ct.tool_resp_close = "</tool_response>"
 }
 
-// ===== std/dense block kernels (prefill, batched) =====
-// Batched counterparts to attention_std_decode / ffn_dense_decode; bit-for-bit identical to
-// calling forward() per position in sequence. Q4 has no batched kernel, falls back to per-token.
+// ===== forward drivers (prefill, batched) =====
+// The prefill/batch entry points and the shared QKV+RoPE prefix; the block kernels themselves
+// live in dasllama_blocks. Bit-for-bit identical to calling forward() per position in sequence.
 
 // attn-norm → batched QKV(+bias) → qk/v-norm → RoPE, for npos rows of x_b into q_b/k_b/v_b — the
 // position-free head of the std attention block, shared by prefill and (later) batched decode.
