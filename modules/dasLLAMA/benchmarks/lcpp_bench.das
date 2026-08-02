@@ -14,6 +14,7 @@ require dasllama/dasllama_audio   // --asr: AUDIO_SAMPLE_RATE, the 16 kHz mono c
 require daslib/module_path            // get_this_module_dir — the default prompt corpus beside this bench
 require ?das_accelerate dasllama/dasllama_math_accelerate   // nolint:STYLE030 — the --accel leg; Apple-only C++ module
 require ../performance/profile_common.das   // profile_threads + affinity_on + bench records — the standing per-box methodology
+require llvm/daslib/llvm_tune   // tune_app_script — the exe-vs-script discriminator behind --for-debug-purposes
 require daslib/jobque_boost
 require daslib/clargs
 require daslib/fio
@@ -107,6 +108,10 @@ struct Args {
     @clarg_doc = "Refuse to mint artifacts: load only an existing prepared .dlim image, panic otherwise (the gen_bench_records --oracle contract)"
     frozen : bool
 
+    @clarg_name = "for-debug-purposes"
+    @clarg_doc = "Allow running as a -jit SCRIPT — a debug instrument only: output is stamped debug-jit and must never enter records. Measurement runs the released exe"
+    for_debug_purposes : bool
+
     @clarg_doc = "ASR cell mode: -m becomes a CATALOG substring (display name or das_model), not a path. Times transcribe best-of--r over the model's corpus buckets and emits the same BenchModel cell the LLM rows use"
     asr : bool
 
@@ -188,7 +193,7 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
     var warm_text = ""
     measure_das(m, warm, 1, spec.lang, warm_text)   // JIT compile + first-touch
     delete warm
-    var run = BenchRun(engine = "das", backend = "cpu", flavor = "tuned",
+    var run = BenchRun(engine = "das", backend = "cpu", flavor = flavor_stamp("tuned"),
         workload = asr_workload(spec), box = box_name(), threads = threads,
         date = format_time(get_clock(), "%Y-%m-%d"), cmd = bench_cmd_line(), env = bench_env_line(),
         sha = run_capture("git rev-parse --short=9 HEAD", true), version = das_version(),
@@ -397,22 +402,41 @@ def private tests_of(rows : array<RowStat>) : table<string; BenchTest> {
     return <- { for (r in rows); r.test => BenchTest(tok_s = r.mean, stddev = r.sd) }
 }
 
+// true when this process is a -jit script run (--for-debug-purposes): every emitted record's
+// flavor is stamped debug-jit so no board or oracle can mistake it for measurement
+var private g_debug_run = false
+
+def private flavor_stamp(base : string) : string {
+    return g_debug_run ? "debug-jit:{base}" : base
+}
+
 [export]
-def main() {
+def main() : int {
     if (!jit_enabled()) {
         print("This benchmark is JIT-only — run with: daslang -jit <file>\n")
-        return
+        return 1
     }
     var r <- parse_args(type<Args>)
     if (r |> is_err) {
         print("error: {r |> unwrap_err}\n\n")
         print_help(get_command_info(type<Args>), "lcpp_bench")
-        return
+        return 1
     }
     let cfg <- r |> move_unwrap
     if (cfg.help) {
         print_help(get_command_info(type<Args>), "lcpp_bench")
-        return
+        return 0
+    }
+    // measurement exists only from the released exe: a -jit SCRIPT run reads whatever sidecar
+    // sits beside the script and re-keys nothing — its numbers must never enter records
+    g_debug_run = !empty(tune_app_script())
+    if (g_debug_run && !cfg.for_debug_purposes) {
+        print("lcpp_bench: this is a -jit SCRIPT run — measurement runs the released exe (daspkg release).\n")
+        print("  pass --for-debug-purposes to proceed as a debug instrument; output is stamped debug-jit and is not record-grade\n")
+        return 1
+    }
+    if (g_debug_run) {
+        print("lcpp_bench: DEBUG RUN (-jit script) — numbers are debug-grade, flavor is stamped debug-jit\n")
     }
     let gpu = cfg.ngl != 0
     if (!gpu) {
@@ -445,30 +469,38 @@ def main() {
         threads = to_int(get_env_variable("DAS_JOBQUE_THREADS"))
         say(fmt, "warning: DAS_JOBQUE_THREADS overrides -t — running {threads} lanes\n")
     } elif (!t_env) {
+        // the PC measurement regime caps at 16 lanes (an explicit env or -t always wins) —
+        // a big-SMT box at full width measures the scheduler, not the kernels
+        if (get_platform_name() == "windows" && cfg.threads <= 0 && threads > 16) {
+            say(fmt, "lcpp_bench: capping {threads} lanes to the 16-lane PC regime (-t or DAS_JOBQUE_THREADS overrides)\n")
+            threads = 16
+        }
         set_jobque_threads_cap(max(threads - 1, 1))
     }
     let pinned = affinity_on() && !has_env_variable("DAS_JOBQUE_AFFINITY")
     if (pinned) {
         set_jobque_affinity(2)   // 2 = hard mask, the llama-bench --cpu-strict mirror (mode 1 re-rolls SMT placement)
     }
+    // the regime is set BY THE BENCH, printed so nobody has to guess: N lanes = N-1 pool
+    // workers + the computing main thread (DAS_JOBQUE_THREADS counts LANES, not workers)
+    say(fmt, "regime: {threads} lanes ({max(threads - 1, 1)} pool workers + main), affinity {pinned ? "hard mask (bench-forced)" : (has_env_variable("DAS_JOBQUE_AFFINITY") ? "env override" : "off (platform default)")}\n")
     if (cfg.asr) {   // the audio cell shares every lane decision above, then runs its own protocol
-        asr_cell_main(cfg.model, cfg.json_path, reps, threads)
-        return
+        return asr_cell_main(cfg.model, cfg.json_path, reps, threads) ? 0 : 1
     }
     apply_box_profile_runtime()   // the tuned per-box stack — what load_model users get
     if (!tune_gate()) {   // never measure on fallback winners — the whole board would sandbag
-        return
+        return 1
     }
     if (cfg.accel && gpu) {
         print("--accel is a CPU-tier lever — drop it or run with -ngl 0\n")
-        return
+        return 1
     }
     if (cfg.accel) {
         static_if (typeinfo builtin_module_exists(das_accelerate)) {
             dasllama_accelerate_enable(32l)   // the shipped +AMX defaults: min ntok 32, work floor 512 MMAC
         } else {
             print("--accel requested but das_accelerate is not built on this platform — no accel row to measure\n")
-            return
+            return 1
         }
     }
     if (gpu) {
@@ -717,7 +749,7 @@ def main() {
     var dr = BenchRun(
         engine = "das",
         backend = backend,
-        flavor = cfg.accel ? "accel" : "tuned",
+        flavor = flavor_stamp(cfg.accel ? "accel" : "tuned"),
         box = box,
         threads = threads,
         date = date,
@@ -759,10 +791,10 @@ def main() {
         let headers <- ["engine", "model", "backend", "ngl", "threads", "test", "t/s"]
         let aligns <- [ColAlign.left, ColAlign.left, ColAlign.left, ColAlign.right, ColAlign.right, ColAlign.left, ColAlign.right]
         print(render_md_table(headers, aligns, mdRows))
-        return
+        return 0
     }
     if (fmt != OutFmt.json) {
-        return
+        return 0
     }
     let text = sprint_json(jsonModels, true)
     if (!empty(cfg.json_path)) {
@@ -780,4 +812,5 @@ def main() {
         }
     }
     print("{text}\n")
+    return 0
 }
