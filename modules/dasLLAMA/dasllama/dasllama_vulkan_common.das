@@ -1679,6 +1679,22 @@ def vk_arena_place(wq : array<uint8>; ws : array<uint8>; n : int64; rows : int64
     return arena_place(unsafe(addr(wq[0])), empty(ws) ? null : unsafe(addr(ws[0])), n, rows, fmt)
 }
 
+// the prefill twin of arena_ensure_scratch below: same arena, the batch GEMM scratch set
+def arena_ensure_batch(fmt : int) {
+    unsafe {
+        var a & = g_gpu.arenas[fmt]
+        if (a.batch_ready) {
+            return
+        }
+        ensure_batch_state()
+        a.batch_meta = make_host_buf(BATCH_META_BYTES, true)
+        a.batch_set = vk_set6(a.wqbuf, a.wsbuf, a.batch_meta.buf, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, g_gpu.batch_y1_dev,
+            a.wqbytes, a.wsbytes, BATCH_META_BYTES, BATCH_XQ_BYTES, BATCH_XS_BYTES, BATCH_Y_BYTES,
+            fixed_array(0u, 0u, 0u, 0u, 0u, VHG_YO))   // meta/acts fill pre-cmd
+        a.batch_ready = true
+    }
+}
+
 // Bindings 0/1 are the arena planes; 2-5 are per-dispatch scratch, written exactly as
 // ensure_gemv_scratch writes them for a per-op stack — so an arena-resident tensor runs the SAME
 // kernels with the same meta convention. Lazy: a format only pays when it actually dispatches.
@@ -2101,6 +2117,15 @@ def rd_gemv_wg(rows : int64) : uint => uint((rows + g_gpu.rows_per_wg - 1l) / g_
 // ===== GPU per-dispatch profiler (DASLLAMA_GPU_PROF=1) =====
 // BOTTOM_OF_PIPE stamps; results ride a same-submit copy, no extra fence. Overlapped hazard
 // levels put the whole level's cost on the LAST member's delta (earlier members read near-zero)
+
+// decode per-role accumulation across tokens (stamps overwrite each submit); printed every 32
+var g_rdq_n = 0u
+var g_rdq_count = 0l
+var g_rdq_total = 0.0lf
+var g_rdq_pro = 0.0lf
+var g_rdq_tail = 0.0lf
+var g_rdq_role : double[16]
+
 let PFQ_CAP = 2048u
 var g_pfq_pool : QueryPool
 var g_pfq_buf : HostBuf
@@ -2457,14 +2482,6 @@ def rd_dispatch_gemv(raw : VkCommandBuffer; fmt : int; var set : VkDescriptorSet
     rd_dispatch(raw, gemv_pipe(fmt), set, groups, h)
 }
 
-// decode per-role accumulation across tokens (stamps overwrite each submit); printed every 32
-var g_rdq_n = 0u
-var g_rdq_count = 0l
-var g_rdq_total = 0.0lf
-var g_rdq_pro = 0.0lf
-var g_rdq_tail = 0.0lf
-var g_rdq_role : double[16]
-
 // One-shot command buffers (the KV readback rails) are freed by their caller — registering them
 // in model_cmds would grow it per hydration until the next model drop.
 def alloc_transient_cmd : VkCommandBuffer {
@@ -2498,19 +2515,19 @@ def cmd_bind_dispatch(raw : VkCommandBuffer; var set_ : VkDescriptorSet; groups 
     vkCmdDispatch(raw, groups, 1u, 1u)
 }
 
-// the GEMV pipeline for a stack's format (0 = the q8 kernel, 1/2/3/4 = kq_moe_gemv_k4/5/6/q40)
+// the GEMV pipeline for a stack's format (the arena fmt slot IS the KqFmt ordinal)
 def gemv_pipe(fmt : int) : Pipeline {
-    if (fmt == 0) {
+    if (fmt == int(KqFmt.q8)) {
         return weak_copy(g_gpu.pipeline)
-    } elif (fmt == 1) {
+    } elif (fmt == int(KqFmt.k4)) {
         return weak_copy(g_gpu.gemv_k4)
-    } elif (fmt == 2) {
+    } elif (fmt == int(KqFmt.k5)) {
         return weak_copy(g_gpu.gemv_k5)
-    } elif (fmt == 3) {
+    } elif (fmt == int(KqFmt.k6)) {
         return weak_copy(g_gpu.gemv_k6)
-    } elif (fmt == 4) {
+    } elif (fmt == int(KqFmt.q40)) {
         return weak_copy(g_gpu.gemv_q40)
-    } elif (fmt == 6) {
+    } elif (fmt == int(KqFmt.q8n)) {
         return weak_copy(g_gpu.gemv_q8n)
     }
     panic("dasLLAMA vulkan tier: no GEMV kernel for stack format {fmt}")
