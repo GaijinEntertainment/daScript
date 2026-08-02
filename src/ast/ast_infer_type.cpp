@@ -292,6 +292,12 @@ namespace das {
         Visitor::preVisitStructureField(that, decl, last);
         checkEmptyName(decl.name, "structure field", decl.at);
         that->fieldLookup[decl.name] = fieldIndex++;
+        if (!decl.type) {
+            program->stickyError("malformed AST, structure field '" + decl.name + "' is missing its type",
+                  "likely a macro-generated declaration; set its type to auto to request inference", "",
+                  decl.at, CompilationError::internal_field);
+            decl.type = new TypeDecl(Type::autoinfer);  // repair in place; the sticky error still fails the compile
+        }
         if (decl.type->isAuto() && !decl.init) {
             error("structure field type can't be inferred, it needs an initializer", "", "",
                   decl.at, CompilationError::missing_structure_field);
@@ -469,6 +475,12 @@ namespace das {
     void InferTypes::preVisitGlobalLet(const VariablePtr &var) {
         Visitor::preVisitGlobalLet(var);
         checkEmptyName(var->name, "global variable declaration", var->at);
+        if (!var->type) {
+            program->stickyError("malformed AST, global variable '" + var->name + "' is missing its type",
+                  "likely a macro-generated declaration; set its type to auto to request inference", "",
+                  var->at, CompilationError::internal_variable);
+            var->type = new TypeDecl(Type::autoinfer);  // repair in place; the sticky error still fails the compile
+        }
         if (noUnsafeUninitializedStructs && !var->init && var->type->unsafeInit()) {
             if (!hasSafeWhenUninitialized(var->annotation)) {
                 error("Uninitialized variable " + var->name + " is unsafe. Use initializer syntax or @safe_when_uninitialized when intended.", "", "",
@@ -665,6 +677,22 @@ namespace das {
     void InferTypes::preVisit(Function *f) {
         Visitor::preVisit(f);
         checkEmptyName(f->name, "function declaration", f->at);
+        if (!f->result) {
+            program->stickyError("malformed AST, function '" + f->name + "' is missing its result type",
+                  "likely a macro-generated function; set result to auto to request inference", "",
+                  f->at, CompilationError::internal_function);
+            f->result = new TypeDecl(Type::autoinfer);  // repair in place; the sticky error still fails the compile
+        }
+        for (auto it = f->arguments.begin(); it != f->arguments.end();) {
+            if (*it == nullptr) {
+                program->stickyError("malformed AST, function '" + f->name + "' has a null argument entry",
+                      "likely a macro-generated function", "",
+                      f->at, CompilationError::internal_function);
+                it = f->arguments.erase(it);  // repair in place; the sticky error still fails the compile
+            } else {
+                ++it;
+            }
+        }
         oneReturn = nullptr;
         returnCount = 0;
         canFoldResult = true;
@@ -689,6 +717,12 @@ namespace das {
     void InferTypes::preVisitArgument(Function *fn, const VariablePtr &var, bool lastArg) {
         Visitor::preVisitArgument(fn, var, lastArg);
         checkEmptyName(var->name, "function argument", var->at);
+        if (!var->type) {
+            program->stickyError("malformed AST, function argument '" + var->name + "' is missing its type",
+                  "likely a macro-generated declaration; set its type to auto to request inference", "",
+                  var->at, CompilationError::internal_variable);
+            var->type = new TypeDecl(Type::autoinfer);  // repair in place; the sticky error still fails the compile
+        }
         if (var->type->isAlias()) {
             if (auto aT = inferAlias(var->type)) {
                 var->type = aT;
@@ -3613,6 +3647,16 @@ namespace das {
     }
     void InferTypes::preVisit(ExprBlock *block) {
         Visitor::preVisit(block);
+        for (auto it = block->arguments.begin(); it != block->arguments.end();) {
+            if (*it == nullptr) {
+                program->stickyError("malformed AST, block has a null argument entry",
+                      "likely a macro-built block", "",
+                      block->at, CompilationError::internal_variable);
+                it = block->arguments.erase(it);  // repair in place; the sticky error still fails the compile
+            } else {
+                ++it;
+            }
+        }
         block->hasEarlyOut = false;
         block->hasReturn = false;
         block->forLoop = false;
@@ -3642,6 +3686,12 @@ namespace das {
     void InferTypes::preVisitBlockArgument(ExprBlock *block, const VariablePtr &var, bool lastArg) {
         Visitor::preVisitBlockArgument(block, var, lastArg);
         checkEmptyName(var->name, "block argument", var->at);
+        if (!var->type) {
+            program->stickyError("malformed AST, block argument '" + var->name + "' is missing its type",
+                  "likely a macro-generated declaration; set its type to auto to request inference", "",
+                  var->at, CompilationError::internal_variable);
+            var->type = new TypeDecl(Type::autoinfer);  // repair in place; the sticky error still fails the compile
+        }
         if (!var->can_shadow && !program->policies.allow_block_variable_shadowing) {
             if (func) {
                 for (auto &fna : func->arguments) {
@@ -5056,6 +5106,30 @@ namespace das {
         Visitor::preVisit(expr);
         // macro generated invisible variables
         // DAS_ASSERT(expr->visibility.line);
+        if (!expr->body && expr != comprehensionFor) {  // a comprehension's embedded for legally has no body until lowering
+            program->stickyError("malformed AST, for loop is missing its body",
+                  "likely a macro-built loop; set body to an ExprBlock", "",
+                  expr->at, CompilationError::internal_expression);
+            expr->body = new ExprBlock();  // repair in place; the sticky error still fails the compile
+            expr->body->at = expr->at;
+        }
+        for (size_t i = 0; i < expr->sources.size();) {
+            if (expr->sources[i] == nullptr) {
+                program->stickyError("malformed AST, for loop has a null source entry",
+                      "likely a macro-built loop", "",
+                      expr->at, CompilationError::internal_expression);
+                // repair in place (erase the whole iterator column, keeping the parallel
+                // vectors consistent); the sticky error still fails the compile
+                expr->sources.erase(expr->sources.begin() + i);
+                if (expr->iterators.size() > i) expr->iterators.erase(expr->iterators.begin() + i);
+                if (expr->iteratorsAt.size() > i) expr->iteratorsAt.erase(expr->iteratorsAt.begin() + i);
+                if (expr->iteratorsAka.size() > i) expr->iteratorsAka.erase(expr->iteratorsAka.begin() + i);
+                if (expr->iteratorsTupleExpansion.size() > i) expr->iteratorsTupleExpansion.erase(expr->iteratorsTupleExpansion.begin() + i);
+                if (expr->iteratorsTags.size() > i) expr->iteratorsTags.erase(expr->iteratorsTags.begin() + i);
+            } else {
+                ++i;
+            }
+        }
         loop.push_back(expr);
         pushVarStack();
     }
@@ -5069,6 +5143,14 @@ namespace das {
             error("for loop needs as many iterators as there are sources", "", "",
                   expr->at, CompilationError::invalid_for_iterator_count);
             return;
+        }
+        if (expr->iteratorsAt.size() < expr->iterators.size() || expr->iteratorsAka.size() < expr->iterators.size()) {
+            program->stickyError("malformed AST, for loop iteratorsAt/iteratorsAka are shorter than the iterator list",
+                  "likely a macro-built loop; keep iterators, iteratorsAt and iteratorsAka the same length", "",
+                  expr->at, CompilationError::internal_expression);
+            // repair in place (pad with defaults); the sticky error still fails the compile
+            if (expr->iteratorsAt.size() < expr->iterators.size()) expr->iteratorsAt.resize(expr->iterators.size());
+            if (expr->iteratorsAka.size() < expr->iterators.size()) expr->iteratorsAka.resize(expr->iterators.size());
         }
         // iterator variables
         int idx = 0;
@@ -5257,6 +5339,16 @@ namespace das {
     }
     void InferTypes::preVisit(ExprLet *expr) {
         Visitor::preVisit(expr);
+        for (auto it = expr->variables.begin(); it != expr->variables.end();) {
+            if (*it == nullptr) {
+                program->stickyError("malformed AST, let expression has a null variable entry",
+                      "likely a macro-built declaration list", "",
+                      expr->at, CompilationError::internal_variable);
+                it = expr->variables.erase(it);  // repair in place; the sticky error still fails the compile
+            } else {
+                ++it;
+            }
+        }
         DAS_ASSERT(!scopes.empty());
         auto scope = scopes.back();
         expr->visibility.fileInfo = expr->at.fileInfo;
@@ -5272,6 +5364,12 @@ namespace das {
         checkEmptyName(var->name, "variable declaration", var->at);
         var->single_return_via_move = false;
         var->consumed = false;
+        if (!var->type) {
+            program->stickyError("malformed AST, variable '" + var->name + "' is missing its type",
+                  "likely a macro-generated declaration; set its type to auto to request inference", "",
+                  var->at, CompilationError::internal_variable);
+            var->type = new TypeDecl(Type::autoinfer);  // repair in place; the sticky error still fails the compile
+        }
         if (var->type && var->type->isExprType()) {
             return;
         }
@@ -6409,6 +6507,11 @@ namespace das {
                                                                                                              "this is likely due to a loop in the type system",
                   "", "",
                   LineInfo(), CompilationError::exceeds_infer_passes);
+        }
+        // re-arm sticky (malformed-AST) reports: the tree was repaired in place so the guard that
+        // detected the damage won't re-fire, and every pass cleared program->errors
+        for (auto &serr : program->stickyErrors) {
+            program->error(serr.what, serr.extra, serr.fixme, serr.at, serr.cerr);
         }
         // End-of-leg collect: sweep this leg's accumulated garbage so the next inferTypes
         // leg (macro restart / restartInfer) inherits only live nodes, not a compounding

@@ -1,0 +1,1 @@
+Reports a sticky error to the currently compiling program: unlike macro_error, the report survives subsequent inference passes, so the compile still fails even after the macro repairs the tree in place.

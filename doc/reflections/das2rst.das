@@ -430,7 +430,7 @@ def document_module_ast(_root : string) {
         group_by_regex("Size and offset", mod, %regex~.*_(size|offset)%%),
         group_by_regex("Pointer conversion", mod, %regex~(ExpressionPtr|FunctionPtr|StructurePtr)%%),
         group_by_regex("Evaluations", mod, %regex~(eval_single_expression)%%),
-        group_by_regex("Error reporting", mod, %regex~(macro_error|macro_performance_warning|macro_style_warning)%%),
+        group_by_regex("Error reporting", mod, %regex~(macro_error|macro_sticky_error|macro_performance_warning|macro_style_warning)%%),
         group_by_regex("Location and context", mod, %regex~(force_at|collect_dependencies|get_ast_context)%%),
         group_by_regex("Use queries", mod, %regex~(get_use_global_variables|get_use_functions)%%),
         group_by_regex("Log", mod, %regex~(to_compilation_log)%%),

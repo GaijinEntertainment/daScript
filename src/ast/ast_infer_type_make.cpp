@@ -1603,6 +1603,10 @@ namespace das {
         }
         return Visitor::visit(expr);
     }
+    void InferTypes::preVisit(ExprArrayComprehension *expr) {
+        Visitor::preVisit(expr);
+        comprehensionFor = expr->exprFor;   // exempt the embedded for from the null-body malformed-AST guard
+    }
     void InferTypes::preVisitArrayComprehensionSubexpr(ExprArrayComprehension *expr, Expression *subexpr) {
         Visitor::preVisitArrayComprehensionSubexpr(expr, subexpr);
         pushVarStack();
