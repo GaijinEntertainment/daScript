@@ -237,6 +237,10 @@ struct public MarkdownViewState {
     hovered_inline_node : int = -1
     hovered_fragment : int = -1
     hovered_display_byte : int = -1
+    // previous frame's hover, carried across the begin/end pair
+    hover_before_inline_node : int = -1
+    hover_before_fragment : int = -1
+    hover_before_display_byte : int = -1
     selection_revision : int = 0
     selection_commit_revision : int = 0
     selection_copy_revision : int = 0
@@ -1724,21 +1728,20 @@ def private render_children(doc : RichDocument const; node_index : int;
     }
 }
 
-def private render_list(doc : RichDocument const; node_index : int; // nolint:STYLE038
-                        var state : MarkdownViewState;
-                        var style : MarkdownViewStyle;
-                        var result : MarkdownViewResult) {
-    let list = doc.nodes[node_index]
-    var item = list.first_child
-    var ordinal = list.start_number > 0 ? list.start_number : 1
-    while (item >= 0) {
-        let node = doc.nodes[item]
-        var cache & = unsafe(state.nodes[item])
-        if (!cache.marker_valid) {
-            cache.marker = list.kind == RichNodeKind.ordered_list ? "{ordinal}." : "•"
-            cache.marker_valid = true
-        }
-        cache.control_screen_valid = false
+def private render_list_item_head(doc : RichDocument const; ordered : bool; // nolint:STYLE038
+                                  item, ordinal : int;
+                                  var state : MarkdownViewState;
+                                  var style : MarkdownViewStyle;
+                                  var result : MarkdownViewResult) {
+    // marker (or task checkbox) + the tight-list direct-inline run
+    let node = doc.nodes[item]
+    var cache & = unsafe(state.nodes[item])
+    if (!cache.marker_valid) {
+        cache.marker = ordered ? "{ordinal}." : "•"
+        cache.marker_valid = true
+    }
+    cache.control_screen_valid = false
+    {
         if (node.is_task) {
             let marker_pos = GetCursorScreenPos()
             // Reserve one state-independent square and draw both states ourselves, so toggling can never reflow.
@@ -1801,15 +1804,35 @@ def private render_list(doc : RichDocument const; node_index : int; // nolint:ST
                           style, 1.0f, 0, RichAlignment.default_, result, true)
             block_spacing(style, style.paragraph_spacing)
         }
-        var child = node.first_child
-        while (child >= 0) {
-            let kind = doc.nodes[child].kind
-            if (!md_node_kind_is_inline(kind)) {
-                render_block(doc, child, state, style, result)
-            }
-            child = doc.nodes[child].next_sibling
+    }
+}
+
+def private render_list_item(doc : RichDocument const; ordered : bool;
+                             item, ordinal : int;
+                             var state : MarkdownViewState;
+                             var style : MarkdownViewStyle;
+                             var result : MarkdownViewResult) {
+    render_list_item_head(doc, ordered, item, ordinal, state, style, result)
+    var child = doc.nodes[item].first_child
+    while (child >= 0) {
+        if (!md_node_kind_is_inline(doc.nodes[child].kind)) {
+            render_block(doc, child, state, style, result)
         }
-        item = node.next_sibling
+        child = doc.nodes[child].next_sibling
+    }
+}
+
+def private render_list(doc : RichDocument const; node_index : int;
+                        var state : MarkdownViewState;
+                        var style : MarkdownViewStyle;
+                        var result : MarkdownViewResult) {
+    let list = doc.nodes[node_index]
+    let ordered = list.kind == RichNodeKind.ordered_list
+    var item = list.first_child
+    var ordinal = list.start_number > 0 ? list.start_number : 1
+    while (item >= 0) {
+        render_list_item(doc, ordered, item, ordinal, state, style, result)
+        item = doc.nodes[item].next_sibling
         ordinal++
     }
     block_spacing(style, list.is_tight ? 2.0f : style.block_spacing)
@@ -2035,6 +2058,149 @@ def private render_block(doc : RichDocument const; node_index : int;
     }
 }
 
+def private chain_child_toward(doc : RichDocument const;
+                               ancestor, descendant : int) : int {
+    // the child of `ancestor` on the parent chain to `descendant`; -1 if none
+    return -1 if (descendant < 0 || descendant == ancestor)
+    var node = descendant
+    while (node >= 0 && doc.nodes[node].parent != ancestor) {
+        node = doc.nodes[node].parent
+    }
+    return node
+}
+
+def private render_children_partial(doc : RichDocument const;
+                                    parent, exclude : int;
+                                    var state : MarkdownViewState;
+                                    var style : MarkdownViewStyle;
+                                    var result : MarkdownViewResult;
+                                    before : bool; blocks_only : bool = false) {
+    let chain = chain_child_toward(doc, parent, exclude)
+    var child = doc.nodes[parent].first_child
+    var past_chain = false
+    while (child >= 0) {
+        let skip = (blocks_only
+            && md_node_kind_is_inline(doc.nodes[child].kind))
+        if (child == chain) {
+            if (before) {
+                if (!skip) {
+                    render_block_partial(doc, child, exclude, state, style,
+                        result, true)
+                }
+                break
+            }
+            if (!skip) {
+                render_block_partial(doc, child, exclude, state, style,
+                    result, false)
+            }
+            past_chain = true
+        } elif (!skip && (before || past_chain)) {
+            render_block(doc, child, state, style, result)
+        }
+        child = doc.nodes[child].next_sibling
+    }
+}
+
+def private render_list_partial(doc : RichDocument const;
+                                list_index, chain, exclude : int;
+                                var state : MarkdownViewState;
+                                var style : MarkdownViewStyle;
+                                var result : MarkdownViewResult; before : bool) {
+    let list = doc.nodes[list_index]
+    let ordered = list.kind == RichNodeKind.ordered_list
+    var item = list.first_child
+    var ordinal = list.start_number > 0 ? list.start_number : 1
+    var past_chain = false
+    while (item >= 0) {
+        if (item == chain) {
+            // deeper exclude keeps the item's marker + inline head on BEFORE
+            if (before) {
+                if (exclude != chain) {
+                    render_list_item_head(doc, ordered, item, ordinal,
+                        state, style, result)
+                    render_children_partial(doc, item, exclude, state, style,
+                        result, true, true)
+                }
+                break
+            }
+            if (exclude != chain) {
+                render_children_partial(doc, item, exclude, state, style,
+                    result, false, true)
+            }
+            past_chain = true
+        } elif (before || past_chain) {
+            render_list_item(doc, ordered, item, ordinal, state, style, result)
+        }
+        item = doc.nodes[item].next_sibling
+        ordinal++
+    }
+    if (!before) {
+        block_spacing(style, list.is_tight ? 2.0f : style.block_spacing)
+    }
+}
+
+def private render_block_partial(doc : RichDocument const;
+                                 node_index, exclude : int;
+                                 var state : MarkdownViewState;
+                                 var style : MarkdownViewStyle;
+                                 var result : MarkdownViewResult;
+                                 before : bool) {
+    return if (node_index < 0 || node_index >= length(doc.nodes)
+        || node_index == exclude)
+    let node = doc.nodes[node_index]
+    let chain = chain_child_toward(doc, node_index, exclude)
+    if (chain < 0) {
+        // exclude is not inside this subtree: render it whole
+        render_block(doc, node_index, state, style, result)
+        return
+    }
+    if (node.kind == RichNodeKind.quote) {
+        let p0 = GetCursorScreenPos()
+        let indent = zoomed(style, style.quote_indent)
+        Indent(indent)
+        render_children_partial(doc, node_index, exclude, state, style,
+            result, before)
+        Unindent(indent)
+        let p1 = GetCursorScreenPos()
+        if (p1.y > p0.y) {
+            var dl = GetWindowDrawList()
+            let bar_x = zoomed(style, 3.0f)
+            *dl |> AddLine(p0 + float2(bar_x, 0.0f),
+                           float2(p0.x + bar_x, p1.y),
+                           GetColorU32(style.quote_color), zoomed(style, 2.0f))
+        }
+    } elif (node.kind == RichNodeKind.unordered_list
+            || node.kind == RichNodeKind.ordered_list) {
+        render_list_partial(doc, node_index, chain, exclude, state, style,
+            result, before)
+    } else {
+        // document + defensive default: split by children, no extra chrome
+        render_children_partial(doc, node_index, exclude, state, style,
+            result, before, node.kind == RichNodeKind.list_item)
+    }
+}
+
+def public markdown_view_block_before(doc : RichDocument const;
+                                      top_node, exclude_node : int;
+                                      var state : MarkdownViewState;
+                                      var style : MarkdownViewStyle;
+                                      var result : MarkdownViewResult) {
+    //! Render the part of top_node's subtree strictly BEFORE exclude_node in
+    //! source order: whole siblings, partial quote/list ancestors. When
+    //! exclude_node == top_node nothing renders. Call between begin/end.
+    render_block_partial(doc, top_node, exclude_node, state, style, result, true)
+}
+
+def public markdown_view_block_after(doc : RichDocument const;
+                                     top_node, exclude_node : int;
+                                     var state : MarkdownViewState;
+                                     var style : MarkdownViewStyle;
+                                     var result : MarkdownViewResult) {
+    //! Mirror of `markdown_view_block_before`: the part strictly AFTER
+    //! exclude_node, including the ancestors' trailing spacing.
+    render_block_partial(doc, top_node, exclude_node, state, style, result, false)
+}
+
 [unused_argument(doc)]
 def private finish_selection(doc : RichDocument const;
                              var state : MarkdownViewState;
@@ -2098,15 +2264,17 @@ def public markdown_selection_export(state : MarkdownViewState const) : MdSelect
     return <- result
 }
 
-def public markdown_view(id : string; doc : RichDocument const; // nolint:STYLE038
-                         var state : MarkdownViewState;
-                         var style : MarkdownViewStyle;
-                         document_revision : int = 0) : MarkdownViewResult {
-    var result = MarkdownViewResult()
+def public markdown_view_begin(id : string; doc : RichDocument const;
+                               var state : MarkdownViewState;
+                               var style : MarkdownViewStyle;
+                               document_revision : int = 0) : bool {
+    //! First half of `markdown_view`. True: render via the top_blocks /
+    //! block_before/after calls, then ALWAYS `markdown_view_end`. False:
+    //! invalid doc, error text drawn, nothing pushed - skip render and end.
     if (!doc.ok || doc.root < 0) {
         TextColored(float4(1.0f, 0.35f, 0.35f, 1.0f),
                     empty(doc.error) ? "Invalid Markdown document" : doc.error)
-        return <- result
+        return false
     }
     prepare_view_state(doc, state, document_revision)
     state.render_revision++
@@ -2115,9 +2283,9 @@ def public markdown_view(id : string; doc : RichDocument const; // nolint:STYLE0
     state.viewport_top = GetWindowPos().y + GetFrameHeight()
     state.viewport_bottom = (GetWindowPos().y + GetWindowSize().y
         - GetStyle().WindowPadding.y)
-    let old_hovered_inline_node = state.hovered_inline_node
-    let old_hovered_fragment = state.hovered_fragment
-    let old_hovered_display_byte = state.hovered_display_byte
+    state.hover_before_inline_node = state.hovered_inline_node
+    state.hover_before_fragment = state.hovered_fragment
+    state.hover_before_display_byte = state.hovered_display_byte
     state.hovered_inline_node = -1
     state.hovered_fragment = -1
     state.hovered_display_byte = -1
@@ -2135,15 +2303,41 @@ def public markdown_view(id : string; doc : RichDocument const; // nolint:STYLE0
         state.selection_dragged = true
     }
     navigate_selection_keyboard(state, style)
-    var pushed_font = false
     if (style.fonts.regular != null) {
         let size = (style.fonts.size_px > 0.0f
             ? style.fonts.size_px : GetFontSize()) * view_zoom(style)
         PushFont(style.fonts.regular, size)
-        pushed_font = true
     }
     PushID(id)
-    render_block(doc, doc.root, state, style, result)
+    return true
+}
+
+def public markdown_view_top_blocks(doc : RichDocument const;
+                                    var state : MarkdownViewState;
+                                    var style : MarkdownViewStyle;
+                                    var result : MarkdownViewResult;
+                                    first_ordinal : int; last_ordinal : int = -1) {
+    //! Render root's top-level blocks with ordinals in [first..last] (inclusive;
+    //! last = -1 renders to the end). Call between begin/end.
+    return if (doc.root < 0)
+    var child = doc.nodes[doc.root].first_child
+    var ordinal = 0
+    while (child >= 0) {
+        break if (last_ordinal >= 0 && ordinal > last_ordinal)
+        if (ordinal >= first_ordinal) {
+            render_block(doc, child, state, style, result)
+        }
+        child = doc.nodes[child].next_sibling
+        ordinal++
+    }
+}
+
+def public markdown_view_end(doc : RichDocument const;
+                             var state : MarkdownViewState;
+                             style : MarkdownViewStyle;
+                             var result : MarkdownViewResult) {
+    //! Second half of `markdown_view`: selection commit/copy/hover bookkeeping,
+    //! id+font pop. Pairs with a true `markdown_view_begin`.
     PopID()
     ensure_keyboard_caret_visible(state)
     if (IsMouseClicked(ImGuiMouseButton.Left, false)
@@ -2189,14 +2383,26 @@ def public markdown_view(id : string; doc : RichDocument const; // nolint:STYLE0
             clipboard_dispose_content(content)
         }
     }
-    if (old_hovered_inline_node != state.hovered_inline_node
-            || old_hovered_fragment != state.hovered_fragment
-            || old_hovered_display_byte != state.hovered_display_byte) {
+    if (state.hover_before_inline_node != state.hovered_inline_node
+            || state.hover_before_fragment != state.hovered_fragment
+            || state.hover_before_display_byte != state.hovered_display_byte) {
         state.hover_revision++
     }
-    if (pushed_font) {
+    if (style.fonts.regular != null) {
         PopFont()
     }
+}
+
+def public markdown_view(id : string; doc : RichDocument const;
+                         var state : MarkdownViewState;
+                         var style : MarkdownViewStyle;
+                         document_revision : int = 0) : MarkdownViewResult {
+    var result = MarkdownViewResult()
+    if (!markdown_view_begin(id, doc, state, style, document_revision)) {
+        return <- result
+    }
+    render_block(doc, doc.root, state, style, result)
+    markdown_view_end(doc, state, style, result)
     return <- result
 }
 
