@@ -149,7 +149,7 @@ def tune_box_identity() : string {
     let plat = get_platform_name()
     if (plat == "windows") {
         hw = "{get_env_variable("PROCESSOR_IDENTIFIER")}|{get_env_variable("OS")}"
-    } elif (plat == "osx") {
+    } elif (plat == "osx" || plat == "darwin") {   // get_platform_name says "darwin" on macOS
         unsafe {
             popen("sysctl -n hw.model kern.osversion machdep.cpu.brand_string 2>/dev/null") $(f) {
                 while (!feof(f)) {

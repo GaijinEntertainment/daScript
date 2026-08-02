@@ -224,6 +224,24 @@ def private shipped_fallback(kernel : string) : string {
     return g_shipped?[kernel] ?? BASELINE
 }
 
+// deterministic tie-break: every candidate whose median sits within the noise floor of the
+// best is the SAME measurement — prefer the shipped baseline, else the first tied row in grid
+// order, so back-to-back mints reproduce instead of flipping between statistical twins
+// (measured: two quiet fast mints flipped 8/34 winners before this)
+def private tie_break(med : array<double>; ok : array<bool>; bi, winner : int; need : double) : int {
+    let cut = med[winner] * (1.0lf + need / 100.0lf)
+    var pick = -1
+    for (i in range(length(med))) {
+        if (ok[i] && med[i] <= cut) {
+            if (i == bi) return i
+            if (pick < 0) {
+                pick = i
+            }
+        }
+    }
+    return pick
+}
+
 def report(kernel : string; names : array<string>; best : array<double>; ok : array<bool>) : string {
     let baseline = shipped_fallback(kernel)
     // rank by MEDIAN of finalist rounds: min-over-rounds is a lottery on a non-silent box.
@@ -246,6 +264,10 @@ def report(kernel : string; names : array<string>; best : array<double>; ok : ar
         if (ok[i] && (winner < 0 || med[i] < med[winner])) {
             winner = i
         }
+    }
+    let need = max(0.5lf, noise_floor_pct())
+    if (winner >= 0) {
+        winner = tie_break(med, ok, bi, winner, need)
     }
     tune_detail("--- {kernel} ---\n")
     for (i in range(length(names))) {
@@ -275,7 +297,6 @@ def report(kernel : string; names : array<string>; best : array<double>; ok : ar
     // a winner inside the measured noise floor HOLDS the shipped baseline: flipping the perm
     // re-keys the JIT and reorders float math for a margin the box cannot even measure —
     // deterministic beats lottery
-    let need = max(0.5lf, noise_floor_pct())
     let margin = base > 0.0lf ? (base - med[winner]) / base * 100.0lf : 0.0lf
     if (wname != baseline && base > 0.0lf && margin < need) {
         wname = baseline
@@ -1890,7 +1911,9 @@ def main : int { // nolint:STYLE037 — flat one-bench-per-kernel rail; the nois
         set_jobque_affinity(2)   // JobQue pins its creator (this measurement thread) to physical CPU 0
     }
     create_job_que()   // child process exit restores affinity; runtime snapshot also reads its lane count
-    let affinity_desc = affinity_inherited ? "DAS_JOBQUE_AFFINITY={get_env_variable("DAS_JOBQUE_AFFINITY")}" : "hard CPU0 (tuner default)"
+    let affinity_desc = (affinity_inherited
+        ? "DAS_JOBQUE_AFFINITY={get_env_variable("DAS_JOBQUE_AFFINITY")}"
+        : (get_platform_name() == "darwin" ? "QoS USER_INTERACTIVE (macOS has no core mask)" : "hard CPU0 (tuner default)"))
     tune_detail("kernel tuner: {FAST_MODE ? "FAST" : "default"}, N={N}, {SCREEN_ROUNDS} full-grid screening rounds, finalists up to {ROUNDS} rounds x {REPS} reps, measurement affinity {affinity_desc}\n\n")
     // refuse before burning minutes measuring noise — a refusal costs seconds, a noisy sidecar
     // costs days of phantom regressions

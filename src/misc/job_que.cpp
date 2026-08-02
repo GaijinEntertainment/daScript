@@ -1246,23 +1246,36 @@ namespace das {
 
 #if defined(__APPLE__)
 
+#include <pthread/qos.h>
+
 namespace das {
     void SetCurrentThreadName ( const string & str ) {
         pthread_setname_np(str.c_str());
     }
 
+    // Apple scheduling runs on QoS classes, not sched_param — pthread_setschedparam opts the
+    // thread OUT of QoS permanently (later QoS calls fail EPERM), and on asymmetric silicon the
+    // QoS class is what decides P-core vs E-core placement, INCLUDING after a block: an
+    // unclassed thread that slept or waited on the GPU wakes cold on an E-core (~half scalar
+    // throughput) until sustained load re-promotes it, a classed one comes back to a P-core.
     void SetCurrentThreadPriority ( JobPriority _priority ) {
-        int priority = int(_priority);
-        float minPlatformPriority = sched_get_priority_min(SCHED_OTHER);
-        float maxPlatformPriority = sched_get_priority_max(SCHED_OTHER);
-        struct sched_param sched_param;
-        int platformPriority = (int)(minPlatformPriority + (maxPlatformPriority - minPlatformPriority)
-            * ((float)(priority - int(JobPriority::Minimum)) / (float)(int(JobPriority::Maximum) - int(JobPriority::Minimum))));
-        sched_param.sched_priority = platformPriority;
-        pthread_setschedparam(pthread_self(), SCHED_OTHER, &sched_param);
+        qos_class_t qos = QOS_CLASS_DEFAULT;
+        switch (_priority) {
+        case JobPriority::Minimum:
+        case JobPriority::Low:      qos = QOS_CLASS_UTILITY; break;
+        case JobPriority::Medium:   qos = QOS_CLASS_DEFAULT; break;
+        case JobPriority::High:     qos = QOS_CLASS_USER_INITIATED; break;
+        case JobPriority::Maximum:  qos = QOS_CLASS_USER_INTERACTIVE; break;
+        default:                    qos = QOS_CLASS_DEFAULT; break;
+        }
+        pthread_set_qos_class_self_np(qos, 0);
     }
 
-    void SetCurrentThreadAffinityCpu ( int, bool ) {}   // no public thread-affinity API on macOS
+    void SetCurrentThreadAffinityCpu ( int, bool hard ) {
+        // no public pin API on macOS — the platform lever is the QoS class, a P-core BIAS the
+        // scheduler honors across blocks; the hint mode biases, the hard mode takes the top class
+        pthread_set_qos_class_self_np(hard ? QOS_CLASS_USER_INTERACTIVE : QOS_CLASS_USER_INITIATED, 0);
+    }
 }
 
 #elif defined(_MSC_VER)

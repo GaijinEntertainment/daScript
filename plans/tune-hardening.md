@@ -119,6 +119,28 @@ Rollout findings (M1, probe = 4-acc dot N=4096 x 2000 reps x 12 rounds ≈ 30 ms
 - Deferred to 1d: child-process dastest cells for the gate rails (refusal rc, override stamp)
   — live-validated this pass; the 1d validation harness is where they belong.
 
+**Tie-break + Apple placement (also landed):**
+- report() tie-breaks inside the noise floor: candidates within `max(0.5%, floor)` of the best
+  median are the SAME measurement — prefer the shipped baseline, else the first in grid order.
+  Reproducibility measured with Parsec+MSVC live: fast mode 10/34 winner flips (12-sample
+  medians cannot resolve sub-2% twins — fast stays a debug budget), DEFAULT mode **2/34**, both
+  survivors exact ties on bandwidth-flat kernels (copy_floats, quantize_q8kv_row). 1d validation
+  re-races in the default budget and treats an inside-floor flip as reproduced.
+- jobque's Apple arm now speaks QoS (job_que.cpp): priorities map to QoS classes (sched_param
+  was opting threads OUT of QoS permanently), affinity hint -> USER_INITIATED, hard ->
+  USER_INTERACTIVE. Process start now lands on a good core (cold-start first probe 28.5% ->
+  0.6%). A thread that SLEEPS still wakes cold at any QoS — macOS resets placement across
+  blocks — so the probes + hot settle remain the guard; QoS shrinks the exposure, nothing
+  removes it. The single-lane probe verdicts "quiet" under idle Parsec+MSVC are honest: the
+  race is single-lane too, and probe medians sat in the quiet band throughout.
+- The Metal twin race's GPU times moved 1.7x between back-to-back runs under Parsec (it encodes
+  on the GPU) — crowns unaffected (2-5x margins), but a future tensor-vs-simdgroup margin under
+  ~2x needs a GPU-side quiet check before it can be trusted.
+- tune_box_identity branched on plat=="osx" but macOS reports "darwin" — the Mac branch never
+  fired, so identities were kernel-version-only. Fixed: identities enrich (hw.model + cpu
+  brand), which makes every existing Mac sidecar read STALE once. Intended — everything
+  re-mints post-hardening anyway.
+
 Next per sequencing: 1d (validation phase) + 1e (paranoid mode), then 2 (provenance/history).
 Acceptance test when ready: mint on zen2 while it is NOISY — the gate must refuse, and keep
-refusing until the actual culprit process is gone; M1 rehearsal = mint with Parsec running.
+refusing until the actual culprit process is gone.
