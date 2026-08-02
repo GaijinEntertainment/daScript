@@ -178,7 +178,7 @@ struct CanaryStaging {
     layers : array<CanaryLayerOffs>
 }
 
-def private serialize_image_meta(var arch : Archive; var st : CanaryStaging) {  // nolint:STYLE014
+def private serialize_image_meta(var arch : Archive; var st : CanaryStaging) {
     serialize_image_meta(arch, st.e)
 }
 
@@ -243,8 +243,8 @@ struct CanaryState {
 
 def private cn_ensure(@scratch var a : array<float>; n : int64) {
     if (long_length(a) < n) {
-        a |> reserve(int(n))
-        a |> resize(int(n))
+        a |> reserve(n)
+        a |> resize(n)
     }
 }
 
@@ -363,14 +363,14 @@ def stage_canary_encoder(path : string) : CanaryStaging {
         st.e.n_fb = int64(rd_i32(bytes, o)); o += 4l
         // mel filterbank [n_mel × n_fb]
         let nfilt = st.e.n_mel * st.e.n_fb
-        st.filters |> resize(int(nfilt))
+        st.filters |> resize(nfilt)
         for (i in range64(nfilt)) {
             st.filters[i] = rd_f32(bytes, o + i * 4l)
         }
         o += nfilt * 4l
         // STFT window
         let n_window = int64(rd_i32(bytes, o)); o += 4l
-        st.window |> resize(int(n_window))
+        st.window |> resize(n_window)
         for (i in range64(n_window)) {
             st.window[i] = rd_f32(bytes, o + i * 4l)
         }
@@ -392,7 +392,7 @@ def stage_canary_encoder(path : string) : CanaryStaging {
             total += r.n_elem
         }
         st.blob |> reserve(total)
-        st.blob |> resize(int(total))
+        st.blob |> resize(total)
         var offs : table<string; int64>
         var bo = 0l
         for (r in recs) {
@@ -411,7 +411,7 @@ def stage_canary_encoder(path : string) : CanaryStaging {
         st.e.pre_w = cn_off(offs, "pre_encode.out.weight"); st.e.pre_b = cn_off(offs, "pre_encode.out.bias")
         st.e.proj_w = cn_off(offs, "proj.weight"); st.e.proj_b = cn_off(offs, "proj.bias")
 
-        st.layers |> resize(int(st.e.n_layer))
+        st.layers |> resize(st.e.n_layer)
         for (l in range64(st.e.n_layer)) {
             let lo = CanaryLayerOffs(
                 nf1_w = cn_off(offs, "L{l}.norm_ff1.weight"), nf1_b = cn_off(offs, "L{l}.norm_ff1.bias"),

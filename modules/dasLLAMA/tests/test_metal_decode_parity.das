@@ -7,12 +7,12 @@ require dasllama/dasllama   // the public facade — engine + arch registrations
 require dasllama/dasllama_math   // set_wscale_f16 — the resident path reads the f32 scale plane
 require dasllama/dasllama_kv_codec   // cvt_q8kv_to_f32/cvt_tq4kv_to_f32 — the cache-row dequant oracles
 require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor transform
-require ?das_metal dasllama/dasllama_metal_decode  // nolint:STYLE030 — stats/mirror/shutdown rails
-require ?das_metal dasllama/dasllama_metal_prefill  // nolint:STYLE030 — the Metal-prefill→GPU-decode hybrid arm
-require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — metal_live_object_count for the leak gate
-require llvm/daslib/f16_cvt  // nolint:STYLE030 — f16 KV row decode in the tolerance gate (Apple half only)
+require ?das_metal dasllama/dasllama_metal_decode  // stats/mirror/shutdown rails
+require ?das_metal dasllama/dasllama_metal_prefill  // the Metal-prefill→GPU-decode hybrid arm
+require ?das_metal metal/das_metal_boost  // metal_live_object_count for the leak gate
+require llvm/daslib/f16_cvt  // f16 KV row decode in the tolerance gate (Apple half only)
 require daslib/jobque_boost
-require daslib/fio  // nolint:STYLE030 — used only inside the Apple static_if half
+require daslib/fio  // used only inside the Apple static_if half
 require math
 require strings
 require _model_tier
@@ -31,8 +31,8 @@ def private same(a, b : array<int64>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (x, y in a, b) {
+        if (x != y) {
             return false
         }
     }
@@ -120,8 +120,8 @@ def private kv_row_max_diff_one(cache_a, cache_b : array<uint8>; base_a, base_b 
             // block codecs compare dequantized (tq4: in the rotated basis both rows share)
             var da : array<float>
             var db : array<float>
-            da |> resize(int(kv_dim))
-            db |> resize(int(kv_dim))
+            da |> resize(kv_dim)
+            db |> resize(kv_dim)
             if (dt == KVDtype.q8_0) {
                 cvt_q8kv_to_f32(addr(da[0]), pa, kv_dim)
                 cvt_q8kv_to_f32(addr(db[0]), pb, kv_dim)
@@ -327,8 +327,8 @@ def private streams_match(a, b : array<array<int64>>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (!same(a[i], b[i])) {
+    for (x, y in a, b) {
+        if (!same(x, y)) {
             return false
         }
     }
@@ -475,7 +475,7 @@ def private paged_batch_greedy(tr, trg : Model; prompts : array<array<int64>>; p
 }
 
 [test]
-def test_metal_batch_decode_parity(t : T?) {
+def test_metal_batch_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, one t |> run cell per arm
     t |> run("GPU batched decode == CPU batch control, greedy streams (Llama-3.2-1B Q8)") <| @(t : T?) {
         if (!family_on(t, "llama")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -725,7 +725,7 @@ def test_metal_batch_decode_parity(t : T?) {
 }
 
 [test]
-def test_metal_decode_parity(t : T?) {
+def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, one t |> run cell per arm
     t |> run("GPU-resident decode == CPU control, greedy continuations (Llama-3.2-1B Q8)") <| @(t : T?) {
         if (!family_on(t, "llama")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {

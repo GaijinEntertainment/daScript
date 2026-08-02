@@ -8,7 +8,7 @@ options _function_length = 0   // same
 require math
 require dasllama/dasllama_env  // the shared typed env readers + the knob registry
 require daslib/fio
-require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs
+require daslib/array_boost
 require daslib/apply
 require daslib/archive
 require strings
@@ -239,8 +239,8 @@ def private wm_repack(var dqblob : array<int8>; var dqscales : array<float>; wof
 //! Non-GEMM slots (pe rows, norms, biases) are quantized-but-unread.
 def whisper_dec_quantize(var st : WhisperStaging) {
     let total = long_length(st.dblob) & ~31l
-    st.dqblob |> resize(int(total))
-    st.dqscales |> resize(int(total / 32l))
+    st.dqblob |> resize(total)
+    st.dqscales |> resize(total / 32l)
     quantize_q8_0_into(st.dblob, total, st.dqblob, st.dqscales, 0l, 0l)
     st.e.dq8 = true
     if (!select_matmul_backend_for_load()) {
@@ -432,14 +432,14 @@ def stage_whisper_model(path : string; q8 : bool = false) : WhisperStaging {
         var encJobs : array<WFillJob>
         var decJobs : array<WFillJob>
         let sz = whisper_index(bytes, int64(stat(path).size), st, recs, encJobs, decJobs)
-        st.enc.fblob |> resize(int(sz.enc_len))
+        st.enc.fblob |> resize(sz.enc_len)
         for (j in encJobs) {
             wjob_read(recs, bytes, j, st.enc.fblob, 0l)
         }
         if (q8) {
             tower_quantize(st.e.enc, st.enc)
         }
-        st.dblob |> resize(int(sz.dec_len))
+        st.dblob |> resize(sz.dec_len)
         for (j in decJobs) {
             wjob_read(recs, bytes, j, st.dblob, 0l)
         }
@@ -829,30 +829,30 @@ def make_decoder_state(w : WhisperModel) : DecoderState {
     let ta = w.enc.n_ctx
     let ncap = tmax
     var ds = DecoderState()
-    ds.kcache |> resize(int(w.n_text_layer * d * tmax))
-    ds.vcache |> resize(int(w.n_text_layer * d * tmax))
-    ds.kx |> resize(int(w.n_text_layer * d * ta))
-    ds.vx |> resize(int(w.n_text_layer * d * ta))
-    ds.ckv_tmp |> resize(int(ta * d))
-    ds.x |> resize(int(ncap * d))
-    ds.xb |> resize(int(ncap * d))
-    ds.xb2 |> resize(int(ncap * d))
-    ds.qq |> resize(int(ncap * d))
-    ds.kk |> resize(int(ncap * d))
-    ds.vv |> resize(int(ncap * d))
-    ds.h |> resize(int(ncap * 4l * d))
-    ds.hp |> resize(int(hh * 2l * ncap * hs))
-    ds.att |> resize(int(hh * ncap * max(tmax, ta)))
-    ds.x1 |> resize(int(d))
-    ds.logits |> resize(int(w.n_vocab))
+    ds.kcache |> resize(w.n_text_layer * d * tmax)
+    ds.vcache |> resize(w.n_text_layer * d * tmax)
+    ds.kx |> resize(w.n_text_layer * d * ta)
+    ds.vx |> resize(w.n_text_layer * d * ta)
+    ds.ckv_tmp |> resize(ta * d)
+    ds.x |> resize(ncap * d)
+    ds.xb |> resize(ncap * d)
+    ds.xb2 |> resize(ncap * d)
+    ds.qq |> resize(ncap * d)
+    ds.kk |> resize(ncap * d)
+    ds.vv |> resize(ncap * d)
+    ds.h |> resize(ncap * 4l * d)
+    ds.hp |> resize(hh * 2l * ncap * hs)
+    ds.att |> resize(hh * ncap * max(tmax, ta))
+    ds.x1 |> resize(d)
+    ds.logits |> resize(w.n_vocab)
     if (w.dq8) {   // largest requant image any decoder GEMM feeds (cross k/v enc_out Ta×d, mlp h ncap×4d)
         let need = max(ta * d, ncap * 4l * d)
-        ds.xqi |> resize(int(need))
-        ds.xsi |> resize(int(need / 32l))
+        ds.xqi |> resize(need)
+        ds.xsi |> resize(need / 32l)
     }
     ds.win.n_mel = w.enc.n_mel
     ds.win.n_len = AUDIO_CHUNK_FRAMES
-    ds.win.data |> resize(int(w.enc.n_mel * AUDIO_CHUNK_FRAMES))
+    ds.win.data |> resize(w.enc.n_mel * AUDIO_CHUNK_FRAMES)
     ds.prompt |> reserve(4)
     ds.toks |> reserve(int(w.n_text_ctx / 2l) - 4)   // n_max, the window token cap
     ds.step |> resize(1)
@@ -1184,6 +1184,7 @@ def set_whisper_trace(on : bool) {
 // ``has_ts``/``seek_delta`` drive the non-decreasing rule.
 def private whisper_filter_logits(w : WhisperModel; var logits : array<float>; no_timestamps : bool;
                                   n_sampled : int; last_id, penult_id : int; has_ts : bool; seek_delta : int64) {
+    let n_vocab = int(w.n_vocab)
     let is_initial = n_sampled == 0
     if (is_initial) {                    // suppress_blank (CLI default true)
         logits[w.tok_eot] = NEG_INF_LOGIT
@@ -1193,7 +1194,7 @@ def private whisper_filter_logits(w : WhisperModel; var logits : array<float>; n
     }
     logits[w.tok_not] = NEG_INF_LOGIT
     if (no_timestamps) {
-        for (i in range(w.tok_beg, int(w.n_vocab))) {
+        for (i in range(w.tok_beg, n_vocab)) {
             logits[i] = NEG_INF_LOGIT
         }
     }
@@ -1215,7 +1216,7 @@ def private whisper_filter_logits(w : WhisperModel; var logits : array<float>; n
     let penult_was_ts = n_sampled < 2 || penult_id >= w.tok_beg
     if (last_was_ts) {
         if (penult_was_ts) {
-            for (i in range(w.tok_beg, int(w.n_vocab))) {
+            for (i in range(w.tok_beg, n_vocab)) {
                 logits[i] = NEG_INF_LOGIT
             }
         } else {
@@ -1229,7 +1230,7 @@ def private whisper_filter_logits(w : WhisperModel; var logits : array<float>; n
     if (is_initial) {
         let precision = 30.0 / float(w.enc.n_ctx)
         let tid0 = int(floor(MAX_INITIAL_TS / precision + 0.5))
-        for (i in range(w.tok_beg + tid0 + 1, int(w.n_vocab))) {
+        for (i in range(w.tok_beg + tid0 + 1, n_vocab)) {
             logits[i] = NEG_INF_LOGIT
         }
     }
@@ -1237,7 +1238,7 @@ def private whisper_filter_logits(w : WhisperModel; var logits : array<float>; n
     // condition timestamps to be non-decreasing within the window
     if (has_ts) {
         let tid0 = int(seek_delta / 2l)
-        for (i in range(w.tok_beg, min(w.tok_beg + tid0, int(w.n_vocab)))) {
+        for (i in range(w.tok_beg, min(w.tok_beg + tid0, n_vocab))) {
             logits[i] = NEG_INF_LOGIT
         }
     }
@@ -1412,7 +1413,7 @@ def private transcribe_mel_windows(w : WhisperModel; var es : EncoderState; var 
                 whisper_force_ts_rule(w, ds.logits)
             }
             let t = sample_greedy(w, ds.logits, lse)
-            ds.toks |> push(t)   // nolint:PERF006 — reserved to n_max in make_decoder_state, capacity survives clear()
+            ds.toks |> push(t)   // nolint:PERF006,LINT019 — reserved to n_max in make_decoder_state, capacity survives clear(); fires only in downstream compiles of this generic
             if (g_whisper_trace) {
                 print("  [{i}] id {t.id} tid {t.tid} plog {t.plog} has_ts {has_ts} seek_delta {seek_delta}\n")
             }
@@ -1567,7 +1568,8 @@ def whisper_detect_language(w : WhisperModel; var es : EncoderState; var ds : De
     ds.prompt |> push(w.tok_sot)
     whisper_decode_batch(w, ds, ds.prompt)
     var best = 0
-    for (i in range(1, int(w.n_lang))) {   // argmax over raw logits == argmax over their softmax
+    let n_lang = int(w.n_lang)
+    for (i in range(1, n_lang)) {   // argmax over raw logits == argmax over their softmax
         if (ds.logits[w.tok_sot + 1 + i] > ds.logits[w.tok_sot + 1 + best]) {
             best = i
         }
@@ -1708,7 +1710,7 @@ def whisper_asr_caps(w : WhisperModel) : AsrCaps {
     if (w.multilingual) {
         c.languages <- whisper_lang_list()
         if (long_length(c.languages) > w.n_lang) {   // 99-lang models predate "yue"
-            c.languages |> resize(int(w.n_lang))
+            c.languages |> resize(w.n_lang)
         }
     } else {
         c.languages <- ["en"]

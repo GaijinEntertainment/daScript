@@ -120,7 +120,7 @@ def private heat_note_and_advise(t : Model; l : int64; idx : array<int64>; k, ne
     }
     var h & = unsafe(g_heat[li])
     if (length(h.cnt) < int(ne)) {
-        h.cnt |> resize(int(ne))
+        h.cnt |> resize(ne)
     }
     for (j in range64(k)) {
         h.cnt[idx[j]]++
@@ -161,9 +161,9 @@ def private expert_reuse_note(l : int64; idx : array<int64>; k, ne : int64) {
     }
     var r & = unsafe(g_reuse[li])
     if (length(r.freq) < int(ne)) {
-        r.freq |> resize(int(ne))
+        r.freq |> resize(ne)
         r.lru |> resize(120)   // sum of REUSE_CAPS
-        r.prev |> resize(int(k))
+        r.prev |> resize(k)
     }
     for (j in range64(k)) {
         let id = idx[j]
@@ -327,7 +327,7 @@ def private moe_experts_chain(t : Model; var s : Session; l : int64) { // nolint
         let fbp = biased ? addr<float const?>(t.fblob[0]) : null
         let idxp = addr<int64 const?>(s.moe_idx[0])
         let wvp = addr<float const?>(s.moe_w[0])
-        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {   // nolint:PERF026 — dispatch-API lambda capture, see attention_chain_decode
+        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {   // nolint:PERF026,LINT019 — dispatch-API lambda capture, see attention_chain_decode; consumed only by the chains anchored in blocks/ple
             unsafe {
                 if (stage == 0) {
                     // gate+up rows of expert j, then bias -> act -> requant on exactly these rows
@@ -391,7 +391,7 @@ def private moe_experts_chain(t : Model; var s : Session; l : int64) { // nolint
 // Routed experts, given the pre-normed input in s.xb and the top-k selection in s.moe_idx/s.moe_w:
 // s.moe_acc = Σ_j w_j · FFN_e_j(xb). Shared by qwen2moe/gpt-oss (via moe_ffn_core) and gemma4
 // (which folds its per-expert down scale into s.moe_w first).
-def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE037 — a flat dispatch table over expert weight format (q8/kq/q51/mx4) x placement; each arm is a distinct kernel call, not a branch to factor
+def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE037,STYLE038 — a flat dispatch table over expert weight format (q8/kq/q51/mx4) x placement; each arm is a distinct kernel call, not a branch to factor
     trace_tag(TRACE_TAG_MOE)
     let c = t.config
     let dim = c.dim
@@ -437,10 +437,10 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
         var moe_chained = false   // the fused chain reduces inline — the nhits==0 axpy tail must skip
         if (heat_moe) {
             heat_note_and_advise(t, l, s.moe_idx, k, ne)
-            s.heat_hit |> resize(int(k))
-            s.heat_o1 |> resize(int(k))
-            s.heat_o3 |> resize(int(k))
-            s.heat_o2 |> resize(int(k))
+            s.heat_hit |> resize(k)
+            s.heat_o1 |> resize(k)
+            s.heat_o3 |> resize(k)
+            s.heat_o2 |> resize(k)
             nhits = matmul_moe_gpu_heat_query(l, s.moe_idx, k, s.heat_hit, s.heat_o1, s.heat_o3, s.heat_o2)
             var hl & = unsafe(g_heat[int(l)])
             hl.hits += nhits
@@ -498,8 +498,8 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
                 s.moe_offs2 |> push(1l)
             }
             let nb = layer_kq ? dim / 256l : dim / 32l
-            s.moe_gxq |> resize(int(nhits * dim))
-            s.moe_gxs |> resize(int(nhits * nb))
+            s.moe_gxq |> resize(nhits * dim)
+            s.moe_gxs |> resize(nhits * nb)
             unsafe {
                 var gq = addr(s.moe_gxq[0])
                 var gs = addr(s.moe_gxs[0])
@@ -573,7 +573,7 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
                     mm_at_q8_groupn(s.moe_dn, t, s.moe_offs, m, s.moe_dq, s.moe_ds, nfe, dim)
                 }
             }
-            s.moe_hdn |> resize(int(nhits * dim))
+            s.moe_hdn |> resize(nhits * dim)
             prof_add("mm_moe_dn", ts_down)
             let ts_join = ref_time_ticks()
             matmul_moe_gpu_ffn_join(s.moe_hdn)
@@ -792,7 +792,7 @@ def moe_select(c : Config; var lg : float?; var idx : array<int64>; var w : arra
 // pointer core — the threaded prefill router runs this in fork workers (scalars + raw pointers
 // only; Config/Session stay on the caller). `bias` (exp_probs_b, DeepSeek-V3/glm4moe) skews the
 // top-k PICK only — the stored weights stay the unbiased probs (llama.cpp build_moe_ffn order).
-def moe_select_core(gate : MoeGate; ne, k : int64; norm_topk : bool; wscale : float; // nolint:STYLE037 — gate variant x bias x renorm are flat arms over one logit row, coupled through the running top-k state
+def moe_select_core(gate : MoeGate; ne, k : int64; norm_topk : bool; wscale : float; // nolint:STYLE037,STYLE038 — gate variant x bias x renorm are flat arms over one logit row, coupled through the running top-k state
                     var lg : float?; var idx : int64?; var w : float?; off : int64;
                     bias : float const? = null) {
     unsafe {   // the whole body indexes the logit-row pointer (in-place gate + top-k knockout)

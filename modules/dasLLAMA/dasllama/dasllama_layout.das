@@ -597,8 +597,8 @@ def moe_gpu_gather_stack(t : Model; woff : int64; n, rows, slice_rows : int64; m
                          var wq : array<uint8>; var ws : array<uint8>) {
     let nb = n / Q8_BLOCK_ELEMS
     assert(rows * n <= 2147483647l, "GPU MoE stack exceeds the int32 gather-buffer rail")
-    wq |> resize(int(rows * n))
-    ws |> resize(int(rows * nb * Q8_SPB))
+    wq |> resize(rows * n)
+    ws |> resize(rows * nb * Q8_SPB)
     assert(wbias == 0l || wbias == 128l, "GPU MoE gather: unknown q8 plane bias")
     let nslices = int(rows / slice_rows)
     unsafe {
@@ -663,7 +663,7 @@ def moe_gpu_gather_stack_q8n(t : Model; woff : int64; n, rows, slice_rows : int6
                              var wq : array<uint8>) {
     let nb = n / Q8_BLOCK_ELEMS
     assert(rows * nb * Q8N_BPB <= 2147483647l, "GPU q8n stack exceeds the int32 gather-buffer rail")
-    wq |> resize(int(rows * nb * Q8N_BPB))
+    wq |> resize(rows * nb * Q8N_BPB)
     assert(wbias == 0l || wbias == 128l, "GPU q8n gather: unknown q8 plane bias")
     let nslices = int(rows / slice_rows)
     unsafe {
@@ -732,8 +732,8 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
     let dssb = kq_ssb(fmt)   // disk/plane scale stride; device rows decode to KQ_DEV_SSB
     assert(n % KQ_SUPERBLOCK_ELEMS == 0l, "GPU MoE kq gather: row length must be a superblock multiple")
     assert(rows * nsb * qsb <= 2147483647l, "GPU MoE kq stack exceeds the int32 gather-buffer rail")
-    wq |> resize(int(rows * nsb * qsb))
-    ws |> resize(int(rows * nsb * KQ_DEV_SSB))
+    wq |> resize(rows * nsb * qsb)
+    ws |> resize(rows * nsb * KQ_DEV_SSB)
     let nslices = int(rows / slice_rows)
     let qrow = nsb * qsb
     let srow = nsb * dssb

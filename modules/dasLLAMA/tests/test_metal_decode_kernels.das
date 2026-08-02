@@ -2,8 +2,8 @@ options gen2
 options indenting = 4
 
 require dastest/testing_boost public
-require ?das_metal dasllama/dasllama_metal_kernels  // nolint:STYLE030 — the decode kernel set (Apple builds)
-require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — device/pipeline/buffer plumbing + the leak gate
+require ?das_metal dasllama/dasllama_metal_kernels  // the decode kernel set (Apple builds)
+require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require math
 
 // The single-query attention kernels vs a direct CPU oracle on synthetic data — the model-less

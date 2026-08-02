@@ -3,7 +3,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 
 require dastest/testing_boost public
 require dasllama/dasllama_math
-require ?vulkan dasllama/dasllama_math_vulkan  // nolint:STYLE030 — the MoE GPU tier under test; the test installs its hooks explicitly (no env gate)
+require ?vulkan dasllama/dasllama_math_vulkan  // the MoE GPU tier under test; the test installs its hooks explicitly (no env gate)
 require llvm/daslib/f16_cvt
 require math
 
@@ -48,20 +48,20 @@ def private pow2_small(i : int64) : float {
 }
 
 def private fill_stack(var wq : array<int8>; var ws : array<float>; rows, n : int64; seed : int64; small_scales : bool) {
-    wq |> resize(int(rows * n))
-    ws |> resize(int(rows * (n / 32l)))
-    for (i in range(int(rows * n))) {
-        wq[i] = int8((int64(i) * 7l + seed) % 255l - 127l)
+    wq |> resize(rows * n)
+    ws |> resize(rows * (n / 32l))
+    for (i in range64(rows * n)) {
+        wq[i] = int8((i * 7l + seed) % 255l - 127l)
     }
-    for (i in range(int(rows * (n / 32l)))) {
-        ws[i] = small_scales ? pow2_small(int64(i) + seed) : pow2_scale(int64(i) + seed)
+    for (i in range64(rows * (n / 32l))) {
+        ws[i] = small_scales ? pow2_small(i + seed) : pow2_scale(i + seed)
     }
 }
 
 // the q8n wire format: per row per 32-block — [f16 d LE][32 int8 quants] = 34 bytes, ONE plane
 def private pack_q8n(wq : array<int8>; ws : array<float>; rows, n : int64; var wqb : array<uint8>) {
     let nb = n / 32l
-    wqb |> resize(int(rows * nb * 34l))
+    wqb |> resize(rows * nb * 34l)
     for (r in range64(rows)) {
         for (b in range64(nb)) {
             let o = int((r * nb + b) * 34l)
@@ -78,8 +78,8 @@ def private pack_q8n(wq : array<int8>; ws : array<float>; rows, n : int64; var w
 // the fmt-0 upload wire format (the mixed arm's gate/up planes)
 def private pack_upload(wq : array<int8>; ws : array<float>; var wqb : array<uint8>; var wsb : array<uint8>) {
     wqb |> resize(length(wq))
-    for (i in range(length(wq))) {
-        wqb[i] = uint8(wq[i])
+    for (q, b in wq, wqb) {
+        b = uint8(q)
     }
     wsb |> resize(length(ws) * 2)
     for (i in range(length(ws))) {
@@ -90,23 +90,23 @@ def private pack_upload(wq : array<int8>; ws : array<float>; var wqb : array<uin
 }
 
 def private fill_acts(var xq : array<int8>; var xs : array<float>; nrows : int64) {
-    xq |> resize(int(nrows * N))
-    xs |> resize(int(nrows * (N / 32l)))
-    for (i in range(int(nrows * N))) {
-        xq[i] = int8((int64(i) * 11l + 3l) % 255l - 127l)
+    xq |> resize(nrows * N)
+    xs |> resize(nrows * (N / 32l))
+    for (i in range64(nrows * N)) {
+        xq[i] = int8((i * 11l + 3l) % 255l - 127l)
     }
-    for (i in range(int(nrows * (N / 32l)))) {
-        xs[i] = pow2_small(int64(i) + 2l)
+    for (i in range64(nrows * (N / 32l))) {
+        xs[i] = pow2_small(i + 2l)
     }
 }
 
 def private make_offs(experts : array<int64>; row0s : array<int64>; cnts : array<int64>; woff : int64; ege : int64) : array<int64> {
     var offs : array<int64>
     offs |> reserve(length(experts) * 3)
-    for (r in range(length(experts))) {
-        offs |> push(woff + experts[r] * ege)   // nolint:STYLE012 — triple-stride append
-        offs |> push(row0s[r])
-        offs |> push(cnts[r])
+    for (e, r0, cn in experts, row0s, cnts) {
+        offs |> push(woff + e * ege)
+        offs |> push(r0)
+        offs |> push(cn)
     }
     return <- offs
 }
@@ -114,23 +114,25 @@ def private make_offs(experts : array<int64>; row0s : array<int64>; cnts : array
 // The CPU reference of the FFN contract. requant=true models the decode chain (Q8_0 actrq
 // between the halves, the q8 suite's formula); requant=false models the cm2 prefill chain —
 // act(g)*u feeds the down GEMM as floats (the GPU rounds them to f16; CM2_TOL covers it).
-def private ref_ffn(offs1, offs3, offs2 : array<int64>; nreg : int;
+def private ref_ffn(offs1, offs3, offs2 : array<int64>; nreg : int;   // nolint:STYLE038 — one flat CPU mirror of the FFN contract, both requant arms inline
                     wq1 : array<int8>; ws1 : array<float>; wq3 : array<int8>; ws3 : array<float>;
                     wq2 : array<int8>; ws2 : array<float>;
                     xq : array<int8>; xs : array<float>; nrows : int64; requant : bool;
                     w1off, w3off, w2off : int64; var gout : array<float>) {
-    gout |> resize(int(nrows * N))
+    gout |> resize(nrows * N)
     let nb = int(N / 32l)
     let nbh = int(NFE / 32l)
+    let nn = int(N)
+    let nfe = int(NFE)
     var inscope gate : array<float>
     var inscope up : array<float>
     var inscope h : array<float>
     var inscope hq : array<int>
     var inscope hs : array<float>
-    gate |> resize(int(NFE))
-    up |> resize(int(NFE))
-    h |> resize(int(NFE))
-    hq |> resize(int(NFE))
+    gate |> resize(NFE)
+    up |> resize(NFE)
+    h |> resize(NFE)
+    hq |> resize(NFE)
     hs |> resize(nbh)
     for (r in range(nreg)) {
         let rb1 = int((offs1[r * 3] - w1off) / N)      // first gate-plane row of this region's expert
@@ -139,7 +141,7 @@ def private ref_ffn(offs1, offs3, offs2 : array<int64>; nreg : int;
         let row0 = int(offs1[r * 3 + 1])
         let cnt = int(offs1[r * 3 + 2])
         for (rw in range(row0, row0 + cnt)) {
-            for (i in range(int(NFE))) {
+            for (i in range(nfe)) {
                 var ag = 0.0
                 var au = 0.0
                 for (b in range(nb)) {
@@ -157,7 +159,7 @@ def private ref_ffn(offs1, offs3, offs2 : array<int64>; nreg : int;
                 gate[i] = ag
                 up[i] = au
             }
-            for (i in range(int(NFE))) {
+            for (i in range(nfe)) {
                 h[i] = (gate[i] / (1.0 + exp(-gate[i]))) * up[i]
             }
             if (requant) {
@@ -173,7 +175,7 @@ def private ref_ffn(offs1, offs3, offs2 : array<int64>; nreg : int;
                         hq[b * 32 + j] = int(round(h[b * 32 + j] * id))
                     }
                 }
-                for (o in range(int(N))) {
+                for (o in range(nn)) {
                     var y = 0.0
                     for (b in range(nbh)) {
                         var dd = 0
@@ -185,9 +187,9 @@ def private ref_ffn(offs1, offs3, offs2 : array<int64>; nreg : int;
                     gout[rw * int(N) + o] = y
                 }
             } else {
-                for (o in range(int(N))) {
+                for (o in range(nn)) {
                     var y = 0.0
-                    for (i in range(int(NFE))) {
+                    for (i in range(nfe)) {
                         y += float(wq2[(rb2 + o) * int(NFE) + i]) * ws2[(rb2 + o) * nbh + i / 32] * h[i]
                     }
                     gout[rw * int(N) + o] = y
@@ -200,15 +202,15 @@ def private ref_ffn(offs1, offs3, offs2 : array<int64>; nreg : int;
 def private compare_gout(gpu, refv : array<float>) : tuple<maxdiff : float; maxref : float> {
     var md = 0.0
     var mr = 0.0
-    for (i in range(length(refv))) {
-        md = max(md, abs(gpu[i] - refv[i]))
-        mr = max(mr, abs(refv[i]))
+    for (gv, rv in gpu, refv) {
+        md = max(md, abs(gv - rv))
+        mr = max(mr, abs(rv))
     }
     return (maxdiff = md, maxref = mr)
 }
 
 [test]
-def test_vulkan_moe_ffn_cm2(t : T?) {
+def test_vulkan_moe_ffn_cm2(t : T?) {   // nolint:STYLE038 — flat arm list, one cell per cm2 arm
     t |> run("vulkan cm2 twin == CPU reference (q8n decode GEMV + decode-in-load prefill)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)

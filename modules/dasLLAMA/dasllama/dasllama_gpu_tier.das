@@ -544,6 +544,13 @@ def public moe_gpu_marks_armed(m : MoeGpuMarks) : bool {
         || (m.total_layers > 0l && (m.from_layer < m.total_layers || m.stream_from < m.total_layers)))
 }
 
+// Release what is installed, then take `src`'s. The restore is public and nothing enforces the
+// save/restore pairing, so an unpaired restore would otherwise drop the old set unreleased.
+def private install_mark_table(var dst : table<auto(KT); auto(VT)>; var src : table<KT; VT>) {
+    delete dst
+    dst <- src   // nolint:PERF030 — released on the line above; the rule has no delete tracking
+}
+
 //! Install `m` as the global marks (moves the tables in; `m` reads as no-marks after).
 def public moe_gpu_marks_restore(var m : MoeGpuMarks) {
     g_moe_gpu_layer_count = m.layer_count
@@ -551,11 +558,11 @@ def public moe_gpu_marks_restore(var m : MoeGpuMarks) {
     g_moe_gpu_stream_from = m.stream_from
     g_moe_gpu_total_layers = m.total_layers
     g_moe_gpu_cls_off = m.cls_off
-    g_moe_gpu_dense_offs <- m.dense_offs
-    g_moe_gpu_dn_layers <- m.dn_layers
-    g_moe_gpu_attn_layers <- m.attn_layers
-    g_moe_gpu_shexp_layers <- m.shexp_layers
-    g_moe_gpu_qkv_layers <- m.qkv_layers
+    install_mark_table(g_moe_gpu_dense_offs, m.dense_offs)
+    install_mark_table(g_moe_gpu_dn_layers, m.dn_layers)
+    install_mark_table(g_moe_gpu_attn_layers, m.attn_layers)
+    install_mark_table(g_moe_gpu_shexp_layers, m.shexp_layers)
+    install_mark_table(g_moe_gpu_qkv_layers, m.qkv_layers)
     g_moe_gpu_unsupported = m.unsupported
     m.layer_count = 0l
     m.from_layer = 1000000l

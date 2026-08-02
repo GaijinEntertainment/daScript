@@ -1,19 +1,20 @@
 options gen2
+options _function_length = 0   // one flat per-family row per function: needs pin, per-path cells, generate + batch parity
 options persistent_heap   // + explicit deletes: the models free before the process exits
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
-require dasllama/dasllama   // nolint:STYLE029 — the public facade (engine + arch registrations + the metal overrides); off-Apple the static_if halves compile out and only its dasllama_common re-export stays referenced
+require dasllama/dasllama   // the public facade (engine + arch registrations + the metal overrides); off-Apple the static_if halves compile out and only its dasllama_common re-export stays referenced
 require dasllama/dasllama_math   // set_wscale_f16 — the wscale matrix axis
 require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor transform
-require dasllama/dasllama_parity   // nolint:STYLE030 — cached_ids/cached_vals (CPU references mapped like .dlim images), used only inside the Apple static_if half
-require ?das_metal dasllama/dasllama_metal_decode  // nolint:STYLE030 — stats/declines/shutdown rails
-require ?das_metal dasllama/dasllama_metal_prefill  // nolint:STYLE030 — prefill stats/declines rails
-require ?das_metal dasllama/dasllama_metal_common  // nolint:STYLE030 — the kernel coverage census (tensor-twin cell)
-require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — device probe + metal_live_object_count
+require dasllama/dasllama_parity   // cached_ids/cached_vals (CPU references mapped like .dlim images), used only inside the Apple static_if half
+require ?das_metal dasllama/dasllama_metal_decode  // stats/declines/shutdown rails
+require ?das_metal dasllama/dasllama_metal_prefill  // prefill stats/declines rails
+require ?das_metal dasllama/dasllama_metal_common  // the kernel coverage census (tensor-twin cell)
+require ?das_metal metal/das_metal_boost  // device probe + metal_live_object_count
 require daslib/jobque_boost
-require daslib/fio  // nolint:STYLE030 — used only inside the Apple static_if half
-require math  // nolint:STYLE030 — used only inside the Apple static_if half
+require daslib/fio  // used only inside the Apple static_if half
+require math  // used only inside the Apple static_if half
 require strings
 require _model_tier
 
@@ -97,8 +98,8 @@ def private same(a, b : array<int64>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (x, y in a, b) {
+        if (x != y) {
             return false
         }
     }
@@ -565,7 +566,7 @@ def private cont_logits_cell(t : T?; tr, trg : Model; tag : string; tol : float)
         let n = long_length(full)
         var head : array<int64>
         var tail : array<int64>
-        head |> reserve(int(n - 2l))
+        head |> reserve(n - 2l)
         for (i in range64(n - 2l)) {
             head |> push(full[i])
         }
@@ -620,7 +621,7 @@ def private family_cells(t : T?; path, family, tag : string; expect_needs : uint
         var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         let derived = metal_needs(tr)
-        let expected = MetalNeed(expect_needs)   // nolint:LINT005 — uint→named-bitfield relabel so the message prints bit NAMES
+        let expected = MetalNeed(expect_needs)   // uint→named-bitfield relabel so the message prints bit NAMES
         t |> success((uint(derived) & expect_needs) == expect_needs,
             "{tag}: metal_needs derives {expected} (got {derived})")
         if (want == "") {
@@ -686,7 +687,7 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
         var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         let derived = metal_needs(tr)
-        let expected = MetalNeed(expect_needs)   // nolint:LINT005 — uint→named-bitfield relabel so the message prints bit NAMES
+        let expected = MetalNeed(expect_needs)   // uint→named-bitfield relabel so the message prints bit NAMES
         t |> success((uint(derived) & expect_needs) == expect_needs,
             "{tag}: metal_needs derives {expected} (got {derived})")
         var trg <- blob_twin(t, path, 512l)
@@ -1358,7 +1359,7 @@ def private batch_quad_forced_logits(trp, trd : Model; pa, pb, pc, pd : array<in
         eval_batch_(trd, ws, sess, cur)
     }
     var out : array<float>
-    out |> reserve(int(vocab) * 4)
+    out |> reserve(vocab * 4l)
     out |> push_from(sa.logits, sb.logits, sc.logits, sd.logits)
     sess |> clear()   // borrowed handles — delete of array<T?> cascades to the pointees
     unsafe {
@@ -1405,7 +1406,7 @@ def private gemma4_hetero_q8_row(t : T?; path : string) {
         var b4g : array<int64>
         with_job_que() {
             setup_dasllama_jobque()
-            cpu_ids <- cached_ids(path, "gen_c1_30_n8") $ {
+            cpu_ids <- cached_ids(path, "gen_c1_30_n8") $ {   // nolint:PERF030 — fresh empty target, single move
                 var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
                 var ids <- generate(tr, s, count_prompt, length(count_prompt) + 8)
                 delete s
@@ -1416,7 +1417,7 @@ def private gemma4_hetero_q8_row(t : T?; path : string) {
             gpu_ids := g2
             delete g2
             select_decode_override("")
-            cpu_b2 <- cached_ids(path, "b2pair_c1c7_n4") $ {
+            cpu_b2 <- cached_ids(path, "b2pair_c1c7_n4") $ {   // nolint:PERF030 — fresh empty target, single move
                 return <- batch_pair_steps(tr, tr, count_prompt, count_prompt2, 4)
             }
             var cpu_bl <- cached_vals(path, "b4forced_n4") $ {
@@ -1424,7 +1425,7 @@ def private gemma4_hetero_q8_row(t : T?; path : string) {
             }
             let ba0 = metal_batch_decode_stats().steps
             select_decode_override("metal")
-            gpu_b2 <- batch_pair_steps(tr, trg, count_prompt, count_prompt2, 4)
+            gpu_b2 <- batch_pair_steps(tr, trg, count_prompt, count_prompt2, 4)   // nolint:PERF030 — fresh empty target, single move
             var gpu_bl <- batch_quad_forced_logits(tr, trg, count_prompt, count_prompt2, count_prompt3, count_prompt4, 4)
             select_decode_override("")
             served_bat = metal_batch_decode_stats().steps - ba0
@@ -1507,13 +1508,13 @@ def private gemma4_hetero_row(t : T?; path : string) {
         var fmaxd = 0.0
         with_job_que() {
             setup_dasllama_jobque()
-            cpu_ids <- cached_ids(path, "gen_free_n128") $ {
+            cpu_ids <- cached_ids(path, "gen_free_n128") $ {   // nolint:PERF030 — fresh empty target, single move
                 var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
                 var ids <- generate(tr, s, prompt, length(prompt) + 128)
                 delete s
                 return <- ids
             }
-            cpu_cnt_ids <- cached_ids(path, "gen_c1_30_n8") $ {
+            cpu_cnt_ids <- cached_ids(path, "gen_c1_30_n8") $ {   // nolint:PERF030 — fresh empty target, single move
                 var sc = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
                 var idsc <- generate(tr, sc, count_prompt, length(count_prompt) + 8)
                 delete sc
@@ -1559,12 +1560,12 @@ def private gemma4_hetero_row(t : T?; path : string) {
             served_pf = metal_prefill_stats().prefills - pf0
             // B=2 batched-decode parity (counting margins — see the header note): CPU truth
             // then the batched metal override, 4 steps per stream over CPU-prefilled state
-            cpu_bat <- cached_ids(path, "b2pair_c1c7_n4") $ {
+            cpu_bat <- cached_ids(path, "b2pair_c1c7_n4") $ {   // nolint:PERF030 — fresh empty target, single move
                 return <- batch_pair_steps(tr, tr, count_prompt, count_prompt2, 4)
             }
             let ba0 = metal_batch_decode_stats().steps
             select_decode_override("metal")
-            gpu_bat <- batch_pair_steps(tr, trg, count_prompt, count_prompt2, 4)
+            gpu_bat <- batch_pair_steps(tr, trg, count_prompt, count_prompt2, 4)   // nolint:PERF030 — fresh empty target, single move
             select_decode_override("")
             served_bat = metal_batch_decode_stats().steps - ba0
         }

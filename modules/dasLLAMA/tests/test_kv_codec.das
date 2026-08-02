@@ -3,7 +3,7 @@ options persistent_heap   // the f16 model A/B holds two Sessions (see test_forw
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration
+require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + target_chunk_work + fused knob
 require dasllama/dasllama_kv_codec   // the codec kernel families under unit test
 require dasllama/dasllama_convert    // cvt_f32_to_f16/cvt_f16_to_f32 — the generic f16 rows
@@ -278,7 +278,7 @@ def test_kv_store_row_f16(t : T?) {
 def private blk_scale(b : array<uint8>; off : int64) : float => f16_to_f32(uint(b[off]) | (uint(b[off + 1l]) << 8u))
 
 def private fill_sin(var a : array<float>; n : int64; amp, w, ph : float) {
-    a |> resize(int(n))
+    a |> resize(n)
     for (i in range(length(a))) {
         a[i] = amp * sin(float(i) * w + ph)
     }
@@ -286,11 +286,11 @@ def private fill_sin(var a : array<float>; n : int64; amp, w, ph : float) {
 
 // deterministic full-range int8 quants + fixed per-32 scales — a hand-built Q8 query
 def private fill_q8_query(var q : array<int8>; var qs : array<float>; n : int64; step : int) {
-    q |> resize(int(n))
+    q |> resize(n)
     for (i in range(length(q))) {
         q[i] = int8(((i * step) % 255) - 127)
     }
-    qs |> resize(int(n / 32l))
+    qs |> resize(n / 32l)
     for (i in range(length(qs))) {
         qs[i] = 0.5 / float(i + 1)
     }
@@ -802,7 +802,7 @@ def private gguf_missing(t : T?) : bool {
 // fresh session, all N_STEPS logit rows out — trajectory-compounding-free comparisons
 def private forced_logits(tr : Model; kdt, vdt : KVDtype; var out : array<float>) {
     let c = tr.config
-    out |> resize(int(int64(N_STEPS) * c.vocab_size))
+    out |> resize(int64(N_STEPS) * c.vocab_size)
     var s <- make_run_state(c, kdt, vdt)
     var pos = 0l
     for (st in range(N_STEPS)) {
@@ -818,8 +818,8 @@ def private forced_logits(tr : Model; kdt, vdt : KVDtype; var out : array<float>
 
 def private worst_diff(a : array<float>; b : array<float>) : float {
     var w = 0.0
-    for (i in range(length(a))) {
-        w = max(w, abs(a[i] - b[i]))
+    for (va, vb in a, b) {
+        w = max(w, abs(va - vb))
     }
     return w
 }

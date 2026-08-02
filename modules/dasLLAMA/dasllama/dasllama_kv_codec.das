@@ -222,7 +222,7 @@ def private fwht_core(var v : float?; n : int64) {
 //! bytes MUST agree, so the seed is a fixed constant and layers with a smaller head_size use
 //! a prefix of the same vector.
 def tq4_fill_signs(var dst : array<float>; n : int64) {
-    dst |> resize(int(n))
+    dst |> resize(n)
     var s = 0xC0FFEEu
     for (x in dst) {
         s = s * 1664525u + 1013904223u
@@ -415,24 +415,24 @@ def kv_row_to_f32(var d : float?; p : TQ4B const?; base, n : int64) {
 // int8×int8 kernel. Lets the flash-decode witness recompute scores exactly as the sliced path did.
 [unused_argument(qq, qs)]
 def kv_score(qp : float const?; qq : int8 const?; qs : float const?; kcp : float const?;
-                     koff, qoff, head_size : int64) : float {
+             koff, qoff, head_size : int64) : float {
     return kv_dot(unsafe(qp + qoff), unsafe(kcp + koff), head_size)
 }
 [unused_argument(qq, qs)]
 def kv_score(qp : float const?; qq : int8 const?; qs : float const?; kcp : uint16 const?;
-                     koff, qoff, head_size : int64) : float {
+             koff, qoff, head_size : int64) : float {
     return kv_dot(unsafe(qp + qoff), unsafe(kcp + koff), head_size)
 }
 [unused_argument(qp)]
 def kv_score(qp : float const?; qq : int8 const?; qs : float const?; kcp : uint8 const?;
-                     koff, qoff, head_size : int64) : float {
+             koff, qoff, head_size : int64) : float {
     return dot_q8q8kv(unsafe(qq + qoff), unsafe(qs + qoff / 32l), unsafe(kcp + koff), head_size)
 }
 // tq4 K: same pre-quantized-query planes as q8_0 — the drivers fill them from the ROTATED query,
 // so the int8×int4 dot runs entirely in the rotated basis
 [unused_argument(qp)]
 def kv_score(qp : float const?; qq : int8 const?; qs : float const?; kcp : TQ4B const?;
-                     koff, qoff, head_size : int64) : float {
+             koff, qoff, head_size : int64) : float {
     unsafe {
         let kb = reinterpret<uint8 const?>(kcp)
         return dot_q8tq4kv(qq + qoff, qs + qoff / 32l, kb + koff, head_size)

@@ -162,7 +162,7 @@ def test_index_push_target(t : T?) {
 }
 
 [test]
-def test_parse_args(t : T?) {
+def test_parse_args(t : T?) {   // nolint:STYLE038 — a flat case table: one argv shape per `t |> run` block
     t |> run("install command") @(t : T?) {
         var r <- parse_args(type<DaspkgArgs>, ["install", "dasImgui"])
         t |> success(r |> is_ok, "parse succeeds")

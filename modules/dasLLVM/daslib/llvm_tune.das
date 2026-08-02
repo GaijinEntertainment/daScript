@@ -1038,7 +1038,7 @@ class private TuneCompanionAnnotation : AstFunctionAnnotation {
     //! stamp the whole grid plus a `<name>_variants()` registry. Mode contract: module docstring.
 [function_macro(name = "tune")]
 class private TuneAnnotation : AstFunctionAnnotation {
-    def override apply(var func : FunctionPtr; var group : ModuleGroup; // nolint:STYLE037 — the [tune] resolution ladder: manifest/fallback/reference arms in precedence order
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; // nolint:STYLE037,STYLE038 — the [tune] resolution ladder: manifest/fallback/reference arms in precedence order
                        args : AnnotationArgumentList; var errors : das_string) : bool {
         let gv = find_arg(args, "gen")
         if (!(gv is tString) || empty(gv as tString)) {
@@ -1687,7 +1687,7 @@ def private emit_status_init(var errors : string&) {
 // the policy core, shared by the declared annotation and the auto default (the infer pass
 // below): resolve the policy (env > declared), then per incomplete scope warn / error /
 // inject the auto or restart guard into `func` (the app's main)
-def private apply_tune_policy(var func : FunctionPtr; declared : string; var errors : string&) : bool { // nolint:STYLE037 — the policy dispatch ladder: one arm per flavor and gate
+def private apply_tune_policy(var func : FunctionPtr; declared : string; var errors : string&) : bool { // nolint:STYLE037,STYLE038 — the policy dispatch ladder: one arm per flavor and gate
     var policy = declared
     {
         let penv = get_env_variable("DAS_TUNE_POLICY")

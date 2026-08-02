@@ -164,14 +164,14 @@ def build_mel_filterbank(n_mel, n_fft, sample_rate : int64) : array<float> {
     let m_hi = fmax < min_log_hz ? fmax * lin_slope : min_log_mel + log(fmax / min_log_hz) / log_step
     // mel grid edges back to hz (m_lo = hz_to_mel(0) = 0)
     var hz_pts : array<double>
-    hz_pts |> resize(int(n_mel + 2l))
+    hz_pts |> resize(n_mel + 2l)
     for (i in range64(n_mel + 2l)) {
         let m = m_hi * double(i) / double(n_mel + 1l)
         hz_pts[i] = m < min_log_mel ? m / lin_slope : min_log_hz * exp((m - min_log_mel) * log_step)
     }
     let bin_hz_step = double(sample_rate) / double(n_fft)
     var out : array<float>
-    out |> resize(int(n_mel * n_bins))
+    out |> resize(n_mel * n_bins)
     for (m in range64(n_mel)) {
         let f_left = hz_pts[m]
         let f_center = hz_pts[m + 1l]
@@ -200,15 +200,15 @@ def build_dft_twiddles(n_fft : int64) : array<float> {
     let n_bins = n_fft / 2l + 1l
     var cos_tab : array<float>
     var sin_tab : array<float>
-    cos_tab |> resize(int(n_fft))
-    sin_tab |> resize(int(n_fft))
+    cos_tab |> resize(n_fft)
+    sin_tab |> resize(n_fft)
     for (i in range64(n_fft)) {
         let theta = 2.0lf * DBL_PI * double(i) / double(n_fft)
         cos_tab[i] = cos(float(theta))
         sin_tab[i] = sin(float(theta))
     }
     var b : array<float>
-    b |> resize(int(n_fft * n_bins * 2l))
+    b |> resize(n_fft * n_bins * 2l)
     for (j in range64(n_fft)) {
         for (k in range64(n_bins)) {
             let idx = (j * k) % n_fft
@@ -237,7 +237,7 @@ def build_fft_plan(n : int64) : FftPlan {
     while ((1l << bits) < n) {
         bits++
     }
-    p.rev |> resize(int(n))
+    p.rev |> resize(n)
     for (i in range64(n)) {
         var r = 0l
         var v = i
@@ -247,7 +247,7 @@ def build_fft_plan(n : int64) : FftPlan {
         }
         p.rev[i] = int(r)
     }
-    p.tw |> resize(int(n))   // n/2 interleaved (cos, −sin) pairs
+    p.tw |> resize(n)   // n/2 interleaved (cos, −sin) pairs
     for (k in range64(n / 2l)) {
         let theta = 2.0lf * DBL_PI * double(k) / double(n)
         p.tw[2l * k] = cos(float(theta))
@@ -429,14 +429,14 @@ def build_whisper_mel_plan(n_fft : int64) : WhisperMelPlan {
     let n_bins = n_fft / 2l + 1l
     var cos_tab : array<float>
     var sin_tab : array<float>
-    cos_tab |> resize(int(n_fft))
-    sin_tab |> resize(int(n_fft))
+    cos_tab |> resize(n_fft)
+    sin_tab |> resize(n_fft)
     for (i in range64(n_fft)) {
         let theta = 2.0lf * DBL_PI * double(i) / double(n_fft)
         cos_tab[i] = cos(float(theta))
         sin_tab[i] = sin(float(theta))
     }
-    p.twt |> resize(int(2l * n_bins * n_fft))
+    p.twt |> resize(2l * n_bins * n_fft)
     for (k in range64(n_bins)) {
         for (j in range64(n_fft)) {
             let idx = (j * k) % n_fft
@@ -453,9 +453,9 @@ def build_whisper_mel_plan(n_fft : int64) : WhisperMelPlan {
 // length stays exact so `for (v in arr)` loops and array-bound reads stay valid on reuse
 def private mel_sized(@scratch var a : array<float>; n : int64) {
     if (long_capacity(a) < n) {
-        a |> reserve(int(n))
+        a |> reserve(n)
     }
-    a |> resize(int(n))
+    a |> resize(n)
 }
 
 //! whisper.cpp's ``log_mel_spectrogram`` — diverges from the mtmd flavor above: reflect-200 pad
@@ -960,8 +960,8 @@ def tower_quantize(var t : AudioTower; var pl : AudioTowerPlanes) {
 
 def private tower_quantize_(var t : AudioTower; fblob : array<float>; var qblob : array<int8>; var qscales : array<float>) {
     let total = long_length(fblob) & ~31l   // GEMM regions are 32-aligned and 32-sized; a ragged blob tail can't be one
-    qblob |> resize(int(total))
-    qscales |> resize(int(total / 32l))
+    qblob |> resize(total)
+    qscales |> resize(total / 32l)
     quantize_q8_0_into(fblob, total, qblob, qscales, 0l, 0l)
     t.q8 = true
     if (!select_matmul_backend_for_load()) {
@@ -1157,7 +1157,7 @@ def stage_audio_tower(path : string; q8 : bool = false) : AudioTowerStaging {
             st.e.proj_w_off = o; o += st.e.mm1_out * mm1_in
             st.e.mm2_w_off = o; o += st.e.proj_dim * st.e.mm1_out
         }
-        st.fblob |> resize(int(o))
+        st.fblob |> resize(o)
 
         load_conv_permuted(m, bytes, "a.conv1d.1.weight", st.fblob, st.e.conv1_w_off, d, nm)
         gguf_read_tensor_f32(m, bytes, "a.conv1d.1.bias", st.fblob, st.e.conv1_b_off, d)
@@ -1235,34 +1235,34 @@ def make_encoder_state(t : AudioTower) : EncoderState {
     let tt = t.n_ctx
     let d = t.d_model
     var s = EncoderState()
-    s.x1 |> resize(int(tin * 3l * t.n_mel))
-    s.y1 |> resize(int(tin * d))
-    s.x2 |> resize(int(tt * 3l * d))
-    s.x |> resize(int(tt * d))
-    s.xb |> resize(int(tt * d))
-    s.xb2 |> resize(int(tt * d))
-    s.qq |> resize(int(tt * d))
-    s.kk |> resize(int(tt * d))
-    s.vv |> resize(int(tt * d))
-    s.hp |> resize(int(4l * tt * d))
-    s.att |> resize(int(int64(get_dispatch_slot_bound()) * ATTN_ENC_QB * tt))
-    s.h |> resize(int(tt * t.n_ff))
-    s.pooled |> resize(int(tt / 2l * d))
+    s.x1 |> resize(tin * 3l * t.n_mel)
+    s.y1 |> resize(tin * d)
+    s.x2 |> resize(tt * 3l * d)
+    s.x |> resize(tt * d)
+    s.xb |> resize(tt * d)
+    s.xb2 |> resize(tt * d)
+    s.qq |> resize(tt * d)
+    s.kk |> resize(tt * d)
+    s.vv |> resize(tt * d)
+    s.hp |> resize(4l * tt * d)
+    s.att |> resize(int64(get_dispatch_slot_bound()) * ATTN_ENC_QB * tt)
+    s.h |> resize(tt * t.n_ff)
+    s.pooled |> resize(tt / 2l * d)
     let rows = audio_tokens_per_chunk(t)
     if (t.proj_kind != AudioProjKind.qwen2a) {
-        s.ph |> resize(int(rows * t.mm1_out))
+        s.ph |> resize(rows * t.mm1_out)
         if (t.proj_kind == AudioProjKind.ultravox) {
-            s.pg |> resize(int(rows * t.mm1_out / 2l))
+            s.pg |> resize(rows * t.mm1_out / 2l)
         }
     }
-    s.out |> resize(int(rows * t.proj_dim))
+    s.out |> resize(rows * t.proj_dim)
     if (t.q8) {   // largest requant image any tower GEMM feeds (conv2 3d / fc2 ff / projector mats)
         var need = tt * max(3l * d, t.n_ff)
         if (t.proj_dim > 0l && t.proj_kind != AudioProjKind.qwen2a) {
             need = max(need, rows * max(d * t.stack_factor, t.mm1_out))
         }
-        s.xqi |> resize(int(need))
-        s.xsi |> resize(int(need / 32l))
+        s.xqi |> resize(need)
+        s.xsi |> resize(need / 32l)
     }
     return <- s
 }
@@ -1279,7 +1279,7 @@ def private enc_attention(t : AudioTower; var s : EncoderState; tt : int64) {
     // que-less-creation guard: the state may have been sized under a smaller slot bound
     let attNeed = int64(get_dispatch_slot_bound()) * ATTN_ENC_QB * tt
     if (long_length(s.att) < attNeed) {
-        s.att |> resize(int(attNeed))
+        s.att |> resize(attNeed)
     }
     unsafe {
         let qp = addr<float const?>(s.qq[0])
@@ -1376,7 +1376,8 @@ def private diff_stage(name : string; x : array<float>; n : int64) {
         unsafe {
             let rp = addr<float?>(bytes[0])
             // int loop: raw-pointer indexing by int64 is AOT-ambiguous (int32/uint32 overloads only)
-            for (i in range(int(n))) {
+            let ni = int(n)
+            for (i in range(ni)) {
                 let d = abs(x[i] - rp[i])
                 if (d > maxd) {
                     maxd = d

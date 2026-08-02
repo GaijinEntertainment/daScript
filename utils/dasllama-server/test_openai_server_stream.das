@@ -123,7 +123,7 @@ struct ClientResult {
 }
 
 [test]
-def test_openai_server_stream(t : T?) {
+def test_openai_server_stream(t : T?) {   // nolint:STYLE038 — one live server session: every SSE-framing assertion runs against that one boot
     if (model_missing(t)) {
         return
     }

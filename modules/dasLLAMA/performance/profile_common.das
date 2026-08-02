@@ -1548,6 +1548,7 @@ def read_asr_profile(var p : AsrProfile) : bool {
 def upsert_asr(var tests : array<AsrRec>; var rec : AsrRec) {
     for (c in tests) {
         if (c.model == rec.model) {
+            delete c
             c <- rec
             return
         }
@@ -1788,6 +1789,7 @@ def upsert_bench_run(var runs : array<BenchRun>; var r : BenchRun) {
     for (c in runs) {
         if (c.box == r.box && c.engine == r.engine && c.backend == r.backend
                 && c.flavor == r.flavor && c.workload == r.workload) {
+            delete c
             c <- r
             return
         }

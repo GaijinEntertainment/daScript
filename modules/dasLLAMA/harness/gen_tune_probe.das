@@ -69,13 +69,13 @@ struct Fixture {
 def build_fixture(n, d, ntok : int64) : Fixture {
     var fx = Fixture(n = n, d = d, ntok = ntok, nb = n / 32l)
     var w : array<float>
-    w |> resize(int(n * d))
+    w |> resize(n * d)
     for (i in range64(n * d)) {
         w[i] = float(i % 17l) * 0.13 - 1.1
     }
     let qt <- quantize_q8_0(w, n * d)
-    fx.q |> resize(int(n * d))
-    fx.s |> resize(int(d * fx.nb))
+    fx.q |> resize(n * d)
+    fx.s |> resize(d * fx.nb)
     for (i in range64(n * d)) {
         fx.q[i] = qt.q[i]
     }
@@ -84,16 +84,16 @@ def build_fixture(n, d, ntok : int64) : Fixture {
     }
 
     var xrow : array<float>
-    xrow |> resize(int(n))
-    fx.xq |> resize(int(ntok * n))
-    fx.xs |> resize(int(ntok * fx.nb))
+    xrow |> resize(n)
+    fx.xq |> resize(ntok * n)
+    fx.xs |> resize(ntok * fx.nb)
     for (tk in range64(ntok)) {
         for (i in range64(n)) {
             xrow[i] = float((i + tk * 7l) % 23l) * 0.07 - 0.8
         }
         quantize_q8_0_into(xrow, n, fx.xq, fx.xs, tk * n, tk * fx.nb)
     }
-    fx.xbs |> resize(int(ntok * fx.nb))
+    fx.xbs |> resize(ntok * fx.nb)
     for (tk in range64(ntok)) {
         for (bi in range64(fx.nb)) {
             var bsum = 0
@@ -106,7 +106,7 @@ def build_fixture(n, d, ntok : int64) : Fixture {
 
     // the oracle: hand laneq semantics off a grp4 copy — the per-block fold order is the same
     // in every variant, so one oracle serves all layouts
-    fx.yref |> resize(int(ntok * d))
+    fx.yref |> resize(ntok * d)
     var q4 := fx.q
     var s4 := fx.s
     unsafe {
@@ -281,16 +281,16 @@ def build_mx4_fixture(n, d : int64) : Mx4Fixture {
     fx.wn <- [for (_i in range64(d * n / 2l)); uint8(random_int(seed) % 256)]
     fx.we <- [for (_i in range64(d * fx.nb)); uint8(118 + random_int(seed) % 14)]
     var xrow : array<float>
-    xrow |> resize(int(n))
-    fx.xq |> resize(int(n))
-    fx.xs |> resize(int(fx.nb))
+    xrow |> resize(n)
+    fx.xq |> resize(n)
+    fx.xs |> resize(fx.nb)
     for (i in range64(n)) {
         xrow[i] = float(i % 23l) * 0.07 - 0.8
     }
     quantize_q8_0_into(xrow, n, fx.xq, fx.xs, 0l, 0l)
     // the oracle: hand interleaved-mx4 semantics off a grp4 plane copy (fold order is
     // layout-independent, like the Q8 oracle)
-    fx.yref |> resize(int(d))
+    fx.yref |> resize(d)
     var n4 := fx.wn
     var e4 := fx.we
     var lut : int8[16]
@@ -436,10 +436,10 @@ def build_kq_fixture(fmt : int64; n, d, ntok : int64) : KqFixture {
     var fx = KqFixture(fmt = fmt, n = n, d = d, ntok = ntok, nsb = n / 256l)
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
-    fx.kq |> resize(int(d * fx.nsb * qsb))
-    fx.ks |> resize(int(d * fx.nsb * ssb))
+    fx.kq |> resize(d * fx.nsb * qsb)
+    fx.ks |> resize(d * fx.nsb * ssb)
     var blkb : array<uint8>
-    blkb |> resize(int(fmt == 4l || fmt == 40l ? 144l : (fmt == 5l ? 176l : 210l)))
+    blkb |> resize(fmt == 4l || fmt == 40l ? 144l : (fmt == 5l ? 176l : 210l))
     for (r in range64(d)) {
         for (s in range64(fx.nsb)) {
             let base = int(r * 31l + s * 7l)
@@ -460,10 +460,10 @@ def build_kq_fixture(fmt : int64; n, d, ntok : int64) : KqFixture {
     // activations: the production quantizer, whose bsums plane IS the kq contract (per-16
     // sums). kq v2: every format takes the Q8_K form — ONE scale per 256-superblock
     var xrow : array<float>
-    xrow |> resize(int(n))
-    fx.xq |> resize(int(ntok * n))
-    fx.xs |> resize(int(ntok * (n / 256l)))
-    fx.xbs |> resize(int(ntok * (n / 16l)))
+    xrow |> resize(n)
+    fx.xq |> resize(ntok * n)
+    fx.xs |> resize(ntok * (n / 256l))
+    fx.xbs |> resize(ntok * (n / 16l))
     for (tk in range64(ntok)) {
         for (i in range64(n)) {
             xrow[i] = float((i + tk * 7l) % 23l) * 0.07 - 0.8
@@ -472,7 +472,7 @@ def build_kq_fixture(fmt : int64; n, d, ntok : int64) : KqFixture {
     }
     delete xrow
     // the oracle: the scalar grp walk off a grp4 copy (fold order is layout-independent)
-    fx.yref |> resize(int(ntok * d))
+    fx.yref |> resize(ntok * d)
     var q4 := fx.kq
     var s4 := fx.ks
     unsafe {
@@ -652,7 +652,7 @@ def kq_gate_variant(suffix : string; tile : KqTileFn; gemv : KqRowsFn;
             repack_kq_grp_fmt(kfx.fmt, addr(kqv[0]), addr(ksv[0]), kfx.n, kfx.d, mr)
         }
         var yk : array<float>
-        yk |> resize(int(kfx.ntok * kfx.d))
+        yk |> resize(kfx.ntok * kfx.d)
         run_kq_tile(tile, kfx, kqv, ksv, mr, yk)
         let tok = close_to_kq_ref(kfx, yk, maxdiff)
         if (!tok) {
@@ -667,7 +667,7 @@ def kq_gate_variant(suffix : string; tile : KqTileFn; gemv : KqRowsFn;
         }
         ok = ok && tok
         var ykg : array<float>
-        ykg |> resize(int(kfx.d))
+        ykg |> resize(kfx.d)
         run_kq_gemv(gemv, kfx, kqv, ksv, mr, ykg)
         let gok = close_to_kq_ref(kfx, ykg, maxdiff)
         if (!gok) {
@@ -705,8 +705,8 @@ struct Q51Fixture {
 
 def build_q51_fixture(n, d : int64) : Q51Fixture {
     var fx = Q51Fixture(n = n, d = d, nb = n / 32l)
-    fx.qq |> resize(int(d * fx.nb * 20l))
-    fx.qs |> resize(int(d * fx.nb * 4l))
+    fx.qq |> resize(d * fx.nb * 20l)
+    fx.qs |> resize(d * fx.nb * 4l)
     // valid small f16 scale bit patterns (d, m) cycled per block; quant/qh bytes an LCG walk
     let f16s = fixed_array(0x2E66, 0x3266, 0xB18F, 0x2C00, 0x3000, 0xB266, 0x2A8F, 0x3400)
     var seed = 0x12345
@@ -726,15 +726,15 @@ def build_q51_fixture(n, d : int64) : Q51Fixture {
         }
     }
     var xrow : array<float>
-    xrow |> resize(int(n))
+    xrow |> resize(n)
     for (i in range64(n)) {
         xrow[i] = float((i * 13l) % 37l) * 0.05 - 0.9
     }
-    fx.xq |> resize(int(n))
-    fx.xs |> resize(int(fx.nb))
+    fx.xq |> resize(n)
+    fx.xs |> resize(fx.nb)
     quantize_q8_0_into(xrow, n, fx.xq, fx.xs, 0l, 0l)
     delete xrow
-    fx.xbs |> resize(int(fx.nb))
+    fx.xbs |> resize(fx.nb)
     for (bi in range64(fx.nb)) {
         var s = 0
         for (j in range64(32l)) {
@@ -742,7 +742,7 @@ def build_q51_fixture(n, d : int64) : Q51Fixture {
         }
         fx.xbs[bi] = s
     }
-    fx.yref |> resize(int(d))
+    fx.yref |> resize(d)
     unsafe {
         for (r in range64(d)) {
             fx.yref[r] = dot_q51q8_scalar(addr(fx.qq[0]) + r * fx.nb * 20l, addr(fx.qs[0]) + r * fx.nb * 4l,
@@ -797,9 +797,9 @@ def q51_tune_family(var rows_out : table<string; JsonValue?>) : string {
     var best = ""
     var bestDt = 2147483647
     var y : array<float>
-    y |> resize(int(sfx.d))
+    y |> resize(sfx.d)
     var yh : array<float>
-    yh |> resize(int(hfx.d))
+    yh |> resize(hfx.d)
     for (v in tvs) {
         let mr = int64(mrs?[v._0] ?? q51q8_layout_gen())
         var sq := sfx.qq
@@ -915,11 +915,11 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>) : stri
         }
     }
     var ky : array<float>
-    ky |> resize(int(kbfx.ntok * kbfx.d))
+    ky |> resize(kbfx.ntok * kbfx.d)
     var kyg : array<float>
-    kyg |> resize(int(kgfx.d))
+    kyg |> resize(kgfx.d)
     var kyh : array<float>
-    kyh |> resize(int(khfx.d))
+    kyh |> resize(khfx.d)
     // correctness first — a tune run must never crown a broken variant
     for (vi in range(nv)) {
         verify(gtab |> key_exists(tvs[vi]._0))
@@ -1025,7 +1025,7 @@ def close_to_ref(fx : Fixture; y : array<float>; var maxdiff : float&) : bool {
     return ok
 }
 
-def test_mode : bool { // nolint:STYLE037 — flat per-variant correctness ladder; each desync check is one arm
+def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctness ladder; each desync check is one arm
     // nb=2 (even main loop), nb=3 (remainder path), production-ish slice — d divides every
     // grid mr (4/8 on arm64, 16/32 on the x64 rows when live); ntok=32 covers one full amx
     // 2×2 macro (and divides the 4/16-token steps of every other row)
@@ -1091,7 +1091,7 @@ def test_mode : bool { // nolint:STYLE037 — flat per-variant correctness ladde
                 repack_q8q8_grp(addr(qv[0]), addr(sv[0]), fx.n, fx.d, mr, wbias, kgv)
             }
             var y : array<float>
-            y |> resize(int(fx.ntok * fx.d))
+            y |> resize(fx.ntok * fx.d)
             run_tile(v._1, ctab[v._0], fx, qv, sv, mr, tsv, gsv, y)
             let fxok = close_to_ref(fx, y, maxdiff)
             if (!fxok) {
@@ -1106,7 +1106,7 @@ def test_mode : bool { // nolint:STYLE037 — flat per-variant correctness ladde
             ok = ok && fxok
             // the gemv rows core on the same buffers: token 0's row of the oracle
             var yg : array<float>
-            yg |> resize(int(fx.d))
+            yg |> resize(fx.d)
             run_gemv(gtab[v._0], fx, qv, sv, mr, yg)
             let gfxok = close_to_ref(fx, yg, gmaxdiff)
             if (!gfxok) {
@@ -1134,7 +1134,7 @@ def test_mode : bool { // nolint:STYLE037 — flat per-variant correctness ladde
                 repack_mx4_grp(addr(nv[0]), addr(ev[0]), mfx.n, mfx.d, mr)
             }
             var ym : array<float>
-            ym |> resize(int(mfx.d))
+            ym |> resize(mfx.d)
             run_mx4_gemv(mtab[v._0], mfx, nv, ev, mr, ym)
             let mfxok = close_to_mx4_ref(mfx, ym, mmaxdiff)
             if (!mfxok) {
@@ -1373,7 +1373,7 @@ def private confirm_winner(winner : string) : string {
     return fb
 }
 
-def tune_mode_run : bool { // nolint:STYLE037 — flat family-by-family race rail; gates + deferred flush in call order
+def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family race rail; gates + deferred flush in call order
     let tune_total_t0 = ref_time_ticks()
     // refuse before burning minutes measuring noise; every winner below queues into `pending`
     // and nothing reaches the sidecar until the end-of-run gate passes
@@ -1486,11 +1486,11 @@ def tune_mode_run : bool { // nolint:STYLE037 — flat family-by-family race rai
         hbest[i] = 1.0e30lf
     }
     var y : array<float>
-    y |> resize(int(fx.ntok * fx.d))
+    y |> resize(fx.ntok * fx.d)
     var yg : array<float>
-    yg |> resize(int(gfx.d))
+    yg |> resize(gfx.d)
     var yh : array<float>
-    yh |> resize(int(hfx.d))
+    yh |> resize(hfx.d)
     // correctness first — a tune run must never crown a broken variant
     for (vi in range(nv)) {
         run_tile(vs[vi]._1, ctab[vs[vi]._0], fx, bufs[vi].q, bufs[vi].s, vmr[vi], vts[vi], vgs[vi], y)

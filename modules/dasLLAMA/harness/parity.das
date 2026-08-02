@@ -1,7 +1,7 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
+require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require daslib/jobque_boost
 require strings
 require daslib/strings_boost

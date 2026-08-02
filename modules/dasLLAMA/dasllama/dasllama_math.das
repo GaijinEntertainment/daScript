@@ -1226,7 +1226,7 @@ def q51q8_batch_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; xq
             var qe : array<int8>
             qe |> resize(n)
             var sc : array<uint8>
-            sc |> resize(int(nb * 4l))
+            sc |> resize(nb * 4l)
             unsafe {
                 var qep = addr(qe[0])
                 var scp = addr(sc[0])
@@ -1264,7 +1264,7 @@ def q51q8_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; o
             var qe : array<int8>
             qe |> resize(n)
             var sc : array<uint8>
-            sc |> resize(int(nb * 4l))
+            sc |> resize(nb * 4l)
             unsafe {
                 var qep = addr(qe[0])
                 var scp = addr(sc[0])
@@ -1304,7 +1304,7 @@ def q51q8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 con
             var qe : array<int8>
             qe |> resize(n)
             var sc : array<uint8>
-            sc |> resize(int(nb * 4l))
+            sc |> resize(nb * 4l)
             unsafe {
                 var qep = addr(qe[0])
                 var scp = addr(sc[0])

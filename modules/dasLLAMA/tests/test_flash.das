@@ -3,7 +3,7 @@ options persistent_heap   // + explicit deletes below: each test frees its model
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
+require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 
 [init]
 def private allow_cpu_prefill_intent() {

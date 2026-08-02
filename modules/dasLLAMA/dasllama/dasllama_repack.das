@@ -24,9 +24,9 @@ def k45_nib(rowq : uint8 const?; k : int64) : uint {
 
 //! the 5th bit of weight k off a disk-order k5 qh row (32 bytes per superblock)
 def k5_hbit(rowh : uint8 const?; k : int64) : uint {
-    let js = k / 64l
+    let js = int(k / 64l)
     let rem = k % 64l
-    return (uint(unsafe(rowh[rem % 32l])) >> uint(2l * js + (rem < 32l ? 0l : 1l))) & 1u
+    return (uint(unsafe(rowh[rem % 32l])) >> uint(2 * js + (rem < 32l ? 0 : 1))) & 1u
 }
 
 //! low 4 bits of weight k off a disk-order k6 ql row (128 bytes per superblock)
@@ -53,8 +53,8 @@ def repack_q8q8_grp(var wp : int8?; var sp : float?; n, d, mr : int64; wbias : i
     let ncg = n / kgroup
     var tw : array<int8>
     var ts : array<float>
-    tw |> resize(int(d * n))
-    ts |> resize(int(d * nb))
+    tw |> resize(d * n)
+    ts |> resize(d * nb)
     unsafe {
         var twp = addr(tw[0])
         var tsp = addr(ts[0])
@@ -99,8 +99,8 @@ def repack_mx4_grp(var np : uint8?; var ep : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tn : array<uint8>
     var te : array<uint8>
-    tn |> resize(int(d * nrow))
-    te |> resize(int(d * nbb))
+    tn |> resize(d * nrow)
+    te |> resize(d * nbb)
     unsafe {
         var tnp = addr(tn[0])
         var tep = addr(te[0])
@@ -141,8 +141,8 @@ def repack_q51_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
-    tq |> resize(int(d * nb * 20l))
-    ts |> resize(int(d * nb * 4l))
+    tq |> resize(d * nb * 20l)
+    ts |> resize(d * nb * 4l)
     unsafe {
         var tqp = addr(tq[0])
         var tsp = addr(ts[0])
@@ -191,8 +191,8 @@ def repack_k4_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
-    tq |> resize(int(d * qrow))
-    ts |> resize(int(d * srow))
+    tq |> resize(d * qrow)
+    ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
         var tsp = addr(ts[0])
@@ -237,8 +237,8 @@ def repack_k5_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
-    tq |> resize(int(d * qrow))
-    ts |> resize(int(d * srow))
+    tq |> resize(d * qrow)
+    ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
         var tsp = addr(ts[0])
@@ -287,8 +287,8 @@ def repack_k6_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
-    tq |> resize(int(d * qrow))
-    ts |> resize(int(d * srow))
+    tq |> resize(d * qrow)
+    ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
         var tsp = addr(ts[0])
@@ -341,8 +341,8 @@ def repack_q40_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64) {
     let ng = d / mr
     var tq : array<uint8>
     var ts : array<uint8>
-    tq |> resize(int(d * qrow))
-    ts |> resize(int(d * srow))
+    tq |> resize(d * qrow)
+    ts |> resize(d * srow)
     unsafe {
         var tqp = addr(tq[0])
         var tsp = addr(ts[0])

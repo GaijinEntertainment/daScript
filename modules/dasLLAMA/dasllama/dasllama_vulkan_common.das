@@ -987,7 +987,7 @@ def vk_moe_init : bool {
     g_gpu.batch_k6 <- make_kernel_pipe("kq_moe_batch_k6", kq_moe_batch_k6_spv)
     g_gpu.batch_q40 <- make_kernel_pipe("kq_moe_batch_q40", kq_moe_batch_q40_spv)
     g_gpu.comb_pipeline <- make_kernel_pipe("moe_combine", moe_combine_spv)
-    // nolint:STYLE015 — dn_conv stages a full row in shared (cv_row+cv_scale = 33024 B); Apple
+    // dn_conv stages a full row in shared (cv_row+cv_scale = 33024 B); Apple
     // caps threadgroup memory at 32 KB and pipeline COMPILE fails, so the chain gates by limit
     var limits_props : VkPhysicalDeviceProperties
     vkGetPhysicalDeviceProperties(g_gpu.phys, limits_props)
@@ -1864,7 +1864,7 @@ def vk_decode_attn(var q : array<float>; var out : array<float>; cnt, qd, kv_dim
     verify(vk_moe_init())
     assert(head_size <= 256l && qd <= RKS_MAX_QD, "dasLLAMA vulkan: decode-attn geometry over scratch")
     ensure_da_state()
-    let n_heads = qd / head_size
+    let n_heads = int(qd / head_size)
     unsafe {
         var mp = reinterpret<uint?>(g_gpu.da_meta.mapped)
         mp[0] = uint(cnt)
@@ -1896,11 +1896,11 @@ def vk_decode_attn(var q : array<float>; var out : array<float>; cnt, qd, kv_dim
 def vk_rope_kv_store(var qkv : array<float>; var qout : array<float>; var krow : array<float>; var vrow : array<float>;
                      cossin : array<float>; qd, kv_dim, head_size, pos : int64; neox : bool) {
     verify(vk_moe_init())
-    let half = head_size / 2l
+    let half = int(head_size / 2l)
     assert(qd <= RKS_MAX_QD && kv_dim <= RKS_MAX_KVD && pos < RKS_MAX_CTX, "dasLLAMA vulkan: rope_kv geometry over scratch")
     ensure_rks_state()
-    let kpair0 = qd / 2l
-    let npairs = kpair0 + kv_dim / 2l
+    let kpair0 = int(qd / 2l)
+    let npairs = kpair0 + int(kv_dim / 2l)
     unsafe {
         var mp = reinterpret<uint?>(g_gpu.rks_meta.mapped)
         mp[0] = uint(qd)
@@ -1920,7 +1920,7 @@ def vk_rope_kv_store(var qkv : array<float>; var qout : array<float>; var krow :
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
-        hz_dispatch(raw, h, weak_copy(g_gpu.rks_pipeline), g_gpu.rks_set, uint((npairs + int64(WG_X) - 1l) / int64(WG_X)))
+        hz_dispatch(raw, h, weak_copy(g_gpu.rks_pipeline), g_gpu.rks_set, uint((npairs + int(WG_X) - 1) / int(WG_X)))
         vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_Y3, 0u, true)   // one declaration for the q/k/v readback group
         cmd_copy_whole(raw, g_gpu.rks_q_dev, g_gpu.rks_q_host.buf, qd * 4l)
         cmd_copy_range(raw, g_gpu.rks_k_dev, pos * kv_dim * 4l, g_gpu.rks_kv_host.buf, 0l, kv_dim * 4l)
@@ -2098,7 +2098,7 @@ def fill_addrms_meta(hb : HostBuf; dim, woff : int64; add : bool) {
 // the fused qk-rmsnorm+rope meta; words 9-11 index the COS buffer, not the norms buffer
 def fill_qkn_rope_meta(hb : HostBuf; l : int64) {
     unsafe {
-        let hs = g_rd.head_size
+        let hs = g_rd.head_size   // nolint:LINT021 — the row-offset words compose it with int64 layout offsets
         var mp = reinterpret<uint?>(hb.mapped)
         mp[0] = uint(g_rd.qd)
         mp[1] = uint(g_rd.kv_dim)

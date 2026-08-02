@@ -249,8 +249,8 @@ struct Gemma4aState {
 
 def private g4a_ensure(@scratch var a : array<float>; n : int64) {
     if (long_length(a) < n) {
-        a |> reserve(int(n))
-        a |> resize(int(n))
+        a |> reserve(n)
+        a |> resize(n)
     }
 }
 
@@ -282,14 +282,14 @@ def private g4a_htk_filterbank(n_mel, n_fft, sample_rate : int64) : array<float>
     let fmax = 0.5lf * double(sample_rate)
     let m_hi = 2595.0lf * log10(1.0lf + fmax / 700.0lf)
     var hz_pts : array<double>
-    hz_pts |> resize(int(n_mel + 2l))
+    hz_pts |> resize(n_mel + 2l)
     for (i in range64(n_mel + 2l)) {
         let mel = m_hi * double(i) / double(n_mel + 1l)   // m_lo = hz_to_mel(0) = 0
         hz_pts[i] = 700.0lf * (pow(10.0lf, mel / 2595.0lf) - 1.0lf)
     }
     let bin_hz_step = double(sample_rate) / double(n_fft)
     var out : array<float>
-    out |> resize(int(n_mel * n_bins))
+    out |> resize(n_mel * n_bins)
     for (mm in range64(n_mel)) {
         let f_left = hz_pts[mm]
         let f_center = hz_pts[mm + 1l]
@@ -405,7 +405,7 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
         st.e.outproj_w = o; o += st.e.proj_dim * d
         st.e.outproj_b = o; o += st.e.proj_dim
         st.e.mmproj_w = o; o += st.e.proj_dim * st.e.proj_dim
-        st.layers |> resize(int(st.e.n_layer))
+        st.layers |> resize(st.e.n_layer)
         for (l in range64(st.e.n_layer)) {
             var lo = G4aLayer()
             lo.ff_norm = o; o += d
@@ -432,8 +432,8 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
             lo.ln2 = o; o += d
             st.layers[l] = lo
         }
-        st.blob |> reserve(int(o))
-        st.blob |> resize(int(o))
+        st.blob |> reserve(o)
+        st.blob |> resize(o)
 
         // read weights
         gguf_read_tensor_f32(m, bytes, "a.conv1d.0.weight", st.blob, st.e.c0_w, st.e.sub_ch0 * 9l)
@@ -490,14 +490,14 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
 
     // HTK filterbank, 512 Hann (320 at the front, zeros to 512), DFT twiddles, RPE table, ones
     st.filters <- g4a_htk_filterbank(st.e.n_mel, G4A_N_FFT, AUDIO_SAMPLE_RATE)
-    st.hann |> resize(int(G4A_N_FFT))
+    st.hann |> resize(G4A_N_FFT)
     for (i in range64(G4A_WINDOW)) {
         st.hann[i] = float(0.5lf - 0.5lf * double(cos(float(2.0lf * DBL_PI * double(i) / double(G4A_WINDOW)))))
     }
     st.twiddles <- build_dft_twiddles(G4A_N_FFT)
     let num_ts = st.e.d_model / 2l
     let log_ts_inc = log(10000.0) / float(max(num_ts - 1l, 1l))
-    st.pos_emb |> resize(int((G4A_PAST + 1l) * st.e.d_model))
+    st.pos_emb |> resize((G4A_PAST + 1l) * st.e.d_model)
     for (pp in range64(G4A_PAST + 1l)) {
         let position = float(G4A_PAST - pp)
         for (i in range64(num_ts)) {
@@ -507,7 +507,7 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
             st.pos_emb[pp * st.e.d_model + i + num_ts] = cos(scaled)
         }
     }
-    st.ones |> resize(int(st.e.proj_dim))
+    st.ones |> resize(st.e.proj_dim)
     for (i in range64(st.e.proj_dim)) {
         st.ones[i] = 1.0
     }

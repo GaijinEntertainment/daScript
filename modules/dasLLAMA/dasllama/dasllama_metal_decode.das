@@ -289,7 +289,7 @@ var private g_rope_sin_next_swa : array<float>
 // geometry + pooled buffers + uniforms for one step at `pos` — no input bytes yet (poke_step).
 // Hetero models (gemma4) carry TWO attention classes (global = config fields, sliding = _swa);
 // buffers size to the class maxima and each layer binds its class's uniform set.
-def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint64; cap : int64; draft : bool = false; nrows : int64 = 1l) : StepRes {
+def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint64; cap : int64; draft : bool = false; nrows : int64 = 1l) : StepRes {   // nolint:STYLE037,STYLE038 — flat per-shape buffer/uniform acquire list
     let c = t.config
     let dim = c.dim
     let head_size = c.head_size
@@ -386,10 +386,10 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
     r.u_zero32 = uniform_u32(0u)
     r.u_one32 = uniform_u32(1u)
     if (c.sliding_window > 0l) {
-        let wstart = pos + 1l > c.sliding_window ? pos + 1l - c.sliding_window : 0l
+        let chlo = uint((pos + 1l > c.sliding_window ? pos + 1l - c.sliding_window : 0l) / ATTN_CHUNK_ROWS)
         r.u_winsl = uniform_u32(uint(c.sliding_window))
-        r.u_chlo = uniform_u32(uint(wstart / ATTN_CHUNK_ROWS))
-        r.k_chlo = uint(wstart / ATTN_CHUNK_ROWS)
+        r.u_chlo = uniform_u32(chlo)
+        r.k_chlo = chlo
     }
     if (r.kdt == KVDtype.q8_0 || r.kdt == KVDtype.tq4) {
         r.k_nblk = uint(kv_dim / 32l)
@@ -398,7 +398,7 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
         }
     }
     if (moe) {
-        let ege = dim * c.n_ff_exp
+        let ege = uint(dim * c.n_ff_exp)
         r.bytes_moe_lg = uint64(nrows * c.n_expert * 4l)
         r.bytes_moe_sel = uint64(nrows) * 128ul
         r.bytes_moe_dn = uint64(nrows * c.n_expert_used * dim * 4l)
@@ -416,10 +416,10 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
         r.u_moe_kdim = uniform_u32(uint(c.n_expert_used * dim))
         r.k_moe_kdim = uint(c.n_expert_used * dim)
         r.u_moe_tot = uniform_u32(uint(nrows * knfe))
-        r.u_moe_eblk = uniform_u32(uint(ege / 32l))
-        r.k_moe_eblk = uint(ege / 32l)
-        r.u_moe_esb = uniform_u32(uint(ege / 256l))
-        r.k_moe_esb = uint(ege / 256l)
+        r.u_moe_eblk = uniform_u32(ege / 32u)
+        r.k_moe_eblk = ege / 32u
+        r.u_moe_esb = uniform_u32(ege / 256u)
+        r.k_moe_esb = ege / 256u
         r.u_moe_xs_dn = uniform_u32(uint(c.n_ff_exp))
         r.k_moe_xs_dn = uint(c.n_ff_exp)
         if (c.moe_dense_shexp) {   // gemma4: router-input scratch + the 1/sqrt(dim) scale
@@ -543,7 +543,7 @@ def private poke_step(s : Session; r : StepRes) {
 // one trunk-shaped fused layer (attention/deltanet + ffn/moe) — the decode step's loop body,
 // shared with the MTP draft arm (which runs it at l == n_layers). Returns the advanced
 // recurrent-slice cursor
-def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?; l : int64; var dnli : int64&) {
+def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?; l : int64; var dnli : int64&) {   // nolint:STYLE037,STYLE038 — one layer's dispatch chain; the phases are hz-barrier coupled
     let c = t.config
     let dim = c.dim
     let n_heads = c.n_heads
@@ -1163,7 +1163,7 @@ def private enc_verify_site(t : Model; enc : MetalComputeEncoder?; fmt : KqFmt;
 
 // one verify-shaped B=2 layer (batch-form sites, same-slab brt row at l*32) — the trunk
 // loop body, shared with the draft-slab warm (which runs it at l == n_layers)
-def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?; brt : MetalBuffer?; l, pos : int64; var dnli : int64&) {
+def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?; brt : MetalBuffer?; l, pos : int64; var dnli : int64&) {   // nolint:STYLE037,STYLE038 — the MTP verify dispatch chain; hz-barrier coupled
     let c = t.config
     let dim = c.dim
     let n_heads = c.n_heads
@@ -1362,9 +1362,9 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
 def private encode_verify_step(t : Model; var r : StepRes; pos : int64) {
     let c = t.config
     let dim = c.dim
-    let esz = uint64(kv_row_bytes(r.kdt, 1l))
+    let esz = uint64(kv_row_bytes(r.kdt, 1l))   // nolint:LINT021 — divides uint64 arena offsets; only the quotient narrows
     // per-layer same-slab route entries (elements); the +nextn entry = the warm's draft slab
-    g_vrt |> resize(int((c.n_layers + c.n_layer_nextn) * 8l))
+    g_vrt |> resize((c.n_layers + c.n_layer_nextn) * 8l)
     for (l in range64(c.n_layers + c.n_layer_nextn)) {
         let lb = uint((r.koff + uint64(mirror_lbase(t, r.kdt, r.cap, l))) / esz)
         let vb = uint((r.voff + uint64(mirror_lbase(t, r.kdt, r.cap, l))) / esz)
@@ -1462,7 +1462,7 @@ def private finish_verify_step(t : Model; var s : Session; r : StepRes; pos : in
 //! Cold/decline paths fall back to one plain (GPU) forward — output-invariant either way.
 //! Reject is ~free: row0 IS the truth decode, the dn shadow region flips in — no re-forward.
 [hot_path]
-def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&) : bool {
+def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&) : bool {   // nolint:STYLE038 — draft/verify/accept is one sequential protocol on shared locals
     let c = t.config
     let pos = s.n_past
     var cold = (g_dev == null || !t.metal_blob || c.n_layer_nextn <= 0l || pos < 1l ||
@@ -1487,7 +1487,7 @@ def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : 
     }
     if (!cold) {
         // the warm's row-pos h input is the PRE-draft trunk hidden — the draft overwrites mtp_h
-        s.mtp_xb_save |> resize(int(c.dim))
+        s.mtp_xb_save |> resize(c.dim)
         unsafe {
             memcpy(addr < void? >(s.mtp_xb_save[0]), addr < void? >(s.mtp_h[0]), c.dim * 4l)
         }
@@ -1744,7 +1744,7 @@ def private finish_step(t : Model; var s : Session; r : StepRes) : bool {
     return ok
 }
 
-def private release_step(var r : StepRes) {
+def private release_step(var r : StepRes) {   // nolint:STYLE037,STYLE038 — flat one-release-per-buffer list
     if (r.cb != null) {
         metal_release(r.cb)
         r.cb = null
@@ -2159,7 +2159,7 @@ def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : arra
 //! through ONE weight pass. STACK-ONLY: on true every row's KV is stored (mirror + CPU cache) and
 //! ws.scr.x_b holds the final residuals; false = declined, CPU loop recomputes from clean state.
 [hot_path]
-def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
+def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {   // nolint:STYLE037,STYLE038 — the batch step driver; encode/commit/stash share the whole step's state
     if (weight_caches_stale()) {   // a model (re)load may have recycled cached weight addresses
         discard_pre()
         weight_caches_flush_on_reload()
@@ -2247,10 +2247,10 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     for (i in range64(nrows)) {
         g_pin |> insert(sessions[i].uid)
     }
-    g_b_rte |> resize(int(nrows * 4l))
-    g_b_koffs |> resize(int(nrows))
-    g_b_voffs |> resize(int(nrows))
-    g_b_caps |> resize(int(nrows))
+    g_b_rte |> resize(nrows * 4l)
+    g_b_koffs |> resize(nrows)
+    g_b_voffs |> resize(nrows)
+    g_b_caps |> resize(nrows)
     var maxcnt = 0l
     var rows_ok = false
     for (attempt in range(2)) {
@@ -2481,8 +2481,8 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     let ts_enc = ref_time_ticks()
     let ncb = min(g_bncb, c.n_layers)
     let lay_per_cb = (c.n_layers + ncb - 1l) / ncb
-    var cbs : array<MetalCommandBuffer?>   // nolint:PERF026 — two steps' cb lists are alive at once (this one + the pending g_lp_cbs), so a reused global cannot serve; bounded by ncb
-    cbs |> reserve(int(ncb))   // nolint:PERF026 — see above
+    var cbs : array<MetalCommandBuffer?>   // two steps' cb lists are alive at once (this one + the pending g_lp_cbs), so a reused global cannot serve
+    cbs |> reserve(ncb)   // nolint:PERF026 — see the declaration above; bounded by ncb
     // concurrent-encode rail: a concurrent encoder + explicit barriers ONLY at real buffer hazards
     // (the serial encoder implicit-barriers every dispatch). Gated to a full pipeline — a knockout
     // (g_skip) run stays on the serial encoder so a skipped stage can't leave a dependent unbarriered.
@@ -2999,7 +2999,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     g_lp_err = false   // a lost pipelined step was logged + counted; this step retries fresh
     // stash this step as the pending one (finish_pending_step just cleared every slot)
     g_lp_active = true
-    g_lp_cbs <- cbs
+    g_lp_cbs <- cbs   // nolint:PERF030 — emptied by finish_pending_step's clear() above; capacity deliberately retained
     g_lp_pooled |> push((buf = bx, size = bytes_x))
     g_lp_pooled |> push((buf = bxb, size = bytes_xb))
     g_lp_pooled |> push((buf = bxb2, size = bytes_x))
@@ -3094,11 +3094,11 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
         g_lp_xb_bytes = nrows * dim * 4l
     }
     g_lp_sessions |> clear()
-    g_lp_sessions |> reserve(int(nrows))
-    g_lp_positions |> resize(int(nrows))
-    g_lp_koffs |> resize(int(nrows))
-    g_lp_voffs |> resize(int(nrows))
-    g_lp_caps |> resize(int(nrows))
+    g_lp_sessions |> reserve(nrows)
+    g_lp_positions |> resize(nrows)
+    g_lp_koffs |> resize(nrows)
+    g_lp_voffs |> resize(nrows)
+    g_lp_caps |> resize(nrows)
     for (i in range64(nrows)) {
         g_lp_sessions |> push(sessions[i])
         g_lp_positions[i] = ws.positions[i]
@@ -3112,9 +3112,9 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     g_lp_vocab = c.vocab_size
     // hetero (gemma4): per-layer row bytes + per-(row, layer) slab bases — uniform models
     // capture the same values the old l * cap * rowb arithmetic produced
-    g_lp_lrowb |> resize(int(c.n_layers))
-    g_lp_lkbase |> resize(int(nrows * c.n_layers))
-    g_lp_lvbase |> resize(int(nrows * c.n_layers))
+    g_lp_lrowb |> resize(c.n_layers)
+    g_lp_lkbase |> resize(nrows * c.n_layers)
+    g_lp_lvbase |> resize(nrows * c.n_layers)
     for (l in range64(c.n_layers)) {
         g_lp_lrowb[l] = kv_row_bytes(kdt, layer_kv_dim(c, l))
         for (i in range64(nrows)) {

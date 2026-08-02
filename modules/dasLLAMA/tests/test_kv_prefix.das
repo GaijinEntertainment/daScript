@@ -3,7 +3,7 @@ options persistent_heap   // several Sessions live at once (see test_forward.das
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration
+require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require dasllama/dasllama_prefix
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + target_chunk_work
 require daslib/jobque_boost
@@ -161,7 +161,7 @@ def private logits_match(s : Session; all : array<float>; snap, vocab : int64) :
 }
 
 [test]
-def test_prefix_warm_equals_cold(t : T?) {
+def test_prefix_warm_equals_cold(t : T?) {   // nolint:STYLE038 — cold/warm/divergent phases share one pool + cache and one flat teardown
     t |> run("attached pages + tail eval == cold prefill, bit-exact (needs stories15M.bin)") @(t : T?) {
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")

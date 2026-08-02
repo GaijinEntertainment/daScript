@@ -194,7 +194,7 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
     let kvd = g_rd.kv_dim
     let hid = g_rd.hidden
     let nlfin = g_rd.n_layers * 2l * dim
-    let pairs = qd / 2l + kvd / 2l
+    let pairs = int(qd / 2l + kvd / 2l)
     unsafe {
         var sp = reinterpret<float?>(g_gpu.staging.mapped)
         sp[0] = g_rd.scale
@@ -232,7 +232,7 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 invoke(mA, b + 2, dim, kvd, L.bk, L.fk)
                 invoke(mA, b + 3, dim, kvd, L.bv, L.fv)
                 if (g_rd.qk_norm) {
-                    let hs = g_rd.head_size
+                    let hs = g_rd.head_size   // nolint:LINT021 — the norm-row words compose it with int64 layout offsets
                     var mn = reinterpret<uint?>(g_rd.pf_meta[b + 15].mapped)
                     mn[0] = uint(hs); mn[1] = uint(g_rd.n_heads); mn[2] = uint(kvd / hs)
                     mn[3] = uint(qd); mn[4] = uint(kvd); mn[5] = 0u   // k rows at 0 in pf_kv, kvd stride
@@ -284,7 +284,7 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
             vhz_dep(raw, h, 0u, VHZ_META, true)
             cmd_copy_whole(raw, g_gpu.ffn_meta.buf, g_gpu.ffn_meta_dev, FFN_META_BYTES)
             pfq_ts(raw)   // q1: meta copy
-            let ropewg = uint((wlen * pairs + int64(WG_X) - 1l) / int64(WG_X))
+            let ropewg = uint((int(wlen) * pairs + int(WG_X) - 1) / int(WG_X))
             let fa128 = g_gpu.has_coopmat && g_rd.head_size == 128l && vk_fa_on()
             let attnwg = uint(fa128 ? g_rd.n_heads * ((wlen + 31l) / 32l) : g_rd.n_heads * ((wlen + 7l) / 8l))
             rd_dispatch(raw, g_gpu.ar_pipeline, g_rd.pf_sets[bp + 0], uint(wlen), h)   // prologue norm
@@ -344,13 +344,13 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
         if (vk_prof() && g_pfq_n == 5u + uint(g_rd.n_layers * rpl)) {
             var role : double[16]
             for (l in range64(g_rd.n_layers)) {
-                for (s in range(int(rpl))) {
+                for (s in range64(rpl)) {
                     role[s] += pfq_us(uint(3l + l * rpl) + uint(s))
                 }
             }
             let nq = 3u + uint(g_rd.n_layers * rpl)
             var tot = 0.0lf
-            for (s in range(int(rpl))) {
+            for (s in range64(rpl)) {
                 tot += role[s]
             }
             tot += pfq_us(2u) + pfq_us(nq) + pfq_us(nq + 1u)

@@ -1,6 +1,8 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options persistent_heap   // the layout arm loads a multi-GB model; explicit delete below
+options _cyclomatic_complexity = 35   // every gate here is the same flat fmt == 4/5/6/40 ladder repeated per stage
+options _function_length = 170        // and each gate carries its whole fixture build + oracle inline
 
 require dastest/testing_boost public
 require _model_tier
@@ -11,7 +13,7 @@ require dasllama/dasllama_math_default   // dot_k4q8/k5/k6/q40q8 — the kernel 
 require dasllama/dasllama_math_gen   // kq_grp_row_dot — the stage-4 repack oracle
 require dasllama/dasllama_repack     // repack_k4/k5/k6/q40_grp + repack_q51_grp
 require dasllama/dasllama_gemm_schema   // kq_qsb/kq_ssb — the fmt-id plane strides
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration for load_gguf
+require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration for load_gguf
 require math
 
 // K-quant (Q4_K / Q6_K) superblock dequant gates. The synthetic arms hand-pack one superblock
@@ -429,7 +431,7 @@ def private q51_grp_gate(t : T?) {
     var xs : array<float>
     q51_fill_acts(xq, xs, 1l, n)
     var xbs : array<int>
-    xbs |> resize(int(nb))
+    xbs |> resize(nb)
     for (bi in range64(nb)) {
         var s = 0
         for (j in range64(32l)) {
@@ -438,17 +440,17 @@ def private q51_grp_gate(t : T?) {
         xbs[bi] = s
     }
     var yref : array<float>
-    yref |> resize(int(d))
+    yref |> resize(d)
     unsafe {
         for (r in range64(d)) {
             yref[r] = dot_q51q8_scalar(addr(kq[0]) + r * nb * 20l, addr(ks[0]) + r * nb * 4l, addr(xq[0]), addr(xs[0]), n)
         }
         var qe : array<int8>
-        qe |> resize(int(n))
+        qe |> resize(n)
         var qe2 : array<int8>
-        qe2 |> resize(int(n))
+        qe2 |> resize(n)
         var sc : array<uint8>
-        sc |> resize(int(nb * 4l))
+        sc |> resize(nb * 4l)
         for (mr in fixed_array(4l, 8l)) {
             var gq := kq
             var gs := ks
@@ -612,8 +614,8 @@ def private kq_gemv_rows_gate(t : T?; fmt : int; n : int64 = 512l) {
     let blk1 <- fmt == 4 ? build_q4k_block() : (fmt == 5 ? build_q5k_block() : (fmt == 40 ? build_q40_block() : build_q6k_block()))
     var kq : array<uint8>
     var ks : array<uint8>
-    kq |> resize(int(d * nsb * qsb))
-    ks |> resize(int(d * nsb * ssb))
+    kq |> resize(d * nsb * qsb)
+    ks |> resize(d * nsb * ssb)
     for (r in range64(d)) {
         for (s in range64(nsb)) {
             if (fmt == 4) {
@@ -646,7 +648,7 @@ def private kq_gemv_rows_gate(t : T?; fmt : int; n : int64 = 512l) {
     xbs |> resize(n / 16l)
     quantize_q8_k_into(src, n, xq, xs, xbs, 0l, 0l, 0l)   // kq v2: Q8_K-form activations, all formats
     var y : array<float>
-    y |> resize(int(d))
+    y |> resize(d)
     matmul_kq(fmt, y, kq, ks, 0l, xq, xs, xbs, n, d)
     unsafe {
         var bad = 0
@@ -715,8 +717,8 @@ def private kq_repack_gate(t : T?; fmt : int; mr : int64; n : int64 = 512l) {
     let blk1 <- fmt == 4 ? build_q4k_block() : (fmt == 5 ? build_q5k_block() : (fmt == 40 ? build_q40_block() : build_q6k_block()))
     var kq : array<uint8>
     var ks : array<uint8>
-    kq |> resize(int(d * nsb * qsb))
-    ks |> resize(int(d * nsb * ssb))
+    kq |> resize(d * nsb * qsb)
+    ks |> resize(d * nsb * ssb)
     for (r in range64(d)) {
         for (s in range64(nsb)) {
             if (fmt == 4) {
@@ -750,8 +752,8 @@ def private kq_repack_gate(t : T?; fmt : int; mr : int64; n : int64 = 512l) {
     quantize_q8_k_into(src, n, xq, xs, xbs, 0l, 0l, 0l)   // kq v2: Q8_K-form activations, all formats
     var want : array<float>
     var wrow : array<float>
-    want |> resize(int(d))
-    wrow |> resize(int(d * n))
+    want |> resize(d)
+    wrow |> resize(d * n)
     unsafe {
         for (r in range64(d)) {
             let kqr = addr(kq[r * nsb * qsb])
@@ -851,8 +853,8 @@ def private kq_tile_gate(t : T?; fmt : int; n : int64 = 512l) {
     let blk1 <- fmt == 4 ? build_q4k_block() : (fmt == 5 ? build_q5k_block() : (fmt == 40 ? build_q40_block() : build_q6k_block()))
     var kq : array<uint8>
     var ks : array<uint8>
-    kq |> resize(int(d * nsb * qsb))
-    ks |> resize(int(d * nsb * ssb))
+    kq |> resize(d * nsb * qsb)
+    ks |> resize(d * nsb * ssb)
     for (r in range64(d)) {
         for (s in range64(nsb)) {
             if (fmt == 4) {
@@ -884,16 +886,16 @@ def private kq_tile_gate(t : T?; fmt : int; n : int64 = 512l) {
     }
     // ntok-row activation image, bs-quantized per row
     var src : array<float>
-    src |> resize(int(ntok * n))
+    src |> resize(ntok * n)
     for (i in range64(ntok * n)) {
         src[i] = 0.9 * sin(float(i) * 0.31) + 0.5 * cos(float(i) * 0.043)
     }
     var xq : array<int8>
     var xs : array<float>
     var xbs : array<int>
-    xq |> resize(int(ntok * n))
-    xs |> resize(int(ntok * n / 32l))
-    xbs |> resize(int(ntok * n / 16l))
+    xq |> resize(ntok * n)
+    xs |> resize(ntok * n / 32l)
+    xbs |> resize(ntok * n / 16l)
     unsafe {
         for (p in range64(ntok)) {
             quantize_q8_k_into_ptr(addr(src[p * n]), n, addr(xq[0]), addr(xs[0]), addr(xbs[0]), p * n, p * (n / 256l), p * (n / 16l))
@@ -901,15 +903,15 @@ def private kq_tile_gate(t : T?; fmt : int; n : int64 = 512l) {
     }
     var ytile : array<float>
     var ygemv : array<float>
-    ytile |> resize(int(ntok * d))
-    ygemv |> resize(int(ntok * d))
+    ytile |> resize(ntok * d)
+    ygemv |> resize(ntok * d)
     // k5/k6 tiles read the byte-expanded panel the batch cell unpacks per (group, token-block)
     // — the gate covers unpack_kq_panel_grp too (tile-over-panel vs gemv-over-packed planes);
     // k4/q40 tiles read the packed planes directly
     let packed = fmt == 4 || fmt == 40
     var panel : array<uint8>
     if (!packed) {
-        panel |> resize(int(mr * nsb * 256l))
+        panel |> resize(mr * nsb * 256l)
     }
     unsafe {
         let ng = d / mr
@@ -1001,8 +1003,8 @@ def private kq_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 = 32l;
     let blk1 <- fmt == 4 ? build_q4k_block() : (fmt == 5 ? build_q5k_block() : (fmt == 40 ? build_q40_block() : build_q6k_block()))
     var kq : array<uint8>
     var ks : array<uint8>
-    kq |> resize(int(nreg * d * nsb * qsb))
-    ks |> resize(int(nreg * d * nsb * ssb))
+    kq |> resize(nreg * d * nsb * qsb)
+    ks |> resize(nreg * d * nsb * ssb)
     for (r in range64(nreg * d)) {
         for (s in range64(nsb)) {
             if (fmt == 4) {
@@ -1023,16 +1025,16 @@ def private kq_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 = 32l;
     }
     // nreg activation rows, bs-quantized per row
     var src : array<float>
-    src |> resize(int(nreg * n))
+    src |> resize(nreg * n)
     for (i in range64(nreg * n)) {
         src[i] = 1.1 * sin(float(i) * 0.23) - 0.6 * cos(float(i) * 0.071)
     }
     var xq : array<int8>
     var xs : array<float>
     var xbs : array<int>
-    xq |> resize(int(nreg * n))
-    xs |> resize(int(nreg * n / 32l))
-    xbs |> resize(int(nreg * n / 16l))
+    xq |> resize(nreg * n)
+    xs |> resize(nreg * n / 32l)
+    xbs |> resize(nreg * n / 16l)
     unsafe {
         for (p in range64(nreg)) {
             quantize_q8_k_into_ptr(addr(src[p * n]), n, addr(xq[0]), addr(xs[0]), addr(xbs[0]), p * n, p * (n / 256l), p * (n / 16l))
@@ -1040,8 +1042,8 @@ def private kq_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 = 32l;
     }
     var offs_sh : array<int64>
     var offs_pr : array<int64>
-    offs_sh |> reserve(int(nreg * 2l))
-    offs_pr |> reserve(int(nreg * 2l))
+    offs_sh |> reserve(nreg * 2l)
+    offs_pr |> reserve(nreg * 2l)
     for (r in range64(nreg)) {
         offs_sh |> push(r * d * n)
         offs_sh |> push(0l)
@@ -1051,8 +1053,8 @@ def private kq_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 = 32l;
     // references: per-row disk dots for both activation bindings
     var want_sh : array<float>
     var want_pr : array<float>
-    want_sh |> resize(int(nreg * d))
-    want_pr |> resize(int(nreg * d))
+    want_sh |> resize(nreg * d)
+    want_pr |> resize(nreg * d)
     unsafe {
         for (r in range64(nreg)) {
             for (row in range64(d)) {
@@ -1076,7 +1078,7 @@ def private kq_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 = 32l;
         }
     }
     var y : array<float>
-    y |> resize(int(nreg * d))
+    y |> resize(nreg * d)
     var bad_dsh = 0
     var bad_dpr = 0
     matmul_kq_groupn(fmt, y, kq, ks, offs_sh, nreg, xq, xs, xbs, n, d)
@@ -1208,8 +1210,8 @@ def private kq_batch_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 
     let blk1 <- fmt == 4 ? build_q4k_block() : (fmt == 5 ? build_q5k_block() : (fmt == 40 ? build_q40_block() : build_q6k_block()))
     var kq : array<uint8>
     var ks : array<uint8>
-    kq |> resize(int(nreg * d * nsb * qsb))
-    ks |> resize(int(nreg * d * nsb * ssb))
+    kq |> resize(nreg * d * nsb * qsb)
+    ks |> resize(nreg * d * nsb * ssb)
     for (r in range64(nreg * d)) {
         for (s in range64(nsb)) {
             if (fmt == 4) {
@@ -1243,16 +1245,16 @@ def private kq_batch_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 
     }
     // gathered activation image: nk rows, Q8_K-quantized per row
     var src : array<float>
-    src |> resize(int(nk * n))
+    src |> resize(nk * n)
     for (i in range64(nk * n)) {
         src[i] = 0.8 * sin(float(i) * 0.29) - 0.4 * cos(float(i) * 0.057)
     }
     var xq : array<int8>
     var xs : array<float>
     var xbs : array<int>
-    xq |> resize(int(nk * n))
-    xs |> resize(int(nk * n / 256l))
-    xbs |> resize(int(nk * n / 16l))
+    xq |> resize(nk * n)
+    xs |> resize(nk * n / 256l)
+    xbs |> resize(nk * n / 16l)
     unsafe {
         for (p in range64(nk)) {
             quantize_q8_k_into_ptr(addr(src[p * n]), n, addr(xq[0]), addr(xs[0]), addr(xbs[0]), p * n, p * (n / 256l), p * (n / 16l))
@@ -1263,12 +1265,12 @@ def private kq_batch_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 
     offs |> reserve(nreg * 3l)
     var want : array<float>
     var y : array<float>
-    want |> resize(int(nk * d))
-    y |> resize(int(nk * d))
+    want |> resize(nk * d)
+    y |> resize(nk * d)
     var row0 = 0l
     unsafe {
         for (r in range64(nreg)) {
-            offs |> push(r * d * n)   // nolint:STYLE012 — triple stream, not a collectable comprehension
+            offs |> push(r * d * n)   // triple stream, not a collectable comprehension
             offs |> push(row0)
             offs |> push(cnts[r])
             let kqr = addr(kq[r * d * nsb * qsb])

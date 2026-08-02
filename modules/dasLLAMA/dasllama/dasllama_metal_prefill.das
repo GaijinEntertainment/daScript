@@ -599,7 +599,7 @@ class MetalMoeMulMmMx4 {
     @workgroup vt : float[32]
 
     [metal_kernel(name="metal_moe_mulmm_mx4_msl")]
-    def metal_moe_mulmm_mx4 {
+    def metal_moe_mulmm_mx4 {   // nolint:STYLE038 — MSL kernel body; the mul_mm tiles are simdgroup-barrier coupled
         let e = gl_WorkGroupID.z
         let ce = cnt[e]
         let mBase = gl_WorkGroupID.x * 32u
@@ -1205,7 +1205,7 @@ class MetalMoeMulMmK6 {
     @workgroup tb : float16[1024]
 
     [metal_kernel(name="metal_moe_mulmm_k6_msl")]
-    def metal_moe_mulmm_k6 {
+    def metal_moe_mulmm_k6 {   // nolint:STYLE038 — MSL kernel body; the mul_mm tiles are simdgroup-barrier coupled
         let e = gl_WorkGroupID.z
         let ce = cnt[e]
         let mBase = gl_WorkGroupID.x * 32u
@@ -1484,7 +1484,7 @@ class MetalAttnSoftmax {
     @workgroup bcast : float
 
     [metal_kernel(name="metal_attn_softmax_msl")]
-    def metal_attn_softmax {
+    def metal_attn_softmax {   // nolint:STYLE038 — MSL kernel body; the softmax halves are tgmem-barrier coupled
         let qi = gl_WorkGroupID.x
         let h = gl_WorkGroupID.y
         let lid = gl_LocalInvocationID.x
@@ -1691,7 +1691,7 @@ class MetalAttnQKMm {
     @workgroup tb : float16[1024]           // Q: k-tiles x 4 query-tiles of 8x8 (query row, k col)
 
     [metal_kernel(name="metal_attn_qk_mm_msl")]
-    def metal_attn_qk_mm {
+    def metal_attn_qk_mm {   // nolint:STYLE038 — MSL kernel body; the QK tiles are simdgroup-barrier coupled
         let mBase = gl_WorkGroupID.x * 32u  // query rows
         let nBase = gl_WorkGroupID.y * 64u  // key rows
         // skip blocks fully above the causal diagonal, or fully below every row's sliding ka.window
@@ -2161,7 +2161,7 @@ def public metal_prefill_stats() : tuple<prefills : int64; declines : int64> {
 //! Release every GPU object the driver holds — the tests' leak-gate rail (and the reset for
 //! refilled weight arrays, same contract as metal_gemm_shutdown). Lazily re-initializes on the
 //! next served prefill.
-def public metal_prefill_shutdown {
+def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-release-per-PSO list
     kcov_fold()   // PSO pointers recycle across re-init — counts fold into names first
     pool_drain(g_pf_pool)
     pool_drain(g_pf_upool)
@@ -2273,7 +2273,7 @@ def public metal_prefill_shutdown {
 }
 
 [cold_path]   // one-time device/PSO bring-up, guarded by its own inited flag
-def private metal_prefill_init : bool {
+def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compile-per-PSO list
     if (g_pf_inited) {
         return true
     }
@@ -2649,8 +2649,8 @@ def private pf_enc_moe_route(enc : MetalComputeEncoder?; t : Model; l : int64;
 def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; stack_off, rows, npos : int64;
                           bx, by, bcnt, bbase, bbkt : MetalBuffer?; var ka : MoeMmArgs;
                           contiguous : bool = false) {
-    let tiles = (npos + 31l) / 32l
-    let ne = t.config.n_expert
+    let tiles = uint((npos + 31l) / 32l)
+    let ne = uint(t.config.n_expert)
     if (fmt == KqFmt.q8) {
         let bw = blob_of(g_dev, t, stack_off)
         let twin = g_pf_moe_mm_q8_tensor && contiguous && g_pf_pso_moe_mm_q8_t != null
@@ -2672,7 +2672,7 @@ def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; st
         hz_read(bbkt)
         hz_write(by)
         hz_gate(enc)
-        kn_dispatch(enc, uint3(uint(tiles), uint(rows / 64l), uint(ne)), uint3(128u, 1u, 1u))
+        kn_dispatch(enc, uint3(tiles, uint(rows / 64l), ne), uint3(128u, 1u, 1u))
     } elif (fmt == KqFmt.q51) {
         let qp = q51_planes_of(g_dev, t, stack_off)
         kn_pipeline(enc, g_pf_pso_moe_mm_q51)
@@ -2692,7 +2692,7 @@ def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; st
         hz_read(bbkt)
         hz_write(by)
         hz_gate(enc)
-        kn_dispatch(enc, uint3(uint(tiles), uint(rows / 64l), uint(ne)), uint3(128u, 1u, 1u))
+        kn_dispatch(enc, uint3(tiles, uint(rows / 64l), ne), uint3(128u, 1u, 1u))
     } else {
         let bq = kq_quants_of(g_dev, t, fmt, stack_off)
         let bs = kq_scales_of(g_dev, t, fmt, stack_off)
@@ -2723,7 +2723,7 @@ def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; st
         hz_read(bbkt)
         hz_write(by)
         hz_gate(enc)
-        kn_dispatch(enc, uint3(uint(tiles), uint(rows / 64l), uint(ne)), uint3(128u, 1u, 1u))
+        kn_dispatch(enc, uint3(tiles, uint(rows / 64l), ne), uint3(128u, 1u, 1u))
     }
 }
 
@@ -2732,8 +2732,8 @@ def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; st
 def private pf_enc_moe_mm_mx4(enc : MetalComputeEncoder?; t : Model; stack_off, rows, npos : int64;
                               bx, by, bcnt, bbase, bbkt, bwb : MetalBuffer?; var ka : MoeMmArgs;
                               contiguous : bool = false) {
-    let tiles = (npos + 31l) / 32l
-    let ne = t.config.n_expert
+    let tiles = uint((npos + 31l) / 32l)
+    let ne = uint(t.config.n_expert)
     let mp = mx4_of(g_dev, t, stack_off)
     let twin = g_pf_moe_mm_mx4_tensor && contiguous && g_pf_pso_moe_mm_mx4_t != null
     kn_pipeline(enc, twin ? g_pf_pso_moe_mm_mx4_t : g_pf_pso_moe_mm_mx4)
@@ -2754,7 +2754,7 @@ def private pf_enc_moe_mm_mx4(enc : MetalComputeEncoder?; t : Model; stack_off, 
     hz_read(bbkt)
     hz_write(by)
     hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(tiles), uint(rows / 64l), uint(ne)), uint3(128u, 1u, 1u))
+    kn_dispatch(enc, uint3(tiles, uint(rows / 64l), ne), uint3(128u, 1u, 1u))
 }
 
 def private pf_enc_moe_reduce(enc : MetalComputeEncoder?; bdn, bsel, binv, by, bdim, bnk : MetalBuffer?; dim, npos : int64) {
@@ -2959,7 +2959,7 @@ def private metal_ple_pre_gpu_gate(t : Model; s : Session; npos, start_pos : int
 }
 
 [hot_path]
-def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) : bool {
+def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) : bool {   // nolint:STYLE037,STYLE038 — the prefill step driver; the layer stack's phases are hz-barrier coupled
     weight_caches_flush_on_reload()
     var why = prefill_decline(t, s, npos, start_pos)
     if (why == MetalPrefillDecline.none && !metal_prefill_init()) {
@@ -2985,7 +2985,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let qd = n_heads * head_size
     let kv_dim = c.n_kv_heads * head_size
     let hidden = layer_hidden(t, 0l)
-    let kv_mul = n_heads / c.n_kv_heads
+    let kv_mul = uint(n_heads / c.n_kv_heads)
     let scale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size))
     let half = (c.rope_dim > 0l ? c.rope_dim : head_size) / 2l   // partial rope: table rows are rope_dim/2 wide
     // deltanet (Wave D): the recurrent-state mirror must be resident/synced BEFORE encoding —
@@ -3091,8 +3091,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var bvs & = unsafe(g_pf_bvs)
     bks |> clear()
     bvs |> clear()
-    bks |> reserve(int(c.n_layers + c.n_layer_nextn))
-    bvs |> reserve(int(c.n_layers + c.n_layer_nextn))
+    bks |> reserve(c.n_layers + c.n_layer_nextn)
+    bvs |> reserve(c.n_layers + c.n_layer_nextn)
     var no_panel : MetalBuffer?   // recurrent layers' null K/V slot
     for (l in range64(c.n_layers + c.n_layer_nextn)) {
         if (layer_kv_dim(c, l) == 0l) {   // recurrent layer (deltanet): no K/V at all
@@ -3320,7 +3320,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let cap = g_pf_env_capture
     var cbs & = unsafe(g_pf_cbs)
     cbs |> clear()
-    cbs |> reserve(int(ncb))
+    cbs |> reserve(ncb)
     var cb : MetalCommandBuffer?
     var enc : MetalComputeEncoder?
     var dnli = 0l   // recurrent-layer index — addresses the dn state/conv mirror slices in order
@@ -3595,7 +3595,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     // the softmax masks + zeroes the below-window prefix; global layers bind 0
                     // the trio walks one slab, so its whole geometry derives ONCE here
                     var atka = AttnArgs(qd = uint(qd_l), kv_dim = uint(kvd_l), head_size = uint(hs_l),
-                        kv_mul = uint(het ? n_heads / kvh_sw : kv_mul), npos = uint(nk),
+                        kv_mul = het ? uint(n_heads / kvh_sw) : kv_mul, npos = uint(nk),
                         np32 = uint(nk64),
                         scale = het ? (c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs_sw))) : scale,
                         qoff = uint(start_pos), qrows = uint(mp),
@@ -4271,7 +4271,7 @@ def private race_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : Meta
     return res
 }
 
-def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : MetalTensorRaceResult {
+def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : MetalTensorRaceResult {   // nolint:STYLE038 — one-shot A/B race harness; buffers + PSOs stay live to the release tail
     var res = MetalTensorRaceResult(family = "moe_mulmm_q8", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
     let ne = 4
     let rows_per = 32
@@ -4362,7 +4362,7 @@ def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : 
     return res
 }
 
-def private race_moe_mulmm_mx4(dev : MetalDevice?; queue : MetalCommandQueue?) : MetalTensorRaceResult {
+def private race_moe_mulmm_mx4(dev : MetalDevice?; queue : MetalCommandQueue?) : MetalTensorRaceResult {   // nolint:STYLE038 — one-shot A/B race harness; buffers + PSOs stay live to the release tail
     var res = MetalTensorRaceResult(family = "moe_mulmm_mx4", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
     let ne = 4
     let rows_per = 32
@@ -4483,7 +4483,7 @@ def private race_moe_mulmm_mx4(dev : MetalDevice?; queue : MetalCommandQueue?) :
 // one kq mulmm race: random quant planes + constant f16 scales (any bit pattern is a valid
 // plane — the twin-vs-base envelope doubles as a layout-agreement check). k6 binds the d plane
 // at its tail offset; k4/k5 bind the compact scale blocks at 0.
-def private race_kq_mulmm(dev : MetalDevice?; queue : MetalCommandQueue?; family : string;
+def private race_kq_mulmm(dev : MetalDevice?; queue : MetalCommandQueue?; family : string;   // nolint:STYLE038 — one-shot A/B race harness; buffers + PSOs stay live to the release tail
                           base_src, base_entry : string; base_fm : bool; base_tgmem : uint64;
                           twin_src, twin_entry : string; twin_fm : bool; twin_tgmem : uint64;
                           qu_per_sb : int; k6 : bool) : MetalTensorRaceResult {
@@ -4595,7 +4595,7 @@ def private race_kq_mulmm(dev : MetalDevice?; queue : MetalCommandQueue?; family
 
 // attention pair races: synthetic Q/K/V; BOTH att/xb outputs pre-zeroed (causal-skipped tiles
 // stay unwritten in both kernels — fresh-buffer garbage would flake the envelope compare).
-def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : array<MetalTensorRaceResult> {
+def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : array<MetalTensorRaceResult> {   // nolint:STYLE038 — one-shot A/B race harness; buffers + PSOs stay live to the release tail
     var out : array<MetalTensorRaceResult>
     let heads = 8
     let hs = 128

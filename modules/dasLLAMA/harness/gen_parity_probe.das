@@ -26,18 +26,18 @@ require math
 let CLOSE_REL = 1e-4
 let CLOSE_ABS = 1e-5
 
-def test_shape(n, d, ntok : int64) : bool {
+def test_shape(n, d, ntok : int64) : bool {   // nolint:STYLE038 — one shape's fixtures, oracle, tile arm and gemv arm read the same buffers end to end
     let nb = n / 32l
     var w : array<float>
-    w |> resize(int(n * d))
+    w |> resize(n * d)
     for (i in range64(n * d)) {
         w[i] = float(i % 17l) * 0.13 - 1.1
     }
     let qt <- quantize_q8_0(w, n * d)
     var q : array<int8>
     var s : array<float>
-    q |> resize(int(n * d))
-    s |> resize(int(d * nb))
+    q |> resize(n * d)
+    s |> resize(d * nb)
     for (i in range64(n * d)) {
         q[i] = qt.q[i]
     }
@@ -47,11 +47,11 @@ def test_shape(n, d, ntok : int64) : bool {
 
     // distinct per-token activations
     var xrow : array<float>
-    xrow |> resize(int(n))
+    xrow |> resize(n)
     var xq : array<int8>
     var xs : array<float>
-    xq |> resize(int(ntok * n))
-    xs |> resize(int(ntok * nb))
+    xq |> resize(ntok * n)
+    xs |> resize(ntok * nb)
     for (tk in range64(ntok)) {
         for (i in range64(n)) {
             xrow[i] = float((i + tk * 7l) % 23l) * 0.07 - 0.8
@@ -61,7 +61,7 @@ def test_shape(n, d, ntok : int64) : bool {
 
     // the oracle: hand laneq semantics off a grp4 copy of the row-major master
     var yref : array<float>
-    yref |> resize(int(ntok * d))
+    yref |> resize(ntok * d)
     var q4 := q
     var s4 := s
     unsafe {
@@ -93,7 +93,7 @@ def test_shape(n, d, ntok : int64) : bool {
     let ng = d / mr
 
     var ygen : array<float>
-    ygen |> resize(int(ntok * d))
+    ygen |> resize(ntok * d)
     unsafe {
         let wp = addr(q[0])
         let sp = addr(s[0])
@@ -114,27 +114,27 @@ def test_shape(n, d, ntok : int64) : bool {
     var exact = 0
     var md = 0.0
     var ok = true
-    for (i in range(length(ygen))) {
-        let df = abs(ygen[i] - yref[i])
+    for (yg, yr in ygen, yref) {
+        let df = abs(yg - yr)
         if (df == 0.0) {
             exact++
         }
         md = max(md, df)
-        ok &&= df <= max(CLOSE_ABS, CLOSE_REL * abs(yref[i]))
+        ok &&= df <= max(CLOSE_ABS, CLOSE_REL * abs(yr))
     }
 
     // the stamped gemv rows core on the same buffers: token 0's row of the oracle
     var ygv : array<float>
-    ygv |> resize(int(d))
+    ygv |> resize(d)
     unsafe {
         q8q8_gemv_gen(addr(ygv[0]), addr(q[0]), addr(s[0]), addr(xq[0]), addr(xs[0]), n, 0l, ng * mr)
     }
     var gmd = 0.0
     var gok = true
-    for (i in range(length(ygv))) {
-        let df = abs(ygv[i] - yref[i])
+    for (yg, yr in ygv, yref) {   // ygv is one row (d) — the zip stops there, on the oracle's token 0
+        let df = abs(yg - yr)
         gmd = max(gmd, df)
-        gok &&= df <= max(CLOSE_ABS, CLOSE_REL * abs(yref[i]))
+        gok &&= df <= max(CLOSE_ABS, CLOSE_REL * abs(yr))
     }
     print("n={n} d={d} ntok={ntok} mr={mr}: tile {exact}/{length(ygen)} exact, maxdiff {md} — {ok ? "OK" : "MISMATCH"}; gemv maxdiff {gmd} — {gok ? "OK" : "MISMATCH"}\n")
     return ok && gok

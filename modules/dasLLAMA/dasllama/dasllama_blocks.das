@@ -56,7 +56,7 @@ def private fused_attn_ok(t : Model; l : int64) : bool {
 // Fused attention block: ONE team rendezvous runs [qkv rows] -> [head-slot norm/rope/kv-store] ->
 // [attn heads + wo-input requant] -> [wo rows + residual add] as four stages. Bit-identical to
 // attention_std_decode at ctx <= FLASH_DECODE_SLICE; deeper contexts are tolerance-equal, not bit-equal.
-def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : int64) { // nolint:STYLE037 — the fused attention chain is one register-coupled sequence; splitting it spills the live state it exists to keep
+def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : int64) { // nolint:STYLE037,STYLE038 — the fused attention chain is one register-coupled sequence; splitting it spills the live state it exists to keep
     let c = t.config
     let dim = c.dim
     let kv_dim = layer_kv_dim(c, l)
@@ -224,7 +224,7 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
         var fllp = nsl > 1 ? addr(s.fl_l[0]) : null
         var flop = nsl > 1 ? addr(s.fl_o[0]) : null
         // the lambda's capture frame is heap per call — the dispatch API's cost, not this kernel's
-        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {   // nolint:PERF026
+        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {
             if (stage == 0) {
                 // qkv rows in 32-row groups (row-local); a group never straddles a q/k/v region boundary
                 unsafe {
@@ -495,7 +495,7 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
     }
 }
 
-def attention_std_decode(t : Model; var s : Session; l : int64; pos : int64) { // nolint:STYLE037 — dispatches every attention flavour (fused/flash/blocked/classic, GPU or CPU) from one place; the ladder IS the contract
+def attention_std_decode(t : Model; var s : Session; l : int64; pos : int64) { // nolint:STYLE037,STYLE038 — dispatches every attention flavour (fused/flash/blocked/classic, GPU or CPU) from one place; the ladder IS the contract
     if (fused_attn_ok(t, l)) {
         attention_chain_decode(t, s, l, pos)
         return
@@ -704,9 +704,9 @@ def attention_gpu_prefill(t : Model; var s : Session; l : int64; npos : int64; g
     let ts_norm0 = ref_time_ticks()
     rms_batch(s.xb_b, s.x_b, t, t.rms_att_off + l * dim, dim, npos)
     if (kq_cls) {   // the chain's activation image follows the q/k/v stack class
-        s.kxqb |> resize(int(npos * dim))
-        s.kxsb |> resize(int(npos * dim / 256l))
-        s.kxbsb |> resize(int(npos * dim / 16l))
+        s.kxqb |> resize(npos * dim)
+        s.kxsb |> resize(npos * dim / 256l)
+        s.kxbsb |> resize(npos * dim / 16l)
         requant_rows_q8k_bs(s.xb_b, dim, npos, s.kxqb, s.kxsb, s.kxbsb)
     } else {
         requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)
@@ -1058,7 +1058,7 @@ def set_moe_gpu_prefill_route(on : bool) {
 
 def gpu_prefill_route_on() : bool => g_gpu_prefill_route
 
-def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos : int64) { // nolint:STYLE037 — the grouped MoE prefill is one bucketed pipeline over experts; each stage feeds the next through shared scratch
+def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos : int64) { // nolint:STYLE037,STYLE038 — the grouped MoE prefill is one bucketed pipeline over experts; each stage feeds the next through shared scratch
     let c = t.config
     let dim = c.dim
     let nb = dim / 32l
@@ -1195,7 +1195,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         }
         // LPT order (biggest buckets first) front-loads expensive spans; expert-order left 32% of GEMM windows idle
         s.moe_ord |> clear()
-        s.moe_ord |> reserve(int(ne))   // capacity persists across layers — no per-layer alloc
+        s.moe_ord |> reserve(ne)   // capacity persists across layers — no per-layer alloc
         for (e in range64(ne)) {
             let b0 = e == 0l ? 0l : s.moe_cnt[e - 1l]
             let cnt = s.moe_cnt[e] - b0

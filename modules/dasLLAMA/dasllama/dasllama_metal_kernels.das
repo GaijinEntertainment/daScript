@@ -37,7 +37,7 @@ require dasllama/dasllama_metal_lens
 // the caller must barrier between them.
 
 // f16/f32 codecs — one generic, instantiated per KV element type.
-def private sq_fill_scores(kc : array<auto(KT)>; q : array<float>; var scores : auto(SS);
+def private sq_fill_scores(kc : array<auto(KT)>; q : array<float>; var scores : auto(SS);   // nolint:STYLE037 — MSL stage body; the epl register-hoist ladder is the point
                            kbase, row0, n, kv_dim, khoff, qoff, hs : uint; scale, softcap : float) {
     // simdgroup sg dots q[head] against K row j so every K load coalesces; the lane's q elements
     // are loop-invariant and hoist to registers (device loads can't — buffers may alias)
@@ -108,7 +108,7 @@ def private sq_fill_scores(kc : array<auto(KT)>; q : array<float>; var scores : 
 
 // q8_0 codec — 34B blocks read through the dual view (half scale + byte quants); the lane's epl
 // elements sit in ONE block, so the scale is loaded once per row and rides the simd sum.
-def private sq_fill_scores_q8(ksh : array<float16>; kqb : array<int8>; q : array<float>; var scores : auto(SS);
+def private sq_fill_scores_q8(ksh : array<float16>; kqb : array<int8>; q : array<float>; var scores : auto(SS);   // nolint:STYLE037 — MSL stage body; the epl register-hoist ladder is the point
                               kb0h, kb0b, row0, n, nblk, khblk, qoff, hs : uint; scale, softcap : float) {
     let sg = gl_SubgroupID
     let sl = gl_SubgroupInvocationID
@@ -181,7 +181,7 @@ def private sq_fill_scores_q8(ksh : array<float16>; kqb : array<int8>; q : array
 
 // tq4 codec — 18B rotated 4-bit blocks; q arrives already rotated, so this runs in the rotated
 // basis and yo needs one fwht-unsign pass downstream. epl == 1 reads a single nibble by parity.
-def private sq_fill_scores_tq4(ksh : array<float16>; kqb : array<uint8>; q : array<float>; var scores : auto(SS);
+def private sq_fill_scores_tq4(ksh : array<float16>; kqb : array<uint8>; q : array<float>; var scores : auto(SS);   // nolint:STYLE037 — MSL stage body; the epl register-hoist ladder is the point
                                kb0h, kb0b, row0, n, nblk, khblk, qoff, hs : uint; scale, softcap : float) {
     let sg = gl_SubgroupID
     let sl = gl_SubgroupInvocationID
@@ -884,7 +884,7 @@ class MetalQ8GemvQkvRsF16 {
     @uniform @binding = 13 ka : Q8QkvRsArgs
 
     [metal_kernel(name="metal_q8_gemv_qkv_rs16_msl")]
-    def metal_q8_gemv_qkv_rs16 {
+    def metal_q8_gemv_qkv_rs16 {   // nolint:STYLE038 — MSL kernel body; the QKV phases share tgmem + simdgroup state
         let ndim = ka.ndim
         let ddim = ka.ddim
         let qd = ka.qd
@@ -1006,7 +1006,7 @@ class MetalQ8GemvQkvRsF32 {
     @uniform @binding = 13 ka : Q8QkvRsArgs
 
     [metal_kernel(name="metal_q8_gemv_qkv_rs32_msl")]
-    def metal_q8_gemv_qkv_rs32 {
+    def metal_q8_gemv_qkv_rs32 {   // nolint:STYLE038 — MSL kernel body; the QKV phases share tgmem + simdgroup state
         let ndim = ka.ndim
         let ddim = ka.ddim
         let qd = ka.qd
@@ -1507,7 +1507,7 @@ class MetalRopeStoreHF16 {
     @workgroup part : float[16]
 
     [metal_kernel(name="metal_rope_store_h16_msl")]
-    def metal_rope_store_h16 {
+    def metal_rope_store_h16 {   // nolint:STYLE037 — MSL kernel body; rope + KV store share the row's register state
         let qd = ka.qd
         let head_size = ka.head_size
         let nheads = ka.nheads
@@ -1637,7 +1637,7 @@ class MetalRopeStoreQ8 {
     @uniform @binding = 9 ka : RopeStoreQ8Args
 
     [metal_kernel(name="metal_rope_store_q8_msl")]
-    def metal_rope_store_q8 {
+    def metal_rope_store_q8 {   // nolint:STYLE037,STYLE038 — MSL kernel body; rope + quant store share the row's register state
         let qd = ka.qd
         let head_size = ka.head_size
         let npairs_q = ka.npairs_q
@@ -1750,7 +1750,7 @@ class MetalRopeStoreTq4 {
     @workgroup buf : float[512]     // <= max head_size (gemma4 global heads are 512)
 
     [metal_kernel(name="metal_rope_store_tq4_msl")]
-    def metal_rope_store_tq4 {
+    def metal_rope_store_tq4 {   // nolint:STYLE037,STYLE038 — MSL kernel body; rope + quant store share the row's register state
         let qd = ka.qd
         let head_size = ka.head_size
         let nheads = ka.nheads
@@ -3976,7 +3976,7 @@ class MetalRopeStoreBQ8 {
     @uniform @binding = 9 ka : RopeStoreBQ8Args
 
     [metal_kernel(name="metal_rope_store_b_q8_msl")]
-    def metal_rope_store_b_q8 {
+    def metal_rope_store_b_q8 {   // nolint:STYLE037,STYLE038 — MSL kernel body; rope + quant store share the row's register state
         let lay = ka.lay
         let nblk = ka.nblk
         let qd = ka.qd
@@ -4159,7 +4159,7 @@ class MetalRopeStoreBTq4 {
     @workgroup buf : float[512]     // <= max head_size (gemma4 global heads are 512)
 
     [metal_kernel(name="metal_rope_store_b_tq4_msl")]
-    def metal_rope_store_b_tq4 {
+    def metal_rope_store_b_tq4 {   // nolint:STYLE037,STYLE038 — MSL kernel body; rope + quant store share the row's register state
         let lay = ka.lay
         let qd = ka.qd
         let head_size = ka.head_size
@@ -4568,11 +4568,11 @@ def enc_kq_mvb(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff 
     kn_buffer(enc, bx, 0ul, 3)
     kn_buffer(enc, by, yoff, 4)
     kn_kargs(enc, ka, 5)
-    let gcols = (two || b8) ? 1l : (nlive + 3l) / 4l
+    let gcols = uint((two || b8) ? 1l : (nlive + 3l) / 4l)
     hz_read(bx)
     hz_write(by)
     hz_gate(enc)
-    kn_dispatch(enc, uint3(uint((rows + 7l) / 8l), uint(gcols), 1u), uint3(64u, 1u, 1u))
+    kn_dispatch(enc, uint3(uint((rows + 7l) / 8l), gcols, 1u), uint3(64u, 1u, 1u))
 }
 
 // the batched kq GEMM (B >= 9): the prefill-owned kq mul_mm twins over the padded x panel —
@@ -4911,8 +4911,8 @@ def enc_mv_b(enc : MetalComputeEncoder?; four : bool; bwblob : MetalBuffer?; wbo
     hz_read(bx)
     hz_write(by)
     hz_gate(enc)
-    let d = int64(ka.ddim)
-    kn_dispatch(enc, uint3(uint(four ? (d + 7l) / 8l : (d + 3l) / 4l), 1u, 1u), uint3(64u, 1u, 1u))
+    let d = ka.ddim
+    kn_dispatch(enc, uint3(four ? (d + 7u) / 8u : (d + 3u) / 4u, 1u, 1u), uint3(64u, 1u, 1u))
 }
 
 // one mv GEMV site: a single form dispatch at B <= 4, two 4-column tiles at B = 5..8 (the
@@ -5327,7 +5327,7 @@ def enc_rms_b(enc : MetalComputeEncoder?; bx, bw, by, bdim, beps : MetalBuffer?;
 
 //! Release every PSO the registry compiled (the PSO half of metal_decode_shutdown — runs
 //! before the shared device goes).
-def metal_kernels_release {   // nolint:STYLE037 — a flat release_pso per kernel; no seam to split on
+def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso per kernel; no seam to split on
     if (g_pso_gemv != null) {
         metal_release(g_pso_gemv)
         g_pso_gemv = null
@@ -5771,7 +5771,7 @@ class MetalKqMulMmK4 {
     @workgroup tb : float16[1024]
 
     [metal_kernel(name="metal_kq_mulmm_k4_msl")]
-    def metal_kq_mulmm_k4 {
+    def metal_kq_mulmm_k4 {   // nolint:STYLE038 — MSL kernel body; the mul_mm tiles are simdgroup-barrier coupled
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
         let mBase = gl_WorkGroupID.x * 32u
@@ -5870,7 +5870,7 @@ class MetalKqMulMmK5 {
     @workgroup tb : float16[1024]
 
     [metal_kernel(name="metal_kq_mulmm_k5_msl")]
-    def metal_kq_mulmm_k5 {
+    def metal_kq_mulmm_k5 {   // nolint:STYLE038 — MSL kernel body; the mul_mm tiles are simdgroup-barrier coupled
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
         let mBase = gl_WorkGroupID.x * 32u
@@ -5971,7 +5971,7 @@ class MetalKqMulMmK6 {
     @workgroup tb : float16[1024]
 
     [metal_kernel(name="metal_kq_mulmm_k6_msl")]
-    def metal_kq_mulmm_k6 {
+    def metal_kq_mulmm_k6 {   // nolint:STYLE038 — MSL kernel body; the mul_mm tiles are simdgroup-barrier coupled
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
         let mBase = gl_WorkGroupID.x * 32u
@@ -6120,7 +6120,7 @@ class MetalMoeSelect {
     @uniform @binding = 5 gmode : uint       // 0 = softmax + norm_topk; 1 = softmax_weight (gpt-oss); 2 = softmax, no renorm (qwen2moe)
 
     [metal_kernel(name="metal_moe_select_msl")]
-    def metal_moe_select {
+    def metal_moe_select {   // nolint:STYLE037,STYLE038 — MSL kernel body; the per-lane logit ladder is register-resident
         let st = gl_WorkGroupID.x
         let lg0 = st * ne
         let sel0 = st * 2u * nk
@@ -6307,7 +6307,7 @@ class MetalMoeGemvK4 {
     @ssbo @binding = 7 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
 
     [metal_kernel(name="metal_moe_gemv_k4_msl")]
-    def metal_moe_gemv_k4 {
+    def metal_moe_gemv_k4 {   // nolint:STYLE038 — MSL kernel body; the gathered GEMV phases share tgmem state
         let ndim = ka.ndim
         let ddim = ka.ddim
         let esb = ka.eplane

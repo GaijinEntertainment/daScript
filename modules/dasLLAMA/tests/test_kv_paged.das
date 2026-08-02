@@ -3,7 +3,7 @@ options persistent_heap   // the paged/flat A/Bs hold several Sessions (see test
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration
+require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + target_chunk_work
 require daslib/jobque_boost
 require daslib/fio
@@ -462,7 +462,7 @@ def test_kv_paged_prefill(t : T?) {
 }
 
 [test]
-def test_kv_paged_eval_batch(t : T?) {
+def test_kv_paged_eval_batch(t : T?) {   // nolint:STYLE038 — flat 3-session paged/flat A/B setup + explicit per-object teardown
     t |> run("paged eval_batch == flat eval_batch, ragged depths on one pool (needs stories15M.bin)") @(t : T?) {
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")

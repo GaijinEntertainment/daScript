@@ -52,7 +52,7 @@ def private read_wav_pcm16_mono(path : string) : array<float> {
             let sz = int64(rd_u32(bytes, o + 4l))
             if (id == 0x61746164u) {   // "data"
                 let cnt = min(sz, n - o - 8l) / 2l
-                out |> resize(int(cnt))
+                out |> resize(cnt)
                 for (i in range64(cnt)) {
                     var v = int(rd_u16(bytes, o + 8l + i * 2l))
                     if (v >= 32768) {

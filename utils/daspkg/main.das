@@ -37,7 +37,7 @@ def print_usage() {
 }
 
 [export]
-def main() { // nolint:STYLE037 — the subcommand dispatch table: one if-arm per CLI verb
+def main() { // nolint:STYLE037,STYLE038 — the subcommand dispatch table: one if-arm per CLI verb
     let argv <- get_user_args()
 
     // Help / no-args path: print the full daspkg usage (subcommand block +

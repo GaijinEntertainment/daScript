@@ -120,7 +120,7 @@ def main : int {
     }
     var flavors := cfg.flavor
     if (empty(flavors)) {
-        flavors <- ["clean-cpu", "stock"]
+        flavors <- ["clean-cpu", "stock"]   // nolint:PERF030 — the enclosing empty(flavors) guard proves the target holds nothing
     }
     for (f in flavors) {
         if (f != "clean-cpu" && f != "stock") {

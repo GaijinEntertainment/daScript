@@ -4,7 +4,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 
 require daslib/fio
 require math
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration
+require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require dasllama/dasllama_math
 require dasllama/dasllama_kv_codec  // the tq4 codec + FWHT rotation under probe
 require dasllama/dasllama_tokenizer
@@ -26,7 +26,7 @@ let BASE_NAMES = fixed_array("identity", "fwht    ", "dct     ", "dft     ")
 // learn a per-(layer, head, side) channel order on sL's rows, score 4-bit + mixed 8/4 on sS's rows.
 // pairs = sort RoPE pairs (2i, 2i+1) by pair RMS instead of single channels (the loader-bakeable
 // granularity for K — rope tables move pairwise).
-def measure_sorted(sL, sS : Session; c : Config; hs, npastL, npastS : int64; pairs : bool; tag : string) {
+def measure_sorted(sL, sS : Session; c : Config; hs, npastL, npastS : int64; pairs : bool; tag : string) {   // nolint:STYLE037,STYLE038 — one measurement kernel over (layer, head, side); order-learning and scoring are loop-coupled
     var e2 : double[2]
     var e2mix : double[2]
     var pw : double[2]
@@ -36,12 +36,12 @@ def measure_sorted(sL, sS : Session; c : Config; hs, npastL, npastS : int64; pai
     var seg : array<float>
     var dq : array<float>
     var blk : array<uint8>
-    chrms |> resize(int(hs))
-    order |> resize(int(hs))
-    porder |> resize(int(hs / 2l))
-    seg |> resize(int(hs))
-    dq |> resize(int(hs))
-    blk |> resize(int(hs / 32l * 18l))
+    chrms |> resize(hs)
+    order |> resize(hs)
+    porder |> resize(hs / 2l)
+    seg |> resize(hs)
+    dq |> resize(hs)
+    blk |> resize(hs / 32l * 18l)
     unsafe {
         let kbL = addr<uint8 const?>(sL.key_cache[0])
         let vbL = addr<uint8 const?>(sL.value_cache[0])
@@ -125,7 +125,7 @@ def measure_sorted(sL, sS : Session; c : Config; hs, npastL, npastS : int64; pai
 }
 
 def build_dct(var m : array<float>; n : int64) {
-    m |> resize(int(n * n))
+    m |> resize(n * n)
     for (k in range64(n)) {
         let sk = k == 0l ? sqrt(1.0 / float(n)) : sqrt(2.0 / float(n))
         for (j in range64(n)) {
@@ -136,7 +136,7 @@ def build_dct(var m : array<float>; n : int64) {
 
 def build_dft(var m : array<float>; n : int64) {
     // orthonormal real-DFT rows ordered low frequency first: dc, cos1, sin1, ..., nyquist
-    m |> resize(int(n * n))
+    m |> resize(n * n)
     var r = 0l
     for (j in range64(n)) {
         m[r * n + j] = sqrt(1.0 / float(n))
@@ -189,7 +189,7 @@ struct Acc {
 }
 
 [export]
-def main {
+def main {   // nolint:STYLE037,STYLE038 — flat probe driver: every basis arm walks the same cache rows through the same scratch buffers
     let env = get_env_variable("DASLLAMA_MODELS_DIR")
     let mdir = empty(env) ? "D:/Work/llama.cpp/models/" : env
     let path = path_join(mdir, "SmolLM2-135M-Instruct-Q8_0.gguf")
@@ -219,16 +219,16 @@ def main {
 
     var acc : Acc[8]   // [side * 4 + basis], side 0 = K, 1 = V
     for (a in acc) {
-        a.vprof |> resize(int(hs))
+        a.vprof |> resize(hs)
     }
     var seg : array<float>
     var y : array<float>
     var dq : array<float>
     var blk : array<uint8>
-    seg |> resize(int(hs))
-    y |> resize(int(hs))
-    dq |> resize(int(hs))
-    blk |> resize(int(hs / 32l * 18l))
+    seg |> resize(hs)
+    y |> resize(hs)
+    dq |> resize(hs)
+    blk |> resize(hs / 32l * 18l)
 
     unsafe {
         let kb = addr<uint8 const?>(s.key_cache[0])
@@ -305,12 +305,12 @@ def main {
     // which the mixed arm then serves at 8 bits
     var acc_s : Acc[2]
     for (a in acc_s) {
-        a.vprof |> resize(int(hs))
+        a.vprof |> resize(hs)
     }
     var chrms : array<double>
     var order : array<int>
-    chrms |> resize(int(hs))
-    order |> resize(int(hs))
+    chrms |> resize(hs)
+    order |> resize(hs)
     unsafe {
         let kb = addr<uint8 const?>(s.key_cache[0])
         let vb = addr<uint8 const?>(s.value_cache[0])

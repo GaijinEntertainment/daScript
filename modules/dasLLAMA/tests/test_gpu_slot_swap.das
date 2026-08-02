@@ -3,11 +3,11 @@ options persistent_heap   // explicit deletes below — the model frees before t
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration
+require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_resident   // the residency rail this suite swaps: arm / hydrate / drop
 require daslib/jobque_boost
-require daslib/fio   // nolint:STYLE030 — only used inside the builtin_module_exists(vulkan) static_if; dead on a no-vulkan lint binary
+require daslib/fio   // nolint:STYLE030,LINT019 — only used inside the builtin_module_exists(vulkan) static_if; dead on a no-vulkan lint binary
 require _model_tier
 
 // The multi-model switch cycle on a REAL model + the resident driver: prefill + decode on
@@ -33,7 +33,7 @@ def private greedy_step(tr : Model; s : Session) : int64 {
 def private run_ids(tr : Model; var s : Session; plen, ngen : int64; var ids : array<int64>) {
     let prompt <- [for (i in range64(plen)); synth_id(i)]
     forward_prefill(tr, s, prompt, plen, 0l)
-    ids |> reserve(int(ngen))
+    ids |> reserve(ngen)
     var pos = plen
     for (_g in range64(ngen)) {
         let best = greedy_step(tr, s)

@@ -12,7 +12,7 @@ require strings
 require daslib/strings_boost   // split — the identity-lane parser
 require dasllama/dasllama_tokenizer   // Tokenizer — the bulk tokenizer serializer below
 require daslib/archive
-require daslib/array_boost   // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs (same note as dasllama_common)
+require daslib/array_boost
 require dasllama/dasllama_plane   // PlaneF/PlaneI8 + plane_bind — the borrowed-plane bind arm below
 require dasllama/dasllama_common
 require dasllama/dasllama_gguf   // GGUFMeta — the streamed cold build's block signature names it
@@ -105,7 +105,7 @@ def image_peek(path : string) : DlimPeek {
         && meta_off <= msize - meta_bytes && meta_bytes <= uint64(INT_MAX))
     if (p.valid && p.version >= 7) {
         var head : array<uint8>
-        head |> resize(int(min(meta_bytes, 65536ul)))
+        head |> resize(int64(min(meta_bytes, 65536ul)))
         unsafe {
             memcpy(addr(head[0]), reinterpret<void?>(bp + int64(meta_off)), uint64(long_length(head)))
         }
@@ -359,7 +359,7 @@ def w_zeros(var w : ImgWriter; n : uint64) {
         return
     }
     var z : array<uint8>
-    z |> resize(int(n))
+    z |> resize(int64(n))
     unsafe {
         w_append(w, addr<void?>(z[0]), n)
     }
@@ -518,14 +518,13 @@ def serialize_strings(var arch : Archive; var a : array<string>) {
     if (arch.reading) {
         a |> resize(length(lens))
         var at = 0
-        for (i in range(length(lens))) {
-            let n = lens[i]
+        for (n, s in lens, a) {
             if (n > 0) {
                 unsafe {
-                    a[i] = string(temp_array(addr < uint8? >(blob[at]), n, type<uint8>))
+                    s = string(temp_array(addr<uint8?>(blob[at]), n, type<uint8>))
                 }
             } else {
-                a[i] = ""
+                s = ""
             }
             at += n
         }
@@ -709,7 +708,7 @@ def private write_plane(var w : ImgWriter; var sections : array<ImgSection>;
 //! THE image build — every prepared image in the process comes out of this walk, whichever sink it
 //! lands in: planes page-aligned raw (borrowed back at load), everything else archived. `plane`
 //! gets first refusal on each plane by name; `consume` frees each owned plane as it lands.
-def private build_image(var t; dst : string; in_mem : bool; extra : uint64;   // nolint:STYLE038 — one linear pass; the phases share w/sections and split into nothing reusable
+def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
                         tag : string; quant : string; consume : bool;
                         plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : ImgWriter {
     // one config snapshot serves the meta embed AND the header hash — they must agree
@@ -1374,14 +1373,14 @@ def private cache_via_image_(var m; var out; img : string; tag : string; quant :
                              plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) {
     if (img == "" || !image_save_enabled()) {
         if (!chunk_rail(m, out, "", 0ul, tag, quant, plane)) {
-            out <- m
+            out <- m   // nolint:PERF030 — `out` is the caller's fresh destination (the cache_via_image contract); m is spent
         }
         return
     }
     let ts = ref_time_ticks()
     if (!save_image_to_file(m, img, 0ul, tag, quant, plane)) {
         to_log(LOG_WARNING, "dasLLAMA: could not write '{img}' — serving the carrier as loaded\n")
-        out <- m
+        out <- m   // nolint:PERF030 — `out` is the caller's fresh destination (the cache_via_image contract); m is spent
         return
     }
     to_log(LOG_INFO, "dasLLAMA: prepared image written in {get_time_usec(ts) / 1000} ms — {img}\n")

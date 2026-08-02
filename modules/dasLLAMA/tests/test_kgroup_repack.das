@@ -11,13 +11,13 @@ require dasllama/dasllama_convert
 
 def build_q8(n, d : int64; var q : array<int8>; var s : array<float>) {
     var w : array<float>
-    w |> resize(int(n * d))
+    w |> resize(n * d)
     for (i in range64(n * d)) {
         w[i] = float(i % 19l) * 0.11 - 0.9
     }
     let qt <- quantize_q8_0(w, n * d)
-    q |> resize(int(n * d))
-    s |> resize(int(d * (n / 32l)))
+    q |> resize(n * d)
+    s |> resize(d * (n / 32l))
     for (i in range64(n * d)) {
         q[i] = qt.q[i]
     }

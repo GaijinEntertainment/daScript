@@ -1,11 +1,13 @@
 options gen2
+options _function_length = 0        // per-kernel gates: hand-bound buffers/uniforms + dispatch + oracle compare, one flat run each
+options _cyclomatic_complexity = 0  // same — the arm ladders follow the kernel's own binding/variant axes
 
 require dastest/testing_boost public
 require dasllama/dasllama_math
-require dasllama/dasllama_convert  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
-require ?das_metal dasllama/dasllama_metal_prefill  // nolint:STYLE030 — the Phase-6 prefill kernel set (Apple builds)
-require ?das_metal dasllama/dasllama_metal_kernels  // nolint:STYLE030 — the Wave C MoE routing kernel set (Apple builds)
-require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — device/pipeline/buffer plumbing + the leak gate
+require dasllama/dasllama_convert  // used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
+require ?das_metal dasllama/dasllama_metal_prefill  // the Phase-6 prefill kernel set (Apple builds)
+require ?das_metal dasllama/dasllama_metal_kernels  // the Wave C MoE routing kernel set (Apple builds)
+require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require llvm/daslib/f16_cvt  // f32_to_f16: the q51 gates hand-pack f16 d/m scale halfwords
 require math
 
@@ -725,8 +727,8 @@ def private moe_select_gate(t : T?; dev, queue; ne, k, nst : int; ties : bool; g
                     best = i
                 }
             }
-            widx |> push(uint(best))   // nolint:STYLE012 — reference built winner-by-winner (knockout between)
-            ww |> push(p[best])   // nolint:STYLE012
+            widx |> push(uint(best))   // reference built winner-by-winner (knockout between)
+            ww |> push(p[best])
             ws += p[best]
             p[best] = -FLT_MAX
         }
@@ -1354,7 +1356,7 @@ def private moe_combine_gate(t : T?; dev, queue; dim, k : int) {
     var selw : array<float>
     selw |> reserve(k)
     for (j in range(k)) {
-        selw |> push(lut[j % 4])   // nolint:STYLE012 — small fixed weight list
+        selw |> push(lut[j % 4])
     }
     var want : array<float>
     want |> resize(dim)

@@ -41,8 +41,8 @@ def private same(a, b : array<int64>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (x, y in a, b) {
+        if (x != y) {
             return false
         }
     }
@@ -120,7 +120,8 @@ def private reject_rollback_ids(tr : Model; n_check : int64; var want : array<in
         var s1 = make_run_state(tr.config)
         let ref_ids <- generate(tr, s1, MTP_PROMPT, int(np + n_check + 1l))
         delete s1
-        want <- [for (i in range64(n_check + 1l)); ref_ids[np - 1l + i]]
+        delete want
+        want <- [for (i in range64(n_check + 1l)); ref_ids[np - 1l + i]]   // nolint:PERF030 — released on the line above
         var s = make_run_state(tr.config)
         forward_prefill(tr, s, MTP_PROMPT, np, 0l)
         let tok = parallel_argmax(s.logits, tr.config.vocab_size)

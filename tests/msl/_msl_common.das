@@ -725,7 +725,7 @@ class UfxKid : UfxBase {
 
 //! Gate B: exactly the construct kinds the fixture set must emit — the census meta-test
 //! asserts equality with the observed union in both directions.
-def public declared_msl_census : table<string> {
+def public declared_msl_census : table<string> {   // nolint:STYLE038 — one flat literal per construct kind; the gate-B contract IS this list
     return <- {
         // signature + parameters
         "preamble",

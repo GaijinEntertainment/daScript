@@ -23,8 +23,8 @@ def private same(a, b : array<int64>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (va, vb in a, b) {
+        if (va != vb) {
             return false
         }
     }
@@ -36,8 +36,8 @@ def private same(a, b : array<uint8>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (va, vb in a, b) {
+        if (va != vb) {
             return false
         }
     }
@@ -242,7 +242,7 @@ def test_chat_end_to_end(t : T?) {
 // lacks the token) <tool_response> stay in the text runs.
 
 [test]
-def test_chat_tools_hermes(t : T?) {
+def test_chat_tools_hermes(t : T?) {   // nolint:STYLE038 — flat expected-token stream, one push per run
     t |> run("Qwen ChatML renders the Hermes tool block token-for-token (needs Qwen2.5-0.5B)") @(t : T?) {
         let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
         if (!stat(path).is_valid) {

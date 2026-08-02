@@ -1,7 +1,7 @@
 options gen2
 options stack = 65536   // the forward/prefill chain + generated kernels need more than the 16K default on arm64
 
-require dasllama/dasllama   // nolint:STYLE029 — the facade require also fires every arch [init]; Section 1 needs the registry populated
+require dasllama/dasllama   // the facade require also fires every arch [init]; Section 1 needs the registry populated
 require daslib/strings_boost
 
 // Tutorial dasLLAMA-06: The Architecture Registry

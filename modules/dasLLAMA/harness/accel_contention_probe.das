@@ -2,7 +2,7 @@ options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require das_accelerate
-require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — the live-Metal-device ingredient (env METAL=1)
+require ?das_metal metal/das_metal_boost  // the live-Metal-device ingredient (env METAL=1)
 require dasllama/dasllama_math
 require dasllama/dasllama_par
 require llvm/daslib/f16_cvt

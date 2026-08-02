@@ -82,12 +82,7 @@ def main : int {
         print("error: no dasllama-server at {base} — start it first, then watch its control page while this runs\n")
         return 1
     }
-    var stages : array<int>
-    if (cfg.workers > 0) {
-        stages |> push(cfg.workers)
-    } else {
-        stages <- [1, 2, 4, 8]
-    }
+    var stages <- cfg.workers > 0 ? [cfg.workers] : [1, 2, 4, 8]
     for (stage in stages) {
         print("=== stage: {stage} worker(s) x {nreq} request(s), max_tokens {max_new}\n")
         with_job_status(stage) $(finished) {

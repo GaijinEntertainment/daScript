@@ -317,7 +317,7 @@ def private rd_record_token {
                 fill_gemv_meta(L.m_v, dim, kvd, qd + kvd, L.bv)   // v at ybase qd+kvd
             }
             if (g_rd.qk_norm) {
-                let hs = g_rd.head_size
+                let hs = g_rd.head_size   // nolint:LINT021 — the norm-row words compose it with int64 layout offsets
                 var mn = reinterpret<uint?>(L.m_qkn.mapped)
                 mn[0] = uint(hs); mn[1] = uint(g_rd.n_heads); mn[2] = uint(kvd / hs)
                 mn[3] = uint(qd); mn[4] = 0u; mn[5] = uint(qd)   // one row: k lives at qd in kv_dev
@@ -416,6 +416,13 @@ def private rd_record_token {
     g_rd.tok_recorded = true
 }
 
+// The per-stamp role names, in the order rdq_sample aggregates them (see the kv/rq_x notes below).
+def private rdq_role_names(fuse, fuse_qkr, qk_norm : bool) : array<string> {
+    return <- ["q", "kv", fuse_qkr ? "qknrope" : "rope", "attn", "rq_a", "wo", "arrq_f", "gate", "up", "actrq", "down", "arrq_n"] if (fuse)
+    return <- ["rq_x", "q", "kv", "qkn", "rope", "attn", "rq_a", "wo", "ar1", "rq_f", "gate", "up", "actrq", "down", "ar2"] if (qk_norm)
+    return <- ["rq_x", "q", "kv", "rope", "attn", "rq_a", "wo", "ar1", "rq_f", "gate", "up", "actrq", "down", "ar2"]
+}
+
 def private rdq_sample {
     // stamp count follows each layer's own kv_merged (K-quant ggufs mix formats per layer)
     let fuse = vk_fuse_on()
@@ -455,14 +462,7 @@ def private rdq_sample {
     g_rdq_count++
     if (g_rdq_count % 32l == 0l) {
         let n = double(g_rdq_count)
-        var names : array<string>
-        if (fuse) {
-            names <- ["q", "kv", fuse_qkr ? "qknrope" : "rope", "attn", "rq_a", "wo", "arrq_f", "gate", "up", "actrq", "down", "arrq_n"]
-        } elif (g_rd.qk_norm) {
-            names <- ["rq_x", "q", "kv", "qkn", "rope", "attn", "rq_a", "wo", "ar1", "rq_f", "gate", "up", "actrq", "down", "ar2"]
-        } else {
-            names <- ["rq_x", "q", "kv", "rope", "attn", "rq_a", "wo", "ar1", "rq_f", "gate", "up", "actrq", "down", "ar2"]
-        }
+        var names <- rdq_role_names(fuse, fuse_qkr, g_rd.qk_norm)
         let rs = build_string() $(w) {
             for (s in range(length(names))) {
                 w |> write("{names[s]} {int(g_rdq_role[s] / n)} ")
@@ -481,7 +481,7 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var
     if (!g_rd.tok_recorded) {
         rd_record_token()
     }
-    let kvd = g_rd.kv_dim
+    let kvd = g_rd.kv_dim   // nolint:LINT021 — the mirror-row offset (layers x seq_cap x kv_dim) needs the 64-bit product
     unsafe {
         memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l)
         memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.head_size * 4l)
@@ -984,8 +984,8 @@ def private heat_pool_make(l : int64; b1, b3, b2 : int64; f1, f3, f2 : int; n, n
     pool.src3 = src3
     pool.src2 = src2
     pool.nslots = int(c)
-    pool.slot_expert |> resize(int(c))
-    for (i in range(int(c))) {
+    pool.slot_expert |> resize(c)
+    for (i in range64(c)) {
         pool.slot_expert[i] = -1l
     }
     g_gpu.resident_bytes += c * per_slot

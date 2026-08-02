@@ -13,19 +13,19 @@ options gen2
 // re-keys the JIT DLL cache). There is no fast RACE mode — a cheap race is a systematic failure
 // to measure; the debugging concession is accepting an existing sidecar (daspkg --quick).
 
-require dasllama/dasllama_math   // nolint:STYLE030 — side-effect: loads the *_template kernels for the cross-module scan
-require dasllama/dasllama_math_default   // nolint:STYLE030 — dot_q8q8_template lives here
+require dasllama/dasllama_math   // side-effect: loads the *_template kernels for the cross-module scan
+require dasllama/dasllama_math_default   // dot_q8q8_template lives here
 require dasllama/dasllama_math_aarch64_neon   // laneq4x4 template (the repack backend "arm64-gen" registers via dasllama_common's math_gen require)
 require dasllama/dasllama_kv_codec   // nolint:STYLE030 — side-effect: the KV-codec *_template kernels for the cross-module scan
-require dasllama/dasllama_convert    // nolint:STYLE030 — side-effect: the f16 row-convert templates for the cross-module scan
+require dasllama/dasllama_convert    // side-effect: the f16 row-convert templates for the cross-module scan
 require dasllama/dasllama_common // the runtime-knob getters (the profile's "runtime" section snapshots them)
 require dasllama/dasllama_tune   // [dasllama_grid] emitter
 require llvm/daslib/llvm_tune    // tune_sidecar_merge — the app-sidecar upsert writer
-require ?das_metal dasllama/dasllama_metal_prefill  // nolint:STYLE030 — metal_tensor_race (Apple static_if half)
-require ?das_metal dasllama/dasllama_metal_kernels  // nolint:STYLE030 — metal_tensor_race_decode (Apple static_if half)
+require ?das_metal dasllama/dasllama_metal_prefill  // metal_tensor_race (Apple static_if half)
+require ?das_metal dasllama/dasllama_metal_kernels  // metal_tensor_race_decode (Apple static_if half)
 require tuner_cli               // --tune-paranoid, shared with the other half
 require tuner_noise             // the noise gate + the measured floor, shared with the other half
-require llvm/daslib/aarch64_neon // nolint:STYLE030 — sdot4_laneq (referenced by the cloned laneq template bodies)
+require llvm/daslib/aarch64_neon // sdot4_laneq (referenced by the cloned laneq template bodies)
 require llvm/daslib/f16_cvt      // f16 references + the cloned f16-kernel template bodies
 require math                     // mad (referenced by the cloned template bodies)
 require daslib/json
@@ -147,12 +147,12 @@ def screening_keep(best : array<double>; ok : array<bool>; i : int;
     }
     var leader = 1.0e30lf
     var faster = 0
-    for (j in range(length(best))) {
-        if (ok[j]) {
-            if (best[j] < leader) {
-                leader = best[j]
+    for (bj, okj in best, ok) {
+        if (okj) {
+            if (bj < leader) {
+                leader = bj
             }
-            if (best[j] < best[i]) {
+            if (bj < best[i]) {
                 faster ++
             }
         }
@@ -220,7 +220,7 @@ def private tune_candidate_active(round : int; best : array<double>; ok : array<
 // likely noise — vec16 was a real 2% loss, so the bar for "genuinely new" is a repeatable margin.
 def private shipped_fallback(kernel : string) : string {
     if (empty(g_shipped)) {
-        g_shipped <- dasllama_tuned_fallbacks()
+        g_shipped <- dasllama_tuned_fallbacks()   // nolint:PERF030 — first and only assignment, under the empty() guard: nothing to release
     }
     return g_shipped?[kernel] ?? BASELINE
 }
@@ -249,11 +249,11 @@ def private race_row(names : array<string>; med, best : array<double>; ok : arra
                      wname, baseline : string; floor : double) : JsonValue? {
     var rows : table<string; JsonValue?>
     var rej = ""
-    for (i in range(length(names))) {
-        if (ok[i]) {
-            rows[names[i]] = JV((med_us = med[i], best_us = best[i]))
+    for (nm, okv, m, bst in names, ok, med, best) {
+        if (okv) {
+            rows[nm] = JV((med_us = m, best_us = bst))
         } else {
-            rej = empty(rej) ? names[i] : "{rej}; {names[i]}"
+            rej = empty(rej) ? nm : "{rej}; {nm}"
         }
     }
     var obj <- {
@@ -438,8 +438,8 @@ def private run_validation() : bool {
 }
 
 def reset(var d : array<float>; d0 : array<float>) {
-    for (i in range(length(d))) {
-        d[i] = d0[i]
+    for (di, d0i in d, d0) {
+        di = d0i
     }
 }
 
@@ -456,9 +456,9 @@ def ref_dot(a : float const?; b : float const?; n : int64) : double {
 def bench_dot() : string {
     var a : array<float>
     var b : array<float>
-    a |> resize(int(N))
-    b |> resize(int(N))
-    for (i in range(int(N))) {
+    a |> resize(N)
+    b |> resize(N)
+    for (i in range64(N)) {
         a[i] = sin(float(i) * 0.1f)
         b[i] = cos(float(i) * 0.07f)
     }
@@ -513,7 +513,7 @@ def bench_binary(kernel : string; vs : array<tuple<string; BinFn>>;
                  d0 : array<float>; s : array<float>; ref_elem : function<(a : float; b : float) : double>) : string {
     let nv = length(vs)
     var d : array<float>
-    d |> resize(int(N))
+    d |> resize(N)
     var dp = unsafe(addr(d[0]))
     let sp = unsafe(addr(s[0]))
 
@@ -530,7 +530,7 @@ def bench_binary(kernel : string; vs : array<tuple<string; BinFn>>;
         let f = vs[i]._1
         invoke(f, dp, sp, N)
         var maxrel = 0.0lf
-        for (j in range(int(N))) {
+        for (j in range64(N)) {
             let want = ref_elem(d0[j], s[j])
             let got = double(d[j])
             let rel = abs(got - want) / (abs(want) + 1.0lf)
@@ -573,10 +573,10 @@ def bench_axpy() : string {
     var d0 : array<float>
     var s : array<float>
     var d : array<float>
-    d0 |> resize(int(N))
-    s |> resize(int(N))
-    d |> resize(int(N))
-    for (i in range(int(N))) {
+    d0 |> resize(N)
+    s |> resize(N)
+    d |> resize(N)
+    for (i in range64(N)) {
         d0[i] = 0.5f + 0.3f * sin(float(i) * 0.05f)
         s[i] = cos(float(i) * 0.03f)
     }
@@ -596,7 +596,7 @@ def bench_axpy() : string {
         let f = vs[i]._1
         invoke(f, dp, sp, scale, N)
         var maxrel = 0.0lf
-        for (j in range(int(N))) {
+        for (j in range64(N)) {
             let want = double(d0[j]) + double(scale) * double(s[j])
             let rel = abs(double(d[j]) - want) / (abs(want) + 1.0lf)
             if (rel > maxrel) {
@@ -636,16 +636,16 @@ def bench_axpy() : string {
 def bench_dot_f16() : string {
     var a : array<float>
     var b : array<uint16>
-    a |> resize(int(N))
-    b |> resize(int(N))
-    for (i in range(int(N))) {
+    a |> resize(N)
+    b |> resize(N)
+    for (i in range64(N)) {
         a[i] = sin(float(i) * 0.1f)
         b[i] = uint16(f32_to_f16(cos(float(i) * 0.07f)))
     }
     let pa = unsafe(addr(a[0]))
     let pb = unsafe(addr(b[0]))
     var want = 0.0lf
-    for (j in range(int(N))) {
+    for (j in range64(N)) {
         want += double(a[j]) * double(f16_to_f32(uint(b[j])))
     }
 
@@ -695,10 +695,10 @@ def bench_axpy_f16() : string {
     var d0 : array<float>
     var s : array<uint16>
     var d : array<float>
-    d0 |> resize(int(N))
-    s |> resize(int(N))
-    d |> resize(int(N))
-    for (i in range(int(N))) {
+    d0 |> resize(N)
+    s |> resize(N)
+    d |> resize(N)
+    for (i in range64(N)) {
         d0[i] = 0.5f + 0.3f * sin(float(i) * 0.05f)
         s[i] = uint16(f32_to_f16(cos(float(i) * 0.03f)))
     }
@@ -718,7 +718,7 @@ def bench_axpy_f16() : string {
         let f = vs[i]._1
         invoke(f, dp, sp, scale, N)
         var maxrel = 0.0lf
-        for (j in range(int(N))) {
+        for (j in range64(N)) {
             let want = double(d0[j]) + double(scale) * double(f16_to_f32(uint(s[j])))
             let rel = abs(double(d[j]) - want) / (abs(want) + 1.0lf)
             if (rel > maxrel) {
@@ -756,9 +756,9 @@ def bench_cvt_f32_to_f16() : string {
     let nv = length(vs)
     var s : array<float>
     var d : array<uint16>
-    s |> resize(int(N))
-    d |> resize(int(N))
-    for (i in range(int(N))) {
+    s |> resize(N)
+    d |> resize(N)
+    for (i in range64(N)) {
         s[i] = 300.0f * sin(float(i) * 0.11f)   // spans the normal f16 range
     }
     s[7] = 1.0e6f      // clamp pin
@@ -778,7 +778,7 @@ def bench_cvt_f32_to_f16() : string {
         let f = vs[i]._1
         invoke(f, dp, sp, N)
         var exact = true
-        for (j in range(int(N))) {
+        for (j in range64(N)) {
             exact &&= uint(d[j]) == f32_to_f16(clamp(s[j], -65504.0, 65504.0))
         }
         ok[i] = exact
@@ -808,9 +808,9 @@ def bench_cvt_f16_to_f32() : string {
     let nv = length(vs)
     var s : array<uint16>
     var d : array<float>
-    s |> resize(int(N))
-    d |> resize(int(N))
-    for (i in range(int(N))) {
+    s |> resize(N)
+    d |> resize(N)
+    for (i in range64(N)) {
         s[i] = uint16(f32_to_f16(300.0f * cos(float(i) * 0.09f)))
     }
     var dp = unsafe(addr(d[0]))
@@ -828,7 +828,7 @@ def bench_cvt_f16_to_f32() : string {
         let f = vs[i]._1
         invoke(f, dp, sp, N)
         var exact = true
-        for (j in range(int(N))) {
+        for (j in range64(N)) {
             exact &&= d[j] == f16_to_f32(uint(s[j]))
         }
         ok[i] = exact
@@ -861,9 +861,9 @@ def bench_scale() : string {
     let scale = 1.0001f   // near 1.0 so scale^REPS stays in normal float range with per-block reset
     var d0 : array<float>
     var d : array<float>
-    d0 |> resize(int(N))
-    d |> resize(int(N))
-    for (i in range(int(N))) {
+    d0 |> resize(N)
+    d |> resize(N)
+    for (i in range64(N)) {
         d0[i] = 0.5f + 0.3f * sin(float(i) * 0.05f)
     }
     var dp = unsafe(addr(d[0]))
@@ -881,7 +881,7 @@ def bench_scale() : string {
         let f = vs[i]._1
         invoke(f, dp, scale, N)
         var maxrel = 0.0lf
-        for (j in range(int(N))) {
+        for (j in range64(N)) {
             let want = double(d0[j]) * double(scale)
             let rel = abs(double(d[j]) - want) / (abs(want) + 1.0lf)
             if (rel > maxrel) {
@@ -922,25 +922,25 @@ def bench_softmax() : string {
     let nv = length(vs)
     var d0 : array<float>
     var d : array<float>
-    d0 |> resize(int(N))
-    d |> resize(int(N))
-    for (i in range(int(N))) {
+    d0 |> resize(N)
+    d |> resize(N)
+    for (i in range64(N)) {
         d0[i] = 4.0f * sin(float(i) * 0.11f)   // scores in [-4,4], a realistic logit spread
     }
     var dp = unsafe(addr(d[0]))
     var want : array<double>
-    want |> resize(int(N))
+    want |> resize(N)
     var mx = -1.0e30lf
-    for (i in range(int(N))) {
+    for (i in range64(N)) {
         mx = max(mx, double(d0[i]))
     }
     var wsum = 0.0lf
-    for (i in range(int(N))) {
+    for (i in range64(N)) {
         let e = exp(double(d0[i]) - mx)
         want[i] = e
         wsum += e
     }
-    for (i in range(int(N))) {
+    for (i in range64(N)) {
         want[i] /= wsum
     }
 
@@ -957,7 +957,7 @@ def bench_softmax() : string {
         let f = vs[i]._1
         invoke(f, dp, N)
         var maxrel = 0.0lf
-        for (j in range(int(N))) {
+        for (j in range64(N)) {
             let rel = abs(double(d[j]) - want[j]) / (abs(want[j]) + 1.0lf)
             if (rel > maxrel) {
                 maxrel = rel
@@ -998,10 +998,10 @@ def bench_rmsnorm() : string {
     var x : array<float>
     var w : array<float>
     var o : array<float>
-    x |> resize(int(N))
-    w |> resize(int(N))
-    o |> resize(int(N))
-    for (i in range(int(N))) {
+    x |> resize(N)
+    w |> resize(N)
+    o |> resize(N)
+    for (i in range64(N)) {
         x[i] = sin(float(i) * 0.1f)
         w[i] = 1.0f + 0.2f * cos(float(i) * 0.07f)
     }
@@ -1009,7 +1009,7 @@ def bench_rmsnorm() : string {
     let xp = unsafe(addr(x[0]))
     let wp = unsafe(addr(w[0]))
     var ss = 0.0lf
-    for (i in range(int(N))) {
+    for (i in range64(N)) {
         ss += double(x[i]) * double(x[i])
     }
     ss = 1.0lf / sqrt(ss / double(N) + double(eps))
@@ -1026,7 +1026,7 @@ def bench_rmsnorm() : string {
         let f = vs[i]._1
         invoke(f, op, xp, wp, N, eps)
         var maxrel = 0.0lf
-        for (j in range(int(N))) {
+        for (j in range64(N)) {
             let want = double(w[j]) * double(x[j]) * ss
             let rel = abs(double(o[j]) - want) / (abs(want) + 1.0lf)
             if (rel > maxrel) {
@@ -1066,18 +1066,18 @@ def bench_dot_q4() : string {
     let nv = length(vs)
     var wf : array<float>
     var x : array<float>
-    wf |> resize(int(N))
-    x |> resize(int(N))
-    for (i in range(int(N))) {
+    wf |> resize(N)
+    x |> resize(N)
+    for (i in range64(N)) {
         wf[i] = sin(float(i) * 0.1f)
         x[i] = cos(float(i) * 0.07f)
     }
     let qt <- quantize_q4_0(wf, N)
     var df : array<float>
-    df |> resize(int(N))
+    df |> resize(N)
     dequantize_q4_0(qt, df)
     var want = 0.0lf
-    for (i in range(int(N))) {
+    for (i in range64(N)) {
         want += double(df[i]) * double(x[i])
     }
     let wqp = unsafe(addr(qt.q[0]))
@@ -1126,9 +1126,9 @@ def bench_dot_q8q8() : string {
     let nv = length(vs)
     var wf : array<float>
     var xf : array<float>
-    wf |> resize(int(N))
-    xf |> resize(int(N))
-    for (i in range(int(N))) {
+    wf |> resize(N)
+    xf |> resize(N)
+    for (i in range64(N)) {
         wf[i] = sin(float(i) * 0.1f)
         xf[i] = cos(float(i) * 0.07f)
     }
@@ -1194,7 +1194,7 @@ def bench_dot_q8q8() : string {
 // reference q8_0 row builder — scalar amax (order-free == the kernel's float4 form), f16 scale,
 // f32-id rounding: quantize_q8kv_row's exact semantics
 def private build_q8kv_row(src : array<float>; n : int64; var row : array<uint8>) {
-    row |> resize(int(n / 32l * 34l))
+    row |> resize(n / 32l * 34l)
     for (bi in range64(n / 32l)) {
         let base = bi * 32l
         var amax = 0.0
@@ -1225,9 +1225,9 @@ def bench_dot_q8kv() : string {
     var a : array<float>
     var wf : array<float>
     var row : array<uint8>
-    a |> resize(int(N))
-    wf |> resize(int(N))
-    for (i in range(int(N))) {
+    a |> resize(N)
+    wf |> resize(N)
+    for (i in range64(N)) {
         a[i] = sin(float(i) * 0.1f)
         wf[i] = cos(float(i) * 0.07f)
     }
@@ -1282,9 +1282,9 @@ def bench_dot_q8q8kv() : string {
     var xf : array<float>
     var wf : array<float>
     var row : array<uint8>
-    xf |> resize(int(N))
-    wf |> resize(int(N))
-    for (i in range(int(N))) {
+    xf |> resize(N)
+    wf |> resize(N)
+    for (i in range64(N)) {
         xf[i] = sin(float(i) * 0.1f)
         wf[i] = cos(float(i) * 0.07f)
     }
@@ -1351,10 +1351,10 @@ def bench_axpy_q8kv() : string {
     var wf : array<float>
     var row : array<uint8>
     var d : array<float>
-    d0 |> resize(int(N))
-    wf |> resize(int(N))
-    d |> resize(int(N))
-    for (i in range(int(N))) {
+    d0 |> resize(N)
+    wf |> resize(N)
+    d |> resize(N)
+    for (i in range64(N)) {
         d0[i] = 0.5f + 0.3f * sin(float(i) * 0.05f)
         wf[i] = cos(float(i) * 0.03f)
     }
@@ -1414,9 +1414,9 @@ def bench_cvt_q8kv_to_f32() : string {
     var wf : array<float>
     var row : array<uint8>
     var d : array<float>
-    wf |> resize(int(N))
-    d |> resize(int(N))
-    for (i in range(int(N))) {
+    wf |> resize(N)
+    d |> resize(N)
+    for (i in range64(N)) {
         wf[i] = 300.0f * cos(float(i) * 0.09f)
     }
     build_q8kv_row(wf, N, row)
@@ -1432,7 +1432,7 @@ def bench_cvt_q8kv_to_f32() : string {
     for (i in range(nv)) {
         names[i] = vs[i]._0
         best[i] = 1.0e30lf
-        for (j in range(int(N))) {
+        for (j in range64(N)) {
             d[j] = -1.0e30f
         }
         let f = vs[i]._1
@@ -1472,8 +1472,8 @@ def bench_quantize_q8kv_row() : string {
     var src : array<float>
     var ref_row : array<uint8>
     var d : array<uint8>
-    src |> resize(int(N))
-    for (i in range(int(N))) {
+    src |> resize(N)
+    for (i in range64(N)) {
         src[i] = 300.0f * sin(float(i) * 0.11f)
     }
     build_q8kv_row(src, N, ref_row)   // the contract: byte-exact ggml quantize_row_q8_0
@@ -1496,8 +1496,8 @@ def bench_quantize_q8kv_row() : string {
         let f = vs[i]._1
         invoke(f, dp, sp, N)
         var exact = true
-        for (j in range(length(d))) {
-            exact &&= d[j] == ref_row[j]
+        for (dj, rj in d, ref_row) {
+            exact &&= dj == rj
         }
         ok[i] = exact
     }
@@ -1534,17 +1534,17 @@ def bench_dot_mx4q8() : string {
     let nb = N / 32l
     var wn : array<uint8>
     var we : array<uint8>
-    wn |> resize(int(N / 2l))
-    we |> resize(int(nb))
-    for (i in range(int(N / 2l))) {
-        wn[i] = uint8((i * 137 + 71) & 0xff)
+    wn |> resize(N / 2l)
+    we |> resize(nb)
+    for (i in range64(N / 2l)) {
+        wn[i] = uint8((int(i) * 137 + 71) & 0xff)
     }
-    for (i in range(int(nb))) {
-        we[i] = uint8(120 + (i * 7) % 16)
+    for (i in range64(nb)) {
+        we[i] = uint8(120 + (int(i) * 7) % 16)
     }
     var xf : array<float>
-    xf |> resize(int(N))
-    for (i in range(int(N))) {
+    xf |> resize(N)
+    for (i in range64(N)) {
         xf[i] = cos(float(i) * 0.07f)
     }
     let xq <- quantize_q8_0(xf, N)
@@ -1611,15 +1611,15 @@ def bench_quantize() : string {
     let vs <- quantize_q8_0_into_ptr_template_variants()
     let nv = length(vs)
     var src : array<float>
-    src |> resize(int(N))
-    for (i in range(int(N))) {
+    src |> resize(N)
+    for (i in range64(N)) {
         src[i] = 2.0f * sin(float(i) * 0.13f)
     }
     let want <- quantize_q8_0(src, N)
     var qdst : array<int8>
     var sdst : array<float>
-    qdst |> resize(int(N))
-    sdst |> resize(int(N / 32l))
+    qdst |> resize(N)
+    sdst |> resize(N / 32l)
     let srcp = unsafe(addr(src[0]))
     var qp = unsafe(addr(qdst[0]))
     var sp = unsafe(addr(sdst[0]))
@@ -1636,12 +1636,12 @@ def bench_quantize() : string {
         let f = vs[i]._1
         invoke(f, srcp, N, qp, sp, 0l, 0l)
         var exact = true
-        for (j in range(int(N))) {
+        for (j in range64(N)) {
             if (qdst[j] != want.q[j]) {
                 exact = false
             }
         }
-        for (b in range(int(N / 32l))) {
+        for (b in range64(N / 32l)) {
             if (sdst[b] != want.scales[b]) {
                 exact = false
             }
@@ -1677,26 +1677,26 @@ def bench_quantize_bs() : string {
     let vs <- quantize_q8_0_bs_into_ptr_template_variants()
     let nv = length(vs)
     var src : array<float>
-    src |> resize(int(N))
-    for (i in range(int(N))) {
+    src |> resize(N)
+    for (i in range64(N)) {
         src[i] = 2.0f * sin(float(i) * 0.13f)
     }
     let want <- quantize_q8_0(src, N)
     var wantbs : array<int>
-    wantbs |> resize(int(N / 16l))
-    for (h in range(int(N / 16l))) {
+    wantbs |> resize(N / 16l)
+    for (h in range64(N / 16l)) {
         var bs = 0
-        for (i in range(16)) {
-            bs += int(want.q[h * 16 + i])
+        for (i in range64(16l)) {
+            bs += int(want.q[h * 16l + i])
         }
         wantbs[h] = bs
     }
     var qdst : array<int8>
     var sdst : array<float>
     var bdst : array<int>
-    qdst |> resize(int(N))
-    sdst |> resize(int(N / 32l))
-    bdst |> resize(int(N / 16l))
+    qdst |> resize(N)
+    sdst |> resize(N / 32l)
+    bdst |> resize(N / 16l)
     let srcp = unsafe(addr(src[0]))
     var qp = unsafe(addr(qdst[0]))
     var sp = unsafe(addr(sdst[0]))
@@ -1714,17 +1714,17 @@ def bench_quantize_bs() : string {
         let f = vs[i]._1
         invoke(f, srcp, N, qp, sp, bp, 0l, 0l, 0l)
         var exact = true
-        for (j in range(int(N))) {
+        for (j in range64(N)) {
             if (qdst[j] != want.q[j]) {
                 exact = false
             }
         }
-        for (b in range(int(N / 32l))) {
+        for (b in range64(N / 32l)) {
             if (sdst[b] != want.scales[b]) {
                 exact = false
             }
         }
-        for (h in range(int(N / 16l))) {
+        for (h in range64(N / 16l)) {
             if (bdst[h] != wantbs[h]) {
                 exact = false
             }
@@ -1763,17 +1763,17 @@ def bench_rope_tab() : string {
     let half = head_size / 2l
     var v0 : array<float>
     var v : array<float>
-    v0 |> resize(int(N))
-    v |> resize(int(N))
-    for (i in range(int(N))) {
+    v0 |> resize(N)
+    v |> resize(N)
+    for (i in range64(N)) {
         v0[i] = sin(float(i) * 0.1f)
     }
     var cosr : array<float>
     var sinr : array<float>
-    cosr |> resize(int(half))
-    sinr |> resize(int(half))
-    for (j in range(int(half))) {
-        let ang = 37.0f / pow(10000.0f, float(2 * j) / float(head_size))
+    cosr |> resize(half)
+    sinr |> resize(half)
+    for (j in range64(half)) {
+        let ang = 37.0f / pow(10000.0f, float(2l * j) / float(head_size))
         cosr[j] = cos(ang)
         sinr[j] = sin(ang)
     }
@@ -1794,17 +1794,17 @@ def bench_rope_tab() : string {
         let f = vs[i]._1
         invoke(f, vp, head_size, N, cp, sp)
         var maxrel = 0.0lf
-        for (h in range(int(N / head_size))) {
-            let base = h * int(head_size)
-            for (j in range(int(half))) {
+        for (h in range64(N / head_size)) {
+            let base = h * head_size
+            for (j in range64(half)) {
                 let a = double(v0[base + j])
-                let b = double(v0[base + j + int(half)])
+                let b = double(v0[base + j + half])
                 let wc = double(cosr[j])
                 let ws = double(sinr[j])
                 let want0 = a * wc - b * ws
                 let want1 = a * ws + b * wc
                 let r0 = abs(double(v[base + j]) - want0) / (abs(want0) + 1.0lf)
-                let r1 = abs(double(v[base + j + int(half)]) - want1) / (abs(want1) + 1.0lf)
+                let r1 = abs(double(v[base + j + half]) - want1) / (abs(want1) + 1.0lf)
                 maxrel = max(maxrel, max(r0, r1))
             }
         }
@@ -1845,13 +1845,13 @@ def bench_gemm_tile() : string {
     var a : array<float>
     var b : array<float>
     var c : array<float>
-    a |> resize(int(4l * K))
-    b |> resize(int(K * NN))
-    c |> resize(int(4l * NN))
-    for (i in range(int(4l * K))) {
+    a |> resize(4l * K)
+    b |> resize(K * NN)
+    c |> resize(4l * NN)
+    for (i in range64(4l * K)) {
         a[i] = sin(float(i) * 0.1f)
     }
-    for (i in range(int(K * NN))) {
+    for (i in range64(K * NN)) {
         b[i] = cos(float(i) * 0.07f)
     }
     var cp = unsafe(addr(c[0]))
@@ -1867,19 +1867,19 @@ def bench_gemm_tile() : string {
     for (i in range(nv)) {
         names[i] = vs[i]._0
         best[i] = 1.0e30lf
-        for (j in range(int(4l * NN))) {
+        for (j in range64(4l * NN)) {
             c[j] = 0.0f
         }
         let f = vs[i]._1
         invoke(f, cp, ap, bp, 0l, 0l, K, NN)
         var maxrel = 0.0lf
-        for (r in range(4)) {
-            for (col in range(int(NN))) {
+        for (r in range64(4l)) {
+            for (col in range64(NN)) {
                 var want = 0.0lf
-                for (kk in range(int(K))) {
-                    want += double(a[r * int(K) + kk]) * double(b[kk * int(NN) + col])
+                for (kk in range64(K)) {
+                    want += double(a[r * K + kk]) * double(b[kk * NN + col])
                 }
-                let rel = abs(double(c[r * int(NN) + col]) - want) / (abs(want) + 1.0lf)
+                let rel = abs(double(c[r * NN + col]) - want) / (abs(want) + 1.0lf)
                 if (rel > maxrel) {
                     maxrel = rel
                 }
@@ -1897,7 +1897,7 @@ def bench_gemm_tile() : string {
             if (!ok[i] || !tune_candidate_active(round, best, ok, i)) {
                 continue
             }
-            for (j in range(int(4l * NN))) {
+            for (j in range64(4l * NN)) {
                 c[j] = 0.0f
             }
             let f = vs[i]._1
@@ -1928,19 +1928,19 @@ def bench_laneq4x4() : string { // nolint:STYLE038 — one bench: fixture, backe
     let d = 4l     // one interleaved 4-row group
     let ntok = 4l
     var wf : array<float>
-    wf |> resize(int(d * n))
-    for (i in range(int(d * n))) {
+    wf |> resize(d * n)
+    for (i in range64(d * n)) {
         wf[i] = sin(float(i) * 0.1f)
     }
     var wq <- quantize_q8_0(wf, d * n)
     var refq : array<int8>    // row-major copies for the reference (repack rewrites wq in place)
     var refs : array<float>
-    refq |> resize(int(d * n))
-    refs |> resize(int(d * nb))
-    for (i in range(int(d * n))) {
+    refq |> resize(d * n)
+    refs |> resize(d * nb)
+    for (i in range64(d * n)) {
         refq[i] = wq.q[i]
     }
-    for (i in range(int(d * nb))) {
+    for (i in range64(d * nb)) {
         refs[i] = wq.scales[i]
     }
     pin_kernel_backend("arm64-gen")               // activates the repack fn the next call uses; the
@@ -1949,17 +1949,17 @@ def bench_laneq4x4() : string { // nolint:STYLE038 — one bench: fixture, backe
                                                   // correctness gate below catches any mr drift)
     repack_q8q8_weight(wq.q, wq.scales, 0l, n, d)
     var xf : array<float>
-    xf |> resize(int(ntok * n))
-    for (i in range(int(ntok * n))) {
+    xf |> resize(ntok * n)
+    for (i in range64(ntok * n)) {
         xf[i] = cos(float(i) * 0.07f)
     }
     var xq : array<int8>
     var xs : array<float>
-    xq |> resize(int(ntok * n))
-    xs |> resize(int(ntok * nb))
+    xq |> resize(ntok * n)
+    xs |> resize(ntok * nb)
     quantize_q8_0_into(xf, ntok * n, xq, xs, 0l, 0l)
     var y : array<float>
-    y |> resize(int(ntok * d))
+    y |> resize(ntok * d)
     var yp = unsafe(addr(y[0]))
     let wgp = unsafe(addr(wq.q[0]))
     let sgp = unsafe(addr(wq.scales[0]))
@@ -1978,17 +1978,17 @@ def bench_laneq4x4() : string { // nolint:STYLE038 — one bench: fixture, backe
         let f = vs[i]._1
         invoke(f, yp, wgp, sgp, xqp, xsp, n, d, 0l, 0l)
         var maxrel = 0.0lf
-        for (t in range(int(ntok))) {
-            for (r in range(int(d))) {
+        for (t in range64(ntok)) {
+            for (r in range64(d)) {
                 var want = 0.0lf
                 for (bi in range64(nb)) {
                     var iacc = 0
                     for (k in range64(32l)) {
-                        iacc += int(refq[r * int(n) + int(bi * 32l + k)]) * int(xq[t * int(n) + int(bi * 32l + k)])
+                        iacc += int(refq[r * n + bi * 32l + k]) * int(xq[t * n + bi * 32l + k])
                     }
-                    want += double(iacc) * double(refs[r * int(nb) + int(bi)]) * double(xs[t * int(nb) + int(bi)])
+                    want += double(iacc) * double(refs[r * nb + bi]) * double(xs[t * nb + bi])
                 }
-                let got = double(y[t * int(d) + r])
+                let got = double(y[t * d + r])
                 let rel = abs(got - want) / (abs(want) + 1.0lf)
                 if (rel > maxrel) {
                     maxrel = rel
@@ -2023,7 +2023,7 @@ def bench_laneq4x4() : string { // nolint:STYLE038 — one bench: fixture, backe
 // fallback: the tuner rail drives this half explicitly (DAS_TUNE_MODE=tune) — the auto
 // policy must not fire a nested tuner off this program's own missing per-app sidecar
 [export, tune_policy(missing = "fallback")]
-def main : int { // nolint:STYLE037 — flat one-bench-per-kernel rail; the noise gates are its checkpoints
+def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail; the noise gates are its checkpoints
     let paranoid = tuner_paranoid_requested()
     if (paranoid) {
         ROUNDS = 240   // ~3x the finalist budget; screening stays full-grid
@@ -2051,25 +2051,25 @@ def main : int { // nolint:STYLE037 — flat one-bench-per-kernel rail; the nois
     // add / mul / copy share the (var d, s) signature — one bench, per-kernel data + reference.
     var add_d0 : array<float>
     var add_s : array<float>
-    add_d0 |> resize(int(N))
-    add_s |> resize(int(N))
-    for (i in range(int(N))) {
+    add_d0 |> resize(N)
+    add_s |> resize(N)
+    for (i in range64(N)) {
         add_d0[i] = 0.5f + 0.3f * sin(float(i) * 0.05f)
         add_s[i] = cos(float(i) * 0.03f)
     }
     var mul_d0 : array<float>
     var mul_s : array<float>
-    mul_d0 |> resize(int(N))
-    mul_s |> resize(int(N))
-    for (i in range(int(N))) {
+    mul_d0 |> resize(N)
+    mul_s |> resize(N)
+    for (i in range64(N)) {
         mul_d0[i] = 0.5f + 0.3f * sin(float(i) * 0.05f)
         mul_s[i] = 1.0f + 0.0005f * sin(float(i) * 0.02f)   // near 1.0: s^REPS stays finite/normal
     }
     var cpy_d0 : array<float>
     var cpy_s : array<float>
-    cpy_d0 |> resize(int(N))
-    cpy_s |> resize(int(N))
-    for (i in range(int(N))) {
+    cpy_d0 |> resize(N)
+    cpy_s |> resize(N)
+    for (i in range64(N)) {
         cpy_d0[i] = 0.0f
         cpy_s[i] = cos(float(i) * 0.03f)
     }

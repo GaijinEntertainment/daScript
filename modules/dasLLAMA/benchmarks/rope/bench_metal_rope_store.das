@@ -4,8 +4,8 @@ options persistent_heap
 require dastest/testing_boost
 require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
 require metal/msl_shader
-require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — GPU driver half, Apple builds only
-require dasllama/dasllama_metal_decode  // nolint:STYLE030 — the production rope+KV-store MSL (zero copy drift)
+require ?das_metal metal/das_metal_boost  // GPU driver half, Apple builds only
+require dasllama/dasllama_metal_decode  // the production rope+KV-store MSL (zero copy drift)
 require math
 require strings
 
@@ -56,7 +56,7 @@ def private time_seq(queue; psos; bufss; groupss; threadss; reps : int) : double
     return gpu_ms / double(reps)
 }
 
-def private run_rope_sidebyside(b) {
+def private run_rope_sidebyside(b) {   // nolint:STYLE038 — flat lab driver: buffers bound once, then one timed slot per kernel
     let rounds = env_int("DASMETAL_LAB_ROUNDS", 3)
     let nheads = 24l
     let hs = 128l
@@ -100,8 +100,7 @@ def private run_rope_sidebyside(b) {
             tsin[bb * half_hs + j] = sin(float(pos + bb) * f)
         }
     }
-    var rte : array<uint>
-    rte <- [0u, 0u, uint(cap), uint(pos + 1l), uint(cap * 4l), uint(cap * 4l), uint(cap), uint(pos + 2l)]
+    var rte <- [0u, 0u, uint(cap), uint(pos + 1l), uint(cap * 4l), uint(cap * 4l), uint(cap), uint(pos + 2l)]
     // row 1 gets its own arena region (element offsets cap*kv_dim x4 fits one arena of 8*cap*kv)
     var qkbuf = upload_array(dev, qk, nb * qkvd * 4l)
     var tcosbuf = upload_array(dev, tcos, nb * half_hs * 4l)

@@ -22,8 +22,8 @@ def private same(a, b : array<int64>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (x, y in a, b) {
+        if (x != y) {
             return false
         }
     }

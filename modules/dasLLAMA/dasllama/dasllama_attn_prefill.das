@@ -15,7 +15,7 @@ require math
 
 // g_attn_prefill_mode: classic/blocked are bit-identical (same score row + FMA order); flash tiles
 // with online softmax and is NOT bit-exact (online reorder).
-def private attn_head_flash(qp : float const?; kcp, vcp : auto const?; var xbp : float?; // nolint:STYLE037 — online-softmax tiling: the KV-format arms and the running max/sum state are one register-coupled loop nest
+def private attn_head_flash(qp : float const?; kcp, vcp : auto const?; var xbp : float?; // nolint:STYLE037,STYLE038 — online-softmax tiling: the KV-format arms and the running max/sum state are one register-coupled loop nest
                             var qpk, kpk, vpk, kqp, vkqp, tmpp : float?; runs : KVRun const?;
                             nrun, npos, start_pos, head_size, qd, kdim, khoff, vdim, vhoff, qoff : int64;
                             scale : float; is_sliding : bool; sliding_window : int64; attn_softcap : float;
@@ -356,7 +356,7 @@ def private attn_head_flash_d(qp : float const?; kcl, vcl : uint8 const?; kdt, v
 }
 
 def private attn_head_blocked_d(var attp_h : float?; var xbp : float?; qp : float const?; // nolint:STYLE038 — 16-way K x V codec dispatch ladder; each arm is one typed call, nothing to factor
-                                qq : int8 const?; qsp : float const?;
+                                qq : int8 const ?; qsp : float const?;
                                 kcl, vcl : uint8 const?; kdt, vdt : KVDtype; runs : KVRun const?;
                                 nrun, npos, start_pos, maxctx, qd, head_size, kv_dim, kvhoff, qoff, hh : int64;
                                 scale : float; is_sliding : bool; sliding_window : int64;
@@ -441,7 +441,7 @@ def private attn_head_blocked_d(var attp_h : float?; var xbp : float?; qp : floa
 }
 
 def private attn_head_classic_d(var attp_h : float?; var xbp : float?; qp : float const?; // nolint:STYLE038 — 16-way K x V codec dispatch ladder; each arm is one typed call, nothing to factor
-                                qq : int8 const?; qsp : float const?;
+                                qq : int8 const ?; qsp : float const?;
                                 kcl, vcl : uint8 const?; kdt, vdt : KVDtype; runs : KVRun const?;
                                 nrun, npos, start_pos, qd, head_size, kv_dim, kvhoff, qoff, hh : int64;
                                 scale : float; is_sliding : bool; sliding_window : int64;
@@ -540,8 +540,8 @@ def prefill_attention(var s : Session; kcl, vcl : uint8 const?; npos, start_pos,
     // block-codec K: quantize every query row once so scores run the SAME int8 dot as decode; flash skips this (f32 tiles)
     if ((kdt == KVDtype.q8_0 || kdt == KVDtype.tq4) && g_attn_prefill_mode != AttnPrefillMode.flash) {
         if (long_length(s.attq) < npos * qd) {
-            s.attq |> resize(int(npos * qd))
-            s.atts |> resize(int(npos * qd / 32l))
+            s.attq |> resize(npos * qd)
+            s.atts |> resize(npos * qd / 32l)
         }
         quantize_q8_0_into(s.q_b, npos * qd, s.attq, s.atts, 0l, 0l)
     }

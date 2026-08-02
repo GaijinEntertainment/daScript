@@ -12,6 +12,18 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **`g_lp_cbs` per-step buffer churn: the `@scratch` recycling never happens on the batch-decode
+  pipeline path (spotted 2026-08-02, lint uplift).** `metal_batch_decode_forward` builds each
+  step's command-buffer list in a LOCAL `cbs` and hands it over with `g_lp_cbs <- cbs`
+  (`dasllama_metal_decode.das:3002`) — the move drops the global's retained buffer every step,
+  so `finish_pending_step`'s capacity-retaining `clear()` recycles nothing, and on a persistent
+  heap the dropped buffer is ~ncb pointers per step. **What a fix changes:** prefill's
+  `g_pf_cbs` ping-pong pattern (build into the global, or `push_from` a reference) recycles both
+  buffers, deletes the per-step allocation, and makes the PERF026/PERF030 nolints at that site
+  unnecessary. Cost today is small (one small alloc + drop per step); the reason to do it is the
+  allocation sits on the measured hot orchestrator, so it belongs to a perf pass with A/B cells,
+  not a lint sweep.
+
 - **ASR peak-RSS baseline (2026-08-02, m1, /usr/bin/time -l around the rig exe, warm=.dlim
   present / cold=mint): whisper-turbo 1.48/5.29 GB (+3.81), parakeet-v3 6.69/6.84 (+0.15),
   gemma4a-E2B 4.27/5.42 (+1.15), canary 13.11/14.44 (+1.33).** Two findings. (1) The MINT spike

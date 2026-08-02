@@ -20,8 +20,8 @@ let N = 64l
 let D = 4l   // one interleaved group per region (laneq-compatible), no tail
 let NREG = 3l
 
-def private build_offs(var offs : array<int64>) {
-    offs <- [N * D * 0l, 0l, N * D * 1l, 0l, N * D * 2l, N]
+def private build_offs() : array<int64> {
+    return <- [N * D * 0l, 0l, N * D * 1l, 0l, N * D * 2l, N]
 }
 
 def private slice_i8(src : array<int8>; off, n : int64) : array<int8> {
@@ -52,8 +52,7 @@ def test_q8q8_groupn(t : T?) {
         }
         let wq0 <- quantize_q8_0(wf, NREG * D * N)
         let xq <- quantize_q8_0(xf, 2l * N)
-        var offs : array<int64>
-        build_offs(offs)
+        var offs <- build_offs()
         let saved = active_kernel_backend()
         for (name in kernel_backend_names()) {
             pin_kernel_backend(name)
@@ -96,7 +95,7 @@ def test_q8q8_groupn(t : T?) {
 }
 
 [test]
-def test_groupn_bias_fold(t : T?) {
+def test_groupn_bias_fold(t : T?) {   // nolint:STYLE038 — flat fixture build + per-backend q8/mx4 A/B sweep
     t |> run("biased groupN == unbiased + add-after, q8 and mx4, every backend") @(t : T?) {
         var wf : array<float>
         var xf : array<float>
@@ -131,8 +130,7 @@ def test_groupn_bias_fold(t : T?) {
         for (r in range64(NREG)) {
             boffs[r] = r * D
         }
-        var offs : array<int64>
-        build_offs(offs)
+        var offs <- build_offs()
         let saved = active_kernel_backend()
         for (name in kernel_backend_names()) {
             pin_kernel_backend(name)
@@ -203,8 +201,7 @@ def test_mx4q8_groupn(t : T?) {
             xf[i] = cos(float(i) * 0.07f)
         }
         let xq <- quantize_q8_0(xf, 2l * N)
-        var offs : array<int64>
-        build_offs(offs)
+        var offs <- build_offs()
         let saved = active_kernel_backend()
         for (name in kernel_backend_names()) {
             pin_kernel_backend(name)

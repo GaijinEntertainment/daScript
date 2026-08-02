@@ -2,15 +2,15 @@ options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _jit_fast_math = true   // ggml-parity FP laxity — the CPU prefill/sampling half only
 
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
+require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + pin_kernel_backend + parallel_argmax
 require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor transform
-require ?das_metal dasllama/dasllama_metal_decode   // nolint:STYLE030 — GPU driver half, Apple builds only
+require ?das_metal dasllama/dasllama_metal_decode   // GPU driver half, Apple builds only
 require daslib/jobque_boost
 require daslib/clargs
-require daslib/fio   // nolint:STYLE030 — used only inside the Apple static_if half
-require math   // nolint:STYLE030 — used only inside the Apple static_if half
-require strings   // nolint:STYLE030 — used only inside the Apple static_if half
+require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
+require math   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
+require strings   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
 
 // The per-step decode TRACE probe — the spec-chain bimodality diagnostic. Runs ONE long greedy
 // decode with the driver's per-step trace armed and prints per-`bucket` summaries: wall / gpu /

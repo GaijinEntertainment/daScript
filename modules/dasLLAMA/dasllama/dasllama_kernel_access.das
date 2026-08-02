@@ -285,7 +285,7 @@ class private AccessVisitor : AstVisitor {
         }
     }
 
-    def override preVisitExprCall(expr : ExprCall?) : void {
+    def override preVisitExprCall(expr : ExprCall?) : void {   // nolint:STYLE037 — an intrinsic-name dispatch table; one arm per GPU builtin
         // POST-infer a resolved call carries its mangled name (`__::<module>`<name>`<hash>`), so
         // the intrinsic table below must match the base name or every entry misses on that pass
         let cname = callee_base_name("{expr.name}")

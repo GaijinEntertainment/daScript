@@ -186,8 +186,8 @@ def private vk_bake_slice(t : Model; fmt : int; woff, n, rows : int64;
     // int-indexed destinations: a >2GB plane would resize truncated and then memcpy past it
     assert(e.wq_bytes <= 2_147_483_647l && e.ws_bytes <= 2_147_483_647l,
         "vulkan image: a baked plane exceeds the int-indexed array cap")
-    wq |> resize(int(e.wq_bytes))
-    ws |> resize(int(e.ws_bytes))
+    wq |> resize(e.wq_bytes)
+    ws |> resize(e.ws_bytes)
     unsafe {
         // int64 blob indexing — wq_off crosses INT32_MAX on multi-GB bakes
         if (e.wq_bytes > 0l) {
@@ -252,7 +252,7 @@ def trim_model_planes(var t : Model) : bool {
     if (t.cls_q8) {
         // mblob-style 34B interleaved blocks over the emb region (dequant_embq_row's layout)
         let nb = vocab * dim / 32l
-        t.embq |> resize(int(nb * 34l))
+        t.embq |> resize(nb * 34l)
         unsafe {
             for (b in range64(nb)) {
                 let off = t.emb_q8_off + b * 32l
@@ -269,23 +269,23 @@ def trim_model_planes(var t : Model) : bool {
         let sb0 = t.wcls_off / 256l
         unsafe {
             if (t.emb_fmt == KqFmt.k4) {
-                t.embq |> resize(int(nsb * K4_QSB))
-                t.embs |> resize(int(nsb * K4_SSB))
+                t.embq |> resize(nsb * K4_QSB)
+                t.embs |> resize(nsb * K4_SSB)
                 memcpy(addr<void?>(t.embq[0]), addr<void?>(t.k4q[sb0 * K4_QSB]), nsb * K4_QSB)
                 memcpy(addr<void?>(t.embs[0]), addr<void?>(t.k4s[sb0 * K4_SSB]), nsb * K4_SSB)
             } elif (t.emb_fmt == KqFmt.k5) {
-                t.embq |> resize(int(nsb * K5_QSB))
-                t.embs |> resize(int(nsb * K5_SSB))
+                t.embq |> resize(nsb * K5_QSB)
+                t.embs |> resize(nsb * K5_SSB)
                 memcpy(addr<void?>(t.embq[0]), addr<void?>(t.k5q[sb0 * K5_QSB]), nsb * K5_QSB)
                 memcpy(addr<void?>(t.embs[0]), addr<void?>(t.k5s[sb0 * K5_SSB]), nsb * K5_SSB)
             } elif (t.emb_fmt == KqFmt.k6) {
-                t.embq |> resize(int(nsb * K6_QSB))
-                t.embs |> resize(int(nsb * K6_SSB))
+                t.embq |> resize(nsb * K6_QSB)
+                t.embs |> resize(nsb * K6_SSB)
                 memcpy(addr<void?>(t.embq[0]), addr<void?>(t.k6q[sb0 * K6_QSB]), nsb * K6_QSB)
                 memcpy(addr<void?>(t.embs[0]), addr<void?>(t.k6s[sb0 * K6_SSB]), nsb * K6_SSB)
             } elif (t.emb_fmt == KqFmt.q40) {
-                t.embq |> resize(int(nsb * Q40_QSB))
-                t.embs |> resize(int(nsb * Q40_SSB))
+                t.embq |> resize(nsb * Q40_QSB)
+                t.embs |> resize(nsb * Q40_SSB)
                 memcpy(addr<void?>(t.embq[0]), addr<void?>(t.q40q[sb0 * Q40_QSB]), nsb * Q40_QSB)
                 memcpy(addr<void?>(t.embs[0]), addr<void?>(t.q40s[sb0 * Q40_SSB]), nsb * Q40_SSB)
             } else {
@@ -515,7 +515,7 @@ def private resident_layer_fmts(t : Model; l : int64) : tuple<fq : KqFmt; fk : K
 
 //! Reserve arenas + place every dense plane + wire the resident decode driver. Returns false (and
 //! leaves the driver unarmed) if the model is not a servable dense shape or does not fit at seq_cap.
-def resident_upload(t : Model; seq_cap : int64) : bool {   // nolint:STYLE037 — all-or-nothing arm: one reject per unsupported family feature, no seam
+def resident_upload(t : Model; seq_cap : int64) : bool {   // nolint:STYLE037,STYLE038 — all-or-nothing arm: one reject per unsupported family feature, no seam
     g_rdec_active = false
     vulkan_bake_role(VkBakeRole.arena)
     if (!moe_gpu_resident_installed() || t.quant != QuantMode.q8 || t.config.n_expert > 0l) {
@@ -559,7 +559,7 @@ def resident_upload(t : Model; seq_cap : int64) : bool {   // nolint:STYLE037 �
     // tally arena blocks per format
     var need : table<int; int64>
     var planes : array<tuple<n : int64; rows : int64; f : KqFmt>>
-    planes |> reserve(int(c.n_layers * 7l + 1l))
+    planes |> reserve(c.n_layers * 7l + 1l)
     for (l in range64(c.n_layers)) {
         let lf = resident_layer_fmts(t, l)
         planes |> push((n = dim, rows = qd, f = lf.fq))
@@ -622,22 +622,22 @@ def resident_upload(t : Model; seq_cap : int64) : bool {   // nolint:STYLE037 �
     // upload the norm rows: [rms_att[l], rms_ffn[l]] x L, then rms_final; qk_norm appends the
     // per-head [rms_q[l], rms_k[l]] x L rows (hs floats each) past the fixed layout
     var norms : array<float>
-    norms |> resize(int(c.n_layers * 2l * dim + dim + (c.qk_norm ? c.n_layers * 2l * hs : 0l)))
+    norms |> resize(c.n_layers * 2l * dim + dim + (c.qk_norm ? c.n_layers * 2l * hs : 0l))
     for (l in range64(c.n_layers)) {
         for (i in range64(dim)) {
-            norms[int(l * 2l * dim + i)] = t.fblob[t.rms_att_off + l * dim + i]
-            norms[int((l * 2l + 1l) * dim + i)] = t.fblob[t.rms_ffn_off + l * dim + i]
+            norms[l * 2l * dim + i] = t.fblob[t.rms_att_off + l * dim + i]
+            norms[(l * 2l + 1l) * dim + i] = t.fblob[t.rms_ffn_off + l * dim + i]
         }
     }
     for (i in range64(dim)) {
-        norms[int(c.n_layers * 2l * dim + i)] = t.fblob[t.rms_final_off + i]
+        norms[c.n_layers * 2l * dim + i] = t.fblob[t.rms_final_off + i]
     }
     if (c.qk_norm) {
         let qkw = c.n_layers * 2l * dim + dim
         for (l in range64(c.n_layers)) {
             for (i in range64(hs)) {
-                norms[int(qkw + l * 2l * hs + i)] = t.fblob[t.rms_q_offs[l] + i]
-                norms[int(qkw + (l * 2l + 1l) * hs + i)] = t.fblob[t.rms_k_offs[l] + i]
+                norms[qkw + l * 2l * hs + i] = t.fblob[t.rms_q_offs[l] + i]
+                norms[qkw + (l * 2l + 1l) * hs + i] = t.fblob[t.rms_k_offs[l] + i]
             }
         }
     }
@@ -685,7 +685,7 @@ def private vulkan_resident_decode(t : Model; var s : Session; token, pos : int6
     let dim = c.dim
     let hs = layer_head_size(c, 0l)
     var x : array<float>
-    x |> resize(int(dim))
+    x |> resize(dim)
     unsafe {
         embed_row(t, token, addr(x[0]))
     }
@@ -695,7 +695,7 @@ def private vulkan_resident_decode(t : Model; var s : Session; token, pos : int6
     // this position's rope row: cos[half] then sin[half]
     let half = hs / 2l
     var cossin : array<float>
-    cossin |> resize(int(hs))
+    cossin |> resize(hs)
     rdec_rope_row(t, pos, hs, half, cossin, 0l)
     let cnt = pos + 1l
     rdec_token(x, cossin, pos, cnt, s.logits)
@@ -731,7 +731,7 @@ def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos 
     let hs = layer_head_size(c, 0l)
     let half = hs / 2l
     var cb : array<float>
-    cb |> resize(int(npos * hs))
+    cb |> resize(npos * hs)
     for (p in range64(npos)) {
         rdec_rope_row(t, p, hs, half, cb, p * hs)
     }
@@ -768,11 +768,11 @@ def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var
         to_log(LOG_INFO, "dasLLAMA: resident batch decode engaged ({nrows} streams)\n")
     }
     var x : array<float>
-    x |> resize(int(dim))
+    x |> resize(dim)
     var cossin : array<float>
-    cossin |> resize(int(hs))
+    cossin |> resize(hs)
     var tmp : array<float>
-    tmp |> resize(int(c.vocab_size))
+    tmp |> resize(c.vocab_size)
     for (i in range64(nrows)) {
         var s & = unsafe(*sessions[i])
         let pos = ws.positions[i]
@@ -899,7 +899,7 @@ def moe_gpu_drop_model() {
 // Upload the offloaded layers' expert stacks to the GPU tier from the PREPARED planes. Called at
 // the end of every load rail so DASLLAMA_GPU_MOE_LAYERS behaves identically however the model
 // arrived. Layers go resident from the end while the tier's VRAM budget holds.
-def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037 — seven sequential rail walks sharing one rollback cursor; splitting them hides the partial-group unwind
+def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven sequential rail walks sharing one rollback cursor; splitting them hides the partial-group unwind
     set_moe_gpu_from_layer(t.config.n_layers)   // nothing resident until an upload lands
     set_moe_gpu_stream_from(t.config.n_layers)
     set_moe_gpu_total_layers(t.config.n_layers)

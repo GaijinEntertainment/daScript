@@ -36,8 +36,8 @@ def build_rope_tabs(@scratch var cos_tab : array<float>; @scratch var sin_tab : 
                     start_pos, npos, head_size : int64) {
     let half = head_size / 2l
     let has_ff = use_ff && !empty(rope_freqs)
-    cos_tab |> resize(npos * half)   // nolint:PERF026 — session scratch; same size every step, so this allocates once
-    sin_tab |> resize(npos * half)   // nolint:PERF026 — see above
+    cos_tab |> resize(npos * half)
+    sin_tab |> resize(npos * half)
     unsafe {
         var cp = addr(cos_tab[0])
         var sp = addr(sin_tab[0])
@@ -61,8 +61,8 @@ def build_rope_tabs_rows(@scratch var cos_tab : array<float>; @scratch var sin_t
                          positions : array<int64>; nrows, head_size : int64) {
     let half = head_size / 2l
     let has_ff = use_ff && !empty(rope_freqs)
-    cos_tab |> resize(nrows * half)   // nolint:PERF026 — session scratch; same size every step, so this allocates once
-    sin_tab |> resize(nrows * half)   // nolint:PERF026 — see above
+    cos_tab |> resize(nrows * half)
+    sin_tab |> resize(nrows * half)
     unsafe {
         var cp = addr(cos_tab[0])
         var sp = addr(sin_tab[0])

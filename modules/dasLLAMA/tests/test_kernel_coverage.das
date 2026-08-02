@@ -3,16 +3,16 @@ options persistent_heap   // + explicit deletes: the models free before the proc
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
-require dasllama/dasllama   // nolint:STYLE029 — the public facade (engine + arch registrations + the metal overrides)
+require dasllama/dasllama   // nolint:STYLE029,LINT019 — the public facade (engine + arch registrations + the metal overrides); only the metal half uses more than dasllama_common
 require dasllama/dasllama_math   // set_wscale_f16 — the s16 axis
 require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor transform
-require ?das_metal dasllama/dasllama_metal_common  // nolint:STYLE030 — the coverage census rail
-require ?das_metal dasllama/dasllama_metal_decode  // nolint:STYLE030 — decode stats + shutdown rails
-require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — device probe
-require ?vulkan dasllama/dasllama_vulkan_common  // nolint:STYLE030 — the vulkan census rail (spec-only here)
+require ?das_metal dasllama/dasllama_metal_common  // the coverage census rail
+require ?das_metal dasllama/dasllama_metal_decode  // decode stats + shutdown rails
+require ?das_metal metal/das_metal_boost  // device probe
+require ?vulkan dasllama/dasllama_vulkan_common  // the vulkan census rail (spec-only here)
 require daslib/jobque_boost
-require daslib/fio  // nolint:STYLE030 — used only inside the Apple static_if half
-require math
+require daslib/fio  // the zoo paths
+require math  // nolint:STYLE030,LINT019 — used only inside the das_metal static_if half
 require strings
 require _model_tier
 
@@ -47,7 +47,7 @@ def private greedy_top(lg : array<float>; vocab : int64) : int64 {
     return best
 }
 
-[unused_argument(t)]   // off-Apple the gated body is empty
+[unused_argument(t, path, family, kdts, nbs)]   // off-Apple the gated body is empty
 def private cov_model(t : T?; path, family : string; kdts : array<KVDtype>; nbs : array<int>) {
     // one model's coverage sweep: per KV codec — GPU prefill (the ~120-id counting prompt
     // clears the npos gate), two greedy decode steps, then one batched step per requested B.

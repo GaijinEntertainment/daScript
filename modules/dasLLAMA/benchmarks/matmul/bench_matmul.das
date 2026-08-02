@@ -34,7 +34,7 @@ def check_same(b : B?; w, x : array<float>; n, d : int) {
 }
 
 [benchmark]
-def bench_matmul(b : B?) {
+def bench_matmul(b : B?) {   // nolint:STYLE038 — flat bench driver: one scoped cell per shape
     if (!jit_enabled()) {
         to_log(LOG_WARNING, "skipped: interpreted (dasLLAMA benchmarks are JIT-only)\n")
         return

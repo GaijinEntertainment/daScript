@@ -365,7 +365,7 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; is_
     return install_git(root, pkg_name, source, version, lf, visiting, [is_root = is_root, is_global = is_global, branch = branch])
 }
 
-def install_git(root, pkg_name, source, version : string; var lf : LockFile; var visiting : table<string; bool>; is_root : bool = true; is_global : bool = false; branch : string = "") { // nolint:STYLE037 — the install ladder: clone/resolve/checkout/move/lock/deps/build arms are one sequential flow
+def install_git(root, pkg_name, source, version : string; var lf : LockFile; var visiting : table<string; bool>; is_root : bool = true; is_global : bool = false; branch : string = "") { // nolint:STYLE037,STYLE038 — the install ladder: clone/resolve/checkout/move/lock/deps/build arms are one sequential flow
     let modules_dir = is_global ? "{get_das_root()}/modules" : "{root}/modules"
     let tmp_dir = "{modules_dir}/.daspkg_tmp/{pkg_name}"
     let target_dir = "{modules_dir}/{pkg_name}"
@@ -539,7 +539,7 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
     return 0
 }
 
-def cmd_install(root, spec : string; force : bool; is_global : bool = false; version_constraint : string = ""; branch : string = "") { // nolint:STYLE037 — flat source-kind dispatch (index name / url / local path / global) + its error arms
+def cmd_install(root, spec : string; force : bool; is_global : bool = false; version_constraint : string = ""; branch : string = "") { // nolint:STYLE037,STYLE038 — flat source-kind dispatch (index name / url / local path / global) + its error arms
     // parse spec: name[@version]
     var source = spec
     var version = ""
@@ -751,7 +751,7 @@ def cmd_remove(root, name : string; is_global : bool = false) {
     return 0
 }
 
-def cmd_update(root, name : string; is_global : bool = false) { // nolint:STYLE037 — flat per-entry update arms (root/dep/local/global) mirror the lock schema
+def cmd_update(root, name : string; is_global : bool = false) { // nolint:STYLE037,STYLE038 — flat per-entry update arms (root/dep/local/global) mirror the lock schema
     var lf : LockFile
     if (is_global) {
         if (!read_global_lock_file(lf)) {
@@ -1450,7 +1450,7 @@ def private read_release_deps(path : string; var deps : ReleaseDeps) : bool {
         to_log(LOG_ERROR, "release: cannot parse deps JSON: {error}\n")
         return false
     }
-    deps = from_JV(parsed, type<ReleaseDeps>)
+    deps = from_JV(parsed, type<ReleaseDeps>)   // nolint:PERF030 — out-param; every caller hands in a freshly declared ReleaseDeps
     return true
 }
 
@@ -2105,7 +2105,7 @@ def private get_daslang_path() : string {
     return get_platform_name() == "windows" ? replace(joined, "/", "\\") : joined
 }
 
-def cmd_release(root : string; out_dir : string; paranoid = false; quick = false) : int { // nolint:STYLE037 — phased orchestrator sharing bundle state end to end; the real split belongs to the daspkg cleanup pass
+def cmd_release(root : string; out_dir : string; paranoid = false; quick = false) : int { // nolint:STYLE037,STYLE038 — phased orchestrator sharing bundle state end to end; the real split belongs to the daspkg cleanup pass
     let release_t0 = ref_time_ticks()
     if (paranoid && quick) {
         to_log(LOG_ERROR, "release: --paranoid and --quick contradict — pick one\n")
@@ -2657,7 +2657,7 @@ def private ensure_external_wasm_archives(pkg_dir, wasm_lib_dir : string; var bu
 }
 
 // Build one app: cross-compile → discover modules → emcc-link → stage assets.
-def private release_one_wasm_app(root, out_dir, app_name, main_script : string; // nolint:STYLE037 — flat per-app wasm release steps + their error arms
+def private release_one_wasm_app(root, out_dir, app_name, main_script : string; // nolint:STYLE037,STYLE038 — flat per-app wasm release steps + their error arms
                                  wasm_lib_dir, runtime_archive, shell_path : string;
                                  include_globs, exclude_globs : array<string>) : int {
     if (!is_safe_pkg_name(app_name)) {

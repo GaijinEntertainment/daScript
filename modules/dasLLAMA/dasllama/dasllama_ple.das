@@ -287,7 +287,7 @@ def private gemma4_router_batch(t : Model; var rin : array<float>; src : array<f
 // gemma4 MoE prefill, grouped: batched twin of gemma4_moe_ffn (26B-A4B). Routes, buckets by expert,
 // runs one Q8 batch GEMM chain per touched expert, then the dense shared expert over all positions.
 // Bit-identical per row to the naive per-position path — g_moe_grouped_prefill is a pure perf lever.
-def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos : int64) { // nolint:STYLE037 — the grouped gemma4 MoE prefill is one bucketed pipeline; its stages share scratch and must stay together
+def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos : int64) { // nolint:STYLE037,STYLE038 — the grouped gemma4 MoE prefill is one bucketed pipeline; its stages share scratch and must stay together
     let c = t.config
     let dim = c.dim
     let hidden = c.hidden_dim
@@ -381,7 +381,7 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
         s.moe_offs2 |> clear(); s.moe_offs2 |> reserve(ne * 3l)
         // LPT order (biggest buckets first) front-loads expensive spans
         s.moe_ord |> clear()
-        s.moe_ord |> reserve(int(ne))   // capacity persists across layers — no per-layer alloc
+        s.moe_ord |> reserve(ne)   // capacity persists across layers — no per-layer alloc
         for (e in range64(ne)) {
             let b0 = e == 0l ? 0l : s.moe_cnt[e - 1l]
             let cnt = s.moe_cnt[e] - b0

@@ -1441,7 +1441,7 @@ def private handle_embeddings(var req : HttpRequest?; var resp : HttpResponse?) 
     }
     var inputs : array<string>
     if (iv.value is _array) {
-        inputs <- from_JV(iv, type<array<string>>)
+        inputs <- from_JV(iv, type<array<string>>)   // nolint:PERF030 — first write to the empty decl above
     } else {
         let single = iv ?? ""
         if (empty(single)) {
@@ -1578,7 +1578,7 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
 // memory; the session exists only once the scheduler admits the stream.
 // Render a user-led suffix of the transcript. System messages are always retained (they were
 // folded into `system`); `start` applies only to conversational messages in the original array.
-def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : array<string>;
+def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : array<string>;   // nolint:STYLE037,STYLE038 — one arm per message role, each accumulating into the same renderer state
                                max_new : int64; start : int; thinking : bool;
                                var prompt, stop_ids, close : array<int64>&;
                                var call_open, call_close : string&) : string {
@@ -1666,9 +1666,10 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
     var turn <- render_turn(cur_model(), chat)
     rendered |> push_from(turn)
     delete turn
-    prompt <- rendered
-    stop_ids <- chat.stop_ids
-    close <- render_close(cur_model(), chat)
+    // out-params: the sole caller hands them in empty and deletes them before every re-render
+    prompt <- rendered      // nolint:PERF030 — empty on entry
+    stop_ids <- chat.stop_ids   // nolint:PERF030 — empty on entry
+    close <- render_close(cur_model(), chat)   // nolint:PERF030 — empty on entry
     call_open = chat.tmpl.tool_call_open
     call_close = chat.tmpl.tool_call_close
     return ""
@@ -1688,7 +1689,7 @@ def private next_user_start(msgs_v : JsonValue?; start : int) : int {
     return -1
 }
 
-def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var writer : HttpResponseWriter?) {
+def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var writer : HttpResponseWriter?) {   // nolint:STYLE037,STYLE038 — flat request-field validation: one guard and one client-facing message per field
     if (reject_deferred_while_draining(srv, writer)) {
         return
     }
@@ -1887,7 +1888,7 @@ def private flush_tool_keepalives(srv : WebSocketServer) {
 // Route drained SchedEvents to their writers: streaming wires emit SSE chunks, buffered wires
 // accumulate pieces and respond once at finish. "evicted" releases the writer with no bytes —
 // the client is gone (reap_disconnected produced it). Finished wires unregister.
-def private flush_events(srv : WebSocketServer) {
+def private flush_events(srv : WebSocketServer) {   // nolint:STYLE037,STYLE038 — one arm per (event kind x wire flavor); the arms share the wire's UTF-8 hold and reply buffer
     for (e in g_events) {
         // interior pointer into g_wires — nothing inserts into the table between here and the erase
         var w = unsafe(g_wires?[e.stream])
@@ -2342,7 +2343,7 @@ def private handle_vad(var req : HttpRequest?; var resp : HttpResponse?) : http_
                 error_body("silero_vad.bin not found ({path}) — the VAD preview needs a source tree", "server_error"),
                 http_status.NOT_IMPLEMENTED)
         }
-        g_vad <- load_vad_model(path)
+        g_vad <- load_vad_model(path)   // nolint:PERF030 — one-shot lazy load; g_vad_loaded proves the target is still the empty default
         g_vad_loaded = true
     }
     var fname = ""
@@ -2548,7 +2549,7 @@ def private process_asr_job(
         if (has_session) {
             delete session
         }
-        session <- create_session(model, language)
+        session <- create_session(model, language)   // nolint:PERF030 — the previous session is released by the delete above
         session_language = language
         has_session = true
     }
@@ -2789,7 +2790,7 @@ def private stop_asr_worker_threads() {
 // ===== Server =====
 
 class OpenAiServer : HvWebServer {
-    def override onInit {
+    def override onInit {   // nolint:STYLE038 — the route table: one registration per endpoint
         allow_cors()
         GET("/v1/models") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_models(resp)
@@ -3041,7 +3042,7 @@ def update_server() : bool {
 }
 
 //! Release every lifecycle-owned object in dependency order. Safe after a partially failed init.
-def shutdown_server() {
+def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers stop before their channels, VRAM drops before the slots, the jobque dies last
     if (g_server_started && g_server != null) {
         g_server->stop()
     }

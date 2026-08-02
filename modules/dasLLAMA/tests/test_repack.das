@@ -129,8 +129,8 @@ def test_extractors(t : T?) {
 
 def private build_q8q8(n, d : int64; var w : array<int8>; var s : array<float>) {
     var rng = Rng(state = 0x51ab1001ul)
-    w |> resize(int(d * n))
-    s |> resize(int(d * (n / 32l)))
+    w |> resize(d * n)
+    s |> resize(d * (n / 32l))
     fill_sbytes(w, rng)
     for (c in s) {
         c = float(next_u32(rng) % 1000u) * 0.001
@@ -139,16 +139,16 @@ def private build_q8q8(n, d : int64; var w : array<int8>; var s : array<float>) 
 
 def private build_mx4(n, d : int64; var np : array<uint8>; var ep : array<uint8>) {
     var rng = Rng(state = 0x4d78f0f0ul)
-    np |> resize(int(d * (n / 2l)))
-    ep |> resize(int(d * (n / 32l)))
+    np |> resize(d * (n / 2l))
+    ep |> resize(d * (n / 32l))
     fill_bytes(np, rng)
     fill_bytes(ep, rng)
 }
 
 def private build_q51(n, d : int64; var q : array<uint8>; var s : array<uint8>) {
     var rng = Rng(state = 0x0051beeful)
-    q |> resize(int(d * (n / 32l) * 20l))
-    s |> resize(int(d * (n / 32l) * 4l))
+    q |> resize(d * (n / 32l) * 20l)
+    s |> resize(d * (n / 32l) * 4l)
     fill_bytes(q, rng)
     fill_bytes(s, rng)
 }
@@ -416,8 +416,8 @@ def private build_kq_disk(var kq : array<uint8>; var ks : array<uint8>; fmt : in
     let nsb = n / 256l
     let qsb = kq_qsb(int(fmt))
     let ssb = kq_ssb(int(fmt))
-    kq |> resize(int(d * nsb * qsb))
-    ks |> resize(int(d * nsb * ssb))
+    kq |> resize(d * nsb * qsb)
+    ks |> resize(d * nsb * ssb)
     fill_bytes(kq, rng)
     fill_bytes(ks, rng)
     // overwrite the f16 scale halfwords with plausible values (random bytes can encode NaN/Inf)
@@ -481,8 +481,8 @@ def private check_kq_fmt(t : T?; fmt : int64; n, d, mr : int64) {
     let ng = d / mr
     var got : array<float>
     var want : array<float>
-    got |> resize(int(n))
-    want |> resize(int(n))
+    got |> resize(n)
+    want |> resize(n)
     var grp_ok = true
     var tail_ok = true
     for (row in range64(d)) {
@@ -493,13 +493,13 @@ def private check_kq_fmt(t : T?; fmt : int64; n, d, mr : int64) {
                 dequant_kq_row_grp(fmt, addr(kq[0]) + g * mr * qrow, addr(ks[0]) + g * mr * srow,
                                    row % mr, mr, n, addr(got[0]))
             }
-            for (i in range(int(n))) {
+            for (i in range64(n)) {
                 grp_ok &&= got[i] == want[i]
             }
         } else {
             // tail rows stay disk-order in the repacked planes — the disk reader must still serve them
             dequant_disk_row(fmt, kq, ks, row, n, got)
-            for (i in range(int(n))) {
+            for (i in range64(n)) {
                 tail_ok &&= got[i] == want[i]
             }
         }
@@ -546,7 +546,7 @@ def private check_unpack(t : T?; fmt : int64; n, d, mr : int64) {
     let nsb = n / 256l
     let qrow = nsb * kq_qsb(int(fmt))
     var panel : array<uint8>
-    panel |> resize(int(nsb * 256l * mr))
+    panel |> resize(nsb * 256l * mr)
     var ok = true
     unsafe {
         for (g in range64(d / mr)) {
@@ -575,8 +575,8 @@ def private check_unpack(t : T?; fmt : int64; n, d, mr : int64) {
                                 }
                                 let ob = sbi * 256l * mr
                                 let gcol = ((blk * 4l + j) * mr) * 4l
-                                let lo_got = uint(panel[int(ob + gcol + r * 4l + b)])
-                                let hi_got = uint(panel[int(ob + 128l * mr + gcol + r * 4l + b)])
+                                let lo_got = uint(panel[ob + gcol + r * 4l + b])
+                                let hi_got = uint(panel[ob + 128l * mr + gcol + r * 4l + b])
                                 ok &&= lo_got == lo_want && hi_got == hi_want
                             }
                         }

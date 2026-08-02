@@ -1,5 +1,7 @@
 options gen2
 options indenting = 4
+options _cyclomatic_complexity = 0   // MSL emitter: exact-type is-ladders over the AST node classes — one arm per construct, and the census gate wants them all in one place
+options _function_length = 0         // same ladders, measured by line
 
 // MSL text emitter (Phase-4 subset: full scalar/vector arithmetic incl. the 16/8-bit lattice,
 // comparisons, logical, control flow, threadgroup memory + barriers + simdgroup intrinsics,

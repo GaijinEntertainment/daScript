@@ -22,7 +22,7 @@ options _function_length = 0   // same
 // GGUF and writing the image. Both numbers are reported per stage so a slow box is diagnosable
 // without a profiler.
 
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration
+require dasllama/dasllama_transformer   // the umbrella fires each arch [init] registration
 require dasllama/dasllama_math          // apply_box_profile_runtime + select_matmul_backend_for_load
 require dasllama/dasllama_image         // the .dlim rail itself
 require dasllama/dasllama_gpu_resident  // the vulkan flavor's bake arm + --trim

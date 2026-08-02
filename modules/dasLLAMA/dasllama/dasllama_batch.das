@@ -61,7 +61,7 @@ def private batch_decode_alloc(t : Model; var s : Session; nrows : int64) {
 // One layer's batched-decode attention: shared prefix (norm → QKV GEMM → qk/v-norm → per-row RoPE
 // via the positions table) → scatter-store each row's k/v into ITS session's cache → per-(row, head)
 // decode attention through the codec seam worker → shared suffix (wo GEMM → post-norm → residual).
-def private attention_batch_decode(t : Model; var ws : BatchWorkspace; sessions : array<Session?>; l, nrows : int64) { // nolint:STYLE037 — per-(row, head) attention over B sessions: cache-geometry arms are flat and share the hoisted row pointers
+def private attention_batch_decode(t : Model; var ws : BatchWorkspace; sessions : array<Session?>; l, nrows : int64) { // nolint:STYLE037,STYLE038 — per-(row, head) attention over B sessions: cache-geometry arms are flat and share the hoisted row pointers
     let c = t.config
     let kv_dim = layer_kv_dim(c, l)
     let head_size = layer_head_size(c, l)
@@ -184,7 +184,7 @@ def private attention_batch_decode(t : Model; var ws : BatchWorkspace; sessions 
 //! One synchronous batched decode step: row i evals tokens[i] at sessions[i]'s position; each
 //! session advances by one. Sessions must be distinct, same-geometry (one model, equal cache
 //! sizes, uniform KV dtype); B == 1, q4_0, non-std attention, or classic rope fall back to forward().
-def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; tokens : array<int64>) {   // nolint:LINT014 — rows mutate THROUGH the pointers; a const array constifies the pointees / nolint:STYLE037 — one decode step: workspace grow, rope rows, override-or-loop, then the final classifier scatter; the phases share ws and must stay in order
+def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; tokens : array<int64>) {   // nolint:STYLE037,STYLE038 — one decode step: workspace grow, rope rows, override-or-loop, then the final classifier scatter; the phases share ws and must stay in order
     let c = t.config
     let nrows = long_length(sessions)
     if (nrows <= 0l) {
@@ -315,7 +315,7 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
         // per-row softcap + scatter into each session's logits + suppress pins, ONE row-parallel
         // dispatch — the serial tail here was most of a ~6ms all-lane hole every step at B=8
         // (B x vocab ≈ 5MB of copy). Rows are disjoint (row i writes only sessions[i].logits).
-        ws.lrow |> resize(int(nrows))
+        ws.lrow |> resize(nrows)
         unsafe {
             for (i in range64(nrows)) {
                 ws.lrow[i] = addr(sessions[i].logits[0])

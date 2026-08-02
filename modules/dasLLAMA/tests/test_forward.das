@@ -3,7 +3,7 @@ options persistent_heap   // + explicit deletes below: each test frees its model
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; load_checkpoint resolves "llama" from the registry
+require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; load_checkpoint resolves "llama" from the registry
 require dasllama/dasllama_tokenizer
 require daslib/jobque_boost
 require daslib/fio
@@ -26,8 +26,8 @@ def same(a, b : array<int64>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (va, vb in a, b) {
+        if (va != vb) {
             return false
         }
     }

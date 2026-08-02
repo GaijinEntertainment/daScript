@@ -3,7 +3,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 options persistent_heap   // + explicit deletes below: each test frees its model/session before the next loads, so multi-GB weights never accumulate in the process
 
 require dastest/testing_boost public
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
+require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -30,8 +30,8 @@ def feq(a, b : array<float>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (x, y in a, b) {
+        if (x != y) {
             return false
         }
     }
@@ -43,8 +43,8 @@ def feq(a, b : array<uint8>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (x, y in a, b) {
+        if (x != y) {
             return false
         }
     }

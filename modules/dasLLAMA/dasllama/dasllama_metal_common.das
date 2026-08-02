@@ -449,7 +449,7 @@ def public metal_decode_mirror_stats() : tuple<mirrors : int64; bytes : uint64> 
 //! mispredict retires TWICE at the same pos (the wrong-token spec entry, then the slow rerun).
 def public metal_decode_trace_arm(cap : int64) {
     g_step_trace |> clear()
-    g_step_trace |> reserve(int(cap))
+    g_step_trace |> reserve(cap)
     g_step_trace_cap = cap
     g_step_trace_t0 = ref_time_ticks()
 }
@@ -822,7 +822,7 @@ def private arena_rebuild(want : uint64; ceil_bytes : uint64) {
     g_arena_free |> clear()
     g_arena_free |> push((off = 0ul, size = g_arena_bytes))
     g_arena_epoch++
-    to_log(LOG_INFO, "dasLLAMA metal decode: KV mirror arena grown to {int(g_arena_bytes / (1024ul * 1024ul))}MB (ceiling {int(ceil_bytes / (1024ul * 1024ul))}MB)\n")   // nolint:PERF028,PERF026 — arena growth is rare and the upload it announces dwarfs the log
+    to_log(LOG_INFO, "dasLLAMA metal decode: KV mirror arena grown to {int(g_arena_bytes / (1024ul * 1024ul))}MB (ceiling {int(ceil_bytes / (1024ul * 1024ul))}MB)\n")
 }
 
 // the arena bytes session s will occupy after mirror_prepare(t, s, pos): its existing slice
@@ -883,7 +883,7 @@ def mirror_defrag(total : uint64) : bool {
 // Ensure s.uid's mirror exists, is big enough, and holds logical rows [0, pos) — the watermark
 // contract (module header). Returns arena byte offsets; caller writes row `pos` GPU-side and
 // advances the watermark only after the step + writeback complete. ok=false ⇒ decline to CPU.
-def mirror_prepare(t : Model; var s : Session; pos : int64) : tuple<ok : bool; koff : uint64; voff : uint64; cap : int64> {
+def mirror_prepare(t : Model; var s : Session; pos : int64) : tuple<ok : bool; koff : uint64; voff : uint64; cap : int64> {   // nolint:STYLE038 — evict/rebuild/grow/upload is one sequential decision on shared locals
     let c = t.config
     let needed = pos + 1l
     if (key_exists(g_mirrors, s.uid)) {
@@ -1469,7 +1469,7 @@ def private gr_schedule(var sched : KSched) : bool {
     sched.nodes = n
     for (j in range(n)) {
         if (g_gr_nodes[j].nrange == 0) {
-            to_log(LOG_WARNING, "dasLLAMA metal: node #{j}/{n} is undeclared (nbind {g_gr_nodes[j].nbind}) — schedule refused\n")   // nolint:PERF028,PERF026 — inside gr_schedule, which runs once per shape class
+            to_log(LOG_WARNING, "dasLLAMA metal: node #{j}/{n} is undeclared (nbind {g_gr_nodes[j].nbind}) — schedule refused\n")
             return false
         }
     }
@@ -1531,9 +1531,9 @@ def graph_flush_sched(enc : MetalComputeEncoder?) {
     if (!key_exists(g_gr_scheds, h)) {
         var s : KSched
         if (!gr_schedule(s)) {
-            to_log(LOG_WARNING, "dasLLAMA metal decode: step graph holds undeclared dispatches — schedule stays capture-order\n")   // nolint:PERF028 — once per shape class, inside the schedule-compile miss
+            to_log(LOG_WARNING, "dasLLAMA metal decode: step graph holds undeclared dispatches — schedule stays capture-order\n")   // nolint:PERF028,LINT019 — once per shape class, inside the schedule-compile miss
         }
-        to_log(LOG_INFO, "dasLLAMA metal decode: schedule compiled — {s.nodes} nodes, depth {s.depth} (class {h})\n")   // nolint:PERF028,PERF026 — once per shape class, inside the schedule-compile miss
+        to_log(LOG_INFO, "dasLLAMA metal decode: schedule compiled — {s.nodes} nodes, depth {s.depth} (class {h})\n")   // nolint:PERF028,PERF026,LINT019 — once per shape class, inside the schedule-compile miss
         g_gr_scheds[h] <- s
     }
     graph_flush(enc, g_gr_scheds[h].order)
@@ -1571,7 +1571,7 @@ def hz_coverage_check(ndisp, ngated : int64) {
     }
     if (!g_hz_cover_warned) {
         g_hz_cover_warned = true
-        to_log(LOG_ERROR, "dasLLAMA metal decode: {ndisp - ngated} dispatch(es) bypassed hz_gate on a gated encoder — ungated dispatches are unbarriered\n")   // nolint:PERF028,PERF026 — correctness tripwire; firing at all means the encoder is already wrong
+        to_log(LOG_ERROR, "dasLLAMA metal decode: {ndisp - ngated} dispatch(es) bypassed hz_gate on a gated encoder — ungated dispatches are unbarriered\n")   // nolint:PERF028,PERF026,LINT019 — correctness tripwire; firing at all means the encoder is already wrong
     }
 }
 
@@ -1597,7 +1597,7 @@ def public set_metal_decode_hazard(paranoid, strict : bool) {
 // (caller-owned) — always cleared, never deleted.
 
 var g_lp_active = false
-var g_lp_cbs : array<MetalCommandBuffer?>
+var @scratch g_lp_cbs : array<MetalCommandBuffer?>   // per-step cb stash; released in finish, clear()-recycled
 var @scratch g_lp_pooled : array<tuple<buf : MetalBuffer?; size : uint64>>   // pending-step stash; clear()-recycled per finish
 var @scratch g_lp_upooled : array<tuple<buf : MetalBuffer?; size : uint64>>
 var g_lp_blog : MetalBuffer?
@@ -1623,7 +1623,7 @@ var g_lp_prev_gpu_end = 0.0lf   // last finished step's gpu_end — the handoff 
 
 // wait + read back + release the pending step; x_b writes back only on the sync CPU-classifier
 // path (pipe mode skips it — stale). A dispatch error sets g_lp_err (sync reruns on CPU; a pipelined step is lost).
-def finish_pending_step {
+def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error/stats/release/readback share the step's locals
     if (!g_lp_active) {
         return
     }
@@ -1647,7 +1647,7 @@ def finish_pending_step {
         let gap_ms = (gs0 - g_lp_prev_gpu_end) * 1000.0lf
         let env_ms = (ge_last - gs0) * 1000.0lf
         if (g_batch_steps < 8l || gap_ms > 1.0lf) {
-            to_log(LOG_INFO, "metal pipe step {g_batch_steps}: gap={gap_ms}ms env={env_ms}ms\n")   // nolint:PERF028,PERF026 — behind the g_pipe_debug gate above
+            to_log(LOG_INFO, "metal pipe step {g_batch_steps}: gap={gap_ms}ms env={env_ms}ms\n")   // nolint:PERF028,PERF026,LINT019 — behind the g_pipe_debug gate above
         }
     }
     g_lp_prev_gpu_end = ge_last
@@ -1690,7 +1690,7 @@ def finish_pending_step {
         g_batch_steps++
         g_batch_rows += g_lp_nrows
     } else {
-        to_log(LOG_ERROR, "dasLLAMA metal batch decode: dispatch failed ({err}) — pipelined step lost\n")   // nolint:PERF028,PERF026 — error path; the re-upload it triggers dwarfs the log
+        to_log(LOG_ERROR, "dasLLAMA metal batch decode: dispatch failed ({err}) — pipelined step lost\n")   // nolint:PERF028,PERF026,LINT019 — error path; the re-upload it triggers dwarfs the log
         // the optimistic commit-time watermark now overstates the mirror (its rows are garbage at
         // and above this step's positions) — force a full re-upload from the CPU truth
         for (i in range64(g_lp_nrows)) {

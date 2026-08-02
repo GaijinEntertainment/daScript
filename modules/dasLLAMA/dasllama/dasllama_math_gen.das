@@ -620,7 +620,7 @@ def private q51q8_groupn_gen(var yp : float?; wq : uint8 const?; ws : uint8 cons
     let ng = d / mr
     var myp = yp
     var bs : array<int>
-    bs |> resize(int(nregions * nb))
+    bs |> resize(nregions * nb)
     unsafe {
         var bsp = addr(bs[0])
         for (r in range64(nregions)) {
@@ -747,7 +747,7 @@ def q8q8_token_grp_generic(var yp : float?; wg : int8 const?; sg : float const?;
     let nb = n / 32l
     let wb0 = int(wbias)
     var f : float[32]   // scratch cap = the grid's max stampable mr (busd512 mr32 row)
-    for (r in range(int(mr))) {
+    for (r in range64(mr)) {
         f[r] = 0.0
     }
     unsafe {
@@ -862,7 +862,7 @@ def private q8q8_batch_kernel_neon_laneq_gen(var yp : float?; wp : int8 const?; 
     let TB = effective_token_block(g_q8_token_block, n)
     var bs : array<int>
     if (wbias != 0l) {
-        bs |> resize(int(ntok * nb))
+        bs |> resize(ntok * nb)
         unsafe {
             var bsp = addr(bs[0])
             for (t in range64(ntok)) {
@@ -978,12 +978,12 @@ def private q8q8_group3_gen(var y0p : float?; var y1p : float?; var y2p : float?
     let ng0 = d0 / mr
     let ng1 = d1 / mr
     let ng2 = d2 / mr
-    let ngtot = ng0 + ng1 + ng2
+    let ngtot = int(ng0 + ng1 + ng2)
     var w0 = y0p
     var w1 = y1p
     var w2 = y2p
     // oversplit only under team dispatch — same trade as the hand laneq group3
-    maybe_parallel_for(0, int(ngtot), matmul_chunks_gemv(int(ngtot * mr), get_jobque_team_mode() ? get_q8_batch_chunks_per_job() : 1, n * (d0 + d1 + d2))) $(rb, re) {
+    maybe_parallel_for(0, ngtot, matmul_chunks_gemv(ngtot * int(mr), get_jobque_team_mode() ? get_q8_batch_chunks_per_job() : 1, n * (d0 + d1 + d2))) $(rb, re) {
         unsafe {
             let b0 = int64(rb)
             let e0 = min(int64(re), ng0)
@@ -1275,7 +1275,7 @@ def private kq_batch_cell_gen(fmt : int; var myp : float?; kqp : uint8 const?; k
     let packed = fmt == 4 || fmt == 40   // pure-nibble planes: the tile reads them directly
     var scratch : array<uint8>
     if (!packed) {
-        scratch |> resize(int(mr * nsb * 256l))
+        scratch |> resize(mr * nsb * 256l)
     }
     unsafe {
         var scp = !packed ? addr(scratch[0]) : reinterpret<uint8?>(null)
@@ -1519,7 +1519,7 @@ def private q8q8_batch_kernel_s16_gen(var yp : float?; wp : int8 const?; sp : ui
     let TB = effective_token_block(g_q8_token_block, n)
     var bs : array<int>
     if (wbias != 0l) {
-        bs |> resize(int(ntok * nb))
+        bs |> resize(ntok * nb)
         unsafe {
             var bsp = addr(bs[0])
             for (t in range64(ntok)) {
@@ -1626,11 +1626,11 @@ def private q8q8_group3_s16_gen(var y0p : float?; var y1p : float?; var y2p : fl
     let ng0 = d0 / mr
     let ng1 = d1 / mr
     let ng2 = d2 / mr
-    let ngtot = ng0 + ng1 + ng2
+    let ngtot = int(ng0 + ng1 + ng2)
     var w0 = y0p
     var w1 = y1p
     var w2 = y2p
-    maybe_parallel_for(0, int(ngtot), matmul_chunks_gemv(int(ngtot * mr), get_jobque_team_mode() ? get_q8_batch_chunks_per_job() : 1, n * (d0 + d1 + d2))) $(rb, re) {
+    maybe_parallel_for(0, ngtot, matmul_chunks_gemv(ngtot * int(mr), get_jobque_team_mode() ? get_q8_batch_chunks_per_job() : 1, n * (d0 + d1 + d2))) $(rb, re) {
         unsafe {
             let b0 = int64(rb)
             let e0 = min(int64(re), ng0)

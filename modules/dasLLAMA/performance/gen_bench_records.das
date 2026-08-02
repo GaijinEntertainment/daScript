@@ -770,11 +770,11 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
         // the onnx/nemo weights are venv-managed (the variant/HF handle in `versions` names
         // them); only the clips are local files here
         var clips := spec.buckets
-        var lib : array<string>
+        var lib : array<string>   // the aggregate leg reads it again after the per-clip rows
         if (!empty(spec.libri_short) && ref.tool == "onnx") {
             // the dictation aggregate pairs against onnx only: one amortized process covers all
             // 25 clips in ~30 s, where a per-clip cli process would cost ~9 min per sweep
-            lib <- libri_wavs()
+            lib <- libri_wavs()   // nolint:PERF030 — first write to the empty decl above
             if (empty(lib)) {
                 to_log(LOG_WARNING, "gen_bench_records: {spec.display} ref onnx — librispeech set absent/partial, leg skipped\n")
             } else {

@@ -3,7 +3,7 @@ options _comment_hygiene = true
 
 module dasllama_gguf shared public
 
-require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs
+require daslib/array_boost
 require strings
 require math                        // sqrt/abs/clamp — the Q5_K encoder's per-sub-block fit
 require daslib/fio                  // shard-path expansion + mapping (split GGUF)
@@ -301,23 +301,23 @@ def gguf_map_shards(paths : array<string>; idx : int; var bases : array<void?>; 
     }
 }
 
+def private parse_gguf_shard(base : void?; size : int64) : GGUFMeta {
+    unsafe {
+        return <- parse_gguf_meta(temp_array(reinterpret<uint8?>(base), size, type<uint8>))
+    }
+}
+
 //! Parse a mapped shard set into one unified meta: shard 0 carries the model KVs (config, vocab,
 //! chat template — llama.cpp split convention), tensor directories merge across all shards with
 //! each tensor stamped with its shard. Tensor reads then resolve through the shard_* arrays.
 def parse_gguf_meta_shards(bases : array<void?>; sizes : array<int64>) : GGUFMeta {
-    var m : GGUFMeta
-    unsafe {
-        m <- parse_gguf_meta(temp_array(reinterpret<uint8?>(bases[0]), sizes[0], type<uint8>))
-    }
+    var m <- parse_gguf_shard(bases[0], sizes[0])
     m.shard_base := bases
     m.shard_size := sizes
     m.shard_data_off |> reserve(length(bases))
     m.shard_data_off |> push(m.data_offset)
     for (k in range(1, length(bases))) {
-        var mk : GGUFMeta
-        unsafe {
-            mk <- parse_gguf_meta(temp_array(reinterpret<uint8?>(bases[k]), sizes[k], type<uint8>))
-        }
+        var mk <- parse_gguf_shard(bases[k], sizes[k])
         m.shard_data_off |> push(mk.data_offset)
         m.tensors |> reserve(length(m.tensors) + length(mk.tensors))
         for (i in range(length(mk.tensors))) {
@@ -712,7 +712,7 @@ def gguf_transcode_q51(m : GGUFMeta; srcbytes : array<uint8> | #; name : string;
 //! Decode tensor `name` (F32 or F16 on disk) into dst[dst_off ..] as fp32. Panics if the
 //! tensor is missing, has a different element count than expected, or uses a type we don't
 //! yet read (quantized types are wired in a later step).
-def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var dst : array<float>; dst_off, expect_n : int64; src_off : int64 = 0l) {
+def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var dst : array<float>; dst_off, expect_n : int64; src_off : int64 = 0l) {   // nolint:STYLE038 — one arm per on-disk ggml type; each arm is a self-contained decode kernel
     let ti = gguf_find_tensor(m, name)
     if (ti < 0) {
         panic("gguf: tensor '{name}' not found")
@@ -726,7 +726,7 @@ def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : strin
     }
     let gtype = m.tensors[ti].ggml_type
     guard_dst(name, "f32 dst", dst_off, expect_n, long_length(dst))
-    with_tensor_view(m, srcbytes, ti) $(bytes, base) {
+    with_tensor_view(m, srcbytes, ti) $(bytes, base) {   // nolint:STYLE037 — the ggml-type ladder; the arms share only the borrowed view
     if (gtype == GGML_TYPE_F32) {
         unsafe {   // raw copy, threaded in u64 words (+ one odd-float tail)
             let sp = addr<uint64 const?>(bytes[base + src_off * 4l])

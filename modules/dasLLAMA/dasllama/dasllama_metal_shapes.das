@@ -223,7 +223,7 @@ def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
 // The MoE serve gate — covered graph shapes: plain routed FFN (qwen3moe, silu, no biases)
 // + optional sigmoid-gated shared expert (qwen35moe), gemma4's dense-shared dual branch, and
 // gpt-oss's mx4 experts (softmax_weight, biases, disk-order). No dense-lead / selection bias.
-def moe_metal_ok(t : Model) : bool {
+def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape refusal ladder; every arm is one reason
     let c = t.config
     if (!c.moe || c.n_layer_dense_lead > 0l || c.moe_exp_probs ||
             (c.expert_weights_scale != 0.0 && c.expert_weights_scale != 1.0)) {

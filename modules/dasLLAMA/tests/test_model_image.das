@@ -754,7 +754,7 @@ def private read_wav_pcm16_mono(path : string) : array<float> {
             let sz = int64(rd_u32(bytes, o + 4l))
             if (id == 0x61746164u) {
                 let cnt = min(sz, n - o - 8l) / 2l
-                out |> resize(int(cnt))
+                out |> resize(cnt)
                 for (i in range64(cnt)) {
                     var v = int(rd_u16(bytes, o + 8l + i * 2l))
                     if (v >= 32768) {
@@ -774,7 +774,7 @@ def private read_wav_pcm16_mono(path : string) : array<float> {
 def private whisper_transcribe_text(path : string; samples : array<float>; cached : bool = true) : tuple<text : string; mapped : bool> {
     var inscope w = WhisperModel()
     if (cached) {
-        w <- load_whisper_model(path)
+        w <- load_whisper_model(path)   // nolint:PERF030 — fresh default-constructed target, single move
     } else {
         // the control: a staged read minted straight into memory — no shared bytes, no shared file
         var inscope stg <- stage_whisper_model(path)
@@ -853,11 +853,11 @@ def test_whisper_image_roundtrip(t : T?) {
 def private parakeet_transcribe_text(path : string; samples : array<float>; cached : bool = true) : tuple<text : string; mapped : bool> {
     var inscope m = AsrModel()
     if (cached) {
-        m <- load_asr_model(path)
+        m <- load_asr_model(path)   // nolint:PERF030 — fresh default-constructed target, single move
     } else {
         // the control: a staged read minted straight into memory, so it shares no bytes and no
         // file with the canonical image the other two arms load
-        m = AsrModel(kind = AsrKind.parakeet)
+        m.kind = AsrKind.parakeet
         var inscope stg <- stage_parakeet_model(path, true)
         mint_parakeet_model(stg, m.pk, true)
     }

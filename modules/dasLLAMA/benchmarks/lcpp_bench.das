@@ -4,7 +4,7 @@ options _jit_fast_math = true   // ggml-parity FP laxity — matches how llama.c
 options _cyclomatic_complexity = 0   // bench cell main = the measurement protocol ladder
 options _function_length = 0   // same
 
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
+require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + apply_box_profile_runtime (engine-level, not re-exported)
 require dasllama/dasllama_image   // load_model_cached — the .dlim rail, without the full facade's compile weight
 require dasllama/dasllama_tokenizer   // the tg-real row needs REAL tokens (see Lever.real)
@@ -12,7 +12,7 @@ require dasllama/dasllama_asr   // --asr: load_asr_model/create_session/transcri
 require audio   // --asr: the miniaudio decoder behind load_audio_16k_mono
 require dasllama/dasllama_audio   // --asr: AUDIO_SAMPLE_RATE, the 16 kHz mono contract
 require daslib/module_path            // get_this_module_dir — the default prompt corpus beside this bench
-require ?das_accelerate dasllama/dasllama_math_accelerate   // nolint:STYLE030 — the --accel leg; Apple-only C++ module
+require ?das_accelerate dasllama/dasllama_math_accelerate   // the --accel leg; Apple-only C++ module
 require ../performance/profile_common.das   // profile_threads + affinity_on + bench records — the standing per-box methodology
 require llvm/daslib/llvm_tune   // tune_app_script — the exe-vs-script discriminator behind --for-debug-purposes
 require daslib/jobque_boost

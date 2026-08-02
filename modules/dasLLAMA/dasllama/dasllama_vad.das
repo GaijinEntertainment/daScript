@@ -175,7 +175,7 @@ def load_vad_model(path : string) : VadModel {
 
 def private sv_ensure(var a : array<float>; n : int64) {
     if (long_length(a) != n) {
-        a |> resize(int(n))
+        a |> resize(n)
     }
 }
 
@@ -423,7 +423,7 @@ def vad_iter_reset(var it : VadIter; opts : VadOpts) {
     vad_reset(it.st)
     it.opts = opts
     it.pending |> clear()
-    it.chunk |> resize(int(SV_CHUNK))
+    it.chunk |> resize(SV_CHUNK)
     it.cur = 0l
     it.triggered = false
     it.temp_end = 0l

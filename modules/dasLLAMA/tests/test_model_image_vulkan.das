@@ -3,15 +3,13 @@ options persistent_heap
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
-// STYLE030 nolints: the whole test body is static_if'd on builtin_module_exists(vulkan), so a
-// no-vulkan build compiles it away and every body-only require reads as unused
-require dasllama/dasllama   // nolint:STYLE029,STYLE030 — umbrella fires each arch [init] registration
-require dasllama/dasllama_image   // nolint:STYLE030
-require dasllama/dasllama_config   // nolint:STYLE030
+require dasllama/dasllama   // umbrella fires each arch [init] registration
+require dasllama/dasllama_image
+require dasllama/dasllama_config
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_resident   // vulkan_bake_* — the offline flavor bake under test
 require daslib/jobque_boost
-require daslib/fio   // nolint:STYLE030
+require daslib/fio
 require _model_tier
 
 // The OFFLINE vulkan bake (plan-as-data): the dry tier runs the load walk's accept/refuse

@@ -365,15 +365,15 @@ struct ParakeetState {
 // on the multi-MB encoder scratch)
 def private pk_ensure(@scratch var a : array<float>; n : int64) {
     if (long_length(a) < n) {
-        a |> reserve(int(n))
-        a |> resize(int(n))
+        a |> reserve(n)
+        a |> resize(n)
     }
 }
 
 def private pk_ensure(@scratch var a : array<int8>; n : int64) {
     if (long_length(a) < n) {
-        a |> reserve(int(n))
-        a |> resize(int(n))
+        a |> reserve(n)
+        a |> resize(n)
     }
 }
 
@@ -400,8 +400,8 @@ def private pk_mm_rq(m : ParakeetModel; var y : array<float>; woff : int64; x : 
 def private pk_requant(x : array<float>; n, npos : int64; @scratch var xq : array<int8>; @scratch var xs : array<float>) {
     let need = npos * n
     if (long_length(xq) < need) {
-        xq |> resize(int(need))
-        xs |> resize(int(need / 32l))
+        xq |> resize(need)
+        xs |> resize(need / 32l)
     }
     asr_requant_rows_q8(x, n, npos, xq, xs)
 }
@@ -410,7 +410,7 @@ def private pk_requant(x : array<float>; n, npos : int64; @scratch var xq : arra
 // (conformer depthwise); the f4 kernels want tap-major [ntap][ch]
 def private pk_conv_tap_major(var blob : array<float>; off, ch, ntap : int64) {
     var tmp : array<float>
-    tmp |> resize(int(ch * ntap))
+    tmp |> resize(ch * ntap)
     for (c in range64(ch)) {
         for (tap in range64(ntap)) {
             tmp[tap * ch + c] = blob[off + c * ntap + tap]
@@ -614,7 +614,7 @@ def stage_parakeet_model(path : string; q8 : bool = false) : ParakeetStaging {
         if (fb_mel != st.e.n_mel || fb_n != st.e.n_fft / 2l + 1l) {
             panic("dasLLAMA parakeet: filterbank is {fb_mel}x{fb_n}, want {st.e.n_mel}x{st.e.n_fft / 2l + 1l}")
         }
-        st.filters |> resize(int(fb_mel * fb_n))
+        st.filters |> resize(fb_mel * fb_n)
         for (i in range64(fb_mel * fb_n)) {
             st.filters[i] = rd_f32(bytes, o + i * 4l)
         }
@@ -622,14 +622,14 @@ def stage_parakeet_model(path : string; q8 : bool = false) : ParakeetStaging {
 
         // STFT window
         let n_window = int64(rd_i32(bytes, o)); o += 4l
-        st.window |> resize(int(n_window))
+        st.window |> resize(n_window)
         for (i in range64(n_window)) {
             st.window[i] = rd_f32(bytes, o + i * 4l)
         }
         o += n_window * 4l
 
         // TDT durations
-        st.durations |> resize(int(st.e.n_durations))
+        st.durations |> resize(st.e.n_durations)
         for (i in range64(st.e.n_durations)) {
             st.durations[i] = int(rd_u32(bytes, o + i * 4l))
         }
@@ -637,7 +637,7 @@ def stage_parakeet_model(path : string; q8 : bool = false) : ParakeetStaging {
 
         // vocab (SPM pieces; blank = id n_vocab lives outside the table)
         let nv = int64(rd_i32(bytes, o)); o += 4l
-        st.e.vocab |> resize(int(nv))
+        st.e.vocab |> resize(nv)
         for (i in range64(nv)) {
             let len = int64(rd_u32(bytes, o)); o += 4l
             st.e.vocab[i] = pk_bytes_str(bytes, o, len)
@@ -1267,8 +1267,8 @@ def parakeet_encode(m : ParakeetModel; var st : ParakeetState) : int64 {
                 // content scores (Q+u)·Kᵀ + rel scores (Q+v)·pos_hᵀ + softmax + P·V_h, threaded in
                 // 4-ROW BLOCKS: gemm_f32's 4×16 tile is row-position-dependent, so 4-aligned chunk
                 // starts keep FMA order bit-exact vs the whole-matrix call at any lane count.
-                let nblk4 = (tt + 3l) / 4l
-                maybe_parallel_for(0, int(nblk4), lanes_for_work(tt * dh * (2l * tt + ww), 0)) $(bb, be) {
+                let nblk4 = int((tt + 3l) / 4l)
+                maybe_parallel_for(0, nblk4, lanes_for_work(tt * dh * (2l * tt + ww), 0)) $(bb, be) {
                     unsafe {
                         let r0 = int64(bb) * 4l
                         let r1 = min(int64(be) * 4l, tt)
@@ -1535,8 +1535,8 @@ def private pk_scan(tag : string; x : array<float>; n : int64) {
     }
     var nan = 0
     var inf = 0
-    var first = -1
-    for (i in range(int(n))) {
+    var first = -1l
+    for (i in range64(n)) {
         let bits = unsafe(reinterpret<uint>(x[i]))
         if ((bits & 0x7F800000u) == 0x7F800000u) {
             if ((bits & 0x007FFFFFu) != 0u) {
@@ -1544,7 +1544,7 @@ def private pk_scan(tag : string; x : array<float>; n : int64) {
             } else {
                 inf++
             }
-            if (first < 0) {
+            if (first < 0l) {
                 first = i
             }
         }
@@ -1567,8 +1567,8 @@ def set_parakeet_trace(on : bool) {
 [cold_path]
 def private pk_trace_step(m : ParakeetModel; st : ParakeetState; t : int64; n_tok_logits, best, bdur : int; mx : float) {
     print("  t={t} tok={best} durp=[")
-    for (i in range(int(m.n_durations))) {
-        print("{exp(st.logits[n_tok_logits + i] - mx)} ")
+    for (i in range64(m.n_durations)) {
+        print("{exp(st.logits[int64(n_tok_logits) + i] - mx)} ")
     }
     print("] -> {bdur}\n")
 }
@@ -1583,6 +1583,7 @@ def parakeet_tdt_decode(m : ParakeetModel; var st : ParakeetState; n_frames : in
     let pd = m.n_pred_dim
     let n_logits = m.n_vocab + 1l + m.n_durations
     let n_tok_logits = int(m.n_vocab + 1l)
+    let n_dur = int(m.n_durations)
 
     // precompute the joint's encoder projection for every frame [T × pred_dim]
     pk_ensure(st.encp, n_frames * pd)
@@ -1629,7 +1630,7 @@ def parakeet_tdt_decode(m : ParakeetModel; var st : ParakeetState; n_frames : in
         // an analytic logit argmax would diverge from the oracle here.
         var bdur = 0
         var bdp = exp(st.logits[n_tok_logits] - mx)
-        for (i in range(1, int(m.n_durations))) {
+        for (i in range(1, n_dur)) {
             let dp = exp(st.logits[n_tok_logits + i] - mx)
             if (dp > bdp) {
                 bdp = dp

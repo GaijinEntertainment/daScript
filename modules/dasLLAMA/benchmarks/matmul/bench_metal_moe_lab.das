@@ -1,16 +1,18 @@
 options gen2
 options persistent_heap
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
+options _function_length = 0        // one MSL kernel body + its hand-bound dispatch per lab — barrier/register coupled, no seam
+options _cyclomatic_complexity = 0  // same — the lab runners are flat knockout ladders
 
-require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — GPU driver half, Apple builds only
+require ?das_metal metal/das_metal_boost  // GPU driver half, Apple builds only
 require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
 require metal/msl_shader
 require dasllama/dasllama_metal_prefill   // the production MoE mul_mm MSL (zero copy drift)
 require dasllama/dasllama_metal_kernels   // the production MoE GEMV + geglu MSL (zero copy drift)
 require llvm/daslib/f16_cvt
-require daslib/fio   // nolint:STYLE030 — used only inside the Apple static_if half
-require math   // nolint:STYLE030 — used only inside the Apple static_if half
-require daslib/math_bits   // nolint:STYLE030 — uint_bits_to_float in the lcppe kernel
+require daslib/fio   // used only inside the Apple static_if half
+require math   // used only inside the Apple static_if half
+require daslib/math_bits   // uint_bits_to_float in the lcppe kernel
 require strings
 
 // The routed-expert GEMV lab — the 26B tg dig's barrier/dispatch attribution rig. The knockout

@@ -10,7 +10,7 @@ options gen2
 // frames = mel rows: jfk (11 s) ~ 1101, gb1 (3.3 min) ~ 19821. The q8 1x1 / pre GEMMs
 // mirror the shipped q8 load; the c0 GEMM stays fp32 like the engine (conv taps are fp32).
 
-require dasllama/dasllama_common // nolint:STYLE030 — [init]-only: registers the q8 kernel backends (arm64-gen/sdot + portable)
+require dasllama/dasllama_common // [init]-only: registers the q8 kernel backends (arm64-gen/sdot + portable)
 require dasllama/dasllama_math
 require dasllama/dasllama_audio
 require dasllama/dasllama_convert
@@ -444,7 +444,7 @@ def bias_relu_f4(var y : array<float>; b : array<float>; d, npos : int64) {
     }
 }
 
-def bench_tail(frames : int64; rounds : int) {
+def bench_tail(frames : int64; rounds : int) {   // nolint:STYLE038 — flat bench driver: setup, then one timed variant per stage
     let t1 = (frames - 1l) / 2l + 1l
     let t2 = (t1 - 1l) / 2l + 1l
     let tt = (t2 - 1l) / 2l + 1l
@@ -649,8 +649,8 @@ def bench_meldot(rounds : int) {
 // ===== bench plumbing =====
 
 def sized(var a : array<float>; n : int64) {
-    a |> reserve(int(n))
-    a |> resize(int(n))
+    a |> reserve(n)
+    a |> resize(n)
 }
 
 def copy_from(var dst : array<float>; src : array<float>) {
@@ -675,8 +675,8 @@ def lap(var best : array<double>; i : int; t0 : int64) : int64 {
 }
 
 def quantize_repacked(w : array<float>; n, d : int64; var q : array<int8>; var s : array<float>) {
-    q |> resize(int(n * d))
-    s |> resize(int(n * d / 32l))
+    q |> resize(n * d)
+    s |> resize(n * d / 32l)
     quantize_q8_0_into(w, n * d, q, s, 0l, 0l)
     repack_q8q8_weight(q, s, 0l, n, d)
 }
@@ -752,7 +752,7 @@ def bench_dw(iw, ih : int64; rounds : int) {
     print("  f4:     {best_f4 / 1000.0lf} ms  ({best_cur / best_f4}x)\n")
 }
 
-def run_bench(frames : int64; rounds : int) {
+def run_bench(frames : int64; rounds : int) {   // nolint:STYLE038 — flat bench driver: one buffer/weight declaration per stage, then the interleaved timed walk
     let t1 = (frames - 1l) / 2l + 1l
     let ww1 = (MEL - 1l) / 2l + 1l   // 64
     let t2 = (t1 - 1l) / 2l + 1l
@@ -789,8 +789,8 @@ def run_bench(frames : int64; rounds : int) {
     let rqmax = max(t2 * ww2 * NCH, tt * feat)
     var xq : array<int8>
     var xs : array<float>
-    xq |> resize(int(rqmax))
-    xs |> resize(int(rqmax / 32l))
+    xq |> resize(rqmax)
+    xs |> resize(rqmax / 32l)
 
     // weights: c0/dw taps fp32 (like the engine); 1x1 + pre as repacked q8
     var cw0 : array<float>

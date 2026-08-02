@@ -2,7 +2,7 @@ options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _jit_fast_math = true   // ggml-parity FP laxity — matches how llama.cpp is benched
 
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
+require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + apply_box_profile_runtime (engine-level, not re-exported)
 require dasllama/dasllama_image   // load_model_cached — the .dlim rail, without the full facade's compile weight
 require dasllama/dasllama_tokenizer
@@ -73,7 +73,7 @@ def private load_corpus(path : string) : array<string> {
 }
 
 [export]
-def main() {
+def main() {   // nolint:STYLE038 — flat probe driver: arg handling, then one A/B cell per batch size
     allow_cpu_prefill()   // CPU-protocol probe by intent — disarm the Metal-build tripwire
     if (!jit_enabled()) {
         print("This probe is JIT-only — run with: daslang -jit <file>\n")

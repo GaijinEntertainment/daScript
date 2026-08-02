@@ -6,11 +6,11 @@ require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — pulls the engine + arch registrations + (on Apple) the metal prefill override
 require dasllama/dasllama_math   // set_wscale_f16 — the resident path reads the f32 scale plane
 require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor transform
-require ?das_metal dasllama/dasllama_metal_prefill  // nolint:STYLE030 — min-npos setter + stats + the shutdown/leak rail
-require ?das_metal dasllama/dasllama_metal_decode  // nolint:STYLE030 — decode shutdown (the kq/quantized-KV arms touch the decode driver)
-require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — metal_live_object_count for the leak gate
+require ?das_metal dasllama/dasllama_metal_prefill  // min-npos setter + stats + the shutdown/leak rail
+require ?das_metal dasllama/dasllama_metal_decode  // decode shutdown (the kq/quantized-KV arms touch the decode driver)
+require ?das_metal metal/das_metal_boost  // metal_live_object_count for the leak gate
 require daslib/jobque_boost
-require daslib/fio  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
+require daslib/fio  // used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
 require strings
 require math
 require _model_tier
@@ -26,8 +26,8 @@ def private same(a, b : array<int64>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (x, y in a, b) {
+        if (x != y) {
             return false
         }
     }
@@ -120,7 +120,7 @@ def private blob_twin(t : T?; path : string; seq_cap : int64) : Model {
 }
 
 [test]
-def test_metal_prefill_parity(t : T?) {
+def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, one t |> run cell per arm
     t |> run("GPU-resident prefill == CPU control, 40-token greedy continuation (Llama-3.2-1B Q8)") <| @(t : T?) {
         if (!family_on(t, "llama")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {

@@ -198,7 +198,7 @@ def stage_qwen3a_tower(path : string) : Qwen3aStaging {
         o += c.n_layer * c.layer_stride
         c.lnp_w_off = o; o += d
         c.lnp_b_off = o; o += d
-        st.core.fblob |> resize(int(o))
+        st.core.fblob |> resize(o)
         for (l in range64(c.n_layer)) {
             let lo = enc_layer_offsets(c, l)
             gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ln1.weight", st.core.fblob, lo.ln1_w, d)
@@ -249,7 +249,7 @@ def stage_qwen3a_tower(path : string) : Qwen3aStaging {
         st.e.mm1_b_off = co; co += d
         st.e.mm2_w_off = co; co += st.e.proj_dim * d
         st.e.mm2_b_off = co; co += st.e.proj_dim
-        st.cblob |> resize(int(co))
+        st.cblob |> resize(co)
         gguf_read_tensor_f32(m, bytes, "a.conv2d.1.weight", st.cblob, st.e.c1_w_off, nch * 9l)
         gguf_read_tensor_f32(m, bytes, "a.conv2d.1.bias", st.cblob, st.e.c1_b_off, nch)
         gguf_read_tensor_f32(m, bytes, "a.conv2d.2.weight", st.cblob, st.e.c2_w_off, nch * nch * 9l)
@@ -367,7 +367,7 @@ def qwen3a_mel_window(m : WhisperMel; off : int64) : MelChunk {
     let win_eff = min(QWEN3A_WINDOW, m.n_len - off)
     let n_chunks = (win_eff + QWEN3A_CHUNK - 1l) / QWEN3A_CHUNK
     var c = MelChunk(n_mel = m.n_mel, n_len = n_chunks * QWEN3A_CHUNK)
-    c.data |> resize(int(m.n_mel * c.n_len))
+    c.data |> resize(m.n_mel * c.n_len)
     for (j in range64(m.n_mel)) {
         for (i in range64(win_eff)) {
             c.data[j * c.n_len + i] = m.data[j * m.n_len + off + i]
@@ -386,7 +386,7 @@ def private conv2d_s2(@scratch var out : array<float>; @scratch var col : array<
     let oh = (ih - 1l) / 2l + 1l
     let kdim = cin * 9l
     let rows = oh * ow
-    col |> resize(int(rows * kdim))
+    col |> resize(rows * kdim)
     for (oy in range64(oh)) {
         for (ox in range64(ow)) {
             let r = (oy * ow + ox) * kdim
@@ -403,7 +403,7 @@ def private conv2d_s2(@scratch var out : array<float>; @scratch var col : array<
             }
         }
     }
-    out |> resize(int(rows * cout))
+    out |> resize(rows * cout)
     mm_blob_b(out, blob, w_off, col, kdim, cout, rows)
     add_bias_rows(out, blob, b_off, cout, rows)
     gelu_erf(out, rows * cout)
@@ -435,7 +435,7 @@ def qwen3a_encode(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConvStat
     }
 
     // conv frontend per chunk -> rows of s.x
-    cs.xin |> resize(int(QWEN3A_CHUNK * nm))
+    cs.xin |> resize(QWEN3A_CHUNK * nm)
     for (ci in range64(n_chunks)) {
         // chunk input as W=100 (frames), H=128 (mel), C=1: x[ih][iw] = mel[ih][ci·100 + iw]
         for (ih in range64(nm)) {
@@ -448,7 +448,7 @@ def qwen3a_encode(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConvStat
         conv2d_s2(cs.y3, cs.col, cs.y2, t.cblob, t.c3_w_off, t.c3_b_off, 25l, 32l, nch, nch)           // 13×16
         // features per output frame ow: v[h + 16·c] = y3[oh=h][ow][c]
         let feat = 16l * nch
-        cs.feat |> resize(int(QWEN3A_TOK_PER_CHUNK * feat))
+        cs.feat |> resize(QWEN3A_TOK_PER_CHUNK * feat)
         for (ow in range64(QWEN3A_TOK_PER_CHUNK)) {
             for (h in range64(16l)) {
                 for (ch in range64(nch)) {
@@ -457,7 +457,7 @@ def qwen3a_encode(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConvStat
             }
         }
         // conv_out rows for this chunk, + per-chunk positions 0..12, into the residual stream
-        cs.crow |> resize(int(QWEN3A_TOK_PER_CHUNK * d))
+        cs.crow |> resize(QWEN3A_TOK_PER_CHUNK * d)
         mm_blob_b(cs.crow, t.cblob, t.cout_w_off, cs.feat, feat, d, QWEN3A_TOK_PER_CHUNK)
         add_bias_rows(cs.crow, t.cblob, t.cout_b_off, d, QWEN3A_TOK_PER_CHUNK)
         let xbase = ci * QWEN3A_TOK_PER_CHUNK * d
@@ -471,11 +471,11 @@ def qwen3a_encode(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConvStat
     layernorm_batch(s.xb, s.x, t.core.fblob, t.core.lnp_w_off, t.core.lnp_b_off, d, npos, t.core.eps)
 
     // MLP projector: mm1 + bias -> gelu_erf -> mm2 + bias
-    s.ph |> resize(int(npos * d))
+    s.ph |> resize(npos * d)
     mm_blob_b(s.ph, t.cblob, t.mm1_w_off, s.xb, d, d, npos)
     add_bias_rows(s.ph, t.cblob, t.mm1_b_off, d, npos)
     gelu_erf(s.ph, npos * d)
-    s.out |> resize(int(npos * t.proj_dim))
+    s.out |> resize(npos * t.proj_dim)
     mm_blob_b(s.out, t.cblob, t.mm2_w_off, s.ph, d, t.proj_dim, npos)
     add_bias_rows(s.out, t.cblob, t.mm2_b_off, t.proj_dim, npos)
 }
@@ -490,7 +490,7 @@ def qwen3a_encode_all(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConv
         let win <- qwen3a_mel_window(mel, off)
         qwen3a_encode(t, s, cs, win)
         let n = (win.n_len / QWEN3A_CHUNK) * QWEN3A_TOK_PER_CHUNK
-        rows |> reserve(int(long_length(rows) + n * t.proj_dim))
+        rows |> reserve(long_length(rows) + n * t.proj_dim)
         for (i in range64(n * t.proj_dim)) {
             rows |> push(s.out[i])
         }
