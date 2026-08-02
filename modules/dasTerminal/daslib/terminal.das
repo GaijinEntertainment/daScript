@@ -682,7 +682,9 @@ def private erase_display(terminal : Terminal const; var buffer : TerminalBuffer
 }
 
 def private erase_cells(terminal : Terminal const; var buffer : TerminalBuffer; count : int) {
-    let last = clamp(buffer.cursor.column + max(1, count), 0, terminal.columns)
+    // clamp the CSI count before the add so a hostile huge parameter cannot wrap the int math
+    let n = clamp(count, 1, terminal.columns)
+    let last = clamp(buffer.cursor.column + n, 0, terminal.columns)
     for (column in range(buffer.cursor.column, last)) {
         clear_cell(terminal, buffer, buffer.cursor.row, column)
     }
