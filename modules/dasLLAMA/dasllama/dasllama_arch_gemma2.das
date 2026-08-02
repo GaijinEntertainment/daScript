@@ -23,10 +23,7 @@ def private configure_gemma2(var c : Config) {
 def register_arch_gemma2() {
     var d = ArchDesc(name = "gemma2", configure = @@configure_gemma2)
     d.blocks = std_blocks()
-    d.chat.add_bos = true   // BOS = <bos>; Gemma has no system role — fold it into the first user turn
-    d.chat.user.parts <- [chat_special("<start_of_turn>"), chat_text("user\n"), chat_content(), chat_special("<end_of_turn>"), chat_text("\n")]
-    d.chat.assistant_open.parts <- [chat_special("<start_of_turn>"), chat_text("model\n")]
-    d.chat.stop <- ["<end_of_turn>", "<eos>"]
+    gemma_chat(d.chat)
     d.lcaps.system_prompt = false   // no system role — the chat layer folds it into the first user turn
     register_arch("gemma2", d)
 }

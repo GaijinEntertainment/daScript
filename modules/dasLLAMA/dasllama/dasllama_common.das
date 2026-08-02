@@ -2099,8 +2099,8 @@ def build_rope_table(@scratch var cos_tab : array<float>; @scratch var sin_tab :
 // (batch rows come from different sequences at unrelated positions). Bit-identical per row to the
 // npos=1 decode table at that position, so rope_batch_tab consumes it unchanged.
 def build_rope_table_rows(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>; t : Model;
-                                  theta, fscale : float; positions : array<int64>; nrows, head_size : int64;
-                                  use_ff : bool = true) {
+                          theta, fscale : float; positions : array<int64>; nrows, head_size : int64;
+                          use_ff : bool = true) {
     build_rope_tabs_rows(cos_tab, sin_tab, theta, fscale, t.config.rope_mscale, t.rope_freqs, use_ff,
                          positions, nrows, head_size)
 }
@@ -4346,6 +4346,27 @@ def chat_special(s : string) : ChatPart {
 }
 def chat_content() : ChatPart {
     return ChatPart(kind = ChatPartKind.content, s = "")
+}
+
+//! Install the ChatML turn set (``<|im_start|>``/``<|im_end|>``) the whole qwen family shares,
+//! empty-think suppress included — every ``<|im_start|>`` GGUF maps here, thinking fine-tunes
+//! too; the suppress renders only when the vocab carries the think specials.
+def chatml_chat(var ct : ChatTemplate) {
+    ct.system.parts <- [chat_special("<|im_start|>"), chat_text("system\n"), chat_content(), chat_special("<|im_end|>"), chat_text("\n")]
+    ct.user.parts <- [chat_special("<|im_start|>"), chat_text("user\n"), chat_content(), chat_special("<|im_end|>"), chat_text("\n")]
+    ct.assistant_open.parts <- [chat_special("<|im_start|>"), chat_text("assistant\n")]
+    ct.think_suppress.parts <- [chat_special("<think>"), chat_text("\n\n"), chat_special("</think>"), chat_text("\n\n")]
+    ct.stop <- ["<|im_end|>", "<|endoftext|>"]
+}
+
+//! Install the Gemma turn set (``<start_of_turn>``/``<end_of_turn>``, BOS at conversation start,
+//! no system role — the chat layer folds it into the first user turn; pair with
+//! ``lcaps.system_prompt = false``). gemma4's channel-based format diverges and stays in its file.
+def gemma_chat(var ct : ChatTemplate) {
+    ct.add_bos = true   // BOS = <bos>
+    ct.user.parts <- [chat_special("<start_of_turn>"), chat_text("user\n"), chat_content(), chat_special("<end_of_turn>"), chat_text("\n")]
+    ct.assistant_open.parts <- [chat_special("<start_of_turn>"), chat_text("model\n")]
+    ct.stop <- ["<end_of_turn>", "<eos>"]
 }
 
 //! Install the Hermes-style tool-calling format (the Qwen2.5/Qwen3 chat template's tool block):

@@ -23,11 +23,7 @@ def private configure_qwen3moe(var c : Config) {
 def register_arch_qwen3moe() {
     var d = ArchDesc(name = "qwen3moe", configure = @@configure_qwen3moe)
     d.blocks = moe_blocks()
-    d.chat.system.parts <- [chat_special("<|im_start|>"), chat_text("system\n"), chat_content(), chat_special("<|im_end|>"), chat_text("\n")]
-    d.chat.user.parts <- [chat_special("<|im_start|>"), chat_text("user\n"), chat_content(), chat_special("<|im_end|>"), chat_text("\n")]
-    d.chat.assistant_open.parts <- [chat_special("<|im_start|>"), chat_text("assistant\n")]
-    d.chat.think_suppress.parts <- [chat_special("<think>"), chat_text("\n\n"), chat_special("</think>"), chat_text("\n\n")]
-    d.chat.stop <- ["<|im_end|>", "<|endoftext|>"]
+    chatml_chat(d.chat)
     hermes_tools(d.chat)
     // Qwen3-Omni-30B's thinker converts as `qwen3vlmoe` — qwen3moe + M-RoPE + deepstack; for text/audio
     // input every M-RoPE coord equals linear position, so it's bit-identical to plain qwen3moe here.
@@ -35,6 +31,8 @@ def register_arch_qwen3moe() {
     var dv = ArchDesc(name = "qwen3vlmoe", configure = @@configure_qwen3moe)
     dv.blocks = moe_blocks()
     dv.chat := d.chat
+    // audio markers on `dv` ONLY: qwen3-family audio models convert as vl; base-arch audio
+    // is the qwen2 family's shape (qwen2 sets its markers before the clone)
     dv.chat.audio_pre.parts <- [chat_special("<|audio_start|>")]
     dv.chat.audio_post.parts <- [chat_special("<|audio_end|>")]
     register_arch("qwen3moe", d)

@@ -38,11 +38,7 @@ def private configure_qwen35moe(var c : Config) {
 def register_arch_qwen35() {
     var d = ArchDesc(name = "qwen35", configure = @@configure_qwen35)
     d.blocks = qwen35_blocks()
-    d.chat.system.parts <- [chat_special("<|im_start|>"), chat_text("system\n"), chat_content(), chat_special("<|im_end|>"), chat_text("\n")]
-    d.chat.user.parts <- [chat_special("<|im_start|>"), chat_text("user\n"), chat_content(), chat_special("<|im_end|>"), chat_text("\n")]
-    d.chat.assistant_open.parts <- [chat_special("<|im_start|>"), chat_text("assistant\n")]
-    d.chat.think_suppress.parts <- [chat_special("<think>"), chat_text("\n\n"), chat_special("</think>"), chat_text("\n\n")]
-    d.chat.stop <- ["<|im_end|>", "<|endoftext|>"]
+    chatml_chat(d.chat)
     // (clone the template BEFORE register_arch moves `d`)
     var dm = ArchDesc(name = "qwen35moe", configure = @@configure_qwen35moe)
     dm.blocks = qwen35moe_blocks()
