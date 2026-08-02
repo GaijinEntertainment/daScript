@@ -1102,6 +1102,10 @@ def test_text_viewer_edit_preview_and_watch(t : T?) { // nolint:STYLE038 — one
             return (state?["preview_focus_valid"] ?? false)
         }
         t |> success(followed, "the preview maps the caret to a rendered position")
+        var caret_state = viewer_state(app)
+        t |> equal(caret_state?["preview_selection_end"] ?? -1,
+            caret_state?["preview_selection_start"] ?? -2,
+            "the caret mark is collapsed - no text selection paints in the preview")
 
         // external change: detect and warn, never auto-reload a dirty buffer
         let before_lines = edit_text_state(app)?["text"] ?? ""

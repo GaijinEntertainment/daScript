@@ -1091,16 +1091,18 @@ def private apply_preview_caret(var doc : TextViewerDocument) {
     return if (doc.preview_revision != doc.edit.revision)
     if (doc.preview_caret_applied != doc.edit.follow_revision) {
         doc.preview_caret_applied = doc.edit.follow_revision
-        // one byte wide (a zero-width selection maps but yields no focus
-        // screen Y), walked back to the nearest RENDERED byte - the caret can
-        // sit on blank lines or fence syntax the preview never draws
+        // ZERO-width: a one-byte selection paints random spans when the caret
+        // sits on unrendered markdown syntax (anchor and focus each fall
+        // forward to different rendered runs). Collapsed resolves the position
+        // invisibly; the focus-line tint below is the visible indication. The
+        // walk covers end-of-document, where nothing is left to fall forward to
         let caret = text_edit_byte_of_position(doc.edit,
             doc.edit.cursor_line, doc.edit.cursor_column)
         var anchor = caret
         var tries = 0
         while (tries < 64) {
             let _sel = markdown_view_select_source_range(
-                doc.preview_view, anchor, anchor + 1)
+                doc.preview_view, anchor, anchor)
             break if (markdown_view_selection_focus_screen_y(
                 doc.preview_view).valid || anchor == 0)
             anchor--
@@ -1156,6 +1158,10 @@ def private draw_document_editor(var doc : TextViewerDocument) {
                 doc.status = "Preview checkboxes are read-only - edit the source."
             }
             apply_preview_caret(doc)
+            if (doc.preview_revision == doc.edit.revision) {
+                markdown_view_focus_line_tint(doc.preview_view,
+                    TextSourceViewStyle().current_line_color)
+            }
         }
     }
 }
@@ -1445,6 +1451,10 @@ def text_viewer_state(_input : JsonValue?) : JsonValue? { // nolint:STYLE038 —
             doc.preview_view).valid,
         preview_focus_y = markdown_view_selection_focus_screen_y(
             doc.preview_view).y,
+        preview_selection_start = md_text_selection_range(
+            doc.preview_view.selection_anchor, doc.preview_view.selection_focus).start_byte,
+        preview_selection_end = md_text_selection_range(
+            doc.preview_view.selection_anchor, doc.preview_view.selection_focus).end_byte,
         has_utf8_bom = doc.source.has_utf8_bom,
         checkbox_count = length(doc.projection.controls),
         control_activation_revision = doc.markdown_view.control_activation_revision,
