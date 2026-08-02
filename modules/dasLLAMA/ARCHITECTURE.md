@@ -78,13 +78,11 @@ often gotten wrong, so each says explicitly where the neighbouring half goes.
   exist only at the IR/kernel-param boundary. `kq_sb` is the superblock-lattice predicate: a
   `fmt != q8` test does not imply the lattice, so branch on the predicate.
 - **`dasllama_convert.das`** — every tensor format CONVERSION: quantize/dequantize/transcode/encode,
-  codec byte readers, numeric widen/narrow — regardless of platform or caller. Metadata-coupled
-  drivers (GGUF lookup, threading, guards) stay with their containers and dispatch in. ONE
-  carve-out: a conversion that IS a KV-cache format's store/read half lives with its codec family
-  (§ below).
-- **`dasllama_quant.das`** — the Q8_0 format itself (block geometry, scale layout) and the
-  quantization-quality detector. Conversions that USE the format live in `dasllama_convert.das`;
-  this file owns what the format IS.
+  codec byte readers, numeric widen/narrow — regardless of platform or caller; plus the Q8_0/Q4_0
+  format identity itself (block geometry, scale layout, the quantization-quality detector).
+  Metadata-coupled drivers (GGUF lookup, threading, guards) stay with their containers and
+  dispatch in. ONE carve-out: a conversion that IS a KV-cache format's store/read half lives with
+  its codec family (§ below).
 - **`dasllama_repack.das`** — every disk-order → compute-order kernel-LAYOUT transform (grp
   interleaves, disk-order extractors, panel unpacks), any format, any platform. Number sources
   (tune stamps, bake overrides) stay with their owners and pass plain parameters in.

@@ -114,9 +114,8 @@ require each other.
 
 - `dasllama_kqformat.das` — format identity: the format enum, per-format descriptors, format
   predicates.
-- `dasllama_convert.das` — every tensor format conversion, any platform, any caller.
-- `dasllama_quant.das` — what the Q8_0 format IS (block geometry, scales) and the quant-quality
-  detector; a conversion that uses the format belongs in `dasllama_convert.das`.
+- `dasllama_convert.das` — every tensor format conversion, any platform, any caller; also owns
+  what the Q8_0/Q4_0 format IS (block geometry, scales) and the quant-quality detector.
 - `dasllama_repack.das` — every disk-order to compute-order kernel-layout transform.
 - `dasllama_kv_codec.das` — the KV-cache runtime codec: one family per cache format, kept whole.
 - `dasllama_rope.das` — RoPE angle and table generation.

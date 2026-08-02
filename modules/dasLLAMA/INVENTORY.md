@@ -11,7 +11,7 @@
 - **197 `.das` files, ~128,900 lines** under `modules/dasLLAMA/`, plus `utils/dasllama-server/` (16 files) and the untracked `modules/dasVulkan/` backend.
 - Directory roles: `dasllama/` engine (58 files, ~72,600 lines) · `tests/` (59, module-owned, NEVER AOT) · `benchmarks/` (59) · `harness/` (78, hand-run probes/tuners/oracles) · `performance/` (33, the publishable rig) · `models/` (silero weights only) · 18 root `.md` docs.
 - The five monoliths: `dasllama_common.das` 13,684 · `dasllama_math_vulkan.das` 9,339 · `dasllama_metal_prefill.das` 8,240 · `dasllama_metal_kernels.das` 7,281 · `dasllama_math.das` 4,330.
-- Hub files by require in-degree: `dasllama_math` 112 · `dasllama_common` 53 · `dasllama_transformer` 30 · `dasllama_quant` 29 · `dasllama_env` 27 (full table in the Math backends section).
+- Hub files by require in-degree: `dasllama_math` 112 · `dasllama_common` 53 · `dasllama_transformer` 30 · `dasllama_quant` 29 (module since DELETED — the convert extraction absorbed it) · `dasllama_env` 27 (full table in the Math backends section).
 - Audit method: six parallel deep-read passes (common anatomy / math backends / GPU dispatch / families / tools-rig-server / root docs), 2026-07-29. Duplication percentages marked "measured" come from line diffs, not eyeballing.
 
 ## dasllama_common.das — the 13,684-line monolith
@@ -156,7 +156,7 @@ Host: 3661–3823 capacity consts + tile routers · 3824–4156 structs (`HostBu
 
 **`dasllama_gemm_schema.das` — 79, no requires, required by 9.** THE layout-descriptor source: `Q8RepackType`, `q8q8_repack_type`, block consts (`Q8_QPB/SPB`, `KQ_SUPERBLOCK_ELEMS`, `Q51_QPB/SPB`, `Q8N_BPB=34`), `kq_qsb(fmt)`/`kq_ssb(fmt)`.
 
-**`dasllama_quant.das` — 350, required by 30.** The convert nucleus: `quantize_q8_0(_into/_into_ptr/_bs_into/_bs_into_ptr/_k_into/_k_into_ptr)`, `dequantize_q8_0`, `quantize/dequantize_q4_0`, `quant_error_stats`.
+**`dasllama_quant.das` — 350, required by 30.** DELETED 2026-08-02: the convert extraction copied this whole surface into `dasllama_convert.das` and rewired every requirer; the file was a dead duplicate. Was the convert nucleus: `quantize_q8_0(_into/_into_ptr/_bs_into/_bs_into_ptr/_k_into/_k_into_ptr)`, `dequantize_q8_0`, `quantize/dequantize_q4_0`, `quant_error_stats`.
 
 ### Cross-platform duplication clusters
 
