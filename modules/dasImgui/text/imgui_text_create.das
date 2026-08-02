@@ -123,25 +123,13 @@ def private fence_open_at(ed : TextEditState const; upto_line : int) : bool {
     // markdown fence parity scan: are we inside ``` / ~~~ at upto_line?
     var open_ = false
     for (row in range(min(upto_line, length(ed.lines)))) {
-        let rest = slice(ed.lines[row], length(leading_whitespace_of(ed.lines[row])),
+        let rest = slice(ed.lines[row], length(leading_whitespace(ed.lines[row])),
             length(ed.lines[row]))
         if (starts_with(rest, "```") || starts_with(rest, "~~~")) {
             open_ = !open_
         }
     }
     return open_
-}
-
-def public leading_whitespace_of(line : string) : string {
-    //! The line's leading spaces/tabs (the snippet-indent rule's domain).
-    var at = 0
-    peek_data(line) $(bytes) {
-        while (at < length(bytes)
-                && (int(bytes[at]) == ' ' || int(bytes[at]) == '\t')) {
-            at++
-        }
-    }
-    return slice(line, 0, at)
 }
 
 def private line_list_prefix(rest : string) : string {
@@ -193,7 +181,7 @@ def public creation_context(ed : TextEditState const) : CreationContext {
         ctx.multi_line_selection = sel.end_line > sel.start_line
     }
     let line = ed.cursor_line < length(ed.lines) ? ed.lines[ed.cursor_line] : ""
-    let indent = leading_whitespace_of(line)
+    let indent = leading_whitespace(line)
     let rest = slice(line, length(indent), length(line))
     ctx.blank_line = empty(rest)
     ctx.at_statement_start = ed.cursor_column <= length(indent)
@@ -344,7 +332,7 @@ def private apply_transform(var ed : TextEditState;
     let had_selection = text_edit_has_selection(ed)
     let caret_line = ed.cursor_line
     let caret_column = ed.cursor_column
-    let first_rest_start = length(leading_whitespace_of(ed.lines[block_.x]))
+    let first_rest_start = length(leading_whitespace(ed.lines[block_.x]))
     let target = transform_target(kind,
         slice(ed.lines[block_.x], first_rest_start, length(ed.lines[block_.x])))
     var caret_delta = 0
@@ -353,7 +341,7 @@ def private apply_transform(var ed : TextEditState;
     new_lines |> reserve(block_.y - block_.x + 1)
     var ordinal = 1
     for (row in range(block_.x, block_.y + 1)) {
-        let indent = leading_whitespace_of(ed.lines[row])
+        let indent = leading_whitespace(ed.lines[row])
         let rest = slice(ed.lines[row], length(indent), length(ed.lines[row]))
         let out_ = indent + transform_line(kind, rest, target, ordinal)
         if (row == caret_line) {

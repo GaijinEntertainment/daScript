@@ -1684,7 +1684,9 @@ def private patch_unit_after(var ed : TextEditState) {
     last.after_cursor_column = ed.cursor_column
 }
 
-def private leading_whitespace(line : string) : string {
+def public leading_whitespace(line : string) : string {
+    //! The line's leading spaces/tabs — the indent domain shared by the
+    //! auto-indent verbs, snippet expansion, and the creation registry.
     var at = 0
     peek_data(line) $(bytes) {
         while (at < length(bytes)

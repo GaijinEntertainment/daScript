@@ -96,15 +96,7 @@ def public rich_das_classify_line(ed : TextEditState const;
 }
 
 def private line_indent(ed : TextEditState const; row : int) : string {
-    let line = ed.lines[row]
-    var at = 0
-    peek_data(line) $(bytes) {
-        while (at < length(bytes)
-                && (int(bytes[at]) == ' ' || int(bytes[at]) == '\t')) {
-            at++
-        }
-    }
-    return slice(line, 0, at)
+    return leading_whitespace(ed.lines[row])
 }
 
 def private begins_in_block(ed : TextEditState const; row : int) : bool {
