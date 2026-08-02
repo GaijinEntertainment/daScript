@@ -1092,8 +1092,8 @@ def draw_file_inspector_content() { // nolint:STYLE038
 def draw_file_inspector_window() {
     if (IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)) {
         let io & = unsafe(GetIO())
-        let command_down = io.ConfigMacOSXBehaviors ? io.KeySuper : io.KeyCtrl
-        if (command_down && IsKeyPressed(ImGuiKey.F, false)) {
+        // io.KeyCtrl is logical — ImGui maps Cmd onto it under ConfigMacOSXBehaviors.
+        if (io.KeyCtrl && IsKeyPressed(ImGuiKey.F, false)) {
             text_find_open(g_inspector.find)
         }
     }

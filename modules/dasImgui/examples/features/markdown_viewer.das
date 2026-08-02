@@ -102,7 +102,8 @@ def private bind_demo_image(width, height : float;
 def markdown_probe_state(_input : JsonValue?) : JsonValue? { // nolint:STYLE038
     let s = g_last_selection
     let io & = unsafe(GetIO())
-    let copy_modifier_down = io.ConfigMacOSXBehaviors ? io.KeySuper : io.KeyCtrl
+    // io.KeyCtrl is logical — ImGui maps Cmd onto it under ConfigMacOSXBehaviors.
+    let copy_modifier_down = io.KeyCtrl
     return JV((
         ok = g_doc.ok,
         render_revision = g_view.render_revision,
@@ -412,7 +413,8 @@ print("{greeting}\n")
 
 Entities decode for display while retaining source bytes: &amp; &copy; &#x1f680;.
 %%
-    g_doc <- md_parse(source)
+    delete g_doc
+    g_doc <- md_parse(source)  // nolint:PERF030 - target deleted on the previous line; the lint mirrors the compiler rewrite, not statement context
     if (!g_doc.ok) {
         g_status = g_doc.error
     }

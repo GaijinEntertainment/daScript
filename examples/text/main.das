@@ -925,8 +925,8 @@ def private handle_document_shortcuts(doc : TextViewerDocument const) {
     let io & = unsafe(GetIO())
     command_poll_scope(g_commands, CommandScope.document, "{doc.id}")
     command_poll_scope(g_commands, CommandScope.component, "{doc.id}")
-    let command_down = io.ConfigMacOSXBehaviors ? io.KeySuper : io.KeyCtrl
-    if (IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows) && command_down) {
+    // io.KeyCtrl is logical — ImGui maps Cmd onto it under ConfigMacOSXBehaviors.
+    if (IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows) && io.KeyCtrl) {
         if (io.MouseWheel > 0.0f) {
             let _ = command_invoke(g_commands, CMD_VIEW_ZOOM_IN,
                                    CommandSource.programmatic, "{doc.id}")
