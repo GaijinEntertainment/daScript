@@ -12,6 +12,9 @@ require imgui/imgui_markdown_tree_sitter
 require imgui/imgui_document_model
 require imgui/imgui_text_find
 require imgui/imgui_text_source_view
+require imgui/imgui_text_source_edit
+require imgui/imgui_text_edit_syntax
+require imgui/imgui_text_edit_complete
 require imgui/imgui_text_tree_sitter
 require imgui/imgui_theme_daslang
 require daslib/clargs
@@ -82,6 +85,10 @@ struct TextViewerFoldArgs {
     collapsed : bool = true
 }
 
+struct TextViewerEditArgs {
+    on : bool = true
+}
+
 struct TextViewerDocument {
     id : int
     pending_dock : bool = true
@@ -102,6 +109,23 @@ struct TextViewerDocument {
     find_applied_jump : int = 0
     find_scroll_byte : int = -1
     find_scroll_markdown : bool = false
+    edit : TextEditState = TextEditState()
+    edit_complete : TextEditCompletion = TextEditCompletion()
+    editing : bool = false
+    read_only : bool = false
+    // markdown live preview while editing — separate from the view-mode
+    // markdown state so viewer scroll/folds survive an editing session
+    preview_document : RichDocument = RichDocument()
+    preview_view : MarkdownViewState = MarkdownViewState()
+    preview_syntax : MarkdownTreeSitterState = MarkdownTreeSitterState()
+    preview_revision : int = -1
+    preview_stamp : int = 0
+    preview_follow : bool = false
+    preview_caret_applied : int = 0
+    disk_mtime : clock
+    disk_size : uint64
+    disk_check_accum : float = 0.0f
+    external_change : bool = false
     content_view_top : float = 0.0f
     window_scroll_max : float = 0.0f
     footer_overflow : float = 0.0f
@@ -136,6 +160,10 @@ var private g_edit_bindings_clicks = 0
 var private g_edit_find_clicks = 0
 var private g_edit_find_next_clicks = 0
 var private g_edit_find_prev_clicks = 0
+var private g_file_new_clicks = 0
+var private g_edit_mode_clicks = 0
+var private g_edit_undo_clicks = 0
+var private g_edit_redo_clicks = 0
 
 let FOOTER_ICON_SIZE = 18.0f
 
@@ -146,6 +174,7 @@ let SYNTAX_MODE_VALUES : array<string> <- [
     "auto", "none", "das", "c", "cpp", "markdown"
 ]
 
+let CMD_FILE_NEW = "file.new"
 let CMD_FILE_OPEN = "file.open"
 let CMD_FILE_SAVE = "file.save"
 let CMD_FILE_SAVE_AS = "file.save_as"
@@ -154,6 +183,9 @@ let CMD_APP_QUIT = "app.quit"
 let CMD_VIEW_MARKDOWN = "view.markdown"
 let CMD_VIEW_PLAIN = "view.plain"
 let CMD_VIEW_TOGGLE = "view.toggle_source"
+// outside the "edit." prefix: the editor widget drains every queued "edit.*"
+// invocation, so a mode toggle named edit.* would be eaten while editing
+let CMD_EDIT_MODE = "view.edit_mode"
 let CMD_VIEW_ZOOM_IN = "view.zoom_in"
 let CMD_VIEW_ZOOM_OUT = "view.zoom_out"
 let CMD_VIEW_ZOOM_RESET = "view.zoom_reset"
@@ -194,6 +226,113 @@ def private set_mode(var doc : TextViewerDocument; mode : TextViewMode) {
     text_source_view_clear_selection(doc.source_view)
 }
 
+def private document_dirty(doc : TextViewerDocument const) : bool {
+    return text_document_dirty(doc.source) || (doc.editing && doc.edit.dirty)
+}
+
+def private edit_language_for(path : string) : string {
+    return markdown_path(path) ? "markdown" : extension(path)
+}
+
+def private record_disk_stamp(var doc : TextViewerDocument) {
+    doc.external_change = false
+    doc.disk_check_accum = 0.0f
+    return if (empty(doc.source.path))
+    let info = stat(doc.source.path)
+    if (info.is_valid) {
+        doc.disk_mtime = info.mtime
+        doc.disk_size = info.size
+    }
+}
+
+def private watch_external_change(var doc : TextViewerDocument) {
+    // detect-and-warn only: a dirty buffer is never auto-reloaded (E5 ruling)
+    return if (empty(doc.source.path) || doc.external_change)
+    let io & = unsafe(GetIO())
+    doc.disk_check_accum += io.DeltaTime
+    return if (doc.disk_check_accum < 2.0f)
+    doc.disk_check_accum = 0.0f
+    let info = stat(doc.source.path)
+    return if (!info.is_valid)
+    if (info.mtime != doc.disk_mtime || info.size != doc.disk_size) {
+        doc.external_change = true
+        doc.status = (document_dirty(doc)
+            ? "File changed on disk - saving will overwrite it; Reload discards your edits."
+            : "File changed on disk - use Reload to refresh.")
+    }
+}
+
+def private seed_editor_from_source(var doc : TextViewerDocument) {
+    text_edit_load(doc.edit, doc.source.text)
+    text_edit_set_language(doc.edit, edit_language_for(doc.source.path))
+    text_edit_set_file_name(doc.edit,
+        empty(doc.source.path) ? "untitled" : base_name(doc.source.path))
+    doc.preview_revision = -1
+}
+
+def private sync_edit_to_document(var doc : TextViewerDocument) : bool {
+    let text = text_edit_source(doc.edit)
+    return false if (text == doc.source.text)
+    doc.source.text = text
+    doc.source.revision++
+    rebuild_projection(doc)
+    return true
+}
+
+def private enter_edit_mode(var doc : TextViewerDocument) : bool {
+    if (doc.editing) return true
+    if (doc.read_only) {
+        doc.status = "This document is read-only."
+        return false
+    }
+    seed_editor_from_source(doc)
+    // carry the viewer selection into the editor when the byte domains agree
+    // (the editor is LF-joined; a CRLF file's view offsets do not map 1:1)
+    if (!doc.edit.crlf) {
+        var start_byte = -1
+        var end_byte = -1
+        if (doc.mode == TextViewMode.markdown) {
+            if (doc.markdown_view.selection_anchor.valid
+                    && doc.markdown_view.selection_focus.valid) {
+                let span = md_text_selection_range(doc.markdown_view.selection_anchor,
+                    doc.markdown_view.selection_focus)
+                start_byte = span.start_byte
+                end_byte = span.end_byte
+            }
+        } else {
+            let selection = text_source_view_selection(doc.source_view)
+            start_byte = selection.start_byte
+            end_byte = selection.end_byte
+        }
+        if (start_byte >= 0 && end_byte >= start_byte) {
+            let span = text_edit_range_of_bytes(doc.edit, start_byte, end_byte)
+            text_edit_select(doc.edit, span.start_line, span.start_column,
+                span.end_line, span.end_column)
+        }
+    }
+    doc.editing = true
+    // pre-arm the editor's keyboard: the widget reclaims item focus and
+    // drains typed chars the same frame it first draws
+    doc.edit.focused = true
+    doc.status = "Editing."
+    return true
+}
+
+def private release_preview(var doc : TextViewerDocument) {
+    markdown_view_invalidate(doc.preview_view)
+    delete doc.preview_document.nodes
+    doc.preview_document = RichDocument()
+    doc.preview_revision = -1
+}
+
+def private exit_edit_mode(var doc : TextViewerDocument) {
+    return if (!doc.editing)
+    let _ = sync_edit_to_document(doc)
+    doc.editing = false
+    release_preview(doc)
+    doc.status = "Viewing."
+}
+
 def private release_document_content(var doc : TextViewerDocument) {
     markdown_view_invalidate(doc.markdown_view)
     delete doc.document.nodes
@@ -208,6 +347,11 @@ def private dispose_document(var doc : TextViewerDocument) {
     markdown_view_dispose(doc.markdown_view)
     text_source_view_dispose(doc.source_view)
     text_find_dispose(doc.find)
+    text_edit_dispose(doc.edit)
+    text_edit_complete_dispose(doc.edit_complete)
+    release_preview(doc)
+    markdown_view_dispose(doc.preview_view)
+    markdown_tree_sitter_dispose(doc.preview_syntax)
     release_document_content(doc)
 }
 
@@ -291,6 +435,12 @@ def private load_path(var viewer : TextViewerDocument; path : string) : bool {
         return false
     }
     install_document(viewer, next_source)
+    viewer.read_only = false
+    record_disk_stamp(viewer)
+    if (viewer.editing) {
+        // explicit load/reload replaces the edit buffer (and its history)
+        seed_editor_from_source(viewer)
+    }
     return true
 }
 
@@ -305,6 +455,22 @@ def private save_path(var viewer : TextViewerDocument; path : string) : bool {
     }
     text_document_mark_saved(viewer.source, path)
     viewer.status = "Saved {length(text_document_bytes(viewer.source))} UTF-8 bytes."
+    return true
+}
+
+def private save_document(var viewer : TextViewerDocument; path : string) : bool {
+    if (viewer.editing) {
+        let _ = sync_edit_to_document(viewer)
+    }
+    return false if (!save_path(viewer, path))
+    record_disk_stamp(viewer)
+    viewer.read_only = false
+    if (viewer.editing) {
+        text_edit_mark_saved(viewer.edit)
+        // Save As can change the extension - keep the language honest
+        text_edit_set_language(viewer.edit, edit_language_for(viewer.source.path))
+        text_edit_set_file_name(viewer.edit, base_name(viewer.source.path))
+    }
     return true
 }
 
@@ -351,7 +517,26 @@ Open a UTF-8 file from **File / Open...**, or pass its path on the command line.
 %%
     let _ = install_source_text(viewer, "", welcome)
     viewer.mode = TextViewMode.markdown
+    viewer.read_only = true
     viewer.status = "No file selected."
+}
+
+def private add_untitled_document() {
+    let active = active_document_index()
+    let inherited_zoom_step = active >= 0 ? g_documents[active].zoom_step : 20
+    var viewer = TextViewerDocument(id = g_next_document_id,
+                                    zoom_step = inherited_zoom_step)
+    g_next_document_id++
+    let _ = install_source_text(viewer, "", "")
+    viewer.mode = TextViewMode.plain_text
+    viewer.status = "New document."
+    g_active_document_id = viewer.id
+    g_document_windows[viewer.id] = DockWindowState(open = true)
+    g_documents |> emplace(viewer)
+    let index = active_document_index()
+    if (index >= 0) {
+        let _entered = enter_edit_mode(g_documents[index])
+    }
 }
 
 def private add_document(path : string; mode_override : int = -1;
@@ -419,7 +604,7 @@ def private save_active_document(bool_save_as : bool = false) : bool {
         save_file_dialog()
         return false
     }
-    return save_path(g_documents[active], path)
+    return save_document(g_documents[active], path)
 }
 
 def private setup_default_layout(dock_id : uint) {
@@ -461,12 +646,11 @@ def private define_find_commands() {
                         scope = CommandScope.document, repeat = true))
 }
 
-def private define_commands() {
-    // ImGuiKey's digit enumerators cannot be named directly in daslang because
-    // `.0` parses as a float literal. ImGui keeps the digit row immediately
-    // before A, so derive the key for Ctrl+0 from that stable enum sequence.
-    let key_0 = unsafe(reinterpret<ImGuiKey>(int(ImGuiKey.A) - 10))
-    g_commands.config_path = command_default_config_path("text-viewer")
+def private define_file_commands() {
+    command_define(g_commands, CommandDefinition(
+        id = CMD_FILE_NEW, title = "New", category = "File",
+        description = "Create an empty editable document."),
+        command_binding(CMD_FILE_NEW, ImGuiKey.N, primary = true))
     command_define(g_commands, CommandDefinition(
         id = CMD_FILE_OPEN, title = "Open...", category = "File",
         description = "Open a file in a new docked document."),
@@ -485,6 +669,15 @@ def private define_commands() {
     command_define(g_commands, CommandDefinition(
         id = CMD_APP_QUIT, title = "Quit", category = "Application"),
         command_binding(CMD_APP_QUIT, ImGuiKey.Q, primary = true))
+}
+
+def private define_commands() {
+    // ImGuiKey's digit enumerators cannot be named directly in daslang because
+    // `.0` parses as a float literal. ImGui keeps the digit row immediately
+    // before A, so derive the key for Ctrl+0 from that stable enum sequence.
+    let key_0 = unsafe(reinterpret<ImGuiKey>(int(ImGuiKey.A) - 10))
+    g_commands.config_path = command_default_config_path("text-viewer")
+    define_file_commands()
     command_define(g_commands, CommandDefinition(
         id = CMD_VIEW_MARKDOWN, title = "Markdown", category = "View",
         scope = CommandScope.document))
@@ -494,6 +687,12 @@ def private define_commands() {
     command_define(g_commands, CommandDefinition(
         id = CMD_VIEW_TOGGLE, title = "Toggle rendered/source", category = "View",
         scope = CommandScope.document))
+    command_define(g_commands, CommandDefinition(
+        id = CMD_EDIT_MODE, title = "Edit Mode", category = "View",
+        description = "Toggle between viewing and editing.",
+        scope = CommandScope.document),
+        command_binding(CMD_EDIT_MODE, ImGuiKey.E, primary = true,
+                        scope = CommandScope.document))
     command_define(g_commands, CommandDefinition(
         id = CMD_VIEW_ZOOM_IN, title = "Zoom In", category = "View",
         scope = CommandScope.document),
@@ -525,6 +724,9 @@ def private define_commands() {
     define_find_commands()
     command_define(g_commands, CommandDefinition(
         id = CMD_EDIT_BINDINGS, title = "Edit Bindings...", category = "Preferences"))
+    // after the app's own definitions (its find.open / edit.copy shapes win the
+    // idempotence race), before the config load (so user overrides apply)
+    text_edit_register_commands(g_commands)
     if (!harness_is_headless() && fexist(g_commands.config_path)) {
         let _ = command_load_bindings(g_commands)
     }
@@ -544,7 +746,12 @@ def private update_command_state() {
     let active = active_document_index()
     let has_active = active >= 0
     let has_path = has_active && !empty(g_documents[active].source.path)
-    let has_selection = has_active && document_has_selection(g_documents[active])
+    let editing = has_active && g_documents[active].editing
+    // while editing, Copy/Clear track the EDITOR's selection - the app's
+    // enabled state gates the editor's own Ctrl+C poll
+    let has_selection = has_active && (editing
+        ? text_edit_has_selection(g_documents[active].edit)
+        : document_has_selection(g_documents[active]))
     command_set_enabled(g_commands, CMD_FILE_SAVE, has_active)
     command_set_enabled(g_commands, CMD_FILE_SAVE_AS, has_active)
     command_set_enabled(g_commands, CMD_FILE_RELOAD, has_path)
@@ -564,6 +771,9 @@ def private update_command_state() {
         has_active && g_documents[active].mode == TextViewMode.markdown)
     command_set_selected(g_commands, CMD_VIEW_PLAIN,
         has_active && g_documents[active].mode == TextViewMode.plain_text)
+    command_set_enabled(g_commands, CMD_EDIT_MODE,
+        has_active && !g_documents[active].read_only)
+    command_set_selected(g_commands, CMD_EDIT_MODE, editing)
 }
 
 def private dispatch_document_command(command_id : string; active : int) : bool {
@@ -600,6 +810,12 @@ def private dispatch_document_command(command_id : string; active : int) : bool 
         } else {
             text_source_view_clear_selection(g_documents[active].source_view)
         }
+    } elif (command_id == CMD_EDIT_MODE) {
+        if (g_documents[active].editing) {
+            exit_edit_mode(g_documents[active])
+        } else {
+            let _ = enter_edit_mode(g_documents[active])
+        }
     } elif (command_id == CMD_FIND) {
         text_find_open(g_documents[active].find)
     } elif (command_id == CMD_FIND_NEXT) {
@@ -618,7 +834,9 @@ def private dispatch_commands() {
         g_last_command = invocation.command_id
         g_command_revision++
         let active = active_document_index()
-        if (invocation.command_id == CMD_FILE_OPEN) {
+        if (invocation.command_id == CMD_FILE_NEW) {
+            add_untitled_document()
+        } elif (invocation.command_id == CMD_FILE_OPEN) {
             open_file_dialog()
         } elif (invocation.command_id == CMD_FILE_SAVE) {
             let _ = save_active_document()
@@ -641,8 +859,11 @@ def private dispatch_commands() {
 def private draw_menu_bar() {
     let active = active_document_index()
     let has_active = active >= 0
+    let editing = has_active && g_documents[active].editing
     main_menu_bar(MAIN_MENU) {
         menu(FILE_MENU, (text = "File", enabled = true)) {
+            menu_label(FILE_NEW, (text = "New",
+                                  shortcut = command_shortcut_text(g_commands, CMD_FILE_NEW)))
             menu_label(FILE_OPEN, (text = "Open...",
                                    shortcut = command_shortcut_text(g_commands, CMD_FILE_OPEN)))
             menu_label(FILE_SAVE, (text = "Save",
@@ -660,6 +881,13 @@ def private draw_menu_bar() {
                                    shortcut = command_shortcut_text(g_commands, CMD_APP_QUIT)))
         }
         menu(EDIT_MENU, (text = "Edit", enabled = true)) {
+            menu_label(EDIT_UNDO, (text = "Undo",
+                shortcut = command_shortcut_text(g_commands, "edit.undo"),
+                enabled = editing && text_edit_can_undo(g_documents[active].edit)))
+            menu_label(EDIT_REDO, (text = "Redo",
+                shortcut = command_shortcut_text(g_commands, "edit.redo"),
+                enabled = editing && text_edit_can_redo(g_documents[active].edit)))
+            separator(EDIT_UNDO_SEPARATOR)
             menu_label(EDIT_COPY, (text = "Copy",
                 shortcut = command_shortcut_text(g_commands, CMD_EDIT_COPY),
                 enabled = command_enabled(g_commands, CMD_EDIT_COPY)))
@@ -688,10 +916,15 @@ def private draw_menu_bar() {
             menu_label(VIEW_PLAIN, (text = "Plain text", shortcut = "",
                                    selected = has_active &&
                                        g_documents[active].mode == TextViewMode.plain_text))
+            separator(VIEW_EDIT_SEPARATOR)
+            menu_label(VIEW_EDIT_MODE, (text = "Edit Mode",
+                shortcut = command_shortcut_text(g_commands, CMD_EDIT_MODE),
+                enabled = has_active && !g_documents[active].read_only,
+                selected = editing))
         }
         if (has_active && !empty(g_documents[active].source.path)) {
             separator(MENU_PATH_SEPARATOR)
-            let dirty = text_document_dirty(g_documents[active].source)
+            let dirty = document_dirty(g_documents[active])
             text_disabled(MENU_PATH, (text = (dirty ? "* " : "")
                 + g_documents[active].source.path))
         }
@@ -701,6 +934,10 @@ def private draw_menu_bar() {
 }
 
 def private dispatch_menu_clicks() {
+    if (FILE_NEW.click_count > g_file_new_clicks) {
+        g_file_new_clicks = FILE_NEW.click_count
+        let _ = command_invoke(g_commands, CMD_FILE_NEW, CommandSource.menu)
+    }
     if (FILE_OPEN.click_count > g_open_clicks) {
         g_open_clicks = FILE_OPEN.click_count
         open_file_dialog()
@@ -728,6 +965,18 @@ def private dispatch_menu_clicks() {
     if (VIEW_PLAIN.click_count > g_plain_clicks) {
         g_plain_clicks = VIEW_PLAIN.click_count
         let _ = command_invoke(g_commands, CMD_VIEW_PLAIN, CommandSource.menu)
+    }
+    if (EDIT_UNDO.click_count > g_edit_undo_clicks) {
+        g_edit_undo_clicks = EDIT_UNDO.click_count
+        let _ = command_invoke(g_commands, "edit.undo", CommandSource.menu)
+    }
+    if (EDIT_REDO.click_count > g_edit_redo_clicks) {
+        g_edit_redo_clicks = EDIT_REDO.click_count
+        let _ = command_invoke(g_commands, "edit.redo", CommandSource.menu)
+    }
+    if (VIEW_EDIT_MODE.click_count > g_edit_mode_clicks) {
+        g_edit_mode_clicks = VIEW_EDIT_MODE.click_count
+        let _ = command_invoke(g_commands, CMD_EDIT_MODE, CommandSource.menu)
     }
     if (EDIT_COPY.click_count > g_edit_copy_clicks) {
         g_edit_copy_clicks = EDIT_COPY.click_count
@@ -818,8 +1067,102 @@ def private apply_markdown_find_scroll(var doc : TextViewerDocument) {
     }
 }
 
+def private refresh_edit_preview(var doc : TextViewerDocument) {
+    // debounce on the editor's own idle clock; the first parse is immediate
+    return if (doc.preview_revision == doc.edit.revision
+        || (doc.preview_revision >= 0 && doc.edit.syntax_idle < 0.2f))
+    var next_document <- md_parse(text_edit_text(doc.edit))
+    markdown_view_invalidate(doc.preview_view)
+    delete doc.preview_document.nodes
+    doc.preview_document <- next_document
+    doc.preview_revision = doc.edit.revision
+    doc.preview_stamp++
+    doc.preview_caret_applied = 0
+}
+
+def private apply_preview_caret(var doc : TextViewerDocument) {
+    // the preview follows the CURSOR, not just the scroll (E5 ruling): a
+    // collapsed selection at the caret byte marks the spot in the rendered pane
+    return if (doc.preview_revision != doc.edit.revision)
+    if (doc.preview_caret_applied != doc.edit.follow_revision) {
+        doc.preview_caret_applied = doc.edit.follow_revision
+        // one byte wide (a zero-width selection maps but yields no focus
+        // screen Y), walked back to the nearest RENDERED byte - the caret can
+        // sit on blank lines or fence syntax the preview never draws
+        let caret = text_edit_byte_of_position(doc.edit,
+            doc.edit.cursor_line, doc.edit.cursor_column)
+        var anchor = caret
+        var tries = 0
+        while (tries < 64) {
+            let _sel = markdown_view_select_source_range(
+                doc.preview_view, anchor, anchor + 1)
+            break if (markdown_view_selection_focus_screen_y(
+                doc.preview_view).valid || anchor == 0)
+            anchor--
+            tries++
+        }
+        doc.preview_follow = true
+    }
+    return if (!doc.preview_follow)
+    doc.preview_follow = false
+    let focus = markdown_view_selection_focus_screen_y(doc.preview_view)
+    return if (!focus.valid)
+    let view_top = GetWindowPos().y
+    let height = GetWindowSize().y
+    if (focus.y < view_top + height * 0.1f || focus.y > view_top + height * 0.9f) {
+        SetScrollY(max(0.0f, GetScrollY() + focus.y - (view_top + height * 0.35f)))
+    }
+}
+
+def private draw_document_editor(var doc : TextViewerDocument) {
+    let side_by_side = doc.mode == TextViewMode.markdown
+    let ui_style & = GetStyle()
+    let avail = GetContentRegionAvail()
+    let editor_width = (side_by_side
+        ? floor((avail.x - ui_style.ItemSpacing.x) * 0.5f) : 0.0f)
+    child(EDITOR_PANE, (text = "editor pane",
+          size = float2(editor_width, 0.0f),
+          child_flags = ImGuiChildFlags.None,
+          window_flags = ImGuiWindowFlags.HorizontalScrollbar)) {
+        var edit_style = TextSourceViewStyle(
+            fonts = g_fonts,
+            zoom = float(zoom_percent(doc)) / 100.0f,
+            write_system_clipboard = !harness_is_headless())
+        let _ = text_source_edit("editor", doc.edit, edit_style, g_commands)
+    }
+    if (side_by_side) {
+        same_line()
+        child(PREVIEW_PANE, (text = "markdown preview",
+              size = float2(0.0f, 0.0f),
+              child_flags = ImGuiChildFlags.None,
+              window_flags = ImGuiWindowFlags.None)) {
+            refresh_edit_preview(doc)
+            var style = MarkdownViewStyle(
+                fonts = g_fonts,
+                typography = MarkdownTypography(
+                    inline_code_scale = 0.84f,
+                    code_block_scale = 0.90f),
+                zoom = float(zoom_percent(doc)) / 100.0f,
+                write_system_clipboard = false)
+            let preview_result <- markdown_view_tree_sitter(
+                "edit preview", doc.preview_document, doc.preview_syntax,
+                doc.preview_view, style, doc.preview_stamp)
+            if (preview_result.control_event.active) {
+                doc.status = "Preview checkboxes are read-only - edit the source."
+            }
+            apply_preview_caret(doc)
+        }
+    }
+}
+
 def private draw_document(var doc : TextViewerDocument) {
-    draw_document_find(doc)
+    if (doc.editing) {
+        if (doc.find.open) {
+            text_find_bar(doc.id, doc.find)
+        }
+    } else {
+        draw_document_find(doc)
+    }
     // The footer's icon button stands taller than a text frame; reserving only
     // GetFrameHeightWithSpacing() overflows the dock window by the difference,
     // growing a phantom second scrollbar beside the content child's.
@@ -830,10 +1173,13 @@ def private draw_document(var doc : TextViewerDocument) {
           (text = "document content",
            size = float2(0.0f, -footer_height),
            child_flags = ImGuiChildFlags.None,
-           window_flags = ImGuiWindowFlags.HorizontalScrollbar)) {
+           window_flags = doc.editing ? ImGuiWindowFlags.None
+               : ImGuiWindowFlags.HorizontalScrollbar)) {
         doc.content_view_top = GetWindowPos().y
         doc.content_view_bottom = GetWindowPos().y + GetWindowSize().y
-        if (doc.mode == TextViewMode.markdown) {
+        if (doc.editing) {
+            draw_document_editor(doc)
+        } elif (doc.mode == TextViewMode.markdown) {
             var style = MarkdownViewStyle(
                 fonts = g_fonts,
                 typography = MarkdownTypography(
@@ -860,7 +1206,27 @@ def private draw_document(var doc : TextViewerDocument) {
         }
     }
 
+    if (doc.editing) {
+        // the editor find/sync chain runs after the widget frame, demo order
+        text_edit_find_sync(doc.edit, doc.find, g_commands)
+        let _ = text_edit_syntax_sync(doc.edit)
+        text_edit_complete_sync(doc.edit, doc.edit_complete)
+    }
     draw_document_footer(doc)
+}
+
+def private footer_mode_label(doc : TextViewerDocument const) : string {
+    let rendered = doc.mode == TextViewMode.markdown
+    var caption = ""
+    if (doc.editing) {
+        caption = rendered ? "Editing side-by-side" : "Editing source"
+    } else {
+        caption = rendered ? "Rendered Markdown" : "Markdown source"
+    }
+    if (doc.read_only) {
+        caption += " - read-only"
+    }
+    return caption
 }
 
 def private draw_document_footer(var doc : TextViewerDocument) {
@@ -873,10 +1239,25 @@ def private draw_document_footer(var doc : TextViewerDocument) {
         let _ = command_invoke(g_commands, CMD_VIEW_TOGGLE,
                                CommandSource.toolbar, "{doc.id}")
     }
+    if (!doc.read_only) {
+        same_line()
+        if (small_button(EDIT_TOGGLE, (text = doc.editing ? "Done" : "Edit"))) {
+            let _ = command_invoke(g_commands, CMD_EDIT_MODE,
+                                   CommandSource.toolbar, "{doc.id}")
+        }
+    }
     same_line()
-    text_disabled(MODE_LABEL,
-        (text = rendered ? "Rendered Markdown" : "Markdown source"))
-    if (rendered) {
+    text_disabled(MODE_LABEL, (text = footer_mode_label(doc)))
+    if (doc.editing) {
+        same_line()
+        text_disabled(EDIT_POSITION,
+            (text = "Ln {doc.edit.cursor_line + 1}, Col {doc.edit.cursor_column + 1}"))
+    }
+    if (doc.external_change) {
+        same_line()
+        text_disabled(EXTERNAL_WARNING, (text = "(!) changed on disk"))
+    }
+    if (rendered && !doc.editing) {
         same_line()
         SetNextItemWidth(115.0f)
         if (edit_combo(unsafe(addr(doc.syntax_mode)),
@@ -921,10 +1302,34 @@ def private handle_global_shortcuts() {
     command_poll_scope(g_commands, CommandScope.application)
 }
 
+def private handle_view_typing(var doc : TextViewerDocument) {
+    // the ruling: typing in the viewer makes it an editor - the first printable
+    // keystroke enters edit mode and lands in the buffer
+    return if (doc.editing || doc.read_only
+        || !IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows))
+    let io & = unsafe(GetIO())
+    return if (io.WantTextInput || io.KeyCtrl || io.KeyAlt)
+    var any_printable = false
+    for (value in io.InputQueueCharacters) {
+        let codepoint = int(value)
+        if (codepoint >= 0x20 && codepoint != 0x7f && codepoint <= 0x10ffff) {
+            any_printable = true
+        }
+    }
+    return if (!any_printable)
+    // enter only - the still-queued chars route through the editor widget's
+    // own drain later this frame (a manual replay here would double-type)
+    let _ = enter_edit_mode(doc)
+}
+
 def private handle_document_shortcuts(doc : TextViewerDocument const) {
     let io & = unsafe(GetIO())
     command_poll_scope(g_commands, CommandScope.document, "{doc.id}")
-    command_poll_scope(g_commands, CommandScope.component, "{doc.id}")
+    if (!doc.editing) {
+        // while editing, the editor widget owns the component scope - a second
+        // poll here would double-fire shared chords like Ctrl+C
+        command_poll_scope(g_commands, CommandScope.component, "{doc.id}")
+    }
     // io.KeyCtrl is logical — ImGui maps Cmd onto it under ConfigMacOSXBehaviors.
     if (IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows) && io.KeyCtrl) {
         if (io.MouseWheel > 0.0f) {
@@ -944,7 +1349,9 @@ def private draw_document_window(var doc : TextViewerDocument; dock_id : uint) {
         }
         doc.pending_dock = false
     }
-    let visible_title = empty(doc.source.path) ? "Text viewer" : base_name(doc.source.path)
+    let base_title = (empty(doc.source.path)
+        ? (doc.read_only ? "Text viewer" : "Untitled") : base_name(doc.source.path))
+    let visible_title = (document_dirty(doc) ? "* " : "") + base_title
     // Triple-hash keeps the ImGui window identity stable when a welcome
     // document is loaded from disk and its visible title becomes a filename.
     let title = "{visible_title}###text_document_{doc.id}"
@@ -961,6 +1368,8 @@ def private draw_document_window(var doc : TextViewerDocument; dock_id : uint) {
         // scrollbar); the content child is the only intended scroller.
         doc.window_scroll_max = GetScrollMaxY()
         handle_document_shortcuts(doc)
+        handle_view_typing(doc)
+        watch_external_change(doc)
         draw_document(doc)
     }
 }
@@ -1005,7 +1414,25 @@ def text_viewer_state(_input : JsonValue?) : JsonValue? { // nolint:STYLE038 —
         zoom_step = doc.zoom_step,
         document_revision = doc.source.revision,
         saved_revision = doc.source.saved_revision,
-        dirty = text_document_dirty(doc.source),
+        dirty = document_dirty(doc),
+        source_dirty = text_document_dirty(doc.source),
+        editing = doc.editing,
+        read_only = doc.read_only,
+        edit_dirty = doc.edit.dirty,
+        edit_revision = doc.edit.revision,
+        edit_cursor_line = doc.edit.cursor_line,
+        edit_cursor_column = doc.edit.cursor_column,
+        edit_line_count = text_edit_line_count(doc.edit),
+        edit_can_undo = text_edit_can_undo(doc.edit),
+        edit_can_redo = text_edit_can_redo(doc.edit),
+        external_change = doc.external_change,
+        preview_revision = doc.preview_revision,
+        preview_stamp = doc.preview_stamp,
+        preview_selection_revision = doc.preview_view.selection_revision,
+        preview_focus_valid = markdown_view_selection_focus_screen_y(
+            doc.preview_view).valid,
+        preview_focus_y = markdown_view_selection_focus_screen_y(
+            doc.preview_view).y,
         has_utf8_bom = doc.source.has_utf8_bom,
         checkbox_count = length(doc.projection.controls),
         control_activation_revision = doc.markdown_view.control_activation_revision,
@@ -1184,12 +1611,43 @@ def text_viewer_save(input : JsonValue?) : JsonValue? {
     if (active < 0) return JV((ok = false, error = "no document is open"))
     let args = from_JV(input, type<TextViewerOpenArgs>)
     let path = empty(args.path) ? g_documents[active].source.path : args.path
-    let ok = save_path(g_documents[active], path)
+    let ok = save_document(g_documents[active], path)
     return JV((ok = ok, path = g_documents[active].source.path,
-               dirty = text_document_dirty(g_documents[active].source),
+               dirty = document_dirty(g_documents[active]),
                document_revision = g_documents[active].source.revision,
                saved_revision = g_documents[active].source.saved_revision,
                status = g_documents[active].status))
+}
+
+[live_command(description = "Enter or leave edit mode in the active document.")]
+def text_viewer_edit(input : JsonValue?) : JsonValue? {
+    let active = active_document_index()
+    if (active < 0) return JV((ok = false, error = "no document is open"))
+    let args = from_JV(input, type<TextViewerEditArgs>)
+    var doc & = unsafe(g_documents[active])
+    var ok = true
+    if (args.on) {
+        ok = enter_edit_mode(doc)
+    } else {
+        exit_edit_mode(doc)
+    }
+    return JV((ok = ok, editing = doc.editing, read_only = doc.read_only,
+               status = doc.status))
+}
+
+[live_command(description = "Read the active edit buffer (LF-joined) and cursor state.")]
+def text_viewer_edit_text(_input : JsonValue?) : JsonValue? {
+    let active = active_document_index()
+    if (active < 0) return JV((ok = false, error = "no document is open"))
+    let doc & = unsafe(g_documents[active])
+    if (!doc.editing) return JV((ok = false, error = "not editing"))
+    return JV((ok = true, text = text_edit_text(doc.edit),
+               cursor_line = doc.edit.cursor_line,
+               cursor_column = doc.edit.cursor_column,
+               dirty = doc.edit.dirty,
+               revision = doc.edit.revision,
+               undo_depth = length(doc.edit.undo_stack),
+               redo_depth = length(doc.edit.redo_stack)))
 }
 
 [live_command(description = "Switch between markdown and plain text modes.")]
@@ -1405,7 +1863,7 @@ def update() {
         if (g_file_dialog_action == ViewerFileDialogAction.save_as) {
             let active = active_document_index()
             if (active >= 0) {
-                let _ = save_path(g_documents[active], selected_path)
+                let _ = save_document(g_documents[active], selected_path)
             }
         } else {
             let _ = add_document(selected_path)

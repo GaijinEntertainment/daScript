@@ -274,6 +274,19 @@ def public text_edit_position_of_byte(ed : TextEditState const;
     return int2(last, length(ed.lines[last]))
 }
 
+def public text_edit_byte_of_position(ed : TextEditState const;
+                                      line, column : int) : int {
+    //! Inverse of `text_edit_position_of_byte`: (line, column) to a byte
+    //! offset in the LF-joined text; positions clamp to the buffer ends.
+    return 0 if (empty(ed.lines))
+    let line_index = clamp(line, 0, length(ed.lines) - 1)
+    var byte_offset = 0
+    for (index in range(line_index)) {
+        byte_offset += length(ed.lines[index]) + 1
+    }
+    return byte_offset + clamp(column, 0, length(ed.lines[line_index]))
+}
+
 def public text_edit_range_of_bytes(ed : TextEditState const;
                                     start_byte, end_byte : int) : TextEditRange {
     let head = text_edit_position_of_byte(ed, start_byte)

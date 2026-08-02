@@ -823,6 +823,13 @@ def test_edit_byte_mapping(t : T?) {
     t |> equal(span.start_column, 1, "range start column maps by byte")
     t |> equal(span.end_line, 1, "range end crosses the newline")
     t |> equal(span.end_column, 1, "range end column maps by byte")
+    for (offset in range(8)) {
+        let pos = text_edit_position_of_byte(ed, offset)
+        t |> equal(text_edit_byte_of_position(ed, pos.x, pos.y), offset,
+            "byte_of_position inverts position_of_byte")
+    }
+    t |> equal(text_edit_byte_of_position(ed, 99, 99), 8,
+        "past-the-end positions clamp to the buffer end")
     text_edit_dispose(ed)
 }
 
