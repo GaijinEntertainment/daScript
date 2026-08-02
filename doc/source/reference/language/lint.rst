@@ -1073,6 +1073,30 @@ zipping would change which array limits the walk.
         y = x * 2.0
     }
 
+PERF030 — move-assign drops the target's old contents
+======================================================
+
+``a <- b`` over a heap-carrying bare variable overwrites ``a`` without releasing
+what it held — a leak on a persistent heap. The ``force_inscope_pod`` rewrite
+heals the shape (collecting the old contents through ``builtin_collect_local_and_zero``)
+and marks every move it generates, so the lint flags exactly the unhealed moves:
+policy off, ``hasUnsafe`` functions, modules that disallow inscope-pod, or types
+whose release is not fully generated (user finalizers — where ``delete`` first is
+the only correct fix).
+
+Bare-variable targets only: element targets (``tab[k] <- v``) are dominated by
+fresh-slot inserts where nothing leaks. Compiler temps and the ``return <- r``
+lowering are excluded.
+
+.. code-block:: das
+
+    // Bad — a's old array is dropped unreleased
+    a <- make_more()                            // PERF030
+
+    // Good — release first (or enable force_inscope_pod)
+    delete a
+    a <- make_more()
+
 PERF019 — ``int(T.a) | int(T.b)`` on bitfield/enum — collapse to one cast
 ==========================================================================
 

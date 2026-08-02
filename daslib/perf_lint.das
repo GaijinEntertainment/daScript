@@ -30,6 +30,7 @@ module perf_lint shared private
 //!   PERF017 — length(s) == 0 / != 0 — use empty(s) / !empty(s)
 //!   PERF018 — for (i in range(length(arr))) where i only indexes arr — use 'for (c in arr)'
 //!   PERF029 — for (i in range(length(X))) subscripting sibling arrays in lockstep — zip: for (a, b in X, Y)
+//!   PERF030 — move-assign onto a live heap-carrying variable drops old contents — delete first or force_inscope_pod
 //!   PERF019 — int(T.a) | int(T.b) on bitfield-or-enum-with-operator-| — collapse to int(T.a | T.b)
 //!   PERF020 — T(x) where x is already T (workhorse type) — drop the redundant cast
 //!   PERF021 — cond ? T(a) : T(b) on workhorse cast T — hoist to T(cond ? a : b)
@@ -202,6 +203,26 @@ def private is_container_sizing(n : string) : bool {
 // True when `expr` reaches a declaration marked @scratch — a struct field or a module global
 // (`var @scratch g : array<T>`, the clear()-recycled capture-rail shape) — walking through
 // indexing and deref, so `p.kblobs[b]` counts by virtue of kblobs.
+def private perf030_needs_release(td : TypeDeclPtr) : bool {
+    // heap-owning shapes the inscope-pod collect (or an explicit delete) must release:
+    // containers, lambdas (capture frame), and composites carrying one transitively
+    if (td == null) return false
+    let bt = td.baseType
+    if (bt == Type.tArray || bt == Type.tTable || bt == Type.tLambda) return true
+    if (bt == Type.tStructure && td.structType != null) {
+        for (fld in td.structType.fields) {
+            if (perf030_needs_release(fld._type)) return true
+        }
+        return false
+    }
+    if (bt == Type.tTuple || bt == Type.tVariant) {
+        for (aft in td.argTypes) {
+            if (perf030_needs_release(aft)) return true
+        }
+    }
+    return false
+}
+
 def private has_scratch_annotation(annotations) : bool {
     for (a in annotations) {
         if (a.name == "scratch") return true
@@ -2009,11 +2030,32 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def override preVisitExprMove(expr : ExprMove?) : void {
+        check_perf030_move_leak(expr)
         if (in_closure > 0 || loop_depth == 0) return
         var v = find_string_var_from_expr(expr.left)
         if (v != null && is_defined_outside_loop(v) && expr.right is ExprStringBuilder) {
             string_builder_target_var = v
         }
+    }
+
+    def check_perf030_move_leak(expr : ExprMove?) : void {
+        // PERF030: `a <- b` over a heap-carrying bare variable drops a's old contents
+        // without release. The inscope-pod rewrite marks every move it heals with
+        // moveFlags.podDelete, so an unmarked move is unhealed no matter why - policy
+        // off, hasUnsafe function, or a disallowed module. Bare-variable targets only:
+        // element targets (tab[k] <- v) are dominated by fresh-slot inserts.
+        if (expr == null || expr.move_flags.podDelete) return
+        var lhs = expr.left
+        if (lhs is ExprRef2Value) {
+            lhs = (lhs as ExprRef2Value.subexpr)
+        }
+        if (lhs == null || !(lhs is ExprVar)) return
+        // `return <- r` lowers through an ExprMove into the return slot - moving INTO
+        // a fresh result is not a leak
+        let lv = (lhs as ExprVar).variable
+        if (lv == null || lv.flags.aliasCMRES || lv.flags.generated) return
+        return if (!perf030_needs_release(expr.left._type))
+        perf_warning("PERF030: move-assign drops the target's old contents without release (a leak on a persistent heap); delete the target first, or enable force_inscope_pod so the compiler collects it", expr.at)
     }
 
     def override visitExprMove(var expr : ExprMove?) : ExpressionPtr {
