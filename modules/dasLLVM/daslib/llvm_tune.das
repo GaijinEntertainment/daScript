@@ -280,11 +280,26 @@ def private load_sidecar_doc(path : string) : JsonValue? {
     return doc
 }
 
-// refresh "provenance" and write the document back
+// refresh "provenance" (base identity + any tune_provenance_note entries) and write back
 def private save_sidecar_doc(path : string; var doc : JsonValue?) : bool {
-    update(doc, "provenance", JV((binary = running_binary(), platform = get_platform_name(),
-        arch = get_architecture_name(), box = tune_box_identity())))
+    var prov = JV((binary = running_binary(), platform = get_platform_name(),
+        arch = get_architecture_name(), box = tune_box_identity()))
+    for (k, v in keys(g_prov_notes), values(g_prov_notes)) {
+        if (k != "binary" && k != "platform" && k != "arch" && k != "box") {
+            update(prov, k, JV(v))
+        }
+    }
+    update(doc, "provenance", prov)
     return fwrite(path, write_json(doc))
+}
+
+var private g_prov_notes : table<string; string>
+
+    //! Attach `key = value` to the `"provenance"` section of every subsequent sidecar save in
+    //! this process — how a tuner records its measurement conditions (noise verdict, mode)
+    //! next to the winners they produced. Same key overwrites; base identity keys always win.
+def tune_provenance_note(key : string; value : string) {
+    g_prov_notes[key] = value
 }
 
 // upsert one "kernels" entry into an already-loaded document
@@ -335,6 +350,69 @@ def tune_sidecar_merge(kernels : table<string; string>; var runtime : JsonValue?
     let ok = save_sidecar_doc(path, doc)
     delete_json(doc)
     return ok
+}
+
+// ===== measurement statistics + the noise floor =====
+
+//! Median of `samples` — the robust central estimate a tuner ranks finalists by (a min over
+//! rounds is a lottery ticket on a non-silent box; the median is what the box actually does).
+def tune_median(samples : array<double>) : double {
+    if (empty(samples)) {
+        return 0.0lf
+    }
+    var s := samples
+    sort(s)
+    let n = length(s)
+    let m = (n & 1) == 1 ? s[n / 2] : 0.5lf * (s[n / 2 - 1] + s[n / 2])
+    delete s
+    return m
+}
+
+//! Coefficient of variation of `samples` in percent (sample sd over mean) — the tuner's noise
+//! measure. 0 when fewer than two samples or the mean is not positive.
+def tune_cv_pct(samples : array<double>) : double {
+    let n = length(samples)
+    if (n < 2) {
+        return 0.0lf
+    }
+    var mean = 0.0lf
+    for (s in samples) {
+        mean += s
+    }
+    mean /= double(n)
+    if (mean <= 0.0lf) {
+        return 0.0lf
+    }
+    var dev2 = 0.0lf
+    for (s in samples) {
+        dev2 += (s - mean) * (s - mean)
+    }
+    return 100.0lf * sqrt(dev2 / double(n - 1)) / mean
+}
+
+var private g_noise_thr = -1.0lf
+var private g_noise_ovr = -1
+
+    //! The probe-cv ceiling (percent) above which a tuner must refuse to race: winners picked
+    //! in louder noise are noise. `DAS_TUNE_NOISE_CV` overrides (calibration; garbage ignored),
+    //! else 2% normal / 1% paranoid — confirmed empirically on the quiet boxes during rollout.
+def tune_noise_threshold_pct(paranoid : bool) : double {
+    if (g_noise_thr < 0.0lf) {
+        let v = to_float(get_env_variable("DAS_TUNE_NOISE_CV"))
+        g_noise_thr = v > 0.0f ? double(v) : 0.0lf
+    }
+    return g_noise_thr > 0.0lf ? g_noise_thr : (paranoid ? 1.0lf : 2.0lf)
+}
+
+    //! True when `DAS_TUNE_NOISE_OVERRIDE` asks to tune through a failing noise gate anyway.
+    //! The tuner that honors it must stamp the sidecar `noise: overridden` — the escape leaves
+    //! a mark, so a later regression hunt can see the mint was taken on a loud box.
+def tune_noise_override() : bool {
+    if (g_noise_ovr < 0) {
+        let v = get_env_variable("DAS_TUNE_NOISE_OVERRIDE")
+        g_noise_ovr = (!empty(v) && v != "0") ? 1 : 0
+    }
+    return g_noise_ovr == 1
 }
 
 // ===== tune status (runtime) =====
@@ -856,7 +934,7 @@ class private TuneCompanionAnnotation : AstFunctionAnnotation {
     //! stamp the whole grid plus a `<name>_variants()` registry. Mode contract: module docstring.
 [function_macro(name = "tune")]
 class private TuneAnnotation : AstFunctionAnnotation {
-    def override apply(var func : FunctionPtr; var group : ModuleGroup;
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; // nolint:STYLE037 — the [tune] resolution ladder: manifest/fallback/reference arms in precedence order
                        args : AnnotationArgumentList; var errors : das_string) : bool {
         let gv = find_arg(args, "gen")
         if (!(gv is tString) || empty(gv as tString)) {
@@ -1505,7 +1583,7 @@ def private emit_status_init(var errors : string&) {
 // the policy core, shared by the declared annotation and the auto default (the infer pass
 // below): resolve the policy (env > declared), then per incomplete scope warn / error /
 // inject the auto or restart guard into `func` (the app's main)
-def private apply_tune_policy(var func : FunctionPtr; declared : string; var errors : string&) : bool {
+def private apply_tune_policy(var func : FunctionPtr; declared : string; var errors : string&) : bool { // nolint:STYLE037 — the policy dispatch ladder: one arm per flavor and gate
     var policy = declared
     {
         let penv = get_env_variable("DAS_TUNE_POLICY")

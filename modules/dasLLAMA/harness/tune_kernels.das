@@ -25,6 +25,7 @@ require llvm/daslib/llvm_tune    // tune_sidecar_merge — the app-sidecar upser
 require ?das_metal dasllama/dasllama_metal_prefill  // nolint:STYLE030 — metal_tensor_race (Apple static_if half)
 require ?das_metal dasllama/dasllama_metal_kernels  // nolint:STYLE030 — metal_tensor_race_decode (Apple static_if half)
 require tuner_cli               // --tune-fast, shared with the other half
+require tuner_noise             // the noise gate + the measured floor, shared with the other half
 require llvm/daslib/aarch64_neon // nolint:STYLE030 — sdot4_laneq (referenced by the cloned laneq template bodies)
 require llvm/daslib/f16_cvt      // f16 references + the cloned f16-kernel template bodies
 require math                     // mad (referenced by the cloned template bodies)
@@ -121,6 +122,10 @@ struct private KernelResult {
 // from here rather than restating all three in parallel arrays that can drift apart.
 var private g_results : array<KernelResult>
 var private g_shipped : table<string; string>
+// per-candidate finalist-phase samples for the CURRENT kernel — reset at kernel_begin. The
+// median of these ranks the finalists in report(); best-of stays min-over-all-rounds (the
+// screening rule still runs on it) and is printed alongside as the per-kernel noise witness.
+var private g_samples : array<array<double>>
 let TOL = 1.0e-3lf
 let BASELINE = "vec8_u2"   // the majority hand default; kernels with their own [tuned(fallback=)] pass it to report()
 
@@ -150,8 +155,25 @@ def screening_keep(best : array<double>; ok : array<bool>; i : int;
 }
 
 def private kernel_begin(name : string) : int64 {
+    delete g_samples
     tune_progress_kernel_begin(name, ROUNDS)
     return ref_time_ticks()
+}
+
+// one timing sample: best[] keeps min-over-all-rounds (screening ranks on it); finalist-phase
+// rounds also collect into g_samples for the median ranking
+def private record_sample(round, i : int; us : double; var best : array<double>) {
+    if (round < 0) {
+        return
+    }
+    if (us < best[i]) {
+        best[i] = us
+    }
+    return if (round < (FAST_MODE ? FAST_MID_ROUNDS : SCREEN_ROUNDS))
+    if (length(g_samples) <= i) {
+        g_samples |> resize(i + 1)
+    }
+    g_samples[i] |> push(us)
 }
 
 def private kernel_done(name : string; t0 : int64) {
@@ -204,16 +226,24 @@ def private shipped_fallback(kernel : string) : string {
 
 def report(kernel : string; names : array<string>; best : array<double>; ok : array<bool>) : string {
     let baseline = shipped_fallback(kernel)
+    // rank by MEDIAN of finalist rounds: min-over-rounds is a lottery on a non-silent box.
+    // Rows screened out before the finalist phase fall back to their best-of — they cannot
+    // win, and their line stays honest about what was measured.
+    var med : array<double>
+    med |> resize(length(names))
+    for (i in range(length(names))) {
+        med[i] = (length(g_samples) > i && !empty(g_samples[i])) ? tune_median(g_samples[i]) : best[i]
+    }
     var bi = -1
     for (i, nm in count(), names) {
         if (nm == baseline) {
             bi = i
         }
     }
-    let base = (bi >= 0 && ok[bi]) ? best[bi] : -1.0lf
+    let base = (bi >= 0 && ok[bi]) ? med[bi] : -1.0lf
     var winner = -1
     for (i in range(length(names))) {
-        if (ok[i] && (winner < 0 || best[i] < best[winner])) {
+        if (ok[i] && (winner < 0 || med[i] < med[winner])) {
             winner = i
         }
     }
@@ -223,32 +253,43 @@ def report(kernel : string; names : array<string>; best : array<double>; ok : ar
             tune_detail("  {names[i]}: REJECTED\n")
             continue
         }
-        let delta = base > 0.0lf ? (best[i] - base) / base * 100.0lf : 0.0lf
+        let delta = base > 0.0lf ? (med[i] - base) / base * 100.0lf : 0.0lf
         let mark = i == winner ? "  <== winner" : ""
-        tune_detail("  {names[i]}: {best[i]} us  ({delta}% vs {baseline}){mark}\n")
+        tune_detail("  {names[i]}: med {med[i]:0.1f} us (best {best[i]:0.1f})  ({delta:0.2f}% vs {baseline}){mark}\n")
     }
     if (winner < 0) {
         tune_progress_note("  {kernel}: no passing variant\n")
         tune_progress_kernel_end(kernel, "", "rejected")
         g_results |> emplace(KernelResult(kernel = kernel, winner = "", fallback = baseline))
+        delete med
         return ""
     }
+    // a winner's best-of sitting far under its own median = interference landed on this
+    // kernel's rounds — the per-kernel noise flag (informational; the median already absorbed it)
+    let div = med[winner] > 0.0lf ? (med[winner] - best[winner]) / med[winner] * 100.0lf : 0.0lf
+    let divThr = max(3.0lf * noise_floor_pct(), 2.0lf)
+    if (div > divThr) {
+        tune_progress_note("  {kernel}: NOISY — winner's best-of runs {div:0.1f}% under its median (flag at {divThr:0.1f}%)\n")
+    }
     var wname = names[winner]
-    // a tie or sub-noise "win" HOLDS the shipped baseline: flipping the perm re-keys the JIT and
-    // reorders the kernel's float math, which is only worth paying for a real, repeatable margin
-    let margin = base > 0.0lf ? (base - best[winner]) / base * 100.0lf : 0.0lf
-    if (wname != baseline && base > 0.0lf && margin < 0.5lf) {
+    // a winner inside the measured noise floor HOLDS the shipped baseline: flipping the perm
+    // re-keys the JIT and reorders float math for a margin the box cannot even measure —
+    // deterministic beats lottery
+    let need = max(0.5lf, noise_floor_pct())
+    let margin = base > 0.0lf ? (base - med[winner]) / base * 100.0lf : 0.0lf
+    if (wname != baseline && base > 0.0lf && margin < need) {
         wname = baseline
-        tune_detail("  => {kernel}: {baseline} holds ({names[winner]} within the noise floor, {margin}%)\n")
+        tune_detail("  => {kernel}: {baseline} holds ({names[winner]} within the noise floor: {margin:0.2f}% < {need:0.2f}%)\n")
         tune_progress_kernel_end(kernel, wname, "holds")
     } elif (wname == baseline) {
         tune_detail("  => {kernel}: {baseline} holds (the shipped default is already best)\n")
         tune_progress_kernel_end(kernel, wname, "holds")
     } else {
-        tune_detail("  => {kernel}: {wname} beats {baseline} by {margin}%  <<< the tuner found something\n")
+        tune_detail("  => {kernel}: {wname} beats {baseline} by {margin:0.2f}%  <<< the tuner found something\n")
         tune_progress_kernel_end(kernel, wname, "beats")
     }
     g_results |> emplace(KernelResult(kernel = kernel, winner = wname, fallback = baseline))
+    delete med
     return wname
 }
 
@@ -311,10 +352,7 @@ def bench_dot() : string {
             for (_rep in range(REPS)) {
                 sink += f(pa, pb, N)
             }
-            let us = double(get_time_usec(t0))
-            if (round >= 0 && us < best[i]) {
-                best[i] = us
-            }
+            record_sample(round, i, double(get_time_usec(t0)), best)
         }
     }
     if (sink == 12345.678f) {
@@ -374,10 +412,7 @@ def bench_binary(kernel : string; vs : array<tuple<string; BinFn>>;
             for (_rep in range(REPS)) {
                 invoke(f, dp, sp, N)
             }
-            let us = double(get_time_usec(t0))
-            if (round >= 0 && us < best[i]) {
-                best[i] = us
-            }
+            record_sample(round, i, double(get_time_usec(t0)), best)
         }
         sink += d[0]
     }
@@ -442,10 +477,7 @@ def bench_axpy() : string {
             for (_rep in range(REPS)) {
                 invoke(f, dp, sp, scale, N)
             }
-            let us = double(get_time_usec(t0))
-            if (round >= 0 && us < best[i]) {
-                best[i] = us
-            }
+            record_sample(round, i, double(get_time_usec(t0)), best)
         }
         sink += d[0]
     }
@@ -503,10 +535,7 @@ def bench_dot_f16() : string {
             for (_rep in range(REPS)) {
                 sink += f(pa, pb, N)
             }
-            let us = double(get_time_usec(t0))
-            if (round >= 0 && us < best[i]) {
-                best[i] = us
-            }
+            record_sample(round, i, double(get_time_usec(t0)), best)
         }
     }
     if (sink == 12345.678f) {
@@ -570,10 +599,7 @@ def bench_axpy_f16() : string {
             for (_rep in range(REPS)) {
                 invoke(f, dp, sp, scale, N)
             }
-            let us = double(get_time_usec(t0))
-            if (round >= 0 && us < best[i]) {
-                best[i] = us
-            }
+            record_sample(round, i, double(get_time_usec(t0)), best)
         }
         sink += d[0]
     }
@@ -627,10 +653,7 @@ def bench_cvt_f32_to_f16() : string {
             for (_rep in range(REPS)) {
                 invoke(f, dp, sp, N)   // pure overwrite — no reset needed
             }
-            let us = double(get_time_usec(t0))
-            if (round >= 0 && us < best[i]) {
-                best[i] = us
-            }
+            record_sample(round, i, double(get_time_usec(t0)), best)
         }
     }
     return report("cvt_f32_to_f16", names, best, ok)
@@ -680,10 +703,7 @@ def bench_cvt_f16_to_f32() : string {
             for (_rep in range(REPS)) {
                 invoke(f, dp, sp, N)   // pure overwrite — no reset needed
             }
-            let us = double(get_time_usec(t0))
-            if (round >= 0 && us < best[i]) {
-                best[i] = us
-            }
+            record_sample(round, i, double(get_time_usec(t0)), best)
         }
     }
     return report("cvt_f16_to_f32", names, best, ok)
@@ -742,10 +762,7 @@ def bench_scale() : string {
             for (_rep in range(REPS)) {
                 invoke(f, dp, scale, N)
             }
-            let us = double(get_time_usec(t0))
-            if (round >= 0 && us < best[i]) {
-                best[i] = us
-            }
+            record_sample(round, i, double(get_time_usec(t0)), best)
         }
         sink += d[0]
     }
@@ -820,10 +837,7 @@ def bench_softmax() : string {
             for (_rep in range(REPS)) {
                 invoke(f, dp, N)
             }
-            let us = double(get_time_usec(t0))
-            if (round >= 0 && us < best[i]) {
-                best[i] = us
-            }
+            record_sample(round, i, double(get_time_usec(t0)), best)
         }
         sink += d[0]
     }
@@ -892,10 +906,7 @@ def bench_rmsnorm() : string {
             for (_rep in range(REPS)) {
                 invoke(f, op, xp, wp, N, eps)
             }
-            let us = double(get_time_usec(t0))
-            if (round >= 0 && us < best[i]) {
-                best[i] = us
-            }
+            record_sample(round, i, double(get_time_usec(t0)), best)
         }
         sink += o[0]
     }
@@ -957,10 +968,7 @@ def bench_dot_q4() : string {
             for (_rep in range(REPS)) {
                 sink += f(wqp, wsp, xp, N)
             }
-            let us = double(get_time_usec(t0))
-            if (round >= 0 && us < best[i]) {
-                best[i] = us
-            }
+            record_sample(round, i, double(get_time_usec(t0)), best)
         }
     }
     if (sink == 12345.678f) {
@@ -1024,10 +1032,7 @@ def bench_dot_q8q8() : string {
             for (_rep in range(REPS)) {
                 sink += f(wqp, wsp, xqp, xsp, N)
             }
-            let us = double(get_time_usec(t0))
-            if (round >= 0 && us < best[i]) {
-                best[i] = us
-            }
+            record_sample(round, i, double(get_time_usec(t0)), best)
         }
     }
     if (sink == 12345.678f) {
@@ -1120,10 +1125,7 @@ def bench_dot_q8kv() : string {
             for (_rep in range(REPS)) {
                 sink += f(pa, pb, N)
             }
-            let us = double(get_time_usec(t0))
-            if (round >= 0 && us < best[i]) {
-                best[i] = us
-            }
+            record_sample(round, i, double(get_time_usec(t0)), best)
         }
     }
     if (sink == 12345.678f) {
@@ -1188,10 +1190,7 @@ def bench_dot_q8q8kv() : string {
             for (_rep in range(REPS)) {
                 sink += f(qp, sp, pb, N)
             }
-            let us = double(get_time_usec(t0))
-            if (round >= 0 && us < best[i]) {
-                best[i] = us
-            }
+            record_sample(round, i, double(get_time_usec(t0)), best)
         }
     }
     if (sink == 12345.678f) {
@@ -1257,10 +1256,7 @@ def bench_axpy_q8kv() : string {
             for (_rep in range(REPS)) {
                 invoke(f, dp, sp, scale, N)
             }
-            let us = double(get_time_usec(t0))
-            if (round >= 0 && us < best[i]) {
-                best[i] = us
-            }
+            record_sample(round, i, double(get_time_usec(t0)), best)
         }
         sink += d[0]
     }
@@ -1318,10 +1314,7 @@ def bench_cvt_q8kv_to_f32() : string {
             for (_rep in range(REPS)) {
                 invoke(f, dp, sp, N)
             }
-            let us = double(get_time_usec(t0))
-            if (round >= 0 && us < best[i]) {
-                best[i] = us
-            }
+            record_sample(round, i, double(get_time_usec(t0)), best)
         }
         sink += d[0]
     }
@@ -1379,10 +1372,7 @@ def bench_quantize_q8kv_row() : string {
             for (_rep in range(REPS)) {
                 invoke(f, dp, sp, N)
             }
-            let us = double(get_time_usec(t0))
-            if (round >= 0 && us < best[i]) {
-                best[i] = us
-            }
+            record_sample(round, i, double(get_time_usec(t0)), best)
         }
         sink += int(d[0])
     }
@@ -1460,10 +1450,7 @@ def bench_dot_mx4q8() : string {
             for (_rep in range(REPS)) {
                 sink += f(lutp, wnp, wep, xqp, xsp, N)
             }
-            let us = double(get_time_usec(t0))
-            if (round >= 0 && us < best[i]) {
-                best[i] = us
-            }
+            record_sample(round, i, double(get_time_usec(t0)), best)
         }
     }
     if (sink == 12345.678f) {
@@ -1532,10 +1519,7 @@ def bench_quantize() : string {
             for (_rep in range(REPS)) {
                 invoke(f, srcp, N, qp, sp, 0l, 0l)
             }
-            let us = double(get_time_usec(t0))
-            if (round >= 0 && us < best[i]) {
-                best[i] = us
-            }
+            record_sample(round, i, double(get_time_usec(t0)), best)
         }
         sink += sdst[0]
     }
@@ -1618,10 +1602,7 @@ def bench_quantize_bs() : string {
             for (_rep in range(REPS)) {
                 invoke(f, srcp, N, qp, sp, bp, 0l, 0l, 0l)
             }
-            let us = double(get_time_usec(t0))
-            if (round >= 0 && us < best[i]) {
-                best[i] = us
-            }
+            record_sample(round, i, double(get_time_usec(t0)), best)
         }
         sink += sdst[0]
     }
@@ -1701,10 +1682,7 @@ def bench_rope_tab() : string {
             for (_rep in range(REPS)) {
                 invoke(f, vp, head_size, N, cp, sp)
             }
-            let us = double(get_time_usec(t0))
-            if (round >= 0 && us < best[i]) {
-                best[i] = us
-            }
+            record_sample(round, i, double(get_time_usec(t0)), best)
         }
         sink += v[0]
     }
@@ -1783,10 +1761,7 @@ def bench_gemm_tile() : string {
             for (_rep in range(REPS)) {
                 invoke(f, cp, ap, bp, 0l, 0l, K, NN)
             }
-            let us = double(get_time_usec(t0))
-            if (round >= 0 && us < best[i]) {
-                best[i] = us
-            }
+            record_sample(round, i, double(get_time_usec(t0)), best)
         }
         sink += c[0]
     }
@@ -1797,7 +1772,7 @@ def bench_gemm_tile() : string {
 // ===== dot_q8q8_laneq4x4: arm64+JIT only (the repack backend must be registered so the pin lands
 // and the intrinsic lowers to hardware SDOT). Runs LAST — the pin sticks until process exit.
 
-def bench_laneq4x4() : string {
+def bench_laneq4x4() : string { // nolint:STYLE038 — one bench: fixture, backend pin, gate and race are one coupled sequence
     if (get_architecture_name() != "arm64" || !jit_enabled()) {
         tune_detail("--- dot_q8q8_laneq4x4 ---\n  skipped (needs arm64 + -jit: lane-indexed SDOT + the repack backend)\n")
         return ""
@@ -1893,10 +1868,7 @@ def bench_laneq4x4() : string {
             for (_rep in range(REPS)) {
                 invoke(f, yp, wgp, sgp, xqp, xsp, n, d, 0l, 0l)
             }
-            let us = double(get_time_usec(t0))
-            if (round >= 0 && us < best[i]) {
-                best[i] = us
-            }
+            record_sample(round, i, double(get_time_usec(t0)), best)
         }
         sink += y[0]
     }
@@ -1907,7 +1879,7 @@ def bench_laneq4x4() : string {
 // fallback: the tuner rail drives this half explicitly (DAS_TUNE_MODE=tune) — the auto
 // policy must not fire a nested tuner off this program's own missing per-app sidecar
 [export, tune_policy(missing = "fallback")]
-def main {
+def main : int { // nolint:STYLE037 — flat one-bench-per-kernel rail; the noise gates are its checkpoints
     FAST_MODE = tuner_fast_requested()
     if (FAST_MODE) {
         SCREEN_ROUNDS = 4
@@ -1920,6 +1892,11 @@ def main {
     create_job_que()   // child process exit restores affinity; runtime snapshot also reads its lane count
     let affinity_desc = affinity_inherited ? "DAS_JOBQUE_AFFINITY={get_env_variable("DAS_JOBQUE_AFFINITY")}" : "hard CPU0 (tuner default)"
     tune_detail("kernel tuner: {FAST_MODE ? "FAST" : "default"}, N={N}, {SCREEN_ROUNDS} full-grid screening rounds, finalists up to {ROUNDS} rounds x {REPS} reps, measurement affinity {affinity_desc}\n\n")
+    // refuse before burning minutes measuring noise — a refusal costs seconds, a noisy sidecar
+    // costs days of phantom regressions
+    if (!noise_gate("start")) {
+        return 1
+    }
     tune_progress_plan("dasllama_kernels", TUNED_KERNEL_COUNT)
 
     // add / mul / copy share the (var d, s) signature — one bench, per-kernel data + reference.
@@ -1982,6 +1959,10 @@ def main {
     kernel_t0 = kernel_begin("copy_floats")
     let copyw = bench_binary("copy_floats", cpy_vs, cpy_d0, cpy_s, @@(_a, b : float) : double => double(b))
     kernel_done("copy_floats", kernel_t0)
+    if (!noise_gate("mid1")) {
+        print("aborting mid-run — no sidecar written\n")
+        return 1
+    }
     kernel_t0 = kernel_begin("softmax")
     let softmaxw = bench_softmax()
     kernel_done("softmax", kernel_t0)
@@ -2009,6 +1990,10 @@ def main {
     kernel_t0 = kernel_begin("quantize_q8kv_row")
     let quantq8kvw = bench_quantize_q8kv_row()
     kernel_done("quantize_q8kv_row", kernel_t0)
+    if (!noise_gate("mid2")) {
+        print("aborting mid-run — no sidecar written\n")
+        return 1
+    }
     kernel_t0 = kernel_begin("dot_mx4q8")
     let dmx4w = bench_dot_mx4q8()
     kernel_done("dot_mx4q8", kernel_t0)
@@ -2027,6 +2012,17 @@ def main {
     kernel_t0 = kernel_begin("dot_q8q8_laneq4x4")
     let laneqw = bench_laneq4x4()   // last: it pins the repack backend (sticks until process exit)
     kernel_done("dot_q8q8_laneq4x4", kernel_t0)
+
+    // the gate that closes the CPU measurement window: every sample the sidecar will carry was
+    // raced between this probe and the start one — a noisy read here means NOTHING is written.
+    // It must run BEFORE the Metal race: GPU work permanently shifts this thread's scheduling
+    // (E-core placement after the burst — probe median 1.9x, cv 30%+), so any CPU probe after
+    // it measures the post-GPU world, not the race window. The Metal twin race guards itself:
+    // interleaved base/twin A/B, so common-mode noise cancels.
+    if (!noise_gate("end")) {
+        print("aborting at the end-of-run gate — no sidecar written\n")
+        return 1
+    }
 
     // Summary: which kernels the tuner re-tuned away from THEIR OWN shipped fallback (the
     // [tuned(fallback=...)] perm; bare [tuned] ships the vec8_u2 majority = BASELINE).
@@ -2120,8 +2116,10 @@ def main {
     // upsert into the app sidecar (same resolution [tuned] reads from): the loop-hint winners
     // join the "kernels" section next to the [tune] generator perms, "runtime" is replaced —
     // this tuner owns it — and everything else (other scopes' keys) survives
+    noise_provenance_stamp()
     let ppath = box_profile_path()
-    if (tune_sidecar_merge(winners, runtime)) {
+    let wrote = tune_sidecar_merge(winners, runtime)
+    if (wrote) {
         print("wrote {ppath}\n")
         // the sidecar body is what the display exists to replace — verbose only
         if (tune_verbosity() == "verbose") {
@@ -2131,4 +2129,5 @@ def main {
         print("FAILED to write {ppath} — if the app dir is read-only, set DAS_TUNE_MANIFEST to a writable path\n")
     }
     delete winners
+    return wrote ? 0 : 1
 }

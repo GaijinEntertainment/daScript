@@ -320,6 +320,40 @@ A harness emits events with `tune_progress_plan` / `_kernel_begin` /
 `_kernel_step` / `_kernel_end`. A different front end (a GUI, a status page)
 consumes them with `tune_progress_feed` and renders `tune_progress_line`.
 
+## The noise gate
+
+A winner raced on a non-silent box is a random number, and the sidecar is a
+file — one noisy mint persists and reads as a code regression later. A
+harness therefore probes the box before, during, and after its races: it
+times one fixed kernel for a dozen rounds at the real round shape, computes
+the coefficient of variation, and **refuses to tune** when the cv exceeds the
+threshold — nonzero exit, nothing written, the measured cv printed so you can
+watch it fall as you quiet the box. A failed probe gets one settle-and-retry
+first (a transient the run itself caused fades in seconds; outside noise does
+not), and a failed **end** probe discards the whole run: winners only reach
+the sidecar through a gate that just passed.
+
+The framework carries the policy and the math; the harness carries the probe:
+
+- `tune_noise_threshold_pct(paranoid)` — the cv ceiling: 2% normal, 1%
+  paranoid; `DAS_TUNE_NOISE_CV=<pct>` overrides for calibration.
+- `tune_noise_override()` — `DAS_TUNE_NOISE_OVERRIDE=1` turns refusals into
+  passes; the harness that honors it must stamp the sidecar
+  `noise: overridden`, so the escape always leaves a mark.
+- `tune_median(samples)` / `tune_cv_pct(samples)` — rank finalists by the
+  median of their finalist rounds (print best-of alongside); a best-of far
+  under its own median is a per-kernel noise flag.
+- `tune_provenance_note(key, value)` — attach the noise verdict (and any
+  other measurement condition) to the `"provenance"` section of every
+  subsequent sidecar save in the process.
+
+Two placement rules from the dasLLAMA harness (the worked consumer): a winner
+must beat the shipped fallback by more than the measured noise floor or the
+fallback keeps the seat — deterministic beats lottery; and the closing probe
+must run **before** any GPU race in the same process — GPU work permanently
+shifts the thread's CPU scheduling, so a later probe measures the post-GPU
+world, not the window the winners were raced in.
+
 ## Writing a harness
 
 A tuner is an ordinary `[export] def main` compiled with
@@ -348,7 +382,8 @@ knobs under `"runtime"` (owned by the library that reads them), and
 
 {
     "kernels" : { "gemm" : "kstep4", "gemm_gemv" : "reference" },
-    "provenance" : { "binary" : "...", "platform" : "windows", "arch" : "x86_64" }
+    "provenance" : { "binary" : "...", "platform" : "windows", "arch" : "x86_64",
+                     "noise" : "ok", "noise_probes" : "start cv 0.40%; mid1 cv 0.14%; end cv 0.28%" }
 }
 ```
 

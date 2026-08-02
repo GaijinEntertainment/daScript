@@ -89,3 +89,28 @@ gate.
 
 No perm-grid redesign, no `[tune]` macro surface changes, no per-kernel adaptive budgets
 (ledger if wanted later).
+
+## Status
+
+**1a + 1b + 1c LANDED.** `tune_median`/`tune_cv_pct`/`tune_noise_threshold_pct`/
+`tune_noise_override`/`tune_provenance_note` in llvm_tune; the shared probe + gate in
+`modules/dasLLAMA/harness/tuner_noise.das`; both halves gate at start/mid/end, exit nonzero on
+refusal, and write NOTHING unless the end gate passes (the gen half's per-family writes are now
+one deferred merge — which also fixed its exit-0-on-FAIL bug). report() ranks by median of
+finalist rounds, flags a best-of far under its median, and the fallback holds unless beaten by
+`max(0.5%, measured floor)`. Unit cells: `modules/dasLLVM/tests/llvm_tune_stats.das`.
+
+Rollout findings (M1, probe = 4-acc dot N=4096 x 2000 reps x 12 rounds ≈ 30 ms):
+- Quiet-box cv 0.10-1.0% — the 2%/1% thresholds hold on Apple; zen2 to confirm the x64 half.
+- The settle before a retry must SPIN, not sleep: a slept thread wakes on an E-core
+  (median 1.9x, cv 20-30% — the artifact looks exactly like a loud box).
+- A CPU probe after the Metal race reads the post-GPU scheduling world (same ~1.9x/30%
+  signature, persistent), so the end gate closes the CPU window BEFORE the GPU race; the
+  Metal twin race guards itself (interleaved A/B, 2-5x margins).
+- Provenance carries the LAST writer's probes only — deliverable 2 restructures.
+- Deferred to 1d: child-process dastest cells for the gate rails (refusal rc, override stamp)
+  — live-validated this pass; the 1d validation harness is where they belong.
+
+Next per sequencing: 1d (validation phase) + 1e (paranoid mode), then 2 (provenance/history).
+Acceptance test when ready: mint on zen2 while it is NOISY — the gate must refuse, and keep
+refusing until the actual culprit process is gone; M1 rehearsal = mint with Parsec running.

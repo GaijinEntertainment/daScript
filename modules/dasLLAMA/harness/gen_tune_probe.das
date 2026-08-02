@@ -41,10 +41,12 @@ require dasllama/dasllama_gguf   // transcode_q*k_superblock — the kq fixture 
 require llvm/daslib/f16_cvt   // f32_to_f16 — the kq fixtures pack disk superblock headers
 require llvm/daslib/llvm_tune
 require daslib/random
+require daslib/json   // JsonValue — the null runtime arg of the deferred sidecar merge
 require daslib/fio   // has_env_variable: the compile-only mint gate (slice J recipe)
 require daslib/strings_boost   // split — the confirm pass parses child output
 require daslib/command_line    // get_das_exe — the confirm pass spawns daslang children
 require tuner_cli              // --tune-fast, shared with tune_kernels
+require tuner_noise            // the noise gate, shared with tune_kernels
 require math
 require strings
 
@@ -868,7 +870,7 @@ def kq_test_family(fmt : int64; kfxs : array<KqFixture>) : bool {
 // and the gemv (streamed + hot decode shapes), print the table, and return the tile-best
 // suffix ("" = a gate failed). The kq gemv is nrsplit-independent — same-mr rows share the
 // plane and the gemv shape — so the tile bench decides the family entry.
-def kq_tune_family(fmt : int64) : string {
+def kq_tune_family(fmt : int64) : string { // nolint:STYLE038 — one family race: shared repacked buffers couple gate, bench and pick
     // batch shape: fat STREAMING ffn (weights > the L2 budget, multi-token-block walk) — the shape
     // class that carries ~90% of prefill time. The old 2048x512x64 kv-projection probe was L2-hot
     // and crowned hot-shape winners that lose double-digit % at model scale (mr4 vs mr8, M1).
@@ -1018,7 +1020,7 @@ def close_to_ref(fx : Fixture; y : array<float>; var maxdiff : float&) : bool {
     return ok
 }
 
-def test_mode : bool {
+def test_mode : bool { // nolint:STYLE037 — flat per-variant correctness ladder; each desync check is one arm
     // nb=2 (even main loop), nb=3 (remainder path), production-ish slice — d divides every
     // grid mr (4/8 on arm64, 16/32 on the x64 rows when live); ntok=32 covers one full amx
     // 2×2 macro (and divides the 4/16-token steps of every other row)
@@ -1311,21 +1313,17 @@ def private confirm_pp_run(model, manifest_path, expected : string) : double {
     return pp
 }
 
-def private write_winner(suffix : string) : bool {
-    let ok = tune_manifest_set("q8q8_tile_gen", suffix)
-    print("winner: {suffix} {ok ? "->" : "-> FAILED TO WRITE"} {tune_manifest_path()}\n")
-    return ok
-}
-
-def private confirm_and_write(winner : string) : bool {
+// the confirmed q8q8 crown to QUEUE for the end-of-run write ("" = hard failure — write
+// nothing, fail the mint). All writes are deferred behind the end-of-run noise gate.
+def private confirm_winner(winner : string) : string {
     let fb = discover_fallback_stamp()
     if (empty(fb)) {
-        print("confirm: fallback-discovery child failed — writing the winner unguarded (pre-confirm behavior)\n")
-        return write_winner(winner)
+        print("confirm: fallback-discovery child failed — keeping the winner unguarded (pre-confirm behavior)\n")
+        return winner
     }
     if (fb == winner) {
         print("confirm: winner '{winner}' IS the per-ISA fallback — no e2e confirm needed\n")
-        return write_winner(winner)
+        return winner
     }
     let model = get_env_variable("DASLLAMA_CONFIRM_MODEL")
     if (empty(model)) {
@@ -1333,7 +1331,7 @@ def private confirm_and_write(winner : string) : bool {
         print("confirm: pinning the fallback '{fb}' — re-run with DASLLAMA_CONFIRM_MODEL=<q8 gguf> to run the confirm pass\n")
         // pin the fallback so the sidecar is COMPLETE — leaving the entry missing makes the
         // startup completeness gate re-tune on every run (the runtime rides the fallback either way)
-        return write_winner(fb)
+        return fb
     }
     let tmpm = "{get_das_root()}/_tune_confirm_manifest.json"
     // the stamps read the manifest's "kernels" SECTION (read_manifest) — a flat root object
@@ -1341,7 +1339,7 @@ def private confirm_and_write(winner : string) : bool {
     // never pass (both arms score 0 -> auto-reject)
     if (!fwrite(tmpm, "\{\"kernels\": \{\"q8q8_tile_gen\": \"{winner}\"\}\}")) {
         print("confirm: cannot write {tmpm} — is das_root writable?\n")
-        return false
+        return ""
     }
     var bestF = 0.0lf
     var bestW = 0.0lf
@@ -1352,18 +1350,24 @@ def private confirm_and_write(winner : string) : bool {
     remove(tmpm)
     if (bestF <= 0.0lf) {
         print("confirm: the FALLBACK arm produced no pp number — not writing anything (fix the box, rerun)\n")
-        return false
+        return ""
     }
     if (bestW > bestF * CONFIRM_MARGIN) {
         print("confirm: challenger '{winner}' {bestW} tok/s BEATS fallback '{fb}' {bestF} tok/s — CONFIRMED\n")
-        return write_winner(winner)
+        return winner
     }
     print("confirm: challenger '{winner}' {bestW} tok/s does NOT beat fallback '{fb}' {bestF} tok/s by x{CONFIRM_MARGIN} — REJECTED, pinning the fallback\n")
-    return write_winner(fb)
+    return fb
 }
 
-def tune_mode_run : bool {
+def tune_mode_run : bool { // nolint:STYLE037 — flat family-by-family race rail; gates + deferred flush in call order
     let tune_total_t0 = ref_time_ticks()
+    // refuse before burning minutes measuring noise; every winner below queues into `pending`
+    // and nothing reaches the sidecar until the end-of-run gate passes
+    if (!noise_gate("start")) {
+        return false
+    }
+    var pending : table<string; string>
     // q8q8 + four kq formats + q51 + the end-to-end confirm
     tune_progress_plan("dasllama_generators", 7)
     tune_progress_kernel_begin("q8q8_tile_gen", ROUNDS)
@@ -1548,7 +1552,10 @@ def tune_mode_run : bool {
     // decode path staying DRAM-bound — validated end-to-end when the entries first landed.
     tune_detail("TUNE_GEN_TIME q8q8_family {get_time_usec(tune_total_t0) / 1000} ms\n")
     tune_progress_kernel_end("q8q8_tile_gen", vs[merged]._0, "beats")
-    var kok = true
+    if (!noise_gate("mid1")) {
+        print("aborting mid-run — no sidecar written\n")
+        return false
+    }
     for (fmt in fixed_array(4l, 5l, 6l, 40l)) {
         let kq_t0 = ref_time_ticks()
         tune_progress_kernel_begin("k{fmt}q8_tile_gen", ROUNDS)
@@ -1556,39 +1563,48 @@ def tune_mode_run : bool {
         tune_detail("TUNE_GEN_TIME k{fmt}_family {get_time_usec(kq_t0) / 1000} ms\n")
         tune_progress_kernel_end("k{fmt}q8_tile_gen", w, empty(w) ? "rejected" : "beats")
         let entry = fmt == 40l ? "q40q8_tile_gen" : "k{fmt}q8_tile_gen"
-        if (empty(w)) {
-            // gate failure (the broken perm is named above): record the always-correct
-            // reference body so the scope still COMPLETES — a missing key re-tunes every start
-            let wok = tune_manifest_set(entry, "reference")
-            print("{entry} winner: reference (gate-failure fallback) {wok ? "->" : "-> FAILED TO WRITE"} {tune_manifest_path()}\n")
-            kok = kok && wok
-        } else {
-            let wok = tune_manifest_set(entry, w)
-            print("{entry} winner: {w} {wok ? "->" : "-> FAILED TO WRITE"} {tune_manifest_path()}\n")
-            kok = kok && wok
-        }
+        // gate failure (the broken perm is named above): queue the always-correct reference
+        // body so the scope still COMPLETES — a missing key re-tunes every start
+        pending[entry] = empty(w) ? "reference" : w
+        print("{entry} winner: {empty(w) ? "reference (gate-failure fallback)" : w}\n")
+    }
+    if (!noise_gate("mid2")) {
+        print("aborting mid-run — no sidecar written\n")
+        return false
     }
     let q51_t0 = ref_time_ticks()
     tune_progress_kernel_begin("q51q8_gemv_gen", ROUNDS)
     let qw = q51_tune_family()
     tune_detail("TUNE_GEN_TIME q51_family {get_time_usec(q51_t0) / 1000} ms\n")
     tune_progress_kernel_end("q51q8_gemv_gen", qw, empty(qw) ? "rejected" : "beats")
-    if (empty(qw)) {
-        // same gate-failure fallback as the kq loop: complete the scope on the reference body
-        let qok = tune_manifest_set("q51q8_gemv_gen", "reference")
-        print("q51q8_gemv_gen winner: reference (gate-failure fallback) {qok ? "->" : "-> FAILED TO WRITE"} {tune_manifest_path()}\n")
-        kok = kok && qok
-    } else {
-        let qok = tune_manifest_set("q51q8_gemv_gen", qw)
-        print("q51q8_gemv_gen winner: {qw} {qok ? "->" : "-> FAILED TO WRITE"} {tune_manifest_path()}\n")
-        kok = kok && qok
-    }
+    // same gate-failure fallback as the kq loop: complete the scope on the reference body
+    pending["q51q8_gemv_gen"] = empty(qw) ? "reference" : qw
+    print("q51q8_gemv_gen winner: {empty(qw) ? "reference (gate-failure fallback)" : qw}\n")
     let confirm_t0 = ref_time_ticks()
     tune_progress_kernel_begin("confirm_e2e_prefill", 0)
-    let ok = confirm_and_write(vs[merged]._0) && kok
+    let cw = confirm_winner(vs[merged]._0)
+    var ok = !empty(cw)
+    if (ok) {
+        pending["q8q8_tile_gen"] = cw
+        print("q8q8_tile_gen winner: {cw}\n")
+    }
     tune_detail("TUNE_GEN_TIME confirm {get_time_usec(confirm_t0) / 1000} ms\n")
     tune_progress_kernel_end("confirm_e2e_prefill", "", ok ? "holds" : "rejected")
     tune_progress_finish()
+    // the only write, behind the last gate: a noisy end-probe means NO entry is written — the
+    // winners above were raced in conditions the probe just proved untrustworthy
+    if (ok && !noise_gate("end")) {
+        print("aborting at the end-of-run gate — no sidecar written\n")
+        ok = false
+    }
+    if (ok) {
+        noise_provenance_stamp()
+        var nort : JsonValue?
+        ok = tune_sidecar_merge(pending, nort)
+        print(ok ? "wrote {length(pending)} generator entries -> {tune_manifest_path()}\n"
+            : "FAILED to write {tune_manifest_path()} — if the app dir is read-only, set DAS_TUNE_MANIFEST to a writable path\n")
+    }
+    delete pending
     tune_detail("TUNE_GEN_TIME total {get_time_usec(tune_total_t0) / 1000} ms\n")
     delete y
     delete yg
@@ -1618,10 +1634,10 @@ def tune_mode_run : bool {
 // fallback: the tuner rail drives this via DAS_TUNE_MODE=tune explicitly; the auto policy
 // must not fire when this runs as the compile-only fallback-discovery child (recursion)
 [export, tune_policy(missing = "fallback")]
-def main {
+def main : int {
     if (!jit_enabled()) {
         print("run with -jit — the generator only fires under the LLVM JIT\n")
-        return
+        return 1
     }
     if (tuner_fast_requested()) {
         ROUNDS = ROUNDS_FAST
@@ -1635,7 +1651,7 @@ def main {
         var vs <- q8q8_tile_gen_variants()
         print("compile-only: DLL linked, {length(vs)} tile variants, execution skipped\n")
         delete vs
-        return
+        return 0
     }
     // select the gen backend where it exists (arm64) — test/tune drive the variant
     // registries directly, so an x64 box runs fine with no gen backend registered
@@ -1647,10 +1663,15 @@ def main {
     }
     let mode = tune_mode()
     if (mode == "test") {
-        print(test_mode() ? "GEN TUNE TEST OK\n" : "GEN TUNE TEST FAIL\n")
-    } elif (mode == "tune") {
-        print(tune_mode_run() ? "GEN TUNE RUN OK\n" : "GEN TUNE RUN FAIL\n")
-    } else {
-        print("set DAS_TUNE_MODE=test or =tune (compile-time env: it stamps the variant grid)\n")
+        let tok = test_mode()
+        print(tok ? "GEN TUNE TEST OK\n" : "GEN TUNE TEST FAIL\n")
+        return tok ? 0 : 1
     }
+    if (mode == "tune") {
+        let rok = tune_mode_run()
+        print(rok ? "GEN TUNE RUN OK\n" : "GEN TUNE RUN FAIL\n")
+        return rok ? 0 : 1
+    }
+    print("set DAS_TUNE_MODE=test or =tune (compile-time env: it stamps the variant grid)\n")
+    return 1
 }
