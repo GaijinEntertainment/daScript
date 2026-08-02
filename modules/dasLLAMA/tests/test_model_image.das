@@ -11,6 +11,7 @@ require dasllama/dasllama_image
 require dasllama/dasllama_plane   // PlaneF — the served side of the round-trip comparisons
 require dasllama/dasllama_canary  // CanaryStaging/stage_canary_encoder — the off-rail truth read
 require dasllama/dasllama_gemma4a // Gemma4aStaging/stage_gemma4a_encoder — same, for the gemma4a arm
+require dasllama/dasllama_parakeet // ParakeetStaging/stage_parakeet_model — same, for the parakeet arm
 require dasllama/dasllama_config     // DlimConfiguration — the peek/round-trip mechanics arms
 require dasllama/dasllama_math   // pin_kernel_backend — the metal-flavor arm's donor contract
 require dasllama/dasllama_layout // convert_model_to_metal_blob — the derive cell's in-RAM control
@@ -810,9 +811,11 @@ def test_whisper_image_roundtrip(t : T?) {
         t |> success(stat(img).is_valid, "cold load saved an image")
         let b = whisper_transcribe_text(path, samples)
         t |> success(b.mapped, "warm load is image-backed")
-        t |> success(!g.mapped && !empty(g.text), "non-empty transcript off the rail")
-        t |> success(g.text == a.text, "bin vs cold-built image transcript")
-        t |> success(g.text == b.text, "bin vs mapped image transcript")
+        // every served model is image-backed now; the control differs by SINK, not by form —
+        // it is minted into memory and never touches the canonical .dlim
+        t |> success(g.mapped && !empty(g.text), "non-empty transcript from the in-memory mint")
+        t |> success(g.text == a.text, "in-memory mint vs cold-built image transcript")
+        t |> success(g.text == b.text, "in-memory mint vs mapped image transcript")
         delete samples
     }
 }
@@ -822,9 +825,11 @@ def private parakeet_transcribe_text(path : string; samples : array<float>; cach
     if (cached) {
         m <- load_asr_model(path)
     } else {
-        // the off-rail control, assembled exactly as load_asr_model's parakeet arm does
+        // the control: a staged read minted straight into memory, so it shares no bytes and no
+        // file with the canonical image the other two arms load
         m = AsrModel(kind = AsrKind.parakeet)
-        m.pk <- load_parakeet_model_(path, true)
+        var inscope stg <- stage_parakeet_model(path, true)
+        mint_parakeet_model(stg, m.pk, true)
     }
     var text = ""
     with_job_que() {
@@ -864,9 +869,11 @@ def test_parakeet_image_roundtrip(t : T?) {
         t |> success(stat(img).is_valid, "cold load saved an image")
         let b = parakeet_transcribe_text(path, samples)
         t |> success(b.mapped, "warm load is image-backed")
-        t |> success(!g.mapped && !empty(g.text), "non-empty transcript off the rail")
-        t |> success(g.text == a.text, "bin vs cold-built image transcript")
-        t |> success(g.text == b.text, "bin vs mapped image transcript")
+        // every served model is image-backed now; the control differs by SINK, not by form —
+        // it is minted into memory and never touches the canonical .dlim
+        t |> success(g.mapped && !empty(g.text), "non-empty transcript from the in-memory mint")
+        t |> success(g.text == a.text, "in-memory mint vs cold-built image transcript")
+        t |> success(g.text == b.text, "in-memory mint vs mapped image transcript")
         delete samples
     }
 }

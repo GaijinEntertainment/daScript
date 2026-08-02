@@ -500,13 +500,21 @@ def matmul(var y : array<float>; w : array<float> | #; x : array<float>; n, d : 
     }
 }
 
+//! Borrowed-plane form of the blob+offset matvec.
+def matmul(var y : array<float>; w : PlaneF; woff : int64; x : array<float>; n, d : int64) {
+    matmul_at(y, plane_at(w, woff), x, n, d)
+}
+
 //! Blob+offset form: the weight is rows [d x n] at element offset `woff` inside `w` — no
 //! array_view (the view's block invoke is an LLVM optimization boundary; the kernel only ever
 //! wanted the base pointer).
 def matmul(var y : array<float>; w : array<float>; woff : int64; x : array<float>; n, d : int64) {
+    matmul_at(y, unsafe(addr<float const?>(w[woff])), x, n, d)
+}
+
+def private matmul_at(var y : array<float>; wp : float const?; x : array<float>; n, d : int64) {
     unsafe {
         var yp = addr(y[0])
-        let wp = addr<float const?>(w[woff])
         let xp = addr(x[0])
         maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), 1, n * d)) $(rb, re) {
             unsafe {

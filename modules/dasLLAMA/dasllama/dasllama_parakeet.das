@@ -14,6 +14,7 @@ require daslib/archive
 require dasllama/dasllama_env
 require dasllama/dasllama_math
 require dasllama/dasllama_gguf
+require dasllama/dasllama_plane public   // PlaneF/PlaneI8/PlaneI32/PlaneI64 — the borrowed weight planes
 require dasllama/dasllama_audio
 require dasllama/dasllama_convert
 require dasllama/dasllama_par
@@ -92,12 +93,12 @@ struct ParakeetModel {
     n_max_tokens : int64
     eps : float = 1e-5
     blank_id : int
-    durations : array<int>
-    filters : array<float>     // [n_mel][n_fb]
-    window : array<float>      // STFT window from the file
+    durations : PlaneI32 = PlaneI32()
+    filters : PlaneF = PlaneF()     // [n_mel][n_fb]
+    window : PlaneF = PlaneF()      // STFT window from the file
     fft : FftPlan = FftPlan()  // radix-2 plan (n_fft is 512 on every parakeet); built at load
     vocab : array<string>
-    blob : array<float>
+    blob : PlaneF = PlaneF()
     // pre-encode conv stack
     c0_w : int64
     c0_b : int64
@@ -117,9 +118,9 @@ struct ParakeetModel {
     aux_layer_stride : int64   // fp32 load; on a q8 load the GEMM regions collapse out of it)
     // prediction network + joint
     embed_off : int64          // [n_vocab+1][pred_dim]
-    lstm_ih : array<int64>     // per layer
-    lstm_hh : array<int64>
-    lstm_b : array<int64>
+    lstm_ih : PlaneI64 = PlaneI64()     // per layer
+    lstm_hh : PlaneI64 = PlaneI64()
+    lstm_b : PlaneI64 = PlaneI64()
     joint_enc_w : int64
     joint_enc_b : int64
     joint_pred_w : int64
@@ -129,22 +130,17 @@ struct ParakeetModel {
     // Q8 fast path (default load): Q8_0 image of the GEMM regions at their full-layout
     // offsets, repacked for the active backend; transcoded straight from the mapped file.
     q8 : bool
-    qblob : array<int8>
-    qscales : array<float>
+    qblob : PlaneI8 = PlaneI8()
+    qscales : PlaneF = PlaneF()
     image_map : void?         // non-null when the planes borrow a .dlim image (dasllama_image)
     image_bytes : uint64
 }
 
+// planes borrow; vocab (meta-carried) and the fft plan (rebuilt at load) are owned
 def finalize(var t : ParakeetModel) {
     apply(t) $ [unused_argument(name)] (name : string; var field) {
         static_if (typeinfo is_array(field)) {
-            if (lock_count(field) != 0) {
-                unsafe {
-                    _builtin_forget_temp_array(field)
-                }
-            } else {
-                delete field
-            }
+            delete field
         } static_elif (typeinfo is_struct(field)) {
             delete field
         }
@@ -265,44 +261,44 @@ def private pk_layer_stride(d, ff, nk : int64) : int64 => 8l * d * d + 4l * ff *
 def private pk_aux_layer_stride(d, nk : int64) : int64 => 16l * d + nk * d
 
 // repack one GEMM region for the active backend (scales index at woff/32, so woff must be 32-aligned)
-def private pk_repack(var m : ParakeetModel; woff, n, d : int64) {
+def private pk_repack(var st : ParakeetStaging; woff, n, d : int64) {
     if (woff % 32l != 0l) {
         panic("parakeet q8: GEMM weight at {woff} is not 32-aligned")
     }
-    repack_q8q8_weight(m.qblob, m.qscales, woff, n, d)
+    repack_q8q8_weight(st.qblob, st.qscales, woff, n, d)
 }
 
 // repack every GEMM region for the active backend's q8q8 kernels; without a selected
 // backend matmul_q8q8_batch reads the flat Q8_0 image as-is
-def private pk_repack_all(var m : ParakeetModel) {
+def private pk_repack_all(var st : ParakeetStaging) {
     if (!select_matmul_backend_for_load()) {
         return
     }
-    let d = m.n_state
+    let d = st.e.n_state
     let ff = 4l * d
-    let nch = m.n_sub_ch
-    let w1 = (m.n_mel - 1l) / 2l + 1l
+    let nch = st.e.n_sub_ch
+    let w1 = (st.e.n_mel - 1l) / 2l + 1l
     let w2 = (w1 - 1l) / 2l + 1l
     let w3 = (w2 - 1l) / 2l + 1l
     let feat = w3 * nch                       // pre_w input dim (encode's xf row width)
-    pk_repack(m, m.c3_w, nch, nch)
-    pk_repack(m, m.c6_w, nch, nch)
-    pk_repack(m, m.pre_w, feat, d)
-    for (l in range64(m.n_layer)) {
-        let lo = pk_layer_offsets(m, l)
-        pk_repack(m, lo.ff1a_w, d, ff)
-        pk_repack(m, lo.ff1b_w, ff, d)
-        pk_repack(m, lo.q_w, d, d)
-        pk_repack(m, lo.k_w, d, d)
-        pk_repack(m, lo.v_w, d, d)
-        pk_repack(m, lo.o_w, d, d)
-        pk_repack(m, lo.pos_w, d, d)
-        pk_repack(m, lo.pw1_w, d, 2l * d)
-        pk_repack(m, lo.pw2_w, d, d)
-        pk_repack(m, lo.ff2a_w, d, ff)
-        pk_repack(m, lo.ff2b_w, ff, d)
+    pk_repack(st, st.e.c3_w, nch, nch)
+    pk_repack(st, st.e.c6_w, nch, nch)
+    pk_repack(st, st.e.pre_w, feat, d)
+    for (l in range64(st.e.n_layer)) {
+        let lo = pk_layer_offsets(st.e, l)
+        pk_repack(st, lo.ff1a_w, d, ff)
+        pk_repack(st, lo.ff1b_w, ff, d)
+        pk_repack(st, lo.q_w, d, d)
+        pk_repack(st, lo.k_w, d, d)
+        pk_repack(st, lo.v_w, d, d)
+        pk_repack(st, lo.o_w, d, d)
+        pk_repack(st, lo.pos_w, d, d)
+        pk_repack(st, lo.pw1_w, d, 2l * d)
+        pk_repack(st, lo.pw2_w, d, d)
+        pk_repack(st, lo.ff2a_w, d, ff)
+        pk_repack(st, lo.ff2b_w, ff, d)
     }
-    pk_repack(m, m.joint_enc_w, d, m.n_pred_dim)
+    pk_repack(st, st.e.joint_enc_w, d, st.e.n_pred_dim)
 }
 
 // ===== per-session scratch =====
@@ -480,9 +476,9 @@ def private pk_read(recs : table<string; PkTensorRec>; b : array<uint8> | #; nam
 // GEMM weight read: a q8 load transcodes it from the file straight into qblob/qscales at its
 // full-layout offset (the fp32 blob never holds it); an fp32 load reads it into the blob.
 def private pk_read_gemm(recs : table<string; PkTensorRec>; b : array<uint8> | #; name : string;
-                         var m : ParakeetModel; var scratch : array<float>; woff, n : int64) {
-    if (!m.q8) {
-        pk_read(recs, b, name, m.blob, woff, n)
+                         var st : ParakeetStaging; var scratch : array<float>; woff, n : int64) {
+    if (!st.e.q8) {
+        pk_read(recs, b, name, st.blob, woff, n)
         return
     }
     if (woff % 32l != 0l) {
@@ -493,7 +489,7 @@ def private pk_read_gemm(recs : table<string; PkTensorRec>; b : array<uint8> | #
         scratch |> resize(n)
     }
     pk_read(recs, b, name, scratch, 0l, n)
-    quantize_q8_0_into(scratch, n, m.qblob, m.qscales, woff, woff / 32l)
+    quantize_q8_0_into(scratch, n, st.qblob, st.qscales, woff, woff / 32l)
 }
 
 //! Loads a converted Parakeet-TDT ggml bin (convert-parakeet-to-ggml.py output; f32 or f16).
@@ -521,20 +517,64 @@ def load_parakeet_model(path : string; q8 : bool = false) : ParakeetModel {
             to_log(LOG_INFO, "dasLLAMA: prepared parakeet image mapped in {get_time_usec(ts_img) / 1000} ms — {img}\n")
             return <- t
         }
-        var m <- load_parakeet_model_(path, q8)
+        var inscope st <- stage_parakeet_model(path, q8)
         var built = ParakeetModel()
-        cache_via_image(m, built, img, tag)
-        delete m
+        cache_via_image_staged(st, built, img, tag)
         dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
         return <- built
     }
-    return <- load_parakeet_model_(path, q8)
+    // no persisted image: mint one in memory and serve THAT — a served model is always
+    // image-backed, so there is no second, array-owning shape of this struct to maintain
+    var inscope st <- stage_parakeet_model(path, q8)
+    var built = ParakeetModel()
+    cache_via_image_staged(st, built, "", tag)
+    return <- built
 }
 
-//! The ggml-bin reader proper — the eager (no image cache) load; ``load_parakeet_model`` wraps it.
-def load_parakeet_model_(path : string; q8 : bool = false) : ParakeetModel {
-    var m = ParakeetModel()
-    m.q8 = q8
+//! The mint-side carrier: ``e`` holds every scalar the meta blob carries (vocab included), the
+//! arrays beside it hold the plane bytes until the writer has them. Public because reading the
+//! source bin off-rail is the only way a suite can check a served model against a non-image form.
+struct ParakeetStaging {
+    e : ParakeetModel = ParakeetModel()
+    durations : array<int>
+    filters : array<float>
+    window : array<float>
+    blob : array<float>
+    lstm_ih : array<int64>
+    lstm_hh : array<int64>
+    lstm_b : array<int64>
+    qblob : array<int8>
+    qscales : array<float>
+}
+
+def private serialize_image_meta(var arch : Archive; var st : ParakeetStaging) {
+    serialize_image_meta(arch, st.e)
+}
+
+// staging owns its plane bytes outright — every array here is heap, none is borrowed
+def finalize(var st : ParakeetStaging) {
+    apply(st) $ [unused_argument(name)] (name : string; var field) {
+        static_if (typeinfo is_array(field)) {
+            delete field
+        }
+    }
+    delete st.e
+}
+
+[unused_argument(st)]
+def private image_post_load(var st : ParakeetStaging) {}
+
+//! Mint a served model from a staged read WITHOUT touching disk — the in-memory image rail.
+//! The off-rail control for suites: a live model that came from no `.dlim` file.
+def mint_parakeet_model(var st : ParakeetStaging; var out : ParakeetModel; q8 : bool = false) {
+    cache_via_image_staged(st, out, "", q8 ? "parakeet-q8" : "parakeet-f32")
+}
+
+//! The ggml-bin reader proper: scalars land in the served model, plane bytes in the staging
+//! arrays beside it. Nothing here is servable — the image build is what produces a live model.
+def stage_parakeet_model(path : string; q8 : bool = false) : ParakeetStaging {
+    var st = ParakeetStaging()
+    st.e.q8 = q8
     let n_bytes = int64(stat(path).size)
     let f = fopen(path, "rb")
     if (f == null) {
@@ -546,60 +586,60 @@ def load_parakeet_model_(path : string; q8 : bool = false) : ParakeetModel {
             panic("dasLLAMA parakeet: bad magic in '{path}'")
         }
         o += 4l
-        m.n_vocab = int64(rd_i32(bytes, o)); o += 4l
+        st.e.n_vocab = int64(rd_i32(bytes, o)); o += 4l
         o += 4l   // n_audio_ctx (unused: full-clip encode)
-        m.n_state = int64(rd_i32(bytes, o)); o += 4l
-        m.n_head = int64(rd_i32(bytes, o)); o += 4l
-        m.n_layer = int64(rd_i32(bytes, o)); o += 4l
-        m.n_mel = int64(rd_i32(bytes, o)); o += 4l
+        st.e.n_state = int64(rd_i32(bytes, o)); o += 4l
+        st.e.n_head = int64(rd_i32(bytes, o)); o += 4l
+        st.e.n_layer = int64(rd_i32(bytes, o)); o += 4l
+        st.e.n_mel = int64(rd_i32(bytes, o)); o += 4l
         o += 4l   // ftype (per-record types below)
-        m.n_fft = int64(rd_i32(bytes, o)); o += 4l
-        m.subsampling = int64(rd_i32(bytes, o)); o += 4l
-        m.n_sub_ch = int64(rd_i32(bytes, o)); o += 4l
-        m.n_conv_kernel = int64(rd_i32(bytes, o)); o += 4l
-        m.n_pred_dim = int64(rd_i32(bytes, o)); o += 4l
-        m.n_pred_layers = int64(rd_i32(bytes, o)); o += 4l
-        m.n_durations = int64(rd_i32(bytes, o)); o += 4l
-        m.n_max_tokens = int64(rd_i32(bytes, o)); o += 4l
-        m.blank_id = int(m.n_vocab)
-        if (m.n_fft != 512l) {   // FFT_FRAME in the mel worker is sized for 512-pt frames
-            panic("dasLLAMA parakeet: n_fft {m.n_fft} — the mel path is built for the family's 512-pt STFT")
+        st.e.n_fft = int64(rd_i32(bytes, o)); o += 4l
+        st.e.subsampling = int64(rd_i32(bytes, o)); o += 4l
+        st.e.n_sub_ch = int64(rd_i32(bytes, o)); o += 4l
+        st.e.n_conv_kernel = int64(rd_i32(bytes, o)); o += 4l
+        st.e.n_pred_dim = int64(rd_i32(bytes, o)); o += 4l
+        st.e.n_pred_layers = int64(rd_i32(bytes, o)); o += 4l
+        st.e.n_durations = int64(rd_i32(bytes, o)); o += 4l
+        st.e.n_max_tokens = int64(rd_i32(bytes, o)); o += 4l
+        st.e.blank_id = int(st.e.n_vocab)
+        if (st.e.n_fft != 512l) {   // FFT_FRAME in the mel worker is sized for 512-pt frames
+            panic("dasLLAMA parakeet: n_fft {st.e.n_fft} — the mel path is built for the family's 512-pt STFT")
         }
-        m.fft <- build_fft_plan(m.n_fft)
+        st.e.fft <- build_fft_plan(st.e.n_fft)
 
         // mel filterbank
         let fb_mel = int64(rd_i32(bytes, o)); o += 4l
         let fb_n = int64(rd_i32(bytes, o)); o += 4l
-        if (fb_mel != m.n_mel || fb_n != m.n_fft / 2l + 1l) {
-            panic("dasLLAMA parakeet: filterbank is {fb_mel}x{fb_n}, want {m.n_mel}x{m.n_fft / 2l + 1l}")
+        if (fb_mel != st.e.n_mel || fb_n != st.e.n_fft / 2l + 1l) {
+            panic("dasLLAMA parakeet: filterbank is {fb_mel}x{fb_n}, want {st.e.n_mel}x{st.e.n_fft / 2l + 1l}")
         }
-        m.filters |> resize(int(fb_mel * fb_n))
+        st.filters |> resize(int(fb_mel * fb_n))
         for (i in range64(fb_mel * fb_n)) {
-            m.filters[i] = rd_f32(bytes, o + i * 4l)
+            st.filters[i] = rd_f32(bytes, o + i * 4l)
         }
         o += fb_mel * fb_n * 4l
 
         // STFT window
         let n_window = int64(rd_i32(bytes, o)); o += 4l
-        m.window |> resize(int(n_window))
+        st.window |> resize(int(n_window))
         for (i in range64(n_window)) {
-            m.window[i] = rd_f32(bytes, o + i * 4l)
+            st.window[i] = rd_f32(bytes, o + i * 4l)
         }
         o += n_window * 4l
 
         // TDT durations
-        m.durations |> resize(int(m.n_durations))
-        for (i in range64(m.n_durations)) {
-            m.durations[i] = int(rd_u32(bytes, o + i * 4l))
+        st.durations |> resize(int(st.e.n_durations))
+        for (i in range64(st.e.n_durations)) {
+            st.durations[i] = int(rd_u32(bytes, o + i * 4l))
         }
-        o += m.n_durations * 4l
+        o += st.e.n_durations * 4l
 
         // vocab (SPM pieces; blank = id n_vocab lives outside the table)
         let nv = int64(rd_i32(bytes, o)); o += 4l
-        m.vocab |> resize(int(nv))
+        st.e.vocab |> resize(int(nv))
         for (i in range64(nv)) {
             let len = int64(rd_u32(bytes, o)); o += 4l
-            m.vocab[i] = pk_bytes_str(bytes, o, len)
+            st.e.vocab[i] = pk_bytes_str(bytes, o, len)
             o += len
         }
 
@@ -622,125 +662,125 @@ def load_parakeet_model_(path : string; q8 : bool = false) : ParakeetModel {
         // blob layout — dual walk: `bo` is the full layout (qblob on a q8 load, blob on an
         // fp32 load); `ao` is the fp32 walk of blob, which the GEMM regions collapse out of
         // on a q8 load (g = 0). On an fp32 load the walks are identical (ao ends == bo).
-        let d = m.n_state
+        let d = st.e.n_state
         let ff = 4l * d
-        let dh = d / m.n_head
-        let nch = m.n_sub_ch
+        let dh = d / st.e.n_head
+        let nch = st.e.n_sub_ch
         let g = q8 ? 0l : 1l
         var bo = 0l
         var ao = 0l
-        m.c0_w = ao; ao += nch * 9l; bo += nch * 9l
-        m.c0_b = ao; ao += nch; bo += nch
-        m.c2_w = ao; ao += nch * 9l; bo += nch * 9l          // depthwise: per-channel 3x3
-        m.c2_b = ao; ao += nch; bo += nch
-        m.c3_w = bo; bo += nch * nch; ao += g * nch * nch
-        m.c3_b = ao; ao += nch; bo += nch
-        m.c5_w = ao; ao += nch * 9l; bo += nch * 9l
-        m.c5_b = ao; ao += nch; bo += nch
-        m.c6_w = bo; bo += nch * nch; ao += g * nch * nch
-        m.c6_b = ao; ao += nch; bo += nch
-        let feat = (m.n_mel / m.subsampling) * nch
-        m.pre_w = bo; bo += d * feat; ao += g * d * feat
-        m.pre_b = ao; ao += d; bo += d
-        m.layers_off = bo
-        m.layer_stride = pk_layer_stride(d, ff, m.n_conv_kernel)
-        m.aux_layers_off = ao
-        m.aux_layer_stride = q8 ? pk_aux_layer_stride(d, m.n_conv_kernel) : m.layer_stride
-        bo += m.n_layer * m.layer_stride
-        ao += m.n_layer * m.aux_layer_stride
-        m.embed_off = ao; ao += (m.n_vocab + 1l) * m.n_pred_dim; bo += (m.n_vocab + 1l) * m.n_pred_dim
-        let pd = m.n_pred_dim
-        for (_l in range64(m.n_pred_layers)) {
-            m.lstm_ih |> push(ao); ao += 4l * pd * pd; bo += 4l * pd * pd
-            m.lstm_hh |> push(ao); ao += 4l * pd * pd; bo += 4l * pd * pd
-            m.lstm_b |> push(ao); ao += 4l * pd; bo += 4l * pd
+        st.e.c0_w = ao; ao += nch * 9l; bo += nch * 9l
+        st.e.c0_b = ao; ao += nch; bo += nch
+        st.e.c2_w = ao; ao += nch * 9l; bo += nch * 9l          // depthwise: per-channel 3x3
+        st.e.c2_b = ao; ao += nch; bo += nch
+        st.e.c3_w = bo; bo += nch * nch; ao += g * nch * nch
+        st.e.c3_b = ao; ao += nch; bo += nch
+        st.e.c5_w = ao; ao += nch * 9l; bo += nch * 9l
+        st.e.c5_b = ao; ao += nch; bo += nch
+        st.e.c6_w = bo; bo += nch * nch; ao += g * nch * nch
+        st.e.c6_b = ao; ao += nch; bo += nch
+        let feat = (st.e.n_mel / st.e.subsampling) * nch
+        st.e.pre_w = bo; bo += d * feat; ao += g * d * feat
+        st.e.pre_b = ao; ao += d; bo += d
+        st.e.layers_off = bo
+        st.e.layer_stride = pk_layer_stride(d, ff, st.e.n_conv_kernel)
+        st.e.aux_layers_off = ao
+        st.e.aux_layer_stride = q8 ? pk_aux_layer_stride(d, st.e.n_conv_kernel) : st.e.layer_stride
+        bo += st.e.n_layer * st.e.layer_stride
+        ao += st.e.n_layer * st.e.aux_layer_stride
+        st.e.embed_off = ao; ao += (st.e.n_vocab + 1l) * st.e.n_pred_dim; bo += (st.e.n_vocab + 1l) * st.e.n_pred_dim
+        let pd = st.e.n_pred_dim
+        for (_l in range64(st.e.n_pred_layers)) {
+            st.lstm_ih |> push(ao); ao += 4l * pd * pd; bo += 4l * pd * pd
+            st.lstm_hh |> push(ao); ao += 4l * pd * pd; bo += 4l * pd * pd
+            st.lstm_b |> push(ao); ao += 4l * pd; bo += 4l * pd
         }
-        m.joint_enc_w = bo; bo += pd * d; ao += g * pd * d
-        m.joint_enc_b = ao; ao += pd; bo += pd
-        m.joint_pred_w = ao; ao += pd * pd; bo += pd * pd
-        m.joint_pred_b = ao; ao += pd; bo += pd
-        let n_logits = m.n_vocab + 1l + m.n_durations
-        m.joint_net_w = ao; ao += n_logits * pd; bo += n_logits * pd
-        m.joint_net_b = ao; ao += n_logits; bo += n_logits
+        st.e.joint_enc_w = bo; bo += pd * d; ao += g * pd * d
+        st.e.joint_enc_b = ao; ao += pd; bo += pd
+        st.e.joint_pred_w = ao; ao += pd * pd; bo += pd * pd
+        st.e.joint_pred_b = ao; ao += pd; bo += pd
+        let n_logits = st.e.n_vocab + 1l + st.e.n_durations
+        st.e.joint_net_w = ao; ao += n_logits * pd; bo += n_logits * pd
+        st.e.joint_net_b = ao; ao += n_logits; bo += n_logits
         // exact allocations: reserve defeats the array allocator's pow2 rounding, which on the
         // 0.6b f32 bin would back 2.4 GiB of blob floats with a 4 GiB allocation
-        m.blob |> reserve(ao)
-        m.blob |> resize(ao)
+        st.blob |> reserve(ao)
+        st.blob |> resize(ao)
         if (q8) {
-            m.qblob |> reserve(bo)
-            m.qblob |> resize(bo)
-            m.qscales |> reserve(bo / 32l)
-            m.qscales |> resize(bo / 32l)
+            st.qblob |> reserve(bo)
+            st.qblob |> resize(bo)
+            st.qscales |> reserve(bo / 32l)
+            st.qscales |> resize(bo / 32l)
         }
 
         var wscratch : array<float>   // q8 transcode staging, one GEMM tensor at a time
-        pk_read(recs, bytes, "encoder.pre_encode.conv.0.weight", m.blob, m.c0_w, nch * 9l)
-        pk_conv_tap_major(m.blob, m.c0_w, nch, 9l)   // c0 kernel reads tap-major too
-        pk_read(recs, bytes, "encoder.pre_encode.conv.0.bias", m.blob, m.c0_b, nch)
-        pk_read(recs, bytes, "encoder.pre_encode.conv.2.weight", m.blob, m.c2_w, nch * 9l)
-        pk_conv_tap_major(m.blob, m.c2_w, nch, 9l)
-        pk_read(recs, bytes, "encoder.pre_encode.conv.2.bias", m.blob, m.c2_b, nch)
-        pk_read_gemm(recs, bytes, "encoder.pre_encode.conv.3.weight", m, wscratch, m.c3_w, nch * nch)
-        pk_read(recs, bytes, "encoder.pre_encode.conv.3.bias", m.blob, m.c3_b, nch)
-        pk_read(recs, bytes, "encoder.pre_encode.conv.5.weight", m.blob, m.c5_w, nch * 9l)
-        pk_conv_tap_major(m.blob, m.c5_w, nch, 9l)
-        pk_read(recs, bytes, "encoder.pre_encode.conv.5.bias", m.blob, m.c5_b, nch)
-        pk_read_gemm(recs, bytes, "encoder.pre_encode.conv.6.weight", m, wscratch, m.c6_w, nch * nch)
-        pk_read(recs, bytes, "encoder.pre_encode.conv.6.bias", m.blob, m.c6_b, nch)
-        pk_read_gemm(recs, bytes, "encoder.pre_encode.out.weight", m, wscratch, m.pre_w, d * feat)
-        pk_read(recs, bytes, "encoder.pre_encode.out.bias", m.blob, m.pre_b, d)
-        for (l in range64(m.n_layer)) {
-            let lo = pk_layer_offsets(m, l)
-            pk_read(recs, bytes, "encoder.layers.{l}.norm_feed_forward1.weight", m.blob, lo.nf1_w, d)
-            pk_read(recs, bytes, "encoder.layers.{l}.norm_feed_forward1.bias", m.blob, lo.nf1_b, d)
-            pk_read_gemm(recs, bytes, "encoder.layers.{l}.feed_forward1.linear1.weight", m, wscratch, lo.ff1a_w, ff * d)
-            pk_read_gemm(recs, bytes, "encoder.layers.{l}.feed_forward1.linear2.weight", m, wscratch, lo.ff1b_w, d * ff)
-            pk_read(recs, bytes, "encoder.layers.{l}.norm_self_att.weight", m.blob, lo.nat_w, d)
-            pk_read(recs, bytes, "encoder.layers.{l}.norm_self_att.bias", m.blob, lo.nat_b, d)
-            pk_read(recs, bytes, "encoder.layers.{l}.self_attn.pos_bias_u", m.blob, lo.bias_u, dh * m.n_head)
-            pk_read(recs, bytes, "encoder.layers.{l}.self_attn.pos_bias_v", m.blob, lo.bias_v, dh * m.n_head)
-            pk_read_gemm(recs, bytes, "encoder.layers.{l}.self_attn.linear_q.weight", m, wscratch, lo.q_w, d * d)
-            pk_read_gemm(recs, bytes, "encoder.layers.{l}.self_attn.linear_k.weight", m, wscratch, lo.k_w, d * d)
-            pk_read_gemm(recs, bytes, "encoder.layers.{l}.self_attn.linear_v.weight", m, wscratch, lo.v_w, d * d)
-            pk_read_gemm(recs, bytes, "encoder.layers.{l}.self_attn.linear_out.weight", m, wscratch, lo.o_w, d * d)
-            pk_read_gemm(recs, bytes, "encoder.layers.{l}.self_attn.linear_pos.weight", m, wscratch, lo.pos_w, d * d)
-            pk_read(recs, bytes, "encoder.layers.{l}.norm_conv.weight", m.blob, lo.ncv_w, d)
-            pk_read(recs, bytes, "encoder.layers.{l}.norm_conv.bias", m.blob, lo.ncv_b, d)
-            pk_read_gemm(recs, bytes, "encoder.layers.{l}.conv.pointwise_conv1.weight", m, wscratch, lo.pw1_w, 2l * d * d)
-            pk_read(recs, bytes, "encoder.layers.{l}.conv.depthwise_conv.weight", m.blob, lo.dw_w, m.n_conv_kernel * d)
-            pk_conv_tap_major(m.blob, lo.dw_w, d, m.n_conv_kernel)   // [d][k] -> [k][d] for the f4 row core
-            pk_read(recs, bytes, "encoder.layers.{l}.conv.batch_norm.weight", m.blob, lo.bn_w, d)
-            pk_read(recs, bytes, "encoder.layers.{l}.conv.batch_norm.bias", m.blob, lo.bn_b, d)
-            pk_read(recs, bytes, "encoder.layers.{l}.conv.batch_norm.running_mean", m.blob, lo.bn_mean, d)
-            pk_read(recs, bytes, "encoder.layers.{l}.conv.batch_norm.running_var", m.blob, lo.bn_var, d)
-            pk_fold_bn(m.blob, lo.bn_w, lo.bn_b, lo.bn_mean, lo.bn_var, d)
-            pk_read_gemm(recs, bytes, "encoder.layers.{l}.conv.pointwise_conv2.weight", m, wscratch, lo.pw2_w, d * d)
-            pk_read(recs, bytes, "encoder.layers.{l}.norm_feed_forward2.weight", m.blob, lo.nf2_w, d)
-            pk_read(recs, bytes, "encoder.layers.{l}.norm_feed_forward2.bias", m.blob, lo.nf2_b, d)
-            pk_read_gemm(recs, bytes, "encoder.layers.{l}.feed_forward2.linear1.weight", m, wscratch, lo.ff2a_w, ff * d)
-            pk_read_gemm(recs, bytes, "encoder.layers.{l}.feed_forward2.linear2.weight", m, wscratch, lo.ff2b_w, d * ff)
-            pk_read(recs, bytes, "encoder.layers.{l}.norm_out.weight", m.blob, lo.nout_w, d)
-            pk_read(recs, bytes, "encoder.layers.{l}.norm_out.bias", m.blob, lo.nout_b, d)
+        pk_read(recs, bytes, "encoder.pre_encode.conv.0.weight", st.blob, st.e.c0_w, nch * 9l)
+        pk_conv_tap_major(st.blob, st.e.c0_w, nch, 9l)   // c0 kernel reads tap-major too
+        pk_read(recs, bytes, "encoder.pre_encode.conv.0.bias", st.blob, st.e.c0_b, nch)
+        pk_read(recs, bytes, "encoder.pre_encode.conv.2.weight", st.blob, st.e.c2_w, nch * 9l)
+        pk_conv_tap_major(st.blob, st.e.c2_w, nch, 9l)
+        pk_read(recs, bytes, "encoder.pre_encode.conv.2.bias", st.blob, st.e.c2_b, nch)
+        pk_read_gemm(recs, bytes, "encoder.pre_encode.conv.3.weight", st, wscratch, st.e.c3_w, nch * nch)
+        pk_read(recs, bytes, "encoder.pre_encode.conv.3.bias", st.blob, st.e.c3_b, nch)
+        pk_read(recs, bytes, "encoder.pre_encode.conv.5.weight", st.blob, st.e.c5_w, nch * 9l)
+        pk_conv_tap_major(st.blob, st.e.c5_w, nch, 9l)
+        pk_read(recs, bytes, "encoder.pre_encode.conv.5.bias", st.blob, st.e.c5_b, nch)
+        pk_read_gemm(recs, bytes, "encoder.pre_encode.conv.6.weight", st, wscratch, st.e.c6_w, nch * nch)
+        pk_read(recs, bytes, "encoder.pre_encode.conv.6.bias", st.blob, st.e.c6_b, nch)
+        pk_read_gemm(recs, bytes, "encoder.pre_encode.out.weight", st, wscratch, st.e.pre_w, d * feat)
+        pk_read(recs, bytes, "encoder.pre_encode.out.bias", st.blob, st.e.pre_b, d)
+        for (l in range64(st.e.n_layer)) {
+            let lo = pk_layer_offsets(st.e, l)
+            pk_read(recs, bytes, "encoder.layers.{l}.norm_feed_forward1.weight", st.blob, lo.nf1_w, d)
+            pk_read(recs, bytes, "encoder.layers.{l}.norm_feed_forward1.bias", st.blob, lo.nf1_b, d)
+            pk_read_gemm(recs, bytes, "encoder.layers.{l}.feed_forward1.linear1.weight", st, wscratch, lo.ff1a_w, ff * d)
+            pk_read_gemm(recs, bytes, "encoder.layers.{l}.feed_forward1.linear2.weight", st, wscratch, lo.ff1b_w, d * ff)
+            pk_read(recs, bytes, "encoder.layers.{l}.norm_self_att.weight", st.blob, lo.nat_w, d)
+            pk_read(recs, bytes, "encoder.layers.{l}.norm_self_att.bias", st.blob, lo.nat_b, d)
+            pk_read(recs, bytes, "encoder.layers.{l}.self_attn.pos_bias_u", st.blob, lo.bias_u, dh * st.e.n_head)
+            pk_read(recs, bytes, "encoder.layers.{l}.self_attn.pos_bias_v", st.blob, lo.bias_v, dh * st.e.n_head)
+            pk_read_gemm(recs, bytes, "encoder.layers.{l}.self_attn.linear_q.weight", st, wscratch, lo.q_w, d * d)
+            pk_read_gemm(recs, bytes, "encoder.layers.{l}.self_attn.linear_k.weight", st, wscratch, lo.k_w, d * d)
+            pk_read_gemm(recs, bytes, "encoder.layers.{l}.self_attn.linear_v.weight", st, wscratch, lo.v_w, d * d)
+            pk_read_gemm(recs, bytes, "encoder.layers.{l}.self_attn.linear_out.weight", st, wscratch, lo.o_w, d * d)
+            pk_read_gemm(recs, bytes, "encoder.layers.{l}.self_attn.linear_pos.weight", st, wscratch, lo.pos_w, d * d)
+            pk_read(recs, bytes, "encoder.layers.{l}.norm_conv.weight", st.blob, lo.ncv_w, d)
+            pk_read(recs, bytes, "encoder.layers.{l}.norm_conv.bias", st.blob, lo.ncv_b, d)
+            pk_read_gemm(recs, bytes, "encoder.layers.{l}.conv.pointwise_conv1.weight", st, wscratch, lo.pw1_w, 2l * d * d)
+            pk_read(recs, bytes, "encoder.layers.{l}.conv.depthwise_conv.weight", st.blob, lo.dw_w, st.e.n_conv_kernel * d)
+            pk_conv_tap_major(st.blob, lo.dw_w, d, st.e.n_conv_kernel)   // [d][k] -> [k][d] for the f4 row core
+            pk_read(recs, bytes, "encoder.layers.{l}.conv.batch_norm.weight", st.blob, lo.bn_w, d)
+            pk_read(recs, bytes, "encoder.layers.{l}.conv.batch_norm.bias", st.blob, lo.bn_b, d)
+            pk_read(recs, bytes, "encoder.layers.{l}.conv.batch_norm.running_mean", st.blob, lo.bn_mean, d)
+            pk_read(recs, bytes, "encoder.layers.{l}.conv.batch_norm.running_var", st.blob, lo.bn_var, d)
+            pk_fold_bn(st.blob, lo.bn_w, lo.bn_b, lo.bn_mean, lo.bn_var, d)
+            pk_read_gemm(recs, bytes, "encoder.layers.{l}.conv.pointwise_conv2.weight", st, wscratch, lo.pw2_w, d * d)
+            pk_read(recs, bytes, "encoder.layers.{l}.norm_feed_forward2.weight", st.blob, lo.nf2_w, d)
+            pk_read(recs, bytes, "encoder.layers.{l}.norm_feed_forward2.bias", st.blob, lo.nf2_b, d)
+            pk_read_gemm(recs, bytes, "encoder.layers.{l}.feed_forward2.linear1.weight", st, wscratch, lo.ff2a_w, ff * d)
+            pk_read_gemm(recs, bytes, "encoder.layers.{l}.feed_forward2.linear2.weight", st, wscratch, lo.ff2b_w, d * ff)
+            pk_read(recs, bytes, "encoder.layers.{l}.norm_out.weight", st.blob, lo.nout_w, d)
+            pk_read(recs, bytes, "encoder.layers.{l}.norm_out.bias", st.blob, lo.nout_b, d)
         }
-        pk_read(recs, bytes, "decoder.prediction.embed.weight", m.blob, m.embed_off, (m.n_vocab + 1l) * m.n_pred_dim)
-        for (l in range64(m.n_pred_layers)) {
-            pk_read(recs, bytes, "decoder.prediction.dec_rnn.lstm.weight_ih_l{l}", m.blob, m.lstm_ih[l], 4l * m.n_pred_dim * m.n_pred_dim)
-            pk_read(recs, bytes, "decoder.prediction.dec_rnn.lstm.weight_hh_l{l}", m.blob, m.lstm_hh[l], 4l * m.n_pred_dim * m.n_pred_dim)
-            pk_read(recs, bytes, "decoder.prediction.dec_rnn.lstm.bias_h_l{l}", m.blob, m.lstm_b[l], 4l * m.n_pred_dim)
+        pk_read(recs, bytes, "decoder.prediction.embed.weight", st.blob, st.e.embed_off, (st.e.n_vocab + 1l) * st.e.n_pred_dim)
+        for (l in range64(st.e.n_pred_layers)) {
+            pk_read(recs, bytes, "decoder.prediction.dec_rnn.lstm.weight_ih_l{l}", st.blob, st.lstm_ih[l], 4l * st.e.n_pred_dim * st.e.n_pred_dim)
+            pk_read(recs, bytes, "decoder.prediction.dec_rnn.lstm.weight_hh_l{l}", st.blob, st.lstm_hh[l], 4l * st.e.n_pred_dim * st.e.n_pred_dim)
+            pk_read(recs, bytes, "decoder.prediction.dec_rnn.lstm.bias_h_l{l}", st.blob, st.lstm_b[l], 4l * st.e.n_pred_dim)
         }
-        pk_read_gemm(recs, bytes, "joint.enc.weight", m, wscratch, m.joint_enc_w, m.n_pred_dim * d)
-        pk_read(recs, bytes, "joint.enc.bias", m.blob, m.joint_enc_b, m.n_pred_dim)
-        pk_read(recs, bytes, "joint.pred.weight", m.blob, m.joint_pred_w, m.n_pred_dim * m.n_pred_dim)
-        pk_read(recs, bytes, "joint.pred.bias", m.blob, m.joint_pred_b, m.n_pred_dim)
-        pk_read(recs, bytes, "joint.joint_net.2.weight", m.blob, m.joint_net_w, (m.n_vocab + 1l + m.n_durations) * m.n_pred_dim)
-        pk_read(recs, bytes, "joint.joint_net.2.bias", m.blob, m.joint_net_b, m.n_vocab + 1l + m.n_durations)
+        pk_read_gemm(recs, bytes, "joint.enc.weight", st, wscratch, st.e.joint_enc_w, st.e.n_pred_dim * d)
+        pk_read(recs, bytes, "joint.enc.bias", st.blob, st.e.joint_enc_b, st.e.n_pred_dim)
+        pk_read(recs, bytes, "joint.pred.weight", st.blob, st.e.joint_pred_w, st.e.n_pred_dim * st.e.n_pred_dim)
+        pk_read(recs, bytes, "joint.pred.bias", st.blob, st.e.joint_pred_b, st.e.n_pred_dim)
+        pk_read(recs, bytes, "joint.joint_net.2.weight", st.blob, st.e.joint_net_w, (st.e.n_vocab + 1l + st.e.n_durations) * st.e.n_pred_dim)
+        pk_read(recs, bytes, "joint.joint_net.2.bias", st.blob, st.e.joint_net_b, st.e.n_vocab + 1l + st.e.n_durations)
         delete wscratch
     }
     fclose(f)
     if (q8) {
-        pk_repack_all(m)
+        pk_repack_all(st)
     }
-    return <- m
+    return <- st
 }
 
 // ===== mel (frame-major!) =====
@@ -779,7 +819,7 @@ def parakeet_log_mel(samples : array<float> | #; m : ParakeetModel; var st : Par
 
     let n_fft = m.n_fft
     let n_bins = n_fft / 2l + 1l
-    let wsz = long_length(m.window)
+    let wsz = length(m.window)
     let wpad = (n_fft - wsz) / 2l
     let mel_eps = 5.960464477539063e-08lf
     let n_len = st.mel.n_len
@@ -790,8 +830,8 @@ def parakeet_log_mel(samples : array<float> | #; m : ParakeetModel; var st : Par
     // so a 9-minute clip no longer materializes the whole [frames × n_fft] image
     unsafe {
         let pdd = addr<float const?>(st.padded[0])
-        let wnd = addr<float const?>(m.window[0])
-        let flt = addr<float const?>(m.filters[0])
+        let wnd = plane_at(m.window, 0l)
+        let flt = plane_at(m.filters, 0l)
         let rev = addr<int const?>(m.fft.rev[0])
         let tw = addr<float const?>(m.fft.tw[0])
         var md = addr(st.mel.data[0])
@@ -848,7 +888,7 @@ def parakeet_log_mel(samples : array<float> | #; m : ParakeetModel; var st : Par
 // c0: conv2d k3 s2 p1, fused bias+relu. w tap-major [9][cout] (repacked at load, L1-resident);
 // bit-exact vs the old im2col+K9-GEMM+bias+relu chain and 6.5x faster even single-lane
 // (conv_sub_bench); threads over oy rows (bit-exact at any lane count).
-def private pk_conv2d_c1_s2_relu(var out : array<float>; x : array<float>; blob : array<float>;
+def private pk_conv2d_c1_s2_relu(var out : array<float>; x : array<float>; blob : PlaneF;
                                  w_off, b_off : int64; iw, ih, cout : int64) {
     let ow = (iw - 1l) / 2l + 1l
     let oh = (ih - 1l) / 2l + 1l
@@ -856,8 +896,8 @@ def private pk_conv2d_c1_s2_relu(var out : array<float>; x : array<float>; blob 
     unsafe {
         var op = addr(out[0])
         let xp = addr<float const?>(x[0])
-        let wp = addr<float const?>(blob[w_off])
-        let bp = addr<float const?>(blob[b_off])
+        let wp = plane_at(blob, w_off)
+        let bp = plane_at(blob, b_off)
         let zero = float4(0.0)
         maybe_parallel_for(0, int(oh), lanes_for_work(oh * ow * cout * 9l, 0)) $(rb, re) {
             unsafe {
@@ -930,7 +970,7 @@ def private pk_dw_pos(var op : float?; xp, wp, bp : float const?; oy, ox, iw, ih
 // depthwise conv2d k3 s2 p1, w tap-major [9][ch] (repacked at load): float4 over the
 // contiguous channel axis, 9 taps unrolled, guarded borders (isolated bench: 7.2x scalar);
 // interior threads over oy rows (independent — bit-exact at any lane count)
-def private pk_conv2d_dw_s2(var out : array<float>; x : array<float>; blob : array<float>;
+def private pk_conv2d_dw_s2(var out : array<float>; x : array<float>; blob : PlaneF;
                             w_off, b_off : int64; iw, ih, ch : int64) {
     let ow = (iw - 1l) / 2l + 1l
     let oh = (ih - 1l) / 2l + 1l
@@ -941,8 +981,8 @@ def private pk_conv2d_dw_s2(var out : array<float>; x : array<float>; blob : arr
     unsafe {
         var op = addr(out[0])
         let xp = addr<float const?>(x[0])
-        let wp = addr<float const?>(blob[w_off])
-        let bp = addr<float const?>(blob[b_off])
+        let wp = plane_at(blob, w_off)
+        let bp = plane_at(blob, b_off)
         maybe_parallel_for(1, int(oy_end), lanes_for_work(oh * ow * ch * 9l, 0)) $(rb, re) {
             unsafe {
                 for (oy in range64(int64(rb), int64(re))) {
@@ -1011,11 +1051,11 @@ def private pk_xf_permute(var xf : array<float>; y6 : array<float>; tt, w3, nch 
 // fused bias+relu over rows (the 1x1 conv epilogues) — one float4 pass instead of the
 // add_bias_rows + relu pair re-streaming the image (bench: 11.8x); threads over rows;
 // explicit npos: scratch is oversized
-def private pk_bias_relu(var y : array<float>; blob : array<float>; b_off, d, npos : int64) {
+def private pk_bias_relu(var y : array<float>; blob : PlaneF; b_off, d, npos : int64) {
     let d4 = d - d % 4l
     unsafe {
         var yp = addr(y[0])
-        let bp = addr<float const?>(blob[b_off])
+        let bp = plane_at(blob, b_off)
         let zero = float4(0.0)
         maybe_parallel_for(0, int(npos), lanes_for_work(npos * d, 0)) $(rb, re) {
             unsafe {
@@ -1190,8 +1230,8 @@ def parakeet_encode(m : ParakeetModel; var st : ParakeetState) : int64 {
                 let kkp = addr<float const?>(st.kk[0])
                 let vvp = addr<float const?>(st.vv[0])
                 let plp = addr<float const?>(st.posl[0])
-                let bup = addr<float const?>(m.blob[lo.bias_u + hi * dh])
-                let bvp = addr<float const?>(m.blob[lo.bias_v + hi * dh])
+                let bup = plane_at(m.blob, lo.bias_u + hi * dh)
+                let bvp = plane_at(m.blob, lo.bias_v + hi * dh)
                 // transposed head views ((Q+u), (Q+v), Kᵀ, V_h, pos_hᵀ) — the row GEMMs read
                 // these in full, so they build before the compute dispatch
                 var th = ref_time_ticks()
@@ -1278,9 +1318,9 @@ def parakeet_encode(m : ParakeetModel; var st : ParakeetState) : int64 {
             let hp = addr<float const?>(st.h[0])
             var xbp = addr(st.xb[0])
             var aop = addr(st.ao[0])
-            let dwp = addr<float const?>(m.blob[lo.dw_w])     // tap-major [k][d] since load
-            let scp = addr<float const?>(m.blob[lo.bn_w])     // folded BN scale (pk_fold_bn)
-            let shp = addr<float const?>(m.blob[lo.bn_b])     // folded BN shift
+            let dwp = plane_at(m.blob, lo.dw_w)     // tap-major [k][d] since load
+            let scp = plane_at(m.blob, lo.bn_w)     // folded BN scale (pk_fold_bn)
+            let shp = plane_at(m.blob, lo.bn_b)     // folded BN shift
             let nk = m.n_conv_kernel
             let kpad = (nk - 1l) / 2l   // depthwise pad (k−1)/2 both sides
             let one = float4(1.0, 1.0, 1.0, 1.0)
@@ -1424,7 +1464,7 @@ def private pk_predict(m : ParakeetModel; var s : ParakeetPredState; token : int
         unsafe {
             let gp = addr<float const?>(s.gates[0])
             let g2p = addr<float const?>(s.gates2[0])
-            let bp = addr<float const?>(m.blob[m.lstm_b[l]])
+            let bp = plane_at(m.blob, m.lstm_b[l])
             var cp = addr(s.c[l * pd])
             var hsp = addr(s.h[l * pd])
             var xp = addr(s.xin[0])
