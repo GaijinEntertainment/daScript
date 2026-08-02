@@ -6,6 +6,7 @@ module dasllama_math shared public
 require math
 require daslib/fio  // has_env_variable: DAS_JOBQUE_TEAM_RANK_GATE suppresses the profile's team_rank_gate knob
 require dasllama/dasllama_env  // env_flag/env_int64: the shared typed readers + the knob registry
+require dasllama/dasllama_plane  // PlaneF/PlaneI8 — the borrowed-plane weight forms below
 require dasllama/dasllama_config  // DlimVulkanConfig — the dry-bake seam's config argument
 require daslib/jobque_boost public  // matmul's threaded path expands parallel_for; consumers need its symbols
 require daslib/jobque_profile  // named trace categories + unit markers (set_trace_tags registers them)
@@ -601,17 +602,27 @@ def clear_float_batch_override() {
 
 def float_batch_override_active() : bool => g_fp_override_active
 
-//! Blob+offset form of matmul_batch (see the matmul woff overload).
-def matmul_batch(var y : array<float>; w : array<float>; woff : int64; x : array<float>; n, d, ntok : int64) {
+// the one body: the float-override seam then the core. Both weight forms below reach it with a
+// base pointer, so a borrowed plane and an owned blob take the identical route.
+def private matmul_batch_at(var y : array<float>; wp : float const?; x : array<float>; n, d, ntok : int64) {
     unsafe {
         var yp = addr(y[0])
-        let wp = addr<float const?>(w[woff])
         let xp = addr<float const?>(x[0])
         if (g_fp_override_active && ntok >= g_fp_override_min_ntok && invoke(g_mm_fp_batch_override, yp, wp, xp, n, d, ntok)) {
             return
         }
         matmul_batch_core(yp, wp, xp, n, d, ntok)
     }
+}
+
+//! Blob+offset form of matmul_batch (see the matmul woff overload).
+def matmul_batch(var y : array<float>; w : array<float>; woff : int64; x : array<float>; n, d, ntok : int64) {
+    matmul_batch_at(y, unsafe(addr<float const?>(w[woff])), x, n, d, ntok)
+}
+
+//! Borrowed-plane form: the weights live in a prepared image, indexed from `woff`.
+def matmul_batch(var y : array<float>; w : PlaneF; woff : int64; x : array<float>; n, d, ntok : int64) {
+    matmul_batch_at(y, plane_at(w, woff), x, n, d, ntok)
 }
 
 //! Batched matvec against a native-BF16 weight [d x n] at halfword offset woff: Y [ntok x d]
@@ -1894,6 +1905,16 @@ def matmul_q8q8_batch(var y : array<float>; wq : array<int8>; ws : array<float>;
     unsafe {
         invoke(g_mm_q8q8_batch, addr(y[0]),
             addr<int8 const?>(wq[woff]), addr<float const?>(ws[woff / 32l]),
+            addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), n, d, ntok)
+    }
+}
+
+//! Borrowed-plane form: the Q8 quant and scale planes live in a prepared image. Scales index
+//! at woff/32, exactly as the array form does.
+def matmul_q8q8_batch(var y : array<float>; wq : PlaneI8; ws : PlaneF; woff : int64; xq : array<int8>; xs : array<float>; n, d, ntok : int64) {
+    unsafe {
+        invoke(g_mm_q8q8_batch, addr(y[0]),
+            plane_at(wq, woff), plane_at(ws, woff / 32l),
             addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), n, d, ntok)
     }
 }

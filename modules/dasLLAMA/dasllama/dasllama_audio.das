@@ -11,6 +11,7 @@ require daslib/fio
 require daslib/apply
 require daslib/archive
 require dasllama/dasllama_math
+require dasllama/dasllama_plane   // PlaneF — the borrowed-plane weight forms of the blob helpers
 require dasllama/dasllama_par
 require dasllama/dasllama_gguf
 require dasllama/dasllama_convert
@@ -785,12 +786,10 @@ def layernorm(var o : float?; x, w, b : float const?; size : int64; eps : float)
 
 //! Threaded per-position layernorm over token-major rows (rms_batch's shape, LN math),
 //! weight/bias read from ``blob`` at the given offsets.
-def layernorm_batch(var out : array<float>; src : array<float>; blob : array<float>; w_off, b_off, dim, npos : int64; eps : float) {
+def private layernorm_batch_at(var out : array<float>; src : array<float>; wp, bp : float const?; dim, npos : int64; eps : float) {
     unsafe {
         var op = addr(out[0])
         let ip = addr<float const?>(src[0])
-        let wp = addr<float const?>(blob[w_off])
-        let bp = addr<float const?>(blob[b_off])
         maybe_parallel_for(0, int(npos), get_dispatch_lanes()) $(rb, re) {
             unsafe {
                 for (p in range(rb, re)) {
@@ -800,6 +799,17 @@ def layernorm_batch(var out : array<float>; src : array<float>; blob : array<flo
             }
         }
     }
+}
+
+def layernorm_batch(var out : array<float>; src : array<float>; blob : array<float>; w_off, b_off, dim, npos : int64; eps : float) {
+    unsafe {
+        layernorm_batch_at(out, src, addr<float const?>(blob[w_off]), addr<float const?>(blob[b_off]), dim, npos, eps)
+    }
+}
+
+//! Borrowed-plane form — the weight/bias rows live in a prepared image.
+def layernorm_batch(var out : array<float>; src : array<float>; blob : PlaneF; w_off, b_off, dim, npos : int64; eps : float) {
+    layernorm_batch_at(out, src, plane_at(blob, w_off), plane_at(blob, b_off), dim, npos, eps)
 }
 
 //! Threaded per-row Q8_0 requant of a token-major activation image — the shared
@@ -812,11 +822,19 @@ def asr_requant_rows_q8(x : array<float>; n, npos : int64; var xqb : array<int8>
 //! tail, threaded over rows (gemv lane cap — pure streaming) — elementwise adds in the
 //! same per-element order, bit-exact vs the scalar loop at any lane count.
 def add_bias_rows(var y : array<float>; blob : array<float>; b_off, d, npos : int64) {
+    add_bias_rows_at(y, unsafe(addr<float const?>(blob[b_off])), d, npos)
+}
+
+//! Borrowed-plane form — the bias row lives in a prepared image.
+def add_bias_rows(var y : array<float>; blob : PlaneF; b_off, d, npos : int64) {
+    add_bias_rows_at(y, plane_at(blob, b_off), d, npos)
+}
+
+def private add_bias_rows_at(var y : array<float>; bp : float const?; d, npos : int64) {
     if (npos <= 0l || d <= 0l) return
     let d4 = d - d % 4l
     unsafe {
         var yp = addr(y[0])
-        let bp = addr<float const?>(blob[b_off])
         maybe_parallel_for(0, int(npos), lanes_for_work(npos * d, get_gemv_lane_cap())) $(rb, re) {
             unsafe {
                 for (p in range64(int64(rb), int64(re))) {
@@ -861,6 +879,11 @@ def add_inplace_rows(var x : array<float>; r : array<float>; n : int64) {
 //! fp32 matmul against a blob region: Y [npos×d] = W[d×n]·X[npos×n] (threaded matmul_batch,
 //! blob+offset form — no array_view).
 def mm_blob_b(var y : array<float>; blob : array<float>; woff : int64; x : array<float>; n, d, npos : int64) {
+    matmul_batch(y, blob, woff, x, n, d, npos)
+}
+
+//! Borrowed-plane form — the weights live in a prepared image.
+def mm_blob_b(var y : array<float>; blob : PlaneF; woff : int64; x : array<float>; n, d, npos : int64) {
     matmul_batch(y, blob, woff, x, n, d, npos)
 }
 
@@ -1495,9 +1518,16 @@ def swiglu_swapped_rows(var o : array<float>; x : array<float>; half, rows : int
 // RMS-norm each d-wide row in place against a weight vector in the blob (ultravox projector
 // norms use eps 1e-6 hardcoded in mtmd's whisper-enc graph, independent of the tower eps)
 def private rms_rows_blob(var x : array<float>; blob : array<float>; w_off, dim, rows : int64) {
+    rms_rows_blob_at(x, unsafe(addr<float const?>(blob[w_off])), dim, rows)
+}
+
+def private rms_rows_blob(var x : array<float>; blob : PlaneF; w_off, dim, rows : int64) {
+    rms_rows_blob_at(x, plane_at(blob, w_off), dim, rows)
+}
+
+def private rms_rows_blob_at(var x : array<float>; wp : float const?; dim, rows : int64) {
     unsafe {
         var xp = addr(x[0])
-        let wp = addr<float const?>(blob[w_off])
         for (r in range64(rows)) {
             rmsnorm(xp + r * dim, xp + r * dim, wp, dim, 1e-6)
         }
