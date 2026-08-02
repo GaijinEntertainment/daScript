@@ -280,6 +280,16 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene 
             }
         }
     }
+    // LINT019 (stale nolint) needs every pass's consumption record - a partial run
+    // under-consumes and would report live directives as dead
+    if (run_paranoid && run_perf && run_style && !result.failed && empty(result.skip_reason)) {
+        let src = fread(file)
+        if (!empty(src)) {
+            var stale : array<LintIssue>
+            result.count += stale_nolint_collect(file, src, disabled_codes, enabled_codes, stale)
+            result.issues |> push_from(stale)
+        }
+    }
     return <- result
 }
 

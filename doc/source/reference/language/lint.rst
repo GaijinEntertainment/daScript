@@ -638,6 +638,30 @@ overloads, so an ``int(...)`` cast on the size argument is pure loss: above
     // Good
     unsafe(memcpy(dst, src, nbytes))
 
+LINT019 — stale ``nolint`` directive
+====================================
+
+A ``// nolint:CODE`` directive that suppressed no diagnostic during the run is dead
+weight: it buries the next real finding on that line and does not survive the code
+moving. The lint runner records every suppression the passes consume and reports the
+leftovers after all passes complete.
+
+Two escape hatches for directives that are live only outside the current compile:
+add ``LINT019`` to the code list (``// nolint:LINT004,LINT019``) when the rule fires
+only in downstream compiles — macro-template lines whose diagnostics surface at
+expansion sites, or option-gated rules — and run-disabled codes are skipped
+automatically, since their rules never had the chance to prove the directive.
+
+.. code-block:: das
+
+    // Bad — PERF006 no longer fires here; the directive outlived its rule hit
+    arr |> push(v)  // nolint:PERF006
+
+    // Good — remove it; or, on a macro-template line:
+    body |> push <| qmacro_expr() {   // nolint:LINT004,LINT019
+        var $i(tmp) = clone_type($i(td_var));
+    }
+
 .. _perf_lint:
 
 -----------------
