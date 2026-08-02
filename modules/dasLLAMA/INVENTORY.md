@@ -386,11 +386,11 @@ They are **audio-encoder tower loaders + forwards**, not decoder architectures �
 
 **ASR side: family behavior lives in family files, the facade routes** (the arms-home move; CODEREVIEW §Audio carries the rules). Still no registry/interface — the union carrier + one-line if/elif arms in 4 verbs are the deliberate shape (a fn-pointer `AsrDesc` needs type erasure the union already provides for free); image-tag registration is the only `[init]`; the shared contracts are `dasllama_asr_types` (caps/segment) and the `AudioTower`+`EncoderState`+`encoder_blocks` data shape (whisper + qwen3a use it; parakeet/canary/gemma4a/vad share only leaf kernels).
 
-### Cross-family duplication clusters
+### Cross-family duplication clusters (dispositions 2026-08-02)
 
-**arch_ files:** C1 ChatML template block verbatim ×5 (qwen2/qwen2moe/qwen3/qwen35/qwen3moe, ~20 ln each) · C2 think_suppress ×6 (5 identical + glm4moe divergent) · C3 Gemma turn block ×2 identical + gemma4 divergent · C4 "clone template before register_arch moves d" idiom ×5 with same warning comment · C5 audio-marker pair ×3 (divergent spellings; placement asymmetry: qwen2 sets before clone → alias inherits, qwen3 after → base doesn't) · C6 gemma config stack 3-level accretion (4-flag core spelled 3×).
+**arch_ files:** ✅ C1 ChatML ×5 + C2 think_suppress ×5-of-6 → `chatml_chat()`; ✅ C3 Gemma turn ×2 → `gemma_chat()` (gemma4's channel format and glm4moe's suppress stay divergent by design) · C4 clone-before-register idiom ×5 — KEPT, it IS the documented move-semantics idiom · C5 audio-marker placement asymmetry — INTENTIONAL, now stated at both qwen3-family sites (qwen2's audio models convert base-arch, qwen3's as vl) · C6 gemma config accretion — DECLINED: each configure_* is that arch's declarative truth; a shared core would hide which arch sets what.
 
-**ASR pile:**
+**ASR pile** (Boris ruling 2026-08: together-over-shared, no conformer library — the cn_/pk_ twins STAY twins until a backend port forces the seam):
 - **C7 log-mel/STFT ×6 independent copies** — parakeet↔canary = COPY-PASTE (preemph/pad/normalize line-for-line; only DFT engine differs); audio's two divergent by design (different oracles); + 2 filterbank generators (Slaney vs HTK).
 - C8 conv subsampling ×3 (parakeet↔canary same topology, divergent impl — f4/threaded vs naive scalar; canary adds length masking parakeet lacks); output-length arithmetic `(l-1)/2+1` ×4.
 - **C9 conformer block loop ×2 = COPY-PASTE with systematic bias delta** (canary adds add_bias_rows everywhere, drops Q8).
