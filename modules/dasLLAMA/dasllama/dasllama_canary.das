@@ -322,7 +322,7 @@ def load_canary_encoder(path : string) : CanaryEncoder {
         var inscope st <- stage_canary_encoder(path)
         var built = CanaryEncoder()
         cache_via_image_staged(st, built, img, tag)
-        dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
+        dlim_gc_stale(path, tag)   // the fresh bake proves ITS LANE's siblings dead
         return <- built
     }
     // no persisted image: mint one in memory and serve THAT — a served encoder is always

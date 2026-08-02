@@ -521,7 +521,7 @@ def load_parakeet_model(path : string; q8 : bool = false) : ParakeetModel {
         var inscope st <- stage_parakeet_model(path, q8)
         var built = ParakeetModel()
         cache_via_image_staged(st, built, img, tag)
-        dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
+        dlim_gc_stale(path, tag)   // the fresh bake proves ITS LANE's siblings dead
         return <- built
     }
     // no persisted image: mint one in memory and serve THAT — a served model is always

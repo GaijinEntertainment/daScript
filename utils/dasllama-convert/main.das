@@ -533,7 +533,7 @@ def main() : int {
         to_log(LOG_INFO, "dasllama-convert: wrote {bytes >> 20l} MB (streamed) in {total_ms} ms total\n")
     }
     if (rc == 0) {
-        dlim_gc_stale(cfg.model)   // the fresh bake proves version-stale siblings dead
+        dlim_gc_stale(cfg.model, tag, qs)   // the fresh bake proves ITS LANE's siblings dead
     }
     return rc
 }

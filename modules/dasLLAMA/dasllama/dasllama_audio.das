@@ -404,7 +404,7 @@ struct WhisperMel {
     n_mel : int64
     n_len : int64
     n_len_org : int64
-    data : array<float>
+    @scratch data : array<float>   // reused across windows; mel_sized grows it exact
 }
 
 // per-frame stack buffers in log_mel_whisper are sized for the fixed 400-pt whisper DFT
@@ -451,7 +451,7 @@ def build_whisper_mel_plan(n_fft : int64) : WhisperMelPlan {
 
 // exact-length grow for reused mel scratch: reserve once (exact), resize every call —
 // length stays exact so `for (v in arr)` loops and array-bound reads stay valid on reuse
-def private mel_sized(var a : array<float>; n : int64) {
+def private mel_sized(@scratch var a : array<float>; n : int64) {
     if (long_capacity(a) < n) {
         a |> reserve(int(n))
     }
@@ -1061,7 +1061,7 @@ def load_audio_tower(path : string; q8 : bool = false) : AudioTower {
         var inscope st <- stage_audio_tower(path, q8)
         var built = AudioTower()
         cache_via_image_staged(st, built, img, tag)
-        dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
+        dlim_gc_stale(path, tag)   // the fresh bake proves ITS LANE's siblings dead
         return <- built
     }
     // no persisted image: mint one in memory and serve THAT — a served tower is always

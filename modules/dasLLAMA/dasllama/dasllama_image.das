@@ -9,6 +9,7 @@ require daslib/fio
 require dasllama/dasllama_env  // the shared typed env readers + the knob registry
 require daslib/apply
 require strings
+require daslib/strings_boost   // split — the identity-lane parser
 require dasllama/dasllama_tokenizer   // Tokenizer — the bulk tokenizer serializer below
 require daslib/archive
 require daslib/array_boost   // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs (same note as dasllama_common)
@@ -174,6 +175,30 @@ def dlim_current_identities : table<string> {
     return <- idents
 }
 
+//! The (quant, tag) LANE of an identity — the coexistence unit: flavors and quants coexist as
+//! lanes, and a bake can prove staleness only inside its own lane.
+def dlim_identity_lane(identity : string) : string {
+    var parts <- split(identity, "|")
+    if (length(parts) < 8) {
+        delete parts
+        return identity   // malformed/pre-v7 — its own lane, never cross-matched
+    }
+    let quant = parts[1]
+    var tag = ""
+    for (i in range(8, length(parts))) {
+        tag = empty(tag) ? parts[i] : "{tag}|{parts[i]}"
+    }
+    delete parts
+    return "{quant}#{tag}"
+}
+
+// a GPU-flavor lane's identity was written by a differently-pinned PROCESS (blob bakes select
+// their own backend/winners) — un-recomputable here, so this process's current set cannot judge it
+def private dlim_lane_foreign(lane : string) : bool {
+    let tag = slice(lane, find(lane, "#") + 1, length(lane))
+    return tag == METAL_IMAGE_TAG || (tag |> starts_with("vulkan"))
+}
+
 def dlim_image_verdict(p : DlimPeek; current : table<string>) : string {
     if (!p.valid) {
         return "BROKEN"
@@ -181,7 +206,10 @@ def dlim_image_verdict(p : DlimPeek; current : table<string>) : string {
     if (p.version != IMAGE_VERSION) {
         return "STALE v{p.version}"
     }
-    return key_exists(current, p.identity) ? "CURRENT" : "OTHER"
+    if (key_exists(current, p.identity)) {
+        return "CURRENT"
+    }
+    return dlim_lane_foreign(dlim_identity_lane(p.identity)) ? "FOREIGN" : "OTHER"
 }
 
 //! Every .dlim beside `gguf_path` (or in a directory), with sizes and verdicts.
@@ -207,13 +235,28 @@ def dlim_inventory(gguf_path : string) : array<DlimImageInfo> {
     return <- out
 }
 
-//! GC-after-save: a fresh bake proves every non-CURRENT sibling of this source dead — BROKEN,
-//! version-stale, AND other-identity images all go (old identities piled up 0.5 TB per box).
-//! CURRENT spans all flavors/quants/families, so a planar save never touches the metal twin.
-def dlim_gc_stale(source_path : string) {
-    let r = dlim_clean(source_path, true)
-    if (r.removed > 0) {
-        to_log(LOG_INFO, "dasLLAMA image: GC freed {r.freed >> 20l} MB — {r.removed} dead sibling(s) of {base_name(source_path)}\n")
+//! GC-after-save: a fresh bake proves dead the non-current siblings of ITS OWN LANE (the
+//! (quant, tag) it just wrote), plus BROKEN and version-stale images in any lane. Other lanes'
+//! identities fold other bake contexts' backend/winner state — this save proves nothing there.
+def dlim_gc_stale(source_path : string; tag : string = ""; quant : string = "q8") {
+    let lane = "{quant}#{tag}"
+    var inv <- dlim_inventory(source_path)
+    var removed = 0
+    var freed = 0l
+    for (im in inv) {
+        let stale_any = im.verdict == "BROKEN" || (im.verdict |> starts_with("STALE"))
+        let lane_dead = ((im.verdict == "OTHER" || im.verdict == "FOREIGN")
+            && dlim_identity_lane(im.identity) == lane)
+        continue if (!(stale_any || lane_dead))
+        if (remove(im.path)) {
+            removed++
+            freed += im.bytes
+            to_log(LOG_INFO, "dasLLAMA image: GC removed {im.file} ({im.bytes >> 20l} MB, {im.verdict})\n")
+        }
+    }
+    delete inv
+    if (removed > 0) {
+        to_log(LOG_INFO, "dasLLAMA image: GC freed {freed >> 20l} MB — {removed} dead sibling(s) of {base_name(source_path)}\n")
     }
 }
 
@@ -223,8 +266,13 @@ def dlim_gc_stale(source_path : string) {
 def dlim_clean(gguf_path : string; apply : bool; keep_other : bool = false) : tuple<total : int; stale : int; removed : int; freed : int64> {
     var r = (total = 0, stale = 0, removed = 0, freed = 0l)
     var inv <- dlim_inventory(gguf_path)
+    var foreign_kept = 0
     for (im in inv) {
         r.total++
+        if (im.verdict == "FOREIGN") {
+            foreign_kept++   // another bake context's lane — never judged from here
+            continue
+        }
         continue if (im.verdict == "CURRENT" || (keep_other && im.verdict == "OTHER"))
         r.stale++
         if (apply && remove(im.path)) {
@@ -234,6 +282,9 @@ def dlim_clean(gguf_path : string; apply : bool; keep_other : bool = false) : tu
         }
     }
     delete inv
+    if (foreign_kept > 0) {
+        to_log(LOG_INFO, "dasLLAMA image: GC kept {foreign_kept} foreign-flavor image(s) — their bake contexts own them\n")
+    }
     return r
 }
 
@@ -1484,7 +1535,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                 if (!load_image(s_img, streamed, s_tag, s_quant)) {
                     panic("dasLLAMA: '{s_img}' was just streamed out and will not map back — see the decline above")
                 }
-                dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
+                dlim_gc_stale(path, s_tag, s_quant)   // the fresh bake proves ITS LANE's siblings dead
             }
             if (served) {
                 // the GPU MoE tier gathers from the PREPARED planes, same as the mapped rail —
@@ -1522,7 +1573,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
             convert_model_to_metal_blob(built)
         }
         delete m
-        dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
+        dlim_gc_stale(path, metal_flavor ? METAL_IMAGE_TAG : "", metal_flavor ? "q8" : qs)   // this lane only
         // the GPU MoE tier gathered from planes the build just freed — re-gather from the image,
         // exactly as the mapped rail does (a no-op when the build declined and `built` IS m)
         moe_gpu_upload_resident(built)

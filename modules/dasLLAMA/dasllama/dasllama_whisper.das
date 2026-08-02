@@ -374,7 +374,7 @@ def load_whisper_model(path : string; q8 : bool = false) : WhisperModel {
         }
         var built = WhisperModel()
         stream_whisper_model(path, q8, img, tag, built)
-        dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
+        dlim_gc_stale(path, tag)   // the fresh bake proves ITS LANE's siblings dead
         return <- built
     }
     // no persisted image: stream one into memory and serve THAT — a served model is always

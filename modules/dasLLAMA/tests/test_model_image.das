@@ -1056,3 +1056,37 @@ def test_fp32_decoder_image_roundtrip(t : T?) {
         delete prompt
     }
 }
+
+// The lane-GC regression gate: a GPU-flavor bake runs in its own pin context, so its identity
+// is un-recomputable here — the verdict must say FOREIGN (kept), never OTHER (reaped). The
+// 2026-08-02 bring-up lost every two-flavor model to exactly this: the metal save reaped the
+// planar sibling, then --clean reaped the metal images.
+[test]
+def test_dlim_flavor_lanes(t : T?) {
+    t |> run("flavor lanes: another bake context's image is never judged from here") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        let planar = image_identity("", "q8")
+        t |> equal(dlim_identity_lane(planar), "q8#", "planar lane is quant-only")
+        t |> equal(dlim_identity_lane("{planar}|metal"), "q8#metal", "metal tag folds into the lane")
+        let vk_tag = "vulkan|m2n b8192 l4 s1 r110000110"
+        t |> equal(dlim_identity_lane("{planar}|{vk_tag}"), "q8#{vk_tag}", "vulkan tags keep their inner pipes")
+        var current <- dlim_current_identities()
+        var p = DlimPeek(valid = true, version = IMAGE_VERSION, identity = planar)
+        t |> equal(dlim_image_verdict(p, current), "CURRENT", "own planar identity")
+        // the observed cross-context metal identity: blob bake selects portable + its own winners
+        p.identity = "v{IMAGE_VERSION}|q8|portable|s16|q8 mr4 b0 g4|kq 4/4/4/4|q51 mr1|nat 1101|metal"
+        t |> equal(dlim_image_verdict(p, current), "FOREIGN", "cross-context metal image is FOREIGN, not OTHER")
+        p.identity = "v{IMAGE_VERSION}|q8|portable|s16|q8 mr4 b0 g4|kq 4/4/4/4|q51 mr1|nat 1101|{vk_tag}"
+        t |> equal(dlim_image_verdict(p, current), "FOREIGN", "cross-context vulkan image is FOREIGN")
+        // same LANE as this process, different knobs — provably stale here
+        p.identity = replace(planar, "|s16|", "|s32|")
+        t |> equal(dlim_image_verdict(p, current), "OTHER", "own-lane knob drift stays OTHER")
+        p.version = IMAGE_VERSION - 1
+        t |> equal(dlim_image_verdict(p, current), "STALE v{IMAGE_VERSION - 1}", "version staleness wins in any lane")
+        p.valid = false
+        t |> equal(dlim_image_verdict(p, current), "BROKEN", "invalid peek")
+        delete current
+    }
+}
