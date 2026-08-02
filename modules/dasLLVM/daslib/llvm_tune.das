@@ -283,7 +283,7 @@ def private load_sidecar_doc(path : string) : JsonValue? {
 // refresh "provenance" (base identity + any tune_provenance_note entries) and write back
 def private save_sidecar_doc(path : string; var doc : JsonValue?) : bool {
     var prov = JV((binary = running_binary(), platform = get_platform_name(),
-        arch = get_architecture_name(), box = tune_box_identity()))
+        arch = get_architecture_name(), box = tune_box_identity(), written = iso8601_now()))
     for (k, v in keys(g_prov_notes), values(g_prov_notes)) {
         if (k != "binary" && k != "platform" && k != "arch" && k != "box") {
             update(prov, k, JV(v))
@@ -385,6 +385,73 @@ def tune_sidecar_section_merge(section : string; var entries : table<string; Jso
     let ok = save_sidecar_doc(path, doc)
     delete_json(doc)
     return ok
+}
+
+// ===== the tune history (~/.tune-history) =====
+
+var private g_history_dir = ""
+
+    //! This box's tune-history directory: `DAS_TUNE_HISTORY` env, else
+    //! `<home>/.tune-history/<sanitized box identity>/`. Every mint archives here — sidecars
+    //! are small and the history is the box's longitudinal health record; NEVER deleted.
+def tune_history_dir() : string {
+    if (!empty(g_history_dir)) {
+        return g_history_dir
+    }
+    let env = get_env_variable("DAS_TUNE_HISTORY")
+    if (!empty(env)) {
+        g_history_dir = env
+        return g_history_dir
+    }
+    var home = get_env_variable("HOME")
+    if (empty(home)) {
+        home = get_env_variable("USERPROFILE")
+    }
+    var san = ""
+    peek_data(tune_box_identity()) $(bytes) {
+        san = build_string() $(w) {
+            for (c in bytes) {
+                let ch = int(c)
+                let an = is_number(ch) || is_alpha(ch)
+                w |> write(an ? to_char(ch) : "-")
+            }
+        }
+    }
+    g_history_dir = "{home}/.tune-history/{san}"
+    return g_history_dir
+}
+
+    //! Archive the sidecar at `path` into the tune history: `verdict=="ok"` copies the file
+    //! (self-contained — provenance + race tables ride inside), anything else leaves a marked
+    //! `.FAILED.json` stub carrying `verdict`/`note`. Best-effort — never fails the mint.
+def tune_history_archive(path : string; verdict : string; note : string) : string {
+    let dir = tune_history_dir()
+    var home = get_env_variable("HOME")
+    if (empty(home)) {
+        home = get_env_variable("USERPROFILE")
+    }
+    mkdir("{home}/.tune-history")   // best-effort parents; mkdir on an existing dir is a no-op failure
+    mkdir(dir)
+    let stamp = format_time(get_clock(), "%Y%m%d-%H%M%S")
+    var stem = base_name(path)
+    if (ends_with(stem, ".tune.json")) {
+        stem = slice(stem, 0, length(stem) - length(".tune.json"))
+    }
+    var dest = ""
+    var ok = false
+    if (verdict == "ok") {
+        dest = "{dir}/{stamp}_{stem}.tune.json"
+        let text = fread(path)
+        ok = !empty(text) && fwrite(dest, text)
+    } else {
+        dest = "{dir}/{stamp}_{stem}.FAILED.json"
+        ok = fwrite(dest, "\{\"verdict\": \"{verdict}\", \"note\": \"{note}\", \"box\": \"{tune_box_identity()}\", \"written\": \"{iso8601_now()}\"\}")
+    }
+    if (!ok) {
+        to_log(LOG_WARNING, "tune history: could not archive to {dest}\n")
+        return ""
+    }
+    return dest
 }
 
 // ===== measurement statistics + the noise floor =====

@@ -10,6 +10,7 @@ module tuner_noise shared public
 
 require llvm/daslib/llvm_tune
 require daslib/strings_boost
+require daslib/fio            // popen + get_das_root — the engine-sha probe
 require math
 
 // the race regime of tune_kernels: one probe round costs the same as one real round there
@@ -135,4 +136,18 @@ def noise_provenance_stamp() {
     tune_provenance_note("noise_probes", join(g_probe_log, "; "))
     tune_provenance_note("noise_floor_cv_pct", "{g_floor_pct:0.2f}")
     tune_provenance_note("mode", g_paranoid ? "paranoid" : "normal")
+    tune_provenance_note("engine_sha", engine_sha())
+}
+
+// the engine commit this mint measured, "unknown" outside a repo (the shipped SDK)
+def private engine_sha() : string {
+    var sha = ""
+    unsafe {
+        popen("git -C \"{get_das_root()}\" rev-parse --short HEAD 2>/dev/null") $(f) {
+            if (f != null) {
+                sha = strip(fgets(f))
+            }
+        }
+    }
+    return empty(sha) ? "unknown" : sha
 }

@@ -404,6 +404,17 @@ It is a per-app, per-box artifact — gitignored (`*.tune.json`), and any
 change re-keys the JIT DLL cache automatically (the winning permutation's args
 fold into the DLL basename).
 
+Every mint is also archived to `<home>/.tune-history/<box>/` (or
+`DAS_TUNE_HISTORY`): successful mints copy the whole sidecar — provenance and
+race tables ride inside, so each archive is self-contained — and failed mints
+leave a marked `.FAILED.json` stub. Nothing in the history is ever deleted;
+it is the box's longitudinal health record, and `tune_history_archive` is the
+framework call a mint wrapper makes. A re-mint also snapshots the previous
+sidecar to `<sidecar>.bak` and prints the diff — winner changes with their
+margins from the new race tables, plus the median time shift over shared
+rows. Uniform shift = box state; scattered past-floor flips = a noisy mint;
+same-direction twin flips = an estimator change.
+
 ```{seealso}
 
 `modules/dasLLAMA/tune_for_this_box.md` — a worked application of this

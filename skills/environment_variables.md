@@ -58,6 +58,7 @@ application directory is read-only.
 | `DAS_TUNE_VERBOSITY` | text | What a tune shows: `silent`, `normal` (default), `verbose`. Anything unrecognized reads as `normal`, so a typo never silences a tune. |
 | `DAS_TUNE_NOISE_CV` | number | The noise gate's cv ceiling in percent, overriding the built-in 2% normal / 1% paranoid. A calibration lever; garbage reads as unset. |
 | `DAS_TUNE_NOISE_OVERRIDE` | flag | Tune through a failing noise gate anyway. The sidecar provenance is stamped `noise: overridden`, so the escape always leaves a mark. |
+| `DAS_TUNE_HISTORY` | path | Where mint archives land, overriding `<home>/.tune-history/<box>/`. Every mint archives (failures kept, marked `.FAILED.json`); the history is never deleted. |
 
 `--tune-quiet` / `--tune-verbose` on the application set it, and it inherits down the whole tuner
 process chain — the measuring code is two `popen`s below the process the user typed the flag at.

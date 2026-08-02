@@ -5,6 +5,7 @@ require llvm/daslib/llvm_tune
 require daslib/fio
 require daslib/json
 require daslib/json_boost
+require strings   // find — the history-archive content asserts
 require math
 
 // The measurement-statistics + noise-gate surface: median/cv math, the env-driven threshold,
@@ -76,6 +77,35 @@ def test_tune_sidecar_section_merge(t : T?) {
     t |> equal(doc?["race"]?["gemm"]?["tile_us"] ?? 0.0lf, 5.0lf)
     t |> equal(doc?["kernels"]?["some_fn"] ?? "", "vec8_u2")
     delete_json(doc)
+    remove(sidecar)
+}
+
+[test]
+def test_tune_history_archive(t : T?) {
+    let dirRes = create_temp_directory_result("llvm_tune_history_")
+    if (dirRes is error) {
+        t |> failure("could not create a temp dir: {dirRes as error}")
+        return
+    }
+    let hdir = dirRes as value
+    set_env_variable("DAS_TUNE_HISTORY", hdir)   // before the first read — the location latches
+    t |> equal(tune_history_dir(), hdir)
+    let tmpRes = create_temp_file_result("llvm_tune_hist_", ".tune.json")
+    if (tmpRes is error) {
+        t |> failure("could not create a temp file: {tmpRes as error}")
+        return
+    }
+    let sidecar = tmpRes as value
+    set_env_variable("DAS_TUNE_MANIFEST", sidecar)
+    t |> success(tune_manifest_set("hist_fn", "vec8_u2"))
+    let okPath = tune_history_archive(sidecar, "ok", "")
+    t |> success(!empty(okPath), "ok mint archives")
+    t |> success(find(fread(okPath), "hist_fn") >= 0, "archive is the sidecar itself")
+    let failPath = tune_history_archive(sidecar, "REFUSED (noise)", "cv 8.1% > 2%")
+    t |> success(!empty(failPath) && find(failPath, ".FAILED.json") >= 0, "failure archives marked")
+    t |> success(find(fread(failPath), "REFUSED") >= 0, "stub carries the verdict")
+    remove(okPath)
+    remove(failPath)
     remove(sidecar)
 }
 
