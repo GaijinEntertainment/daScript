@@ -64,10 +64,12 @@ def good_index_passed_to_func(arr : array<int>) {
     }
 }
 
-def good_two_arrays(a : array<int>; b : array<int>) : int {
+// NOTE: two arrays subscripted in lockstep is no longer a silent disqualifier -
+// that shape is PERF029 now (zip the arrays); see perf029_parallel_array_zip.das
+def good_array_and_table(a : array<int>; t : table<int; int>) : int {
     var s = 0
     for (i in range(length(a))) {
-        s += a[i] + b[i]   // b[i] uses i to index a different array — disqualifies
+        s += a[i] + (t?[i] ?? 0)   // t[i] is a key lookup, not a position - disqualifies
     }
     return s
 }

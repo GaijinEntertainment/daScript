@@ -2247,15 +2247,13 @@ class StyleLintVisitor : AstVisitor {
         var enclosing_priv = false
         var inside_function = false
         var enclosing_size : uint = 0xFFFFFFFFu
-        for (i in range(length(fn_file))) {
-            if (fn_file[i] != file_name) continue
-            let s = fn_starts[i]
-            let e = fn_ends[i]
+        for (f_file, s, e, f_priv in fn_file, fn_starts, fn_ends, fn_private) {
+            if (f_file != file_name) continue
             if (s <= block_start && block_start <= e) {
                 let size = e - s
                 if (size < enclosing_size) {
                     enclosing_size = size
-                    enclosing_priv = fn_private[i]
+                    enclosing_priv = f_priv
                     inside_function = true
                 }
             }

@@ -29,6 +29,7 @@ module perf_lint shared private
 //!   PERF016 — ternary abs — use abs(x)
 //!   PERF017 — length(s) == 0 / != 0 — use empty(s) / !empty(s)
 //!   PERF018 — for (i in range(length(arr))) where i only indexes arr — use 'for (c in arr)'
+//!   PERF029 — for (i in range(length(X))) subscripting sibling arrays in lockstep — zip: for (a, b in X, Y)
 //!   PERF019 — int(T.a) | int(T.b) on bitfield-or-enum-with-operator-| — collapse to int(T.a | T.b)
 //!   PERF020 — T(x) where x is already T (workhorse type) — drop the redundant cast
 //!   PERF021 — cond ? T(a) : T(b) on workhorse cast T — hoist to T(cond ? a : b)
@@ -71,6 +72,12 @@ struct Perf018State {
     vars_seen : int
     disqualified : bool
     matched : bool
+    // PERF029 extension: sibling arrays subscripted by the same index in lockstep.
+    // Strings keep the state copyable ("|"-joined intptr keys for dedup; ", "-joined
+    // names for the message); other_qualified counts sibling subscripts observed.
+    other_keys : string
+    other_names : string
+    other_qualified : int
 }
 
 struct Perf022State {
@@ -195,24 +202,25 @@ def private is_container_sizing(n : string) : bool {
 // True when `expr` reaches a declaration marked @scratch — a struct field or a module global
 // (`var @scratch g : array<T>`, the clear()-recycled capture-rail shape) — walking through
 // indexing and deref, so `p.kblobs[b]` counts by virtue of kblobs.
+def private has_scratch_annotation(annotations) : bool {
+    for (a in annotations) {
+        if (a.name == "scratch") return true
+    }
+    return false
+}
+
 def private is_scratch_dest(var expr : Expression?) : bool {
     return false if (expr == null)
     if (expr is ExprField) {
         var f = expr as ExprField
         var fd = f.field
-        if (fd != null) {
-            for (a in fd.annotation) {
-                if (a.name == "scratch") return true
-            }
-        }
+        if (fd != null && has_scratch_annotation(fd.annotation)) return true
         return is_scratch_dest(f.value)
     }
     if (expr is ExprVar) {
         var v = (expr as ExprVar).variable
         if (v != null) {
-            for (a in v.annotation) {
-                if (a.name == "scratch") return true
-            }
+            if (has_scratch_annotation(v.annotation)) return true
             // a ref binding (`var lst & = pool.free_bufs[b]`) carries its destination's scratch-ness
             if (v._type != null && v._type.flags.ref && v.init != null) {
                 return is_scratch_dest(v.init)
@@ -545,23 +553,20 @@ class PerfLintVisitor : AstVisitor {
             path = "[*]{path}"
             return find_expr_path(at.subexpr, path)
         }
-        if (expr is ExprSwizzle) {
-            var swiz = expr as ExprSwizzle
-            return find_expr_path(swiz.value, path)
-        }
-        if (expr is ExprCast) {
-            var ca = expr as ExprCast
-            return find_expr_path(ca.subexpr, path)
-        }
-        if (expr is ExprRef2Ptr) {
-            var rr = expr as ExprRef2Ptr
-            return find_expr_path(rr.subexpr, path)
-        }
-        if (expr is ExprPtr2Ref) {
-            var rr = expr as ExprPtr2Ref
-            return find_expr_path(rr.subexpr, path)
+        var through = path_passthrough_child(expr)
+        if (through != null) {
+            return find_expr_path(through, path)
         }
         // Bail on everything else (Op3, NullCoalescing, calls, etc.)
+        return null
+    }
+
+    def path_passthrough_child(expr : Expression?) : Expression? {
+        // wrappers that keep the path unchanged - swizzles, casts, ref/ptr adapters
+        if (expr is ExprSwizzle) return (expr as ExprSwizzle).value
+        if (expr is ExprCast) return (expr as ExprCast.subexpr)
+        if (expr is ExprRef2Ptr) return (expr as ExprRef2Ptr.subexpr)
+        if (expr is ExprPtr2Ref) return (expr as ExprPtr2Ref.subexpr)
         return null
     }
 
@@ -1038,7 +1043,11 @@ class PerfLintVisitor : AstVisitor {
         perf018_stack    |> pop()
         perf018_for_exprs |> pop()
         if (state.matched && !state.disqualified && state.qualified_count > 0 && owning != null) {
-            perf_warning("PERF018: for (i in range(length(X))) where i only indexes X; use 'for (c in X)' for direct iteration", owning.at)
+            if (state.other_qualified > 0 && state.arr_var != null) {
+                perf_warning("PERF029: parallel-array indexing - i subscripts {state.arr_var.name}{state.other_names} in lockstep; zip them: 'for (a, b, ... in {state.arr_var.name}{state.other_names})'", owning.at)
+            } else {
+                perf_warning("PERF018: for (i in range(length(X))) where i only indexes X; use 'for (c in X)' for direct iteration", owning.at)
+            }
         }
     }
 
@@ -1145,6 +1154,24 @@ class PerfLintVisitor : AstVisitor {
         return idx != null && idx is ExprVar && (idx as ExprVar).variable == state.iter_var
     }
 
+    def perf029_other_array_of(var at : ExprAt?; frame_idx : int) : Variable? {
+        // PERF029: a bare array-typed sibling (not the range source, not a table) indexed by the frame's iter_var
+        if (frame_idx < 0 || frame_idx >= length(perf018_stack)) return null
+        let state = perf018_stack[frame_idx]
+        if (state.disqualified || !state.matched
+            || state.arr_var == null || state.iter_var == null) return null
+        var av = perf018_bare_var_of(at.subexpr)
+        if (av == null || av == state.arr_var || av._type == null) return null
+        let bt = av._type.baseType
+        if (bt != Type.tArray && bt != Type.tFixedArray) return null
+        var idx = at.index
+        if (idx is ExprRef2Value) {
+            idx = (idx as ExprRef2Value.subexpr)
+        }
+        if (idx == null || !(idx is ExprVar) || (idx as ExprVar).variable != state.iter_var) return null
+        return av
+    }
+
     def perf018_on_at(var expr : ExprAt?) : void {
         var pushes = 0
         let n = length(perf018_stack)
@@ -1154,6 +1181,19 @@ class PerfLintVisitor : AstVisitor {
                 st.qualified_count++
                 perf018_stack[i] = st
                 pushes++
+            } else {
+                var av = perf029_other_array_of(expr, i)
+                if (av != null) {
+                    var st = perf018_stack[i]
+                    st.other_qualified++
+                    let akey = "{intptr(av)}|"
+                    if (find(st.other_keys, akey) < 0) {
+                        st.other_keys += akey
+                        st.other_names += ", {av.name}"
+                    }
+                    perf018_stack[i] = st
+                    pushes++
+                }
             }
         }
         if (pushes > 0) {
@@ -1245,20 +1285,7 @@ class PerfLintVisitor : AstVisitor {
         // Destination must be `array<T>` — the `*_from` overloads are array-only.
         let dest = call.arguments[0]
         if (dest == null || dest._type == null || dest._type.baseType != Type.tArray) return
-        var callee_id = 0
-        if (call.func.fromGeneric != null) {
-            if (call.func.fromGeneric.name == "push") {
-                callee_id = 1
-            } elif (call.func.fromGeneric.name == "push_clone") {
-                callee_id = 2
-            }
-        } else {
-            if (call.func.name == "push") {
-                callee_id = 1
-            } elif (call.func.name == "push_clone") {
-                callee_id = 2
-            }
-        }
+        let callee_id = perf022_callee_id(call)
         if (callee_id == 0) return
         var arg1 = call.arguments[1]
         if (arg1 is ExprRef2Value) {
@@ -1270,6 +1297,16 @@ class PerfLintVisitor : AstVisitor {
         state.matched = true
         state.callee_id = callee_id
         perf022_stack[top_idx] = state
+    }
+
+    def perf022_callee_id(var call : ExprCall?) : int {
+        // 1 = push, 2 = push_clone, 0 = neither; generic instances resolve through fromGeneric
+        if (call.func.fromGeneric != null) {
+            if (call.func.fromGeneric.name == "push") return 1
+            return call.func.fromGeneric.name == "push_clone" ? 2 : 0
+        }
+        if (call.func.name == "push") return 1
+        return call.func.name == "push_clone" ? 2 : 0
     }
 
     def perf022_pop_and_check() : void {
@@ -1397,23 +1434,9 @@ class PerfLintVisitor : AstVisitor {
         if (is_get_ptr_vs_null(expr.left, expr.right) || is_get_ptr_vs_null(expr.right, expr.left)) {
             perf_warning("PERF010: get_ptr() is unnecessary for null comparison; smart_ptr supports == and != null directly", expr.at)
         }
-        // PERF013: a += ±1 / a -= ±1 → a++ / a-- Derive the actual delta from (op, RHS) so each branch can suggest the correct postfix operator. RHS is one of {+1, -1}; op flips the sign.
+        // PERF013: a += ±1 / a -= ±1 → a++ / a--
         if (expr.op == "+=" || expr.op == "-=") {
-            if (expr.left != null && is_workhorse_numeric(expr.left._type)) {
-                let rhs_one = is_const_one(expr.right)
-                let rhs_neg = is_const_neg_one(expr.right)
-                var delta = 0
-                if (rhs_one) {
-                    delta = expr.op == "+=" ? 1 : -1
-                } elif (rhs_neg) {
-                    delta = expr.op == "+=" ? -1 : 1
-                }
-                if (delta == 1) {
-                    perf_warning("PERF013: '{expr.op} {rhs_one ? 1 : -1}' on a numeric scalar; use postfix '++' for a faster, idiomatic increment", expr.at)
-                } elif (delta == -1) {
-                    perf_warning("PERF013: '{expr.op} {rhs_one ? 1 : -1}' on a numeric scalar; use postfix '--' for a faster, idiomatic decrement", expr.at)
-                }
-            }
+            check_perf013_incdec(expr)
         }
         // PERF014: exact char-class checks. Digit range is a single bounded range (closed joins with &&, negated complement with ||). Alpha is the both-case compound (closed = || of two ranges, negated = && of two complements).
         if (expr.op == "&&") {
@@ -1431,6 +1454,24 @@ class PerfLintVisitor : AstVisitor {
         // PERF019: int(T.a) | int(T.b) collapses to int(T.a | T.b) when T natively supports `|` (bitfield always; enum only when an `operator |` overload exists).
         if (expr.op == "|") {
             check_perf019_int_cast_or(expr)
+        }
+    }
+
+    def check_perf013_incdec(expr : ExprOp2?) : void {
+        // Derive the actual delta from (op, RHS) so each branch suggests the correct postfix operator. RHS is one of {+1, -1}; op flips the sign.
+        if (expr.left == null || !is_workhorse_numeric(expr.left._type)) return
+        let rhs_one = is_const_one(expr.right)
+        let rhs_neg = is_const_neg_one(expr.right)
+        var delta = 0
+        if (rhs_one) {
+            delta = expr.op == "+=" ? 1 : -1
+        } elif (rhs_neg) {
+            delta = expr.op == "+=" ? -1 : 1
+        }
+        if (delta == 1) {
+            perf_warning("PERF013: '{expr.op} {rhs_one ? 1 : -1}' on a numeric scalar; use postfix '++' for a faster, idiomatic increment", expr.at)
+        } elif (delta == -1) {
+            perf_warning("PERF013: '{expr.op} {rhs_one ? 1 : -1}' on a numeric scalar; use postfix '--' for a faster, idiomatic decrement", expr.at)
         }
     }
 

@@ -1029,8 +1029,9 @@ Detection peels at most one ``ExprCast`` between ``range`` and ``length``
 target and the indexed receiver via the existing ``find_expr_path`` chain
 walker. Every use of ``i`` in the body must be the bare index of
 ``arr[i]`` against the same path; any arithmetic on ``i``
-(``arr[i+1]`` / sliding window), use of ``i`` outside an indexing
-expression, or indexing a different array disqualifies the loop.
+(``arr[i+1]`` / sliding window) or use of ``i`` outside an indexing
+expression disqualifies the loop. Bare-variable sibling arrays indexed by
+the same ``i`` route the loop to PERF029 instead.
 
 .. code-block:: das
 
@@ -1042,6 +1043,34 @@ expression, or indexing a different array disqualifies the loop.
     // Good — direct iteration
     for (c in arr) {
         process(c)
+    }
+
+PERF029 — parallel-array indexing — zip the arrays
+==================================================
+
+``for (i in range(length(X)))`` walking sibling arrays by subscript hides the
+length coupling: one sibling of a diverging length is an out-of-bounds panic
+the loop header never shows. The multi-source ``for`` iterates every array in
+lockstep by construction — no index, no bounds question.
+
+Fires when every use of ``i`` is a plain ``[i]`` subscript over bare
+array-typed variables and at least one of them is not the ``range`` source.
+Tables are excluded (``t[i]`` is a key lookup, not a position); index
+arithmetic or ``i`` escaping as a value disqualifies, since the zip form
+cannot express those. Loops whose ``i`` never subscripts the ``range``
+source itself also stay silent — there the source is only a bound, and
+zipping would change which array limits the walk.
+
+.. code-block:: das
+
+    // Bad — xs and ys coupled through i
+    for (i in range(length(xs))) {              // PERF029
+        ys[i] = xs[i] * 2.0
+    }
+
+    // Good — lockstep by construction
+    for (x, y in xs, ys) {
+        y = x * 2.0
     }
 
 PERF019 — ``int(T.a) | int(T.b)`` on bitfield/enum — collapse to one cast
