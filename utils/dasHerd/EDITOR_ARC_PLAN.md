@@ -145,6 +145,36 @@ selection post-LSP (confirmed); snippets + format-on-type recorded;
 `version_2_syntax` sweep of das-side tools; smoke re-run cadence
 whenever 9090 frees.
 
+**E5 status (SHIPPED 2026-08-01):** examples/text is the editor. Component:
+undo units carry serials; `text_edit_mark_saved` records the save point and
+`dirty` recomputes as top-serial != saved-serial (undo back to the save
+point clears it; divergence makes it unreachable — VS Code semantics, three
+model tests); `text_edit_byte_of_position` added (inverse byte mapping).
+App: per-document edit state; enter by typing (printable char pre-arms the
+editor's keyboard and the widget's own drain consumes the queued chars —
+a manual replay double-typed, probe-caught), Ctrl+E, footer Edit/Done, or
+View menu; plain/code = single pane, markdown = side-by-side with live
+preview (debounced `md_parse` of the LF buffer into SEPARATE preview state
+so viewer scroll/folds survive; caret follow = one-byte selection walked
+back to the nearest rendered byte, then the find-scroll band); save/save-as
+/reload ride the existing commands with editor sync + save-point record;
+dirty asterisk in the window title; welcome doc read-only; file.new =
+untitled buffer; 2s stat watch detects external changes (warn only, never
+auto-reload — explicit Reload refreshes and re-seeds). FOCUS LESSON: the
+find bar must draw AFTER the editor in the frame — the editor's FocusItem
+reclaim runs at its own draw, so a bar drawn earlier loses the
+replace-input focus race every frame (each typed char then replaced the
+currently-selected match through the re-jumping find sync — the undo
+journal made the failure legible). GRAMMAR FIX ridden in: bare named call
+arguments (#3410) were unparseable by the tree-sitter grammar, silently
+killing folds/outline after the first such call — `_argument` grew
+`make_struct_field` (two GLR conflicts declared, corpus 44/44, parser.c
+regenerated). The features demo (`examples/features/text_edit.das`) is
+DELETED; its three smokes retarget examples/text; viewer suite 10/10 with
+new save-point and preview/watch scenarios; the fold-click leg got a
+test-owned fixture. Deliberately left for E6: async das/cpp providers,
+Issues panel, completion beyond the tier-1 words/keywords rail.
+
 ## Shape: ONE component, one arc, two skins
 
 One arc, not two. The editing core — buffer, cursor, selection, undo,
