@@ -194,13 +194,13 @@ def test_parse_args(t : T?) {
         t |> equal(parsed.command ?? "", "list")
         t |> success(parsed.command_arg |> is_none)
     }
-    t |> run("release with fast tuning") @(t : T?) {
-        var r <- parse_args(type<DaspkgArgs>, ["release", "--out", "E:/", "--tune-fast"])
+    t |> run("release with paranoid tuning") @(t : T?) {
+        var r <- parse_args(type<DaspkgArgs>, ["release", "--out", "E:/", "--paranoid"])
         t |> success(r |> is_ok, "parse succeeds")
         let parsed <- r |> move_unwrap
         t |> equal(parsed.command ?? "", "release")
         t |> equal(parsed.out, "E:/")
-        t |> success(parsed.tune_fast)
+        t |> success(parsed.paranoid)
     }
     t |> run("no command") @(t : T?) {
         let empty_args : array<string>

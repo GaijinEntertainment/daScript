@@ -56,11 +56,12 @@ hand-copy trap). Several libraries share one file: tuners UPSERT their own keys
 `modules/dasLLAMA/harness/dasllama_tuner.das` (repo-only) is the scope tuner — a wrapper spawning
 `gen_tune_probe.das` (the `[tune]` generator grid) then `tune_kernels.das` (the `[tuned]`
 loop-hint grid + the `"runtime"` knob snapshot), both upserting the one env-pointed sidecar.
-`--tune-fast` narrows both, but they are shaped differently: `tune_kernels` screens progressively
-(20/80 → 4/8/20 — the `phase` on a step event is `screening`/`narrowing`/`finalists`, and `live`
-is what `screening_keep` already computes), while `gen_tune_probe` is a flat best-of-N and only
-drops 6 → 3. Its confirm pass is deliberately NOT cut — a correctness gate, not a budget.
-The flag spec is shared: `harness/tuner_cli.das`, required by bare name (same-directory).
+Two race modes only: default (`tune_kernels` 20 screening / 80 finalist rounds — the `phase` on
+a step event is `screening`/`finalists`, `live` is what `screening_keep` computes; `gen_tune_probe`
+flat best-of-6) and `--tune-paranoid` (240 / best-of-18, 1% gate). There is NO fast race mode —
+short races cannot resolve sub-2% twins; the debugging concession is `daspkg release --quick`
+(accept the existing sidecar, race nothing). The confirm pass is never cut — a correctness gate,
+not a budget. The flag spec is shared: `harness/tuner_cli.das`, required by bare name (same-directory).
 
 **The shipped fallback has ONE source.** `[tuned]` banks each kernel's resolved fallback and
 `[dasllama_fallbacks]` (a dummy struct in `tune_kernels.das`, declared after the requires that

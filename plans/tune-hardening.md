@@ -141,6 +141,39 @@ Rollout findings (M1, probe = 4-acc dot N=4096 x 2000 reps x 12 rounds ≈ 30 ms
   brand), which makes every existing Mac sidecar read STALE once. Intended — everything
   re-mints post-hardening anyway.
 
-Next per sequencing: 1d (validation phase) + 1e (paranoid mode), then 2 (provenance/history).
+**Race tables (2a pulled forward, extended to ALL competitors per Boris):** the sidecar's
+`"race"` section records every passing candidate's numbers (med/best us per loop-hint perm;
+tile/gemv/hot us per generator row), winner, fallback, floor, and rejects — flushed only behind
+the end gate via `tune_sidecar_section_merge`. First readout (on-file rig vs cold gated mint):
+9 of 11 winner diffs carry margins −1.0%..+0.3% (statistical twins, damage zero); ONE real one:
+q8q8_tile_gen `kstep2` → `mr8_budget` at **+10.5% tile** — the generated-GEMM class this arc
+exists for. The new unit cell also caught a real framework bug: the box-identity cache keys on
+path@mtime (1s granular), so same-second observe-then-write cycles re-read the pre-write
+observation — an empty first observation reset the document on every save; fixed in
+`save_sidecar_doc` (cache refreshed for the mtime it just created).
+
+**1d + 1e LANDED; --tune-fast REMOVED** (the corrected model: quick means accept-existing,
+never race-cheap — a fast race is the systematic failure to measure):
+- Validation phase: a 5-kernel heavy subset re-races twice at full budget after the sweep;
+  reproduce = same winner or an inside-floor flip, median drift bound 5% (paranoid 3%); any
+  miss fails the mint before anything is written. First live run: 10/10 OK, drifts
+  0.00-0.68%, the dot twins flipped inside-floor in one rep and reproduced exactly in the other.
+- Paranoid: `--tune-paranoid` on both halves + the wrapper (240 finalist rounds / gen
+  best-of-18, 1% probe ceiling, 3% drift bound); `daspkg release --paranoid` forwards it.
+  `--tune-fast` is gone from the halves, the wrapper, and daspkg; `--quick` lands with the
+  deliverable-3 release inversion.
+- **The confirm gate was dead twice over** (visible only once the noise work made its output
+  legible): (1) the `llvm_tune: <fn> <- <perm>` stamp lines its children PARSE went
+  verbose-only in the progress-UX arc — at default verbosity discovery read nothing, so a
+  divergent crown shipped UNGUARDED (no confirm model) or hard-failed the mint (model set);
+  the children now force `DAS_TUNE_VERBOSITY=verbose`. (2) The challenger arm's hand-written
+  temp manifest carried no `provenance.box`, so the box-identity rail read it as foreign →
+  absent, the challenger stamped the fallback and auto-scored 0 → auto-reject; the temp
+  manifest now embeds `tune_box_identity()`. En route, discovery named the arm64 per-ISA
+  fallback: `kstep2` — the rig's on-file q8q8 entry was a PINNED FALLBACK, not a raced crown,
+  so the +10.5% mr8_budget margin was never e2e-arbitrated until now.
+
+Next per sequencing: 2's remainder (provenance date/sha, ~/.tune-history, .bak + diff — the
+diff now has numbers to diff), then 3 (release inversion + --quick), 4, 5, 6.
 Acceptance test when ready: mint on zen2 while it is NOISY — the gate must refuse, and keep
 refusing until the actual culprit process is gone.

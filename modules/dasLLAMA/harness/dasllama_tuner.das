@@ -4,7 +4,7 @@ require daslib/module_path
 require daslib/command_line
 require daslib/fio
 require daslib/jobque_boost   // get_total_hw_cores: the measurement-regime lane count
-require tuner_cli               // --tune-fast, shared with the other half
+require tuner_cli               // --tune-paranoid, shared with both halves
 require math
 
 // The dasllama scope tuner — the wrapper the policy rail (auto default / --tune / daspkg
@@ -15,9 +15,9 @@ require math
 // A child failure is reported but does not abort the other half — the completeness check
 // upstream names whatever ends up missing.
 
-// `-- --tune-fast` narrows both halves, but they are shaped differently: tune_kernels screens
-// progressively (20/80 -> 4/8/20), gen_tune_probe is a flat best-of-N and only drops 6 -> 3.
-// `daspkg release --tune-fast` forwards the same flag here.
+// Two modes only: default and `-- --tune-paranoid` (3x budget, 1% gate) — `daspkg release
+// --paranoid` forwards the flag here. There is no fast RACE mode; the debugging concession is
+// `daspkg release --quick`, which accepts the existing sidecar and never spawns this at all.
 // Both halves take real measurements (the confirm gate is a full prefill), so they must run
 // under the box measurement regime — 16 cores with affinity on the big-SMT x64 boxes, not the
 // fresh-que default (all cores): a crown confirmed at the wrong width ships the wrong kernel.
@@ -37,10 +37,10 @@ def private regime_env_prefix() : string {
     return pfx
 }
 
-def private run_half(name : string; fast : bool) : bool {
+def private run_half(name : string; paranoid : bool) : bool {
     let t0 = ref_time_ticks()
     let pfx = regime_env_prefix()
-    let user_args = fast ? " -- --tune-fast" : ""
+    let user_args = paranoid ? " -- --tune-paranoid" : ""
     let cmd = "{pfx}\"{get_das_exe()}\" -jit \"{path_join(get_this_module_dir(), name)}\" -dasroot \"{get_das_root()}\"{user_args} 2>&1"
     // cmd.exe strips the first and last quote of a line that starts with a quote — wrap in a
     // sacrificial outer pair on windows UNLESS the env prefix already leads (the daspkg popen trap)
@@ -68,14 +68,14 @@ def private run_half(name : string; fast : bool) : bool {
 [export]
 def main : int {
     let t0 = ref_time_ticks()
-    let fast = tuner_fast_requested()
+    let paranoid = tuner_paranoid_requested()
     print("dasllama_tuner: sidecar = {get_env_variable("DAS_TUNE_MANIFEST")}\n")
-    let modeDesc = (fast
-        ? "FAST (kernels 4/8/20 progressive, generators best-of-3)"
-        : "default (kernels 20 screening / 80 max, generators best-of-6)")
+    let modeDesc = (paranoid
+        ? "PARANOID (kernels 20 screening / 240 max, generators best-of-18, 1% gate, validation)"
+        : "default (kernels 20 screening / 80 max, generators best-of-6, validation)")
     print("dasllama_tuner: mode = {modeDesc}\n")
-    let ok1 = run_half("gen_tune_probe.das", fast)
-    let ok2 = run_half("tune_kernels.das", fast)
+    let ok1 = run_half("gen_tune_probe.das", paranoid)
+    let ok2 = run_half("tune_kernels.das", paranoid)
     print("dasllama_tuner: total {get_time_usec(t0) / 1000} ms\n")
     return ok1 && ok2 ? 0 : 1
 }

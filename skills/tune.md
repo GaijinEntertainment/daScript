@@ -357,6 +357,16 @@ causes; it recovers under a couple of seconds of sustained load, but a
 post-race gate would pay that settle on every mint for a window whose noise
 cannot touch the CPU medians anyway.)
 
+After the sweep, the harness validates itself: a heavy subset re-races at
+the same budget and the winners must reproduce — an inside-floor flip counts
+as reproduction (candidates within the floor are the same measurement, so
+ties break deterministically: baseline first, then grid order) — with
+medians inside a drift bound, or the **mint fails as a whole**. Two budgets
+exist: default and paranoid (3× the rounds, a 1% cv ceiling, a tighter drift
+bound). There is deliberately no fast race mode: a short race cannot resolve
+sub-2% twins, so its winners are lottery tickets; the debugging concession
+is accepting an existing sidecar, never racing cheaply.
+
 ## Writing a harness
 
 A tuner is an ordinary `[export] def main` compiled with

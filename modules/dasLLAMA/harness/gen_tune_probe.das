@@ -46,16 +46,14 @@ require daslib/json_boost   // JV over tuples — the per-variant race rows
 require daslib/fio   // has_env_variable: the compile-only mint gate (slice J recipe)
 require daslib/strings_boost   // split — the confirm pass parses child output
 require daslib/command_line    // get_das_exe — the confirm pass spawns daslang children
-require tuner_cli              // --tune-fast, shared with tune_kernels
+require tuner_cli              // --tune-paranoid, shared with tune_kernels
 require tuner_noise            // the noise gate, shared with tune_kernels
 require math
 require strings
 
-// This half is a flat best-of-N with no screening phase to narrow, so the round count is the
-// only budget dial --tune-fast has. The confirm pass is deliberately NOT cut: it is a
-// correctness gate, and skipping it ships an unconfirmed crown (the SPR amx lesson).
+// This half is a flat best-of-N; paranoid triples the round count. The confirm pass is never
+// cut: it is a correctness gate, and skipping it ships an unconfirmed crown (the SPR amx lesson).
 let ROUNDS_FULL = 6
-let ROUNDS_FAST = 3
 var ROUNDS = ROUNDS_FULL
 
 struct Fixture {
@@ -1289,7 +1287,11 @@ def private discover_fallback_stamp() : string {
         print("confirm: using q8q8 fallback '{inherited}' from the release compile on this host\n")
         return inherited
     }
-    var envs <- [("DAS_TUNE_MODE" => "normal"), ("DAS_TUNE_MANIFEST" => ""), ("GEN_TUNE_COMPILE_ONLY" => "1")]
+    // verbose is MANDATORY on this child: the `llvm_tune: <fn> <- <perm>` stamp line this
+    // parses is verbose-only, so at inherited-normal the discovery reads nothing and the
+    // confirm gate silently degrades to unguarded-keep
+    var envs <- [("DAS_TUNE_MODE" => "normal"), ("DAS_TUNE_MANIFEST" => ""),
+        ("GEN_TUNE_COMPILE_ONLY" => "1"), ("DAS_TUNE_VERBOSITY" => "verbose")]
     let cmd = env_cmd(envs, "\"{get_das_exe()}\" -jit \"{harness_dir()}/gen_tune_probe.das\"")
     delete envs
     return parse_stamp_suffix(run_child(cmd))
@@ -1298,7 +1300,10 @@ def private discover_fallback_stamp() : string {
 // One confirm arm: real-model prefill under the given manifest (empty = the fallback chain).
 // The stamp line doubles as the plumbing check — a wrong stamp scores 0 (= a rejection).
 def private confirm_pp_run(model, manifest_path, expected : string) : double {
-    var envs <- [("DAS_TUNE_MODE" => "normal"), ("DAS_TUNE_MANIFEST" => manifest_path)]
+    // verbose for the same reason as the discovery child: the arm's stamp line IS the
+    // plumbing check, and without it both arms score 0 and the confirm can never pass
+    var envs <- [("DAS_TUNE_MODE" => "normal"), ("DAS_TUNE_MANIFEST" => manifest_path),
+        ("DAS_TUNE_VERBOSITY" => "verbose")]
     let cmd = env_cmd(envs, "\"{get_das_exe()}\" -jit \"{harness_dir()}/tune_confirm_prefill.das\" -- \"{model}\"")
     delete envs
     let outp = run_child(cmd)
@@ -1342,9 +1347,10 @@ def private confirm_winner(winner : string) : string {
     }
     let tmpm = "{get_das_root()}/_tune_confirm_manifest.json"
     // the stamps read the manifest's "kernels" SECTION (read_manifest) — a flat root object
-    // parses found-but-empty, the challenger arm stamps the fallback, and the confirm can
-    // never pass (both arms score 0 -> auto-reject)
-    if (!fwrite(tmpm, "\{\"kernels\": \{\"q8q8_tile_gen\": \"{winner}\"\}\}")) {
+    // parses found-but-empty. And provenance.box is MANDATORY: the box-identity staleness rail
+    // reads a box-less manifest as foreign -> absent, the challenger arm stamps the fallback,
+    // and the confirm can never pass (both arms score 0 -> auto-reject)
+    if (!fwrite(tmpm, "\{\"kernels\": \{\"q8q8_tile_gen\": \"{winner}\"\}, \"provenance\": \{\"box\": \"{tune_box_identity()}\"\}\}")) {
         print("confirm: cannot write {tmpm} — is das_root writable?\n")
         return ""
     }
@@ -1662,8 +1668,9 @@ def main : int {
         print("run with -jit — the generator only fires under the LLVM JIT\n")
         return 1
     }
-    if (tuner_fast_requested()) {
-        ROUNDS = ROUNDS_FAST
+    if (tuner_paranoid_requested()) {
+        ROUNDS = ROUNDS_FULL * 3
+        noise_set_paranoid(true)
     }
     // pre-i8mm mint rail (the slice J no-linker-on-target recipe): the JIT has already
     // linked + installed the full grid DLL by the time main runs — this gate skips

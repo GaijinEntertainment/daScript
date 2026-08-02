@@ -19,6 +19,7 @@ let private PROBE_ROUNDS = 12
 
 var private g_floor_pct = 0.0lf
 var private g_overridden = false
+var private g_paranoid = false
 var private g_probe_log : array<string>
 
 // fixed probe kernel — four accumulators like the hand vec bodies, deterministic, cache-resident
@@ -85,12 +86,18 @@ def noise_floor_pct() : double {
     return g_floor_pct
 }
 
+//! Switch every subsequent gate to the paranoid threshold (1% instead of 2%). Call before the
+//! first gate; the flag also rides into the provenance stamp.
+def noise_set_paranoid(p : bool) {
+    g_paranoid = p
+}
+
 //! Probe the box and gate on the cv. True = quiet enough to keep measuring (a one-line verdict
 //! prints either way, so drift is visible across a run and across history). False = REFUSED:
 //! the caller must stop without writing a sidecar and exit nonzero. `DAS_TUNE_NOISE_OVERRIDE`
 //! turns a refusal into a pass, and the sidecar provenance is stamped `noise: overridden`.
 def noise_gate(tag : string) : bool {
-    let thr = tune_noise_threshold_pct(false)
+    let thr = tune_noise_threshold_pct(g_paranoid)
     var med = 0.0lf
     var cv = probe_once(0, med)
     if (cv > thr) {
@@ -127,4 +134,5 @@ def noise_provenance_stamp() {
     tune_provenance_note("noise", g_overridden ? "overridden" : "ok")
     tune_provenance_note("noise_probes", join(g_probe_log, "; "))
     tune_provenance_note("noise_floor_cv_pct", "{g_floor_pct:0.2f}")
+    tune_provenance_note("mode", g_paranoid ? "paranoid" : "normal")
 }

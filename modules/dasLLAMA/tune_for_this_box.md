@@ -118,11 +118,11 @@ stale — every reader treats it as absent, and the next tuner write resets it.
 ```
 bin/daslang -jit modules/dasLLAMA/harness/tune_kernels.das
 
-# quick mode: progressive 4/8-round screening, finalists stop at 20
-bin/daslang -jit modules/dasLLAMA/harness/tune_kernels.das -- --tune-fast
+# paranoid: 3x the finalist budget, 1% noise-gate ceiling, tighter validation
+bin/daslang -jit modules/dasLLAMA/harness/tune_kernels.das -- --tune-paranoid
 
-# full generator + kernel scope (also available as `daspkg release --tune-fast`)
-bin/daslang -jit modules/dasLLAMA/harness/dasllama_tuner.das -- --tune-fast
+# full generator + kernel scope (also available as `daspkg release [--paranoid]`)
+bin/daslang -jit modules/dasLLAMA/harness/dasllama_tuner.das
 ```
 
 Sweeps every `[tuned]` kernel (25 — `TUNED_KERNEL_COUNT`, one `[dasllama_grid]` each: the float
@@ -131,11 +131,19 @@ rope-table leaf, the fp32 GEMM tile, the f16 codec set, the q8 KV-codec set, and
 only, clean skip elsewhere — the laneq4x4 tile) across the 20-permutation grid
 (`{plain, u2, u4, u8} ∪ {vec4,vec8,vec16,vec32} × {-, u2, u4, u8}`), interleaved best-of-N.
 The default screens the full valid grid for 20 rounds, retains the four fastest rows plus
-anything within 5% of the leader, and continues those finalists to at most 80 rounds.
-`--tune-fast` narrows progressively after rounds 4 and 8 and stops at 20. Every mode runs
-one unscored warm-up pass and rotates row order each round; the measured minimum remains the
-score. The measurement thread is hard-pinned by its child-process JobQue and is automatically
-unpinned when that tuner child exits. Each round runs 2000 reps at N=4096. The correctness
+anything within 5% of the leader, and continues those finalists to at most 80 rounds;
+`--tune-paranoid` extends the finalists to 240. There is no fast RACE mode — short races
+cannot resolve sub-2% twins (measured: 10/34 winner flips between back-to-back fast mints);
+the debugging concession is accepting an existing sidecar, not racing cheaply. Every mode
+runs one unscored warm-up pass and rotates row order each round; finalists are ranked by the
+MEDIAN of their finalist rounds (best-of prints alongside), a winner must beat the shipped
+fallback by more than the measured noise floor, and ties inside the floor break
+deterministically (baseline first, then grid order). Noise gates probe the box at
+start/mid/end — a failing gate refuses to tune, and a failing end gate writes nothing. After
+the sweep, a five-kernel subset re-races twice and the winners must reproduce or the mint
+fails. The measurement thread is hard-pinned by its child-process JobQue (QoS-pinned on
+macOS, which has no core masks) and is automatically unpinned when that tuner child exits.
+Each round runs 2000 reps at N=4096. The correctness
 gate per variant (f64 reference; EXACT
 quant/scale equality for the requant), reports each variant as %Δ vs that kernel's SHIPPED
 fallback perm (`vec8_u2` for most; dot_q8q8 ships `vec16`, dot_q4 `vec4_u4`, the tile k-loops

@@ -38,7 +38,7 @@ daslang utils/daspkg/main.das -- install --global dasImgui
 | `build` | Build all C/C++ packages (cmake) |
 | `check` | Verify installed packages are present |
 | `doctor` | Check environment (git, cmake, gh) |
-| `release [--out <dir>] [--tune-fast]` | Bundle project as a redistributable standalone; tuning defaults to 20/80, with an opt-in quick 4/8/20 pass |
+| `release [--out <dir>] [--paranoid]` | Bundle project as a redistributable standalone; tuning defaults to the full 20/80 budget, `--paranoid` triples it |
 | `introduce [url]` | Submit a package to the index via PR |
 | `withdraw <name>` | Remove a package from the index via PR |
 
@@ -56,7 +56,7 @@ All package commands accept `--global` / `-g` to operate on global modules.
 | `--json` | Machine-readable JSON output (`search`, `list`, `check`) |
 | `--branch <name>`, `-b <name>` | Install from a git branch (e.g. `master`) instead of a tag |
 | `--out <path>` | Output directory for `release` (default: current directory) |
-| `--tune-fast` | During `release`, tune with progressive 4/8-round screening and a 20-round cap instead of the default 20/80 budget |
+| `--paranoid` | During `release`, tune with the paranoid budget: 3x the rounds and a 1% noise-gate ceiling. There is no fast race mode — a cheap race measures nothing |
 
 ## Global modules
 

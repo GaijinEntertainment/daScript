@@ -10,9 +10,10 @@ options gen2
 // each variant's time as a DELTA vs that kernel's SHIPPED fallback perm so a "win" that is really
 // noise is obvious.
 //
-// Run:  bin/daslang -jit modules/dasLLAMA/harness/tune_kernels.das
-// Quick pass: append `-- --tune-fast` for progressive 4/8 screening / 20 maximum rounds.
-//   then rebuild/rerun the model with -jit to pick up box_profile.json (it re-keys the JIT DLL cache).
+// Run:  bin/daslang -jit modules/dasLLAMA/harness/tune_kernels.das   (append `-- --tune-paranoid`
+// for the 3x budget), then rebuild/rerun the model with -jit to pick up box_profile.json (it
+// re-keys the JIT DLL cache). There is no fast RACE mode — a cheap race is a systematic failure
+// to measure; the debugging concession is accepting an existing sidecar (daspkg --quick).
 
 require dasllama/dasllama_math   // nolint:STYLE030 — side-effect: loads the *_template kernels for the cross-module scan
 require dasllama/dasllama_math_default   // nolint:STYLE030 — dot_q8q8_template lives here
@@ -24,7 +25,7 @@ require dasllama/dasllama_tune   // [dasllama_grid] emitter
 require llvm/daslib/llvm_tune    // tune_sidecar_merge — the app-sidecar upsert writer
 require ?das_metal dasllama/dasllama_metal_prefill  // nolint:STYLE030 — metal_tensor_race (Apple static_if half)
 require ?das_metal dasllama/dasllama_metal_kernels  // nolint:STYLE030 — metal_tensor_race_decode (Apple static_if half)
-require tuner_cli               // --tune-fast, shared with the other half
+require tuner_cli               // --tune-paranoid, shared with the other half
 require tuner_noise             // the noise gate + the measured floor, shared with the other half
 require llvm/daslib/aarch64_neon // nolint:STYLE030 — sdot4_laneq (referenced by the cloned laneq template bodies)
 require llvm/daslib/f16_cvt      // f16 references + the cloned f16-kernel template bodies
@@ -98,14 +99,10 @@ typedef AxpyFn = function<(var d : float?; s : float const?; scale : float; n : 
 typedef ScaleFn = function<(var d : float?; scale : float; n : int64) : void>
 
 let N = 4096l
-var private FAST_MODE = false
-var private SCREEN_ROUNDS = 20
-var private ROUNDS = 80
+let SCREEN_ROUNDS = 20
+var private ROUNDS = 80   // paranoid triples this
 let MIN_FINALISTS = 4
 let FINALIST_MARGIN = 1.05lf
-let FAST_MID_ROUNDS = 8
-let FAST_MID_FINALISTS = 8
-let FAST_MID_MARGIN = 1.10lf
 let REPS = 2000
 // The outer progress denominator, needed before the first kernel runs so it cannot be derived
 // from the results. A mismatch only skews the bar, and main says so at the end.
@@ -129,6 +126,14 @@ var private g_samples : array<array<double>>
 // per-kernel race tables for the sidecar "race" section — "how much did it flip/win by" must
 // be answerable from the file long after the scrollback is gone
 var private g_race : table<string; JsonValue?>
+// the validation phase: after the sweep, a heavy subset re-races at the same budget and the
+// winners must reproduce (an inside-floor flip counts) with medians inside the drift bound —
+// self-validation, not self-certification; a miss fails the WHOLE mint
+var private g_validating = false
+var private g_validate_expect : table<string; string>
+var private g_validate_med : table<string; double>
+var private g_validate_failures = 0
+var private VALIDATE_DRIFT_PCT = 5.0lf   // paranoid tightens this in main
 let TOL = 1.0e-3lf
 let BASELINE = "vec8_u2"   // the majority hand default; kernels with their own [tuned(fallback=)] pass it to report()
 
@@ -172,7 +177,7 @@ def private record_sample(round, i : int; us : double; var best : array<double>)
     if (us < best[i]) {
         best[i] = us
     }
-    return if (round < (FAST_MODE ? FAST_MID_ROUNDS : SCREEN_ROUNDS))
+    return if (round < SCREEN_ROUNDS)
     if (length(g_samples) <= i) {
         g_samples |> resize(i + 1)
     }
@@ -200,18 +205,13 @@ def private emit_round(round : int; best : array<double>; ok : array<bool>) {
             live++
         }
     }
-    let phase = (round < SCREEN_ROUNDS
-        ? "screening"
-        : ((FAST_MODE && round < FAST_MID_ROUNDS) ? "narrowing" : "finalists"))
+    let phase = round < SCREEN_ROUNDS ? "screening" : "finalists"
     tune_progress_kernel_step(round + 1, phase, live)
 }
 
 def private tune_candidate_active(round : int; best : array<double>; ok : array<bool>; i : int) : bool {
     if (round < SCREEN_ROUNDS) {
         return true
-    }
-    if (FAST_MODE && round < FAST_MID_ROUNDS) {
-        return screening_keep(best, ok, i, FAST_MID_FINALISTS, FAST_MID_MARGIN)
     }
     return screening_keep(best, ok, i, MIN_FINALISTS, FINALIST_MARGIN)
 }
@@ -268,6 +268,20 @@ def private race_row(names : array<string>; med, best : array<double>; ok : arra
     return JV(obj)
 }
 
+def private print_race(kernel : string; names : array<string>; med, best : array<double>;
+                       ok : array<bool>; winner : int; base : double; baseline : string) {
+    tune_detail("--- {kernel} ---\n")
+    for (i in range(length(names))) {
+        if (!ok[i]) {
+            tune_detail("  {names[i]}: REJECTED\n")
+            continue
+        }
+        let delta = base > 0.0lf ? (med[i] - base) / base * 100.0lf : 0.0lf
+        let mark = i == winner ? "  <== winner" : ""
+        tune_detail("  {names[i]}: med {med[i]:0.1f} us (best {best[i]:0.1f})  ({delta:0.2f}% vs {baseline}){mark}\n")
+    }
+}
+
 def report(kernel : string; names : array<string>; best : array<double>; ok : array<bool>) : string {
     let baseline = shipped_fallback(kernel)
     // rank by MEDIAN of finalist rounds: min-over-rounds is a lottery on a non-silent box.
@@ -295,21 +309,17 @@ def report(kernel : string; names : array<string>; best : array<double>; ok : ar
     if (winner >= 0) {
         winner = tie_break(med, ok, bi, winner, need)
     }
-    tune_detail("--- {kernel} ---\n")
-    for (i in range(length(names))) {
-        if (!ok[i]) {
-            tune_detail("  {names[i]}: REJECTED\n")
-            continue
-        }
-        let delta = base > 0.0lf ? (med[i] - base) / base * 100.0lf : 0.0lf
-        let mark = i == winner ? "  <== winner" : ""
-        tune_detail("  {names[i]}: med {med[i]:0.1f} us (best {best[i]:0.1f})  ({delta:0.2f}% vs {baseline}){mark}\n")
-    }
+    print_race(kernel, names, med, best, ok, winner, base, baseline)
     if (winner < 0) {
         tune_progress_note("  {kernel}: no passing variant\n")
         tune_progress_kernel_end(kernel, "", "rejected")
-        g_results |> emplace(KernelResult(kernel = kernel, winner = "", fallback = baseline))
-        g_race[kernel] = race_row(names, med, best, ok, "", baseline, noise_floor_pct())
+        if (g_validating) {
+            g_validate_failures++
+            tune_progress_note("VALIDATE {kernel}: FAIL — no passing variant in the re-race\n")
+        } else {
+            g_results |> emplace(KernelResult(kernel = kernel, winner = "", fallback = baseline))
+            g_race[kernel] = race_row(names, med, best, ok, "", baseline, noise_floor_pct())
+        }
         delete med
         return ""
     }
@@ -336,10 +346,93 @@ def report(kernel : string; names : array<string>; best : array<double>; ok : ar
         tune_detail("  => {kernel}: {wname} beats {baseline} by {margin:0.2f}%  <<< the tuner found something\n")
         tune_progress_kernel_end(kernel, wname, "beats")
     }
-    g_results |> emplace(KernelResult(kernel = kernel, winner = wname, fallback = baseline))
-    g_race[kernel] = race_row(names, med, best, ok, wname, baseline, noise_floor_pct())
+    if (g_validating) {
+        validate_check(kernel, names, med, ok, wname, need)
+    } else {
+        record_kernel(kernel, names, med, best, ok, wname, baseline, winner)
+    }
     delete med
     return wname
+}
+
+// the record step: the summary row, the race table, and the validation expectations (the
+// shipped winner's name + its median — what the re-race must reproduce)
+def private record_kernel(kernel : string; names : array<string>; med, best : array<double>;
+                          ok : array<bool>; wname, baseline : string; winner : int) {
+    g_results |> emplace(KernelResult(kernel = kernel, winner = wname, fallback = baseline))
+    g_race[kernel] = race_row(names, med, best, ok, wname, baseline, noise_floor_pct())
+    var wi = winner
+    for (i, nm in count(), names) {
+        if (nm == wname) {
+            wi = i
+        }
+    }
+    g_validate_expect[kernel] = wname
+    g_validate_med[kernel] = med[wi]
+}
+
+// one validation comparison: the recorded winner must still pass correctness, sit within the
+// floor of the re-raced winner (an inside-floor flip IS reproduction), and its median must
+// land inside the drift bound of the recorded one
+def private validate_check(kernel : string; names : array<string>; med : array<double>;
+                           ok : array<bool>; wname : string; need : double) {
+    let expect0 = g_validate_expect?[kernel] ?? ""
+    return if (empty(expect0))
+    var ei = -1
+    var wi = -1
+    for (i, nm in count(), names) {
+        if (nm == expect0) {
+            ei = i
+        }
+        if (nm == wname) {
+            wi = i
+        }
+    }
+    var fail = ""
+    if (ei < 0 || !ok[ei]) {
+        fail = "recorded winner {expect0} REJECTED in the re-race"
+    } else {
+        let recorded = g_validate_med?[kernel] ?? med[ei]
+        let gap = (wi >= 0 && med[wi] > 0.0lf) ? (med[ei] - med[wi]) / med[wi] * 100.0lf : 0.0lf
+        let drift = recorded > 0.0lf ? abs(med[ei] - recorded) / recorded * 100.0lf : 0.0lf
+        if (wname != expect0 && gap > need) {
+            fail = "winner flipped {expect0} -> {wname} by {gap:0.2f}% (past the {need:0.2f}% floor)"
+        } elif (drift > VALIDATE_DRIFT_PCT) {
+            fail = "median drifted {drift:0.2f}% from the recorded race (bound {VALIDATE_DRIFT_PCT:0.1f}%)"
+        } else {
+            let fliptxt = wname != expect0 ? " (inside-floor flip vs {expect0})" : ""
+            tune_progress_note("VALIDATE {kernel}: OK — winner {wname}{fliptxt}, drift {drift:0.2f}%\n")
+        }
+    }
+    if (!empty(fail)) {
+        g_validate_failures++
+        tune_progress_note("VALIDATE {kernel}: FAIL — {fail}\n")
+    }
+}
+
+// re-race the heavy subset twice at the full budget; any check miss fails the whole mint —
+// the tuner proves its own winners before they are allowed to exist as a file
+def private run_validation() : bool {
+    var subset <- [
+        ("dot" => @@bench_dot), ("dot_q8q8" => @@bench_dot_q8q8), ("rmsnorm" => @@bench_rmsnorm),
+        ("gemm_f32_uk_4x16" => @@bench_gemm_tile), ("quantize_q8_0_into_ptr" => @@bench_quantize)
+    ]
+    tune_progress_note("validation: re-racing {length(subset)} heavy kernels twice at full budget\n")
+    g_validating = true
+    for (_vrep in range(2)) {
+        for (s in subset) {
+            kernel_begin(s._0)
+            invoke(s._1)
+        }
+    }
+    g_validating = false
+    delete subset
+    if (g_validate_failures > 0) {
+        print("VALIDATION FAILED: {g_validate_failures} check(s) did not reproduce — the winners are weather, not measurement\n")
+        return false
+    }
+    tune_progress_note("validation: every check reproduced\n")
+    return true
 }
 
 def reset(var d : array<float>; d0 : array<float>) {
@@ -1929,10 +2022,11 @@ def bench_laneq4x4() : string { // nolint:STYLE038 — one bench: fixture, backe
 // policy must not fire a nested tuner off this program's own missing per-app sidecar
 [export, tune_policy(missing = "fallback")]
 def main : int { // nolint:STYLE037 — flat one-bench-per-kernel rail; the noise gates are its checkpoints
-    FAST_MODE = tuner_fast_requested()
-    if (FAST_MODE) {
-        SCREEN_ROUNDS = 4
-        ROUNDS = 20
+    let paranoid = tuner_paranoid_requested()
+    if (paranoid) {
+        ROUNDS = 240   // ~3x the finalist budget; screening stays full-grid
+        VALIDATE_DRIFT_PCT = 3.0lf
+        noise_set_paranoid(true)
     }
     let affinity_inherited = has_env_variable("DAS_JOBQUE_AFFINITY")
     if (!affinity_inherited) {
@@ -1942,13 +2036,15 @@ def main : int { // nolint:STYLE037 — flat one-bench-per-kernel rail; the nois
     let affinity_desc = (affinity_inherited
         ? "DAS_JOBQUE_AFFINITY={get_env_variable("DAS_JOBQUE_AFFINITY")}"
         : (get_platform_name() == "darwin" ? "QoS USER_INTERACTIVE (macOS has no core mask)" : "hard CPU0 (tuner default)"))
-    tune_detail("kernel tuner: {FAST_MODE ? "FAST" : "default"}, N={N}, {SCREEN_ROUNDS} full-grid screening rounds, finalists up to {ROUNDS} rounds x {REPS} reps, measurement affinity {affinity_desc}\n\n")
+    let modeName = paranoid ? "PARANOID" : "default"
+    tune_detail("kernel tuner: {modeName}, N={N}, {SCREEN_ROUNDS} full-grid screening rounds, finalists up to {ROUNDS} rounds x {REPS} reps, measurement affinity {affinity_desc}\n\n")
     // refuse before burning minutes measuring noise — a refusal costs seconds, a noisy sidecar
     // costs days of phantom regressions
     if (!noise_gate("start")) {
         return 1
     }
-    tune_progress_plan("dasllama_kernels", TUNED_KERNEL_COUNT)
+    // +10: the validation phase re-races 5 kernels twice
+    tune_progress_plan("dasllama_kernels", TUNED_KERNEL_COUNT + 10)
 
     // add / mul / copy share the (var d, s) signature — one bench, per-kernel data + reference.
     var add_d0 : array<float>
@@ -2063,6 +2159,13 @@ def main : int { // nolint:STYLE037 — flat one-bench-per-kernel rail; the nois
     kernel_t0 = kernel_begin("dot_q8q8_laneq4x4")
     let laneqw = bench_laneq4x4()   // last: it pins the repack backend (sticks until process exit)
     kernel_done("dot_q8q8_laneq4x4", kernel_t0)
+
+    // self-validation, inside the measurement window: the winners just picked must reproduce
+    // in a fresh re-race or nothing ships
+    if (!run_validation()) {
+        print("aborting — no sidecar written\n")
+        return 1
+    }
 
     // the gate that closes the CPU measurement window: every sample the sidecar will carry was
     // raced between this probe and the start one — a noisy read here means NOTHING is written.

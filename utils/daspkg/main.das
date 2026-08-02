@@ -31,7 +31,7 @@ def print_usage() {
     print("  check                              Verify installed packages\n")
     print("  cleanup                            Remove modules/ and daspkg.lock for a fresh install\n")
     print("  doctor                             Check environment (git, cmake, gh)\n")
-    print("  release [--out <dir>] [--tune-fast]\n")
+    print("  release [--out <dir>] [--paranoid]\n")
     print("                                       Bundle project as a redistributable standalone\n\n")
     print(format_help_with_auto_help(get_command_info(type<DaspkgArgs>), "daspkg"))
 }
@@ -111,7 +111,7 @@ def main() {
         if (command_arg == "wasm") {
             rc = cmd_release_wasm(root, parsed.out, parsed.wasm_lib_dir)
         } else {
-            rc = cmd_release(root, parsed.out, parsed.tune_fast)
+            rc = cmd_release(root, parsed.out, parsed.paranoid)
         }
     } elif (command == "doctor") {
         rc = cmd_doctor()

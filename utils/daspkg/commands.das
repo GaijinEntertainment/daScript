@@ -65,9 +65,9 @@ struct DaspkgArgs {
     @clarg_doc = "Output directory for `release` (default: current directory)"
     out : string = "."
 
-    @clarg_name = "tune-fast"
-    @clarg_doc = "Use the tuner's quick progressive 4/8-round screen / 20-round cap during `release`"
-    tune_fast : bool
+    @clarg_name = "paranoid"
+    @clarg_doc = "During `release`, tune with the paranoid budget (3x rounds, 1% noise gate)"
+    paranoid : bool
 
     @clarg_name = "wasm"
     @clarg_doc = "Target wasm64 (memory64): `build --wasm` builds the wasm64 runtime + module archives; `release wasm` ships compiled .wasm artifacts"
@@ -1426,12 +1426,12 @@ def private read_release_deps(path : string; var deps : ReleaseDeps) : bool {
 
 // the exact env+cmd shape llvm_tune's policy rail uses for scope tuners (the env prefix
 // leads so the line never starts with a quote — cmd.exe strips a LEADING one)
-def private release_tuner_cmd(daslang : string; ts : TuneScopeDep; tune_fast : bool) : string {
+def private release_tuner_cmd(daslang : string; ts : TuneScopeDep; paranoid : bool) : string {
     let win = get_platform_name() == "windows"
     let envs = (win ?
         "set \"DAS_TUNE_MODE=tune\"&& set \"DAS_TUNE_MANIFEST={ts.manifest}\"&& set \"DAS_TUNE_COMPILE_FALLBACKS={ts.fallbacks}\"&& " :
         "DAS_TUNE_MODE=tune DAS_TUNE_MANIFEST=\"{ts.manifest}\" DAS_TUNE_COMPILE_FALLBACKS=\"{ts.fallbacks}\" ")
-    let tune_args = tune_fast ? " -- --tune-fast" : ""
+    let tune_args = paranoid ? " -- --tune-paranoid" : ""
     return "{envs}\"{daslang}\" -jit \"{ts.tuner}\" -dasroot \"{get_das_root()}\"{tune_args}"
 }
 
@@ -2063,7 +2063,7 @@ def private get_daslang_path() : string {
     return get_platform_name() == "windows" ? replace(joined, "/", "\\") : joined
 }
 
-def cmd_release(root : string; out_dir : string; tune_fast = false) : int {
+def cmd_release(root : string; out_dir : string; paranoid = false) : int {
     let release_t0 = ref_time_ticks()
     // Reset the patchelf availability cache so a daspkg process that releases
     // multiple bundles can pick up a patchelf install between calls.
@@ -2196,7 +2196,7 @@ def cmd_release(root : string; out_dir : string; tune_fast = false) : int {
                 log("  tune: scope `{ts.name}` -> {ts.manifest}\n")
                 let tune_t0 = ref_time_ticks()
                 var tout : string
-                let trc = run_cmd(release_tuner_cmd(daslang, ts, tune_fast), tout)
+                let trc = run_cmd(release_tuner_cmd(daslang, ts, paranoid), tout)
                 let tune_seconds = release_elapsed(tune_t0)
                 if (trc != 0) {
                     to_log(LOG_WARNING, "release: tuner for scope `{ts.name}` failed after {tune_seconds}s (rc={trc}) — shipping fallback stamps\n{tout}\n")
