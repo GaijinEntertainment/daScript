@@ -429,7 +429,7 @@ def expr_at(var st : TokenStream) : Result {
             if (TypeInfo(dimSize = 0u)) {
                 return st |> error("can't index non-array")
             }
-            if (_) {
+            if (_) { // nolint:STYLE010 — match wildcard arm; macro rewrites `_` to `if(true)`
                 nresult = opDim(st, st |> getI(eindex), result)
             }
         }
@@ -470,7 +470,7 @@ def expr_mul_div(var st : TokenStream) : Result {
             if (rightValue == 0l) return st |> error("runtime error, division by 0")
             return Result(st |> getI(leftValue) * rightValue)
         }
-        if (_) {
+        if (_) { // nolint:STYLE010 — match wildcard arm; macro rewrites `_` to `if(true)`
             unput(st, token)
         }
     }
@@ -487,7 +487,7 @@ def expr_add_sub(var st : TokenStream) : Result {
         if (Token(punkt = '-')) {
             return Result(st |> getI(leftValue) - st |> getI(expr_add_sub(st)))
         }
-        if (_) {
+        if (_) { // nolint:STYLE010 — match wildcard arm; macro rewrites `_` to `if(true)`
             unput(st, token)
         }
     }
@@ -564,7 +564,7 @@ def expr_bool_op(var st : TokenStream) : Result {
             unput(st, subtoken)
             return Result(st |> getI(leftValue) > st |> getI(expr_bool_op(st)))
         }
-        if (_) {
+        if (_) { // nolint:STYLE010 — match wildcard arm; macro rewrites `_` to `if(true)`
             unput(st, subtoken)
             unput(st, token)
         }

@@ -1803,7 +1803,7 @@ def document_module_gltf(_root : string) {
 def main {  // nolint:STYLE038 — flat one-call-per-documented-module dispatch list
     disable_profiler(this_context())
     disable_profiler_log(this_context())
-    ast_gc_guard() {  // nolint:STYLE038 — same flat dispatch list, one guard scope
+    ast_gc_guard() {
     let root = get_das_root() + "/doc/source/stdlib/generated"
     // document embedded modules
     document_module_builtin(root)
