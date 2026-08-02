@@ -50,6 +50,21 @@ struct ChatSession {
     n_audio_rows : int64                  // row count in audio_rows (each tower.proj_dim wide)
 }
 
+// Stated rather than inferred: the tower holds borrowed planes, and a generated teardown
+// would force every module that deletes a ChatSession to see the plane finalizers too.
+// Each field's own finalizer does the real work — this only names them in one place.
+def finalize(var c : ChatSession) {
+    delete c.session
+    delete c.tmpl
+    delete c.close_parts
+    delete c.stop_ids
+    delete c.tools_json
+    delete c.history
+    delete c.tower
+    delete c.enc
+    delete c.audio_rows
+}
+
 // ===== Chat-template resolution =====
 
 // The Zephyr / TinyLlama-chat template. Its <|system|>/<|user|>/<|assistant|> markers are plain
