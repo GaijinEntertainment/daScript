@@ -23,11 +23,17 @@ require llvm/daslib/f16_cvt  // f16<->f32 converts: JIT half intrinsics on aarch
 // can be passed zero-copy as views into one big model blob and outputs can be written
 // straight into a view (e.g. the KV cache). Dims/indices are int64 for large models.
 
-//! Dot product of two n-length float buffers, auto-vectorized by the LLVM JIT
-//! (width-8, no bounds checks, a/b asserted non-aliasing). Beats hand-rolled float4 ~1.8x.
-//! `dot_template` is the single source of truth (hot loop marked `[tune=1]`); the emitted
-//! `dot` below reconstitutes it via `[tuned]` with the per-box permutation — default `vec8_u2`
-//! is the original `[vectorize, vectorize_width=8, unroll_count=2]`, so this is bit-identical.
+//! The library-seam ``-jit`` stop: dasLLAMA inference NEVER runs interpreted (kernels 10-40x
+//! slower). Inference seams call it; scaffolding that only parses or peeks never crosses it.
+def guard_interp_inference(what : string) {
+    if (!jit_enabled() && !is_standalone_exe()) {
+        panic("dasLLAMA: {what} requires -jit (or a compiled exe) — interpreted inference runs the kernels 10-40x slower")
+    }
+}
+
+//! Dot product of two n-length float buffers, auto-vectorized (width-8, no bounds checks,
+//! non-aliasing). `dot_template` is the single source (hot loop `[tune=1]`); the emitted `dot`
+//! reconstitutes it via `[tuned]` — default `vec8_u2` is the original hints, bit-identical.
 [hint(unsafe_range_check, noalias = a, noalias = b)]
 def template dot_template(a, b : float const ?; n : int64) : float {
     var acc = 0.0

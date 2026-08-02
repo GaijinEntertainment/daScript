@@ -12,6 +12,7 @@ require dasllama/dasllama_gguf   // rd_u32 for the magic sniff
 require dasllama/dasllama_image  // load_model_cached (decoders ride the .dlim rail) + image_peek
 require dasllama/dasllama_plane public  // plane finalizers — re-exported so any module that deletes an ASR carrier sees them
 require dasllama/dasllama_asr_types public  // AsrCaps/AsrTimestamps/TranscribeSegment — the shared ASR floor
+require dasllama/dasllama_math  // guard_interp_inference — the library-seam -jit stop at session creation
 require dasllama/dasllama_whisper public
 require dasllama/dasllama_qwen3a public
 require dasllama/dasllama_parakeet public
@@ -244,6 +245,7 @@ def create_session(m : AsrModel; lang : string = "en") : AsrSession {
     //! Create a transcription session. ``lang`` is a language code from ``caps().languages``,
     //! or "auto" to detect (whisper multilingual models; Qwen3-ASR always detects — it only
     //! accepts "auto"). Validation lives with each family.
+    guard_interp_inference("ASR session creation")   // whisper/parakeet never cross make_run_state
     var s = AsrSession()
     if (m.kind == AsrKind.parakeet) {
         parakeet_check_lang(m.pk, lang)   // no language conditioning — validate, then unused

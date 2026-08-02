@@ -1763,6 +1763,7 @@ var private g_session_uid : uint64
 //! (no process-global state — sessions with different codecs coexist, models run in parallel).
 //! `alloc_cache = false` skips the flat cache slabs (paged sessions and cache-less scratch).
 def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDtype.f32; alloc_cache : bool = true) : Session {
+    guard_interp_inference("session creation")
     kv_validate_q8(c, kdt, vdt)
     var s : Session
     g_session_uid++
