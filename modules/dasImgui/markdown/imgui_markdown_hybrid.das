@@ -271,8 +271,9 @@ def public markdown_hybrid_compute_segments(doc : RichDocument const;
 
 // ===== The widget =====
 
-def private hybrid_edit_line_height(edit_style : TextSourceViewStyle) : float {
-    // mirror of the editor's own metrics so the island child fits exactly
+def public markdown_hybrid_line_height(edit_style : TextSourceViewStyle) : float {
+    //! Mirror of the editor's own line metrics so island children fit exactly
+    //! (shared by every hybrid driver, incl. rich-das).
     let zoom = clamp(edit_style.zoom, 0.5f, 3.0f)
     let font_size = (edit_style.fonts.size_px > 0.0f
         ? edit_style.fonts.size_px : GetFontSize()) * zoom
@@ -366,7 +367,7 @@ def public markdown_hybrid_edit(id : string; var ed : TextEditState; // nolint:S
             registry, TextEditSegmentSpec())
         return <- result
     }
-    let line_height = hybrid_edit_line_height(edit_style)
+    let line_height = markdown_hybrid_line_height(edit_style)
     let delta = length(ed.lines) - hybrid.seg_line_count
     var island_top = 0.0f
     var island_first = 0

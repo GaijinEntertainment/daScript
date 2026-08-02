@@ -15,6 +15,7 @@ require imgui/imgui_text_find
 require imgui/imgui_text_source_view
 require imgui/imgui_text_source_edit
 require imgui/imgui_text_create
+require imgui/imgui_text_rich_das
 require imgui/imgui_text_edit_syntax
 require imgui/imgui_text_edit_complete
 require imgui/imgui_text_tree_sitter
@@ -141,6 +142,7 @@ struct TextViewerDocument {
     edit_surface : EditSurface = EditSurface.preview
     hybrid : HybridEditState = HybridEditState()
     hybrid_immediate_reparse_count : int = 0
+    rich_das : RichDasState = RichDasState()
     disk_mtime : clock
     disk_size : uint64
     disk_check_accum : float = 0.0f
@@ -367,6 +369,7 @@ def private exit_edit_mode(var doc : TextViewerDocument) {
     doc.editing = false
     release_preview(doc)
     markdown_hybrid_dispose(doc.hybrid)
+    rich_das_dispose(doc.rich_das)
     doc.status = "Viewing."
 }
 
@@ -391,6 +394,7 @@ def private dispose_document(var doc : TextViewerDocument) {
     markdown_view_dispose(doc.preview_view)
     markdown_tree_sitter_dispose(doc.preview_syntax)
     markdown_hybrid_dispose(doc.hybrid)
+    rich_das_dispose(doc.rich_das)
     release_document_content(doc)
 }
 
@@ -842,17 +846,19 @@ def private update_command_state() {
     command_set_enabled(g_commands, CMD_EDIT_MODE,
         has_active && !g_documents[active].read_only)
     command_set_selected(g_commands, CMD_EDIT_MODE, editing)
-    // the editing-surface trio applies to markdown editing sessions only
+    // the surface trio serves markdown AND rich-das editing; Split is md-only
     let md_editing = editing && g_documents[active].mode == TextViewMode.markdown
-    command_set_enabled(g_commands, CMD_SURFACE_SOURCE, md_editing)
+    let rich_editing = (md_editing
+        || (editing && rich_das_capable(g_documents[active])))
+    command_set_enabled(g_commands, CMD_SURFACE_SOURCE, rich_editing)
     command_set_enabled(g_commands, CMD_SURFACE_SPLIT, md_editing)
-    command_set_enabled(g_commands, CMD_SURFACE_PREVIEW, md_editing)
+    command_set_enabled(g_commands, CMD_SURFACE_PREVIEW, rich_editing)
     command_set_selected(g_commands, CMD_SURFACE_SOURCE,
-        md_editing && g_documents[active].edit_surface == EditSurface.source_)
+        rich_editing && g_documents[active].edit_surface == EditSurface.source_)
     command_set_selected(g_commands, CMD_SURFACE_SPLIT,
         md_editing && g_documents[active].edit_surface == EditSurface.split)
     command_set_selected(g_commands, CMD_SURFACE_PREVIEW,
-        md_editing && g_documents[active].edit_surface == EditSurface.preview)
+        rich_editing && g_documents[active].edit_surface == EditSurface.preview)
     update_creation_command_state(active, editing)
 }
 
@@ -985,15 +991,17 @@ def private draw_view_menu(active : int; has_active, editing : bool) {
             selected = editing))
         separator(VIEW_SURFACE_SEPARATOR)
         let md_editing = editing && g_documents[active].mode == TextViewMode.markdown
+        let rich_editing = (md_editing
+            || (editing && rich_das_capable(g_documents[active])))
         menu_label(VIEW_SURFACE_SOURCE, (text = "Editing: Source", shortcut = "",
-            enabled = md_editing,
-            selected = md_editing && g_documents[active].edit_surface == EditSurface.source_))
+            enabled = rich_editing,
+            selected = rich_editing && g_documents[active].edit_surface == EditSurface.source_))
         menu_label(VIEW_SURFACE_SPLIT, (text = "Editing: Split", shortcut = "",
             enabled = md_editing,
             selected = md_editing && g_documents[active].edit_surface == EditSurface.split))
         menu_label(VIEW_SURFACE_PREVIEW, (text = "Editing: Live Preview", shortcut = "",
-            enabled = md_editing,
-            selected = md_editing && g_documents[active].edit_surface == EditSurface.preview))
+            enabled = rich_editing,
+            selected = rich_editing && g_documents[active].edit_surface == EditSurface.preview))
     }
 }
 
@@ -1323,14 +1331,40 @@ def private draw_editor_live_preview(var doc : TextViewerDocument) {
     }
 }
 
+def private draw_editor_rich_das(var doc : TextViewerDocument) {
+    // the second hybrid format: comment groups render rich, code stays source
+    var edit_style = TextSourceViewStyle(
+        fonts = g_fonts,
+        zoom = float(zoom_percent(doc)) / 100.0f,
+        write_system_clipboard = !harness_is_headless())
+    var md_style = MarkdownViewStyle(
+        fonts = g_fonts,
+        typography = MarkdownTypography(
+            inline_code_scale = 0.84f,
+            code_block_scale = 0.90f),
+        zoom = float(zoom_percent(doc)) / 100.0f,
+        write_system_clipboard = false)
+    let _ = rich_das_hybrid_edit(doc.edit, doc.rich_das, doc.hybrid,
+        edit_style, md_style, g_commands)
+}
+
+def private rich_das_capable(doc : TextViewerDocument const) : bool {
+    return doc.edit.language == "daslang"
+}
+
 def private draw_document_editor(var doc : TextViewerDocument) {
     let md_capable = doc.mode == TextViewMode.markdown
-    let surface = md_capable ? doc.edit_surface : EditSurface.source_
+    let rich_capable = md_capable || rich_das_capable(doc)
+    let surface = rich_capable ? doc.edit_surface : EditSurface.source_
     if (surface == EditSurface.preview) {
-        draw_editor_live_preview(doc)
+        if (md_capable) {
+            draw_editor_live_preview(doc)
+        } else {
+            draw_editor_rich_das(doc)
+        }
         return
     }
-    let side_by_side = surface == EditSurface.split
+    let side_by_side = surface == EditSurface.split && md_capable
     let ui_style & = GetStyle()
     let avail = GetContentRegionAvail()
     let editor_width = (side_by_side
@@ -1459,17 +1493,21 @@ def private footer_mode_label(doc : TextViewerDocument const) : string {
     return caption
 }
 
-def private draw_surface_selector(doc : TextViewerDocument const) {
-    // the editing-surface trio replaces the viewer's rendered/source toggle
+def private draw_surface_selector(doc : TextViewerDocument const;
+                                  show_split : bool) {
+    // the editing-surface trio replaces the viewer's rendered/source toggle;
+    // rich-das buffers hide Split (source + a fully-rich pane is meaningless)
     SURFACE_MODE.value = int(doc.edit_surface)
     if (radio_button_int(SURFACE_MODE, "Source", int(EditSurface.source_))) {
         let _ = command_invoke(g_commands, CMD_SURFACE_SOURCE,
                                CommandSource.toolbar, "{doc.id}")
     }
-    same_line()
-    if (radio_button_int(SURFACE_MODE, "Split", int(EditSurface.split))) {
-        let _ = command_invoke(g_commands, CMD_SURFACE_SPLIT,
-                               CommandSource.toolbar, "{doc.id}")
+    if (show_split) {
+        same_line()
+        if (radio_button_int(SURFACE_MODE, "Split", int(EditSurface.split))) {
+            let _ = command_invoke(g_commands, CMD_SURFACE_SPLIT,
+                                   CommandSource.toolbar, "{doc.id}")
+        }
     }
     same_line()
     if (radio_button_int(SURFACE_MODE, "Preview", int(EditSurface.preview))) {
@@ -1481,8 +1519,8 @@ def private draw_surface_selector(doc : TextViewerDocument const) {
 def private draw_document_footer(var doc : TextViewerDocument) {
     let ui_style & = GetStyle()
     let rendered = doc.mode == TextViewMode.markdown
-    if (doc.editing && rendered) {
-        draw_surface_selector(doc)
+    if (doc.editing && (rendered || rich_das_capable(doc))) {
+        draw_surface_selector(doc, rendered)
     } elif (icon_button(MODE_TOGGLE,
             (glyph = rendered ? "edit" : "visible",
              tip = rendered ? "Show Markdown source" : "Render Markdown",
@@ -1697,6 +1735,9 @@ def text_viewer_state(_input : JsonValue?) : JsonValue? { // nolint:STYLE038 —
         hybrid_island_y1 = hybrid_island_segment(doc).screen_y1,
         hybrid_rich_click_revision = doc.hybrid.rich_click_revision,
         hybrid_immediate_reparse_count = doc.hybrid_immediate_reparse_count,
+        rich_das_group_count = length(doc.rich_das.groups),
+        rich_das_parse_count = doc.rich_das.parse_count,
+        rich_das_synced_revision = doc.rich_das.synced_revision,
         preview_revision = doc.preview_revision,
         preview_stamp = doc.preview_stamp,
         preview_selection_revision = doc.preview_view.selection_revision,
