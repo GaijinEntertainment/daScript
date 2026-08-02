@@ -192,11 +192,18 @@ def dlim_identity_lane(identity : string) : string {
     return "{quant}#{tag}"
 }
 
-// a GPU-flavor lane's identity was written by a differently-pinned PROCESS (blob bakes select
-// their own backend/winners) — un-recomputable here, so this process's current set cannot judge it
+// FOREIGN = this process cannot recompute the identity, so it may not judge it: GPU flavors
+// (their bake context pins its own backend + winners) and family tags whose module is not
+// loaded here. Only a lane this process can actually produce may be judged stale.
 def private dlim_lane_foreign(lane : string) : bool {
     let tag = slice(lane, find(lane, "#") + 1, length(lane))
-    return tag == METAL_IMAGE_TAG || (tag |> starts_with("vulkan"))
+    if (empty(tag)) {
+        return false   // the planar lane: every process produces it
+    }
+    if (tag == METAL_IMAGE_TAG || (tag |> starts_with("vulkan"))) {
+        return true    // pinned by its own bake context
+    }
+    return !has_value(g_family_tags, tag)
 }
 
 def dlim_image_verdict(p : DlimPeek; current : table<string>) : string {

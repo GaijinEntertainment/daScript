@@ -1080,6 +1080,16 @@ def test_dlim_flavor_lanes(t : T?) {
         t |> equal(dlim_image_verdict(p, current), "FOREIGN", "cross-context metal image is FOREIGN, not OTHER")
         p.identity = "v{IMAGE_VERSION}|q8|portable|s16|q8 mr4 b0 g4|kq 4/4/4/4|q51 mr1|nat 1101|{vk_tag}"
         t |> equal(dlim_image_verdict(p, current), "FOREIGN", "cross-context vulkan image is FOREIGN")
+        // a family tag whose module is not loaded in the judging process: unrecomputable, so
+        // FOREIGN — the 2026-08-02 board's step-zero GC reaped every whisper/parakeet image
+        // this way before the rule generalized
+        p.identity = "v{IMAGE_VERSION}|q8|arm64-gen|s16|q8 mr8 b0 g4|kq 8/8/4/8|q51 mr4|nat 1101|not-a-registered-family"
+        t |> equal(dlim_image_verdict(p, current), "FOREIGN", "unregistered family tag is FOREIGN")
+        // a REGISTERED family tag is judgeable — whisper's module is required by this suite
+        p.identity = image_identity("whisper-q8")
+        t |> equal(dlim_image_verdict(p, current), "CURRENT", "registered family tag, own identity")
+        p.identity = replace(image_identity("whisper-q8"), "|s16|", "|s32|")
+        t |> equal(dlim_image_verdict(p, current), "OTHER", "registered family tag, drifted knobs")
         // same LANE as this process, different knobs — provably stale here
         p.identity = replace(planar, "|s16|", "|s32|")
         t |> equal(dlim_image_verdict(p, current), "OTHER", "own-lane knob drift stays OTHER")
