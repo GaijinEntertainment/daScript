@@ -14,6 +14,7 @@ require imgui/imgui_document_model
 require imgui/imgui_text_find
 require imgui/imgui_text_source_view
 require imgui/imgui_text_source_edit
+require imgui/imgui_text_create
 require imgui/imgui_text_edit_syntax
 require imgui/imgui_text_edit_complete
 require imgui/imgui_text_tree_sitter
@@ -776,8 +777,26 @@ def private define_commands() {
     // after the app's own definitions (its find.open / edit.copy shapes win the
     // idempotence race), before the config load (so user overrides apply)
     text_edit_register_commands(g_commands)
+    creation_register_commands(g_commands)
     if (!harness_is_headless() && fexist(g_commands.config_path)) {
         let _ = command_load_bindings(g_commands)
+    }
+}
+
+def private update_creation_command_state(active : int; editing : bool) {
+    // create.<id> chords fire only while editing a format-matching buffer
+    let language = active >= 0 ? g_documents[active].edit.language : ""
+    var inscope names : array<string>
+    for (name in keys(creation_registry)) {
+        names |> push(name)
+    }
+    for (name in names) {
+        var enabled = false
+        creation_get(name) $(definition) {
+            enabled = (editing
+                && (empty(definition.format) || definition.format == language))
+        }
+        command_set_enabled(g_commands, "create." + name, enabled)
     }
 }
 
@@ -834,6 +853,7 @@ def private update_command_state() {
         md_editing && g_documents[active].edit_surface == EditSurface.split)
     command_set_selected(g_commands, CMD_SURFACE_PREVIEW,
         md_editing && g_documents[active].edit_surface == EditSurface.preview)
+    update_creation_command_state(active, editing)
 }
 
 def private dispatch_surface_command(command_id : string; active : int) : bool {
@@ -935,6 +955,15 @@ def private dispatch_commands() {
             request_exit()
         } elif (invocation.command_id == CMD_EDIT_BINDINGS) {
             g_bindings_editor.open = true
+        } elif (starts_with(invocation.command_id, "create.") && active >= 0
+                && g_documents[active].editing) {
+            let creatable = slice(invocation.command_id, 7,
+                length(invocation.command_id))
+            var inscope ctx <- creation_context(g_documents[active].edit)
+            // (rich-mode hosts add RichDocument-derived ctx.tags here)
+            if (!creation_execute(g_documents[active].edit, creatable, ctx)) {
+                g_documents[active].status = "Cannot insert here."
+            }
         } else {
             let _ = dispatch_document_command(invocation.command_id, active)
         }
@@ -965,6 +994,35 @@ def private draw_view_menu(active : int; has_active, editing : bool) {
         menu_label(VIEW_SURFACE_PREVIEW, (text = "Editing: Live Preview", shortcut = "",
             enabled = md_editing,
             selected = md_editing && g_documents[active].edit_surface == EditSurface.preview))
+    }
+}
+
+var private INSERT_ITEM : table<int; ClickState>
+
+def private draw_insert_menu(active : int; editing : bool) {
+    // one item per registry creatable for the buffer's format (Insert menu)
+    return if (!editing || active < 0)
+    var inscope ids <- creation_ids(g_documents[active].edit.language)
+    return if (empty(ids))
+    var clicked = ""
+    menu(INSERT_MENU, (text = "Insert", enabled = true)) {
+        for (index in range(length(ids))) {
+            var title = ids[index]
+            creation_get(ids[index]) $(definition) {
+                title = definition.title
+            }
+            if (menu_label(INSERT_ITEM[index], (text = title,
+                    shortcut = command_shortcut_text(g_commands,
+                        "create." + ids[index]),
+                    enabled = command_enabled(g_commands,
+                        "create." + ids[index])))) {
+                clicked = ids[index]
+            }
+        }
+    }
+    if (!empty(clicked)) {
+        let _ = command_invoke(g_commands, "create." + clicked,
+                               CommandSource.menu)
     }
 }
 
@@ -1022,6 +1080,7 @@ def private draw_menu_bar() {
             menu_label(EDIT_BINDINGS, (text = "Edit Bindings...", shortcut = ""))
         }
         draw_view_menu(active, has_active, editing)
+        draw_insert_menu(active, editing)
         if (has_active && !empty(g_documents[active].source.path)) {
             separator(MENU_PATH_SEPARATOR)
             let dirty = document_dirty(g_documents[active])
@@ -1856,13 +1915,36 @@ def text_viewer_edit_text(_input : JsonValue?) : JsonValue? {
     if (active < 0) return JV((ok = false, error = "no document is open"))
     let doc & = unsafe(g_documents[active])
     if (!doc.editing) return JV((ok = false, error = "not editing"))
+    let sel = text_edit_selection(doc.edit)
     return JV((ok = true, text = text_edit_text(doc.edit),
                cursor_line = doc.edit.cursor_line,
                cursor_column = doc.edit.cursor_column,
                dirty = doc.edit.dirty,
                revision = doc.edit.revision,
                undo_depth = length(doc.edit.undo_stack),
-               redo_depth = length(doc.edit.redo_stack)))
+               redo_depth = length(doc.edit.redo_stack),
+               has_selection = text_edit_has_selection(doc.edit),
+               selection_start_line = sel.start_line,
+               selection_start_column = sel.start_column,
+               selection_end_line = sel.end_line,
+               selection_end_column = sel.end_column,
+               snippet_active = text_edit_snippet_active(doc.edit),
+               snippet_index = doc.edit.snippet_index,
+               snippet_stop_count = length(doc.edit.snippet_stops)))
+}
+
+[live_command(description = "List creatable ids allowed at the current caret.")]
+def text_viewer_creations(_input : JsonValue?) : JsonValue? {
+    let active = active_document_index()
+    if (active < 0) return JV((ok = false, error = "no document is open"))
+    let doc & = unsafe(g_documents[active])
+    if (!doc.editing) return JV((ok = false, error = "not editing"))
+    var inscope ctx <- creation_context(doc.edit)
+    var inscope allowed <- creation_available(doc.edit.language, ctx)
+    var ids <- [for (id in allowed); JV(id)]
+    return JV((ok = true, count = length(ids), ids = JV(ids),
+               in_code_fence = ctx.in_code_fence,
+               at_statement_start = ctx.at_statement_start))
 }
 
 [live_command(description = "Place the edit caret at 0-based (line, column).")]
