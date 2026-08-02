@@ -7,8 +7,11 @@ name: nightly daspkg index
 # surfaces here as a nightly signal instead of inside an unrelated PR's
 # extended_checks run. history/ci/COVERAGE_GAP.md stage 4.
 #
-# Linux-only by design: the recorded incident class (external module compiled
-# against changed daslang headers) is a compile error, platform-independent.
+# The index sweep is Linux-only by design: its recorded incident class
+# (external module compiled against changed daslang headers) is a compile
+# error, platform-independent. The daspkg unit suite ALSO runs on macOS —
+# the release layout forks per platform (.app bundle vs flat), and that fork
+# once sat red on macOS for weeks with no lane to see it.
 #
 # The scheduled run always sweeps master (GitHub runs cron from the default
 # branch). workflow_dispatch from a non-default branch deliberately sweeps
@@ -97,6 +100,15 @@ jobs:
           -G Ninja $ACTIVE_MODULES
         cmake --build ./build --config Release --target daslang
 
+    - name: "daspkg suites: unit + git-integration"
+      # the binary is already built; unit is seconds and offline, the git
+      # suite exercises install/resolve against the borisbat/daspkg-test-*
+      # fixture repos (network, like the sweep below)
+      run: |
+        set -eux
+        ./bin/daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg.das --timeout 600
+        ./bin/daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg_git.das --timeout 1200
+
     - name: "Sweep: install every index package at default-branch HEAD"
       # default-branch HEAD (not release-tag resolution): release tags lag
       # legitimately after an ABI sweep until externals re-release; branch
@@ -137,3 +149,27 @@ jobs:
           echo "FAILED: ${failed[*]}"
           exit 1
         fi
+
+  daspkg_unit_macos:
+    # the platform the unit suite exists to catch: the release layout forks
+    # into an .app bundle here. Interpreted run — no LLVM, plain build.
+    if: github.event_name != 'schedule' || github.repository == 'GaijinEntertainment/daScript'
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+    - name: "SCM Checkout"
+      uses: actions/checkout@v4
+
+    - name: "Install CMake and Ninja"
+      uses: lukka/get-cmake@latest
+
+    - name: "Build: Daslang (Release, core only)"
+      run: |
+        set -eux
+        cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=Release -G Ninja
+        cmake --build ./build --config Release --target daslang
+
+    - name: "daspkg unit suite"
+      run: |
+        set -eux
+        ./bin/daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg.das --timeout 600

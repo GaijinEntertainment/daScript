@@ -21,8 +21,9 @@ bin/daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg_git.das
 Needs network (the `borisbat/daspkg-test-*` fixture repos).
 
 **A release-path change is verified on macOS, or the review says it was not.** The release
-layout forks per platform (`.app` bundle vs flat directory), and no CI lane runs these tests —
-a change green on one platform has shipped red on the other before.
+layout forks per platform (`.app` bundle vs flat directory); the only CI on these suites is
+the nightly (`nightly_daspkg_index.yml`: Linux unit+git, macOS unit), so a per-change run is
+still the review's job — a change green on one platform has shipped red on the other before.
 
 **A new command or flag lands with its test cell, its `print_usage` line, and its README table
 row in the same change.**
