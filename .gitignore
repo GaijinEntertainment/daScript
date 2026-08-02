@@ -164,3 +164,6 @@ box_profile.json
 _bench_*.json
 build32/dasModuleGlfw.vcxproj.filters
 modules/dasLLAMA/performance/_rig/
+
+# my local box runbook (machine-specific paths; not for the shared repo)
+ZEN2.md
