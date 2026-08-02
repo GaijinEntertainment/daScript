@@ -483,14 +483,26 @@ def tune_summary() : string {
 
 //! The bench cells' provenance gate: REFUSE to measure on fallback kernel winners. A
 //! stale/absent sidecar silently downgrades every ``[tune]`` kernel with only [I]-level
-//! warnings — the m4 pilot shipped a full board that way. Under ``DAS_TUNE_MANIFEST`` the
-//! stamps apply but ``tune_status()`` does not populate (framework gap, ledgered), so the
-//! env-pinned path gates on the FILE: present, newer than the binary, carrying kernels —
-//! exactly the observed failure modes. ``DASLLAMA_ALLOW_UNTUNED=1`` is the dev-run escape.
+//! warnings — the m4 pilot shipped a full board that way. Three worlds, because
+//! ``tune_status()`` populates in exactly one of them:
+//! * **standalone exe** (the board rig): winners are BAKED at build time, so the status table
+//!   is empty by design — provenance is the sidecar the release shipped beside the binary.
+//! * **``DAS_TUNE_MANIFEST`` pinned**: stamps apply, status stays empty (framework gap,
+//!   ledgered) — gate on the FILE: present, newer than the binary, carrying kernels.
+//! * **plain script**: the policy rail ran, so every row must stamp a manifest winner.
+//! ``DASLLAMA_ALLOW_UNTUNED=1`` is the dev-run escape in all three.
 def tune_gate() : bool {
     var why = ""
     let mpath = get_env_variable("DAS_TUNE_MANIFEST")
-    if (!empty(mpath)) {
+    if (is_standalone_exe()) {
+        // the release ships <exe>.tune.json from the same mint that baked the winners in
+        let sc = tune_manifest_path()
+        if (!stat(sc).is_valid) {
+            why = "no sidecar beside the exe ({sc}) — the release did not ship its mint"
+        } elif (find(fread(sc), "\"kernels\"") < 0) {
+            why = "the exe's sidecar ({sc}) carries no kernels section — not a minted manifest"
+        }
+    } elif (!empty(mpath)) {
         var mst : FStat
         var bst : FStat
         let args <- get_command_line_arguments()
