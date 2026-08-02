@@ -412,6 +412,33 @@ highlight inside code blocks lands with the selection work in E2/E4.
 - **E5.5** rich-text markdown mode — the live-preview model per the
   Shape section, right after E5 while the markdown machinery is hot;
   E6/E7 numbering unchanged.
+  **STATUS: SHIPPED (2026-08-02, one PR on codex/e5-preview-caret).**
+  What landed, in dependency order: (1) editor range-core —
+  `text_source_edit_segment` + `TextEditSegmentSpec` draw any line range
+  at a composition offset, classic widget = the defaults call; (2)
+  markdown view begin/render/end split + partial block rendering
+  (`markdown_view_top_blocks`, `markdown_view_block_before/after`); (3)
+  `imgui/imgui_markdown_hybrid` — the segmented-buffer compositor: pure
+  block↔line segmentation (fence widen, sourceless-block resolution,
+  separators attach to the preceding block), innermost unfold (quote
+  inner paragraph, list per-item), delta shifting while typing, dirty
+  caret-exit → same-frame reparse, rich clicks → caret, compositor-owned
+  follow; (4) examples/text three-way editing surface (Source | Split |
+  Preview; live preview is the md editing default) with `hybrid_*` state
+  rails + `text_viewer_set_cursor`/`text_viewer_hybrid_segments`; (5)
+  snippet engine IN THE EDITOR CORE (`text_edit_snippet_expand`,
+  `${n:label}`/`${0}`/`${SEL}`, one undo unit fenced both sides, session
+  wins Tab over ghost/indent, tracking via ONE rule at the commit_edit
+  funnel); (6) `imgui/imgui_text_create` — the user-extensible creation
+  registry (LAST-wins `creation_define`, context tags + `can_create`
+  predicate lambdas, transforms, md set with Ctrl+B/I/K + das construct
+  set, `create.<id>` commands, Insert menu); (7)
+  `imgui/imgui_text_rich_das` — the SECOND hybrid format: comment groups
+  render rich via per-group fragment parses with adoption caching, das
+  buffers get Source | Preview. Deliberate v1 limits (flagged in code):
+  selection paints only in the source island, no snippet mirrors,
+  rich-das caret columns approximate under inline markup, read-only das
+  docs keep the plain view.
 - **E6** LSP in the code editor: hover + definition reuse the viewing
   arc's spawn-per-request transport verbatim (`nav.das`, overlay = the
   unsaved buffer — the SAME `--overlay` flag, no new machinery);
