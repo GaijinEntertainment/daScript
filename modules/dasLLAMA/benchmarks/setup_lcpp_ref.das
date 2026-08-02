@@ -85,6 +85,26 @@ def private locate_bench(build_dir : string) : string {
     return ""
 }
 
+// create the ref worktree at `full`, or verify an existing one sits there. "" = error (printed).
+def private ensure_ref_worktree(src, full, short_sha : string) : string {
+    let dest = "{src}-ref-{short_sha}"
+    if (!stat(dest).is_valid) {
+        print("creating worktree {dest} @ {short_sha}\n")
+        if (run_visible("git -C \"{src}\" worktree add \"{dest}\" {full}") != 0) {
+            print("error: worktree add failed\n")
+            return ""
+        }
+        return dest
+    }
+    let head = capture_out("git -C \"{dest}\" rev-parse HEAD")
+    if (head != full) {
+        print("error: {dest} exists but is at {head}, not {full} — remove it (git -C \"{src}\" worktree remove \"{dest}\") and re-run\n")
+        return ""
+    }
+    print("worktree {dest} already at {short_sha}\n")
+    return dest
+}
+
 [export]
 def main : int {
     var r <- parse_args(type<Args>)
@@ -124,20 +144,9 @@ def main : int {
         return 1
     }
     let short_sha = slice(full, 0, 7)
-    let dest = "{src}-ref-{short_sha}"
-    if (!stat(dest).is_valid) {
-        print("creating worktree {dest} @ {short_sha}\n")
-        if (run_visible("git -C \"{src}\" worktree add \"{dest}\" {full}") != 0) {
-            print("error: worktree add failed\n")
-            return 1
-        }
-    } else {
-        let head = capture_out("git -C \"{dest}\" rev-parse HEAD")
-        if (head != full) {
-            print("error: {dest} exists but is at {head}, not {full} — remove it (git -C \"{src}\" worktree remove \"{dest}\") and re-run\n")
-            return 1
-        }
-        print("worktree {dest} already at {short_sha}\n")
+    let dest = ensure_ref_worktree(src, full, short_sha)
+    if (empty(dest)) {
+        return 1
     }
     var rc = 0
     for (f in flavors) {

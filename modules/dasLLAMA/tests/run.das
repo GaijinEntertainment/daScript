@@ -24,10 +24,10 @@ struct RunArgs {
     full : bool
 
     @clarg_short = "s"
-    @clarg_doc = "Suite: decode | prefill | matrix | kernels | image | coverage | all (default all)"
+    @clarg_doc = "Suite: decode | prefill | matrix | kernels | image | image-vulkan | coverage | all (default all; all excludes image-vulkan)"
     suite : string = "all"
 
-    @clarg_doc = "Family filter — comma-separated family tokens (llama, qwen2, qwen3, phi3, gemma, ultravox, whisper, voxtral); only blocks of these model families run (model-free blocks always run); sets DASLLAMA_TEST_FAMILY"
+    @clarg_doc = "Family filter — comma-separated family tokens (the full list lives in tests/CLAUDE.md, EXACT match); only blocks of these model families run (model-free blocks always run); sets DASLLAMA_TEST_FAMILY"
     family : string
 
     @clarg_short = "n"

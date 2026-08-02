@@ -4181,7 +4181,7 @@ def private count_mismatch_sampled(got : array<float>; ref_v : array<float>; d, 
     return bad
 }
 
-def private run_lab(b : B?; variants) {
+def private run_lab(b : B?; variants) {   // nolint:STYLE037 — the lab A/B ladder: per-variant compile/dispatch/measure arms are one flow
     let rounds = env_int("DASMETAL_LAB_ROUNDS", 3)
     let refd = 128l
     let bmax = 16l
@@ -4531,7 +4531,7 @@ def private find_bbuf(nbatch : int) : int {
 }
 
 [benchmark, unused_argument(b)]   // b is consumed only inside the Apple static_if half
-def bench_metal_gemv_kernels(b : B?) {
+def bench_metal_gemv_kernels(b : B?) {   // nolint:STYLE038 — flat variant registration table + the driver call
     if (!jit_enabled()) {
         to_log(LOG_WARNING, "skipped: interpreted (dasLLAMA benchmarks are JIT-only)\n")
         return

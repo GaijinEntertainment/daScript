@@ -1,9 +1,7 @@
 options gen2
 
-// Per-box kernel tuner — sweeps the FULL grid (20 perms) for every [tuned] kernel (the float
-// elementwise set, softmax, rmsnorm, the quantized dots, the activation requant, the NEOX rope
-// table leaf, the fp32 GEMM tile, and the arm64 laneq4x4 tile) and writes the winning permutation
-// of each to box_profile.json. [dasllama_grid] emits, cross-module, each template's
+// Per-box kernel tuner — sweeps the FULL grid (20 perms) for every [tuned] kernel and writes
+// the winning permutation of each to box_profile.json. [dasllama_grid] emits, cross-module, each template's
 // <name>__<suffix> variant clones plus a <name>_template_variants() fn-ptr registry; the bench runs
 // the registry INTERLEAVED under the JIT (loop hints only bite there — see dasllama_tune),
 // correctness-gates every variant vs an f64 reference (exact equality for the requant), and reports
