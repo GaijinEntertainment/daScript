@@ -2079,7 +2079,7 @@ def private get_daslang_path() : string {
     return get_platform_name() == "windows" ? replace(joined, "/", "\\") : joined
 }
 
-def cmd_release(root : string; out_dir : string; paranoid = false; quick = false) : int {
+def cmd_release(root : string; out_dir : string; paranoid = false; quick = false) : int { // nolint:STYLE037 — phased orchestrator sharing bundle state end to end; the real split belongs to the daspkg cleanup pass
     let release_t0 = ref_time_ticks()
     if (paranoid && quick) {
         to_log(LOG_ERROR, "release: --paranoid and --quick contradict — pick one\n")
@@ -2147,14 +2147,32 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
     // The macOS .app is wholly daspkg-owned: full wipe. A flat bundle dir is NOT — it
     // accumulates user files next to daspkg's output — so it cleans via the previous
     // release's manifest instead (empty dirs from removed deps may linger; harmless).
+    // User-owned starter files (release_include_if_missing — deployed configs the user may
+    // have edited) survive the wipe: stash before, restore after, and the if-missing copy
+    // below then sees them existing and leaves them alone.
+    var preserved_snapshots : table<string; string>
     if (is_mac_app) {
         if (fexist(app_root)) {
+            for (rel in preserve_project_files) {
+                let p = path_join(bundle_dir, rel)
+                if (fexist(p)) {
+                    preserved_snapshots[rel] = fread(p)
+                }
+            }
             force_rmdir(app_root)
         }
     } elif (fexist(bundle_dir)) {
         clean_previous_release(bundle_dir, preserve_project_files)
     }
     mkdir_rec(bundle_dir)
+    for (rel, content in keys(preserved_snapshots), values(preserved_snapshots)) {
+        let p = path_join(bundle_dir, rel)
+        mkdir_rec(dir_name(p))
+        fwrite(p, content)
+    }
+    if (!empty(preserved_snapshots)) {
+        log("  preserved {length(preserved_snapshots)} user-owned starter file(s) through the .app wipe\n")
+    }
     // Arm symbol collection for every finalize_shipped_binary below. Windows-only for now: ELF
     // carries DWARF in the binary and macOS needs .dSYM handling, so neither has a .pdb to ship.
     _symbols_dir = ""
@@ -2468,20 +2486,20 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
             return 1
         }
         log("  wrote: Contents/Info.plist (CFBundleIdentifier={bundle_id})\n")
-        log("Released to: {app_root} ({release_elapsed(release_t0)}s)\n")
-    } else {
-        let mbody = build_string() $(var writer) {
-            for (s in shipped) {
-                writer |> write(s)
-                writer |> write("\n")
-            }
-        }
-        if (!fwrite(path_join(bundle_dir, RELEASE_MANIFEST), mbody)) {
-            to_log(LOG_ERROR, "release: cannot write {RELEASE_MANIFEST}\n")
-            return 1
-        }
-        log("Released to: {bundle_dir} ({release_elapsed(release_t0)}s)\n")
     }
+    // every release writes the ownership manifest — the .app too: the wipe path does not
+    // consult it, but tooling and the migration semantics read one record everywhere
+    let mbody = build_string() $(var writer) {
+        for (s in shipped) {
+            writer |> write(s)
+            writer |> write("\n")
+        }
+    }
+    if (!fwrite(path_join(bundle_dir, RELEASE_MANIFEST), mbody)) {
+        to_log(LOG_ERROR, "release: cannot write {RELEASE_MANIFEST}\n")
+        return 1
+    }
+    log("Released to: {is_mac_app ? app_root : bundle_dir} ({release_elapsed(release_t0)}s)\n")
     return 0
 }
 
