@@ -502,6 +502,9 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
                 }
                 continue
             }
+            if (cfg.workload == "asr") {   // -w asr narrows the oracle exactly like the publishing rig
+                continue
+            }
             var be = ""
             var tag = ""
             var accel = false
