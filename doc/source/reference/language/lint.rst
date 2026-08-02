@@ -1092,8 +1092,10 @@ whose release is not fully generated (user finalizers — where ``delete`` first
 the only correct fix).
 
 Bare-variable targets only: element targets (``tab[k] <- v``) are dominated by
-fresh-slot inserts where nothing leaks. Compiler temps and the ``return <- r``
-lowering are excluded.
+fresh-slot inserts where nothing leaks. Compiler temps, the ``return <- r``
+lowering, and generated moves are excluded — in particular the early-out
+relocation that splits ``var inscope x <- init`` into a hoisted declaration
+plus a generated move (the target is fresh and the ``finally`` releases it).
 
 .. code-block:: das
 

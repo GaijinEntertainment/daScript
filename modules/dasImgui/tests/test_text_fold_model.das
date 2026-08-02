@@ -40,6 +40,24 @@ def test_das_fold_extraction(t : T?) {
 }
 
 [test]
+def test_das_folds_survive_bare_named_arguments(t : T?) {
+    // the 0.6.4 bare named-call syntax was unparseable by the grammar and the
+    // error region swallowed every fold after the first such call
+    let source = ("options gen2\n\ndef caller() \{\n"
+        + "    foo(1, primary = true, scope = 2)\n\}\n\n"
+        + "def after() \{\n    let x = 1\n    let y = 2\n\}\n")
+    var document <- tree_sitter_source_document(source, "das", 1)
+    var functions = 0
+    for (fold in document.folds) {
+        if (fold.kind == "function_declaration") {
+            functions++
+        }
+    }
+    t |> equal(functions, 2, "the function AFTER a bare named call still folds")
+    text_source_document_dispose(document)
+}
+
+[test]
 def test_markdown_fold_extraction(t : T?) {
     let source = "# Title\n\nprose\n\n```\ncode line one\ncode line two\n```\n"
     var document <- markdown_source_document(source, 1)

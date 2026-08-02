@@ -145,6 +145,36 @@ selection post-LSP (confirmed); snippets + format-on-type recorded;
 `version_2_syntax` sweep of das-side tools; smoke re-run cadence
 whenever 9090 frees.
 
+**E5 status (SHIPPED 2026-08-01):** examples/text is the editor. Component:
+undo units carry serials; `text_edit_mark_saved` records the save point and
+`dirty` recomputes as top-serial != saved-serial (undo back to the save
+point clears it; divergence makes it unreachable — VS Code semantics, three
+model tests); `text_edit_byte_of_position` added (inverse byte mapping).
+App: per-document edit state; enter by typing (printable char pre-arms the
+editor's keyboard and the widget's own drain consumes the queued chars —
+a manual replay double-typed, probe-caught), Ctrl+E, footer Edit/Done, or
+View menu; plain/code = single pane, markdown = side-by-side with live
+preview (debounced `md_parse` of the LF buffer into SEPARATE preview state
+so viewer scroll/folds survive; caret follow = one-byte selection walked
+back to the nearest rendered byte, then the find-scroll band); save/save-as
+/reload ride the existing commands with editor sync + save-point record;
+dirty asterisk in the window title; welcome doc read-only; file.new =
+untitled buffer; 2s stat watch detects external changes (warn only, never
+auto-reload — explicit Reload refreshes and re-seeds). FOCUS LESSON: the
+find bar must draw AFTER the editor in the frame — the editor's FocusItem
+reclaim runs at its own draw, so a bar drawn earlier loses the
+replace-input focus race every frame (each typed char then replaced the
+currently-selected match through the re-jumping find sync — the undo
+journal made the failure legible). GRAMMAR FIX ridden in: bare named call
+arguments (#3410) were unparseable by the tree-sitter grammar, silently
+killing folds/outline after the first such call — `_argument` grew
+`make_struct_field` (two GLR conflicts declared, corpus 44/44, parser.c
+regenerated). The features demo (`examples/features/text_edit.das`) is
+DELETED; its three smokes retarget examples/text; viewer suite 10/10 with
+new save-point and preview/watch scenarios; the fold-click leg got a
+test-owned fixture. Deliberately left for E6: async das/cpp providers,
+Issues panel, completion beyond the tier-1 words/keywords rail.
+
 ## Shape: ONE component, one arc, two skins
 
 One arc, not two. The editing core — buffer, cursor, selection, undo,
@@ -152,9 +182,15 @@ input, search/replace — is identical for markdown and code; only the
 presentation differs, and both presentations already exist as viewers.
 The **rich text editor edits markdown SOURCE with a live preview pane**
 (the existing markdown viewer) beside it — the shape every good md editor
-uses. True WYSIWYG editing inside the laid-out rich text is a different,
-much larger beast: named non-goal, revisit only if the split-view editor
-proves insufficient in use.
+uses. **Markdown end state (E5 discussion, 2026-08-01, Boris): THREE
+editing modes** — plain source, side-by-side (source + live preview), and
+rich-text. Rich-text arrives via the Obsidian/Typora "live preview"
+stepping stone: every block renders rich except the one owning the
+cursor, which shows as inline editable source — reuses the line editor
+(per block) and the markdown renderer unchanged; the render tree's
+per-node source indices are the block↔source map. Slotted as **E5.5**.
+Full in-place WYSIWYG (a rich cursor inside a styled run) stays gated
+behind "live preview proves insufficient in use".
 
 - Component home: `modules/dasImgui/text/imgui_text_source_edit.das`,
   the editing sibling of `imgui_text_source_view`.
@@ -163,10 +199,11 @@ proves insufficient in use.
   presentations (rendered Markdown + syntax-highlighted source), command
   registry, live rails, and a dastest suite — is the parallel preview app
   for every feature slice: search, LSP, editing. It accretes the arc
-  instead of new `examples/editor/*` apps being built beside it; whether a
-  separate minimal code-editor example is still worth shipping is decided
-  at E5, not before. (The dasImgui merge landed 2026-07-30 — one repo,
-  the old staging caveat is gone.)
+  instead of new `examples/editor/*` apps being built beside it; the
+  separate minimal code-editor example is FOLDED (E5 discussion,
+  2026-08-01, Boris) — `examples/features/text_edit.das` served its E1
+  preview purpose and retires when the viewer edits. (The dasImgui merge
+  landed 2026-07-30 — one repo, the old staging caveat is gone.)
 
 ## The component, in detail
 
@@ -356,9 +393,25 @@ highlight inside code blocks lands with the selection work in E2/E4.
 - **E5** `examples/text` becomes an honest editor: the component wired
   into both its presentations (markdown source with live preview beside
   it, plain/code source), carrying save/load, dirty-state (undo back to
-  the save point clears dirty), and the find widget. Decide HERE whether
-  a separate minimal code-editor example still earns its keep or the
-  viewer covers it.
+  the save point clears dirty), and the find widget. **Settled (E5
+  discussion, 2026-08-01, Boris):** (a) viewer IS editor — a document
+  opens as viewer, first edit makes it an editor, with visible
+  indication (read-only badge vs dirty marker); the standalone example
+  folds (see above). (b) Editable = has a write-back path: disk files
+  write via fio; git-backed surfaces with a write-back (e.g. the PR
+  body — save pushes the change) are editable too; diff panes never
+  edit. (c) External change under a dirty buffer: detect and warn,
+  never auto-reload; merge/reload UX deferred. (d) Save surface: Ctrl+S
+  + dirty marker, save-as included; the file-open dialog needs its own
+  slice regardless — low priority, not a blocker. (e) Side-by-side
+  preview follows the edit point: scrolls to the current line AND
+  indicates the cursor position in the rendered pane. (f) Save-point
+  dirty semantics are the VS Code ones — redo past the save point then
+  diverging makes it unreachable and dirty returns; pinned in tests
+  day one.
+- **E5.5** rich-text markdown mode — the live-preview model per the
+  Shape section, right after E5 while the markdown machinery is hot;
+  E6/E7 numbering unchanged.
 - **E6** LSP in the code editor: hover + definition reuse the viewing
   arc's spawn-per-request transport verbatim (`nav.das`, overlay = the
   unsaved buffer — the SAME `--overlay` flag, no new machinery);

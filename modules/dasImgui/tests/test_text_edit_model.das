@@ -406,6 +406,78 @@ def test_undo_multiline_insert(t : T?) {
 }
 
 [test]
+def test_save_point_clears_dirty_on_undo(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "base")
+    text_edit_move_end(ed)
+    text_edit_insert(ed, "1")
+    t |> success(ed.dirty, "edit marks dirty")
+    text_edit_mark_saved(ed)
+    t |> success(!ed.dirty, "mark_saved clears dirty")
+    text_edit_insert(ed, "2")
+    t |> success(ed.dirty, "post-save edit is dirty again")
+    t |> equal(length(ed.undo_stack), 2, "save fences the open typing run")
+    let _ = text_edit_undo(ed)
+    t |> success(!ed.dirty, "undo back TO the save point is clean")
+    t |> equal(text_edit_source(ed), "base1", "buffer matches the saved state")
+    let _2 = text_edit_redo(ed)
+    t |> success(ed.dirty, "redo past the save point is dirty")
+    let _3 = text_edit_undo(ed)
+    let _4 = text_edit_undo(ed)
+    t |> success(ed.dirty, "undo PAST the save point is dirty (older state)")
+    t |> equal(text_edit_source(ed), "base", "buffer is the pre-save state")
+    let _5 = text_edit_redo(ed)
+    t |> success(!ed.dirty, "redo forward to the save point is clean again")
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_save_point_unreachable_after_divergence(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "")
+    text_edit_insert(ed, "a")
+    text_edit_mark_saved(ed)
+    let _ = text_edit_undo(ed)
+    t |> success(ed.dirty, "undone past the save point")
+    text_edit_insert(ed, "b")
+    t |> success(!text_edit_can_redo(ed), "divergence cleared redo")
+    t |> success(ed.dirty, "diverged state is dirty")
+    let _2 = text_edit_undo(ed)
+    t |> success(ed.dirty,
+        "the save point is unreachable: same depth, different history stays dirty")
+    t |> equal(text_edit_source(ed), "", "buffer content is the load state")
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_save_point_at_pristine_load(t : T?) {
+    var ed = TextEditState()
+    text_edit_load(ed, "text")
+    text_edit_mark_saved(ed)
+    t |> success(!ed.dirty, "saving the pristine buffer is a no-op")
+    text_edit_move_end(ed)
+    text_edit_insert(ed, "!")
+    let _ = text_edit_undo(ed)
+    t |> success(!ed.dirty, "undo to the pristine save point is clean")
+    text_edit_load(ed, "reset")
+    t |> success(!ed.dirty, "load resets the save point")
+    text_edit_insert(ed, "x")
+    text_edit_mark_saved(ed)
+    var spans : array<TextEditRange>
+    var texts : array<string>
+    spans |> push(TextEditRange(start_line = 0, start_column = 0,
+        end_line = 0, end_column = 1))
+    texts |> push("R")
+    let _2 = text_edit_replace_all(ed, spans, texts)
+    t |> success(ed.dirty, "replace_all after save is dirty")
+    let _3 = text_edit_undo(ed)
+    t |> success(!ed.dirty, "undoing the replace_all returns to the save point")
+    delete spans
+    delete texts
+    text_edit_dispose(ed)
+}
+
+[test]
 def test_clipboard_selection_round_trip(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "alpha beta")
@@ -751,6 +823,13 @@ def test_edit_byte_mapping(t : T?) {
     t |> equal(span.start_column, 1, "range start column maps by byte")
     t |> equal(span.end_line, 1, "range end crosses the newline")
     t |> equal(span.end_column, 1, "range end column maps by byte")
+    for (offset in range(8)) {
+        let pos = text_edit_position_of_byte(ed, offset)
+        t |> equal(text_edit_byte_of_position(ed, pos.x, pos.y), offset,
+            "byte_of_position inverts position_of_byte")
+    }
+    t |> equal(text_edit_byte_of_position(ed, 99, 99), 8,
+        "past-the-end positions clamp to the buffer end")
     text_edit_dispose(ed)
 }
 

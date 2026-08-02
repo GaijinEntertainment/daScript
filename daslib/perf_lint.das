@@ -2040,8 +2040,8 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def check_perf030_move_leak(expr : ExprMove?) : void {
-        // podDelete marks a rewrite-healed move, so an unmarked one is unhealed no matter why
-        if (expr == null || expr.move_flags.podDelete) return
+        // podDelete = rewrite-healed; generated = a lowering (the early-out `var inscope x <- init` split), not a user reassign
+        if (expr == null || expr.move_flags.podDelete || expr.genFlags.generated) return
         var lhs = expr.left
         if (lhs is ExprRef2Value) {
             lhs = (lhs as ExprRef2Value.subexpr)
