@@ -114,6 +114,12 @@ needs a different marker. Decide before Phase 1 starts.
 
 ## Status
 
+**Phase 1 LANDED, Phase 2 LANDED, Phase 3 LANDED FOR WHISPER** (5.29 → 2.12 GB cold-mint peak,
+streamed==eager gated plane-for-plane, fp32 and q8 both). Gemma4a/canary mints (+1.15/+1.33 GB)
+stay staged for now — both sit under serve-side peaks their mints do not dominate, and the
+long-clip encoder scratch in PERF_LEDGER.md is the bigger memory item. Parakeet (+0.15 GB) is
+not worth streaming.
+
 **Phase 1 LANDED, Phase 2 LANDED** (2026-08-01, branch bbatkin/dasllama-reorg). All six carriers
 serve borrowed planes; no eager form survives; the ownership hack remains only under `Model` and
 the synthetic test probe. The gemma4a teardown panic closed with it — it was the generated
