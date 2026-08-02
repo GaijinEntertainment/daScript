@@ -70,6 +70,18 @@ def good_element_target {
     delete t
 }
 
+def good_hoisted_inscope_init(flag : bool) : int {
+    // the early-out relocation splits this decl into let + GENERATED move
+    // (ast_allocate_stack.cpp RelocateVariables); the target is fresh and the
+    // finally releases it - the lowering's move must stay silent
+    return 0 if (flag)
+    var inscope a <- make_arr()
+    if (length(a) > 1) {
+        return 2
+    }
+    return length(a)
+}
+
 [export]
 def main {
     bad_array_reassign()
@@ -78,4 +90,5 @@ def main {
     bad_fixed_array_reassign()
     good_pod_move()
     good_element_target()
+    let _ = good_hoisted_inscope_init(false)
 }
