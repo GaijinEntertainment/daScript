@@ -191,11 +191,26 @@ struct public TextEditState {
     list_index : int = -1
     //! Byte length of the request prefix — accepting inserts the remainder.
     list_prefix_bytes : int = 0
+    //! Snippet session: tab stops in traversal order (numbered ascending, the
+    //! `${0}` final always last). snippet_index -1 = no session.
+    snippet_stops : array<TextEditSnippetStop>
+    snippet_index : int = -1
+    //! The whole inserted span; the caret leaving it ends the session.
+    snippet_region : TextEditRange = TextEditRange()
     // widget layout cache + per-draw stamps for live inspection
     layout_revision : int = -1
     max_line_bytes : int = 0
     line_count : int = 1
     visible_rows : int = 0
+}
+
+struct public TextEditSnippetStop {
+    //! One placeholder range: single-line [start_column..end_column) on `line`.
+    line : int
+    start_column : int
+    end_column : int
+    //! The `${n}` number; 0 = the final caret (always traversed last).
+    index : int
 }
 
 struct public TextEditResult {
@@ -212,6 +227,7 @@ def public text_edit_dispose(var ed : TextEditState) {
     delete ed.line_styles
     delete ed.list_items
     delete ed.diagnostics
+    delete ed.snippet_stops
     ed = TextEditState() // nolint:PERF030 (owned fields deleted above; the move target is already empty)
 }
 
@@ -238,6 +254,7 @@ def public text_edit_load(var ed : TextEditState; source : string) {
     delete ed.diagnostics
     ed.compile_status = TextEditCompileStatus.unknown
     text_edit_close_list(ed)
+    text_edit_snippet_end(ed)
     ed.undo_open = false
     ed.undo_serial = 0
     ed.saved_serial = 0
@@ -843,6 +860,7 @@ def private commit_edit(var ed : TextEditState; kind : TextEditUndoKind;
     last.after_cursor_line = ed.cursor_line
     last.after_cursor_column = ed.cursor_column
     ed.undo_open = true
+    snippet_track_edit(ed, line, column, removed, inserted)
     touch_edit(ed)
     restyle_lines(ed, min(line, ed.cursor_line), max(line, ed.cursor_line))
     if (same_line) {
@@ -864,6 +882,7 @@ def private restore_unit_cursor(var ed : TextEditState;
 def public text_edit_undo(var ed : TextEditState) : bool {
     //! Revert the newest undo unit; restores the pre-edit cursor + selection.
     ed.undo_open = false
+    text_edit_snippet_end(ed)
     return false if (empty(ed.undo_stack))
     let unit_index = length(ed.undo_stack) - 1
     var unit <- ed.undo_stack[unit_index]
@@ -895,6 +914,7 @@ def public text_edit_undo(var ed : TextEditState) : bool {
 
 def public text_edit_redo(var ed : TextEditState) : bool {
     ed.undo_open = false
+    text_edit_snippet_end(ed)
     return false if (empty(ed.redo_stack))
     let unit_index = length(ed.redo_stack) - 1
     var unit <- ed.redo_stack[unit_index]
@@ -1928,10 +1948,14 @@ def public text_edit_list_accept(var ed : TextEditState) : bool {
 }
 
 def public text_edit_tab(var ed : TextEditState) {
-    //! Tab accepts a visible ghost completion first (the VS Code rule); else
-    //! per spec fork 2: multi-line or full-line selection block indents; a
-    //! partial-line selection is replaced; else insert a tab.
+    //! Tab precedence: active snippet session > ghost completion > indent.
+    //! Else per spec fork 2: multi-line or full-line selection block indents;
+    //! a partial-line selection is replaced; else insert a tab.
     ensure_line(ed)
+    if (text_edit_snippet_active(ed)) {
+        let _ = text_edit_snippet_next(ed)
+        return
+    }
     if (!empty(ed.ghost_text)) {
         let accepted = ed.ghost_text
         text_edit_insert(ed, accepted)
@@ -1947,6 +1971,334 @@ def public text_edit_tab(var ed : TextEditState) {
         }
     }
     text_edit_insert(ed, "\t")
+}
+
+// ===== Snippet sessions =====
+
+struct private SnippetParse {
+    body : string
+    stops : array<TextEditSnippetStop> // body-relative positions
+    sel_start : int2 = int2(-1, -1)
+    sel_end : int2 = int2(-1, -1)
+    final_at : int2 = int2(-1, -1)
+}
+
+def private snippet_advance(text : string; var rl : int&; var rc : int&) {
+    let breaks = count(text, "\n")
+    if (breaks == 0) {
+        rc += length(text)
+    } else {
+        rl += breaks
+        rc = length(text) - rfind(text, "\n") - 1
+    }
+}
+
+def private snippet_digits(text : string) : bool {
+    return false if (empty(text))
+    var all = true
+    peek_data(text) $(bytes) {
+        for (value in bytes) {
+            if (!is_number(int(value))) {
+                all = false
+                break
+            }
+        }
+    }
+    return all
+}
+
+def private snippet_chunk(text, indent : string) : string {
+    // body lines after the first inherit the caret line's indentation
+    return empty(indent) ? text : replace(text, "\n", "\n" + indent)
+}
+
+def private snippet_token(token, selection : string; var writer : StringBuilderWriter;
+                          var parsed : SnippetParse; var rl : int&; var rc : int&) : bool {
+    if (token == "SEL") {
+        parsed.sel_start = int2(rl, rc)
+        writer |> write(selection)
+        snippet_advance(selection, rl, rc)
+        parsed.sel_end = int2(rl, rc)
+        return true
+    }
+    let colon = find(token, ":")
+    let number_text = colon >= 0 ? slice(token, 0, colon) : token
+    return false if (!snippet_digits(number_text))
+    let number = to_int(number_text)
+    if (number == 0) {
+        parsed.final_at = int2(rl, rc)
+        return true
+    }
+    let caption = colon >= 0 ? slice(token, colon + 1, length(token)) : ""
+    var known = false
+    for (stop in parsed.stops) {
+        if (stop.index == number) {
+            known = true
+            break
+        }
+    }
+    let start_column = rc
+    writer |> write(caption)
+    snippet_advance(caption, rl, rc)
+    if (!known) {
+        // duplicates emit their label but record no stop (no mirrors in v1)
+        parsed.stops |> push(TextEditSnippetStop(line = rl, index = number,
+            start_column = start_column, end_column = rc))
+    }
+    return true
+}
+
+def private snippet_parse(pattern, selection, indent : string;
+                          var parsed : SnippetParse) {
+    var rl = 0
+    var rc = 0
+    parsed.body = build_string() $(var writer) {
+        var at = 0
+        let total = length(pattern)
+        while (at < total) {
+            let open_ = find(pattern, "$\{", at)
+            let close_ = open_ < 0 ? -1 : find(pattern, "}", open_)
+            if (open_ < 0 || close_ < 0) {
+                let chunk = snippet_chunk(slice(pattern, at, total), indent)
+                writer |> write(chunk)
+                snippet_advance(chunk, rl, rc)
+                break
+            }
+            if (open_ > at) {
+                let chunk = snippet_chunk(slice(pattern, at, open_), indent)
+                writer |> write(chunk)
+                snippet_advance(chunk, rl, rc)
+            }
+            let token = slice(pattern, open_ + 2, close_)
+            if (!snippet_token(token, selection, writer, parsed, rl, rc)) {
+                // not a placeholder: emit verbatim
+                let literal = slice(pattern, open_, close_ + 1)
+                writer |> write(literal)
+                snippet_advance(literal, rl, rc)
+            }
+            at = close_ + 1
+        }
+    }
+}
+
+def private snippet_absolute(rel : int2; line, column : int) : int2 {
+    return int2(line + rel.x, rel.x == 0 ? column + rel.y : rel.y)
+}
+
+def private snippet_focus_stop(var ed : TextEditState) {
+    let stop = ed.snippet_stops[ed.snippet_index]
+    if (stop.end_column > stop.start_column) {
+        text_edit_select(ed, stop.line, stop.start_column, stop.line, stop.end_column)
+    } else {
+        text_edit_set_cursor(ed, stop.line, stop.start_column)
+    }
+}
+
+def public text_edit_snippet_active(ed : TextEditState const) : bool {
+    return ed.snippet_index >= 0
+}
+
+def public text_edit_snippet_end(var ed : TextEditState) {
+    //! Drop the tab-stop session; the buffer is untouched.
+    delete ed.snippet_stops
+    ed.snippet_index = -1
+}
+
+def private snippet_arm(var ed : TextEditState; parsed : SnippetParse;
+                        anchor_line, anchor_column : int) {
+    var stops : array<TextEditSnippetStop>
+    stops |> reserve(length(parsed.stops) + 1)
+    for (stop in parsed.stops) {
+        let start_ = snippet_absolute(int2(stop.line, stop.start_column),
+            anchor_line, anchor_column)
+        let end_ = snippet_absolute(int2(stop.line, stop.end_column),
+            anchor_line, anchor_column)
+        // traversal is by ${n} number: insertion sort on the small set
+        var at = 0
+        while (at < length(stops) && stops[at].index <= stop.index) {
+            at++
+        }
+        stops |> push(TextEditSnippetStop(line = start_.x, index = stop.index,
+            start_column = start_.y, end_column = end_.y), at)
+    }
+    if (empty(stops) && parsed.sel_start.x >= 0) {
+        // wrap rule: the spliced selection stays selected for chaining
+        let start_ = snippet_absolute(parsed.sel_start, anchor_line, anchor_column)
+        let end_ = snippet_absolute(parsed.sel_end, anchor_line, anchor_column)
+        if (start_.x == end_.x) {
+            stops |> push(TextEditSnippetStop(line = start_.x, index = 1,
+                start_column = start_.y, end_column = end_.y))
+        }
+    }
+    var final_at = int2(ed.cursor_line, ed.cursor_column)
+    if (parsed.final_at.x >= 0) {
+        final_at = snippet_absolute(parsed.final_at, anchor_line, anchor_column)
+    }
+    if (empty(stops)) {
+        // no tab stops: place the caret and stay sessionless
+        text_edit_set_cursor(ed, final_at.x, final_at.y)
+        delete stops
+        return
+    }
+    stops |> push(TextEditSnippetStop(line = final_at.x, index = 0,
+        start_column = final_at.y, end_column = final_at.y))
+    ed.snippet_stops <- stops
+    ed.snippet_index = 0
+    snippet_focus_stop(ed)
+}
+
+def public text_edit_snippet_expand(var ed : TextEditState;
+                                    pattern : string) : bool {
+    //! Expand a `$\{n:label}` snippet at the caret (replacing any selection)
+    //! as ONE undo unit and arm the tab-stop session; `$\{SEL}` splices the
+    //! selection, `$\{0}` places the final caret.
+    ensure_line(ed)
+    text_edit_snippet_end(ed)
+    let had_selection = text_edit_has_selection(ed)
+    let target = text_edit_selection(ed)
+    let anchor_line = had_selection ? target.start_line : ed.cursor_line
+    let anchor_column = had_selection ? target.start_column : ed.cursor_column
+    var parsed = SnippetParse()
+    snippet_parse(pattern, had_selection ? text_edit_selected_text(ed) : "",
+        leading_whitespace(ed.lines[anchor_line]), parsed)
+    if (empty(parsed.body) && parsed.final_at.x < 0) {
+        delete parsed.stops
+        return false
+    }
+    text_edit_push_undo_stop(ed)
+    text_edit_insert(ed, parsed.body)
+    ed.snippet_region = TextEditRange(start_line = anchor_line,
+        start_column = anchor_column,
+        end_line = ed.cursor_line, end_column = ed.cursor_column)
+    snippet_arm(ed, parsed, anchor_line, anchor_column)
+    patch_unit_after(ed)
+    text_edit_push_undo_stop(ed)
+    delete parsed.stops
+    return true
+}
+
+def public text_edit_snippet_next(var ed : TextEditState) : bool {
+    //! Tab: advance to the next stop; past the last (or onto `$\{0}`) lands
+    //! the final caret and ends the session. False = no active session.
+    return false if (ed.snippet_index < 0)
+    ed.snippet_index++
+    if (ed.snippet_index >= length(ed.snippet_stops)
+            || ed.snippet_stops[ed.snippet_index].index == 0) {
+        let final_stop = ed.snippet_stops[length(ed.snippet_stops) - 1]
+        text_edit_set_cursor(ed, final_stop.line, final_stop.start_column)
+        text_edit_snippet_end(ed)
+        return true
+    }
+    snippet_focus_stop(ed)
+    return true
+}
+
+def public text_edit_snippet_prev(var ed : TextEditState) : bool {
+    //! Shift+Tab: step back to the previous stop (clamped at the first).
+    return false if (ed.snippet_index < 0)
+    if (ed.snippet_index > 0) {
+        ed.snippet_index--
+    }
+    snippet_focus_stop(ed)
+    return true
+}
+
+def public text_edit_snippet_sync(var ed : TextEditState) {
+    //! Frame watchdog: the caret leaving the inserted region ends the session.
+    return if (ed.snippet_index < 0)
+    let region = ed.snippet_region
+    if (pos_before(ed.cursor_line, ed.cursor_column,
+                   region.start_line, region.start_column)
+            || pos_before(region.end_line, region.end_column,
+                          ed.cursor_line, ed.cursor_column)) {
+        text_edit_snippet_end(ed)
+    }
+}
+
+def public text_edit_patch_redo_cursor(var ed : TextEditState) {
+    //! Stamp the caret placed AFTER a compound commit into the newest undo
+    //! unit so redo restores it (the line-op recipe, public for registries).
+    patch_unit_after(ed)
+}
+
+def private snippet_map_position(p, s, re, ie : int2) : int2 {
+    // map a tracked position across (removed -> inserted) at s; (-1,-1) = gone
+    if (pos_before(p.x, p.y, s.x, s.y)) return p
+    if (!pos_before(p.x, p.y, re.x, re.y)) {
+        let dl = ie.x - re.x
+        if (p.x == re.x) return int2(ie.x, ie.y + (p.y - re.y))
+        return int2(p.x + dl, p.y)
+    }
+    return int2(-1, -1)
+}
+
+def private snippet_track_stop(var stop : TextEditSnippetStop;
+                               s, re, ie : int2) : bool {
+    // false = the session must die (partial overlap / stop went multi-line)
+    let start_ = int2(stop.line, stop.start_column)
+    let end_ = int2(stop.line, stop.end_column)
+    if (!pos_before(s.x, s.y, start_.x, start_.y)
+            && !pos_before(end_.x, end_.y, re.x, re.y)) {
+        // edit CONTAINED in the stop: the start anchors, only the end maps
+        let mapped = snippet_map_position(end_, s, re, ie)
+        return false if (mapped.x != stop.line)
+        stop.end_column = mapped.y
+        return true
+    }
+    if (!pos_before(s.x, s.y, end_.x, end_.y)) {
+        return true // entirely after the stop
+    }
+    if (!pos_before(start_.x, start_.y, re.x, re.y)) {
+        // entirely before: both ends shift
+        let mapped_start = snippet_map_position(start_, s, re, ie)
+        let mapped_end = snippet_map_position(end_, s, re, ie)
+        return false if (mapped_start.x < 0 || mapped_end.x < 0
+            || mapped_start.x != mapped_end.x)
+        stop.line = mapped_start.x
+        stop.start_column = mapped_start.y
+        stop.end_column = mapped_end.y
+        return true
+    }
+    return false
+}
+
+def private snippet_track_edit(var ed : TextEditState; line, column : int;
+                               removed, inserted : string) {
+    // ONE rule at the ONE mutation funnel: shift/grow stops, else kill clean
+    return if (ed.snippet_index < 0)
+    let s = int2(line, column)
+    let re = text_end_position(line, column, removed)
+    let ie = text_end_position(line, column, inserted)
+    var region = ed.snippet_region
+    var ok = true
+    if (pos_before(re.x, re.y, region.start_line, region.start_column)) {
+        let mapped = snippet_map_position(
+            int2(region.start_line, region.start_column), s, re, ie)
+        region.start_line = mapped.x
+        region.start_column = mapped.y
+    } elif (pos_before(s.x, s.y, region.start_line, region.start_column)) {
+        ok = false // the edit spans across the region's start
+    }
+    if (ok && !pos_before(region.end_line, region.end_column, s.x, s.y)) {
+        let mapped = snippet_map_position(
+            int2(region.end_line, region.end_column), s, re, ie)
+        if (mapped.x < 0) {
+            ok = false
+        } else {
+            region.end_line = mapped.x
+            region.end_column = mapped.y
+        }
+    }
+    var index = 0
+    while (ok && index < length(ed.snippet_stops)) {
+        ok = snippet_track_stop(ed.snippet_stops[index], s, re, ie)
+        index++
+    }
+    if (!ok) {
+        text_edit_snippet_end(ed)
+        return
+    }
+    ed.snippet_region = region
 }
 
 // ===== Find / replace =====
@@ -1967,6 +2319,7 @@ def public text_edit_replace_all(var ed : TextEditState;
     //! Replace every span (ascending, non-overlapping) with its text as ONE
     //! undo unit — one undo reverts the whole replace-all. Returns the count.
     ensure_line(ed)
+    text_edit_snippet_end(ed) // bypasses commit_edit: stops cannot track it
     let count_ = min(length(spans), length(texts))
     return 0 if (count_ == 0)
     delete ed.redo_stack
@@ -3043,7 +3396,8 @@ def private drive_primary_input(var ed : TextEditState;
             text_edit_close_list(ed)
         }
         command_set_enabled(registry, "edit.cancel",
-            text_edit_has_selection(ed) || ed.list_open)
+            text_edit_has_selection(ed) || ed.list_open
+            || text_edit_snippet_active(ed))
         command_poll_scope(registry, CommandScope.component, id, typed)
     }
     var invocation = CommandInvocation()
@@ -3051,6 +3405,7 @@ def private drive_primary_input(var ed : TextEditState;
         dispatch_edit_command(ed, invocation.command_id, page_rows,
             write_system_clipboard)
     }
+    text_edit_snippet_sync(ed)
 }
 
 def private apply_segment_scroll(var ed : TextEditState; m : EditMetrics;
@@ -3756,8 +4111,11 @@ def private dispatch_edit_command(var ed : TextEditState; command_id : string; /
     } elif (verb == "edit.goto") {
         text_edit_open_goto(ed)
     } elif (verb == "edit.cancel") {
+        // Escape chain: completion list, then the snippet session, then selection
         if (ed.list_open) {
             text_edit_close_list(ed)
+        } elif (text_edit_snippet_active(ed)) {
+            text_edit_snippet_end(ed)
         } else {
             text_edit_clear_selection(ed)
         }
@@ -3788,7 +4146,12 @@ def private dispatch_edit_line_command(var ed : TextEditState; verb : string) {
     } elif (verb == "edit.indent_lines") {
         text_edit_indent_lines(ed)
     } elif (verb == "edit.outdent_lines") {
-        text_edit_outdent_lines(ed)
+        // Shift+Tab steps the active snippet session back instead
+        if (text_edit_snippet_active(ed)) {
+            let _ = text_edit_snippet_prev(ed)
+        } else {
+            text_edit_outdent_lines(ed)
+        }
     } elif (verb == "edit.expand_line_selection") {
         text_edit_expand_line_selection(ed)
     } elif (verb == "edit.join_lines") {
