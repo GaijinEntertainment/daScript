@@ -92,6 +92,10 @@ struct Args {
     @clarg_doc = "Oracle: seconds to idle before the automatic solo re-run of a FAILED cell, whose verdict then stands (default: 60; 0 disables) — board-tail cells under-read on a hot chip (−6.5%..−34% observed), a solo re-run after settle reads true"
     oracle_retry_settle : int = 60
 
+    @clarg_name = "oracle-allow-crossgen"
+    @clarg_doc = "Oracle: compare across sidecar generations anyway (default: a tune_sha mismatch is INCOMPARABLE — the stored mean belongs to different winners — and fails the run)"
+    oracle_allow_crossgen : bool
+
     @clarg_short = "?"
     @clarg_doc = "Show this help and exit"
     help : bool
@@ -220,10 +224,31 @@ def private elapsed_ms(t0 : int64) : int {
 }
 
 // Stamp source + the catalog note and upsert every run of `cell` into the store, then persist.
+// the records directory carries each sidecar generation ONCE, by shasum: a row's tune_sha
+// resolves to the FULL doc (winners + race tables + provenance) sitting beside the store
+def private snapshot_tune_generation(exe : string) {
+    let sc = sidecar_for(exe)
+    let sha = sidecar_generation_sha(sc)
+    return if (empty(sha))
+    let dst = "modules/dasLLAMA/performance/records/{box_name()}.tune.{slice(sha, 0, 12)}.json"
+    return if (stat(dst).is_valid)
+    if (fwrite(dst, fread(sc))) {
+        to_log(LOG_INFO, "gen_bench_records: sidecar generation archived -> {dst}\n")
+    }
+}
+
 def private absorb_cell(var models : array<BenchModel>; var cell : array<BenchModel>; store, note : string) {
     for (c in cell) {
+        var debug_stamped = false
         for (r in c.runs) {
             r.source = "official"
+            debug_stamped ||= r.flavor |> starts_with("debug-jit")
+        }
+        if (debug_stamped) {
+            // belt + braces: the rig only spawns the released exe, but a debug-stamped row
+            // must never survive into the store no matter how it arrived
+            to_log(LOG_ERROR, "gen_bench_records: DROPPING debug-jit cell for {c.gguf} — debug runs are not records\n")
+            continue
         }
         upsert_bench_model(models, c)
         stamp_note(models, c.gguf, note)
@@ -453,9 +478,37 @@ def private oracle_prepare(gguf, be, tag, exe : string; accel : bool; threads : 
 // The --oracle driver: the work list is the STORE's das LLM rows for this box (the published
 // tables re-verify; coverage gaps fail loudly), each re-measured once and gated one-sided
 // against its stored mean. Pure check — the store is never written.
+// the cross-generation gate: a stored row minted under a DIFFERENT sidecar generation is not
+// comparable — its mean belongs to different winners. Legacy rows (no tune_sha) warn and
+// compare; a mismatch declines as INCOMPARABLE unless --oracle-allow-crossgen forces it.
+def private crossgen_ok(sr : BenchRun; currentSha : string; allow : bool; what : string;
+                        var board : array<string>; var fails : int&; var warns : int&) : bool {
+    if (empty(currentSha)) {
+        return true   // rig exe without a sidecar: the tune gate inside the cell reports it
+    }
+    if (empty(sr.tune_sha)) {
+        board |> push("WARN {what}: legacy row (no sidecar generation recorded) — comparing anyway")
+        warns++
+        return true
+    }
+    if (sr.tune_sha == currentSha) {
+        return true
+    }
+    if (allow) {
+        board |> push("WARN {what}: cross-generation compare FORCED (stored {slice(sr.tune_sha, 0, 12)} vs current {slice(currentSha, 0, 12)})")
+        warns++
+        return true
+    }
+    board |> push("INCOMPARABLE {what}: sidecar generation changed (stored {slice(sr.tune_sha, 0, 12)} vs current {slice(currentSha, 0, 12)}) — re-record the row or --oracle-allow-crossgen")
+    to_log(LOG_ERROR, "gen_bench_records: ORACLE INCOMPARABLE {what} — the stored mean belongs to different winners\n")
+    fails++
+    return false
+}
+
 def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : array<BenchModel>;
                         threads : int; cellPath, exe : string) : int {
     let box = box_name()
+    let currentSha = sidecar_generation_sha(sidecar_for(exe))
     let doAsrOracle = cfg.workload != "llm"
     let asrTier = parse_tier(cfg.asr_tier)
     var board : array<string>
@@ -489,6 +542,9 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
                     continue
                 }
                 cells++
+                if (!crossgen_ok(sr, currentSha, cfg.oracle_allow_crossgen, "{m.gguf} das asr", board, fails, warns)) {
+                    continue
+                }
                 settle(cfg)
                 let va = oracle_asr_cell(spec, sr, cfg, threads, cellPath, exe, board)
                 if (va == OracleVerdict.fail) {
@@ -530,6 +586,9 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
                 continue
             }
             cells++
+            if (!crossgen_ok(sr, currentSha, cfg.oracle_allow_crossgen, "{m.gguf} das {tag}", board, fails, warns)) {
+                continue
+            }
             oracle_prepare(m.gguf, be, tag, exe, accel, threads, cellPath)
             settle(cfg)
             var v = oracle_cell(m.gguf, be, tag, exe, accel, sr, cfg, threads, cellPath, board)
@@ -944,6 +1003,7 @@ def main : int {
         return 1
     }
     mkdir_rec("modules/dasLLAMA/performance/records")
+    snapshot_tune_generation(exe)
     let store = bench_records_path()
     var models : array<BenchModel>
     read_bench_records(store, models)

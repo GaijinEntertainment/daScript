@@ -845,6 +845,17 @@ def private compute_sha256(path : string) : string {
 //! mismatch (re-download, re-quantize) recomputes and rewrites it. `sha256` is "" only when the
 //! file is missing or the box has no hash tool — callers store the InputFile regardless, so the
 //! gap is visible in the record rather than silently absent.
+    //! sha256 of this process's tune sidecar — the sidecar GENERATION a measurement runs under.
+    //! Rows minted under different generations are not comparable; "" when the sidecar is absent.
+def tune_manifest_sha() : string {
+    return sidecar_generation_sha(tune_manifest_path())
+}
+
+    //! sha256 of an explicit sidecar file — the oracle's current-generation probe; "" when absent.
+def sidecar_generation_sha(path : string) : string {
+    return stat(path).is_valid ? compute_sha256(path) : ""
+}
+
 def file_identity(path : string; role : string) : InputFile {
     var fi = InputFile(role = role, name = base_name(path))
     let st = stat(path)
@@ -1578,6 +1589,8 @@ struct BenchRun {
     @optional version : string  // das release version
     @optional versions : string // reference-tool version line (venv package pins, patch sha) — see B4
     @optional tune : string     // das gen-kernel stamp provenance — required for reproducibility
+    @optional tune_sha : string // sha256 of the tune sidecar the exe shipped with — the sidecar
+                                // GENERATION; rows across generations are not comparable
     @optional exec_fmt : string // what this engine EXECUTES for this file (weight formats per site
                                 // class + activation/scale treatment) — the apples-to-apples receipt;
                                 // das derives it from the loaded Model, llama.cpp rows from flavor

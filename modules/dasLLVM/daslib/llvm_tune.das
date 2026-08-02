@@ -99,8 +99,10 @@ def tune_app_script() : string {
     return ""
 }
 
-// `<stem>.tune.json` — foo/app.das, foo/app.exe and foo/app all map to foo/app.tune.json
-def private sidecar_for(app : string) : string {
+    //! The sidecar-name convention, `<stem>.tune.json`: foo/app.das, foo/app.exe and foo/app
+    //! all map to foo/app.tune.json. The ONE implementation of the naming rule — callers that
+    //! need "the sidecar beside this artifact" (oracles, release tooling) resolve through it.
+def sidecar_for(app : string) : string {
     var stem = app
     if (stem |> ends_with(".das") || stem |> ends_with(".exe")) {
         stem = slice(stem, 0, length(stem) - 4)

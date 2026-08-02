@@ -197,7 +197,7 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
         workload = asr_workload(spec), box = box_name(), threads = threads,
         date = format_time(get_clock(), "%Y-%m-%d"), cmd = bench_cmd_line(), env = bench_env_line(),
         sha = run_capture("git rev-parse --short=9 HEAD", true), version = das_version(),
-        tune = tune_summary(), hardware = gather_hardware())
+        tune = tune_summary(), tune_sha = tune_manifest_sha(), hardware = gather_hardware())
     run.files |> emplace(file_identity(model_path, "weights"))
     if (!empty(spec.das_mmproj)) {
         run.files |> emplace(file_identity("{spec.root}{spec.das_mmproj}", "mmproj"))
@@ -758,6 +758,7 @@ def main() : int {
         sha = run_capture("git rev-parse --short=9 HEAD", true),
         version = das_version(),
         tune = tune_summary(),
+        tune_sha = tune_manifest_sha(),
         exec_fmt = execFmt,
         hardware = hw,
         tests <- tests_of(results))
