@@ -827,6 +827,8 @@ def test_text_viewer_fold_clicks_and_no_reflow(t : T?) { // nolint:STYLE038 — 
         let temp_dir = create_temp_directory("das_text_viewer_folds", temp_error)
         t |> success(empty(temp_error) && !empty(temp_dir), "fold temp dir created")
         return if (!empty(temp_error) || empty(temp_dir))
+        // the bare block's finally covers every return path after creation
+        {
         let das_fixture = path_join(temp_dir, "folds.das")
         t |> success(fwrite(das_fixture, ("options gen2\n\ndef alpha() \{\n"
             + "    print(\"a\\n\")\n    print(\"b\\n\")\n    print(\"c\\n\")\n\}\n\n"
@@ -889,7 +891,9 @@ def test_text_viewer_fold_clicks_and_no_reflow(t : T?) { // nolint:STYLE038 — 
         let misses_after = viewer_state(app)?["source_layout_misses"] ?? -2
         t |> equal(misses_after, misses_before,
                    "fold toggles reuse the cached flow instead of reflowing")
-        rmdir_rec_result(temp_dir)
+        } finally {
+            rmdir_rec_result(temp_dir)
+        }
     }
 }
 
@@ -982,6 +986,8 @@ def test_text_viewer_edit_mode_save_point(t : T?) { // nolint:STYLE038 — one e
         let temp_dir = create_temp_directory("das_text_viewer_edit", temp_error)
         t |> success(empty(temp_error) && !empty(temp_dir), "temp dir created")
         return if (!empty(temp_error) || empty(temp_dir))
+        // the bare block's finally covers every return path after creation
+        {
         let fixture = path_join(temp_dir, "edit.md")
         t |> success(fwrite(fixture, EDIT_FIXTURE_TEXT), "edit fixture written")
         let opened = post_command(app, "text_viewer_open", JV((path = fixture)))
@@ -1053,18 +1059,21 @@ def test_text_viewer_edit_mode_save_point(t : T?) { // nolint:STYLE038 — one e
         t |> success(viewing, "back to a clean viewer")
         t |> success(starts_with(fread(fixture), "X# Edit probe"),
             "the saved file carries the edit")
-        rmdir_rec_result(temp_dir)
+        } finally {
+            rmdir_rec_result(temp_dir)
+        }
     }
 }
 
 [test]
-def test_text_viewer_edit_preview_and_watch(t : T?) {
+def test_text_viewer_edit_preview_and_watch(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))
         var temp_error = ""
         let temp_dir = create_temp_directory("das_text_viewer_watch", temp_error)
         t |> success(empty(temp_error) && !empty(temp_dir), "temp dir created")
         return if (!empty(temp_error) || empty(temp_dir))
+        {
         let fixture = path_join(temp_dir, "watch.md")
         t |> success(fwrite(fixture, EDIT_FIXTURE_TEXT), "watch fixture written")
         let opened = post_command(app, "text_viewer_open", JV((path = fixture)))
@@ -1117,6 +1126,16 @@ def test_text_viewer_edit_preview_and_watch(t : T?) {
         }
         t |> success(refreshed, "reload picks up the external content into the editor")
 
+        // deletion is an external change too - detect, warn, keep the buffer
+        let removed = remove_result(fixture)
+        t |> success(!(removed is error), "fixture deleted behind the app")
+        let missing_flagged = wait_cond(app, 15.0f) $() : bool {
+            var state = viewer_state(app)
+            return ((state?["external_change"] ?? false)
+                && find(state?["status"] ?? "", "no longer exists") >= 0)
+        }
+        t |> success(missing_flagged, "a deleted file flags as an external change")
+
         // the footer Done button leaves edit mode
         click(app, "DOCK_ROOT/g_document_windows[1]/EDIT_TOGGLE")
         t |> success(wait_for_mouse_idle(app), "Done click drains")
@@ -1125,6 +1144,8 @@ def test_text_viewer_edit_preview_and_watch(t : T?) {
             return !(state?["editing"] ?? true)
         }
         t |> success(viewing, "Done returns to the viewer")
-        rmdir_rec_result(temp_dir)
+        } finally {
+            rmdir_rec_result(temp_dir)
+        }
     }
 }

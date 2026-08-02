@@ -253,7 +253,12 @@ def private watch_external_change(var doc : TextViewerDocument) {
     return if (doc.disk_check_accum < 2.0f)
     doc.disk_check_accum = 0.0f
     let info = stat(doc.source.path)
-    return if (!info.is_valid)
+    if (!info.is_valid) {
+        // deletion is an external change too - Save re-creates the file
+        doc.external_change = true
+        doc.status = "File no longer exists on disk - Save re-creates it."
+        return
+    }
     if (info.mtime != doc.disk_mtime || info.size != doc.disk_size) {
         doc.external_change = true
         doc.status = (document_dirty(doc)

@@ -309,8 +309,9 @@ class LintVisitor : AstVisitor {
     // --- LINT005: redundant reinterpret cast ---
 
     def override preVisitExprCast(expr : ExprCast?) : void {
+        // alwaysSafe = compiler-authorized (e.g. the early-out relocation const-strips a finally-used `let` with a reinterpret the user never wrote)
         if (noLint || genericDepth > 0
-            || !expr.castFlags.reinterpretCast
+            || !expr.castFlags.reinterpretCast || expr.genFlags.alwaysSafe
             || expr.subexpr == null || expr.subexpr._type == null || expr.castType == null
             || expr.castType.isVoidPointer != expr.subexpr._type.isVoidPointer) return
         if (is_same_type(expr.castType, expr.subexpr._type, false, true, true, false)) {

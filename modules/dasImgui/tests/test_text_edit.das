@@ -46,7 +46,10 @@ def test_text_edit_keystrokes_reach_buffer(t : T?) {
 
     with_imgui_app(EDIT_FEATURE, no_modules, "", "") $(d) {
         var temp_dir = ""
-        return if (!open_edit_fixture(t, d, "keys", temp_dir))
+        let fixture_ok = open_edit_fixture(t, d, "keys", temp_dir)
+        // the bare block's finally covers every return path after creation
+        {
+        return if (!fixture_ok)
         var initial = wait_for_render(d, EDIT_TARGET, 15.0f)
         t |> equal(widget_payload_field(initial, EDIT_TARGET, "line_count") ?? 0, 6,
             "sample buffer loads six lines")
@@ -94,7 +97,11 @@ def test_text_edit_keystrokes_reach_buffer(t : T?) {
             return line == "abc"
         }
         t |> success(final_snap != null, "the join preserves the typed text")
-        rmdir_rec_result(temp_dir)
+        } finally {
+            if (!empty(temp_dir)) {
+                rmdir_rec_result(temp_dir)
+            }
+        }
     }
 }
 
@@ -103,7 +110,9 @@ def test_text_edit_numpad_and_overtype(t : T?) {
     let no_modules : array<string>
     with_imgui_app(EDIT_FEATURE, no_modules, "", "") $(d) {
         var temp_dir = ""
-        return if (!open_edit_fixture(t, d, "numpad", temp_dir))
+        let fixture_ok = open_edit_fixture(t, d, "numpad", temp_dir)
+        {
+        return if (!fixture_ok)
         var initial = wait_for_render(d, EDIT_TARGET, 15.0f)
         click(d, EDIT_TARGET)
         t |> success(wait_for_mouse_idle(d), "focus click timeline drains")
@@ -160,7 +169,11 @@ def test_text_edit_numpad_and_overtype(t : T?) {
         t |> success(wait_for_key_idle(d, 6.0f), "Ctrl+Shift+Down drains")
         t |> success(wait_for_int_value(d, EDIT_TARGET, "cursor_line", 1, 300),
             "Ctrl+Shift+Down extends the selection down a line")
-        rmdir_rec_result(temp_dir)
+        } finally {
+            if (!empty(temp_dir)) {
+                rmdir_rec_result(temp_dir)
+            }
+        }
     }
 }
 
@@ -169,7 +182,9 @@ def test_text_edit_find_replace(t : T?) {
     let no_modules : array<string>
     with_imgui_app(EDIT_FEATURE, no_modules, "", "") $(d) {
         var temp_dir = ""
-        return if (!open_edit_fixture(t, d, "findrep", temp_dir))
+        let fixture_ok = open_edit_fixture(t, d, "findrep", temp_dir)
+        {
+        return if (!fixture_ok)
         click(d, EDIT_TARGET)
         t |> success(wait_for_mouse_idle(d), "focus click timeline drains")
         t |> success(wait_for_bool_value(d, EDIT_TARGET, "focused", true, 300),
@@ -233,7 +248,11 @@ def test_text_edit_find_replace(t : T?) {
         t |> success(undone != null, "one undo reverts the whole replace-all")
 
         smoke_goto_flow(t, d)
-        rmdir_rec_result(temp_dir)
+        } finally {
+            if (!empty(temp_dir)) {
+                rmdir_rec_result(temp_dir)
+            }
+        }
     }
 }
 
