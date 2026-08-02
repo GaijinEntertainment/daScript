@@ -747,8 +747,10 @@ def public stale_nolint_collect(fname, source : string; disabled_codes, enabled_
     var line_no = 0
     var stale_codes : array<string>
     stale_codes |> reserve(4)
-    for (line in split(source, "\n")) {
+    for (raw_line in split(source, "\n")) {
         line_no++
+        // a CRLF checkout leaves \r glued to the last token - strip it
+        let line = raw_line |> ends_with("\r") ? slice(raw_line, 0, length(raw_line) - 1) : raw_line
         let cpos = find(line, "//")
         continue if (cpos < 0)
         stale_codes |> clear()
