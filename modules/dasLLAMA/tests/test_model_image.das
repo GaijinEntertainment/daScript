@@ -53,6 +53,19 @@ def private count_mismatch(a : array<float>; b : PlaneF) : int64 {
     return bad
 }
 
+def private count_mismatch_i8(a : array<int8>; b : PlaneI8) : int64 {
+    if (long_length(a) != length(b)) {
+        return -1l
+    }
+    var bad = 0l
+    for (i in range64(long_length(a))) {
+        if (a[i] != b[i]) {
+            bad++
+        }
+    }
+    return bad
+}
+
 def private count_mismatch(a, b : array<auto(TT)>) : int64 {
     if (long_length(a) != long_length(b)) {
         return -1l
@@ -814,6 +827,24 @@ def test_whisper_image_roundtrip(t : T?) {
         t |> success(g.mapped && !empty(g.text), "non-empty transcript from the in-memory mint")
         t |> success(g.text == a.text, "in-memory mint vs cold-built image transcript")
         t |> success(g.text == b.text, "in-memory mint vs mapped image transcript")
+        // streamed == eager, plane for plane: the cold mint above STREAMED the big planes from
+        // the source mapping; the staged read materializes them. Same bytes or the stream lied.
+        var inscope stg <- stage_whisper_model(path)
+        var inscope w32 <- load_whisper_model(path)
+        t |> equal(count_mismatch(stg.dblob, w32.dblob), 0l, "streamed dblob element-exact vs staged")
+        t |> equal(count_mismatch(stg.enc.fblob, w32.enc.fblob), 0l, "streamed enc.fblob element-exact vs staged")
+        t |> equal(count_mismatch(stg.filters, w32.filters), 0l, "filters element-exact")
+        // and the q8 flavor — quantize+repack per streamed job must match the eager whole-blob pass
+        let img8 = image_path_for(path, "whisper-q8")
+        remove(img8)
+        var inscope stg8 <- stage_whisper_model(path, true)
+        var inscope w8 <- load_whisper_model(path, true)
+        t |> success(w8.image_map != null, "q8 cold load serves the image it streamed")
+        t |> equal(count_mismatch_i8(stg8.dqblob, w8.dqblob), 0l, "streamed dqblob element-exact vs staged")
+        t |> equal(count_mismatch(stg8.dqscales, w8.dqscales), 0l, "streamed dqscales element-exact vs staged")
+        t |> equal(count_mismatch_i8(stg8.enc.qblob, w8.enc.qblob), 0l, "streamed enc.qblob element-exact vs staged")
+        t |> equal(count_mismatch(stg8.enc.qscales, w8.enc.qscales), 0l, "streamed enc.qscales element-exact vs staged")
+        t |> equal(count_mismatch(stg8.dblob, w8.dblob), 0l, "q8 flavor's fp32 dblob element-exact too")
         delete samples
     }
 }

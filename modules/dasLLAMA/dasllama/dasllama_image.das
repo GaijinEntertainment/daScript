@@ -237,7 +237,7 @@ def dlim_clean(gguf_path : string; apply : bool; keep_other : bool = false) : tu
     return r
 }
 
-def private pad_to_page(cur : uint64) : uint64 {
+def pad_to_page(cur : uint64) : uint64 {
     let page = uint64(IMAGE_PAGE)
     return (cur + page - 1ul) / page * page
 }
@@ -245,10 +245,10 @@ def private pad_to_page(cur : uint64) : uint64 {
 let private IMAGE_WRITE_BAND = 16l * 1024l * 1024l   // the direct writer's staging band
 let private SECTION_TABLE_SLACK = 65536ul            // preallocation headroom for the section blob
 
-// The image's byte sink: append-only and strictly ascending, which is what keeps NTFS from
-// charging valid-data-length zero-fill on the preallocated file (measured: 3.4 s per 8 GB gap).
-// Two backings, one walk: a memory chunk or the direct file writer.
-struct private ImgWriter {
+//! The mint sink: append-only and strictly ascending (what keeps NTFS from charging
+//! valid-data-length zero-fill on the preallocated file), one walk over two backings (memory
+//! chunk / direct file writer). Public so family streamers append planes from their hooks.
+struct ImgWriter {
     h : void? = null       // the direct file writer; null on the memory rail
     mem : void? = null     // the page-aligned chunk; null on the file rail
     cap : uint64 = 0ul     // the chunk's usable extent — an append past it is a sizing bug
@@ -276,7 +276,7 @@ def private mem_at(base : void?; off : uint64) : void? {
     return unsafe(reinterpret<void?>(at))
 }
 
-def private w_append(var w : ImgWriter; p : void?; nbytes : uint64) {
+def w_append(var w : ImgWriter; p : void?; nbytes : uint64) {
     if (!w.ok || nbytes == 0ul) {
         return
     }
@@ -296,7 +296,7 @@ def private w_append(var w : ImgWriter; p : void?; nbytes : uint64) {
     w.cur += nbytes
 }
 
-def private w_zeros(var w : ImgWriter; n : uint64) {
+def w_zeros(var w : ImgWriter; n : uint64) {
     if (n == 0ul || !w.ok) {
         return
     }
@@ -690,11 +690,13 @@ def private build_image(var t; dst : string; in_mem : bool; extra : uint64;   //
                     }
                 }
             } static_elif (typeinfo safe_has_field < image_planes > (field)) {
-                // a staging plane-group: the nested carrier's bytes under its served field name —
-                // the sections come out dotted exactly as the parse walk will look them up
+                // a staging plane-group: the nested carrier's bytes under dotted names, with
+                // the hook getting the same first refusal the top level gives it
                 apply(field) $(iname : string; var ifield) {
                     static_if (typeinfo is_array(ifield)) {
-                        write_plane(w, sections, "{name}.{iname}", ifield)
+                        if (!invoke(plane, "{name}.{iname}", w, sections)) {
+                            write_plane(w, sections, "{name}.{iname}", ifield)
+                        }
                         if (consume) {
                             delete ifield
                         }
@@ -1280,12 +1282,20 @@ def cache_via_image(var m; var out; img : string; tag : string = ""; quant : str
 //! plane arrays, `out` comes back borrowing the image. A staging struct is not servable, so a
 //! build that cannot produce an image panics rather than handing anything back.
 def cache_via_image_staged(var st; var out; img : string; tag : string = ""; quant : string = "q8") {
+    cache_via_image_staged_(st, out, img, 0ul, tag, quant) $ [unused_argument(name, w, sections)] (name : string;
+                                                                                                   var w : ImgWriter; var sections : array<ImgSection>) {
+        return false
+    }
+}
+
+//! cache_via_image_staged with the walk's plane hook exposed plus a pre-sized `extra` for the
+//! bytes the hook streams — the streamed mints serve their big planes straight from the source
+//! mapping instead of staging them (Phase 3 of the audio rail).
+def cache_via_image_staged_(var st; var out; img : string; extra : uint64; tag : string; quant : string;
+                            plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) {
     if (img != "" && image_save_enabled()) {
         let ts = ref_time_ticks()
-        if (save_image_to_file(st, img, 0ul, tag, quant) $ [unused_argument(name, w, sections)] (name : string;
-                                                                                                 var w : ImgWriter; var sections : array<ImgSection>) {
-            return false
-        }) {
+        if (save_image_to_file(st, img, extra, tag, quant, plane)) {
             to_log(LOG_INFO, "dasLLAMA: prepared image written in {get_time_usec(ts) / 1000} ms — {img}\n")
             delete st   // before the map, not after: holding both is what makes a cold load peak twice
             if (!load_image(img, out, tag, quant)) {
@@ -1295,10 +1305,7 @@ def cache_via_image_staged(var st; var out; img : string; tag : string = ""; qua
         }
         to_log(LOG_WARNING, "dasLLAMA: could not write '{img}' — building the image in memory instead\n")
     }
-    if (!chunk_rail(st, out, "", 0ul, tag, quant) $ [unused_argument(name, w, sections)] (name : string;
-                                                                                          var w : ImgWriter; var sections : array<ImgSection>) {
-        return false
-    }) {
+    if (!chunk_rail(st, out, "", extra, tag, quant, plane)) {
         panic("dasLLAMA: could not build the prepared image in memory — there is no other form to serve")
     }
 }
