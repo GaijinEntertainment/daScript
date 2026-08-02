@@ -11,7 +11,7 @@ options gen2
 // Good pattern:
 //   for (x, y in xs, ys) { y = x * 2.0 }
 
-expect 31208:2
+expect 31208:3
 
 require daslib/perf_lint
 
@@ -24,6 +24,12 @@ def bad_two_arrays(xs : array<float>; var ys : array<float>) {
 def bad_three_arrays(xs, ys : array<float>; var zs : array<float>) {
     for (i in range(length(xs))) {          // PERF029
         zs[i] = xs[i] + ys[i]
+    }
+}
+
+def bad_two_arrays_long(xs : array<float>; var ys : array<float>) {
+    for (i in range64(long_length(xs))) {   // PERF029 - 64-bit spelling
+        ys[i] = xs[i] * 2.0
     }
 }
 
@@ -56,6 +62,7 @@ def main {
     var total = 0.0
     bad_two_arrays(xs, ys)
     bad_three_arrays(xs, ys, zs)
+    bad_two_arrays_long(xs, ys)
     good_zip(xs, ys)
     good_offset_stays_silent(xs, ys)
     good_index_needed(xs, total)

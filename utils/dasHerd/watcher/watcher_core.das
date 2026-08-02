@@ -1188,7 +1188,7 @@ def public watcher_launch(request : WatcherLaunchRequest) : WatcherLaunchResult 
         append_event(session, "agent_bootstrap_prepared",
             "context={session.context_path}; skill={request.agent_skill_path}; " +
             "task_bytes={length(request.task_context)}")
-        child_argv <- agent_launch_argv(request, session_id, session.context_path)
+        child_argv <- agent_launch_argv(request, session_id, session.context_path)  // nolint:PERF030 - first assignment; declared empty above
     } else {
         child_argv := request.argv
     }
@@ -1342,7 +1342,7 @@ def public watcher_output_since(session_id : string; requested_offset : int64;
     let count = min(int64(clamp(maximum_bytes, 1024, 1024 * 1024)), available)
     if (count > 0l) {
         let source = int(offset - session.raw_history_start)
-        result.bytes |> resize(int(count))
+        result.bytes |> resize(count)
         unsafe {
             memcpy(addr(result.bytes[0]), addr(session.raw_history[source]), count)
         }

@@ -13,7 +13,7 @@ Lint Tools
 
 daslang provides three complementary lint passes that detect issues at compile time:
 
-- **Paranoid lint** (``daslib/lint``) — unreachable code, unused variables and arguments, variables that can be ``let``, underscore naming, redundant reinterpret casts
+- **Paranoid lint** (``daslib/lint``) — unreachable code, unused variables and arguments, variables that can be ``let``, underscore naming, redundant reinterpret casts, 64-bit narrowing traps (error code ``50503``)
 - **Performance lint** (``daslib/perf_lint``) — performance anti-patterns (error code ``31208``)
 - **Style lint** (``daslib/style_lint``) — non-idiomatic patterns (error code ``31209``)
 
@@ -623,20 +623,35 @@ type, which keeps a same-named user overload silent, along with the
 fixed-array ``length`` generic in ``daslib/builtin.das`` that genuinely has no
 ``long_`` twin.
 
-LINT018 — narrowed ``memcpy`` / ``memcmp`` size
-================================================
+LINT018 — narrowed size argument of a call with a 64-bit overload
+==================================================================
 
 ``memcpy`` and ``memcmp`` carry ``uint``, ``int64`` and ``uint64`` size
-overloads, so an ``int(...)`` cast on the size argument is pure loss: above
-2\ :sup:`31` it silently covers the wrong number of bytes.
+overloads; array ``resize``, ``resize_no_init``, ``resize_and_init``,
+``reserve`` and ``erase`` (both forms) and table ``reserve`` carry ``int64``
+overloads. An ``int(...)`` cast on the size or position argument of any of
+them is pure loss: above 2\ :sup:`31` it silently covers the wrong count while
+the overload would have taken the 64-bit value straight through.
 
 .. code-block:: das
 
     // Bad — truncates for nbytes > 2GB
     unsafe(memcpy(dst, src, int(nbytes)))    // nbytes : int64
+    arr |> resize(int(newSize))              // newSize : int64
 
     // Good
     unsafe(memcpy(dst, src, nbytes))
+    arr |> resize(newSize)
+
+The container half is receiver-gated on array/table, which keeps string
+``resize`` silent (it is int-only — the advice would not compile) along with
+same-named user functions on other receivers. A ``uint64`` operand gets a
+"widen with ``int64(...)``" variant instead (the container overloads have no
+``uint64`` arm). Only a cast that is the *whole* argument fires; compound
+sizes like ``resize(int(n) + 1)`` are LINT021's business. The ranged
+``erase(at, count)`` reports once per call — both bounds share the fix, and
+its ``int64`` overload is homogeneous, so a mixed call widens the sibling
+argument too.
 
 LINT019 — stale ``nolint`` directive
 ====================================
@@ -668,6 +683,73 @@ reaches the line.
     body |> push <| qmacro_expr() {   // nolint:LINT004,LINT019
         var $i(tmp) = clone_type($i(td_var));
     }
+
+LINT020 — 64-bit bound narrowed into a 32-bit range constructor
+================================================================
+
+``range(int(n))`` truncates the bound above 2\ :sup:`31` before the loop even
+starts. ``range64`` and ``urange64`` take the 64-bit value directly, and the
+loop variable then indexes arrays, fixed arrays and (unsafe) pointers as-is —
+``TypeDecl::isIndexExt`` admits ``int64``/``uint64`` subscripts natively.
+
+.. code-block:: das
+
+    // Bad — n > 2^31 wraps before the loop starts
+    for (i in range(int(n))) {          // n : int64
+        s += arr[i]
+    }
+
+    // Good — 64-bit the whole way through
+    for (i in range64(n)) {
+        s += arr[i]
+    }
+
+Applies to ``range``, ``urange`` and ``interval`` (whose ``int64`` form maps
+to ``range64``), on any bound of the 1- and 2-arg forms, reporting once per
+constructor. Only ``int(...)``/``uint(...)`` casts of 64-bit operands fire —
+``range(int(someFloat))`` is a genuine conversion and stays silent.
+
+Two carve-outs to know when applying the fix: vector components (``v[i]``)
+and ``string`` indexing accept only 32-bit subscripts, and the slice form
+``a[range]`` has no ``range64`` overload. In those rare bodies, narrow the
+*bound* once instead and keep the 32-bit loop.
+
+LINT021 — a 64-bit local that is never consumed as 64-bit
+==========================================================
+
+An ``int64``/``uint64`` local whose *every* use sits inside an
+``int(...)``/``uint(...)`` narrowing cast is a 64-bit detour: the wide value
+is computed and thrown away at every sink, truncating silently above
+2\ :sup:`31`. Either narrow once at the declaration (or compute in int —
+``length()`` instead of ``long_length()``), or lift the sinks to 64-bit
+(``range64``, the ``int64`` ``resize``/``reserve``/``erase`` overloads).
+
+.. code-block:: das
+
+    // Bad — keep is 64-bit, yet every single use narrows
+    let keep = long_length(pending) - consumed * HOP
+    rest |> resize(int(max(keep, 0l)))
+    for (i in range(int(max(keep, 0l)))) { ... }
+
+    // Good — 64-bit end-to-end; the casts simply disappear
+    let keep = long_length(pending) - consumed * HOP
+    rest |> resize(max(keep, 0l))
+    for (i in range64(max(keep, 0l))) { ... }
+
+A use counts as narrow-consumed only when the path from the cast to the
+variable goes through math that leaves the top unbounded — operators, the
+ternary, ``max`` and ``abs``. ``min``, ``clamp`` and ``sign`` *cap* the value,
+which makes the narrow deliberate saturation (``int(clamp(x, lo, hi))`` is the
+canonical spelling), so they disqualify instead — as does any other call under
+the cast, a comparison, a write, a capture, or a bare 64-bit use. Only
+initialized non-ref locals are tracked — parameters and iteration variables
+are out of scope.
+
+Known accepted false positive: a genuinely 64-bit value whose only use narrows
+*after* load-bearing 64-bit math under the cast — ``int(t / 1000000l)`` over a
+nanosecond timestamp is shape-identical to ``int(max(keep, 0l))``. The rule
+cannot tell them apart; ``// nolint:LINT021`` on the declaration line is the
+answer there.
 
 .. _perf_lint:
 
@@ -1031,10 +1113,12 @@ PERF018 — ``for (i in range(length(arr)))`` should iterate directly
 When the loop variable ``i`` is used only as ``arr[i]`` against the same
 array, the index is pure overhead — iterate the array directly.
 
-Detection peels at most one ``ExprCast`` between ``range`` and ``length``
-(to allow ``range(uint(length(arr)))``) and resolves both the loop's
-target and the indexed receiver via the existing ``find_expr_path`` chain
-walker. Every use of ``i`` in the body must be the bare index of
+Detection accepts any of ``range`` / ``urange`` / ``range64`` / ``urange64``
+around ``length`` or ``long_length``, peeling at most one cast layer on
+either — an ``ExprCast`` or a 1-arg workhorse int-cast call — so
+``range64(long_length(arr))`` and ``urange(uint(length(arr)))`` both
+match. It resolves both the loop's target and the indexed receiver via
+the existing ``find_expr_path`` chain walker. Every use of ``i`` in the body must be the bare index of
 ``arr[i]`` against the same path; any arithmetic on ``i``
 (``arr[i+1]`` / sliding window) or use of ``i`` outside an indexing
 expression disqualifies the loop. Bare-variable sibling arrays indexed by
@@ -1062,6 +1146,8 @@ lockstep by construction — no index, no bounds question.
 
 Fires when every use of ``i`` is a plain ``[i]`` subscript over bare
 array-typed variables and at least one of them is not the ``range`` source.
+The loop header accepts the same spellings as PERF018 —
+``urange`` / ``range64`` / ``urange64`` and ``long_length`` included.
 Tables are excluded (``t[i]`` is a key lookup, not a position); index
 arithmetic or ``i`` escaping as a value disqualifies, since the zip form
 cannot express those. Loops whose ``i`` never subscripts the ``range``

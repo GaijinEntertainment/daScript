@@ -268,7 +268,7 @@ class AudioChannel {
             }
         }
     }
-    def mix(var data : array<float>#; channels, rate : int; dt : float) : bool {
+    def mix(var data : array<float>#; channels, rate : int; dt : float) : bool {  // nolint:STYLE037 - one DSP stage per branch, linear pipeline
         if (!source->ready() || g_pitch == 0.) return true
         if (paused) {
             if (status != null) {
@@ -300,7 +300,7 @@ class AudioChannel {
                 unsafe(addr(temp[0])),
                 unsafe(addr(outputFrames)))
             delete samples
-            samples <- temp
+            samples <- temp  // nolint:PERF030 - target deleted on the previous line
         }
         // hrtf — only when this channel is routed through HRTF (top-N by distance per update_hrtf budget)
         var nSoundChannels = source.channels
@@ -315,7 +315,7 @@ class AudioChannel {
                 uint(outputFrames))
             nSoundChannels = 2      // HRTF always produces stereo
             delete samples
-            samples <- temp
+            samples <- temp  // nolint:PERF030 - target deleted on the previous line
         }
         // reverb
         if (reverb != null) {
@@ -329,7 +329,7 @@ class AudioChannel {
                 panic("unsupported channel count {channels}")
             }
             delete samples
-            samples <- temp
+            samples <- temp  // nolint:PERF030 - target deleted on the previous line
         }
         // chorus
         if (chorus != null && nSoundChannels == 2) {
@@ -337,7 +337,7 @@ class AudioChannel {
             temp |> resize(int(outputFrames) * 2)
             chorus_process(chorus, unsafe(addr(samples[0])), unsafe(addr(temp[0])), int(outputFrames))
             delete samples
-            samples <- temp
+            samples <- temp  // nolint:PERF030 - target deleted on the previous line
         }
         // convert channels — for is3D channels, pick the converter sized to the upstream stage:
         //   HRTF mode    -> samples are 2ch, use `channel_converter` (2 -> MA_CHANNELS)
@@ -365,7 +365,8 @@ class AudioChannel {
         // apply pause fade (per-channel ramp speed, default ~2ms to avoid clicks)
         if (pause_fade != pause_fade_target) {
             let fade_step = pause_fade_step
-            for (f in range(int(outputFrames))) {
+            let fade_frames = int(outputFrames)
+            for (f in range(fade_frames)) {
                 let fade = pause_fade
                 for (c in range(channels)) {
                     data[f * channels + c] *= fade
@@ -580,11 +581,11 @@ class AudioSourceDecoder : AudioSource {
     def override get_samples(nframes : int) : array<float> {
         var samples : array<float>
         samples |> resize(nframes * channels)
-        let rframes = ma_decoder_read_pcm_frames(
+        let rframes = int(ma_decoder_read_pcm_frames(
             decoder,
             unsafe(addr(samples[0])),
-            uint64(nframes))
-        samples |> resize(int(rframes) * channels)
+            uint64(nframes)))
+        samples |> resize(rframes * channels)
         return <- samples
     }
     def override append(var data : array<float>) : bool {
@@ -881,9 +882,9 @@ def public audio_system_release_context {
 }
 
 [pinvoke]
-def command_processor {
+def command_processor {  // nolint:STYLE038 - one arm per AudioCommand variant
     return if (g_command_stream == null)
-    g_command_stream |> gather_archive() $(var cmd : AudioCommand) {
+    g_command_stream |> gather_archive() $(var cmd : AudioCommand) {  // nolint:STYLE037 - the ladder IS the command dispatch table
         if (cmd is shutdown) {
             unsafe {
                 delete g_channels

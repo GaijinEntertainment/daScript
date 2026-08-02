@@ -33,6 +33,12 @@ struct private DeadStoreEntry {
     pending_pure : bool
 }
 
+struct private Lint021Candidate {
+    @do_not_delete v : Variable const?
+    safe_uses : int
+    disqualified : bool
+}
+
 def private is_block_terminator(expr : ExpressionPtr) : bool {
     // A direct-child block statement that always exits the enclosing function.
     if (expr is ExprReturn) return true
@@ -69,6 +75,13 @@ class LintVisitor : AstVisitor {
     branch_depth : int = 0
     ds_entries : array<DeadStoreEntry>
     funcFile : string       // current function's source file, anchors lint_error's foreign-lineinfo gate
+    // LINT021 state — 64-bit locals never consumed as 64-bit. Per-ExprCall kind stack keeps
+    // narrow/poison depths correct across nesting; closure depth disqualifies captured uses.
+    lint021_candidates : array<Lint021Candidate>
+    lint021_call_kind : array<int>      // 0 = plain, 1 = 64-bit narrowing cast, 2 = poison
+    lint021_narrow_depth : int = 0
+    lint021_poison_depth : int = 0
+    lint021_closure_depth : int = 0
     def LintVisitor() {
         pass
     }
@@ -228,6 +241,12 @@ class LintVisitor : AstVisitor {
         // LINT010 — reset dead-store tracking
         branch_depth = 0
         ds_entries |> clear()
+        // LINT021 — reset 64-bit-local tracking
+        lint021_candidates |> clear()
+        lint021_call_kind |> clear()
+        lint021_narrow_depth = 0
+        lint021_poison_depth = 0
+        lint021_closure_depth = 0
     }
     def override preVisitExprReturn(expr : ExprReturn?) : void {
         if (expr.subexpr != null && expr.subexpr is ExprVar) {
@@ -256,6 +275,15 @@ class LintVisitor : AstVisitor {
                 }
             }
         }
+        // LINT021 — report 64-bit locals whose every use narrowed
+        if (!noLint && genericDepth == 0) {
+            for (c in lint021_candidates) {
+                if (!c.disqualified && c.safe_uses > 0) {
+                    lint_error("LINT021: 64-bit local '{c.v.name}' is never consumed as 64-bit - every use narrows through int(...)/uint(...); narrow once at the declaration (or use length() int math), or lift the sinks to 64-bit (range64, int64 resize/reserve/erase); nolint if the 64-bit math under a cast is load-bearing", c.v.at)
+                }
+            }
+        }
+        lint021_candidates |> clear()
         noLint = false
         if (fun.fromGeneric != null || fun.flags.generated) {
             genericDepth--
@@ -268,6 +296,7 @@ class LintVisitor : AstVisitor {
         let bf = blk.blockFlags
         if (!noLint && genericDepth == 0 && (bf.isClosure || bf.isLambdaBlock || bf.isGeneratorBlock)) {
             branch_depth++
+            lint021_closure_depth++     // a captured use is a 64-bit escape, not a narrow
         }
     }
     def override visitExprBlock(var blk : ExprBlock?) : ExpressionPtr {
@@ -277,6 +306,7 @@ class LintVisitor : AstVisitor {
         let bf = blk.blockFlags
         if (!noLint && genericDepth == 0 && (bf.isClosure || bf.isLambdaBlock || bf.isGeneratorBlock)) {
             branch_depth--
+            lint021_closure_depth--
         }
         return <- blk
     }
@@ -442,27 +472,132 @@ class LintVisitor : AstVisitor {
         lint_error("LINT017: {expr.name}({iname}(...)) widens an already-32-bit result, so the 2^31 limit is still hit inside {iname} (as a wrap, or as the panic guard on array/table/string length) before the cast runs; call {twin}(...) instead", expr.at)
     }
 
-    // --- LINT018: narrowing the size argument of memcpy / memcmp ---
+    // --- LINT018: narrowing the size/position argument of a call that has a 64-bit overload ---
+
+    def lint018_check_arg(expr : ExprCall?; fname : string; idx : int; isMem : bool) : bool {
+        let a = expr.arguments[idx]
+        if (!(a is ExprCall)) return false
+        let scall = a as ExprCall
+        if (scall.name != "int" || length(scall.arguments) != 1) return false
+        let src = scall.arguments[0]._type
+        if (src == null) return false
+        let bt = src.baseType
+        if (isMem) {
+            if (bt != Type.tInt64 && bt != Type.tUInt64 && bt != Type.tUInt) return false
+            lint_error("LINT018: int(...) truncates the {fname} size above 2^31; {fname} has uint/int64/uint64 overloads, so drop the cast", expr.at)
+        } elif (bt == Type.tInt64) {
+            lint_error("LINT018: int(...) truncates the {fname} argument above 2^31; {fname} has an int64 overload, so drop the cast", expr.at)
+        } elif (bt == Type.tUInt64) {
+            lint_error("LINT018: int(...) truncates the {fname} argument above 2^31; {fname} has an int64 overload - widen with int64(...) instead of narrowing", expr.at)
+        } else {
+            return false
+        }
+        return true
+    }
 
     def check_lint018_mem_size_narrowing(expr : ExprCall?) : void {
-        if (noLint || genericDepth > 0
-            || (expr.name != "memcpy" && expr.name != "memcmp")
-            || length(expr.arguments) != 3) return
-        let size = expr.arguments[2]
-        if (!(size is ExprCall)) return
-        let scall = size as ExprCall
-        if (scall.name != "int" || length(scall.arguments) != 1) return
-        let src = scall.arguments[0]._type
-        if (src == null) return
-        let bt = src.baseType
-        if (bt != Type.tInt64 && bt != Type.tUInt64 && bt != Type.tUInt) return
-        lint_error("LINT018: int(...) truncates the {expr.name} size above 2^31; {expr.name} has uint/int64/uint64 overloads, so drop the cast", expr.at)
+        // Receiver-gated: string resize is int-only (no 64-bit twin), and same-named user functions on non-container receivers stay silent.
+        if (noLint || genericDepth > 0) return
+        let fname = string(expr.func != null && expr.func.fromGeneric != null
+            ? expr.func.fromGeneric.name
+            : expr.name)
+        let nargs = length(expr.arguments)
+        if ((fname == "memcpy" || fname == "memcmp") && nargs == 3) {
+            lint018_check_arg(expr, fname, 2, true)
+            return
+        }
+        if (nargs < 2 || expr.arguments[0]._type == null) return
+        let bt = expr.arguments[0]._type.baseType
+        if (bt == Type.tArray) {
+            if (nargs == 2 && (fname == "resize" || fname == "resize_no_init"
+                    || fname == "resize_and_init" || fname == "reserve" || fname == "erase")) {
+                lint018_check_arg(expr, fname, 1, false)
+            } elif (nargs == 3 && fname == "resize_and_init") {
+                lint018_check_arg(expr, fname, 1, false)
+            } elif (nargs == 3 && fname == "erase") {
+                // once per call - both position and count narrowing carry the same fix
+                if (!lint018_check_arg(expr, fname, 1, false)) {
+                    lint018_check_arg(expr, fname, 2, false)
+                }
+            }
+        } elif (bt == Type.tTable) {
+            if (nargs == 2 && fname == "reserve") {
+                lint018_check_arg(expr, fname, 1, false)
+            }
+        }
+    }
+
+    // --- LINT020: 64-bit bound narrowed into a 32-bit range constructor ---
+
+    def check_lint020_range_narrowing(expr : ExprCall?) : void {
+        if (noLint || genericDepth > 0) return
+        let isRange = expr.name == "range"
+        let isURange = expr.name == "urange"
+        let isInterval = expr.name == "interval"
+        if (!isRange && !isURange && !isInterval) return
+        let nargs = length(expr.arguments)
+        if (nargs < 1 || nargs > 2) return
+        for (a in expr.arguments) {
+            if (!(a is ExprCall)) { continue; }
+            let scall = a as ExprCall
+            if ((scall.name != "int" && scall.name != "uint") || length(scall.arguments) != 1) { continue; }
+            let src = scall.arguments[0]._type
+            if (src == null || (src.baseType != Type.tInt64 && src.baseType != Type.tUInt64)) { continue; }
+            if (isInterval) {
+                lint_error("LINT020: {scall.name}(...) truncates a 64-bit bound above 2^31; interval has an int64 form, so drop the cast", expr.at)
+            } else {
+                let twin = isRange ? "range64" : "urange64"
+                lint_error("LINT020: {expr.name}({scall.name}(...)) truncates a 64-bit bound above 2^31; use {twin}(...) on the 64-bit values directly - arrays and pointers index with int64/uint64 as-is", expr.at)
+            }
+            return  // once per constructor, however many bounds narrow
+        }
+    }
+
+    // --- LINT021 call-context tracking (candidates seeded in preVisitExprLetVariable) ---
+
+    def lint021_is_narrow_cast(expr : ExprCall?) : bool {
+        if ((expr.name != "int" && expr.name != "uint") || length(expr.arguments) != 1) return false
+        let t = expr.arguments[0]._type
+        return t != null && (t.baseType == Type.tInt64 || t.baseType == Type.tUInt64)
+    }
+
+    def lint021_is_transparent(expr : ExprCall?) : bool {
+        // only unbounded-top math keeps the hazard alive; min/clamp/sign cap the value, so int(clamp(x, lo, hi)) is deliberate saturation and must not fire
+        let fname = string(expr.func != null && expr.func.fromGeneric != null
+            ? expr.func.fromGeneric.name
+            : expr.name)
+        return fname == "max" || fname == "abs"
     }
 
     def override preVisitExprCall(expr : ExprCall?) : void {
+        var kind = 0
+        if (!noLint && genericDepth == 0) {
+            if (lint021_is_narrow_cast(expr)) {
+                kind = 1
+                lint021_narrow_depth++
+            } elif (lint021_narrow_depth > 0 && !lint021_is_transparent(expr)) {
+                kind = 2
+                lint021_poison_depth++
+            }
+        }
+        lint021_call_kind |> push(kind)
         check_string_push_clone(expr)
         check_lint017_long_cast(expr)
         check_lint018_mem_size_narrowing(expr)
+        check_lint020_range_narrowing(expr)
+    }
+
+    def override visitExprCall(var expr : ExprCall?) : ExpressionPtr {
+        if (!empty(lint021_call_kind)) {
+            let kind = lint021_call_kind |> back()
+            lint021_call_kind |> pop()
+            if (kind == 1) {
+                lint021_narrow_depth--
+            } elif (kind == 2) {
+                lint021_poison_depth--
+            }
+        }
+        return <- expr
     }
 
     // `assume name = <block>` keeps a template block at the alias-definition site; every use of
@@ -557,11 +692,24 @@ class LintVisitor : AstVisitor {
         return -1
     }
 
+    def private lint021_find(v : VariablePtr) : int {
+        let vc : Variable const? = v
+        for (i in range(length(lint021_candidates))) {
+            if (lint021_candidates[i].v == vc) return i
+        }
+        return -1
+    }
+
     def override preVisitExprLetVariable(_let : ExprLet?; v : VariablePtr; _last : bool) : void {
         check_string_clone_init(v)
+        if (noLint || genericDepth > 0) return
+        // LINT021 — seed initialized non-ref 64-bit locals
+        if (v._type != null && !v._type.flags.ref && v.init != null && !v.flags.generated
+                && (v._type.baseType == Type.tInt64 || v._type.baseType == Type.tUInt64)) {
+            lint021_candidates |> emplace(Lint021Candidate(v = v, safe_uses = 0, disqualified = false))
+        }
         // Skip reference bindings (`var r & = x`) and inscope smart_ptr vars — these have aliasing or scope-exit semantics we don't reason about.
-        if (noLint || genericDepth > 0
-            || (v._type != null && v._type.flags.ref)
+        if ((v._type != null && v._type.flags.ref)
             || v.flags.inScope
             || v.access_flags.access_fold
             || !v.access_flags.access_get) return
@@ -582,6 +730,16 @@ class LintVisitor : AstVisitor {
 
     def override preVisitExprVar(expr : ExprVar?) : void {
         if (noLint || genericDepth > 0) return
+        // LINT021 — classify this use of a tracked 64-bit local
+        let ci = lint021_find(expr.variable)
+        if (ci >= 0 && !lint021_candidates[ci].disqualified) {
+            if (expr.varFlags.write || lint021_closure_depth > 0
+                    || lint021_narrow_depth == 0 || lint021_poison_depth > 0) {
+                lint021_candidates[ci].disqualified = true
+            } else {
+                lint021_candidates[ci].safe_uses++
+            }
+        }
         let i = ds_find(expr.variable)
         if (i < 0 || ds_entries[i].skip) return
         let vf = expr.varFlags

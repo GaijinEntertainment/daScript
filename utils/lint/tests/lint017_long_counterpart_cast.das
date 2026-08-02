@@ -14,6 +14,9 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // Good pattern:
 //   let n = long_length(arr)
 
+expect 50503:5
+
+require daslib/lint
 require daslib/linq
 
 // bad: int64 of array length (1 warning)

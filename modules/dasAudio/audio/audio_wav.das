@@ -8,14 +8,14 @@ require daslib/fio
 require math
 require strings
 
-def public read_wav(fname : string; var samples : array<float>&; var sample_rate : int&; var channels : int&) : bool {
+def public read_wav(fname : string; var samples : array<float>&; var sample_rate : int&; var channels : int&) : bool {  // nolint:STYLE038 - one linear RIFF-chunk walk
     //! Read a WAV file into float samples. Returns true on success. Sets sample_rate and channels.
     var raw : array<uint8>
     fopen(fname, "rb") $(f) {
         if (f != null) {
             let st = fstat(f)
             if (st.is_valid) {
-                raw |> resize(int(st.size))
+                raw |> resize(int64(st.size))
                 fread(f, raw)
             }
         }

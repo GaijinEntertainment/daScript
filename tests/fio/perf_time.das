@@ -77,8 +77,8 @@ def test_ref_time_ticks_units_are_nanoseconds(t : T?) {
         let b = ref_time_ticks()
         deltas |> push(b - a)
     }
-    let lo = min(deltas[0], min(deltas[1], deltas[2]))
-    let hi = max(deltas[0], max(deltas[1], deltas[2]))
+    let lo = min(deltas[0], min(deltas[1], deltas[2]))  // nolint:LINT021 - ns-scale ticks; the /1_000_000 under the cast needs 64 bits
+    let hi = max(deltas[0], max(deltas[1], deltas[2]))  // nolint:LINT021 - ns-scale ticks; the /1_000_000 under the cast needs 64 bits
     let spread_ms = int((hi - lo) / 1_000_000l)
     t |> success(spread_ms <= 200,
         "sleep(100ms) deltas span {spread_ms}ms — non-uniform tick rate")

@@ -48,7 +48,7 @@ def pure(value : Event) : Pattern {
         for (sub in split) {
             let cyc = sameCycle(sub.start)
             let whole = TimeSpan(start = cyc, stop = cyc + 1.0lf)
-            result |> push(Hap(whole = whole, part = sub, value = value)) // nolint:PERF006
+            result |> push(Hap(whole = whole, part = sub, value = value))
         }
         return <- result
     }
@@ -140,7 +140,7 @@ def playFor(var pat : Pattern; n : int | float | double) : Pattern {
         result |> reserve(length(haps))
         for (h in haps) {
             if (h.whole.start >= 0.0lf && h.whole.start < nn) {
-                result |> push(h) // nolint:PERF006
+                result |> push(h)
             }
         }
         delete haps
@@ -164,7 +164,7 @@ def stack(var pats : array<Pattern>) : Pattern {
         for (pat in pats) {
             var haps <- pat(span)
             for (h in haps) {
-                result |> push(h) // nolint:PERF006
+                result |> push(h)
             }
             delete haps
         }
@@ -191,7 +191,7 @@ def cat(var pats : array<Pattern>) : Pattern {
             let innerSpan = TimeSpan(start = innerStart, stop = innerStop)
             var haps <- invoke(pats[idx], innerSpan)
             for (h in haps) {
-                result |> push(Hap( // nolint:PERF006
+                result |> push(Hap(
                     whole = TimeSpan(start = h.whole.start + cycle, stop = h.whole.stop + cycle),
                     part = TimeSpan(start = h.part.start + cycle, stop = h.part.stop + cycle),
                     has_whole = h.has_whole,
@@ -237,7 +237,7 @@ def weighted_fastcat(var pats : array<Pattern>; var weights : array<float>) : Pa
                     let qStop = min((min(relStop, elemStop) - elemStart) / w, 1.0lf)
                     var haps <- invoke(pats[i], TimeSpan(start = qStart, stop = qStop))
                     for (h in haps) {
-                        result |> push(Hap( // nolint:PERF006
+                        result |> push(Hap(
                             whole = TimeSpan(start = h.whole.start * w + elemStart + cycleStart, stop = h.whole.stop * w + elemStart + cycleStart),
                             part = TimeSpan(start = h.part.start * w + elemStart + cycleStart, stop = h.part.stop * w + elemStart + cycleStart),
                             has_whole = h.has_whole,
@@ -313,12 +313,12 @@ def every(n : int; var pat_on : Pattern; var pat_off : Pattern) : Pattern {
             if (idx == 0) {
                 var inscope patOn = pat_on(sub)
                 for (h in patOn) {
-                    result |> push(h) // nolint:PERF006
+                    result |> push(h)
                 }
             } else {
                 var inscope patOff = pat_off(sub)
                 for (h in patOff) {
-                    result |> push(h) // nolint:PERF006
+                    result |> push(h)
                 }
             }
         }
@@ -719,7 +719,7 @@ def private set_compressor_release(var pat : Pattern; r : int | float | double) 
 // ─── SF2 SoundFont Helpers ───
 
 // GM instrument name → program number mapping.
-def private gm_program_by_name(name : string) : int {
+def private gm_program_by_name(name : string) : int {  // nolint:STYLE037 - one arm per GM instrument name
     // Piano family
     if (name == "piano" || name == "acoustic_grand_piano") return 0;
     if (name == "bright_piano") return 1;
@@ -968,7 +968,7 @@ def rev(var pat : Pattern) : Pattern {
                 let wStop = h.whole.stop - hCycle
                 let pStart = h.part.start - hCycle
                 let pStop = h.part.stop - hCycle
-                result |> push(Hap( // nolint:PERF006
+                result |> push(Hap(
                     whole = TimeSpan(start = 1.0lf - wStop + hCycle, stop = 1.0lf - wStart + hCycle),
                     part = TimeSpan(start = 1.0lf - pStop + hCycle, stop = 1.0lf - pStart + hCycle),
                     has_whole = h.has_whole,
@@ -999,7 +999,7 @@ def jux(var pat : Pattern; transform : PatternTransform) : Pattern {
 def off(var pat : Pattern; time : int | float | double; transform : PatternTransform) : Pattern {
     //! Overlays `pat` with a time-shifted copy transformed by `transform`. Example: `s("bd sd") |> off(0.125, @(x) => transpose(x, 7.0))` — canon at the fifth.
     var shifted <- invoke(transform, pat) |> late(numd(time))
-    var layers : array<Pattern> // nolint:STYLE012
+    var layers : array<Pattern>
     layers |> emplace <| pat
     layers |> emplace <| shifted
     return <- stack(layers)
@@ -1015,7 +1015,7 @@ def private degrade_keep(var pat : Pattern; prob : float) : Pattern {
             if (h.has_whole) {
                 let r = strudel_hash01(h.whole.start, 0)
                 if (r >= cn) {
-                    result |> push(h) // nolint:PERF006
+                    result |> push(h)
                 }
             }
         }
@@ -1033,7 +1033,7 @@ def private degrade_drop(var pat : Pattern; prob : float) : Pattern {
             if (h.has_whole) {
                 let r = strudel_hash01(h.whole.start, 0)
                 if (r < cn) {
-                    result |> push(h) // nolint:PERF006
+                    result |> push(h)
                 }
             }
         }
@@ -1048,7 +1048,7 @@ def sometimesby(var pat : Pattern; prob : float; transform : PatternTransform) :
     //! Applies `transform` to each event with probability `prob` (0..1). Example: `s("bd*8") |> sometimesby(0.3, @(x) => fast(x, 2.0lf))`.
     var degraded <- degrade_keep(pat, prob)
     var undegraded <- degrade_drop(pat, prob) // nolint:LINT003
-    var transformed <- invoke(transform, undegraded) // nolint:LINT003
+    var transformed <- invoke(transform, undegraded)
     var layers : array<Pattern> // nolint:STYLE012
     layers |> emplace <| degraded
     layers |> emplace <| transformed
@@ -1290,14 +1290,14 @@ def combineWith(var pat : Pattern; var val_pat : Pattern; var fn : lambda<(e : E
             var val_haps <- val_pat(sampleSpan)
             if (length(val_haps) > 0) {
                 let sampled = val_haps[0].value.note
-                result |> push(Hap( // nolint:PERF006
+                result |> push(Hap(
                     whole = h.whole,
                     part = h.part,
                     has_whole = h.has_whole,
                     value = fn(h.value, sampled)
                 ))
             } else {
-                result |> push(h) // nolint:PERF006
+                result |> push(h)
             }
             delete val_haps
         }
@@ -1667,14 +1667,14 @@ def combineWithStr(var pat : Pattern; var val_pat : Pattern; var fn : lambda<(e 
             var val_haps <- val_pat(sampleSpan)
             if (length(val_haps) > 0) {
                 let sampled = val_haps[0].value.s
-                result |> push(Hap( // nolint:PERF006
+                result |> push(Hap(
                     whole = h.whole,
                     part = h.part,
                     has_whole = h.has_whole,
                     value = fn(h.value, sampled)
                 ))
             } else {
-                result |> push(h) // nolint:PERF006
+                result |> push(h)
             }
             delete val_haps
         }
@@ -1767,7 +1767,7 @@ def palindrome(var pat : Pattern) : Pattern {
             if (cycle % 2 == 0) {
                 var haps <- pat(sub)
                 for (h in haps) {
-                    result |> push(h) // nolint:PERF006
+                    result |> push(h)
                 }
                 delete haps
             } else {
@@ -1785,7 +1785,7 @@ def palindrome(var pat : Pattern) : Pattern {
                     let wStop = h.whole.stop - hCycle
                     let pStart = h.part.start - hCycle
                     let pStop = h.part.stop - hCycle
-                    result |> push(Hap( // nolint:PERF006
+                    result |> push(Hap(
                         whole = TimeSpan(start = 1.0lf - wStop + hCycle, stop = 1.0lf - wStart + hCycle),
                         part = TimeSpan(start = 1.0lf - pStop + hCycle, stop = 1.0lf - pStart + hCycle),
                         has_whole = h.has_whole,
@@ -1841,7 +1841,7 @@ def echo(var pat : Pattern; times : int; time : int | float | double; feedback :
             for (h in haps) {
                 var ev = h.value
                 ev.gain = ev.gain * g
-                result |> push(Hap( // nolint:PERF006
+                result |> push(Hap(
                     whole = TimeSpan(start = h.whole.start + off, stop = h.whole.stop + off),
                     part = TimeSpan(start = h.part.start + off, stop = h.part.stop + off),
                     has_whole = h.has_whole,
@@ -1869,7 +1869,7 @@ def ply(var pat : Pattern; n : int) : Pattern {
         var haps <- pat(span)
         for (h in haps) {
             if (!h.has_whole) {
-                result |> push(h) // nolint:PERF006
+                result |> push(h)
                 continue
             }
             let dur = (h.whole.stop - h.whole.start) / nf
@@ -1910,7 +1910,7 @@ def iter(var pat : Pattern; n : int) : Pattern {
             let innerSpan = TimeSpan(start = sub.start + shift, stop = sub.stop + shift)
             var haps <- pat(innerSpan)
             for (h in haps) {
-                result |> push(Hap( // nolint:PERF006
+                result |> push(Hap(
                     whole = TimeSpan(start = h.whole.start - shift, stop = h.whole.stop - shift),
                     part = TimeSpan(start = h.part.start - shift, stop = h.part.stop - shift),
                     has_whole = h.has_whole,
@@ -1939,7 +1939,7 @@ def iterBack(var pat : Pattern; n : int) : Pattern {
             let innerSpan = TimeSpan(start = sub.start + shift, stop = sub.stop + shift)
             var haps <- pat(innerSpan)
             for (h in haps) {
-                result |> push(Hap( // nolint:PERF006
+                result |> push(Hap(
                     whole = TimeSpan(start = h.whole.start - shift, stop = h.whole.stop - shift),
                     part = TimeSpan(start = h.part.start - shift, stop = h.part.stop - shift),
                     has_whole = h.has_whole,
@@ -1965,13 +1965,13 @@ def when_cycle(var pat : Pattern; var cond : lambda<(cycle : int) : bool>; trans
             if (cond(cycle)) {
                 var haps <- transformed(sub)
                 for (h in haps) {
-                    result |> push(h) // nolint:PERF006
+                    result |> push(h)
                 }
                 delete haps
             } else {
                 var haps <- pat(sub)
                 for (h in haps) {
-                    result |> push(h) // nolint:PERF006
+                    result |> push(h)
                 }
                 delete haps
             }
@@ -2010,7 +2010,7 @@ def linger(var pat : Pattern; t : int | float | double) : Pattern {
                     var haps <- pat(innerSpan)
                     for (h in haps) {
                         // shift events by chunkStart so they land in the output iteration
-                        result |> push(Hap( // nolint:PERF006
+                        result |> push(Hap(
                             whole = TimeSpan(start = h.whole.start + chunkStart, stop = h.whole.stop + chunkStart),
                             part = TimeSpan(start = h.part.start + chunkStart, stop = h.part.stop + chunkStart),
                             has_whole = h.has_whole,
@@ -2054,7 +2054,7 @@ def compress(var pat : Pattern; b, e : int | float | double) : Pattern {
             var haps <- pat(TimeSpan(start = innerStart, stop = innerStop))
             for (h in haps) {
                 // map back: [cycle,cycle+1] → [winStart,winStop]
-                result |> push(Hap( // nolint:PERF006
+                result |> push(Hap(
                     whole = TimeSpan(
                         start = (h.whole.start - cycle) * dur + winStart,
                         stop = (h.whole.stop - cycle) * dur + winStart
@@ -2099,13 +2099,13 @@ def chunk(var pat : Pattern; n : int; transform : PatternTransform) : Pattern {
                 if (i == activeChunk) {
                     var haps <- transformed(querySpan)
                     for (h in haps) {
-                        result |> push(h) // nolint:PERF006
+                        result |> push(h)
                     }
                     delete haps
                 } else {
                     var haps <- pat(querySpan)
                     for (h in haps) {
-                        result |> push(h) // nolint:PERF006
+                        result |> push(h)
                     }
                     delete haps
                 }
@@ -2159,7 +2159,7 @@ def chop(var pat : Pattern; n : int) : Pattern {
             let wstart = h.whole.start
             let wdur = h.whole.stop - h.whole.start
             if (wdur <= 0.0lf) {
-                result |> push(h) // nolint:PERF006
+                result |> push(h)
                 continue
             }
             // subdivide the sample's existing [begin, end_pos] window into n parts
@@ -2174,7 +2174,7 @@ def chop(var pat : Pattern; n : int) : Pattern {
                 var ev = h.value
                 ev.begin = b0 + float(i) * nfinv * win
                 ev.end_pos = b0 + float(i + 1) * nfinv * win
-                result |> push(Hap( // nolint:PERF006
+                result |> push(Hap(
                     whole = TimeSpan(start = subStart, stop = subStop),
                     part = TimeSpan(start = pStart, stop = pStop),
                     has_whole = h.has_whole,
@@ -2208,7 +2208,7 @@ def slice(var pat : Pattern; n : int; var idx_pat : Pattern) : Pattern {
             let win = ev.end_pos - b0
             ev.begin = b0 + float(i) * nfinv * win
             ev.end_pos = b0 + float(i + 1) * nfinv * win
-            result |> push(Hap( // nolint:PERF006
+            result |> push(Hap(
                 whole = ih.whole,
                 part = ih.part,
                 has_whole = ih.has_whole,
@@ -2235,7 +2235,7 @@ def struct_(var pat : Pattern; var bool_pat : Pattern) : Pattern {
                 let pStart = max(ih.part.start, mh.part.start)
                 let pStop = min(ih.part.stop, mh.part.stop)
                 if (pStart < pStop) {
-                    result |> push(Hap( // nolint:PERF006
+                    result |> push(Hap(
                         whole = mh.whole,
                         part = TimeSpan(start = pStart, stop = pStop),
                         has_whole = true,
@@ -2261,7 +2261,7 @@ def mask(var pat : Pattern; var mask_pat : Pattern) : Pattern {
             // check if mask has any event overlapping this hap
             var mask_haps <- mask_pat(h.whole)
             if (length(mask_haps) > 0) {
-                result |> push(h) // nolint:PERF006
+                result |> push(h)
             }
             delete mask_haps
         }
@@ -2282,7 +2282,7 @@ def choose(var pats : array<Pattern>) : Pattern {
             let idx = int(strudel_hash32(double(cycle), 0) % uint(cn))
             var haps <- invoke(pats[idx], sub)
             for (h in haps) {
-                result |> push(h) // nolint:PERF006
+                result |> push(h)
             }
             delete haps
         }
@@ -2316,7 +2316,7 @@ def wchoose(var pats : array<Pattern>; var weights : array<float>) : Pattern {
             }
             var haps <- invoke(pats[idx], sub)
             for (h in haps) {
-                result |> push(h) // nolint:PERF006
+                result |> push(h)
             }
             delete haps
         }
@@ -2350,7 +2350,7 @@ def strudel_hash32(t : double; slot : int) : uint {
     //! Deterministic 32-bit hash of a query time + slot index, used by the random combinators
     //! (`degrade`, `shuffle`, `scramble`, `choose`). Public so their captured lambdas resolve it
     //! when re-instantiated in a consumer module.
-    let Ti = int64(t * 536870912.0lf)
+    let Ti = int64(t * 536870912.0lf)  // nolint:LINT021 - the >> 32 below consumes the top half; the 64 bits are load-bearing
     let lo = uint(Ti)
     let hi = uint(Ti >> 32l)
     var key = lo ^ ((hi ^ 0x85EBCA6Bu) * 0xC2B2AE35u)
@@ -2407,7 +2407,7 @@ def shuffle(var pat : Pattern; n : int) : Pattern {
                 for (h in haps) {
                     // remap to destination slot
                     let shift = slotStart - srcStart
-                    result |> push(Hap( // nolint:PERF006
+                    result |> push(Hap(
                         whole = TimeSpan(start = h.whole.start + shift, stop = h.whole.stop + shift),
                         part = TimeSpan(start = max(h.part.start + shift, overStart), stop = min(h.part.stop + shift, overStop)),
                         has_whole = h.has_whole,
@@ -2443,7 +2443,7 @@ def scramble(var pat : Pattern; n : int) : Pattern {
                 var haps <- pat(TimeSpan(start = srcStart, stop = srcStop))
                 for (h in haps) {
                     let shift = slotStart - srcStart
-                    result |> push(Hap( // nolint:PERF006
+                    result |> push(Hap(
                         whole = TimeSpan(start = h.whole.start + shift, stop = h.whole.stop + shift),
                         part = TimeSpan(start = max(h.part.start + shift, overStart), stop = min(h.part.stop + shift, overStop)),
                         has_whole = h.has_whole,

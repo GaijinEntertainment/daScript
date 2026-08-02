@@ -17,7 +17,7 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 //       use(c)
 //   }
 
-expect 31208:3
+expect 31208:5
 
 require daslib/perf_lint
 
@@ -46,6 +46,24 @@ def bad_array_double_use(arr : array<int>) : int {
         }
     }
     return hi
+}
+
+// The 64-bit spelling LINT017 pushes big-array code toward fires too.
+def bad_array_sum_long(arr : array<int>) : int64 {
+    var s = 0l
+    for (i in range64(long_length(arr))) {
+        s += int64(arr[i])
+    }
+    return s
+}
+
+// Unsigned spelling, with the workhorse-cast wrapper peeled.
+def bad_array_sum_urange(arr : array<int>) : int {
+    var s = 0
+    for (i in urange(uint(length(arr)))) {
+        s += arr[i]
+    }
+    return s
 }
 
 // --- Good: index actually used ---
