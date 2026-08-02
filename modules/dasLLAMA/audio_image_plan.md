@@ -135,7 +135,11 @@ the four `fmap_close` finalizers to `image_backing_release` — a prerequisite, 
 the chunk rail reachable in the default configuration. This is a user-visible knob change and
 belongs in `ENVIRONMENT.md`.
 
-**Phase 3 — stream the cold build.** Compute the layout and total size ahead of the first byte
+**Phase 3 — stream the cold build.** Baselines measured (2026-08-02, m1, max-RSS warm vs cold):
+whisper-turbo 1.48→5.29 GB is THE case — mint 3.6× serve; gemma4a +1.15 GB, canary +1.33 GB on
+top of serve peaks their mints do not dominate; parakeet +0.15 GB, not worth streaming. Order:
+whisper, then gemma4a/canary if their serve-side scratch (the larger finding — see
+PERF_LEDGER.md) has not restructured them first. Compute the layout and total size ahead of the first byte
 (the loaders already compute every offset before filling), then transcode plane bytes from the
 source mapping straight into the writer instead of materializing the blob. Peak drops from
 whole-model to one band. This is where the memory win is; Phases 1–2 are correctness.

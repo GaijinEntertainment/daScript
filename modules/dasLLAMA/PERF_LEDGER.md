@@ -12,6 +12,18 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **ASR peak-RSS baseline (2026-08-02, m1, /usr/bin/time -l around the rig exe, warm=.dlim
+  present / cold=mint): whisper-turbo 1.48/5.29 GB (+3.81), parakeet-v3 6.69/6.84 (+0.15),
+  gemma4a-E2B 4.27/5.42 (+1.15), canary 13.11/14.44 (+1.33).** Two findings. (1) The MINT spike
+  is whisper-shaped: staging fp32 fblob+dblob plus the Q8 planes held at once — Phase 3
+  streaming (audio_image_plan.md) targets whisper first; parakeet's mint is immaterial.
+  (2) **The SERVE peak on long clips dwarfs the mint everywhere else**: canary 13.1 GB warm on a
+  2.5B (fp32 encoder + fp32 decoder + ~199 s-clip FastConformer scratch), parakeet 6.7 GB on a
+  0.6B (546 s hp0x2 encoder scratch; attention terms scale with frame count, some quadratically).
+  What a fix changes: window/chunk the encoder attention scratch or cap resident frames — a
+  16 GB box is one clip length from swap on the canary cell. Not acted on mid-arc per the
+  standing rule; sized here so the perf pass ranks it.
+
 - **Try the borrowed plane WITHOUT its bounds check, at profiling time (spotted 2026-08-01, audio
   `.dlim` arc).** `PlaneF`/`PlaneI8` `operator []` in `dasllama_plane.das` guards every read with
   one unsigned compare. **Costs nothing today, measured:** M1, `-jit`, cache-resident
