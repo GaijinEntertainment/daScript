@@ -6741,6 +6741,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "make_struct_field"
+        },
+        {
+          "type": "SYMBOL",
           "name": "named_argument_block"
         }
       ]
@@ -10711,6 +10715,14 @@
     ],
     [
       "require_module_name"
+    ],
+    [
+      "make_struct_fields",
+      "argument_list"
+    ],
+    [
+      "_argument",
+      "make_struct_fields"
     ]
   ],
   "precedences": [],

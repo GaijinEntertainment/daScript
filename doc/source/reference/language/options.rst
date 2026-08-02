@@ -307,6 +307,22 @@ Safety and Strictness
      - bool
      - true
      - Disallows ``unsafe``-ly uninitialized structures.
+   * - ``default_init_containers``
+     - bool
+     - true
+     - Containers own their elements' lifetime, in both directions.
+       **Construct**: a new array slot from ``resize``, and a freshly inserted
+       ``tab[key]`` slot, are given ``default<T>`` of the element/value type — so a
+       struct gets its field initializers, and ``resize`` no longer needs ``unsafe``
+       for such element types. Note this is ``default<T>`` semantics, not "run every
+       initializer reachable inside T": a ``tuple`` or ``variant`` whose members carry
+       field initializers is still zero-initialized, because ``default<>`` of a
+       composite is zero. Direct stores (``tab[key] = / <- / :=``) and
+       ``addr(tab[key])`` keep the raw zeroed slot.
+       The collect half of container lifetime — erase/clear/shrink freeing the owned
+       heap of dropped elements — rides ``force_inscope_pod``, not this option.
+       When ``false``, construction reverts to the pre-0.6.5 behavior: zeroed slots,
+       and ``resize`` of init-carrying element types requires ``unsafe``.
    * - ``unsafe_table_lookup``
      - bool
      - false
@@ -513,7 +529,15 @@ Miscellaneous
    * - ``force_inscope_pod``
      - bool
      - false
-     - Forces inscope lifetime semantics for POD-like types.
+     - Forces inscope lifetime semantics for POD-like types: move-assign and scope exit
+       collect the old contents via ``builtin_collect_local_and_zero``, and the container
+       collect banner arms — ``erase`` / ``erase_if`` / ``clear`` / shrinking ``resize`` /
+       ``pop`` (arrays) and ``erase`` / ``clear`` (tables) free the owned heap of the
+       elements they drop via ``builtin_collect_local`` (the GcPod walk, which cannot run
+       user code). The banner fires only when collection is fully generated, frees heap the
+       element owns, and deletes no pointees (``typeinfo is_pod_delete`` and
+       ``is_safe_to_delete``); user finalizers never run implicitly — ``delete`` remains the
+       full teardown that runs them.
    * - ``keep_alive``
      - bool
      - false

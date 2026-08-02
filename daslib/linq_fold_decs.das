@@ -148,7 +148,7 @@ class DecsAdapter : SourceAdapter {
             inner = wrap_inner_for_with_decs_ranges(inner, rangeInfo, names)
             inner = wrap_decs_chain(inner, chainInfo, calls, intermediateEnd, at)
             if (inner == null) return null
-            prelude <- decs_range_prelude(rangeInfo, names)
+            prelude <- decs_range_prelude(rangeInfo, names)  // nolint:PERF030 - fresh local, nothing to release
         }
         var forExprNode = build_decs_inner_for_pruned(br, tupName, inner, at)
         var loopExpr : Expression?
@@ -265,7 +265,7 @@ def private make_decs_term_adapter(var bridge : DecsBridgeShape?; var chainInfo 
 }
 
 [macro_function]
-def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string; var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
+def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string; var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {  // nolint:STYLE037 - one arm per loop-lane shape
     let hasTerm = c.single |> key_exists("term")
     var termCall : ExprCall?
     var termName : string
@@ -414,7 +414,7 @@ def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string
 // Decs `reverse |> take(N) [|> _select(F)] |> to_array` skip-into-tail: 2-pass walk (arch.size sum, then for_each_archetype_find with whole-arch-skip + partial-arch skip-counter + early-exit). Preserves PR #2834's 5.2× gain. When terminalSelectLam != null, projects the K reversed elements at the end (K push_clones of projection vs N push_clones of full tuple in the catch-all path).
 // `terminalSelectElemType` must be the typer-resolved element type of the termsel call result (caller reads it from `c.single["termsel"]._type.firstType`) — peel_lambda_rename_var's invoke-fallback shape for non-peelable lambdas has a null `_type` at macro stage, so deriving projType from the peeled body would mis-classify those as untyped and bail. Caller is responsible for ensuring termselElemType is non-null before this fast-path is selected; otherwise the gate falls through to the catch-all which has its own termsel handling.
 [macro_function]
-def emit_decs_reverse_skip_into_tail(var takeExpr : Expression?; bridge : DecsBridgeShape?; tupName : string; needIterWrap : bool; var terminalSelectLam : Expression?; terminalSelectElemType : TypeDeclPtr; at : LineInfo) : Expression? {
+def emit_decs_reverse_skip_into_tail(var takeExpr : Expression?; bridge : DecsBridgeShape?; tupName : string; needIterWrap : bool; var terminalSelectLam : Expression?; terminalSelectElemType : TypeDeclPtr; at : LineInfo) : Expression? {  // nolint:STYLE038 - two qmacro template bodies, one per projection shape
     let bufName = qn("buf", at)
     let takeNName = qn("take_n", at)
     let totalName = qn("decs_total", at)
@@ -474,7 +474,7 @@ def emit_decs_reverse_skip_into_tail(var takeExpr : Expression?; bridge : DecsBr
             if ($i(actualName) == 0_l) {
                 return <- $i(bufName)
             }
-            $i(bufName) |> reserve(int($i(actualName)))
+            $i(bufName) |> reserve($i(actualName))
             var $i(seenName) = 0_l
             for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
                 if ($i(seenName) + $i(archName).size <= $i(skipName)) {
@@ -503,7 +503,7 @@ def emit_decs_reverse_skip_into_tail(var takeExpr : Expression?; bridge : DecsBr
             if ($i(actualName) == 0_l) {
                 return <- $i(projBufName)
             }
-            $i(bufName) |> reserve(int($i(actualName)))
+            $i(bufName) |> reserve($i(actualName))
             var $i(seenName) = 0_l
             for_each_archetype_find($e(bridge.reqHashExpr), $e(bridge.erqExpr), $($i(archName) : Archetype) : bool {
                 if ($i(seenName) + $i(archName).size <= $i(skipName)) {
@@ -1003,7 +1003,7 @@ def make_decs_range_names(at : LineInfo) : DecsRangeStateNames {
 }
 
 [macro_function, unused_argument(at)]
-def extract_decs_ranges(var calls : array<tuple<ExprCall?; LinqCall?>>;
+def extract_decs_ranges(var calls : array<tuple<ExprCall?; LinqCall?>>;  // nolint:STYLE037 - one arm per range-combinator kind
                         intermediateEnd : int;
                         tupName : string;
                         at : LineInfo) : DecsRangeInfo? {
@@ -1277,7 +1277,6 @@ def emit_decs_join_impl(bridgeA : DecsBridgeShape?; var c : Captures; ctx : Emit
     var pieces = build_join_standalone_pieces(joinCall, whereLam, selectLam, leadWhereLam, countOnly, keyaBody, tupAName, hashName, tupBType, false, "decs", at)
     if (pieces == null) return null
     var collectBody <- qmacro_block_to_array() {
-        // nolint:PERF006 per-key bucket size unknown ahead of time
         $i(hashName)[$e(keybBody)] |> push_clone($i(tupBName))
     }
     var collectInner = build_decs_inner_for(bridgeB, tupBindB, stmts_to_expr(collectBody), at)

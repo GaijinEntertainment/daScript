@@ -22,8 +22,10 @@ options gc
 
 require dashv/dashv_boost public
 require daslib/jobque_boost
+require live/live_gc
+require live_host
 require daslib/json_boost
-require strings
+
 require daslib/fio
 
 let SERVER_PORT = 18084
@@ -177,6 +179,7 @@ def with_cookie_form_server(port : int; upload_dir : string; blk : block<(base_u
                     started |> notify_and_release
                     while (stop_flag |> get == 0) {
                         server->tick()
+                        maybe_collect_gc()  // the thread owns this context's heap; collect between ticks
                         sleep(10u)
                     }
                     server->stop()
@@ -216,7 +219,7 @@ def with_cookie_form_server(port : int; upload_dir : string; blk : block<(base_u
 //  get_url_encoded(msg, key)                            Get URL-encoded field (server)
 
 [export]
-def main() {
+def main() { // nolint:STYLE038 — tutorial client script, linear by design
     let upload_dir = "{get_das_root()}/tutorials/dasHV/_upload_test"
     let test_file = "{get_das_root()}/tutorials/dasHV/_testfile.txt"
     create_upload_dir(upload_dir)

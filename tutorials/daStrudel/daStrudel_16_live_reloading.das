@@ -20,6 +20,7 @@
 options gen2
 options indenting = 4
 options persistent_heap
+options gc
 
 require strudel/strudel public
 require strudel/strudel_player
@@ -30,6 +31,7 @@ require audio/audio_boost
 require live/audio_live // nolint:STYLE030 — required for its live-reload handlers, not symbols
 require live/live_commands
 require live/live_api
+require live/live_gc
 require live_host
 require daslib/fio
 require daslib/json
@@ -171,15 +173,20 @@ def shutdown() {
     audio_system_finalize(asch.command, asch.next_sid)
 }
 
-// Standalone fallback — if run under daslang.exe, act as a regular demo.
+// Standalone fallback — if run under daslang.exe, drive the same exported trio
+// in the canonical loop (bounded 10-second demo run). maybe_collect_gc() is the
+// per-iteration GC boundary a standalone loop provides; under daslang-live the
+// host collects instead and this function self-disables.
 [export]
 def main() {
-    print("daStrudel tutorial 16 (standalone — no hot-reload)\n")
-    with_audio_system() {
-        load_samples()
-        strudel_init(@@strudel_main)
-        print("playing 10 seconds...\n")
-        sleep(10000u)
-        strudel_shutdown()
+    print("daStrudel tutorial 16 (standalone — no hot-reload), playing 10 seconds...\n")
+    init()
+    var elapsed = 0u
+    while (!exit_requested() && elapsed < 10000u) {
+        update()
+        maybe_collect_gc()
+        sleep(100u)
+        elapsed += 100u
     }
+    shutdown()
 }

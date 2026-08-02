@@ -950,7 +950,7 @@ def private transcode_to_wav(cfg : DictationConfig; src, dst : string) : bool {
                 "-i", src, "-ar", "16000", "-ac", "1", dst]
     let rc = unsafe(popen_argv(argv, 120.0) $(f) {
         if (f != null) {
-            unsafe(fread_to_eof(f))   // drain the pipe so a chatty ffmpeg build can't stall
+            fread(f)   // drain the pipe so a chatty ffmpeg build can't stall
         }
     })
     return rc == 0

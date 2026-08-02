@@ -34,9 +34,9 @@ def transcribe_slice(var m : AsrModel; lang : string; take : array<float>; s, e 
         return ""
     }
     var slice : array<float>
-    slice |> resize(int(e - s))
-    for (i in range(length(slice))) {
-        slice[i] = take[s + int64(i)]
+    slice |> resize(e - s)
+    for (i in range64(e - s)) {
+        slice[i] = take[s + i]
     }
     var sess <- create_session(m, lang)
     let text = transcribe(m, sess, slice)
@@ -46,7 +46,7 @@ def transcribe_slice(var m : AsrModel; lang : string; take : array<float>; s, e 
 }
 
 [export]
-def main {
+def main {  // nolint:STYLE038 - one linear record/VAD/transcribe session
     let cmd <- get_command_line_arguments()
     var model_path = ""
     var max_seconds = MAX_SECONDS_DEFAULT
@@ -111,7 +111,7 @@ def main {
                         any = true
                         print("  [listening…]\n")
                     } else {
-                        let e = min(ev.sample, int64(length(take)))
+                        let e = min(ev.sample, long_length(take))
                         let text = transcribe_slice(m, lang, take, seg_start, e)
                         transcript += (empty(transcript) ? "" : " ") + text
                         print("  {text}\n")
@@ -133,7 +133,7 @@ def main {
         }
         // a segment still open at stop (speech ongoing) — transcribe its tail
         if (open) {
-            let text = transcribe_slice(m, lang, take, seg_start, int64(length(take)))
+            let text = transcribe_slice(m, lang, take, seg_start, long_length(take))
             transcript += (empty(transcript) ? "" : " ") + text
         }
         print("\n=== transcript ===\n{transcript}\n")

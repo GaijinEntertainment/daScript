@@ -6,15 +6,18 @@ deleted, renamed — e.g. the fixed-array rework deleting `TypeDecl::dim`),
 signatures of daslib generics that externals instantiate, or the
 `.das_module` / serialization surface.
 
-## Why externals can red YOUR PR
+## Why externals can red the nightly
 
-`extended_checks` runs `daspkg install dasImgui --branch master` — it builds
-the external repo's **master** against **your branch's** headers, at PR time.
-So a breaking change produces a red CI step that looks unrelated
-(`no member named 'dim'` inside dasImgui), and the naive fix creates a
-deadlock: the daslang PR can't go green until externals are compatible, and an
-externals fix that *requires* the new daslang can't merge until the daslang PR
-lands.
+The external ABI canaries are **dasImguiImplot** and **dasImguiNodeEditor**
+(dasImgui itself is in-tree now and builds per-PR like any other module).
+`nightly_daspkg_index.yml` daspkg-installs every daspkg-index package at its
+default-branch HEAD against daslang master each night — and a
+`workflow_dispatch` from your branch runs the same sweep on demand for an
+ABI-touching PR. A breaking change produces a red sweep step that looks
+unrelated (`no member named 'dim'` inside dasImguiNodeEditor), and the naive
+fix creates a lockstep: the sweep can't go green until externals are
+compatible, and an externals fix that *requires* the new daslang can't merge
+until the daslang PR lands.
 
 The scope of "externals" is the [daspkg-index](https://github.com/borisbat/daspkg-index)
 package list — that is the universe of repos any user (and the planned nightly
@@ -39,10 +42,10 @@ cron) builds against daslang master.
       release when no shared spelling exists.
    3. **Feature macro / version check** in the external — last resort; it
       forces lockstep merges and rots into dead branches.
-4. **Land order: externals first.** Because extended_checks pulls externals'
-   master, the external fix must be MERGED (not just PR'd) before the daslang
-   PR's CI can go green. Merge externals → re-run the daslang PR's
-   extended_checks → merge daslang.
+4. **Land order: externals first.** Because the daspkg-index sweep pulls
+   externals' master, the external fix must be MERGED (not just PR'd) before
+   the sweep can go green. Merge externals → dispatch
+   `nightly_daspkg_index.yml` from your branch to confirm → merge daslang.
 5. **Verify locally before pushing** — the external-module junction pattern
    (`skills/external_module_debugging.md`), rebuild order **daslang first,
    then each module**. Stale-DLL trap: a `.shared_module` built against the

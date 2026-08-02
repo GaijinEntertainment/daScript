@@ -1,0 +1,1 @@
+Removes every element from the array. Under ``default_init_containers`` the dropped elements are finalized first, but only where finalizing frees memory the array owns — raw pointers, lambdas, and composites carrying one are left untouched, so ``clear`` before ``delete`` remains the idiom for an array of borrowed pointers.

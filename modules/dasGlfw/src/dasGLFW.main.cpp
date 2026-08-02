@@ -77,8 +77,9 @@ namespace das {
 // behind VK_VERSION_1_0 (i.e. needs vulkan.h, which this module does not include),
 // so forward-declare it with an ABI-compatible loader type and bind a void* shim.
 // emscripten's GLFW (library_glfw.js) provides no Vulkan loader, and the web
-// target has no Vulkan — leave glfwInitVulkanLoader unbound there (fail-closed,
-// matching the binder's emscripten_skip_function for the other GLFW gaps).
+// target has no Vulkan — leave glfwInitVulkanLoader unbound there. Unlike the
+// 11 stubbed GLFW gaps (src/glfw_emscripten_stubs.c), no web-reachable .das
+// references it (dasVulkan is not in the web build), so skip-on-web stays safe.
 #ifndef __EMSCRIPTEN__
 extern "C" {
     typedef void * (* DAS_vkGetInstanceProcAddr)(void * instance, const char * name);

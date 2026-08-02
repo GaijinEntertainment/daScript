@@ -994,6 +994,7 @@ namespace das
                 bool    isConstClassMethod : 1;      // method is const
                 bool    isCustomProperty : 1;        // this is a user function which looks like a property ("`name")
                 bool    neverInline : 1;             // [never_inline] - excluded from best-effort (auto) inlining; conflicts with [inline]
+                bool    localFunction : 1;           // @@{} local function body - generated, but the block is verbatim user code
             };
             uint32_t moreFlags = 0;
         };
@@ -1570,7 +1571,7 @@ namespace das
     // language
         /*option*/ bool unsafe_table_lookup = false;                // table lookup (tab[key]) to be unsafe
         /*option*/ bool relaxed_pointer_const = false;             // allow const correctness to be relaxed on pointers
-        bool version_2_syntax = false;                  // use syntax version 2
+        bool version_2_syntax = true;                   // use syntax version 2 (per-file `options gen2 = false` still opts out)
         bool gen2_make_syntax = false;                  // only new make syntax is allowed (no [[...]] or [{...}])
         /*option*/ bool relaxed_assign = true;                     // allow = to <- substitution, in certain expressions
         bool no_unsafe = false;
@@ -1598,6 +1599,7 @@ namespace das
         /*option*/ bool report_invisible_functions = true;         // report invisible functions (report functions not visible from current module)
         /*option*/ bool report_private_functions = true;           // report private functions (report functions which are not accessible due to private module)
         /*option*/ bool no_unsafe_uninitialized_structures = true; // if true, then unsafe uninitialized structures are not allowed
+        /*option*/ bool default_init_containers = true;            // if true, containers construct their elements (resize inits new slots, table index inits fresh slots)
         /*option*/ bool strict_properties = false;                 // if true, then properties are strict, i.e. a.prop = b does not get promoted to a.prop := b
         /*option*/ bool no_writing_to_nameless = true;             // if true, then writing to nameless variables (intermediate on the stack) is not allowed
     // environment

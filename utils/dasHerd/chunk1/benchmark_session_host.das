@@ -74,7 +74,7 @@ def private read_file(path : string; var error : string) : string {
         error = "could not read {path}"
         return ""
     }
-    let result = unsafe(fread_to_eof(file))
+    let result = fread(file)
     fclose(file)
     return result
 }
@@ -120,7 +120,7 @@ def private run_hosted_probe(command : GitProbeCommand const;
         if (first_count > 0) {
             sample.ready_us = elapsed_us(started)
         }
-        remainder = unsafe(fread_to_eof(f))
+        remainder = fread(f)
     }))
     sample.outer_total_us = elapsed_us(started)
     let output = (first_count > 0 ? to_char(int(first_byte[0])) : "") + remainder

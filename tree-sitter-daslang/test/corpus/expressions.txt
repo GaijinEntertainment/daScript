@@ -200,3 +200,31 @@ Module-level reader macro
   (reader_macro
     name: (identifier)
     content: (reader_macro_content)))
+
+================================================================================
+Bare named call arguments
+================================================================================
+
+def beta() {
+    foo(1, primary = true, scope = x)
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list)
+    body: (block
+      (expression_statement
+        (call_expression
+          function: (identifier)
+          (argument_list
+            (integer_literal)
+            (make_struct_field
+              name: (identifier)
+              value: (boolean_literal))
+            (make_struct_field
+              name: (identifier)
+              value: (identifier))))))))

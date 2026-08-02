@@ -6,44 +6,34 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Compile-coverage for the dagor config: EASTL containers, dag::Vector as
+# das::vector (uint32_t size_type), ska::flat_hash_map as das_map, DAS_CUSTOM_HASH
+# undefined, no global new/delete. Built with gcc, whose uninitialized analysis is
+# what this lane guards.
+# See cmake/das_config_eastl/daScript/das_config.h and ci/build_eastl_config.sh.
 jobs:
   build_eastl:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # pc: compiler binary, fileio on. no_fileio: no filesystem and no
+        # environment (what a console build gets), static lib only, still on the
+        # host toolchain - console SDKs cannot run in public CI.
+        variant: [pc, no_fileio]
     steps:
       - uses: actions/checkout@v4
       - uses: lukka/get-cmake@latest
-      - run: sudo apt-get update -y && sudo apt-get install -y bison flex
-      - run: git clone --depth 1 https://github.com/electronicarts/EASTL.git eastl
-      - run: git clone --depth 1 https://github.com/electronicarts/EABase.git eabase
-      # EASTL is not header-only: compile its sources + glue into libeastl.a and
-      # link it in. EASTL_EASTDC_VSNPRINTF=0 drops the EAStdC dependency (the glue
-      # supplies Vsnprintf*). The same define must reach daslang's own TUs below.
-      - run: |
-          EAFLAGS="-O2 -fPIC -std=c++17 -DEASTL_EASTDC_VSNPRINTF=0 -isystem $PWD/eastl/include -isystem $PWD/eabase/include/Common"
-          mkdir -p eastl_build
-          for f in eastl/source/*.cpp cmake/das_config_eastl/eastl_glue.cpp; do
-            clang++ $EAFLAGS -c "$f" -o "eastl_build/$(basename "$f").o"
-          done
-          ar rcs eastl_build/libeastl.a eastl_build/*.o
-      - run: |
-          CC=clang CXX=clang++ cmake -B build -G Ninja \
-            -DDAS_LLVM_DISABLED=ON -DDAS_GLFW_DISABLED=ON -DDAS_HV_DISABLED=ON \
-            -DDAS_TESTS_DISABLED=ON -DDAS_TUTORIAL_DISABLED=ON \
-            -DDAS_AOT_EXAMPLES_DISABLED=ON \
-            -DDAS_CONFIG_INCLUDE_DIR=cmake/das_config_eastl \
-            -DCMAKE_CXX_FLAGS="-isystem $PWD/eastl/include -isystem $PWD/eabase/include/Common -DEASTL_EASTDC_VSNPRINTF=0" \
-            -DCMAKE_CXX_STANDARD_LIBRARIES="$PWD/eastl_build/libeastl.a"
-      - run: cmake --build build --target daslang --parallel
-      # No-fileio coverage: filesystem is a fio-only dependency. The shadow
-      # cmake/das_config_eastl/filesystem header #errors on any <filesystem>
-      # include under DAS_NO_FILEIO, so this build fails if a stray dependency
-      # creeps in.
-      - run: |
-          CC=clang CXX=clang++ cmake -B build_nofileio -G Ninja \
-            -DDAS_LLVM_DISABLED=ON -DDAS_GLFW_DISABLED=ON -DDAS_HV_DISABLED=ON \
-            -DDAS_TESTS_DISABLED=ON -DDAS_TUTORIAL_DISABLED=ON \
-            -DDAS_AOT_EXAMPLES_DISABLED=ON \
-            -DDAS_CONFIG_INCLUDE_DIR=cmake/das_config_eastl \
-            -DCMAKE_CXX_FLAGS="-isystem $PWD/eastl/include -isystem $PWD/eabase/include/Common -DEASTL_EASTDC_VSNPRINTF=0 -DDAS_NO_FILEIO=1" \
-            -DCMAKE_CXX_STANDARD_LIBRARIES="$PWD/eastl_build/libeastl.a"
-      - run: cmake --build build_nofileio --target daslang --parallel
+      - run: sudo apt-get update -y && sudo apt-get install -y bison flex g++
+      - name: sparse-checkout dagor headers
+        run: |
+          git clone --depth 1 --filter=blob:none --sparse \
+            https://github.com/GaijinEntertainment/DagorEngine.git .dagor_headers
+          git -C .dagor_headers sparse-checkout set \
+            prog/1stPartyLibs/dag prog/3rdPartyLibs/eastl prog/3rdPartyLibs/ska_hash_map prog/dagorInclude/util
+      - run: ci/build_eastl_config.sh ${{ matrix.variant }}
+        env:
+          DAGOR_ROOT: ${{ github.workspace }}/.dagor_headers
+      - name: smoke run
+        if: matrix.variant == 'pc'
+        run: ./bin/daslang_static examples/clargs/main.das -- --name ci -r 1

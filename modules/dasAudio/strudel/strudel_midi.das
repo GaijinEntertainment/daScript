@@ -7,7 +7,6 @@ module strudel_midi shared public
 //! program changes, pitch bend, and tempo information.
 
 require daslib/fio
-require daslib/algorithm
 require math
 
 // ─── Data Structures ───
@@ -110,7 +109,7 @@ def read_vlq(data : array<uint8>; var cursor : int&) : int {
 
 // ─── Track Parser ───
 
-def private parse_midi_track(data : array<uint8>; var cursor : int&) : MidiTrack {
+def private parse_midi_track(data : array<uint8>; var cursor : int&) : MidiTrack {  // nolint:STYLE037 - one arm per MIDI event kind
     //! Parse a single MTrk chunk starting at cursor, returning the track with all events.
     var track : MidiTrack
     // expect "MTrk"
@@ -293,7 +292,7 @@ def load_midi(path : string) : MidiFile {
         if (f != null) {
             let st = fstat(f)
             if (st.is_valid) {
-                data |> resize(int(st.size))
+                data |> resize(int64(st.size))
                 fread(f, data)
             }
         }

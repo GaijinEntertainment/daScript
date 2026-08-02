@@ -7,6 +7,7 @@ namespace das {
 
     class ClearUnusedSymbols : public Visitor {
     public:
+        ClearUnusedSymbols ( Module * tm ) : thisModule(tm) {}
         virtual bool canVisitFunction ( Function * fun ) override {
             return !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
         }
@@ -18,6 +19,27 @@ namespace das {
                 expr->func = nullptr;
             }
         }
+        // `WithInit()` in a struct field initializer infers to ExprMakeStruct, whose
+        // constructor ref is NOT an ExprCallFunc - left unnulled, removeUnusedSymbols frees
+        // the ctor while the surviving structure's field-init expression keeps the raw
+        // pointer, and AST serialization reads a dangling Function* (nondeterministic
+        // SIGSEGV in getMangledName under --ser)
+        virtual void preVisit(ExprMakeStruct * expr) override {
+            Visitor::preVisit(expr);
+            if ( expr->constructor && !expr->constructor->used && !expr->constructor->builtIn ) {
+                expr->constructor = nullptr;
+            }
+        }
+        // same dangling-pointer story for a global referenced only from a field initializer
+        // (`s : int = g_seed`). only this module's globals get freed (RemoveUnusedSymbols
+        // runs on thisModule alone), so cross-module refs - e.g. folded builtin constants
+        // like math::PI - stay untouched and keep their valid metadata
+        virtual void preVisit(ExprVar * expr) override {
+            Visitor::preVisit(expr);
+            if ( expr->variable && expr->variable->module == thisModule && !expr->variable->used ) {
+                expr->variable = nullptr;
+            }
+        }
         virtual void preVisitExpression(Expression * expr) override {
             Visitor::preVisitExpression(expr);
             if ( expr->rtti_isCallFunc() ) {
@@ -27,6 +49,8 @@ namespace das {
                 }
             }
         }
+    protected:
+        Module * thisModule = nullptr;
     };
 
     class MarkSymbolUse : public Visitor {
@@ -346,7 +370,7 @@ namespace das {
 
     void Program::removeUnusedSymbols() {
         if ( options.getBoolOption("remove_unused_symbols",true) ) {
-            ClearUnusedSymbols cvis;
+            ClearUnusedSymbols cvis(thisModule.get());
             visit(cvis);
             MarkSymbolUse vis(false);
             vis.RemoveUnusedSymbols(*thisModule);

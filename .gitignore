@@ -60,6 +60,10 @@ site/doc/
 doc/sphinx-build/
 doc/sphinx-build-latex/
 doc/source/stdlib/generated/
+# Tutorial recordings: APNG intermediates land here from modules/dasImgui/tests
+# record_* drivers; the MP4 deliverables are staged here from the docs-assets
+# GitHub release by utils/docs_assets/fetch — neither is tracked.
+doc/source/_static/tutorials/
 doc/source/__pycache__/
 doc/source/_build/doctrees/environment.pickle
 doc/source/_build/
@@ -101,11 +105,6 @@ install/
 daspkg.lock
 .daspkg_global.lock
 .daspkg_standalone
-# dasImgui ships from its own repo (https://github.com/borisbat/dasImgui);
-# the modules/dasImgui/ tree is daspkg-installed locally and must NOT be
-# tracked here, or the root cmake will try to build the daspkg-standalone
-# module in-tree (broken master 2026-05-12 -> 13).
-modules/dasImgui/
 modules/.daspkg_tmp/
 modules/.daspkg_backup/
 modules/.daspkg_cache/

@@ -2,6 +2,7 @@ options gen2
 
 require dastest/testing_boost public
 require ../file_inspection.das
+require daslib/strings_boost
 
 [test]
 def test_inspector_language_resolution(t : T?) {
@@ -66,6 +67,98 @@ def test_unified_patch_projection(t : T?) {
 
         var inscope invalid <- git_parse_unified_patch("not a Git diff")
         tt |> equal(invalid.error, "diff contains no text hunks")
+    }
+}
+
+[test]
+def test_patch_context_injection(t : T?) {
+    //! Find reveals hidden matches IN the diff: injected windows must display
+    //! like any other area - correct line numbers both sides, hunk offsets
+    //! intact, aligned texts rebuilt.
+    let patch = "diff --git a/a.das b/a.das\n--- a/a.das\n+++ b/a.das\n@@ -2,3 +2,4 @@\n keep_a\n-old\n+new\n+extra\n keep_b\n"
+    let source = "one\nkeep_a\nnew\nextra\nkeep_b\nsix\nseven\neight\nnine\nten\n"
+    t |> run("a window after the hunk inserts shifted context rows") <| @(tt : T?) {
+        var inscope parsed <- git_parse_unified_patch(patch)
+        tt |> equal(parsed.error, "")
+        let before_rows = length(parsed.rows)
+        git_patch_inject_context(parsed, source, [int2(7, 9)])
+        tt |> equal(length(parsed.rows), before_rows + 3)
+        let first = parsed.rows[before_rows]
+        tt |> equal(first.new_line, 7)
+        tt |> equal(first.old_line, 6,
+            "the old side is one line behind after the net insertion")
+        tt |> equal(first.new_text, "seven")
+        tt |> equal(first.old_kind, GitDiffLineKind.context)
+        tt |> equal(first.new_kind, GitDiffLineKind.context)
+        tt |> success(ends_with(parsed.new_aligned_text, "seven\neight\nnine"),
+            "the AFTER pane displays the window")
+        tt |> success(ends_with(parsed.old_aligned_text, "seven\neight\nnine"),
+            "the BEFORE pane displays the window")
+        tt |> equal(parsed.hunks[0].row_start, 0)
+    }
+    t |> run("a window before the hunk shifts the hunk and skips displayed lines") <| @(tt : T?) {
+        var inscope parsed <- git_parse_unified_patch(patch)
+        let before_rows = length(parsed.rows)
+        git_patch_inject_context(parsed, source, [int2(1, 3)])
+        tt |> equal(length(parsed.rows), before_rows + 1,
+            "lines 2 and 3 are already displayed")
+        tt |> equal(parsed.rows[0].new_line, 1)
+        tt |> equal(parsed.rows[0].old_line, 1)
+        tt |> equal(parsed.rows[0].new_text, "one")
+        tt |> equal(parsed.hunks[0].row_start, 1)
+    }
+    t |> run("fully displayed windows are a no-op; out-of-range clamps") <| @(tt : T?) {
+        var inscope parsed <- git_parse_unified_patch(patch)
+        let before_rows = length(parsed.rows)
+        git_patch_inject_context(parsed, source, [int2(2, 5)])
+        tt |> equal(length(parsed.rows), before_rows)
+        git_patch_inject_context(parsed, source, [int2(9, 99)])
+        tt |> equal(length(parsed.rows), before_rows + 2,
+            "only the real lines nine and ten exist")
+        tt |> equal(parsed.rows[length(parsed.rows) - 1].new_text, "ten")
+        tt |> equal(parsed.rows[length(parsed.rows) - 1].new_line, 10)
+    }
+    t |> run("a window between two hunks lands between them") <| @(tt : T?) {
+        let two = "diff --git a/a.das b/a.das\n--- a/a.das\n+++ b/a.das\n@@ -2,2 +2,2 @@\n-old one\n+new one\n keep\n@@ -20 +20 @@\n-old two\n+new two\n"
+        var inscope lines : array<string>
+        for (index in range(1, 23)) {
+            lines |> push(index == 2 ? "new one"
+                : (index == 3 ? "keep" : (index == 20 ? "new two" : "line {index}")))
+        }
+        let big_source = join(lines, "\n")
+        var inscope parsed <- git_parse_unified_patch(two)
+        tt |> equal(parsed.error, "")
+        git_patch_inject_context(parsed, big_source, [int2(10, 12)])
+        tt |> equal(length(parsed.rows), 6)
+        tt |> equal(parsed.rows[2].new_line, 10)
+        tt |> equal(parsed.rows[2].old_line, 10,
+            "both hunks replace 1:1 - zero offset between them")
+        tt |> equal(parsed.hunks[0].row_start, 0)
+        tt |> equal(parsed.hunks[1].row_start, 5,
+            "the second hunk shifts past the window")
+    }
+}
+
+[test]
+def test_patch_context_injection_empty_trailing_hunk(t : T?) {
+    t |> run("a bodyless trailing hunk survives the remap") <| @(tt : T?) {
+        // An `@@` header with NOTHING under it parks row_start one past the
+        // last row; remapping it through the row map used to read off the end
+        // and panic with "array index out of range".
+        let trailing = "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1,2 +1,2 @@\n one\n-two\n+TWO\n@@ -9,0 +9,0 @@\n"
+        let nine = "one\nTWO\nthree\nfour\nfive\nsix\nseven\neight\nnine\n"
+        var inscope parsed <- git_parse_unified_patch(trailing)
+        tt |> equal(parsed.error, "")
+        tt |> equal(length(parsed.hunks), 2)
+        tt |> equal(parsed.hunks[1].row_start, length(parsed.rows),
+            "the empty hunk starts one past the last row")
+        tt |> equal(parsed.hunks[1].row_count, 0)
+        git_patch_inject_context(parsed, nine, [int2(5, 6)])
+        tt |> equal(length(parsed.rows), 4)
+        tt |> equal(parsed.hunks[0].row_start, 0)
+        tt |> equal(parsed.hunks[1].row_start, length(parsed.rows),
+            "it keeps its empty span at the new end")
+        tt |> equal(parsed.hunks[1].row_count, 0)
     }
 }
 

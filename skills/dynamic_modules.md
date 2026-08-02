@@ -51,7 +51,7 @@ def initialize(project_path : string) {
 - First arg: path to the `.shared_module` file (string interpolation with `project_path`)
 - Second arg: C++ module class name (must match `REGISTER_MODULE(Module_Foo)` in C++)
 - Guard with `das_is_dll_build()` — only needed in the dynamic binary
-- One call per C++ module class; a single DLL can contain multiple module classes (see dasImgui example below)
+- One call per C++ module class; a single DLL can contain multiple module classes, and one `.das_module` can register several DLLs (see the dasImgui example below)
 
 ### `register_native_path` — for pure-das modules (no C++ component)
 
@@ -87,7 +87,7 @@ def initialize(project_path : string) {
 }
 ```
 
-### C++ module with multiple classes (dasImgui)
+### C++ module with multiple classes (in-tree `modules/dasImgui`)
 
 ```das
 options gen2
@@ -97,8 +97,8 @@ require daslib/fio
 def initialize(project_path : string) {
     if (das_is_dll_build()) {
         register_dynamic_module("{project_path}/dasModuleImgui.shared_module", "Module_dasIMGUI")
-        register_dynamic_module("{project_path}/dasModuleImgui.shared_module", "Module_dasIMGUI_NODE_EDITOR")
         register_dynamic_module("{project_path}/imguiApp.shared_module", "Module_imgui_app")
+        register_dynamic_module("{project_path}/imguiAppHeadless.shared_module", "Module_imgui_app_headless")
     }
 }
 ```

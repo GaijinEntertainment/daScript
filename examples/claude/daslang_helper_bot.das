@@ -1,12 +1,16 @@
 options gen2
 options rtti
 options persistent_heap
+options gc
 options no_unused_block_arguments = false
 
 require telegram/tbot
 require anthropic/anthropic
+require daslib/ast_boost   // make_file_access / compile_file for the compile_check tool
 require daslib/json_boost
 require daslib/fio
+require live/live_gc
+require live_host
 require strings
 
 var system_prompt : string
@@ -248,8 +252,12 @@ def handle_message(chat_id, user_name, text : string) {
     }
 }
 
+// Lifecycle state is global: JIT heap collection cannot see stack locals as GC
+// roots, so main keeps no collectable value alive across maybe_collect_gc().
+var g_offset = 0l
+
 [export]
-def main() {
+def init() {
     load_system_prompt()
     var token = ""
     unsafe {
@@ -271,28 +279,48 @@ def main() {
     }
     telegram_set_configuration(configuration(token = token))
     print("daslang helper bot started. Waiting for messages...\n")
-    var offset = 0l
-    while (true) {
-        var updates <- telegram_getUpdates(get_updates(offset = offset, timeout = 30l, limit = 100l))
-        let err = telegram_get_last_error()
-        if (!empty(err)) {
-            if (find(err, "429") >= 0 || find(err, "Too Many Requests") >= 0) {
-                print("Rate limited, waiting 5s...\n")
-                sleep(5000u)
-                continue
-            }
-            print("Poll error: {err}\n")
-            break
+    g_offset = 0l
+}
+
+// One long poll (the 30-second timeout is the pacing) + handle every new message.
+// The rate-limit sleep stays here — the next update() polls again after it.
+[export]
+def update() {
+    var updates <- telegram_getUpdates(get_updates(offset = g_offset, timeout = 30l, limit = 100l))
+    let err = telegram_get_last_error()
+    if (!empty(err)) {
+        if (find(err, "429") >= 0 || find(err, "Too Many Requests") >= 0) {
+            print("Rate limited, waiting 5s...\n")
+            sleep(5000u)
+            return
         }
-        for (u in updates) {
-            offset = u.update_id + 1l
-            if (u.message != null) {
-                assume msg = *u.message
-                let chat_id = "{msg.chat.id}"
-                if (!empty(msg.text)) {
-                    handle_message(chat_id, msg._from.first_name, msg.text)
-                }
+        print("Poll error: {err}\n")
+        request_exit()
+        return
+    }
+    for (u in updates) {
+        g_offset = u.update_id + 1l
+        if (u.message != null) {
+            assume msg = *u.message
+            let chat_id = "{msg.chat.id}"
+            if (!empty(msg.text)) {
+                handle_message(chat_id, msg._from.first_name, msg.text)
             }
         }
     }
+}
+
+[export]
+def shutdown() {
+    pass
+}
+
+[export]
+def main() {
+    init()
+    while (!exit_requested()) {
+        update()
+        maybe_collect_gc()
+    }
+    shutdown()
 }

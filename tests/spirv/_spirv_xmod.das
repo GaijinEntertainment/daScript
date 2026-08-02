@@ -11,6 +11,8 @@ options no_aot     // the fixture exists to pin the optimizer-folded REQUIRED-mo
 
 module _spirv_xmod public
 
+require math
+
 
 def xm_clip(x : float; var out_v : float&) : bool {
     if (x < 0.0) {
@@ -59,4 +61,40 @@ def xm_sv_dropped_init(m : float) : float {
         l = m * 3.0
     }
     return l
+}
+
+// A fixed-array element assigned at an index built from module-scope consts, where the same array
+// is read back at neighbouring indices. Optimized-arrival reshapes the assignment enough that the
+// emitter computed the destination OpAccessChain and never stored through it -- the write vanished
+// with no diagnostic. Spelling the bounds as literals instead of consts hides it, so keep the
+// consts. Companion same-file copy lives in test_xmod_array_store.das.
+let XM_FA_N = 8
+let XM_FA_L = 15
+
+def xm_fa_tab(i : int) : float {
+    let mu = fixed_array(
+        0.01985507175123188, 0.10166676129318663,
+        0.23723379504183551, 0.40828267875217510,
+        0.59171732124782490, 0.76276620495816449,
+        0.89833323870681337, 0.98014492824876812)
+    return mu[i]
+}
+
+def xm_fa_recurrence() : float {
+    var p : float[128]
+    for (i in range(XM_FA_N)) {
+        p[i] = 1.0
+        p[XM_FA_N + i] = xm_fa_tab(i)
+        for (l in range(2, XM_FA_L + 1)) {
+            p[l * XM_FA_N + i] = (
+                ((2.0 * float(l) - 1.0) * xm_fa_tab(i) * p[(l - 1) * XM_FA_N + i]
+                    - (float(l) - 1.0) * p[(l - 2) * XM_FA_N + i])
+                / float(l))
+        }
+    }
+    var s = 0.0
+    for (q in range(128)) {
+        s += abs(p[q])
+    }
+    return s
 }

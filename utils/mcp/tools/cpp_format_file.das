@@ -23,7 +23,7 @@ def private try_clang_format(cmd : string) : bool {
     var ok = false
     let rc = unsafe(popen_argv([cmd, "--version"], 5.0, $(f) {
         if (f == null) return
-        let line = unsafe(fread_to_eof(f))
+        let line = fread(f)
         if (find(line, "clang-format") >= 0) {
             ok = true
         }

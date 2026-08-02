@@ -67,7 +67,7 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/daspkg.md` | Creating `.das_package` manifests, daspkg commands |
 | `skills/clargs_usage.md` | Writing daslang CLI tools — declarative argv parsing via `daslib/clargs` |
 | `skills/dynamic_modules.md` | `.das_module` descriptors, module resolution, `register_native_path` |
-| `skills/external_module_debugging.md` | Iterating on a daslang module outside the SDK tree (dasImgui, dasCards, or your own daspkg package) — run/lint/test from a standalone `daslang` or via MCP without a full `daspkg install` (junction pattern + `project_root` MCP arg) |
+| `skills/external_module_debugging.md` | Iterating on a daslang module outside the SDK tree (dasImguiNodeEditor, dasCards, or your own daspkg package) — run/lint/test from a standalone `daslang` or via MCP without a full `daspkg install` (junction pattern + `project_root` MCP arg) |
 | `skills/daslang_live.md` | `daslang-live` lifecycle, REST API, `[live_command]`, persistent state |
 | `skills/imgui_ui_debugging.md` | Diagnosing or fixing any dasImgui UI / interaction bug — the discipline: reproduce → make it observable in `imgui_snapshot` → fix → prove via snapshot + test. Never claim a UI fix works from logic or a screenshot alone |
 | `skills/json.md` | Reading/writing JSON (`sprint_json`/`sscan_json`, `JV`, manual `JsonValue?`) |
@@ -92,7 +92,6 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/tune.md` | The long-form `[tune]` reference that `llvm_tune.md` points at — the full permutation/scope/policy surface |
 | `skills/profiler.md` | Runtime profiling and `--das-profiler-leaks` — the full guide `memory_leak_detection.md` points at |
 | `skills/linq_fold_patterns.md` | Which chain shapes `_fold(...)` recognizes — the full pattern reference `linq.md` points at |
-| `skills/environment_variables.md` | Reading or ADDING any environment variable — the full daslang set, plus the read-once/typed-default rules a new one must follow. dasLLAMA's own ~130 knobs are generated into `modules/dasLLAMA/ENVIRONMENT.md` |
 | `skills/perf_lint.md` | Adding or interpreting `PERF*` rules in `daslib/perf_lint.das` — **and before declaring any hot path off-limits to allocation**: `[hot_path]` / `[no_alloc]` / `[no_env]` / `[no_io]` contracts (PERF026-028), `[cold_path]` to prune, `@scratch` to declare a reused buffer |
 | `skills/style_lint.md` | Adding or interpreting `STYLE*` rules in `daslib/style_lint.das` |
 

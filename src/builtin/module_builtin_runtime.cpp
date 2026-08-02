@@ -2517,6 +2517,9 @@ namespace das
         addInterop<builtin_collect_local_and_zero,void,vec4f,uint32_t>(*this, lib, "builtin_collect_local_and_zero",
             SideEffects::modifyArgumentAndExternal, "builtin_collect_local_and_zero")
                 ->args({"anything","sizeOfAnything"})->unsafeOperation = true;
+        addInterop<builtin_collect_local,void,vec4f,uint32_t>(*this, lib, "builtin_collect_local",
+            SideEffects::modifyArgumentAndExternal, "builtin_collect_local")
+                ->args({"anything","sizeOfAnything"})->unsafeOperation = true;
         addInterop<builtin_scope_free,void,vec4f,uint32_t>(*this, lib, "builtin_scope_free",
             SideEffects::modifyArgumentAndExternal, "builtin_scope_free")
                 ->args({"pointer","sizeOfPointee"})->unsafeOperation = true;

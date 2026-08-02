@@ -1,0 +1,59 @@
+*.shared_module
+*.exp
+*.lib
+.daspkg_standalone
+_build/
+build/
+modules/
+imgui/
+example/imgui.ini
+example/imgui_log.txt
+imgui.ini
+libhv.*.log
+example/**/_*.png
+example/_aot_generated/
+build_msvc/
+# wasm build artifacts (daspkg release wasm / emscripten CMake branch)
+_wasm/
+_wasm_build/
+_wasm_obj/
+_*.log
+logs/
+# Visual-aids ad-hoc smoke screenshots dropped at repo root by the screenshot live_command
+screenshot.png
+tour_*.png
+decay_*.png
+no_unsafe.png
+post_addrect.png
+post_fix_render.png
+final_clean.png
+narrate_fixed.png
+auto_flash_click.png
+auto_highlight_test.png
+ah_step*.png
+daslib/_aot_generated/
+src/imgui_headers.h.json
+src/imgui_headers.h.json.log
+src/imgui_vulkan_headers.h.json
+src/imgui_vulkan_headers.h.json.log
+# Sphinx generated content (emitted by utils/imgui2rst.das) — never tracked.
+# Handmade material lives in doc/source/stdlib/handmade/ + sec_*.rst + index.rst
+# + external_types.rst + tutorials/ and IS tracked.
+doc/source/stdlib/generated/
+
+# Tutorial recordings: the raw .apng files dropped by record_*.das drivers
+# are intermediate artifacts — ffmpeg-converted .mp4s (~10 MB total for
+# all tutorials) ship in-tree under doc/source/_static/tutorials/. .apng
+# is gitignored; .mp4 is tracked.
+doc/source/_static/tutorials/*.apng
+# Voiceover pipeline intermediates (prepare_recording / convert_recording):
+# pre-rendered TTS wavs + manifest, the record-time sidecar, the per-clip music
+# bed, and the saved ffmpeg command. Only the final .mp4 is tracked.
+doc/source/_static/tutorials/voiceover/
+doc/source/_static/tutorials/*_music.wav
+doc/source/_static/tutorials/*.mp4.ffmpeg.txt
+doc/source/__pycache__/
+doc/build_html/
+
+# Transient artifacts dropped by the daslang MCP grep/find tools.
+index.db

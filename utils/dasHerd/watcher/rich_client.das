@@ -15,6 +15,7 @@ require imgui/imgui_docking_builtin
 require imgui/imgui_table_builtin
 require imgui/imgui_markdown_tree_sitter
 require imgui/imgui_text_source_view
+require imgui/imgui_text_find
 require dashv/dashv_boost
 require daslib/safe_addr
 require daslib/json_boost
@@ -111,6 +112,7 @@ def private setup_layout_preset(dock_id : uint) {
 var private MENU_ERROR_POPUP : PopupContextItemState
 var private MENU_ERROR_COPY : ToggleState
 var private MENU_ERROR_SEND : ToggleState
+var private MENU_ERROR_FIX : ToggleState
 
 def private menu_status_busy_count() : int {
     var count = 0
@@ -181,7 +183,8 @@ def private draw_menu_status_cluster() {
             (color = token_error_color(), text = error_text))
         set_item_tooltip(MENU_STATUS_ERROR_TIP, (text = full_error))
         draw_error_context(MENU_ERROR_POPUP, MENU_ERROR_COPY,
-            MENU_ERROR_SEND, "menu_error", "Watcher", full_error)
+            MENU_ERROR_SEND, "menu_error", "Watcher", full_error,
+            MENU_ERROR_FIX)
         same_line()
         if (icon_button_draw("##menu-error-dismiss", "close", line)) {
             g_client.error = ""
@@ -217,45 +220,325 @@ def private command_new_session() {
     open_launcher_modal()
 }
 
-def private draw_worktree_block_popup() {
-    if (g_worktree_delete_block.active) {
-        g_worktree_delete_block.active = false
-        open_popup(WORKTREE_BLOCK_DIALOG)
+// Checklist rows are drawn through a shared helper, so every widget inside it
+// renders once PER ROW in a single frame. A bare same_line() would take its
+// identity from its one source location and collide with itself; both states
+// are indexed by row instead.
+var WORKTREE_RETIRE_ROW_JOIN : table<int; EmptyMarkerState>
+
+var WORKTREE_RETIRE_ROW_TEXT : table<int; NarrativeState>
+
+let private RETIRE_ROW_SESSION = 0
+let private RETIRE_ROW_TREE = 1
+let private RETIRE_ROW_COMMITS = 2
+
+def private checklist_row(row : int; passing : bool; caption : string) {
+    //! One fact, its pass/fail glyph, and what it means. Never a bare colour:
+    //! the sentence has to carry the meaning on its own.
+    checklist_glyph_row(row, passing ? "check" : "warning",
+        passing ? token_added_color() : token_warning_color(), caption)
+}
+
+def private checklist_glyph_row(row : int; glyph : string; tint : float4;
+                                caption : string) {
+    // the third state: "help" carries a fact that could not be measured
+    icon_tinted(glyph, GetTextLineHeight(), tint)
+    same_line(WORKTREE_RETIRE_ROW_JOIN[row])
+    text(WORKTREE_RETIRE_ROW_TEXT[row], (text = caption))
+}
+
+def private worktree_change_summary(worktree : WorktreeState const) : string {
+    var inscope parts : array<string>
+    if (worktree.staged > 0) parts |> push("{worktree.staged} staged")
+    if (worktree.unstaged > 0) parts |> push("{worktree.unstaged} unstaged")
+    if (worktree.untracked > 0) parts |> push("{worktree.untracked} untracked")
+    if (worktree.conflicted > 0) parts |> push("{worktree.conflicted} conflicted")
+    return join(parts, ", ")
+}
+
+var WORKTREE_RETIRE_LOG_ROW : table<int; NarrativeState>
+
+// The failure log opens itself once per failure, then leaves the header alone
+// so a user who collapses it is not fought every frame.
+var g_retire_log_forced = false
+
+def private operation_failure_brief(operation : WorktreeOperation const) : string {
+    //! Everything the agent needs and nothing it has to ask for: the command
+    //! that failed, git's own words, and the whole transcript.
+    return build_string() $(var writer) {
+        writer |> write("The operation FAILED at step {operation.step_index} ")
+        writer |> write("of {operation.step_count}.\n\nGit reported:\n")
+        writer |> write("{operation.error}\n")
+        if (!empty(operation.hint)) {
+            writer |> write("\nWhat that usually means:\n{operation.hint}\n")
+        }
+        writer |> write("\nFull command log:\n")
+        for (line in operation.log) {
+            writer |> write("{line}\n")
+        }
     }
-    popup_modal(WORKTREE_BLOCK_DIALOG.PUBLIC, (text = "Cannot delete worktree",
-            closable = true, flags = ImGuiWindowFlags.AlwaysAutoResize)) {
-        text(WORKTREE_BLOCK_PATH, (text = g_worktree_delete_block.worktree_path))
-        if (g_worktree_delete_block.reason == "in_use") {
-            text(WORKTREE_BLOCK_WHY,
-                (text = "A session is working here: {g_worktree_delete_block.detail}"))
-            text_disabled(WORKTREE_BLOCK_HINT,
-                (text = "Close or delete that session first."))
-        } elif (g_worktree_delete_block.reason == "dirty") {
-            text(WORKTREE_BLOCK_WHY, (text = "Uncommitted changes block deletion:"))
-            text_disabled(WORKTREE_BLOCK_DETAIL,
-                (text = g_worktree_delete_block.detail))
-            if (button(WORKTREE_BLOCK_LAUNCH,
-                    (text = "Launch session to resolve..."))) {
-                g_selected_repository_id = g_worktree_delete_block.repository_id
-                g_selected_worktree_path = g_worktree_delete_block.worktree_path
+}
+
+let private SPINNER_FRAMES = "|/-\\"
+
+def private draw_retire_operation(operation : WorktreeOperation const) {
+    //! The running/finished half of the dialog: what step, how far, and the
+    //! exact commands with their output behind a collapsed header. A user who
+    //! is told "working..." with no detail has to guess; the log is the detail.
+    separator(WORKTREE_RETIRE_OP_SEPARATOR)
+    if (operation.state == "running") {
+        // A frame-driven glyph is the honest progress indicator here: git
+        // reports no percentage, so a bar would be inventing one.
+        let phase = (g_ui_frame / 6) % length(SPINNER_FRAMES)
+        text(WORKTREE_RETIRE_SPINNER,
+            (text = slice(SPINNER_FRAMES, phase, phase + 1)))
+        same_line(WORKTREE_RETIRE_SPINNER_JOIN)
+        text(WORKTREE_RETIRE_OP_STEP, (text =
+            "{operation.step} ({operation.step_index}/{operation.step_count})"))
+    } elif (operation.state == "ok") {
+        with_style((ImGuiCol.Text, token_added_color())) {
+            text(WORKTREE_RETIRE_OP_STEP, (text = "Done."))
+        }
+    } elif (operation.state == "cancelled") {
+        with_style((ImGuiCol.Text, token_warning_color())) {
+            text(WORKTREE_RETIRE_OP_STEP, (text =
+                "Cancelled. Whatever already ran is in the log."))
+        }
+    } else {
+        // Git's own words, in full and in the error colour — never summarised
+        // away, because they are the only first-hand account of the failure.
+        with_style((ImGuiCol.Text, token_error_color())) {
+            text_wrapped(WORKTREE_RETIRE_OP_STEP,
+                (text = "Failed: {operation.error}"))
+        }
+        if (!empty(operation.hint)) {
+            text_wrapped(WORKTREE_RETIRE_OP_HINT, (text = operation.hint))
+        }
+    }
+    // Collapsed while things are going well; a failure opens it, because that
+    // is the moment the log is the whole point.
+    if (operation.state == "failed" && !g_retire_log_forced) {
+        g_retire_log_forced = true
+        WORKTREE_RETIRE_LOG.pending_open = true
+    }
+    if (operation.state == "running") {
+        g_retire_log_forced = false
+    }
+    collapsing_header(WORKTREE_RETIRE_LOG, (text =
+            "Operation log ({length(operation.log)} lines)",
+            closable = false, flags = ImGuiTreeNodeFlags.None)) {
+        for (row, line in count(), operation.log) {
+            text_disabled(WORKTREE_RETIRE_LOG_ROW[row], (text = line))
+        }
+    }
+}
+
+// The one retire-a-worktree checklist (note 58), for both entry doors. The
+// facts are re-read live every frame instead of captured at open time, so it
+// can never describe a state the repository has already left — a WIP commit
+// made from inside this dialog flips its own verdict.
+def private draw_worktree_retire_popup() { // nolint:STYLE038
+    if (g_worktree_retire.active) {
+        g_worktree_retire.active = false
+        // A tick left over from the last worktree must never pre-arm a
+        // destructive delete for this one.
+        WORKTREE_RETIRE_FORCE.value = false
+        open_popup(WORKTREE_RETIRE_DIALOG)
+    }
+    popup_modal(WORKTREE_RETIRE_DIALOG.PUBLIC, (text = "Retire worktree",
+            closable = true, flags = ImGuiWindowFlags.AlwaysAutoResize)) { // nolint:STYLE037
+        let path = g_worktree_retire.worktree_path
+        let repository_id = g_worktree_retire.repository_id
+        text(WORKTREE_RETIRE_PATH, (text = path))
+        // Once an operation owns this worktree the checklist is history — and
+        // after a successful delete it is actively WRONG, because the facts it
+        // reads describe a folder that no longer exists.
+        let operation_mine = (g_client != null
+            && g_client.operation.worktree_path == path
+            && g_client.operation.state != "idle"
+            && !empty(g_client.operation.state))
+        if (operation_mine) {
+            let operation & = unsafe(g_client.operation)
+            draw_retire_operation(operation)
+            if (operation.state == "running") {
+                if (button(WORKTREE_RETIRE_CANCEL_OP, (text = "Cancel"))) {
+                    g_client->request_worktree_operation_cancel()
+                }
+            } else {
+                if (operation.state == "failed") {
+                    // The full output lives in a real PTY; the log above is a
+                    // digest of it. This is the way to the whole thing.
+                    if (button(WORKTREE_RETIRE_TERMINAL,
+                            (text = "Open in terminal",
+                             enabled = !empty(operation.session_id)))) {
+                        g_client->attach_session(operation.session_id)
+                        g_open_terminal_pending = true
+                        g_focus_terminal_pending = true
+                    }
+                    same_line()
+                    // When all else fails: hand the whole failure to an agent,
+                    // in the worktree it happened in.
+                    if (button(WORKTREE_RETIRE_FIX_SESSION,
+                            (text = "Start a session to fix this..."))) {
+                        start_error_session("Retiring the worktree {path}",
+                            operation_failure_brief(operation), path)
+                        close_current_popup(WORKTREE_RETIRE_DIALOG)
+                    }
+                    same_line()
+                    // Only offered when trying again could actually differ —
+                    // a retry against a permanent failure wastes the user's
+                    // time and teaches them to distrust the button.
+                    if (button(WORKTREE_RETIRE_RETRY, (text = "Try again",
+                            enabled = operation.retryable))) {
+                        g_worktree_retire.active = true
+                        g_client->request_worktree_delete(repository_id, path,
+                            WORKTREE_RETIRE_FORCE.value)
+                    }
+                    if (!operation.retryable) {
+                        set_item_tooltip(WORKTREE_RETIRE_RETRY_TIP, (text =
+                            "This failure will not change on its own — " +
+                            "retrying would fail the same way."))
+                    }
+                    same_line()
+                }
+                if (button(WORKTREE_RETIRE_DONE, (text = "Close"))) {
+                    close_current_popup(WORKTREE_RETIRE_DIALOG)
+                    open_next_queued_retire()
+                }
+            }
+            return
+        }
+        var worktree = WorktreeState()
+        let observed = find_worktree_state(repository_id, path, worktree)
+        let claimed_by = herd_session_claiming(path,
+            g_worktree_retire.herd_session_id)
+        let tier = (observed
+            ? repository_worktree_delete_tier(worktree, claimed_by)
+            : WORKTREE_TIER_DIRTY)
+        let changes = worktree_change_summary(worktree)
+
+        if (!observed) {
+            text_disabled(WORKTREE_RETIRE_UNKNOWN, (text =
+                "This worktree is not in the Git inventory yet — refresh the " +
+                "repository before retiring it."))
+        }
+        checklist_row(RETIRE_ROW_SESSION, empty(claimed_by),
+            (empty(claimed_by)
+                ? "No session is working here."
+                : "Session '{claimed_by}' is working here — retire it first."))
+        checklist_row(RETIRE_ROW_TREE, empty(changes),
+            (empty(changes)
+                ? "Working tree is clean."
+                : "{changes} — these files exist only in this folder."))
+        // The unpushed line is about REDUNDANCY, not risk: removing a worktree
+        // cannot lose a commit, the branch keeps every one of them.
+        if (!worktree.unmerged_known) {
+            checklist_glyph_row(RETIRE_ROW_COMMITS, "help",
+                token_warning_color(),
+                "Commits vs base: unknown — no base ref resolved, so " +
+                "redundancy cannot be confirmed. The branch keeps its commits.")
+        } elif (worktree.unmerged_commits == 0) {
+            checklist_row(RETIRE_ROW_COMMITS, true,
+                "Nothing here that {worktree.unmerged_base_ref} does not have.")
+        } elif (repository_worktree_only_here(worktree)) {
+            checklist_row(RETIRE_ROW_COMMITS, false,
+                "{worktree.unmerged_commits} commits vs {worktree.unmerged_base_ref} " +
+                "exist only on this machine; nothing else has a copy.")
+        } else {
+            checklist_row(RETIRE_ROW_COMMITS, true,
+                "{worktree.unmerged_commits} commits vs {worktree.unmerged_base_ref}, " +
+                "all pushed to {worktree.upstream_ref}.")
+        }
+        if (!empty(worktree.branch)) {
+            text_disabled(WORKTREE_RETIRE_BRANCH_NOTE, (text =
+                "Branch {worktree.branch} keeps its commits — removing this " +
+                "folder does not delete the branch."))
+        }
+        if (!empty(g_worktree_retire.server_reason)) {
+            with_style((ImGuiCol.Text, token_error_color())) {
+                text(WORKTREE_RETIRE_SERVER, (text =
+                    "Refused: {g_worktree_retire.server_detail}"))
+            }
+        }
+        if (!empty(g_worktree_retire.notice)) {
+            text_disabled(WORKTREE_RETIRE_NOTICE,
+                (text = g_worktree_retire.notice))
+        }
+
+        if (tier == WORKTREE_TIER_IN_USE) {
+            if (button(WORKTREE_RETIRE_GOTO_SESSION,
+                    (text = "Go to session '{claimed_by}'"))) {
+                g_open_sessions_pending = true
+                close_current_popup(WORKTREE_RETIRE_DIALOG)
+            }
+        } elif (tier == WORKTREE_TIER_DIRTY) {
+            // The mechanical rescue Boris named as the button: the branch
+            // outlives the worktree and keeps its name, so committing needs no
+            // judgment about what belongs where.
+            if (button(WORKTREE_RETIRE_COMMIT, (text = "Commit to the branch",
+                    enabled = g_client != null && observed
+                        && !empty(worktree.branch)))) {
+                g_client->request_worktree_commit_wip(repository_id, path,
+                    "WIP: work in progress on {worktree.branch}")
+                g_worktree_retire.notice = "Committing..."
+            }
+            same_line()
+            if (button(WORKTREE_RETIRE_LAUNCH,
+                    (text = "Start a session to sort it out..."))) {
+                g_selected_repository_id = repository_id
+                g_selected_worktree_path = path
                 g_selection_explicit = true
-                prepare_resolver_launcher(g_worktree_delete_block.repository_id,
-                    g_worktree_delete_block.worktree_path,
-                    "The user wants to DELETE the worktree " +
-                    "{g_worktree_delete_block.worktree_path}, but it has " +
-                    "uncommitted changes:\n{g_worktree_delete_block.detail}\n" +
+                prepare_resolver_launcher(repository_id, path,
+                    "The user wants to RETIRE the worktree {path}, but it has " +
+                    "uncommitted changes:\n{changes}\n" +
                     "Review the changes and resolve them: commit (and push) " +
                     "what should be kept, discard what should not. Do not " +
                     "delete the worktree yourself. When the tree is clean, " +
                     "report what you did and finish.")
                 g_launch_resolver_pending = true
-                close_current_popup(WORKTREE_BLOCK_DIALOG)
+                close_current_popup(WORKTREE_RETIRE_DIALOG)
+            }
+            // Untracked-as-blocker needs a way through, or junk files send the
+            // user off to clean by hand for nothing.
+            checkbox(WORKTREE_RETIRE_FORCE, (text =
+                "Delete anyway — {changes} lost"))
+            g_worktree_retire.force_acknowledged = WORKTREE_RETIRE_FORCE.value
+            if (button(WORKTREE_RETIRE_FORCE_GO, (text = "Delete worktree...",
+                    enabled = g_client != null
+                        && g_worktree_retire.force_acknowledged))) {
+                g_worktree_retire.confirming = true
             }
         } else {
-            text(WORKTREE_BLOCK_WHY, (text = g_worktree_delete_block.detail))
+            if (button(WORKTREE_RETIRE_GO, (text = "Delete worktree...",
+                    enabled = g_client != null && observed))) {
+                g_worktree_retire.confirming = true
+            }
         }
-        if (button(WORKTREE_BLOCK_CLOSE, (text = "Close"))) {
-            close_current_popup(WORKTREE_BLOCK_DIALOG)
+        same_line()
+        if (button(WORKTREE_RETIRE_CLOSE, (text = "Cancel"))) {
+            close_current_popup(WORKTREE_RETIRE_DIALOG)
+        }
+        // The confirmation is a second, explicit act, and it names what is
+        // about to happen rather than asking "are you sure" about nothing.
+        if (g_worktree_retire.confirming) {
+            separator(WORKTREE_RETIRE_CONFIRM_SEPARATOR)
+            let lost = (tier == WORKTREE_TIER_DIRTY
+                ? " {changes} will be lost." : "")
+            with_style((ImGuiCol.Text, token_warning_color())) {
+                text(WORKTREE_RETIRE_CONFIRM_TEXT, (text =
+                    "Delete the folder {path}?{lost} " +
+                    "The branch is not touched."))
+            }
+            if (button(WORKTREE_RETIRE_CONFIRM_GO, (text = "Yes, delete it"))) {
+                g_worktree_retire.confirming = false
+                g_worktree_retire.notice = ""
+                g_client->request_worktree_delete(repository_id, path,
+                    tier == WORKTREE_TIER_DIRTY)
+            }
+            same_line()
+            if (button(WORKTREE_RETIRE_CONFIRM_NO, (text = "No"))) {
+                g_worktree_retire.confirming = false
+            }
         }
     }
 }
@@ -331,7 +614,7 @@ def private register_commands() {
         CommandBinding(), @@() { imgui_terminal_clear_selection(g_terminal_view); })
 }
 
-def draw_main_menu() {
+def draw_main_menu() { // nolint:STYLE038
     main_menu_bar(MAIN_MENU) {
         menu(FILE_MENU, (text = "File", enabled = true)) {
             if (menu_label(FILE_EXIT, (text = "Exit", shortcut = "Alt+F4"))) {
@@ -508,12 +791,19 @@ def init() {
 }
 
 [export]
-def update() {
+def update() { // nolint:STYLE037
     // The native frame gate returns false while the window is minimized.
     // Keep the transport alive outside that gate so heartbeats, controller
     // renewal, and queued PTY output continue until the window is restored.
     if (g_client != null) g_client->pump()
     if (g_client != null) {
+        // Every refreshed status list re-scopes the Changelist selection: a row
+        // that left the list drops out, so a file that comes back to that group
+        // cannot arrive pre-selected and ride a stage or discard batch.
+        if (g_client.repository_message_count != g_changelist_pruned_revision) {
+            g_changelist_pruned_revision = g_client.repository_message_count
+            prune_changelist_selection(g_client.repositories)
+        }
         // Error ring (note 28): capture every transition to a new error text.
         if (g_client.error != g_last_seen_error) {
             g_last_seen_error = g_client.error
@@ -620,8 +910,7 @@ def update() {
         }
     }
     herd_commands_poll()
-    let tab_signature = ("pr={GIT_PR_TAB.selected} hist={GIT_HISTORY_TAB.selected} " +
-        "tree={GIT_TREE_TAB.selected} proj={GIT_PROJECT_TAB.selected} " +
+    let tab_signature = ("git={g_git_perspective} cl={g_changelist_view} " +
         "diff={INSPECTOR_DIFF_TAB.selected} " +
         "view={INSPECTOR_VIEW_TAB.selected} wt={g_selected_worktree_path}")
     if (tab_signature != g_ui_tab_signature) {
@@ -679,8 +968,9 @@ def update() {
         draw_settings_dock()
     }
     draw_herd_rename_popup()
+    draw_herd_retire_popup()
     draw_destructive_confirm_popup()
-    draw_worktree_block_popup()
+    draw_worktree_retire_popup()
     draw_launcher_modal()
     herd_commands_drain()
     harness_end_frame()
@@ -710,6 +1000,9 @@ def shutdown() {
     text_source_view_dispose(g_inspector.old_view)
     text_source_view_dispose(g_inspector.new_view)
     text_source_view_dispose(g_inspector.view)
+    text_find_dispose(g_inspector.find)
+    delete g_inspector.find_windows
+    delete g_inspector.find_match_old_side
     terminal_viewport_snapshot_dispose(g_terminal_cache.snapshot)
     terminal_dispose(g_terminal)
     delete g_font_sources

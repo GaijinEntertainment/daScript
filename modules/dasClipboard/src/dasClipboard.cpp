@@ -1,5 +1,6 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_interop.h"
+#include "daScript/misc/env_cfg.h"
 #include "aot_builtin_clipboard.h"
 #include "clip.h"
 
@@ -51,7 +52,7 @@ namespace das {
 #elif defined(__linux__)
             // clip's Linux backend is XCB.  A Wayland session with XWayland has
             // DISPLAY and works; a native Wayland-only session is unavailable.
-            const char * display = std::getenv("DISPLAY");
+            const char * display = das_getenv("DISPLAY");
             return display && *display;
 #else
             return true;

@@ -188,7 +188,7 @@ def main() : int {
             var rc = 0
             unsafe {
                 rc = popen(cmd) $(f) {
-                    let _drain = fread_to_eof(f)   // output is redirected; drain keeps the pipe contract
+                    let _drain = fread(f)   // output is redirected; drain keeps the pipe contract
                 }
             }
             let secs = double(get_time_usec(t0)) / 1000000.0lf

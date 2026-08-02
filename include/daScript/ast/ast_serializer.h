@@ -220,8 +220,8 @@ namespace das {
         AstSerializer & operator << ( Module & module );
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
-        static constexpr uint32_t getVersion () { 
-            return 106;   // 106: CodeOfPolicies::building_documentation (105: Function::AliasInfo cross-module serialization, 104: valid GC roots, 103: ExprWith::moduleName, 102: auto_inline policies + neverInline, 101: 16/8-bit lattice)
+        static constexpr uint32_t getVersion () {
+            return 107;   // 107: CodeOfPolicies::default_init_containers (106: CodeOfPolicies::building_documentation, 105: Function::AliasInfo cross-module serialization, 104: valid GC roots, 103: ExprWith::moduleName, 102: auto_inline policies + neverInline)
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

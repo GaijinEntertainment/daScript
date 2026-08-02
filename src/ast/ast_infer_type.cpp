@@ -111,6 +111,7 @@ namespace das {
         relaxedAssign = prog->options.getBoolOption("relaxed_assign", prog->policies.relaxed_assign);
         relaxedPointerConst = prog->options.getBoolOption("relaxed_pointer_const", prog->policies.relaxed_pointer_const);
         unsafeTableLookup = prog->options.getBoolOption("unsafe_table_lookup", prog->policies.unsafe_table_lookup);
+        defaultInitContainers = prog->options.getBoolOption("default_init_containers", prog->policies.default_init_containers);
         withModuleIsUnsafe = prog->options.getBoolOption("with_module_is_unsafe", prog->policies.with_module_is_unsafe);
         forceInscopePod = prog->options.getBoolOption("force_inscope_pod", prog->policies.force_inscope_pod);
         logInscopePod = prog->options.getBoolOption("log_inscope_pod", prog->policies.log_inscope_pod);
@@ -1224,6 +1225,13 @@ namespace das {
             propagateTempType(expr->subexpr->type, expr->type); // deref(Foo#?) is Foo#
         }
         return Visitor::visit(expr);
+    }
+    void InferTypes::preVisit(ExprRef2Ptr *expr) {
+        Visitor::preVisit(expr);
+        // addr(tab[k]) is raw slot access — no default_init_containers rewrite
+        if (expr->subexpr->rtti_isAt()) {
+            static_cast<ExprAt*>(expr->subexpr)->noTableInit = true;
+        }
     }
     ExpressionPtr InferTypes::visit(ExprRef2Ptr *expr) {
         if (!expr->subexpr->type)
@@ -2549,6 +2557,31 @@ namespace das {
             } else if (expr->trait == "is_unsafe_when_uninitialized") {
                 reportAstChanged();
                 return new ExprConstBool(expr->at, noUnsafeUninitializedStructs && expr->typeexpr->unsafeInit());
+            } else if (expr->trait == "is_safe_to_delete") {
+                reportAstChanged();
+                return new ExprConstBool(expr->at, expr->typeexpr->isSafeToDelete());
+            } else if (expr->trait == "needs_container_init") {
+                reportAstChanged();
+                return new ExprConstBool(expr->at, defaultInitContainers && expr->typeexpr->unsafeInit());
+            } else if (expr->trait == "is_pod_delete") {
+                reportAstChanged();
+                return new ExprConstBool(expr->at, isPodDelete(expr->typeexpr));
+            } else if (expr->trait == "needs_container_finalize") {
+                // the COLLECT half rides force_inscope_pod - the same policy that governs
+                // builtin_collect_local_and_zero on move-assign/scope-exit; container init
+                // (default_init_containers) is the construct half only, a separate knob.
+                // isPodDelete: collection must be fully GENERATED (user finalizers never run
+                // implicitly), must only free heap the value owns, and there must be some — so POD
+                // structs cost nothing. isSafeToDelete on top: a generated finalizer that would
+                // DELETE POINTEES (a struct with a raw-pointer field, e.g. sql_linq's JoinSpec) is
+                // unsafe to run implicitly — those keep the old drop-the-slot behavior.
+                reportAstChanged();
+                const auto & tt = expr->typeexpr;
+                return new ExprConstBool(expr->at, forceInscopePod && !tt->isConst()
+                                                    && isPodDelete(tt) && tt->isSafeToDelete());
+            } else if (expr->trait == "needs_nontrivial_init") {
+                reportAstChanged();
+                return new ExprConstBool(expr->at, expr->typeexpr->unsafeInit());
             } else if (expr->trait == "has_nontrivial_ctor") {
                 reportAstChanged();
                 return new ExprConstBool(expr->at, expr->typeexpr->hasNonTrivialCtor());
@@ -3313,6 +3346,23 @@ namespace das {
             if (unsafeTableLookup && !safeExpression(expr)) {
                 error("table index requires unsafe", "use 'get_value', 'insert', 'insert_clone' or 'emplace' instead. consider 'get'", "",
                       expr->at, CompilationError::unsafe_table_index);
+            }
+            // default_init_containers: a non-store index over an init-carrying value type becomes
+            // _table_index_and_init(tab,key) - a ref-returning wrapper - so a fresh slot runs its
+            // initializers (builtin.das owns the wrapper; its own body is exempt below, which is
+            // what keeps its Tab[at] from recursing into itself). Temporary tables keep the raw
+            // index - a # view is a borrowed shape whose indexed inserts panic on the lock at
+            // runtime anyway; rewriting it would only trade that for a compile error naming a
+            // compiler-internal generic.
+            if (defaultInitContainers && !unsafeTableLookup && !expr->noTableInit
+                && !seT->temporary && seT->secondType->unsafeInit()
+                && !(func && func->fromGeneric && func->fromGeneric->name == "_table_index_and_init")) {
+                auto pCall = new ExprCall(expr->at, "_table_index_and_init");
+                pCall->arguments.push_back(expr->subexpr->clone());
+                pCall->arguments.push_back(expr->index->clone());
+                pCall->generated = true;
+                reportAstChanged();
+                return pCall;
             }
             TypeDecl::clone(expr->type, seT->secondType);
             expr->type->ref = true;
@@ -5345,9 +5395,11 @@ namespace das {
                 }
             }
             if (forceInscopePod && !expr->inScope && !var->pod_delete && !var->type->ref) { // no constant for now
-                if ((expr->variables.size() == 1)                                           // only one variable
-                                                                                            // very restrictive on functions
-                    && (func && !func->generated && !func->generator && !func->lambda)
+                // lambda and @@{} local-function bodies are generated wrappers around verbatim
+                // user blocks - their locals are ordinary per-invocation stack locals, so
+                // scope-exit collection is as sound there as in a plain function. Generators
+                // stay excluded: their locals persist across yields in the state machine.
+                if ((func && (!func->generated || func->lambda || func->localFunction) && !func->generator)
                     // not in the generator block
                     && (blocks.empty() || !blocks.back()->isGeneratorBlock)) {
                     if (isPodDelete(var->type)) {

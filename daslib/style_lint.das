@@ -2247,15 +2247,13 @@ class StyleLintVisitor : AstVisitor {
         var enclosing_priv = false
         var inside_function = false
         var enclosing_size : uint = 0xFFFFFFFFu
-        for (i in range(length(fn_file))) {
-            if (fn_file[i] != file_name) continue
-            let s = fn_starts[i]
-            let e = fn_ends[i]
+        for (f_file, s, e, f_priv in fn_file, fn_starts, fn_ends, fn_private) {
+            if (f_file != file_name) continue
             if (s <= block_start && block_start <= e) {
                 let size = e - s
                 if (size < enclosing_size) {
                     enclosing_size = size
-                    enclosing_priv = fn_private[i]
+                    enclosing_priv = f_priv
                     inside_function = true
                 }
             }
@@ -2565,7 +2563,26 @@ class StyleLintVisitor : AstVisitor {
                   blk.list[0] is ExprReturn ||
                   blk.list[0] is ExprNew)
                 && !frame.has_non_local_let_ref) {
-            style_warning("STYLE025: 'unsafe \{ ... }' block scope is too broad; only one operation requires unsafe — narrow to 'unsafe(<sub-expr>)' wrapping that operation", expr.at)
+            // a loop whose body is only delete statements can't narrow either — delete has no expression form
+            var narrowable = true
+            if (blk.list[0] is ExprFor) {
+                let fbody = (blk.list[0] as ExprFor).body
+                if (fbody != null && fbody is ExprBlock) {
+                    let fblk = fbody as ExprBlock
+                    var all_deletes = !empty(fblk.list)
+                    for (s in fblk.list) {
+                        if (!(s is ExprDelete)) {
+                            all_deletes = false
+                        }
+                    }
+                    if (all_deletes) {
+                        narrowable = false
+                    }
+                }
+            }
+            if (narrowable) {
+                style_warning("STYLE025: 'unsafe \{ ... }' block scope is too broad; only one operation requires unsafe — narrow to 'unsafe(<sub-expr>)' wrapping that operation", expr.at)
+            }
         }
         return expr
     }

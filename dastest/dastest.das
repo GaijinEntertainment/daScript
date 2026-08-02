@@ -180,7 +180,7 @@ def private build_iso_cmd(filesList : array<string>; prefix, suffix : string) : 
 }
 
 // Run one subprocess and parse its streamed per-file JSON reports.
-def private run_iso_subprocess(cmd : string; timeoutSec : float; var br : BatchRun) {
+def private run_iso_subprocess(cmd : string; timeoutSec : float; var br : BatchRun) {  // nolint:STYLE038 - one linear spawn/poll/reap pass
     var pending : array<string>
     // popen_timeout's stderr handling is timeout-dependent: with timeout<=0 it
     // falls back to plain _popen (stdout only — stderr DROPPED), which is the
@@ -398,7 +398,7 @@ def serialize_path(ctx : SuiteCtx, files : array<string>, out_file : string) {
         }
         fwrite(f, res.total)
         ast_serializer_get_data(ser) $(data) {
-            let sz = uint64(length(data))
+            let sz = uint64(long_length(data))
             fwrite(f, sz)
             fwrite(f, data)
         }
@@ -429,7 +429,7 @@ def deserialize_path(var ctx : SuiteCtx, _files : array<string>, in_file : strin
             _builtin_read(f, addr(sz), typeinfo sizeof(sz))
         }
         var data : array<uint8>
-        data |> resize(int(sz))
+        data |> resize(int64(sz))
         fread(f, data)
         log::info("Deserializing {count:d} programs from {in_file}")
         var ser = create_ast_deserializer(data)
@@ -464,7 +464,7 @@ def deserialize_path(var ctx : SuiteCtx, _files : array<string>, in_file : strin
 }
 
 [export]
-def main() : int {
+def main() : int {  // nolint:STYLE037 - CLI dispatch, one arm per mode
     // ansi-colors detection scans full argv for --color / --no-color so the
     // user can place either flag before or after the "--" separator.
     log::init_log()

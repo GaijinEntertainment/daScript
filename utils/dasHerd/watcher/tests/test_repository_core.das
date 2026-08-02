@@ -41,10 +41,122 @@ def test_repository_porcelain_parsing(t : T?) {
         t |> equal(length(files), 1)
         t |> equal(files[0].path, "unicode-Привет.txt")
     }
+    t |> run("the status branch line carries the upstream, or says there is none") <| @(t : T?) {
+        var worktree = WorktreeState(path = "D:/Work/fixture")
+        var files : array<GitFileState>
+        repository_parse_status("## topic...borisbat/topic [ahead 2]\r\n",
+            worktree, files)
+        t |> equal(worktree.upstream_ref, "borisbat/topic")
+        // Measured live 2026-07-27 on codex/dogfood-round-2: a branch whose
+        // upstream IS the base, 9 ahead. The same worktree reads 81 unmerged
+        // against local master and 9 against origin/master, because local
+        // master sits 108 behind — the trap this whole design exists for.
+        repository_parse_status(
+            "## codex/dogfood-round-2...origin/master [ahead 9, behind 36]\r\n",
+            worktree, files)
+        t |> equal(worktree.upstream_ref, "origin/master")
+        t |> equal(worktree.ahead, 9)
+        t |> equal(worktree.behind, 36)
+        repository_parse_status("## topic...origin/topic\r\n", worktree, files)
+        t |> equal(worktree.upstream_ref, "origin/topic",
+            "an in-sync branch prints no bracket")
+        repository_parse_status("## local-only\r\n", worktree, files)
+        t |> equal(worktree.upstream_ref, "",
+            "no upstream means nothing else has a copy")
+        repository_parse_status("## HEAD (no branch)\r\n", worktree, files)
+        t |> equal(worktree.upstream_ref, "")
+    }
 }
 
 [test]
-def test_repository_untracked_diff_contract(t : T?) {
+def test_repository_delete_safety_verdict(t : T?) {
+    t |> run("the verdict ladder blocks on the working tree, warns on redundancy") <| @(t : T?) {
+        let clean = WorktreeState(path = "D:/Work/tree", branch = "topic",
+            upstream_ref = "origin/topic", unmerged_known = true,
+            unmerged_base_ref = "origin/master")
+        t |> equal(repository_worktree_delete_tier(clean, ""),
+            WORKTREE_TIER_GREEN)
+        t |> equal(repository_worktree_delete_tier(clean, "dictation"),
+            WORKTREE_TIER_IN_USE, "a live session outranks every other fact")
+
+        let main_checkout <- WorktreeState(path = "D:/Work/daScript",
+            is_main = true)
+        t |> equal(repository_worktree_delete_tier(main_checkout, ""),
+            WORKTREE_TIER_MAIN)
+
+        // Untracked alone blocks: those files exist nowhere but this folder.
+        let junk <- WorktreeState(path = "D:/Work/tree", untracked = 3,
+            unmerged_known = true)
+        t |> equal(repository_worktree_delete_tier(junk, ""),
+            WORKTREE_TIER_DIRTY)
+    }
+    t |> run("only-here needs BOTH unmerged and unpushed, and never guesses") <| @(t : T?) {
+        // Pushed: the remote has every commit, so removing the folder loses
+        // nothing and duplicates nothing.
+        var pushed = WorktreeState(unmerged_known = true, unmerged_commits = 3,
+            upstream_ref = "origin/topic", ahead = 0)
+        t |> success(!repository_worktree_only_here(pushed),
+            "commits on an upstream are not 'only here'")
+        pushed.ahead = 1
+        t |> success(repository_worktree_only_here(pushed),
+            "commits ahead of the upstream exist only on this machine")
+
+        let no_upstream <- WorktreeState(unmerged_known = true,
+            unmerged_commits = 2)
+        t |> success(repository_worktree_only_here(no_upstream),
+            "no upstream at all means nothing else has a copy")
+        t |> equal(repository_worktree_delete_tier(no_upstream, ""),
+            WORKTREE_TIER_WARN, "redundancy warns, it never blocks")
+
+        // The count that could not be measured must not read as a warning OR
+        // as a clean bill of health.
+        let unknown <- WorktreeState(unmerged_commits = 7)
+        t |> success(!repository_worktree_only_here(unknown),
+            "an unresolved base never manufactures a warning")
+        t |> equal(repository_worktree_delete_tier(unknown, ""),
+            WORKTREE_TIER_UNKNOWN,
+            "an unmeasured count is its own tier, never green")
+        t |> equal(repository_worktree_delete_tier(unknown, "dictation"),
+            WORKTREE_TIER_IN_USE, "a live session still outranks unknown")
+    }
+}
+
+[test]
+def test_repository_delete_failure_explanations(t : T?) {
+    t |> run("a recognised failure explains itself and says whether retrying helps") <| @(t : T?) {
+        // The exact line git produced live on 2026-07-27, retiring
+        // D:/Work/daScript-ci-30233791631: it emptied the folder, could not
+        // remove the folder itself, and asked an interactive question. Proven
+        // non-transient — a second delete attempt failed the same way.
+        var hint : string
+        var retryable = false
+        repository_classify_failure(
+            "Deletion of directory 'D:/Work/daScript-ci-30233791631' failed. " +
+            "Should I try again? (y/n)", hint, retryable)
+        t |> success(!empty(hint), "the locked-folder failure must explain itself")
+        t |> success(find(hint, "locked") >= 0,
+            "the explanation names the cause, not git's question")
+        t |> success(retryable, "a lock can be released, so retry is offered")
+
+        var unknown_hint : string
+        var unknown_retryable = true
+        repository_classify_failure("something nobody has ever seen",
+            unknown_hint, unknown_retryable)
+        t |> equal(unknown_hint, "",
+            "an unrecognised failure invents no explanation")
+        t |> success(!unknown_retryable,
+            "and never claims a retry will help when we do not know")
+    }
+    t |> run("the base ref is the authoritative one, never local master") <| @(t : T?) {
+        t |> equal(repository_default_base_ref(RepositoryRecord()),
+            "origin/master")
+        t |> equal(repository_default_base_ref(
+            RepositoryRecord(base_ref = "origin/trunk")), "origin/trunk")
+    }
+}
+
+[test]
+def test_repository_untracked_diff_contract(t : T?) { // nolint:STYLE038
     t |> run("Untracked diffs accept git --no-index exit 1") <| @(t : T?) {
         let file = GitFileState(code = "??", path = "new file.das")
         var argv : array<string>
@@ -158,7 +270,7 @@ def test_repository_untracked_diff_contract(t : T?) {
 }
 
 [test]
-def test_repository_review_parsing(t : T?) {
+def test_repository_review_parsing(t : T?) { // nolint:STYLE038
     t |> run("worktree PR commits retain descriptions and identity") <| @(t : T?) {
         var commits : array<GitCommitState>
         repository_parse_review_commits(
@@ -335,6 +447,358 @@ def test_repository_review_parsing(t : T?) {
         t |> equal(argv[6], "HEAD")
         t |> success(!empty(repository_build_file_action_argv(
             "D:/Work/tree", "../outside.txt", "stage", argv)))
+    }
+}
+
+[test]
+def test_repository_operation_step_lists(t : T?) { // nolint:STYLE038
+    t |> run("retire builds the precheck/remove list with its recovery graph") <| @(t : T?) {
+        var steps : array<WorktreeOperationStep>
+        var recoveries : table<string; array<WorktreeOperationStep>>
+        repository_operation_remove_steps("D:/Work/main", "D:/Work/tree",
+            false, steps, recoveries)
+        t |> equal(length(steps), 2)
+        t |> equal(steps[0].argv[1], "-C")
+        t |> equal(steps[0].argv[2], "D:/Work/tree",
+            "the dirty precheck runs in the WORKTREE, not the checkout")
+        t |> equal(steps[0].argv[3], "status")
+        t |> equal(steps[0].expectation, "empty_output")
+        t |> equal(steps[0].expect_message,
+            "uncommitted or untracked work is present")
+        t |> equal(steps[0].recover_match, "not a git repository")
+        t |> equal(steps[0].recover_name, "force_remove")
+        t |> equal(steps[1].argv[2], "D:/Work/main",
+            "the removal runs from the main checkout")
+        t |> equal(steps[1].argv[4], "remove")
+        t |> equal(steps[1].argv[length(steps[1].argv) - 1], "D:/Work/tree")
+        t |> equal(steps[1].recover_match, "validation failed")
+        t |> equal(steps[1].recover_name, "prune")
+        t |> success(key_exists(recoveries, "force_remove"))
+        t |> success(key_exists(recoveries, "prune"))
+        t |> equal(length(recoveries["force_remove"]), 1)
+        t |> equal(recoveries["force_remove"][0].argv[5], "--force")
+        t |> equal(recoveries["force_remove"][0].recover_name, "prune",
+            "the forced fallback still recovers into prune")
+        t |> equal(length(recoveries["prune"]), 1)
+        t |> equal(recoveries["prune"][0].argv[4], "prune")
+        t |> success(recoveries["prune"][0].require_folder_gone,
+            "prune success still fails honestly when the folder survives")
+        delete steps
+        delete recoveries
+    }
+    t |> run("forced retire is one step and keeps the prune fallback") <| @(t : T?) {
+        var steps : array<WorktreeOperationStep>
+        var recoveries : table<string; array<WorktreeOperationStep>>
+        repository_operation_remove_steps("D:/Work/main", "D:/Work/tree",
+            true, steps, recoveries)
+        t |> equal(length(steps), 1)
+        t |> equal(steps[0].argv[5], "--force")
+        t |> equal(steps[0].recover_name, "prune")
+        t |> success(!key_exists(recoveries, "force_remove"),
+            "an already-forced removal has no forced fallback")
+        t |> success(key_exists(recoveries, "prune"))
+        delete steps
+        delete recoveries
+    }
+    t |> run("multi-path actions build one literal argv or none at all") <| @(t : T?) {
+        var argv : array<string>
+        let paths <- ["src/main.das", "with space.txt", ":(glob)**.das"]
+        t |> equal(repository_build_files_action_argv(
+            "D:/Work/tree", paths, "stage", argv), "")
+        t |> equal(argv[1], "--literal-pathspecs")
+        t |> equal(argv[4], "add")
+        t |> equal(argv[5], "--")
+        t |> equal(argv[6], "src/main.das")
+        t |> equal(argv[7], "with space.txt")
+        t |> equal(argv[8], ":(glob)**.das")
+        t |> equal(repository_build_files_action_argv(
+            "D:/Work/tree", paths, "unstage", argv), "")
+        t |> equal(argv[4], "reset")
+        t |> equal(argv[6], "HEAD")
+        t |> equal(argv[7], "--")
+        t |> equal(argv[length(argv) - 1], ":(glob)**.das")
+        // One bad path fails the WHOLE action — never a partial argv.
+        let poisoned <- ["src/main.das", "../outside.txt"]
+        t |> success(!empty(repository_build_files_action_argv(
+            "D:/Work/tree", poisoned, "stage", argv)))
+        t |> equal(length(argv), 0, "a rejected action leaves argv empty")
+        let no_paths : array<string>
+        t |> success(!empty(repository_build_files_action_argv(
+            "D:/Work/tree", no_paths, "stage", argv)))
+        t |> success(!empty(repository_build_files_action_argv(
+            "D:/Work/tree", paths, "sideload", argv)),
+            "unknown actions still error rather than building an argv")
+    }
+    t |> run("changelist actions are one rail step with a counted label") <| @(t : T?) {
+        var steps : array<WorktreeOperationStep>
+        let paths <- ["a.das", "b.das"]
+        t |> equal(repository_operation_changelist_steps(
+            "D:/Work/tree", "stage", paths, steps), "")
+        t |> equal(length(steps), 1)
+        t |> equal(steps[0].step_label, "staging 2 files")
+        t |> equal(steps[0].kind, "git-changelist-stage")
+        t |> equal(steps[0].argv[4], "add")
+        let single <- ["a.das"]
+        t |> equal(repository_operation_changelist_steps(
+            "D:/Work/tree", "unstage", single, steps), "")
+        t |> equal(steps[0].step_label, "unstaging 1 file")
+        t |> equal(steps[0].argv[4], "reset")
+        let poisoned <- ["../outside.txt"]
+        t |> success(!empty(repository_operation_changelist_steps(
+            "D:/Work/tree", "stage", poisoned, steps)))
+        t |> equal(length(steps), 0)
+        delete steps
+    }
+    t |> run("a batch is checked against the observed status, path by path") <| @(t : T?) {
+        // `git add -- a.txt gone.txt c.txt` exits 128 and stages NOTHING, so
+        // one stale row would kill the whole batch with git's pathspec error.
+        var files <- [GitFileState(worktree_path = "D:/Work/tree",
+                code = " M", path = "a.txt"),
+            GitFileState(worktree_path = "D:/Work/tree",
+                code = "M ", path = "s.txt"),
+            GitFileState(worktree_path = "D:/Work/tree",
+                code = "MM", path = "both.txt"),
+            GitFileState(worktree_path = "D:/Work/tree",
+                code = "??", path = "new.txt"),
+            GitFileState(worktree_path = "D:/Work/other",
+                code = " M", path = "elsewhere.txt")]
+        let live <- ["a.txt", "both.txt", "new.txt"]
+        t |> equal(repository_changelist_status_error(files, "D:/Work/tree",
+            "stage", live), "", "every staged row carries a working change")
+        let with_stale <- ["a.txt", "gone.txt", "new.txt"]
+        let stale_error = repository_changelist_status_error(files,
+            "D:/Work/tree", "stage", with_stale)
+        t |> success(find(stale_error, "gone.txt") >= 0,
+            "the refusal NAMES the path git would have choked on")
+        t |> success(find(stale_error, "observed Git status") >= 0,
+            "and reads like the single-file rail's refusal")
+        // A row from ANOTHER worktree is a stale path here too.
+        let cross_tree <- ["elsewhere.txt"]
+        t |> success(!empty(repository_changelist_status_error(files,
+            "D:/Work/tree", "stage", cross_tree)))
+        // Per-file eligibility matches the single-file rail exactly.
+        let staged_only <- ["s.txt"]
+        t |> success(find(repository_changelist_status_error(files,
+            "D:/Work/tree", "stage", staged_only),
+            "no working-tree change") >= 0)
+        t |> equal(repository_changelist_status_error(files, "D:/Work/tree",
+            "unstage", staged_only), "")
+        let working_only <- ["a.txt"]
+        t |> success(find(repository_changelist_status_error(files,
+            "D:/Work/tree", "unstage", working_only),
+            "no staged change") >= 0)
+        let mm <- ["both.txt"]
+        t |> equal(repository_changelist_status_error(files, "D:/Work/tree",
+            "stage", mm), "", "an MM file can carry either verb")
+        t |> equal(repository_changelist_status_error(files, "D:/Work/tree",
+            "unstage", mm), "")
+        t |> equal(repository_file_action_status_error("??", "stage"), "",
+            "an untracked row stages")
+        t |> success(!empty(repository_file_action_status_error("??",
+            "unstage")))
+        delete files
+    }
+    t |> run("the three discard spellings stay distinct - confusing them destroys staged work") <| @(t : T?) {
+        var argv : array<string>
+        let paths <- ["src/main.das"]
+        t |> equal(repository_build_files_action_argv(
+            "D:/Work/tree", paths, "discard_worktree", argv), "")
+        t |> equal(argv[4], "checkout")
+        t |> equal(argv[5], "--",
+            "discard_worktree restores from the INDEX - a staged part survives")
+        t |> equal(repository_build_files_action_argv(
+            "D:/Work/tree", paths, "discard_all", argv), "")
+        t |> equal(argv[4], "checkout")
+        t |> equal(argv[5], "HEAD",
+            "discard_all resets index AND worktree to HEAD")
+        t |> equal(argv[6], "--")
+        t |> equal(repository_build_files_action_argv(
+            "D:/Work/tree", paths, "discard_untracked", argv), "")
+        t |> equal(argv[4], "clean")
+        t |> equal(argv[5], "-f")
+        t |> equal(argv[6], "--", "no directory row, no -d")
+        let with_dir <- ["stray.txt", "junk/"]
+        t |> equal(repository_build_files_action_argv(
+            "D:/Work/tree", with_dir, "discard_untracked", argv), "")
+        t |> equal(argv[6], "-d",
+            "a dir/ row adds -d - clean refuses directories without it")
+        t |> equal(argv[7], "--")
+    }
+    t |> run("discard builds one operation with a step per class, staged first") <| @(t : T?) {
+        var steps : array<WorktreeOperationStep>
+        let modified <- ["m.das"]
+        let staged <- ["s.das"]
+        let untracked <- ["u.txt"]
+        t |> equal(repository_operation_discard_steps("D:/Work/tree",
+            modified, staged, untracked, steps), "")
+        t |> equal(length(steps), 3)
+        t |> equal(steps[0].step_label, "discarding 1 staged file")
+        t |> equal(steps[0].argv[5], "HEAD")
+        t |> equal(steps[1].step_label, "discarding 1 edited file")
+        t |> equal(steps[1].argv[5], "--")
+        t |> equal(steps[2].step_label, "deleting 1 untracked file")
+        t |> equal(steps[2].argv[4], "clean")
+        let no_paths : array<string>
+        t |> equal(repository_operation_discard_steps("D:/Work/tree",
+            no_paths, staged, no_paths, steps), "")
+        t |> equal(length(steps), 1, "empty classes contribute no step")
+        t |> success(!empty(repository_operation_discard_steps("D:/Work/tree",
+            no_paths, no_paths, no_paths, steps)),
+            "nothing to discard is an error, not an empty operation")
+        delete steps
+    }
+    t |> run("a real commit takes the staged set only and runs the hooks") <| @(t : T?) {
+        var steps : array<WorktreeOperationStep>
+        t |> equal(repository_operation_commit_steps("D:/Work/tree",
+            "a real message", steps), "")
+        t |> equal(length(steps), 1)
+        t |> equal(steps[0].argv[3], "commit")
+        t |> equal(steps[0].argv[4], "-m")
+        t |> equal(steps[0].argv[5], "a real message")
+        for (argument in steps[0].argv) {
+            t |> success(argument != "--no-verify",
+                "a real commit must run the repository's hooks")
+            t |> success(argument != "-a",
+                "commit never silently widens beyond what is staged")
+        }
+        t |> success(!empty(repository_operation_commit_steps("D:/Work/tree",
+            "   ", steps)), "a blank message is refused before git sees it")
+        delete steps
+    }
+    t |> run("network operations build guarded steps: ff-only pull, explicit publish") <| @(t : T?) {
+        var steps : array<WorktreeOperationStep>
+        t |> equal(repository_operation_network_steps("D:/Work/tree", "sync",
+            "topic", "origin/topic", steps), "")
+        t |> equal(length(steps), 3, "sync is fetch, then pull, then push")
+        t |> equal(steps[0].argv[3], "fetch")
+        t |> equal(steps[0].argv[4], "--prune")
+        t |> equal(steps[1].argv[3], "pull")
+        t |> equal(steps[1].argv[4], "--ff-only",
+            "NEVER a bare pull - a surprise merge commit is a silent lie")
+        t |> equal(steps[2].argv[3], "push")
+        t |> equal(length(steps[2].argv), 4,
+            "an existing upstream gets a plain push")
+        for (step in steps) {
+            t |> equal(step.timeout_ms, 120000l,
+                "network git gets its own budget, not the local 15s")
+            t |> equal(length(step.env), 1)
+            t |> equal(step.env[0], "GIT_TERMINAL_PROMPT=0",
+                "a credential prompt must fail fast, not eat the timeout")
+        }
+        t |> equal(repository_operation_network_steps("D:/Work/tree", "push",
+            "topic", "", steps), "")
+        t |> equal(length(steps), 1)
+        t |> equal(steps[0].argv[4], "-u")
+        t |> equal(steps[0].argv[5], "origin")
+        t |> equal(steps[0].argv[6], "topic",
+            "no upstream means an explicit publish naming the remote")
+        t |> success(!empty(repository_operation_network_steps("D:/Work/tree",
+            "push", "", "", steps)), "detached HEAD cannot push")
+        t |> success(!empty(repository_operation_network_steps("D:/Work/tree",
+            "teleport", "topic", "origin/topic", steps)),
+            "unknown network actions error")
+        delete steps
+    }
+    t |> run("sync on an unpublished branch skips the pull and publishes") <| @(t : T?) {
+        var steps : array<WorktreeOperationStep>
+        // There is nothing to pull FROM: `pull --ff-only` dies with "no
+        // tracking information" and sync would never reach the publish step
+        // that exists for exactly this branch.
+        t |> equal(repository_operation_network_steps("D:/Work/tree", "sync",
+            "topic", "", steps), "")
+        t |> equal(length(steps), 2, "fetch, then publish - no pull between")
+        t |> equal(steps[0].argv[3], "fetch")
+        t |> equal(steps[1].argv[3], "push")
+        t |> equal(steps[1].argv[4], "-u")
+        t |> equal(steps[1].argv[6], "topic")
+        // An explicit pull keeps its step, so git's own refusal reaches the
+        // user instead of an empty operation.
+        t |> equal(repository_operation_network_steps("D:/Work/tree", "pull",
+            "topic", "", steps), "")
+        t |> equal(length(steps), 1)
+        t |> equal(steps[0].argv[3], "pull")
+        delete steps
+    }
+    t |> run("the pull refusal on an unpublished branch classifies") <| @(t : T?) {
+        var hint : string
+        var retryable = true
+        // git pull says "no tracking information"; git push says "no upstream".
+        repository_classify_failure(
+            "There is no tracking information for the current branch.\n" +
+            "Please specify which branch you want to merge with.",
+            hint, retryable)
+        t |> success(!empty(hint), "the wording git PULL uses is recognised")
+        t |> success(find(hint, "ublish") >= 0,
+            "and points at Publish, the verb that fixes it")
+        t |> success(!retryable)
+    }
+    t |> run("a rev-list count refuses garbage rather than inventing a zero") <| @(t : T?) {
+        var count = -1
+        t |> success(repository_parse_rev_list_count("7\n", count))
+        t |> equal(count, 7)
+        t |> success(repository_parse_rev_list_count("0\r\n", count))
+        t |> equal(count, 0)
+        // The capture is a PTY, so git's stderr shares the stream - the count
+        // is still the last line.
+        t |> success(repository_parse_rev_list_count(
+            "warning: refname 'origin/master' is ambiguous.\n5\n", count))
+        t |> equal(count, 5)
+        // to_int would answer 0 here, and a fabricated 0 reads as "nothing
+        // lives only in this worktree" - the retire dialog's green light.
+        t |> success(!repository_parse_rev_list_count(
+            "fatal: bad revision 'origin/master..HEAD'\n", count))
+        t |> success(!repository_parse_rev_list_count("", count))
+        t |> success(!repository_parse_rev_list_count("   \n \n", count))
+        t |> success(!repository_parse_rev_list_count("3 commits\n", count))
+    }
+    t |> run("network failures classify: what happened, and whether retry helps") <| @(t : T?) {
+        var hint : string
+        var retryable = true
+        repository_classify_failure(
+            "! [rejected] topic -> topic (non-fast-forward)", hint, retryable)
+        t |> success(!empty(hint), "non-fast-forward explains itself")
+        t |> success(!retryable,
+            "retry fails identically until the user rebases - not retryable")
+        retryable = true
+        repository_classify_failure(
+            "fatal: Not possible to fast-forward, aborting.", hint, retryable)
+        t |> success(!empty(hint), "the ff-only pull refusal is recognised")
+        t |> success(!retryable)
+        retryable = true
+        repository_classify_failure(
+            "fatal: The current branch topic has no upstream branch.",
+            hint, retryable)
+        t |> success(!empty(hint))
+        t |> success(find(hint, "ublish") >= 0,
+            "the hint points at Publish, the button that fixes it")
+        t |> success(!retryable)
+        retryable = true
+        repository_classify_failure(
+            "fatal: could not read Username for 'https://github.com': " +
+            "terminal prompts disabled", hint, retryable)
+        t |> success(!empty(hint), "auth failures explain themselves")
+        t |> success(!retryable, "auth retries fail identically")
+        retryable = false
+        repository_classify_failure(
+            "fatal: unable to access 'https://github.com/x.git/': " +
+            "Could not resolve host", hint, retryable)
+        t |> success(!empty(hint))
+        t |> success(retryable, "a network blip is worth retrying")
+    }
+    t |> run("the WIP rescue stages everything then commits, hooks bypassed") <| @(t : T?) {
+        var steps : array<WorktreeOperationStep>
+        repository_operation_commit_wip_steps("D:/Work/tree", "rescue message",
+            steps)
+        t |> equal(length(steps), 2)
+        t |> equal(steps[0].argv[3], "add")
+        t |> equal(steps[0].argv[4], "-A")
+        t |> equal(steps[1].argv[3], "commit")
+        t |> equal(steps[1].argv[4], "--no-verify",
+            "the rescue must not be blocked by a hook")
+        t |> equal(steps[1].argv[length(steps[1].argv) - 1], "rescue message")
+        t |> equal(steps[0].timeout_ms, 0l,
+            "local git keeps the default timeout")
+        delete steps
     }
 }
 

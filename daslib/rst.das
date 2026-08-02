@@ -40,6 +40,10 @@ var public {
 
 var private seen_function_labels : table<string; uint>
 
+// modules whose symbols get NO generated pages (raw bindings): type mentions
+// print as plain text, never as :ref: targets sphinx -W would die on.
+var private pageless_ref_modules : table<string>
+
 // symbol names whose value/field tables are wrapped in `.. container:: nosearch`
 // (the search crawler drops them; the symbol + its description stay indexed).
 // populated per-module by `documents()` from its `nosearch` argument.
@@ -66,6 +70,16 @@ def module_name(mod) {
         if (mn == src) return dst
     }
     return mn
+}
+
+def public mark_module_pageless(name : string) {
+    //! Declare that `name` (a raw binding such as `imgui`) gets no generated
+    //! pages: signatures naming its types print them plain instead of :ref:.
+    pageless_ref_modules |> insert(name)
+}
+
+def has_ref_page(mod) : bool {
+    return !key_exists(pageless_ref_modules, module_name(mod))
 }
 
 def alias_label_name(td : TypeDeclPtr) {
@@ -259,7 +273,7 @@ def cleanup_type_short(name : string) {
     return res
 }
 
-def describe_type_short(td : TypeDeclPtr) {
+def describe_type_short(td : TypeDeclPtr) { // nolint:STYLE038 — one arm per Type class, the short-form twin of describe_type
     if (td == null) {
         PANIC("describe_type_short: null type")
     }
@@ -386,8 +400,8 @@ def rst_describe_function_short(func : FunctionPtr) {
     return res
 }
 
-def describe_type(td : TypeDecl?) {
-    return build_string() $(var writer) {
+def describe_type(td : TypeDecl?) { // nolint:STYLE038 — the full type-writer: one arm per Type class
+    return build_string() $(var writer) { // nolint:STYLE037 — the ladder IS the type grammar; splitting scatters it
         if (!empty(td.alias) && !td.isAuto && !td.isAlias) {
             write(writer, make_ref(alias_label_name(td), string(td.alias)))
             return
@@ -439,13 +453,23 @@ def describe_type(td : TypeDecl?) {
                 write(writer, ",")
                 write(writer, parts[2])
                 write(writer, ">")
-            } else {
+            } elif (has_ref_page(td.annotation._module)) {
                 write(writer, make_ref(handle_label_name(td.annotation), "{td.annotation.name}"))
+            } else {
+                write(writer, "{td.annotation.name}")
             }
         } elif (baseType == Type.tStructure) {
-            write(writer, make_ref(struct_label_name(td.structType), "{td.structType.name}"))
+            if (has_ref_page(td.structType._module)) {
+                write(writer, make_ref(struct_label_name(td.structType), "{td.structType.name}"))
+            } else {
+                write(writer, "{td.structType.name}")
+            }
         } elif (baseType == Type.tEnumeration || baseType == Type.tEnumeration8 || baseType == Type.tEnumeration16 || baseType == Type.tEnumeration64) {
-            write(writer, make_ref(enum_label_name(td.enumType), "{td.enumType.name}"))
+            if (has_ref_page(td.enumType._module)) {
+                write(writer, make_ref(enum_label_name(td.enumType), "{td.enumType.name}"))
+            } else {
+                write(writer, "{td.enumType.name}")
+            }
         }
         // write(writer,make_ref(handle_label_name(td.annotation),"{module_name(td.annotation._module)}::{td.annotation.name}")) elif baseType==Type tStructure write(writer,make_ref(struct_label_name(td.structType),"{module_name(td.structType._module)}::{td.structType.name}")) elif baseType==Type tEnumeration || baseType==Type tEnumeration8 || baseType==Type tEnumeration16 || baseType==Type tEnumeration64 write(writer,make_ref(enum_label_name(td.enumType),"{module_name(td.enumType._module)}::{td.enumType.name}"))
         elif (baseType == Type.tPointer) {
@@ -1250,7 +1274,7 @@ def is_class_method(value; fld : FieldDeclaration&) {
 }
     // return length(fld._type.argNames) > 0 && fld._type.argNames[0] == "self" && is_class_method(unsafe(reinterpret<StructurePtr> value), fld._type)
 
-def document_classes(doc_file : file; mods : array<Module?>) {
+def document_classes(doc_file : file; mods : array<Module?>) { // nolint:STYLE038 — one linear page-emission pass per class facet
     var any = false
     for (mod in mods) {
         if (any) break
@@ -1882,7 +1906,7 @@ def document_function(doc_file : file; mod : Module?; var func : FunctionPtr; dr
 }
 
 
-def document_functions(doc_file : file; mods : array<Module?>; var groups : array<DocGroup>) {
+def document_functions(doc_file : file; mods : array<Module?>; var groups : array<DocGroup>) { // nolint:STYLE037 — grouping/uses/unused-doc bookkeeping in one pass
     var tab : table<Function?>
     for (grp in groups) {
         if (!empty(grp.func)) {

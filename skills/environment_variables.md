@@ -107,3 +107,18 @@ If a variable is genuinely warranted:
    to zero. Plain `to_int` answers `0` on garbage, which silently reads as "explicitly zero".
 3. **Document it in the same commit.** A knob that exists only in the source is a knob nobody can
    use and nobody can remove.
+
+On the C++ side every core read goes through an accessor declared in
+`include/daScript/misc/env_cfg.h` rather than a `getenv` at the use site. The accessor is
+`get_dasenv_` plus the variable in lowercase without its `DAS_` prefix (`DAS_GC_STAGE_REPORT` →
+`get_dasenv_gc_stage_report`); a variable daslang does not own keeps its own name (`COLUMNS` →
+`get_columns`). It returns the raw `const char *`, and leaves parsing and caching to the caller.
+That keeps the name string in one place, and gives the PS targets — which have no environment at
+all — a single point to return "unset" from.
+
+Adding one: declare it in that header and implement it in `src/misc/env_cfg.cpp` alongside the
+others, one line each.
+
+Writes go through `das_setenv` from the same header, a no-op on PS. Host configs may poison
+`getenv`/`setenv`/`putenv` outside `src/misc/env_cfg.cpp` (dagor's CI config does), so a direct
+call at a use site fails to compile.

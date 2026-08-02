@@ -687,6 +687,10 @@
           "named": true
         },
         {
+          "type": "make_struct_field",
+          "named": true
+        },
+        {
           "type": "named_argument_block",
           "named": true
         }

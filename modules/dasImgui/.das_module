@@ -1,0 +1,109 @@
+options gen2
+require daslib/fio
+
+[export]
+def initialize(project_path : string) {
+    if (das_is_dll_build()) {
+        register_dynamic_module("{project_path}/dasModuleImgui.shared_module", "Module_dasIMGUI")
+        register_dynamic_module("{project_path}/imguiApp.shared_module", "Module_imgui_app")
+        register_dynamic_module("{project_path}/imguiAppHeadless.shared_module", "Module_imgui_app_headless")
+    }
+    // Legacy v1 surface. Compiles standalone; NOT compatible with the v2 boost
+    // modules below — a consumer picks one, not both. New code uses v2.
+    register_native_path("imgui", "imgui_boost", "{project_path}/daslib/imgui_boost.das")
+    // Phase 0a — define_widget core. v2 surface; primary post-refactor home.
+    register_native_path("imgui", "imgui_boost_v2", "{project_path}/widgets/imgui_boost_v2.das")
+    register_native_path("imgui", "imgui_boost_runtime", "{project_path}/widgets/imgui_boost_runtime.das")
+    register_native_path("imgui", "imgui_widgets_builtin", "{project_path}/widgets/imgui_widgets_builtin.das")
+    register_native_path("imgui", "imgui_containers_builtin", "{project_path}/widgets/imgui_containers_builtin.das")
+    // Reload-aware ImGui ctx lifecycle (mirror of live/glfw_live for ImGui).
+    register_native_path("imgui", "imgui_live", "{project_path}/widgets/imgui_live.das")
+    // Synth IO bypass driver (mouse + keyboard timelines + imgui_synth_tick),
+    // re-exported by imgui_live.
+    register_native_path("imgui", "imgui_live_core", "{project_path}/widgets/imgui_live_core.das")
+    register_native_path("imgui", "imgui_transport", "{project_path}/widgets/imgui_transport.das")
+    // Phase 3 — public playwright module (promoted from tests/integration/live_driver.das).
+    register_native_path("imgui", "imgui_playwright", "{project_path}/widgets/imgui_playwright.das")
+    // Phase 4 — visual aids overlays (highlight, mouse_trail, narrate).
+    register_native_path("imgui", "imgui_visual_aids", "{project_path}/widgets/imgui_visual_aids.das")
+    // §4.8 — explicit ID-stack push (with_id) for scope-based widget addressing.
+    register_native_path("imgui", "imgui_id_builtin", "{project_path}/widgets/imgui_id_builtin.das")
+    // §4.7 — style stack helpers (with_style call_macro + push_style_one overloads).
+    register_native_path("imgui", "imgui_style_builtin", "{project_path}/widgets/imgui_style_builtin.das")
+    // daslang.io drop-in theme — apply_daslang_theme(GetStyle()) on init.
+    register_native_path("imgui", "imgui_theme_daslang", "{project_path}/widgets/imgui_theme_daslang.das")
+    // Font loading + explicit merge-mode fallback. Dear ImGui has no platform
+    // fallback resolver, so terminal/editor consumers build a font stack here.
+    register_native_path("imgui", "imgui_fonts", "{project_path}/widgets/imgui_fonts.das")
+    // Shared UTF-8 source ranges, grapheme grouping, and view-independent
+    // inline flow. Kept in its own section because Markdown/editor/terminal
+    // renderers all consume it without owning one another.
+    register_native_path("imgui", "imgui_text_flow", "{project_path}/text/imgui_text_flow.das")
+    register_native_path("imgui", "imgui_document_model", "{project_path}/text/imgui_document_model.das")
+    register_native_path("imgui", "imgui_text_source_model", "{project_path}/text/imgui_text_source_model.das")
+    register_native_path("imgui", "imgui_text_source_view", "{project_path}/text/imgui_text_source_view.das")
+    register_native_path("imgui", "imgui_text_find", "{project_path}/text/imgui_text_find.das")
+    register_native_path("imgui", "imgui_text_source_edit", "{project_path}/text/imgui_text_source_edit.das")
+    register_native_path("imgui", "imgui_text_language", "{project_path}/text/imgui_text_language.das")
+    register_native_path("imgui", "imgui_text_edit_syntax", "{project_path}/text/imgui_text_edit_syntax.das")
+    register_native_path("imgui", "imgui_text_edit_complete", "{project_path}/text/imgui_text_edit_complete.das")
+    register_native_path("imgui", "imgui_text_edit_provider_das", "{project_path}/text/imgui_text_edit_provider_das.das")
+    register_native_path("imgui", "imgui_text_edit_provider_cpp", "{project_path}/text/imgui_text_edit_provider_cpp.das")
+    register_native_path("imgui", "imgui_text_tree_sitter", "{project_path}/text/imgui_text_tree_sitter.das")
+    // Semantic commands, scoped shortcuts and editable per-user bindings.
+    register_native_path("imgui", "imgui_commands", "{project_path}/commands/imgui_commands.das")
+    // Markdown-facing UI adapters. Parsing/model modules will join this section
+    // without coupling the shared text-flow core to immediate-mode rendering.
+    register_native_path("imgui", "imgui_markdown_model", "{project_path}/markdown/imgui_markdown_model.das")
+    register_native_path("imgui", "imgui_markdown_text", "{project_path}/markdown/imgui_markdown_text.das")
+    register_native_path("imgui", "imgui_markdown_view", "{project_path}/markdown/imgui_markdown_view.das")
+    register_native_path("imgui", "imgui_markdown_tree_sitter", "{project_path}/markdown/imgui_markdown_tree_sitter.das")
+    // Interactive terminal renderer. Protocol/process ownership stays in the
+    // sibling renderless dasTerminal module.
+    register_native_path("imgui", "imgui_terminal", "{project_path}/terminal/imgui_terminal.das")
+    // Flag-operator extensions (| / & / ~) for internal imgui enums the binder gave
+    // no addEnumFlagOps — currently ImGuiItemFlags. Re-exported by imgui_scope_builtin.
+    register_native_path("imgui", "imgui_enums", "{project_path}/widgets/imgui_enums.das")
+    // §4.9 — stateless scope wrappers (with_indent, with_item_width, with_text_wrap_pos).
+    register_native_path("imgui", "imgui_scope_builtin", "{project_path}/widgets/imgui_scope_builtin.das")
+    // §4.6 — layout helpers (split_h, split_v, dock_left).
+    register_native_path("imgui", "imgui_layout_builtin", "{project_path}/widgets/imgui_layout_builtin.das")
+    // Default-on lint pass — forbids legacy imgui_boost::* and raw imgui::*
+    // (modulo curated allow-list) so consumer files don't bypass v2 wrappers.
+    // Bundled into imgui_boost_v2 via `require imgui/imgui_lint public`, so
+    // every dasImgui consumer gets it transitively. Per-file opt-out:
+    // `options _allow_imgui_legacy = true`.
+    register_native_path("imgui", "imgui_lint", "{project_path}/widgets/imgui_lint.das")
+    // Canonical wrapper for examples/tests — hides GLFW/GL boilerplate behind
+    // 5 helpers and re-exports the backend-agnostic stack. Bundles
+    // imgui_harness_lint via `require imgui/imgui_harness_lint public` so every
+    // harness-using file gets the windowed-backend ban transitively.
+    register_native_path("imgui", "imgui_harness", "{project_path}/widgets/imgui_harness.das")
+    // Default-on lint for files requiring imgui_harness — forbids direct calls
+    // into glfw_boost / opengl_boost / glfw_live / opengl_live / imgui_live so
+    // harness consumers stay backend-agnostic. Per-file opt-out:
+    // `options _allow_glfw_calls = true` (scaffolding only).
+    register_native_path("imgui", "imgui_harness_lint", "{project_path}/widgets/imgui_harness_lint.das")
+    // Phase 7 — docking (dockspace, dock_window) + DockBuilder bindings cherry-picked from imgui_internal.h.
+    register_native_path("imgui", "imgui_docking_builtin", "{project_path}/widgets/imgui_docking_builtin.das")
+    // Tables — data_table container + table_setup_*/table_next_*/table_set_column_index pass-throughs.
+    register_native_path("imgui", "imgui_table_builtin", "{project_path}/widgets/imgui_table_builtin.das")
+    // File dialog — reusable native New/Open/Save (popup_modal + data_table + selectable_label +
+    // input_text + combo), fully playwright-drivable; no raw-ImGui C++ dependency.
+    register_native_path("imgui", "imgui_file_dialog", "{project_path}/widgets/imgui_file_dialog.das")
+    // Window-size constraints — lambda-bearing overload (3-arg SetNextWindowSizeConstraints).
+    register_native_path("imgui", "imgui_window_constraints_builtin", "{project_path}/widgets/imgui_window_constraints_builtin.das")
+    // Drawlist rail — with_window_drawlist / with_foreground_drawlist /
+    // with_background_drawlist scope wrappers + 8 [drawlist_prim] primitives
+    // (add_line/add_rect/add_rect_filled/add_circle/add_circle_filled/
+    // add_triangle/add_triangle_filled/add_text). Per-call-site path key
+    // (<mod>:<line>:<col>) feeds g_registry; no state global.
+    register_native_path("imgui", "imgui_drawlist_builtin", "{project_path}/widgets/imgui_drawlist_builtin.das")
+    // IM_COL32 packer split out from v1 imgui_boost so v2 consumers get
+    // rgba+constants without the legacy surface.
+    register_native_path("imgui", "imgui_colors", "{project_path}/widgets/imgui_colors.das")
+    // Vector icon set — asset-free glyphs drawn onto the ImDrawList on a 24-grid
+    // (no SVG/atlas), tinted from the theme amber. icon() / icon_button(); a
+    // general, growing set (transport, edit, mix, synth, scene tools, chrome).
+    register_native_path("imgui", "imgui_icons", "{project_path}/widgets/imgui_icons.das")
+}

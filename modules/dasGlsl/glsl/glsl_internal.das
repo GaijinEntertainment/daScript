@@ -582,7 +582,7 @@ class GlslExport : AstVisitor {
         }
         return st
     }
-    def produce_zero(t : TypeDeclPtr) {
+    def produce_zero(t : TypeDeclPtr) {  // nolint:STYLE037 - one arm per Type class
         if (t.baseType == Type.tFixedArray) {
             *writer |> write("{describe_glsl_type(t)}(")
             var ct <- clone_type(t.firstType)   // element of the fixed-array chain
@@ -698,7 +698,7 @@ class GlslExport : AstVisitor {
             newLine(1)
         }
     }
-    def override preVisitProgram(prog : ProgramPtr) : void {
+    def override preVisitProgram(prog : ProgramPtr) : void {  // nolint:STYLE038 - one linear header-emission pass
         // GLSL ES 3.00 (WebGL2) vs desktop core. Keyed off the compiler's platform:
         // under emscripten the interpreter IS the wasm target (Model A), so a wasm
         // compile emits ES 3.00. (A host cross-compile to wasm — Model B — emits on
@@ -1157,7 +1157,7 @@ class GlslExport : AstVisitor {
         *writer |> write("\} {arg.name}")
         return true
     }
-    def override preVisitGlobalLetVariable(arg : VariablePtr; lastArg : bool) {
+    def override preVisitGlobalLetVariable(arg : VariablePtr; lastArg : bool) {  // nolint:STYLE037 - one arm per global-annotation kind
         line(arg.at)
         // 16/8-bit lattice globals fail closed: varyings have no f16 attribute-upload path in
         // dasOpenGL, loose uniforms have no glUniform f16 setters, blocks are gated at patch
@@ -1970,8 +1970,8 @@ class GlslExport : AstVisitor {
     }
 // const enumeraiton
     def override preVisitExprConstEnumeration(expr : ExprConstEnumeration?) : void {
-        let val = find_enum_value(expr.enumType, "{expr.value}")
-        *writer |> write("{int(val)}")
+        let val = int(find_enum_value(expr.enumType, "{expr.value}"))
+        *writer |> write("{val}")
     }
 // const bitfield
     def override preVisitExprConstBitfield(expr : ExprConstBitfield?) : void {
@@ -2171,7 +2171,7 @@ class GlslExport : AstVisitor {
 }
 
 [macro_function]
-def generate_glsl(fnMain : FunctionPtr; var errors : array<string>; shaderType : ShaderType; version : int; comp_loc_size : int3; caps : ShaderExportCaps; force_es300 : bool = false) : tuple<body : string; inout_stub : string; inout_decl : string> {
+def generate_glsl(fnMain : FunctionPtr; var errors : array<string>; shaderType : ShaderType; version : int; comp_loc_size : int3; caps : ShaderExportCaps; force_es300 : bool = false) : tuple<body : string; inout_stub : string; inout_decl : string> {  // nolint:STYLE038 - one linear emission pipeline
     var inout_stub = ""
     var inout_decl = ""
     var needs_f16 = false
@@ -2202,7 +2202,7 @@ def generate_glsl(fnMain : FunctionPtr; var errors : array<string>; shaderType :
                 }
             }
         }
-        errors <- astVisitor.errors
+        errors <- astVisitor.errors  // nolint:PERF030 - fresh accumulator, nothing to release
         inout_stub = astVisitor.inout_stub
         inout_decl = astVisitor.inout_decl
         needs_f16 = astVisitor.needs_f16

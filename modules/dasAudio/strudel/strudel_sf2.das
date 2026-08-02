@@ -603,7 +603,7 @@ def public sf2_load(path : string) : SF2File? {
         if (f != null) {
             let st = fstat(f)
             if (st.is_valid) {
-                data |> resize(int(st.size))
+                data |> resize(int64(st.size))
                 fread(f, data)
             }
         }
@@ -617,7 +617,7 @@ def public sf2_load(path : string) : SF2File? {
     return <- result
 }
 
-def public sf2_parse(data : array<uint8>) : SF2File? {
+def public sf2_parse(data : array<uint8>) : SF2File? {  // nolint:STYLE037 - one arm per RIFF sub-chunk id
     //! Parse SF2 data from a byte array.
     var cursor = 0
 
@@ -705,21 +705,21 @@ def public sf2_parse(data : array<uint8>) : SF2File? {
                     let sub_start = cursor
 
                     if (sub_id == "phdr") {
-                        raw_phdr <- parse_preset_headers(data, sub_start, sub_size)
+                        raw_phdr <- parse_preset_headers(data, sub_start, sub_size)  // nolint:PERF030 - ids unique in a well-formed SF2
                     } elif (sub_id == "pbag") {
-                        raw_pbag <- parse_bags(data, sub_start, sub_size)
+                        raw_pbag <- parse_bags(data, sub_start, sub_size)  // nolint:PERF030 - ids unique in a well-formed SF2
                     } elif (sub_id == "pmod") {
-                        raw_pmod <- parse_modulators(data, sub_start, sub_size)
+                        raw_pmod <- parse_modulators(data, sub_start, sub_size)  // nolint:PERF030 - ids unique in a well-formed SF2
                     } elif (sub_id == "pgen") {
-                        raw_pgen <- parse_generators(data, sub_start, sub_size)
+                        raw_pgen <- parse_generators(data, sub_start, sub_size)  // nolint:PERF030 - ids unique in a well-formed SF2
                     } elif (sub_id == "inst") {
-                        raw_inst <- parse_instrument_headers(data, sub_start, sub_size)
+                        raw_inst <- parse_instrument_headers(data, sub_start, sub_size)  // nolint:PERF030 - ids unique in a well-formed SF2
                     } elif (sub_id == "ibag") {
-                        raw_ibag <- parse_bags(data, sub_start, sub_size)
+                        raw_ibag <- parse_bags(data, sub_start, sub_size)  // nolint:PERF030 - ids unique in a well-formed SF2
                     } elif (sub_id == "imod") {
-                        raw_imod <- parse_modulators(data, sub_start, sub_size)
+                        raw_imod <- parse_modulators(data, sub_start, sub_size)  // nolint:PERF030 - ids unique in a well-formed SF2
                     } elif (sub_id == "igen") {
-                        raw_igen <- parse_generators(data, sub_start, sub_size)
+                        raw_igen <- parse_generators(data, sub_start, sub_size)  // nolint:PERF030 - ids unique in a well-formed SF2
                     } elif (sub_id == "shdr") {
                         result.samples <- parse_sample_headers(data, sub_start, sub_size)
                     }

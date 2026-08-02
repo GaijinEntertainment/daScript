@@ -236,7 +236,7 @@ def resolve_dep_source(root, source : string) : string {
     return source
 }
 
-def install_dependencies(root, pkg_name : string; var lf : LockFile; var visiting : table<string; bool>; is_global : bool = false) {
+def install_dependencies(root, pkg_name : string; var lf : LockFile; var visiting : table<string; bool>; is_global : bool = false) { // nolint:STYLE038
     // `visiting` is a STACK of pkgs currently in flight on the install chain, not
     // a "visited" set — we erase pkg_name before returning so a sibling dep
     // (diamond graph) sees it via has_package, not via the cycle path.
@@ -279,6 +279,21 @@ def install_dependencies(root, pkg_name : string; var lf : LockFile; var visitin
                 if (is_global && fexist("{modules_dir}/{dep_name}")) {
                     log_debug("dependency '{dep_name}' already present in {modules_dir} — skipping")
                     continue
+                }
+                // An IN-TREE module (part of the daslang source/SDK tree, e.g.
+                // dasImgui) satisfies the dep in any project — the compiled host
+                // already carries it; a project-local clone would only shadow it.
+                // Discriminated from a daspkg GLOBAL install at the same path by
+                // the global lock file (global installs are recorded there;
+                // tracked in-tree modules never are) — those keep the documented
+                // local-shadows-global behavior.
+                if (!is_global && fexist("{get_das_root()}/modules/{dep_name}")) {
+                    var glf : LockFile
+                    read_global_lock_file(glf)
+                    if (!has_package(glf, dep_name)) {
+                        log("  Dependency '{dep_name}' is part of this daslang tree — skipping install\n")
+                        continue
+                    }
                 }
                 log("  Installing dependency: {dep_name}...\n")
                 let dep_source = resolve_dep_source(root, d.source)
@@ -597,6 +612,17 @@ def cmd_install(root, spec : string; force : bool; is_global : bool = false; ver
         log("Found stale lock entry for '{pkg_name}' (directory missing) — reinstalling\n")
         remove_package(lf, pkg_name)
         write_lock_file(root, lf)
+    }
+
+    // An IN-TREE module (part of the daslang source/SDK tree, e.g. dasImgui)
+    // needs no install anywhere — the compiled host already carries it.
+    // Discriminated from a daspkg global install by the global lock file
+    // (see the same rule in install_dependencies).
+    var glf0 : LockFile
+    read_global_lock_file(glf0)
+    if (!force && fexist("{get_das_root()}/modules/{pkg_name}") && !has_package(glf0, pkg_name)) {
+        log("'{pkg_name}' is part of this daslang tree — nothing to install\n")
+        return 0
     }
 
     // check if a compatible global version exists

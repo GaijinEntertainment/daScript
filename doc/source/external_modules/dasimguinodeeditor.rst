@@ -3,8 +3,8 @@ dasImguiNodeEditor
 
 dasImguiNodeEditor is the daslang binding for `imgui-node-editor
 <https://github.com/thedmd/imgui-node-editor>`_, the node/graph editor built on
-Dear ImGui. It sits beside :doc:`dasimgui` as a second ImGui-extension binding —
-it depends on dasImgui and loads alongside it, without modifying it.
+Dear ImGui. It extends the in-tree :ref:`dasImgui module <stdlib_imgui_section>`
+— it depends on dasImgui and loads alongside it, without modifying it.
 
 Where to go
 -----------

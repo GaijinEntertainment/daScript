@@ -269,20 +269,22 @@ Global modules
 ==============
 
 By default, packages install per-project into ``{root}/modules/``.
-Large packages with native builds (e.g. dasImgui) can be installed
+Large packages with native builds (e.g. dasVulkan) can be installed
 **globally** -- once under ``{das_root}/modules/`` -- and shared across
-all projects using that daScript SDK.
+all projects using that daScript SDK.  In-tree modules (e.g. dasImgui)
+need no install at all: daspkg reports them as *part of this daslang
+tree -- nothing to install*.
 
 .. code-block:: bash
 
    # install globally
-   daspkg install --global dasImgui
+   daspkg install --global dasVulkan
 
    # list / update / upgrade / remove / build / check globally
    daspkg list --global
-   daspkg update --global dasImgui
-   daspkg upgrade --global dasImgui
-   daspkg remove --global dasImgui
+   daspkg update --global dasVulkan
+   daspkg upgrade --global dasVulkan
+   daspkg remove --global dasVulkan
    daspkg build --global
    daspkg check --global
 
@@ -312,7 +314,7 @@ A package can exist both locally and globally.  The C++ runtime
 - If the same module directory exists in both ``{das_root}/modules/``
   and ``{project_root}/modules/``, the **local version wins**.
 - A warning is printed:
-  ``Warning: local 'dasImgui' shadows global -- using local``
+  ``Warning: local 'dasVulkan' shadows global -- using local``
 - This is safe -- removing the local copy seamlessly falls back to the
   global one.
 

@@ -4,21 +4,25 @@ require strings
 require daslib/strings_boost
 require dastest/testing_boost public
 
-// note: this is var because we want "sample" global variable to show up
+// note: this is var because we want "sample" global variable to show up.
+// The sample is gen2 and compiles under a DEFAULT CodeOfPolicies — this test
+// is the in-tree witness that version_2_syntax defaults to true.
 var {
     sample = "
 require math
 require UnitTest
 
-let
+let \{
     one_two = 12
+\}
 
-enum TestEnum
+enum TestEnum \{
     foo
     bar
+\}
 
 [checkRange (foo=5)]
-struct TestStruct
+struct TestStruct \{
     a : int = 5
     b : string = \"something\"
     c : float[3][4]
@@ -29,19 +33,22 @@ struct TestStruct
     h : variant<i : int; f : float>
     fn : function<(a:int;b:float):string>
     lm : lambda<(a:int;b:float):string>
+\}
 
 [export]
-def bar ( blk : block<(a:int):float> )
+def bar(blk : block<(a:int):float>) \{
     pass
+\}
 
 [export]
-def main
+def main \{
     feint(\"hello world!\n\")
     return true
+\}
 "
 }
 
-def describeType(info) {
+def describeType(info) { // nolint:STYLE037 — one arm per reflected Type class; the ladder is the test
     var res : string
     if (info.basicType == Type.tHandle) {
         res = string(info.annotation.name)

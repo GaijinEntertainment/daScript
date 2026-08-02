@@ -36,5 +36,5 @@ When the thing under test is a **fixed-port live server** — e.g. `daslang-live
 The symptom is deceptive: **mass ~120s `timed out` failures landing on *different* tests each run** (whichever was mid-flight when the cross-talk hit) — it reads like a regression but is pure port contention. A timed-out run also leaves the server child holding the port. So:
 
 - Run dual-platform verification **sequentially** — one platform fully finished before the other starts (this defeats the whole point of "run both at once to compare", but there's no way around the shared port).
-- **Sweep stale servers between runs**: `Get-Process -Name daslang,daslang-live | Stop-Process -Force` on Windows; `pkill -9 -f daslang` in WSL.
+- **Sweep stale servers between runs** — by PATH, never bare by name (a bare name-kill also takes down the dasHerd watcher and every other tree's processes): `Get-Process daslang,daslang-live -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "<your-tree>\*" } | Stop-Process -Force` on Windows; `pkill -9 -f "<your-tree>.*daslang"` in WSL.
 - This is the same hazard the general "never run two shell commands in parallel" rule guards against — here the collision is cross-OS via shared loopback, which is easy to miss because the two feel like separate machines.

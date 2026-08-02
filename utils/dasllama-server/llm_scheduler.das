@@ -157,16 +157,16 @@ def create_scheduler(model : Model; max_streams : int64 = 4l; max_queue : int64 
 }
 
 //! Active stream count (prefilling + decoding).
-def n_active(sch : Scheduler) : int64 => int64(length(sch.streams))
+def n_active(sch : Scheduler) : int64 => long_length(sch.streams)
 
 //! Queued (not yet admitted) request count.
-def n_queued(sch : Scheduler) : int64 => int64(length(sch.queue))
+def n_queued(sch : Scheduler) : int64 => long_length(sch.queue)
 
 //! Queue a request; false = queue full (the wiring answers 503). Preconditions PANIC — the wiring
 //! must reject them first (its 400s): a non-empty prompt that fits the model context with room to
 //! generate, and max_new >= 1.
 def submit(model : Model; var sch : Scheduler; var req : PendingReq) : bool {
-    let np = int64(length(req.prompt))
+    let np = long_length(req.prompt)
     if (np <= 0l) {
         panic("llm_scheduler: empty prompt (stream {req.id}) — the wiring must reject it first")
     }
@@ -176,12 +176,12 @@ def submit(model : Model; var sch : Scheduler; var req : PendingReq) : bool {
     if (req.max_new < 1l) {
         panic("llm_scheduler: max_new {req.max_new} < 1 (stream {req.id}) — the wiring must clamp it first")
     }
-    if (int64(length(sch.queue)) >= sch.max_queue) {
+    if (long_length(sch.queue) >= sch.max_queue) {
         return false
     }
     req.t_submit = ref_time_ticks()
     sch.queue |> emplace(req)
-    if (int64(length(sch.queue)) + int64(length(sch.streams)) > sch.max_streams) {
+    if (long_length(sch.queue) + long_length(sch.streams) > sch.max_streams) {
         to_log(LOG_INFO, "[req {sch.queue[length(sch.queue) - 1].id}] queued: depth {length(sch.queue)}, active {length(sch.streams)}/{sch.max_streams}\n")
     }
     return true
@@ -195,7 +195,7 @@ def private finish_stream(var st : Stream; finish : string; var events : array<S
     let rate = gen_us > 0l ? 1000000.0 * float(st.n_gen) / float(gen_us) : 0.0
     to_log(LOG_INFO, "[stream {st.id}] finish: reason={finish}, gen={st.n_gen} tok in {gen_us / 1000l}ms ({rate} tok/s), total {int64(get_time_usec(st.t_admit)) / 1000l}ms\n")
     events |> push(SchedEvent(stream = st.id, kind = SchedEventKind.finished, finish = finish,
-                              n_prompt = int64(length(st.prompt)), n_gen = st.n_gen,
+                              n_prompt = long_length(st.prompt), n_gen = st.n_gen,
                               n_cached = st.n_cached, ttft_us = st.ttft_us,
                               gen_us = gen_us))
 }
@@ -278,7 +278,7 @@ def private sample_advance(m : Model; var st : Stream; var events : array<SchedE
 //! event appends NOW; the session is reaped next step), a queued request is dropped with the same
 //! event. False = unknown id.
 def evict(var sch : Scheduler; id : int64; var events : array<SchedEvent>) : bool {
-    for (i in range64(int64(length(sch.streams)))) {
+    for (i in range64(long_length(sch.streams))) {
         if (sch.streams[i].id == id && sch.streams[i].state != StreamState.done) {
             to_log(LOG_WARNING, "[stream {id}] evicting: client disconnected mid-generation\n")
             finish_stream(sch.streams[i], "evicted", events)
@@ -286,10 +286,10 @@ def evict(var sch : Scheduler; id : int64; var events : array<SchedEvent>) : boo
             return true
         }
     }
-    for (i in range64(int64(length(sch.queue)))) {
+    for (i in range64(long_length(sch.queue))) {
         if (sch.queue[i].id == id) {
             events |> push(SchedEvent(stream = id, kind = SchedEventKind.finished, finish = "evicted",
-                                      n_prompt = int64(length(sch.queue[i].prompt))))
+                                      n_prompt = long_length(sch.queue[i].prompt)))
             delete sch.queue[i]   // erase is a raw memmove — finalize the owned arrays first
             sch.queue |> erase(i)
             sch.n_evicted ++
@@ -303,7 +303,7 @@ def evict(var sch : Scheduler; id : int64; var events : array<SchedEvent>) : boo
 //! over every decoding stream, at most ONE chunk_tokens prefill chunk (FCFS; the final chunk's
 //! logits sample the first token inline), then reap finished streams. Events append to `events`
 //! (the caller drains it). Returns true while any stream or queued request remains.
-def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent>) : bool {
+def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent>) : bool {  // nolint:STYLE037 - admit/decode/prefill/reap, one linear pass
     // (0) drop finished-stream linger entries past their poll window (bounded backstop at 32).
     // get_time_nsec, NOT get_time_usec: the usec helper returns int and wraps at ~35.8 min,
     // which would freeze this comparison for any entry that survived a wrap
@@ -314,7 +314,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
     }
     // (1) admit FIFO while under the cap — sessions (KV memory) exist only from this point on.
     // Paged mode also attaches the longest prefix-cache hit: those positions never prefill.
-    while (!empty(sch.queue) && int64(length(sch.streams)) < sch.max_streams) {
+    while (!empty(sch.queue) && long_length(sch.streams) < sch.max_streams) {
         var st <- Stream(id = sch.queue[0].id,
                          params = sch.queue[0].params, prompt <- sch.queue[0].prompt,
                          close_toks <- sch.queue[0].close_toks, stop_ids <- sch.queue[0].stop_ids,
@@ -350,13 +350,13 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         sch.queue |> erase(0)
         sch.n_admitted ++
     }
-    sch.peak_active = max(sch.peak_active, int64(length(sch.streams)))
+    sch.peak_active = max(sch.peak_active, long_length(sch.streams))
     // (2) ONE batched decode step over every decoding stream (decode priority). Rows are gathered
     // fresh each step: admission above may have reallocated `streams`, and nothing below grows it.
     sch.batch_rows |> clear()
     sch.batch_toks |> clear()
     sch.batch_idx |> clear()
-    for (i in range64(int64(length(sch.streams)))) {
+    for (i in range64(long_length(sch.streams))) {
         if (sch.streams[i].state != StreamState.decoding) {
             continue
         }
@@ -398,21 +398,21 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
     if (!empty(sch.batch_rows)) {
         eval_batch(m, sch.ws, sch.batch_rows, sch.batch_toks)
         sch.decode_steps ++
-        sch.sum_batch += int64(length(sch.batch_rows))
-        for (bi in range64(int64(length(sch.batch_idx)))) {
+        sch.sum_batch += long_length(sch.batch_rows)
+        for (bi in range64(long_length(sch.batch_idx))) {
             if (sample_advance(m, sch.streams[sch.batch_idx[bi]], events)) {
                 sch.gen_tokens ++
             }
         }
     }
     // (3) at most ONE prefill chunk, FCFS — decode-priority with a bounded prefill quantum
-    for (i in range64(int64(length(sch.streams)))) {
+    for (i in range64(long_length(sch.streams))) {
         if (sch.streams[i].state != StreamState.prefilling) {
             continue
         }
-        let np = int64(length(sch.streams[i].prompt))
+        let np = long_length(sch.streams[i].prompt)
         let take = min(sch.chunk_tokens, np - sch.streams[i].n_prefilled)
-        sch.chunk |> resize(int(take))
+        sch.chunk |> resize(take)
         for (k in range64(take)) {
             sch.chunk[k] = sch.streams[i].prompt[sch.streams[i].n_prefilled + k]
         }
@@ -443,7 +443,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             }
             sch.recent_done |> push(DoneStream(
                 id = sch.streams[i].id, finish = sch.streams[i].finish,
-                n_prompt = int64(length(sch.streams[i].prompt)), n_cached = sch.streams[i].n_cached,
+                n_prompt = long_length(sch.streams[i].prompt), n_cached = sch.streams[i].n_cached,
                 n_gen = sch.streams[i].n_gen, ttft_us = sch.streams[i].ttft_us,
                 prompt_head = sch.streams[i].prompt_head, gen_tail = string(sch.streams[i].gen_tail_bytes),
                 done_at = ref_time_ticks()))
@@ -476,7 +476,7 @@ def private donate_stream(m : Model; var sch : Scheduler; var st : Stream) {
         }
         sch.donate_toks |> push_from(st.close_toks)
         if (!empty(sch.donate_toks)
-                && st.session.n_past + int64(length(sch.donate_toks)) <= m.config.seq_len) {
+                && st.session.n_past + long_length(sch.donate_toks) <= m.config.seq_len) {
             eval(m, st.session, sch.donate_toks)
         }
     }

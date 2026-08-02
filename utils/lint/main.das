@@ -38,6 +38,9 @@ struct Config {
     @clarg_doc = "Enable STYLE014/STYLE015 comment-length checks"
     comment_hygiene : bool
 
+    @clarg_doc = "Lint _fixture_*.das files too (for tests exercising this tool)"
+    lint_fixtures : bool
+
     @clarg_doc = "Only run paranoid lint (skip perf and style)"
     paranoid_only : bool
 
@@ -220,7 +223,7 @@ def normalize_rule_list(raw : array<string>; var dest : table<string>) : string 
     return ""
 }
 
-def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene : bool;
+def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures : bool;
               disabled_codes, enabled_codes : table<string>) : LintResult {
     var result = LintResult(file = file)
     if (has_expect_directive(file)) {
@@ -230,7 +233,10 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene 
     // the lint tool's own rule fixtures violate rules BY DESIGN (warning-expectation
     // files carry no `expect` directive, so the content skip above misses them).
     // normalize() emits the platform's preferred separator - fold to forward slashes
-    if (normalize(file) |> replace("\\", "/") |> find("utils/lint/tests/") >= 0) {
+    // _fixture_*.das is the e2e-fixture naming convention (tests/lint/* dirs) - those
+    // files violate rules BY DESIGN too, for tests that spawn this CLI over them
+    if (normalize(file) |> replace("\\", "/") |> find("utils/lint/tests/") >= 0
+            || (!lint_fixtures && base_name(file) |> starts_with("_fixture_"))) {
         result.skip_reason = "(lint rule fixture)"
         return <- result
     }
@@ -280,6 +286,16 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene 
             }
         }
     }
+    // LINT019 (stale nolint) needs every pass's consumption record - a partial run
+    // under-consumes and would report live directives as dead
+    if (run_paranoid && run_perf && run_style && !result.failed && empty(result.skip_reason)) {
+        let src = fread(file)
+        if (!empty(src)) {
+            var stale : array<LintIssue>
+            result.count += stale_nolint_collect(file, src, disabled_codes, enabled_codes, stale)
+            result.issues |> push_from(stale)
+        }
+    }
     return <- result
 }
 
@@ -323,10 +339,10 @@ def read_paths_from(path : string; var out : array<string>) : bool {
 // Worker entry: lint every file in `paths`, emit one JSON-wrapped
 // LintResult per file between `##lint##\n` markers. Caller (driver)
 // parses the stream and aggregates.
-def run_worker(paths : array<string>; run_paranoid, run_perf, run_style, comment_hygiene : bool;
+def run_worker(paths : array<string>; run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures : bool;
                disabled_codes, enabled_codes : table<string>) {
     for (f in paths) {
-        let result = lint_file(f, run_paranoid, run_perf, run_style, comment_hygiene, disabled_codes, enabled_codes)
+        let result = lint_file(f, run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, disabled_codes, enabled_codes)
         print("{JSON_PREFIX}{write_json(JV(result))}\n{JSON_PREFIX}")
     }
 }
@@ -344,6 +360,9 @@ def build_worker_argv(spawn_prefix : array<string>; chunk_path : string; cfg : C
     }
     if (cfg.comment_hygiene) {
         argv |> push("--comment-hygiene")
+    }
+    if (cfg.lint_fixtures) {
+        argv |> push("--lint-fixtures")
     }
     if (cfg.paranoid_only) {
         argv |> push("--paranoid-only")
@@ -580,7 +599,7 @@ def main() : int {
             print("error: cannot read paths-from file: {cfg.paths_from}\n")
             return 1
         }
-        run_worker(paths, run_paranoid, run_perf, run_style, cfg.comment_hygiene, disabled_codes, enabled_codes)
+        run_worker(paths, run_paranoid, run_perf, run_style, cfg.comment_hygiene, cfg.lint_fixtures, disabled_codes, enabled_codes)
         return 0
     }
 
@@ -609,7 +628,7 @@ def main() : int {
             if (!cfg.quiet) {
                 print("checking {file}...\n")
             }
-            let result = lint_file(file, run_paranoid, run_perf, run_style, cfg.comment_hygiene, disabled_codes, enabled_codes)
+            let result = lint_file(file, run_paranoid, run_perf, run_style, cfg.comment_hygiene, cfg.lint_fixtures, disabled_codes, enabled_codes)
             print_result(result, cfg.quiet, cfg.silent)
             tally_result(result, total_issues, total_errors, total_skipped)
         }

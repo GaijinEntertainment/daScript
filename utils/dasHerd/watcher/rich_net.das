@@ -33,6 +33,8 @@ class WatcherRichClient : HvWebSocketClient {
     attached_id : string
     sessions : array<WatcherSessionInfo>
     repositories : array<RepositorySnapshot>
+    // The watcher's one running worktree operation, pushed as it progresses.
+    operation : WorktreeOperation = WorktreeOperation()
     herd_profiles : array<HerdProfile>
     herd_sessions : array<HerdSession>
     herd_revision : int64 = -1l
@@ -60,6 +62,8 @@ class WatcherRichClient : HvWebSocketClient {
     git_action_loading : bool
     git_action_file_path : string
     git_action_status : string
+    // A changelist action the watcher refused to start (rail busy, bad path).
+    changelist_notice : string
     git_failure_revisions : table<string; int64>
     git_failure_baseline_ready : bool
     connect_count : int64
@@ -129,7 +133,7 @@ class WatcherRichClient : HvWebSocketClient {
         }
     }
 
-    def override onMessage(message : string#) {
+    def override onMessage(message : string#) { // nolint:STYLE037
         message_count++
         var envelope : WatcherEnvelope
         let body = string(message)
@@ -271,22 +275,44 @@ class WatcherRichClient : HvWebSocketClient {
         } elif (envelope._type == "worktree_delete_result") {
             var incoming = WatcherWorktreeDeleteResult()
             if (sscan_json(body, incoming) && !incoming.ok) {
-                g_worktree_delete_block = WorktreeDeleteBlock(active = true,
+                g_worktree_retire = WorktreeRetirePrompt(active = true,
                     repository_id = clone_string(incoming.repository_id),
                     worktree_path = clone_string(incoming.worktree_path),
-                    reason = clone_string(incoming.reason),
-                    detail = clone_string(incoming.detail))
+                    server_reason = clone_string(incoming.reason),
+                    server_detail = clone_string(incoming.detail))
             }
-        } elif (envelope._type == "herd_delete_result") {
+        } elif (envelope._type == "herd_archive_result") {
             var incoming = WatcherHerdDeleteResult()
-            if (sscan_json(body, incoming) && !empty(incoming.kept)) {
-                // Surface the first kept worktree; the rest stay visible in
-                // the git panel with their own delete flow.
-                g_worktree_delete_block = WorktreeDeleteBlock(active = true,
-                    repository_id = clone_string(incoming.kept[0].repository_id),
-                    worktree_path = clone_string(incoming.kept[0].path),
-                    reason = clone_string(incoming.kept[0].reason),
-                    detail = clone_string(incoming.kept[0].detail))
+            if (sscan_json(body, incoming) && !empty(incoming.offered)) {
+                // The record is already archived. Its worktrees queue up and
+                // drain one at a time through the same operation rail, so each
+                // gets the same checklist, progress and cancel.
+                delete g_worktree_retire_queue
+                g_worktree_retire_queue <- [for (offer in incoming.offered);
+                    WorktreeRetireQueueEntry(
+                        repository_id = clone_string(offer.repository_id),
+                        worktree_path = clone_string(offer.path))]
+                open_next_queued_retire()
+            }
+        } elif (envelope._type == "worktree_operation") {
+            var incoming = WatcherWorktreeOperationEnvelope()
+            if (sscan_json(body, incoming)) {
+                delete operation.log
+                operation <- incoming.data
+            }
+        } elif (envelope._type == "changelist_action_result") {
+            var incoming = WatcherChangelistActionResult()
+            if (sscan_json(body, incoming)) {
+                // A refusal to START (rail busy, bad path) — a failure of the
+                // running operation itself rides the operation broadcast.
+                changelist_notice = (incoming.ok ? ""
+                    : clone_string("Could not {incoming.action}: {incoming.detail}"))
+            }
+        } elif (envelope._type == "worktree_commit_wip_result") {
+            var incoming = WatcherWorktreeCommitWipResult()
+            if (sscan_json(body, incoming) && !incoming.ok) {
+                g_worktree_retire.notice = clone_string(
+                    "Could not start the commit: {incoming.detail}")
             }
         } elif (envelope._type == "mailbox") {
             var incoming = WatcherMailboxMessageEnvelope()
@@ -539,17 +565,106 @@ class WatcherRichClient : HvWebSocketClient {
             "{sprint_json(herd_session_id, false)}\}")
     }
 
-    def request_herd_delete(herd_session_id : string) {
+    def request_herd_archive(herd_session_id : string;
+                             worktree_paths : array<string> const;
+                             force : bool = false) {
         if (!connected || empty(herd_session_id)) return
-        send("\{\"op\":\"herd_delete\",\"herd_session_id\":" +
+        var inscope parts : array<string>
+        parts |> reserve(length(worktree_paths))
+        for (path in worktree_paths) {
+            parts |> push(sprint_json(path, false))
+        }
+        let path_list = join(parts, ",")
+        send("\{\"op\":\"herd_archive\",\"herd_session_id\":" +
+            "{sprint_json(herd_session_id, false)},\"worktree_paths\":[" +
+            "{path_list}],\"force\":{force}\}")
+    }
+
+    def request_herd_restore(herd_session_id : string) {
+        if (!connected || empty(herd_session_id)) return
+        send("\{\"op\":\"herd_restore\",\"herd_session_id\":" +
             "{sprint_json(herd_session_id, false)}\}")
     }
 
-    def request_worktree_delete(repository_id, worktree_path : string) {
+    def request_worktree_delete(repository_id, worktree_path : string;
+                                force : bool = false) {
         if (!connected || empty(worktree_path)) return
         send("\{\"op\":\"worktree_delete\",\"repository_id\":" +
             "{sprint_json(repository_id, false)},\"worktree_path\":" +
-            "{sprint_json(worktree_path, false)}\}")
+            "{sprint_json(worktree_path, false)},\"force\":{force}\}")
+    }
+
+    def request_worktree_operation_cancel() {
+        if (!connected) return
+        send("\{\"op\":\"worktree_operation_cancel\"\}")
+    }
+
+    def changelist_action(repository_id, worktree_path, action : string;
+                          paths : array<string>) {
+        //! Multi-file stage/unstage on the watcher's operation rail. Outcome
+        //! rides the worktree_operation broadcast; a refusal to start comes
+        //! back as changelist_action_result.
+        if (!connected || empty(repository_id) || empty(worktree_path)
+                || empty(paths)) return
+        changelist_notice = ""
+        send("\{\"op\":\"changelist_action\",\"repository_id\":" +
+            "{sprint_json(repository_id, false)},\"worktree_path\":" +
+            "{sprint_json(worktree_path, false)},\"action\":" +
+            "{sprint_json(action, false)},\"worktree_paths\":" +
+            "{sprint_json(paths, false)}\}")
+    }
+
+    def changelist_discard(repository_id, worktree_path : string;
+                           modified_paths : array<string>;
+                           staged_paths : array<string>;
+                           untracked_paths : array<string>) {
+        //! The unrecoverable one. The caller (dialog or rail) owns the
+        //! confirmation; this only carries the three class lists, because
+        //! each needs a different git command.
+        if (!connected || empty(repository_id) || empty(worktree_path)
+                || (empty(modified_paths) && empty(staged_paths)
+                    && empty(untracked_paths))) return
+        changelist_notice = ""
+        send("\{\"op\":\"changelist_discard\",\"repository_id\":" +
+            "{sprint_json(repository_id, false)},\"worktree_path\":" +
+            "{sprint_json(worktree_path, false)},\"worktree_paths\":" +
+            "{sprint_json(modified_paths, false)},\"staged_paths\":" +
+            "{sprint_json(staged_paths, false)},\"untracked_paths\":" +
+            "{sprint_json(untracked_paths, false)}\}")
+    }
+
+    def changelist_commit(repository_id, worktree_path, message : string) {
+        //! A real commit of the staged set, on the rail, hooks and all. The
+        //! message rides the request — never re-read from UI state when the
+        //! step launches.
+        if (!connected || empty(repository_id) || empty(worktree_path)
+                || empty(strip(message))) return
+        changelist_notice = ""
+        send("\{\"op\":\"changelist_commit\",\"repository_id\":" +
+            "{sprint_json(repository_id, false)},\"worktree_path\":" +
+            "{sprint_json(worktree_path, false)},\"text\":" +
+            "{sprint_json(message, false)}\}")
+    }
+
+    def changelist_network(repository_id, worktree_path, action : string) {
+        //! fetch / pull / push / sync on the rail. The watcher decides the
+        //! exact steps (publish vs push, ff-only pull) from its own snapshot.
+        if (!connected || empty(repository_id) || empty(worktree_path)
+                || empty(action)) return
+        changelist_notice = ""
+        send("\{\"op\":\"changelist_network\",\"repository_id\":" +
+            "{sprint_json(repository_id, false)},\"worktree_path\":" +
+            "{sprint_json(worktree_path, false)},\"action\":" +
+            "{sprint_json(action, false)}\}")
+    }
+
+    def request_worktree_commit_wip(repository_id, worktree_path,
+                                    message : string) {
+        if (!connected || empty(worktree_path) || empty(message)) return
+        send("\{\"op\":\"worktree_commit_wip\",\"repository_id\":" +
+            "{sprint_json(repository_id, false)},\"worktree_path\":" +
+            "{sprint_json(worktree_path, false)},\"text\":" +
+            "{sprint_json(message, false)}\}")
     }
 
     def request_herd_rename(herd_session_id, name : string) {
@@ -810,7 +925,7 @@ class WatcherRichClient : HvWebSocketClient {
     def send_input(text : string) {
         if (!controls || empty(text)) return
         send("\{\"op\":\"input\",\"text\":{sprint_json(text, false)}\}")
-        sent_input_bytes += int64(length(text))
+        sent_input_bytes += long_length(text)
     }
 
     def request_resize(columns, rows : int) {
@@ -827,9 +942,12 @@ class WatcherRichClient : HvWebSocketClient {
         sent_rows = desired_rows
     }
 
-    def terminate_selected() {
-        if (!connected || empty(selected_id)) return
-        send("\{\"op\":\"terminate\",\"session_id\":{sprint_json(selected_id, false)}\}")
+    def terminate_session(session_id : string) {
+        //! Always by id. The selection moves on its own — the network re-points
+        //! it on every launch and relaunch — so "terminate the selected one" is
+        //! never what a user who named a session meant.
+        if (!connected || empty(session_id)) return
+        send("\{\"op\":\"terminate\",\"session_id\":{sprint_json(session_id, false)}\}")
     }
 
     def refresh() {
@@ -878,3 +996,55 @@ class WatcherRichClient : HvWebSocketClient {
 }
 
 var g_client : WatcherRichClient?
+
+def open_next_queued_retire() {
+    //! Pops the next worktree a session retire handed over and opens the same
+    //! checklist on it. Sequencing is the client's job because the watcher
+    //! runs one operation at a time.
+    if (empty(g_worktree_retire_queue)) return
+    let next = g_worktree_retire_queue[0]
+    g_worktree_retire_queue |> erase(0)
+    g_worktree_retire = WorktreeRetirePrompt(active = true,
+        repository_id = clone_string(next.repository_id),
+        worktree_path = clone_string(next.worktree_path))
+}
+
+def herd_session_claiming(worktree_path : string;
+                          exclude_herd_id : string = "") : string {
+    //! Name of the live session attending this worktree, or "" when it is
+    //! free — the client-side twin of the watcher's herd_worktree_user, so the
+    //! checklist reads the same verdict the watcher will enforce. Closed and
+    //! archived sessions are retired and hold nothing.
+    if (g_client == null) return ""
+    let canonical = herd_canonical_worktree(worktree_path)
+    for (record in g_client.herd_sessions) {
+        if (record.id == exclude_herd_id || record.state == "closed"
+            || record.archived) continue
+        if (herd_canonical_worktree(record.worktree_path) == canonical) {
+            return record.name
+        }
+        for (entry in record.satellites) {
+            if (herd_canonical_worktree(entry.worktree_path) == canonical) {
+                return record.name
+            }
+        }
+    }
+    return ""
+}
+
+def find_worktree_state(repository_id, worktree_path : string;
+                        var found : WorktreeState) : bool {
+    //! The live facts for one worktree. False when the snapshot has not seen
+    //! it (yet, or any more) — the caller must then say "unknown", never
+    //! assume the zeroes mean "clean".
+    if (g_client == null) return false
+    for (repository in g_client.repositories) {
+        if (!empty(repository_id) && repository.record.id != repository_id) continue
+        for (worktree in repository.worktrees) {
+            if (worktree.path != worktree_path) continue
+            found := worktree
+            return true
+        }
+    }
+    return false
+}

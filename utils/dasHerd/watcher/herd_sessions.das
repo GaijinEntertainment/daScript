@@ -61,6 +61,11 @@ struct public HerdSession {
     // Advisory: another non-closed session attends one of this session's
     // worktrees. Recomputed every tick, never enforced.
     conflicted : bool
+    // Retired, not erased (note 60). An archived record leaves the default
+    // list but stays on disk and stays retrievable, so its events, mailbox,
+    // bundles and journal keep an owner instead of being stranded.
+    archived : bool
+    archived_wall_s : int64
     columns : int = 120
     rows : int = 36
 }
@@ -107,10 +112,14 @@ def public herd_display_worktree(path : string) : string {
     return replace(path, "\\", "/")
 }
 
+def private herd_holds_worktrees(record : HerdSession const) : bool {
+    return record.state != "closed" && !record.archived
+}
+
 def private refresh_conflicts : bool {
     var inscope counts : table<string; int>
     for (record in g_herd) {
-        if (record.state == "closed") continue
+        if (!herd_holds_worktrees(record)) continue
         counts[herd_canonical_worktree(record.worktree_path)]++
         for (entry in record.satellites) {
             counts[herd_canonical_worktree(entry.worktree_path)]++
@@ -119,7 +128,7 @@ def private refresh_conflicts : bool {
     var changed = false
     for (record in g_herd) {
         var flagged = false
-        if (record.state != "closed") {
+        if (herd_holds_worktrees(record)) {
             flagged = counts[herd_canonical_worktree(record.worktree_path)] > 1
             if (!flagged) {
                 for (entry in record.satellites) {
@@ -479,28 +488,49 @@ def public herd_close(herd_id : string; var pty_to_terminate : string&) : string
     return save_registry()
 }
 
-def public herd_delete(herd_id : string; var removed : HerdSession) : string {
-    //! Removes the record entirely (unlike herd_close, which keeps it as
-    //! history). The caller gets the removed record so it can attempt guarded
-    //! removal of the session's worktrees. Running sessions never delete.
+def public herd_archive(herd_id : string; var archived : HerdSession) : string {
+    //! Retires the record WITHOUT erasing it (note 60, and the standing rule
+    //! behind it: stories stay). The session leaves the default list but its
+    //! record — and therefore its artifacts — stay reachable. State and reason
+    //! are left alone so the session's own ending survives the retirement. The
+    //! caller gets a copy so it can offer the session's worktrees for removal.
+    //! Running sessions never archive.
     let index = herd_find(herd_id)
     if (index < 0) return "unknown herd session"
     if (g_herd[index].state == "running") {
-        return "session is running; close it before deleting"
+        return "session is running; close it before archiving"
     }
-    removed := g_herd[index]
-    g_herd |> erase(index)
+    if (g_herd[index].archived) {
+        archived := g_herd[index]
+        return ""
+    }
+    g_herd[index].archived = true
+    g_herd[index].archived_wall_s = wall_seconds()
+    archived := g_herd[index]
+    g_herd_revision++
+    return save_registry()
+}
+
+def public herd_restore(herd_id : string) : string {
+    //! The other half of archiving: an archived session comes back to the
+    //! default list. Retrievable is only true if something retrieves it.
+    let index = herd_find(herd_id)
+    if (index < 0) return "unknown herd session"
+    if (!g_herd[index].archived) return ""
+    g_herd[index].archived = false
+    g_herd[index].archived_wall_s = 0l
+    g_herd[index].updated_wall_s = wall_seconds()
     g_herd_revision++
     return save_registry()
 }
 
 def public herd_worktree_user(worktree_path : string; exclude_herd_id : string = "") : string {
-    //! Name of a non-closed session attending this worktree (primary or
-    //! satellite), or "" when the worktree is free. Drives the hard block on
-    //! worktree deletion.
+    //! Name of a live session attending this worktree (primary or satellite),
+    //! or "" when the worktree is free. Drives the hard block on worktree
+    //! deletion. An archived session is retired and holds nothing.
     let canonical = herd_canonical_worktree(worktree_path)
     for (record in g_herd) {
-        if (record.id == exclude_herd_id || record.state == "closed") continue
+        if (record.id == exclude_herd_id || !herd_holds_worktrees(record)) continue
         if (herd_canonical_worktree(record.worktree_path) == canonical) {
             return record.name
         }
@@ -508,6 +538,23 @@ def public herd_worktree_user(worktree_path : string; exclude_herd_id : string =
             if (herd_canonical_worktree(entry.worktree_path) == canonical) {
                 return record.name
             }
+        }
+    }
+    return ""
+}
+
+def public herd_session_repository_for(record : HerdSession const;
+                                       worktree_path : string) : string {
+    //! Which repository one of this session's worktrees belongs to, primary or
+    //! satellite; "" when the path is not the session's, which makes the
+    //! removal fail as "unknown" rather than aim at someone else's worktree.
+    let canonical = herd_canonical_worktree(worktree_path)
+    if (herd_canonical_worktree(record.worktree_path) == canonical) {
+        return record.repository_id
+    }
+    for (entry in record.satellites) {
+        if (herd_canonical_worktree(entry.worktree_path) == canonical) {
+            return entry.repository_id
         }
     }
     return ""

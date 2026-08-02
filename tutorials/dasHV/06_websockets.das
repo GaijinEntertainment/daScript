@@ -23,6 +23,8 @@ options gc
 
 require dashv/dashv_boost public
 require daslib/jobque_boost
+require live/live_gc
+require live_host
 require daslib/fio
 
 let SERVER_PORT = 18085
@@ -144,6 +146,7 @@ def with_ws_server(port : int; blk : block<(base_url : string) : void>) {
                     started |> notify_and_release
                     while (stop_flag |> get == 0) {
                         server->tick()
+                        maybe_collect_gc()  // the thread owns this context's heap; collect between ticks
                         sleep(10u)
                     }
                     server->stop()
@@ -189,7 +192,7 @@ def wait_for_messages(var client : ChatClient?; count : int; max_ms : int = 2000
 }
 
 [export]
-def main() {
+def main() { // nolint:STYLE038 — tutorial client script, linear by design
     with_ws_server(SERVER_PORT) $(base_url) {
 
         // ── Section 2a: Single client connection ──

@@ -63,6 +63,7 @@ Disallows member functions in structures.
 Disallows local class members.
 Report invisible functions.
 Report private functions.
+Containers own their elements' lifetime: resize and fresh table slots get ``default<T>`` of the element type, and erase/clear/shrink finalize dropped elements whose finalizer is fully generated and frees owned heap. Host-side counterpart of ``options default_init_containers``.
 Enables strict property checks.
 Disables all optimizations.
 Allows float optimizations with major bit differences (x*0, x-x, reciprocal division, NaN-compare flips, reassociation); also stamps JIT fast-math flags. Doubles stay bit-exact unless enabled.

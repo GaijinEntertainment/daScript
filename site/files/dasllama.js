@@ -306,29 +306,48 @@
      das (amber) over its reference (teal) from one baseline; each pair normalized to its own
      max so the longer side spans the track and the gap IS the ratio. Bars are RATES in every
      section — tok/s in § 01, ×RT in § 02/03 — so longer amber always means faster. */
-  function renderPairBars(box, items) {
+  function renderPairBars(box, items, receiptFn) {
     if (!items.length) {
       box.innerHTML = '<div class="dl-empty">No runs match these filters.</div>';
       return;
     }
-    box.innerHTML = items.map(function (it) {
+    box.innerHTML = items.map(function (it, i) {
       var mx = Math.max(it.das, it.ref);
       var dasW = (it.das / mx) * 100, refW = (it.ref / mx) * 100;
       var rcls = it.ratio > 1.005 ? 'dl-win' : (it.ratio < 0.995 ? 'dl-loss' : '');
-      return '<div class="dl-bar-row">' +
-        '<div class="dl-bar-label">' + esc(it.label) + '<span class="dl-dim2">' + esc(it.sub) + '</span></div>' +
+      // note tooltip + ✱ mark: same construction as the table's modelCell
+      var r = it.r, noteAttr = '', mark = '';
+      if (r && r.noted) {
+        var t = [r.modelNote,
+          r.das && r.das.comment ? 'das: ' + r.das.comment : '',
+          r.ref && r.ref.comment ? 'reference: ' + r.ref.comment : ''].filter(Boolean).join('\n');
+        noteAttr = ' data-note="' + esc(t).replace(/"/g, '&quot;') + '"';
+        mark = ' <span class="dl-note-mark">✱</span>';
+      }
+      var rec = (receiptFn && r) ? receiptFn(r) : null;
+      return '<div class="dl-bar-row' + (rec ? ' js-bar-expand" data-bar="' + i : '') + '">' +
+        '<div class="dl-bar-label"' + noteAttr + '>' + esc(it.label) + mark + '<span class="dl-dim2">' + esc(it.sub) + '</span></div>' +
         '<div class="dl-bar-pair">' +
         '<div class="dl-bar-line"><div class="dl-bar-das" style="width:' + dasW.toFixed(2) + '%"></div><span class="dl-bar-val dl-bar-val--das">' + it.dasText + '</span></div>' +
         '<div class="dl-bar-line"><div class="dl-bar-ref" style="width:' + refW.toFixed(2) + '%"></div><span class="dl-bar-val">' + it.refText + '</span></div>' +
         '</div>' +
         '<div class="dl-bar-ratio ' + rcls + '">' + fmt(it.ratio, 2) + '×</div>' +
-        '</div>';
+        '</div>' +
+        (rec ? '<div class="dl-bar-receipt" hidden data-bar-receipt="' + i + '">' +
+          '<div class="dl-bench-receipt">' + rec + '</div></div>' : '');
     }).join('');
+    // same interaction as the table rows: click toggles the run's receipt
+    box.querySelectorAll('.js-bar-expand').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var n = box.querySelector('[data-bar-receipt="' + el.dataset.bar + '"]');
+        if (n) n.hidden = !n.hidden;
+      });
+    });
   }
 
   /* one wiring for any section: view toggle, optional metric toggle, the SAME filter selects
      the table owns, sorted by ratio from the first paint */
-  function wireBars(sec, rows, itemsOf) {
+  function wireBars(sec, rows, itemsOf, receiptFn) {
     var viewSeg = document.getElementById(sec + '-view');
     var metricSeg = document.getElementById(sec + '-metric');
     var barsBox = document.getElementById(sec + '-bars');
@@ -341,7 +360,7 @@
     function draw() {
       var filters = {};
       document.querySelectorAll('#' + sec + '-filters .js-filter').forEach(function (s) { filters[s.dataset.field] = s.value; });
-      renderPairBars(barsBox, itemsOf(rows, filters, metric()));
+      renderPairBars(barsBox, itemsOf(rows, filters, metric()), receiptFn);
     }
     function setSeg(seg, btn) {
       seg.querySelectorAll('button').forEach(function (b) { b.classList.toggle('is-on', b === btn); });
@@ -383,9 +402,9 @@
           return { label: r.model, sub: r.boxName + ' · ' + r.lane,
                    das: r[m + '_das'], ref: r[m + '_ref'],
                    dasText: tps(r[m + '_das']), refText: tps(r[m + '_ref']),
-                   ratio: r[m + '_ratio'] };
+                   ratio: r[m + '_ratio'], r: r };
         });
-    });
+    }, pairReceipt);
   }
 
   function mountAudioViews(sec, rows) {
@@ -404,9 +423,9 @@
           var d = xrt(r.audio_s, r.das_ms), f = xrt(r.audio_s, r.ref_ms);
           return { label: r.model, sub: r.boxName + ' · ' + r.tool + ' · ' + r.wav,
                    das: d, ref: f, dasText: xrtText(d), refText: xrtText(f),
-                   ratio: r.speed };
+                   ratio: r.speed, r: r };
         });
-    });
+    }, pairReceipt);
   }
 
   function mountLLM(rows) {

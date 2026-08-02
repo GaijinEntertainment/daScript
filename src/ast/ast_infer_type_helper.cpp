@@ -1266,6 +1266,12 @@ namespace das {
             if (typ->secondType && (typ->secondType->constant || !isPodDelete(typ->secondType, dep, hasHeap)))
                 return false;
             hasHeap = true;
+        } else if (typ->baseType == Type::tFixedArray) {
+            // a fixed array's elements are live at init - their pod-delete-ness (and heap) counts.
+            // without this branch Foo[4] fell through to 'true' with hasHeap untouched, so a struct
+            // holding array<int>[4] read as no-heap and force_inscope_pod never collected it
+            if (typ->firstType && (typ->firstType->constant || !isPodDelete(typ->firstType, dep, hasHeap)))
+                return false;
         } else if (typ->baseType == Type::tPointer) {
             return !typ->needDelete(); // pointer is good if we don't need to delete
         } else if (typ->baseType == Type::tIterator || typ->baseType == Type::tBlock || typ->baseType == Type::tLambda || typ->baseType == Type::tFunction) {

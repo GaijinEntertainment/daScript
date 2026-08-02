@@ -112,7 +112,7 @@ def public run_direct_probe(command : GitProbeCommand const;
         if (first_count > 0) {
             sample.first_output_us = elapsed_us(started)
         }
-        remainder = unsafe(fread_to_eof(f))
+        remainder = fread(f)
     }))
     sample.exit_us = elapsed_us(started)
     sample.drained_us = sample.exit_us
@@ -217,6 +217,11 @@ def public run_terminal_probe(command : GitProbeCommand const;
         sleep(0u)
     }
 
+    finish_probe_sample(sample, terminal, log_file, started)
+    return <- sample
+}
+
+def private finish_probe_sample(var sample : GitProbeSample; var terminal : Terminal; log_file : file; started : int64) {
     fflush(log_file)
     fclose(log_file)
     sample.total_us = elapsed_us(started)
@@ -230,5 +235,4 @@ def public run_terminal_probe(command : GitProbeCommand const;
     var viewport = TerminalViewportSnapshot()
     terminal_viewport_snapshot(terminal, 0, viewport)
     sample.output_text = viewport.screen_text
-    return <- sample
 }

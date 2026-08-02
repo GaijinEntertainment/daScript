@@ -11,6 +11,7 @@ require dastest/testing_boost public
 require strings
 require daslib/strings_boost
 require _inline_generic_helper
+require _inline_constant_expression_helper
 
 // structural FIRED proof + behavioral safety net for heuristic auto inlining of plain
 // calls (src/ast/ast_inline.cpp, `options auto_inline_functions`): a call to a small
@@ -374,6 +375,15 @@ def target_cross_origin_generic(a, k : int) : int {
     return gscale(a, k)
 }
 
+[export]
+def target_locked_name_dispatch(a : int) : int {
+    var out = 0
+    with_picked(a) $(v : int) {
+        out = v
+    }
+    return out
+}
+
 def has(s, sub : string) : bool {
     return find(s, sub, 0) >= 0
 }
@@ -550,6 +560,7 @@ def test_auto_inline_functions_behavior(t : T?) {
         t |> equal(target_fn_finally(4), 5)
         t |> equal(g_log, "D")
         t |> equal(target_cross_origin_generic(4, 5), 40)
+        t |> equal(target_locked_name_dispatch(4), 5)
     }
     t |> run("const empty-array argument results match") @(t : T?) {
         t |> equal(target_const_empty_array(5), 5)
