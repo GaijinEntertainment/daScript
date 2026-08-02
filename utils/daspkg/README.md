@@ -38,7 +38,7 @@ daslang utils/daspkg/main.das -- install --global dasImgui
 | `build` | Build all C/C++ packages (cmake) |
 | `check` | Verify installed packages are present |
 | `doctor` | Check environment (git, cmake, gh) |
-| `release [--out <dir>] [--paranoid]` | Bundle project as a redistributable standalone; tuning defaults to the full 20/80 budget, `--paranoid` triples it |
+| `release [--out <dir>] [--paranoid \| --quick]` | Bundle project as a redistributable standalone. Release ALWAYS mints the tune sidecar; `--quick` is the only mode that inherits a complete existing one |
 | `introduce [url]` | Submit a package to the index via PR |
 | `withdraw <name>` | Remove a package from the index via PR |
 
@@ -57,6 +57,7 @@ All package commands accept `--global` / `-g` to operate on global modules.
 | `--branch <name>`, `-b <name>` | Install from a git branch (e.g. `master`) instead of a tag |
 | `--out <path>` | Output directory for `release` (default: current directory) |
 | `--paranoid` | During `release`, tune with the paranoid budget: 3x the rounds and a 1% noise-gate ceiling. There is no fast race mode — a cheap race measures nothing |
+| `--quick` | During `release`, accept a complete existing sidecar instead of re-minting (an incomplete or stale scope still mints — an exe never ships unmeasured). Forgetting it costs one re-mint, never correctness |
 
 ## Global modules
 

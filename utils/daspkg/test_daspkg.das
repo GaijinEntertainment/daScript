@@ -202,6 +202,14 @@ def test_parse_args(t : T?) {
         t |> equal(parsed.out, "E:/")
         t |> success(parsed.paranoid)
     }
+    t |> run("release with quick inherit") @(t : T?) {
+        var r <- parse_args(type<DaspkgArgs>, ["release", "--quick"])
+        t |> success(r |> is_ok, "parse succeeds")
+        let parsed <- r |> move_unwrap
+        t |> equal(parsed.command ?? "", "release")
+        t |> success(parsed.quick)
+        t |> success(!parsed.paranoid)
+    }
     t |> run("no command") @(t : T?) {
         let empty_args : array<string>
         var r <- parse_args(type<DaspkgArgs>, empty_args)
