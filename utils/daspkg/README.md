@@ -204,6 +204,8 @@ The **package runner** compiles `.das_package` scripts in-process using `compile
 
 ## Tests
 
+Review gates live in [CODEREVIEW.md](CODEREVIEW.md) — run the unit suite on every change.
+
 | File | Count | Type |
 |------|-------|------|
 | `test_daspkg.das` | 151 | Unit tests (local operations, parsing, lock file, package_runner) |
