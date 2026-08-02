@@ -204,13 +204,11 @@ def private is_container_sizing(n : string) : bool {
 // (`var @scratch g : array<T>`, the clear()-recycled capture-rail shape) — walking through
 // indexing and deref, so `p.kblobs[b]` counts by virtue of kblobs.
 def private perf030_needs_release(td : TypeDeclPtr) : bool {
-    // heap-owning shapes the inscope-pod collect (or an explicit delete) must release:
-    // containers, lambdas (capture frame), and composites carrying one transitively
+    // heap-owning shapes: containers, lambdas, and composites carrying one transitively
     if (td == null) return false
     let bt = td.baseType
     if (bt == Type.tArray || bt == Type.tTable || bt == Type.tLambda) return true
-    // a fixed array's elements are live at init - their heap counts (the same blind
-    // spot the C++ isPodDelete audit fixed)
+    // fixed-array elements are live at init - their heap counts (the C++ isPodDelete blind spot)
     if (bt == Type.tFixedArray) return perf030_needs_release(td.firstType)
     if (bt == Type.tStructure && td.structType != null) {
         for (fld in td.structType.fields) {
@@ -2042,22 +2040,17 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def check_perf030_move_leak(expr : ExprMove?) : void {
-        // PERF030: `a <- b` over a heap-carrying bare variable drops a's old contents
-        // without release. The inscope-pod rewrite marks every move it heals with
-        // moveFlags.podDelete, so an unmarked move is unhealed no matter why - policy
-        // off, hasUnsafe function, or a disallowed module. Bare-variable targets only:
-        // element targets (tab[k] <- v) are dominated by fresh-slot inserts.
+        // podDelete marks a rewrite-healed move, so an unmarked one is unhealed no matter why
         if (expr == null || expr.move_flags.podDelete) return
         var lhs = expr.left
         if (lhs is ExprRef2Value) {
             lhs = (lhs as ExprRef2Value.subexpr)
         }
         if (lhs == null || !(lhs is ExprVar)) return
-        // `return <- r` lowers through an ExprMove into the return slot - moving INTO
-        // a fresh result is not a leak
+        // generated/CMRES targets are the `return <- r` lowering - moving INTO a fresh result
         let lv = (lhs as ExprVar).variable
-        if (lv == null || lv.flags.aliasCMRES || lv.flags.generated) return
-        return if (!perf030_needs_release(expr.left._type))
+        if (lv == null || lv.flags.aliasCMRES || lv.flags.generated
+                || !perf030_needs_release(expr.left._type)) return
         perf_warning("PERF030: move-assign drops the target's old contents without release (a leak on a persistent heap); delete the target first, or enable force_inscope_pod so the compiler collects it", expr.at)
     }
 
