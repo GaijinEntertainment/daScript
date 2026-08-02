@@ -161,6 +161,25 @@ A backend is a family of role files, and the role names the contents. `<gpu>` is
 A backend-only capability goes in that backend's matching role file. A new grab-bag file for it
 is a defect.
 
+**A GPU family shares ONE device and queue**, created by `<gpu>_common`'s init. A module
+creating its own device is a defect.
+
+**A PSO set is compiled and released by the module that owns its kernels.** Decode:
+`metal_decode_init` / `metal_kernels_release` in `dasllama_metal_kernels`. Prefill:
+`metal_prefill_init` / `metal_prefill_shutdown` in `dasllama_metal_prefill`. A PSO compiled or
+released anywhere else is a defect.
+
+**Race code for a kernel family lives beside the family** — kernels races its families, prefill
+races its own; the shared scaffolding (`race_buf`, `race_envelope_ok`, `race_pair_ms`) is
+`<gpu>_common`'s. A race harness anywhere else is a defect.
+
+**A decline reason is an enum value in the shapes module; decline counting lives in
+`<gpu>_common`.** A string-typed decline reason, or a counter beside the decline site, is a
+defect.
+
+**The backend asymmetries are the closed list in `ARCHITECTURE.md` §1.5.** A diff that makes
+Metal and Vulkan differ in a new way lands with its entry there, or it is a defect.
+
 ### Model families
 
 - `dasllama_arch_*.das` — one file per architecture family, declarative registration only: build

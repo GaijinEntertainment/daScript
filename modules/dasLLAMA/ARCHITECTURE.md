@@ -182,6 +182,37 @@ that a question answered for one backend has an obvious address in the other. Th
 - **`dasllama_kernel_access.das`** — the shared body-walk read/write classifier both GPU lenses run
   on. Backend-specific lowering stays in that backend's lens.
 
+**PSO lifecycle — the family shares ONE device and queue** (`metal_common_init`; the second-device
+question was surveyed and closed against). The decode PSO set lives as `g_pso_*` in
+`dasllama_metal_common`, is compiled by `metal_decode_init` in `dasllama_metal_kernels` and
+released by `metal_kernels_release` there — the kernels module owns its set's lifecycle even
+though the vars live with the device state. Prefill's `g_pf_pso_*` set is prefill-private end to
+end: `metal_prefill_init` compiles, `metal_prefill_shutdown` releases.
+
+**Race and tune code for a kernel family lives beside the family.** The shared scaffolding
+(`race_buf`, `race_envelope_ok`, `race_pair_ms`, `MetalTensorRaceResult`) is `<gpu>_common`'s;
+each module races its OWN families (`metal_tensor_race_decode` in kernels, `metal_tensor_race`
+in prefill) and the tuner calls those public entries.
+
+**Decline REASONS are enum values in the shapes module** (`MetalDecodeDecline`,
+`MetalPrefillDecline`); decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for
+both paths.
+
+**The allowed asymmetries between the backends — this list is closed; a new one lands with its
+entry here:**
+
+- **Metal sits ABOVE `dasllama_common`** (typed `Model`/`Session` access, umbrella entry via the
+  transformer's `?das_metal` requires, shapes unconditional); **Vulkan sits BELOW it** (untyped
+  pointer/array seams, the single `?vulkan` entry through the `dasllama_math_vulkan` facade).
+  That inversion is why their kernels↔common require directions differ.
+- **UMA vs discrete VRAM**: Metal never grows residency machinery (memory is memory); arenas,
+  upload economics, mirrors and hydration are Vulkan's alone.
+- **Lens depth**: the Metal lens generates `enc_*` builders from kernel classes; Vulkan's
+  hand-built `vk_set6`/`vk_write6` ladders stand until the class-kernel arc
+  (`followup_vulkan.md` item 9) gives SPIR-V the same interface surface.
+- **Vulkan has no shapes module yet** — `resident_upload` declines ad hoc by feature name; the
+  gap is `followup_vulkan.md` item 1, not a precedent to copy.
+
 Vulkan is the deliberately-designed model of this shape; Metal converges as it is touched.
 
 ### 1.6 Architecture registrations
