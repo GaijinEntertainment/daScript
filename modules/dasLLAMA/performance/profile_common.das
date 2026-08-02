@@ -1923,13 +1923,41 @@ struct LlamaBenchRow {
     build_commit : string
 }
 
+// The capture merges stderr (popen_argv does, by design), and every reference build that logs a
+// line — a Metal build announcing its device, say — therefore poisons the JSON. Cut the trailing
+// `-o json` array back out: llama-bench prints exactly one, last, opening with `[` on its own
+// line. "" when there is none, which is the honest signal that the child printed no result.
+def private json_array_tail(raw : string) : string {
+    var lines <- split(raw, "\n")
+    var start = -1
+    for (i in range(length(lines))) {
+        if (strip(lines[i]) == "[") {
+            start = i
+        }
+    }
+    if (start < 0) {
+        delete lines
+        return ""
+    }
+    var keep <- [for (i in range(start, length(lines))); lines[i]]
+    let out = join(keep, "\n")
+    delete keep
+    delete lines
+    return out
+}
+
 //! Run a llama-bench command line (must include `-o json`) and parse its rows. False on a run or
-//! parse failure. Stdout only — llama-bench keeps progress on stderr, so the pipe stays clean.
+//! parse failure. The child's stdout and stderr arrive merged, so the JSON array is cut back out
+//! before parsing — a reference build that logs is normal, not a failure.
 //! `raw` keeps what the child actually printed: a failure here is otherwise indistinguishable
 //! from a silent one, and the caller has nothing to report but elapsed time.
 def run_llama_bench(args : array<string>; var rows : array<LlamaBenchRow>; var raw : string&) : bool {
     raw = run_capture_argv(args)
-    return sscan_json(raw, rows)
+    let js = json_array_tail(raw)
+    if (empty(js)) {
+        return false   // no result array at all: the child died or printed only diagnostics
+    }
+    return sscan_json(js, rows)
 }
 
 def run_llama_bench(args : array<string>; var rows : array<LlamaBenchRow>) : bool {

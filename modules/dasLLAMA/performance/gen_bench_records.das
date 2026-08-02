@@ -651,7 +651,12 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
     if (!run_llama_bench(args, rows, raw) || empty(rows)) {
         // the tail is the whole diagnosis: a ref cell that dies has no other voice
         let tail = slice(raw, max(0, length(raw) - 400))
-        to_log(LOG_ERROR, "gen_bench_records: FAILED {file} ref {flavor} {backend} ({elapsed_ms(t0)} ms) — cmd: {cmd}\n  tail: {tail}\n")
+        // name WHY, not just the last 200 bytes: an empty capture is a dead child, output with
+        // no result array is a child that only logged, and either beats a mid-token slice
+        let why = (empty(strip(raw)) ? "child printed NOTHING (spawn or early death)"
+            : (find(raw, "\n[") < 0 && !(strip(raw) |> starts_with("[")) ? "output carries NO json result array (only diagnostics?)"
+                : "a result array was found but did not parse"))
+        to_log(LOG_ERROR, "gen_bench_records: FAILED {file} ref {flavor} {backend} ({elapsed_ms(t0)} ms) — {why}\n  cmd: {cmd}\n  tail: {tail}\n")
         logger_error("bench.records", "cell FAILED", JV({"model" => JV(file), "engine" => JV("llama.cpp"), "leg" => JV("{flavor} {backend}"), "elapsed_ms" => JV(elapsed_ms(t0))}))
         failed |> push("{file} ref {flavor} {backend}")
         return
