@@ -10,6 +10,7 @@ require strings
 require daslib/strings_boost
 require dasllama/dasllama_gguf   // rd_u32 for the magic sniff
 require dasllama/dasllama_image  // load_model_cached (decoders ride the .dlim rail) + image_peek
+require dasllama/dasllama_plane public  // plane finalizers — re-exported so any module that deletes an ASR carrier sees them
 require dasllama/dasllama_audio  // EncoderState (the qwen3a tower's scratch)
 require dasllama/dasllama_whisper public
 require dasllama/dasllama_qwen3a public
@@ -57,6 +58,18 @@ struct AsrModel {
     pk : ParakeetModel = ParakeetModel()
     cenc : CanaryEncoder = CanaryEncoder()   // canary: the FastConformer-32 encoder + projector
     g4a : Gemma4aEncoder = Gemma4aEncoder()  // gemma4a: the Conformer audio encoder + mm embedder
+}
+
+// Stated rather than inferred: the family carriers hold borrowed planes, and a generated
+// teardown would force every module that deletes an AsrModel to see the plane finalizers too.
+// Each field's own finalizer does the real work — this only names them in one place.
+def finalize(var m : AsrModel) {
+    delete m.whisper
+    delete m.dec
+    delete m.q3t
+    delete m.pk
+    delete m.cenc
+    delete m.g4a
 }
 
 //! One transcription stream over an AsrModel: per-backend scratch plus shared options.

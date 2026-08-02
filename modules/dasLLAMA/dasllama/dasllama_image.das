@@ -860,7 +860,7 @@ def save_model_image_streaming(var t : Model; m : GGUFMeta; bytes : array<uint8>
     var regs : array<StreamReg>
     stream_collect_regions(t, regs)
     let ok = save_image_to_file(t, path, stream_extra_bytes(t, jobs), tag, quant) $(name : string;
-            var w : ImgWriter; var sections : array<ImgSection>) {
+                                                                                    var w : ImgWriter; var sections : array<ImgSection>) {
         if (stream_plane_bytes(t, jobs, name) <= 0l) {
             // a blob build's kq scale strips take their device form as each one's turn comes —
             // its own fills are done by then and its bytes are not yet written
@@ -1154,7 +1154,7 @@ def image_from_model_streaming(var t : Model; var out : Model; m : GGUFMeta; byt
     var regs : array<StreamReg>
     stream_collect_regions(t, regs)
     let ok = chunk_rail(t, out, save_to, stream_extra_bytes(t, jobs), tag, quant) $(name : string;
-            var w : ImgWriter; var sections : array<ImgSection>) {
+                                                                                    var w : ImgWriter; var sections : array<ImgSection>) {
         if (stream_plane_bytes(t, jobs, name) <= 0l) {
             if (t.metal_blob) {   // the kq scale strips take their device form — see the file saver
                 blob_stream_scale_plane(t, name)
@@ -1255,6 +1255,33 @@ def cache_via_image(var m; var out; img : string; tag : string = ""; quant : str
     // no plane wants special handling — the walk writes them all from RAM
     cache_via_image_(m, out, img, tag, quant) $(name : string; var w : ImgWriter; var sections : array<ImgSection>) {
         return false
+    }
+}
+
+//! cache_via_image for a carrier whose MINT form differs from its SERVED form: `st` carries owned
+//! plane arrays, `out` comes back borrowing the image. A staging struct is not servable, so a
+//! build that cannot produce an image panics rather than handing anything back.
+def cache_via_image_staged(var st; var out; img : string; tag : string = ""; quant : string = "q8") {
+    if (img != "" && image_save_enabled()) {
+        let ts = ref_time_ticks()
+        if (save_image_to_file(st, img, 0ul, tag, quant) $ [unused_argument(name, w, sections)] (name : string;
+                                                                                                 var w : ImgWriter; var sections : array<ImgSection>) {
+            return false
+        }) {
+            to_log(LOG_INFO, "dasLLAMA: prepared image written in {get_time_usec(ts) / 1000} ms — {img}\n")
+            delete st   // before the map, not after: holding both is what makes a cold load peak twice
+            if (!load_image(img, out, tag, quant)) {
+                panic("dasLLAMA: '{img}' was just written and verified, and will not map back — see the decline above")
+            }
+            return
+        }
+        to_log(LOG_WARNING, "dasLLAMA: could not write '{img}' — building the image in memory instead\n")
+    }
+    if (!chunk_rail(st, out, "", 0ul, tag, quant) $ [unused_argument(name, w, sections)] (name : string;
+                                                                                          var w : ImgWriter; var sections : array<ImgSection>) {
+        return false
+    }) {
+        panic("dasLLAMA: could not build the prepared image in memory — there is no other form to serve")
     }
 }
 
@@ -1461,7 +1488,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
         var built = Model()
         cache_via_image_(m, built, metal_flavor ? image_path_for(path, METAL_IMAGE_TAG) : img,
             metal_flavor ? METAL_IMAGE_TAG : "", metal_flavor ? "q8" : qs) $(name : string;
-                var w : ImgWriter; var sections : array<ImgSection>) {
+                                                                             var w : ImgWriter; var sections : array<ImgSection>) {
             return metal_flavor && metal_derive_plane(m, name, w, sections)
         }
         if (metal_flavor && built.image_map == null) {

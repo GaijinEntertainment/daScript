@@ -103,3 +103,13 @@ def plane_release(var pl : PlaneI8) {
     pl.p = null
     pl.n = 0l
 }
+
+// A plane holds a raw pointer, which would make `delete` unsafe for every struct that contains
+// one, all the way up the carrier. Declaring the teardown says what it is: dropping a view.
+def finalize(var pl : PlaneF) {
+    plane_release(pl)
+}
+
+def finalize(var pl : PlaneI8) {
+    plane_release(pl)
+}

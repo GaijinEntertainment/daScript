@@ -15,6 +15,7 @@ require daslib/archive
 require dasllama/dasllama_env
 require dasllama/dasllama_math
 require dasllama/dasllama_gguf
+require dasllama/dasllama_plane public   // PlaneF — the borrowed weight planes; re-exported so requirers can delete an encoder
 require dasllama/dasllama_audio
 require dasllama/dasllama_common   // apply_box_profile_runtime for the canary-image identity
 require dasllama/dasllama_image
@@ -33,7 +34,7 @@ let private CN_MEL_FLOOR = 5.960464477539063e-08lf   // 2^-24 (NeMo log_zero_gua
 
 //! Per-layer weight offsets inside ``blob`` (biases carried on every projection — the
 //! parakeet delta). ``bn_w``/``bn_b`` become fold scale/shift at load (BN + depthwise bias).
-struct private CanaryLayerOffs {
+struct CanaryLayerOffs {
     nf1_w : int64; nf1_b : int64
     ff1a_w : int64; ff1a_b : int64; ff1b_w : int64; ff1b_b : int64
     nat_w : int64; nat_b : int64
@@ -65,10 +66,10 @@ struct CanaryEncoder {
     proj_dim : int64
     n_fb : int64
     eps : float = 1e-5
-    filters : array<float>    // [n_mel × n_fb]
-    window : array<float>
-    twiddles : array<float>   // DFT twiddle matrix [n_fft × (n_fb·2)]
-    blob : array<float>
+    filters : PlaneF = PlaneF()    // [n_mel × n_fb]
+    window : PlaneF = PlaneF()
+    twiddles : PlaneF = PlaneF()   // DFT twiddle matrix [n_fft × (n_fb·2)]
+    blob : PlaneF = PlaneF()
     // pre-encode subsampling stack
     c0_w : int64; c0_b : int64
     c2_w : int64; c2_b : int64
@@ -76,35 +77,57 @@ struct CanaryEncoder {
     c5_w : int64; c5_b : int64
     c6_w : int64; c6_b : int64
     pre_w : int64; pre_b : int64
-    layers : array<CanaryLayerOffs>
+    layers : CanaryLayerPlane = CanaryLayerPlane()
     proj_w : int64; proj_b : int64
     image_map : void?         // non-null when the planes borrow a mapped .dlim (dasllama_image)
     image_bytes : uint64
 }
 
-def finalize(var t : CanaryEncoder) {
-    apply(t) $ [unused_argument(name)] (name : string; var field) {
-        static_if (typeinfo is_array(field)) {
-            if (lock_count(field) != 0) {
-                unsafe {
-                    _builtin_forget_temp_array(field)
-                }
-            } else {
-                delete field
-            }
-        }
+// the per-layer offset table is a plane like any other; PlaneF/PlaneI8 cover the scalar
+// element types, a POD-struct plane needs its own two accessors
+struct CanaryLayerPlane {
+    borrowed_plane : bool = true
+    p : CanaryLayerOffs const? = null
+    n : int64 = 0l
+}
+
+def length(pl : CanaryLayerPlane) : int64 => pl.n
+
+def operator [] (pl : CanaryLayerPlane; i : int64) : CanaryLayerOffs {
+    if (uint64(i) >= uint64(pl.n)) {
+        panic("dasLLAMA canary: layer {i} outside [0,{pl.n})")
     }
+    return unsafe(pl.p[i])
+}
+
+def finalize(var pl : CanaryLayerPlane) {
+    pl.p = null
+    pl.n = 0l
+}
+
+def plane_bind(var pl : CanaryLayerPlane; base : uint8 const?; off, nbytes : int64) : bool {
+    let esz = int64(typeinfo sizeof(type<CanaryLayerOffs>))
+    if (nbytes % esz != 0l) {
+        return false
+    }
+    unsafe {
+        pl.p = reinterpret<CanaryLayerOffs const?>(base + off)
+    }
+    pl.n = nbytes / esz
+    return true
+}
+
+// the encoder owns exactly one thing — its image backing. Every plane borrows.
+def finalize(var t : CanaryEncoder) {
     if (t.image_map != null) {
-        unsafe {
-            fmap_close(t.image_map, t.image_bytes)
-        }
+        image_backing_release(t.image_map, t.image_bytes)
         t.image_map = null
         t.image_bytes = 0ul
     }
 }
 
 // the tripwire: serialize_image_meta(CanaryEncoder) covers 26 fields; image_map + image_bytes
-// are deliberate skips (layers is a POD-struct array — it rides as a plane).
+// are deliberate skips (the five planes are sections, not meta).
 let private CANARY_META_FIELDS = 26 + 2
 
 // every meta-carried CanaryEncoder field, explicitly, both directions (see dasllama_image)
@@ -140,6 +163,35 @@ def private serialize_image_meta(var arch : Archive; var t : CanaryEncoder) {
 
 [unused_argument(t)]
 def private image_post_load(var t : CanaryEncoder) {}   // no derived state — offsets ARE the meta
+
+//! The mint-side carrier: ``e`` holds every scalar the meta blob carries, the arrays beside it
+//! hold the plane bytes until the writer has them. Public because reading the source bin off-rail
+//! is the only way a suite can check a served encoder against something not itself image-backed.
+struct CanaryStaging {
+    e : CanaryEncoder = CanaryEncoder()
+    filters : array<float>
+    window : array<float>
+    twiddles : array<float>
+    blob : array<float>
+    layers : array<CanaryLayerOffs>
+}
+
+def private serialize_image_meta(var arch : Archive; var st : CanaryStaging) {  // nolint:STYLE014
+    serialize_image_meta(arch, st.e)
+}
+
+// staging owns its plane bytes outright — every array here is heap, none is borrowed
+def finalize(var st : CanaryStaging) {
+    apply(st) $ [unused_argument(name)] (name : string; var field) {
+        static_if (typeinfo is_array(field)) {
+            delete field
+        }
+    }
+    delete st.e
+}
+
+[unused_argument(st)]
+def private image_post_load(var st : CanaryStaging) {}
 
 [init]
 def private register_canary_image_tags {
@@ -265,19 +317,24 @@ def load_canary_encoder(path : string) : CanaryEncoder {
             to_log(LOG_INFO, "dasLLAMA: prepared canary-encoder image mapped in {get_time_usec(ts_img) / 1000} ms — {img}\n")
             return <- t
         }
-        var m <- load_canary_encoder_(path)
+        var inscope st <- stage_canary_encoder(path)
         var built = CanaryEncoder()
-        cache_via_image(m, built, img, tag)
-        delete m
+        cache_via_image_staged(st, built, img, tag)
         dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
         return <- built
     }
-    return <- load_canary_encoder_(path)
+    // no persisted image: mint one in memory and serve THAT — a served encoder is always
+    // image-backed, so there is no second, array-owning shape of this struct to maintain
+    var inscope st <- stage_canary_encoder(path)
+    var built = CanaryEncoder()
+    cache_via_image_staged(st, built, "", tag)
+    return <- built
 }
 
-//! The CNRY-bin reader proper — the eager (no image cache) load; ``load_canary_encoder`` wraps it.
-def load_canary_encoder_(path : string) : CanaryEncoder {
-    var m = CanaryEncoder()
+// The CNRY-bin reader proper: scalars land in the served encoder, plane bytes in the staging
+// arrays beside it. Nothing here is servable — the image build is what produces a live encoder.
+def stage_canary_encoder(path : string) : CanaryStaging {
+    var st = CanaryStaging()
     let n_bytes = int64(stat(path).size)
     let f = fopen(path, "rb")
     if (f == null) {
@@ -290,30 +347,30 @@ def load_canary_encoder_(path : string) : CanaryEncoder {
         }
         o += 4l
         o += 4l   // version
-        m.d_model = int64(rd_i32(bytes, o)); o += 4l
-        m.n_layer = int64(rd_i32(bytes, o)); o += 4l
-        m.n_head = int64(rd_i32(bytes, o)); o += 4l
-        m.n_ff = int64(rd_i32(bytes, o)); o += 4l
-        m.n_mel = int64(rd_i32(bytes, o)); o += 4l
-        m.n_fft = int64(rd_i32(bytes, o)); o += 4l
-        m.subsampling = int64(rd_i32(bytes, o)); o += 4l
-        m.n_sub_ch = int64(rd_i32(bytes, o)); o += 4l
-        m.conv_kernel = int64(rd_i32(bytes, o)); o += 4l
-        m.proj_dim = int64(rd_i32(bytes, o)); o += 4l
-        m.eps = rd_f32(bytes, o); o += 4l
-        m.n_fb = int64(rd_i32(bytes, o)); o += 4l
+        st.e.d_model = int64(rd_i32(bytes, o)); o += 4l
+        st.e.n_layer = int64(rd_i32(bytes, o)); o += 4l
+        st.e.n_head = int64(rd_i32(bytes, o)); o += 4l
+        st.e.n_ff = int64(rd_i32(bytes, o)); o += 4l
+        st.e.n_mel = int64(rd_i32(bytes, o)); o += 4l
+        st.e.n_fft = int64(rd_i32(bytes, o)); o += 4l
+        st.e.subsampling = int64(rd_i32(bytes, o)); o += 4l
+        st.e.n_sub_ch = int64(rd_i32(bytes, o)); o += 4l
+        st.e.conv_kernel = int64(rd_i32(bytes, o)); o += 4l
+        st.e.proj_dim = int64(rd_i32(bytes, o)); o += 4l
+        st.e.eps = rd_f32(bytes, o); o += 4l
+        st.e.n_fb = int64(rd_i32(bytes, o)); o += 4l
         // mel filterbank [n_mel × n_fb]
-        let nfilt = m.n_mel * m.n_fb
-        m.filters |> resize(int(nfilt))
+        let nfilt = st.e.n_mel * st.e.n_fb
+        st.filters |> resize(int(nfilt))
         for (i in range64(nfilt)) {
-            m.filters[i] = rd_f32(bytes, o + i * 4l)
+            st.filters[i] = rd_f32(bytes, o + i * 4l)
         }
         o += nfilt * 4l
         // STFT window
         let n_window = int64(rd_i32(bytes, o)); o += 4l
-        m.window |> resize(int(n_window))
+        st.window |> resize(int(n_window))
         for (i in range64(n_window)) {
-            m.window[i] = rd_f32(bytes, o + i * 4l)
+            st.window[i] = rd_f32(bytes, o + i * 4l)
         }
         o += n_window * 4l
 
@@ -332,28 +389,28 @@ def load_canary_encoder_(path : string) : CanaryEncoder {
         for (r in recs) {
             total += r.n_elem
         }
-        m.blob |> reserve(total)
-        m.blob |> resize(int(total))
+        st.blob |> reserve(total)
+        st.blob |> resize(int(total))
         var offs : table<string; int64>
         var bo = 0l
         for (r in recs) {
-            cn_read_rec(bytes, r, m.blob, bo)
+            cn_read_rec(bytes, r, st.blob, bo)
             offs[r.name] = bo
             bo += r.n_elem
         }
         delete recs
 
         // pre-encode + projector offsets
-        m.c0_w = cn_off(offs, "pre_encode.conv.0.weight"); m.c0_b = cn_off(offs, "pre_encode.conv.0.bias")
-        m.c2_w = cn_off(offs, "pre_encode.conv.2.weight"); m.c2_b = cn_off(offs, "pre_encode.conv.2.bias")
-        m.c3_w = cn_off(offs, "pre_encode.conv.3.weight"); m.c3_b = cn_off(offs, "pre_encode.conv.3.bias")
-        m.c5_w = cn_off(offs, "pre_encode.conv.5.weight"); m.c5_b = cn_off(offs, "pre_encode.conv.5.bias")
-        m.c6_w = cn_off(offs, "pre_encode.conv.6.weight"); m.c6_b = cn_off(offs, "pre_encode.conv.6.bias")
-        m.pre_w = cn_off(offs, "pre_encode.out.weight"); m.pre_b = cn_off(offs, "pre_encode.out.bias")
-        m.proj_w = cn_off(offs, "proj.weight"); m.proj_b = cn_off(offs, "proj.bias")
+        st.e.c0_w = cn_off(offs, "pre_encode.conv.0.weight"); st.e.c0_b = cn_off(offs, "pre_encode.conv.0.bias")
+        st.e.c2_w = cn_off(offs, "pre_encode.conv.2.weight"); st.e.c2_b = cn_off(offs, "pre_encode.conv.2.bias")
+        st.e.c3_w = cn_off(offs, "pre_encode.conv.3.weight"); st.e.c3_b = cn_off(offs, "pre_encode.conv.3.bias")
+        st.e.c5_w = cn_off(offs, "pre_encode.conv.5.weight"); st.e.c5_b = cn_off(offs, "pre_encode.conv.5.bias")
+        st.e.c6_w = cn_off(offs, "pre_encode.conv.6.weight"); st.e.c6_b = cn_off(offs, "pre_encode.conv.6.bias")
+        st.e.pre_w = cn_off(offs, "pre_encode.out.weight"); st.e.pre_b = cn_off(offs, "pre_encode.out.bias")
+        st.e.proj_w = cn_off(offs, "proj.weight"); st.e.proj_b = cn_off(offs, "proj.bias")
 
-        m.layers |> resize(int(m.n_layer))
-        for (l in range64(m.n_layer)) {
+        st.layers |> resize(int(st.e.n_layer))
+        for (l in range64(st.e.n_layer)) {
             let lo = CanaryLayerOffs(
                 nf1_w = cn_off(offs, "L{l}.norm_ff1.weight"), nf1_b = cn_off(offs, "L{l}.norm_ff1.bias"),
                 ff1a_w = cn_off(offs, "L{l}.ff1.linear1.weight"), ff1a_b = cn_off(offs, "L{l}.ff1.linear1.bias"),
@@ -376,13 +433,13 @@ def load_canary_encoder_(path : string) : CanaryEncoder {
                 ff2b_w = cn_off(offs, "L{l}.ff2.linear2.weight"), ff2b_b = cn_off(offs, "L{l}.ff2.linear2.bias"),
                 nout_w = cn_off(offs, "L{l}.norm_out.weight"), nout_b = cn_off(offs, "L{l}.norm_out.bias"))
             // fold BN (with the depthwise bias) into bn_w/bn_b at load
-            cn_fold_bn(m.blob, lo.bn_w, lo.bn_b, lo.bn_mean, lo.bn_var, lo.dw_b, m.d_model, m.eps)
-            m.layers[l] = lo
+            cn_fold_bn(st.blob, lo.bn_w, lo.bn_b, lo.bn_mean, lo.bn_var, lo.dw_b, st.e.d_model, st.e.eps)
+            st.layers[l] = lo
         }
     }
     fclose(f)
-    m.twiddles <- build_dft_twiddles(m.n_fft)
-    return <- m
+    st.twiddles <- build_dft_twiddles(st.e.n_fft)
+    return <- st
 }
 
 // ===== mel (frame-major, parakeet flavor) =====
@@ -420,7 +477,7 @@ def canary_log_mel(m : CanaryEncoder; samples : array<float> | #; var st : Canar
     st.n_len = (n_padded - n_fft) / CN_HOP + 1l
     let n_len = st.n_len
     cn_ensure(st.mel, n_len * n_mel)
-    let wsz = long_length(m.window)
+    let wsz = length(m.window)
     let wpad = (n_fft - wsz) / 2l
 
     // windowed frames -> DFT via twiddle gemm -> power
@@ -438,7 +495,7 @@ def canary_log_mel(m : CanaryEncoder; samples : array<float> | #; var st : Canar
         }
     }
     cn_ensure(st.reim, n_len * n_bins * 2l)
-    gemm_f32(unsafe(addr(st.reim[0])), unsafe(addr(st.xw[0])), unsafe(addr(m.twiddles[0])),
+    gemm_f32(unsafe(addr(st.reim[0])), unsafe(addr(st.xw[0])), plane_at(m.twiddles, 0l),
              n_len, n_fft, n_bins * 2l)
 
     cn_ensure(st.power, n_bins)

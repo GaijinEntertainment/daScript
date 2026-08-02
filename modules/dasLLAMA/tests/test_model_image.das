@@ -8,6 +8,8 @@ require dasllama/dasllama            // the facade: load_model's image cache is 
 require dasllama/dasllama_whisper
 require dasllama/dasllama_gguf       // rd_u32/rd_u16 — the wav fixture reader
 require dasllama/dasllama_image
+require dasllama/dasllama_plane   // PlaneF — the served side of the round-trip comparisons
+require dasllama/dasllama_canary  // CanaryStaging/stage_canary_encoder — the off-rail truth read
 require dasllama/dasllama_config     // DlimConfiguration — the peek/round-trip mechanics arms
 require dasllama/dasllama_math   // pin_kernel_backend — the metal-flavor arm's donor contract
 require dasllama/dasllama_layout // convert_model_to_metal_blob — the derive cell's in-RAM control
@@ -34,6 +36,21 @@ def private whisper_dir() : string {
 }
 
 // element-exact plane compare: -1 = length mismatch, else the number of differing elements
+// the staged (owned array) side against the served (borrowed plane) side — the only comparison
+// that can prove an image round-trips, now that a served carrier has no array form
+def private count_mismatch(a : array<float>; b : PlaneF) : int64 {
+    if (long_length(a) != length(b)) {
+        return -1l
+    }
+    var bad = 0l
+    for (i in range64(long_length(a))) {
+        if (a[i] != b[i]) {
+            bad++
+        }
+    }
+    return bad
+}
+
 def private count_mismatch(a, b : array<auto(TT)>) : int64 {
     if (long_length(a) != long_length(b)) {
         return -1l
@@ -800,7 +817,7 @@ def test_whisper_image_roundtrip(t : T?) {
 }
 
 def private parakeet_transcribe_text(path : string; samples : array<float>; cached : bool = true) : tuple<text : string; mapped : bool> {
-    var m = AsrModel()
+    var inscope m = AsrModel()
     if (cached) {
         m <- load_asr_model(path)
     } else {
@@ -816,7 +833,6 @@ def private parakeet_transcribe_text(path : string; samples : array<float>; cach
         delete s
     }
     let mapped = m.pk.image_map != null
-    delete m
     return (text = text, mapped = mapped)
 }
 
@@ -905,23 +921,23 @@ def test_canary_encoder_image_roundtrip(t : T?) {
         }
         let img = image_path_for(path, "canary-f32")
         remove(img)
-        // off-rail truth: both cached loads are image-backed, so they cannot check each other
-        var a <- load_canary_encoder_(path)
-        var cold <- load_canary_encoder(path)
+        // off-rail truth: both cached loads are image-backed, so they cannot check each other.
+        // The staging carrier IS the off-rail read now — a served encoder has no array form.
+        var inscope a <- stage_canary_encoder(path)
+        var inscope cold <- load_canary_encoder(path)
         t |> success(cold.image_map != null, "cold load serves the image it built")
         t |> success(stat(img).is_valid, "cold load saved an image")
         t |> equal(count_mismatch(a.blob, cold.blob), 0l, "cold-built blob element-exact")
-        delete cold
-        var b <- load_canary_encoder(path)
+        var inscope b <- load_canary_encoder(path)
         t |> success(b.image_map != null, "warm load is image-backed")
-        t |> equal(b.d_model, a.d_model)
-        t |> equal(b.n_layer, a.n_layer)
-        t |> equal(b.proj_dim, a.proj_dim)
-        t |> equal(long_length(b.layers), long_length(a.layers))
+        t |> equal(b.d_model, a.e.d_model)
+        t |> equal(b.n_layer, a.e.n_layer)
+        t |> equal(b.proj_dim, a.e.proj_dim)
+        t |> equal(length(b.layers), long_length(a.layers))
         t |> equal(count_mismatch(a.blob, b.blob), 0l, "blob element-exact")
         t |> equal(count_mismatch(a.filters, b.filters), 0l, "filters element-exact")
-        delete a
-        delete b
+        t |> equal(count_mismatch(a.window, b.window), 0l, "window element-exact")
+        t |> equal(count_mismatch(a.twiddles, b.twiddles), 0l, "twiddles element-exact")
     }
 }
 
