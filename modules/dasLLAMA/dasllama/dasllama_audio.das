@@ -11,7 +11,7 @@ require daslib/fio
 require daslib/apply
 require daslib/archive
 require dasllama/dasllama_math
-require dasllama/dasllama_plane   // PlaneF — the borrowed-plane weight forms of the blob helpers
+require dasllama/dasllama_plane public   // PlaneF/PlaneI8 — plane forms of the blob helpers; re-exported for deleters
 require dasllama/dasllama_par
 require dasllama/dasllama_gguf
 require dasllama/dasllama_convert
@@ -468,8 +468,19 @@ def log_mel_whisper(samples : array<float> | #; plan : WhisperMelPlan; filters :
     return <- m
 }
 
+//! Borrowed-plane form — the filterbank lives in a prepared image.
+def log_mel_whisper(samples : array<float> | #; plan : WhisperMelPlan; filters : PlaneF; n_mel : int64;
+                    var padded : array<float>; var m : WhisperMel) {
+    log_mel_whisper_(samples, plan, plane_at(filters, 0l), n_mel, padded, m)
+}
+
 def log_mel_whisper(samples : array<float> | #; plan : WhisperMelPlan; filters : array<float>; n_mel : int64;
                     var padded : array<float>; var m : WhisperMel) {
+    log_mel_whisper_(samples, plan, unsafe(addr<float const?>(filters[0])), n_mel, padded, m)
+}
+
+def private log_mel_whisper_(samples : array<float> | #; plan : WhisperMelPlan; filters : float const?; n_mel : int64;
+                             var padded : array<float>; var m : WhisperMel) {
     let n_in = long_length(samples)
     let head = AUDIO_N_FFT / 2l                            // 200
     let n_padded = n_in + AUDIO_SAMPLE_RATE * 30l + 2l * head
@@ -511,7 +522,7 @@ def log_mel_whisper(samples : array<float> | #; plan : WhisperMelPlan; filters :
         let pdd = addr<float const?>(padded[0])
         let hw = addr<float const?>(plan.hann[0])
         let twt = addr<float const?>(plan.twt[0])
-        let flt = addr<float const?>(filters[0])
+        let flt = filters
         var md = addr(m.data[0])
         maybe_parallel_for(0, int(n_compute), lanes_for_work(n_compute * n_fft * n_bins * 2l, 0)) $(rb, re) {
             var xwin : float[MEL_DFT_N]    // windowed samples, stack-resident
@@ -606,10 +617,10 @@ struct AudioTower {
     stack_factor : int64 = 1  // frame-concat width before the projector (ultravox 8, voxtral 4)
     mm1_out : int64 = 0l      // projector hidden width (ultravox: pre-swiglu, voxtral: pre-gelu)
     has_k_bias : bool = false // qwen3a attention carries a k bias; whisper towers don't
-    fblob : array<float>
+    fblob : PlaneF = PlaneF()
     q8 : bool = false         // encoder GEMMs quantized: qblob/qscales carry the Q8_0 image
-    qblob : array<int8>       // whole-fblob-shaped Q8_0 quants (GEMM regions repacked in place)
-    qscales : array<float>    // per-32-block scales, indexed at woff/32
+    qblob : PlaneI8 = PlaneI8()   // whole-fblob-shaped Q8_0 quants (GEMM regions repacked in place)
+    qscales : PlaneF = PlaneF()   // per-32-block scales, indexed at woff/32
     conv1_w_off : int64
     conv1_b_off : int64
     conv2_w_off : int64
@@ -628,22 +639,10 @@ struct AudioTower {
     image_bytes : uint64
 }
 
+// the tower owns exactly one thing — its image backing. Every plane borrows.
 def finalize(var t : AudioTower) {
-    apply(t) $ [unused_argument(name)] (name : string; var field) {
-        static_if (typeinfo is_array(field)) {
-            if (lock_count(field) != 0) {
-                unsafe {
-                    _builtin_forget_temp_array(field)
-                }
-            } else {
-                delete field
-            }
-        }
-    }
     if (t.image_map != null) {
-        unsafe {
-            fmap_close(t.image_map, t.image_bytes)
-        }
+        image_backing_release(t.image_map, t.image_bytes)
         t.image_map = null
         t.image_bytes = 0ul
     }
@@ -689,6 +688,45 @@ def serialize_image_meta(var arch : Archive; var t : AudioTower) {
 
 [unused_argument(t)]
 def private image_post_load(var t : AudioTower) {}   // no derived state — offsets ARE the meta
+
+//! A nested tower's plane BYTES at mint time. Embedded in another family's staging under the
+//! served field name (WhisperStaging.enc, Qwen3aStaging.core), so the image walk writes the
+//! dotted sections the parse walk will bind (`enc.fblob`).
+struct AudioTowerPlanes {
+    image_planes : bool = true   // the marker the image write walk static_ifs on
+    fblob : array<float>
+    qblob : array<int8>
+    qscales : array<float>
+}
+
+def finalize(var pl : AudioTowerPlanes) {
+    delete pl.fblob
+    delete pl.qblob
+    delete pl.qscales
+}
+
+//! The standalone tower's mint-side carrier: ``e`` holds every scalar the meta blob carries,
+//! the arrays hold the plane bytes until the writer has them. Public for the off-rail suites.
+struct AudioTowerStaging {
+    e : AudioTower = AudioTower()
+    fblob : array<float>
+    qblob : array<int8>
+    qscales : array<float>
+}
+
+def private serialize_image_meta(var arch : Archive; var st : AudioTowerStaging) {
+    serialize_image_meta(arch, st.e)
+}
+
+def finalize(var st : AudioTowerStaging) {
+    delete st.fblob
+    delete st.qblob
+    delete st.qscales
+    delete st.e
+}
+
+[unused_argument(st)]
+def private image_post_load(var st : AudioTowerStaging) {}
 
 [init]
 def private register_tower_image_tags {
@@ -897,49 +935,57 @@ def mm_blob_b(var y : array<float>; blob : PlaneF; woff : int64; x : PlaneF; n, 
 // repack one GEMM region for the active backend (scales index at woff/32 ⇒ woff must be
 // 32-aligned); a region whose contraction width is not a 32-multiple stays fp32 — tw_mm
 // falls back per call on the same condition, so plane and route can never disagree
-def private tw_repack(var t : AudioTower; woff, n, d : int64) {
+def private tw_repack(var qblob : array<int8>; var qscales : array<float>; woff, n, d : int64) {
     if (n % 32l != 0l) {
         return
     }
     if (woff % 32l != 0l) {
         panic("audio tower q8: GEMM weight at {woff} is not 32-aligned")
     }
-    repack_q8q8_weight(t.qblob, t.qscales, woff, n, d)
+    repack_q8q8_weight(qblob, qscales, woff, n, d)
 }
 
 //! Quantizes the tower's GEMM weights to Q8_0 (conv2, per-layer q/k/v/o, fc1/fc2, projector mats).
 //! conv1 stays fp32 (its 3·n_mel contraction isn't a 32-multiple on 80-mel models); non-GEMM slots
 //! are quantized-but-unread — fblob stays the fp32 truth for them.
-def tower_quantize(var t : AudioTower) {
-    let total = long_length(t.fblob) & ~31l   // GEMM regions are 32-aligned and 32-sized; a ragged blob tail can't be one
-    t.qblob |> resize(int(total))
-    t.qscales |> resize(int(total / 32l))
-    quantize_q8_0_into(t.fblob, total, t.qblob, t.qscales, 0l, 0l)
+def tower_quantize(var st : AudioTowerStaging) {
+    tower_quantize_(st.e, st.fblob, st.qblob, st.qscales)
+}
+
+def tower_quantize(var t : AudioTower; var pl : AudioTowerPlanes) {
+    tower_quantize_(t, pl.fblob, pl.qblob, pl.qscales)
+}
+
+def private tower_quantize_(var t : AudioTower; fblob : array<float>; var qblob : array<int8>; var qscales : array<float>) {
+    let total = long_length(fblob) & ~31l   // GEMM regions are 32-aligned and 32-sized; a ragged blob tail can't be one
+    qblob |> resize(int(total))
+    qscales |> resize(int(total / 32l))
+    quantize_q8_0_into(fblob, total, qblob, qscales, 0l, 0l)
     t.q8 = true
     if (!select_matmul_backend_for_load()) {
         return   // row-major backend reads the flat Q8_0 image as-is
     }
     let d = t.d_model
     let ff = t.n_ff
-    tw_repack(t, t.conv2_w_off, 3l * d, d)
+    tw_repack(qblob, qscales, t.conv2_w_off, 3l * d, d)
     for (l in range64(t.n_layer)) {
         let lo = enc_layer_offsets(t, l)
-        tw_repack(t, lo.q_w, d, d)
-        tw_repack(t, lo.k_w, d, d)
-        tw_repack(t, lo.v_w, d, d)
-        tw_repack(t, lo.o_w, d, d)
-        tw_repack(t, lo.fc1_w, d, ff)
-        tw_repack(t, lo.fc2_w, ff, d)
+        tw_repack(qblob, qscales, lo.q_w, d, d)
+        tw_repack(qblob, qscales, lo.k_w, d, d)
+        tw_repack(qblob, qscales, lo.v_w, d, d)
+        tw_repack(qblob, qscales, lo.o_w, d, d)
+        tw_repack(qblob, qscales, lo.fc1_w, d, ff)
+        tw_repack(qblob, qscales, lo.fc2_w, ff, d)
     }
     if (t.proj_dim > 0l) {   // whisper .bin towers have no projector
         if (t.proj_kind == AudioProjKind.qwen2a) {
-            tw_repack(t, t.proj_w_off, d, t.proj_dim)
+            tw_repack(qblob, qscales, t.proj_w_off, d, t.proj_dim)
         } elif (t.proj_kind == AudioProjKind.ultravox) {
-            tw_repack(t, t.proj_w_off, d * t.stack_factor, t.mm1_out)
-            tw_repack(t, t.mm2_w_off, t.mm1_out / 2l, t.proj_dim)
+            tw_repack(qblob, qscales, t.proj_w_off, d * t.stack_factor, t.mm1_out)
+            tw_repack(qblob, qscales, t.mm2_w_off, t.mm1_out / 2l, t.proj_dim)
         } else {   // voxtral
-            tw_repack(t, t.proj_w_off, d * t.stack_factor, t.mm1_out)
-            tw_repack(t, t.mm2_w_off, t.mm1_out, t.proj_dim)
+            tw_repack(qblob, qscales, t.proj_w_off, d * t.stack_factor, t.mm1_out)
+            tw_repack(qblob, qscales, t.mm2_w_off, t.mm1_out, t.proj_dim)
         }
     }
 }
@@ -1010,19 +1056,29 @@ def load_audio_tower(path : string; q8 : bool = false) : AudioTower {
             to_log(LOG_INFO, "dasLLAMA: prepared tower image mapped in {get_time_usec(ts_img) / 1000} ms — {img}\n")
             return <- t
         }
-        var m <- load_audio_tower_(path, q8)
+        var inscope st <- stage_audio_tower(path, q8)
         var built = AudioTower()
-        cache_via_image(m, built, img, tag)
-        delete m
+        cache_via_image_staged(st, built, img, tag)
         dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
         return <- built
     }
-    return <- load_audio_tower_(path, q8)
+    // no persisted image: mint one in memory and serve THAT — a served tower is always
+    // image-backed, so there is no second, array-owning shape of this struct to maintain
+    var inscope st <- stage_audio_tower(path, q8)
+    var built = AudioTower()
+    cache_via_image_staged(st, built, "", tag)
+    return <- built
 }
 
-//! The mmproj-gguf reader proper — the eager (no image cache) load; ``load_audio_tower`` wraps it.
-def load_audio_tower_(path : string; q8 : bool = false) : AudioTower {
-    var t = AudioTower()
+//! Mint a served tower from a staged read WITHOUT touching disk — the off-rail control for suites.
+def mint_audio_tower(var st : AudioTowerStaging; var out : AudioTower; q8 : bool = false) {
+    cache_via_image_staged(st, out, "", q8 ? "tower-q8" : "tower-f32")
+}
+
+//! The mmproj-gguf reader proper: scalars land in the served tower, plane bytes in the staging
+//! arrays beside it. Nothing here is servable — the image build is what produces a live tower.
+def stage_audio_tower(path : string; q8 : bool = false) : AudioTowerStaging {
+    var st = AudioTowerStaging()
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA: cannot open mmproj gguf '{path}'")
@@ -1031,121 +1087,121 @@ def load_audio_tower_(path : string; q8 : bool = false) : AudioTower {
         var inscope m <- parse_gguf_meta(bytes)
         let proj = gguf_str(m, bytes, "clip.projector_type")
         if (proj == "qwen2a" || proj == "qwen2.5o") {   // omni's audio side is qwen2a verbatim
-            t.proj_kind = AudioProjKind.qwen2a
+            st.e.proj_kind = AudioProjKind.qwen2a
         } elif (proj == "ultravox") {
-            t.proj_kind = AudioProjKind.ultravox
+            st.e.proj_kind = AudioProjKind.ultravox
         } elif (proj == "voxtral") {
-            t.proj_kind = AudioProjKind.voxtral
+            st.e.proj_kind = AudioProjKind.voxtral
         } else {
             panic("dasLLAMA: audio tower supports qwen2a/qwen2.5o/ultravox/voxtral projectors, got '{proj}'")
         }
-        t.n_mel = gguf_int(m, bytes, "clip.audio.num_mel_bins")
-        t.d_model = gguf_int(m, bytes, "clip.audio.embedding_length")
-        t.n_head = gguf_int(m, bytes, "clip.audio.attention.head_count")
-        t.n_layer = gguf_int(m, bytes, "clip.audio.block_count")
-        t.n_ff = gguf_int(m, bytes, "clip.audio.feed_forward_length")
-        t.proj_dim = gguf_int(m, bytes, "clip.audio.projection_dim")
+        st.e.n_mel = gguf_int(m, bytes, "clip.audio.num_mel_bins")
+        st.e.d_model = gguf_int(m, bytes, "clip.audio.embedding_length")
+        st.e.n_head = gguf_int(m, bytes, "clip.audio.attention.head_count")
+        st.e.n_layer = gguf_int(m, bytes, "clip.audio.block_count")
+        st.e.n_ff = gguf_int(m, bytes, "clip.audio.feed_forward_length")
+        st.e.proj_dim = gguf_int(m, bytes, "clip.audio.projection_dim")
         if (gguf_has(m, "clip.audio.attention.layer_norm_epsilon")) {
-            t.eps = gguf_f32(m, bytes, "clip.audio.attention.layer_norm_epsilon")
+            st.e.eps = gguf_f32(m, bytes, "clip.audio.attention.layer_norm_epsilon")
         }
         if (gguf_has(m, "clip.audio.projector.stack_factor")) {
-            t.stack_factor = gguf_int(m, bytes, "clip.audio.projector.stack_factor")
+            st.e.stack_factor = gguf_int(m, bytes, "clip.audio.projector.stack_factor")
         }
-        let d = t.d_model
-        let ff = t.n_ff
-        let nm = t.n_mel
+        let d = st.e.d_model
+        let ff = st.e.n_ff
+        let nm = st.e.n_mel
         // encoder positions from the position-embedding tensor (1500 for whisper-large-v3)
         let pi = gguf_find_tensor(m, "a.position_embd.weight")
         if (pi < 0) {
             panic("dasLLAMA: a.position_embd.weight missing from mmproj")
         }
-        t.n_ctx = m.tensors[pi].n_elem / d
+        st.e.n_ctx = m.tensors[pi].n_elem / d
 
         // shapes come from the tensors, not clip.audio.projection_dim — it lies for ultravox-1b (4096 vs actual 2048)
         var mm1_in = 0l
-        if (t.proj_kind != AudioProjKind.qwen2a) {
-            mm1_in = d * t.stack_factor
+        if (st.e.proj_kind != AudioProjKind.qwen2a) {
+            mm1_in = d * st.e.stack_factor
             let i1 = gguf_find_tensor(m, "mm.a.mlp.1.weight")
             let i2 = gguf_find_tensor(m, "mm.a.mlp.2.weight")
             if (i1 < 0 || i2 < 0) {
                 panic("dasLLAMA: mm.a.mlp.1/2.weight missing from '{proj}' mmproj")
             }
-            t.mm1_out = m.tensors[i1].n_elem / mm1_in
-            let mm2_in = t.proj_kind == AudioProjKind.ultravox ? t.mm1_out / 2l : t.mm1_out
-            t.proj_dim = m.tensors[i2].n_elem / mm2_in
+            st.e.mm1_out = m.tensors[i1].n_elem / mm1_in
+            let mm2_in = st.e.proj_kind == AudioProjKind.ultravox ? st.e.mm1_out / 2l : st.e.mm1_out
+            st.e.proj_dim = m.tensors[i2].n_elem / mm2_in
         }
 
         // fixed blob layout: convs, pos, per-layer region, post-ln, projector
         var o = 0l
-        t.conv1_w_off = o; o += d * 3l * nm
-        t.conv1_b_off = o; o += d
-        t.conv2_w_off = o; o += d * 3l * d
-        t.conv2_b_off = o; o += d
-        t.pos_off = o; o += t.n_ctx * d
-        t.layers_off = o
-        t.layer_stride = enc_layer_stride(d, ff)
-        o += t.n_layer * t.layer_stride
-        t.lnp_w_off = o; o += d
-        t.lnp_b_off = o; o += d
-        if (t.proj_kind == AudioProjKind.qwen2a) {
-            t.proj_w_off = o; o += t.proj_dim * d
-            t.proj_b_off = o; o += t.proj_dim
-        } elif (t.proj_kind == AudioProjKind.ultravox) {
-            t.normpre_off = o; o += mm1_in
-            t.proj_w_off = o; o += t.mm1_out * mm1_in
-            t.normmid_off = o; o += t.mm1_out / 2l
-            t.mm2_w_off = o; o += t.proj_dim * (t.mm1_out / 2l)
+        st.e.conv1_w_off = o; o += d * 3l * nm
+        st.e.conv1_b_off = o; o += d
+        st.e.conv2_w_off = o; o += d * 3l * d
+        st.e.conv2_b_off = o; o += d
+        st.e.pos_off = o; o += st.e.n_ctx * d
+        st.e.layers_off = o
+        st.e.layer_stride = enc_layer_stride(d, ff)
+        o += st.e.n_layer * st.e.layer_stride
+        st.e.lnp_w_off = o; o += d
+        st.e.lnp_b_off = o; o += d
+        if (st.e.proj_kind == AudioProjKind.qwen2a) {
+            st.e.proj_w_off = o; o += st.e.proj_dim * d
+            st.e.proj_b_off = o; o += st.e.proj_dim
+        } elif (st.e.proj_kind == AudioProjKind.ultravox) {
+            st.e.normpre_off = o; o += mm1_in
+            st.e.proj_w_off = o; o += st.e.mm1_out * mm1_in
+            st.e.normmid_off = o; o += st.e.mm1_out / 2l
+            st.e.mm2_w_off = o; o += st.e.proj_dim * (st.e.mm1_out / 2l)
         } else {   // voxtral
-            t.proj_w_off = o; o += t.mm1_out * mm1_in
-            t.mm2_w_off = o; o += t.proj_dim * t.mm1_out
+            st.e.proj_w_off = o; o += st.e.mm1_out * mm1_in
+            st.e.mm2_w_off = o; o += st.e.proj_dim * st.e.mm1_out
         }
-        t.fblob |> resize(int(o))
+        st.fblob |> resize(int(o))
 
-        load_conv_permuted(m, bytes, "a.conv1d.1.weight", t.fblob, t.conv1_w_off, d, nm)
-        gguf_read_tensor_f32(m, bytes, "a.conv1d.1.bias", t.fblob, t.conv1_b_off, d)
-        load_conv_permuted(m, bytes, "a.conv1d.2.weight", t.fblob, t.conv2_w_off, d, d)
-        gguf_read_tensor_f32(m, bytes, "a.conv1d.2.bias", t.fblob, t.conv2_b_off, d)
-        gguf_read_tensor_f32(m, bytes, "a.position_embd.weight", t.fblob, t.pos_off, t.n_ctx * d)
-        for (l in range64(t.n_layer)) {
-            let lo = enc_layer_offsets(t, l)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ln1.weight", t.fblob, lo.ln1_w, d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ln1.bias", t.fblob, lo.ln1_b, d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_q.weight", t.fblob, lo.q_w, d * d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_q.bias", t.fblob, lo.q_b, d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_k.weight", t.fblob, lo.k_w, d * d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_v.weight", t.fblob, lo.v_w, d * d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_v.bias", t.fblob, lo.v_b, d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_out.weight", t.fblob, lo.o_w, d * d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_out.bias", t.fblob, lo.o_b, d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ln2.weight", t.fblob, lo.ln2_w, d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ln2.bias", t.fblob, lo.ln2_b, d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ffn_up.weight", t.fblob, lo.fc1_w, ff * d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ffn_up.bias", t.fblob, lo.fc1_b, ff)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ffn_down.weight", t.fblob, lo.fc2_w, d * ff)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ffn_down.bias", t.fblob, lo.fc2_b, d)
+        load_conv_permuted(m, bytes, "a.conv1d.1.weight", st.fblob, st.e.conv1_w_off, d, nm)
+        gguf_read_tensor_f32(m, bytes, "a.conv1d.1.bias", st.fblob, st.e.conv1_b_off, d)
+        load_conv_permuted(m, bytes, "a.conv1d.2.weight", st.fblob, st.e.conv2_w_off, d, d)
+        gguf_read_tensor_f32(m, bytes, "a.conv1d.2.bias", st.fblob, st.e.conv2_b_off, d)
+        gguf_read_tensor_f32(m, bytes, "a.position_embd.weight", st.fblob, st.e.pos_off, st.e.n_ctx * d)
+        for (l in range64(st.e.n_layer)) {
+            let lo = enc_layer_offsets(st.e, l)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ln1.weight", st.fblob, lo.ln1_w, d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ln1.bias", st.fblob, lo.ln1_b, d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_q.weight", st.fblob, lo.q_w, d * d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_q.bias", st.fblob, lo.q_b, d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_k.weight", st.fblob, lo.k_w, d * d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_v.weight", st.fblob, lo.v_w, d * d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_v.bias", st.fblob, lo.v_b, d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_out.weight", st.fblob, lo.o_w, d * d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_out.bias", st.fblob, lo.o_b, d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ln2.weight", st.fblob, lo.ln2_w, d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ln2.bias", st.fblob, lo.ln2_b, d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ffn_up.weight", st.fblob, lo.fc1_w, ff * d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ffn_up.bias", st.fblob, lo.fc1_b, ff)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ffn_down.weight", st.fblob, lo.fc2_w, d * ff)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ffn_down.bias", st.fblob, lo.fc2_b, d)
         }
-        gguf_read_tensor_f32(m, bytes, "a.post_ln.weight", t.fblob, t.lnp_w_off, d)
-        gguf_read_tensor_f32(m, bytes, "a.post_ln.bias", t.fblob, t.lnp_b_off, d)
-        if (t.proj_kind == AudioProjKind.qwen2a) {
-            gguf_read_tensor_f32(m, bytes, "mm.a.fc.weight", t.fblob, t.proj_w_off, t.proj_dim * d)
-            gguf_read_tensor_f32(m, bytes, "mm.a.fc.bias", t.fblob, t.proj_b_off, t.proj_dim)
-        } elif (t.proj_kind == AudioProjKind.ultravox) {
-            let m1in = d * t.stack_factor
-            gguf_read_tensor_f32(m, bytes, "mm.a.norm_pre.weight", t.fblob, t.normpre_off, m1in)
-            gguf_read_tensor_f32(m, bytes, "mm.a.mlp.1.weight", t.fblob, t.proj_w_off, t.mm1_out * m1in)
-            gguf_read_tensor_f32(m, bytes, "mm.a.norm_mid.weight", t.fblob, t.normmid_off, t.mm1_out / 2l)
-            gguf_read_tensor_f32(m, bytes, "mm.a.mlp.2.weight", t.fblob, t.mm2_w_off, t.proj_dim * (t.mm1_out / 2l))
+        gguf_read_tensor_f32(m, bytes, "a.post_ln.weight", st.fblob, st.e.lnp_w_off, d)
+        gguf_read_tensor_f32(m, bytes, "a.post_ln.bias", st.fblob, st.e.lnp_b_off, d)
+        if (st.e.proj_kind == AudioProjKind.qwen2a) {
+            gguf_read_tensor_f32(m, bytes, "mm.a.fc.weight", st.fblob, st.e.proj_w_off, st.e.proj_dim * d)
+            gguf_read_tensor_f32(m, bytes, "mm.a.fc.bias", st.fblob, st.e.proj_b_off, st.e.proj_dim)
+        } elif (st.e.proj_kind == AudioProjKind.ultravox) {
+            let m1in = d * st.e.stack_factor
+            gguf_read_tensor_f32(m, bytes, "mm.a.norm_pre.weight", st.fblob, st.e.normpre_off, m1in)
+            gguf_read_tensor_f32(m, bytes, "mm.a.mlp.1.weight", st.fblob, st.e.proj_w_off, st.e.mm1_out * m1in)
+            gguf_read_tensor_f32(m, bytes, "mm.a.norm_mid.weight", st.fblob, st.e.normmid_off, st.e.mm1_out / 2l)
+            gguf_read_tensor_f32(m, bytes, "mm.a.mlp.2.weight", st.fblob, st.e.mm2_w_off, st.e.proj_dim * (st.e.mm1_out / 2l))
         } else {   // voxtral
-            let m1in = d * t.stack_factor
-            gguf_read_tensor_f32(m, bytes, "mm.a.mlp.1.weight", t.fblob, t.proj_w_off, t.mm1_out * m1in)
-            gguf_read_tensor_f32(m, bytes, "mm.a.mlp.2.weight", t.fblob, t.mm2_w_off, t.proj_dim * t.mm1_out)
+            let m1in = d * st.e.stack_factor
+            gguf_read_tensor_f32(m, bytes, "mm.a.mlp.1.weight", st.fblob, st.e.proj_w_off, st.e.mm1_out * m1in)
+            gguf_read_tensor_f32(m, bytes, "mm.a.mlp.2.weight", st.fblob, st.e.mm2_w_off, st.e.proj_dim * st.e.mm1_out)
         }
     }
     fclose(f)
     if (q8) {
-        tower_quantize(t)
+        tower_quantize(st)
     }
-    return <- t
+    return <- st
 }
 
 //! Encoder scratch, sized once per tower and reused across chunks/calls.

@@ -357,6 +357,13 @@ def private image_total_bytes(var t; meta_bytes : uint64) : uint64 {
             static_if (!typeinfo is_string(field[0])) {
                 cur = plane_end(cur, field)
             }
+        } static_elif (typeinfo safe_has_field < image_planes > (field)) {
+            // a staging plane-group (nested carrier's bytes) — sized exactly like nested planes
+            apply(field) $ [unused_argument(iname)] (iname : string; var ifield) {
+                static_if (typeinfo is_array(ifield)) {
+                    cur = plane_end(cur, ifield)
+                }
+            }
         } static_elif (typeinfo safe_has_field < image_map > (field)) {
             apply(field) $ [unused_argument(iname)] (iname : string; var ifield) {
                 static_if (typeinfo is_array(ifield)) {
@@ -680,6 +687,17 @@ def private build_image(var t; dst : string; in_mem : bool; extra : uint64;   //
                     // lock_count != 0 is a BORROWED view over some other image — never ours to free
                     if (consume && lock_count(field) == 0) {
                         delete field
+                    }
+                }
+            } static_elif (typeinfo safe_has_field < image_planes > (field)) {
+                // a staging plane-group: the nested carrier's bytes under its served field name —
+                // the sections come out dotted exactly as the parse walk will look them up
+                apply(field) $(iname : string; var ifield) {
+                    static_if (typeinfo is_array(ifield)) {
+                        write_plane(w, sections, "{name}.{iname}", ifield)
+                        if (consume) {
+                            delete ifield
+                        }
                     }
                 }
             } static_elif (typeinfo safe_has_field < image_map > (field)) {

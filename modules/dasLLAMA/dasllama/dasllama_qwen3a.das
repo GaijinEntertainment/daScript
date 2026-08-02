@@ -10,6 +10,7 @@ require strings
 require daslib/apply
 require daslib/archive
 require dasllama/dasllama_env
+require dasllama/dasllama_plane public   // PlaneF/PlaneI8 — the borrowed weight planes; re-exported for deleters
 require dasllama/dasllama_math
 require dasllama/dasllama_gguf
 require dasllama/dasllama_audio
@@ -35,7 +36,7 @@ struct Qwen3aTower {
     core : AudioTower = AudioTower()   // d_model/heads/blocks/post_ln; has_k_bias; n_ctx = window positions
     proj_dim : int64                   // decoder embedding width (mm2 output)
     n_ch : int64                       // conv channel count (480)
-    cblob : array<float>
+    cblob : PlaneF = PlaneF()
     c1_w_off : int64                   // conv2d weights, file order [oc][ic][kh][kw] (= im2col col order)
     c1_b_off : int64
     c2_w_off : int64
@@ -53,24 +54,10 @@ struct Qwen3aTower {
     image_bytes : uint64
 }
 
+// the tower owns exactly one thing — its image backing. Every plane borrows.
 def finalize(var t : Qwen3aTower) {
-    apply(t) $ [unused_argument(name)] (name : string; var field) {
-        static_if (typeinfo is_array(field)) {
-            if (lock_count(field) != 0) {
-                unsafe {
-                    _builtin_forget_temp_array(field)
-                }
-            } else {
-                delete field
-            }
-        } static_elif (typeinfo is_struct(field)) {
-            delete field   // core's own finalizer forgets ITS borrowed planes
-        }
-    }
     if (t.image_map != null) {
-        unsafe {
-            fmap_close(t.image_map, t.image_bytes)
-        }
+        image_backing_release(t.image_map, t.image_bytes)
         t.image_map = null
         t.image_bytes = 0ul
     }
@@ -104,6 +91,28 @@ def private serialize_image_meta(var arch : Archive; var t : Qwen3aTower) {
 [unused_argument(t)]
 def private image_post_load(var t : Qwen3aTower) {}   // no derived state — offsets ARE the meta
 
+//! The mint-side carrier: ``e`` holds every scalar the meta blob carries; ``core`` is the nested
+//! tower's byte group (sections `core.fblob`). Public for the off-rail suites.
+struct Qwen3aStaging {
+    e : Qwen3aTower = Qwen3aTower()
+    cblob : array<float>
+    core : AudioTowerPlanes = AudioTowerPlanes()
+}
+
+def private serialize_image_meta(var arch : Archive; var st : Qwen3aStaging) {
+    serialize_image_meta(arch, st.e)
+}
+
+// staging owns its plane bytes outright — every array here is heap, none is borrowed
+def finalize(var st : Qwen3aStaging) {
+    delete st.cblob
+    delete st.core
+    delete st.e
+}
+
+[unused_argument(st)]
+def private image_post_load(var st : Qwen3aStaging) {}
+
 [init]
 def private register_qwen3a_image_tags {
     register_image_family_tag("qwen3a-f32")
@@ -134,19 +143,24 @@ def load_qwen3a_tower(path : string) : Qwen3aTower {
             to_log(LOG_INFO, "dasLLAMA: prepared qwen3a-tower image mapped in {get_time_usec(ts_img) / 1000} ms — {img}\n")
             return <- t
         }
-        var m <- load_qwen3a_tower_(path)
+        var inscope st <- stage_qwen3a_tower(path)
         var built = Qwen3aTower()
-        cache_via_image(m, built, img, tag)
-        delete m
+        cache_via_image_staged(st, built, img, tag)
         dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
         return <- built
     }
-    return <- load_qwen3a_tower_(path)
+    // no persisted image: mint one in memory and serve THAT — a served tower is always
+    // image-backed, so there is no second, array-owning shape of this struct to maintain
+    var inscope st <- stage_qwen3a_tower(path)
+    var built = Qwen3aTower()
+    cache_via_image_staged(st, built, "", tag)
+    return <- built
 }
 
-//! The mmproj-gguf reader proper — the eager (no image cache) load; ``load_qwen3a_tower`` wraps it.
-def load_qwen3a_tower_(path : string) : Qwen3aTower {
-    var t = Qwen3aTower()
+//! The mmproj-gguf reader proper: scalars land in the served tower, plane bytes in the staging
+//! arrays beside it. Nothing here is servable — the image build is what produces a live tower.
+def stage_qwen3a_tower(path : string) : Qwen3aStaging {
+    var st = Qwen3aStaging()
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA: cannot open mmproj gguf '{path}'")
@@ -181,29 +195,29 @@ def load_qwen3a_tower_(path : string) : Qwen3aTower {
         o += c.n_layer * c.layer_stride
         c.lnp_w_off = o; o += d
         c.lnp_b_off = o; o += d
-        c.fblob |> resize(int(o))
+        st.core.fblob |> resize(int(o))
         for (l in range64(c.n_layer)) {
             let lo = enc_layer_offsets(c, l)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ln1.weight", c.fblob, lo.ln1_w, d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ln1.bias", c.fblob, lo.ln1_b, d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_q.weight", c.fblob, lo.q_w, d * d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_q.bias", c.fblob, lo.q_b, d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_k.weight", c.fblob, lo.k_w, d * d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_k.bias", c.fblob, lo.k_b, d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_v.weight", c.fblob, lo.v_w, d * d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_v.bias", c.fblob, lo.v_b, d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_out.weight", c.fblob, lo.o_w, d * d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_out.bias", c.fblob, lo.o_b, d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ln2.weight", c.fblob, lo.ln2_w, d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ln2.bias", c.fblob, lo.ln2_b, d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ffn_up.weight", c.fblob, lo.fc1_w, ff * d)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ffn_up.bias", c.fblob, lo.fc1_b, ff)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ffn_down.weight", c.fblob, lo.fc2_w, d * ff)
-            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ffn_down.bias", c.fblob, lo.fc2_b, d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ln1.weight", st.core.fblob, lo.ln1_w, d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ln1.bias", st.core.fblob, lo.ln1_b, d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_q.weight", st.core.fblob, lo.q_w, d * d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_q.bias", st.core.fblob, lo.q_b, d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_k.weight", st.core.fblob, lo.k_w, d * d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_k.bias", st.core.fblob, lo.k_b, d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_v.weight", st.core.fblob, lo.v_w, d * d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_v.bias", st.core.fblob, lo.v_b, d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_out.weight", st.core.fblob, lo.o_w, d * d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.attn_out.bias", st.core.fblob, lo.o_b, d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ln2.weight", st.core.fblob, lo.ln2_w, d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ln2.bias", st.core.fblob, lo.ln2_b, d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ffn_up.weight", st.core.fblob, lo.fc1_w, ff * d)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ffn_up.bias", st.core.fblob, lo.fc1_b, ff)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ffn_down.weight", st.core.fblob, lo.fc2_w, d * ff)
+            gguf_read_tensor_f32(m, bytes, "a.blk.{l}.ffn_down.bias", st.core.fblob, lo.fc2_b, d)
         }
-        gguf_read_tensor_f32(m, bytes, "a.post_ln.weight", c.fblob, c.lnp_w_off, d)
-        gguf_read_tensor_f32(m, bytes, "a.post_ln.bias", c.fblob, c.lnp_b_off, d)
-        t.core <- c
+        gguf_read_tensor_f32(m, bytes, "a.post_ln.weight", st.core.fblob, c.lnp_w_off, d)
+        gguf_read_tensor_f32(m, bytes, "a.post_ln.bias", st.core.fblob, c.lnp_b_off, d)
+        st.e.core <- c
 
         // conv frontend + projector blob
         let i3 = gguf_find_tensor(m, "a.conv2d.1.weight")
@@ -211,47 +225,47 @@ def load_qwen3a_tower_(path : string) : Qwen3aTower {
             panic("dasLLAMA: a.conv2d.1.weight missing from qwen3a mmproj")
         }
         let nch = m.tensors[i3].n_elem / 9l          // [3,3,1,nch]
-        t.n_ch = nch
+        st.e.n_ch = nch
         let feat = 16l * nch                          // conv3 output H=16 × channels
         let i2 = gguf_find_tensor(m, "mm.a.mlp.2.weight")
         if (i2 < 0) {
             panic("dasLLAMA: mm.a.mlp.2.weight missing from qwen3a mmproj")
         }
-        t.proj_dim = m.tensors[i2].n_elem / d
+        st.e.proj_dim = m.tensors[i2].n_elem / d
         var co = 0l
-        t.c1_w_off = co; co += nch * 9l               // cin = 1
-        t.c1_b_off = co; co += nch
-        t.c2_w_off = co; co += nch * nch * 9l
-        t.c2_b_off = co; co += nch
-        t.c3_w_off = co; co += nch * nch * 9l
-        t.c3_b_off = co; co += nch
-        t.cout_w_off = co; co += d * feat
-        t.cout_b_off = co; co += d
-        t.pos_off = co; co += QWEN3A_TOK_PER_CHUNK * d
-        t.mm1_w_off = co; co += d * d
-        t.mm1_b_off = co; co += d
-        t.mm2_w_off = co; co += t.proj_dim * d
-        t.mm2_b_off = co; co += t.proj_dim
-        t.cblob |> resize(int(co))
-        gguf_read_tensor_f32(m, bytes, "a.conv2d.1.weight", t.cblob, t.c1_w_off, nch * 9l)
-        gguf_read_tensor_f32(m, bytes, "a.conv2d.1.bias", t.cblob, t.c1_b_off, nch)
-        gguf_read_tensor_f32(m, bytes, "a.conv2d.2.weight", t.cblob, t.c2_w_off, nch * nch * 9l)
-        gguf_read_tensor_f32(m, bytes, "a.conv2d.2.bias", t.cblob, t.c2_b_off, nch)
-        gguf_read_tensor_f32(m, bytes, "a.conv2d.3.weight", t.cblob, t.c3_w_off, nch * nch * 9l)
-        gguf_read_tensor_f32(m, bytes, "a.conv2d.3.bias", t.cblob, t.c3_b_off, nch)
-        gguf_read_tensor_f32(m, bytes, "a.conv_out.weight", t.cblob, t.cout_w_off, d * feat)
+        st.e.c1_w_off = co; co += nch * 9l               // cin = 1
+        st.e.c1_b_off = co; co += nch
+        st.e.c2_w_off = co; co += nch * nch * 9l
+        st.e.c2_b_off = co; co += nch
+        st.e.c3_w_off = co; co += nch * nch * 9l
+        st.e.c3_b_off = co; co += nch
+        st.e.cout_w_off = co; co += d * feat
+        st.e.cout_b_off = co; co += d
+        st.e.pos_off = co; co += QWEN3A_TOK_PER_CHUNK * d
+        st.e.mm1_w_off = co; co += d * d
+        st.e.mm1_b_off = co; co += d
+        st.e.mm2_w_off = co; co += st.e.proj_dim * d
+        st.e.mm2_b_off = co; co += st.e.proj_dim
+        st.cblob |> resize(int(co))
+        gguf_read_tensor_f32(m, bytes, "a.conv2d.1.weight", st.cblob, st.e.c1_w_off, nch * 9l)
+        gguf_read_tensor_f32(m, bytes, "a.conv2d.1.bias", st.cblob, st.e.c1_b_off, nch)
+        gguf_read_tensor_f32(m, bytes, "a.conv2d.2.weight", st.cblob, st.e.c2_w_off, nch * nch * 9l)
+        gguf_read_tensor_f32(m, bytes, "a.conv2d.2.bias", st.cblob, st.e.c2_b_off, nch)
+        gguf_read_tensor_f32(m, bytes, "a.conv2d.3.weight", st.cblob, st.e.c3_w_off, nch * nch * 9l)
+        gguf_read_tensor_f32(m, bytes, "a.conv2d.3.bias", st.cblob, st.e.c3_b_off, nch)
+        gguf_read_tensor_f32(m, bytes, "a.conv_out.weight", st.cblob, st.e.cout_w_off, d * feat)
         if (gguf_find_tensor(m, "a.conv_out.bias") >= 0) {   // absent in the shipped mmprojs — region stays zero
-            gguf_read_tensor_f32(m, bytes, "a.conv_out.bias", t.cblob, t.cout_b_off, d)
+            gguf_read_tensor_f32(m, bytes, "a.conv_out.bias", st.cblob, st.e.cout_b_off, d)
         }
         // positions reset per chunk — only rows 0..12 of the stored table are ever used
-        gguf_read_tensor_f32(m, bytes, "a.position_embd.weight", t.cblob, t.pos_off, QWEN3A_TOK_PER_CHUNK * d)
-        gguf_read_tensor_f32(m, bytes, "mm.a.mlp.1.weight", t.cblob, t.mm1_w_off, d * d)
-        gguf_read_tensor_f32(m, bytes, "mm.a.mlp.1.bias", t.cblob, t.mm1_b_off, d)
-        gguf_read_tensor_f32(m, bytes, "mm.a.mlp.2.weight", t.cblob, t.mm2_w_off, t.proj_dim * d)
-        gguf_read_tensor_f32(m, bytes, "mm.a.mlp.2.bias", t.cblob, t.mm2_b_off, t.proj_dim)
+        gguf_read_tensor_f32(m, bytes, "a.position_embd.weight", st.cblob, st.e.pos_off, QWEN3A_TOK_PER_CHUNK * d)
+        gguf_read_tensor_f32(m, bytes, "mm.a.mlp.1.weight", st.cblob, st.e.mm1_w_off, d * d)
+        gguf_read_tensor_f32(m, bytes, "mm.a.mlp.1.bias", st.cblob, st.e.mm1_b_off, d)
+        gguf_read_tensor_f32(m, bytes, "mm.a.mlp.2.weight", st.cblob, st.e.mm2_w_off, st.e.proj_dim * d)
+        gguf_read_tensor_f32(m, bytes, "mm.a.mlp.2.bias", st.cblob, st.e.mm2_b_off, st.e.proj_dim)
     }
     fclose(f)
-    return <- t
+    return <- st
 }
 
 //! Qwen3-ASR's log-mel (WhisperFeatureExtractor, center=True, truncation=False): 200-sample
@@ -363,7 +377,7 @@ def qwen3a_mel_window(m : WhisperMel; off : int64) : MelChunk {
 // (c fastest); output rows [oh][ow][c_out]. Weight flat [oc][ic][kh][kw] — the im2col column
 // order (ic, kh, kw) matches the file layout, no permute.
 def private conv2d_s2(var out : array<float>; var col : array<float>;
-                      x : array<float>; blob : array<float>; w_off, b_off : int64;
+                      x : array<float>; blob : PlaneF; w_off, b_off : int64;
                       iw, ih, cin, cout : int64) {
     let ow = (iw - 1l) / 2l + 1l
     let oh = (ih - 1l) / 2l + 1l

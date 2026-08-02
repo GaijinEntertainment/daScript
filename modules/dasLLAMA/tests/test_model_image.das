@@ -703,29 +703,26 @@ def test_tower_image_roundtrip(t : T?) {
         }
         let img = image_path_for(path, "tower-f32")
         remove(img)
-        // the truth is the OFF-RAIL gguf read: cold and warm are both image-backed now, so a
+        // the truth is the OFF-RAIL staged read: cold and warm are both image-backed now, so a
         // cold-vs-warm compare alone would only prove the file matches the chunk it came from
-        var a <- load_audio_tower_(path)
-        var cold <- load_audio_tower(path)
+        var inscope a <- stage_audio_tower(path)
+        var inscope cold <- load_audio_tower(path)
         t |> success(cold.image_map != null, "cold load serves the image it built")
         t |> success(stat(img).is_valid, "cold load saved an image")
         t |> equal(count_mismatch(a.fblob, cold.fblob), 0l, "cold-built fblob element-exact")
-        delete cold
-        var b <- load_audio_tower(path)
+        var inscope b <- load_audio_tower(path)
         t |> success(b.image_map != null, "warm load is image-backed")
-        t |> equal(b.d_model, a.d_model)
-        t |> equal(b.n_layer, a.n_layer)
-        t |> equal(b.n_ff, a.n_ff)
-        t |> equal(b.n_ctx, a.n_ctx)
-        t |> equal(b.proj_dim, a.proj_dim)
-        t |> equal(b.stack_factor, a.stack_factor)
-        t |> equal(b.mm1_out, a.mm1_out)
-        t |> success(b.proj_kind == a.proj_kind, "proj_kind")
-        t |> equal(b.layers_off, a.layers_off)
-        t |> equal(b.layer_stride, a.layer_stride)
+        t |> equal(b.d_model, a.e.d_model)
+        t |> equal(b.n_layer, a.e.n_layer)
+        t |> equal(b.n_ff, a.e.n_ff)
+        t |> equal(b.n_ctx, a.e.n_ctx)
+        t |> equal(b.proj_dim, a.e.proj_dim)
+        t |> equal(b.stack_factor, a.e.stack_factor)
+        t |> equal(b.mm1_out, a.e.mm1_out)
+        t |> success(b.proj_kind == a.e.proj_kind, "proj_kind")
+        t |> equal(b.layers_off, a.e.layers_off)
+        t |> equal(b.layer_stride, a.e.layer_stride)
         t |> equal(count_mismatch(a.fblob, b.fblob), 0l, "fblob element-exact")
-        delete a
-        delete b
     }
 }
 
@@ -762,11 +759,13 @@ def private read_wav_pcm16_mono(path : string) : array<float> {
 }
 
 def private whisper_transcribe_text(path : string; samples : array<float>; cached : bool = true) : tuple<text : string; mapped : bool> {
-    var w = WhisperModel()
+    var inscope w = WhisperModel()
     if (cached) {
         w <- load_whisper_model(path)
     } else {
-        w <- load_whisper_model_(path)   // the off-rail control
+        // the control: a staged read minted straight into memory — no shared bytes, no shared file
+        var inscope stg <- stage_whisper_model(path)
+        mint_whisper_model(stg, w)
     }
     var text = ""
     with_job_que() {
@@ -778,7 +777,6 @@ def private whisper_transcribe_text(path : string; samples : array<float>; cache
         delete s
     }
     let mapped = w.image_map != null
-    delete w
     return (text = text, mapped = mapped)
 }
 
@@ -893,24 +891,22 @@ def test_qwen3a_tower_image_roundtrip(t : T?) {
         }
         let img = image_path_for(path, "qwen3a-f32")
         remove(img)
-        // off-rail truth: both cached loads are image-backed, so they cannot check each other
-        var a <- load_qwen3a_tower_(path)
-        var cold <- load_qwen3a_tower(path)
+        // off-rail truth: the staged read — both cached loads are image-backed and cannot
+        // check each other
+        var inscope a <- stage_qwen3a_tower(path)
+        var inscope cold <- load_qwen3a_tower(path)
         t |> success(cold.image_map != null, "cold load serves the image it built")
         t |> success(stat(img).is_valid, "cold load saved an image")
         t |> equal(count_mismatch(a.cblob, cold.cblob), 0l, "cold-built cblob element-exact")
-        delete cold
-        var b <- load_qwen3a_tower(path)
+        var inscope b <- load_qwen3a_tower(path)
         t |> success(b.image_map != null, "warm load is image-backed")
-        t |> equal(b.core.d_model, a.core.d_model)
-        t |> equal(b.core.n_layer, a.core.n_layer)
-        t |> equal(b.core.n_ctx, a.core.n_ctx)
-        t |> equal(b.proj_dim, a.proj_dim)
-        t |> equal(b.n_ch, a.n_ch)
+        t |> equal(b.core.d_model, a.e.core.d_model)
+        t |> equal(b.core.n_layer, a.e.core.n_layer)
+        t |> equal(b.core.n_ctx, a.e.core.n_ctx)
+        t |> equal(b.proj_dim, a.e.proj_dim)
+        t |> equal(b.n_ch, a.e.n_ch)
         t |> equal(count_mismatch(a.core.fblob, b.core.fblob), 0l, "core.fblob element-exact")
         t |> equal(count_mismatch(a.cblob, b.cblob), 0l, "cblob element-exact")
-        delete a
-        delete b
     }
 }
 
