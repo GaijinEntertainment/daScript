@@ -131,12 +131,11 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def style_warning(text : string; at : LineInfo) : void {
-        // Suppress warnings for macro-generated functions — the user didn't write that code.
-        if (current_function != null && current_function.flags.generated) return
-        let key = location_key(at)
+        // suppress before the dedup insert + code in the key: a nolint'd rule must not mask a co-located sibling or fake a LINT019 stale
+        if ((current_function != null && current_function.flags.generated) || is_suppressed(text, at)) return
+        let key = location_key(at) ^ hash(extract_lint_code(text))
         if (key_exists(reported_locations, key)) return
         reported_locations |> insert(key)
-        if (is_suppressed(text, at)) return
         warning_count++
         var msg = text
         if (current_function != null && current_function.fromGeneric != null && !empty(current_function.inferStack)) {

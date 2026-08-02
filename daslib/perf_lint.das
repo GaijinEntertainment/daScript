@@ -479,15 +479,14 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf_warning(text : string; at : LineInfo) : void {
-        // Suppress in templates and inside macro-generated functions — the user didn't write that code.
+        // suppress before the dedup insert + code in the key: a nolint'd rule must not mask a co-located sibling or fake a LINT019 stale
         if (in_template
-            || (current_function != null && current_function.flags.generated)) return
-        // Deduplicate warnings — same source location reported once, regardless of generic instantiations
-        let key = location_key(at)
+            || (current_function != null && current_function.flags.generated)
+            || is_suppressed(text, at)) return
+        // one report per (rule, location), regardless of generic instantiations
+        let key = location_key(at) ^ hash(extract_lint_code(text))
         if (key_exists(reported_locations, key)) return
         reported_locations |> insert(key)
-        // Check inline suppression: // PERFxxx on the same line
-        if (is_suppressed(text, at)) return
         warning_count++
         var msg = text
         if (current_function != null && current_function.fromGeneric != null && !empty(current_function.inferStack)) {
@@ -2062,11 +2061,12 @@ class PerfLintVisitor : AstVisitor {
             lhs = (lhs as ExprRef2Value.subexpr)
         }
         if (lhs == null || !(lhs is ExprVar)) return
-        // generated/CMRES targets are the `return <- r` lowering - moving INTO a fresh result
+        // CMRES/generated = the `return <- r` lowering; a `&` binding = an element/field alias, the category tab[k] <- v already excludes
         let lv = (lhs as ExprVar).variable
         if (lv == null || lv.flags.aliasCMRES || lv.flags.generated
+                || (lv._type != null && lv._type.flags.ref)
                 || !perf030_needs_release(expr.left._type)) return
-        perf_warning("PERF030: move-assign drops the target's old contents without release (a leak on a persistent heap); delete the target first, or enable force_inscope_pod so the compiler collects it", expr.at)
+        perf_warning("PERF030: move-assign drops the target's old contents without release (a leak on a persistent heap); when the target can be live, delete it first AND keep a nolint (the check cannot see the delete); when it is fresh, fold the move into the declaration; or enable force_inscope_pod so the compiler collects it", expr.at)
     }
 
     def override visitExprMove(var expr : ExprMove?) : ExpressionPtr {
