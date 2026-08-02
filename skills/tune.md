@@ -350,9 +350,12 @@ The framework carries the policy and the math; the harness carries the probe:
 Two placement rules from the dasLLAMA harness (the worked consumer): a winner
 must beat the shipped fallback by more than the measured noise floor or the
 fallback keeps the seat — deterministic beats lottery; and the closing probe
-must run **before** any GPU race in the same process — GPU work permanently
-shifts the thread's CPU scheduling, so a later probe measures the post-GPU
-world, not the window the winners were raced in.
+runs **before** any GPU race in the same process, so the bracket covers
+exactly the window that produced the winners. (GPU races block the thread,
+and a thread that blocked wakes cold — the same E-core transient a sleep
+causes; it recovers under a couple of seconds of sustained load, but a
+post-race gate would pay that settle on every mint for a window whose noise
+cannot touch the CPU medians anyway.)
 
 ## Writing a harness
 

@@ -102,11 +102,19 @@ finalist rounds, flags a best-of far under its median, and the fallback holds un
 
 Rollout findings (M1, probe = 4-acc dot N=4096 x 2000 reps x 12 rounds ≈ 30 ms):
 - Quiet-box cv 0.10-1.0% — the 2%/1% thresholds hold on Apple; zen2 to confirm the x64 half.
-- The settle before a retry must SPIN, not sleep: a slept thread wakes on an E-core
-  (median 1.9x, cv 20-30% — the artifact looks exactly like a loud box).
-- A CPU probe after the Metal race reads the post-GPU scheduling world (same ~1.9x/30%
-  signature, persistent), so the end gate closes the CPU window BEFORE the GPU race; the
-  Metal twin race guards itself (interleaved A/B, 2-5x margins).
+- The settle before a retry must SPIN, not sleep: on macOS a thread that BLOCKED (sleep, GPU
+  wait, IO) wakes cold — E-core placement, median ~1.9x, cv 20-30%, indistinguishable from a
+  loud box — and re-promotes only under a couple of seconds of sustained load. Verified both
+  directions: post-Metal probe reads 11.8% dirty, spin-settled retry recovers to 1.6%.
+- The end gate still closes the CPU window BEFORE the GPU race — the bracket must cover the
+  window that produced the winners, and GPU-phase noise cannot touch CPU medians retroactively;
+  the Metal twin race guards itself (interleaved A/B, 2-5x margins).
+- Affinity: mode 2 is a real hard mask on Windows/Linux (zen2 measurement rests on it), but
+  the darwin arm is an EMPTY STUB (job_que.cpp SetCurrentThreadAffinityCpu — macOS has no
+  public pin API), so the tuner's "hard CPU0" banner is aspirational on Mac. Candidate for
+  4b: implement the darwin arm as QoS (mode 2 -> USER_INTERACTIVE on lanes + creator) — a
+  P-core BIAS, not a mask; shrinks the wake-cold windows, defends nothing against a busy box,
+  so the gate stays the detector either way.
 - Provenance carries the LAST writer's probes only — deliverable 2 restructures.
 - Deferred to 1d: child-process dastest cells for the gate rails (refusal rc, override stamp)
   — live-validated this pass; the 1d validation harness is where they belong.

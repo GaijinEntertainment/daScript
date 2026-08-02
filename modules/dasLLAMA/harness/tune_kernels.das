@@ -2015,10 +2015,12 @@ def main : int { // nolint:STYLE037 — flat one-bench-per-kernel rail; the nois
 
     // the gate that closes the CPU measurement window: every sample the sidecar will carry was
     // raced between this probe and the start one — a noisy read here means NOTHING is written.
-    // It must run BEFORE the Metal race: GPU work permanently shifts this thread's scheduling
-    // (E-core placement after the burst — probe median 1.9x, cv 30%+), so any CPU probe after
-    // it measures the post-GPU world, not the race window. The Metal twin race guards itself:
-    // interleaved base/twin A/B, so common-mode noise cancels.
+    // It runs BEFORE the Metal race so the bracket covers exactly the window that produced the
+    // numbers (noise during the GPU phase cannot retroactively touch the CPU medians). The race
+    // also blocks on the GPU, and a thread that blocked wakes cold (E-core placement, ~1.9x
+    // medians until a couple of seconds of sustained load re-promotes it) — a post-race gate
+    // would pay a mandatory settle just to measure through that. The Metal twin race guards
+    // itself: interleaved base/twin A/B, so common-mode noise cancels.
     if (!noise_gate("end")) {
         print("aborting at the end-of-run gate — no sidecar written\n")
         return 1
