@@ -404,7 +404,7 @@ def document_module_rtti(_root : string) {
         group_by_regex("Context and mutex locking", mod, %regex~(lock_this_context|lock_context|lock_mutex)$%%),
         group_by_regex("Runtime data access", mod, %regex~(get_table_key_index)$%%),
         group_by_regex("Tuple and variant access", mod, %regex~(get_tuple_field_offset|get_variant_field_offset)$%%),
-        group_by_regex("Lint suppression", mod, %regex~(rtti_get_source_line|rtti_is_nolint_suppressed|is_lint_suppressed|extract_lint_code)$%%),
+        group_by_regex("Lint suppression", mod, %regex~(rtti_get_source_line|rtti_is_nolint_suppressed|is_lint_suppressed|was_nolint_consumed|extract_lint_code)$%%),
         group_by_regex("Iteration", mod, %regex~(each)$%%))
     // CompilationError's 580-value list blows the search crawler's per-record size cap;
     // exclude it from search (the symbol + its description stay indexed).
@@ -1305,7 +1305,7 @@ def document_module_heartbeat(_root : string) {
 def document_module_lint(_root : string) {
     var mod = find_module("lint")
     var groups <- array<DocGroup>(
-        group_by_regex("Lint operations", mod, %regex~(paranoid|paranoid_collect|paranoid_collect_issues)$%%)
+        group_by_regex("Lint operations", mod, %regex~(paranoid|paranoid_collect|paranoid_collect_issues|stale_nolint_collect)$%%)
     )
     document("Paranoid lint pass", mod, "lint.rst", groups)
 }
@@ -1803,7 +1803,7 @@ def document_module_gltf(_root : string) {
 def main {  // nolint:STYLE038 — flat one-call-per-documented-module dispatch list
     disable_profiler(this_context())
     disable_profiler_log(this_context())
-    ast_gc_guard() {  // nolint:STYLE038 — same flat dispatch list, one guard scope
+    ast_gc_guard() {
     let root = get_das_root() + "/doc/source/stdlib/generated"
     // document embedded modules
     document_module_builtin(root)

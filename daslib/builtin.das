@@ -2152,7 +2152,7 @@ def subarray(a : array<auto(TT)>; r : urange) {
 def move_to_ref(var a : auto&; var b) {
     static_if (typeinfo is_ref_type(a)) {
         static_if (typeinfo can_move(a)) {
-            a <- b
+            a <- b  // nolint:PERF030 — the raw move IS this primitive's contract; whether it should collect the old contents is an open design question
         } else {
             concept_assert(false, "type is not movable")
         }

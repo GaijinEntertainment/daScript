@@ -259,10 +259,24 @@ def RttiValue_nothing {
     return t
 }
 
+// LINT019 support: every suppression hit is recorded so the stale-nolint scan can
+// tell live directives from dead ones. Keyed "{file}:{line}:{code}", per process.
+var private nolint_consumed : table<string>
+
 //! Returns true when the source line at `at` carries a `// nolint:CODE` (or `// nolint:CODE1,CODE2,...`) directive listing `code`. Null-safe wrapper around the C-side scanner; returns false if `at.fileInfo == null` or `at.line == 0`. Canonical entry point for lint visitors.
 def public is_lint_suppressed(at : LineInfo; code : string) : bool {
     return false if (at.fileInfo == null || at.line == 0u)
-    return rtti_is_nolint_suppressed(at.fileInfo, at.line, code)
+    if (rtti_is_nolint_suppressed(at.fileInfo, at.line, code)) {
+        nolint_consumed |> insert("{at.fileInfo.name}:{int(at.line)}:{code}")
+        return true
+    }
+    return false
+}
+
+//! True when a diagnostic already consumed the ``// nolint:code`` directive at `fname`:`line`
+//! (1-based) during this run. The query half of the LINT019 stale-nolint scan.
+def public was_nolint_consumed(fname : string; line : int; code : string) : bool {
+    return key_exists(nolint_consumed, "{fname}:{line}:{code}")
 }
 
 //! Extracts the leading code from a lint message such as "LINT001: foo bar"

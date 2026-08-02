@@ -994,6 +994,7 @@ namespace das
                 bool    isConstClassMethod : 1;      // method is const
                 bool    isCustomProperty : 1;        // this is a user function which looks like a property ("`name")
                 bool    neverInline : 1;             // [never_inline] - excluded from best-effort (auto) inlining; conflicts with [inline]
+                bool    localFunction : 1;           // @@{} local function body - generated, but the block is verbatim user code
             };
             uint32_t moreFlags = 0;
         };

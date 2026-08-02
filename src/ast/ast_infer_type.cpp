@@ -5395,9 +5395,11 @@ namespace das {
                 }
             }
             if (forceInscopePod && !expr->inScope && !var->pod_delete && !var->type->ref) { // no constant for now
-                if ((expr->variables.size() == 1)                                           // only one variable
-                                                                                            // very restrictive on functions
-                    && (func && !func->generated && !func->generator && !func->lambda)
+                // lambda and @@{} local-function bodies are generated wrappers around verbatim
+                // user blocks - their locals are ordinary per-invocation stack locals, so
+                // scope-exit collection is as sound there as in a plain function. Generators
+                // stay excluded: their locals persist across yields in the state machine.
+                if ((func && (!func->generated || func->lambda || func->localFunction) && !func->generator)
                     // not in the generator block
                     && (blocks.empty() || !blocks.back()->isGeneratorBlock)) {
                     if (isPodDelete(var->type)) {

@@ -736,3 +736,92 @@ def public paranoid_collect_issues(prog : ProgramPtr; var issues : array<LintIss
     }
     return count
 }
+
+//! LINT019 - stale nolint detection: reports every ``// nolint:CODE`` in `source` whose code
+//! suppressed nothing this process (run-disabled codes are skipped - their rules cannot prove
+//! themselves). Call AFTER all lint passes ran; a partial run under-consumes and would lie.
+def public stale_nolint_collect(fname, source : string; disabled_codes, enabled_codes : table<string>; var issues : array<LintIssue>) : int {
+    return 0 if (key_exists(disabled_codes, "LINT019")
+                    || (!empty(enabled_codes) && !key_exists(enabled_codes, "LINT019")))
+    var count = 0
+    var line_no = 0
+    var stale_codes : array<string>
+    stale_codes |> reserve(4)
+    for (raw_line in split(source, "\n")) {
+        line_no++
+        // a CRLF checkout leaves \r glued to the last token - strip it
+        let line = raw_line |> ends_with("\r") ? slice(raw_line, 0, length(raw_line) - 1) : raw_line
+        let cpos = find(line, "//")
+        continue if (cpos < 0)
+        stale_codes |> clear()
+        var self_suppressed = false
+        var at = find(line, "nolint:", cpos)
+        while (at >= 0) {
+            // comma-list parse, mirroring the C-side scanner in rtti_is_nolint_suppressed
+            var p = at + length("nolint:")
+            peek_data(line) $(bytes) {
+                let n = length(bytes)
+                while (p < n) {
+                    while (p < n && (int(bytes[p]) == ' ' || int(bytes[p]) == '\t')) {
+                        p++
+                    }
+                    let tok_start = p
+                    while (p < n && int(bytes[p]) != ',' && int(bytes[p]) != ' ' && int(bytes[p]) != '\t') {
+                        p++
+                    }
+                    break if (p == tok_start)
+                    let code = slice(line, tok_start, p)
+                    if (code == "LINT019") {
+                        self_suppressed = true
+                    } elif (is_rule_code(code)
+                            && !key_exists(disabled_codes, code)
+                            && (empty(enabled_codes) || key_exists(enabled_codes, code))
+                            && !was_nolint_consumed(fname, line_no, code)) {
+                        stale_codes |> push(code)
+                    }
+                    while (p < n && (int(bytes[p]) == ' ' || int(bytes[p]) == '\t')) {
+                        p++
+                    }
+                    break if (p >= n || int(bytes[p]) != ',')
+                    p++
+                }
+            }
+            at = find(line, "nolint:", p)
+        }
+        if (!self_suppressed) {
+            issues |> reserve(length(issues) + length(stale_codes))
+            for (code in stale_codes) {
+                let msg = "LINT019: stale nolint - {code} suppresses nothing on this line; remove it, or add LINT019 to the list if the rule fires only in downstream compiles (generic bodies - instantiations elsewhere fire at the generic's line - macro-template lines, option-gated rules)"
+                issues |> push(LintIssue(code = "LINT019", message = msg, file = fname,
+                    line = line_no, column = 0, last_line = line_no, last_column = 0))
+                count++
+            }
+        }
+    }
+    return count
+}
+
+// a rule id is LINT/PERF/STYLE + digits - anything else on a nolint list is prose
+// (docs quoting the syntax) or a typo the C-side scanner would never match anyway
+def private is_rule_code(code : string) : bool {
+    var prefix_len = 0
+    if (code |> starts_with("LINT") || code |> starts_with("PERF")) {
+        prefix_len = 4
+    } elif (code |> starts_with("STYLE")) {
+        prefix_len = 5
+    } else {
+        return false
+    }
+    var digits = 0
+    var ok = true
+    peek_data(code) $(bytes) {
+        let n = length(bytes)
+        for (i in range(prefix_len, n)) {
+            if (!is_number(int(bytes[i]))) {
+                ok = false
+            }
+            digits++
+        }
+    }
+    return ok && digits > 0
+}

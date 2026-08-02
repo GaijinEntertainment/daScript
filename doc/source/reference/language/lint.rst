@@ -638,6 +638,37 @@ overloads, so an ``int(...)`` cast on the size argument is pure loss: above
     // Good
     unsafe(memcpy(dst, src, nbytes))
 
+LINT019 — stale ``nolint`` directive
+====================================
+
+A ``// nolint:CODE`` directive that suppressed no diagnostic during the run is dead
+weight: it buries the next real finding on that line and does not survive the code
+moving. The lint runner records every suppression the passes consume and reports the
+leftovers after all passes complete.
+
+Two escape hatches for directives that are live only outside the current compile:
+add ``LINT019`` to the code list (``// nolint:PERF020,LINT019``) when the rule fires
+only in downstream compiles — **generic bodies** (instantiations elsewhere fire at the
+generic's own line: ``uint64(data)`` in a generic hash is a PERF020 hit only for the
+``uint64`` instantiation), macro-template lines whose diagnostics surface at expansion
+sites, or option-gated rules — and run-disabled codes are skipped automatically, since
+their rules never had the chance to prove the directive.
+
+Never *remove* a reported directive from a generic body on the scan's word alone —
+the per-file scan cannot see which instantiations elsewhere consume it. Tag it with
+``LINT019`` instead; removal is only safe where the author knows no other compile
+reaches the line.
+
+.. code-block:: das
+
+    // Bad — PERF006 no longer fires here; the directive outlived its rule hit
+    arr |> push(v)  // nolint:PERF006
+
+    // Good — remove it; or, on a macro-template line:
+    body |> push <| qmacro_expr() {   // nolint:LINT004,LINT019
+        var $i(tmp) = clone_type($i(td_var));
+    }
+
 .. _perf_lint:
 
 -----------------
@@ -1005,8 +1036,9 @@ Detection peels at most one ``ExprCast`` between ``range`` and ``length``
 target and the indexed receiver via the existing ``find_expr_path`` chain
 walker. Every use of ``i`` in the body must be the bare index of
 ``arr[i]`` against the same path; any arithmetic on ``i``
-(``arr[i+1]`` / sliding window), use of ``i`` outside an indexing
-expression, or indexing a different array disqualifies the loop.
+(``arr[i+1]`` / sliding window) or use of ``i`` outside an indexing
+expression disqualifies the loop. Bare-variable sibling arrays indexed by
+the same ``i`` route the loop to PERF029 instead.
 
 .. code-block:: das
 
@@ -1019,6 +1051,58 @@ expression, or indexing a different array disqualifies the loop.
     for (c in arr) {
         process(c)
     }
+
+PERF029 — parallel-array indexing — zip the arrays
+==================================================
+
+``for (i in range(length(X)))`` walking sibling arrays by subscript hides the
+length coupling: one sibling of a diverging length is an out-of-bounds panic
+the loop header never shows. The multi-source ``for`` iterates every array in
+lockstep by construction — no index, no bounds question.
+
+Fires when every use of ``i`` is a plain ``[i]`` subscript over bare
+array-typed variables and at least one of them is not the ``range`` source.
+Tables are excluded (``t[i]`` is a key lookup, not a position); index
+arithmetic or ``i`` escaping as a value disqualifies, since the zip form
+cannot express those. Loops whose ``i`` never subscripts the ``range``
+source itself also stay silent — there the source is only a bound, and
+zipping would change which array limits the walk.
+
+.. code-block:: das
+
+    // Bad — xs and ys coupled through i
+    for (i in range(length(xs))) {              // PERF029
+        ys[i] = xs[i] * 2.0
+    }
+
+    // Good — lockstep by construction
+    for (x, y in xs, ys) {
+        y = x * 2.0
+    }
+
+PERF030 — move-assign drops the target's old contents
+======================================================
+
+``a <- b`` over a heap-carrying bare variable overwrites ``a`` without releasing
+what it held — a leak on a persistent heap. The ``force_inscope_pod`` rewrite
+heals the shape (collecting the old contents through ``builtin_collect_local_and_zero``)
+and marks every move it generates, so the lint flags exactly the unhealed moves:
+policy off, ``hasUnsafe`` functions, modules that disallow inscope-pod, or types
+whose release is not fully generated (user finalizers — where ``delete`` first is
+the only correct fix).
+
+Bare-variable targets only: element targets (``tab[k] <- v``) are dominated by
+fresh-slot inserts where nothing leaks. Compiler temps and the ``return <- r``
+lowering are excluded.
+
+.. code-block:: das
+
+    // Bad — a's old array is dropped unreleased
+    a <- make_more()                            // PERF030
+
+    // Good — release first (or enable force_inscope_pod)
+    delete a
+    a <- make_more()
 
 PERF019 — ``int(T.a) | int(T.b)`` on bitfield/enum — collapse to one cast
 ==========================================================================
