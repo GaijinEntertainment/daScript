@@ -290,7 +290,15 @@ def private save_sidecar_doc(path : string; var doc : JsonValue?) : bool {
         }
     }
     update(doc, "provenance", prov)
-    return fwrite(path, write_json(doc))
+    let ok = fwrite(path, write_json(doc))
+    if (ok) {
+        // mtime is 1s-granular: a same-second re-read must not reuse a PRE-write box observation
+        var sfs : FStat
+        if (stat(path, sfs)) {
+            g_box_cache["{path}@{sfs.mtime}"] = tune_box_identity()
+        }
+    }
+    return ok
 }
 
 var private g_prov_notes : table<string; string>
@@ -346,6 +354,33 @@ def tune_sidecar_merge(kernels : table<string; string>; var runtime : JsonValue?
     }
     if (runtime != null) {
         update(doc, "runtime", runtime)   // frees the previous section; doc adopts the new one
+    }
+    let ok = save_sidecar_doc(path, doc)
+    delete_json(doc)
+    return ok
+}
+
+    //! Upsert `entries` into sidecar section `section` (created when absent; same key
+    //! overwrites, other keys/sections survive; the document ADOPTS the entries). How a tuner
+    //! records per-kernel race tables — "how much did it win by" must be answerable from the file.
+def tune_sidecar_section_merge(section : string; var entries : table<string; JsonValue?>) : bool {
+    let path = tune_manifest_path()
+    if (empty(path)) {
+        return false
+    }
+    var doc = load_sidecar_doc(path)
+    var sec = doc?[section]
+    if (sec == null || !(sec.value is _object)) {
+        update(doc, section, JV(entries))   // adopts entries; frees a non-object leftover
+    } else {
+        var so & = unsafe(sec.value as _object)
+        for (k, v in keys(entries), values(entries)) {
+            if (so |> key_exists(k)) {
+                delete_json(so[k])
+            }
+            so[k] = v   // the document adopts the entry
+        }
+        entries |> clear()   // adopted — the caller's table no longer owns them
     }
     let ok = save_sidecar_doc(path, doc)
     delete_json(doc)

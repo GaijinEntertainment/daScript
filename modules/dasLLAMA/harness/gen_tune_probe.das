@@ -42,6 +42,7 @@ require llvm/daslib/f16_cvt   // f32_to_f16 — the kq fixtures pack disk superb
 require llvm/daslib/llvm_tune
 require daslib/random
 require daslib/json   // JsonValue — the null runtime arg of the deferred sidecar merge
+require daslib/json_boost   // JV over tuples — the per-variant race rows
 require daslib/fio   // has_env_variable: the compile-only mint gate (slice J recipe)
 require daslib/strings_boost   // split — the confirm pass parses child output
 require daslib/command_line    // get_das_exe — the confirm pass spawns daslang children
@@ -790,7 +791,7 @@ def private q51_layout_mrs() : table<string; int> {
 
 // The q51 family tune pass: gate every variant against the scalar disk oracle on repacked
 // planes, iso-bench the streamed decode shape, return the best suffix ("" = a gate failed).
-def q51_tune_family() : string {
+def q51_tune_family(var rows_out : table<string; JsonValue?>) : string {
     var sfx <- build_q51_fixture(704l, 32768l)   // streamed: the 26B expert-down K at DRAM scale
     var hfx <- build_q51_fixture(704l, 2816l)    // hot: one expert's down stack
     var tvs <- q51q8_gemv_gen_variants()
@@ -831,6 +832,7 @@ def q51_tune_family() : string {
             dt = min(dt, get_time_usec(t0))
         }
         let gb = double(sfx.d * sfx.nb * 24l) / double(max(dt, 1)) / 1000.0lf
+        rows_out[v._0] = JV((streamed_us = double(dt)))
         tune_detail("q51 {v._0} (mr={mr}): ok (maxdiff {maxdiff}), streamed {dt} us ({gb:0.1f} GB/s)\n")
         if (dt < bestDt) {
             bestDt = dt
@@ -870,7 +872,7 @@ def kq_test_family(fmt : int64; kfxs : array<KqFixture>) : bool {
 // and the gemv (streamed + hot decode shapes), print the table, and return the tile-best
 // suffix ("" = a gate failed). The kq gemv is nrsplit-independent — same-mr rows share the
 // plane and the gemv shape — so the tile bench decides the family entry.
-def kq_tune_family(fmt : int64) : string { // nolint:STYLE038 — one family race: shared repacked buffers couple gate, bench and pick
+def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>) : string { // nolint:STYLE038 — one family race: shared repacked buffers couple gate, bench and pick
     // batch shape: fat STREAMING ffn (weights > the L2 budget, multi-token-block walk) — the shape
     // class that carries ~90% of prefill time. The old 2048x512x64 kv-projection probe was L2-hot
     // and crowned hot-shape winners that lose double-digit % at model scale (mr4 vs mr8, M1).
@@ -984,6 +986,7 @@ def kq_tune_family(fmt : int64) : string { // nolint:STYLE038 — one family rac
         if (best[vi] < best[winner]) {
             winner = vi
         }
+        rows_out[tvs[vi]._0] = JV((tile_us = best[vi], gemv_us = gbest[vi], hot_us = hbest[vi]))
         tune_detail("k{fmt} {tvs[vi]._0} (mr={vmr[vi]}): tile {macs / best[vi] / 1000.0lf} GMAC/s, gemv stream {gmacs / gbest[vi] / 1000.0lf} GMAC/s ({gwbytes / gbest[vi] / 1000.0lf} GB/s w), hot {hmacs / hbest[vi] / 1000.0lf} GMAC/s (best of {ROUNDS})\n")
     }
     let wname = tvs[winner]._0
@@ -1009,6 +1012,10 @@ def kq_tune_family(fmt : int64) : string { // nolint:STYLE038 — one family rac
 
 let CLOSE_REL = 1e-4
 let CLOSE_ABS = 1e-5
+
+// family entry -> rows object for the sidecar "race" section, filled as each family races and
+// flushed with the winners — margins must be answerable from the file, not the scrollback
+var private g_rows : table<string; JsonValue?>
 
 def close_to_ref(fx : Fixture; y : array<float>; var maxdiff : float&) : bool {
     var ok = true
@@ -1525,12 +1532,15 @@ def tune_mode_run : bool { // nolint:STYLE037 — flat family-by-family race rai
     let gmacs = double(gfx.n * gfx.d)
     let hmacs = double(hfx.n * hfx.d)
     var winner = 0
+    var q8rows : table<string; JsonValue?>
     for (vi in range(nv)) {
         if (best[vi] < best[winner]) {
             winner = vi
         }
+        q8rows[vs[vi]._0] = JV((tile_us = best[vi], gemv_us = gbest[vi], hot_us = hbest[vi]))
         tune_detail("{vs[vi]._0} (mr={vmr[vi]}): tile {macs / best[vi] / 1000.0lf} GMAC/s, gemv stream {gmacs / gbest[vi] / 1000.0lf} / hot {hmacs / hbest[vi] / 1000.0lf} GMAC/s (best of {ROUNDS})\n")
     }
+    g_rows["q8q8_tile_gen"] = JV(q8rows)
     // the merged winner: the batch bench picks the tile knobs (and with them the layout);
     // the HOT decode bench picks gkstep among the rows sharing those tile knobs (the
     // streamed shape is DRAM-bound and cannot tell kernels apart) — one entry, one
@@ -1559,7 +1569,8 @@ def tune_mode_run : bool { // nolint:STYLE037 — flat family-by-family race rai
     for (fmt in fixed_array(4l, 5l, 6l, 40l)) {
         let kq_t0 = ref_time_ticks()
         tune_progress_kernel_begin("k{fmt}q8_tile_gen", ROUNDS)
-        let w = kq_tune_family(fmt)
+        var krows : table<string; JsonValue?>
+        let w = kq_tune_family(fmt, krows)
         tune_detail("TUNE_GEN_TIME k{fmt}_family {get_time_usec(kq_t0) / 1000} ms\n")
         tune_progress_kernel_end("k{fmt}q8_tile_gen", w, empty(w) ? "rejected" : "beats")
         let entry = fmt == 40l ? "q40q8_tile_gen" : "k{fmt}q8_tile_gen"
@@ -1567,6 +1578,7 @@ def tune_mode_run : bool { // nolint:STYLE037 — flat family-by-family race rai
         // body so the scope still COMPLETES — a missing key re-tunes every start
         pending[entry] = empty(w) ? "reference" : w
         print("{entry} winner: {empty(w) ? "reference (gate-failure fallback)" : w}\n")
+        g_rows[entry] = JV(krows)
     }
     if (!noise_gate("mid2")) {
         print("aborting mid-run — no sidecar written\n")
@@ -1574,11 +1586,13 @@ def tune_mode_run : bool { // nolint:STYLE037 — flat family-by-family race rai
     }
     let q51_t0 = ref_time_ticks()
     tune_progress_kernel_begin("q51q8_gemv_gen", ROUNDS)
-    let qw = q51_tune_family()
+    var qrows : table<string; JsonValue?>
+    let qw = q51_tune_family(qrows)
     tune_detail("TUNE_GEN_TIME q51_family {get_time_usec(q51_t0) / 1000} ms\n")
     tune_progress_kernel_end("q51q8_gemv_gen", qw, empty(qw) ? "rejected" : "beats")
     // same gate-failure fallback as the kq loop: complete the scope on the reference body
     pending["q51q8_gemv_gen"] = empty(qw) ? "reference" : qw
+    g_rows["q51q8_gemv_gen"] = JV(qrows)
     print("q51q8_gemv_gen winner: {empty(qw) ? "reference (gate-failure fallback)" : qw}\n")
     let confirm_t0 = ref_time_ticks()
     tune_progress_kernel_begin("confirm_e2e_prefill", 0)
@@ -1601,6 +1615,15 @@ def tune_mode_run : bool { // nolint:STYLE037 — flat family-by-family race rai
         noise_provenance_stamp()
         var nort : JsonValue?
         ok = tune_sidecar_merge(pending, nort)
+        var race : table<string; JsonValue?>
+        for (k, v in keys(pending), values(pending)) {
+            if (g_rows |> key_exists(k)) {
+                var obj <- { "winner" => JV(v), "rows" => g_rows[k] }
+                race[k] = JV(obj)
+            }
+        }
+        g_rows |> clear()   // pointees transferred into race (clear does not finalize)
+        ok = tune_sidecar_section_merge("race", race) && ok
         print(ok ? "wrote {length(pending)} generator entries -> {tune_manifest_path()}\n"
             : "FAILED to write {tune_manifest_path()} — if the app dir is read-only, set DAS_TUNE_MANIFEST to a writable path\n")
     }

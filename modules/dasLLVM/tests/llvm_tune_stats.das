@@ -53,6 +53,33 @@ def test_tune_noise_env(t : T?) {
 }
 
 [test]
+def test_tune_sidecar_section_merge(t : T?) {
+    let tmpRes = create_temp_file_result("llvm_tune_race_", ".tune.json")
+    if (tmpRes is error) {
+        t |> failure("could not create a temp file: {tmpRes as error}")
+        return
+    }
+    let sidecar = tmpRes as value
+    set_env_variable("DAS_TUNE_MANIFEST", sidecar)
+    t |> success(tune_manifest_set("some_fn", "vec8_u2"))
+    var partA <- { "dot" => JV((med_us = 100.0lf, best_us = 98.0lf)) }
+    t |> success(tune_sidecar_section_merge("race", partA))
+    var partB <- { "gemm" => JV((tile_us = 5.0lf)) }
+    t |> success(tune_sidecar_section_merge("race", partB))
+    var jerr = ""
+    var doc = read_json(fread(sidecar), jerr)
+    t |> success(doc != null, "sidecar parses: {jerr}")
+    // both merges' keys survive, and the kernels section is untouched. Regression guard: the
+    // box cache is keyed path@mtime (1s granular) — a pre-created empty temp file once poisoned
+    // it as box="", making every same-second re-read read STALE and reset the whole doc
+    t |> equal(doc?["race"]?["dot"]?["med_us"] ?? 0.0lf, 100.0lf)
+    t |> equal(doc?["race"]?["gemm"]?["tile_us"] ?? 0.0lf, 5.0lf)
+    t |> equal(doc?["kernels"]?["some_fn"] ?? "", "vec8_u2")
+    delete_json(doc)
+    remove(sidecar)
+}
+
+[test]
 def test_tune_provenance_note_roundtrip(t : T?) {
     let tmpRes = create_temp_file_result("llvm_tune_stats_", ".tune.json")
     if (tmpRes is error) {

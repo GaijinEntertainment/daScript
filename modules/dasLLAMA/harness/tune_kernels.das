@@ -126,6 +126,9 @@ var private g_shipped : table<string; string>
 // median of these ranks the finalists in report(); best-of stays min-over-all-rounds (the
 // screening rule still runs on it) and is printed alongside as the per-kernel noise witness.
 var private g_samples : array<array<double>>
+// per-kernel race tables for the sidecar "race" section — "how much did it flip/win by" must
+// be answerable from the file long after the scrollback is gone
+var private g_race : table<string; JsonValue?>
 let TOL = 1.0e-3lf
 let BASELINE = "vec8_u2"   // the majority hand default; kernels with their own [tuned(fallback=)] pass it to report()
 
@@ -242,6 +245,29 @@ def private tie_break(med : array<double>; ok : array<bool>; bi, winner : int; n
     return pick
 }
 
+// the kernel's race table: every passing candidate's median + best in us, the winner, the
+// shipped fallback it was judged against, and the noise floor the verdict was made under
+def private race_row(names : array<string>; med, best : array<double>; ok : array<bool>;
+                     wname, baseline : string; floor : double) : JsonValue? {
+    var rows : table<string; JsonValue?>
+    var rej = ""
+    for (i in range(length(names))) {
+        if (ok[i]) {
+            rows[names[i]] = JV((med_us = med[i], best_us = best[i]))
+        } else {
+            rej = empty(rej) ? names[i] : "{rej}; {names[i]}"
+        }
+    }
+    var obj <- {
+        "winner" => JV(wname), "fallback" => JV(baseline),
+        "floor_pct" => JV(floor), "rows" => JV(rows)
+    }
+    if (!empty(rej)) {
+        obj["rejected"] = JV(rej)
+    }
+    return JV(obj)
+}
+
 def report(kernel : string; names : array<string>; best : array<double>; ok : array<bool>) : string {
     let baseline = shipped_fallback(kernel)
     // rank by MEDIAN of finalist rounds: min-over-rounds is a lottery on a non-silent box.
@@ -283,6 +309,7 @@ def report(kernel : string; names : array<string>; best : array<double>; ok : ar
         tune_progress_note("  {kernel}: no passing variant\n")
         tune_progress_kernel_end(kernel, "", "rejected")
         g_results |> emplace(KernelResult(kernel = kernel, winner = "", fallback = baseline))
+        g_race[kernel] = race_row(names, med, best, ok, "", baseline, noise_floor_pct())
         delete med
         return ""
     }
@@ -310,6 +337,7 @@ def report(kernel : string; names : array<string>; best : array<double>; ok : ar
         tune_progress_kernel_end(kernel, wname, "beats")
     }
     g_results |> emplace(KernelResult(kernel = kernel, winner = wname, fallback = baseline))
+    g_race[kernel] = race_row(names, med, best, ok, wname, baseline, noise_floor_pct())
     delete med
     return wname
 }
@@ -2143,7 +2171,8 @@ def main : int { // nolint:STYLE037 — flat one-bench-per-kernel rail; the nois
     // this tuner owns it — and everything else (other scopes' keys) survives
     noise_provenance_stamp()
     let ppath = box_profile_path()
-    let wrote = tune_sidecar_merge(winners, runtime)
+    var wrote = tune_sidecar_merge(winners, runtime)
+    wrote = tune_sidecar_section_merge("race", g_race) && wrote
     if (wrote) {
         print("wrote {ppath}\n")
         // the sidecar body is what the display exists to replace — verbose only
