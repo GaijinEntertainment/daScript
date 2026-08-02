@@ -1,5 +1,11 @@
 /// <reference types="tree-sitter-cli/dsl" />
 // @ts-check
+//
+// Drift canary: modules/dasImgui/tests/test_grammar_canary.das parses one
+// tricky construct per section through the EMBEDDED grammar and reds when an
+// error region swallows what follows. New syntax in ds2_parser.ypp -> add a
+// section there; grammar edits here -> regen (tree-sitter generate) AND
+// rebuild tree_sitter_daslang + daslang/daslang-live (three consumers).
 
 // Operator precedence levels (higher = tighter binding)
 const PREC = {
