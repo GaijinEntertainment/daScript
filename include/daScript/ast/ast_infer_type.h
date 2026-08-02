@@ -35,6 +35,7 @@ namespace das {
         VariablePtr globalVar = nullptr;
         vector<VariablePtr> local;
         vector<ExpressionPtr> loop;
+        Expression *comprehensionFor = nullptr;  // comprehension-embedded ExprFor legally has a null body until lowering
         vector<ExprBlock *> blocks;
         vector<ExprBlock *> scopes;
         vector<ExprWith *> with;
@@ -665,6 +666,7 @@ namespace das {
         virtual ExpressionPtr visitMakeArrayIndex(ExprMakeArray *expr, int index, Expression *init, bool last) override;
         virtual ExpressionPtr visit(ExprMakeArray *expr) override;
         // array comprehension
+        virtual void preVisit(ExprArrayComprehension *expr) override;
         virtual void preVisitArrayComprehensionSubexpr(ExprArrayComprehension *expr, Expression *subexpr) override;
         virtual void preVisitArrayComprehensionWhere(ExprArrayComprehension *expr, Expression *where) override;
         virtual ExpressionPtr visit(ExprArrayComprehension *expr) override;

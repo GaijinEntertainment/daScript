@@ -1760,6 +1760,9 @@ namespace das
         bool simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack = nullptr );
         uint64_t getInitSemanticHashWithDep( uint64_t initHash );
         void error ( const string & str, const string & extra, const string & fixme, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
+        // for malformed-AST reports on a tree that gets repaired in place: survives the per-pass
+        // errors.clear() in infer (re-armed at the end of every infer leg), so the compile still fails
+        void stickyError ( const string & str, const string & extra, const string & fixme, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
         void deduplicateErrors ();
         bool failed() const { return failToCompile || macroException; }
         static ExpressionPtr makeConst ( const LineInfo & at, const TypeDeclPtr & type, vec4f value );
@@ -1818,6 +1821,7 @@ namespace das
         int                         newLambdaIndex = 1;
         int                         inferPassesUsed = 0;   // sum of inferTypesDirty inner-loop pass counts across all inferTypes calls (incl. restartInfer legs) for this module; reset by parseDaScript once per module-compile; used by per-module compile-time log
         vector<Error>               errors;
+        vector<Error>               stickyErrors;
         vector<Error>               aotErrors;
         uint32_t                    globalInitStackSize = 0;
         uint32_t                    globalStringHeapSize = 0;

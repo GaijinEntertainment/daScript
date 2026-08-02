@@ -55,6 +55,11 @@ namespace das {
         failToCompile = true;
     }
 
+    void Program::stickyError ( const string & str, const string & extra, const string & fixme, const LineInfo & at, CompilationError cerr ) {
+        stickyErrors.emplace_back(str,extra,fixme,at,cerr);
+        error(str,extra,fixme,at,cerr);
+    }
+
     // Identify the "not_resolved_yet" follow-on family by numeric range.
     // All `not_resolved_yet_*` codes live in the 31300-31399 block (the
     // `not_resolved_yet` facet cluster within stage 3, semantic). See

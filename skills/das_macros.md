@@ -57,6 +57,12 @@ pvar._type.flags.ref = true
 
 Same family of trap as the [ExprRef2Value blocker](#peel-exprref2value-before-qmatch) — the typer doesn't repair what macro substitution introduces, when the substitution lands in an already-typed AST fragment.
 
+**A `Variable` you emit MUST have `_type` set** — unlike `ExprVar` (where a null `_type` means "let the typer fill it"), a `new Variable(name := n, at = at, init = e)` destined for an `ExprLet` (or a global, function/block argument, structure field) with null `_type` is a malformed tree: infer reports `error[50640] malformed AST, variable '<n>' is missing its type` (`50608` for structure fields) and fails the compile. For type inference from the initializer, set `_type = new TypeDecl(baseType = Type.autoinfer, at = at)`.
+
+The same `malformed AST, ...` detection family covers the other required-but-nullable fields a macro-built tree can miss: a for loop's `body` (`50607`), `iteratorsAt`/`iteratorsAka` left shorter than `iterators` when rewriting a loop (`50607` — keep all the parallel vectors the same length, like the tutorial's table_kv macro does), null ENTRIES in `variables`/`arguments`/`sources` lists (`50640`/`50609`/`50607`), and a generated `Function` with null `result` (`50609` — set `result` to an auto `TypeDecl`). These repair the tree in place so compilation can continue reporting, but the error is sticky — the compile still fails. Null *expression children* (`ExprOp2.left`, an `if` condition) are NOT guarded — those crash in the visitor walk itself; the crash-capture stack trace is the diagnostic there.
+
+**`macro_sticky_error(prog, at, message)`** — the sticky-error primitive itself, next to `macro_error` in the ast module. Use it when your macro detects damage, repairs it so infer can proceed, but the program must still fail to compile: a plain `macro_error` recorded on a pass that also changed the AST is discarded by the next infer pass, a sticky one survives to the end.
+
 Canonical example: `try_make_inline_cmp` and the `_where`-arm projection-bind rewrite in `daslib/linq_fold_common.das` (PR #2714).
 
 ## The few residual smart_ptr types — `Program`, `Context`, `FileAccess`
