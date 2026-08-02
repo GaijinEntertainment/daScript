@@ -413,7 +413,8 @@ print("{greeting}\n")
 
 Entities decode for display while retaining source bytes: &amp; &copy; &#x1f680;.
 %%
-    g_doc <- md_parse(source)
+    delete g_doc
+    g_doc <- md_parse(source)  // nolint:PERF030 - target deleted on the previous line; the lint mirrors the compiler rewrite, not statement context
     if (!g_doc.ok) {
         g_status = g_doc.error
     }

@@ -29,7 +29,7 @@ def private probe(app : ImguiApp) : JsonValue? {
 }
 
 [test]
-def test_macos_chords(t : T?) { // nolint:STYLE038 — one forced-macOS scenario; the sub-cases share app state
+def test_macos_chords(t : T?) {
     with_imgui_app(FEATURE) $(d) {
         t |> run("bindings declare logical Ctrl chords") <| @(t : T?) {
             var snap0 = wait_for_render(d, "MAIN_WIN", GUARD_SEC)

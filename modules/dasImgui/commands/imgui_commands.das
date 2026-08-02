@@ -599,9 +599,6 @@ def public command_bindings_editor(var registry : CommandRegistry;
 }
 
 def public command_registry_dispose(var registry : CommandRegistry) {
-    delete registry.definitions
-    delete registry.default_bindings
-    delete registry.bindings
-    delete registry.invocations
-    registry = CommandRegistry()
+    // delete finalizes every container and zeroes the value - exactly default<CommandRegistry>
+    delete registry
 }

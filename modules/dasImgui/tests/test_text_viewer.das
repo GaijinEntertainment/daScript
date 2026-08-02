@@ -525,7 +525,7 @@ def test_text_viewer_find_scrolls_to_match(t : T?) { // nolint:STYLE038 — one 
 }
 
 [test]
-def test_text_viewer_find_icons_and_reopen(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
+def test_text_viewer_find_icons_and_reopen(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         let ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
             var state = viewer_state(app)
@@ -881,7 +881,7 @@ def test_text_viewer_fold_clicks_and_no_reflow(t : T?) { // nolint:STYLE038 — 
 }
 
 [test]
-def test_text_viewer_single_scroller(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
+def test_text_viewer_single_scroller(t : T?) {
     //! The content child is the only scroller: the dock window must never grow
     //! its own scrollbar, and the right-aligned zoom cluster must fit at any
     //! zoom value (both regressed together as "two scrollbars + clipped 100%").
