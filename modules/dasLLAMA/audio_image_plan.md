@@ -112,6 +112,15 @@ field-count tripwire stay in one place.
 via `typeinfo safe_has_field <image_map>`. Staging structs have no `image_map`, so the nested walk
 needs a different marker. Decide before Phase 1 starts.
 
+## Status
+
+**Phase 1 LANDED, Phase 2 LANDED** (2026-08-01, branch bbatkin/dasllama-reorg). All six carriers
+serve borrowed planes; no eager form survives; the ownership hack remains only under `Model` and
+the synthetic test probe. The gemma4a teardown panic closed with it — it was the generated
+`AsrModel` field-walk delete, fixed by an explicit finalizer. Phase 3 is open, and it is the
+binding half of CODEREVIEW.md's "a mint never holds the whole model": today every audio mint
+stages the full model in owned arrays before the writer runs.
+
 ## Phases
 
 **Phase 1 — representation.** Add `PlaneF`/`PlaneI8` and accessors. Move the small arrays to meta.
