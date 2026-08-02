@@ -938,7 +938,8 @@ def save_model_image_streaming(var t : Model; m : GGUFMeta; bytes : array<uint8>
     stream_collect_regions(t, regs)
     let ok = save_image_to_file(t, path, stream_extra_bytes(t, jobs), tag, quant) $(name : string;
                                                                                     var w : ImgWriter; var sections : array<ImgSection>) {
-        if (stream_plane_bytes(t, jobs, name) <= 0l) {
+        let want = stream_plane_bytes(t, jobs, name)
+        if (want <= 0l) {
             // a blob build's kq scale strips take their device form as each one's turn comes —
             // its own fills are done by then and its bytes are not yet written
             if (t.metal_blob) {
@@ -951,6 +952,11 @@ def save_model_image_streaming(var t : Model; m : GGUFMeta; bytes : array<uint8>
         if (!fill_stream_plane(m, bytes, t, name, jobs, regs) $(p : void?; nb : uint64) { w_append(w, p, nb) }) {
             // a failed transcode IS a failed write: kill the sink so the tmp never gets promoted
             to_log(LOG_ERROR, "dasLLAMA image: streamed fill of plane '{name}' failed — image save aborted\n")
+            w.ok = false
+        }
+        // a plane short of its plan maps back as a silently-truncated borrow — that too is a failed write
+        if (w.ok && w.cur - at != uint64(want)) {
+            to_log(LOG_ERROR, "dasLLAMA image: streamed plane '{name}' wrote {int64(w.cur - at)} bytes, plan says {want} — image save aborted\n")
             w.ok = false
         }
         sections |> push(ImgSection(name = name, off = at, bytes = w.cur - at))
@@ -1232,7 +1238,8 @@ def image_from_model_streaming(var t : Model; var out : Model; m : GGUFMeta; byt
     stream_collect_regions(t, regs)
     let ok = chunk_rail(t, out, save_to, stream_extra_bytes(t, jobs), tag, quant) $(name : string;
                                                                                     var w : ImgWriter; var sections : array<ImgSection>) {
-        if (stream_plane_bytes(t, jobs, name) <= 0l) {
+        let want = stream_plane_bytes(t, jobs, name)
+        if (want <= 0l) {
             if (t.metal_blob) {   // the kq scale strips take their device form — see the file saver
                 blob_stream_scale_plane(t, name)
             }
@@ -1242,6 +1249,11 @@ def image_from_model_streaming(var t : Model; var out : Model; m : GGUFMeta; byt
         let at = w.cur
         if (!fill_stream_plane(m, bytes, t, name, jobs, regs) $(p : void?; nb : uint64) { w_append(w, p, nb) }) {
             to_log(LOG_ERROR, "dasLLAMA image: streamed fill of plane '{name}' failed — image build aborted\n")
+            w.ok = false
+        }
+        // a plane short of its plan maps back as a silently-truncated borrow — that too is a failed write
+        if (w.ok && w.cur - at != uint64(want)) {
+            to_log(LOG_ERROR, "dasLLAMA image: streamed plane '{name}' wrote {int64(w.cur - at)} bytes, plan says {want} — image build aborted\n")
             w.ok = false
         }
         sections |> push(ImgSection(name = name, off = at, bytes = w.cur - at))

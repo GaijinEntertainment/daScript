@@ -662,6 +662,7 @@ def private stream_job_qoff(t : Model; j : FillJob) : int64 {
 //! Total bytes the streamed fill will append for `field` (page padding NOT included) — the
 //! LAYOUT size when the sizing pass recorded one (holes included), else the job sum.
 def stream_plane_bytes(t : Model; jobs : array<FillJob>; field : string) : int64 {
+    if (empty(jobs)) return 0l   // no plan: the save must degrade to the eager walk EXACTLY (its contract)
     let lt = g_stream_plane_total?[field] ?? 0l
     if (lt > 0l) {
         return lt
@@ -842,6 +843,8 @@ def private blob_pack_job(q : array<int8>; s : array<float>; nblk : int64;
 def fill_plan_begin {
     g_fill_plan_mode = true
     g_fill_plan |> clear()
+    // plane totals are THIS plan's sizing — a load that disarms must not save under the previous one's
+    g_stream_plane_total |> clear()
 }
 
 //! Disarm and move the recorded plan out (empty = nothing recorded).
