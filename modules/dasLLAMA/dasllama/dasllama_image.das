@@ -12,6 +12,7 @@ require strings
 require dasllama/dasllama_tokenizer   // Tokenizer — the bulk tokenizer serializer below
 require daslib/archive
 require daslib/array_boost   // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs (same note as dasllama_common)
+require dasllama/dasllama_plane   // PlaneF/PlaneI8 + plane_bind — the borrowed-plane bind arm below
 require dasllama/dasllama_common
 require dasllama/dasllama_gguf   // GGUFMeta — the streamed cold build's block signature names it
 require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor image transform
@@ -591,10 +592,12 @@ let IMAGE_META_FIELDS = 66 + 3
 def count_meta_fields(var t) : int {
     var n = 0
     apply(t) $ [unused_argument(name, field)] (name : string; var field) {
-        static_if (!typeinfo is_array(field)) {
-            n++
-        } static_elif (typeinfo is_string(field[0])) {
-            n++
+        static_if (typeinfo is_array(field)) {
+            static_if (typeinfo is_string(field[0])) {
+                n++
+            }
+        } static_elif (!typeinfo safe_has_field < borrowed_plane > (field)) {
+            n++   // a borrowed plane is a section, not a meta field
         }
     }
     return n
@@ -902,6 +905,27 @@ def private borrow_plane(bp : uint8 const?; msize : uint64; path : string;
     }
 }
 
+// one borrowed plane: validate the section against the mapping, then point the plane at it.
+// The plane owns nothing, so a decline leaves it empty and the caller drops the whole carrier.
+def private bind_plane_section(bp : uint8 const?; msize : uint64; path : string;
+                               by_name : table<string; ImgSection>; var ok : bool&;
+                               name : string; var pl) {
+    if (!key_exists(by_name, name)) {
+        return
+    }
+    let sec = by_name?[name] ?? ImgSection()
+    // bytes-then-offset ordering keeps the bounds math wrap-free (off + bytes could overflow)
+    if (sec.off % uint64(IMAGE_PAGE) != 0ul || sec.bytes > msize || sec.off > msize - sec.bytes) {
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined — section '{name}' at {sec.off}+{sec.bytes} is malformed\n")
+        ok = false
+        return
+    }
+    if (!_::plane_bind(pl, bp, int64(sec.off), int64(sec.bytes))) {
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined — section '{name}' is {sec.bytes} bytes, not a whole number of elements\n")
+        ok = false
+    }
+}
+
 //! THE image parse — the only way a prepared image becomes a struct, mapped .dlim or chunk this
 //! process just built alike: plane fields borrow `base` in place, the archive blob restores
 //! everything else. false = decline (the caller owns `base` and releases it either way).
@@ -1010,6 +1034,8 @@ def private parse_image(base : void?; msize : uint64; path : string; var t; tag 
             static_if (!typeinfo is_string(field[0])) {   // string arrays ride the meta blob
                 borrow_plane(bp, msize, path, by_name, ok, name, field)
             }
+        } static_elif (typeinfo safe_has_field < borrowed_plane > (field)) {
+            bind_plane_section(bp, msize, path, by_name, ok, name, field)
         } static_elif (typeinfo safe_has_field < image_map > (field)) {
             // nested weight-carrier: borrow its planes back from the dotted sections (the
             // nested image_map stays null — the OUTER struct owns this mapping)
@@ -1018,6 +1044,8 @@ def private parse_image(base : void?; msize : uint64; path : string; var t; tag 
                     static_if (!typeinfo is_string(ifield[0])) {
                         borrow_plane(bp, msize, path, by_name, ok, "{name}.{iname}", ifield)
                     }
+                } static_elif (typeinfo safe_has_field < borrowed_plane > (ifield)) {
+                    bind_plane_section(bp, msize, path, by_name, ok, "{name}.{iname}", ifield)
                 }
             }
         }

@@ -10,12 +10,14 @@ module dasllama_plane shared public
 //! A borrowed float plane: `p` points into a prepared image, `n` counts elements.
 //! Read it with `pl[i]` (bounds-checked) or hand `pl.p` to a pointer kernel.
 struct PlaneF {
+    borrowed_plane : bool = true   // the marker the image walks static_if on — see dasllama_image
     p : float const? = null
     n : int64 = 0l
 }
 
 //! A borrowed int8 plane — the Q8 quant planes. Same contract as PlaneF.
 struct PlaneI8 {
+    borrowed_plane : bool = true
     p : int8 const? = null
     n : int64 = 0l
 }
