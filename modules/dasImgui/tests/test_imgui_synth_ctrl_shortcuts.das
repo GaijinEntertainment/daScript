@@ -63,20 +63,18 @@ def test_imgui_synth_ctrl_shortcuts(t : T?) { // nolint:STYLE038
             t |> success(snap0 != null, "NAME_INPUT renders")
             if (snap0 == null) return
 
-            // ImGui swaps Cmd<>Ctrl inside AddKeyEvent when ConfigMacOSXBehaviors is on
-            // (default on macOS), so a synth LeftCtrl surfaces as the Super modifier there.
-            let macos = snap0?["io"]?["config_macos_behaviors"] ?? false
-            let mod_field = macos ? "key_super" : "key_ctrl"
-
+            // Synth keys are logical: the synth layer pre-swaps Ctrl<->Super
+            // under ConfigMacOSXBehaviors to cancel ImGui's AddKeyEvent swap,
+            // so a synth LeftCtrl reads back as io.KeyCtrl on every platform.
             let ctrl_key = int(ImGuiKey.LeftCtrl)
             post_command(d, "imgui_key_press", JV((key = ctrl_key)))
             let saw_ctrl = wait_until(d, 240) $(var snap) {
-                return snap?["io"]?[mod_field] ?? false
+                return snap?["io"]?["key_ctrl"] ?? false
             }
             t |> success(saw_ctrl != null, "synth Ctrl held shows up in the io modifier state")
             post_command(d, "imgui_key_release", JV((key = ctrl_key)))
             let cleared = wait_until(d, 240) $(var snap) {
-                return !(snap?["io"]?[mod_field] ?? true)
+                return !(snap?["io"]?["key_ctrl"] ?? true)
             }
             t |> success(cleared != null, "io modifier clears after release")
         }
@@ -84,15 +82,11 @@ def test_imgui_synth_ctrl_shortcuts(t : T?) { // nolint:STYLE038
 
         // Canary for the click-then-Ctrl+A bug: synth-click NAME_INPUT, type text, select-all →
         // Backspace, expect an empty buffer (legacy glfw_live left Shortcut() routing broken, so
-        // Ctrl+A no-opped and the buffer ended "ab"). macOS uses Cmd not Ctrl (config_macos_behaviors).
+        // Ctrl+A no-opped). Chords are logical: synth Ctrl is the primary mod on every platform.
         t |> run("click_then_ctrl_a_clears_input") <| @(t : T?) {
             var snap0 = wait_for_render(d, "MAIN_WIN/NAME_INPUT", 15.0f)
             t |> success(snap0 != null, "NAME_INPUT renders")
             if (snap0 == null) return
-
-            // Determine platform shortcut modifier from the io snapshot.
-            let macos = snap0?["io"]?["config_macos_behaviors"] ?? false
-            let select_all_mod = macos ? "Super" : "Ctrl"
 
             // Locate NAME_INPUT center for the synth click.
             let b = snap0?["globals"]?["MAIN_WIN/NAME_INPUT"]?["bbox"]
@@ -124,13 +118,8 @@ def test_imgui_synth_ctrl_shortcuts(t : T?) { // nolint:STYLE038
             // idle before the chord so the chord events don't interleave its tail.
             t |> success(wait_for_key_idle(d, 4.0f), "key_type timeline idle before chord")
 
-            // Select-all chord: Cmd+A on macOS, Ctrl+A everywhere else.
-            if (macos) {
-                post_command(d, "imgui_key_chord", JV((mods = ["Super"], key = "A")))
-            } else {
-                post_command(d, "imgui_key_chord", JV((mods = ["Ctrl"], key = "A")))
-            }
-            t |> success(wait_for_key_idle(d, 4.0f), "{select_all_mod}+A chord completes")
+            post_command(d, "imgui_key_chord", JV((mods = ["Ctrl"], key = "A")))
+            t |> success(wait_for_key_idle(d, 4.0f), "Ctrl+A chord completes")
 
             // Backspace once → if selection is active, buffer empties.
             let bksp = int(ImGuiKey.Backspace)
@@ -141,7 +130,7 @@ def test_imgui_synth_ctrl_shortcuts(t : T?) { // nolint:STYLE038
                 let v = snap?["globals"]?["MAIN_WIN/NAME_INPUT"]?["payload"]?["value"] ?? "still-has-content"
                 return v == ""
             }
-            t |> success(emptied != null, "NAME_INPUT.value == \"\" after {select_all_mod}+A then Backspace")
+            t |> success(emptied != null, "NAME_INPUT.value == \"\" after Ctrl+A then Backspace")
         }
     }
 }

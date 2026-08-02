@@ -102,7 +102,8 @@ def private bind_demo_image(width, height : float;
 def markdown_probe_state(_input : JsonValue?) : JsonValue? { // nolint:STYLE038
     let s = g_last_selection
     let io & = unsafe(GetIO())
-    let copy_modifier_down = io.ConfigMacOSXBehaviors ? io.KeySuper : io.KeyCtrl
+    // io.KeyCtrl is logical — ImGui maps Cmd onto it under ConfigMacOSXBehaviors.
+    let copy_modifier_down = io.KeyCtrl
     return JV((
         ok = g_doc.ok,
         render_revision = g_view.render_revision,

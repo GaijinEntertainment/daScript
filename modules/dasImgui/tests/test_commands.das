@@ -27,8 +27,10 @@ def test_command_invocation_is_input_source_agnostic(t : T?) {
 }
 
 [test]
-def test_command_primary_modifier_follows_platform_policy(t : T?) {
-    let macos = get_platform_name() == "darwin"
+def test_command_chords_speak_logical_ctrl(t : T?) {
+    // Chords are logical on every platform: primary is the Ctrl bit, secondary
+    // the Super bit. ImGui's ConfigMacOSXBehaviors swap inside AddKeyEvent owns
+    // the Cmd mapping — a registry-side swap would double-swap on macOS.
     let key = int(ImGuiKey.C)
     let ctrl = 1 << 12
     let shift = 1 << 13
@@ -40,11 +42,11 @@ def test_command_primary_modifier_follows_platform_policy(t : T?) {
                                     secondary = true)
 
     t |> equal(command_binding_chord(primary),
-               key | (macos ? super : ctrl) | shift | alt,
-               "primary follows the current platform modifier policy")
+               key | ctrl | shift | alt,
+               "primary is the logical Ctrl bit on every platform")
     t |> equal(command_binding_chord(secondary),
-               key | (macos ? ctrl : super),
-               "secondary uses the complementary platform modifier")
+               key | super,
+               "secondary is the logical Super bit on every platform")
 }
 
 [test]

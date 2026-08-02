@@ -123,10 +123,10 @@ def test_text_viewer_open_modes_and_zoom(t : T?) { // nolint:STYLE038 — one ev
         }
         t |> success(release_observed, "source selection release is acknowledged")
 
-        let input_snapshot = post_command(app, "imgui_snapshot", null)
-        let input_primary = (input_snapshot?["io"]?["config_macos_behaviors"] ?? false) ? "Super" : "Ctrl"
+        // Synth chords are logical: "Ctrl" is the primary modifier on every
+        // platform (the synth layer maps it onto Cmd under macOS behaviors).
         let copy_before = viewer_state(app)?["source_selection_copy_revision"] ?? 0
-        post_command(app, "imgui_key_chord", JV((mods = [input_primary], key = "C")))
+        post_command(app, "imgui_key_chord", JV((mods = ["Ctrl"], key = "C")))
         t |> success(wait_for_key_idle(app, 4.0f), "platform-primary copy chord completes")
         let copy_observed = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
             var state = viewer_state(app)
@@ -136,7 +136,7 @@ def test_text_viewer_open_modes_and_zoom(t : T?) { // nolint:STYLE038 — one ev
         t |> success(copy_observed,
                      "copy binding routes through a semantic command into the source view")
 
-        post_command(app, "imgui_key_chord", JV((mods = [input_primary], key = "A")))
+        post_command(app, "imgui_key_chord", JV((mods = ["Ctrl"], key = "A")))
         t |> success(wait_for_key_idle(app, 4.0f),
                      "platform-primary select-all chord completes")
         let select_all_observed = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
@@ -158,9 +158,7 @@ def test_text_viewer_open_modes_and_zoom(t : T?) { // nolint:STYLE038 — one ev
 
         var before_reset = viewer_state(app)
         let command_before = before_reset?["command_revision"] ?? 0
-        let zoom_snapshot = post_command(app, "imgui_snapshot", null)
-        let primary_mod = (zoom_snapshot?["io"]?["config_macos_behaviors"] ?? false) ? "Super" : "Ctrl"
-        post_command(app, "imgui_key_chord", JV((mods = [primary_mod], key = "0")))
+        post_command(app, "imgui_key_chord", JV((mods = ["Ctrl"], key = "0")))
         t |> success(wait_for_key_idle(app, 4.0f),
                      "platform-primary reset chord completes")
         let reset_observed = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {

@@ -189,24 +189,13 @@ def public command_take(var registry : CommandRegistry;
     return true
 }
 
-def private command_uses_macos_behaviors() : bool {
-    if (GetCurrentContext() != null) {
-        return GetIO().ConfigMacOSXBehaviors
-    }
-    return get_platform_name() == "darwin"
-}
-
 def private make_chord(key : int; primary, shift, alt, secondary : bool) : int {
+    // Chords are LOGICAL (primary = Ctrl bit, secondary = Super bit): ImGui's ConfigMacOSXBehaviors swap in AddKeyEvent already maps Cmd onto logical Ctrl — swapping here too double-swaps and no primary chord ever fires on macOS.
     var chord = key
-    let macos = command_uses_macos_behaviors()
-    if (primary) {
-        chord = chord | (macos ? COMMAND_MOD_SUPER : COMMAND_MOD_CTRL)
-    }
+    if (primary) { chord = chord | COMMAND_MOD_CTRL }
     if (shift) { chord = chord | COMMAND_MOD_SHIFT }
     if (alt) { chord = chord | COMMAND_MOD_ALT }
-    if (secondary) {
-        chord = chord | (macos ? COMMAND_MOD_CTRL : COMMAND_MOD_SUPER)
-    }
+    if (secondary) { chord = chord | COMMAND_MOD_SUPER }
     return chord
 }
 
@@ -505,8 +494,10 @@ def public command_capture_tick(var registry : CommandRegistry) {
         if (empty(name) || name == "None" || name == "Unknown"
                 || starts_with(name, "Mod") || starts_with(name, "Mouse")
                 || starts_with(name, "Gamepad") || !IsKeyPressed(key, false)) continue
-        let primary_down = io.ConfigMacOSXBehaviors ? io.KeySuper : io.KeyCtrl
-        let secondary_down = io.ConfigMacOSXBehaviors ? io.KeyCtrl : io.KeySuper
+        // io.KeyCtrl/io.KeySuper are already logical (ImGui swaps Cmd onto
+        // KeyCtrl under ConfigMacOSXBehaviors), matching make_chord's bits.
+        let primary_down = io.KeyCtrl
+        let secondary_down = io.KeySuper
         let id = registry.capture_command_id
         let scope = registry.definitions[definition].scope
         let alt_capture = registry.capture_alt

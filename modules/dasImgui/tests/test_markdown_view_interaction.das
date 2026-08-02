@@ -399,19 +399,15 @@ def test_markdown_view_event_driven_interactions(t : T?) { // nolint:STYLE038
         // system writes, so regular dastest never mutates the desktop clipboard.
         let selected_text = committed_state?["selection"]?["display_text"] ?? ""
         let copy_before = committed_state?["selection"]?["copy_revision"] ?? -1
-        var input_state = markdown_state(app)
-        let macos = input_state?["input"]?["macos_behaviors"] ?? false
-        // ImGui remaps synthetic LeftCtrl to Super when macOS behaviors are
-        // enabled, matching the viewer's platform shortcut choice.
+        // Synth keys are logical: LeftCtrl reads back as io.KeyCtrl on every
+        // platform (the synth layer cancels ImGui's macOS Ctrl<->Super swap).
         let copy_modifier_key = int(ImGuiKey.LeftCtrl)
         post_command(app, "imgui_key_press", JV((key = copy_modifier_key)))
         let modifier_down = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
             var state = markdown_state(app)
             return state?["input"]?["copy_modifier_down"] ?? false
         }
-        t |> success(modifier_down,
-                     macos ? "synthetic Cmd modifier is observed"
-                           : "synthetic Ctrl modifier is observed")
+        t |> success(modifier_down, "synthetic primary modifier is observed")
 
         post_command(app, "imgui_key_press", JV((key = int(ImGuiKey.C))))
         let copied = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
