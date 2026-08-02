@@ -10,6 +10,7 @@ require dasllama/dasllama_gguf       // rd_u32/rd_u16 — the wav fixture reader
 require dasllama/dasllama_image
 require dasllama/dasllama_plane   // PlaneF — the served side of the round-trip comparisons
 require dasllama/dasllama_canary  // CanaryStaging/stage_canary_encoder — the off-rail truth read
+require dasllama/dasllama_gemma4a // Gemma4aStaging/stage_gemma4a_encoder — same, for the gemma4a arm
 require dasllama/dasllama_config     // DlimConfiguration — the peek/round-trip mechanics arms
 require dasllama/dasllama_math   // pin_kernel_backend — the metal-flavor arm's donor contract
 require dasllama/dasllama_layout // convert_model_to_metal_blob — the derive cell's in-RAM control
@@ -956,23 +957,25 @@ def test_gemma4a_encoder_image_roundtrip(t : T?) {
         }
         let img = image_path_for(path, "gemma4a-f32")
         remove(img)
-        // off-rail truth: both cached loads are image-backed, so they cannot check each other
-        var a <- load_gemma4a_encoder_(path)
-        var cold <- load_gemma4a_encoder(path)
+        // off-rail truth: both cached loads are image-backed, so they cannot check each other.
+        // The staging carrier IS the off-rail read now — a served encoder has no array form.
+        var inscope a <- stage_gemma4a_encoder(path)
+        var inscope cold <- load_gemma4a_encoder(path)
         t |> success(cold.image_map != null, "cold load serves the image it built")
         t |> success(stat(img).is_valid, "cold load saved an image")
         t |> equal(count_mismatch(a.blob, cold.blob), 0l, "cold-built blob element-exact")
-        delete cold
-        var b <- load_gemma4a_encoder(path)
+        var inscope b <- load_gemma4a_encoder(path)
         t |> success(b.image_map != null, "warm load is image-backed")
-        t |> equal(b.d_model, a.d_model)
-        t |> equal(b.n_layer, a.n_layer)
-        t |> equal(b.proj_dim, a.proj_dim)
-        t |> equal(long_length(b.layers), long_length(a.layers))
+        t |> equal(b.d_model, a.e.d_model)
+        t |> equal(b.n_layer, a.e.n_layer)
+        t |> equal(b.proj_dim, a.e.proj_dim)
+        t |> equal(length(b.layers), long_length(a.layers))
         t |> equal(count_mismatch(a.blob, b.blob), 0l, "blob element-exact")
         t |> equal(count_mismatch(a.twiddles, b.twiddles), 0l, "twiddles element-exact")
-        delete a
-        delete b
+        t |> equal(count_mismatch(a.filters, b.filters), 0l, "filters element-exact")
+        t |> equal(count_mismatch(a.pos_emb, b.pos_emb), 0l, "pos_emb element-exact")
+        t |> equal(count_mismatch(a.hann, b.hann), 0l, "hann element-exact")
+        t |> equal(count_mismatch(a.ones, b.ones), 0l, "ones element-exact")
     }
 }
 

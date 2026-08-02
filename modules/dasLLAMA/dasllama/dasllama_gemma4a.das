@@ -12,6 +12,7 @@ require daslib/archive
 require dasllama/dasllama_env
 require dasllama/dasllama_math
 require dasllama/dasllama_gguf
+require dasllama/dasllama_plane public   // PlaneF — the borrowed weight planes; re-exported so requirers can delete an encoder
 require dasllama/dasllama_audio
 require dasllama/dasllama_common   // apply_box_profile_runtime for the gemma4a-image identity
 require dasllama/dasllama_image
@@ -84,12 +85,12 @@ struct Gemma4aEncoder {
     sub_ch1 : int64    // conv1 out channels (32)
     n_bins : int64     // n_fft/2 + 1 = 257
     eps : float = GEMMA4A_NORM_EPS
-    filters : array<float>    // [n_mel × n_bins] HTK, no area norm
-    hann : array<float>       // [512]: 320 Hann at the front, zeros to 512
-    twiddles : array<float>   // DFT twiddle matrix [n_fft × (n_bins·2)]
-    pos_emb : array<float>    // sinusoidal RPE table [13 × d_model]
-    ones : array<float>       // [proj_dim] weight for the final weightless RMSNorm
-    blob : array<float>
+    filters : PlaneF = PlaneF()    // [n_mel × n_bins] HTK, no area norm
+    hann : PlaneF = PlaneF()       // [512]: 320 Hann at the front, zeros to 512
+    twiddles : PlaneF = PlaneF()   // DFT twiddle matrix [n_fft × (n_bins·2)]
+    pos_emb : PlaneF = PlaneF()    // sinusoidal RPE table [13 × d_model]
+    ones : PlaneF = PlaneF()       // [proj_dim] weight for the final weightless RMSNorm
+    blob : PlaneF = PlaneF()
     // subsample conv frontend + input projection
     c0_w : int64; norm0_w : int64
     c1_w : int64; norm1_w : int64
@@ -97,34 +98,56 @@ struct Gemma4aEncoder {
     // output projection + audio multimodal embedder
     outproj_w : int64; outproj_b : int64
     mmproj_w : int64
-    layers : array<G4aLayer>
+    layers : G4aLayerPlane = G4aLayerPlane()
     image_map : void?         // non-null when the planes borrow a mapped .dlim (dasllama_image)
     image_bytes : uint64
 }
 
-def finalize(var t : Gemma4aEncoder) {
-    apply(t) $ [unused_argument(name)] (name : string; var field) {
-        static_if (typeinfo is_array(field)) {
-            if (lock_count(field) != 0) {
-                unsafe {
-                    _builtin_forget_temp_array(field)
-                }
-            } else {
-                delete field
-            }
-        }
+// the per-layer offset table is a plane like any other; PlaneF covers the scalar element
+// types, a POD-struct plane needs its own accessors
+struct G4aLayerPlane {
+    borrowed_plane : bool = true
+    p : G4aLayer const? = null
+    n : int64 = 0l
+}
+
+def length(pl : G4aLayerPlane) : int64 => pl.n
+
+def operator [] (pl : G4aLayerPlane; i : int64) : G4aLayer {
+    if (uint64(i) >= uint64(pl.n)) {
+        panic("dasLLAMA gemma4a: layer {i} outside [0,{pl.n})")
     }
+    return unsafe(pl.p[i])
+}
+
+def finalize(var pl : G4aLayerPlane) {
+    pl.p = null
+    pl.n = 0l
+}
+
+def plane_bind(var pl : G4aLayerPlane; base : uint8 const?; off, nbytes : int64) : bool {
+    let esz = int64(typeinfo sizeof(type<G4aLayer>))
+    if (nbytes % esz != 0l) {
+        return false
+    }
+    unsafe {
+        pl.p = reinterpret<G4aLayer const?>(base + off)
+    }
+    pl.n = nbytes / esz
+    return true
+}
+
+// the encoder owns exactly one thing — its image backing. Every plane borrows.
+def finalize(var t : Gemma4aEncoder) {
     if (t.image_map != null) {
-        unsafe {
-            fmap_close(t.image_map, t.image_bytes)
-        }
+        image_backing_release(t.image_map, t.image_bytes)
         t.image_map = null
         t.image_bytes = 0ul
     }
 }
 
 // the tripwire: serialize_image_meta(Gemma4aEncoder) covers 19 fields; image_map + image_bytes
-// are deliberate skips (layers is a POD-struct array — it rides as a plane).
+// are deliberate skips (the six planes and the layer table are sections, not meta).
 let private GEMMA4A_META_FIELDS = 19 + 2
 
 // every meta-carried Gemma4aEncoder field, explicitly, both directions (see dasllama_image)
@@ -153,6 +176,37 @@ def private serialize_image_meta(var arch : Archive; var t : Gemma4aEncoder) {
 
 [unused_argument(t)]
 def private image_post_load(var t : Gemma4aEncoder) {}   // no derived state — offsets ARE the meta
+
+//! The mint-side carrier: ``e`` holds every scalar the meta blob carries, the arrays beside it
+//! hold the plane bytes until the writer has them. Public because reading the source gguf off-rail
+//! is the only way a suite can check a served encoder against something not itself image-backed.
+struct Gemma4aStaging {
+    e : Gemma4aEncoder = Gemma4aEncoder()
+    filters : array<float>
+    hann : array<float>
+    twiddles : array<float>
+    pos_emb : array<float>
+    ones : array<float>
+    blob : array<float>
+    layers : array<G4aLayer>
+}
+
+def private serialize_image_meta(var arch : Archive; var st : Gemma4aStaging) {
+    serialize_image_meta(arch, st.e)
+}
+
+// staging owns its plane bytes outright — every array here is heap, none is borrowed
+def finalize(var st : Gemma4aStaging) {
+    apply(st) $ [unused_argument(name)] (name : string; var field) {
+        static_if (typeinfo is_array(field)) {
+            delete field
+        }
+    }
+    delete st.e
+}
+
+[unused_argument(st)]
+def private image_post_load(var st : Gemma4aStaging) {}
 
 [init]
 def private register_gemma4a_image_tags {
@@ -278,19 +332,24 @@ def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
             to_log(LOG_INFO, "dasLLAMA: prepared gemma4a-encoder image mapped in {get_time_usec(ts_img) / 1000} ms — {img}\n")
             return <- t
         }
-        var m <- load_gemma4a_encoder_(path)
+        var inscope st <- stage_gemma4a_encoder(path)
         var built = Gemma4aEncoder()
-        cache_via_image(m, built, img, tag)
-        delete m
+        cache_via_image_staged(st, built, img, tag)
         dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
         return <- built
     }
-    return <- load_gemma4a_encoder_(path)
+    // no persisted image: mint one in memory and serve THAT — a served encoder is always
+    // image-backed, so there is no second, array-owning shape of this struct to maintain
+    var inscope st <- stage_gemma4a_encoder(path)
+    var built = Gemma4aEncoder()
+    cache_via_image_staged(st, built, "", tag)
+    return <- built
 }
 
-//! The mmproj-gguf reader proper — the eager (no image cache) load; ``load_gemma4a_encoder`` wraps it.
-def load_gemma4a_encoder_(path : string) : Gemma4aEncoder {
-    var enc = Gemma4aEncoder()
+//! The mmproj-gguf reader proper: scalars land in the served encoder, plane bytes in the staging
+//! arrays beside it. Nothing here is servable — the image build is what produces a live encoder.
+def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
+    var st = Gemma4aStaging()
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA gemma4a: cannot open mmproj gguf '{path}'")
@@ -303,15 +362,15 @@ def load_gemma4a_encoder_(path : string) : Gemma4aEncoder {
         if (proj != "gemma4a") {
             panic("dasLLAMA gemma4a: mmproj projector type is '{proj}', expected 'gemma4a'")
         }
-        enc.n_mel = gguf_int(m, bytes, "clip.audio.num_mel_bins")
-        enc.d_model = gguf_int(m, bytes, "clip.audio.embedding_length")
-        enc.n_head = gguf_int(m, bytes, "clip.audio.attention.head_count")
-        enc.n_layer = gguf_int(m, bytes, "clip.audio.block_count")
-        enc.n_ff = gguf_int(m, bytes, "clip.audio.feed_forward_length")
-        enc.d_head = enc.d_model / enc.n_head
-        enc.n_bins = G4A_N_FFT / 2l + 1l
-        let d = enc.d_model
-        let ff = enc.n_ff
+        st.e.n_mel = gguf_int(m, bytes, "clip.audio.num_mel_bins")
+        st.e.d_model = gguf_int(m, bytes, "clip.audio.embedding_length")
+        st.e.n_head = gguf_int(m, bytes, "clip.audio.attention.head_count")
+        st.e.n_layer = gguf_int(m, bytes, "clip.audio.block_count")
+        st.e.n_ff = gguf_int(m, bytes, "clip.audio.feed_forward_length")
+        st.e.d_head = st.e.d_model / st.e.n_head
+        st.e.n_bins = G4A_N_FFT / 2l + 1l
+        let d = st.e.d_model
+        let ff = st.e.n_ff
 
         // subsample channel counts from the conv tensor sizes ([3,3,cin,cout])
         let i0 = gguf_find_tensor(m, "a.conv1d.0.weight")
@@ -319,8 +378,8 @@ def load_gemma4a_encoder_(path : string) : Gemma4aEncoder {
         if (i0 < 0 || i1 < 0) {
             panic("dasLLAMA gemma4a: missing a.conv1d.0/1.weight")
         }
-        enc.sub_ch0 = m.tensors[i0].n_elem / 9l            // cin = 1
-        enc.sub_ch1 = m.tensors[i1].n_elem / (9l * enc.sub_ch0)
+        st.e.sub_ch0 = m.tensors[i0].n_elem / 9l            // cin = 1
+        st.e.sub_ch1 = m.tensors[i1].n_elem / (9l * st.e.sub_ch0)
         // proj_dim from the audio multimodal embedder mm.a.input_projection [proj_dim × proj_dim]
         let ip = gguf_find_tensor(m, "mm.a.input_projection.weight")
         if (ip < 0) {
@@ -330,21 +389,21 @@ def load_gemma4a_encoder_(path : string) : Gemma4aEncoder {
         if (op < 0) {
             panic("dasLLAMA gemma4a: missing a.pre_encode.out.weight")
         }
-        enc.proj_dim = m.tensors[op].n_elem / d            // out proj [d × proj_dim]
+        st.e.proj_dim = m.tensors[op].n_elem / d            // out proj [d × proj_dim]
 
         // blob layout: subsample + output first, then per-layer
         var o = 0l
-        enc.c0_w = o; o += enc.sub_ch0 * 9l
-        enc.norm0_w = o; o += enc.sub_ch0
-        enc.c1_w = o; o += enc.sub_ch1 * enc.sub_ch0 * 9l
-        enc.norm1_w = o; o += enc.sub_ch1
-        let feat = enc.sub_ch1 * (enc.n_mel / 4l)          // 32 × 32 = 1024
-        enc.inproj_w = o; o += d * feat
-        enc.outproj_w = o; o += enc.proj_dim * d
-        enc.outproj_b = o; o += enc.proj_dim
-        enc.mmproj_w = o; o += enc.proj_dim * enc.proj_dim
-        enc.layers |> resize(int(enc.n_layer))
-        for (l in range64(enc.n_layer)) {
+        st.e.c0_w = o; o += st.e.sub_ch0 * 9l
+        st.e.norm0_w = o; o += st.e.sub_ch0
+        st.e.c1_w = o; o += st.e.sub_ch1 * st.e.sub_ch0 * 9l
+        st.e.norm1_w = o; o += st.e.sub_ch1
+        let feat = st.e.sub_ch1 * (st.e.n_mel / 4l)          // 32 × 32 = 1024
+        st.e.inproj_w = o; o += d * feat
+        st.e.outproj_w = o; o += st.e.proj_dim * d
+        st.e.outproj_b = o; o += st.e.proj_dim
+        st.e.mmproj_w = o; o += st.e.proj_dim * st.e.proj_dim
+        st.layers |> resize(int(st.e.n_layer))
+        for (l in range64(st.e.n_layer)) {
             var lo = G4aLayer()
             lo.ff_norm = o; o += d
             lo.ff_up = o; o += ff * d
@@ -355,7 +414,7 @@ def load_gemma4a_encoder_(path : string) : Gemma4aEncoder {
             lo.k = o; o += d * d
             lo.v = o; o += d * d
             lo.o = o; o += d * d
-            lo.per_dim_scale = o; o += enc.d_head
+            lo.per_dim_scale = o; o += st.e.d_head
             lo.attn_k_rel = o; o += d * d
             lo.attn_post_norm = o; o += d
             lo.norm_conv = o; o += d
@@ -368,49 +427,49 @@ def load_gemma4a_encoder_(path : string) : Gemma4aEncoder {
             lo.ff_down_1 = o; o += d * ff
             lo.ff_post_norm_1 = o; o += d
             lo.ln2 = o; o += d
-            enc.layers[l] = lo
+            st.layers[l] = lo
         }
-        enc.blob |> reserve(int(o))
-        enc.blob |> resize(int(o))
+        st.blob |> reserve(int(o))
+        st.blob |> resize(int(o))
 
         // read weights
-        gguf_read_tensor_f32(m, bytes, "a.conv1d.0.weight", enc.blob, enc.c0_w, enc.sub_ch0 * 9l)
-        gguf_read_tensor_f32(m, bytes, "a.conv1d.0.norm.weight", enc.blob, enc.norm0_w, enc.sub_ch0)
-        gguf_read_tensor_f32(m, bytes, "a.conv1d.1.weight", enc.blob, enc.c1_w, enc.sub_ch1 * enc.sub_ch0 * 9l)
-        gguf_read_tensor_f32(m, bytes, "a.conv1d.1.norm.weight", enc.blob, enc.norm1_w, enc.sub_ch1)
-        gguf_read_tensor_f32(m, bytes, "a.input_projection.weight", enc.blob, enc.inproj_w, d * feat)
-        gguf_read_tensor_f32(m, bytes, "a.pre_encode.out.weight", enc.blob, enc.outproj_w, enc.proj_dim * d)
-        gguf_read_tensor_f32(m, bytes, "a.pre_encode.out.bias", enc.blob, enc.outproj_b, enc.proj_dim)
-        gguf_read_tensor_f32(m, bytes, "mm.a.input_projection.weight", enc.blob, enc.mmproj_w, enc.proj_dim * enc.proj_dim)
-        for (l in range64(enc.n_layer)) {
-            let lo = enc.layers[l]
+        gguf_read_tensor_f32(m, bytes, "a.conv1d.0.weight", st.blob, st.e.c0_w, st.e.sub_ch0 * 9l)
+        gguf_read_tensor_f32(m, bytes, "a.conv1d.0.norm.weight", st.blob, st.e.norm0_w, st.e.sub_ch0)
+        gguf_read_tensor_f32(m, bytes, "a.conv1d.1.weight", st.blob, st.e.c1_w, st.e.sub_ch1 * st.e.sub_ch0 * 9l)
+        gguf_read_tensor_f32(m, bytes, "a.conv1d.1.norm.weight", st.blob, st.e.norm1_w, st.e.sub_ch1)
+        gguf_read_tensor_f32(m, bytes, "a.input_projection.weight", st.blob, st.e.inproj_w, d * feat)
+        gguf_read_tensor_f32(m, bytes, "a.pre_encode.out.weight", st.blob, st.e.outproj_w, st.e.proj_dim * d)
+        gguf_read_tensor_f32(m, bytes, "a.pre_encode.out.bias", st.blob, st.e.outproj_b, st.e.proj_dim)
+        gguf_read_tensor_f32(m, bytes, "mm.a.input_projection.weight", st.blob, st.e.mmproj_w, st.e.proj_dim * st.e.proj_dim)
+        for (l in range64(st.e.n_layer)) {
+            let lo = st.layers[l]
             let p = "a.blk.{l}"
-            gguf_read_tensor_f32(m, bytes, "{p}.ffn_norm.weight", enc.blob, lo.ff_norm, d)
-            gguf_read_tensor_f32(m, bytes, "{p}.ffn_up.weight", enc.blob, lo.ff_up, ff * d)
-            gguf_read_tensor_f32(m, bytes, "{p}.ffn_down.weight", enc.blob, lo.ff_down, d * ff)
-            gguf_read_tensor_f32(m, bytes, "{p}.ffn_post_norm.weight", enc.blob, lo.ff_post_norm, d)
-            gguf_read_tensor_f32(m, bytes, "{p}.attn_pre_norm.weight", enc.blob, lo.attn_pre_norm, d)
-            gguf_read_tensor_f32(m, bytes, "{p}.attn_q.weight", enc.blob, lo.q, d * d)
-            gguf_read_tensor_f32(m, bytes, "{p}.attn_k.weight", enc.blob, lo.k, d * d)
-            gguf_read_tensor_f32(m, bytes, "{p}.attn_v.weight", enc.blob, lo.v, d * d)
-            gguf_read_tensor_f32(m, bytes, "{p}.attn_out.weight", enc.blob, lo.o, d * d)
-            gguf_read_tensor_f32(m, bytes, "{p}.per_dim_scale.weight", enc.blob, lo.per_dim_scale, enc.d_head)
-            gguf_read_tensor_f32(m, bytes, "{p}.attn_k_rel.weight", enc.blob, lo.attn_k_rel, d * d)
-            gguf_read_tensor_f32(m, bytes, "{p}.attn_post_norm.weight", enc.blob, lo.attn_post_norm, d)
+            gguf_read_tensor_f32(m, bytes, "{p}.ffn_norm.weight", st.blob, lo.ff_norm, d)
+            gguf_read_tensor_f32(m, bytes, "{p}.ffn_up.weight", st.blob, lo.ff_up, ff * d)
+            gguf_read_tensor_f32(m, bytes, "{p}.ffn_down.weight", st.blob, lo.ff_down, d * ff)
+            gguf_read_tensor_f32(m, bytes, "{p}.ffn_post_norm.weight", st.blob, lo.ff_post_norm, d)
+            gguf_read_tensor_f32(m, bytes, "{p}.attn_pre_norm.weight", st.blob, lo.attn_pre_norm, d)
+            gguf_read_tensor_f32(m, bytes, "{p}.attn_q.weight", st.blob, lo.q, d * d)
+            gguf_read_tensor_f32(m, bytes, "{p}.attn_k.weight", st.blob, lo.k, d * d)
+            gguf_read_tensor_f32(m, bytes, "{p}.attn_v.weight", st.blob, lo.v, d * d)
+            gguf_read_tensor_f32(m, bytes, "{p}.attn_out.weight", st.blob, lo.o, d * d)
+            gguf_read_tensor_f32(m, bytes, "{p}.per_dim_scale.weight", st.blob, lo.per_dim_scale, st.e.d_head)
+            gguf_read_tensor_f32(m, bytes, "{p}.attn_k_rel.weight", st.blob, lo.attn_k_rel, d * d)
+            gguf_read_tensor_f32(m, bytes, "{p}.attn_post_norm.weight", st.blob, lo.attn_post_norm, d)
             // 🔑 conv_norm / norm_conv are name-swapped in the GGUF (upstream tensor_mapping.py):
             // the PRE-conv RMSNorm reads the tensor named "conv_norm", the POST-depthwise one "norm_conv"
-            gguf_read_tensor_f32(m, bytes, "{p}.conv_norm.weight", enc.blob, lo.norm_conv, d)
-            gguf_read_tensor_f32(m, bytes, "{p}.conv_pw1.weight", enc.blob, lo.conv_pw1, 2l * d * d)
-            gguf_read_tensor_f32(m, bytes, "{p}.conv_dw.weight", enc.blob, lo.conv_dw, 5l * d)
-            gguf_read_tensor_f32(m, bytes, "{p}.norm_conv.weight", enc.blob, lo.conv_norm, d)
-            gguf_read_tensor_f32(m, bytes, "{p}.conv_pw2.weight", enc.blob, lo.conv_pw2, d * d)
-            gguf_read_tensor_f32(m, bytes, "{p}.ffn_norm_1.weight", enc.blob, lo.ff_norm_1, d)
-            gguf_read_tensor_f32(m, bytes, "{p}.ffn_up_1.weight", enc.blob, lo.ff_up_1, ff * d)
-            gguf_read_tensor_f32(m, bytes, "{p}.ffn_down_1.weight", enc.blob, lo.ff_down_1, d * ff)
-            gguf_read_tensor_f32(m, bytes, "{p}.ffn_post_norm_1.weight", enc.blob, lo.ff_post_norm_1, d)
-            gguf_read_tensor_f32(m, bytes, "{p}.ln2.weight", enc.blob, lo.ln2, d)
+            gguf_read_tensor_f32(m, bytes, "{p}.conv_norm.weight", st.blob, lo.norm_conv, d)
+            gguf_read_tensor_f32(m, bytes, "{p}.conv_pw1.weight", st.blob, lo.conv_pw1, 2l * d * d)
+            gguf_read_tensor_f32(m, bytes, "{p}.conv_dw.weight", st.blob, lo.conv_dw, 5l * d)
+            gguf_read_tensor_f32(m, bytes, "{p}.norm_conv.weight", st.blob, lo.conv_norm, d)
+            gguf_read_tensor_f32(m, bytes, "{p}.conv_pw2.weight", st.blob, lo.conv_pw2, d * d)
+            gguf_read_tensor_f32(m, bytes, "{p}.ffn_norm_1.weight", st.blob, lo.ff_norm_1, d)
+            gguf_read_tensor_f32(m, bytes, "{p}.ffn_up_1.weight", st.blob, lo.ff_up_1, ff * d)
+            gguf_read_tensor_f32(m, bytes, "{p}.ffn_down_1.weight", st.blob, lo.ff_down_1, d * ff)
+            gguf_read_tensor_f32(m, bytes, "{p}.ffn_post_norm_1.weight", st.blob, lo.ff_post_norm_1, d)
+            gguf_read_tensor_f32(m, bytes, "{p}.ln2.weight", st.blob, lo.ln2, d)
             // clamp ranges of the clamped matmuls
-            var lc = enc.layers[l]
+            var lc = st.layers[l]
             lc.c_ff_up = g4a_read_clamp(m, bytes, "{p}.ffn_up")
             lc.c_ff_down = g4a_read_clamp(m, bytes, "{p}.ffn_down")
             lc.c_q = g4a_read_clamp(m, bytes, "{p}.attn_q")
@@ -421,35 +480,35 @@ def load_gemma4a_encoder_(path : string) : Gemma4aEncoder {
             lc.c_pw2 = g4a_read_clamp(m, bytes, "{p}.conv_pw2")
             lc.c_ff_up_1 = g4a_read_clamp(m, bytes, "{p}.ffn_up_1")
             lc.c_ff_down_1 = g4a_read_clamp(m, bytes, "{p}.ffn_down_1")
-            enc.layers[l] = lc
+            st.layers[l] = lc
         }
     }
     fclose(f)
 
     // HTK filterbank, 512 Hann (320 at the front, zeros to 512), DFT twiddles, RPE table, ones
-    enc.filters <- g4a_htk_filterbank(enc.n_mel, G4A_N_FFT, AUDIO_SAMPLE_RATE)
-    enc.hann |> resize(int(G4A_N_FFT))
+    st.filters <- g4a_htk_filterbank(st.e.n_mel, G4A_N_FFT, AUDIO_SAMPLE_RATE)
+    st.hann |> resize(int(G4A_N_FFT))
     for (i in range64(G4A_WINDOW)) {
-        enc.hann[i] = float(0.5lf - 0.5lf * double(cos(float(2.0lf * DBL_PI * double(i) / double(G4A_WINDOW)))))
+        st.hann[i] = float(0.5lf - 0.5lf * double(cos(float(2.0lf * DBL_PI * double(i) / double(G4A_WINDOW)))))
     }
-    enc.twiddles <- build_dft_twiddles(G4A_N_FFT)
-    let num_ts = enc.d_model / 2l
+    st.twiddles <- build_dft_twiddles(G4A_N_FFT)
+    let num_ts = st.e.d_model / 2l
     let log_ts_inc = log(10000.0) / float(max(num_ts - 1l, 1l))
-    enc.pos_emb |> resize(int((G4A_PAST + 1l) * enc.d_model))
+    st.pos_emb |> resize(int((G4A_PAST + 1l) * st.e.d_model))
     for (pp in range64(G4A_PAST + 1l)) {
         let position = float(G4A_PAST - pp)
         for (i in range64(num_ts)) {
             let inv_ts = exp(-float(i) * log_ts_inc)
             let scaled = position * inv_ts
-            enc.pos_emb[pp * enc.d_model + i] = sin(scaled)
-            enc.pos_emb[pp * enc.d_model + i + num_ts] = cos(scaled)
+            st.pos_emb[pp * st.e.d_model + i] = sin(scaled)
+            st.pos_emb[pp * st.e.d_model + i + num_ts] = cos(scaled)
         }
     }
-    enc.ones |> resize(int(enc.proj_dim))
-    for (i in range64(enc.proj_dim)) {
-        enc.ones[i] = 1.0
+    st.ones |> resize(int(st.e.proj_dim))
+    for (i in range64(st.e.proj_dim)) {
+        st.ones[i] = 1.0
     }
-    return <- enc
+    return <- st
 }
 
 // ===== mel (gemma4a: no preemphasis, natural-log magnitude, HTK, no per-feature norm) =====
@@ -492,7 +551,7 @@ def gemma4a_log_mel(enc : Gemma4aEncoder; samples : array<float> | #; off, len :
         }
     }
     g4a_ensure(st.reim, n_len * n_bins * 2l)
-    gemm_f32(unsafe(addr(st.reim[0])), unsafe(addr(st.xw[0])), unsafe(addr(enc.twiddles[0])),
+    gemm_f32(unsafe(addr(st.reim[0])), unsafe(addr(st.xw[0])), plane_at(enc.twiddles, 0l),
              n_len, G4A_N_FFT, n_bins * 2l)
 
     g4a_ensure(st.power, n_bins)
@@ -593,7 +652,7 @@ def private g4a_rms_rows(enc : Gemma4aEncoder; var dst : array<float>; src : arr
     unsafe {
         var dp = addr(dst[0])
         let sp = addr<float const?>(src[0])
-        let wp = addr<float const?>(enc.blob[w_off])
+        let wp = plane_at(enc.blob, w_off)
         for (r in range64(npos)) {
             rmsnorm(dp + r * d, sp + r * d, wp, d, enc.eps)
         }
@@ -753,7 +812,7 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
     add_bias_rows(st.tmp, enc.blob, enc.outproj_b, enc.proj_dim, npos)
     unsafe {
         var tp = addr(st.tmp[0])
-        let wp = addr<float const?>(enc.ones[0])
+        let wp = plane_at(enc.ones, 0l)
         for (r in range64(npos)) {
             rmsnorm(tp + r * enc.proj_dim, tp + r * enc.proj_dim, wp, enc.proj_dim, enc.eps)
         }

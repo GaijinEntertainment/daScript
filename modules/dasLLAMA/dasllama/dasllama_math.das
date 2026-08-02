@@ -625,6 +625,19 @@ def matmul_batch(var y : array<float>; w : PlaneF; woff : int64; x : array<float
     matmul_batch_at(y, plane_at(w, woff), x, n, d, ntok)
 }
 
+//! Both sides borrowed — a baked table (gemma4a's positional embedding) driving a baked weight.
+def matmul_batch(var y : array<float>; w : PlaneF; woff : int64; x : PlaneF; n, d, ntok : int64) {
+    unsafe {
+        var yp = addr(y[0])
+        let wp = plane_at(w, woff)
+        let xp = plane_at(x, 0l)
+        if (g_fp_override_active && ntok >= g_fp_override_min_ntok && invoke(g_mm_fp_batch_override, yp, wp, xp, n, d, ntok)) {
+            return
+        }
+        matmul_batch_core(yp, wp, xp, n, d, ntok)
+    }
+}
+
 //! Batched matvec against a native-BF16 weight [d x n] at halfword offset woff: Y [ntok x d]
 //! token-major. Bit-for-bit matmul_batch's fp32 expand at half the weight read (dot_bf16's widen
 //! is exact). Decode (ntok == 1) takes the GEMV chunk shaper.

@@ -887,6 +887,11 @@ def mm_blob_b(var y : array<float>; blob : PlaneF; woff : int64; x : array<float
     matmul_batch(y, blob, woff, x, n, d, npos)
 }
 
+//! Both sides borrowed — the activation is itself a baked table.
+def mm_blob_b(var y : array<float>; blob : PlaneF; woff : int64; x : PlaneF; n, d, npos : int64) {
+    matmul_batch(y, blob, woff, x, n, d, npos)
+}
+
 // ===== tower Q8 rail (parakeet's v1 recipe: whole-blob Q8_0 image + per-GEMM-region repack) =====
 
 // repack one GEMM region for the active backend (scales index at woff/32 ⇒ woff must be
