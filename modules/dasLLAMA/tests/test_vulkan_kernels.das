@@ -2424,3 +2424,226 @@ def test_vkd_q8_gemv_pair(t0 : T?) {
         }
     }
 }
+
+[test]
+def test_vkd_cvt_family(t0 : T?) {
+    t0 |> run("dn requant + cvt/act-f16 class twins == the shipped kernels (bit-exact)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_cls_dn_rq()) {
+                feint("no Vulkan device — skipping\n")
+                return
+            }
+            // dn_requant: src floats at an offset -> Q8_0 words + scales (device-gated on dn_shared_ok)
+            if (key_exists(g_pipe_access, intptr(boost_value_to_vk(g_gpu.dn_rq_pipeline)))) {
+                let nblk = 24
+                let inbase = 64
+                var srch : array<float>
+                srch |> resize(inbase + nblk * 32)
+                for (i in range(inbase + nblk * 32)) {
+                    srch[i] = float((i * 37) % 113) * 0.04 - 2.2
+                }
+                let src_bytes = int64(inbase + nblk * 32) * 4l
+                let q_bytes = int64(nblk) * 32l
+                let s_bytes = int64(nblk) * 4l
+                let srcd = make_device_buf(src_bytes)
+                let qd1 = make_device_buf(q_bytes)
+                let sd1 = make_device_buf(s_bytes)
+                let qd2 = make_device_buf(q_bytes)
+                let sd2 = make_device_buf(s_bytes)
+                var meta = make_host_buf(META_BYTES, false, [cached = false])
+                var host = make_host_buf(q_bytes + s_bytes, true, [cached = true])
+                var q_old : array<uint>
+                var q_cls : array<uint>
+                var s_old : array<float>
+                var s_cls : array<float>
+                q_old |> resize(nblk * 8)
+                q_cls |> resize(nblk * 8)
+                s_old |> resize(nblk)
+                s_cls |> resize(nblk)
+                let wgs = (nblk * 8 + 255) / 256
+                unsafe {
+                    upload_region_at(srcd, 0l, addr<uint8 const?>(srch[0]), src_bytes)
+                    var mp = reinterpret<uint?>(meta.mapped)
+                    mp[10] = uint(inbase)
+                    mp[18] = uint(nblk)
+                    // the SHIPPED kernel: src floats@0, meta@2, quant words@3, scales@4
+                    var so = vk_set6(srcd, meta.buf, meta.buf, qd1, sd1, meta.buf,
+                        src_bytes, META_BYTES, META_BYTES, q_bytes, s_bytes, META_BYTES,
+                        fixed_array(1u, 0u, 0u, 4u, 8u, 0u))
+                    var raw = alloc_cmd()
+                    let begin = VkCommandBufferBeginInfo()
+                    vk_check(vkBeginCommandBuffer(raw, begin), null)
+                    var h : VkHaz
+                    hz_dispatch(raw, h, weak_copy(g_gpu.dn_rq_pipeline), so, uint(wgs))
+                    vhz_dep(raw, h, 4u, 0u, true)
+                    cmd_copy_whole(raw, qd1, host.buf, q_bytes)
+                    cmd_copy_range(raw, sd1, 0l, host.buf, q_bytes, s_bytes)
+                    vk_check(vkEndCommandBuffer(raw), null)
+                    submit_wait(raw)
+                    memcpy(addr<void?>(q_old[0]), host.mapped, q_bytes)
+                    memcpy(addr<void?>(s_old[0]), reinterpret<void?>(intptr(host.mapped) + uint64(q_bytes)), s_bytes)
+                    var sc = set_cls_dn_rq(fixed_array(srcd, qd2, sd2),
+                        fixed_array(src_bytes, q_bytes, s_bytes),
+                        fixed_array(1u, 4u, 8u))
+                    var raw2 = alloc_cmd()
+                    vk_check(vkBeginCommandBuffer(raw2, begin), null)
+                    var h2 : VkHaz
+                    var pc = RqArgs(inbase = uint(inbase), nblk = uint(nblk))
+                    enc_cls_dn_rq(raw2, h2, sc, pc, int64(wgs))
+                    vhz_dep(raw2, h2, 4u, 0u, true)
+                    cmd_copy_whole(raw2, qd2, host.buf, q_bytes)
+                    cmd_copy_range(raw2, sd2, 0l, host.buf, q_bytes, s_bytes)
+                    vk_check(vkEndCommandBuffer(raw2), null)
+                    submit_wait(raw2)
+                    memcpy(addr<void?>(q_cls[0]), host.mapped, q_bytes)
+                    memcpy(addr<void?>(s_cls[0]), reinterpret<void?>(intptr(host.mapped) + uint64(q_bytes)), s_bytes)
+                }
+                var bad = 0
+                for (i in range(nblk * 8)) {
+                    if (q_old[i] != q_cls[i]) {
+                        bad++
+                    }
+                }
+                for (i in range(nblk)) {
+                    if (s_old[i] != s_cls[i]) {
+                        bad++
+                    }
+                }
+                t |> success(bad == 0, "dn_requant: class twin bit-exact ({bad} diverge)")
+                delete srch
+                delete q_old
+                delete q_cls
+                delete s_old
+                delete s_cls
+            } else {
+                feint("dn chain declined on this device — skipping dn_requant arm\n")
+            }
+            // the cm2-chain converters (mode 4 pipes): xf16 dequant, act-f16, f16 convert
+            if (key_exists(g_pipe_access, intptr(boost_value_to_vk(g_gpu.xf16_pipeline)))) {
+                verify(ensure_cls_xf16() && ensure_actf16_cls() && ensure_f16cvt_cls(),
+                    "class rails must engage when the shipped pipes exist")
+                let nwords = 512
+                let nelem = 2048
+                var xqh : array<uint>
+                var xsh : array<float>
+                var gh : array<float>
+                var uh : array<float>
+                xqh |> resize(nwords)
+                xsh |> resize(nwords / 8)
+                gh |> resize(nelem)
+                uh |> resize(nelem)
+                for (i in range(nwords)) {
+                    xqh[i] = hash_word(uint(i) * 7u + 11u)
+                }
+                for (i in range(nwords / 8)) {
+                    xsh[i] = 0.25 + float(i % 7) * 0.0625
+                }
+                for (i in range(nelem)) {
+                    gh[i] = float((i * 29) % 61) * 0.06 - 1.9
+                    uh[i] = float((i * 43) % 83) * 0.05 - 2.1
+                }
+                let xq_bytes = int64(nwords) * 4l
+                let xs_bytes = int64(nwords / 8) * 4l
+                let g_bytes = int64(nelem) * 4l
+                let h_bytes = int64(nelem) * 2l
+                let xqd = make_device_buf(xq_bytes)
+                let xsd = make_device_buf(xs_bytes)
+                let gd = make_device_buf(g_bytes)
+                let ud = make_device_buf(g_bytes)
+                let hd1 = make_device_buf(h_bytes)
+                let hd2 = make_device_buf(h_bytes)
+                var meta = make_host_buf(META_BYTES, false, [cached = false])
+                var host = make_host_buf(h_bytes, true, [cached = true])
+                var h_old : array<uint>
+                var h_cls : array<uint>
+                h_old |> resize(nelem / 2)
+                h_cls |> resize(nelem / 2)
+                for (arm in range(3)) {   // 0 = xf16 dequant, 1 = act-f16 (gelu), 2 = f16 convert
+                    unsafe {
+                        upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
+                        upload_region_at(xsd, 0l, addr<uint8 const?>(xsh[0]), xs_bytes)
+                        upload_region_at(gd, 0l, addr<uint8 const?>(gh[0]), g_bytes)
+                        upload_region_at(ud, 0l, addr<uint8 const?>(uh[0]), g_bytes)
+                        var mp = reinterpret<uint?>(meta.mapped)
+                        mp[0] = uint(nelem)
+                        mp[1] = 1u   // gelu arm of act_mul
+                        mp[3] = uint(nwords)
+                        var so : VkDescriptorSet
+                        if (arm == 0) {
+                            // xf16: out f16@0, meta@2, quant words@3, scales@4
+                            so = vk_set6(hd1, meta.buf, meta.buf, xqd, xsd, meta.buf,
+                                h_bytes, META_BYTES, META_BYTES, xq_bytes, xs_bytes, META_BYTES,
+                                fixed_array(1u, 0u, 0u, 4u, 8u, 0u))
+                        } elif (arm == 1) {
+                            // actf16: up@0, meta@2, out f16@3, gate@5
+                            so = vk_set6(ud, meta.buf, meta.buf, hd1, meta.buf, gd,
+                                g_bytes, META_BYTES, META_BYTES, h_bytes, META_BYTES, g_bytes,
+                                fixed_array(1u, 0u, 0u, 4u, 0u, 8u))
+                        } else {
+                            // f16cvt: src@0, meta@2, out f16@3
+                            so = vk_set6(ud, meta.buf, meta.buf, hd1, meta.buf, meta.buf,
+                                g_bytes, META_BYTES, META_BYTES, h_bytes, META_BYTES, META_BYTES,
+                                fixed_array(1u, 0u, 0u, 4u, 0u, 0u))
+                        }
+                        let wgs = arm == 0 ? (nwords + 255) / 256 : (nelem / 4 + 255) / 256
+                        var raw = alloc_cmd()
+                        let begin = VkCommandBufferBeginInfo()
+                        vk_check(vkBeginCommandBuffer(raw, begin), null)
+                        var h : VkHaz
+                        hz_dispatch(raw, h,
+                            arm == 0 ? weak_copy(g_gpu.xf16_pipeline)
+                                : (arm == 1 ? weak_copy(g_gpu.actf16_pipeline) : weak_copy(g_gpu.f16cvt_pipeline)),
+                            so, uint(wgs))
+                        vhz_dep(raw, h, 4u, 0u, true)
+                        cmd_copy_whole(raw, hd1, host.buf, h_bytes)
+                        vk_check(vkEndCommandBuffer(raw), null)
+                        submit_wait(raw)
+                        memcpy(addr<void?>(h_old[0]), host.mapped, h_bytes)
+                        var sc : VkDescriptorSet
+                        var raw2 = alloc_cmd()
+                        vk_check(vkBeginCommandBuffer(raw2, begin), null)
+                        var h2 : VkHaz
+                        if (arm == 0) {
+                            sc = set_cls_xf16(fixed_array(xqd, xsd, hd2),
+                                fixed_array(xq_bytes, xs_bytes, h_bytes), fixed_array(1u, 2u, 4u))
+                            var pc = RqArgs(inbase = 0u, nblk = uint(nwords))
+                            enc_cls_xf16(raw2, h2, sc, pc, int64(wgs))
+                        } elif (arm == 1) {
+                            sc = set_actf16_cls(fixed_array(gd, ud, hd2),
+                                fixed_array(g_bytes, g_bytes, h_bytes), fixed_array(1u, 2u, 4u))
+                            var pc = ActArgs(nelem = uint(nelem), gelu = 1u, nblk = 0u)
+                            enc_actf16_cls(raw2, h2, sc, pc, int64(wgs))
+                        } else {
+                            sc = set_f16cvt_cls(fixed_array(ud, hd2),
+                                fixed_array(g_bytes, h_bytes), fixed_array(1u, 4u))
+                            var pc = ActArgs(nelem = uint(nelem), gelu = 0u, nblk = 0u)
+                            enc_f16cvt_cls(raw2, h2, sc, pc, int64(wgs))
+                        }
+                        vhz_dep(raw2, h2, 4u, 0u, true)
+                        cmd_copy_whole(raw2, hd2, host.buf, h_bytes)
+                        vk_check(vkEndCommandBuffer(raw2), null)
+                        submit_wait(raw2)
+                        memcpy(addr<void?>(h_cls[0]), host.mapped, h_bytes)
+                    }
+                    var bad = 0
+                    for (i in range(nelem / 2)) {
+                        if (h_old[i] != h_cls[i]) {
+                            bad++
+                        }
+                    }
+                    t |> success(bad == 0, "cvt arm {arm}: class twin bit-exact ({bad} of {nelem / 2} words diverge)")
+                }
+                delete xqh
+                delete xsh
+                delete gh
+                delete uh
+                delete h_old
+                delete h_cls
+            } else {
+                feint("cm2 chain pipes not built (DASLLAMA_COOPMAT=cm2 only) — skipping cvt arms\n")
+            }
+        } else {
+            feint("dasVulkan not present — skipping\n")
+        }
+    }
+}
