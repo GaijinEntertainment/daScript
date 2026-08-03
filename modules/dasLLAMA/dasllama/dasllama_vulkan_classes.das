@@ -523,6 +523,183 @@ class DnConv {
     }
 }
 
+// ===== deltanet: the fused decode step =====
+
+struct DnStepArgs {
+    cd : uint
+    kd : uint
+    nkh : uint
+    ds : uint
+    dconv : uint
+    beta_off : uint
+    g_off : uint
+    taps_off : uint
+    wnorm_off : uint
+    a_off : uint
+    dt_off : uint
+    hist_off : uint
+    par : uint     // ring parity (the old kernel smuggled it through a float scale slot)
+    eps : float
+    qscale : float
+}
+
+// the decode-step FUSED chain (one workgroup per v-head): conv preamble -> chunk-length-1 delta
+// rule IN PLACE on the persistent state -> gated out-norm -> the head's Q8_0 requant. The conv
+// ring is parity-double-buffered inside the smalls member.
+[vk_dispatch(name = "dn_step_cls", grid = "nvh", params = "nvh : int64")]
+class DnStepFused {
+    @ssbo @binding = 0 proj : array<float>     // the fresh projection row (+ z rows at cd)
+    @ssbo @binding = 1 state : array<float>    // the persistent per-head f32 state (in place)
+    @ssbo @binding = 2 smalls : array<float>   // beta/g/taps/wnorm/a/dt + the conv HISTORY ring (rw)
+    @ssbo @binding = 3 outs : array<float>     // the head's Q8_0 scales
+    @ssbo @binding = 4 outq : array<uint>      // ... and quant words
+    @push_constant pa : DnStepArgs
+    @workgroup dq : float[128]
+    @workgroup dk : float[128]
+    @workgroup dv : float[128]
+    @workgroup dvn : float[128]
+    @workgroup dout : float[128]
+    @workgroup ds8 : float[8]
+
+    [spirv_kernel(local_size_x = 256, name = "dn_step_cls_spv")]
+    def run {   // nolint:STYLE037,STYLE038 — the verbatim fused chain, parity-locked to the shipped kernel
+        let h = gl_WorkGroupID.x
+        let ds = pa.ds
+        let taps = pa.dconv - 1u
+        let rrb = pa.hist_off + pa.par * pa.cd * taps
+        let wrb = pa.hist_off + (1u - pa.par) * pa.cd * taps
+        let tid = gl_LocalInvocationID.x
+        let kh = h % pa.nkh
+        var e = tid
+        while (e < 3u * ds) {
+            let sl = e / ds
+            let j = e % ds
+            let ch = (sl == 0u ? kh * ds : (sl == 1u ? pa.kd + kh * ds : 2u * pa.kd + h * ds)) + j
+            let fresh = proj[ch]
+            var acc = fresh * smalls[pa.taps_off + ch * pa.dconv + taps]
+            var k = 0u
+            while (k < taps) {
+                acc += smalls[rrb + ch * taps + k] * smalls[pa.taps_off + ch * pa.dconv + k]
+                k++
+            }
+            if (sl == 2u || h < pa.nkh) {   // this head owns the channel's ring advance
+                k = 0u
+                while (k + 1u < taps) {
+                    smalls[wrb + ch * taps + k] = smalls[rrb + ch * taps + k + 1u]
+                    k++
+                }
+                smalls[wrb + ch * taps + taps - 1u] = fresh
+            }
+            let sv = acc / (1.0 + exp(-acc))
+            if (sl == 0u) {
+                dq[j] = sv
+            } elif (sl == 1u) {
+                dk[j] = sv
+            } else {
+                dv[j] = sv
+            }
+            e += 256u
+        }
+        barrier()
+        // q/k L2 scales + the per-token beta/g transforms — tiny serial lanes (ds is 128-class)
+        if (tid < 2u) {
+            var sum = 0.0
+            var j = 0u
+            while (j < ds) {
+                let v = tid == 0u ? dq[j] : dk[j]
+                sum += v * v
+                j++
+            }
+            ds8[tid] = (1.0 / max(sqrt(sum), pa.eps)) * (tid == 0u ? pa.qscale : 1.0)
+        } elif (tid == 2u) {
+            let graw = smalls[pa.g_off + h] + smalls[pa.dt_off + h]
+            ds8[2u] = exp(smalls[pa.a_off + h] * (graw > 20.0 ? graw : log(1.0 + exp(graw))))
+            ds8[3u] = 1.0 / (1.0 + exp(-smalls[pa.beta_off + h]))
+        }
+        barrier()
+        e = tid
+        while (e < ds) {
+            dq[e] = dq[e] * ds8[0u]
+            dk[e] = dk[e] * ds8[1u]
+            e += 256u
+        }
+        barrier()
+        if (tid == 0u) {
+            var qk = 0.0
+            var j = 0u
+            while (j < ds) {
+                qk += dq[j] * dk[j]
+                j++
+            }
+            ds8[4u] = qk
+        }
+        barrier()
+        // the delta rule at chunk length 1, state in place
+        let sbase = h * ds * ds
+        let eg = ds8[2u]
+        let bt = ds8[3u]
+        if (tid < ds) {
+            var ks = 0.0
+            var qs = 0.0
+            var i = 0u
+            while (i < ds) {
+                let sv = state[sbase + i * ds + tid]
+                ks += dk[i] * sv
+                qs += dq[i] * sv
+                i++
+            }
+            let vn = bt * (dv[tid] - eg * ks)
+            dvn[tid] = vn
+            dout[tid] = eg * qs + ds8[4u] * vn
+        }
+        barrier()
+        e = tid
+        while (e < ds * ds) {
+            state[sbase + e] = state[sbase + e] * eg + dk[e / ds] * dvn[e % ds]
+            e += 256u
+        }
+        if (tid == 0u) {
+            var sum = 0.0
+            var j = 0u
+            while (j < ds) {
+                sum += dout[j] * dout[j]
+                j++
+            }
+            ds8[5u] = 1.0 / sqrt(sum / float(ds) + pa.eps)
+        }
+        barrier()
+        e = tid
+        while (e < ds) {
+            let zv = proj[pa.cd + h * ds + e]
+            let xn = dout[e] * ds8[5u] * smalls[pa.wnorm_off + e]
+            dout[e] = xn * (zv / (1.0 + exp(-zv)))
+            e += 256u
+        }
+        barrier()
+        // the head's Q8_0 blocks (ds % 32 asserted host-side)
+        if (tid < ds / 32u) {
+            let gb = (h * ds) / 32u + tid
+            let jb = tid * 32u
+            var amax = 0.0
+            for (i in range(32)) {
+                amax = max(amax, abs(dout[jb + uint(i)]))
+            }
+            let d = amax / 127.0
+            let id = d != 0.0 ? 1.0 / d : 0.0
+            outs[gb] = d
+            for (wi in range(8)) {
+                let wj = jb + uint(wi) * 4u
+                var word = 0u
+                for (j in range(4)) {
+                    let q = int(round(dout[wj + uint(j)] * id))
+                    word = word | ((uint(q) & 0xFF) << (uint(j) * 8u))
+                }
+                outq[gb * 8u + uint(wi)] = word
+            }
+        }
+    }
+}
+
 // ===== decode attention =====
 
 struct DaAttnArgs {
