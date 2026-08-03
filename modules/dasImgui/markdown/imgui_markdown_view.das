@@ -977,13 +977,18 @@ def public markdown_view_node_above(doc : RichDocument const;
     return best
 }
 
-def private nearest_line_point(layout : TextFlowLayout const;
+def private nearest_line_point(entry : MarkdownNodeViewCache const;
                                local : float2) : float2 {
-    // clamp an off-glyph point into the nearest fragment; the LINE dominates
+    // clamp an off-glyph point into the nearest fragment; the LINE dominates.
+    // fragment rects are unaligned layout coords while centered/right lines
+    // DRAW shifted by the alignment offset - unshift the probe per line
+    let layout & = unsafe(entry.layout)
     var best = float2(-1.0f, -1.0f)
     var best_cost = 3.0e38f
-    for (line in layout.lines) {
+    for (line_index in range(length(layout.lines))) {
+        let line = layout.lines[line_index]
         continue if (line.fragment_count <= 0)
+        let lx = local.x - markdown_line_alignment_offset(entry, line_index)
         let line_bottom = line.y + line.height
         let y_cost = (local.y < line.y ? line.y - local.y
             : (local.y > line_bottom ? local.y - line_bottom : 0.0f))
@@ -991,13 +996,13 @@ def private nearest_line_point(layout : TextFlowLayout const;
                 line.first_fragment + line.fragment_count)) {
             let fragment = layout.fragments[index]
             continue if (fragment.is_control)
-            let x_cost = (local.x < fragment.rect.x ? fragment.rect.x - local.x
-                : (local.x > fragment.rect.z ? local.x - fragment.rect.z : 0.0f))
+            let x_cost = (lx < fragment.rect.x ? fragment.rect.x - lx
+                : (lx > fragment.rect.z ? lx - fragment.rect.z : 0.0f))
             let cost = y_cost * 1000.0f + x_cost
             if (cost < best_cost) {
                 best_cost = cost
                 best = float2(
-                    clamp(local.x, fragment.rect.x, fragment.rect.z - 0.5f),
+                    clamp(lx, fragment.rect.x, fragment.rect.z - 0.5f),
                     clamp(local.y, fragment.rect.y + 0.5f, fragment.rect.w - 0.5f))
             }
         }
@@ -1500,7 +1505,7 @@ def private render_inline(doc : RichDocument const; node_index : int; // nolint:
             && IsMouseHoveringRect(origin,
                 origin + float2(available, max(layout.size.y, line_height)), true)) {
         // an off-glyph CLICK inside the block lands at the nearest line caret
-        probe = nearest_line_point(layout, GetMousePos() - origin)
+        probe = nearest_line_point(cache, GetMousePos() - origin)
         probe_valid = probe.x >= 0.0f
     }
     var hit = TextFlowHit()
