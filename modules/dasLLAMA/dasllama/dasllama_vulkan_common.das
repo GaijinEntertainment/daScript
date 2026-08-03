@@ -236,6 +236,17 @@ struct VkStack {
     batch_tile : int64       // the tile edge the last fill_batch_meta routed — the bind must match
     batch_aligned : bool     // ... and whether that fill qualified for the guard-free aligned-L pipe
     batch_made : bool
+    // class-rail batch state: the bound-plane args (for lazy per-variant set builds), the last
+    // fill's map offset, and per-router-variant sets (cleared on rebind; die with the stack)
+    batch_xs : uint64
+    batch_xq_bytes : int64
+    batch_xs_bytes : int64
+    batch_y_bytes : int64
+    batch_xbit : uint
+    batch_ybit : uint
+    batch_map_off : int64
+    batch_cls_sets : VkDescriptorSet[8]
+    batch_cls_ready : uint
     // classifier dispatch state (lazy — set up on the first cls GEMV against this stack)
     cls_set : VkDescriptorSet
     cls_meta_dev : uint64    // device meta — vocab-row dispatches run ~150K subgroups, each
@@ -454,6 +465,8 @@ struct GpuState {
     batch_y2_dev : uint64    // up output plane (the fused pair's second write target)
     batch_y1 : HostBuf       // host-cached readback staging for batch_y1_dev
     batch_actrq_set : VkDescriptorSet   // batch twin of FfnCmd's fused act+requant set (y1/y2 planes)
+    batch_actrq_k_set : VkDescriptorSet // ... the Q8_K form (class sets are per-class)
+    batch_acts_cls_ready : bool         // both act sets built (by prefill; reset on drop)
     batch_cmd : VkCommandBuffer   // one reusable batch cmd buffer, re-recorded per submit
     batch_ready : bool
     // cm2 batch state (lazy — first q8n batch dispatch creates it; mode 4 only)
@@ -1498,6 +1511,7 @@ def vk_drop_model_state {
     g_gpu.da_ready = false
     g_gpu.ffn_ready = false
     g_gpu.batch_ready = false
+    g_gpu.batch_acts_cls_ready = false
     g_gpu.comb_ready = false
     g_gpu.stream_ready = false
     g_gpu.dn_ready = false
@@ -2598,10 +2612,8 @@ def ensure_batch_state {
     g_gpu.batch_y2_dev = make_device_buf(BATCH_Y_BYTES)
     g_gpu.batch_y1 = make_host_buf(BATCH_Y_BYTES, true, [cached = true])
     g_gpu.batch_cmd = alloc_cmd()
-    // fused act+requant bindings: up@0, params@2, hq/hs@3/4, gate@5; binding 1 is unused filler
-    g_gpu.batch_actrq_set = vk_set6(g_gpu.batch_y2_dev, g_gpu.batch_xs_dev, g_gpu.ffn_meta_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_gpu.batch_y1_dev,
-        BATCH_Y_BYTES, BATCH_XS_BYTES, FFN_META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, BATCH_Y_BYTES,
-        fixed_array(VHB_Y2, 0u, VHB_META, VHB_HQ, VHB_HQ, VHB_Y1))
+    // the fused act+requant class sets build in dasllama_vulkan_prefill (this module cannot
+    // require the classes module)
     g_gpu.resident_bytes += BATCH_XQ_BYTES + BATCH_XS_BYTES
     g_gpu.batch_ready = true
     to_log(LOG_INFO, "dasLLAMA vulkan tier: prefill batch tier engaged\n")
