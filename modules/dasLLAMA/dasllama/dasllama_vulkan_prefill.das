@@ -84,6 +84,13 @@ def private pf_setup {
     }
     let mirbytes = g_rd.n_layers * g_rd.seq_cap * kvd * 4l
     let normbytes = g_rd.norms_bytes
+    // the non-GEMM roles ride the class rail: their sets are per-class, params ride push
+    let fa128s = g_gpu.has_coopmat && g_rd.head_size == 128l && vk_fa_on()
+    verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_rope_kv_b_cls()
+        && (fa128s ? ensure_da_attn_b_h128_cls() : ensure_da_attn_b_cls())
+        && ensure_q8_actrq_cls() && (!g_rd.qk_norm || ensure_qk_rms_cls())
+        && (!any6 || (ensure_f16cvt_cls() && ensure_actf16_cls())),
+        "vk prefill: the class rails must engage on a live device")
     for (l in range64(g_rd.n_layers)) {
         var L & = unsafe(g_rd.layers[l])
         let b = int(l * PF_ROLES)
@@ -111,9 +118,12 @@ def private pf_setup {
         let hqn = dn6 ? np * hid * 2l : np * hid
         let hsn = dn6 ? 256l : np * (hid / 32l) * 4l
         // 0 quant_xb: pf_xb -> pf_xq/pf_xs (fmt 6: f16 convert -> pf_xf)
-        pf_bind(b + 0, g_rd.pf_xb, g_rd.dummy, g_rd.pf_meta[b + 0].buf, xqb, xsb, g_rd.dummy,
-            np * dim * 4l, 256l, BATCH_META_BYTES, xqn, xsn, 256l,
-            fixed_array(VHZ_XB, 0u, 0u, VHZ_XQ, VHZ_XQ, 0u))
+        g_rd.pf_sets[b + 0] = (qkv6
+            ? set_f16cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf),
+                fixed_array(np * dim * 4l, np * dim * 2l), fixed_array(VHZ_XB, VHZ_XQ))
+            : set_cls_dn_rq(fixed_array(g_rd.pf_xb, g_rd.pf_xq, g_rd.pf_xs),
+                fixed_array(np * dim * 4l, np * dim, np * (dim / 32l) * 4l),
+                fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ)))
         // 1/2/3 q/k/v batch GEMM: arena planes, pf_xq/pf_xs act, -> pf_q / pf_kv(k@0) / pf_kv(v@np*kvd)
         pf_bind(b + 1, pq.wq, pq.ws, g_rd.pf_meta[b + 1].buf, xqb, xsb, g_rd.pf_q,
             pq.wqb, pq.wsb, BATCH_META_BYTES, xqn, xsn, np * qd * 4l,
@@ -124,30 +134,43 @@ def private pf_setup {
         pf_bind(b + 3, pv.wq, pv.ws, g_rd.pf_meta[b + 3].buf, xqb, xsb, g_rd.pf_v,
             pv.wqb, pv.wsb, BATCH_META_BYTES, xqn, xsn, np * kvd * 4l,
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_VST))
-        // 4 rope+store: q@0 in place, Kmir@1, Vmir@3, cos@4, kv@5
-        pf_bind(b + 4, g_rd.pf_q, g_rd.k_mirror, g_rd.pf_meta[b + 4].buf, g_rd.v_mirror, g_rd.pf_cos, g_rd.pf_kv,
-            np * qd * 4l, mirbytes, BATCH_META_BYTES, mirbytes, np * g_rd.head_size * 4l, np * 2l * kvd * 4l,
-            fixed_array(VHZ_Q, VHZ_MIR, 0u, VHZ_MIR, VHZ_COS, VHZ_KVK | VHZ_KVV))
-        // 5 attn: q@0, Kmir@1, Vmir@3, scale@4, out@5
-        pf_bind(b + 5, g_rd.pf_q, g_rd.k_mirror, g_rd.pf_meta[b + 5].buf, g_rd.v_mirror, g_rd.scal_dev, g_rd.pf_attn,
-            np * qd * 4l, mirbytes, BATCH_META_BYTES, mirbytes, 64l, np * qd * 4l,
-            fixed_array(VHZ_Q, VHZ_MIR, 0u, VHZ_MIR, 0u, VHZ_ATT))
+        // 4 rope+store (class: q, kv, Kmir, Vmir, cos)
+        {
+            let rbufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_cos)
+            let rsizes = fixed_array(np * qd * 4l, np * 2l * kvd * 4l, mirbytes, mirbytes, np * g_rd.head_size * 4l)
+            g_rd.pf_sets[b + 4] = set_rope_kv_b_cls(rbufs, rsizes,
+                fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS))
+        }
+        // 5 attn (class: q, Kmir, Vmir, out) — the h128 coopmat twin when it serves this model
+        {
+            let abufs5 = fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_attn)
+            let asizes5 = fixed_array(np * qd * 4l, mirbytes, mirbytes, np * qd * 4l)
+            let agbits5 = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT)
+            g_rd.pf_sets[b + 5] = (fa128s ? set_da_attn_b_h128_cls(abufs5, asizes5, agbits5)
+                : set_da_attn_b_cls(abufs5, asizes5, agbits5))
+        }
         // 6 quant_at: pf_attn -> pf_aq/pf_as (fmt 6: f16 convert -> pf_af)
-        pf_bind(b + 6, g_rd.pf_attn, g_rd.dummy, g_rd.pf_meta[b + 6].buf, aqb, asb, g_rd.dummy,
-            np * qd * 4l, 256l, BATCH_META_BYTES, aqn, asn, 256l,
-            fixed_array(VHZ_ATT, 0u, 0u, VHZ_AQ, VHZ_AQ, 0u))
+        g_rd.pf_sets[b + 6] = (wo6
+            ? set_f16cvt_cls(fixed_array(g_rd.pf_attn, g_rd.pf_af),
+                fixed_array(np * qd * 4l, np * qd * 2l), fixed_array(VHZ_ATT, VHZ_AQ))
+            : set_cls_dn_rq(fixed_array(g_rd.pf_attn, g_rd.pf_aq, g_rd.pf_as),
+                fixed_array(np * qd * 4l, np * qd, np * (qd / 32l) * 4l),
+                fixed_array(VHZ_ATT, VHZ_AQ, VHZ_AQ)))
         // 7 wo GEMM -> pf_xb2
         pf_bind(b + 7, po.wq, po.ws, g_rd.pf_meta[b + 7].buf, aqb, asb, g_rd.pf_xb2,
             po.wqb, po.wsb, BATCH_META_BYTES, aqn, asn, np * dim * 4l,
             fixed_array(0u, 0u, 0u, VHZ_AQ, VHZ_AQ, VHZ_XB2))
-        // 8 addr_ffn: x += xb2, xb = rms_ffn
-        pf_bind(b + 8, g_rd.pf_x, g_rd.pf_xb2, g_rd.pf_meta[b + 8].buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.pf_xb,
-            np * dim * 4l, np * dim * 4l, BATCH_META_BYTES, normbytes, 64l, np * dim * 4l,
-            fixed_array(VHZ_X, VHZ_XB2, 0u, 0u, 0u, VHZ_XB))
+        // 8 addr_ffn (class: x, add partner, norms, xb out)
+        g_rd.pf_sets[b + 8] = set_cls_ar(fixed_array(g_rd.pf_x, g_rd.pf_xb2, g_rd.norms_dev, g_rd.pf_xb),
+            fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim * 4l),
+            fixed_array(VHZ_X, VHZ_XB2, 0u, VHZ_XB))
         // 9 quant_xb2: pf_xb -> pf_xq (fmt 6: f16 convert -> pf_xf)
-        pf_bind(b + 9, g_rd.pf_xb, g_rd.dummy, g_rd.pf_meta[b + 9].buf, gqb, gsb, g_rd.dummy,
-            np * dim * 4l, 256l, BATCH_META_BYTES, gqn, gsn, 256l,
-            fixed_array(VHZ_XB, 0u, 0u, VHZ_XQ, VHZ_XQ, 0u))
+        g_rd.pf_sets[b + 9] = (gu6
+            ? set_f16cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf),
+                fixed_array(np * dim * 4l, np * dim * 2l), fixed_array(VHZ_XB, VHZ_XQ))
+            : set_cls_dn_rq(fixed_array(g_rd.pf_xb, g_rd.pf_xq, g_rd.pf_xs),
+                fixed_array(np * dim * 4l, np * dim, np * (dim / 32l) * 4l),
+                fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ)))
         // 10/11 gate/up GEMM
         pf_bind(b + 10, p1.wq, p1.ws, g_rd.pf_meta[b + 10].buf, gqb, gsb, g_rd.pf_gate,
             p1.wqb, p1.wsb, BATCH_META_BYTES, gqn, gsn, np * hid * 4l,
@@ -155,34 +178,38 @@ def private pf_setup {
         pf_bind(b + 11, p3.wq, p3.ws, g_rd.pf_meta[b + 11].buf, gqb, gsb, g_rd.pf_up,
             p3.wqb, p3.wsb, BATCH_META_BYTES, gqn, gsn, np * hid * 4l,
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_UP))
-        // 12 actrq: up@0, ffn_meta@2, hq@3, hs@4, gate@5 (fmt 6: actf16 -> pf_hf@3)
-        pf_bind(b + 12, g_rd.pf_up, g_rd.dummy, g_gpu.ffn_meta_dev, hqb, hsb, g_rd.pf_gate,
-            np * hid * 4l, 256l, FFN_META_BYTES, dn6 ? hqn : BATCH_HQ_BYTES, dn6 ? hsn : BATCH_HS_BYTES, np * hid * 4l,
-            fixed_array(VHZ_UP, 0u, VHZ_META, VHZ_HQ, VHZ_HQ, VHZ_GATE))
+        // 12 actrq (class: gate, up, quants out, scales out; fmt 6: actf16 -> pf_hf)
+        g_rd.pf_sets[b + 12] = (dn6
+            ? set_actf16_cls(fixed_array(g_rd.pf_gate, g_rd.pf_up, g_rd.pf_hf),
+                fixed_array(np * hid * 4l, np * hid * 4l, np * hid * 2l),
+                fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ))
+            : set_q8_actrq_cls(fixed_array(g_rd.pf_gate, g_rd.pf_up, g_gpu.hq_dev, g_gpu.hs_dev),
+                fixed_array(np * hid * 4l, np * hid * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+                fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ)))
         // 13 down GEMM: hq/hs act -> pf_ffnout
         pf_bind(b + 13, p2.wq, p2.ws, g_rd.pf_meta[b + 13].buf, hqb, hsb, g_rd.pf_ffnout,
             p2.wqb, p2.wsb, BATCH_META_BYTES, hqn, hsn, np * dim * 4l,
             fixed_array(0u, 0u, 0u, VHZ_HQ, VHZ_HQ, VHZ_FFO))
-        // 14 addr_next: x += ffnout, xb = rms_att[l+1]|final
-        pf_bind(b + 14, g_rd.pf_x, g_rd.pf_ffnout, g_rd.pf_meta[b + 14].buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.pf_xb,
-            np * dim * 4l, np * dim * 4l, BATCH_META_BYTES, normbytes, 64l, np * dim * 4l,
-            fixed_array(VHZ_X, VHZ_FFO, 0u, 0u, 0u, VHZ_XB))
-        // 15 qk rmsnorm (qk_norm models): q@0 (pf_q), norm rows@3, eps@4, k@5 (pf_kv, k at 0)
+        // 14 addr_next (class): x += ffnout, xb = rms_att[l+1]|final
+        g_rd.pf_sets[b + 14] = set_cls_ar(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xb),
+            fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim * 4l),
+            fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB))
+        // 15 qk rmsnorm (qk_norm models; class: q, k rows, norm rows)
         if (g_rd.qk_norm) {
-            pf_bind(b + 15, g_rd.pf_q, g_rd.dummy, g_rd.pf_meta[b + 15].buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.pf_kv,
-                np * qd * 4l, 256l, BATCH_META_BYTES, normbytes, 64l, np * 2l * kvd * 4l,
-                fixed_array(VHZ_Q, 0u, 0u, 0u, 0u, VHZ_KVK))
+            g_rd.pf_sets[b + 15] = set_qk_rms_cls(fixed_array(g_rd.pf_q, g_rd.pf_kv, g_rd.norms_dev),
+                fixed_array(np * qd * 4l, np * 2l * kvd * 4l, normbytes),
+                fixed_array(VHZ_Q, VHZ_KVK, 0u))
         }
     }
     let bp = int(g_rd.n_layers * PF_ROLES)
-    // prologue: xb = rms_att[0](x), add off
-    pf_bind(bp + 0, g_rd.pf_x, g_rd.dummy, g_rd.pf_meta[bp + 0].buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.pf_xb,
-        np * dim * 4l, 256l, BATCH_META_BYTES, normbytes, 64l, np * dim * 4l,
-        fixed_array(VHZ_X, 0u, 0u, 0u, 0u, VHZ_XB))
+    // prologue: xb = rms_att[0](x), add off (the aa slot binds x itself — add_on 0 never reads it)
+    g_rd.pf_sets[bp + 0] = set_cls_ar(fixed_array(g_rd.pf_x, g_rd.pf_x, g_rd.norms_dev, g_rd.pf_xb),
+        fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim * 4l),
+        fixed_array(VHZ_X, VHZ_X, 0u, VHZ_XB))
     // final quantize of the LAST row (into the decode driver's xq_dev/xs_dev) for the cls GEMV
-    pf_bind(bp + 1, g_rd.pf_xb, g_rd.dummy, g_rd.pf_meta[bp + 1].buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.dummy,
-        np * dim * 4l, 256l, BATCH_META_BYTES, dim, (dim / 32l) * 4l, 256l,
-        fixed_array(VHZ_XB, 0u, 0u, VHZ_XQ, VHZ_XQ, 0u))
+    g_rd.pf_sets[bp + 1] = set_cls_dn_rq(fixed_array(g_rd.pf_xb, g_rd.xq_dev, g_rd.xs_dev),
+        fixed_array(np * dim * 4l, dim, (dim / 32l) * 4l),
+        fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
     g_rd.pf_ready = true
 }
 
@@ -215,64 +242,22 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
             upload_region_at(g_rd.pf_x, 0l, addr<uint8 const?>(x_batch[int(w0 * dim)]), wlen * dim * 4l)
             upload_region_at(g_rd.pf_cos, 0l, addr<uint8 const?>(cos_batch[int(w0 * g_rd.head_size)]), wlen * g_rd.head_size * 4l)
             fill_ffn_meta(wlen * hid, wlen * hid / 32l, false)   // act(rq|f16) over the window's rows
-            // fill metas
+            // fill metas — GEMM roles only; the class-rail roles carry their params in push
             let mA = @(idx : int; n, d, blk : int64; fmt : int) {
                 fill_arena_batch_meta(g_rd.pf_meta[idx], n, d, blk, wlen, fmt)
             }
-            let mQ = @(idx : int; blocks : int64) { fill_quant_meta(g_rd.pf_meta[idx], blocks) }
-            let mC = @(idx : int; elems : int64) { fill_cvt_meta(g_rd.pf_meta[idx], elems) }
-            let mR = @(idx : int; woff : int64; add : bool) { fill_addrms_meta(g_rd.pf_meta[idx], dim, woff, add) }
             for (l in range64(g_rd.n_layers)) {
                 var L & = g_rd.layers[l]
                 let b = int(l * PF_ROLES)
-                if (L.fq == 6) {
-                    invoke(mC, b + 0, wlen * dim)
-                } else {
-                    invoke(mQ, b + 0, wlen * dim / 32l)
-                }
                 invoke(mA, b + 1, dim, qd, L.bq, L.fq)
                 invoke(mA, b + 2, dim, kvd, L.bk, L.fk)
                 invoke(mA, b + 3, dim, kvd, L.bv, L.fv)
-                if (g_rd.qk_norm) {
-                    let hs = g_rd.head_size   // nolint:LINT021 — the norm-row words compose it with int64 layout offsets
-                    var mn = reinterpret<uint?>(g_rd.pf_meta[b + 15].mapped)
-                    mn[0] = uint(hs); mn[1] = uint(g_rd.n_heads); mn[2] = uint(kvd / hs)
-                    mn[3] = uint(qd); mn[4] = uint(kvd); mn[5] = 0u   // k rows at 0 in pf_kv, kvd stride
-                    mn[6] = uint(nlfin + dim + l * 2l * hs)
-                    mn[7] = uint(nlfin + dim + (l * 2l + 1l) * hs)
-                }
-                var mr = reinterpret<uint?>(g_rd.pf_meta[b + 4].mapped)
-                mr[0] = uint(qd); mr[1] = uint(kvd); mr[2] = uint(g_rd.head_size); mr[3] = uint(g_rd.head_size / 2l)
-                mr[4] = g_rd.neox ? 1u : 0u; mr[5] = uint(qd / 2l); mr[6] = uint(pairs)
-                mr[7] = uint(l * g_rd.seq_cap * kvd); mr[9] = uint(wlen); mr[10] = uint(w0); mr[11] = uint(wlen * kvd)
-                var ma = reinterpret<uint?>(g_rd.pf_meta[b + 5].mapped)
-                ma[0] = uint(wlen); ma[1] = uint(g_rd.n_heads); ma[2] = uint(kvd); ma[3] = uint(g_rd.head_size); ma[4] = uint(g_rd.kv_mul)
-                ma[5] = uint(l * g_rd.seq_cap * kvd); ma[6] = uint(l * g_rd.seq_cap * kvd); ma[7] = uint(w0)
-                if (L.fo == 6) {
-                    invoke(mC, b + 6, wlen * qd)
-                } else {
-                    invoke(mQ, b + 6, wlen * qd / 32l)
-                }
                 invoke(mA, b + 7, qd, dim, L.bo, L.fo)
-                invoke(mR, b + 8, (l * 2l + 1l) * dim, true)
-                if (L.f1 == 6) {
-                    invoke(mC, b + 9, wlen * dim)
-                } else {
-                    invoke(mQ, b + 9, wlen * dim / 32l)
-                }
                 invoke(mA, b + 10, dim, hid, L.b1, L.f1)
                 invoke(mA, b + 11, dim, hid, L.b3, L.f3)
                 invoke(mA, b + 13, hid, dim, L.b2, L.f2)
-                let nxt = l + 1l < g_rd.n_layers ? (l + 1l) * 2l * dim : nlfin
-                invoke(mR, b + 14, nxt, true)
             }
             let bp = int(g_rd.n_layers * PF_ROLES)
-            invoke(mR, bp + 0, 0l, false)   // prologue norm
-            if (last) {
-                // final quantize reads the LAST row of pf_xb
-                var mf = reinterpret<uint?>(g_rd.pf_meta[bp + 1].mapped)
-                mf[10] = uint((wlen - 1l) * dim); mf[18] = uint(dim / 32l)
-            }
             let t_prep = get_time_usec(tp0)
             // record
             var raw = g_rd.pf_cmd
@@ -286,10 +271,13 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
             vhz_dep(raw, h, 0u, VHZ_META, true)
             cmd_copy_whole(raw, g_gpu.ffn_meta.buf, g_gpu.ffn_meta_dev, FFN_META_BYTES)
             pfq_ts(raw)   // q1: meta copy
-            let ropewg = uint((int(wlen) * pairs + int(WG_X) - 1) / int(WG_X))
+            let ropewg = (wlen * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
             let fa128 = g_gpu.has_coopmat && g_rd.head_size == 128l && vk_fa_on()
-            let attnwg = uint(fa128 ? g_rd.n_heads * ((wlen + 31l) / 32l) : g_rd.n_heads * ((wlen + 7l) / 8l))
-            rd_dispatch(raw, g_gpu.ar_pipeline, g_rd.pf_sets[bp + 0], uint(wlen), h)   // prologue norm
+            let attnwg = fa128 ? g_rd.n_heads * ((wlen + 31l) / 32l) : g_rd.n_heads * ((wlen + 7l) / 8l)
+            let hs = g_rd.head_size
+            var pc_pro = ArArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = g_rd.eps, ascale = 1.0)
+            enc_cls_ar(raw, h, g_rd.pf_sets[bp + 0], pc_pro, wlen)   // prologue norm
+            pfq_ts(raw)
             for (l in range64(g_rd.n_layers)) {
                 let b = int(l * PF_ROLES)
                 // fmt-6 (cm2) roles: f32->f16 convert feeds the decode-in-load twin; the fill's fmt
@@ -298,30 +286,81 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 let fo6 = g_rd.layers[l].fo == 6
                 let gu6 = g_rd.layers[l].f1 == 6
                 let dn6 = g_rd.layers[l].f2 == 6
-                rd_dispatch(raw, weak_copy(fq6 ? g_gpu.f16cvt_pipeline : g_gpu.dn_rq_pipeline), g_rd.pf_sets[b + 0], uint((wlen * dim / 4l + 255l) / 256l), h)
+                let mirb = l * g_rd.seq_cap * kvd   // nolint:LINT021 — the mirror offset multiply must run 64-bit before the push-field narrow
+                if (fq6) {
+                    var pc0 = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
+                    enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 4l + 255l) / 256l)
+                } else {
+                    var pc0 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
+                    enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 4l + 255l) / 256l)
+                }
+                pfq_ts(raw)
                 rd_dispatch(raw, pf_gemm_pipe(fq6, qd, wlen), g_rd.pf_sets[b + 1], fill_arena_batch_meta(g_rd.pf_meta[b + 1], dim, qd, g_rd.layers[l].bq, wlen, fq6 ? 6 : 0), h)
                 rd_dispatch(raw, pf_gemm_pipe(fq6, kvd, wlen), g_rd.pf_sets[b + 2], fill_arena_batch_meta(g_rd.pf_meta[b + 2], dim, kvd, g_rd.layers[l].bk, wlen, fq6 ? 6 : 0), h)
                 rd_dispatch(raw, pf_gemm_pipe(fq6, kvd, wlen), g_rd.pf_sets[b + 3], fill_arena_batch_meta(g_rd.pf_meta[b + 3], dim, kvd, g_rd.layers[l].bv, wlen, fq6 ? 6 : 0), h)
                 vhz_dep(raw, h, VHZ_VST, VHZ_KVV, true)
                 cmd_copy_range(raw, g_rd.pf_v, 0l, g_rd.pf_kv, wlen * kvd * 4l, wlen * kvd * 4l)   // v into pf_kv's v half
                 if (g_rd.qk_norm) {
-                    rd_dispatch(raw, g_gpu.qkn_pipeline, g_rd.pf_sets[b + 15],
-                        uint(wlen * (g_rd.n_heads + kvd / g_rd.head_size)), h)
+                    var pcn = QkRmsArgs(hs = uint(hs), nh = uint(g_rd.n_heads), nkvh = uint(kvd / hs),
+                        qstride = uint(qd), kstride = uint(kvd), kbase = 0u,
+                        qwoff = uint(nlfin + dim + l * 2l * hs), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hs),
+                        eps = g_rd.eps)
+                    enc_qk_rms_cls(raw, h, g_rd.pf_sets[b + 15], pcn, wlen * (g_rd.n_heads + kvd / hs))
+                    pfq_ts(raw)
                 }
-                rd_dispatch(raw, g_gpu.rks_b_pipeline, g_rd.pf_sets[b + 4], ropewg, h)
-                rd_dispatch(raw, weak_copy(fa128 ? g_gpu.da_b128_pipeline : g_gpu.da_b_pipeline), g_rd.pf_sets[b + 5], attnwg, h)
-                rd_dispatch(raw, weak_copy(fo6 ? g_gpu.f16cvt_pipeline : g_gpu.dn_rq_pipeline), g_rd.pf_sets[b + 6], uint((wlen * qd / 4l + 255l) / 256l), h)
+                var pcr = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2l),
+                    neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), ppp = uint(pairs),
+                    layerbase = uint(mirb), npos = uint(wlen), pos0 = uint(w0), voff = uint(wlen * kvd))
+                enc_rope_kv_b_cls(raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
+                pfq_ts(raw)
+                var pca = DaAttnBArgs(npos = uint(wlen), nh = uint(g_rd.n_heads), kvd = uint(kvd),
+                    hs = uint(hs), kv_mul = uint(g_rd.kv_mul), kbase = uint(mirb), vbase = uint(mirb),
+                    w0 = uint(w0), scale = g_rd.scale)
+                if (fa128) {
+                    enc_da_attn_b_h128_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
+                } else {
+                    enc_da_attn_b_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
+                }
+                pfq_ts(raw)
+                if (fo6) {
+                    var pc6 = ActArgs(nelem = uint(wlen * qd), gelu = 0u, nblk = 0u)
+                    enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 6], pc6, (wlen * qd / 4l + 255l) / 256l)
+                } else {
+                    var pc6 = RqArgs(inbase = 0u, nblk = uint(wlen * qd / 32l))
+                    enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 6], pc6, (wlen * qd / 4l + 255l) / 256l)
+                }
+                pfq_ts(raw)
                 rd_dispatch(raw, pf_gemm_pipe(fo6, dim, wlen), g_rd.pf_sets[b + 7], fill_arena_batch_meta(g_rd.pf_meta[b + 7], qd, dim, g_rd.layers[l].bo, wlen, fo6 ? 6 : 0), h)
-                rd_dispatch(raw, g_gpu.ar_pipeline, g_rd.pf_sets[b + 8], uint(wlen), h)
-                rd_dispatch(raw, weak_copy(gu6 ? g_gpu.f16cvt_pipeline : g_gpu.dn_rq_pipeline), g_rd.pf_sets[b + 9], uint((wlen * dim / 4l + 255l) / 256l), h)
+                var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint((l * 2l + 1l) * dim), eps = g_rd.eps, ascale = 1.0)
+                enc_cls_ar(raw, h, g_rd.pf_sets[b + 8], pc8, wlen)
+                pfq_ts(raw)
+                if (gu6) {
+                    var pc9 = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
+                    enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 4l + 255l) / 256l)
+                } else {
+                    var pc9 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
+                    enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 4l + 255l) / 256l)
+                }
+                pfq_ts(raw)
                 rd_dispatch(raw, pf_gemm_pipe(gu6, hid, wlen), g_rd.pf_sets[b + 10], fill_arena_batch_meta(g_rd.pf_meta[b + 10], dim, hid, g_rd.layers[l].b1, wlen, gu6 ? 6 : 0), h)
                 rd_dispatch(raw, pf_gemm_pipe(gu6, hid, wlen), g_rd.pf_sets[b + 11], fill_arena_batch_meta(g_rd.pf_meta[b + 11], dim, hid, g_rd.layers[l].b3, wlen, gu6 ? 6 : 0), h)
-                rd_dispatch(raw, weak_copy(dn6 ? g_gpu.actf16_pipeline : g_gpu.actrq_pipeline), g_rd.pf_sets[b + 12], uint((wlen * hid / 4l + 255l) / 256l), h)
+                var pc12 = ActArgs(nelem = uint(wlen * hid), gelu = 0u, nblk = uint(wlen * hid / 32l))
+                if (dn6) {
+                    enc_actf16_cls(raw, h, g_rd.pf_sets[b + 12], pc12, (wlen * hid / 4l + 255l) / 256l)
+                } else {
+                    enc_q8_actrq_cls(raw, h, g_rd.pf_sets[b + 12], pc12, (wlen * hid / 4l + 255l) / 256l)
+                }
+                pfq_ts(raw)
                 rd_dispatch(raw, pf_gemm_pipe(dn6, dim, wlen), g_rd.pf_sets[b + 13], fill_arena_batch_meta(g_rd.pf_meta[b + 13], hid, dim, g_rd.layers[l].b2, wlen, dn6 ? 6 : 0), h)
-                rd_dispatch(raw, g_gpu.ar_pipeline, g_rd.pf_sets[b + 14], uint(wlen), h)
+                let nxt = l + 1l < g_rd.n_layers ? (l + 1l) * 2l * dim : nlfin   // nolint:LINT021 — composed from int64 layout offsets
+                var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
+                enc_cls_ar(raw, h, g_rd.pf_sets[b + 14], pc14, wlen)
+                pfq_ts(raw)
             }
             if (last) {
-                rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.pf_sets[bp + 1], uint((dim / 4l + 255l) / 256l), h)
+                var pcf = RqArgs(inbase = uint((wlen - 1l) * dim), nblk = uint(dim / 32l))
+                enc_cls_dn_rq(raw, h, g_rd.pf_sets[bp + 1], pcf, (dim / 4l + 255l) / 256l)
+                pfq_ts(raw)
                 rd_dispatch_gemv(raw, g_rd.cls_fmt_marker, g_rd.cls_set, rd_gemv_wg(g_rd.vocab), h)
                 vhz_dep(raw, h, VHZ_LOG, 0u, true)
                 cmd_copy_whole(raw, g_rd.logits_dev, g_rd.pf_logits_host.buf, g_rd.vocab * 4l)
