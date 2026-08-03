@@ -135,5 +135,7 @@ def test_fail_closed_kernel_class(t : T?) {
         check_rejects(t, "_fc_kernel_nobinding", "has no @binding")
         check_rejects(t, "_fc_kernel_wg_binding", "take no binding")
         check_rejects(t, "_fc_kernel_no_ssbo", "has no @ssbo members")
+        check_rejects(t, "_fc_kernel_method_rec", "method call cycle")
+        check_rejects(t, "_fc_kernel_method_abstract", "has no resolvable body")
     }
 }

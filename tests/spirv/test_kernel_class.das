@@ -61,6 +61,25 @@ class KwKern {
     }
 }
 
+class KmKern {
+    @ssbo @binding = 0 xs : array<float>
+    @ssbo @binding = 1 ys : array<float>
+
+    def gain : float {
+        return 3.0
+    }
+
+    def scale(v : float) : float {
+        return v * gain()
+    }
+
+    [spirv_kernel(local_size_x=64, name="km_spv")]
+    def km {
+        let i = gl_GlobalInvocationID.x
+        ys[i] = scale(xs[i])
+    }
+}
+
 def private opcode_counts(words : array<uint>) : table<uint; int> {
     var counts : table<uint; int>
     foreach_inst(words) $(opcode : uint; _w : array<uint>; _s, _n : int) {
@@ -107,11 +126,20 @@ def test_kernel_class_twin_equivalence(t : T?) {
 }
 
 [test]
+def test_kernel_class_methods(t : T?) {
+    t |> run("class kernel: method calls devirtualize to self-dropped OpFunctionCalls") <| @(t : T?) {
+        t |> equal(count_op(km_spv, SpvOp.Function), 3)       // main + scale + gain
+        t |> equal(count_op(km_spv, SpvOp.FunctionCall), 2)   // km -> scale -> gain
+    }
+}
+
+[test]
 def test_kernel_class_validates(t : T?) {
     t |> run("class kernels: spirv-val clean") <| @(t : T?) {
         check_valid(t, kc_spv, "kc")
         check_valid(t, kw_spv, "kw")
         check_valid(t, kc_twin_spv, "kc_twin")
+        check_valid(t, km_spv, "km")
     }
 }
 
