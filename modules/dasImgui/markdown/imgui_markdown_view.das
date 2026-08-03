@@ -910,6 +910,100 @@ def public markdown_cached_fragment_rect(entry : MarkdownNodeViewCache const;
         entry.screen_origin.y + fragment.rect.w)
 }
 
+def private node_screen_bottom(doc : RichDocument const;
+                               state : MarkdownViewState const;
+                               node_index : int) : float {
+    // lowest stamped screen bottom in the subtree; -1 = nothing stamped
+    var bottom = -1.0f
+    let cache & = unsafe(state.nodes[node_index])
+    if (cache.screen_revision == state.render_revision) {
+        bottom = cache.screen_origin.y + cache.layout.size.y
+    }
+    var child = doc.nodes[node_index].first_child
+    while (child >= 0) {
+        bottom = max(bottom, node_screen_bottom(doc, state, child))
+        child = doc.nodes[child].next_sibling
+    }
+    return bottom
+}
+
+def public markdown_view_node_band(doc : RichDocument const;
+                                   state : MarkdownViewState const;
+                                   node_index : int) : float2 {
+    //! (top, bottom) of a top-level block's rendered extent this frame;
+    //! (-1,-1) when nothing in its subtree was stamped.
+    return float2(-1.0f, -1.0f) if (node_index < 0
+        || node_index >= length(doc.nodes)
+        || length(state.nodes) < length(doc.nodes))
+    let bottom = node_screen_bottom(doc, state, node_index)
+    return float2(-1.0f, -1.0f) if (bottom < 0.0f)
+    return float2(node_screen_top(doc, state, node_index), bottom)
+}
+
+def private node_screen_top(doc : RichDocument const;
+                            state : MarkdownViewState const;
+                            node_index : int) : float {
+    var top = 3.0e38f
+    let cache & = unsafe(state.nodes[node_index])
+    if (cache.screen_revision == state.render_revision) {
+        top = cache.screen_origin.y
+    }
+    var child = doc.nodes[node_index].first_child
+    while (child >= 0) {
+        top = min(top, node_screen_top(doc, state, child))
+        child = doc.nodes[child].next_sibling
+    }
+    return top
+}
+
+def public markdown_view_node_above(doc : RichDocument const;
+                                    state : MarkdownViewState const;
+                                    screen_y : float) : int {
+    //! The top-level block whose rendered extent ends nearest ABOVE screen_y
+    //! — the anchor for clicks in the spacing gap between blocks. -1 = none.
+    return -1 if (doc.root < 0 || length(state.nodes) < length(doc.nodes))
+    var best = -1
+    var best_bottom = -1.0f
+    var child = doc.nodes[doc.root].first_child
+    while (child >= 0) {
+        let bottom = node_screen_bottom(doc, state, child)
+        if (bottom >= 0.0f && bottom <= screen_y && bottom > best_bottom) {
+            best = child
+            best_bottom = bottom
+        }
+        child = doc.nodes[child].next_sibling
+    }
+    return best
+}
+
+def private nearest_line_point(layout : TextFlowLayout const;
+                               local : float2) : float2 {
+    // clamp an off-glyph point into the nearest fragment; the LINE dominates
+    var best = float2(-1.0f, -1.0f)
+    var best_cost = 3.0e38f
+    for (line in layout.lines) {
+        continue if (line.fragment_count <= 0)
+        let line_bottom = line.y + line.height
+        let y_cost = (local.y < line.y ? line.y - local.y
+            : (local.y > line_bottom ? local.y - line_bottom : 0.0f))
+        for (index in range(line.first_fragment,
+                line.first_fragment + line.fragment_count)) {
+            let fragment = layout.fragments[index]
+            continue if (fragment.is_control)
+            let x_cost = (local.x < fragment.rect.x ? fragment.rect.x - local.x
+                : (local.x > fragment.rect.z ? local.x - fragment.rect.z : 0.0f))
+            let cost = y_cost * 1000.0f + x_cost
+            if (cost < best_cost) {
+                best_cost = cost
+                best = float2(
+                    clamp(local.x, fragment.rect.x, fragment.rect.z - 0.5f),
+                    clamp(local.y, fragment.rect.y + 0.5f, fragment.rect.w - 0.5f))
+            }
+        }
+    }
+    return best
+}
+
 def public markdown_cached_fragment_font_size(entry : MarkdownNodeViewCache const;
                                               fragment : TextFlowFragment const) : float {
     //! Exact point size used to measure and paint a retained fragment.  Live
@@ -1369,18 +1463,21 @@ def private render_inline(doc : RichDocument const; node_index : int; // nolint:
     var hovered = -1
     var hovered_fragment_index = -1
     var hovered_image_control = false
-    for (fragment_index in range(length(layout.fragments))) {
-        let fragment = layout.fragments[fragment_index]
-        let rect = markdown_cached_fragment_rect(cache, fragment)
-        if (!fragment.is_control && IsMouseHoveringRect(
-                float2(rect.x, rect.y), float2(rect.z, rect.w), true)) {
-            hovered_fragment_index = fragment_index
-        }
-        if (fragment.semantic_id >= 0 && IsMouseHoveringRect(
-                float2(rect.x, rect.y), float2(rect.z, rect.w), true)) {
-            hovered = fragment.semantic_id
-            hovered_image_control = (fragment.is_control
-                && fragment.control_kind == CONTROL_IMAGE_PLACEHOLDER)
+    // drawlist hit rects bypass ImGui's arbitration: the WINDOW gate stops menu/popup click-through
+    if (IsWindowHovered(ImGuiHoveredFlags.None)) {
+        for (fragment_index in range(length(layout.fragments))) {
+            let fragment = layout.fragments[fragment_index]
+            let rect = markdown_cached_fragment_rect(cache, fragment)
+            if (!fragment.is_control && IsMouseHoveringRect(
+                    float2(rect.x, rect.y), float2(rect.z, rect.w), true)) {
+                hovered_fragment_index = fragment_index
+            }
+            if (fragment.semantic_id >= 0 && IsMouseHoveringRect(
+                    float2(rect.x, rect.y), float2(rect.z, rect.w), true)) {
+                hovered = fragment.semantic_id
+                hovered_image_control = (fragment.is_control
+                    && fragment.control_kind == CONTROL_IMAGE_PLACEHOLDER)
+            }
         }
     }
 
@@ -1390,13 +1487,26 @@ def private render_inline(doc : RichDocument const; node_index : int; // nolint:
         state.selection_click_claimed = true
     }
 
-    var hit = TextFlowHit()
+    var probe = float2(0.0f, 0.0f)
+    var probe_valid = false
     if (hovered_fragment_index >= 0) {
         let hovered_fragment = layout.fragments[hovered_fragment_index]
         let align_x = markdown_line_alignment_offset(cache, hovered_fragment.line_index)
+        probe = GetMousePos() - origin - float2(align_x, 0.0f)
+        probe_valid = true
+    } elif (IsWindowHovered(ImGuiHoveredFlags.None)
+            && IsMouseClicked(ImGuiMouseButton.Left, false)
+            && IsMouseHoveringRect(origin,
+                origin + float2(available, max(layout.size.y, line_height)), true)) {
+        // an off-glyph CLICK inside the block lands at the nearest line caret
+        probe = nearest_line_point(layout, GetMousePos() - origin)
+        probe_valid = probe.x >= 0.0f
+    }
+    var hit = TextFlowHit()
+    if (probe_valid) {
         hit = text_flow_hit_test_ranges(content.text, layout,
-            GetMousePos() - origin - float2(align_x, 0.0f)) $(text : string;
-                                                              start_byte, end_byte, style_id : int) : float {
+            probe) $(text : string;
+                     start_byte, end_byte, style_id : int) : float {
                 var font = font_for_style(style_id, style.fonts, fallback_font)
                 let styled_size = font_size_for_style(
                     font_size, key.inline_code_scale, style_id)
@@ -1532,6 +1642,7 @@ def private render_inline(doc : RichDocument const; node_index : int; // nolint:
                 include_selection_screen_rect(state, line_rect)
                 state.selection_paint_rect_count++
                 if (IsMouseReleased(ImGuiMouseButton.Right)
+                        && IsWindowHovered(ImGuiHoveredFlags.None)
                         && IsMouseHoveringRect(
                             float2(line_rect.x, line_rect.y),
                             float2(line_rect.z, line_rect.w), true)) {
