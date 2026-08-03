@@ -449,6 +449,80 @@ class MoeCombine {
     }
 }
 
+// ===== deltanet: the conv front =====
+
+struct DnConvArgs {
+    cd : uint         // conv width (channels)
+    kd : uint         // q/k region width (2*kd channels L2-normed in ds-blocks)
+    ds : uint         // d_state (the norm block)
+    dconv : uint      // conv taps + 1
+    hist_mode : uint  // 1 = per-channel history rows, else per-position
+    taps_off : uint   // offsets into the smalls member
+    hist_off : uint
+    eps : float
+    qscale : float
+}
+
+// depthwise conv + SiLU + per-head q/k L2-norm, one workgroup per position; every handoff stays
+// in shared, each global output element has exactly one writer
+[vk_dispatch(name = "dn_conv_cls", grid = "npos", params = "npos : int64")]
+class DnConv {
+    @ssbo @binding = 0 src : array<float>      // the projected rows (position-major)
+    @ssbo @binding = 1 outr : array<float>     // conv output rows
+    @ssbo @binding = 2 smalls : array<float>   // taps + history + any small planes (push offsets)
+    @push_constant pa : DnConvArgs
+    @workgroup row : float[8192]               // the whole position row, silu'd
+    @workgroup nsc : float[64]                 // per-block L2 scales
+
+    [spirv_kernel(local_size_x = 256, name = "dn_conv_cls_spv")]
+    def run {
+        let p = gl_WorkGroupID.x
+        let taps = pa.dconv - 1u
+        let tid = gl_LocalInvocationID.x
+        // depthwise conv + SiLU into shared, strided channels; taps in the raw fblob layout
+        var ch = tid
+        while (ch < pa.cd) {
+            var acc = 0.0
+            var k = 0u
+            while (k < pa.dconv) {
+                let sp = int(p + k) - int(taps)
+                var xv = 0.0
+                if (sp >= 0) {
+                    xv = src[uint(sp) * pa.cd + ch]
+                } elif (pa.hist_mode == 1u) {
+                    xv = smalls[pa.hist_off + ch * taps + p + k]
+                } else {
+                    xv = smalls[pa.hist_off + (p + k) * pa.cd + ch]
+                }
+                acc += xv * smalls[pa.taps_off + ch * pa.dconv + k]
+                k++
+            }
+            row[ch] = acc / (1.0 + exp(-acc))
+            ch += 256u
+        }
+        barrier()
+        // per-head L2 norm scale over the q and k regions, q pre-scale folded in
+        let nblk = (2u * pa.kd) / pa.ds
+        if (tid < nblk) {
+            var sum = 0.0
+            var j = 0u
+            while (j < pa.ds) {
+                let v = row[tid * pa.ds + j]
+                sum += v * v
+                j++
+            }
+            nsc[tid] = (1.0 / max(sqrt(sum), pa.eps)) * (tid < pa.kd / pa.ds ? pa.qscale : 1.0)
+        }
+        barrier()
+        ch = tid
+        while (ch < pa.cd) {
+            let s = ch < 2u * pa.kd ? nsc[ch / pa.ds] : 1.0
+            outr[p * pa.cd + ch] = row[ch] * s
+            ch += 256u
+        }
+    }
+}
+
 // ===== decode attention =====
 
 struct DaAttnArgs {
