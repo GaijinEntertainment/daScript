@@ -4,9 +4,9 @@ options persistent_heap
 require dastest/testing_boost
 require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
 require metal/msl_shader
-require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — GPU driver half, Apple builds only
-require dasllama/dasllama_metal_llama  // nolint:STYLE030 — the production batch add+rms MSL (zero copy drift)
-require dasllama/dasllama_metal_prefill  // the production swiglu MSL (zero copy drift)
+require ?das_metal metal/das_metal_boost  // GPU driver half, Apple builds only
+require dasllama/dasllama_metal_decode  // the production batch add+rms MSL (zero copy drift)
+require dasllama/dasllama_metal_kernels  // the production swiglu MSL (zero copy drift)
 require math
 require strings
 
@@ -78,7 +78,7 @@ def private best_of(queue; psos; bufss; groupss; threadss; tgmems; rounds : int;
     return best
 }
 
-def private run_ew_lab(b) {
+def private run_ew_lab(b) {   // nolint:STYLE038 — flat lab driver: buffers bound once, then one timed slot per kernel
     let rounds = env_int("DASMETAL_LAB_ROUNDS", 3)
     let dim = 3072l
     let hidden = 8192l

@@ -57,6 +57,12 @@ pvar._type.flags.ref = true
 
 Same family of trap as the [ExprRef2Value blocker](#peel-exprref2value-before-qmatch) — the typer doesn't repair what macro substitution introduces, when the substitution lands in an already-typed AST fragment.
 
+**A `Variable` you emit MUST have `_type` set** — unlike `ExprVar` (where a null `_type` means "let the typer fill it"), a `new Variable(name := n, at = at, init = e)` destined for an `ExprLet` (or a global, function/block argument, structure field) with null `_type` is a malformed tree: infer reports `error[50640] malformed AST, variable '<n>' is missing its type` (`50608` for structure fields) and fails the compile. For type inference from the initializer, set `_type = new TypeDecl(baseType = Type.autoinfer, at = at)`.
+
+The same `malformed AST, ...` detection family covers the other required-but-nullable fields a macro-built tree can miss: a for loop's `body` (`50607`), `iteratorsAt`/`iteratorsAka` left shorter than `iterators` when rewriting a loop (`50607` — keep all the parallel vectors the same length, like the tutorial's table_kv macro does), null ENTRIES in `variables`/`arguments`/`sources` lists (`50640`/`50609`/`50607`), and a generated `Function` with null `result` (`50609` — set `result` to an auto `TypeDecl`). These repair the tree in place so compilation can continue reporting, but the error is sticky — the compile still fails. Null *expression children* (`ExprOp2.left`, an `if` condition) are NOT guarded — those crash in the visitor walk itself; the crash-capture stack trace is the diagnostic there.
+
+**`macro_sticky_error(prog, at, message)`** — the sticky-error primitive itself, next to `macro_error` in the ast module. Use it when your macro detects damage, repairs it so infer can proceed, but the program must still fail to compile: a plain `macro_error` recorded on a pass that also changed the AST is discarded by the next infer pass, a sticky one survives to the end.
+
 Canonical example: `try_make_inline_cmp` and the `_where`-arm projection-bind rewrite in `daslib/linq_fold_common.das` (PR #2714).
 
 ## The few residual smart_ptr types — `Program`, `Context`, `FileAccess`
@@ -108,6 +114,16 @@ The trap also bites READS: module B calling A's accessor function reads **B's co
 - **`[tag_function(tag_name)]`** on a function + **`[tag_function_macro(tag="tag_name")]`** on a class — intercepts calls to the tagged function and rewrites them in the `transform` method. Used for compile-time call rewriting (e.g., SOA `operator .` rewrites `soa[i].field` → `soa.field[i]`).
 - **Annotation argument names can't be grammar keywords.** `[myanno(default = "x")]` is `error[30151] syntax error, unexpected default` — the arg-list parser takes a `name`, and keywords (`default`, `type`, `in`, …) don't reduce to one. Pick a synonym (`fallback`, `kind`); verified 2026-07-02 on `[tuned]`.
 - **`[for_loop_macro(name=foo)]`** on a class inheriting `AstForLoopMacro` — intercepts `for` loops whose source is a matching type. Override `visitExprFor` to rewrite the loop AST (e.g., SOA for-loop expands `for (it in soa)` into per-field array iteration).
+
+### Deriving facts from method bodies — bodies are PRE-infer here
+
+A structure macro that *reads* the bodies of the struct's methods (deriving a contract instead of making the author declare it — the pattern behind dasLLAMA's GPU access lenses) is walking **un-inferred** AST. Three consequences, each learned the hard way:
+
+- **No types, no resolution.** A field access is a bare `ExprVar` carrying the field's name, and member access is parser-level `ExprField` whose base is untyped. You cannot ask "is this base my struct?" — match on names.
+- **Name-only `ExprField` matching collides with swizzles.** `wv.y` on a `float4` local is an `ExprField` named `y`, indistinguishable from a field named `y` if you only look at the name. So match bare names plus explicit `self.<name>` and nothing else; do not recurse into free callees (their locals collide too), and refuse a whole `self` passed as an argument rather than guessing.
+- **Key any derived claim by source location, not node pointer.** Infer clones subtrees, so a pointer identifying a node during the macro pass need not identify the same node later. `LineInfo` survives; the pointer does not.
+
+The payoff is worth the care: keep the declarations in place while the derivation lands, and every existing declaration becomes an assertion against the derived answer — which is how stale hand-written annotations surface.
 
 ## AST type introspection
 

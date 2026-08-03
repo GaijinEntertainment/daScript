@@ -1,5 +1,5 @@
 options gen2
-options stack = 65536   // the forward/prefill chain + generated kernels need more than the 16K default on arm64
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options indenting = 4
 
 // Shared foundation for the dasLLAMA profiling suite: the model catalog, the small/large tier gate,
@@ -48,7 +48,7 @@ def box_name() : string {
 }
 
 //! The per-box shared tune manifest (`DAS_TUNE_MANIFEST` target): ONE tune per box, so every
-//! rig process — cells, converter pre-bakes — stamps the same winners and their .dlim image
+//! rig process — every cell — stamps the same winners and their .dlim image
 //! identities agree. Gitignored (machine-local; staleness = older than the binary).
 def public rig_tune_manifest() : string {
     return "modules/dasLLAMA/performance/{box_name()}.tune.json"
@@ -483,14 +483,26 @@ def tune_summary() : string {
 
 //! The bench cells' provenance gate: REFUSE to measure on fallback kernel winners. A
 //! stale/absent sidecar silently downgrades every ``[tune]`` kernel with only [I]-level
-//! warnings — the m4 pilot shipped a full board that way. Under ``DAS_TUNE_MANIFEST`` the
-//! stamps apply but ``tune_status()`` does not populate (framework gap, ledgered), so the
-//! env-pinned path gates on the FILE: present, newer than the binary, carrying kernels —
-//! exactly the observed failure modes. ``DASLLAMA_ALLOW_UNTUNED=1`` is the dev-run escape.
+//! warnings — the m4 pilot shipped a full board that way. Three worlds, because
+//! ``tune_status()`` populates in exactly one of them:
+//! * **standalone exe** (the board rig): winners are BAKED at build time, so the status table
+//!   is empty by design — provenance is the sidecar the release shipped beside the binary.
+//! * **``DAS_TUNE_MANIFEST`` pinned**: stamps apply, status stays empty (framework gap,
+//!   ledgered) — gate on the FILE: present, newer than the binary, carrying kernels.
+//! * **plain script**: the policy rail ran, so every row must stamp a manifest winner.
+//! ``DASLLAMA_ALLOW_UNTUNED=1`` is the dev-run escape in all three.
 def tune_gate() : bool {
     var why = ""
     let mpath = get_env_variable("DAS_TUNE_MANIFEST")
-    if (!empty(mpath)) {
+    if (is_standalone_exe()) {
+        // the release ships <exe>.tune.json from the same mint that baked the winners in
+        let sc = tune_manifest_path()
+        if (!stat(sc).is_valid) {
+            why = "no sidecar beside the exe ({sc}) — the release did not ship its mint"
+        } elif (find(fread(sc), "\"kernels\"") < 0) {
+            why = "the exe's sidecar ({sc}) carries no kernels section — not a minted manifest"
+        }
+    } elif (!empty(mpath)) {
         var mst : FStat
         var bst : FStat
         let args <- get_command_line_arguments()
@@ -553,7 +565,7 @@ def gather_platform(threads : int; llama_cpp, date, box_profile : string; parsec
         tune = tune_summary())
 }
 
-// ===== Hardware block (public bench records — see modules/dasLLAMA/PUBLIC_BENCH_PLAN.md) =====
+// ===== Hardware block (public bench records — schema in modules/dasLLAMA/METHODOLOGY.md) =====
 
 //! Auto-gathered hardware identity for a public bench record. Always probed, never typed by the
 //! submitter — community records depend on this block being trustworthy. Probes are best-effort
@@ -845,6 +857,17 @@ def private compute_sha256(path : string) : string {
 //! mismatch (re-download, re-quantize) recomputes and rewrites it. `sha256` is "" only when the
 //! file is missing or the box has no hash tool — callers store the InputFile regardless, so the
 //! gap is visible in the record rather than silently absent.
+    //! sha256 of this process's tune sidecar — the sidecar GENERATION a measurement runs under.
+    //! Rows minted under different generations are not comparable; "" when the sidecar is absent.
+def tune_manifest_sha() : string {
+    return sidecar_generation_sha(tune_manifest_path())
+}
+
+    //! sha256 of an explicit sidecar file — the oracle's current-generation probe; "" when absent.
+def sidecar_generation_sha(path : string) : string {
+    return stat(path).is_valid ? compute_sha256(path) : ""
+}
+
 def file_identity(path : string; role : string) : InputFile {
     var fi = InputFile(role = role, name = base_name(path))
     let st = stat(path)
@@ -1050,6 +1073,23 @@ struct AsrModelSpec {
     buckets : array<string>
     libri_short : string
     lang : string          // create_session language: "en" for the pure-ASR models, "auto" for audio-chat
+    // DECLARED, not derived from file size the way the LLM tier is: ASR cost is clip-duration x
+    // model-speed, and bytes mis-sort it — large-v3-turbo is 1.51 GB against Parakeet's 2.33 GB
+    // yet costs 97.5 s per rep against Parakeet's 38.6 s (m1, the five corpus buckets).
+    tier : Tier = Tier.small
+}
+
+//! Full path to the spec's das-side carrier — the one source for what four call sites spelled
+//! inline as "{spec.root}{spec.das_model}".
+def asr_model_path(spec : AsrModelSpec) : string => "{spec.root}{spec.das_model}"
+
+//! True when the model's carrier is on disk AND it is in the requested tier — the ASR twin of
+//! model_selected. The tier is the spec's own field; only presence is probed here.
+def asr_model_selected(spec : AsrModelSpec; tier : Tier) : bool {
+    if (!stat(asr_model_path(spec)).is_valid) {
+        return false
+    }
+    return tier == Tier.all || tier == spec.tier
 }
 
 // The audio models the suite profiles. Absent files are skipped at run time. The das side is uniform
@@ -1075,21 +1115,21 @@ def asr_catalog() : array<AsrModelSpec> {
         AsrModelSpec(display = "Whisper large-v3-turbo", das_model = "ggml-large-v3-turbo.bin",
             das_mmproj = "", root = wroot,
             refs <- [AsrRef(tool = "whisper-cli", handle = ""), AsrRef(tool = "onnx", handle = "whisper-turbo-int8")],
-            buckets <- corpus_buckets(), libri_short = "", lang = "en"),
+            buckets <- corpus_buckets(), libri_short = "", lang = "en", tier = Tier.large),
         AsrModelSpec(display = "Canary-Qwen 2.5B", das_model = "canary-qwen-2.5b-decoder-f16.gguf",
             das_mmproj = "canary-qwen-2.5b-encoder-f32.bin", root = lroot,
             refs <- [AsrRef(tool = "nemo", handle = "nvidia/canary-qwen-2.5b")],
-            buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"], libri_short = "", lang = "auto"),
+            buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"], libri_short = "", lang = "auto", tier = Tier.large),
         // jfk3 (33 s) replaced gemma4a_test2.wav — the one corpus clip with no traceable
         // provenance; every published input must be re-fetchable (B2/B3)
         AsrModelSpec(display = "Gemma-4 E2B audio", das_model = "gemma-4-E2B-it-Q8_0.gguf",
             das_mmproj = "mmproj-gemma-4-E2B-it-bf16.gguf", root = lroot,
             refs <- [AsrRef(tool = "mtmd", handle = "mmproj-gemma-4-E2B-it-bf16.gguf")],
-            buckets <- ["jfk3.wav"], libri_short = "", lang = "auto"),
+            buckets <- ["jfk3.wav"], libri_short = "", lang = "auto", tier = Tier.large),
         AsrModelSpec(display = "Qwen3-Omni-30B audio", das_model = "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf",
             das_mmproj = "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf", root = lroot,
             refs <- [AsrRef(tool = "mtmd", handle = "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf")],
-            buckets <- ["jfk.wav", "jfk3.wav"], libri_short = "", lang = "auto")
+            buckets <- ["jfk.wav", "jfk3.wav"], libri_short = "", lang = "auto", tier = Tier.large)
     ]
 }
 
@@ -1508,6 +1548,7 @@ def read_asr_profile(var p : AsrProfile) : bool {
 def upsert_asr(var tests : array<AsrRec>; var rec : AsrRec) {
     for (c in tests) {
         if (c.model == rec.model) {
+            delete c
             c <- rec
             return
         }
@@ -1515,7 +1556,7 @@ def upsert_asr(var tests : array<AsrRec>; var rec : AsrRec) {
     tests |> emplace(rec)
 }
 
-// ===== Public bench records (modules/dasLLAMA/PUBLIC_BENCH_PLAN.md) =====
+// ===== Public bench records (schema: modules/dasLLAMA/METHODOLOGY.md "The record") =====
 
 //! One measured test row, keyed in `BenchRun.tests` by the llama-bench test name
 //! ("pp512", "tg128", ...) for LLM runs, or by clip ("asr:jfk.wav") for ASR runs.
@@ -1526,6 +1567,10 @@ struct BenchTest {
     @optional stddev : double
     @optional ms : double
     @optional audio_s : double
+    // the ASR transcript. A duration alone cannot distinguish "faster" from "decoded fewer
+    // tokens", and under fast-math that is exactly the ambiguity — so the row carries the text
+    // the timing came from, and two rows can be diffed rather than trusted.
+    @optional text : string
 }
 
 //! One input file a run read, pinned by content hash. `sha256` comes from the `.sha` sidecar
@@ -1557,6 +1602,8 @@ struct BenchRun {
     @optional version : string  // das release version
     @optional versions : string // reference-tool version line (venv package pins, patch sha) — see B4
     @optional tune : string     // das gen-kernel stamp provenance — required for reproducibility
+    @optional tune_sha : string // sha256 of the tune sidecar the exe shipped with — the sidecar
+                                // GENERATION; rows across generations are not comparable
     @optional exec_fmt : string // what this engine EXECUTES for this file (weight formats per site
                                 // class + activation/scale treatment) — the apples-to-apples receipt;
                                 // das derives it from the loaded Model, llama.cpp rows from flavor
@@ -1742,6 +1789,7 @@ def upsert_bench_run(var runs : array<BenchRun>; var r : BenchRun) {
     for (c in runs) {
         if (c.box == r.box && c.engine == r.engine && c.backend == r.backend
                 && c.flavor == r.flavor && c.workload == r.workload) {
+            delete c
             c <- r
             return
         }
@@ -1781,6 +1829,90 @@ def upsert_bench_model(var models : array<BenchModel>; var incoming : BenchModel
     models |> emplace(incoming)
 }
 
+// ===== Oracle mode (gen_bench_records --oracle: the stored rows re-verify against fresh cells) =====
+
+//! Worst-case cell verdict of an oracle comparison — ``fail`` drives the nonzero exit.
+enum OracleVerdict {
+    ok
+    warn
+    fail
+}
+
+def oracle_verdict_str(v : OracleVerdict) : string {
+    return v == OracleVerdict.fail ? "FAIL" : (v == OracleVerdict.warn ? "WARN" : "OK")
+}
+
+//! Gate a fresh das run against its stored row, one line per stored tok/s test key. One-sided:
+//! a drop past ``fail_pct`` fails, past ``warn_pct`` warns; a gain reports (flagged as
+//! suspicious past ``fail_pct``, but never failed). A stored key missing from the fresh run —
+//! and a stored row with no tok/s tests at all — is a fail: the stored row is the coverage
+//! contract. Returns the worst verdict across keys.
+def oracle_compare(fresh, stored : BenchRun; warn_pct, fail_pct : double; var lines : array<string>) : OracleVerdict {
+    var worst = OracleVerdict.ok
+    var compared = 0
+    var tkeys <- [for (k in keys(stored.tests)); k]
+    sort(tkeys)
+    for (k in tkeys) {
+        let s_tok = stored.tests?[k]?.tok_s ?? 0.0lf
+        if (s_tok <= 0.0lf) {
+            // ms-shaped (ASR): the SAME one-sided gate, mirrored — for a duration, worse is HIGHER,
+            // so the regression side is +delta. A row with neither metric stays uncomparable.
+            let s_ms = stored.tests?[k]?.ms ?? 0.0lf
+            if (s_ms <= 0.0lf) {
+                continue
+            }
+            compared++
+            let f_ms = fresh.tests?[k]?.ms ?? 0.0lf
+            if (f_ms <= 0.0lf) {
+                lines |> push("{k} MISSING from the fresh run (stored {s_ms:.1f} ms)")
+                worst = OracleVerdict.fail
+                continue
+            }
+            let d_ms = (f_ms - s_ms) * 100.0lf / s_ms
+            var vm = OracleVerdict.ok
+            if (d_ms > fail_pct) {
+                vm = OracleVerdict.fail
+            } elif (d_ms > warn_pct) {
+                vm = OracleVerdict.warn
+            }
+            let note_ms = (vm == OracleVerdict.ok && d_ms < -fail_pct) ? " (suspicious gain — verify the cell)" : ""
+            let sign_ms = d_ms < 0.0lf ? "" : "+"
+            lines |> push("{k} {f_ms:.1f} vs {s_ms:.1f} ms ({sign_ms}{d_ms:.1f}%) {oracle_verdict_str(vm)}{note_ms}")
+            if (int(vm) > int(worst)) {
+                worst = vm
+            }
+            continue
+        }
+        compared++
+        let f_tok = fresh.tests?[k]?.tok_s ?? 0.0lf
+        if (f_tok <= 0.0lf) {
+            lines |> push("{k} MISSING from the fresh run (stored {s_tok:.1f})")
+            worst = OracleVerdict.fail
+            continue
+        }
+        let s_sd = stored.tests?[k]?.stddev ?? 0.0lf
+        let delta = (f_tok - s_tok) * 100.0lf / s_tok
+        var v = OracleVerdict.ok
+        if (delta < -fail_pct) {
+            v = OracleVerdict.fail
+        } elif (delta < -warn_pct) {
+            v = OracleVerdict.warn
+        }
+        let note = (v == OracleVerdict.ok && delta > fail_pct) ? " (suspicious gain — verify the cell)" : ""
+        let sign = delta < 0.0lf ? "" : "+"
+        lines |> push("{k} {f_tok:.1f} vs {s_tok:.1f}±{s_sd:.1f} ({sign}{delta:.1f}%) {oracle_verdict_str(v)}{note}")
+        if (int(v) > int(worst)) {
+            worst = v
+        }
+    }
+    delete tkeys
+    if (compared == 0) {
+        lines |> push("no comparable tok/s or ms tests in the stored row")
+        worst = OracleVerdict.fail
+    }
+    return worst
+}
+
 // ===== llama-bench invocation (shared by lcpp_bench --ref and the establisher) =====
 
 //! One llama-bench `-o json` result row (prefill rows have n_gen=0, decode rows n_prompt=0).
@@ -1793,8 +1925,44 @@ struct LlamaBenchRow {
     build_commit : string
 }
 
+// The capture merges stderr (popen_argv does, by design), and every reference build that logs a
+// line — a Metal build announcing its device, say — therefore poisons the JSON. Cut the trailing
+// `-o json` array back out: llama-bench prints exactly one, last, opening with `[` on its own
+// line. "" when there is none, which is the honest signal that the child printed no result.
+def private json_array_tail(raw : string) : string {
+    var lines <- split(raw, "\n")
+    var start = -1
+    for (i in range(length(lines))) {
+        if (strip(lines[i]) == "[") {
+            start = i
+        }
+    }
+    if (start < 0) {
+        delete lines
+        return ""
+    }
+    var keep <- [for (i in range(start, length(lines))); lines[i]]
+    let out = join(keep, "\n")
+    delete keep
+    delete lines
+    return out
+}
+
 //! Run a llama-bench command line (must include `-o json`) and parse its rows. False on a run or
-//! parse failure. Stdout only — llama-bench keeps progress on stderr, so the pipe stays clean.
+//! parse failure. The child's stdout and stderr arrive merged, so the JSON array is cut back out
+//! before parsing — a reference build that logs is normal, not a failure.
+//! `raw` keeps what the child actually printed: a failure here is otherwise indistinguishable
+//! from a silent one, and the caller has nothing to report but elapsed time.
+def run_llama_bench(args : array<string>; var rows : array<LlamaBenchRow>; var raw : string&) : bool {
+    raw = run_capture_argv(args)
+    let js = json_array_tail(raw)
+    if (empty(js)) {
+        return false   // no result array at all: the child died or printed only diagnostics
+    }
+    return sscan_json(js, rows)
+}
+
 def run_llama_bench(args : array<string>; var rows : array<LlamaBenchRow>) : bool {
-    return sscan_json(run_capture_argv(args), rows)
+    var raw = ""
+    return run_llama_bench(args, rows, raw)
 }

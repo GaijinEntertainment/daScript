@@ -1,6 +1,8 @@
 # dasLLAMA harness
 
-Verification / eval test beds and GGUF inspection tools (not shipped with the module).
+Verification / eval test beds and GGUF inspection tools (not shipped with the module). The
+table lists the parity/inspection core; the ~40 probe and bench beds beside them are one-off
+instruments — each carries its purpose in its header comment.
 
 | File | What it does |
 |---|---|
@@ -71,8 +73,8 @@ modules/dasLLAMA/harness/parity.sh ~/Work/llama.cpp/models/gemma-2-2b-it-Q8_0.gg
 Verified: a 4168-token context is **11/11 token-for-token** vs the oracle — the window path is correct.
 
 Two caveats worth knowing:
-- **It's slow.** The prefill attention loop is single-threaded (only the matmuls thread), so a
-  ~4k-token prefill is ~9 minutes. That's why this stays a manual harness check, not a CI fixture.
+- **It stays a manual harness check, not a CI fixture** — it needs a hand-built >4k prompt and
+  the oracle binary beside a llama.cpp build.
 - **Token-level parity is a weak SWA discriminator on Gemma.** Its *global* (odd) layers carry the
   long-range signal, so toggling the sliding layers off often yields the *same* tokens. The window is
   still load-bearing: at the last position of a 4168-token context (where the sliding layers exclude

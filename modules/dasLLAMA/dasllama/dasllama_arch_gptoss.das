@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_arch_gptoss shared public
 
 require dasllama/dasllama_common
+require dasllama/dasllama_blocks   // std_blocks/moe_blocks — the default block sets this arch binds
 
 // gpt-oss (OpenAI, llama.cpp arch "gpt-oss" / openai-moe) — a MoE with attention extras: every FFN
 // is routed top-k (32 experts, top-4 on the 20B, softmax over the SELECTED weights, no shared

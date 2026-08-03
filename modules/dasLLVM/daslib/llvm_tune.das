@@ -99,8 +99,10 @@ def tune_app_script() : string {
     return ""
 }
 
-// `<stem>.tune.json` — foo/app.das, foo/app.exe and foo/app all map to foo/app.tune.json
-def private sidecar_for(app : string) : string {
+    //! The sidecar-name convention, `<stem>.tune.json`: foo/app.das, foo/app.exe and foo/app
+    //! all map to foo/app.tune.json. The ONE implementation of the naming rule — callers that
+    //! need "the sidecar beside this artifact" (oracles, release tooling) resolve through it.
+def sidecar_for(app : string) : string {
     var stem = app
     if (stem |> ends_with(".das") || stem |> ends_with(".exe")) {
         stem = slice(stem, 0, length(stem) - 4)
@@ -149,7 +151,7 @@ def tune_box_identity() : string {
     let plat = get_platform_name()
     if (plat == "windows") {
         hw = "{get_env_variable("PROCESSOR_IDENTIFIER")}|{get_env_variable("OS")}"
-    } elif (plat == "osx") {
+    } elif (plat == "osx" || plat == "darwin") {   // get_platform_name says "darwin" on macOS
         unsafe {
             popen("sysctl -n hw.model kern.osversion machdep.cpu.brand_string 2>/dev/null") $(f) {
                 while (!feof(f)) {
@@ -280,11 +282,34 @@ def private load_sidecar_doc(path : string) : JsonValue? {
     return doc
 }
 
-// refresh "provenance" and write the document back
+// refresh "provenance" (base identity + any tune_provenance_note entries) and write back
 def private save_sidecar_doc(path : string; var doc : JsonValue?) : bool {
-    update(doc, "provenance", JV((binary = running_binary(), platform = get_platform_name(),
-        arch = get_architecture_name(), box = tune_box_identity())))
-    return fwrite(path, write_json(doc))
+    var prov = JV((binary = running_binary(), platform = get_platform_name(),
+        arch = get_architecture_name(), box = tune_box_identity(), written = iso8601_now()))
+    for (k, v in keys(g_prov_notes), values(g_prov_notes)) {
+        if (k != "binary" && k != "platform" && k != "arch" && k != "box") {
+            update(prov, k, JV(v))
+        }
+    }
+    update(doc, "provenance", prov)
+    let ok = fwrite(path, write_json(doc))
+    if (ok) {
+        // mtime is 1s-granular: a same-second re-read must not reuse a PRE-write box observation
+        var sfs : FStat
+        if (stat(path, sfs)) {
+            g_box_cache["{path}@{sfs.mtime}"] = tune_box_identity()
+        }
+    }
+    return ok
+}
+
+var private g_prov_notes : table<string; string>
+
+    //! Attach `key = value` to the `"provenance"` section of every subsequent sidecar save in
+    //! this process — how a tuner records its measurement conditions (noise verdict, mode)
+    //! next to the winners they produced. Same key overwrites; base identity keys always win.
+def tune_provenance_note(key : string; value : string) {
+    g_prov_notes[key] = value
 }
 
 // upsert one "kernels" entry into an already-loaded document
@@ -335,6 +360,163 @@ def tune_sidecar_merge(kernels : table<string; string>; var runtime : JsonValue?
     let ok = save_sidecar_doc(path, doc)
     delete_json(doc)
     return ok
+}
+
+    //! Upsert `entries` into sidecar section `section` (created when absent; same key
+    //! overwrites, other keys/sections survive; the document ADOPTS the entries). How a tuner
+    //! records per-kernel race tables — "how much did it win by" must be answerable from the file.
+def tune_sidecar_section_merge(section : string; var entries : table<string; JsonValue?>) : bool {
+    let path = tune_manifest_path()
+    if (empty(path)) {
+        return false
+    }
+    var doc = load_sidecar_doc(path)
+    var sec = doc?[section]
+    if (sec == null || !(sec.value is _object)) {
+        update(doc, section, JV(entries))   // adopts entries; frees a non-object leftover
+    } else {
+        var so & = unsafe(sec.value as _object)
+        for (k, v in keys(entries), values(entries)) {
+            if (so |> key_exists(k)) {
+                delete_json(so[k])
+            }
+            so[k] = v   // the document adopts the entry
+        }
+        entries |> clear()   // adopted — the caller's table no longer owns them
+    }
+    let ok = save_sidecar_doc(path, doc)
+    delete_json(doc)
+    return ok
+}
+
+// ===== the tune history (~/.tune-history) =====
+
+var private g_history_dir = ""
+
+    //! This box's tune-history directory: `DAS_TUNE_HISTORY` env, else
+    //! `<home>/.tune-history/<sanitized box identity>/`. Every mint archives here — sidecars
+    //! are small and the history is the box's longitudinal health record; NEVER deleted.
+def tune_history_dir() : string {
+    if (!empty(g_history_dir)) {
+        return g_history_dir
+    }
+    let env = get_env_variable("DAS_TUNE_HISTORY")
+    if (!empty(env)) {
+        g_history_dir = env
+        return g_history_dir
+    }
+    var home = get_env_variable("HOME")
+    if (empty(home)) {
+        home = get_env_variable("USERPROFILE")
+    }
+    var san = ""
+    peek_data(tune_box_identity()) $(bytes) {
+        san = build_string() $(w) {
+            for (c in bytes) {
+                let ch = int(c)
+                let an = is_number(ch) || is_alpha(ch)
+                w |> write(an ? to_char(ch) : "-")
+            }
+        }
+    }
+    g_history_dir = "{home}/.tune-history/{san}"
+    return g_history_dir
+}
+
+    //! Archive the sidecar at `path` into the tune history: `verdict=="ok"` copies the file
+    //! (self-contained — provenance + race tables ride inside), anything else leaves a marked
+    //! `.FAILED.json` stub carrying `verdict`/`note`. Best-effort — never fails the mint.
+def tune_history_archive(path : string; verdict : string; note : string) : string {
+    let dir = tune_history_dir()
+    var home = get_env_variable("HOME")
+    if (empty(home)) {
+        home = get_env_variable("USERPROFILE")
+    }
+    mkdir("{home}/.tune-history")   // best-effort parents; mkdir on an existing dir is a no-op failure
+    mkdir(dir)
+    let stamp = format_time(get_clock(), "%Y%m%d-%H%M%S")
+    var stem = base_name(path)
+    if (ends_with(stem, ".tune.json")) {
+        stem = slice(stem, 0, length(stem) - length(".tune.json"))
+    }
+    var dest = ""
+    var ok = false
+    if (verdict == "ok") {
+        dest = "{dir}/{stamp}_{stem}.tune.json"
+        let text = fread(path)
+        ok = !empty(text) && fwrite(dest, text)
+    } else {
+        dest = "{dir}/{stamp}_{stem}.FAILED.json"
+        ok = fwrite(dest, "\{\"verdict\": \"{verdict}\", \"note\": \"{note}\", \"box\": \"{tune_box_identity()}\", \"written\": \"{iso8601_now()}\"\}")
+    }
+    if (!ok) {
+        to_log(LOG_WARNING, "tune history: could not archive to {dest}\n")
+        return ""
+    }
+    return dest
+}
+
+// ===== measurement statistics + the noise floor =====
+
+//! Median of `samples` — the robust central estimate a tuner ranks finalists by (a min over
+//! rounds is a lottery ticket on a non-silent box; the median is what the box actually does).
+def tune_median(samples : array<double>) : double {
+    if (empty(samples)) {
+        return 0.0lf
+    }
+    var s := samples
+    sort(s)
+    let n = length(s)
+    let m = (n & 1) == 1 ? s[n / 2] : 0.5lf * (s[n / 2 - 1] + s[n / 2])
+    delete s
+    return m
+}
+
+//! Coefficient of variation of `samples` in percent (sample sd over mean) — the tuner's noise
+//! measure. 0 when fewer than two samples or the mean is not positive.
+def tune_cv_pct(samples : array<double>) : double {
+    let n = length(samples)
+    if (n < 2) {
+        return 0.0lf
+    }
+    var mean = 0.0lf
+    for (s in samples) {
+        mean += s
+    }
+    mean /= double(n)
+    if (mean <= 0.0lf) {
+        return 0.0lf
+    }
+    var dev2 = 0.0lf
+    for (s in samples) {
+        dev2 += (s - mean) * (s - mean)
+    }
+    return 100.0lf * sqrt(dev2 / double(n - 1)) / mean
+}
+
+var private g_noise_thr = -1.0lf
+var private g_noise_ovr = -1
+
+    //! The probe-cv ceiling (percent) above which a tuner must refuse to race: winners picked
+    //! in louder noise are noise. `DAS_TUNE_NOISE_CV` overrides (calibration; garbage ignored),
+    //! else 2% normal / 1% paranoid — confirmed empirically on the quiet boxes during rollout.
+def tune_noise_threshold_pct(paranoid : bool) : double {
+    if (g_noise_thr < 0.0lf) {
+        let v = to_float(get_env_variable("DAS_TUNE_NOISE_CV"))
+        g_noise_thr = v > 0.0f ? double(v) : 0.0lf
+    }
+    return g_noise_thr > 0.0lf ? g_noise_thr : (paranoid ? 1.0lf : 2.0lf)
+}
+
+    //! True when `DAS_TUNE_NOISE_OVERRIDE` asks to tune through a failing noise gate anyway.
+    //! The tuner that honors it must stamp the sidecar `noise: overridden` — the escape leaves
+    //! a mark, so a later regression hunt can see the mint was taken on a loud box.
+def tune_noise_override() : bool {
+    if (g_noise_ovr < 0) {
+        let v = get_env_variable("DAS_TUNE_NOISE_OVERRIDE")
+        g_noise_ovr = (!empty(v) && v != "0") ? 1 : 0
+    }
+    return g_noise_ovr == 1
 }
 
 // ===== tune status (runtime) =====
@@ -856,7 +1038,7 @@ class private TuneCompanionAnnotation : AstFunctionAnnotation {
     //! stamp the whole grid plus a `<name>_variants()` registry. Mode contract: module docstring.
 [function_macro(name = "tune")]
 class private TuneAnnotation : AstFunctionAnnotation {
-    def override apply(var func : FunctionPtr; var group : ModuleGroup;
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; // nolint:STYLE037,STYLE038 — the [tune] resolution ladder: manifest/fallback/reference arms in precedence order
                        args : AnnotationArgumentList; var errors : das_string) : bool {
         let gv = find_arg(args, "gen")
         if (!(gv is tString) || empty(gv as tString)) {
@@ -1505,7 +1687,7 @@ def private emit_status_init(var errors : string&) {
 // the policy core, shared by the declared annotation and the auto default (the infer pass
 // below): resolve the policy (env > declared), then per incomplete scope warn / error /
 // inject the auto or restart guard into `func` (the app's main)
-def private apply_tune_policy(var func : FunctionPtr; declared : string; var errors : string&) : bool {
+def private apply_tune_policy(var func : FunctionPtr; declared : string; var errors : string&) : bool { // nolint:STYLE037,STYLE038 — the policy dispatch ladder: one arm per flavor and gate
     var policy = declared
     {
         let penv = get_env_variable("DAS_TUNE_POLICY")

@@ -1,18 +1,20 @@
 options gen2
 options persistent_heap
+options _function_length = 0        // one MSL kernel body + its hand-bound dispatch per lab — barrier/register coupled, no seam
+options _cyclomatic_complexity = 0  // same — run_lab is the flat variant ladder
 
 require dastest/testing_boost
 require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
 require metal/msl_shader
-require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — GPU driver half, Apple builds only
-require ?das_metal dasllama/dasllama_math_metal  // nolint:STYLE030 — the production kernel MSL (v0 baseline)
-require dasllama/dasllama_metal_prefill  // nolint:STYLE030 — the production mul_mm companions (v25 = zero copy drift)
+require ?das_metal metal/das_metal_boost  // GPU driver half, Apple builds only
+require ?das_metal dasllama/dasllama_metal_gemm  // the production kernel MSL (v0 baseline)
+require dasllama/dasllama_metal_kernels  // the production mul_mm companions (v25 = zero copy drift)
 require daslib/fio
-require math  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
+require math  // used only inside the Apple static_if half
 require strings
 
 // The Metal Q8 GEMM kernel lab: candidate kernel variants head-to-head against the PRODUCTION
-// kernel (v0 = the exact MSL text dasllama_math_metal ships — zero copy drift), in ONE process,
+// kernel (v0 = the exact MSL text dasllama_metal_gemm ships — zero copy drift), in ONE process,
 // timed by GPU timestamps (with_compute_encoder_timed) so CPU-side noise and driver memcpys
 // never pollute the signal. Rounds interleave variants to neutralize thermal drift.
 //

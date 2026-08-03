@@ -162,7 +162,7 @@ def test_index_push_target(t : T?) {
 }
 
 [test]
-def test_parse_args(t : T?) {
+def test_parse_args(t : T?) {   // nolint:STYLE038 — a flat case table: one argv shape per `t |> run` block
     t |> run("install command") @(t : T?) {
         var r <- parse_args(type<DaspkgArgs>, ["install", "dasImgui"])
         t |> success(r |> is_ok, "parse succeeds")
@@ -194,13 +194,21 @@ def test_parse_args(t : T?) {
         t |> equal(parsed.command ?? "", "list")
         t |> success(parsed.command_arg |> is_none)
     }
-    t |> run("release with fast tuning") @(t : T?) {
-        var r <- parse_args(type<DaspkgArgs>, ["release", "--out", "E:/", "--tune-fast"])
+    t |> run("release with paranoid tuning") @(t : T?) {
+        var r <- parse_args(type<DaspkgArgs>, ["release", "--out", "E:/", "--paranoid"])
         t |> success(r |> is_ok, "parse succeeds")
         let parsed <- r |> move_unwrap
         t |> equal(parsed.command ?? "", "release")
         t |> equal(parsed.out, "E:/")
-        t |> success(parsed.tune_fast)
+        t |> success(parsed.paranoid)
+    }
+    t |> run("release with quick inherit") @(t : T?) {
+        var r <- parse_args(type<DaspkgArgs>, ["release", "--quick"])
+        t |> success(r |> is_ok, "parse succeeds")
+        let parsed <- r |> move_unwrap
+        t |> equal(parsed.command ?? "", "release")
+        t |> success(parsed.quick)
+        t |> success(!parsed.paranoid)
     }
     t |> run("no command") @(t : T?) {
         let empty_args : array<string>

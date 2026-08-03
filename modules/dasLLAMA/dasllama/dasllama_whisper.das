@@ -8,14 +8,16 @@ options _function_length = 0   // same
 require math
 require dasllama/dasllama_env  // the shared typed env readers + the knob registry
 require daslib/fio
-require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs
+require daslib/array_boost
 require daslib/apply
 require daslib/archive
 require strings
+require dasllama/dasllama_plane public   // PlaneF/PlaneI8 — the borrowed weight planes; re-exported for deleters
 require dasllama/dasllama_math
 require dasllama/dasllama_par
 require dasllama/dasllama_gguf
-require dasllama/dasllama_quant
+require dasllama/dasllama_convert
+require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — the shared ASR floor
 require dasllama/dasllama_audio
 require dasllama/dasllama_common   // apply_box_profile_runtime for the whisper-image identity
 require dasllama/dasllama_image
@@ -50,41 +52,34 @@ struct WhisperModel {
     tok_beg : int
     tok_space : int    // id of " " (suppress_blank's second victim)
     vocab : array<string>    // id -> raw bytes; synthesized tail ids (specials/timestamps) are ""
-    filters : array<float>   // mel filterbank [n_mel][201], loaded from the file
+    filters : PlaneF = PlaneF()   // mel filterbank [n_mel][201], loaded from the file
     mel : WhisperMelPlan = WhisperMelPlan()   // hoisted hann + transposed DFT twiddles
     enc : AudioTower = AudioTower()
-    dblob : array<float>
+    dblob : PlaneF = PlaneF()
     dq8 : bool = false        // decoder GEMMs quantized: dqblob/dqscales carry the Q8_0 image
-    dqblob : array<int8>      // whole-dblob-shaped Q8_0 quants (GEMM regions repacked in place)
-    dqscales : array<float>   // per-32-block scales, indexed at woff/32
+    dqblob : PlaneI8 = PlaneI8()   // whole-dblob-shaped Q8_0 quants (GEMM regions repacked in place)
+    dqscales : PlaneF = PlaneF()   // per-32-block scales, indexed at woff/32
     d_pe_off : int64
     d_te_off : int64
     d_ln_w_off : int64
     d_ln_b_off : int64
     dlayers_off : int64
     dlayer_stride : int64
-    image_map : void?         // non-null when the planes borrow a mapped .dlim (dasllama_image)
+    image_map : void?         // non-null when the planes borrow a .dlim image (dasllama_image)
     image_bytes : uint64
 }
 
+// planes borrow; vocab (meta-carried) and the mel plan (rebuilt at load) are owned
 def finalize(var t : WhisperModel) {
     apply(t) $ [unused_argument(name)] (name : string; var field) {
         static_if (typeinfo is_array(field)) {
-            if (lock_count(field) != 0) {
-                unsafe {
-                    _builtin_forget_temp_array(field)
-                }
-            } else {
-                delete field
-            }
+            delete field
         } static_elif (typeinfo is_struct(field)) {
-            delete field   // enc's own finalizer forgets ITS borrowed planes
+            delete field
         }
     }
     if (t.image_map != null) {
-        unsafe {
-            fmap_close(t.image_map, t.image_bytes)
-        }
+        image_backing_release(t.image_map, t.image_bytes)
         t.image_map = null
         t.image_bytes = 0ul
     }
@@ -130,6 +125,35 @@ def private serialize_image_meta(var arch : Archive; var t : WhisperModel) {
 def private image_post_load(var t : WhisperModel) {
     t.mel <- build_whisper_mel_plan(AUDIO_N_FFT)   // derived tables — the parse-at-load carve-out
 }
+
+//! The mint-side carrier: ``e`` holds every scalar the meta blob carries (vocab included), the
+//! arrays hold the plane bytes; ``enc`` is the nested tower's byte group (sections `enc.fblob`).
+//! Public because the staged read is the only non-image form a suite can check against.
+struct WhisperStaging {
+    e : WhisperModel = WhisperModel()
+    filters : array<float>
+    dblob : array<float>
+    dqblob : array<int8>
+    dqscales : array<float>
+    enc : AudioTowerPlanes = AudioTowerPlanes()
+}
+
+def private serialize_image_meta(var arch : Archive; var st : WhisperStaging) {
+    serialize_image_meta(arch, st.e)
+}
+
+// staging owns its plane bytes outright — every array here is heap, none is borrowed
+def finalize(var st : WhisperStaging) {
+    delete st.filters
+    delete st.dblob
+    delete st.dqblob
+    delete st.dqscales
+    delete st.enc
+    delete st.e
+}
+
+[unused_argument(st)]
+def private image_post_load(var st : WhisperStaging) {}
 
 // Per-layer decoder tensor offsets inside dblob, in layout order (24 tensors: self-attn
 // block, cross-attn block, mlp block; both k projections have no bias).
@@ -200,42 +224,42 @@ def dec_layer_stride(d : int64) : int64 => 16l * d * d + 17l * d
 // repack one decoder GEMM region for the active backend — tw_repack's twin (scales index at
 // woff/32 ⇒ woff must be 32-aligned); an n%32!=0 region stays fp32, wm_mm falls back per
 // call on the same condition
-def private wm_repack(var w : WhisperModel; woff, n, d : int64) {
+def private wm_repack(var dqblob : array<int8>; var dqscales : array<float>; woff, n, d : int64) {
     if (n % 32l != 0l) {
         return
     }
     if (woff % 32l != 0l) {
         panic("whisper decoder q8: GEMM weight at {woff} is not 32-aligned")
     }
-    repack_q8q8_weight(w.dqblob, w.dqscales, woff, n, d)
+    repack_q8q8_weight(dqblob, dqscales, woff, n, d)
 }
 
 //! Quantizes the decoder's GEMM weights to Q8_0: tied token embedding (as the [n_vocab × d]
 //! logits GEMV weight; row lookups still read fp32 dblob) + per-layer self/cross q/k/v/o + fc1/fc2.
 //! Non-GEMM slots (pe rows, norms, biases) are quantized-but-unread.
-def whisper_dec_quantize(var w : WhisperModel) {
-    let total = long_length(w.dblob) & ~31l
-    w.dqblob |> resize(int(total))
-    w.dqscales |> resize(int(total / 32l))
-    quantize_q8_0_into(w.dblob, total, w.dqblob, w.dqscales, 0l, 0l)
-    w.dq8 = true
+def whisper_dec_quantize(var st : WhisperStaging) {
+    let total = long_length(st.dblob) & ~31l
+    st.dqblob |> resize(total)
+    st.dqscales |> resize(total / 32l)
+    quantize_q8_0_into(st.dblob, total, st.dqblob, st.dqscales, 0l, 0l)
+    st.e.dq8 = true
     if (!select_matmul_backend_for_load()) {
         return   // row-major backend reads the flat Q8_0 image as-is
     }
-    let d = w.n_text_state
-    wm_repack(w, w.d_te_off, d, w.n_vocab)
-    for (l in range64(w.n_text_layer)) {
-        let lo = dec_layer_offsets(w, l)
-        wm_repack(w, lo.q_w, d, d)
-        wm_repack(w, lo.k_w, d, d)
-        wm_repack(w, lo.v_w, d, d)
-        wm_repack(w, lo.o_w, d, d)
-        wm_repack(w, lo.cq_w, d, d)
-        wm_repack(w, lo.ck_w, d, d)
-        wm_repack(w, lo.cv_w, d, d)
-        wm_repack(w, lo.co_w, d, d)
-        wm_repack(w, lo.fc1_w, d, 4l * d)
-        wm_repack(w, lo.fc2_w, 4l * d, d)
+    let d = st.e.n_text_state
+    wm_repack(st.dqblob, st.dqscales, st.e.d_te_off, d, st.e.n_vocab)
+    for (l in range64(st.e.n_text_layer)) {
+        let lo = dec_layer_offsets(st.e, l)
+        wm_repack(st.dqblob, st.dqscales, lo.q_w, d, d)
+        wm_repack(st.dqblob, st.dqscales, lo.k_w, d, d)
+        wm_repack(st.dqblob, st.dqscales, lo.v_w, d, d)
+        wm_repack(st.dqblob, st.dqscales, lo.o_w, d, d)
+        wm_repack(st.dqblob, st.dqscales, lo.cq_w, d, d)
+        wm_repack(st.dqblob, st.dqscales, lo.ck_w, d, d)
+        wm_repack(st.dqblob, st.dqscales, lo.cv_w, d, d)
+        wm_repack(st.dqblob, st.dqscales, lo.co_w, d, d)
+        wm_repack(st.dqblob, st.dqscales, lo.fc1_w, d, 4l * d)
+        wm_repack(st.dqblob, st.dqscales, lo.fc2_w, 4l * d, d)
     }
 }
 
@@ -348,15 +372,16 @@ def load_whisper_model(path : string; q8 : bool = false) : WhisperModel {
             to_log(LOG_INFO, "dasLLAMA: prepared whisper image mapped in {get_time_usec(ts_img) / 1000} ms — {img}\n")
             return <- t
         }
-        var m <- load_whisper_model_(path, q8)
-        let ts_save = ref_time_ticks()
-        if (save_image(m, img, tag)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared whisper image saved in {get_time_usec(ts_save) / 1000} ms — {img}\n")
-        }
-        dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
-        return <- m
+        var built = WhisperModel()
+        stream_whisper_model(path, q8, img, tag, built)
+        dlim_gc_stale(path, tag)   // the fresh bake proves ITS LANE's siblings dead
+        return <- built
     }
-    return <- load_whisper_model_(path, q8)
+    // no persisted image: stream one into memory and serve THAT — a served model is always
+    // image-backed, so there is no second, array-owning shape of this struct to maintain
+    var built = WhisperModel()
+    stream_whisper_model(path, q8, "", tag, built)
+    return <- built
 }
 
 [init]
@@ -365,219 +390,382 @@ def private register_whisper_image_tags {
     register_image_family_tag("whisper-f32")
 }
 
-//! The ggml-bin reader proper — the eager (no image cache) load; ``load_whisper_model`` wraps it.
-def load_whisper_model_(path : string; q8 : bool = false) : WhisperModel {
-    var w = WhisperModel()
-    // record walk needs the true byte count: length(bytes) is int32 and wraps negative on >2 GB bins (large-v3) — stat's st_size is 64-bit
-    let n_bytes = int64(stat(path).size)
+// One tensor's place in a destination blob — the SAME list drives staged reader and streamed mint.
+struct private WFillJob {
+    name : string          // tensor name in the bin
+    off : int64            // element offset in the destination blob
+    n : int64              // element count
+    conv_cin : int64 = 0l  // != 0: conv weight, permute [cout][cin][3] -> im2col on the way in
+    gemm_n : int64 = 0l    // != 0: a repacked GEMM region with this contraction width
+}
+
+def private wjob(var jobs : array<WFillJob>; name : string; off, n : int64;
+                 conv_cin : int64 = 0l; gemm_n : int64 = 0l) {
+    jobs |> emplace(WFillJob(name = name, off = off, n = n, conv_cin = conv_cin, gemm_n = gemm_n))
+}
+
+// replay one job into an owned blob (the staged reader's inner step)
+def private wjob_read(recs : table<string; WTensorRec>; b : array<uint8> | #;
+                      j : WFillJob; var dst : array<float>; base : int64) {
+    if (j.conv_cin != 0l) {
+        wt_read_conv_permuted(recs, b, j.name, dst, base + j.off, j.n / (j.conv_cin * 3l), j.conv_cin)
+    } else {
+        wt_read(recs, b, j.name, dst, base + j.off, j.n)
+    }
+}
+
+//! Mint a served model from a staged read WITHOUT touching disk — the off-rail control for suites.
+def mint_whisper_model(var st : WhisperStaging; var out : WhisperModel; q8 : bool = false) {
+    cache_via_image_staged(st, out, "", q8 ? "whisper-q8" : "whisper-f32")
+}
+
+//! The ggml-bin reader proper: scalars land in the served model, plane bytes in the staging
+//! arrays beside it. Nothing here is servable — the image build is what produces a live model.
+def stage_whisper_model(path : string; q8 : bool = false) : WhisperStaging {
+    var st = WhisperStaging()
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA whisper: cannot open model '{path}'")
     }
     fmap(f) $(var bytes : array<uint8>#) {
-        var o = 0l
-        if (rd_u32(bytes, o) != 0x67676d6cu) {
-            panic("dasLLAMA whisper: bad magic in '{path}' (want ggml 0x67676d6c)")
-        }
-        o += 4l
-
-        // 11 i32 hparams
-        w.n_vocab = int64(rd_i32(bytes, o)); o += 4l
-        let n_audio_ctx = int64(rd_i32(bytes, o)); o += 4l
-        let n_audio_state = int64(rd_i32(bytes, o)); o += 4l
-        let n_audio_head = int64(rd_i32(bytes, o)); o += 4l
-        let n_audio_layer = int64(rd_i32(bytes, o)); o += 4l
-        w.n_text_ctx = int64(rd_i32(bytes, o)); o += 4l
-        w.n_text_state = int64(rd_i32(bytes, o)); o += 4l
-        w.n_text_head = int64(rd_i32(bytes, o)); o += 4l
-        w.n_text_layer = int64(rd_i32(bytes, o)); o += 4l
-        let n_mels = int64(rd_i32(bytes, o)); o += 4l
-        let ftype = rd_i32(bytes, o) % 1000; o += 4l
-        if (ftype != GGML_TYPE_F32 && ftype != GGML_TYPE_F16) {
-            panic("dasLLAMA whisper: unsupported ftype {ftype} (only f32/f16 bins)")
-        }
-
-        // mel filterbank
-        let filt_mel = int64(rd_i32(bytes, o)); o += 4l
-        let filt_fft = int64(rd_i32(bytes, o)); o += 4l
-        if (filt_mel != n_mels || filt_fft != AUDIO_N_FFT / 2l + 1l) {
-            panic("dasLLAMA whisper: filterbank is {filt_mel}x{filt_fft}, want {n_mels}x{AUDIO_N_FFT / 2l + 1l}")
-        }
-        w.filters |> resize(int(filt_mel * filt_fft))
-        for (i in range64(filt_mel * filt_fft)) {
-            w.filters[i] = rd_f32(bytes, o + i * 4l)
-        }
-        o += filt_mel * filt_fft * 4l
-        w.mel <- build_whisper_mel_plan(AUDIO_N_FFT)
-
-        // vocab: raw byte tokens; hparams tail ids (specials/timestamps) have no bytes
-        let n_vocab_file = int64(rd_i32(bytes, o)); o += 4l
-        w.vocab |> resize(int(w.n_vocab))
-        for (i in range64(n_vocab_file)) {
-            let len = int64(rd_u32(bytes, o)); o += 4l
-            w.vocab[i] = bytes_str(bytes, o, len)
-            o += len
-        }
-
-        // special-token id math (whisper_vocab defaults + multilingual shift)
-        w.multilingual = w.n_vocab >= 51865l
-        w.n_lang = w.n_vocab - 51765l - (w.multilingual ? 1l : 0l)
-        w.tok_eot = 50256
-        w.tok_sot = 50257
-        w.tok_translate = 50357
-        w.tok_transcribe = 50358
-        w.tok_solm = 50359
-        w.tok_prev = 50360
-        w.tok_nosp = 50361
-        w.tok_not = 50362
-        w.tok_beg = 50363
-        if (w.multilingual) {
-            w.tok_eot++
-            w.tok_sot++
-            let dt = int(w.n_lang) - 98
-            w.tok_translate += dt
-            w.tok_transcribe += dt
-            w.tok_solm += dt
-            w.tok_prev += dt
-            w.tok_nosp += dt
-            w.tok_not += dt
-            w.tok_beg += dt
-        }
-        w.tok_space = -1
-        for (i in range64(n_vocab_file)) {
-            if (w.vocab[i] == " ") {
-                w.tok_space = int(i)
-                break
-            }
-        }
-
-        // tensor directory: records until EOF, data immediately after each name
         var recs : table<string; WTensorRec>
-        while (o + 12l <= n_bytes) {
-            let nd = rd_i32(bytes, o)
-            let nl = int64(rd_i32(bytes, o + 4l))
-            let tt = rd_i32(bytes, o + 8l)
-            o += 12l
-            if (tt != GGML_TYPE_F32 && tt != GGML_TYPE_F16) {
-                panic("dasLLAMA whisper: unsupported tensor type {tt} (only f32/f16 bins)")
-            }
-            var ne = 1l
-            for (_i in range(nd)) {
-                ne *= int64(rd_i32(bytes, o))
-                o += 4l
-            }
-            let name = bytes_str(bytes, o, nl)
-            o += nl
-            recs[name] = WTensorRec(ttype = tt, n_elem = ne, off = o)
-            o += ne * (tt == GGML_TYPE_F32 ? 4l : 2l)
+        var encJobs : array<WFillJob>
+        var decJobs : array<WFillJob>
+        let sz = whisper_index(bytes, int64(stat(path).size), st, recs, encJobs, decJobs)
+        st.enc.fblob |> resize(sz.enc_len)
+        for (j in encJobs) {
+            wjob_read(recs, bytes, j, st.enc.fblob, 0l)
         }
-
-        // encoder tower -> AudioTower blob (same layout the qwen2a loader builds)
-        var t = AudioTower()
-        t.n_mel = n_mels
-        t.d_model = n_audio_state
-        t.n_head = n_audio_head
-        t.n_layer = n_audio_layer
-        t.n_ff = 4l * n_audio_state
-        t.n_ctx = n_audio_ctx
-        t.proj_dim = 0l
-        t.gelu_tanh = true
-        let d = t.d_model
-        let ff = t.n_ff
-        var oe = 0l
-        t.conv1_w_off = oe; oe += d * 3l * t.n_mel
-        t.conv1_b_off = oe; oe += d
-        t.conv2_w_off = oe; oe += d * 3l * d
-        t.conv2_b_off = oe; oe += d
-        t.pos_off = oe; oe += t.n_ctx * d
-        t.layers_off = oe
-        t.layer_stride = enc_layer_stride(d, ff)
-        oe += t.n_layer * t.layer_stride
-        t.lnp_w_off = oe; oe += d
-        t.lnp_b_off = oe; oe += d
-        t.proj_w_off = oe
-        t.proj_b_off = oe
-        t.fblob |> resize(int(oe))
-
-        wt_read_conv_permuted(recs, bytes, "encoder.conv1.weight", t.fblob, t.conv1_w_off, d, t.n_mel)
-        wt_read(recs, bytes, "encoder.conv1.bias", t.fblob, t.conv1_b_off, d)
-        wt_read_conv_permuted(recs, bytes, "encoder.conv2.weight", t.fblob, t.conv2_w_off, d, d)
-        wt_read(recs, bytes, "encoder.conv2.bias", t.fblob, t.conv2_b_off, d)
-        wt_read(recs, bytes, "encoder.positional_embedding", t.fblob, t.pos_off, t.n_ctx * d)
-        for (l in range64(t.n_layer)) {
-            let lo = enc_layer_offsets(t, l)
-            wt_read(recs, bytes, "encoder.blocks.{l}.attn_ln.weight", t.fblob, lo.ln1_w, d)
-            wt_read(recs, bytes, "encoder.blocks.{l}.attn_ln.bias", t.fblob, lo.ln1_b, d)
-            wt_read(recs, bytes, "encoder.blocks.{l}.attn.query.weight", t.fblob, lo.q_w, d * d)
-            wt_read(recs, bytes, "encoder.blocks.{l}.attn.query.bias", t.fblob, lo.q_b, d)
-            wt_read(recs, bytes, "encoder.blocks.{l}.attn.key.weight", t.fblob, lo.k_w, d * d)
-            wt_read(recs, bytes, "encoder.blocks.{l}.attn.value.weight", t.fblob, lo.v_w, d * d)
-            wt_read(recs, bytes, "encoder.blocks.{l}.attn.value.bias", t.fblob, lo.v_b, d)
-            wt_read(recs, bytes, "encoder.blocks.{l}.attn.out.weight", t.fblob, lo.o_w, d * d)
-            wt_read(recs, bytes, "encoder.blocks.{l}.attn.out.bias", t.fblob, lo.o_b, d)
-            wt_read(recs, bytes, "encoder.blocks.{l}.mlp_ln.weight", t.fblob, lo.ln2_w, d)
-            wt_read(recs, bytes, "encoder.blocks.{l}.mlp_ln.bias", t.fblob, lo.ln2_b, d)
-            wt_read(recs, bytes, "encoder.blocks.{l}.mlp.0.weight", t.fblob, lo.fc1_w, ff * d)
-            wt_read(recs, bytes, "encoder.blocks.{l}.mlp.0.bias", t.fblob, lo.fc1_b, ff)
-            wt_read(recs, bytes, "encoder.blocks.{l}.mlp.2.weight", t.fblob, lo.fc2_w, d * ff)
-            wt_read(recs, bytes, "encoder.blocks.{l}.mlp.2.bias", t.fblob, lo.fc2_b, d)
-        }
-        wt_read(recs, bytes, "encoder.ln_post.weight", t.fblob, t.lnp_w_off, d)
-        wt_read(recs, bytes, "encoder.ln_post.bias", t.fblob, t.lnp_b_off, d)
         if (q8) {
-            tower_quantize(t)
+            tower_quantize(st.e.enc, st.enc)
         }
-        w.enc <- t
-
-        // decoder blob
-        let dd = w.n_text_state
-        var od = 0l
-        w.d_pe_off = od; od += w.n_text_ctx * dd
-        w.d_te_off = od; od += w.n_vocab * dd
-        w.dlayers_off = od
-        w.dlayer_stride = dec_layer_stride(dd)
-        od += w.n_text_layer * w.dlayer_stride
-        w.d_ln_w_off = od; od += dd
-        w.d_ln_b_off = od; od += dd
-        w.dblob |> resize(int(od))
-
-        wt_read(recs, bytes, "decoder.positional_embedding", w.dblob, w.d_pe_off, w.n_text_ctx * dd)
-        wt_read(recs, bytes, "decoder.token_embedding.weight", w.dblob, w.d_te_off, w.n_vocab * dd)
-        for (l in range64(w.n_text_layer)) {
-            let lo = dec_layer_offsets(w, l)
-            wt_read(recs, bytes, "decoder.blocks.{l}.attn_ln.weight", w.dblob, lo.ln1_w, dd)
-            wt_read(recs, bytes, "decoder.blocks.{l}.attn_ln.bias", w.dblob, lo.ln1_b, dd)
-            wt_read(recs, bytes, "decoder.blocks.{l}.attn.query.weight", w.dblob, lo.q_w, dd * dd)
-            wt_read(recs, bytes, "decoder.blocks.{l}.attn.query.bias", w.dblob, lo.q_b, dd)
-            wt_read(recs, bytes, "decoder.blocks.{l}.attn.key.weight", w.dblob, lo.k_w, dd * dd)
-            wt_read(recs, bytes, "decoder.blocks.{l}.attn.value.weight", w.dblob, lo.v_w, dd * dd)
-            wt_read(recs, bytes, "decoder.blocks.{l}.attn.value.bias", w.dblob, lo.v_b, dd)
-            wt_read(recs, bytes, "decoder.blocks.{l}.attn.out.weight", w.dblob, lo.o_w, dd * dd)
-            wt_read(recs, bytes, "decoder.blocks.{l}.attn.out.bias", w.dblob, lo.o_b, dd)
-            wt_read(recs, bytes, "decoder.blocks.{l}.cross_attn_ln.weight", w.dblob, lo.cln_w, dd)
-            wt_read(recs, bytes, "decoder.blocks.{l}.cross_attn_ln.bias", w.dblob, lo.cln_b, dd)
-            wt_read(recs, bytes, "decoder.blocks.{l}.cross_attn.query.weight", w.dblob, lo.cq_w, dd * dd)
-            wt_read(recs, bytes, "decoder.blocks.{l}.cross_attn.query.bias", w.dblob, lo.cq_b, dd)
-            wt_read(recs, bytes, "decoder.blocks.{l}.cross_attn.key.weight", w.dblob, lo.ck_w, dd * dd)
-            wt_read(recs, bytes, "decoder.blocks.{l}.cross_attn.value.weight", w.dblob, lo.cv_w, dd * dd)
-            wt_read(recs, bytes, "decoder.blocks.{l}.cross_attn.value.bias", w.dblob, lo.cv_b, dd)
-            wt_read(recs, bytes, "decoder.blocks.{l}.cross_attn.out.weight", w.dblob, lo.co_w, dd * dd)
-            wt_read(recs, bytes, "decoder.blocks.{l}.cross_attn.out.bias", w.dblob, lo.co_b, dd)
-            wt_read(recs, bytes, "decoder.blocks.{l}.mlp_ln.weight", w.dblob, lo.ln2_w, dd)
-            wt_read(recs, bytes, "decoder.blocks.{l}.mlp_ln.bias", w.dblob, lo.ln2_b, dd)
-            wt_read(recs, bytes, "decoder.blocks.{l}.mlp.0.weight", w.dblob, lo.fc1_w, 4l * dd * dd)
-            wt_read(recs, bytes, "decoder.blocks.{l}.mlp.0.bias", w.dblob, lo.fc1_b, 4l * dd)
-            wt_read(recs, bytes, "decoder.blocks.{l}.mlp.2.weight", w.dblob, lo.fc2_w, dd * 4l * dd)
-            wt_read(recs, bytes, "decoder.blocks.{l}.mlp.2.bias", w.dblob, lo.fc2_b, dd)
+        st.dblob |> resize(sz.dec_len)
+        for (j in decJobs) {
+            wjob_read(recs, bytes, j, st.dblob, 0l)
         }
-        wt_read(recs, bytes, "decoder.ln.weight", w.dblob, w.d_ln_w_off, dd)
-        wt_read(recs, bytes, "decoder.ln.bias", w.dblob, w.d_ln_b_off, dd)
+        delete recs
+        delete encJobs
+        delete decJobs
     }
     fclose(f)
     if (q8) {
-        whisper_dec_quantize(w)
+        whisper_dec_quantize(st)
     }
-    return <- w
+    return <- st
+}
+
+// stream one job list as a plane: per tensor, read+convert (+permute) into scratch, append.
+// Regions are 32-aligned and job-local, so per-job q8 transcode matches the eager whole-blob
+// quantize byte for byte; layout holes and the tail zero-fill (quantized zeros ARE zeros).
+def private wstream_plane(recs : table<string; WTensorRec>; b : array<uint8> | #;
+                          jobs : array<WFillJob>; total : int64;   // the blob's full element count — gaps zero-fill
+                          kind : int;   // 0 = fp32, 1 = q8 quants, 2 = q8 scales
+                          rep : bool;   // repack GEMM regions — same gate the eager quantizers take
+                          var w : ImgWriter; var sections : array<ImgSection>; name : string) : bool {
+    w_zeros(w, pad_to_page(w.cur) - w.cur)
+    let at = w.cur
+    var scratch : array<float>
+    var q8s : array<int8>
+    var qss : array<float>
+    // elements -> plane bytes for this kind (q8 quants are 1B/elem, scales 4B per 32)
+    var cur = 0l
+    for (j in jobs) {
+        if (j.off > cur) {
+            // a layout hole no tensor fills (whisper's biasless k slots) — the eager blob is
+            // zero there, and quantized zeros are zeros, so every kind zero-fills the same way
+            w_zeros(w, uint64(wplane_bytes(j.off - cur, kind)))
+            cur = j.off
+        }
+        cur += j.n
+        if (long_length(scratch) < j.n) {
+            scratch |> resize(int(j.n))
+        }
+        wjob_read(recs, b, j, scratch, -j.off)   // land the tensor at scratch[0]
+        if (kind == 0) {
+            unsafe {
+                w_append(w, addr<void?>(scratch[0]), uint64(j.n * 4l))
+            }
+            continue
+        }
+        if (long_length(q8s) < j.n) {
+            q8s |> resize(int(j.n))
+            qss |> resize(int(j.n / 32l))
+        }
+        quantize_q8_0_into(scratch, j.n, q8s, qss, 0l, 0l)
+        if (rep && j.gemm_n != 0l && j.gemm_n % 32l == 0l) {
+            repack_q8q8_weight(q8s, qss, 0l, j.gemm_n, j.n / j.gemm_n)
+        }
+        unsafe {
+            if (kind == 1) {
+                w_append(w, addr<void?>(q8s[0]), uint64(j.n))
+            } else {
+                w_append(w, addr<void?>(qss[0]), uint64((j.n / 32l) * 4l))
+            }
+        }
+    }
+    if (total > cur) {
+        w_zeros(w, uint64(wplane_bytes(total - cur, kind)))
+    }
+    delete scratch
+    delete q8s
+    delete qss
+    sections |> push(ImgSection(name = name, off = at, bytes = w.cur - at))
+    return w.ok
+}
+
+def private wplane_bytes(elems : int64; kind : int) : int64 => (
+    kind == 0 ? elems * 4l : (kind == 1 ? elems : (elems / 32l) * 4l))
+
+//! The STREAMED whisper mint — Phase 3 of the audio rail: the big planes transcode from the
+//! source mapping straight into the writer and never materialize. The staging carrier holds
+//! only scalars, the vocab, and the filterbank; peak drops from whole-model to one tensor.
+def private stream_whisper_model(path : string; q8 : bool; img, tag : string; var out : WhisperModel) {
+    let f = fopen(path, "rb")
+    if (f == null) {
+        panic("dasLLAMA whisper: cannot open model '{path}'")
+    }
+    fmap(f) $(var bytes : array<uint8>#) {
+        var st = WhisperStaging()
+        var recs : table<string; WTensorRec>
+        var encJobs : array<WFillJob>
+        var decJobs : array<WFillJob>
+        let sz = whisper_index(bytes, int64(stat(path).size), st, recs, encJobs, decJobs)
+        st.e.enc.q8 = q8   // the streamed q8 planes below are what the eager quantizers would mark
+        st.e.dq8 = q8
+        // no selected backend = flat Q8_0 image, same repack gate the eager quantizers take
+        let rep = q8 && select_matmul_backend_for_load()
+        var extra = uint64(sz.enc_len * 4l) + uint64(sz.dec_len * 4l) + 2ul * uint64(IMAGE_PAGE)
+        if (q8) {
+            extra += uint64(sz.enc_len + sz.dec_len)                    // quant planes
+            extra += uint64((sz.enc_len / 32l + sz.dec_len / 32l) * 4l) // scale planes
+            extra += 4ul * uint64(IMAGE_PAGE)
+        }
+        cache_via_image_staged_(st, out, img, extra, tag, "q8") $(name : string;
+                                                                  var w : ImgWriter; var sections : array<ImgSection>) {
+            if (name == "dblob") {
+                return wstream_plane(recs, bytes, decJobs, sz.dec_len, 0, rep, w, sections, name)
+            }
+            if (name == "enc.fblob") {
+                return wstream_plane(recs, bytes, encJobs, sz.enc_len, 0, rep, w, sections, name)
+            }
+            if (q8 && name == "dqblob") {
+                return wstream_plane(recs, bytes, decJobs, sz.dec_len, 1, rep, w, sections, name)
+            }
+            if (q8 && name == "dqscales") {
+                return wstream_plane(recs, bytes, decJobs, sz.dec_len, 2, rep, w, sections, name)
+            }
+            if (q8 && name == "enc.qblob") {
+                return wstream_plane(recs, bytes, encJobs, sz.enc_len, 1, rep, w, sections, name)
+            }
+            if (q8 && name == "enc.qscales") {
+                return wstream_plane(recs, bytes, encJobs, sz.enc_len, 2, rep, w, sections, name)
+            }
+            return false   // filters (small) and the q8 planes of an fp32 mint stage normally
+        }
+        delete recs
+        delete encJobs
+        delete decJobs
+    }
+    fclose(f)
+}
+
+// Parse everything EXCEPT tensor data: hparams, filterbank, vocab, token ids, both blob
+// layouts — and emit the fill-job lists that name every tensor's place in them.
+def private whisper_index(bytes : array<uint8> | #; n_bytes : int64; var st : WhisperStaging;
+                          var recs : table<string; WTensorRec>;
+                          var encJobs, decJobs : array<WFillJob>) : tuple<enc_len : int64; dec_len : int64> {
+    var o = 0l
+    if (rd_u32(bytes, o) != 0x67676d6cu) {
+        panic("dasLLAMA whisper: bad magic (want ggml 0x67676d6c)")
+    }
+    o += 4l
+
+    // 11 i32 hparams
+    st.e.n_vocab = int64(rd_i32(bytes, o)); o += 4l
+    let n_audio_ctx = int64(rd_i32(bytes, o)); o += 4l
+    let n_audio_state = int64(rd_i32(bytes, o)); o += 4l
+    let n_audio_head = int64(rd_i32(bytes, o)); o += 4l
+    let n_audio_layer = int64(rd_i32(bytes, o)); o += 4l
+    st.e.n_text_ctx = int64(rd_i32(bytes, o)); o += 4l
+    st.e.n_text_state = int64(rd_i32(bytes, o)); o += 4l
+    st.e.n_text_head = int64(rd_i32(bytes, o)); o += 4l
+    st.e.n_text_layer = int64(rd_i32(bytes, o)); o += 4l
+    let n_mels = int64(rd_i32(bytes, o)); o += 4l
+    let ftype = rd_i32(bytes, o) % 1000; o += 4l
+    if (ftype != GGML_TYPE_F32 && ftype != GGML_TYPE_F16) {
+        panic("dasLLAMA whisper: unsupported ftype {ftype} (only f32/f16 bins)")
+    }
+
+    // mel filterbank
+    let filt_mel = int64(rd_i32(bytes, o)); o += 4l
+    let filt_fft = int64(rd_i32(bytes, o)); o += 4l
+    if (filt_mel != n_mels || filt_fft != AUDIO_N_FFT / 2l + 1l) {
+        panic("dasLLAMA whisper: filterbank is {filt_mel}x{filt_fft}, want {n_mels}x{AUDIO_N_FFT / 2l + 1l}")
+    }
+    st.filters |> resize(int(filt_mel * filt_fft))
+    for (i in range64(filt_mel * filt_fft)) {
+        st.filters[i] = rd_f32(bytes, o + i * 4l)
+    }
+    o += filt_mel * filt_fft * 4l
+    st.e.mel <- build_whisper_mel_plan(AUDIO_N_FFT)
+
+    // vocab: raw byte tokens; hparams tail ids (specials/timestamps) have no bytes
+    let n_vocab_file = int64(rd_i32(bytes, o)); o += 4l
+    st.e.vocab |> resize(int(st.e.n_vocab))
+    for (i in range64(n_vocab_file)) {
+        let len = int64(rd_u32(bytes, o)); o += 4l
+        st.e.vocab[i] = bytes_str(bytes, o, len)
+        o += len
+    }
+
+    // special-token id math (whisper_vocab defaults + multilingual shift)
+    st.e.multilingual = st.e.n_vocab >= 51865l
+    st.e.n_lang = st.e.n_vocab - 51765l - (st.e.multilingual ? 1l : 0l)
+    st.e.tok_eot = 50256
+    st.e.tok_sot = 50257
+    st.e.tok_translate = 50357
+    st.e.tok_transcribe = 50358
+    st.e.tok_solm = 50359
+    st.e.tok_prev = 50360
+    st.e.tok_nosp = 50361
+    st.e.tok_not = 50362
+    st.e.tok_beg = 50363
+    if (st.e.multilingual) {
+        st.e.tok_eot++
+        st.e.tok_sot++
+        let dt = int(st.e.n_lang) - 98
+        st.e.tok_translate += dt
+        st.e.tok_transcribe += dt
+        st.e.tok_solm += dt
+        st.e.tok_prev += dt
+        st.e.tok_nosp += dt
+        st.e.tok_not += dt
+        st.e.tok_beg += dt
+    }
+    st.e.tok_space = -1
+    for (i in range64(n_vocab_file)) {
+        if (st.e.vocab[i] == " ") {
+            st.e.tok_space = int(i)
+            break
+        }
+    }
+
+    // tensor directory: records until EOF, data immediately after each name
+    while (o + 12l <= n_bytes) {
+        let nd = rd_i32(bytes, o)
+        let nl = int64(rd_i32(bytes, o + 4l))
+        let tt = rd_i32(bytes, o + 8l)
+        o += 12l
+        if (tt != GGML_TYPE_F32 && tt != GGML_TYPE_F16) {
+            panic("dasLLAMA whisper: unsupported tensor type {tt} (only f32/f16 bins)")
+        }
+        var ne = 1l
+        for (_i in range(nd)) {
+            ne *= int64(rd_i32(bytes, o))
+            o += 4l
+        }
+        let name = bytes_str(bytes, o, nl)
+        o += nl
+        recs[name] = WTensorRec(ttype = tt, n_elem = ne, off = o)
+        o += ne * (tt == GGML_TYPE_F32 ? 4l : 2l)
+    }
+
+    // encoder tower layout -> AudioTower scalars + one job per tensor, in blob-offset order
+    var t = AudioTower()
+    t.n_mel = n_mels
+    t.d_model = n_audio_state
+    t.n_head = n_audio_head
+    t.n_layer = n_audio_layer
+    t.n_ff = 4l * n_audio_state
+    t.n_ctx = n_audio_ctx
+    t.proj_dim = 0l
+    t.gelu_tanh = true
+    let d = t.d_model
+    let ff = t.n_ff
+    var oe = 0l
+    t.conv1_w_off = oe; oe += d * 3l * t.n_mel
+    t.conv1_b_off = oe; oe += d
+    t.conv2_w_off = oe; oe += d * 3l * d
+    t.conv2_b_off = oe; oe += d
+    t.pos_off = oe; oe += t.n_ctx * d
+    t.layers_off = oe
+    t.layer_stride = enc_layer_stride(d, ff)
+    oe += t.n_layer * t.layer_stride
+    t.lnp_w_off = oe; oe += d
+    t.lnp_b_off = oe; oe += d
+    t.proj_w_off = oe
+    t.proj_b_off = oe
+
+    wjob(encJobs, "encoder.conv1.weight", t.conv1_w_off, d * 3l * t.n_mel, conv_cin = t.n_mel)
+    wjob(encJobs, "encoder.conv1.bias", t.conv1_b_off, d)
+    wjob(encJobs, "encoder.conv2.weight", t.conv2_w_off, d * 3l * d, conv_cin = d, gemm_n = 3l * d)
+    wjob(encJobs, "encoder.conv2.bias", t.conv2_b_off, d)
+    wjob(encJobs, "encoder.positional_embedding", t.pos_off, t.n_ctx * d)
+    for (l in range64(t.n_layer)) {
+        let lo = enc_layer_offsets(t, l)
+        wjob(encJobs, "encoder.blocks.{l}.attn_ln.weight", lo.ln1_w, d)
+        wjob(encJobs, "encoder.blocks.{l}.attn_ln.bias", lo.ln1_b, d)
+        wjob(encJobs, "encoder.blocks.{l}.attn.query.weight", lo.q_w, d * d, gemm_n = d)
+        wjob(encJobs, "encoder.blocks.{l}.attn.query.bias", lo.q_b, d)
+        wjob(encJobs, "encoder.blocks.{l}.attn.key.weight", lo.k_w, d * d, gemm_n = d)
+        wjob(encJobs, "encoder.blocks.{l}.attn.value.weight", lo.v_w, d * d, gemm_n = d)
+        wjob(encJobs, "encoder.blocks.{l}.attn.value.bias", lo.v_b, d)
+        wjob(encJobs, "encoder.blocks.{l}.attn.out.weight", lo.o_w, d * d, gemm_n = d)
+        wjob(encJobs, "encoder.blocks.{l}.attn.out.bias", lo.o_b, d)
+        wjob(encJobs, "encoder.blocks.{l}.mlp_ln.weight", lo.ln2_w, d)
+        wjob(encJobs, "encoder.blocks.{l}.mlp_ln.bias", lo.ln2_b, d)
+        wjob(encJobs, "encoder.blocks.{l}.mlp.0.weight", lo.fc1_w, ff * d, gemm_n = d)
+        wjob(encJobs, "encoder.blocks.{l}.mlp.0.bias", lo.fc1_b, ff)
+        wjob(encJobs, "encoder.blocks.{l}.mlp.2.weight", lo.fc2_w, d * ff, gemm_n = ff)
+        wjob(encJobs, "encoder.blocks.{l}.mlp.2.bias", lo.fc2_b, d)
+    }
+    wjob(encJobs, "encoder.ln_post.weight", t.lnp_w_off, d)
+    wjob(encJobs, "encoder.ln_post.bias", t.lnp_b_off, d)
+    st.e.enc <- t
+
+    // decoder blob layout + jobs
+    let dd = st.e.n_text_state
+    var od = 0l
+    st.e.d_pe_off = od; od += st.e.n_text_ctx * dd
+    st.e.d_te_off = od; od += st.e.n_vocab * dd
+    st.e.dlayers_off = od
+    st.e.dlayer_stride = dec_layer_stride(dd)
+    od += st.e.n_text_layer * st.e.dlayer_stride
+    st.e.d_ln_w_off = od; od += dd
+    st.e.d_ln_b_off = od; od += dd
+
+    wjob(decJobs, "decoder.positional_embedding", st.e.d_pe_off, st.e.n_text_ctx * dd)
+    wjob(decJobs, "decoder.token_embedding.weight", st.e.d_te_off, st.e.n_vocab * dd, gemm_n = dd)
+    for (l in range64(st.e.n_text_layer)) {
+        let lo = dec_layer_offsets(st.e, l)
+        wjob(decJobs, "decoder.blocks.{l}.attn_ln.weight", lo.ln1_w, dd)
+        wjob(decJobs, "decoder.blocks.{l}.attn_ln.bias", lo.ln1_b, dd)
+        wjob(decJobs, "decoder.blocks.{l}.attn.query.weight", lo.q_w, dd * dd, gemm_n = dd)
+        wjob(decJobs, "decoder.blocks.{l}.attn.query.bias", lo.q_b, dd)
+        wjob(decJobs, "decoder.blocks.{l}.attn.key.weight", lo.k_w, dd * dd, gemm_n = dd)
+        wjob(decJobs, "decoder.blocks.{l}.attn.value.weight", lo.v_w, dd * dd, gemm_n = dd)
+        wjob(decJobs, "decoder.blocks.{l}.attn.value.bias", lo.v_b, dd)
+        wjob(decJobs, "decoder.blocks.{l}.attn.out.weight", lo.o_w, dd * dd, gemm_n = dd)
+        wjob(decJobs, "decoder.blocks.{l}.attn.out.bias", lo.o_b, dd)
+        wjob(decJobs, "decoder.blocks.{l}.cross_attn_ln.weight", lo.cln_w, dd)
+        wjob(decJobs, "decoder.blocks.{l}.cross_attn_ln.bias", lo.cln_b, dd)
+        wjob(decJobs, "decoder.blocks.{l}.cross_attn.query.weight", lo.cq_w, dd * dd, gemm_n = dd)
+        wjob(decJobs, "decoder.blocks.{l}.cross_attn.query.bias", lo.cq_b, dd)
+        wjob(decJobs, "decoder.blocks.{l}.cross_attn.key.weight", lo.ck_w, dd * dd, gemm_n = dd)
+        wjob(decJobs, "decoder.blocks.{l}.cross_attn.value.weight", lo.cv_w, dd * dd, gemm_n = dd)
+        wjob(decJobs, "decoder.blocks.{l}.cross_attn.value.bias", lo.cv_b, dd)
+        wjob(decJobs, "decoder.blocks.{l}.cross_attn.out.weight", lo.co_w, dd * dd, gemm_n = dd)
+        wjob(decJobs, "decoder.blocks.{l}.cross_attn.out.bias", lo.co_b, dd)
+        wjob(decJobs, "decoder.blocks.{l}.mlp_ln.weight", lo.ln2_w, dd)
+        wjob(decJobs, "decoder.blocks.{l}.mlp_ln.bias", lo.ln2_b, dd)
+        wjob(decJobs, "decoder.blocks.{l}.mlp.0.weight", lo.fc1_w, 4l * dd * dd, gemm_n = dd)
+        wjob(decJobs, "decoder.blocks.{l}.mlp.0.bias", lo.fc1_b, 4l * dd)
+        wjob(decJobs, "decoder.blocks.{l}.mlp.2.weight", lo.fc2_w, dd * 4l * dd, gemm_n = 4l * dd)
+        wjob(decJobs, "decoder.blocks.{l}.mlp.2.bias", lo.fc2_b, dd)
+    }
+    wjob(decJobs, "decoder.ln.weight", st.e.d_ln_w_off, dd)
+    wjob(decJobs, "decoder.ln.bias", st.e.d_ln_b_off, dd)
+    return (enc_len = oe, dec_len = od)
 }
 
 // ===== encoder =====
@@ -585,6 +773,7 @@ def load_whisper_model_(path : string; q8 : bool = false) : WhisperModel {
 //! Whisper encoder over one 30 s mel window: the shared tower core (conv frontend + pos +
 //! pre-LN blocks) + ln_post. Output lands in ``s.xb``: ``n_ctx × d_model`` — the memory the
 //! decoder's cross-attention reads (via whisper_cross_kv).
+[hot_path]
 def whisper_encode(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     audio_encode_blocks(t, s, mel)
     layernorm_batch(s.xb, s.x, t.fblob, t.lnp_w_off, t.lnp_b_off, t.d_model, t.n_ctx, t.eps)
@@ -640,30 +829,30 @@ def make_decoder_state(w : WhisperModel) : DecoderState {
     let ta = w.enc.n_ctx
     let ncap = tmax
     var ds = DecoderState()
-    ds.kcache |> resize(int(w.n_text_layer * d * tmax))
-    ds.vcache |> resize(int(w.n_text_layer * d * tmax))
-    ds.kx |> resize(int(w.n_text_layer * d * ta))
-    ds.vx |> resize(int(w.n_text_layer * d * ta))
-    ds.ckv_tmp |> resize(int(ta * d))
-    ds.x |> resize(int(ncap * d))
-    ds.xb |> resize(int(ncap * d))
-    ds.xb2 |> resize(int(ncap * d))
-    ds.qq |> resize(int(ncap * d))
-    ds.kk |> resize(int(ncap * d))
-    ds.vv |> resize(int(ncap * d))
-    ds.h |> resize(int(ncap * 4l * d))
-    ds.hp |> resize(int(hh * 2l * ncap * hs))
-    ds.att |> resize(int(hh * ncap * max(tmax, ta)))
-    ds.x1 |> resize(int(d))
-    ds.logits |> resize(int(w.n_vocab))
+    ds.kcache |> resize(w.n_text_layer * d * tmax)
+    ds.vcache |> resize(w.n_text_layer * d * tmax)
+    ds.kx |> resize(w.n_text_layer * d * ta)
+    ds.vx |> resize(w.n_text_layer * d * ta)
+    ds.ckv_tmp |> resize(ta * d)
+    ds.x |> resize(ncap * d)
+    ds.xb |> resize(ncap * d)
+    ds.xb2 |> resize(ncap * d)
+    ds.qq |> resize(ncap * d)
+    ds.kk |> resize(ncap * d)
+    ds.vv |> resize(ncap * d)
+    ds.h |> resize(ncap * 4l * d)
+    ds.hp |> resize(hh * 2l * ncap * hs)
+    ds.att |> resize(hh * ncap * max(tmax, ta))
+    ds.x1 |> resize(d)
+    ds.logits |> resize(w.n_vocab)
     if (w.dq8) {   // largest requant image any decoder GEMM feeds (cross k/v enc_out Ta×d, mlp h ncap×4d)
         let need = max(ta * d, ncap * 4l * d)
-        ds.xqi |> resize(int(need))
-        ds.xsi |> resize(int(need / 32l))
+        ds.xqi |> resize(need)
+        ds.xsi |> resize(need / 32l)
     }
     ds.win.n_mel = w.enc.n_mel
     ds.win.n_len = AUDIO_CHUNK_FRAMES
-    ds.win.data |> resize(int(w.enc.n_mel * AUDIO_CHUNK_FRAMES))
+    ds.win.data |> resize(w.enc.n_mel * AUDIO_CHUNK_FRAMES)
     ds.prompt |> reserve(4)
     ds.toks |> reserve(int(w.n_text_ctx / 2l) - 4)   // n_max, the window token cap
     ds.step |> resize(1)
@@ -673,6 +862,7 @@ def make_decoder_state(w : WhisperModel) : DecoderState {
 //! Precompute the cross-attention memory for one encoded window (``enc_out`` =
 //! whisper_encode's ``s.xb``, ``n_ctx × d``): per layer K = W_k·enc (no bias, pre-scaled
 //! hs^-0.25), V = W_v·enc + b — whisper.cpp's build_graph_cross. Resets the sequence.
+[hot_path]
 def whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_out : array<float>) {
     let d = w.n_text_state
     let hh = w.n_text_head
@@ -889,6 +1079,7 @@ def private dec_cross_attn(w : WhisperModel; var ds : DecoderState; l, n : int64
 //! Decode a batch of tokens at positions n_past..n_past+n-1 (prompt prefill and single-step
 //! generation share this path). Leaves next-token logits (for the LAST row, tied token
 //! embedding) in ``ds.logits`` and advances ``ds.n_past``.
+[hot_path]
 def whisper_decode_batch(w : WhisperModel; var ds : DecoderState; tokens : array<int> | #) {
     let n = long_length(tokens)
     let d = w.n_text_state
@@ -988,22 +1179,12 @@ def set_whisper_trace(on : bool) {
     g_whisper_trace = on
 }
 
-//! One transcription segment: [t0, t1] centiseconds, text, raw token ids (whisper.cpp's
-//! result_all shape, timestamps+eot included), and mean per-token log-probability — a
-//! confidence signal, more negative = less certain.
-struct TranscribeSegment {
-    t0 : int64
-    t1 : int64
-    text : string
-    tokens : array<int>
-    avg_logprob : float = 0.0
-}
-
 // whisper.cpp's whisper_process_logits filter suite, in its exact order. ``n_sampled`` /
 // ``last_id`` / ``penult_id`` describe the window's sampled-so-far state (pairs rule),
 // ``has_ts``/``seek_delta`` drive the non-decreasing rule.
 def private whisper_filter_logits(w : WhisperModel; var logits : array<float>; no_timestamps : bool;
                                   n_sampled : int; last_id, penult_id : int; has_ts : bool; seek_delta : int64) {
+    let n_vocab = int(w.n_vocab)
     let is_initial = n_sampled == 0
     if (is_initial) {                    // suppress_blank (CLI default true)
         logits[w.tok_eot] = NEG_INF_LOGIT
@@ -1013,7 +1194,7 @@ def private whisper_filter_logits(w : WhisperModel; var logits : array<float>; n
     }
     logits[w.tok_not] = NEG_INF_LOGIT
     if (no_timestamps) {
-        for (i in range(w.tok_beg, int(w.n_vocab))) {
+        for (i in range(w.tok_beg, n_vocab)) {
             logits[i] = NEG_INF_LOGIT
         }
     }
@@ -1035,7 +1216,7 @@ def private whisper_filter_logits(w : WhisperModel; var logits : array<float>; n
     let penult_was_ts = n_sampled < 2 || penult_id >= w.tok_beg
     if (last_was_ts) {
         if (penult_was_ts) {
-            for (i in range(w.tok_beg, int(w.n_vocab))) {
+            for (i in range(w.tok_beg, n_vocab)) {
                 logits[i] = NEG_INF_LOGIT
             }
         } else {
@@ -1049,7 +1230,7 @@ def private whisper_filter_logits(w : WhisperModel; var logits : array<float>; n
     if (is_initial) {
         let precision = 30.0 / float(w.enc.n_ctx)
         let tid0 = int(floor(MAX_INITIAL_TS / precision + 0.5))
-        for (i in range(w.tok_beg + tid0 + 1, int(w.n_vocab))) {
+        for (i in range(w.tok_beg + tid0 + 1, n_vocab)) {
             logits[i] = NEG_INF_LOGIT
         }
     }
@@ -1057,7 +1238,7 @@ def private whisper_filter_logits(w : WhisperModel; var logits : array<float>; n
     // condition timestamps to be non-decreasing within the window
     if (has_ts) {
         let tid0 = int(seek_delta / 2l)
-        for (i in range(w.tok_beg, min(w.tok_beg + tid0, int(w.n_vocab)))) {
+        for (i in range(w.tok_beg, min(w.tok_beg + tid0, n_vocab))) {
             logits[i] = NEG_INF_LOGIT
         }
     }
@@ -1232,7 +1413,7 @@ def private transcribe_mel_windows(w : WhisperModel; var es : EncoderState; var 
                 whisper_force_ts_rule(w, ds.logits)
             }
             let t = sample_greedy(w, ds.logits, lse)
-            ds.toks |> push(t)   // nolint:PERF006 — reserved to n_max in make_decoder_state, capacity survives clear()
+            ds.toks |> push(t)   // nolint:PERF006,LINT019 — reserved to n_max in make_decoder_state, capacity survives clear(); fires only in downstream compiles of this generic
             if (g_whisper_trace) {
                 print("  [{i}] id {t.id} tid {t.tid} plog {t.plog} has_ts {has_ts} seek_delta {seek_delta}\n")
             }
@@ -1387,7 +1568,8 @@ def whisper_detect_language(w : WhisperModel; var es : EncoderState; var ds : De
     ds.prompt |> push(w.tok_sot)
     whisper_decode_batch(w, ds, ds.prompt)
     var best = 0
-    for (i in range(1, int(w.n_lang))) {   // argmax over raw logits == argmax over their softmax
+    let n_lang = int(w.n_lang)
+    for (i in range(1, n_lang)) {   // argmax over raw logits == argmax over their softmax
         if (ds.logits[w.tok_sot + 1 + i] > ds.logits[w.tok_sot + 1 + best]) {
             best = i
         }
@@ -1517,4 +1699,35 @@ def whisper_lang_id(lang : string) : int {
         }
     }
     return -1
+}
+
+//! Whisper's capability sheet: its own language set, translation, segment timestamps.
+def whisper_asr_caps(w : WhisperModel) : AsrCaps {
+    var c = AsrCaps(translate = w.multilingual,
+                    timestamps = AsrTimestamps.segment,
+                    streaming = false,
+                    prompt = false)
+    if (w.multilingual) {
+        c.languages <- whisper_lang_list()
+        if (long_length(c.languages) > w.n_lang) {   // 99-lang models predate "yue"
+            c.languages |> resize(w.n_lang)
+        }
+    } else {
+        c.languages <- ["en"]
+    }
+    return <- c
+}
+
+//! The facade's transcribe arm: forward the shared options, transcribe, report the
+//! resolved language ("" until auto-detect ran).
+def whisper_asr_transcribe(w : WhisperModel; var s : WhisperSession; translate, no_timestamps : bool;
+                           samples : array<float> | #; blk : block<(seg : TranscribeSegment)>;
+                           var detected_lang : string&) : int {
+    s.translate = translate
+    s.no_timestamps = no_timestamps
+    let n = transcribe(w, s, samples, blk)
+    if (s.lang_id >= 0) {
+        detected_lang = whisper_lang_list()[s.lang_id]
+    }
+    return n
 }

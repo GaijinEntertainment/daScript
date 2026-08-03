@@ -1,5 +1,5 @@
 options gen2
-options stack = 131072    // model frames: a Scheduler (workspace Session inline) + reference Sessions
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options persistent_heap   // each test frees its model/scheduler before the next loads
 
 require dastest/testing_boost public
@@ -42,8 +42,8 @@ def private same(a, b : array<int64>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (x, y in a, b) {
+        if (x != y) {
             return false
         }
     }
@@ -122,7 +122,7 @@ def private finished_of(events : array<SchedEvent>; id : int64) : SchedEvent {
 // ===== scheduler ≡ generate (1 stream): greedy bit-exact, seeded sampling, stop finish =====
 
 [test]
-def test_scheduler_matches_generate(t : T?) {
+def test_scheduler_matches_generate(t : T?) {   // nolint:STYLE038 — one model load per test: every assertion runs against that model inside the same jobque scope
     t |> run("scheduler ≡ generate: bit-exact stream, seeded sampling, stop/budget (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
             return
@@ -327,7 +327,7 @@ def test_scheduler_batching(t : T?) {
 // ===== paged serving + prefix cache: a repeat request attaches pages and skips their prefill =====
 
 [test]
-def test_scheduler_prefix_cache(t : T?) {
+def test_scheduler_prefix_cache(t : T?) {   // nolint:STYLE038 — one model load per test: every assertion runs against that model inside the same jobque scope
     t |> run("paged scheduler: repeat request attaches cached pages, identical stream (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
             return

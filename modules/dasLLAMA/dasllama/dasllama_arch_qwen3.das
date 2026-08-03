@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_arch_qwen3 shared public
 
 require dasllama/dasllama_common
+require dasllama/dasllama_blocks   // std_blocks/moe_blocks — the default block sets this arch binds
 
 // Qwen3 — per-head RMSNorm on Q/K before RoPE (QK-norm) + NEOX rope; no QKV bias (unlike Qwen2).
 def private configure_qwen3(var c : Config) {
@@ -15,11 +16,7 @@ def private configure_qwen3(var c : Config) {
 def register_arch_qwen3() {
     var d = ArchDesc(name = "qwen3", configure = @@configure_qwen3)
     d.blocks = std_blocks()
-    d.chat.system.parts <- [chat_special("<|im_start|>"), chat_text("system\n"), chat_content(), chat_special("<|im_end|>"), chat_text("\n")]
-    d.chat.user.parts <- [chat_special("<|im_start|>"), chat_text("user\n"), chat_content(), chat_special("<|im_end|>"), chat_text("\n")]
-    d.chat.assistant_open.parts <- [chat_special("<|im_start|>"), chat_text("assistant\n")]
-    d.chat.think_suppress.parts <- [chat_special("<think>"), chat_text("\n\n"), chat_special("</think>"), chat_text("\n\n")]
-    d.chat.stop <- ["<|im_end|>", "<|endoftext|>"]
+    chatml_chat(d.chat)
     hermes_tools(d.chat)
     // Qwen3-ASR's decoder converts as `qwen3vl` — M-RoPE + deepstack; for text/audio input every
     // M-RoPE coord equals linear position, so it's bit-identical to plain qwen3 forward here.
@@ -27,6 +24,8 @@ def register_arch_qwen3() {
     var dv = ArchDesc(name = "qwen3vl", configure = @@configure_qwen3)
     dv.blocks = std_blocks()
     dv.chat := d.chat
+    // audio markers on `dv` ONLY: qwen3-family audio models convert as vl; base-arch audio
+    // is the qwen2 family's shape (qwen2 sets its markers before the clone)
     dv.chat.audio_pre.parts <- [chat_special("<|audio_start|>")]
     dv.chat.audio_post.parts <- [chat_special("<|audio_end|>")]
     register_arch("qwen3", d)

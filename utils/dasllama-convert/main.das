@@ -1,5 +1,5 @@
 options gen2
-options stack = 65536   // dasLLAMA program-root convention (options stack does not unify up from libs)
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _cyclomatic_complexity = 0   // CLI dispatch; absorbed into lcpp_bench by the single-rig consolidation
 options _function_length = 0   // same
 
@@ -22,9 +22,10 @@ options _function_length = 0   // same
 // GGUF and writing the image. Both numbers are reported per stage so a slow box is diagnosable
 // without a profiler.
 
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration
+require dasllama/dasllama_transformer   // the umbrella fires each arch [init] registration
 require dasllama/dasllama_math          // apply_box_profile_runtime + select_matmul_backend_for_load
 require dasllama/dasllama_image         // the .dlim rail itself
+require dasllama/dasllama_gpu_resident  // the vulkan flavor's bake arm + --trim
 require dasllama/dasllama_layout        // convert_model_to_metal_blob — the metal flavor's transform
 require dasllama/dasllama_config        // DlimConfiguration — --config / --dump-config
 require dasllama/dasllama_gguf          // GGUFMeta — the streaming block's mapping handle
@@ -72,7 +73,7 @@ struct ConvertArgs {
     @clarg_doc = "P3 trim (with -f vulkan): drop the big CPU weight families from the image — pure resident-driver dense models only; serve with DASLLAMA_TRIM=1"
     trim : bool
 
-    @clarg_doc = "Streaming conversion (planar q8): big planes go source->transcode->image without materializing in RAM; unstreamable models fall back to eager automatically"
+    @clarg_doc = "Streaming conversion (planar or metal q8): big planes go source->transcode->image without materializing in RAM; unstreamable models fall back to eager automatically"
     stream : bool
 
     @clarg_doc = "List every .dlim beside -m (a GGUF, or a directory): size, version, verdict, baked identity"
@@ -473,30 +474,40 @@ def main() : int {
         return 0
     }
 
-    if (cfg.stream && cfg.flavor != Flavor.planar) {
-        to_log(LOG_ERROR, "dasllama-convert: --stream covers the planar flavor (metal/vulkan bakes convert eagerly)\n")
+    if (cfg.stream && cfg.flavor == Flavor.vulkan) {
+        to_log(LOG_ERROR, "dasllama-convert: --stream covers the planar and metal flavors (the vulkan bake collects whole planes, so it converts eagerly)\n")
         return 2
     }
+    let want_blob = cfg.flavor == Flavor.metal
     var rc = 0
     var did_stream = false
     let ts = ref_time_ticks()
     // the job que carries the transcode/repack passes; the load spins its own if we do not
     with_job_que() {
-        if (cfg.stream && cfg.flavor == Flavor.planar) {
+        if (cfg.stream) {
             // NO apply_box_profile_runtime() here: it already ran before the --config override,
             // and re-reading the sidecar would revert the config's pinned knobs AFTER the
             // fail-closed identity verify (silently un-pinning a cross-box streamed bake)
             var mt = Model()
             var jobs : array<FillJob>
             var blk_ran = false
-            let sok = load_gguf_streaming(cfg.model, qm, mt, jobs) $(gm : GGUFMeta; gbytes : array<uint8>) {
+            var blob_refused = false
+            let sok = load_gguf_streaming(cfg.model, qm, mt, jobs, want_blob) $(gm : GGUFMeta; gbytes : array<uint8>) {
                 blk_ran = true
+                if (want_blob && !mt.metal_blob) {
+                    // the sizing pass refused the blob layout; a planar image under the metal
+                    // identity would be the wrong artifact, so hand this to the eager rail
+                    blob_refused = true
+                    return false
+                }
                 if (empty(jobs)) {
                     to_log(LOG_INFO, "dasllama-convert: streaming unavailable for this model — writing eagerly from RAM\n")
                 }
                 return save_model_image_streaming(mt, gm, gbytes, jobs, out, tag, qs)
             }
-            if (sok || blk_ran) {
+            if (blob_refused) {
+                to_log(LOG_INFO, "dasllama-convert: the metal blob flavor cannot stream for this model — converting eagerly\n")
+            } elif (sok || blk_ran) {
                 did_stream = true
                 rc = sok ? 0 : 1
                 if (rc != 0) {
@@ -522,7 +533,7 @@ def main() : int {
         to_log(LOG_INFO, "dasllama-convert: wrote {bytes >> 20l} MB (streamed) in {total_ms} ms total\n")
     }
     if (rc == 0) {
-        dlim_gc_stale(cfg.model)   // the fresh bake proves version-stale siblings dead
+        dlim_gc_stale(cfg.model, tag, qs)   // the fresh bake proves ITS LANE's siblings dead
     }
     return rc
 }

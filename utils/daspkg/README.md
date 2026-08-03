@@ -38,7 +38,7 @@ daslang utils/daspkg/main.das -- install --global dasImgui
 | `build` | Build all C/C++ packages (cmake) |
 | `check` | Verify installed packages are present |
 | `doctor` | Check environment (git, cmake, gh) |
-| `release [--out <dir>] [--tune-fast]` | Bundle project as a redistributable standalone; tuning defaults to 20/80, with an opt-in quick 4/8/20 pass |
+| `release [--out <dir>] [--paranoid \| --quick]` | Bundle project as a redistributable standalone. Release ALWAYS mints the tune sidecar; `--quick` is the only mode that inherits a complete existing one |
 | `introduce [url]` | Submit a package to the index via PR |
 | `withdraw <name>` | Remove a package from the index via PR |
 
@@ -56,7 +56,8 @@ All package commands accept `--global` / `-g` to operate on global modules.
 | `--json` | Machine-readable JSON output (`search`, `list`, `check`) |
 | `--branch <name>`, `-b <name>` | Install from a git branch (e.g. `master`) instead of a tag |
 | `--out <path>` | Output directory for `release` (default: current directory) |
-| `--tune-fast` | During `release`, tune with progressive 4/8-round screening and a 20-round cap instead of the default 20/80 budget |
+| `--paranoid` | During `release`, tune with the paranoid budget: 3x the rounds and a 1% noise-gate ceiling. There is no fast race mode — a cheap race measures nothing |
+| `--quick` | During `release`, accept a complete existing sidecar instead of re-minting (an incomplete or stale scope still mints — an exe never ships unmeasured). Forgetting it costs one re-mint, never correctness |
 
 ## Global modules
 
@@ -202,6 +203,8 @@ The global lock file (`{das_root}/modules/.daspkg_global.lock`) uses the same fo
 The **package runner** compiles `.das_package` scripts in-process using `compile_file` + `simulate` + `invoke_in_context`. It calls exported functions and reads state from `daslib/daspkg` module globals via `get_context_global_variable`.
 
 ## Tests
+
+Review gates live in [CODEREVIEW.md](CODEREVIEW.md) — run the unit suite on every change.
 
 | File | Count | Type |
 |------|-------|------|

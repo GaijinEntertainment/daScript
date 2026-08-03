@@ -1,6 +1,6 @@
 options gen2
 options persistent_heap   // + explicit deletes below: each test frees its model/session before the next loads, so multi-GB weights never accumulate in the process
-options stack = 65536   // dastest harness + generate_ sampler + forward chain sits near the default 16KB; 4x headroom (dasPEG tests do the same)
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — public-path tests exercise the API through it (engine + arch registrations + chat)
@@ -31,8 +31,8 @@ def private same(a, b : array<int64>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (x, y in a, b) {
+        if (x != y) {
             return false
         }
     }
@@ -51,7 +51,7 @@ def test_sampling_greedy_matches_oracle(t : T?) {
             t |> skip("{path} not present")
             return
         }
-        var m <- load_model(path, QuantMode.q8)
+        var m <- load_model_(path, QuantMode.q8)
         // Token-exact oracle gate: pin bit-exact classic attention + scalar activations (same reason
         // as test_parity — the flash / exp4 defaults are within tolerance but not bit-exact).
         let pa = get_prefill_attn_mode()
@@ -94,7 +94,7 @@ def private set_logits(var s : Session; vals : array<float>) {
 }
 
 [test]
-def test_sampler_units(t : T?) {
+def test_sampler_units(t : T?) {   // nolint:STYLE038 — flat unit list, one t |> run cell per sampler knob
     t |> run("defaults are greedy argmax") @(t : T?) {
         var s = mk_sampler(4)
         set_logits(s, [0.5, 3.0, 1.0, 2.0])
@@ -220,7 +220,7 @@ def test_sampling_deterministic(t : T?) {
             t |> skip("{path} not present")
             return
         }
-        var m <- load_model(path, QuantMode.q8)
+        var m <- load_model_(path, QuantMode.q8)
         let params = SamplingParams(temp = 0.8, top_k = 40l)
         let n = 16l
         var a : array<int64>

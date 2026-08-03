@@ -1,6 +1,6 @@
 options gen2
 options persistent_heap
-options stack = 65536
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
 require dasllama/dasllama_vad
@@ -52,7 +52,7 @@ def private read_wav_pcm16_mono(path : string) : array<float> {
             let sz = int64(rd_u32(bytes, o + 4l))
             if (id == 0x61746164u) {   // "data"
                 let cnt = min(sz, n - o - 8l) / 2l
-                out |> resize(int(cnt))
+                out |> resize(cnt)
                 for (i in range64(cnt)) {
                     var v = int(rd_u16(bytes, o + 8l + i * 2l))
                     if (v >= 32768) {

@@ -3,7 +3,7 @@ options persistent_heap   // model-scale allocations — freed per test
 // The uniform AsrModel/AsrSession union every backend's model+scratch by value (whisper, qwen3a,
 // parakeet, canary, gemma4a) — ~5 KB / ~10 KB each now; tests holding two (q8-gate) or nesting
 // load frames (parakeet) need headroom above the default. Bumped for the 6-backend union.
-options stack = 131072
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
 require dasllama/dasllama_whisper
@@ -52,7 +52,7 @@ def private read_wav_pcm16_mono(path : string) : array<float> {
             let sz = int64(rd_u32(bytes, o + 4l))
             if (id == 0x61746164u) {      // "data"
                 let cnt = min(sz, n - o - 8l) / 2l
-                out |> resize(int(cnt))
+                out |> resize(cnt)
                 for (i in range64(cnt)) {
                     var v = int(rd_u16(bytes, o + 8l + i * 2l))
                     if (v >= 32768) {
@@ -264,7 +264,7 @@ def test_asr_surface(t : T?) {
     t |> run("load_asr_model sniffs the bin + caps report whisper honestly") @(t : T?) {
         let model_path = path_join(whisper_models_dir(), "ggml-tiny.bin")
         if (!model_available(t, model_path)) return
-        var m <- load_asr_model(model_path)   // the sniff route: ggml magic + big vocab -> whisper
+        var inscope m <- load_asr_model(model_path)   // the sniff route: ggml magic + big vocab -> whisper
         t |> equal(m.whisper.n_vocab, 51865l, "loaded through the sniff")
         let c <- caps(m)
         // honest caps: tiny is a 99-language model (n_vocab 51865) — "yue" (id 99) only exists
@@ -297,7 +297,7 @@ def test_qwen3a_tower(t : T?) {
             t |> skip("jfk.wav not present")
             return
         }
-        var tw <- load_qwen3a_tower(path)
+        var inscope tw <- load_qwen3a_tower(path)
         t |> equal(tw.core.d_model, 896l, "d_model")
         t |> equal(tw.core.n_layer, 18l, "layers")
         t |> equal(tw.core.n_head, 14l, "heads")
@@ -320,8 +320,6 @@ def test_qwen3a_tower(t : T?) {
         t |> success(abs(enc.out[1] + 0.015482) < 5e-3, "tok0[1]")
         t |> success(abs(enc.out[2] + 0.032934) < 5e-3, "tok0[2]")
         t |> success(abs(enc.out[3] - 0.023813) < 5e-3, "tok0[3]")
-        delete tw.core.fblob
-        delete tw.cblob
     }
 }
 
@@ -340,7 +338,7 @@ def test_parakeet_oracle(t : T?) {
             return
         }
         // through the uniform ASR surface: the sniff routes a small-vocab ggml bin to parakeet
-        var m <- load_asr_model(path)
+        var inscope m <- load_asr_model(path)
         let c <- caps(m)
         t |> equal(length(c.languages), 1, "English-only")
         t |> success(c.timestamps == AsrTimestamps.segment, "segment timestamps")
@@ -349,13 +347,14 @@ def test_parakeet_oracle(t : T?) {
         t |> equal(m.pk.durations[4], 4, "tdt durations")
         with_job_que() {
             setup_dasllama_jobque_()
-            var s <- create_session(m)
-            var segs : array<TranscribeSegment>
+            var inscope s <- create_session(m)
+            var inscope segs : array<TranscribeSegment>
             transcribe(m, s, samples) $(seg) {
                 segs |> push_clone(seg)
             }
             // parakeet-cli -ng -ps (CPU, f32 self-convert): 33 tokens, these exact ends
             t |> equal(length(segs), 1)
+            to_log(LOG_INFO, "parakeet-v2 jfk eyeball: '{segs[0].text}'\n")
             t |> equal(length(segs[0].tokens), 33, "token count")
             t |> equal(segs[0].tokens[0], 123, "tok[0] '▁And'")
             t |> equal(segs[0].tokens[1], 96, "tok[1] '▁so'")
@@ -368,12 +367,12 @@ def test_parakeet_oracle(t : T?) {
             // bit-exact fp32 route AND that both routes stay token-identical (jfk; gb1 was
             // verified 786/786 at the q8 landing)
             set_asr_fp32(true)
-            var mf <- load_asr_model(path)
+            var inscope mf <- load_asr_model(path)
             set_asr_fp32(false)
             t |> success(!mf.pk.q8, "knob forces fp32")
             t |> success(m.pk.q8, "default load is q8")
-            var sf <- create_session(mf)
-            var fsegs : array<TranscribeSegment>
+            var inscope sf <- create_session(mf)
+            var inscope fsegs : array<TranscribeSegment>
             transcribe(mf, sf, samples) $(seg) {
                 fsegs |> push_clone(seg)
             }
@@ -382,9 +381,7 @@ def test_parakeet_oracle(t : T?) {
             for (a, b in fsegs[0].tokens, segs[0].tokens) {
                 t |> equal(a, b, "q8/fp32 token")
             }
-            delete mf.pk.blob
         }
-        delete m.pk.blob
     }
 }
 
@@ -403,15 +400,15 @@ def test_parakeet_v3_oracle(t : T?) {
             return
         }
         // the 8192-piece SPM vocab routes to parakeet AND flips the multilingual caps
-        var m <- load_asr_model(path)
+        var inscope m <- load_asr_model(path)
         let c <- caps(m)
         t |> equal(length(c.languages), 25, "25 languages")
         t |> equal(m.pk.n_vocab, 8192l, "vocab")
         t |> success(m.pk.q8, "default load is q8")
         with_job_que() {
             setup_dasllama_jobque_()
-            var s <- create_session(m, "de")   // any of the 25; parakeet has no conditioning
-            var segs : array<TranscribeSegment>
+            var inscope s <- create_session(m, "de")   // any of the 25; parakeet has no conditioning
+            var inscope segs : array<TranscribeSegment>
             transcribe(m, s, samples) $(seg) {
                 segs |> push_clone(seg)
             }
@@ -419,6 +416,7 @@ def test_parakeet_v3_oracle(t : T?) {
             // id-exact on jfk (durations too — gb1's 16/655 duration-only flips are the known
             // q8 divergence, ids/text exact there as well)
             t |> equal(length(segs), 1)
+            to_log(LOG_INFO, "parakeet-v3 jfk eyeball: '{segs[0].text}'\n")
             t |> equal(length(segs[0].tokens), 38, "token count")
             t |> equal(segs[0].tokens[0], 1976, "tok[0] '▁And'")
             t |> equal(segs[0].tokens[1], 547, "tok[1] '▁so'")
@@ -427,7 +425,6 @@ def test_parakeet_v3_oracle(t : T?) {
             t |> success(segs[0].text == "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.", "text")
             t |> equal(s.detected_lang, "", "v3 does not report a language")
         }
-        delete m.pk.blob
     }
 }
 
@@ -448,8 +445,8 @@ def test_whisper_transcribe_oracle(t : T?) {
         var w <- load_whisper_model(model_path)
         with_job_que() {
             setup_dasllama_jobque_()
-            var s <- create_session(w)
-            var segs : array<TranscribeSegment>
+            var inscope s <- create_session(w)
+            var inscope segs : array<TranscribeSegment>
             transcribe(w, s, samples) $(seg) {
                 segs |> push_clone(seg)
             }
@@ -458,6 +455,7 @@ def test_whisper_transcribe_oracle(t : T?) {
             let want <- [50364, 400, 370, 452, 7177, 6280, 1029, 406, 437, 428, 1941, 393,
                          360, 337, 291, 11, 1029, 437, 291, 393, 360, 337, 428, 1941, 13, 50889]
             t |> equal(length(segs), 1)
+            to_log(LOG_INFO, "whisper-tiny jfk eyeball: '{segs[0].text}'\n")
             t |> equal(segs[0].t0, 0l)
             t |> equal(segs[0].t1, 1050l)
             t |> equal(length(segs[0].tokens), length(want))
@@ -471,7 +469,7 @@ def test_whisper_transcribe_oracle(t : T?) {
             t |> success(segs[0].text == " And so my fellow Americans ask not what your country can do for you, ask what you can do for your country.", "text")
 
             // the push-chunks rail lands on the same result: feed in 2 chunks, flush
-            var s2 <- create_session(w)
+            var inscope s2 <- create_session(w)
             let half = length(samples) / 2
             var part : array<float>
             part |> reserve(length(samples))
@@ -495,7 +493,7 @@ def test_whisper_transcribe_oracle(t : T?) {
             t |> success(segs[0].avg_logprob < 0.0 && segs[0].avg_logprob > -1.0, "avg_logprob in (-1, 0)")
 
             // lang="auto" detects English on the same clip and lands on the identical text
-            var s3 <- create_session(w, "auto")
+            var inscope s3 <- create_session(w, "auto")
             t |> equal(s3.lang_id, -1, "auto starts unresolved")
             var auto_text = ""
             transcribe(w, s3, samples) $(seg) {
@@ -521,25 +519,27 @@ def test_whisper_q8_gate(t : T?) {
             t |> skip("jfk.wav not present")
             return
         }
-        var m <- load_asr_model(model_path)     // the asr-surface default: q8 tower
+        var inscope m <- load_asr_model(model_path)     // the asr-surface default: q8 tower
         set_asr_fp32(true)
-        var mf <- load_asr_model(model_path)    // knob-pinned fp32 (the oracle route)
+        var inscope mf <- load_asr_model(model_path)    // knob-pinned fp32 (the oracle route)
         set_asr_fp32(false)
         t |> success(m.whisper.enc.q8, "default load is q8")
         t |> success(!mf.whisper.enc.q8, "knob forces fp32")
         with_job_que() {
             setup_dasllama_jobque_()
-            var s <- create_session(m)
-            var segs : array<TranscribeSegment>
+            var inscope s <- create_session(m)
+            var inscope segs : array<TranscribeSegment>
             transcribe(m, s, samples) $(seg) {
                 segs |> push_clone(seg)
             }
-            var sf <- create_session(mf)
-            var fsegs : array<TranscribeSegment>
+            var inscope sf <- create_session(mf)
+            var inscope fsegs : array<TranscribeSegment>
             transcribe(mf, sf, samples) $(seg) {
                 fsegs |> push_clone(seg)
             }
             t |> equal(length(segs), length(fsegs), "segment count")
+            to_log(LOG_INFO, "whisper-tiny q8 jfk eyeball: '{segs[0].text}'\n")
+            to_log(LOG_INFO, "whisper-tiny f32 jfk eyeball: '{fsegs[0].text}'\n")
             var mismatches = 0
             var total = 0
             for (a, b in segs, fsegs) {
@@ -568,12 +568,13 @@ def private check_canary_clip(t : T?; m : AsrModel; wav : string; expected : arr
         t |> skip("{base_name(wav)} not present")
         return
     }
-    var s <- create_session(m, "en")
-    var segs : array<TranscribeSegment>
+    var inscope s <- create_session(m, "en")
+    var inscope segs : array<TranscribeSegment>
     transcribe(m, s, samples) $(seg) {
         segs |> push_clone(seg)
     }
     t |> equal(length(segs), 1, "{base_name(wav)}: one segment")
+    to_log(LOG_INFO, "canary {base_name(wav)} eyeball: '{segs[0].text}'\n")
     t |> equal(length(segs[0].tokens), length(expected), "{base_name(wav)}: token count")
     for (a, b in segs[0].tokens, expected) {
         t |> equal(a, b, "{base_name(wav)}: token id")
@@ -598,7 +599,7 @@ def test_canary_qwen_oracle(t : T?) {
             return
         }
         // the two-file route: decoder GGUF (LoRA-merged Qwen3-1.7B) + "CNRY" FastConformer bin
-        var m <- load_asr_model(dec, enc)
+        var inscope m <- load_asr_model(dec, enc)
         let c <- caps(m)
         t |> equal(length(c.languages), 1, "English-only")
         t |> success(!c.translate && c.timestamps == AsrTimestamps.none && !c.streaming, "no translate / timestamps / streaming")
@@ -616,8 +617,6 @@ def test_canary_qwen_oracle(t : T?) {
             check_canary_clip(t, m, path_join(corpus_dir(), "librispeech/05_1089-134686-0004.wav"),
                 [2833, 5779, 29160, 451, 11896, 374, 8580, 389, 498, 13, 7684, 3729, 9972, 151645])
         }
-        delete m.dec.wblob
-        delete m.cenc.blob
     }
 }
 
@@ -639,7 +638,7 @@ def test_gemma4a_audio_oracle(t : T?) {
         if (!model_available(t, dec) || !model_available(t, mmproj)) {
             return
         }
-        var m <- load_asr_model(dec, mmproj)
+        var inscope m <- load_asr_model(dec, mmproj)
         t |> equal(m.g4a.n_layer, 12l, "gemma4a Conformer, 12 blocks")
         t |> equal(m.g4a.d_model, 1024l, "audio d_model 1024")
         t |> equal(m.g4a.n_head, 8l, "8 heads")
@@ -647,19 +646,18 @@ def test_gemma4a_audio_oracle(t : T?) {
         let wav = path_join(corpus_dir(), "gemma4a_test2.wav")
         let samples <- read_wav_pcm16_mono(wav)
         if (empty(samples)) {
-            delete m.dec.wblob
-            delete m.g4a.blob
             t |> skip("gemma4a_test2.wav not present")
             return
         }
         with_job_que() {
             setup_dasllama_jobque_()
-            var s <- create_session(m, "en")
-            var segs : array<TranscribeSegment>
+            var inscope s <- create_session(m, "en")
+            var inscope segs : array<TranscribeSegment>
             transcribe(m, s, samples) $(seg) {
                 segs |> push_clone(seg)
             }
             t |> equal(length(segs), 1, "one segment")
+            to_log(LOG_INFO, "gemma4a eyeball: '{segs[0].text}'\n")
             // frozen llama-mtmd-cli no-think greedy ids (first 40 tokens — the confident prefix
             // before the model's own ~0.6-logit near-tie at step 48). "The New York Times from
             // July 21st, 1969. This isn't just newsprint and ink. This is the moment when..."
@@ -678,8 +676,6 @@ def test_gemma4a_audio_oracle(t : T?) {
             t |> success(mismatches == 0, "confident prefix token-for-token ({mismatches} mismatches)")
             t |> equal(s.detected_lang, "en", "english")
         }
-        delete m.dec.wblob
-        delete m.g4a.blob
     }
 }
 
@@ -691,12 +687,13 @@ def private check_q3omni_clip(t : T?; m : AsrModel; wav : string; expected : arr
         t |> skip("{base_name(wav)} not present")
         return
     }
-    var s <- create_session(m, "auto")
-    var segs : array<TranscribeSegment>
+    var inscope s <- create_session(m, "auto")
+    var inscope segs : array<TranscribeSegment>
     transcribe(m, s, samples) $(seg) {
         segs |> push_clone(seg)
     }
     t |> equal(length(segs), 1, "{base_name(wav)}: one segment")
+    to_log(LOG_INFO, "qwen3omni {base_name(wav)} eyeball: '{segs[0].text}'\n")
     t |> equal(length(segs[0].tokens), length(expected), "{base_name(wav)}: token count")
     for (a, b in segs[0].tokens, expected) {
         t |> equal(a, b, "{base_name(wav)}: token id")
@@ -725,7 +722,7 @@ def test_qwen3omni_audio_oracle(t : T?) {
         if (!model_available(t, dec) || !model_available(t, mmproj)) {
             return
         }
-        var m <- load_asr_model(dec, mmproj)
+        var inscope m <- load_asr_model(dec, mmproj)
         t |> equal(m.dec.arch, "qwen3vlmoe", "the Qwen3-Omni MoE thinker")
         t |> equal(m.q3t.core.n_layer, 32l, "AuT tower, 32 blocks")
         t |> equal(m.q3t.core.d_model, 1280l, "audio d_model 1280")
@@ -746,8 +743,5 @@ def test_qwen3omni_audio_oracle(t : T?) {
                 [2833, 5779, 11, 7722, 451, 613, 645, 374, 8580, 389, 498, 13, 7684, 3729, 11,
                  9972, 13, 7684, 3729, 13, 151645])
         }
-        delete m.dec.wblob
-        delete m.q3t.core.fblob
-        delete m.q3t.cblob
     }
 }

@@ -8,25 +8,16 @@ options _function_length = 0   // same
 require dasllama/dasllama_common
 require dasllama/dasllama_math          // g_repack_* backend pointers + active_* layout knobs
 require dasllama/dasllama_math_default  // k4_sc_mn — the k4 6-bit sc/mn decoder
+require dasllama/dasllama_repack        // k45_nib/k5_hbit/k6_nib — the disk-order K-quant accessors
 require dasllama/dasllama_gguf          // K6_SSB — the k6 disk scale stride
 require dasllama/dasllama_gemm_schema   // kq_qsb/kq_ssb — the fmt-id plane strides
 require dasllama/dasllama_par           // maybe_parallel_for + jobque probes
+require dasllama/dasllama_load   // StreamReg + the streaming-fill hook contract this file registers into
 require math
 
 // Disk-format -> compute-layout transforms: the metal-flavor blob transform, the CPU repack
 // walkers, and the GPU tier gathers. Requires dasllama_common back for Model/KqFmt; the loader
 // reaches the entry points through the hooks registered at [init] (register_model_layout).
-
-//! KqFmt -> the gemm_schema kq format id space (4/5/6/40) — the ONE bridge between the enum
-//! and the stride tables. q8/q51 are not kq superblock formats and panic.
-def kq_schema_id(f : KqFmt) : int {
-    if (f == KqFmt.k4) return 4
-    if (f == KqFmt.k5) return 5
-    if (f == KqFmt.k6) return 6
-    if (f == KqFmt.q40) return 40
-    panic("kq_schema_id: not a kq superblock format")
-    return 0
-}
 
 // ===== metal-flavor blob transform (the blob-only .dlim redesign) =====
 
@@ -101,13 +92,9 @@ def private metal_blob_layout_ok(t : Model) : bool {
         (!t.cls_q8 || metal_blob_off_ok(t.emb_q8_off, KqFmt.q8)))
 }
 
-//! Convert a planar q8-mode Model to the metal-blob form IN PLACE (see the Model field doc).
-//! False = the model cannot take the blob form (not q8, repacked planes, or a bind-alignment
-//! violation) — the caller keeps the planar model. CPU inference on the converted model panics.
-def convert_model_to_metal_blob(var t : Model) : bool {
-    if (t.metal_blob) {
-        return true
-    }
+//! Can `t` take the blob form? The refusal half of the transform, split out so the image writer
+//! can commit to the metal flavor without first building the blob plane in RAM.
+def metal_blob_eligible(t : Model) : bool {
     if (t.quant != QuantMode.q8 || t.kq_repacked || t.mx4_repacked || kernel_backend_needs_repack(active_kernel_backend())) {
         return false
     }
@@ -121,44 +108,67 @@ def convert_model_to_metal_blob(var t : Model) : bool {
         to_log(LOG_WARNING, "dasLLAMA: metal-blob transform declined — a weight offset violates the GPU bind alignment\n")
         return false
     }
-    let ts = ref_time_ticks()
-    let nb = long_length(t.qblob) / Q8_BLOCK_ELEMS
-    let mbb = Q8_QPB + Q8_SPB   // the 34B gguf-native block_q8_0
-    if (nb > 0l) {
-        t.mblob |> resize(nb * mbb)
-        let s16 = t.wscale_f16
-        unsafe {
-            var dp = addr(t.mblob[0])
-            let qp = addr < int8 const? >(t.qblob[0])
-            var sp : float const?
-            var sp16 : uint16 const?
-            if (s16) {
-                sp16 = addr(t.qscales16[0])
-            } else {
-                sp = addr(t.qscales[0])
-            }
-            let nch = int(clamp(nb / 262144l, 1l, 64l))
-            maybe_parallel_for(0, int(nb / 32l) + (nb % 32l != 0l ? 1 : 0), is_job_que_available() ? nch : 1) $(cb, ce) {
-                unsafe {
-                    for (b in range64(int64(cb) * 32l, min(int64(ce) * 32l, nb))) {
-                        var ph = reinterpret<uint16?>(dp + b * mbb)
-                        ph[0] = s16 ? sp16[b] : uint16(f32_to_f16(clamp(sp[b], -65504.0, 65504.0)))
-                        memcpy(reinterpret<void?>(dp + b * mbb + Q8_SPB), reinterpret<void const?>(qp + b * Q8_QPB), 32)
-                    }
+    return true
+}
+
+//! Block count of the blob plane and its stride — the 34B gguf-native block_q8_0, which is the
+//! layout the planar load SPLIT into qblob+qscales when it read the file.
+def metal_blob_shape(t : Model) : tuple<blocks : int64; stride : int64> {
+    return (blocks = long_length(t.qblob) / Q8_BLOCK_ELEMS, stride = Q8_QPB + Q8_SPB)
+}
+
+//! Interleave blob blocks [b0, b0+nblk) from the planar planes into `dst` (>= nblk*34 bytes).
+//! The whole-plane call materializes mblob; the image writer calls it band by band instead, which
+//! is what keeps a cold metal mint from holding the weights twice.
+def metal_blob_fill_blocks(t : Model; b0, nblk : int64; var dst : array<uint8>) {
+    if (nblk <= 0l) {
+        return
+    }
+    let mbb = Q8_QPB + Q8_SPB
+    let s16 = t.wscale_f16
+    unsafe {
+        var dp = addr(dst[0])
+        let qp = addr < int8 const? >(t.qblob[b0 * Q8_BLOCK_ELEMS])
+        var sp : float const?
+        var sp16 : uint16 const?
+        if (s16) {
+            sp16 = addr(t.qscales16[b0])
+        } else {
+            sp = addr(t.qscales[b0])
+        }
+        let nch = int(clamp(nblk / 262144l, 1l, 64l))
+        maybe_parallel_for(0, int(nblk / 32l) + (nblk % 32l != 0l ? 1 : 0), is_job_que_available() ? nch : 1) $(cb, ce) {
+            unsafe {
+                for (b in range64(int64(cb) * 32l, min(int64(ce) * 32l, nblk))) {
+                    var ph = reinterpret<uint16?>(dp + b * mbb)
+                    ph[0] = s16 ? sp16[b] : uint16(f32_to_f16(clamp(sp[b], -65504.0, 65504.0)))
+                    memcpy(reinterpret<void?>(dp + b * mbb + Q8_SPB), reinterpret<void const?>(qp + b * Q8_QPB), 32)
                 }
             }
         }
     }
-    delete t.qblob
-    delete t.qscales
-    delete t.qscales16
+}
+
+//! Put ONE kq scale plane into its metal device form, named by its Model field; false = not a kq
+//! scale plane. Per-plane because the streamed image walk applies each as its own turn comes,
+//! which is the only point where that plane's fills are done and its bytes are not yet written.
+def metal_blob_scale_plane(var t : Model; name : string) : bool {
     // k4/k5: the 16B verbatim disk scale block per superblock — the 4B pad is CPU-repack
     // scratch (see the plane-layout comment in dasllama_gguf) and a blob model never repacks
-    if (!empty(t.k4s)) {
-        compact_kq_scale_strip(t.k4s)
+    if (name == "k4s") {
+        if (!empty(t.k4s)) {
+            compact_kq_scale_strip(t.k4s)
+        }
+        return true
     }
-    if (!empty(t.k5s)) {
-        compact_kq_scale_strip(t.k5s)
+    if (name == "k5s") {
+        if (!empty(t.k5s)) {
+            compact_kq_scale_strip(t.k5s)
+        }
+        return true
+    }
+    if (name != "k6s") {
+        return false
     }
     // k6: the GPU split form — [nsb x 16B sub-scale strips][nsb x f16 d halfwords]
     if (!empty(t.k6s)) {
@@ -176,9 +186,52 @@ def convert_model_to_metal_blob(var t : Model) : bool {
         }
         t.k6s <- k6c
     }
-    t.metal_blob = true
-    to_log(LOG_INFO, "dasLLAMA: metal-blob transform ({nb} blocks) in {get_time_usec(ts) / 1000} ms\n")
     return true
+}
+
+//! Commit `t` to the metal blob flavor WITHOUT building the big plane: the kq scale strips take
+//! their device form and the flag flips, but mblob stays empty and qblob/qscales16 stay put. A
+//! committed model serves NOTHING — write its image and drop it, or finish the transform.
+def metal_blob_commit(var t : Model) : bool {
+    if (!metal_blob_eligible(t)) {
+        return false
+    }
+    for (nm in ["k4s", "k5s", "k6s"]) {
+        metal_blob_scale_plane(t, nm)
+    }
+    t.metal_blob = true
+    return true
+}
+
+//! Convert a planar q8-mode Model to the metal-blob form IN PLACE — the RAM-serving rail (a model
+//! bound for an image commits instead and lets the writer derive). False = cannot take the blob
+//! form (not q8, repacked, bind-misaligned); the caller keeps the planar model.
+def convert_model_to_metal_blob(var t : Model) : bool {
+    if (t.metal_blob) {
+        metal_blob_materialize(t)   // a COMMITTED model still owes its plane; a converted one is a no-op
+        return true
+    }
+    if (!metal_blob_commit(t)) {
+        return false
+    }
+    metal_blob_materialize(t)
+    return true
+}
+
+// Build the blob plane a committed model is still missing and retire the planar sources. The only
+// way a model reaches here already whole is the early return above, where qblob is long gone.
+def private metal_blob_materialize(var t : Model) {
+    let sh = metal_blob_shape(t)
+    if (sh.blocks <= 0l) {
+        return
+    }
+    let ts = ref_time_ticks()
+    t.mblob |> resize_no_init(sh.blocks * sh.stride)
+    metal_blob_fill_blocks(t, 0l, sh.blocks, t.mblob)
+    delete t.qblob
+    delete t.qscales
+    delete t.qscales16
+    to_log(LOG_INFO, "dasLLAMA: metal-blob transform ({sh.blocks} blocks) in {get_time_usec(ts) / 1000} ms\n")
 }
 
 // 20B -> 16B in place: keep bytes [0..16) of every superblock strip, then shrink. Forward
@@ -544,8 +597,8 @@ def moe_gpu_gather_stack(t : Model; woff : int64; n, rows, slice_rows : int64; m
                          var wq : array<uint8>; var ws : array<uint8>) {
     let nb = n / Q8_BLOCK_ELEMS
     assert(rows * n <= 2147483647l, "GPU MoE stack exceeds the int32 gather-buffer rail")
-    wq |> resize(int(rows * n))
-    ws |> resize(int(rows * nb * Q8_SPB))
+    wq |> resize(rows * n)
+    ws |> resize(rows * nb * Q8_SPB)
     assert(wbias == 0l || wbias == 128l, "GPU MoE gather: unknown q8 plane bias")
     let nslices = int(rows / slice_rows)
     unsafe {
@@ -610,7 +663,7 @@ def moe_gpu_gather_stack_q8n(t : Model; woff : int64; n, rows, slice_rows : int6
                              var wq : array<uint8>) {
     let nb = n / Q8_BLOCK_ELEMS
     assert(rows * nb * Q8N_BPB <= 2147483647l, "GPU q8n stack exceeds the int32 gather-buffer rail")
-    wq |> resize(int(rows * nb * Q8N_BPB))
+    wq |> resize(rows * nb * Q8N_BPB)
     assert(wbias == 0l || wbias == 128l, "GPU q8n gather: unknown q8 plane bias")
     let nslices = int(rows / slice_rows)
     unsafe {
@@ -669,46 +722,18 @@ def moe_gpu_gather_stack_q8n(t : Model; woff : int64; n, rows, slice_rows : int6
     }
 }
 
-// Disk-order K-quant plane accessors for the kq gather's un-repacked/tail rows (source of
-// truth: the private twins beside repack_k4/k5/k6_grp in dasllama_math_gen.das — replicated
-// because math_gen mounts conditionally behind the dasLLVM guard).
-
-// low 4 bits of weight k off a disk-order k4/k5 nibble row (128 bytes per superblock)
-def private kq_disk_nib45(rowq : uint8 const?; k : int64) : uint {
-    let js = k / 64l
-    let rem = k % 64l
-    let b = uint(unsafe(rowq[js * 32l + rem % 32l]))
-    return rem < 32l ? b & 15u : b >> 4u
-}
-
-// the 5th bit of weight k off a disk-order k5 qh row (32 bytes per superblock)
-def private kq_disk_hbit5(rowh : uint8 const?; k : int64) : uint {
-    let js = k / 64l
-    let rem = k % 64l
-    return (uint(unsafe(rowh[rem % 32l])) >> uint(2l * js + (rem < 32l ? 0l : 1l))) & 1u
-}
-
-// low 4 bits of weight k off a disk-order k6 ql row (128 bytes per superblock)
-def private kq_disk_nib6(rowq : uint8 const?; k : int64) : uint {
-    let h = k / 128l
-    let g = (k % 128l) / 32l
-    let b = uint(unsafe(rowq[h * 64l + (g % 2l) * 32l + k % 32l]))
-    return g < 2l ? b & 15u : b >> 4u
-}
-
 // Gather one PREPARED K-quant weight stack into the GPU tier's device planes — quant payloads
 // row-major per superblock in the k/k+16 nibble pairing, plus DECODED 20B scale rows. Reads
 // whatever the load prepared (grp<mr> interleave or disk-order); device bytes are identical either way.
 def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_rows : int64;
                             repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
     let nsb = n / KQ_SUPERBLOCK_ELEMS
-    let sid = kq_schema_id(fmt)
-    let qsb = kq_qsb(sid)    // quant plane stride per superblock (disk == device for quants)
-    let dssb = kq_ssb(sid)   // disk/plane scale stride; device rows decode to KQ_DEV_SSB
+    let qsb = kq_qsb(fmt)    // quant plane stride per superblock (disk == device for quants)
+    let dssb = kq_ssb(fmt)   // disk/plane scale stride; device rows decode to KQ_DEV_SSB
     assert(n % KQ_SUPERBLOCK_ELEMS == 0l, "GPU MoE kq gather: row length must be a superblock multiple")
     assert(rows * nsb * qsb <= 2147483647l, "GPU MoE kq stack exceeds the int32 gather-buffer rail")
-    wq |> resize(int(rows * nsb * qsb))
-    ws |> resize(int(rows * nsb * KQ_DEV_SSB))
+    wq |> resize(rows * nsb * qsb)
+    ws |> resize(rows * nsb * KQ_DEV_SSB)
     let nslices = int(rows / slice_rows)
     let qrow = nsb * qsb
     let srow = nsb * dssb
@@ -788,8 +813,8 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                 } else {
                                     for (m in range64(128l)) {   // re-pair disk k/k+32 nibbles to k/k+16
                                         let k = (m / 16l) * 32l + m % 16l
-                                        let lo = fmt == KqFmt.k6 ? kq_disk_nib6(rq, k) : kq_disk_nib45(rq, k)
-                                        let hi = fmt == KqFmt.k6 ? kq_disk_nib6(rq, k + 16l) : kq_disk_nib45(rq, k + 16l)
+                                        let lo = fmt == KqFmt.k6 ? k6_nib(rq, k) : k45_nib(rq, k)
+                                        let hi = fmt == KqFmt.k6 ? k6_nib(rq, k + 16l) : k45_nib(rq, k + 16l)
                                         dq[m] = uint8(lo | (hi << 4u))
                                     }
                                 }
@@ -798,8 +823,8 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                         let k = (bj / 4l) * 32l + (bj % 4l) * 4l
                                         var hb = 0u
                                         for (tt in range64(4l)) {
-                                            hb |= kq_disk_hbit5(rq + 128l, k + tt) << uint(tt)
-                                            hb |= kq_disk_hbit5(rq + 128l, k + 16l + tt) << uint(4l + tt)
+                                            hb |= k5_hbit(rq + 128l, k + tt) << uint(tt)
+                                            hb |= k5_hbit(rq + 128l, k + 16l + tt) << uint(4l + tt)
                                         }
                                         dq[128l + bj] = uint8(hb)
                                     }
@@ -840,5 +865,6 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
 def private register_layout_hooks {
     register_model_layout(@@repack_q8_weights, @@repack_kq_weights, @@repack_mx4_stacks, @@repack_q51_stacks,
         @@moe_gpu_gather_stack, @@moe_gpu_gather_stack_kq, @@moe_gpu_gather_stack_q8n)
-    register_stream_layout(@@collect_q8_regions, @@collect_kq_regions, @@collect_q51_regions, @@stream_repack_one)
+    register_stream_layout(@@collect_q8_regions, @@collect_kq_regions, @@collect_q51_regions, @@stream_repack_one,
+        @@metal_blob_eligible, @@metal_blob_scale_plane)
 }

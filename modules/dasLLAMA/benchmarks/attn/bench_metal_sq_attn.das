@@ -1,12 +1,15 @@
 options gen2
 options persistent_heap
+options _function_length = 0        // one MSL kernel body + its hand-bound dispatch per lab — barrier/register coupled, no seam
+options _cyclomatic_complexity = 0  // same — the side-by-side runners are flat arm ladders
 
 require dastest/testing_boost
 require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
 require metal/msl_shader
-require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — GPU driver half, Apple builds only
-require dasllama/dasllama_metal_llama  // nolint:STYLE030 — the production batch attention MSL (zero copy drift)
-require dasllama/dasllama_math   // the q8_0 KV codec (quantize_q8kv_row / cvt_q8kv_to_f32) — the store oracle
+require ?das_metal metal/das_metal_boost  // GPU driver half, Apple builds only
+require dasllama/dasllama_metal_decode  // the production batch attention MSL (zero copy drift)
+require dasllama/dasllama_math
+require dasllama/dasllama_kv_codec   // the q8_0/tq4 KV codecs (quantize_q8kv_row / cvt_q8kv_to_f32 / FWHT) — the store oracle
 require math
 require strings
 
@@ -1131,8 +1134,7 @@ def private run_attn_b2_sidebyside(b) {
         let nsgsd = min(nch32, int64(env_int("DASMETAL_LAB_ATTN_NSGS", 16)))
         var nsgsdbuf = upload_u32(dev, uint(nsgsd))
         // rt row: (kbase, vbase, capacity, cnt) — flat single-layer mirror at base 0
-        var rte : array<uint>
-        rte <- [0u, 0u, uint(depth), uint(depth), 0u, 0u, uint(depth), uint(depth)]
+        var rte <- [0u, 0u, uint(depth), uint(depth), 0u, 0u, uint(depth), uint(depth)]
         var rtbuf = upload_array(dev, rte, nb * 16l)
         var yref <- cpu_sq_attn(kc, vc, q, nb, depth, nheads, head_size, kv_dim, kv_mul, scale)
         var bufs_part <- [kbuf, vbuf, qbuf, partbuf, rtbuf, laybuf, kvdimbuf, nheadsbuf, kvmulbuf, hsbuf, scalebuf, qstridebuf, nchmaxbuf, cap0buf, win0buf]
@@ -1149,10 +1151,8 @@ def private run_attn_b2_sidebyside(b) {
         let groups_partd = uint3(uint(nheads), uint((nsgsd + 3l) / 4l), uint(nb))
         let groups_comb = uint3(uint(nheads * nb), 1u, 1u)
         let groups_combp = uint3(uint(nheads), uint(nb), 1u)
-        var best : array<double>
-        var est : array<double>
-        best <- [1.0e30lf, 1.0e30lf, 1.0e30lf, 1.0e30lf]
-        est <- [0.0lf, 0.0lf, 0.0lf, 0.0lf]
+        var best <- [1.0e30lf, 1.0e30lf, 1.0e30lf, 1.0e30lf]
+        var est <- [0.0lf, 0.0lf, 0.0lf, 0.0lf]
         var names <- ["part+comb", "partD+combG", "partF+comb32", "partF64+combG"]
         // warmup + correctness, each arm against the CPU oracle
         for (arm in range(4)) {

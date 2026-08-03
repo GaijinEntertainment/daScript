@@ -634,7 +634,7 @@ namespace das
     ,   runtime_function                                            =   50500    // 3 site(s)
     ,   runtime_function_annotation                                 =   50501    // 5 site(s)
     ,   runtime_global                                              =   50502    // 2 site(s)
-    ,   runtime_macro                                               =   50503    // 6 site(s)
+    ,   runtime_macro                                               =   50503    // 7 site(s)
 
 // internal_*
 
@@ -645,9 +645,9 @@ namespace das
     ,   internal_block_missing_return_type                          =   50604    // 1 site(s)
     ,   internal_class                                              =   50605    // 1 site(s)
     ,   internal_enumeration                                        =   50606    // 1 site(s)
-    ,   internal_expression                                         =   50607    // 26 site(s)
-    ,   internal_field                                              =   50608    // 1 site(s)
-    ,   internal_function                                           =   50609    // 9 site(s)
+    ,   internal_expression                                         =   50607    // 29 site(s)
+    ,   internal_field                                              =   50608    // 2 site(s)
+    ,   internal_function                                           =   50609    // 11 site(s)
     ,   internal_function_annotation                                =   50610    // 1 site(s)
     ,   internal_function_changed                                   =   50611    // 1 site(s)
     ,   internal_function_name                                      =   50612    // 1 site(s)
@@ -678,7 +678,7 @@ namespace das
     ,   internal_type                                               =   50637    // 15 site(s)
     ,   internal_type_alias                                         =   50638    // 1 site(s)
     ,   internal_typeinfo_macro                                     =   50639    // 1 site(s)
-    ,   internal_variable                                           =   50640    // 3 site(s)
+    ,   internal_variable                                           =   50640    // 9 site(s)
 
     // ===== preserved for direct (non-error()) callers =====
     ,   missing_aot                                                 =   50101    // Program::linkError direct

@@ -386,10 +386,10 @@ button:disabled { opacity: 0.45; cursor: default; }
             scheduler, the paged KV cache, this HTTP server — is written in
             <a href="https://daslang.io">daslang</a>, a statically-typed scripting language for
             games. No PyTorch, no llama.cpp, no CUDA: the LLM engine — kernels, IR generators,
-            tokenizer, loaders — is ~26&#8239;000 lines of <code>.das</code>, JIT-compiled to
+            tokenizer, loaders — is ~35&#8239;000 lines of <code>.das</code>, JIT-compiled to
             native code through LLVM at startup, with its hot kernels auto-tuned per box on
-            first run. The speech-recognition stack adds ~7&#8239;000, the Metal and Vulkan GPU
-            backends ~15&#8239;000, and the server, scheduler, and this page ~4&#8239;000 more.
+            first run. The speech-recognition stack adds ~8&#8239;500, the Metal and Vulkan GPU
+            backends ~28&#8239;500, and the server, scheduler, and this page ~7&#8239;000 more.
             The GPU tier offloads MoE expert stacks over Vulkan compute — hybrid by layer
             <i>type</i>, not layer count.
         </p>

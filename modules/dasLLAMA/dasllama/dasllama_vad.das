@@ -175,7 +175,7 @@ def load_vad_model(path : string) : VadModel {
 
 def private sv_ensure(var a : array<float>; n : int64) {
     if (long_length(a) != n) {
-        a |> resize(int(n))
+        a |> resize(n)
     }
 }
 
@@ -222,7 +222,9 @@ def private sv_sigmoid(x : float) : float {
 
 //! Advance one 512-sample chunk and return its speech probability, updating streaming state.
 //! `chunk` must hold exactly SV_CHUNK samples (16 kHz mono f32).
+[hot_path]
 def vad_chunk_prob(m : VadModel; var st : VadState; chunk : array<float> | #) : float {
+    guard_interp_inference("VAD")   // the one seam every VAD verb crosses (~31 calls/s: one branch)
     // 1. window = context ++ chunk, reflect-pad right 64 (left 0)
     for (i in range64(SV_CONTEXT)) { st.padded[i] = st.context[i] }
     for (i in range64(SV_CHUNK)) { st.padded[SV_CONTEXT + i] = chunk[i] }
@@ -421,7 +423,7 @@ def vad_iter_reset(var it : VadIter; opts : VadOpts) {
     vad_reset(it.st)
     it.opts = opts
     it.pending |> clear()
-    it.chunk |> resize(int(SV_CHUNK))
+    it.chunk |> resize(SV_CHUNK)
     it.cur = 0l
     it.triggered = false
     it.temp_end = 0l

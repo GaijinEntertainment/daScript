@@ -17,7 +17,7 @@ require dasllama/dasllama_kernel_access
 // unioned per @binding), and splices the result into the module as a spec string:
 //     "kernel=readmask,writemask;..."   (decimal, 6-bit binding masks, name-sorted)
 // The runtime pairs those masks with per-descriptor-set region bits to derive each dispatch's
-// hazard masks — see dasllama_math_vulkan's hz_dispatch.
+// hazard masks — see dasllama_vulkan_common's hz_dispatch.
 //
 // Escape hatch: [vk_access(reads="vk_a,vk_b", writes="vk_y")] on a kernel overrides derivation.
 // Without force=true the override must MATCH the derived masks (a drift guard); force=true makes

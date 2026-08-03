@@ -1,5 +1,5 @@
 options gen2
-options stack = 65536   // the respond()/prefill chain + generated NEON kernels overflow the 16K default on arm64 (M1)
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options persistent_heap   // + explicit deletes below: each test frees its model/session before the next loads, so multi-GB weights never accumulate in the process
 
 require dastest/testing_boost public
@@ -9,17 +9,13 @@ require dasllama/dasllama_bpe
 require daslib/jobque_boost
 require daslib/fio
 require math
+require _model_tier   // model_available: presence + the >6 GiB PARITY_FULL tier gate
 
 // The unified chat engine must render each arch's turn EXACTLY as the old per-model REPLs hand-rolled
 // it — same special-token ids, same text segmentation — so collapsing the 5 REPLs into one changes no
 // tokens. Each case rebuilds the old demo's first-turn prefill against the RAW tokenizer backend and
 // compares it to render_turn(). GGUF models are gitignored, so each case skips cleanly when absent.
 
-// override the machine-local model root with DASLLAMA_MODELS_DIR (e.g. on the x64 handoff box)
-def private models_dir() : string {
-    let env = get_env_variable("DASLLAMA_MODELS_DIR")
-    return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
-}
 let SYS = "You are a helpful, friendly assistant. Keep answers concise."
 let USR = "Once upon a time"
 
@@ -27,8 +23,8 @@ def private same(a, b : array<int64>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (va, vb in a, b) {
+        if (va != vb) {
             return false
         }
     }
@@ -40,8 +36,8 @@ def private same(a, b : array<uint8>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (va, vb in a, b) {
+        if (va != vb) {
             return false
         }
     }
@@ -51,7 +47,7 @@ def private same(a, b : array<uint8>) : bool {
 // Load capped to a tiny context: these cases only render prompts, and the session's KV cache is sized
 // to config.seq_len — Phi/Llama-3's native 131072 would allocate ~64GB.
 def private load_capped(path : string) : Model {
-    var m <- load_model(path, QuantMode.q8)
+    var m <- load_model_(path, QuantMode.q8)
     m.config.seq_len = min(m.config.seq_len, 512l)
     return <- m
 }
@@ -214,7 +210,7 @@ def test_chat_end_to_end(t : T?) {
             t |> skip("{path} not present")
             return
         }
-        var m <- load_model(path, QuantMode.q8)
+        var m <- load_model_(path, QuantMode.q8)
         m.config.seq_len = min(m.config.seq_len, 512l)
         var reply = ""
         var ntok = 0l
@@ -246,7 +242,7 @@ def test_chat_end_to_end(t : T?) {
 // lacks the token) <tool_response> stay in the text runs.
 
 [test]
-def test_chat_tools_hermes(t : T?) {
+def test_chat_tools_hermes(t : T?) {   // nolint:STYLE038 — flat expected-token stream, one push per run
     t |> run("Qwen ChatML renders the Hermes tool block token-for-token (needs Qwen2.5-0.5B)") @(t : T?) {
         let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
         if (!stat(path).is_valid) {
@@ -577,5 +573,65 @@ def test_chat_render_seam(t : T?) {
             delete a
             delete m
         }
+    }
+}
+
+// detokenize a rendered span for the eyeball line; specials have no piece bytes, so they
+// render as ⟨id⟩ — the markers under test must be VISIBLE in the log
+def private detok(m : Model; ids : array<int64>) : string {
+    let raw = build_string() $(writer) {
+        for (id in ids) {
+            let p = piece_(m, id)
+            writer |> write(empty(p) ? "⟨{id}⟩" : p)
+        }
+    }
+    return replace(raw, "\n", "\\n")
+}
+
+// The chat-audio marker gate: render_prompt_audio must bracket the soft-token splice in the
+// family's audio markers — the render-side half of the chat-audio rail (encoder numerics are
+// test_audio's; nothing else pins these template tags against a real vocab).
+[test]
+def test_chat_audio_markers(t : T?) {
+    t |> run("voxtral audio turn opens with [BEGIN_AUDIO] (no closing marker — mtmd shape)") @(t : T?) {
+        let path = path_join(models_dir(), "voxtral-mini-3b-q8_0.gguf")
+        if (!model_available(t, path)) {
+            return
+        }
+        var m <- load_capped(path)
+        var c <- create_chat_renderer_(m)
+        add_user(c, USR)
+        c.n_audio_rows = 3l   // planted span: render only brackets it, the splice happens at eval
+        var head : array<int64>
+        var tail : array<int64>
+        render_prompt_audio(m, c, head, tail)
+        to_log(LOG_INFO, "voxtral audio-turn eyeball: '{detok(m, head)}' [audio x3] '{detok(m, tail)}'\n")
+        let ba = special_id(m, "[BEGIN_AUDIO]")
+        t |> success(ba >= 0l, "[BEGIN_AUDIO] resolves in the vocab")
+        t |> equal(head[length(head) - 1], ba, "head closes with the opening audio marker")
+        t |> success(length(tail) > 0 && tail[0] != ba, "no closing marker — the tail starts with text")
+        delete c
+        delete m
+    }
+    t |> run("qwen2audio audio turn is bracketed by <|audio_bos|>/<|audio_eos|>") @(t : T?) {
+        let path = path_join(models_dir(), "qwen2audio-7b-q8_0.gguf")
+        if (!model_available(t, path)) {   // 7.7 GB — runs under DASLLAMA_PARITY_FULL=1
+            return
+        }
+        var m <- load_capped(path)
+        var c <- create_chat_renderer_(m)
+        add_user(c, USR)
+        c.n_audio_rows = 3l
+        var head : array<int64>
+        var tail : array<int64>
+        render_prompt_audio(m, c, head, tail)
+        to_log(LOG_INFO, "qwen2audio audio-turn eyeball: '{detok(m, head)}' [audio x3] '{detok(m, tail)}'\n")
+        let bos = special_id(m, "<|audio_bos|>")
+        let eos = special_id(m, "<|audio_eos|>")
+        t |> success(bos >= 0l && eos >= 0l, "audio markers resolve in the vocab")
+        t |> equal(head[length(head) - 1], bos, "head closes with <|audio_bos|>")
+        t |> equal(tail[0], eos, "tail opens with <|audio_eos|>")
+        delete c
+        delete m
     }
 }

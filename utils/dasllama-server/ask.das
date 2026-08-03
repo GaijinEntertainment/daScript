@@ -1,5 +1,5 @@
 options gen2
-options stack = 262144   // the forward chain runs deep
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 // ask — a one-shot dasLLAMA completion CLI, a sibling of dasllama-server.
 //

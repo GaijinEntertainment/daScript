@@ -1,6 +1,6 @@
 options gen2
 options gc               // standalone JIT loop collects between update calls
-options stack = 262144   // the forward chain runs deep under the HTTP tick + C++->das handler bridge
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 // dasllama-server — an OpenAI-compatible HTTP server over the dasLLAMA facade.
 //
@@ -250,7 +250,7 @@ def private cfg_from_toml(root : JsonValue?; key : string; var field : bool&; au
 // which keys the command line set explicitly — the fill-if-unset sentinels, plus flag-presence
 // probes for the keys where 0 is a meaningful explicit value (--threads / --affinity / --prefix
 // and the vulkan detail knobs)
-def private mark_cli_sources(cfg : ServerArgs) {
+def private mark_cli_sources(cfg : ServerArgs) {   // nolint:STYLE037,STYLE038 — one flat presence test per CLI knob; a table would hide which knobs are checked how
     if (!empty(cfg.model)) {
         g_cfg_sources["model"] = "cli"
     }
@@ -380,56 +380,60 @@ def apply_config(var cfg : ServerArgs) : bool {
     cfg_from_toml(root, "flat", cfg.flat, auth)
     cfg_from_toml(root, "mtp", cfg.mtp, auth)
     cfg_from_toml(root, "lcpp_bin", cfg.lcpp_bin, auth)
-    // [[models]] roster — per-model path + overrides; absent keys keep the ModelEntry sentinels
-    // (inherit the flat keys). Hand-written TOML gets the same backend/default checks POST
-    // /config enforces, in the warn-and-degrade shape config mistakes take everywhere else here.
     if (toml_has(root, "models")) {
-        delete g_models
-        let mv = root?["models"]
-        if (mv != null && mv.value is _array) {
-            var have_default = false
-            var seen_routes : table<string>
-            for (e in mv.value as _array) {
-                let has_mtp = e != null && (e.value is _object) && key_exists(e.value as _object, "mtp")
-                var ent = ModelEntry(
-                    name = e?["name"] ?? "", path = e?["path"] ?? "",
-                    backend = to_lower(e?["backend"] ?? "auto"),
-                    ctx = int(e?["ctx"] ?? 0l), quant = e?["quant"] ?? "",
-                    kv_dtype = e?["kv_dtype"] ?? "",
-                    streams = int(e?["streams"] ?? -1l), chunk = int(e?["chunk"] ?? -1l),
-                    page_rows = int(e?["page_rows"] ?? -1l), prefix = int(e?["prefix"] ?? -2l),
-                    mtp = has_mtp ? ((e?["mtp"] ?? false) ? 1 : 0) : -1,
-                    is_default = e?["default"] ?? false)
-                if (ent.backend != "auto" && ent.backend != "cpu" && ent.backend != "gpu") {
-                    to_log(LOG_WARNING, "dasllama-server: [[models]] '{base_name(ent.path)}' backend '{ent.backend}' is not auto | cpu | gpu — using auto\n")
-                    ent.backend = "auto"
-                }
-                if (ent.is_default && have_default) {
-                    to_log(LOG_WARNING, "dasllama-server: more than one [[models]] entry marked default = true — keeping the first\n")
-                    ent.is_default = false
-                }
-                have_default ||= ent.is_default
-                if (empty(ent.path)) {
-                    to_log(LOG_WARNING, "dasllama-server: [[models]] entry with no path — skipped\n")
-                } else {
-                    let route = empty(ent.name) ? base_name(ent.path) : ent.name
-                    if (key_exists(seen_routes, route)) {
-                        to_log(LOG_WARNING, "dasllama-server: duplicate [[models]] name '{route}' — entry skipped (requests route on the first)\n")
-                    } else {
-                        seen_routes |> insert(route)
-                        g_models |> push(ent)
-                    }
-                }
-            }
-            g_cfg_sources["models"] = "toml"
-        } else {
-            to_log(LOG_WARNING, "dasllama-server: 'models' in the config is not a [[models]] array-of-tables — roster ignored\n")
-        }
+        apply_models_roster(root)
     }
     unsafe {
         delete root
     }
     return true
+}
+
+// [[models]] roster — per-model path + overrides; absent keys keep the ModelEntry sentinels
+// (inherit the flat keys). Hand-written TOML gets the same backend/default checks POST
+// /config enforces, in the warn-and-degrade shape config mistakes take everywhere else here.
+def private apply_models_roster(root : JsonValue?) {
+    delete g_models
+    let mv = root?["models"]
+    if (mv == null || !(mv.value is _array)) {
+        to_log(LOG_WARNING, "dasllama-server: 'models' in the config is not a [[models]] array-of-tables — roster ignored\n")
+        return
+    }
+    var have_default = false
+    var seen_routes : table<string>
+    for (e in mv.value as _array) {
+        let has_mtp = e != null && (e.value is _object) && key_exists(e.value as _object, "mtp")
+        var ent = ModelEntry(
+            name = e?["name"] ?? "", path = e?["path"] ?? "",
+            backend = to_lower(e?["backend"] ?? "auto"),
+            ctx = int(e?["ctx"] ?? 0l), quant = e?["quant"] ?? "",
+            kv_dtype = e?["kv_dtype"] ?? "",
+            streams = int(e?["streams"] ?? -1l), chunk = int(e?["chunk"] ?? -1l),
+            page_rows = int(e?["page_rows"] ?? -1l), prefix = int(e?["prefix"] ?? -2l),
+            mtp = has_mtp ? ((e?["mtp"] ?? false) ? 1 : 0) : -1,
+            is_default = e?["default"] ?? false)
+        if (ent.backend != "auto" && ent.backend != "cpu" && ent.backend != "gpu") {
+            to_log(LOG_WARNING, "dasllama-server: [[models]] '{base_name(ent.path)}' backend '{ent.backend}' is not auto | cpu | gpu — using auto\n")
+            ent.backend = "auto"
+        }
+        if (ent.is_default && have_default) {
+            to_log(LOG_WARNING, "dasllama-server: more than one [[models]] entry marked default = true — keeping the first\n")
+            ent.is_default = false
+        }
+        have_default ||= ent.is_default
+        if (empty(ent.path)) {
+            to_log(LOG_WARNING, "dasllama-server: [[models]] entry with no path — skipped\n")
+            continue
+        }
+        let route = empty(ent.name) ? base_name(ent.path) : ent.name
+        if (key_exists(seen_routes, route)) {
+            to_log(LOG_WARNING, "dasllama-server: duplicate [[models]] name '{route}' — entry skipped (requests route on the first)\n")
+            continue
+        }
+        seen_routes |> insert(route)
+        g_models |> push(ent)
+    }
+    g_cfg_sources["models"] = "toml"
 }
 
 // The serving modes are QuantMode fp32/q8/q4_0, CLI spellings "fp32" | "q8" | "q4" — "q4"
@@ -676,7 +680,7 @@ def maybe_collect_gc() {
 }
 
 [export]
-def init() {
+def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are order-coupled (dispatch/affinity before the jobque, backend before the load), so the phases cannot move behind a function boundary
     if (!g_args_parsed) {
         parse_args()   // daslang-live calls init directly; standalone main parsed already
     }

@@ -1,9 +1,9 @@
 options gen2
 options _jit_fast_math = true   // ggml-parity FP laxity — matches how llama.cpp is benched
 options persistent_heap = true
-options stack = 65536
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
+require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_math   // setup_dasllama_jobque_ (the engine-standard jobque config)
 require daslib/jobque_boost
 require daslib/clargs
@@ -63,7 +63,7 @@ def private greedy_top(s : Session; vocab : int64) : int64 {
 }
 
 [export]
-def main() {
+def main() {   // nolint:STYLE038 — flat bench driver: arg handling, then one timed cell per prompt bucket
     if (!jit_enabled()) {
         print("This benchmark is JIT-only — run with: daslang -jit <file>\n")
         return

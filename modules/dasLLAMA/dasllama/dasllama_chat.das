@@ -3,7 +3,7 @@ options _comment_hygiene = true
 
 module dasllama_chat shared public
 
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
+require dasllama/dasllama_transformer   // the umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_tokenizer  // TokKind — disambiguate the "llama" chat template by backend
 require dasllama/dasllama_audio      // AudioTower + encoder: chat sessions can carry an audio tower
 require daslib/strings_boost  // join() to assemble a segment / the streamed reply in O(n)
@@ -50,6 +50,21 @@ struct ChatSession {
     n_audio_rows : int64                  // row count in audio_rows (each tower.proj_dim wide)
 }
 
+// Stated rather than inferred: the tower holds borrowed planes, and a generated teardown
+// would force every module that deletes a ChatSession to see the plane finalizers too.
+// Each field's own finalizer does the real work — this only names them in one place.
+def finalize(var c : ChatSession) {
+    delete c.session
+    delete c.tmpl
+    delete c.close_parts
+    delete c.stop_ids
+    delete c.tools_json
+    delete c.history
+    delete c.tower
+    delete c.enc
+    delete c.audio_rows
+}
+
 // ===== Chat-template resolution =====
 
 // The Zephyr / TinyLlama-chat template. Its <|system|>/<|user|>/<|assistant|> markers are plain
@@ -89,49 +104,38 @@ def private mistral_v7_tekken_template() : ChatTemplate {
     return <- ct
 }
 
-// Pick a named template by sniffing the GGUF's embedded Jinja source for each family's distinctive
+// Name a template kind by sniffing the GGUF's embedded Jinja source for each family's distinctive
 // marker — detection only, the Jinja is never executed. Resolves fine-tunes and arch-name
 // collisions (a Mistral GGUF is arch "llama" but spells [INST]); checked most-specific first.
-def private detect_chat_template(m : Model; var out : ChatTemplate) : bool {
-    let src = m.chat_template_str
-    if (empty(src)) {
-        return false
-    }
-    if (contains(src, "<|start_header_id|>")) {   // Llama-3 instruct
-        out <- arch_chat("llama")
-    } elif (contains(src, "<|channel|>")) {       // gpt-oss Harmony channel format
-        out <- arch_chat("gpt-oss")
-    } elif (contains(src, "<|im_start|>")) {      // ChatML (Qwen family, TinyLlama v0.3, ...)
-        out <- arch_chat("qwen2")
-    } elif (contains(src, "<|turn>")) {           // Gemma-4 channel-based turn format
-        out <- arch_chat("gemma4")
-    } elif (contains(src, "<start_of_turn>")) {   // Gemma (2 and 3 share the turn shape)
-        out <- arch_chat("gemma2")
-    } elif (contains(src, "<|end|>")) {           // Phi-3
-        out <- arch_chat("phi3")
-    } elif (contains(src, "v7-tekken")) {         // Mistral v7-tekken BY NAME (Voxtral GGUFs store
-        out <- mistral_v7_tekken_template()       // the llama.cpp template alias, not Jinja)
-    } elif (contains(src, "[SYSTEM_PROMPT]")) {   // Mistral v7-tekken SHAPE by Jinja source (Medium 3.5):
-        out <- mistral_v7_tekken_template()       // [SYSTEM_PROMPT] system role, unspaced [INST]
-    } elif (contains(src, "[INST]")) {            // Mistral instruct
-        out <- mistral_instruct_template()
-    } elif (contains(src, "[gMASK]<sop>")) {      // GLM-4.5 family (spells <|user|> too — before Zephyr)
-        out <- arch_chat("glm4moe")
-    } elif (contains(src, "<|user|>")) {          // Zephyr / TinyLlama-chat
-        out <- zephyr_chat_template()
-    } else {
-        return false
-    }
-    return true
+def private detect_chat_kind(src : string) : string {
+    return "llama" if (contains(src, "<|start_header_id|>"))            // Llama-3 instruct
+    return "gpt-oss" if (contains(src, "<|channel|>"))                  // gpt-oss Harmony channel format
+    return "qwen2" if (contains(src, "<|im_start|>"))                   // ChatML (Qwen family, TinyLlama v0.3, ...)
+    return "gemma4" if (contains(src, "<|turn>"))                       // Gemma-4 channel-based turn format
+    return "gemma2" if (contains(src, "<start_of_turn>"))               // Gemma (2 and 3 share the turn shape)
+    return "phi3" if (contains(src, "<|end|>"))                         // Phi-3
+    // v7-tekken BY NAME (Voxtral stores the llama.cpp alias, not Jinja), or by SHAPE (Medium 3.5)
+    return "mistral-v7-tekken" if (contains(src, "v7-tekken") || contains(src, "[SYSTEM_PROMPT]"))
+    return "mistral-instruct" if (contains(src, "[INST]"))              // Mistral instruct
+    return "glm4moe" if (contains(src, "[gMASK]<sop>"))                 // GLM-4.5 family (spells <|user|> too — before Zephyr)
+    return "zephyr" if (contains(src, "<|user|>"))                      // Zephyr / TinyLlama-chat
+    return ""
+}
+
+def private chat_template_of_kind(kind : string) : ChatTemplate {
+    return <- mistral_v7_tekken_template() if (kind == "mistral-v7-tekken")
+    return <- mistral_instruct_template() if (kind == "mistral-instruct")
+    return <- zephyr_chat_template() if (kind == "zephyr")
+    return <- arch_chat(kind)
 }
 
 //! The chat template for a loaded model: sniff the GGUF's embedded `tokenizer.chat_template`
 //! first, falling back to the arch heuristic. GGUF general.architecture is "llama" for both
 //! Llama-3 (BPE) and Llama-2 (SentencePiece), so the fallback disambiguates by tokenizer backend.
 def chat_template(m : Model) : ChatTemplate {
-    var det = ChatTemplate()
-    if (detect_chat_template(m, det)) {
-        return <- det
+    let kind = detect_chat_kind(m.chat_template_str)
+    if (!empty(kind)) {
+        return <- chat_template_of_kind(kind)
     }
     if (m.arch == "llama" && m.tok.kind == TokKind.spm) {
         return <- zephyr_chat_template()
@@ -271,10 +275,10 @@ def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) {
     render_parts(m, c.tmpl.assistant_open.parts, "", out)
 }
 
-// Render an AUDIO turn's prefill as two spans around the soft-token splice point (head before,
-// tail after) — matches llama-mtmd-cli exactly, whose text chunks break at media boundaries so
-// BPE merges never cross the audio.
-def private render_prompt_audio(m : Model; c : ChatSession; var head : array<int64>; var tail : array<int64>) {
+//! Render an AUDIO turn's prefill as two spans around the soft-token splice point (head before,
+//! tail after) — matches llama-mtmd-cli exactly, whose text chunks break at media boundaries so
+//! BPE merges never cross the audio. Public with ``create_chat_renderer_``: the render-only seam.
+def render_prompt_audio(m : Model; c : ChatSession; var head : array<int64>; var tail : array<int64>) {
     if (c.first && c.tmpl.add_bos) {
         head |> push(bos_id(m))
     }
@@ -562,7 +566,7 @@ def respond_(m : Model; var c : ChatSession; params : SamplingParams;
         let n_tail = long_length(tail)
         let npos = n_head + c.n_audio_rows + n_tail
         var embd : array<float>
-        embd |> resize(int(npos * dim))
+        embd |> resize(npos * dim)
         embed_text_rows(m, head, embd, 0l)
         for (i in range64(c.n_audio_rows * dim)) {
             embd[n_head * dim + i] = c.audio_rows[i]

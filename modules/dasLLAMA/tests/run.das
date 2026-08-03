@@ -24,10 +24,10 @@ struct RunArgs {
     full : bool
 
     @clarg_short = "s"
-    @clarg_doc = "Suite: decode | prefill | matrix | kernels | image | all (default all)"
+    @clarg_doc = "Suite: decode | prefill | matrix | kernels | image | image-vulkan | coverage | all (default all; all excludes image-vulkan)"
     suite : string = "all"
 
-    @clarg_doc = "Family filter — comma-separated family tokens (llama, qwen2, qwen3, phi3, gemma, ultravox, whisper, voxtral); only blocks of these model families run (model-free blocks always run); sets DASLLAMA_TEST_FAMILY"
+    @clarg_doc = "Family filter — comma-separated family tokens (the full list lives in tests/CLAUDE.md, EXACT match); only blocks of these model families run (model-free blocks always run); sets DASLLAMA_TEST_FAMILY"
     family : string
 
     @clarg_short = "n"
@@ -51,16 +51,20 @@ def private suite_files(name : string) : array<string> {
     } elif (name == "matrix") {
         return <- [ "modules/dasLLAMA/tests/test_metal_support_matrix.das" ]
     } elif (name == "kernels") {
-        return <- [ "modules/dasLLAMA/tests/test_metal_prefill_kernels.das" ]
+        return <- [ "modules/dasLLAMA/tests/test_metal_prefill_kernels.das",
+                    "modules/dasLLAMA/tests/test_metal_decode_kernels.das" ]
     } elif (name == "image") {
         return <- [ "modules/dasLLAMA/tests/test_model_image.das" ]
     } elif (name == "image-vulkan") {
         return <- [ "modules/dasLLAMA/tests/test_model_image_vulkan.das" ]
+    } elif (name == "coverage") {
+        return <- [ "modules/dasLLAMA/tests/test_kernel_coverage.das" ]
     } elif (name == "all") {
         return <- [ "modules/dasLLAMA/tests/test_metal_decode_parity.das",
                     "modules/dasLLAMA/tests/test_metal_prefill_parity.das",
                     "modules/dasLLAMA/tests/test_metal_support_matrix.das",
                     "modules/dasLLAMA/tests/test_metal_prefill_kernels.das",
+                    "modules/dasLLAMA/tests/test_metal_decode_kernels.das",
                     "modules/dasLLAMA/tests/test_model_image.das" ]
     }
     var none : array<string>
@@ -93,13 +97,11 @@ def private log_summary(log_path : string) : string {
     return summary
 }
 
-[export]
 // CPU_PREFILL: the suites' CPU truth halves and parity controls prefill on the CPU by intent.
 // HAZARD_STRICT: the scheduling-unification ratchet's runtime half — an undeclared dispatch
 // on an armed hazard oracle PANICS here, so declaration gaps can never ship quietly.
 // cmd.exe has no VAR=val prefix — `set "VAR=val"&&` is the safe form (llvm_tune's tuner_cmd)
-def private build_env_prefix(cfg : RunArgs) : string {
-    let win = get_platform_name() == "windows"
+def private child_envs(cfg : RunArgs; win : bool) : string {
     var envs = ""
     if (win) {
         envs = ((cfg.full ? "set \"DASLLAMA_PARITY_FULL=1\"&& " : "set \"DASLLAMA_TEST_ARMS={cfg.arm}\"&& ")
@@ -119,9 +121,25 @@ def private build_env_prefix(cfg : RunArgs) : string {
         envs = (win ? "{envs}set \"DASLLAMA_GPU=1\"&& set \"DASLLAMA_GPU_VRAM_MB=2000\"&& "
             : "DASLLAMA_GPU=1 DASLLAMA_GPU_VRAM_MB=2000 {envs}")
     }
+    // ONE tune per box (rig_tune_manifest's contract, inlined — profile_common pulls the whole
+    // engine): pin the children to the box manifest so their .dlim image identities agree with
+    // the perf rig's. Without this every child auto-mints its own sidecar tune, computes a
+    // FOREIGN image identity, and its save GC-purges the rig's images as dead siblings
+    // (observed 2026-07-30: fam-gemma4 freed 34 GB of bench flavors). A caller-set
+    // DAS_TUNE_MANIFEST inherits; a box without a minted manifest keeps sidecar behavior.
+    if (empty(get_env_variable("DAS_TUNE_MANIFEST"))) {
+        let boxEnv = get_env_variable("DASLLAMA_BOX")
+        let manifest = "modules/dasLLAMA/performance/{empty(boxEnv) ? "m1" : boxEnv}.tune.json"
+        var mst : FStat
+        if (stat(manifest, mst)) {
+            envs = (win ? "{envs}set \"DAS_TUNE_MANIFEST={manifest}\"&& "
+                : "DAS_TUNE_MANIFEST='{manifest}' {envs}")
+        }
+    }
     return envs
 }
 
+[export]
 def main() : int {
     var r <- parse_args(type<RunArgs>)
     if (r |> is_err) {
@@ -144,7 +162,7 @@ def main() : int {
     }
     var files <- suite_files(cfg.suite)
     if (empty(files)) {
-        to_log(LOG_ERROR, "unknown --suite '{cfg.suite}' (decode | prefill | matrix | kernels | image | image-vulkan | all)\n")
+        to_log(LOG_ERROR, "unknown --suite '{cfg.suite}' (decode | prefill | matrix | kernels | image | image-vulkan | coverage | all)\n")
         return 2
     }
     var tmp = get_env_variable("TMPDIR")
@@ -154,7 +172,8 @@ def main() : int {
     if (empty(tmp)) {
         tmp = "/tmp"
     }
-    let envs = build_env_prefix(cfg)
+    let win = get_platform_name() == "windows"
+    let envs = child_envs(cfg, win)
     // the full gate holds the 8B/70B tails — the stock 1200s dastest wall is an arm-mode budget
     let tmo = cfg.full ? 3600 : 1200
     let reps = max(cfg.nreps, 1)

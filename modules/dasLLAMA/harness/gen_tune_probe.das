@@ -34,24 +34,26 @@ require dasllama/dasllama_math
 require dasllama/dasllama_math_default
 require dasllama/dasllama_math_aarch64_neon
 require dasllama/dasllama_math_gen
+require dasllama/dasllama_repack
 require dasllama/dasllama_gemm_schema
-require dasllama/dasllama_quant
+require dasllama/dasllama_convert
 require dasllama/dasllama_gguf   // transcode_q*k_superblock — the kq fixture pack rail
 require llvm/daslib/f16_cvt   // f32_to_f16 — the kq fixtures pack disk superblock headers
 require llvm/daslib/llvm_tune
 require daslib/random
+require daslib/json   // JsonValue — the null runtime arg of the deferred sidecar merge
+require daslib/json_boost   // JV over tuples — the per-variant race rows
 require daslib/fio   // has_env_variable: the compile-only mint gate (slice J recipe)
 require daslib/strings_boost   // split — the confirm pass parses child output
 require daslib/command_line    // get_das_exe — the confirm pass spawns daslang children
-require tuner_cli              // --tune-fast, shared with tune_kernels
+require tuner_cli              // --tune-paranoid, shared with tune_kernels
+require tuner_noise            // the noise gate, shared with tune_kernels
 require math
 require strings
 
-// This half is a flat best-of-N with no screening phase to narrow, so the round count is the
-// only budget dial --tune-fast has. The confirm pass is deliberately NOT cut: it is a
-// correctness gate, and skipping it ships an unconfirmed crown (the SPR amx lesson).
+// This half is a flat best-of-N; paranoid triples the round count. The confirm pass is never
+// cut: it is a correctness gate, and skipping it ships an unconfirmed crown (the SPR amx lesson).
 let ROUNDS_FULL = 6
-let ROUNDS_FAST = 3
 var ROUNDS = ROUNDS_FULL
 
 struct Fixture {
@@ -67,13 +69,13 @@ struct Fixture {
 def build_fixture(n, d, ntok : int64) : Fixture {
     var fx = Fixture(n = n, d = d, ntok = ntok, nb = n / 32l)
     var w : array<float>
-    w |> resize(int(n * d))
+    w |> resize(n * d)
     for (i in range64(n * d)) {
         w[i] = float(i % 17l) * 0.13 - 1.1
     }
     let qt <- quantize_q8_0(w, n * d)
-    fx.q |> resize(int(n * d))
-    fx.s |> resize(int(d * fx.nb))
+    fx.q |> resize(n * d)
+    fx.s |> resize(d * fx.nb)
     for (i in range64(n * d)) {
         fx.q[i] = qt.q[i]
     }
@@ -82,16 +84,16 @@ def build_fixture(n, d, ntok : int64) : Fixture {
     }
 
     var xrow : array<float>
-    xrow |> resize(int(n))
-    fx.xq |> resize(int(ntok * n))
-    fx.xs |> resize(int(ntok * fx.nb))
+    xrow |> resize(n)
+    fx.xq |> resize(ntok * n)
+    fx.xs |> resize(ntok * fx.nb)
     for (tk in range64(ntok)) {
         for (i in range64(n)) {
             xrow[i] = float((i + tk * 7l) % 23l) * 0.07 - 0.8
         }
         quantize_q8_0_into(xrow, n, fx.xq, fx.xs, tk * n, tk * fx.nb)
     }
-    fx.xbs |> resize(int(ntok * fx.nb))
+    fx.xbs |> resize(ntok * fx.nb)
     for (tk in range64(ntok)) {
         for (bi in range64(fx.nb)) {
             var bsum = 0
@@ -104,7 +106,7 @@ def build_fixture(n, d, ntok : int64) : Fixture {
 
     // the oracle: hand laneq semantics off a grp4 copy — the per-block fold order is the same
     // in every variant, so one oracle serves all layouts
-    fx.yref |> resize(int(ntok * d))
+    fx.yref |> resize(ntok * d)
     var q4 := fx.q
     var s4 := fx.s
     unsafe {
@@ -279,16 +281,16 @@ def build_mx4_fixture(n, d : int64) : Mx4Fixture {
     fx.wn <- [for (_i in range64(d * n / 2l)); uint8(random_int(seed) % 256)]
     fx.we <- [for (_i in range64(d * fx.nb)); uint8(118 + random_int(seed) % 14)]
     var xrow : array<float>
-    xrow |> resize(int(n))
-    fx.xq |> resize(int(n))
-    fx.xs |> resize(int(fx.nb))
+    xrow |> resize(n)
+    fx.xq |> resize(n)
+    fx.xs |> resize(fx.nb)
     for (i in range64(n)) {
         xrow[i] = float(i % 23l) * 0.07 - 0.8
     }
     quantize_q8_0_into(xrow, n, fx.xq, fx.xs, 0l, 0l)
     // the oracle: hand interleaved-mx4 semantics off a grp4 plane copy (fold order is
     // layout-independent, like the Q8 oracle)
-    fx.yref |> resize(int(d))
+    fx.yref |> resize(d)
     var n4 := fx.wn
     var e4 := fx.we
     var lut : int8[16]
@@ -434,10 +436,10 @@ def build_kq_fixture(fmt : int64; n, d, ntok : int64) : KqFixture {
     var fx = KqFixture(fmt = fmt, n = n, d = d, ntok = ntok, nsb = n / 256l)
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
-    fx.kq |> resize(int(d * fx.nsb * qsb))
-    fx.ks |> resize(int(d * fx.nsb * ssb))
+    fx.kq |> resize(d * fx.nsb * qsb)
+    fx.ks |> resize(d * fx.nsb * ssb)
     var blkb : array<uint8>
-    blkb |> resize(int(fmt == 4l || fmt == 40l ? 144l : (fmt == 5l ? 176l : 210l)))
+    blkb |> resize(fmt == 4l || fmt == 40l ? 144l : (fmt == 5l ? 176l : 210l))
     for (r in range64(d)) {
         for (s in range64(fx.nsb)) {
             let base = int(r * 31l + s * 7l)
@@ -458,10 +460,10 @@ def build_kq_fixture(fmt : int64; n, d, ntok : int64) : KqFixture {
     // activations: the production quantizer, whose bsums plane IS the kq contract (per-16
     // sums). kq v2: every format takes the Q8_K form — ONE scale per 256-superblock
     var xrow : array<float>
-    xrow |> resize(int(n))
-    fx.xq |> resize(int(ntok * n))
-    fx.xs |> resize(int(ntok * (n / 256l)))
-    fx.xbs |> resize(int(ntok * (n / 16l)))
+    xrow |> resize(n)
+    fx.xq |> resize(ntok * n)
+    fx.xs |> resize(ntok * (n / 256l))
+    fx.xbs |> resize(ntok * (n / 16l))
     for (tk in range64(ntok)) {
         for (i in range64(n)) {
             xrow[i] = float((i + tk * 7l) % 23l) * 0.07 - 0.8
@@ -470,7 +472,7 @@ def build_kq_fixture(fmt : int64; n, d, ntok : int64) : KqFixture {
     }
     delete xrow
     // the oracle: the scalar grp walk off a grp4 copy (fold order is layout-independent)
-    fx.yref |> resize(int(ntok * d))
+    fx.yref |> resize(ntok * d)
     var q4 := fx.kq
     var s4 := fx.ks
     unsafe {
@@ -650,7 +652,7 @@ def kq_gate_variant(suffix : string; tile : KqTileFn; gemv : KqRowsFn;
             repack_kq_grp_fmt(kfx.fmt, addr(kqv[0]), addr(ksv[0]), kfx.n, kfx.d, mr)
         }
         var yk : array<float>
-        yk |> resize(int(kfx.ntok * kfx.d))
+        yk |> resize(kfx.ntok * kfx.d)
         run_kq_tile(tile, kfx, kqv, ksv, mr, yk)
         let tok = close_to_kq_ref(kfx, yk, maxdiff)
         if (!tok) {
@@ -665,7 +667,7 @@ def kq_gate_variant(suffix : string; tile : KqTileFn; gemv : KqRowsFn;
         }
         ok = ok && tok
         var ykg : array<float>
-        ykg |> resize(int(kfx.d))
+        ykg |> resize(kfx.d)
         run_kq_gemv(gemv, kfx, kqv, ksv, mr, ykg)
         let gok = close_to_kq_ref(kfx, ykg, maxdiff)
         if (!gok) {
@@ -703,8 +705,8 @@ struct Q51Fixture {
 
 def build_q51_fixture(n, d : int64) : Q51Fixture {
     var fx = Q51Fixture(n = n, d = d, nb = n / 32l)
-    fx.qq |> resize(int(d * fx.nb * 20l))
-    fx.qs |> resize(int(d * fx.nb * 4l))
+    fx.qq |> resize(d * fx.nb * 20l)
+    fx.qs |> resize(d * fx.nb * 4l)
     // valid small f16 scale bit patterns (d, m) cycled per block; quant/qh bytes an LCG walk
     let f16s = fixed_array(0x2E66, 0x3266, 0xB18F, 0x2C00, 0x3000, 0xB266, 0x2A8F, 0x3400)
     var seed = 0x12345
@@ -724,15 +726,15 @@ def build_q51_fixture(n, d : int64) : Q51Fixture {
         }
     }
     var xrow : array<float>
-    xrow |> resize(int(n))
+    xrow |> resize(n)
     for (i in range64(n)) {
         xrow[i] = float((i * 13l) % 37l) * 0.05 - 0.9
     }
-    fx.xq |> resize(int(n))
-    fx.xs |> resize(int(fx.nb))
+    fx.xq |> resize(n)
+    fx.xs |> resize(fx.nb)
     quantize_q8_0_into(xrow, n, fx.xq, fx.xs, 0l, 0l)
     delete xrow
-    fx.xbs |> resize(int(fx.nb))
+    fx.xbs |> resize(fx.nb)
     for (bi in range64(fx.nb)) {
         var s = 0
         for (j in range64(32l)) {
@@ -740,7 +742,7 @@ def build_q51_fixture(n, d : int64) : Q51Fixture {
         }
         fx.xbs[bi] = s
     }
-    fx.yref |> resize(int(d))
+    fx.yref |> resize(d)
     unsafe {
         for (r in range64(d)) {
             fx.yref[r] = dot_q51q8_scalar(addr(fx.qq[0]) + r * fx.nb * 20l, addr(fx.qs[0]) + r * fx.nb * 4l,
@@ -787,7 +789,7 @@ def private q51_layout_mrs() : table<string; int> {
 
 // The q51 family tune pass: gate every variant against the scalar disk oracle on repacked
 // planes, iso-bench the streamed decode shape, return the best suffix ("" = a gate failed).
-def q51_tune_family() : string {
+def q51_tune_family(var rows_out : table<string; JsonValue?>) : string {
     var sfx <- build_q51_fixture(704l, 32768l)   // streamed: the 26B expert-down K at DRAM scale
     var hfx <- build_q51_fixture(704l, 2816l)    // hot: one expert's down stack
     var tvs <- q51q8_gemv_gen_variants()
@@ -795,9 +797,9 @@ def q51_tune_family() : string {
     var best = ""
     var bestDt = 2147483647
     var y : array<float>
-    y |> resize(int(sfx.d))
+    y |> resize(sfx.d)
     var yh : array<float>
-    yh |> resize(int(hfx.d))
+    yh |> resize(hfx.d)
     for (v in tvs) {
         let mr = int64(mrs?[v._0] ?? q51q8_layout_gen())
         var sq := sfx.qq
@@ -828,6 +830,7 @@ def q51_tune_family() : string {
             dt = min(dt, get_time_usec(t0))
         }
         let gb = double(sfx.d * sfx.nb * 24l) / double(max(dt, 1)) / 1000.0lf
+        rows_out[v._0] = JV((streamed_us = double(dt)))
         tune_detail("q51 {v._0} (mr={mr}): ok (maxdiff {maxdiff}), streamed {dt} us ({gb:0.1f} GB/s)\n")
         if (dt < bestDt) {
             bestDt = dt
@@ -867,7 +870,7 @@ def kq_test_family(fmt : int64; kfxs : array<KqFixture>) : bool {
 // and the gemv (streamed + hot decode shapes), print the table, and return the tile-best
 // suffix ("" = a gate failed). The kq gemv is nrsplit-independent — same-mr rows share the
 // plane and the gemv shape — so the tile bench decides the family entry.
-def kq_tune_family(fmt : int64) : string {
+def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>) : string { // nolint:STYLE038 — one family race: shared repacked buffers couple gate, bench and pick
     // batch shape: fat STREAMING ffn (weights > the L2 budget, multi-token-block walk) — the shape
     // class that carries ~90% of prefill time. The old 2048x512x64 kv-projection probe was L2-hot
     // and crowned hot-shape winners that lose double-digit % at model scale (mr4 vs mr8, M1).
@@ -912,11 +915,11 @@ def kq_tune_family(fmt : int64) : string {
         }
     }
     var ky : array<float>
-    ky |> resize(int(kbfx.ntok * kbfx.d))
+    ky |> resize(kbfx.ntok * kbfx.d)
     var kyg : array<float>
-    kyg |> resize(int(kgfx.d))
+    kyg |> resize(kgfx.d)
     var kyh : array<float>
-    kyh |> resize(int(khfx.d))
+    kyh |> resize(khfx.d)
     // correctness first — a tune run must never crown a broken variant
     for (vi in range(nv)) {
         verify(gtab |> key_exists(tvs[vi]._0))
@@ -981,6 +984,7 @@ def kq_tune_family(fmt : int64) : string {
         if (best[vi] < best[winner]) {
             winner = vi
         }
+        rows_out[tvs[vi]._0] = JV((tile_us = best[vi], gemv_us = gbest[vi], hot_us = hbest[vi]))
         tune_detail("k{fmt} {tvs[vi]._0} (mr={vmr[vi]}): tile {macs / best[vi] / 1000.0lf} GMAC/s, gemv stream {gmacs / gbest[vi] / 1000.0lf} GMAC/s ({gwbytes / gbest[vi] / 1000.0lf} GB/s w), hot {hmacs / hbest[vi] / 1000.0lf} GMAC/s (best of {ROUNDS})\n")
     }
     let wname = tvs[winner]._0
@@ -1007,6 +1011,10 @@ def kq_tune_family(fmt : int64) : string {
 let CLOSE_REL = 1e-4
 let CLOSE_ABS = 1e-5
 
+// family entry -> rows object for the sidecar "race" section, filled as each family races and
+// flushed with the winners — margins must be answerable from the file, not the scrollback
+var private g_rows : table<string; JsonValue?>
+
 def close_to_ref(fx : Fixture; y : array<float>; var maxdiff : float&) : bool {
     var ok = true
     for (i in range(length(y))) {
@@ -1017,7 +1025,7 @@ def close_to_ref(fx : Fixture; y : array<float>; var maxdiff : float&) : bool {
     return ok
 }
 
-def test_mode : bool {
+def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctness ladder; each desync check is one arm
     // nb=2 (even main loop), nb=3 (remainder path), production-ish slice — d divides every
     // grid mr (4/8 on arm64, 16/32 on the x64 rows when live); ntok=32 covers one full amx
     // 2×2 macro (and divides the 4/16-token steps of every other row)
@@ -1083,7 +1091,7 @@ def test_mode : bool {
                 repack_q8q8_grp(addr(qv[0]), addr(sv[0]), fx.n, fx.d, mr, wbias, kgv)
             }
             var y : array<float>
-            y |> resize(int(fx.ntok * fx.d))
+            y |> resize(fx.ntok * fx.d)
             run_tile(v._1, ctab[v._0], fx, qv, sv, mr, tsv, gsv, y)
             let fxok = close_to_ref(fx, y, maxdiff)
             if (!fxok) {
@@ -1098,7 +1106,7 @@ def test_mode : bool {
             ok = ok && fxok
             // the gemv rows core on the same buffers: token 0's row of the oracle
             var yg : array<float>
-            yg |> resize(int(fx.d))
+            yg |> resize(fx.d)
             run_gemv(gtab[v._0], fx, qv, sv, mr, yg)
             let gfxok = close_to_ref(fx, yg, gmaxdiff)
             if (!gfxok) {
@@ -1126,7 +1134,7 @@ def test_mode : bool {
                 repack_mx4_grp(addr(nv[0]), addr(ev[0]), mfx.n, mfx.d, mr)
             }
             var ym : array<float>
-            ym |> resize(int(mfx.d))
+            ym |> resize(mfx.d)
             run_mx4_gemv(mtab[v._0], mfx, nv, ev, mr, ym)
             let mfxok = close_to_mx4_ref(mfx, ym, mmaxdiff)
             if (!mfxok) {
@@ -1279,7 +1287,11 @@ def private discover_fallback_stamp() : string {
         print("confirm: using q8q8 fallback '{inherited}' from the release compile on this host\n")
         return inherited
     }
-    var envs <- [("DAS_TUNE_MODE" => "normal"), ("DAS_TUNE_MANIFEST" => ""), ("GEN_TUNE_COMPILE_ONLY" => "1")]
+    // verbose is MANDATORY on this child: the `llvm_tune: <fn> <- <perm>` stamp line this
+    // parses is verbose-only, so at inherited-normal the discovery reads nothing and the
+    // confirm gate silently degrades to unguarded-keep
+    var envs <- [("DAS_TUNE_MODE" => "normal"), ("DAS_TUNE_MANIFEST" => ""),
+        ("GEN_TUNE_COMPILE_ONLY" => "1"), ("DAS_TUNE_VERBOSITY" => "verbose")]
     let cmd = env_cmd(envs, "\"{get_das_exe()}\" -jit \"{harness_dir()}/gen_tune_probe.das\"")
     delete envs
     return parse_stamp_suffix(run_child(cmd))
@@ -1288,7 +1300,10 @@ def private discover_fallback_stamp() : string {
 // One confirm arm: real-model prefill under the given manifest (empty = the fallback chain).
 // The stamp line doubles as the plumbing check — a wrong stamp scores 0 (= a rejection).
 def private confirm_pp_run(model, manifest_path, expected : string) : double {
-    var envs <- [("DAS_TUNE_MODE" => "normal"), ("DAS_TUNE_MANIFEST" => manifest_path)]
+    // verbose for the same reason as the discovery child: the arm's stamp line IS the
+    // plumbing check, and without it both arms score 0 and the confirm can never pass
+    var envs <- [("DAS_TUNE_MODE" => "normal"), ("DAS_TUNE_MANIFEST" => manifest_path),
+        ("DAS_TUNE_VERBOSITY" => "verbose")]
     let cmd = env_cmd(envs, "\"{get_das_exe()}\" -jit \"{harness_dir()}/tune_confirm_prefill.das\" -- \"{model}\"")
     delete envs
     let outp = run_child(cmd)
@@ -1310,21 +1325,17 @@ def private confirm_pp_run(model, manifest_path, expected : string) : double {
     return pp
 }
 
-def private write_winner(suffix : string) : bool {
-    let ok = tune_manifest_set("q8q8_tile_gen", suffix)
-    print("winner: {suffix} {ok ? "->" : "-> FAILED TO WRITE"} {tune_manifest_path()}\n")
-    return ok
-}
-
-def private confirm_and_write(winner : string) : bool {
+// the confirmed q8q8 crown to QUEUE for the end-of-run write ("" = hard failure — write
+// nothing, fail the mint). All writes are deferred behind the end-of-run noise gate.
+def private confirm_winner(winner : string) : string {
     let fb = discover_fallback_stamp()
     if (empty(fb)) {
-        print("confirm: fallback-discovery child failed — writing the winner unguarded (pre-confirm behavior)\n")
-        return write_winner(winner)
+        print("confirm: fallback-discovery child failed — keeping the winner unguarded (pre-confirm behavior)\n")
+        return winner
     }
     if (fb == winner) {
         print("confirm: winner '{winner}' IS the per-ISA fallback — no e2e confirm needed\n")
-        return write_winner(winner)
+        return winner
     }
     let model = get_env_variable("DASLLAMA_CONFIRM_MODEL")
     if (empty(model)) {
@@ -1332,15 +1343,16 @@ def private confirm_and_write(winner : string) : bool {
         print("confirm: pinning the fallback '{fb}' — re-run with DASLLAMA_CONFIRM_MODEL=<q8 gguf> to run the confirm pass\n")
         // pin the fallback so the sidecar is COMPLETE — leaving the entry missing makes the
         // startup completeness gate re-tune on every run (the runtime rides the fallback either way)
-        return write_winner(fb)
+        return fb
     }
     let tmpm = "{get_das_root()}/_tune_confirm_manifest.json"
     // the stamps read the manifest's "kernels" SECTION (read_manifest) — a flat root object
-    // parses found-but-empty, the challenger arm stamps the fallback, and the confirm can
-    // never pass (both arms score 0 -> auto-reject)
-    if (!fwrite(tmpm, "\{\"kernels\": \{\"q8q8_tile_gen\": \"{winner}\"\}\}")) {
+    // parses found-but-empty. And provenance.box is MANDATORY: the box-identity staleness rail
+    // reads a box-less manifest as foreign -> absent, the challenger arm stamps the fallback,
+    // and the confirm can never pass (both arms score 0 -> auto-reject)
+    if (!fwrite(tmpm, "\{\"kernels\": \{\"q8q8_tile_gen\": \"{winner}\"\}, \"provenance\": \{\"box\": \"{tune_box_identity()}\"\}\}")) {
         print("confirm: cannot write {tmpm} — is das_root writable?\n")
-        return false
+        return ""
     }
     var bestF = 0.0lf
     var bestW = 0.0lf
@@ -1351,18 +1363,24 @@ def private confirm_and_write(winner : string) : bool {
     remove(tmpm)
     if (bestF <= 0.0lf) {
         print("confirm: the FALLBACK arm produced no pp number — not writing anything (fix the box, rerun)\n")
-        return false
+        return ""
     }
     if (bestW > bestF * CONFIRM_MARGIN) {
         print("confirm: challenger '{winner}' {bestW} tok/s BEATS fallback '{fb}' {bestF} tok/s — CONFIRMED\n")
-        return write_winner(winner)
+        return winner
     }
     print("confirm: challenger '{winner}' {bestW} tok/s does NOT beat fallback '{fb}' {bestF} tok/s by x{CONFIRM_MARGIN} — REJECTED, pinning the fallback\n")
-    return write_winner(fb)
+    return fb
 }
 
-def tune_mode_run : bool {
+def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family race rail; gates + deferred flush in call order
     let tune_total_t0 = ref_time_ticks()
+    // refuse before burning minutes measuring noise; every winner below queues into `pending`
+    // and nothing reaches the sidecar until the end-of-run gate passes
+    if (!noise_gate("start")) {
+        return false
+    }
+    var pending : table<string; string>
     // q8q8 + four kq formats + q51 + the end-to-end confirm
     tune_progress_plan("dasllama_generators", 7)
     tune_progress_kernel_begin("q8q8_tile_gen", ROUNDS)
@@ -1468,11 +1486,11 @@ def tune_mode_run : bool {
         hbest[i] = 1.0e30lf
     }
     var y : array<float>
-    y |> resize(int(fx.ntok * fx.d))
+    y |> resize(fx.ntok * fx.d)
     var yg : array<float>
-    yg |> resize(int(gfx.d))
+    yg |> resize(gfx.d)
     var yh : array<float>
-    yh |> resize(int(hfx.d))
+    yh |> resize(hfx.d)
     // correctness first — a tune run must never crown a broken variant
     for (vi in range(nv)) {
         run_tile(vs[vi]._1, ctab[vs[vi]._0], fx, bufs[vi].q, bufs[vi].s, vmr[vi], vts[vi], vgs[vi], y)
@@ -1520,12 +1538,15 @@ def tune_mode_run : bool {
     let gmacs = double(gfx.n * gfx.d)
     let hmacs = double(hfx.n * hfx.d)
     var winner = 0
+    var q8rows : table<string; JsonValue?>
     for (vi in range(nv)) {
         if (best[vi] < best[winner]) {
             winner = vi
         }
+        q8rows[vs[vi]._0] = JV((tile_us = best[vi], gemv_us = gbest[vi], hot_us = hbest[vi]))
         tune_detail("{vs[vi]._0} (mr={vmr[vi]}): tile {macs / best[vi] / 1000.0lf} GMAC/s, gemv stream {gmacs / gbest[vi] / 1000.0lf} / hot {hmacs / hbest[vi] / 1000.0lf} GMAC/s (best of {ROUNDS})\n")
     }
+    g_rows["q8q8_tile_gen"] = JV(q8rows)
     // the merged winner: the batch bench picks the tile knobs (and with them the layout);
     // the HOT decode bench picks gkstep among the rows sharing those tile knobs (the
     // streamed shape is DRAM-bound and cannot tell kernels apart) — one entry, one
@@ -1547,47 +1568,72 @@ def tune_mode_run : bool {
     // decode path staying DRAM-bound — validated end-to-end when the entries first landed.
     tune_detail("TUNE_GEN_TIME q8q8_family {get_time_usec(tune_total_t0) / 1000} ms\n")
     tune_progress_kernel_end("q8q8_tile_gen", vs[merged]._0, "beats")
-    var kok = true
+    if (!noise_gate("mid1")) {
+        print("aborting mid-run — no sidecar written\n")
+        return false
+    }
     for (fmt in fixed_array(4l, 5l, 6l, 40l)) {
         let kq_t0 = ref_time_ticks()
         tune_progress_kernel_begin("k{fmt}q8_tile_gen", ROUNDS)
-        let w = kq_tune_family(fmt)
+        var krows : table<string; JsonValue?>
+        let w = kq_tune_family(fmt, krows)
         tune_detail("TUNE_GEN_TIME k{fmt}_family {get_time_usec(kq_t0) / 1000} ms\n")
         tune_progress_kernel_end("k{fmt}q8_tile_gen", w, empty(w) ? "rejected" : "beats")
         let entry = fmt == 40l ? "q40q8_tile_gen" : "k{fmt}q8_tile_gen"
-        if (empty(w)) {
-            // gate failure (the broken perm is named above): record the always-correct
-            // reference body so the scope still COMPLETES — a missing key re-tunes every start
-            let wok = tune_manifest_set(entry, "reference")
-            print("{entry} winner: reference (gate-failure fallback) {wok ? "->" : "-> FAILED TO WRITE"} {tune_manifest_path()}\n")
-            kok = kok && wok
-        } else {
-            let wok = tune_manifest_set(entry, w)
-            print("{entry} winner: {w} {wok ? "->" : "-> FAILED TO WRITE"} {tune_manifest_path()}\n")
-            kok = kok && wok
-        }
+        // gate failure (the broken perm is named above): queue the always-correct reference
+        // body so the scope still COMPLETES — a missing key re-tunes every start
+        pending[entry] = empty(w) ? "reference" : w
+        print("{entry} winner: {empty(w) ? "reference (gate-failure fallback)" : w}\n")
+        g_rows[entry] = JV(krows)
+    }
+    if (!noise_gate("mid2")) {
+        print("aborting mid-run — no sidecar written\n")
+        return false
     }
     let q51_t0 = ref_time_ticks()
     tune_progress_kernel_begin("q51q8_gemv_gen", ROUNDS)
-    let qw = q51_tune_family()
+    var qrows : table<string; JsonValue?>
+    let qw = q51_tune_family(qrows)
     tune_detail("TUNE_GEN_TIME q51_family {get_time_usec(q51_t0) / 1000} ms\n")
     tune_progress_kernel_end("q51q8_gemv_gen", qw, empty(qw) ? "rejected" : "beats")
-    if (empty(qw)) {
-        // same gate-failure fallback as the kq loop: complete the scope on the reference body
-        let qok = tune_manifest_set("q51q8_gemv_gen", "reference")
-        print("q51q8_gemv_gen winner: reference (gate-failure fallback) {qok ? "->" : "-> FAILED TO WRITE"} {tune_manifest_path()}\n")
-        kok = kok && qok
-    } else {
-        let qok = tune_manifest_set("q51q8_gemv_gen", qw)
-        print("q51q8_gemv_gen winner: {qw} {qok ? "->" : "-> FAILED TO WRITE"} {tune_manifest_path()}\n")
-        kok = kok && qok
-    }
+    // same gate-failure fallback as the kq loop: complete the scope on the reference body
+    pending["q51q8_gemv_gen"] = empty(qw) ? "reference" : qw
+    g_rows["q51q8_gemv_gen"] = JV(qrows)
+    print("q51q8_gemv_gen winner: {empty(qw) ? "reference (gate-failure fallback)" : qw}\n")
     let confirm_t0 = ref_time_ticks()
     tune_progress_kernel_begin("confirm_e2e_prefill", 0)
-    let ok = confirm_and_write(vs[merged]._0) && kok
+    let cw = confirm_winner(vs[merged]._0)
+    var ok = !empty(cw)
+    if (ok) {
+        pending["q8q8_tile_gen"] = cw
+        print("q8q8_tile_gen winner: {cw}\n")
+    }
     tune_detail("TUNE_GEN_TIME confirm {get_time_usec(confirm_t0) / 1000} ms\n")
     tune_progress_kernel_end("confirm_e2e_prefill", "", ok ? "holds" : "rejected")
     tune_progress_finish()
+    // the only write, behind the last gate: a noisy end-probe means NO entry is written — the
+    // winners above were raced in conditions the probe just proved untrustworthy
+    if (ok && !noise_gate("end")) {
+        print("aborting at the end-of-run gate — no sidecar written\n")
+        ok = false
+    }
+    if (ok) {
+        noise_provenance_stamp()
+        var nort : JsonValue?
+        ok = tune_sidecar_merge(pending, nort)
+        var race : table<string; JsonValue?>
+        for (k, v in keys(pending), values(pending)) {
+            if (g_rows |> key_exists(k)) {
+                var obj <- { "winner" => JV(v), "rows" => g_rows[k] }
+                race[k] = JV(obj)
+            }
+        }
+        g_rows |> clear()   // pointees transferred into race (clear does not finalize)
+        ok = tune_sidecar_section_merge("race", race) && ok
+        print(ok ? "wrote {length(pending)} generator entries -> {tune_manifest_path()}\n"
+            : "FAILED to write {tune_manifest_path()} — if the app dir is read-only, set DAS_TUNE_MANIFEST to a writable path\n")
+    }
+    delete pending
     tune_detail("TUNE_GEN_TIME total {get_time_usec(tune_total_t0) / 1000} ms\n")
     delete y
     delete yg
@@ -1617,13 +1663,14 @@ def tune_mode_run : bool {
 // fallback: the tuner rail drives this via DAS_TUNE_MODE=tune explicitly; the auto policy
 // must not fire when this runs as the compile-only fallback-discovery child (recursion)
 [export, tune_policy(missing = "fallback")]
-def main {
+def main : int {
     if (!jit_enabled()) {
         print("run with -jit — the generator only fires under the LLVM JIT\n")
-        return
+        return 1
     }
-    if (tuner_fast_requested()) {
-        ROUNDS = ROUNDS_FAST
+    if (tuner_paranoid_requested()) {
+        ROUNDS = ROUNDS_FULL * 3
+        noise_set_paranoid(true)
     }
     // pre-i8mm mint rail (the slice J no-linker-on-target recipe): the JIT has already
     // linked + installed the full grid DLL by the time main runs — this gate skips
@@ -1634,7 +1681,7 @@ def main {
         var vs <- q8q8_tile_gen_variants()
         print("compile-only: DLL linked, {length(vs)} tile variants, execution skipped\n")
         delete vs
-        return
+        return 0
     }
     // select the gen backend where it exists (arm64) — test/tune drive the variant
     // registries directly, so an x64 box runs fine with no gen backend registered
@@ -1646,10 +1693,15 @@ def main {
     }
     let mode = tune_mode()
     if (mode == "test") {
-        print(test_mode() ? "GEN TUNE TEST OK\n" : "GEN TUNE TEST FAIL\n")
-    } elif (mode == "tune") {
-        print(tune_mode_run() ? "GEN TUNE RUN OK\n" : "GEN TUNE RUN FAIL\n")
-    } else {
-        print("set DAS_TUNE_MODE=test or =tune (compile-time env: it stamps the variant grid)\n")
+        let tok = test_mode()
+        print(tok ? "GEN TUNE TEST OK\n" : "GEN TUNE TEST FAIL\n")
+        return tok ? 0 : 1
     }
+    if (mode == "tune") {
+        let rok = tune_mode_run()
+        print(rok ? "GEN TUNE RUN OK\n" : "GEN TUNE RUN FAIL\n")
+        return rok ? 0 : 1
+    }
+    print("set DAS_TUNE_MODE=test or =tune (compile-time env: it stamps the variant grid)\n")
+    return 1
 }

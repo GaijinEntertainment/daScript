@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_arch_glm4moe shared public
 
 require dasllama/dasllama_common
+require dasllama/dasllama_blocks   // std_blocks/moe_blocks — the default block sets this arch binds
 
 // GLM-4.5 / GLM-4.5-Air (llama.cpp arch "glm4moe") — leading dense layer(s) then routed MoE with
 // sigmoid gating + the DeepSeek-style exp_probs_b selection bias and an UNGATED shared expert

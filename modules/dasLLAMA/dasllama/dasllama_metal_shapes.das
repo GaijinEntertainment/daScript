@@ -46,6 +46,33 @@ enum MetalDecodeDecline {
                         // forward-only and NOT re-derivable — no watermark repair exists)
 }
 
+// why a prefill declined to the CPU path — the FIRST failing gate clause (the decode enum's
+// twin; the support-matrix test asserts these names as strings)
+enum MetalPrefillDecline {
+    none                // supported — the prefill runs on the GPU
+    start_pos           // RETIRED (M2.5): a continuation chunk gathers the session's existing
+                        // rows into the K/V panels and shifts the causal diagonal by start_pos
+    npos_window         // npos below g_min_npos or above g_max_npos
+    quant_mode          // weights not loaded under QuantMode.q8
+    kquant_native       // per-tensor K-quant planes: not readable as qblob offsets (kernels = W4)
+    wscale_f16          // f16 scale plane (the load DEFAULT) — GPU prefill needs the s16 path (W2)
+    arch                // RETIRED (family waves A): the arch-name check is gone — non-std block
+                        // sets decline `graph`, feature-flag configs decline `feature` per bit
+    backend_repack      // repack backend: interleaved weight layout unreadable by the GEMM kernel
+    config              // RETIRED (family waves A): split into `feature` + the per-need
+                        // `need_*` keys in the declines-by-reason table
+    graph               // block set is not the std dense stack (MoE / recurrent / custom attn)
+    feature             // the model needs layer-stack features this path's kernels don't
+                        // implement — each missing bit records a `need_*` key alongside
+    shape               // head/dim alignment outside the kernel grids
+    layers              // per-layer non-uniformity (kv_dim/head_size/hidden/sliding/missing wv)
+    rope_rows           // the window's rope table not built
+    device              // metal_prefill_init failed (no device / PSO build failure)
+    gpu_error           // dispatch failed at execution time
+    planar              // weights not in the blob-image form (the drivers are blob-only)
+    dn_state            // recurrent state not GPU-resident and no CPU prefix to sync from
+}
+
 //! Layer-stack features a model's graph needs beyond the base llama dense block — ONE derivation
 //! (`metal_needs`) feeds every GPU gate; each path holds its own implemented-set mask and declines
 //! `feature` on the difference, recording a `need_*` key per missing bit.
@@ -193,12 +220,10 @@ def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
     return false
 }
 
-def private moe_fmt_at(a : array<KqFmt>; l : int64) : KqFmt => empty(a) ? KqFmt.q8 : a[l]
-
 // The MoE serve gate — covered graph shapes: plain routed FFN (qwen3moe, silu, no biases)
 // + optional sigmoid-gated shared expert (qwen35moe), gemma4's dense-shared dual branch, and
 // gpt-oss's mx4 experts (softmax_weight, biases, disk-order). No dense-lead / selection bias.
-def moe_metal_ok(t : Model) : bool {
+def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape refusal ladder; every arm is one reason
     let c = t.config
     if (!c.moe || c.n_layer_dense_lead > 0l || c.moe_exp_probs ||
             (c.expert_weights_scale != 0.0 && c.expert_weights_scale != 1.0)) {
@@ -262,9 +287,9 @@ def moe_metal_ok(t : Model) : bool {
         return true
     }
     for (l in range64(c.n_layers)) {
-        let f1 = moe_fmt_at(t.we1_fmt, l)
-        let f2 = moe_fmt_at(t.we2_fmt, l)
-        let f3 = moe_fmt_at(t.we3_fmt, l)
+        let f1 = fmt_at(t.we1_fmt, l)
+        let f2 = fmt_at(t.we2_fmt, l)
+        let f3 = fmt_at(t.we3_fmt, l)
         // per-site alignment + reduction dims: superblock kq kernels iterate whole 256-rows,
         // q51 whole 32-blocks (+ the mul_mm's 64-col output tiles)
         let sb1 = f1 == KqFmt.k4 || f1 == KqFmt.k5 || f1 == KqFmt.k6

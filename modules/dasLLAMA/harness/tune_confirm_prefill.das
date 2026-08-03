@@ -1,9 +1,9 @@
 options gen2
-options stack = 65536   // dasLLAMA program-root convention (options stack does not unify up from libs)
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options persistent_heap
 options _jit_fast_math = true   // production prefill config (prefill_perf parity)
 
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
+require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_math  // setup_dasllama_jobque_ + apply_box_profile_runtime
 require llvm/daslib/llvm_tune   // [tune_policy]: the confirm arm measures WHAT THE MANIFEST SAYS — never self-tune
 require daslib/jobque_boost

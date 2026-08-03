@@ -10,7 +10,7 @@ options _comment_hygiene = true
 //!
 //! Run model programs with ``-jit`` (interpreted inference is far too slow), wrap the
 //! generation in ``with_job_que()`` from ``daslib/jobque_boost`` so the kernels can thread, and
-//! declare ``options stack = 65536`` — the forward chain outgrows the 16K default on arm64, and
+//! declare ``options stack = 524288`` — the forward chain outgrows the 16K default, and
 //! a required module cannot raise the program's stack for you. See ``examples/dasLLAMA/run.das``
 //! and ``chat.das`` for the canonical shape.
 
@@ -151,7 +151,7 @@ def create_batch_workspace(model : Model) : BatchWorkspace {
     return <- create_batch_workspace_(model)
 }
 
-def eval_batch(model : Model; var ws : BatchWorkspace; var sessions : array<Session?>; tokens : array<int64>) {   // nolint:LINT014 — rows mutate THROUGH the pointers; a const array constifies the pointees
+def eval_batch(model : Model; var ws : BatchWorkspace; var sessions : array<Session?>; tokens : array<int64>) {   // `var sessions`: rows mutate THROUGH the pointers; a const array constifies the pointees
     //! One synchronous batched decode step: row i evals ``tokens[i]`` at ``sessions[i]``'s current
     //! position, advancing each by one — B conversations through ONE pass of the weights (GEMVs
     //! batch into GEMMs). Sessions must be distinct, same-geometry, one pool if paged.

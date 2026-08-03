@@ -1,8 +1,8 @@
 options gen2
-options stack = 65536   // dasLLAMA program-root convention (options stack does not unify up from libs)
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _jit_fast_math = true   // ggml-parity FP laxity — the CPU truth half only
 
-require dasllama/dasllama   // nolint:STYLE029 — the facade: arch [init] registrations + load_model's prepared-image (.dlim) cache
+require dasllama/dasllama   // the facade: arch [init] registrations + load_model's prepared-image (.dlim) cache
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + pin_kernel_backend + parallel_argmax
 require daslib/jobque_boost
 require daslib/clargs
@@ -79,7 +79,7 @@ def private teacher_logits(t : Model; nb, nsteps : int64; feeds : array<int64>; 
     let vocab = c.vocab_size
     let replay = !empty(feeds)
     var out : array<float>
-    out |> reserve(int(vocab * nb))
+    out |> reserve(vocab * nb)
     if (nb == 1l) {
         var s = make_run_state(c, KVDtype.f16, KVDtype.f16)
         var prompt <- stream_prompt(t, 0l)
@@ -98,7 +98,7 @@ def private teacher_logits(t : Model; nb, nsteps : int64; feeds : array<int64>; 
         return <- out
     }
     var ss : array<Session>
-    ss |> reserve(int(nb))
+    ss |> reserve(nb)
     for (i in range64(nb)) {
         ss |> emplace <| make_run_state(c, KVDtype.f16, KVDtype.f16)
         var prompt <- stream_prompt(t, i)
@@ -107,9 +107,9 @@ def private teacher_logits(t : Model; nb, nsteps : int64; feeds : array<int64>; 
     }
     var ws <- create_batch_workspace_(t)
     var sess : array<Session?>
-    sess |> reserve(int(nb))
+    sess |> reserve(nb)
     var cur : array<int64>
-    cur |> reserve(int(nb))
+    cur |> reserve(nb)
     for (i in range64(nb)) {
         unsafe {
             sess |> push(addr(ss[i]))
@@ -213,7 +213,7 @@ def private load_truth(path : string; var feeds : array<int64>; var logits : arr
 }
 
 [export]
-def main() : int {
+def main() : int {   // nolint:STYLE038 — flat probe driver: arg handling, then one A/B cell per --bs entry
     allow_cpu_prefill()   // both halves prefill the streams on the CPU by design (truth + replay)
     if (!jit_enabled()) {
         print("This probe is JIT-only — run with: daslang -jit <file>\n")
@@ -245,7 +245,7 @@ def main() : int {
         set_metal_mode(MetalMode.when_available)
         var tg2 <- load_model(cfg.model, QuantMode.q8)
         set_metal_mode(MetalMode.off)   // overrides select per phase below
-        tg <- tg2
+        tg <- tg2   // nolint:PERF030 — tg is still the default-constructed Model, nothing to release
         tg.config.seq_len = min(tg.config.seq_len, 1024l)
         if (!tg.metal_blob) {
             print("WARNING: the replay model is NOT blob-form (a CPU-flavor .dlim?) — the GPU replay will decline `planar` and run on the CPU\n")
@@ -269,7 +269,8 @@ def main() : int {
             if (!cached) {
                 select_decode_override("")
                 var sink : array<int64>
-                truth <- teacher_logits(t, nb, nsteps, sink, feeds)
+                delete truth   // a rejected cache can leave rows behind (feeds empty, logits parsed)
+                truth <- teacher_logits(t, nb, nsteps, sink, feeds)   // nolint:PERF030 — released by the delete above
                 delete sink
                 if (!empty(cpath)) {
                     save_truth(cpath, feeds, truth)

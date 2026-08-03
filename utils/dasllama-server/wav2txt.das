@@ -1,5 +1,5 @@
 options gen2
-options stack = 262144
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 // wav2txt — transcribe an audio file to text with a dasLLAMA ASR model. A sibling of
 // dasllama-server: it requires dasLLAMA and so inherits the shared [tune_scope], reading the

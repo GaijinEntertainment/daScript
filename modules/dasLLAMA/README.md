@@ -1,16 +1,19 @@
 # dasLLAMA
 
-dasLLAMA is a **CPU LLM + speech stack written entirely in daslang** — no C++ kernels, no
-hand-written assembly. The daslang JIT compiles the whole engine, and a per-box auto-tuner
-picks the kernel forms for *your* machine, so the same source ships tuned code on an M1 and
-a Threadripper alike. It loads stock GGUF files (llama.cpp's format — single-file or
-multi-shard splits, F32/F16/Q8_0/Q4_0/Q5_0/MXFP4 and native Q4_K/Q5_K/Q6_K planes), runs text
-LLMs, audio-input "omni" chat models, speech-to-text, and voice-activity detection, and it
-is fast: consistently ahead of llama.cpp's CPU inference on prompt processing (up to ~1.7×),
-trading blows on generation, and up to ~6× ahead on audio/omni workloads — live scoreboard +
-methodology at [daslang.io/dasllama.html](https://daslang.io/dasllama.html). Every supported
-model is **verified token-for-token** against its reference implementation before it lands
-in the support table.
+dasLLAMA is an **LLM + speech stack written entirely in daslang** — no C++ kernels, no
+hand-written assembly, on CPU *and* GPU. The daslang JIT compiles the whole engine, and a
+per-box auto-tuner picks the kernel forms for *your* machine, so the same source ships tuned
+code on an M1 and a Threadripper alike. Backends stack behind one registry: the portable /
+NEON / AVX CPU tiers, an Accelerate "+AMX" float tier on Apple silicon, and **Metal** or
+**Vulkan** compute for GPU-resident serving. It loads stock GGUF files (llama.cpp's format —
+single-file or multi-shard splits, F32/F16/Q8_0/Q4_0/Q5_0/MXFP4 and native Q4_K/Q5_K/Q6_K
+planes), runs text LLMs, audio-input "omni" chat models, speech-to-text, and voice-activity
+detection, and it is fast: consistently ahead of llama.cpp's CPU inference on prompt processing
+(up to ~1.7×), trading blows on generation, and up to ~6× ahead on audio/omni workloads — live
+scoreboard + methodology at
+[daslang.io/dasllama.html](https://daslang.io/dasllama.html). Every supported model is
+**verified token-for-token** against its reference implementation before it lands in the
+support table.
 
 ## Quick start
 
@@ -36,7 +39,7 @@ bin/daslang -jit examples/dasLLAMA/run.das -- <model.gguf>
 bin/daslang -jit examples/dasLLAMA/chat.das -- <model.gguf>
 
 # audio chat (omni models: decoder GGUF + audio mmproj)
-bin/daslang -jit examples/dasLLAMA/audio.das -- <decoder.gguf> <mmproj.gguf> <audio-file> [prompt]
+bin/daslang -jit examples/dasLLAMA/audio_chat.das -- <decoder.gguf> <mmproj.gguf> <audio-file> [prompt]
 
 # speech-to-text: whisper / parakeet / canary ggml bins, or qwen3-asr GGUF pairs
 bin/daslang -jit examples/dasLLAMA/transcribe.das -- <ggml-model.bin | decoder.gguf mmproj.gguf> <audio-file>
@@ -76,30 +79,80 @@ demos are in `examples/dasLLAMA/` and tests in `modules/dasLLAMA/tests/`.
 modules/dasLLAMA/
   .das_module                 # registers the dasllama/ namespace (dynamic binary)
   CMakeLists.txt              # ADD_MODULE_DAS registration (static binary + install)
-  API_REWORK.md               # API + backend-seam design record (the plan of record)
-  x64_arch.md                 # x64 port docs — seam map; get_x64_going.md = runbook,
-  get_x64_going.md            #   tune_for_this_box.md = per-box tuning + measurement discipline
-  tune_for_this_box.md        # (closed-arc docs — avx_kernel_matrix.md, epyc9654_measurements.md,
-                              #  model_expansion_plan.md — are archived under history/dasLLAMA/)
+  ARCHITECTURE.md             # what-goes-where ledger — which module owns which concern
+  INVENTORY.md                # as-is census of the module
+  CODEREVIEW.md               # the per-change review checklist
+  METHODOLOGY.md              # how every published number is measured (the site's method page)
+  PROFILE.md                  # the three profiling rigs — the routine in-process check, the oracle cell, the rig that publishes
+  PERF_LEDGER.md              # the living perf backlog — parked ideas, not chased mid-wave
+  tune_for_this_box.md        # per-box tuning + the measurement discipline (SDK-installed)
+  ENVIRONMENT.md              # GENERATED from dasllama_env's registry (harness/gen_env_doc.das writes it; tests/test_env_registry.das gates drift) — every knob
+  THINKING.md                 # design notes and open questions
+  followup_vulkan.md          # PLANNED: grow the vulkan resident driver to Metal's contract shape
+  whisper_plan.md             # per-family bring-up records + findings:
+  qwen2_audio_plan.md         #   whisper, qwen2-audio, parakeet, silero-vad
+  parakeet_plan.md
+  silero_vad_plan.md          # (closed-arc docs — API_REWORK.md, PUBLIC_BENCH_PLAN.md,
+                              #  gemm_generator_plan.md, x64_arch.md, get_x64_going.md,
+                              #  kernel_access_lens_metal.md, kv_cache_compression.md,
+                              #  turboquant_research.md, audio_models_plan.md,
+                              #  box_profile.epyc9654.json, avx_kernel_matrix.md,
+                              #  epyc9654_measurements.md, model_expansion_plan.md,
+                              #  audio_image_plan.md, and the pre-board metal profiling
+                              #  set results_metal_*.md + baseline_metal_*.tsv — are
+                              #  archived under history/dasLLAMA/)
   dasllama/                   # the module — require dasllama/<name>
-    dasllama_math.das         #   numeric primitives + matmul/dot kernels (fp32, Q8, Q4) + Q8·Q8 kernel-backend registry
+    dasllama_env.das          #   the env-var registry + the typed readers every knob goes through (ENVIRONMENT.md is generated from it)
+    dasllama_math.das         #   numeric primitives + matmul/dot kernels + Q8·Q8 kernel-backend registry + dispatch shaping
+    dasllama_kv_codec.das     #   the KV-cache codec — per cache format (f16/q8_0/tq4) the WHOLE family: store/read/dot/axpy (+ tq4 FWHT rotation)
+    dasllama_kqformat.das     #   format identity — the KqFmt enum, per-format strides/geometry/stream codes, the one enum->kernel-id bridge
+    dasllama_rope.das         #   RoPE angle/table generation (theta schedule, rope_freqs, every materialized layout)
+    dasllama_gpu_tier.das     #   the device-cooperation SPI — hook types, install slots, want/status (vulkan implements; metal uses common's override registries)
+    dasllama_repack.das       #   disk-order -> compute-order kernel-layout transforms (grp<mr> interleaves, extractors, panel unpacks)
+    dasllama_convert.das      #   tensor format conversion — codec byte readers, superblock dequants, transcodes, Q5_K encoder, the fp32->Q8/Q4 quantizers, f16 rows
     dasllama_math_default.das #   the portable Q8·Q8 kernel backend (the fallback; platform backends out-rank it)
     dasllama_math_aarch64_neon.das # arm64 SDOT row-major Q8·Q8 backend + the laneq dot leaves the gen tier composes ([init]-registered; no-op off-ARM)
-    dasllama_math_metal.das   #   Metal GPU prefill-GEMM backend (batch-only donor; decode GEMV stays CPU)
+    dasllama_math_accelerate.das #  the "+AMX" float tier — Accelerate BLAS (AMX on M1-M3, SME on M4+) over the float-plane batch shapes
+    dasllama_metal_gemm.das   #   Metal GPU prefill-GEMM backend (batch-only donor; decode GEMV stays CPU)
     dasllama_metal_prefill.das #  Metal full-GPU-resident prefill kernel set (requant, rmsnorm, rope, attention)
+    dasllama_metal_decode.das  #   Metal GPU-resident DECODE driver — one command buffer per token step, the layer stack as fused dispatches
+    dasllama_metal_kernels.das #  the family-agnostic Metal kernel + PSO registry (GEMV/GEMM forms, single-query attn per KV codec, fused rope+KV-store)
+    dasllama_metal_common.das #   the Metal dispatch/capture rail — kn_dispatch + graph replay
+    dasllama_metal_shapes.das #   the Metal drivers' MODEL-SHAPE gates, extracted PORTABLE (no das_metal) so any box can bake a metal-flavor .dlim
+    dasllama_metal_lens.das   #   the [metal_dispatch] lens — @role's read/write axis DERIVED from the kernel body
+    dasllama_math_vulkan.das  #   Vulkan backend ENTRY: probe/arm, dry-bake, .dlim identity, routers, [init] (re-exports the family)
+    dasllama_vulkan_kernels.das #  the Vulkan [compute_shader] kernel set + derived-access spec (no device state)
+    dasllama_vulkan_common.das #   Vulkan device state (GpuState/g_gpu) + buffer/command plumbing + hazard rail + arena + profiler
+    dasllama_vulkan_decode.das #   Vulkan resident DECODE driver + decode arms (FFN GEMV, qkv, cls, dnd step, heat cache)
+    dasllama_vulkan_prefill.das #  Vulkan resident PREFILL driver + batch arms (FFN batch, dense, dn, attention, streamed mirrors)
+    dasllama_vulkan_lens.das  #   the Vulkan kernel-access lens — per-binding hazard masks derived from the kernel body
+    dasllama_kernel_access.das #  the shared body-walk read/write classifier both GPU lenses run on
+    dasllama_gpu_resident.das #   the vulkan MoE GPU-resident expert tier — bake plan, upload/stream slots, per-layer placement
     dasllama_math_gen.das     #   the generated GEMM tier — registers "arm64-gen"/"x64-gen" (load-select repack backends; traversals read the stamped layout)
     dasllama_gemm_schema.das  #   tune_perm grid + layout schema shared by the generator and the runtime
     dasllama_gemm_gen.das     #   the GEMM tile generator (emits per-perm kernels under llvm_tune)
     dasllama_gemm_register.das #  [tune] family registration — manifest > per-ISA fallback chain
     dasllama_par.das          #   maybe_parallel_for threading macro
     dasllama_tune.das         #   per-box kernel loop-hint tuner — [tuned] / [dasllama_grid] (see tune_for_this_box.md)
-    dasllama_quant.das        #   Q8_0 / Q4_0 (de)quantization
-    dasllama_gguf.das         #   GGUF container parser + tensor transcode
+    dasllama_parity.das       #   CPU-reference caches for the parity instruments (the metal suites, batch_parity_probe)
+    dasllama_gguf.das         #   GGUF container parser + tensor read drivers (codecs live in dasllama_convert)
+    dasllama_load.das         #   the gguf load rail — plan-load, the streaming cold build (FillJobs), the staged load stages
+    dasllama_layout.das       #   disk-format -> compute-layout transforms (the blob transform, the CPU repack walkers, the GPU tier gathers)
+    dasllama_config.das       #   DlimConfiguration — every input that changes .dlim image BYTES, in one struct (+ the identity formatter)
+    dasllama_plane.das        #   the borrowed-plane vocabulary — Plane* structs: a pointer into a prepared image + element count; a carrier owns only its backing
+    dasllama_image.das        #   the .dlim prepared-model image — post-load planes dumped once, mapped back with zero O(model) copying
     dasllama_unicode.das      #   Unicode classification + UTF-8 codec
     dasllama_tokenizer.das    #   SentencePiece tokenizer (Llama-2 family, Phi-3, Gemma)
     dasllama_bpe.das          #   byte-level BPE / tiktoken tokenizer (Llama-3 + Qwen2 pre-tokenizers)
     dasllama_common.das       #   engine core — Config / Model / Session, load + forward + generate + sample (incl. MTP/NextN self-spec decode)
+    dasllama_blocks.das       #   the shared dense/grouped transformer block helpers (FFN, embed rows, eval bridges)
+    dasllama_moe.das          #   MoE routing — select, expert dispatch, the GPU expert-tier hooks
+    dasllama_ple.das          #   gemma-4 E-series per-layer embeddings + the gemma4 MoE FFN (hook-registered into the forward)
+    dasllama_attn_prefill.das #   the CPU batch-attention prefill driver
+    dasllama_batch.das        #   batch decode — BatchWorkspace stepping over multiple sequences
+    dasllama_sampling.das     #   SamplingParams / Stats + the samplers (greedy, top-k, penalties)
     dasllama_prefix.das       #   vLLM-style page-granular prefix cache over the paged KV pool
+    dasllama_asr_types.das    #   the ASR floor types — AsrCaps/AsrTimestamps/TranscribeSegment (+ asr_ctx_guard); family files require this, never each other
     dasllama_audio_io.das     #   miniaudio decode (wav/mp3/flac/ogg -> 16 kHz mono f32) + mic capture
     dasllama_audio.das        #   audio tower — whisper mel frontends + encoder core + qwen2a projector (soft-token splice)
     dasllama_whisper.das      #   whisper-proper ASR — ggml-bin loader, cross-attn decoder, greedy driver, transcribe API
@@ -110,6 +163,7 @@ modules/dasLLAMA/
     dasllama_asr.das          #   uniform ASR surface — load_asr_model (format-sniffed), caps(), family-free verbs
     dasllama_vad.das          #   Silero-VAD (voice activity) — STFT+conv+LSTM forward, batch + streaming segmenter
     dasllama_arch_llama.das   #   Llama / Llama-2 / Llama-3 / TinyLlama arch (config + chat template)
+    dasllama_arch_mistral3.das #  Mistral-Medium-3.5 arch (the llama dense shape + YaRN rope, v7-tekken chat)
     dasllama_arch_qwen2.das   #   Qwen2 arch  (per-arch: config setter + [init] registration)
     dasllama_arch_qwen3.das   #   Qwen3 arch (QK-norm)
     dasllama_arch_qwen35.das  #   Qwen3.5/3.6 + Qwen3-Next hybrid arches (Gated-DeltaNet + gated attention; qwen35 / qwen35moe / qwen3next)
@@ -119,6 +173,7 @@ modules/dasLLAMA/
     dasllama_arch_gemma4.das  #   Gemma-4 arch (heterogeneous sliding/global geometry + p-RoPE)
     dasllama_arch_qwen2moe.das #  Qwen2-MoE arch (routed top-k + shared expert)
     dasllama_arch_qwen3moe.das #  Qwen3-MoE arch (QK-norm attn + renormalized top-k, no shared expert)
+    dasllama_arch_glm4moe.das #   GLM-4.5 arch (leading dense layer + sigmoid router w/ exp_probs_b selection bias + ungated shared expert)
     dasllama_arch_gptoss.das  #   gpt-oss arch (MoE + sinks + YaRN + swiglu_oai + biases)
     dasllama_transformer.das  #   umbrella — re-exports dasllama_common + registers every arch
     dasllama_chat.das         #   layer-2 chat engine — Role/Message/ChatSession, template renderer, respond()
@@ -127,7 +182,7 @@ modules/dasLLAMA/
     matmul/                   #   matmul kernel micro-bench ledger
   harness/                    # verification / eval test beds, per-box tuners, GGUF inspection tools
   tests/                      # dastest [test] suites (model-gated ones self-skip)
-examples/dasLLAMA/            # runnable demos only — run.das (completion + stats), chat.das (REPL), audio.das (audio chat), transcribe.das (speech-to-text), dictate.das (live mic -> text)
+examples/dasLLAMA/            # runnable demos only — run.das (completion + stats), chat.das (REPL), audio_chat.das (audio chat), transcribe.das (speech-to-text), dictate.das (live mic -> text)
 tutorials/dasLLAMA/           # the guided series — 01 generate ... 06 add an arch, 07 speech-to-text, 08 audio chat
 ```
 
@@ -150,7 +205,7 @@ require dasllama/dasllama_math           // matmul / rmsnorm / softmax / silu / 
 
 The clean surface is `load_model → create_session → encode → eval → sample / generate
 (streaming) → decode / piece`, with chat one layer up (`create_chat → add_user →
-respond(model, chat, params) $(piece) { ... }`); design record in `API_REWORK.md`.
+respond(model, chat, params) $(piece) { ... }`); design record in `history/dasLLAMA/API_REWORK.md`.
 
 ---
 
@@ -187,7 +242,7 @@ Legend: ✅ **verified token-for-token** vs the reference · 🚧 in progress ·
 | **Qwen2-Audio-7B-Instruct** (audio input) | self-converted F16→Q8_0 + f32 mmproj (ggml-org publishes no pre-quant — convert with the in-tree `convert_hf_to_gguf.py`, decoder + `--mmproj`) | Qwen2 decoder untouched + whisper-large-v3 encoder tower (fp32: mel→conv×2→32 blocks→avg-pool→linear projector; soft tokens spliced at `<|audio_bos|>…<|audio_eos|>` via `forward_prefill_embd`) | BPE (qwen2 pre) | ✅ | `llama-mtmd-cli --temp 0`: token-for-token on jfk.wav AND tools/mtmd/test-2.mp3; encoder gated vs `llama-mtmd-debug` all-ones mel (test_audio.das); mel gated vs the 440 Hz preproc dump (3.1e-05) — rig + findings in `qwen2_audio_plan.md` |
 | **Ultravox v0.5** (audio input): llama-3.2-1b + llama-3.1-8b | STOCK Llama-3 Q8_0 GGUFs (decoders untouched) + ggml-org f16 mmproj (oracle runs use a local f16→f32 re-encode so mtmd computes in fp32; our loader reads either) | whisper-large-v3 tower + `ultravox` projector: post-LN → stack-8 frame concat (floor rows, ragged tail dropped) → RMS-pre → mm1 → swiglu_swapped → RMS-mid → mm2, no biases; 187 soft tokens/chunk spliced INLINE in the llama-3 template (no audio delimiter tokens) | BPE/tiktoken | ✅ | `llama-mtmd-cli --temp 0`: 1b token-for-token on jfk.wav AND tools/mtmd/test-2.mp3; 8b token-for-token on jfk.wav; tower shapes gated in `test_audio.das` |
 | **Qwen2.5-Omni 3B / 7B** (audio input) | ggml-org Q8_0 GGUFs + f16 mmproj (same local f32 re-encode for the oracle; the combined mmproj's `v.*` vision tensors are skipped by the name-driven loader) | decoder is arch `qwen2vl` — M-RoPE whose coordinates all equal the linear position for text+audio, so the plain qwen2 forward is bit-identical (registered as a qwen2 alias; vision out of scope); audio side = the QWEN2A tower + projector VERBATIM (750 tokens/chunk at `<|audio_bos|>…<|audio_eos|>`) | BPE (qwen2 pre) | ✅ | `llama-mtmd-cli --temp 0`: 3B token-for-token on jfk.wav AND test-2.mp3; 7B token-for-token on jfk.wav |
-| **Voxtral-Mini-3B** (audio input) | self-converted decoder Q8_0 + mmproj f32 (ggml-org publishes only K-quants; `convert_hf_to_gguf.py` needs `mistral-common` + a local missing-`return` fix, see `audio_models_plan.md`) | llama-arch decoder (head_dim 128, rope θ 1e8) + whisper tower + `voxtral` projector: avg-pool → post-LN → stack-4 → mm1 → gelu_erf → mm2, no biases; 187 tokens/chunk after `[BEGIN_AUDIO]` in the `[INST]…[/INST]` v7-tekken template; NEW `tekken` pre-tokenizer (generic-wregex alternation semantics — no contractions, single digits, '/' punct tail) | BPE (`tekken` pre) | ✅ | `llama-mtmd-cli --temp 0`: transcription prompt on jfk.wav byte-identical to natural stop; tokenizer id-for-id vs `llama-tokenize` (incl. 你A / contraction / digit probes); decoder 40/40 text-only (`harness/parity.sh`); encoder ≤5e-4 vs mtmd on real input. The two open-caption prompts each flip ONE step sitting at a 0.079 / 0.195-logit near-tie (p≈0.5 coin-flips; every matched step clears gaps up to 12 logits) — same knife-edge class as whisper tiny/base, not chased |
+| **Voxtral-Mini-3B** (audio input) | self-converted decoder Q8_0 + mmproj f32 (ggml-org publishes only K-quants; `convert_hf_to_gguf.py` needs `mistral-common` + a local missing-`return` fix, see `history/dasLLAMA/audio_models_plan.md`) | llama-arch decoder (head_dim 128, rope θ 1e8) + whisper tower + `voxtral` projector: avg-pool → post-LN → stack-4 → mm1 → gelu_erf → mm2, no biases; 187 tokens/chunk after `[BEGIN_AUDIO]` in the `[INST]…[/INST]` v7-tekken template; NEW `tekken` pre-tokenizer (generic-wregex alternation semantics — no contractions, single digits, '/' punct tail) | BPE (`tekken` pre) | ✅ | `llama-mtmd-cli --temp 0`: transcription prompt on jfk.wav byte-identical to natural stop; tokenizer id-for-id vs `llama-tokenize` (incl. 你A / contraction / digit probes); decoder 40/40 text-only (`harness/parity.sh`); encoder ≤5e-4 vs mtmd on real input. The two open-caption prompts each flip ONE step sitting at a 0.079 / 0.195-logit near-tie (p≈0.5 coin-flips; every matched step clears gaps up to 12 logits) — same knife-edge class as whisper tiny/base, not chased |
 | **Qwen3-ASR 0.6B / 1.7B** (speech-to-text) | ggml-org Q8_0 decoder + bf16 mmproj GGUFs (read directly — bf16→f32 is exact) | decoder is arch `qwen3vl` (M-RoPE degenerates for text+audio, deepstack inactive without vision — registered as a qwen3 alias) + NEW `qwen3a` encoder: 100-frame mel chunks through 3 stride-2 conv2d blocks (13×16×480), features to d_model, per-chunk position reset, transformer over 800-frame windows (13 tokens/chunk, k-biased attention on the shared tower block loop), GELU MLP projector; LLM-style transcription — the model emits `language {L}<asr_text>{text}`, parsed into `detected_lang` + one segment (no timestamps); context biasing via `AsrSession.context` | BPE (qwen2 pre) | ✅ | `llama-mtmd-cli --temp 0`: 0.6B transcript byte-identical on jfk.wav AND tools/mtmd/test-2.mp3 (88-token read of the NYT clip); 1.7B byte-identical on jfk.wav; encoder gated vs `MTMD_DEBUG_EMBEDDINGS` per-window token-0 (≤1e-4) in `test_whisper.das` |
 | **Parakeet-TDT 0.6b-v2** (speech-to-text) | self-converted `.nemo` → ggml bin (whisper.cpp's in-tree `convert-parakeet-to-ggml.py`, `--use-f32`) | NEW family end to end: frame-major mel (preemph 0.97, zero-center-pad, natural log, per-feature Bessel normalization) → conv2d subsampling (regular+depthwise ×2, 8× time) → 24 FastConformer blocks (macaron half-FFNs ×0.5, rel-pos attention with u/v biases + interleaved sin/cos table + scalar rel-shift gather, GLU→depthwise-k9→inference-BN→SiLU conv module, per-layer post-norm) → 2-layer LSTM predictor ([i,f,o,g] packed gates) → TDT joint (relu, full-row log-softmax) + duration-skip greedy | SPM (▁ pieces from the bin) | ✅ | `parakeet-cli -ng -ps` (CPU, f32): **jfk.wav 33/33 and gb1 (3-min Columbia address) 786/786 token-for-token** — ids, frames, duration indices AND values; the duration argmax must run over fp32 softmax values, not raw logits (the oracle's underflow-to-−inf tie-break, see `parakeet_plan.md`); suite gate in `test_whisper.das` |
 | **Parakeet-TDT 0.6b-v3** (speech-to-text, 25 European languages) | same converter as v2 (`--use-f32`) | the v2 pipeline verbatim — only the SPM vocab grows to 8192 pieces (joint row 8198); the loader reads every dim from the header, the ASR sniff routes any sub-32768 ggml-bin vocab to parakeet, and `caps()` flips to the 25-language list on the 8192-piece vocab | SPM (▁ pieces from the bin) | ✅ | `parakeet-cli -ng -ps` (CPU, f32): **jfk.wav 38/38 and gb1 655/655 token-for-token** — ids, frames, duration indices AND values; q8 default stays id/text-exact on both (jfk durations too; gb1 flips 16/655 duration picks only — ≤4-frame transient timestamp drift, always re-syncing); suite gate in `test_whisper.das` |
@@ -217,9 +272,9 @@ bin/daslang -jit examples/dasLLAMA/chat.das -- ~/Work/llama.cpp/models/gemma-2-2
 # Audio chat: whisper-encoder tower + soft-token splice into the decoder. The mmproj's
 # projector type picks the prompt shape — the same demo runs Qwen2-Audio, Qwen2.5-Omni,
 # Ultravox (stock Llama-3 decoders), and Voxtral pairs:
-bin/daslang -jit examples/dasLLAMA/audio.das -- ~/Work/llama.cpp/models/qwen2audio-7b-q8_0.gguf \
+bin/daslang -jit examples/dasLLAMA/audio_chat.das -- ~/Work/llama.cpp/models/qwen2audio-7b-q8_0.gguf \
     ~/Work/llama.cpp/models/qwen2audio-mmproj-f32.gguf ~/Work/llama.cpp/models/jfk.wav "What is being said in this audio?"
-bin/daslang -jit examples/dasLLAMA/audio.das -- ~/Work/llama.cpp/models/Llama-3.2-1B-Instruct-Q8_0.gguf \
+bin/daslang -jit examples/dasLLAMA/audio_chat.das -- ~/Work/llama.cpp/models/Llama-3.2-1B-Instruct-Q8_0.gguf \
     ~/Work/llama.cpp/models/mmproj-ultravox-1b-f32.gguf ~/Work/llama.cpp/models/jfk.wav
 
 # Speech-to-text (Whisper): any audio file -> timestamped segments, stock whisper.cpp models
@@ -258,7 +313,7 @@ What a model needs to "just work" today:
 | Sampling | greedy, temperature, top-k, top-p, min-p, repetition/presence/frequency penalties (`SamplingParams`; greedy = temp 0, bit-identical to argmax) |
 | Chat | per-arch data-driven templates in the registry + one segment-accumulation renderer (`dasllama_chat`) — reproduces the reference prefills token-for-token (`test_chat.das`); the template is auto-detected by sniffing the GGUF's embedded `tokenizer.chat_template` (never executed), falling back to the arch heuristic; Qwen3-style `<think>` blocks are stripped from chat history (`strip_think`); Gemma-4 uses its channel-based turn format (`<|turn>` / `<turn|>`, non-thinking opener closes an empty `thought` channel); gpt-oss uses the Harmony-lite template (`<|start|>role<|message|>...<|end|>`, replies end at `<|return|>` / `<|call|>`, channel markers render in decoded text as in llama.cpp) |
 | Self-speculative decode (MTP/NextN) | qwen35-family `-MTP-` GGUFs load natively (`nextn_predict_layers == 1`): the in-file NextN draft block — one trunk-shaped attention layer at index `n_layers` plus `nextn.eh_proj/enorm/hnorm/shared_head_norm` — drafts one token ahead and a 2-row batched trunk forward verifies it, so accepted steps stream the weights once for two tokens. **Output-invariant vs plain greedy** (gated by `modules/dasLLAMA/tests/test_mtp.das` + the scheduler arm in `test_llm_scheduler.das`); 1.39× decode on Qwen3.6-27B Q8 flat-loop, ~2× through the server (zen2, list continuation). Engine gate `set_mtp_spec` + per-step `mtp_spec_eval`: prefills maintain the head's KV incrementally (chunked prefill included, seam rows via the `mtp_h` handoff), flat AND paged sessions (the pool carries the draft-block slab), every KV codec; `dasllama-server --mtp` spec-ticks greedy streams. Greedy-only v1; the DeltaNet recurrent state snapshots and rolls back around rejected drafts; `mtp_only` sidecar files panic honestly; a draft block with its OWN `nextn.embed_tokens`/`shared_head_head` (glm4moe) disables the MTP head with a warning — the das head drafts through the trunk's embedding/classifier, so it would use the wrong weights there (trunk forward unaffected; llama.cpp never runs the NextN layer either) |
-| Performance | KV cache, SIMD + JobQue-threaded matmul, activation-quant Q8·Q8 behind a pluggable kernel-backend registry (ARM SDOT/laneq + the generated x64 AVX2 maddubs/vpdpbusd tier — `x64_arch.md`), flash-attention batched prefill, per-box kernel tuning (`tune_for_this_box.md`) |
+| Performance | KV cache, SIMD + JobQue-threaded matmul, activation-quant Q8·Q8 behind a pluggable kernel-backend registry (ARM SDOT/laneq + the generated x64 AVX2 maddubs/vpdpbusd tier — `history/dasLLAMA/x64_arch.md`), flash-attention batched prefill, per-box kernel tuning (`tune_for_this_box.md`) |
 
 ## Optimization guidelines
 
@@ -301,10 +356,13 @@ that runs per unit of work rather than per load):
 
 So there's no ambiguity about what will fail:
 
-- **MoE beyond the qwen2moe / gpt-oss / gemma4 shapes** — grouped expert routing (DeepSeek-V3
-  `expert_group_count`) and the expert-selection bias (`exp_probs_b`) panic honestly at load
-  (Tier-3 archs — MLA, Mamba/hybrid, multimodal — remain explicitly deferred in
-  `API_REWORK.md`).
+- **Grouped expert routing** (DeepSeek-V3 `expert_group_count` > 1) panics honestly at load —
+  the one MoE routing shape still missing. (The DeepSeek-style `exp_probs_b` selection bias
+  itself ships, via glm4moe.)
+- **MLA** (DeepSeek-style low-rank-compressed KV), **Mamba/SSM** proper, and **vision**
+  multimodal input are not implemented. The hybrid recurrent+attention shape IS shipped
+  (Gated-DeltaNet: qwen35 / qwen35moe / qwen3next), and so is audio-in — vision is what stays
+  out of scope on the omni models.
 - **GGUF weight types beyond F32 / F16 / Q8_0 / Q4_0 / MXFP4 / Q4_K / Q5_K / Q6_K** — no IQ
   quants; BF16 is read only for the audio-tower mmprojs, not as an LLM weight format.
 - `encode(..., parse_special)` is reserved and currently a no-op — the chat renderer injects
@@ -334,6 +392,28 @@ keeping the tokenizer out of the loop so only the loader + forward pass are unde
    model for a clean token-for-token gate.
 4. For the tokenizer itself: the `ggml-vocab-*.gguf.inp`/`.out` fixtures in
    `~/Work/llama.cpp/models/` are ready-made round-trip test vectors.
+
+**Adjudicating a near-tie divergence.** When a temp-0 gate diverges, walk your greedy steps
+printing the top-2 logit gap at each one — that is the standard verdict method. A flip at a gap
+of a fraction of a logit out of ~24 (p ≈ 0.5) is the model's own coin-flip, not a forward bug,
+but the verdict needs all three of: every MATCHED step clears a wide gap; tokenizer, decoder and
+encoder each verify independently; and a prompt that happens to carry no tie matches
+byte-identical to the natural stop. That last one is the positive gate — without it, "it was
+just a near-tie" is unfalsifiable.
+
+**Audio towers: oracle against fp32, ship f16.** Published mmprojs are f16, and ggml's f16
+`mul_mat` accumulates in fp16 on ARM, which drifts against our fp32 tower — so an oracle run
+uses a local f16→f32 re-encode of the mmproj. **The conv weights must stay f16**: ggml's clip
+conv/im2col path aborts on F32 kernels (which is also why the upstream converter pins convs to
+f16 even at `--outtype f32`). Our loader reads either dtype identically.
+
+**Two audio-loader traps the oracle cannot warn you about.** ggml's `build_stack` "padding"
+never materializes — `GGML_PAD` is a power-of-2 bitmask macro and the stack strides are not
+powers of two, so the real semantics are `floor(n_pos / stack)` full rows with the ragged tail
+positions DROPPED, and the zero-pad row never reaches the projector; implement the floor
+directly (`audio_tokens_per_chunk`). And `clip.audio.projection_dim` lies on ultravox-1b (claims
+4096 while `mm.a.mlp.2` projects into the 2048-wide decoder) — derive projector shapes from the
+mm tensors, never from that key.
 
 Perf is compared with `llama-bench -ngl 0 -t 16 --cpu-mask 0x55555555 --cpu-strict 1` on the
 x86 boxes (16 physical cores, pinned on BOTH sides — das pins via the jobque's hard affinity

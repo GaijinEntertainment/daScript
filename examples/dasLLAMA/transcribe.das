@@ -1,6 +1,6 @@
 options gen2
 options fast_math = true   // ggml-parity FP laxity (non-bit-exact, ~+10%); tests stay bit-exact
-options stack = 65536      // the ASR model structs (decoder + tower) need a deeper stack
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dasllama/dasllama         // the facade: load_asr_model / caps / create_session / transcribe
 require audio                     // miniaudio decode (any format) resampled to 16 kHz mono
@@ -17,7 +17,7 @@ require math
 //                    [--lang <code>] [--translate] [--no-timestamps]
 
 // Decode any audio file miniaudio understands (WAV/MP3/FLAC/Vorbis) to 16 kHz mono f32 —
-// the decoder converts rate/channels on the fly (same rail as audio.das).
+// the decoder converts rate/channels on the fly (same rail as audio_chat.das).
 def load_audio_16k_mono(path : string) : array<float> {
     var decoder = new ma_decoder
     var config <- ma_decoder_config_init(ma_format.ma_format_f32, 1u, uint(AUDIO_SAMPLE_RATE))

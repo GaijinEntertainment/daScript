@@ -1038,3 +1038,104 @@ grew the batch arms — B=3 GEMV + mid-run shrink, B=6 GEMM, mixed batch/single 
 handoff), one-step logits+KV tolerance x {B3,B6}x{f16,f32}, paged multi-run gathers, wscale16
 both paths, leak gate; CPU batch suite 18/18.
 NEXT: P4 batched decode (gemm32 crossover, batch seam driver), P5 ship.
+
+**2026-07-30 — Phase 0 (dedup arc): FUNCTION + CLASS LOWERING in msl_emit — design (Boris-ruled).**
+Goal: kernels feel like normal das code — free functions, class methods, and inheritance lower
+1:1; no more "a kernel is a single function". Ruled: option 1 (proper MSL classes), tests are
+Phase 0's own gate set. Mechanics:
+1. **Free functions** lower as plain MSL functions (`def add(a, b : int) : int` →
+   `int add(int a, int b)`), any module the body reaches, one MSL function per GENERIC
+   instance (mangled name sanitized). Prototypes emit before bodies; recursion is a compile
+   error. Param mapping by das type: `array<T>` → `device T*` (`device const T*` without
+   `var`), fixed array `T[N]` → `threadgroup T*`, `var T&` → `thread T&` (thread-space
+   binders only), scalars/vectors by value; value returns legal (kernel entry stays void).
+   Free functions reading gl_* builtins get hidden trailing by-value params, threaded
+   automatically at call sites.
+2. **The kernel class emits as ONE FLAT MSL struct** — inherited members AND methods flatten
+   into the concrete class; an override wins; no MSL inheritance, no vtables. das inheritance
+   is source reuse; emission is always the concrete class. Struct fields: @ssbo → device
+   pointer, @uniform → BY-VALUE copy (sidesteps address-space reference members), @workgroup
+   → threadgroup pointer, used gl_* builtins → by-value fields. Methods emit as member
+   functions — member access needs zero rewriting.
+3. **The entry keeps today's ABI exactly** (same [[buffer(N)]] params, builtin params, shmem +
+   `_tgmem` companion — encoders and the [metal_dispatch] lens untouched): it fills `self`
+   (pointers, uniform copies, builtin copies, derived tgmem pointers) and calls the kernel
+   method.
+4. **Method calls devirtualize statically against the concrete kernel class.** Typed AST shape
+   (probe-verified 2026-07-30): `ExprInvoke` with `isInvokeMethod=true`, arguments[0] =
+   `ExprField(value = ExprTypeDecl, name = <method>)`, arguments[1] = (possibly ExprCast-
+   upcast) receiver, rest = params. Resolution: method name → the CONCRETE class's field-init
+   function — identical to CPU vtable results for kernel objects (one exact instance).
+   Reassigning a method field in kernel code is a compile error.
+5. **Write-set goes interprocedural by SIGNATURE at call sites** (a member passed to a
+   `var array<T>` param is written; const param = read) **and by recursive body scan for
+   methods** (they touch members directly).
+Census grows matching kinds (gate B both-directions discipline). Tests:
+`tests/metal/test_metal_functions.das` — CPU-oracle-vs-GPU for free fn / method / inheritance
++ override (base skeleton calls a derived-overridden stage) / generic ×2 instances / ref arg /
+tgmem param / builtin-using helper / uniform-reading method; negative gates for recursion,
+method-field reassignment, unsupported param types. First consumer: the dasLLAMA SqAttn family
+dedup (16-of-20 twins share one skeleton; stage helpers + one uniform struct per family).
+
+## @uniform structs — the kargs form
+
+A kernel with a dozen scalars used to cost a dozen binds. `@uniform @binding = N ka : KArgs`,
+where `KArgs` is a plain das struct, costs one: the struct definition emits into the MSL
+preamble, the member becomes `constant KArgs& ka [[buffer(N)]]`, and `ka.field` is one hop.
+
+**Fields are `int`/`uint`/`float` only.** That restriction is the whole feature: a struct of
+4-byte scalars is the same bytes in das and in MSL, with no padding rules to keep in sync, so
+the host writes its own struct straight through `setBytes` (`metal_set_bytes`, already bound —
+Metal caps it at 4KB and a kargs struct is well under). A `float4` field would be 16-byte
+aligned in MSL and shift every field after it; a nested struct brings its own alignment. Both
+are refused (`tests/msl/_fail_closed/_fc_ustruct_{field,nested}.das`).
+
+Host side: `run_compute_1d_kargs` for tests, and dasLLAMA's `kn_bytes` / `kn_kargs` on the
+capture rail — under graph capture the bytes are COPIED into a pool, since the caller's kargs is
+a stack local long gone by replay time.
+
+**It costs the GPU nothing.** Every field was already a runtime `constant uint&`; the fold trades
+N bindings for one argument-buffer read and the kernel branches on exactly the values it did
+before. Nothing about the *shape* of a kernel may become a kargs field, though: a block stride, a
+lane width, a codec selector belongs in a per-codec overload or a monomorphized generic, where it
+stays a literal in the emitted MSL. Passing one as a value and trusting Metal to inline-and-fold
+it back is an assumption, not a guarantee — and the assumption is worth nothing in the kernels
+that matter.
+
+Tests: `tests/msl/test_msl_uniform_struct.das` (definition placement, the single `constant&`
+parameter, no per-scalar parameter survives) and `tests/metal/test_metal_uniform_struct.das`
+(GPU vs CPU-oracle — the only thing that can prove the layout claim; mutation-verified by
+inserting one pad field into the emitted struct).
+
+## Phase 0 follow-on: pointer parameters
+
+A helper takes a raw pointer: `def stage(var p : half4 const?; n : uint)`. This is what lets the
+kernels that stream `unsafe(addr(buf[i]))` through a loop — the split-K "D" attention family, the
+K-quant mul_mm trio — share a skeleton at all, since the advancing pointer is the shape and
+rewriting it as index math changes AGX register allocation.
+
+**MSL requires an address space in the signature** (`device half4*` vs `threadgroup half4*`) and
+the das type `half4?` carries none — the same type can name an @ssbo interior or a @workgroup
+interior. The parameter declares it and the call site proves it:
+
+- **Unmarked is `device`.** Every pointer stream in the zoo is device, so the common case is
+  plain das with no marker to learn.
+- **`@threadgroup p : T?`** opts into threadgroup memory. Parameter annotations already parse
+  and keep their values, so this needs no grammar.
+- **The emitter derives the space from the argument's provenance and cross-checks it** — an
+  inline `addr(member[i])`, a pointer local, a pointer parameter being forwarded, or `p + n`
+  over any of those. Disagreement is a das error naming both sides; provenance it cannot trace
+  (a thread-space local) is refused rather than guessed. The declared space is never trusted on
+  its own, so a wrong marker cannot reach the runtime MSL compile as a null pipeline.
+- **The POINTEE's const is the MSL const.** `T const?` lowers `device const T*` and reads only;
+  `T?` lowers `device T*` and marks the source member written, exactly as a `var array<T>`
+  parameter does. (Writing through it in das additionally needs the handle non-const — `var o :
+  T?` — because das flows the handle's const onto the dereference.)
+
+Long-term this is a shortcut for **pointer families** as a language-level feature — a real type
+axis rather than an annotation. Parked on `modules/dasLLAMA/followup_general.md`.
+
+Tests: `tests/msl/_msl_common.das` + `test_msl_functions.das` (signatures, forwarding, inline
+`addr` arguments, census), `tests/metal/test_metal_functions.das` (GPU advancing dot + threadgroup
+slab max vs a directly-computed expectation), `tests/msl/_fail_closed/_fc_ptr_space_{tg,dev}.das`
+and `_fc_ptr_untraceable.das` (both mismatch directions + the untraceable case).

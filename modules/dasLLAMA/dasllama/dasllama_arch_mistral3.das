@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_arch_mistral3 shared public
 
 require dasllama/dasllama_common
+require dasllama/dasllama_blocks   // std_blocks/moe_blocks — the default block sets this arch binds
 
 // Mistral Medium 3.5 (llama.cpp arch "mistral3") — the llama dense shape (NORM rope, SiLU FFN,
 // no QK-norm) with YaRN rope (factor 64 over a 4096 original context, beta_fast 4) and the

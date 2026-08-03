@@ -1,6 +1,6 @@
 options gen2
 options persistent_heap
-options stack = 65536
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 // whisper q8 gate (tower + decoder): q8-vs-fp32 token streams for one (model, wav) — run per
 // numeric change alongside the suite's tiny oracle. Timestamp tokens (id >= tok_beg) are

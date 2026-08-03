@@ -1,5 +1,5 @@
 options gen2
-options stack = 262144   // dashv client + jobque threads run under the same deep forward chain as the server
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 // demo_load — a small load generator for dasllama-server, dogfooding the dashv client: worker
 // threads loop varied chat completions against a RUNNING server. The default STAGED RAMP
@@ -82,12 +82,7 @@ def main : int {
         print("error: no dasllama-server at {base} — start it first, then watch its control page while this runs\n")
         return 1
     }
-    var stages : array<int>
-    if (cfg.workers > 0) {
-        stages |> push(cfg.workers)
-    } else {
-        stages <- [1, 2, 4, 8]
-    }
+    var stages <- cfg.workers > 0 ? [cfg.workers] : [1, 2, 4, 8]
     for (stage in stages) {
         print("=== stage: {stage} worker(s) x {nreq} request(s), max_tokens {max_new}\n")
         with_job_status(stage) $(finished) {

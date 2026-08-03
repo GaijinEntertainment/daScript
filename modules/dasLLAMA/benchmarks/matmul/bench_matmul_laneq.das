@@ -3,7 +3,7 @@ options persistent_heap
 
 require dastest/testing_boost
 require matmul_variants
-require dasllama/dasllama_quant
+require dasllama/dasllama_convert
 require math
 
 // Isolation proof for the lane-indexed SDOT + interleaved repack (4-row tile, 1 token) vs the current

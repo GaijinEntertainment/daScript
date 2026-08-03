@@ -17,9 +17,9 @@ options gen2
 //   bin/daslang -jit modules/dasLLAMA/harness/tune_tb.das
 
 require dasllama/dasllama_math
-require dasllama/dasllama_math_default          // nolint:STYLE030 — portable fallback + [init] ordering
-require dasllama/dasllama_math_gen               // nolint:STYLE030 — registers the arm64-gen/x64-gen repack backends at [init]
-require dasllama/dasllama_quant
+require dasllama/dasllama_math_default          // portable fallback + [init] ordering
+require dasllama/dasllama_math_gen               // registers the arm64-gen/x64-gen repack backends at [init]
+require dasllama/dasllama_convert
 require daslib/jobque_boost
 require math
 
@@ -35,7 +35,7 @@ let REPS = 1
 let BASE_TB = 128l   // today's hand default — the delta reference
 
 def fillf(var a : array<float>; cnt : int64) {
-    a |> resize(int(cnt))
+    a |> resize(cnt)
     for (i in range64(cnt)) {
         a[i] = float(i % 13l) * 0.1f - 0.6f
     }
@@ -52,7 +52,7 @@ def all_equal(a, b : array<float>; len : int64) : bool {
 
 // Bench one weight shape (n = contraction dim, d = output rows) across the TB grid, interleaved
 // best-of-N. Returns the winning TB (or -1 if a variant broke the bit-identity gate).
-def bench_shape(name : string; n, d : int64) : int64 {
+def bench_shape(name : string; n, d : int64) : int64 {   // nolint:STYLE037,STYLE038 — one rig: fixtures, the bit-identity gate and the interleaved TB timing rounds share every buffer
     let nb = n / 32l
     // Q8 weights, repacked into the gen interleaved layout (load-time cost, done once, untimed).
     var w : array<float>
@@ -67,14 +67,14 @@ def bench_shape(name : string; n, d : int64) : int64 {
     fillf(x, n)
     var xq : array<int8>
     var xs : array<float>
-    xq |> resize(int(n))
-    xs |> resize(int(nb))
+    xq |> resize(n)
+    xs |> resize(nb)
     quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
     delete x
     var xqb : array<int8>
     var xsb : array<float>
-    xqb |> resize(int(NTOK * n))
-    xsb |> resize(int(NTOK * nb))
+    xqb |> resize(NTOK * n)
+    xsb |> resize(NTOK * nb)
     for (tk in range64(NTOK)) {
         for (i in range64(n)) {
             xqb[int(tk * n + i)] = xq[int(i)]
@@ -89,8 +89,8 @@ def bench_shape(name : string; n, d : int64) : int64 {
     let ntb = length(TB_GRID)
     var y : array<float>
     var yref : array<float>
-    y |> resize(int(NTOK * d))
-    yref |> resize(int(NTOK * d))
+    y |> resize(NTOK * d)
+    yref |> resize(NTOK * d)
 
     var best : array<double>
     var ok : array<bool>

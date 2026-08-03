@@ -171,6 +171,8 @@ Appends `NATIVE_MODULE(category, subfolder, module_dir, native);` to `external_r
 
 **If you add a new module under `modules/` and it works with the static binary but fails with the dynamic binary** (error: "missing prerequisite"), you need a `.das_module` descriptor.
 
+**Adding a new `.das` file to an *existing* module needs the same edit.** Require-root registration is manifest-driven, so a file that is not named in the module's `.das_module` (and, for the static binary, its `CMakeLists.txt`) is unreachable — `require foo/newfile` fails with `error[20605] missing prerequisite`. The file compiling fine on its own is no signal. Add the name in the same commit that adds the file.
+
 ## Debugging module resolution
 
 - Static binary (`daslang_static`): if `require foo/bar` fails, check that `ADD_MODULE_DAS(foo, subfolder, bar)` exists in the module's `CMakeLists.txt` and rebuild

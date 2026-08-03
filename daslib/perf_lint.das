@@ -32,7 +32,7 @@ module perf_lint shared private
 //!   PERF029 — for (i in range(length(X))) subscripting sibling arrays in lockstep — zip: for (a, b in X, Y); same range/length variants as PERF018
 //!   PERF030 — move-assign onto a live heap-carrying variable drops old contents — delete first or force_inscope_pod
 //!   PERF019 — int(T.a) | int(T.b) on bitfield-or-enum-with-operator-| — collapse to int(T.a | T.b)
-//!   PERF020 — T(x) where x is already T (workhorse type) — drop the redundant cast
+//!   PERF020 — T(x) where x is already T (workhorse type) — drop the redundant cast (non-generic bodies only)
 //!   PERF021 — cond ? T(a) : T(b) on workhorse cast T — hoist to T(cond ? a : b)
 //!   PERF022 — for (s in A) { B |> push(s) } / push_clone — use 'B |> push_from(A)' (bulk reserve+copy)
 //!   PERF023 — var X = clone_expression(E); ... $e(X) ... — qmacro splice already clones; drop the pre-clone
@@ -479,15 +479,14 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf_warning(text : string; at : LineInfo) : void {
-        // Suppress in templates and inside macro-generated functions — the user didn't write that code.
+        // suppress before the dedup insert + code in the key: a nolint'd rule must not mask a co-located sibling or fake a LINT019 stale
         if (in_template
-            || (current_function != null && current_function.flags.generated)) return
-        // Deduplicate warnings — same source location reported once, regardless of generic instantiations
-        let key = location_key(at)
+            || (current_function != null && current_function.flags.generated)
+            || is_suppressed(text, at)) return
+        // one report per (rule, location), regardless of generic instantiations
+        let key = location_key(at) ^ hash(extract_lint_code(text))
         if (key_exists(reported_locations, key)) return
         reported_locations |> insert(key)
-        // Check inline suppression: // PERFxxx on the same line
-        if (is_suppressed(text, at)) return
         warning_count++
         var msg = text
         if (current_function != null && current_function.fromGeneric != null && !empty(current_function.inferStack)) {
@@ -1525,7 +1524,9 @@ class PerfLintVisitor : AstVisitor {
     // --- PERF020: T(x) where x is already T — redundant workhorse cast ---
 
     def check_perf020_redundant_cast(call : ExprCall?) : void {
-        if (call == null || call.func == null || length(call.arguments) != 1) return
+        // a generic's one source line serves every instance — `float(x)` is a no-op where the element binds float and the required widen where it binds float16, so the verdict is not actionable there
+        if (call == null || call.func == null || length(call.arguments) != 1
+            || (current_function != null && current_function.fromGeneric != null)) return
         let fname = string(call.func.fromGeneric != null ? call.func.fromGeneric.name : call.func.name)
         let target = perf020_target_basetype(fname)
         if (target == Type.none) return
@@ -2060,11 +2061,12 @@ class PerfLintVisitor : AstVisitor {
             lhs = (lhs as ExprRef2Value.subexpr)
         }
         if (lhs == null || !(lhs is ExprVar)) return
-        // generated/CMRES targets are the `return <- r` lowering - moving INTO a fresh result
+        // CMRES/generated = the `return <- r` lowering; a `&` binding = an element/field alias, the category tab[k] <- v already excludes
         let lv = (lhs as ExprVar).variable
         if (lv == null || lv.flags.aliasCMRES || lv.flags.generated
+                || (lv._type != null && lv._type.flags.ref)
                 || !perf030_needs_release(expr.left._type)) return
-        perf_warning("PERF030: move-assign drops the target's old contents without release (a leak on a persistent heap); delete the target first, or enable force_inscope_pod so the compiler collects it", expr.at)
+        perf_warning("PERF030: move-assign drops the target's old contents without release (a leak on a persistent heap); when the target can be live, delete it first AND keep a nolint (the check cannot see the delete); when it is fresh, fold the move into the declaration; or enable force_inscope_pod so the compiler collects it", expr.at)
     }
 
     def override visitExprMove(var expr : ExprMove?) : ExpressionPtr {

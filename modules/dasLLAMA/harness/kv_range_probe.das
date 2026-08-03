@@ -1,7 +1,7 @@
 options gen2
-options stack = 65536   // dasLLAMA program-root convention (options stack does not unify up from libs)
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration
+require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/clargs
@@ -69,7 +69,7 @@ def private report_layer(l : int64; tag : string; r : Range) {
 }
 
 [export]
-def main() {
+def main() {   // nolint:STYLE038 — flat probe driver: args, load, prefill, slab walk, report
     allow_cpu_prefill()   // CPU harness by intent — disarm the Metal-build tripwire
     if (!jit_enabled()) {
         print("This probe is JIT-only — run with: daslang -jit <file>\n")

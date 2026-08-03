@@ -4,8 +4,8 @@ require dastest/testing_boost public
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default        // portable backend (knob-inert control)
 require dasllama/dasllama_math_aarch64_neon   // arm64 backends (registered under arm64 + JIT only)
-require ?llvm/daslib/llvm_tune dasllama/dasllama_math_gen  // nolint:STYLE030 — the gen batch walk (the knob's target)
-require dasllama/dasllama_quant
+require ?llvm/daslib/llvm_tune dasllama/dasllama_math_gen  // the gen batch walk (the knob's target)
+require dasllama/dasllama_convert
 require daslib/jobque_boost
 require math
 

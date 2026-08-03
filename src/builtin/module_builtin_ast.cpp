@@ -328,6 +328,11 @@ namespace das {
         prog->error(message ? message : "macro error","","",at,CompilationError::runtime_macro);
     }
 
+    void ast_sticky_error ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo ) {
+        if ( !prog ) context->throw_error_at(lineInfo,"program can't be null (expecting compiling_program())");
+        prog->stickyError(message ? message : "macro error","","",at,CompilationError::runtime_macro);
+    }
+
     void ast_performance_warning ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo ) {
         if ( !prog ) context->throw_error_at(lineInfo,"program can't be null (expecting compiling_program())");
         prog->error(message ? message : "performance warning","","",at,CompilationError::runtime_macro_performance);
@@ -1610,13 +1615,16 @@ namespace das {
         // errors
         addExtern<DAS_BIND_FUN(ast_error)>(*this, lib,  "macro_error",
             SideEffects::modifyArgumentAndExternal, "ast_error")
-                ->args({"porogram","at","message","context","line"});
+                ->args({"program","at","message","context","line"});
+        addExtern<DAS_BIND_FUN(ast_sticky_error)>(*this, lib,  "macro_sticky_error",
+            SideEffects::modifyArgumentAndExternal, "ast_sticky_error")
+                ->args({"program","at","message","context","line"});
         addExtern<DAS_BIND_FUN(ast_performance_warning)>(*this, lib,  "macro_performance_warning",
             SideEffects::modifyArgumentAndExternal, "ast_performance_warning")
-                ->args({"porogram","at","message","context","line"});
+                ->args({"program","at","message","context","line"});
         addExtern<DAS_BIND_FUN(ast_style_warning)>(*this, lib,  "macro_style_warning",
             SideEffects::modifyArgumentAndExternal, "ast_style_warning")
-                ->args({"porogram","at","message","context","line"});
+                ->args({"program","at","message","context","line"});
         // class
         addExtern<DAS_BIND_FUN(makeClassRtti)>(*this, lib,  "builtin_ast_make_class_rtti",
             SideEffects::modifyArgumentAndExternal, "makeClassRtti")

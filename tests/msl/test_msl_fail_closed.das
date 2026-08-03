@@ -7,10 +7,11 @@ options no_aot     // invokes the compiler at runtime (compile_file) — not AOT
 // non-empty, no crash, no silent wrong kernel). Each fixture holds exactly one unsupported
 // construct; we compile it with compile_file and assert the error text carries the specific
 // diagnostic. The fixtures span the rejection surface: a WRITTEN @uniform (write-set scan),
-// an ARRAY @uniform (member scan), a VALUE return (statement emit), a user-function CALL (the
-// emit_call_value whitelist backstop), a BOUND @workgroup, and a dynamic-array @workgroup; the
-// Phase-5 simdgroup_matrix surface: `.data` access in a kernel, an @ssbo of tiles, a non-member
-// load source, and a threadgroup store.
+// an ARRAY @uniform (member scan), a VALUE return in the kernel (statement emit), a BOUND
+// @workgroup, and a dynamic-array @workgroup; the user-function surface: a RECURSIVE helper,
+// an un-lowerable helper PARAMETER type, and a @workgroup member bound to a thread-space `&`
+// parameter; the Phase-5 simdgroup_matrix surface: `.data` access in a kernel, an @ssbo of
+// tiles, a non-member load source, and a threadgroup store.
 
 require dastest/testing_boost public
 require daslib/ast
@@ -47,9 +48,18 @@ def private check_rejects(t : T?; fixture, needle : string) {
 def test_fail_closed_rejections(t : T?) {
     t |> run("emitter rejects kernel-illegal constructs cleanly") <| @(t : T?) {
         check_rejects(t, "_fc_uniform_written", "@uniform member `n` is written")
-        check_rejects(t, "_fc_uniform_array", "@uniform member `xs` must be a scalar or vector value")
+        check_rejects(t, "_fc_uniform_array", "array members are @ssbo buffers")
         check_rejects(t, "_fc_return_value", "kernels return void")
-        check_rejects(t, "_fc_call", "call `helper` is not a supported MSL builtin")
+        check_rejects(t, "_fc_recursion", "is recursive — MSL forbids recursion")
+        check_rejects(t, "_fc_ufn_param", "type has no MSL form")
+        check_rejects(t, "_fc_workgroup_ref", "address spaces differ")
+        check_rejects(t, "_fc_ptr_space_tg", "is `threadgroup` but the argument points into device memory")
+        check_rejects(t, "_fc_ptr_space_dev", "is `device` but the argument points into threadgroup memory")
+        check_rejects(t, "_fc_ptr_untraceable", "has no traceable address space")
+        check_rejects(t, "_fc_ustruct_field", "only int/uint/float fields lower")
+        check_rejects(t, "_fc_ustruct_nested", "only int/uint/float fields lower")
+        check_rejects(t, "_fc_method_recursion", "method `mrec` is recursive")
+        check_rejects(t, "_fc_method_abstract", "has no resolvable body")
         check_rejects(t, "_fc_wg_binding", "threadgroup memory is not a bindable buffer")
         check_rejects(t, "_fc_wg_type", "@workgroup member `tile` must be a scalar, vector, or single-dimension fixed array")
         check_rejects(t, "_fc_lattice_wide", "is CPU-only (8/16-lane lattice forms do not exist in shaders")

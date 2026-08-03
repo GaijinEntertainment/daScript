@@ -1,6 +1,6 @@
 options gen2
 options persistent_heap   // the server thread loads/frees a multi-GB model once; explicit deletes below
-options stack = 262144    // the forward chain runs under the HTTP tick + C++->das bridge (matches main.das)
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options fast_math = true  // ggml-parity FP laxity — this is an inference tool test, not the bit-exact suite
 
 require dastest/testing_boost public
@@ -57,8 +57,8 @@ def private vecs_equal(a, b : array<float>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (x, y in a, b) {
+        if (x != y) {
             return false
         }
     }
@@ -115,7 +115,7 @@ def private with_llama_server(model_path : string; port : int; mode : MetalMode 
 }
 
 [test]
-def test_openai_server(t : T?) {
+def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server session per test: every endpoint assertion runs against that one boot
     t |> run("OpenAI server: models + embeddings + chat (needs tinyllama q8)") @(t : T?) {
         if (!jit_enabled()) {
             t |> success(true, "skipped: interpreted (dasLLAMA server test is JIT-only)")
@@ -642,7 +642,7 @@ def private with_llama_server2(path_a, path_b : string; port : int; blk : block<
 }
 
 [test]
-def test_openai_server_multimodel(t : T?) {
+def test_openai_server_multimodel(t : T?) {   // nolint:STYLE038 — one live two-slot server session per test: the routing assertions share that one boot
     t |> run("multi-model: routing + per-slot caches (needs tinyllama + SmolLM2-135M q8)") @(t : T?) {
         if (!jit_enabled()) {
             t |> success(true, "skipped: interpreted (dasLLAMA server test is JIT-only)")

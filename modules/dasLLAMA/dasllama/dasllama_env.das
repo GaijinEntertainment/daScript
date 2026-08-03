@@ -6,7 +6,7 @@ options _comment_hygiene = true
 //! Two jobs. First, [[env_flag]] / [[env_int]] / [[env_int64]] / [[env_str]] replace the five
 //! ad-hoc `env_int`-shaped helpers the tree grew independently, so "unset", "garbage" and
 //! "explicitly off" mean the same thing everywhere. Second, [[env_registry]] is the single list of
-//! every variable dasLLAMA reads — `ENVIRONMENT.md` is GENERATED from it (`--dump-env`), and
+//! every variable dasLLAMA reads — `ENVIRONMENT.md` is GENERATED from it (`harness/gen_env_doc.das`), and
 //! `tests/test_env_registry.das` fails if a `DASLLAMA_*` literal appears in the tree without a
 //! matching entry. Add the knob here in the same commit that adds the read, or the test breaks.
 //!
@@ -93,7 +93,9 @@ def private k(var out : array<EnvKnob>; name : string; kind : EnvKind; area : En
 
 def private reg_engine(var o : array<EnvKnob>) {
     k(o, "DASLLAMA_IMAGE", EnvKind.flag, EnvArea.engine, "on",
-      "Use the prepared-image cache beside a .gguf for millisecond reloads; 0 forces a full parse.")
+      "Use the prepared-image file beside a source model for millisecond reloads. 0 skips the file: LLM ggufs take the full parse; audio carriers mint the image in memory and serve that (they are always image-backed).")
+    k(o, "DASLLAMA_IMAGE_SAVE", EnvKind.flag, EnvArea.engine, "on",
+      "Persist the prepared image beside the source; 0 builds it in memory and serves that, leaving no .dlim behind.")
     k(o, "DASLLAMA_CPU_PREFILL", EnvKind.flag, EnvArea.engine, "off",
       "Allow the CPU prefill path even when a GPU prefill override is registered.")
     k(o, "DASLLAMA_PIN_PREFILL", EnvKind.text, EnvArea.engine, "",
