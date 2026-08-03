@@ -414,9 +414,8 @@ def private dispose_document(var doc : TextViewerDocument) {
     release_preview(doc)
     markdown_view_dispose(doc.preview_view)
     markdown_tree_sitter_dispose(doc.preview_syntax)
-    markdown_hybrid_dispose(doc.hybrid)
     rich_das_dispose(doc.rich_das)
-    release_document_content(doc)
+    release_document_content(doc) // also disposes doc.hybrid
 }
 
 def private install_document(var viewer : TextViewerDocument;
