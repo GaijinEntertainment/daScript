@@ -8,6 +8,8 @@ require ?vulkan _vkd_toy
 require ?vulkan vulkan
 require ?vulkan vulkan/vulkan_boost
 require ?vulkan dasllama/dasllama_vulkan_common
+require ?vulkan dasllama/dasllama_vulkan_classes
+require ?vulkan dasllama/dasllama_kqformat
 require daslib/shader_lingua_franca   // gl_GlobalInvocationID — the CPU replay drives it per lane
 
 // The model-less Vulkan kernel-unit suite ([vk_dispatch] bring-up): a class kernel dispatched
@@ -159,6 +161,174 @@ def test_vkd_ar_class(t0 : T?) {
             delete y2
             delete yc
             delete xc
+        } else {
+            feint("dasVulkan not present — skipping\n")
+        }
+    }
+}
+
+// ===== the kq GEMV family: class twins vs the SHIPPED kernels, per format =====
+// Synthetic planes — any bit pattern is valid K-quant data, EXCEPT the scale words, which are
+// composed from finite halves so a NaN can't poison the bit-compare. Identical inputs, identical
+// lane geometry (64-wide, one lane per 32-block) => the class twin must match BIT-EXACTLY.
+
+def private safe_half(i : uint) : uint {
+    let tab = fixed_array(0x3C00u, 0xB800u, 0x3400u, 0x4200u, 0x2E00u, 0xBC00u, 0x3E00u, 0xB000u)
+    return tab[i % 8u]
+}
+
+def private ws_word(i : uint) : uint {
+    return safe_half(i * 7u + 3u) | (safe_half(i * 3u + 1u) << 16u)
+}
+
+def private hash_word(i : uint) : uint {
+    var h = i * 2654435761u
+    h ^= h >> 16u
+    h *= 2246822519u
+    return h ^ (h >> 13u)
+}
+
+[test]
+def test_vkd_kq_gemv_family(t0 : T?) {
+    t0 |> run("kq GEMV class family == the shipped kernels (bit-exact, all 4 formats)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!(ensure_kq_gemv_k4_cls() && ensure_kq_gemv_q40_cls() && ensure_kq_gemv_k5_cls() && ensure_kq_gemv_k6_cls())) {
+                feint("no Vulkan device — skipping\n")
+                return
+            }
+            let nsb = 2      // superblocks per row reduction (n = 512)
+            let d = 3        // rows per region
+            let nreg = 2
+            let rows = nreg * d
+            let nfmt = 4
+            let fmts = fixed_array(int(KqFmt.k4), int(KqFmt.q40), int(KqFmt.k5), int(KqFmt.k6))
+            let stride4s = fixed_array(8, 8, 10, 12)   // uint4s per superblock
+            for (fi in range(nfmt)) {
+                let fmt = fmts[fi]
+                let stride4 = stride4s[fi]
+                let nwsb = rows * nsb                       // region r's weights at r*d*nsb
+                let wq_words = nwsb * stride4 * 4
+                let ws_words_n = nwsb * 5
+                var wqh : array<uint>
+                var wsh : array<uint>
+                var xqh : array<uint>
+                var xsh : array<float>
+                wqh |> resize(wq_words)
+                wsh |> resize(ws_words_n)
+                xqh |> resize(nsb * 64)                     // nsb superblocks x 64 uints
+                xsh |> resize(nsb)
+                for (i in range(wq_words)) {
+                    wqh[i] = hash_word(uint(i) + uint(fmt) * 77777u)
+                }
+                for (i in range(ws_words_n)) {
+                    wsh[i] = ws_word(uint(i) + uint(fmt) * 13u)
+                }
+                for (i in range(nsb * 64)) {
+                    xqh[i] = hash_word(uint(i) * 31u + 5u)
+                }
+                for (i in range(nsb)) {
+                    xsh[i] = 0.5 + float(i % 7) * 0.25
+                }
+                let wq_bytes = int64(wq_words) * 4l
+                let ws_bytes = int64(ws_words_n) * 4l
+                let xq_bytes = int64(nsb) * 256l
+                let xs_bytes = int64(nsb) * 4l
+                let y_bytes = int64(rows) * 4l
+                let wqd = make_device_buf(wq_bytes)
+                let wsd = make_device_buf(ws_bytes)
+                let xqd = make_device_buf(xq_bytes)
+                let xsd = make_device_buf(xs_bytes)
+                let yd1 = make_device_buf(y_bytes)
+                let yd2 = make_device_buf(y_bytes)
+                let rgd = make_device_buf(int64(nreg) * 8l)
+                var meta = make_host_buf(META_BYTES, false, [cached = false])
+                var host = make_host_buf(y_bytes, true, [cached = true])
+                var y_old : array<float>
+                var y_cls : array<float>
+                y_old |> resize(rows)
+                y_cls |> resize(rows)
+                let wgs = (int64(rows) + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg
+                unsafe {
+                    upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
+                    upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
+                    upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
+                    upload_region_at(xsd, 0l, addr<uint8 const?>(xsh[0]), xs_bytes)
+                    var regs : array<uint>
+                    regs |> resize(nreg * 2)
+                    var mp = reinterpret<uint?>(meta.mapped)
+                    mp[0] = 512u
+                    mp[1] = uint(d)
+                    mp[2] = uint(nreg)
+                    mp[3] = 0u
+                    for (r in range(nreg)) {
+                        mp[4 + r * 2] = uint(r * d * nsb)
+                        mp[5 + r * 2] = 0u
+                        regs[r * 2] = uint(r * d * nsb)
+                        regs[r * 2 + 1] = 0u
+                    }
+                    upload_region_at(rgd, 0l, addr<uint8 const?>(regs[0]), int64(nreg) * 8l)
+                    // the SHIPPED kernel
+                    var s_old = vk_set6(wqd, wsd, meta.buf, xqd, xsd, yd1,
+                        wq_bytes, ws_bytes, META_BYTES, xq_bytes, xs_bytes, y_bytes,
+                        fixed_array(1u, 2u, 4u, 8u, 16u, 32u))
+                    var raw = alloc_cmd()
+                    let begin = VkCommandBufferBeginInfo()
+                    vk_check(vkBeginCommandBuffer(raw, begin), null)
+                    var h : VkHaz
+                    hz_dispatch(raw, h, gemv_pipe(fmt), s_old, uint(wgs))
+                    vhz_dep(raw, h, 32u, 0u, true)
+                    cmd_copy_whole(raw, yd1, host.buf, y_bytes)
+                    vk_check(vkEndCommandBuffer(raw), null)
+                    submit_wait(raw)
+                    memcpy(addr<void?>(y_old[0]), host.mapped, y_bytes)
+                    // the class twin — same planes, its own regions SSBO + push params
+                    let cb = fixed_array(wqd, wsd, rgd, xqd, xsd, yd2)
+                    let cs = fixed_array(wq_bytes, ws_bytes, int64(nreg) * 8l, xq_bytes, xs_bytes, y_bytes)
+                    let cg = fixed_array(1u, 2u, 4u, 8u, 16u, 32u)
+                    var s_cls : VkDescriptorSet
+                    if (fmt == int(KqFmt.k4)) {
+                        s_cls = set_kq_gemv_k4_cls(cb, cs, cg)
+                    } elif (fmt == int(KqFmt.q40)) {
+                        s_cls = set_kq_gemv_q40_cls(cb, cs, cg)
+                    } elif (fmt == int(KqFmt.k5)) {
+                        s_cls = set_kq_gemv_k5_cls(cb, cs, cg)
+                    } else {
+                        s_cls = set_kq_gemv_k6_cls(cb, cs, cg)
+                    }
+                    var raw2 = alloc_cmd()
+                    vk_check(vkBeginCommandBuffer(raw2, begin), null)
+                    var h2 : VkHaz
+                    var pc = KqGemvArgs(n = 512u, d = uint(d), nreg = uint(nreg), ybase = 0u)
+                    if (fmt == int(KqFmt.k4)) {
+                        enc_kq_gemv_k4_cls(raw2, h2, s_cls, pc, wgs)
+                    } elif (fmt == int(KqFmt.q40)) {
+                        enc_kq_gemv_q40_cls(raw2, h2, s_cls, pc, wgs)
+                    } elif (fmt == int(KqFmt.k5)) {
+                        enc_kq_gemv_k5_cls(raw2, h2, s_cls, pc, wgs)
+                    } else {
+                        enc_kq_gemv_k6_cls(raw2, h2, s_cls, pc, wgs)
+                    }
+                    vhz_dep(raw2, h2, 32u, 0u, true)
+                    cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
+                    vk_check(vkEndCommandBuffer(raw2), null)
+                    submit_wait(raw2)
+                    memcpy(addr<void?>(y_cls[0]), host.mapped, y_bytes)
+                    delete regs
+                }
+                var bad = 0
+                for (i in range(rows)) {
+                    if (y_old[i] != y_cls[i]) {
+                        bad++
+                    }
+                }
+                t |> success(bad == 0, "fmt {fmt}: class twin bit-exact vs shipped ({bad} of {rows} rows diverge)")
+                delete wqh
+                delete wsh
+                delete xqh
+                delete xsh
+                delete y_old
+                delete y_cls
+            }
         } else {
             feint("dasVulkan not present — skipping\n")
         }
