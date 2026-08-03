@@ -66,8 +66,16 @@ def test_rich_das_block_comment_poisoning(t : T?) {
     rich_das_collect_groups(closer, closer_spans)
     t |> equal(length(closer_spans), 0,
         "a MIXED closer poisons the whole block span")
+    // a blank interior line poisons too: the tail would be an interior-only
+    // island, which the grouping rules forbid outright
+    var gapped = das_editor("/* alpha\n\nbeta */\nlet z = 3\n")
+    var inscope gapped_spans : array<RichDasGroupSpan>
+    rich_das_collect_groups(gapped, gapped_spans)
+    t |> equal(length(gapped_spans), 0,
+        "a blank inside a pure block comment keeps the whole span source")
     text_edit_dispose(opener)
     text_edit_dispose(closer)
+    text_edit_dispose(gapped)
 }
 
 [test]
