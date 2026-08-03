@@ -23,15 +23,30 @@ struct ArArgs {
     ascale : float
 }
 
-// ar_add_rms_b's class twin: x/a/w/y stop sharing packed buffers, eps/ascale ride the push
-// struct. The reduce order is VERBATIM (stride-256 accum, subgroupAdd, sequential partials,
-// 1/sqrt), so against vk_add_rms on the same inputs the outputs are BIT-IDENTICAL.
-[vk_dispatch(name = "cls_ar", grid = "nrows", params = "nrows : int64")]
-class ClsArAddRms {
+// the shared Q8_0 quantize pieces (pure — the amax fold is subgroup-wide, the pack is scalar)
+def private q8_amax3(m0 : float) : float {
+    var m = m0
+    m = max(m, subgroupShuffleXor(m, 1u))
+    m = max(m, subgroupShuffleXor(m, 2u))
+    m = max(m, subgroupShuffleXor(m, 4u))
+    return m
+}
+
+def private q8_pack4(v0, v1, v2, v3 : float; id : float) : uint {
+    let q0 = int(round(v0 * id))
+    let q1 = int(round(v1 * id))
+    let q2 = int(round(v2 * id))
+    let q3 = int(round(v3 * id))
+    return ((uint(q0) & 0xFFu) | ((uint(q1) & 0xFFu) << 8u)
+        | ((uint(q2) & 0xFFu) << 16u) | ((uint(q3) & 0xFFu) << 24u))
+}
+
+// the add+rmsnorm core: x/a/w members, the row stash, and the verbatim reduce (stride-256 accum,
+// subgroupAdd, sequential partials, 1/sqrt) — leaves add their output members + kernels
+class ArBase {
     @ssbo @binding = 0 xs : array<float>   // x rows, the residual stream — updated in place
     @ssbo @binding = 1 aa : array<float>   // the add partner rows
     @ssbo @binding = 2 wn : array<float>   // the norm weight row
-    @ssbo @binding = 3 yo : array<float>   // the normed output rows
     @push_constant pa : ArArgs
     @workgroup row : float[4096]           // AR_MAX_DIM — staged so the post-reduce reread is local
     @workgroup part : float[64]            // one partial per subgroup (subgroupSize >= 4 floor)
@@ -70,6 +85,12 @@ class ClsArAddRms {
         barrier()
         return inv1[0u]
     }
+}
+
+// ar_add_rms_b's class twin: one workgroup per row, the normed output to its own member
+[vk_dispatch(name = "cls_ar", grid = "nrows", params = "nrows : int64")]
+class ClsArAddRms : ArBase {
+    @ssbo @binding = 3 yo : array<float>   // the normed output rows
 
     [spirv_kernel(local_size_x = 256, name = "cls_ar_spv")]
     def run {
@@ -80,6 +101,153 @@ class ClsArAddRms {
         while (k < pa.dim) {
             yo[base + k] = wn[k] * (row[k] * inv)
             k += 256u
+        }
+    }
+}
+
+// ar_add_rms + Q8_0 requant in ONE dispatch: the normed row quantizes out of the row stash, so
+// xb never reaches memory. Verbatim reduce/amax/rounding => bit-identical to the split pair.
+[vk_dispatch(name = "cls_ar_rq", grid = "wgs", params = "wgs : int64")]
+class ArAddRmsRq : ArBase {
+    @ssbo @binding = 3 outq : array<uint>    // the quantized words
+    @ssbo @binding = 4 outs : array<float>   // per-32-block scales
+
+    [spirv_kernel(local_size_x = 256, name = "cls_ar_rq_spv")]
+    def run {
+        let tid = gl_LocalInvocationID.x
+        let ss = accum_row(0u)
+        let inv = rms_inv(ss)
+        // quantize the normed row instead of storing it: 8 lanes per 32-block, 32 blocks per pass
+        let nblk = pa.dim / 32u
+        let lane8 = tid % 8u
+        var b = tid / 8u
+        while (b < nblk) {
+            let base = b * 32u + lane8 * 4u
+            let v0 = wn[base] * (row[base] * inv)
+            let v1 = wn[base + 1u] * (row[base + 1u] * inv)
+            let v2 = wn[base + 2u] * (row[base + 2u] * inv)
+            let v3 = wn[base + 3u] * (row[base + 3u] * inv)
+            let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
+            let d = m / 127.0
+            let id = d != 0.0 ? 1.0 / d : 0.0
+            if (lane8 == 0u) {
+                outs[b] = d
+            }
+            outq[b * 8u + lane8] = q8_pack4(v0, v1, v2, v3, id)
+            b += 32u
+        }
+    }
+}
+
+struct RqArgs {
+    inbase : uint   // element base of the source rows
+    nblk : uint     // block / superblock count
+}
+
+// straight Q8_0 requant of f32 rows (the deltanet chain's quantize step)
+[vk_dispatch(name = "cls_dn_rq", grid = "wgs", params = "wgs : int64")]
+class DnRequant {
+    @ssbo @binding = 0 src : array<float>
+    @ssbo @binding = 1 outq : array<uint>
+    @ssbo @binding = 2 outs : array<float>
+    @push_constant pa : RqArgs
+
+    [spirv_kernel(local_size_x = 256, name = "cls_dn_rq_spv")]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        let sg = gid / 32u
+        let lane = gid % 32u
+        let b = sg * 4u + lane / 8u
+        if (b < pa.nblk) {
+            let eb = pa.inbase + sg * 128u + lane * 4u
+            let lane8 = lane % 8u
+            let v0 = src[eb]
+            let v1 = src[eb + 1u]
+            let v2 = src[eb + 2u]
+            let v3 = src[eb + 3u]
+            let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
+            let d = m / 127.0
+            let id = d != 0.0 ? 1.0 / d : 0.0
+            if (lane8 == 0u) {
+                outs[b] = d
+            }
+            outq[b * 8u + lane8] = q8_pack4(v0, v1, v2, v3, id)
+        }
+    }
+}
+
+// straight Q8_K requant of f32 rows (the K-quant chains' mid-step re-quantize)
+[vk_dispatch(name = "cls_q8k_rq", grid = "wgs", params = "wgs : int64")]
+class Q8kRequant {
+    @ssbo @binding = 0 src : array<float>
+    @ssbo @binding = 1 outq : array<uint>
+    @ssbo @binding = 2 outs : array<float>
+    @push_constant pa : RqArgs
+
+    def blk_scale(b, lane : uint; m0 : float) : float {
+        var m = m0
+        m = max(m, subgroupShuffleXor(m, 1u))
+        m = max(m, subgroupShuffleXor(m, 2u))
+        m = max(m, subgroupShuffleXor(m, 4u))
+        m = max(m, subgroupShuffleXor(m, 8u))
+        m = max(m, subgroupShuffleXor(m, 16u))
+        let d = m / 127.0
+        if (lane == 0u) {
+            outs[b] = d
+        }
+        return d != 0.0 ? 1.0 / d : 0.0
+    }
+
+    def pack_word(b, r, lane : uint; v, id : float) {
+        let q = int(round(v * id))
+        let b8 = uint(q) & 0xFFu
+        let p = b8 | (subgroupShuffleXor(b8, 1u) << 8u)
+        let w = p | (subgroupShuffleXor(p, 2u) << 16u)
+        if (lane % 4u == 0u) {
+            outq[b * 64u + r * 8u + lane / 4u] = w
+        }
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "cls_q8k_rq_spv")]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        let b = gid / 32u
+        let lane = gid % 32u
+        if (b < pa.nblk) {
+            let base = pa.inbase + b * 256u
+            var vals : float[8]
+            var m = 0.0
+            for [unroll] (r in range(8)) {
+                let v = src[base + uint(r) * 32u + lane]
+                vals[r] = v
+                m = max(m, abs(v))
+            }
+            let id = blk_scale(b, lane, m)
+            for [unroll] (r in range(8)) {
+                pack_word(b, uint(r), lane, vals[r], id)
+            }
+        }
+    }
+}
+
+// Q8_0 words -> f16 rows (the cm2 chain's activation feed; one word = 4 quants per thread)
+[vk_dispatch(name = "cls_xf16", grid = "wgs", params = "wgs : int64")]
+class Q8Xf16 {
+    @ssbo @binding = 0 xqw : array<uint>
+    @ssbo @binding = 1 axs : array<float>     // one scale per 8 words (a 32-quant block)
+    @ssbo @binding = 2 outh : array<float16>
+    @push_constant pa : RqArgs                // nblk carries the WORD count here
+
+    [spirv_kernel(local_size_x = 256, name = "cls_xf16_spv")]
+    def run {
+        let w = gl_GlobalInvocationID.x
+        if (w < pa.nblk) {
+            let v = int(xqw[w])
+            let s = axs[w / 8u]
+            outh[w * 4u] = float16(float((v << 24) >> 24) * s)
+            outh[w * 4u + 1u] = float16(float((v << 16) >> 24) * s)
+            outh[w * 4u + 2u] = float16(float((v << 8) >> 24) * s)
+            outh[w * 4u + 3u] = float16(float(v >> 24) * s)
         }
     }
 }
