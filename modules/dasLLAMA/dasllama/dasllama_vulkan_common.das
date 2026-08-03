@@ -1820,6 +1820,7 @@ struct RDec {
     pf_logits_host : HostBuf
     pf_meta : array<HostBuf>      // one host meta per (layer, role) + prologue/final/cls
     pf_sets : array<VkDescriptorSet>
+    pf_cls_gemm : table<int; VkDescriptorSet>   // GEMM-role class sets, keyed idx*8 + router variant
     pf_cmd : VkCommandBuffer
 }
 

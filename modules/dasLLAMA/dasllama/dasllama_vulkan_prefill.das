@@ -33,8 +33,37 @@ require math
 
 let private PF_ROLES = 16l   // quant_xb q k v rope attn quant_at wo addr_ffn quant_xb2 gate up actrq down addr_next qkn
 
-def private pf_bind(idx : int; b0, b1, b2, b3, b4, b5 : uint64; s0, s1, s2, s3, s4, s5 : int64; gbits : uint[6]) {
-    g_rd.pf_sets[idx] = vk_set6(b0, b1, b2, b3, b4, b5, s0, s1, s2, s3, s4, s5, gbits)
+// one prefill GEMM role on the class rail: class-layout schedule into the role's meta buf, a
+// per-(role, router-variant) cached set (the variant moves with wlen — the last window is
+// shorter), BatchArgs push. fmt-6 roles ride the cm2 decode-in-load class (sparse bindings).
+def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt6 : bool;
+                        wq, ws, ab, sb, yb : uint64; wqn, wsn, an, sn, yn : int64;
+                        abit, ybit : uint; n, d, blk, wlen : int64) {
+    let groups = int64(fill_arena_batch_sched(g_rd.pf_meta[idx], d, blk, wlen, fmt6 ? 6 : 0))
+    var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
+    if (fmt6) {
+        let key = idx * 8 + 7
+        if (!key_exists(g_rd.pf_cls_gemm, key)) {
+            verify(ensure_q8n_batch_cm2_cls(), "vk prefill: the cm2 batch class rail must engage")
+            g_rd.pf_cls_gemm[key] = set_q8n_batch_cm2_cls(
+                fixed_array(wq, g_rd.pf_meta[idx].buf, ab, yb),
+                fixed_array(wqn, BATCH_META_BYTES, an, yn),
+                fixed_array(0u, 0u, abit, ybit))
+        }
+        enc_q8n_batch_cm2_cls(raw, h, g_rd.pf_cls_gemm[key], pc, groups)
+    } else {
+        let v = q8_batch_cls_variant(q8_batch_tile_for(d, wlen), q8_batch_aligned(d, wlen))
+        let key = idx * 8 + v
+        if (!key_exists(g_rd.pf_cls_gemm, key)) {
+            verify(q8_batch_cls_ensure(v), "vk prefill: the q8 batch class rail must engage")
+            g_rd.pf_cls_gemm[key] = q8_batch_cls_set(v,
+                fixed_array(wq, ws, g_rd.pf_meta[idx].buf, ab, sb, yb),
+                fixed_array(wqn, wsn, BATCH_META_BYTES, an, sn, yn),
+                fixed_array(0u, 0u, 0u, abit, abit, ybit))
+        }
+        q8_batch_cls_enc(v, raw, h, g_rd.pf_cls_gemm[key], pc, groups)
+    }
+    pfq_ts(raw)
 }
 
 def private pf_setup {
@@ -94,29 +123,10 @@ def private pf_setup {
     for (l in range64(g_rd.n_layers)) {
         var L & = unsafe(g_rd.layers[l])
         let b = int(l * PF_ROLES)
-        let pq = arena_planes(L.fq); let pk = arena_planes(L.fk); let pv = arena_planes(L.fv)
-        let po = arena_planes(L.fo); let p1 = arena_planes(L.f1); let p3 = arena_planes(L.f3); let p2 = arena_planes(L.f2)
-        // fmt-6 groups run on the f16 twin plane at binding 3 (idle binding-4 bits are lens-ignored)
         let qkv6 = L.fq == 6
-        let xqb = qkv6 ? g_rd.pf_xf : g_rd.pf_xq
-        let xsb = qkv6 ? g_rd.dummy : g_rd.pf_xs
-        let xqn = qkv6 ? np * dim * 2l : np * dim
-        let xsn = qkv6 ? 256l : np * (dim / 32l) * 4l
         let wo6 = L.fo == 6
-        let aqb = wo6 ? g_rd.pf_af : g_rd.pf_aq
-        let asb = wo6 ? g_rd.dummy : g_rd.pf_as
-        let aqn = wo6 ? np * qd * 2l : np * qd
-        let asn = wo6 ? 256l : np * (qd / 32l) * 4l
         let gu6 = L.f1 == 6
-        let gqb = gu6 ? g_rd.pf_xf : g_rd.pf_xq
-        let gsb = gu6 ? g_rd.dummy : g_rd.pf_xs
-        let gqn = gu6 ? np * dim * 2l : np * dim
-        let gsn = gu6 ? 256l : np * (dim / 32l) * 4l
         let dn6 = L.f2 == 6
-        let hqb = dn6 ? g_rd.pf_hf : g_gpu.hq_dev
-        let hsb = dn6 ? g_rd.dummy : g_gpu.hs_dev
-        let hqn = dn6 ? np * hid * 2l : np * hid
-        let hsn = dn6 ? 256l : np * (hid / 32l) * 4l
         // 0 quant_xb: pf_xb -> pf_xq/pf_xs (fmt 6: f16 convert -> pf_xf)
         g_rd.pf_sets[b + 0] = (qkv6
             ? set_f16cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf),
@@ -124,18 +134,9 @@ def private pf_setup {
             : set_cls_dn_rq(fixed_array(g_rd.pf_xb, g_rd.pf_xq, g_rd.pf_xs),
                 fixed_array(np * dim * 4l, np * dim, np * (dim / 32l) * 4l),
                 fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ)))
-        // 1/2/3 q/k/v batch GEMM: arena planes, pf_xq/pf_xs act, -> pf_q / pf_kv(k@0) / pf_kv(v@np*kvd)
-        pf_bind(b + 1, pq.wq, pq.ws, g_rd.pf_meta[b + 1].buf, xqb, xsb, g_rd.pf_q,
-            pq.wqb, pq.wsb, BATCH_META_BYTES, xqn, xsn, np * qd * 4l,
-            fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_Q))
-        pf_bind(b + 2, pk.wq, pk.ws, g_rd.pf_meta[b + 2].buf, xqb, xsb, g_rd.pf_kv,
-            pk.wqb, pk.wsb, BATCH_META_BYTES, xqn, xsn, np * 2l * kvd * 4l,
-            fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_KVK))
-        pf_bind(b + 3, pv.wq, pv.ws, g_rd.pf_meta[b + 3].buf, xqb, xsb, g_rd.pf_v,
-            pv.wqb, pv.wsb, BATCH_META_BYTES, xqn, xsn, np * kvd * 4l,
-            fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_VST))
-        // 4 rope+store (class: q, kv, Kmir, Vmir, cos)
+        // (GEMM roles 1/2/3/7/10/11/13 build lazily per router variant at record time)
         {
+            // 4 rope+store (class: q, kv, Kmir, Vmir, cos)
             let rbufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_cos)
             let rsizes = fixed_array(np * qd * 4l, np * 2l * kvd * 4l, mirbytes, mirbytes, np * g_rd.head_size * 4l)
             g_rd.pf_sets[b + 4] = set_rope_kv_b_cls(rbufs, rsizes,
@@ -156,10 +157,6 @@ def private pf_setup {
             : set_cls_dn_rq(fixed_array(g_rd.pf_attn, g_rd.pf_aq, g_rd.pf_as),
                 fixed_array(np * qd * 4l, np * qd, np * (qd / 32l) * 4l),
                 fixed_array(VHZ_ATT, VHZ_AQ, VHZ_AQ)))
-        // 7 wo GEMM -> pf_xb2
-        pf_bind(b + 7, po.wq, po.ws, g_rd.pf_meta[b + 7].buf, aqb, asb, g_rd.pf_xb2,
-            po.wqb, po.wsb, BATCH_META_BYTES, aqn, asn, np * dim * 4l,
-            fixed_array(0u, 0u, 0u, VHZ_AQ, VHZ_AQ, VHZ_XB2))
         // 8 addr_ffn (class: x, add partner, norms, xb out)
         g_rd.pf_sets[b + 8] = set_cls_ar(fixed_array(g_rd.pf_x, g_rd.pf_xb2, g_rd.norms_dev, g_rd.pf_xb),
             fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim * 4l),
@@ -171,13 +168,6 @@ def private pf_setup {
             : set_cls_dn_rq(fixed_array(g_rd.pf_xb, g_rd.pf_xq, g_rd.pf_xs),
                 fixed_array(np * dim * 4l, np * dim, np * (dim / 32l) * 4l),
                 fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ)))
-        // 10/11 gate/up GEMM
-        pf_bind(b + 10, p1.wq, p1.ws, g_rd.pf_meta[b + 10].buf, gqb, gsb, g_rd.pf_gate,
-            p1.wqb, p1.wsb, BATCH_META_BYTES, gqn, gsn, np * hid * 4l,
-            fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_GATE))
-        pf_bind(b + 11, p3.wq, p3.ws, g_rd.pf_meta[b + 11].buf, gqb, gsb, g_rd.pf_up,
-            p3.wqb, p3.wsb, BATCH_META_BYTES, gqn, gsn, np * hid * 4l,
-            fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_UP))
         // 12 actrq (class: gate, up, quants out, scales out; fmt 6: actf16 -> pf_hf)
         g_rd.pf_sets[b + 12] = (dn6
             ? set_actf16_cls(fixed_array(g_rd.pf_gate, g_rd.pf_up, g_rd.pf_hf),
@@ -186,10 +176,6 @@ def private pf_setup {
             : set_q8_actrq_cls(fixed_array(g_rd.pf_gate, g_rd.pf_up, g_gpu.hq_dev, g_gpu.hs_dev),
                 fixed_array(np * hid * 4l, np * hid * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
                 fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ)))
-        // 13 down GEMM: hq/hs act -> pf_ffnout
-        pf_bind(b + 13, p2.wq, p2.ws, g_rd.pf_meta[b + 13].buf, hqb, hsb, g_rd.pf_ffnout,
-            p2.wqb, p2.wsb, BATCH_META_BYTES, hqn, hsn, np * dim * 4l,
-            fixed_array(0u, 0u, 0u, VHZ_HQ, VHZ_HQ, VHZ_FFO))
         // 14 addr_next (class): x += ffnout, xb = rms_att[l+1]|final
         g_rd.pf_sets[b + 14] = set_cls_ar(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xb),
             fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim * 4l),
@@ -241,22 +227,6 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
             let last = w0 + wlen >= npos
             upload_region_at(g_rd.pf_x, 0l, addr<uint8 const?>(x_batch[int(w0 * dim)]), wlen * dim * 4l)
             upload_region_at(g_rd.pf_cos, 0l, addr<uint8 const?>(cos_batch[int(w0 * g_rd.head_size)]), wlen * g_rd.head_size * 4l)
-            fill_ffn_meta(wlen * hid, wlen * hid / 32l, false)   // act(rq|f16) over the window's rows
-            // fill metas — GEMM roles only; the class-rail roles carry their params in push
-            let mA = @(idx : int; n, d, blk : int64; fmt : int) {
-                fill_arena_batch_meta(g_rd.pf_meta[idx], n, d, blk, wlen, fmt)
-            }
-            for (l in range64(g_rd.n_layers)) {
-                var L & = g_rd.layers[l]
-                let b = int(l * PF_ROLES)
-                invoke(mA, b + 1, dim, qd, L.bq, L.fq)
-                invoke(mA, b + 2, dim, kvd, L.bk, L.fk)
-                invoke(mA, b + 3, dim, kvd, L.bv, L.fv)
-                invoke(mA, b + 7, qd, dim, L.bo, L.fo)
-                invoke(mA, b + 10, dim, hid, L.b1, L.f1)
-                invoke(mA, b + 11, dim, hid, L.b3, L.f3)
-                invoke(mA, b + 13, hid, dim, L.b2, L.f2)
-            }
             let bp = int(g_rd.n_layers * PF_ROLES)
             let t_prep = get_time_usec(tp0)
             // record
@@ -295,9 +265,20 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                     enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 4l + 255l) / 256l)
                 }
                 pfq_ts(raw)
-                rd_dispatch(raw, pf_gemm_pipe(fq6, qd, wlen), g_rd.pf_sets[b + 1], fill_arena_batch_meta(g_rd.pf_meta[b + 1], dim, qd, g_rd.layers[l].bq, wlen, fq6 ? 6 : 0), h)
-                rd_dispatch(raw, pf_gemm_pipe(fq6, kvd, wlen), g_rd.pf_sets[b + 2], fill_arena_batch_meta(g_rd.pf_meta[b + 2], dim, kvd, g_rd.layers[l].bk, wlen, fq6 ? 6 : 0), h)
-                rd_dispatch(raw, pf_gemm_pipe(fq6, kvd, wlen), g_rd.pf_sets[b + 3], fill_arena_batch_meta(g_rd.pf_meta[b + 3], dim, kvd, g_rd.layers[l].bv, wlen, fq6 ? 6 : 0), h)
+                let pq = arena_planes(g_rd.layers[l].fq)
+                let pk = arena_planes(g_rd.layers[l].fk)
+                let pv = arena_planes(g_rd.layers[l].fv)
+                let np = g_rd.pf_np
+                let xqb = fq6 ? g_rd.pf_xf : g_rd.pf_xq
+                let xsb = fq6 ? g_rd.dummy : g_rd.pf_xs
+                let xqn = fq6 ? np * dim * 2l : np * dim
+                let xsn = fq6 ? 256l : np * (dim / 32l) * 4l
+                pf_gemm_enc(raw, h, b + 1, fq6, pq.wq, pq.ws, xqb, xsb, g_rd.pf_q,
+                    pq.wqb, pq.wsb, xqn, xsn, np * qd * 4l, VHZ_XQ, VHZ_Q, dim, qd, g_rd.layers[l].bq, wlen)
+                pf_gemm_enc(raw, h, b + 2, fq6, pk.wq, pk.ws, xqb, xsb, g_rd.pf_kv,
+                    pk.wqb, pk.wsb, xqn, xsn, np * 2l * kvd * 4l, VHZ_XQ, VHZ_KVK, dim, kvd, g_rd.layers[l].bk, wlen)
+                pf_gemm_enc(raw, h, b + 3, fq6, pv.wq, pv.ws, xqb, xsb, g_rd.pf_v,
+                    pv.wqb, pv.wsb, xqn, xsn, np * kvd * 4l, VHZ_XQ, VHZ_VST, dim, kvd, g_rd.layers[l].bv, wlen)
                 vhz_dep(raw, h, VHZ_VST, VHZ_KVV, true)
                 cmd_copy_range(raw, g_rd.pf_v, 0l, g_rd.pf_kv, wlen * kvd * 4l, wlen * kvd * 4l)   // v into pf_kv's v half
                 if (g_rd.qk_norm) {
@@ -330,7 +311,13 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                     enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 6], pc6, (wlen * qd / 4l + 255l) / 256l)
                 }
                 pfq_ts(raw)
-                rd_dispatch(raw, pf_gemm_pipe(fo6, dim, wlen), g_rd.pf_sets[b + 7], fill_arena_batch_meta(g_rd.pf_meta[b + 7], qd, dim, g_rd.layers[l].bo, wlen, fo6 ? 6 : 0), h)
+                let po = arena_planes(g_rd.layers[l].fo)
+                let aqb = fo6 ? g_rd.pf_af : g_rd.pf_aq
+                let asb = fo6 ? g_rd.dummy : g_rd.pf_as
+                let aqn = fo6 ? np * qd * 2l : np * qd
+                let asn = fo6 ? 256l : np * (qd / 32l) * 4l
+                pf_gemm_enc(raw, h, b + 7, fo6, po.wq, po.ws, aqb, asb, g_rd.pf_xb2,
+                    po.wqb, po.wsb, aqn, asn, np * dim * 4l, VHZ_AQ, VHZ_XB2, qd, dim, g_rd.layers[l].bo, wlen)
                 var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint((l * 2l + 1l) * dim), eps = g_rd.eps, ascale = 1.0)
                 enc_cls_ar(raw, h, g_rd.pf_sets[b + 8], pc8, wlen)
                 pfq_ts(raw)
@@ -342,8 +329,16 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                     enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 4l + 255l) / 256l)
                 }
                 pfq_ts(raw)
-                rd_dispatch(raw, pf_gemm_pipe(gu6, hid, wlen), g_rd.pf_sets[b + 10], fill_arena_batch_meta(g_rd.pf_meta[b + 10], dim, hid, g_rd.layers[l].b1, wlen, gu6 ? 6 : 0), h)
-                rd_dispatch(raw, pf_gemm_pipe(gu6, hid, wlen), g_rd.pf_sets[b + 11], fill_arena_batch_meta(g_rd.pf_meta[b + 11], dim, hid, g_rd.layers[l].b3, wlen, gu6 ? 6 : 0), h)
+                let p1 = arena_planes(g_rd.layers[l].f1)
+                let p3 = arena_planes(g_rd.layers[l].f3)
+                let gqb = gu6 ? g_rd.pf_xf : g_rd.pf_xq
+                let gsb = gu6 ? g_rd.dummy : g_rd.pf_xs
+                let gqn = gu6 ? np * dim * 2l : np * dim
+                let gsn = gu6 ? 256l : np * (dim / 32l) * 4l
+                pf_gemm_enc(raw, h, b + 10, gu6, p1.wq, p1.ws, gqb, gsb, g_rd.pf_gate,
+                    p1.wqb, p1.wsb, gqn, gsn, np * hid * 4l, VHZ_XQ, VHZ_GATE, dim, hid, g_rd.layers[l].b1, wlen)
+                pf_gemm_enc(raw, h, b + 11, gu6, p3.wq, p3.ws, gqb, gsb, g_rd.pf_up,
+                    p3.wqb, p3.wsb, gqn, gsn, np * hid * 4l, VHZ_XQ, VHZ_UP, dim, hid, g_rd.layers[l].b3, wlen)
                 var pc12 = ActArgs(nelem = uint(wlen * hid), gelu = 0u, nblk = uint(wlen * hid / 32l))
                 if (dn6) {
                     enc_actf16_cls(raw, h, g_rd.pf_sets[b + 12], pc12, (wlen * hid / 4l + 255l) / 256l)
@@ -351,7 +346,13 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                     enc_q8_actrq_cls(raw, h, g_rd.pf_sets[b + 12], pc12, (wlen * hid / 4l + 255l) / 256l)
                 }
                 pfq_ts(raw)
-                rd_dispatch(raw, pf_gemm_pipe(dn6, dim, wlen), g_rd.pf_sets[b + 13], fill_arena_batch_meta(g_rd.pf_meta[b + 13], hid, dim, g_rd.layers[l].b2, wlen, dn6 ? 6 : 0), h)
+                let p2 = arena_planes(g_rd.layers[l].f2)
+                let hqb = dn6 ? g_rd.pf_hf : g_gpu.hq_dev
+                let hsb = dn6 ? g_rd.dummy : g_gpu.hs_dev
+                let hqn = dn6 ? np * hid * 2l : np * hid
+                let hsn = dn6 ? 256l : np * (hid / 32l) * 4l
+                pf_gemm_enc(raw, h, b + 13, dn6, p2.wq, p2.ws, hqb, hsb, g_rd.pf_ffnout,
+                    p2.wqb, p2.wsb, hqn, hsn, np * dim * 4l, VHZ_HQ, VHZ_FFO, hid, dim, g_rd.layers[l].b2, wlen)
                 let nxt = l + 1l < g_rd.n_layers ? (l + 1l) * 2l * dim : nlfin   // nolint:LINT021 — composed from int64 layout offsets
                 var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
                 enc_cls_ar(raw, h, g_rd.pf_sets[b + 14], pc14, wlen)
@@ -496,31 +497,6 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
         submit_wait(raw)
         memcpy(addr<void?>(y[0]), g_gpu.af_yo_host.mapped, n * 4l)
     }
-}
-
-// single-region batch-GEMM meta over an arena block (the OLD kernels' layout — the resident
-// prefill chain still rides it until its own rewire): all tiles map to region 0
-def private fill_arena_batch_meta(hb : HostBuf; n, d, blk, npos : int64; fmt : int) : uint {
-    let te = batch_tile_edges(fmt, d, npos)
-    let wtiles = (d + te.td - 1l) / te.td
-    let rtiles = (npos + te.tc - 1l) / te.tc
-    let total = rtiles * wtiles
-    assert((8l + total) * 4l <= BATCH_META_BYTES, "dasLLAMA vulkan arena: batch meta exceeds capacity")
-    unsafe {
-        var mp = reinterpret<uint?>(hb.mapped)
-        mp[0] = uint(n)
-        mp[1] = uint(d)
-        mp[2] = 1u          // one region
-        mp[3] = 8u          // map_off = 4 + nrc*4
-        mp[4] = uint(blk)   // arena block base (already in fmt units)
-        mp[5] = 0u          // rb0 - r0
-        mp[6] = uint(npos)  // cnt
-        mp[7] = 0u          // wg base
-        for (g in range64(total)) {
-            mp[8l + g] = 0u
-        }
-    }
-    return uint(total)
 }
 
 // single-region batch schedule over an arena block: 4-word record at 0, all tiles map to region
