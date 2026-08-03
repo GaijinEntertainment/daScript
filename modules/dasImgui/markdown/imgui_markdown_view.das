@@ -429,11 +429,12 @@ def public markdown_view_source_line(state : MarkdownViewState const;
     var line_y = entry.screen_origin.y
     var line_height = GetTextLineHeight()
     for (line in entry.layout.lines) {
-        if (position.display_byte >= line.source.start_byte
-                && position.display_byte <= line.source.end_byte) {
+        // line ranges are [start, end) - a wrap-boundary byte belongs to the
+        // NEXT visual row; the paragraph-final byte stays on the last row
+        if (position.display_byte >= line.source.start_byte) {
             line_y = entry.screen_origin.y + line.y
             line_height = max(line.height, 1.0f)
-            break
+            break if (position.display_byte < line.source.end_byte)
         }
     }
     return (valid = true, y = line_y, height = line_height)
