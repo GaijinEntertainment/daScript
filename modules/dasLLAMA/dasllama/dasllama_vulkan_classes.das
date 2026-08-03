@@ -535,6 +535,365 @@ class Q8Batch {
     }
 }
 
+// ===== the K-quant batch GEMM tile family: one shell, per-format stage/fma overrides =====
+// Q8Batch's 32x32 tile shape on Q8_K activations (256-weight superblocks); only the w-nibble
+// compose, the scale stage, and the per-block FMA (float order contractual per format) differ —
+// each is an override, and the devirtualizer inlines the family back to four standalone kernels.
+
+class KqBatchBase {
+    @ssbo @binding = 0 wq : array<uint>        // weight quant planes (per-format block layout)
+    @ssbo @binding = 1 wsu : array<uint>       // scale planes (5-word superblock layout)
+    @ssbo @binding = 2 sched : array<uint>     // region records + per-wg map
+    @ssbo @binding = 3 xqw : array<uint>       // Q8_K activation words (64 per row-superblock)
+    @ssbo @binding = 4 axs : array<float>      // one Q8_K d per (row, superblock)
+    @ssbo @binding = 5 y : array<float>
+    @push_constant pa : BatchArgs
+    @workgroup xw4 : uint4[544]
+    @workgroup ww4 : uint4[544]
+    @workgroup xsw : float[256]
+    @workgroup wsw : float[256]    // first per-(block, col) scale plane
+    @workgroup wsw2 : float[256]   // second plane (the d/min pair's min side; k6's hi sub-scale)
+
+    def region_rec : uint4 {
+        let rid = sched[pa.map_off + gl_WorkGroupID.x]
+        let rb = rid * 4u
+        return uint4(sched[rb], sched[rb + 1u], sched[rb + 2u], gl_WorkGroupID.x - sched[rb + 3u])
+    }
+
+    def k5_dep(hb : uint) : uint {
+        return ((hb & 1u) << 4u) | ((hb & 2u) << 11u) | ((hb & 4u) << 18u) | ((hb & 8u) << 25u)
+    }
+
+    // x tile stage: this thread's two uint4 chunks of the Q8_K activation rows
+    def load_x(row0, xrow, cnt, nsb, s, word, grp : uint) {
+        for (ki in range(2)) {
+            let k = word + uint(ki) * 8u
+            let bu = k / 2u
+            let hh = k % 2u
+            var xv = uint4(0u)
+            if (xrow < cnt) {
+                let xb4 = ((row0 + xrow) * nsb + s) * 64u + bu * 8u + hh * 4u
+                xv = uint4(xqw[xb4], xqw[xb4 + 1u], xqw[xb4 + 2u], xqw[xb4 + 3u])
+            }
+            xw4[grp * 17u + k] = xv
+        }
+    }
+
+    def load_xs(row0, xt, cnt, nsb, s, tid : uint) {
+        if (tid < 32u) {
+            var xs = 0.0
+            if (xt * 32u + tid < cnt) {
+                xs = axs[(row0 + xt * 32u + tid) * nsb + s]
+            }
+            xsw[tid] = xs
+        }
+    }
+
+    // w-scale stage for the d/min pair form (Q4_K/Q5_K share the 5-word wsu layout)
+    def load_dm(wsb0, wt, nsb, s, slane, sblk : uint) {
+        var sa = 0.0
+        var sbv = 0.0
+        if (wt * 32u + slane < pa.d) {
+            let wsb = wsb0 + (wt * 32u + slane) * nsb + s
+            let dm = unpackHalf2x16(wsu[wsb * 5u])
+            let sc = int((wsu[wsb * 5u + 1u + sblk / 4u] >> ((sblk % 4u) * 8u)) & 0xFF)
+            let mn = int((wsu[wsb * 5u + 3u + sblk / 4u] >> ((sblk % 4u) * 8u)) & 0xFF)
+            sa = dm.x * float(sc)
+            sbv = dm.y * float(mn)
+        }
+        wsw[sblk * 32u + slane] = sa
+        wsw2[sblk * 32u + slane] = sbv
+    }
+
+    // one 32-weight block's integer tile dots: this thread's 4 output columns + the x block sum
+    def dots(bu, grp, word : uint; var i : int4&) : int {
+        var bs = 0
+        for (kk in range(2)) {
+            let k = bu * 2u + uint(kk)
+            let xw = xw4[grp * 17u + k]
+            let wv0 = ww4[word * 17u + k]
+            let wv1 = ww4[(word + 8u) * 17u + k]
+            let wv2 = ww4[(word + 16u) * 17u + k]
+            let wv3 = ww4[(word + 24u) * 17u + k]
+            bs += sdot4(xw.x, 0x01010101) + sdot4(xw.y, 0x01010101) + sdot4(xw.z, 0x01010101) + sdot4(xw.w, 0x01010101)
+            i.x += sdot4(wv0.x, xw.x) + sdot4(wv0.y, xw.y) + sdot4(wv0.z, xw.z) + sdot4(wv0.w, xw.w)
+            i.y += sdot4(wv1.x, xw.x) + sdot4(wv1.y, xw.y) + sdot4(wv1.z, xw.z) + sdot4(wv1.w, xw.w)
+            i.z += sdot4(wv2.x, xw.x) + sdot4(wv2.y, xw.y) + sdot4(wv2.z, xw.z) + sdot4(wv2.w, xw.w)
+            i.w += sdot4(wv3.x, xw.x) + sdot4(wv3.y, xw.y) + sdot4(wv3.z, xw.z) + sdot4(wv3.w, xw.w)
+        }
+        return bs
+    }
+
+    // per-block FMA, d/min form: xscl * (d*sc*idot - dmin*mn*bsum)
+    def fma_dm(bu, grp, word : uint; xscl : float) : float4 {
+        var i = int4(0)
+        let bs = dots(bu, grp, word, i)
+        let ws = float4(wsw[bu * 32u + word], wsw[bu * 32u + word + 8u],
+            wsw[bu * 32u + word + 16u], wsw[bu * 32u + word + 24u])
+        let wsb2 = float4(wsw2[bu * 32u + word], wsw2[bu * 32u + word + 8u],
+            wsw2[bu * 32u + word + 16u], wsw2[bu * 32u + word + 24u])
+        return xscl * (ws * float4(i) - wsb2 * float(bs))
+    }
+
+    def store_y(xrow, cnt, row0, wt, word : uint; f : float4) {
+        if (xrow < cnt) {
+            let yb = (row0 + xrow) * pa.d + wt * 32u + word
+            if (wt * 32u + word < pa.d) {
+                y[yb] = f.x
+            }
+            if (wt * 32u + word + 8u < pa.d) {
+                y[yb + 8u] = f.y
+            }
+            if (wt * 32u + word + 16u < pa.d) {
+                y[yb + 16u] = f.z
+            }
+            if (wt * 32u + word + 24u < pa.d) {
+                y[yb + 24u] = f.w
+            }
+        }
+    }
+
+    // the variant points — every [spirv_kernel] leaf overrides stage_w; q40/k6 also stage_ws/blk_fma
+    def stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
+        pass
+    }
+
+    def stage_ws(wsb0, wt, nsb, s, tid : uint) {
+        load_dm(wsb0, wt, nsb, s, tid % 32u, tid / 32u)
+    }
+
+    def blk_fma(bu, grp, word : uint; xscl : float) : float4 {
+        return fma_dm(bu, grp, word, xscl)
+    }
+
+    def tile_shell {
+        let reg = region_rec()
+        let wsb0 = reg.x
+        let row0 = reg.y
+        let cnt = reg.z
+        let tix = reg.w
+        let wtiles = (pa.d + 31u) / 32u
+        let xt = tix / wtiles
+        let wt = tix % wtiles
+        let nsb = pa.n / 256u
+        let tid = gl_LocalInvocationID.x
+        let word = tid % 8u
+        let grp = tid / 8u
+        let xrow = xt * 32u + grp
+        let wcol = wt * 32u + grp
+        var f = float4(0.0)
+        var s = 0u
+        while (s < nsb) {
+            load_x(row0, xrow, cnt, nsb, s, word, grp)
+            stage_w(wsb0, wcol, nsb, s, word, grp)
+            load_xs(row0, xt, cnt, nsb, s, tid)
+            stage_ws(wsb0, wt, nsb, s, tid)
+            barrier()
+            let xscl = xsw[grp]
+            for (bb in range(8)) {
+                f += blk_fma(uint(bb), grp, word, xscl)
+            }
+            barrier()
+            s++
+        }
+        store_y(xrow, cnt, row0, wt, word, f)
+    }
+}
+
+// Q4_K tile: per block acc += xs * (d*sc*idot - dmin*mn*bsum)
+[vk_dispatch(name = "kq_batch_k4_cls", grid = "wgs", params = "wgs : int64")]
+class KqBatchK4 : KqBatchBase {
+    def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
+        for (ki in range(2)) {
+            let k = word + uint(ki) * 8u
+            let bu = k / 2u
+            let hh = k % 2u
+            var wv = uint4(0u)
+            if (wcol < pa.d) {
+                let wsb = wsb0 + wcol * nsb + s
+                let rb4 = wsb * 32u + bu * 4u
+                let r0 = wq[rb4]
+                let r1 = wq[rb4 + 1u]
+                let r2 = wq[rb4 + 2u]
+                let r3 = wq[rb4 + 3u]
+                if (hh == 0u) {
+                    wv = uint4(r0 & 0x0F0F0F0F, r1 & 0x0F0F0F0F, r2 & 0x0F0F0F0F, r3 & 0x0F0F0F0F)
+                } else {
+                    wv = uint4((r0 >> 4u) & 0x0F0F0F0F, (r1 >> 4u) & 0x0F0F0F0F,
+                        (r2 >> 4u) & 0x0F0F0F0F, (r3 >> 4u) & 0x0F0F0F0F)
+                }
+            }
+            ww4[grp * 17u + k] = wv
+        }
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_k4_cls_spv")]
+    def run {
+        tile_shell()
+    }
+}
+
+// Q4_0 tile: the k4 staging with one scale plane — per block acc += xs * d * (idot - 8*bsum)
+[vk_dispatch(name = "kq_batch_q40_cls", grid = "wgs", params = "wgs : int64")]
+class KqBatchQ40 : KqBatchK4 {
+    def override stage_ws(wsb0, wt, nsb, s, tid : uint) {
+        let slane = tid % 32u
+        let sblk = tid / 32u
+        var sa = 0.0
+        if (wt * 32u + slane < pa.d) {
+            let wsb = wsb0 + (wt * 32u + slane) * nsb + s
+            let dp = unpackHalf2x16(wsu[wsb * 5u + sblk / 2u])
+            sa = sblk % 2u == 0u ? dp.x : dp.y
+        }
+        wsw[sblk * 32u + slane] = sa
+    }
+
+    def override blk_fma(bu, grp, word : uint; xscl : float) : float4 {
+        var i = int4(0)
+        let bs = dots(bu, grp, word, i)
+        let ws = float4(wsw[bu * 32u + word], wsw[bu * 32u + word + 8u],
+            wsw[bu * 32u + word + 16u], wsw[bu * 32u + word + 24u])
+        return xscl * ws * float4(i - int4(8 * bs))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_q40_cls_spv")]
+    def override run {
+        tile_shell()
+    }
+}
+
+// Q5_K tile: the k4 compose with the 5th bit OR'd in from the 40B block's qh words
+[vk_dispatch(name = "kq_batch_k5_cls", grid = "wgs", params = "wgs : int64")]
+class KqBatchK5 : KqBatchBase {
+    def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
+        for (ki in range(2)) {
+            let k = word + uint(ki) * 8u
+            let bu = k / 2u
+            let hh = k % 2u
+            var wv = uint4(0u)
+            if (wcol < pa.d) {
+                let wsb = wsb0 + wcol * nsb + s
+                let rb4 = wsb * 40u + bu * 4u
+                let r0 = wq[rb4]
+                let r1 = wq[rb4 + 1u]
+                let r2 = wq[rb4 + 2u]
+                let r3 = wq[rb4 + 3u]
+                let hbw = wq[wsb * 40u + 32u + bu]
+                let h0 = hbw & 0xFF
+                let h1 = (hbw >> 8u) & 0xFF
+                let h2 = (hbw >> 16u) & 0xFF
+                let h3 = (hbw >> 24u) & 0xFF
+                if (hh == 0u) {
+                    wv = uint4((r0 & 0x0F0F0F0F) | k5_dep(h0 & 0xF), (r1 & 0x0F0F0F0F) | k5_dep(h1 & 0xF),
+                        (r2 & 0x0F0F0F0F) | k5_dep(h2 & 0xF), (r3 & 0x0F0F0F0F) | k5_dep(h3 & 0xF))
+                } else {
+                    wv = uint4(((r0 >> 4u) & 0x0F0F0F0F) | k5_dep(h0 >> 4u), ((r1 >> 4u) & 0x0F0F0F0F) | k5_dep(h1 >> 4u),
+                        ((r2 >> 4u) & 0x0F0F0F0F) | k5_dep(h2 >> 4u), ((r3 >> 4u) & 0x0F0F0F0F) | k5_dep(h3 >> 4u))
+                }
+            }
+            ww4[grp * 17u + k] = wv
+        }
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_k5_cls_spv")]
+    def run {
+        tile_shell()
+    }
+}
+
+// Q6_K tile: composed 6-bit quants, the -32 folded per 16-half as slo/shi vs the half's block
+// sum — the lo/hi word split IS the sub-scale split
+[vk_dispatch(name = "kq_batch_k6_cls", grid = "wgs", params = "wgs : int64")]
+class KqBatchK6 : KqBatchBase {
+    def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
+        for (ki in range(2)) {
+            let k = word + uint(ki) * 8u
+            let bu = k / 2u
+            let hh = k % 2u
+            var wv = uint4(0u)
+            if (wcol < pa.d) {
+                let wsb = wsb0 + wcol * nsb + s
+                let rb4 = wsb * 48u + bu * 4u
+                let r0 = wq[rb4]
+                let r1 = wq[rb4 + 1u]
+                let r2 = wq[rb4 + 2u]
+                let r3 = wq[rb4 + 3u]
+                let qb4 = wsb * 48u + 32u + (bu / 4u) * 8u + hh * 4u
+                let q0 = wq[qb4]
+                let q1 = wq[qb4 + 1u]
+                let q2 = wq[qb4 + 2u]
+                let q3 = wq[qb4 + 3u]
+                let shift = (bu % 4u) * 2u
+                if (hh == 0u) {
+                    wv = uint4((r0 & 0x0F0F0F0F) | (((q0 >> shift) & 0x03030303) << 4u),
+                        (r1 & 0x0F0F0F0F) | (((q1 >> shift) & 0x03030303) << 4u),
+                        (r2 & 0x0F0F0F0F) | (((q2 >> shift) & 0x03030303) << 4u),
+                        (r3 & 0x0F0F0F0F) | (((q3 >> shift) & 0x03030303) << 4u))
+                } else {
+                    wv = uint4(((r0 >> 4u) & 0x0F0F0F0F) | (((q0 >> shift) & 0x03030303) << 4u),
+                        ((r1 >> 4u) & 0x0F0F0F0F) | (((q1 >> shift) & 0x03030303) << 4u),
+                        ((r2 >> 4u) & 0x0F0F0F0F) | (((q2 >> shift) & 0x03030303) << 4u),
+                        ((r3 >> 4u) & 0x0F0F0F0F) | (((q3 >> shift) & 0x03030303) << 4u))
+                }
+            }
+            ww4[grp * 17u + k] = wv
+        }
+    }
+
+    def override stage_ws(wsb0, wt, nsb, s, tid : uint) {
+        let slane = tid % 32u
+        let sblk = tid / 32u
+        var sa = 0.0
+        var sbv = 0.0
+        if (wt * 32u + slane < pa.d) {
+            let wsb = wsb0 + (wt * 32u + slane) * nsb + s
+            let s4 = int4(unpack8(int(wsu[wsb * 5u + sblk / 2u])))
+            let slo = (sblk % 2u) == 0u ? s4.x : s4.z
+            let shi = (sblk % 2u) == 0u ? s4.y : s4.w
+            let dd = unpackHalf2x16(wsu[wsb * 5u + 4u]).x
+            sa = dd * float(slo)
+            sbv = dd * float(shi)
+        }
+        wsw[sblk * 32u + slane] = sa
+        wsw2[sblk * 32u + slane] = sbv
+    }
+
+    // the split-half FMA: each 16-weight half keeps its own dot, sum, and signed sub-scale
+    def override blk_fma(bu, grp, word : uint; xscl : float) : float4 {
+        let kL = bu * 2u
+        let kH = bu * 2u + 1u
+        let xwL = xw4[grp * 17u + kL]
+        let xwH = xw4[grp * 17u + kH]
+        let blo = sdot4(xwL.x, 0x01010101) + sdot4(xwL.y, 0x01010101) + sdot4(xwL.z, 0x01010101) + sdot4(xwL.w, 0x01010101)
+        let bhi = sdot4(xwH.x, 0x01010101) + sdot4(xwH.y, 0x01010101) + sdot4(xwH.z, 0x01010101) + sdot4(xwH.w, 0x01010101)
+        let wL0 = ww4[word * 17u + kL]
+        let wL1 = ww4[(word + 8u) * 17u + kL]
+        let wL2 = ww4[(word + 16u) * 17u + kL]
+        let wL3 = ww4[(word + 24u) * 17u + kL]
+        let wH0 = ww4[word * 17u + kH]
+        let wH1 = ww4[(word + 8u) * 17u + kH]
+        let wH2 = ww4[(word + 16u) * 17u + kH]
+        let wH3 = ww4[(word + 24u) * 17u + kH]
+        let l0 = sdot4(wL0.x, xwL.x) + sdot4(wL0.y, xwL.y) + sdot4(wL0.z, xwL.z) + sdot4(wL0.w, xwL.w)
+        let l1 = sdot4(wL1.x, xwL.x) + sdot4(wL1.y, xwL.y) + sdot4(wL1.z, xwL.z) + sdot4(wL1.w, xwL.w)
+        let l2 = sdot4(wL2.x, xwL.x) + sdot4(wL2.y, xwL.y) + sdot4(wL2.z, xwL.z) + sdot4(wL2.w, xwL.w)
+        let l3 = sdot4(wL3.x, xwL.x) + sdot4(wL3.y, xwL.y) + sdot4(wL3.z, xwL.z) + sdot4(wL3.w, xwL.w)
+        let h0 = sdot4(wH0.x, xwH.x) + sdot4(wH0.y, xwH.y) + sdot4(wH0.z, xwH.z) + sdot4(wH0.w, xwH.w)
+        let h1 = sdot4(wH1.x, xwH.x) + sdot4(wH1.y, xwH.y) + sdot4(wH1.z, xwH.z) + sdot4(wH1.w, xwH.w)
+        let h2 = sdot4(wH2.x, xwH.x) + sdot4(wH2.y, xwH.y) + sdot4(wH2.z, xwH.z) + sdot4(wH2.w, xwH.w)
+        let h3 = sdot4(wH3.x, xwH.x) + sdot4(wH3.y, xwH.y) + sdot4(wH3.z, xwH.z) + sdot4(wH3.w, xwH.w)
+        return float4(xscl * (wsw[bu * 32u + word] * float(l0 - 32 * blo) + wsw2[bu * 32u + word] * float(h0 - 32 * bhi)),
+            xscl * (wsw[bu * 32u + word + 8u] * float(l1 - 32 * blo) + wsw2[bu * 32u + word + 8u] * float(h1 - 32 * bhi)),
+            xscl * (wsw[bu * 32u + word + 16u] * float(l2 - 32 * blo) + wsw2[bu * 32u + word + 16u] * float(h2 - 32 * bhi)),
+            xscl * (wsw[bu * 32u + word + 24u] * float(l3 - 32 * blo) + wsw2[bu * 32u + word + 24u] * float(h3 - 32 * bhi)))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_k6_cls_spv")]
+    def run {
+        tile_shell()
+    }
+}
+
 // ===== rope + KV store + qk-norm =====
 
 // the workgroup-rms machinery the head-row kernels share (one wg reduces one row)
