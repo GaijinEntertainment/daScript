@@ -459,8 +459,8 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
     }
 }
 
-// single-region batch-GEMM meta over an arena block: all tiles map to region 0. Returns the
-// dispatch workgroup count. Mirrors fill_batch_meta for one region [0, npos).
+// single-region batch-GEMM meta over an arena block (the OLD kernels' layout — the resident
+// prefill chain still rides it until its own rewire): all tiles map to region 0
 def private fill_arena_batch_meta(hb : HostBuf; n, d, blk, npos : int64; fmt : int) : uint {
     let te = batch_tile_edges(fmt, d, npos)
     let wtiles = (d + te.td - 1l) / te.td
@@ -484,6 +484,27 @@ def private fill_arena_batch_meta(hb : HostBuf; n, d, blk, npos : int64; fmt : i
     return uint(total)
 }
 
+// single-region batch schedule over an arena block: 4-word record at 0, all tiles map to region
+// 0 at map_off = 4. Returns the dispatch workgroup count.
+def private fill_arena_batch_sched(hb : HostBuf; d, blk, npos : int64; fmt : int) : uint {
+    let te = batch_tile_edges(fmt, d, npos)
+    let wtiles = (d + te.td - 1l) / te.td
+    let rtiles = (npos + te.tc - 1l) / te.tc
+    let total = rtiles * wtiles
+    assert((4l + total) * 4l <= BATCH_META_BYTES, "dasLLAMA vulkan arena: batch schedule exceeds capacity")
+    unsafe {
+        var mp = reinterpret<uint?>(hb.mapped)
+        mp[0] = uint(blk)   // arena block base (already in fmt units)
+        mp[1] = 0u          // rb0 - r0
+        mp[2] = uint(npos)  // cnt
+        mp[3] = 0u          // wg base
+        for (g in range64(total)) {
+            mp[4l + g] = 0u
+        }
+    }
+    return uint(total)
+}
+
 //! Arena seam: batch GEMM of the [d x n] tensor at block `blk` against `npos` quantized activation
 //! rows (xq/xs, [npos x n]) into y[0..npos*d). The prefill twin of vk_arena_gemv (q8 only for now).
 def vk_arena_gemm(var y : array<float>; blk : int64; n, d, npos : int64; fmt : int; xq : array<int8>; xs : array<float>) {
@@ -491,15 +512,26 @@ def vk_arena_gemm(var y : array<float>; blk : int64; n, d, npos : int64; fmt : i
     assert(fmt == int(KqFmt.q8), "dasLLAMA vulkan arena_gemm: q8 only")
     assert(npos * n <= BATCH_XQ_BYTES && npos * d * 4l <= BATCH_Y_BYTES, "arena_gemm: batch exceeds scratch")
     arena_ensure_batch(fmt)
-    let groups = fill_arena_batch_meta(g_gpu.arenas[fmt].batch_meta, n, d, blk, npos, fmt)
+    let v = q8_batch_cls_variant(q8_batch_tile_for(d, npos), q8_batch_aligned(d, npos))
     unsafe {
+        var a & = g_gpu.arenas[fmt]
+        if ((a.cls_batch_ready & (1u << uint(v))) == 0u) {   // dies with the arena on model drop
+            verify(q8_batch_cls_ensure(v), "vulkan arena: the batch class rail must engage on a live device")
+            a.cls_batch_sets[v] = q8_batch_cls_set(v,
+                fixed_array(a.wqbuf, a.wsbuf, a.batch_meta.buf, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, g_gpu.batch_y1_dev),
+                fixed_array(a.wqbytes, a.wsbytes, BATCH_META_BYTES, BATCH_XQ_BYTES, BATCH_XS_BYTES, BATCH_Y_BYTES),
+                fixed_array(0u, 0u, 0u, 0u, 0u, VHG_YO))
+            a.cls_batch_ready |= 1u << uint(v)
+        }
+        let groups = fill_arena_batch_sched(a.batch_meta, d, blk, npos, fmt)
         upload_region_at(g_gpu.batch_xq_dev, 0l, addr<uint8 const?>(xq[0]), npos * n)
         upload_region_at(g_gpu.batch_xs_dev, 0l, addr<uint8 const?>(xs[0]), npos * (n / 32l) * 4l)
         var raw = alloc_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
-        hz_dispatch(raw, h, q8_batch_pipe_for(d, npos), g_gpu.arenas[fmt].batch_set, groups)
+        var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
+        q8_batch_cls_enc(v, raw, h, a.cls_batch_sets[v], pc, int64(groups))
         vhz_dep(raw, h, VHG_YO, 0u, true)
         cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, npos * d * 4l)
         vk_check(vkEndCommandBuffer(raw), null)

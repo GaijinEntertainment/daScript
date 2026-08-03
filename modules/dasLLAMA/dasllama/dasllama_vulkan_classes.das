@@ -3528,6 +3528,71 @@ class KqGemvBase {
     }
 }
 
+// ===== the q8 batch tile router (class side) =====
+// Mirrors q8_batch_pipe's (mode, tile, aligned) pick as a variant ordinal — all six classes
+// share the 6-buffer member layout + BatchArgs, but each carries its own set layout.
+// variant: 0 = sdot4 tile, 1 = cmf16, 2 = cmi8, 3 = mm M-tile, 4 = mm aligned-L, 5 = mm L
+
+def q8_batch_cls_variant(tile : int64; aligned : bool) : int {
+    if (g_gpu.coopmat_mode == 1) {
+        return 1
+    } elif (g_gpu.coopmat_mode == 2) {
+        return 2
+    } elif (g_gpu.coopmat_mode >= 3) {
+        if (tile == BATCH_TILE) {   // the small tier IS the sdot4 kernel — measured, not a fallback
+            return 0
+        }
+        return tile == 64l ? 3 : (aligned ? 4 : 5)
+    }
+    return 0
+}
+
+def q8_batch_cls_ensure(v : int) : bool {
+    if (v == 1) {
+        return ensure_q8_batch_cmf16_cls()
+    } elif (v == 2) {
+        return ensure_q8_batch_cmi8_cls()
+    } elif (v == 3) {
+        return ensure_q8_batch_mm_m_cls()
+    } elif (v == 4) {
+        return ensure_q8_batch_mm_a_cls()
+    } elif (v == 5) {
+        return ensure_q8_batch_mm_cls()
+    }
+    return ensure_q8_batch_cls()
+}
+
+def q8_batch_cls_set(v : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbits : uint const[6]) : VkDescriptorSet {
+    if (v == 1) {
+        return set_q8_batch_cmf16_cls(bufs, sizes, gbits)
+    } elif (v == 2) {
+        return set_q8_batch_cmi8_cls(bufs, sizes, gbits)
+    } elif (v == 3) {
+        return set_q8_batch_mm_m_cls(bufs, sizes, gbits)
+    } elif (v == 4) {
+        return set_q8_batch_mm_a_cls(bufs, sizes, gbits)
+    } elif (v == 5) {
+        return set_q8_batch_mm_cls(bufs, sizes, gbits)
+    }
+    return set_q8_batch_cls(bufs, sizes, gbits)
+}
+
+def q8_batch_cls_enc(v : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : BatchArgs; wgs : int64) {
+    if (v == 1) {
+        enc_q8_batch_cmf16_cls(raw, h, set_, pc, wgs)
+    } elif (v == 2) {
+        enc_q8_batch_cmi8_cls(raw, h, set_, pc, wgs)
+    } elif (v == 3) {
+        enc_q8_batch_mm_m_cls(raw, h, set_, pc, wgs)
+    } elif (v == 4) {
+        enc_q8_batch_mm_a_cls(raw, h, set_, pc, wgs)
+    } elif (v == 5) {
+        enc_q8_batch_mm_cls(raw, h, set_, pc, wgs)
+    } else {
+        enc_q8_batch_cls(raw, h, set_, pc, wgs)
+    }
+}
+
 // ===== format-dispatched class-GEMV rail =====
 // The drivers' 5-way gemv_pipe(fmt) becomes a 5-way ensure/set/enc: every decode GEMV class
 // shares the 6-buffer shape (wq, ws, regions, xq, xs, y) and GemvArgs; q8n drops the scale slot.

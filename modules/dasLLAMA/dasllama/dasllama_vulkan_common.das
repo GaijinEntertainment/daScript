@@ -1566,6 +1566,9 @@ struct ArenaFmt {
     batch_set : VkDescriptorSet
     batch_meta : HostBuf
     batch_ready : bool
+    // class-rail batch sets, one per router variant (built lazily by prefill; die with the arena)
+    cls_batch_sets : VkDescriptorSet[6]
+    cls_batch_ready : uint   // variant bitmask
 }
 
 // per-block plane strides — the block is 32 weights for q8 and a 256-weight superblock for kq.
