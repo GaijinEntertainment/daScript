@@ -3060,6 +3060,13 @@ def private collect_locals(var m : SpirvModule; var ctx : EmitCtx; e : Expressio
         collect_locals(m, ctx, fr.body, errors)
         return
     }
+    // a class-kernel method body arrives wrapped in with(self) under no_optimizations (lint/LSP)
+    // compiles — transparent here exactly as the expression walk treats it
+    let wth = e ?as ExprWith
+    if (wth != null) {
+        collect_locals(m, ctx, wth.body, errors)
+        return
+    }
 }
 
 // ===== compound assignment + increment/decrement =====
