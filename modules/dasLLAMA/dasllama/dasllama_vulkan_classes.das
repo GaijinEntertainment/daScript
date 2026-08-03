@@ -1026,6 +1026,96 @@ class DnScanP2 : DnScanBase {
     }
 }
 
+// ===== prefill attention: the prep pass =====
+
+struct AtPrepArgs {
+    d : uint         // this pass's row width (qd for q, kvd for k)
+    nh : uint        // heads in this pass
+    hs : uint
+    half : uint      // partial-rope half (0 = no rope)
+    flags : uint     // bit 0 = gated q, bit 1 = qk-norm
+    rms_off : uint   // this pass's norm-weight row in smalls
+    cos_off : uint   // per-position cos rows in smalls
+    sin_off : uint
+    obase : uint     // output panel's row base (0 for q, npos for k)
+    qsrc : uint      // 1 = the q source (gating applies), 0 = k
+    eps : float
+}
+
+// deinterleave (gated q), per-head RMSNorm, partial NEOX rope — ONE kernel where the old rail
+// had at_prep_q/at_prep_k twins: the distinction was pure parameters, so the driver dispatches
+// this twice with different push values.
+[vk_dispatch(name = "at_prep_cls", grid = "npos", params = "npos : int64")]
+class AtPrep {
+    @ssbo @binding = 0 src : array<float>      // the projection rows
+    @ssbo @binding = 1 outp : array<float>     // the prepped panel rows
+    @ssbo @binding = 2 gates : array<float>    // the gate stash (gated-q models; written only then)
+    @ssbo @binding = 3 smalls : array<float>   // cos/sin rows + norm weights (push offsets)
+    @push_constant pa : AtPrepArgs
+    @workgroup row : float[8192]               // one position's projection row (d <= 8192)
+    @workgroup hsinv : float[64]               // per-head inverse rms (heads <= 64)
+
+    [spirv_kernel(local_size_x = 256, name = "at_prep_cls_spv")]
+    def run {   // nolint:STYLE037,STYLE038 — the verbatim prep pass, parity-locked to the shipped kernels
+        let p = gl_WorkGroupID.x
+        let hs = pa.hs
+        let half = pa.half
+        let gated = pa.qsrc != 0u ? (pa.flags & 1u) : 0u
+        let qknorm = pa.flags & 2u
+        let tid = gl_LocalInvocationID.x
+        var i = tid
+        while (i < pa.d) {
+            let h = i / hs
+            let j = i % hs
+            if (gated != 0u) {
+                row[i] = src[p * 2u * pa.d + h * 2u * hs + j]
+                gates[p * pa.d + i] = src[p * 2u * pa.d + h * 2u * hs + hs + j]
+            } else {
+                row[i] = src[p * pa.d + i]
+            }
+            i += 256u
+        }
+        barrier()
+        if (qknorm != 0u && tid < pa.nh) {
+            var ss = 0.0
+            var j = 0u
+            while (j < hs) {
+                let v = row[tid * hs + j]
+                ss += v * v
+                j++
+            }
+            hsinv[tid] = 1.0 / sqrt(ss / float(hs) + pa.eps)
+        }
+        barrier()
+        i = tid
+        while (i < pa.d) {
+            let h = i / hs
+            let j = i % hs
+            var v = row[i]
+            if (qknorm != 0u) {
+                v = smalls[pa.rms_off + j] * (v * hsinv[h])
+            }
+            var outv = v
+            if (j < half) {
+                var v1 = row[h * hs + j + half]
+                if (qknorm != 0u) {
+                    v1 = smalls[pa.rms_off + j + half] * (v1 * hsinv[h])
+                }
+                outv = v * smalls[pa.cos_off + p * half + j] - v1 * smalls[pa.sin_off + p * half + j]
+            } elif (j < 2u * half) {
+                let jj = j - half
+                var v0 = row[h * hs + jj]
+                if (qknorm != 0u) {
+                    v0 = smalls[pa.rms_off + jj] * (v0 * hsinv[h])
+                }
+                outv = v0 * smalls[pa.sin_off + p * half + jj] + v * smalls[pa.cos_off + p * half + jj]
+            }
+            outp[(pa.obase + p) * pa.d + i] = outv
+            i += 256u
+        }
+    }
+}
+
 // ===== decode attention =====
 
 struct DaAttnArgs {
