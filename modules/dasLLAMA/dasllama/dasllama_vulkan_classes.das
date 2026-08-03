@@ -1414,6 +1414,196 @@ class DaAttnB : AtAttnBase {
     }
 }
 
+// hs=128 flash-attention twin of DaAttnB (coopmat devices): QK^T on f16 MMAs (hoisted q frags),
+// shuffle-reduced online softmax, register-tiled PV over the f16 V tile. Same args contract
+// (hs unread — baked 128); parity bar vs DaAttnB is IDS, vs the shipped kernel bit-exact
+[vk_dispatch(name = "da_attn_b_h128_cls", grid = "wgs", params = "wgs : int64")]
+class DaAttnBH128 {
+    @ssbo @binding = 0 qpanel : array<float>   // roped q rows
+    @ssbo @binding = 1 kpanel : array<float>   // the K mirror plane (kbase offsets)
+    @ssbo @binding = 2 vpanel : array<float>   // the V mirror plane (vbase offsets)
+    @ssbo @binding = 3 outp : array<float>     // attention out rows
+    @push_constant pa : DaAttnBArgs
+    @workgroup fbq : uint[2048]    // the 32-row q tile, f16 pairs
+    @workgroup fbkv : uint[2048]   // one 32-row K/V stage, f16 pairs
+    @workgroup fbp : float[1024]   // the 32x32 score/probability tile
+    @workgroup fbm : float[32]     // per-row online-softmax state
+    @workgroup fbl : float[32]
+    @workgroup fba : float[32]
+
+    [spirv_kernel(local_size_x = 128, name = "da_attn_b_h128_cls_spv")]
+    def run {   // nolint:STYLE037,STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
+        let qd = pa.nh * 128u
+        let qtiles = (pa.npos + 31u) / 32u
+        let h = gl_WorkGroupID.x / qtiles
+        let q0 = (gl_WorkGroupID.x % qtiles) * 32u
+        let tid = gl_LocalInvocationID.x
+        let warp = tid / 32u
+        let kvh = h / pa.kv_mul
+        var i = tid
+        while (i < 2048u) {   // stage the 32-row q tile once, f32 -> f16 pairs
+            let qr = q0 + i / 64u
+            let jp = (i % 64u) * 2u
+            if (qr < pa.npos) {
+                let src = qr * qd + h * 128u + jp
+                fbq[i] = packHalf2x16(float2(qpanel[src], qpanel[src + 1u]))
+            } else {
+                fbq[i] = 0u
+            }
+            i += 128u
+        }
+        if (tid < 32u) {
+            fbm[tid] = -3.0e38
+            fbl[tid] = 0.0
+        }
+        var o : float[32]   // 2 rows x 16 cols per thread
+        for (z in range(32)) {
+            o[z] = 0.0
+        }
+        let orow0 = (tid / 8u) * 2u
+        let oe = (tid % 8u) * 16u
+        let srow = tid / 4u
+        let cb = (tid % 4u) * 8u
+        let lane4 = tid % 4u
+        barrier()
+        // my S block's q fragments — invariant across the whole K loop
+        let br = warp / 2u
+        let bc = warp % 2u
+        var qa0 : coopmatA_f16_16x16
+        var qa1 : coopmatA_f16_16x16
+        var qa2 : coopmatA_f16_16x16
+        var qa3 : coopmatA_f16_16x16
+        var qa4 : coopmatA_f16_16x16
+        var qa5 : coopmatA_f16_16x16
+        var qa6 : coopmatA_f16_16x16
+        var qa7 : coopmatA_f16_16x16
+        coopmatLoad(qa0, fbq, int(br * 16u) * 64, 64, 0)
+        coopmatLoad(qa1, fbq, int(br * 16u) * 64 + 8, 64, 0)
+        coopmatLoad(qa2, fbq, int(br * 16u) * 64 + 16, 64, 0)
+        coopmatLoad(qa3, fbq, int(br * 16u) * 64 + 24, 64, 0)
+        coopmatLoad(qa4, fbq, int(br * 16u) * 64 + 32, 64, 0)
+        coopmatLoad(qa5, fbq, int(br * 16u) * 64 + 40, 64, 0)
+        coopmatLoad(qa6, fbq, int(br * 16u) * 64 + 48, 64, 0)
+        coopmatLoad(qa7, fbq, int(br * 16u) * 64 + 56, 64, 0)
+        let kend = pa.w0 + min(q0 + 32u, pa.npos)
+        var k0 = 0u
+        while (k0 < kend) {
+            i = tid
+            while (i < 2048u) {   // K tile, f16 pairs
+                let kr = k0 + i / 64u
+                let jp = (i % 64u) * 2u
+                if (kr < kend) {
+                    let src = pa.kbase + kr * pa.kvd + kvh * 128u + jp
+                    fbkv[i] = packHalf2x16(float2(kpanel[src], kpanel[src + 1u]))
+                } else {
+                    fbkv[i] = 0u
+                }
+                i += 128u
+            }
+            barrier()
+            var acc : coopmatAcc_f32_16x16
+            var kb : coopmatB_f16_16x16
+            coopmatLoad(kb, fbkv, int(bc * 16u) * 64, 64, 1)
+            acc = coopmatMulAdd(qa0, kb, acc)
+            coopmatLoad(kb, fbkv, int(bc * 16u) * 64 + 8, 64, 1)
+            acc = coopmatMulAdd(qa1, kb, acc)
+            coopmatLoad(kb, fbkv, int(bc * 16u) * 64 + 16, 64, 1)
+            acc = coopmatMulAdd(qa2, kb, acc)
+            coopmatLoad(kb, fbkv, int(bc * 16u) * 64 + 24, 64, 1)
+            acc = coopmatMulAdd(qa3, kb, acc)
+            coopmatLoad(kb, fbkv, int(bc * 16u) * 64 + 32, 64, 1)
+            acc = coopmatMulAdd(qa4, kb, acc)
+            coopmatLoad(kb, fbkv, int(bc * 16u) * 64 + 40, 64, 1)
+            acc = coopmatMulAdd(qa5, kb, acc)
+            coopmatLoad(kb, fbkv, int(bc * 16u) * 64 + 48, 64, 1)
+            acc = coopmatMulAdd(qa6, kb, acc)
+            coopmatLoad(kb, fbkv, int(bc * 16u) * 64 + 56, 64, 1)
+            acc = coopmatMulAdd(qa7, kb, acc)
+            coopmatStore(acc, fbp, int(br * 16u) * 32 + int(bc * 16u), 32, 0)
+            barrier()
+            // online softmax: 4 threads/row (8 cols each), shuffle-reduced within the aligned quad
+            let gq = pa.w0 + q0 + srow
+            let m_old = fbm[srow]
+            var mloc = -3.0e38
+            for [unroll] (j in range(8)) {
+                let idx = srow * 32u + cb + uint(j)
+                let gk = k0 + cb + uint(j)
+                let s = (gk <= gq && q0 + srow < pa.npos && gk < kend) ? fbp[idx] * pa.scale : -3.0e38
+                fbp[idx] = s
+                mloc = max(mloc, s)
+            }
+            mloc = max(mloc, subgroupShuffleXor(mloc, 1u))
+            mloc = max(mloc, subgroupShuffleXor(mloc, 2u))
+            let mt = max(m_old, mloc)
+            var lloc = 0.0
+            for [unroll] (j in range(8)) {
+                let idx = srow * 32u + cb + uint(j)
+                let e = exp(fbp[idx] - mt)
+                fbp[idx] = e
+                lloc += e
+            }
+            lloc += subgroupShuffleXor(lloc, 1u)
+            lloc += subgroupShuffleXor(lloc, 2u)
+            if (lane4 == 0u) {
+                let alpha = exp(m_old - mt)
+                fbl[srow] = fbl[srow] * alpha + lloc
+                fbm[srow] = mt
+                fba[srow] = alpha
+            }
+            barrier()
+            i = tid
+            while (i < 2048u) {   // V tile reuses the K staging
+                let kr = k0 + i / 64u
+                let jp = (i % 64u) * 2u
+                if (kr < kend) {
+                    let src = pa.vbase + kr * pa.kvd + kvh * 128u + jp
+                    fbkv[i] = packHalf2x16(float2(vpanel[src], vpanel[src + 1u]))
+                } else {
+                    fbkv[i] = 0u
+                }
+                i += 128u
+            }
+            barrier()
+            let av0 = fba[orow0]
+            let av1 = fba[orow0 + 1u]
+            for (z in range(16)) {
+                o[z] *= av0
+                o[16 + z] *= av1
+            }
+            var c2 = 0u
+            while (c2 < 32u) {
+                let pw0 = fbp[orow0 * 32u + c2]
+                let pw1 = fbp[(orow0 + 1u) * 32u + c2]
+                let vb = c2 * 64u + oe / 2u
+                for [unroll] (zp in range(8)) {
+                    let pair = unpackHalf2x16(fbkv[vb + uint(zp)])
+                    o[zp * 2] += pw0 * pair.x
+                    o[zp * 2 + 1] += pw0 * pair.y
+                    o[16 + zp * 2] += pw1 * pair.x
+                    o[16 + zp * 2 + 1] += pw1 * pair.y
+                }
+                c2++
+            }
+            barrier()
+            k0 += 32u
+        }
+        if (q0 + orow0 < pa.npos) {
+            let inv0 = 1.0 / fbl[orow0]
+            let ob0 = (q0 + orow0) * qd + h * 128u + oe
+            for (z in range(16)) {
+                outp[ob0 + uint(z)] = o[z] * inv0
+            }
+        }
+        if (q0 + orow0 + 1u < pa.npos) {
+            let inv1 = 1.0 / fbl[orow0 + 1u]
+            let ob1 = (q0 + orow0 + 1u) * qd + h * 128u + oe
+            for (z in range(16)) {
+                outp[ob1 + uint(z)] = o[16 + z] * inv1
+            }
+        }
+    }
+}
+
 // ===== decode attention =====
 
 struct DaAttnArgs {
