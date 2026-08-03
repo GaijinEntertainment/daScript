@@ -2320,22 +2320,24 @@ def make_kernel_pipe(kernel : string; var spv : array<uint>) : Pipeline {
 
 struct VkdClass {
     ready : bool
-    nbindings : int
     push_bytes : int
+    bindings : array<int>      // the class's DECLARED binding indices, ascending (gaps legal)
     set_layout : DescriptorSetLayout
     pipe_layout : PipelineLayout
     pipe : Pipeline
 }
 
-def vkd_class_init(var c : VkdClass; nbindings, push_bytes : int) {
+def vkd_class_init(var c : VkdClass; bindings : array<int>; push_bytes : int) {
     var dslci : DescriptorSetLayoutCreateInfo
-    dslci.pBindings |> reserve(nbindings)
-    for (bind in range(nbindings)) {
+    dslci.pBindings |> reserve(length(bindings))
+    c.bindings |> reserve(length(bindings))
+    for (bind in bindings) {
         var b0 = DescriptorSetLayoutBinding(binding = uint(bind),
                                             descriptorType = VkDescriptorType.STORAGE_BUFFER,
                                             descriptorCount = 1u)
         b0.stageFlags.compute = true
         dslci.pBindings |> emplace(b0)
+        c.bindings |> push(bind)
     }
     c.set_layout <- create_descriptor_set_layout(g_gpu.device, dslci)
     var plci : PipelineLayoutCreateInfo
@@ -2346,24 +2348,23 @@ def vkd_class_init(var c : VkdClass; nbindings, push_bytes : int) {
         plci.pPushConstantRanges |> push(PushConstantRange(stageFlags = sf, offset = 0u, size = uint(push_bytes)))
     }
     c.pipe_layout <- create_pipeline_layout(g_gpu.device, plci)
-    c.nbindings = nbindings
     c.push_bytes = push_bytes
 }
 
 // write a class set's descriptors + declare its region bits (the [vk_dispatch]-generated set
-// builder's engine; generic over the class's binding count)
+// builder's engine; generic over the class's binding count, i-th entry -> i-th declared binding)
 def vkd_set(c : VkdClass; set_ : VkDescriptorSet; bufs : uint64 const[]; sizes : int64 const[]; gbits : uint const[]) {
-    assert(length(bufs) == c.nbindings, "vkd_set: buffer count != the class's binding count")
+    assert(length(bufs) == length(c.bindings), "vkd_set: buffer count != the class's binding count")
     var writes : array<WriteDescriptorSet>
-    for (bind in range(length(bufs))) {
-        write_buf_desc(writes, set_, uint(bind), bufs[bind], sizes[bind])
+    for (i in range(length(bufs))) {
+        write_buf_desc(writes, set_, uint(c.bindings[i]), bufs[i], sizes[i])
     }
     let no_copies : array<CopyDescriptorSet>
     update_descriptor_sets(g_gpu.device, writes, no_copies)
     var sb : SetBits
-    for (bind in range(length(gbits))) {
-        if (bind < 6) {
-            sb.b[bind] = gbits[bind]
+    for (i in range(length(gbits))) {
+        if (c.bindings[i] < 6) {
+            sb.b[c.bindings[i]] = gbits[i]
         }
     }
     g_set_bits[intptr(set_)] = sb

@@ -298,7 +298,7 @@ def test_vkd_kq_gemv_family(t0 : T?) {
                     var raw2 = alloc_cmd()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
                     var h2 : VkHaz
-                    var pc = KqGemvArgs(n = 512u, d = uint(d), nreg = uint(nreg), ybase = 0u)
+                    var pc = GemvArgs(n = 512u, d = uint(d), nreg = uint(nreg), ybase = 0u)
                     if (fmt == int(KqFmt.k4)) {
                         enc_kq_gemv_k4_cls(raw2, h2, s_cls, pc, wgs)
                     } elif (fmt == int(KqFmt.q40)) {
@@ -322,6 +322,145 @@ def test_vkd_kq_gemv_family(t0 : T?) {
                     }
                 }
                 t |> success(bad == 0, "fmt {fmt}: class twin bit-exact vs shipped ({bad} of {rows} rows diverge)")
+                delete wqh
+                delete wsh
+                delete xqh
+                delete xsh
+                delete y_old
+                delete y_cls
+            }
+        } else {
+            feint("dasVulkan not present — skipping\n")
+        }
+    }
+}
+
+[test]
+def test_vkd_q8_gemv_pair(t0 : T?) {
+    t0 |> run("q8/q8n GEMV class twins == the shipped kernels (bit-exact)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!(ensure_q8_gemv_cls() && ensure_q8n_gemv_cls())) {
+                feint("no Vulkan device — skipping\n")
+                return
+            }
+            let nb = 16      // 32-blocks per row reduction (n = 512)
+            let d = 3
+            let nreg = 2
+            let rows = nreg * d
+            let totblk = rows * nb
+            for (arm in range(2)) {   // 0 = q8, 1 = q8n
+                let q8n = arm == 1
+                if (q8n && !key_exists(g_pipe_access, intptr(boost_value_to_vk(g_gpu.gemv_q8n)))) {
+                    feint("q8n reference pipe not built (cm2 mode only) — skipping the q8n arm\n")
+                    continue
+                }
+                let wq_bytes = q8n ? int64(totblk) * 34l : int64(totblk) * 32l
+                let ws_bytes = int64(totblk) * 2l
+                let wq_words = int((wq_bytes + 3l) / 4l)
+                var wqh : array<uint>
+                var wsh : array<uint>
+                var xqh : array<uint>
+                var xsh : array<float>
+                wqh |> resize(wq_words)
+                wsh |> resize(totblk / 2 + 1)
+                xqh |> resize(nb * 8)
+                xsh |> resize(nb)
+                for (i in range(wq_words)) {
+                    // q8n reads u16[0] of each 17-u16 block as an f16 d — keep EVERY u16 a finite
+                    // half on that arm; plain q8 quant words are free bits
+                    wqh[i] = q8n ? ws_word(uint(i) + 991u) : hash_word(uint(i) + 55u)
+                }
+                for (i in range(totblk / 2 + 1)) {
+                    wsh[i] = ws_word(uint(i))
+                }
+                for (i in range(nb * 8)) {
+                    xqh[i] = hash_word(uint(i) * 17u + 9u)
+                }
+                for (i in range(nb)) {
+                    xsh[i] = 0.25 + float(i % 5) * 0.125
+                }
+                let xq_bytes = int64(nb) * 32l
+                let xs_bytes = int64(nb) * 4l
+                let y_bytes = int64(rows) * 4l
+                let wqd = make_device_buf(wq_bytes)
+                let wsd = make_device_buf(ws_bytes)
+                let xqd = make_device_buf(xq_bytes)
+                let xsd = make_device_buf(xs_bytes)
+                let yd1 = make_device_buf(y_bytes)
+                let yd2 = make_device_buf(y_bytes)
+                let rgd = make_device_buf(int64(nreg) * 8l)
+                var meta = make_host_buf(META_BYTES, false, [cached = false])
+                var host = make_host_buf(y_bytes, true, [cached = true])
+                var y_old : array<float>
+                var y_cls : array<float>
+                y_old |> resize(rows)
+                y_cls |> resize(rows)
+                let wgs = (int64(rows) + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg
+                unsafe {
+                    upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
+                    upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
+                    upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
+                    upload_region_at(xsd, 0l, addr<uint8 const?>(xsh[0]), xs_bytes)
+                    var regs : array<uint>
+                    regs |> resize(nreg * 2)
+                    var mp = reinterpret<uint?>(meta.mapped)
+                    mp[0] = 512u
+                    mp[1] = uint(d)
+                    mp[2] = uint(nreg)
+                    mp[3] = 0u
+                    for (r in range(nreg)) {
+                        mp[4 + r * 2] = uint(r * d * nb)
+                        mp[5 + r * 2] = 0u
+                        regs[r * 2] = uint(r * d * nb)
+                        regs[r * 2 + 1] = 0u
+                    }
+                    upload_region_at(rgd, 0l, addr<uint8 const?>(regs[0]), int64(nreg) * 8l)
+                    var s_old = vk_set6(wqd, wsd, meta.buf, xqd, xsd, yd1,
+                        wq_bytes, ws_bytes, META_BYTES, xq_bytes, xs_bytes, y_bytes,
+                        fixed_array(1u, 2u, 4u, 8u, 16u, 32u))
+                    var raw = alloc_cmd()
+                    let begin = VkCommandBufferBeginInfo()
+                    vk_check(vkBeginCommandBuffer(raw, begin), null)
+                    var h : VkHaz
+                    hz_dispatch(raw, h, gemv_pipe(q8n ? int(KqFmt.q8n) : int(KqFmt.q8)), s_old, uint(wgs))
+                    vhz_dep(raw, h, 32u, 0u, true)
+                    cmd_copy_whole(raw, yd1, host.buf, y_bytes)
+                    vk_check(vkEndCommandBuffer(raw), null)
+                    submit_wait(raw)
+                    memcpy(addr<void?>(y_old[0]), host.mapped, y_bytes)
+                    var s_cls : VkDescriptorSet
+                    if (q8n) {
+                        s_cls = set_q8n_gemv_cls(fixed_array(wqd, rgd, xqd, xsd, yd2),
+                            fixed_array(wq_bytes, int64(nreg) * 8l, xq_bytes, xs_bytes, y_bytes),
+                            fixed_array(1u, 4u, 8u, 16u, 32u))
+                    } else {
+                        s_cls = set_q8_gemv_cls(fixed_array(wqd, wsd, rgd, xqd, xsd, yd2),
+                            fixed_array(wq_bytes, ws_bytes, int64(nreg) * 8l, xq_bytes, xs_bytes, y_bytes),
+                            fixed_array(1u, 2u, 4u, 8u, 16u, 32u))
+                    }
+                    var raw2 = alloc_cmd()
+                    vk_check(vkBeginCommandBuffer(raw2, begin), null)
+                    var h2 : VkHaz
+                    var pc = GemvArgs(n = 512u, d = uint(d), nreg = uint(nreg), ybase = 0u)
+                    if (q8n) {
+                        enc_q8n_gemv_cls(raw2, h2, s_cls, pc, wgs)
+                    } else {
+                        enc_q8_gemv_cls(raw2, h2, s_cls, pc, wgs)
+                    }
+                    vhz_dep(raw2, h2, 32u, 0u, true)
+                    cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
+                    vk_check(vkEndCommandBuffer(raw2), null)
+                    submit_wait(raw2)
+                    memcpy(addr<void?>(y_cls[0]), host.mapped, y_bytes)
+                    delete regs
+                }
+                var bad = 0
+                for (i in range(rows)) {
+                    if (y_old[i] != y_cls[i]) {
+                        bad++
+                    }
+                }
+                t |> success(bad == 0, "{q8n ? "q8n" : "q8"}: class twin bit-exact vs shipped ({bad} of {rows} rows diverge)")
                 delete wqh
                 delete wsh
                 delete xqh

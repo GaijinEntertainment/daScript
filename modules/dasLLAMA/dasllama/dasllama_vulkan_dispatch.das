@@ -7,7 +7,6 @@ require daslib/ast
 require daslib/ast_boost
 require daslib/templates_boost   // make_expression_block / add_global_var / force_at
 require daslib/rtti
-require math
 require strings
 require daslib/strings_boost   // split / strip — the grid & params micro-format tokenizers
 require dasllama_kernel_access   // the shared body-walk classifier (field mode) — access is DERIVED
@@ -220,24 +219,22 @@ class VkDispatch : AstStructureAnnotation {
             errors := "[vk_dispatch] {base}: no @ssbo members to bind"
             return false
         }
-        var nb = 0
-        for (bf in bufs) {
-            nb = max(nb, bf.binding + 1)
-        }
-        if (nb > 6) {
-            errors := "[vk_dispatch] {base}: {nb} bindings — the hazard rail's SetBits caps at 6"
-            return false
-        }
+        // the class's distinct bindings, ascending (gaps legal — the layout lists exactly these;
+        // same-binding views collapse to one slot)
         var covered : table<int>
+        var blist : array<int>
         for (bf in bufs) {
-            covered |> insert(bf.binding)
-        }
-        for (bind in range(nb)) {
-            if (!key_exists(covered, bind)) {
-                errors := "[vk_dispatch] {base}: binding {bind} is not covered — bindings must be contiguous 0..{nb - 1}"
-                return false
+            if (!key_exists(covered, bf.binding)) {
+                covered |> insert(bf.binding)
+                blist |> push(bf.binding)
             }
         }
+        sort(blist)
+        if (blist[length(blist) - 1] > 5) {
+            errors := "[vk_dispatch] {base}: binding {blist[length(blist) - 1]} — the hazard rail's SetBits caps at binding 5"
+            return false
+        }
+        let nb = length(blist)   // the set builder's arity: one buffer/size/bits entry per declared binding
 
         // the kernel method + derived access -> per-binding read/write masks
         var nmatch = 0
@@ -302,9 +299,18 @@ class VkDispatch : AstStructureAnnotation {
 
         // ensure_<base>() : bool — device up, layouts + pipeline once
         {
+            // `array<int>(b0, b1, ...)` — the gen2 array literal (ExprMakeArray wrapped in
+            // to_array_move, the spirv_shader capture shape)
+            var mkArr = new ExprMakeArray(at = at, makeType = new TypeDecl(at = at, baseType = Type.tInt))
+            mkArr.gen2 = true
+            for (bind in blist) {
+                mkArr.values |> emplace_new <| new ExprConstInt(at = at, value = bind)
+            }
+            var bl = new ExprCall(at = at, name := "to_array_move")
+            bl.arguments |> emplace(mkArr)
             var ci = new ExprCall(at = at, name := "vkd_class_init")
             ci.arguments |> emplace_new <| mk_gvar(at, gname)
-            ci.arguments |> emplace_new <| new ExprConstInt(at = at, value = nb)
+            ci.arguments |> emplace_new <| bl
             ci.arguments |> emplace_new <| new ExprConstInt(at = at, value = push_fields * 4)
             var cp = new ExprCall(at = at, name := "vkd_class_pipe")
             cp.arguments |> emplace_new <| mk_gvar(at, gname)

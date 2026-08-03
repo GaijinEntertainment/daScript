@@ -84,18 +84,125 @@ class ClsArAddRms {
     }
 }
 
+// ===== the region-GEMV push params (every decode GEMV shares the shape) =====
+
+struct GemvArgs {
+    n : uint       // reduction dim
+    d : uint       // output rows per region
+    nreg : uint    // region count
+    ybase : uint   // output base row
+}
+
+// ===== the Q8_0 decode GEMV pair =====
+
+// q8_moe_groupn's class twin: TWO lanes per 32-block (a uint4 each), xor-1 fold, even lane folds
+// the scales. The workhorse decode GEMV.
+[vk_dispatch(name = "q8_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class Q8Gemv {
+    @ssbo @binding = 0 wq4 : array<uint4>      // weight quant words, vec4 view (16B loads)
+    @ssbo @binding = 1 wsh : array<float16>    // per-block f16 weight scales
+    @ssbo @binding = 2 regions : array<uint>   // (rel_wblock, xblock) pairs per region
+    @ssbo @binding = 3 xqw : array<uint>       // activation quant words
+    @ssbo @binding = 4 axs : array<float>      // per-block activation scales
+    @ssbo @binding = 5 y : array<float>
+    @push_constant pa : GemvArgs
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "q8_gemv_cls_spv")]
+    def run {
+        let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
+        if (rg < pa.nreg * pa.d) {
+            let r = rg / pa.d
+            let row = rg % pa.d
+            let nb = pa.n / 32u
+            let wb0 = regions[r * 2u] + row * nb
+            let xb0 = regions[r * 2u + 1u]
+            let lane = gl_SubgroupInvocationID
+            let bpp = gl_SubgroupSize / 2u
+            var acc = 0.0
+            var bi0 = 0u
+            while (bi0 < nb) {
+                let b = bi0 + lane / 2u
+                if (b < nb) {
+                    let wv = wq4[(wb0 + bi0) * 2u + lane]
+                    let xbase = (xb0 + bi0) * 8u + lane * 4u
+                    var idot = sdot4(wv.x, xqw[xbase])
+                    idot += sdot4(wv.y, xqw[xbase + 1u])
+                    idot += sdot4(wv.z, xqw[xbase + 2u])
+                    idot += sdot4(wv.w, xqw[xbase + 3u])
+                    idot += subgroupShuffleXor(idot, 1u)
+                    if (lane % 2u == 0u) {
+                        acc += float(idot) * float(wsh[wb0 + b]) * axs[xb0 + b]
+                    }
+                }
+                bi0 += bpp
+            }
+            let total = subgroupAdd(acc)
+            if (subgroupElect()) {
+                y[pa.ybase + rg] = total
+            }
+        }
+    }
+}
+
+// q8n_moe_groupn's class twin: the region skeleton on the 34B blocks — 17 u16 per block, u16-pair
+// loads combined to words, 8 lanes per block, d broadcast-read from u16[0]. No binding-1 scale
+// plane (scales are inline), so the class layout carries the GAP — sparse bindings by design.
+[vk_dispatch(name = "q8n_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class Q8nGemv {
+    @ssbo @binding = 0 wq16 : array<uint16>    // the 34B blocks as u16 words ([d][16 quant pairs])
+    @ssbo @binding = 2 regions : array<uint>
+    @ssbo @binding = 3 xqw : array<uint>
+    @ssbo @binding = 4 axs : array<float>
+    @ssbo @binding = 5 y : array<float>
+    @push_constant pa : GemvArgs
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "q8n_gemv_cls_spv")]
+    def run {
+        let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
+        if (rg < pa.nreg * pa.d) {
+            let r = rg / pa.d
+            let row = rg % pa.d
+            let nb = pa.n / 32u
+            let wb0 = regions[r * 2u] + row * nb
+            let xb0 = regions[r * 2u + 1u]
+            let lane = gl_SubgroupInvocationID
+            let my_word = lane % 8u
+            let my_boff = lane / 8u
+            let bpp = gl_SubgroupSize / 8u
+            var acc = 0.0
+            var bi0 = 0u
+            while (bi0 < nb) {
+                let b = bi0 + my_boff
+                var idot = 0
+                var dbits = 0u
+                if (b < nb) {
+                    let base = (wb0 + b) * 17u
+                    let lo = uint(wq16[base + 1u + my_word * 2u])
+                    let hi = uint(wq16[base + 2u + my_word * 2u])
+                    idot = sdot4(lo | (hi << 16u), xqw[(xb0 + b) * 8u + my_word])
+                    dbits = uint(wq16[base])
+                }
+                idot += subgroupShuffleXor(idot, 1u)
+                idot += subgroupShuffleXor(idot, 2u)
+                idot += subgroupShuffleXor(idot, 4u)
+                if (my_word == 0u && b < nb) {
+                    acc += float(idot) * unpackHalf2x16(dbits).x * axs[xb0 + b]
+                }
+                bi0 += bpp
+            }
+            let total = subgroupAdd(acc)
+            if (subgroupElect()) {
+                y[pa.ybase + rg] = total
+            }
+        }
+    }
+}
+
 // ===== the K-quant decode GEMV family: one base shell, per-format block contributions =====
 // ONE LANE PER 32-BLOCK via uint4 loads (512B/warp in flight, one scale decode per block).
 // The four formats share the region walk, the lane->block map, and the subgroup fold — only
 // the block's dot + scale fold differ, so each format is an override of blk_contrib and the
 // devirtualizer inlines the family back to four standalone kernels at emission.
-
-struct KqGemvArgs {
-    n : uint       // reduction dim (a multiple of 256 — whole superblocks)
-    d : uint       // output rows per region
-    nreg : uint    // region count
-    ybase : uint   // output base row
-}
 
 let private KQC_LOW = 0x0F0F0F0Fu   // nibble mask
 let private KQC_ONES = 0x01010101u  // sdot4 against this sums 4 signed bytes
@@ -108,7 +215,7 @@ class KqGemvBase {
     @ssbo @binding = 3 xq4 : array<uint4>      // activation quant words, vec4 view
     @ssbo @binding = 4 axs : array<float>      // activation block scales
     @ssbo @binding = 5 y : array<float>        // output rows
-    @push_constant pa : KqGemvArgs
+    @push_constant pa : GemvArgs
 
     // per-format: one 32-block's scaled contribution — every [spirv_kernel] variant overrides
     def blk_contrib(wsb, blk, xsb : uint) : float {
