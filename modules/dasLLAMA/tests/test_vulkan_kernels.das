@@ -1302,6 +1302,265 @@ def test_vkd_cm_batch_family(t0 : T?) {
     }
 }
 
+[test]
+def test_vkd_kq_q40_cm_batch(t0 : T?) {
+    t0 |> run("q40 coopmat f16 batch class twin == the shipped kernel (bit-exact)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
+                feint("no Vulkan device — skipping\n")
+                return
+            }
+            if (!key_exists(g_pipe_access, intptr(boost_value_to_vk(g_gpu.batch_coopmat_q40)))) {
+                feint("q40 coopmat pipe not built (DASLLAMA_COOPMAT=f16 only) — skipping\n")
+                return
+            }
+            verify(ensure_kq_batch_q40_cmf16_cls(), "class rail must engage when the shipped pipe exists")
+            let n = 256                // nsb = 1 superblock per row reduction
+            let nsb = n / 256
+            let d = 40                 // wtiles = 2 with a 8-col edge tile
+            let cnt0 = 35
+            let cnt1 = 20
+            let rows = cnt0 + cnt1
+            let wtiles = (d + 31) / 32
+            let wgs0 = ((cnt0 + 31) / 32) * wtiles
+            let wgs1 = ((cnt1 + 31) / 32) * wtiles
+            let wgs = wgs0 + wgs1
+            let totsb = 2 * d * nsb
+            var wqh : array<uint>
+            var wsuh : array<uint>
+            var xqh : array<uint>
+            var xsh : array<float>
+            wqh |> resize(totsb * 32)
+            wsuh |> resize(totsb * 5)
+            xqh |> resize(rows * nsb * 64)
+            xsh |> resize(rows * nsb)
+            for (i in range(totsb * 32)) {
+                wqh[i] = hash_word(uint(i) + 3u)
+            }
+            for (i in range(totsb * 5)) {
+                wsuh[i] = ws_word(uint(i) + 7u)   // d halves live here — every u16 a finite half
+            }
+            for (i in range(rows * nsb * 64)) {
+                xqh[i] = hash_word(uint(i) * 13u + 1u)
+            }
+            for (i in range(rows * nsb)) {
+                xsh[i] = 0.375 + float(i % 9) * 0.0625
+            }
+            let wq_bytes = int64(totsb) * 128l
+            let wsu_bytes = int64(totsb) * 20l
+            let xq_bytes = int64(rows * nsb) * 256l
+            let xs_bytes = int64(rows * nsb) * 4l
+            let y_bytes = int64(rows * d) * 4l
+            let wqd = make_device_buf(wq_bytes)
+            let wsud = make_device_buf(wsu_bytes)
+            let xqd = make_device_buf(xq_bytes)
+            let xsd = make_device_buf(xs_bytes)
+            let yd1 = make_device_buf(y_bytes)
+            let yd2 = make_device_buf(y_bytes)
+            var meta = make_host_buf(META_BYTES, false, [cached = false])
+            var host = make_host_buf(y_bytes, true, [cached = true])
+            var y_old : array<float>
+            var y_cls : array<float>
+            y_old |> resize(rows * d)
+            y_cls |> resize(rows * d)
+            unsafe {
+                upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
+                upload_region_at(wsud, 0l, addr<uint8 const?>(wsuh[0]), wsu_bytes)
+                upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
+                upload_region_at(xsd, 0l, addr<uint8 const?>(xsh[0]), xs_bytes)
+                var sched : array<uint>
+                sched |> resize(2 * 4 + wgs)
+                sched[0] = 0u
+                sched[1] = 0u
+                sched[2] = uint(cnt0)
+                sched[3] = 0u
+                sched[4] = uint(d * nsb)
+                sched[5] = uint(cnt0)
+                sched[6] = uint(cnt1)
+                sched[7] = uint(wgs0)
+                for (w in range(wgs)) {
+                    sched[8 + w] = w < wgs0 ? 0u : 1u
+                }
+                var mp = reinterpret<uint?>(meta.mapped)
+                mp[0] = uint(n)
+                mp[1] = uint(d)
+                mp[3] = uint(4 + 2 * 4)
+                for (i in range(2 * 4 + wgs)) {
+                    mp[4 + i] = sched[i]
+                }
+                let sc_bytes = int64(2 * 4 + wgs) * 4l
+                let scd = make_device_buf(sc_bytes)
+                upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
+                var so = vk_set6(wqd, wsud, meta.buf, xqd, xsd, yd1,
+                    wq_bytes, wsu_bytes, META_BYTES, xq_bytes, xs_bytes, y_bytes,
+                    fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                var raw = alloc_cmd()
+                let begin = VkCommandBufferBeginInfo()
+                vk_check(vkBeginCommandBuffer(raw, begin), null)
+                var h : VkHaz
+                hz_dispatch(raw, h, weak_copy(g_gpu.batch_coopmat_q40), so, uint(wgs))
+                vhz_dep(raw, h, 32u, 0u, true)
+                cmd_copy_whole(raw, yd1, host.buf, y_bytes)
+                vk_check(vkEndCommandBuffer(raw), null)
+                submit_wait(raw)
+                memcpy(addr<void?>(y_old[0]), host.mapped, y_bytes)
+                var sc = set_kq_batch_q40_cmf16_cls(fixed_array(wqd, wsud, scd, xqd, xsd, yd2),
+                    fixed_array(wq_bytes, wsu_bytes, sc_bytes, xq_bytes, xs_bytes, y_bytes),
+                    fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                var raw2 = alloc_cmd()
+                vk_check(vkBeginCommandBuffer(raw2, begin), null)
+                var h2 : VkHaz
+                var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
+                enc_kq_batch_q40_cmf16_cls(raw2, h2, sc, pc, int64(wgs))
+                vhz_dep(raw2, h2, 32u, 0u, true)
+                cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
+                vk_check(vkEndCommandBuffer(raw2), null)
+                submit_wait(raw2)
+                memcpy(addr<void?>(y_cls[0]), host.mapped, y_bytes)
+                delete sched
+            }
+            var bad = 0
+            for (i in range(rows * d)) {
+                if (y_old[i] != y_cls[i]) {
+                    bad++
+                }
+            }
+            to_log(LOG_INFO, "q40 cm batch: {bad} of {rows * d} diverge\n")
+            t |> success(bad == 0, "q40 cm batch: class twin bit-exact ({bad} of {rows * d} diverge)")
+            delete wqh
+            delete wsuh
+            delete xqh
+            delete xsh
+            delete y_old
+            delete y_cls
+        } else {
+            feint("dasVulkan not present — skipping\n")
+        }
+    }
+}
+
+[test]
+def test_vkd_cm2_batch(t0 : T?) {
+    t0 |> run("cm2 decode-in-load batch class twin == the shipped kernel (bit-exact)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
+                feint("no Vulkan device — skipping\n")
+                return
+            }
+            if (!key_exists(g_pipe_access, intptr(boost_value_to_vk(g_gpu.batch_cm2)))) {
+                feint("cm2 batch pipe not built (DASLLAMA_COOPMAT=cm2 only) — skipping\n")
+                return
+            }
+            verify(ensure_q8n_batch_cm2_cls(), "class rail must engage when the shipped pipe exists")
+            let n = 64                 // 2 q8n blocks per row reduction
+            let nbb = n / 32
+            let d = 96                 // one full 64-tile + a 32 edge
+            let cnt0 = 140             // 128-token tiles with a 12-row edge
+            let cnt1 = 116
+            let rows = cnt0 + cnt1
+            let wtiles = (d + 63) / 64
+            let wgs0 = ((cnt0 + 127) / 128) * wtiles
+            let wgs1 = ((cnt1 + 127) / 128) * wtiles
+            let wgs = wgs0 + wgs1
+            let totblk = 2 * d * nbb
+            let wq_bytes = int64(totblk) * 34l
+            let wq_words = int((wq_bytes + 3l) / 4l)
+            var wqh : array<uint>
+            var xfh : array<uint>
+            wqh |> resize(wq_words)
+            xfh |> resize(rows * n / 2)
+            for (i in range(wq_words)) {
+                wqh[i] = ws_word(uint(i) + 991u)   // d is read as f16 — every u16 a finite half
+            }
+            for (i in range(rows * n / 2)) {
+                xfh[i] = ws_word(uint(i) * 3u + 5u)   // f16 activation pairs
+            }
+            let xf_bytes = int64(rows * n) * 2l
+            let y_bytes = int64(rows * d) * 4l
+            let wqd = make_device_buf(wq_bytes)
+            let xfd = make_device_buf(xf_bytes)
+            let yd1 = make_device_buf(y_bytes)
+            let yd2 = make_device_buf(y_bytes)
+            var meta = make_host_buf(META_BYTES, false, [cached = false])
+            var host = make_host_buf(y_bytes, true, [cached = true])
+            var y_old : array<float>
+            var y_cls : array<float>
+            y_old |> resize(rows * d)
+            y_cls |> resize(rows * d)
+            unsafe {
+                upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
+                upload_region_at(xfd, 0l, addr<uint8 const?>(xfh[0]), xf_bytes)
+                var sched : array<uint>
+                sched |> resize(2 * 4 + wgs)
+                sched[0] = 0u
+                sched[1] = 0u
+                sched[2] = uint(cnt0)
+                sched[3] = 0u
+                sched[4] = uint(d * nbb)
+                sched[5] = uint(cnt0)
+                sched[6] = uint(cnt1)
+                sched[7] = uint(wgs0)
+                for (w in range(wgs)) {
+                    sched[8 + w] = w < wgs0 ? 0u : 1u
+                }
+                var mp = reinterpret<uint?>(meta.mapped)
+                mp[0] = uint(n)
+                mp[1] = uint(d)
+                mp[3] = uint(4 + 2 * 4)
+                for (i in range(2 * 4 + wgs)) {
+                    mp[4 + i] = sched[i]
+                }
+                let sc_bytes = int64(2 * 4 + wgs) * 4l
+                let scd = make_device_buf(sc_bytes)
+                upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
+                // the SHIPPED kernel: blocks@0, meta@2, f16 acts@3, y@5; slots 1/4 = meta filler
+                var so = vk_set6(wqd, meta.buf, meta.buf, xfd, meta.buf, yd1,
+                    wq_bytes, META_BYTES, META_BYTES, xf_bytes, META_BYTES, y_bytes,
+                    fixed_array(1u, 0u, 0u, 4u, 0u, 16u))
+                var raw = alloc_cmd()
+                let begin = VkCommandBufferBeginInfo()
+                vk_check(vkBeginCommandBuffer(raw, begin), null)
+                var h : VkHaz
+                hz_dispatch(raw, h, weak_copy(g_gpu.batch_cm2), so, uint(wgs))
+                vhz_dep(raw, h, 16u, 0u, true)
+                cmd_copy_whole(raw, yd1, host.buf, y_bytes)
+                vk_check(vkEndCommandBuffer(raw), null)
+                submit_wait(raw)
+                memcpy(addr<void?>(y_old[0]), host.mapped, y_bytes)
+                // the class twin: sparse bindings 0/2/3/5
+                var sc = set_q8n_batch_cm2_cls(fixed_array(wqd, scd, xfd, yd2),
+                    fixed_array(wq_bytes, sc_bytes, xf_bytes, y_bytes),
+                    fixed_array(1u, 0u, 4u, 16u))
+                var raw2 = alloc_cmd()
+                vk_check(vkBeginCommandBuffer(raw2, begin), null)
+                var h2 : VkHaz
+                var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
+                enc_q8n_batch_cm2_cls(raw2, h2, sc, pc, int64(wgs))
+                vhz_dep(raw2, h2, 16u, 0u, true)
+                cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
+                vk_check(vkEndCommandBuffer(raw2), null)
+                submit_wait(raw2)
+                memcpy(addr<void?>(y_cls[0]), host.mapped, y_bytes)
+                delete sched
+            }
+            var bad = 0
+            for (i in range(rows * d)) {
+                if (y_old[i] != y_cls[i]) {
+                    bad++
+                }
+            }
+            to_log(LOG_INFO, "cm2 batch: {bad} of {rows * d} diverge\n")
+            t |> success(bad == 0, "cm2 batch: class twin bit-exact ({bad} of {rows * d} diverge)")
+            delete wqh
+            delete xfh
+            delete y_old
+            delete y_cls
+        } else {
+            feint("dasVulkan not present — skipping\n")
+        }
+    }
+}
+
 def private cm_pipe_for_test(v : int) : Pipeline {
     if (v == 0) {
         return weak_copy(g_gpu.batch_coopmat_f16)
