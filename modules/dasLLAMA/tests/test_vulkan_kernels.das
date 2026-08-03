@@ -3097,3 +3097,383 @@ def test_vkd_at_prep(t0 : T?) {
         }
     }
 }
+
+[test]
+def test_vkd_dn_family(t0 : T?) {
+    t0 |> run("deltanet class twins == the shipped kernels (bit-exact: conv, fused step, 2-phase scan)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_dn_conv_cls()) {
+                feint("no Vulkan device — skipping\n")
+                return
+            }
+            if (!key_exists(g_pipe_access, intptr(boost_value_to_vk(g_gpu.dn_conv_pipeline)))) {
+                feint("dn chain declined on this device — skipping\n")
+                return
+            }
+            verify(ensure_dn_step_cls() && ensure_dn_scan_p1_cls() && ensure_dn_scan_p2_cls(),
+                "class rails must engage when the shipped pipes exist")
+            let ds = 64
+            let nkh = 2
+            let nvh = 4
+            let kd = nkh * ds
+            let cd = 2 * kd + nvh * ds
+            let dconv = 4
+            let taps = dconv - 1
+            let eps = 0.00001
+            let qscale = 1.25
+            // --- dn_conv: depthwise conv + SiLU + q/k L2-norm, one wg per position ---
+            {
+                let npos = 3
+                let hist_mode = 1
+                let taps_off = 16
+                let hist_off = taps_off + cd * dconv
+                let sm_n = hist_off + cd * taps
+                var srch : array<float>
+                var smh : array<float>
+                srch |> resize(npos * cd)
+                smh |> resize(sm_n)
+                for (i in range(npos * cd)) {
+                    srch[i] = float((i * 19) % 79) * 0.03 - 1.1
+                }
+                for (i in range(sm_n)) {
+                    smh[i] = float((i * 11) % 37) * 0.02 - 0.35
+                }
+                smh[0] = eps
+                smh[1] = qscale
+                let src_bytes = int64(npos * cd) * 4l
+                let sm_bytes = int64(sm_n) * 4l
+                let out_bytes = int64(npos * cd) * 4l
+                let srcd = make_device_buf(src_bytes)
+                let smd = make_device_buf(sm_bytes)
+                let od1 = make_device_buf(out_bytes)
+                let od2 = make_device_buf(out_bytes)
+                var meta = make_host_buf(META_BYTES, false, [cached = false])
+                var host = make_host_buf(out_bytes, true, [cached = true])
+                var o_old : array<float>
+                var o_cls : array<float>
+                o_old |> resize(npos * cd)
+                o_cls |> resize(npos * cd)
+                unsafe {
+                    upload_region_at(srcd, 0l, addr<uint8 const?>(srch[0]), src_bytes)
+                    upload_region_at(smd, 0l, addr<uint8 const?>(smh[0]), sm_bytes)
+                    var mp = reinterpret<uint?>(meta.mapped)
+                    mp[1] = uint(cd)
+                    mp[2] = uint(kd)
+                    mp[6] = uint(ds)
+                    mp[7] = uint(dconv)
+                    mp[8] = uint(hist_mode)
+                    mp[13] = uint(taps_off)
+                    mp[17] = uint(hist_off)
+                    // the SHIPPED kernel: conv out@0, meta@2, smalls@4, proj rows@5
+                    var so = vk_set6(od1, meta.buf, meta.buf, meta.buf, smd, srcd,
+                        out_bytes, META_BYTES, META_BYTES, META_BYTES, sm_bytes, src_bytes,
+                        fixed_array(1u, 0u, 0u, 0u, 4u, 8u))
+                    var raw = alloc_cmd()
+                    let begin = VkCommandBufferBeginInfo()
+                    vk_check(vkBeginCommandBuffer(raw, begin), null)
+                    var h : VkHaz
+                    hz_dispatch(raw, h, weak_copy(g_gpu.dn_conv_pipeline), so, uint(npos))
+                    vhz_dep(raw, h, 1u, 0u, true)
+                    cmd_copy_whole(raw, od1, host.buf, out_bytes)
+                    vk_check(vkEndCommandBuffer(raw), null)
+                    submit_wait(raw)
+                    memcpy(addr<void?>(o_old[0]), host.mapped, out_bytes)
+                    var sc = set_dn_conv_cls(fixed_array(srcd, od2, smd),
+                        fixed_array(src_bytes, out_bytes, sm_bytes),
+                        fixed_array(8u, 1u, 4u))
+                    var raw2 = alloc_cmd()
+                    vk_check(vkBeginCommandBuffer(raw2, begin), null)
+                    var h2 : VkHaz
+                    var pc = DnConvArgs(cd = uint(cd), kd = uint(kd), ds = uint(ds),
+                        dconv = uint(dconv), hist_mode = uint(hist_mode), taps_off = uint(taps_off),
+                        hist_off = uint(hist_off), eps = eps, qscale = qscale)
+                    enc_dn_conv_cls(raw2, h2, sc, pc, int64(npos))
+                    vhz_dep(raw2, h2, 1u, 0u, true)
+                    cmd_copy_whole(raw2, od2, host.buf, out_bytes)
+                    vk_check(vkEndCommandBuffer(raw2), null)
+                    submit_wait(raw2)
+                    memcpy(addr<void?>(o_cls[0]), host.mapped, out_bytes)
+                }
+                var bad = 0
+                for (i in range(npos * cd)) {
+                    if (o_old[i] != o_cls[i]) {
+                        bad++
+                    }
+                }
+                t |> success(bad == 0, "dn_conv: class twin bit-exact ({bad} of {npos * cd} diverge)")
+                delete srch
+                delete smh
+                delete o_old
+                delete o_cls
+            }
+            // --- dn_step_fused: the whole per-v-head decode chain, state + ring in place ---
+            {
+                let par = 1
+                let beta_off = 16
+                let g_off = beta_off + nvh
+                let a_off = g_off + nvh
+                let dt_off = a_off + nvh
+                let taps_off = dt_off + nvh
+                let wnorm_off = taps_off + cd * dconv
+                let hist_off = wnorm_off + ds
+                let sm_n = hist_off + 2 * cd * taps
+                let nblk = nvh * ds / 32
+                var projh : array<float>
+                var sth : array<float>
+                var smh : array<float>
+                projh |> resize(cd + nvh * ds)
+                sth |> resize(nvh * ds * ds)
+                smh |> resize(sm_n)
+                for (i in range(cd + nvh * ds)) {
+                    projh[i] = float((i * 23) % 71) * 0.03 - 1.0
+                }
+                for (i in range(nvh * ds * ds)) {
+                    sth[i] = float((i * 13) % 53) * 0.02 - 0.5
+                }
+                for (i in range(sm_n)) {
+                    smh[i] = float((i * 17) % 43) * 0.02 - 0.4
+                }
+                smh[0] = eps
+                smh[1] = qscale
+                smh[2] = float(par)
+                for (i in range(nvh)) {
+                    smh[a_off + i] = -0.4 - float(i) * 0.1   // a stays negative (decay)
+                }
+                let proj_bytes = int64(cd + nvh * ds) * 4l
+                let st_bytes = int64(nvh * ds * ds) * 4l
+                let sm_bytes = int64(sm_n) * 4l
+                let sc_bytes = int64(nblk) * 4l
+                let q_bytes = int64(nblk) * 32l
+                let projd = make_device_buf(proj_bytes)
+                let st1 = make_device_buf(st_bytes)
+                let st2 = make_device_buf(st_bytes)
+                let sm1 = make_device_buf(sm_bytes)
+                let sm2 = make_device_buf(sm_bytes)
+                let scd1 = make_device_buf(sc_bytes)
+                let scd2 = make_device_buf(sc_bytes)
+                let qd1 = make_device_buf(q_bytes)
+                let qd2 = make_device_buf(q_bytes)
+                var meta = make_host_buf(META_BYTES, false, [cached = false])
+                var host = make_host_buf(st_bytes + sm_bytes + sc_bytes + q_bytes, true, [cached = true])
+                var o_old : array<uint>
+                var o_cls : array<uint>
+                let cmp_words = int((st_bytes + sm_bytes + sc_bytes + q_bytes) / 4l)
+                o_old |> resize(cmp_words)
+                o_cls |> resize(cmp_words)
+                unsafe {
+                    upload_region_at(projd, 0l, addr<uint8 const?>(projh[0]), proj_bytes)
+                    var mp = reinterpret<uint?>(meta.mapped)
+                    mp[1] = uint(cd)
+                    mp[2] = uint(kd)
+                    mp[5] = uint(nkh)
+                    mp[6] = uint(ds)
+                    mp[7] = uint(dconv)
+                    mp[11] = uint(beta_off)
+                    mp[12] = uint(g_off)
+                    mp[13] = uint(taps_off)
+                    mp[14] = uint(wnorm_off)
+                    mp[15] = uint(a_off)
+                    mp[16] = uint(dt_off)
+                    mp[17] = uint(hist_off)
+                    for (side in range(2)) {
+                        let std = side == 0 ? st1 : st2
+                        let smd = side == 0 ? sm1 : sm2
+                        let scd = side == 0 ? scd1 : scd2
+                        let qdv = side == 0 ? qd1 : qd2
+                        upload_region_at(std, 0l, addr<uint8 const?>(sth[0]), st_bytes)
+                        upload_region_at(smd, 0l, addr<uint8 const?>(smh[0]), sm_bytes)
+                        var raw = alloc_cmd()
+                        let begin = VkCommandBufferBeginInfo()
+                        vk_check(vkBeginCommandBuffer(raw, begin), null)
+                        var h : VkHaz
+                        if (side == 0) {
+                            // the SHIPPED kernel: scales@0, state@1, meta@2, quants@3, smalls@4 (rw), proj@5
+                            var so = vk_set6(scd, std, meta.buf, qdv, smd, projd,
+                                sc_bytes, st_bytes, META_BYTES, q_bytes, sm_bytes, proj_bytes,
+                                fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                            hz_dispatch(raw, h, weak_copy(g_gpu.dnd_fused_pipeline), so, uint(nvh))
+                        } else {
+                            var sc = set_dn_step_cls(fixed_array(projd, std, smd, scd, qdv),
+                                fixed_array(proj_bytes, st_bytes, sm_bytes, sc_bytes, q_bytes),
+                                fixed_array(16u, 2u, 8u, 1u, 4u))
+                            var pc = DnStepArgs(cd = uint(cd), kd = uint(kd), nkh = uint(nkh),
+                                ds = uint(ds), dconv = uint(dconv), beta_off = uint(beta_off),
+                                g_off = uint(g_off), taps_off = uint(taps_off),
+                                wnorm_off = uint(wnorm_off), a_off = uint(a_off),
+                                dt_off = uint(dt_off), hist_off = uint(hist_off),
+                                par = uint(par), eps = eps, qscale = qscale)
+                            enc_dn_step_cls(raw, h, sc, pc, int64(nvh))
+                        }
+                        vhz_dep(raw, h, 1u | 2u | 4u | 8u, 0u, true)
+                        cmd_copy_whole(raw, std, host.buf, st_bytes)
+                        cmd_copy_range(raw, smd, 0l, host.buf, st_bytes, sm_bytes)
+                        cmd_copy_range(raw, scd, 0l, host.buf, st_bytes + sm_bytes, sc_bytes)
+                        cmd_copy_range(raw, qdv, 0l, host.buf, st_bytes + sm_bytes + sc_bytes, q_bytes)
+                        vk_check(vkEndCommandBuffer(raw), null)
+                        submit_wait(raw)
+                        if (side == 0) {
+                            memcpy(addr<void?>(o_old[0]), host.mapped, int64(cmp_words) * 4l)
+                        } else {
+                            memcpy(addr<void?>(o_cls[0]), host.mapped, int64(cmp_words) * 4l)
+                        }
+                    }
+                }
+                var bad = 0
+                for (i in range(cmp_words)) {
+                    if (o_old[i] != o_cls[i]) {
+                        bad++
+                    }
+                }
+                t |> success(bad == 0, "dn_step_fused: class twin bit-exact ({bad} of {cmp_words} words diverge)")
+                delete projh
+                delete sth
+                delete smh
+                delete o_old
+                delete o_cls
+            }
+            // --- dn_scan p1 + p2 chained: 2 chunks (64 + a 6-row partial), state advanced through both ---
+            {
+                let npos = 70
+                let CS = 64
+                let nch = (npos + CS - 1) / CS
+                let di = nvh * ds
+                let slab_stride = 7 * CS * ds + 2 * CS * CS + 4 * CS
+                let st_off = nvh * nch * slab_stride
+                let o_off = st_off + nvh * (ds * ds + CS * ds)
+                let slab_n = o_off + npos * di
+                let beta_off = 16
+                let g_off = beta_off + npos * nvh
+                let a_off = g_off + npos * nvh
+                let dt_off = a_off + nvh
+                let wnorm_off = dt_off + nvh
+                let sm_n = wnorm_off + ds
+                var convh : array<float>
+                var zh : array<float>
+                var sth : array<float>
+                var smh : array<float>
+                convh |> resize(npos * cd)
+                zh |> resize(npos * di)
+                sth |> resize(nvh * ds * ds)
+                smh |> resize(sm_n)
+                for (i in range(npos * cd)) {
+                    convh[i] = float((i * 19) % 79) * 0.025 - 0.9
+                }
+                for (i in range(npos * di)) {
+                    zh[i] = float((i * 29) % 61) * 0.05 - 1.5
+                }
+                for (i in range(nvh * ds * ds)) {
+                    sth[i] = float((i * 13) % 53) * 0.02 - 0.5
+                }
+                for (i in range(sm_n)) {
+                    smh[i] = float((i * 17) % 43) * 0.03 - 0.6
+                }
+                smh[0] = eps
+                for (i in range(nvh)) {
+                    smh[a_off + i] = -0.4 - float(i) * 0.1
+                }
+                for (i in range(ds)) {
+                    smh[wnorm_off + i] = 0.8 + float(i % 9) * 0.04
+                }
+                let conv_bytes = int64(npos * cd) * 4l
+                let z_bytes = int64(npos * di) * 4l
+                let st_bytes = int64(nvh * ds * ds) * 4l
+                let sm_bytes = int64(sm_n) * 4l
+                let slab_bytes = int64(slab_n) * 4l
+                let convd = make_device_buf(conv_bytes)
+                let zd = make_device_buf(z_bytes)
+                let st1 = make_device_buf(st_bytes)
+                let st2 = make_device_buf(st_bytes)
+                let smd = make_device_buf(sm_bytes)
+                let sl1 = make_device_buf(slab_bytes)
+                let sl2 = make_device_buf(slab_bytes)
+                var meta = make_host_buf(META_BYTES, false, [cached = false])
+                let o_bytes = int64(npos * di) * 4l
+                var host = make_host_buf(o_bytes + st_bytes, true, [cached = true])
+                var o_old : array<float>
+                var o_cls : array<float>
+                let cmp_n = npos * di + nvh * ds * ds
+                o_old |> resize(cmp_n)
+                o_cls |> resize(cmp_n)
+                unsafe {
+                    upload_region_at(convd, 0l, addr<uint8 const?>(convh[0]), conv_bytes)
+                    upload_region_at(zd, 0l, addr<uint8 const?>(zh[0]), z_bytes)
+                    upload_region_at(smd, 0l, addr<uint8 const?>(smh[0]), sm_bytes)
+                    var mp = reinterpret<uint?>(meta.mapped)
+                    mp[0] = uint(npos)
+                    mp[1] = uint(cd)
+                    mp[2] = uint(kd)
+                    mp[3] = uint(di)
+                    mp[4] = uint(nvh)
+                    mp[5] = uint(nkh)
+                    mp[6] = uint(ds)
+                    mp[9] = uint(slab_stride)
+                    mp[10] = uint(o_off)
+                    mp[11] = uint(beta_off)
+                    mp[12] = uint(g_off)
+                    mp[14] = uint(wnorm_off)
+                    mp[15] = uint(a_off)
+                    mp[16] = uint(dt_off)
+                    mp[19] = uint(st_off)
+                    for (side in range(2)) {
+                        let std = side == 0 ? st1 : st2
+                        let sld = side == 0 ? sl1 : sl2
+                        upload_region_at(std, 0l, addr<uint8 const?>(sth[0]), st_bytes)
+                        var raw = alloc_cmd()
+                        let begin = VkCommandBufferBeginInfo()
+                        vk_check(vkBeginCommandBuffer(raw, begin), null)
+                        var h : VkHaz
+                        if (side == 0) {
+                            // one set serves both phases: conv@0, state@1, meta@2, slab@3, smalls@4, z@5
+                            var so = vk_set6(convd, std, meta.buf, sld, smd, zd,
+                                conv_bytes, st_bytes, META_BYTES, slab_bytes, sm_bytes, z_bytes,
+                                fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                            hz_dispatch(raw, h, weak_copy(g_gpu.dn_scan_p1_pipeline), so, uint(nvh * nch))
+                            hz_dispatch(raw, h, weak_copy(g_gpu.dn_scan_p2_pipeline), so, uint(nvh))
+                        } else {
+                            var sc1 = set_dn_scan_p1_cls(fixed_array(convd, smd, sld),
+                                fixed_array(conv_bytes, sm_bytes, slab_bytes),
+                                fixed_array(1u, 8u, 4u))
+                            var pc1 = DnScanP1Args(npos = uint(npos), cd = uint(cd), kd = uint(kd),
+                                nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
+                                beta_off = uint(beta_off), g_off = uint(g_off), a_off = uint(a_off),
+                                dt_off = uint(dt_off), slab_stride = uint(slab_stride))
+                            enc_dn_scan_p1_cls(raw, h, sc1, pc1, int64(nvh * nch))
+                            var sc2 = set_dn_scan_p2_cls(fixed_array(zd, std, sld, smd),
+                                fixed_array(z_bytes, st_bytes, slab_bytes, sm_bytes),
+                                fixed_array(16u, 2u, 4u, 8u))
+                            var pc2 = DnScanP2Args(npos = uint(npos), di = uint(di), ds = uint(ds),
+                                o_off = uint(o_off), wnorm_off = uint(wnorm_off),
+                                slab_stride = uint(slab_stride), st_off = uint(st_off), eps = eps)
+                            enc_dn_scan_p2_cls(raw, h, sc2, pc2, int64(nvh))
+                        }
+                        vhz_dep(raw, h, 2u | 4u, 0u, true)
+                        cmd_copy_range(raw, sld, int64(o_off) * 4l, host.buf, 0l, o_bytes)
+                        cmd_copy_range(raw, std, 0l, host.buf, o_bytes, st_bytes)
+                        vk_check(vkEndCommandBuffer(raw), null)
+                        submit_wait(raw)
+                        if (side == 0) {
+                            memcpy(addr<void?>(o_old[0]), host.mapped, o_bytes + st_bytes)
+                        } else {
+                            memcpy(addr<void?>(o_cls[0]), host.mapped, o_bytes + st_bytes)
+                        }
+                    }
+                }
+                var bad = 0
+                for (i in range(cmp_n)) {
+                    if (o_old[i] != o_cls[i]) {
+                        bad++
+                    }
+                }
+                t |> success(bad == 0, "dn_scan p1+p2: class twins bit-exact ({bad} of {cmp_n} diverge)")
+                delete convh
+                delete zh
+                delete sth
+                delete smh
+                delete o_old
+                delete o_cls
+            }
+        } else {
+            feint("dasVulkan not present — skipping\n")
+        }
+    }
+}
