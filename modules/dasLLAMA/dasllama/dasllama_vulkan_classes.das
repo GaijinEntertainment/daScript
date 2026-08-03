@@ -1130,15 +1130,13 @@ struct AtAttnArgs {
     scale : float
 }
 
-// batched causal attention, flash-style Q tile: one wg per (head, 8-query tile), 32-position
-// shared K/V tiles (V reuses the K staging), per-row online softmax; lane c owns dims c + 32*jj
-[vk_dispatch(name = "at_attn_cls", grid = "wgs", params = "wgs : int64")]
-class AtAttn {
-    @ssbo @binding = 0 qpanel : array<float>   // the prepped q panel
-    @ssbo @binding = 1 kpanel : array<float>   // the prepped k panel
-    @ssbo @binding = 2 vpanel : array<float>   // the raw v rows
-    @ssbo @binding = 3 outp : array<float>     // attention out (gated models read the gate stash here)
-    @push_constant pa : AtAttnArgs
+// the flash Q-tile core (AtAttn and DaAttnB share it; the h128 coopmat twin does not): staged
+// K/V tiles at stride 257, per-row online softmax. Leaves bring their own out plane + push args,
+// so the methods take every varying scalar as a param (the shipped fa_* signatures)
+class AtAttnBase {
+    @ssbo @binding = 0 qpanel : array<float>   // the prepped/roped q rows
+    @ssbo @binding = 1 kpanel : array<float>   // the K plane (panel or mirror — kbase offsets)
+    @ssbo @binding = 2 vpanel : array<float>   // the V plane (raw rows or mirror — vbase offsets)
     @workgroup fq : float[2048]    // the tile's 8 q rows
     @workgroup fkv : float[8224]   // one 32-row K/V stage, stride 257 (bank-spread)
     @workgroup fp : float[256]     // the 8x32 score/probability tile
@@ -1147,12 +1145,12 @@ class AtAttn {
     @workgroup fal : float[8]
 
     // stage the 8-query tile and reset the online-softmax state
-    def load_q(q0, h : uint) {
+    def load_q(q0, nrows, qd, h, hs : uint) {
         let tid = gl_LocalInvocationID.x
         var i = tid
-        while (i < 8u * pa.hs) {
-            let qr = q0 + i / pa.hs
-            fq[i] = qr < pa.rows ? qpanel[qr * pa.qd + h * pa.hs + i % pa.hs] : 0.0
+        while (i < 8u * hs) {
+            let qr = q0 + i / hs
+            fq[i] = qr < nrows ? qpanel[qr * qd + h * hs + i % hs] : 0.0
             i += 256u
         }
         if (tid < 8u) {
@@ -1161,29 +1159,30 @@ class AtAttn {
         }
     }
 
-    // stage one 32-position K tile from kpanel at kbase (V reuse of this staging loads per-kernel)
-    def load_k(k0, kend, kbase, kvh : uint) {
+    // stage one 32-position K tile from kpanel at kbase (the V reuse of this staging loads
+    // per-kernel — the two leaves' V planes differ)
+    def load_k(k0, kend, kbase, kvd, kvh, hs : uint) {
         var i = gl_LocalInvocationID.x
-        while (i < 32u * pa.hs) {
-            let kr = k0 + i / pa.hs
-            fkv[(i / pa.hs) * 257u + i % pa.hs] = kr < kend ? kpanel[kbase + kr * pa.kvd + kvh * pa.hs + i % pa.hs] : 0.0
+        while (i < 32u * hs) {
+            let kr = k0 + i / hs
+            fkv[(i / hs) * 257u + i % hs] = kr < kend ? kpanel[kbase + kr * kvd + kvh * hs + i % hs] : 0.0
             i += 256u
         }
     }
 
     // tile QK^T: lane (r, c) scores query r against position k0+c, causal-masked into fp
-    def qk_score(r, c, k0, gq, q0 : uint) {
+    def qk_score(r, c, hs, k0, gq, q0, nrows : uint; scale : float) {
         var s = 0.0
         var j = 0u
-        while (j < pa.hs) {   // 4-wide manual unroll (hs % 32 == 0)
-            s += fq[r * pa.hs + j] * fkv[c * 257u + j]
-            s += fq[r * pa.hs + j + 1u] * fkv[c * 257u + j + 1u]
-            s += fq[r * pa.hs + j + 2u] * fkv[c * 257u + j + 2u]
-            s += fq[r * pa.hs + j + 3u] * fkv[c * 257u + j + 3u]
+        while (j < hs) {   // 4-wide manual unroll (hs % 32 == 0)
+            s += fq[r * hs + j] * fkv[c * 257u + j]
+            s += fq[r * hs + j + 1u] * fkv[c * 257u + j + 1u]
+            s += fq[r * hs + j + 2u] * fkv[c * 257u + j + 2u]
+            s += fq[r * hs + j + 3u] * fkv[c * 257u + j + 3u]
             j += 4u
         }
         let gk = k0 + c
-        fp[r * 32u + c] = (gk <= gq && q0 + r < pa.rows) ? s * pa.scale : -3.0e38
+        fp[r * 32u + c] = (gk <= gq && q0 + r < nrows) ? s * scale : -3.0e38
     }
 
     // per-row online-softmax update: max, rescale, exponentiate in place
@@ -1210,6 +1209,14 @@ class AtAttn {
             fal[tid] = alpha
         }
     }
+}
+
+// batched causal attention (prefill), flash-style Q tile: one wg per (head, 8-query tile);
+// lane c owns dims c + 32*jj. V = the raw v rows; the epilogue gates through the out plane
+[vk_dispatch(name = "at_attn_cls", grid = "wgs", params = "wgs : int64")]
+class AtAttn : AtAttnBase {
+    @ssbo @binding = 3 outp : array<float>   // attention out (gated models read the gate stash here)
+    @push_constant pa : AtAttnArgs
 
     [spirv_kernel(local_size_x = 256, name = "at_attn_cls_spv")]
     def run {   // nolint:STYLE037,STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
@@ -1220,7 +1227,7 @@ class AtAttn {
         let r = tid / 32u
         let c = tid % 32u
         let kvh = h / pa.kv_mul
-        load_q(q0, h)
+        load_q(q0, pa.rows, pa.qd, h, pa.hs)
         var o0 = 0.0
         var o1 = 0.0
         var o2 = 0.0
@@ -1235,9 +1242,9 @@ class AtAttn {
         var i = tid
         var k0 = 0u
         while (k0 < kend) {
-            load_k(k0, kend, 0u, kvh)
+            load_k(k0, kend, 0u, pa.kvd, kvh, pa.hs)
             barrier()
-            qk_score(r, c, k0, gq, q0)
+            qk_score(r, c, pa.hs, k0, gq, q0, pa.rows, pa.scale)
             barrier()
             softmax_update()
             barrier()
@@ -1291,6 +1298,116 @@ class AtAttn {
                     v = v / (1.0 + exp(-g))
                 }
                 outp[ob + jj * 32u] = v
+                jj++
+            }
+        }
+    }
+}
+
+struct DaAttnBArgs {
+    npos : uint     // window query rows
+    nh : uint
+    kvd : uint
+    hs : uint
+    kv_mul : uint
+    kbase : uint    // word offsets into the K / V mirror planes
+    vbase : uint
+    w0 : uint       // window base (queries attend mirror positions [0, w0 + row])
+    scale : float
+}
+
+// batched causal attention over the decode mirrors, flash-style Q tile: K/V read at kbase/vbase,
+// out = plain rows (no gating); dpl-guarded accumulators serve hs 32..256. Reduce order differs
+// from the row kernel so the parity bar there is IDS; vs the shipped da_attn_b it is bit-exact
+[vk_dispatch(name = "da_attn_b_cls", grid = "wgs", params = "wgs : int64")]
+class DaAttnB : AtAttnBase {
+    @ssbo @binding = 3 outp : array<float>   // attention out rows
+    @push_constant pa : DaAttnBArgs
+
+    [spirv_kernel(local_size_x = 256, name = "da_attn_b_cls_spv")]
+    def run {   // nolint:STYLE037,STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
+        let qd = pa.nh * pa.hs
+        let dpl = pa.hs / 32u
+        let qtiles = (pa.npos + 7u) / 8u
+        let h = gl_WorkGroupID.x / qtiles
+        let q0 = (gl_WorkGroupID.x % qtiles) * 8u
+        let tid = gl_LocalInvocationID.x
+        let r = tid / 32u
+        let c = tid % 32u
+        let kvh = h / pa.kv_mul
+        load_q(q0, pa.npos, qd, h, pa.hs)
+        var o0 = 0.0
+        var o1 = 0.0
+        var o2 = 0.0
+        var o3 = 0.0
+        var o4 = 0.0
+        var o5 = 0.0
+        var o6 = 0.0
+        var o7 = 0.0
+        barrier()
+        let gq = pa.w0 + q0 + r
+        let kend = pa.w0 + min(q0 + 8u, pa.npos)   // causal bound (exclusive) of the tile's last row
+        var i = tid
+        var k0 = 0u
+        while (k0 < kend) {
+            load_k(k0, kend, pa.kbase, pa.kvd, kvh, pa.hs)
+            barrier()
+            qk_score(r, c, pa.hs, k0, gq, q0, pa.npos, pa.scale)
+            barrier()
+            softmax_update()
+            barrier()
+            let av = fal[r]
+            o0 *= av
+            if (dpl > 1u) {
+                o1 *= av
+            }
+            if (dpl > 2u) {
+                o2 *= av
+                o3 *= av
+            }
+            if (dpl > 4u) {
+                o4 *= av
+                o5 *= av
+                o6 *= av
+                o7 *= av
+            }
+            i = tid
+            while (i < 32u * pa.hs) {   // V tile reuses the K staging (all K reads completed above)
+                let kr = k0 + i / pa.hs
+                fkv[(i / pa.hs) * 257u + i % pa.hs] = kr < kend ? vpanel[pa.vbase + kr * pa.kvd + kvh * pa.hs + i % pa.hs] : 0.0
+                i += 256u
+            }
+            barrier()
+            var c2 = 0u
+            while (c2 < 32u) {
+                let pw = fp[r * 32u + c2]
+                let vb = c2 * 257u + c
+                o0 += pw * fkv[vb]
+                if (dpl > 1u) {
+                    o1 += pw * fkv[vb + 32u]
+                }
+                if (dpl > 2u) {
+                    o2 += pw * fkv[vb + 64u]
+                    o3 += pw * fkv[vb + 96u]
+                }
+                if (dpl > 4u) {
+                    o4 += pw * fkv[vb + 128u]
+                    o5 += pw * fkv[vb + 160u]
+                    o6 += pw * fkv[vb + 192u]
+                    o7 += pw * fkv[vb + 224u]
+                }
+                c2++
+            }
+            barrier()
+            k0 += 32u
+        }
+        if (q0 + r < pa.npos) {
+            let inv = 1.0 / fl[r]
+            let ob = (q0 + r) * qd + h * pa.hs + c
+            var jj = 0u
+            while (jj < dpl) {
+                outp[ob + jj * 32u] = (jj == 0u ? o0 : (jj == 1u ? o1 : (jj == 2u ? o2 : (jj == 3u ? o3
+                    : (jj == 4u ? o4 : (jj == 5u ? o5 : (jj == 6u ? o6 : o7))))))) * inv
                 jj++
             }
         }
