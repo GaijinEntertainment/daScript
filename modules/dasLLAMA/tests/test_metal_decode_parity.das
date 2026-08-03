@@ -12,7 +12,7 @@ require ?das_metal dasllama/dasllama_metal_prefill  // the Metal-prefill→GPU-d
 require ?das_metal metal/das_metal_boost  // metal_live_object_count for the leak gate
 require llvm/daslib/f16_cvt  // f16 KV row decode in the tolerance gate (Apple half only)
 require daslib/jobque_boost
-require daslib/fio  // used only inside the Apple static_if half
+require daslib/fio   // nolint:STYLE030,LINT019 — path_join/stat, used only inside the das_metal static_if halves
 require math
 require strings
 require _model_tier
@@ -1115,7 +1115,7 @@ def private forced_maxd_pair(tr, trg : Model; prompt : array<int64>; nsteps : in
 
 // one GPU prefill on a throwaway session — the poison: prefill's PLAIN per-tensor region
 // uploads claim g_regions entries the decode drivers later look up as cat3 CONCATS
-def private foreign_gpu_prefill(tr, trg : Model) {
+def private foreign_gpu_prefill(tr, trg : Model) {   // nolint:LINT012,LINT019 — both read by the das_metal arm below
     static_if (typeinfo builtin_module_exists(das_metal)) {
         with_job_que() {
             setup_dasllama_jobque()
