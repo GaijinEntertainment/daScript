@@ -509,5 +509,45 @@ jobs:
         path: _site
 
     - name: "Deploy to GitHub Pages"
+      # master-only so a workflow_dispatch from a branch cannot touch the
+      # production Pages site. The job-level `github-pages` environment also
+      # scopes DASWEB_DEPLOY_KEY below (master-only branch policy), so testing
+      # the VPS leg from a branch needs that policy widened deliberately.
+      if: github.ref == 'refs/heads/master'
       id: deployment
       uses: actions/deploy-pages@v4
+
+    - name: "Deploy to daslang.io origin (VPS)"
+      # Mirror the exact _site snapshot onto the origin box (daslang.io is
+      # moving off GitHub Pages; both targets stay in sync until DNS flips).
+      # Release layout on the box: /srv/daslang.io/releases/<rNNN-sha>, with
+      # `current` an atomic symlink Caddy serves; --link-dest hard-links files
+      # unchanged since the previous release so a docs-only deploy costs ~MBs.
+      env:
+        DEPLOY_KEY: ${{ secrets.DASWEB_DEPLOY_KEY }}
+      run: |
+        set -euo pipefail
+        if [ -z "$DEPLOY_KEY" ]; then
+            echo "DASWEB_DEPLOY_KEY not set (fork?) - skipping VPS deploy"
+            exit 0
+        fi
+        mkdir -p ~/.ssh
+        printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/dasweb_deploy
+        chmod 600 ~/.ssh/dasweb_deploy
+        # Pinned host key - no trust-on-first-use from CI.
+        echo '89.167.63.131 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILP2wzOeEGD2r7apldQlTe2gwR1dVTCXCfrD+pJooMmY' >> ~/.ssh/known_hosts
+        RSH="ssh -i $HOME/.ssh/dasweb_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes"
+        REL="r${{ github.run_number }}-$(echo "$GITHUB_SHA" | cut -c1-8)"
+        # Hard-link against the previous release when there is one. rsync only
+        # warns on a missing --link-dest, but skipping it keeps the log honest
+        # on a fresh/rebuilt box.
+        LINK=""
+        if $RSH deploy@89.167.63.131 "test -d /srv/daslang.io/current/"; then
+            LINK="--link-dest=/srv/daslang.io/current/"
+        fi
+        rsync -az --delete $LINK \
+            -e "$RSH" _site/ "deploy@89.167.63.131:/srv/daslang.io/releases/$REL/"
+        # Atomic flip, then prune to the 5 newest releases.
+        $RSH deploy@89.167.63.131 "ln -sfn /srv/daslang.io/releases/$REL /srv/daslang.io/current \
+            && cd /srv/daslang.io/releases && ls -1t | tail -n +6 | xargs -r rm -rf"
+        echo "deployed $REL"
