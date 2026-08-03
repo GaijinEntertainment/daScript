@@ -281,6 +281,137 @@ class MoeCombine {
     }
 }
 
+// ===== the Q8_0 batch GEMM tile (the sdot4 prefill workhorse) =====
+
+struct BatchArgs {
+    n : uint         // reduction dim
+    d : uint         // output cols
+    map_off : uint   // the per-wg map's word offset in sched (region records sit at 0)
+}
+
+// 32x32 tiles through shared so weight rows stream once per 32 rows; K advances 8 blocks per
+// barrier pair. sched = 4-word region records [wblk0, row0, cnt, wg0] then the wg -> region map.
+[vk_dispatch(name = "q8_batch_cls", grid = "wgs", params = "wgs : int64")]
+class Q8Batch {
+    @ssbo @binding = 0 wq : array<uint>        // weight quant words
+    @ssbo @binding = 1 wsh : array<float16>    // per-block weight scales
+    @ssbo @binding = 2 sched : array<uint>     // region records + per-wg map (bulk schedule data)
+    @ssbo @binding = 3 xqw : array<uint>       // activation quant words
+    @ssbo @binding = 4 axs : array<float>      // per-block activation scales
+    @ssbo @binding = 5 y : array<float>
+    @push_constant pa : BatchArgs
+    @workgroup xw4 : uint4[544]   // x tile: 32 rows x 16 uint4 chunks, stride 17 (bank-spread)
+    @workgroup ww4 : uint4[544]   // w tile: 32 cols x 16 chunks, stride 17
+    @workgroup xsw : float[256]   // x scales per (block, row)
+    @workgroup wsw : float[256]   // w scales per (block, col)
+
+    // this workgroup's region record: x = weight base, y = activation row base, z = row count,
+    // w = the wg's tile index rebased to the region
+    def region_rec : uint4 {
+        let rid = sched[pa.map_off + gl_WorkGroupID.x]
+        let rb = rid * 4u
+        return uint4(sched[rb], sched[rb + 1u], sched[rb + 2u], gl_WorkGroupID.x - sched[rb + 3u])
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "q8_batch_cls_spv")]
+    def run {   // nolint:STYLE038 — the verbatim tile pass (stage/reduce/store), parity-locked to the shipped kernel
+        let reg = region_rec()
+        let wblk0 = reg.x
+        let row0 = reg.y
+        let cnt = reg.z
+        let tix = reg.w
+        let wtiles = (pa.d + 31u) / 32u
+        let xt = tix / wtiles
+        let wt = tix % wtiles
+        let nbb = pa.n / 32u
+        let nsteps = (nbb + 7u) / 8u   // q8 K need not be superblock-aligned
+        let tid = gl_LocalInvocationID.x
+        let word = tid % 8u
+        let grp = tid / 8u             // 0..31: the x row AND w col this thread stages
+        let xrow = xt * 32u + grp
+        let wcol = wt * 32u + grp
+        let slane = tid % 32u
+        let sblk = tid / 32u
+        var f0 = 0.0
+        var f1 = 0.0
+        var f2 = 0.0
+        var f3 = 0.0
+        var s = 0u
+        while (s < nsteps) {
+            let b0 = s * 8u
+            for (ki in range(2)) {     // this thread stages v4 chunks word and word+8 of its row/col
+                let k = word + uint(ki) * 8u
+                let bu = k / 2u
+                let h = (k % 2u) * 4u
+                var xv = uint4(0u)
+                if (xrow < cnt && b0 + bu < nbb) {
+                    let xb4 = ((row0 + xrow) * nbb + b0 + bu) * 8u + h
+                    xv = uint4(xqw[xb4], xqw[xb4 + 1u], xqw[xb4 + 2u], xqw[xb4 + 3u])
+                }
+                xw4[grp * 17u + k] = xv
+                var wv = uint4(0u)
+                if (wcol < pa.d && b0 + bu < nbb) {
+                    let wb4 = (wblk0 + wcol * nbb + b0 + bu) * 8u + h
+                    wv = uint4(wq[wb4], wq[wb4 + 1u], wq[wb4 + 2u], wq[wb4 + 3u])
+                }
+                ww4[grp * 17u + k] = wv
+            }
+            var xs = 0.0
+            if (xt * 32u + slane < cnt && b0 + sblk < nbb) {
+                xs = axs[(row0 + xt * 32u + slane) * nbb + b0 + sblk]
+            }
+            xsw[sblk * 32u + slane] = xs
+            var ws = 0.0
+            if (wt * 32u + slane < pa.d && b0 + sblk < nbb) {
+                ws = float(wsh[wblk0 + (wt * 32u + slane) * nbb + b0 + sblk])
+            }
+            wsw[sblk * 32u + slane] = ws
+            barrier()
+            for (bb in range(8)) {     // zero-filled tail blocks contribute 0 (ws = xs = 0)
+                let bu = uint(bb)
+                var i0 = 0
+                var i1 = 0
+                var i2 = 0
+                var i3 = 0
+                for (kk in range(2)) {
+                    let k = bu * 2u + uint(kk)
+                    let xw = xw4[grp * 17u + k]
+                    let wv0 = ww4[word * 17u + k]
+                    let wv1 = ww4[(word + 8u) * 17u + k]
+                    let wv2 = ww4[(word + 16u) * 17u + k]
+                    let wv3 = ww4[(word + 24u) * 17u + k]
+                    i0 += sdot4(wv0.x, xw.x) + sdot4(wv0.y, xw.y) + sdot4(wv0.z, xw.z) + sdot4(wv0.w, xw.w)
+                    i1 += sdot4(wv1.x, xw.x) + sdot4(wv1.y, xw.y) + sdot4(wv1.z, xw.z) + sdot4(wv1.w, xw.w)
+                    i2 += sdot4(wv2.x, xw.x) + sdot4(wv2.y, xw.y) + sdot4(wv2.z, xw.z) + sdot4(wv2.w, xw.w)
+                    i3 += sdot4(wv3.x, xw.x) + sdot4(wv3.y, xw.y) + sdot4(wv3.z, xw.z) + sdot4(wv3.w, xw.w)
+                }
+                let xscl = xsw[bu * 32u + grp]
+                f0 += float(i0) * wsw[bu * 32u + word] * xscl
+                f1 += float(i1) * wsw[bu * 32u + word + 8u] * xscl
+                f2 += float(i2) * wsw[bu * 32u + word + 16u] * xscl
+                f3 += float(i3) * wsw[bu * 32u + word + 24u] * xscl
+            }
+            barrier()
+            s++
+        }
+        if (xrow < cnt) {
+            let yb = (row0 + xrow) * pa.d + wt * 32u + word
+            if (wt * 32u + word < pa.d) {
+                y[yb] = f0
+            }
+            if (wt * 32u + word + 8u < pa.d) {
+                y[yb + 8u] = f1
+            }
+            if (wt * 32u + word + 16u < pa.d) {
+                y[yb + 16u] = f2
+            }
+            if (wt * 32u + word + 24u < pa.d) {
+                y[yb + 24u] = f3
+            }
+        }
+    }
+}
+
 // ===== rope + KV store + qk-norm =====
 
 // the workgroup-rms machinery the head-row kernels share (one wg reduces one row)
