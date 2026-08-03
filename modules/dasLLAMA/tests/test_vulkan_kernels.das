@@ -2647,3 +2647,297 @@ def test_vkd_cvt_family(t0 : T?) {
         }
     }
 }
+
+[test]
+def test_vkd_rope_b_pair(t0 : T?) {
+    t0 |> run("batch rope + fused qkn-rope class twins == the shipped kernels (bit-exact)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!(ensure_rope_kv_b_cls() && ensure_qkn_rope_cls())) {
+                feint("no Vulkan device — skipping\n")
+                return
+            }
+            let nh = 4
+            let nkvh = 2
+            let hs = 64
+            let half = hs / 2
+            let qd = nh * hs
+            let kvd = nkvh * hs
+            // --- rope_kv_store_b: npos positions, q in place, k roped + v raw into the mirrors ---
+            {
+                let neox = 1
+                let npos = 5
+                let pos0 = 7
+                let layerbase = 256
+                let voff = npos * kvd   // v rows base inside the kv projection buffer
+                let ppp = (nh + nkvh) * half
+                let kpair0 = nh * half
+                let mirn = layerbase + (pos0 + npos) * kvd
+                var q0h : array<float>
+                var kvh : array<float>
+                var csh : array<float>
+                q0h |> resize(npos * qd)
+                kvh |> resize(voff + npos * kvd)
+                csh |> resize(npos * hs)
+                for (i in range(npos * qd)) {
+                    q0h[i] = float((i * 31) % 67) * 0.05 - 1.6
+                }
+                for (i in range(voff + npos * kvd)) {
+                    kvh[i] = float((i * 23) % 71) * 0.04 - 1.5
+                }
+                for (i in range(npos * hs)) {
+                    csh[i] = float((i * 13) % 41) * 0.045 - 0.9
+                }
+                let q_bytes = int64(npos * qd) * 4l
+                let kv_bytes = int64(voff + npos * kvd) * 4l
+                let cs_bytes = int64(npos * hs) * 4l
+                let m_bytes = int64(mirn) * 4l
+                let qd1 = make_device_buf(q_bytes)
+                let qd2 = make_device_buf(q_bytes)
+                let kvdv = make_device_buf(kv_bytes)
+                let csd = make_device_buf(cs_bytes)
+                let km1 = make_device_buf(m_bytes)
+                let vm1 = make_device_buf(m_bytes)
+                let km2 = make_device_buf(m_bytes)
+                let vm2 = make_device_buf(m_bytes)
+                var meta = make_host_buf(META_BYTES, false, [cached = false])
+                var host = make_host_buf(q_bytes + 2l * m_bytes, true, [cached = true])
+                var q_old : array<float>
+                var q_cls : array<float>
+                var m_old : array<float>
+                var m_cls : array<float>
+                q_old |> resize(npos * qd)
+                q_cls |> resize(npos * qd)
+                m_old |> resize(2 * mirn)
+                m_cls |> resize(2 * mirn)
+                let wgs = (npos * ppp + 255) / 256
+                unsafe {
+                    upload_region_at(kvdv, 0l, addr<uint8 const?>(kvh[0]), kv_bytes)
+                    upload_region_at(csd, 0l, addr<uint8 const?>(csh[0]), cs_bytes)
+                    var mp = reinterpret<uint?>(meta.mapped)
+                    mp[0] = uint(qd)
+                    mp[1] = uint(kvd)
+                    mp[2] = uint(hs)
+                    mp[3] = uint(half)
+                    mp[4] = uint(neox)
+                    mp[5] = uint(kpair0)
+                    mp[6] = uint(ppp)
+                    mp[7] = uint(layerbase)
+                    mp[9] = uint(npos)
+                    mp[10] = uint(pos0)
+                    mp[11] = uint(voff)
+                    for (side in range(2)) {   // 0 = shipped, 1 = class (fresh q plane each)
+                        let qdev = side == 0 ? qd1 : qd2
+                        let kmd = side == 0 ? km1 : km2
+                        let vmd = side == 0 ? vm1 : vm2
+                        upload_region_at(qdev, 0l, addr<uint8 const?>(q0h[0]), q_bytes)
+                        var raw = alloc_cmd()
+                        let begin = VkCommandBufferBeginInfo()
+                        vk_check(vkBeginCommandBuffer(raw, begin), null)
+                        var h : VkHaz
+                        if (side == 0) {
+                            // the SHIPPED kernel: q@0, Kmir@1, meta@2, Vmir@3, cos@4, kv proj@5
+                            var so = vk_set6(qdev, kmd, meta.buf, vmd, csd, kvdv,
+                                q_bytes, m_bytes, META_BYTES, m_bytes, cs_bytes, kv_bytes,
+                                fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                            hz_dispatch(raw, h, weak_copy(g_gpu.rks_b_pipeline), so, uint(wgs))
+                        } else {
+                            var sc = set_rope_kv_b_cls(fixed_array(qdev, kvdv, kmd, vmd, csd),
+                                fixed_array(q_bytes, kv_bytes, m_bytes, m_bytes, cs_bytes),
+                                fixed_array(1u, 16u, 2u, 4u, 8u))
+                            var pc = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs),
+                                half = uint(half), neox = uint(neox), kpair0 = uint(kpair0),
+                                ppp = uint(ppp), layerbase = uint(layerbase), npos = uint(npos),
+                                pos0 = uint(pos0), voff = uint(voff))
+                            enc_rope_kv_b_cls(raw, h, sc, pc, int64(wgs))
+                        }
+                        vhz_dep(raw, h, 8u, 0u, true)
+                        cmd_copy_whole(raw, qdev, host.buf, q_bytes)
+                        cmd_copy_range(raw, kmd, 0l, host.buf, q_bytes, m_bytes)
+                        cmd_copy_range(raw, vmd, 0l, host.buf, q_bytes + m_bytes, m_bytes)
+                        vk_check(vkEndCommandBuffer(raw), null)
+                        submit_wait(raw)
+                        if (side == 0) {
+                            memcpy(addr<void?>(q_old[0]), host.mapped, q_bytes)
+                            memcpy(addr<void?>(m_old[0]), reinterpret<void?>(intptr(host.mapped) + uint64(q_bytes)), 2l * m_bytes)
+                        } else {
+                            memcpy(addr<void?>(q_cls[0]), host.mapped, q_bytes)
+                            memcpy(addr<void?>(m_cls[0]), reinterpret<void?>(intptr(host.mapped) + uint64(q_bytes)), 2l * m_bytes)
+                        }
+                    }
+                }
+                var bad = 0
+                for (i in range(npos * qd)) {
+                    if (q_old[i] != q_cls[i]) {
+                        bad++
+                    }
+                }
+                // mirrors: only the written region [layerbase + pos0*kvd, layerbase + (pos0+npos)*kvd)
+                let w0 = layerbase + pos0 * kvd
+                for (i in range(npos * kvd)) {
+                    if (m_old[w0 + i] != m_cls[w0 + i]) {
+                        bad++
+                    }
+                    if (m_old[mirn + w0 + i] != m_cls[mirn + w0 + i]) {
+                        bad++
+                    }
+                }
+                t |> success(bad == 0, "rope_kv_store_b: class twin bit-exact ({bad} diverge)")
+                delete q0h
+                delete kvh
+                delete csh
+                delete q_old
+                delete q_cls
+                delete m_old
+                delete m_cls
+            }
+            // --- qkn_rope_kv: qk-rms + rope + kv-store in one dispatch, one wg per head-row ---
+            {
+                let neox = 1
+                let krow = 192
+                let vrow = 320
+                let eps = 0.00001
+                let mirn2 = vrow + nkvh * hs
+                var q0h : array<float>
+                var kvh : array<float>
+                var csh : array<float>
+                var wnh : array<float>
+                q0h |> resize(qd)
+                kvh |> resize(qd + 2 * kvd)
+                csh |> resize(hs)
+                wnh |> resize(2 * hs)
+                for (i in range(qd)) {
+                    q0h[i] = float((i * 31) % 67) * 0.05 - 1.6
+                }
+                for (i in range(qd + 2 * kvd)) {
+                    kvh[i] = float((i * 23) % 71) * 0.04 - 1.5
+                }
+                for (i in range(hs)) {
+                    csh[i] = float((i * 13) % 41) * 0.045 - 0.9
+                }
+                for (i in range(2 * hs)) {
+                    wnh[i] = 0.75 + float(i % 11) * 0.05
+                }
+                let q_bytes = int64(qd) * 4l
+                let kv_bytes = int64(qd + 2 * kvd) * 4l
+                let cs_bytes = int64(hs) * 4l
+                let wn_bytes = int64(2 * hs) * 4l
+                let m_bytes = int64(mirn2) * 4l
+                // the shipped kernel's xs plane: cos+sin, then the two weight rows, then eps
+                var xsh : array<float>
+                xsh |> resize(3 * hs + 1)
+                for (i in range(hs)) {
+                    xsh[i] = csh[i]
+                }
+                for (i in range(2 * hs)) {
+                    xsh[hs + i] = wnh[i]
+                }
+                xsh[3 * hs] = eps
+                let xs_bytes = int64(3 * hs + 1) * 4l
+                let qd1 = make_device_buf(q_bytes)
+                let qd2 = make_device_buf(q_bytes)
+                let kvdv = make_device_buf(kv_bytes)
+                let csd = make_device_buf(cs_bytes)
+                let wnd = make_device_buf(wn_bytes)
+                let xsd = make_device_buf(xs_bytes)
+                let km1 = make_device_buf(m_bytes)
+                let vm1 = make_device_buf(m_bytes)
+                let km2 = make_device_buf(m_bytes)
+                let vm2 = make_device_buf(m_bytes)
+                var meta = make_host_buf(META_BYTES, false, [cached = false])
+                var host = make_host_buf(q_bytes + 2l * m_bytes, true, [cached = true])
+                var q_old : array<float>
+                var q_cls : array<float>
+                var m_old : array<float>
+                var m_cls : array<float>
+                q_old |> resize(qd)
+                q_cls |> resize(qd)
+                m_old |> resize(2 * mirn2)
+                m_cls |> resize(2 * mirn2)
+                let wgs = nh + nkvh
+                unsafe {
+                    upload_region_at(kvdv, 0l, addr<uint8 const?>(kvh[0]), kv_bytes)
+                    upload_region_at(csd, 0l, addr<uint8 const?>(csh[0]), cs_bytes)
+                    upload_region_at(wnd, 0l, addr<uint8 const?>(wnh[0]), wn_bytes)
+                    upload_region_at(xsd, 0l, addr<uint8 const?>(xsh[0]), xs_bytes)
+                    var mp = reinterpret<uint?>(meta.mapped)
+                    mp[0] = uint(qd)
+                    mp[1] = uint(kvd)
+                    mp[2] = uint(hs)
+                    mp[3] = uint(half)
+                    mp[4] = uint(neox)
+                    mp[5] = uint(nh)
+                    mp[7] = uint(krow)
+                    mp[8] = uint(vrow)
+                    mp[9] = uint(hs)
+                    mp[10] = uint(2 * hs)
+                    mp[11] = uint(3 * hs)
+                    for (side in range(2)) {
+                        let qdev = side == 0 ? qd1 : qd2
+                        let kmd = side == 0 ? km1 : km2
+                        let vmd = side == 0 ? vm1 : vm2
+                        upload_region_at(qdev, 0l, addr<uint8 const?>(q0h[0]), q_bytes)
+                        var raw = alloc_cmd()
+                        let begin = VkCommandBufferBeginInfo()
+                        vk_check(vkBeginCommandBuffer(raw, begin), null)
+                        var h : VkHaz
+                        if (side == 0) {
+                            // the SHIPPED kernel: kv proj@0, Kmir@1, meta@2, Vmir@3, cos+rms+eps@4, q@5
+                            var so = vk_set6(kvdv, kmd, meta.buf, vmd, xsd, qdev,
+                                kv_bytes, m_bytes, META_BYTES, m_bytes, xs_bytes, q_bytes,
+                                fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                            hz_dispatch(raw, h, weak_copy(g_gpu.qkn_rope_pipeline), so, uint(wgs))
+                        } else {
+                            var sc = set_qkn_rope_cls(fixed_array(qdev, kvdv, kmd, vmd, csd, wnd),
+                                fixed_array(q_bytes, kv_bytes, m_bytes, m_bytes, cs_bytes, wn_bytes),
+                                fixed_array(16u, 1u, 2u, 4u, 8u, 8u))
+                            var pc = QknRopeArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs),
+                                half = uint(half), neox = uint(neox), nh = uint(nh),
+                                krow = uint(krow), vrow = uint(vrow), qwoff = 0u,
+                                kwoff = uint(hs), eps = eps)
+                            enc_qkn_rope_cls(raw, h, sc, pc, int64(wgs))
+                        }
+                        vhz_dep(raw, h, 8u, 0u, true)
+                        cmd_copy_whole(raw, qdev, host.buf, q_bytes)
+                        cmd_copy_range(raw, kmd, 0l, host.buf, q_bytes, m_bytes)
+                        cmd_copy_range(raw, vmd, 0l, host.buf, q_bytes + m_bytes, m_bytes)
+                        vk_check(vkEndCommandBuffer(raw), null)
+                        submit_wait(raw)
+                        if (side == 0) {
+                            memcpy(addr<void?>(q_old[0]), host.mapped, q_bytes)
+                            memcpy(addr<void?>(m_old[0]), reinterpret<void?>(intptr(host.mapped) + uint64(q_bytes)), 2l * m_bytes)
+                        } else {
+                            memcpy(addr<void?>(q_cls[0]), host.mapped, q_bytes)
+                            memcpy(addr<void?>(m_cls[0]), reinterpret<void?>(intptr(host.mapped) + uint64(q_bytes)), 2l * m_bytes)
+                        }
+                    }
+                }
+                var bad = 0
+                for (i in range(qd)) {
+                    if (q_old[i] != q_cls[i]) {
+                        bad++
+                    }
+                }
+                for (i in range(nkvh * hs)) {
+                    if (m_old[krow + i] != m_cls[krow + i]) {
+                        bad++
+                    }
+                    if (m_old[mirn2 + vrow + i] != m_cls[mirn2 + vrow + i]) {
+                        bad++
+                    }
+                }
+                t |> success(bad == 0, "qkn_rope_kv: class twin bit-exact ({bad} diverge)")
+                delete q0h
+                delete kvh
+                delete csh
+                delete wnh
+                delete xsh
+                delete q_old
+                delete q_cls
+                delete m_old
+                delete m_cls
+            }
+        } else {
+            feint("dasVulkan not present — skipping\n")
+        }
+    }
+}
