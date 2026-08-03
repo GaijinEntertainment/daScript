@@ -80,6 +80,42 @@ class KmKern {
     }
 }
 
+class KBase {
+    @ssbo @binding = 0 bxs : array<float>
+
+    def gain : float {
+        return 2.0
+    }
+
+    def bias : float {
+        return 1.0
+    }
+}
+
+class KDeriv : KBase {
+    @ssbo @binding = 1 bys : array<float>
+
+    def override gain : float {
+        return 3.0
+    }
+
+    [spirv_kernel(local_size_x=64, name="kd_spv")]
+    def kd {
+        let i = gl_GlobalInvocationID.x
+        bys[i] = bxs[i] * gain() + bias()
+    }
+}
+
+def private has_const_bits(words : array<uint>; bits : uint) : bool {
+    var found = false
+    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
+        if (opcode == uint(SpvOp.Constant) && n >= 3 && w[s + 2] == bits) {
+            found = true
+        }
+    }
+    return found
+}
+
 def private opcode_counts(words : array<uint>) : table<uint; int> {
     var counts : table<uint; int>
     foreach_inst(words) $(opcode : uint; _w : array<uint>; _s, _n : int) {
@@ -130,6 +166,17 @@ def test_kernel_class_methods(t : T?) {
     t |> run("class kernel: method calls devirtualize to self-dropped OpFunctionCalls") <| @(t : T?) {
         t |> equal(count_op(km_spv, SpvOp.Function), 3)       // main + scale + gain
         t |> equal(count_op(km_spv, SpvOp.FunctionCall), 2)   // km -> scale -> gain
+    }
+}
+
+[test]
+def test_kernel_class_inheritance(t : T?) {
+    t |> run("class kernel: base members inherit, overrides devirtualize to the derived body") <| @(t : T?) {
+        t |> equal(count_op(kd_spv, SpvOp.Function), 3)   // main + gain (override) + bias (base)
+        t |> success(op_has_operand_pair(kd_spv, SpvOp.Decorate, uint(SpvDecoration.Binding), 0u), "base member Binding = 0")
+        t |> success(op_has_operand_pair(kd_spv, SpvOp.Decorate, uint(SpvDecoration.Binding), 1u), "derived member Binding = 1")
+        t |> success(has_const_bits(kd_spv, 0x40400000), "the OVERRIDE's 3.0 is emitted")
+        t |> success(!has_const_bits(kd_spv, 0x40000000), "the base gain's 2.0 is NOT emitted")
     }
 }
 

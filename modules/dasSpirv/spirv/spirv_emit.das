@@ -6232,6 +6232,11 @@ class SpirvEmit : AstVisitor {
         errs |> push("null coalescing (??) is not supported in SPIR-V shaders")
     }
     def override preVisitExprCast(expr : ExprCast?) : void {
+        // a self-method invoke's receiver may arrive upcast to the base class — structural, consumed
+        // by the invoke arm
+        if (key_exists(ctx.invoke_fields, intptr(expr))) {
+            return
+        }
         errs |> push("cast is not supported in SPIR-V shaders")
     }
     def override preVisitExprPtr2Ref(expr : ExprPtr2Ref?) : void {
@@ -6719,11 +6724,22 @@ class private SpirvMethodScan : AstVisitor {
         delete lerr
         if (mfn == null) return
         ctx.invoke_targets |> insert(intptr(expr), intptr(mfn))
-        // suppress the structural operands: the method-field read, its possible Ref2Value wrapper,
-        // and the receiver's wrapper — the invoke arm consumes them without producing values
+        // suppress the structural operands: the method-field read + its wrapper, and the WHOLE
+        // receiver chain (a base-class method's receiver arrives upcast: Ref2Value/Cast wrappers
+        // down to self) — the invoke arm consumes them without producing values
         ctx.invoke_fields |> insert(intptr(fld))
         ctx.invoke_fields |> insert(intptr(expr.arguments[0]))
-        ctx.invoke_fields |> insert(intptr(expr.arguments[1]))
+        var rc = expr.arguments[1]
+        while (rc != null) {
+            ctx.invoke_fields |> insert(intptr(rc))
+            if (rc is ExprRef2Value) {
+                rc = (rc as ExprRef2Value).subexpr
+            } elif (rc is ExprCast) {
+                rc = (rc as ExprCast).subexpr
+            } else {
+                break
+            }
+        }
         found |> push(mfn)
     }
 }
