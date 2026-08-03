@@ -186,6 +186,35 @@ def private sweep_cover(var spans : array<BlockLineSpan>;
     }
 }
 
+def private covered_line_after_node(doc : RichDocument const;
+                                    line_starts : array<int> const;
+                                    line_count, node : int) : int {
+    // coverage, not source ranges: those exclude a closing fence line
+    return -1 if (doc.root < 0 || line_count <= 0)
+    var inscope tops : array<BlockLineSpan>
+    child_line_spans(doc, doc.source, line_starts, doc.root,
+        0, line_count - 1, tops)
+    sweep_cover(tops, 0, line_count - 1)
+    for (span in tops) {
+        if (span.node == node) return span.last
+    }
+    return -1
+}
+
+def public markdown_hybrid_gap_line(doc : RichDocument const;
+                                    view : MarkdownViewState const;
+                                    screen_y : float) : int {
+    //! Map a click in the spacing gap between rendered blocks to the
+    //! separator line after the block above `screen_y` (-1 = nothing above).
+    //! Coverage-based, so a closing fence stays inside its block.
+    let above = markdown_view_node_above(doc, view, screen_y)
+    return -1 if (above < 0)
+    var inscope line_starts : array<int>
+    markdown_hybrid_line_starts(doc.source, line_starts)
+    return covered_line_after_node(doc, line_starts,
+        length(line_starts), above)
+}
+
 def private descend_block(doc : RichDocument const; source : string;
                           line_starts : array<int> const;
                           node, cover_first, cover_last, caret_line : int) : int3 {
@@ -317,7 +346,8 @@ def private hybrid_draw_island(var ed : TextEditState;
                                var edit_style : TextSourceViewStyle;
                                var registry : CommandRegistry;
                                seg : HybridSegment;
-                               delta : int; line_height, view_height : float;
+                               delta : int;
+                               line_height, view_height, view_top : float;
                                var result : HybridEditResult) : float {
     // returns the island child's screen top (caret-follow anchor)
     let line_last = min(seg.line_last + delta, length(ed.lines) - 1)
@@ -333,10 +363,14 @@ def private hybrid_draw_island(var ed : TextEditState;
             line_last = line_last, primary = true, advance_clocks = true,
             owns_scroll = false,
             follow_x = ed.follow_revision != ed.followed_revision,
-            dead_area = false, register_alias = true,
-            view_height = view_height)
+            dead_area = true, defocus_outside = false, register_alias = true,
+            view_height = view_height, view_top = view_top)
         result.edit = text_source_edit_segment("editor", ed, edit_style,
             registry, spec)
+    } else {
+        // the island scrolled out of the pane: keys stay alive
+        text_edit_drive_clipped(ed, registry, "editor", view_height,
+            line_height, edit_style.write_system_clipboard)
     }
     EndChild()
     PopStyleVar()
@@ -381,19 +415,20 @@ def public markdown_hybrid_edit(id : string; var ed : TextEditState; // nolint:S
             markdown_view_block_before(doc, seg.top_node, seg.exclude_node,
                 view, md_style, result.view)
             island_top = hybrid_draw_island(ed, edit_style, registry, seg,
-                delta, line_height, view_height, result)
+                delta, line_height, view_height, view_top, result)
             island_first = seg.line_first
             markdown_view_block_after(doc, seg.top_node, seg.exclude_node,
                 view, md_style, result.view)
         } else {
             // whole-buffer source segment (empty/unstructured document)
             island_top = hybrid_draw_island(ed, edit_style, registry, seg,
-                delta, line_height, view_height, result)
+                delta, line_height, view_height, view_top, result)
             island_first = seg.line_first
         }
         seg.screen_y1 = GetCursorScreenPos().y
     }
     markdown_view_end(doc, view, md_style, result.view)
+    var click_routed = false
     if (view.selection_revision != selection_before
             && view.selection_focus.valid
             && view.selection_focus.source_byte >= 0) {
@@ -403,20 +438,58 @@ def public markdown_hybrid_edit(id : string; var ed : TextEditState; // nolint:S
         text_edit_set_cursor(ed, target.x, target.y)
         markdown_view_clear_selection(view)
         hybrid.rich_click_revision++
+        click_routed = true
         if (ed.revision != hybrid.seg_edit_revision) {
             result.reparse_needed = true
+        }
+    }
+    if (!click_routed && IsMouseClicked(ImGuiMouseButton.Left, false)
+            && IsWindowHovered(ImGuiHoveredFlags.None)) {
+        // a click in the SPACING GAP between blocks lands the caret on the
+        // separator line under the block above it (the "between paragraphs"
+        // insert point); below the last block it lands at the buffer end
+        let above = markdown_view_node_above(doc, view, GetMousePos().y)
+        {
+            var line = -1
+            if (above >= 0) {
+                line = covered_line_after_node(doc, hybrid.line_starts,
+                    hybrid.seg_line_count, above)
+            } elif (hybrid.source_segment >= 0
+                    && hybrid.source_segment < length(hybrid.segments)
+                    && GetMousePos().y
+                        >= hybrid.segments[hybrid.source_segment].screen_y0) {
+                // the island's node is not rendered rich, so it never shows
+                // up as "the block above" - unclaimed clicks in its band's
+                // padding land on its last covered line
+                line = hybrid.segments[hybrid.source_segment].line_last
+            }
+            if (line >= 0) {
+                if (hybrid.source_segment >= 0
+                        && line >= hybrid.segments[hybrid.source_segment].line_last) {
+                    line += delta
+                }
+                let row = clamp(line, 0, length(ed.lines) - 1)
+                text_edit_set_cursor(ed, row, length(ed.lines[row]))
+                hybrid.rich_click_revision++
+                if (ed.revision != hybrid.seg_edit_revision) {
+                    result.reparse_needed = true
+                }
+            }
         }
     }
     if (ed.follow_revision != ed.followed_revision) {
         let caret_inside = (ed.cursor_line >= island_first
             && ed.cursor_line - island_first < hybrid.seg_line_count + delta)
         if (caret_inside) {
+            // reveal-only, like the classic editor: a caret already visible
+            // never scrolls (a click on a visible row must not move the view)
             let caret_y = (island_top
                 + float(ed.cursor_line - island_first) * line_height)
-            if (caret_y < view_top + view_height * 0.10f
-                    || caret_y + line_height > view_top + view_height * 0.90f) {
-                SetScrollY(max(GetScrollY() + caret_y
-                    - (view_top + view_height * 0.35f), 0.0f))
+            if (caret_y < view_top) {
+                SetScrollY(max(GetScrollY() + caret_y - view_top, 0.0f))
+            } elif (caret_y + line_height > view_top + view_height) {
+                SetScrollY(max(GetScrollY() + caret_y + line_height
+                    - (view_top + view_height), 0.0f))
             }
             ed.followed_revision = ed.follow_revision
         }

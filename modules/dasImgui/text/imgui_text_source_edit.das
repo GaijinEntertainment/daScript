@@ -173,6 +173,13 @@ struct public TextEditState {
     //! Press inside the selection = a possible drag-and-drop of it.
     drag_move_pending : bool = false
     drag_move_active : bool = false
+    //! Segment (by line_first) that started the live drag - other segments
+    //! sharing this state must not continue or finish it.
+    drag_owner_first : int = -1
+    //! A sibling segment's item held keyboard focus (this/last frame) - the
+    //! primary's FocusItem reclaim must not steal it (nav would yank scroll).
+    sibling_focus_now : bool = false
+    sibling_focus_prev : bool = false
     //! Inline color embed: picker session over a 0xRRGGBB / 0xAARRGGBB
     //! literal; color_undo_mark makes the write-backs roll into ONE unit.
     color_open : bool = false
@@ -2722,6 +2729,7 @@ struct private EditMetrics {
     origin : float2 // screen top-left of line_first's row
     extent : float2
     view_height : float = 0.0f
+    view_top : float = 0.0f // screen y of the scrolling viewport's top
     line_first : int = 0
     line_last : int = 0 // inclusive
 }
@@ -2738,7 +2746,8 @@ def private compute_edit_metrics(ed : TextEditState const;
                                  style : TextSourceViewStyle const;
                                  var font : ImFont?;
                                  line_first : int = 0; line_last : int = -1;
-                                 view_height_override : float = -1.0f) : EditMetrics {
+                                 view_height_override : float = -1.0f;
+                                 view_top_override : float = -1.0f) : EditMetrics {
     let zoom = clamp(style.zoom, 0.5f, 3.0f)
     let font_size = (style.fonts.size_px > 0.0f
         ? style.fonts.size_px : GetFontSize()) * zoom
@@ -2764,6 +2773,8 @@ def private compute_edit_metrics(ed : TextEditState const;
         extent = float2(gutter_space + text_width, float(row_count) * line_height),
         view_height = (view_height_override >= 0.0f
             ? view_height_override : GetWindowHeight()),
+        view_top = (view_top_override >= 0.0f
+            ? view_top_override : GetWindowPos().y),
         line_first = seg_first, line_last = seg_last)
 }
 
@@ -2866,15 +2877,18 @@ def private handle_edit_click(var ed : TextEditState; hit : int2;
 
 def private handle_edit_mouse(var ed : TextEditState; m : EditMetrics;
                               style : TextSourceViewStyle const;
-                              hovered, window_hovered, dead_area : bool;
+                              hovered, window_hovered : bool;
+                              dead_area, defocus_outside : bool;
                               var font : ImFont?) {
     let io & = unsafe(GetIO())
     if (hovered && IsMouseClicked(ImGuiMouseButton.Left, false)) {
         if (!swatch_at_mouse(ed, m, style, font)) {
             handle_edit_click(ed, edit_hit_position(ed, m, style, font),
                 GetMouseClickedCount(ImGuiMouseButton.Left), io.KeyShift)
+            ed.drag_owner_first = m.line_first
         }
     } elif ((ed.selection_dragging || ed.drag_move_pending)
+            && ed.drag_owner_first == m.line_first
             && IsMouseDown(ImGuiMouseButton.Left)) {
         let hit = edit_hit_position(ed, m, style, font)
         if (ed.drag_move_pending) {
@@ -2899,14 +2913,17 @@ def private handle_edit_mouse(var ed : TextEditState; m : EditMetrics;
             ed.anchor_line = hit.x
             ed.anchor_column = hit.y
             ed.selection_dragging = true
+            ed.drag_owner_first = m.line_first
             ed.preferred_column = -1
             ed.blink_time = 0.0f
-        } elif (!ed.goto_open) {
+        } elif (defocus_outside && !ed.goto_open) {
             // clicks on the goto dialog itself never unfocus the editor
             ed.focused = false
         }
     }
-    if (IsMouseReleased(ImGuiMouseButton.Left)) {
+    // only the drag-owner segment finishes it (siblings would re-clamp the hit)
+    if (IsMouseReleased(ImGuiMouseButton.Left)
+            && ed.drag_owner_first == m.line_first) {
         if (ed.drag_move_active) {
             // drop the selection at the release point (declines inside it)
             let hit = edit_hit_position(ed, m, style, font)
@@ -2921,6 +2938,7 @@ def private handle_edit_mouse(var ed : TextEditState; m : EditMetrics;
         ed.drag_move_pending = false
         ed.drag_move_active = false
         ed.drag_mode = 0
+        ed.drag_owner_first = -1
         if (ed.selection_dragging) {
             ed.selection_dragging = false
             if (!text_edit_has_selection(ed)) {
@@ -2965,8 +2983,9 @@ def private draw_edit_content(ed : TextEditState const; m : EditMetrics;
                               var font : ImFont?; primary : bool) {
     var dl = GetWindowDrawList()
     let draw_last = min(m.line_last, length(ed.lines) - 1)
+    // viewport-top virtualization - a segment child's own pos pins to its head
     let first_visible = clamp(
-        m.line_first + int(floor((GetWindowPos().y - m.origin.y) / m.line_height)),
+        m.line_first + int(floor((m.view_top - m.origin.y) / m.line_height)),
         m.line_first, draw_last)
     let last_visible = clamp(
         first_visible + int(ceil(m.view_height / m.line_height)) + 1,
@@ -3373,11 +3392,18 @@ struct public TextEditSegmentSpec {
     //! Consume the caret-follow latch + pending scroll on the current window.
     //! A compositor passes false and owns both against its own scroller.
     owns_scroll : bool = true
+    //! Screen y of the scrolling viewport's top (the compositor's pane).
+    //! Negative = this segment's own window scrolls (the classic editor).
+    view_top : float = -1.0f
     //! One-shot X-only caret follow when !owns_scroll (the segment's child is
     //! the horizontal scroller; the compositor decides when).
     follow_x : bool = false
-    //! Off-widget window clicks move/defocus the caret (classic dead area).
+    //! Off-widget clicks INSIDE the current window clamp the caret to the
+    //! nearest line (classic dead area).
     dead_area : bool = true
+    //! Clicks outside the window ALSO defocus the editor. A compositor turns
+    //! this off: rich-area clicks route the caret and must keep focus.
+    defocus_outside : bool = true
     //! Register the playwright state bbox for this surface.
     register_alias : bool = true
     //! Page-rows viewport override for a segment shorter than the real view;
@@ -3390,6 +3416,7 @@ def private drive_primary_input(var ed : TextEditState;
                                 id : string; page_rows : int;
                                 write_system_clipboard, window_focused : bool) {
     let io & = unsafe(GetIO())
+
     if (ed.focused && window_focused && !io.WantTextInput) {
         // chars first (never binding-routed); char frames mute keypad chords
         let typed = drain_typed_chars(ed)
@@ -3400,7 +3427,8 @@ def private drive_primary_input(var ed : TextEditState;
         command_set_enabled(registry, "edit.cancel",
             text_edit_has_selection(ed) || ed.list_open
             || text_edit_snippet_active(ed))
-        command_poll_scope(registry, CommandScope.component, id, typed)
+        // global route: focus routing dies when the caret's child loses nav
+        command_poll_scope(registry, CommandScope.component, id, typed, true)
     }
     var invocation = CommandInvocation()
     while (command_take_prefix(registry, "edit.", invocation)) {
@@ -3408,6 +3436,21 @@ def private drive_primary_input(var ed : TextEditState;
             write_system_clipboard)
     }
     text_edit_snippet_sync(ed)
+}
+
+def public text_edit_drive_clipped(var ed : TextEditState;
+                                   var registry : CommandRegistry;
+                                   id : string;
+                                   view_height, line_height : float;
+                                   write_system_clipboard : bool) {
+    //! Keyboard-only drive for a PRIMARY segment whose child was clipped out
+    //! of view — keys must not go dead just because the caret scrolled off.
+    //! A caret move re-arms the follow, so the compositor reveals it again.
+    let page_rows = max(1, int(floor(view_height / max(line_height, 1.0f))) - 1)
+    let window_focused = (IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)
+        || (ed.focused && !IsWindowFocused(ImGuiFocusedFlags.AnyWindow)))
+    drive_primary_input(ed, registry, id, page_rows,
+        write_system_clipboard, window_focused)
 }
 
 def private apply_segment_scroll(var ed : TextEditState; m : EditMetrics;
@@ -3426,6 +3469,20 @@ def private apply_segment_scroll(var ed : TextEditState; m : EditMetrics;
     }
 }
 
+def private roll_segment_frame_state(var ed : TextEditState) {
+    // per frame: focus memory rolls; a clipped-owner drag that never released sweeps
+    ed.sibling_focus_prev = ed.sibling_focus_now
+    ed.sibling_focus_now = false
+    if (ed.drag_owner_first >= 0 && !IsMouseDown(ImGuiMouseButton.Left)
+            && !IsMouseReleased(ImGuiMouseButton.Left)) {
+        ed.selection_dragging = false
+        ed.drag_move_pending = false
+        ed.drag_move_active = false
+        ed.drag_mode = 0
+        ed.drag_owner_first = -1
+    }
+}
+
 def public text_source_edit_segment(id : string; var ed : TextEditState;
                                     var style : TextSourceViewStyle;
                                     var registry : CommandRegistry;
@@ -3439,10 +3496,13 @@ def public text_source_edit_segment(id : string; var ed : TextEditState;
     refresh_layout_cache(ed)
     let revision_before = ed.revision
     let follow_before = ed.follow_revision
+    if (spec.advance_clocks) {
+        roll_segment_frame_state(ed)
+    }
     var fallback = GetFont()
     var font = style.fonts.monospace != null ? style.fonts.monospace : fallback
     let m = compute_edit_metrics(ed, style, font, spec.line_first, spec.line_last,
-        spec.view_height)
+        spec.view_height, spec.view_top)
     PushID(id)
     InvisibleButton("##edit", m.extent)
     if (spec.register_alias) {
@@ -3454,17 +3514,28 @@ def public text_source_edit_segment(id : string; var ed : TextEditState;
     let hovered = IsItemHovered(ImGuiHoveredFlags.None)
     // keyboard arbitration: focused WINDOW picks the editor; WantTextInput mutes
     let io & = unsafe(GetIO())
-    let window_focused = IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)
-    if (spec.primary) {
-        if (IsItemFocused()) {
+    let nav_focused = IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)
+    // nav dies entirely when the focused segment-child gets clipped out (e.g.
+    // Ctrl+End jumps the view): NO window holds focus, yet the user is still
+    // editing - keys keep flowing; the reclaim keeps the strict sensor
+    let window_focused = (nav_focused
+        || (ed.focused && !IsWindowFocused(ImGuiFocusedFlags.AnyWindow)))
+    if (IsItemFocused()) {
+        ed.sibling_focus_now = true
+        if (spec.primary) {
             ed.focused = true
-        } elif (ed.focused && window_focused && !io.WantTextInput) {
-            // Shortcut routing follows item focus; the find bar keeps it on close — reclaim
-            FocusItem()
         }
+    } elif (spec.primary && ed.focused && nav_focused && !io.WantTextInput
+            && !IsAnyItemActive()
+            && !ed.sibling_focus_now && !ed.sibling_focus_prev) {
+        // find-bar-close reclaim; NEVER while an item holds an active press
+        // (cancels earlier-submitted buttons) or while a SIBLING segment holds
+        // focus (nav's scroll-to-focused-item would yank the pane scroll)
+        FocusItem()
     }
     handle_edit_mouse(ed, m, style, hovered,
-        IsWindowHovered(ImGuiHoveredFlags.None), spec.dead_area, font)
+        IsWindowHovered(ImGuiHoveredFlags.None), spec.dead_area,
+        spec.defocus_outside, font)
     if (hovered && !empty(ed.diagnostics)) {
         edit_diagnostic_tooltip(ed, m, style, font)
     }

@@ -314,7 +314,7 @@ def private rich_das_draw_source(var ed : TextEditState; // nolint:STYLE038
                                  var registry : CommandRegistry;
                                  seg : HybridSegment; index : int;
                                  primary, advance_clocks : bool;
-                                 line_height, view_height : float;
+                                 line_height, view_height, view_top : float;
                                  var result : RichDasEditResult) : float {
     // returns the child's screen top (the caret-follow anchor when primary)
     let rows = seg.line_last - seg.line_first + 1
@@ -334,13 +334,18 @@ def private rich_das_draw_source(var ed : TextEditState; // nolint:STYLE038
             line_last = seg.line_last, primary = primary,
             advance_clocks = advance_clocks, owns_scroll = false,
             follow_x = primary && ed.follow_revision != ed.followed_revision,
-            dead_area = false, register_alias = primary,
-            view_height = view_height)
+            dead_area = primary, defocus_outside = false,
+            register_alias = primary,
+            view_height = view_height, view_top = view_top)
         let seg_result = text_source_edit_segment("editor", ed, edit_style,
             registry, spec)
         if (primary) {
             result = seg_result
         }
+    } elif (primary) {
+        // the caret's segment scrolled out of view: keys stay alive
+        text_edit_drive_clipped(ed, registry, "editor", view_height,
+            line_height, edit_style.write_system_clipboard)
     }
     EndChild()
     PopID()
@@ -390,7 +395,7 @@ def public rich_das_hybrid_edit(var ed : TextEditState; // nolint:STYLE038
         if (seg.kind == HybridSegKind.source_ || primary) {
             let top = rich_das_draw_source(ed, edit_style, registry, seg,
                 index, primary, clocks_pending, line_height, view_height,
-                result)
+                view_top, result)
             clocks_pending = false
             if (primary) {
                 island_top = top
@@ -406,14 +411,26 @@ def public rich_das_hybrid_edit(var ed : TextEditState; // nolint:STYLE038
         seg.screen_y1 = GetCursorScreenPos().y
     }
     if (ed.follow_revision != ed.followed_revision) {
-        let caret_y = (island_top
-            + float(ed.cursor_line - island_first) * line_height)
-        if (caret_y < view_top + view_height * 0.10f
-                || caret_y + line_height > view_top + view_height * 0.90f) {
-            SetScrollY(max(GetScrollY() + caret_y
-                - (view_top + view_height * 0.35f), 0.0f))
+        // follow only while the caret sits in the segment drawn as primary
+        // THIS frame - after a cross-segment click the anchor is stale, so
+        // the latch stays armed for next frame's fresh primary
+        let caret_inside = (caret_segment >= 0
+            && caret_segment < length(hybrid.segments)
+            && ed.cursor_line >= hybrid.segments[caret_segment].line_first
+            && ed.cursor_line <= hybrid.segments[caret_segment].line_last)
+        if (caret_inside) {
+            // reveal-only, like the classic editor: a caret already visible
+            // never scrolls (a click on a visible row must not move the view)
+            let caret_y = (island_top
+                + float(ed.cursor_line - island_first) * line_height)
+            if (caret_y < view_top) {
+                SetScrollY(max(GetScrollY() + caret_y - view_top, 0.0f))
+            } elif (caret_y + line_height > view_top + view_height) {
+                SetScrollY(max(GetScrollY() + caret_y + line_height
+                    - (view_top + view_height), 0.0f))
+            }
+            ed.followed_revision = ed.follow_revision
         }
-        ed.followed_revision = ed.follow_revision
     }
     if (ed.pending_scroll_lines != 0) {
         SetScrollY(max(GetScrollY()
