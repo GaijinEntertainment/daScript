@@ -58,6 +58,9 @@ def initialize(project_path : string) {
     register_native_path("imgui", "imgui_markdown_text", "{project_path}/markdown/imgui_markdown_text.das")
     register_native_path("imgui", "imgui_markdown_view", "{project_path}/markdown/imgui_markdown_view.das")
     register_native_path("imgui", "imgui_markdown_tree_sitter", "{project_path}/markdown/imgui_markdown_tree_sitter.das")
+    register_native_path("imgui", "imgui_markdown_hybrid", "{project_path}/markdown/imgui_markdown_hybrid.das")
+    register_native_path("imgui", "imgui_text_create", "{project_path}/text/imgui_text_create.das")
+    register_native_path("imgui", "imgui_text_rich_das", "{project_path}/text/imgui_text_rich_das.das")
     // Interactive terminal renderer. Protocol/process ownership stays in the
     // sibling renderless dasTerminal module.
     register_native_path("imgui", "imgui_terminal", "{project_path}/terminal/imgui_terminal.das")

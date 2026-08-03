@@ -17,3 +17,17 @@ discovery runs after the master rebase).
 * Tests are kept multiplatform — no hardcoded platform-specific paths,
   separators, or OS-only assumptions; resolve locations via `get_das_root()` /
   module-relative helpers, never absolute or machine-local paths.
+
+## Grammar canary — tree-sitter-daslang drift contract
+
+* Any change to `tree-sitter-daslang/grammar.js` requires: regenerating
+  `parser.c`, rebuilding ALL THREE consumers (the tree_sitter_daslang shared
+  module/DLL, `daslang`, `daslang-live`), and a green
+  `tests/test_grammar_canary.das`. A grammar error region silently SWALLOWS
+  every fold/outline after it (the bare-named-args gap hid exactly this way) —
+  "it still parses" is not evidence.
+* New syntax (`src/parser/ds2_parser.ypp` or `grammar.js`) lands with a new
+  canary section in `test_grammar_canary.das` in the same PR — the canary only
+  protects syntax it pins.
+* A red canary names the section that broke. Never ship around it by deleting
+  or loosening sections.
