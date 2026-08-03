@@ -84,6 +84,203 @@ class ClsArAddRms {
     }
 }
 
+// ===== act + requant (the FFN mid-chain elementwise family) =====
+
+struct ActArgs {
+    nelem : uint   // element count (4-wide kernels; always a 32-multiple, the guard is exact)
+    gelu : uint    // activation select: 0 = silu, else tanh-gelu
+    nblk : uint    // 32-block / superblock count (the requant kernels' guard)
+}
+
+// members shared by the act/requant kernels; act_mul is the one activation formula
+class ActRqMembers {
+    @ssbo @binding = 0 gate : array<float>     // gate rows (act's v side)
+    @ssbo @binding = 1 up : array<float>       // up rows (act's u side)
+    @ssbo @binding = 2 outq : array<uint>      // quantized words out
+    @ssbo @binding = 3 outs : array<float>     // per-block scales out
+    @push_constant pa : ActArgs
+
+    def act_mul(v, u : float) : float {
+        return (pa.gelu != 0u ? (0.5 * v * (1.0 + tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)))) * u
+            : (v / (1.0 + exp(-v))) * u)
+    }
+}
+
+// fused act + Q8_0 requant: subgroup per 4 blocks, word per lane, 8-lane shuffle amax (xor 1/2/4)
+[vk_dispatch(name = "q8_actrq_cls", grid = "wgs", params = "wgs : int64")]
+class Q8ActRq : ActRqMembers {
+    // 8-lane block quantize: amax fold over the block's 8 co-active lanes, d to outs[b],
+    // returns this lane's packed word
+    def blk_pack(b, lane8 : uint; v0, v1, v2, v3 : float) : uint {
+        var m = max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3)))
+        m = max(m, subgroupShuffleXor(m, 1u))
+        m = max(m, subgroupShuffleXor(m, 2u))
+        m = max(m, subgroupShuffleXor(m, 4u))
+        let d = m / 127.0
+        let id = d != 0.0 ? 1.0 / d : 0.0
+        if (lane8 == 0u) {
+            outs[b] = d
+        }
+        let q0 = int(round(v0 * id))
+        let q1 = int(round(v1 * id))
+        let q2 = int(round(v2 * id))
+        let q3 = int(round(v3 * id))
+        return ((uint(q0) & 0xFFu) | ((uint(q1) & 0xFFu) << 8u)
+            | ((uint(q2) & 0xFFu) << 16u) | ((uint(q3) & 0xFFu) << 24u))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "q8_actrq_cls_spv")]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        let sg = gid / 32u
+        let lane = gid % 32u
+        let b = sg * 4u + lane / 8u
+        if (b < pa.nblk) {
+            let eb = sg * 128u + lane * 4u
+            let v0 = act_mul(gate[eb], up[eb])
+            let v1 = act_mul(gate[eb + 1u], up[eb + 1u])
+            let v2 = act_mul(gate[eb + 2u], up[eb + 2u])
+            let v3 = act_mul(gate[eb + 3u], up[eb + 3u])
+            outq[b * 8u + lane % 8u] = blk_pack(b, lane % 8u, v0, v1, v2, v3)
+        }
+    }
+}
+
+// the Q8_K twin: one subgroup per 256-weight superblock, whole-subgroup 5-shuffle amax,
+// butterfly byte pack
+[vk_dispatch(name = "q8k_actrq_cls", grid = "wgs", params = "wgs : int64")]
+class Q8kActRq : ActRqMembers {
+    def blk_scale(b, lane : uint; m0 : float) : float {
+        var m = m0
+        m = max(m, subgroupShuffleXor(m, 1u))
+        m = max(m, subgroupShuffleXor(m, 2u))
+        m = max(m, subgroupShuffleXor(m, 4u))
+        m = max(m, subgroupShuffleXor(m, 8u))
+        m = max(m, subgroupShuffleXor(m, 16u))
+        let d = m / 127.0
+        if (lane == 0u) {
+            outs[b] = d
+        }
+        return d != 0.0 ? 1.0 / d : 0.0
+    }
+
+    // butterfly byte pack of one quantized round: lanes 4j..4j+3 fold into the superblock's word j
+    def pack_word(b, r, lane : uint; v, id : float) {
+        let q = int(round(v * id))
+        let b8 = uint(q) & 0xFFu
+        let p = b8 | (subgroupShuffleXor(b8, 1u) << 8u)
+        let w = p | (subgroupShuffleXor(p, 2u) << 16u)
+        if (lane % 4u == 0u) {
+            outq[b * 64u + r * 8u + lane / 4u] = w
+        }
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "q8k_actrq_cls_spv")]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        let b = gid / 32u
+        let lane = gid % 32u
+        if (b < pa.nblk) {
+            let base = b * 256u
+            var vals : float[8]
+            var m = 0.0
+            for [unroll] (r in range(8)) {
+                let e = base + uint(r) * 32u + lane
+                let v = act_mul(gate[e], up[e])
+                vals[r] = v
+                m = max(m, abs(v))
+            }
+            let id = blk_scale(b, lane, m)
+            for [unroll] (r in range(8)) {
+                pack_word(b, uint(r), lane, vals[r], id)
+            }
+        }
+    }
+}
+
+// act straight to the f16 hidden plane (the cm2 route — no quantization)
+[vk_dispatch(name = "actf16_cls", grid = "wgs", params = "wgs : int64")]
+class ActF16 {
+    @ssbo @binding = 0 gate : array<float>
+    @ssbo @binding = 1 up : array<float>
+    @ssbo @binding = 2 outh : array<float16>
+    @push_constant pa : ActArgs
+
+    def act_mul(v, u : float) : float {
+        return (pa.gelu != 0u ? (0.5 * v * (1.0 + tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)))) * u
+            : (v / (1.0 + exp(-v))) * u)
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "actf16_cls_spv")]
+    def run {
+        let e = gl_GlobalInvocationID.x * 4u
+        if (e < pa.nelem) {
+            outh[e] = float16(act_mul(gate[e], up[e]))
+            outh[e + 1u] = float16(act_mul(gate[e + 1u], up[e + 1u]))
+            outh[e + 2u] = float16(act_mul(gate[e + 2u], up[e + 2u]))
+            outh[e + 3u] = float16(act_mul(gate[e + 3u], up[e + 3u]))
+        }
+    }
+}
+
+// straight f32 -> f16 rows (the arena cm2 chain's activation feed)
+[vk_dispatch(name = "f16cvt_cls", grid = "wgs", params = "wgs : int64")]
+class F16Cvt {
+    @ssbo @binding = 0 src : array<float>
+    @ssbo @binding = 1 outh : array<float16>
+    @push_constant pa : ActArgs
+
+    [spirv_kernel(local_size_x = 256, name = "f16cvt_cls_spv")]
+    def run {
+        let e = gl_GlobalInvocationID.x * 4u
+        if (e < pa.nelem) {
+            outh[e] = float16(src[e])
+            outh[e + 1u] = float16(src[e + 1u])
+            outh[e + 2u] = float16(src[e + 2u])
+            outh[e + 3u] = float16(src[e + 3u])
+        }
+    }
+}
+
+// ===== the MoE combine =====
+
+struct CombineArgs {
+    n : uint    // row width
+    k : uint    // slots per position
+    r0 : uint   // this dispatch's slot-row window [r0, r1)
+    r1 : uint
+}
+
+// one workgroup per output POSITION, summing its k slots' down-GEMM rows ascending j (the
+// decode accumulation order); r0 == 0 starts the sum, chunk-spanning positions accumulate
+[vk_dispatch(name = "combine_cls", grid = "npos", params = "npos : int64")]
+class MoeCombine {
+    @ssbo @binding = 0 acc_rows : array<float>   // the per-position accumulator rows (in/out)
+    @ssbo @binding = 1 slot_idx : array<uint>    // position -> its k slot rows
+    @ssbo @binding = 2 slot_w : array<float>     // ... and their routing weights
+    @ssbo @binding = 3 down_rows : array<float>  // the window's down-GEMM output rows
+    @push_constant pa : CombineArgs
+
+    [spirv_kernel(local_size_x = 256, name = "combine_cls_spv")]
+    def run {
+        let p = gl_WorkGroupID.x
+        var i = gl_LocalInvocationID.x
+        while (i < pa.n) {
+            var acc = pa.r0 == 0u ? 0.0 : acc_rows[p * pa.n + i]
+            var j = 0u
+            while (j < pa.k) {
+                let jb = slot_idx[p * pa.k + j]
+                if (jb >= pa.r0 && jb < pa.r1) {
+                    acc += slot_w[p * pa.k + j] * down_rows[(jb - pa.r0) * pa.n + i]
+                }
+                j++
+            }
+            acc_rows[p * pa.n + i] = acc
+            i += 256u
+        }
+    }
+}
+
 // ===== the region-GEMV push params (every decode GEMV shares the shape) =====
 
 struct GemvArgs {

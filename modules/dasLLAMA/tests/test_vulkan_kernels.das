@@ -336,6 +336,217 @@ def test_vkd_kq_gemv_family(t0 : T?) {
 }
 
 [test]
+def test_vkd_act_family(t0 : T?) {
+    t0 |> run("act/requant + combine class twins == the shipped kernels (bit-exact)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!(ensure_q8_actrq_cls() && ensure_q8k_actrq_cls() && ensure_combine_cls())) {
+                feint("no Vulkan device — skipping\n")
+                return
+            }
+            let nelem = 1024
+            var gh : array<float>
+            var uh : array<float>
+            gh |> resize(nelem)
+            uh |> resize(nelem)
+            for (i in range(nelem)) {
+                gh[i] = float((i * 29) % 61) * 0.21 - 6.0
+                uh[i] = float((i * 11) % 47) * 0.17 - 4.0
+            }
+            let e_bytes = int64(nelem) * 4l
+            let gd = make_device_buf(e_bytes)
+            let ud = make_device_buf(e_bytes)
+            var meta = make_host_buf(META_BYTES, false, [cached = false])
+            unsafe {
+                upload_region_at(gd, 0l, addr<uint8 const?>(gh[0]), e_bytes)
+                upload_region_at(ud, 0l, addr<uint8 const?>(uh[0]), e_bytes)
+            }
+            // arm 0 = q8 (32-blocks), arm 1 = q8k (256-superblocks)
+            for (arm in range(2)) {
+                let q8k = arm == 1
+                let nblk = q8k ? nelem / 256 : nelem / 32
+                let q_bytes = int64(nelem)          // 1 byte per quant either way
+                let s_bytes = int64(nblk) * 4l
+                let hq1 = make_device_buf(q_bytes)
+                let hs1 = make_device_buf(s_bytes)
+                let hq2 = make_device_buf(q_bytes)
+                let hs2 = make_device_buf(s_bytes)
+                var hostq = make_host_buf(q_bytes, true, [cached = true])
+                var hosts = make_host_buf(s_bytes, true, [cached = true])
+                var q_old : array<uint>
+                var q_cls : array<uint>
+                var s_old : array<float>
+                var s_cls : array<float>
+                q_old |> resize(nelem / 4)
+                q_cls |> resize(nelem / 4)
+                s_old |> resize(nblk)
+                s_cls |> resize(nblk)
+                let wgs = 1l   // 256 threads cover both shapes at nelem = 1024
+                unsafe {
+                    var mp = reinterpret<uint?>(meta.mapped)
+                    mp[0] = uint(nelem)
+                    mp[1] = 0u   // silu
+                    mp[2] = uint(nblk)
+                    // the SHIPPED kernel: up@0, filler@1, meta@2, hq@3, hs@4, gate@5
+                    var so = vk_set6(ud, ud, meta.buf, hq1, hs1, gd,
+                        e_bytes, e_bytes, META_BYTES, q_bytes, s_bytes, e_bytes,
+                        fixed_array(1u, 0u, 2u, 4u, 8u, 16u))
+                    var raw = alloc_cmd()
+                    let begin = VkCommandBufferBeginInfo()
+                    vk_check(vkBeginCommandBuffer(raw, begin), null)
+                    var h : VkHaz
+                    hz_dispatch(raw, h, weak_copy(q8k ? g_gpu.actrq_k_pipeline : g_gpu.actrq_pipeline), so, uint(wgs))
+                    vhz_dep(raw, h, 4u | 8u, 0u, true)
+                    cmd_copy_whole(raw, hq1, hostq.buf, q_bytes)
+                    cmd_copy_whole(raw, hs1, hosts.buf, s_bytes)
+                    vk_check(vkEndCommandBuffer(raw), null)
+                    submit_wait(raw)
+                    memcpy(addr<void?>(q_old[0]), hostq.mapped, q_bytes)
+                    memcpy(addr<void?>(s_old[0]), hosts.mapped, s_bytes)
+                    // the class twin: gate@0, up@1, outq@2, outs@3
+                    var sc : VkDescriptorSet
+                    if (q8k) {
+                        sc = set_q8k_actrq_cls(fixed_array(gd, ud, hq2, hs2),
+                            fixed_array(e_bytes, e_bytes, q_bytes, s_bytes),
+                            fixed_array(16u, 1u, 4u, 8u))
+                    } else {
+                        sc = set_q8_actrq_cls(fixed_array(gd, ud, hq2, hs2),
+                            fixed_array(e_bytes, e_bytes, q_bytes, s_bytes),
+                            fixed_array(16u, 1u, 4u, 8u))
+                    }
+                    var raw2 = alloc_cmd()
+                    vk_check(vkBeginCommandBuffer(raw2, begin), null)
+                    var h2 : VkHaz
+                    var pc = ActArgs(nelem = uint(nelem), gelu = 0u, nblk = uint(nblk))
+                    if (q8k) {
+                        enc_q8k_actrq_cls(raw2, h2, sc, pc, wgs)
+                    } else {
+                        enc_q8_actrq_cls(raw2, h2, sc, pc, wgs)
+                    }
+                    vhz_dep(raw2, h2, 4u | 8u, 0u, true)
+                    cmd_copy_whole(raw2, hq2, hostq.buf, q_bytes)
+                    cmd_copy_whole(raw2, hs2, hosts.buf, s_bytes)
+                    vk_check(vkEndCommandBuffer(raw2), null)
+                    submit_wait(raw2)
+                    memcpy(addr<void?>(q_cls[0]), hostq.mapped, q_bytes)
+                    memcpy(addr<void?>(s_cls[0]), hosts.mapped, s_bytes)
+                }
+                var bad = 0
+                for (i in range(nelem / 4)) {
+                    if (q_old[i] != q_cls[i]) {
+                        bad++
+                    }
+                }
+                for (i in range(nblk)) {
+                    if (s_old[i] != s_cls[i]) {
+                        bad++
+                    }
+                }
+                t |> success(bad == 0, "{q8k ? "q8k" : "q8"} actrq: class twin bit-exact ({bad} words/scales diverge)")
+                delete q_old
+                delete q_cls
+                delete s_old
+                delete s_cls
+            }
+            // the combine
+            {
+                let n = 64
+                let k = 4
+                let npos = 3
+                let nrows = 8
+                var sidx : array<uint>
+                var sw : array<float>
+                var rows : array<float>
+                var accs : array<float>
+                sidx |> resize(npos * k)
+                sw |> resize(npos * k)
+                rows |> resize(nrows * n)
+                accs |> resize(npos * n)
+                for (i in range(npos * k)) {
+                    sidx[i] = hash_word(uint(i)) % uint(nrows)
+                    sw[i] = 0.125 + float(i % 5) * 0.25
+                }
+                for (i in range(nrows * n)) {
+                    rows[i] = float((i * 7) % 93) * 0.13 - 5.5
+                }
+                for (i in range(npos * n)) {
+                    accs[i] = 0.0
+                }
+                let si_bytes = int64(npos * k) * 4l
+                let ro_bytes = int64(nrows * n) * 4l
+                let ac_bytes = int64(npos * n) * 4l
+                let sid = make_device_buf(si_bytes)
+                let swd = make_device_buf(si_bytes)
+                let rod = make_device_buf(ro_bytes)
+                let ac1 = make_device_buf(ac_bytes)
+                let ac2 = make_device_buf(ac_bytes)
+                var hosta = make_host_buf(ac_bytes, true, [cached = true])
+                var a_old : array<float>
+                var a_cls : array<float>
+                a_old |> resize(npos * n)
+                a_cls |> resize(npos * n)
+                unsafe {
+                    upload_region_at(sid, 0l, addr<uint8 const?>(sidx[0]), si_bytes)
+                    upload_region_at(swd, 0l, addr<uint8 const?>(sw[0]), si_bytes)
+                    upload_region_at(rod, 0l, addr<uint8 const?>(rows[0]), ro_bytes)
+                    upload_region_at(ac1, 0l, addr<uint8 const?>(accs[0]), ac_bytes)
+                    upload_region_at(ac2, 0l, addr<uint8 const?>(accs[0]), ac_bytes)
+                    var mp = reinterpret<uint?>(meta.mapped)
+                    mp[4] = uint(n)
+                    mp[5] = uint(k)
+                    mp[6] = 0u
+                    mp[7] = uint(nrows)
+                    // the SHIPPED combine: acc(upf)@0, meta@2, slot idx(xq)@3, slot w(xs)@4, rows(y)@5
+                    var so = vk_set6(ac1, sid, meta.buf, sid, swd, rod,
+                        ac_bytes, si_bytes, META_BYTES, si_bytes, si_bytes, ro_bytes,
+                        fixed_array(1u, 0u, 2u, 4u, 8u, 16u))
+                    var raw = alloc_cmd()
+                    let begin = VkCommandBufferBeginInfo()
+                    vk_check(vkBeginCommandBuffer(raw, begin), null)
+                    var h : VkHaz
+                    hz_dispatch(raw, h, weak_copy(g_gpu.comb_pipeline), so, uint(npos))
+                    vhz_dep(raw, h, 1u, 0u, true)
+                    cmd_copy_whole(raw, ac1, hosta.buf, ac_bytes)
+                    vk_check(vkEndCommandBuffer(raw), null)
+                    submit_wait(raw)
+                    memcpy(addr<void?>(a_old[0]), hosta.mapped, ac_bytes)
+                    // the class twin
+                    var sc = set_combine_cls(fixed_array(ac2, sid, swd, rod),
+                        fixed_array(ac_bytes, si_bytes, si_bytes, ro_bytes),
+                        fixed_array(1u, 2u, 4u, 8u))
+                    var raw2 = alloc_cmd()
+                    vk_check(vkBeginCommandBuffer(raw2, begin), null)
+                    var h2 : VkHaz
+                    var pc = CombineArgs(n = uint(n), k = uint(k), r0 = 0u, r1 = uint(nrows))
+                    enc_combine_cls(raw2, h2, sc, pc, int64(npos))
+                    vhz_dep(raw2, h2, 1u, 0u, true)
+                    cmd_copy_whole(raw2, ac2, hosta.buf, ac_bytes)
+                    vk_check(vkEndCommandBuffer(raw2), null)
+                    submit_wait(raw2)
+                    memcpy(addr<void?>(a_cls[0]), hosta.mapped, ac_bytes)
+                }
+                var bad = 0
+                for (i in range(npos * n)) {
+                    if (a_old[i] != a_cls[i]) {
+                        bad++
+                    }
+                }
+                t |> success(bad == 0, "combine: class twin bit-exact ({bad} of {npos * n} diverge)")
+                delete sidx
+                delete sw
+                delete rows
+                delete accs
+                delete a_old
+                delete a_cls
+            }
+            delete gh
+            delete uh
+        } else {
+            feint("dasVulkan not present — skipping\n")
+        }
+    }
+}
+
+[test]
 def test_vkd_q8_gemv_pair(t0 : T?) {
     t0 |> run("q8/q8n GEMV class twins == the shipped kernels (bit-exact)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
