@@ -512,8 +512,6 @@ struct GpuState {
     dnd_steps : table<int64; DnStep>   // qkv plane offset -> the layer's step chain
     dnd_ready : bool
     // attention chain state (lazy — first attention dispatch creates it)
-    at_meta : HostBuf             // attention kernel params staging
-    at_meta_dev : uint64
     at_smalls : HostBuf           // eps/scale/rms rows + the window's cos/sin rope rows
     at_smalls_dev : uint64
     at_q_dev : uint64             // the window's normed+roped q rows
@@ -525,7 +523,8 @@ struct GpuState {
     at_prep_q_set : VkDescriptorSet
     at_prep_k_set : VkDescriptorSet
     at_attn_set : VkDescriptorSet
-    at_rq_set : VkDescriptorSet
+    at_rq_set : VkDescriptorSet      // the Q8_K o-requant form (kq wo stacks)
+    at_rq_dn_set : VkDescriptorSet   // ... and the Q8_0 form (o_kq picks per window)
     at_ready : bool
 }
 

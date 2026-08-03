@@ -1114,8 +1114,8 @@ def private ensure_at_state {
         return
     }
     ensure_batch_state()
-    g_gpu.at_meta = make_host_buf(AT_META_BYTES, false)
-    g_gpu.at_meta_dev = make_device_buf(AT_META_BYTES)
+    verify(ensure_at_prep_cls() && ensure_at_attn_cls() && ensure_cls_q8k_rq() && ensure_cls_dn_rq(),
+        "vk attention chain: the class rails must engage on a live device")
     g_gpu.at_smalls = make_host_buf(AT_SMALLS_BYTES, false)
     g_gpu.at_smalls_dev = make_device_buf(AT_SMALLS_BYTES)
     g_gpu.at_q_dev = make_device_buf(AT_WINDOW * AT_MAX_QD * 4l)
@@ -1124,57 +1124,37 @@ def private ensure_at_state {
     g_gpu.at_v_dev = make_device_buf(AT_CTX * AT_MAX_KV * 4l)
     g_gpu.at_vraw_dev = make_device_buf(AT_WINDOW * AT_MAX_KV * 4l)
     g_gpu.at_kv_host = make_host_buf(2l * AT_WINDOW * AT_MAX_KV * 4l, true, [cached = true])
-    // prep-q bindings: q|gate GEMM rows@5, q out@0, gate out@3, smalls@4, params@2; 1 filler
-    g_gpu.at_prep_q_set = vk_set6(g_gpu.at_q_dev, g_gpu.at_meta_dev, g_gpu.at_meta_dev, g_gpu.at_g_dev, g_gpu.at_smalls_dev, g_gpu.batch_y1_dev,
-        AT_WINDOW * AT_MAX_QD * 4l, AT_META_BYTES, AT_META_BYTES, AT_WINDOW * AT_MAX_QD * 4l, AT_SMALLS_BYTES, BATCH_Y_BYTES,
-        fixed_array(VHB_ATQ, 0u, VHB_META, VHB_ATG, VHB_SM, VHB_Y1))
-    // prep-k: roped k out@0 lands at ABSOLUTE positions; the gate view@3 never fires for a k row
-    g_gpu.at_prep_k_set = vk_set6(g_gpu.at_k_dev, g_gpu.at_meta_dev, g_gpu.at_meta_dev, g_gpu.at_meta_dev, g_gpu.at_smalls_dev, g_gpu.batch_y2_dev,
-        AT_CTX * AT_MAX_KV * 4l, AT_META_BYTES, AT_META_BYTES, AT_META_BYTES, AT_SMALLS_BYTES, BATCH_Y_BYTES,
-        fixed_array(VHB_ATK, 0u, VHB_META, 0u, VHB_SM, VHB_Y2))   // 3 = the never-fired gate view
-    // attn bindings: q@0, k@1, gate in/o out@3, smalls@4, v@5, params@2
-    g_gpu.at_attn_set = vk_set6(g_gpu.at_q_dev, g_gpu.at_k_dev, g_gpu.at_meta_dev, g_gpu.at_g_dev, g_gpu.at_smalls_dev, g_gpu.at_v_dev,
-        AT_WINDOW * AT_MAX_QD * 4l, AT_CTX * AT_MAX_KV * 4l, AT_META_BYTES, AT_WINDOW * AT_MAX_QD * 4l, AT_SMALLS_BYTES, AT_CTX * AT_MAX_KV * 4l,
-        fixed_array(VHB_ATQ, VHB_ATK, VHB_META, VHB_ATG, VHB_SM, VHB_ATV))
-    // requant bindings: o rows@0, quant words@3, scales@4 (wo GEMM activation image), params@2
-    g_gpu.at_rq_set = vk_set6(g_gpu.at_g_dev, g_gpu.at_meta_dev, g_gpu.at_meta_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_gpu.at_meta_dev,
-        AT_WINDOW * AT_MAX_QD * 4l, AT_META_BYTES, AT_META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, AT_META_BYTES,
-        fixed_array(VHB_ATG, 0u, VHB_META, VHB_HQ, VHB_HQ, 0u))
+    // prep (class: GEMM rows, prepped panel, gate stash, smalls) — the k form's gate view never fires
+    g_gpu.at_prep_q_set = set_at_prep_cls(
+        fixed_array(g_gpu.batch_y1_dev, g_gpu.at_q_dev, g_gpu.at_g_dev, g_gpu.at_smalls_dev),
+        fixed_array(BATCH_Y_BYTES, AT_WINDOW * AT_MAX_QD * 4l, AT_WINDOW * AT_MAX_QD * 4l, AT_SMALLS_BYTES),
+        fixed_array(VHB_Y1, VHB_ATQ, VHB_ATG, VHB_SM))
+    g_gpu.at_prep_k_set = set_at_prep_cls(
+        fixed_array(g_gpu.batch_y2_dev, g_gpu.at_k_dev, g_gpu.at_g_dev, g_gpu.at_smalls_dev),
+        fixed_array(BATCH_Y_BYTES, AT_CTX * AT_MAX_KV * 4l, AT_WINDOW * AT_MAX_QD * 4l, AT_SMALLS_BYTES),
+        fixed_array(VHB_Y2, VHB_ATK, 0u, VHB_SM))
+    // attn (class: q panel, k panel, v rows, gate/out plane)
+    g_gpu.at_attn_set = set_at_attn_cls(
+        fixed_array(g_gpu.at_q_dev, g_gpu.at_k_dev, g_gpu.at_v_dev, g_gpu.at_g_dev),
+        fixed_array(AT_WINDOW * AT_MAX_QD * 4l, AT_CTX * AT_MAX_KV * 4l, AT_CTX * AT_MAX_KV * 4l, AT_WINDOW * AT_MAX_QD * 4l),
+        fixed_array(VHB_ATQ, VHB_ATK, VHB_ATV, VHB_ATG))
+    // o requant (class: o rows, quant words, scales) — both forms; o_kq picks per window
+    let rqbufs = fixed_array(g_gpu.at_g_dev, g_gpu.hq_dev, g_gpu.hs_dev)
+    let rqsizes = fixed_array(AT_WINDOW * AT_MAX_QD * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES)
+    let rqgbits = fixed_array(VHB_ATG, VHB_HQ, VHB_HQ)
+    g_gpu.at_rq_set = set_cls_q8k_rq(rqbufs, rqsizes, rqgbits)
+    g_gpu.at_rq_dn_set = set_cls_dn_rq(rqbufs, rqsizes, rqgbits)
     g_gpu.at_ready = true
     to_log(LOG_INFO, "dasLLAMA vulkan tier: attention chain engaged\n")
-}
-
-def private fill_at_meta(rows, w0, qd, kv_dim, hs, half, n_heads, n_kv_heads, kv_mul, nblocks : int64; gated, qknorm : bool) {
-    unsafe {
-        var mp = reinterpret<uint?>(g_gpu.at_meta.mapped)
-        mp[0] = uint(rows)
-        mp[1] = uint(w0)
-        mp[2] = uint(qd)
-        mp[3] = uint(kv_dim)
-        mp[4] = uint(hs)
-        mp[5] = uint(half)
-        mp[6] = uint(n_heads)
-        mp[7] = uint(n_kv_heads)
-        mp[8] = uint(kv_mul)
-        mp[9] = uint((gated ? 1 : 0) | (qknorm ? 2 : 0))
-        mp[10] = 0u
-        mp[11] = uint(hs / 32l)
-        mp[12] = uint(w0 + rows)
-        mp[13] = uint(AT_SM_COS + rows * half)
-        mp[14] = uint(AT_SM_RMSQ)
-        mp[15] = uint(AT_SM_RMSK)
-        mp[16] = uint(AT_SM_COS)
-        mp[17] = 0u
-        mp[18] = uint(nblocks)
-    }
 }
 
 // one attention window: acts/meta/smalls staging copies, q|gate + k + v tiles, the prep pair
 // (deinterleave/qk-rms/rope; k lands at absolute positions), v append + k/v host DMA in the
 // transfer window, the flash attention pass, o requant, wo tile, y DMA
-def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o : uint;
-                          rows, w0, qd, kv_dim, dim, n_heads : int64;
-                          axq_bytes, axs_bytes, sm_bytes : int64; o_kq : bool) {
+def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o : uint;   // nolint:STYLE038 — the verbatim window chain, one seam
+                          rows, w0, qd, kv_dim, dim, n_heads, hs, half, n_kv, kv_mul, o_nblk : int64;
+                          axq_bytes, axs_bytes, sm_bytes : int64; o_kq, gated, qknorm : bool;
+                          eps, scale : float) {
     let raw = g_gpu.batch_cmd
     let rf : VkCommandBufferResetFlags
     vk_check(vkResetCommandBuffer(raw, rf), null)
@@ -1188,7 +1168,6 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
     cmd_copy_batch_meta(raw, s_k)
     cmd_copy_batch_meta(raw, s_v)
     cmd_copy_batch_meta(raw, s_o)
-    cmd_copy_whole(raw, g_gpu.at_meta.buf, g_gpu.at_meta_dev, AT_META_BYTES)
     vhz_dep(raw, h, 0u, VHB_SM, true)
     cmd_copy_range(raw, g_gpu.at_smalls.buf, 0l, g_gpu.at_smalls_dev, 0l, sm_bytes)
     hz_dispatch(raw, h, batch_pipe(g_gpu.stacks[s_q].fmt, g_gpu.stacks[s_q].batch_tile, g_gpu.stacks[s_q].batch_aligned),
@@ -1197,8 +1176,15 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
         g_gpu.stacks[s_k].batch_set, nwg_k)
     hz_dispatch(raw, h, batch_pipe(g_gpu.stacks[s_v].fmt, g_gpu.stacks[s_v].batch_tile, g_gpu.stacks[s_v].batch_aligned),
         g_gpu.stacks[s_v].batch_set, nwg_v)
-    hz_dispatch(raw, h, weak_copy(g_gpu.at_prep_q_pipeline), g_gpu.at_prep_q_set, uint(rows))
-    hz_dispatch(raw, h, weak_copy(g_gpu.at_prep_k_pipeline), g_gpu.at_prep_k_set, uint(rows))
+    let pflags = uint((gated ? 1 : 0) | (qknorm ? 2 : 0))
+    var pcq = AtPrepArgs(d = uint(qd), nh = uint(n_heads), hs = uint(hs), half = uint(half),
+        flags = pflags, rms_off = uint(AT_SM_RMSQ), cos_off = uint(AT_SM_COS),
+        sin_off = uint(AT_SM_COS + rows * half), obase = 0u, qsrc = 1u, eps = eps)
+    enc_at_prep_cls(raw, h, g_gpu.at_prep_q_set, pcq, rows)
+    var pck = AtPrepArgs(d = uint(kv_dim), nh = uint(n_kv), hs = uint(hs), half = uint(half),
+        flags = pflags, rms_off = uint(AT_SM_RMSK), cos_off = uint(AT_SM_COS),
+        sin_off = uint(AT_SM_COS + rows * half), obase = uint(w0), qsrc = 0u, eps = eps)
+    enc_at_prep_cls(raw, h, g_gpu.at_prep_k_set, pck, rows)
     // transfer window: append raw v at absolute positions, DMA roped k/raw v to host
     vhz_dep(raw, h, VHB_VRAW, VHB_ATV, true)
     cmd_copy_range(raw, g_gpu.at_vraw_dev, 0l, g_gpu.at_v_dev, w0 * kv_dim * 4l, rows * kv_dim * 4l)
@@ -1206,9 +1192,16 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
     cmd_copy_range(raw, g_gpu.at_k_dev, w0 * kv_dim * 4l, g_gpu.at_kv_host.buf, 0l, rows * kv_dim * 4l)
     vhz_dep(raw, h, VHB_VRAW, 0u, true)
     cmd_copy_range(raw, g_gpu.at_vraw_dev, 0l, g_gpu.at_kv_host.buf, AT_WINDOW * AT_MAX_KV * 4l, rows * kv_dim * 4l)
-    hz_dispatch(raw, h, weak_copy(g_gpu.at_attn_pipeline), g_gpu.at_attn_set, uint(n_heads * ((rows + 7l) / 8l)))
-    hz_dispatch(raw, h, weak_copy(o_kq ? g_gpu.q8k_rq_pipeline : g_gpu.dn_rq_pipeline),
-        g_gpu.at_rq_set, uint((rows * qd / (o_kq ? 8l : 4l) + 255l) / 256l))
+    var pca = AtAttnArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd), kvd = uint(kv_dim),
+        hs = uint(hs), kv_mul = uint(kv_mul), flags = gated ? 1u : 0u, dpl = uint(hs / 32l), scale = scale)
+    enc_at_attn_cls(raw, h, g_gpu.at_attn_set, pca, n_heads * ((rows + 7l) / 8l))
+    var pcr = RqArgs(inbase = 0u, nblk = uint(o_nblk))
+    let rqwgs = (rows * qd / (o_kq ? 8l : 4l) + 255l) / 256l
+    if (o_kq) {
+        enc_cls_q8k_rq(raw, h, g_gpu.at_rq_set, pcr, rqwgs)
+    } else {
+        enc_cls_dn_rq(raw, h, g_gpu.at_rq_dn_set, pcr, rqwgs)
+    }
     hz_dispatch(raw, h, batch_pipe(g_gpu.stacks[s_o].fmt, g_gpu.stacks[s_o].batch_tile, g_gpu.stacks[s_o].batch_aligned),
         g_gpu.stacks[s_o].batch_set, nwg_o)
     vhz_dep(raw, h, VHB_Y1, 0u, true)
@@ -1297,12 +1290,12 @@ def vk_moe_attn(var yp : float?; var kp : float?; var vp : float?;
             par_memcpy(reinterpret<void?>(sp + AT_SM_COS), reinterpret<void?>(cosp + r0 * half), rows * half * 4l)
             par_memcpy(reinterpret<void?>(sp + AT_SM_COS + rows * half), reinterpret<void?>(sinp + r0 * half), rows * half * 4l)
         }
-        fill_at_meta(rows, r0, qd, kv_dim, hs, half, n_heads, n_kv, kv_mul,
-            rows * qd / (fo != 0 ? 256l : 32l), gated, qknorm)
         let ts1 = ref_time_ticks()
         record_at_cmd(s_q, s_k, s_v, s_o, nwg_q, nwg_k, nwg_v, nwg_o,
-            rows, r0, qd, kv_dim, dim, n_heads,
-            rows * dim, rows * (dim / xunit) * 4l, (AT_SM_COS + 2l * rows * half) * 4l, fo != 0)
+            rows, r0, qd, kv_dim, dim, n_heads, hs, half, n_kv, kv_mul,
+            rows * qd / (fo != 0 ? 256l : 32l),
+            rows * dim, rows * (dim / xunit) * 4l, (AT_SM_COS + 2l * rows * half) * 4l,
+            fo != 0, gated, qknorm, eps, scale)
         submit_wait(g_gpu.batch_cmd)
         let ts2 = ref_time_ticks()
         unsafe {
