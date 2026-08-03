@@ -700,6 +700,332 @@ class DnStepFused {
     }
 }
 
+// ===== deltanet: the two-phase chunked scan =====
+
+// the slab + staged-GEMM machinery both phases share: C[MxN] (+)= A[MxK] * B[KxN] over the
+// DN_WS work surface, 16-deep K stages through shared, C in per-thread Private registers
+class DnScanBase {
+    @ssbo @binding = 2 slab : array<float>   // the DN_WS work surface (every GEMM operand)
+    @workgroup tm : float[4096]              // the 64x64 unit-lower solve tile
+    @workgroup ta : float[2048]
+    @workgroup tb : float[2048]
+    @private_global acc64 : float[64]        // per-invocation C accumulator (ds*ds/256 max)
+
+    def gemm(cofs, aofs, bofs : uint; mm, kk, nn : uint; lda, ldb, ldc : uint; accum : uint) {
+        let tid = gl_LocalInvocationID.x
+        var o = tid
+        var oi = 0u
+        while (o < mm * nn) {
+            acc64[oi] = accum == 0u ? 0.0 : slab[cofs + (o / nn) * ldc + o % nn]
+            oi++
+            o += 256u
+        }
+        var kb = 0u
+        while (kb < kk) {
+            let kt = min(kk - kb, 16u)
+            var i = tid
+            while (i < mm * kt) {
+                ta[(i / kt) * 16u + i % kt] = slab[aofs + (i / kt) * lda + kb + i % kt]
+                i += 256u
+            }
+            i = tid
+            while (i < kt * nn) {
+                tb[(i / nn) * 128u + i % nn] = slab[bofs + (kb + i / nn) * ldb + i % nn]
+                i += 256u
+            }
+            barrier()
+            o = tid
+            oi = 0u
+            while (o < mm * nn) {
+                let r = o / nn
+                let c = o % nn
+                var acc = acc64[oi]
+                var k2 = 0u
+                while (k2 < kt) {
+                    acc += ta[r * 16u + k2] * tb[k2 * 128u + c]
+                    k2++
+                }
+                acc64[oi] = acc
+                oi++
+                o += 256u
+            }
+            barrier()
+            kb += 16u
+        }
+        o = tid
+        oi = 0u
+        while (o < mm * nn) {
+            slab[cofs + (o / nn) * ldc + o % nn] = acc64[oi]
+            oi++
+            o += 256u
+        }
+        memoryBarrierBuffer()
+        barrier()
+    }
+}
+
+struct DnScanP1Args {
+    npos : uint
+    cd : uint
+    kd : uint
+    nvh : uint
+    nkh : uint
+    ds : uint
+    beta_off : uint
+    g_off : uint
+    a_off : uint
+    dt_off : uint
+    slab_stride : uint   // floats per (head x chunk) slab region
+}
+
+// phase 1: every state-independent piece per (head x chunk) — panels, decay-scaled A, the
+// unit-lower solve, the local vnew half, the transition operand
+[vk_dispatch(name = "dn_scan_p1_cls", grid = "wgs", params = "wgs : int64")]
+class DnScanP1 : DnScanBase {
+    @ssbo @binding = 0 conv : array<float>     // the conv output rows (position-major)
+    @ssbo @binding = 1 smalls : array<float>   // beta/g/a/dt planes (push offsets)
+    @push_constant pa : DnScanP1Args
+
+    [spirv_kernel(local_size_x = 256, name = "dn_scan_p1_cls_spv")]
+    def run {   // nolint:STYLE037,STYLE038 — the verbatim phase-1 pass, parity-locked to the shipped kernel
+        let ds = pa.ds
+        let tid = gl_LocalInvocationID.x
+        let CS = 64u
+        let nch = (pa.npos + CS - 1u) / CS
+        let wid = gl_WorkGroupID.x
+        let h = wid / nch
+        let c0 = (wid % nch) * CS
+        let cl = min(CS, pa.npos - c0)
+        let slb = pa.slab_stride * wid
+        let qc = slb
+        let kcT = slb + CS * ds
+        let kb = slb + 2u * CS * ds
+        let vb = slb + 3u * CS * ds
+        let w = slb + 4u * CS * ds
+        let vnew = slb + 5u * CS * ds
+        let kgT = slb + 6u * CS * ds
+        let tmg = slb + 7u * CS * ds
+        let kq = tmg + CS * CS
+        let gcum = kq + CS * CS
+        let egc = gcum + CS
+        let kgc = gcum + 2u * CS
+        let bvec = gcum + 3u * CS
+        let kh = h % pa.nkh
+        let qoff = kh * ds
+        let koff = pa.kd + kh * ds
+        let voff = 2u * pa.kd + h * ds
+        let aa = smalls[pa.a_off + h]
+        let dtb = smalls[pa.dt_off + h]
+        // per-token transforms: beta = sigmoid(raw), g-cumsum of a*softplus(raw + dt)
+        if (tid == 0u) {
+            var gacc = 0.0
+            var t = 0u
+            while (t < cl) {
+                let graw = smalls[pa.g_off + (c0 + t) * pa.nvh + h] + dtb
+                gacc += aa * (graw > 20.0 ? graw : log(1.0 + exp(graw)))
+                slab[gcum + t] = gacc
+                slab[egc + t] = exp(gacc)
+                slab[bvec + t] = 1.0 / (1.0 + exp(-smalls[pa.beta_off + (c0 + t) * pa.nvh + h]))
+                t++
+            }
+        }
+        memoryBarrierBuffer()
+        barrier()
+        // panels off the conv rows: qc/kb/vb row-major cl x ds, kcT transposed ds x CS
+        var e = tid
+        while (e < cl * ds) {
+            let i = e / ds
+            let j = e % ds
+            let crow = (c0 + i) * pa.cd
+            let kv = conv[crow + koff + j]
+            let bv = slab[bvec + i]
+            slab[qc + i * ds + j] = conv[crow + qoff + j]
+            slab[kcT + j * CS + i] = kv
+            slab[kb + i * ds + j] = kv * bv
+            slab[vb + i * ds + j] = conv[crow + voff + j] * bv
+            e += 256u
+        }
+        memoryBarrierBuffer()
+        barrier()
+        // A = (k_beta k^T) decay-scaled strictly lower (negated); KQ keeps its diagonal
+        gemm(tmg, kb, kcT, cl, ds, cl, ds, CS, CS, 0u)
+        gemm(kq, qc, kcT, cl, ds, cl, ds, CS, CS, 0u)
+        e = tid
+        while (e < cl * cl) {
+            let i = e / cl
+            let j = e % cl
+            if (j < i) {
+                let d = exp(slab[gcum + i] - slab[gcum + j])
+                slab[tmg + i * CS + j] = -slab[tmg + i * CS + j] * d
+                slab[kq + i * CS + j] = slab[kq + i * CS + j] * d
+            } elif (j == i) {
+                slab[tmg + i * CS + j] = 1.0
+            } else {
+                slab[tmg + i * CS + j] = 0.0
+                slab[kq + i * CS + j] = 0.0
+            }
+            e += 256u
+        }
+        memoryBarrierBuffer()
+        barrier()
+        // unit-lower solve in shared, rows finalized top-down
+        e = tid
+        while (e < cl * cl) {
+            tm[(e / cl) * CS + e % cl] = slab[tmg + (e / cl) * CS + e % cl]
+            e += 256u
+        }
+        barrier()
+        var i2 = 1u
+        while (i2 < cl) {
+            var fin = 0.0
+            if (tid < i2) {
+                fin = tm[i2 * CS + tid]
+                var t2 = tid + 1u
+                while (t2 < i2) {
+                    fin += tm[i2 * CS + t2] * tm[t2 * CS + tid]
+                    t2++
+                }
+            }
+            barrier()
+            if (tid < i2) {
+                tm[i2 * CS + tid] = fin
+            }
+            barrier()
+            i2++
+        }
+        e = tid
+        while (e < cl * cl) {
+            slab[tmg + (e / cl) * CS + e % cl] = tm[(e / cl) * CS + e % cl]
+            e += 256u
+        }
+        // d = T v_beta - (T (k_beta e^gcum)) S — kb scaled in place, minus folded into the scale
+        e = tid
+        while (e < cl * ds) {
+            slab[kb + e] = slab[kb + e] * -slab[egc + e / ds]
+            e += 256u
+        }
+        memoryBarrierBuffer()
+        barrier()
+        gemm(w, tmg, kb, cl, cl, ds, CS, ds, ds, 0u)
+        gemm(vnew, tmg, vb, cl, cl, ds, CS, ds, ds, 0u)
+        // qc scaled in place to (q e^gcum) — phase 2's och GEMM reads it directly
+        e = tid
+        while (e < cl * ds) {
+            slab[qc + e] = slab[qc + e] * slab[egc + e / ds]
+            e += 256u
+        }
+        // transition piece: kgT = (k e^{glast - gcum})^T, phase 2's state-advance A operand
+        let glast = slab[gcum + cl - 1u]
+        if (tid < cl) {
+            slab[kgc + tid] = exp(glast - slab[gcum + tid])
+        }
+        memoryBarrierBuffer()
+        barrier()
+        e = tid
+        while (e < ds * cl) {
+            let j = e / cl
+            let i = e % cl
+            slab[kgT + j * CS + i] = slab[kcT + j * CS + i] * slab[kgc + i]
+            e += 256u
+        }
+    }
+}
+
+struct DnScanP2Args {
+    npos : uint
+    di : uint
+    ds : uint
+    o_off : uint
+    wnorm_off : uint
+    slab_stride : uint
+    st_off : uint    // per-head state+och working region base
+    eps : float
+}
+
+// phase 2: chunks sequentially, only the 4 state-dependent GEMMs + the gated out-norm
+[vk_dispatch(name = "dn_scan_p2_cls", grid = "nvh", params = "nvh : int64")]
+class DnScanP2 : DnScanBase {
+    @ssbo @binding = 0 zrows : array<float>    // the z gate rows
+    @ssbo @binding = 1 state : array<float>    // the persistent per-head f32 state
+    @ssbo @binding = 3 smalls : array<float>   // wnorm (push offset)
+    @push_constant pa : DnScanP2Args
+
+    [spirv_kernel(local_size_x = 256, name = "dn_scan_p2_cls_spv")]
+    def run {   // nolint:STYLE037,STYLE038 — the verbatim phase-2 walk, parity-locked to the shipped kernel
+        let h = gl_WorkGroupID.x
+        let ds = pa.ds
+        let tid = gl_LocalInvocationID.x
+        let CS = 64u
+        let nch = (pa.npos + CS - 1u) / CS
+        let st = pa.st_off + h * (ds * ds + CS * ds)
+        let och = st + ds * ds
+        // the persistent state works in its slab copy (one GEMM surface for everything)
+        var i0 = tid
+        while (i0 < ds * ds) {
+            slab[st + i0] = state[h * ds * ds + i0]
+            i0 += 256u
+        }
+        memoryBarrierBuffer()
+        barrier()
+        var c = 0u
+        while (c < nch) {
+            let c0 = c * CS
+            let cl = min(CS, pa.npos - c0)
+            let slb = pa.slab_stride * (h * nch + c)
+            let qc = slb
+            let w = slb + 4u * CS * ds
+            let vnew = slb + 5u * CS * ds
+            let kgT = slb + 6u * CS * ds
+            let kq = slb + 7u * CS * ds + CS * CS
+            let gcum = slb + 7u * CS * ds + 2u * CS * CS
+            // d = vnloc + w S (in place over phase 1's local half)
+            gemm(vnew, w, st, cl, ds, ds, ds, ds, ds, 1u)
+            // o = (q e^gcum) S + KQ d
+            gemm(och, qc, st, cl, ds, ds, ds, ds, ds, 0u)
+            gemm(och, kq, vnew, cl, cl, ds, CS, ds, ds, 1u)
+            // gated out-norm straight into the o rows: rms(och) * wnorm, silu(z)-gated
+            if (tid < cl) {
+                let ob = och + tid * ds
+                var sum = 0.0
+                var j3 = 0u
+                while (j3 < ds) {
+                    let v = slab[ob + j3]
+                    sum += v * v
+                    j3++
+                }
+                let scale = 1.0 / sqrt(sum / float(ds) + pa.eps)
+                let orow = pa.o_off + (c0 + tid) * pa.di + h * ds
+                let zrow = (c0 + tid) * pa.di + h * ds
+                j3 = 0u
+                while (j3 < ds) {
+                    let zv = zrows[zrow + j3]
+                    let xn = slab[ob + j3] * scale * smalls[pa.wnorm_off + j3]
+                    slab[orow + j3] = xn * (zv / (1.0 + exp(-zv)))
+                    j3++
+                }
+            }
+            barrier()
+            // state advance, once per chunk: S = e^glast S + kgT d
+            let egl = exp(slab[gcum + cl - 1u])
+            var e = tid
+            while (e < ds * ds) {
+                slab[st + e] = slab[st + e] * egl
+                e += 256u
+            }
+            memoryBarrierBuffer()
+            barrier()
+            gemm(st, kgT, vnew, ds, cl, ds, CS, ds, ds, 1u)
+            c++
+        }
+        // the advanced state back to its persistent plane
+        i0 = tid
+        while (i0 < ds * ds) {
+            state[h * ds * ds + i0] = slab[st + i0]
+            i0 += 256u
+        }
+    }
+}
+
 // ===== decode attention =====
 
 struct DaAttnArgs {
