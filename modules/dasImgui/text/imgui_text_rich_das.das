@@ -103,7 +103,7 @@ def private begins_in_block(ed : TextEditState const; row : int) : bool {
     return row < length(ed.line_styles) && ed.line_styles[row].in_block_comment
 }
 
-def public rich_das_collect_groups(ed : TextEditState const; // nolint:STYLE038
+def public rich_das_collect_groups(ed : TextEditState const;
                                    var spans : array<RichDasGroupSpan>) {
     //! Maximal runs of adjacent full-comment lines with byte-identical indent.
     //! Blank lines split; a `/* */` with a MIXED opener or closer line poisons
@@ -210,7 +210,7 @@ def public rich_das_caret_target(st : RichDasState const; group_index : int;
 
 // ===== Sync (per-group cache with content adoption) =====
 
-def public rich_das_sync(var st : RichDasState; ed : TextEditState const; // nolint:STYLE038
+def public rich_das_sync(var st : RichDasState; ed : TextEditState const;
                          immediate : bool) : bool {
     //! Rebuild the group list; unchanged fragments ADOPT their old parse and
     //! layout, so editing one group reparses only that group and code edits
@@ -309,7 +309,7 @@ def private rich_das_route_click(var ed : TextEditState; var st : RichDasState;
     text_edit_set_cursor(ed, target.x, target.y)
 }
 
-def private rich_das_draw_source(var ed : TextEditState; // nolint:STYLE038
+def private rich_das_draw_source(var ed : TextEditState;
                                  var edit_style : TextSourceViewStyle;
                                  var registry : CommandRegistry;
                                  seg : HybridSegment; index : int;

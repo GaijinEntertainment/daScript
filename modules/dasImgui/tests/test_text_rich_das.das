@@ -104,7 +104,7 @@ def private segment_of_line(app : ImguiApp; line : int) : JsonValue const? {
 }
 
 [test]
-def test_rich_das_cross_segment_click_no_jump(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
+def test_rich_das_cross_segment_click_no_jump(t : T?) {
     // play round 3: a click on ANOTHER source segment used to be hijacked by
     // the primary (caret clamped to its first line) and the follow scrolled
     // "god knows where" off a stale anchor
@@ -154,7 +154,7 @@ def test_rich_das_cross_segment_click_no_jump(t : T?) { // nolint:STYLE038 — o
 }
 
 [test]
-def test_rich_das_keys_after_ctrl_end(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
+def test_rich_das_keys_after_ctrl_end(t : T?) {
     // play round 3: after Ctrl+End the caret's segment-child owns neither nav
     // focus nor (once scrolled out) a drawn body - keys must survive both
     with_imgui_app(FEATURE) $(app) {
@@ -193,7 +193,7 @@ def test_rich_das_keys_after_ctrl_end(t : T?) { // nolint:STYLE038 — one event
 }
 
 [test]
-def test_rich_das_groups_and_unfold(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
+def test_rich_das_groups_and_unfold(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))
         var temp_error = ""
@@ -235,7 +235,7 @@ def test_rich_das_groups_and_unfold(t : T?) { // nolint:STYLE038 — one event-g
 }
 
 [test]
-def test_rich_das_edit_refreshes_one_fragment(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
+def test_rich_das_edit_refreshes_one_fragment(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))
         var temp_error = ""

@@ -1400,7 +1400,7 @@ def private ensure_layout(doc : RichDocument const; node_index : int; // nolint:
     state.layout_misses++
 }
 
-def private render_inline(doc : RichDocument const; node_index : int; // nolint:STYLE037
+def private render_inline(doc : RichDocument const; node_index : int; // nolint:STYLE037,STYLE038 — the one-pass inline layout/draw core; state threads through every span, a split re-plumbs it all
                           var state : MarkdownViewState; max_width : float;
                           var style : MarkdownViewStyle;
                           font_scale : float; forced_style : int;
@@ -1839,7 +1839,7 @@ def private render_children(doc : RichDocument const; node_index : int;
     }
 }
 
-def private render_list_item_head(doc : RichDocument const; ordered : bool; // nolint:STYLE038
+def private render_list_item_head(doc : RichDocument const; ordered : bool;
                                   item, ordinal : int;
                                   var state : MarkdownViewState;
                                   var style : MarkdownViewStyle;

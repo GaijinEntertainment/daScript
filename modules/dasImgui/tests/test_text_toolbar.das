@@ -64,7 +64,7 @@ def private open_toolbar_fixture(t : T?; app : ImguiApp;
 }
 
 [test]
-def test_toolbar_image_between_paragraphs(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
+def test_toolbar_image_between_paragraphs(t : T?) {
     // Boris's exact flow: click a paragraph, click the blank line after it,
     // click Img on the toolbar - all REAL clicks
     with_imgui_app(FEATURE) $(app) {
@@ -116,7 +116,7 @@ def test_toolbar_image_between_paragraphs(t : T?) { // nolint:STYLE038 — one e
 let FENCE_FIXTURE = "# Title\n\nLead paragraph.\n\n```text\ncode line\n```\n\nTail paragraph.\n"
 
 [test]
-def test_toolbar_image_below_fence(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
+def test_toolbar_image_below_fence(t : T?) {
     // regression pin (Boris, play round 2): a gap click BELOW a code fence
     // parked the caret ON the closing ``` line (node source ranges exclude
     // it), so Img/List declined in-fence with only a silent footer status
@@ -206,7 +206,7 @@ def test_toolbar_buttons_fire_over_reclaim(t : T?) {
 }
 
 [test]
-def test_click_off_glyph_and_dead_strip(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
+def test_click_off_glyph_and_dead_strip(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))
         var temp_error = ""
@@ -314,7 +314,7 @@ def test_view_click_enters_editing(t : T?) {
 }
 
 [test]
-def test_view_drag_and_checkbox_stay_viewing(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
+def test_view_drag_and_checkbox_stay_viewing(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))
         var temp_error = ""
@@ -387,7 +387,7 @@ def test_click_to_edit_crlf_caret(t : T?) {
 }
 
 [test]
-def test_live_reload_keeps_documents(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
+def test_live_reload_keeps_documents(t : T?) {
     // the [before_reload]/[after_reload] document persistence: a reload keeps
     // the open doc, its unsaved buffer, the caret, and edit mode
     with_imgui_app(FEATURE) $(app) {

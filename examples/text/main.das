@@ -1563,7 +1563,7 @@ def private click_means_edit : bool {
         || (GetScrollMaxX() > 0.0f && pos.y > origin.y + size.y - bar))
 }
 
-def private markdown_click_route(var doc : TextViewerDocument; // nolint:STYLE038
+def private markdown_click_route(var doc : TextViewerDocument;
                                  control_active : bool;
                                  fold_before, copy_before,
                                  selection_before : int) {

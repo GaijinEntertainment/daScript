@@ -62,7 +62,7 @@ def private viewer_ready(t : T?; app : ImguiApp) : bool {
 }
 
 [test]
-def test_create_wrap_chaining_and_undo(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
+def test_create_wrap_chaining_and_undo(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))
         var temp_error = ""
@@ -107,7 +107,7 @@ def test_create_wrap_chaining_and_undo(t : T?) { // nolint:STYLE038 — one even
 }
 
 [test]
-def test_create_link_snippet_tab_flow(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
+def test_create_link_snippet_tab_flow(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))
         var temp_error = ""
@@ -149,7 +149,7 @@ def test_create_link_snippet_tab_flow(t : T?) { // nolint:STYLE038 — one event
 }
 
 [test]
-def test_create_transform_and_fence_gate(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
+def test_create_transform_and_fence_gate(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))
         var temp_error = ""

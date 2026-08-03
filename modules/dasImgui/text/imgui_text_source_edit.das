@@ -4114,17 +4114,8 @@ def private edit_define_ctrl_select(var registry : CommandRegistry;
             CommandScope.component, true), keypad, true, true))
 }
 
-def private dispatch_edit_command(var ed : TextEditState; command_id : string; // nolint:STYLE037 — one arm per command id; the verb ladder is flat, with the line ops already split off
-                                  page_rows : int; use_system_clipboard : bool) {
-    var select = false
-    var verb = command_id
-    if (ends_with(verb, ".2")) {
-        verb = slice(verb, 0, length(verb) - 2)
-    }
-    if (ends_with(verb, ".select")) {
-        select = true
-        verb = slice(verb, 0, length(verb) - 7)
-    }
+def private dispatch_edit_motion(var ed : TextEditState; verb : string;
+                                 page_rows : int; select : bool) : bool {
     if (verb == "edit.cursor_left") {
         text_edit_move_left(ed, select)
     } elif (verb == "edit.cursor_right") {
@@ -4153,6 +4144,25 @@ def private dispatch_edit_command(var ed : TextEditState; command_id : string; /
         text_edit_move_document_start(ed, select)
     } elif (verb == "edit.document_end") {
         text_edit_move_document_end(ed, select)
+    } else {
+        return false
+    }
+    return true
+}
+
+def private dispatch_edit_command(var ed : TextEditState; command_id : string; // nolint:STYLE037 — one arm per command id; the verb ladder is flat, with motion + line ops split off
+                                  page_rows : int; use_system_clipboard : bool) {
+    var select = false
+    var verb = command_id
+    if (ends_with(verb, ".2")) {
+        verb = slice(verb, 0, length(verb) - 2)
+    }
+    if (ends_with(verb, ".select")) {
+        select = true
+        verb = slice(verb, 0, length(verb) - 7)
+    }
+    if (dispatch_edit_motion(ed, verb, page_rows, select)) {
+        pass
     } elif (verb == "edit.newline") {
         if (!text_edit_list_accept(ed)) {
             text_edit_newline(ed)

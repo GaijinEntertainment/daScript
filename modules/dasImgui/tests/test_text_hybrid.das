@@ -66,7 +66,7 @@ def private viewer_ready(t : T?; app : ImguiApp) : bool {
 }
 
 [test]
-def test_hybrid_surface_three_way(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
+def test_hybrid_surface_three_way(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))
         var temp_error = ""
@@ -185,7 +185,7 @@ def test_hybrid_click_rich_block_moves_caret(t : T?) {
 }
 
 [test]
-def test_hybrid_typing_debounce_and_exit_snap(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
+def test_hybrid_typing_debounce_and_exit_snap(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))
         var temp_error = ""
@@ -230,7 +230,7 @@ def test_hybrid_typing_debounce_and_exit_snap(t : T?) { // nolint:STYLE038 — o
 }
 
 [test]
-def test_hybrid_editor_state_across_surfaces(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
+def test_hybrid_editor_state_across_surfaces(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))
         var temp_error = ""

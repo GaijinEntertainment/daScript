@@ -524,7 +524,7 @@ def private define_das_statement(id, title, body : string) {
     creation_define(definition)
 }
 
-def private register_daslang_builtins() { // nolint:STYLE038 — flat builtin table, one define per construct
+def private register_daslang_builtins() {
     define_das_statement("das.if", "if",
         "if ($\{1:condition}) \{\n\t$\{0}\n\}")
     define_das_statement("das.if_else", "if / else",
