@@ -246,7 +246,10 @@ def test_click_off_glyph_and_dead_strip(t : T?) {
         // wait_for_render returns the SNAPSHOT; extract the widget entry
         var entry = find_widget(probe,
             "DOCK_ROOT/g_document_windows[1]/DOCUMENT_CONTENT/editor")
-        let strip_y = (entry?["bbox"]?["w"] ?? 0.0f) + 6.0f
+        let strip_base = entry?["bbox"]?["w"] ?? 0.0f
+        // a missing bbox would fall back to ~6px - the menu bar, not the strip
+        t |> success(strip_base > 0.0f, "the island editor bbox is present")
+        let strip_y = strip_base + 6.0f
         // atomic travel+click: a plain pos+press pair can interleave with the
         // previous click's synth timeline
         post_command(app, "imgui_mouse_click_at",
