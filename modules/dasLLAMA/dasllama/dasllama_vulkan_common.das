@@ -2314,6 +2314,103 @@ def make_kernel_pipe(kernel : string; var spv : array<uint>) : Pipeline {
     return <- pipe
 }
 
+// ===== the class-kernel dispatch rail ([vk_dispatch]-generated code calls these) =====
+// A [spirv_kernel] class gets its OWN set/pipeline layout (push range from @push_constant); the
+// hazard rail is unchanged — class pipelines register binding masks, sets carry region bits.
+
+struct VkdClass {
+    ready : bool
+    nbindings : int
+    push_bytes : int
+    set_layout : DescriptorSetLayout
+    pipe_layout : PipelineLayout
+    pipe : Pipeline
+}
+
+def vkd_class_init(var c : VkdClass; nbindings, push_bytes : int) {
+    var dslci : DescriptorSetLayoutCreateInfo
+    dslci.pBindings |> reserve(nbindings)
+    for (bind in range(nbindings)) {
+        var b0 = DescriptorSetLayoutBinding(binding = uint(bind),
+                                            descriptorType = VkDescriptorType.STORAGE_BUFFER,
+                                            descriptorCount = 1u)
+        b0.stageFlags.compute = true
+        dslci.pBindings |> emplace(b0)
+    }
+    c.set_layout <- create_descriptor_set_layout(g_gpu.device, dslci)
+    var plci : PipelineLayoutCreateInfo
+    plci.pSetLayouts <- [weak_copy(c.set_layout)]
+    if (push_bytes > 0) {
+        var sf : VkShaderStageFlags
+        sf.compute = true
+        plci.pPushConstantRanges |> push(PushConstantRange(stageFlags = sf, offset = 0u, size = uint(push_bytes)))
+    }
+    c.pipe_layout <- create_pipeline_layout(g_gpu.device, plci)
+    c.nbindings = nbindings
+    c.push_bytes = push_bytes
+}
+
+// write a class set's descriptors + declare its region bits (the [vk_dispatch]-generated set
+// builder's engine; generic over the class's binding count)
+def vkd_set(c : VkdClass; set_ : VkDescriptorSet; bufs : uint64 const[]; sizes : int64 const[]; gbits : uint const[]) {
+    assert(length(bufs) == c.nbindings, "vkd_set: buffer count != the class's binding count")
+    var writes : array<WriteDescriptorSet>
+    for (bind in range(length(bufs))) {
+        write_buf_desc(writes, set_, uint(bind), bufs[bind], sizes[bind])
+    }
+    let no_copies : array<CopyDescriptorSet>
+    update_descriptor_sets(g_gpu.device, writes, no_copies)
+    var sb : SetBits
+    for (bind in range(length(gbits))) {
+        if (bind < 6) {
+            sb.b[bind] = gbits[bind]
+        }
+    }
+    g_set_bits[intptr(set_)] = sb
+}
+
+def vkd_class_pipe(var c : VkdClass; var spv : array<uint>; rmask, wmask : uint; kernel : string) {
+    var shader <- create_shader_module(g_gpu.device, spv)
+    c.pipe <- create_compute_pipeline(g_gpu.device, c.pipe_layout, shader)
+    let pk = intptr(boost_value_to_vk(c.pipe))
+    g_pipe_access[pk] = uint2(rmask, wmask)
+    g_pipe_names[pk] = kernel
+    c.ready = true
+}
+
+def vkd_alloc_set(c : VkdClass) : VkDescriptorSet {
+    var dsai = VkDescriptorSetAllocateInfo()
+    dsai.descriptorPool = boost_value_to_vk(g_gpu.desc_pool)
+    dsai.descriptorSetCount = 1u
+    var raw_set_layout = boost_value_to_vk(c.set_layout)
+    var raw : VkDescriptorSet
+    unsafe {
+        dsai.pSetLayouts = addr(raw_set_layout)
+        vk_check(vkAllocateDescriptorSets(dev_raw(), dsai, addr(raw)), null)
+    }
+    return raw
+}
+
+// push the class's params struct (all-4-byte-scalar, [vk_dispatch]-validated); generic so the
+// generated encoder passes the struct plainly and the one unsafe address-of lives here
+def vkd_push(raw : VkCommandBuffer; c : VkdClass; var pc : auto(PT)&) {
+    var sf : VkShaderStageFlags
+    sf.compute = true
+    vkCmdPushConstants(raw, boost_value_to_vk(c.pipe_layout), sf, 0u, uint(c.push_bytes), unsafe(addr<void?>(pc)))
+}
+
+// the class twin of hz_dispatch: same masks/coverage/barrier rail, the CLASS pipeline layout
+def vkd_dispatch(raw : VkCommandBuffer; var h : VkHaz; c : VkdClass; var set_ : VkDescriptorSet; groups : uint) {
+    let m = hz_masks(c.pipe, set_)
+    g_vk_kcov[intptr(boost_value_to_vk(c.pipe))]++
+    vhz_dep(raw, h, m.r, m.w)
+    cmd_bind_pipeline(vk_value_to_boost(raw), c.pipe, VkPipelineBindPoint.COMPUTE)
+    unsafe {
+        vkCmdBindDescriptorSets(raw, VkPipelineBindPoint.COMPUTE, boost_value_to_vk(c.pipe_layout), 0u, 1u, addr(set_), 0u, null)
+    }
+    vkCmdDispatch(raw, groups, 1u, 1u)
+}
+
 // derive this dispatch's hazard masks: the set's region bits distributed over the kernel's
 // read/write bindings. Undeclared pipeline or set = a programming error, not a fallback.
 def hz_masks(pipe : Pipeline; var set_ : VkDescriptorSet) : tuple<r : uint; w : uint> {
