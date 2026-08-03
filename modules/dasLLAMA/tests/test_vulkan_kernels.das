@@ -1114,6 +1114,207 @@ def test_vkd_kq_batch_family(t0 : T?) {
     }
 }
 
+[test]
+def test_vkd_cm_batch_family(t0 : T?) {
+    t0 |> run("coopmat batch class twins == the shipped kernels (bit-exact, per available mode)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q8_batch_cmf16_cls()) {   // any ensure engages the device; pipes gate per arm
+                feint("no Vulkan device — skipping\n")
+                return
+            }
+            var ran = 0
+            // per variant: [tile, d, cnt0, cnt1, n] — cmi8 keeps rows/cols aligned (its loads are
+            // unguarded); mm/mm_m mix full and edge tiles; mm_a is the all-aligned twin
+            for (v in range(5)) {
+                var tile = 32
+                var d = 40
+                var cnt0 = 35
+                var cnt1 = 20
+                var n = 96
+                if (v == 1) {
+                    d = 64
+                    cnt0 = 32
+                    cnt1 = 32
+                } elif (v == 2) {
+                    tile = 128
+                    d = 192
+                    cnt0 = 140
+                    cnt1 = 116
+                    n = 64
+                } elif (v == 3) {
+                    tile = 128
+                    d = 128
+                    cnt0 = 128
+                    cnt1 = 128
+                    n = 64
+                } elif (v == 4) {
+                    tile = 64
+                    d = 96
+                    cnt0 = 80
+                    cnt1 = 48
+                    n = 64
+                }
+                if (!key_exists(g_pipe_access, intptr(boost_value_to_vk(cm_pipe_for_test(v))))) {
+                    continue   // this mode's pipe not created in this process
+                }
+                let up = (v == 0 ? ensure_q8_batch_cmf16_cls()
+                    : (v == 1 ? ensure_q8_batch_cmi8_cls()
+                    : (v == 2 ? ensure_q8_batch_mm_cls()
+                    : (v == 3 ? ensure_q8_batch_mm_a_cls() : ensure_q8_batch_mm_m_cls()))))
+                assert(up, "class rail must engage when the shipped pipe exists")
+                ran++
+                let nbb = n / 32
+                let rows = cnt0 + cnt1
+                let wtiles = (d + tile - 1) / tile
+                let wgs0 = ((cnt0 + tile - 1) / tile) * wtiles
+                let wgs1 = ((cnt1 + tile - 1) / tile) * wtiles
+                let wgs = wgs0 + wgs1
+                let totblk = 2 * d * nbb
+                var wqh : array<uint>
+                var wsh : array<uint>
+                var xqh : array<uint>
+                var xsh : array<float>
+                wqh |> resize(totblk * 8)
+                wsh |> resize(totblk / 2 + 1)
+                xqh |> resize(rows * nbb * 8)
+                xsh |> resize(rows * nbb)
+                for (i in range(totblk * 8)) {
+                    wqh[i] = hash_word(uint(i) + 3u)
+                }
+                for (i in range(totblk / 2 + 1)) {
+                    wsh[i] = ws_word(uint(i) + 7u)
+                }
+                for (i in range(rows * nbb * 8)) {
+                    xqh[i] = hash_word(uint(i) * 13u + 1u)
+                }
+                for (i in range(rows * nbb)) {
+                    xsh[i] = 0.375 + float(i % 9) * 0.0625
+                }
+                let wq_bytes = int64(totblk) * 32l
+                let ws_bytes = int64(totblk) * 2l
+                let xq_bytes = int64(rows * nbb) * 32l
+                let xs_bytes = int64(rows * nbb) * 4l
+                let y_bytes = int64(rows * d) * 4l
+                let wqd = make_device_buf(wq_bytes)
+                let wsd = make_device_buf(ws_bytes)
+                let xqd = make_device_buf(xq_bytes)
+                let xsd = make_device_buf(xs_bytes)
+                let yd1 = make_device_buf(y_bytes)
+                let yd2 = make_device_buf(y_bytes)
+                var meta = make_host_buf(META_BYTES, false, [cached = false])
+                var host = make_host_buf(y_bytes, true, [cached = true])
+                var y_old : array<float>
+                var y_cls : array<float>
+                y_old |> resize(rows * d)
+                y_cls |> resize(rows * d)
+                unsafe {
+                    upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
+                    upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
+                    upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
+                    upload_region_at(xsd, 0l, addr<uint8 const?>(xsh[0]), xs_bytes)
+                    var sched : array<uint>
+                    sched |> resize(2 * 4 + wgs)
+                    sched[0] = 0u
+                    sched[1] = 0u
+                    sched[2] = uint(cnt0)
+                    sched[3] = 0u
+                    sched[4] = uint(d * nbb)
+                    sched[5] = uint(cnt0)
+                    sched[6] = uint(cnt1)
+                    sched[7] = uint(wgs0)
+                    for (w in range(wgs)) {
+                        sched[8 + w] = w < wgs0 ? 0u : 1u
+                    }
+                    var mp = reinterpret<uint?>(meta.mapped)
+                    mp[0] = uint(n)
+                    mp[1] = uint(d)
+                    mp[3] = uint(4 + 2 * 4)
+                    for (i in range(2 * 4 + wgs)) {
+                        mp[4 + i] = sched[i]
+                    }
+                    let sc_bytes = int64(2 * 4 + wgs) * 4l
+                    let scd = make_device_buf(sc_bytes)
+                    upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
+                    var so = vk_set6(wqd, wsd, meta.buf, xqd, xsd, yd1,
+                        wq_bytes, ws_bytes, META_BYTES, xq_bytes, xs_bytes, y_bytes,
+                        fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                    var raw = alloc_cmd()
+                    let begin = VkCommandBufferBeginInfo()
+                    vk_check(vkBeginCommandBuffer(raw, begin), null)
+                    var h : VkHaz
+                    hz_dispatch(raw, h, cm_pipe_for_test(v), so, uint(wgs))
+                    vhz_dep(raw, h, 32u, 0u, true)
+                    cmd_copy_whole(raw, yd1, host.buf, y_bytes)
+                    vk_check(vkEndCommandBuffer(raw), null)
+                    submit_wait(raw)
+                    memcpy(addr<void?>(y_old[0]), host.mapped, y_bytes)
+                    let bufs = fixed_array(wqd, wsd, scd, xqd, xsd, yd2)
+                    let sizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, xs_bytes, y_bytes)
+                    let gbits = fixed_array(1u, 2u, 0u, 4u, 8u, 16u)
+                    var sc = (v == 0 ? set_q8_batch_cmf16_cls(bufs, sizes, gbits)
+                        : (v == 1 ? set_q8_batch_cmi8_cls(bufs, sizes, gbits)
+                        : (v == 2 ? set_q8_batch_mm_cls(bufs, sizes, gbits)
+                        : (v == 3 ? set_q8_batch_mm_a_cls(bufs, sizes, gbits)
+                        : set_q8_batch_mm_m_cls(bufs, sizes, gbits)))))
+                    var raw2 = alloc_cmd()
+                    vk_check(vkBeginCommandBuffer(raw2, begin), null)
+                    var h2 : VkHaz
+                    var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
+                    if (v == 0) {
+                        enc_q8_batch_cmf16_cls(raw2, h2, sc, pc, int64(wgs))
+                    } elif (v == 1) {
+                        enc_q8_batch_cmi8_cls(raw2, h2, sc, pc, int64(wgs))
+                    } elif (v == 2) {
+                        enc_q8_batch_mm_cls(raw2, h2, sc, pc, int64(wgs))
+                    } elif (v == 3) {
+                        enc_q8_batch_mm_a_cls(raw2, h2, sc, pc, int64(wgs))
+                    } else {
+                        enc_q8_batch_mm_m_cls(raw2, h2, sc, pc, int64(wgs))
+                    }
+                    vhz_dep(raw2, h2, 32u, 0u, true)
+                    cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
+                    vk_check(vkEndCommandBuffer(raw2), null)
+                    submit_wait(raw2)
+                    memcpy(addr<void?>(y_cls[0]), host.mapped, y_bytes)
+                    delete sched
+                }
+                var bad = 0
+                for (i in range(rows * d)) {
+                    if (y_old[i] != y_cls[i]) {
+                        bad++
+                    }
+                }
+                to_log(LOG_INFO, "cm batch variant {v}: {bad} of {rows * d} diverge\n")
+                t |> success(bad == 0, "cm batch variant {v}: class twin bit-exact ({bad} of {rows * d} diverge)")
+                delete wqh
+                delete wsh
+                delete xqh
+                delete xsh
+                delete y_old
+                delete y_cls
+            }
+            if (ran == 0) {
+                feint("no coopmat batch pipes in this mode — set DASLLAMA_COOPMAT to cover\n")
+            }
+        } else {
+            feint("dasVulkan not present — skipping\n")
+        }
+    }
+}
+
+def private cm_pipe_for_test(v : int) : Pipeline {
+    if (v == 0) {
+        return weak_copy(g_gpu.batch_coopmat_f16)
+    } elif (v == 1) {
+        return weak_copy(g_gpu.batch_coopmat_i8)
+    } elif (v == 2) {
+        return weak_copy(g_gpu.batch_coopmat_mm)
+    } elif (v == 3) {
+        return weak_copy(g_gpu.batch_coopmat_mm_a)
+    }
+    return weak_copy(g_gpu.batch_coopmat_mm_m)
+}
+
 def private gemv_pipe_batch_for_test(fmt : int) : Pipeline {
     if (fmt == int(KqFmt.k4)) {
         return weak_copy(g_gpu.batch_k4)
