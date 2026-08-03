@@ -1116,6 +1116,187 @@ class AtPrep {
     }
 }
 
+// ===== prefill attention: the flash Q-tile =====
+
+struct AtAttnArgs {
+    rows : uint     // window query rows
+    w0 : uint       // window base (queries attend positions [0, w0 + row])
+    qd : uint
+    kvd : uint
+    hs : uint
+    kv_mul : uint
+    flags : uint    // bit 0 = gated output
+    dpl : uint      // output dims per lane (hs / 32)
+    scale : float
+}
+
+// batched causal attention, flash-style Q tile: one wg per (head, 8-query tile), 32-position
+// shared K/V tiles (V reuses the K staging), per-row online softmax; lane c owns dims c + 32*jj
+[vk_dispatch(name = "at_attn_cls", grid = "wgs", params = "wgs : int64")]
+class AtAttn {
+    @ssbo @binding = 0 qpanel : array<float>   // the prepped q panel
+    @ssbo @binding = 1 kpanel : array<float>   // the prepped k panel
+    @ssbo @binding = 2 vpanel : array<float>   // the raw v rows
+    @ssbo @binding = 3 outp : array<float>     // attention out (gated models read the gate stash here)
+    @push_constant pa : AtAttnArgs
+    @workgroup fq : float[2048]    // the tile's 8 q rows
+    @workgroup fkv : float[8224]   // one 32-row K/V stage, stride 257 (bank-spread)
+    @workgroup fp : float[256]     // the 8x32 score/probability tile
+    @workgroup fm : float[8]       // per-row online-softmax state
+    @workgroup fl : float[8]
+    @workgroup fal : float[8]
+
+    // stage the 8-query tile and reset the online-softmax state
+    def load_q(q0, h : uint) {
+        let tid = gl_LocalInvocationID.x
+        var i = tid
+        while (i < 8u * pa.hs) {
+            let qr = q0 + i / pa.hs
+            fq[i] = qr < pa.rows ? qpanel[qr * pa.qd + h * pa.hs + i % pa.hs] : 0.0
+            i += 256u
+        }
+        if (tid < 8u) {
+            fm[tid] = -3.0e38
+            fl[tid] = 0.0
+        }
+    }
+
+    // stage one 32-position K tile from kpanel at kbase (V reuse of this staging loads per-kernel)
+    def load_k(k0, kend, kbase, kvh : uint) {
+        var i = gl_LocalInvocationID.x
+        while (i < 32u * pa.hs) {
+            let kr = k0 + i / pa.hs
+            fkv[(i / pa.hs) * 257u + i % pa.hs] = kr < kend ? kpanel[kbase + kr * pa.kvd + kvh * pa.hs + i % pa.hs] : 0.0
+            i += 256u
+        }
+    }
+
+    // tile QK^T: lane (r, c) scores query r against position k0+c, causal-masked into fp
+    def qk_score(r, c, k0, gq, q0 : uint) {
+        var s = 0.0
+        var j = 0u
+        while (j < pa.hs) {   // 4-wide manual unroll (hs % 32 == 0)
+            s += fq[r * pa.hs + j] * fkv[c * 257u + j]
+            s += fq[r * pa.hs + j + 1u] * fkv[c * 257u + j + 1u]
+            s += fq[r * pa.hs + j + 2u] * fkv[c * 257u + j + 2u]
+            s += fq[r * pa.hs + j + 3u] * fkv[c * 257u + j + 3u]
+            j += 4u
+        }
+        let gk = k0 + c
+        fp[r * 32u + c] = (gk <= gq && q0 + r < pa.rows) ? s * pa.scale : -3.0e38
+    }
+
+    // per-row online-softmax update: max, rescale, exponentiate in place
+    def softmax_update {
+        let tid = gl_LocalInvocationID.x
+        if (tid < 8u) {
+            var mt = fm[tid]
+            var j2 = 0u
+            while (j2 < 32u) {
+                mt = max(mt, fp[tid * 32u + j2])
+                j2++
+            }
+            let alpha = exp(fm[tid] - mt)
+            var lsum = 0.0
+            j2 = 0u
+            while (j2 < 32u) {
+                let e = exp(fp[tid * 32u + j2] - mt)
+                fp[tid * 32u + j2] = e
+                lsum += e
+                j2++
+            }
+            fl[tid] = fl[tid] * alpha + lsum
+            fm[tid] = mt
+            fal[tid] = alpha
+        }
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "at_attn_cls_spv")]
+    def run {   // nolint:STYLE037,STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
+        let qtiles = (pa.rows + 7u) / 8u
+        let h = gl_WorkGroupID.x / qtiles
+        let q0 = (gl_WorkGroupID.x % qtiles) * 8u
+        let tid = gl_LocalInvocationID.x
+        let r = tid / 32u
+        let c = tid % 32u
+        let kvh = h / pa.kv_mul
+        load_q(q0, h)
+        var o0 = 0.0
+        var o1 = 0.0
+        var o2 = 0.0
+        var o3 = 0.0
+        var o4 = 0.0
+        var o5 = 0.0
+        var o6 = 0.0
+        var o7 = 0.0
+        barrier()
+        let gq = pa.w0 + q0 + r
+        let kend = pa.w0 + min(q0 + 8u, pa.rows)   // causal bound (exclusive) of the tile's last row
+        var i = tid
+        var k0 = 0u
+        while (k0 < kend) {
+            load_k(k0, kend, 0u, kvh)
+            barrier()
+            qk_score(r, c, k0, gq, q0)
+            barrier()
+            softmax_update()
+            barrier()
+            let av = fal[r]
+            o0 *= av
+            o1 *= av
+            o2 *= av
+            o3 *= av
+            if (pa.dpl > 4u) {
+                o4 *= av
+                o5 *= av
+                o6 *= av
+                o7 *= av
+            }
+            i = tid
+            while (i < 32u * pa.hs) {   // V tile reuses the K staging (all K reads completed above)
+                let kr = k0 + i / pa.hs
+                fkv[(i / pa.hs) * 257u + i % pa.hs] = kr < kend ? vpanel[kr * pa.kvd + kvh * pa.hs + i % pa.hs] : 0.0
+                i += 256u
+            }
+            barrier()
+            var c2 = 0u
+            while (c2 < 32u) {
+                let pw = fp[r * 32u + c2]
+                let vb = c2 * 257u + c
+                o0 += pw * fkv[vb]
+                o1 += pw * fkv[vb + 32u]
+                o2 += pw * fkv[vb + 64u]
+                o3 += pw * fkv[vb + 96u]
+                if (pa.dpl > 4u) {
+                    o4 += pw * fkv[vb + 128u]
+                    o5 += pw * fkv[vb + 160u]
+                    o6 += pw * fkv[vb + 192u]
+                    o7 += pw * fkv[vb + 224u]
+                }
+                c2++
+            }
+            barrier()
+            k0 += 32u
+        }
+        if (q0 + r < pa.rows) {
+            let inv = 1.0 / fl[r]
+            let ob = (q0 + r) * pa.qd + h * pa.hs + c
+            let gated = pa.flags & 1u
+            var jj = 0u
+            while (jj < pa.dpl) {
+                var v = (jj == 0u ? o0 : (jj == 1u ? o1 : (jj == 2u ? o2 : (jj == 3u ? o3
+                    : (jj == 4u ? o4 : (jj == 5u ? o5 : (jj == 6u ? o6 : o7))))))) * inv
+                if (gated != 0u) {
+                    let g = outp[ob + jj * 32u]
+                    v = v / (1.0 + exp(-g))
+                }
+                outp[ob + jj * 32u] = v
+                jj++
+            }
+        }
+    }
+}
+
 // ===== decode attention =====
 
 struct DaAttnArgs {

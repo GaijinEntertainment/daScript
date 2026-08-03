@@ -1231,6 +1231,124 @@ def test_vkd_da_attn(t0 : T?) {
 }
 
 [test]
+def test_vkd_at_attn(t0 : T?) {
+    t0 |> run("prefill attention class twin == the shipped kernel (bit-exact, partial tiles, gated)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_at_attn_cls()) {
+                feint("no Vulkan device — skipping\n")
+                return
+            }
+            let nheads = 4
+            let kv_mul = 2
+            let rows = 13   // partial 8-tile: q0=8 has 5 valid rows — the row masks run
+            let w0 = 32     // nonzero window base: kend crosses the 32-position K tile → alpha rescale runs
+            let scale = 0.125
+            for (hs in [64, 256]) {   // dpl 2 (o0/o1 only) and dpl 8 (the o4..o7 arm); gate the wide one
+                let gated = hs == 256
+                let qd = nheads * hs
+                let kvd = (nheads / kv_mul) * hs
+                let kpos = w0 + rows   // K/V panels hold absolute positions [0, w0+rows)
+                var qh : array<float>
+                var kh : array<float>
+                var vh : array<float>
+                var gh : array<float>
+                qh |> resize(rows * qd)
+                kh |> resize(kpos * kvd)
+                vh |> resize(kpos * kvd)
+                gh |> resize(rows * qd)
+                for (i in range(rows * qd)) {
+                    qh[i] = float((i * 41) % 73) * 0.05 - 1.8
+                    gh[i] = float((i * 29) % 61) * 0.06 - 1.9
+                }
+                for (i in range(kpos * kvd)) {
+                    kh[i] = float((i * 17) % 97) * 0.03 - 1.4
+                    vh[i] = float((i * 53) % 89) * 0.04 - 1.7
+                }
+                let q_bytes = int64(rows * qd) * 4l
+                let m_bytes = int64(kpos * kvd) * 4l
+                let qdev = make_device_buf(q_bytes)
+                let kdev = make_device_buf(m_bytes)
+                let vdev = make_device_buf(m_bytes)
+                let gdev = make_device_buf(q_bytes)   // the shipped kernel's gate stash / out plane
+                let sdev = make_device_buf(16l)
+                let yd2 = make_device_buf(q_bytes)
+                var meta = make_host_buf(META_BYTES, false, [cached = false])
+                var host = make_host_buf(q_bytes, true, [cached = true])
+                var y_old : array<float>
+                var y_cls : array<float>
+                y_old |> resize(rows * qd)
+                y_cls |> resize(rows * qd)
+                let wgs = nheads * ((rows + 7) / 8)
+                unsafe {
+                    upload_region_at(qdev, 0l, addr<uint8 const?>(qh[0]), q_bytes)
+                    upload_region_at(kdev, 0l, addr<uint8 const?>(kh[0]), m_bytes)
+                    upload_region_at(vdev, 0l, addr<uint8 const?>(vh[0]), m_bytes)
+                    upload_region_at(gdev, 0l, addr<uint8 const?>(gh[0]), q_bytes)
+                    var sm : float[4]
+                    sm[1] = scale   // the shipped kernel reads scale at smalls word 1
+                    upload_region_at(sdev, 0l, addr<uint8 const?>(sm[0]), 16l)
+                    var mp = reinterpret<uint?>(meta.mapped)
+                    mp[0] = uint(rows)
+                    mp[1] = uint(w0)
+                    mp[2] = uint(qd)
+                    mp[3] = uint(kvd)
+                    mp[4] = uint(hs)
+                    mp[8] = uint(kv_mul)
+                    mp[9] = gated ? 1u : 0u
+                    mp[11] = uint(hs / 32)
+                    // the SHIPPED kernel: q@0, K@1, meta@2, gate/out@3, smalls@4, V@5
+                    var so = vk_set6(qdev, kdev, meta.buf, gdev, sdev, vdev,
+                        q_bytes, m_bytes, META_BYTES, q_bytes, 16l, m_bytes,
+                        fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                    var raw = alloc_cmd()
+                    let begin = VkCommandBufferBeginInfo()
+                    vk_check(vkBeginCommandBuffer(raw, begin), null)
+                    var h : VkHaz
+                    hz_dispatch(raw, h, weak_copy(g_gpu.at_attn_pipeline), so, uint(wgs))
+                    vhz_dep(raw, h, 4u, 0u, true)
+                    cmd_copy_whole(raw, gdev, host.buf, q_bytes)
+                    vk_check(vkEndCommandBuffer(raw), null)
+                    submit_wait(raw)
+                    memcpy(addr<void?>(y_old[0]), host.mapped, q_bytes)
+                    // the class twin: q@0, K@1, V@2, out@3 (pre-loaded with the same gates)
+                    upload_region_at(yd2, 0l, addr<uint8 const?>(gh[0]), q_bytes)
+                    var sc = set_at_attn_cls(fixed_array(qdev, kdev, vdev, yd2),
+                        fixed_array(q_bytes, m_bytes, m_bytes, q_bytes),
+                        fixed_array(1u, 2u, 8u, 4u))
+                    var raw2 = alloc_cmd()
+                    vk_check(vkBeginCommandBuffer(raw2, begin), null)
+                    var h2 : VkHaz
+                    var pc = AtAttnArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd),
+                        kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul),
+                        flags = gated ? 1u : 0u, dpl = uint(hs / 32), scale = scale)
+                    enc_at_attn_cls(raw2, h2, sc, pc, int64(wgs))
+                    vhz_dep(raw2, h2, 4u, 0u, true)
+                    cmd_copy_whole(raw2, yd2, host.buf, q_bytes)
+                    vk_check(vkEndCommandBuffer(raw2), null)
+                    submit_wait(raw2)
+                    memcpy(addr<void?>(y_cls[0]), host.mapped, q_bytes)
+                }
+                var bad = 0
+                for (i in range(rows * qd)) {
+                    if (y_old[i] != y_cls[i]) {
+                        bad++
+                    }
+                }
+                t |> success(bad == 0, "at_attn hs {hs}: class twin bit-exact ({bad} of {rows * qd} diverge)")
+                delete qh
+                delete kh
+                delete vh
+                delete gh
+                delete y_old
+                delete y_cls
+            }
+        } else {
+            feint("dasVulkan not present — skipping\n")
+        }
+    }
+}
+
+[test]
 def test_vkd_requant_family(t0 : T?) {
     t0 |> run("fused ar+requant + q8k requant class twins == the shipped kernels (bit-exact)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
