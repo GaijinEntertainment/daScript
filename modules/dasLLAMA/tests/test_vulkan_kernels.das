@@ -1231,6 +1231,250 @@ def test_vkd_da_attn(t0 : T?) {
 }
 
 [test]
+def test_vkd_requant_family(t0 : T?) {
+    t0 |> run("fused ar+requant + q8k requant class twins == the shipped kernels (bit-exact)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!(ensure_cls_ar_rq() && ensure_cls_q8k_rq())) {
+                feint("no Vulkan device — skipping\n")
+                return
+            }
+            var meta = make_host_buf(META_BYTES, false, [cached = false])
+            let begin = VkCommandBufferBeginInfo()
+            // ===== the fused ar + Q8_0 requant =====
+            {
+                let dim = 1024
+                let eps = 1e-5
+                let ascale = 1.25
+                let nblk = dim / 32
+                var x : array<float>
+                var a : array<float>
+                var w : array<float>
+                var wpk : array<float>   // the OLD kernel's packed w buffer: weights + [eps, ascale]
+                x |> resize(dim)
+                a |> resize(dim)
+                w |> resize(dim)
+                wpk |> resize(dim + 2)
+                for (i in range(dim)) {
+                    x[i] = float((i * 37) % 101) * 0.09 - 4.2
+                    a[i] = float((i * 13) % 89) * 0.06 - 2.6
+                    w[i] = 0.5 + float(i % 17) * 0.04
+                    wpk[i] = w[i]
+                }
+                wpk[dim] = eps
+                wpk[dim + 1] = ascale
+                let e_bytes = int64(dim) * 4l
+                let q_bytes = int64(dim)
+                let s_bytes = int64(nblk) * 4l
+                let x1 = make_device_buf(e_bytes)
+                let x2 = make_device_buf(e_bytes)
+                let ad = make_device_buf(e_bytes)
+                let wd = make_device_buf(e_bytes)
+                let wpkd = make_device_buf(e_bytes + 8l)
+                let q1 = make_device_buf(q_bytes)
+                let q2 = make_device_buf(q_bytes)
+                let s1 = make_device_buf(s_bytes)
+                let s2 = make_device_buf(s_bytes)
+                var host = make_host_buf(e_bytes, true, [cached = true])
+                var q_old : array<uint>
+                var q_cls : array<uint>
+                var s_old : array<float>
+                var s_cls : array<float>
+                var x_old : array<float>
+                var x_cls : array<float>
+                q_old |> resize(dim / 4)
+                q_cls |> resize(dim / 4)
+                s_old |> resize(nblk)
+                s_cls |> resize(nblk)
+                x_old |> resize(dim)
+                x_cls |> resize(dim)
+                unsafe {
+                    upload_region_at(x1, 0l, addr<uint8 const?>(x[0]), e_bytes)
+                    upload_region_at(x2, 0l, addr<uint8 const?>(x[0]), e_bytes)
+                    upload_region_at(ad, 0l, addr<uint8 const?>(a[0]), e_bytes)
+                    upload_region_at(wd, 0l, addr<uint8 const?>(w[0]), e_bytes)
+                    upload_region_at(wpkd, 0l, addr<uint8 const?>(wpk[0]), e_bytes + 8l)
+                    var mp = reinterpret<uint?>(meta.mapped)
+                    mp[0] = uint(dim)
+                    mp[1] = 1u
+                    mp[2] = 0u
+                    mp[3] = uint(dim)
+                    // the SHIPPED kernel: x@0, a@1, meta@2, w+eps/ascale@3, outs@4, outq@5
+                    var so = vk_set6(x1, ad, meta.buf, wpkd, s1, q1,
+                        e_bytes, e_bytes, META_BYTES, e_bytes + 8l, s_bytes, q_bytes,
+                        fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                    var raw = alloc_cmd()
+                    vk_check(vkBeginCommandBuffer(raw, begin), null)
+                    var h : VkHaz
+                    hz_dispatch(raw, h, weak_copy(g_gpu.ar_rq_pipeline), so, 1u)
+                    vhz_dep(raw, h, 1u | 8u | 16u, 0u, true)
+                    cmd_copy_whole(raw, q1, host.buf, q_bytes)
+                    vk_check(vkEndCommandBuffer(raw), null)
+                    submit_wait(raw)
+                    memcpy(addr<void?>(q_old[0]), host.mapped, q_bytes)
+                    var rawb = alloc_cmd()
+                    vk_check(vkBeginCommandBuffer(rawb, begin), null)
+                    cmd_copy_whole(rawb, s1, host.buf, s_bytes)
+                    vk_check(vkEndCommandBuffer(rawb), null)
+                    submit_wait(rawb)
+                    memcpy(addr<void?>(s_old[0]), host.mapped, s_bytes)
+                    var rawc = alloc_cmd()
+                    vk_check(vkBeginCommandBuffer(rawc, begin), null)
+                    cmd_copy_whole(rawc, x1, host.buf, e_bytes)
+                    vk_check(vkEndCommandBuffer(rawc), null)
+                    submit_wait(rawc)
+                    memcpy(addr<void?>(x_old[0]), host.mapped, e_bytes)
+                    // the class twin: x@0, a@1, w@2, outq@3, outs@4
+                    var sc = set_cls_ar_rq(fixed_array(x2, ad, wd, q2, s2),
+                        fixed_array(e_bytes, e_bytes, e_bytes, q_bytes, s_bytes),
+                        fixed_array(1u, 2u, 4u, 16u, 8u))
+                    var raw2 = alloc_cmd()
+                    vk_check(vkBeginCommandBuffer(raw2, begin), null)
+                    var h2 : VkHaz
+                    var pc = ArArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = ascale)
+                    enc_cls_ar_rq(raw2, h2, sc, pc, 1l)
+                    vhz_dep(raw2, h2, 1u | 8u | 16u, 0u, true)
+                    cmd_copy_whole(raw2, q2, host.buf, q_bytes)
+                    vk_check(vkEndCommandBuffer(raw2), null)
+                    submit_wait(raw2)
+                    memcpy(addr<void?>(q_cls[0]), host.mapped, q_bytes)
+                    var raw2b = alloc_cmd()
+                    vk_check(vkBeginCommandBuffer(raw2b, begin), null)
+                    cmd_copy_whole(raw2b, s2, host.buf, s_bytes)
+                    vk_check(vkEndCommandBuffer(raw2b), null)
+                    submit_wait(raw2b)
+                    memcpy(addr<void?>(s_cls[0]), host.mapped, s_bytes)
+                    var raw2c = alloc_cmd()
+                    vk_check(vkBeginCommandBuffer(raw2c, begin), null)
+                    cmd_copy_whole(raw2c, x2, host.buf, e_bytes)
+                    vk_check(vkEndCommandBuffer(raw2c), null)
+                    submit_wait(raw2c)
+                    memcpy(addr<void?>(x_cls[0]), host.mapped, e_bytes)
+                }
+                var bad = 0
+                for (i in range(dim / 4)) {
+                    if (q_old[i] != q_cls[i]) {
+                        bad++
+                    }
+                }
+                for (i in range(nblk)) {
+                    if (s_old[i] != s_cls[i]) {
+                        bad++
+                    }
+                }
+                for (i in range(dim)) {
+                    if (x_old[i] != x_cls[i]) {
+                        bad++
+                    }
+                }
+                t |> success(bad == 0, "ar+requant fused: class twin bit-exact ({bad} elements diverge)")
+                delete x
+                delete a
+                delete w
+                delete wpk
+                delete q_old
+                delete q_cls
+                delete s_old
+                delete s_cls
+                delete x_old
+                delete x_cls
+            }
+            // ===== the Q8_K requant =====
+            {
+                let nsb = 4
+                let nelem = nsb * 256
+                var src : array<float>
+                src |> resize(nelem)
+                for (i in range(nelem)) {
+                    src[i] = float((i * 61) % 113) * 0.05 - 2.8
+                }
+                let e_bytes = int64(nelem) * 4l
+                let q_bytes = int64(nelem)
+                let s_bytes = int64(nsb) * 4l
+                let sd = make_device_buf(e_bytes)
+                let q1 = make_device_buf(q_bytes)
+                let q2 = make_device_buf(q_bytes)
+                let s1 = make_device_buf(s_bytes)
+                let s2 = make_device_buf(s_bytes)
+                var host = make_host_buf(q_bytes, true, [cached = true])
+                var q_old : array<uint>
+                var q_cls : array<uint>
+                var s_old : array<float>
+                var s_cls : array<float>
+                q_old |> resize(nelem / 4)
+                q_cls |> resize(nelem / 4)
+                s_old |> resize(nsb)
+                s_cls |> resize(nsb)
+                let wgs = (nsb * 32 + 255) / 256
+                unsafe {
+                    upload_region_at(sd, 0l, addr<uint8 const?>(src[0]), e_bytes)
+                    var mp = reinterpret<uint?>(meta.mapped)
+                    mp[10] = 0u
+                    mp[18] = uint(nsb)
+                    // the SHIPPED kernel: src@0, meta@2, outq@3, outs@4
+                    var so = vk_set6(sd, sd, meta.buf, q1, s1, sd,
+                        e_bytes, e_bytes, META_BYTES, q_bytes, s_bytes, e_bytes,
+                        fixed_array(1u, 0u, 0u, 4u, 8u, 0u))
+                    var raw = alloc_cmd()
+                    vk_check(vkBeginCommandBuffer(raw, begin), null)
+                    var h : VkHaz
+                    hz_dispatch(raw, h, weak_copy(g_gpu.q8k_rq_pipeline), so, uint(wgs))
+                    vhz_dep(raw, h, 4u | 8u, 0u, true)
+                    cmd_copy_whole(raw, q1, host.buf, q_bytes)
+                    vk_check(vkEndCommandBuffer(raw), null)
+                    submit_wait(raw)
+                    memcpy(addr<void?>(q_old[0]), host.mapped, q_bytes)
+                    var rawb = alloc_cmd()
+                    vk_check(vkBeginCommandBuffer(rawb, begin), null)
+                    cmd_copy_whole(rawb, s1, host.buf, s_bytes)
+                    vk_check(vkEndCommandBuffer(rawb), null)
+                    submit_wait(rawb)
+                    memcpy(addr<void?>(s_old[0]), host.mapped, s_bytes)
+                    // the class twin: src@0, outq@1, outs@2
+                    var sc = set_cls_q8k_rq(fixed_array(sd, q2, s2),
+                        fixed_array(e_bytes, q_bytes, s_bytes),
+                        fixed_array(1u, 4u, 8u))
+                    var raw2 = alloc_cmd()
+                    vk_check(vkBeginCommandBuffer(raw2, begin), null)
+                    var h2 : VkHaz
+                    var pc = RqArgs(inbase = 0u, nblk = uint(nsb))
+                    enc_cls_q8k_rq(raw2, h2, sc, pc, int64(wgs))
+                    vhz_dep(raw2, h2, 4u | 8u, 0u, true)
+                    cmd_copy_whole(raw2, q2, host.buf, q_bytes)
+                    vk_check(vkEndCommandBuffer(raw2), null)
+                    submit_wait(raw2)
+                    memcpy(addr<void?>(q_cls[0]), host.mapped, q_bytes)
+                    var raw2b = alloc_cmd()
+                    vk_check(vkBeginCommandBuffer(raw2b, begin), null)
+                    cmd_copy_whole(raw2b, s2, host.buf, s_bytes)
+                    vk_check(vkEndCommandBuffer(raw2b), null)
+                    submit_wait(raw2b)
+                    memcpy(addr<void?>(s_cls[0]), host.mapped, s_bytes)
+                }
+                var bad = 0
+                for (i in range(nelem / 4)) {
+                    if (q_old[i] != q_cls[i]) {
+                        bad++
+                    }
+                }
+                for (i in range(nsb)) {
+                    if (s_old[i] != s_cls[i]) {
+                        bad++
+                    }
+                }
+                t |> success(bad == 0, "q8k requant: class twin bit-exact ({bad} elements diverge)")
+                delete src
+                delete q_old
+                delete q_cls
+                delete s_old
+                delete s_cls
+            }
+        } else {
+            feint("dasVulkan not present — skipping\n")
+        }
+    }
+}
+
+[test]
 def test_vkd_q8_gemv_pair(t0 : T?) {
     t0 |> run("q8/q8n GEMV class twins == the shipped kernels (bit-exact)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
