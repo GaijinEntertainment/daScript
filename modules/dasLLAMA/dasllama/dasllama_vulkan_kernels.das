@@ -22,8 +22,10 @@ require math
 // lanes cooperate per 32-weight block (lane = one 4-byte word), so every warp load is 128
 // CONSECUTIVE bytes — one transaction. The block's integer dot stays exact — sdot4 (dp4a) per
 // word, then a 3-step shuffleXor fold across the 8 lanes; lane 0 applies the f16*f32 scales.
-// Params ride in vk_meta (NOT push constants — the generated pusher drops small trailing
-// scalars, dasVulkan ROADMAP): [0]=n [1]=d [2]=nregions [3]=y base row (deltanet step chains
+// Params ride in vk_meta. (Historically "push constants drop small trailing scalars" — RESOLVED
+// upstream: dasVulkan stages pushes through the std140 walk, gate tests/integration/
+// test_push_std140.das. The class-kernel arc moves params to push constants; see
+// plans/vulkan_class_kernels.md.) Words: [0]=n [1]=d [2]=nregions [3]=y base row (deltanet step chains
 // route two GEMVs into one shared y buffer; every other fill zeroes it), then
 // (rel_wblock, xblock) uint pairs per region — 32-weight BLOCK offsets (weight blocks relative
 // to the resident stack, activation blocks into vk_xq/vk_xs).
