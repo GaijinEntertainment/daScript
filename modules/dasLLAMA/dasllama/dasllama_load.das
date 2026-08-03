@@ -1170,8 +1170,8 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
 }
 
 //! Streaming-conversion entry: plan-load `t`, then invoke `blk(m, bytes)` with the source
-//! mapping STILL ALIVE — the caller streams the save inside. Fails open (unstreamable models
-//! materialize + save eagerly through the same blk); split shards return false pre-blk.
+//! mapping(s) STILL ALIVE — split shards included, every shard stays mapped; the caller streams
+//! the save inside. Fails open: unstreamable models materialize + save eagerly through the same blk.
 def load_gguf_streaming(path : string; mode : QuantMode; var t : Model; var jobs : array<FillJob>;   // nolint:STYLE038 — one linear plan-then-stream sequence under a live mapping
                         want_blob : bool = false;
                         blk : block<(m : GGUFMeta; bytes : array<uint8>) : bool>) : bool {

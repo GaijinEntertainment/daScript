@@ -32,8 +32,9 @@ runner `modules/dasLLAMA/tests/run.das`; invoking dastest directly on those suit
 **Every test runs under `-jit`.** Never the interpreter, never AOT. A test invocation without
 `-jit` is a defect even if it passes.
 
-**All dasLLAMA tests live under `modules/dasLLAMA/tests/`.** No dasLLAMA test is registered in
-any `CMakeLists.txt` — no AOT registration, no ctest wiring.
+**dasLLAMA `[test]` files live under `modules/dasLLAMA/tests/`**, with one carve-out: a
+benchmark self-check may sit beside the bench it verifies (`benchmarks/matmul/test_matmul_par.das`).
+No dasLLAMA test is registered in any `CMakeLists.txt` — no AOT registration, no ctest wiring.
 
 **A test passes or skips explicitly on every platform.** A skip goes through a capability or
 model gate. A test that silently vanishes on one platform is a defect.
@@ -59,10 +60,10 @@ one arm per world: a standalone exe checks the sidecar the release shipped besid
 manifest winner. A rig invocation that no arm covers is a defect — it will refuse, or worse,
 measure on fallback kernels.
 
-**No new benchmark harness is written.** Performance is measured by
-`modules/dasLLAMA/benchmarks/lcpp_bench.das` — one cell directly, or a whole board through
-`performance/gen_bench_records.das`. A new timing harness, a one-off measurement script, or a
-revived rig is a defect. `PROFILE.md` carries the two commands; the rig's shape is
+**No new benchmark harness is written.** Performance is measured by the three rigs `PROFILE.md`
+documents — `performance/gen_profile.das` (the routine in-process check),
+`benchmarks/lcpp_bench.das` (one cell), `performance/gen_bench_records.das` (a board). A new timing harness, a one-off measurement script, or a
+revived rig is a defect. `PROFILE.md` carries the three commands; the rig's shape is
 `ARCHITECTURE.md` §2.5.
 
 ---
@@ -77,9 +78,11 @@ carve-outs.
 **A new file ships with its rule here, its charter in `ARCHITECTURE.md` §1, and its tests, in
 the same change.** A file without its records is a defect.
 
-**A consumer requires the facade, never an engine internal.** Tests, harnesses, benchmarks and
-tools require `dasllama/dasllama` or `dasllama/dasllama_transformer`, which re-export the engine;
-a direct require of an internal module from outside `dasllama/` is a defect, and so is a split
+**A consumer OUTSIDE `modules/dasLLAMA` requires the facade, never an engine internal.**
+Examples, tutorials and external tools require `dasllama/dasllama` (or
+`dasllama/dasllama_transformer`), which re-export the engine. In-module tests, harnesses and
+benchmarks may require internals — that is what they test. A facade-reachable symbol required
+directly from outside the module is a defect, and so is a split
 that adds requires across the tree instead of fixing the facade re-export. Engine internals may
 require each other.
 
@@ -166,8 +169,9 @@ A backend is a family of role files, and the role names the contents. `<gpu>` is
 A backend-only capability goes in that backend's matching role file. A new grab-bag file for it
 is a defect.
 
-**A GPU family shares ONE device and queue**, created by `<gpu>_common`'s init. A module
-creating its own device is a defect.
+**A GPU family shares ONE device and queue**, created by `<gpu>_common`'s init — with one
+exception: `dasllama_metal_gemm.das` owns its second device+queue (ARCHITECTURE §1.5). Any
+other module creating a device is a defect.
 
 **A PSO set is compiled and released by the module that owns its kernels.** Decode:
 `metal_decode_init` / `metal_kernels_release` in `dasllama_metal_kernels`. Prefill:
@@ -178,9 +182,10 @@ released anywhere else is a defect.
 races its own; the shared scaffolding (`race_buf`, `race_envelope_ok`, `race_pair_ms`) is
 `<gpu>_common`'s. A race harness anywhere else is a defect.
 
-**A decline reason is an enum value in the shapes module; decline counting lives in
-`<gpu>_common`.** A string-typed decline reason, or a counter beside the decline site, is a
-defect.
+**A METAL decline reason is an enum value in the shapes module; decline counting lives in
+`metal_common`.** A string-typed metal decline, or a counter beside the decline site, is a
+defect. The vulkan tier's decline reasons are strings carried by `dasllama_gpu_resident` — that
+is its current contract, not a defect.
 
 **The backend asymmetries are the closed list in `ARCHITECTURE.md` §1.5.** A diff that makes
 Metal and Vulkan differ in a new way lands with its entry there, or it is a defect.
@@ -226,8 +231,10 @@ defect.
 
 ### Generated
 
-- `dasllama_env.das`, `dasllama_unicode.das` — generated. Editing one by hand is a defect; edit
-  its generator.
+- `ENVIRONMENT.md` — generated from `dasllama_env.das`'s registry by `harness/gen_env_doc.das`
+  (`tests/test_env_registry.das` fails on drift). Hand-editing the .md is a defect; edit the
+  registry and regenerate. `dasllama_unicode.das`'s RANGES/WS tables are transcoded from
+  llama.cpp's unicode-data.cpp — hand-editing the tables is a defect; retranscode.
 
 ---
 

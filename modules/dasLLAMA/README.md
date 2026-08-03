@@ -83,10 +83,10 @@ modules/dasLLAMA/
   INVENTORY.md                # as-is census of the module
   CODEREVIEW.md               # the per-change review checklist
   METHODOLOGY.md              # how every published number is measured (the site's method page)
-  PROFILE.md                  # THE two profiling commands — the oracle, and the rig that publishes
+  PROFILE.md                  # the three profiling rigs — the routine in-process check, the oracle cell, the rig that publishes
   PERF_LEDGER.md              # the living perf backlog — parked ideas, not chased mid-wave
   tune_for_this_box.md        # per-box tuning + the measurement discipline (SDK-installed)
-  ENVIRONMENT.md              # GENERATED from dasllama_env's registry (`--dump-env`) — every knob
+  ENVIRONMENT.md              # GENERATED from dasllama_env's registry (harness/gen_env_doc.das writes it; tests/test_env_registry.das gates drift) — every knob
   THINKING.md                 # design notes and open questions
   followup_vulkan.md          # PLANNED: grow the vulkan resident driver to Metal's contract shape
   whisper_plan.md             # per-family bring-up records + findings:
@@ -127,6 +127,7 @@ modules/dasLLAMA/
     dasllama_vulkan_prefill.das #  Vulkan resident PREFILL driver + batch arms (FFN batch, dense, dn, attention, streamed mirrors)
     dasllama_vulkan_lens.das  #   the Vulkan kernel-access lens — per-binding hazard masks derived from the kernel body
     dasllama_kernel_access.das #  the shared body-walk read/write classifier both GPU lenses run on
+    dasllama_gpu_resident.das #   the vulkan MoE GPU-resident expert tier — bake plan, upload/stream slots, per-layer placement
     dasllama_math_gen.das     #   the generated GEMM tier — registers "arm64-gen"/"x64-gen" (load-select repack backends; traversals read the stamped layout)
     dasllama_gemm_schema.das  #   tune_perm grid + layout schema shared by the generator and the runtime
     dasllama_gemm_gen.das     #   the GEMM tile generator (emits per-perm kernels under llvm_tune)
@@ -135,14 +136,23 @@ modules/dasLLAMA/
     dasllama_tune.das         #   per-box kernel loop-hint tuner — [tuned] / [dasllama_grid] (see tune_for_this_box.md)
     dasllama_parity.das       #   CPU-reference caches for the parity instruments (the metal suites, batch_parity_probe)
     dasllama_gguf.das         #   GGUF container parser + tensor read drivers (codecs live in dasllama_convert)
+    dasllama_load.das         #   the gguf load rail — plan-load, the streaming cold build (FillJobs), the staged load stages
     dasllama_layout.das       #   disk-format -> compute-layout transforms (the blob transform, the CPU repack walkers, the GPU tier gathers)
     dasllama_config.das       #   DlimConfiguration — every input that changes .dlim image BYTES, in one struct (+ the identity formatter)
+    dasllama_plane.das        #   the borrowed-plane vocabulary — Plane* structs: a pointer into a prepared image + element count; a carrier owns only its backing
     dasllama_image.das        #   the .dlim prepared-model image — post-load planes dumped once, mapped back with zero O(model) copying
     dasllama_unicode.das      #   Unicode classification + UTF-8 codec
     dasllama_tokenizer.das    #   SentencePiece tokenizer (Llama-2 family, Phi-3, Gemma)
     dasllama_bpe.das          #   byte-level BPE / tiktoken tokenizer (Llama-3 + Qwen2 pre-tokenizers)
     dasllama_common.das       #   engine core — Config / Model / Session, load + forward + generate + sample (incl. MTP/NextN self-spec decode)
+    dasllama_blocks.das       #   the shared dense/grouped transformer block helpers (FFN, embed rows, eval bridges)
+    dasllama_moe.das          #   MoE routing — select, expert dispatch, the GPU expert-tier hooks
+    dasllama_ple.das          #   gemma-4 E-series per-layer embeddings + the gemma4 MoE FFN (hook-registered into the forward)
+    dasllama_attn_prefill.das #   the CPU batch-attention prefill driver
+    dasllama_batch.das        #   batch decode — BatchWorkspace stepping over multiple sequences
+    dasllama_sampling.das     #   SamplingParams / Stats + the samplers (greedy, top-k, penalties)
     dasllama_prefix.das       #   vLLM-style page-granular prefix cache over the paged KV pool
+    dasllama_asr_types.das    #   the ASR floor types — AsrCaps/AsrTimestamps/TranscribeSegment (+ asr_ctx_guard); family files require this, never each other
     dasllama_audio_io.das     #   miniaudio decode (wav/mp3/flac/ogg -> 16 kHz mono f32) + mic capture
     dasllama_audio.das        #   audio tower — whisper mel frontends + encoder core + qwen2a projector (soft-token splice)
     dasllama_whisper.das      #   whisper-proper ASR — ggml-bin loader, cross-attn decoder, greedy driver, transcribe API

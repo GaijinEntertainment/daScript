@@ -6,7 +6,7 @@ options _comment_hygiene = true
 //! Two jobs. First, [[env_flag]] / [[env_int]] / [[env_int64]] / [[env_str]] replace the five
 //! ad-hoc `env_int`-shaped helpers the tree grew independently, so "unset", "garbage" and
 //! "explicitly off" mean the same thing everywhere. Second, [[env_registry]] is the single list of
-//! every variable dasLLAMA reads — `ENVIRONMENT.md` is GENERATED from it (`--dump-env`), and
+//! every variable dasLLAMA reads — `ENVIRONMENT.md` is GENERATED from it (`harness/gen_env_doc.das`), and
 //! `tests/test_env_registry.das` fails if a `DASLLAMA_*` literal appears in the tree without a
 //! matching entry. Add the knob here in the same commit that adds the read, or the test breaks.
 //!

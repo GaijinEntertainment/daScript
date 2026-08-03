@@ -103,15 +103,10 @@ def private sq_single_gate(t : T?; dev, queue; tag : string; cnt : int; softcap 
     var bv = buf_upload(dev, kc)            // V reads the same slab — the oracle mirrors that
     var bq = buf_upload(dev, q)
     var by = buf_fill(dev, QD, -1000.0)
-    var bcnt = buf_u32(dev, uint(cnt))
-    var bkvd = buf_u32(dev, uint(KV_DIM))
-    var bnh = buf_u32(dev, uint(N_HEADS))
-    var bkvm = buf_u32(dev, uint(KV_MUL))
-    var bhs = buf_u32(dev, uint(HS))
-    var bsc = buf_f32(dev, scale)
-    var bcap = buf_f32(dev, softcap)
     var bsink = buf_fill(dev, N_HEADS, sink_v)
-    var bhass = buf_u32(dev, hass ? 1u : 0u)
+    var ka = SqAttnArgs(cnt = uint(cnt), kstride = uint(KV_DIM), nheads = uint(N_HEADS),
+        kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale, softcap = softcap,
+        hass = hass ? 1u : 0u)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
         metal_set_threadgroup_memory_length(enc, metal_sq_attn16_msl_tgmem, 0)
@@ -119,15 +114,8 @@ def private sq_single_gate(t : T?; dev, queue; tag : string; cnt : int; softcap 
         metal_set_buffer(enc, bv, 0ul, 1)
         metal_set_buffer(enc, bq, 0ul, 2)
         metal_set_buffer(enc, by, 0ul, 3)
-        metal_set_buffer(enc, bcnt, 0ul, 4)
-        metal_set_buffer(enc, bkvd, 0ul, 5)
-        metal_set_buffer(enc, bnh, 0ul, 6)
-        metal_set_buffer(enc, bkvm, 0ul, 7)
-        metal_set_buffer(enc, bhs, 0ul, 8)
-        metal_set_buffer(enc, bsc, 0ul, 9)
-        metal_set_buffer(enc, bcap, 0ul, 10)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
         metal_set_buffer(enc, bsink, 0ul, 20)
-        metal_set_buffer(enc, bhass, 0ul, 21)
         metal_dispatch_threadgroups(enc, uint3(uint(N_HEADS), 1u, 1u), uint3(uint(HS), 1u, 1u))
     }
     t |> success(ran, "{tag}: encode: {err}")
@@ -136,7 +124,7 @@ def private sq_single_gate(t : T?; dev, queue; tag : string; cnt : int; softcap 
         t |> equal(buf_mismatch_approx(by, want), 0)
         delete want
     }
-    release_all([bk, bv, bq, by, bcnt, bkvd, bnh, bkvm, bhs, bsc, bcap, bsink, bhass])
+    release_all([bk, bv, bq, by, bsink])
     metal_release(pso)
 }
 
@@ -164,18 +152,12 @@ def private sq_part_gate(t : T?; dev, queue; tag : string; cnt, window : int) {
     var bq = buf_upload(dev, q)
     var bpart = buf_fill(dev, N_HEADS * nchunks * (HS + 2), -1000.0)
     var by = buf_fill(dev, QD, -1000.0)
-    var bcnt = buf_u32(dev, uint(cnt))
-    var bkvd = buf_u32(dev, uint(KV_DIM))
-    var bnh = buf_u32(dev, uint(N_HEADS))
-    var bkvm = buf_u32(dev, uint(KV_MUL))
-    var bhs = buf_u32(dev, uint(HS))
-    var bsc = buf_f32(dev, scale)
-    var bnch = buf_u32(dev, uint(nchunks))
-    var bcap = buf_f32(dev, 0.0)
-    var bwin = buf_u32(dev, uint(window))
-    var bchlo = buf_u32(dev, uint(chlo))
     var bsink = buf_fill(dev, N_HEADS, 0.0)
-    var bhass = buf_u32(dev, 0u)
+    var kap = SqAttnPartArgs(cnt = uint(cnt), kstride = uint(KV_DIM), nheads = uint(N_HEADS),
+        kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale, nchunks = uint(nchunks),
+        softcap = 0.0, window = uint(window))
+    var kac = SqAttnCombArgs(nchunks = uint(nchunks), nheads = uint(N_HEADS), hs = uint(HS),
+        chlo = uint(chlo), hass = 0u)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso_p)
         metal_set_threadgroup_memory_length(enc, metal_sq_attn_part16_msl_tgmem, 0)
@@ -183,25 +165,13 @@ def private sq_part_gate(t : T?; dev, queue; tag : string; cnt, window : int) {
         metal_set_buffer(enc, bv, 0ul, 1)
         metal_set_buffer(enc, bq, 0ul, 2)
         metal_set_buffer(enc, bpart, 0ul, 3)
-        metal_set_buffer(enc, bcnt, 0ul, 4)
-        metal_set_buffer(enc, bkvd, 0ul, 5)
-        metal_set_buffer(enc, bnh, 0ul, 6)
-        metal_set_buffer(enc, bkvm, 0ul, 7)
-        metal_set_buffer(enc, bhs, 0ul, 8)
-        metal_set_buffer(enc, bsc, 0ul, 9)
-        metal_set_buffer(enc, bnch, 0ul, 10)
-        metal_set_buffer(enc, bcap, 0ul, 11)
-        metal_set_buffer(enc, bwin, 0ul, 12)
+        metal_set_bytes(enc, unsafe(addr<void?>(kap)), uint64(typeinfo sizeof(kap)), 4)
         metal_dispatch_threadgroups(enc, uint3(uint(N_HEADS * nchunks), 1u, 1u), uint3(uint(HS), 1u, 1u))
         metal_set_pipeline(enc, pso_c)
         metal_set_buffer(enc, bpart, 0ul, 0)
         metal_set_buffer(enc, by, 0ul, 1)
-        metal_set_buffer(enc, bnch, 0ul, 2)
-        metal_set_buffer(enc, bnh, 0ul, 3)
-        metal_set_buffer(enc, bhs, 0ul, 4)
-        metal_set_buffer(enc, bchlo, 0ul, 5)
+        metal_set_bytes(enc, unsafe(addr<void?>(kac)), uint64(typeinfo sizeof(kac)), 2)
         metal_set_buffer(enc, bsink, 0ul, 20)
-        metal_set_buffer(enc, bhass, 0ul, 21)
         metal_dispatch_threadgroups(enc, uint3(uint(N_HEADS), 1u, 1u), uint3(uint(HS), 1u, 1u))
     }
     t |> success(ran, "{tag}: encode: {err}")
@@ -210,7 +180,7 @@ def private sq_part_gate(t : T?; dev, queue; tag : string; cnt, window : int) {
         t |> equal(buf_mismatch_approx(by, want), 0)
         delete want
     }
-    release_all([bk, bv, bq, bpart, by, bcnt, bkvd, bnh, bkvm, bhs, bsc, bnch, bcap, bwin, bchlo, bsink, bhass])
+    release_all([bk, bv, bq, bpart, by, bsink])
     metal_release(pso_p)
     metal_release(pso_c)
 }
@@ -282,20 +252,6 @@ def private buf_fill(dev; nn : int; value : auto(TT)) : auto {
     for (k in range(nn)) {
         unsafe(p[k]) = value
     }
-    return buf
-}
-
-def private buf_u32(dev; v : uint) : auto {
-    var buf = metal_new_buffer(dev, 4ul)
-    var p = unsafe(reinterpret<uint?>(metal_buffer_contents(buf)))
-    unsafe(p[0]) = v
-    return buf
-}
-
-def private buf_f32(dev; v : float) : auto {
-    var buf = metal_new_buffer(dev, 4ul)
-    var p = unsafe(reinterpret<float?>(metal_buffer_contents(buf)))
-    unsafe(p[0]) = v
     return buf
 }
 

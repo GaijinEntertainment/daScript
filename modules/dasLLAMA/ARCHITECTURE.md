@@ -28,8 +28,11 @@ thing live instead. Files with no contested edge get one short line.
 
 ## 1. File charters
 
-Every non-generated file under `dasllama/` appears here. `dasllama_env.das` and
-`dasllama_unicode.das` are generated and have no charter — edit their generators.
+Every file under `dasllama/` appears here. Two carry generated CONTENT rather than being
+generated themselves: `dasllama_env.das` is the hand-written env registry (`ENVIRONMENT.md` is
+generated FROM it by `harness/gen_env_doc.das`), and `dasllama_unicode.das` is hand-written
+around transcoded data tables (RANGES/WS from llama.cpp's unicode-data.cpp — retranscode,
+never hand-edit the tables).
 
 ### 1.1 Engine core
 
@@ -69,9 +72,12 @@ Every non-generated file under `dasllama/` appears here. `dasllama_env.das` and
 
 ### 1.2 Formats and data movement
 
-These five own the module's data-shape vocabulary. The boundaries between them are the ones most
+These six own the module's data-shape vocabulary. The boundaries between them are the ones most
 often gotten wrong, so each says explicitly where the neighbouring half goes.
 
+- **`dasllama_plane.das`** — the borrowed-plane vocabulary: a plane is a pointer into a prepared
+  image plus its element count; the image owns the bytes, a carrier owns nothing but its backing.
+  Requires nothing in dasllama — the image rail binds planes, every carrier holds them.
 - **`dasllama_kqformat.das`** — format IDENTITY: the `KqFmt` enum, the per-format descriptor table
   (plane strides, block geometry, stream codes), format predicates. It requires nothing else in
   dasllama, because it is the taxonomy everything keys off. ONE id space — the enum; integer ids
@@ -117,8 +123,9 @@ forward path touches at run time — a loaded `Model` is the whole handoff — a
 breaks the cycle. That re-export is what keeps every consumer on the facade.
 
 - **`dasllama_image.das`** — the prepared-model `.dlim` rail, and it is ONE rail (§2.1). Nothing
-  outside this file may read weights into a live carrier, and nothing outside it may release an
-  image backing.
+  outside this file may read weights into a live carrier; image backings are released only
+  through the single release path in `dasllama_common` that the carrier finalizers call — never
+  an ad-hoc unmap.
 
 ### 1.4 CPU kernel tiers
 
@@ -226,6 +233,10 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
 
 ### 1.7 Audio and ASR
 
+- **`dasllama_asr_types.das`** — the ASR floor: the capability/segment/timestamp types every
+  family file and the facade share (`AsrCaps`/`AsrTimestamps`/`TranscribeSegment`, plus
+  `asr_ctx_guard`). Family modules require this instead of each other — a shape needed by two
+  families moves up here, never sideways.
 - **`dasllama_audio.das`** — the shared audio tower: mel front-end, encoder blocks, the pieces every
   audio model composes.
 - **`dasllama_audio_io.das`** — decode-any-format → 16 kHz mono f32 PCM. The only file that talks to
@@ -418,9 +429,10 @@ Durable "why it is built this way" facts harvested from the design docs archived
   Loop hints and intrinsic lowering exist only in the JIT, and the JIT tier is the only one the
   oracles gate. **Scaffolding is exempt:** conversion utilities (`.dlim` bake, image processing),
   debug scripts, and batch/driver tools that spawn the real runner as a child may run interpreted.
-  Interim enforcement is `guard_interp_gguf_load` (`dasllama_image.das` — big-load panic +
-  `DASLLAMA_ALLOW_INTERP_LOAD` escape for the conversion path); the unconditional library-seam
-  check lands with the tuning rework, after the repack/convert pulls make that seam clean. (The
+  Enforcement is `guard_interp_gguf_load` (`dasllama_image.das` — big-load panic +
+  `DASLLAMA_ALLOW_INTERP_LOAD` escape for the conversion path) plus `guard_interp_inference`
+  (`dasllama_math.das`), which panics at the library seams: `make_run_state`, ASR session
+  creation, and `vad_chunk_prob`. (The
   x64-era "fallback rail" framing — AOT/interp as correct-but-untuned tiers — is retired;
   intrinsic fallback bodies exist for off-ARCH correctness *inside* the JIT, not as runnable
   tiers.)
