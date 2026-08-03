@@ -2941,3 +2941,159 @@ def test_vkd_rope_b_pair(t0 : T?) {
         }
     }
 }
+
+[test]
+def test_vkd_at_prep(t0 : T?) {
+    t0 |> run("attention prep class (q+k collapse) == the shipped pair (bit-exact, gated+qknorm+partial rope)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_at_prep_cls()) {
+                feint("no Vulkan device — skipping\n")
+                return
+            }
+            if (!key_exists(g_pipe_access, intptr(boost_value_to_vk(g_gpu.at_prep_q_pipeline)))) {
+                feint("at chain declined on this device — skipping\n")
+                return
+            }
+            let nh = 4
+            let nkvh = 2
+            let hs = 64
+            let half = 16   // PARTIAL rope: dims [32, 64) pass through unroped
+            let qd = nh * hs
+            let kvd = nkvh * hs
+            let rows = 3
+            let w0 = 5      // the k panel lands at absolute positions
+            let eps = 0.00001
+            let flags = 3   // gated q + qk-norm
+            // smalls layout (offsets ride meta words / push args): eps@0, rmsq@16, rmsk@16+hs,
+            // cos rows, sin rows
+            let rmsq_off = 16
+            let rmsk_off = 16 + hs
+            let cos_off = 16 + 2 * hs
+            let sin_off = cos_off + rows * half
+            let sm_n = sin_off + rows * half
+            var srcqh : array<float>
+            var srckh : array<float>
+            var smh : array<float>
+            srcqh |> resize(rows * 2 * qd)
+            srckh |> resize(rows * kvd)
+            smh |> resize(sm_n)
+            for (i in range(rows * 2 * qd)) {
+                srcqh[i] = float((i * 19) % 79) * 0.045 - 1.7
+            }
+            for (i in range(rows * kvd)) {
+                srckh[i] = float((i * 27) % 59) * 0.055 - 1.4
+            }
+            for (i in range(sm_n)) {
+                smh[i] = float((i * 11) % 37) * 0.05 - 0.8
+            }
+            smh[0] = eps
+            let srcq_bytes = int64(rows * 2 * qd) * 4l
+            let srck_bytes = int64(rows * kvd) * 4l
+            let sm_bytes = int64(sm_n) * 4l
+            let qp_bytes = int64(rows * qd) * 4l
+            let kp_bytes = int64((w0 + rows) * kvd) * 4l
+            let srcqd = make_device_buf(srcq_bytes)
+            let srckd = make_device_buf(srck_bytes)
+            let smd = make_device_buf(sm_bytes)
+            let qp1 = make_device_buf(qp_bytes)
+            let g1 = make_device_buf(qp_bytes)
+            let kp1 = make_device_buf(kp_bytes)
+            let qp2 = make_device_buf(qp_bytes)
+            let g2 = make_device_buf(qp_bytes)
+            let kp2 = make_device_buf(kp_bytes)
+            var meta = make_host_buf(META_BYTES, false, [cached = false])
+            var host = make_host_buf(2l * qp_bytes + kp_bytes, true, [cached = true])
+            var o_old : array<float>
+            var o_cls : array<float>
+            o_old |> resize(2 * rows * qd + (w0 + rows) * kvd)
+            o_cls |> resize(2 * rows * qd + (w0 + rows) * kvd)
+            unsafe {
+                upload_region_at(srcqd, 0l, addr<uint8 const?>(srcqh[0]), srcq_bytes)
+                upload_region_at(srckd, 0l, addr<uint8 const?>(srckh[0]), srck_bytes)
+                upload_region_at(smd, 0l, addr<uint8 const?>(smh[0]), sm_bytes)
+                var mp = reinterpret<uint?>(meta.mapped)
+                mp[1] = uint(w0)
+                mp[2] = uint(qd)
+                mp[3] = uint(kvd)
+                mp[4] = uint(hs)
+                mp[5] = uint(half)
+                mp[6] = uint(nh)
+                mp[7] = uint(nkvh)
+                mp[9] = uint(flags)
+                mp[13] = uint(sin_off)
+                mp[14] = uint(rmsq_off)
+                mp[15] = uint(rmsk_off)
+                mp[16] = uint(cos_off)
+                for (side in range(2)) {
+                    let qpd = side == 0 ? qp1 : qp2
+                    let gd = side == 0 ? g1 : g2
+                    let kpd = side == 0 ? kp1 : kp2
+                    var raw = alloc_cmd()
+                    let begin = VkCommandBufferBeginInfo()
+                    vk_check(vkBeginCommandBuffer(raw, begin), null)
+                    var h : VkHaz
+                    if (side == 0) {
+                        // the SHIPPED pair: panel@0, meta@2, gate stash@3, smalls@4, GEMM rows@5
+                        var soq = vk_set6(qpd, meta.buf, meta.buf, gd, smd, srcqd,
+                            qp_bytes, META_BYTES, META_BYTES, qp_bytes, sm_bytes, srcq_bytes,
+                            fixed_array(1u, 0u, 0u, 2u, 4u, 8u))
+                        var sok = vk_set6(kpd, meta.buf, meta.buf, gd, smd, srckd,
+                            kp_bytes, META_BYTES, META_BYTES, qp_bytes, sm_bytes, srck_bytes,
+                            fixed_array(16u, 0u, 0u, 0u, 4u, 8u))
+                        hz_dispatch(raw, h, weak_copy(g_gpu.at_prep_q_pipeline), soq, uint(rows))
+                        hz_dispatch(raw, h, weak_copy(g_gpu.at_prep_k_pipeline), sok, uint(rows))
+                    } else {
+                        // the class collapse: ONE kernel, two dispatches with different push values
+                        var scq = set_at_prep_cls(fixed_array(srcqd, qpd, gd, smd),
+                            fixed_array(srcq_bytes, qp_bytes, qp_bytes, sm_bytes),
+                            fixed_array(8u, 1u, 2u, 4u))
+                        var sck = set_at_prep_cls(fixed_array(srckd, kpd, gd, smd),
+                            fixed_array(srck_bytes, kp_bytes, qp_bytes, sm_bytes),
+                            fixed_array(8u, 16u, 0u, 4u))
+                        var pcq = AtPrepArgs(d = uint(qd), nh = uint(nh), hs = uint(hs),
+                            half = uint(half), flags = uint(flags), rms_off = uint(rmsq_off),
+                            cos_off = uint(cos_off), sin_off = uint(sin_off), obase = 0u,
+                            qsrc = 1u, eps = eps)
+                        enc_at_prep_cls(raw, h, scq, pcq, int64(rows))
+                        var pck = AtPrepArgs(d = uint(kvd), nh = uint(nkvh), hs = uint(hs),
+                            half = uint(half), flags = uint(flags), rms_off = uint(rmsk_off),
+                            cos_off = uint(cos_off), sin_off = uint(sin_off), obase = uint(w0),
+                            qsrc = 0u, eps = eps)
+                        enc_at_prep_cls(raw, h, sck, pck, int64(rows))
+                    }
+                    vhz_dep(raw, h, 1u | 2u | 16u, 0u, true)
+                    cmd_copy_whole(raw, qpd, host.buf, qp_bytes)
+                    cmd_copy_range(raw, gd, 0l, host.buf, qp_bytes, qp_bytes)
+                    cmd_copy_range(raw, kpd, 0l, host.buf, 2l * qp_bytes, kp_bytes)
+                    vk_check(vkEndCommandBuffer(raw), null)
+                    submit_wait(raw)
+                    if (side == 0) {
+                        memcpy(addr<void?>(o_old[0]), host.mapped, 2l * qp_bytes + kp_bytes)
+                    } else {
+                        memcpy(addr<void?>(o_cls[0]), host.mapped, 2l * qp_bytes + kp_bytes)
+                    }
+                }
+            }
+            var bad = 0
+            for (i in range(2 * rows * qd)) {   // q panel + gate stash
+                if (o_old[i] != o_cls[i]) {
+                    bad++
+                }
+            }
+            let kb0 = 2 * rows * qd + w0 * kvd   // k panel: only the written absolute rows
+            for (i in range(rows * kvd)) {
+                if (o_old[kb0 + i] != o_cls[kb0 + i]) {
+                    bad++
+                }
+            }
+            t |> success(bad == 0, "at_prep: class collapse bit-exact ({bad} diverge)")
+            delete srcqh
+            delete srckh
+            delete smh
+            delete o_old
+            delete o_cls
+        } else {
+            feint("dasVulkan not present — skipping\n")
+        }
+    }
+}
