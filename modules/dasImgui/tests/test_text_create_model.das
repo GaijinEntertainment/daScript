@@ -73,7 +73,31 @@ def test_create_predicate_lambda(t : T?) {
     t |> success(find_index(allowed_on_blank, "user.rule") >= 0,
         "the predicate admits a blank line")
     t |> success(creation_execute(ed, "user.rule"), "execute lands there")
-    t |> equal(ed.lines[1], "---", "the rule inserted")
+    // the separator repair re-opens the blank above (also keeps the hr from
+    // reading as a setext underline of the paragraph)
+    t |> equal(ed.lines[1], "", "a blank stays between the text and the rule")
+    t |> equal(ed.lines[2], "---", "the rule inserted")
+    text_edit_dispose(ed)
+}
+
+[test]
+def test_create_separator_keeps_blank_neighbors(t : T?) {
+    // play round 3: List on the separator line consumed the only blank, so
+    // typing lazily glued the new item to BOTH neighbor paragraphs
+    var ed = md_editor("alpha\n\nbeta\n")
+    text_edit_set_cursor(ed, 1, 0)
+    t |> success(creation_execute(ed, "md.list"), "list lands on the separator")
+    t |> equal(text_edit_text(ed), "alpha\n\n- \n\nbeta\n",
+        "the transform re-opens blank lines on both sides")
+    t |> equal(ed.cursor_line, 2, "the caret rides onto the marker line")
+    t |> equal(ed.cursor_column, 2, "the caret sits after the marker")
+    t |> success(text_edit_undo(ed), "undo accepted")
+    t |> equal(text_edit_text(ed), "alpha\n\nbeta\n", "one undo reverts all of it")
+    // insert shapes carry the same guarantee
+    text_edit_set_cursor(ed, 1, 0)
+    t |> success(creation_execute(ed, "md.image"), "image lands on the separator")
+    t |> equal(text_edit_text(ed), "alpha\n\n![alt](src)\n\nbeta\n",
+        "the insert keeps blank lines on both sides")
     text_edit_dispose(ed)
 }
 

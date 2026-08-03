@@ -248,6 +248,12 @@ def private creation_line_block(ed : TextEditState const) : int2 {
     return int2(sel.start_line, last)
 }
 
+def private separated_at(ed : TextEditState const; row : int) : bool {
+    // blank line or buffer edge = block separation exists on that side
+    return true if (row < 0 || row >= length(ed.lines))
+    return length(leading_whitespace(ed.lines[row])) == length(ed.lines[row])
+}
+
 def private strip_line_prefixes(rest : string) : string {
     // markers stack: checkbox implies list; strip the deepest known form
     for (marker in ["- [ ] ", "- [x] ", "- [X] "]) {
@@ -355,14 +361,28 @@ def private apply_transform(var ed : TextEditState;
         delete new_lines
         return false
     }
+    var replacement = join(new_lines, "\n")
+    delete new_lines
+    var caret_row_shift = 0
+    // separator-born constructs keep blank neighbors (lazy-continuation glue)
+    let separator_born = (!had_selection && block_.x == block_.y
+        && target != 0 && first_rest_start == length(ed.lines[block_.x]))
+    if (separator_born) {
+        if (!separated_at(ed, block_.x - 1)) {
+            replacement = "\n" + replacement
+            caret_row_shift = 1
+        }
+        if (!separated_at(ed, block_.y + 1)) {
+            replacement += "\n"
+        }
+    }
     let span = TextEditRange(start_line = block_.x, start_column = 0,
         end_line = block_.y, end_column = length(ed.lines[block_.y]))
-    text_edit_replace_range(ed, span, join(new_lines, "\n"))
-    delete new_lines
+    text_edit_replace_range(ed, span, replacement)
     if (had_selection) {
         text_edit_select(ed, block_.x, 0, block_.y, length(ed.lines[block_.y]))
     } else {
-        text_edit_set_cursor(ed, caret_line,
+        text_edit_set_cursor(ed, caret_line + caret_row_shift,
             max(caret_column + caret_delta, 0))
     }
     text_edit_patch_redo_cursor(ed)
@@ -383,7 +403,20 @@ def public creation_execute(var ed : TextEditState; id : string;
         if (definition.shape == CreationShape.transform) {
             executed = apply_transform(ed, definition.transform)
         } else {
-            executed = text_edit_snippet_expand(ed, definition.body)
+            var body = definition.body
+            if (!ctx.has_selection && ctx.blank_line) {
+                // separator-born constructs keep their blank neighbors (see
+                // apply_transform) - stop positions shift with the prefix
+                if (!separated_at(ed, ed.cursor_line - 1)
+                        && !starts_with(body, "\n")) {
+                    body = "\n" + body
+                }
+                if (!separated_at(ed, ed.cursor_line + 1)
+                        && !ends_with(body, "\n")) {
+                    body += "\n"
+                }
+            }
+            executed = text_edit_snippet_expand(ed, body)
         }
     }
     return executed
@@ -454,6 +487,8 @@ def private define_transform(id, title, format : string;
 }
 
 def private register_markdown_builtins() {
+    define_builtin("md.section", "New section", "markdown",
+        CreationShape.insert, "\n\n## $\{1:Section}\n\n$\{0}")
     define_builtin("md.bold", "Bold", "markdown",
         CreationShape.wrap, "**$\{SEL}**", ImGuiKey.B, key_primary = true)
     define_builtin("md.italic", "Italic", "markdown",
