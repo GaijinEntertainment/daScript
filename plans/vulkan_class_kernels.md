@@ -35,6 +35,14 @@ a dialect.
    (bulk data, not params). Escape hatch: a params block can be an `@ssbo` member if one ever
    outgrows the limit. Precondition: fix the dasVulkan generated pusher (drops small trailing
    scalars — the reason `vk_meta` exists at all; see `dasllama_vulkan_kernels.das:25-29`).
+   **Phase-0 refinement:** the decode submission model v2 PRE-RECORDS command buffers per stack
+   and refreshes only mapped memory per token (`dasllama_vulkan_common.das:29-33`) — push values
+   are frozen at record time, so per-token-varying params cannot ride push constants on those
+   rails without per-token re-record. The `[vk_dispatch]` generator therefore supports BOTH
+   carriers per class — push constants (re-recorded rails: prefill, batch, seams) and a mapped
+   params buffer (pre-recorded decode sets) — with identical named-struct authoring either way.
+   Whether decode moves to per-token re-record (push everywhere) or keeps mapped params is a
+   phase-5 measurement, not an up-front bet.
 3. **One descriptor set per class.** `@set` parsed but must be 0 (clean error — Metal-consistent
    restraint). Per-class `VkDescriptorSetLayout` generated from members replaces the shared 6-slot
    layout. Generated set-builder caches sets keyed by (class, bound resources) — preserves today's
