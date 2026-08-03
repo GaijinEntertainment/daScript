@@ -458,7 +458,6 @@ struct GpuState {
     batch_y1_dev : uint64    // gate / single output plane (kernel writes; also the down output)
     batch_y2_dev : uint64    // up output plane (the fused pair's second write target)
     batch_y1 : HostBuf       // host-cached readback staging for batch_y1_dev
-    batch_y2 : HostBuf       // ... and batch_y2_dev (idle since the FFN fold — kept for debug taps)
     batch_actrq_set : VkDescriptorSet   // batch twin of FfnCmd's fused act+requant set (y1/y2 planes)
     batch_cmd : VkCommandBuffer   // one reusable batch cmd buffer, re-recorded per submit
     batch_ready : bool
@@ -486,7 +485,6 @@ struct GpuState {
     stream_max_dn_wq : int64
     stream_max_dn_ws : int64
     stream_ready : bool
-    stream_reserve : int64        // bytes carved out of weight_budget for the 2 stream slots
     // dedicated transfer family (phase 5): mirror->slot copies overlap compute, handed off via a
     // timeline semaphore the next compute submit waits on. -1 = single-queue mode (the old rail).
     xfer_fam : int = -1
@@ -1375,7 +1373,7 @@ def vk_moe_upload_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n : 
         return false
     }
     if (verdict == 2) {
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: descriptor capacity reached at {length(g_gpu.stacks)} stacks\n")
+        to_log(LOG_WARNING, "dasLLAMA vulkan tier: descriptor capacity reached at {length(g_gpu.stacks)} stacks — remaining layers stay on the CPU\n")
         return false
     }
     let pb = stack_plane_bytes(n, rows, fmt)
@@ -2707,7 +2705,6 @@ def ensure_batch_state {
     g_gpu.batch_y1_dev = make_device_buf(BATCH_Y_BYTES)
     g_gpu.batch_y2_dev = make_device_buf(BATCH_Y_BYTES)
     g_gpu.batch_y1 = make_host_buf(BATCH_Y_BYTES, true, [cached = true])
-    g_gpu.batch_y2 = make_host_buf(BATCH_Y_BYTES, true, [cached = true])
     g_gpu.batch_cmd = alloc_cmd()
     // fused act+requant bindings: up@0, params@2, hq/hs@3/4, gate@5; binding 1 is unused filler
     g_gpu.batch_actrq_set = vk_set6(g_gpu.batch_y2_dev, g_gpu.batch_xs_dev, g_gpu.ffn_meta_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_gpu.batch_y1_dev,

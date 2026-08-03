@@ -8,6 +8,7 @@ options _function_length = 0   // same
 require dasllama/dasllama_vulkan_common   // g_gpu/g_rd state, plumbing, hazard rail, fill metas
 require dasllama/dasllama_vulkan_decode   // vk_moe_dn_step — the dn chain's npos==1 arm routes through the decode step
 require dasllama/dasllama_kqformat   // KqFmt — the arena fmt slots are its ordinals
+require dasllama/dasllama_gpu_tier   // moe_gpu_stream_need — the stream-slot carve's source of truth
 require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_math
@@ -1227,8 +1228,9 @@ def private ensure_stream_slots {
     }
     g_gpu.stream_ready = true
     let slot_bytes = 2l * (g_gpu.stream_max_gu_wq + g_gpu.stream_max_gu_ws) + g_gpu.stream_max_dn_wq + g_gpu.stream_max_dn_ws
-    // reserve was carved from the weight budget at init — overcommit here silently hits the WDDM paging cliff
-    let reserve = g_gpu.stream_reserve > 0l ? g_gpu.stream_reserve : STREAM_RESERVE
+    // same read-time carve carved_budget() subtracts — overcommit silently hits the WDDM paging cliff
+    let need = moe_gpu_stream_need()
+    let reserve = need > 0l ? 2l * need : STREAM_RESERVE
     assert(2l * slot_bytes <= reserve, "dasLLAMA vulkan tier: stream slots exceed the carved stream reserve")
     to_log(LOG_INFO, "dasLLAMA vulkan tier: streamed prefill engaged ({length(g_gpu.stream_stacks) / 3} layers, slot {slot_bytes} bytes x 2)\n")
 }
