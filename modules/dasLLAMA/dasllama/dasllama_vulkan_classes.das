@@ -281,6 +281,129 @@ class MoeCombine {
     }
 }
 
+// ===== decode attention =====
+
+struct DaAttnArgs {
+    cnt : uint      // KV positions to attend
+    kvd : uint      // kv row width
+    hs : uint       // head size
+    kv_mul : uint   // GQA group (query heads per kv head)
+    kbase : uint    // layer base into the shared K mirror (0 for the standalone seam)
+    vbase : uint
+    scale : float
+}
+
+// decode attention (one query row): one wg per head, GQA, f32 K/V mirror. Online softmax over
+// 256-position chunks (running max/denom, alpha-rescaled V accumulators) — any cnt works.
+[vk_dispatch(name = "da_attn_cls", grid = "nheads", params = "nheads : int64")]
+class DaAttn {
+    @ssbo @binding = 0 q : array<float>      // roped query rows, one per head
+    @ssbo @binding = 1 kmir : array<float>   // the K mirror plane
+    @ssbo @binding = 2 vmir : array<float>   // the V mirror plane
+    @ssbo @binding = 3 y : array<float>      // attention out rows
+    @push_constant pa : DaAttnArgs
+    @workgroup qrow : float[256]   // this head's query row (hs <= 256)
+    @workgroup sc : float[256]     // chunk scores, then the cross-group V partial reduce
+    @workgroup part : float[64]    // per-subgroup partials
+    @workgroup ml : float[2]       // [0] = running max, [1] = running softmax denom
+
+    [spirv_kernel(local_size_x = 256, name = "da_attn_cls_spv")]
+    def run {   // nolint:STYLE038 — the verbatim online-softmax pass, parity-locked to the shipped kernel
+        let hs = pa.hs
+        let h = gl_WorkGroupID.x
+        let kvh = h / pa.kv_mul
+        let tid = gl_LocalInvocationID.x
+        let npart = 256u / hs     // V-phase partial groups; thread tid = group g, output dim c
+        let g = tid / hs
+        let c = tid % hs
+        var i = tid
+        while (i < hs) {
+            qrow[i] = q[h * hs + i]
+            i += 256u
+        }
+        if (tid == 0u) {
+            ml[1u] = 0.0
+        }
+        barrier()
+        var acc = 0.0             // this thread's V partial (group g's slice of dim c)
+        var mrun = -3.0e38        // running max — uniform, tracked in lockstep by every thread
+        var c0 = 0u
+        while (c0 < pa.cnt) {
+            let clen = min(256u, pa.cnt - c0)
+            // chunk scores: thread tid owns position c0 + tid
+            var s = -3.0e38
+            if (tid < clen) {
+                var sv = 0.0
+                var d = 0u
+                while (d < hs) {
+                    sv += qrow[d] * kmir[pa.kbase + (c0 + tid) * pa.kvd + kvh * hs + d]
+                    d++
+                }
+                s = sv * pa.scale
+            }
+            let tmax = subgroupMax(s)
+            if (gl_SubgroupInvocationID == 0u) {
+                part[gl_SubgroupID] = tmax
+            }
+            barrier()
+            if (tid == 0u) {
+                var m = mrun
+                var sgi = 0u
+                while (sgi < gl_NumSubgroups) {
+                    m = max(m, part[sgi])
+                    sgi++
+                }
+                ml[0u] = m
+            }
+            barrier()
+            let mnew = ml[0u]
+            let alpha = exp(mrun - mnew)
+            mrun = mnew
+            // exp + chunk sum; denom rescale rides the same alpha
+            let e = tid < clen ? exp(s - mnew) : 0.0
+            sc[tid] = e
+            let tsum = subgroupAdd(e)
+            if (gl_SubgroupInvocationID == 0u) {
+                part[gl_SubgroupID] = tsum
+            }
+            barrier()
+            if (tid == 0u) {
+                var lsum = 0.0
+                var sgi = 0u
+                while (sgi < gl_NumSubgroups) {
+                    lsum += part[sgi]
+                    sgi++
+                }
+                ml[1u] = ml[1u] * alpha + lsum
+            }
+            // V accumulate: group g strides the chunk, rescaled by this chunk's alpha
+            acc *= alpha
+            if (tid < npart * hs) {
+                var jj = g
+                while (jj < clen) {
+                    acc += sc[jj] * vmir[pa.vbase + (c0 + jj) * pa.kvd + kvh * hs + c]
+                    jj += npart
+                }
+            }
+            barrier()   // sc/part settle before the next chunk overwrites them
+            c0 += 256u
+        }
+        // cross-group reduce (sc reused as the partial slab: slot tid == g * hs + c)
+        sc[tid] = acc
+        barrier()
+        if (tid < hs) {
+            let linv = 1.0 / ml[1u]
+            var tot = 0.0
+            var gg = 0u
+            while (gg < npart) {
+                tot += sc[gg * hs + tid]
+                gg++
+            }
+            y[h * hs + tid] = tot * linv
+        }
+    }
+}
+
 // ===== the Q8_0 batch GEMM tile (the sdot4 prefill workhorse) =====
 
 struct BatchArgs {

@@ -964,6 +964,111 @@ def test_vkd_q8_batch_tile(t0 : T?) {
 }
 
 [test]
+def test_vkd_da_attn(t0 : T?) {
+    t0 |> run("decode attention class twin == the shipped kernel (bit-exact, chunk boundary)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_da_attn_cls()) {
+                feint("no Vulkan device — skipping\n")
+                return
+            }
+            let hs = 64
+            let kv_mul = 2
+            let nheads = 4
+            let kvd = (nheads / kv_mul) * hs
+            let cnt = 300   // crosses the 256-position chunk boundary: the alpha-rescale path runs
+            let scale = 0.125
+            var qh : array<float>
+            var kh : array<float>
+            var vh : array<float>
+            var sh : array<float>
+            qh |> resize(nheads * hs)
+            kh |> resize(cnt * kvd)
+            vh |> resize(cnt * kvd)
+            sh |> resize(1)
+            for (i in range(nheads * hs)) {
+                qh[i] = float((i * 41) % 73) * 0.05 - 1.8
+            }
+            for (i in range(cnt * kvd)) {
+                kh[i] = float((i * 17) % 97) * 0.03 - 1.4
+                vh[i] = float((i * 53) % 89) * 0.04 - 1.7
+            }
+            sh[0] = scale
+            let q_bytes = int64(nheads * hs) * 4l
+            let m_bytes = int64(cnt * kvd) * 4l
+            let qd = make_device_buf(q_bytes)
+            let kd = make_device_buf(m_bytes)
+            let vd = make_device_buf(m_bytes)
+            let sd = make_device_buf(4l)
+            let yd1 = make_device_buf(q_bytes)
+            let yd2 = make_device_buf(q_bytes)
+            var meta = make_host_buf(META_BYTES, false, [cached = false])
+            var host = make_host_buf(q_bytes, true, [cached = true])
+            var y_old : array<float>
+            var y_cls : array<float>
+            y_old |> resize(nheads * hs)
+            y_cls |> resize(nheads * hs)
+            unsafe {
+                upload_region_at(qd, 0l, addr<uint8 const?>(qh[0]), q_bytes)
+                upload_region_at(kd, 0l, addr<uint8 const?>(kh[0]), m_bytes)
+                upload_region_at(vd, 0l, addr<uint8 const?>(vh[0]), m_bytes)
+                upload_region_at(sd, 0l, addr<uint8 const?>(sh[0]), 4l)
+                var mp = reinterpret<uint?>(meta.mapped)
+                mp[0] = uint(cnt)
+                mp[2] = uint(kvd)
+                mp[3] = uint(hs)
+                mp[4] = uint(kv_mul)
+                mp[5] = 0u
+                mp[6] = 0u
+                // the SHIPPED kernel: q@0, K@1, meta@2, V@3, scale@4, y@5
+                var so = vk_set6(qd, kd, meta.buf, vd, sd, yd1,
+                    q_bytes, m_bytes, META_BYTES, m_bytes, 4l, q_bytes,
+                    fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                var raw = alloc_cmd()
+                let begin = VkCommandBufferBeginInfo()
+                vk_check(vkBeginCommandBuffer(raw, begin), null)
+                var h : VkHaz
+                hz_dispatch(raw, h, weak_copy(g_gpu.da_pipeline), so, uint(nheads))
+                vhz_dep(raw, h, 16u, 0u, true)
+                cmd_copy_whole(raw, yd1, host.buf, q_bytes)
+                vk_check(vkEndCommandBuffer(raw), null)
+                submit_wait(raw)
+                memcpy(addr<void?>(y_old[0]), host.mapped, q_bytes)
+                // the class twin: q@0, K@1, V@2, y@3
+                var sc = set_da_attn_cls(fixed_array(qd, kd, vd, yd2),
+                    fixed_array(q_bytes, m_bytes, m_bytes, q_bytes),
+                    fixed_array(1u, 2u, 4u, 16u))
+                var raw2 = alloc_cmd()
+                vk_check(vkBeginCommandBuffer(raw2, begin), null)
+                var h2 : VkHaz
+                var pc = DaAttnArgs(cnt = uint(cnt), kvd = uint(kvd), hs = uint(hs),
+                    kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale)
+                enc_da_attn_cls(raw2, h2, sc, pc, int64(nheads))
+                vhz_dep(raw2, h2, 16u, 0u, true)
+                cmd_copy_whole(raw2, yd2, host.buf, q_bytes)
+                vk_check(vkEndCommandBuffer(raw2), null)
+                submit_wait(raw2)
+                memcpy(addr<void?>(y_cls[0]), host.mapped, q_bytes)
+            }
+            var bad = 0
+            for (i in range(nheads * hs)) {
+                if (y_old[i] != y_cls[i]) {
+                    bad++
+                }
+            }
+            t |> success(bad == 0, "da_attn: class twin bit-exact ({bad} of {nheads * hs} diverge)")
+            delete qh
+            delete kh
+            delete vh
+            delete sh
+            delete y_old
+            delete y_cls
+        } else {
+            feint("dasVulkan not present — skipping\n")
+        }
+    }
+}
+
+[test]
 def test_vkd_q8_gemv_pair(t0 : T?) {
     t0 |> run("q8/q8n GEMV class twins == the shipped kernels (bit-exact)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
