@@ -5,6 +5,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 require dastest/testing_boost public
 require dasllama/dasllama_math
 require ?vulkan dasllama/dasllama_math_vulkan  // the MoE GPU tier under test; the test installs its hooks explicitly (no env gate)
+require ?vulkan dasllama/dasllama_vulkan_seams  // the single-op seams (vk_add_rms / rope_kv / decode_attn) on the class rail
 require llvm/daslib/f16_cvt
 require math
 

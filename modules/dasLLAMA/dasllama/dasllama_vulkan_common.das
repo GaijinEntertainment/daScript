@@ -389,8 +389,6 @@ struct GpuState {
     ar_a_dev : uint64
     ar_w_dev : uint64
     ar_y_dev : uint64
-    ar_meta : HostBuf
-    ar_scal : HostBuf
     ar_host : HostBuf
     ar_set : VkDescriptorSet
     ar_ready : bool
@@ -412,8 +410,7 @@ struct GpuState {
     // rope+KV-store state: qkv in, roped q out, K/V planes = one contiguous device KV scratch
     rks_qkv_dev : uint64
     rks_q_dev : uint64
-    rks_scal : HostBuf
-    rks_meta : HostBuf
+    rks_scal : HostBuf        // the cos+sin row (kernel data, not params)
     rks_k_dev : uint64        // f32 K mirror (rows x kv_dim, absolute positions)
     rks_v_dev : uint64        // f32 V mirror
     rks_q_host : HostBuf
@@ -422,8 +419,6 @@ struct GpuState {
     rks_ready : bool
     // decode-attention state: q in, out; reads the rks K/V mirror planes
     da_q_dev : uint64
-    da_scal : HostBuf
-    da_meta : HostBuf
     da_out_dev : uint64
     da_out_host : HostBuf
     da_set : VkDescriptorSet
@@ -1714,65 +1709,8 @@ def arena_ensure_scratch(fmt : int) {
     }
 }
 
-// residual-stream scratch for the add+rms kernel (lazy — only a resident-driver run creates it)
-def ensure_ar_state {
-    if (g_gpu.ar_ready) {
-        return
-    }
-    let bytes = AR_MAX_DIM * 4l
-    g_gpu.ar_x_dev = make_device_buf(bytes)
-    g_gpu.ar_a_dev = make_device_buf(bytes)
-    g_gpu.ar_w_dev = make_device_buf(bytes)
-    g_gpu.ar_y_dev = make_device_buf(bytes)
-    g_gpu.ar_meta = make_host_buf(META_BYTES, true)
-    g_gpu.ar_scal = make_host_buf(XS_BYTES, true)
-    g_gpu.ar_host = make_host_buf(bytes, false, [cached = true])   // x and y readback
-    g_gpu.ar_set = vk_set6(g_gpu.ar_x_dev, g_gpu.ar_a_dev, g_gpu.ar_meta.buf, g_gpu.ar_w_dev, g_gpu.ar_scal.buf, g_gpu.ar_y_dev,
-        bytes, bytes, META_BYTES, bytes, XS_BYTES, bytes,
-        fixed_array(VHG_X, 0u, 0u, 0u, 0u, VHG_YO))   // a/w/meta/scal fill pre-cmd
-    g_gpu.ar_ready = true
-}
-
-//! Resident-driver seam: x = (x + a) * ascale then y = rms(x) * w, in ONE dispatch. `add` false
-//! runs the plain norm (the stack prologue). x is updated in place — it IS the residual stream.
-def vk_add_rms(var x : array<float>; a : array<float>; w : array<float>; var y : array<float>;
-               dim : int64; eps, ascale : float; add : bool) {
-    verify(vk_moe_init())   // assert() refuses side-effecting expressions; the probe must run
-    assert(dim <= AR_MAX_DIM, "dasLLAMA vulkan: add_rms dim exceeds AR_MAX_DIM")
-    ensure_ar_state()
-    let bytes = dim * 4l
-    unsafe {
-        var mp = reinterpret<uint?>(g_gpu.ar_meta.mapped)
-        mp[0] = uint(dim)
-        mp[1] = add ? 1u : 0u
-        mp[2] = 0u   // standalone seam: norm weight starts at 0
-        var sp = reinterpret<float?>(g_gpu.ar_scal.mapped)
-        sp[0] = eps
-        sp[1] = ascale
-        upload_region_at(g_gpu.ar_x_dev, 0l, addr<uint8 const?>(x[0]), bytes)
-        upload_region_at(g_gpu.ar_w_dev, 0l, addr<uint8 const?>(w[0]), bytes)
-        if (add) {
-            upload_region_at(g_gpu.ar_a_dev, 0l, addr<uint8 const?>(a[0]), bytes)
-        }
-        var raw = alloc_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
-        hz_dispatch(raw, h, weak_copy(g_gpu.ar_pipeline), g_gpu.ar_set, 1u)   // one workgroup owns the whole row (it reduces)
-        vhz_dep(raw, h, VHG_YO, 0u, true)   // x reads back post-fence in the second cmd
-        cmd_copy_whole(raw, g_gpu.ar_y_dev, g_gpu.ar_host.buf, bytes)
-        vk_check(vkEndCommandBuffer(raw), null)
-        submit_wait(raw)
-        memcpy(addr<void?>(y[0]), g_gpu.ar_host.mapped, bytes)
-        // x is the residual stream: read the updated row back too
-        var raw2 = alloc_cmd()
-        vk_check(vkBeginCommandBuffer(raw2, begin), null)
-        cmd_copy_whole(raw2, g_gpu.ar_x_dev, g_gpu.ar_host.buf, bytes)
-        vk_check(vkEndCommandBuffer(raw2), null)
-        submit_wait(raw2)
-        memcpy(addr<void?>(x[0]), g_gpu.ar_host.mapped, bytes)
-    }
-}
+// The single-op seams (vk_add_rms / vk_rope_kv_store / vk_decode_attn) live in
+// dasllama_vulkan_seams — the class rail; their scratch handles stay on g_gpu here.
 
 // The arena FFN chain's four sets. Bindings mirror ffn_cmd_for exactly — only bindings 0/1 change,
 // from a stack's own plane pair to its format's arena. Each role needs its OWN set because the
@@ -1819,117 +1757,8 @@ let RKS_MAX_KVD = 1_024l
 let RKS_MAX_CTX = 4_096l   // K/V mirror rows in the standalone-kernel scratch
 let KV_READBACK_ROWS = 256l   // bulk mirror->host hydration chunk (rows per submit)
 
-def ensure_rks_state {
-    if (g_gpu.rks_ready) {
-        return
-    }
-    g_gpu.rks_qkv_dev = make_device_buf((RKS_MAX_QD + 2l * RKS_MAX_KVD) * 4l)
-    g_gpu.rks_q_dev = make_device_buf(RKS_MAX_QD * 4l)
-    g_gpu.rks_k_dev = make_device_buf(RKS_MAX_CTX * RKS_MAX_KVD * 4l)
-    g_gpu.rks_v_dev = make_device_buf(RKS_MAX_CTX * RKS_MAX_KVD * 4l)
-    g_gpu.rks_scal = make_host_buf(XS_BYTES, true)
-    g_gpu.rks_meta = make_host_buf(META_BYTES, true)
-    g_gpu.rks_q_host = make_host_buf(RKS_MAX_QD * 4l, false, [cached = true])
-    g_gpu.rks_kv_host = make_host_buf(2l * RKS_MAX_KVD * 4l, false, [cached = true])
-    g_gpu.rks_set = vk_set6(g_gpu.rks_qkv_dev, g_gpu.rks_k_dev, g_gpu.rks_meta.buf, g_gpu.rks_v_dev, g_gpu.rks_scal.buf, g_gpu.rks_q_dev,
-        (RKS_MAX_QD + 2l * RKS_MAX_KVD) * 4l, RKS_MAX_CTX * RKS_MAX_KVD * 4l, META_BYTES,
-        RKS_MAX_CTX * RKS_MAX_KVD * 4l, XS_BYTES, RKS_MAX_QD * 4l,
-        fixed_array(0u, VHG_Y2, 0u, VHG_Y3, 0u, VHG_Y1))   // K mirror / V mirror / roped q
-    g_gpu.rks_ready = true
-}
-
-
-def ensure_da_state {
-    if (g_gpu.da_ready) {
-        return
-    }
-    ensure_rks_state()   // shares the K/V mirror planes
-    g_gpu.da_q_dev = make_device_buf(RKS_MAX_QD * 4l)
-    g_gpu.da_out_dev = make_device_buf(RKS_MAX_QD * 4l)
-    g_gpu.da_scal = make_host_buf(XS_BYTES, true)
-    g_gpu.da_meta = make_host_buf(META_BYTES, true)
-    g_gpu.da_out_host = make_host_buf(RKS_MAX_QD * 4l, false, [cached = true])
-    g_gpu.da_set = vk_set6(g_gpu.da_q_dev, g_gpu.rks_k_dev, g_gpu.da_meta.buf, g_gpu.rks_v_dev, g_gpu.da_scal.buf, g_gpu.da_out_dev,
-        RKS_MAX_QD * 4l, RKS_MAX_CTX * RKS_MAX_KVD * 4l, META_BYTES,
-        RKS_MAX_CTX * RKS_MAX_KVD * 4l, XS_BYTES, RKS_MAX_QD * 4l,
-        fixed_array(0u, 0u, 0u, 0u, 0u, VHG_YO))   // q/mirrors fill pre-cmd (fence-ordered)
-    g_gpu.da_ready = true
-}
-
-//! Resident-driver seam: decode attention of the roped q row against the `cnt` cached positions in
-//! the device K/V mirror (the same planes vk_rope_kv_store wrote), GQA per kv_mul, into out[0..qd).
-def vk_decode_attn(var q : array<float>; var out : array<float>; cnt, qd, kv_dim, head_size, kv_mul : int64; scale : float) {
-    verify(vk_moe_init())
-    assert(head_size <= 256l && qd <= RKS_MAX_QD, "dasLLAMA vulkan: decode-attn geometry over scratch")
-    ensure_da_state()
-    let n_heads = int(qd / head_size)
-    unsafe {
-        var mp = reinterpret<uint?>(g_gpu.da_meta.mapped)
-        mp[0] = uint(cnt)
-        mp[1] = uint(qd)
-        mp[2] = uint(kv_dim)
-        mp[3] = uint(head_size)
-        mp[4] = uint(kv_mul)
-        mp[5] = 0u   // standalone seam: mirror base 0
-        mp[6] = 0u
-        var sp = reinterpret<float?>(g_gpu.da_scal.mapped)
-        sp[0] = scale
-        upload_region_at(g_gpu.da_q_dev, 0l, addr<uint8 const?>(q[0]), qd * 4l)
-        var raw = alloc_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
-        hz_dispatch(raw, h, weak_copy(g_gpu.da_pipeline), g_gpu.da_set, uint(n_heads))
-        vhz_dep(raw, h, VHG_YO, 0u, true)
-        cmd_copy_whole(raw, g_gpu.da_out_dev, g_gpu.da_out_host.buf, qd * 4l)
-        vk_check(vkEndCommandBuffer(raw), null)
-        submit_wait(raw)
-        memcpy(addr<void?>(out[0]), g_gpu.da_out_host.mapped, qd * 4l)
-    }
-}
-
-//! Resident-driver seam (standalone-kernel form): rope the q row in place, rope the k row into the
-//! device K mirror at row `pos`, copy v raw into the V mirror at `pos`; then read q + that row's
-//! K/V back for parity. `neox` picks llama's adjacent-pair vs qwen/gemma's half-offset rope.
-def vk_rope_kv_store(var qkv : array<float>; var qout : array<float>; var krow : array<float>; var vrow : array<float>;
-                     cossin : array<float>; qd, kv_dim, head_size, pos : int64; neox : bool) {
-    verify(vk_moe_init())
-    let half = int(head_size / 2l)
-    assert(qd <= RKS_MAX_QD && kv_dim <= RKS_MAX_KVD && pos < RKS_MAX_CTX, "dasLLAMA vulkan: rope_kv geometry over scratch")
-    ensure_rks_state()
-    let kpair0 = int(qd / 2l)
-    let npairs = kpair0 + int(kv_dim / 2l)
-    unsafe {
-        var mp = reinterpret<uint?>(g_gpu.rks_meta.mapped)
-        mp[0] = uint(qd)
-        mp[1] = uint(kv_dim)
-        mp[2] = uint(head_size)
-        mp[3] = uint(half)
-        mp[4] = neox ? 1u : 0u
-        mp[5] = uint(kpair0)
-        mp[6] = uint(npairs)
-        mp[7] = uint(pos * kv_dim)   // K mirror row offset (f32 elements)
-        mp[8] = uint(pos * kv_dim)   // V mirror row offset
-        memcpy(g_gpu.rks_scal.mapped, addr<void?>(cossin[0]), head_size * 4l)   // cos[half] + sin[half]
-        upload_region_at(g_gpu.rks_qkv_dev, 0l, addr<uint8 const?>(qkv[0]), (qd + 2l * kv_dim) * 4l)
-        // q enters the kernel via vk_y (binding 5) = rks_q_dev — seed it with the raw q rows
-        upload_region_at(g_gpu.rks_q_dev, 0l, addr<uint8 const?>(qkv[0]), qd * 4l)
-        var raw = alloc_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
-        hz_dispatch(raw, h, weak_copy(g_gpu.rks_pipeline), g_gpu.rks_set, uint((npairs + int(WG_X) - 1) / int(WG_X)))
-        vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_Y3, 0u, true)   // one declaration for the q/k/v readback group
-        cmd_copy_whole(raw, g_gpu.rks_q_dev, g_gpu.rks_q_host.buf, qd * 4l)
-        cmd_copy_range(raw, g_gpu.rks_k_dev, pos * kv_dim * 4l, g_gpu.rks_kv_host.buf, 0l, kv_dim * 4l)
-        cmd_copy_range(raw, g_gpu.rks_v_dev, pos * kv_dim * 4l, g_gpu.rks_kv_host.buf, kv_dim * 4l, kv_dim * 4l)
-        vk_check(vkEndCommandBuffer(raw), null)
-        submit_wait(raw)
-        memcpy(addr<void?>(qout[0]), g_gpu.rks_q_host.mapped, qd * 4l)
-        memcpy(addr<void?>(krow[0]), g_gpu.rks_kv_host.mapped, kv_dim * 4l)
-        memcpy(addr<void?>(vrow[0]), reinterpret<float?>(g_gpu.rks_kv_host.mapped) + kv_dim, kv_dim * 4l)
-    }
-}
+// ensure_rks_state / ensure_da_state / vk_rope_kv_store / vk_decode_attn moved to
+// dasllama_vulkan_seams (the class rail).
 
 // ===== resident-driver state + the fill-meta family (the driver itself is decode/prefill) =====
 // One cb/token: residual + KV mirror stay device-side, host only uploads x + rope row, reads logits.

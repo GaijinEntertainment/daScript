@@ -19,6 +19,7 @@ require math
 struct ArArgs {
     dim : uint
     add_on : uint
+    woff : uint     // norm-weight row base in wn (the driver's norms plane is shared per-layer)
     eps : float
     ascale : float
 }
@@ -99,7 +100,7 @@ class ClsArAddRms : ArBase {
         let inv = rms_inv(ss)
         var k = gl_LocalInvocationID.x
         while (k < pa.dim) {
-            yo[base + k] = wn[k] * (row[k] * inv)
+            yo[base + k] = wn[pa.woff + k] * (row[k] * inv)
             k += 256u
         }
     }
@@ -123,10 +124,10 @@ class ArAddRmsRq : ArBase {
         var b = tid / 8u
         while (b < nblk) {
             let base = b * 32u + lane8 * 4u
-            let v0 = wn[base] * (row[base] * inv)
-            let v1 = wn[base + 1u] * (row[base + 1u] * inv)
-            let v2 = wn[base + 2u] * (row[base + 2u] * inv)
-            let v3 = wn[base + 3u] * (row[base + 3u] * inv)
+            let v0 = wn[pa.woff + base] * (row[base] * inv)
+            let v1 = wn[pa.woff + base + 1u] * (row[base + 1u] * inv)
+            let v2 = wn[pa.woff + base + 2u] * (row[base + 2u] * inv)
+            let v3 = wn[pa.woff + base + 3u] * (row[base + 3u] * inv)
             let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
             let d = m / 127.0
             let id = d != 0.0 ? 1.0 / d : 0.0

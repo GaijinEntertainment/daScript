@@ -9,6 +9,7 @@ require ?vulkan vulkan
 require ?vulkan vulkan/vulkan_boost
 require ?vulkan dasllama/dasllama_vulkan_common
 require ?vulkan dasllama/dasllama_vulkan_classes
+require ?vulkan dasllama/dasllama_vulkan_seams
 require ?vulkan dasllama/dasllama_kqformat
 require daslib/shader_lingua_franca   // gl_GlobalInvocationID — the CPU replay drives it per lane
 
