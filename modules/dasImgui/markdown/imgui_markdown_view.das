@@ -979,9 +979,7 @@ def public markdown_view_node_above(doc : RichDocument const;
 
 def private nearest_line_point(entry : MarkdownNodeViewCache const;
                                local : float2) : float2 {
-    // clamp an off-glyph point into the nearest fragment; the LINE dominates.
-    // fragment rects are unaligned layout coords while centered/right lines
-    // DRAW shifted by the alignment offset - unshift the probe per line
+    // nearest-fragment clamp; rects are UNALIGNED layout coords - unshift the probe by each line's alignment offset
     let layout & = unsafe(entry.layout)
     var best = float2(-1.0f, -1.0f)
     var best_cost = 3.0e38f
