@@ -6,6 +6,7 @@ options _cyclomatic_complexity = 0   // batched record/setup walks — split que
 options _function_length = 0   // same
 
 require dasllama/dasllama_vulkan_common   // g_gpu/g_rd state, plumbing, hazard rail, fill metas
+require dasllama/dasllama_vulkan_classes   // the class-kernel rail (generated set_/enc_ + gemv_cls_*)
 require dasllama/dasllama_vulkan_decode   // vk_moe_dn_step — the dn chain's npos==1 arm routes through the decode step
 require dasllama/dasllama_kqformat   // KqFmt — the arena fmt slots are its ordinals
 require dasllama/dasllama_gpu_tier   // moe_gpu_stream_need — the stream-slot carve's source of truth
@@ -365,6 +366,49 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
     }
 }
 
+// The arena FFN chain's four class sets. Only bindings 0/1 vary per role (a stack's plane pair vs
+// its format's arena); each GEMV role carries its OWN regions buffer (the weight base pair).
+def private ensure_af_state(f1, f3, f2 : int) {
+    if (g_gpu.af_ready) {
+        return
+    }
+    ensure_ffn_state()
+    let dkq = !vk_fmt_b32(f2)
+    verify(gemv_cls_ensure(f1) && gemv_cls_ensure(f3) && gemv_cls_ensure(f2)
+        && (dkq ? ensure_q8k_actrq_cls() : ensure_q8_actrq_cls()),
+        "vulkan arena: the class rails must engage on a live device")
+    g_gpu.af_meta_g = make_host_buf(META_BYTES, true)
+    g_gpu.af_meta_u = make_host_buf(META_BYTES, true)
+    g_gpu.af_meta_d = make_host_buf(META_BYTES, true)
+    g_gpu.af_xq = make_host_buf(XQ_BYTES, true)
+    g_gpu.af_xs = make_host_buf(XS_BYTES, true)
+    g_gpu.af_ya_dev = make_device_buf(Y_BYTES)
+    g_gpu.af_yb_dev = make_device_buf(Y_BYTES)
+    g_gpu.af_yo_dev = make_device_buf(Y_BYTES)
+    g_gpu.af_yo_host = make_host_buf(Y_BYTES, false, [cached = true])
+    let a1 = arena_planes(f1)
+    let a3 = arena_planes(f3)
+    let a2 = arena_planes(f2)
+    g_gpu.af_gate_set = gemv_cls_set(f1,
+        fixed_array(a1.wq, a1.ws, g_gpu.af_meta_g.buf, g_gpu.af_xq.buf, g_gpu.af_xs.buf, g_gpu.af_ya_dev),
+        fixed_array(a1.wqb, a1.wsb, META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES),
+        fixed_array(0u, 0u, 0u, 0u, 0u, VHG_Y1))
+    g_gpu.af_up_set = gemv_cls_set(f3,
+        fixed_array(a3.wq, a3.ws, g_gpu.af_meta_u.buf, g_gpu.af_xq.buf, g_gpu.af_xs.buf, g_gpu.af_yb_dev),
+        fixed_array(a3.wqb, a3.wsb, META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES),
+        fixed_array(0u, 0u, 0u, 0u, 0u, VHG_Y2))
+    // the requant form follows the DOWN plane; class bindings: gate@0, up@1, hq@2, hs@3
+    let abufs = fixed_array(g_gpu.af_ya_dev, g_gpu.af_yb_dev, g_gpu.hq_dev, g_gpu.hs_dev)
+    let asizes = fixed_array(Y_BYTES, Y_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES)
+    let agbits = fixed_array(VHG_Y1, VHG_Y2, VHG_HQ, VHG_HQ)
+    g_gpu.af_actrq_set = dkq ? set_q8k_actrq_cls(abufs, asizes, agbits) : set_q8_actrq_cls(abufs, asizes, agbits)
+    g_gpu.af_down_set = gemv_cls_set(f2,
+        fixed_array(a2.wq, a2.ws, g_gpu.af_meta_d.buf, g_gpu.hq_dev, g_gpu.hs_dev, g_gpu.af_yo_dev),
+        fixed_array(a2.wqb, a2.wsb, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, Y_BYTES),
+        fixed_array(0u, 0u, 0u, VHG_HQ, VHG_HQ, VHG_YO))
+    g_gpu.af_ready = true
+}
+
 //! Arena seam: one dense FFN layer against arena-resident planes — gate GEMV, up GEMV, fused
 //! act+requant, down GEMV, ONE submit. `blk1/blk3/blk2` are gate/up/down arena block indices.
 //! Gate and up must share a format class (they share the activation image); down is free.
@@ -376,26 +420,37 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
     ensure_af_state(f1, f3, f2)
     let xunit = fmt_unit(f1)
     let dkq = !vk_fmt_b32(f2)
-    fill_gemv_meta(g_gpu.af_meta_g, n, nfe, 0l, blk1)
-    fill_gemv_meta(g_gpu.af_meta_u, n, nfe, 0l, blk3)
-    fill_gemv_meta(g_gpu.af_meta_d, nfe, n, 0l, blk2)
-    fill_ffn_meta(nfe, nfe / (dkq ? 256l : 32l), is_gelu)
     unsafe {
+        // per-role regions: one (weight block, xblock) pair each
+        var rg = reinterpret<uint?>(g_gpu.af_meta_g.mapped)
+        rg[0] = uint(blk1)
+        rg[1] = 0u
+        var ru = reinterpret<uint?>(g_gpu.af_meta_u.mapped)
+        ru[0] = uint(blk3)
+        ru[1] = 0u
+        var rd = reinterpret<uint?>(g_gpu.af_meta_d.mapped)
+        rd[0] = uint(blk2)
+        rd[1] = 0u
         memcpy(g_gpu.af_xq.mapped, addr<void?>(xq[0]), n)
         memcpy(g_gpu.af_xs.mapped, addr<void?>(xs[0]), (n / xunit) * 4l)
         var raw = alloc_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
-        vhz_dep(raw, h, 0u, VHG_META, true)
-        cmd_copy_whole(raw, g_gpu.ffn_meta.buf, g_gpu.ffn_meta_dev, FFN_META_BYTES)
-        let gwg = uint((nfe + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg)
-        hz_dispatch(raw, h, gemv_pipe(f1), g_gpu.af_gate_set, gwg)
-        hz_dispatch(raw, h, gemv_pipe(f3), g_gpu.af_up_set, gwg)
+        let gwg = (nfe + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg
+        var pcg = GemvArgs(n = uint(n), d = uint(nfe), nreg = 1u, ybase = 0u)
+        gemv_cls_enc(f1, raw, h, g_gpu.af_gate_set, pcg, gwg)
+        gemv_cls_enc(f3, raw, h, g_gpu.af_up_set, pcg, gwg)
         // the requant form follows the DOWN plane — its GEMV consumes hq/hs
-        hz_dispatch(raw, h, weak_copy(dkq ? g_gpu.actrq_k_pipeline : g_gpu.actrq_pipeline),
-            g_gpu.af_actrq_set, uint((nfe / (dkq ? 8l : 4l) + 255l) / 256l))
-        hz_dispatch(raw, h, gemv_pipe(f2), g_gpu.af_down_set, uint((n + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
+        var pca = ActArgs(nelem = uint(nfe), gelu = is_gelu ? 1u : 0u, nblk = uint(nfe / (dkq ? 256l : 32l)))
+        let awgs = (nfe / (dkq ? 8l : 4l) + 255l) / 256l
+        if (dkq) {
+            enc_q8k_actrq_cls(raw, h, g_gpu.af_actrq_set, pca, awgs)
+        } else {
+            enc_q8_actrq_cls(raw, h, g_gpu.af_actrq_set, pca, awgs)
+        }
+        var pcd = GemvArgs(n = uint(nfe), d = uint(n), nreg = 1u, ybase = 0u)
+        gemv_cls_enc(f2, raw, h, g_gpu.af_down_set, pcd, (n + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg)
         vhz_dep(raw, h, VHG_YO, 0u, true)
         cmd_copy_whole(raw, g_gpu.af_yo_dev, g_gpu.af_yo_host.buf, n * 4l)
         vk_check(vkEndCommandBuffer(raw), null)
@@ -453,8 +508,8 @@ def vk_arena_gemm(var y : array<float>; blk : int64; n, d, npos : int64; fmt : i
     }
 }
 
-//! Arena seam: one GEMV of the [d x n] tensor at block index `blk` into y[0..d). Same kernels and
-//! meta layout as the per-op tier — only the weight base is an arena index, not stack-relative.
+//! Arena seam: one GEMV of the [d x n] tensor at block index `blk` into y[0..d). Same kernels as
+//! the per-op tier — only the weight base is an arena index, not stack-relative.
 def vk_arena_gemv(var y : array<float>; blk : int64; n, d : int64; fmt : int; xq : array<int8>; xs : array<float>) {
     assert(g_gpu != null && key_exists(g_gpu.arenas, fmt), "dasLLAMA vulkan arena: format not reserved")
     var yp = unsafe(addr(y[0]))
@@ -467,20 +522,25 @@ def vk_arena_gemv(var y : array<float>; blk : int64; n, d : int64; fmt : int; xq
     assert(d * 4l <= Y_BYTES, "dasLLAMA vulkan arena: gemv output exceeds y capacity")
     unsafe {
         var a & = g_gpu.arenas[fmt]
+        if (!a.cls_ready) {   // dies with the arena on model drop — rebuilt over the new scratch
+            verify(gemv_cls_ensure(fmt), "vulkan arena: the gemv class rail must engage on a live device")
+            a.cls_set = gemv_cls_set(fmt,
+                fixed_array(a.wqbuf, a.wsbuf, a.meta.buf, a.xq.buf, a.xs.buf, a.y_dev),
+                fixed_array(a.wqbytes, a.wsbytes, META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES),
+                fixed_array(0u, 0u, 0u, 0u, 0u, VHG_YO))
+            a.cls_ready = true
+        }
         var mp = reinterpret<uint?>(a.meta.mapped)
-        mp[0] = uint(n)
-        mp[1] = uint(d)
-        mp[2] = 1u          // one region: the whole tensor
-        mp[3] = 0u          // y base row
-        mp[4] = uint(blk)   // THE arena base — a stack-relative offset in the per-op tier
-        mp[5] = 0u          // activation block base
+        mp[0] = uint(blk)   // one region: the whole tensor at the arena base
+        mp[1] = 0u          // activation block base
         memcpy(a.xq.mapped, reinterpret<void?>(xqp), n)   // one int8 quant per weight
         memcpy(a.xs.mapped, reinterpret<void?>(xsp), nb * 4l)
         var raw = alloc_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
-        hz_dispatch(raw, h, gemv_pipe(fmt), a.raw_set, uint((d + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
+        var pc = GemvArgs(n = uint(n), d = uint(d), nreg = 1u, ybase = 0u)
+        gemv_cls_enc(fmt, raw, h, a.cls_set, pc, (d + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg)
         vhz_dep(raw, h, VHG_YO, 0u, true)
         cmd_copy_whole(raw, a.y_dev, a.y.buf, d * 4l)
         vk_check(vkEndCommandBuffer(raw), null)

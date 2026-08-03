@@ -8,6 +8,7 @@ require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_dispatch
+require dasllama/dasllama_kqformat
 require math
 
 // The CLASS-KERNEL home (the [spirv_kernel]/[vk_dispatch] port of dasllama_vulkan_kernels —
@@ -3524,6 +3525,59 @@ class KqGemvBase {
                 y[pa.ybase + rg] = total
             }
         }
+    }
+}
+
+// ===== format-dispatched class-GEMV rail =====
+// The drivers' 5-way gemv_pipe(fmt) becomes a 5-way ensure/set/enc: every decode GEMV class
+// shares the 6-buffer shape (wq, ws, regions, xq, xs, y) and GemvArgs; q8n drops the scale slot.
+
+def gemv_cls_ensure(fmt : int) : bool {
+    if (fmt == int(KqFmt.q8)) {
+        return ensure_q8_gemv_cls()
+    } elif (fmt == int(KqFmt.k4)) {
+        return ensure_kq_gemv_k4_cls()
+    } elif (fmt == int(KqFmt.k5)) {
+        return ensure_kq_gemv_k5_cls()
+    } elif (fmt == int(KqFmt.k6)) {
+        return ensure_kq_gemv_k6_cls()
+    } elif (fmt == int(KqFmt.q40)) {
+        return ensure_kq_gemv_q40_cls()
+    }
+    return ensure_q8n_gemv_cls()
+}
+
+def gemv_cls_set(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbits : uint const[6]) : VkDescriptorSet {
+    if (fmt == int(KqFmt.q8)) {
+        return set_q8_gemv_cls(bufs, sizes, gbits)
+    } elif (fmt == int(KqFmt.k4)) {
+        return set_kq_gemv_k4_cls(bufs, sizes, gbits)
+    } elif (fmt == int(KqFmt.k5)) {
+        return set_kq_gemv_k5_cls(bufs, sizes, gbits)
+    } elif (fmt == int(KqFmt.k6)) {
+        return set_kq_gemv_k6_cls(bufs, sizes, gbits)
+    } elif (fmt == int(KqFmt.q40)) {
+        return set_kq_gemv_q40_cls(bufs, sizes, gbits)
+    }
+    // q8n has no scale plane — slot 1 drops out
+    return set_q8n_gemv_cls(fixed_array(bufs[0], bufs[2], bufs[3], bufs[4], bufs[5]),
+        fixed_array(sizes[0], sizes[2], sizes[3], sizes[4], sizes[5]),
+        fixed_array(gbits[0], gbits[2], gbits[3], gbits[4], gbits[5]))
+}
+
+def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {
+    if (fmt == int(KqFmt.q8)) {
+        enc_q8_gemv_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.k4)) {
+        enc_kq_gemv_k4_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.k5)) {
+        enc_kq_gemv_k5_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.k6)) {
+        enc_kq_gemv_k6_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.q40)) {
+        enc_kq_gemv_q40_cls(raw, h, set_, pc, wgs)
+    } else {
+        enc_q8n_gemv_cls(raw, h, set_, pc, wgs)
     }
 }
 

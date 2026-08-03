@@ -1552,8 +1552,10 @@ struct ArenaFmt {
     wsbytes : int64
     blocks : int64           // bump cursor: 32-weight blocks (q8) or 256-weight superblocks (kq)
     cap_blocks : int64
-    // dispatch scratch — ONE set per format: bindings 0/1 stay put, only the meta changes per call
+    // dispatch scratch — ONE set per format: bindings 0/1 stay put, only the regions change per call
     raw_set : VkDescriptorSet
+    cls_set : VkDescriptorSet   // the class-rail twin (built lazily by the prefill module — the
+    cls_ready : bool            // classes module cannot be required from here; dies with the arena)
     meta : HostBuf
     xq : HostBuf
     xs : HostBuf
@@ -1712,41 +1714,8 @@ def arena_ensure_scratch(fmt : int) {
 // The single-op seams (vk_add_rms / vk_rope_kv_store / vk_decode_attn) live in
 // dasllama_vulkan_seams — the class rail; their scratch handles stay on g_gpu here.
 
-// The arena FFN chain's four sets. Bindings mirror ffn_cmd_for exactly — only bindings 0/1 change,
-// from a stack's own plane pair to its format's arena. Each role needs its OWN set because the
-// weight base lives at a fixed meta offset, so it cannot vary within one set.
-def ensure_af_state(f1, f3, f2 : int) {
-    if (g_gpu.af_ready) {
-        return
-    }
-    ensure_ffn_state()
-    g_gpu.af_meta_g = make_host_buf(META_BYTES, true)
-    g_gpu.af_meta_u = make_host_buf(META_BYTES, true)
-    g_gpu.af_meta_d = make_host_buf(META_BYTES, true)
-    g_gpu.af_xq = make_host_buf(XQ_BYTES, true)
-    g_gpu.af_xs = make_host_buf(XS_BYTES, true)
-    g_gpu.af_ya_dev = make_device_buf(Y_BYTES)
-    g_gpu.af_yb_dev = make_device_buf(Y_BYTES)
-    g_gpu.af_yo_dev = make_device_buf(Y_BYTES)
-    g_gpu.af_yo_host = make_host_buf(Y_BYTES, false, [cached = true])
-    let a1 = arena_planes(f1)
-    let a3 = arena_planes(f3)
-    let a2 = arena_planes(f2)
-    g_gpu.af_gate_set = vk_set6(a1.wq, a1.ws, g_gpu.af_meta_g.buf, g_gpu.af_xq.buf, g_gpu.af_xs.buf, g_gpu.af_ya_dev,
-        a1.wqb, a1.wsb, META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES,
-        fixed_array(0u, 0u, 0u, 0u, 0u, VHG_Y1))
-    g_gpu.af_up_set = vk_set6(a3.wq, a3.ws, g_gpu.af_meta_u.buf, g_gpu.af_xq.buf, g_gpu.af_xs.buf, g_gpu.af_yb_dev,
-        a3.wqb, a3.wsb, META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES,
-        fixed_array(0u, 0u, 0u, 0u, 0u, VHG_Y2))
-    // the act+requant set has no weights: up@0, gate@5, hq/hs out (binding 1 is filler)
-    g_gpu.af_actrq_set = vk_set6(g_gpu.af_yb_dev, a1.ws, g_gpu.ffn_meta_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_gpu.af_ya_dev,
-        Y_BYTES, a1.wsb, FFN_META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, Y_BYTES,
-        fixed_array(VHG_Y2, 0u, VHG_META, VHG_HQ, VHG_HQ, VHG_Y1))
-    g_gpu.af_down_set = vk_set6(a2.wq, a2.ws, g_gpu.af_meta_d.buf, g_gpu.hq_dev, g_gpu.hs_dev, g_gpu.af_yo_dev,
-        a2.wqb, a2.wsb, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, Y_BYTES,
-        fixed_array(0u, 0u, 0u, VHG_HQ, VHG_HQ, VHG_YO))
-    g_gpu.af_ready = true
-}
+// The arena FFN chain (ensure_af_state + vk_arena_ffn) lives in dasllama_vulkan_prefill on the
+// class rail; its scratch handles stay on g_gpu here.
 
 //! True when a Vulkan device is up (probes lazily). Non-panicking — the resident-driver seams that
 //! `verify(vk_moe_init())` are fine on this hardware, but a test wants to feint on a headless box.
