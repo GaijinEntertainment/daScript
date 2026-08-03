@@ -1193,6 +1193,68 @@ class RopeKvStore {
     }
 }
 
+struct RopeKvBArgs {
+    qd : uint
+    kvd : uint
+    hs : uint
+    half : uint
+    neox : uint
+    kpair0 : uint    // first k pair's per-position index
+    ppp : uint       // rotation pairs per position
+    layerbase : uint // this layer's K/V mirror base
+    npos : uint
+    pos0 : uint      // the window's first absolute position
+    voff : uint      // v rows' base inside the kv projection buffer
+}
+
+// batched rope + KV-store (prefill, npos positions): q roped in place, k/v from the projection
+// buffer into the mirrors at absolute positions
+[vk_dispatch(name = "rope_kv_b_cls", grid = "wgs", params = "wgs : int64")]
+class RopeKvStoreB {
+    @ssbo @binding = 0 qrows : array<float>    // q rows, roped in place
+    @ssbo @binding = 1 kvrows : array<float>   // k rows at 0, v rows at voff
+    @ssbo @binding = 2 kmir : array<float>
+    @ssbo @binding = 3 vmir : array<float>
+    @ssbo @binding = 4 cossin : array<float>   // per-position cos row then sin row (hs floats each)
+    @push_constant pa : RopeKvBArgs
+
+    [spirv_kernel(local_size_x = 256, name = "rope_kv_b_cls_spv")]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.npos * pa.ppp) {
+            let p = gid / pa.ppp
+            let lp = gid % pa.ppp
+            let is_k = lp >= pa.kpair0
+            let pr = is_k ? lp - pa.kpair0 : lp
+            let h = pr / pa.half
+            let j = pr % pa.half
+            let cb = p * pa.hs
+            let fcr = cossin[cb + j]
+            let fci = cossin[cb + pa.half + j]
+            let e0 = pa.neox != 0u ? j : j * 2u
+            let e1 = pa.neox != 0u ? j + pa.half : j * 2u + 1u
+            let apos = pa.pos0 + p
+            if (is_k) {
+                let kb = p * pa.kvd + h * pa.hs
+                let a0 = kvrows[kb + e0]
+                let a1 = kvrows[kb + e1]
+                let mo = pa.layerbase + apos * pa.kvd + h * pa.hs
+                kmir[mo + e0] = a0 * fcr - a1 * fci
+                kmir[mo + e1] = a0 * fci + a1 * fcr
+                let vb = pa.voff + p * pa.kvd + h * pa.hs
+                vmir[mo + e0] = kvrows[vb + e0]
+                vmir[mo + e1] = kvrows[vb + e1]
+            } else {
+                let qb = p * pa.qd + h * pa.hs
+                let a0 = qrows[qb + e0]
+                let a1 = qrows[qb + e1]
+                qrows[qb + e0] = a0 * fcr - a1 * fci
+                qrows[qb + e1] = a0 * fci + a1 * fcr
+            }
+        }
+    }
+}
+
 struct QknRopeArgs {
     qd : uint
     kvd : uint
