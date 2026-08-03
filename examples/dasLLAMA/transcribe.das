@@ -17,7 +17,7 @@ require math
 //                    [--lang <code>] [--translate] [--no-timestamps]
 
 // Decode any audio file miniaudio understands (WAV/MP3/FLAC/Vorbis) to 16 kHz mono f32 —
-// the decoder converts rate/channels on the fly (same rail as audio.das).
+// the decoder converts rate/channels on the fly (same rail as audio_chat.das).
 def load_audio_16k_mono(path : string) : array<float> {
     var decoder = new ma_decoder
     var config <- ma_decoder_config_init(ma_format.ma_format_f32, 1u, uint(AUDIO_SAMPLE_RATE))

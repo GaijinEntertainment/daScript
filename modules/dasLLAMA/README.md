@@ -39,7 +39,7 @@ bin/daslang -jit examples/dasLLAMA/run.das -- <model.gguf>
 bin/daslang -jit examples/dasLLAMA/chat.das -- <model.gguf>
 
 # audio chat (omni models: decoder GGUF + audio mmproj)
-bin/daslang -jit examples/dasLLAMA/audio.das -- <decoder.gguf> <mmproj.gguf> <audio-file> [prompt]
+bin/daslang -jit examples/dasLLAMA/audio_chat.das -- <decoder.gguf> <mmproj.gguf> <audio-file> [prompt]
 
 # speech-to-text: whisper / parakeet / canary ggml bins, or qwen3-asr GGUF pairs
 bin/daslang -jit examples/dasLLAMA/transcribe.das -- <ggml-model.bin | decoder.gguf mmproj.gguf> <audio-file>
@@ -182,7 +182,7 @@ modules/dasLLAMA/
     matmul/                   #   matmul kernel micro-bench ledger
   harness/                    # verification / eval test beds, per-box tuners, GGUF inspection tools
   tests/                      # dastest [test] suites (model-gated ones self-skip)
-examples/dasLLAMA/            # runnable demos only — run.das (completion + stats), chat.das (REPL), audio.das (audio chat), transcribe.das (speech-to-text), dictate.das (live mic -> text)
+examples/dasLLAMA/            # runnable demos only — run.das (completion + stats), chat.das (REPL), audio_chat.das (audio chat), transcribe.das (speech-to-text), dictate.das (live mic -> text)
 tutorials/dasLLAMA/           # the guided series — 01 generate ... 06 add an arch, 07 speech-to-text, 08 audio chat
 ```
 
@@ -272,9 +272,9 @@ bin/daslang -jit examples/dasLLAMA/chat.das -- ~/Work/llama.cpp/models/gemma-2-2
 # Audio chat: whisper-encoder tower + soft-token splice into the decoder. The mmproj's
 # projector type picks the prompt shape — the same demo runs Qwen2-Audio, Qwen2.5-Omni,
 # Ultravox (stock Llama-3 decoders), and Voxtral pairs:
-bin/daslang -jit examples/dasLLAMA/audio.das -- ~/Work/llama.cpp/models/qwen2audio-7b-q8_0.gguf \
+bin/daslang -jit examples/dasLLAMA/audio_chat.das -- ~/Work/llama.cpp/models/qwen2audio-7b-q8_0.gguf \
     ~/Work/llama.cpp/models/qwen2audio-mmproj-f32.gguf ~/Work/llama.cpp/models/jfk.wav "What is being said in this audio?"
-bin/daslang -jit examples/dasLLAMA/audio.das -- ~/Work/llama.cpp/models/Llama-3.2-1B-Instruct-Q8_0.gguf \
+bin/daslang -jit examples/dasLLAMA/audio_chat.das -- ~/Work/llama.cpp/models/Llama-3.2-1B-Instruct-Q8_0.gguf \
     ~/Work/llama.cpp/models/mmproj-ultravox-1b-f32.gguf ~/Work/llama.cpp/models/jfk.wav
 
 # Speech-to-text (Whisper): any audio file -> timestamped segments, stock whisper.cpp models

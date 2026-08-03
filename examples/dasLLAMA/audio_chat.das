@@ -18,7 +18,7 @@ require math
 //   ultravox:        <|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n[audio]{prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n
 //   voxtral:         <s>[INST][BEGIN_AUDIO][audio]{prompt}[/INST]
 //
-//   bin/daslang -jit examples/dasLLAMA/audio.das -- <decoder.gguf> <mmproj.gguf> <audio-file> [prompt]
+//   bin/daslang -jit examples/dasLLAMA/audio_chat.das -- <decoder.gguf> <mmproj.gguf> <audio-file> [prompt]
 
 let DEFAULT_PROMPT = "What is being said in this audio?"
 let N_GEN = 128l
@@ -67,7 +67,7 @@ def main {
         }
     }
     if (gguf_at < 0 || gguf_at + 2 >= length(cmd)) {
-        print("usage: daslang -jit examples/dasLLAMA/audio.das -- <decoder.gguf> <mmproj.gguf> <audio-file> [prompt]\n")
+        print("usage: daslang -jit examples/dasLLAMA/audio_chat.das -- <decoder.gguf> <mmproj.gguf> <audio-file> [prompt]\n")
         return
     }
     let model_path = cmd[gguf_at]
