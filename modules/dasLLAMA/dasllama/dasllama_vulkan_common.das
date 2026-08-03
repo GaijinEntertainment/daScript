@@ -500,8 +500,10 @@ struct GpuState {
     dn_state_dev : uint64
     dn_ws_dev : uint64            // per-head scan slabs + the gated o rows
     dn_conv_set : VkDescriptorSet
-    dn_scan_set : VkDescriptorSet
+    dn_scan_set : VkDescriptorSet      // scan phase 1 (class sets are per-class — p2 has its own)
+    dn_scan_p2_set : VkDescriptorSet
     dn_rq_set : VkDescriptorSet
+    dn_cls_ready : bool                // the window chain's class sets (built by prefill)
     dn_ready : bool
     dn_shared_ok : bool  // device shared-mem cap fits dn_conv's 33 KB tile (false on Apple/MoltenVK)
     // deltanet decode-step state (lazy — first npos == 1 DN dispatch creates it)
@@ -1499,6 +1501,7 @@ def vk_drop_model_state {
     g_gpu.comb_ready = false
     g_gpu.stream_ready = false
     g_gpu.dn_ready = false
+    g_gpu.dn_cls_ready = false
     g_gpu.dnd_ready = false
     g_gpu.at_ready = false
     g_gpu.ffn_pend_s2 = -1
@@ -2578,18 +2581,8 @@ def ensure_dn_state {
     g_gpu.dn_tail_host = make_host_buf(DN_TAIL_BYTES, true, [cached = true])
     g_gpu.dn_state_dev = make_device_buf(DN_STATE_BYTES)
     g_gpu.dn_ws_dev = make_device_buf(DN_WS_BYTES)
-    // conv bindings: qkv@5, conv output@0 (vk_upf view of hq_dev), smalls@4, params@2; 1/3 fillers
-    g_gpu.dn_conv_set = vk_set6(g_gpu.hq_dev, g_gpu.dn_meta_dev, g_gpu.dn_meta_dev, g_gpu.dn_meta_dev, g_gpu.dn_smalls_dev, g_gpu.batch_y1_dev,
-        BATCH_HQ_BYTES, DN_META_BYTES, DN_META_BYTES, DN_META_BYTES, DN_SMALLS_BYTES, BATCH_Y_BYTES,
-        fixed_array(VHB_HQ, 0u, VHB_META, 0u, VHB_SM, VHB_Y1))
-    // scan bindings: conv rows@0, state@1, slabs/o@3, smalls@4, z rows@5, params@2
-    g_gpu.dn_scan_set = vk_set6(g_gpu.hq_dev, g_gpu.dn_state_dev, g_gpu.dn_meta_dev, g_gpu.dn_ws_dev, g_gpu.dn_smalls_dev, g_gpu.batch_y2_dev,
-        BATCH_HQ_BYTES, DN_STATE_BYTES, DN_META_BYTES, DN_WS_BYTES, DN_SMALLS_BYTES, BATCH_Y_BYTES,
-        fixed_array(VHB_HQ, VHB_ST, VHB_META, VHB_WS, VHB_SM, VHB_Y2))
-    // requant bindings: o rows@0, quant words@3, scales@4 (out-proj activation image), params@2; 1/5 fillers
-    g_gpu.dn_rq_set = vk_set6(g_gpu.dn_ws_dev, g_gpu.dn_meta_dev, g_gpu.dn_meta_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_gpu.dn_meta_dev,
-        DN_WS_BYTES, DN_META_BYTES, DN_META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, DN_META_BYTES,
-        fixed_array(VHB_WS, 0u, VHB_META, VHB_HQ, VHB_HQ, 0u))
+    // the window chain's class sets build in dasllama_vulkan_prefill (this module cannot require
+    // the classes module)
     g_gpu.dn_ready = true
     to_log(LOG_INFO, "dasLLAMA vulkan tier: deltanet chain engaged\n")
 }

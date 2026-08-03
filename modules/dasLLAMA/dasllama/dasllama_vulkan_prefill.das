@@ -958,13 +958,38 @@ def vk_moe_dense(var yp : float?; woff : int64; xqp : int8 const?; xsp : float c
 
 // ===== deltanet dispatch (the recurrent-layer attention chain) =====
 
-
+// the window chain's class sets over the dn scratch (built here — common cannot require classes)
+def private ensure_dn_cls_sets {
+    if (g_gpu.dn_cls_ready) {
+        return
+    }
+    verify(ensure_dn_conv_cls() && ensure_dn_scan_p1_cls() && ensure_dn_scan_p2_cls() && ensure_cls_dn_rq(),
+        "vk deltanet chain: the class rails must engage on a live device")
+    g_gpu.dn_conv_set = set_dn_conv_cls(
+        fixed_array(g_gpu.batch_y1_dev, g_gpu.hq_dev, g_gpu.dn_smalls_dev),
+        fixed_array(BATCH_Y_BYTES, BATCH_HQ_BYTES, DN_SMALLS_BYTES),
+        fixed_array(VHB_Y1, VHB_HQ, VHB_SM))
+    g_gpu.dn_scan_set = set_dn_scan_p1_cls(
+        fixed_array(g_gpu.hq_dev, g_gpu.dn_smalls_dev, g_gpu.dn_ws_dev),
+        fixed_array(BATCH_HQ_BYTES, DN_SMALLS_BYTES, DN_WS_BYTES),
+        fixed_array(VHB_HQ, VHB_SM, VHB_WS))
+    g_gpu.dn_scan_p2_set = set_dn_scan_p2_cls(
+        fixed_array(g_gpu.batch_y2_dev, g_gpu.dn_state_dev, g_gpu.dn_ws_dev, g_gpu.dn_smalls_dev),
+        fixed_array(BATCH_Y_BYTES, DN_STATE_BYTES, DN_WS_BYTES, DN_SMALLS_BYTES),
+        fixed_array(VHB_Y2, VHB_ST, VHB_WS, VHB_SM))
+    g_gpu.dn_rq_set = set_cls_dn_rq(
+        fixed_array(g_gpu.dn_ws_dev, g_gpu.hq_dev, g_gpu.hs_dev),
+        fixed_array(DN_WS_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+        fixed_array(VHB_WS, VHB_HQ, VHB_HQ))
+    g_gpu.dn_cls_ready = true
+}
 
 // one deltanet window: acts/meta/smalls staging copies, qkv + z tiles, conv, scan, the conv-tail
 // extraction (before out-proj overwrites the qkv rows in y1), o requant, out-proj tile, y DMA;
 // the state uploads on the first window and reads back on the last
-def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint; rows, cd, di, dim, taps, nvh, ds : int64;
-                          axq_bytes, axs_bytes : int64; first, last : bool) {
+def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;   // nolint:STYLE038 — the verbatim window chain, one seam
+                          rows, cd, kd, di, dim, taps, nvh, nkh, ds : int64;
+                          axq_bytes, axs_bytes : int64; first, last : bool; eps : float) {
     let raw = g_gpu.batch_cmd
     let rf : VkCommandBufferResetFlags
     vk_check(vkResetCommandBuffer(raw, rf), null)
@@ -979,7 +1004,6 @@ def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;
     cmd_copy_batch_meta(raw, s_qkv)
     cmd_copy_batch_meta(raw, s_z)
     cmd_copy_batch_meta(raw, s_o)
-    cmd_copy_whole(raw, g_gpu.dn_meta.buf, g_gpu.dn_meta_dev, DN_META_BYTES)
     // stops SHORT of the hist region — later windows read the device-copied tail rows there
     vhz_dep(raw, h, 0u, VHB_SM, true)
     cmd_copy_range(raw, g_gpu.dn_smalls.buf, 0l, g_gpu.dn_smalls_dev, 0l, DN_SM_HIST * 4l)
@@ -994,11 +1018,19 @@ def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;
     hz_dispatch(raw, h, batch_pipe(0, g_gpu.stacks[s_z].batch_tile, g_gpu.stacks[s_z].batch_aligned),
         g_gpu.stacks[s_z].batch_set, nwg_z)
     pfq_ts(raw)   // q2: qkv+z GEMMs
-    hz_dispatch(raw, h, weak_copy(g_gpu.dn_conv_pipeline), g_gpu.dn_conv_set, uint(rows))
+    var pcc = DnConvArgs(cd = uint(cd), kd = uint(kd), ds = uint(ds), dconv = uint(taps + 1l),
+        hist_mode = first ? 1u : 2u, taps_off = uint(DN_SM_TAPS), hist_off = uint(DN_SM_HIST),
+        eps = eps, qscale = 1.0 / sqrt(float(ds)))
+    enc_dn_conv_cls(raw, h, g_gpu.dn_conv_set, pcc, rows)
     pfq_ts(raw)   // q3: conv
-    hz_dispatch(raw, h, weak_copy(g_gpu.dn_scan_p1_pipeline), g_gpu.dn_scan_set, uint(nvh * ((rows + DN_CS - 1l) / DN_CS)))
+    var pc1 = DnScanP1Args(npos = uint(rows), cd = uint(cd), kd = uint(kd), nvh = uint(nvh),
+        nkh = uint(nkh), ds = uint(ds), beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G),
+        a_off = uint(DN_SM_A), dt_off = uint(DN_SM_DT), slab_stride = uint(DN_SLAB))
+    enc_dn_scan_p1_cls(raw, h, g_gpu.dn_scan_set, pc1, nvh * ((rows + DN_CS - 1l) / DN_CS))
     pfq_ts(raw)   // q4: scan phase 1
-    hz_dispatch(raw, h, weak_copy(g_gpu.dn_scan_p2_pipeline), g_gpu.dn_scan_set, uint(nvh))
+    var pc2 = DnScanP2Args(npos = uint(rows), di = uint(di), ds = uint(ds), o_off = uint(DN_O_OFF),
+        wnorm_off = uint(DN_SM_WNORM), slab_stride = uint(DN_SLAB), st_off = uint(DN_P2_OFF), eps = eps)
+    enc_dn_scan_p2_cls(raw, h, g_gpu.dn_scan_p2_set, pc2, nvh)
     pfq_ts(raw)   // q5: scan phase 2
     // conv-tail extraction: last `taps` RAW qkv rows out of y1 before out-proj reuses it
     if (!last) {
@@ -1011,7 +1043,8 @@ def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;
         cmd_copy_whole(raw, g_gpu.dn_state_dev, g_gpu.dn_state_host.buf, nvh * ds * ds * 4l)
     }
     pfq_ts(raw)   // q6: tail copies
-    hz_dispatch(raw, h, weak_copy(g_gpu.dn_rq_pipeline), g_gpu.dn_rq_set, uint((rows * di / 4l + 255l) / 256l))
+    var pcr = RqArgs(inbase = uint(DN_O_OFF), nblk = uint(rows * di / 32l))
+    enc_cls_dn_rq(raw, h, g_gpu.dn_rq_set, pcr, (rows * di / 4l + 255l) / 256l)
     pfq_ts(raw)   // q7: o requant
     hz_dispatch(raw, h, batch_pipe(0, g_gpu.stacks[s_o].batch_tile, g_gpu.stacks[s_o].batch_aligned),
         g_gpu.stacks[s_o].batch_set, nwg_out)
@@ -1047,6 +1080,7 @@ def vk_moe_dn(var yp : float?; woq, woz, woo : int64;
         "dasLLAMA vulkan tier: deltanet geometry outside chain capacity")
     ensure_batch_state()
     ensure_dn_state()
+    ensure_dn_cls_sets()
     ensure_batch_set(s_qkv, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y1)
     ensure_batch_set(s_z, g_gpu.batch_y2_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y2)
     ensure_batch_set(s_o, g_gpu.batch_y1_dev, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES, VHB_HQ, VHB_Y1)
@@ -1085,11 +1119,9 @@ def vk_moe_dn(var yp : float?; woq, woz, woo : int64;
             par_memcpy(reinterpret<void?>(sp + DN_SM_BETA), reinterpret<void?>(bp + r0 * nvh), rows * nvh * 4l)
             par_memcpy(reinterpret<void?>(sp + DN_SM_G), reinterpret<void?>(gp + r0 * nvh), rows * nvh * 4l)
         }
-        fill_dn_meta(g_gpu.dn_meta, rows, cd, kd, di, nvh, nkh, ds, dconv, r0 == 0l ? 1 : 2,
-            DN_SLAB, DN_O_OFF, rows * di / 32l, DN_P2_OFF)
         let ts1 = ref_time_ticks()
-        record_dn_cmd(s_qkv, s_z, s_o, nwg_qkv, nwg_z, nwg_out, rows, cd, di, dim, taps, nvh, ds,
-            rows * dim, rows * (dim / 32l) * 4l, r0 == 0l, r0 + rows == npos)
+        record_dn_cmd(s_qkv, s_z, s_o, nwg_qkv, nwg_z, nwg_out, rows, cd, kd, di, dim, taps, nvh, nkh, ds,
+            rows * dim, rows * (dim / 32l) * 4l, r0 == 0l, r0 + rows == npos, eps)
         submit_wait(g_gpu.batch_cmd)
         let ts2 = ref_time_ticks()
         unsafe {
