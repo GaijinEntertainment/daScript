@@ -86,8 +86,8 @@ def test_create_wrap_chaining_and_undo(t : T?) {
             return find(edit_text_state(app)?["text"] ?? "", "**hello") >= 0
         }
         t |> success(bold_done, "bold wraps the selection")
-        let italized = run_create(app, "md.italic")
-        t |> success(italized?["ok"] ?? false, "italic command queues")
+        let italicized = run_create(app, "md.italic")
+        t |> success(italicized?["ok"] ?? false, "italic command queues")
         let chained = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
             return find(edit_text_state(app)?["text"] ?? "", "***hello***") >= 0
         }

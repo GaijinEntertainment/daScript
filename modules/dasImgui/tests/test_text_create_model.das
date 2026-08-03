@@ -117,6 +117,14 @@ def test_create_context_facts(t : T?) {
     var inscope fenced <- creation_available("markdown", fence_ctx)
     t |> success(find_index(fenced, "md.bold") < 0,
         "not-in-code-fence gates the markdown set inside fences")
+    // the marker lines gate too - the parity scan alone would read the
+    // opening ``` as outside the fence
+    text_edit_set_cursor(ed, 3, 0)
+    var inscope open_marker_ctx <- creation_context(ed)
+    t |> success(open_marker_ctx.in_code_fence, "the opening marker line gates")
+    text_edit_set_cursor(ed, 5, 0)
+    var inscope close_marker_ctx <- creation_context(ed)
+    t |> success(close_marker_ctx.in_code_fence, "the closing marker line gates")
     var das_ed = TextEditState()
     text_edit_load(das_ed, "\tlet x = 1 // note\n")
     text_edit_set_language(das_ed, "daslang")

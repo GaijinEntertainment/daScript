@@ -189,7 +189,10 @@ def public creation_context(ed : TextEditState const) : CreationContext {
     ctx.in_comment = style == TextSourceSyntaxStyle.comment
     ctx.in_string = style == TextSourceSyntaxStyle.string_
     if (ed.language == "markdown") {
-        ctx.in_code_fence = fence_open_at(ed, ed.cursor_line)
+        // the marker lines themselves gate too - the parity scan stops short
+        // of the caret line, so the opening ``` would otherwise read as open
+        ctx.in_code_fence = (fence_open_at(ed, ed.cursor_line)
+            || starts_with(rest, "```") || starts_with(rest, "~~~"))
         ctx.list_prefix = line_list_prefix(rest)
         ctx.heading_level = line_heading_level(rest)
     }
