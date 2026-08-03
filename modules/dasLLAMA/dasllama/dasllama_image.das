@@ -9,14 +9,19 @@ require daslib/fio
 require dasllama/dasllama_env  // the shared typed env readers + the knob registry
 require daslib/apply
 require strings
+require daslib/strings_boost   // split — the identity-lane parser
 require dasllama/dasllama_tokenizer   // Tokenizer — the bulk tokenizer serializer below
 require daslib/archive
-require daslib/array_boost   // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs (same note as dasllama_common)
+require daslib/array_boost
+require dasllama/dasllama_plane   // PlaneF/PlaneI8 + plane_bind — the borrowed-plane bind arm below
 require dasllama/dasllama_common
+require dasllama/dasllama_gguf   // GGUFMeta — the streamed cold build's block signature names it
 require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor image transform
+require dasllama/dasllama_gpu_resident   // the flavor bake this file drives (vulkan_bake_*) + the residency upload each load arms
 require dasllama/dasllama_math   // active_kernel_backend — half the image identity
 require dasllama/dasllama_config   // DlimConfiguration + dlim_identity — the identity formatter
 require math
+require dasllama/dasllama_load   // the GGUF load walk (load_gguf/load_model_/load_checkpoint)
 
 // The prepared-model image (spec: fmap-model-image plan, locked 2026-07-16): the post-load
 // Model dumped once — planes POST-repack, page-aligned — then mapped back with zero O(model)
@@ -100,7 +105,7 @@ def image_peek(path : string) : DlimPeek {
         && meta_off <= msize - meta_bytes && meta_bytes <= uint64(INT_MAX))
     if (p.valid && p.version >= 7) {
         var head : array<uint8>
-        head |> resize(int(min(meta_bytes, 65536ul)))
+        head |> resize(int64(min(meta_bytes, 65536ul)))
         unsafe {
             memcpy(addr(head[0]), reinterpret<void?>(bp + int64(meta_off)), uint64(long_length(head)))
         }
@@ -135,6 +140,15 @@ struct DlimImageInfo {
 // registers its own, so inventory/GC verdicts recognize those images as CURRENT
 var private g_family_tags : array<string>
 
+var private g_image_frozen = false
+
+//! Artifact-frozen mode — the perf-oracle contract: ``load_model_cached`` loads ONLY existing
+//! prepared images, and any load that would mint/bake a flavor panics instead of falling
+//! through to the gguf. Arms via lcpp_bench ``--frozen``.
+def set_image_artifacts_frozen(frozen : bool) {
+    g_image_frozen = frozen
+}
+
 //! Register an image family/flavor tag (call from the family module's [init]) so
 //! ``dlim_current_identities`` — and with it every list/GC verdict — covers its images.
 def register_image_family_tag(tag : string) {
@@ -161,6 +175,37 @@ def dlim_current_identities : table<string> {
     return <- idents
 }
 
+//! The (quant, tag) LANE of an identity — the coexistence unit: flavors and quants coexist as
+//! lanes, and a bake can prove staleness only inside its own lane.
+def dlim_identity_lane(identity : string) : string {
+    var parts <- split(identity, "|")
+    if (length(parts) < 8) {
+        delete parts
+        return identity   // malformed/pre-v7 — its own lane, never cross-matched
+    }
+    let quant = parts[1]
+    var tag = ""
+    for (i in range(8, length(parts))) {
+        tag = empty(tag) ? parts[i] : "{tag}|{parts[i]}"
+    }
+    delete parts
+    return "{quant}#{tag}"
+}
+
+// FOREIGN = this process cannot recompute the identity, so it may not judge it: GPU flavors
+// (their bake context pins its own backend + winners) and family tags whose module is not
+// loaded here. Only a lane this process can actually produce may be judged stale.
+def private dlim_lane_foreign(lane : string) : bool {
+    let tag = slice(lane, find(lane, "#") + 1, length(lane))
+    if (empty(tag)) {
+        return false   // the planar lane: every process produces it
+    }
+    if (tag == METAL_IMAGE_TAG || (tag |> starts_with("vulkan"))) {
+        return true    // pinned by its own bake context
+    }
+    return !has_value(g_family_tags, tag)
+}
+
 def dlim_image_verdict(p : DlimPeek; current : table<string>) : string {
     if (!p.valid) {
         return "BROKEN"
@@ -168,7 +213,10 @@ def dlim_image_verdict(p : DlimPeek; current : table<string>) : string {
     if (p.version != IMAGE_VERSION) {
         return "STALE v{p.version}"
     }
-    return key_exists(current, p.identity) ? "CURRENT" : "OTHER"
+    if (key_exists(current, p.identity)) {
+        return "CURRENT"
+    }
+    return dlim_lane_foreign(dlim_identity_lane(p.identity)) ? "FOREIGN" : "OTHER"
 }
 
 //! Every .dlim beside `gguf_path` (or in a directory), with sizes and verdicts.
@@ -194,13 +242,28 @@ def dlim_inventory(gguf_path : string) : array<DlimImageInfo> {
     return <- out
 }
 
-//! GC-after-save: a fresh bake proves every non-CURRENT sibling of this source dead — BROKEN,
-//! version-stale, AND other-identity images all go (old identities piled up 0.5 TB per box).
-//! CURRENT spans all flavors/quants/families, so a planar save never touches the metal twin.
-def dlim_gc_stale(source_path : string) {
-    let r = dlim_clean(source_path, true)
-    if (r.removed > 0) {
-        to_log(LOG_INFO, "dasLLAMA image: GC freed {r.freed >> 20l} MB — {r.removed} dead sibling(s) of {base_name(source_path)}\n")
+//! GC-after-save: a fresh bake proves dead the non-current siblings of ITS OWN LANE (the
+//! (quant, tag) it just wrote), plus BROKEN and version-stale images in any lane. Other lanes'
+//! identities fold other bake contexts' backend/winner state — this save proves nothing there.
+def dlim_gc_stale(source_path : string; tag : string = ""; quant : string = "q8") {
+    let lane = "{quant}#{tag}"
+    var inv <- dlim_inventory(source_path)
+    var removed = 0
+    var freed = 0l
+    for (im in inv) {
+        let stale_any = im.verdict == "BROKEN" || (im.verdict |> starts_with("STALE"))
+        let lane_dead = ((im.verdict == "OTHER" || im.verdict == "FOREIGN")
+            && dlim_identity_lane(im.identity) == lane)
+        continue if (!(stale_any || lane_dead))
+        if (remove(im.path)) {
+            removed++
+            freed += im.bytes
+            to_log(LOG_INFO, "dasLLAMA image: GC removed {im.file} ({im.bytes >> 20l} MB, {im.verdict})\n")
+        }
+    }
+    delete inv
+    if (removed > 0) {
+        to_log(LOG_INFO, "dasLLAMA image: GC freed {freed >> 20l} MB — {removed} dead sibling(s) of {base_name(source_path)}\n")
     }
 }
 
@@ -210,8 +273,13 @@ def dlim_gc_stale(source_path : string) {
 def dlim_clean(gguf_path : string; apply : bool; keep_other : bool = false) : tuple<total : int; stale : int; removed : int; freed : int64> {
     var r = (total = 0, stale = 0, removed = 0, freed = 0l)
     var inv <- dlim_inventory(gguf_path)
+    var foreign_kept = 0
     for (im in inv) {
         r.total++
+        if (im.verdict == "FOREIGN") {
+            foreign_kept++   // another bake context's lane — never judged from here
+            continue
+        }
         continue if (im.verdict == "CURRENT" || (keep_other && im.verdict == "OTHER"))
         r.stale++
         if (apply && remove(im.path)) {
@@ -221,10 +289,13 @@ def dlim_clean(gguf_path : string; apply : bool; keep_other : bool = false) : tu
         }
     }
     delete inv
+    if (foreign_kept > 0) {
+        to_log(LOG_INFO, "dasLLAMA image: GC kept {foreign_kept} foreign-flavor image(s) — their bake contexts own them\n")
+    }
     return r
 }
 
-def private pad_to_page(cur : uint64) : uint64 {
+def pad_to_page(cur : uint64) : uint64 {
     let page = uint64(IMAGE_PAGE)
     return (cur + page - 1ul) / page * page
 }
@@ -232,10 +303,13 @@ def private pad_to_page(cur : uint64) : uint64 {
 let private IMAGE_WRITE_BAND = 16l * 1024l * 1024l   // the direct writer's staging band
 let private SECTION_TABLE_SLACK = 65536ul            // preallocation headroom for the section blob
 
-// The image's byte sink: append-only and strictly ascending, which is what keeps NTFS from
-// charging valid-data-length zero-fill on the preallocated file (measured: 3.4 s per 8 GB gap).
-struct private ImgWriter {
-    h : void? = null
+//! The mint sink: append-only and strictly ascending (what keeps NTFS from charging
+//! valid-data-length zero-fill on the preallocated file), one walk over two backings (memory
+//! chunk / direct file writer). Public so family streamers append planes from their hooks.
+struct ImgWriter {
+    h : void? = null       // the direct file writer; null on the memory rail
+    mem : void? = null     // the page-aligned chunk; null on the file rail
+    cap : uint64 = 0ul     // the chunk's usable extent — an append past it is a sizing bug
     cur : uint64 = 0ul
     ok : bool = true
 }
@@ -245,23 +319,47 @@ def private w_open(path : string; total : uint64) : ImgWriter {
     return ImgWriter(h = h, ok = h != null)
 }
 
-def private w_append(var w : ImgWriter; p : void?; nbytes : uint64) {
+// the memory sink. `total` must be image_total_bytes' answer — the chunk is exact, so an overrun
+// means the sizing pass and the walk disagree, which is a bug and not a disk condition
+def private w_open_mem(total : uint64) : ImgWriter {
+    let base = image_chunk_alloc(total, uint64(IMAGE_PAGE))
+    if (base == null) {
+        to_log(LOG_WARNING, "dasLLAMA image: cannot allocate a {int64(total) >> 20l} MB image chunk\n")
+    }
+    return ImgWriter(mem = base, cap = total, ok = base != null)
+}
+
+def private mem_at(base : void?; off : uint64) : void? {
+    let at = unsafe(reinterpret<uint64>(base)) + off
+    return unsafe(reinterpret<void?>(at))
+}
+
+def w_append(var w : ImgWriter; p : void?; nbytes : uint64) {
     if (!w.ok || nbytes == 0ul) {
         return
     }
-    if (!unsafe(dwrite_append(w.h, p, nbytes))) {
+    if (w.mem != null) {
+        if (nbytes > w.cap - w.cur) {
+            to_log(LOG_ERROR, "dasLLAMA image: chunk overrun at {int64(w.cur)} + {int64(nbytes)} > {int64(w.cap)} — image sizing is wrong\n")
+            w.ok = false
+            return
+        }
+        unsafe {
+            memcpy(mem_at(w.mem, w.cur), p, nbytes)
+        }
+    } elif (!unsafe(dwrite_append(w.h, p, nbytes))) {
         w.ok = false   // a dead save stays dead — don't keep pushing bytes at a full disk
         return
     }
     w.cur += nbytes
 }
 
-def private w_zeros(var w : ImgWriter; n : uint64) {
+def w_zeros(var w : ImgWriter; n : uint64) {
     if (n == 0ul || !w.ok) {
         return
     }
     var z : array<uint8>
-    z |> resize(int(n))
+    z |> resize(int64(n))
     unsafe {
         w_append(w, addr<void?>(z[0]), n)
     }
@@ -269,12 +367,35 @@ def private w_zeros(var w : ImgWriter; n : uint64) {
 }
 
 def private w_close(var w : ImgWriter) : bool {
+    if (w.mem != null) {
+        return w.ok   // nothing to flush: the chunk IS the image
+    }
     if (w.h == null) {
         return false
     }
     let flushed = unsafe(dwrite_close(w.h))
     w.h = null
     return flushed && w.ok
+}
+
+// Page 0, which only the finished walk knows (section count, meta offset and size). The memory
+// rail stores it in place; the file rail's direct writer is append-only, so it patches through an
+// ordinary handle after close — which is why `path` is a parameter and not w's business.
+def private w_header(var w : ImgWriter; path : string; var hdr : array<uint8>) : bool {
+    if (w.mem != null) {
+        unsafe {
+            memcpy(w.mem, addr<void?>(hdr[0]), uint64(IMAGE_HEADER_BYTES))
+        }
+        return true
+    }
+    var ok = false
+    fopen(path, "r+b") $(hf) {
+        if (hf != null) {
+            fseek(hf, 0l, seek_set)
+            ok = (hf |> long_fwrite(hdr)) == IMAGE_HEADER_BYTES
+        }
+    }
+    return ok
 }
 
 def private plane_end(cur : uint64; field : array<auto(TT)>) : uint64 {
@@ -293,6 +414,13 @@ def private image_total_bytes(var t; meta_bytes : uint64) : uint64 {
         static_if (typeinfo is_array(field)) {
             static_if (!typeinfo is_string(field[0])) {
                 cur = plane_end(cur, field)
+            }
+        } static_elif (typeinfo safe_has_field < image_planes > (field)) {
+            // a staging plane-group (nested carrier's bytes) — sized exactly like nested planes
+            apply(field) $ [unused_argument(iname)] (iname : string; var ifield) {
+                static_if (typeinfo is_array(ifield)) {
+                    cur = plane_end(cur, ifield)
+                }
             }
         } static_elif (typeinfo safe_has_field < image_map > (field)) {
             apply(field) $ [unused_argument(iname)] (iname : string; var ifield) {
@@ -390,14 +518,13 @@ def serialize_strings(var arch : Archive; var a : array<string>) {
     if (arch.reading) {
         a |> resize(length(lens))
         var at = 0
-        for (i in range(length(lens))) {
-            let n = lens[i]
+        for (n, s in lens, a) {
             if (n > 0) {
                 unsafe {
-                    a[i] = string(temp_array(addr < uint8? >(blob[at]), n, type<uint8>))
+                    s = string(temp_array(addr<uint8?>(blob[at]), n, type<uint8>))
                 }
             } else {
-                a[i] = ""
+                s = ""
             }
             at += n
         }
@@ -446,10 +573,10 @@ def private serialize_tokenizer(var arch : Archive; var tk : Tokenizer) {
     delete merges
 }
 
-// every non-array Model field, explicitly, both directions (the archive is bidirectional).
-// blocks is NOT serialized — image_post_load re-binds it from the registry after the read.
-// The count tripwire forces this list to grow with the struct.
-def private serialize_image_meta(var arch : Archive; var t : Model) {
+//! Model's half of the image contract: every non-array field, both directions, with a count
+//! tripwire so the list grows with the struct (blocks re-binds in image_post_load instead).
+//! Public only because build/parse resolve `_::` at the instantiation ROOT — not a call-me API.
+def serialize_image_meta(var arch : Archive; var t : Model) {
     verify(count_meta_fields(t) == IMAGE_META_FIELDS)   // grew Model? extend this list
     arch |> serialize(t.config)
     arch |> serialize(t.arch)
@@ -529,19 +656,21 @@ let IMAGE_META_FIELDS = 66 + 3
 def count_meta_fields(var t) : int {
     var n = 0
     apply(t) $ [unused_argument(name, field)] (name : string; var field) {
-        static_if (!typeinfo is_array(field)) {
-            n++
-        } static_elif (typeinfo is_string(field[0])) {
-            n++
+        static_if (typeinfo is_array(field)) {
+            static_if (typeinfo is_string(field[0])) {
+                n++
+            }
+        } static_elif (!typeinfo safe_has_field < borrowed_plane > (field)) {
+            n++   // a borrowed plane is a section, not a meta field
         }
     }
     return n
 }
 
-// Model's post-read fix-up: blocks re-bind from the registry. Deliberately NOT resolve_arch —
-// its configure would clobber serialized gguf overrides with the arch's fallbacks (see
-// rebind_arch_blocks).
-def private image_post_load(var t : Model) {
+//! Model's post-read fix-up: blocks re-bind from the registry. Deliberately NOT resolve_arch —
+//! its configure would clobber serialized gguf overrides with the arch's fallbacks. Public for
+//! the same `_::` reason as serialize_image_meta.
+def image_post_load(var t : Model) {
     rebind_arch_blocks(t, t.arch)
 }
 
@@ -576,13 +705,12 @@ def private write_plane(var w : ImgWriter; var sections : array<ImgSection>;
     sections |> push(ImgSection(name = name, off = at, bytes = nbytes))
 }
 
-//! Serialize a loaded weight-carrying struct as a prepared image: array planes page-aligned raw
-//! (borrowed back at load), everything else archived. Tmp+rename: atomic on POSIX; on Windows a
-//! brief missing-file window lets a concurrent reader regenerate. Caller supplies `serialize_image_meta`/`image_post_load` (`_::` dispatch).
-def save_image(var t; path : string; tag : string = ""; quant : string = "q8") : bool {
-    // per-writer tmp name: concurrent savers (parallel test workers on one cache miss) must
-    // not clobber each other's half-written file; last atomic rename wins with same content
-    let tmp_path = "{path}.{ref_time_ticks()}.tmp"
+//! THE image build — every prepared image in the process comes out of this walk, whichever sink it
+//! lands in: planes page-aligned raw (borrowed back at load), everything else archived. `plane`
+//! gets first refusal on each plane by name; `consume` frees each owned plane as it lands.
+def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
+                        tag : string; quant : string; consume : bool;
+                        plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : ImgWriter {
     // one config snapshot serves the meta embed AND the header hash — they must agree
     let dcfg = dlim_config_current(quant)
     let ident = dlim_identity(dcfg, IMAGE_VERSION, tag)
@@ -594,7 +722,7 @@ def save_image(var t; path : string; tag : string = ""; quant : string = "q8") :
     var warch = Archive(reading = false, stream = meta)
     var sections : array<ImgSection>
     // meta first: it needs nothing from the planes, and having it sized up front is what lets
-    // the writer preallocate the exact file (see image_total_bytes)
+    // the sink preallocate exactly (see image_total_bytes)
     let ts_meta = ref_time_ticks()
     _::serialize_image_meta(warch, t)
     to_log(LOG_INFO, "dasLLAMA image: meta serialize {get_time_usec(ts_meta) / 1000}ms\n")
@@ -602,14 +730,34 @@ def save_image(var t; path : string; tag : string = ""; quant : string = "q8") :
     unsafe {
         delete meta
     }
-    var w = w_open(tmp_path, image_total_bytes(t, uint64(long_length(scalar_blob)) + SECTION_TABLE_SLACK))
+    let total = image_total_bytes(t, uint64(long_length(scalar_blob)) + SECTION_TABLE_SLACK) + extra
+    var w = in_mem ? w_open_mem(total) : w_open(dst, total)
     if (w.ok) {
-        w_zeros(w, uint64(IMAGE_PAGE))   // page 0: header placeholder — patched after close
+        w_zeros(w, uint64(IMAGE_PAGE))   // page 0: header placeholder — stored once the walk knows it
         let ts_planes = ref_time_ticks()
         apply(t) $(name : string; var field) {
             static_if (typeinfo is_array(field)) {
                 static_if (!typeinfo is_string(field[0])) {   // string arrays ride the meta blob
-                    write_plane(w, sections, name, field)
+                    if (!invoke(plane, name, w, sections)) {
+                        write_plane(w, sections, name, field)
+                    }
+                    // lock_count != 0 is a BORROWED view over some other image — never ours to free
+                    if (consume && lock_count(field) == 0) {
+                        delete field
+                    }
+                }
+            } static_elif (typeinfo safe_has_field < image_planes > (field)) {
+                // a staging plane-group: the nested carrier's bytes under dotted names, with
+                // the hook getting the same first refusal the top level gives it
+                apply(field) $(iname : string; var ifield) {
+                    static_if (typeinfo is_array(ifield)) {
+                        if (!invoke(plane, "{name}.{iname}", w, sections)) {
+                            write_plane(w, sections, "{name}.{iname}", ifield)
+                        }
+                        if (consume) {
+                            delete ifield
+                        }
+                    }
                 }
             } static_elif (typeinfo safe_has_field < image_map > (field)) {
                 // a nested weight-carrier on the image rail (marker: it declares image_map) —
@@ -619,6 +767,9 @@ def save_image(var t; path : string; tag : string = ""; quant : string = "q8") :
                     static_if (typeinfo is_array(ifield)) {
                         static_if (!typeinfo is_string(ifield[0])) {
                             write_plane(w, sections, "{name}.{iname}", ifield)
+                            if (consume && lock_count(ifield) == 0) {
+                                delete ifield
+                            }
                         }
                     }
                 }
@@ -627,13 +778,15 @@ def save_image(var t; path : string; tag : string = ""; quant : string = "q8") :
         let planes_ms = int64(get_time_usec(ts_planes)) / 1000l
         let planes_mb = int64(w.cur) >> 20l
         to_log(LOG_INFO, "dasLLAMA image: planes write {planes_ms}ms ({planes_mb} MB at {planes_ms > 0l ? planes_mb * 1000l / planes_ms : 0l} MB/s)\n")
-        // the writer's own split — staging our bytes vs waiting on the device. Anything the two
-        // do not account for is time spent OUTSIDE the writer (the walk itself).
-        let copy_ms = int64(unsafe(dwrite_stat(w.h, 0))) / 1000000l
-        let write_ms = int64(unsafe(dwrite_stat(w.h, 1))) / 1000000l
-        let direct_mb = int64(unsafe(dwrite_stat(w.h, 2))) >> 20l
-        let bounce_mb = int64(unsafe(dwrite_stat(w.h, 3))) >> 20l
-        to_log(LOG_INFO, "dasLLAMA image:   writer split: stage {copy_ms}ms ({bounce_mb} MB bounced), syscall {write_ms}ms ({direct_mb} MB direct), unaccounted {planes_ms - copy_ms - write_ms}ms\n")
+        if (w.h != null) {
+            // the file writer's own split — staging our bytes vs waiting on the device. Anything
+            // the two do not account for is time spent OUTSIDE the writer (the walk itself).
+            let copy_ms = int64(unsafe(dwrite_stat(w.h, 0))) / 1000000l
+            let write_ms = int64(unsafe(dwrite_stat(w.h, 1))) / 1000000l
+            let direct_mb = int64(unsafe(dwrite_stat(w.h, 2))) >> 20l
+            let bounce_mb = int64(unsafe(dwrite_stat(w.h, 3))) >> 20l
+            to_log(LOG_INFO, "dasLLAMA image:   writer split: stage {copy_ms}ms ({bounce_mb} MB bounced), syscall {write_ms}ms ({direct_mb} MB direct), unaccounted {planes_ms - copy_ms - write_ms}ms\n")
+        }
         // meta = [identity string][config JSON][sections][the walk's scalar stream], one blob at
         // the tail — the two strings lead so a mismatched load can print WHAT the image was
         // baked for without parsing anything else
@@ -654,7 +807,7 @@ def save_image(var t; path : string; tag : string = ""; quant : string = "q8") :
                 w_append(w, addr<void?>(meta_blob[0]), meta_bytes)
             }
         }
-        // pad the file itself to a page multiple (the whole-file bytesNoCopy wrap needs it)
+        // pad the image itself to a page multiple (the whole-image bytesNoCopy wrap needs it)
         fend = pad_to_page(w.cur)
         w_zeros(w, fend - w.cur)
         delete meta_blob
@@ -664,11 +817,8 @@ def save_image(var t; path : string; tag : string = ""; quant : string = "q8") :
         delete sections
     }
     delete scalar_blob
-    var ok = w_close(w)
-    if (ok) {
-        // the header carries counts only the finished walk knows (section count, meta offset and
-        // size), and the direct writer is append-only — so patch page 0 through an ordinary
-        // handle now that the streaming one is closed
+    w.ok = w_close(w)
+    if (w.ok) {
         var hdr : array<uint8>
         hdr |> resize(int(IMAGE_HEADER_BYTES))
         store_u32(hdr, 0, IMAGE_MAGIC)
@@ -679,24 +829,24 @@ def save_image(var t; path : string; tag : string = ""; quant : string = "q8") :
         store_u64(hdr, 24, meta_bytes)
         store_u64(hdr, 32, fend)
         store_u64(hdr, 40, hash(ident))
-        ok = false
-        fopen(tmp_path, "r+b") $(hf) {
-            if (hf != null) {
-                fseek(hf, 0l, seek_set)
-                ok = int64(hf |> fwrite(hdr)) == IMAGE_HEADER_BYTES
-            }
-        }
-        if (!ok) {
-            to_log(LOG_ERROR, "dasLLAMA image: '{tmp_path}' header patch failed — image save aborted\n")
+        w.ok = w_header(w, dst, hdr)
+        if (!w.ok) {
+            to_log(LOG_ERROR, "dasLLAMA image: '{dst}' header write failed — image build aborted\n")
         }
         delete hdr
     }
+    w.cur = fend   // the image's true extent, for whoever maps or adopts it
+    return w
+}
+
+// tmp+rename: atomic on POSIX; on Windows a brief missing-file window costs a reader a regenerate
+def private promote_tmp(tmp_path : string; path : string; built : bool; want_bytes : uint64) : bool {
+    var ok = built
     if (ok) {
-        // last backstop: the writer reports its own failures, but an ENOSPC that only surfaces
-        // at close would still leave a short file — verify what actually landed on disk
+        // an ENOSPC that only surfaces at close still leaves a short file — check what landed
         var st : FStat
-        if (!stat(tmp_path, st) || st.size != fend) {
-            to_log(LOG_ERROR, "dasLLAMA image: '{tmp_path}' is {int64(st.size)} bytes on disk, expected {int64(fend)} — disk full? image save aborted\n")
+        if (!stat(tmp_path, st) || st.size != want_bytes) {
+            to_log(LOG_ERROR, "dasLLAMA image: '{tmp_path}' is {int64(st.size)} bytes on disk, expected {int64(want_bytes)} — disk full? image save aborted\n")
             ok = false
         }
     }
@@ -710,8 +860,7 @@ def save_image(var t; path : string; tag : string = ""; quant : string = "q8") :
     if (rename(tmp_path, path)) {
         return true   // the atomic replace (POSIX rename-over)
     }
-    // rename-over-existing is not portable (Windows) — drop the stale image and retry; the
-    // brief missing-file window only costs a concurrent reader a regenerate
+    // rename-over-existing is not portable (Windows) — drop the stale image and retry
     remove(path)
     if (!rename(tmp_path, path)) {
         if (!remove(tmp_path)) {
@@ -722,39 +871,53 @@ def save_image(var t; path : string; tag : string = ""; quant : string = "q8") :
     return true
 }
 
+// per-writer name: concurrent savers must not clobber each other; last rename wins, same content
+def private tmp_name_for(path : string) : string {
+    return "{path}.{ref_time_ticks()}.tmp"
+}
+
+def private save_image_to_file(var t; path : string; extra : uint64; tag : string; quant : string;
+                               plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : bool {
+    let tmp_path = tmp_name_for(path)
+    let w = build_image(t, tmp_path, false, extra, tag, quant, false, plane)
+    return promote_tmp(tmp_path, path, w.ok, w.cur)
+}
+
+// a finished chunk to disk, header and all — one append, no patch pass (page 0 is already stored)
+def private write_chunk(base : void?; bytes : uint64; path : string) : bool {
+    let tmp_path = tmp_name_for(path)
+    var w = w_open(tmp_path, bytes)
+    let ts = ref_time_ticks()
+    w_append(w, base, bytes)
+    let ok = w_close(w)
+    if (ok) {
+        let mb = int64(bytes) >> 20l
+        let ms = int64(get_time_usec(ts)) / 1000l
+        to_log(LOG_INFO, "dasLLAMA image: chunk written in {ms} ms ({mb} MB at {ms > 0l ? mb * 1000l / ms : 0l} MB/s)\n")
+    }
+    return promote_tmp(tmp_path, path, ok, bytes)
+}
+
+//! Serialize a loaded weight-carrying struct as a prepared image on disk (see build_image).
+def save_image(var t; path : string; tag : string = ""; quant : string = "q8") : bool {
+    // no plane wants special handling — the walk writes them all from RAM
+    return save_image_to_file(t, path, 0ul, tag, quant) $(name : string; var w : ImgWriter; var sections : array<ImgSection>) {
+        return false
+    }
+}
+
 //! Model entry point (the AudioTower one is load_audio_tower's cache in dasllama_audio).
 //! `tag` names the flavor (METAL_IMAGE_TAG for blob-only metal-flavor models, "" planar).
 def save_model_image(var t : Model; path : string; tag : string = ""; quant : string = "q8") : bool {
     return save_image(t, path, tag, quant)
 }
 
-//! save_image's STREAMING twin (Model-only): fields with recorded FillJobs stream through
-//! fill_stream_plane; empty `jobs` degrades to the eager save exactly. Call from
-//! load_gguf_streaming's block (m/bytes must be alive); keep the tails in step with save_image.
-def save_model_image_streaming(var t : Model; m : GGUFMeta; bytes : array<uint8> | #;
-                               var jobs : array<FillJob>; path : string; tag : string = ""; quant : string = "q8") : bool {
-    let tmp_path = "{path}.{ref_time_ticks()}.tmp"
-    let dcfg = dlim_config_current(quant)
-    let ident = dlim_identity(dcfg, IMAGE_VERSION, tag)
-    var fend = 0ul
-    var meta_off = 0ul
-    var meta_bytes = 0ul
-    var nsections = 0
-    var meta <- new MemSerializer()
-    var warch = Archive(reading = false, stream = meta)
-    var sections : array<ImgSection>
-    let ts_meta = ref_time_ticks()
-    serialize_image_meta(warch, t)
-    to_log(LOG_INFO, "dasLLAMA image: meta serialize {get_time_usec(ts_meta) / 1000}ms\n")
-    var scalar_blob <- meta->extractData()
-    unsafe {
-        delete meta
-    }
-    // preallocation: the generic total (streamed fields are empty, contributing 0) plus each
-    // streamed plane's exact bytes + a page of padding, plus the pending-wscale qscales16
-    // (absent until the epilogue). Over-reserve is free — dwrite_close truncates.
+// preallocation for a streamed build: the generic total counts streamed fields as empty (they
+// are), so add each streamed plane's exact bytes + a page of padding, plus the pending-wscale
+// qscales16 (absent until the epilogue). Over-reserve is free — dwrite_close truncates.
+def private stream_extra_bytes(t : Model; jobs : array<FillJob>) : uint64 {
     var extra = 0ul
-    for (fname in ["qblob", "k4q", "k5q", "k6q", "q40q", "q51q"]) {
+    for (fname in ["qblob", "mblob", "k4q", "k5q", "k6q", "q40q", "q51q"]) {
         let sb = stream_plane_bytes(t, jobs, fname)
         if (sb > 0l) {
             extra += uint64(sb) + uint64(IMAGE_PAGE)
@@ -763,104 +926,44 @@ def save_model_image_streaming(var t : Model; m : GGUFMeta; bytes : array<uint8>
     if (t.wscale_f16 && empty(t.qscales16) && !empty(t.qscales)) {
         extra += uint64(long_length(t.qscales) * 2l) + uint64(IMAGE_PAGE)
     }
+    return extra
+}
+
+//! save_image's STREAMING form (Model-only): planes with recorded FillJobs are transcoded from the
+//! gguf mapping straight into the image and never materialize in RAM; empty `jobs` degrades to the
+//! eager walk exactly. Call from load_gguf_streaming's block — m/bytes must still be alive.
+def save_model_image_streaming(var t : Model; m : GGUFMeta; bytes : array<uint8> | #;
+                               var jobs : array<FillJob>; path : string; tag : string = ""; quant : string = "q8") : bool {
     var regs : array<StreamReg>
     stream_collect_regions(t, regs)
-    var fill_ok = true
-    var w = w_open(tmp_path, image_total_bytes(t, uint64(long_length(scalar_blob)) + SECTION_TABLE_SLACK) + extra)
-    if (w.ok) {
-        w_zeros(w, uint64(IMAGE_PAGE))   // page 0: header placeholder — patched after close
-        let ts_planes = ref_time_ticks()
-        apply(t) $(name : string; var field) {
-            static_if (typeinfo is_array(field)) {
-                static_if (!typeinfo is_string(field[0])) {
-                    if (stream_plane_bytes(t, jobs, name) > 0l) {
-                        let padded = pad_to_page(w.cur)
-                        w_zeros(w, padded - w.cur)
-                        let at = w.cur
-                        if (!fill_stream_plane(m, bytes, t, name, jobs, regs) $(p : void?; nb : uint64) { w_append(w, p, nb) }) {
-                            fill_ok = false
-                        }
-                        sections |> push(ImgSection(name = name, off = at, bytes = w.cur - at))
-                    } else {
-                        write_plane(w, sections, name, field)
-                    }
-                }
+    let ok = save_image_to_file(t, path, stream_extra_bytes(t, jobs), tag, quant) $(name : string;
+                                                                                    var w : ImgWriter; var sections : array<ImgSection>) {
+        let want = stream_plane_bytes(t, jobs, name)
+        if (want <= 0l) {
+            // a blob build's kq scale strips take their device form as each one's turn comes —
+            // its own fills are done by then and its bytes are not yet written
+            if (t.metal_blob) {
+                blob_stream_scale_plane(t, name)
             }
+            return false   // not a streamed plane — the walk writes it from RAM
         }
-        let planes_ms = int64(get_time_usec(ts_planes)) / 1000l
-        let planes_mb = int64(w.cur) >> 20l
-        to_log(LOG_INFO, "dasLLAMA image: streamed planes write {planes_ms}ms ({planes_mb} MB at {planes_ms > 0l ? planes_mb * 1000l / planes_ms : 0l} MB/s)\n")
-        var smeta <- new MemSerializer()
-        var sarch = Archive(reading = false, stream = smeta)
-        var m_ident = ident
-        var m_cfg = dlim_config_json(dcfg)
-        sarch |> serialize(m_ident)
-        sarch |> serialize(m_cfg)
-        sarch |> serialize(sections)
-        var meta_blob <- smeta->extractData()
-        meta_blob |> push_from(scalar_blob)
-        nsections = length(sections)
-        meta_off = w.cur
-        meta_bytes = uint64(long_length(meta_blob))
-        if (meta_bytes > 0ul) {
-            unsafe {
-                w_append(w, addr<void?>(meta_blob[0]), meta_bytes)
-            }
+        w_zeros(w, pad_to_page(w.cur) - w.cur)
+        let at = w.cur
+        if (!fill_stream_plane(m, bytes, t, name, jobs, regs) $(p : void?; nb : uint64) { w_append(w, p, nb) }) {
+            // a failed transcode IS a failed write: kill the sink so the tmp never gets promoted
+            to_log(LOG_ERROR, "dasLLAMA image: streamed fill of plane '{name}' failed — image save aborted\n")
+            w.ok = false
         }
-        fend = pad_to_page(w.cur)
-        w_zeros(w, fend - w.cur)
-        delete meta_blob
-        unsafe {
-            delete smeta
+        // a plane short of its plan maps back as a silently-truncated borrow — that too is a failed write
+        if (w.ok && w.cur - at != uint64(want)) {
+            to_log(LOG_ERROR, "dasLLAMA image: streamed plane '{name}' wrote {int64(w.cur - at)} bytes, plan says {want} — image save aborted\n")
+            w.ok = false
         }
-        delete sections
-    }
-    delete scalar_blob
-    delete regs
-    var ok = w_close(w) && fill_ok
-    if (ok) {
-        var hdr : array<uint8>
-        hdr |> resize(int(IMAGE_HEADER_BYTES))
-        store_u32(hdr, 0, IMAGE_MAGIC)
-        store_u32(hdr, 4, uint(IMAGE_VERSION))
-        store_u32(hdr, 8, uint(IMAGE_PAGE))
-        store_u32(hdr, 12, uint(nsections))
-        store_u64(hdr, 16, meta_off)
-        store_u64(hdr, 24, meta_bytes)
-        store_u64(hdr, 32, fend)
-        store_u64(hdr, 40, hash(ident))
-        ok = false
-        fopen(tmp_path, "r+b") $(hf) {
-            if (hf != null) {
-                fseek(hf, 0l, seek_set)
-                ok = int64(hf |> fwrite(hdr)) == IMAGE_HEADER_BYTES
-            }
-        }
-        if (!ok) {
-            to_log(LOG_ERROR, "dasLLAMA image: '{tmp_path}' header patch failed — image save aborted\n")
-        }
-        delete hdr
-    }
-    if (ok) {
-        var st : FStat
-        if (!stat(tmp_path, st) || st.size != fend) {
-            to_log(LOG_ERROR, "dasLLAMA image: '{tmp_path}' is {int64(st.size)} bytes on disk, expected {int64(fend)} — disk full? image save aborted\n")
-            ok = false
-        }
-    }
-    if (!ok) {
-        if (stat(tmp_path).is_valid && !remove(tmp_path)) {
-            to_log(LOG_WARNING, "dasLLAMA image: orphaned tmp '{tmp_path}' could not be removed — clean it up by hand\n")
-        }
-        return false
-    }
-    // POSIX rename-over is atomic; Windows needs remove-then-rename (a concurrent reader may
-    // regenerate in the window)
-    if (rename(tmp_path, path) || (remove(path) && rename(tmp_path, path))) {
+        sections |> push(ImgSection(name = name, off = at, bytes = w.cur - at))
         return true
     }
-    to_log(LOG_ERROR, "dasLLAMA image: could not move '{tmp_path}' over '{path}'\n")
-    return false
+    delete regs
+    return ok
 }
 
 // ===== load =====
@@ -885,30 +988,34 @@ def private borrow_plane(bp : uint8 const?; msize : uint64; path : string;
     }
 }
 
-//! Map a prepared image and rebuild the struct with zero O(model) work: array plane fields borrow
-//! the mapping (finalizer forgets + unmaps), archive blob restores everything else. false = absent /
-//! wrong identity / wrong version — caller regenerates from gguf. Same `_::` contract as save_image.
-def load_image(path : string; var t; tag : string = ""; quant : string = "q8") : bool {
-    if (!stat(path).is_valid) {
-        return false
+// one borrowed plane: validate the section against the mapping, then point the plane at it.
+// The plane owns nothing, so a decline leaves it empty and the caller drops the whole carrier.
+def private bind_plane_section(bp : uint8 const?; msize : uint64; path : string;
+                               by_name : table<string; ImgSection>; var ok : bool&;
+                               name : string; var pl) {
+    if (!key_exists(by_name, name)) {
+        return
     }
-    // the mapped planes are packed for the load backend — activate it before any kernel runs
+    let sec = by_name?[name] ?? ImgSection()
+    // bytes-then-offset ordering keeps the bounds math wrap-free (off + bytes could overflow)
+    if (sec.off % uint64(IMAGE_PAGE) != 0ul || sec.bytes > msize || sec.off > msize - sec.bytes) {
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined — section '{name}' at {sec.off}+{sec.bytes} is malformed\n")
+        ok = false
+        return
+    }
+    if (!_::plane_bind(pl, bp, int64(sec.off), int64(sec.bytes))) {
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined — section '{name}' is {sec.bytes} bytes, not a whole number of elements\n")
+        ok = false
+    }
+}
+
+//! THE image parse — the only way a prepared image becomes a struct, mapped .dlim or chunk this
+//! process just built alike: plane fields borrow `base` in place, the archive blob restores
+//! everything else. false = decline (the caller owns `base` and releases it either way).
+def private parse_image(base : void?; msize : uint64; path : string; var t; tag : string; quant : string) : bool {
+    // the image's planes are packed for the load backend — activate it before any kernel runs
     // (same select the gguf loader does; the identity check below then names that backend)
     select_matmul_backend_for_load()
-    var msize = 0ul
-    var base : void?
-    unsafe {
-        base = fmap_open(path, addr(msize))
-    }
-    if (base == null || int64(msize) < IMAGE_HEADER_BYTES) {
-        // fmap_open declines with null (vanished file, mmap failure, >size_t on 32-bit) —
-        // treat it like any other decline; the header reads below need a real mapping
-        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined — cannot map ({msize} bytes)\n")
-        if (base != null) {
-            unsafe(fmap_close(base, msize))
-        }
-        return false
-    }
     var bp = unsafe(reinterpret<uint8 const?>(base))
     if (read_u32(bp, 0l) != IMAGE_MAGIC || read_u32(bp, 4l) != uint(IMAGE_VERSION)
             || read_u32(bp, 8l) != uint(IMAGE_PAGE)) {
@@ -916,7 +1023,6 @@ def load_image(path : string; var t; tag : string = ""; quant : string = "q8") :
         // undebuggable. A wrong version means the meta layout is unknowable, so this arm
         // cannot read the baked identity string the identity-mismatch arm below prints.
         to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined — size {msize} magic {read_u32(bp, 0l)} version {read_u32(bp, 4l)} (want {IMAGE_VERSION}) page {read_u32(bp, 8l)}\n")
-        unsafe(fmap_close(base, msize))
         return false
     }
     let nsections = int(read_u32(bp, 12l))
@@ -928,7 +1034,6 @@ def load_image(path : string; var t; tag : string = ""; quant : string = "q8") :
     // section table always rides there, and addr(meta_blob[0]) needs a nonzero resize)
     if (file_bytes != msize || meta_bytes == 0ul || meta_bytes > msize || meta_off > msize - meta_bytes || meta_bytes > uint64(INT_MAX)) {
         to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined — header says {file_bytes} bytes / meta {meta_off}+{meta_bytes}, mapped {msize}\n")
-        unsafe(fmap_close(base, msize))
         return false
     }
     let want_ident = image_identity(tag, quant)
@@ -949,7 +1054,6 @@ def load_image(path : string; var t; tag : string = ""; quant : string = "q8") :
         unsafe {
             delete hmeta
         }
-        unsafe(fmap_close(base, msize))
         return false
     }
     // the meta blob is the ONE copied+parsed piece (small); planes stay lazy in the mapping
@@ -976,7 +1080,6 @@ def load_image(path : string; var t; tag : string = ""; quant : string = "q8") :
         unsafe {
             delete meta
         }
-        unsafe(fmap_close(base, msize))
         return false
     }
     var by_name <- {for (sec in sections); sec.name => sec}
@@ -990,7 +1093,6 @@ def load_image(path : string; var t; tag : string = ""; quant : string = "q8") :
         unsafe {
             delete meta
         }
-        unsafe(fmap_close(base, msize))
         return false
     }
     _::serialize_image_meta(rarch, t)
@@ -1006,7 +1108,6 @@ def load_image(path : string; var t; tag : string = ""; quant : string = "q8") :
         unsafe {
             delete meta
         }
-        unsafe(fmap_close(base, msize))
         return false
     }
     _::image_post_load(t)
@@ -1016,6 +1117,8 @@ def load_image(path : string; var t; tag : string = ""; quant : string = "q8") :
             static_if (!typeinfo is_string(field[0])) {   // string arrays ride the meta blob
                 borrow_plane(bp, msize, path, by_name, ok, name, field)
             }
+        } static_elif (typeinfo safe_has_field < borrowed_plane > (field)) {
+            bind_plane_section(bp, msize, path, by_name, ok, name, field)
         } static_elif (typeinfo safe_has_field < image_map > (field)) {
             // nested weight-carrier: borrow its planes back from the dotted sections (the
             // nested image_map stays null — the OUTER struct owns this mapping)
@@ -1024,6 +1127,8 @@ def load_image(path : string; var t; tag : string = ""; quant : string = "q8") :
                     static_if (!typeinfo is_string(ifield[0])) {
                         borrow_plane(bp, msize, path, by_name, ok, "{name}.{iname}", ifield)
                     }
+                } static_elif (typeinfo safe_has_field < borrowed_plane > (ifield)) {
+                    bind_plane_section(bp, msize, path, by_name, ok, "{name}.{iname}", ifield)
                 }
             }
         }
@@ -1035,19 +1140,266 @@ def load_image(path : string; var t; tag : string = ""; quant : string = "q8") :
         delete meta
     }
     if (!ok) {
-        // a malformed section table: forget whatever was borrowed (the finalizer), THEN unmap —
-        // image_map was never set, so the finalizer alone would leak the mapping
+        // a malformed section table: forget whatever was borrowed (the finalizer) and leave the
+        // backing to the caller — image_map is not set, so the finalizer would not release it
         delete t
-        unsafe(fmap_close(base, msize))
         return false
     }
     t.image_map = base
     t.image_bytes = msize
     // address-keyed weight caches (the Metal drivers' resident regions) flush on the weights
-    // epoch; this mapping may sit at a deleted model's recycled addresses, so it counts as a
+    // epoch; this image may sit at a deleted model's recycled addresses, so it counts as a
     // load exactly like load_gguf's own bump does
     bump_weights_epoch()
     return true
+}
+
+//! Map a prepared image off disk and parse it: plane fields become borrowed views over the
+//! mapping (the finalizer forgets them and unmaps). false = absent / wrong identity / wrong
+//! version — the caller regenerates from gguf. Same `_::` contract as save_image.
+def load_image(path : string; var t; tag : string = ""; quant : string = "q8") : bool {
+    if (!stat(path).is_valid) {
+        return false
+    }
+    var msize = 0ul
+    var base : void?
+    unsafe {
+        base = fmap_open(path, addr(msize))
+    }
+    if (base == null || int64(msize) < IMAGE_HEADER_BYTES) {
+        // fmap_open declines with null (vanished file, mmap failure, >size_t on 32-bit) —
+        // treat it like any other decline; the header reads need a real mapping
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined — cannot map ({msize} bytes)\n")
+        if (base != null) {
+            unsafe(fmap_close(base, msize))
+        }
+        return false
+    }
+    if (parse_image(base, msize, path, t, tag, quant)) {
+        return true
+    }
+    unsafe(fmap_close(base, msize))
+    return false
+}
+
+// Parse an image chunk this process just built. On a decline the chunk is freed; on success the
+// carrier owns it and its finalizer releases it exactly like a mapping.
+def private adopt_image(base : void?; msize : uint64; src : string; var t; tag : string; quant : string) : bool {
+    if (parse_image(base, msize, src, t, tag, quant)) {
+        return true
+    }
+    image_chunk_free(base)
+    return false
+}
+
+// The chunk rail's body: build into a chunk, tee it to `save_to`, adopt it into `out`. Both cold
+// entries below are this with a different plane hook.
+def private chunk_rail(var t; var out; save_to : string; extra : uint64; tag : string; quant : string;
+                       plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : bool {
+    let ts = ref_time_ticks()
+    var w = build_image(t, "", true, extra, tag, quant, true, plane)
+    if (!w.ok) {
+        // failing to get the chunk is the only decline that precedes the walk — `t` is whole and
+        // the caller can still serve it. Failing after it means the sizing pass and the walk
+        // disagree, which is a bug in this file and not a condition to limp on from.
+        if (w.mem == null) {
+            return false
+        }
+        image_chunk_free(w.mem)
+        panic("dasLLAMA: the image build failed after it began consuming the model — see the error above")
+    }
+    to_log(LOG_INFO, "dasLLAMA image: built in memory in {get_time_usec(ts) / 1000} ms ({int64(w.cur) >> 20l} MB)\n")
+    // the save is a courtesy to the NEXT run — a full disk must not cost this one its model
+    if (save_to != "" && !write_chunk(w.mem, w.cur, save_to)) {
+        to_log(LOG_WARNING, "dasLLAMA image: could not write '{save_to}' — this run still serves the image it built\n")
+    }
+    if (!adopt_image(w.mem, w.cur, save_to != "" ? save_to : "<in-memory image>", out, tag, quant)) {
+        panic("dasLLAMA: the image this process just built would not parse back — see the decline above")
+    }
+    return true
+}
+
+//! THE cold load: build `t`'s image once into one page-aligned chunk, optionally write it to
+//! `save_to`, then serve `out` from that chunk — the same borrowed-plane struct the mapped rail
+//! yields. `t`'s planes free as they land, so this never holds two copies; `t` ends up spent.
+def image_from_carrier(var t; var out; save_to : string; tag : string = ""; quant : string = "q8") : bool {
+    return chunk_rail(t, out, save_to, 0ul, tag, quant) $(name : string; var w : ImgWriter; var sections : array<ImgSection>) {
+        return false
+    }
+}
+
+//! image_from_carrier's STREAMING form: a plane with a recorded FillJob is transcoded from the
+//! gguf mapping DIRECTLY into the image and never becomes a model plane — the difference between
+//! peaking at one copy of the model and two. Call inside load_gguf_streaming's block.
+def image_from_model_streaming(var t : Model; var out : Model; m : GGUFMeta; bytes : array<uint8> | #;
+                               var jobs : array<FillJob>; save_to : string;
+                               tag : string = ""; quant : string = "q8") : bool {
+    var regs : array<StreamReg>
+    stream_collect_regions(t, regs)
+    let ok = chunk_rail(t, out, save_to, stream_extra_bytes(t, jobs), tag, quant) $(name : string;
+                                                                                    var w : ImgWriter; var sections : array<ImgSection>) {
+        let want = stream_plane_bytes(t, jobs, name)
+        if (want <= 0l) {
+            if (t.metal_blob) {   // the kq scale strips take their device form — see the file saver
+                blob_stream_scale_plane(t, name)
+            }
+            return false   // not a streamed plane — the walk writes it from RAM
+        }
+        w_zeros(w, pad_to_page(w.cur) - w.cur)
+        let at = w.cur
+        if (!fill_stream_plane(m, bytes, t, name, jobs, regs) $(p : void?; nb : uint64) { w_append(w, p, nb) }) {
+            to_log(LOG_ERROR, "dasLLAMA image: streamed fill of plane '{name}' failed — image build aborted\n")
+            w.ok = false
+        }
+        // a plane short of its plan maps back as a silently-truncated borrow — that too is a failed write
+        if (w.ok && w.cur - at != uint64(want)) {
+            to_log(LOG_ERROR, "dasLLAMA image: streamed plane '{name}' wrote {int64(w.cur - at)} bytes, plan says {want} — image build aborted\n")
+            w.ok = false
+        }
+        sections |> push(ImgSection(name = name, off = at, bytes = w.cur - at))
+        return true
+    }
+    delete regs
+    return ok
+}
+
+// The vulkan flavor is a SECOND artifact baked off a model that is already SERVING: the GPU walk
+// that just uploaded from its planes also collected the device-layout bytes. Warm map and cold
+// stream both land here, which is why neither needs the model in RAM to bake one.
+def private vulkan_bake_flavor(var t : Model; path : string; vk_tag : string) {
+    if (vk_tag == "" || !vulkan_bake_take(t)) {
+        return
+    }
+    let ts = ref_time_ticks()
+    let img_v = image_path_for(path, vk_tag)
+    if (save_model_image(t, img_v, vk_tag)) {
+        to_log(LOG_INFO, "dasLLAMA: vulkan image baked in {get_time_usec(ts) / 1000} ms — {img_v}\n")
+    }
+    delete t.vkblob   // this run is already uploaded — the bake only serves the NEXT load
+    delete t.vkplan
+}
+
+//! Whether a cold build persists its image. Off = build it in memory and serve that, leaving no
+//! .dlim behind; the run pays a second copy of the model for it, so on by default.
+def image_save_enabled : bool {
+    return env_flag("DASLLAMA_IMAGE_SAVE", true)
+}
+
+// ===== the metal flavor, derived in the writer =====
+
+// ~36 MB of blob per band: big enough that the interleave amortizes and the writer sees bulk
+// appends, small enough that the staging cost does not register against the model.
+let private METAL_BAND_BLOCKS = 1048576l
+
+// Write mblob without it ever being a plane: interleave the planar planes band by band into a
+// staging buffer the writer consumes before the next band refills it. Runs at QBLOB's position in
+// the walk, not mblob's — on the consuming (chunk) rail qblob is freed the moment its field lands.
+def private write_metal_blob_plane(var t : Model; var w : ImgWriter; var sections : array<ImgSection>) {
+    let sh = metal_blob_shape(t)
+    if (sh.blocks <= 0l) {
+        return
+    }
+    let nbytes = uint64(sh.blocks * sh.stride)
+    let at = pad_to_page(w.cur)
+    w_zeros(w, at - w.cur)
+    let ts = ref_time_ticks()
+    var band : array<uint8>
+    band |> resize_no_init(min(sh.blocks, METAL_BAND_BLOCKS) * sh.stride)
+    var b0 = 0l
+    while (b0 < sh.blocks && w.ok) {
+        let n = min(METAL_BAND_BLOCKS, sh.blocks - b0)
+        metal_blob_fill_blocks(t, b0, n, band)
+        unsafe {
+            w_append(w, addr<void?>(band[0]), uint64(n * sh.stride))
+        }
+        b0 += n
+    }
+    delete band
+    if (!w.ok) {
+        to_log(LOG_ERROR, "dasLLAMA image: plane 'mblob' failed writing {int64(nbytes)} bytes at offset {int64(at)} — disk full? image save aborted\n")
+        return
+    }
+    let ms = int64(get_time_usec(ts)) / 1000l
+    let mb = int64(nbytes) >> 20l
+    to_log(LOG_INFO, "dasLLAMA image:   plane mblob {mb} MB derived+written in {ms} ms = {ms > 0l ? mb * 1000l / ms : 0l} MB/s\n")
+    sections |> push(ImgSection(name = "mblob", off = at, bytes = nbytes))
+}
+
+//! The metal flavor's plane hook: the blob layout IS qblob+qscales interleaved, so those three
+//! planar planes are not planes of a metal image — mblob stands in for all of them, derived at
+//! the first of the three so both sources are still live on the consuming rail.
+def private metal_derive_plane(var t : Model; name : string; var w : ImgWriter;
+                               var sections : array<ImgSection>) : bool {
+    if (name == "qblob") {
+        write_metal_blob_plane(t, w, sections)
+        return true
+    }
+    return name == "qscales" || name == "qscales16" || name == "mblob"
+}
+
+//! The cold half of a cached load, for any carrier: turn the freshly-loaded `m` into its prepared
+//! image and put the image-served struct in `out`. With a target path the FILE is the handoff (`m`
+//! is dropped between write and map); without one the image is built in memory. `m` is spent.
+def cache_via_image(var m; var out; img : string; tag : string = ""; quant : string = "q8") {
+    // no plane wants special handling — the walk writes them all from RAM
+    cache_via_image_(m, out, img, tag, quant) $(name : string; var w : ImgWriter; var sections : array<ImgSection>) {
+        return false
+    }
+}
+
+//! cache_via_image for a carrier whose MINT form differs from its SERVED form: `st` carries owned
+//! plane arrays, `out` comes back borrowing the image. A staging struct is not servable, so a
+//! build that cannot produce an image panics rather than handing anything back.
+def cache_via_image_staged(var st; var out; img : string; tag : string = ""; quant : string = "q8") {
+    cache_via_image_staged_(st, out, img, 0ul, tag, quant) $ [unused_argument(name, w, sections)] (name : string;
+                                                                                                   var w : ImgWriter; var sections : array<ImgSection>) {
+        return false
+    }
+}
+
+//! cache_via_image_staged with the walk's plane hook exposed plus a pre-sized `extra` for the
+//! bytes the hook streams — the streamed mints serve their big planes straight from the source
+//! mapping instead of staging them (Phase 3 of the audio rail).
+def cache_via_image_staged_(var st; var out; img : string; extra : uint64; tag : string; quant : string;
+                            plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) {
+    if (img != "" && image_save_enabled()) {
+        let ts = ref_time_ticks()
+        if (save_image_to_file(st, img, extra, tag, quant, plane)) {
+            to_log(LOG_INFO, "dasLLAMA: prepared image written in {get_time_usec(ts) / 1000} ms — {img}\n")
+            delete st   // before the map, not after: holding both is what makes a cold load peak twice
+            if (!load_image(img, out, tag, quant)) {
+                panic("dasLLAMA: '{img}' was just written and verified, and will not map back — see the decline above")
+            }
+            return
+        }
+        to_log(LOG_WARNING, "dasLLAMA: could not write '{img}' — building the image in memory instead\n")
+    }
+    if (!chunk_rail(st, out, "", extra, tag, quant, plane)) {
+        panic("dasLLAMA: could not build the prepared image in memory — there is no other form to serve")
+    }
+}
+
+// cache_via_image with the walk's plane hook exposed — the metal flavor derives its blob plane
+// from the planar ones here instead of materializing it first (see metal_derive_plane).
+def private cache_via_image_(var m; var out; img : string; tag : string; quant : string;
+                             plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) {
+    if (img == "" || !image_save_enabled()) {
+        if (!chunk_rail(m, out, "", 0ul, tag, quant, plane)) {
+            out <- m   // nolint:PERF030 — `out` is the caller's fresh destination (the cache_via_image contract); m is spent
+        }
+        return
+    }
+    let ts = ref_time_ticks()
+    if (!save_image_to_file(m, img, 0ul, tag, quant, plane)) {
+        to_log(LOG_WARNING, "dasLLAMA: could not write '{img}' — serving the carrier as loaded\n")
+        out <- m   // nolint:PERF030 — `out` is the caller's fresh destination (the cache_via_image contract); m is spent
+        return
+    }
+    to_log(LOG_INFO, "dasLLAMA: prepared image written in {get_time_usec(ts) / 1000} ms — {img}\n")
+    delete m   // before the map, not after: holding both is what makes a cold load peak twice
+    if (!load_image(img, out, tag, quant)) {
+        panic("dasLLAMA: '{img}' was just written and verified, and will not map back — see the decline above")
+    }
 }
 
 // interp-load guard: the gguf path's O(model) das loops run ~10x slower interpreted (tinyllama
@@ -1147,54 +1499,106 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                 return <- t
             }
             vulkan_bake_disarm()
+            if (g_image_frozen) {
+                panic("dasLLAMA: no prepared vulkan image for '{path}' ({image_path_for(path, vk_tag)}) and artifacts are frozen — pre-mint it")
+            }
             vulkan_bake_begin()   // whatever loads below runs the GPU walk — collect and bake
         }
         let img = image_path_for(path, "", qs)
         if (load_model_image(img, t, "", qs)) {
-            if (vk_tag != "" && vulkan_bake_take(t)) {
-                // the planar image served this run's uploads; bake the flavor for the next one
-                let ts_save = ref_time_ticks()
-                let img_v = image_path_for(path, vk_tag)
-                if (save_model_image(t, img_v, vk_tag)) {
-                    to_log(LOG_INFO, "dasLLAMA: vulkan image baked in {get_time_usec(ts_save) / 1000} ms — {img_v}\n")
-                }
-                delete t.vkblob   // this run is already uploaded — the bake only serves the NEXT load
-                delete t.vkplan
-            }
+            vulkan_bake_flavor(t, path, vk_tag)
             if (!(want_metal && metal_model_servable(t))) {
                 to_log(LOG_INFO, "dasLLAMA: prepared image mapped in {get_time_usec(ts_img) / 1000} ms — {img}\n")
                 return <- t
             }
             // a planar image of a metal-servable config under metal mode — drop the mapping
             // and regenerate the blob flavor (the planar file stays for CPU-mode loads)
+            if (g_image_frozen) {
+                panic("dasLLAMA: '{img}' is planar but this run needs the metal blob flavor, and artifacts are frozen — pre-mint {image_path_for(path, METAL_IMAGE_TAG)}")
+            }
             delete t
         }
+        if (g_image_frozen) {
+            let want = want_metal ? image_path_for(path, METAL_IMAGE_TAG) : img
+            panic("dasLLAMA: no prepared image for '{path}' ({want}) and artifacts are frozen — pre-mint it")
+        }
         guard_interp_gguf_load(path)
-        var m <- load_model_(path, mode)
-        let ts_save = ref_time_ticks()
-        if (want_metal && metal_model_servable(m) && convert_model_to_metal_blob(m)) {
-            let img_m = image_path_for(path, METAL_IMAGE_TAG)
-            if (save_model_image(m, img_m, METAL_IMAGE_TAG)) {
-                to_log(LOG_INFO, "dasLLAMA: prepared image saved in {get_time_usec(ts_save) / 1000} ms — {img_m}\n")
-            }
-        } else {
-            // planar saves FIRST (vkblob still empty — the planar flavor must stay planar),
-            // then the take moves the collected planes in and the vulkan flavor saves
-            if (save_model_image(m, img, "", qs)) {
-                to_log(LOG_INFO, "dasLLAMA: prepared image saved in {get_time_usec(ts_save) / 1000} ms — {img}\n")
-            }
-            if (vk_tag != "" && vulkan_bake_take(m)) {
-                let ts_vk = ref_time_ticks()
-                let img_v = image_path_for(path, vk_tag)
-                if (save_model_image(m, img_v, vk_tag)) {
-                    to_log(LOG_INFO, "dasLLAMA: vulkan image baked in {get_time_usec(ts_vk) / 1000} ms — {img_v}\n")
+        // The cold build streams: planes go from the gguf mapping straight into the image, never
+        // becoming model planes. Every flavor rides it — the metal blob assembles per tensor, and
+        // the vulkan bake collects off the mapping the stream just produced (as the warm path does)
+        {
+            let s_tag = want_metal ? METAL_IMAGE_TAG : ""
+            let s_quant = want_metal ? "q8" : qs
+            let s_img = want_metal ? image_path_for(path, METAL_IMAGE_TAG) : img
+            var mt = Model()
+            var jobs : array<FillJob>
+            var streamed = Model()
+            var served = false
+            let ts_s = ref_time_ticks()
+            let save = image_save_enabled()
+            let ran = load_gguf_streaming(path, mode, mt, jobs, want_metal) $(gm : GGUFMeta; gbytes : array<uint8>) {
+                // the sizing pass answers whether the blob flavor was available; a metal run that
+                // got the planar answer must not write a planar image under the metal identity
+                if (want_metal && !mt.metal_blob) {
+                    return false
                 }
-                delete m.vkblob
-                delete m.vkplan
+                served = (save ? save_model_image_streaming(mt, gm, gbytes, jobs, s_img, s_tag, s_quant)
+                    : image_from_model_streaming(mt, streamed, gm, gbytes, jobs, "", s_tag, s_quant))
+                return served
+            }
+            delete jobs
+            delete mt   // the streamed planes never became model planes; the rest goes now
+            if (served && save) {
+                to_log(LOG_INFO, "dasLLAMA: prepared image streamed in {get_time_usec(ts_s) / 1000} ms — {s_img}\n")
+                if (!load_image(s_img, streamed, s_tag, s_quant)) {
+                    panic("dasLLAMA: '{s_img}' was just streamed out and will not map back — see the decline above")
+                }
+                dlim_gc_stale(path, s_tag, s_quant)   // the fresh bake proves ITS LANE's siblings dead
+            }
+            if (served) {
+                // the GPU MoE tier gathers from the PREPARED planes, same as the mapped rail —
+                // and that walk is what collects the vulkan bake, so the flavor costs no reload
+                moe_gpu_upload_resident(streamed)
+                vulkan_bake_flavor(streamed, path, vk_tag)
+                return <- streamed
+            }
+            delete streamed
+            if (ran) {
+                to_log(LOG_WARNING, "dasLLAMA: the streamed cold build declined for '{path}' — taking the eager rail\n")
             }
         }
-        dlim_gc_stale(path)   // the fresh bake proves version-stale siblings dead
-        return <- m
+        var m <- load_model_(path, mode)
+        // COMMIT to the metal flavor, do not build it: the blob plane is the planar planes
+        // interleaved, and the writer derives it band by band — materializing it here is what
+        // used to make a metal mint peak at two copies of the weights
+        let metal_flavor = want_metal && metal_model_servable(m) && metal_blob_commit(m)
+        if (!metal_flavor) {
+            // the stream declined for this model, so load_model_'s own GPU walk did the collecting;
+            // the image it goes on to serve must stay planar, so the flavor goes out and goes away
+            vulkan_bake_flavor(m, path, vk_tag)
+        }
+        // and now the load's own flavor, on the one rail: built once in memory, written out for
+        // the next run, and served from the very bytes that were written
+        var built = Model()
+        cache_via_image_(m, built, metal_flavor ? image_path_for(path, METAL_IMAGE_TAG) : img,
+            metal_flavor ? METAL_IMAGE_TAG : "", metal_flavor ? "q8" : qs) $(name : string;
+                                                                             var w : ImgWriter; var sections : array<ImgSection>) {
+            return metal_flavor && metal_derive_plane(m, name, w, sections)
+        }
+        if (metal_flavor && built.image_map == null) {
+            // the image declined and handed the carrier back committed but plane-less — finish
+            // the flavor in RAM, which is the one state that can still serve this run
+            convert_model_to_metal_blob(built)
+        }
+        delete m
+        dlim_gc_stale(path, metal_flavor ? METAL_IMAGE_TAG : "", metal_flavor ? "q8" : qs)   // this lane only
+        // the GPU MoE tier gathered from planes the build just freed — re-gather from the image,
+        // exactly as the mapped rail does (a no-op when the build declined and `built` IS m)
+        moe_gpu_upload_resident(built)
+        return <- built
+    }
+    if (g_image_frozen) {
+        panic("dasLLAMA: the image rail is off/ineligible for '{path}' (mode {qs}) and artifacts are frozen — the oracle contract needs a prepared image")
     }
     guard_interp_gguf_load(path)
     var m <- load_model_(path, mode)

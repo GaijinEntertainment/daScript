@@ -5,7 +5,7 @@ require daslib/clargs
 require strings
 require daslib/strings_boost
 
-// The reference supply chain (modules/dasLLAMA/PUBLIC_BENCH_PLAN.md): build pinned llama-bench
+// The reference supply chain (history/dasLLAMA/PUBLIC_BENCH_PLAN.md): build pinned llama-bench
 // binaries per build flavor, so every box — and any community user who wants our exact reference —
 // benches against the identical binary. One git worktree at the pinned sha, one build dir per flavor:
 //   clean-cpu: -DGGML_ACCELERATE=OFF -DGGML_BLAS=OFF -DGGML_METAL=OFF — kernel-vs-kernel fair
@@ -85,6 +85,26 @@ def private locate_bench(build_dir : string) : string {
     return ""
 }
 
+// create the ref worktree at `full`, or verify an existing one sits there. "" = error (printed).
+def private ensure_ref_worktree(src, full, short_sha : string) : string {
+    let dest = "{src}-ref-{short_sha}"
+    if (!stat(dest).is_valid) {
+        print("creating worktree {dest} @ {short_sha}\n")
+        if (run_visible("git -C \"{src}\" worktree add \"{dest}\" {full}") != 0) {
+            print("error: worktree add failed\n")
+            return ""
+        }
+        return dest
+    }
+    let head = capture_out("git -C \"{dest}\" rev-parse HEAD")
+    if (head != full) {
+        print("error: {dest} exists but is at {head}, not {full} — remove it (git -C \"{src}\" worktree remove \"{dest}\") and re-run\n")
+        return ""
+    }
+    print("worktree {dest} already at {short_sha}\n")
+    return dest
+}
+
 [export]
 def main : int {
     var r <- parse_args(type<Args>)
@@ -100,7 +120,7 @@ def main : int {
     }
     var flavors := cfg.flavor
     if (empty(flavors)) {
-        flavors <- ["clean-cpu", "stock"]
+        flavors <- ["clean-cpu", "stock"]   // nolint:PERF030 — the enclosing empty(flavors) guard proves the target holds nothing
     }
     for (f in flavors) {
         if (f != "clean-cpu" && f != "stock") {
@@ -124,20 +144,9 @@ def main : int {
         return 1
     }
     let short_sha = slice(full, 0, 7)
-    let dest = "{src}-ref-{short_sha}"
-    if (!stat(dest).is_valid) {
-        print("creating worktree {dest} @ {short_sha}\n")
-        if (run_visible("git -C \"{src}\" worktree add \"{dest}\" {full}") != 0) {
-            print("error: worktree add failed\n")
-            return 1
-        }
-    } else {
-        let head = capture_out("git -C \"{dest}\" rev-parse HEAD")
-        if (head != full) {
-            print("error: {dest} exists but is at {head}, not {full} — remove it (git -C \"{src}\" worktree remove \"{dest}\") and re-run\n")
-            return 1
-        }
-        print("worktree {dest} already at {short_sha}\n")
+    let dest = ensure_ref_worktree(src, full, short_sha)
+    if (empty(dest)) {
+        return 1
     }
     var rc = 0
     for (f in flavors) {

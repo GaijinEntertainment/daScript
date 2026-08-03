@@ -1,6 +1,6 @@
 options gen2
 options persistent_heap
-options stack = 65536
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 // Segment gate: print `SEG<TAB>start<TAB>end` (sample indices) from find_speech_timestamps,
 // diff against silero get_speech_timestamps (harness/silero_segment_oracle.py).

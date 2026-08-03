@@ -65,9 +65,13 @@ struct DaspkgArgs {
     @clarg_doc = "Output directory for `release` (default: current directory)"
     out : string = "."
 
-    @clarg_name = "tune-fast"
-    @clarg_doc = "Use the tuner's quick progressive 4/8-round screen / 20-round cap during `release`"
-    tune_fast : bool
+    @clarg_name = "paranoid"
+    @clarg_doc = "During `release`, tune with the paranoid budget (3x rounds, 1% noise gate)"
+    paranoid : bool
+
+    @clarg_name = "quick"
+    @clarg_doc = "During `release`, accept a complete existing sidecar instead of re-minting — the ONLY mode that inherits"
+    quick : bool
 
     @clarg_name = "wasm"
     @clarg_doc = "Target wasm64 (memory64): `build --wasm` builds the wasm64 runtime + module archives; `release wasm` ships compiled .wasm artifacts"
@@ -361,7 +365,7 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; is_
     return install_git(root, pkg_name, source, version, lf, visiting, [is_root = is_root, is_global = is_global, branch = branch])
 }
 
-def install_git(root, pkg_name, source, version : string; var lf : LockFile; var visiting : table<string; bool>; is_root : bool = true; is_global : bool = false; branch : string = "") { // nolint:STYLE037
+def install_git(root, pkg_name, source, version : string; var lf : LockFile; var visiting : table<string; bool>; is_root : bool = true; is_global : bool = false; branch : string = "") { // nolint:STYLE037,STYLE038 — the install ladder: clone/resolve/checkout/move/lock/deps/build arms are one sequential flow
     let modules_dir = is_global ? "{get_das_root()}/modules" : "{root}/modules"
     let tmp_dir = "{modules_dir}/.daspkg_tmp/{pkg_name}"
     let target_dir = "{modules_dir}/{pkg_name}"
@@ -535,7 +539,7 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
     return 0
 }
 
-def cmd_install(root, spec : string; force : bool; is_global : bool = false; version_constraint : string = ""; branch : string = "") { // nolint:STYLE037
+def cmd_install(root, spec : string; force : bool; is_global : bool = false; version_constraint : string = ""; branch : string = "") { // nolint:STYLE037,STYLE038 — flat source-kind dispatch (index name / url / local path / global) + its error arms
     // parse spec: name[@version]
     var source = spec
     var version = ""
@@ -747,7 +751,7 @@ def cmd_remove(root, name : string; is_global : bool = false) {
     return 0
 }
 
-def cmd_update(root, name : string; is_global : bool = false) { // nolint:STYLE037
+def cmd_update(root, name : string; is_global : bool = false) { // nolint:STYLE037,STYLE038 — flat per-entry update arms (root/dep/local/global) mirror the lock schema
     var lf : LockFile
     if (is_global) {
         if (!read_global_lock_file(lf)) {
@@ -1057,7 +1061,7 @@ def cmd_build(root : string; is_global : bool = false) {
 // that `daspkg release wasm` links against, and consolidate them into <lib_dir>
 // (default <das_root>/web/output64/lib). Requires an activated emscripten SDK
 // (emcc + cmake on PATH); CI activates emsdk_env before invoking.
-def cmd_build_wasm(_root : string; lib_dir_override : string) : int { // nolint:STYLE038
+def cmd_build_wasm(_root : string; lib_dir_override : string) : int { // nolint:STYLE038 — the wasm build recipe: flat tool-invocation steps, one per stage
     let das_root = get_das_root()
     let lib_dir = empty(lib_dir_override) ? "{das_root}/web/output64/lib" : lib_dir_override
     let build_dir = "{das_root}/web/build64"
@@ -1316,7 +1320,7 @@ def private is_safe_pkg_name(name : string) : bool {
     return !(find(name, "/") >= 0 || find(name, "\\") >= 0)
 }
 
-def cmd_cleanup(root : string; force : bool; is_global : bool = false) : int { // nolint:STYLE038
+def cmd_cleanup(root : string; force : bool; is_global : bool = false) : int { // nolint:STYLE038 — flat removal checklist (modules/, lock, caches), one arm per artifact
     if (is_global) {
         if (!force) {
             to_log(LOG_ERROR, "Error: --global cleanup requires --force (removes every globally-installed daspkg package)\n")
@@ -1446,18 +1450,30 @@ def private read_release_deps(path : string; var deps : ReleaseDeps) : bool {
         to_log(LOG_ERROR, "release: cannot parse deps JSON: {error}\n")
         return false
     }
-    deps = from_JV(parsed, type<ReleaseDeps>)
+    deps = from_JV(parsed, type<ReleaseDeps>)   // nolint:PERF030 — out-param; every caller hands in a freshly declared ReleaseDeps
     return true
 }
 
 // the exact env+cmd shape llvm_tune's policy rail uses for scope tuners (the env prefix
 // leads so the line never starts with a quote — cmd.exe strips a LEADING one)
-def private release_tuner_cmd(daslang : string; ts : TuneScopeDep; tune_fast : bool) : string {
+// the one-line provenance of what a scope ships: noise verdict, mode, engine sha, when, box
+def private sidecar_provenance_line(manifest : string) : string {
+    var err = ""
+    var doc = read_json(fread(manifest), err)
+    if (doc == null) {
+        return "(no readable provenance at {manifest})"
+    }
+    let line = "noise={doc?["provenance"]?["noise"] ?? "?"} mode={doc?["provenance"]?["mode"] ?? "?"} sha={doc?["provenance"]?["engine_sha"] ?? "?"} written={doc?["provenance"]?["written"] ?? "?"} box={doc?["provenance"]?["box"] ?? "?"}"
+    delete_json(doc)
+    return line
+}
+
+def private release_tuner_cmd(daslang : string; ts : TuneScopeDep; paranoid : bool) : string {
     let win = get_platform_name() == "windows"
     let envs = (win ?
         "set \"DAS_TUNE_MODE=tune\"&& set \"DAS_TUNE_MANIFEST={ts.manifest}\"&& set \"DAS_TUNE_COMPILE_FALLBACKS={ts.fallbacks}\"&& " :
         "DAS_TUNE_MODE=tune DAS_TUNE_MANIFEST=\"{ts.manifest}\" DAS_TUNE_COMPILE_FALLBACKS=\"{ts.fallbacks}\" ")
-    let tune_args = tune_fast ? " -- --tune-fast" : ""
+    let tune_args = paranoid ? " -- --tune-paranoid" : ""
     return "{envs}\"{daslang}\" -jit \"{ts.tuner}\" -dasroot \"{get_das_root()}\"{tune_args}"
 }
 
@@ -2089,8 +2105,12 @@ def private get_daslang_path() : string {
     return get_platform_name() == "windows" ? replace(joined, "/", "\\") : joined
 }
 
-def cmd_release(root : string; out_dir : string; tune_fast = false) : int { // nolint:STYLE037
+def cmd_release(root : string; out_dir : string; paranoid = false; quick = false) : int { // nolint:STYLE037,STYLE038 — phased orchestrator sharing bundle state end to end; the real split belongs to the daspkg cleanup pass
     let release_t0 = ref_time_ticks()
+    if (paranoid && quick) {
+        to_log(LOG_ERROR, "release: --paranoid and --quick contradict — pick one\n")
+        return 1
+    }
     // Reset the patchelf availability cache so a daspkg process that releases
     // multiple bundles can pick up a patchelf install between calls.
     patchelf_state = -1
@@ -2153,14 +2173,32 @@ def cmd_release(root : string; out_dir : string; tune_fast = false) : int { // n
     // The macOS .app is wholly daspkg-owned: full wipe. A flat bundle dir is NOT — it
     // accumulates user files next to daspkg's output — so it cleans via the previous
     // release's manifest instead (empty dirs from removed deps may linger; harmless).
+    // User-owned starter files (release_include_if_missing — deployed configs the user may
+    // have edited) survive the wipe: stash before, restore after, and the if-missing copy
+    // below then sees them existing and leaves them alone.
+    var preserved_snapshots : table<string; string>
     if (is_mac_app) {
         if (fexist(app_root)) {
+            for (rel in preserve_project_files) {
+                let p = path_join(bundle_dir, rel)
+                if (fexist(p)) {
+                    preserved_snapshots[rel] = fread(p)
+                }
+            }
             force_rmdir(app_root)
         }
     } elif (fexist(bundle_dir)) {
         clean_previous_release(bundle_dir, preserve_project_files)
     }
     mkdir_rec(bundle_dir)
+    for (rel, content in keys(preserved_snapshots), values(preserved_snapshots)) {
+        let p = path_join(bundle_dir, rel)
+        mkdir_rec(dir_name(p))
+        fwrite(p, content)
+    }
+    if (!empty(preserved_snapshots)) {
+        log("  preserved {length(preserved_snapshots)} user-owned starter file(s) through the .app wipe\n")
+    }
     // Arm symbol collection for every finalize_shipped_binary below. Windows-only for now: ELF
     // carries DWARF in the binary and macOS needs .dSYM handling, so neither has a .pdb to ship.
     _symbols_dir = ""
@@ -2204,32 +2242,48 @@ def cmd_release(root : string; out_dir : string; tune_fast = false) : int { // n
         return 1
     }
     log("  build: standalone exe in {release_elapsed(build_t0)}s\n")
-    // 1.5 Build-time tuning: the deps JSON reports each [tune_scope] with per-key
-    //     completeness against the app sidecar. Run the tuners of incomplete scopes and
-    //     REBUILD, so the shipped exe bakes measured winners instead of the generic
-    //     fallback stamps ("untuned does not start" applies to release artifacts at
-    //     BUILD time — the frozen exe itself never tunes).
+    // 1.5 Build-time tuning: release ALWAYS mints — a mint is minutes, and an inherited
+    //     sidecar of unknown provenance is how a noisy race poisons every measurement that
+    //     follows. `--quick` is the ONLY mode that accepts an existing sidecar, and only a
+    //     COMPLETE one (an incomplete/stale scope mints even under --quick: the frozen exe
+    //     itself never tunes, so shipping it unmeasured is not an option).
     {
         var deps0 : ReleaseDeps
         if (read_release_deps(deps_file, deps0)) {
             var tuned_any = false
             for (ts in deps0.tune_scopes) {
-                continue if (ts.complete)
                 if (empty(ts.tuner)) {
-                    to_log(LOG_WARNING, "release: tune scope `{ts.name}` is untuned and declares no tuner — shipping fallback stamps\n")
+                    if (!ts.complete) {
+                        to_log(LOG_WARNING, "release: tune scope `{ts.name}` is untuned and declares no tuner — shipping fallback stamps\n")
+                    }
                     continue
+                }
+                if (quick && ts.complete) {
+                    log("  tune: scope `{ts.name}` inherited (--quick): {sidecar_provenance_line(ts.manifest)}\n")
+                    continue
+                }
+                if (quick && !ts.complete) {
+                    log("  tune: scope `{ts.name}` is incomplete — minting despite --quick\n")
+                } elif (ts.complete) {
+                    log("  tune: scope `{ts.name}` re-mints (release always mints; --quick inherits)\n")
                 }
                 log("  tune: scope `{ts.name}` -> {ts.manifest}\n")
                 let tune_t0 = ref_time_ticks()
                 var tout : string
-                let trc = run_cmd(release_tuner_cmd(daslang, ts, tune_fast), tout)
+                let trc = run_cmd(release_tuner_cmd(daslang, ts, paranoid), tout)
                 let tune_seconds = release_elapsed(tune_t0)
                 if (trc != 0) {
-                    to_log(LOG_WARNING, "release: tuner for scope `{ts.name}` failed after {tune_seconds}s (rc={trc}) — shipping fallback stamps\n{tout}\n")
-                } else {
-                    log("  tune: scope `{ts.name}` finished in {tune_seconds}s\n")
-                    tuned_any = true
+                    // a nonzero tuner is a REFUSAL (noise gate, validation) or a failure —
+                    // either way the winners were not measured, and unmeasured winners do
+                    // not ship. DAS_TUNE_NOISE_OVERRIDE mints anyway (stamped).
+                    to_log(LOG_ERROR, "release: tuner for scope `{ts.name}` refused/failed after {tune_seconds}s (rc={trc}) — not shipping unmeasured winners; quiet the box and re-run, or --quick to inherit a complete sidecar\n{tout}\n")
+                    if (fexist(deps_file)) {
+                        remove(deps_file)
+                    }
+                    return 1
                 }
+                log("  tune: scope `{ts.name}` finished in {tune_seconds}s — ships {sidecar_provenance_line(ts.manifest)}\n")
+                tuned_any = true
             }
             if (tuned_any) {
                 log("  rebuild: baking the fresh tune winners into the exe\n")
@@ -2458,20 +2512,20 @@ def cmd_release(root : string; out_dir : string; tune_fast = false) : int { // n
             return 1
         }
         log("  wrote: Contents/Info.plist (CFBundleIdentifier={bundle_id})\n")
-        log("Released to: {app_root} ({release_elapsed(release_t0)}s)\n")
-    } else {
-        let mbody = build_string() $(var writer) {
-            for (s in shipped) {
-                writer |> write(s)
-                writer |> write("\n")
-            }
-        }
-        if (!fwrite(path_join(bundle_dir, RELEASE_MANIFEST), mbody)) {
-            to_log(LOG_ERROR, "release: cannot write {RELEASE_MANIFEST}\n")
-            return 1
-        }
-        log("Released to: {bundle_dir} ({release_elapsed(release_t0)}s)\n")
     }
+    // every release writes the ownership manifest — the .app too: the wipe path does not
+    // consult it, but tooling and the migration semantics read one record everywhere
+    let mbody = build_string() $(var writer) {
+        for (s in shipped) {
+            writer |> write(s)
+            writer |> write("\n")
+        }
+    }
+    if (!fwrite(path_join(bundle_dir, RELEASE_MANIFEST), mbody)) {
+        to_log(LOG_ERROR, "release: cannot write {RELEASE_MANIFEST}\n")
+        return 1
+    }
+    log("Released to: {is_mac_app ? app_root : bundle_dir} ({release_elapsed(release_t0)}s)\n")
     return 0
 }
 
@@ -2603,7 +2657,7 @@ def private ensure_external_wasm_archives(pkg_dir, wasm_lib_dir : string; var bu
 }
 
 // Build one app: cross-compile → discover modules → emcc-link → stage assets.
-def private release_one_wasm_app(root, out_dir, app_name, main_script : string; // nolint:STYLE037
+def private release_one_wasm_app(root, out_dir, app_name, main_script : string; // nolint:STYLE037,STYLE038 — flat per-app wasm release steps + their error arms
                                  wasm_lib_dir, runtime_archive, shell_path : string;
                                  include_globs, exclude_globs : array<string>) : int {
     if (!is_safe_pkg_name(app_name)) {

@@ -1,5 +1,5 @@
 options gen2
-options stack = 65536   // the forward/prefill chain + generated kernels need more than the 16K default on arm64
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options fast_math = true   // ggml-parity FP laxity (non-bit-exact, ~+10%); tests stay bit-exact
 
 require dasllama/dasllama       // the public facade: engine + chat layer + audio tower
@@ -18,7 +18,7 @@ require math
 //   ultravox:        <|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n[audio]{prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n
 //   voxtral:         <s>[INST][BEGIN_AUDIO][audio]{prompt}[/INST]
 //
-//   bin/daslang -jit examples/dasLLAMA/audio.das -- <decoder.gguf> <mmproj.gguf> <audio-file> [prompt]
+//   bin/daslang -jit examples/dasLLAMA/audio_chat.das -- <decoder.gguf> <mmproj.gguf> <audio-file> [prompt]
 
 let DEFAULT_PROMPT = "What is being said in this audio?"
 let N_GEN = 128l
@@ -67,7 +67,7 @@ def main {
         }
     }
     if (gguf_at < 0 || gguf_at + 2 >= length(cmd)) {
-        print("usage: daslang -jit examples/dasLLAMA/audio.das -- <decoder.gguf> <mmproj.gguf> <audio-file> [prompt]\n")
+        print("usage: daslang -jit examples/dasLLAMA/audio_chat.das -- <decoder.gguf> <mmproj.gguf> <audio-file> [prompt]\n")
         return
     }
     let model_path = cmd[gguf_at]

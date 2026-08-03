@@ -1,16 +1,16 @@
 options gen2
 options persistent_heap   // + explicit deletes: the model frees before the process exits
-options stack = 131072   // by-value Sessions in the kq + quantized-KV arms (test_batch_decode sizing)
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — pulls the engine + arch registrations + (on Apple) the metal prefill override
 require dasllama/dasllama_math   // set_wscale_f16 — the resident path reads the f32 scale plane
 require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor transform
-require ?das_metal dasllama/dasllama_metal_prefill  // nolint:STYLE030 — min-npos setter + stats + the shutdown/leak rail
-require ?das_metal dasllama/dasllama_metal_llama  // nolint:STYLE030 — decode shutdown (the kq/quantized-KV arms touch the decode driver)
-require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — metal_live_object_count for the leak gate
+require ?das_metal dasllama/dasllama_metal_prefill  // min-npos setter + stats + the shutdown/leak rail
+require ?das_metal dasllama/dasllama_metal_decode  // decode shutdown (the kq/quantized-KV arms touch the decode driver)
+require ?das_metal metal/das_metal_boost  // metal_live_object_count for the leak gate
 require daslib/jobque_boost
-require daslib/fio  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
+require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
 require strings
 require math
 require _model_tier
@@ -26,8 +26,8 @@ def private same(a, b : array<int64>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (x, y in a, b) {
+        if (x != y) {
             return false
         }
     }
@@ -120,7 +120,7 @@ def private blob_twin(t : T?; path : string; seq_cap : int64) : Model {
 }
 
 [test]
-def test_metal_prefill_parity(t : T?) {
+def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, one t |> run cell per arm
     t |> run("GPU-resident prefill == CPU control, 40-token greedy continuation (Llama-3.2-1B Q8)") <| @(t : T?) {
         if (!family_on(t, "llama")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -136,7 +136,7 @@ def test_metal_prefill_parity(t : T?) {
             let prior_backend = active_kernel_backend()     // (both exit paths run through the restore)
             set_wscale_f16(false)       // the resident path reads the f32 scale plane (declines on s16)
             pin_kernel_backend("portable")  // ...and ROW-MAJOR weights — a repack backend's layout is unreadable (5c donor contract)
-            var tr <- load_model(path, QuantMode.q8)
+            var tr <- load_model_(path, QuantMode.q8)
             if (tr.config.seq_len > 2048l) {
                 tr.config.seq_len = 2048l
             }
@@ -173,7 +173,7 @@ def test_metal_prefill_parity(t : T?) {
             if (arm_on(t, "s16")) {
                 set_wscale_f16(true)
                 pin_kernel_backend("portable")
-                var tr16 <- load_model(path, QuantMode.q8)
+                var tr16 <- load_model_(path, QuantMode.q8)
                 if (tr16.config.seq_len > 2048l) {
                     tr16.config.seq_len = 2048l
                 }
@@ -203,7 +203,7 @@ def test_metal_prefill_parity(t : T?) {
             } elif (stat(kpath).is_valid) {
                 set_wscale_f16(false)
                 pin_kernel_backend("portable")
-                var trk <- load_model(kpath, QuantMode.q8)
+                var trk <- load_model_(kpath, QuantMode.q8)
                 if (trk.config.seq_len > 2048l) {
                     trk.config.seq_len = 2048l
                 }
@@ -234,7 +234,7 @@ def test_metal_prefill_parity(t : T?) {
             if (arm_on(t, "cont")) {
                 set_wscale_f16(false)
                 pin_kernel_backend("portable")
-                var trc <- load_model(path, QuantMode.q8)
+                var trc <- load_model_(path, QuantMode.q8)
                 if (trc.config.seq_len > 2048l) {
                     trc.config.seq_len = 2048l
                 }
@@ -274,7 +274,7 @@ def test_metal_prefill_parity(t : T?) {
                 if (model_available(t, path8)) {
                     set_wscale_f16(false)
                     pin_kernel_backend("portable")
-                    var tr8 <- load_model(path8, QuantMode.q8)
+                    var tr8 <- load_model_(path8, QuantMode.q8)
                     if (tr8.config.seq_len > 2048l) {
                         tr8.config.seq_len = 2048l
                     }
@@ -303,7 +303,7 @@ def test_metal_prefill_parity(t : T?) {
             if (arm_on(t, "qkv")) {
                 set_wscale_f16(false)
                 pin_kernel_backend("portable")
-                var trq <- load_model(path, QuantMode.q8)
+                var trq <- load_model_(path, QuantMode.q8)
                 if (trq.config.seq_len > 2048l) {
                     trq.config.seq_len = 2048l
                 }

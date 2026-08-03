@@ -1,11 +1,12 @@
 options gen2
 options persistent_heap
-options stack = 131072
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require daslib/fio
 require math
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration
+require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require dasllama/dasllama_math
+require dasllama/dasllama_kv_codec  // quantize_tq4kv_row/cvt_tq4kv_to_f32 — the codec under probe
 require dasllama/dasllama_tokenizer
 require llvm/daslib/f16_cvt
 
@@ -78,17 +79,18 @@ def score_mixed(src : float const?; kvd, hs, h, npast : int64; order : array<int
 }
 
 def pair_order_from(scores : array<double>; np : int64; var order : array<int>) {
-    var porder <- [for (p in range(int(np))); p]
+    let n = int(np)
+    var porder <- [for (p in range(n)); p]
     porder |> sort() $(oa, ob) => scores[oa] > scores[ob]
-    for (p in range64(np)) {
-        order[2l * p] = 2 * porder[int(p)]
-        order[2l * p + 1l] = 2 * porder[int(p)] + 1
+    for (p in range(n)) {
+        order[2 * p] = 2 * porder[p]
+        order[2 * p + 1] = 2 * porder[p] + 1
     }
     delete porder
 }
 
 [export]
-def main {
+def main {   // nolint:STYLE037,STYLE038 — two stats passes over (layer, head, side, domain) sharing every accumulator
     let env = get_env_variable("DASLLAMA_MODELS_DIR")
     let mdir = empty(env) ? "D:/Work/llama.cpp/models/" : env
     let path = path_join(mdir, "SmolLM2-135M-Instruct-Q8_0.gguf")
@@ -124,8 +126,8 @@ def main {
     let NSLOT = nl * nh * 2l
     var pe : array<double>       // [slot * ND + d] * np + p
     var pt : array<double>       // per-slot per-domain totals
-    pe |> resize(int(NSLOT * int64(ND) * np))
-    pt |> resize(int(NSLOT * int64(ND)))
+    pe |> resize(NSLOT * int64(ND) * np)
+    pt |> resize(NSLOT * int64(ND))
     unsafe {
         for (d in range64(int64(ND))) {
             let s & = sessions[int(d)]
@@ -171,13 +173,13 @@ def main {
     var seg : array<float>
     var dq : array<float>
     var blk : array<uint8>
-    gsc |> resize(int(np))
-    osc |> resize(int(np))
-    gorder |> resize(int(hs))
-    oorder |> resize(int(hs))
-    seg |> resize(int(hs))
-    dq |> resize(int(hs))
-    blk |> resize(int(hs / 32l * 18l))
+    gsc |> resize(np)
+    osc |> resize(np)
+    gorder |> resize(hs)
+    oorder |> resize(hs)
+    seg |> resize(hs)
+    dq |> resize(hs)
+    blk |> resize(hs / 32l * 18l)
     var ge2 : double[10]   // [d * 2 + side]
     var oe2 : double[10]
     var gpw : double[10]

@@ -12,10 +12,10 @@ options gen2
 //
 // Interleaved rounds (config loop inside the round loop) — drift lands on every config evenly.
 
-require dasllama/dasllama_common // nolint:STYLE030 — [init]-only: registers the q8 kernel backends
+require dasllama/dasllama_common // [init]-only: registers the q8 kernel backends
 require dasllama/dasllama_math
 require dasllama/dasllama_audio
-require dasllama/dasllama_quant
+require dasllama/dasllama_convert
 require dasllama/dasllama_par
 require daslib/jobque_boost
 require daslib/clargs
@@ -84,24 +84,24 @@ def fill_sin(var a : array<float>; scale, step : float) {
 def build_case(c : GemmCase; var cd : CaseData) {
     let nb = c.n / 32l
     var w : array<float>
-    w |> resize(int(c.n * c.d))
+    w |> resize(c.n * c.d)
     fill_sin(w, 0.5, 0.173)
-    cd.q |> resize(int(c.n * c.d))
-    cd.s |> resize(int(c.d * nb))
+    cd.q |> resize(c.n * c.d)
+    cd.s |> resize(c.d * nb)
     quantize_q8_0_into(w, c.n * c.d, cd.q, cd.s, 0l, 0l)
     repack_q8q8_weight(cd.q, cd.s, 0l, c.n, c.d)
     delete w
     // one activation row, quantized once, replicated m times (timing is data-independent)
     var x : array<float>
-    x |> resize(int(c.n))
+    x |> resize(c.n)
     fill_sin(x, 1.0, 0.377)
     var xq1 : array<int8>
     var xs1 : array<float>
-    xq1 |> resize(int(c.n))
-    xs1 |> resize(int(nb))
+    xq1 |> resize(c.n)
+    xs1 |> resize(nb)
     quantize_q8_0_into(x, c.n, xq1, xs1, 0l, 0l)
-    cd.xq |> resize(int(c.m * c.n))
-    cd.xs |> resize(int(c.m * nb))
+    cd.xq |> resize(c.m * c.n)
+    cd.xs |> resize(c.m * nb)
     for (t in range64(c.m)) {
         for (i in range64(c.n)) {
             cd.xq[t * c.n + i] = xq1[i]
@@ -110,7 +110,7 @@ def build_case(c : GemmCase; var cd : CaseData) {
             cd.xs[t * nb + i] = xs1[i]
         }
     }
-    cd.y |> resize(int(c.m * c.d))
+    cd.y |> resize(c.m * c.d)
     let macs = c.n * c.d * c.m
     cd.reps = int(clamp(4_000_000_000l / macs, 1l, 400l))
     delete x
@@ -279,10 +279,10 @@ struct StageWeights {
 
 def build_weight(n, d : int64; step : float; var sw : StageWeights) {
     var w : array<float>
-    w |> resize(int(n * d))
+    w |> resize(n * d)
     fill_sin(w, 0.5, step)
-    sw.q |> resize(int(n * d))
-    sw.s |> resize(int(n * d / 32l))
+    sw.q |> resize(n * d)
+    sw.s |> resize(n * d / 32l)
     quantize_q8_0_into(w, n * d, sw.q, sw.s, 0l, 0l)
     repack_q8q8_weight(sw.q, sw.s, 0l, n, d)
     delete w
@@ -317,7 +317,7 @@ def run_attn_stage(rounds : int; tt : int64) {
         build_weight(d, d, 0.171 + 0.001 * float(i), wts[i])
     }
     var blob : array<float>   // LN gamma at 0, beta at d
-    blob |> resize(int(2l * d))
+    blob |> resize(2l * d)
     fill_sin(blob, 1.0, 0.0173)
     var x : array<float>
     var xb : array<float>
@@ -326,24 +326,24 @@ def run_attn_stage(rounds : int; tt : int64) {
     var vv : array<float>
     var posl : array<float>
     var pos_emb : array<float>
-    x |> resize(int(tt * d))
-    xb |> resize(int(tt * d))
-    qq |> resize(int(tt * d))
-    kk |> resize(int(tt * d))
-    vv |> resize(int(tt * d))
-    posl |> resize(int(ww * d))
-    pos_emb |> resize(int(ww * d))
+    x |> resize(tt * d)
+    xb |> resize(tt * d)
+    qq |> resize(tt * d)
+    kk |> resize(tt * d)
+    vv |> resize(tt * d)
+    posl |> resize(ww * d)
+    pos_emb |> resize(ww * d)
     fill_sin(x, 1.0, 0.377)
     fill_sin(pos_emb, 1.0, 0.531)
     var xqi : array<int8>
     var xsi : array<float>
-    xqi |> resize(int(tt * d))
-    xsi |> resize(int(tt * nb))
+    xqi |> resize(tt * d)
+    xsi |> resize(tt * nb)
     // the layer-invariant pos image requants once per encode in the engine — hoisted here too
     var posq : array<int8>
     var poss : array<float>
-    posq |> resize(int(ww * d))
-    poss |> resize(int(ww * nb))
+    posq |> resize(ww * d)
+    poss |> resize(ww * nb)
     asr_requant_rows_q8(pos_emb, d, ww, posq, poss)
 
     let names <- ["ln     ", "requant", "q      ", "k      ", "v      ", "pos    "]
@@ -374,8 +374,8 @@ def run_attn_stage(rounds : int; tt : int64) {
             t = lap(acc, 5, t)
         }
         if (rnd > 0) {
-            for (i in range(length(best))) {
-                best[i] = min(best[i], acc[i])
+            for (b, a in best, acc) {
+                b = min(b, a)
             }
         }
     }
@@ -394,19 +394,19 @@ def run_ffn_stage(rounds : int; tt : int64) {
         build_weight(d4, d, 0.271 + 0.001 * float(l), wts[l * 2 + 1])
     }
     var blob : array<float>
-    blob |> resize(int(2l * d))
+    blob |> resize(2l * d)
     fill_sin(blob, 1.0, 0.0173)
     var x : array<float>
     var xb : array<float>
     var h : array<float>
-    x |> resize(int(tt * d))
-    xb |> resize(int(tt * d))
-    h |> resize(int(tt * d4))
+    x |> resize(tt * d)
+    xb |> resize(tt * d)
+    h |> resize(tt * d4)
     fill_sin(x, 1.0, 0.377)
     var xqi : array<int8>
     var xsi : array<float>
-    xqi |> resize(int(tt * d4))   // shared requant scratch sized for the 4d image (engine: st.xqi)
-    xsi |> resize(int(tt * d4 / 32l))
+    xqi |> resize(tt * d4)   // shared requant scratch sized for the 4d image (engine: st.xqi)
+    xsi |> resize(tt * d4 / 32l)
 
     let names <- ["ln     ", "rq d   ", "ff1a   ", "silu4  ", "rq 4d  ", "ff1b   ", "resid  "]
     var best : array<double>
@@ -440,8 +440,8 @@ def run_ffn_stage(rounds : int; tt : int64) {
             t = lap(acc, 6, t)
         }
         if (rnd > 0) {
-            for (i in range(length(best))) {
-                best[i] = min(best[i], acc[i])
+            for (b, a in best, acc) {
+                b = min(b, a)
             }
         }
     }
@@ -456,7 +456,7 @@ def run_silu_sweep(rounds : int; tt : int64) {
     let dimg = 4l * DD
     let n = tt * dimg
     var h : array<float>
-    h |> resize(int(n))
+    h |> resize(n)
     fill_sin(h, 2.0, 0.377)
     let reps = int(clamp(200_000_000l / n, 1l, 400l))
     let lane_grid = [1, 2, 4, 6, 8]

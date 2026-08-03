@@ -9,7 +9,8 @@ options persistent_heap
 // floor); attn_qk/av_mm = 896 (f32 source values live across the staging barrier).
 require metal/das_metal_boost
 require dasllama/dasllama_metal_prefill
-require dasllama/dasllama_math_metal
+require dasllama/dasllama_metal_kernels
+require dasllama/dasllama_metal_gemm
 require strings
 
 def check(dev; name, src, entry : string; fastmath : bool) {

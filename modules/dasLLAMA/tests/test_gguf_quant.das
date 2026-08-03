@@ -1,6 +1,7 @@
 options gen2
 
 require dastest/testing_boost public
+require dasllama/dasllama_convert  // the codec layer under test — direct require pins the new module API
 require dasllama/dasllama_gguf
 require math
 

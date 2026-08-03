@@ -6,16 +6,20 @@ module dasllama_common shared public
 require daslib/fio
 require dasllama/dasllama_env  // the shared typed env readers + the knob registry
 require dasllama/dasllama_config  // DlimConfiguration — this module registers the cpu/metal sources
+require dasllama/dasllama_kqformat public   // KqFmt + kq_sb + the stride truth — re-exported so every requirer keeps seeing the enum
+require dasllama/dasllama_rope       // the RoPE angle/table generation (Model-facing wrappers below pass config params in)
+require dasllama/dasllama_gpu_tier   // the device-cooperation seam (hooks the loader/dispatch arms call)
 require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs and false-flags this as unused
 require dasllama/dasllama_math
+require dasllama/dasllama_kv_codec public  // the KV-cache codec families — kv_store_row/kv_load_row/kv_dot/kv_axpy dispatch into them
+require dasllama/dasllama_convert   // cvt_f32_to_f16/cvt_f16_to_f32 — the f16 rows (wscale plane + the f16 KV codec)
 require dasllama/dasllama_math_default  // registers the portable Q8·Q8 backend at [init] (the fallback everywhere)
 require dasllama/dasllama_math_aarch64_neon  // registers the arm64 SDOT Q8·Q8 backend at [init]; no-op off-ARM
-require ?llvm/daslib/llvm_tune dasllama/dasllama_math_gen  // nolint:STYLE030 — [init]-only: registers "arm64-gen" (the generated GEMM family, arm64 load-select tier). PATH guard: the module hard-requires llvm_tune, so it loads exactly when dasLLVM is mounted
+require ?llvm/daslib/llvm_tune dasllama/dasllama_math_gen  // [init]-only: registers "arm64-gen" (the generated GEMM family, arm64 load-select tier). PATH guard: the module hard-requires llvm_tune, so it loads exactly when dasLLVM is mounted
 require ?llvm/daslib/llvm_tune llvm/daslib/llvm_tune public  // re-export ONLY llvm_tune (not math_gen's whole public surface — its jobque_boost would flood requirers with ambiguities): the auto-policy pass and tune_status reach every app that requires this module
-require ?das_metal dasllama/dasllama_math_metal  // nolint:STYLE030 — [init]-only: registers "metal" (the GPU prefill-GEMM batch donor). STRICT guard: the C++ das_metal module exists on Apple builds only, so non-Apple lanes never compile the Metal driver
-require ?das_accelerate dasllama/dasllama_math_accelerate  // nolint:STYLE030 — [init]-only: arms the "+AMX" float-batch override when DASLLAMA_ACCEL=1. Same Apple-only guard shape as the metal driver
-require ?vulkan dasllama/dasllama_math_vulkan  // nolint:STYLE030 — [init]-only: registers "vulkan" (the GPU tier; stage-0 skeleton, kernels land with the offload rail). STRICT guard: the C++ vulkan module is linked only where the dasVulkan package is installed, so CI lanes without it never compile the Vulkan driver
-require dasllama/dasllama_quant
+require ?das_metal dasllama/dasllama_metal_gemm  // [init]-only: registers "metal" (the GPU prefill-GEMM batch donor). STRICT guard: the C++ das_metal module exists on Apple builds only, so non-Apple lanes never compile the Metal driver
+require ?das_accelerate dasllama/dasllama_math_accelerate  // [init]-only: arms the "+AMX" float-batch override when DASLLAMA_ACCEL=1. Same Apple-only guard shape as the metal driver
+require ?vulkan dasllama/dasllama_math_vulkan  // [init]-only: registers "vulkan" (the GPU tier; stage-0 skeleton, kernels land with the offload rail). STRICT guard: the C++ vulkan module is linked only where the dasVulkan package is installed, so CI lanes without it never compile the Vulkan driver
 require dasllama/dasllama_gguf
 require dasllama/dasllama_gemm_schema  // kq_qsb/kq_ssb — the fmt-id plane strides
 require dasllama/dasllama_tokenizer  // Model owns its tokenizer; load_model populates it
@@ -42,24 +46,6 @@ enum QuantMode {
     q8
     q4_0
 }
-
-//! Per-weight storage format under a q8-mode load with native planes: q8 = qblob/qscales;
-//! k4/k5/k6/q40 = superblock plane pairs (mixed PER TENSOR); q51 = native Q5_1 per-32 planes;
-//! q8n = q8 as gguf-native 34B interleaved blocks (ONE plane, the cm2 GPU-tier tag, never disk).
-enum KqFmt : uint8 {
-    q8
-    k4
-    k5
-    k6
-    q40
-    q51
-    q8n
-}
-
-// The superblock-lattice formats (Q8_K-form activations, % 256 rows, repack + stamped kq
-// kernels). q51 deliberately fails this: it rides per-32 planes with Q8_0-form activations —
-// a `fmt != KqFmt.q8` test no longer implies the kq lattice; branch on kq_sb where it does.
-def private kq_sb(f : KqFmt) : bool => f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.q40
 
 //! FFN gate activation: silu = SwiGLU (Llama family), gelu = GeGLU (Gemma), swiglu_oai = the
 //! clamped SwiGLU with +1 on the up branch (gpt-oss).
@@ -104,11 +90,6 @@ enum KVDtype {
     q8_0
     tq4
 }
-
-// tq4 cache-pointer dispatch tag: the read seam overloads on the cache pointer's element type, and
-// q8_0 already owns `uint8 const?` — a distinct newtype over uint8 gives tq4 its own overload
-// identity at zero runtime cost (byte-strided arithmetic, ABI identical to uint8).
-typedef distinct TQ4B = uint8
 
 //! Model hyperparameters (the 7-int checkpoint header plus derived sizes).
 struct Config {
@@ -251,6 +232,48 @@ def register_ple_gpu_gate(fn : PleGpuGateFn) {
     g_ple_gpu_gate_set = true
 }
 
+// ===== gemma-4 PLE pre-step hooks (registered by dasllama_ple at [init]) =====
+// PLE needs Model/Session, so it requires this module back and cannot be required from here — the
+// forward path reaches its per-pass pre-step through these hooks, and the umbrella breaks the cycle.
+typedef PlePreDecodeFn = function<(t : Model; var s : Session; token : int64) : void>
+typedef PlePrePrefillFn = function<(t : Model; var s : Session; tokens : array<int64>; npos : int64) : void>
+typedef PlePrePrefillPadFn = function<(t : Model; var s : Session; npos : int64) : void>
+
+var private g_ple_pre_decode : PlePreDecodeFn
+var private g_ple_pre_prefill : PlePrePrefillFn
+var private g_ple_pre_prefill_pad : PlePrePrefillPadFn
+
+def register_ple_pre_decode(fn : PlePreDecodeFn) {
+    g_ple_pre_decode = fn
+}
+def register_ple_pre_prefill(fn : PlePrePrefillFn) {
+    g_ple_pre_prefill = fn
+}
+def register_ple_pre_prefill_pad(fn : PlePrePrefillPadFn) {
+    g_ple_pre_prefill_pad = fn
+}
+
+// Every call site is behind has_ple(config), so an unset rail means this program was built without
+// dasllama/dasllama_ple yet loaded a model that needs it — say which require is missing, loudly.
+def private ple_rail_missing() {
+    panic("dasLLAMA: this model needs the PLE rail — the program must require dasllama/dasllama_ple")
+}
+
+def private ple_pre_decode(t : Model; var s : Session; token : int64) {
+    if (g_ple_pre_decode == null) ple_rail_missing()
+    invoke(g_ple_pre_decode, t, s, token)
+}
+
+def ple_pre_prefill(t : Model; var s : Session; tokens : array<int64>; npos : int64) {
+    if (g_ple_pre_prefill == null) ple_rail_missing()
+    invoke(g_ple_pre_prefill, t, s, tokens, npos)
+}
+
+def ple_pre_prefill_pad(t : Model; var s : Session; npos : int64) {
+    if (g_ple_pre_prefill_pad == null) ple_rail_missing()
+    invoke(g_ple_pre_prefill_pad, t, s, npos)
+}
+
 // set by an override that ALSO produced the last position's logits; reset before every invocation
 var private g_prefill_logits_done = false
 
@@ -269,6 +292,23 @@ typedef DecodeOverrideFn = function<(t : Model; var s : Session; token, pos : in
 //! The batched-decode twin, invoked in eval_batch_ after the embed + per-row rope tables: on true
 //! every row's KV is stored and ws.scr.x_b holds the final residuals. The CPU tail (final rms,
 //! classifier, suppress, n_past++) stays with the caller — the override NEVER touches n_past.
+
+//! Caller-owned scratch for eval_batch, reused across calls (buffers grow to the largest B seen).
+//! `scr` wraps a cache-less Session so the batched prefill blocks (mm_b / rms_batch / ffn_prefill)
+//! apply unchanged; per call it impersonates the batch's cache geometry (dtypes + byte prefixes).
+struct BatchWorkspace {
+    scr : Session             // *_b scratch, rope tables, ple scratch — no KV cache / sampler state
+    positions : array<int64>  // row i's absolute position (sessions[i].n_past at entry)
+    logits_b : array<float>   // B x vocab classifier output, scattered per session after softcap
+    // row i's cache base pointers (into sessions[i]; valid per call). @do_not_delete is load-bearing:
+    // delete of a plain array<T?> CASCADES to the pointees, which would free the sessions' cache blobs
+    @do_not_delete kbase : array<uint8?>
+    @do_not_delete vbase : array<uint8?>
+    @do_not_delete lrow : array<float?>   // row i's sessions[i].logits base (the threaded scatter)
+    runs_b : array<KVRun>     // per-row physical runs, flattened rows × max-runs (flat rows: 1 each)
+    nrun_b : array<int64>     // per-row run count
+}
+
 typedef BatchDecodeOverrideFn = function<(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool>
 
 // The decode-override registries (see DecodeOverrideFn / BatchDecodeOverrideFn). Name-keyed like
@@ -364,29 +404,75 @@ def private layout_hooks_check {
     }
 }
 
-def private repack_q8_weights(var t : Model) {
+def layout_repack_q8(var t : Model) {
     layout_hooks_check()
     invoke(g_layout_repack_q8, t)
 }
 
-def private repack_kq_weights(var t : Model) {
+def layout_repack_kq(var t : Model) {
     layout_hooks_check()
     invoke(g_layout_repack_kq, t)
 }
 
-def private repack_mx4_stacks(var t : Model) {
+def layout_repack_mx4(var t : Model) {
     layout_hooks_check()
     invoke(g_layout_repack_mx4, t)
 }
 
-def private repack_q51_stacks(var t : Model) {
+def layout_repack_q51(var t : Model) {
     layout_hooks_check()
     invoke(g_layout_repack_q51, t)
 }
 
-// ===== the vulkan-flavor image bake (driven by dasllama_image) =====
-// Collect: a normal load's GPU walk appends every gather's output to the bake blob; slice: a
-// flavor load's walk skips the transforms and copies the mapped blob back, plan-checked.
+// The GPU walk's gather half of the same hook contract. The residency rail intercepts each gather
+// for the flavor bake before calling through, so these stay thin and the hook globals stay private.
+
+def layout_gather_stack(t : Model; woff : int64; n, rows, slice_rows : int64; mr, kgroup, wbias : int64;
+                        var wq : array<uint8>; var ws : array<uint8>) {
+    layout_hooks_check()
+    invoke(g_layout_gather, t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
+}
+
+def layout_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_rows : int64;
+                           repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
+    layout_hooks_check()
+    invoke(g_layout_gather_kq, t, fmt, woff, n, rows, slice_rows, repacked, mr, wq, ws)
+}
+
+def layout_gather_stack_q8n(t : Model; woff : int64; n, rows, slice_rows : int64;
+                            mr, kgroup, wbias : int64; var wq : array<uint8>) {
+    layout_hooks_check()
+    invoke(g_layout_gather_q8n, t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq)
+}
+
+// ===== whole-model GPU residency hook (registered by dasllama_gpu_resident at [init]) =====
+
+// The residency rail requires this module back for Model, so the loader reaches its upload walk
+// through this slot. Unset is NORMAL and means no-op: a program that never requires the rail has
+// no GPU residency to arm, unlike the layout hooks, which are mandatory and panic.
+
+typedef GpuUploadResidentFn = function<(t : Model) : void>
+
+var private g_gpu_upload_resident : GpuUploadResidentFn
+
+def register_gpu_upload_resident(fn : GpuUploadResidentFn) {
+    g_gpu_upload_resident = fn
+}
+
+def gpu_upload_resident(t : Model) {
+    if (g_gpu_upload_resident == null) {
+        // A tier CAN arm without the rail — this module requires ?vulkan itself, the rail only from
+        // the transformer umbrella. Silently skipping the upload there would leave a model the tier
+        // believes it serves with nothing on the device, so say so instead.
+        if (moe_gpu_tier_installed()) {
+            panic("dasLLAMA: a GPU tier is installed but no residency rail registered — the program must require dasllama/dasllama_gpu_resident")
+        }
+        return
+    }
+    invoke(g_gpu_upload_resident, t)
+}
+
+// ===== the GPU-flavor bake plan record (Model.vkplan's element; built by dasllama_gpu_resident) =====
 
 //! One baked gather of the vulkan flavor's plan — walk order, offsets into Model.vkblob.
 //! `role` records WHICH walk stage produced it (VkBakeRole) — the trim pass (P3) and the
@@ -401,306 +487,6 @@ struct VkPlanEntry {
     wq_bytes : int64
     ws_off : int64
     ws_bytes : int64
-}
-
-//! The upload-walk stage a baked gather belongs to — set by the walk, stamped per entry.
-enum VkBakeRole {
-    none
-    cls
-    dense
-    shexp
-    dn
-    attn
-    qkv
-    expert          //!< resident expert stack (VRAM)
-    expert_stream   //!< streamed expert stack (pinned mirror; CPU planes stay — decode runs there)
-    arena           //!< resident-driver arena plane (dense models)
-}
-
-enum private VkBakeMode {
-    off
-    collect
-    slice
-}
-
-var private g_vk_bake = VkBakeMode.off
-var private g_vk_bake_blob : array<uint8>
-var private g_vk_bake_plan : array<VkPlanEntry>
-var private g_vk_bake_cursor = 0l
-var private g_vk_bake_role = VkBakeRole.none
-
-// P2 imported mirrors: the mapped-blob window of each sliced gather, keyed woff*8+fmt (the
-// marks convention) — the stream-mirror path imports these instead of copying to pinned RAM
-struct private SliceWindow {
-    wq : void?
-    ws : void?
-    wq_bytes : int64
-    ws_bytes : int64
-}
-
-var private g_vk_slice_windows : table<int64; SliceWindow>
-
-def private vk_slice_window_provider(woff : int64; fmt : int) : MoeGpuSliceWindow {
-    let k = woff * 8l + int64(fmt)
-    if (!key_exists(g_vk_slice_windows, k)) {
-        return default<MoeGpuSliceWindow>
-    }
-    unsafe {
-        let w & = g_vk_slice_windows[k]
-        return (wq = w.wq, ws = w.ws, wqb = w.wq_bytes, wsb = w.ws_bytes)
-    }
-}
-
-//! The upload walk declares its current stage here (collect stamps it, slice verifies it).
-def vulkan_bake_role(r : VkBakeRole) {
-    g_vk_bake_role = r
-}
-
-//! Arm collection for the next model load's GPU walk (the vulkan-flavor bake).
-def vulkan_bake_begin {
-    g_vk_bake = VkBakeMode.collect
-    g_vk_bake_role = VkBakeRole.none
-    g_vk_bake_blob |> clear()
-    g_vk_bake_plan |> clear()
-}
-
-//! Move the collected planes into the model and disarm; false = nothing collected (no GPU walk ran).
-def vulkan_bake_take(var t : Model) : bool {
-    g_vk_bake = VkBakeMode.off
-    if (empty(g_vk_bake_plan)) {
-        delete g_vk_bake_blob
-        return false
-    }
-    t.vkblob <- g_vk_bake_blob
-    t.vkplan <- g_vk_bake_plan
-    return true
-}
-
-//! Arm slicing for a mapped vulkan-flavor load: the walk reads t.vkblob instead of gathering.
-def vulkan_bake_slice_begin {
-    g_vk_bake = VkBakeMode.slice
-    g_vk_bake_role = VkBakeRole.none
-    g_vk_bake_cursor = 0l
-    g_vk_slice_windows |> clear()
-}
-
-//! Disarm after a successful flavor load; a partially-consumed plan means the walk diverged
-//! (the slicer already declined to live gathers — correct, just slower) and is worth a rebake.
-def vulkan_bake_slice_end(t : Model) {
-    if (g_vk_bake != VkBakeMode.off && g_vk_bake_cursor != long_length(t.vkplan)) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan image: the GPU walk consumed {g_vk_bake_cursor} of {length(t.vkplan)} baked gathers — the image is stale for this run's shape, consider rebaking\n")
-    }
-    g_vk_bake = VkBakeMode.off
-}
-
-//! Disarm without verification (a flavor-load attempt that never ran the walk).
-def vulkan_bake_disarm {
-    g_vk_bake = VkBakeMode.off
-}
-
-def private vk_bake_append(a : array<uint8>) : int64 {
-    // 4KB-aligned starts (import windows); long_ forms — the blob crosses the int32 array rail
-    let off = (long_length(g_vk_bake_blob) + 4095l) / 4096l * 4096l
-    let abytes = long_length(a)
-    let need = off + abytes
-    // growth capped at 2GB steps past 4GB — doubling a multi-GB blob wastes up to half its size
-    if (long_capacity(g_vk_bake_blob) < need) {
-        let cap = long_capacity(g_vk_bake_blob)
-        let grown = cap < 4_294_967_296l ? cap * 2l : cap + 2_147_483_648l
-        g_vk_bake_blob |> reserve(max(need, grown))
-    }
-    g_vk_bake_blob |> resize(need)
-    if (abytes > 0l) {
-        unsafe {
-            memcpy(addr<void?>(g_vk_bake_blob[off]), addr<void?>(a[0]), abytes)
-        }
-    }
-    return off
-}
-
-// Called AFTER the tier accepted the upload/placement (a refused gather must not enter the
-// plan — the slice path would replay the refusal's absence and diverge).
-def private vk_bake_collect(fmt : int; woff, n, rows : int64; wq, ws : array<uint8>) {
-    if (g_vk_bake != VkBakeMode.collect) {
-        return
-    }
-    var e = VkPlanEntry(fmt = fmt, role = int(g_vk_bake_role), woff = woff, n = n, rows = rows,
-                        wq_bytes = long_length(wq), ws_bytes = long_length(ws))
-    e.wq_off = vk_bake_append(wq)
-    e.ws_off = vk_bake_append(ws)
-    g_vk_bake_plan |> push(e)
-}
-
-def private vk_bake_slice(t : Model; fmt : int; woff, n, rows : int64;
-                          var wq : array<uint8>; var ws : array<uint8>) : bool {
-    if (g_vk_bake != VkBakeMode.slice) {
-        return false
-    }
-    // the bake records only ACCEPTED gathers — serve a would-refuse mismatch EMPTY (the refusal is pure arithmetic), hold the cursor: the walk re-refuses, rolls back, and re-syncs with the plan
-    if (g_vk_bake_cursor >= long_length(t.vkplan)) {
-        if (!moe_gpu_would_accept(n, rows, fmt, g_vk_bake_role == VkBakeRole.expert_stream)) {
-            wq |> resize(0)
-            ws |> resize(0)
-            return true
-        }
-        to_log(LOG_WARNING, "dasLLAMA vulkan image: the GPU walk overran the baked plan at gather {g_vk_bake_cursor} — regathering live from here\n")
-        g_vk_bake = VkBakeMode.off
-        return false
-    }
-    let e = t.vkplan[int(g_vk_bake_cursor)]
-    if (e.fmt != fmt || e.woff != woff || e.n != n || e.rows != rows || e.role != int(g_vk_bake_role)) {
-        if (!moe_gpu_would_accept(n, rows, fmt, g_vk_bake_role == VkBakeRole.expert_stream)) {
-            wq |> resize(0)
-            ws |> resize(0)
-            return true
-        }
-        to_log(LOG_WARNING, "dasLLAMA vulkan image: baked gather {g_vk_bake_cursor} is (fmt {e.fmt} role {e.role} woff {e.woff} {e.n}x{e.rows}), the walk wants (fmt {fmt} role {int(g_vk_bake_role)} woff {woff} {n}x{rows}) — regathering live from here\n")
-        g_vk_bake = VkBakeMode.off
-        return false
-    }
-    g_vk_bake_cursor++
-    // record the mapped window (P2: the stream-mirror path imports it instead of copying)
-    unsafe {
-        g_vk_slice_windows |> insert(e.woff * 8l + int64(fmt), SliceWindow(
-            wq = e.wq_bytes > 0l ? addr<void?>(t.vkblob[e.wq_off]) : null,
-            ws = e.ws_bytes > 0l ? addr<void?>(t.vkblob[e.ws_off]) : null,
-            wq_bytes = e.wq_bytes, ws_bytes = e.ws_bytes))
-    }
-    // int-indexed destinations: a >2GB plane would resize truncated and then memcpy past it
-    assert(e.wq_bytes <= 2_147_483_647l && e.ws_bytes <= 2_147_483_647l,
-        "vulkan image: a baked plane exceeds the int-indexed array cap")
-    wq |> resize(int(e.wq_bytes))
-    ws |> resize(int(e.ws_bytes))
-    unsafe {
-        // int64 blob indexing — wq_off crosses INT32_MAX on multi-GB bakes
-        if (e.wq_bytes > 0l) {
-            memcpy(addr(wq[0]), addr<void?>(t.vkblob[e.wq_off]), e.wq_bytes)
-        }
-        if (e.ws_bytes > 0l) {
-            memcpy(addr(ws[0]), addr<void?>(t.vkblob[e.ws_off]), e.ws_bytes)
-        }
-    }
-    return true
-}
-
-def private moe_gpu_gather_stack(t : Model; woff : int64; n, rows, slice_rows : int64; mr, kgroup, wbias : int64;
-                                 var wq : array<uint8>; var ws : array<uint8>) {
-    layout_hooks_check()
-    if (vk_bake_slice(t, 0, woff, n, rows, wq, ws)) {
-        return
-    }
-    if (t.planes_trimmed) {
-        panic("dasLLAMA: planes_trimmed image — live gather impossible (baked plan diverged, or a re-gather was requested); rebake without --trim or match the image's config")
-    }
-    invoke(g_layout_gather, t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
-}
-
-def private moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_rows : int64;
-                                    repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
-    layout_hooks_check()
-    if (vk_bake_slice(t, int(fmt), woff, n, rows, wq, ws)) {
-        return
-    }
-    if (t.planes_trimmed) {
-        panic("dasLLAMA: planes_trimmed image — live gather impossible (baked plan diverged, or a re-gather was requested); rebake without --trim or match the image's config")
-    }
-    invoke(g_layout_gather_kq, t, fmt, woff, n, rows, slice_rows, repacked, mr, wq, ws)
-}
-
-def private moe_gpu_gather_stack_q8n(t : Model; woff : int64; n, rows, slice_rows : int64;
-                                     mr, kgroup, wbias : int64; var wq : array<uint8>) {
-    layout_hooks_check()
-    var no_ws : array<uint8>
-    if (vk_bake_slice(t, 6, woff, n, rows, wq, no_ws)) {
-        return
-    }
-    if (t.planes_trimmed) {
-        panic("dasLLAMA: planes_trimmed image — live gather impossible (baked plan diverged, or a re-gather was requested); rebake without --trim or match the image's config")
-    }
-    invoke(g_layout_gather_q8n, t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq)
-}
-
-//! P3 trim (generate-then-free): pack the emb/cls region into embq/embs, mark the model
-//! trimmed, and FREE the big CPU weight families — the save then writes them as empty planes.
-//! Arena-only plans qualify (pure resident-driver dense); false = declined, nothing changed.
-def trim_model_planes(var t : Model) : bool {
-    if (empty(t.vkplan) || t.config.n_layer_nextn > 0l) {
-        return false
-    }
-    for (e in t.vkplan) {
-        if (e.role != int(VkBakeRole.arena)) {
-            to_log(LOG_WARNING, "dasLLAMA trim: baked plan carries non-arena role {e.role} — only pure resident-driver dense models trim; declining\n")
-            return false
-        }
-    }
-    let dim = t.config.dim
-    let vocab = t.config.vocab_size
-    if (t.cls_q8) {
-        // mblob-style 34B interleaved blocks over the emb region (dequant_embq_row's layout)
-        let nb = vocab * dim / 32l
-        t.embq |> resize(int(nb * 34l))
-        unsafe {
-            for (b in range64(nb)) {
-                let off = t.emb_q8_off + b * 32l
-                var bp = addr(t.embq[b * 34l])
-                let sc = t.wscale_f16 ? uint(t.qscales16[off / 32l]) : f32_to_f16(t.qscales[off / 32l])
-                bp[0] = uint8(sc & 0xFFu)
-                bp[1] = uint8((sc >> 8u) & 0xFFu)
-                memcpy(addr<void?>(t.embq[b * 34l + 2l]), addr<void?>(t.qblob[off]), 32l)
-            }
-        }
-    } elif (cls_kq(t)) {
-        // the region's plane pair verbatim (repack layout preserved), rebased to superblock 0
-        let nsb = vocab * (dim / 256l)
-        let sb0 = t.wcls_off / 256l
-        unsafe {
-            if (t.emb_fmt == KqFmt.k4) {
-                t.embq |> resize(int(nsb * K4_QSB))
-                t.embs |> resize(int(nsb * K4_SSB))
-                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.k4q[sb0 * K4_QSB]), nsb * K4_QSB)
-                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.k4s[sb0 * K4_SSB]), nsb * K4_SSB)
-            } elif (t.emb_fmt == KqFmt.k5) {
-                t.embq |> resize(int(nsb * K5_QSB))
-                t.embs |> resize(int(nsb * K5_SSB))
-                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.k5q[sb0 * K5_QSB]), nsb * K5_QSB)
-                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.k5s[sb0 * K5_SSB]), nsb * K5_SSB)
-            } elif (t.emb_fmt == KqFmt.k6) {
-                t.embq |> resize(int(nsb * K6_QSB))
-                t.embs |> resize(int(nsb * K6_SSB))
-                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.k6q[sb0 * K6_QSB]), nsb * K6_QSB)
-                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.k6s[sb0 * K6_SSB]), nsb * K6_SSB)
-            } elif (t.emb_fmt == KqFmt.q40) {
-                t.embq |> resize(int(nsb * Q40_QSB))
-                t.embs |> resize(int(nsb * Q40_SSB))
-                memcpy(addr<void?>(t.embq[0]), addr<void?>(t.q40q[sb0 * Q40_QSB]), nsb * Q40_QSB)
-                memcpy(addr<void?>(t.embs[0]), addr<void?>(t.q40s[sb0 * Q40_SSB]), nsb * Q40_SSB)
-            } else {
-                to_log(LOG_WARNING, "dasLLAMA trim: emb fmt '{t.emb_fmt}' has no kq plane pair — declining\n")
-                return false
-            }
-        }
-    }   // fp32 embeddings ride fblob, which the trim keeps
-    t.planes_trimmed = true
-    delete t.qblob
-    delete t.qscales
-    delete t.qscales16
-    delete t.wblob
-    delete t.bf16blob
-    delete t.k4q
-    delete t.k4s
-    delete t.k5q
-    delete t.k5s
-    delete t.k6q
-    delete t.k6s
-    delete t.q40q
-    delete t.q40s
-    delete t.q51q
-    delete t.q51s
-    delete t.mxq
-    delete t.mxs
-    delete t.q4blob
-    delete t.q4scales
-    return true
 }
 
 def register_batch_decode_override(name : string; fn : BatchDecodeOverrideFn) {
@@ -729,6 +515,14 @@ def select_decode_override(name : string) : bool {
         g_batch_decode_override_name = ""
     }
     return true
+}
+
+//! The armed batch-decode override, or none — eval_batch_ (dasllama_batch) dispatches through these
+//! two rather than the registry going public.
+def batch_decode_override_armed() : bool => !empty(g_batch_decode_override_name)
+
+def batch_decode_override_invoke(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
+    return invoke(g_batch_decode_override, t, ws, sessions, nrows)
 }
 
 def active_decode_override : string {
@@ -770,7 +564,7 @@ def private cpu_prefill_allowed : bool {
 // The blob-only tripwire: a metal-flavor (blob-only) model carries no planar CPU planes — any
 // CPU inference against it is a wiring bug, never a fallback. (The gather paths — embed_row,
 // PLE — read the blob directly and stay legal.)
-def private blob_only_panic(t : Model; what : string) {
+def blob_only_panic(t : Model; what : string) {
     if (t.metal_blob) {
         panic("dasLLAMA: CPU {what} on a blob-only metal-flavor model — serve it on the GPU (set_metal_mode / fix the declined gate) or load the CPU-flavor image (metal mode off at load_model)")
     }
@@ -840,6 +634,14 @@ var private g_batch_decode_logits_done = false
 def batch_decode_override_logits_done {
     g_batch_decode_logits_done = true
 }
+
+//! eval_batch_ arms the flag before dispatching and reads it after — the driver lives in
+//! dasllama_batch, the registry here, so the flag is reached through these two instead of going public.
+def batch_decode_logits_reset {
+    g_batch_decode_logits_done = false
+}
+
+def batch_decode_logits_done() : bool => g_batch_decode_logits_done
 
 //! Build one position's RoPE cos/sin row into caller arrays — bit-identical to the row forward()
 //! hands the decode override (an encode-ahead driver pre-builds the NEXT position's row; the
@@ -1097,15 +899,70 @@ struct Model {
     embq : array<uint8>
     embs : array<uint8>
     // prepared-model image backing (dasllama_image): when set, every locked array field above
-    // is a borrowed VIEW into this mapping (zero-copy) and the finalizer below unmaps it.
+    // is a borrowed VIEW into this image (zero-copy) and the finalizer below releases it.
     // Both fields are skipped by the image save/load field walk.
     image_map : void?
     image_bytes : uint64
 }
 
+// ===== prepared-image backing =====
+
+// A carrier's planes borrow either a mapped .dlim or a chunk this process built. Owned chunks
+// live here, keyed by the ALIGNED base image_map holds, so telling the two apart is one lookup
+// and no carrier needs a second field: a miss means "mapping".
+var private g_image_chunks : table<uint64; array<uint8>>
+
+def private ptr_key(p : void?) : uint64 {
+    return unsafe(reinterpret<uint64>(p))
+}
+
+//! Allocate an image chunk of `bytes`, its base aligned to `align` — the in-memory twin of
+//! ``fmap_open``. Uninitialized by design: a multi-GB image is fully overwritten by the build
+//! walk (padding gaps zero-fill explicitly), and pre-touching it would commit every page twice.
+def image_chunk_alloc(bytes : uint64; align : uint64) : void? {
+    var raw : array<uint8>
+    let total = int64(bytes + align)
+    raw |> resize_no_init(total)
+    if (long_length(raw) != total) {
+        delete raw
+        return null
+    }
+    var base : void?
+    unsafe {
+        let a = reinterpret<uint64>(addr(raw[0]))
+        base = reinterpret<void?>((a + align - 1ul) / align * align)
+    }
+    g_image_chunks[ptr_key(base)] <- raw
+    return base
+}
+
+//! Release an owned image chunk by base; false = not one of ours, i.e. the caller holds a mapping
+//! and unmaps instead. This is how every carrier's finalizer tells the two backings apart.
+def image_chunk_free(base : void?) : bool {
+    let key = ptr_key(base)
+    if (base == null || !key_exists(g_image_chunks, key)) {
+        return false
+    }
+    var raw <- g_image_chunks[key]
+    g_image_chunks |> erase(key)
+    delete raw
+    return true
+}
+
+//! Let go of a carrier's image backing, chunk or mapping — the ONE release. Every weight
+//! carrier's finalizer routes here; nothing else may call ``fmap_close`` on an image.
+def image_backing_release(map : void?; bytes : uint64) {
+    if (map == null || image_chunk_free(map)) {
+        return
+    }
+    unsafe {
+        fmap_close(map, bytes)
+    }
+}
+
 // Model's finalizer (every `delete model` lowers to _::finalize and lands here): image-backed
-// models hold locked BORROWED views over the mapping — those must be forgotten (reset without
-// freeing) before the mapping unmaps; everything owned deletes as usual.
+// models hold locked BORROWED views over the image — those must be forgotten (reset without
+// freeing) before the backing goes; everything owned deletes as usual.
 def finalize(var t : Model) {
     apply(t) $ [unused_argument(name)] (name : string; var field) {
         static_if (typeinfo is_array(field)) {
@@ -1121,11 +978,9 @@ def finalize(var t : Model) {
         }
     }
     if (t.image_map != null) {
-        // imported device memory over this mapping (P2 mirrors) must release BEFORE the unmap
+        // imported device memory over this image (P2 mirrors) must release BEFORE the backing does
         moe_gpu_unmap_notify(t.image_map, t.image_bytes)
-        unsafe {
-            fmap_close(t.image_map, t.image_bytes)
-        }
+        image_backing_release(t.image_map, t.image_bytes)
         t.image_map = null
         t.image_bytes = 0ul
     }
@@ -1212,933 +1067,22 @@ struct ArchDesc {
     chat : ChatTemplate = ChatTemplate()
     lcaps : LlmCaps = LlmCaps()
 }
-
-struct private LayoutSizes {
-    fblob_n : int64   // element count of the fp32 aux region
-    wblob_n : int64   // element count of the big-weight region
-    mx_n : int64      // element count of the native-MXFP4 expert planes (0 unless experts_mx4)
-    bf16_n : int64    // halfword count of the native-BF16 region (0 unless ple_model_bf16)
-    k4_n : int64      // element counts of the native K-quant planes (0 unless kquant_native)
-    k5_n : int64
-    k6_n : int64
-    q40_n : int64
-    q51_n : int64
-}
-
-// The big-weight layout cursors: one element cursor per storage plane. kq_take advances the
-// cursor a weight's format tag selects, so layout_offsets stays a single linear walk.
-struct private KqCursors {
-    wo : int64   // qblob / wblob / q4blob (the classic parallel-offset region)
-    k4 : int64
-    k5 : int64
-    k6 : int64
-    q40 : int64
-    q51 : int64
-}
-
-def private kq_take(var cur : KqCursors; f : KqFmt; n : int64) : int64 {
-    if (f == KqFmt.k4) {
-        let o = cur.k4
-        cur.k4 += n
-        return o
-    }
-    if (f == KqFmt.k5) {
-        let o = cur.k5
-        cur.k5 += n
-        return o
-    }
-    if (f == KqFmt.k6) {
-        let o = cur.k6
-        cur.k6 += n
-        return o
-    }
-    if (f == KqFmt.q40) {
-        let o = cur.q40
-        cur.q40 += n
-        return o
-    }
-    if (f == KqFmt.q51) {
-        let o = cur.q51
-        cur.q51 += n
-        return o
-    }
-    let o = cur.wo
-    cur.wo += n
-    return o
-}
-
-// Format tag for layer l of a per-kind tag array; empty array (non-kq load) = q8.
-def fmt_at(a : array<KqFmt>; l : int64) : KqFmt => empty(a) ? KqFmt.q8 : a[l]
-
 //! Tied K-quant classifier: the embedding table lives in a native K-quant plane at wcls_off —
 //! no fp32 table, no qblob copy (the cls_q8 analog for kquant_native loads).
 def cls_kq(t : Model) : bool => t.kquant_native && t.config.shared_weights && t.emb_fmt != KqFmt.q8
 
-// Fill the dense FFN offset tables (w1/w2/w3), each a contiguous per-layer region. Per-layer FFN
-// width (gemma-4 E2B) reads t.ffn_w; empty = uniform `hidden`. dense_below >= 0 limits the dense
-// slots to layers below it (glm4moe leading dense; routed layers get -1).
-def private fill_dense_ffn_offsets(var t : Model; var cur : KqCursors; layers, dim, hidden : int64; dense_below : int64 = -1l) {
-    t.w1_offs |> clear(); t.w1_offs |> reserve(layers)
-    for (l in range64(layers)) { t.w1_offs |> push(dense_below >= 0l && l >= dense_below ? -1l : kq_take(cur, fmt_at(t.w1_fmt, l), dim * (empty(t.ffn_w) ? hidden : t.ffn_w[l]))) }
-    t.w2_offs |> clear(); t.w2_offs |> reserve(layers)
-    for (l in range64(layers)) { t.w2_offs |> push(dense_below >= 0l && l >= dense_below ? -1l : kq_take(cur, fmt_at(t.w2_fmt, l), (empty(t.ffn_w) ? hidden : t.ffn_w[l]) * dim)) }
-    t.w3_offs |> clear(); t.w3_offs |> reserve(layers)
-    for (l in range64(layers)) { t.w3_offs |> push(dense_below >= 0l && l >= dense_below ? -1l : kq_take(cur, fmt_at(t.w3_fmt, l), dim * (empty(t.ffn_w) ? hidden : t.ffn_w[l]))) }
-}
-
-// Fill both offset tables from the config; return the element counts of each region. Offsets are
-// 32-aligned (every dim/kv/hidden is a multiple of 32), so Q8/Q4 scale/byte indices divide cleanly.
-// Attention tensors get PER-LAYER offsets (shapes differ per layer class on gemma4).
-def private layout_offsets(var t : Model) : LayoutSizes {
-    let c = t.config
-    let dim = c.dim
-    let hidden = c.hidden_dim
-    // The MTP/NextN draft block is one extra trunk-shaped attention layer at index n_layers; every per-layer walk here covers it
-    let layers = c.n_layers + c.n_layer_nextn
-    var fo = 0l
-    var bf16 = 0l
-    if (t.cls_q8 || cls_kq(t)) {
-        t.tok_emb_off = -1l   // no fp32 embedding table — rows dequant from emb_q8_off / the kq plane
-    } else {
-        t.tok_emb_off = fo
-        fo += c.vocab_size * dim
-    }
-    t.rms_att_off = fo
-    fo += layers * dim
-    t.rms_ffn_off = fo
-    fo += layers * dim
-    if (c.pre_post_norm) {  // Gemma2: extra post-attention + post-FFN norms
-        t.rms_post_att_off = fo
-        fo += layers * dim
-        t.rms_post_ffn_off = fo
-        fo += layers * dim
-    }
-    if (c.qk_norm) {  // Qwen3/gemma4: per-head Q/K RMSNorm weights, one head_size(l) vector per layer
-        t.rms_q_offs |> clear()
-        t.rms_q_offs |> reserve(layers)
-        for (l in range64(layers)) {
-            t.rms_q_offs |> push(fo)
-            fo += layer_head_size(c, l)
-        }
-        t.rms_k_offs |> clear()
-        t.rms_k_offs |> reserve(layers)
-        for (l in range64(layers)) {
-            t.rms_k_offs |> push(fo)
-            fo += layer_head_size(c, l)
-        }
-    }
-    if (c.v_norm) {  // gemma4: a max-head-size vector of 1.0s so the weightless V-norm reuses rms_batch
-        t.rms_ones_off = fo
-        fo += max_head_size(c)
-    }
-    if (c.layer_out_scale) {  // gemma4: one output scalar per layer
-        t.out_scale_off = fo
-        fo += layers
-    }
-    if (c.attn_sinks) {  // gpt-oss: one sink logit per head per layer
-        t.sinks_off = fo
-        fo += layers * c.n_heads
-    }
-    if (c.recr_mask != 0ul) {  // qwen35 deltanet fp32 smalls (flat strides; attention layers' slots unused)
-        t.dn_conv_off = fo
-        fo += layers * c.ssm_d_conv * dn_conv_dim(c)
-        t.dn_dt_off = fo
-        fo += layers * c.ssm_dt_rank
-        t.dn_a_off = fo
-        fo += layers * c.ssm_dt_rank
-        t.dn_norm_off = fo
-        fo += layers * c.ssm_d_state
-        if (t.dn_ba_f32) {  // F32-on-disk ssm_beta/ssm_alpha stay fp32 (llama.cpp matmuls them f32)
-            t.dn_betaf_off = fo
-            fo += layers * dim * c.ssm_dt_rank
-            t.dn_alphaf_off = fo
-            fo += layers * dim * c.ssm_dt_rank
-        }
-    }
-    if (c.n_expert > 0l) {  // MoE: per-layer router matrices + shared-expert gate vectors, fp32
-        t.router_off = fo
-        fo += layers * c.n_expert * dim
-        if (c.n_ff_shexp > 0l && c.moe_shexp_gated) {
-            t.shexp_gate_off = fo
-            fo += layers * dim
-        }
-        if (c.moe_router_bias) {  // gpt-oss: router logits bias
-            t.router_b_off = fo
-            fo += layers * c.n_expert
-        }
-        if (c.moe_exp_probs) {  // DeepSeek-V3/glm4moe: per-expert selection bias
-            t.exp_probs_off = fo
-            fo += layers * c.n_expert
-        }
-        if (c.moe_exps_bias) {  // gpt-oss: per-expert gate/down/up biases (expert-major per layer)
-            t.web1_off = fo
-            fo += layers * c.n_expert * c.n_ff_exp
-            t.web2_off = fo
-            fo += layers * c.n_expert * dim
-            t.web3_off = fo
-            fo += layers * c.n_expert * c.n_ff_exp
-        }
-        if (c.moe_dense_shexp) {  // gemma4: router input scale + per-expert down scale + routed sandwich norms
-            t.moe_router_scale_off = fo
-            fo += layers * dim
-            t.moe_down_scale_off = fo
-            fo += layers * c.n_expert
-            t.rms_pre_ffn2_off = fo
-            fo += layers * dim
-            t.rms_post_ffn1_off = fo
-            fo += layers * dim
-            t.rms_post_ffn2_off = fo
-            fo += layers * dim
-        }
-    }
-    t.rms_final_off = fo
-    fo += dim
-    // gemma-4 E-series PLE norms (fblob): the single proj-norm vector [ple] + the per-layer post-norm.
-    if (has_ple(c)) {
-        t.ple_pnorm_off = fo
-        fo += c.n_embd_per_layer
-        t.ple_post_off = fo
-        fo += layers * dim
-        if (t.ple_model_bf16) {
-            t.ple_model_off = 0l
-            bf16 = dim * c.n_embd_per_layer * layers
-        } else {
-            t.ple_model_off = fo
-            fo += dim * c.n_embd_per_layer * layers
-        }
-    }
-    // Per-layer KV source + cache-row prefix. A shared layer (E-series) contributes NO width and aliases its source's slot
-    t.kv_src |> clear()
-    t.kv_src |> reserve(layers)
-    for (l in range64(layers)) {
-        t.kv_src |> push(layer_kv_source(c, l))
-    }
-    t.kv_row_prefix |> clear()
-    t.kv_row_prefix |> reserve(layers)
-    var kvrow = 0l
-    for (l in range64(layers)) {
-        if (t.kv_src[l] != l) {
-            t.kv_row_prefix |> push(t.kv_row_prefix[t.kv_src[l]])
-        } else {
-            t.kv_row_prefix |> push(kvrow)
-            kvrow += layer_kv_dim(c, l)
-        }
-    }
-    var cur = KqCursors()
-    t.wq_offs |> clear()
-    t.wq_offs |> reserve(layers)
-    for (l in range64(layers)) {
-        if (layer_is_recurrent(c, l)) {
-            t.wq_offs |> push(-1l)   // deltanet layer: no attention projections at all
-        } else {
-            // q_gated (qwen35): attn_q is 2x-wide — per head [q | gate]
-            t.wq_offs |> push(kq_take(cur, fmt_at(t.wq_fmt, l), dim * layer_qd(c, l) * (c.q_gated ? 2l : 1l)))
-        }
-    }
-    t.wk_offs |> clear()
-    t.wk_offs |> reserve(layers)
-    for (l in range64(layers)) {
-        if (t.kv_src[l] != l || layer_is_recurrent(c, l)) {
-            t.wk_offs |> push(-1l)   // shared-KV layer (E-series) or deltanet layer: no attn_k of its own
-        } else {
-            t.wk_offs |> push(kq_take(cur, fmt_at(t.wk_fmt, l), dim * layer_kv_dim(c, l)))
-        }
-    }
-    t.wv_offs |> clear()
-    t.wv_offs |> reserve(layers)
-    for (l in range64(layers)) {
-        // -1 marks V-from-K/shared-KV/deltanet; the l < n_layers guard kills the shift-by-64 wrap at the MTP index
-        if (t.kv_src[l] != l || (l < c.n_layers && ((c.v_from_k_mask >> uint64(l)) & 1ul) != 0ul) || layer_is_recurrent(c, l)) {
-            t.wv_offs |> push(-1l)
-        } else {
-            t.wv_offs |> push(kq_take(cur, fmt_at(t.wv_fmt, l), dim * layer_kv_dim(c, l)))
-        }
-    }
-    t.wo_offs |> clear()
-    t.wo_offs |> reserve(layers)
-    for (l in range64(layers)) {
-        if (layer_is_recurrent(c, l)) {
-            t.wo_offs |> push(-1l)
-        } else {
-            t.wo_offs |> push(kq_take(cur, fmt_at(t.wo_fmt, l), layer_qd(c, l) * dim))
-        }
-    }
-    if (c.recr_mask != 0ul) {  // deltanet big weights (recurrent layers only; kind-major regions; beta/alpha stay q8)
-        let cd = dn_conv_dim(c)
-        t.dnqkv_offs |> clear(); t.dnqkv_offs |> reserve(layers)
-        for (l in range64(layers)) { t.dnqkv_offs |> push(layer_is_recurrent(c, l) ? kq_take(cur, fmt_at(t.dnqkv_fmt, l), dim * cd) : -1l) }
-        t.dngate_offs |> clear(); t.dngate_offs |> reserve(layers)
-        for (l in range64(layers)) { t.dngate_offs |> push(layer_is_recurrent(c, l) ? kq_take(cur, fmt_at(t.dngate_fmt, l), dim * c.ssm_d_inner) : -1l) }
-        t.dnbeta_offs |> clear(); t.dnbeta_offs |> reserve(layers)
-        for (l in range64(layers)) { t.dnbeta_offs |> push(layer_is_recurrent(c, l) && !t.dn_ba_f32 ? kq_take(cur, KqFmt.q8, dim * c.ssm_dt_rank) : -1l) }
-        t.dnalpha_offs |> clear(); t.dnalpha_offs |> reserve(layers)
-        for (l in range64(layers)) { t.dnalpha_offs |> push(layer_is_recurrent(c, l) && !t.dn_ba_f32 ? kq_take(cur, KqFmt.q8, dim * c.ssm_dt_rank) : -1l) }
-        t.dnout_offs |> clear(); t.dnout_offs |> reserve(layers)
-        for (l in range64(layers)) { t.dnout_offs |> push(layer_is_recurrent(c, l) ? kq_take(cur, fmt_at(t.dnout_fmt, l), c.ssm_d_inner * dim) : -1l) }
-    }
-    var mx = 0l
-    if (c.n_expert > 0l) {
-        // MoE: routed expert stacks — expert e of layer l is a normal 2D matrix at we*_off + (l*n_expert+e)*(dim*n_ff_exp)
-        let ege = dim * c.n_ff_exp   // per-expert element count (same for gate/up and down)
-        t.we1_offs |> clear(); t.we1_offs |> reserve(layers)
-        t.we2_offs |> clear(); t.we2_offs |> reserve(layers)
-        t.we3_offs |> clear(); t.we3_offs |> reserve(layers)
-        if (t.experts_mx4) {
-            for (_l in range64(layers)) { t.we1_offs |> push(mx); mx += c.n_expert * ege }
-            for (_l in range64(layers)) { t.we2_offs |> push(mx); mx += c.n_expert * ege }
-            for (_l in range64(layers)) { t.we3_offs |> push(mx); mx += c.n_expert * ege }
-        } else {
-            // dense-lead layers (glm4moe) carry no expert stacks: -1, no plane space
-            for (l in range64(layers)) { t.we1_offs |> push(l < c.n_layer_dense_lead ? -1l : kq_take(cur, fmt_at(t.we1_fmt, l), c.n_expert * ege)) }
-            for (l in range64(layers)) { t.we2_offs |> push(l < c.n_layer_dense_lead ? -1l : kq_take(cur, fmt_at(t.we2_fmt, l), c.n_expert * ege)) }
-            for (l in range64(layers)) { t.we3_offs |> push(l < c.n_layer_dense_lead ? -1l : kq_take(cur, fmt_at(t.we3_fmt, l), c.n_expert * ege)) }
-        }
-        if (c.n_ff_shexp > 0l) {
-            let she = dim * c.n_ff_shexp
-            t.wsh1_off = cur.wo
-            cur.wo += layers * she
-            t.wsh2_off = cur.wo
-            cur.wo += layers * she
-            t.wsh3_off = cur.wo
-            cur.wo += layers * she
-        }
-        if (c.moe_dense_shexp) {  // gemma4: the DENSE parallel shared expert (plain ffn gate/up/down)
-            fill_dense_ffn_offsets(t, cur, layers, dim, hidden)
-        } elif (c.n_layer_dense_lead > 0l) {  // glm4moe: plain dense FFN on the leading layer(s) only
-            fill_dense_ffn_offsets(t, cur, layers, dim, hidden, c.n_layer_dense_lead)
-        }
-    } else {
-        fill_dense_ffn_offsets(t, cur, layers, dim, hidden)
-    }
-    if (has_ple(c)) {  // gemma-4 E-series PLE big weights: the token table + per-layer Q8 gate/proj
-        let ple = c.n_embd_per_layer
-        // gather-only rows, NOT repacked — kq tag keeps native planes (disk order), else q8 linear
-        t.ple_emb_off = kq_take(cur, t.ple_emb_fmt, c.vocab_size * ple * layers)
-        t.ple_gate_off = cur.wo
-        cur.wo += layers * dim * ple
-        t.ple_proj_off = cur.wo
-        cur.wo += layers * ple * dim
-    }
-    if (c.shared_weights) {
-        if (t.cls_q8) {
-            // tied Q8: the classifier transcode + the linear embedding copy the row reads dequant from
-            t.wcls_off = cur.wo
-            cur.wo += c.vocab_size * dim
-            t.emb_q8_off = cur.wo
-            cur.wo += c.vocab_size * dim
-        } elif (cls_kq(t)) {
-            // tied K-quant: ONE plane copy serves both the classifier matmul and the embedding row reads
-            t.wcls_off = kq_take(cur, t.emb_fmt, c.vocab_size * dim)
-        } else {
-            t.wcls_off = 0l   // unused — the classifier reads the fp32 embedding from fblob
-        }
-    } else {
-        t.wcls_off = kq_take(cur, t.wcls_fmt, c.vocab_size * dim)
-    }
-    if (c.n_layer_nextn > 0l) {   // MTP/NextN extras (the block's standard tensors rode the walks above)
-        t.mtp_ehproj_off = kq_take(cur, t.mtp_ehproj_fmt, 2l * dim * dim)
-        t.mtp_enorm_off = fo
-        fo += dim
-        t.mtp_hnorm_off = fo
-        fo += dim
-        t.mtp_headnorm_off = fo   // loaded only when the tensor exists; reads fall back to rms_final_off
-        fo += dim
-    }
-    return LayoutSizes(fblob_n = fo, wblob_n = cur.wo, mx_n = mx, bf16_n = bf16,
-                       k4_n = cur.k4, k5_n = cur.k5, k6_n = cur.k6, q40_n = cur.q40, q51_n = cur.q51)
-}
+// Format tag for layer l of a per-kind tag array; empty array (non-kq load) = q8.
+def fmt_at(a : array<KqFmt>; l : int64) : KqFmt => empty(a) ? KqFmt.q8 : a[l]
 
 // Reserve exact capacity then size — avoids the array allocator's power-of-2 rounding on big arrays.
-def private reserve_resize(var a : array<float>; n : int64) {
+def reserve_resize(var a : array<float>; n : int64) {
     a |> reserve(n)
     a |> resize(n)
 }
 
-def private copy_floats(src : array<float> | #; soff : int64; var dst : array<float>; doff, n : int64) {
+def copy_floats(src : array<float> | #; soff : int64; var dst : array<float>; doff, n : int64) {
     for (i in range64(n)) {
         dst[doff + i] = src[soff + i]
-    }
-}
-
-//! Load a llama2.c checkpoint: 7-int32 header, then fp32 weights in fixed file order. Distributes
-//! them into the split fp32 layout (embedding + norms -> fblob, the 2D matrices -> wblob).
-def load_checkpoint(path : string) : Model {
-    let HEADER_INTS = 7
-    let HEADER_BYTES = 28
-    var t = Model()
-    t.quant = QuantMode.fp32
-    let f = fopen(path, "rb")
-    if (f == null) {
-        panic("dasLLAMA: cannot open checkpoint '{path}'")
-    }
-    fmap(f) $(var bytes : array<uint8>#) {
-        if (length(bytes) < HEADER_BYTES) {
-            panic("dasLLAMA: checkpoint too small")
-        }
-        unsafe {
-            let hdr = temp_array(addr < int? >(bytes[0]), HEADER_INTS, type<int>)
-            t.config.dim = int64(hdr[0])
-            t.config.hidden_dim = int64(hdr[1])
-            t.config.n_layers = int64(hdr[2])
-            t.config.n_heads = int64(hdr[3])
-            t.config.n_kv_heads = int64(hdr[4])
-            let vocab = hdr[5]
-            t.config.seq_len = int64(hdr[6])
-            // negative vocab is llama2.c's signal for unshared classifier weights
-            t.config.shared_weights = vocab > 0
-            t.config.vocab_size = int64(vocab > 0 ? vocab : -vocab)
-        }
-        t.config.head_size = t.config.dim / t.config.n_heads
-        t.config.kv_dim = (t.config.dim * t.config.n_kv_heads) / t.config.n_heads
-        t.config.rope_freq_base = 10000.0  // llama2.c checkpoints predate configurable θ
-        // resolve the swa-θ sentinel like load_gguf does, so code (or a test) that forces
-        // sliding_window on afterwards ropes those layers at the real θ, not 0
-        t.config.rope_freq_base_swa = t.config.rope_freq_base
-        let sz = layout_offsets(t)
-        reserve_resize(t.fblob, sz.fblob_n)
-        reserve_resize(t.wblob, sz.wblob_n)
-        let c = t.config
-        let dim = c.dim
-        let hidden = c.hidden_dim
-        let layers = c.n_layers
-        let kv = c.kv_dim
-        let qd = c.n_heads * c.head_size
-        unsafe {
-            let n_floats = (length(bytes) - HEADER_BYTES) / 4
-            let src = temp_array(addr < float? >(bytes[HEADER_BYTES]), n_floats, type<float>)
-            // file order: emb, rms_att, wq, wk, wv, wo, rms_ffn, w1, w2, w3, rms_final, freq_cis, [wcls]
-            // (uniform llama geometry: each kind's region base is its layer-0 offset)
-            var fc = 0l
-            copy_floats(src, fc, t.fblob, t.tok_emb_off, c.vocab_size * dim)
-            fc += c.vocab_size * dim
-            copy_floats(src, fc, t.fblob, t.rms_att_off, layers * dim)
-            fc += layers * dim
-            copy_floats(src, fc, t.wblob, t.wq_offs[0], layers * dim * qd)
-            fc += layers * dim * qd
-            copy_floats(src, fc, t.wblob, t.wk_offs[0], layers * dim * kv)
-            fc += layers * dim * kv
-            copy_floats(src, fc, t.wblob, t.wv_offs[0], layers * dim * kv)
-            fc += layers * dim * kv
-            copy_floats(src, fc, t.wblob, t.wo_offs[0], layers * qd * dim)
-            fc += layers * qd * dim
-            copy_floats(src, fc, t.fblob, t.rms_ffn_off, layers * dim)
-            fc += layers * dim
-            copy_floats(src, fc, t.wblob, t.w1_offs[0], layers * dim * hidden)
-            fc += layers * dim * hidden
-            copy_floats(src, fc, t.wblob, t.w2_offs[0], layers * hidden * dim)
-            fc += layers * hidden * dim
-            copy_floats(src, fc, t.wblob, t.w3_offs[0], layers * dim * hidden)
-            fc += layers * dim * hidden
-            copy_floats(src, fc, t.fblob, t.rms_final_off, dim)
-            fc += dim
-            fc += c.seq_len * c.head_size   // skip old freq_cis (real + imag halves)
-            if (!c.shared_weights) {
-                copy_floats(src, fc, t.wblob, t.wcls_off, c.vocab_size * dim)
-            }
-        }
-    }
-    fclose(f)
-    resolve_arch(t, "llama")   // llama2.c checkpoints are always the llama arch — bind its blocks
-    return <- t
-}
-
-// Read one big 2D weight tensor into the active representation: transcode straight from disk when
-// the on-disk type already matches the target precision, otherwise dequant to a reused fp32 scratch
-// and quantize into the shared blob. `fmt` != q8 routes into that native K-quant plane pair.
-
-// ===== conversion-time accounting =====
-// load_big's branches ARE the conversion kinds, so bucketing here answers "where does gguf -> image
-// time go". DASLLAMA_CONV_PROF arms it: one clock pair per tensor, a dead branch when off.
-
-struct private ConvBucket {
-    nsec : int64
-    elems : int64
-    calls : int64
-}
-
-struct private ConvRow {
-    name : string
-    nsec : int64
-    elems : int64
-    calls : int64
-}
-
-var private g_conv_prof = false
-var private g_conv : table<string; ConvBucket>
-
-//! Arm per-conversion-kind timing over the gguf -> image weight walk (env DASLLAMA_CONV_PROF=1
-//! arms it at load). Buckets reset on each arm; dump them with [[conv_profile_report]].
-def set_conv_profile(on : bool) {
-    g_conv_prof = on
-    g_conv |> clear()
-}
-
-//! Current state of the [[set_conv_profile]] gate.
-def get_conv_profile() : bool => g_conv_prof
-
-def private conv_note(kind : string; t0, n : int64) {
-    if (!g_conv_prof) {
-        return
-    }
-    let ns = get_time_nsec(t0)
-    var b = g_conv[kind]
-    b.nsec += ns
-    b.elems += n
-    b.calls++
-    g_conv[kind] = b
-}
-
-//! Dump the conversion-kind breakdown gathered since the last [[set_conv_profile]] arm, slowest
-//! first: wall ms, share of the accounted total, weights moved, and the arm's throughput.
-def conv_profile_report() {
-    if (!g_conv_prof || empty(g_conv)) {
-        return
-    }
-    var rows : array<ConvRow>
-    var total = 0l
-    for (k, v in keys(g_conv), values(g_conv)) {
-        rows |> emplace(ConvRow(name = clone_string(k), nsec = v.nsec, elems = v.elems, calls = v.calls))
-        total += v.nsec
-    }
-    rows |> sort() $(a, b) => a.nsec > b.nsec
-    to_log(LOG_INFO, "dasLLAMA conv: {length(rows)} kinds, {double(total) / 1.0e6lf:.0f} ms accounted\n")
-    for (r in rows) {
-        let ms = double(r.nsec) / 1.0e6lf
-        let pct = total > 0l ? 100.0lf * double(r.nsec) / double(total) : 0.0lf
-        let mws = r.nsec > 0l ? double(r.elems) * 1000.0lf / double(r.nsec) : 0.0lf
-        to_log(LOG_INFO, "dasLLAMA conv:   {r.name}: {ms:.0f} ms ({pct:.1f}%), "
-            + "{double(r.elems) / 1.0e6lf:.0f} Mw over {r.calls} tensors, {mws:.0f} Mw/s\n")
-    }
-    delete rows
-}
-
-// ===== streaming plan/fill (phase D of the .dlim arc) =====
-
-//! One recorded big-tensor conversion: load_big's call args, replayable — the fill pass
-//! re-derives the branch from (fmt, quant, disk type), so plan and fill cannot drift.
-struct FillJob {
-    name : string
-    woff : int64
-    n : int64
-    src_off : int64
-    fmt : KqFmt
-}
-
-//! One repack region over a plane (element offset + 2D shape). fmt ids follow the repack
-//! walkers: 0 = q8, 1 = mx4, 2 = q51, 4/5/6/40 = the kq plane pairs.
-struct StreamReg {
-    off : int64
-    n : int64
-    d : int64
-    fmt : int
-}
-
-typedef StreamCollectFn = function<(t : Model; var regs : array<StreamReg>) : void>
-typedef StreamRepackFn = function<(fmt : int; qp, sp : void?; n, d : int64) : void>
-
-[unused_argument(t, regs)]
-def private stream_no_collect(t : Model; var regs : array<StreamReg>) {
-    panic("dasLLAMA: no stream-layout hooks registered (dasllama_layout's [init] provides them)")
-}
-
-[unused_argument(fmt, qp, sp, n, d)]
-def private stream_no_repack(fmt : int; qp, sp : void?; n, d : int64) {
-    panic("dasLLAMA: no stream-repack hook registered (dasllama_layout's [init] provides it)")
-}
-
-var private g_stream_collect_q8 = @@stream_no_collect
-var private g_stream_collect_kq = @@stream_no_collect
-var private g_stream_collect_q51 = @@stream_no_collect
-var private g_stream_repack = @@stream_no_repack
-
-//! dasllama_layout registers the streaming-fill collaborators at [init]: the three region
-//! collectors (the repack walkers' build halves) and the single-region repack dispatcher.
-def register_stream_layout(cq8, ckq, cq51 : StreamCollectFn; rr : StreamRepackFn) {
-    g_stream_collect_q8 = cq8
-    g_stream_collect_kq = ckq
-    g_stream_collect_q51 = cq51
-    g_stream_repack = rr
-}
-
-var private g_fill_plan_mode = false
-var private g_fill_plan : array<FillJob>
-// field -> the plane's LAYOUT byte total, recorded at sizing: a layout can hold allocated-but-
-// never-written holes (glm4moe's dense-lead shexp slices), so the streamed plane must be sized
-// and gap-filled from the layout — a job-sum concatenation SHIFTS everything past the first hole
-var private g_stream_plane_total : table<string; int64>
-
-//! The regions the eager repack stage WOULD build for `t` — same gates, same walkers (the
-//! collector halves), so the streamed fill's per-job repack cannot drift from the eager one.
-def stream_collect_regions(t : Model; var regs : array<StreamReg>) {
-    if (t.quant != QuantMode.q8 || !select_matmul_backend_for_load()) {
-        return
-    }
-    invoke(g_stream_collect_q8, t, regs)
-    if (active_q51_layout_mr() > 1l) {
-        invoke(g_stream_collect_q51, t, regs)
-    }
-    if (t.kquant_native && kernel_backend_has_kq()) {
-        invoke(g_stream_collect_kq, t, regs)
-    }
-}
-
-// the streamed destination field of a job (Model plane field name), "" = not streamed
-def private stream_field_of(t : Model; fmt : KqFmt) : string {
-    if (fmt == KqFmt.k4) {
-        return "k4q"
-    } elif (fmt == KqFmt.k5) {
-        return "k5q"
-    } elif (fmt == KqFmt.k6) {
-        return "k6q"
-    } elif (fmt == KqFmt.q40) {
-        return "q40q"
-    } elif (fmt == KqFmt.q51) {
-        return "q51q"
-    } elif (t.quant == QuantMode.q8) {
-        return "qblob"
-    }
-    return ""
-}
-
-// (q plane bytes, scale plane bytes, region fmt id) for one streamed job
-[unused_argument(t)]
-def private stream_job_shape(t : Model; j : FillJob) : tuple<qb : int64; sb : int64; rfmt : int> {
-    if (j.fmt == KqFmt.k4) {
-        return (qb = (j.n / 256l) * K4_QSB, sb = (j.n / 256l) * K4_SSB, rfmt = 4)
-    } elif (j.fmt == KqFmt.k5) {
-        return (qb = (j.n / 256l) * K5_QSB, sb = (j.n / 256l) * K5_SSB, rfmt = 5)
-    } elif (j.fmt == KqFmt.k6) {
-        return (qb = (j.n / 256l) * K6_QSB, sb = (j.n / 256l) * K6_SSB, rfmt = 6)
-    } elif (j.fmt == KqFmt.q40) {
-        return (qb = (j.n / 256l) * Q40_QSB, sb = (j.n / 256l) * Q40_SSB, rfmt = 40)
-    } elif (j.fmt == KqFmt.q51) {
-        return (qb = (j.n / 32l) * Q51_QB, sb = (j.n / 32l) * Q51_SB, rfmt = 2)
-    }
-    return (qb = j.n, sb = 0l, rfmt = 0)   // q8: 1 byte/elem quants; scales handled as floats
-}
-
-// a job's byte offset within its plane (woff is elems; kq/q51 planes stride per superblock)
-def private stream_job_qoff(j : FillJob) : int64 {
-    if (j.fmt == KqFmt.k4) {
-        return (j.woff / 256l) * K4_QSB
-    } elif (j.fmt == KqFmt.k5) {
-        return (j.woff / 256l) * K5_QSB
-    } elif (j.fmt == KqFmt.k6) {
-        return (j.woff / 256l) * K6_QSB
-    } elif (j.fmt == KqFmt.q40) {
-        return (j.woff / 256l) * Q40_QSB
-    } elif (j.fmt == KqFmt.q51) {
-        return (j.woff / 32l) * Q51_QB
-    }
-    return j.woff
-}
-
-//! Total bytes the streamed fill will append for `field` (page padding NOT included) — the
-//! LAYOUT size when the sizing pass recorded one (holes included), else the job sum.
-def stream_plane_bytes(t : Model; jobs : array<FillJob>; field : string) : int64 {
-    let lt = g_stream_plane_total?[field] ?? 0l
-    if (lt > 0l) {
-        return lt
-    }
-    var total = 0l
-    for (j in jobs) {
-        if (stream_field_of(t, j.fmt) == field) {
-            total += stream_job_shape(t, j).qb
-        }
-    }
-    return total
-}
-
-// append `gap` zero bytes — a layout hole the jobs never cover (never-written plane space)
-def private stream_zero_fill(gap : int64; var zeros : array<uint8>;
-                             append : block<(p : void?; nbytes : uint64) : void>) {
-    var left = gap
-    if (left > 0l && empty(zeros)) {
-        zeros |> resize(1048576)
-    }
-    while (left > 0l) {
-        let chunk = min(left, long_length(zeros))
-        unsafe {
-            invoke(append, addr<void?>(zeros[0]), uint64(chunk))
-        }
-        left -= chunk
-    }
-}
-
-//! Execute every recorded job targeting `field`: transcode into a job-sized temp (load_big's
-//! own arms at temp offset 0), land scales in the RAM plane, apply the job's repack regions
-//! (temp-biased q, in-place s), hand the temp to `append`; qblob's tail runs the wscale epilogue.
-def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; field : string;
-                      jobs : array<FillJob>; regs : array<StreamReg>;
-                      append : block<(p : void?; nbytes : uint64) : void>) : bool {
-    // jobs for this field, ascending woff — plane order IS ascending source order
-    var mine : array<FillJob>
-    for (j in jobs) {
-        if (stream_field_of(t, j.fmt) == field) {
-            mine |> push(j)
-        }
-    }
-    if (empty(mine)) {
-        return true
-    }
-    mine |> sort() $(a, b : FillJob) => a.woff < b.woff
-    var temp_q : array<uint8>
-    var temp_q8 : array<int8>   // the q8 family's quant temp (qblob is int8)
-    var temp_s : array<uint8>
-    var temp_sf : array<float>
-    var scratch : array<float>
-    var zeros : array<uint8>
-    var cursor = 0l   // plane bytes appended so far — layout holes between jobs zero-fill
-    for (j in mine) {
-        let sh = stream_job_shape(t, j)
-        stream_zero_fill(stream_job_qoff(j) - cursor, zeros, append)
-        cursor = stream_job_qoff(j) + sh.qb
-        temp_q |> resize(int(sh.qb))
-        let t0 = g_conv_prof ? ref_time_ticks() : 0l
-        var kind = "q8 transcode (Q8_0 verbatim)"
-        if (j.fmt == KqFmt.k4) {
-            temp_s |> resize(int(sh.sb))
-            gguf_transcode_q4k(m, bytes, j.name, temp_q, temp_s, 0l, j.n, j.src_off)
-            kind = "k4 transcode (Q4_K)"
-        } elif (j.fmt == KqFmt.k5) {
-            temp_s |> resize(int(sh.sb))
-            if (gguf_tensor_type(m, j.name) == GGML_TYPE_Q5_K) {
-                gguf_transcode_q5k(m, bytes, j.name, temp_q, temp_s, 0l, j.n, j.src_off)
-                kind = "k5 transcode (Q5_K)"
-            } else {
-                scratch |> resize(int(j.n))
-                gguf_read_tensor_f32(m, bytes, j.name, scratch, 0l, j.n, j.src_off)
-                quantize_k5_plane(scratch, j.n, temp_q, temp_s, 0l)
-                kind = "k5 RE-ENCODE (Q5_0 dequant+quant)"
-            }
-        } elif (j.fmt == KqFmt.k6) {
-            temp_s |> resize(int(sh.sb))
-            gguf_transcode_q6k(m, bytes, j.name, temp_q, temp_s, 0l, j.n, j.src_off)
-            kind = "k6 transcode (Q6_K)"
-        } elif (j.fmt == KqFmt.q40) {
-            temp_s |> resize(int(sh.sb))
-            gguf_transcode_q40(m, bytes, j.name, temp_q, temp_s, 0l, j.n, j.src_off)
-            kind = "q40 transcode (Q4_0)"
-        } elif (j.fmt == KqFmt.q51) {
-            temp_s |> resize(int(sh.sb))
-            gguf_transcode_q51(m, bytes, j.name, temp_q, temp_s, 0l, j.n, j.src_off)
-            kind = "q51 transcode (Q5_1)"
-        } else {
-            // q8 family: scales are FLOATS; the epilogue converts the whole plane at the end
-            temp_q8 |> resize(int(j.n))
-            temp_sf |> resize(int(j.n / 32l))
-            let gt = gguf_tensor_type(m, j.name)
-            if (gt == GGML_TYPE_Q8_0) {
-                gguf_transcode_q8_0(m, bytes, j.name, temp_q8, temp_sf, 0l, 0l, j.n, j.src_off)
-            } elif (gt == GGML_TYPE_Q5_0) {
-                gguf_transcode_q5_0_to_q8(m, bytes, j.name, temp_q8, temp_sf, 0l, 0l, j.n, j.src_off)
-                kind = "q8 transcode (Q5_0 exact)"
-            } else {
-                scratch |> resize(int(j.n))
-                gguf_read_tensor_f32(m, bytes, j.name, scratch, 0l, j.n, j.src_off)
-                quantize_q8_0_into(scratch, j.n, temp_q8, temp_sf, 0l, 0l)
-                kind = "q8 REQUANT (dequant+quant)"
-            }
-        }
-        conv_note(kind, t0, j.n)
-        // land the scale half at its real offset (RAM-resident plane)
-        unsafe {
-            if (j.fmt == KqFmt.k4) {
-                memcpy(addr<void?>(t.k4s[(j.woff / 256l) * K4_SSB]), addr<void?>(temp_s[0]), sh.sb)
-            } elif (j.fmt == KqFmt.k5) {
-                memcpy(addr<void?>(t.k5s[(j.woff / 256l) * K5_SSB]), addr<void?>(temp_s[0]), sh.sb)
-            } elif (j.fmt == KqFmt.k6) {
-                memcpy(addr<void?>(t.k6s[(j.woff / 256l) * K6_SSB]), addr<void?>(temp_s[0]), sh.sb)
-            } elif (j.fmt == KqFmt.q40) {
-                memcpy(addr<void?>(t.q40s[(j.woff / 256l) * Q40_SSB]), addr<void?>(temp_s[0]), sh.sb)
-            } elif (j.fmt == KqFmt.q51) {
-                memcpy(addr<void?>(t.q51s[(j.woff / 32l) * Q51_SB]), addr<void?>(temp_s[0]), sh.sb)
-            } elif (sh.sb == 0l && j.n > 0l) {
-                memcpy(addr<void?>(t.qscales[j.woff / 32l]), addr<void?>(temp_sf[0]), (j.n / 32l) * 4l)
-            }
-        }
-        // per-job repack: this job's regions applied on the temp (q half, pointer biased to
-        // woff 0) and the real scale plane (in place) — the same backend fns, same regions
-        unsafe {
-            for (r in regs) {
-                if (r.fmt != sh.rfmt || r.off < j.woff || r.off >= j.woff + j.n) {
-                    continue
-                }
-                if (r.fmt == 0) {
-                    invoke(g_stream_repack, 0, addr<void?>(temp_q8[r.off - j.woff]),
-                        addr<void?>(t.qscales[r.off / 32l]), r.n, r.d)
-                } elif (r.fmt == 2) {
-                    invoke(g_stream_repack, 2, addr<void?>(temp_q[((r.off - j.woff) / 32l) * Q51_QPB]),
-                        addr<void?>(t.q51s[(r.off / 32l) * Q51_SPB]), r.n, r.d)
-                } elif (r.fmt == 4) {
-                    invoke(g_stream_repack, 4, addr<void?>(temp_q[((r.off - j.woff) / 256l) * K4_QSB]),
-                        addr<void?>(t.k4s[(r.off / 256l) * K4_SSB]), r.n, r.d)
-                } elif (r.fmt == 5) {
-                    invoke(g_stream_repack, 5, addr<void?>(temp_q[((r.off - j.woff) / 256l) * K5_QSB]),
-                        addr<void?>(t.k5s[(r.off / 256l) * K5_SSB]), r.n, r.d)
-                } elif (r.fmt == 6) {
-                    invoke(g_stream_repack, 6, addr<void?>(temp_q[((r.off - j.woff) / 256l) * K6_QSB]),
-                        addr<void?>(t.k6s[(r.off / 256l) * K6_SSB]), r.n, r.d)
-                } elif (r.fmt == 40) {
-                    invoke(g_stream_repack, 40, addr<void?>(temp_q[((r.off - j.woff) / 256l) * Q40_QSB]),
-                        addr<void?>(t.q40s[(r.off / 256l) * Q40_SSB]), r.n, r.d)
-                }
-            }
-        }
-        unsafe {
-            if (sh.rfmt == 0) {
-                invoke(append, addr<void?>(temp_q8[0]), uint64(sh.qb))
-            } else {
-                invoke(append, addr<void?>(temp_q[0]), uint64(sh.qb))
-            }
-        }
-    }
-    // the layout's tail past the last job (never-written space) completes the plane
-    stream_zero_fill(stream_plane_bytes(t, jobs, field) - cursor, zeros, append)
-    if (field == "qblob" && g_wscale_f16) {
-        // the epilogue: scales are complete and repacked; qscales16 lands BEFORE its field
-        // writes (qblob precedes qscales/qscales16 in Model field order)
-        wscale_convert_f16(t)
-    }
-    delete mine
-    delete temp_q
-    delete temp_q8
-    delete temp_s
-    delete temp_sf
-    delete scratch
-    delete zeros
-    return true
-}
-
-//! Arm plan recording: subsequent load_big calls append FillJobs instead of transcoding
-//! (smalls still load eagerly — fblob is small and every flavor keeps it).
-def fill_plan_begin {
-    g_fill_plan_mode = true
-    g_fill_plan |> clear()
-}
-
-//! Disarm and move the recorded plan out (empty = nothing recorded).
-def fill_plan_take(var out : array<FillJob>) {
-    g_fill_plan_mode = false
-    out <- g_fill_plan
-}
-
-def private load_big(m : GGUFMeta; bytes : array<uint8> | #; name : string; var t : Model; woff, n : int64; var scratch : array<float>; src_off : int64 = 0l; fmt : KqFmt = KqFmt.q8) {
-    if (g_fill_plan_mode) {
-        g_fill_plan |> push(FillJob(name = name, woff = woff, n = n, src_off = src_off, fmt = fmt))
-        return
-    }
-    let t0 = g_conv_prof ? ref_time_ticks() : 0l
-    var kind = "f32 read (no quant)"
-    if (fmt == KqFmt.k4) {
-        gguf_transcode_q4k(m, bytes, name, t.k4q, t.k4s, woff, n, src_off)
-        kind = "k4 transcode (Q4_K)"
-    } elif (fmt == KqFmt.k5) {
-        if (gguf_tensor_type(m, name) == GGML_TYPE_Q5_K) {
-            gguf_transcode_q5k(m, bytes, name, t.k5q, t.k5s, woff, n, src_off)
-            kind = "k5 transcode (Q5_K)"
-        } else {   // Q5_0 source: no exact embedding exists, so dequant and re-encode (lossy)
-            scratch |> resize(n)
-            gguf_read_tensor_f32(m, bytes, name, scratch, 0l, n, src_off)
-            quantize_k5_plane(scratch, n, t.k5q, t.k5s, woff)
-            kind = "k5 RE-ENCODE (Q5_0 dequant+quant)"
-        }
-    } elif (fmt == KqFmt.k6) {
-        gguf_transcode_q6k(m, bytes, name, t.k6q, t.k6s, woff, n, src_off)
-        kind = "k6 transcode (Q6_K)"
-    } elif (fmt == KqFmt.q40) {
-        gguf_transcode_q40(m, bytes, name, t.q40q, t.q40s, woff, n, src_off)
-        kind = "q40 transcode (Q4_0)"
-    } elif (fmt == KqFmt.q51) {
-        gguf_transcode_q51(m, bytes, name, t.q51q, t.q51s, woff, n, src_off)
-        kind = "q51 transcode (Q5_1)"
-    } elif (t.quant == QuantMode.q8) {
-        let gt = gguf_tensor_type(m, name)
-        if (gt == GGML_TYPE_Q8_0) {
-            gguf_transcode_q8_0(m, bytes, name, t.qblob, t.qscales, woff, woff / 32l, n, src_off)
-            kind = "q8 transcode (Q8_0 verbatim)"
-        } elif (gt == GGML_TYPE_Q5_0) {
-            gguf_transcode_q5_0_to_q8(m, bytes, name, t.qblob, t.qscales, woff, woff / 32l, n, src_off)
-            kind = "q8 transcode (Q5_0 exact)"
-        } else {
-            scratch |> resize(n)
-            gguf_read_tensor_f32(m, bytes, name, scratch, 0l, n, src_off)
-            quantize_q8_0_into(scratch, n, t.qblob, t.qscales, woff, woff / 32l)
-            kind = "q8 REQUANT (dequant+quant)"
-        }
-    } elif (t.quant == QuantMode.q4_0) {
-        if (gguf_tensor_type(m, name) == GGML_TYPE_Q4_0) {
-            gguf_transcode_q4_0(m, bytes, name, t.q4blob, t.q4scales, woff / 2l, woff / 32l, n, src_off)
-            kind = "q4_0 transcode (Q4_0 verbatim)"
-        } else {
-            scratch |> resize(n)
-            gguf_read_tensor_f32(m, bytes, name, scratch, 0l, n, src_off)
-            quantize_q4_0_into(scratch, n, t.q4blob, t.q4scales, woff / 2l, woff / 32l)
-            kind = "q4_0 REQUANT (dequant+quant)"
-        }
-    } else {
-        gguf_read_tensor_f32(m, bytes, name, t.wblob, woff, n, src_off)
-    }
-    conv_note(kind, t0, n)
-}
-
-// qwen3next-layout deltanet big weights: same planes as the qwen35 arm, but the file's v-indexed
-// rows arrive GROUPED by k-head — sub-slice reads land each v-head chunk at its TILED position
-// (tiled j*nk+g <- grouped g*nvpk+j); ssm_out (an INPUT-column permute) round-trips through f32.
-def private load_dn_grouped(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; l, dim : int64; var scratch : array<float>) {
-    let nk = t.config.ssm_n_group
-    let nvh = t.config.ssm_dt_rank
-    let nvpk = nvh / nk
-    let hv = t.config.ssm_d_inner / nvh
-    let qkr = 2l * nk * t.config.ssm_d_state    // fused qkv: the q+k rows stay put, v rows permute
-    load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.dnqkv_offs[l], dim * qkr, scratch)
-    for (g in range64(nk)) {
-        for (j in range64(nvpk)) {
-            let vg = g * nvpk + j
-            let vt = j * nk + g
-            load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.dnqkv_offs[l] + (qkr + vt * hv) * dim, hv * dim, scratch, (qkr + vg * hv) * dim)
-            load_big(m, bytes, "blk.{l}.attn_gate.weight", t, t.dngate_offs[l] + vt * hv * dim, hv * dim, scratch, vg * hv * dim)
-            if (!t.dn_ba_f32) {   // fused ba rows per k-head group: [beta j.. ; alpha j..]
-                load_big(m, bytes, "blk.{l}.ssm_ba.weight", t, t.dnbeta_offs[l] + vt * dim, dim, scratch, (g * 2l * nvpk + j) * dim)
-                load_big(m, bytes, "blk.{l}.ssm_ba.weight", t, t.dnalpha_offs[l] + vt * dim, dim, scratch, ((g * 2l + 1l) * nvpk + j) * dim)
-            }
-        }
-    }
-    let n = t.config.ssm_d_inner * dim
-    var raw : array<float>
-    raw |> resize(n)
-    gguf_read_tensor_f32(m, bytes, "blk.{l}.ssm_out.weight", raw, 0l, n)
-    scratch |> resize(n)
-    let din = t.config.ssm_d_inner
-    unsafe {   // column-permute threaded over output rows (disjoint writes per row)
-        let rawp = addr < float const? >(raw[0])
-        var scrp = addr(scratch[0])
-        maybe_parallel_for(0, int(dim), is_job_que_available() ? 16 : 1) $(rb, re) {
-            unsafe {
-                for (r in range64(int64(rb), int64(re))) {
-                    for (g in range64(nk)) {
-                        for (j in range64(nvpk)) {
-                            let src = r * din + (g * nvpk + j) * hv
-                            let dst = r * din + (j * nk + g) * hv
-                            for (x in range64(hv)) {
-                                scrp[dst + x] = rawp[src + x]
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    delete raw
-    let woff = t.dnout_offs[l]
-    if (t.quant == QuantMode.q8) {
-        quantize_q8_0_into(scratch, n, t.qblob, t.qscales, woff, woff / 32l)
-    } elif (t.quant == QuantMode.q4_0) {
-        quantize_q4_0_into(scratch, n, t.q4blob, t.q4scales, woff / 2l, woff / 32l)
-    } else {
-        for (i in range64(n)) {
-            t.wblob[woff + i] = scratch[i]
-        }
     }
 }
 
@@ -2182,7 +1126,7 @@ def caps_(m : Model) : LlmCaps {
 
 // Look the arch up, apply its config flags, and copy its (copyable) block kernels onto the model.
 // The full descriptor stays in the registry; only the hot-path pointers ride on the Model.
-def private resolve_arch(var t : Model; arch : string) {
+def resolve_arch(var t : Model; arch : string) {
     rebind_arch_blocks(t, arch)
     g_arch_registry[arch].configure(t.config)
 }
@@ -2233,6 +1177,89 @@ def public get_resilient_load() : bool {
 // requantizing to Q8. Default ON since the kernel tier landed; OFF loads through the q8-requant
 // fallback exactly as before — the A/B opt-out.
 var private g_kquant_native = true
+
+def private apply_i64_knob(rt : JsonValue const?; key : string; blk : block<(v : int64) : void>) {
+    let v = read_json_field(rt, key, -1l)
+    if (v >= 0l) {
+        invoke(blk, v)
+        to_log(LOG_INFO, "dasLLAMA: box profile runtime: {key} = {v}\n")
+    }
+}
+
+//! Apply the runtime knobs from the app tune sidecar's optional "runtime" section (see
+//! tune_for_this_box.md): token block, L2 budget, threading thresholds, chunk multipliers, and an
+//! optional kernel-backend pin. Missing/STALE file or missing section = no-op; every applied entry logs.
+def apply_box_profile_runtime(path : string = "") {
+    if (path == "" && box_profile_stale()) {
+        to_log(LOG_INFO, "dasLLAMA: tune sidecar is older than the binary — runtime knobs not applied (re-tune)\n")
+        return
+    }
+    let ppath = path != "" ? path : box_profile_path()
+    let text = fread(ppath)
+    if (empty(text)) return
+    var err = ""
+    let jv = read_json(text, err)
+    if (jv == null) {
+        to_log(LOG_WARNING, "dasLLAMA: {ppath} is not valid JSON ({err}) — runtime knobs not applied\n")
+        return
+    }
+    let rt = jv?["runtime"]   // null-sentinel when absent — every read below then keeps its default
+    apply_i64_knob(rt, "q8_token_block") $(v) { set_q8_token_block(v) }
+    apply_i64_knob(rt, "q8_l2_budget") $(v) { set_q8_l2_budget(v) }
+    apply_i64_knob(rt, "target_chunk_work") $(v) { set_target_chunk_work(v) }
+    apply_i64_knob(rt, "attn_par_threshold") $(v) { set_attn_par_threshold(v) }
+    apply_i64_knob(rt, "requant_par_threshold") $(v) { set_requant_par_threshold(v) }
+    apply_i64_knob(rt, "norm_par_threshold") $(v) { set_norm_par_threshold(v) }
+    apply_i64_knob(rt, "rope_par_threshold") $(v) { set_rope_par_threshold(v) }
+    apply_i64_knob(rt, "kv_store_par_threshold") $(v) { set_kv_store_par_threshold(v) }
+    apply_i64_knob(rt, "act_par_threshold") $(v) { set_act_par_threshold(v) }
+    // the int-typed knobs clamp into int range before the cast — int() wraps silently on int64
+    apply_i64_knob(rt, "q8_chunks_per_job") $(v) { set_q8_chunks_per_job(int(min(v, 2147483647l))) }
+    apply_i64_knob(rt, "q4_chunks_per_job") $(v) { set_q4_chunks_per_job(int(min(v, 2147483647l))) }
+    apply_i64_knob(rt, "q8_batch_chunks_per_job") $(v) { set_q8_batch_chunks_per_job(int(min(v, 2147483647l))) }
+    apply_i64_knob(rt, "matmul_min_chunk_rows") $(v) { set_matmul_min_chunk_rows(int(min(v, 2147483647l))) }
+    apply_i64_knob(rt, "matmul_min_chunk_rows_gemv") $(v) { set_matmul_min_chunk_rows_gemv(int(min(v, 2147483647l))) }
+    apply_i64_knob(rt, "gemv_chunks_per_lane") $(v) { set_gemv_chunks_per_lane(int(min(v, 2147483647l))) }
+    apply_i64_knob(rt, "wscale_f16") $(v) { set_wscale_f16(v != 0l) }
+    apply_i64_knob(rt, "kquant_native") $(v) { set_kquant_native(v != 0l) }
+    apply_i64_knob(rt, "kq_q40_native") $(v) { set_kq_q40_native(v != 0l) }
+    apply_i64_knob(rt, "kq_q50_native") $(v) { set_kq_q50_native(v != 0l) }
+    apply_i64_knob(rt, "noisy") $(v) { set_dasllama_noisy(v != 0l) }
+    apply_i64_knob(rt, "gemv_lane_cap") $(v) { set_gemv_lane_cap(int(min(v, 2147483647l))) }
+    apply_i64_knob(rt, "batch_lane_cap") $(v) { set_batch_lane_cap(int(min(v, 2147483647l))) }
+    apply_i64_knob(rt, "batch_grid_2d") $(v) { set_batch_grid_2d(int(min(v, 2l))) }
+    apply_i64_knob(rt, "dispatch_worker_limit") $(v) { set_dispatch_worker_limit(int(min(v, 2147483647l))) }
+    apply_i64_knob(rt, "gemv_wave_fill") $(v) { set_gemv_wave_fill(v != 0l) }
+    apply_i64_knob(rt, "fused_decode") $(v) { set_fused_decode(v != 0l) }
+    // stored only — the queue may not exist yet; setup_dasllama_jobque applies these inside with_job_que
+    apply_i64_knob(rt, "jobque_spin_us") $(v) { set_jobque_spin_us(v) }
+    apply_i64_knob(rt, "jobque_join_poll") $(v) { set_jobque_join_poll(v) }
+    apply_i64_knob(rt, "team_rank_gate") $(v) { set_team_rank_gate(int(min(v, 1l))) }
+    let mtc = read_json_field(rt, "metal_tensor", "")
+    if (mtc != "") {
+        set_metal_tensor_crowns(mtc)
+        to_log(LOG_INFO, "dasLLAMA: box profile runtime: metal_tensor crowns = {mtc}\n")
+    }
+    let be = read_json_field(rt, "backend", "")
+    if (be != "") {
+        pin_kernel_backend(be)   // warns and keeps the current backend if the name is unknown
+        to_log(LOG_INFO, "dasLLAMA: box profile runtime: backend = {active_kernel_backend()} (profile pin '{be}')\n")
+    }
+    let bbe = read_json_field(rt, "batch_backend", "")
+    if (bbe != "") {
+        // sticky through the load-time (re)select — activate() re-applies it; warns and keeps the
+        // active backend's batch slots if the donor is unknown or reads a different weight layout
+        select_batch_backend(bbe)
+        to_log(LOG_INFO, "dasLLAMA: box profile runtime: batch_backend = {active_batch_backend()} (profile pin '{bbe}')\n")
+    }
+    // "threads" is advisory — the worker count is fixed at jobque creation, controlled by the
+    // DAS_JOBQUE_THREADS env (see tune_for_this_box.md); a profile can only recommend it. No live
+    // comparison here: get_dispatch_lanes() throws outside a job queue, and load_model may run there.
+    let adv = read_json_field(rt, "threads", -1l)
+    if (adv > 0l) {
+        to_log(LOG_INFO, "dasLLAMA: box profile advises threads = {adv} — ensure DAS_JOBQUE_THREADS={adv}\n")
+    }
+}
 
 //! Enable/disable native K-quant weight planes for subsequent loads (A/B rail; default ON).
 def public set_kquant_native(on : bool) {
@@ -2316,189 +1343,24 @@ def private dlim_metal_source_impl(var c : DlimMetalConfig) : bool {
 def dlim_config_sources_register() {
     set_dlim_cpu_source(@@dlim_cpu_source_impl)
     set_dlim_metal_source(@@dlim_metal_source_impl)
-    set_moe_gpu_slice_window_fn(@@vk_slice_window_provider)
-}
-
-def private count_fmt(a : array<KqFmt>; f : KqFmt) : int {
-    var n = 0
-    for (x in a) {
-        if (x == f) {
-            n++
-        }
-    }
-    return n
-}
-
-def private tally_fmt(t : Model; f : KqFmt) : int {
-    return (count_fmt(t.wq_fmt, f) + count_fmt(t.wk_fmt, f) + count_fmt(t.wv_fmt, f)
-        + count_fmt(t.wo_fmt, f) + count_fmt(t.w1_fmt, f) + count_fmt(t.w2_fmt, f)
-        + count_fmt(t.w3_fmt, f) + count_fmt(t.we1_fmt, f) + count_fmt(t.we2_fmt, f)
-        + count_fmt(t.we3_fmt, f))
-}
-
-// The load's self-report: knob states, per-tensor format tags, and plane bytes. Plane bytes are
-// the ONLY direct evidence that a format tag actually engaged — a timing delta can never prove it.
-def private log_load_report(t : Model) {
-    if (!dasllama_noisy()) {
-        return
-    }
-    let mb = 1048576.0
-    to_log(LOG_INFO, "dasLLAMA noisy: backend '{active_kernel_backend()}' | kquant_native {g_kquant_native} q40_native {g_kq_q40_native} q50_native {g_kq_q50_native}\n")
-    // the tier arms at [init], before a --noisy CLI flag can land — restate it here so the flag alone suffices
-    to_log(LOG_INFO, "dasLLAMA noisy: GPU tier installed {moe_gpu_tier_installed()} | want auto {gpu_want_auto()}, moe layers {gpu_want_moe_layers()}, stream {gpu_want_moe_stream()}\n")
-    to_log(LOG_INFO, "dasLLAMA noisy: format tags — q8 {tally_fmt(t, KqFmt.q8)}, k4 {tally_fmt(t, KqFmt.k4)}, k5 {tally_fmt(t, KqFmt.k5)}, k6 {tally_fmt(t, KqFmt.k6)}, q40 {tally_fmt(t, KqFmt.q40)}, q51 {tally_fmt(t, KqFmt.q51)}\n")
-    to_log(LOG_INFO, "dasLLAMA noisy: plane MB — q8 {float(long_length(t.qblob)) / mb} (+scales {float(long_length(t.qscales) * 4l) / mb}), k4 {float(long_length(t.k4q) + long_length(t.k4s)) / mb}, k5 {float(long_length(t.k5q) + long_length(t.k5s)) / mb}, k6 {float(long_length(t.k6q) + long_length(t.k6s)) / mb}, q40 {float(long_length(t.q40q) + long_length(t.q40s)) / mb}, q51 {float(long_length(t.q51q) + long_length(t.q51s)) / mb}, f32 {float(long_length(t.wblob) * 4l) / mb}\n")
-}
-
-// GGML disk type -> plane format tag (non-K-quant types ride the classic q8 path)
-def private kq_fmt_of(gt : int) : KqFmt {
-    if (gt == GGML_TYPE_Q4_K) {
-        return KqFmt.k4
-    }
-    if (gt == GGML_TYPE_Q5_K) {
-        return KqFmt.k5
-    }
-    if (gt == GGML_TYPE_Q6_K) {
-        return KqFmt.k6
-    }
-    if (gt == GGML_TYPE_Q4_0 && g_kq_q40_native) {
-        return KqFmt.q40
-    }
-    if (gt == GGML_TYPE_Q5_0 && g_kq_q50_native) {
-        return KqFmt.k5
-    }
-    if (gt == GGML_TYPE_Q5_1 && g_kq_q51_native) {
-        return KqFmt.q51
-    }
-    return KqFmt.q8
 }
 
 // Dense-position demotion: q40/k5-from-Q5_0 need % 256 rows (superblock walkers); q51 always
 // demotes — dense positions have no q51 dispatch (v1 is expert stacks — kq_fmt_expert_ok).
-def private kq_fmt_row_ok(f : KqFmt; n : int64) : KqFmt {
+def kq_fmt_row_ok(f : KqFmt; n : int64) : KqFmt {
     if (f == KqFmt.q51) return KqFmt.q8
     return (f == KqFmt.q40 || f == KqFmt.k5) && n % 256l != 0l ? KqFmt.q8 : f
 }
 
 // Expert-stack tag rule: q51 serves natively off per-32 planes (its whole reason to exist — the
 // 26B-A4B down stacks are 704-wide); the superblock formats keep the % 256 rule.
-def private kq_fmt_expert_ok(f : KqFmt; n : int64) : KqFmt {
+def kq_fmt_expert_ok(f : KqFmt; n : int64) : KqFmt {
     if (f == KqFmt.q51) return n % 32l == 0l ? f : KqFmt.q8
     return kq_fmt_row_ok(f, n)
 }
 
-// Fill the per-kind weight format tags from the file's tensor types (q8-mode loads with the
-// kquant_native knob on). Fused-projection arches (Phi3) split attn_qkv/ffn_up at row-aligned
-// slice offsets, so every slice stays superblock-aligned; one disk tensor = one tag for its slices.
-def private detect_kq_formats(var t : Model; m : GGUFMeta) {
-    if (t.quant != QuantMode.q8 || !g_kquant_native
-            || (t.config.fused_qkv && t.config.dim % 256l != 0l)) {   // fused slice offsets are dim-multiples
-        return
-    }
-    let layers = t.config.n_layers + t.config.n_layer_nextn   // + the MTP block's tags at index n_layers
-    t.wq_fmt |> resize(layers)
-    t.wk_fmt |> resize(layers)
-    t.wv_fmt |> resize(layers)
-    t.wo_fmt |> resize(layers)
-    t.w1_fmt |> resize(layers)
-    t.w2_fmt |> resize(layers)
-    t.w3_fmt |> resize(layers)
-    var any = false
-    // q40 tags additionally demote per tensor when the row length isn't % 256 — Q4_0 only guarantees % 32
-    for (l in range64(layers)) {
-        if (t.config.fused_qkv) {
-            let fqkv = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.attn_qkv.weight")), t.config.dim)
-            t.wq_fmt[l] = fqkv
-            t.wk_fmt[l] = fqkv
-            t.wv_fmt[l] = fqkv
-            let fgu = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.ffn_up.weight")), t.config.dim)
-            t.w1_fmt[l] = fgu
-            t.w3_fmt[l] = fgu
-        } else {
-            t.wq_fmt[l] = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.attn_q.weight")), t.config.dim)
-            t.wk_fmt[l] = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.attn_k.weight")), t.config.dim)
-            t.wv_fmt[l] = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.attn_v.weight")), t.config.dim)
-            t.w1_fmt[l] = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.ffn_gate.weight")), t.config.dim)
-            t.w3_fmt[l] = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.ffn_up.weight")), t.config.dim)
-        }
-        t.wo_fmt[l] = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.attn_output.weight")), layer_qd(t.config, l))
-        t.w2_fmt[l] = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.ffn_down.weight")), layer_hidden(t, l))
-        any ||= t.wq_fmt[l] != KqFmt.q8 || t.wk_fmt[l] != KqFmt.q8 || t.wv_fmt[l] != KqFmt.q8
-        any ||= t.wo_fmt[l] != KqFmt.q8 || t.w1_fmt[l] != KqFmt.q8 || t.w2_fmt[l] != KqFmt.q8
-        any ||= t.w3_fmt[l] != KqFmt.q8
-    }
-    // MoE routed expert stacks: one tag per (layer, kind). Biased-experts arches (gpt-oss) stay q8 — the kq groupn carries no bias form
-    if (t.config.n_expert > 0l && !t.config.moe_exps_bias
-            && (t.config.dim * t.config.n_ff_exp) % 256l == 0l) {
-        t.we1_fmt |> resize(layers)
-        t.we2_fmt |> resize(layers)
-        t.we3_fmt |> resize(layers)
-        let fused_gu = t.config.moe_dense_shexp   // gemma4: experts ship fused as ffn_gate_up_exps
-        for (l in range64(layers)) {
-            if (fused_gu) {
-                let f = kq_fmt_expert_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.ffn_gate_up_exps.weight")), t.config.dim)
-                t.we1_fmt[l] = f
-                t.we3_fmt[l] = f
-            } else {
-                t.we1_fmt[l] = kq_fmt_expert_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.ffn_gate_exps.weight")), t.config.dim)
-                t.we3_fmt[l] = kq_fmt_expert_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.ffn_up_exps.weight")), t.config.dim)
-            }
-            t.we2_fmt[l] = kq_fmt_expert_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.ffn_down_exps.weight")), t.config.n_ff_exp)
-            any ||= t.we1_fmt[l] != KqFmt.q8 || t.we2_fmt[l] != KqFmt.q8 || t.we3_fmt[l] != KqFmt.q8
-        }
-    }
-    if (t.config.shared_weights) {
-        t.emb_fmt = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "token_embd.weight")), t.config.dim)
-        any ||= t.emb_fmt != KqFmt.q8
-    } else {
-        t.wcls_fmt = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "output.weight")), t.config.dim)
-        any ||= t.wcls_fmt != KqFmt.q8
-    }
-    if (t.config.n_layer_nextn > 0l) {
-        t.mtp_ehproj_fmt = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{t.config.n_layers}.nextn.eh_proj.weight")), 2l * t.config.dim)
-        any ||= t.mtp_ehproj_fmt != KqFmt.q8
-    }
-    // deltanet dn tags: CPU rail only — Metal/GPU tiers bind dn q8; grouped files have no exact transcode
-    if (t.config.recr_mask != 0ul && !t.dn_grouped
-            && get_metal_mode() == MetalMode.off
-            && !(moe_gpu_tier_installed() && (gpu_want_dense() || gpu_want_dn() || gpu_want_dnd()))) {
-        t.dnqkv_fmt |> resize(layers)
-        t.dngate_fmt |> resize(layers)
-        t.dnout_fmt |> resize(layers)
-        for (l in range64(layers)) {
-            if (layer_is_recurrent(t.config, l)) {
-                t.dnqkv_fmt[l] = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.attn_qkv.weight")), t.config.dim)
-                t.dngate_fmt[l] = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.attn_gate.weight")), t.config.dim)
-                t.dnout_fmt[l] = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.ssm_out.weight")), t.config.ssm_d_inner)
-                any ||= t.dnqkv_fmt[l] != KqFmt.q8 || t.dngate_fmt[l] != KqFmt.q8 || t.dnout_fmt[l] != KqFmt.q8
-            }
-        }
-    }
-    // E-series PLE token table: gather-only whole rows; row length must be superblock-aligned
-    if (has_ple(t.config) && (t.config.n_layers * t.config.n_embd_per_layer) % 256l == 0l) {
-        t.ple_emb_fmt = kq_fmt_of(gguf_tensor_type(m, "per_layer_token_embd.weight"))
-        any ||= t.ple_emb_fmt != KqFmt.q8
-    }
-    if (!any) {   // nothing K-quant in the file: drop the tags so fmt_at short-circuits on empty
-        delete t.wq_fmt
-        delete t.wk_fmt
-        delete t.wv_fmt
-        delete t.wo_fmt
-        delete t.w1_fmt
-        delete t.w2_fmt
-        delete t.w3_fmt
-        delete t.we1_fmt
-        delete t.we2_fmt
-        delete t.we3_fmt
-        delete t.dnqkv_fmt
-        delete t.dngate_fmt
-        delete t.dnout_fmt
-    }
-    t.kquant_native = any
-}
-
 // Any K-quant-tagged expert stack in layer `l`? (The MoE dispatch and prefill gates branch on this.)
-def private moe_layer_kq(t : Model; l : int64) : bool {
+def moe_layer_kq(t : Model; l : int64) : bool {
     return fmt_at(t.we1_fmt, l) != KqFmt.q8 || fmt_at(t.we2_fmt, l) != KqFmt.q8 || fmt_at(t.we3_fmt, l) != KqFmt.q8
 }
 
@@ -2509,14 +1371,14 @@ def dn_layer_q8(t : Model; l : int64) : bool {
 
 // Any expert stack on the SUPERBLOCK kq lattice? (q51 excluded — its grouped-prefill kernels are
 // always available, so it never gates on kq_repacked / the kq batch tile.)
-def private moe_layer_sb_kq(t : Model; l : int64) : bool {
+def moe_layer_sb_kq(t : Model; l : int64) : bool {
     return kq_sb(fmt_at(t.we1_fmt, l)) || kq_sb(fmt_at(t.we2_fmt, l)) || kq_sb(fmt_at(t.we3_fmt, l))
 }
 
 // Convert the (already repacked/permuted) f32 scale plane to raw binary16 halfwords and free the
 // f32 plane. f16->f32->f16 round-trips exactly for gguf-Q8 tensors (bit-identical dots);
 // runtime-quantized tensors take one f16 rounding. Gated on the backend carrying f16-scale kernels.
-def private wscale_convert_f16(var t : Model) {
+def wscale_convert_f16(var t : Model) {
     if (!kernel_backend_has_wscale16()) {
         to_log(LOG_WARNING, "dasLLAMA: wscale_f16 requested but backend '{active_kernel_backend()}' has no f16-scale kernels — keeping the f32 scale plane\n")
         return
@@ -2546,1083 +1408,17 @@ def private wscale_convert_f16(var t : Model) {
     to_log(LOG_INFO, "dasLLAMA: weight-scale plane converted to f16 ({n} scales, -{n * 2l} bytes)\n")
 }
 
-// ===== GPU MoE tier upload (post-prepare, loader-agnostic) =====
-
-def private moe_gpu_fmt_kq(f : KqFmt) : bool => f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.q40
-
-// a plane the dense rail can serve: a format the tier has kernels for, repacked if native-kq
-def private dense_plane_ok(t : Model; f : KqFmt) : bool => (f == KqFmt.q8 || moe_gpu_fmt_kq(f)) && kq_servable(t, f)
-
-// layer l carries a parallel-dense shared expert whose whole w1/w3/w2 triple the tier can serve
-def private dense_shexp_uploadable(t : Model; l : int64) : bool {
-    if (!t.config.moe_dense_shexp || !gpu_want_dense_shexp() || long_length(t.w1_offs) <= l
-            || t.w1_offs[l] < 0l || t.w2_offs[l] < 0l || t.w3_offs[l] < 0l) {
-        return false
-    }
-    return (dense_plane_ok(t, fmt_at(t.w1_fmt, l)) && dense_plane_ok(t, fmt_at(t.w2_fmt, l))
-        && dense_plane_ok(t, fmt_at(t.w3_fmt, l)))
-}
-
 // The device format of an EXPERT stack: q8 rides the cm2 native-block layout (q8n, fmt 6) when
 // the armed tier asks for it; every other format ships as-is. Upload and dispatch must agree on
 // the answer — both go through this one helper.
-def private moe_gpu_expert_fmt(f : KqFmt) : KqFmt => f == KqFmt.q8 && moe_gpu_expert_q8n() ? KqFmt.q8n : f
+def moe_gpu_expert_fmt(f : KqFmt) : KqFmt => f == KqFmt.q8 && moe_gpu_expert_q8n() ? KqFmt.q8n : f
 
-// Gather one stack through its format's reader (q8 planes, q8n interleaved blocks, or native kq
-// planes) and hand it to the tier's upload hook with the format tag.
-def private moe_gpu_gather_upload(t : Model; f : KqFmt; woff : int64; n, rows, slice_rows : int64;
-                                  mr, kgroup, wbias : int64; var wq : array<uint8>; var ws : array<uint8>;
-                                  stream : bool = false) : bool {
-    if (f == KqFmt.q8) {
-        moe_gpu_gather_stack(t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
-    } elif (f == KqFmt.q8n) {
-        moe_gpu_gather_stack_q8n(t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq)
-        ws |> resize(0)   // no scale plane — the tier takes an EMPTY ws for fmt 6
-    } else {
-        let kmr = t.kq_repacked ? (f == KqFmt.k4 ? t.kq_repack_mr4
-            : (f == KqFmt.k5 ? t.kq_repack_mr5
-            : (f == KqFmt.k6 ? t.kq_repack_mr6 : t.kq_repack_mr40))) : 1l
-        moe_gpu_gather_stack_kq(t, f, woff, n, rows, slice_rows, t.kq_repacked, kmr, wq, ws)
+// the active grp<mr> interleave of a repacked kq plane (1 = disk order / not repacked)
+def kq_active_mr(t : Model; f : KqFmt) : int64 {
+    if (!t.kq_repacked) {
+        return 1l
     }
-    let ok = moe_gpu_upload_stack(wq, ws, woff, n, rows, int(f), stream)
-    if (ok) {
-        vk_bake_collect(int(f), woff, n, rows, wq, ws)
-    }
-    return ok
-}
-
-//! What a whole-model resident load would cost on the device. The resident driver is all-or-nothing
-//! by construction — a half-resident whole-stack driver cannot run at all — so this is the decision,
-//! and it is computed from Model metadata BEFORE a single byte uploads.
-struct ResidentPlan {
-    weight_bytes : int64
-    kv_bytes : int64
-    budget_bytes : int64
-    fits : bool
-    reason : string       //!< "" when it fits; otherwise why, with a remedy where one exists
-}
-
-//! Size `t` for the resident driver at `seq_cap` context. Declines (fits = false) carry a reason:
-//! the commonest support question on this tier is "why did it decline", so the answer is the API.
-def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan {
-    let c = t.config
-    var p = ResidentPlan(budget_bytes = moe_gpu_weight_budget())
-    if (p.budget_bytes <= 0l) {
-        p.reason = "no GPU tier armed"
-        return p
-    }
-    if (c.n_expert > 0l) {
-        p.reason = "MoE — the per-op offload tier serves routed experts, not the resident driver"
-        return p
-    }
-    // KV is reserved BEFORE weights and never grows: on a discrete card it competes directly with
-    // them, and evicting weights to grow it would mean re-uploading gigabytes.
-    var krow = 0l
-    var vrow = 0l
-    for (l in range64(c.n_layers)) {
-        krow += kv_row_bytes(kdt, layer_kv_dim(c, l))
-        vrow += kv_row_bytes(vdt, layer_kv_dim(c, l))
-    }
-    p.kv_bytes = seq_cap * (krow + vrow)
-    // every 2D plane a dense forward reads: the attention quad, the FFN triple, the classifier
-    for (l in range64(c.n_layers)) {
-        let qd = layer_qd(c, l)
-        let kvd = layer_kv_dim(c, l)
-        let hid = layer_hidden(t, l)
-        if (t.wq_offs[l] >= 0l) {
-            p.weight_bytes += moe_gpu_plane_bytes(c.dim, qd * (c.q_gated ? 2l : 1l), int(fmt_at(t.wq_fmt, l)))
-        }
-        if (t.wk_offs[l] >= 0l) {
-            p.weight_bytes += moe_gpu_plane_bytes(c.dim, kvd, int(fmt_at(t.wk_fmt, l)))
-        }
-        if (t.wv_offs[l] >= 0l) {
-            p.weight_bytes += moe_gpu_plane_bytes(c.dim, kvd, int(fmt_at(t.wv_fmt, l)))
-        }
-        if (t.wo_offs[l] >= 0l) {
-            p.weight_bytes += moe_gpu_plane_bytes(qd, c.dim, int(fmt_at(t.wo_fmt, l)))
-        }
-        if (t.w1_offs[l] >= 0l) {
-            p.weight_bytes += moe_gpu_plane_bytes(c.dim, hid, int(fmt_at(t.w1_fmt, l)))
-            p.weight_bytes += moe_gpu_plane_bytes(c.dim, hid, int(fmt_at(t.w3_fmt, l)))
-            p.weight_bytes += moe_gpu_plane_bytes(hid, c.dim, int(fmt_at(t.w2_fmt, l)))
-        }
-    }
-    let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
-    p.weight_bytes += moe_gpu_plane_bytes(c.dim, c.vocab_size, int(cls_fmt))
-    let total = p.weight_bytes + p.kv_bytes
-    p.fits = total <= p.budget_bytes
-    if (!p.fits) {
-        // a shorter context is the remedy that actually works — weights are fixed, KV is not
-        let kv_fit = max(p.budget_bytes - p.weight_bytes, 0l)
-        let cap_fit = (krow + vrow) > 0l ? kv_fit / (krow + vrow) : 0l
-        p.reason = (cap_fit >= 512l
-            ? "needs {total >> 20l} MB of {p.budget_bytes >> 20l} MB at ctx {seq_cap} — would fit at ctx {cap_fit}"
-            : "needs {total >> 20l} MB of {p.budget_bytes >> 20l} MB (weights alone {p.weight_bytes >> 20l} MB)")
-    }
-    return p
-}
-
-// ===== the resident whole-stack decode driver (dense models that fully fit) =====
-
-var private g_rdec_active = false       // this loaded model runs the resident decode driver
-var private g_rdec_cnt = 0l             // cached positions in the device KV mirror (built as we decode)
-var private g_rdec_cap = 0l             // mirror context the driver armed at (<= model ctx when VRAM-capped)
-var private g_rdec_gen = 0l             // mirror ownership generation (bumped per resident prefill)
-var private g_resident_prefill_allowed = true   // multi-stream schedulers pin this off (see set_resident_prefill_allowed)
-
-//! Allow/forbid the whole-prefill resident override. A multi-stream scheduler (dasllama-server)
-//! pins it OFF: the single shared mirror + chunked prefill would leave device-only KV that a
-//! second stream's steal strands. Single-session tools keep the fast path (default on).
-def set_resident_prefill_allowed(allowed : bool) {
-    g_resident_prefill_allowed = allowed
-}
-
-// Bulk-hydrate the session's host KV from the device mirror rows [0, g_rdec_cnt) — the rail that
-// keeps host KV authoritative at rest after device-resident prefills/decodes.
-def private rdec_hydrate_host(t : Model; var s : Session) {
-    let c = t.config
-    for (l in range64(c.n_layers)) {
-        unsafe {
-            rdec_read_kv_bulk(l, reinterpret<float?>(kv_layer_kbase(s, l, c.seq_len)),
-                reinterpret<float?>(kv_layer_vbase(s, l, c.seq_len)), g_rdec_cnt)
-        }
-    }
-    s.rdec_hydrated = true
-    to_log(LOG_INFO, "dasLLAMA: resident KV hydrated to host ({g_rdec_cnt} positions x {c.n_layers} layers)\n")
-}
-let private RDEC_MIN_CTX = 4096l        // smallest ctx worth arming a capped mirror at
-
-// the auto-cap floor, env-overridable: DASLLAMA_GPU_MIN_CTX lets a short-context session arm a
-// model whose capped mirror lands under the default floor (e.g. a 3B on an 8GB card fits at 3429)
-def private rdec_min_ctx : int64 {
-    let v = env_int64("DASLLAMA_GPU_MIN_CTX", 0l)   // unset or non-numeric keeps the default floor
-    return v > 0l ? max(v, 256l) : RDEC_MIN_CTX
-}
-
-// gather one prepared plane into device-layout bytes and place it in its format's arena; returns
-// the arena block index. Same gather the per-op tier uses (moe_gpu_gather_stack / _kq), then place
-// instead of upload_stack.
-def private resident_place(t : Model; f : KqFmt; woff : int64; n, rows : int64;
-                           mr, kgroup, wbias : int64) : int64 {
-    var wq : array<uint8>
-    var ws : array<uint8>
-    if (f == KqFmt.q8n) {
-        moe_gpu_gather_stack_q8n(t, woff, n, rows, rows, mr, kgroup, wbias, wq)
-        // no scale plane — the tier takes an EMPTY ws for fmt 6
-    } elif (f == KqFmt.q8) {
-        moe_gpu_gather_stack(t, woff, n, rows, rows, mr, kgroup, wbias, wq, ws)
-    } else {
-        let kmr = t.kq_repacked ? (f == KqFmt.k4 ? t.kq_repack_mr4
-            : (f == KqFmt.k5 ? t.kq_repack_mr5
-            : (f == KqFmt.k6 ? t.kq_repack_mr6 : t.kq_repack_mr40))) : 1l
-        moe_gpu_gather_stack_kq(t, f, woff, n, rows, rows, t.kq_repacked, kmr, wq, ws)
-    }
-    let blk = rdec_place(wq, ws, n, rows, int(f))
-    if (blk >= 0l) {
-        vk_bake_collect(int(f), woff, n, rows, wq, ws)
-    }
-    delete wq
-    delete ws
-    return blk
-}
-
-def private rdec_blocks_for(n, rows : int64; f : KqFmt) : int64 => (
-    rows * (n / (f == KqFmt.q8 || f == KqFmt.q8n ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS)))
-
-// cm2 (mode 4) places dense q8 planes as q8n — decode-in-load prefill GEMMs, q8n decode GEMV.
-// Promotion is per activation-group: members sharing one B-side image must agree on its form,
-// so {q,k,v} and {gate,up} promote only whole; wo / down / cls are singletons.
-def private resident_layer_fmts(t : Model; l : int64) : tuple<fq : KqFmt; fk : KqFmt; fv : KqFmt; fo : KqFmt; f1 : KqFmt; f3 : KqFmt; f2 : KqFmt> {
-    var fq = fmt_at(t.wq_fmt, l)
-    var fk = fmt_at(t.wk_fmt, l)
-    var fv = fmt_at(t.wv_fmt, l)
-    if (fq == KqFmt.q8 && fk == KqFmt.q8 && fv == KqFmt.q8 && moe_gpu_expert_q8n()) {
-        fq = KqFmt.q8n
-        fk = KqFmt.q8n
-        fv = KqFmt.q8n
-    }
-    var f1 = fmt_at(t.w1_fmt, l)
-    var f3 = fmt_at(t.w3_fmt, l)
-    if (f1 == KqFmt.q8 && f3 == KqFmt.q8 && moe_gpu_expert_q8n()) {
-        f1 = KqFmt.q8n
-        f3 = KqFmt.q8n
-    }
-    return (fq = fq, fk = fk, fv = fv, fo = moe_gpu_expert_fmt(fmt_at(t.wo_fmt, l)),
-            f1 = f1, f3 = f3, f2 = moe_gpu_expert_fmt(fmt_at(t.w2_fmt, l)))
-}
-
-//! Reserve arenas + place every dense plane + wire the resident decode driver. Returns false (and
-//! leaves the driver unarmed) if the model is not a servable dense shape or does not fit at seq_cap.
-def resident_upload(t : Model; seq_cap : int64) : bool {
-    g_rdec_active = false
-    vulkan_bake_role(VkBakeRole.arena)
-    if (!moe_gpu_resident_installed() || t.quant != QuantMode.q8 || t.config.n_expert > 0l) {
-        return false
-    }
-    // the driver is all-or-nothing across prefill AND decode (the KV lives in the device mirror
-    // only), so a pin away from it declines BEFORE any upload — the per-op rails take over
-    let pin = env_str("DASLLAMA_PIN_PREFILL", "")
-    if ((!empty(pin) && pin != "vulkan") || !empty(active_prefill_override())) {
-        return false
-    }
-    let c = t.config
-    // the plain llama std shape + qk-norm (qwen3) — no bias, sinks, gated attention (its wq is
-    // 2x qd rows, and it rode the old qk_norm decline), shared-KV, softcap, or partial rotary.
-    // These decline cleanly and fall back to the CPU loop.
-    if (c.attn_qkv_bias || c.attn_out_bias || c.v_norm || c.attn_sinks || c.moe_dense_shexp
-            || c.n_layer_nextn > 0l || c.q_gated || c.attn_logit_softcap != 0.0
-            || c.final_logit_softcap != 0.0 || c.pre_post_norm
-            || (c.rope_dim > 0l && c.rope_dim != c.head_size)) {
-        return false
-    }
-    let dim = c.dim
-    let hid0 = layer_hidden(t, 0l)
-    let hs = layer_head_size(c, 0l)
-    let qd = layer_qd(c, 0l)
-    let kvd = layer_kv_dim(c, 0l)
-    // the prefill Q-tile attention kernel's geometry (da_attn_b: 32-dim lanes, hs-strided staging)
-    if (hs % 32l != 0l || hs > 256l) {
-        return false
-    }
-    let neox = c.rope_neox
-    let cls_fmt = moe_gpu_expert_fmt(c.shared_weights ? t.emb_fmt : t.wcls_fmt)
-    // reject non-uniform per-layer geometry (the recorder assumes fixed dims across layers)
-    for (l in range64(c.n_layers)) {
-        if (layer_hidden(t, l) != hid0 || layer_head_size(c, l) != hs || layer_kv_dim(c, l) != kvd
-                || t.kv_src[l] != l || t.wq_offs[l] < 0l || t.wk_offs[l] < 0l || t.wv_offs[l] < 0l
-                || layer_is_recurrent(c, l) || layer_is_sliding(c, l)) {
-            return false
-        }
-    }
-    // tally arena blocks per format
-    var need : table<int; int64>
-    var planes : array<tuple<n : int64; rows : int64; f : KqFmt>>
-    planes |> reserve(int(c.n_layers * 7l + 1l))
-    for (l in range64(c.n_layers)) {
-        let lf = resident_layer_fmts(t, l)
-        planes |> push((n = dim, rows = qd, f = lf.fq))
-        planes |> push((n = dim, rows = kvd, f = lf.fk))
-        planes |> push((n = dim, rows = kvd, f = lf.fv))
-        planes |> push((n = qd, rows = dim, f = lf.fo))
-        planes |> push((n = dim, rows = hid0, f = lf.f1))
-        planes |> push((n = dim, rows = hid0, f = lf.f3))
-        planes |> push((n = hid0, rows = dim, f = lf.f2))
-    }
-    planes |> push((n = dim, rows = c.vocab_size, f = cls_fmt))
-    for (pl in planes) {
-        let fi = int(pl.f)
-        need[fi] = (need?[fi] ?? 0l) + rdec_blocks_for(pl.n, pl.rows, pl.f)
-    }
-    delete planes
-    var reserve_ok = true
-    for (fmt, blocks in keys(need), values(need)) {
-        if (!rdec_reserve(fmt, blocks)) {
-            to_log(LOG_WARNING, "dasLLAMA: resident driver — arena reserve failed (fmt {fmt}, {blocks} blocks)\n")
-            reserve_ok = false
-        }
-    }
-    delete need
-    if (!reserve_ok) {
-        return false
-    }
-    let repacked = kernel_backend_needs_repack(active_kernel_backend())
-    let mr = repacked ? active_q8_layout_mr() : 1l
-    let kg = repacked ? active_q8_kgroup() : 4l
-    let wb = repacked ? active_q8_wbias() : 0l
-    if (!rdec_prepare(c.n_layers, dim, qd, kvd, hs, c.n_heads, hid0, c.vocab_size, seq_cap, neox,
-                      c.norm_eps, c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs)), c.qk_norm)) {
-        return false
-    }
-    // place every plane, wire each layer
-    for (l in range64(c.n_layers)) {
-        let lf = resident_layer_fmts(t, l)
-        let bq = resident_place(t, lf.fq, t.wq_offs[l], dim, qd, mr, kg, wb)
-        let bk = resident_place(t, lf.fk, t.wk_offs[l], dim, kvd, mr, kg, wb)
-        let bv = resident_place(t, lf.fv, t.wv_offs[l], dim, kvd, mr, kg, wb)
-        let bo = resident_place(t, lf.fo, t.wo_offs[l], qd, dim, mr, kg, wb)
-        let b1 = resident_place(t, lf.f1, t.w1_offs[l], dim, hid0, mr, kg, wb)
-        let b3 = resident_place(t, lf.f3, t.w3_offs[l], dim, hid0, mr, kg, wb)
-        let b2 = resident_place(t, lf.f2, t.w2_offs[l], hid0, dim, mr, kg, wb)
-        // a placement can fail (arena exhausted); fail closed to the CPU loop rather than wire a -1 block
-        if (bq < 0l || bk < 0l || bv < 0l || bo < 0l || b1 < 0l || b3 < 0l || b2 < 0l) {
-            to_log(LOG_WARNING, "dasLLAMA: resident driver — arena placement failed at layer {l}, declining\n")
-            return false
-        }
-        rdec_set_layer(l, bq, bk, bv, bo, b1, b3, b2,
-            int(lf.fq), int(lf.fk), int(lf.fv), int(lf.fo), int(lf.f1), int(lf.f3), int(lf.f2))
-    }
-    let bcls = resident_place(t, cls_fmt, t.wcls_off, dim, c.vocab_size, mr, kg, wb)
-    if (bcls < 0l) {
-        to_log(LOG_WARNING, "dasLLAMA: resident driver — classifier placement failed, declining\n")
-        return false
-    }
-    rdec_set_cls(bcls, int(cls_fmt))
-    // upload the norm rows: [rms_att[l], rms_ffn[l]] x L, then rms_final; qk_norm appends the
-    // per-head [rms_q[l], rms_k[l]] x L rows (hs floats each) past the fixed layout
-    var norms : array<float>
-    norms |> resize(int(c.n_layers * 2l * dim + dim + (c.qk_norm ? c.n_layers * 2l * hs : 0l)))
-    for (l in range64(c.n_layers)) {
-        for (i in range64(dim)) {
-            norms[int(l * 2l * dim + i)] = t.fblob[t.rms_att_off + l * dim + i]
-            norms[int((l * 2l + 1l) * dim + i)] = t.fblob[t.rms_ffn_off + l * dim + i]
-        }
-    }
-    for (i in range64(dim)) {
-        norms[int(c.n_layers * 2l * dim + i)] = t.fblob[t.rms_final_off + i]
-    }
-    if (c.qk_norm) {
-        let qkw = c.n_layers * 2l * dim + dim
-        for (l in range64(c.n_layers)) {
-            for (i in range64(hs)) {
-                norms[int(qkw + l * 2l * hs + i)] = t.fblob[t.rms_q_offs[l] + i]
-                norms[int(qkw + (l * 2l + 1l) * hs + i)] = t.fblob[t.rms_k_offs[l] + i]
-            }
-        }
-    }
-    rdec_upload_norms(norms)
-    delete norms
-    g_rdec_active = true
-    g_rdec_cnt = 0l
-    g_rdec_cap = seq_cap
-    // prefill + decode select together — the device prefill fills the mirror the decode reads
-    select_prefill_override("vulkan")
-    select_decode_override("vulkan")
-    to_log(LOG_INFO, "dasLLAMA: resident driver armed ({c.n_layers} layers, dim {dim}, ctx {seq_cap}, device prefill + decode)\n")
-    return true
-}
-
-//! The resident whole-stack decode override (registered as "vulkan"): embeds the token, builds this
-//! position's rope row, runs the whole forward on device, produces s.logits. Decode-from-scratch
-//! for now — the mirror builds as positions arrive (prefix-KV sync is a follow-up).
-def private vulkan_resident_decode(t : Model; var s : Session; token, pos : int64) : bool {
-    // continuity guard: a gap in the mirror means an earlier position took the CPU path — decline too
-    if (!g_rdec_active || pos > g_rdec_cnt) {
-        return false
-    }
-    // ownership guard: the single mirror holds ONE session's rows (superseded => host has ours)
-    if (s.rdec_gen != g_rdec_gen) {
-        if (s.rdec_gen != 0l && !s.rdec_hydrated) {
-            panic("dasLLAMA resident decode: session's mirror rows were superseded before hydration — engine bug (the steal path must hydrate first)")
-        }
-        return false
-    }
-    if (pos + 1l > g_rdec_cap) {
-        // capacity exhausted: hydrate host KV from the mirror, then the CPU rails take over
-        rdec_hydrate_host(t, s)
-        return false
-    }
-    let c = t.config
-    let dim = c.dim
-    let hs = layer_head_size(c, 0l)
-    var x : array<float>
-    x |> resize(int(dim))
-    unsafe {
-        embed_row(t, token, addr(x[0]))
-    }
-    if (c.embed_scale != 1.0) {
-        scale_inplace(unsafe(addr(x[0])), c.embed_scale, dim)
-    }
-    // this position's rope row: cos[half] then sin[half]
-    let half = hs / 2l
-    var cossin : array<float>
-    cossin |> resize(int(hs))
-    let theta = c.rope_freq_base
-    for (j in range64(half)) {
-        var freq = 1.0 / pow(theta, float(2l * j) / float(hs))
-        if (!empty(t.rope_freqs)) {
-            freq /= t.rope_freqs[j]
-        }
-        let ang = float(pos) * freq * c.rope_freq_scale
-        cossin[int(j)] = cos(ang) * c.rope_mscale
-        cossin[int(half + j)] = sin(ang) * c.rope_mscale
-    }
-    let cnt = pos + 1l
-    rdec_token(x, cossin, pos, cnt, s.logits)
-    delete x
-    delete cossin
-    g_rdec_cnt = pos + 1l   // mirror continuity: rows [0, pos] are now live
-    s.rdec_hydrated = false   // the mirror advanced past any earlier hydration
-    decode_override_logits_done()   // logits produced on device
-    return true
-}
-
-//! Resident prefill: embed all `npos` prompt tokens, build per-position rope rows, run the batched
-//! forward on device -> the LAST token's logits in s.logits, and the mirror filled for [0, npos).
-//! Returns false when the driver isn't armed (caller keeps the CPU prefill path).
-def resident_prefill(t : Model; var s : Session; tokens : array<int64>; npos : int64) : bool {
-    if (!g_rdec_active) {
-        return false
-    }
-    let c = t.config
-    let dim = c.dim
-    let hs = layer_head_size(c, 0l)
-    let half = hs / 2l
-    var xb : array<float>
-    xb |> resize(int(npos * dim))
-    var cb : array<float>
-    cb |> resize(int(npos * hs))
-    for (p in range64(npos)) {
-        unsafe {
-            embed_row(t, tokens[p], addr(xb[p * dim]))
-        }
-        if (c.embed_scale != 1.0) {
-            scale_inplace(unsafe(addr(xb[p * dim])), c.embed_scale, dim)
-        }
-        let theta = c.rope_freq_base
-        for (j in range64(half)) {
-            var freq = 1.0 / pow(theta, float(2l * j) / float(hs))
-            if (!empty(t.rope_freqs)) {
-                freq /= t.rope_freqs[j]
-            }
-            let ang = float(p) * freq * c.rope_freq_scale
-            cb[int(p * hs + j)] = cos(ang) * c.rope_mscale
-            cb[int(p * hs + half + j)] = sin(ang) * c.rope_mscale
-        }
-    }
-    rdec_prefill(xb, cb, npos, s.logits)
-    delete xb
-    delete cb
-    return true
-}
-
-// The "vulkan" whole-prefill override (PrefillOverrideFn): one-submit device prefill via the
-// resident driver. The mirror gets the rows; host KV is hydrated back on demand (continuation,
-// cap exhaustion) so the CPU rails always take over from a valid host authority.
-def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos : int64) : bool {
-    // gates: armed + embedder-allowed + the hydratable flat-f32 shape (else device would hold the only KV copy)
-    if (!g_rdec_active || !g_resident_prefill_allowed
-            || s.kv_dtype_k != KVDtype.f32 || s.kv_dtype_v != KVDtype.f32 || s.kv_pool != null) {
-        return false
-    }
-    if (start_pos != 0l) {
-        // continuation over OUR device-held history: hydrate host KV, then decline to the CPU loop
-        if (g_rdec_cnt > 0l && s.rdec_gen == g_rdec_gen && !s.rdec_hydrated) {
-            rdec_hydrate_host(t, s)
-        }
-        return false
-    }
-    if (npos > g_rdec_cap) {
-        return false
-    }
-    // a DIFFERENT session's re-prefill steals the single mirror — fine for serial flows; a stranded owner's decode fails LOUD via the ownership guard
-    let c = t.config
-    let hs = layer_head_size(c, 0l)
-    let half = hs / 2l
-    var cb : array<float>
-    cb |> resize(int(npos * hs))
-    for (p in range64(npos)) {
-        let theta = c.rope_freq_base
-        for (j in range64(half)) {
-            var freq = 1.0 / pow(theta, float(2l * j) / float(hs))
-            if (!empty(t.rope_freqs)) {
-                freq /= t.rope_freqs[j]
-            }
-            let ang = float(p) * freq * c.rope_freq_scale
-            cb[int(p * hs + j)] = cos(ang) * c.rope_mscale
-            cb[int(p * hs + half + j)] = sin(ang) * c.rope_mscale
-        }
-    }
-    rdec_prefill(s.x_b, cb, npos, s.logits)
-    delete cb
-    g_rdec_cnt = npos   // the mirror now holds [0, npos) — the decode's continuity witness
-    g_rdec_gen ++
-    s.rdec_gen = g_rdec_gen
-    s.rdec_hydrated = false
-    prefill_override_logits_done()
-    return true
-}
-
-//! Resident batch-decode override: processes each session SEQUENTIALLY through the single-session
-//! decode chain (resync its f32 KV into the mirror, decode, write K/V back, scatter logits).
-//! Correct multi-stream decode; declines to CPU for non-f32 KV or paged sessions.
-def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
-    if (!g_rdec_active) {
-        return false
-    }
-    let c = t.config
-    let dim = c.dim
-    let hs = layer_head_size(c, 0l)
-    let half = hs / 2l
-    let kvd = layer_kv_dim(c, 0l)
-    // require the shape the mirror sync can handle: flat f32 cache
-    for (i in range64(nrows)) {
-        var s = sessions[i]
-        if (s.kv_dtype_k != KVDtype.f32 || s.kv_dtype_v != KVDtype.f32 || s.kv_pool != null) {
-            return false
-        }
-    }
-    if (dasllama_noisy()) {
-        to_log(LOG_INFO, "dasLLAMA: resident batch decode engaged ({nrows} streams)\n")
-    }
-    var x : array<float>
-    x |> resize(int(dim))
-    var cossin : array<float>
-    cossin |> resize(int(hs))
-    var tmp : array<float>
-    tmp |> resize(int(c.vocab_size))
-    for (i in range64(nrows)) {
-        var s & = unsafe(*sessions[i])
-        let pos = ws.positions[i]
-        // resync this session's KV history [0, pos) into the mirror
-        for (l in range64(c.n_layers)) {
-            unsafe {
-                rdec_sync_kv(l, reinterpret<float const?>(kv_layer_kbase(s, l, c.seq_len)),
-                    reinterpret<float const?>(kv_layer_vbase(s, l, c.seq_len)), pos)
-            }
-        }
-        // this row's embedded residual is already in ws.scr.x_b; its rope row for pos
-        for (k in range64(dim)) {
-            x[int(k)] = ws.scr.x_b[i * dim + k]
-        }
-        let theta = c.rope_freq_base
-        for (j in range64(half)) {
-            var freq = 1.0 / pow(theta, float(2l * j) / float(hs))
-            if (!empty(t.rope_freqs)) {
-                freq /= t.rope_freqs[j]
-            }
-            let ang = float(pos) * freq * c.rope_freq_scale
-            cossin[int(j)] = cos(ang) * c.rope_mscale
-            cossin[int(half + j)] = sin(ang) * c.rope_mscale
-        }
-        rdec_token(x, cossin, pos, pos + 1l, tmp)
-        // write the new token's K/V back to this session's cache at pos, then scatter logits
-        for (l in range64(c.n_layers)) {
-            unsafe {
-                rdec_read_kv(l, pos, reinterpret<float?>(kv_layer_kbase(s, l, c.seq_len)) + pos * kvd,
-                    reinterpret<float?>(kv_layer_vbase(s, l, c.seq_len)) + pos * kvd)
-            }
-        }
-        copy_floats(tmp, 0l, s.logits, 0l, c.vocab_size)
-    }
-    delete x
-    delete cossin
-    delete tmp
-    batch_decode_override_logits_done()
-    return true
-}
-
-[init]
-def resident_driver_register() {
-    register_decode_override("vulkan", @@vulkan_resident_decode)
-    register_batch_decode_override("vulkan", @@vulkan_resident_batch_decode)
-    register_prefill_override("vulkan", @@vulkan_resident_prefill)
-}
-
-// ===== multi-model GPU slot switch (marks swap + whole-model drop/re-arm) =====
-
-//! One model's complete per-model tier state for a multi-model host: the loader-contract marks
-//! plus the resident driver's activation. Save after the model's load (or arm), restore before
-//! stepping that model — two models' offset-keyed marks must never be installed together.
-struct GpuModelMarks {
-    marks : MoeGpuMarks <- MoeGpuMarks()
-    rdec_active : bool
-    rdec_cnt : int64
-    rdec_cap : int64
-}
-
-//! Move the INSTALLED per-model tier state out into `st`; the globals read as no-model after.
-def moe_gpu_model_marks_save(var st : GpuModelMarks) {
-    moe_gpu_marks_save(st.marks)
-    st.rdec_active = g_rdec_active
-    st.rdec_cnt = g_rdec_cnt
-    st.rdec_cap = g_rdec_cap
-    g_rdec_active = false
-    g_rdec_cnt = 0l
-    g_rdec_cap = 0l
-}
-
-//! Install `st` as the per-model tier state (the save's inverse; `st` reads as no-model after).
-def moe_gpu_model_marks_restore(var st : GpuModelMarks) {
-    moe_gpu_marks_restore(st.marks)
-    g_rdec_active = st.rdec_active
-    g_rdec_cnt = st.rdec_cnt
-    g_rdec_cap = st.rdec_cap
-    st.rdec_active = false
-    st.rdec_cnt = 0l
-    st.rdec_cap = 0l
-}
-
-//! Is the resident whole-stack decode driver active for the INSTALLED model? (The arm-outcome
-//! discriminator status surfaces read: resident beats rails beats cpu.)
-def moe_gpu_resident_active() : bool => g_rdec_active
-
-//! Hydrate `s`'s host KV from the device mirror when `s` owns live mirror rows (no-op
-//! otherwise). Call over every live session of the outgoing model before ``moe_gpu_drop_model``
-//! — the drop destroys the mirror, and an unhydrated owner's rows exist nowhere else.
-def moe_gpu_hydrate_session(t : Model; var s : Session) {
-    if (g_rdec_active && g_rdec_cnt > 0l && s.rdec_gen == g_rdec_gen && !s.rdec_hydrated) {
-        rdec_hydrate_host(t, s)
-    }
-}
-
-//! Drop the INSTALLED model's whole GPU state (every model-owned device object + the routing
-//! marks); the model keeps serving on the CPU rails, and re-arm = the same three calls a load
-//! runs. Caller guarantees quiescence: no step in flight, sessions hydrated first.
-def moe_gpu_drop_model() {
-    if (!moe_gpu_tier_installed()) {
-        return
-    }
-    moe_gpu_dn_invalidate()
-    g_rdec_active = false
-    g_rdec_cnt = 0l
-    g_rdec_cap = 0l
-    // resident_upload selected the "vulkan" overrides; deselect so (a) a later re-arm's
-    // resident_upload passes its no-active-override gate (the warm re-arm decline), and (b) a
-    // dropped model's prefill/decode take the plain CPU path without consulting dead state
-    if (active_prefill_override() == "vulkan") {
-        select_prefill_override("")
-    }
-    if (active_decode_override() == "vulkan") {
-        select_decode_override("")
-    }
-    moe_gpu_drop_model_state()
-    // loader-contract reset — the same clean slate moe_gpu_upload_resident starts from
-    set_moe_gpu_layer_count(0l)
-    set_moe_gpu_from_layer(1000000l)
-    set_moe_gpu_stream_from(1000000l)
-    set_moe_gpu_total_layers(0l)
-    set_moe_gpu_cls_off(-1l)
-    reset_moe_gpu_dense_offs()
-    reset_moe_gpu_dn_layers()
-    reset_moe_gpu_attn_layers()
-    reset_moe_gpu_shexp_layers()
-    reset_moe_gpu_qkv_layers()
-    set_moe_gpu_model_support("")
-}
-
-// Upload the offloaded layers' expert stacks to the GPU tier from the PREPARED planes. Called at
-// the end of every load rail so DASLLAMA_GPU_MOE_LAYERS behaves identically however the model
-// arrived. Layers go resident from the end while the tier's VRAM budget holds.
-def moe_gpu_upload_resident(t : Model) {
-    set_moe_gpu_from_layer(t.config.n_layers)   // nothing resident until an upload lands
-    set_moe_gpu_stream_from(t.config.n_layers)
-    set_moe_gpu_total_layers(t.config.n_layers)
-    set_moe_gpu_cls_off(-1l)
-    reset_moe_gpu_dense_offs()
-    reset_moe_gpu_dn_layers()
-    reset_moe_gpu_attn_layers()
-    reset_moe_gpu_shexp_layers()
-    reset_moe_gpu_qkv_layers()
-    set_moe_gpu_model_support("")
-    // -1 = auto: ask for every layer and let the walk's own budget stops place the split (the
-    // resident loop drops a partial triple and breaks, the streamed loop does the same on the
-    // pinned-mirror budget) — that is what makes auto degrade on a smaller card instead of failing
-    let nstream_want = gpu_want_moe_stream()
-    let nstream = nstream_want < 0l ? t.config.n_layers : nstream_want
-    let dn_want = gpu_want_dn() || gpu_want_dnd()   // the decode step rides the same dn uploads
-    let at_want = gpu_want_attn()
-    // layer count tests == 0, NOT <= 0: -1 is the auto sentinel and must read as a REQUEST
-    if (!moe_gpu_tier_installed()
-            || (moe_gpu_layer_count() == 0l && nstream <= 0l && !dn_want && !at_want
-                && !gpu_want_shexp() && !gpu_want_qkv() && !gpu_want_cls())) {
-        return   // tier absent or nothing requested
-    }
-    // size the tier's streamed-slot reserve from THIS model's largest expert layer — a fixed
-    // reserve wastes VRAM or asserts on big-expert geometries (GLM Air, Qwen1.5-MoE); must
-    // precede the first upload (the tier carves the reserve at its lazy init)
-    if (t.config.n_expert > 0l) {
-        var sgu = 0l
-        var sdn = 0l
-        for (sl in range64(t.config.n_layers + t.config.n_layer_nextn)) {
-            if (sl < t.config.n_layer_dense_lead || long_length(t.we1_offs) <= sl
-                    || t.we1_offs[sl] < 0l || t.we2_offs[sl] < 0l || t.we3_offs[sl] < 0l) {
-                continue
-            }
-            let sne = t.config.n_expert
-            let snfe = t.config.n_ff_exp
-            sgu = max(sgu, moe_gpu_plane_bytes(t.config.dim, sne * snfe, int(fmt_at(t.we1_fmt, sl))))
-            sgu = max(sgu, moe_gpu_plane_bytes(t.config.dim, sne * snfe, int(fmt_at(t.we3_fmt, sl))))
-            sdn = max(sdn, moe_gpu_plane_bytes(snfe, sne * t.config.dim, int(fmt_at(t.we2_fmt, sl))))
-        }
-        set_moe_gpu_stream_need(sgu > 0l ? 2l * sgu + sdn : 0l)
-    }
-    // dense models that fully fit: try the whole-stack resident driver FIRST — it subsumes every
-    // rail below (all planes + classifier resident, one-submit device prefill + mirror decode).
-    // Any decline (shape, fit, placement) falls through to the per-op rails unchanged.
-    if (moe_gpu_resident_installed() && gpu_want_auto() && t.config.n_expert == 0l) {
-        var seq_cap = t.config.seq_len
-        var plan = resident_plan(t, seq_cap, KVDtype.f32, KVDtype.f32)
-        if (!plan.fits && plan.weight_bytes > 0l && plan.kv_bytes > 0l) {
-            // weights are fixed, the KV mirror is not: retry at the context that fits (the plan's
-            // own remedy), as long as it stays a usable window. The driver guards decode past the cap.
-            let fit_ctx = (plan.budget_bytes - plan.weight_bytes) / (plan.kv_bytes / seq_cap)
-            if (fit_ctx >= rdec_min_ctx()) {
-                seq_cap = fit_ctx
-                plan = resident_plan(t, seq_cap, KVDtype.f32, KVDtype.f32)
-            }
-        }
-        if (plan.fits) {
-            if (resident_upload(t, seq_cap)) {
-                return
-            }
-        } elif (!empty(plan.reason)) {
-            to_log(LOG_INFO, "dasLLAMA: resident driver declined — {plan.reason}\n")
-        }
-    }
-    // capability guard: the tier needs q8 serving mode — record WHY for the status surface when it
-    // is armed but this model cannot ride it. Dense archs pass: every non-expert rail (cls, dense
-    // planes, attn quads, qkv) keys on wq/wk/wv/wo/wcls offsets and never on experts.
-    var reason = ""
-    if (t.quant != QuantMode.q8) {
-        reason = "GPU tier needs q8 serving mode"
-    } elif (t.experts_mx4) {
-        reason = "mx4 expert planes are not tier-servable"
-    } elif (t.config.moe_exps_bias) {
-        reason = "biased expert stacks are not tier-servable"
-    }
-    if (!empty(reason)) {
-        set_moe_gpu_model_support(reason)
-        to_log(LOG_WARNING, "dasLLAMA: GPU tier armed but idle — {reason}\n")
-        return
-    }
-    let ts_gpu = ref_time_ticks()
-    let layers = t.config.n_layers
-    let dim = t.config.dim
-    let ne = t.config.n_expert
-    let nfe = t.config.n_ff_exp
-    let want_raw = moe_gpu_layer_count()
-    // a dense arch has no expert stacks at all — we*_offs are never populated (they are built only
-    // under n_expert > 0), so the expert + streamed walks below MUST resolve to zero iterations
-    let has_experts = ne > 0l
-    let want = has_experts ? (want_raw < 0l ? layers : min(want_raw, layers)) : 0l   // -1 = auto: fill the budget
-    set_moe_gpu_layer_count(want)   // publish the resolved count — downstream status reads it
-    let repacked = kernel_backend_needs_repack(active_kernel_backend())
-    let mr = repacked ? active_q8_layout_mr() : 1l
-    let kgroup = repacked ? active_q8_kgroup() : 4l
-    let wbias = repacked ? active_q8_wbias() : 0l
-    var from_l = layers
-    var wq : array<uint8>
-    var ws : array<uint8>
-    // classifier plane first — the board's best ms-per-GB region (one whole-vocab GEMV serves
-    // every token). One slice: the repack groups the plane globally, tail rows disk-order.
-    // DASLLAMA_GPU_CLS=0 keeps it on the CPU (A/B lever).
-    let cls_fmt = t.config.shared_weights ? t.emb_fmt : t.wcls_fmt
-    let cls_servable = cls_fmt == KqFmt.q8 ? (t.cls_q8 || !t.config.shared_weights) : moe_gpu_fmt_kq(cls_fmt)
-    vulkan_bake_role(VkBakeRole.cls)
-    if (cls_servable && gpu_want_cls_upload()
-            && moe_gpu_gather_upload(t, cls_fmt, t.wcls_off, dim, t.config.vocab_size, t.config.vocab_size, mr, kgroup, wbias, wq, ws)) {
-        set_moe_gpu_cls_off(t.wcls_off)
-    }
-    // dense (attention-side) planes second — DASLLAMA_GPU_DENSE=1 / gpu_dense opt-in. Arch-agnostic:
-    // recurrent layers carry the deltanet triple, attention layers the q/o pair (k/v stay CPU — small).
-    // Layer-ascending; each successful upload marks its plane, a budget stop ends the walk.
-    vulkan_bake_role(VkBakeRole.dense)
-    if (gpu_want_dense()) {
-        var dense_marked = 0l
-        var dense_stop = false
-        for (l in range64(layers)) {
-            var uploads : array<tuple<f : KqFmt; woff : int64; n : int64; rows : int64>>
-            if (layer_is_recurrent(t.config, l)) {
-                // kq-tagged dn planes (CPU-rail loads) are not tier-servable — the dn chain reads q8
-                if (t.dnqkv_offs[l] >= 0l && t.dngate_offs[l] >= 0l && t.dnout_offs[l] >= 0l
-                        && dn_layer_q8(t, l)) {
-                    uploads |> push((f = KqFmt.q8, woff = t.dnqkv_offs[l], n = dim, rows = dn_conv_dim(t.config)))
-                    uploads |> push((f = KqFmt.q8, woff = t.dngate_offs[l], n = dim, rows = t.config.ssm_d_inner))
-                    uploads |> push((f = KqFmt.q8, woff = t.dnout_offs[l], n = t.config.ssm_d_inner, rows = dim))
-                }
-            } else {
-                let qd = layer_qd(t.config, l)
-                let fq = fmt_at(t.wq_fmt, l)
-                let fo = fmt_at(t.wo_fmt, l)
-                if (gpu_want_dense_attn() && t.wq_offs[l] >= 0l && t.wo_offs[l] >= 0l
-                        && (fq == KqFmt.q8 || moe_gpu_fmt_kq(fq)) && (fo == KqFmt.q8 || moe_gpu_fmt_kq(fo))
-                        && kq_servable(t, fq) && kq_servable(t, fo)) {
-                    uploads |> push((f = fq, woff = t.wq_offs[l], n = dim, rows = t.config.q_gated ? 2l * qd : qd))
-                    uploads |> push((f = fo, woff = t.wo_offs[l], n = qd, rows = dim))
-                }
-            }
-            // gemma-4's parallel dense shared expert triple — opt-in, measured a wash (see the gate's doc)
-            if (dense_shexp_uploadable(t, l)) {
-                let hid = empty(t.ffn_w) ? t.config.hidden_dim : t.ffn_w[l]
-                uploads |> push((f = fmt_at(t.w1_fmt, l), woff = t.w1_offs[l], n = dim, rows = hid))
-                uploads |> push((f = fmt_at(t.w3_fmt, l), woff = t.w3_offs[l], n = dim, rows = hid))
-                uploads |> push((f = fmt_at(t.w2_fmt, l), woff = t.w2_offs[l], n = hid, rows = dim))
-            }
-            for (u in uploads) {
-                if (!moe_gpu_gather_upload(t, u.f, u.woff, u.n, u.rows, u.rows, mr, kgroup, wbias, wq, ws)) {
-                    dense_stop = true   // VRAM budget hit — later planes keep the CPU dense path
-                    break
-                }
-                set_moe_gpu_dense_off(int(u.f), u.woff)
-                dense_marked++
-            }
-            delete uploads
-            break if (dense_stop)
-        }
-        if (dense_marked > 0l) {
-            to_log(LOG_INFO, "dasLLAMA: GPU MoE tier: {dense_marked} dense planes resident\n")
-        }
-    }
-    // shared-expert triples — DASLLAMA_GPU_SHEXP=1 opt-in. Dense (every token, every layer, one
-    // fixed weight set) so residency carries no miss term; q8 only (the repack registers them fmt 0).
-    vulkan_bake_role(VkBakeRole.shexp)
-    if (gpu_want_shexp() && t.config.n_ff_shexp > 0l && !t.config.moe_dense_shexp) {
-        let nsh = t.config.n_ff_shexp
-        let she = dim * nsh
-        var sh_marked = 0l
-        for (l in range64(layers)) {
-            var uploads <- [(woff = t.wsh1_off + l * she, n = dim, rows = nsh),
-                            (woff = t.wsh3_off + l * she, n = dim, rows = nsh),
-                            (woff = t.wsh2_off + l * she, n = nsh, rows = dim)]
-            var ok = true
-            var done = 0
-            for (u in uploads) {
-                if (!moe_gpu_gather_upload(t, KqFmt.q8, u.woff, u.n, u.rows, u.rows, mr, kgroup, wbias, wq, ws)) {
-                    ok = false
-                    break
-                }
-                done++
-            }
-            if (!ok) {
-                moe_gpu_drop_stacks(done, false)   // partial triple rolls back (the resident-walk rule)
-                delete uploads
-                break
-            }
-            // deliberately NOT set_moe_gpu_dense_off: that would also route the PREFILL shexp GEMMs
-            // onto the dense rail (a separately measured wash) and stop this being a decode-only lever
-            set_moe_gpu_shexp_layer(l)
-            sh_marked++
-            delete uploads
-        }
-        if (sh_marked > 0l) {
-            to_log(LOG_INFO, "dasLLAMA: GPU MoE tier: shared experts of {sh_marked} layers resident\n")
-        }
-    }
-    // deltanet triples third — DASLLAMA_GPU_DN=1 opt-in: each recurrent layer's qkv/z-gate/
-    // out-proj planes + the layer mark that routes its whole prefill attention through the
-    // device chain. Layer-ascending; a budget stop leaves later layers CPU, a partial triple rolls back.
-    vulkan_bake_role(VkBakeRole.dn)
-    if (dn_want) {
-        var dn_marked = 0l
-        var dn_stop = false
-        for (l in range64(layers)) {
-            if (!layer_is_recurrent(t.config, l)
-                    || t.dnqkv_offs[l] < 0l || t.dngate_offs[l] < 0l || t.dnout_offs[l] < 0l
-                    || !dn_layer_q8(t, l)) {   // kq-tagged dn planes stay on the CPU rail
-                continue
-            }
-            if (moe_gpu_dense_on_gpu(int(KqFmt.q8), t.dnqkv_offs[l])) {
-                set_moe_gpu_dn_layer(l, t.dnqkv_offs[l])
-                dn_marked++
-                continue
-            }
-            let cd = dn_conv_dim(t.config)
-            let di = t.config.ssm_d_inner
-            var got = 0
-            if (moe_gpu_gather_upload(t, KqFmt.q8, t.dnqkv_offs[l], dim, cd, cd, mr, kgroup, wbias, wq, ws)) {
-                got++
-            }
-            if (got == 1 && moe_gpu_gather_upload(t, KqFmt.q8, t.dngate_offs[l], dim, di, di, mr, kgroup, wbias, wq, ws)) {
-                got++
-            }
-            if (got == 2 && moe_gpu_gather_upload(t, KqFmt.q8, t.dnout_offs[l], di, dim, dim, mr, kgroup, wbias, wq, ws)) {
-                got++
-            }
-            if (got < 3) {
-                if (got > 0) {
-                    moe_gpu_drop_stacks(got, false)
-                }
-                dn_stop = true
-            }
-            break if (dn_stop)
-            set_moe_gpu_dn_layer(l, t.dnqkv_offs[l])
-            dn_marked++
-        }
-        if (dn_marked > 0l) {
-            to_log(LOG_INFO, "dasLLAMA: GPU MoE tier: deltanet triples of {dn_marked} layers resident\n")
-        }
-    }
-    // attention quads fourth — DASLLAMA_GPU_ATTN=1 opt-in: each servable full-attention layer's
-    // q|gate/k/v/wo planes + the layer mark that routes its whole prefill attention through the
-    // device chain. Layer-ascending; a budget stop rolls back the partial quad.
-    vulkan_bake_role(VkBakeRole.attn)
-    if (at_want) {
-        let c = t.config
-        // NEOX rope only (partial rotary implies NEOX per the loader); the chain has no bias /
-        // v-norm / sinks / softcap / post-norm arms
-        let arch_ok = (!c.attn_qkv_bias && !c.v_norm && !c.attn_sinks && c.attn_logit_softcap == 0.0
-            && !c.pre_post_norm && !c.attn_out_bias
-            && (c.rope_neox || (c.rope_dim > 0l && c.rope_dim != c.head_size)))
-        var at_marked = 0l
-        var at_stop = false
-        for (l in range64(layers)) {
-            break if (!arch_ok)
-            continue if (layer_is_recurrent(c, l) || layer_is_sliding(c, l) || t.kv_src[l] != l
-                || t.wq_offs[l] < 0l || t.wk_offs[l] < 0l || t.wv_offs[l] < 0l || t.wo_offs[l] < 0l)
-            let hs = layer_head_size(c, l)
-            let kvd = layer_kv_dim(c, l)
-            let qd = c.n_heads * hs
-            let rot = c.rope_dim > 0l ? c.rope_dim : hs
-            let fq = fmt_at(t.wq_fmt, l)
-            let fk = fmt_at(t.wk_fmt, l)
-            let fv = fmt_at(t.wv_fmt, l)
-            let fo = fmt_at(t.wo_fmt, l)
-            // q/k/v share the chain's one activation image — format class must agree; wo is free
-            let kq_cls = fq != KqFmt.q8
-            var fmts_ok = (fk != KqFmt.q8) == kq_cls && (fv != KqFmt.q8) == kq_cls
-            for (f in [fq, fk, fv, fo]) {
-                fmts_ok = fmts_ok && (f == KqFmt.q8 || moe_gpu_fmt_kq(f)) && kq_servable(t, f)
-            }
-            continue if (!fmts_ok || !(hs == 128l || hs == 256l) || qd > 8192l || kvd > 1024l
-                || c.n_heads > 64l || rot % 2l != 0l || rot > hs || kvd % 32l != 0l
-                || qd % (fo != KqFmt.q8 ? 256l : 32l) != 0l || dim % 32l != 0l)
-            var uploads : array<tuple<f : KqFmt; woff : int64; n : int64; rows : int64>>
-            if (!moe_gpu_dense_on_gpu(int(fq), t.wq_offs[l])) {
-                uploads |> push((f = fq, woff = t.wq_offs[l], n = dim, rows = c.q_gated ? 2l * qd : qd))
-            }
-            uploads |> push((f = fk, woff = t.wk_offs[l], n = dim, rows = kvd))
-            uploads |> push((f = fv, woff = t.wv_offs[l], n = dim, rows = kvd))
-            if (!moe_gpu_dense_on_gpu(int(fo), t.wo_offs[l])) {
-                uploads |> push((f = fo, woff = t.wo_offs[l], n = qd, rows = dim))
-            }
-            var got = 0
-            for (u in uploads) {
-                if (!moe_gpu_gather_upload(t, u.f, u.woff, u.n, u.rows, u.rows, mr, kgroup, wbias, wq, ws)) {
-                    at_stop = true
-                    break
-                }
-                got++
-            }
-            delete uploads
-            if (at_stop) {
-                if (got > 0) {
-                    moe_gpu_drop_stacks(got, false)
-                }
-                break
-            }
-            set_moe_gpu_attn_layer(l)
-            at_marked++
-        }
-        if (at_marked > 0l) {
-            to_log(LOG_INFO, "dasLLAMA: GPU MoE tier: attention quads of {at_marked} layers resident\n")
-        }
-    }
-    // attention q/k/v triples — DASLLAMA_GPU_QKV=1 opt-in. LAST of the dense rails ON PURPOSE: it
-    // is the lowest-value one and an earlier section exhausting stacks/VRAM starves those behind it
-    // (a 224-stack cap once cut 6 DN layers = -14% tg). Pays only where GPU reads beat CPU reads.
-    vulkan_bake_role(VkBakeRole.qkv)
-    if (gpu_want_qkv()) {
-        var qkv_marked = 0l
-        for (l in range64(layers)) {
-            continue if (layer_is_recurrent(t.config, l) || t.kv_src[l] != l || moe_gpu_attn_on_gpu(l))
-            let qd = layer_qd(t.config, l)
-            let kv = layer_kv_dim(t.config, l)
-            let fq = fmt_at(t.wq_fmt, l)
-            let fk = fmt_at(t.wk_fmt, l)
-            let fv = fmt_at(t.wv_fmt, l)
-            // one shared activation image ⇒ the three planes must agree on quant CLASS
-            let cls_ok = (fq == KqFmt.q8) == (fk == KqFmt.q8) && (fq == KqFmt.q8) == (fv == KqFmt.q8)
-            continue if (t.wq_offs[l] < 0l || t.wk_offs[l] < 0l || t.wv_offs[l] < 0l || !cls_ok
-                || !kq_servable(t, fq) || !kq_servable(t, fk) || !kq_servable(t, fv))
-            var uploads <- [(f = fq, woff = t.wq_offs[l], n = dim, rows = t.config.q_gated ? 2l * qd : qd),
-                            (f = fk, woff = t.wk_offs[l], n = dim, rows = kv),
-                            (f = fv, woff = t.wv_offs[l], n = dim, rows = kv)]
-            var done = 0
-            var ok = true
-            for (u in uploads) {
-                if (!moe_gpu_gather_upload(t, u.f, u.woff, u.n, u.rows, u.rows, mr, kgroup, wbias, wq, ws)) {
-                    ok = false
-                    break
-                }
-                done++
-            }
-            delete uploads
-            if (!ok) {
-                moe_gpu_drop_stacks(done, false)   // partial triple rolls back
-                break
-            }
-            set_moe_gpu_qkv_layer(l)
-            qkv_marked++
-        }
-        if (qkv_marked > 0l) {
-            to_log(LOG_INFO, "dasLLAMA: GPU MoE tier: q/k/v of {qkv_marked} attention layers resident\n")
-        }
-    }
-    vulkan_bake_role(VkBakeRole.expert)
-    for (i in range64(want)) {
-        let l = layers - 1l - i
-        let f1 = fmt_at(t.we1_fmt, l)
-        let f2 = fmt_at(t.we2_fmt, l)
-        let f3 = fmt_at(t.we3_fmt, l)
-        // gate/up must share a form (one activation image); down is free. llama.cpp's Q4_K_M MoE
-        // recipe bumps ffn_down_exps to Q5_0/Q8_0, so k4/k4/q8 is the COMMON shape (glm4moe,
-        // gemma). The walk stops on refusal so the resident set stays contiguous from the end.
-        let gu_ok = ((f1 == KqFmt.q8) == (f3 == KqFmt.q8)
-            && (f1 == KqFmt.q8 || (moe_gpu_fmt_kq(f1) && moe_gpu_fmt_kq(f3))))
-        let dn_ok = f2 == KqFmt.q8 || moe_gpu_fmt_kq(f2)
-        if (l < t.config.n_layer_dense_lead || t.we1_offs[l] < 0l || !(gu_ok && dn_ok)) {
-            break
-        }
-        var got = 0
-        if (moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f1), t.we1_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws)) {
-            got++
-        }
-        if (got == 1 && moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f3), t.we3_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws)) {
-            got++
-        }
-        if (got == 2 && moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f2), t.we2_offs[l], nfe, ne * dim, dim, mr, kgroup, wbias, wq, ws)) {
-            got++
-        }
-        if (got < 3) {
-            // VRAM budget hit — this and lower layers stay on CPU. A partial triple MUST roll
-            // back: a dangling gate/up plane hijacks the tier's residency check when this layer
-            // re-enters as streamed (or CPU prefill probes it) — non-resident-region panic
-            if (got > 0) {
-                moe_gpu_drop_stacks(got, false)
-            }
-            break
-        }
-        from_l = l
-    }
-    // streamed tail: DASLLAMA_GPU_MOE_STREAM=N marks the next N layers below the resident set for
-    // prefill streaming — device-layout planes gathered into pinned host mirrors the tier DMAs per
-    // prefill. CPU planes stay (decode runs them); the walk is contiguous descending.
-    vulkan_bake_role(VkBakeRole.expert_stream)
-    var sfrom = from_l
-    for (i in range64(has_experts ? max(nstream, 0l) : 0l)) {
-        let l = from_l - 1l - i
-        if (l < t.config.n_layer_dense_lead || t.we1_offs[l] < 0l) {
-            break
-        }
-        let f1 = fmt_at(t.we1_fmt, l)
-        let f2 = fmt_at(t.we2_fmt, l)
-        let f3 = fmt_at(t.we3_fmt, l)
-        // same rule as the resident walk: gate/up share one activation image, down is free
-        let gu_ok = ((f1 == KqFmt.q8) == (f3 == KqFmt.q8)
-            && (f1 == KqFmt.q8 || (moe_gpu_fmt_kq(f1) && moe_gpu_fmt_kq(f3))))
-        if (!(gu_ok && (f2 == KqFmt.q8 || moe_gpu_fmt_kq(f2)))) {
-            break
-        }
-        var got = 0
-        if (moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f1), t.we1_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws, [stream = true])) {
-            got++
-        }
-        if (got == 1 && moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f3), t.we3_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws, [stream = true])) {
-            got++
-        }
-        if (got == 2 && moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f2), t.we2_offs[l], nfe, ne * dim, dim, mr, kgroup, wbias, wq, ws, [stream = true])) {
-            got++
-        }
-        if (got < 3) {
-            // pinned-mirror budget hit — this and lower layers stay CPU-only. Roll back a
-            // partial triple: the stream registry's group arithmetic assumes whole gate/up/down
-            // triples, and a phantom gate would match the group scan at dispatch
-            if (got > 0) {
-                moe_gpu_drop_stacks(got, true)
-            }
-            break
-        }
-        sfrom = l
-    }
-    delete wq
-    delete ws
-    set_moe_gpu_from_layer(from_l)
-    set_moe_gpu_stream_from(sfrom)
-    if (from_l < layers || moe_gpu_cls_on_gpu(t.wcls_off)) {
-        let cls_note = moe_gpu_cls_on_gpu(t.wcls_off) ? "classifier + " : ""
-        let stream_note = sfrom < from_l ? ", [{sfrom}..{from_l}) streamed" : ""
-        to_log(LOG_INFO, "dasLLAMA: GPU MoE tier: {cls_note}expert stacks of layers [{from_l}..{layers}) resident{stream_note}, {get_time_usec(ts_gpu) / 1000} ms\n")
-    }
+    return f == KqFmt.k4 ? t.kq_repack_mr4 : (f == KqFmt.k5 ? t.kq_repack_mr5 : (f == KqFmt.k6 ? t.kq_repack_mr6 : t.kq_repack_mr40))
 }
 
 //! Load a llama-architecture GGUF into the split layout at the requested precision — straight into
@@ -3643,1080 +1439,6 @@ def public weights_epoch() : int64 {
 def public bump_weights_epoch() {
     g_weights_epoch++
 }
-
-def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
-    //! The conversion passes (transcode/repack/wscale) thread across the jobque; spin a scoped one
-    //! for the load when the caller hasn't (the server/tools start theirs after the model loads).
-    if (is_job_que_available()) {
-        return <- load_gguf_impl(path, mode)
-    }
-    var t = Model()
-    with_job_que() {
-        t <- load_gguf_impl(path, mode)
-    }
-    return <- t
-}
-
-//! Streaming-conversion entry: plan-load `t`, then invoke `blk(m, bytes)` with the source
-//! mapping STILL ALIVE — the caller streams the save inside. Fails open (unstreamable models
-//! materialize + save eagerly through the same blk); split shards return false pre-blk.
-def load_gguf_streaming(path : string; mode : QuantMode; var t : Model; var jobs : array<FillJob>;
-                        blk : block<(m : GGUFMeta; bytes : array<uint8>) : bool>) : bool {
-    if (!is_job_que_available()) {
-        var okj = false
-        with_job_que() {
-            okj = load_gguf_streaming(path, mode, t, jobs, blk)
-        }
-        return okj
-    }
-    g_weights_epoch++
-    t.quant = mode
-    if (has_env_variable("DASLLAMA_CONV_PROF")) {
-        set_conv_profile(true)
-    }
-    let ts_load = ref_time_ticks()
-    let lmode0 = mode
-    var shards <- gguf_shard_paths(path)
-    if (length(shards) > 1) {
-        // split gguf: every shard mapping stays alive across the plan-load AND the blk-save
-        // (the transcode kernels resolve per-shard bases through the meta)
-        to_log(LOG_INFO, "dasLLAMA: split gguf — {length(shards)} shards (streaming)\n")
-        var sok = false
-        var bases : array<void?>
-        var sizes : array<int64>
-        gguf_map_shards(shards, 0, bases, sizes) {
-            if (env_flag("DASLLAMA_PREFETCH", true)) {
-                var pf_mb = 0l
-                for (bi in range(length(bases))) {
-                    if (unsafe(prefetch_map(bases[bi], uint64(sizes[bi])))) {
-                        pf_mb += sizes[bi] >> 20l
-                    }
-                }
-                if (pf_mb > 0l) {
-                    to_log(LOG_INFO, "dasLLAMA: source prefetch armed ({pf_mb} MB across {length(bases)} shards)\n")
-                }
-            }
-            var m <- parse_gguf_meta_shards(bases, sizes)
-            fill_plan_begin()
-            unsafe {
-                load_gguf_parsed(t, m, temp_array(reinterpret<uint8?>(bases[0]), sizes[0], type<uint8>), lmode0, ts_load)
-            }
-            fill_plan_take(jobs)
-            t.tok <- load_tokenizer_auto(path)
-            unsafe {
-                sok = invoke(blk, m, temp_array(reinterpret<uint8?>(bases[0]), sizes[0], type<uint8>))
-            }
-            delete m
-        }
-        bases |> clear()   // borrowed mapping bases — clear so delete frees only the buffer
-        delete bases
-        delete sizes
-        delete shards
-        return sok
-    }
-    delete shards
-    let f = fopen(path, "rb")
-    if (f == null) {
-        return false
-    }
-    var ok = false   // nolint:LINT003 — written inside the fmap block
-    let lmode = mode
-    fmap(f) $(var bytes : array<uint8>#) {
-        if (env_flag("DASLLAMA_PREFETCH", true)) {
-            var armed = false
-            unsafe {
-                armed = prefetch_map(addr<void?>(bytes[0]), uint64(long_length(bytes)))
-            }
-            if (armed) {
-                to_log(LOG_INFO, "dasLLAMA: source prefetch armed ({long_length(bytes) >> 20l} MB)\n")
-            }
-        }
-        var inscope m <- parse_gguf_meta(bytes)
-        fill_plan_begin()
-        load_gguf_parsed(t, m, bytes, lmode, ts_load)
-        fill_plan_take(jobs)
-        t.tok <- load_tokenizer_auto(path)
-        unsafe {
-            ok = invoke(blk, m, temp_array(addr<uint8?>(bytes[0]), long_length(bytes), type<uint8>))
-        }
-    }
-    fclose(f)
-    return ok
-}
-
-def private load_gguf_impl(path : string; var mode : QuantMode) : Model {
-    g_weights_epoch++
-    var t = Model()
-    t.quant = mode
-    if (has_env_variable("DASLLAMA_CONV_PROF")) {
-        set_conv_profile(true)
-    }
-    let ts_load = ref_time_ticks()
-    let shards <- gguf_shard_paths(path)
-    if (length(shards) > 1) {
-        to_log(LOG_INFO, "dasLLAMA: split gguf — {length(shards)} shards\n")
-        var bases : array<void?>
-        var sizes : array<int64>
-        gguf_map_shards(shards, 0, bases, sizes) {
-            // fault the source in AHEAD of the parallel transcode (in-loop faults serialize lanes)
-            if (env_flag("DASLLAMA_PREFETCH", true)) {
-                var pf_mb = 0l
-                for (bi in range(length(bases))) {
-                    if (unsafe(prefetch_map(bases[bi], uint64(sizes[bi])))) {
-                        pf_mb += sizes[bi] >> 20l
-                    }
-                }
-                if (pf_mb > 0l) {
-                    to_log(LOG_INFO, "dasLLAMA: source prefetch armed ({pf_mb} MB across {length(shards)} shards)\n")
-                }
-            }
-            var m <- parse_gguf_meta_shards(bases, sizes)
-            unsafe {
-                load_gguf_parsed(t, m, temp_array(reinterpret<uint8?>(bases[0]), sizes[0], type<uint8>), mode, ts_load)
-            }
-            delete m
-        }
-        bases |> clear()   // borrowed mapping bases — clear so delete frees only the buffer
-        delete bases
-        delete sizes
-        return <- t
-    }
-    let f = fopen(path, "rb")
-    if (f == null) {
-        panic("dasLLAMA: cannot open gguf '{path}'")
-    }
-    fmap(f) $(var bytes : array<uint8>#) {
-        if (env_flag("DASLLAMA_PREFETCH", true)) {
-            var armed = false
-            unsafe {
-                armed = prefetch_map(addr<void?>(bytes[0]), uint64(long_length(bytes)))
-            }
-            if (armed) {
-                to_log(LOG_INFO, "dasLLAMA: source prefetch armed ({long_length(bytes) >> 20l} MB)\n")
-            }
-        }
-        var inscope m <- parse_gguf_meta(bytes)
-        load_gguf_parsed(t, m, bytes, mode, ts_load)
-    }
-    fclose(f)
-    return <- t
-}
-
-// The load once metadata is parsed and the byte view carrying the KVs (shard 0 for splits) is
-// mapped — config, vocab, plane sizing, tensor reads/transcodes, repack, wscale.
-def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> | #; var mode : QuantMode; ts_load : int64) {
-    var ts_stage = ref_time_ticks()
-    {
-        let arch = gguf_str(m, bytes, "general.architecture")
-        resolve_arch(t, arch)   // registry lookup: apply config flags + bind the arch's block kernels
-        if (gguf_has(m, "tokenizer.chat_template")) {
-            t.chat_template_str = gguf_str(m, bytes, "tokenizer.chat_template")
-        }
-        // GGUF uses the architecture name as the metadata key prefix (llama.*, qwen2.*, gemma2.*, ...)
-        let dim = gguf_int(m, bytes, "{arch}.embedding_length")
-        // MTP/NextN: block_count INCLUDES the appended draft block(s) (llama.cpp n_layer_all);
-        // `layers` below is the TRUNK count — every per-layer validation/mask walks the trunk only.
-        let nextn = gguf_has(m, "{arch}.nextn_predict_layers") ? gguf_int(m, bytes, "{arch}.nextn_predict_layers") : 0l
-        if (nextn < 0l || nextn > 1l) {
-            panic("dasLLAMA: nextn_predict_layers = {nextn} not supported (single NextN head only)")
-        }
-        let layers = gguf_int(m, bytes, "{arch}.block_count") - nextn
-        if (layers < 1l) {   // fail closed on a malformed file before "blk.-1..." confusion downstream
-            panic("dasLLAMA: {arch}.block_count = {layers + nextn} with nextn_predict_layers = {nextn} leaves no trunk layers")
-        }
-        t.config.n_layer_nextn = nextn
-        // FFN width: a scalar for uniform arches, or a per-layer array (gemma-4 E2B: the elastic
-        // MatFormer sub-model, 6144 for layers 0-14 then 12288). ffn_w holds the per-layer widths;
-        // hidden_dim is the MAX (scratch sizing). Set before layout_offsets so the offsets vary per layer.
-        var hidden = 0l
-        if (gguf_is_array(m, "{arch}.feed_forward_length")) {
-            t.ffn_w <- gguf_int_array(m, bytes, "{arch}.feed_forward_length")
-            if (long_length(t.ffn_w) != layers) {
-                panic("dasLLAMA: feed_forward_length array has {long_length(t.ffn_w)} entries, expected {layers}")
-            }
-            for (w in t.ffn_w) { hidden = max(hidden, w) }
-        } elif (gguf_has(m, "{arch}.feed_forward_length")) {
-            hidden = gguf_int(m, bytes, "{arch}.feed_forward_length")
-        } elif (!t.config.moe) {
-            // pure-MoE files (qwen35moe) drop the key — every FFN is router + experts; a dense
-            // arch without it is a broken file
-            panic("dasLLAMA: {arch}.feed_forward_length missing")
-        }
-        let n_heads = gguf_int(m, bytes, "{arch}.attention.head_count")
-        let seq_len = gguf_int(m, bytes, "{arch}.context_length")
-        // vocab from the token-embedding tensor: rows = vocab, cols = dim
-        let temb = gguf_find_tensor(m, "token_embd.weight")
-        if (temb < 0) {
-            panic("dasLLAMA: token_embd.weight missing")
-        }
-        let vocab = m.tensors[temb].n_elem / dim
-        t.config.dim = dim
-        t.config.hidden_dim = hidden
-        t.config.n_layers = layers
-        t.config.n_heads = n_heads
-        t.config.vocab_size = vocab
-        t.config.seq_len = seq_len
-        // head_size from metadata key_length when present (Gemma2: 256, != dim/n_heads=288);
-        // kv_dim = n_kv_heads * head_size. Both reduce to the llama formulas when head_size = dim/n_heads.
-        t.config.head_size = (gguf_has(m, "{arch}.attention.key_length")
-            ? gguf_int(m, bytes, "{arch}.attention.key_length")
-            : dim / n_heads)
-        // Gemma scales the embedding by sqrt(dim); configure can't (dim unknown there)
-        if (t.config.embed_scale_sqrt_dim) {
-            t.config.embed_scale = sqrt(float(dim))
-        }
-        // sliding-window span + per-layer pattern from metadata, for arches that opted in via
-        // configure (Gemma2/3 alternating; gemma4 an explicit per-layer bool array -> swa_mask).
-        // Resolved BEFORE the kv-head classes below, which key off layer_is_sliding.
-        if (t.config.sliding_window > 0l) {
-            if (gguf_has(m, "{arch}.attention.sliding_window")) {
-                t.config.sliding_window = gguf_int(m, bytes, "{arch}.attention.sliding_window")
-            }
-            if (gguf_is_array(m, "{arch}.attention.sliding_window_pattern")) {
-                if (layers > 64l) {
-                    panic("dasLLAMA: per-layer sliding_window_pattern needs n_layers <= 64 (got {layers})")
-                }
-                let pat <- gguf_int_array(m, bytes, "{arch}.attention.sliding_window_pattern")
-                for (l in range64(layers)) {
-                    if (pat[l] != 0l) {
-                        t.config.swa_mask |= 1ul << uint64(l)
-                    }
-                }
-            } elif (gguf_has(m, "{arch}.attention.sliding_window_pattern")) {
-                t.config.swa_pattern = gguf_int(m, bytes, "{arch}.attention.sliding_window_pattern")
-            }
-        }
-        // qwen35 hybrid: the per-layer recurrent (Gated-DeltaNet) mask + ssm geometry. Mask from the
-        // explicit bool array when present, else every layer except each full_attention_interval-th.
-        // Parsed BEFORE the kv-head classes below, whose walk skips recurrent layers.
-        if (t.config.hybrid_deltanet) {
-            if (layers > 64l) {
-                panic("dasLLAMA: the hybrid recurrent-layer mask needs n_layers <= 64 (got {layers})")
-            }
-            if (gguf_is_array(m, "{arch}.attention.recurrent_layers")) {
-                let rl <- gguf_int_array(m, bytes, "{arch}.attention.recurrent_layers")
-                if (long_length(rl) != layers) {
-                    panic("dasLLAMA: recurrent_layers array has {long_length(rl)} entries, expected {layers}")
-                }
-                for (l in range64(layers)) {
-                    if (rl[l] != 0l) {
-                        t.config.recr_mask |= 1ul << uint64(l)
-                    }
-                }
-            } else {
-                let interval = (gguf_has(m, "{arch}.full_attention_interval")
-                    ? gguf_int(m, bytes, "{arch}.full_attention_interval") : 4l)
-                if (interval <= 0l) {
-                    panic("dasLLAMA: full_attention_interval must be positive (got {interval})")
-                }
-                for (l in range64(layers)) {
-                    if ((l + 1l) % interval != 0l) {
-                        t.config.recr_mask |= 1ul << uint64(l)
-                    }
-                }
-            }
-            t.config.ssm_d_conv = gguf_int(m, bytes, "{arch}.ssm.conv_kernel")
-            t.config.ssm_d_state = gguf_int(m, bytes, "{arch}.ssm.state_size")
-            t.config.ssm_n_group = gguf_int(m, bytes, "{arch}.ssm.group_count")
-            t.config.ssm_dt_rank = gguf_int(m, bytes, "{arch}.ssm.time_step_rank")
-            t.config.ssm_d_inner = gguf_int(m, bytes, "{arch}.ssm.inner_size")
-            if (t.config.ssm_d_inner != t.config.ssm_dt_rank * t.config.ssm_d_state) {
-                panic("dasLLAMA: deltanet inner_size {t.config.ssm_d_inner} != time_step_rank {t.config.ssm_dt_rank} * state_size {t.config.ssm_d_state}")
-            }
-            if (t.config.ssm_d_state <= 0l || t.config.ssm_n_group <= 0l || t.config.ssm_dt_rank <= 0l
-                    || t.config.ssm_d_conv < 2l || t.config.ssm_dt_rank % t.config.ssm_n_group != 0l) {
-                panic("dasLLAMA: unsupported deltanet geometry (conv_kernel {t.config.ssm_d_conv}, state {t.config.ssm_d_state}, v-heads {t.config.ssm_dt_rank}, k-heads {t.config.ssm_n_group})")
-            }
-            if (dn_conv_dim(t.config) % 4l != 0l) {   // the batched conv reads float4 rows (validate-at-load, kv_validate_q8 precedent)
-                panic("dasLLAMA: deltanet conv_dim {dn_conv_dim(t.config)} must be a multiple of 4")
-            }
-        }
-        // MTP/NextN consistency (arch-agnostic — qwen35 hybrids AND glm4moe carry draft blocks):
-        // the metadata and the tensor directory must agree, and an MTP-only sidecar (trunk
-        // stripped, llama.cpp mtp_only) is not loadable standalone
-        if (t.config.n_layer_nextn > 0l) {
-            if (gguf_find_tensor(m, "blk.{layers}.nextn.eh_proj.weight") < 0) {
-                panic("dasLLAMA: nextn_predict_layers = {t.config.n_layer_nextn} but blk.{layers}.nextn.eh_proj.weight is missing")
-            }
-            if (gguf_find_tensor(m, "blk.0.attn_norm.weight") < 0) {
-                panic("dasLLAMA: MTP-only sidecar GGUF (no trunk tensors) is not supported — use the full -MTP file")
-            }
-            // glm4moe's MTP shares the trunk's embedding and classifier with the draft head, and the
-            // GGUF materializes copies of both — so draft through the TRUNK's tables and skip them.
-            // A shape disagreement means it is NOT that sharing, so fail closed.
-            let nemb = gguf_find_tensor(m, "blk.{layers}.nextn.embed_tokens.weight")
-            let nhead = gguf_find_tensor(m, "blk.{layers}.nextn.shared_head_head.weight")
-            if ((nemb >= 0 && m.tensors[nemb].n_elem != vocab * dim)
-                    || (nhead >= 0 && m.tensors[nhead].n_elem != vocab * dim)) {
-                to_log(LOG_WARNING, "dasLLAMA: NextN embed_tokens/shared_head_head are not the trunk's shape — MTP draft head disabled\n")
-                t.config.n_layer_nextn = 0l
-            }
-        } elif (gguf_find_tensor(m, "blk.{layers}.nextn.eh_proj.weight") >= 0
-                || gguf_find_tensor(m, "blk.{layers - 1l}.nextn.eh_proj.weight") >= 0) {
-            // the second probe catches a malformed file whose block_count already counts the
-            // draft block — its nextn tensors sit one below the first probe's index
-            panic("dasLLAMA: file ships NextN tensors but no nextn_predict_layers key — refusing to guess")
-        }
-        // KV-head count: scalar (uniform), or gemma4's per-layer array — which must collapse to the
-        // TWO layer classes (one value on sliding layers, one on global) the engine models
-        if (gguf_is_array(m, "{arch}.attention.head_count_kv")) {
-            let kvh <- gguf_int_array(m, bytes, "{arch}.attention.head_count_kv")
-            var full_v = -1l
-            var swa_v = -1l
-            for (l in range64(layers)) {
-                if (layer_is_recurrent(t.config, l)) {  // deltanet layers have no KV heads (0 or absent)
-                    continue
-                }
-                if (layer_is_sliding(t.config, l)) {
-                    if (swa_v < 0l) {
-                        swa_v = kvh[l]
-                    } elif (swa_v != kvh[l]) {
-                        panic("dasLLAMA: per-layer head_count_kv beyond two sliding/global classes is not supported")
-                    }
-                } elif (full_v < 0l) {
-                    full_v = kvh[l]
-                } elif (full_v != kvh[l]) {
-                    panic("dasLLAMA: per-layer head_count_kv beyond two sliding/global classes is not supported")
-                }
-            }
-            t.config.n_kv_heads = full_v >= 0l ? full_v : swa_v
-            if (swa_v >= 0l && swa_v != t.config.n_kv_heads) {
-                t.config.n_kv_heads_swa = swa_v
-            }
-        } else {
-            t.config.n_kv_heads = gguf_int(m, bytes, "{arch}.attention.head_count_kv")
-        }
-        // sliding layers' head size (gemma4: 256 vs the global 512); K and V widths must agree
-        if (gguf_has(m, "{arch}.attention.key_length_swa")) {
-            let hs_swa = gguf_int(m, bytes, "{arch}.attention.key_length_swa")
-            if (gguf_has(m, "{arch}.attention.value_length_swa")
-                    && gguf_int(m, bytes, "{arch}.attention.value_length_swa") != hs_swa) {
-                panic("dasLLAMA: key_length_swa != value_length_swa is not supported")
-            }
-            if (hs_swa != t.config.head_size) {
-                t.config.head_size_swa = hs_swa
-            }
-        }
-        t.config.kv_dim = t.config.n_kv_heads * t.config.head_size
-        // the engine ropes over the full head unless the arch opted into partial rotary (qwen35:
-        // rotate the first rope_dim of head_size dims; text-only M-RoPE sections degenerate to
-        // this, see the qwen3vl precedent) — anything else refuses instead of mis-running
-        if (gguf_has(m, "{arch}.rope.dimension_count")
-                && gguf_int(m, bytes, "{arch}.rope.dimension_count") != t.config.head_size) {
-            if (t.config.partial_rope) {
-                t.config.rope_dim = gguf_int(m, bytes, "{arch}.rope.dimension_count")
-                if (t.config.rope_dim <= 0l || t.config.rope_dim % 2l != 0l || t.config.rope_dim > t.config.head_size) {
-                    panic("dasLLAMA: bad partial rotary width {t.config.rope_dim} (head_size {t.config.head_size})")
-                }
-                if (!t.config.rope_neox) {   // only the NEOX _part leaves exist (qwen35/glm4moe are NEOX)
-                    panic("dasLLAMA: partial rotary is only supported with NEOX rope")
-                }
-            } else {
-                panic("dasLLAMA: partial rotary (rope.dimension_count != head_size) is not supported")
-            }
-        }
-        if (gguf_has(m, "{arch}.rope.dimension_count_swa")) {
-            let swa_hs = t.config.head_size_swa > 0l ? t.config.head_size_swa : t.config.head_size
-            if (gguf_int(m, bytes, "{arch}.rope.dimension_count_swa") != swa_hs) {
-                panic("dasLLAMA: partial rotary (rope.dimension_count_swa != the sliding head size) is not supported")
-            }
-        }
-        // gemma-4 E-series: cross-layer KV sharing — the last N layers reuse an earlier layer's KV
-        // cache (n_layer_kv_from_start = layers - shared), and their own attn_k/attn_v are dead weights
-        // (skipped by layout_offsets). Mirrors llama.cpp gemma4's has_kv()/reuse().
-        if (gguf_has(m, "{arch}.attention.shared_kv_layers")) {
-            let n_shared = gguf_int(m, bytes, "{arch}.attention.shared_kv_layers")
-            if (n_shared > 0l) {
-                t.config.n_layer_kv_from_start = layers - n_shared
-            }
-        }
-        // gemma-4 E-series: per-layer embeddings (PLE) — a per-(token, layer) side input mixed into
-        // each layer's output. n_embd_per_layer = 0 on the dense 12B/31B (feature off).
-        if (gguf_has(m, "{arch}.embedding_length_per_layer_input")) {
-            t.config.n_embd_per_layer = gguf_int(m, bytes, "{arch}.embedding_length_per_layer_input")
-        }
-        // gemma4 is MoE only when the file carries experts (12B/31B dense, 26B-A4B MoE)
-        if (t.config.moe_optional
-                && gguf_has(m, "{arch}.expert_count") && gguf_int(m, bytes, "{arch}.expert_count") > 0l) {
-            t.config.moe = true
-        }
-        if (t.config.moe_optional && !t.config.moe) {
-            // the moe-optional arch registers ffn_is_dense = false for the shared descriptor, but
-            // THIS file resolved dense (12B/31B/E-series) — its ffn IS the std dense stack
-            // (+ out_scale; the E-series PLE epilogue is MetalNeed.ple, not a MoE graph)
-            t.blocks.ffn_is_dense = true
-        }
-        if (t.config.moe) {
-            // MoE geometry from metadata (qwen2moe A2.7B: 60 experts, top-4, 1408-wide experts
-            // + a 5632-wide shared expert)
-            if (!gguf_has(m, "{arch}.expert_count") || gguf_int(m, bytes, "{arch}.expert_count") <= 0l) {
-                panic("dasLLAMA: '{arch}' is a MoE arch but the GGUF has no {arch}.expert_count")
-            }
-            t.config.n_expert = gguf_int(m, bytes, "{arch}.expert_count")
-            t.config.n_expert_used = gguf_has(m, "{arch}.expert_used_count") ? gguf_int(m, bytes, "{arch}.expert_used_count") : 0l
-            if (t.config.n_expert_used <= 0l || t.config.n_expert_used > t.config.n_expert) {
-                panic("dasLLAMA: bad expert_used_count {t.config.n_expert_used} (expert_count {t.config.n_expert})")
-            }
-            t.config.n_ff_exp = (gguf_has(m, "{arch}.expert_feed_forward_length")
-                ? gguf_int(m, bytes, "{arch}.expert_feed_forward_length")
-                : hidden / t.config.n_expert_used)   // llama.cpp's fallback for files without the key
-            if (t.config.n_ff_exp <= 0l) {   // pure-MoE files may omit feed_forward_length (hidden 0) — then the expert key is mandatory
-                panic("dasLLAMA: expert_feed_forward_length missing (and no dense feed_forward_length to derive it)")
-            }
-            // glm4moe: the first k layers are plain dense FFN — every MoE tensor probe below keys
-            // off the FIRST ROUTED layer, not blk.0 (blk.0 is dense there and would misdetect)
-            if (gguf_has(m, "{arch}.leading_dense_block_count")) {
-                t.config.n_layer_dense_lead = gguf_int(m, bytes, "{arch}.leading_dense_block_count")
-                if (t.config.n_layer_dense_lead < 0l || t.config.n_layer_dense_lead >= layers) {
-                    panic("dasLLAMA: leading_dense_block_count = {t.config.n_layer_dense_lead} leaves no routed layers ({layers} trunk layers)")
-                }
-            }
-            let lead = t.config.n_layer_dense_lead
-            // shared expert: present iff its tensors are (qwen2moe always ships one; glm4moe's is
-            // UNGATED — no ffn_gate_inp_shexp — and its width is n_ff_exp x expert_shared_count)
-            if (gguf_find_tensor(m, "blk.{lead}.ffn_up_shexp.weight") >= 0) {
-                t.config.n_ff_shexp = (gguf_has(m, "{arch}.expert_shared_feed_forward_length")
-                    ? gguf_int(m, bytes, "{arch}.expert_shared_feed_forward_length")
-                    : (gguf_has(m, "{arch}.expert_shared_count")
-                        ? t.config.n_ff_exp * gguf_int(m, bytes, "{arch}.expert_shared_count")
-                        : hidden))
-                if (t.config.n_ff_shexp <= 0l) {
-                    panic("dasLLAMA: expert_shared_feed_forward_length missing (and no dense feed_forward_length to derive it)")
-                }
-                t.config.moe_shexp_gated = gguf_find_tensor(m, "blk.{lead}.ffn_gate_inp_shexp.weight") >= 0
-            }
-            if (gguf_has(m, "{arch}.expert_weights_norm")) {
-                t.config.norm_topk_prob = gguf_int(m, bytes, "{arch}.expert_weights_norm") != 0l
-            }
-            if (gguf_has(m, "{arch}.expert_weights_scale")) {
-                t.config.expert_weights_scale = gguf_f32(m, bytes, "{arch}.expert_weights_scale")
-            }
-            if (gguf_has(m, "{arch}.expert_gating_func")) {
-                // llama.cpp enum: 1 = softmax over the logits, 2 = sigmoid, 3 = softmax over the
-                // selected top-k weights (gpt-oss hardcodes 3 in its graph — no GGUF key there,
-                // so its arch configure sets the default; bailingmoe2 files carry the key)
-                let gf = gguf_int(m, bytes, "{arch}.expert_gating_func")
-                if (gf == 2l) {
-                    t.config.moe_gate = MoeGate.sigmoid
-                } elif (gf == 3l) {
-                    t.config.moe_gate = MoeGate.softmax_weight
-                } elif (gf != 1l) {
-                    panic("dasLLAMA: unsupported expert_gating_func {gf}")
-                }
-            }
-            // DeepSeek-V3 grouped expert routing is not modeled — refuse instead of mis-routing
-            if (gguf_has(m, "{arch}.expert_group_count") && gguf_int(m, bytes, "{arch}.expert_group_count") > 1l) {
-                panic("dasLLAMA: grouped expert routing (expert_group_count > 1) is not yet supported")
-            }
-            // DeepSeek-V3/glm4moe expert-selection bias: added to the (sigmoid) probs for the top-k
-            // PICK only; the mixing weights stay unbiased (llama.cpp build_moe_ffn)
-            t.config.moe_exp_probs = gguf_find_tensor(m, "blk.{lead}.exp_probs_b.bias") >= 0
-            // router / per-expert biases (gpt-oss) — detected from the tensor table; the gate/up
-            // pair always ships together, so probing ffn_up_exps.bias covers all three stacks
-            t.config.moe_router_bias = gguf_find_tensor(m, "blk.{lead}.ffn_gate_inp.bias") >= 0
-            t.config.moe_exps_bias = gguf_find_tensor(m, "blk.{lead}.ffn_up_exps.bias") >= 0
-            // gemma4 family: a DENSE parallel shared expert (plain ffn_gate/up/down alongside the routed
-            // experts) plus the fused gate_up stacks + sandwich norms + custom router that ride with it
-            // (probed at the first ROUTED layer — a glm4moe dense-lead blk.0.ffn_gate must not trip it)
-            t.config.moe_dense_shexp = gguf_find_tensor(m, "blk.{lead}.ffn_gate.weight") >= 0
-        } elif (gguf_has(m, "{arch}.expert_count") && gguf_int(m, bytes, "{arch}.expert_count") > 0l) {
-            panic("dasLLAMA: MoE expert blocks are not supported for arch '{arch}'")
-        }
-        // attention output-projection bias + per-head sink logits (gpt-oss) — tensor-detected
-        t.config.attn_out_bias = gguf_find_tensor(m, "blk.0.attn_output.bias") >= 0
-        t.config.attn_sinks = gguf_find_tensor(m, "blk.0.attn_sinks.weight") >= 0
-        // QK-norm ships per-FILE within some families (GLM-4.5 355B carries attn_q_norm, Air
-        // doesn't) — an arch that didn't opt in would silently skip the norms, so refuse instead
-        if (!t.config.qk_norm && gguf_find_tensor(m, "blk.0.attn_q_norm.weight") >= 0) {
-            panic("dasLLAMA: file ships attn_q_norm but arch '{arch}' does not configure qk_norm — refusing to mis-run")
-        }
-        // llama4-style per-position attention temperature tuning (mistral3 carries the key, shipped
-        // as 0 = disabled) — no Q-scaling path here, fail closed rather than silently mis-attend
-        let tskey = "{arch}.attention.temperature_scale"
-        if (gguf_has(m, tskey) && gguf_f32(m, bytes, tskey) != 0.0) {
-            panic("dasLLAMA: {arch}.attention.temperature_scale != 0 (attention temperature tuning) is not supported")
-        }
-        // RoPE base frequency (θ): default 10000, but Llama-3 uses 500000
-        t.config.rope_freq_base = gguf_has(m, "{arch}.rope.freq_base") ? gguf_f32(m, bytes, "{arch}.rope.freq_base") : 10000.0
-        // linear RoPE position scaling (Gemma3-4B: factor 8 on global layers); YaRN / LongRoPE
-        // variants keep their own handling (rope_freqs factors + attn_factor below)
-        if (gguf_has(m, "{arch}.rope.scaling.type") && gguf_str(m, bytes, "{arch}.rope.scaling.type") == "linear"
-                && gguf_has(m, "{arch}.rope.scaling.factor")) {
-            t.config.rope_freq_scale = 1.0 / gguf_f32(m, bytes, "{arch}.rope.scaling.factor")
-        }
-        // sliding layers' θ: metadata override when present, else configure's value; the 0 sentinel
-        // (arch didn't set it) resolves to the global θ so per-layer selection is uniform
-        if (gguf_has(m, "{arch}.rope.freq_base_swa")) {
-            t.config.rope_freq_base_swa = gguf_f32(m, bytes, "{arch}.rope.freq_base_swa")
-        }
-        if (t.config.rope_freq_base_swa == 0.0) {
-            t.config.rope_freq_base_swa = t.config.rope_freq_base
-            t.config.rope_freq_scale_swa = t.config.rope_freq_scale
-        }
-        // RMSNorm epsilon from metadata (Llama 1e-5; Qwen2 / Gemma2 1e-6); default matches Llama
-        let epskey = "{arch}.attention.layer_norm_rms_epsilon"
-        t.config.norm_eps = gguf_has(m, epskey) ? gguf_f32(m, bytes, epskey) : 1.0e-5
-        // Per-pair RoPE frequency factors: Llama-3.1 NTK-by-parts (rope_freqs.weight) or Phi3 LongRoPE
-        // short-context factors (rope_factors_short.weight). Both divide θ per pair (head_size/2 values).
-        let rf_name = (gguf_find_tensor(m, "rope_factors_short.weight") >= 0
-            ? "rope_factors_short.weight"
-            : (gguf_find_tensor(m, "rope_freqs.weight") >= 0 ? "rope_freqs.weight" : ""))
-        if (rf_name != "") {
-            let nff = t.config.head_size / 2l
-            t.rope_freqs |> resize(nff)
-            gguf_read_tensor_f32(m, bytes, rf_name, t.rope_freqs, 0l, nff)
-            // the _part leaves take a factor pointer, but no partial-rope model ships factors —
-            // the untested combination stays fail-closed (std paths pass has_ff=false when partial)
-            if (t.config.rope_dim > 0l && t.config.rope_dim != t.config.head_size) {
-                panic("dasLLAMA: partial rotary combined with per-pair rope factors is not supported")
-            }
-        }
-        // Phi3 LongRoPE magnitude factor (attn_factor) scales the rope output; absent (=1.0) elsewhere
-        let mskey = "{arch}.rope.scaling.attn_factor"
-        t.config.rope_mscale = gguf_has(m, mskey) ? gguf_f32(m, bytes, mskey) : 1.0
-        // YaRN (gpt-oss: factor 32 over a 4096 original context). Folds into the existing per-pair
-        // machinery: synthesize rope_freqs[j] = 1/eff_j (factors DIVIDE θ), keep rope_freq_scale = 1,
-        // fold the magnitude correction 1 + 0.1·ln(factor) into rope_mscale.
-        if (gguf_has(m, "{arch}.rope.scaling.type") && gguf_str(m, bytes, "{arch}.rope.scaling.type") == "yarn") {
-            if (!empty(t.rope_freqs)) {
-                panic("dasLLAMA: YaRN combined with per-pair rope factors is not supported")
-            }
-            if (t.config.rope_dim > 0l && t.config.rope_dim != t.config.head_size) {
-                panic("dasLLAMA: partial rotary combined with YaRN is not supported")
-            }
-            // yarn_log_multiplier replaces the 0.1 in the mscale correction (DeepSeek-2 lineage);
-            // mistral3 files carry it as 0, where llama.cpp's cancel-and-reapply dance nets out to
-            // the plain 1 + 0.1·ln(factor) below — any other value needs that dance, fail closed
-            let lmkey = "{arch}.rope.scaling.yarn_log_multiplier"
-            if (gguf_has(m, lmkey) && gguf_f32(m, bytes, lmkey) != 0.0) {
-                panic("dasLLAMA: {arch} YaRN yarn_log_multiplier != 0 is not supported")
-            }
-            let yfactor = gguf_f32(m, bytes, "{arch}.rope.scaling.factor")
-            let yorig = (gguf_has(m, "{arch}.rope.scaling.original_context_length")
-                ? gguf_int(m, bytes, "{arch}.rope.scaling.original_context_length") : seq_len)
-            let fscale = 1.0 / yfactor
-            // NTK-by-parts correction band (ggml_rope_yarn_corr_dims; beta_fast/slow from metadata,
-            // llama.cpp defaults 32/1): pairs below `lo` rotate at full frequency (extrapolate),
-            // above `hi` fully interpolate (mistral3: beta_fast 4 widens the band vs gpt-oss's 32)
-            let bfkey = "{arch}.rope.scaling.yarn_beta_fast"
-            let bskey = "{arch}.rope.scaling.yarn_beta_slow"
-            let beta_fast = gguf_has(m, bfkey) ? gguf_f32(m, bytes, bfkey) : 32.0
-            let beta_slow = gguf_has(m, bskey) ? gguf_f32(m, bytes, bskey) : 1.0
-            if (beta_fast <= 0.0 || beta_slow <= 0.0) {   // divisors inside log() below — fail closed on a malformed file
-                panic("dasLLAMA: YaRN beta_fast/beta_slow must be > 0 (got {beta_fast}/{beta_slow})")
-            }
-            let hs = t.config.head_size
-            let denom = 2.0 * log(t.config.rope_freq_base)
-            let lo = max(0.0, floor(float(hs) * log(float(yorig) / (beta_fast * 2.0 * PI)) / denom))
-            let hi = min(float(hs - 1l), ceil(float(hs) * log(float(yorig) / (beta_slow * 2.0 * PI)) / denom))
-            t.rope_freqs |> resize(hs / 2l)
-            for (j in range64(hs / 2l)) {
-                let ramp = 1.0 - clamp((float(j) - lo) / max(0.001, hi - lo), 0.0, 1.0)  // = rope_yarn_ramp(lo, hi, i0 = 2j): ggml halves i0, and lo/hi are already pair-unit
-                t.rope_freqs[j] = 1.0 / (fscale + ramp * (1.0 - fscale))
-            }
-            t.config.rope_mscale *= 1.0 + 0.1 * log(1.0 / fscale)
-        }
-        // q4_0 serving has no per-layer-embedding rail: the PLE table reserves on the q8 cursor
-        // but its bytes route to q4blob, so the gather reads an empty qblob (E-series dies token
-        // 1). Not adding a PLE q4 rail — strict loads panic here, resilient (server) fall back to q8.
-        if (mode == QuantMode.q4_0 && has_ple(t.config)) {
-            if (get_resilient_load()) {
-                to_log(LOG_WARNING, "dasLLAMA: q4 serving mode has no per-layer-embedding rail — this model falls back to q8\n")
-                mode = QuantMode.q8
-                t.quant = QuantMode.q8
-            } else {
-                panic("dasLLAMA: q4 serving mode has no per-layer-embedding rail — serve this model with quant q8")
-            }
-        }
-        // a separate output.weight means the classifier is not tied to the embeddings
-        t.config.shared_weights = gguf_find_tensor(m, "output.weight") < 0
-        // tied Q8 loads of a Q8_0 embedding matmul the classifier on the DISK quants (llama.cpp's
-        // arithmetic) and drop the fp32 table — see Model.cls_q8. Other disk types keep the exact
-        // fp32 path (a requantized classifier would drift from the oracle for no parity gain).
-        t.cls_q8 = (t.config.shared_weights && mode == QuantMode.q8
-            && gguf_tensor_type(m, "token_embd.weight") == GGML_TYPE_Q8_0)
-        // ssm_beta/ssm_alpha disk type routes their matmul (must precede layout_offsets): F32
-        // files keep them fp32 in fblob (llama.cpp matmuls f32); quantized files ride qblob.
-        // Also before detect_kq_formats — the dn tags demote on grouped (qwen3next) files.
-        if (t.config.recr_mask != 0ul) {
-            var frl = 0l
-            while (!layer_is_recurrent(t.config, frl)) {
-                frl++
-            }
-            t.dn_grouped = gguf_find_tensor(m, "blk.{frl}.ssm_ba.weight") >= 0
-            let ba0 = t.dn_grouped ? "blk.{frl}.ssm_ba.weight" : "blk.{frl}.ssm_beta.weight"
-            t.dn_ba_f32 = gguf_tensor_type(m, ba0) == GGML_TYPE_F32
-        }
-        // per-tensor K-quant format tags (kquant_native rail; no-op when the knob is off or the
-        // file has no K-quant tensors) — must precede layout_offsets, which walks the tags
-        detect_kq_formats(t, m)
-        // logit soft-caps from metadata when present (gemma2: 50/30, gemma4: final 30 only);
-        // configure()'s values stay as the fallback for files without the keys
-        if (gguf_has(m, "{arch}.attn_logit_softcapping")) {
-            t.config.attn_logit_softcap = gguf_f32(m, bytes, "{arch}.attn_logit_softcapping")
-        }
-        if (gguf_has(m, "{arch}.final_logit_softcapping")) {
-            t.config.final_logit_softcap = gguf_f32(m, bytes, "{arch}.final_logit_softcapping")
-        }
-        // suppressed token ids (gemma4: the checkpoint's known-bad <image|>/<audio|>) — llama.cpp
-        // pins their logits to -inf in the graph, so parity requires the same
-        if (gguf_has(m, "tokenizer.ggml.suppress_tokens")) {
-            t.suppress <- gguf_i32_array(m, bytes, "tokenizer.ggml.suppress_tokens")
-        }
-        // layers with no attn_v tensor reuse the pre-norm K projection as V (gemma4 global layers);
-        // detected from the tensor table so layout_offsets can skip their V slot
-        if (!t.config.fused_qkv) {
-            for (l in range64(layers)) {
-                // recurrent (deltanet) layers legitimately have no attn_v — they are NOT V-from-K
-                if (gguf_find_tensor(m, "blk.{l}.attn_v.weight") < 0 && !layer_is_recurrent(t.config, l)) {
-                    if (l >= 64l) {
-                        panic("dasLLAMA: V-from-K layers need n_layers <= 64 (got layer {l})")
-                    }
-                    t.config.v_from_k_mask |= 1ul << uint64(l)
-                }
-            }
-        }
-        // per-layer output scalars (gemma4 layer_output_scale) — presence detected from the tensors
-        t.config.layer_out_scale = gguf_find_tensor(m, "blk.0.layer_output_scale.weight") >= 0
-        // Native-MXFP4 expert stacks (gpt-oss): on a q8 load whose routed expert stacks are all
-        // MXFP4 on disk, keep them in their native nibble + E8M0 planes (see Model.experts_mx4)
-        // instead of transcoding to Q8 — half the resident bytes and decode traffic, exact disk bits.
-        t.experts_mx4 = (t.config.n_expert > 0l && mode == QuantMode.q8
-            && gguf_tensor_type(m, "blk.0.ffn_gate_exps.weight") == GGML_TYPE_MXFP4
-            && gguf_tensor_type(m, "blk.0.ffn_down_exps.weight") == GGML_TYPE_MXFP4
-            && gguf_tensor_type(m, "blk.0.ffn_up_exps.weight") == GGML_TYPE_MXFP4)
-        // gemma-4 E-series: keep per_layer_model_proj in its native BF16 — half the per-token
-        // read; dot_bf16's widen is the exact bit shift, so the values match the fp32 expand
-        t.ple_model_bf16 = (has_ple(t.config)
-            && gguf_tensor_type(m, "per_layer_model_proj.weight") == GGML_TYPE_BF16)
-        let kv = t.config.kv_dim
-        let qd = t.config.n_heads * t.config.head_size   // query width (== dim except Gemma2)
-        // streaming covers the q8-mode load_big rails; models with direct-write loaders
-        // (mx4 experts, grouped deltanet, bf16 PLE) disarm HERE — before sizing — so the
-        // eager path proceeds with fully materialized planes and an empty job list
-        if (g_fill_plan_mode && (mode != QuantMode.q8 || t.experts_mx4 || t.dn_grouped || t.ple_model_bf16)) {
-            to_log(LOG_INFO, "dasLLAMA: streaming plan disarmed — unstreamed rail (mode {mode}, mx4 {t.experts_mx4}, dn-grouped {t.dn_grouped}, bf16-ple {t.ple_model_bf16}); converting eagerly\n")
-            g_fill_plan_mode = false
-        }
-        let sz = layout_offsets(t)
-        // fp32 aux (embedding + norms) is always present; the big-weight storage matches `mode`
-        reserve_resize(t.fblob, sz.fblob_n)
-        if (sz.bf16_n > 0l) {
-            t.bf16blob |> reserve(sz.bf16_n)
-            t.bf16blob |> resize(sz.bf16_n)
-        }
-        if (sz.mx_n > 0l) {
-            t.mxq |> reserve(sz.mx_n / 2l)
-            t.mxq |> resize(sz.mx_n / 2l)
-            t.mxs |> reserve(sz.mx_n / 32l)
-            t.mxs |> resize(sz.mx_n / 32l)
-        }
-        // streaming: big q-halves never materialize (jobs stream them to the writer); scale
-        // halves are small (6-16%) and stay in RAM. Unstreamable features disarmed above.
-        let stream_q = g_fill_plan_mode
-        if (stream_q) {
-            // the streamed save sizes each q-plane from the LAYOUT (holes included), not the job sum
-            g_stream_plane_total |> clear()
-            g_stream_plane_total["k4q"] = (sz.k4_n / 256l) * K4_QSB
-            g_stream_plane_total["k5q"] = (sz.k5_n / 256l) * K5_QSB
-            g_stream_plane_total["k6q"] = (sz.k6_n / 256l) * K6_QSB
-            g_stream_plane_total["q40q"] = (sz.q40_n / 256l) * Q40_QSB
-            g_stream_plane_total["q51q"] = (sz.q51_n / 32l) * Q51_QB
-            g_stream_plane_total["qblob"] = mode == QuantMode.q8 ? sz.wblob_n : 0l
-        }
-        if (sz.k4_n > 0l) {
-            if (!stream_q) {
-                t.k4q |> reserve((sz.k4_n / 256l) * K4_QSB)
-                t.k4q |> resize((sz.k4_n / 256l) * K4_QSB)
-            }
-            t.k4s |> reserve((sz.k4_n / 256l) * K4_SSB)
-            t.k4s |> resize((sz.k4_n / 256l) * K4_SSB)
-        }
-        if (sz.k5_n > 0l) {
-            if (!stream_q) {
-                t.k5q |> reserve((sz.k5_n / 256l) * K5_QSB)
-                t.k5q |> resize((sz.k5_n / 256l) * K5_QSB)
-            }
-            t.k5s |> reserve((sz.k5_n / 256l) * K5_SSB)
-            t.k5s |> resize((sz.k5_n / 256l) * K5_SSB)
-        }
-        if (sz.k6_n > 0l) {
-            if (!stream_q) {
-                t.k6q |> reserve((sz.k6_n / 256l) * K6_QSB)
-                t.k6q |> resize((sz.k6_n / 256l) * K6_QSB)
-            }
-            t.k6s |> reserve((sz.k6_n / 256l) * K6_SSB)
-            t.k6s |> resize((sz.k6_n / 256l) * K6_SSB)
-        }
-        if (sz.q40_n > 0l) {
-            if (!stream_q) {
-                t.q40q |> reserve((sz.q40_n / 256l) * Q40_QSB)
-                t.q40q |> resize((sz.q40_n / 256l) * Q40_QSB)
-            }
-            t.q40s |> reserve((sz.q40_n / 256l) * Q40_SSB)
-            t.q40s |> resize((sz.q40_n / 256l) * Q40_SSB)
-        }
-        if (sz.q51_n > 0l) {
-            if (!stream_q) {
-                t.q51q |> reserve((sz.q51_n / 32l) * Q51_QB)
-                t.q51q |> resize((sz.q51_n / 32l) * Q51_QB)
-            }
-            t.q51s |> reserve((sz.q51_n / 32l) * Q51_SB)
-            t.q51s |> resize((sz.q51_n / 32l) * Q51_SB)
-        }
-        if (mode == QuantMode.q8) {
-            if (!stream_q) {
-                t.qblob |> reserve(sz.wblob_n)
-                t.qblob |> resize(sz.wblob_n)
-            }
-            t.qscales |> reserve(sz.wblob_n / 32l)
-            t.qscales |> resize(sz.wblob_n / 32l)
-        } elif (mode == QuantMode.q4_0) {
-            t.q4blob |> reserve(sz.wblob_n / 2l)
-            t.q4blob |> resize(sz.wblob_n / 2l)
-            t.q4scales |> reserve(sz.wblob_n / 32l)
-            t.q4scales |> resize(sz.wblob_n / 32l)
-        } else {
-            reserve_resize(t.wblob, sz.wblob_n)
-        }
-        // embedding + norms -> fblob (decoded to fp32 from whatever the disk type is); cls_q8 /
-        // cls_kq keep the embedding out of fblob — the quantized copies transcode with the big
-        // weights below
-        if (!t.cls_q8 && !cls_kq(t)) {
-            gguf_read_tensor_f32(m, bytes, "token_embd.weight", t.fblob, t.tok_emb_off, vocab * dim)
-        }
-        // gpt-oss names its pre-FFN norm post_attention_norm (same graph role as ffn_norm)
-        let ffn_norm_name = t.config.post_attn_is_ffn_norm ? "post_attention_norm" : "ffn_norm"
-        // per-layer walks below include the MTP/NextN block (index n_layers) — a trunk-shaped
-        // attention layer whose norms/weights load through the standard arms
-        let layers_ld = layers + t.config.n_layer_nextn
-        for (l in range64(layers_ld)) {
-            gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_norm.weight", t.fblob, t.rms_att_off + l * dim, dim)
-            gguf_read_tensor_f32(m, bytes, "blk.{l}.{ffn_norm_name}.weight", t.fblob, t.rms_ffn_off + l * dim, dim)
-            if (t.config.pre_post_norm) {  // Gemma2: post-attn + post-FFN norms (already +1-baked in the GGUF)
-                gguf_read_tensor_f32(m, bytes, "blk.{l}.post_attention_norm.weight", t.fblob, t.rms_post_att_off + l * dim, dim)
-                gguf_read_tensor_f32(m, bytes, "blk.{l}.post_ffw_norm.weight", t.fblob, t.rms_post_ffn_off + l * dim, dim)
-            }
-            if (t.config.qk_norm && !layer_is_recurrent(t.config, l)) {  // Qwen3/gemma4: per-head Q/K norms (head_size(l) each)
-                let hs = layer_head_size(t.config, l)
-                gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_q_norm.weight", t.fblob, t.rms_q_offs[l], hs)
-                if (t.wk_offs[l] >= 0l) {   // shared-KV layers (E-series) never project/norm their own K
-                    gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_k_norm.weight", t.fblob, t.rms_k_offs[l], hs)
-                }
-            }
-            if (layer_is_recurrent(t.config, l)) {  // qwen35 deltanet fp32 smalls
-                let cd = dn_conv_dim(t.config)
-                let nvh = t.config.ssm_dt_rank
-                gguf_read_tensor_f32(m, bytes, "blk.{l}.ssm_norm.weight", t.fblob, t.dn_norm_off + l * t.config.ssm_d_state, t.config.ssm_d_state)
-                if (t.dn_grouped) {  // permute v-indexed smalls grouped->tiled (see load_dn_grouped)
-                    let nk = t.config.ssm_n_group
-                    let nvpk = nvh / nk
-                    let hv = t.config.ssm_d_inner / nvh
-                    let dc = t.config.ssm_d_conv
-                    let qkch = 2l * nk * t.config.ssm_d_state   // conv qk channels stay put
-                    gguf_read_tensor_f32(m, bytes, "blk.{l}.ssm_conv1d.weight", t.fblob, t.dn_conv_off + l * dc * cd, qkch * dc)
-                    for (g in range64(nk)) {
-                        for (j in range64(nvpk)) {
-                            let vg = g * nvpk + j
-                            let vt = j * nk + g
-                            gguf_read_tensor_f32(m, bytes, "blk.{l}.ssm_conv1d.weight", t.fblob, t.dn_conv_off + l * dc * cd + (qkch + vt * hv) * dc, hv * dc, (qkch + vg * hv) * dc)
-                            gguf_read_tensor_f32(m, bytes, "blk.{l}.ssm_dt.bias", t.fblob, t.dn_dt_off + l * nvh + vt, 1l, vg)
-                            gguf_read_tensor_f32(m, bytes, "blk.{l}.ssm_a", t.fblob, t.dn_a_off + l * nvh + vt, 1l, vg)
-                            if (t.dn_ba_f32) {
-                                gguf_read_tensor_f32(m, bytes, "blk.{l}.ssm_ba.weight", t.fblob, t.dn_betaf_off + l * dim * nvh + vt * dim, dim, (g * 2l * nvpk + j) * dim)
-                                gguf_read_tensor_f32(m, bytes, "blk.{l}.ssm_ba.weight", t.fblob, t.dn_alphaf_off + l * dim * nvh + vt * dim, dim, ((g * 2l + 1l) * nvpk + j) * dim)
-                            }
-                        }
-                    }
-                } else {
-                    gguf_read_tensor_f32(m, bytes, "blk.{l}.ssm_conv1d.weight", t.fblob, t.dn_conv_off + l * t.config.ssm_d_conv * cd, t.config.ssm_d_conv * cd)
-                    gguf_read_tensor_f32(m, bytes, "blk.{l}.ssm_dt.bias", t.fblob, t.dn_dt_off + l * nvh, nvh)
-                    gguf_read_tensor_f32(m, bytes, "blk.{l}.ssm_a", t.fblob, t.dn_a_off + l * nvh, nvh)
-                    if (t.dn_ba_f32) {  // F32-on-disk beta/alpha stay fp32
-                        gguf_read_tensor_f32(m, bytes, "blk.{l}.ssm_beta.weight", t.fblob, t.dn_betaf_off + l * dim * nvh, dim * nvh)
-                        gguf_read_tensor_f32(m, bytes, "blk.{l}.ssm_alpha.weight", t.fblob, t.dn_alphaf_off + l * dim * nvh, dim * nvh)
-                    }
-                }
-            }
-            if (t.config.layer_out_scale) {  // gemma4: one output scalar per layer
-                gguf_read_tensor_f32(m, bytes, "blk.{l}.layer_output_scale.weight", t.fblob, t.out_scale_off + l, 1l)
-            }
-            if (t.config.moe_dense_shexp) {  // gemma4 MoE: custom-router scale, per-expert down scale, routed sandwich norms
-                let ne = t.config.n_expert
-                gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_gate_inp.scale", t.fblob, t.moe_router_scale_off + l * dim, dim)
-                gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_down_exps.scale", t.fblob, t.moe_down_scale_off + l * ne, ne)
-                gguf_read_tensor_f32(m, bytes, "blk.{l}.pre_ffw_norm_2.weight", t.fblob, t.rms_pre_ffn2_off + l * dim, dim)
-                gguf_read_tensor_f32(m, bytes, "blk.{l}.post_ffw_norm_1.weight", t.fblob, t.rms_post_ffn1_off + l * dim, dim)
-                gguf_read_tensor_f32(m, bytes, "blk.{l}.post_ffw_norm_2.weight", t.fblob, t.rms_post_ffn2_off + l * dim, dim)
-            }
-            if (t.config.attn_sinks) {  // gpt-oss: one sink logit per head
-                gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_sinks.weight", t.fblob, t.sinks_off + l * n_heads, n_heads)
-            }
-            if (has_ple(t.config)) {  // gemma-4 E-series: per-layer PLE output norm (fblob)
-                gguf_read_tensor_f32(m, bytes, "blk.{l}.post_norm.weight", t.fblob, t.ple_post_off + l * dim, dim)
-            }
-        }
-        if (t.config.v_norm) {  // the weightless V-norm's synthetic all-ones weight vector
-            for (i in range64(max_head_size(t.config))) {
-                t.fblob[t.rms_ones_off + i] = 1.0
-            }
-        }
-        gguf_read_tensor_f32(m, bytes, "output_norm.weight", t.fblob, t.rms_final_off, dim)
-        if (has_ple(t.config)) {  // gemma-4 E-series PLE globals: model-proj (native bf16 when on disk) + proj-norm
-            let ple = t.config.n_embd_per_layer
-            if (t.ple_model_bf16) {
-                gguf_transcode_bf16(m, bytes, "per_layer_model_proj.weight", t.bf16blob, t.ple_model_off, dim * ple * layers)
-            } else {
-                gguf_read_tensor_f32(m, bytes, "per_layer_model_proj.weight", t.fblob, t.ple_model_off, dim * ple * layers)
-            }
-            gguf_read_tensor_f32(m, bytes, "per_layer_proj_norm.weight", t.fblob, t.ple_pnorm_off, ple)
-        }
-        to_log(LOG_INFO, "dasLLAMA: load stage meta+config+smalls: {get_time_usec(ts_stage) / 1000} ms\n")
-        ts_stage = ref_time_ticks()
-        // big 2D weights -> active precision. ggml stores them row-major [out x in] = our convention.
-        var scratch : array<float>
-        for (l in range64(layers_ld)) {
-            let kv_l = layer_kv_dim(t.config, l)
-            let qd_l = layer_qd(t.config, l)
-            if (layer_is_recurrent(t.config, l)) {
-                // qwen35 deltanet projections: fused [q;k;v] + z gate + per-v-head beta/alpha + out
-                // (beta/alpha skip the big-weight path when they ship F32 — read into fblob above)
-                if (t.dn_grouped) {
-                    load_dn_grouped(m, bytes, t, l, dim, scratch)
-                } else {
-                    let cd = dn_conv_dim(t.config)
-                    load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.dnqkv_offs[l], dim * cd, scratch, 0l, fmt_at(t.dnqkv_fmt, l))
-                    load_big(m, bytes, "blk.{l}.attn_gate.weight", t, t.dngate_offs[l], dim * t.config.ssm_d_inner, scratch, 0l, fmt_at(t.dngate_fmt, l))
-                    if (!t.dn_ba_f32) {
-                        load_big(m, bytes, "blk.{l}.ssm_beta.weight", t, t.dnbeta_offs[l], dim * t.config.ssm_dt_rank, scratch)
-                        load_big(m, bytes, "blk.{l}.ssm_alpha.weight", t, t.dnalpha_offs[l], dim * t.config.ssm_dt_rank, scratch)
-                    }
-                    load_big(m, bytes, "blk.{l}.ssm_out.weight", t, t.dnout_offs[l], t.config.ssm_d_inner * dim, scratch, 0l, fmt_at(t.dnout_fmt, l))
-                }
-            } elif (t.config.fused_qkv) {
-                // Phi3: attn_qkv rows are [q (qd) ; k (kv) ; v (kv)], ffn_up rows are [gate ; up] (hidden each).
-                // src_off slices the fused tensor, preserving its Q8 blocks (no fp32 requantize); K-quant
-                // slices stay superblock-aligned (offsets are dim-multiples, dim % 256 gated in detect).
-                load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.wq_offs[l], dim * qd_l, scratch, 0l, fmt_at(t.wq_fmt, l))
-                load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.wk_offs[l], dim * kv_l, scratch, dim * qd_l, fmt_at(t.wk_fmt, l))
-                load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.wv_offs[l], dim * kv_l, scratch, dim * qd_l + dim * kv_l, fmt_at(t.wv_fmt, l))
-            } else {
-                // q_gated (qwen35): attn_q ships 2x-wide — per head [q | gate]
-                load_big(m, bytes, "blk.{l}.attn_q.weight", t, t.wq_offs[l], dim * qd_l * (t.config.q_gated ? 2l : 1l), scratch, 0l, fmt_at(t.wq_fmt, l))
-                if (t.wk_offs[l] >= 0l) {   // absent on E-series shared-KV layers (reuse the source layer's K)
-                    load_big(m, bytes, "blk.{l}.attn_k.weight", t, t.wk_offs[l], dim * kv_l, scratch, 0l, fmt_at(t.wk_fmt, l))
-                }
-                if (t.wv_offs[l] >= 0l) {   // absent on gemma4 global (V-from-K) + E-series shared-KV layers
-                    load_big(m, bytes, "blk.{l}.attn_v.weight", t, t.wv_offs[l], dim * kv_l, scratch, 0l, fmt_at(t.wv_fmt, l))
-                }
-            }
-            if (t.wo_offs[l] >= 0l) {   // absent on deltanet layers (ssm_out is their out projection)
-                load_big(m, bytes, "blk.{l}.attn_output.weight", t, t.wo_offs[l], qd_l * dim, scratch, 0l, fmt_at(t.wo_fmt, l))
-            }
-            if (t.config.n_expert > 0l && l >= t.config.n_layer_dense_lead) {
-                // MoE: fp32 router (+ shared-expert gate vector) -> fblob; the 3D expert stacks are
-                // expert-major on disk, so ONE contiguous load lands every expert's 2D matrix at its
-                // we*_off + (l*n_expert + e) * (dim*n_ff_exp) slot
-                let ne = t.config.n_expert
-                let ege = dim * t.config.n_ff_exp
-                gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_gate_inp.weight", t.fblob, t.router_off + l * ne * dim, ne * dim)
-                if (t.config.moe_router_bias) {
-                    gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_gate_inp.bias", t.fblob, t.router_b_off + l * ne, ne)
-                }
-                if (t.config.moe_exp_probs) {   // DeepSeek/glm4moe selection bias (f32, one per expert)
-                    gguf_read_tensor_f32(m, bytes, "blk.{l}.exp_probs_b.bias", t.fblob, t.exp_probs_off + l * ne, ne)
-                }
-                if (t.experts_mx4) {
-                    // native MXFP4: raw nibble + scale bits straight into the planes (no dequant)
-                    let mo1 = t.we1_offs[l]
-                    let mo2 = t.we2_offs[l]
-                    let mo3 = t.we3_offs[l]
-                    gguf_transcode_mx4(m, bytes, "blk.{l}.ffn_gate_exps.weight", t.mxq, t.mxs, mo1 / 2l, mo1 / 32l, ne * ege)
-                    gguf_transcode_mx4(m, bytes, "blk.{l}.ffn_down_exps.weight", t.mxq, t.mxs, mo2 / 2l, mo2 / 32l, ne * ege)
-                    gguf_transcode_mx4(m, bytes, "blk.{l}.ffn_up_exps.weight", t.mxq, t.mxs, mo3 / 2l, mo3 / 32l, ne * ege)
-                } elif (t.config.moe_dense_shexp) {
-                    // gemma4: experts ship FUSED as ffn_gate_up_exps {dim, 2*nfe, ne} — expert-major,
-                    // each [2*nfe x dim] with rows [0..nfe)=gate, [nfe..2*nfe)=up. Split per expert
-                    // into the separate we1(gate)/we3(up) stacks the routed GEMM seam expects.
-                    for (e in range64(ne)) {
-                        let dst = e * ege
-                        let src = e * 2l * ege
-                        load_big(m, bytes, "blk.{l}.ffn_gate_up_exps.weight", t, t.we1_offs[l] + dst, ege, scratch, src, fmt_at(t.we1_fmt, l))
-                        load_big(m, bytes, "blk.{l}.ffn_gate_up_exps.weight", t, t.we3_offs[l] + dst, ege, scratch, src + ege, fmt_at(t.we3_fmt, l))
-                    }
-                    load_big(m, bytes, "blk.{l}.ffn_down_exps.weight", t, t.we2_offs[l], ne * ege, scratch, 0l, fmt_at(t.we2_fmt, l))
-                } else {
-                    load_big(m, bytes, "blk.{l}.ffn_gate_exps.weight", t, t.we1_offs[l], ne * ege, scratch, 0l, fmt_at(t.we1_fmt, l))
-                    load_big(m, bytes, "blk.{l}.ffn_down_exps.weight", t, t.we2_offs[l], ne * ege, scratch, 0l, fmt_at(t.we2_fmt, l))
-                    load_big(m, bytes, "blk.{l}.ffn_up_exps.weight", t, t.we3_offs[l], ne * ege, scratch, 0l, fmt_at(t.we3_fmt, l))
-                }
-                if (t.config.moe_exps_bias) {  // per-expert bias stacks, expert-major on disk like the weights
-                    let nfe = t.config.n_ff_exp
-                    gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_gate_exps.bias", t.fblob, t.web1_off + l * ne * nfe, ne * nfe)
-                    gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_down_exps.bias", t.fblob, t.web2_off + l * ne * dim, ne * dim)
-                    gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_up_exps.bias", t.fblob, t.web3_off + l * ne * nfe, ne * nfe)
-                }
-                if (t.config.n_ff_shexp > 0l) {
-                    let she = dim * t.config.n_ff_shexp
-                    if (t.config.moe_shexp_gated) {   // glm4moe's shared expert is ungated — no gate vector on disk
-                        gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_gate_inp_shexp.weight", t.fblob, t.shexp_gate_off + l * dim, dim)
-                    }
-                    load_big(m, bytes, "blk.{l}.ffn_gate_shexp.weight", t, t.wsh1_off + l * she, she, scratch)
-                    load_big(m, bytes, "blk.{l}.ffn_down_shexp.weight", t, t.wsh2_off + l * she, she, scratch)
-                    load_big(m, bytes, "blk.{l}.ffn_up_shexp.weight", t, t.wsh3_off + l * she, she, scratch)
-                }
-                if (t.config.moe_dense_shexp) {  // gemma4: the DENSE parallel shared expert (plain ffn gate/up/down)
-                    load_big(m, bytes, "blk.{l}.ffn_gate.weight", t, t.w1_offs[l], dim * hidden, scratch, 0l, fmt_at(t.w1_fmt, l))
-                    load_big(m, bytes, "blk.{l}.ffn_up.weight", t, t.w3_offs[l], dim * hidden, scratch, 0l, fmt_at(t.w3_fmt, l))
-                    load_big(m, bytes, "blk.{l}.ffn_down.weight", t, t.w2_offs[l], hidden * dim, scratch, 0l, fmt_at(t.w2_fmt, l))
-                }
-            } elif (t.config.fused_qkv) {
-                load_big(m, bytes, "blk.{l}.ffn_up.weight", t, t.w1_offs[l], dim * hidden, scratch, 0l, fmt_at(t.w1_fmt, l))
-                load_big(m, bytes, "blk.{l}.ffn_up.weight", t, t.w3_offs[l], dim * hidden, scratch, dim * hidden, fmt_at(t.w3_fmt, l))
-                load_big(m, bytes, "blk.{l}.ffn_down.weight", t, t.w2_offs[l], hidden * dim, scratch, 0l, fmt_at(t.w2_fmt, l))
-            } else {
-                let h = layer_hidden(t, l)   // gemma-4 E2B varies this per layer
-                load_big(m, bytes, "blk.{l}.ffn_gate.weight", t, t.w1_offs[l], dim * h, scratch, 0l, fmt_at(t.w1_fmt, l))
-                load_big(m, bytes, "blk.{l}.ffn_up.weight", t, t.w3_offs[l], dim * h, scratch, 0l, fmt_at(t.w3_fmt, l))
-                load_big(m, bytes, "blk.{l}.ffn_down.weight", t, t.w2_offs[l], h * dim, scratch, 0l, fmt_at(t.w2_fmt, l))
-            }
-            if (has_ple(t.config)) {  // gemma-4 E-series: per-layer PLE gate (dim->ple) + proj (ple->dim), Q8
-                let ple = t.config.n_embd_per_layer
-                load_big(m, bytes, "blk.{l}.inp_gate.weight", t, t.ple_gate_off + l * dim * ple, dim * ple, scratch)
-                load_big(m, bytes, "blk.{l}.proj.weight", t, t.ple_proj_off + l * ple * dim, ple * dim, scratch)
-            }
-        }
-        if (t.config.n_layer_nextn > 0l) {   // MTP/NextN extras (block index n_layers = `layers`)
-            load_big(m, bytes, "blk.{layers}.nextn.eh_proj.weight", t, t.mtp_ehproj_off, 2l * dim * dim, scratch, 0l, t.mtp_ehproj_fmt)
-            gguf_read_tensor_f32(m, bytes, "blk.{layers}.nextn.enorm.weight", t.fblob, t.mtp_enorm_off, dim)
-            gguf_read_tensor_f32(m, bytes, "blk.{layers}.nextn.hnorm.weight", t.fblob, t.mtp_hnorm_off, dim)
-            if (gguf_find_tensor(m, "blk.{layers}.nextn.shared_head_norm.weight") >= 0) {
-                gguf_read_tensor_f32(m, bytes, "blk.{layers}.nextn.shared_head_norm.weight", t.fblob, t.mtp_headnorm_off, dim)
-            } else {
-                t.mtp_headnorm_off = -1l   // reads fall back to output_norm (rms_final_off)
-            }
-            // nextn.embed_tokens / nextn.shared_head_head are the trunk's own tables under the
-            // head's prefix (shape-vetted at config parse) — deliberately never loaded
-        }
-        if (has_ple(t.config)) {  // the per-layer token-embedding table [vocab x (ple*layers)], gathered per token, never repacked
-            load_big(m, bytes, "per_layer_token_embd.weight", t, t.ple_emb_off, vocab * t.config.n_embd_per_layer * layers, scratch, 0l, t.ple_emb_fmt)
-        }
-        if (!t.config.shared_weights) {
-            load_big(m, bytes, "output.weight", t, t.wcls_off, vocab * dim, scratch, 0l, t.wcls_fmt)
-        } elif (t.cls_q8) {
-            // tied Q8: classifier copy (repacked below) + the linear copy embedding rows read.
-            // Through load_big (its q8 arm is the same transcode) so the streaming plan records both.
-            load_big(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch)
-            load_big(m, bytes, "token_embd.weight", t, t.emb_q8_off, vocab * dim, scratch)
-        } elif (cls_kq(t)) {
-            // tied K-quant: ONE plane copy serves the classifier matmul and embedding row reads
-            // (the kq planes stay in disk order — no repack, so no second linear copy)
-            load_big(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch, 0l, t.emb_fmt)
-        }
-        // Qwen2 Q/K/V projection biases — small fp32 tensors, kept dense
-        if (t.config.attn_qkv_bias) {
-            t.bq |> resize(layers_ld * qd)
-            t.bk |> resize(layers_ld * kv)
-            t.bv |> resize(layers_ld * kv)
-            for (l in range64(layers_ld)) {
-                gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_q.bias", t.bq, l * qd, qd)
-                gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_k.bias", t.bk, l * kv, kv)
-                gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_v.bias", t.bv, l * kv, kv)
-            }
-        }
-        // gpt-oss attention output-projection bias (dim per layer)
-        if (t.config.attn_out_bias) {
-            t.bo |> resize(layers_ld * dim)
-            for (l in range64(layers_ld)) {
-                gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_output.bias", t.bo, l * dim, dim)
-            }
-        }
-        delete scratch
-        to_log(LOG_INFO, "dasLLAMA: load stage weights: {get_time_usec(ts_stage) / 1000} ms\n")
-        conv_profile_report()   // the per-conversion-kind split of the stage just reported
-        ts_stage = ref_time_ticks()
-        // arm64: switch to the laneq backend and repack the just-loaded Q8 weights into its interleaved
-        // layout. Returns false off-ARM (portable stays, weights stay row-major).
-        if (mode == QuantMode.q8 && select_matmul_backend_for_load()) {
-            if (g_fill_plan_mode) {
-                // streaming: the q-halves are not materialized — the fill applies the SAME
-                // regions per job. Set the marks the eager walkers would (the meta serializes
-                // BEFORE the streamed planes fill), run nothing.
-                t.mx4_repacked = true
-                if (t.kquant_native && kernel_backend_has_kq()) {
-                    t.kq_repacked = true
-                    t.kq_repack_mr4 = active_kq_layout_mr(4)
-                    t.kq_repack_mr5 = active_kq_layout_mr(5)
-                    t.kq_repack_mr6 = active_kq_layout_mr(6)
-                    t.kq_repack_mr40 = active_kq_layout_mr(40)
-                }
-            } else {
-                repack_q8_weights(t)
-                if (t.experts_mx4) {
-                    repack_mx4_stacks(t)
-                }
-                if (active_q51_layout_mr() > 1l) {
-                    repack_q51_stacks(t)
-                }
-                if (t.kquant_native && kernel_backend_has_kq()) {
-                    repack_kq_weights(t)
-                    t.kq_repacked = true
-                    t.kq_repack_mr4 = active_kq_layout_mr(4)
-                    t.kq_repack_mr5 = active_kq_layout_mr(5)
-                    t.kq_repack_mr6 = active_kq_layout_mr(6)
-                    t.kq_repack_mr40 = active_kq_layout_mr(40)
-                    to_log(LOG_INFO, "dasLLAMA: K-quant planes repacked to the '{active_kernel_backend()}' layouts (k4 grp{t.kq_repack_mr4}, k5 grp{t.kq_repack_mr5}, k6 grp{t.kq_repack_mr6}, q40 grp{t.kq_repack_mr40})\n")
-                }
-            }
-        }
-        to_log(LOG_INFO, "dasLLAMA: load stage repack: {get_time_usec(ts_stage) / 1000} ms\n")
-        ts_stage = ref_time_ticks()
-        if (mode == QuantMode.q8 && g_wscale_f16) {
-            if (g_fill_plan_mode) {
-                // streaming: the epilogue converts after qblob fills; pre-mark for the meta,
-                // mirroring the convert's own outcome (empty scales = nothing converts, no flag)
-                t.wscale_f16 = !empty(t.qscales) && kernel_backend_has_wscale16()
-            } else {
-                wscale_convert_f16(t)
-            }
-        }
-        to_log(LOG_INFO, "dasLLAMA: load stage wscale: {get_time_usec(ts_stage) / 1000} ms, total {get_time_usec(ts_load) / 1000} ms\n")
-        log_load_report(t)
-        if (!g_fill_plan_mode) {   // streaming converts only — no serving, no gathers over unmade planes
-            moe_gpu_upload_resident(t)
-        }
-    }
-}
-
-//! Quantize a fp32-loaded model's big weights to Q8_0 in place and switch forward onto the Q8 path.
-//! Requires the fp32 representation (wblob) — i.e. a model loaded with QuantMode.fp32. Keeps wblob
-//! so the same model can be re-quantized to another precision for an A/B comparison.
-def quantize_weights(var t : Model) {
-    let n = long_length(t.wblob)
-    var qt <- quantize_q8_0(t.wblob, n)
-    t.qblob <- qt.q
-    t.qscales <- qt.scales
-    t.quant = QuantMode.q8
-    // same backend-for-load select + in-place repack as the load_gguf Q8 path (no-op off-ARM)
-    if (select_matmul_backend_for_load()) {
-        repack_q8_weights(t)
-    }
-    if (g_wscale_f16) {
-        wscale_convert_f16(t)
-    }
-    moe_gpu_upload_resident(t)
-}
-
-//! Quantize a fp32-loaded model's big weights to Q4_0 in place and switch forward onto the Q4 path.
-//! Same fp32-required / wblob-kept contract as quantize_weights.
-def quantize_weights_q4(var t : Model) {
-    let n = long_length(t.wblob)
-    var qt <- quantize_q4_0(t.wblob, n)
-    t.q4blob <- qt.q
-    t.q4scales <- qt.scales
-    t.quant = QuantMode.q4_0
-}
-
 //! Resident memory footprint of a loaded model, in bytes, broken down by region. aux_fp32 is the
 //! embedding + norms (always kept); weight_fp32 is the dense big weights (only in fp32 mode — a
 //! quantized model should show this as 0). The detector for the memory-honest refactor.
@@ -5040,7 +1762,8 @@ var private g_session_uid : uint64
 //! Allocate the run state sized to a model. `kdt`/`vdt` pick the KV-cache codec for THIS session
 //! (no process-global state — sessions with different codecs coexist, models run in parallel).
 //! `alloc_cache = false` skips the flat cache slabs (paged sessions and cache-less scratch).
-def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDtype.f32; alloc_cache : bool = true) : Session {
+def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDtype.f32; alloc_cache : bool = true) : Session {   // nolint:STYLE038 — a flat sizing run: one buffer per line, all against the same geometry
+    guard_interp_inference("session creation")
     kv_validate_q8(c, kdt, vdt)
     var s : Session
     g_session_uid++
@@ -5064,7 +1787,7 @@ def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDt
     // logits carry page-rounded CAPACITY (length stays vocab_size): the Metal drivers wrap this
     // storage in a bytesNoCopy MTLBuffer (zero-copy logits), whose length must be a 16KB-page
     // multiple — the reserve keeps that rounded length inside the array's own allocation
-    s.logits |> reserve(int(((c.vocab_size * 4l + 16383l) & ~16383l) / 4l))
+    s.logits |> reserve(((c.vocab_size * 4l + 16383l) & ~16383l) / 4l)
     s.logits |> resize(c.vocab_size)
     if (c.n_expert > 0l) {   // MoE routing scratch
         s.moe_logits |> resize(c.n_expert)
@@ -5093,8 +1816,8 @@ def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDt
     }
     if (c.recr_mask != 0ul) {   // qwen35 deltanet: per-recurrent-layer conv history + S state (zeroed by resize)
         let cd = dn_conv_dim(c)
-        s.dn_conv_prefix |> reserve(int(c.n_layers))
-        s.dn_state_prefix |> reserve(int(c.n_layers))
+        s.dn_conv_prefix |> reserve(c.n_layers)
+        s.dn_state_prefix |> reserve(c.n_layers)
         var co = 0l
         var so = 0l
         for (l in range64(c.n_layers)) {
@@ -5161,8 +1884,8 @@ def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDt
     s.kv_dtype_v = vdt
     // + the MTP/NextN draft block's slab (index n_layers) — one attention layer's rows
     let kv_layers = c.n_layers + c.n_layer_nextn
-    s.kv_bprefix_k |> reserve(int(kv_layers))
-    s.kv_bprefix_v |> reserve(int(kv_layers))
+    s.kv_bprefix_k |> reserve(kv_layers)
+    s.kv_bprefix_v |> reserve(kv_layers)
     var krow = 0l
     var vrow = 0l
     for (l in range64(kv_layers)) {
@@ -5211,7 +1934,7 @@ def make_run_state_paged(c : Config; var pool : KVPool) : Session {
         s.kv_pool = addr(pool)
     }
     // paged run scratch: a window can span every page of the (post-cap) context
-    s.kv_runs |> resize(int((c.seq_len + pool.page_rows - 1l) / pool.page_rows + 1l))
+    s.kv_runs |> resize((c.seq_len + pool.page_rows - 1l) / pool.page_rows + 1l)
     return <- s
 }
 
@@ -5231,14 +1954,6 @@ def eval_(t : Model; var s : Session; tokens : array<int64>) {
 
 // ===== Per-app runtime profile (the tune sidecar's "runtime" section) =====
 
-def private apply_i64_knob(rt : JsonValue const?; key : string; blk : block<(v : int64) : void>) {
-    let v = read_json_field(rt, key, -1l)
-    if (v >= 0l) {
-        invoke(blk, v)
-        to_log(LOG_INFO, "dasLLAMA: box profile runtime: {key} = {v}\n")
-    }
-}
-
 // ===== Metal-4 tensor-lane crowns (the sidecar's "runtime"."metal_tensor" knob) =====
 // Comma-list of families whose TENSOR twin won this box's tune race; consulted once per
 // family at pso build. Default empty = simdgroup; a DAS_TUNE_MANIFEST copy force-crowns.
@@ -5257,91 +1972,6 @@ def public set_metal_tensor_crowns(list : string) {
 
 def public metal_tensor_crowned(family : string) : bool {
     return key_exists(g_tensor_crowns, family)
-}
-
-//! Apply the runtime knobs from the app tune sidecar's optional "runtime" section (see
-//! tune_for_this_box.md): token block, L2 budget, threading thresholds, chunk multipliers, and an
-//! optional kernel-backend pin. Missing/STALE file or missing section = no-op; every applied entry logs.
-def apply_box_profile_runtime(path : string = "") {
-    if (path == "" && box_profile_stale()) {
-        to_log(LOG_INFO, "dasLLAMA: tune sidecar is older than the binary — runtime knobs not applied (re-tune)\n")
-        return
-    }
-    let ppath = path != "" ? path : box_profile_path()
-    let text = fread(ppath)
-    if (empty(text)) return
-    var err = ""
-    let jv = read_json(text, err)
-    if (jv == null) {
-        to_log(LOG_WARNING, "dasLLAMA: {ppath} is not valid JSON ({err}) — runtime knobs not applied\n")
-        return
-    }
-    let rt = jv?["runtime"]   // null-sentinel when absent — every read below then keeps its default
-    apply_i64_knob(rt, "q8_token_block") $(v) { set_q8_token_block(v) }
-    apply_i64_knob(rt, "q8_l2_budget") $(v) { set_q8_l2_budget(v) }
-    apply_i64_knob(rt, "target_chunk_work") $(v) { set_target_chunk_work(v) }
-    apply_i64_knob(rt, "attn_par_threshold") $(v) { set_attn_par_threshold(v) }
-    apply_i64_knob(rt, "requant_par_threshold") $(v) { set_requant_par_threshold(v) }
-    apply_i64_knob(rt, "norm_par_threshold") $(v) { set_norm_par_threshold(v) }
-    apply_i64_knob(rt, "rope_par_threshold") $(v) { set_rope_par_threshold(v) }
-    apply_i64_knob(rt, "kv_store_par_threshold") $(v) { set_kv_store_par_threshold(v) }
-    apply_i64_knob(rt, "act_par_threshold") $(v) { set_act_par_threshold(v) }
-    // the int-typed knobs clamp into int range before the cast — int() wraps silently on int64
-    apply_i64_knob(rt, "q8_chunks_per_job") $(v) { set_q8_chunks_per_job(int(min(v, 2147483647l))) }
-    apply_i64_knob(rt, "q4_chunks_per_job") $(v) { set_q4_chunks_per_job(int(min(v, 2147483647l))) }
-    apply_i64_knob(rt, "q8_batch_chunks_per_job") $(v) { set_q8_batch_chunks_per_job(int(min(v, 2147483647l))) }
-    apply_i64_knob(rt, "matmul_min_chunk_rows") $(v) { set_matmul_min_chunk_rows(int(min(v, 2147483647l))) }
-    apply_i64_knob(rt, "matmul_min_chunk_rows_gemv") $(v) { set_matmul_min_chunk_rows_gemv(int(min(v, 2147483647l))) }
-    apply_i64_knob(rt, "gemv_chunks_per_lane") $(v) { set_gemv_chunks_per_lane(int(min(v, 2147483647l))) }
-    apply_i64_knob(rt, "wscale_f16") $(v) { set_wscale_f16(v != 0l) }
-    apply_i64_knob(rt, "kquant_native") $(v) { set_kquant_native(v != 0l) }
-    apply_i64_knob(rt, "kq_q40_native") $(v) { set_kq_q40_native(v != 0l) }
-    apply_i64_knob(rt, "kq_q50_native") $(v) { set_kq_q50_native(v != 0l) }
-    apply_i64_knob(rt, "noisy") $(v) { set_dasllama_noisy(v != 0l) }
-    apply_i64_knob(rt, "gemv_lane_cap") $(v) { set_gemv_lane_cap(int(min(v, 2147483647l))) }
-    apply_i64_knob(rt, "batch_lane_cap") $(v) { set_batch_lane_cap(int(min(v, 2147483647l))) }
-    apply_i64_knob(rt, "batch_grid_2d") $(v) { set_batch_grid_2d(int(min(v, 2l))) }
-    apply_i64_knob(rt, "dispatch_worker_limit") $(v) { set_dispatch_worker_limit(int(min(v, 2147483647l))) }
-    apply_i64_knob(rt, "gemv_wave_fill") $(v) { set_gemv_wave_fill(v != 0l) }
-    apply_i64_knob(rt, "fused_decode") $(v) { set_fused_decode(v != 0l) }
-    // stored only — the queue may not exist yet; setup_dasllama_jobque applies these inside with_job_que
-    apply_i64_knob(rt, "jobque_spin_us") $(v) { set_jobque_spin_us(v) }
-    apply_i64_knob(rt, "jobque_join_poll") $(v) { set_jobque_join_poll(v) }
-    apply_i64_knob(rt, "team_rank_gate") $(v) { set_team_rank_gate(int(min(v, 1l))) }
-    let mtc = read_json_field(rt, "metal_tensor", "")
-    if (mtc != "") {
-        set_metal_tensor_crowns(mtc)
-        to_log(LOG_INFO, "dasLLAMA: box profile runtime: metal_tensor crowns = {mtc}\n")
-    }
-    let be = read_json_field(rt, "backend", "")
-    if (be != "") {
-        pin_kernel_backend(be)   // warns and keeps the current backend if the name is unknown
-        to_log(LOG_INFO, "dasLLAMA: box profile runtime: backend = {active_kernel_backend()} (profile pin '{be}')\n")
-    }
-    let bbe = read_json_field(rt, "batch_backend", "")
-    if (bbe != "") {
-        // sticky through the load-time (re)select — activate() re-applies it; warns and keeps the
-        // active backend's batch slots if the donor is unknown or reads a different weight layout
-        select_batch_backend(bbe)
-        to_log(LOG_INFO, "dasLLAMA: box profile runtime: batch_backend = {active_batch_backend()} (profile pin '{bbe}')\n")
-    }
-    // "threads" is advisory — the worker count is fixed at jobque creation, controlled by the
-    // DAS_JOBQUE_THREADS env (see tune_for_this_box.md); a profile can only recommend it. No live
-    // comparison here: get_dispatch_lanes() throws outside a job queue, and load_model may run there.
-    let adv = read_json_field(rt, "threads", -1l)
-    if (adv > 0l) {
-        to_log(LOG_INFO, "dasLLAMA: box profile advises threads = {adv} — ensure DAS_JOBQUE_THREADS={adv}\n")
-    }
-}
-
-//! Load a model AND its tokenizer from a GGUF — the full user-facing entry point. Arch and
-//! tokenizer backend are both auto-selected from GGUF metadata; `mode` picks the weight quant.
-//! Applies the tune sidecar's "runtime" knobs first (see apply_box_profile_runtime).
-def load_model_(path : string; mode : QuantMode = QuantMode.fp32) : Model {
-    apply_box_profile_runtime()   // before load: a backend pin must precede the backend-for-load select
-    var m <- load_gguf(path, mode)
-    m.tok <- load_tokenizer_auto(path)
-    return <- m
 }
 
 //! Encode text to token ids using the model's tokenizer.
@@ -5377,18 +2007,18 @@ def private mm_at(var y : array<float>; t : Model; woff : int64; x : array<float
 }
 
 // fp32 matmul against the fp32 aux blob (used for the tied classifier = embedding).
-def private mm_fblob(var y : array<float>; t : Model; woff : int64; x : array<float>; n, d : int64) {
+def mm_fblob(var y : array<float>; t : Model; woff : int64; x : array<float>; n, d : int64) {
     matmul(y, t.fblob, woff, x, n, d)
 }
 
 // Batched fp32 matmul against the aux blob: Y [npos x d] token-major from X [npos x n] — the grouped
 // MoE prefill's router. matmul_batch is bit-for-bit npos x matmul, so routing matches decode exactly.
-def private mm_fblob_b(var y : array<float>; t : Model; woff : int64; x : array<float>; n, d, npos : int64) {
+def mm_fblob_b(var y : array<float>; t : Model; woff : int64; x : array<float>; n, d, npos : int64) {
     matmul_batch(y, t.fblob, woff, x, n, d, npos)
 }
 
 // rmsnorm with the weight at `woff` in the fp32 aux blob — straight to the tuned pointer core.
-def private rms_at(var o : array<float> | #; t : Model; woff : int64; x : array<float> | #; size : int64) {
+def rms_at(var o : array<float> | #; t : Model; woff : int64; x : array<float> | #; size : int64) {
     unsafe {
         rmsnorm(addr < float? >(o[0]), addr < float const? >(x[0]),
             addr < float const? >(t.fblob[woff]), size, t.config.norm_eps)
@@ -5396,7 +2026,7 @@ def private rms_at(var o : array<float> | #; t : Model; woff : int64; x : array<
 }
 
 // Same, with the source at element offset `xoff` (per-position rows of a batched activation).
-def private rms_at(var o : array<float> | #; t : Model; woff : int64; x : array<float>; xoff : int64; size : int64) {
+def rms_at(var o : array<float> | #; t : Model; woff : int64; x : array<float>; xoff : int64; size : int64) {
     unsafe {
         rmsnorm(addr < float? >(o[0]), addr < float const? >(x[xoff]),
             addr < float const? >(t.fblob[woff]), size, t.config.norm_eps)
@@ -5405,7 +2035,7 @@ def private rms_at(var o : array<float> | #; t : Model; woff : int64; x : array<
 
 // Threaded per-position rmsnorm: out[p*dim..] = rmsnorm(src[p*dim..]) with the layer weight at fblob+woff.
 // `out` and `src` may be the same array (Gemma post-norms run in place). Fork workers touch raw addresses.
-def private rms_batch(var out : array<float>; src : array<float>; t : Model; woff : int64; dim, npos : int64) {
+def rms_batch(var out : array<float>; src : array<float>; t : Model; woff : int64; dim, npos : int64) {
     let eps = t.config.norm_eps
     unsafe {
         var op = addr(out[0])
@@ -5461,60 +2091,19 @@ def private rope_batch(var q_b : array<float>; var k_b : array<float>; t : Model
 // Precompute the prefill RoPE cos/sin table once: cos_tab[pi*half + j] = cos((start_pos+pi)*freq[j]),
 // sin likewise. freq[j] is position-independent (hoisted out of the position loop); mscale folds
 // in here. Built once before the layer loop, reused across all heads/layers. Bit-identical to classic.
-def private build_rope_table(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>; t : Model; theta, fscale : float; start_pos, npos, head_size : int64; use_ff : bool = true) {
-    let c = t.config
-    let half = head_size / 2l
-    let scale = c.rope_mscale   // scales cos/sin — ggml applies mscale to NORM and NEOX alike (mistral3 YaRN)
-    let has_ff = use_ff && !empty(t.rope_freqs)
-    cos_tab |> resize(npos * half)   // nolint:PERF026 — session scratch; same size every decode step, so this allocates once
-    sin_tab |> resize(npos * half)   // nolint:PERF026 — see above
-    unsafe {
-        var cp = addr(cos_tab[0])
-        var sp = addr(sin_tab[0])
-        let ffp = has_ff ? addr < float const? >(t.rope_freqs[0]) : null
-        for (j in range64(half)) {
-            var freq = 1.0 / pow(theta, float(2l * j) / float(head_size))
-            if (has_ff) {
-                freq /= ffp[j]
-            }
-            for (pi in range64(npos)) {
-                let angle = float(start_pos + pi) * fscale * freq
-                cp[pi * half + j] = cos(angle) * scale
-                sp[pi * half + j] = sin(angle) * scale
-            }
-        }
-    }
+def build_rope_table(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>; t : Model; theta, fscale : float; start_pos, npos, head_size : int64; use_ff : bool = true) {
+    build_rope_tabs(cos_tab, sin_tab, theta, fscale, t.config.rope_mscale, t.rope_freqs, use_ff,
+                    start_pos, npos, head_size)
 }
 
 // build_rope_table's batched-decode twin: row pi's angle uses positions[pi] instead of start_pos+pi
 // (batch rows come from different sequences at unrelated positions). Bit-identical per row to the
 // npos=1 decode table at that position, so rope_batch_tab consumes it unchanged.
-def private build_rope_table_rows(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>; t : Model;
-                                  theta, fscale : float; positions : array<int64>; nrows, head_size : int64;
-                                  use_ff : bool = true) {
-    let c = t.config
-    let half = head_size / 2l
-    let scale = c.rope_mscale
-    let has_ff = use_ff && !empty(t.rope_freqs)
-    cos_tab |> resize(nrows * half)
-    sin_tab |> resize(nrows * half)
-    unsafe {
-        var cp = addr(cos_tab[0])
-        var sp = addr(sin_tab[0])
-        let pp = addr < int64 const? >(positions[0])
-        let ffp = has_ff ? addr < float const? >(t.rope_freqs[0]) : null
-        for (j in range64(half)) {
-            var freq = 1.0 / pow(theta, float(2l * j) / float(head_size))
-            if (has_ff) {
-                freq /= ffp[j]
-            }
-            for (pi in range64(nrows)) {
-                let angle = float(pp[pi]) * fscale * freq
-                cp[pi * half + j] = cos(angle) * scale
-                sp[pi * half + j] = sin(angle) * scale
-            }
-        }
-    }
+def build_rope_table_rows(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>; t : Model;
+                          theta, fscale : float; positions : array<int64>; nrows, head_size : int64;
+                          use_ff : bool = true) {
+    build_rope_tabs_rows(cos_tab, sin_tab, theta, fscale, t.config.rope_mscale, t.rope_freqs, use_ff,
+                         positions, nrows, head_size)
 }
 
 // Table-driven prefill RoPE: rope q_b[p*qd..] and k_b[p*kv_dim..] in place using the precomputed
@@ -5669,7 +2258,7 @@ def create_kv_pool_(c : Config; page_rows : int64; kdt, vdt : KVDtype) : KVPool 
     // + the MTP/NextN draft block's slab (index n_layers) — one attention layer's rows, so the
     // self-spec rails work on paged sessions too (pages only allocate when rows are written)
     let kv_layers = c.n_layers + c.n_layer_nextn
-    p.blob_of |> reserve(int(kv_layers))
+    p.blob_of |> reserve(kv_layers)
     for (l in range64(kv_layers)) {
         let src = layer_kv_source(c, l)
         if (src != l) {
@@ -5681,8 +2270,8 @@ def create_kv_pool_(c : Config; page_rows : int64; kdt, vdt : KVDtype) : KVPool 
             p.nblobs ++
         }
     }
-    p.kblobs |> resize(int(p.nblobs))
-    p.vblobs |> resize(int(p.nblobs))
+    p.kblobs |> resize(p.nblobs)
+    p.vblobs |> resize(p.nblobs)
     return <- p
 }
 
@@ -5693,10 +2282,10 @@ def private kv_pool_grow(var p : KVPool) {
     let oldcap = p.capacity_groups
     let newcap = oldcap <= 0l ? 4l : oldcap * 2l
     for (b in range64(p.nblobs)) {
-        p.kblobs[b] |> resize(int(newcap * p.page_rows * p.krow_bytes[b]))
-        p.vblobs[b] |> resize(int(newcap * p.page_rows * p.vrow_bytes[b]))
+        p.kblobs[b] |> resize(newcap * p.page_rows * p.krow_bytes[b])
+        p.vblobs[b] |> resize(newcap * p.page_rows * p.vrow_bytes[b])
     }
-    p.refcnt |> resize(int(newcap))
+    p.refcnt |> resize(newcap)
     var g = int(newcap)
     while (g > int(oldcap)) {   // push high->low so the LOWEST new group pops first
         g --
@@ -5818,109 +2407,6 @@ def kv_load_row(src0 : uint8 const?; dt : KVDtype; kv_dim, row, sub, n : int64; 
     }
 }
 
-// Read-side glue: overload per cache element type, resolved inside the monomorphized workers.
-def private kv_dot(a : float const?; b : float const?; n : int64) : float => dot(a, b, n)
-def private kv_axpy(var d : float?; s : float const?; scale : float; n : int64) {
-    axpy(d, s, scale, n)
-}
-def private kv_load(p : float const?; base, i : int64) : float => unsafe(p[base + i])
-def private kv_dot(a : float const?; b : uint16 const?; n : int64) : float => dot_f16(a, b, n)
-def private kv_axpy(var d : float?; s : uint16 const?; scale : float; n : int64) {
-    axpy_f16(d, s, scale, n)
-}
-def private kv_load(p : uint16 const?; base, i : int64) : float => f16_to_f32(uint(unsafe(p[base + i])))
-// q8_0: the cache pointer stays uint8 (byte units — the _d wrappers prescale stride/offset via
-// kv_side_off), so `base` here is a whole-block BYTE offset and `i` an element index within it
-def private kv_dot(a : float const?; b : uint8 const?; n : int64) : float => dot_q8kv(a, b, n)
-def private kv_axpy(var d : float?; s : uint8 const?; scale : float; n : int64) {
-    axpy_q8kv(d, s, scale, n)
-}
-def private kv_load(p : uint8 const?; base, i : int64) : float {
-    unsafe {
-        let blk = p + base + i / 32l * 34l
-        let b16 = reinterpret<uint16 const?>(blk)   // bind first: reinterpret would swallow the index
-        let bq = reinterpret<int8 const?>(blk)
-        return float(bq[2l + i % 32l]) * f16_to_f32(uint(b16[0]))
-    }
-}
-// tq4: dispatch rides the TQ4B distinct-pointer tag (q8_0 owns the raw uint8 overloads); the
-// kernels themselves are byte-typed, so each arm re-tags back to uint8. Values come out in the
-// ROTATED basis — kv_axpy accumulates rotated and the drivers un-rotate each head's output once.
-def private kv_axpy(var d : float?; s : TQ4B const?; scale : float; n : int64) {
-    axpy_tq4kv(d, unsafe(reinterpret<uint8 const?>(s)), scale, n)
-}
-def private kv_load(p : TQ4B const?; base, i : int64) : float {
-    unsafe {
-        let blk = reinterpret<uint8 const?>(p) + base + i / 32l * 18l
-        let b16 = reinterpret<uint16 const?>(blk)
-        let by = int(blk[2l + (i % 32l) / 2l])
-        let q = (i & 1l) == 0l ? (by & 15) : (by >> 4)
-        return float(q - 8) * f16_to_f32(uint(b16[0]))
-    }
-}
-// kv_side_off's pointer-typed twin for code that is generic over the cache element type (the
-// flash-decode witness): element offset -> the side's own addressing units
-[unused_argument(p)]
-def private kv_head_off(p : float const?; elems : int64) : int64 => elems
-[unused_argument(p)]
-def private kv_head_off(p : uint16 const?; elems : int64) : int64 => elems
-[unused_argument(p)]
-def private kv_head_off(p : uint8 const?; elems : int64) : int64 => elems / 32l * 34l
-[unused_argument(p)]
-def private kv_head_off(p : TQ4B const?; elems : int64) : int64 => elems / 32l * 18l
-
-// Bulk one-row dequant into f32 scratch — the flash pack's per-row primitive (and any future
-// codec's bulk-dequant seam: q8_0 adds a cvt overload here, never a new pack shape).
-def private kv_row_to_f32(var d : float?; p : float const?; base, n : int64) {
-    unsafe {
-        copy_floats(d, p + base, n)
-    }
-}
-def private kv_row_to_f32(var d : float?; p : uint16 const?; base, n : int64) {
-    unsafe {
-        cvt_f16_to_f32(d, p + base, n)
-    }
-}
-def private kv_row_to_f32(var d : float?; p : uint8 const?; base, n : int64) {
-    unsafe {
-        cvt_q8kv_to_f32(d, p + base, n)
-    }
-}
-def private kv_row_to_f32(var d : float?; p : TQ4B const?; base, n : int64) {
-    unsafe {
-        cvt_tq4kv_to_f32(d, reinterpret<uint8 const?>(p) + base, n)
-    }
-}
-
-// Decode-read score dot, resolved on the K-cache pointer type: scalar codecs dot the f32 query;
-// q8_0 dots the PRE-QUANTIZED query planes (qq/qs — filled once per token after RoPE) through the
-// int8×int8 kernel. Lets the flash-decode witness recompute scores exactly as the sliced path did.
-[unused_argument(qq, qs)]
-def private kv_score(qp : float const?; qq : int8 const?; qs : float const?; kcp : float const?;
-                     koff, qoff, head_size : int64) : float {
-    return kv_dot(unsafe(qp + qoff), unsafe(kcp + koff), head_size)
-}
-[unused_argument(qq, qs)]
-def private kv_score(qp : float const?; qq : int8 const?; qs : float const?; kcp : uint16 const?;
-                     koff, qoff, head_size : int64) : float {
-    return kv_dot(unsafe(qp + qoff), unsafe(kcp + koff), head_size)
-}
-[unused_argument(qp)]
-def private kv_score(qp : float const?; qq : int8 const?; qs : float const?; kcp : uint8 const?;
-                     koff, qoff, head_size : int64) : float {
-    return dot_q8q8kv(unsafe(qq + qoff), unsafe(qs + qoff / 32l), unsafe(kcp + koff), head_size)
-}
-// tq4 K: same pre-quantized-query planes as q8_0 — the drivers fill them from the ROTATED query,
-// so the int8×int4 dot runs entirely in the rotated basis
-[unused_argument(qp)]
-def private kv_score(qp : float const?; qq : int8 const?; qs : float const?; kcp : TQ4B const?;
-                     koff, qoff, head_size : int64) : float {
-    unsafe {
-        let kb = reinterpret<uint8 const?>(kcp)
-        return dot_q8tq4kv(qq + qoff, qs + qoff / 32l, kb + koff, head_size)
-    }
-}
-
 // One decode attention head over one layer's cache slab — the attention_std_decode/chain-decode
 // stage-1 worker body, generic over the cache element type. kcp/vcp are LAYER-BASE typed pointers;
 // arow is this head's score row (window-relative). Cache rows found through `runs` (kv_runs contract).
@@ -6008,11 +2494,11 @@ def private kv_slice_av(var flop : float?; attp : float const?; vcp : auto const
 // Byte-base cache pointers + session dtypes in, ONE monomorphized worker call out. The scalar
 // K×V matrix is spelled here once; a new codec = new arms here with zero call-site changes.
 
-def private attn_head_decode_d(var arow : float?; var xbp : float?; qp : float const?;
-                               qq : int8 const?; qsp : float const?;
-                               kcl, vcl : uint8 const?; kdt, vdt : KVDtype; runs : KVRun const?;
-                               nrun, qoff, kvhoff, kstart, cnt, kv_dim, head_size, hh : int64;
-                               scale, attn_softcap : float; sinksp : float const?) {
+def attn_head_decode_d(var arow : float?; var xbp : float?; qp : float const?;
+                       qq : int8 const?; qsp : float const?;
+                       kcl, vcl : uint8 const?; kdt, vdt : KVDtype; runs : KVRun const?;
+                       nrun, qoff, kvhoff, kstart, cnt, kv_dim, head_size, hh : int64;
+                       scale, attn_softcap : float; sinksp : float const?) {
     // per-side stride/offset in the side's own units — elements for scalar codecs, BYTES for the q8_0 block codec
     let kdim = kv_side_off(kdt, kv_dim)
     let khoff = kv_side_off(kdt, kvhoff)
@@ -6077,11 +2563,11 @@ def private attn_head_decode_d(var arow : float?; var xbp : float?; qp : float c
     }
 }
 
-def private kv_slice_scores_d(var attp : float?; qp : float const?; qq : int8 const?; qsp : float const?;
-                              kcl : uint8 const?; kdt : KVDtype;
-                              runs : KVRun const?;
-                              nrun, kstart, j0, j1, kv_dim, kvhoff, head_size, qh0, kv_mul, seq_len : int64;
-                              scale : float) {
+def kv_slice_scores_d(var attp : float?; qp : float const?; qq : int8 const?; qsp : float const?;
+                      kcl : uint8 const?; kdt : KVDtype;
+                      runs : KVRun const?;
+                      nrun, kstart, j0, j1, kv_dim, kvhoff, head_size, qh0, kv_mul, seq_len : int64;
+                      scale : float) {
     let kdim = kv_side_off(kdt, kv_dim)
     let khoff = kv_side_off(kdt, kvhoff)
     unsafe {
@@ -6101,9 +2587,9 @@ def private kv_slice_scores_d(var attp : float?; qp : float const?; qq : int8 co
     }
 }
 
-def private kv_slice_av_d(var flop : float?; attp : float const?; vcl : uint8 const?; vdt : KVDtype;
-                          runs : KVRun const?;
-                          nrun, kstart, j0, j1, kv_dim, kvhoff, head_size, qh0, kv_mul, seq_len, nsl, sl : int64) {
+def kv_slice_av_d(var flop : float?; attp : float const?; vcl : uint8 const?; vdt : KVDtype;
+                  runs : KVRun const?;
+                  nrun, kstart, j0, j1, kv_dim, kvhoff, head_size, qh0, kv_mul, seq_len, nsl, sl : int64) {
     let vdim = kv_side_off(vdt, kv_dim)
     let vhoff = kv_side_off(vdt, kvhoff)
     unsafe {
@@ -6127,7 +2613,7 @@ def private kv_slice_av_d(var flop : float?; attp : float const?; vcl : uint8 co
 // recompute of every head's attention output vs the sliced result in xb. Codec-generic like the
 // workers; test-only and serial, so the extraction costs nothing.
 [cold_path]   // reference-check path, armed by g_flash_decode_check
-def private flash_decode_check_g(qp : float const?; qq : int8 const?; qsp : float const?;
+def private flash_decode_check_g(qp : float const?; qq : int8 const?; qsp : float const?;   // nolint:STYLE038 — one serial exact-recompute pass per head; the phases share every accumulator
                                  kcp, vcp : auto const?; xbv : float const?;
                                  runs : KVRun const?;
                                  nrun, n_heads, kv_mul, head_size, kdim, vdim, kstart, cnt, l, nsl : int64;
@@ -6217,12 +2703,12 @@ def private flash_decode_check_g(qp : float const?; qq : int8 const?; qsp : floa
 
 // The witness' codec dispatch — the K×V matrix spelled once, like the worker wrappers.
 [cold_path]   // reference-check path, armed by g_flash_decode_check
-def private flash_decode_check_d(qp : float const?; qq : int8 const?; qsp : float const?;
-                                 kcl, vcl : uint8 const?; kdt, vdt : KVDtype; xbv : float const?;
-                                 runs : KVRun const?;
-                                 nrun, n_heads, kv_mul, head_size, kv_dim, kstart, cnt, l, nsl : int64;
-                                 scale, attn_softcap : float; sinksp : float const?;
-                                 vsignsp : float const?) {
+def flash_decode_check_d(qp : float const?; qq : int8 const?; qsp : float const?;
+                         kcl, vcl : uint8 const?; kdt, vdt : KVDtype; xbv : float const?;
+                         runs : KVRun const?;
+                         nrun, n_heads, kv_mul, head_size, kv_dim, kstart, cnt, l, nsl : int64;
+                         scale, attn_softcap : float; sinksp : float const?;
+                         vsignsp : float const?) {
     let kdim = kv_side_off(kdt, kv_dim)
     let vdim = kv_side_off(vdt, kv_dim)
     unsafe {
@@ -6320,7 +2806,7 @@ def tq4_rotate_batch(var buf : array<float>; nrows, stride, head_size : int64; s
         }
     }
 }
-def private tq4_unrotate_batch(var buf : array<float>; nrows, stride, head_size : int64; signs : float const?) {
+def tq4_unrotate_batch(var buf : array<float>; nrows, stride, head_size : int64; signs : float const?) {
     unsafe {
         var p = addr(buf[0])
         for (sg in range64(nrows * (stride / head_size))) {
@@ -6342,14 +2828,14 @@ def tq4_unrotate_rows(var p : float?; nrows, stride, head_size : int64; signs : 
 // Fused activation + gate multiply: hb[p] = act(W1·x[p]) * (W3·x[p]) in place, threaded per position.
 // One memory pass, transcendental vectorized via exp4 unless g_act_vec is off (only non-bit-exact
 // bit: exp4's ~2 ulp). Self-gates on g_act_par_threshold so small prompts/decode run inline.
-def private gate_batch(var g : array<float>; u : array<float>; act : FfnAct; hidden, npos : int64) {
+def gate_batch(var g : array<float>; u : array<float>; act : FfnAct; hidden, npos : int64) {
     unsafe {
         gate_batch(addr(g[0]), addr < float const? >(u[0]), act, hidden, npos)
     }
 }
 
 // pointer-level core — the fused gate+up dispatch acts on the halves of one groupn output buffer
-def private gate_batch(var gp0 : float?; up0 : float const?; act : FfnAct; hidden, npos : int64) {
+def gate_batch(var gp0 : float?; up0 : float const?; act : FfnAct; hidden, npos : int64) {
     let is_gelu = act == FfnAct.gelu
     let is_oai = act == FfnAct.swiglu_oai
     let vec = g_act_vec
@@ -6386,7 +2872,7 @@ def private gate_batch(var gp0 : float?; up0 : float const?; act : FfnAct; hidde
 // Add a projection bias (Qwen2): y[yoff + i] += b[boff + i]. yoff is 0 for the single-token forward,
 // p*stride for the batched prefill; boff is the per-layer slice into bq/bk/bv.
 [hint(unsafe_range_check)]
-def private add_bias(var y : array<float>; yoff : int64; b : array<float>; boff, n : int64) {
+def add_bias(var y : array<float>; yoff : int64; b : array<float>; boff, n : int64) {
     for (i in range64(n)) {
         y[yoff + i] += b[boff + i]
     }
@@ -6413,7 +2899,7 @@ def private mm_at_q4(var y : array<float>; t : Model; woff : int64; x : array<fl
 // Fuse the attention Q/K/V projections into one parallel dispatch when Q8 and the combined matmul
 // clears the parallel threshold: small K/V projections ride along on the worker pool, activation
 // quantized once. Otherwise fall back to three separate matmuls.
-def private mm_qkv(var s : Session; t : Model; l : int64) {
+def mm_qkv(var s : Session; t : Model; l : int64) {
     let c = t.config
     let dim = c.dim
     let kv = layer_kv_dim(c, l)
@@ -6472,7 +2958,7 @@ def private mm_qkv(var s : Session; t : Model; l : int64) {
 // Q8 matmul against a PRE-quantized activation (xq/xs already hold x's Q8 image) — the MoE core
 // quantizes the shared rmsnormed activation once per layer and reuses it across every expert's
 // gate/up matmul instead of re-quantizing per call.
-def private mm_at_q8_pre(var y : array<float>; t : Model; woff : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
+def mm_at_q8_pre(var y : array<float>; t : Model; woff : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
     if (t.wscale_f16) {
         matmul_q8q8(y, t.qblob, t.qscales16, woff, xq, xs, n, d)
     } else {
@@ -6489,7 +2975,7 @@ def private mm_at_mx4_pre(var y : array<float>; t : Model; woff : int64; xq : ar
 // Region-list GEMVs (the MoE decode dispatch fuse): all k routed experts' same-shape projections
 // in ONE fork/join. offs packs (weight, activation) element-offset pairs; region j -> y[j*d..j*d+d).
 // The boffs form folds each region's fblob bias into the workers' stores — bit-identical to add_bias.
-def private mm_at_q8_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
+def mm_at_q8_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
     if (t.wscale_f16) {
         matmul_q8q8_groupn(y, t.qblob, t.qscales16, offs, nregions, xq, xs, n, d)
     } else {
@@ -6497,7 +2983,7 @@ def private mm_at_q8_groupn(var y : array<float>; t : Model; offs : array<int64>
     }
 }
 
-def private mm_at_q8_groupn(var y : array<float>; t : Model; offs, boffs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
+def mm_at_q8_groupn(var y : array<float>; t : Model; offs, boffs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
     if (t.wscale_f16) {
         matmul_q8q8_groupn(y, t.qblob, t.qscales16, offs, nregions, xq, xs, t.fblob, boffs, n, d)
     } else {
@@ -6505,25 +2991,25 @@ def private mm_at_q8_groupn(var y : array<float>; t : Model; offs, boffs : array
     }
 }
 
-def private mm_at_mx4_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
+def mm_at_mx4_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
     matmul_mx4q8_groupn(y, t.mxq, t.mxs, offs, nregions, xq, xs, n, d)
 }
 
-def private mm_at_mx4_groupn(var y : array<float>; t : Model; offs, boffs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
+def mm_at_mx4_groupn(var y : array<float>; t : Model; offs, boffs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
     matmul_mx4q8_groupn(y, t.mxq, t.mxs, offs, nregions, xq, xs, t.fblob, boffs, n, d)
 }
 
 // ===== native q51 dispatch (Q8_0-form activations — NOT the kq Q8_K image) =====
 
-def private mm_at_q51_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
+def mm_at_q51_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
     matmul_q51q8_groupn(y, t.q51q, t.q51s, offs, nregions, xq, xs, n, d)
 }
 
-def private mm_b_q51_pre(var y : array<float>; t : Model; woff : int64; xqb : array<int8>; xsb : array<float>; n, d, npos : int64) {
+def mm_b_q51_pre(var y : array<float>; t : Model; woff : int64; xqb : array<int8>; xsb : array<float>; n, d, npos : int64) {
     matmul_q51q8_batch(y, t.q51q, t.q51s, woff, xqb, xsb, n, d, npos)
 }
 
-def private mm_b_q51_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
+def mm_b_q51_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
     matmul_q51q8_batch_groupn(y, t.q51q, t.q51s, offs, nregions, xq, xs, n, d)
 }
 
@@ -6536,7 +3022,7 @@ def private kq_fi(fmt : KqFmt) : int => fmt == KqFmt.k4 ? 4 : (fmt == KqFmt.k5 ?
 
 // K-quant GEMV against a PRE-quantized activation (xq/xs/xbs already filled by the bs quantizer).
 // kq_repacked loads run the backend's stamped cores; disk-order loads run the portable kernels.
-def private mm_at_kq_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d : int64; yoff : int64 = 0l) {
+def mm_at_kq_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d : int64; yoff : int64 = 0l) {
     if (t.kq_repacked) {
         if (fmt == KqFmt.k4) {
             matmul_kq_active(4, y, t.k4q, t.k4s, woff, xq, xs, xbs, n, d, yoff)
@@ -6572,7 +3058,7 @@ def private mm_kq(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x 
 // Batched K-quant matmul. Repacked loads with a kq batch kernel run the native tile: one threaded
 // bs-requant, then ONE weight-stationary GEMM (bit-for-bit npos x the per-position GEMV).
 // Otherwise positions run serially, each bs-quantized then a full row GEMV.
-def private mm_b_kq(var s : Session; var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x : array<float>; n, d, npos : int64) {
+def mm_b_kq(var s : Session; var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x : array<float>; n, d, npos : int64) {
     if (t.kq_repacked && kernel_backend_has_kq_batch()) {
         requant_rows_q8k_bs(x, n, npos, s.xqb, s.xsb, s.xbsb)   // kq v2: Q8_K-form image
         if (npos >= 32l && moe_gpu_dense_on_gpu(int(fmt), woff)) {
@@ -6605,7 +3091,7 @@ def private mm_b_kq(var s : Session; var y : array<float>; t : Model; fmt : KqFm
 // Region-list kq GEMV over the model's planes (the MoE expert dispatch's kq twin of
 // mm_at_q8_groupn; offs = (weight, activation) element-offset pairs within fmt's plane).
 // Repacked loads run the backend's kq_groupn; disk-order loads run the portable region walk.
-def private mm_at_kq_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d : int64) {
+def mm_at_kq_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d : int64) {
     if (t.kq_repacked) {
         if (fmt == KqFmt.k4) {
             matmul_kq_groupn_active(4, y, t.k4q, t.k4s, offs, nregions, xq, xs, xbs, n, d)
@@ -6633,7 +3119,7 @@ def private mm_at_kq_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs :
 
 // Fused batched region-list kq GEMM (the fused MoE prefill's kq twin of the mx4 batch groupn;
 // triple offs). Callers guard with kq_repacked && kernel_backend_has_kq_batch_groupn().
-def private mm_b_kq_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d : int64) {
+def mm_b_kq_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d : int64) {
     if (fmt == KqFmt.k4) {
         matmul_kq_batch_groupn(4, y, t.k4q, t.k4s, offs, nregions, xq, xs, xbs, n, d)
     } elif (fmt == KqFmt.k5) {
@@ -6650,7 +3136,7 @@ def private mm_b_kq_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs : 
 // Batched kq GEMM off PRE-quantized activation rows (the grouped MoE prefill's kq twin of
 // mm_b_q8_pre). Callers guard with kq_repacked && kernel_backend_has_kq_batch() — the prefill
 // gate routes kq-expert layers to the per-position reference path otherwise.
-def private mm_b_kq_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d, ntok : int64) {
+def mm_b_kq_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d, ntok : int64) {
     if (fmt == KqFmt.k4) {
         matmul_kq_batch(4, y, t.k4q, t.k4s, woff, xq, xs, xbs, n, d, ntok)
     } elif (fmt == KqFmt.k5) {
@@ -6664,7 +3150,7 @@ def private mm_b_kq_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int
     }
 }
 
-def private kq_plane_q(t : Model; fmt : KqFmt; woff : int64) : uint8 const? {
+def kq_plane_q(t : Model; fmt : KqFmt; woff : int64) : uint8 const? {
     let sb = woff / 256l
     if (fmt == KqFmt.k4) return unsafe(addr<uint8 const?>(t.k4q[sb * K4_QSB]))
     if (fmt == KqFmt.k5) return unsafe(addr<uint8 const?>(t.k5q[sb * K5_QSB]))
@@ -6673,7 +3159,7 @@ def private kq_plane_q(t : Model; fmt : KqFmt; woff : int64) : uint8 const? {
     return null
 }
 
-def private kq_plane_s(t : Model; fmt : KqFmt; woff : int64) : uint8 const? {
+def kq_plane_s(t : Model; fmt : KqFmt; woff : int64) : uint8 const? {
     let sb = woff / 256l
     if (fmt == KqFmt.k4) return unsafe(addr<uint8 const?>(t.k4s[sb * K4_SSB]))
     if (fmt == KqFmt.k5) return unsafe(addr<uint8 const?>(t.k5s[sb * K5_SSB]))
@@ -6682,18 +3168,18 @@ def private kq_plane_s(t : Model; fmt : KqFmt; woff : int64) : uint8 const? {
     return null
 }
 
-def private kq_rows_for(fmt : KqFmt) : MatmulKqRowsFn {
+def kq_rows_for(fmt : KqFmt) : MatmulKqRowsFn {
     return kq_rows_fn(kq_fi(fmt))
 }
 
 // Can the fused chains serve a weight of this format? q8 always; superblock kq only off a
 // repacked load (the backend rows cores read the grp layout). q51 NEVER — no chain/rows arms.
-def private kq_servable(t : Model; fmt : KqFmt) : bool => fmt == KqFmt.q8 || (kq_sb(fmt) && t.kq_repacked)
+def kq_servable(t : Model; fmt : KqFmt) : bool => fmt == KqFmt.q8 || (kq_sb(fmt) && t.kq_repacked)
 
 // Do the gate/up stacks read the Q8_K-form scratch? Superblock formats only — q8 AND q51 read
 // the Q8_0-form image. The pair shares ONE gathered activation plane, so both stacks must
 // agree on the form (mixed sb/non-sb panics).
-def private moe_pair_kform(f1, f3 : KqFmt) : bool {
+def moe_pair_kform(f1, f3 : KqFmt) : bool {
     let k1 = kq_sb(f1)
     let k3 = kq_sb(f3)
     if (k1 != k3) {
@@ -6703,7 +3189,7 @@ def private moe_pair_kform(f1, f3 : KqFmt) : bool {
 }
 
 // Format router: q8-tagged weights take the classic mm; kq tags take the plane GEMV.
-def private mm_f(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x : array<float>; var xq : array<int8>; var xs : array<float>; var xbs : array<int>; n, d : int64) {
+def mm_f(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x : array<float>; var xq : array<int8>; var xs : array<float>; var xbs : array<int>; n, d : int64) {
     if (fmt == KqFmt.q8) {
         mm(y, t, woff, x, xq, xs, n, d)
     } else {
@@ -6713,7 +3199,7 @@ def private mm_f(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x :
 
 // Pre-quantized format router: q8-tagged weights consume the Q8_0-form scratch (xq/xs);
 // kq-tagged weights the Q8_K-form scratch (kxq/kxs/kxbs — kq v2, all three formats).
-def private mm_pre_f(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; kxq : array<int8>; kxs : array<float>; kxbs : array<int>; n, d : int64) {
+def mm_pre_f(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; kxq : array<int8>; kxs : array<float>; kxbs : array<int>; n, d : int64) {
     if (fmt == KqFmt.q8) {
         mm_at_q8_pre(y, t, woff, xq, xs, n, d)
     } else {
@@ -6723,7 +3209,7 @@ def private mm_pre_f(var y : array<float>; t : Model; fmt : KqFmt; woff : int64;
 
 // Batched format router: q8 weights ride the batch tile; kq weights take the native kq tile
 // (repacked loads) or the serial-per-position fallback (see mm_b_kq).
-def private mm_b_f(var s : Session; var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x : array<float>; n, d, npos : int64) {
+def mm_b_f(var s : Session; var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x : array<float>; n, d, npos : int64) {
     if (fmt == KqFmt.q8) {
         mm_b(y, t, woff, x, s.xqb, s.xsb, n, d, npos)
     } else {
@@ -6733,7 +3219,7 @@ def private mm_b_f(var s : Session; var y : array<float>; t : Model; fmt : KqFmt
 
 // Route a big-weight matmul through the Q8, Q4, or fp32 kernel depending on the model's quant mode.
 // xq/xs are the run-state activation-quant scratch (used only by the Q8 path).
-def private mm(var y : array<float>; t : Model; woff : int64; x : array<float>; var xq : array<int8>; var xs : array<float>; n, d : int64) {
+def mm(var y : array<float>; t : Model; woff : int64; x : array<float>; var xq : array<int8>; var xs : array<float>; n, d : int64) {
     if (t.quant == QuantMode.q8) {
         mm_at_q8(y, t, woff, x, xq, xs, n, d)
     } elif (t.quant == QuantMode.q4_0) {
@@ -6746,54 +3232,24 @@ def private mm(var y : array<float>; t : Model; woff : int64; x : array<float>; 
 // Quantize the npos rows of a batched activation to Q8 (row p at x[p*n..] -> xqb[p*n..]) —
 // independent per position, so thread it (was the largest serial bucket once attention + GEMM
 // threaded). Same per-row quants as the single-row quantize_q8_0_into.
-def private requant_rows_q8(x : array<float>; n, npos : int64; var xqb : array<int8>; var xsb : array<float>) {
-    let nb = n / 32l
+def requant_rows_q8(x : array<float>; n, npos : int64; var xqb : array<int8>; var xsb : array<float>) {
     let ts_rq = ref_time_ticks()
-    unsafe {
-        let xp = addr < float const? >(x[0])
-        var qp = addr(xqb[0])
-        var sp = addr(xsb[0])
-        let rq_par = n * npos >= g_requant_par_threshold
-        maybe_parallel_for(rq_par, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
-            unsafe {
-                for (p in range(rb, re)) {
-                    let pp = int64(p)
-                    quantize_q8_0_into_ptr(xp + pp * n, n, qp, sp, pp * n, pp * nb)
-                }
-            }
-        }
-    }
+    requant_rows_q8(x, n, npos, xqb, xsb, n * npos >= g_requant_par_threshold)
     prof_add("mm_requant", ts_rq)
 }
 
 // Q8_K-form batch requant (kq v2): per-256 scales + per-16 sums of the per-256-scaled
 // quants. k4-weight batch matmuls and MoE gathers consume these rows.
-def private requant_rows_q8k_bs(x : array<float>; n, npos : int64; var xqb : array<int8>; var xsb : array<float>; var xbsb : array<int>) {
-    let nsb = n / 256l
-    let nh = n / 16l
+def requant_rows_q8k_bs(x : array<float>; n, npos : int64; var xqb : array<int8>; var xsb : array<float>; var xbsb : array<int>) {
     let ts_rq = ref_time_ticks()
-    unsafe {
-        let xp = addr < float const? >(x[0])
-        var qp = addr(xqb[0])
-        var sp = addr(xsb[0])
-        var bp = addr(xbsb[0])
-        let rq_par = n * npos >= g_requant_par_threshold
-        maybe_parallel_for(rq_par, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
-            unsafe {
-                for (p in range(rb, re)) {
-                    let pp = int64(p)
-                    quantize_q8_k_into_ptr(xp + pp * n, n, qp, sp, bp, pp * n, pp * nsb, pp * nh)
-                }
-            }
-        }
-    }
+    requant_rows_q8k_bs(x, n, npos, xqb, xsb, xbsb, n * npos >= g_requant_par_threshold)
     prof_add("mm_requant", ts_rq)
 }
 
 // Batched native-MXFP4 GEMM against a PRE-quantized activation image (the batch analog of
 // mm_at_mx4_pre): grouped MoE prefill dispatches here — no Q8 expansion — when the active backend
 // carries a native mx4 batch kernel (g_active_mx4_native_batch).
-def private mm_b_mx4_pre(var y : array<float>; t : Model; woff : int64; xqb : array<int8>; xsb : array<float>; n, d, npos : int64) {
+def mm_b_mx4_pre(var y : array<float>; t : Model; woff : int64; xqb : array<int8>; xsb : array<float>; n, d, npos : int64) {
     let ts_gemm = ref_time_ticks()
     matmul_mx4q8_batch(y, t.mxq, t.mxs, woff, xqb, xsb, n, d, npos)
     prof_add("mm_gemm", ts_gemm)
@@ -6802,7 +3258,7 @@ def private mm_b_mx4_pre(var y : array<float>; t : Model; woff : int64; xqb : ar
 // Batched Q8 GEMM against a PRE-quantized activation image (the batch analog of mm_at_q8_pre) —
 // the grouped MoE prefill runs many GEMMs off one requant (the whole-batch image or a gathered
 // expert bucket).
-def private mm_b_q8_pre(var y : array<float>; t : Model; woff : int64; xqb : array<int8>; xsb : array<float>; n, d, npos : int64) {
+def mm_b_q8_pre(var y : array<float>; t : Model; woff : int64; xqb : array<int8>; xsb : array<float>; n, d, npos : int64) {
     let ts_gemm = ref_time_ticks()
     if (t.wscale_f16) {
         matmul_q8q8_batch(y, t.qblob, t.qscales16, woff, xqb, xsb, n, d, npos)
@@ -6815,7 +3271,7 @@ def private mm_b_q8_pre(var y : array<float>; t : Model; woff : int64; xqb : arr
 // Batched big-weight matmul for prefill: Y [npos x d] from X [npos x n], via the slice-1 GEMM
 // kernels. Q8 quantizes each of the npos activation columns into the batched xqb/xsb scratch first;
 // fp32 goes straight through. Q4 has no batched kernel, so forward_prefill never routes it here.
-def private mm_b(var y : array<float>; t : Model; woff : int64; x : array<float>; var xqb : array<int8>; var xsb : array<float>; n, d, npos : int64) {
+def mm_b(var y : array<float>; t : Model; woff : int64; x : array<float>; var xqb : array<int8>; var xsb : array<float>; n, d, npos : int64) {
     if (t.quant == QuantMode.q8) {
         requant_rows_q8(x, n, npos, xqb, xsb)
         if (npos >= 32l && moe_gpu_dense_on_gpu(int(KqFmt.q8), woff)) {
@@ -6858,8 +3314,34 @@ let DN_CHUNK = 64l
 // Per-v-head workspace floats for the chunked deltanet prefill: eight CS x d_state panels
 // (q / kT / k_beta / v_beta / w / v_new / o / kgT), two CS x CS triangles (T, KQ), and three
 // per-chunk scalar rows (g cumsum, e^{gcum}, e^{g_last - gcum}).
-def private dn_cws_head_size(c : Config) : int64 => (8l * DN_CHUNK * c.ssm_d_state
+def dn_cws_head_size(c : Config) : int64 => (8l * DN_CHUNK * c.ssm_d_state
     + 2l * DN_CHUNK * DN_CHUNK + 3l * DN_CHUNK)
+
+def dn_reset(var s : Session) {
+    for (i in range64(long_length(s.dn_conv_state))) {
+        s.dn_conv_state[i] = 0.0
+    }
+    for (i in range64(long_length(s.dn_state))) {
+        s.dn_state[i] = 0.0
+    }
+    moe_gpu_dn_invalidate()   // CPU zeros are now authoritative — drop any device-resident copies
+}
+
+// Sync one layer's device-resident deltanet state down before a CPU read (no-op when clean).
+def dn_flush_layer(var s : Session; l : int64) {
+    if (l < long_length(s.dn_state_prefix) && s.dn_state_prefix[l] >= 0l) {
+        unsafe {
+            moe_gpu_dn_flush(l, addr(s.dn_state[s.dn_state_prefix[l]]),
+                addr(s.dn_conv_state[s.dn_conv_prefix[l]]))
+        }
+    }
+}
+
+def dn_flush_all(var s : Session) {
+    for (l in range64(long_length(s.dn_state_prefix))) {
+        dn_flush_layer(s, l)
+    }
+}
 
 //! Layer `l`'s dense FFN width. Uniform config.hidden_dim unless the model varies it per layer
 //! (gemma-4 E2B: 6144 for layers 0-14, 12288 for 15-34).
@@ -6938,2539 +3420,10 @@ def has_dual_rope(c : Config) : bool => (c.sliding_window > 0l
     && (c.rope_freq_base_swa != c.rope_freq_base || c.rope_freq_scale_swa != c.rope_freq_scale
         || (c.head_size_swa > 0l && c.head_size_swa != c.head_size)))
 
-//! One forward pass: token at position `pos` -> s.logits. Faithful port of llama2.c forward().
-// ===== std/dense block kernels (decode, single-token) =====
-// The default llama-family blocks; a new arch registers a different block without touching forward().
-
-// Flash-decode slicing (fused attention chain): a context deeper than FLASH_DECODE_SLICE splits
-// each head's KV pass into ceil(cnt/SLICE_LEN) slices with a per-head combine stage. Slice count
-// derives from CONTEXT ONLY (deterministic); ctx <= 256 stays bit-identical, deeper is tolerance-equal.
-let FLASH_DECODE_SLICE = 256l       // single-pass threshold: cnt <= this never slices
-let FLASH_DECODE_SLICE_LEN = 32l    // slice granularity once slicing engages
-let FLASH_DECODE_MAX_SLICES = 32l   // 4 chunks/lane at 16L: Qwen2.5-1.5B d4k attn wall 393->333us/layer vs cap 16
-
-// attn-norm -> QKV(+bias) -> RoPE -> KV-store -> GQA attention -> out-proj(+post-norm) -> residual.
-// Can layer l's attention run as the fused chain? Std shape only: Q8 weights, group3 layout, table
-// rope, team mode + a backend row core. pre_post_norm defers the residual add to a serial tail.
-def private fused_attn_ok(t : Model; l : int64) : bool {
-    let c = t.config
-    let fq = fmt_at(t.wq_fmt, l)
-    let fk = fmt_at(t.wk_fmt, l)
-    let fv = fmt_at(t.wv_fmt, l)
-    let fo = fmt_at(t.wo_fmt, l)
-    let any_kq = fq != KqFmt.q8 || fk != KqFmt.q8 || fv != KqFmt.q8 || fo != KqFmt.q8
-    let head_size = layer_head_size(c, l)
-    let qd = layer_qd(c, l)
-    // head_size % 32: the wo-input requant needs whole 32-quant groups per head (stories15M's 48 falls back)
-    return (g_fused_decode && t.quant == QuantMode.q8 && g_use_rope_table
-        && t.wv_offs[l] >= 0l && head_size % 32l == 0l
-        // partial rotary (glm4moe): fall back to attention_std_decode, which has the rot-aware leaves
-        && (c.rope_dim == 0l || c.rope_dim == head_size)
-        && kq_servable(t, fq) && kq_servable(t, fk) && kq_servable(t, fv) && kq_servable(t, fo)
-        // kq v2 regrain: Q8_K quantizes whole 256-superblocks, so qd and the head grouping must divide out
-        && (!any_kq || c.dim % 256l == 0l)
-        && (fo == KqFmt.q8 || (qd % 256l == 0l && (head_size >= 256l ? head_size % 256l == 0l : 256l % head_size == 0l)))
-        && get_jobque_team_mode() && kernel_backend_has_rows()
-        && (!t.wscale_f16 || kernel_backend_has_rows16())
-        && lanes_for_work(c.dim * (qd + 2l * layer_kv_dim(c, l)), g_gemv_lane_cap) > 1)
-}
-
-// Fused attention block: ONE team rendezvous runs [qkv rows] -> [head-slot norm/rope/kv-store] ->
-// [attn heads + wo-input requant] -> [wo rows + residual add] as four stages. Bit-identical to
-// attention_std_decode at ctx <= FLASH_DECODE_SLICE; deeper contexts are tolerance-equal, not bit-equal.
-def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : int64) {
-    let c = t.config
-    let dim = c.dim
-    let kv_dim = layer_kv_dim(c, l)
-    let head_size = layer_head_size(c, l)
-    let n_heads = c.n_heads
-    let n_kv_heads = layer_n_kv_heads(c, l)
-    let qd = n_heads * head_size
-    let kv_mul = n_heads / n_kv_heads
-    let scale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size))
-    let is_sliding = layer_is_sliding(c, l)
-    let kstart = (is_sliding && pos + 1l > c.sliding_window) ? (pos + 1l - c.sliding_window) : 0l
-    let cnt = pos + 1l - kstart
-    let nrun = kv_runs(s, kstart, pos + 1l, s.kv_runs)   // physical runs of this layer's window (flat: 1)
-    let prow = kv_phys_row(s, pos)                       // where THIS position's row lives
-    // per-weight formats (kq layers reach here only off a repacked load — fused_attn_ok)
-    let fq = fmt_at(t.wq_fmt, l)
-    let fk = fmt_at(t.wk_fmt, l)
-    let fv = fmt_at(t.wv_fmt, l)
-    let fo = fmt_at(t.wo_fmt, l)
-    let any_kq = fq != KqFmt.q8 || fk != KqFmt.q8 || fv != KqFmt.q8 || fo != KqFmt.q8
-    // attention rmsnorm + input quantize: one image per consumed form — q8 reads Q8_0, kq reads Q8_K (kq v2)
-    let ts_norm0 = ref_time_ticks()
-    rms_at(s.xb, t, t.rms_att_off + l * dim, s.x, dim)
-    if (fq == KqFmt.q8 || fk == KqFmt.q8 || fv == KqFmt.q8) {
-        quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)
-    }
-    if (fq != KqFmt.q8 || fk != KqFmt.q8 || fv != KqFmt.q8) {
-        quantize_q8_k_into(s.xb, dim, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)
-    }
-    prof_add("norm", ts_norm0)
-    let ts_chain = ref_time_ticks()
-    trace_tag(TRACE_TAG_ATTN_CHAIN)
-    // stage geometry (same grain math as the per-op dispatches; the C++ side clamps chunks <= range)
-    let nslots = int(n_heads + 2l * n_kv_heads)
-    let ngq = int((qd + 2l * kv_dim) / 32l)   // stage-0 domain: 32-row groups (head_size % 32 == 0 by the fuse gate)
-    let n0 = chain_stage_chunks(ngq, int(qd + 2l * kv_dim), dim * (qd + 2l * kv_dim))
-    let n1 = get_dispatch_lanes()
-    let ngrp = int(dim / 32l)
-    let n2 = chain_stage_chunks(ngrp, int(dim), qd * dim)
-    // attn-stage unit: a kq wo requants the output per HEAD GROUP spanning whole 256-superblocks
-    let hpu = (fo != KqFmt.q8 && head_size < 256l) ? 256l / head_size : 1l
-    let nhu = int(n_heads / hpu)
-    // flash-decode slicing engages once cnt crosses FLASH_DECODE_SLICE (ctx-derived, deterministic); nsl == 1 keeps the exact single-pass body
-    let nsl = cnt <= FLASH_DECODE_SLICE ? 1 : int(min(FLASH_DECODE_MAX_SLICES, (cnt + FLASH_DECODE_SLICE_LEN - 1l) / FLASH_DECODE_SLICE_LEN))
-    let slice_len = (cnt + int64(nsl) - 1l) / int64(nsl)
-    if (nsl > 1) {
-        let need = int(n_heads) * nsl
-        if (length(s.fl_m) < need) {
-            s.fl_m |> resize(need)
-            s.fl_l |> resize(need)
-        }
-        let needo = int(n_heads * int64(nsl) * head_size)
-        if (length(s.fl_o) < needo) {
-            s.fl_o |> resize(needo)
-        }
-        s.chain_stages |> resize(5)
-        s.chain_stages[0] = int3(0, ngq, n0)
-        s.chain_stages[1] = int3(0, nslots, nslots)
-        s.chain_stages[2] = int3(0, int(n_kv_heads) * nsl, int(n_kv_heads) * nsl)
-        s.chain_stages[3] = int3(0, nhu, nhu)
-        s.chain_stages[4] = int3(0, ngrp, n2)
-        count_parallel_dispatch(min(n0, ngq) + nslots + int(n_kv_heads) * nsl + nhu + min(n2, ngrp))
-    } else {
-        s.chain_stages |> resize(4)
-        s.chain_stages[0] = int3(0, ngq, n0)
-        s.chain_stages[1] = int3(0, nslots, nslots)
-        s.chain_stages[2] = int3(0, nhu, n1)
-        s.chain_stages[3] = int3(0, ngrp, n2)
-        count_parallel_dispatch(min(n0, ngq) + nslots + min(n1, nhu) + min(n2, ngrp))
-    }
-    let mmrows = mm_q8q8_rows_fn()
-    let neox = c.rope_neox
-    let eps = c.norm_eps
-    let seq_len = c.seq_len
-    let attn_softcap = c.attn_logit_softcap
-    let kdt = s.kv_dtype_k
-    let vdt = s.kv_dtype_v
-    // Gemma2/3 post-attention norm is a whole-vector reduction, so the residual add lands serially after
-    let post_norm = c.pre_post_norm
-    unsafe {
-        // activations / scratch — raw pointers only (the stage lambda runs in fork contexts)
-        var qp = addr(s.q[0])
-        var kp = addr(s.k[0])
-        var vp = addr(s.v[0])
-        var xbp = addr(s.xb[0])
-        var xb2p = addr(s.xb2[0])
-        var xp = addr(s.x[0])
-        var attp = addr(s.att[0])
-        var xqp = addr(s.xq[0])
-        var xsp = addr(s.xs[0])
-        // block-codec K: each stage-0 q slot fills its quantized-query plane after rope; tq4 rotates first
-        let kq8 = kdt == KVDtype.q8_0 || kdt == KVDtype.tq4
-        let ktq4 = kdt == KVDtype.tq4
-        let vtq4 = vdt == KVDtype.tq4
-        let sgp = (ktq4 || vtq4) ? addr < float const? >(s.kv_signs[0]) : null
-        var attqp = kq8 ? addr(s.attq[0]) : null
-        var attsp = kq8 ? addr(s.atts[0]) : null
-        var kcl = kv_layer_kbase(s, l, c.seq_len)  // layer-base byte pointers (stores + the _d read dispatch)
-        var vcl = kv_layer_vbase(s, l, c.seq_len)
-        let runsp = addr < KVRun const? >(s.kv_runs[0])  // this layer's physical runs (fork-safe hoist)
-        // weight region bases (element offsets into the Q8 blob); all-kq layers skip q8 bases (may be EMPTY)
-        let f16w = t.wscale_f16
-        let mmrows16 = mm_q8q8_rows16_fn()
-        let has_q8w = fq == KqFmt.q8 || fk == KqFmt.q8 || fv == KqFmt.q8 || fo == KqFmt.q8
-        let wqb = has_q8w ? addr < int8 const? >(t.qblob[0]) : null
-        var wsq : float const? = null
-        var wsk : float const? = null
-        var wsv : float const? = null
-        var wso : float const? = null
-        var wsq16 : uint16 const? = null
-        var wsk16 : uint16 const? = null
-        var wsv16 : uint16 const? = null
-        var wso16 : uint16 const? = null
-        if (f16w && has_q8w) {
-            let wsb16 = addr < uint16 const? >(t.qscales16[0])
-            wsq16 = wsb16 + t.wq_offs[l] / 32l
-            wsk16 = wsb16 + t.wk_offs[l] / 32l
-            wsv16 = wsb16 + t.wv_offs[l] / 32l
-            wso16 = wsb16 + t.wo_offs[l] / 32l
-        } elif (has_q8w) {
-            let wsb = addr < float const? >(t.qscales[0])
-            wsq = wsb + t.wq_offs[l] / 32l
-            wsk = wsb + t.wk_offs[l] / 32l
-            wsv = wsb + t.wv_offs[l] / 32l
-            wso = wsb + t.wo_offs[l] / 32l
-        }
-        let wpq = wqb + t.wq_offs[l]
-        let wpk = wqb + t.wk_offs[l]
-        let wpv = wqb + t.wv_offs[l]
-        let wpo = wqb + t.wo_offs[l]
-        // kq-tagged weights: plane bases + stamped rows core per format + the Q8_K activation image (kq v2)
-        var kxqp : int8? = any_kq ? addr(s.kxq[0]) : null
-        var kxsp : float? = any_kq ? addr(s.kxs[0]) : null
-        var kxbsp : int? = any_kq ? addr(s.kxbs[0]) : null
-        let kqpq = kq_plane_q(t, fq, t.wq_offs[l])
-        let kspq = kq_plane_s(t, fq, t.wq_offs[l])
-        let rowsq = kq_rows_for(fq)
-        let kqpk = kq_plane_q(t, fk, t.wk_offs[l])
-        let kspk = kq_plane_s(t, fk, t.wk_offs[l])
-        let rowsk = kq_rows_for(fk)
-        let kqpv = kq_plane_q(t, fv, t.wv_offs[l])
-        let kspv = kq_plane_s(t, fv, t.wv_offs[l])
-        let rowsv = kq_rows_for(fv)
-        let kqpo = kq_plane_q(t, fo, t.wo_offs[l])
-        let kspo = kq_plane_s(t, fo, t.wo_offs[l])
-        let rowso = kq_rows_for(fo)
-        // this position's rope table row (dual-rope arches: the sliding class's row)
-        let swa_row = is_sliding && has_dual_rope(c)
-        let crow = swa_row ? addr < float const? >(s.rope_cos_swa[0]) : addr < float const? >(s.rope_cos[0])
-        let srow = swa_row ? addr < float const? >(s.rope_sin_swa[0]) : addr < float const? >(s.rope_sin[0])
-        // optional per-arch epilogues (null = off): qkv bias, per-head q/k norm, weightless v norm, sinks, wo bias
-        let bqp = c.attn_qkv_bias ? addr < float const? >(t.bq[0]) : null
-        let bkp = c.attn_qkv_bias ? addr < float const? >(t.bk[0]) : null
-        let bvp = c.attn_qkv_bias ? addr < float const? >(t.bv[0]) : null
-        let rqp = c.qk_norm ? addr < float const? >(t.fblob[t.rms_q_offs[l]]) : null
-        let rkp = c.qk_norm ? addr < float const? >(t.fblob[t.rms_k_offs[l]]) : null
-        let rvp = c.v_norm ? addr < float const? >(t.fblob[t.rms_ones_off]) : null
-        let sinksp = c.attn_sinks ? addr < float const? >(t.fblob[t.sinks_off + l * n_heads]) : null
-        let bop = c.attn_out_bias ? addr < float const? >(t.bo[0]) : null
-        let bqoff = l * qd
-        let bkvoff = l * kv_dim
-        let booff = l * dim
-        // flash-decode partial planes (deep ctx only; the arrays are empty when nsl == 1)
-        var flmp = nsl > 1 ? addr(s.fl_m[0]) : null
-        var fllp = nsl > 1 ? addr(s.fl_l[0]) : null
-        var flop = nsl > 1 ? addr(s.fl_o[0]) : null
-        // the lambda's capture frame is heap per call — the dispatch API's cost, not this kernel's
-        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {   // nolint:PERF026
-            if (stage == 0) {
-                // qkv rows in 32-row groups (row-local); a group never straddles a q/k/v region boundary
-                unsafe {
-                    var r = int64(jb) * 32l
-                    let rend = int64(je) * 32l
-                    while (r < rend) {
-                        if (r < qd) {
-                            let r1 = min(rend, qd)
-                            if (fq != KqFmt.q8) {
-                                invoke(rowsq, qp, kqpq, kspq, kxqp, kxsp, kxbsp, dim, r, r1)
-                            } elif (f16w) {
-                                invoke(mmrows16, qp, wpq, wsq16, xqp, xsp, dim, r, r1)
-                            } else {
-                                invoke(mmrows, qp, wpq, wsq, xqp, xsp, dim, r, r1)
-                            }
-                            if (bqp != null) {
-                                add_inplace(qp + r, bqp + bqoff + r, r1 - r)
-                            }
-                            r = r1
-                        } elif (r < qd + kv_dim) {
-                            let r0 = r - qd
-                            let r1 = min(rend, qd + kv_dim) - qd
-                            if (fk != KqFmt.q8) {
-                                invoke(rowsk, kp, kqpk, kspk, kxqp, kxsp, kxbsp, dim, r0, r1)
-                            } elif (f16w) {
-                                invoke(mmrows16, kp, wpk, wsk16, xqp, xsp, dim, r0, r1)
-                            } else {
-                                invoke(mmrows, kp, wpk, wsk, xqp, xsp, dim, r0, r1)
-                            }
-                            if (bkp != null) {
-                                add_inplace(kp + r0, bkp + bkvoff + r0, r1 - r0)
-                            }
-                            r = r1 + qd
-                        } else {
-                            let r0 = r - qd - kv_dim
-                            let r1 = min(rend, qd + 2l * kv_dim) - qd - kv_dim
-                            if (fv != KqFmt.q8) {
-                                invoke(rowsv, vp, kqpv, kspv, kxqp, kxsp, kxbsp, dim, r0, r1)
-                            } elif (f16w) {
-                                invoke(mmrows16, vp, wpv, wsv16, xqp, xsp, dim, r0, r1)
-                            } else {
-                                invoke(mmrows, vp, wpv, wsv, xqp, xsp, dim, r0, r1)
-                            }
-                            if (bvp != null) {
-                                add_inplace(vp + r0, bvp + bkvoff + r0, r1 - r0)
-                            }
-                            r = r1 + qd + kv_dim
-                        }
-                    }
-                }
-            } elif (stage == 1) {
-                // head-local epilogue by head slot: norm -> rope -> cache store -> roped-query quantize
-                unsafe {
-                    for (slot in range(jb, je)) {
-                        let sl = int64(slot)
-                        if (sl < n_heads) {
-                            let r0 = sl * head_size
-                            if (rqp != null) {
-                                rmsnorm(qp + r0, qp + r0, rqp, head_size, eps)
-                            }
-                            if (neox) {
-                                rope_scaled_neox_tab(qp + r0, head_size, head_size, crow, srow)
-                            } else {
-                                rope_scaled_tab(qp + r0, head_size, head_size, crow, srow)
-                            }
-                            if (ktq4) {   // tq4: rotate the roped query head before the plane fill
-                                fwht_signs_row(qp + r0, sgp, head_size)
-                            }
-                            if (kq8) {   // quantize this head's roped query for the int8 score dot
-                                quantize_q8_0_into_ptr(qp + r0, head_size, attqp, attsp, r0, r0 / 32l)
-                            }
-                        } elif (sl < n_heads + n_kv_heads) {
-                            let r0 = (sl - n_heads) * head_size
-                            if (rkp != null) {
-                                rmsnorm(kp + r0, kp + r0, rkp, head_size, eps)
-                            }
-                            if (neox) {
-                                rope_scaled_neox_tab(kp + r0, head_size, head_size, crow, srow)
-                            } else {
-                                rope_scaled_tab(kp + r0, head_size, head_size, crow, srow)
-                            }
-                            if (ktq4) {   // tq4: rotate the roped key head before the codec store
-                                fwht_signs_row(kp + r0, sgp, head_size)
-                            }
-                            kv_store_row(kcl, kdt, kv_dim, prow, r0, head_size, kp + r0)
-                        } else {
-                            let r0 = (sl - n_heads - n_kv_heads) * head_size
-                            if (rvp != null) {
-                                rmsnorm(vp + r0, vp + r0, rvp, head_size, eps)
-                            }
-                            if (vtq4) {   // tq4: rotate the value head before the codec store
-                                fwht_signs_row(vp + r0, sgp, head_size)
-                            }
-                            kv_store_row(vcl, vdt, kv_dim, prow, r0, head_size, vp + r0)
-                        }
-                    }
-                }
-            } elif (stage == 2 && nsl == 1) {
-                // multi-head attention + requant of the wo input; overwrites input quants (stage 0's only reader is done)
-                unsafe {
-                    for (u in range(jb, je)) {
-                        for (g in range64(hpu)) {
-                            let hh = int64(u) * hpu + g
-                            let qoff = hh * head_size
-                            let kvhoff = (hh / kv_mul) * head_size  // GQA: which kv head this query head reads
-                            attn_head_decode_d(attp + hh * seq_len, xbp, qp, attqp, attsp, kcl, vcl, kdt, vdt, runsp,
-                                nrun, qoff, kvhoff, kstart, cnt, kv_dim, head_size, hh, scale, attn_softcap, sinksp)
-                            if (vtq4) {   // tq4 V: this head's xb slice is rotated-basis — un-rotate before requant
-                                fwht_unsign_row(xbp + qoff, sgp, head_size)
-                            }
-                        }
-                        let u0 = int64(u) * hpu * head_size
-                        if (fo != KqFmt.q8) {   // kq wo: Q8_K over the unit's whole-superblock span
-                            quantize_q8_k_into_ptr(xbp + u0, hpu * head_size, kxqp, kxsp, kxbsp, u0, u0 / 256l, u0 / 16l)
-                        } else {
-                            quantize_q8_0_into_ptr(xbp + u0, hpu * head_size, xqp, xsp, u0, u0 / 32l)
-                        }
-                    }
-                }
-            } elif (stage == 2) {
-                // flash-decode partials: unit = (KV-head, slice) — K/V rows stream ONCE, serving all kv_mul q-heads
-                unsafe {
-                    for (u in range(jb, je)) {
-                        let kvh = int64(u / nsl)
-                        let sl = int64(u % nsl)
-                        let kvhoff = kvh * head_size
-                        let qh0 = kvh * kv_mul
-                        let j0 = sl * slice_len
-                        let j1 = min(j0 + slice_len, cnt)
-                        // K pass: each K row read once, dotted against every group q-head
-                        kv_slice_scores_d(attp, qp, attqp, attsp, kcl, kdt, runsp, nrun, kstart, j0, j1, kv_dim, kvhoff, head_size,
-                            qh0, kv_mul, seq_len, scale)
-                        for (g in range64(kv_mul)) {
-                            let hh = qh0 + g
-                            var arow = attp + hh * seq_len
-                            if (attn_softcap > 0.0) {
-                                softcap4(arow + j0, j1 - j0, attn_softcap)
-                            }
-                            // hand-vectorized max reduction — order-independent, bit-identical to the scalar scan
-                            let m = hmax(unsafe(arow + j0), j1 - j0)
-                            // exp4 fast path, clamped to -80 like the prefill flash fold (underflow -> ~0)
-                            var lsum = 0.0
-                            {
-                                let m4 = float4(m, m, m, m)
-                                var sum4 = float4(0.0)
-                                var j = j0
-                                while (j + 4l <= j1) {
-                                    let e = exp4(max(float4(arow[j], arow[j + 1l], arow[j + 2l], arow[j + 3l]) - m4, EXP4_LO))
-                                    arow[j] = e.x
-                                    arow[j + 1l] = e.y
-                                    arow[j + 2l] = e.z
-                                    arow[j + 3l] = e.w
-                                    sum4 += e
-                                    j += 4l
-                                }
-                                lsum = sum4.x + sum4.y + sum4.z + sum4.w
-                                while (j < j1) {
-                                    let e = exp(max(arow[j] - m, -80.0))
-                                    arow[j] = e
-                                    lsum += e
-                                    j++
-                                }
-                            }
-                            var op = flop + (hh * int64(nsl) + sl) * head_size
-                            for (i in range64(head_size)) {
-                                op[i] = 0.0
-                            }
-                            flmp[hh * int64(nsl) + sl] = m
-                            fllp[hh * int64(nsl) + sl] = lsum
-                        }
-                        // V pass: each V row read once, weighted into every group head's partial
-                        kv_slice_av_d(flop, attp, vcl, vdt, runsp, nrun, kstart, j0, j1, kv_dim, kvhoff, head_size,
-                            qh0, kv_mul, seq_len, int64(nsl), sl)
-                    }
-                }
-            } elif (stage == 3 && nsl > 1) {
-                // per-head combine (flash rescale; sink joins max + denominator) + wo-input requant per unit span
-                unsafe {
-                    for (u in range(jb, je)) {
-                        for (g in range64(hpu)) {
-                            let hh = int64(u) * hpu + g
-                            let qoff = hh * head_size
-                            let fbase = hh * int64(nsl)
-                            var mg = hmax(unsafe(flmp + fbase), int64(nsl))
-                            if (sinksp != null) {
-                                mg = max(mg, sinksp[hh])
-                            }
-                            for (i in range64(head_size)) {
-                                xbp[qoff + i] = 0.0
-                            }
-                            var lg = 0.0
-                            {
-                                // exp4 over the slice scale factors (nsl <= 16), flash-fold clamp convention
-                                let mg4 = float4(mg, mg, mg, mg)
-                                var sl = 0l
-                                while (sl + 4l <= int64(nsl)) {
-                                    let f = exp4(max(float4(flmp[fbase + sl], flmp[fbase + sl + 1l], flmp[fbase + sl + 2l], flmp[fbase + sl + 3l]) - mg4, EXP4_LO))
-                                    lg += (fllp[fbase + sl] * f.x + fllp[fbase + sl + 1l] * f.y
-                                        + fllp[fbase + sl + 2l] * f.z + fllp[fbase + sl + 3l] * f.w)
-                                    axpy(xbp + qoff, flop + (fbase + sl) * head_size, f.x, head_size)
-                                    axpy(xbp + qoff, flop + (fbase + sl + 1l) * head_size, f.y, head_size)
-                                    axpy(xbp + qoff, flop + (fbase + sl + 2l) * head_size, f.z, head_size)
-                                    axpy(xbp + qoff, flop + (fbase + sl + 3l) * head_size, f.w, head_size)
-                                    sl += 4l
-                                }
-                                while (sl < int64(nsl)) {
-                                    let f = exp(max(flmp[fbase + sl] - mg, -80.0))
-                                    lg += fllp[fbase + sl] * f
-                                    axpy(xbp + qoff, flop + (fbase + sl) * head_size, f, head_size)
-                                    sl++
-                                }
-                            }
-                            if (sinksp != null) {
-                                lg += exp(max(sinksp[hh] - mg, -80.0))
-                            }
-                            let inv = 1.0 / lg
-                            for (i in range64(head_size)) {
-                                xbp[qoff + i] *= inv
-                            }
-                            if (vtq4) {   // tq4 V: combined partials are rotated-basis — un-rotate before requant
-                                fwht_unsign_row(xbp + qoff, sgp, head_size)
-                            }
-                        }
-                        let u0 = int64(u) * hpu * head_size
-                        if (fo != KqFmt.q8) {   // kq wo: Q8_K over the unit's whole-superblock span
-                            quantize_q8_k_into_ptr(xbp + u0, hpu * head_size, kxqp, kxsp, kxbsp, u0, u0 / 256l, u0 / 16l)
-                        } else {
-                            quantize_q8_0_into_ptr(xbp + u0, hpu * head_size, xqp, xsp, u0, u0 / 32l)
-                        }
-                    }
-                }
-            } else {
-                // output projection rows + optional bias + residual add, all chunk-local (post-norm arches defer the add)
-                unsafe {
-                    let r0 = int64(jb) * 32l
-                    let r1 = int64(je) * 32l
-                    if (fo != KqFmt.q8) {
-                        invoke(rowso, xb2p, kqpo, kspo, kxqp, kxsp, kxbsp, qd, r0, r1)
-                    } elif (f16w) {
-                        invoke(mmrows16, xb2p, wpo, wso16, xqp, xsp, qd, r0, r1)
-                    } else {
-                        invoke(mmrows, xb2p, wpo, wso, xqp, xsp, qd, r0, r1)
-                    }
-                    if (bop != null) {
-                        add_inplace(xb2p + r0, bop + booff + r0, r1 - r0)
-                    }
-                    if (!post_norm) {
-                        add_inplace(xp + r0, xb2p + r0, r1 - r0)
-                    }
-                }
-            }
-        }
-        if (nsl > 1 && g_flash_decode_check) {
-            // test-only witness: sliced partials + combine must equal an exact single-pass recompute (fp32 tolerance)
-            flash_decode_check_d(qp, attqp, attsp, kcl, vcl, kdt, vdt, xbp, runsp,
-                nrun, n_heads, kv_mul, head_size, kv_dim, kstart, cnt, l, int64(nsl), scale, attn_softcap, sinksp,
-                vtq4 ? sgp : null)
-            g_flash_decode_checked++
-        }
-    }
-    prof_add("attn_chain", ts_chain)
-    if (post_norm) {  // Gemma2/3: post-attention RMSNorm before the residual add — same serial
-        // tail as the un-fused path (dim-sized, microseconds), bit-identical order
-        let ts_resid = ref_time_ticks()
-        rms_at(s.xb2, t, t.rms_post_att_off + l * dim, s.xb2, dim)
-        add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb2[0])), dim)
-        prof_add("act_resid", ts_resid)
-    }
-}
-
-// Can layer l's dense FFN run as the fused 2-stage chain? Q8, team mode + a backend row core, and
-// the size threshold. pre_post_norm/layer_out_scale are handled: the chain defers the residual add
-// and the caller's serial tail runs post-norm and/or the fused add+scale after the rendezvous.
-def private fused_ffn_ok(t : Model; l : int64) : bool {
-    let c = t.config
-    let f1 = fmt_at(t.w1_fmt, l)
-    let f2 = fmt_at(t.w2_fmt, l)
-    let f3 = fmt_at(t.w3_fmt, l)
-    let any_kq = f1 != KqFmt.q8 || f2 != KqFmt.q8 || f3 != KqFmt.q8
-    return (g_fused_decode && t.quant == QuantMode.q8
-        && kq_servable(t, f1) && kq_servable(t, f2) && kq_servable(t, f3)
-        // kq v2 regrain: Q8_K quantizes whole 256-superblocks, so dim/hidden must divide out cleanly
-        && (!any_kq || c.dim % 256l == 0l)
-        && (f2 == KqFmt.q8 || layer_hidden(t, l) % 256l == 0l)
-        && get_jobque_team_mode() && kernel_backend_has_rows()
-        && (!t.wscale_f16 || kernel_backend_has_rows16())
-        && lanes_for_work(c.dim * layer_hidden(t, l), g_gemv_lane_cap) > 1)
-}
-
-// Fused dense FFN block: ONE team rendezvous runs [w1+w3 rows + act + requant] -> [w2 rows +
-// residual add] as two stages, gate/up rows PAIRED per chunk (requant lands in xq2/xs2, not
-// xq/xs — other stage-0 chunks still read the input quants). Bit-identical to ffn_dense_decode.
-def private ffn_chain_decode(t : Model; var s : Session; l : int64) {
-    let c = t.config
-    let dim = c.dim
-    let hidden = layer_hidden(t, l)   // gemma-4 E2B varies FFN width per layer
-    // per-weight formats (kq layers reach here only off a repacked load — fused_ffn_ok)
-    let f1 = fmt_at(t.w1_fmt, l)
-    let f2 = fmt_at(t.w2_fmt, l)
-    let f3 = fmt_at(t.w3_fmt, l)
-    let any_kq = f1 != KqFmt.q8 || f2 != KqFmt.q8 || f3 != KqFmt.q8
-    let ts_norm1 = ref_time_ticks()
-    rms_at(s.xb, t, t.rms_ffn_off + l * dim, s.x, dim)
-    // one input quantize per consumed form: q8 gate/up read Q8_0, kq gate/up read Q8_K (kq v2)
-    if (f1 == KqFmt.q8 || f3 == KqFmt.q8) {
-        quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)
-    }
-    if (f1 != KqFmt.q8 || f3 != KqFmt.q8) {
-        quantize_q8_k_into(s.xb, dim, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)
-    }
-    prof_add("norm", ts_norm1)
-    let ts_chain = ref_time_ticks()
-    trace_tag(TRACE_TAG_FFN_CHAIN)
-    let mmrows = mm_q8q8_rows_fn()
-    let is_gelu = c.ffn_act == FfnAct.gelu
-    let is_oai = c.ffn_act == FfnAct.swiglu_oai
-    let vec = g_act_vec
-    // Gemma2/3 post-FFN norm is a whole-vector reduction, so the chain defers the residual add to a serial tail
-    let post_norm = c.pre_post_norm
-    let out_scale_here = c.layer_out_scale && !has_ple(c)
-    let defer_add = post_norm || out_scale_here
-    // stage-0 grain: 32 rows for a q8 down-proj; 256 for a kq one (Q8_K quantizes whole superblocks)
-    let grain0 = f2 != KqFmt.q8 ? 256l : 32l
-    let ngrp0 = int(hidden / grain0)
-    let ngrp1 = int(dim / 32l)
-    let n0 = chain_stage_chunks(ngrp0, int(hidden), 2l * dim * hidden)
-    let n1 = chain_stage_chunks(ngrp1, int(dim), hidden * dim)
-    s.chain_stages |> resize(2)
-    s.chain_stages[0] = int3(0, ngrp0, n0)
-    s.chain_stages[1] = int3(0, ngrp1, n1)
-    count_parallel_dispatch(min(n0, ngrp0) + min(n1, ngrp1))
-    unsafe {
-        var xp = addr(s.x[0])
-        var xbp = addr(s.xb[0])
-        var gup = addr(s.ffn_gu[0])
-        var xqp = addr(s.xq[0])
-        var xsp = addr(s.xs[0])
-        var xq2p = addr(s.xq2[0])
-        var xs2p = addr(s.xs2[0])
-        let f16w = t.wscale_f16
-        let mmrows16 = mm_q8q8_rows16_fn()
-        // all-kq layers skip the q8 bases — qblob/qscales can be EMPTY on an all-K-quant file
-        let has_q8w = f1 == KqFmt.q8 || f2 == KqFmt.q8 || f3 == KqFmt.q8
-        let wqb = has_q8w ? addr < int8 const? >(t.qblob[0]) : null
-        let w1o = t.w1_offs[l]
-        let w3o = t.w3_offs[l]
-        let w2o = t.w2_offs[l]
-        var ws1 : float const? = null
-        var ws3 : float const? = null
-        var ws2 : float const? = null
-        var ws116 : uint16 const? = null
-        var ws316 : uint16 const? = null
-        var ws216 : uint16 const? = null
-        if (f16w && has_q8w) {
-            let wsb16 = addr < uint16 const? >(t.qscales16[0])
-            ws116 = wsb16 + w1o / 32l
-            ws316 = wsb16 + w3o / 32l
-            ws216 = wsb16 + w2o / 32l
-        } elif (has_q8w) {
-            let wsb = addr < float const? >(t.qscales[0])
-            ws1 = wsb + w1o / 32l
-            ws3 = wsb + w3o / 32l
-            ws2 = wsb + w2o / 32l
-        }
-        let wp1 = wqb + w1o
-        let wp3 = wqb + w3o
-        let wp2 = wqb + w2o
-        // kq-tagged weights: plane bases + rows cores + the Q8_K activation image (kq v2); q8 rows cores keep Q8_0
-        var kxqp : int8? = any_kq ? addr(s.kxq[0]) : null
-        var kxsp : float? = any_kq ? addr(s.kxs[0]) : null
-        var kxbsp : int? = any_kq ? addr(s.kxbs[0]) : null
-        var xbs2w : int? = f2 != KqFmt.q8 ? addr(s.xbs2[0]) : null
-        let kqp1 = kq_plane_q(t, f1, w1o)
-        let ksp1 = kq_plane_s(t, f1, w1o)
-        let rows1 = kq_rows_for(f1)
-        let kqp3 = kq_plane_q(t, f3, w3o)
-        let ksp3 = kq_plane_s(t, f3, w3o)
-        let rows3 = kq_rows_for(f3)
-        let kqp2 = kq_plane_q(t, f2, w2o)
-        let ksp2 = kq_plane_s(t, f2, w2o)
-        let rows2 = kq_rows_for(f2)
-        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {   // nolint:PERF026 — dispatch-API lambda capture, see attention_chain_decode
-            unsafe {
-                let grain = stage == 0 ? grain0 : 32l
-                let r0 = int64(jb) * grain
-                let r1 = int64(je) * grain
-                if (stage == 0) {
-                    // paired gate/up rows, then act + requant on exactly these rows
-                    if (f1 != KqFmt.q8) {
-                        invoke(rows1, gup, kqp1, ksp1, kxqp, kxsp, kxbsp, dim, r0, r1)
-                    } elif (f16w) {
-                        invoke(mmrows16, gup, wp1, ws116, xqp, xsp, dim, r0, r1)
-                    } else {
-                        invoke(mmrows, gup, wp1, ws1, xqp, xsp, dim, r0, r1)
-                    }
-                    if (f3 != KqFmt.q8) {
-                        invoke(rows3, gup + hidden, kqp3, ksp3, kxqp, kxsp, kxbsp, dim, r0, r1)
-                    } elif (f16w) {
-                        invoke(mmrows16, gup + hidden, wp3, ws316, xqp, xsp, dim, r0, r1)
-                    } else {
-                        invoke(mmrows, gup + hidden, wp3, ws3, xqp, xsp, dim, r0, r1)
-                    }
-                    if (vec) {
-                        if (is_gelu) {
-                            geglu4(gup + r0, gup + hidden + r0, r1 - r0)
-                        } elif (is_oai) {
-                            swiglu_oai4(gup + r0, gup + hidden + r0, r1 - r0)
-                        } else {
-                            swiglu4(gup + r0, gup + hidden + r0, r1 - r0)
-                        }
-                    } else {
-                        if (is_gelu) {
-                            geglu(gup + r0, gup + hidden + r0, r1 - r0)
-                        } elif (is_oai) {
-                            swiglu_oai(gup + r0, gup + hidden + r0, r1 - r0)
-                        } else {
-                            swiglu(gup + r0, gup + hidden + r0, r1 - r0)
-                        }
-                    }
-                    if (f2 != KqFmt.q8) {   // kq down-proj: Q8_K requant, whole superblocks (grain 256)
-                        quantize_q8_k_into_ptr(gup + r0, r1 - r0, xq2p, xs2p, xbs2w, r0, r0 / 256l, r0 / 16l)
-                    } else {
-                        quantize_q8_0_into_ptr(gup + r0, r1 - r0, xq2p, xs2p, r0, r0 / 32l)
-                    }
-                } else {
-                    // down-projection rows + residual add (post-norm/layer_out_scale arches defer the add)
-                    if (f2 != KqFmt.q8) {
-                        invoke(rows2, xbp, kqp2, ksp2, xq2p, xs2p, xbs2w, hidden, r0, r1)
-                    } elif (f16w) {
-                        invoke(mmrows16, xbp, wp2, ws216, xq2p, xs2p, hidden, r0, r1)
-                    } else {
-                        invoke(mmrows, xbp, wp2, ws2, xq2p, xs2p, hidden, r0, r1)
-                    }
-                    if (!defer_add) {
-                        add_inplace(xp + r0, xbp + r0, r1 - r0)
-                    }
-                }
-            }
-        }
-    }
-    prof_add("ffn_chain", ts_chain)
-    if (defer_add) {  // same serial tail as the un-fused path (dim-sized, microseconds), bit-identical order
-        let ts_resid = ref_time_ticks()
-        if (post_norm) {  // Gemma2/3/4: post-FFN RMSNorm before the residual add
-            rms_at(s.xb, t, t.rms_post_ffn_off + l * dim, s.xb, dim)
-        }
-        if (out_scale_here) {  // gemma4 12B/31B: residual + per-layer output scale, one pass
-            add_scale_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb[0])), t.fblob[t.out_scale_off + l], dim)
-        } else {
-            add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb[0])), dim)
-        }
-        prof_add("act_resid", ts_resid)
-    }
-}
-
-[no_alloc, no_env, no_io]
-def private attention_std_decode(t : Model; var s : Session; l : int64; pos : int64) {
-    if (fused_attn_ok(t, l)) {
-        attention_chain_decode(t, s, l, pos)
-        return
-    }
-    trace_tag(TRACE_TAG_ATTN_STD)
-    let c = t.config
-    let dim = c.dim
-    let kv_dim = layer_kv_dim(c, l)
-    let head_size = layer_head_size(c, l)
-    let n_heads = c.n_heads
-    let n_kv_heads = layer_n_kv_heads(c, l)
-    let qd = n_heads * head_size       // query / attention-output width (== dim except Gemma2/gemma4)
-    let kv_mul = n_heads / n_kv_heads
-    let scale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size))
-    var kcl = kv_layer_kbase(s, l, c.seq_len)   // layer-base byte pointers (aliases the source layer when shared)
-    var vcl = kv_layer_vbase(s, l, c.seq_len)
-    // sliding-window vs global attention per the arch's layer pattern; no-op for short contexts (pos < window)
-    let is_sliding = layer_is_sliding(c, l)
-    // gemma-4 E-series shared-KV layer: no attn_k/attn_v of its own — project Q only, attend against the SOURCE layer's cache
-    let kv_shared = t.kv_src[l] != l
-    let kstart = (is_sliding && pos + 1l > c.sliding_window) ? (pos + 1l - c.sliding_window) : 0l
-    let cnt = pos + 1l - kstart
-    // attention rmsnorm
-    let ts_norm0 = ref_time_ticks()
-    rms_at(s.xb, t, t.rms_att_off + l * dim, s.x, dim)
-    prof_add("norm", ts_norm0)
-    // q, k, v projections (independent — share s.xb; fused into one parallel dispatch when Q8)
-    let ts_qkv = ref_time_ticks()
-    if (kv_shared) {
-        mm_f(s.q, t, fmt_at(t.wq_fmt, l), t.wq_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, qd)   // Q only
-    } else {
-        mm_qkv(s, t, l)
-    }
-    if (c.attn_qkv_bias) {  // Qwen2: + bias before RoPE
-        add_bias(s.q, 0l, t.bq, l * qd, qd)
-        add_bias(s.k, 0l, t.bk, l * kv_dim, kv_dim)
-        add_bias(s.v, 0l, t.bv, l * kv_dim, kv_dim)
-    }
-    prof_add("mm_qkv", ts_qkv)
-    if (c.qk_norm) {  // Qwen3/gemma4: per-head RMSNorm on q/k before RoPE — q/k are n_heads/n_kv_heads rows of head_size
-        let ts_qknorm = ref_time_ticks()
-        rms_batch(s.q, s.q, t, t.rms_q_offs[l], head_size, n_heads)
-        if (!kv_shared) {
-            rms_batch(s.k, s.k, t, t.rms_k_offs[l], head_size, n_kv_heads)
-        }
-        prof_add("norm", ts_qknorm)
-    }
-    // gemma4: weightless per-head RMSNorm on V; V-from-K layers already normed V inside mm_qkv
-    if (c.v_norm && t.wv_offs[l] >= 0l) {
-        let ts_vnorm = ref_time_ticks()
-        rms_batch(s.v, s.v, t, t.rms_ones_off, head_size, n_kv_heads)
-        prof_add("norm", ts_vnorm)
-    }
-    // table path: leaves called DIRECTLY, same as rope_batch_tab, to dodge pass-through-const-write-elision
-    let ts_rope = ref_time_ticks()
-    // partial rotary (glm4moe: 64 of 128) — table rows span rot/2 pairs; loader guarantees NEOX
-    let rot = c.rope_dim > 0l ? c.rope_dim : head_size
-    if (g_use_rope_table) {
-        let swa_row = is_sliding && has_dual_rope(c)
-        unsafe {
-            let crow = swa_row ? addr<float const?>(s.rope_cos_swa[0]) : addr<float const?>(s.rope_cos[0])
-            let srow = swa_row ? addr<float const?>(s.rope_sin_swa[0]) : addr<float const?>(s.rope_sin[0])
-            if (rot != head_size) {
-                rope_scaled_neox_tab_part(addr(s.q[0]), head_size, rot, qd, crow, srow)
-                if (!kv_shared) { rope_scaled_neox_tab_part(addr(s.k[0]), head_size, rot, kv_dim, crow, srow) }
-            } elif (c.rope_neox) {
-                rope_scaled_neox_tab(addr(s.q[0]), head_size, qd, crow, srow)
-                if (!kv_shared) { rope_scaled_neox_tab(addr(s.k[0]), head_size, kv_dim, crow, srow) }
-            } else {
-                rope_scaled_tab(addr(s.q[0]), head_size, qd, crow, srow)
-                if (!kv_shared) { rope_scaled_tab(addr(s.k[0]), head_size, kv_dim, crow, srow) }
-            }
-        }
-    } else {
-        let theta = is_sliding ? c.rope_freq_base_swa : c.rope_freq_base
-        let fscale = is_sliding ? c.rope_freq_scale_swa : c.rope_freq_scale
-        let use_ff = !(c.rope_ff_global_only && is_sliding)
-        if (rot != head_size) {
-            unsafe {
-                rope_scaled_neox_part(addr(s.q[0]), pos, head_size, rot, qd, theta, fscale, false, null, c.rope_mscale)
-                if (!kv_shared) {
-                    rope_scaled_neox_part(addr(s.k[0]), pos, head_size, rot, kv_dim, theta, fscale, false, null, c.rope_mscale)
-                }
-            }
-        } else {
-            rope_apply(s.q, pos, head_size, qd, theta, fscale, t.rope_freqs, c.rope_neox, c.rope_mscale, use_ff)
-            if (!kv_shared) {
-                rope_apply(s.k, pos, head_size, kv_dim, theta, fscale, t.rope_freqs, c.rope_neox, c.rope_mscale, use_ff)
-            }
-        }
-    }
-    prof_add("rope", ts_rope)
-    let ktq4 = s.kv_dtype_k == KVDtype.tq4
-    let vtq4 = s.kv_dtype_v == KVDtype.tq4
-    if (ktq4 || vtq4) {
-        // tq4 basis change: q/k/v rotate per head, attention runs in that basis, xb un-rotates after (⟨Hq,Hk⟩ = ⟨q,k⟩)
-        let ts_rot = ref_time_ticks()
-        unsafe {
-            let sgp = addr < float const? >(s.kv_signs[0])
-            if (ktq4) {
-                var qrp = addr(s.q[0])
-                for (hh in range64(qd / head_size)) {
-                    fwht_signs_row(qrp + hh * head_size, sgp, head_size)
-                }
-                if (!kv_shared) {
-                    var krp = addr(s.k[0])
-                    for (hh in range64(kv_dim / head_size)) {
-                        fwht_signs_row(krp + hh * head_size, sgp, head_size)
-                    }
-                }
-            }
-            if (vtq4 && !kv_shared) {
-                var vrp = addr(s.v[0])
-                for (hh in range64(kv_dim / head_size)) {
-                    fwht_signs_row(vrp + hh * head_size, sgp, head_size)
-                }
-            }
-        }
-        prof_add("tq4_rot", ts_rot)
-    }
-    if (s.kv_dtype_k == KVDtype.q8_0 || ktq4) {
-        // quantize the roped query ONCE for the int8x int8/int4 score dot — O(qd), dwarfed by the reads it feeds
-        quantize_q8_0_into(s.q, qd, s.attq, s.atts, 0l, 0l)
-    }
-    // store k, v for this position (shared-KV layers: nothing to store — source layer already cached it)
-    if (!kv_shared) {
-        let ts_kv = ref_time_ticks()
-        unsafe {
-            kv_store_row(kcl, s.kv_dtype_k, kv_dim, kv_phys_row(s, pos), 0l, kv_dim,
-                addr < float const? >(s.k[0]))
-            kv_store_row(vcl, s.kv_dtype_v, kv_dim, kv_phys_row(s, pos), 0l, kv_dim,
-                addr < float const? >(s.v[0]))
-        }
-        prof_add("kv_store", ts_kv)
-    }
-    // attention threaded over heads: disjoint att rows per head, result-identical to the inline loop
-    let ts_attn = ref_time_ticks()
-    let seq_len = c.seq_len
-    let attn_softcap = c.attn_logit_softcap
-    // work-proportional lanes; tiny-cnt early-decode attention (~2K MACs at cnt=1) inlines instead
-    let attn_lanes = min(int(n_heads), lanes_for_work(2l * cnt * head_size * n_heads, g_gemv_lane_cap))
-    let sinksp = (c.attn_sinks
-        ? unsafe(addr < float const? >(t.fblob[t.sinks_off + l * n_heads]))
-        : null)
-    let kdt = s.kv_dtype_k
-    let vdt = s.kv_dtype_v
-    let nrun = kv_runs(s, kstart, pos + 1l, s.kv_runs)   // physical runs of this layer's window (flat: 1)
-    unsafe {
-        let kplanes = kdt == KVDtype.q8_0 || kdt == KVDtype.tq4
-        let qp = addr < float const? >(s.q[0])
-        let qqp = kplanes ? addr < int8 const? >(s.attq[0]) : null
-        let qsp = kplanes ? addr < float const? >(s.atts[0]) : null
-        let runsp = addr < KVRun const? >(s.kv_runs[0])
-        var xbp = addr(s.xb[0])
-        var attp = addr(s.att[0])
-        maybe_parallel_for(0, int(n_heads), attn_lanes) $(rb, re) {
-            unsafe {
-                for (h in range(rb, re)) {
-                    let hh = int64(h)
-                    let qoff = hh * head_size
-                    let kvhoff = (hh / kv_mul) * head_size  // GQA: which kv head this query head reads
-                    attn_head_decode_d(attp + hh * seq_len, xbp, qp, qqp, qsp, kcl, vcl, kdt, vdt, runsp,
-                        nrun, qoff, kvhoff, kstart, cnt, kv_dim, head_size, hh, scale, attn_softcap, sinksp)
-                }
-            }
-        }
-    }
-    prof_add("attn", ts_attn)
-    if (vtq4) {   // tq4 V: xb accumulated in the rotated basis — un-rotate each head's slice
-        unsafe {
-            let sgp = addr < float const? >(s.kv_signs[0])
-            var xrp = addr(s.xb[0])
-            for (hh in range64(n_heads)) {
-                fwht_unsign_row(xrp + hh * head_size, sgp, head_size)
-            }
-        }
-    }
-    // output projection (qd -> dim), optional bias + post-attention norm, residual
-    let ts_wo = ref_time_ticks()
-    mm_f(s.xb2, t, fmt_at(t.wo_fmt, l), t.wo_offs[l], s.xb, s.xq, s.xs, s.xbs, qd, dim)
-    if (c.attn_out_bias) {  // gpt-oss: + bias on the projected attention output
-        add_bias(s.xb2, 0l, t.bo, l * dim, dim)
-    }
-    prof_add("mm_wo", ts_wo)
-    let ts_resid0 = ref_time_ticks()
-    if (c.pre_post_norm) {  // Gemma2: post-attention RMSNorm before the residual add
-        rms_at(s.xb2, t, t.rms_post_att_off + l * dim, s.xb2, dim)
-    }
-    add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb2[0])), dim)
-    prof_add("act_resid", ts_resid0)
-}
-
-// ===== qwen35 hybrid blocks: Gated DeltaNet (recurrent) + gated attention =====
-// Alternates Gated-DeltaNet linear-attention layers (no KV, O(1) f32 state) with full-attention
-// layers whose 2x-wide Q carries a sigmoid output gate. Oracle: llama.cpp qwen35.cpp + delta-net-base.cpp.
-
-// Causal depthwise conv1d, one token step: per channel, dot the (taps = d_conv-1)-deep history
-// plus the current input against that channel's taps (oldest first, ggml_ssm_conv order), then
-// shift the history. Float accumulation matches ggml's sumf.
-def private dn_conv_step(var outp : float?; var st : float?; inp : float const?; w : float const?; channels, taps : int64) {
-    unsafe {
-        for (ch in range64(channels)) {
-            let sb = ch * taps
-            let wb = ch * (taps + 1l)
-            var acc = 0.0
-            for (k in range64(taps)) {
-                acc += st[sb + k] * w[wb + k]
-            }
-            let cur = inp[ch]
-            acc += cur * w[wb + taps]
-            for (k in range64(taps - 1l)) {
-                st[sb + k] = st[sb + k + 1l]
-            }
-            st[sb + taps - 1l] = cur
-            outp[ch] = acc
-        }
-    }
-}
-
-// One delta-rule step for one v-head (llama.cpp build_delta_net_autoregressive): S decays by
-// exp(g); sk = kᵀS; d = (v - sk)·β; S += k⊗d; o = qᵀS (q pre-scaled by 1/sqrt(d_state)).
-// Row-by-row accumulation over the k index reproduces ggml's sum order.
-def private dn_delta_head(var st : float?; q, k, v : float const?; var o : float?; var skd : float?; g, beta : float; ds : int64) {
-    unsafe {
-        let decay = exp(g)
-        for (j in range64(ds)) {
-            skd[j] = 0.0
-        }
-        for (i in range64(ds)) {
-            var row = st + i * ds
-            let ki = k[i]
-            for (j in range64(ds)) {
-                let sv = row[j] * decay
-                row[j] = sv
-                skd[j] += ki * sv
-            }
-        }
-        for (j in range64(ds)) {
-            skd[j] = (v[j] - skd[j]) * beta
-            o[j] = 0.0
-        }
-        for (i in range64(ds)) {
-            var row = st + i * ds
-            let ki = k[i]
-            let qi = q[i]
-            for (j in range64(ds)) {
-                let sv = row[j] + ki * skd[j]
-                row[j] = sv
-                o[j] += qi * sv
-            }
-        }
-    }
-}
-
-// The per-token deltanet core, shared by decode and (per position) prefill: β/g transforms, causal
-// conv + SiLU, q/k L2-norm + q pre-scale, the per-v-head delta rule, and z-gated out-norm.
-// `qkv` is this token's fused [q;k;v] row; z/beta/g its other projections; output lands in `o`.
-def private dn_token_core(t : Model; var s : Session; l : int64; qkv : float const?; var z : float?; var beta : float?; var g : float?; var o : float?) {
-    let c = t.config
-    let cd = dn_conv_dim(c)
-    let kd = dn_key_dim(c)
-    let nvh = c.ssm_dt_rank
-    let nkh = c.ssm_n_group
-    let ds = c.ssm_d_state
-    let taps = c.ssm_d_conv - 1l
-    unsafe {
-        // β = σ(raw); g = ssm_a ⊙ softplus(raw + dt_bias) — ssm_a stores −exp(A_log) precomputed
-        for (h in range64(nvh)) {
-            beta[h] = 1.0 / (1.0 + exp(-beta[h]))
-            g[h] = t.fblob[t.dn_a_off + l * nvh + h] * softplus(g[h] + t.fblob[t.dn_dt_off + l * nvh + h])
-        }
-        // causal conv over the fused [q;k;v] row (persistent per-layer history), then SiLU
-        var cop = addr(s.dn_conv_out[0])
-        dn_conv_step(cop, addr(s.dn_conv_state[s.dn_conv_prefix[l]]), qkv,
-            addr < float const? >(t.fblob[t.dn_conv_off + l * c.ssm_d_conv * cd]), cd, taps)
-        silu(cop, cd)
-        // L2-normalize the q and k heads (v passes through), then pre-scale q by 1/sqrt(ds)
-        l2_norm_rows(cop, nkh, ds, c.norm_eps)
-        l2_norm_rows(cop + kd, nkh, ds, c.norm_eps)
-        scale_inplace(cop, 1.0 / sqrt(float(ds)), kd)
-        // per-v-head delta rule; k-heads repeat cyclically onto v-heads (h % nkh); heads are independent, so lanes over them
-        let qp = reinterpret<float const?>(cop)
-        let kp = reinterpret<float const?>(cop + kd)
-        let vp = reinterpret<float const?>(cop + 2l * kd)
-        var stp = addr(s.dn_state[s.dn_state_prefix[l]])
-        var skp = addr(s.dn_sk[0])
-        let dn_lanes = min(int(nvh), lanes_for_work(2l * nvh * ds * ds, g_gemv_lane_cap))
-        maybe_parallel_for(0, int(nvh), dn_lanes) $(rb, re) {
-            unsafe {
-                for (hh in range(rb, re)) {
-                    let h = int64(hh)
-                    let kh = h % nkh
-                    dn_delta_head(stp + h * ds * ds, qp + kh * ds, kp + kh * ds, vp + h * ds,
-                        o + h * ds, skp + h * ds, g[h], beta[h], ds)
-                }
-            }
-        }
-        // gated out-norm: per head RMSNorm(o; ssm_norm, shared weights) ⊙ SiLU(z)
-        let wnorm = addr < float const? >(t.fblob[t.dn_norm_off + l * ds])
-        for (h in range64(nvh)) {
-            rmsnorm(o + h * ds, reinterpret<float const?>(o + h * ds), wnorm, ds, c.norm_eps)
-        }
-        silu(z, c.ssm_d_inner)
-        mul_inplace(o, reinterpret<float const?>(z), c.ssm_d_inner)
-    }
-}
-
-// The deltanet decode step as ONE device chain (npos=1 through MoeGpuDnFn): CPU keeps norm +
-// raw β/α + the q8 image. State/conv history live DEVICE-SIDE across steps — dn_flush_layer /
-// moe_gpu_dn_invalidate are the sync seams for every CPU consumer.
-def private deltanet_decode_gpu(t : Model; var s : Session; l : int64) {
-    let c = t.config
-    let dim = c.dim
-    let cd = dn_conv_dim(c)
-    let kd = dn_key_dim(c)
-    let di = c.ssm_d_inner
-    let nvh = c.ssm_dt_rank
-    let nkh = c.ssm_n_group
-    let ds = c.ssm_d_state
-    let dconv = c.ssm_d_conv
-    let taps = dconv - 1l
-    let ts_norm0 = ref_time_ticks()
-    rms_at(s.xb, t, t.rms_att_off + l * dim, s.x, dim)
-    prof_add("norm", ts_norm0)
-    let ts_qkv = ref_time_ticks()
-    if (t.dn_ba_f32) {   // F32-on-disk beta/alpha matmul fp32, like llama.cpp
-        mm_fblob(s.dn_beta, t, t.dn_betaf_off + l * dim * nvh, s.xb, dim, nvh)
-        mm_fblob(s.dn_g, t, t.dn_alphaf_off + l * dim * nvh, s.xb, dim, nvh)
-    } else {
-        mm_f(s.dn_beta, t, KqFmt.q8, t.dnbeta_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, nvh)
-        mm_f(s.dn_g, t, KqFmt.q8, t.dnalpha_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, nvh)
-    }
-    quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)   // one Q8_0 image serves the qkv AND z GEMVs
-    prof_add("mm_qkv", ts_qkv)
-    let ts_gpu = ref_time_ticks()
-    s.dn_tail |> resize(int(taps * cd))   // contract slot only — the step arm never writes it
-    unsafe {
-        matmul_moe_gpu_dn(s.xb2, t.dnqkv_offs[l], t.dngate_offs[l], t.dnout_offs[l],
-            s.xq, s.xs, s.dn_beta, s.dn_g,
-            addr < float const? >(t.fblob[t.dn_conv_off + l * dconv * cd]),
-            addr < float const? >(t.fblob[t.dn_norm_off + l * ds]),
-            addr < float const? >(t.fblob[t.dn_a_off + l * nvh]),
-            addr < float const? >(t.fblob[t.dn_dt_off + l * nvh]),
-            addr(s.dn_state[s.dn_state_prefix[l]]), s.dn_tail,
-            addr < float const? >(s.dn_conv_state[s.dn_conv_prefix[l]]),
-            1l, dim, cd, kd, di, nvh, nkh, ds, dconv, c.norm_eps)
-    }
-    prof_add("dn_gpu", ts_gpu)
-    let ts_resid = ref_time_ticks()
-    add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb2[0])), dim)
-    prof_add("act_resid", ts_resid)
-}
-
-// attn-norm → fused qkv/z/β/α projections → per-token deltanet core → ssm_out projection → residual.
-def private deltanet_decode(t : Model; var s : Session; l : int64) {
-    if (moe_gpu_dnd_on_gpu(l)) {
-        deltanet_decode_gpu(t, s, l)
-        return
-    }
-    dn_flush_layer(s, l)   // device state may be dirty from earlier GPU steps (route flip)
-    let c = t.config
-    let dim = c.dim
-    let cd = dn_conv_dim(c)
-    let di = c.ssm_d_inner
-    let nvh = c.ssm_dt_rank
-    let ts_norm0 = ref_time_ticks()
-    rms_at(s.xb, t, t.rms_att_off + l * dim, s.x, dim)
-    prof_add("norm", ts_norm0)
-    let ts_qkv = ref_time_ticks()
-    mm_f(s.dn_qkv, t, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, cd)
-    mm_f(s.dn_z, t, fmt_at(t.dngate_fmt, l), t.dngate_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, di)
-    if (t.dn_ba_f32) {   // F32-on-disk beta/alpha matmul fp32, like llama.cpp
-        mm_fblob(s.dn_beta, t, t.dn_betaf_off + l * dim * nvh, s.xb, dim, nvh)
-        mm_fblob(s.dn_g, t, t.dn_alphaf_off + l * dim * nvh, s.xb, dim, nvh)
-    } else {
-        mm_f(s.dn_beta, t, KqFmt.q8, t.dnbeta_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, nvh)
-        mm_f(s.dn_g, t, KqFmt.q8, t.dnalpha_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, nvh)
-    }
-    prof_add("mm_qkv", ts_qkv)
-    let ts_attn = ref_time_ticks()
-    unsafe {
-        dn_token_core(t, s, l, addr < float const? >(s.dn_qkv[0]), addr(s.dn_z[0]),
-            addr(s.dn_beta[0]), addr(s.dn_g[0]), addr(s.dn_o[0]))
-    }
-    prof_add("attn", ts_attn)
-    let ts_wo = ref_time_ticks()
-    mm_f(s.xb2, t, fmt_at(t.dnout_fmt, l), t.dnout_offs[l], s.dn_o, s.xq, s.xs, s.xbs, di, dim)
-    prof_add("mm_wo", ts_wo)
-    let ts_resid = ref_time_ticks()
-    add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb2[0])), dim)
-    prof_add("act_resid", ts_resid)
-}
-
-// attn-norm → 2x-wide [q|gate] + k/v → QK-norm → partial rope → KV-store → GQA attention →
-// out ⊙ σ(gate) → out-proj → residual. The gated-attention twin of attention_std_decode.
-def private attention_qwen35_gated_decode(t : Model; var s : Session; l : int64; pos : int64) {
-    trace_tag(TRACE_TAG_ATTN_STD)
-    let c = t.config
-    let dim = c.dim
-    let kv_dim = layer_kv_dim(c, l)
-    let head_size = layer_head_size(c, l)
-    let n_heads = c.n_heads
-    let n_kv_heads = layer_n_kv_heads(c, l)
-    let qd = n_heads * head_size
-    let kv_mul = n_heads / n_kv_heads
-    let scale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size))
-    let rot = c.rope_dim > 0l ? c.rope_dim : head_size
-    var kcl = kv_layer_kbase(s, l, c.seq_len)
-    var vcl = kv_layer_vbase(s, l, c.seq_len)
-    let kstart = 0l
-    let cnt = pos + 1l
-    let ts_norm0 = ref_time_ticks()
-    rms_at(s.xb, t, t.rms_att_off + l * dim, s.x, dim)
-    prof_add("norm", ts_norm0)
-    let ts_qkv = ref_time_ticks()
-    mm_f(s.dn_qg, t, fmt_at(t.wq_fmt, l), t.wq_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, 2l * qd)
-    mm_f(s.k, t, fmt_at(t.wk_fmt, l), t.wk_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, kv_dim)
-    mm_f(s.v, t, fmt_at(t.wv_fmt, l), t.wv_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, kv_dim)
-    // deinterleave: head h's q lives at 2h·hs, its gate at (2h+1)·hs
-    unsafe {
-        let qgp = addr < float const? >(s.dn_qg[0])
-        var qp = addr(s.q[0])
-        var gp = addr(s.dn_qgate[0])
-        for (h in range64(n_heads)) {
-            let sb = h * 2l * head_size
-            let db = h * head_size
-            for (i in range64(head_size)) {
-                qp[db + i] = qgp[sb + i]
-                gp[db + i] = qgp[sb + head_size + i]
-            }
-        }
-    }
-    prof_add("mm_qkv", ts_qkv)
-    let ts_qknorm = ref_time_ticks()
-    rms_batch(s.q, s.q, t, t.rms_q_offs[l], head_size, n_heads)
-    rms_batch(s.k, s.k, t, t.rms_k_offs[l], head_size, n_kv_heads)
-    prof_add("norm", ts_qknorm)
-    let ts_rope = ref_time_ticks()
-    if (g_use_rope_table) {
-        unsafe {
-            let crow = addr < float const? >(s.rope_cos[0])
-            let srow = addr < float const? >(s.rope_sin[0])
-            rope_scaled_neox_tab_part(addr(s.q[0]), head_size, rot, qd, crow, srow)
-            rope_scaled_neox_tab_part(addr(s.k[0]), head_size, rot, kv_dim, crow, srow)
-        }
-    } else {
-        unsafe {
-            rope_scaled_neox_part(addr(s.q[0]), pos, head_size, rot, qd, c.rope_freq_base, c.rope_freq_scale, false, null, c.rope_mscale)
-            rope_scaled_neox_part(addr(s.k[0]), pos, head_size, rot, kv_dim, c.rope_freq_base, c.rope_freq_scale, false, null, c.rope_mscale)
-        }
-    }
-    prof_add("rope", ts_rope)
-    let ktq4 = s.kv_dtype_k == KVDtype.tq4
-    let vtq4 = s.kv_dtype_v == KVDtype.tq4
-    if (ktq4 || vtq4) {
-        // tq4 basis change at the RoPE seam: attention runs rotated; xb un-rotates per head after
-        let ts_rot = ref_time_ticks()
-        unsafe {
-            let sgp = addr < float const? >(s.kv_signs[0])
-            if (ktq4) {
-                var qrp = addr(s.q[0])
-                for (hh in range64(qd / head_size)) {
-                    fwht_signs_row(qrp + hh * head_size, sgp, head_size)
-                }
-                var krp = addr(s.k[0])
-                for (hh in range64(kv_dim / head_size)) {
-                    fwht_signs_row(krp + hh * head_size, sgp, head_size)
-                }
-            }
-            if (vtq4) {
-                var vrp = addr(s.v[0])
-                for (hh in range64(kv_dim / head_size)) {
-                    fwht_signs_row(vrp + hh * head_size, sgp, head_size)
-                }
-            }
-        }
-        prof_add("tq4_rot", ts_rot)
-    }
-    if (s.kv_dtype_k == KVDtype.q8_0 || ktq4) {
-        quantize_q8_0_into(s.q, qd, s.attq, s.atts, 0l, 0l)
-    }
-    let ts_kv = ref_time_ticks()
-    unsafe {
-        kv_store_row(kcl, s.kv_dtype_k, kv_dim, kv_phys_row(s, pos), 0l, kv_dim,
-            addr < float const? >(s.k[0]))
-        kv_store_row(vcl, s.kv_dtype_v, kv_dim, kv_phys_row(s, pos), 0l, kv_dim,
-            addr < float const? >(s.v[0]))
-    }
-    prof_add("kv_store", ts_kv)
-    let ts_attn = ref_time_ticks()
-    let seq_len = c.seq_len
-    let attn_softcap = c.attn_logit_softcap
-    let attn_lanes = min(int(n_heads), lanes_for_work(2l * cnt * head_size * n_heads, g_gemv_lane_cap))
-    let kdt = s.kv_dtype_k
-    let vdt = s.kv_dtype_v
-    let nrun = kv_runs(s, kstart, pos + 1l, s.kv_runs)
-    unsafe {
-        let kplanes = kdt == KVDtype.q8_0 || kdt == KVDtype.tq4
-        let qp = addr < float const? >(s.q[0])
-        let qqp = kplanes ? addr < int8 const? >(s.attq[0]) : null
-        let qsp = kplanes ? addr < float const? >(s.atts[0]) : null
-        let runsp = addr < KVRun const? >(s.kv_runs[0])
-        var xbp = addr(s.xb[0])
-        var attp = addr(s.att[0])
-        maybe_parallel_for(0, int(n_heads), attn_lanes) $(rb, re) {
-            unsafe {
-                for (h in range(rb, re)) {
-                    let hh = int64(h)
-                    let qoff = hh * head_size
-                    let kvhoff = (hh / kv_mul) * head_size
-                    attn_head_decode_d(attp + hh * seq_len, xbp, qp, qqp, qsp, kcl, vcl, kdt, vdt, runsp,
-                        nrun, qoff, kvhoff, kstart, cnt, kv_dim, head_size, hh, scale, attn_softcap, null)
-                }
-            }
-        }
-    }
-    prof_add("attn", ts_attn)
-    if (vtq4) {   // tq4 V: xb accumulated in the rotated basis — un-rotate before the out-gate
-        unsafe {
-            let sgp = addr < float const? >(s.kv_signs[0])
-            var xrp = addr(s.xb[0])
-            for (hh in range64(n_heads)) {
-                fwht_unsign_row(xrp + hh * head_size, sgp, head_size)
-            }
-        }
-    }
-    // per-head sigmoid output gate on the attention output, before the out projection (exp4)
-    let ts_wo = ref_time_ticks()
-    unsafe {
-        var xbp2 = addr(s.xb[0])
-        let gp2 = addr < float const? >(s.dn_qgate[0])
-        if (g_act_vec) {
-            sigmoid_gate4(xbp2, gp2, qd)
-        } else {
-            sigmoid_gate(xbp2, gp2, qd)
-        }
-    }
-    mm_f(s.xb2, t, fmt_at(t.wo_fmt, l), t.wo_offs[l], s.xb, s.xq, s.xs, s.xbs, qd, dim)
-    prof_add("mm_wo", ts_wo)
-    let ts_resid = ref_time_ticks()
-    add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb2[0])), dim)
-    prof_add("act_resid", ts_resid)
-}
-
-// Zero the recurrent state for a fresh conversation (position 0).
-def private dn_reset(var s : Session) {
-    for (i in range64(long_length(s.dn_conv_state))) {
-        s.dn_conv_state[i] = 0.0
-    }
-    for (i in range64(long_length(s.dn_state))) {
-        s.dn_state[i] = 0.0
-    }
-    moe_gpu_dn_invalidate()   // CPU zeros are now authoritative — drop any device-resident copies
-}
-
-// Sync one layer's device-resident deltanet state down before a CPU read (no-op when clean).
-def private dn_flush_layer(var s : Session; l : int64) {
-    if (l < long_length(s.dn_state_prefix) && s.dn_state_prefix[l] >= 0l) {
-        unsafe {
-            moe_gpu_dn_flush(l, addr(s.dn_state[s.dn_state_prefix[l]]),
-                addr(s.dn_conv_state[s.dn_conv_prefix[l]]))
-        }
-    }
-}
-
-def private dn_flush_all(var s : Session) {
-    for (l in range64(long_length(s.dn_state_prefix))) {
-        dn_flush_layer(s, l)
-    }
-}
-
-// The qwen35 decode attention block: forward-only state guard, then deltanet or gated attention
-// per the layer mask.
-[no_alloc, no_env, no_io]
-def private attention_qwen35_decode(t : Model; var s : Session; l : int64; pos : int64) {
-    if (l == 0l) {   // recurrent state is forward-only: full reset at 0, no rewind
-        if (pos == 0l) {
-            dn_reset(s)
-        } elif (pos != s.dn_pos) {
-            panic("dasLLAMA: deltanet state is forward-only — cannot eval position {pos} (session is at {s.dn_pos}); rewinding needs a fresh session")
-        }
-        s.dn_pos = pos + 1l
-    }
-    if (layer_is_recurrent(t.config, l)) {
-        trace_tag(TRACE_TAG_ATTN_STD)
-        deltanet_decode(t, s, l)
-    } else {
-        attention_qwen35_gated_decode(t, s, l, pos)
-    }
-}
-
-// ffn-norm -> gated FFN (act(W1·x) * (W3·x)) -> down-proj(+post-norm) -> residual.
-// Dense gated FFN kernel, in place: reads pre-normed activation in s.xb, writes act(W1·xb)·(W3·xb)
-// projected through W2 back into s.xb. Shared by ffn_dense_decode and gemma4's dense shared expert.
-def private dense_ffn_inplace(t : Model; var s : Session; l : int64) {
-    let c = t.config
-    let dim = c.dim
-    let hidden = layer_hidden(t, l)   // gemma-4 E2B varies FFN width per layer
-    let ts_ffn = ref_time_ticks()
-    let f1 = fmt_at(t.w1_fmt, l)
-    let f2 = fmt_at(t.w2_fmt, l)
-    let f3 = fmt_at(t.w3_fmt, l)
-    if (f1 != KqFmt.q8 || f2 != KqFmt.q8 || f3 != KqFmt.q8) {
-        // K-quant FFN (formats mix, e.g. Q4_K_M keeps ffn_down at Q6_K): one bs-quantize serves every format
-        if (f1 == KqFmt.q8 || f3 == KqFmt.q8) {
-            quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)
-        }
-        if (f1 != KqFmt.q8 || f3 != KqFmt.q8) {   // kq v2: every kq format reads the Q8_K form
-            quantize_q8_k_into(s.xb, dim, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)
-        }
-        mm_pre_f(s.hb, t, f1, t.w1_offs[l], s.xq, s.xs, s.kxq, s.kxs, s.kxbs, dim, hidden)
-        mm_pre_f(s.hb2, t, f3, t.w3_offs[l], s.xq, s.xs, s.kxq, s.kxs, s.kxbs, dim, hidden)
-        prof_add("mm_ffn", ts_ffn)
-        let ts_act = ref_time_ticks()
-        gate_batch(s.hb, s.hb2, c.ffn_act, hidden, 1l)
-        prof_add("act", ts_act)
-        let ts_down = ref_time_ticks()
-        if (f2 == KqFmt.q8) {
-            quantize_q8_0_into(s.hb, hidden, s.xq, s.xs, 0l, 0l)
-        } else {   // kq v2
-            quantize_q8_k_into(s.hb, hidden, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)
-        }
-        mm_pre_f(s.xb, t, f2, t.w2_offs[l], s.xq, s.xs, s.kxq, s.kxs, s.kxbs, hidden, dim)
-        prof_add("mm_ffn_down", ts_down)
-    } elif (t.quant == QuantMode.q8) {
-        // gate+up share the activation: ONE quantize + ONE region-list dispatch into ffn_gu's halves
-        quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)
-        s.ffn_offs[0] = t.w1_offs[l]
-        s.ffn_offs[1] = 0l
-        s.ffn_offs[2] = t.w3_offs[l]
-        s.ffn_offs[3] = 0l
-        mm_at_q8_groupn(s.ffn_gu, t, s.ffn_offs, 2l, s.xq, s.xs, dim, hidden)
-        prof_add("mm_ffn", ts_ffn)
-        let ts_act = ref_time_ticks()
-        unsafe {
-            gate_batch(addr(s.ffn_gu[0]), addr < float const? >(s.ffn_gu[hidden]), c.ffn_act, hidden, 1l)
-        }
-        prof_add("act", ts_act)
-        // down projection off the gated half
-        let ts_down = ref_time_ticks()
-        quantize_q8_0_into(s.ffn_gu, hidden, s.xq, s.xs, 0l, 0l)
-        mm_at_q8_pre(s.xb, t, t.w2_offs[l], s.xq, s.xs, hidden, dim)
-        prof_add("mm_ffn_down", ts_down)
-    } else {
-        mm(s.hb, t, t.w1_offs[l], s.xb, s.xq, s.xs, dim, hidden)
-        mm(s.hb2, t, t.w3_offs[l], s.xb, s.xq, s.xs, dim, hidden)
-        prof_add("mm_ffn", ts_ffn)
-        let ts_act = ref_time_ticks()
-        gate_batch(s.hb, s.hb2, c.ffn_act, hidden, 1l)   // fused act*gate; same kernel as prefill (npos=1 → inline)
-        prof_add("act", ts_act)
-        let ts_ffn2 = ref_time_ticks()
-        mm(s.xb, t, t.w2_offs[l], s.hb, s.xq, s.xs, hidden, dim)
-        prof_add("mm_ffn_down", ts_ffn2)
-    }
-}
-
-[no_alloc, no_env, no_io]
-def private ffn_dense_decode(t : Model; var s : Session; l : int64) {
-    if (fused_ffn_ok(t, l)) {
-        ffn_chain_decode(t, s, l)
-        return
-    }
-    trace_tag(TRACE_TAG_FFN_STD)
-    let c = t.config
-    let dim = c.dim
-    // ffn rmsnorm
-    let ts_norm1 = ref_time_ticks()
-    rms_at(s.xb, t, t.rms_ffn_off + l * dim, s.x, dim)
-    prof_add("norm", ts_norm1)
-    // gated FFN: hb = act(W1·xb) * (W3·xb) — silu (SwiGLU) or gelu (GeGLU, Gemma2)
-    dense_ffn_inplace(t, s, l)
-    let ts_resid1 = ref_time_ticks()
-    if (c.pre_post_norm) {  // Gemma2: post-FFN RMSNorm before the residual add
-        rms_at(s.xb, t, t.rms_post_ffn_off + l * dim, s.xb, dim)
-    }
-    // gemma4: E-series applies layer-output scale AFTER its PLE block, so skip it here when PLE is on
-    if (c.layer_out_scale && !has_ple(c)) {
-        add_scale_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb[0])), t.fblob[t.out_scale_off + l], dim)
-    } else {
-        add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb[0])), dim)
-    }
-    prof_add("act_resid", ts_resid1)
-}
-
-// The MoE FFN core shared by decode and (naive per-token) prefill: reads rmsnormed activation in
-// s.xb, leaves combined routed + shared-expert output in s.moe_acc. Router probs taken over ALL
-// experts BEFORE top-k (llama.cpp build_moe_ffn order); off is 0 for decode, p*k for grouped prefill.
-def private moe_select(c : Config; var lg : float?; var idx : array<int64>; var w : array<float>; off : int64; bias : float const? = null) {
-    unsafe {
-        moe_select_core(c.moe_gate, c.n_expert, c.n_expert_used, c.norm_topk_prob, c.expert_weights_scale,
-            lg, addr(idx[0]), addr(w[0]), off, bias)
-    }
-}
-
-// pointer core — the threaded prefill router runs this in fork workers (scalars + raw pointers
-// only; Config/Session stay on the caller). `bias` (exp_probs_b, DeepSeek-V3/glm4moe) skews the
-// top-k PICK only — the stored weights stay the unbiased probs (llama.cpp build_moe_ffn order).
-def private moe_select_core(gate : MoeGate; ne, k : int64; norm_topk : bool; wscale : float;
-                            var lg : float?; var idx : int64?; var w : float?; off : int64;
-                            bias : float const? = null) {
-    unsafe {   // the whole body indexes the logit-row pointer (in-place gate + top-k knockout)
-    // probs — softmax_weight routes on the RAW biased logits, softmaxes only the selected top-k after
-    if (gate == MoeGate.sigmoid) {
-        var i = 0l
-        while (i + 4l <= ne) {
-            let e = exp4(clamp(-float4(lg[i], lg[i + 1l], lg[i + 2l], lg[i + 3l]), EXP4_LO, EXP4_HI))
-            lg[i] = 1.0 / (1.0 + e.x)
-            lg[i + 1l] = 1.0 / (1.0 + e.y)
-            lg[i + 2l] = 1.0 / (1.0 + e.z)
-            lg[i + 3l] = 1.0 / (1.0 + e.w)
-            i += 4l
-        }
-        while (i < ne) {
-            lg[i] = 1.0 / (1.0 + exp(clamp(-lg[i], -80.0, 80.0)))
-            i++
-        }
-    } elif (gate == MoeGate.softmax) {
-        var mx = lg[0]
-        for (i in range64(ne)) {
-            mx = max(mx, lg[i])
-        }
-        let m4 = float4(mx, mx, mx, mx)
-        var sum4 = float4(0.0)
-        var i = 0l
-        while (i + 4l <= ne) {
-            let e = exp4(max(float4(lg[i], lg[i + 1l], lg[i + 2l], lg[i + 3l]) - m4, EXP4_LO))
-            lg[i] = e.x
-            lg[i + 1l] = e.y
-            lg[i + 2l] = e.z
-            lg[i + 3l] = e.w
-            sum4 += e
-            i += 4l
-        }
-        var sum = sum4.x + sum4.y + sum4.z + sum4.w
-        while (i < ne) {
-            let e = exp(max(lg[i] - mx, -80.0))
-            lg[i] = e
-            sum += e
-            i++
-        }
-        for (j in range64(ne)) {
-            lg[j] /= sum
-        }
-    }
-    // top-k by score, winner knocked out with -FLT_MAX; with a bias the pick compares lg[i]+bias[i] but stores UNBIASED lg[best]
-    if (bias == null) {
-        for (j in range64(k)) {
-            var best = 0l
-            for (i in range64(ne)) {
-                if (lg[i] > lg[best]) {
-                    best = i
-                }
-            }
-            idx[off + j] = best
-            w[off + j] = lg[best]
-            lg[best] = -FLT_MAX
-        }
-    } else {
-        for (j in range64(k)) {
-            var best = 0l
-            var bs = -FLT_MAX
-            for (i in range64(ne)) {
-                if (lg[i] == -FLT_MAX) {   // knocked out — a huge/inf file bias must not resurrect it
-                    continue
-                }
-                let sc = lg[i] + bias[i]
-                if (sc > bs) {
-                    best = i
-                    bs = sc
-                }
-            }
-            idx[off + j] = best
-            w[off + j] = lg[best]
-            lg[best] = -FLT_MAX
-        }
-    }
-    if (gate == MoeGate.softmax_weight) {  // gpt-oss: softmax over just the selected k logits
-        softmax(w + off, k)
-    }
-    if (norm_topk) {   // renormalize the selected weights to sum 1 (llama.cpp clamps at f16-min)
-        var ws = 0.0
-        for (j in range64(k)) {
-            ws += w[off + j]
-        }
-        ws = max(ws, 6.103515625e-5)
-        for (j in range64(k)) {
-            w[off + j] /= ws
-        }
-    }
-    if (wscale != 0.0 && wscale != 1.0) {
-        for (j in range64(k)) {
-            w[off + j] *= wscale
-        }
-    }
-    }
-}
-
-// The shared expert's scalar sigmoid gate: σ(gate_vec_l · x). One body for decode and prefill.
-// Tuned dot on raw pointers, not an array_view loop — the block invoke + bounds-checked indexing
-// was an optimization boundary around a plain dot (reassociates the sum: tolerance-level change).
-def private moe_shexp_gate(t : Model; l : int64; xp : float const?) : float {
-    let dim = t.config.dim
-    unsafe {
-        return 1.0 / (1.0 + exp(-dot(addr(t.fblob[t.shexp_gate_off + l * dim]), xp, dim)))
-    }
-}
-
-// ===== cross-token expert reuse instrument (decode) =====
-// DASLLAMA_EXPERT_REUSE=1 arms per-layer recording of decode expert picks — the data gate for
-// the hot-expert decode cache (only cross-token reuse pays; per-token streaming loses).
-
-let private REUSE_CAPS = fixed_array(8l, 16l, 32l, 64l)   // simulated per-layer LRU capacities
-
-struct private ReuseLayer {
-    @scratch freq : array<int64>    // per-expert pick count (static-pinning oracle input)
-    @scratch prev : array<int64>    // previous token's picks
-    prevn : int64
-    @scratch lru : array<int64>     // the simulated LRU lists, flattened at cap-sum offsets
-    lrun : int64[4]
-    hits : int64[4]
-    consec : int64         // picks already picked at the previous token
-    accesses : int64
-    tokens : int64
-}
-
-var private g_reuse_on = -1
-var private g_reuse : array<ReuseLayer>
-
-// ===== heat-cache policy (the live half of the reuse instrument) =====
-// Decaying per-(layer, expert) pick counters drive an interval re-pin: every HEAT_REPIN tokens
-// (staggered by layer so uploads spread) the layer's top-C ids go to the tier via advise.
-
-let private HEAT_DECAY = 256l    // halve the counters every this many tokens (per layer)
-let private HEAT_REPIN = 64l     // advise interval (per layer, layer-staggered)
-
-struct private HeatLayer {
-    @scratch cnt : array<float>     // decaying pick counters (n_expert)
-    tokens : int64
-    hits : int64           // routed picks the slot cache served
-    picks : int64          // ... out of this many
-}
-
-var private g_heat : array<HeatLayer>
-var private g_heat_want = -1l    // cached gpu_want_heat() (env read once)
-
-//! Mean/per-layer heat-cache hit rate over the run (the split-FFN's coverage — the LRU sim in
-//! expert_reuse_report is an ORACLE, this is what the live pins actually caught).
-def heat_report(verbose : bool = false) {
-    var hits = 0l
-    var picks = 0l
-    var nl = 0
-    for (li in range(length(g_heat))) {
-        let h & = unsafe(g_heat[li])
-        continue if (h.picks == 0l)
-        nl++
-        hits += h.hits
-        picks += h.picks
-        if (verbose) {
-            to_log(LOG_INFO, "heat L{li} hit {double(h.hits) * 100.0lf / double(h.picks):.1f}% ({h.hits}/{h.picks})\n")
-        }
-    }
-    if (picks == 0l) {
-        to_log(LOG_INFO, "heat: no data (cache never queried)\n")
-        return
-    }
-    to_log(LOG_INFO, "heat MEAN hit {double(hits) * 100.0lf / double(picks):.1f}% ({hits}/{picks} picks over {nl} layers)\n")
-}
-
-def heat_report_reset() {
-    for (h in g_heat) {
-        h.hits = 0l
-        h.picks = 0l
-    }
-}
-
-[cold_path]   // one-time env resolution; heat_armed is a global test after the first call
-def private load_heat_want() {
-    g_heat_want = max(gpu_want_heat(), 0l)
-}
-
-def private heat_armed() : bool {
-    if (g_heat_want < 0l) {
-        load_heat_want()
-    }
-    return g_heat_want > 0l && moe_gpu_heat_on()
-}
-
-def private heat_advise_layer(t : Model; l : int64; h : HeatLayer) {
-    let c = t.config
-    // same fmt rule as the resident walk: a stack the tier has no kernels for (q51) never pools
-    let hf1 = fmt_at(t.we1_fmt, l)
-    let hf2 = fmt_at(t.we2_fmt, l)
-    let hf3 = fmt_at(t.we3_fmt, l)
-    if (!((hf1 == KqFmt.q8 || moe_gpu_fmt_kq(hf1)) && (hf2 == KqFmt.q8 || moe_gpu_fmt_kq(hf2))
-            && (hf3 == KqFmt.q8 || moe_gpu_fmt_kq(hf3)))) {
-        return
-    }
-    var ids <- [for (i in range(length(h.cnt))); int64(i)]
-    ids |> sort() $(a, b) => h.cnt[a] > h.cnt[b]
-    var want = min(g_heat_want, long_length(ids))
-    while (want > 0l && h.cnt[ids[want - 1l]] <= 0.0) {   // never pin never-picked experts
-        want--
-    }
-    if (want > 0l) {
-        moe_gpu_heat_advise(l, t.we1_offs[l], t.we3_offs[l], t.we2_offs[l],
-            int(moe_gpu_expert_fmt(fmt_at(t.we1_fmt, l))), int(moe_gpu_expert_fmt(fmt_at(t.we3_fmt, l))),
-            int(moe_gpu_expert_fmt(fmt_at(t.we2_fmt, l))), c.dim, c.n_ff_exp, ids, want)
-    }
-    delete ids
-}
-
-[cold_path]   // opt-in bookkeeping behind the heat_moe gate
-def private heat_note_and_advise(t : Model; l : int64; idx : array<int64>; k, ne : int64) {
-    let li = int(l)
-    if (length(g_heat) <= li) {
-        g_heat |> resize(li + 1)
-    }
-    var h & = unsafe(g_heat[li])
-    if (length(h.cnt) < int(ne)) {
-        h.cnt |> resize(int(ne))
-    }
-    for (j in range64(k)) {
-        h.cnt[idx[j]]++
-    }
-    h.tokens++
-    if (h.tokens % HEAT_DECAY == 0l) {
-        for (i in range(length(h.cnt))) {
-            h.cnt[i] *= 0.5
-        }
-    }
-    if ((h.tokens + l) % HEAT_REPIN == 0l) {
-        heat_advise_layer(t, l, h)
-    }
-}
-
-[cold_path]   // one-time env resolution; the accessor is a global test after the first call
-def private load_expert_reuse() {
-    g_reuse_on = env_flag("DASLLAMA_EXPERT_REUSE", false) ? 1 : 0
-}
-
-def private expert_reuse_armed() : bool {
-    if (g_reuse_on < 0) {
-        load_expert_reuse()
-    }
-    return g_reuse_on == 1
-}
-
-//! Arm/disarm the reuse counter programmatically (benches; the env is for probes/servers).
-def set_expert_reuse(on : bool) {
-    g_reuse_on = on ? 1 : 0
-}
-
-[cold_path]   // opt-in bookkeeping behind expert_reuse_armed
-def private expert_reuse_note(l : int64; idx : array<int64>; k, ne : int64) {
-    let li = int(l)
-    if (length(g_reuse) <= li) {
-        g_reuse |> resize(li + 1)
-    }
-    var r & = unsafe(g_reuse[li])
-    if (length(r.freq) < int(ne)) {
-        r.freq |> resize(int(ne))
-        r.lru |> resize(120)   // sum of REUSE_CAPS
-        r.prev |> resize(int(k))
-    }
-    for (j in range64(k)) {
-        let id = idx[j]
-        r.freq[id]++
-        r.accesses++
-        for (p in range64(r.prevn)) {
-            if (r.prev[p] == id) {
-                r.consec++
-                break
-            }
-        }
-        var base = 0l
-        for (ci in range(4)) {
-            let cap = REUSE_CAPS[ci]
-            var found = -1l
-            for (p in range64(r.lrun[ci])) {
-                if (r.lru[base + p] == id) {
-                    found = p
-                    break
-                }
-            }
-            if (found >= 0l) {
-                r.hits[ci]++
-            } else {
-                if (r.lrun[ci] < cap) {
-                    r.lrun[ci]++
-                }
-                found = r.lrun[ci] - 1l   // lands most-recent; the true LRU tail falls off when full
-            }
-            var p = found
-            while (p > 0l) {
-                r.lru[base + p] = r.lru[base + p - 1l]
-                p--
-            }
-            r.lru[base] = id
-            base += cap
-        }
-    }
-    for (j in range64(k)) {
-        r.prev[j] = idx[j]
-    }
-    r.prevn = k
-    r.tokens++
-}
-
-//! Print the decode expert-reuse report accumulated under ``DASLLAMA_EXPERT_REUSE=1``: per layer
-//! (``verbose`` only), simulated LRU hit rates at capacities 8/16/32/64, static top-C frequency
-//! coverage (the whole-run pinning oracle), and consecutive-token overlap.
-def expert_reuse_report(verbose : bool = true) {
-    var nl = 0
-    for (r in g_reuse) {
-        if (r.accesses > 0l) {
-            nl++
-        }
-    }
-    var sum_hits : int64[4]
-    var sum_cov : int64[4]
-    var sum_consec = 0l
-    var sum_acc = 0l
-    var toks = 0l
-    for (li in range(length(g_reuse))) {
-        var r & = unsafe(g_reuse[li])
-        if (r.accesses == 0l) {
-            continue
-        }
-        toks = max(toks, r.tokens)
-        // static top-C coverage: sort a frequency copy descending, prefix-sum at each capacity
-        var f := r.freq
-        f |> sort() $(a, b) => a > b
-        var cov : int64[4]
-        var acc = 0l
-        var fi = 0
-        for (ci in range(4)) {
-            while (int64(fi) < min(REUSE_CAPS[ci], long_length(f))) {
-                acc += f[fi]
-                fi++
-            }
-            cov[ci] = acc
-            sum_cov[ci] += acc
-        }
-        delete f
-        let a = double(r.accesses)
-        let ltag = li < 10 ? "L0" : "L"
-        if (verbose) {
-            to_log(LOG_INFO, "{ltag}{li} lru {double(r.hits[0]) * 100.0lf / a:.1f}/{double(r.hits[1]) * 100.0lf / a:.1f}/{double(r.hits[2]) * 100.0lf / a:.1f}/{double(r.hits[3]) * 100.0lf / a:.1f}%  top {double(cov[0]) * 100.0lf / a:.1f}/{double(cov[1]) * 100.0lf / a:.1f}/{double(cov[2]) * 100.0lf / a:.1f}/{double(cov[3]) * 100.0lf / a:.1f}%  consec {double(r.consec) * 100.0lf / a:.1f}%\n")
-        }
-        for (ci in range(4)) {
-            sum_hits[ci] += r.hits[ci]
-        }
-        sum_consec += r.consec
-        sum_acc += r.accesses
-    }
-    if (sum_acc == 0l) {
-        to_log(LOG_INFO, "expert-reuse: no data (DASLLAMA_EXPERT_REUSE=1 not set, or no decode ran)\n")
-        return
-    }
-    let a = double(sum_acc)
-    to_log(LOG_INFO, "MEAN lru {double(sum_hits[0]) * 100.0lf / a:.1f}/{double(sum_hits[1]) * 100.0lf / a:.1f}/{double(sum_hits[2]) * 100.0lf / a:.1f}/{double(sum_hits[3]) * 100.0lf / a:.1f}%  top {double(sum_cov[0]) * 100.0lf / a:.1f}/{double(sum_cov[1]) * 100.0lf / a:.1f}/{double(sum_cov[2]) * 100.0lf / a:.1f}/{double(sum_cov[3]) * 100.0lf / a:.1f}%  consec {double(sum_consec) * 100.0lf / a:.1f}%  (caps {REUSE_CAPS[0]}/{REUSE_CAPS[1]}/{REUSE_CAPS[2]}/{REUSE_CAPS[3]}, tokens {toks}, layers-with-data {nl})\n")
-    // the transfer-budget view: cache misses per token per layer at each capacity
-    let tl = double(sum_acc) / (toks > 0l ? double(toks) : 1.0lf)
-    to_log(LOG_INFO, "miss/tok/layer lru {(a - double(sum_hits[0])) / a * tl / double(nl > 0 ? nl : 1):.2f}/{(a - double(sum_hits[1])) / a * tl / double(nl > 0 ? nl : 1):.2f}/{(a - double(sum_hits[2])) / a * tl / double(nl > 0 ? nl : 1):.2f}/{(a - double(sum_hits[3])) / a * tl / double(nl > 0 ? nl : 1):.2f}\n")
-}
-
-//! Drop all accumulated expert-reuse data (phase separation in probes).
-def expert_reuse_reset() {
-    delete g_reuse
-}
-
-//! Top-``n`` expert ids for layer ``li`` by recorded pick frequency — the pinning candidate set.
-def expert_reuse_top(li : int; n : int) : array<int64> {
-    var res : array<int64>
-    if (li < 0 || li >= length(g_reuse)) {
-        return <- res
-    }
-    let r & = unsafe(g_reuse[li])
-    var ids <- [for (i in range(length(r.freq))); int64(i)]
-    ids |> sort() $(a, b) => r.freq[a] > r.freq[b]
-    for (i in range(min(n, length(ids)))) {
-        if (r.freq[ids[i]] > 0l) {
-            res |> push(ids[i])
-        }
-    }
-    delete ids
-    return <- res
-}
-
-// Can the routed mx4 experts run as the fused 2-stage chain? Q8 pre-quant, mx4 expert planes,
-// team mode + a backend mx4 rows core, 32-divisible spans — the fused_ffn_ok contract at MoE shape.
-def private fused_moe_ok(t : Model) : bool {
-    let c = t.config
-    return (g_fused_decode && t.quant == QuantMode.q8 && t.experts_mx4
-        && c.n_ff_exp % 32l == 0l && c.dim % 32l == 0l
-        && get_jobque_team_mode() && kernel_backend_has_mx4_rows()
-        && lanes_for_work(2l * c.n_expert_used * c.dim * c.n_ff_exp, g_gemv_lane_cap) > 1)
-}
-
-// Fused MoE expert chain: ONE team rendezvous runs [gate+up rows + bias + act + requant] ->
-// [down rows + bias + weighted reduce] over all k routed experts. Bit-identical to the groupn
-// sequence — same rows cores, same dot->bias->act element order, stage 1 reduces in slot order.
-def private moe_experts_chain(t : Model; var s : Session; l : int64) {
-    let c = t.config
-    let dim = c.dim
-    let ne = c.n_expert
-    let k = c.n_expert_used
-    let nfe = c.n_ff_exp
-    let ege = dim * nfe
-    let biased = c.moe_exps_bias
-    let ts_chain = ref_time_ticks()
-    let mxrows = mx4_rows_fn()
-    let is_gelu = c.ffn_act == FfnAct.gelu
-    let is_oai = c.ffn_act == FfnAct.swiglu_oai
-    let vec = g_act_vec
-    let w1o = t.we1_offs[l]
-    let w3o = t.we3_offs[l]
-    let w2o = t.we2_offs[l]
-    let web1o = t.web1_off
-    let web3o = t.web3_off
-    let web2o = t.web2_off
-    let ng0 = nfe / 32l
-    let ngrp0 = int(k * ng0)
-    let ngrp1 = int(dim / 32l)
-    let n0 = chain_stage_chunks(ngrp0, int(k * nfe), 2l * k * dim * nfe)
-    let n1 = chain_stage_chunks(ngrp1, int(dim), k * nfe * dim)
-    s.chain_stages |> resize(2)
-    s.chain_stages[0] = int3(0, ngrp0, n0)
-    s.chain_stages[1] = int3(0, ngrp1, n1)
-    count_parallel_dispatch(min(n0, ngrp0) + min(n1, ngrp1))
-    unsafe {
-        var accp = addr(s.moe_acc[0])
-        var gup = addr(s.moe_gu[0])
-        var gu2p = addr(s.moe_gu2[0])
-        var dnp = addr(s.moe_dn[0])
-        var dqp = addr(s.moe_dq[0])
-        var dsp = addr(s.moe_ds[0])
-        let xqp = addr<int8 const?>(s.moe_xq[0])
-        let xsp = addr<float const?>(s.moe_xs[0])
-        let wnb = addr<uint8 const?>(t.mxq[0])
-        let web = addr<uint8 const?>(t.mxs[0])
-        let fbp = biased ? addr<float const?>(t.fblob[0]) : null
-        let idxp = addr<int64 const?>(s.moe_idx[0])
-        let wvp = addr<float const?>(s.moe_w[0])
-        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {   // nolint:PERF026 — dispatch-API lambda capture, see attention_chain_decode
-            unsafe {
-                if (stage == 0) {
-                    // gate+up rows of expert j, then bias -> act -> requant on exactly these rows
-                    var g = int64(jb)
-                    while (g < int64(je)) {
-                        let j = g / ng0
-                        let gEnd = min(int64(je) - j * ng0, ng0)
-                        let r0 = (g % ng0) * 32l
-                        let r1 = gEnd * 32l
-                        let base = idxp[j] * ege
-                        let w1 = w1o + base
-                        let w3 = w3o + base
-                        invoke(mxrows, gup + j * nfe, wnb + w1 / 2l, web + w1 / 32l, xqp, xsp, dim, r0, r1)
-                        invoke(mxrows, gu2p + j * nfe, wnb + w3 / 2l, web + w3 / 32l, xqp, xsp, dim, r0, r1)
-                        if (biased) {
-                            let e = l * ne + idxp[j]
-                            add_inplace(gup + j * nfe + r0, fbp + web1o + e * nfe + r0, r1 - r0)
-                            add_inplace(gu2p + j * nfe + r0, fbp + web3o + e * nfe + r0, r1 - r0)
-                        }
-                        if (vec) {
-                            if (is_gelu) {
-                                geglu4(gup + j * nfe + r0, gu2p + j * nfe + r0, r1 - r0)
-                            } elif (is_oai) {
-                                swiglu_oai4(gup + j * nfe + r0, gu2p + j * nfe + r0, r1 - r0)
-                            } else {
-                                swiglu4(gup + j * nfe + r0, gu2p + j * nfe + r0, r1 - r0)
-                            }
-                        } else {
-                            if (is_gelu) {
-                                geglu(gup + j * nfe + r0, gu2p + j * nfe + r0, r1 - r0)
-                            } elif (is_oai) {
-                                swiglu_oai(gup + j * nfe + r0, gu2p + j * nfe + r0, r1 - r0)
-                            } else {
-                                swiglu(gup + j * nfe + r0, gu2p + j * nfe + r0, r1 - r0)
-                            }
-                        }
-                        quantize_q8_0_into_ptr(gup + j * nfe + r0, r1 - r0, dqp, dsp, j * nfe + r0, (j * nfe + r0) / 32l)
-                        g = j * ng0 + gEnd
-                    }
-                } else {
-                    // every expert's down rows for this dim span, then the weighted sum in slot order
-                    let r0 = int64(jb) * 32l
-                    let r1 = int64(je) * 32l
-                    for (j in range64(k)) {
-                        let w2 = w2o + idxp[j] * ege
-                        invoke(mxrows, dnp + j * dim, wnb + w2 / 2l, web + w2 / 32l, dqp + j * nfe, dsp + j * nfe / 32l, nfe, r0, r1)
-                        if (biased) {
-                            add_inplace(dnp + j * dim + r0, fbp + web2o + (l * ne + idxp[j]) * dim + r0, r1 - r0)
-                        }
-                    }
-                    for (j in range64(k)) {
-                        axpy(accp + r0, dnp + j * dim + r0, wvp[j], r1 - r0)
-                    }
-                }
-            }
-        }
-    }
-    prof_add("moe_chain", ts_chain)
-}
-
-// Routed experts, given the pre-normed input in s.xb and the top-k selection in s.moe_idx/s.moe_w:
-// s.moe_acc = Σ_j w_j · FFN_e_j(xb). Shared by qwen2moe/gpt-oss (via moe_ffn_core) and gemma4
-// (which folds its per-expert down scale into s.moe_w first).
-def private moe_experts_apply(t : Model; var s : Session; l : int64) {
-    trace_tag(TRACE_TAG_MOE)
-    let c = t.config
-    let dim = c.dim
-    let ne = c.n_expert
-    let k = c.n_expert_used
-    if (expert_reuse_armed()) {
-        expert_reuse_note(l, s.moe_idx, k, ne)
-    }
-    for (i in range64(dim)) {
-        s.moe_acc[i] = 0.0
-    }
-    // Q8: quantize the shared activation ONCE (dedicated moe_xq/moe_xs so down-proj requant doesn't clobber it)
-    let pre_q8 = t.quant == QuantMode.q8
-    let layer_kq = pre_q8 && moe_layer_kq(t, l)
-    if (pre_q8) {
-        let ts_rq = ref_time_ticks()
-        if (layer_kq && moe_pair_kform(fmt_at(t.we1_fmt, l), fmt_at(t.we3_fmt, l))) {
-            // kq v2: kq gate/up stacks read the Q8_K-form scratch
-            quantize_q8_k_into(s.xb, dim, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)
-            if (c.n_ff_shexp > 0l && !c.moe_dense_shexp) {
-                // the q8 shexp downstream reads the hoisted moe_xq image — without this it silently drops out
-                quantize_q8_0_into(s.xb, dim, s.moe_xq, s.moe_xs, 0l, 0l)
-            }
-        } else {
-            quantize_q8_0_into(s.xb, dim, s.moe_xq, s.moe_xs, 0l, 0l)
-        }
-        prof_add("mm_requant", ts_rq)
-    }
-    let nfe = c.n_ff_exp
-    let ege = dim * nfe
-    if (pre_q8) {
-        // fused-dispatch form: bit-exact vs the per-expert loop, but 3 fork/joins instead of 3k
-        let ts_gu = ref_time_ticks()
-        let biased = c.moe_exps_bias   // gpt-oss: each expert's biases fold into the workers' stores
-        let f1 = fmt_at(t.we1_fmt, l)
-        let f2 = fmt_at(t.we2_fmt, l)
-        let f3 = fmt_at(t.we3_fmt, l)
-        // GPU MoE tier: unbiased plain-q8 or all-K-quant stacks of offloaded layers dispatch on the GPU
-        let gpu_moe = !biased && !t.experts_mx4 && c.ffn_act != FfnAct.swiglu_oai && moe_gpu_layer_on_gpu(l)
-        // heat cache: non-resident layers partition the top-k against the tier's slot pools — hits ride the GPU FFN chain async, misses run the CPU groupn path concurrently
-        let heat_moe = !gpu_moe && !biased && !t.experts_mx4 && c.ffn_act != FfnAct.swiglu_oai && heat_armed()
-        var nhits = 0l
-        var moe_chained = false   // the fused chain reduces inline — the nhits==0 axpy tail must skip
-        if (heat_moe) {
-            heat_note_and_advise(t, l, s.moe_idx, k, ne)
-            s.heat_hit |> resize(int(k))
-            s.heat_o1 |> resize(int(k))
-            s.heat_o3 |> resize(int(k))
-            s.heat_o2 |> resize(int(k))
-            nhits = matmul_moe_gpu_heat_query(l, s.moe_idx, k, s.heat_hit, s.heat_o1, s.heat_o3, s.heat_o2)
-            var hl & = unsafe(g_heat[int(l)])
-            hl.hits += nhits
-            hl.picks += k
-        }
-        if (gpu_moe) {
-            // region triples (slot j = row j) + a k-row gathered image; gate+up/act/requant/down runs device-side into moe_dn
-            s.moe_offs1 |> clear(); s.moe_offs1 |> reserve(k * 3l)
-            s.moe_offs3 |> clear(); s.moe_offs3 |> reserve(k * 3l)
-            s.moe_offs2 |> clear(); s.moe_offs2 |> reserve(k * 3l)
-            for (j in range64(k)) {
-                let base = s.moe_idx[j] * ege
-                s.moe_offs1 |> push(t.we1_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
-                s.moe_offs1 |> push(j)
-                s.moe_offs1 |> push(1l)
-                s.moe_offs3 |> push(t.we3_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
-                s.moe_offs3 |> push(j)
-                s.moe_offs3 |> push(1l)
-                s.moe_offs2 |> push(t.we2_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
-                s.moe_offs2 |> push(j)
-                s.moe_offs2 |> push(1l)
-            }
-            // kq layers gather the Q8_K image; q8 layers the Q8_0 one — the tier resolves the form per stack
-            let nb = layer_kq ? dim / 256l : dim / 32l
-            s.moe_gxq |> resize(k * dim)
-            s.moe_gxs |> resize(k * nb)
-            unsafe {
-                var gq = addr(s.moe_gxq[0])
-                var gs = addr(s.moe_gxs[0])
-                let sxq = layer_kq ? addr<void?>(s.kxq[0]) : addr<void?>(s.moe_xq[0])
-                let sxs = layer_kq ? addr<void?>(s.kxs[0]) : addr<void?>(s.moe_xs[0])
-                for (j in range64(k)) {
-                    memcpy(reinterpret<void?>(gq + j * dim), sxq, dim)
-                    memcpy(reinterpret<void?>(gs + j * nb), sxs, nb * 4l)
-                }
-            }
-            matmul_moe_gpu_ffn(s.moe_dn, s.moe_offs1, s.moe_offs3, s.moe_offs2, k,
-                s.moe_gxq, s.moe_gxs, dim, nfe, k, int(moe_gpu_expert_fmt(f1)), int(moe_gpu_expert_fmt(f3)), int(moe_gpu_expert_fmt(f2)), c.ffn_act == FfnAct.gelu)
-            prof_add("mm_moe", ts_gu)
-        } elif (nhits > 0l) {
-            // split-FFN: compacted hit regions (pool coordinates, rows 0..nhits) dispatch async
-            let m = k - nhits
-            s.moe_offs1 |> clear()
-            s.moe_offs3 |> clear()
-            s.moe_offs2 |> clear()
-            for (i in range64(nhits)) {
-                s.moe_offs1 |> push(s.heat_o1[i])   // nolint:STYLE012 — loop-append into reused scratch
-                s.moe_offs1 |> push(i)
-                s.moe_offs1 |> push(1l)
-                s.moe_offs3 |> push(s.heat_o3[i])   // nolint:STYLE012 — loop-append into reused scratch
-                s.moe_offs3 |> push(i)
-                s.moe_offs3 |> push(1l)
-                s.moe_offs2 |> push(s.heat_o2[i])   // nolint:STYLE012 — loop-append into reused scratch
-                s.moe_offs2 |> push(i)
-                s.moe_offs2 |> push(1l)
-            }
-            let nb = layer_kq ? dim / 256l : dim / 32l
-            s.moe_gxq |> resize(int(nhits * dim))
-            s.moe_gxs |> resize(int(nhits * nb))
-            unsafe {
-                var gq = addr(s.moe_gxq[0])
-                var gs = addr(s.moe_gxs[0])
-                let sxq = layer_kq ? addr<void?>(s.kxq[0]) : addr<void?>(s.moe_xq[0])
-                let sxs = layer_kq ? addr<void?>(s.kxs[0]) : addr<void?>(s.moe_xs[0])
-                for (i in range64(nhits)) {
-                    memcpy(reinterpret<void?>(gq + i * dim), sxq, dim)
-                    memcpy(reinterpret<void?>(gs + i * nb), sxs, nb * 4l)
-                }
-            }
-            let ts_sub = ref_time_ticks()
-            matmul_moe_gpu_ffn_begin(s.moe_offs1, s.moe_offs3, s.moe_offs2, nhits,
-                s.moe_gxq, s.moe_gxs, dim, nfe, nhits, int(moe_gpu_expert_fmt(f1)), int(moe_gpu_expert_fmt(f3)), int(moe_gpu_expert_fmt(f2)), c.ffn_act == FfnAct.gelu)
-            prof_add("heat_sub", ts_sub)   // dispatch cost ON the critical path (the split's tax)
-            // the missed experts run the CPU groupn chain while the GPU crunches the hits
-            var ts_down = ts_gu
-            if (m > 0l) {
-                var mi = 0l
-                for (j in range64(k)) {
-                    if (s.heat_hit[j] == int8(0)) {
-                        s.moe_offs[mi * 2l] = t.we1_offs[l] + s.moe_idx[j] * ege
-                        s.moe_offs[mi * 2l + 1l] = 0l
-                        mi++
-                    }
-                }
-                if (kq_sb(f1)) {
-                    mm_at_kq_groupn(s.moe_gu, t, f1, s.moe_offs, m, s.kxq, s.kxs, s.kxbs, dim, nfe)
-                } elif (f1 == KqFmt.q51) {
-                    mm_at_q51_groupn(s.moe_gu, t, s.moe_offs, m, s.moe_xq, s.moe_xs, dim, nfe)
-                } else {
-                    mm_at_q8_groupn(s.moe_gu, t, s.moe_offs, m, s.moe_xq, s.moe_xs, dim, nfe)
-                }
-                mi = 0l
-                for (j in range64(k)) {
-                    if (s.heat_hit[j] == int8(0)) {
-                        s.moe_offs[mi * 2l] = t.we3_offs[l] + s.moe_idx[j] * ege
-                        s.moe_offs[mi * 2l + 1l] = 0l
-                        mi++
-                    }
-                }
-                if (kq_sb(f3)) {
-                    mm_at_kq_groupn(s.moe_gu2, t, f3, s.moe_offs, m, s.kxq, s.kxs, s.kxbs, dim, nfe)
-                } elif (f3 == KqFmt.q51) {
-                    mm_at_q51_groupn(s.moe_gu2, t, s.moe_offs, m, s.moe_xq, s.moe_xs, dim, nfe)
-                } else {
-                    mm_at_q8_groupn(s.moe_gu2, t, s.moe_offs, m, s.moe_xq, s.moe_xs, dim, nfe)
-                }
-                prof_add("mm_moe", ts_gu)
-                let ts_act = ref_time_ticks()
-                gate_batch(s.moe_gu, s.moe_gu2, c.ffn_act, nfe, m)
-                prof_add("act", ts_act)
-                if (kq_sb(f2)) {
-                    requant_rows_q8k_bs(s.moe_gu, nfe, m, s.moe_dq, s.moe_ds, s.moe_dbs)
-                } else {
-                    requant_rows_q8(s.moe_gu, nfe, m, s.moe_dq, s.moe_ds)
-                }
-                ts_down = ref_time_ticks()
-                mi = 0l
-                for (j in range64(k)) {
-                    if (s.heat_hit[j] == int8(0)) {
-                        s.moe_offs[mi * 2l] = t.we2_offs[l] + s.moe_idx[j] * ege
-                        s.moe_offs[mi * 2l + 1l] = mi * nfe
-                        mi++
-                    }
-                }
-                if (kq_sb(f2)) {
-                    mm_at_kq_groupn(s.moe_dn, t, f2, s.moe_offs, m, s.moe_dq, s.moe_ds, s.moe_dbs, nfe, dim)
-                } elif (f2 == KqFmt.q51) {
-                    mm_at_q51_groupn(s.moe_dn, t, s.moe_offs, m, s.moe_dq, s.moe_ds, nfe, dim)
-                } else {
-                    mm_at_q8_groupn(s.moe_dn, t, s.moe_offs, m, s.moe_dq, s.moe_ds, nfe, dim)
-                }
-            }
-            s.moe_hdn |> resize(int(nhits * dim))
-            prof_add("mm_moe_dn", ts_down)
-            let ts_join = ref_time_ticks()
-            matmul_moe_gpu_ffn_join(s.moe_hdn)
-            prof_add("heat_wait", ts_join)   // GPU residue after the CPU misses — 0 = fully hidden
-            let ts_hred = ref_time_ticks()
-            var hi = 0l
-            var mrow = 0l
-            for (j in range64(k)) {   // original slot order — the weighted sum stays order-stable
-                if (s.heat_hit[j] != int8(0)) {
-                    axpy(unsafe(addr(s.moe_acc[0])), unsafe(addr(s.moe_hdn[hi * dim])), s.moe_w[j], dim)
-                    hi++
-                } else {
-                    axpy(unsafe(addr(s.moe_acc[0])), unsafe(addr(s.moe_dn[mrow * dim])), s.moe_w[j], dim)
-                    mrow++
-                }
-            }
-            prof_add("moe_reduce", ts_hred)
-        } elif (t.experts_mx4 && !kq_sb(f1) && f1 != KqFmt.q51 && !kq_sb(f3) && f3 != KqFmt.q51
-                && !kq_sb(f2) && f2 != KqFmt.q51 && fused_moe_ok(t)) {
-            // fused mx4 expert chain: 3 groupn fork/joins collapse to ONE team rendezvous
-            moe_experts_chain(t, s, l)
-            moe_chained = true
-        } else {
-            for (j in range64(k)) {
-                let e = l * ne + s.moe_idx[j]
-                s.moe_offs[j * 2l] = t.we1_offs[l] + s.moe_idx[j] * ege
-                s.moe_offs[j * 2l + 1l] = 0l   // gates share the single hoisted xb image
-                s.moe_boffs[j] = t.web1_off + e * nfe
-            }
-            if (kq_sb(f1)) {   // native K-quant expert stack reads the Q8_K-form scratch (never biased — detect guards that)
-                mm_at_kq_groupn(s.moe_gu, t, f1, s.moe_offs, k, s.kxq, s.kxs, s.kxbs, dim, nfe)
-            } elif (f1 == KqFmt.q51) {   // native Q5_1 stack reads the Q8_0-form image (never biased)
-                mm_at_q51_groupn(s.moe_gu, t, s.moe_offs, k, s.moe_xq, s.moe_xs, dim, nfe)
-            } elif (t.experts_mx4) {   // native 4-bit expert weights — half the Q8 traffic
-                if (biased) {
-                    mm_at_mx4_groupn(s.moe_gu, t, s.moe_offs, s.moe_boffs, k, s.moe_xq, s.moe_xs, dim, nfe)
-                } else {
-                    mm_at_mx4_groupn(s.moe_gu, t, s.moe_offs, k, s.moe_xq, s.moe_xs, dim, nfe)
-                }
-            } elif (biased) {
-                mm_at_q8_groupn(s.moe_gu, t, s.moe_offs, s.moe_boffs, k, s.moe_xq, s.moe_xs, dim, nfe)
-            } else {
-                mm_at_q8_groupn(s.moe_gu, t, s.moe_offs, k, s.moe_xq, s.moe_xs, dim, nfe)
-            }
-            for (j in range64(k)) {
-                let e = l * ne + s.moe_idx[j]
-                s.moe_offs[j * 2l] = t.we3_offs[l] + s.moe_idx[j] * ege
-                s.moe_offs[j * 2l + 1l] = 0l   // ups read the same hoisted xb image (explicit, not inherited from the gate pass)
-                s.moe_boffs[j] = t.web3_off + e * nfe
-            }
-            if (kq_sb(f3)) {   // kq v2: Q8_K-form scratch
-                mm_at_kq_groupn(s.moe_gu2, t, f3, s.moe_offs, k, s.kxq, s.kxs, s.kxbs, dim, nfe)
-            } elif (f3 == KqFmt.q51) {
-                mm_at_q51_groupn(s.moe_gu2, t, s.moe_offs, k, s.moe_xq, s.moe_xs, dim, nfe)
-            } elif (t.experts_mx4) {
-                if (biased) {
-                    mm_at_mx4_groupn(s.moe_gu2, t, s.moe_offs, s.moe_boffs, k, s.moe_xq, s.moe_xs, dim, nfe)
-                } else {
-                    mm_at_mx4_groupn(s.moe_gu2, t, s.moe_offs, k, s.moe_xq, s.moe_xs, dim, nfe)
-                }
-            } elif (biased) {
-                mm_at_q8_groupn(s.moe_gu2, t, s.moe_offs, s.moe_boffs, k, s.moe_xq, s.moe_xs, dim, nfe)
-            } else {
-                mm_at_q8_groupn(s.moe_gu2, t, s.moe_offs, k, s.moe_xq, s.moe_xs, dim, nfe)
-            }
-            prof_add("mm_moe", ts_gu)
-            let ts_act = ref_time_ticks()
-            gate_batch(s.moe_gu, s.moe_gu2, c.ffn_act, nfe, k)
-            prof_add("act", ts_act)
-            if (kq_sb(f2)) {   // kq v2: the down stack reads Q8_K-form rows; q51/q8 the Q8_0 form
-                requant_rows_q8k_bs(s.moe_gu, nfe, k, s.moe_dq, s.moe_ds, s.moe_dbs)
-            } else {
-                requant_rows_q8(s.moe_gu, nfe, k, s.moe_dq, s.moe_ds)   // books mm_requant
-            }
-            let ts_down = ref_time_ticks()
-            for (j in range64(k)) {
-                let e = l * ne + s.moe_idx[j]
-                s.moe_offs[j * 2l] = t.we2_offs[l] + s.moe_idx[j] * ege
-                s.moe_offs[j * 2l + 1l] = j * nfe   // each down reads its own requantized row
-                s.moe_boffs[j] = t.web2_off + e * dim   // down bias inside the routed weight (ggml_add_id order)
-            }
-            if (kq_sb(f2)) {
-                mm_at_kq_groupn(s.moe_dn, t, f2, s.moe_offs, k, s.moe_dq, s.moe_ds, s.moe_dbs, nfe, dim)
-            } elif (f2 == KqFmt.q51) {
-                mm_at_q51_groupn(s.moe_dn, t, s.moe_offs, k, s.moe_dq, s.moe_ds, nfe, dim)
-            } elif (t.experts_mx4) {
-                if (biased) {
-                    mm_at_mx4_groupn(s.moe_dn, t, s.moe_offs, s.moe_boffs, k, s.moe_dq, s.moe_ds, nfe, dim)
-                } else {
-                    mm_at_mx4_groupn(s.moe_dn, t, s.moe_offs, k, s.moe_dq, s.moe_ds, nfe, dim)
-                }
-            } elif (biased) {
-                mm_at_q8_groupn(s.moe_dn, t, s.moe_offs, s.moe_boffs, k, s.moe_dq, s.moe_ds, nfe, dim)
-            } else {
-                mm_at_q8_groupn(s.moe_dn, t, s.moe_offs, k, s.moe_dq, s.moe_ds, nfe, dim)
-            }
-            prof_add("mm_moe_dn", ts_down)
-        }
-        if (nhits == 0l && !moe_chained) {   // the split arm reduced its own row banks; the chain reduced inline
-            let ts_red = ref_time_ticks()
-            for (j in range64(k)) {   // slot order preserved — the sum is bit-identical
-                axpy(unsafe(addr(s.moe_acc[0])), unsafe(addr(s.moe_dn[j * dim])), s.moe_w[j], dim)
-            }
-            prof_add("moe_reduce", ts_red)
-        }
-    } else {
-        // fp32 reference path: the per-expert loop (q4_0 never routes here — MoE loads are q8/fp32)
-        for (j in range64(k)) {
-            let e = l * ne + s.moe_idx[j]
-            let base = s.moe_idx[j] * ege
-            let ts_gu = ref_time_ticks()
-            mm(s.hb, t, t.we1_offs[l] + base, s.xb, s.xq, s.xs, dim, nfe)
-            mm(s.hb2, t, t.we3_offs[l] + base, s.xb, s.xq, s.xs, dim, nfe)
-            if (c.moe_exps_bias) {  // gpt-oss: this expert's gate/up biases before the activation
-                add_bias(s.hb, 0l, t.fblob, t.web1_off + e * nfe, nfe)
-                add_bias(s.hb2, 0l, t.fblob, t.web3_off + e * nfe, nfe)
-            }
-            prof_add("mm_moe", ts_gu)
-            let ts_act = ref_time_ticks()
-            gate_batch(s.hb, s.hb2, c.ffn_act, nfe, 1l)
-            prof_add("act", ts_act)
-            let ts_down = ref_time_ticks()
-            mm(s.xb2, t, t.we2_offs[l] + base, s.hb, s.xq, s.xs, nfe, dim)
-            if (c.moe_exps_bias) {  // ... and its down bias, inside the routed weight (ggml_add_id order)
-                add_bias(s.xb2, 0l, t.fblob, t.web2_off + e * dim, dim)
-            }
-            prof_add("mm_moe_dn", ts_down)
-            let ts_red = ref_time_ticks()
-            axpy(unsafe(addr(s.moe_acc[0])), unsafe(addr(s.xb2[0])), s.moe_w[j], dim)
-            prof_add("moe_reduce", ts_red)
-        }
-    }
-}
-
-// MoE FFN core (qwen2moe / gpt-oss): router logits on the rmsnormed activation in s.xb -> softmax /
-// sigmoid select -> routed experts (moe_experts_apply) -> optional sigmoid-gated shared expert.
-// Leaves the combined output in s.moe_acc; callers add the post-norm / residual / layer-out scale.
-def private moe_ffn_core(t : Model; var s : Session; l : int64) {
-    let c = t.config
-    let dim = c.dim
-    let ne = c.n_expert
-    trace_tag(TRACE_TAG_ROUTE)   // decode router GEMV — without this it rides the stale attn tag in traces
-    let ts_route = ref_time_ticks()
-    mm_fblob(s.moe_logits, t, t.router_off + l * ne * dim, s.xb, dim, ne)
-    if (c.moe_router_bias) {
-        add_bias(s.moe_logits, 0l, t.fblob, t.router_b_off + l * ne, ne)
-    }
-    var ebp : float const?
-    if (c.moe_exp_probs) {
-        ebp = unsafe(addr<float const?>(t.fblob[t.exp_probs_off + l * ne]))
-    }
-    moe_select(c, unsafe(addr(s.moe_logits[0])), s.moe_idx, s.moe_w, 0l, ebp)
-    prof_add("moe_route", ts_route)
-    // resident shared expert: submit FIRST, collect AFTER the routed experts, so it runs inside the CPU's own expert window — a synchronous per-layer submit is the heat-cache wash.
-    let sh_gpu = (c.n_ff_shexp > 0l && !c.moe_dense_shexp && t.quant == QuantMode.q8
-        && moe_gpu_shexp_on_gpu(l) && !moe_gpu_layer_on_gpu(l) && !heat_armed())
-    let nsh = c.n_ff_shexp
-    let she = dim * nsh
-    if (sh_gpu) {
-        let ts_shs = ref_time_ticks()
-        quantize_q8_0_into(s.xb, dim, s.moe_xq, s.moe_xs, 0l, 0l)   // moe_experts_apply recomputes the same bits
-        // the routed CPU path uses moe_offs (not the triples) — these are free at this gate
-        s.moe_offs1 <- [t.wsh1_off + l * she, 0l, 1l]
-        s.moe_offs3 <- [t.wsh3_off + l * she, 0l, 1l]
-        s.moe_offs2 <- [t.wsh2_off + l * she, 0l, 1l]
-        matmul_moe_gpu_ffn_begin(s.moe_offs1, s.moe_offs3, s.moe_offs2, 1l, s.moe_xq, s.moe_xs,
-            dim, nsh, 1l, 0, 0, 0, c.ffn_act == FfnAct.gelu)
-        prof_add("shexp_sub", ts_shs)
-    }
-    moe_experts_apply(t, s, l)
-    if (sh_gpu) {
-        let ts_shw = ref_time_ticks()
-        trace_tag(TRACE_TAG_SHEXP)
-        let g = c.moe_shexp_gated ? moe_shexp_gate(t, l, unsafe(addr(s.xb[0]))) : 1.0
-        matmul_moe_gpu_ffn_join(s.xb2)
-        axpy(unsafe(addr(s.moe_acc[0])), unsafe(addr(s.xb2[0])), g, dim)
-        prof_add("shexp_wait", ts_shw)   // 0 = fully hidden behind the routed-expert window
-    }
-    // shared expert, gated by a sigmoid scalar from its per-layer gate vector (glm4moe: ungated, g = 1)
-    if (c.n_ff_shexp > 0l && !sh_gpu) {
-        let pre_q8 = t.quant == QuantMode.q8
-        let ts_sh = ref_time_ticks()
-        trace_tag(TRACE_TAG_SHEXP)
-        let g = c.moe_shexp_gated ? moe_shexp_gate(t, l, unsafe(addr(s.xb[0]))) : 1.0
-        if (pre_q8) {
-            // shexp gate+up share the hoisted xb quants: one region-list dispatch, act on the halves
-            s.ffn_offs[0] = t.wsh1_off + l * she
-            s.ffn_offs[1] = 0l
-            s.ffn_offs[2] = t.wsh3_off + l * she
-            s.ffn_offs[3] = 0l
-            mm_at_q8_groupn(s.ffn_gu, t, s.ffn_offs, 2l, s.moe_xq, s.moe_xs, dim, nsh)
-            unsafe {
-                gate_batch(addr(s.ffn_gu[0]), addr < float const? >(s.ffn_gu[nsh]), c.ffn_act, nsh, 1l)
-            }
-            quantize_q8_0_into(s.ffn_gu, nsh, s.xq, s.xs, 0l, 0l)
-            mm_at_q8_pre(s.xb2, t, t.wsh2_off + l * she, s.xq, s.xs, nsh, dim)
-        } else {
-            mm(s.hb, t, t.wsh1_off + l * she, s.xb, s.xq, s.xs, dim, nsh)
-            mm(s.hb2, t, t.wsh3_off + l * she, s.xb, s.xq, s.xs, dim, nsh)
-            gate_batch(s.hb, s.hb2, c.ffn_act, nsh, 1l)
-            mm(s.xb2, t, t.wsh2_off + l * she, s.hb, s.xq, s.xs, nsh, dim)
-        }
-        axpy(unsafe(addr(s.moe_acc[0])), unsafe(addr(s.xb2[0])), g, dim)
-        prof_add("mm_shexp", ts_sh)
-    }
-}
-
-// ===== gemma-4 E-series per-layer embeddings (PLE) =====
-// A per-(token, layer) side input mixed into each layer's output (mirrors llama.cpp gemma4's
-// build_inp_per_layer + per_layer_embd). ple_inp is POSITION-major: (p, l, i) at p*(layers*ple)+l*ple+i.
-
-// Pre-step finish (shared by decode/prefill): given the gathered+sqrt(ple)-scaled token rows already
-// in s.ple_inp[0..npos*all), add the projected embedding branch. proj = rmsnorm((1/√dim)·(model_proj·
-// embd)); ple_inp = (gathered + proj)/√2. embd_scaled is the sqrt(dim)-scaled residual (s.x / s.x_b).
-def private ple_pre_finish(t : Model; var s : Session; embd_scaled : array<float>; npos : int64) {
-    trace_tag(TRACE_TAG_PLE)   // decode: runs between cls and layer 0, would inherit the stale cls tag
-    let c = t.config
-    let ple = c.n_embd_per_layer
-    let all = c.n_layers * ple
-    scale_inplace(unsafe(addr(s.ple_inp[0])), sqrt(float(ple)), npos * all)
-    // model_proj · embedding, then × 1/√dim — native-BF16 rows when kept (exact widen), else fp32 expand
-    if (t.ple_model_bf16) {
-        matmul_bf16_batch(s.ple_proj, t.bf16blob, t.ple_model_off, embd_scaled, c.dim, all, npos)
-    } else {
-        mm_fblob_b(s.ple_proj, t, t.ple_model_off, embd_scaled, c.dim, all, npos)
-    }
-    scale_inplace(unsafe(addr(s.ple_proj[0])), 1.0 / sqrt(float(c.dim)), npos * all)
-    // RMSNorm each (position, layer) ple-slice with the single proj-norm vector
-    rms_batch(s.ple_proj, s.ple_proj, t, t.ple_pnorm_off, ple, npos * c.n_layers)
-    add_inplace(unsafe(addr(s.ple_inp[0])), unsafe(addr(s.ple_proj[0])), npos * all)
-    scale_inplace(unsafe(addr(s.ple_inp[0])), 1.0 / sqrt(2.0), npos * all)
-}
-
-// One PLE token row (all = layers*ple elements, superblock-aligned by the detect gate) off the
-// gather's storage: native disk-order K-quant planes (the table is excluded from the grp repack)
-// or the q8 linear region on fallback loads.
-def private ple_gather_row(t : Model; row : int64; var dst : array<float>; doff : int64) {
-    let all = t.config.n_layers * t.config.n_embd_per_layer
-    let eloff = t.ple_emb_off + row * all
-    if (t.ple_emb_fmt == KqFmt.q8) {
-        dequant_q8_row(t, eloff, all, unsafe(addr(dst[doff])))
-        return
-    }
-    for (blk in range64(all / 256l)) {
-        let sb = (eloff + blk * 256l) / 256l
-        if (t.ple_emb_fmt == KqFmt.k4) {
-            dequant_k4_plane_superblock(t.k4q, sb * K4_QSB, t.k4s, sb * K4_SSB, dst, doff + blk * 256l)
-        } elif (t.ple_emb_fmt == KqFmt.k5) {
-            dequant_k5_plane_superblock(t.k5q, sb * K5_QSB, t.k5s, sb * K5_SSB, dst, doff + blk * 256l)
-        } elif (t.ple_emb_fmt == KqFmt.k6) {
-            dequant_k6_plane_superblock(t.k6q, sb * K6_QSB, t.k6s, sb * K6_SSB, dst, doff + blk * 256l)
-        } elif (t.ple_emb_fmt == KqFmt.q40) {
-            dequant_q40_plane_superblock(t.q40q, sb * Q40_QSB, t.q40s, sb * Q40_SSB, dst, doff + blk * 256l)
-        } else {
-            panic("ple_gather_row: '{t.ple_emb_fmt}' has no kq plane pair")
-        }
-    }
-}
-
-// Decode pre-step: gather the single token's per-layer embedding row, then finish.
-def private ple_pre_decode(t : Model; var s : Session; token : int64) {
-    ple_gather_row(t, token, s.ple_inp, 0l)
-    ple_pre_finish(t, s, s.x, 1l)
-}
-
-//! Prefill pre-step: gather every position's per-layer embedding row, then finish (batched).
-//! Public as the late-decline fallback for a driver that claimed the pre-step via the gate.
-def ple_pre_prefill(t : Model; var s : Session; tokens : array<int64>; npos : int64) {
-    let all = t.config.n_layers * t.config.n_embd_per_layer
-    for (p in range64(npos)) {
-        ple_gather_row(t, tokens[p], s.ple_inp, p * all)
-    }
-    ple_pre_finish(t, s, s.x_b, npos)
-}
-
-// Prefill-from-embeddings (multimodal) pre-step: no token ids, so the gather uses the padding token
-// (id 0) broadcast across positions — matching llama.cpp gemma4's build_inp_per_layer media branch.
-def private ple_pre_prefill_pad(t : Model; var s : Session; npos : int64) {
-    let all = t.config.n_layers * t.config.n_embd_per_layer
-    for (p in range64(npos)) {
-        ple_gather_row(t, 0l, s.ple_inp, p * all)
-    }
-    ple_pre_finish(t, s, s.x_b, npos)
-}
-
-// Per-layer block (decode): cur += post_norm(proj · (gelu(inp_gate·cur) ⊙ ple_inp[l])). In place on s.x.
-def private ple_block_decode(t : Model; var s : Session; l : int64) {
-    trace_tag(TRACE_TAG_PLE)
-    let c = t.config
-    let dim = c.dim
-    let ple = c.n_embd_per_layer
-    mm(s.ple_gate, t, t.ple_gate_off + l * dim * ple, s.x, s.xq, s.xs, dim, ple)   // dim -> ple
-    gelu(s.ple_gate, ple)
-    mul_inplace(unsafe(addr(s.ple_gate[0])), unsafe(addr(s.ple_inp[l * ple])), ple)  // ⊙ this layer's side input
-    mm(s.xb, t, t.ple_proj_off + l * ple * dim, s.ple_gate, s.xq, s.xs, ple, dim)   // ple -> dim
-    rms_at(s.xb, t, t.ple_post_off + l * dim, s.xb, dim)
-    add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb[0])), dim)   // residual (pe_in + projected)
-}
-
-// Per-layer block (prefill, batched over npos). ple_inp is position-major so the layer-l side vector
-// of position p sits at p*(layers*ple) + l*ple.
-def private ple_block_prefill(t : Model; var s : Session; l : int64; npos : int64) {
-    // a broken gate promise would read an empty/stale ple_inp here — fail loud, never mismeasure
-    if (s.ple_gpu_pending) panic("ple_block_prefill: GPU pre-step promised but the CPU body engaged")
-    let c = t.config
-    let dim = c.dim
-    let ple = c.n_embd_per_layer
-    let all = c.n_layers * ple
-    mm_b(s.ple_gate, t, t.ple_gate_off + l * dim * ple, s.x_b, s.xqb, s.xsb, dim, ple, npos)
-    gelu(s.ple_gate, npos * ple)
-    for (p in range64(npos)) {
-        mul_inplace(unsafe(addr(s.ple_gate[p * ple])), unsafe(addr(s.ple_inp[p * all + l * ple])), ple)
-    }
-    mm_b(s.xb_b, t, t.ple_proj_off + l * ple * dim, s.ple_gate, s.xqb, s.xsb, ple, dim, npos)
-    rms_batch(s.xb_b, s.xb_b, t, t.ple_post_off + l * dim, dim, npos)
-    add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb_b[0])), npos * dim)
-}
-
-// gemma4 MoE router input: weightless RMSNorm(attn_out) × (1/√dim) × ffn_gate_inp_s, into s.xb2.
-// Distinct from the plain-matmul routers: the RMS is over attn_out (not the shared-expert pre-norm),
-// weightless, then scaled by 1/√n_embd and a learned per-channel scale before the ffn_gate_inp matmul.
-def private gemma4_router_tmp(t : Model; var s : Session; l : int64) {
-    let dim = t.config.dim
-    // sum of squares in DOUBLE (matches ggml_rms_norm): float drift here flips the discrete top-8 expert pick
-    var ss = 0.0lf
-    for (i in range64(dim)) {
-        ss += double(s.moe_ao[i] * s.moe_ao[i])
-    }
-    let scale = 1.0 / sqrt(float(ss / double(dim)) + t.config.norm_eps)
-    let inv_d = 1.0 / sqrt(float(dim))
-    unsafe {
-        let scp = addr < float const? >(t.fblob[t.moe_router_scale_off + l * dim])
-        var op = addr(s.xb2[0])
-        let ip = addr < float const? >(s.moe_ao[0])
-        let si = scale * inv_d
-        for (i in range64(dim)) {
-            op[i] = ip[i] * si * scp[i]
-        }
-    }
-}
-
-// gemma4 MoE layer (26B-A4B): two parallel branches of the residual stream in s.moe_ao, SUMMED.
-// routed = post_ffw_norm_2(Σ_j w_j · GeGLU_e_j(pre_ffw_norm_2(attn_out))); dense = a full dense
-// shared expert, always on. Leaves post_ffw_norm(routed + dense) in s.moe_acc.
-def private gemma4_moe_ffn(t : Model; var s : Session; l : int64) {
-    let c = t.config
-    let dim = c.dim
-    let ne = c.n_expert
-    let k = c.n_expert_used
-    // routed branch — input, custom router, select, per-expert down scale, experts, post-norm
-    let ts_norm0 = ref_time_ticks()
-    rms_at(s.xb, t, t.rms_pre_ffn2_off + l * dim, s.moe_ao, dim)
-    prof_add("norm", ts_norm0)
-    trace_tag(TRACE_TAG_ROUTE)   // decode router GEMV — without this it rides the stale attn tag in traces
-    let ts_route = ref_time_ticks()
-    gemma4_router_tmp(t, s, l)
-    mm_fblob(s.moe_logits, t, t.router_off + l * ne * dim, s.xb2, dim, ne)
-    moe_select(c, unsafe(addr(s.moe_logits[0])), s.moe_idx, s.moe_w, 0l)
-    for (j in range64(k)) {   // ggml scales each expert's down output by ffn_down_exps_s — fold it into w_j
-        s.moe_w[j] *= t.fblob[t.moe_down_scale_off + l * ne + s.moe_idx[j]]
-    }
-    prof_add("moe_route", ts_route)
-    moe_experts_apply(t, s, l)
-    let ts_norm1 = ref_time_ticks()
-    rms_at(s.moe_acc, t, t.rms_post_ffn2_off + l * dim, s.moe_acc, dim)
-    prof_add("norm", ts_norm1)
-    // dense parallel shared expert (its own pre/post norms), into s.xb
-    let ts_sh = ref_time_ticks()
-    trace_tag(TRACE_TAG_SHEXP)
-    rms_at(s.xb, t, t.rms_ffn_off + l * dim, s.moe_ao, dim)
-    dense_ffn_inplace(t, s, l)
-    rms_at(s.xb, t, t.rms_post_ffn1_off + l * dim, s.xb, dim)
-    prof_add("mm_shexp", ts_sh)
-    // combine then the shared post_ffw_norm on the sum
-    let ts_comb = ref_time_ticks()
-    add_inplace(unsafe(addr(s.moe_acc[0])), unsafe(addr(s.xb[0])), dim)
-    prof_add("act_resid", ts_comb)
-    let ts_norm2 = ref_time_ticks()
-    rms_at(s.moe_acc, t, t.rms_post_ffn_off + l * dim, s.moe_acc, dim)
-    prof_add("norm", ts_norm2)
-}
-
-// gemma4 FFN decode: dense (12B/31B) or the parallel dense-shared + routed MoE (26B-A4B) by expert count.
-[no_alloc, no_env, no_io]
-def private ffn_gemma4_decode(t : Model; var s : Session; l : int64) {
-    let c = t.config
-    if (c.n_expert <= 0l) {
-        ffn_dense_decode(t, s, l)   // out_scale deferred to after the PLE block when has_ple
-        if (has_ple(c)) {  // E-series: per-layer embedding block sits between the FFN residual and out_scale
-            let ts_ple = ref_time_ticks()
-            ple_block_decode(t, s, l)
-            if (c.layer_out_scale) {
-                scale_inplace(unsafe(addr(s.x[0])), t.fblob[t.out_scale_off + l], c.dim)
-            }
-            prof_add("ple", ts_ple)
-        }
-        return
-    }
-    let dim = c.dim
-    let ts_copy = ref_time_ticks()
-    copy_floats(s.x, 0l, s.moe_ao, 0l, dim)
-    prof_add("act_resid", ts_copy)
-    gemma4_moe_ffn(t, s, l)
-    let ts_resid = ref_time_ticks()
-    if (c.layer_out_scale) {
-        add_scale_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.moe_acc[0])), t.fblob[t.out_scale_off + l], dim)
-    } else {
-        add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.moe_acc[0])), dim)
-    }
-    prof_add("act_resid", ts_resid)
-}
-
-// gemma4 FFN prefill: dense delegates; MoE takes the grouped expert-bucketed path (Q8, default) or the
-// per-position reference loop (fp32 loads and the bit-identical A/B switch).
-[no_alloc, no_env, no_io]
-def private ffn_gemma4_prefill(t : Model; var s : Session; l : int64; npos : int64) {
-    let c = t.config
-    if (c.n_expert <= 0l) {
-        ffn_dense_prefill(t, s, l, npos)   // out_scale deferred to after the PLE block when has_ple
-        if (has_ple(c)) {  // E-series per-layer embedding block, then out_scale
-            let ts_ple = ref_time_ticks()
-            ple_block_prefill(t, s, l, npos)
-            if (c.layer_out_scale) {
-                scale_inplace(unsafe(addr(s.x_b[0])), t.fblob[t.out_scale_off + l], npos * c.dim)
-            }
-            prof_add("ple", ts_ple)
-        }
-        return
-    }
-    let dim = c.dim
-    // kq-expert layers ride grouped buckets via the kq batch tile; portable/no-kq backends take the per-position path
-    let kq_grouped_ok = !moe_layer_sb_kq(t, l) || (t.kq_repacked && kernel_backend_has_kq_batch())
-    if (t.quant == QuantMode.q8 && g_moe_grouped_prefill && kq_grouped_ok) {
-        gemma4_moe_prefill_grouped(t, s, l, npos)
-    } else {
-        for (p in range64(npos)) {
-            copy_floats(s.x_b, p * dim, s.moe_ao, 0l, dim)
-            gemma4_moe_ffn(t, s, l)
-            add_inplace(unsafe(addr(s.x_b[p * dim])), unsafe(addr(s.moe_acc[0])), dim)
-        }
-    }
-    if (c.layer_out_scale) {
-        scale_inplace(unsafe(addr(s.x_b[0])), t.fblob[t.out_scale_off + l], npos * dim)
-    }
-}
-
-// MoE FFN, decode: rmsnorm -> routed top-k + shared expert -> residual. Mirrors ffn_dense_decode's
-// optional post-norm / layer-output-scale steps so future MoE arches compose with them.
-[no_alloc, no_env, no_io]
-def private ffn_moe_decode(t : Model; var s : Session; l : int64) {
-    let c = t.config
-    if (l < c.n_layer_dense_lead) {   // glm4moe: the leading layer(s) are plain dense FFN
-        ffn_dense_decode(t, s, l)
-        return
-    }
-    let dim = c.dim
-    let ts_norm = ref_time_ticks()
-    rms_at(s.xb, t, t.rms_ffn_off + l * dim, s.x, dim)
-    prof_add("norm", ts_norm)
-    moe_ffn_core(t, s, l)
-    let ts_resid = ref_time_ticks()
-    if (c.pre_post_norm) {
-        rms_at(s.moe_acc, t, t.rms_post_ffn_off + l * dim, s.moe_acc, dim)
-    }
-    if (c.layer_out_scale) {
-        add_scale_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.moe_acc[0])), t.fblob[t.out_scale_off + l], dim)
-    } else {
-        add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.moe_acc[0])), dim)
-    }
-    prof_add("act_resid", ts_resid)
-}
-
 // Q8_0 row dequant from the linear embedding copy: dst[i] = q[i] * scale[i/32] — the same
 // arithmetic gguf_read_tensor_f32 used to fill fblob, so the values are bit-identical to the
 // fp32 table this replaces.
-def private dequant_q8_row(t : Model; off, n : int64; var dst : float?) {
+def dequant_q8_row(t : Model; off, n : int64; var dst : float?) {
     if (t.metal_blob) {
         // blob layout: f16 scale + 32 int8 per 34-byte block at (off/32)*34
         unsafe {
@@ -9533,7 +3486,7 @@ def private dequant_embq_row(t : Model; off, n : int64; var dst : float?) {
 // Copy token `token`'s embedding row into dst — from fp32 fblob, or (cls_q8) dequanted from the
 // linear Q8 copy at emb_q8_off (embq when trimmed), or (cls_kq) from the K-quant plane at
 // wcls_off (embq/embs when trimmed). Rows are whole superblocks (a ggml K-quant invariant).
-def private embed_row(t : Model; token : int64; var dst : float?) {
+def embed_row(t : Model; token : int64; var dst : float?) {   // nolint:STYLE037,STYLE038 — a KqFmt ladder x trimmed/repacked; arms differ only in the plane pair and its strides
     let dim = t.config.dim
     if (t.cls_q8) {
         if (t.planes_trimmed) {
@@ -9542,9 +3495,7 @@ def private embed_row(t : Model; token : int64; var dst : float?) {
             dequant_q8_row(t, t.emb_q8_off + token * dim, dim, dst)
         }
     } elif (cls_kq(t)) {
-        let mr = (t.emb_fmt == KqFmt.k4 ? t.kq_repack_mr4
-            : (t.emb_fmt == KqFmt.k5 ? t.kq_repack_mr5
-            : (t.emb_fmt == KqFmt.k6 ? t.kq_repack_mr6 : t.kq_repack_mr40)))
+        let mr = kq_active_mr(t, t.emb_fmt)   // 1 when not repacked — unread past the guard then
         if (t.kq_repacked && token < (t.config.vocab_size / mr) * mr) {
             // repacked plane: gather via the grp<mr> layout (tail rows below stay disk-order, verbatim)
             unsafe {
@@ -9682,7 +3633,7 @@ def private cls_softcap_chain(t : Model; var s : Session; cap : float) {
     let mmrows = mm_q8q8_rows_fn()
     let ngrp = int(vocab / 32l)
     let n0 = chain_stage_chunks(ngrp, int(vocab), dim * vocab)
-    s.chain_stages |> resize(1)   // nolint:PERF026 — session scratch, fixed size after the first classifier call
+    s.chain_stages |> resize(1)
     s.chain_stages[0] = int3(0, ngrp, n0)
     count_parallel_dispatch(min(n0, ngrp))
     unsafe {
@@ -9722,8 +3673,9 @@ def private cls_softcap_chain(t : Model; var s : Session; cap : float) {
     }
 }
 
+//! One forward pass: token at position `pos` -> s.logits. Faithful port of llama2.c forward().
 [no_alloc, no_env, no_io]
-def forward(t : Model; var s : Session; token, pos : int64) {
+def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE038 — one decode step; the phases share s and must stay in order
     let c = t.config
     let dim = c.dim
     kv_ensure(s, pos + 1l)   // paged sessions: grow the block table BEFORE any cache-pointer hoist
@@ -10107,7 +4059,7 @@ def generate_mtp_greedy(t : Model; var s : Session; prompt : array<int64>; total
 
 // Batch widths at or below this are speculative-verify shaped, so they follow the DECODE dispatch
 // policy, not the prefill work threshold — see prefill_attention (lcpp runs n=1..3, vLLM's GLM 1).
-let private ATTN_NARROW_NPOS = 8l
+let ATTN_NARROW_NPOS = 8l
 
 var g_attn_par_threshold = 100_000l
 // Thread the per-position activation requant (mm_b) once n × npos clears this.
@@ -10300,7 +4252,7 @@ def private prof_add_armed(name : string; t0 : int64) {
     g_prof_mark_inline = il
 }
 
-def private prof_add(name : string; t0 : int64) {
+def prof_add(name : string; t0 : int64) {
     return if (!g_forward_prof_on)
     prof_add_armed(name, t0)
 }
@@ -10326,608 +4278,117 @@ def forward_profile_report() {
     to_log(LOG_INFO, "  TOTAL: {total}\n")
 }
 
-// Prefill attention, threaded over heads (perfect load balance, no shared scratch). Dispatches on
-// g_attn_prefill_mode: classic/blocked are bit-identical (same score row + FMA order); flash tiles
-// with online softmax and is NOT bit-exact (online reorder).
-def private attn_head_flash(qp : float const?; kcp, vcp : auto const?; var xbp : float?;
-                            var qpk, kpk, vpk, kqp, vkqp, tmpp : float?; runs : KVRun const?;
-                            nrun, npos, start_pos, head_size, qd, kdim, khoff, vdim, vhoff, qoff : int64;
-                            scale : float; is_sliding : bool; sliding_window : int64; attn_softcap : float;
-                            has_sink : bool; sink : float) {
-    let QT = ATTN_FLASH_QT
-    let KV = ATTN_FLASH_KV
-    unsafe {
-        var p0 = 0l
-        while (p0 < npos) {
-            let tile_rows = min(QT, npos - p0)
-            let ap0 = start_pos + p0
-            let apL = ap0 + tile_rows - 1l                 // max query position in this tile
-            let kstart_min = (is_sliding && ap0 + 1l > sliding_window) ? (ap0 + 1l - sliding_window) : 0l
-            // pack the Q tile contiguous [tile_rows × head_size] (q rows are qd-strided in q_b)
-            for (qt in range64(tile_rows)) {
-                let qsrc = (p0 + qt) * qd + qoff
-                for (d in range64(head_size)) {
-                    qpk[qt * head_size + d] = qp[qsrc + d]
-                }
-            }
-            var mrun : float[64]   // must equal ATTN_FLASH_QT (fixed-array dim needs an int32 literal)
-            var srun : float[64]
-            for (qt in range64(tile_rows)) {
-                // the sink (gpt-oss) is one extra virtual score with no V contribution — seeding the
-                // online softmax with max = sink, sum = e^(sink-sink) = 1 is exactly that column;
-                // later tiles rescale it along with everything else
-                mrun[int(qt)] = has_sink ? sink : -1.0e30
-                srun[int(qt)] = has_sink ? 1.0 : 0.0
-                for (d in range64(head_size)) {
-                    vkqp[qt * head_size + d] = 0.0
-                }
-            }
-            var kt0 = kstart_min
-            while (kt0 <= apL) {
-                let kvalid = min(KV, apL + 1l - kt0)
-                // pack Kᵀ tile [head_size × KV] and V tile [KV × head_size] by physical run: each
-                // cached row dequants ONCE via kv_row_to_f32 (the dequant seam — the GEMMs read f32
-                // scratch), V straight into its tile row, K through tmpp then transpose-scattered
-                for (r in range64(nrun)) {
-                    let rj0 = max(runs[r].j0, kt0)
-                    let rj1 = min(runs[r].j1, kt0 + kvalid)
-                    let rowbase = runs[r].row0 - runs[r].j0
-                    for (aj in range64(rj0, rj1)) {
-                        let kt = aj - kt0
-                        kv_row_to_f32(vpk + kt * head_size, vcp, (rowbase + aj) * vdim + vhoff, head_size)
-                        kv_row_to_f32(tmpp, kcp, (rowbase + aj) * kdim + khoff, head_size)
-                        for (d in range64(head_size)) {
-                            kpk[d * KV + kt] = tmpp[d]
-                        }
-                    }
-                }
-                for (kt in range64(kvalid, KV)) {   // zero-pad the tail columns
-                    for (d in range64(head_size)) {
-                        kpk[d * KV + kt] = 0.0
-                        vpk[kt * head_size + d] = 0.0
-                    }
-                }
-                // scores: kq[tile_rows × KV] = Q · Kᵀ  (gemm_f32 accumulates, so zero first)
-                for (i in range64(tile_rows * KV)) {
-                    kqp[i] = 0.0
-                }
-                gemm_f32(kqp, qpk, kpk, tile_rows, head_size, KV)
-                // ggml-style decomposition (ops.cpp:8771): scale — then soft-cap — the whole score tile
-                // in one vectorized sweep each, replacing the scalar per-element multiply in the mask branch.
-                scale_inplace(kqp, scale, tile_rows * KV)
-                if (attn_softcap > 0.0) {   // Gemma2: soft-cap scores before softmax
-                    softcap4(kqp, tile_rows * KV, attn_softcap)
-                }
-                // online-softmax fold per query row. The causal + sliding mask is a CONTIGUOUS column
-                // span [lo, hi] (cached keys kstart_p..ap), so masking is two boundary fills (no
-                // per-element branch) and the row max is hand-vectorized (hmax).
-                for (qt in range64(tile_rows)) {
-                    let ap = ap0 + qt
-                    let kstart_p = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
-                    let row = qt * KV
-                    let lo = max(0l, kstart_p - kt0)              // first valid tile-local column
-                    let hi = min(kvalid - 1l, ap - kt0)           // last valid tile-local column (causal)
-                    if (hi < lo) {                                // no valid keys here → contributes nothing
-                        for (kt in range64(KV)) { kqp[row + kt] = 0.0 }
-                        continue
-                    }
-                    for (kt in range64(0l, lo))      { kqp[row + kt] = -1.0e30 }   // below the sliding window
-                    for (kt in range64(hi + 1l, KV)) { kqp[row + kt] = -1.0e30 }   // above causal / zero-padded
-                    let tmax = hmax(kqp + row, KV)
-                    let mold = mrun[int(qt)]
-                    let mnew = max(mold, tmax)
-                    if (mnew > mold) {                 // new running max → rescale this row's accumulator
-                        let ms = exp(mold - mnew)
-                        scale_inplace(vkqp + qt * head_size, ms, head_size)
-                        srun[int(qt)] *= ms
-                    }
-                    mrun[int(qt)] = mnew
-                    // kq row becomes the (un-normalized) prob row — vectorized exp4 over KV (mult of 4).
-                    // Masked entries (-1e30) clamp to -80 so exp4's fast path stays in range and yields ~0
-                    // (1.8e-35, negligible vs the real probs); flash is already non-bit-exact (online reorder).
-                    let mnew4 = float4(mnew, mnew, mnew, mnew)
-                    let floor4 = float4(-80.0, -80.0, -80.0, -80.0)
-                    var sum4 = float4(0.0, 0.0, 0.0, 0.0)
-                    var prow = reinterpret<float4?>(kqp + row)
-                    for (kc in range64(KV / 4l)) {
-                        let pe4 = exp4(max(prow[kc] - mnew4, floor4))
-                        prow[kc] = pe4
-                        sum4 += pe4
-                    }
-                    srun[int(qt)] += sum4.x + sum4.y + sum4.z + sum4.w
-                }
-                // accumulate output: vkq[tile_rows × head_size] += P[tile_rows × KV] · V[KV × head_size]
-                gemm_f32(vkqp, kqp, vpk, tile_rows, KV, head_size)
-                kt0 += KV
-            }
-            // normalize by the running sum and write the qd-strided output slice
-            for (qt in range64(tile_rows)) {
-                let inv = srun[int(qt)] > 0.0 ? 1.0 / srun[int(qt)] : 0.0
-                let dst = (p0 + qt) * qd + qoff
-                for (d in range64(head_size)) {
-                    xbp[dst + d] = vkqp[qt * head_size + d] * inv
-                }
-            }
-            p0 += QT
-        }
-    }
+//! Greedy argmax over the current logits; returns the winning token id.
+def argmax(s : Session; vocab : int64) : int64 {
+    // team-scanned (bit-identical to serial first-wins): 151-262k vocab scan was 210-284us/token idle
+    return parallel_argmax(s.logits, vocab)
 }
 
-// One head of BLOCKED prefill attention (see prefill_attention) — codec-generic + run-walking.
-// attp_h = this head's ATTN_BLOCK_Q score rows (maxctx-strided). Scores go through kv_score
-// (q8_0 K: the same dot decode runs, keeping prefill == decode bit-exact under the block codec).
-def private attn_head_blocked(var attp_h : float?; var xbp : float?; qp : float const?;
-                              qq : int8 const?; qsp : float const?;
-                              kcp, vcp : auto const?; runs : KVRun const?;
-                              nrun, npos, start_pos, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh : int64;
-                              scale : float; is_sliding : bool; sliding_window : int64;
-                              attn_softcap : float; sinksp : float const?) {
-    unsafe {
-        var p0 = 0l
-        while (p0 < npos) {
-            let bq = min(ATTN_BLOCK_Q, npos - p0)
-            let ap_first = start_pos + p0
-            let ap_last = ap_first + bq - 1l
-            let kstart_block = (is_sliding && ap_first + 1l > sliding_window) ? (ap_first + 1l - sliding_window) : 0l
-            // PASS 1: scores — each K[kk] loaded once, reused across the block's queries
-            for (r in range64(nrun)) {
-                let rj0 = max(runs[r].j0, kstart_block)
-                let rj1 = min(runs[r].j1, ap_last + 1l)
-                let rowbase = runs[r].row0 - runs[r].j0
-                for (kk in range64(rj0, rj1)) {
-                    let koff = (rowbase + kk) * kdim + khoff
-                    let bi_lo = max(0l, kk - ap_first)            // causal: keep queries with ap >= kk
-                    var bi_hi = bq
-                    if (is_sliding) {                            // window: keep queries with kstart_p <= kk
-                        bi_hi = min(bq, kk + sliding_window - ap_first)
-                    }
-                    for (bi in range64(bi_lo, bi_hi)) {
-                        let p = p0 + bi
-                        let ap = start_pos + p
-                        let kstart_p = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
-                        let qbase = p * qd + qoff
-                        attp_h[bi * maxctx + (kk - kstart_p)] = kv_score(qp, qq, qsp, kcp, koff, qbase, head_size) * scale
-                    }
-                }
-            }
-            // softcap + softmax per query, then zero its output slice
-            for (bi in range64(bq)) {
-                let p = p0 + bi
-                let ap = start_pos + p
-                let kstart_p = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
-                let cnt = ap + 1l - kstart_p
-                let rbase = bi * maxctx
-                if (attn_softcap > 0.0) {  // Gemma2: soft-cap scores before softmax
-                    softcap4(attp_h + rbase, cnt, attn_softcap)
-                }
-                if (sinksp != null) {  // gpt-oss: sink joins the denominator
-                    softmax_sink(attp_h + rbase, cnt, sinksp[hh])
-                } else {
-                    softmax(attp_h + rbase, cnt)
-                }
-                let qbase = p * qd + qoff
-                for (i in range64(head_size)) {
-                    xbp[qbase + i] = 0.0
-                }
-            }
-            // PASS 2: output += Σ att[j]·V[j] — each V[kk] loaded once, reused across the block
-            for (r in range64(nrun)) {
-                let rj0 = max(runs[r].j0, kstart_block)
-                let rj1 = min(runs[r].j1, ap_last + 1l)
-                let rowbase = runs[r].row0 - runs[r].j0
-                for (kk in range64(rj0, rj1)) {
-                    let voff = (rowbase + kk) * vdim + vhoff
-                    let bi_lo = max(0l, kk - ap_first)
-                    var bi_hi = bq
-                    if (is_sliding) {
-                        bi_hi = min(bq, kk + sliding_window - ap_first)
-                    }
-                    for (bi in range64(bi_lo, bi_hi)) {
-                        let p = p0 + bi
-                        let ap = start_pos + p
-                        let kstart_p = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
-                        let qbase = p * qd + qoff
-                        kv_axpy(xbp + qbase, vcp + voff, attp_h[bi * maxctx + (kk - kstart_p)], head_size)
-                    }
-                }
-            }
-            p0 += ATTN_BLOCK_Q
-        }
+//! Greedy decode. While still inside `prompt_tokens`, the next token is forced from the prompt;
+//! otherwise it's argmax. Returns emitted IDs (prompt echo minus BOS, then continuation; stops on BOS).
+def generate(t : Model; var s : Session; prompt_tokens : array<int64>; steps : int) : array<int64> {
+    var ids : array<int64>
+    let n_prompt = long_length(prompt_tokens)
+    let nsteps = int64(steps)
+    if (nsteps <= 0l || n_prompt <= 0l) {
+        return <- ids
     }
+    ids |> reserve(nsteps)
+    // prefill the whole prompt in one batched pass (cache 0..n_prompt-1; logits at the last position)
+    forward_batch(t, s, prompt_tokens, n_prompt, 0l)
+    // echo prompt[1..n_prompt-1] (the forced "next" tokens while consuming the prompt), honoring
+    // the step budget and the BOS delimiter
+    for (q in range64(n_prompt - 1l)) {
+        if (long_length(ids) >= nsteps) {
+            return <- ids
+        }
+        let tok = prompt_tokens[q + 1l]
+        if (tok == 1l) {
+            return <- ids
+        }
+        ids |> push(tok)
+    }
+    // greedy continuation: sample from the last prompt position's logits, then decode one token
+    // per step at the next absolute position
+    if (long_length(ids) >= nsteps) {
+        return <- ids
+    }
+    var token = argmax(s, t.config.vocab_size)
+    var apos = n_prompt
+    var one : array<int64>
+    one |> resize(1)
+    while (long_length(ids) < nsteps) {
+        if (token == 1l) {  // BOS delimits sequences
+            break
+        }
+        ids |> push(token)
+        if (long_length(ids) >= nsteps) {
+            break
+        }
+        one[0] = token
+        forward_batch(t, s, one, 1l, apos)
+        apos ++
+        token = argmax(s, t.config.vocab_size)
+    }
+    return <- ids
 }
 
-// One head of CLASSIC prefill attention (see prefill_attention) — codec-generic + run-walking.
-// attp_h = this head's private score row (maxctx wide, window-relative); each query's window
-// [kstart, ap] intersects the layer's physical runs. Scores through kv_score (see attn_head_blocked).
-def private attn_head_classic(var attp_h : float?; var xbp : float?; qp : float const?;
-                              qq : int8 const?; qsp : float const?;
-                              kcp, vcp : auto const?; runs : KVRun const?;
-                              nrun, npos, start_pos, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh : int64;
-                              scale : float; is_sliding : bool; sliding_window : int64;
-                              attn_softcap : float; sinksp : float const?) {
-    unsafe {
-        for (p in range64(npos)) {
-            let ap = start_pos + p
-            let kstart = (is_sliding && ap + 1l > sliding_window) ? (ap + 1l - sliding_window) : 0l
-            let cnt = ap + 1l - kstart
-            let qbase = p * qd + qoff           // q row == output row (both qd-strided)
-            for (r in range64(nrun)) {
-                let rj0 = max(runs[r].j0, kstart)
-                let rj1 = min(runs[r].j1, ap + 1l)
-                let rowbase = runs[r].row0 - runs[r].j0
-                for (aj in range64(rj0, rj1)) {
-                    attp_h[aj - kstart] = kv_score(qp, qq, qsp, kcp, (rowbase + aj) * kdim + khoff, qbase, head_size) * scale
-                }
-            }
-            if (attn_softcap > 0.0) {  // Gemma2: soft-cap scores before softmax
-                softcap4(attp_h, cnt, attn_softcap)
-            }
-            if (sinksp != null) {  // gpt-oss: sink joins the denominator
-                softmax_sink(attp_h, cnt, sinksp[hh])
-            } else {
-                softmax(attp_h, cnt)
-            }
-            for (i in range64(head_size)) {
-                xbp[qbase + i] = 0.0
-            }
-            for (r in range64(nrun)) {   // output += Σ att[j]·V[j]
-                let rj0 = max(runs[r].j0, kstart)
-                let rj1 = min(runs[r].j1, ap + 1l)
-                let rowbase = runs[r].row0 - runs[r].j0
-                for (aj in range64(rj0, rj1)) {
-                    kv_axpy(xbp + qbase, vcp + (rowbase + aj) * vdim + vhoff, attp_h[aj - kstart], head_size)
-                }
-            }
-        }
-    }
+// ===== Shared arch-registration surface =====
+// Chat-template part builders + the default dense block set; each arch self-registers at [init].
+
+//! Chat-template part builders (for arch registration + the chat engine). `chat_text` is literal
+//! text; `chat_special` is a special-token spelling the renderer resolves to an id; `chat_content`
+//! is the slot the message text fills.
+def chat_text(s : string) : ChatPart {
+    return ChatPart(kind = ChatPartKind.text, s = s)
+}
+def chat_special(s : string) : ChatPart {
+    return ChatPart(kind = ChatPartKind.special, s = s)
+}
+def chat_content() : ChatPart {
+    return ChatPart(kind = ChatPartKind.content, s = "")
 }
 
-// Prefill codec dispatch (same contract as attn_head_decode_d): one wrapper per prefill worker,
-// the 3x3 K×V matrix spelled once. Prefill is compute-bound, so dequant-in-dot is fine — no
-// query quantize needed.
-def private attn_head_flash_d(qp : float const?; kcl, vcl : uint8 const?; kdt, vdt : KVDtype; var xbp : float?;
-                              var qpk, kpk, vpk, kqp, vkqp, tmpp : float?; runs : KVRun const?;
-                              nrun, npos, start_pos, head_size, qd, kv_dim, kvhoff, qoff : int64;
-                              scale : float; is_sliding : bool; sliding_window : int64; attn_softcap : float;
-                              has_sink : bool; sink : float) {
-    let kdim = kv_side_off(kdt, kv_dim)
-    let khoff = kv_side_off(kdt, kvhoff)
-    let vdim = kv_side_off(vdt, kv_dim)
-    let vhoff = kv_side_off(vdt, kvhoff)
-    unsafe {
-        if (kdt == KVDtype.q8_0) {
-            if (vdt == KVDtype.q8_0) {
-                attn_head_flash(qp, kcl, vcl, xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            } elif (vdt == KVDtype.tq4) {
-                attn_head_flash(qp, kcl, reinterpret<TQ4B const?>(vcl), xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            } elif (vdt == KVDtype.f16) {
-                attn_head_flash(qp, kcl, reinterpret<uint16 const?>(vcl), xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            } else {
-                attn_head_flash(qp, kcl, reinterpret<float const?>(vcl), xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            }
-        } elif (kdt == KVDtype.tq4) {
-            if (vdt == KVDtype.q8_0) {
-                attn_head_flash(qp, reinterpret<TQ4B const?>(kcl), vcl, xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            } elif (vdt == KVDtype.tq4) {
-                attn_head_flash(qp, reinterpret<TQ4B const?>(kcl), reinterpret<TQ4B const?>(vcl), xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            } elif (vdt == KVDtype.f16) {
-                attn_head_flash(qp, reinterpret<TQ4B const?>(kcl), reinterpret<uint16 const?>(vcl), xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            } else {
-                attn_head_flash(qp, reinterpret<TQ4B const?>(kcl), reinterpret<float const?>(vcl), xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            }
-        } elif (kdt == KVDtype.f16) {
-            if (vdt == KVDtype.q8_0) {
-                attn_head_flash(qp, reinterpret<uint16 const?>(kcl), vcl, xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            } elif (vdt == KVDtype.tq4) {
-                attn_head_flash(qp, reinterpret<uint16 const?>(kcl), reinterpret<TQ4B const?>(vcl), xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            } elif (vdt == KVDtype.f16) {
-                attn_head_flash(qp, reinterpret<uint16 const?>(kcl), reinterpret<uint16 const?>(vcl), xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            } else {
-                attn_head_flash(qp, reinterpret<uint16 const?>(kcl), reinterpret<float const?>(vcl), xbp,
-                    qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, head_size, qd,
-                    kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-            }
-        } elif (vdt == KVDtype.q8_0) {
-            attn_head_flash(qp, reinterpret<float const?>(kcl), vcl, xbp,
-                qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, head_size, qd,
-                kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-        } elif (vdt == KVDtype.tq4) {
-            attn_head_flash(qp, reinterpret<float const?>(kcl), reinterpret<TQ4B const?>(vcl), xbp,
-                qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, head_size, qd,
-                kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-        } elif (vdt == KVDtype.f16) {
-            attn_head_flash(qp, reinterpret<float const?>(kcl), reinterpret<uint16 const?>(vcl), xbp,
-                qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, head_size, qd,
-                kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-        } else {
-            attn_head_flash(qp, reinterpret<float const?>(kcl), reinterpret<float const?>(vcl), xbp,
-                qpk, kpk, vpk, kqp, vkqp, tmpp, runs, nrun, npos, start_pos, head_size, qd,
-                kdim, khoff, vdim, vhoff, qoff, scale, is_sliding, sliding_window, attn_softcap, has_sink, sink)
-        }
-    }
+//! Install the ChatML turn set (``<|im_start|>``/``<|im_end|>``) the whole qwen family shares,
+//! empty-think suppress included — every ``<|im_start|>`` GGUF maps here, thinking fine-tunes
+//! too; the suppress renders only when the vocab carries the think specials.
+def chatml_chat(var ct : ChatTemplate) {
+    ct.system.parts <- [chat_special("<|im_start|>"), chat_text("system\n"), chat_content(), chat_special("<|im_end|>"), chat_text("\n")]
+    ct.user.parts <- [chat_special("<|im_start|>"), chat_text("user\n"), chat_content(), chat_special("<|im_end|>"), chat_text("\n")]
+    ct.assistant_open.parts <- [chat_special("<|im_start|>"), chat_text("assistant\n")]
+    ct.think_suppress.parts <- [chat_special("<think>"), chat_text("\n\n"), chat_special("</think>"), chat_text("\n\n")]
+    ct.stop <- ["<|im_end|>", "<|endoftext|>"]
 }
 
-def private attn_head_blocked_d(var attp_h : float?; var xbp : float?; qp : float const?;
-                                qq : int8 const?; qsp : float const?;
-                                kcl, vcl : uint8 const?; kdt, vdt : KVDtype; runs : KVRun const?;
-                                nrun, npos, start_pos, maxctx, qd, head_size, kv_dim, kvhoff, qoff, hh : int64;
-                                scale : float; is_sliding : bool; sliding_window : int64;
-                                attn_softcap : float; sinksp : float const?) {
-    let kdim = kv_side_off(kdt, kv_dim)
-    let khoff = kv_side_off(kdt, kvhoff)
-    let vdim = kv_side_off(vdt, kv_dim)
-    let vhoff = kv_side_off(vdt, kvhoff)
-    unsafe {
-        if (kdt == KVDtype.q8_0) {
-            if (vdt == KVDtype.q8_0) {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, kcl, vcl,
-                    runs, nrun, npos, start_pos, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.tq4) {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, kcl, reinterpret<TQ4B const?>(vcl),
-                    runs, nrun, npos, start_pos, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.f16) {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, kcl, reinterpret<uint16 const?>(vcl),
-                    runs, nrun, npos, start_pos, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } else {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, kcl, reinterpret<float const?>(vcl),
-                    runs, nrun, npos, start_pos, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            }
-        } elif (kdt == KVDtype.tq4) {
-            if (vdt == KVDtype.q8_0) {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<TQ4B const?>(kcl), vcl,
-                    runs, nrun, npos, start_pos, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.tq4) {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<TQ4B const?>(kcl), reinterpret<TQ4B const?>(vcl),
-                    runs, nrun, npos, start_pos, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.f16) {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<TQ4B const?>(kcl), reinterpret<uint16 const?>(vcl),
-                    runs, nrun, npos, start_pos, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } else {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<TQ4B const?>(kcl), reinterpret<float const?>(vcl),
-                    runs, nrun, npos, start_pos, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            }
-        } elif (kdt == KVDtype.f16) {
-            if (vdt == KVDtype.q8_0) {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<uint16 const?>(kcl), vcl,
-                    runs, nrun, npos, start_pos, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.tq4) {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<uint16 const?>(kcl), reinterpret<TQ4B const?>(vcl),
-                    runs, nrun, npos, start_pos, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.f16) {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<uint16 const?>(kcl), reinterpret<uint16 const?>(vcl),
-                    runs, nrun, npos, start_pos, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } else {
-                attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<uint16 const?>(kcl), reinterpret<float const?>(vcl),
-                    runs, nrun, npos, start_pos, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            }
-        } elif (vdt == KVDtype.q8_0) {
-            attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<float const?>(kcl), vcl,
-                runs, nrun, npos, start_pos, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                scale, is_sliding, sliding_window, attn_softcap, sinksp)
-        } elif (vdt == KVDtype.tq4) {
-            attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<float const?>(kcl), reinterpret<TQ4B const?>(vcl),
-                runs, nrun, npos, start_pos, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                scale, is_sliding, sliding_window, attn_softcap, sinksp)
-        } elif (vdt == KVDtype.f16) {
-            attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<float const?>(kcl), reinterpret<uint16 const?>(vcl),
-                runs, nrun, npos, start_pos, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                scale, is_sliding, sliding_window, attn_softcap, sinksp)
-        } else {
-            attn_head_blocked(attp_h, xbp, qp, qq, qsp, reinterpret<float const?>(kcl), reinterpret<float const?>(vcl),
-                runs, nrun, npos, start_pos, maxctx, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                scale, is_sliding, sliding_window, attn_softcap, sinksp)
-        }
-    }
+//! Install the Gemma turn set (``<start_of_turn>``/``<end_of_turn>``, BOS at conversation start,
+//! no system role — the chat layer folds it into the first user turn; pair with
+//! ``lcaps.system_prompt = false``). gemma4's channel-based format diverges and stays in its file.
+def gemma_chat(var ct : ChatTemplate) {
+    ct.add_bos = true   // BOS = <bos>
+    ct.user.parts <- [chat_special("<start_of_turn>"), chat_text("user\n"), chat_content(), chat_special("<end_of_turn>"), chat_text("\n")]
+    ct.assistant_open.parts <- [chat_special("<start_of_turn>"), chat_text("model\n")]
+    ct.stop <- ["<end_of_turn>", "<eos>"]
 }
 
-def private attn_head_classic_d(var attp_h : float?; var xbp : float?; qp : float const?;
-                                qq : int8 const?; qsp : float const?;
-                                kcl, vcl : uint8 const?; kdt, vdt : KVDtype; runs : KVRun const?;
-                                nrun, npos, start_pos, qd, head_size, kv_dim, kvhoff, qoff, hh : int64;
-                                scale : float; is_sliding : bool; sliding_window : int64;
-                                attn_softcap : float; sinksp : float const?) {
-    let kdim = kv_side_off(kdt, kv_dim)
-    let khoff = kv_side_off(kdt, kvhoff)
-    let vdim = kv_side_off(vdt, kv_dim)
-    let vhoff = kv_side_off(vdt, kvhoff)
-    unsafe {
-        if (kdt == KVDtype.q8_0) {
-            if (vdt == KVDtype.q8_0) {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, kcl, vcl,
-                    runs, nrun, npos, start_pos, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.tq4) {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, kcl, reinterpret<TQ4B const?>(vcl),
-                    runs, nrun, npos, start_pos, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.f16) {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, kcl, reinterpret<uint16 const?>(vcl),
-                    runs, nrun, npos, start_pos, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } else {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, kcl, reinterpret<float const?>(vcl),
-                    runs, nrun, npos, start_pos, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            }
-        } elif (kdt == KVDtype.tq4) {
-            if (vdt == KVDtype.q8_0) {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<TQ4B const?>(kcl), vcl,
-                    runs, nrun, npos, start_pos, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.tq4) {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<TQ4B const?>(kcl), reinterpret<TQ4B const?>(vcl),
-                    runs, nrun, npos, start_pos, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.f16) {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<TQ4B const?>(kcl), reinterpret<uint16 const?>(vcl),
-                    runs, nrun, npos, start_pos, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } else {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<TQ4B const?>(kcl), reinterpret<float const?>(vcl),
-                    runs, nrun, npos, start_pos, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            }
-        } elif (kdt == KVDtype.f16) {
-            if (vdt == KVDtype.q8_0) {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<uint16 const?>(kcl), vcl,
-                    runs, nrun, npos, start_pos, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.tq4) {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<uint16 const?>(kcl), reinterpret<TQ4B const?>(vcl),
-                    runs, nrun, npos, start_pos, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } elif (vdt == KVDtype.f16) {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<uint16 const?>(kcl), reinterpret<uint16 const?>(vcl),
-                    runs, nrun, npos, start_pos, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            } else {
-                attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<uint16 const?>(kcl), reinterpret<float const?>(vcl),
-                    runs, nrun, npos, start_pos, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                    scale, is_sliding, sliding_window, attn_softcap, sinksp)
-            }
-        } elif (vdt == KVDtype.q8_0) {
-            attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<float const?>(kcl), vcl,
-                runs, nrun, npos, start_pos, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                scale, is_sliding, sliding_window, attn_softcap, sinksp)
-        } elif (vdt == KVDtype.tq4) {
-            attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<float const?>(kcl), reinterpret<TQ4B const?>(vcl),
-                runs, nrun, npos, start_pos, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                scale, is_sliding, sliding_window, attn_softcap, sinksp)
-        } elif (vdt == KVDtype.f16) {
-            attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<float const?>(kcl), reinterpret<uint16 const?>(vcl),
-                runs, nrun, npos, start_pos, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                scale, is_sliding, sliding_window, attn_softcap, sinksp)
-        } else {
-            attn_head_classic(attp_h, xbp, qp, qq, qsp, reinterpret<float const?>(kcl), reinterpret<float const?>(vcl),
-                runs, nrun, npos, start_pos, qd, head_size, kdim, khoff, vdim, vhoff, qoff, hh,
-                scale, is_sliding, sliding_window, attn_softcap, sinksp)
-        }
-    }
+//! Install the Hermes-style tool-calling format (the Qwen2.5/Qwen3 chat template's tool block):
+//! ``<tools>`` JSON definitions in the system turn, ``<tool_call>`` JSON calls in assistant
+//! output, ``<tool_response>`` results riding user turns.
+def hermes_tools(var ct : ChatTemplate) {
+    ct.tool_sys_prelude = "# Tools\n\nYou may call one or more functions to assist with the user query.\n\nYou are provided with function signatures within <tools></tools> XML tags:\n<tools>"
+    ct.tool_sys_epilogue = "</tools>\n\nFor each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\n<tool_call>\n\{\"name\": <function-name>, \"arguments\": <args-json-object>}\n</tool_call>"
+    ct.tool_call_open = "<tool_call>"
+    ct.tool_call_close = "</tool_call>"
+    ct.tool_resp_open = "<tool_response>"
+    ct.tool_resp_close = "</tool_response>"
 }
 
-def private prefill_attention(var s : Session; kcl, vcl : uint8 const?; npos, start_pos, head_size, qd, kv_dim,
-                              n_heads, kv_mul : int64; scale : float;
-                              is_sliding : bool; sliding_window : int64; attn_softcap : float;
-                              sinksp : float const?) {   // this layer's per-head sink logits; null = no sinks
-    let maxctx = start_pos + npos          // per-head att row width (= max cnt over this call)
-    // narrow batches are decode-shaped: under the prefill work threshold they lose every lane
-    let attn_par = npos <= ATTN_NARROW_NPOS || npos * maxctx * n_heads >= g_attn_par_threshold
-    let kdt = s.kv_dtype_k
-    let vdt = s.kv_dtype_v
-    // ONE run list over the layer's widest window; workers intersect their sub-windows with each run
-    let kstart_min = (is_sliding && start_pos + 1l > sliding_window) ? (start_pos + 1l - sliding_window) : 0l
-    let nrun = kv_runs(s, kstart_min, start_pos + npos, s.kv_runs)
-    // block-codec K: quantize every query row once so scores run the SAME int8 dot as decode; flash skips this (f32 tiles)
-    if ((kdt == KVDtype.q8_0 || kdt == KVDtype.tq4) && g_attn_prefill_mode != AttnPrefillMode.flash) {
-        if (long_length(s.attq) < npos * qd) {
-            s.attq |> resize(int(npos * qd))
-            s.atts |> resize(int(npos * qd / 32l))
-        }
-        quantize_q8_0_into(s.q_b, npos * qd, s.attq, s.atts, 0l, 0l)
-    }
-    unsafe {
-        let qp = addr < float const? >(s.q_b[0])
-        let kq8bc = (kdt == KVDtype.q8_0 || kdt == KVDtype.tq4) && g_attn_prefill_mode != AttnPrefillMode.flash
-        let qqp = kq8bc ? addr < int8 const? >(s.attq[0]) : null
-        let qsp = kq8bc ? addr < float const? >(s.atts[0]) : null
-        let runsp = addr < KVRun const? >(s.kv_runs[0])
-        var xbp = addr(s.xb_b[0])
-        // att_b is sized only for blocked/classic (flash packs into fa_* instead) — null under flash, never dereferenced
-        var attp = !empty(s.att_b) ? addr(s.att_b[0]) : null
-        if (g_attn_prefill_mode == AttnPrefillMode.flash) {
-            // per-head packing scratch bases (sized in forward_prefill for this mode)
-            var qpk0 = addr(s.fa_q[0]);  var kpk0 = addr(s.fa_k[0]);  var vpk0 = addr(s.fa_v[0])
-            var kqp0 = addr(s.fa_kq[0]); var vkqp0 = addr(s.fa_vkq[0]); var tmp0 = addr(s.fa_tmp[0])
-            maybe_parallel_for(attn_par, 0, int(n_heads), get_dispatch_lanes()) $(rb, re) {
-                unsafe {
-                    for (h in range(rb, re)) {
-                        let hh = int64(h)
-                        let qoff = hh * head_size
-                        let kvhoff = (hh / kv_mul) * head_size
-                        attn_head_flash_d(qp, kcl, vcl, kdt, vdt, xbp,
-                            qpk0 + hh * ATTN_FLASH_QT * head_size,
-                            kpk0 + hh * head_size * ATTN_FLASH_KV,
-                            vpk0 + hh * ATTN_FLASH_KV * head_size,
-                            kqp0 + hh * ATTN_FLASH_QT * ATTN_FLASH_KV,
-                            vkqp0 + hh * ATTN_FLASH_QT * head_size,
-                            tmp0 + hh * head_size, runsp,
-                            nrun, npos, start_pos, head_size, qd, kv_dim, kvhoff, qoff,
-                            scale, is_sliding, sliding_window, attn_softcap,
-                            sinksp != null, sinksp != null ? sinksp[hh] : 0.0)
-                    }
-                }
-            }
-        } elif (g_attn_prefill_mode == AttnPrefillMode.blocked) {
-            maybe_parallel_for(attn_par, 0, int(n_heads), get_dispatch_lanes()) $(rb, re) {
-                unsafe {
-                    for (h in range(rb, re)) {
-                        let hh = int64(h)
-                        let qoff = hh * head_size
-                        let kvhoff = (hh / kv_mul) * head_size
-                        attn_head_blocked_d(attp + hh * ATTN_BLOCK_Q * maxctx, xbp, qp, qqp, qsp, kcl, vcl, kdt, vdt, runsp,
-                            nrun, npos, start_pos, maxctx, qd, head_size, kv_dim, kvhoff, qoff, hh,
-                            scale, is_sliding, sliding_window, attn_softcap, sinksp)
-                    }
-                }
-            }
-        } else {
-            maybe_parallel_for(attn_par, 0, int(n_heads), get_dispatch_lanes()) $(rb, re) {
-                unsafe {
-                    for (h in range(rb, re)) {
-                        let hh = int64(h)
-                        let qoff = hh * head_size
-                        let kvhoff = (hh / kv_mul) * head_size
-                        attn_head_classic_d(attp + hh * maxctx, xbp, qp, qqp, qsp, kcl, vcl, kdt, vdt, runsp,
-                            nrun, npos, start_pos, qd, head_size, kv_dim, kvhoff, qoff, hh,
-                            scale, is_sliding, sliding_window, attn_softcap, sinksp)
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ===== std/dense block kernels (prefill, batched) =====
-// Batched counterparts to attention_std_decode / ffn_dense_decode; bit-for-bit identical to
-// calling forward() per position in sequence. Q4 has no batched kernel, falls back to per-token.
+// ===== forward drivers (prefill, batched) =====
+// The prefill/batch entry points and the shared QKV+RoPE prefix; the block kernels themselves
+// live in dasllama_blocks. Bit-for-bit identical to calling forward() per position in sequence.
 
 // attn-norm → batched QKV(+bias) → qk/v-norm → RoPE, for npos rows of x_b into q_b/k_b/v_b — the
 // position-free head of the std attention block, shared by prefill and (later) batched decode.
-def private attn_qkv_rope_prefix(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) {
+def attn_qkv_rope_prefix(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) {
     let c = t.config
     let dim = c.dim
     let kv_dim = layer_kv_dim(c, l)
@@ -11004,7 +4465,7 @@ def private attn_qkv_rope_prefix(t : Model; var s : Session; l : int64; npos : i
 
 // out-proj(+bias, +post-norm) → residual, for npos rows of xb_b back into x_b — the position-free
 // tail of the std attention block, shared by prefill and (later) batched decode.
-def private attn_out_suffix(t : Model; var s : Session; l : int64; npos : int64) {
+def attn_out_suffix(t : Model; var s : Session; l : int64; npos : int64) {
     let c = t.config
     let dim = c.dim
     let qd = c.n_heads * layer_head_size(c, l)
@@ -11028,1626 +4489,6 @@ def private attn_out_suffix(t : Model; var s : Session; l : int64; npos : int64)
 // The GPU arm shared by the std and gated prefill blocks: the whole attention block (GEMMs,
 // qk-norm, rope, flash-style attention, wo) as one device chain per window; norm, activation
 // image, KV-store, and residual stay CPU. Numerics: GPU f32 tile accumulation — drift-class vs CPU flash.
-def private attention_gpu_prefill(t : Model; var s : Session; l : int64; npos : int64; gated : bool) {
-    let c = t.config
-    let dim = c.dim
-    let kv_dim = layer_kv_dim(c, l)
-    let head_size = layer_head_size(c, l)
-    let n_heads = c.n_heads
-    let n_kv_heads = layer_n_kv_heads(c, l)
-    let qd = n_heads * head_size
-    let kv_mul = n_heads / n_kv_heads
-    let scale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size))
-    let rot = c.rope_dim > 0l ? c.rope_dim : head_size
-    let fq = fmt_at(t.wq_fmt, l)
-    let kq_cls = fq != KqFmt.q8
-    let ts_norm0 = ref_time_ticks()
-    rms_batch(s.xb_b, s.x_b, t, t.rms_att_off + l * dim, dim, npos)
-    if (kq_cls) {   // the chain's activation image follows the q/k/v stack class
-        s.kxqb |> resize(int(npos * dim))
-        s.kxsb |> resize(int(npos * dim / 256l))
-        s.kxbsb |> resize(int(npos * dim / 16l))
-        requant_rows_q8k_bs(s.xb_b, dim, npos, s.kxqb, s.kxsb, s.kxbsb)
-    } else {
-        requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)
-    }
-    if (!g_use_rope_table) {   // the GPU rope consumes table rows — build them (bit-identical values)
-        build_rope_table(s.rope_cos, s.rope_sin, t, c.rope_freq_base, c.rope_freq_scale, 0l, npos, rot, true)
-    }
-    prof_add("at_norm", ts_norm0)
-    let ts_gpu = ref_time_ticks()
-    unsafe {
-        if (kq_cls) {
-            matmul_moe_gpu_attn(s.xb2_b, s.k_b, s.v_b,
-                t.wq_offs[l], t.wk_offs[l], t.wv_offs[l], t.wo_offs[l],
-                int(fq), int(fmt_at(t.wk_fmt, l)), int(fmt_at(t.wv_fmt, l)), int(fmt_at(t.wo_fmt, l)),
-                s.kxqb, s.kxsb,
-                c.qk_norm ? addr<float const?>(t.fblob[t.rms_q_offs[l]]) : null,
-                c.qk_norm ? addr<float const?>(t.fblob[t.rms_k_offs[l]]) : null,
-                addr<float const?>(s.rope_cos[0]), addr<float const?>(s.rope_sin[0]),
-                npos, dim, qd, kv_dim, head_size, rot, n_heads, kv_mul,
-                scale, c.norm_eps, gated, c.qk_norm)
-        } else {
-            matmul_moe_gpu_attn(s.xb2_b, s.k_b, s.v_b,
-                t.wq_offs[l], t.wk_offs[l], t.wv_offs[l], t.wo_offs[l],
-                int(fq), int(fmt_at(t.wk_fmt, l)), int(fmt_at(t.wv_fmt, l)), int(fmt_at(t.wo_fmt, l)),
-                s.xqb, s.xsb,
-                c.qk_norm ? addr<float const?>(t.fblob[t.rms_q_offs[l]]) : null,
-                c.qk_norm ? addr<float const?>(t.fblob[t.rms_k_offs[l]]) : null,
-                addr<float const?>(s.rope_cos[0]), addr<float const?>(s.rope_sin[0]),
-                npos, dim, qd, kv_dim, head_size, rot, n_heads, kv_mul,
-                scale, c.norm_eps, gated, c.qk_norm)
-        }
-    }
-    prof_add("at_gpu", ts_gpu)
-    // the cache store runs the normal CPU codec off the DMA'd k/v rows
-    let ts_kv = ref_time_ticks()
-    var kcl = kv_layer_kbase(s, l, c.seq_len)
-    var vcl = kv_layer_vbase(s, l, c.seq_len)
-    let store_nrun = kv_runs(s, 0l, npos, s.kv_runs)
-    unsafe {
-        kv_store_batch(kcl, vcl, s.kv_dtype_k, s.kv_dtype_v, s.k_b, s.v_b,
-            addr < KVRun const? >(s.kv_runs[0]), store_nrun, 0l, npos, kv_dim)
-    }
-    prof_add("kv_store", ts_kv)
-    let ts_resid = ref_time_ticks()
-    add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
-    prof_add("at_resid", ts_resid)
-}
-
-// npos >= 32 (a batch worth dispatching), start of sequence only (the chain reads the batch's
-// own K/V device-side), tq4 excluded (the basis change lives in the CPU path), npos within the
-// chain's context capacity
-def private attn_gpu_prefill_ready(s : Session; l : int64; npos : int64; start_pos : int64) : bool {
-    return (npos >= 32l && npos <= 4096l && start_pos == 0l && moe_gpu_attn_on_gpu(l)
-        && s.kv_dtype_k != KVDtype.tq4 && s.kv_dtype_v != KVDtype.tq4)
-}
-
-// attn-norm → batched QKV(+bias) → RoPE → KV-store → prefill attention → out-proj(+post-norm) → residual.
-[no_alloc, no_env, no_io]
-def private attention_std_prefill(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) {
-    if (attn_gpu_prefill_ready(s, l, npos, start_pos)) {
-        attention_gpu_prefill(t, s, l, npos, false)   // buckets at_norm / at_gpu / kv_store / at_resid
-        return
-    }
-    let c = t.config
-    let kv_dim = layer_kv_dim(c, l)
-    let head_size = layer_head_size(c, l)
-    let n_heads = c.n_heads
-    let n_kv_heads = layer_n_kv_heads(c, l)
-    let qd = n_heads * head_size
-    let kv_mul = n_heads / n_kv_heads
-    let scale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size))
-    var kcl = kv_layer_kbase(s, l, c.seq_len)   // layer-base byte pointers (aliases the source layer when shared)
-    var vcl = kv_layer_vbase(s, l, c.seq_len)
-    let is_sliding = layer_is_sliding(c, l)
-    let kv_shared = t.kv_src[l] != l
-    attn_qkv_rope_prefix(t, s, l, npos, start_pos)
-    let ktq4 = s.kv_dtype_k == KVDtype.tq4
-    let vtq4 = s.kv_dtype_v == KVDtype.tq4
-    if (ktq4 || vtq4) {
-        // tq4 basis change at the RoPE seam (see attention_std_decode); xb_b un-rotates below
-        let ts_rot = ref_time_ticks()
-        unsafe {
-            let sgp = addr < float const? >(s.kv_signs[0])
-            if (ktq4) {
-                tq4_rotate_batch(s.q_b, npos, qd, head_size, sgp)
-                if (!kv_shared) {
-                    tq4_rotate_batch(s.k_b, npos, kv_dim, head_size, sgp)
-                }
-            }
-            if (vtq4 && !kv_shared) {
-                tq4_rotate_batch(s.v_b, npos, kv_dim, head_size, sgp)
-            }
-        }
-        prof_add("tq4_rot", ts_rot)
-    }
-    // separate pass (provably identical to interleaving); shared-KV layers store nothing — already cached
-    if (!kv_shared) {
-        let ts_kv = ref_time_ticks()
-        let store_nrun = kv_runs(s, start_pos, start_pos + npos, s.kv_runs)   // where the new rows land
-        unsafe {
-            kv_store_batch(kcl, vcl, s.kv_dtype_k, s.kv_dtype_v, s.k_b, s.v_b,
-                addr < KVRun const? >(s.kv_runs[0]), store_nrun, start_pos, npos, kv_dim)
-        }
-        prof_add("kv_store", ts_kv)
-    }
-    // causal attention into xb_b; output for position p lands at xb_b[p*qd..], feeding wo below
-    let ts_attn = ref_time_ticks()
-    let sinksp = (c.attn_sinks
-        ? unsafe(addr < float const? >(t.fblob[t.sinks_off + l * n_heads]))
-        : null)
-    prefill_attention(s, kcl, vcl, npos, start_pos, head_size, qd, kv_dim, n_heads, kv_mul, scale,
-                      is_sliding, c.sliding_window, c.attn_logit_softcap, sinksp)
-    prof_add("attn", ts_attn)
-    if (vtq4) {   // tq4 V: xb_b rows accumulated in the rotated basis — un-rotate per (pos, head)
-        unsafe {
-            tq4_unrotate_batch(s.xb_b, npos, qd, head_size, addr < float const? >(s.kv_signs[0]))
-        }
-    }
-    attn_out_suffix(t, s, l, npos)
-}
-
-// Batched causal conv over the whole prefill window + per-row epilogue (SiLU, q/k L2-norm, q
-// pre-scale): row p depends only on input rows p-taps..p, so rows parallelize freely. Weights
-// transpose tap-major once per layer for vector fmas instead of a per-channel scalar tap walk.
-def private dn_conv_batch(t : Model; var s : Session; l : int64; npos : int64) {
-    let c = t.config
-    let cd = dn_conv_dim(c)
-    let kd = dn_key_dim(c)
-    let nkh = c.ssm_n_group
-    let ds = c.ssm_d_state
-    let dconv = c.ssm_d_conv
-    let taps = dconv - 1l
-    let qscale = 1.0 / sqrt(float(ds))
-    unsafe {
-        let wsrc = addr < float const? >(t.fblob[t.dn_conv_off + l * dconv * cd])
-        var wtp = addr(s.dn_wtap[0])
-        for (ch in range64(cd)) {
-            for (k in range64(dconv)) {
-                wtp[k * cd + ch] = wsrc[ch * dconv + k]
-            }
-        }
-    }
-    var inp0 : float const?
-    var wtap0 : float const?
-    var hist0 : float const?
-    var outp0 : float?
-    unsafe {
-        inp0 = addr < float const? >(s.dn_qkv_b[0])
-        wtap0 = addr < float const? >(s.dn_wtap[0])
-        hist0 = addr < float const? >(s.dn_conv_state[s.dn_conv_prefix[l]])
-        outp0 = addr(s.dn_conv_b[0])
-    }
-    maybe_parallel_for(npos * cd >= g_act_par_threshold, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
-        unsafe {
-            for (pp in range(rb, re)) {
-                let p = int64(pp)
-                var orow = outp0 + p * cd
-                if (p >= taps) {   // all taps in-batch: dconv row fmas over float4 channel blocks
-                    let irow = inp0 + (p - taps) * cd
-                    var ch = 0l
-                    while (ch < cd) {
-                        var acc = float4(0.0, 0.0, 0.0, 0.0)
-                        for (k in range64(dconv)) {
-                            acc += *addr < float4 const? >(irow[k * cd + ch]) * *addr < float4 const? >(wtap0[k * cd + ch])
-                        }
-                        *addr < float4? >(orow[ch]) = acc
-                        ch += 4l
-                    }
-                } else {           // window straddles the batch start: missing taps from history
-                    for (ch in range64(cd)) {
-                        var acc = 0.0
-                        for (k in range64(dconv)) {
-                            let sp = p - taps + k
-                            acc += (sp >= 0l ? inp0[sp * cd + ch] : hist0[ch * taps + p + k]) * wtap0[k * cd + ch]
-                        }
-                        orow[ch] = acc
-                    }
-                }
-                silu(orow, cd)
-                l2_norm_rows(orow, nkh, ds, c.norm_eps)
-                l2_norm_rows(orow + kd, nkh, ds, c.norm_eps)
-                scale_inplace(orow, qscale, kd)
-            }
-        }
-    }
-    unsafe {   // advance the conv history to the last taps input rows (channel-major)
-        var st = addr(s.dn_conv_state[s.dn_conv_prefix[l]])
-        for (k in range64(taps)) {
-            let sp = npos - taps + k
-            if (sp >= 0l) {
-                for (ch in range64(cd)) {
-                    st[ch * taps + k] = inp0[sp * cd + ch]
-                }
-            } else {   // npos < taps: shift surviving old taps left (ascending k reads ahead of writes)
-                for (ch in range64(cd)) {
-                    st[ch * taps + k] = st[ch * taps + k + npos]
-                }
-            }
-        }
-    }
-}
-
-// One v-head's chunked delta rule over the whole prefill window (mirrors llama.cpp
-// build_delta_net_chunking; NOT bit-identical to the recurrent form — chunk FP reassociation).
-// Solves (I + A) d = V_beta - (K_beta ⊙ e^{gcum}) S per chunk; state S advances once per chunk.
-def private dn_chunked_head(conv : float const?; qoff, koff, voff, cd : int64;
-                            bp, gp : float const?; bg_stride : int64;
-                            zp : float const?; var op : float?; o_stride : int64;
-                            var stp : float?; var ws : float?; wnorm : float const?;
-                            aa, dtb, eps : float; vec : bool; npos, ds : int64) {
-    let CS = DN_CHUNK
-    unsafe {
-        var qc = ws                         // CS x ds: q rows, scaled to q ⊙ e^{gcum} after the KQ GEMM
-        var kcT = ws + CS * ds              // ds x cl: raw k, transposed (the B side of A/KQ GEMMs)
-        var kb = ws + 2l * CS * ds          // CS x ds: k ⊙ beta, scaled to -(k_beta ⊙ e^{gcum}) after A
-        var vb = ws + 3l * CS * ds          // CS x ds: v ⊙ beta
-        var w = ws + 4l * CS * ds           // CS x ds: -T @ (k_beta ⊙ e^{gcum})
-        var vnew = ws + 5l * CS * ds        // CS x ds: the in-chunk delta vectors d
-        var och = ws + 6l * CS * ds         // CS x ds: this chunk's outputs
-        var kgT = ws + 7l * CS * ds         // ds x cl: (k ⊙ e^{g_last - gcum})^T for the state update
-        var tm = ws + 8l * CS * ds          // cl x cl: A, solved in place into T (unit diag)
-        var kq = ws + 8l * CS * ds + CS * CS   // cl x cl: Q K^T ⊙ decay (diagonal kept)
-        var gcum = ws + 8l * CS * ds + 2l * CS * CS   // CS: in-chunk cumsum of log-decay
-        var egc = gcum + CS                 // CS: e^{gcum}
-        var kgc = gcum + 2l * CS            // CS: e^{g_last - gcum}
-        var c0 = 0l
-        while (c0 < npos) {
-            let cl = min(CS, npos - c0)
-            // gather + per-token transforms (beta/g raw -> beta = sigmoid, g = a·softplus(raw+dt))
-            var gacc = 0.0
-            for (i in range64(cl)) {
-                let crow = conv + (c0 + i) * cd
-                let bv = 1.0 / (1.0 + exp(-bp[(c0 + i) * bg_stride]))
-                gacc += aa * softplus(gp[(c0 + i) * bg_stride] + dtb)
-                gcum[i] = gacc
-                egc[i] = exp(gacc)
-                for (j in range64(ds)) {
-                    let kv = crow[koff + j]
-                    qc[i * ds + j] = crow[qoff + j]
-                    kcT[j * cl + i] = kv
-                    kb[i * ds + j] = kv * bv
-                    vb[i * ds + j] = crow[voff + j] * bv
-                }
-            }
-            // A = (k_beta k^T) ⊙ decay, strictly lower, negated for the in-place solve; KQ keeps its diagonal
-            for (i in range64(cl * cl)) {
-                tm[i] = 0.0
-                kq[i] = 0.0
-            }
-            gemm_f32(tm, kb, kcT, cl, ds, cl)
-            gemm_f32(kq, qc, kcT, cl, ds, cl)
-            for (i in range64(cl)) {
-                let gi = gcum[i]
-                var j = 0l
-                if (vec) {   // exp4 over the strictly-lower row (args <= 0; clamp = flash-fold convention)
-                    let gi4 = float4(gi, gi, gi, gi)
-                    while (j + 4l <= i) {
-                        let d = exp4(max(gi4 - float4(gcum[j], gcum[j + 1l], gcum[j + 2l], gcum[j + 3l]), EXP4_LO))
-                        tm[i * cl + j] = -tm[i * cl + j] * d.x
-                        tm[i * cl + j + 1l] = -tm[i * cl + j + 1l] * d.y
-                        tm[i * cl + j + 2l] = -tm[i * cl + j + 2l] * d.z
-                        tm[i * cl + j + 3l] = -tm[i * cl + j + 3l] * d.w
-                        kq[i * cl + j] *= d.x
-                        kq[i * cl + j + 1l] *= d.y
-                        kq[i * cl + j + 2l] *= d.z
-                        kq[i * cl + j + 3l] *= d.w
-                        j += 4l
-                    }
-                }
-                while (j < i) {
-                    let d = exp(gi - gcum[j])
-                    tm[i * cl + j] = -tm[i * cl + j] * d
-                    kq[i * cl + j] *= d
-                    j++
-                }
-                tm[i * cl + i] = 0.0
-                for (ju in range64(i + 1l, cl)) {   // upper: tm zeroed, kq zeroed (diagonal kept)
-                    tm[i * cl + ju] = 0.0
-                    kq[i * cl + ju] = 0.0
-                }
-            }
-            // forward substitution in place: T[i][j] = -A[i][j] - sum_t A[i][t] T[t][j]
-            for (i in range64(cl)) {
-                for (tt in range64(i)) {
-                    let coef = tm[i * cl + tt]
-                    for (j in range64(tt)) {
-                        tm[i * cl + j] += coef * tm[tt * cl + j]
-                    }
-                }
-                tm[i * cl + i] = 1.0
-            }
-            // d = T v_beta - (T (k_beta ⊙ e^{gcum})) S — kb scaled in place, minus folded into w
-            for (i in range64(cl)) {
-                scale_inplace(kb + i * ds, -egc[i], ds)
-            }
-            for (i in range64(cl * ds)) {
-                w[i] = 0.0
-                vnew[i] = 0.0
-            }
-            gemm_f32(w, tm, kb, cl, cl, ds)
-            gemm_f32(vnew, tm, vb, cl, cl, ds)
-            gemm_f32(vnew, w, stp, cl, ds, ds)
-            // o = (q ⊙ e^{gcum}) S + KQ d (qc scaled in place after its raw-q GEMM above)
-            for (i in range64(cl)) {
-                scale_inplace(qc + i * ds, egc[i], ds)
-            }
-            for (i in range64(cl * ds)) {
-                och[i] = 0.0
-            }
-            gemm_f32(och, qc, stp, cl, ds, ds)
-            gemm_f32(och, kq, vnew, cl, cl, ds)
-            // gated out-norm into batched output rows; z-gate exp4 (largest exp population of the whole prefill)
-            for (i in range64(cl)) {
-                rmsnorm(och + i * ds, reinterpret<float const?>(och + i * ds), wnorm, ds, eps)
-                var orow = op + (c0 + i) * o_stride
-                let zrow = zp + (c0 + i) * o_stride
-                if (vec) {
-                    silu_mul4(orow, och + i * ds, zrow, ds)
-                } else {
-                    for (j in range64(ds)) {
-                        let zv = zrow[j]
-                        orow[j] = och[i * ds + j] * (zv / (1.0 + exp(-zv)))
-                    }
-                }
-            }
-            // state advance, once per chunk: S = e^{g_last} S + (k ⊙ e^{g_last - gcum})^T d
-            let glast = gcum[cl - 1l]
-            scale_inplace(stp, exp(glast), ds * ds)
-            for (i in range64(cl)) {
-                kgc[i] = exp(glast - gcum[i])
-            }
-            for (j in range64(ds)) {
-                var kr = kgT + j * cl
-                let ks = kcT + j * cl
-                for (i in range64(cl)) {
-                    kr[i] = ks[i] * kgc[i]
-                }
-            }
-            gemm_f32(stp, kgT, vnew, ds, cl, ds)
-            c0 += cl
-        }
-    }
-}
-
-// The chunked deltanet prefill core: batched conv rows, then the per-v-head chunk pass threaded
-// over heads (each head's state chain is independent; per-head slabs in dn_cws).
-def private deltanet_prefill_chunked(t : Model; var s : Session; l : int64; npos : int64) {
-    let c = t.config
-    let cd = dn_conv_dim(c)
-    let kd = dn_key_dim(c)
-    let di = c.ssm_d_inner
-    let nvh = c.ssm_dt_rank
-    let nkh = c.ssm_n_group
-    let ds = c.ssm_d_state
-    let ts_conv = ref_time_ticks()
-    dn_conv_batch(t, s, l, npos)
-    prof_add("dn_conv", ts_conv)
-    var conv0 : float const?
-    var bp0 : float const?
-    var gp0 : float const?
-    var zp0 : float const?
-    var op0 : float?
-    var st0 : float?
-    var ws0 : float?
-    var wnorm0 : float const?
-    var ab0 : float const?
-    var dtb0 : float const?
-    unsafe {
-        conv0 = addr < float const? >(s.dn_conv_b[0])
-        bp0 = addr < float const? >(s.dn_beta_b[0])
-        gp0 = addr < float const? >(s.dn_g_b[0])
-        zp0 = addr < float const? >(s.dn_z_b[0])
-        op0 = addr(s.dn_o_b[0])
-        st0 = addr(s.dn_state[s.dn_state_prefix[l]])
-        ws0 = addr(s.dn_cws[0])
-        wnorm0 = addr < float const? >(t.fblob[t.dn_norm_off + l * ds])
-        ab0 = addr < float const? >(t.fblob[t.dn_a_off + l * nvh])
-        dtb0 = addr < float const? >(t.fblob[t.dn_dt_off + l * nvh])
-    }
-    let wssz = dn_cws_head_size(c)
-    let vec = g_act_vec   // read on the caller, captured — fork workers must not read globals
-    let ts_scan = ref_time_ticks()
-    maybe_parallel_for(0, int(nvh), min(int(nvh), get_dispatch_lanes())) $(rb, re) {
-        unsafe {
-            for (hh in range(rb, re)) {
-                let h = int64(hh)
-                let kh = h % nkh   // k-heads repeat cyclically onto v-heads (ggml_repeat: h % nkh)
-                dn_chunked_head(conv0, kh * ds, kd + kh * ds, 2l * kd + h * ds, cd,
-                    bp0 + h, gp0 + h, nvh, zp0 + h * ds, op0 + h * ds, di,
-                    st0 + h * ds * ds, ws0 + h * wssz, wnorm0,
-                    ab0[h], dtb0[h], c.norm_eps, vec, npos, ds)
-            }
-        }
-    }
-    prof_add("dn_scan", ts_scan)
-}
-
-// The GPU arm: the whole block (qkv/z GEMMs, conv, chunked scan, gated out-norm, out-proj) as one
-// device chain per window; norm, raw beta/alpha GEMMs, residual, conv-history store stay CPU.
-// Numerics drift-class vs CPU (GPU exp/f32 accumulation) — the DN parity bar (qwen35 knife-edge).
-def private deltanet_prefill_gpu(t : Model; var s : Session; l : int64; npos : int64) {
-    let c = t.config
-    let dim = c.dim
-    let cd = dn_conv_dim(c)
-    let kd = dn_key_dim(c)
-    let di = c.ssm_d_inner
-    let nvh = c.ssm_dt_rank
-    let nkh = c.ssm_n_group
-    let ds = c.ssm_d_state
-    let dconv = c.ssm_d_conv
-    let taps = dconv - 1l
-    let ts_norm0 = ref_time_ticks()
-    rms_batch(s.xb_b, s.x_b, t, t.rms_att_off + l * dim, dim, npos)
-    prof_add("dn_norm", ts_norm0)
-    let ts_in = ref_time_ticks()
-    if (t.dn_ba_f32) {   // raw beta/alpha rows — the transforms run in-kernel
-        mm_fblob_b(s.dn_beta_b, t, t.dn_betaf_off + l * dim * nvh, s.xb_b, dim, nvh, npos)
-        mm_fblob_b(s.dn_g_b, t, t.dn_alphaf_off + l * dim * nvh, s.xb_b, dim, nvh, npos)
-    } else {
-        mm_b_f(s, s.dn_beta_b, t, KqFmt.q8, t.dnbeta_offs[l], s.xb_b, dim, nvh, npos)
-        mm_b_f(s, s.dn_g_b, t, KqFmt.q8, t.dnalpha_offs[l], s.xb_b, dim, nvh, npos)
-    }
-    requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)   // one Q8_0 image serves the qkv AND z GEMMs
-    prof_add("dn_mm_in", ts_in)
-    let ts_gpu = ref_time_ticks()
-    s.dn_tail |> resize(int(taps * cd))
-    unsafe {
-        matmul_moe_gpu_dn(s.xb2_b, t.dnqkv_offs[l], t.dngate_offs[l], t.dnout_offs[l],
-            s.xqb, s.xsb, s.dn_beta_b, s.dn_g_b,
-            addr<float const?>(t.fblob[t.dn_conv_off + l * dconv * cd]),
-            addr<float const?>(t.fblob[t.dn_norm_off + l * ds]),
-            addr<float const?>(t.fblob[t.dn_a_off + l * nvh]),
-            addr<float const?>(t.fblob[t.dn_dt_off + l * nvh]),
-            addr(s.dn_state[s.dn_state_prefix[l]]), s.dn_tail,
-            addr<float const?>(s.dn_conv_state[s.dn_conv_prefix[l]]),
-            npos, dim, cd, kd, di, nvh, nkh, ds, dconv, c.norm_eps)
-    }
-    prof_add("dn_gpu", ts_gpu)
-    let ts_resid = ref_time_ticks()
-    unsafe {   // conv-history advance from the tail rows (channel-major — the decode layout)
-        var st = addr(s.dn_conv_state[s.dn_conv_prefix[l]])
-        let tp = addr < float const? >(s.dn_tail[0])
-        for (k in range64(taps)) {
-            for (ch in range64(cd)) {
-                st[ch * taps + k] = tp[k * cd + ch]
-            }
-        }
-    }
-    add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
-    prof_add("dn_resid", ts_resid)
-}
-
-// qwen35 deltanet prefill: batched projections, then the inherently sequential per-token core
-// (state carried across positions), then one batched ssm_out projection + residual.
-def private deltanet_prefill(t : Model; var s : Session; l : int64; npos : int64) {
-    trace_tag(TRACE_TAG_DN)   // override the loop's attn_std stamp: dn layers color separately
-    dn_flush_layer(s, l)   // every prefill branch reads/round-trips CPU state buffers
-    if (g_dn_prefill_mode == DnPrefillMode.chunked && npos >= 32l && moe_gpu_dn_on_gpu(l)) {
-        deltanet_prefill_gpu(t, s, l, npos)   // buckets dn_norm / dn_mm_in / dn_gpu / dn_resid
-        return
-    }
-    let c = t.config
-    let dim = c.dim
-    let cd = dn_conv_dim(c)
-    let di = c.ssm_d_inner
-    let nvh = c.ssm_dt_rank
-    let ts_norm0 = ref_time_ticks()
-    rms_batch(s.xb_b, s.x_b, t, t.rms_att_off + l * dim, dim, npos)
-    prof_add("dn_norm", ts_norm0)
-    let ts_qkv = ref_time_ticks()
-    mm_b_f(s, s.dn_qkv_b, t, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], s.xb_b, dim, cd, npos)
-    mm_b_f(s, s.dn_z_b, t, fmt_at(t.dngate_fmt, l), t.dngate_offs[l], s.xb_b, dim, di, npos)
-    if (t.dn_ba_f32) {   // F32-on-disk beta/alpha matmul fp32, like llama.cpp
-        mm_fblob_b(s.dn_beta_b, t, t.dn_betaf_off + l * dim * nvh, s.xb_b, dim, nvh, npos)
-        mm_fblob_b(s.dn_g_b, t, t.dn_alphaf_off + l * dim * nvh, s.xb_b, dim, nvh, npos)
-    } else {
-        mm_b_f(s, s.dn_beta_b, t, KqFmt.q8, t.dnbeta_offs[l], s.xb_b, dim, nvh, npos)
-        mm_b_f(s, s.dn_g_b, t, KqFmt.q8, t.dnalpha_offs[l], s.xb_b, dim, nvh, npos)
-    }
-    prof_add("dn_mm_in", ts_qkv)
-    if (g_dn_prefill_mode == DnPrefillMode.chunked && npos > 1l) {   // single rows: recurrent is cheaper
-        deltanet_prefill_chunked(t, s, l, npos)   // buckets dn_conv + dn_scan inside
-    } else {
-        let ts_core = ref_time_ticks()
-        unsafe {
-            let qkvp = addr < float const? >(s.dn_qkv_b[0])
-            var zp = addr(s.dn_z_b[0])
-            var bp = addr(s.dn_beta_b[0])
-            var gp = addr(s.dn_g_b[0])
-            var op = addr(s.dn_o_b[0])
-            for (p in range64(npos)) {
-                dn_token_core(t, s, l, qkvp + p * cd, zp + p * di, bp + p * nvh, gp + p * nvh, op + p * di)
-            }
-        }
-        prof_add("dn_core", ts_core)
-    }
-    let ts_wo = ref_time_ticks()
-    mm_b_f(s, s.xb2_b, t, fmt_at(t.dnout_fmt, l), t.dnout_offs[l], s.dn_o_b, di, dim, npos)
-    prof_add("dn_mm_out", ts_wo)
-    let ts_resid = ref_time_ticks()
-    add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
-    prof_add("dn_resid", ts_resid)
-}
-
-// The batched gated-attention twin of attention_std_prefill: 2x-wide [q|gate], partial rope,
-// sigmoid out-gate before the shared out-proj suffix.
-def private attention_qwen35_gated_prefill(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) {
-    if (attn_gpu_prefill_ready(s, l, npos, start_pos)) {
-        attention_gpu_prefill(t, s, l, npos, true)   // buckets at_norm / at_gpu / kv_store / at_resid
-        return
-    }
-    let c = t.config
-    let dim = c.dim
-    let kv_dim = layer_kv_dim(c, l)
-    let head_size = layer_head_size(c, l)
-    let n_heads = c.n_heads
-    let n_kv_heads = layer_n_kv_heads(c, l)
-    let qd = n_heads * head_size
-    let kv_mul = n_heads / n_kv_heads
-    let scale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size))
-    let rot = c.rope_dim > 0l ? c.rope_dim : head_size
-    var kcl = kv_layer_kbase(s, l, c.seq_len)
-    var vcl = kv_layer_vbase(s, l, c.seq_len)
-    let ts_norm0 = ref_time_ticks()
-    rms_batch(s.xb_b, s.x_b, t, t.rms_att_off + l * dim, dim, npos)
-    prof_add("norm", ts_norm0)
-    let ts_qkv = ref_time_ticks()
-    mm_b_f(s, s.dn_qg_b, t, fmt_at(t.wq_fmt, l), t.wq_offs[l], s.xb_b, dim, 2l * qd, npos)
-    mm_b_f(s, s.k_b, t, fmt_at(t.wk_fmt, l), t.wk_offs[l], s.xb_b, dim, kv_dim, npos)
-    mm_b_f(s, s.v_b, t, fmt_at(t.wv_fmt, l), t.wv_offs[l], s.xb_b, dim, kv_dim, npos)
-    // deinterleave q/gate rows (q at 2h·hs, gate at (2h+1)·hs), threaded: serial copy was a ~3ms all-lane hole per layer
-    unsafe {
-        let qgp = addr < float const? >(s.dn_qg_b[0])
-        var qp = addr(s.q_b[0])
-        var gp = addr(s.dn_qgate_b[0])
-        maybe_parallel_for(npos * qd >= g_act_par_threshold, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
-            unsafe {
-                for (pp in range(rb, re)) {
-                    let p = int64(pp)
-                    for (h in range64(n_heads)) {
-                        let sb = p * 2l * qd + h * 2l * head_size
-                        let db = p * qd + h * head_size
-                        copy_floats(qp + db, qgp + sb, head_size)
-                        copy_floats(gp + db, qgp + sb + head_size, head_size)
-                    }
-                }
-            }
-        }
-    }
-    prof_add("mm_qkv", ts_qkv)
-    let ts_qknorm = ref_time_ticks()
-    rms_batch(s.q_b, s.q_b, t, t.rms_q_offs[l], head_size, npos * n_heads)
-    rms_batch(s.k_b, s.k_b, t, t.rms_k_offs[l], head_size, npos * n_kv_heads)
-    prof_add("norm", ts_qknorm)
-    let ts_rope = ref_time_ticks()
-    unsafe {
-        let half = rot / 2l
-        var qbp = addr(s.q_b[0])
-        var kbp = addr(s.k_b[0])
-        if (g_use_rope_table) {
-            let cp = addr < float const? >(s.rope_cos[0])
-            let sp2 = addr < float const? >(s.rope_sin[0])
-            for (p in range64(npos)) {
-                rope_scaled_neox_tab_part(qbp + p * qd, head_size, rot, qd, cp + p * half, sp2 + p * half)
-                rope_scaled_neox_tab_part(kbp + p * kv_dim, head_size, rot, kv_dim, cp + p * half, sp2 + p * half)
-            }
-        } else {
-            for (p in range64(npos)) {
-                rope_scaled_neox_part(qbp + p * qd, start_pos + p, head_size, rot, qd, c.rope_freq_base, c.rope_freq_scale, false, null, c.rope_mscale)
-                rope_scaled_neox_part(kbp + p * kv_dim, start_pos + p, head_size, rot, kv_dim, c.rope_freq_base, c.rope_freq_scale, false, null, c.rope_mscale)
-            }
-        }
-    }
-    prof_add("rope", ts_rope)
-    let ktq4 = s.kv_dtype_k == KVDtype.tq4
-    let vtq4 = s.kv_dtype_v == KVDtype.tq4
-    if (ktq4 || vtq4) {   // tq4 basis change (attention_std_prefill's twin); xb_b un-rotates below
-        let ts_rot = ref_time_ticks()
-        unsafe {
-            let sgp = addr < float const? >(s.kv_signs[0])
-            if (ktq4) {
-                tq4_rotate_batch(s.q_b, npos, qd, head_size, sgp)
-                tq4_rotate_batch(s.k_b, npos, kv_dim, head_size, sgp)
-            }
-            if (vtq4) {
-                tq4_rotate_batch(s.v_b, npos, kv_dim, head_size, sgp)
-            }
-        }
-        prof_add("tq4_rot", ts_rot)
-    }
-    let ts_kv = ref_time_ticks()
-    let store_nrun = kv_runs(s, start_pos, start_pos + npos, s.kv_runs)
-    unsafe {
-        kv_store_batch(kcl, vcl, s.kv_dtype_k, s.kv_dtype_v, s.k_b, s.v_b,
-            addr < KVRun const? >(s.kv_runs[0]), store_nrun, start_pos, npos, kv_dim)
-    }
-    prof_add("kv_store", ts_kv)
-    let ts_attn = ref_time_ticks()
-    prefill_attention(s, kcl, vcl, npos, start_pos, head_size, qd, kv_dim, n_heads, kv_mul, scale,
-                      false, 0l, c.attn_logit_softcap, null)
-    prof_add("attn", ts_attn)
-    if (vtq4) {   // un-rotate every position's xb before the out-gate (gate is in the original basis)
-        unsafe {
-            tq4_unrotate_batch(s.xb_b, npos, qd, head_size, addr < float const? >(s.kv_signs[0]))
-        }
-    }
-    // threaded + exp4: serial scalar loop was npos·qd (2.1M @pp512) libm exps, ~10ms all-lane hole/layer
-    let ts_gate = ref_time_ticks()
-    unsafe {
-        var xbp = addr(s.xb_b[0])
-        let gbp = addr < float const? >(s.dn_qgate_b[0])
-        let vec = g_act_vec
-        maybe_parallel_for(npos * qd >= g_act_par_threshold, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
-            unsafe {
-                let off = int64(rb) * qd
-                let cnt = int64(re - rb) * qd
-                if (vec) {
-                    sigmoid_gate4(xbp + off, gbp + off, cnt)
-                } else {
-                    sigmoid_gate(xbp + off, gbp + off, cnt)
-                }
-            }
-        }
-    }
-    prof_add("act", ts_gate)
-    attn_out_suffix(t, s, l, npos)
-}
-
-// The qwen35 prefill attention block: forward-only state guard, then deltanet or gated attention.
-[no_alloc, no_env, no_io]
-def private attention_qwen35_prefill(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) {
-    if (l == 0l) {   // recurrent state is forward-only: full reset at 0, no rewind
-        if (start_pos == 0l) {
-            dn_reset(s)
-        } elif (start_pos != s.dn_pos) {
-            panic("dasLLAMA: deltanet state is forward-only — cannot prefill from position {start_pos} (session is at {s.dn_pos}); rewinding needs a fresh session")
-        }
-        s.dn_pos = start_pos + npos
-    }
-    if (layer_is_recurrent(t.config, l)) {
-        deltanet_prefill(t, s, l, npos)
-    } else {
-        attention_qwen35_gated_prefill(t, s, l, npos, start_pos)
-    }
-}
-
-// ffn-norm → batched gated FFN → down-proj(+post-norm) → residual.
-[no_alloc, no_env, no_io]
-def private ffn_dense_prefill(t : Model; var s : Session; l : int64; npos : int64) {
-    let c = t.config
-    let dim = c.dim
-    let hidden = layer_hidden(t, l)   // gemma-4 E2B varies FFN width per layer
-    // ffn rmsnorm, per position
-    let ts_norm1 = ref_time_ticks()
-    rms_batch(s.xb_b, s.x_b, t, t.rms_ffn_off + l * dim, dim, npos)
-    prof_add("norm", ts_norm1)
-    // gated FFN (batched): hb = act(W1·xb) * (W3·xb) — act/mul elementwise, so batch-flat
-    let ts_ffn = ref_time_ticks()
-    mm_b_f(s, s.hb_b, t, fmt_at(t.w1_fmt, l), t.w1_offs[l], s.xb_b, dim, hidden, npos)
-    mm_b_f(s, s.hb2_b, t, fmt_at(t.w3_fmt, l), t.w3_offs[l], s.xb_b, dim, hidden, npos)
-    prof_add("mm_ffn", ts_ffn)
-    let ts_act = ref_time_ticks()
-    gate_batch(s.hb_b, s.hb2_b, c.ffn_act, hidden, npos)   // fused act*gate (exp4 unless act_vec off)
-    prof_add("act", ts_act)
-    // down projection (batched) + optional post-FFN norm + residual
-    let ts_ffn2 = ref_time_ticks()
-    mm_b_f(s, s.xb_b, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], s.hb_b, hidden, dim, npos)
-    prof_add("mm_ffn_down", ts_ffn2)   // own bucket: down is long-K + often a different format (Q4_K_M keeps it q6_K)
-    let ts_resid1 = ref_time_ticks()
-    if (c.pre_post_norm) {  // Gemma2: post-FFN RMSNorm per position before residual
-        rms_batch(s.xb_b, s.xb_b, t, t.rms_post_ffn_off + l * dim, dim, npos)
-    }
-    add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb_b[0])), npos * dim)
-    // E-series applies out_scale AFTER its PLE block (in ffn_gemma4_prefill) — skip it here when PLE is on
-    if (c.layer_out_scale && !has_ple(c)) {  // gemma4: scale the whole layer output (after the residual)
-        let os = t.fblob[t.out_scale_off + l]
-        scale_inplace(unsafe(addr(s.x_b[0])), os, npos * dim)
-    }
-    prof_add("act_resid", ts_resid1)
-}
-
-// Raw byte move as int64 lanes — the Q8 gather's copy. Integer loads/stores are bit-exact by
-// construction with no FP semantics (a float-lane copy of quant bytes could in principle quiet
-// sNaN bit patterns on some targets). n8 = byte count / 8.
-[hint(unsafe_range_check, noalias = d, noalias = s)]
-def private copy_int64s(var d : int64?; s : int64 const?; n8 : int64) {
-    unsafe {
-        for (j in range64(n8)) {
-            d[j] = s[j]
-        }
-    }
-}
-
-// Gather one expert bucket's Q8-quantized activation rows (quants + scales) out of the whole-batch
-// image: gather row r comes from position moe_bkt[b0+r]/k. The int8 quant rows move as int64 lanes
-// (dim % 32 == 0 so dim % 8 == 0); the scales are genuine floats and ride the tuned copy_floats.
-def private moe_gather_rows(var s : Session; b0, cnt, dim, k : int64; with_bs : bool = false; kform : bool = false) {
-    let nb = kform ? dim / 256l : dim / 32l   // kq v2: Q8_K rows carry per-256 scales
-    let d8 = dim / 8l
-    unsafe {
-        var xqp : int64 const?
-        var xsp : float const?
-        if (kform) {
-            xqp = addr < int64 const? >(s.kxqb[0])
-            xsp = addr < float const? >(s.kxsb[0])
-        } else {
-            xqp = addr < int64 const? >(s.xqb[0])
-            xsp = addr < float const? >(s.xsb[0])
-        }
-        var gqp = addr < int64? >(s.moe_gxq[0])
-        var gsp = addr(s.moe_gxs[0])
-        for (r in range64(cnt)) {
-            let p = s.moe_bkt[b0 + r] / k
-            copy_int64s(gqp + r * d8, xqp + p * d8, d8)
-            copy_floats(gsp + r * nb, xsp + p * nb, nb)
-        }
-        if (with_bs) {   // kq-expert layers: the per-16 sum rows ride along (dim/16 ints = dim/32 int64s)
-            let nb8 = dim / 32l
-            var bp : int64 const?
-            if (kform) {
-                bp = addr < int64 const? >(s.kxbsb[0])
-            } else {
-                bp = addr < int64 const? >(s.xbsb[0])
-            }
-            var gbp = addr < int64? >(s.moe_gxbs[0])
-            for (r in range64(cnt)) {
-                let p = s.moe_bkt[b0 + r] / k
-                copy_int64s(gbp + r * nb8, bp + p * nb8, nb8)
-            }
-        }
-    }
-}
-
-// Expand one native-MXFP4 expert region [d x n] into EXACT Q8 blocks: q[j] = doubled-e2m1 LUT
-// value, scale = e8m0_half(e) — no requantization error. Interleaved-mr backends write the
-// repacked form directly (byte-for-byte map); non-interleaved backends expand row-major then repack.
-def private expand_mx4_region_q8(t : Model; woff, n, d : int64; @scratch var wq : array<int8>; @scratch var ws : array<float>) {
-    let total = n * d
-    wq |> resize(total)
-    ws |> resize(total / 32l)
-    var lut : int8[16]
-    mxfp4_fill_lut(lut)
-    let nblk = total / 32l
-    unsafe {
-        let lutp = addr(lut[0])   // frame outlives the join, so workers read a live pointer
-        let np = addr(t.mxq[woff / 2l])
-        let ep = addr(t.mxs[woff / 32l])
-        var qp = addr(wq[0])
-        var sp = addr(ws[0])
-        // scale bytes: 1:1 positional map in both the row-major and the interleaved layout
-        maybe_parallel_for(total >= g_requant_par_threshold, 0, int(nblk), get_dispatch_lanes()) $(sb, se) {
-            unsafe {
-                for (bi in range(sb, se)) {
-                    sp[bi] = e8m0_half(uint(ep[bi]))
-                }
-            }
-        }
-        if (g_active_mx4_expand_interleaved) {
-            // interleaved: mr-row block-groups first, then row-major tail; bias128 stamps need a BIASED LUT copy
-            let mr = active_q8_layout_mr()
-            let wbias = int(active_q8_wbias())
-            let kgv = active_q8_kgroup()
-            var blut : int8[16]
-            for (i in range(16)) {
-                blut[i] = int8(int(lut[i]) + wbias)
-            }
-            let nbyt = 16l * mr    // nibble bytes per block-group
-            let qbyt = 32l * mr    // q8 bytes per block-group
-            let ngrp = (d / mr) * (n / 32l)
-            let blutp = addr(blut[0])   // frame outlives the join, same as lutp
-            if (kgv == 8l) {
-                maybe_parallel_for(total >= g_requant_par_threshold, 0, int(ngrp), get_dispatch_lanes()) $(gb, ge) {
-                    unsafe {
-                        for (bg0 in range(gb, ge)) {
-                            let bg = int64(bg0)
-                            let nb = bg * nbyt
-                            let qb = bg * qbyt
-                            for (off in range64(nbyt)) {
-                                let j = off / (4l * mr)
-                                let rem = off % (4l * mr)
-                                let q8o = (j / 2l) * 8l * mr + (rem / 4l) * 8l + (j % 2l) * 4l + rem % 4l
-                                let b = int(np[nb + off])
-                                qp[qb + q8o] = blutp[b & 15]
-                                qp[qb + nbyt + q8o] = blutp[b >> 4]
-                            }
-                        }
-                    }
-                }
-            } else {
-                maybe_parallel_for(total >= g_requant_par_threshold, 0, int(ngrp), get_dispatch_lanes()) $(gb, ge) {
-                    unsafe {
-                        for (bg0 in range(gb, ge)) {
-                            let bg = int64(bg0)
-                            let nb = bg * nbyt
-                            let qb = bg * qbyt
-                            for (off in range64(nbyt)) {
-                                let b = int(np[nb + off])
-                                qp[qb + off] = blutp[b & 15]
-                                qp[qb + nbyt + off] = blutp[b >> 4]
-                            }
-                        }
-                    }
-                }
-            }
-            for (bi in range64(ngrp * mr, nblk)) {   // row tail (d % mr): row-major from here on
-                let nb16 = bi * 16l
-                let qb = bi * 32l
-                for (j in range64(16l)) {
-                    let b = int(np[nb16 + j])
-                    qp[qb + j] = lutp[b & 15]
-                    qp[qb + j + 16l] = lutp[b >> 4]
-                }
-            }
-        } else {
-            maybe_parallel_for(total >= g_requant_par_threshold, 0, int(nblk), get_dispatch_lanes()) $(bb, be) {
-                unsafe {
-                    for (bi0 in range(bb, be)) {
-                        let bi = int64(bi0)
-                        let nb16 = bi * 16l
-                        let qb = bi * 32l
-                        for (j in range64(16l)) {
-                            let b = int(np[nb16 + j])
-                            qp[qb + j] = lutp[b & 15]
-                            qp[qb + j + 16l] = lutp[b >> 4]
-                        }
-                    }
-                }
-            }
-        }
-    }
-    if (g_active_needs_repack && !g_active_mx4_expand_interleaved) {
-        // row-major-expanded scratch on a repack backend: interleave through the backend's own Q8 repack
-        repack_q8q8_weight(wq, ws, 0l, n, d)
-    }
-}
-
-// MoE FFN prefill, grouped: route every position, bucket by expert, run ONE batched GEMM chain per
-// touched expert instead of npos*k single-token matmuls. Bit-exact vs the per-position reference
-// path (native-MXFP4 experts are the one exception — differ by kernel summation order only).
-
-var private g_gpu_combine = true
-var private g_gpu_combine_probed = false
-
-[cold_path]   // one-time env resolution; the accessor is a global test after the first call
-def private load_gpu_combine() {
-    g_gpu_combine_probed = true
-    g_gpu_combine = env_flag("DASLLAMA_GPU_COMBINE", true)
-}
-
-def private gpu_combine_on : bool {
-    if (!g_gpu_combine_probed) {
-        load_gpu_combine()
-    }
-    return g_gpu_combine
-}
-
-//! Runtime routing gate over the device-side routed combine (overrides the
-//! ``DASLLAMA_GPU_COMBINE`` env probe) — the in-process A/B lever: both arms share one
-//! process, one residency, one paging weather, so the measured delta is the combine alone.
-def set_gpu_combine_route(on : bool) {
-    g_gpu_combine_probed = true
-    g_gpu_combine = on
-}
-
-var private g_gpu_prefill_route = true
-
-//! Runtime routing gate over the GPU MoE PREFILL arm (`fused_gpu`) in both grouped prefills —
-//! the generic one and gemma-4's twin. Routing-only: uploads and residency stay put, so an
-//! in-process A/B isolates device-side prefill against the same resident set (decode is untouched).
-def set_moe_gpu_prefill_route(on : bool) {
-    g_gpu_prefill_route = on
-}
-
-def private gpu_prefill_route_on() : bool => g_gpu_prefill_route
-
-def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos : int64) {
-    let c = t.config
-    let dim = c.dim
-    let nb = dim / 32l
-    let ne = c.n_expert
-    let k = c.n_expert_used
-    let nfe = c.n_ff_exp
-    let nsh = c.n_ff_shexp
-    let nfx = max(nfe, nsh)
-    let nk = npos * k
-    // fused (native mx4-batch): gather/hidden/output images span every routed row at once, bucket-ordered
-    let kq_layer = moe_layer_kq(t, l)
-    let f1 = fmt_at(t.we1_fmt, l)
-    let f2 = fmt_at(t.we2_fmt, l)
-    let f3 = fmt_at(t.we3_fmt, l)
-    // fused single-dispatch GEMMs: all stacks native-plane (sb-kq needs repack+tile; q51 always)
-    let sb_fusable = t.kq_repacked && kernel_backend_has_kq_batch_groupn()
-    let fused_kq = (kq_layer && g_moe_fused_expert_gemms
-        && (kq_sb(f1) ? sb_fusable : f1 == KqFmt.q51)
-        && (kq_sb(f2) ? sb_fusable : f2 == KqFmt.q51)
-        && (kq_sb(f3) ? sb_fusable : f3 == KqFmt.q51))
-    // GPU MoE tier: offloaded layers run the whole expert FFN chain device-side; tiny batches stay CPU (GPU submit cost > the GEMM)
-    let fused_gpu = (!c.moe_exps_bias && !t.experts_mx4 && c.ffn_act != FfnAct.swiglu_oai
-        && (moe_gpu_layer_on_gpu(l) || moe_gpu_layer_streamed(l)) && g_moe_fused_expert_gemms && npos >= 32l && gpu_prefill_route_on())
-    // device-side combine rides fused_gpu; DASLLAMA_GPU_COMBINE=0 falls back to park + CPU reduce
-    let gpu_comb = fused_gpu && gpu_combine_on()
-    let fused = (t.experts_mx4 && g_active_mx4_native_batch && g_moe_fused_expert_gemms) || fused_kq || fused_gpu
-    let grows = fused ? nk : npos
-    s.moe_rlog |> resize(npos * ne)
-    s.moe_idx_b |> resize(nk)
-    s.moe_w_b |> resize(nk)
-    s.moe_cnt |> resize(ne)
-    s.moe_bkt |> resize(nk)
-    s.moe_gxq |> resize(grows * dim)
-    s.moe_gxs |> resize(grows * nb)
-    s.moe_ghb |> resize(grows * nfx)
-    s.moe_ghb2 |> resize(grows * nfx)
-    s.moe_hq |> resize(grows * nfx)
-    s.moe_hs |> resize(grows * nfx / 32l)
-    s.moe_gout |> resize(grows * dim)
-    s.moe_eout |> resize(nk * dim)
-    if (nsh > 0l && c.moe_shexp_gated) {
-        s.moe_gl_b |> resize(npos)
-    }
-    if (kq_layer) {
-        s.moe_gxbs |> resize(grows * dim / 16l)
-        s.moe_hbs |> resize(grows * nfx / 16l)
-    }
-
-    // 1. route every position: one batched router GEMM, then the shared select per row; shexp gate dots ride along
-    trace_tag(TRACE_TAG_ROUTE)
-    let ts_route = ref_time_ticks()
-    mm_fblob_b(s.moe_rlog, t, t.router_off + l * ne * dim, s.xb_b, dim, ne, npos)
-    // per-row bias+select+gate dot, threaded: serial loop was ~2-3ms every-lane-idle/layer here
-    unsafe {
-        var rlp = addr(s.moe_rlog[0])
-        var idxp = addr(s.moe_idx_b[0])
-        var wp = addr(s.moe_w_b[0])
-        var glp = nsh > 0l && c.moe_shexp_gated ? addr(s.moe_gl_b[0]) : null
-        let xbp = addr<float const?>(s.xb_b[0])
-        let rbp = c.moe_router_bias ? addr<float const?>(t.fblob[t.router_b_off + l * ne]) : null
-        let ebp = c.moe_exp_probs ? addr<float const?>(t.fblob[t.exp_probs_off + l * ne]) : null
-        let gvp = nsh > 0l && c.moe_shexp_gated ? addr<float const?>(t.fblob[t.shexp_gate_off + l * dim]) : null
-        let gate = c.moe_gate
-        let norm_topk = c.norm_topk_prob
-        let wscale = c.expert_weights_scale
-        maybe_parallel_for(npos > 1l, 0, int(npos), get_dispatch_lanes()) $(pb, pe) {
-            unsafe {
-                for (pp in range(pb, pe)) {
-                    let p = int64(pp)
-                    var lgp = rlp + p * ne
-                    if (rbp != null) {
-                        for (i in range64(ne)) {
-                            lgp[i] += rbp[i]
-                        }
-                    }
-                    moe_select_core(gate, ne, k, norm_topk, wscale, lgp, idxp, wp, p * k, ebp)
-                    if (glp != null) {
-                        glp[p] = 1.0 / (1.0 + exp(-dot(gvp, xbp + p * dim, dim)))
-                    }
-                }
-            }
-        }
-    }
-    // bucket (position, slot) pairs by expert — CSR in-place cursor: moe_cnt[e] ends as e's run END
-    for (e in range64(ne)) {
-        s.moe_cnt[e] = 0l
-    }
-    for (r in range64(nk)) {
-        s.moe_cnt[s.moe_idx_b[r]]++
-    }
-    var run = 0l
-    for (e in range64(ne)) {
-        let cn = s.moe_cnt[e]
-        s.moe_cnt[e] = run
-        run += cn
-    }
-    for (r in range64(nk)) {
-        let e = s.moe_idx_b[r]
-        s.moe_bkt[s.moe_cnt[e]] = r
-        s.moe_cnt[e]++
-    }
-    prof_add("moe_route", ts_route)
-
-    // 2. quantize every normed activation row ONCE; kq v2 gate/up gathers off Q8_K, q8 stacks off Q8_0
-    let moe_kform = kq_layer && moe_pair_kform(f1, f3)
-    if (moe_kform) {
-        s.kxqb |> resize(npos * dim)
-        s.kxsb |> resize(npos * dim / 256l)
-        s.kxbsb |> resize(npos * dim / 16l)
-        requant_rows_q8k_bs(s.xb_b, dim, npos, s.kxqb, s.kxsb, s.kxbsb)
-        if (nsh > 0l && !c.moe_dense_shexp) {
-            // the q8 shexp batch (step 4) reads the Q8_0 image — without this it silently corrupts
-            requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)
-        }
-    } else {
-        requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)
-    }
-
-    // 3F. fused: gate/up/down each run as ONE region-list dispatch (3 fork/joins/layer, not 3/expert)
-    if (fused) {
-        trace_tag(TRACE_TAG_MOE)
-        let ts_gather = ref_time_ticks()
-        // the GPU tile computes activation block sums in-kernel — skip the per-16 sum gather
-        moe_gather_rows(s, 0l, nk, dim, k, moe_kform && !fused_gpu, moe_kform)
-        prof_add("moe_gather", ts_gather)
-        // region triples (woff, row0, cnt) per touched expert; the three planes share row0/cnt
-        s.moe_offs1 |> clear(); s.moe_offs1 |> reserve(ne * 3l)
-        s.moe_offs3 |> clear(); s.moe_offs3 |> reserve(ne * 3l)
-        s.moe_offs2 |> clear(); s.moe_offs2 |> reserve(ne * 3l)
-        if (c.moe_exps_bias) {
-            s.moe_boffs1 |> clear(); s.moe_boffs1 |> reserve(ne)
-            s.moe_boffs3 |> clear(); s.moe_boffs3 |> reserve(ne)
-            s.moe_boffs2 |> clear(); s.moe_boffs2 |> reserve(ne)
-        }
-        // LPT order (biggest buckets first) front-loads expensive spans; expert-order left 32% of GEMM windows idle
-        s.moe_ord |> clear()
-        s.moe_ord |> reserve(int(ne))   // capacity persists across layers — no per-layer alloc
-        for (e in range64(ne)) {
-            let b0 = e == 0l ? 0l : s.moe_cnt[e - 1l]
-            let cnt = s.moe_cnt[e] - b0
-            if (cnt > 0l) {
-                s.moe_ord |> push(int2(int(e), int(cnt)))
-            }
-        }
-        lpt_order(s.moe_ord)
-        var nreg = 0l
-        for (oe in s.moe_ord) {
-            let e = int64(oe.x)
-            let cnt = int64(oe.y)
-            let b0 = e == 0l ? 0l : s.moe_cnt[e - 1l]
-            let eg = l * ne + e
-            let base = e * dim * nfe
-            s.moe_offs1 |> push(t.we1_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
-            s.moe_offs1 |> push(b0)
-            s.moe_offs1 |> push(cnt)
-            s.moe_offs3 |> push(t.we3_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
-            s.moe_offs3 |> push(b0)
-            s.moe_offs3 |> push(cnt)
-            s.moe_offs2 |> push(t.we2_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
-            s.moe_offs2 |> push(b0)
-            s.moe_offs2 |> push(cnt)
-            if (c.moe_exps_bias) {
-                s.moe_boffs1 |> push(t.web1_off + eg * nfe)
-                s.moe_boffs3 |> push(t.web3_off + eg * nfe)
-                s.moe_boffs2 |> push(t.web2_off + eg * dim)
-            }
-            nreg++
-        }
-        let ts_g1 = ref_time_ticks()
-        if (gpu_comb) {   // GPU tier: gate+up/act/requant/down AND the routed weighted-sum combine
-            // gout comes back as npos combined rows; the 33MB-class bucket-row readback + park scatter disappear
-            s.moe_inv |> resize(nk)
-            for (j in range64(nk)) {
-                s.moe_inv[s.moe_bkt[j]] = uint(j)
-            }
-            matmul_moe_gpu_ffn_combined(s.moe_eout, s.moe_offs1, s.moe_offs3, s.moe_offs2, nreg,
-                s.moe_gxq, s.moe_gxs, s.moe_w_b, s.moe_inv, dim, nfe, nk, npos, int(moe_gpu_expert_fmt(f1)), int(moe_gpu_expert_fmt(f3)), int(moe_gpu_expert_fmt(f2)), c.ffn_act == FfnAct.gelu)
-            prof_add("moe_gpu", ts_g1)
-        } elif (fused_gpu) {   // combine off: per-row gout + the park/CPU-reduce path below
-            matmul_moe_gpu_ffn(s.moe_gout, s.moe_offs1, s.moe_offs3, s.moe_offs2, nreg,
-                s.moe_gxq, s.moe_gxs, dim, nfe, nk, int(moe_gpu_expert_fmt(f1)), int(moe_gpu_expert_fmt(f3)), int(moe_gpu_expert_fmt(f2)), c.ffn_act == FfnAct.gelu)
-            prof_add("moe_gpu", ts_g1)
-        } else {
-            if (fused_kq) {   // native-plane: one batched region-list GEMM per projection (never biased)
-                if (kq_sb(f1)) {
-                    mm_b_kq_groupn(s.moe_ghb, t, f1, s.moe_offs1, nreg, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
-                } else {
-                    mm_b_q51_groupn(s.moe_ghb, t, s.moe_offs1, nreg, s.moe_gxq, s.moe_gxs, dim, nfe)
-                }
-                if (kq_sb(f3)) {
-                    mm_b_kq_groupn(s.moe_ghb2, t, f3, s.moe_offs3, nreg, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
-                } else {
-                    mm_b_q51_groupn(s.moe_ghb2, t, s.moe_offs3, nreg, s.moe_gxq, s.moe_gxs, dim, nfe)
-                }
-            } elif (c.moe_exps_bias) {   // gpt-oss: gate/up biases fold into the stores, before the act
-                matmul_mx4q8_batch_groupn(s.moe_ghb, t.mxq, t.mxs, s.moe_offs1, nreg, s.moe_gxq, s.moe_gxs, t.fblob, s.moe_boffs1, dim, nfe)
-                matmul_mx4q8_batch_groupn(s.moe_ghb2, t.mxq, t.mxs, s.moe_offs3, nreg, s.moe_gxq, s.moe_gxs, t.fblob, s.moe_boffs3, dim, nfe)
-            } else {
-                matmul_mx4q8_batch_groupn(s.moe_ghb, t.mxq, t.mxs, s.moe_offs1, nreg, s.moe_gxq, s.moe_gxs, dim, nfe)
-                matmul_mx4q8_batch_groupn(s.moe_ghb2, t.mxq, t.mxs, s.moe_offs3, nreg, s.moe_gxq, s.moe_gxs, dim, nfe)
-            }
-            prof_add("mm_gemm", ts_g1)
-            let ts_act = ref_time_ticks()
-            gate_batch(s.moe_ghb, s.moe_ghb2, c.ffn_act, nfe, nk)
-            prof_add("act", ts_act)
-            if (fused_kq && kq_sb(f2)) {   // kq v2: sb down stacks read Q8_K-form rows (+ per-16 sums); q51/q8 the Q8_0 form
-                requant_rows_q8k_bs(s.moe_ghb, nfe, nk, s.moe_hq, s.moe_hs, s.moe_hbs)
-            } else {
-                requant_rows_q8(s.moe_ghb, nfe, nk, s.moe_hq, s.moe_hs)
-            }
-            let ts_g3 = ref_time_ticks()
-            if (fused_kq && kq_sb(f2)) {
-                mm_b_kq_groupn(s.moe_gout, t, f2, s.moe_offs2, nreg, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim)
-            } elif (fused_kq) {
-                mm_b_q51_groupn(s.moe_gout, t, s.moe_offs2, nreg, s.moe_hq, s.moe_hs, nfe, dim)
-            } elif (c.moe_exps_bias) {   // ... and the down biases, inside the routed weight (ggml_add_id order)
-                matmul_mx4q8_batch_groupn(s.moe_gout, t.mxq, t.mxs, s.moe_offs2, nreg, s.moe_hq, s.moe_hs, t.fblob, s.moe_boffs2, nfe, dim)
-            } else {
-                matmul_mx4q8_batch_groupn(s.moe_gout, t.mxq, t.mxs, s.moe_offs2, nreg, s.moe_hq, s.moe_hs, nfe, dim)
-            }
-            prof_add("mm_gemm", ts_g3)
-        }
-        // threaded bucket scatter: serial was an ~8ms ALL-LANE hole here (~67MB traffic at pp512/30B)
-        if (!gpu_comb) {
-            trace_tag(TRACE_TAG_PARK)
-            let ts_park = ref_time_ticks()
-            unsafe {
-                let gp = addr < float const? >(s.moe_gout[0])
-                var ep = addr(s.moe_eout[0])
-                let bp = addr < int64 const? >(s.moe_bkt[0])
-                maybe_parallel_for(nk * dim >= g_act_par_threshold, 0, int(nk), get_dispatch_lanes()) $(rb, re) {
-                    unsafe {
-                        for (j in range(rb, re)) {
-                            let jj = int64(j)
-                            copy_floats(ep + bp[jj] * dim, gp + jj * dim, dim)
-                        }
-                    }
-                }
-            }
-            prof_add("moe_park", ts_park)
-        }
-    }
-
-    // 3. one batched GEMM chain per touched expert; raw down rows park for the ordered reduce (skipped when fused ran)
-    if (!fused) {
-        trace_tag(TRACE_TAG_MOE)
-    }
-    for (e in range64(fused ? 0l : ne)) {
-        let b0 = e == 0l ? 0l : s.moe_cnt[e - 1l]
-        let cnt = s.moe_cnt[e] - b0
-        if (cnt == 0l) {
-            continue
-        }
-        let ts_gather = ref_time_ticks()
-        moe_gather_rows(s, b0, cnt, dim, k, moe_kform, moe_kform)
-        prof_add("moe_gather", ts_gather)
-        let eg = l * ne + e
-        let base = e * dim * nfe
-        if (kq_layer) {   // native kq batch tiles off the repacked planes, per-kind fmt (down may differ)
-            if (kq_sb(f1)) {
-                mm_b_kq_pre(s.moe_ghb, t, f1, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
-            } elif (f1 == KqFmt.q51) {
-                mm_b_q51_pre(s.moe_ghb, t, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-            } else {
-                mm_b_q8_pre(s.moe_ghb, t, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-            }
-            if (kq_sb(f3)) {
-                mm_b_kq_pre(s.moe_ghb2, t, f3, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
-            } elif (f3 == KqFmt.q51) {
-                mm_b_q51_pre(s.moe_ghb2, t, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-            } else {
-                mm_b_q8_pre(s.moe_ghb2, t, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-            }
-        } elif (t.experts_mx4 && g_active_mx4_native_batch) {
-            // native mx4 batch GEMMs straight off the nibble/E8M0 planes — no expansion
-            mm_b_mx4_pre(s.moe_ghb, t, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-            mm_b_mx4_pre(s.moe_ghb2, t, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-        } elif (t.experts_mx4) {   // exact Q8 expansion of this expert, then the proven batch GEMMs
-            let ts_ex = ref_time_ticks()
-            expand_mx4_region_q8(t, t.we1_offs[l] + base, dim, nfe, s.mx4_wq, s.mx4_ws)
-            prof_add("moe_expand", ts_ex)
-            let ts_g1 = ref_time_ticks()
-            matmul_q8q8_batch(s.moe_ghb, s.mx4_wq, s.mx4_ws, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-            prof_add("mm_gemm", ts_g1)
-            let ts_ex2 = ref_time_ticks()
-            expand_mx4_region_q8(t, t.we3_offs[l] + base, dim, nfe, s.mx4_wq, s.mx4_ws)
-            prof_add("moe_expand", ts_ex2)
-            let ts_g2 = ref_time_ticks()
-            matmul_q8q8_batch(s.moe_ghb2, s.mx4_wq, s.mx4_ws, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-            prof_add("mm_gemm", ts_g2)
-        } else {
-            mm_b_q8_pre(s.moe_ghb, t, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-            mm_b_q8_pre(s.moe_ghb2, t, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-        }
-        if (c.moe_exps_bias) {  // gpt-oss: this expert's gate/up biases before the activation
-            for (r in range64(cnt)) {
-                add_bias(s.moe_ghb, r * nfe, t.fblob, t.web1_off + eg * nfe, nfe)
-                add_bias(s.moe_ghb2, r * nfe, t.fblob, t.web3_off + eg * nfe, nfe)
-            }
-        }
-        let ts_act = ref_time_ticks()
-        gate_batch(s.moe_ghb, s.moe_ghb2, c.ffn_act, nfe, cnt)
-        prof_add("act", ts_act)
-        if (kq_sb(f2)) {   // kq v2: Q8_K-form rows + the per-16 sums the fold consumes; q51/q8 the Q8_0 form
-            requant_rows_q8k_bs(s.moe_ghb, nfe, cnt, s.moe_hq, s.moe_hs, s.moe_hbs)
-        } else {
-            requant_rows_q8(s.moe_ghb, nfe, cnt, s.moe_hq, s.moe_hs)
-        }
-        if (kq_sb(f2)) {
-            mm_b_kq_pre(s.moe_gout, t, f2, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim, cnt)
-        } elif (f2 == KqFmt.q51) {
-            mm_b_q51_pre(s.moe_gout, t, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, nfe, dim, cnt)
-        } elif (t.experts_mx4 && g_active_mx4_native_batch) {
-            mm_b_mx4_pre(s.moe_gout, t, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, nfe, dim, cnt)
-        } elif (t.experts_mx4) {
-            let ts_ex3 = ref_time_ticks()
-            expand_mx4_region_q8(t, t.we2_offs[l] + base, nfe, dim, s.mx4_wq, s.mx4_ws)
-            prof_add("moe_expand", ts_ex3)
-            let ts_g3 = ref_time_ticks()
-            matmul_q8q8_batch(s.moe_gout, s.mx4_wq, s.mx4_ws, s.moe_hq, s.moe_hs, nfe, dim, cnt)
-            prof_add("mm_gemm", ts_g3)
-        } else {
-            mm_b_q8_pre(s.moe_gout, t, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, nfe, dim, cnt)
-        }
-        if (c.moe_exps_bias) {  // ... and its down bias, inside the routed weight (ggml_add_id order)
-            for (r in range64(cnt)) {
-                add_bias(s.moe_gout, r * dim, t.fblob, t.web2_off + eg * dim, dim)
-            }
-        }
-        let ts_park = ref_time_ticks()
-        for (r in range64(cnt)) {
-            copy_floats(s.moe_gout, r * dim, s.moe_eout, s.moe_bkt[b0 + r] * dim, dim)
-        }
-        prof_add("moe_park", ts_park)
-    }
-
-    // 4. shared expert for ALL positions — a plain dense batched FFN off the whole-batch image
-    if (nsh > 0l) {
-        trace_tag(TRACE_TAG_SHEXP)
-        let she = dim * nsh
-        mm_b_q8_pre(s.moe_ghb, t, t.wsh1_off + l * she, s.xqb, s.xsb, dim, nsh, npos)
-        mm_b_q8_pre(s.moe_ghb2, t, t.wsh3_off + l * she, s.xqb, s.xsb, dim, nsh, npos)
-        let ts_act2 = ref_time_ticks()
-        gate_batch(s.moe_ghb, s.moe_ghb2, c.ffn_act, nsh, npos)
-        prof_add("act", ts_act2)
-        requant_rows_q8(s.moe_ghb, nsh, npos, s.moe_hq, s.moe_hs)
-        mm_b_q8_pre(s.moe_gout, t, t.wsh2_off + l * she, s.moe_hq, s.moe_hs, nsh, dim, npos)
-    }
-
-    // 5. ordered reduce into xb2_b, decode's accumulation order (bit-identical); plain mul+add, not axpy
-    trace_tag(TRACE_TAG_PARK)
-    let ts_red = ref_time_ticks()
-    unsafe {
-        var ap = addr(s.xb2_b[0])
-        let ep = addr<float const?>(s.moe_eout[0])
-        let wp = addr<float const?>(s.moe_w_b[0])
-        let sp = nsh > 0l ? addr<float const?>(s.moe_gout[0]) : null
-        let gp = nsh > 0l && c.moe_shexp_gated ? addr<float const?>(s.moe_gl_b[0]) : null
-        maybe_parallel_for(nk * dim >= g_act_par_threshold, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
-            unsafe {
-                for (p in range(rb, re)) {
-                    let pp = int64(p)
-                    var arow = ap + pp * dim
-                    if (gpu_comb) {
-                        let cr = ep + pp * dim
-                        for (i in range64(dim)) {
-                            arow[i] = cr[i]
-                        }
-                    } else {
-                        for (i in range64(dim)) {
-                            arow[i] = 0.0
-                        }
-                        for (j in range64(k)) {
-                            let w = wp[pp * k + j]
-                            let er = ep + (pp * k + j) * dim
-                            for (i in range64(dim)) {
-                                arow[i] += w * er[i]
-                            }
-                        }
-                    }
-                    if (sp != null) {
-                        let g = gp != null ? gp[pp] : 1.0   // ungated shexp (glm4moe) adds at weight 1
-                        let sr = sp + pp * dim
-                        for (i in range64(dim)) {
-                            arow[i] += g * sr[i]
-                        }
-                    }
-                }
-            }
-        }
-    }
-    prof_add("moe_reduce", ts_red)
-    // post-norm + residual (the layer-output scale tail is shared with the reference path)
-    let ts_resid = ref_time_ticks()
-    if (c.pre_post_norm) {
-        rms_batch(s.xb2_b, s.xb2_b, t, t.rms_post_ffn_off + l * dim, dim, npos)
-    }
-    add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
-    prof_add("act_resid", ts_resid)
-}
-
-// gemma4 MoE router input, batched: twin of gemma4_router_tmp over npos positions. Sum-of-squares
-// accumulates in DOUBLE to match ggml_float — top-8 select is near-tie-brittle, float SoS would flip
-// experts. Bit-identical per row to the decode single-token path.
-def private gemma4_router_batch(t : Model; var rin : array<float>; src : array<float>; l, dim, npos : int64) {
-    let eps = t.config.norm_eps
-    let inv_d = 1.0 / sqrt(float(dim))
-    unsafe {
-        var op = addr(rin[0])
-        let ip = addr < float const? >(src[0])
-        let scp = addr < float const? >(t.fblob[t.moe_router_scale_off + l * dim])
-        maybe_parallel_for(dim * npos >= g_norm_par_threshold, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
-            unsafe {
-                for (p in range(rb, re)) {
-                    let off = int64(p) * dim
-                    var ss = 0.0lf
-                    for (i in range64(dim)) {
-                        let v = ip[off + i]
-                        ss += double(v * v)
-                    }
-                    let scale = 1.0 / sqrt(float(ss / double(dim)) + eps)
-                    for (i in range64(dim)) {
-                        op[off + i] = ip[off + i] * scale * inv_d * scp[i]
-                    }
-                }
-            }
-        }
-    }
-}
-
-// gemma4 MoE prefill, grouped: batched twin of gemma4_moe_ffn (26B-A4B). Routes, buckets by expert,
-// runs one Q8 batch GEMM chain per touched expert, then the dense shared expert over all positions.
-// Bit-identical per row to the naive per-position path — g_moe_grouped_prefill is a pure perf lever.
-def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos : int64) {
-    let c = t.config
-    let dim = c.dim
-    let hidden = c.hidden_dim
-    let nb = dim / 32l
-    let ne = c.n_expert
-    let k = c.n_expert_used
-    let nfe = c.n_ff_exp
-    let nk = npos * k
-    // per-layer expert stack formats (kq layers: the gate routed us here only with the batch tile up)
-    let kq_layer = moe_layer_kq(t, l)
-    let f1 = fmt_at(t.we1_fmt, l)
-    let f2 = fmt_at(t.we2_fmt, l)
-    let f3 = fmt_at(t.we3_fmt, l)
-    // GPU tier: offloaded layers run the routed chain device-side; the fused arm gathers ALL nk bucket rows at once (grows)
-    let fused_gpu = (!c.moe_exps_bias && !t.experts_mx4 && c.ffn_act != FfnAct.swiglu_oai
-        && (moe_gpu_layer_on_gpu(l) || moe_gpu_layer_streamed(l)) && g_moe_fused_expert_gemms && npos >= 32l && gpu_prefill_route_on())
-    let gpu_comb = fused_gpu && gpu_combine_on()
-    let grows = fused_gpu ? nk : npos
-    s.moe_rlog |> resize(npos * ne)
-    s.moe_idx_b |> resize(nk)
-    s.moe_w_b |> resize(nk)
-    s.moe_cnt |> resize(ne)
-    s.moe_bkt |> resize(nk)
-    s.moe_gxq |> resize(grows * dim)
-    s.moe_gxs |> resize(grows * nb)
-    s.moe_ghb |> resize(grows * nfe)
-    s.moe_ghb2 |> resize(grows * nfe)
-    s.moe_hq |> resize(grows * nfe)
-    s.moe_hs |> resize(grows * nfe / 32l)
-    s.moe_gout |> resize(grows * dim)
-    s.moe_eout |> resize(nk * dim)
-    if (kq_layer) {
-        s.moe_gxbs |> resize(grows * dim / 16l)
-        s.moe_hbs |> resize(grows * nfe / 16l)
-    }
-
-    // 1. route every position: double-RMS router input, one batched GEMM, per-row select + down-scale fold
-    trace_tag(TRACE_TAG_ROUTE)
-    let ts_route = ref_time_ticks()
-    gemma4_router_batch(t, s.xb2_b, s.x_b, l, dim, npos)
-    mm_fblob_b(s.moe_rlog, t, t.router_off + l * ne * dim, s.xb2_b, dim, ne, npos)
-    for (p in range64(npos)) {
-        moe_select(c, unsafe(addr(s.moe_rlog[p * ne])), s.moe_idx_b, s.moe_w_b, p * k)
-        for (j in range64(k)) {
-            s.moe_w_b[p * k + j] *= t.fblob[t.moe_down_scale_off + l * ne + s.moe_idx_b[p * k + j]]
-        }
-    }
-    // bucket (position, slot) pairs by expert — CSR in-place cursor trick (moe_cnt[e] ends as its run END)
-    for (e in range64(ne)) {
-        s.moe_cnt[e] = 0l
-    }
-    for (r in range64(nk)) {
-        s.moe_cnt[s.moe_idx_b[r]]++
-    }
-    var run = 0l
-    for (e in range64(ne)) {
-        let cn = s.moe_cnt[e]
-        s.moe_cnt[e] = run
-        run += cn
-    }
-    for (r in range64(nk)) {
-        let e = s.moe_idx_b[r]
-        s.moe_bkt[s.moe_cnt[e]] = r
-        s.moe_cnt[e]++
-    }
-    prof_add("moe_route", ts_route)
-
-    // 2. expert input = pre_ffw_norm_2(residual) per position, quantized ONCE for every expert GEMM
-    rms_batch(s.xb_b, s.x_b, t, t.rms_pre_ffn2_off + l * dim, dim, npos)
-    // kq v2: kq gate/up stacks gather off a Q8_K-form image; q8 stacks off the Q8_0 image
-    let moe_kform = kq_layer && moe_pair_kform(f1, f3)
-    if (moe_kform) {
-        s.kxqb |> resize(npos * dim)
-        s.kxsb |> resize(npos * dim / 256l)
-        s.kxbsb |> resize(npos * dim / 16l)
-        requant_rows_q8k_bs(s.xb_b, dim, npos, s.kxqb, s.kxsb, s.kxbsb)
-    } else {
-        requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)
-    }
-
-    // 3F. GPU tier: gate/up -> act -> requant -> down as ONE region-list dispatch for the layer
-    if (fused_gpu) {
-        trace_tag(TRACE_TAG_MOE)
-        let ts_gather = ref_time_ticks()
-        // the GPU tile computes activation block sums in-kernel — skip the per-16 sum gather
-        moe_gather_rows(s, 0l, nk, dim, k, false, moe_kform)
-        prof_add("moe_gather", ts_gather)
-        // region triples (woff, row0, cnt) per touched expert; the three planes share row0/cnt
-        s.moe_offs1 |> clear(); s.moe_offs1 |> reserve(ne * 3l)
-        s.moe_offs3 |> clear(); s.moe_offs3 |> reserve(ne * 3l)
-        s.moe_offs2 |> clear(); s.moe_offs2 |> reserve(ne * 3l)
-        // LPT order (biggest buckets first) front-loads expensive spans
-        s.moe_ord |> clear()
-        s.moe_ord |> reserve(int(ne))   // capacity persists across layers — no per-layer alloc
-        for (e in range64(ne)) {
-            let b0 = e == 0l ? 0l : s.moe_cnt[e - 1l]
-            let cnt = s.moe_cnt[e] - b0
-            if (cnt > 0l) {
-                s.moe_ord |> push(int2(int(e), int(cnt)))
-            }
-        }
-        lpt_order(s.moe_ord)
-        var nreg = 0l
-        for (oe in s.moe_ord) {
-            let e = int64(oe.x)
-            let cnt = int64(oe.y)
-            let b0 = e == 0l ? 0l : s.moe_cnt[e - 1l]
-            let base = e * dim * nfe
-            s.moe_offs1 |> push(t.we1_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
-            s.moe_offs1 |> push(b0)
-            s.moe_offs1 |> push(cnt)
-            s.moe_offs3 |> push(t.we3_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
-            s.moe_offs3 |> push(b0)
-            s.moe_offs3 |> push(cnt)
-            s.moe_offs2 |> push(t.we2_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
-            s.moe_offs2 |> push(b0)
-            s.moe_offs2 |> push(cnt)
-            nreg++
-        }
-        let ts_g1 = ref_time_ticks()
-        if (gpu_comb) {   // gout comes back as npos combined rows — the park + CPU reduce disappear
-            s.moe_inv |> resize(nk)
-            for (j in range64(nk)) {
-                s.moe_inv[s.moe_bkt[j]] = uint(j)
-            }
-            matmul_moe_gpu_ffn_combined(s.moe_eout, s.moe_offs1, s.moe_offs3, s.moe_offs2, nreg,
-                s.moe_gxq, s.moe_gxs, s.moe_w_b, s.moe_inv, dim, nfe, nk, npos, int(moe_gpu_expert_fmt(f1)), int(moe_gpu_expert_fmt(f3)), int(moe_gpu_expert_fmt(f2)), c.ffn_act == FfnAct.gelu)
-        } else {
-            matmul_moe_gpu_ffn(s.moe_gout, s.moe_offs1, s.moe_offs3, s.moe_offs2, nreg,
-                s.moe_gxq, s.moe_gxs, dim, nfe, nk, int(moe_gpu_expert_fmt(f1)), int(moe_gpu_expert_fmt(f3)), int(moe_gpu_expert_fmt(f2)), c.ffn_act == FfnAct.gelu)
-        }
-        prof_add("moe_gpu", ts_g1)
-        if (!gpu_comb) {   // combine off: park the raw down rows in bucket order for the reduce
-            trace_tag(TRACE_TAG_PARK)
-            let ts_park = ref_time_ticks()
-            unsafe {
-                let gp = addr<float const?>(s.moe_gout[0])
-                var ep = addr(s.moe_eout[0])
-                let bp = addr<int64 const?>(s.moe_bkt[0])
-                maybe_parallel_for(nk * dim >= g_act_par_threshold, 0, int(nk), get_dispatch_lanes()) $(rb, re) {
-                    unsafe {
-                        for (j in range(rb, re)) {
-                            let jj = int64(j)
-                            copy_floats(ep + bp[jj] * dim, gp + jj * dim, dim)
-                        }
-                    }
-                }
-            }
-            prof_add("moe_park", ts_park)
-        }
-    }
-
-    // 3. one batched GEMM chain per touched expert, parking raw down rows (skipped when 3F ran)
-    if (!fused_gpu) {
-        trace_tag(TRACE_TAG_MOE)
-    }
-    for (e in range64(fused_gpu ? 0l : ne)) {
-        let b0 = e == 0l ? 0l : s.moe_cnt[e - 1l]
-        let cnt = s.moe_cnt[e] - b0
-        if (cnt == 0l) {
-            continue
-        }
-        let ts_gather = ref_time_ticks()
-        moe_gather_rows(s, b0, cnt, dim, k, moe_kform, moe_kform)
-        prof_add("moe_gather", ts_gather)
-        let base = e * dim * nfe
-        if (kq_sb(f1)) {
-            mm_b_kq_pre(s.moe_ghb, t, f1, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
-        } elif (f1 == KqFmt.q51) {
-            mm_b_q51_pre(s.moe_ghb, t, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-        } else {
-            mm_b_q8_pre(s.moe_ghb, t, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-        }
-        if (kq_sb(f3)) {
-            mm_b_kq_pre(s.moe_ghb2, t, f3, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
-        } elif (f3 == KqFmt.q51) {
-            mm_b_q51_pre(s.moe_ghb2, t, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-        } else {
-            mm_b_q8_pre(s.moe_ghb2, t, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-        }
-        let ts_act = ref_time_ticks()
-        gate_batch(s.moe_ghb, s.moe_ghb2, c.ffn_act, nfe, cnt)
-        prof_add("act", ts_act)
-        if (kq_sb(f2)) {
-            // kq v2: Q8_K-form rows + the per-16 sums the fold consumes
-            requant_rows_q8k_bs(s.moe_ghb, nfe, cnt, s.moe_hq, s.moe_hs, s.moe_hbs)
-            mm_b_kq_pre(s.moe_gout, t, f2, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim, cnt)
-        } elif (f2 == KqFmt.q51) {
-            requant_rows_q8(s.moe_ghb, nfe, cnt, s.moe_hq, s.moe_hs)
-            mm_b_q51_pre(s.moe_gout, t, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, nfe, dim, cnt)
-        } else {
-            requant_rows_q8(s.moe_ghb, nfe, cnt, s.moe_hq, s.moe_hs)
-            mm_b_q8_pre(s.moe_gout, t, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, nfe, dim, cnt)
-        }
-        let ts_park = ref_time_ticks()
-        for (r in range64(cnt)) {
-            copy_floats(s.moe_gout, r * dim, s.moe_eout, s.moe_bkt[b0 + r] * dim, dim)
-        }
-        prof_add("moe_park", ts_park)
-    }
-
-    // 4. ordered reduce into xb2_b: k weighted routed outputs in slot order, matching decode's accumulation order
-    let ts_red = ref_time_ticks()
-    unsafe {
-        var ap = addr(s.xb2_b[0])
-        let ep = addr < float const? >(s.moe_eout[0])
-        let wp = addr < float const? >(s.moe_w_b[0])
-        maybe_parallel_for(nk * dim >= g_act_par_threshold, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
-            unsafe {
-                for (p in range(rb, re)) {
-                    let pp = int64(p)
-                    var arow = ap + pp * dim
-                    if (gpu_comb) {   // the device already reduced: eout's head IS the combined row
-                        let cr = ep + pp * dim
-                        for (i in range64(dim)) {
-                            arow[i] = cr[i]
-                        }
-                    } else {
-                        for (i in range64(dim)) {
-                            arow[i] = 0.0
-                        }
-                        for (j in range64(k)) {
-                            let w = wp[pp * k + j]
-                            let er = ep + (pp * k + j) * dim
-                            for (i in range64(dim)) {
-                                arow[i] += w * er[i]
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    prof_add("moe_reduce", ts_red)
-    rms_batch(s.xb2_b, s.xb2_b, t, t.rms_post_ffn2_off + l * dim, dim, npos)
-
-    // 5. dense parallel shared expert over ALL positions: rms_ffn -> GeGLU -> post_ffw_norm_1 into gout
-    let ts_sh = ref_time_ticks()
-    rms_batch(s.xb_b, s.x_b, t, t.rms_ffn_off + l * dim, dim, npos)
-    mm_b_f(s, s.hb_b, t, fmt_at(t.w1_fmt, l), t.w1_offs[l], s.xb_b, dim, hidden, npos)
-    mm_b_f(s, s.hb2_b, t, fmt_at(t.w3_fmt, l), t.w3_offs[l], s.xb_b, dim, hidden, npos)
-    gate_batch(s.hb_b, s.hb2_b, c.ffn_act, hidden, npos)
-    mm_b_f(s, s.moe_gout, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], s.hb_b, hidden, dim, npos)
-    rms_batch(s.moe_gout, s.moe_gout, t, t.rms_post_ffn1_off + l * dim, dim, npos)
-    prof_add("mm_shexp", ts_sh)
-
-    // 6. combine (routed + dense), shared post_ffw_norm, residual add; layer-output scale is the caller's job
-    add_inplace(unsafe(addr(s.xb2_b[0])), unsafe(addr(s.moe_gout[0])), npos * dim)
-    rms_batch(s.xb2_b, s.xb2_b, t, t.rms_post_ffn_off + l * dim, dim, npos)
-    let ts_resid = ref_time_ticks()
-    add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
-    prof_add("act_resid", ts_resid)
-}
-
-// MoE FFN, prefill: norm, then either the grouped expert-bucketed path (Q8, default) or the
-// per-position reference path through the decode scratch (fp32 models — q4_0 never prefills — and
-// the bit-identical A/B switch).
-[no_alloc, no_env, no_io]
-def private ffn_moe_prefill(t : Model; var s : Session; l : int64; npos : int64) {
-    let c = t.config
-    if (l < c.n_layer_dense_lead) {   // glm4moe: the leading layer(s) are plain dense FFN
-        ffn_dense_prefill(t, s, l, npos)
-        return
-    }
-    let dim = c.dim
-    let ts_norm = ref_time_ticks()
-    rms_batch(s.xb_b, s.x_b, t, t.rms_ffn_off + l * dim, dim, npos)
-    prof_add("norm", ts_norm)
-    // native-MXFP4 grouped path pays a per-touched-expert Q8 expansion (~120MB/expert); under ~8 rows/expert the per-position mx4 GEMVs are cheaper
-    let mx4_grouped_pays = !t.experts_mx4 || npos * c.n_expert_used >= 8l * c.n_expert
-    // kq-expert layers ride grouped buckets via the kq batch tile; portable/no-kq backends take the per-position path
-    let kq_grouped_ok = !moe_layer_sb_kq(t, l) || (t.kq_repacked && kernel_backend_has_kq_batch())
-    if (t.quant == QuantMode.q8 && g_moe_grouped_prefill && mx4_grouped_pays && kq_grouped_ok) {
-        ffn_moe_prefill_grouped(t, s, l, npos)
-    } else {
-        // per-position reference path — moe_ffn_core carries its own section buckets
-        for (p in range64(npos)) {
-            copy_floats(s.xb_b, p * dim, s.xb, 0l, dim)
-            moe_ffn_core(t, s, l)
-            if (c.pre_post_norm) {
-                rms_at(s.moe_acc, t, t.rms_post_ffn_off + l * dim, s.moe_acc, dim)
-            }
-            add_inplace(unsafe(addr(s.x_b[p * dim])), unsafe(addr(s.moe_acc[0])), dim)   // residual add into this position's x_b row
-        }
-    }
-    if (c.layer_out_scale) {
-        let os = t.fblob[t.out_scale_off + l]
-        scale_inplace(unsafe(addr(s.x_b[0])), os, npos * dim)
-    }
-}
-
 [no_alloc, no_env, no_io]
 def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, start_pos : int64; skip_logits : bool = false) {
     let c = t.config
@@ -12678,7 +4519,7 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
     if (has_ple(c)) {  // gemma-4 E-series: build each position's per-(layer) side input before the stack
         let ts_ple = ref_time_ticks()
         if (g_ple_gpu_gate_set && invoke(g_ple_gpu_gate, t, s, npos, start_pos)) {
-            s.ple_gpu_tokens |> resize(int(npos))
+            s.ple_gpu_tokens |> resize(npos)
             for (p in range64(npos)) {
                 s.ple_gpu_tokens[p] = tokens[p]
             }
@@ -12712,123 +4553,47 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
     }
 }
 
-//! Batched prefill from PRE-BUILT embeddings (npos x dim) instead of token ids — the multimodal
-//! splice entry (text rows from `embed_text_rows`, media rows from the audio tower). Same KV/logits
-//! behavior as `forward_prefill`; embeddings go in as-is, no embed_scale applied here.
-def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, start_pos : int64) {
-    if (npos <= 0l) {
-        return
-    }
-    if (t.quant == QuantMode.q4_0) {
-        panic("forward_prefill_embd: q4_0 mode has no batched prefill path (use q8 or fp32)")
-    }
-    if (long_length(embd) < npos * t.config.dim) {
-        panic("forward_prefill_embd: embd has {long_length(embd)} floats — npos={npos} rows of dim={t.config.dim} need {npos * t.config.dim}")
-    }
-    kv_ensure(s, start_pos + npos)   // paged sessions: grow the block table BEFORE any cache-pointer hoist
-    forward_prefill_alloc(t, s, npos, start_pos)
-    let dim = t.config.dim
-    let ts_embed = ref_time_ticks()
-    for (i in range64(npos * dim)) {
-        s.x_b[i] = embd[i]
-    }
-    prof_add("embed", ts_embed)
-    if (has_ple(t.config)) {  // gemma-4 E-series: PLE side input (padding-token gather for the media path)
-        let ts_ple = ref_time_ticks()
-        ple_pre_prefill_pad(t, s, npos)
-        prof_add("ple", ts_ple)
-    }
-    forward_prefill_body(t, s, npos, start_pos)
-}
-
-//! Fill ``dst[at*dim ..]`` with the embedding rows of ``tokens`` (embed_scale applied) — the
-//! text-span half of a multimodal prefill buffer.
-def embed_text_rows(t : Model; tokens : array<int64>; var dst : array<float>; at : int64) {
-    let dim = t.config.dim
-    let n = long_length(tokens)
-    for (p in range64(n)) {
-        embed_row(t, tokens[p], unsafe(addr(dst[(at + p) * dim])))
-    }
-    if (t.config.embed_scale != 1.0) {
-        scale_inplace(unsafe(addr(dst[at * dim])), t.config.embed_scale, n * dim)
-    }
-}
-
-//! ``eval_``'s embedding-input twin: prefill ``npos`` embedding rows at the session cursor and
-//! advance it. Leaves ``s.logits`` = the last position's logits.
-def eval_embd_(t : Model; var s : Session; embd : array<float>; npos : int64) {
-    if (npos <= 0l) {
-        return
-    }
-    forward_prefill_embd(t, s, embd, npos, s.n_past)
-    s.n_past += npos
-}
-
-//! Mean-pooled, L2-normalized sentence embedding for `tokens` into `out`: last-layer hidden state
-//! averaged over positions, unit-normalized. Runs one forward over `s` from position 0 — pass a
-//! FRESH session (no KV history assumed; cache is left filled).
-def embed_forward(t : Model; var s : Session; tokens : array<int64>; npos : int64; var out : array<float>) {
-    let c = t.config
-    let dim = c.dim
-    out |> resize(dim)
-    for (i in range64(dim)) {
-        out[i] = 0.0
-    }
-    if (npos <= 0l) {
-        return
-    }
-    if (t.quant != QuantMode.q4_0 && npos > 1l) {
-        // batched prefill fills s.x_b (npos × dim residual) and leaves it intact; the body norms only
-        // the last position, so re-apply the final RMSNorm to EVERY position and accumulate.
-        forward_prefill(t, s, tokens, npos, 0l)
-        for (p in range64(npos)) {
-            rms_at(s.xb, t, t.rms_final_off, s.x_b, p * dim, dim)
-            add_inplace(unsafe(addr(out[0])), unsafe(addr(s.xb[0])), dim)
-        }
-    } else {
-        // q4_0 (no batched prefill) or a single token: per-token forward leaves s.xb = post-final-norm hidden.
-        for (p in range64(npos)) {
-            forward(t, s, tokens[p], p)
-            add_inplace(unsafe(addr(out[0])), unsafe(addr(s.xb[0])), dim)
-        }
-    }
-    s.n_past = npos   // KV now holds npos positions (start_pos was 0) — keep the session cursor consistent
-    // mean over positions, then L2-normalize
-    let inv = 1.0 / float(npos)
-    var ss = 0.0
-    for (i in range64(dim)) {
-        out[i] *= inv
-        ss += out[i] * out[i]
-    }
-    let rn = ss > 0.0 ? 1.0 / sqrt(ss) : 0.0
-    for (i in range64(dim)) {
-        out[i] *= rn
-    }
-}
-
-//! Mean-pooled, L2-normalized sentence embedding of `text` (`dim` floats): tokenize, run one forward,
-//! average the decoder's last-layer hidden state over positions, unit-normalize. Decoder-as-embedder
-//! yields RAG-grade vectors, not a substitute for a dedicated embedding model.
-def embed_(m : Model; text : string) : array<float> {
-    var s <- create_session_(m)
-    let tokens = encode_(m, text)
-    var out : array<float>
-    embed_forward(m, s, tokens, long_length(tokens), out)
-    delete s
-    return <- out
-}
-
 // batched-prefill scratch sizing, shared by token and embedding entries. grow-only no-init:
 // contents are stage output (fully overwritten); `delete` on grow skips the realloc's old-block
 // copy + zero-fill (~5ms saved on a first 512-row prefill).
-def private scratch_resize(@scratch var a : array<auto(numT)>; need : int64) {
+def scratch_resize(@scratch var a : array<auto(numT)>; need : int64) {
     if (long_length(a) < need) {
         delete a
     }
     a |> resize_no_init(need)
 }
 
-def private forward_prefill_alloc(t : Model; var s : Session; npos, start_pos : int64) {
+//! Unified batch entry: process `npos` tokens at start_pos..start_pos+npos-1. npos==1 dispatches to
+//! forward() (decode); npos>1 to forward_prefill. Leaves s.logits at the last token, extends KV by npos.
+[no_alloc, no_env, no_io]
+def forward_batch(t : Model; var s : Session; tokens : array<int64>; npos, start_pos : int64) {
+    if (npos == 1l) {
+        forward(t, s, tokens[0], start_pos)
+    } else {
+        forward_prefill(t, s, tokens, npos, start_pos)
+    }
+}
+
+// the size threshold. pre_post_norm/layer_out_scale are handled: the chain defers the residual add
+// and the caller's serial tail runs post-norm and/or the fused add+scale after the rendezvous.
+def fused_ffn_ok(t : Model; l : int64) : bool {
+    let c = t.config
+    let f1 = fmt_at(t.w1_fmt, l)
+    let f2 = fmt_at(t.w2_fmt, l)
+    let f3 = fmt_at(t.w3_fmt, l)
+    let any_kq = f1 != KqFmt.q8 || f2 != KqFmt.q8 || f3 != KqFmt.q8
+    return (g_fused_decode && t.quant == QuantMode.q8
+        && kq_servable(t, f1) && kq_servable(t, f2) && kq_servable(t, f3)
+        // kq v2 regrain: Q8_K quantizes whole 256-superblocks, so dim/hidden must divide out cleanly
+        && (!any_kq || c.dim % 256l == 0l)
+        && (f2 == KqFmt.q8 || layer_hidden(t, l) % 256l == 0l)
+        && get_jobque_team_mode() && kernel_backend_has_rows()
+        && (!t.wscale_f16 || kernel_backend_has_rows16())
+        && lanes_for_work(c.dim * layer_hidden(t, l), g_gemv_lane_cap) > 1)
+}
+
+[no_alloc, no_env, no_io]
+def forward_prefill_alloc(t : Model; var s : Session; npos, start_pos : int64) {
     let c = t.config
     let dim = c.dim
     let hidden = c.hidden_dim
@@ -12890,7 +4655,7 @@ def private forward_prefill_alloc(t : Model; var s : Session; npos, start_pos : 
 
 // the shared prefill core: rope table + layer stack + final norm/classifier, over a pre-filled
 // s.x_b residual stream (token or embedding sourced)
-def private forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; skip_logits : bool = false) {
+def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; skip_logits : bool = false) {
     let c = t.config
     let dim = c.dim
 
@@ -12958,727 +4723,4 @@ def private forward_prefill_body(t : Model; var s : Session; npos, start_pos : i
         s.logits[id] = -1.0e30
     }
     prof_add("final", ts_final)
-}
-
-//! Unified batch entry: process `npos` tokens at start_pos..start_pos+npos-1. npos==1 dispatches to
-//! forward() (decode); npos>1 to forward_prefill. Leaves s.logits at the last token, extends KV by npos.
-[no_alloc, no_env, no_io]
-def forward_batch(t : Model; var s : Session; tokens : array<int64>; npos, start_pos : int64) {
-    if (npos == 1l) {
-        forward(t, s, tokens[0], start_pos)
-    } else {
-        forward_prefill(t, s, tokens, npos, start_pos)
-    }
-}
-
-// ===== batched decode =====
-// One decode step over B sessions through ONE pass of the weights: GEMVs become B-row GEMMs via
-// the batched prefill blocks; attention stays per-(row, head) since each reads only ITS session's cache.
-
-//! Caller-owned scratch for eval_batch, reused across calls (buffers grow to the largest B seen).
-//! `scr` wraps a cache-less Session so the batched prefill blocks (mm_b / rms_batch / ffn_prefill)
-//! apply unchanged; per call it impersonates the batch's cache geometry (dtypes + byte prefixes).
-struct BatchWorkspace {
-    scr : Session             // *_b scratch, rope tables, ple scratch — no KV cache / sampler state
-    positions : array<int64>  // row i's absolute position (sessions[i].n_past at entry)
-    logits_b : array<float>   // B x vocab classifier output, scattered per session after softcap
-    // row i's cache base pointers (into sessions[i]; valid per call). @do_not_delete is load-bearing:
-    // delete of a plain array<T?> CASCADES to the pointees, which would free the sessions' cache blobs
-    @do_not_delete kbase : array<uint8?>
-    @do_not_delete vbase : array<uint8?>
-    @do_not_delete lrow : array<float?>   // row i's sessions[i].logits base (the threaded scatter)
-    runs_b : array<KVRun>     // per-row physical runs, flattened rows × max-runs (flat rows: 1 each)
-    nrun_b : array<int64>     // per-row run count
-}
-
-def create_batch_workspace_(model : Model) : BatchWorkspace {
-    var ws : BatchWorkspace
-    // the scratch Session never owns cache or sampler state — eval_batch reads/writes the real
-    // sessions' caches through kbase/vbase (flat) or the batch's pool (paged)
-    ws.scr <- make_run_state(model.config, KVDtype.f32, KVDtype.f32, false)
-    delete ws.scr.sample_scratch
-    return <- ws
-}
-
-// B-row slice of forward_prefill_alloc: exactly the buffers the batched-decode step touches (no
-// prefill attention scratch — att_b sizes per layer in attention_batch_decode, fa_* never used).
-def private batch_decode_alloc(t : Model; var s : Session; nrows : int64) {
-    let c = t.config
-    let dim = c.dim
-    let hidden = c.hidden_dim
-    let kv_dim = max_kv_dim(c)
-    let head_size = max_head_size(c)
-    let qd = c.n_heads * head_size
-    let xdim = max(dim, qd)
-    let maxn = max(xdim, hidden)
-    s.x_b |> resize(nrows * dim)
-    s.xb_b |> resize(nrows * xdim)
-    s.xb2_b |> resize(nrows * dim)
-    s.q_b |> resize(nrows * qd)
-    s.k_b |> resize(nrows * kv_dim)
-    s.v_b |> resize(nrows * kv_dim)
-    s.hb_b |> resize(nrows * hidden)
-    s.hb2_b |> resize(nrows * hidden)
-    s.xqb |> resize(nrows * maxn)
-    s.xsb |> resize(nrows * maxn / 32l)
-    if (t.kquant_native) {   // kq batch tile: per-16 sums beside the batch quants
-        s.xbsb |> resize(nrows * maxn / 16l)
-    }
-    if (s.kv_dtype_k == KVDtype.q8_0 || s.kv_dtype_k == KVDtype.tq4) {   // batch query-quant planes (dtypes snapshotted before this)
-        s.attq |> resize(nrows * qd)
-        s.atts |> resize(nrows * qd / 32l)
-    }
-    if (has_ple(c)) {   // gemma-4 E-series PLE scratch (one row per batch slot)
-        let all = c.n_layers * c.n_embd_per_layer
-        s.ple_inp |> resize(nrows * all)
-        s.ple_proj |> resize(nrows * all)
-        s.ple_gate |> resize(nrows * c.n_embd_per_layer)
-    }
-}
-
-// One layer's batched-decode attention: shared prefix (norm → QKV GEMM → qk/v-norm → per-row RoPE
-// via the positions table) → scatter-store each row's k/v into ITS session's cache → per-(row, head)
-// decode attention through the codec seam worker → shared suffix (wo GEMM → post-norm → residual).
-def private attention_batch_decode(t : Model; var ws : BatchWorkspace; sessions : array<Session?>; l, nrows : int64) {
-    let c = t.config
-    let kv_dim = layer_kv_dim(c, l)
-    let head_size = layer_head_size(c, l)
-    let n_heads = c.n_heads
-    let n_kv_heads = layer_n_kv_heads(c, l)
-    let qd = n_heads * head_size
-    let kv_mul = n_heads / n_kv_heads
-    let scale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size))
-    let is_sliding = layer_is_sliding(c, l)
-    let swin = c.sliding_window
-    let kv_shared = t.kv_src[l] != l
-    // flat rows address each session's slab; paged rows all address the batch's ONE pool for layer l
-    let paged = ws.scr.kv_pool != null
-    let kbb = paged ? 0l : kv_base_k(ws.scr, l, c.seq_len)   // layer slab base BYTES — uniform across the batch
-    let vbb = paged ? 0l : kv_base_v(ws.scr, l, c.seq_len)   // (ws.scr carries the batch's dtypes + prefixes)
-    var pkcl = paged ? kv_layer_kbase(ws.scr, l, c.seq_len) : null
-    var pvcl = paged ? kv_layer_vbase(ws.scr, l, c.seq_len) : null
-    let kdt = ws.scr.kv_dtype_k
-    let vdt = ws.scr.kv_dtype_v
-    // start_pos is only for the classic rope path; eval_batch_ never routes here (rows table bakes position)
-    attn_qkv_rope_prefix(t, ws.scr, l, nrows, 0l)
-    let ktq4 = kdt == KVDtype.tq4
-    let vtq4 = vdt == KVDtype.tq4
-    if (ktq4 || vtq4) {
-        // tq4 basis change at the RoPE seam (see attention_std_decode); xb_b un-rotates below
-        let ts_rot = ref_time_ticks()
-        unsafe {
-            let sgp = addr < float const? >(ws.scr.kv_signs[0])
-            if (ktq4) {
-                tq4_rotate_batch(ws.scr.q_b, nrows, qd, head_size, sgp)
-                if (!kv_shared) {
-                    tq4_rotate_batch(ws.scr.k_b, nrows, kv_dim, head_size, sgp)
-                }
-            }
-            if (vtq4 && !kv_shared) {
-                tq4_rotate_batch(ws.scr.v_b, nrows, kv_dim, head_size, sgp)
-            }
-        }
-        prof_add("tq4_rot", ts_rot)
-    }
-    if (kdt == KVDtype.q8_0 || ktq4) {
-        // q_b rows are contiguous and qd % 32 == 0, so per-32-block quants match the per-row form
-        quantize_q8_0_into(ws.scr.q_b, nrows * qd, ws.scr.attq, ws.scr.atts, 0l, 0l)
-    }
-    if (!kv_shared) {
-        let ts_kv = ref_time_ticks()
-        unsafe {
-            let kbp = addr < float const? >(ws.scr.k_b[0])
-            let vbp = addr < float const? >(ws.scr.v_b[0])
-            for (i in range64(nrows)) {
-                let prow = kv_phys_row(*sessions[i], ws.positions[i])   // flat: identity
-                kv_store_row(paged ? pkcl : ws.kbase[i] + kbb, kdt, kv_dim, prow, 0l, kv_dim, kbp + i * kv_dim)
-                kv_store_row(paged ? pvcl : ws.vbase[i] + vbb, vdt, kv_dim, prow, 0l, kv_dim, vbp + i * kv_dim)
-            }
-        }
-        prof_add("kv_store", ts_kv)
-    }
-    // per-(row, head): row i attends to ITS cache; lane count is work-proportional to KV traffic.
-    let ts_attn = ref_time_ticks()
-    var maxctx = 0l
-    var work = 0l   // Σ 2·cnt_i·head_size MACs per head
-    // runs_b row stride: a flat row is always one run; a paged row can span every page of the context
-    let maxruns = paged ? (c.seq_len + ws.scr.kv_pool.page_rows - 1l) / ws.scr.kv_pool.page_rows + 1l : 1l
-    ws.runs_b |> resize(nrows * maxruns)
-    ws.nrun_b |> resize(nrows)
-    for (i in range64(nrows)) {
-        let pos = ws.positions[i]
-        let kstart = (is_sliding && pos + 1l > swin) ? (pos + 1l - swin) : 0l
-        maxctx = max(maxctx, pos + 1l - kstart)
-        work += 2l * (pos + 1l - kstart) * head_size
-        ws.nrun_b[i] = kv_runs(*sessions[i], kstart, pos + 1l, ws.runs_b, i * maxruns)   // flat: 1 identity run
-    }
-    ws.scr.att_b |> resize(nrows * n_heads * maxctx)
-    let attn_softcap = c.attn_logit_softcap
-    let attn_lanes = min(int(nrows * n_heads), lanes_for_work(work * n_heads, g_gemv_lane_cap))
-    let sinksp = (c.attn_sinks
-        ? unsafe(addr < float const? >(t.fblob[t.sinks_off + l * n_heads]))
-        : null)
-    unsafe {
-        let qp = addr < float const? >(ws.scr.q_b[0])
-        let kq8 = kdt == KVDtype.q8_0 || kdt == KVDtype.tq4
-        let qqp0 = kq8 ? addr < int8 const? >(ws.scr.attq[0]) : null
-        let qsp0 = kq8 ? addr < float const? >(ws.scr.atts[0]) : null
-        var xbp = addr(ws.scr.xb_b[0])
-        var attp = addr(ws.scr.att_b[0])
-        let posp = addr < int64 const? >(ws.positions[0])
-        let runsbp = addr < KVRun const? >(ws.runs_b[0])
-        let nrunbp = addr < int64 const? >(ws.nrun_b[0])
-        var kbpp = addr(ws.kbase[0])
-        var vbpp = addr(ws.vbase[0])
-        maybe_parallel_for(0, int(nrows * n_heads), attn_lanes) $(rb, re) {
-            unsafe {
-                for (idx in range(rb, re)) {
-                    let ix = int64(idx)
-                    let ii = ix / n_heads
-                    let hh = ix % n_heads
-                    let pos = posp[ii]
-                    let kstart = (is_sliding && pos + 1l > swin) ? (pos + 1l - swin) : 0l
-                    let cnt = pos + 1l - kstart
-                    let qoff = hh * head_size
-                    let kvhoff = (hh / kv_mul) * head_size
-                    attn_head_decode_d(attp + ix * maxctx, xbp + ii * qd, qp + ii * qd,
-                        kq8 ? qqp0 + ii * qd : null, kq8 ? qsp0 + ii * qd / 32l : null,
-                        paged ? pkcl : kbpp[ii] + kbb, paged ? pvcl : vbpp[ii] + vbb, kdt, vdt,
-                        runsbp + ii * maxruns, nrunbp[ii], qoff, kvhoff, kstart, cnt, kv_dim, head_size,
-                        hh, scale, attn_softcap, sinksp)
-                }
-            }
-        }
-    }
-    prof_add("attn", ts_attn)
-    if (vtq4) {   // tq4 V: xb_b rows accumulated in the rotated basis — un-rotate per (row, head)
-        unsafe {
-            tq4_unrotate_batch(ws.scr.xb_b, nrows, qd, head_size, addr < float const? >(ws.scr.kv_signs[0]))
-        }
-    }
-    attn_out_suffix(t, ws.scr, l, nrows)
-}
-
-//! One synchronous batched decode step: row i evals tokens[i] at sessions[i]'s position; each
-//! session advances by one. Sessions must be distinct, same-geometry (one model, equal cache
-//! sizes, uniform KV dtype); B == 1, q4_0, non-std attention, or classic rope fall back to forward().
-def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; tokens : array<int64>) {   // nolint:LINT014 — rows mutate THROUGH the pointers; a const array constifies the pointees
-    let c = t.config
-    let nrows = long_length(sessions)
-    if (nrows <= 0l) {
-        return
-    }
-    if (long_length(tokens) != nrows) {
-        panic("eval_batch: {long_length(sessions)} sessions but {long_length(tokens)} tokens — one token per session")
-    }
-    for (i in range64(nrows)) {
-        if (sessions[i] == null) {
-            panic("eval_batch: sessions[{i}] is null")
-        }
-        if (sessions[i].n_past + 1l > c.seq_len) {
-            panic("eval_batch: sessions[{i}] is full (n_past={sessions[i].n_past}, seq_len={c.seq_len})")
-        }
-        for (j in range64(i)) {
-            if (sessions[i] == sessions[j]) {
-                panic("eval_batch: sessions[{j}] and sessions[{i}] are the same session — rows must be distinct")
-            }
-        }
-    }
-    var s0 = sessions[0]
-    for (i in range64(1l, nrows)) {
-        let sp = sessions[i]
-        if (sp.kv_dtype_k != s0.kv_dtype_k || sp.kv_dtype_v != s0.kv_dtype_v) {
-            panic("eval_batch: sessions[{i}] KV dtype differs from sessions[0] — the batch must be uniform")
-        }
-        if (sp.kv_pool != s0.kv_pool) {
-            panic("eval_batch: sessions[{i}] KV pool differs from sessions[0] — one pool (or all-flat) per batch")
-        }
-        // long_length: a full-seq 1B's flat f16 cache is exactly 2^31 bytes — length() throws
-        if (s0.kv_pool == null && (long_length(sp.key_cache) != long_length(s0.key_cache) || long_length(sp.value_cache) != long_length(s0.value_cache))) {
-            panic("eval_batch: sessions[{i}] cache size differs from sessions[0] — same model + same seq_len required")
-        }
-    }
-    // per-row fallback keeps every configuration correct: B == 1 keeps the fused decode chain, q4_0
-    // has no batched kernels, non-std arches have no batch attention worker, and the classic rope
-    // path can't express per-row positions
-    if (nrows == 1l || t.quant == QuantMode.q4_0 || !t.blocks.attn_is_std || !g_use_rope_table) {
-        for (i in range64(nrows)) {
-            var sp = sessions[i]
-            forward(t, *sp, tokens[i], sp.n_past)
-            sp.n_past++
-        }
-        return
-    }
-    // snapshot cache geometry onto the scratch Session; kv_ensure runs for every row FIRST because
-    // paged growth resizes pool blobs, so no pool pointer may be hoisted until all rows have pages.
-    ws.scr.kv_dtype_k = s0.kv_dtype_k
-    ws.scr.kv_dtype_v = s0.kv_dtype_v
-    ws.scr.kv_signs := s0.kv_signs   // tq4: the rotation signs travel with the dtypes
-    ws.scr.kv_bprefix_k := s0.kv_bprefix_k
-    ws.scr.kv_bprefix_v := s0.kv_bprefix_v
-    ws.scr.kv_pool = s0.kv_pool
-    ws.positions |> resize(nrows)
-    ws.kbase |> resize(nrows)
-    ws.vbase |> resize(nrows)
-    for (i in range64(nrows)) {
-        var sp = sessions[i]
-        kv_ensure(*sp, sp.n_past + 1l)
-        ws.positions[i] = sp.n_past
-        if (s0.kv_pool == null) {
-            unsafe {
-                ws.kbase[i] = addr(sp.key_cache[0])
-                ws.vbase[i] = addr(sp.value_cache[0])
-            }
-        } else {
-            ws.kbase[i] = null   // paged rows address the pool blobs, hoisted per layer
-            ws.vbase[i] = null
-        }
-    }
-    batch_decode_alloc(t, ws.scr, nrows)
-    // embed each row's token into the residual stream
-    let dim = c.dim
-    let ts_embed = ref_time_ticks()
-    for (i in range64(nrows)) {
-        embed_row(t, tokens[i], unsafe(addr(ws.scr.x_b[i * dim])))
-    }
-    if (c.embed_scale != 1.0) {  // Gemma2: scale the embedding by sqrt(dim)
-        scale_inplace(unsafe(addr(ws.scr.x_b[0])), c.embed_scale, nrows * dim)
-    }
-    prof_add("embed", ts_embed)
-    if (has_ple(c)) {  // gemma-4 E-series: per-(row, layer) side input (token-indexed, position-free)
-        let ts_ple = ref_time_ticks()
-        ple_pre_prefill(t, ws.scr, tokens, nrows)
-        prof_add("ple", ts_ple)
-    }
-    // per-row RoPE cos/sin table(s) — row i at sessions[i]'s own position
-    let ts_rope_build = ref_time_ticks()
-    build_rope_table_rows(ws.scr.rope_cos, ws.scr.rope_sin, t, c.rope_freq_base, c.rope_freq_scale,
-        ws.positions, nrows, c.rope_dim > 0l ? c.rope_dim : c.head_size, true)
-    if (has_dual_rope(c)) {
-        let swa_hs = c.head_size_swa > 0l ? c.head_size_swa : c.head_size
-        build_rope_table_rows(ws.scr.rope_cos_swa, ws.scr.rope_sin_swa, t, c.rope_freq_base_swa,
-            c.rope_freq_scale_swa, ws.positions, nrows, swa_hs, !c.rope_ff_global_only)
-    }
-    prof_add("rope_build", ts_rope_build)
-    // layer stack: batched attention + the arch's batched FFN. An active batch-decode override may
-    // claim the whole stack (false = declined, fall back to the per-layer loop below).
-    var stack_done = false
-    g_batch_decode_logits_done = false
-    if (!empty(g_batch_decode_override_name)) {
-        stack_done = invoke(g_batch_decode_override, t, ws, sessions, nrows)
-    }
-    if (!stack_done) {
-        blob_only_panic(t, "batch-decode stack")
-        for (l in range64(c.n_layers)) {
-            attention_batch_decode(t, ws, sessions, l, nrows)
-            t.blocks.ffn_prefill(t, ws.scr, l, nrows)
-        }
-    }
-    // final rmsnorm + classifier over ALL rows, then per-row softcap/pins scattered per session
-    let ts_final = ref_time_ticks()
-    let vocab = c.vocab_size
-    if (!(stack_done && g_batch_decode_logits_done)) {
-        blob_only_panic(t, "batch-decode final-norm/classifier step")
-        rms_batch(ws.scr.xb_b, ws.scr.x_b, t, t.rms_final_off, dim, nrows)
-        ws.logits_b |> resize(nrows * vocab)
-        let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
-        if (c.shared_weights && !t.cls_q8 && cls_fmt == KqFmt.q8) {
-            // tied weights (fp32/q4_0 loads): the classifier IS the fp32 embedding table
-            mm_fblob_b(ws.logits_b, t, t.tok_emb_off, ws.scr.xb_b, dim, vocab, nrows)
-        } elif (cls_fmt != KqFmt.q8) {
-            mm_b_kq(ws.scr, ws.logits_b, t, cls_fmt, t.wcls_off, ws.scr.xb_b, dim, vocab, nrows)
-        } else {
-            mm_b(ws.logits_b, t, t.wcls_off, ws.scr.xb_b, ws.scr.xqb, ws.scr.xsb, dim, vocab, nrows)
-        }
-        // per-row softcap + scatter into each session's logits + suppress pins, ONE row-parallel
-        // dispatch — the serial tail here was most of a ~6ms all-lane hole every step at B=8
-        // (B x vocab ≈ 5MB of copy). Rows are disjoint (row i writes only sessions[i].logits).
-        ws.lrow |> resize(int(nrows))
-        unsafe {
-            for (i in range64(nrows)) {
-                ws.lrow[i] = addr(sessions[i].logits[0])
-            }
-            var lbp = addr(ws.logits_b[0])
-            var lrp = addr(ws.lrow[0])
-            let softcap = c.final_logit_softcap
-            maybe_parallel_for(0, int(nrows), min(int(nrows), get_dispatch_lanes())) $(rb, re) {
-                unsafe {
-                    for (i in range(rb, re)) {
-                        var src = lbp + int64(i) * vocab
-                        if (softcap > 0.0) {  // Gemma2: soft-cap the output logits per row
-                            softcap4(src, vocab, softcap)
-                        }
-                        copy_floats(lrp[i], src, vocab)
-                    }
-                }
-            }
-        }
-    }
-    for (i in range64(nrows)) {
-        var sp = sessions[i]
-        for (id in t.suppress) {  // gemma4: pin the checkpoint's suppressed token ids to -inf
-            sp.logits[id] = -1.0e30
-        }
-        sp.n_past++
-    }
-    prof_add("final", ts_final)
-}
-
-//! Greedy argmax over the current logits; returns the winning token id.
-def private argmax(s : Session; vocab : int64) : int64 {
-    // team-scanned (bit-identical to serial first-wins): 151-262k vocab scan was 210-284us/token idle
-    return parallel_argmax(s.logits, vocab)
-}
-
-//! Greedy decode. While still inside `prompt_tokens`, the next token is forced from the prompt;
-//! otherwise it's argmax. Returns emitted IDs (prompt echo minus BOS, then continuation; stops on BOS).
-def generate(t : Model; var s : Session; prompt_tokens : array<int64>; steps : int) : array<int64> {
-    var ids : array<int64>
-    let n_prompt = long_length(prompt_tokens)
-    let nsteps = int64(steps)
-    if (nsteps <= 0l || n_prompt <= 0l) {
-        return <- ids
-    }
-    ids |> reserve(nsteps)
-    // prefill the whole prompt in one batched pass (cache 0..n_prompt-1; logits at the last position)
-    forward_batch(t, s, prompt_tokens, n_prompt, 0l)
-    // echo prompt[1..n_prompt-1] (the forced "next" tokens while consuming the prompt), honoring
-    // the step budget and the BOS delimiter
-    for (q in range64(n_prompt - 1l)) {
-        if (long_length(ids) >= nsteps) {
-            return <- ids
-        }
-        let tok = prompt_tokens[q + 1l]
-        if (tok == 1l) {
-            return <- ids
-        }
-        ids |> push(tok)
-    }
-    // greedy continuation: sample from the last prompt position's logits, then decode one token
-    // per step at the next absolute position
-    if (long_length(ids) >= nsteps) {
-        return <- ids
-    }
-    var token = argmax(s, t.config.vocab_size)
-    var apos = n_prompt
-    var one : array<int64>
-    one |> resize(1)
-    while (long_length(ids) < nsteps) {
-        if (token == 1l) {  // BOS delimits sequences
-            break
-        }
-        ids |> push(token)
-        if (long_length(ids) >= nsteps) {
-            break
-        }
-        one[0] = token
-        forward_batch(t, s, one, 1l, apos)
-        apos ++
-        token = argmax(s, t.config.vocab_size)
-    }
-    return <- ids
-}
-
-// ===== Sampling =====
-
-//! Sampling parameters. Defaults are greedy (temp = 0, all cutoffs/penalties off) — bit-identical
-//! to argmax. Cutoff order matches llama.cpp: top-k on logits, then top-p and min-p on the
-//! softmaxed probabilities.
-struct SamplingParams {
-    temp : float = 0.0             // <= 0 => greedy argmax; otherwise softmax temperature
-    top_k : int64 = 0l             // <= 0 or >= vocab => no top-k cutoff
-    top_p : float = 1.0            // nucleus: keep the smallest prob mass >= top_p (>= 1 = off)
-    min_p : float = 0.0            // drop tokens with prob < min_p * max prob (<= 0 = off)
-    penalty : float = 1.0          // multiplicative repetition penalty over recent tokens (1 = none; <= 0 treated as none)
-    presence_penalty : float = 0.0   // subtracted from the logit of every distinct token in the window
-    frequency_penalty : float = 0.0  // subtracted per occurrence in the window (OpenAI semantics)
-    penalty_last_n : int64 = 64l   // penalty window (most recent N generated tokens)
-}
-
-//! Seed the session's sampling RNG for reproducible generation.
-def set_seed_(var s : Session; seed : int) {
-    s.rng = random_seed(seed)
-}
-
-// Repetition/presence/frequency penalties over the last `penalty_last_n` of `s.recent` (llama.cpp
-// semantics): each unique token penalized once, multiplicative then presence+frequency*count.
-def private apply_penalties_(var s : Session; params : SamplingParams) {
-    // <= 0 treated as off too (not just 1): 0 would inf/NaN the logits, and additive-penalty clients send it
-    let rep = params.penalty > 0.0 && params.penalty != 1.0
-    if (!rep && params.presence_penalty == 0.0 && params.frequency_penalty == 0.0) {
-        return
-    }
-    let n = length(s.recent)
-    let win = int(params.penalty_last_n)
-    let pstart = n > win ? n - win : 0
-    for (k in range(pstart, n)) {
-        let id = s.recent[k]
-        var seen = false
-        for (j in range(pstart, k)) {
-            if (s.recent[j] == id) {
-                seen = true
-                break
-            }
-        }
-        continue if (seen)
-        var cnt = 1
-        for (j in range(k + 1, n)) {
-            if (s.recent[j] == id) {
-                cnt++
-            }
-        }
-        var v = s.logits[id]
-        if (rep) {
-            v = v > 0.0 ? v / params.penalty : v * params.penalty
-        }
-        v -= params.presence_penalty + params.frequency_penalty * float(cnt)
-        s.logits[id] = v
-    }
-}
-
-//! Sample the next token from `s.logits` per `params`: penalties, then temp + top-k, softmax,
-//! top-p/min-p, and a CDF draw (or greedy argmax when temp <= 0). Consumes `s.logits` in place.
-def sample_(var s : Session; params : SamplingParams) : int64 {
-    let vocab = long_length(s.logits)
-    apply_penalties_(s, params)
-    if (params.temp <= 0.0) {
-        return argmax(s, vocab)
-    }
-    let inv = 1.0 / params.temp
-    for (i in range64(vocab)) {
-        s.logits[i] *= inv
-    }
-    if (params.top_k > 0l && params.top_k < vocab) {
-        for (i in range64(vocab)) {
-            s.sample_scratch[i] = s.logits[i]
-        }
-        var kth = -1.0e30
-        for (_j in range64(params.top_k)) {
-            var mx = -1.0e30
-            var mi = 0l
-            for (i in range64(vocab)) {
-                if (s.sample_scratch[i] > mx) {
-                    mx = s.sample_scratch[i]
-                    mi = i
-                }
-            }
-            kth = mx
-            s.sample_scratch[mi] = -1.0e30
-        }
-        for (i in range64(vocab)) {
-            if (s.logits[i] < kth) {
-                s.logits[i] = -1.0e30
-            }
-        }
-    }
-    softmax(s.logits, vocab)
-    if (params.top_p < 1.0) {
-        // nucleus cut: sort a prob copy descending-by-walk, find the smallest prefix whose mass
-        // reaches top_p, zero everything below that prefix's boundary probability
-        for (i in range64(vocab)) {
-            s.sample_scratch[i] = s.logits[i]
-        }
-        sort(s.sample_scratch)
-        let target = max(params.top_p, 0.0)
-        var mass = 0.0
-        var cut = 0.0
-        var idx = length(s.sample_scratch) - 1
-        while (idx >= 0) {
-            cut = s.sample_scratch[idx]
-            mass += cut
-            break if (mass >= target)
-            idx--
-        }
-        for (i in range64(vocab)) {
-            if (s.logits[i] < cut) {
-                s.logits[i] = 0.0
-            }
-        }
-    }
-    if (params.min_p > 0.0) {
-        var maxp = 0.0
-        for (i in range64(vocab)) {
-            maxp = max(maxp, s.logits[i])
-        }
-        let thr = min(params.min_p, 1.0) * maxp
-        for (i in range64(vocab)) {
-            if (s.logits[i] < thr) {
-                s.logits[i] = 0.0
-            }
-        }
-    }
-    // the cuts above zero probabilities without renormalizing — draw against the surviving mass
-    // (cdf accumulates in the same order as total, so the walk always lands on a surviving token)
-    var total = 0.0
-    for (i in range64(vocab)) {
-        total += s.logits[i]
-    }
-    let r = random_float(s.rng) * total
-    var cdf = 0.0
-    for (i in range64(vocab)) {
-        cdf += s.logits[i]
-        if (r < cdf) {
-            return i
-        }
-    }
-    return vocab - 1l
-}
-
-//! Stream-generate up to `max_tokens` from `prompt`, invoking `blk(id, piece)` per token; return
-//! false from the block to stop early. Returns the number of tokens emitted.
-def generate_(t : Model; var s : Session; prompt : array<int64>; params : SamplingParams;
-              max_tokens : int64; blk : block<(id : int64; piece : string) : bool>) : int64 {
-    s.recent |> clear()
-    let t_pre = ref_time_ticks()
-    eval_(t, s, prompt)
-    s.stat_prefill_us = int64(get_time_usec(t_pre))
-    s.stat_n_prefill = long_length(prompt)
-    var one : array<int64>
-    one |> resize(1)
-    var nout = 0l
-    var got_first = false
-    let t_gen = ref_time_ticks()
-    for (_step in range64(max_tokens)) {
-        let tok = sample_(s, params)
-        if (!got_first) {   // time-to-first-token spans the prefill + the first forward
-            s.stat_ttft_us = int64(get_time_usec(t_pre))
-            got_first = true
-        }
-        if (!invoke(blk, tok, piece_(t, tok))) {
-            break
-        }
-        nout++
-        s.recent |> push(tok)
-        one[0] = tok
-        eval_(t, s, one)
-    }
-    s.stat_gen_us = int64(get_time_usec(t_gen))
-    s.stat_n_gen = nout
-    return nout
-}
-
-//! generate_'s embedding-prefill twin: prefill `npos` pre-built embedding rows (the multimodal
-//! splice — see eval_embd_), then stream-sample exactly like generate_. The chat layer's audio
-//! turns run through this.
-def generate_embd_(t : Model; var s : Session; embd : array<float>; npos : int64; params : SamplingParams;
-                   max_tokens : int64; blk : block<(id : int64; piece : string) : bool>) : int64 {
-    s.recent |> clear()
-    let t_pre = ref_time_ticks()
-    eval_embd_(t, s, embd, npos)
-    s.stat_prefill_us = int64(get_time_usec(t_pre))
-    s.stat_n_prefill = npos
-    var one : array<int64>
-    one |> resize(1)
-    var nout = 0l
-    var got_first = false
-    let t_gen = ref_time_ticks()
-    for (_step in range64(max_tokens)) {
-        let tok = sample_(s, params)
-        if (!got_first) {   // time-to-first-token spans the prefill + the first forward
-            s.stat_ttft_us = int64(get_time_usec(t_pre))
-            got_first = true
-        }
-        if (!invoke(blk, tok, piece_(t, tok))) {
-            break
-        }
-        nout++
-        s.recent |> push(tok)
-        one[0] = tok
-        eval_(t, s, one)
-    }
-    s.stat_gen_us = int64(get_time_usec(t_gen))
-    s.stat_n_gen = nout
-    return nout
-}
-
-// ===== Generation stats =====
-
-//! A summary of the most recent generate()/respond() call's timing. Times are seconds; rates tok/s.
-struct Stats {
-    n_prompt : int64 = 0l        // prompt tokens prefilled
-    n_gen : int64 = 0l           // tokens generated
-    ttft_s : double = 0.0lf      // time to first token (prefill + first forward)
-    prefill_tps : double = 0.0lf // prompt tokens / prefill seconds
-    gen_tps : double = 0.0lf     // generated tokens / generation seconds
-}
-
-//! Summarize the last generate()/respond() call from the session's timing counters.
-def stats_(s : Session) : Stats {
-    var r = Stats(n_prompt = s.stat_n_prefill, n_gen = s.stat_n_gen,
-                  ttft_s = double(s.stat_ttft_us) / 1.0e6lf)
-    if (s.stat_prefill_us > 0l) {
-        r.prefill_tps = double(s.stat_n_prefill) * 1.0e6lf / double(s.stat_prefill_us)
-    }
-    if (s.stat_gen_us > 0l) {
-        r.gen_tps = double(s.stat_n_gen) * 1.0e6lf / double(s.stat_gen_us)
-    }
-    return r
-}
-
-// ===== Shared arch-registration surface =====
-// Chat-template part builders + the default dense block set; each arch self-registers at [init].
-
-//! Chat-template part builders (for arch registration + the chat engine). `chat_text` is literal
-//! text; `chat_special` is a special-token spelling the renderer resolves to an id; `chat_content`
-//! is the slot the message text fills.
-def chat_text(s : string) : ChatPart {
-    return ChatPart(kind = ChatPartKind.text, s = s)
-}
-def chat_special(s : string) : ChatPart {
-    return ChatPart(kind = ChatPartKind.special, s = s)
-}
-def chat_content() : ChatPart {
-    return ChatPart(kind = ChatPartKind.content, s = "")
-}
-
-//! Install the Hermes-style tool-calling format (the Qwen2.5/Qwen3 chat template's tool block):
-//! ``<tools>`` JSON definitions in the system turn, ``<tool_call>`` JSON calls in assistant
-//! output, ``<tool_response>`` results riding user turns.
-def hermes_tools(var ct : ChatTemplate) {
-    ct.tool_sys_prelude = "# Tools\n\nYou may call one or more functions to assist with the user query.\n\nYou are provided with function signatures within <tools></tools> XML tags:\n<tools>"
-    ct.tool_sys_epilogue = "</tools>\n\nFor each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\n<tool_call>\n\{\"name\": <function-name>, \"arguments\": <args-json-object>}\n</tool_call>"
-    ct.tool_call_open = "<tool_call>"
-    ct.tool_call_close = "</tool_call>"
-    ct.tool_resp_open = "<tool_response>"
-    ct.tool_resp_close = "</tool_response>"
-}
-
-//! The default llama-family blocks (std attention, dense gated FFN), shared by every dense arch.
-//! Arch files pass this to their ArchDesc unless they swap block dataflow (e.g. MoE).
-def std_blocks() : ArchBlocks {
-    return ArchBlocks(attn_decode = @@attention_std_decode, ffn_decode = @@ffn_dense_decode,
-                      attn_prefill = @@attention_std_prefill, ffn_prefill = @@ffn_dense_prefill)
-}
-
-//! The MoE block set: standard attention + the routed-experts FFN (decode and naive-per-token
-//! prefill). Arches whose configure sets `moe` register these instead of std_blocks.
-def moe_blocks() : ArchBlocks {
-    return ArchBlocks(attn_decode = @@attention_std_decode, ffn_decode = @@ffn_moe_decode,
-                      attn_prefill = @@attention_std_prefill, ffn_prefill = @@ffn_moe_prefill,
-                      ffn_is_dense = false)
-}
-
-//! gemma4's block set: standard attention + a FFN that dispatches per file — dense (12B/31B) or the
-//! parallel dense-shared + routed MoE (26B-A4B) by expert count, so ONE gemma4 registration covers both.
-def gemma4_blocks() : ArchBlocks {
-    return ArchBlocks(attn_decode = @@attention_std_decode, ffn_decode = @@ffn_gemma4_decode,
-                      attn_prefill = @@attention_std_prefill, ffn_prefill = @@ffn_gemma4_prefill,
-                      ffn_is_dense = false)
-}
-
-//! qwen35's block set: the hybrid Gated-DeltaNet / gated-attention dispatch + the dense FFN.
-//! attn_is_std = false — batched decode falls back to per-row forward() (recurrent state is
-//! per-session and strictly sequential).
-def qwen35_blocks() : ArchBlocks {
-    return ArchBlocks(attn_decode = @@attention_qwen35_decode, ffn_decode = @@ffn_dense_decode,
-                      attn_prefill = @@attention_qwen35_prefill, ffn_prefill = @@ffn_dense_prefill,
-                      attn_is_std = false)
-}
-
-//! qwen35moe's block set: the same hybrid attention dispatch + the routed-experts FFN
-//! (softmax top-k with renorm + the qwen2moe-style sigmoid-gated shared expert).
-def qwen35moe_blocks() : ArchBlocks {
-    return ArchBlocks(attn_decode = @@attention_qwen35_decode, ffn_decode = @@ffn_moe_decode,
-                      attn_prefill = @@attention_qwen35_prefill, ffn_prefill = @@ffn_moe_prefill,
-                      attn_is_std = false, ffn_is_dense = false)
 }

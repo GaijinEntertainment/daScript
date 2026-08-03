@@ -10,15 +10,16 @@ require dasllama/dasllama_env  // env_int/env_flag: the shared typed readers + t
 require metal/das_metal_boost
 require dasllama/dasllama_common
 require dasllama/dasllama_math
+require dasllama/dasllama_kv_codec  // tq4_fill_signs — GPU and CPU must share the exact sign vector
 require dasllama/dasllama_metal_shapes public   // the extracted portable shape gates — re-exported so the driver family keeps its names
 
 // Shared infrastructure for the dasMetal resident drivers (the format-matrix arc's W1 split):
 // device/queue init, buffer pools, the weight-region + block_q8_0-blob + cat-blob caches, the
-// per-session KV mirror arena (watermark/LRU/rewind contract — see dasllama_metal_llama's
+// per-session KV mirror arena (watermark/LRU/rewind contract — see dasllama_metal_decode's
 // header), HazTrack, the pending-step (encode-ahead) machinery + metal_decode_flush, upload +
 // uniform helpers, and the decline observability layer (all three GPU paths' reason enums,
 // declines-by-reason tables, and the stage report). The kernel/PSO registry
-// (dasllama_metal_kernels) and the family graph modules (dasllama_metal_llama) sit on top.
+// (dasllama_metal_kernels) and the family graph modules (dasllama_metal_decode) sit on top.
 // Module-level state is deliberately non-private: this is an internal driver family, required
 // only by dasLLAMA itself, and the family modules read/write it directly.
 
@@ -38,7 +39,17 @@ let ADD_RMS_MAX_DIM = 4096l
 var g_dev : MetalDevice?
 var g_queue : MetalCommandQueue?
 var g_failed = false
-var @scratch g_regions : table<uint64; MetalBuffer?>  // base address -> resident region; upload-once, steady-state [] is a hit
+// a resident copy of host bytes [base, base+bytes) — span-aware: a hit must COVER the request
+// (a shorter first upload must never serve a wider later one); concats keep their OWN table so
+// a plain span and a cat3 at the same base never alias (the prefill-plain vs decode-cat3 bug)
+struct private RegionEntry {
+    @do_not_delete buf : MetalBuffer?   // released explicitly (flush/release/retire)
+    bytes : uint64
+}
+
+var @scratch g_regions : table<uint64; RegionEntry>  // base address -> resident PLAIN region; upload-once, steady-state [] is a hit
+var @scratch g_regions_cat3 : table<uint64; RegionEntry>  // first-piece base -> resident CONCAT region
+var @scratch g_region_retire : array<MetalBuffer?>  // grown-out buffers: unretained cbs may still bind them — released only at the quiesce boundaries
 var g_pool : MetalBufferPool
 var g_upool : MetalBufferPool                // UNTRACKED pool: uniforms + rope rows (GPU-read-only)
 var g_decodes = 0l
@@ -438,7 +449,7 @@ def public metal_decode_mirror_stats() : tuple<mirrors : int64; bytes : uint64> 
 //! mispredict retires TWICE at the same pos (the wrong-token spec entry, then the slow rerun).
 def public metal_decode_trace_arm(cap : int64) {
     g_step_trace |> clear()
-    g_step_trace |> reserve(int(cap))
+    g_step_trace |> reserve(cap)
     g_step_trace_cap = cap
     g_step_trace_t0 = ref_time_ticks()
 }
@@ -501,27 +512,34 @@ def mirror_release(var mr : KVMirror) {
 //! re-initializes on the next served step; all mirrors rebuild from the CPU caches on demand.
 
 
-def upload_region(src : void?; bytes : uint64) : MetalBuffer? {
-    let key = intptr(src)
-    if (key_exists(g_regions, key)) {
-        return g_regions[key]
-    }
+[cold_path]   // first touch (or a wider re-touch) of a region — the upload, not the per-dispatch path
+def private region_upload_new(key : uint64; src : void?; bytes : uint64) : MetalBuffer? {
+    // UNTRACKED: weights are GPU-read-only (written once, before any commit) — tracking ~450 of them made scheduler dependency analysis the dominant non-GPU cost (~70ms/prefill on 3B)
     var buf = metal_new_buffer_untracked(g_dev, bytes)
     unsafe {
         memcpy(metal_buffer_contents(buf), src, bytes)
     }
-    g_regions[key] = buf
+    g_regions[key] = RegionEntry(buf = buf, bytes = bytes)
     return buf
 }
 
-// lazily upload up to three CONSECUTIVE-ROW regions as ONE resident buffer, keyed by the first
-// piece's base address — the fused QKV / W1W3 GEMV streams (one dispatch, continuous row
-// indexing). Load-once-stable like upload_region; b2 == 0 makes it a two-piece concat.
-def upload_region_cat3(p0 : void?; b0 : uint64; p1 : void?; b1 : uint64; p2 : void?; b2 : uint64) : MetalBuffer? {
-    let key = intptr(p0)
+def upload_region(src : void?; bytes : uint64) : MetalBuffer? {
+    let key = intptr(src)
     if (key_exists(g_regions, key)) {
-        return g_regions[key]
+        var cached = g_regions[key]
+        if (cached.bytes >= bytes) {
+            return cached.buf
+        }
+        // a wider span at a shorter entry's base: the old buffer may be bound in an in-flight
+        // unretained cb — retire it, re-upload the full span
+        g_region_retire |> push(cached.buf)
     }
+    return region_upload_new(key, src, bytes)
+}
+
+[cold_path]
+def private region_upload_cat3_new(key : uint64; p0 : void?; b0 : uint64; p1 : void?; b1 : uint64;
+                                   p2 : void?; b2 : uint64) : MetalBuffer? {
     var buf = metal_new_buffer_untracked(g_dev, b0 + b1 + b2)
     unsafe {
         var d = reinterpret<uint8?>(metal_buffer_contents(buf))
@@ -531,8 +549,23 @@ def upload_region_cat3(p0 : void?; b0 : uint64; p1 : void?; b1 : uint64; p2 : vo
             memcpy(reinterpret<void?>(d + (b0 + b1)), p2, b2)
         }
     }
-    g_regions[key] = buf
+    g_regions_cat3[key] = RegionEntry(buf = buf, bytes = b0 + b1 + b2)
     return buf
+}
+
+// lazily upload up to three CONSECUTIVE-ROW regions as ONE resident buffer, keyed by the first
+// piece's base address — the fused QKV / W1W3 GEMV streams (one dispatch, continuous row
+// indexing). Load-once-stable like upload_region; b2 == 0 makes it a two-piece concat.
+def upload_region_cat3(p0 : void?; b0 : uint64; p1 : void?; b1 : uint64; p2 : void?; b2 : uint64) : MetalBuffer? {
+    let key = intptr(p0)
+    if (key_exists(g_regions_cat3, key)) {
+        var cached = g_regions_cat3[key]
+        if (cached.bytes >= b0 + b1 + b2) {
+            return cached.buf
+        }
+        g_region_retire |> push(cached.buf)
+    }
+    return region_upload_cat3_new(key, p0, b0, p1, b1, p2, b2)
 }
 
 // ===== the whole-plane resident buffers (blob-only models) =====
@@ -542,7 +575,11 @@ def upload_region_cat3(p0 : void?; b0 : uint64; p1 : void?; b1 : uint64; p2 : vo
 def private plane_buffer(dev : MetalDevice?; base : void?; bytes : uint64; mapped : bool) : MetalBuffer? {
     let key = intptr(base)
     if (key_exists(g_regions, key)) {
-        return g_regions[key]
+        var cached = g_regions[key]
+        if (cached.bytes >= bytes) {
+            return cached.buf
+        }
+        g_region_retire |> push(cached.buf)   // plane requests are whole-tensor constants — grow never fires in practice
     }
     var buf : MetalBuffer?
     if (mapped) {
@@ -561,7 +598,7 @@ def private plane_buffer(dev : MetalDevice?; base : void?; bytes : uint64; mappe
             }
         }
     }
-    g_regions[key] = buf
+    g_regions[key] = RegionEntry(buf = buf, bytes = bytes)
     return buf
 }
 
@@ -785,7 +822,7 @@ def private arena_rebuild(want : uint64; ceil_bytes : uint64) {
     g_arena_free |> clear()
     g_arena_free |> push((off = 0ul, size = g_arena_bytes))
     g_arena_epoch++
-    to_log(LOG_INFO, "dasLLAMA metal decode: KV mirror arena grown to {int(g_arena_bytes / (1024ul * 1024ul))}MB (ceiling {int(ceil_bytes / (1024ul * 1024ul))}MB)\n")   // nolint:PERF028,PERF026 — arena growth is rare and the upload it announces dwarfs the log
+    to_log(LOG_INFO, "dasLLAMA metal decode: KV mirror arena grown to {int(g_arena_bytes / (1024ul * 1024ul))}MB (ceiling {int(ceil_bytes / (1024ul * 1024ul))}MB)\n")
 }
 
 // the arena bytes session s will occupy after mirror_prepare(t, s, pos): its existing slice
@@ -846,7 +883,7 @@ def mirror_defrag(total : uint64) : bool {
 // Ensure s.uid's mirror exists, is big enough, and holds logical rows [0, pos) — the watermark
 // contract (module header). Returns arena byte offsets; caller writes row `pos` GPU-side and
 // advances the watermark only after the step + writeback complete. ok=false ⇒ decline to CPU.
-def mirror_prepare(t : Model; var s : Session; pos : int64) : tuple<ok : bool; koff : uint64; voff : uint64; cap : int64> {
+def mirror_prepare(t : Model; var s : Session; pos : int64) : tuple<ok : bool; koff : uint64; voff : uint64; cap : int64> {   // nolint:STYLE038 — evict/rebuild/grow/upload is one sequential decision on shared locals
     let c = t.config
     let needed = pos + 1l
     if (key_exists(g_mirrors, s.uid)) {
@@ -1075,8 +1112,6 @@ def signs_buffer() : MetalBuffer? {
 // tq4-mirror rope+store: one threadgroup per head (the FWHT spans it); mirror rows bind twice
 // each (half-scale + byte views at the same row offset)
 
-def private moe_fmt_at(a : array<KqFmt>; l : int64) : KqFmt => empty(a) ? KqFmt.q8 : a[l]
-
 // one MoE weight stack's (fmt, offset) serve check: base offset = the format's BIND alignment
 // (q8/k4/k5 %256, k6's d-plane pair %512); per-expert stride = the in-kernel index unit
 
@@ -1202,20 +1237,88 @@ struct KNode {
     nrange : int
 }
 
+// One bind: either a buffer at `off`, or — when `nbytes` > 0 — inline kargs bytes living at
+// `off` in the capture's byte pool. The kargs a caller hands over is a stack local that is gone
+// by replay time, so capture COPIES it.
 struct KBind {
     buf : MetalBuffer?
     off : uint64
     slot : int
+    nbytes : uint64
 }
 
 var g_gr_on = false
 var @scratch g_gr_nodes : array<KNode>      // capture-rail arrays: grown once, clear()-recycled per capture
 var @scratch g_gr_binds : array<KBind>
+var @scratch g_gr_bytes : array<uint8>      // inline-kargs pool; KBind.off indexes it when nbytes > 0
 var @scratch g_gr_ranges : array<MemRange>
 var g_gr_open = false            // a node is being built (kn_pipeline .. kn_dispatch)
 
+// ===== the kernel coverage census (CODEREVIEW rule 17) =====
+// Dispatches count under the PSO pointer; compile_pso registers pointer -> MSL entry name, and
+// releases FOLD live counts into names first (PSO pointers recycle across shutdown/reinit).
+var @scratch g_kcov : table<uint64; int64>          // pso pointer -> dispatches since last fold
+var @scratch g_kcov_names : table<uint64; string>   // pso pointer -> MSL entry name
+var @scratch g_kcov_folded : table<string; int64>   // survives PSO release cycles
+
+def kcov_register(pso : MetalComputePipeline?; entry : string) {
+    g_kcov_names[intptr(pso)] = entry
+}
+
+[cold_path]   // shutdown/release only — live pointer counts fold into names before reuse
+def kcov_fold {
+    for (k, n in keys(g_kcov), values(g_kcov)) {
+        g_kcov_folded[g_kcov_names?[k] ?? "pso_{k}"] += n
+    }
+    g_kcov |> clear()
+}
+
+//! Per-kernel dispatch counts (name -> count) since process start or the last reset — every
+//! COMPILED kernel appears, so a 0 row is "compiled but never dispatched" (the coverage census).
+def public metal_kernel_coverage() : table<string; int64> {
+    var out : table<string; int64>
+    for (name, k in values(g_kcov_names), keys(g_kcov_names)) {
+        out[name] += g_kcov?[k] ?? 0l
+    }
+    for (name, n in keys(g_kcov_folded), values(g_kcov_folded)) {
+        out[name] += n
+    }
+    return <- out
+}
+
+def public metal_kernel_coverage_reset {
+    g_kcov |> clear()
+    g_kcov_folded |> clear()
+}
+
+//! Log the census: dispatched kernels with counts, then a LOUD WARNING per compiled-but-never-
+//! dispatched kernel. A zero row is a coverage gap or a dead kernel — a human call, never automatic.
+def public metal_kernel_coverage_report {
+    var cov <- metal_kernel_coverage()
+    var names <- [for (name in keys(cov)); name]
+    names |> sort()
+    var served = 0
+    for (name in names) {
+        if (cov[name] > 0l) {
+            served++
+            to_log(LOG_INFO, "metal kernel coverage: {name} = {cov[name]}\n")
+        }
+    }
+    var dead = 0
+    for (name in names) {
+        if (cov[name] == 0l) {
+            dead++
+            to_log(LOG_WARNING, "metal kernel coverage: {name} NEVER DISPATCHED this run — coverage gap or dead kernel (human call)\n")
+        }
+    }
+    to_log(LOG_INFO, "metal kernel coverage: {served} dispatched, {dead} never-dispatched of {length(names)} compiled\n")
+    delete names
+    delete cov
+}
+
 def kn_pipeline(enc : MetalComputeEncoder?; pso : MetalComputePipeline?) {
     if (!g_gr_on) {
+        g_kcov[intptr(pso)]++
         metal_set_pipeline(enc, pso)
         return
     }
@@ -1232,6 +1335,27 @@ def kn_buffer(enc : MetalComputeEncoder?; b : MetalBuffer?; off : uint64; slot :
         return
     }
     g_gr_binds |> push(KBind(buf = unsafe(reinterpret<MetalBuffer?>(b)), off = off, slot = slot))
+}
+
+//! Bind `len` bytes of kargs inline at `slot` — one bind for a whole struct of scalars, instead
+//! of one bound buffer per scalar. Under capture the bytes are copied into the pool: the caller's
+//! kargs is a stack local, long gone by the time graph_flush replays.
+def kn_bytes(enc : MetalComputeEncoder?; data : void?; len : uint64; slot : int) {
+    if (!g_gr_on) {
+        metal_set_bytes(enc, data, len, slot)
+        return
+    }
+    let base = length(g_gr_bytes)
+    g_gr_bytes |> resize(base + int(len))
+    unsafe {
+        memcpy(addr<void?>(g_gr_bytes[base]), data, len)
+    }
+    g_gr_binds |> push(KBind(buf = null, off = uint64(base), slot = slot, nbytes = len))
+}
+
+//! kn_bytes over a kargs STRUCT — the emitter's `@uniform ka : KArgs` twin on the host side.
+def kn_kargs(enc : MetalComputeEncoder?; var ka : auto(KA); slot : int) {
+    kn_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(type<KA>)), slot)
 }
 
 def kn_tgmem(enc : MetalComputeEncoder?; bytes : uint64; idx : int) {
@@ -1263,6 +1387,7 @@ def gr_arm(on : bool) {
     g_gr_on = on
     g_gr_nodes |> clear()
     g_gr_binds |> clear()
+    g_gr_bytes |> clear()
     g_gr_ranges |> clear()
     g_gr_open = false
     g_hz_stage |> clear()
@@ -1274,13 +1399,20 @@ def private gr_encode_node(enc : MetalComputeEncoder?; n : KNode) {
     for (r in range(n.nrange)) {
         g_hz_stage |> push(g_gr_ranges[n.range0 + r])
     }
+    g_kcov[intptr(n.pso)]++
     metal_set_pipeline(enc, n.pso)
     if (n.tgmem > 0ul) {
         metal_set_threadgroup_memory_length(enc, n.tgmem, 0)
     }
     for (b in range(n.nbind)) {
         let kb = g_gr_binds[n.bind0 + b]
-        metal_set_buffer(enc, kb.buf, kb.off, kb.slot)
+        if (kb.nbytes > 0ul) {
+            unsafe {
+                metal_set_bytes(enc, addr<void?>(g_gr_bytes[int(kb.off)]), kb.nbytes, kb.slot)
+            }
+        } else {
+            metal_set_buffer(enc, kb.buf, kb.off, kb.slot)
+        }
     }
     hz_gate(enc)
     metal_dispatch_threadgroups(enc, n.grid, n.tg)
@@ -1337,7 +1469,7 @@ def private gr_schedule(var sched : KSched) : bool {
     sched.nodes = n
     for (j in range(n)) {
         if (g_gr_nodes[j].nrange == 0) {
-            to_log(LOG_WARNING, "dasLLAMA metal: node #{j}/{n} is undeclared (nbind {g_gr_nodes[j].nbind}) — schedule refused\n")   // nolint:PERF028,PERF026 — inside gr_schedule, which runs once per shape class
+            to_log(LOG_WARNING, "dasLLAMA metal: node #{j}/{n} is undeclared (nbind {g_gr_nodes[j].nbind}) — schedule refused\n")
             return false
         }
     }
@@ -1399,9 +1531,9 @@ def graph_flush_sched(enc : MetalComputeEncoder?) {
     if (!key_exists(g_gr_scheds, h)) {
         var s : KSched
         if (!gr_schedule(s)) {
-            to_log(LOG_WARNING, "dasLLAMA metal decode: step graph holds undeclared dispatches — schedule stays capture-order\n")   // nolint:PERF028 — once per shape class, inside the schedule-compile miss
+            to_log(LOG_WARNING, "dasLLAMA metal decode: step graph holds undeclared dispatches — schedule stays capture-order\n")   // nolint:PERF028,LINT019 — once per shape class, inside the schedule-compile miss
         }
-        to_log(LOG_INFO, "dasLLAMA metal decode: schedule compiled — {s.nodes} nodes, depth {s.depth} (class {h})\n")   // nolint:PERF028,PERF026 — once per shape class, inside the schedule-compile miss
+        to_log(LOG_INFO, "dasLLAMA metal decode: schedule compiled — {s.nodes} nodes, depth {s.depth} (class {h})\n")   // nolint:PERF028,PERF026,LINT019 — once per shape class, inside the schedule-compile miss
         g_gr_scheds[h] <- s
     }
     graph_flush(enc, g_gr_scheds[h].order)
@@ -1439,7 +1571,7 @@ def hz_coverage_check(ndisp, ngated : int64) {
     }
     if (!g_hz_cover_warned) {
         g_hz_cover_warned = true
-        to_log(LOG_ERROR, "dasLLAMA metal decode: {ndisp - ngated} dispatch(es) bypassed hz_gate on a gated encoder — ungated dispatches are unbarriered\n")   // nolint:PERF028,PERF026 — correctness tripwire; firing at all means the encoder is already wrong
+        to_log(LOG_ERROR, "dasLLAMA metal decode: {ndisp - ngated} dispatch(es) bypassed hz_gate on a gated encoder — ungated dispatches are unbarriered\n")   // nolint:PERF028,PERF026,LINT019 — correctness tripwire; firing at all means the encoder is already wrong
     }
 }
 
@@ -1465,7 +1597,7 @@ def public set_metal_decode_hazard(paranoid, strict : bool) {
 // (caller-owned) — always cleared, never deleted.
 
 var g_lp_active = false
-var g_lp_cbs : array<MetalCommandBuffer?>
+var @scratch g_lp_cbs : array<MetalCommandBuffer?>   // per-step cb stash; released in finish, clear()-recycled
 var @scratch g_lp_pooled : array<tuple<buf : MetalBuffer?; size : uint64>>   // pending-step stash; clear()-recycled per finish
 var @scratch g_lp_upooled : array<tuple<buf : MetalBuffer?; size : uint64>>
 var g_lp_blog : MetalBuffer?
@@ -1491,7 +1623,7 @@ var g_lp_prev_gpu_end = 0.0lf   // last finished step's gpu_end — the handoff 
 
 // wait + read back + release the pending step; x_b writes back only on the sync CPU-classifier
 // path (pipe mode skips it — stale). A dispatch error sets g_lp_err (sync reruns on CPU; a pipelined step is lost).
-def finish_pending_step {
+def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error/stats/release/readback share the step's locals
     if (!g_lp_active) {
         return
     }
@@ -1515,7 +1647,7 @@ def finish_pending_step {
         let gap_ms = (gs0 - g_lp_prev_gpu_end) * 1000.0lf
         let env_ms = (ge_last - gs0) * 1000.0lf
         if (g_batch_steps < 8l || gap_ms > 1.0lf) {
-            to_log(LOG_INFO, "metal pipe step {g_batch_steps}: gap={gap_ms}ms env={env_ms}ms\n")   // nolint:PERF028,PERF026 — behind the g_pipe_debug gate above
+            to_log(LOG_INFO, "metal pipe step {g_batch_steps}: gap={gap_ms}ms env={env_ms}ms\n")   // nolint:PERF028,PERF026,LINT019 — behind the g_pipe_debug gate above
         }
     }
     g_lp_prev_gpu_end = ge_last
@@ -1558,7 +1690,7 @@ def finish_pending_step {
         g_batch_steps++
         g_batch_rows += g_lp_nrows
     } else {
-        to_log(LOG_ERROR, "dasLLAMA metal batch decode: dispatch failed ({err}) — pipelined step lost\n")   // nolint:PERF028,PERF026 — error path; the re-upload it triggers dwarfs the log
+        to_log(LOG_ERROR, "dasLLAMA metal batch decode: dispatch failed ({err}) — pipelined step lost\n")   // nolint:PERF028,PERF026,LINT019 — error path; the re-upload it triggers dwarfs the log
         // the optimistic commit-time watermark now overstates the mirror (its rows are garbage at
         // and above this step's positions) — force a full re-upload from the CPU truth
         for (i in range64(g_lp_nrows)) {
@@ -1622,12 +1754,40 @@ def metal_common_init : bool {
 }
 
 // ===== the weights-epoch guard =====
-// g_regions/g_cat_blobs key by host address; a model reload makes those keys lie (see
+// g_regions keys by host address; a model reload makes those keys lie (see
 // weights_epoch). Drivers flush at entry when the epoch moved, after quiescing in-flight work.
 var g_weight_cache_epoch = -1l
 
 def weight_caches_stale() : bool {
     return weights_epoch() != g_weight_cache_epoch
+}
+
+[cold_path]   // regions release + retire drain — the shared tail of the flush/teardown legs
+def private regions_release_all {
+    for (e in values(g_regions)) {
+        if (e.buf != null) {
+            metal_release(e.buf)
+        }
+        e.buf = null
+    }
+    unsafe {
+        delete g_regions
+    }
+    for (e in values(g_regions_cat3)) {
+        if (e.buf != null) {
+            metal_release(e.buf)
+        }
+        e.buf = null
+    }
+    unsafe {
+        delete g_regions_cat3
+    }
+    for (b in g_region_retire) {
+        if (b != null) {
+            metal_release(b)
+        }
+    }
+    g_region_retire |> clear()   // released above — delete of array<T?> would double-free the pointees
 }
 
 [cold_path]   // live-reload only
@@ -1636,19 +1796,12 @@ def weight_caches_flush_on_reload {
         return
     }
     finish_pending_step()
-    for (buf in values(g_regions)) {
-        if (buf != null) {
-            metal_release(buf)
-        }
-        buf = null
-    }
-    unsafe {
-        delete g_regions
-    }
+    regions_release_all()
     g_weight_cache_epoch = weights_epoch()
 }
 
 def metal_common_release {
+    kcov_fold()   // PSO pointers recycle across re-init — counts fold into names first
     // schedules key on PSO pointers — a re-init reallocates PSOs, so cached classes would lie
     unsafe {
         delete g_gr_scheds
@@ -1673,15 +1826,7 @@ def metal_common_release {
     }
     g_arena_bytes = 0ul
     g_arena_free |> clear()
-    for (buf in values(g_regions)) {
-        if (buf != null) {
-            metal_release(buf)
-        }
-        buf = null
-    }
-    unsafe {
-        delete g_regions
-    }
+    regions_release_all()
     pool_drain(g_pool)
     pool_drain(g_upool)
     if (g_signs != null) {
@@ -1699,36 +1844,12 @@ def metal_common_release {
     g_failed = false
 }
 
-// ===== the prefill path's decline machinery + the shared block_q8_0 blob cache =====
-// (moved from dasllama_metal_prefill in the W1 split: the stage report above reads these, and
-// prefill requires THIS module for its decline enum — the reverse call would be a cycle)
+// ===== the prefill path's decline counters + the shared block_q8_0 blob cache =====
+// (the stage report above reads these; the MetalPrefillDecline enum itself lives in
+// dasllama_metal_shapes beside its decode twin — M5)
 
-// why a prefill declined to the CPU path — the FIRST failing gate clause (the decode enum's
-// twin; the support-matrix test asserts these names as strings)
-enum MetalPrefillDecline {
-    none                // supported — the prefill runs on the GPU
-    start_pos           // RETIRED (M2.5): a continuation chunk gathers the session's existing
-                        // rows into the K/V panels and shifts the causal diagonal by start_pos
-    npos_window         // npos below g_min_npos or above g_max_npos
-    quant_mode          // weights not loaded under QuantMode.q8
-    kquant_native       // per-tensor K-quant planes: not readable as qblob offsets (kernels = W4)
-    wscale_f16          // f16 scale plane (the load DEFAULT) — GPU prefill needs the s16 path (W2)
-    arch                // RETIRED (family waves A): the arch-name check is gone — non-std block
-                        // sets decline `graph`, feature-flag configs decline `feature` per bit
-    backend_repack      // repack backend: interleaved weight layout unreadable by the GEMM kernel
-    config              // RETIRED (family waves A): split into `feature` + the per-need
-                        // `need_*` keys in the declines-by-reason table
-    graph               // block set is not the std dense stack (MoE / recurrent / custom attn)
-    feature             // the model needs layer-stack features this path's kernels don't
-                        // implement — each missing bit records a `need_*` key alongside
-    shape               // head/dim alignment outside the kernel grids
-    layers              // per-layer non-uniformity (kv_dim/head_size/hidden/sliding/missing wv)
-    rope_rows           // the window's rope table not built
-    device              // metal_prefill_init failed (no device / PSO build failure)
-    gpu_error           // dispatch failed at execution time
-    planar              // weights not in the blob-image form (the drivers are blob-only)
-    dn_state            // recurrent state not GPU-resident and no CPU prefix to sync from
-}
+// The MetalPrefillDecline enum lives in dasllama_metal_shapes beside its decode twin (M5);
+// the counting machinery for both paths stays here (require_or_panic + the reason tables).
 
 var g_prefill_declines = 0l
 var g_prefill_declines_by_reason : table<string; int64>

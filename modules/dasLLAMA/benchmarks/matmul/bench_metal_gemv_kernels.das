@@ -4,12 +4,12 @@ options persistent_heap
 require dastest/testing_boost
 require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
 require metal/msl_shader
-require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — GPU driver half, Apple builds only
-require ?das_metal dasllama/dasllama_math_metal  // nolint:STYLE030 — the production 32x32 GEMM MSL (the batch-crossover row)
-require dasllama/dasllama_metal_prefill  // nolint:STYLE030 — the production GEMV MSL (v0 baseline)
+require ?das_metal metal/das_metal_boost  // GPU driver half, Apple builds only
+require ?das_metal dasllama/dasllama_metal_gemm  // the production 32x32 GEMM MSL (the batch-crossover row)
+require dasllama/dasllama_metal_kernels  // the production GEMV MSL (v0 baseline)
 require llvm/daslib/f16_cvt  // f16 bit converts for the K-quant superblock fills
 require daslib/fio
-require math  // nolint:STYLE030 — used only inside the Apple static_if half
+require math  // used only inside the Apple static_if half
 require strings
 
 // The Metal Q8 GEMV kernel lab — the emission (decode) arc's weight-stream detector. Decode is
@@ -581,7 +581,7 @@ class MetalGemvLabB4C8 {
     }
 }
 
-// X-staged batched gemv (the API_REWORK ledger's candidate (a)): the tg's 4 rows all dot the SAME
+// X-staged batched gemv (the PERF_LEDGER candidate (a)): the tg's 4 rows all dot the SAME
 // B x-vectors, so stage a k-chunk of the X panel in threadgroup memory ONCE per tg (cooperative
 // 128-thread load, 4x fewer device x loads) and the per-lane inner-loop x reads become tgmem hits.
 // W stays strided/coalesced. Chunk = 64 float4s per stream (4KB tgmem at B=4). Barrier-safe by
@@ -4181,7 +4181,7 @@ def private count_mismatch_sampled(got : array<float>; ref_v : array<float>; d, 
     return bad
 }
 
-def private run_lab(b : B?; variants) {
+def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the lab A/B ladder: per-variant compile/dispatch/measure arms are one flow
     let rounds = env_int("DASMETAL_LAB_ROUNDS", 3)
     let refd = 128l
     let bmax = 16l
@@ -4260,7 +4260,7 @@ def private run_lab(b : B?; variants) {
         var yref_k4 : array<float>
         if (anyk4) {
             fill_exact_k4(k4q_h, k4s_h, k4g_h, d, n, 7l)
-            yref_k4 <- cpu_ref_k4(k4q_h, k4s_h, xf, n, bmax, refd)
+            yref_k4 <- cpu_ref_k4(k4q_h, k4s_h, xf, n, bmax, refd)   // nolint:PERF030 — first write to the empty decl above
             // the 16B compact scale plane = the 20B blocks with the pads stripped
             let nsb_all = (d * n) / 256l
             k4c_h |> resize(nsb_all * 16l)
@@ -4276,7 +4276,7 @@ def private run_lab(b : B?; variants) {
         var yref_k5 : array<float>
         if (anyk5) {
             fill_exact_k5(k5q_h, k5c_h, k5g_h, d, n, 9l)
-            yref_k5 <- cpu_ref_k5(k5q_h, k5c_h, xf, n, bmax, refd)
+            yref_k5 <- cpu_ref_k5(k5q_h, k5c_h, xf, n, bmax, refd)   // nolint:PERF030 — first write to the empty decl above
         }
         var k6q_h : array<uint8>
         var k6sc_h : array<uint8>
@@ -4285,7 +4285,7 @@ def private run_lab(b : B?; variants) {
         var yref_k6 : array<float>
         if (anyk6) {
             fill_exact_k6(k6q_h, k6sc_h, k6d_h, k6g_h, d, n, 11l)
-            yref_k6 <- cpu_ref_k6(k6q_h, k6sc_h, k6d_h, xf, n, bmax, refd)
+            yref_k6 <- cpu_ref_k6(k6q_h, k6sc_h, k6d_h, xf, n, bmax, refd)   // nolint:PERF030 — first write to the empty decl above
         }
         var wbuf = upload_array(dev, wq, d * n)
         var sbuf = upload_array(dev, ws, d * nb * 4l)
@@ -4337,11 +4337,9 @@ def private run_lab(b : B?; variants) {
         est_ms |> resize(length(run_v))
         best |> resize(length(run_v))
         var ygot : array<float>
-        for (ri in range(length(run_v))) {
-            alive[ri] = false
-            best[ri] = 1.0e30lf
-            let vi = run_v[ri]
-            let nbatch = run_b[ri]
+        for (vi, nbatch, alv, est, bst in run_v, run_b, alive, est_ms, best) {
+            alv = false
+            bst = 1.0e30lf
             var bufs <- make_bufs(variants[vi], wbuf, sbuf, xfbuf, xtbuf, xqbuf, xsbuf, ybuf, ndimbuf, ddimbuf, bbufs[find_bbuf(nbatch)], partbuf, skbufs[sk_idx(variants[vi].sk)], kqarr)
             var ms = 0.0lf   // warmup + correctness dispatch
             if (variants[vi].gemm_sk) {
@@ -4364,7 +4362,7 @@ def private run_lab(b : B?; variants) {
                 b |> success(false, "{variants[vi].name}/B{nbatch} {sh._0}: dispatch")
                 continue
             }
-            est_ms[ri] = ms
+            est = ms
             download_floats(ybuf, ygot, int64(nbatch) * d)
             var firstBad = -1l
             var bad = 0l
@@ -4381,18 +4379,17 @@ def private run_lab(b : B?; variants) {
             if (bad != 0l) {
                 to_log(LOG_ERROR, "{variants[vi].name}/B{nbatch} {sh._0}: {bad} mismatches, first at {firstBad}: got {ygot[firstBad]}\n")
             } else {
-                alive[ri] = true
+                alv = true
             }
         }
         // interleaved best-of-N timing rounds
         for (_round in range(rounds)) {
-            for (ri in range(length(run_v))) {
-                if (!alive[ri]) {
+            for (vi, nbatch, alv, est, bst in run_v, run_b, alive, est_ms, best) {
+                if (!alv) {
                     continue
                 }
-                let vi = run_v[ri]
-                var bufs <- make_bufs(variants[vi], wbuf, sbuf, xfbuf, xtbuf, xqbuf, xsbuf, ybuf, ndimbuf, ddimbuf, bbufs[find_bbuf(run_b[ri])], partbuf, skbufs[sk_idx(variants[vi].sk)], kqarr)
-                let reps = clamp(int(25.0lf / max(est_ms[ri], 0.01lf)) + 1, 1, 128)
+                var bufs <- make_bufs(variants[vi], wbuf, sbuf, xfbuf, xtbuf, xqbuf, xsbuf, ybuf, ndimbuf, ddimbuf, bbufs[find_bbuf(nbatch)], partbuf, skbufs[sk_idx(variants[vi].sk)], kqarr)
+                let reps = clamp(int(25.0lf / max(est, 0.01lf)) + 1, 1, 128)
                 var ms = 0.0lf
                 if (variants[vi].gemm_sk) {
                     var rbufs <- [partbuf, ybuf, totalbuf, skbufs[sk_idx(variants[vi].sk)]]
@@ -4406,8 +4403,8 @@ def private run_lab(b : B?; variants) {
                     let vgroups = uint3(uint((d + int64(variants[vi].rtg) - 1l) / int64(variants[vi].rtg)), 1u, 1u)
                     ms = time_reps(queue, psos[vi], bufs, variants[vi].gemm64_fx ? groups_gemm64 : ((variants[vi].gemm || variants[vi].gemm_fx) ? groups_gemm : vgroups), reps, variants[vi].tgmem, variants[vi].tgsz)
                 }
-                if (ms > 0.0lf && ms < best[ri]) {
-                    best[ri] = ms
+                if (ms > 0.0lf && ms < bst) {
+                    bst = ms
                 }
                 bufs |> clear()
                 unsafe {
@@ -4417,16 +4414,14 @@ def private run_lab(b : B?; variants) {
         }
         // weight traffic: q8 planar = n quant + n/8 scale bytes per output row; k4 = 148B
         // (planes, 128+20) or 144B (ggml interleaved) per 256 elems
-        for (ri in range(length(run_v))) {
-            if (!alive[ri]) {
+        for (vi, nbatch, alv, bst in run_v, run_b, alive, best) {
+            if (!alv) {
                 continue
             }
-            let vi = run_v[ri]
             let wbytes = double(d * kq_wrow_bytes(variants[vi], n))
-            let nbatch = run_b[ri]
-            let gbs = wbytes / (best[ri] * 1.0e6lf)
-            let gmacs = double(n * d * int64(nbatch)) / (best[ri] * 1.0e6lf)
-            to_log(LOG_INFO, "{variants[vi].name}/B{nbatch}  {sh._0} {best[ri]} ms  {gbs} wGB/s  {gmacs} GMAC/s\n")
+            let gbs = wbytes / (bst * 1.0e6lf)
+            let gmacs = double(n * d * int64(nbatch)) / (bst * 1.0e6lf)
+            to_log(LOG_INFO, "{variants[vi].name}/B{nbatch}  {sh._0} {bst} ms  {gbs} wGB/s  {gmacs} GMAC/s\n")
         }
         metal_release(wbuf)
         metal_release(sbuf)
@@ -4531,7 +4526,7 @@ def private find_bbuf(nbatch : int) : int {
 }
 
 [benchmark, unused_argument(b)]   // b is consumed only inside the Apple static_if half
-def bench_metal_gemv_kernels(b : B?) {
+def bench_metal_gemv_kernels(b : B?) {   // nolint:STYLE038 — flat variant registration table + the driver call
     if (!jit_enabled()) {
         to_log(LOG_WARNING, "skipped: interpreted (dasLLAMA benchmarks are JIT-only)\n")
         return

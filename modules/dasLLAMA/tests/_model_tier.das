@@ -1,4 +1,5 @@
-// Shared model-presence + size-tier gate for the dasLLAMA model-loading tests.
+// Shared model-presence + size-tier gate (+ the parity eyeball rail) for the dasLLAMA
+// model-loading tests.
 //
 // The parity/audio fixtures load multi-GB GGUFs; loading every one on every iteration is the
 // suite's main time sink. This gate keeps the fast iteration loop to each arch's small carrier
@@ -15,6 +16,7 @@ require daslib/fio public
 require strings public
 require daslib/strings_boost   // split — the DASLLAMA_TEST_ARMS comma list
 require dasllama/dasllama_gguf   // gguf_shard_paths — split models tier on their TOTAL size
+require dasllama/dasllama_common   // decode_ — the eyeball rail detokenizes through the model
 
 // Models larger than this are large-tier. 6 GiB cleanly splits the ~5GB-and-under carriers
 // (incl. gemma-4-E2B at 4.97GB) from the 7.7GB+ heavies.
@@ -68,6 +70,20 @@ def family_on(t : T?; name : string) : bool {
     }
     t |> skip("family '{name}' filtered out (DASLLAMA_TEST_FAMILY={filter})")
     return false
+}
+
+// EYEBALL RAIL (CODEREVIEW rule 18): every token-for-token generate cell logs both decoded
+// streams — a red (or a stale-cache green) should read as TEXT in the log, not as an id diff.
+// Decoded model text may carry raw newlines that would split a one-line log record, so every
+// eyeball string renders through the \n escape.
+
+def eyeball_str(s : string) : string => replace(s, "\n", "\\n")
+
+def eyeball_text(m : Model; ids : array<int64>) : string => eyeball_str(decode_(m, ids))
+
+def log_gen_texts(m : Model; tag : string; cpu_ids, gpu_ids : array<int64>) {
+    to_log(LOG_INFO, "{tag} CPU text: {eyeball_text(m, cpu_ids)}\n")
+    to_log(LOG_INFO, "{tag} GPU text: {eyeball_text(m, gpu_ids)}\n")
 }
 
 // Presence + tier gate for a model-loading test. Returns true if the caller should proceed to

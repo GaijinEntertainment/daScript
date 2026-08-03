@@ -1,5 +1,5 @@
 options gen2
-options stack = 524288   // the forward/prefill chain outgrows the 16K default when driven directly (the probes' value); the test file is the program root under dastest, so the option applies
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options persistent_heap   // + explicit deletes below: each test frees its model/session before the next loads, so multi-GB weights never accumulate in the process
 
 require dastest/testing_boost public
@@ -41,8 +41,8 @@ def private same(a, b : array<int64>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (x, y in a, b) {
+        if (x != y) {
             return false
         }
     }
@@ -120,7 +120,8 @@ def private reject_rollback_ids(tr : Model; n_check : int64; var want : array<in
         var s1 = make_run_state(tr.config)
         let ref_ids <- generate(tr, s1, MTP_PROMPT, int(np + n_check + 1l))
         delete s1
-        want <- [for (i in range64(n_check + 1l)); ref_ids[np - 1l + i]]
+        delete want
+        want <- [for (i in range64(n_check + 1l)); ref_ids[np - 1l + i]]   // nolint:PERF030 — released on the line above
         var s = make_run_state(tr.config)
         forward_prefill(tr, s, MTP_PROMPT, np, 0l)
         let tok = parallel_argmax(s.logits, tr.config.vocab_size)
@@ -189,7 +190,7 @@ def test_mtp_output_invariance(t : T?) {
         }
         let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
         if (!model_available(t, path)) return
-        var tr <- load_model(path, QuantMode.q8)   // load_model: the prose arm encodes in-test
+        var tr <- load_model_(path, QuantMode.q8)   // load_model: the prose arm encodes in-test
         tr.config.seq_len = 2048l
         with_pinned_kernels() {
             // the counting fixture is accept-heavy: exercises the 2-row batched accept path + backfill
@@ -272,7 +273,7 @@ def test_mtp_invariance_glm(t : T?) {
         }
         let path = path_join(models_dir(), "glm45air/Q4_K_M/GLM-4.5-Air-Q4_K_M-00001-of-00002.gguf")
         if (!model_available(t, path)) return
-        var tr <- load_model(path, QuantMode.q8)   // load_model: this arm encodes its prompt in-test
+        var tr <- load_model_(path, QuantMode.q8)   // load_model: this arm encodes its prompt in-test
         t |> equal(tr.config.n_layer_nextn, 1l)    // head ENABLED, not disabled over the table copies
         t |> equal(tr.config.n_layers, 46l)        // block_count 47 - nextn 1
         // the two properties that make this arm load-bearing — asserted so a future file losing

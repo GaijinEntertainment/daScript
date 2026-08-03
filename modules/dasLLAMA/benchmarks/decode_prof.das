@@ -1,11 +1,11 @@
 options gen2
-options stack = 65536   // dasLLAMA program-root convention (options stack does not unify up from libs)
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _jit_fast_math = true   // ggml-parity FP laxity — matches how llama.cpp is benched
 
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
+require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + apply_box_profile_runtime (engine-level, not re-exported)
 require dasllama/dasllama_image   // load_model_cached — the .dlim rail, without the full facade's compile weight
-require ?das_accelerate dasllama/dasllama_math_accelerate   // nolint:STYLE030 — the --accel leg; Apple-only C++ module
+require ?das_accelerate dasllama/dasllama_math_accelerate   // the --accel leg; Apple-only C++ module
 require ../performance/profile_common.das   // profile_threads + affinity_on — the standing per-box methodology
 require daslib/jobque_boost
 require daslib/clargs

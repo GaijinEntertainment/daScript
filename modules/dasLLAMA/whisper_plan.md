@@ -191,20 +191,6 @@ f16→f32-converted weights.
     temperature fallback (fallback is disabled in the oracle runs anyway); entropy-based
     failure (result_len > 32 && entropy < 2.4) not implemented.
 
-## Performance ledger (arc-local; fold into API_REWORK.md at PR time)
+## Performance ledger
 
-- Measured (M1, examples/dasLLAMA/transcribe.das, jfk 11 s, fp32): tiny 22×, base 10×,
-  small 2.6×, medium 0.85×, large-v3 0.42×, **large-v3-turbo 0.49× realtime** — almost all
-  of it the fp32 encoder window.
-- Turbo encoder = the qwen2a tower cost (fp32 ≈ 18–19 s per 30 s chunk on M1) — the q8
-  encoder-GEMM path from the qwen2-audio ledger applies verbatim and is the headline item
-  (expected ~4× → ~2× realtime turbo).
-- Decoder is small (tiny ~35 MMAC/token, turbo ~140 MMAC/token incl. 66 MMAC tied logits) —
-  fp32 fine; q8 the token_embd logits GEMV if it shows up.
-- Model load: byte-wise f16→f32 tensor reads (the bin stores tensors unaligned) — turbo
-  ~1.6 GB f16 loads in a few seconds; an aligned-fast-path only if load time starts to bite.
-- gelu LUT round-trip is per-element float work — noise next to GEMMs, don't optimize.
-- Long audio: encoder windows are sequential per seek; pipelining only if long-form becomes
-  a real use case.
-- One WhisperSession per stream shares one loaded model; sessions are cheap (scratch +
-  caches), models are not — same economics as the LLM side.
+Folded into `PERF_LEDGER.md` (2026-07-29 doc reorg) — arc-local perf notes live there now.

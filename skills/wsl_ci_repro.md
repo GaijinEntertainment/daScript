@@ -21,6 +21,10 @@ Copying your Windows checkout instead of cloning drags in non-source state that 
 - **Local-dev junction symlinks** — `modules/<pkg> → /mnt/d/...` (the external-module junction trick) are self-referential. A recursive copy follows them into an infinite loop: a 470 MB tree ballooned a copy to 27 GB before it was killed.
 - **A stale / behind daScript** — wrong branch, or N commits behind master — runs different interpreter / live-host / frame-timing code than CI. Fatal for timing-sensitive bugs (e.g. synth-input vs render-poll phase). A fresh clone at the CI ref is the only way to be sure; "it's probably close enough" is how you chase a ghost.
 
+## Windows `core.autocrlf` corrupts binary-ish test fixtures
+
+Test-vector files that carry control characters must be checked out **without** CRLF translation. The `models/ggml-vocab-*.gguf.inp`/`.out` tokenizer corpora (in the llama.cpp checkout) have no `.gitattributes` protection, so a default-configured Windows git converts them and `test_tokenizer.das` fails — the `\n__ggml_vocab_test__\n` separator stops matching, and you see 1 input against 46 expected outlines. The vectors legitimately contain control characters, so **do not** make the parser strip `\r`; fix the checkout: `git config core.autocrlf false` (repo-local), delete the fixtures, `git checkout -- models/`. Same reasoning applies to any fixture a repro depends on: if it isn't text, CRLF translation is a silent content change.
+
 ## WSL-from-Windows shell gotcha
 
 The tool shell is Git Bash; WSL is reached as `wsl.exe -- bash -lc "..."`. A `$var` — **especially a loop variable** — can evaporate across the Git Bash → `wsl.exe` → `bash -lc` quoting layers and collapse a path. A real incident: `for repo in a b; do rsync --delete /src/$repo/ ~/$repo/; done` saw `$repo` come through empty, became `rsync --delete /src/ ~/`, and wiped a home directory. Use **explicit literal paths**, or write a script to a file and run `wsl bash script.sh`. Never run `--delete` / `rm -rf` with an interpolated path across that boundary.

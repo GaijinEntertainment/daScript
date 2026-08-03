@@ -1,7 +1,7 @@
 options gen2
-options stack = 65536
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
-require dasllama/dasllama_transformer   // nolint:STYLE029
+require dasllama/dasllama_transformer
 require dasllama/dasllama_math
 require dasllama/dasllama_math_gen
 require daslib/fio   // get_env_variable

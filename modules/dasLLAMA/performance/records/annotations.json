@@ -25,5 +25,10 @@
   "engine": "llama-mtmd-cli",
   "workload": "audio-chat",
   "comment": "Same jfk.wav decode runaway as on the M4 box (the reference generates at length on that clip despite --temp 0 --reasoning off), amplified by CPU-only decode - a behavior difference, not a speed measurement."
+ },
+ {
+  "gguf": "Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf",
+  "box": "m1",
+  "comment": "This cell is measured LAST in the m1 sweep and both of its engines read low: against the stored 2026-07-28 pair, das metal tg128 re-measures 20.6 against 16.92 and llama.cpp metal tg128 re-measures 16.87 against 13.48 - about +21% and +25%, on an unchanged llama.cpp binary. That is the board-tail thermal under-read the rig documents (-6.5% to -34%), not a code change; the same board showed gemma-4-26B at -18.7% as the final cell and -0.7% on a settled solo re-run. The pair is left as recorded because both sides are depressed together and their ratio is therefore still meaningful (1.26x); correcting one side alone would publish a wrong ratio. Both engines get re-measured together at the end of the refactor."
  }
 ]

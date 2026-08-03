@@ -1,5 +1,5 @@
 options gen2
-options stack = 65536     // the forward/prefill chain outgrows the 16K default on arm64
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options fast_math = true  // ggml-parity FP laxity — a serving benchmark, not the bit-exact suite
 
 // Serving-latency benchmark for llm_scheduler — drives the scheduler directly through the
@@ -184,7 +184,7 @@ def private interference_run(m : Model; var sch : Scheduler; long_p, salt : int6
 }
 
 [export]
-def main() {
+def main() {   // nolint:STYLE038 — bench driver: three numbered arms sharing one loaded model, one jobque scope and one prompt-salt counter
     if (!jit_enabled()) {
         print("This benchmark is JIT-only — run with: daslang -jit <file>\n")
         return
@@ -216,7 +216,7 @@ def main() {
         delete parts
     }
     if (empty(chunks)) {
-        chunks <- [16l, 64l, 256l]
+        chunks <- [16l, 64l, 256l]   // nolint:PERF030 — the enclosing guard proves the target holds nothing
     }
     print("loading {cfg.model}\n")
     var m <- load_model(cfg.model, cfg.quant)

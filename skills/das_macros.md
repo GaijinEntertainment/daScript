@@ -115,6 +115,16 @@ The trap also bites READS: module B calling A's accessor function reads **B's co
 - **Annotation argument names can't be grammar keywords.** `[myanno(default = "x")]` is `error[30151] syntax error, unexpected default` — the arg-list parser takes a `name`, and keywords (`default`, `type`, `in`, …) don't reduce to one. Pick a synonym (`fallback`, `kind`); verified 2026-07-02 on `[tuned]`.
 - **`[for_loop_macro(name=foo)]`** on a class inheriting `AstForLoopMacro` — intercepts `for` loops whose source is a matching type. Override `visitExprFor` to rewrite the loop AST (e.g., SOA for-loop expands `for (it in soa)` into per-field array iteration).
 
+### Deriving facts from method bodies — bodies are PRE-infer here
+
+A structure macro that *reads* the bodies of the struct's methods (deriving a contract instead of making the author declare it — the pattern behind dasLLAMA's GPU access lenses) is walking **un-inferred** AST. Three consequences, each learned the hard way:
+
+- **No types, no resolution.** A field access is a bare `ExprVar` carrying the field's name, and member access is parser-level `ExprField` whose base is untyped. You cannot ask "is this base my struct?" — match on names.
+- **Name-only `ExprField` matching collides with swizzles.** `wv.y` on a `float4` local is an `ExprField` named `y`, indistinguishable from a field named `y` if you only look at the name. So match bare names plus explicit `self.<name>` and nothing else; do not recurse into free callees (their locals collide too), and refuse a whole `self` passed as an argument rather than guessing.
+- **Key any derived claim by source location, not node pointer.** Infer clones subtrees, so a pointer identifying a node during the macro pass need not identify the same node later. `LineInfo` survives; the pointer does not.
+
+The payoff is worth the care: keep the declarations in place while the derivation lands, and every existing declaration becomes an assertion against the derived answer — which is how stale hand-written annotations surface.
+
 ## AST type introspection
 
 - **`typeDecl.isConst`** — `true` if a `TypeDecl` has the `const` modifier. Useful for checking whether function parameters (e.g., `self` in interface methods) are declared const.

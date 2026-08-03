@@ -121,24 +121,6 @@ resamples at decode time (`make_decoder(filename, rate, channels)` → 16 kHz mo
   existing arch registration, zero decoder changes. `clip.audio.projection_dim` = 4096
   read from the mmproj (do not assume 3584).
 
-## Performance ledger (arc-local; fold into API_REWORK.md at PR time)
-
-- fp32 encoder ≈ 18–19 s per 30 s chunk on M1 (~37 s for the standard 2 chunks; projections
-  ride threaded `matmul_batch`, attention parallel over 20 heads via `gemm_f32`). The fast
-  path: q8 the 6 GEMM families + projector at load (`quantize_weights` pattern) onto the
-  generated q8q8 kernels — expect the usual ~4× — plus threading the im2col/pack loops.
-  Tolerance-gate like flash-decode (witness vs fp32), token-parity revalidate.
-- the all-silence second chunk's 750 soft tokens are INPUT-INDEPENDENT (same mel floor
-  every ≤30 s clip) — cacheable per tower; halves encoder cost for short clips.
-- prefill 1518 pos (1500 audio) ≈ 16.4 s on M1 for the 7B q8 decoder (~93 t/s);
-  decode ~11 t/s — normal 7B-on-M1 numbers, no audio-specific cost.
-- mel/DFT-GEMM: single-threaded gemm_f32, ~0.13 s per clip — noise, leave.
-
 ## Performance ledger
 
-- Encoder GEMMs ride the existing generated-kernel family as-is (n=1280/5120 batch shapes).
-  A dedicated tune pass over encoder shapes (1500-token batch, always-prefill regime) only if
-  the encoder becomes a measured bottleneck vs mtmd.
-- Mel-as-GEMM twiddle matrices are f32 fblob consts (~410 KB) — quantizing them is noise, skip.
-- 30 s chunking processes chunks serially; multi-chunk audio could pipeline encoder chunks —
-  only relevant for long-audio use, not scoped.
+Folded into `PERF_LEDGER.md` (2026-07-29 doc reorg; the two arc-local sections deduped there).

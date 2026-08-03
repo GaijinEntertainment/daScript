@@ -1,11 +1,13 @@
 options gen2
+options _function_length = 0        // per-kernel gates: hand-bound buffers/uniforms + dispatch + oracle compare, one flat run each
+options _cyclomatic_complexity = 0  // same — the arm ladders follow the kernel's own binding/variant axes
 
 require dastest/testing_boost public
 require dasllama/dasllama_math
-require dasllama/dasllama_quant  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
-require ?das_metal dasllama/dasllama_metal_prefill  // nolint:STYLE030 — the Phase-6 prefill kernel set (Apple builds)
-require ?das_metal dasllama/dasllama_metal_kernels  // nolint:STYLE030 — the Wave C MoE routing kernel set (Apple builds)
-require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — device/pipeline/buffer plumbing + the leak gate
+require dasllama/dasllama_convert  // used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
+require ?das_metal dasllama/dasllama_metal_prefill  // the Phase-6 prefill kernel set (Apple builds)
+require ?das_metal dasllama/dasllama_metal_kernels  // the Wave C MoE routing kernel set (Apple builds)
+require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require llvm/daslib/f16_cvt  // f32_to_f16: the q51 gates hand-pack f16 d/m scale halfwords
 require math
 
@@ -106,61 +108,32 @@ def private attn_trio_gate(t : T?; dev, queue; head_size, n_heads, n_kv_heads, n
     var bav = buf_upload(dev, av)
     var batt = buf_fill(dev, n_heads * np32 * np32, 0.0)
     var bxb = buf_fill(dev, np32 * qd, 0.0)
-    var bqd = buf_u32(dev, uint(qd))
-    var bkvd = buf_u32(dev, uint(kv_dim))
-    var bhs = buf_u32(dev, uint(head_size))
-    var bkvm = buf_u32(dev, uint(kv_mul))
-    var bnp = buf_u32(dev, uint(npos))
-    var bnp32 = buf_u32(dev, uint(np32))
-    var bscale = buf_f32(dev, scale)
-    // the M2.5 continuation uniforms at their fresh-start values: qoff = 0 (no existing rows),
-    // qrows = np32 (the score slab's row extent == the padded query count here)
-    var bqoff = buf_u32(dev, 0u)
-    var bqrows = buf_u32(dev, uint(np32))
-    // the wave-B gemma uniforms at their llama-shape values: no sliding window, no soft cap
-    var bwin0 = buf_u32(dev, 0u)
-    var bcap0 = buf_f32(dev, 0.0)
+    // ONE AttnArgs serves all three stages (each ignores the fields it does not read):
+    // qoff = 0 / qrows = np32 (fresh start), window/softcap/hass at their llama-shape identities
+    var ka = AttnArgs(qd = uint(qd), kv_dim = uint(kv_dim), head_size = uint(head_size),
+        kv_mul = uint(kv_mul), npos = uint(npos), np32 = uint(np32), scale = scale,
+        qoff = 0u, qrows = uint(np32), window = 0u, softcap = 0.0, hass = 0u)
+    var bcap0 = buf_f32(dev, 0.0)   // stands in for the sink buffer slot (hass = 0: never read)
     let aran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso_sc)
         metal_set_threadgroup_memory_length(enc, mm ? metal_attn_qk_mm_msl_tgmem : metal_attn_qk_msl_tgmem, 0)
         metal_set_buffer(enc, baq, 0ul, 0)
         metal_set_buffer(enc, bak, 0ul, 1)
         metal_set_buffer(enc, batt, 0ul, 2)
-        metal_set_buffer(enc, bqd, 0ul, 3)
-        metal_set_buffer(enc, bkvd, 0ul, 4)
-        metal_set_buffer(enc, bhs, 0ul, 5)
-        metal_set_buffer(enc, bkvm, 0ul, 6)
-        metal_set_buffer(enc, bnp, 0ul, 7)
-        metal_set_buffer(enc, bnp32, 0ul, 8)
-        metal_set_buffer(enc, bscale, 0ul, 9)
-        metal_set_buffer(enc, bqoff, 0ul, 10)
-        metal_set_buffer(enc, bqrows, 0ul, 11)
-        metal_set_buffer(enc, bwin0, 0ul, 12)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 3)
         metal_dispatch_threadgroups(enc, uint3(uint(np32 / 32), uint(np32 / (mm ? 64 : 32)), uint(n_heads)), uint3(128u, 1u, 1u))
         metal_set_pipeline(enc, pso_sm)
         metal_set_threadgroup_memory_length(enc, metal_attn_softmax_msl_tgmem, 0)
         metal_set_buffer(enc, batt, 0ul, 0)
-        metal_set_buffer(enc, bnp32, 0ul, 1)
-        metal_set_buffer(enc, bqoff, 0ul, 2)
-        metal_set_buffer(enc, bqrows, 0ul, 3)
-        metal_set_buffer(enc, bwin0, 0ul, 4)
-        metal_set_buffer(enc, bcap0, 0ul, 5)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 1)
         metal_set_buffer(enc, bcap0, 0ul, 20)   // sink identity (hass = 0)
-        metal_set_buffer(enc, bwin0, 0ul, 21)
         metal_dispatch_threadgroups(enc, uint3(uint(npos), uint(n_heads), 1u), uint3(128u, 1u, 1u))
         metal_set_pipeline(enc, pso_av)
         metal_set_threadgroup_memory_length(enc, mm ? metal_attn_av_mm_msl_tgmem : metal_attn_av_msl_tgmem, 0)
         metal_set_buffer(enc, batt, 0ul, 0)
         metal_set_buffer(enc, bav, 0ul, 1)
         metal_set_buffer(enc, bxb, 0ul, 2)
-        metal_set_buffer(enc, bqd, 0ul, 3)
-        metal_set_buffer(enc, bkvd, 0ul, 4)
-        metal_set_buffer(enc, bhs, 0ul, 5)
-        metal_set_buffer(enc, bkvm, 0ul, 6)
-        metal_set_buffer(enc, bnp, 0ul, 7)
-        metal_set_buffer(enc, bnp32, 0ul, 8)
-        metal_set_buffer(enc, bqoff, 0ul, 9)
-        metal_set_buffer(enc, bqrows, 0ul, 10)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 3)
         metal_dispatch_threadgroups(enc, uint3(uint(np32 / 32), uint(head_size / (mm ? 64 : 32)), uint(n_heads)), uint3(128u, 1u, 1u))
     }
     t |> success(aran, "attention dispatches (hs={head_size}, mm={mm}): {err}")
@@ -172,16 +145,6 @@ def private attn_trio_gate(t : T?; dev, queue; head_size, n_heads, n_kv_heads, n
     metal_release(bav)
     metal_release(batt)
     metal_release(bxb)
-    metal_release(bqd)
-    metal_release(bkvd)
-    metal_release(bhs)
-    metal_release(bkvm)
-    metal_release(bnp)
-    metal_release(bnp32)
-    metal_release(bscale)
-    metal_release(bqoff)
-    metal_release(bqrows)
-    metal_release(bwin0)
     metal_release(bcap0)
     metal_release(pso_sc)
     metal_release(pso_sm)
@@ -725,8 +688,8 @@ def private moe_select_gate(t : T?; dev, queue; ne, k, nst : int; ties : bool; g
                     best = i
                 }
             }
-            widx |> push(uint(best))   // nolint:STYLE012 — reference built winner-by-winner (knockout between)
-            ww |> push(p[best])   // nolint:STYLE012
+            widx |> push(uint(best))   // reference built winner-by-winner (knockout between)
+            ww |> push(p[best])
             ws += p[best]
             p[best] = -FLT_MAX
         }
@@ -923,28 +886,18 @@ def private moe_gemv_gate(t : T?; dev, queue; n, d, net, k, nst : int; perslot :
     }
     var bx = buf_upload(dev, xv)
     var by = buf_fill(dev, nst * k * d, -1000.0)
-    var bn = buf_u32(dev, uint(n))
-    var bd = buf_u32(dev, uint(d))
     var bsel = buf_upload(dev, sel)
-    var beblk = buf_u32(dev, uint(d * nb))
-    var bxs = buf_u32(dev, perslot ? uint(n) : 0u)
-    var bss = buf_u32(dev, uint(2 * k))
-    var bbxs = buf_u32(dev, uint((perslot ? k : 1) * n))
-    var bbys = buf_u32(dev, uint(k * d))
+    var ka = MoeGemvArgs(ndim = uint(n), ddim = uint(d), eplane = uint(d * nb),
+        xs = perslot ? uint(n) : 0u, ss = uint(2 * k),
+        bxs = uint((perslot ? k : 1) * n), bys = uint(k * d), hasb = 0u)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
         metal_set_buffer(enc, bw, 0ul, 0)   // half-scale view
         metal_set_buffer(enc, bw, 0ul, 1)   // byte view
         metal_set_buffer(enc, bx, 0ul, 2)
         metal_set_buffer(enc, by, 0ul, 3)
-        metal_set_buffer(enc, bn, 0ul, 4)
-        metal_set_buffer(enc, bd, 0ul, 5)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
         metal_set_buffer(enc, bsel, 0ul, 6)
-        metal_set_buffer(enc, beblk, 0ul, 7)
-        metal_set_buffer(enc, bxs, 0ul, 8)
-        metal_set_buffer(enc, bss, 0ul, 9)
-        metal_set_buffer(enc, bbxs, 0ul, 10)
-        metal_set_buffer(enc, bbys, 0ul, 11)
         metal_dispatch_threadgroups(enc, uint3(uint((d + 3) / 4), uint(k), uint(nst)), uint3(128u, 1u, 1u))
     }
     t |> success(ran, "moe gemv dispatch n={n} d={d} net={net} k={k} nst={nst}: {err}")
@@ -952,14 +905,7 @@ def private moe_gemv_gate(t : T?; dev, queue; n, d, net, k, nst : int; perslot :
     metal_release(bw)
     metal_release(bx)
     metal_release(by)
-    metal_release(bn)
-    metal_release(bd)
     metal_release(bsel)
-    metal_release(beblk)
-    metal_release(bxs)
-    metal_release(bss)
-    metal_release(bbxs)
-    metal_release(bbys)
     metal_release(pso)
     delete wq
     delete ws
@@ -1051,28 +997,18 @@ def private moe_gemv_q51_gate(t : T?; dev, queue; n, d, net, k, nst : int; persl
     var bs = buf_upload(dev, sp)
     var bx = buf_upload(dev, xv)
     var by = buf_fill(dev, nst * k * d, -1000.0)
-    var bn = buf_u32(dev, uint(n))
-    var bd = buf_u32(dev, uint(d))
     var bsel = buf_upload(dev, sel)
-    var beblk = buf_u32(dev, uint(d * nb))
-    var bxs = buf_u32(dev, perslot ? uint(n) : 0u)
-    var bss = buf_u32(dev, uint(2 * k))
-    var bbxs = buf_u32(dev, uint((perslot ? k : 1) * n))
-    var bbys = buf_u32(dev, uint(k * d))
+    var ka = MoeGemvArgs(ndim = uint(n), ddim = uint(d), eplane = uint(d * nb),
+        xs = perslot ? uint(n) : 0u, ss = uint(2 * k),
+        bxs = uint((perslot ? k : 1) * n), bys = uint(k * d), hasb = 0u)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
         metal_set_buffer(enc, bw, 0ul, 0)
         metal_set_buffer(enc, bs, 0ul, 1)
         metal_set_buffer(enc, bx, 0ul, 2)
         metal_set_buffer(enc, by, 0ul, 3)
-        metal_set_buffer(enc, bn, 0ul, 4)
-        metal_set_buffer(enc, bd, 0ul, 5)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
         metal_set_buffer(enc, bsel, 0ul, 6)
-        metal_set_buffer(enc, beblk, 0ul, 7)
-        metal_set_buffer(enc, bxs, 0ul, 8)
-        metal_set_buffer(enc, bss, 0ul, 9)
-        metal_set_buffer(enc, bbxs, 0ul, 10)
-        metal_set_buffer(enc, bbys, 0ul, 11)
         metal_dispatch_threadgroups(enc, uint3(uint((d + 3) / 4), uint(k), uint(nst)), uint3(64u, 1u, 1u))
     }
     t |> success(ran, "moe q51 gemv dispatch n={n} d={d} net={net} k={k} nst={nst}: {err}")
@@ -1081,14 +1017,7 @@ def private moe_gemv_q51_gate(t : T?; dev, queue; n, d, net, k, nst : int; persl
     metal_release(bs)
     metal_release(bx)
     metal_release(by)
-    metal_release(bn)
-    metal_release(bd)
     metal_release(bsel)
-    metal_release(beblk)
-    metal_release(bxs)
-    metal_release(bss)
-    metal_release(bbxs)
-    metal_release(bbys)
     metal_release(pso)
     delete qp
     delete sp
@@ -1169,16 +1098,11 @@ def private moe_gemv_mx4_gate(t : T?; dev, queue; n, d, net, k, nst : int; persl
     var bs = buf_upload(dev, sp)
     var bx = buf_upload(dev, xv)
     var by = buf_fill(dev, nst * k * d, -1000.0)
-    var bn = buf_u32(dev, uint(n))
-    var bd = buf_u32(dev, uint(d))
     var bsel = buf_upload(dev, sel)
-    var beblk = buf_u32(dev, uint(d * nb))
-    var bxs = buf_u32(dev, perslot ? uint(n) : 0u)
-    var bss = buf_u32(dev, uint(2 * k))
-    var bbxs = buf_u32(dev, uint((perslot ? k : 1) * n))
-    var bbys = buf_u32(dev, uint(k * d))
     var bwb = buf_upload(dev, wb)
-    var bhasb = buf_u32(dev, bias ? 1u : 0u)
+    var ka = MoeGemvArgs(ndim = uint(n), ddim = uint(d), eplane = uint(d * nb),
+        xs = perslot ? uint(n) : 0u, ss = uint(2 * k),
+        bxs = uint((perslot ? k : 1) * n), bys = uint(k * d), hasb = bias ? 1u : 0u)
     var vtf : array<float>
     vtf |> resize(16)
     for (i in range(16)) {
@@ -1192,16 +1116,9 @@ def private moe_gemv_mx4_gate(t : T?; dev, queue; n, d, net, k, nst : int; persl
         metal_set_buffer(enc, bs, 0ul, 1)
         metal_set_buffer(enc, bx, 0ul, 2)
         metal_set_buffer(enc, by, 0ul, 3)
-        metal_set_buffer(enc, bn, 0ul, 4)
-        metal_set_buffer(enc, bd, 0ul, 5)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
         metal_set_buffer(enc, bsel, 0ul, 6)
-        metal_set_buffer(enc, beblk, 0ul, 7)
-        metal_set_buffer(enc, bxs, 0ul, 8)
-        metal_set_buffer(enc, bss, 0ul, 9)
-        metal_set_buffer(enc, bbxs, 0ul, 10)
-        metal_set_buffer(enc, bbys, 0ul, 11)
         metal_set_buffer(enc, bwb, 0ul, 12)
-        metal_set_buffer(enc, bhasb, 0ul, 13)
         metal_set_buffer(enc, bvt, 0ul, 15)
         metal_dispatch_threadgroups(enc, uint3(uint((d + 3) / 4), uint(k), uint(nst)), uint3(64u, 1u, 1u))
     }
@@ -1211,16 +1128,8 @@ def private moe_gemv_mx4_gate(t : T?; dev, queue; n, d, net, k, nst : int; persl
     metal_release(bs)
     metal_release(bx)
     metal_release(by)
-    metal_release(bn)
-    metal_release(bd)
     metal_release(bsel)
-    metal_release(beblk)
-    metal_release(bxs)
-    metal_release(bss)
-    metal_release(bbxs)
-    metal_release(bbys)
     metal_release(bwb)
-    metal_release(bhasb)
     metal_release(bvt)
     metal_release(pso)
     delete etab
@@ -1286,30 +1195,24 @@ def private moe_mulmm_q51_gate(t : T?; dev, queue; kdim, ndim : int; counts : ar
     var bs = buf_upload(dev, sp)
     var bx = buf_upload(dev, xv)
     var by = buf_fill(dev, pad * ndim, -1000.0)
-    var bkdim = buf_u32(dev, uint(kdim))
-    var bndim = buf_u32(dev, uint(ndim))
     var bcnt = buf_upload(dev, cnt)
     var bbase = buf_upload(dev, basep)
-    var bbkt = buf_u32(dev, 0u)   // gather = 0: bkt unread
-    var beblk = buf_u32(dev, uint(ndim * nb))
-    var bnk = buf_u32(dev, 1u)
-    var bgather = buf_u32(dev, 0u)
+    var bbkt = buf_u32(dev, 0u)   // gather = 0: bkt unread — a 4B stand-in satisfies the binding
+    var ka = MoeMmArgs(kdim = uint(kdim), ndim = uint(ndim), eplane = uint(ndim * nb),
+        nk = 1u, gather = 0u, hasb = 0u)
     let tiles = (pad + 31) / 32
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
         metal_set_threadgroup_memory_length(enc, metal_moe_mulmm_q51_msl_tgmem, 0)
         metal_set_buffer(enc, bs, 0ul, 0)
         metal_set_buffer(enc, bw, 0ul, 1)
-        metal_set_buffer(enc, bx, 0ul, 2)
-        metal_set_buffer(enc, by, 0ul, 3)
-        metal_set_buffer(enc, bkdim, 0ul, 4)
-        metal_set_buffer(enc, bndim, 0ul, 5)
-        metal_set_buffer(enc, bcnt, 0ul, 6)
-        metal_set_buffer(enc, bbase, 0ul, 7)
-        metal_set_buffer(enc, bbkt, 0ul, 8)
-        metal_set_buffer(enc, beblk, 0ul, 9)
-        metal_set_buffer(enc, bnk, 0ul, 10)
-        metal_set_buffer(enc, bgather, 0ul, 11)
+        // the MetalMoeMulMmBase family's shared numbering — 2 is the k-quant third weight view
+        metal_set_buffer(enc, bx, 0ul, 3)
+        metal_set_buffer(enc, by, 0ul, 4)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+        metal_set_buffer(enc, bcnt, 0ul, 7)
+        metal_set_buffer(enc, bbase, 0ul, 8)
+        metal_set_buffer(enc, bbkt, 0ul, 9)
         metal_dispatch_threadgroups(enc, uint3(uint(tiles), uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
     }
     t |> success(ran, "moe q51 mulmm dispatch kdim={kdim} ndim={ndim} ne={ne} pad={pad}: {err}")
@@ -1318,14 +1221,9 @@ def private moe_mulmm_q51_gate(t : T?; dev, queue; kdim, ndim : int; counts : ar
     metal_release(bs)
     metal_release(bx)
     metal_release(by)
-    metal_release(bkdim)
-    metal_release(bndim)
     metal_release(bcnt)
     metal_release(bbase)
     metal_release(bbkt)
-    metal_release(beblk)
-    metal_release(bnk)
-    metal_release(bgather)
     metal_release(pso)
     delete qp
     delete sp
@@ -1353,7 +1251,7 @@ def private moe_combine_gate(t : T?; dev, queue; dim, k : int) {
     var selw : array<float>
     selw |> reserve(k)
     for (j in range(k)) {
-        selw |> push(lut[j % 4])   // nolint:STYLE012 — small fixed weight list
+        selw |> push(lut[j % 4])
     }
     var want : array<float>
     want |> resize(dim)
@@ -1508,33 +1406,29 @@ def private dn_chain_gate(t : T?; dev, queue; nkh, nvh, dconv, npos : int) {
     var bh = buf_upload(dev, hist)
     var bw = buf_upload(dev, cw)
     var by = buf_fill(dev, npos * cd, 0.0)
-    var bcd = buf_u32(dev, uint(cd))
-    var bdc = buf_u32(dev, uint(dconv))
-    var bnp = buf_u32(dev, uint(npos))
+    // ONE DnArgs serves all five stages (each ignores the fields it does not read);
+    // mid = npos >= 2 arms the dual-store shadow writes in hist and scan
+    var ka = DnArgs(cd = uint(cd), dconv = uint(dconv), npos = uint(npos), kd = uint(kd),
+        ds = uint(ds), nvh = uint(nvh), nkh = uint(nkh), di = uint(di), eps = EPS,
+        qscale = qscale, mid = npos >= 2 ? 1u : 0u)
     let cran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso_conv)
         metal_set_buffer(enc, bx, 0ul, 0)
         metal_set_buffer(enc, bh, 0ul, 1)
         metal_set_buffer(enc, bw, 0ul, 2)
         metal_set_buffer(enc, by, 0ul, 3)
-        metal_set_buffer(enc, bcd, 0ul, 4)
-        metal_set_buffer(enc, bdc, 0ul, 5)
-        metal_set_buffer(enc, bnp, 0ul, 6)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
         metal_dispatch_threadgroups(enc, uint3(uint((cd + 255) / 256), uint(npos), 1u), uint3(256u, 1u, 1u))
     }
     t |> success(cran, "dn conv dispatch npos={npos}: {err}")
     t |> equal(buf_mismatch_approx(by, cv), 0)
-    var bmid = buf_u32(dev, npos >= 2 ? 1u : 0u)
     var bhm = npos >= 2 ? buf_fill(dev, cd * taps, -1000.0) : null
     let hran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso_hist)
         metal_set_buffer(enc, bx, 0ul, 0)
         metal_set_buffer(enc, bh, 0ul, 1)
-        metal_set_buffer(enc, bcd, 0ul, 2)
-        metal_set_buffer(enc, bdc, 0ul, 3)
-        metal_set_buffer(enc, bnp, 0ul, 4)
-        metal_set_buffer(enc, npos >= 2 ? bhm : bh, 0ul, 5)
-        metal_set_buffer(enc, bmid, 0ul, 6)
+        metal_set_buffer(enc, npos >= 2 ? bhm : bh, 0ul, 2)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 3)
         metal_dispatch_threadgroups(enc, uint3(uint((cd + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
     }
     t |> success(hran, "dn hist dispatch npos={npos}: {err}")
@@ -1556,18 +1450,10 @@ def private dn_chain_gate(t : T?; dev, queue; nkh, nvh, dconv, npos : int) {
             }
         }
     }
-    var bkd = buf_u32(dev, uint(kd))
-    var bds = buf_u32(dev, uint(ds))
-    var beps = buf_f32(dev, EPS)
-    var bqs = buf_f32(dev, qscale)
     let lran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso_l2)
         metal_set_buffer(enc, by, 0ul, 0)
-        metal_set_buffer(enc, bcd, 0ul, 1)
-        metal_set_buffer(enc, bkd, 0ul, 2)
-        metal_set_buffer(enc, bds, 0ul, 3)
-        metal_set_buffer(enc, beps, 0ul, 4)
-        metal_set_buffer(enc, bqs, 0ul, 5)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 1)
         metal_dispatch_threadgroups(enc, uint3(uint((2 * nkh + 7) / 8), uint(npos), 1u), uint3(256u, 1u, 1u))
     }
     t |> success(lran, "dn l2norm dispatch npos={npos}: {err}")
@@ -1630,9 +1516,6 @@ def private dn_chain_gate(t : T?; dev, queue; nkh, nvh, dconv, npos : int) {
     var baa = buf_upload(dev, aa)
     var bdt = buf_upload(dev, dtb)
     var bo = buf_fill(dev, npos * di, 0.0)
-    var bnvh = buf_u32(dev, uint(nvh))
-    var bnkh = buf_u32(dev, uint(nkh))
-    var bdi = buf_u32(dev, uint(di))
     var bstm = npos >= 2 ? buf_fill(dev, nvh * ds * ds, -1000.0) : null
     let sran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso_scan)
@@ -1643,15 +1526,8 @@ def private dn_chain_gate(t : T?; dev, queue; nkh, nvh, dconv, npos : int) {
         metal_set_buffer(enc, baa, 0ul, 4)
         metal_set_buffer(enc, bdt, 0ul, 5)
         metal_set_buffer(enc, bo, 0ul, 6)
-        metal_set_buffer(enc, bcd, 0ul, 7)
-        metal_set_buffer(enc, bkd, 0ul, 8)
-        metal_set_buffer(enc, bds, 0ul, 9)
-        metal_set_buffer(enc, bnvh, 0ul, 10)
-        metal_set_buffer(enc, bnkh, 0ul, 11)
-        metal_set_buffer(enc, bdi, 0ul, 12)
-        metal_set_buffer(enc, bnp, 0ul, 13)
-        metal_set_buffer(enc, npos >= 2 ? bstm : bst, 0ul, 14)
-        metal_set_buffer(enc, bmid, 0ul, 15)
+        metal_set_buffer(enc, npos >= 2 ? bstm : bst, 0ul, 7)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 8)
         metal_dispatch_threadgroups(enc, uint3(uint(ds / 4), uint(nvh), 1u), uint3(128u, 1u, 1u))
     }
     t |> success(sran, "dn scan dispatch npos={npos} nkh={nkh} nvh={nvh}: {err}")
@@ -1685,9 +1561,7 @@ def private dn_chain_gate(t : T?; dev, queue; nkh, nvh, dconv, npos : int) {
         metal_set_buffer(enc, bo, 0ul, 0)
         metal_set_buffer(enc, bz, 0ul, 1)
         metal_set_buffer(enc, bwn, 0ul, 2)
-        metal_set_buffer(enc, bds, 0ul, 3)
-        metal_set_buffer(enc, bdi, 0ul, 4)
-        metal_set_buffer(enc, beps, 0ul, 5)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 3)
         metal_dispatch_threadgroups(enc, uint3(uint((nvh + 7) / 8), uint(npos), 1u), uint3(256u, 1u, 1u))
     }
     t |> success(gran, "dn gate dispatch npos={npos}: {err}")
@@ -1696,25 +1570,14 @@ def private dn_chain_gate(t : T?; dev, queue; nkh, nvh, dconv, npos : int) {
     metal_release(bh)
     metal_release(bw)
     metal_release(by)
-    metal_release(bcd)
-    metal_release(bdc)
-    metal_release(bnp)
-    metal_release(bkd)
-    metal_release(bds)
-    metal_release(beps)
-    metal_release(bqs)
     metal_release(bst)
     metal_release(bbr)
     metal_release(bgr)
     metal_release(baa)
     metal_release(bdt)
     metal_release(bo)
-    metal_release(bnvh)
-    metal_release(bnkh)
-    metal_release(bdi)
     metal_release(bz)
     metal_release(bwn)
-    metal_release(bmid)
     if (bhm != null) {
         metal_release(bhm)
     }
@@ -1778,17 +1641,13 @@ def private dn_deint_sigmul_gate(t : T?; dev, queue; nh, hs, npos : int) {
     var bqg = buf_upload(dev, qg)
     var bq = buf_fill(dev, npos * qs, 0.0)
     var bgt = buf_fill(dev, npos * qd, 0.0)
-    var bhs = buf_u32(dev, uint(hs))
-    var bqd = buf_u32(dev, uint(qd))
-    var bqs = buf_u32(dev, uint(qs))
+    var ka = DnDeintArgs(hs = uint(hs), qd = uint(qd), qs = uint(qs))
     let dran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso_de)
         metal_set_buffer(enc, bqg, 0ul, 0)
         metal_set_buffer(enc, bq, 0ul, 1)
         metal_set_buffer(enc, bgt, 0ul, 2)
-        metal_set_buffer(enc, bhs, 0ul, 3)
-        metal_set_buffer(enc, bqd, 0ul, 4)
-        metal_set_buffer(enc, bqs, 0ul, 5)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 3)
         metal_dispatch_threadgroups(enc, uint3(uint((qd + 255) / 256), uint(npos), 1u), uint3(256u, 1u, 1u))
     }
     t |> success(dran, "dn deint dispatch: {err}")
@@ -1827,9 +1686,6 @@ def private dn_deint_sigmul_gate(t : T?; dev, queue; nh, hs, npos : int) {
     metal_release(bqg)
     metal_release(bq)
     metal_release(bgt)
-    metal_release(bhs)
-    metal_release(bqd)
-    metal_release(bqs)
     metal_release(bxv)
     metal_release(btot)
     metal_release(pso_de)

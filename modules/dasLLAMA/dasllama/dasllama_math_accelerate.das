@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_math_accelerate shared public
 
 require dasllama/dasllama_math
+require dasllama/dasllama_convert  // cvt_f32_to_f16 — the BNNS f16 batch prep
 require dasllama/dasllama_env  // env_flag/env_int64: the shared typed readers + the knob registry
 require dasllama/dasllama_par
 require das_accelerate
@@ -87,7 +88,7 @@ def private f16_plane_ptr(wp : uint16 const?; total : int64) : uint16 const? {
         return hit
     }
     var pl = BnnsF16Plane(total = total, fp = fpv)
-    pl.data |> resize(int(total))
+    pl.data |> resize(total)
     unsafe {
         var hp = addr(pl.data[0])
         maybe_parallel_for(0, int(total), 32) $(cb, ce) {
@@ -137,7 +138,7 @@ def private accel_bf16_f16_lane(var yp : float?; wp : uint16 const?; xp : float 
     let hwp = f16_plane_ptr(wp, d * n)
     let xcnt = ntok * n
     if (long_length(g_hx_scratch) < xcnt) {
-        g_hx_scratch |> resize(int(xcnt))
+        g_hx_scratch |> resize(xcnt)
     }
     unsafe {
         var hxp = addr(g_hx_scratch[0])
@@ -196,7 +197,7 @@ def private accel_bf16_batch(var yp : float?; wp : uint16 const?; xp : float con
     // widen bf16 to grow-only f32 scratch once per call (ggml-blas-style), then strip-sgemm
     let total = d * n
     if (long_length(g_wf32_scratch) < total) {
-        g_wf32_scratch |> resize(int(total))
+        g_wf32_scratch |> resize(total)
     }
     unsafe {
         var sp = addr(g_wf32_scratch[0])

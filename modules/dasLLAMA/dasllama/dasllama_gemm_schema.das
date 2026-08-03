@@ -3,6 +3,8 @@ options _comment_hygiene = true
 
 module dasllama_gemm_schema shared public
 
+require dasllama/dasllama_kqformat public   // the format taxonomy + typed stride truth these int-id forms delegate to
+
 // The one place the Q8 interleaved-weight layout is defined (gemm_generator_plan.md part 3):
 // the [llvm_code] tile generator derives its strides from q8q8_repack_type at emit time, and
 // the load-time repack implements the same descriptor — one source, two callers, no desync.
@@ -61,9 +63,10 @@ let Q8N_BPB = 34l
 //! Q6_K, 40 = Q4_0). The ONE stride source for every fmt-branched kq walker/kernel/repack —
 //! an unknown id panics instead of silently walking another format's stride.
 def kq_qsb(fmt : int) : int64 {
-    if (fmt == 4 || fmt == 40) return 128l
-    if (fmt == 5) return 160l
-    if (fmt == 6) return 192l
+    if (fmt == 4) return kq_qsb(KqFmt.k4)
+    if (fmt == 5) return kq_qsb(KqFmt.k5)
+    if (fmt == 6) return kq_qsb(KqFmt.k6)
+    if (fmt == 40) return kq_qsb(KqFmt.q40)
     panic("kq_qsb: unknown kq format id {fmt}")
     return 0l
 }
@@ -71,9 +74,10 @@ def kq_qsb(fmt : int) : int64 {
 //! Scale-plane bytes per 256-weight superblock per row (see kq_qsb): k4/k5 20 (16B disk block
 //! + 4B pad, decoded in place at repack), k6 18 (native), q40 16 (8 x f16 d, verbatim).
 def kq_ssb(fmt : int) : int64 {
-    if (fmt == 4 || fmt == 5) return 20l
-    if (fmt == 6) return 18l
-    if (fmt == 40) return 16l
+    if (fmt == 4) return kq_ssb(KqFmt.k4)
+    if (fmt == 5) return kq_ssb(KqFmt.k5)
+    if (fmt == 6) return kq_ssb(KqFmt.k6)
+    if (fmt == 40) return kq_ssb(KqFmt.q40)
     panic("kq_ssb: unknown kq format id {fmt}")
     return 0l
 }

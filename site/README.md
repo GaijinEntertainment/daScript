@@ -274,7 +274,7 @@ cd site && python3 -m http.server 8000    # eyeball all three sections before pu
 
 Measurement methodology and the sweep tooling live in `modules/dasLLAMA/METHODOLOGY.md`
 (published at /doc/reference/dasllama_methodology.html) and
-`modules/dasLLAMA/performance/BRINGUP.md`. Hand-written per-row notes go in
+`modules/dasLLAMA/BRINGUP.md`. Hand-written per-row notes go in
 `modules/dasLLAMA/performance/records/annotations.json` — never edit the JSON by hand.
 
 ## Updating dasProfile snapshot

@@ -1,10 +1,12 @@
 options gen2
 options persistent_heap   // the f16 model A/B holds two Sessions (see test_forward.das)
-options stack = 65536
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration
+require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + target_chunk_work + fused knob
+require dasllama/dasllama_kv_codec   // the codec kernel families under unit test
+require dasllama/dasllama_convert    // cvt_f32_to_f16/cvt_f16_to_f32 — the generic f16 rows
 require llvm/daslib/f16_cvt
 require daslib/jobque_boost
 require daslib/fio
@@ -268,6 +270,344 @@ def test_kv_store_row_f16(t : T?) {
     }
 }
 
+// ===== kv_codec kernel units — byte-level, model-free =====
+// Exactness split: integer-accumulating dots (q8q8kv/q8tq4kv) and per-element kernels
+// (axpy/cvt/quantize) are bit-exact against a scalar reference on ANY tuned perm; the
+// float-reduction dots (dot_q8kv/dot_f16) tolerance-compare (a vectorized perm reorders adds).
+
+def private blk_scale(b : array<uint8>; off : int64) : float => f16_to_f32(uint(b[off]) | (uint(b[off + 1l]) << 8u))
+
+def private fill_sin(var a : array<float>; n : int64; amp, w, ph : float) {
+    a |> resize(n)
+    for (i in range(length(a))) {
+        a[i] = amp * sin(float(i) * w + ph)
+    }
+}
+
+// deterministic full-range int8 quants + fixed per-32 scales — a hand-built Q8 query
+def private fill_q8_query(var q : array<int8>; var qs : array<float>; n : int64; step : int) {
+    q |> resize(n)
+    for (i in range(length(q))) {
+        q[i] = int8(((i * step) % 255) - 127)
+    }
+    qs |> resize(n / 32l)
+    for (i in range(length(qs))) {
+        qs[i] = 0.5 / float(i + 1)
+    }
+}
+
+[test]
+def test_kv_codec_signs(t : T?) {
+    t |> run("tq4_fill_signs: ±1 values, smaller head sizes are a prefix") @(t : T?) {
+        var signs : array<float>
+        tq4_fill_signs(signs, 64l)
+        var ok_pm = true
+        for (x in signs) {
+            ok_pm &&= (x == 1.0 || x == -1.0)
+        }
+        t |> success(ok_pm, "signs are ±1")
+        var pre : array<float>
+        tq4_fill_signs(pre, 32l)
+        var ok_prefix = true
+        for (i in range(32)) {
+            ok_prefix &&= pre[i] == signs[i]
+        }
+        t |> success(ok_prefix, "head_size 32 signs are a prefix of the 64 vector")
+        delete signs
+        delete pre
+    }
+}
+
+[test]
+def test_kv_codec_fwht(t : T?) {
+    t |> run("fwht: unsign inverts sign-rotate, the transform preserves dots") @(t : T?) {
+        let hs = 64l
+        var signs : array<float>
+        tq4_fill_signs(signs, hs)
+        var x : array<float>
+        var y : array<float>
+        fill_sin(x, hs, 1.0, 0.7, 0.3)
+        fill_sin(y, hs, 1.0, 0.41, 1.57)
+        var xr := x
+        var yr := y
+        unsafe {
+            var d0 = 0.0
+            for (i in range64(hs)) {
+                d0 += x[i] * y[i]
+            }
+            fwht_signs_row(addr(xr[0]), addr<float const?>(signs[0]), hs)
+            fwht_signs_row(addr(yr[0]), addr<float const?>(signs[0]), hs)
+            var d1 = 0.0
+            for (i in range64(hs)) {
+                d1 += xr[i] * yr[i]
+            }
+            t |> success(abs(d1 - d0) <= 1.0e-4 * max(abs(d0), 1.0), "rotated dot == original dot (orthonormal)")
+            fwht_unsign_row(addr(xr[0]), addr<float const?>(signs[0]), hs)
+            var ok_inv = true
+            for (i in range64(hs)) {
+                ok_inv &&= abs(xr[i] - x[i]) <= 1.0e-5
+            }
+            t |> success(ok_inv, "unsign_row(signs_row(v)) == v")
+        }
+        delete signs
+        delete x
+        delete y
+        delete xr
+        delete yr
+    }
+}
+
+[test]
+def test_kv_codec_tq4_roundtrip(t : T?) {
+    t |> run("tq4 quantize/dequant: round-trip within one step, idempotent re-quantize") @(t : T?) {
+        let n = 64l
+        var src : array<float>
+        fill_sin(src, n, 1.75, 0.53, 0.07)
+        var blk : array<uint8>
+        blk |> resize(int(n / 32l * 18l))
+        var dq : array<float>
+        dq |> resize(int(n))
+        unsafe {
+            quantize_tq4kv_row(addr(blk[0]), addr<float const?>(src[0]), n)
+            cvt_tq4kv_to_f32(addr(dq[0]), addr<uint8 const?>(blk[0]), n)
+            var ok_rt = true
+            for (bi in range64(n / 32l)) {
+                let d = blk_scale(blk, bi * 18l)
+                for (k in range64(32l)) {
+                    // half a truncation step in general, but q4_0 saturates the POSITIVE extreme
+                    // (min(15, ...) caps x = +8d at quant 15 -> dequant 7d): up to one full step
+                    ok_rt &&= abs(src[bi * 32l + k] - dq[bi * 32l + k]) <= abs(d) * 1.08 + 1.0e-7
+                }
+            }
+            t |> success(ok_rt, "every element within one quantization step (q4_0 saturation)")
+            var blk2 : array<uint8>
+            blk2 |> resize(int(n / 32l * 18l))
+            quantize_tq4kv_row(addr(blk2[0]), addr<float const?>(dq[0]), n)
+            var idem = true
+            for (b in range64(long_length(blk))) {
+                idem &&= blk[b] == blk2[b]
+            }
+            t |> success(idem, "quantize(dequantize(row)) is byte-identical")
+            delete blk2
+        }
+        delete src
+        delete blk
+        delete dq
+    }
+}
+
+[test]
+def test_kv_codec_q8_dots(t : T?) {
+    t |> run("q8_0 dots agree with the scalar block reference") @(t : T?) {
+        let n = 64l
+        var src : array<float>
+        fill_sin(src, n, 2.5, 0.61, 0.23)
+        var a : array<float>
+        fill_sin(a, n, 1.0, 0.13, 1.97)
+        var q : array<int8>
+        var qs : array<float>
+        fill_q8_query(q, qs, n, 37)
+        var row : array<uint8>
+        row |> resize(int(n / 32l * 34l))
+        unsafe {
+            quantize_q8kv_row(addr(row[0]), addr<float const?>(src[0]), n)
+            let rp = addr<uint8 const?>(row[0])
+            // dot_q8kv: float inner reduction — a vectorized perm reorders adds, so tolerance
+            var want = 0.0
+            for (bi in range64(n / 32l)) {
+                var facc = 0.0
+                for (k in range64(32l)) {
+                    facc += a[bi * 32l + k] * float(int8(row[bi * 34l + 2l + k]))
+                }
+                want += facc * blk_scale(row, bi * 34l)
+            }
+            let got = dot_q8kv(addr<float const?>(a[0]), rp, n)
+            t |> success(abs(got - want) <= 1.0e-3 * max(abs(want), 1.0), "dot_q8kv matches the block reference")
+            // dot_q8q8kv: integer inner sum commutes — exact on any perm
+            var want2 = 0.0
+            for (bi in range64(n / 32l)) {
+                var iacc = 0
+                for (k in range64(32l)) {
+                    iacc += int(q[bi * 32l + k]) * int(int8(row[bi * 34l + 2l + k]))
+                }
+                want2 += float(iacc) * qs[bi] * blk_scale(row, bi * 34l)
+            }
+            let got2 = dot_q8q8kv(addr<int8 const?>(q[0]), addr<float const?>(qs[0]), rp, n)
+            t |> success(got2 == want2, "dot_q8q8kv bit-exact vs the integer block reference")
+        }
+        delete src
+        delete a
+        delete q
+        delete qs
+        delete row
+    }
+}
+
+[test]
+def test_kv_codec_q8_axpy(t : T?) {
+    t |> run("axpy_q8kv: one mad per element — bit-exact on any perm") @(t : T?) {
+        let n = 64l
+        var src : array<float>
+        fill_sin(src, n, 2.5, 0.61, 0.23)
+        var row : array<uint8>
+        row |> resize(int(n / 32l * 34l))
+        var dst : array<float>
+        var dref : array<float>
+        dst |> resize(int(n))
+        dref |> resize(int(n))
+        for (i in range64(n)) {
+            dst[i] = float(i) * 0.125 - 2.0
+            dref[i] = dst[i]
+        }
+        unsafe {
+            quantize_q8kv_row(addr(row[0]), addr<float const?>(src[0]), n)
+            for (bi in range64(n / 32l)) {
+                let c = 0.6 * blk_scale(row, bi * 34l)
+                for (k in range64(32l)) {
+                    dref[bi * 32l + k] = mad(c, float(int8(row[bi * 34l + 2l + k])), dref[bi * 32l + k])
+                }
+            }
+            axpy_q8kv(addr(dst[0]), addr<uint8 const?>(row[0]), 0.6, n)
+        }
+        var okx = true
+        for (i in range64(n)) {
+            okx &&= dst[i] == dref[i]
+        }
+        t |> success(okx, "axpy_q8kv bit-exact per element")
+        delete src
+        delete row
+        delete dst
+        delete dref
+    }
+}
+
+[test]
+def test_kv_codec_tq4_dot(t : T?) {
+    t |> run("dot_q8tq4kv: integer inner sum — bit-exact vs the block reference") @(t : T?) {
+        let n = 64l
+        var src : array<float>
+        fill_sin(src, n, 1.4, 0.83, 0.51)
+        var q : array<int8>
+        var qs : array<float>
+        fill_q8_query(q, qs, n, 53)
+        var blk : array<uint8>
+        blk |> resize(int(n / 32l * 18l))
+        unsafe {
+            quantize_tq4kv_row(addr(blk[0]), addr<float const?>(src[0]), n)
+            var want = 0.0
+            for (bi in range64(n / 32l)) {
+                var iacc = 0
+                for (k in range64(16l)) {
+                    let by = int(blk[bi * 18l + 2l + k])
+                    iacc += int(q[bi * 32l + 2l * k]) * ((by & 15) - 8)
+                    iacc += int(q[bi * 32l + 2l * k + 1l]) * ((by >> 4) - 8)
+                }
+                want += float(iacc) * qs[bi] * blk_scale(blk, bi * 18l)
+            }
+            let got = dot_q8tq4kv(addr<int8 const?>(q[0]), addr<float const?>(qs[0]), addr<uint8 const?>(blk[0]), n)
+            t |> success(got == want, "dot_q8tq4kv bit-exact vs the integer block reference")
+        }
+        delete src
+        delete q
+        delete qs
+        delete blk
+    }
+}
+
+[test]
+def test_kv_codec_tq4_axpy(t : T?) {
+    t |> run("axpy_tq4kv: one mad per nibble element — bit-exact on any perm") @(t : T?) {
+        let n = 64l
+        var src : array<float>
+        fill_sin(src, n, 1.4, 0.83, 0.51)
+        var blk : array<uint8>
+        blk |> resize(int(n / 32l * 18l))
+        var dst : array<float>
+        var dref : array<float>
+        dst |> resize(int(n))
+        dref |> resize(int(n))
+        for (i in range64(n)) {
+            dst[i] = 1.0 - float(i) * 0.0625
+            dref[i] = dst[i]
+        }
+        unsafe {
+            quantize_tq4kv_row(addr(blk[0]), addr<float const?>(src[0]), n)
+            for (bi in range64(n / 32l)) {
+                let c = -0.8 * blk_scale(blk, bi * 18l)
+                for (k in range64(16l)) {
+                    let by = int(blk[bi * 18l + 2l + k])
+                    dref[bi * 32l + 2l * k] = mad(c, float((by & 15) - 8), dref[bi * 32l + 2l * k])
+                    dref[bi * 32l + 2l * k + 1l] = mad(c, float((by >> 4) - 8), dref[bi * 32l + 2l * k + 1l])
+                }
+            }
+            axpy_tq4kv(addr(dst[0]), addr<uint8 const?>(blk[0]), -0.8, n)
+        }
+        var okx = true
+        for (i in range64(n)) {
+            okx &&= dst[i] == dref[i]
+        }
+        t |> success(okx, "axpy_tq4kv bit-exact per element")
+        delete src
+        delete blk
+        delete dst
+        delete dref
+    }
+}
+
+[test]
+def test_kv_codec_f16(t : T?) {
+    t |> run("f16 dot/axpy + convert's f16 row pair") @(t : T?) {
+        let n = 48l
+        var a : array<float>
+        fill_sin(a, n, 1.0, 0.9, 0.1)
+        var s : array<float>
+        fill_sin(s, n, 2.0, 0.77, 1.57)
+        s[3] = 1.0e6   // pins the store clamp
+        var h : array<uint16>
+        h |> resize(int(n))
+        unsafe {
+            cvt_f32_to_f16(addr(h[0]), addr<float const?>(s[0]), n)
+            t |> equal(f16_to_f32(uint(h[3])), 65504.0)   // clamped, finite — inf never enters
+            var back : array<float>
+            back |> resize(int(n))
+            cvt_f16_to_f32(addr(back[0]), addr<uint16 const?>(h[0]), n)
+            var ok = true
+            for (i in range64(n)) {
+                ok &&= back[i] == f16_to_f32(f32_to_f16(clamp(s[i], -65504.0, 65504.0)))
+            }
+            t |> success(ok, "cvt round-trip == scalar f16 semantics per element")
+            // dot_f16: float reduction — tolerance vs the scalar mad chain
+            var want = 0.0
+            for (i in range64(n)) {
+                want = mad(a[i], back[i], want)
+            }
+            let got = dot_f16(addr<float const?>(a[0]), addr<uint16 const?>(h[0]), n)
+            t |> success(abs(got - want) <= 1.0e-3 * max(abs(want), 1.0), "dot_f16 matches the reference")
+            // axpy_f16: one mad per element — exact on any perm
+            var dst : array<float>
+            var dref : array<float>
+            dst |> resize(int(n))
+            dref |> resize(int(n))
+            for (i in range64(n)) {
+                dst[i] = float(i) * 0.25
+                dref[i] = mad(0.75, back[i], dst[i])
+            }
+            axpy_f16(addr(dst[0]), addr<uint16 const?>(h[0]), 0.75, n)
+            var okx = true
+            for (i in range64(n)) {
+                okx &&= dst[i] == dref[i]
+            }
+            t |> success(okx, "axpy_f16 bit-exact per element")
+            delete back
+            delete dst
+            delete dref
+        }
+        delete a
+        delete s
+        delete h
+    }
+}
+
 def private llama2c_dir() : string {
     let env = get_env_variable("DASLLAMA_LLAMA2C_DIR")
     return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
@@ -462,7 +802,7 @@ def private gguf_missing(t : T?) : bool {
 // fresh session, all N_STEPS logit rows out — trajectory-compounding-free comparisons
 def private forced_logits(tr : Model; kdt, vdt : KVDtype; var out : array<float>) {
     let c = tr.config
-    out |> resize(int(int64(N_STEPS) * c.vocab_size))
+    out |> resize(int64(N_STEPS) * c.vocab_size)
     var s <- make_run_state(c, kdt, vdt)
     var pos = 0l
     for (st in range(N_STEPS)) {
@@ -478,8 +818,8 @@ def private forced_logits(tr : Model; kdt, vdt : KVDtype; var out : array<float>
 
 def private worst_diff(a : array<float>; b : array<float>) : float {
     var w = 0.0
-    for (i in range(length(a))) {
-        w = max(w, abs(a[i] - b[i]))
+    for (va, vb in a, b) {
+        w = max(w, abs(va - vb))
     }
     return w
 }

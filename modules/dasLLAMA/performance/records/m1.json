@@ -8,8 +8,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -22,20 +22,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":220.06437836625605,
-            "stddev":1.9508939981460571
+            "tok_s":217.72149959250913,
+            "stddev":1.9543932676315308
           },
           "tg128":{
-            "tok_s":34.514972448515564,
-            "stddev":0.036510158330202103
+            "tok_s":34.50651289848404,
+            "stddev":0.047119021415710449
           }
         },
         "source":"official",
-        "sha":"57346c9fa",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k5/k6/q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -51,8 +51,8 @@
         "flavor":"clean-cpu",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf\" -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -65,12 +65,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":154.85206500000001,
-            "stddev":0.41346100000000002
+            "tok_s":156.167269,
+            "stddev":0.13333999999999999
           },
           "tg128":{
-            "tok_s":30.571467999999999,
-            "stddev":0.077880000000000005
+            "tok_s":30.552699,
+            "stddev":0.12595200000000001
           }
         },
         "source":"official",
@@ -91,8 +91,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -105,20 +105,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":842.91486008315076,
-            "stddev":20.535499572753906
+            "tok_s":854.45736559871989,
+            "stddev":24.288177490234375
           },
           "tg128":{
-            "tok_s":64.578927091970371,
-            "stddev":0.053473174571990967
+            "tok_s":64.882714423848327,
+            "stddev":0.064102247357368469
           }
         },
         "source":"official",
-        "sha":"57346c9fa",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k5/k6/q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -134,8 +134,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf\" -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -148,12 +148,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":832.17773099999999,
-            "stddev":5.2744540000000004
+            "tok_s":833.47756000000004,
+            "stddev":5.0013690000000004
           },
           "tg128":{
-            "tok_s":54.485908000000002,
-            "stddev":0.031972
+            "tok_s":54.498489999999997,
+            "stddev":0.041020000000000001
           }
         },
         "source":"official",
@@ -174,8 +174,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf\" -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -188,12 +188,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":151.19347400000001,
-            "stddev":0.58937099999999998
+            "tok_s":150.98651699999999,
+            "stddev":0.13020300000000001
           },
           "tg128":{
-            "tok_s":30.145054999999999,
-            "stddev":0.29904900000000001
+            "tok_s":30.24728,
+            "stddev":0.148092
           }
         },
         "source":"official",
@@ -214,8 +214,8 @@
         "flavor":"accel",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -228,20 +228,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":220.12099511309924,
-            "stddev":1.7067859172821045
+            "tok_s":216.19167244881186,
+            "stddev":2.3982036113739014
           },
           "tg128":{
-            "tok_s":34.545766656478534,
-            "stddev":0.045374978333711624
+            "tok_s":34.520712652462706,
+            "stddev":0.065174467861652374
           }
         },
         "source":"official",
-        "sha":"57346c9fa",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k5/k6/q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -267,8 +267,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -281,20 +281,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":30.220860751514312,
-            "stddev":0.1386646032333374
+            "tok_s":29.474742101245397,
+            "stddev":0.22909128665924072
           },
           "tg128":{
-            "tok_s":6.7612560469247374,
-            "stddev":0.0068870889954268932
+            "tok_s":6.7436452436827325,
+            "stddev":0.013960862532258034
           }
         },
         "source":"official",
-        "sha":"81cec57ce",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k5/k6/q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -310,8 +310,8 @@
         "flavor":"clean-cpu",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf\" -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -324,12 +324,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":26.683481,
-            "stddev":0.095210000000000003
+            "tok_s":26.565421000000001,
+            "stddev":0.23075000000000001
           },
           "tg128":{
-            "tok_s":6.4887550000000003,
-            "stddev":0.0095700000000000004
+            "tok_s":6.4803269999999999,
+            "stddev":0.010222
           }
         },
         "source":"official",
@@ -350,8 +350,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-29",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -364,19 +364,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":147.2839705446828,
-            "stddev":0.13619960844516754
+            "tok_s":145.48782461677797,
+            "stddev":1.6345044374465942
           },
           "tg128":{
-            "tok_s":14.545525765865751,
-            "stddev":0.01352222915738821
+            "tok_s":14.499723574970783,
+            "stddev":0.0062285121530294418
           }
         },
         "source":"official",
-        "sha":"deca8fcbd",
+        "sha":"7605e8476",
         "version":"0.6.4",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/m1.tune.json DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -392,8 +393,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-29",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf\" -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -406,12 +407,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":129.53068400000001,
-            "stddev":0.085514000000000007
+            "tok_s":129.46063899999999,
+            "stddev":0.054671999999999998
           },
           "tg128":{
-            "tok_s":11.983140000000001,
-            "stddev":0.0077019999999999996
+            "tok_s":11.925976,
+            "stddev":0.010355
           }
         },
         "source":"official",
@@ -432,8 +433,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf\" -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -446,12 +447,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":26.596024,
-            "stddev":0.21156900000000001
+            "tok_s":26.598882,
+            "stddev":0.217725
           },
           "tg128":{
-            "tok_s":6.4063309999999998,
-            "stddev":0.18799199999999999
+            "tok_s":6.4950580000000002,
+            "stddev":0.0057409999999999996
           }
         },
         "source":"official",
@@ -472,8 +473,8 @@
         "flavor":"accel",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -486,20 +487,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":29.563678520450857,
-            "stddev":0.2810647189617157
+            "tok_s":29.629575059015558,
+            "stddev":0.20596876740455627
           },
           "tg128":{
-            "tok_s":6.751317077625747,
-            "stddev":0.0054859188385307789
+            "tok_s":6.7624656498264759,
+            "stddev":0.010061044245958328
           }
         },
         "source":"official",
-        "sha":"81cec57ce",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k5/k6/q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -525,8 +526,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -539,20 +540,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":67.075219092195042,
-            "stddev":0.65542513132095337
+            "tok_s":67.085930615223873,
+            "stddev":0.18216718733310699
           },
           "tg128":{
-            "tok_s":14.830725329692234,
-            "stddev":0.011081786826252937
+            "tok_s":14.778773993122448,
+            "stddev":0.004809744656085968
           }
         },
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -568,8 +569,8 @@
         "flavor":"clean-cpu",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf\" -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -582,12 +583,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":61.252141999999999,
-            "stddev":0.099386000000000002
+            "tok_s":60.543131000000002,
+            "stddev":0.40633999999999998
           },
           "tg128":{
-            "tok_s":14.279624999999999,
-            "stddev":0.029676999999999999
+            "tok_s":14.283272,
+            "stddev":0.074130000000000001
           }
         },
         "source":"official",
@@ -608,8 +609,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -622,20 +623,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":327.40957639064413,
-            "stddev":0.77636760473251343
+            "tok_s":326.53340612538369,
+            "stddev":0.34685316681861877
           },
           "tg128":{
-            "tok_s":33.369116099286025,
-            "stddev":1.4809298515319824
+            "tok_s":33.410809179385481,
+            "stddev":1.3481451272964478
           }
         },
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; metal blob",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -651,8 +652,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf\" -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -665,12 +666,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":309.29276700000003,
-            "stddev":0.74399800000000005
+            "tok_s":309.52694600000001,
+            "stddev":0.15862499999999999
           },
           "tg128":{
-            "tok_s":29.02197,
-            "stddev":0.022655999999999999
+            "tok_s":28.952618999999999,
+            "stddev":0.004339
           }
         },
         "source":"official",
@@ -691,8 +692,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf\" -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -705,12 +706,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":61.308404000000003,
-            "stddev":0.13583400000000001
+            "tok_s":60.661405999999999,
+            "stddev":0.31758399999999998
           },
           "tg128":{
-            "tok_s":14.226986999999999,
-            "stddev":0.024102999999999999
+            "tok_s":14.242231,
+            "stddev":0.011757999999999999
           }
         },
         "source":"official",
@@ -731,8 +732,8 @@
         "flavor":"accel",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -745,20 +746,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":67.781989107653956,
-            "stddev":0.43131425976753235
+            "tok_s":67.095499948955435,
+            "stddev":0.15594550967216492
           },
           "tg128":{
-            "tok_s":14.804086921516918,
-            "stddev":0.0070282625965774059
+            "tok_s":14.819921117397978,
+            "stddev":0.0090368511155247688
           }
         },
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -784,8 +785,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -798,20 +799,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":216.26214838750207,
-            "stddev":1.2850327491760254
+            "tok_s":218.87636694730045,
+            "stddev":1.5739412307739258
           },
           "tg128":{
-            "tok_s":22.066416125254854,
-            "stddev":0.059407971799373627
+            "tok_s":22.005211550140366,
+            "stddev":0.011702542193233967
           }
         },
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -827,8 +828,8 @@
         "flavor":"clean-cpu",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf\" -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -841,12 +842,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":120.570921,
-            "stddev":1.0664450000000001
+            "tok_s":121.42473200000001,
+            "stddev":0.12463100000000001
           },
           "tg128":{
-            "tok_s":20.228719999999999,
-            "stddev":0.21521899999999999
+            "tok_s":20.330411999999999,
+            "stddev":0.15936800000000001
           }
         },
         "source":"official",
@@ -867,8 +868,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf\" -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -881,12 +882,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":197.316248,
-            "stddev":2.3040980000000002
+            "tok_s":200.670841,
+            "stddev":0.55844800000000006
           },
           "tg128":{
-            "tok_s":20.305579999999999,
-            "stddev":0.059875999999999999
+            "tok_s":19.951280000000001,
+            "stddev":0.56960299999999997
           }
         },
         "source":"official",
@@ -907,8 +908,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf\" -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -921,12 +922,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":918.66932299999996,
-            "stddev":1.435827
+            "tok_s":915.626037,
+            "stddev":0.85216700000000001
           },
           "tg128":{
-            "tok_s":52.956961999999997,
-            "stddev":0.021349
+            "tok_s":52.939664999999998,
+            "stddev":0.028410999999999999
           }
         },
         "source":"official",
@@ -947,8 +948,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -961,20 +962,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":978.13827931723313,
-            "stddev":8.6901483535766602
+            "tok_s":981.64260281698535,
+            "stddev":1.2203842401504517
           },
           "tg128":{
-            "tok_s":52.547691061266413,
-            "stddev":0.027148110792040825
+            "tok_s":52.636187287656618,
+            "stddev":0.032106913626194
           }
         },
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -990,8 +991,8 @@
         "flavor":"accel",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1004,20 +1005,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":226.95567614913753,
-            "stddev":2.0363655090332031
+            "tok_s":229.28939695458104,
+            "stddev":1.1376674175262451
           },
           "tg128":{
-            "tok_s":22.065209628985585,
-            "stddev":0.036820210516452789
+            "tok_s":21.493592076160052,
+            "stddev":0.50420272350311279
           }
         },
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -1043,8 +1044,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1057,20 +1058,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":208.12837484311012,
-            "stddev":0.38789749145507812
+            "tok_s":208.05408876613802,
+            "stddev":0.32735583186149597
           },
           "tg128":{
-            "tok_s":41.183205367875445,
-            "stddev":0.25265571475028992
+            "tok_s":41.20003209758481,
+            "stddev":0.057818345725536346
           }
         },
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights mxfp4/q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -1086,8 +1087,8 @@
         "flavor":"clean-cpu",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf\" -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1100,12 +1101,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":119.638784,
-            "stddev":1.2020310000000001
+            "tok_s":121.029444,
+            "stddev":0.66226799999999997
           },
           "tg128":{
-            "tok_s":42.700633000000003,
-            "stddev":0.18510799999999999
+            "tok_s":42.705545999999998,
+            "stddev":0.186637
           }
         },
         "source":"official",
@@ -1126,8 +1127,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1140,20 +1141,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":1032.3919680060567,
-            "stddev":2.5009860992431641
+            "tok_s":1032.9780236497108,
+            "stddev":1.7200174331665039
           },
           "tg128":{
-            "tok_s":88.195385760698926,
-            "stddev":0.1131274625658989
+            "tok_s":88.922860071070133,
+            "stddev":0.070478878915309906
           }
         },
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights mxfp4/q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -1169,8 +1170,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf\" -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1183,12 +1184,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":1036.811479,
-            "stddev":1.7290540000000001
+            "tok_s":1035.9240950000001,
+            "stddev":3.2972060000000001
           },
           "tg128":{
-            "tok_s":84.253186999999997,
-            "stddev":0.19789899999999999
+            "tok_s":84.445203000000006,
+            "stddev":0.028757000000000001
           }
         },
         "source":"official",
@@ -1209,8 +1210,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf\" -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1223,12 +1224,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":120.12740100000001,
-            "stddev":0.25797300000000001
+            "tok_s":120.200401,
+            "stddev":0.11577800000000001
           },
           "tg128":{
-            "tok_s":42.514003000000002,
-            "stddev":0.081831000000000001
+            "tok_s":42.591012999999997,
+            "stddev":0.11673600000000001
           }
         },
         "source":"official",
@@ -1249,8 +1250,8 @@
         "flavor":"accel",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1263,20 +1264,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":208.85493722416794,
-            "stddev":0.35681164264678955
+            "tok_s":208.04402682771166,
+            "stddev":0.33332249522209167
           },
           "tg128":{
-            "tok_s":41.236049705616871,
-            "stddev":0.10812488943338394
+            "tok_s":41.567848426062653,
+            "stddev":0.16755180060863495
           }
         },
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights mxfp4/q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -1302,8 +1303,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1316,20 +1317,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":219.37297344838785,
-            "stddev":1.0492720603942871
+            "tok_s":211.98454574608917,
+            "stddev":4.6506032943725586
           },
           "tg128":{
-            "tok_s":47.958837249096881,
-            "stddev":0.093594454228878021
+            "tok_s":48.104148138395558,
+            "stddev":0.49066537618637085
           }
         },
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -1345,8 +1346,8 @@
         "flavor":"clean-cpu",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf\" -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1359,12 +1360,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":137.94863799999999,
-            "stddev":0.18384200000000001
+            "tok_s":137.90283099999999,
+            "stddev":0.15882599999999999
           },
           "tg128":{
-            "tok_s":47.266221000000002,
-            "stddev":0.20952200000000001
+            "tok_s":46.490020000000001,
+            "stddev":0.188914
           }
         },
         "source":"official",
@@ -1385,8 +1386,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1399,20 +1400,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":851.96327247231636,
-            "stddev":22.284030914306641
+            "tok_s":847.93069782280509,
+            "stddev":21.823587417602539
           },
           "tg128":{
-            "tok_s":86.186368669647166,
-            "stddev":0.098415076732635498
+            "tok_s":89.527510177511658,
+            "stddev":1.8800439834594727
           }
         },
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; metal blob",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -1428,8 +1429,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf\" -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1442,12 +1443,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":846.46126700000002,
-            "stddev":4.2215480000000003
+            "tok_s":846.74490600000001,
+            "stddev":4.0971989999999998
           },
           "tg128":{
-            "tok_s":76.577956,
-            "stddev":0.011606999999999999
+            "tok_s":76.258438999999996,
+            "stddev":0.29283399999999998
           }
         },
         "source":"official",
@@ -1468,8 +1469,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf\" -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1482,12 +1483,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":135.10562899999999,
-            "stddev":0.31503199999999998
+            "tok_s":135.318251,
+            "stddev":0.068266999999999994
           },
           "tg128":{
-            "tok_s":46.751871999999999,
-            "stddev":0.137683
+            "tok_s":47.170144999999998,
+            "stddev":0.41250900000000001
           }
         },
         "source":"official",
@@ -1508,8 +1509,8 @@
         "flavor":"accel",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1522,20 +1523,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":215.7322365421156,
-            "stddev":1.6275458335876465
+            "tok_s":214.9126583062986,
+            "stddev":0.88831567764282227
           },
           "tg128":{
-            "tok_s":47.916118264858717,
-            "stddev":0.070843949913978577
+            "tok_s":48.078842077141623,
+            "stddev":0.022483339533209801
           }
         },
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k6/q8 native; q8 activations; f32 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -1561,8 +1562,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1575,20 +1576,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":33.391218766459708,
-            "stddev":0.35803204774856567
+            "tok_s":33.677321299855137,
+            "stddev":0.14516520500183105
           },
           "tg128":{
-            "tok_s":8.2691711776788033,
-            "stddev":0.0064271669834852219
+            "tok_s":8.2900339852316751,
+            "stddev":0.0029765234794467688
           }
         },
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k6 native; q8 activations; f32 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -1604,8 +1605,8 @@
         "flavor":"clean-cpu",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf\" -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1618,12 +1619,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":32.289693999999997,
-            "stddev":0.090707999999999997
+            "tok_s":31.950744,
+            "stddev":0.39331899999999997
           },
           "tg128":{
-            "tok_s":8.2541130000000003,
-            "stddev":0.0016789999999999999
+            "tok_s":8.236008,
+            "stddev":0.023486
           }
         },
         "source":"official",
@@ -1644,8 +1645,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1658,20 +1659,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":125.39499599462943,
-            "stddev":5.0437283515930176
+            "tok_s":131.87409739515221,
+            "stddev":1.3104180097579956
           },
           "tg128":{
-            "tok_s":16.92048233367742,
-            "stddev":0.14842700958251953
+            "tok_s":20.51820763367876,
+            "stddev":0.0033356640487909317
           }
         },
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k6 native; q8 activations; f32 scales; metal blob",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -1687,8 +1688,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf\" -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1701,12 +1702,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":124.92514300000001,
-            "stddev":1.4293499999999999
+            "tok_s":128.20487700000001,
+            "stddev":0.124081
           },
           "tg128":{
-            "tok_s":13.475201999999999,
-            "stddev":0.35621799999999998
+            "tok_s":16.850774999999999,
+            "stddev":0.0056059999999999999
           }
         },
         "source":"official",
@@ -1727,8 +1728,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf\" -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1741,12 +1742,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":32.125608999999997,
-            "stddev":0.13381000000000001
+            "tok_s":31.966107999999998,
+            "stddev":0.39652199999999999
           },
           "tg128":{
-            "tok_s":8.2207249999999998,
-            "stddev":0.041867000000000001
+            "tok_s":8.2615219999999994,
+            "stddev":0.003833
           }
         },
         "source":"official",
@@ -1767,8 +1768,8 @@
         "flavor":"accel",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1781,20 +1782,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":34.103123876178145,
-            "stddev":0.49227777123451233
+            "tok_s":33.763704504413269,
+            "stddev":0.19322448968887329
           },
           "tg128":{
-            "tok_s":8.208068791815732,
-            "stddev":0.067675337195396423
+            "tok_s":8.2925749880741204,
+            "stddev":0.0049322908744215965
           }
         },
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/k6 native; q8 activations; f32 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -1820,8 +1821,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1834,20 +1835,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":144.36687745204227,
-            "stddev":2.6286225318908691
+            "tok_s":148.48467429247691,
+            "stddev":0.29768747091293335
           },
           "tg128":{
-            "tok_s":29.621044778360549,
-            "stddev":0.015655111521482468
+            "tok_s":29.536225938473933,
+            "stddev":0.080337166786193848
           }
         },
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/q51/q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -1863,8 +1864,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1877,20 +1878,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":928.844414371639,
-            "stddev":3.0145783424377441
+            "tok_s":922.58565409238395,
+            "stddev":2.3088579177856445
           },
           "tg128":{
-            "tok_s":61.034481487812023,
-            "stddev":2.648592472076416
+            "tok_s":61.16639818028483,
+            "stddev":2.648909330368042
           }
         },
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/q51/q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -1906,8 +1907,8 @@
         "flavor":"clean-cpu",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf\" -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1920,12 +1921,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":120.137518,
-            "stddev":1.449457
+            "tok_s":121.46524599999999,
+            "stddev":0.61795800000000001
           },
           "tg128":{
-            "tok_s":28.005013000000002,
-            "stddev":0.13122800000000001
+            "tok_s":27.837159,
+            "stddev":0.133716
           }
         },
         "source":"official",
@@ -1946,8 +1947,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf\" -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -ngl 0 -nopo 1 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -1960,12 +1961,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":116.61856899999999,
-            "stddev":1.1399360000000001
+            "tok_s":118.31432,
+            "stddev":0.101663
           },
           "tg128":{
-            "tok_s":27.668783999999999,
-            "stddev":0.15237400000000001
+            "tok_s":27.739604,
+            "stddev":0.095840999999999996
           }
         },
         "source":"official",
@@ -1986,8 +1987,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"\"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench\" -m \"/Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf\" -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
+        "date":"2026-08-02",
+        "cmd":"/Users/borisbatkin/Work/llama.cpp-ref-ebd048f/build-stock/bin/llama-bench -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -ngl 99 -t 8 -p 512 -n 128 -r 5 -o json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2000,12 +2001,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":820.98926500000005,
-            "stddev":3.3261020000000001
+            "tok_s":822.17674499999998,
+            "stddev":3.4716049999999998
           },
           "tg128":{
-            "tok_s":60.651603000000001,
-            "stddev":0.021354999999999999
+            "tok_s":60.740510999999998,
+            "stddev":0.062274999999999997
           }
         },
         "source":"official",
@@ -2026,8 +2027,8 @@
         "flavor":"accel",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --accel",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2040,20 +2041,20 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":146.50622194213807,
-            "stddev":2.2452819347381592
+            "tok_s":148.58111511762459,
+            "stddev":0.18382979929447174
           },
           "tg128":{
-            "tok_s":29.62071724879463,
-            "stddev":0.033345770090818405
+            "tok_s":29.569185568779716,
+            "stddev":0.023786382749676704
           }
         },
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr4 (manifest)",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
         "exec_fmt":"weights k4/q51/q8 native; q8 activations; f16 scales; planar arm64-gen (repacked)",
-        "env":"DASLLAMA_BOX=m1",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -2079,8 +2080,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/asr/asr_bench_cell.das -- -m ggml-parakeet-tdt-0.6b-v2-f32.bin -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- --asr -m ggml-parakeet-tdt-0.6b-v2-f32.bin -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2093,32 +2094,37 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":149.28399999999999,
-            "audio_s":11
+            "ms":151.54499999999999,
+            "audio_s":11,
+            "text":"And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:jfk3.wav":{
-            "ms":452.697,
-            "audio_s":33
+            "ms":452.55099999999999,
+            "audio_s":33,
+            "text":"And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country."
           },
           "asr:gb1.wav":{
-            "ms":4550.2979999999998,
-            "audio_s":198.734375
+            "ms":4499.9200000000001,
+            "audio_s":198.734375,
+            "text":"My fellow Americans, this day has brought terrible news and great sadness to our country. At 9 o'clock this morning, Mission Control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven, Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kulpna Shavla, and Ilan Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when space flight has come to seem almost routine, it is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce outer atmosphere of the Earth. These astronauts knew the dangers, and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock and grief. You're not alone. Our entire nation grieves with you, and those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah, lift your eyes and look to the heavens. Who created all these? He who brings out the starry hosts one by one and calls them each by name. Because of his great power and mighty strength, not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth, yet we can pray that all are safely home. May God bless the grieving families, and may God continue to bless America."
           },
           "asr:hp0.wav":{
-            "ms":7481.9030000000002,
-            "audio_s":273.28724999999997
+            "ms":7374.5230000000001,
+            "audio_s":273.28724999999997,
+            "text":"Henry F. Phillips from Wikipedia, the Free Encyclopedia at EN. Wikipedia. org Henry F. Phillips from Wikipedia, the Free Encyclopedia Henry F. Phillips 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the crosshead screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in 1936, US patent number two million forty six thousand three hundred forty three US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips screw company and the American screw company went on to devise the Pausa Drive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips screw head. The following is an info box which accompanies this article InfoBox part of the series on screw drive types slotted commonly erroneously flathead Phillips Crosshead Pausadrive SuperDrive Torx Hex Allen Robertson Tri Wing Torqueset Spannerhead Triple Square XN Others Polydrive Spline Drive Double Hex Many images accompanied this info box. This page was last modified on the 9th of April 2008 at 1704. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a US registered five hundred one C three tax deductible nonprofit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License available at WWW dot gnu dot org slash copyleft slash fdl dot html"
           },
           "asr:hp0x2.wav":{
-            "ms":24583.374,
-            "audio_s":546.57449999999994
+            "ms":24293.514999999999,
+            "audio_s":546.57449999999994,
+            "text":"Henry F. Phillips from Wikipedia, the free encyclopedia at EN. Wikipedia. org Henry F. Phillips from Wikipedia, the Free Encyclopedia. Henry F. Phillips eighteen ninety to nineteen fifty eight, a US businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the crosshead screw design lies in its self centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in 1936, US patent number two million forty six thousand three hundred forty three US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw as distinct from the simple milled slot of a slotted type screw. The Phillips screw company and the American screw company went on to devise the Pausa Drive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips screw head. The following is an info box which accompanies this article InfoBox part of the series on screw drive types slotted commonly erroneously flathead Phillips Crosshead Pausadrive Super Drive Torques Hex Allen Robertson Triwing Torqueset Spannerhead Triple Square XN Others Polydrive Spline Drive Double Hex Many images accompanied this info box. This page was last modified on the 9th of April two thousand eight at seventeen oh four. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated a US registered five hundred one C three tax deductible nonprofit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License available at www dot gnu dot org slash copyleft slash fdl dot html Henry F Phillips from Wikipedia the free encyclopedia at EN dot wikipedia dot org Henry F Phillips from Wikipedia the Free Encyclopedia Henry F Phillips eighteen ninety to nineteen fifty eight a US businessman from Portland, Oregon has the honor of having the Phillips head screw and screwdriver named after him. The importance of the crosshead screw design lies in its self centering property useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in 1936 US patent number two million forty six thousand three hundred forty three US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw as distinct from the simple milled slot of a slotted type screw. The Phillips screw company and the American screw company went on to devise the Pausa Drive screw which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips screw head. The following is an info box which accompanies this article InfoBox part of the series on screw drive types slotted commonly erroneously flathead Phillips crosshead Pausadrive SuperDrive Torques Hex Allen Robertson Triwing Torqueset Spannerhead Triple Square XN Others Polydrive Spline Drive Double Hex Many images accompanied this info box. This page was last modified on the 9th of April two thousand eight at seventeen oh four. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a US registered five hundred one C three tax deductible nonprofit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License available at WWW dot gnu dot org slash copyleft slash fdl dot html"
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr8 (manifest)",
-        "env":"DASLLAMA_BOX=m1",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -2164,7 +2170,7 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
+        "date":"2026-08-02",
         "cmd":"/Users/borisbatkin/Work/whisper.cpp/build/bin/parakeet-cli -m /Users/borisbatkin/Work/whisper.cpp/models/ggml-parakeet-tdt-0.6b-v2-f32.bin -f modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav -t 8 -ng",
         "hardware":{
           "cpu":"Apple M1 Max",
@@ -2178,19 +2184,19 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":458.63999999999999
+            "ms":479.22000000000014
           },
           "asr:jfk3.wav":{
-            "ms":1031.01
+            "ms":1052.0599999999999
           },
           "asr:gb1.wav":{
-            "ms":8618.3999999999996
+            "ms":8735.5
           },
           "asr:hp0.wav":{
-            "ms":14055.410000000002
+            "ms":14267.959999999999
           },
           "asr:hp0x2.wav":{
-            "ms":48357.860000000001
+            "ms":48531.449999999997
           }
         },
         "workload":"asr",
@@ -2241,8 +2247,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"/Users/borisbatkin/Work/parakeet-tdt-0.6b-v3-fastapi-openai/.venv/bin/python modules/dasLLAMA/benchmarks/asr/onnx_bench.py --variant v2-int8 --threads 8 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/benchmarks/asr/.venv-onnx/bin/python modules/dasLLAMA/benchmarks/asr/onnx_bench.py --variant v2-int8 --out modules/dasLLAMA/benchmarks/asr/_pybench_rows.txt --threads 8 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2255,19 +2261,19 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":461.48200000000003,
+            "ms":474.964,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":894.04899999999998,
+            "ms":892.39400000000001,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":7064.4309999999996,
+            "ms":7072.8459999999995,
             "audio_s":198.73400000000001
           },
           "asr:hp0.wav":{
-            "ms":11414.635,
+            "ms":11420.92,
             "audio_s":273.28699999999998
           }
         },
@@ -2314,8 +2320,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-29",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/asr/asr_bench_cell.das -- -m ggml-parakeet-tdt-0.6b-v3-f32.bin -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- --asr -m ggml-parakeet-tdt-0.6b-v3-f32.bin -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2328,35 +2334,41 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":161.274,
-            "audio_s":11
+            "ms":160.62100000000001,
+            "audio_s":11,
+            "text":"And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:jfk3.wav":{
-            "ms":490.10899999999998,
-            "audio_s":33
+            "ms":483.05000000000001,
+            "audio_s":33,
+            "text":"And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:gb1.wav":{
-            "ms":4727.0950000000003,
-            "audio_s":198.734375
+            "ms":4650.1999999999998,
+            "audio_s":198.734375,
+            "text":"My fellow Americans, this day has brought terrible news and great sadness to our country. At nine o'clock this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia's lost. There are no survivors. On board was a crew of seven. Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kulpna Shavla, and Ilan Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when space flight has come to seem almost routine. It is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce outer atmosphere of the earth. These astronauts knew the dangers, and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. And those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah, lift your eyes and look to the heavens. Who created all these? He who brings out the starry hosts one by one and calls them each by name. Because of his great power and mighty strength, not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth. Yet we can pray that all are safely home. May God bless the grieving families, and make out may God continue to bless America."
           },
           "asr:hp0.wav":{
-            "ms":7742.1270000000004,
-            "audio_s":273.28724999999997
+            "ms":7634.2669999999998,
+            "audio_s":273.28724999999997,
+            "text":"Henry F Phillips from Wikipedia the Free Encyclopedia at EN.wikipedia.org Henry F Phillips from Wikipedia the Free Encyclopedia Henry F Phillips eighteen ninety to nineteen fifty eight, a US businessman from Portland, Oregon, has the honor of having the Phillips Head Screw and Screwdriver named after him. The importance of the crosshead screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in nineteen thirty six, US patent number two million forty six thousand three hundred forty three, US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the pause drive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips Screw Head. The following is an info box which accompanies this article Info Box Part of the Series on Screw Drive Types Slotted Commonly Erroneously Flathead Phillips Crosshead PauseDrive SupaDrive Torx Hex Allen Robertson Triwing Torqueset Spannerhead Triple Square XZN Others Polydrive Spline Drive Double Hex Many Images accompanied this info box This page was last modified on the ninth of April two thousand eight at seventeen oh four All text is available under the terms of the GNU Free Documentation License See Copyrights for details Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated a US registered five oh one C three Tax Deductible Nonprofit Charity This sound file and all text in the article are licensed under the GNU Free Documentation License available at WWW dot gnu dot org slash copyleft slash fdl dot html."
           },
           "asr:hp0x2.wav":{
-            "ms":25447.474999999999,
-            "audio_s":546.57449999999994
+            "ms":24726.037,
+            "audio_s":546.57449999999994,
+            "text":"Henry F Phillips from Wikipedia the Free Encyclopedia at EN dot Wikipedia dot org Henry F Phillips from Wikipedia the Free Encyclopedia Henry F Phillips eighteen ninety to nineteen fifty eight a US businessman from Portland, Oregon, has the honor of having the Phillips Head Screw and Screwdriver named after him. The importance of the crosshead screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in nineteen thirty six, US patent number two million forty six thousand three hundred forty three US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the pausa drive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips Screw Head. The following is an info box which accompanies this article Info Box Part of the Series on Screw Drive Types Slotted Commonly Erroneously Flathead Phillips Crosshead PausaDrive SuperDrive Torx Hex Allen Robertson Tri Wing Torqueset Spannerhead Triple Square XN Others Polydrive Spline Drive Double Hex Many Images accompanied this info box This page was last modified on the ninth of April two thousand eight at seventeen oh four All Text is available under the terms of the GNU Free Documentation License See Copyrights for details Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated a US registered five hundred one C three tax deductible nonprofit charity This sound file and all text in the article are licensed under the GNU Free Documentation License available at WWW dot GNU dot org slash copyleft slash FDL dot HTML Henry F Phillips from Wikipedia the Free Encyclopedia at EN dot wikipedia dot org Henry F Phillips from Wikipedia the Free Encyclopedia Henry F Phillips eighteen ninety to nineteen fifty eight a US businessman from Portland, Oregon has the honor of having the Phillips Head Screw and Screwdriver named after him. The importance of the crosshead screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in nineteen thirty six, US patent number two million forty six thousand three hundred forty three US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the pausa drive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips Screw Head. The following is an info box which accompanies this article Info Box Part of the Series on Screw Drive Types Slotted Commonly Erroneously Flathead Phillips Crosshead Pausa Drive SupaDrive Torx Hex Allen Robertson Tri Wing Torqueset Spannerhead Triple Square XZN Others Polydrive Spline Drive Double Hex Many Images accompanied this info box This page was last modified on the ninth of April two thousand eight at seventeen oh four All text is available under the terms of the GNU Free Documentation License See Copyrights for details Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated a US registered five hundred one C three tax deductible nonprofit charity This sound file and all text in the article are licensed under the GNU Free Documentation License available at WWW dotnu dot org slash copy left slash FDL dot HTML."
           },
           "asr:librispeech25":{
-            "ms":3458.6059999999998,
+            "ms":3421.5219999999995,
             "audio_s":215.91506250000006
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"edc7e5b8c",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "env":"DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/m1.tune.json",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -2552,7 +2564,7 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-29",
+        "date":"2026-08-02",
         "cmd":"/Users/borisbatkin/Work/whisper.cpp/build/bin/parakeet-cli -m /Users/borisbatkin/Work/whisper.cpp/models/ggml-parakeet-tdt-0.6b-v3-f32.bin -t 8 -ng modules/dasLLAMA/benchmarks/asr/corpus/librispeech/01_1089-134686-0000.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/02_1089-134686-0001.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/03_1089-134686-0002.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/04_1089-134686-0003.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/05_1089-134686-0004.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/06_1089-134686-0005.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/07_1089-134686-0006.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/08_1089-134686-0007.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/09_1089-134686-0008.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/10_1089-134686-0009.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/11_1089-134686-0010.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/12_1089-134686-0011.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/13_1089-134686-0012.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/14_1089-134686-0013.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/15_1089-134686-0014.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/16_1089-134686-0015.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/17_1089-134686-0016.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/18_1089-134686-0017.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/19_1089-134686-0018.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/20_1089-134686-0019.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/21_1089-134686-0020.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/22_1089-134686-0021.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/23_1089-134686-0022.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/24_1089-134686-0023.wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/25_1089-134686-0024.wav",
         "hardware":{
           "cpu":"Apple M1 Max",
@@ -2566,22 +2578,22 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":501.83000000000004
+            "ms":479.16000000000008
           },
           "asr:jfk3.wav":{
-            "ms":1104.7399999999998
+            "ms":1127.9400000000001
           },
           "asr:gb1.wav":{
-            "ms":8841.9300000000003
+            "ms":8801.9099999999999
           },
           "asr:hp0.wav":{
-            "ms":14350.130000000001
+            "ms":14312.16
           },
           "asr:hp0x2.wav":{
-            "ms":48751.690000000002
+            "ms":49078.540000000001
           },
           "asr:librispeech25":{
-            "ms":10562.48
+            "ms":10889.950000000001
           }
         },
         "workload":"asr",
@@ -2782,8 +2794,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-29",
-        "cmd":"/Users/borisbatkin/Work/parakeet-tdt-0.6b-v3-fastapi-openai/.venv/bin/python modules/dasLLAMA/benchmarks/asr/onnx_bench.py --variant int8 --threads 8 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/01_1089-134686-0000.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/02_1089-134686-0001.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/03_1089-134686-0002.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/04_1089-134686-0003.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/05_1089-134686-0004.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/06_1089-134686-0005.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/07_1089-134686-0006.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/08_1089-134686-0007.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/09_1089-134686-0008.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/10_1089-134686-0009.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/11_1089-134686-0010.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/12_1089-134686-0011.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/13_1089-134686-0012.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/14_1089-134686-0013.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/15_1089-134686-0014.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/16_1089-134686-0015.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/17_1089-134686-0016.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/18_1089-134686-0017.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/19_1089-134686-0018.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/20_1089-134686-0019.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/21_1089-134686-0020.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/22_1089-134686-0021.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/23_1089-134686-0022.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/24_1089-134686-0023.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/25_1089-134686-0024.wav",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/benchmarks/asr/.venv-onnx/bin/python modules/dasLLAMA/benchmarks/asr/onnx_bench.py --variant int8 --out modules/dasLLAMA/benchmarks/asr/_pybench_rows.txt --threads 8 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/01_1089-134686-0000.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/02_1089-134686-0001.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/03_1089-134686-0002.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/04_1089-134686-0003.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/05_1089-134686-0004.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/06_1089-134686-0005.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/07_1089-134686-0006.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/08_1089-134686-0007.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/09_1089-134686-0008.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/10_1089-134686-0009.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/11_1089-134686-0010.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/12_1089-134686-0011.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/13_1089-134686-0012.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/14_1089-134686-0013.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/15_1089-134686-0014.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/16_1089-134686-0015.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/17_1089-134686-0016.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/18_1089-134686-0017.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/19_1089-134686-0018.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/20_1089-134686-0019.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/21_1089-134686-0020.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/22_1089-134686-0021.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/23_1089-134686-0022.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/24_1089-134686-0023.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/librispeech/25_1089-134686-0024.wav",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -2796,23 +2808,23 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":460.71499999999997,
+            "ms":450.80200000000002,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":903.63099999999997,
+            "ms":899.89200000000005,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":7087.0309999999999,
+            "ms":7098.9210000000003,
             "audio_s":198.73400000000001
           },
           "asr:hp0.wav":{
-            "ms":11415.859,
+            "ms":11411.701999999999,
             "audio_s":273.28699999999998
           },
           "asr:librispeech25":{
-            "ms":10056.223000000002,
+            "ms":9709.2569999999996,
             "audio_s":215.91500000000005
           }
         },
@@ -3009,8 +3021,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/asr/asr_bench_cell.das -- -m ggml-tiny.bin -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- --asr -m ggml-tiny.bin -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -3023,32 +3035,37 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":85.807000000000002,
-            "audio_s":11
+            "ms":86.275999999999996,
+            "audio_s":11,
+            "text":" And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:jfk3.wav":{
-            "ms":197.01599999999999,
-            "audio_s":33
+            "ms":195.72300000000001,
+            "audio_s":33,
+            "text":" And so my fellow Americans ask not what your country can do for you ask what you can do for your country. And so my fellow Americans ask not what your country can do for you ask what you can do for your country. And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:gb1.wav":{
-            "ms":995.35299999999995,
-            "audio_s":198.734375
+            "ms":997.92600000000004,
+            "audio_s":198.734375,
+            "text":" My fellow Americans, this day has brought terrible news and great sadness to our country. At 9 o'clock this morning, Mission Control and Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia's lost. There are no survivors. And board was a crew of seven, Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Cooltna Chavla, and Elon Ramon, a Colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when space flight has come to seem almost routine, it is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce outer atmosphere of the earth. These astronauts knew the dangers and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock in grief. You're not alone. Our entire nation agrees with you. And those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Man kind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. As farther than we can see, there is comfort and hope. In the words of the prophet Isaiah, lift your eyes and look to the heavens who created all these, He who brings out the story hosts one by one and calls them each by name, because of His great power and mighty strength, not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth yet we can pray that all are safely home. May God bless the grieving families and may God continue to bless America. [BLANK_AUDIO]"
           },
           "asr:hp0.wav":{
-            "ms":1242.712,
-            "audio_s":273.28724999999997
+            "ms":1247.3530000000001,
+            "audio_s":273.28724999999997,
+            "text":" Henry F. Phillips from Wikipedia, the free encyclopedia at EN. Wikipedia.org. Henry F. Phillips from Wikipedia, the free encyclopedia. Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Phillips-head screw and screwdriver named after him. The importance of the cross-head screw design lies in its self-centering property, useful on automated production lines that used power to screw drivers. Phillips Major contribution was in driving the crosshead concept forward to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in 1936, US patent number 2 million 46,343 US patents $2,046,837 to $2,046,840. It was so widely copied that by 1949 Philips lost his patent. The American screw company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept, since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Philips screw company and the American screw company went on to devise the Pawsadrive screw, which differs from the Philips in that it is designed to accommodate greater torque than the Philips. An image accompanied this article, caption, \"Philips screw head.\" The following is an info box which accompanies this article. Info box part of the series on screw drive types. Slotted commonly erroneously flat head. Phillips cross head. Positrive Super Drive. Torx. Alex Allen Robertson Tri-wing Torxet Spannerhead Triple Square XZN Others Polydrive Spline Drive Double Hex Many images accompanied this info box This page was last modified on 9 April 2008 at 1704. All text is available under the terms of the GNU-free documentation license. See Copyrights for details. Wikipedia is a registered trademark of the Wiki media foundation incorporated. A U.S. registered 501 C3 tax deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation license. Available at www.gnu.org/copyleft/fdl.html."
           },
           "asr:hp0x2.wav":{
-            "ms":2703.02,
-            "audio_s":546.57449999999994
+            "ms":2505.7460000000001,
+            "audio_s":546.57449999999994,
+            "text":" Henry F. Phillips from Wikipedia, the free encyclopedia at EN. Wikipedia.org. Henry F. Phillips from Wikipedia, the free encyclopedia. Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Phillips-head screw and screwdriver named after him. The importance of the cross-head screw design lies in its self-centering property, useful on automated production lines that used power to screw drivers. Phillips Major contribution was in driving the crosshead concept forward to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in 1936, US patent number 2 million 46,343 US patents $2,046,837 to $2,046,840. It was so widely copied that by 1949 Philips lost his patent. The American screw company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept, since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Philips screw company and the American screw company went on to devise the Pawsadrive screw, which differs from the Philips in that it is designed to accommodate greater torque than the Philips. An image accompanied this article, caption, \"Philips screw head.\" The following is an info box which accompanies this article. Info box part of the series on screw drive types. Slotted commonly erroneously flat head. Phillips cross head. Positrive Super Drive. Torx. Alex Allen Robertson Tri-wing Torxet Spannerhead Triple Square XZN Others Polydrive Spline Drive Double Hex Many images accompanied this info box This page was last modified on 9 April 2008 at 1704. All text is available under the terms of the GNU-free documentation license. See Copyrights for details. Wikipedia is a registered trademark of the Wiki media foundation incorporated. A U.S. registered 501 C3 tax deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation license. Available at www.gnu.org/copyleft/fdl.html. Henry F Phillips from Wikipedia, the free The Korean Cyclopedia at EN. Wikipedia.org Henry F. Phillips From Wikipedia, the Korean Cyclopedia Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Philips' head screw and screwdriver named after him. The importance of the cross head screw design lies in its self-centering property, useful on automated production lines that use powered screw drivers. Philips' major contribution was in driving the cross head concept forward, to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in 1936, US patent number 2,046,343, US patents 2,046,837 to 2,046,847, 840. It was so widely copied that by 1949, Phillips lost his patent. The American screw company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw. As distinct from the simple milled slot of a slotted type screw. The Phillips screw company and the American screw company went on to devise the Pawsadrive screw which differs from the Philips in that it is designed to accommodate greater torque than the Philips. An image accompanied this article caption \"Philips Screwhead\". The following is an info box which accompanies this article. In a info box part of the series on screw drive types. Slaughted, commonly, erroneously, flat head. Phillips, cross head. Paws of Drive, Super Drive. Torx, Hex, Allen, Robertson, Tri-wing, Torxet, Spannerhead, Triple Square, XZN, Others, Polydrive, Spline Drive, Double Hacks, Many images accompanied this infobox. This page was last modified on 9 April 2008 at 1704. All text is available under the terms of the Gnue-free documentation license. See Copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Inc. a US registered 501c3 tax deductible nonprofit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License. Available at www.gnu.org/copyleft/fdl.a THTML"
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr8 (manifest)",
-        "env":"DASLLAMA_BOX=m1",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -3094,7 +3111,7 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
+        "date":"2026-08-02",
         "cmd":"/Users/borisbatkin/Work/whisper.cpp/build/bin/whisper-cli -m /Users/borisbatkin/Work/whisper.cpp/models/ggml-tiny.bin -f modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav -t 8 -bs 1 -bo 1 -nf -ng",
         "hardware":{
           "cpu":"Apple M1 Max",
@@ -3108,19 +3125,19 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":126.19999999999999
+            "ms":130.57999999999998
           },
           "asr:jfk3.wav":{
-            "ms":308.94999999999999
+            "ms":312.32999999999998
           },
           "asr:gb1.wav":{
-            "ms":1724.6600000000001
+            "ms":1794.74
           },
           "asr:hp0.wav":{
-            "ms":2205.2200000000003
+            "ms":2301.3500000000004
           },
           "asr:hp0x2.wav":{
-            "ms":4942.3000000000002
+            "ms":5083.46
           }
         },
         "workload":"asr",
@@ -3171,8 +3188,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"/Users/borisbatkin/Work/parakeet-tdt-0.6b-v3-fastapi-openai/.venv/bin/python modules/dasLLAMA/benchmarks/asr/onnx_bench.py --variant whisper-tiny-int8 --threads 8 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/benchmarks/asr/.venv-onnx/bin/python modules/dasLLAMA/benchmarks/asr/onnx_bench.py --variant whisper-tiny-int8 --out modules/dasLLAMA/benchmarks/asr/_pybench_rows.txt --threads 8 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -3185,7 +3202,7 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":413.024,
+            "ms":400.72300000000001,
             "audio_s":11
           }
         },
@@ -3214,8 +3231,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/asr/asr_bench_cell.das -- -m ggml-large-v3-turbo.bin -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- --asr -m ggml-large-v3-turbo.bin -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -3228,32 +3245,37 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":1991.2550000000001,
-            "audio_s":11
+            "ms":1970.4760000000001,
+            "audio_s":11,
+            "text":" And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:jfk3.wav":{
-            "ms":4089.232,
-            "audio_s":33
+            "ms":4045.5740000000001,
+            "audio_s":33,
+            "text":" And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:gb1.wav":{
-            "ms":17372.662,
-            "audio_s":198.734375
+            "ms":16787.313999999998,
+            "audio_s":198.734375,
+            "text":" My fellow Americans, this day has brought terrible news and great sadness to our country. At 9 o'clock this morning, Mission Control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven: Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kultna Shavla, and Ilan Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when spaceflight has come to seem almost routine, it is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce outer atmosphere of the Earth. These astronauts knew the dangers, and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock and grief. You're not alone. Our entire nation grieves with you. And those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah, \"Lift your eyes and look to the heavens who created all these. He who brings out the starry hosts one by one and calls them each by name. Because of His great power and mighty strength, not one of them is missing.\" The same Creator who names the stars also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth, yet we can pray that all are safely home. May God bless the grieving families, and may God continue to bless America. Thank you."
           },
           "asr:hp0.wav":{
-            "ms":25313.425999999999,
-            "audio_s":273.28724999999997
+            "ms":24580.651999999998,
+            "audio_s":273.28724999999997,
+            "text":" Henry F. Phillips, from Wikipedia, the Free Encyclopedia, at en.wikipedia.org. Henry F. Phillips, from Wikipedia, the Free Encyclopedia. henry f phillips a u s businessman from portland oregon has the honor of having the phillips head screw and screwdriver named after him the importance of the cross-head screw design lies in its self-centering property useful on automated production lines that use powered screw-drivers philip's major contribution was in driving the cross-head concept forward to the point where it was adopted by screw makers and automobile companies Although he received patents for the design in 1936, U.S. Patent No. 2,046,343, U.S. Patents 2,046,837 to 2,046,840, It was so widely copied that by 1949 Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the PosaDrive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article. Caption, Phillips Screw Head. The following is an info box which accompanies this article. Info box, part of the series on screw drive types. Slotted, commonly, erroneously, flathead. Phillips, crosshead. Posa drive, super drive. Torx. Hex, Allen. Robertson. Tri-wing. Torxet. Spannerhead. Triple square, XZN. Others, poly drive, spline drive, double hex. Many images accompanied this info box. This page was last modified on the 9th of April, 2008, at 1704. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation, Inc., a U.S. registered 501c3 tax-deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License, available at www.gnu.org slash copyleft slash fdl.html"
           },
           "asr:hp0x2.wav":{
-            "ms":48704.434999999998,
-            "audio_s":546.57449999999994
+            "ms":47122.447,
+            "audio_s":546.57449999999994,
+            "text":" Henry F. Phillips, from Wikipedia, the Free Encyclopedia, at en.wikipedia.org. Henry F. Phillips, from Wikipedia, the Free Encyclopedia. henry f phillips a u s businessman from portland oregon has the honor of having the phillips head screw and screwdriver named after him the importance of the cross-head screw design lies in its self-centering property useful on automated production lines that use powered screw-drivers philip's major contribution was in driving the cross-head concept forward to the point where it was adopted by screw makers and automobile companies Although he received patents for the design in 1936, U.S. Patent No. 2,046,343, U.S. Patents 2,046,837 to 2,046,840, It was so widely copied that by 1949 Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the PosaDrive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article. Caption, Phillips Screw Head. The following is an info box which accompanies this article. Info box, part of the series on screw drive types. Slotted, commonly, erroneously, flathead. Phillips, crosshead. Posa drive, super drive. Torx. Hex, Allen. Robertson. Tri-wing. Torxet. Spannerhead. Triple square, XZN. Others, poly drive, spline drive, double hex. Many images accompanied this info box. This page was last modified on the 9th of April, 2008, at 1704. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation, Inc., a U.S. registered 501c3 tax-deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License, Available at www.gnu.org slash copyleft slash fdl.html Henry F. Phillips From Wikipedia, the free encyclopedia at en.wikipedia.org Henry F. Phillips, 1890-1958, a U.S. businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the cross-head screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the cross-head concept forward, to the point where it was adopted by screw-makers and automobile companies. Although he received patents for the design in 1936, U.S. Patent No. 2,046,343, U.S. Patents 2,046,837 to 2,046,840, It was so widely copied that by 1949 Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the PosaDrive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article. Caption, Phillips Screw Head. The following is an info box which accompanies this article. Info box, part of the series on screw drive types. Slotted, commonly, erroneously, flathead. Phillips, crosshead. Posa drive, super drive. Torx. Hex Allen, Robertson, Tri-Wing, Torxet, Spannerhead, Triple Square, XZN. Others, Poly Drive, Spline Drive, Double Hex. Many images accompanied this info box. This page was last modified on the 9th of April, 2008, at 1704. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation, Inc., a U.S. registered 501c3 tax-deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License, available at www.gnu.org slash copyleft slash fdl.html"
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr8 (manifest)",
-        "env":"DASLLAMA_BOX=m1",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -3299,7 +3321,7 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
+        "date":"2026-08-02",
         "cmd":"/Users/borisbatkin/Work/whisper.cpp/build/bin/whisper-cli -m /Users/borisbatkin/Work/whisper.cpp/models/ggml-large-v3-turbo.bin -f modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav -t 8 -bs 1 -bo 1 -nf -ng",
         "hardware":{
           "cpu":"Apple M1 Max",
@@ -3313,19 +3335,19 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":3033.48
+            "ms":3031.5999999999999
           },
           "asr:jfk3.wav":{
-            "ms":6243.5799999999999
+            "ms":6257.4200000000001
           },
           "asr:gb1.wav":{
-            "ms":35250.529999999999
+            "ms":35387.669999999998
           },
           "asr:hp0.wav":{
-            "ms":45704.669999999998
+            "ms":45880.170000000006
           },
           "asr:hp0x2.wav":{
-            "ms":88681.009999999995
+            "ms":88812.240000000005
           }
         },
         "workload":"asr",
@@ -3376,8 +3398,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"/Users/borisbatkin/Work/parakeet-tdt-0.6b-v3-fastapi-openai/.venv/bin/python modules/dasLLAMA/benchmarks/asr/onnx_bench.py --variant whisper-turbo-int8 --threads 8 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/benchmarks/asr/.venv-onnx/bin/python modules/dasLLAMA/benchmarks/asr/onnx_bench.py --variant whisper-turbo-int8 --out modules/dasLLAMA/benchmarks/asr/_pybench_rows.txt --threads 8 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -3390,7 +3412,7 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":2257.087,
+            "ms":2232.7689999999998,
             "audio_s":11
           }
         },
@@ -3419,8 +3441,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/asr/asr_bench_cell.das -- -m canary-qwen-2.5b-decoder-f16.gguf -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- --asr -m canary-qwen-2.5b-decoder-f16.gguf -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -3433,24 +3455,27 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":4902.5630000000001,
-            "audio_s":11
+            "ms":4956.4459999999999,
+            "audio_s":11,
+            "text":"And so my fellow Americans ask not what your country can do for you ask what you can do for your country"
           },
           "asr:jfk3.wav":{
-            "ms":15415.68,
-            "audio_s":33
+            "ms":15459.344999999999,
+            "audio_s":33,
+            "text":"And so my fellow Americans ask not what your country can do for you, ask what you can do for your country. And so my fellow Americans ask not what your country can do for you, ask what you can do for your country. And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:gb1.wav":{
-            "ms":125138.443,
-            "audio_s":198.734375
+            "ms":125587.63499999999,
+            "audio_s":198.734375,
+            "text":"My fellow Americans, this day has brought terrible news and great sadness to our country. At nine o'clock this morning, Mission Control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. In the words of the prophet Isaiah, May God bless the grieving families and may God continue to bless America."
           }
         },
         "workload":"asr",
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr8 (manifest)",
-        "env":"DASLLAMA_BOX=m1",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -3490,8 +3515,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"/Users/borisbatkin/Work/canary-nemo-oracle/.venv/bin/python modules/dasLLAMA/benchmarks/asr/canary_qwen_bench.py --threads 8 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/benchmarks/asr/.venv-nemo/bin/python modules/dasLLAMA/benchmarks/asr/canary_qwen_bench.py --threads 8 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -3504,15 +3529,15 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":8151.6279999999997,
+            "ms":8117.8180000000002,
             "audio_s":11
           },
           "asr:jfk3.wav":{
-            "ms":22088.127,
+            "ms":22132.896000000001,
             "audio_s":33
           },
           "asr:gb1.wav":{
-            "ms":41512.146999999997,
+            "ms":41147.389999999999,
             "audio_s":199
           }
         },
@@ -3553,8 +3578,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/asr/asr_bench_cell.das -- -m gemma-4-E2B-it-Q8_0.gguf -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- --asr -m gemma-4-E2B-it-Q8_0.gguf -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -3567,16 +3592,17 @@
         },
         "tests":{
           "asr:jfk3.wav":{
-            "ms":6827.335,
-            "audio_s":33
+            "ms":6787.5590000000002,
+            "audio_s":33,
+            "text":"And so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow American country"
           }
         },
         "workload":"audio-chat",
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr8 (manifest)",
-        "env":"DASLLAMA_BOX=m1",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -3604,8 +3630,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-clean/build-amx/bin/llama-mtmd-cli -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t 8",
+        "date":"2026-08-02",
+        "cmd":"../llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli -m /Users/borisbatkin/Work/llama.cpp/models/gemma-4-E2B-it-Q8_0.gguf --mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-4-E2B-it-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t 8",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -3618,7 +3644,7 @@
         },
         "tests":{
           "asr:jfk3.wav":{
-            "ms":32408.5
+            "ms":32392.299999999999
           }
         },
         "workload":"audio-chat",
@@ -3658,8 +3684,8 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"bin/daslang -jit modules/dasLLAMA/benchmarks/asr/asr_bench_cell.das -- -m Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
+        "date":"2026-08-02",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- --asr -m Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_m1.json",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -3672,20 +3698,22 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":3334.2159999999999,
-            "audio_s":11
+            "ms":3297.6559999999999,
+            "audio_s":11,
+            "text":"And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:jfk3.wav":{
-            "ms":7447.0810000000001,
-            "audio_s":33
+            "ms":7399.8329999999996,
+            "audio_s":33,
+            "text":"And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
           }
         },
         "workload":"audio-chat",
         "source":"official",
-        "sha":"8665ceedd",
+        "sha":"7605e8476",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr4 (manifest); q40q8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_gemv_gen=mr8 (manifest)",
-        "env":"DASLLAMA_BOX=m1",
+        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
+        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=/Users/borisbatkin/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
@@ -3719,8 +3747,8 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-07-28",
-        "cmd":"/Users/borisbatkin/Work/llama.cpp-clean/build-amx/bin/llama-mtmd-cli -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf --mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t 8",
+        "date":"2026-08-02",
+        "cmd":"../llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli -m /Users/borisbatkin/Work/llama.cpp/models/Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf --mmproj /Users/borisbatkin/Work/llama.cpp/models/mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t 8",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
@@ -3733,10 +3761,10 @@
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":20637.5
+            "ms":21385.900000000001
           },
           "asr:jfk3.wav":{
-            "ms":45478
+            "ms":44953.699999999997
           }
         },
         "workload":"audio-chat",

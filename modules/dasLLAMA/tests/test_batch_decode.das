@@ -1,9 +1,9 @@
 options gen2
 options persistent_heap   // several by-value Sessions + a BatchWorkspace per subtest; explicit deletes below
-options stack = 131072   // batch harness holds 3 Sessions + a workspace (its own Session) in one frame
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
-require dasllama/dasllama_transformer   // nolint:STYLE029 — umbrella fires each arch [init] registration
+require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
 require llvm/daslib/f16_cvt
 require daslib/jobque_boost
@@ -51,8 +51,8 @@ def private run_ref(tr : Model; kdt : KVDtype; prompt : array<int64>; nsteps, vo
     var s <- make_run_state(tr.config, kdt, kdt)
     eval_(tr, s, prompt)
     var r : RefRun
-    r.lg |> reserve(int(nsteps * vocab))
-    r.toks |> reserve(int(nsteps))
+    r.lg |> reserve(nsteps * vocab)
+    r.toks |> reserve(nsteps)
     var cur = greedy_top(s.logits, vocab)
     for (_st in range64(nsteps)) {
         eval_(tr, s, [cur])

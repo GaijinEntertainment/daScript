@@ -3,9 +3,9 @@ options gen2
 require dastest/testing_boost public
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default        // registers the "portable" backend at [init] (the oracle + fallback)
-require ?das_metal dasllama/dasllama_math_metal  // nolint:STYLE030 — registers the "metal" batch donor on Apple builds
-require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — metal_live_object_count for the leak gate
-require math  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
+require ?das_metal dasllama/dasllama_metal_gemm  // registers the "metal" batch donor on Apple builds
+require ?das_metal metal/das_metal_boost  // metal_live_object_count for the leak gate
+require math   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
 
 // The Metal GPU prefill-GEMM donor (Phase-5 dasMetal offload) vs the portable CPU kernel on
 // synthetic Q8 data. Two comparisons: power-of-two scales make the GPU's dequant-to-half EXACT
@@ -45,7 +45,7 @@ def private run_batch(var y : array<float>; wq : array<int8>; ws : array<float>;
 }
 
 [test]
-def test_metal_gemm_vs_portable(t : T?) {
+def test_metal_gemm_vs_portable(t : T?) {   // nolint:STYLE038 — flat fixture build + one comparison cell per scale flavor
     t |> run("metal batch donor == portable CPU kernel on synthetic Q8 GEMM") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             var found = false

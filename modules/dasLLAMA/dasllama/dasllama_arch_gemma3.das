@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_arch_gemma3 shared public
 
 require dasllama/dasllama_common
+require dasllama/dasllama_blocks   // std_blocks/moe_blocks — the default block sets this arch binds
 
 // Gemma-3 — Gemma-2's shape (GeGLU, 4 norms/layer, NEOX rope, √dim embed scale) minus the soft-caps,
 // plus Qwen3-style per-head QK-norm and the 5-local:1-global attention pattern with dual RoPE:
@@ -24,10 +25,7 @@ def private configure_gemma3(var c : Config) {
 def register_arch_gemma3() {
     var d = ArchDesc(name = "gemma3", configure = @@configure_gemma3)
     d.blocks = std_blocks()
-    d.chat.add_bos = true   // BOS = <bos>; Gemma has no system role — fold it into the first user turn
-    d.chat.user.parts <- [chat_special("<start_of_turn>"), chat_text("user\n"), chat_content(), chat_special("<end_of_turn>"), chat_text("\n")]
-    d.chat.assistant_open.parts <- [chat_special("<start_of_turn>"), chat_text("model\n")]
-    d.chat.stop <- ["<end_of_turn>", "<eos>"]
+    gemma_chat(d.chat)
     d.lcaps.system_prompt = false   // no system role — the chat layer folds it into the first user turn
     register_arch("gemma3", d)
 }

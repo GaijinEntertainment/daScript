@@ -16,6 +16,10 @@ has no effect.
 | Variable | Type | Effect |
 |---|---|---|
 | `DAS_JOBQUE_THREADS` | number | Total compute lanes. Overrides the cap and the stock default. |
+
+Not an env var despite the name: `DAS_MAX_HW_JOBS` is a **build-time** `-D` define, **wasm-only**
+since 2026-07-02 — desktop gets `cores-1`. A pre-fix binary caps at 4 workers, so every threaded
+number it produced is a 4-thread number.
 | `DAS_JOBQUE_AFFINITY` | number | Worker affinity: `0` off, `1` ideal-processor hint, `2` hard mask. On a big SMT box the placement lottery can land two compute lanes on one physical core's SMT pair; `2` prevents it. |
 | `DAS_JOBQUE_LIMIT_ORDER` | flag | Constrain job ordering — a determinism aid when chasing a race, not a speed knob. |
 | `DAS_JOBQUE_TEAM_EAGER_EXIT` | flag | Team workers leave as soon as their share is done rather than waiting at the barrier. |
@@ -52,6 +56,9 @@ application directory is read-only.
 | Variable | Type | Effect |
 |---|---|---|
 | `DAS_TUNE_VERBOSITY` | text | What a tune shows: `silent`, `normal` (default), `verbose`. Anything unrecognized reads as `normal`, so a typo never silences a tune. |
+| `DAS_TUNE_NOISE_CV` | number | The noise gate's cv ceiling in percent, overriding the built-in 2% normal / 1% paranoid. A calibration lever; garbage reads as unset. |
+| `DAS_TUNE_NOISE_OVERRIDE` | flag | Tune through a failing noise gate anyway. The sidecar provenance is stamped `noise: overridden`, so the escape always leaves a mark. |
+| `DAS_TUNE_HISTORY` | path | Where mint archives land, overriding `<home>/.tune-history/<box>/`. Every mint archives (failures kept, marked `.FAILED.json`); the history is never deleted. |
 
 `--tune-quiet` / `--tune-verbose` on the application set it, and it inherits down the whole tuner
 process chain — the measuring code is two `popen`s below the process the user typed the flag at.

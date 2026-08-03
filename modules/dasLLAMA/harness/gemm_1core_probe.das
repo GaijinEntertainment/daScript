@@ -15,7 +15,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_math_default
 require dasllama/dasllama_math_aarch64_neon
 require dasllama/dasllama_math_gen
-require dasllama/dasllama_quant
+require dasllama/dasllama_convert
 require daslib/jobque_boost
 require daslib/fio
 require math
@@ -26,7 +26,7 @@ let NTOK = 128l
 let ROUNDS = 6
 
 def fillf(var a : array<float>; cnt : int64) {
-    a |> resize(int(cnt))
+    a |> resize(cnt)
     for (i in range64(cnt)) {
         a[i] = float(i % 13l) * 0.1 - 0.6
     }
@@ -34,8 +34,8 @@ def fillf(var a : array<float>; cnt : int64) {
 
 def maxdiff(a, b : array<float>) : float {
     var m = 0.0
-    for (i in range(length(a))) {
-        m = max(m, abs(a[i] - b[i]))
+    for (av, bv in a, b) {
+        m = max(m, abs(av - bv))
     }
     return m
 }
@@ -45,15 +45,15 @@ struct Cand {
     repacked : bool
 }
 
-def bench_shape(name : string; n, d : int64; reps : int) {
+def bench_shape(name : string; n, d : int64; reps : int) {   // nolint:STYLE037,STYLE038 — one rig: fixtures, the correctness gate and the interleaved timing rounds share every buffer
     let nb = n / 32l
     var w : array<float>
     fillf(w, n * d)
     let qt <- quantize_q8_0(w, n * d)
     var q : array<int8>
     var s : array<float>
-    q |> resize(int(n * d))
-    s |> resize(int(d * nb))
+    q |> resize(n * d)
+    s |> resize(d * nb)
     for (i in range64(n * d)) {
         q[i] = qt.q[i]
     }
@@ -64,13 +64,13 @@ def bench_shape(name : string; n, d : int64; reps : int) {
     fillf(x, n)
     var xq : array<int8>
     var xs : array<float>
-    xq |> resize(int(n))
-    xs |> resize(int(nb))
+    xq |> resize(n)
+    xs |> resize(nb)
     quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
     var xqb : array<int8>
     var xsb : array<float>
-    xqb |> resize(int(NTOK * n))
-    xsb |> resize(int(NTOK * nb))
+    xqb |> resize(NTOK * n)
+    xsb |> resize(NTOK * nb)
     for (tk in range64(NTOK)) {
         for (i in range64(n)) {
             xqb[int(tk * n + i)] = xq[int(i)]
@@ -110,8 +110,8 @@ def bench_shape(name : string; n, d : int64; reps : int) {
 
     var y : array<float>
     var yref : array<float>
-    y |> resize(int(NTOK * d))
-    yref |> resize(int(NTOK * d))
+    y |> resize(NTOK * d)
+    yref |> resize(NTOK * d)
 
     // correctness gate: every backend within 1e-3 of portable on the same data
     select_kernel_backend("portable")
@@ -208,15 +208,15 @@ def bench_shape(name : string; n, d : int64; reps : int) {
 //   DASLLAMA_FOCUS_FORKED=1       — rung B: one process, threshold 0 (always parallel_for), workers
 //                                   from DAS_JOBQUE_THREADS; B minus A at each K = the scheduler's bill
 
-def focus_bench(be : string; shape : string; n, d, ntok : int64; forked : bool) {
+def focus_bench(be : string; shape : string; n, d, ntok : int64; forked : bool) {   // nolint:STYLE037,STYLE038 — one calibrated window: splitting it separates the calibration from the loop it sizes
     let nb = n / 32l
     var w : array<float>
     fillf(w, n * d)
     let qt <- quantize_q8_0(w, n * d)
     var q : array<int8>
     var s : array<float>
-    q |> resize(int(n * d))
-    s |> resize(int(d * nb))
+    q |> resize(n * d)
+    s |> resize(d * nb)
     for (i in range64(n * d)) {
         q[i] = qt.q[i]
     }
@@ -231,13 +231,13 @@ def focus_bench(be : string; shape : string; n, d, ntok : int64; forked : bool) 
     fillf(x, n)
     var xq : array<int8>
     var xs : array<float>
-    xq |> resize(int(n))
-    xs |> resize(int(nb))
+    xq |> resize(n)
+    xs |> resize(nb)
     quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
     var xqb : array<int8>
     var xsb : array<float>
-    xqb |> resize(int(ntok * n))
-    xsb |> resize(int(ntok * nb))
+    xqb |> resize(ntok * n)
+    xsb |> resize(ntok * nb)
     for (tk in range64(ntok)) {
         for (i in range64(n)) {
             xqb[int(tk * n + i)] = xq[int(i)]
@@ -247,7 +247,7 @@ def focus_bench(be : string; shape : string; n, d, ntok : int64; forked : bool) 
         }
     }
     var y : array<float>
-    y |> resize(int(ntok * d))
+    y |> resize(ntok * d)
 
     // DASLLAMA_BATCH_CHUNKS="1,4" A/Bs the batch-oversplit knob INTERLEAVED within this process
     // (best-of-6 per value, adjacent in time — immune to box drift); absent = current knob, one shot

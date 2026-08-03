@@ -1,7 +1,8 @@
 options gen2
 require dastest/testing_boost public
 require dasllama/dasllama_math_gen
-require dasllama/dasllama_quant
+require dasllama/dasllama_repack
+require dasllama/dasllama_convert
 
 // The kg8 plane rail (slice J — the smmla stamp's row-pair layout): repack_q8q8_grp with
 // kgroup=8 must write [kg8][r][8 bytes] groups, and q8q8_token_grp_generic must read kg4 and
@@ -10,13 +11,13 @@ require dasllama/dasllama_quant
 
 def build_q8(n, d : int64; var q : array<int8>; var s : array<float>) {
     var w : array<float>
-    w |> resize(int(n * d))
+    w |> resize(n * d)
     for (i in range64(n * d)) {
         w[i] = float(i % 19l) * 0.11 - 0.9
     }
     let qt <- quantize_q8_0(w, n * d)
-    q |> resize(int(n * d))
-    s |> resize(int(d * (n / 32l)))
+    q |> resize(n * d)
+    s |> resize(d * (n / 32l))
     for (i in range64(n * d)) {
         q[i] = qt.q[i]
     }

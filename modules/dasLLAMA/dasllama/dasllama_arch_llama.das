@@ -4,6 +4,7 @@ options _comment_hygiene = true
 module dasllama_arch_llama shared public
 
 require dasllama/dasllama_common
+require dasllama/dasllama_blocks   // std_blocks/moe_blocks — the default block sets this arch binds
 
 // Llama / Llama-2 / Llama-3 / TinyLlama. Every Config default already encodes this family, so the
 // config setter is empty. The chat template is the Llama-3 instruct DEFAULT: GGUF general.architecture

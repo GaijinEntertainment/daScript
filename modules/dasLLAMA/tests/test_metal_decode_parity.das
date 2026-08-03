@@ -1,17 +1,18 @@
 options gen2
 options persistent_heap   // + explicit deletes: the model frees before the process exits
-options stack = 131072   // several by-value Sessions per arm in one frame (test_batch_decode sizing)
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — engine + arch registrations + (on Apple) the metal overrides
 require dasllama/dasllama_math   // set_wscale_f16 — the resident path reads the f32 scale plane
+require dasllama/dasllama_kv_codec   // cvt_q8kv_to_f32/cvt_tq4kv_to_f32 — the cache-row dequant oracles
 require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor transform
-require ?das_metal dasllama/dasllama_metal_llama  // nolint:STYLE030 — stats/mirror/shutdown rails
-require ?das_metal dasllama/dasllama_metal_prefill  // nolint:STYLE030 — the Metal-prefill→GPU-decode hybrid arm
-require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — metal_live_object_count for the leak gate
-require llvm/daslib/f16_cvt  // nolint:STYLE030 — f16 KV row decode in the tolerance gate (Apple half only)
+require ?das_metal dasllama/dasllama_metal_decode  // stats/mirror/shutdown rails
+require ?das_metal dasllama/dasllama_metal_prefill  // the Metal-prefill→GPU-decode hybrid arm
+require ?das_metal metal/das_metal_boost  // metal_live_object_count for the leak gate
+require llvm/daslib/f16_cvt  // f16 KV row decode in the tolerance gate (Apple half only)
 require daslib/jobque_boost
-require daslib/fio  // nolint:STYLE030 — used only inside the Apple static_if half
+require daslib/fio   // nolint:STYLE030,LINT019 — path_join/stat, used only inside the das_metal static_if halves
 require math
 require strings
 require _model_tier
@@ -30,8 +31,8 @@ def private same(a, b : array<int64>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (x, y in a, b) {
+        if (x != y) {
             return false
         }
     }
@@ -119,8 +120,8 @@ def private kv_row_max_diff_one(cache_a, cache_b : array<uint8>; base_a, base_b 
             // block codecs compare dequantized (tq4: in the rotated basis both rows share)
             var da : array<float>
             var db : array<float>
-            da |> resize(int(kv_dim))
-            db |> resize(int(kv_dim))
+            da |> resize(kv_dim)
+            db |> resize(kv_dim)
             if (dt == KVDtype.q8_0) {
                 cvt_q8kv_to_f32(addr(da[0]), pa, kv_dim)
                 cvt_q8kv_to_f32(addr(db[0]), pb, kv_dim)
@@ -326,8 +327,8 @@ def private streams_match(a, b : array<array<int64>>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (!same(a[i], b[i])) {
+    for (x, y in a, b) {
+        if (!same(x, y)) {
             return false
         }
     }
@@ -474,7 +475,7 @@ def private paged_batch_greedy(tr, trg : Model; prompts : array<array<int64>>; p
 }
 
 [test]
-def test_metal_batch_decode_parity(t : T?) {
+def test_metal_batch_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, one t |> run cell per arm
     t |> run("GPU batched decode == CPU batch control, greedy streams (Llama-3.2-1B Q8)") <| @(t : T?) {
         if (!family_on(t, "llama")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -493,7 +494,7 @@ def test_metal_batch_decode_parity(t : T?) {
             let prior_backend = active_kernel_backend()
             set_wscale_f16(false)
             pin_kernel_backend("portable")   // row-major weights (the resident drivers' donor contract)
-            var tr <- load_model(path, QuantMode.q8)
+            var tr <- load_model_(path, QuantMode.q8)
             tr.config.seq_len = min(tr.config.seq_len, 512l)   // batch arms hold up to 12 sessions
             var trg <- blob_twin(t, path, 512l)
             var prompts3 <- [ <- encode(tr, counting_prompt(1, 60), true, false),
@@ -584,7 +585,7 @@ def test_metal_batch_decode_parity(t : T?) {
 
             // arm B6: wscale_f16 model — the dual-view s16 scale reads on both batch paths
             set_wscale_f16(true)
-            var tr16 <- load_model(path, QuantMode.q8)
+            var tr16 <- load_model_(path, QuantMode.q8)
             tr16.config.seq_len = min(tr16.config.seq_len, 512l)
             var tr16g <- blob_twin(t, path, 512l)
             var prompts16 <- [ <- encode(tr16, counting_prompt(1, 44), true, false),
@@ -613,7 +614,7 @@ def test_metal_batch_decode_parity(t : T?) {
             let path3b = path_join(models_dir(), "Llama-3.2-3B-Instruct-Q8_0.gguf")
             if (arm_on(t, "batchB7-partd")) {
                 if (stat(path3b).is_valid) {
-                    var tr3 <- load_model(path3b, QuantMode.q8)
+                    var tr3 <- load_model_(path3b, QuantMode.q8)
                     tr3.config.seq_len = min(tr3.config.seq_len, 512l)
                     var tr3g <- blob_twin(t, path3b, 512l)
                     var promptsd <- [ <- encode(tr3, counting_prompt(1, 48), true, false),
@@ -642,7 +643,7 @@ def test_metal_batch_decode_parity(t : T?) {
             let kpath_b = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q4_K_M.gguf")
             if (arm_on(t, "batchB8-kq")) {
                 if (stat(kpath_b).is_valid) {
-                    var trkb <- load_model(kpath_b, QuantMode.q8)
+                    var trkb <- load_model_(kpath_b, QuantMode.q8)
                     trkb.config.seq_len = min(trkb.config.seq_len, 512l)
                     var trkbg <- blob_twin(t, kpath_b, 512l)
                     var promptsk <- [ <- encode(trkb, counting_prompt(1, 52), true, false),
@@ -683,7 +684,7 @@ def test_metal_batch_decode_parity(t : T?) {
             let kpath_5 = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q5_K_M.gguf")
             if (arm_on(t, "batchB8-kq")) {
                 if (stat(kpath_5).is_valid) {
-                    var trk5 <- load_model(kpath_5, QuantMode.q8)
+                    var trk5 <- load_model_(kpath_5, QuantMode.q8)
                     trk5.config.seq_len = min(trk5.config.seq_len, 512l)
                     var trk5g <- blob_twin(t, kpath_5, 512l)
                     var prompts5 <- [ <- encode(trk5, counting_prompt(2, 47), true, false),
@@ -724,7 +725,7 @@ def test_metal_batch_decode_parity(t : T?) {
 }
 
 [test]
-def test_metal_decode_parity(t : T?) {
+def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, one t |> run cell per arm
     t |> run("GPU-resident decode == CPU control, greedy continuations (Llama-3.2-1B Q8)") <| @(t : T?) {
         if (!family_on(t, "llama")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -740,7 +741,7 @@ def test_metal_decode_parity(t : T?) {
             let prior_backend = active_kernel_backend()     // (every exit path runs the restore)
             set_wscale_f16(false)       // the resident path reads the f32 scale plane (declines on s16)
             pin_kernel_backend("portable")  // ...and ROW-MAJOR weights (same donor contract as prefill)
-            var tr <- load_model(path, QuantMode.q8)
+            var tr <- load_model_(path, QuantMode.q8)
             if (tr.config.seq_len > 2048l) {
                 tr.config.seq_len = 2048l
             }
@@ -897,7 +898,7 @@ def test_metal_decode_parity(t : T?) {
             // plane (llama.cpp q8_0 byte parity); a fresh load owns fresh weight regions
             if (arm_on(t, "arm8-s16")) {
                 set_wscale_f16(true)
-                var tr16 <- load_model(path, QuantMode.q8)
+                var tr16 <- load_model_(path, QuantMode.q8)
                 if (tr16.config.seq_len > 2048l) {
                     tr16.config.seq_len = 2048l
                 }
@@ -919,7 +920,7 @@ def test_metal_decode_parity(t : T?) {
             // addresses, and a stale cache hit serves the DEAD model's buffers (pre-W4 this
             // produced silent garbage continuations; the load-epoch flush is the fix)
             if (arm_on(t, "arm9-reload")) {
-                var trr <- load_model(path, QuantMode.q8)
+                var trr <- load_model_(path, QuantMode.q8)
                 if (trr.config.seq_len > 2048l) {
                     trr.config.seq_len = 2048l
                 }
@@ -943,7 +944,7 @@ def test_metal_decode_parity(t : T?) {
             let kpath = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q4_K_M.gguf")
             if (arm_on(t, "arm10-kq")) {
                 if (stat(kpath).is_valid) {
-                    var trk <- load_model(kpath, QuantMode.q8)
+                    var trk <- load_model_(kpath, QuantMode.q8)
                     if (trk.config.seq_len > 2048l) {
                         trk.config.seq_len = 2048l
                     }
@@ -969,7 +970,7 @@ def test_metal_decode_parity(t : T?) {
             // (1B, hs=64) scans the full depth. f16 + q8_0 mirrors (block-codec row offsets at
             // depth). The CPU control is depth-unbounded by construction.
             if (arm_on(t, "arm11-depth")) {
-                var trd <- load_model(path, QuantMode.q8)
+                var trd <- load_model_(path, QuantMode.q8)
                 trd.config.seq_len = min(trd.config.seq_len, 2176l)
                 var trdg <- blob_twin(t, path, 2176l)
                 var deep_p <- encode(trd, counting_prompt(1, 700), true, false)
@@ -996,7 +997,7 @@ def test_metal_decode_parity(t : T?) {
                 // other attention shape that never ran past the old cap
                 let path3d = path_join(models_dir(), "Llama-3.2-3B-Instruct-Q8_0.gguf")
                 if (stat(path3d).is_valid) {
-                    var trd3 <- load_model(path3d, QuantMode.q8)
+                    var trd3 <- load_model_(path3d, QuantMode.q8)
                     // seq 4224 makes the mirror slice ~470MB: the fresh 256MB arena MUST grow
                     // (M2.7 grow-on-demand exercised under parity — the rebuild re-mirrors)
                     trd3.config.seq_len = min(trd3.config.seq_len, 4224l)
@@ -1028,7 +1029,7 @@ def test_metal_decode_parity(t : T?) {
             if (arm_on(t, "arm12-dim")) {
                 let path8 = path_join(models_dir(), "Meta-Llama-3.1-8B-Instruct-Q8_0.gguf")
                 if (model_available(t, path8)) {
-                    var tr8 <- load_model(path8, QuantMode.q8)
+                    var tr8 <- load_model_(path8, QuantMode.q8)
                     tr8.config.seq_len = min(tr8.config.seq_len, 512l)
                     var tr8g <- blob_twin(t, path8, 512l)
                     batch_step_gate(t, tr8, tr8g, 8, KVDtype.f16, 0.5, 0.25, "B=8 dim4096 f16", [plen = 12])
@@ -1073,6 +1074,121 @@ def test_metal_decode_parity(t : T?) {
             set_wscale_f16(prior_wscale)
             delete tr
             delete trg
+        } else {
+            feint("das_metal is not built on this platform; nothing to compare\n")
+        }
+    }
+}
+
+// forced-feed decode parity for the poison gate: CPU-prefill both states on the planar model,
+// then force the CPU side's live greedy continuation through both decoders, comparing full
+// logits each step — near-tie flips can't red it, weight corruption can't hide from it
+def private forced_maxd_pair(tr, trg : Model; prompt : array<int64>; nsteps : int) : float {
+    var maxd = 0.0
+    with_job_que() {
+        setup_dasllama_jobque()
+        var sa = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
+        var sb = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+        eval_(tr, sa, prompt)
+        eval_(tr, sb, prompt)
+        select_decode_override("metal")
+        let vocab = tr.config.vocab_size
+        for (_i in range(nsteps)) {
+            let tok = greedy_top(sa.logits, vocab)
+            for (a, b in sa.logits, sb.logits) {
+                maxd = max(maxd, abs(a - b))
+            }
+            var one <- [tok]
+            eval_(tr, sa, one)
+            eval_(trg, sb, one)
+            delete one
+        }
+        for (a, b in sa.logits, sb.logits) {
+            maxd = max(maxd, abs(a - b))
+        }
+        select_decode_override("")
+        delete sa
+        delete sb
+    }
+    return maxd
+}
+
+// one GPU prefill on a throwaway session — the poison: prefill's PLAIN per-tensor region
+// uploads claim g_regions entries the decode drivers later look up as cat3 CONCATS
+def private foreign_gpu_prefill(tr, trg : Model) {   // nolint:LINT012,LINT019 — both read by the das_metal arm below
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        with_job_que() {
+            setup_dasllama_jobque()
+            var s = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+            let p <- encode(tr, counting_prompt(3, 44), true, false)
+            select_prefill_override("metal")
+            set_metal_prefill_min_npos(1l)
+            eval_(trg, s, p)
+            set_metal_prefill_min_npos(64l)
+            select_prefill_override("")
+            delete s
+        }
+    }
+}
+
+// The shared-region collision gate: metal PREFILL uploads several weight regions PLAIN
+// (per-tensor spans) that the DECODE drivers upload as cat3 CONCATS keyed by the SAME host
+// base address — the [bq|bk|bv] bias triple (qkv_bias families, this fixture) and the
+// [rms_q|rms_k] gamma pair (qk_norm families). g_regions keys by host address alone, so
+// whichever driver runs first owns the entry: prefill-first caches the SHORT plain buffer and
+// decode's concat lookup reads past its end — garbage K/V bias on every layer. The gate runs
+// the same forced-feed measure twice: on a fresh pair (sanity control), then on fresh loads
+// (the weights-epoch flush isolates) after ONE foreign GPU prefill.
+[test]
+def test_metal_prefill_poison(t : T?) {
+    t |> run("GPU decode after a foreign GPU prefill: shared-region collision (Qwen2.5-0.5B Q8)") <| @(t : T?) {
+        if (!family_on(t, "qwen2")) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!arm_on(t, "arm14-poison")) {
+                return
+            }
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
+            if (!model_available(t, path)) {
+                return
+            }
+            let prior_wscale = get_wscale_f16()
+            let prior_backend = active_kernel_backend()
+            set_wscale_f16(false)
+            pin_kernel_backend("portable")
+            var tr <- load_model_(path, QuantMode.q8)
+            tr.config.seq_len = min(tr.config.seq_len, 512l)
+            var trg <- blob_twin(t, path, 512l)
+            let prompt <- encode(tr, counting_prompt(1, 30), true, false)
+            let de0 = metal_decode_stats().decodes
+            let d_clean = forced_maxd_pair(tr, trg, prompt, 8)
+            delete tr
+            delete trg
+            if (metal_decode_stats().decodes - de0 == 0l) {
+                clear_kernel_backend_pin()
+                select_kernel_backend(prior_backend)
+                set_wscale_f16(prior_wscale)
+                feint("metal decode declined (no Metal device?); poison gate skipped\n")
+                return
+            }
+            t |> success(d_clean < 4.0, "clean control: forced-feed GPU decode within 4 of CPU (measured {d_clean})")
+            // fresh loads move the weights epoch — the first driver entry flushes g_regions,
+            // so the poison below stands alone
+            var tr2 <- load_model_(path, QuantMode.q8)
+            tr2.config.seq_len = min(tr2.config.seq_len, 512l)
+            var trg2 <- blob_twin(t, path, 512l)
+            foreign_gpu_prefill(tr2, trg2)
+            let d_poison = forced_maxd_pair(tr2, trg2, prompt, 8)
+            to_log(LOG_INFO, "arm14-poison eyeball: clean maxd {d_clean} vs poisoned {d_poison}\n")
+            t |> success(d_poison < 4.0, "after a foreign GPU prefill: forced-feed GPU decode still within 4 of CPU (measured {d_poison})")
+            delete tr2
+            delete trg2
+            clear_kernel_backend_pin()
+            select_kernel_backend(prior_backend)
+            set_wscale_f16(prior_wscale)
         } else {
             feint("das_metal is not built on this platform; nothing to compare\n")
         }

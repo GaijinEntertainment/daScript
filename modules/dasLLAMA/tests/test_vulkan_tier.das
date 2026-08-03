@@ -1,9 +1,10 @@
 options gen2
-options stack = 524288
+options _function_length = 0   // one flat gate per kernel arm: fixture build, hook install, dispatch, CPU-reference compare
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
 require dasllama/dasllama_math
-require ?vulkan dasllama/dasllama_math_vulkan  // nolint:STYLE030 — the MoE GPU tier under test; the test installs its hooks explicitly (no env gate)
+require ?vulkan dasllama/dasllama_math_vulkan  // the MoE GPU tier under test; the test installs its hooks explicitly (no env gate)
 require llvm/daslib/f16_cvt
 require math
 
@@ -55,21 +56,21 @@ def private pow2_small(i : int64) : float {
 }
 
 def private fill_stack(var wq : array<int8>; var ws : array<float>; rows, n : int64; seed : int64; small_scales : bool) {
-    wq |> resize(int(rows * n))
-    ws |> resize(int(rows * (n / 32l)))
-    for (i in range(int(rows * n))) {
-        wq[i] = int8((int64(i) * 7l + seed) % 255l - 127l)
+    wq |> resize(rows * n)
+    ws |> resize(rows * (n / 32l))
+    for (i in range64(rows * n)) {
+        wq[i] = int8((i * 7l + seed) % 255l - 127l)
     }
-    for (i in range(int(rows * (n / 32l)))) {
-        ws[i] = small_scales ? pow2_small(int64(i) + seed) : pow2_scale(int64(i) + seed)
+    for (i in range64(rows * (n / 32l))) {
+        ws[i] = small_scales ? pow2_small(i + seed) : pow2_scale(i + seed)
     }
 }
 
 // the upload wire format: row-major int8 quants as bytes + f16 halfword scales as bytes (LE)
 def private pack_upload(wq : array<int8>; ws : array<float>; var wqb : array<uint8>; var wsb : array<uint8>) {
     wqb |> resize(length(wq))
-    for (i in range(length(wq))) {
-        wqb[i] = uint8(wq[i])
+    for (q, b in wq, wqb) {
+        b = uint8(q)
     }
     wsb |> resize(length(ws) * 2)
     for (i in range(length(ws))) {
@@ -80,13 +81,13 @@ def private pack_upload(wq : array<int8>; ws : array<float>; var wqb : array<uin
 }
 
 def private fill_acts(var xq : array<int8>; var xs : array<float>; nrows : int64) {
-    xq |> resize(int(nrows * N))
-    xs |> resize(int(nrows * (N / 32l)))
-    for (i in range(int(nrows * N))) {
-        xq[i] = int8((int64(i) * 11l + 3l) % 255l - 127l)
+    xq |> resize(nrows * N)
+    xs |> resize(nrows * (N / 32l))
+    for (i in range64(nrows * N)) {
+        xq[i] = int8((i * 11l + 3l) % 255l - 127l)
     }
-    for (i in range(int(nrows * (N / 32l)))) {
-        xs[i] = pow2_small(int64(i) + 2l)
+    for (i in range64(nrows * (N / 32l))) {
+        xs[i] = pow2_small(i + 2l)
     }
 }
 
@@ -94,10 +95,10 @@ def private fill_acts(var xq : array<int8>; var xs : array<float>; nrows : int64
 def private make_offs(experts : array<int64>; row0s : array<int64>; cnts : array<int64>; woff : int64; ege : int64) : array<int64> {
     var offs : array<int64>
     offs |> reserve(length(experts) * 3)
-    for (r in range(length(experts))) {
-        offs |> push(woff + experts[r] * ege)   // nolint:STYLE012 — triple-stride append
-        offs |> push(row0s[r])
-        offs |> push(cnts[r])
+    for (e, r0, cn in experts, row0s, cnts) {
+        offs |> push(woff + e * ege)
+        offs |> push(r0)
+        offs |> push(cn)
     }
     return <- offs
 }
@@ -107,18 +108,20 @@ def private ref_ffn(offs1, offs3, offs2 : array<int64>; nreg : int;
                     wq1 : array<int8>; ws1 : array<float>; wq3 : array<int8>; ws3 : array<float>;
                     wq2 : array<int8>; ws2 : array<float>;
                     xq : array<int8>; xs : array<float>; nrows : int64; var gout : array<float>) {
-    gout |> resize(int(nrows * N))
+    gout |> resize(nrows * N)
     let nb = int(N / 32l)
     let nbh = int(NFE / 32l)
+    let nn = int(N)
+    let nfe = int(NFE)
     var gate : array<float>
     var up : array<float>
     var h : array<float>
     var hq : array<int>
     var hs : array<float>
-    gate |> resize(int(NFE))
-    up |> resize(int(NFE))
-    h |> resize(int(NFE))
-    hq |> resize(int(NFE))
+    gate |> resize(NFE)
+    up |> resize(NFE)
+    h |> resize(NFE)
+    hq |> resize(NFE)
     hs |> resize(nbh)
     for (r in range(nreg)) {
         let rb1 = int((offs1[r * 3] - WOFF1) / N)      // first gate-plane row of this region's expert
@@ -127,7 +130,7 @@ def private ref_ffn(offs1, offs3, offs2 : array<int64>; nreg : int;
         let row0 = int(offs1[r * 3 + 1])
         let cnt = int(offs1[r * 3 + 2])
         for (rw in range(row0, row0 + cnt)) {
-            for (i in range(int(NFE))) {
+            for (i in range(nfe)) {
                 var ag = 0.0
                 var au = 0.0
                 for (b in range(nb)) {
@@ -145,7 +148,7 @@ def private ref_ffn(offs1, offs3, offs2 : array<int64>; nreg : int;
                 gate[i] = ag
                 up[i] = au
             }
-            for (i in range(int(NFE))) {
+            for (i in range(nfe)) {
                 h[i] = (gate[i] / (1.0 + exp(-gate[i]))) * up[i]
             }
             for (b in range(nbh)) {
@@ -160,7 +163,7 @@ def private ref_ffn(offs1, offs3, offs2 : array<int64>; nreg : int;
                     hq[b * 32 + j] = int(round(h[b * 32 + j] * id))
                 }
             }
-            for (o in range(int(N))) {
+            for (o in range(nn)) {
                 var y = 0.0
                 for (b in range(nbh)) {
                     var dd = 0
@@ -179,9 +182,9 @@ def private ref_ffn(offs1, offs3, offs2 : array<int64>; nreg : int;
 def private compare_gout(gpu, refv : array<float>) : tuple<maxdiff : float; maxref : float> {
     var md = 0.0
     var mr = 0.0
-    for (i in range(length(refv))) {
-        md = max(md, abs(gpu[i] - refv[i]))
-        mr = max(mr, abs(refv[i]))
+    for (gv, rv in gpu, refv) {
+        md = max(md, abs(gv - rv))
+        mr = max(mr, abs(rv))
     }
     return (maxdiff = md, maxref = mr)
 }
@@ -430,7 +433,7 @@ def private heat_hit_offs(o : array<int64>; nh : int64) : array<int64> {
     var offs : array<int64>
     offs |> reserve(int(nh) * 3)
     for (i in range64(nh)) {
-        offs |> push(o[i])   // nolint:STYLE012 — triple-stride append
+        offs |> push(o[i])
         offs |> push(i)
         offs |> push(1l)
     }
@@ -588,8 +591,8 @@ def private fill_kq_stack(fmt : int; rows, n : int64; seed : int64; tiny_d : boo
                           var wqb : array<uint8>; var wsb : array<uint8>) {
     let nsb = n / 256l
     let qsb = fmt == 2 ? 160l : (fmt == 3 ? 192l : 128l)
-    wqb |> resize(int(rows * nsb * qsb))
-    wsb |> resize(int(rows * nsb * 20l))
+    wqb |> resize(rows * nsb * qsb)
+    wsb |> resize(rows * nsb * 20l)
     var st = uint64(seed) * 2654435761ul + 12345ul
     for (c in wqb) {
         c = lcg_byte(st)
@@ -636,7 +639,7 @@ def private dequant_kq_stack(fmt : int; wqb : array<uint8>; wsb : array<uint8>; 
                              var w : array<float>) {
     let nsb = n / 256l
     let qsb = fmt == 2 ? 160l : (fmt == 3 ? 192l : 128l)
-    w |> resize(int(rows * n))
+    w |> resize(rows * n)
     for (rr in range64(rows)) {
         for (sbi in range64(nsb)) {
             let qo = (rr * nsb + sbi) * qsb
@@ -644,49 +647,49 @@ def private dequant_kq_stack(fmt : int; wqb : array<uint8>; wsb : array<uint8>; 
             let wo = rr * n + sbi * 256l
             if (fmt == 4) {
                 for (blk in range64(8l)) {
-                    let d = f16_to_f32(uint(wsb[int(so + blk * 2l)]) | (uint(wsb[int(so + blk * 2l + 1l)]) << 8u))
+                    let d = f16_to_f32(uint(wsb[so + blk * 2l]) | (uint(wsb[so + blk * 2l + 1l]) << 8u))
                     for (m in range64(16l)) {
-                        let b = int(wqb[int(qo + blk * 16l + m)])
-                        w[int(wo + blk * 32l + m)] = d * float((b & 15) - 8)
-                        w[int(wo + blk * 32l + 16l + m)] = d * float((b >> 4) - 8)
+                        let b = int(wqb[qo + blk * 16l + m])
+                        w[wo + blk * 32l + m] = d * float((b & 15) - 8)
+                        w[wo + blk * 32l + 16l + m] = d * float((b >> 4) - 8)
                     }
                 }
             } elif (fmt == 3) {
-                let d = f16_to_f32(uint(wsb[int(so) + 16]) | (uint(wsb[int(so) + 17]) << 8u))
+                let d = f16_to_f32(uint(wsb[so + 16l]) | (uint(wsb[so + 17l]) << 8u))
                 for (blk in range64(8l)) {
                     let shift = int(2l * (blk % 4l))
-                    let vlo = int(wsb[int(so + 2l * blk)])
-                    let vhi = int(wsb[int(so + 2l * blk + 1l)])
+                    let vlo = int(wsb[so + 2l * blk])
+                    let vhi = int(wsb[so + 2l * blk + 1l])
                     let slo = float(vlo >= 128 ? vlo - 256 : vlo)
                     let shi = float(vhi >= 128 ? vhi - 256 : vhi)
                     for (m in range64(16l)) {
-                        let b = int(wqb[int(qo + blk * 16l + m)])
-                        let hb = int(wqb[int(qo + 128l + (blk / 4l) * 32l + m)])
-                        let hb2 = int(wqb[int(qo + 128l + (blk / 4l) * 32l + 16l + m)])
+                        let b = int(wqb[qo + blk * 16l + m])
+                        let hb = int(wqb[qo + 128l + (blk / 4l) * 32l + m])
+                        let hb2 = int(wqb[qo + 128l + (blk / 4l) * 32l + 16l + m])
                         let qlo = ((b & 15) | (((hb >> shift) & 3) << 4)) - 32
                         let qhi = ((b >> 4) | (((hb2 >> shift) & 3) << 4)) - 32
-                        w[int(wo + blk * 32l + m)] = d * slo * float(qlo)
-                        w[int(wo + blk * 32l + 16l + m)] = d * shi * float(qhi)
+                        w[wo + blk * 32l + m] = d * slo * float(qlo)
+                        w[wo + blk * 32l + 16l + m] = d * shi * float(qhi)
                     }
                 }
             } else {
-                let d = f16_to_f32(uint(wsb[int(so)]) | (uint(wsb[int(so) + 1]) << 8u))
-                let dmin = f16_to_f32(uint(wsb[int(so) + 2]) | (uint(wsb[int(so) + 3]) << 8u))
+                let d = f16_to_f32(uint(wsb[so]) | (uint(wsb[so + 1l]) << 8u))
+                let dmin = f16_to_f32(uint(wsb[so + 2l]) | (uint(wsb[so + 3l]) << 8u))
                 for (blk in range64(8l)) {
-                    let d1 = d * float(uint(wsb[int(so + 4l + blk)]))
-                    let m1 = dmin * float(uint(wsb[int(so + 12l + blk)]))
+                    let d1 = d * float(uint(wsb[so + 4l + blk]))
+                    let m1 = dmin * float(uint(wsb[so + 12l + blk]))
                     for (m in range64(16l)) {
-                        let b = int(wqb[int(qo + blk * 16l + m)])
+                        let b = int(wqb[qo + blk * 16l + m])
                         var qlo = b & 15
                         var qhi = b >> 4
                         if (fmt == 2) {
-                            let hb = int(wqb[int(qo + 128l + blk * 4l + m / 4l)])
+                            let hb = int(wqb[qo + 128l + blk * 4l + m / 4l])
                             let tt = int(m % 4l)
                             qlo |= ((hb >> tt) & 1) << 4
                             qhi |= ((hb >> (4 + tt)) & 1) << 4
                         }
-                        w[int(wo + blk * 32l + m)] = d1 * float(qlo) - m1
-                        w[int(wo + blk * 32l + 16l + m)] = d1 * float(qhi) - m1
+                        w[wo + blk * 32l + m] = d1 * float(qlo) - m1
+                        w[wo + blk * 32l + 16l + m] = d1 * float(qhi) - m1
                     }
                 }
             }
@@ -695,13 +698,13 @@ def private dequant_kq_stack(fmt : int; wqb : array<uint8>; wsb : array<uint8>; 
 }
 
 def private fill_acts_kq(var xq : array<int8>; var xs : array<float>; nrows : int64) {
-    xq |> resize(int(nrows * KN))
-    xs |> resize(int(nrows * (KN / 256l)))
-    for (i in range(int(nrows * KN))) {
-        xq[i] = int8((int64(i) * 13l + 5l) % 255l - 127l)
+    xq |> resize(nrows * KN)
+    xs |> resize(nrows * (KN / 256l))
+    for (i in range64(nrows * KN)) {
+        xq[i] = int8((i * 13l + 5l) % 255l - 127l)
     }
-    for (i in range(int(nrows * (KN / 256l)))) {
-        xs[i] = pow2_small(int64(i) + 4l)
+    for (i in range64(nrows * (KN / 256l))) {
+        xs[i] = pow2_small(i + 4l)
     }
 }
 
@@ -714,21 +717,23 @@ def private ref_ffn_kq(offs1, offs3, offs2 : array<int64>; nreg : int;
                        w1, w3, w2 : array<float>;
                        xq : array<int8>; xs : array<float>; nrows : int64; var gout : array<float>;
                        midblk : int = 256) {
+    let kn = int(KN)
+    let knfe = int(KNFE)
     // a midblk that does not divide KNFE would silently drop h's tail and produce a WRONG
     // baseline — masking a real kernel failure. verify, not assert: this must hold in release too
-    verify(int(KNFE) % midblk == 0, "ref_ffn_kq: midblk must divide KNFE")
-    gout |> resize(int(nrows * KN))
+    verify(knfe % midblk == 0, "ref_ffn_kq: midblk must divide KNFE")
+    gout |> resize(nrows * KN)
     let nsb = int(KN / 256l)
-    let nsbh = int(KNFE) / midblk
+    let nsbh = knfe / midblk
     var gate : array<float>
     var up : array<float>
     var h : array<float>
     var hq : array<int>
     var hs : array<float>
-    gate |> resize(int(KNFE))
-    up |> resize(int(KNFE))
-    h |> resize(int(KNFE))
-    hq |> resize(int(KNFE))
+    gate |> resize(KNFE)
+    up |> resize(KNFE)
+    h |> resize(KNFE)
+    hq |> resize(KNFE)
     hs |> resize(nsbh)
     for (r in range(nreg)) {
         let rb1 = int((offs1[r * 3] - KWOFF1) / KN)
@@ -737,7 +742,7 @@ def private ref_ffn_kq(offs1, offs3, offs2 : array<int64>; nreg : int;
         let row0 = int(offs1[r * 3 + 1])
         let cnt = int(offs1[r * 3 + 2])
         for (rw in range(row0, row0 + cnt)) {
-            for (i in range(int(KNFE))) {
+            for (i in range(knfe)) {
                 var ag = 0.0lf
                 var au = 0.0lf
                 for (sb in range(nsb)) {
@@ -755,7 +760,7 @@ def private ref_ffn_kq(offs1, offs3, offs2 : array<int64>; nreg : int;
                 gate[i] = float(ag)
                 up[i] = float(au)
             }
-            for (i in range(int(KNFE))) {
+            for (i in range(knfe)) {
                 h[i] = (gate[i] / (1.0 + exp(-gate[i]))) * up[i]
             }
             for (sb in range(nsbh)) {
@@ -770,7 +775,7 @@ def private ref_ffn_kq(offs1, offs3, offs2 : array<int64>; nreg : int;
                     hq[sb * midblk + j] = int(round(h[sb * midblk + j] * id))
                 }
             }
-            for (o in range(int(KN))) {
+            for (o in range(kn)) {
                 var y = 0.0lf
                 for (sb in range(nsbh)) {
                     var dd = 0.0lf
@@ -1050,7 +1055,7 @@ let MXOFF2 = 230000000l
 
 def private dequant_q8_stack(wq : array<int8>; ws : array<float>; rows, n : int64; var w : array<float>) {
     let nb = int(n / 32l)
-    w |> resize(int(rows * n))
+    w |> resize(rows * n)
     for (r in range64(rows)) {
         for (i in range64(n)) {
             w[int(r * n + i)] = float(wq[int(r * n + i)]) * ws[int(r) * nb + int(i / 32l)]
@@ -1329,10 +1334,12 @@ def private synth_f(i, seed : int64; amp : float) : float {
 // q8 image GEMM mirror (int block dots, double-accumulated): y [nrows x d] = X . W^T
 def private ref_q8_gemm(wq : array<int8>; ws : array<float>; xq : array<int8>; xs : array<float>;
                         n, d, nrows : int64; var y : array<float>) {
-    y |> resize(int(nrows * d))
+    let nri = int(nrows)
+    let di = int(d)
+    y |> resize(nrows * d)
     let nb = int(n / 32l)
-    for (r in range(int(nrows))) {
-        for (c in range(int(d))) {
+    for (r in range(nri)) {
+        for (c in range(di)) {
             var acc = 0.0lf
             for (b in range(nb)) {
                 var id = 0
@@ -1349,10 +1356,10 @@ def private ref_q8_gemm(wq : array<int8>; ws : array<float>; xq : array<int8>; x
 // the CPU mirror of the deltanet chain past the qkv/z GEMMs: conv + SiLU + q/k L2-norm +
 // q pre-scale, the per-head chunked delta rule, the gated out-norm, the o requant, and the
 // out projection. state advances in place; qkvy/zy are the GEMM outputs the caller made.
-def private ref_dn_core(qkvy, zy : array<float>; bts, gts, tapsv, wnormv, av, dtv : array<float>;
+def private ref_dn_core(qkvy, zy : array<float>; bts, gts, tapsv, wnormv, av, dtv : array<float>;   // nolint:STYLE037 — one flat CPU mirror of the deltanet chain; its stages share the chunk buffers
                         var state : array<float>; hist : array<float>; npos : int64;
                         wo : array<int8>; wso : array<float>; var yout : array<float>; var conv : array<float>) {
-    conv |> resize(int(npos * DNCD))
+    conv |> resize(npos * DNCD)
     for (p in range64(npos)) {
         for (ch in range64(DNCD)) {
             var acc = 0.0
@@ -1380,7 +1387,7 @@ def private ref_dn_core(qkvy, zy : array<float>; bts, gts, tapsv, wnormv, av, dt
     }
     let CS = 64l
     var o : array<float>
-    o |> resize(int(npos * DNDI))
+    o |> resize(npos * DNDI)
     var p_qc : array<float>
     var p_kc : array<float>
     var p_kb : array<float>
@@ -1394,10 +1401,10 @@ def private ref_dn_core(qkvy, zy : array<float>; bts, gts, tapsv, wnormv, av, dt
     var gcum : array<float>
     var egc : array<float>
     var bv : array<float>
-    p_qc |> resize(int(CS * DNDS)); p_kc |> resize(int(CS * DNDS)); p_kb |> resize(int(CS * DNDS))
-    p_vb |> resize(int(CS * DNDS)); p_w |> resize(int(CS * DNDS)); p_vn |> resize(int(CS * DNDS))
-    p_oc |> resize(int(CS * DNDS)); p_tm |> resize(int(CS * CS)); p_am |> resize(int(CS * CS))
-    p_kq |> resize(int(CS * CS)); gcum |> resize(int(CS)); egc |> resize(int(CS)); bv |> resize(int(CS))
+    p_qc |> resize(CS * DNDS); p_kc |> resize(CS * DNDS); p_kb |> resize(CS * DNDS)
+    p_vb |> resize(CS * DNDS); p_w |> resize(CS * DNDS); p_vn |> resize(CS * DNDS)
+    p_oc |> resize(CS * DNDS); p_tm |> resize(CS * CS); p_am |> resize(CS * CS)
+    p_kq |> resize(CS * CS); gcum |> resize(CS); egc |> resize(CS); bv |> resize(CS)
     for (h in range64(DNVH)) {
         let kh = h % DNKH
         let qoff = kh * DNDS
@@ -1415,11 +1422,11 @@ def private ref_dn_core(qkvy, zy : array<float>; bts, gts, tapsv, wnormv, av, dt
                 gcum[int(i)] = gacc
                 egc[int(i)] = exp(gacc)
                 for (j in range64(DNDS)) {
-                    let crow = int((c0 + i) * DNCD)
-                    p_qc[int(i * DNDS + j)] = conv[crow + int(qoff + j)]
-                    p_kc[int(i * DNDS + j)] = conv[crow + int(koff + j)]
-                    p_kb[int(i * DNDS + j)] = conv[crow + int(koff + j)] * bv[int(i)]
-                    p_vb[int(i * DNDS + j)] = conv[crow + int(voff + j)] * bv[int(i)]
+                    let crow = (c0 + i) * DNCD
+                    p_qc[int(i * DNDS + j)] = conv[crow + qoff + j]
+                    p_kc[int(i * DNDS + j)] = conv[crow + koff + j]
+                    p_kb[int(i * DNDS + j)] = conv[crow + koff + j] * bv[int(i)]
+                    p_vb[int(i * DNDS + j)] = conv[crow + voff + j] * bv[int(i)]
                 }
             }
             for (i in range64(cl)) {   // A = kb k^T (decay-scaled below); KQ keeps its diagonal
@@ -1542,8 +1549,8 @@ def private ref_dn_core(qkvy, zy : array<float>; bts, gts, tapsv, wnormv, av, dt
     // Q8_0 requant of the o rows, then the out projection off the quantized image
     var oq : array<int8>
     var os : array<float>
-    oq |> resize(int(npos * DNDI))
-    os |> resize(int(npos * DNDI / 32l))
+    oq |> resize(npos * DNDI)
+    os |> resize(npos * DNDI / 32l)
     for (b in range64(npos * DNDI / 32l)) {
         var amax = 0.0
         for (j in range64(32l)) {
@@ -1987,46 +1994,46 @@ def private ref_at_prep(y : array<float>; rmsw : array<float>; cosr, sinr : arra
                         npos, d, rot : int64; gated : bool;
                         var outp : array<float>; var gatep : array<float>) {
     let half = rot / 2l
-    outp |> resize(int(npos * d))
+    outp |> resize(npos * d)
     if (gated) {
-        gatep |> resize(int(npos * d))
+        gatep |> resize(npos * d)
     }
     var row : array<float>
-    row |> resize(int(d))
+    row |> resize(d)
     for (p in range64(npos)) {
         for (i in range64(d)) {
             let h = i / ATHS
             let j = i % ATHS
             if (gated) {
-                row[int(i)] = y[int(p * 2l * d + h * 2l * ATHS + j)]
-                gatep[int(p * d + i)] = y[int(p * 2l * d + h * 2l * ATHS + ATHS + j)]
+                row[i] = y[p * 2l * d + h * 2l * ATHS + j]
+                gatep[p * d + i] = y[p * 2l * d + h * 2l * ATHS + ATHS + j]
             } else {
-                row[int(i)] = y[int(p * d + i)]
+                row[i] = y[p * d + i]
             }
         }
         for (h in range64(d / ATHS)) {   // per-head rms (f32 square-sum, the kernel's order)
             var ss = 0.0
             for (j in range64(ATHS)) {
-                let v = row[int(h * ATHS + j)]
+                let v = row[h * ATHS + j]
                 ss += v * v
             }
             let scale = 1.0 / sqrt(ss / float(ATHS) + AT_EPS)
             for (j in range64(ATHS)) {
-                row[int(h * ATHS + j)] = rmsw[int(j)] * (row[int(h * ATHS + j)] * scale)
+                row[h * ATHS + j] = rmsw[j] * (row[h * ATHS + j] * scale)
             }
         }
         for (h in range64(d / ATHS)) {   // NEOX pairs (j, j+half) over the roped span
             for (j in range64(half)) {
-                let v0 = row[int(h * ATHS + j)]
-                let v1 = row[int(h * ATHS + j + half)]
-                let cr = cosr[int(p * half + j)]
-                let ci = sinr[int(p * half + j)]
-                row[int(h * ATHS + j)] = v0 * cr - v1 * ci
-                row[int(h * ATHS + j + half)] = v0 * ci + v1 * cr
+                let v0 = row[h * ATHS + j]
+                let v1 = row[h * ATHS + j + half]
+                let cr = cosr[p * half + j]
+                let ci = sinr[p * half + j]
+                row[h * ATHS + j] = v0 * cr - v1 * ci
+                row[h * ATHS + j + half] = v0 * ci + v1 * cr
             }
         }
         for (i in range64(d)) {
-            outp[int(p * d + i)] = row[int(i)]
+            outp[p * d + i] = row[i]
         }
     }
     delete row
@@ -2037,9 +2044,9 @@ def private ref_at_attn(qp, kp, vp, gatep : array<float>; npos : int64; gated : 
                         var op : array<float>) {
     let scale = 1.0 / sqrt(float(ATHS))
     let kv_mul = ATNH / ATNKV
-    op |> resize(int(npos * ATQD))
+    op |> resize(npos * ATQD)
     var sc : array<float>
-    sc |> resize(int(npos))
+    sc |> resize(npos)
     for (p in range64(npos)) {
         for (h in range64(ATNH)) {
             let kvh = h / kv_mul
@@ -2047,27 +2054,27 @@ def private ref_at_attn(qp, kp, vp, gatep : array<float>; npos : int64; gated : 
             for (j in range64(p + 1l)) {
                 var s = 0.0
                 for (dd in range64(ATHS)) {
-                    s += qp[int(p * ATQD + h * ATHS + dd)] * kp[int(j * ATKVD + kvh * ATHS + dd)]
+                    s += qp[p * ATQD + h * ATHS + dd] * kp[j * ATKVD + kvh * ATHS + dd]
                 }
-                sc[int(j)] = s * scale
-                mx = max(mx, sc[int(j)])
+                sc[j] = s * scale
+                mx = max(mx, sc[j])
             }
             var lsum = 0.0
             for (j in range64(p + 1l)) {
-                sc[int(j)] = exp(sc[int(j)] - mx)
-                lsum += sc[int(j)]
+                sc[j] = exp(sc[j] - mx)
+                lsum += sc[j]
             }
             for (dd in range64(ATHS)) {
                 var acc = 0.0
                 for (j in range64(p + 1l)) {
-                    acc += sc[int(j)] * vp[int(j * ATKVD + kvh * ATHS + dd)]
+                    acc += sc[j] * vp[j * ATKVD + kvh * ATHS + dd]
                 }
                 var v = acc / lsum
                 if (gated) {
-                    let g = gatep[int(p * ATQD + h * ATHS + dd)]
+                    let g = gatep[p * ATQD + h * ATHS + dd]
                     v = v / (1.0 + exp(-g))
                 }
-                op[int(p * ATQD + h * ATHS + dd)] = v
+                op[p * ATQD + h * ATHS + dd] = v
             }
         }
     }

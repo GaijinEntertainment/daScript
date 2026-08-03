@@ -1,7 +1,7 @@
 options gen2
 
 require dastest/testing_boost public
-require dasllama/dasllama_quant
+require dasllama/dasllama_convert
 require math
 
 // Q8_0 round-trip properties. fp scaling isn't bit-exact, so we assert bounds, not values.

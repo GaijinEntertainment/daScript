@@ -95,6 +95,57 @@ def test_annotations(t : T?) {
     }
 }
 
+def private make_oracle_run(pp, tg : double) : BenchRun {
+    var r = BenchRun(engine = "das", backend = "metal", flavor = "tuned", box = "m1",
+        threads = 8, date = "2026-07-30", cmd = "test")
+    if (pp > 0.0lf) {
+        r.tests |> insert("pp512", BenchTest(tok_s = pp, stddev = 1.0lf))
+    }
+    if (tg > 0.0lf) {
+        r.tests |> insert("tg128", BenchTest(tok_s = tg, stddev = 0.5lf))
+    }
+    return <- r
+}
+
+[test]
+def test_oracle_compare(t : T?) {
+    t |> run("the oracle gate is one-sided with a warn band") @(t : T?) {
+        let stored <- make_oracle_run(100.0lf, 50.0lf)
+        // clean pass: -1% pp, +2% tg
+        var fresh <- make_oracle_run(99.0lf, 51.0lf)
+        var lines : array<string>
+        t |> success(oracle_compare(fresh, stored, 3.0lf, 5.0lf, lines) == OracleVerdict.ok, "small drift is OK")
+        t |> equal(length(lines), 2)
+        // -4% pp lands in the warn band; -6% tg fails and wins as worst
+        lines |> clear()
+        fresh.tests |> insert("pp512", BenchTest(tok_s = 96.0lf))
+        t |> success(oracle_compare(fresh, stored, 3.0lf, 5.0lf, lines) == OracleVerdict.warn, "-4% warns")
+        lines |> clear()
+        fresh.tests |> insert("tg128", BenchTest(tok_s = 47.0lf))
+        t |> success(oracle_compare(fresh, stored, 3.0lf, 5.0lf, lines) == OracleVerdict.fail, "-6% fails")
+        // gains never fail, but a gain past the fail bar is flagged for verification
+        lines |> clear()
+        fresh.tests |> insert("pp512", BenchTest(tok_s = 110.0lf))
+        fresh.tests |> insert("tg128", BenchTest(tok_s = 50.0lf))
+        t |> success(oracle_compare(fresh, stored, 3.0lf, 5.0lf, lines) == OracleVerdict.ok, "+10% stays OK")
+        var flagged = false
+        for (l in lines) {
+            flagged = flagged || find(l, "suspicious gain") >= 0
+        }
+        t |> success(flagged, "the +10% line carries the suspicion flag")
+        // a stored key missing from the fresh run is a coverage fail
+        lines |> clear()
+        let partial <- make_oracle_run(99.0lf, 0.0lf)
+        t |> success(oracle_compare(partial, stored, 3.0lf, 5.0lf, lines) == OracleVerdict.fail, "missing tg row fails")
+        // a stored row with nothing comparable (e.g. ms-shaped tests) fails too
+        lines |> clear()
+        var msonly = BenchRun(engine = "das", backend = "cpu", flavor = "tuned", box = "m1",
+            threads = 8, date = "2026-07-30", cmd = "test")
+        msonly.tests |> insert("asr:jfk.wav", BenchTest(ms = 197.1lf))
+        t |> success(oracle_compare(fresh, msonly, 3.0lf, 5.0lf, lines) == OracleVerdict.fail, "no tok/s tests fails")
+    }
+}
+
 [test]
 def test_asr_catalog_invariants(t : T?) {
     t |> run("catalog stays reproducible") @(t : T?) {

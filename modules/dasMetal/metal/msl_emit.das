@@ -1,5 +1,7 @@
 options gen2
 options indenting = 4
+options _cyclomatic_complexity = 0   // MSL emitter: exact-type is-ladders over the AST node classes — one arm per construct, and the census gate wants them all in one place
+options _function_length = 0         // same ladders, measured by line
 
 // MSL text emitter (Phase-4 subset: full scalar/vector arithmetic incl. the 16/8-bit lattice,
 // comparisons, logical, control flow, threadgroup memory + barriers + simdgroup intrinsics,
@@ -22,6 +24,7 @@ require daslib/ast_boost
 require daslib/rtti
 require daslib/strings_boost
 require strings
+require math
 
 struct public MslEmitConfig {
     kernel_name : string    // "" -> the method name (class-prefix stripped)
@@ -36,9 +39,22 @@ struct private MslMember {
     uniform : bool
     workgroup : bool
     packed : bool           // elem != value_elem: 3-lane element behind a packed_T3 param
+    ustruct : bool          // @uniform STRUCT (kargs): one bound value holding many scalars
     wg_dim : int            // @workgroup fixed-array count; -1 = scalar/vector
     wg_bytes : uint64       // @workgroup member's MSL byte size (whole member)
     wg_off : uint64         // @workgroup member's offset inside the dynamic shmem buffer
+}
+
+// one discovered user function (Phase 0: free functions lower 1:1 as plain MSL functions;
+// class methods lower as member functions of the ONE FLAT struct the kernel class emits as)
+struct private UserFn {
+    @do_not_delete fn : FunctionPtr             // gc_node-owned AST — never finalized from here
+    msl_name : string
+    is_method : bool            // member function of the kernel struct (self skipped, members visible)
+    builtins : table<string>    // gl_* this fn's OWN body reads (hidden trailing params; methods use struct fields)
+    calls : array<int>          // ufn indices this fn's body calls (transitive builtin closure)
+    proto : string
+    text : string
 }
 
 struct private MslCtx {
@@ -48,11 +64,20 @@ struct private MslCtx {
     builtins_used : table<string>               // referenced builtin globals (gl_*)
     renames : table<string; string>             // das identifier -> MSL-safe identifier
     ptrs : table<string; string>                // pointer local (addr(member[..])) -> its member (das names)
+    ptr_space : table<string; string>           // pointer local/param -> "device" | "threadgroup" (call-site check)
+    ustructs : table<string; string>            // @uniform struct name -> its MSL definition (preamble)
     helpers : table<string>                     // preamble helper functions referenced by lowered calls
     gen_helpers : table<string; string>         // GENERATED preamble helpers (tensor ops): mangled name -> text
     scan_ptrs : table<string; string>           // scan-time pointer local -> member (write-set resolution)
     tg_accs : table<string; string>             // staged-GEMM acc local -> "m|n|sgs|kk" (decl suppressed on GPU)
     self_name : string
+    user_fns : table<string; int>               // ufn key -> ufns index
+    ufns : array<UserFn>
+    scan_stack : array<string>                  // discovery stack — recursion is a compile error
+    cur_ufn : int = -1                          // ufn being scanned/emitted; -1 = the kernel itself
+    fn_depth : int                              // > 0 while emitting a user function body
+    @do_not_delete kcls : StructurePtr          // the CONCRETE kernel class (devirtualization table)
+    has_methods : bool                          // any method call discovered -> the class emits as a struct
 }
 
 // MSL reserves the C++14 keyword set plus its own address-space/type keywords; colliding
@@ -123,6 +148,45 @@ def private builtin_msl_info(name : string) : tuple<ok : bool; mslType : string;
 }
 
 // ===== member + builtin scans =====
+
+// A struct bound as ONE @uniform value (the kargs form). Fields are restricted to 4-byte
+// scalars so the das layout and the MSL layout are the same bytes with no padding rules — the
+// host writes the das struct straight through setBytes. Returns "" (after err) if it cannot.
+def private uniform_struct(var ctx : MslCtx; st : StructurePtr; at : LineInfo) : string {
+    if (st == null) {
+        err(ctx, at, "@uniform struct member has no structure type")
+        return ""
+    }
+    let sname = msl_safe_name(string(st.name))
+    if (key_exists(ctx.ustructs, sname)) {
+        return sname
+    }
+    var lines : array<string>
+    var bad = false
+    for (f in st.fields) {
+        let ft = f._type
+        let tn = ft == null ? "" : msl_type_name(ft)
+        // int/uint/float only: every other MSL type either changes size across the seam or
+        // carries alignment padding, and then the host's byte image stops matching
+        if (empty(tn) || !(tn == "int" || tn == "uint" || tn == "float")) {
+            err(ctx, at, "@uniform struct `{st.name}` field `{f.name}` is {ft == null ? "?" : describe(ft)} — only int/uint/float fields lower (a 4-byte-scalar struct is the same bytes in das and MSL)")
+            bad = true
+            continue
+        }
+        lines |> push("    {tn} {msl_safe_name(string(f.name))};")
+    }
+    if (empty(lines) && !bad) {
+        err(ctx, at, "@uniform struct `{st.name}` has no fields")
+        bad = true
+    }
+    if (bad) {
+        delete lines
+        return ""
+    }
+    ctx.ustructs[sname] = "struct {sname} \{\n{join(lines, "\n")}\n\};"
+    delete lines
+    return sname
+}
 
 def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
     for (fld in fn.classParent.fields) {
@@ -199,6 +263,7 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
         }
         var elem = ""
         var valueElem = ""
+        var isUstruct = false
         if (isSsbo) {
             if (fld._type == null || fld._type.baseType != Type.tArray) {
                 err(ctx, fld.at, "@ssbo member `{fld.name}` must be array<T>; got {fld._type == null ? "?" : describe(fld._type)}")
@@ -213,9 +278,18 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
                 err(ctx, fld.at, "@ssbo member `{fld.name}` element type {describe(fld._type.firstType)} has no MSL form (int/uint/float scalars, the 16/8-bit lattice, their 2/3/4 vectors)")
                 continue
             }
+        } elif (fld._type != null && fld._type.baseType == Type.tStructure) {
+            // the kargs form: ONE bound value carrying many scalars, so a kernel with a dozen
+            // uniforms costs one bind instead of a dozen
+            elem = uniform_struct(ctx, fld._type.structType, fld.at)
+            if (empty(elem)) {
+                continue
+            }
+            valueElem = elem
+            isUstruct = true
         } else {
             if (fld._type != null && fld._type.baseType == Type.tArray) {
-                err(ctx, fld.at, "@uniform member `{fld.name}` must be a scalar or vector value — array members are @ssbo buffers")
+                err(ctx, fld.at, "@uniform member `{fld.name}` must be a scalar, vector, or a struct of 4-byte scalars — array members are @ssbo buffers")
                 continue
             }
             if (reject_cpu_only_width(ctx, fld.at, fld._type)) {
@@ -237,7 +311,7 @@ def private scan_members(var ctx : MslCtx; fn : FunctionPtr) {
         ctx.renames[fldName] = msl_safe_name(fldName)
         ctx.members[fldName] = MslMember(msl_name = msl_safe_name(fldName), elem = elem, value_elem = valueElem,
             binding = binding, written = false, uniform = isUniform, workgroup = false,
-            packed = elem != valueElem, wg_dim = -1)
+            packed = elem != valueElem, ustruct = isUstruct, wg_dim = -1)
     }
     var ssboCount = 0
     for (m in values(ctx.members)) {
@@ -258,6 +332,10 @@ def private mark_write_target(var ctx : MslCtx; e : Expression?) {
     }
     if (e is ExprRef2Value) {
         mark_write_target(ctx, (e as ExprRef2Value).subexpr)
+    } elif (e is ExprRef2Ptr) {   // `addr(member[i])` handed to a writable pointer parameter
+        mark_write_target(ctx, (e as ExprRef2Ptr).subexpr)
+    } elif (e is ExprCall && call_base_name("{(e as ExprCall).name}") == "i_das_ptr_add") {
+        mark_write_target(ctx, (e as ExprCall).arguments[0])
     } elif (e is ExprAt) {
         mark_write_target(ctx, (e as ExprAt).subexpr)
     } elif (e is ExprSwizzle) {
@@ -282,6 +360,203 @@ def private mark_write_target(var ctx : MslCtx; e : Expression?) {
 // Pre-scan pass over the body: collects the member write-set (drives device vs device const) and
 // the referenced builtin set (drives the attributed parameters). Unhandled node classes are
 // reported by the emit pass — this scan stays permissive.
+// every das-coded name the emit ladders own — discovery must never lower these as user
+// functions (their CPU stub bodies are not MSL); C++ builtIns and ctor spellings need no
+// entry (the builtIn flag and the reserved type names already exclude them)
+let private MSL_LADDER_OWNED : table<string> <- {
+    "barrier", "memoryBarrierShared", "simdgroup_load", "simdgroup_store", "tg_store_half4",
+    "tg_store_float4", "simdgroup_multiply", "simdgroup_multiply_accumulate",
+    "make_filled_simdgroup_float8x8", "make_filled_simdgroup_half8x8",
+    "simd_sum", "simd_shuffle", "simd_shuffle_up", "simd_shuffle_down", "simd_shuffle_xor",
+    "sdot4", "usdot4", "i_das_ptr_add",
+    "tmm2d_f32_bf16_f32", "tmm2d_q8_f32", "tmm2d_q8_f16s", "tmm2d_q8b_f32",
+    "tmm2d_tg_begin", "tmm2d_tg_step", "tmm2d_tg_store",
+    "uint_bits_to_float", "int_bits_to_float", "float_bits_to_uint", "float_bits_to_int"
+}
+
+// A call the builtin ladder does NOT own: everything emit_call_value handles is either a
+// C++ builtIn (math, ctors, i_das_ptr_add), a ladder-owned das name, or lives in the marker
+// modules (metal_builtins, shader_lingua_franca — checked through fromGeneric, since generic
+// INSTANCES belong to the instantiating module) — anything else is the user's, and lowers 1:1
+def private is_user_fn(fn : FunctionPtr) : bool {
+    if (fn == null || fn.flags.builtIn || key_exists(MSL_LADDER_OWNED, call_base_name("{fn.name}"))) {
+        return false
+    }
+    let origin = fn.fromGeneric != null ? fn.fromGeneric : fn
+    let mname = origin._module != null ? string(origin._module.name) : ""
+    return mname != "metal_builtins" && mname != "shader_lingua_franca"
+}
+
+// generic INSTANCES can share a bare name — the parameter types join the key so every
+// instance emits as its own MSL function
+def private ufn_key(fn : FunctionPtr) : string {
+    return build_string() $(var w) {
+        w |> write(fn._module != null ? string(fn._module.name) : "")
+        w |> write("::")
+        w |> write(fn.name)
+        for (v in fn.arguments) {
+            w |> write("|")
+            w |> write(v._type != null ? describe(v._type) : "?")
+        }
+    }
+}
+
+// MSL-safe, collision-free emitted name: the bare das name when free, else base_N. A method
+// spelled like its class would be a C++ constructor — force the suffix.
+def private ufn_msl_name(var ctx : MslCtx; base_name : string) : string {
+    let base = msl_safe_name(base_name)
+    var taken = ctx.kcls != null && ctx.kcls.name == base
+    for (u in ctx.ufns) {
+        if (u.msl_name == base) {
+            taken = true
+        }
+    }
+    return taken ? "{base}_{length(ctx.ufns)}" : base
+}
+
+def private discover_user_fn(var ctx : MslCtx; fn : FunctionPtr; at : LineInfo) : int {
+    let key = ufn_key(fn)
+    let bn = call_base_name("{fn.name}")
+    // the stack check comes FIRST: a function registers before its body scans, so a
+    // recursive self-call would otherwise hit the fast path and lower silently
+    for (s in ctx.scan_stack) {
+        if (s == key) {
+            err(ctx, at, "function `{bn}` is recursive — MSL forbids recursion")
+            return -1
+        }
+    }
+    if (key_exists(ctx.user_fns, key)) {
+        return ctx.user_fns[key]
+    }
+    if (fn.body == null) {
+        err(ctx, at, "function `{bn}` has no body to lower")
+        return -1
+    }
+    let idx = length(ctx.ufns)
+    ctx.user_fns[key] = idx
+    ctx.ufns |> emplace <| UserFn(fn = unsafe(reinterpret<FunctionPtr>(fn)),
+        msl_name = ufn_msl_name(ctx, bn))
+    ctx.scan_stack |> push(key)
+    let prev = ctx.cur_ufn
+    ctx.cur_ufn = idx
+    scan_body(ctx, fn.body)
+    ctx.cur_ufn = prev
+    ctx.scan_stack |> pop()
+    return idx
+}
+
+// Devirtualization: the concrete kernel class's method-field init IS the dispatch table — a
+// kernel object is the one exact instance self ever names, so the field init (inherited or
+// overriding) resolves every method call statically, matching the CPU vtable result.
+def private resolve_method(var ctx : MslCtx; mname : string; at : LineInfo) : FunctionPtr {
+    for (fld in ctx.kcls.fields) {
+        if (fld.name == mname) {
+            // an override's init casts the function address to the base field's signature —
+            // peel value/cast wrappers down to the address
+            var ie = fld.init
+            while (ie != null) {
+                if (ie is ExprRef2Value) {
+                    ie = (ie as ExprRef2Value).subexpr
+                } elif (ie is ExprCast) {
+                    ie = (ie as ExprCast).subexpr
+                } else {
+                    break
+                }
+            }
+            let ea = ie ?as ExprAddr
+            if (ea != null && ea.func != null) {
+                return unsafe(reinterpret<FunctionPtr>(ea.func))
+            }
+            err(ctx, at, "method `{mname}` of `{ctx.kcls.name}` has no resolvable body (abstract, or its field is not a plain method)")
+            return null
+        }
+    }
+    err(ctx, at, "method `{mname}` is not a member of `{ctx.kcls.name}`")
+    return null
+}
+
+def private discover_method(var ctx : MslCtx; mfn : FunctionPtr; mname : string; at : LineInfo) : int {
+    let key = ufn_key(mfn)
+    for (s in ctx.scan_stack) {
+        if (s == key) {
+            err(ctx, at, "method `{mname}` is recursive — MSL forbids recursion")
+            return -1
+        }
+    }
+    if (key_exists(ctx.user_fns, key)) {
+        return ctx.user_fns[key]
+    }
+    if (mfn.body == null) {
+        err(ctx, at, "method `{mname}` has no body to lower")
+        return -1
+    }
+    ctx.has_methods = true
+    let idx = length(ctx.ufns)
+    ctx.user_fns[key] = idx
+    ctx.ufns |> emplace <| UserFn(fn = unsafe(reinterpret<FunctionPtr>(mfn)),
+        msl_name = ufn_msl_name(ctx, mname), is_method = true)
+    ctx.scan_stack |> push(key)
+    let prev = ctx.cur_ufn
+    let prev_self = ctx.self_name
+    ctx.cur_ufn = idx
+    ctx.self_name = !empty(mfn.arguments) ? string(mfn.arguments[0].name) : ""
+    scan_body(ctx, mfn.body)
+    ctx.self_name = prev_self
+    ctx.cur_ufn = prev
+    ctx.scan_stack |> pop()
+    return idx
+}
+
+// the method-field reference of an invoke (arguments[0]), Ref2Value-peeled; null when the
+// invoke is not the `type<Cls>.method` shape
+def private invoke_method_field(e : Expression?) : ExprField? {
+    if (e == null) {
+        return null
+    }
+    if (e is ExprRef2Value) {
+        return invoke_method_field((e as ExprRef2Value).subexpr)
+    }
+    return e ?as ExprField
+}
+
+// receiver of a method call must peel down to self — kernels hold exactly one instance
+def private receiver_is_self(ctx : MslCtx; e : Expression?) : bool {
+    if (e == null) {
+        return false
+    }
+    if (e is ExprRef2Value) {
+        return receiver_is_self(ctx, (e as ExprRef2Value).subexpr)
+    }
+    if (e is ExprCast) {
+        return receiver_is_self(ctx, (e as ExprCast).subexpr)
+    }
+    let ev = e ?as ExprVar
+    return ev != null && ev.name == ctx.self_name
+}
+
+// a member passed to a callee's writable (non-const) array param is a write to that member
+// a parameter the callee may store through: a mutable buffer/tile/ref, or a pointer whose
+// POINTEE is mutable (`T?`; `T const?` is read-only — the pointer's own const says nothing)
+def private param_is_written(pt : TypeDecl?) : bool {
+    if (pt == null) {
+        return false
+    }
+    if (pt.baseType == Type.tPointer) {
+        return pt.firstType != null && !pt.firstType.flags.constant
+    }
+    return (pt.baseType == Type.tArray || pt.baseType == Type.tFixedArray || pt.flags.ref) && !pt.flags.constant
+}
+
+def private mark_call_arg_writes(var ctx : MslCtx; fn : FunctionPtr; ec : ExprCall?) {
+    let na = length(ec.arguments)
+    let np = length(fn.arguments)
+    for (i in range(min(na, np))) {
+        if (param_is_written(fn.arguments[i]._type)) {
+            mark_write_target(ctx, ec.arguments[i])
+        }
+    }
+}
+
 def private scan_body(var ctx : MslCtx; e : Expression?) {
     if (e == null) {
         return
@@ -366,11 +641,49 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
                 ctx.tg_accs[string((acc0 as ExprVar).name)] = ""   // params fill at emit time
             }
         }
+        if (is_user_fn(ecs.func)) {
+            let ui = discover_user_fn(ctx, ecs.func, ecs.at)
+            if (ui >= 0) {
+                if (ctx.cur_ufn >= 0) {
+                    ctx.ufns[ctx.cur_ufn].calls |> push(ui)
+                }
+                mark_call_arg_writes(ctx, ecs.func, ecs)
+            }
+        }
         for (arg in ecs.arguments) {
             scan_body(ctx, arg)
         }
+    } elif (e is ExprInvoke) {
+        let ei = e as ExprInvoke
+        let mf = length(ei.arguments) >= 2 ? invoke_method_field(ei.arguments[0]) : null
+        if (ei.isInvokeMethod && mf != null && receiver_is_self(ctx, ei.arguments[1])) {
+            let mname = string(mf.name)
+            let mfn = resolve_method(ctx, mname, ei.at)
+            if (mfn != null) {
+                let ui = discover_method(ctx, mfn, mname, ei.at)
+                if (ui >= 0) {
+                    if (ctx.cur_ufn >= 0) {
+                        ctx.ufns[ctx.cur_ufn].calls |> push(ui)
+                    }
+                    // method params start at fn.arguments[1] (self); call args at arguments[2]
+                    let na = length(ei.arguments) - 2
+                    let np = length(mfn.arguments) - 1
+                    for (i in range(min(na, np))) {
+                        if (param_is_written(mfn.arguments[i + 1]._type)) {
+                            mark_write_target(ctx, ei.arguments[i + 2])
+                        }
+                    }
+                }
+            }
+        }
+        // args scan runs regardless — the emit pass reports unsupported invoke shapes
+        for (i in range(2, length(ei.arguments))) {
+            scan_body(ctx, ei.arguments[i])
+        }
     } elif (e is ExprReturn) {
         scan_body(ctx, (e as ExprReturn).subexpr)
+    } elif (e is ExprRef2Ptr) {
+        scan_body(ctx, (e as ExprRef2Ptr).subexpr)
     } elif (e is ExprAt) {
         scan_body(ctx, (e as ExprAt).subexpr)
         scan_body(ctx, (e as ExprAt).index)
@@ -384,9 +697,38 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
             let bi = builtin_msl_info(string(ev.name))
             if (bi.ok) {
                 ctx.builtins_used |> insert(string(ev.name))
+                if (ctx.cur_ufn >= 0) {   // hidden trailing param on this function
+                    ctx.ufns[ctx.cur_ufn].builtins |> insert(string(ev.name))
+                }
             }
         }
     }
+}
+
+// builtins a user function needs = its own reads + every callee's, transitively; hidden
+// params thread them invisibly from the entry down. Sorted for a pinned signature order.
+def private ufn_all_builtins(ctx : MslCtx; idx : int; var seen : table<int>; var out : table<string>) {
+    if (key_exists(seen, idx)) {
+        return
+    }
+    seen |> insert(idx)
+    for (b in keys(ctx.ufns[idx].builtins)) {
+        out |> insert(b)
+    }
+    for (c in ctx.ufns[idx].calls) {
+        ufn_all_builtins(ctx, c, seen, out)
+    }
+}
+
+def private ufn_hidden_builtins(ctx : MslCtx; idx : int) : array<string> {
+    var seen : table<int>
+    var out : table<string>
+    ufn_all_builtins(ctx, idx, seen, out)
+    var names <- [for (b in keys(out)); b]
+    names |> sort()
+    delete seen
+    delete out
+    return <- names
 }
 
 // ===== expression emission (returns text; records census + errors in ctx) =====
@@ -595,7 +937,12 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
             note(ctx, "expr.member")
             return m.msl_name
         }
-        err(ctx, ef.at, "field access `.{fieldName}` is not a kernel-class member access — only self.<@ssbo/@uniform member> lowers to MSL")
+        let um = member_lookup(ctx, ef.value)   // `kargs.field` — one hop inside a @uniform struct
+        if (!empty(um) && ctx.members[um].ustruct) {
+            note(ctx, "expr.member.ustruct")
+            return "{ctx.members[um].msl_name}.{msl_safe_name(fieldName)}"
+        }
+        err(ctx, ef.at, "field access `.{fieldName}` is not a kernel-class member access — only self.<@ssbo/@uniform member> and one hop into a @uniform struct lower to MSL")
         return "/*.{fieldName}*/"
     } elif (e is ExprCall && call_base_name("{(e as ExprCall).name}") == "i_das_ptr_add") {
         // das pointer arithmetic (`p = unsafe(p + n)`): args = (ptr, elems, elem_size); MSL
@@ -603,6 +950,23 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
         let pc = e as ExprCall
         note(ctx, "op.ptr_add")
         return "({emit_value(ctx, pc.arguments[0])} + ({emit_value(ctx, pc.arguments[1])}))"
+    } elif (e is ExprRef2Ptr) {
+        // `addr(member[i])` spelled inline at a call site — the same lowering the pointer-local
+        // declaration gets, minus the local. Address-space agreement is check_ptr_arg's job
+        let sub = (e as ExprRef2Ptr).subexpr
+        let pat = sub ?as ExprAt
+        let pmem = pat != null ? member_lookup(ctx, pat.subexpr) : ""
+        if (empty(pmem)) {
+            err(ctx, e.at, "addr() in a kernel must take a kernel-class member element (addr(member[expr]))")
+            return "/*addr*/"
+        }
+        let pm = ctx.members[pmem]
+        if (pm.uniform || pm.packed) {
+            err(ctx, e.at, "addr() over a @uniform or packed 3-lane member has no MSL pointer form")
+            return "/*addr*/"
+        }
+        note(ctx, pm.workgroup ? "expr.addr.tg" : "expr.addr.dev")
+        return "({pm.msl_name} + ({emit_value(ctx, pat.index)}))"
     } elif (e is ExprAt) {
         let ea = e as ExprAt
         let pm = member_lookup(ctx, ea.subexpr)
@@ -723,6 +1087,8 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
         let fv = emit_value(ctx, op3.right)
         note(ctx, "op.select")
         return "({c} ? {tv} : {fv})"
+    } elif (e is ExprInvoke) {
+        return emit_invoke_value(ctx, e as ExprInvoke)
     } elif (e is ExprCall) {
         return emit_call_value(ctx, e as ExprCall)
     }
@@ -932,8 +1298,70 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
             return "{msl_type_name(ec._type)}(clamp({v}, {lo}, {hi}))"
         }
     }
-    err(ctx, ec.at, "call `{cname}` is not a supported MSL builtin — user function calls do not lower (a kernel is a single function)")
+    if (is_user_fn(ec.func)) {
+        // Phase 0: a user function lowers 1:1 as a plain MSL function (emitted in the preamble);
+        // gl_* builtins it reaches thread through as hidden trailing arguments
+        let ui = ctx.user_fns?[ufn_key(ec.func)] ?? -1
+        if (ui < 0) {
+            err(ctx, ec.at, "internal: user function `{cname}` was not discovered at scan time")
+            return "/*call {cname}*/"
+        }
+        var args : array<string>
+        args |> reserve(na + 4)
+        for (i in range(na)) {
+            if (i < length(ec.func.arguments)) {
+                let pt = ec.func.arguments[i]._type
+                let wm = member_lookup(ctx, ec.arguments[i])
+                if (!empty(wm) && (ctx.members?[wm]?.workgroup ?? false) && pt != null && pt.flags.ref) {
+                    err(ctx, ec.at, "@workgroup member `{wm}` bound to a `&` parameter — address spaces differ; pass the fixed array itself")
+                }
+                check_ptr_arg(ctx, ec.func.arguments[i], ec.arguments[i], ec.at)
+            }
+            args |> push(emit_value(ctx, ec.arguments[i]))
+        }
+        var hidden <- ufn_hidden_builtins(ctx, ui)
+        args |> push_from(hidden)   // in scope by the same name in the entry and in every helper
+        delete hidden
+        note(ctx, "call.user")
+        return "{ctx.ufns[ui].msl_name}({join(args, ", ")})"
+    }
+    err(ctx, ec.at, "call `{cname}` is not a supported MSL builtin and not a lowerable user function — kernels reach only the MSL subset")
     return "/*call {cname}*/"
+}
+
+// method call: mname(args) — inside the flat struct every method is a member function, and
+// the kernel body itself emits as one, so a plain call resolves in scope
+def private emit_invoke_value(var ctx : MslCtx; ei : ExprInvoke?) : string {
+    let mf = length(ei.arguments) >= 2 ? invoke_method_field(ei.arguments[0]) : null
+    if (!(ei.isInvokeMethod && mf != null && receiver_is_self(ctx, ei.arguments[1]))) {
+        err(ctx, ei.at, "invoke has no MSL lowering — only method calls on the kernel's own self lower")
+        return "/*invoke*/"
+    }
+    let mname = string(mf.name)
+    let mfn = resolve_method(ctx, mname, ei.at)
+    if (mfn == null) {
+        return "/*invoke {mname}*/"
+    }
+    let ui = ctx.user_fns?[ufn_key(mfn)] ?? -1
+    if (ui < 0) {
+        err(ctx, ei.at, "internal: method `{mname}` was not discovered at scan time")
+        return "/*invoke {mname}*/"
+    }
+    var args : array<string>
+    args |> reserve(length(ei.arguments))
+    for (i in range(2, length(ei.arguments))) {
+        if (i - 1 < length(mfn.arguments)) {
+            let pt = mfn.arguments[i - 1]._type
+            let wm = member_lookup(ctx, ei.arguments[i])
+            if (!empty(wm) && (ctx.members?[wm]?.workgroup ?? false) && pt != null && pt.flags.ref) {
+                err(ctx, ei.at, "@workgroup member `{wm}` bound to a `&` parameter — address spaces differ; pass the fixed array itself")
+            }
+            check_ptr_arg(ctx, mfn.arguments[i - 1], ei.arguments[i], ei.at)
+        }
+        args |> push(emit_value(ctx, ei.arguments[i]))
+    }
+    note(ctx, "call.method")
+    return "{ctx.ufns[ui].msl_name}({join(args, ", ")})"
 }
 
 def private base_is_self(ctx : MslCtx; e : Expression?) : bool {
@@ -961,6 +1389,53 @@ def private member_lookup(ctx : MslCtx; e : Expression?) : string {
     }
     let name = string(ef.name)
     return key_exists(ctx.members, name) ? name : ""
+}
+
+// The address space a pointer ARGUMENT actually points into, "" when the shape says nothing.
+// Walks the three ways a kernel spells one: an inline `addr(member[i])`, a pointer local or
+// parameter already banked in ptr_space, and `p + n` on top of either.
+def private ptr_arg_space(ctx : MslCtx; e : Expression?) : string {
+    if (e == null) {
+        return ""
+    }
+    if (e is ExprRef2Value) {
+        return ptr_arg_space(ctx, (e as ExprRef2Value).subexpr)
+    }
+    if (e is ExprCast) {
+        return ptr_arg_space(ctx, (e as ExprCast).subexpr)
+    }
+    if (e is ExprRef2Ptr) {
+        let sub = (e as ExprRef2Ptr).subexpr
+        let mem = member_lookup(ctx, sub is ExprAt ? (sub as ExprAt).subexpr : sub)
+        if (empty(mem)) {
+            return ""
+        }
+        return (ctx.members?[mem]?.workgroup ?? false) ? "threadgroup" : "device"
+    }
+    if (e is ExprCall && call_base_name("{(e as ExprCall).name}") == "i_das_ptr_add") {
+        return ptr_arg_space(ctx, (e as ExprCall).arguments[0])
+    }
+    if (e is ExprVar) {
+        return ctx.ptr_space?[string((e as ExprVar).name)] ?? ""
+    }
+    return ""
+}
+
+// A pointer parameter declares its address space (unmarked = device); the argument's provenance
+// derives one. They must agree — MSL has no conversion between spaces, and a mismatch would
+// otherwise surface as a null pipeline at model load instead of a das error here.
+def private check_ptr_arg(var ctx : MslCtx; pv : VariablePtr; arg : Expression?; at : LineInfo) {
+    let pt = pv._type
+    if (pt == null || pt.baseType != Type.tPointer) {
+        return
+    }
+    let want = ptr_param_space(pv)
+    let got = ptr_arg_space(ctx, arg)
+    if (empty(got)) {
+        err(ctx, at, "argument bound to pointer parameter `{pv.name}` has no traceable address space — pass `addr(member[i])`, a pointer local, or a pointer parameter")
+    } elif (got != want) {
+        err(ctx, at, "pointer parameter `{pv.name}` is `{want}` but the argument points into {got} memory — {want == "device" ? "mark it `@threadgroup`" : "drop the `@threadgroup`"} or pass a {want} pointer")
+    }
 }
 
 // true when `e` (Ref2Value-peeled) indexes a packed 3-lane buffer member
@@ -1431,6 +1906,7 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
                 ctx.ptrs[pname0] = pmem
                 let base = emit_value(ctx, pat.index)
                 let space = pm.workgroup ? "threadgroup" : (pm.written ? "device" : "device const")
+                ctx.ptr_space[pname0] = pm.workgroup ? "threadgroup" : "device"
                 note(ctx, pm.workgroup ? "decl.ptr.tg" : "decl.ptr.dev")
                 lines |> push("{indent}{space} {pm.elem} * {ctx.renames[pname0]} = {pm.msl_name} + ({base});")
                 continue
@@ -1549,6 +2025,9 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
         lines |> push("{indent}\}")
     } elif (e is ExprFor) {
         emit_for(ctx, e as ExprFor, indent, lines)
+    } elif (e is ExprInvoke) {
+        note(ctx, "stmt.call_method")
+        lines |> push("{indent}{emit_invoke_value(ctx, e as ExprInvoke)};")
     } elif (e is ExprCall) {
         let ec = e as ExprCall
         let cname = call_base_name("{ec.name}")
@@ -1578,6 +2057,9 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
             emit_tmm2d_tg_step(ctx, ec, indent, lines)
         } elif (cname == "tmm2d_tg_store") {
             emit_tmm2d_tg_store(ctx, ec, indent, lines)
+        } elif (is_user_fn(ec.func)) {
+            note(ctx, "stmt.call_user")
+            lines |> push("{indent}{emit_call_value(ctx, ec)};")
         } else {
             err(ctx, ec.at, "call `{cname}` as a statement has no MSL lowering — only barrier()/memoryBarrierShared() sync and the simdgroup_matrix ops are supported")
         }
@@ -1590,7 +2072,12 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
     } elif (e is ExprReturn) {
         let er = e as ExprReturn
         if (er.subexpr != null) {
-            err(ctx, er.at, "kernels return void — `return <value>` has no MSL form")
+            if (ctx.fn_depth == 0) {
+                err(ctx, er.at, "kernels return void — `return <value>` has no MSL form")
+                return
+            }
+            note(ctx, "stmt.return_value")
+            lines |> push("{indent}return {emit_value(ctx, er.subexpr)};")
             return
         }
         note(ctx, "stmt.return")
@@ -1703,6 +2190,217 @@ def private emit_for(var ctx : MslCtx; fr : ExprFor?; indent : string; var lines
     lines |> push("{indent}\}")
 }
 
+// ===== user-function emission (Phase 0) =====
+
+// The address space a pointer PARAMETER declares: unmarked is `device`, `@threadgroup` opts into
+// threadgroup memory. das `T?` carries no space of its own, and every call site is cross-checked
+// against this against the provenance of the pointer it passes.
+def private ptr_param_space(v : VariablePtr) : string {
+    for (a in v.annotation) {
+        if (a.name == "threadgroup") {
+            return "threadgroup"
+        }
+    }
+    return "device"
+}
+
+def private ufn_param_ptr(var ctx : MslCtx; v : VariablePtr; t : TypeDecl?;
+                          dname, name : string; at : LineInfo) : string {
+    let pt = t.firstType
+    if (pt == null) {
+        err(ctx, at, "parameter `{dname}` is a void pointer — MSL needs an element type")
+        return ""
+    }
+    if (reject_cpu_only_width(ctx, at, pt)) {
+        return ""
+    }
+    let elem = msl_buffer_elem_name(pt)
+    if (empty(elem)) {
+        err(ctx, at, "parameter `{dname}` pointee type has no MSL form")
+        return ""
+    }
+    if (elem != msl_type_name(pt)) {
+        err(ctx, at, "parameter `{dname}`: 3-lane packed elements do not lower through pointer parameters")
+        return ""
+    }
+    let space = ptr_param_space(v)
+    ctx.ptr_space[dname] = space
+    // the POINTEE's const is the MSL const — `T const?` is read-only, `T?` may be stored through
+    let isc = pt.flags.constant
+    note(ctx, isc ? "ufn.param.ptr.{space}_const" : "ufn.param.ptr.{space}")
+    return isc ? "{space} const {elem}* {name}" : "{space} {elem}* {name}"
+}
+
+// MSL parameter for one das helper argument; "" = error already reported. Address space is
+// fully determined by the das type: array<T> can only be an @ssbo member (device), a fixed
+// array only a @workgroup member (threadgroup), everything else travels by value or thread-ref
+def private ufn_param(var ctx : MslCtx; v : VariablePtr; at : LineInfo) : string {
+    let dname = string(v.name)
+    let name = msl_safe_name(dname)
+    ctx.renames[dname] = name
+    let t = v._type
+    if (t == null) {
+        err(ctx, at, "parameter `{dname}` has no type")
+        return ""
+    }
+    if (t.baseType == Type.tArray) {
+        if (reject_cpu_only_width(ctx, at, t.firstType)) {
+            return ""
+        }
+        let elem = msl_buffer_elem_name(t.firstType)
+        if (empty(elem)) {
+            err(ctx, at, "parameter `{dname}` element type has no MSL form")
+            return ""
+        }
+        if (elem != msl_type_name(t.firstType)) {
+            err(ctx, at, "parameter `{dname}`: 3-lane packed elements do not lower through parameters")
+            return ""
+        }
+        note(ctx, t.flags.constant ? "ufn.param.buffer_const" : "ufn.param.buffer")
+        return t.flags.constant ? "device const {elem}* {name}" : "device {elem}* {name}"
+    }
+    if (t.baseType == Type.tFixedArray) {
+        if (reject_cpu_only_width(ctx, at, t.firstType)) {
+            return ""
+        }
+        let elem = msl_type_name(t.firstType)
+        if (empty(elem)) {
+            err(ctx, at, "parameter `{dname}` element type has no MSL form")
+            return ""
+        }
+        note(ctx, t.flags.constant ? "ufn.param.tg_const" : "ufn.param.tg")
+        return t.flags.constant ? "threadgroup const {elem}* {name}" : "threadgroup {elem}* {name}"
+    }
+    if (t.baseType == Type.tPointer) {
+        return ufn_param_ptr(ctx, v, t, dname, name, at)
+    }
+    if (reject_cpu_only_width(ctx, at, t)) {
+        return ""
+    }
+    let tn = msl_type_name(t)
+    if (empty(tn)) {
+        err(ctx, at, "parameter `{dname}` type has no MSL form (scalars, their 2/3/4 vectors, array<T>, T[N])")
+        return ""
+    }
+    if (t.flags.ref && !t.flags.constant) {
+        note(ctx, "ufn.param.ref")
+        return "thread {tn}& {name}"
+    }
+    note(ctx, "ufn.param.value")
+    return "{tn} {name}"   // const refs on scalars degrade to by-value — semantically equal
+}
+
+def private emit_one_ufn(var ctx : MslCtx; idx : int) {
+    // per-function scope: the local-name state swaps out around the body emission
+    var save_renames <- ctx.renames
+    var save_ptrs <- ctx.ptrs
+    var save_ptr_space <- ctx.ptr_space
+    let save_self = ctx.self_name
+    let is_method = ctx.ufns[idx].is_method
+    let fn = ctx.ufns[idx].fn
+    // a method's members resolve through ITS self name; a free function has none
+    ctx.self_name = is_method && !empty(fn.arguments) ? string(fn.arguments[0].name) : ""
+    var params : array<string>
+    params |> reserve(length(fn.arguments) + 4)
+    var first = true
+    for (v in fn.arguments) {
+        if (first && is_method) {   // self becomes the implicit MSL `this`
+            first = false
+            continue
+        }
+        first = false
+        let p = ufn_param(ctx, v, fn.at)
+        if (!empty(p)) {
+            params |> push(p)
+        }
+    }
+    if (!is_method) {   // methods read builtins as struct fields — no hidden threading
+        var hidden <- ufn_hidden_builtins(ctx, idx)
+        for (b in hidden) {
+            let bi = builtin_msl_info(b)
+            note(ctx, "ufn.param.hidden_builtin")
+            params |> push("{bi.mslType} {b}")
+        }
+        delete hidden
+    }
+    var ret = "void"
+    if (fn.result != null && fn.result.baseType != Type.tVoid) {
+        if (!reject_cpu_only_width(ctx, fn.at, fn.result)) {
+            ret = msl_type_name(fn.result)
+            if (empty(ret)) {
+                err(ctx, fn.at, "return type of `{ctx.ufns[idx].msl_name}` has no MSL form")
+                ret = "void"
+            }
+        }
+    }
+    let base_indent = is_method ? "    " : ""
+    var body_lines : array<string>
+    ctx.fn_depth++
+    emit_stmt(ctx, fn.body, base_indent + "    ", body_lines)
+    ctx.fn_depth--
+    note(ctx, is_method ? "decl.method" : "decl.user_fn")
+    let sig = "{base_indent}{ret} {ctx.ufns[idx].msl_name}({join(params, ", ")})"
+    ctx.ufns[idx].proto = "{sig};"
+    ctx.ufns[idx].text = build_string() $(var w) {
+        w |> write(sig)
+        w |> write(" \{\n")
+        w |> write(join(body_lines, "\n"))
+        w |> write("\n")
+        w |> write(base_indent)
+        w |> write("\}")
+    }
+    delete params
+    delete body_lines
+    ctx.self_name = save_self
+    ctx.renames <- save_renames
+    ctx.ptrs <- save_ptrs
+    ctx.ptr_space <- save_ptr_space
+}
+
+// free functions: prototypes first, then bodies, in pinned (name-sorted) order — call order
+// can't bite. Methods emit here too but their texts assemble into the struct (no prototypes:
+// C++ member functions see each other regardless of order).
+def private emit_user_fns(var ctx : MslCtx) : string {
+    if (empty(ctx.ufns)) {
+        return ""
+    }
+    var order <- [for (i in range(length(ctx.ufns))); i]
+    order |> sort() $(a, b : int) : bool {
+        return ctx.ufns[a].msl_name < ctx.ufns[b].msl_name
+    }
+    for (i in order) {
+        emit_one_ufn(ctx, i)
+    }
+    return build_string() $(var w) {
+        for (i in order) {
+            if (!ctx.ufns[i].is_method) {
+                w |> write(ctx.ufns[i].proto)
+                w |> write("\n")
+            }
+        }
+        for (i in order) {
+            if (!ctx.ufns[i].is_method) {
+                w |> write(ctx.ufns[i].text)
+                w |> write("\n")
+            }
+        }
+    }
+}
+
+// method bodies in pinned order, ready to sit inside the struct declaration
+def private method_texts(ctx : MslCtx) : string {
+    var order <- [for (i in range(length(ctx.ufns))); i; where ctx.ufns[i].is_method]
+    order |> sort() $(a, b : int) : bool {
+        return ctx.ufns[a].msl_name < ctx.ufns[b].msl_name
+    }
+    return build_string() $(var w) {
+        for (i in order) {
+            w |> write(ctx.ufns[i].text)
+            w |> write("\n")
+        }
+    }
+}
+
 // ===== kernel signature + driver =====
 
 [macro_function]
@@ -1720,7 +2418,7 @@ def public kernel_entry_name(fn : FunctionPtr; cfg : MslEmitConfig) : string {
 //! explains; `census` collects the construct kinds emitted (gate B).
 [macro_function]
 def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslEmitConfig; var census : table<string>; var tgmem : uint64&) : string {
-    var ctx : MslCtx
+    var ctx = MslCtx()
     if (fn == null) {
         errors |> push("generate_msl: null function")
         return ""
@@ -1734,6 +2432,7 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
         return ""
     }
     ctx.self_name = string(fn.arguments[0].name)
+    ctx.kcls = unsafe(reinterpret<StructurePtr>(fn.classParent))   // the devirtualization table
     scan_members(ctx, fn)
     scan_body(ctx, fn.body)
 
@@ -1743,10 +2442,16 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
     // the math-bound loop phase (ISA-measured on mul_mm: 40 vs 24 iadds/iteration, the das
     // kernel's whole residual vs llama.cpp). The opaque dynamic base keeps small carried
     // offsets. Layout: name-sorted, each member 16B-aligned; the total ships as the `_tgmem`
-    // companion and the dispatch sets setThreadgroupMemoryLength(index 0) with it.
-    var tg_lines : array<string>
+    // companion and the dispatch sets setThreadgroupMemoryLength(index 0) with it. In struct
+    // mode (the kernel calls methods) the derived pointers become struct fields filled at entry.
+    var tg_lines : array<string>       // flat mode: local declarations
+    var wg_fields : array<string>      // struct mode: pointer fields
+    var wg_fills : array<string>       // struct mode: entry fills
     var wg_names <- [for (name, m in keys(ctx.members), values(ctx.members)); name; where m.workgroup]
     wg_names |> sort()
+    tg_lines |> reserve(length(wg_names))
+    wg_fields |> reserve(length(wg_names))
+    wg_fills |> reserve(length(wg_names))
     tgmem = 0ul
     for (name in wg_names) {
         let moff = tgmem
@@ -1754,20 +2459,26 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
         let m = ctx.members[name]
         tgmem = (moff + m.wg_bytes + 15ul) & ~15ul
         let base = moff == 0ul ? "(shmem)" : "(shmem + {int64(moff)})"
+        var pname = m.msl_name
         if (m.wg_dim > 0) {
             note(ctx, "decl.shmem_ptr_array")
-            tg_lines |> push("    threadgroup {m.elem} * {m.msl_name} = (threadgroup {m.elem} *){base};")
         } else {
             // scalar member: the pointer takes a derived name and every access dereferences it
             note(ctx, "decl.shmem_ptr")
-            let pname = "{m.msl_name}_wg"
-            tg_lines |> push("    threadgroup {m.elem} * {pname} = (threadgroup {m.elem} *){base};")
+            pname = "{m.msl_name}_wg"
             ctx.members[name].msl_name = "(*{pname})"
         }
+        tg_lines |> push("    threadgroup {m.elem} * {pname} = (threadgroup {m.elem} *){base};")
+        wg_fields |> push("    threadgroup {m.elem} * {pname};")
+        wg_fills |> push("    self_.{pname} = (threadgroup {m.elem} *){base};")
     }
 
+    // user functions discovered by the scan emit after the tg rewrite (scalar-wg member reads
+    // inside method bodies need the derived-pointer spelling), before the kernel body
+    let user_fn_text = emit_user_fns(ctx)
+
     var body_lines : array<string>
-    emit_stmt(ctx, fn.body, "    ", body_lines)
+    emit_stmt(ctx, fn.body, ctx.has_methods ? "        " : "    ", body_lines)
 
     var params : array<string>
     params |> reserve((ctx.members |> length) + (ctx.builtins_used |> length))
@@ -1819,6 +2530,14 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
         hs |> sort()    // table iteration order is hash-based — pin the emitted order
         helper_text = join(hs, "\n") + "\n"
     }
+    if (!empty(ctx.ustructs)) {
+        // @uniform struct definitions come first — the kernel signature names them, and in
+        // struct mode the flat class holds one by value. Sorted: table order is hash-based
+        var us <- [for (v in values(ctx.ustructs)); v]
+        us |> sort()
+        note(ctx, "decl.uniform_struct")
+        helper_text = join(us, "\n") + "\n" + helper_text
+    }
     var mpp_include = ""
     if (!empty(ctx.gen_helpers) || !empty(ctx.tg_accs)) {
         // Metal-4 tensor ops: the MPP include + namespace (the tg protocol emits inline —
@@ -1833,13 +2552,66 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
             }
         }
     }
+    if (!ctx.has_methods) {   // flat mode — kernels with no method calls emit exactly as before
+        let chunks = [
+            "#include <metal_stdlib>\nusing namespace metal;\n{mpp_include}{helper_text}{user_fn_text}kernel void {kernel_entry_name(fn, cfg)}(",
+            join(params, ",\n        "),
+            ") \{\n",
+            empty(tg_lines) ? "" : join(tg_lines, "\n") + "\n",
+            join(body_lines, "\n"),
+            "\n\}\n"
+        ]
+        for (kind in keys(ctx.census)) {
+            census |> insert(kind)
+        }
+        return join(chunks, "")
+    }
+
+    // struct mode: the kernel class emits as ONE FLAT MSL struct — members and every method
+    // (inherited or overriding, devirtualized) live in the concrete class; the entry keeps
+    // today's ABI, fills self, and calls the kernel method
+    note(ctx, "decl.class_struct")
+    note(ctx, "entry.self_fill")
+    let sname = msl_safe_name(string(ctx.kcls.name))
+    let kname = "{fn.name}"
+    let ktick = kname |> rfind("`")
+    let kmethod = msl_safe_name(ktick >= 0 ? (kname |> slice(ktick + 1)) : kname)
+    var field_lines : array<string>
+    var fill_lines : array<string>
+    field_lines |> reserve(length(ordered) + length(wg_fields) + length(bnames))
+    fill_lines |> reserve(length(ordered) + length(wg_fills) + length(bnames))
+    for (name in ordered) {
+        let m = ctx.members[name]
+        if (m.uniform) {
+            field_lines |> push("    {m.elem} {m.msl_name};")
+        } elif (m.written) {
+            field_lines |> push("    device {m.elem}* {m.msl_name};")
+        } else {
+            field_lines |> push("    device const {m.elem}* {m.msl_name};")
+        }
+        fill_lines |> push("    self_.{m.msl_name} = {m.msl_name};")
+    }
+    field_lines |> push_from(wg_fields)
+    fill_lines |> push_from(wg_fills)
+    for (name in bnames) {
+        let bi = builtin_msl_info(name)
+        field_lines |> push("    {bi.mslType} {name};")
+        fill_lines |> push("    self_.{name} = {name};")
+    }
     let chunks = [
-        "#include <metal_stdlib>\nusing namespace metal;\n{mpp_include}{helper_text}kernel void {kernel_entry_name(fn, cfg)}(",
-        join(params, ",\n        "),
-        ") \{\n",
-        empty(tg_lines) ? "" : join(tg_lines, "\n") + "\n",
+        "#include <metal_stdlib>\nusing namespace metal;\n{mpp_include}{helper_text}{user_fn_text}",
+        "struct {sname} \{\n",
+        join(field_lines, "\n"),
+        "\n",
+        method_texts(ctx),
+        "    void {kmethod}() \{\n",
         join(body_lines, "\n"),
-        "\n\}\n"
+        "\n    \}\n\};\n",
+        "kernel void {kernel_entry_name(fn, cfg)}(",
+        join(params, ",\n        "),
+        ") \{\n    {sname} self_;\n",
+        join(fill_lines, "\n"),
+        "\n    self_.{kmethod}();\n\}\n"
     ]
     for (kind in keys(ctx.census)) {
         census |> insert(kind)

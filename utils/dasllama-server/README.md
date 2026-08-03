@@ -1,6 +1,7 @@
 # dasllama-server — an OpenAI-compatible HTTP server
 
-A drop-in OpenAI-compatible server for [dasLLAMA](../../modules/dasLLAMA) CPU inference, written
+A drop-in OpenAI-compatible server for [dasLLAMA](../../modules/dasLLAMA) inference (CPU, or
+hybrid with the Metal/Vulkan GPU tiers via `gpu = metal|vulkan`), written
 entirely in daslang over the public dasLLAMA facade + the `dasHV` HTTP layer. Point any OpenAI
 client (opencode, Open WebUI, the `llm` CLI, the `openai` Python SDK, …) at `http://127.0.0.1:<port>/v1`.
 
@@ -38,7 +39,7 @@ Run under `-jit` — interpreted inference is far too slow. Flags:
 | `--page-rows` | — | `64` | KV page size in positions for paged serving |
 | `--prefix` | — | *auto* | Prefix-cache retention cap in pages (auto: one full context per stream; `-1` = unbounded) |
 | `--flat` | — | — | Flat preallocated KV sessions — disables paged serving and the prefix cache |
-| `--mtp` | — | — | MTP/NextN self-speculative decode for greedy requests (`temperature: 0`, no repetition penalty) — needs a model with an in-file NextN head (the `-MTP-` GGUFs). Output-invariant; ~2× decode on the dense qwen35/qwen3.6 models, ~nothing on the MoEs. `/v1/stats` reports `mtp_drafted`/`mtp_accepted` |
+| `--mtp` | — | — | MTP/NextN self-speculative decode for greedy requests (`temperature: 0`, no repetition penalty) — needs a model with an in-file NextN head (the `-MTP-` GGUFs). Output-invariant; up to ~2x decode on the dense qwen35/qwen3.6 models (measured rows: `performance/results_llm.md`), ~nothing on the MoEs. `/v1/stats` reports `mtp_drafted`/`mtp_accepted` |
 | `--help` | `-?` | — | Show help and exit |
 
 A config file replaces long command lines; keys are the long flag names with underscores.
@@ -119,8 +120,7 @@ python utils/watchdog/watchdog.py --cwd utils/dasllama-server --jit-stack
 ```
 
 The first JIT start on an untuned box writes the tune sidecar and exits with code 3; the watchdog
-recognizes that bootstrap exit and relaunches. That cold path — DLL cache miss, codegen, tuning all
-38 kernel families, model load — takes minutes, so the watchdog logs ranked startup stages
+recognizes that bootstrap exit and relaunches. That cold path — DLL cache miss, codegen, tuning every kernel family, model load — takes minutes, so the watchdog logs ranked startup stages
 (`jit_codegen` -> `jit_linked` -> `tuning` -> `model_load` -> `ready`) with the elapsed time of
 each, and reports health only on transition plus a heartbeat.
 

@@ -320,6 +320,53 @@ A harness emits events with `tune_progress_plan` / `_kernel_begin` /
 `_kernel_step` / `_kernel_end`. A different front end (a GUI, a status page)
 consumes them with `tune_progress_feed` and renders `tune_progress_line`.
 
+## The noise gate
+
+A winner raced on a non-silent box is a random number, and the sidecar is a
+file — one noisy mint persists and reads as a code regression later. A
+harness therefore probes the box before, during, and after its races: it
+times one fixed kernel for a dozen rounds at the real round shape, computes
+the coefficient of variation, and **refuses to tune** when the cv exceeds the
+threshold — nonzero exit, nothing written, the measured cv printed so you can
+watch it fall as you quiet the box. A failed probe gets one settle-and-retry
+first (a transient the run itself caused fades in seconds; outside noise does
+not), and a failed **end** probe discards the whole run: winners only reach
+the sidecar through a gate that just passed.
+
+The framework carries the policy and the math; the harness carries the probe:
+
+- `tune_noise_threshold_pct(paranoid)` — the cv ceiling: 2% normal, 1%
+  paranoid; `DAS_TUNE_NOISE_CV=<pct>` overrides for calibration.
+- `tune_noise_override()` — `DAS_TUNE_NOISE_OVERRIDE=1` turns refusals into
+  passes; the harness that honors it must stamp the sidecar
+  `noise: overridden`, so the escape always leaves a mark.
+- `tune_median(samples)` / `tune_cv_pct(samples)` — rank finalists by the
+  median of their finalist rounds (print best-of alongside); a best-of far
+  under its own median is a per-kernel noise flag.
+- `tune_provenance_note(key, value)` — attach the noise verdict (and any
+  other measurement condition) to the `"provenance"` section of every
+  subsequent sidecar save in the process.
+
+Two placement rules from the dasLLAMA harness (the worked consumer): a winner
+must beat the shipped fallback by more than the measured noise floor or the
+fallback keeps the seat — deterministic beats lottery; and the closing probe
+runs **before** any GPU race in the same process, so the bracket covers
+exactly the window that produced the winners. (GPU races block the thread,
+and a thread that blocked wakes cold — the same E-core transient a sleep
+causes; it recovers under a couple of seconds of sustained load, but a
+post-race gate would pay that settle on every mint for a window whose noise
+cannot touch the CPU medians anyway.)
+
+After the sweep, the harness validates itself: a heavy subset re-races at
+the same budget and the winners must reproduce — an inside-floor flip counts
+as reproduction (candidates within the floor are the same measurement, so
+ties break deterministically: baseline first, then grid order) — with
+medians inside a drift bound, or the **mint fails as a whole**. Two budgets
+exist: default and paranoid (3× the rounds, a 1% cv ceiling, a tighter drift
+bound). There is deliberately no fast race mode: a short race cannot resolve
+sub-2% twins, so its winners are lottery tickets; the debugging concession
+is accepting an existing sidecar, never racing cheaply.
+
 ## Writing a harness
 
 A tuner is an ordinary `[export] def main` compiled with
@@ -348,13 +395,25 @@ knobs under `"runtime"` (owned by the library that reads them), and
 
 {
     "kernels" : { "gemm" : "kstep4", "gemm_gemv" : "reference" },
-    "provenance" : { "binary" : "...", "platform" : "windows", "arch" : "x86_64" }
+    "provenance" : { "binary" : "...", "platform" : "windows", "arch" : "x86_64",
+                     "noise" : "ok", "noise_probes" : "start cv 0.40%; mid1 cv 0.14%; end cv 0.28%" }
 }
 ```
 
 It is a per-app, per-box artifact — gitignored (`*.tune.json`), and any
 change re-keys the JIT DLL cache automatically (the winning permutation's args
 fold into the DLL basename).
+
+Every mint is also archived to `<home>/.tune-history/<box>/` (or
+`DAS_TUNE_HISTORY`): successful mints copy the whole sidecar — provenance and
+race tables ride inside, so each archive is self-contained — and failed mints
+leave a marked `.FAILED.json` stub. Nothing in the history is ever deleted;
+it is the box's longitudinal health record, and `tune_history_archive` is the
+framework call a mint wrapper makes. A re-mint also snapshots the previous
+sidecar to `<sidecar>.bak` and prints the diff — winner changes with their
+margins from the new race tables, plus the median time shift over shared
+rows. Uniform shift = box state; scattered past-floor flips = a noisy mint;
+same-direction twin flips = an estimator change.
 
 ```{seealso}
 

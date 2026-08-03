@@ -14,7 +14,7 @@ options persistent_heap = true
 
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default
-require dasllama/dasllama_quant
+require dasllama/dasllama_convert
 require daslib/jobque_boost
 require math
 
@@ -80,7 +80,7 @@ def build_gemv_fixture() : GemvFixture {
     let planeQ = GEMV_N * GEMV_D
     let planeS = planeQ / 32l
     var w : array<float>
-    w |> resize(int(planeQ))
+    w |> resize(planeQ)
     for (i in range64(planeQ)) {
         w[i] = float(i % 17l) * 0.13 - 1.1
     }
@@ -100,7 +100,7 @@ def build_gemv_fixture() : GemvFixture {
     }
     delete qt
     var x : array<float>
-    x |> resize(int(GEMV_N))
+    x |> resize(GEMV_N)
     for (i in range64(GEMV_N)) {
         x[i] = float(i % 23l) * 0.07 - 0.8
     }
@@ -109,7 +109,7 @@ def build_gemv_fixture() : GemvFixture {
     fx.xq := xt.q
     fx.xs := xt.scales
     delete xt
-    fx.y |> resize(int(GEMV_D))
+    fx.y |> resize(GEMV_D)
     return <- fx
 }
 

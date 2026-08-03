@@ -1,6 +1,6 @@
 options gen2
 options persistent_heap
-options stack = 131072
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dasllama/dasllama_math_gen
 require dasllama/dasllama_math
@@ -17,7 +17,7 @@ let NTOK = 64   // prefill chunk
 let ROUNDS = 5
 
 [export]
-def main {
+def main {   // nolint:STYLE038 — flat microbench driver: synthetic planes, then the two timed arms on them
     if (!jit_enabled()) {
         print("run with -jit: the kq generators only fire under the JIT\n")
         return
@@ -30,8 +30,8 @@ def main {
 
     var kq : array<uint8>
     var ks : array<uint8>
-    kq |> resize(int(kq_bytes))
-    ks |> resize(int(ks_bytes))
+    kq |> resize(kq_bytes)
+    ks |> resize(ks_bytes)
     var seed = 0x1234u
     for (b in kq) {
         seed = seed * 1664525u + 1013904223u

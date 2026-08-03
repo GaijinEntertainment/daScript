@@ -1,18 +1,20 @@
 options gen2
+options _function_length = 0   // one flat per-family row per function: needs pin, per-path cells, generate + batch parity
 options persistent_heap   // + explicit deletes: the models free before the process exits
-options stack = 131072   // several by-value Sessions per cell (test_batch_decode sizing)
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dastest/testing_boost public
-require dasllama/dasllama   // nolint:STYLE029 — the public facade (engine + arch registrations + the metal overrides); off-Apple the static_if halves compile out and only its dasllama_common re-export stays referenced
+require dasllama/dasllama   // the public facade (engine + arch registrations + the metal overrides); off-Apple the static_if halves compile out and only its dasllama_common re-export stays referenced
 require dasllama/dasllama_math   // set_wscale_f16 — the wscale matrix axis
 require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor transform
-require dasllama/dasllama_parity   // nolint:STYLE030 — cached_ids/cached_vals (CPU references mapped like .dlim images), used only inside the Apple static_if half
-require ?das_metal dasllama/dasllama_metal_llama  // nolint:STYLE030 — stats/declines/shutdown rails
-require ?das_metal dasllama/dasllama_metal_prefill  // nolint:STYLE030 — prefill stats/declines rails
-require ?das_metal metal/das_metal_boost  // nolint:STYLE030 — device probe + metal_live_object_count
+require dasllama/dasllama_parity   // nolint:STYLE030,LINT019 — cached_ids/cached_vals, used only inside the Apple static_if half
+require ?das_metal dasllama/dasllama_metal_decode  // stats/declines/shutdown rails
+require ?das_metal dasllama/dasllama_metal_prefill  // prefill stats/declines rails
+require ?das_metal dasllama/dasllama_metal_common  // the kernel coverage census (tensor-twin cell)
+require ?das_metal metal/das_metal_boost  // device probe + metal_live_object_count
 require daslib/jobque_boost
-require daslib/fio  // nolint:STYLE030 — used only inside the Apple static_if half
-require math  // nolint:STYLE030 — used only inside the Apple static_if half
+require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
+require math  // used only inside the Apple static_if half
 require strings
 require _model_tier
 
@@ -80,12 +82,24 @@ def private greedy_top(lg : array<float>; vocab : int64) : int64 {
     return best
 }
 
+// greedy over one stream's slice of a concatenated multi-stream logits array (the B=4
+// forced cells' eyeball rail)
+def private greedy_top_at(lg : array<float>; base, vocab : int64) : int64 {
+    var best = 0l
+    for (v in range64(1l, vocab)) {
+        if (lg[base + v] > lg[base + best]) {
+            best = v
+        }
+    }
+    return best
+}
+
 def private same(a, b : array<int64>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        if (a[i] != b[i]) {
+    for (x, y in a, b) {
+        if (x != y) {
             return false
         }
     }
@@ -281,7 +295,7 @@ def test_metal_support_matrix(t : T?) {
 
             // ===== q8 weights, f32 scale plane =====
             set_wscale_f16(false)
-            var tr <- load_model(path, QuantMode.q8)
+            var tr <- load_model_(path, QuantMode.q8)
             tr.config.seq_len = min(tr.config.seq_len, 512l)
             var trg <- blob_twin(t, path, 512l)
             if (arm_on(t, "cells-q8")) {
@@ -392,7 +406,7 @@ def test_metal_support_matrix(t : T?) {
             if (!arm_on(t, "kq")) {
                 // filtered — the skip is already registered
             } elif (stat(kpath).is_valid) {
-                var trk <- load_model(kpath, QuantMode.q8)
+                var trk <- load_model_(kpath, QuantMode.q8)
                 trk.config.seq_len = min(trk.config.seq_len, 512l)
                 t |> success(trk.kquant_native, "Q4_K_M under a q8-mode load keeps native K-quant planes")
                 var trkg <- blob_twin(t, kpath, 512l)
@@ -552,7 +566,7 @@ def private cont_logits_cell(t : T?; tr, trg : Model; tag : string; tol : float)
         let n = long_length(full)
         var head : array<int64>
         var tail : array<int64>
-        head |> reserve(int(n - 2l))
+        head |> reserve(n - 2l)
         for (i in range64(n - 2l)) {
             head |> push(full[i])
         }
@@ -560,6 +574,8 @@ def private cont_logits_cell(t : T?; tr, trg : Model; tag : string; tol : float)
         tail |> push(full[n - 1l])
         var served = 0l
         var d = 0.0
+        var cpk = 0l
+        var gpk = 0l
         with_job_que() {
             setup_dasllama_jobque()
             var sc = make_run_state(c, KVDtype.f16, KVDtype.f16)
@@ -576,9 +592,12 @@ def private cont_logits_cell(t : T?; tr, trg : Model; tag : string; tol : float)
             for (i in range64(vocab)) {
                 d = max(d, abs(sb.logits[i] - sc.logits[i]))
             }
+            cpk = greedy_top(sc.logits, vocab)
+            gpk = greedy_top(sb.logits, vocab)
             delete sb
             delete sc
         }
+        to_log(LOG_INFO, "{tag} continuation eyeball: CPU next '{eyeball_str(piece_(tr, cpk))}' vs GPU next '{eyeball_str(piece_(tr, gpk))}' (maxd {d})\n")
         t |> success(served > 0l, "{tag}: continuation prefill ENGAGED ({served} served)")
         t |> success(d < tol, "{tag}: continuation-prefill logits within {tol} of CPU (measured {d})")
         delete head
@@ -599,10 +618,10 @@ def private family_cells(t : T?; path, family, tag : string; expect_needs : uint
         if (!family_on(t, family) || !arm_on(t, "fam-{family}") || !model_available(t, path)) {
             return
         }
-        var tr <- load_model(path, QuantMode.q8)
+        var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         let derived = metal_needs(tr)
-        let expected = MetalNeed(expect_needs)   // nolint:LINT005 — uint→named-bitfield relabel so the message prints bit NAMES
+        let expected = MetalNeed(expect_needs)   // uint→named-bitfield relabel so the message prints bit NAMES
         t |> success((uint(derived) & expect_needs) == expect_needs,
             "{tag}: metal_needs derives {expected} (got {derived})")
         if (want == "") {
@@ -633,6 +652,7 @@ def private family_cells(t : T?; path, family, tag : string; expect_needs : uint
                 select_decode_override("")
                 select_prefill_override("")
             }
+            log_gen_texts(tr, tag, cpu_ids, gpu_ids)
             t |> success(same(cpu_ids, gpu_ids),
                 "{tag}: metal-overrides generate matches the CPU truth token-for-token")
             delete cpu_ids
@@ -664,10 +684,10 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
         if (!family_on(t, family) || !arm_on(t, "fam-{family}") || !model_available(t, path)) {
             return
         }
-        var tr <- load_model(path, QuantMode.q8)
+        var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         let derived = metal_needs(tr)
-        let expected = MetalNeed(expect_needs)   // nolint:LINT005 — uint→named-bitfield relabel so the message prints bit NAMES
+        let expected = MetalNeed(expect_needs)   // uint→named-bitfield relabel so the message prints bit NAMES
         t |> success((uint(derived) & expect_needs) == expect_needs,
             "{tag}: metal_needs derives {expected} (got {derived})")
         var trg <- blob_twin(t, path, 512l)
@@ -741,6 +761,7 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
             select_decode_override("")
             select_prefill_override("")
         }
+        log_gen_texts(tr, tag, cpu_ids, gpu_ids)
         t |> success(same(cpu_ids, gpu_ids),
             "{tag}: metal-overrides generate matches the CPU truth token-for-token")
         delete cpu_ids
@@ -748,6 +769,72 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
         if (cont_tol > 0.0) {
             cont_logits_cell(t, tr, trg, tag, cont_tol)
         }
+        delete trg
+        delete tr
+    }
+}
+
+// A Metal-4 tensor (tmm2d) twin SERVES only when the box's tune sidecar crowns its family, so a
+// box whose sidecar is stale or absent crowns nothing and every twin ships unexercised. Force the
+// crowns, recompile the PSOs, and assert the model still produces the CPU's tokens with twins in
+// the graph. A new tensor family joins CROWNED below.
+[unused_argument(t, path)]   // off-Apple the gated body is empty
+def private tensor_twin_row(t : T?; path, tag : string) {   // nolint:LINT012,LINT019 — tag is read by the das_metal arm
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        if (!family_on(t, "llama") || !arm_on(t, "tensor") || !model_available(t, path)) {
+            return
+        }
+        let CROWNED = ("attn_avmm,attn_qkmm,gemm64b_q8,gemmb_q8,gemmb_sk_q8,kq_mulmm_k4," +
+            "kq_mulmm_k5,kq_mulmm_k6,moe_mulmm_mx4,moe_mulmm_q8,mulmm_bf16,mulmm_q8")
+        var tr <- load_model_(path, QuantMode.q8)
+        tr.config.seq_len = min(tr.config.seq_len, 512l)
+        var trg <- blob_twin(t, path, 512l)
+        let prompt <- encode(tr, counting_prompt(1, 30), true, false)
+        var cpu_ids : array<int64>
+        var gpu_ids : array<int64>
+        with_job_que() {
+            setup_dasllama_jobque()
+            var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
+            let ids <- generate(tr, s, prompt, length(prompt) + 8)
+            cpu_ids := ids
+            delete s
+            // crowns are read when the PSOs compile, so they must be set before the rebuild
+            set_metal_tensor_crowns(CROWNED)
+            metal_decode_shutdown()
+            metal_prefill_shutdown()
+            metal_kernel_coverage_reset()
+            select_decode_override("metal")
+            select_prefill_override("metal")
+            set_metal_prefill_min_npos(1l)
+            var s2 = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+            let ids2 <- generate(trg, s2, prompt, length(prompt) + 8)
+            gpu_ids := ids2
+            delete s2
+            set_metal_prefill_min_npos(64l)
+            select_decode_override("")
+            select_prefill_override("")
+        }
+        var twins = 0
+        var cov <- metal_kernel_coverage()
+        for (name in keys(cov)) {
+            // cov[name] would INSERT into a table keys() has locked — read through the safe form
+            let n = cov?[name] ?? 0l
+            if (n > 0l && ends_with(name, "_t")) {
+                twins++
+                to_log(LOG_INFO, "tensor twin served: {name} = {n}\n")
+            }
+        }
+        delete cov
+        // without this the cell passes vacuously the day crowning stops taking effect
+        t |> success(twins > 0, "{tag}: a crowned tmm2d twin actually served ({twins} of them)")
+        log_gen_texts(tr, tag, cpu_ids, gpu_ids)
+        t |> success(same(cpu_ids, gpu_ids),
+            "{tag}: crowned tmm2d generate matches the CPU truth token-for-token")
+        delete cpu_ids
+        delete gpu_ids
+        set_metal_tensor_crowns("")
+        metal_decode_shutdown()
+        metal_prefill_shutdown()
         delete trg
         delete tr
     }
@@ -763,7 +850,7 @@ def private qwen2moe_row(t : T?; path : string) {
         if (!family_on(t, "qwen2moe") || !arm_on(t, "fam-qwen2moe") || !model_available(t, path)) {
             return
         }
-        var tr <- load_model(path, QuantMode.q8)
+        var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         let derived = metal_needs(tr)
         t |> success((uint(derived) & uint(MetalNeed.neox | MetalNeed.qkv_bias)) == uint(MetalNeed.neox | MetalNeed.qkv_bias),
@@ -848,6 +935,7 @@ def private qwen2moe_row(t : T?; path : string) {
             select_decode_override("")
             select_prefill_override("")
         }
+        log_gen_texts(tr, "qwen2moe", cpu_ids, gpu_ids)
         t |> success(same(cpu_ids, gpu_ids),
             "qwen2moe: metal-overrides generate matches the CPU truth token-for-token")
         delete cpu_ids
@@ -868,7 +956,7 @@ def private gemma4e_row(t : T?; path : string) {
         if (!family_on(t, "gemma4e") || !arm_on(t, "fam-gemma4e") || !model_available(t, path)) {
             return
         }
-        var tr <- load_model(path, QuantMode.q8)
+        var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         let want_bits = (MetalNeed.neox | MetalNeed.qk_norm | MetalNeed.v_norm | MetalNeed.attn_scale |
             MetalNeed.sliding | MetalNeed.pre_post_norm | MetalNeed.out_scale | MetalNeed.geglu |
@@ -960,6 +1048,7 @@ def private gemma4e_row(t : T?; path : string) {
             select_decode_override("")
             select_prefill_override("")
         }
+        log_gen_texts(tr, "gemma4e-e4b", cpu_ids, gpu_ids)
         t |> success(same(cpu_ids, gpu_ids),
             "gemma4e-e4b: metal-overrides generate matches the CPU truth token-for-token")
         delete cpu_ids
@@ -983,7 +1072,7 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
         if (!family_on(t, "gemma4moe") || !arm_on(t, "fam-gemma4moe") || !model_available(t, path)) {
             return
         }
-        var tr <- load_model(path, QuantMode.q8)
+        var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         let c = tr.config
         t |> success(c.moe && c.moe_dense_shexp && c.n_expert == 128l && c.n_expert_used == 8l,
@@ -1015,6 +1104,8 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
         var mpf = 0.0
         var m1 = 0.0
         var served = 0l
+        var gpk0 = 0l
+        var gpk1 = 0l
         with_job_que() {
             setup_dasllama_jobque()
             select_prefill_override("metal")
@@ -1027,12 +1118,14 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
             for (v in range64(vocab)) {
                 mpf = max(mpf, abs(lg0[v] - s.logits[v]))
             }
+            gpk0 = greedy_top(s.logits, vocab)
             var one <- [t0]
             eval_(trg, s, one)
             delete one
             for (v in range64(vocab)) {
                 m1 = max(m1, abs(lg1[v] - s.logits[v]))
             }
+            gpk1 = greedy_top(s.logits, vocab)
             served = (metal_prefill_stats().prefills - pf0) + (metal_decode_stats().decodes - d0)
             set_metal_prefill_min_npos(64l)
             select_prefill_override("")
@@ -1042,7 +1135,7 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
         t |> success(served == 2l, "{tag}: GPU prefill + forced step both served ({served}/2)")
         t |> success(mpf <= tol_pf, "{tag}: post-prefill logits within {tol_pf} of the CPU truth (measured {mpf})")
         t |> success(m1 <= tol_step, "{tag}: one forced step within {tol_step} of the CPU truth (measured {m1})")
-        to_log(LOG_INFO, "{tag} tolerance cells: post-prefill maxd={mpf} (tol {tol_pf}), forced step maxd={m1} (tol {tol_step})\n")
+        to_log(LOG_INFO, "{tag} tolerance cells: post-prefill maxd={mpf} (tol {tol_pf}), forced step maxd={m1} (tol {tol_step}); eyeball CPU '{eyeball_str(piece_(trg, t0))}'/'{eyeball_str(piece_(trg, greedy_top(lg1, vocab)))}' vs GPU '{eyeball_str(piece_(trg, gpk0))}'/'{eyeball_str(piece_(trg, gpk1))}'\n")
         delete lg0
         delete lg1
         delete prompt
@@ -1060,7 +1153,7 @@ def private gptoss_row(t : T?; path : string) {
         if (!family_on(t, "gptoss") || !arm_on(t, "fam-gptoss") || !model_available(t, path)) {
             return
         }
-        var tr <- load_model(path, QuantMode.q8)
+        var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         let c = tr.config
         t |> success(c.moe && tr.experts_mx4 && c.attn_sinks && c.n_expert == 32l && c.n_expert_used == 4l,
@@ -1092,6 +1185,8 @@ def private gptoss_row(t : T?; path : string) {
         var mpf = 0.0
         var m1 = 0.0
         var served = 0l
+        var gpk0 = 0l
+        var gpk1 = 0l
         with_job_que() {
             setup_dasllama_jobque()
             select_prefill_override("metal")
@@ -1104,12 +1199,14 @@ def private gptoss_row(t : T?; path : string) {
             for (v in range64(vocab)) {
                 mpf = max(mpf, abs(lg0[v] - s.logits[v]))
             }
+            gpk0 = greedy_top(s.logits, vocab)
             var one <- [t0]
             eval_(trg, s, one)
             delete one
             for (v in range64(vocab)) {
                 m1 = max(m1, abs(lg1[v] - s.logits[v]))
             }
+            gpk1 = greedy_top(s.logits, vocab)
             served = (metal_prefill_stats().prefills - pf0) + (metal_decode_stats().decodes - d0)
             set_metal_prefill_min_npos(64l)
             select_prefill_override("")
@@ -1119,7 +1216,7 @@ def private gptoss_row(t : T?; path : string) {
         t |> success(served == 2l, "gptoss-20b: GPU prefill + forced step both served ({served}/2)")
         t |> success(mpf <= 2.0, "gptoss-20b: post-prefill logits within 2.0 of the CPU truth (measured {mpf})")
         t |> success(m1 <= 4.0, "gptoss-20b: one forced step within 4.0 of the CPU truth (measured {m1})")
-        to_log(LOG_INFO, "gptoss-20b tolerance cells: post-prefill maxd={mpf} (tol 2), forced step maxd={m1} (tol 4)\n")
+        to_log(LOG_INFO, "gptoss-20b tolerance cells: post-prefill maxd={mpf} (tol 2), forced step maxd={m1} (tol 4); eyeball CPU '{eyeball_str(piece_(trg, t0))}'/'{eyeball_str(piece_(trg, greedy_top(lg1, vocab)))}' vs GPU '{eyeball_str(piece_(trg, gpk0))}'/'{eyeball_str(piece_(trg, gpk1))}'\n")
         delete lg0
         delete lg1
         delete prompt
@@ -1137,7 +1234,7 @@ def private gemma2_window_row(t : T?; path : string) {
         if (!family_on(t, "gemma2") || !arm_on(t, "fam-gemma2") || !model_available(t, path)) {
             return
         }
-        var tr <- load_model(path, QuantMode.q8)
+        var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         tr.config.sliding_window = 160l
         var trg <- blob_twin(t, path, 512l)
@@ -1172,6 +1269,7 @@ def private gemma2_window_row(t : T?; path : string) {
         }
         t |> success(served_de > 0l && served_pf > 0l,
             "gemma2-2b/window: both GPU paths engaged (decode {served_de}, prefill {served_pf})")
+        log_gen_texts(tr, "gemma2-2b/window", cpu_ids, gpu_ids)
         t |> success(same(cpu_ids, gpu_ids),
             "gemma2-2b/window: window-crossing generate matches the CPU truth token-for-token")
         delete cpu_ids
@@ -1219,6 +1317,18 @@ def private batch_pair_steps(trp, trd : Model; pa, pb : array<int64>; nsteps : i
     return <- out
 }
 
+// the B=2 cells' eyeball rail: de-interleave the pair streams and log each as text
+def private log_pair_texts(m : Model; tag : string; cpu, gpu : array<int64>) {
+    for (ph in range(2)) {
+        var c <- [for (i in range(length(cpu))); cpu[i]; where i % 2 == ph]
+        var g <- [for (i in range(length(gpu))); gpu[i]; where i % 2 == ph]
+        to_log(LOG_INFO, "{tag} stream {ph} CPU text: {eyeball_text(m, c)}\n")
+        to_log(LOG_INFO, "{tag} stream {ph} GPU text: {eyeball_text(m, g)}\n")
+        delete c
+        delete g
+    }
+}
+
 // B=4 batched steps under TEACHER-FORCED tokens (deterministic synthetic feed, identical on
 // the CPU and GPU passes — no greedy feedback, so a near-tie flip cannot compound), returning
 // the four streams' final-step logits concatenated for a tolerance compare.
@@ -1249,7 +1359,7 @@ def private batch_quad_forced_logits(trp, trd : Model; pa, pb, pc, pd : array<in
         eval_batch_(trd, ws, sess, cur)
     }
     var out : array<float>
-    out |> reserve(int(vocab) * 4)
+    out |> reserve(vocab * 4l)
     out |> push_from(sa.logits, sb.logits, sc.logits, sd.logits)
     sess |> clear()   // borrowed handles — delete of array<T?> cascades to the pointees
     unsafe {
@@ -1279,7 +1389,7 @@ def private gemma4_hetero_q8_row(t : T?; path : string) {
         if (!family_on(t, "gemma4") || !arm_on(t, "fam-gemma4") || !model_available(t, path)) {
             return
         }
-        var tr <- load_model(path, QuantMode.q8)
+        var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         var trg <- blob_twin(t, path, 512l)
         let count_prompt <- encode(tr, counting_prompt(1, 30), true, false)
@@ -1292,9 +1402,11 @@ def private gemma4_hetero_q8_row(t : T?; path : string) {
         var gpu_b2 : array<int64>
         var served_bat = 0l
         var d4 = 0.0
+        var b4c : array<int64>
+        var b4g : array<int64>
         with_job_que() {
             setup_dasllama_jobque()
-            cpu_ids <- cached_ids(path, "gen_c1_30_n8") $ {
+            cpu_ids <- cached_ids(path, "gen_c1_30_n8") $ {   // nolint:PERF030,LINT019 — fresh empty target, single move; fires only on the das_metal arm
                 var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
                 var ids <- generate(tr, s, count_prompt, length(count_prompt) + 8)
                 delete s
@@ -1305,7 +1417,7 @@ def private gemma4_hetero_q8_row(t : T?; path : string) {
             gpu_ids := g2
             delete g2
             select_decode_override("")
-            cpu_b2 <- cached_ids(path, "b2pair_c1c7_n4") $ {
+            cpu_b2 <- cached_ids(path, "b2pair_c1c7_n4") $ {   // nolint:PERF030,LINT019 — fresh empty target, single move; fires only on the das_metal arm
                 return <- batch_pair_steps(tr, tr, count_prompt, count_prompt2, 4)
             }
             var cpu_bl <- cached_vals(path, "b4forced_n4") $ {
@@ -1313,16 +1425,24 @@ def private gemma4_hetero_q8_row(t : T?; path : string) {
             }
             let ba0 = metal_batch_decode_stats().steps
             select_decode_override("metal")
-            gpu_b2 <- batch_pair_steps(tr, trg, count_prompt, count_prompt2, 4)
+            gpu_b2 <- batch_pair_steps(tr, trg, count_prompt, count_prompt2, 4)   // nolint:PERF030,LINT019 — fresh empty target, single move; fires only on the das_metal arm
             var gpu_bl <- batch_quad_forced_logits(tr, trg, count_prompt, count_prompt2, count_prompt3, count_prompt4, 4)
             select_decode_override("")
             served_bat = metal_batch_decode_stats().steps - ba0
             for (i in range(length(cpu_bl))) {
                 d4 = max(d4, abs(cpu_bl[i] - gpu_bl[i]))
             }
+            let vocab = tr.config.vocab_size
+            for (s4 in range64(4l)) {
+                b4c |> push(greedy_top_at(cpu_bl, s4 * vocab, vocab))
+                b4g |> push(greedy_top_at(gpu_bl, s4 * vocab, vocab))
+            }
             delete cpu_bl
             delete gpu_bl
         }
+        log_gen_texts(tr, "gemma4-12b/q8", cpu_ids, gpu_ids)
+        log_pair_texts(tr, "gemma4-12b/q8 B=2", cpu_b2, gpu_b2)
+        to_log(LOG_INFO, "gemma4-12b/q8 B=4 eyeball: CPU forced-final picks '{eyeball_text(tr, b4c)}' vs GPU '{eyeball_text(tr, b4g)}' (maxd {d4})\n")
         t |> success(same(cpu_ids, gpu_ids),
             "gemma4-12b/q8: metal-decode generate matches the CPU truth token-for-token")
         t |> success(served_bat > 0l, "gemma4-12b/q8: the hetero q8 batch ENGAGED ({served_bat} served)")
@@ -1335,6 +1455,8 @@ def private gemma4_hetero_q8_row(t : T?; path : string) {
         delete gpu_ids
         delete cpu_b2
         delete gpu_b2
+        delete b4c
+        delete b4g
         delete tr
         delete trg
     }
@@ -1343,7 +1465,7 @@ def private gemma4_hetero_q8_row(t : T?; path : string) {
 [unused_argument(t, path)]   // off-Apple the gated body is empty
 def private gemma4_hetero_row(t : T?; path : string) {
     // the stage-3 heterogeneous row: needs-derivation pin, per-path cells (all three ENGAGE),
-    // a FREEFORM decode-only token-parity generate, a counting both-paths generate, a B=2
+    // a FREEFORM decode-only forced-feed tolerance cell, a counting both-paths generate, a B=2
     // batched-decode parity, and the continuation-prefill numeric cell —
     // the per-class geometry, V-from-K, v_norm, out_scale, dual-theta p-RoPE and the
     // suppress+softcap gpu-logits tail all sit on the proven paths. The both-paths generate is
@@ -1351,13 +1473,17 @@ def private gemma4_hetero_row(t : T?; path : string) {
     // noise to ~1-5 logits (CPU truth is thread-count-stable; the proven decode driver shows
     // the same scale), so a freeform first token can sit on a sub-noise near-tie and flip
     // without any driver bug — counting margins dwarf the noise, and real corruption (the
-    // 16-31-logit panel-overrun class) still breaks it. The decode-only freeform arm stays:
-    // regression-proven stable over 24 tokens on this prompt.
+    // 16-31-logit panel-overrun class) still breaks it. The freeform arm is FORCED-FEED
+    // TOLERANCE over a cached 128-token stream: token equality on a freeform prompt reds on
+    // legitimate CPU-trajectory near-tie moves with the GPU side CORRECT — both decoders force
+    // through the same cached tokens, so real corruption still reds, near-tie flips can't, and
+    // the cache is a FEED, not a truth (staleness harmless). Both sides land in the log as
+    // text for the eyeball rail.
     static_if (typeinfo builtin_module_exists(das_metal)) {
         if (!family_on(t, "gemma4") || !arm_on(t, "fam-gemma4") || !model_available(t, path)) {
             return
         }
-        var tr <- load_model(path, QuantMode.q8)
+        var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         let derived = metal_needs(tr)
         let want_bits = (MetalNeed.neox | MetalNeed.qk_norm | MetalNeed.sliding | MetalNeed.pre_post_norm |
@@ -1371,31 +1497,56 @@ def private gemma4_hetero_row(t : T?; path : string) {
         let count_prompt <- encode(tr, counting_prompt(1, 30), true, false)
         let count_prompt2 <- encode(tr, counting_prompt(7, 36), true, false)
         var cpu_ids : array<int64>
-        var gpu_ids : array<int64>
+        var gpu_picks : array<int64>
         var cpu_cnt_ids : array<int64>
         var both_ids : array<int64>
         var cpu_bat : array<int64>
         var gpu_bat : array<int64>
         var served_pf = 0l
         var served_bat = 0l
+        var served_free = 0l
+        var fmaxd = 0.0
         with_job_que() {
             setup_dasllama_jobque()
-            cpu_ids <- cached_ids(path, "gen_free_n24") $ {
+            cpu_ids <- cached_ids(path, "gen_free_n128") $ {   // nolint:PERF030,LINT019 — fresh empty target, single move; fires only on the das_metal arm
                 var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
-                var ids <- generate(tr, s, prompt, length(prompt) + 24)
+                var ids <- generate(tr, s, prompt, length(prompt) + 128)
                 delete s
                 return <- ids
             }
-            cpu_cnt_ids <- cached_ids(path, "gen_c1_30_n8") $ {
+            cpu_cnt_ids <- cached_ids(path, "gen_c1_30_n8") $ {   // nolint:PERF030,LINT019 — fresh empty target, single move; fires only on the das_metal arm
                 var sc = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
                 var idsc <- generate(tr, sc, count_prompt, length(count_prompt) + 8)
                 delete sc
                 return <- idsc
             }
+            // forced-feed freeform decode parity: CPU-prefill BOTH states on the planar model
+            // (blob CPU prefill panics), then force each cached continuation token through both
+            // decoders — under the override the planar model quietly CPU-serves (planar decline)
+            let vocab = tr.config.vocab_size
+            var sa = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
+            var sb = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+            eval_(tr, sa, prompt)
+            eval_(tr, sb, prompt)
+            let df0 = metal_decode_stats().decodes
             select_decode_override("metal")
-            var g2 <- split_generate(tr, trg, prompt, length(prompt) + 24)
-            gpu_ids := g2
-            delete g2
+            for (q in range64(long_length(prompt) - 1l, long_length(cpu_ids))) {
+                gpu_picks |> push(greedy_top(sb.logits, vocab))
+                for (a, b in sa.logits, sb.logits) {
+                    fmaxd = max(fmaxd, abs(a - b))
+                }
+                var one <- [cpu_ids[q]]
+                eval_(tr, sa, one)
+                eval_(trg, sb, one)
+                delete one
+            }
+            for (a, b in sa.logits, sb.logits) {
+                fmaxd = max(fmaxd, abs(a - b))
+            }
+            served_free = metal_decode_stats().decodes - df0
+            delete sa
+            delete sb
+            // the decode override stays selected — the both-paths cell below decodes on the twin
             let pf0 = metal_prefill_stats().prefills
             select_prefill_override("metal")
             set_metal_prefill_min_npos(1l)
@@ -1409,26 +1560,31 @@ def private gemma4_hetero_row(t : T?; path : string) {
             served_pf = metal_prefill_stats().prefills - pf0
             // B=2 batched-decode parity (counting margins — see the header note): CPU truth
             // then the batched metal override, 4 steps per stream over CPU-prefilled state
-            cpu_bat <- cached_ids(path, "b2pair_c1c7_n4") $ {
+            cpu_bat <- cached_ids(path, "b2pair_c1c7_n4") $ {   // nolint:PERF030,LINT019 — fresh empty target, single move; fires only on the das_metal arm
                 return <- batch_pair_steps(tr, tr, count_prompt, count_prompt2, 4)
             }
             let ba0 = metal_batch_decode_stats().steps
             select_decode_override("metal")
-            gpu_bat <- batch_pair_steps(tr, trg, count_prompt, count_prompt2, 4)
+            gpu_bat <- batch_pair_steps(tr, trg, count_prompt, count_prompt2, 4)   // nolint:PERF030,LINT019 — fresh empty target, single move; fires only on the das_metal arm
             select_decode_override("")
             served_bat = metal_batch_decode_stats().steps - ba0
         }
-        t |> success(same(cpu_ids, gpu_ids),
-            "gemma4-12b/k4: metal-decode generate matches the CPU truth token-for-token")
+        to_log(LOG_INFO, "gemma4-12b/k4 freeform CPU text (prompt echo + cont): {eyeball_text(tr, cpu_ids)}\n")
+        to_log(LOG_INFO, "gemma4-12b/k4 freeform GPU greedy-would-be cont (fmaxd {fmaxd}): {eyeball_text(tr, gpu_picks)}\n")
+        t |> success(fmaxd < 8.0,
+            "gemma4-12b/k4: forced-feed freeform decode logits within 8 of CPU over the 128-token stream (measured {fmaxd})")
+        t |> success(served_free > 0l, "gemma4-12b/k4: the forced-feed freeform decode ENGAGED ({served_free} served)")
         t |> success(served_pf > 0l, "gemma4-12b/k4: the hetero prefill ENGAGED ({served_pf} served)")
+        log_gen_texts(tr, "gemma4-12b/k4 both-paths", cpu_cnt_ids, both_ids)
         t |> success(same(cpu_cnt_ids, both_ids),
             "gemma4-12b/k4: metal prefill+decode generate matches the CPU truth token-for-token")
         t |> success(served_bat > 0l, "gemma4-12b/k4: the hetero batch ENGAGED ({served_bat} served)")
+        log_pair_texts(tr, "gemma4-12b/k4 B=2", cpu_bat, gpu_bat)
         t |> success(same(cpu_bat, gpu_bat),
             "gemma4-12b/k4: B=2 batched decode matches the CPU truth token-for-token")
         cont_logits_cell(t, tr, trg, "gemma4-12b/k4", 8.0)
         delete cpu_ids
-        delete gpu_ids
+        delete gpu_picks
         delete cpu_cnt_ids
         delete both_ids
         delete cpu_bat
@@ -1569,6 +1725,10 @@ def test_metal_family_matrix(t : T?) {
             // qwen2moe (Wave D ride-along): softmax-no-renorm select + sigmoid shexp on std
             // attention; batch declines by design. 15GB — DASLLAMA_PARITY_FULL-gated.
             qwen2moe_row(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf"))
+            // the Metal-4 tensor twins, forced into service on small carriers (--arm tensor):
+            // q8 drives the mulmm/attn twins, the K-quant row drives the kq mulmm twins
+            tensor_twin_row(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf"), "tensor-twins/q8")
+            tensor_twin_row(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q5_K_M.gguf"), "tensor-twins/k5")
             metal_decode_shutdown()
             metal_prefill_shutdown()
             t |> equal(metal_log_leaks_if_any(), 0l)

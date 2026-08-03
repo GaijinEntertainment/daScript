@@ -537,9 +537,195 @@ class MathCalls {
     }
 }
 
+// ===== Phase 0: user-function lowering (free functions lower 1:1 as MSL functions) =====
+
+def private ufx_sky(d : float) : float => 0.5 * d + 0.5
+
+def private ufx_shade(d : float; bounce : int) : float {
+    var acc = ufx_sky(d)     // nested user call
+    for (_i in range(bounce)) {
+        acc *= 0.5
+    }
+    return acc
+}
+
+def private ufx_lane : uint => gl_GlobalInvocationID.x   // hidden-builtin threading
+
+def private ufx_splat(var yo : array<float>; i : uint; v : float) {   // write-through param
+    yo[i] = v
+}
+
+def private ufx_twice(src : array<auto(TT)>; i : uint) : TT {   // generic: 2 MSL instances
+    return src[i] + src[i]
+}
+
+def private ufx_sum_tg(part : float[32]; n : uint) : float {   // threadgroup-pointer param
+    var s = 0.0
+    var k = 0u
+    while (k < n) {
+        s += part[k]
+        k++
+    }
+    return s
+}
+
+// a WRITABLE threadgroup slab param that also rendezvouses inside the helper — the shape a
+// staged kernel (dasLLAMA's attention softmax) hands its @workgroup scratch to
+def private ufx_scale_tg(var part : float[32]; k : float; lid, n : uint) {
+    var i = lid
+    while (i < n) {
+        part[i] *= k
+        i += n
+    }
+    barrier()
+}
+
+def private ufx_accum(var acc : float&; v : float) {   // thread-ref param
+    acc += v
+}
+
+// Pointer parameters. das `T?` names no address space, so the parameter declares it — unmarked
+// is `device`, `@threadgroup` opts in — and every call site is checked against the provenance
+// of the pointer it hands over. The pointee's const is the MSL const, exactly as for a buffer.
+def private ufx_ptr_walk(var p : float const?; n : uint) : float {
+    var s = 0.0
+    var k = 0u
+    while (k < n) {
+        s += unsafe(p[0])
+        p = unsafe(p + 1)   // the advancing-pointer shape the split-K attention kernels stream
+        k++
+    }
+    return s
+}
+
+def private ufx_ptr_fwd(var p : float const?; n : uint) : float => ufx_ptr_walk(p, n)   // space propagates
+
+def private ufx_ptr_store(var o : float?; i : uint; v : float) {
+    unsafe(o[i]) = v
+}
+
+def private ufx_ptr_tg(@threadgroup p : float const?; n : uint) : float {
+    var s = 0.0
+    var k = 0u
+    while (k < n) {
+        s += unsafe(p[k])
+        k++
+    }
+    return s
+}
+
+class UserFns {
+    @ssbo @binding = 0 src : array<float>
+    @ssbo @binding = 1 srch : array<float16>
+    @ssbo @binding = 2 yo : array<float>
+    @ssbo @binding = 3 yoh : array<float16>
+    @ssbo @binding = 4 yp : array<float>
+    @workgroup part : float[32]
+
+    [metal_kernel(name="userfns_msl"), marker(no_coverage)]
+    def userfns {
+        let i = ufx_lane()
+        let lid = gl_LocalInvocationID.x
+        part[lid] = ufx_twice(src, i)
+        yoh[i] = ufx_twice(srch, i)
+        barrier()
+        ufx_scale_tg(part, 0.5, lid, gl_WorkGroupSize.x)   // writes the slab, barriers inside
+        var acc = 0.0
+        ufx_accum(acc, ufx_shade(src[i], 3))
+        if (lid == 0u) {
+            acc += ufx_sum_tg(part, gl_WorkGroupSize.x)
+            acc += ufx_ptr_tg(unsafe(addr(part[0])), gl_WorkGroupSize.x)
+        }
+        var sp = unsafe(addr(src[0]))
+        acc += ufx_ptr_walk(sp, 2u) + ufx_ptr_fwd(unsafe(sp + i), 2u)
+        ufx_ptr_store(unsafe(addr(yp[0])), i, acc)
+        ufx_splat(yo, i, acc)
+    }
+}
+
+// Shape stays compile-time (dasLLAMA CODEREVIEW #21): the per-type overload does the indexing
+// ITSELF, so the stride is a literal inside each instance and never crosses a call boundary as a
+// value. The array argument is the codec discriminator, not data — hence the unused annotation.
+[unused_argument(sel)]
+def private ufx_pick(sel : array<int8>; xs : array<float>; blk : uint) : float => xs[blk * 34u]
+
+[unused_argument(sel)]
+def private ufx_pick(sel : array<uint8>; xs : array<float>; blk : uint) : float => xs[blk * 18u]
+
+class UkStride {
+    @ssbo @binding = 0 xs : array<float>
+    @ssbo @binding = 1 sa : array<int8>
+    @ssbo @binding = 2 sb : array<uint8>
+    @ssbo @binding = 3 ys : array<float>
+
+    [metal_kernel(name="ukstride_msl"), marker(no_coverage)]
+    def ukstride {
+        let i = gl_GlobalInvocationID.x
+        ys[i] = ufx_pick(sa, xs, i) + ufx_pick(sb, xs, i)
+    }
+}
+
+// ===== @uniform structs (the kargs form) =====
+// A kernel with a dozen scalars costs a dozen binds; one struct costs one. Fields are 4-byte
+// scalars only, so the das layout IS the MSL layout and the host writes its struct straight
+// through setBytes.
+
+struct UkArgs {
+    n : uint
+    gain : float
+    bias : int
+}
+
+class UkKern {
+    @ssbo @binding = 0 xs : array<float>
+    @ssbo @binding = 1 ys : array<float>
+    @uniform @binding = 2 ka : UkArgs
+
+    [metal_kernel(name="ukargs_msl"), marker(no_coverage)]
+    def ukargs {
+        let i = gl_GlobalInvocationID.x
+        if (i >= ka.n) {
+            return
+        }
+        ys[i] = xs[i] * ka.gain + float(ka.bias)
+    }
+}
+
+// ===== Phase 0: class methods + inheritance (the ONE FLAT struct emission) =====
+
+class UfxBase {
+    @ssbo @binding = 0 xs : array<float>
+    @ssbo @binding = 1 ys : array<float>
+    @uniform @binding = 2 gain : float
+
+    def stage(v : float) : float => v * gain
+    def pick(i : uint) : float => xs[i]
+    def combo(i : uint) : float => stage(pick(i))   // base skeleton calling the overridable stage
+}
+
+class UfxKid : UfxBase {
+    @ssbo @binding = 3 zs : array<float>
+    @workgroup tmp : float[16]
+
+    def override pick(i : uint) : float => xs[i] + zs[i]   // what combo must actually call
+
+    def store(i : uint; v : float) {   // member write through a method body
+        ys[i] = v
+    }
+
+    [metal_kernel(name="ufxcls_msl"), marker(no_coverage)]
+    def ufxcls {
+        let i = gl_GlobalInvocationID.x
+        let lid = gl_LocalInvocationID.x
+        tmp[lid] = combo(i)
+        barrier()
+        store(i, tmp[lid] + ufx_sky(xs[i]))
+    }
+}
+
 //! Gate B: exactly the construct kinds the fixture set must emit — the census meta-test
 //! asserts equality with the observed union in both directions.
-def public declared_msl_census : table<string> {
+def public declared_msl_census : table<string> {   // nolint:STYLE038 — one flat literal per construct kind; the gate-B contract IS this list
     return <- {
         // signature + parameters
         "preamble",
@@ -677,6 +863,7 @@ def public declared_msl_census : table<string> {
         "cvt.i32.i16",
         "cvt.i16.i32",
         "cvt.i8.i32",
+        "cvt.i32.f32",
         "cvt.i32.u32",
         "cvt_sat.i32v.i8v",
         "cvt_sat.u32v.u16v",
@@ -730,8 +917,12 @@ def public declared_msl_census : table<string> {
         "stmt.var.sgmat_array.f16",
         "stmt.var.array",
         "stmt.for.unroll",
+        "decl.uniform_struct",
+        "expr.member.ustruct",
         "decl.ptr.tg",
         "decl.ptr.dev",
+        "expr.addr.tg",
+        "expr.addr.dev",
         "op.ptr_add",
         "call.sgmat_load_ptr.f16",
         "call.sgmat_fill.f32",
@@ -790,7 +981,28 @@ def public declared_msl_census : table<string> {
         "stmt.for",
         "stmt.break",
         "stmt.continue",
-        "stmt.return"
+        "stmt.return",
+        // Phase 0: user-function lowering
+        "decl.user_fn",
+        "call.user",
+        "stmt.call_user",
+        "stmt.return_value",
+        "ufn.param.buffer",
+        "ufn.param.buffer_const",
+        "ufn.param.tg",
+        "ufn.param.tg_const",
+        "ufn.param.ptr.device",
+        "ufn.param.ptr.device_const",
+        "ufn.param.ptr.threadgroup_const",
+        "ufn.param.ref",
+        "ufn.param.value",
+        "ufn.param.hidden_builtin",
+        // Phase 0: class methods + inheritance (the flat-struct emission)
+        "decl.class_struct",
+        "decl.method",
+        "call.method",
+        "stmt.call_method",
+        "entry.self_fill"
     }
 }
 
@@ -799,5 +1011,6 @@ def public all_msl_censuses : array<string> {
     return <- [mul_ab_msl_census, uarith_msl_census, iarith_msl_census, farith_msl_census,
         vecarith_msl_census, control_msl_census, loops_msl_census, reduce_msl_census, simd_msl_census,
         halfarith_msl_census, latconv_msl_census, packed3_msl_census, sgmat_msl_census,
-        sgmat_tiled_msl_census, sgmat_rolled_msl_census, mathcalls_msl_census]
+        sgmat_tiled_msl_census, sgmat_rolled_msl_census, mathcalls_msl_census, userfns_msl_census,
+        ufxcls_msl_census, ukargs_msl_census, ukstride_msl_census]
 }

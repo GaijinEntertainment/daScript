@@ -28,6 +28,9 @@ struct private BufField {
                      // derived access (the tracker keys ranges by buffer, so staging both views
                      // unions naturally; hand-written builders encoded that union on the owner)
     ssbo : bool      // @ssbo (vs @uniform) — only ssbo fields join the access derivation
+    // a struct-typed @uniform is a kargs value: it binds by VALUE (kn_kargs), so the builder
+    // takes the struct itself, not a MetalBuffer?. Null = an ordinary buffer field.
+    @do_not_delete kt : TypeDeclPtr
     off : string     // @off = "<param>" — bind at a caller-passed uint64 offset ("" = 0)
     rng : string     // @span = "<a*b*4>" product over params — exact hz length ("" = whole buffer)
 }
@@ -54,6 +57,14 @@ def private mk_off_arg(at : LineInfo; off : string) : Expression? {
     return new ExprVar(at = at, name := off)
 }
 
+def private mk_kn_kargs(at : LineInfo; pname : string; binding : int) : ExpressionPtr {
+    var c = new ExprCall(at = at, name := "kn_kargs")
+    c.arguments |> emplace_new <| new ExprVar(at = at, name := "enc")
+    c.arguments |> emplace_new <| new ExprVar(at = at, name := pname)
+    c.arguments |> emplace_new <| new ExprConstInt(at = at, value = binding)
+    return c
+}
+
 def private mk_kn_buffer(at : LineInfo; pname : string; binding : int; off : string) : ExpressionPtr {
     var c = new ExprCall(at = at, name := "kn_buffer")
     c.arguments |> emplace_new <| new ExprVar(at = at, name := "enc")
@@ -61,6 +72,33 @@ def private mk_kn_buffer(at : LineInfo; pname : string; binding : int; off : str
     c.arguments |> emplace_new <| mk_off_arg(at, off)
     c.arguments |> emplace_new <| new ExprConstInt(at = at, value = binding)
     return c
+}
+
+// The type of a struct-typed @uniform (the kargs form), null for an ordinary buffer field. At
+// structure-macro time the declared type may still be an unresolved ALIAS, so the parameter gets
+// a CLONE of exactly what the field declared and infer resolves both the same way.
+def private kargs_type_of(ft : TypeDecl const?; is_ssbo : bool) : TypeDeclPtr {
+    if (is_ssbo || ft == null || (ft.baseType != Type.tStructure && empty(ft.alias))) {
+        return null
+    }
+    return clone_type(unsafe(reinterpret<TypeDeclPtr>(ft)))
+}
+
+// one bind statement: a kargs value binds by value, everything else is a buffer at an offset
+def private mk_bind(at : LineInfo; bf : BufField) : ExpressionPtr {
+    return (bf.kt == null ? mk_kn_buffer(at, "b{bf.name}", bf.binding, bf.off)
+        : mk_kn_kargs(at, "{bf.name}", bf.binding))
+}
+
+// ... and its builder parameter: the struct itself for kargs, a buffer handle otherwise
+def private mk_builder_param(at : LineInfo; var bf : BufField) : VariablePtr {
+    if (bf.kt == null) {
+        return new Variable(at = at, name := "b{bf.name}", _type = const_t(qmacro_type(type<MetalBuffer?>)))
+    }
+    // kn_kargs takes the struct as `var` (it needs its address), so the builder's parameter is a
+    // mutable by-ref struct — the `var ka : Foo` a hand-written builder would have declared
+    bf.kt.flags.ref = true
+    return new Variable(at = at, name := "{bf.name}", _type = bf.kt)
 }
 
 def private mk_var_call(at : LineInfo; call_name, arg0 : string) : ExpressionPtr {
@@ -249,7 +287,7 @@ def private derived_role(res : AccessResult; name : string) : string {
 
 [structure_macro(name = metal_dispatch)]
 class MetalDispatch : AstStructureAnnotation {
-    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {   // nolint:STYLE037,STYLE038 — flat per-argument validation + emit table
         let at = st.at
         let fn_name = find_arg(args, "name") ?as tString ?? ""
         let pso = find_arg(args, "pso") ?as tString ?? ""
@@ -326,7 +364,10 @@ class MetalDispatch : AstStructureAnnotation {
             }
             let off = find_arg(field.annotation, "off") ?as tString ?? ""
             let rangeStr = find_arg(field.annotation, "span") ?as tString ?? ""
-            bufs |> push(BufField(name = "{field.name}", binding = binding, role = role, ssbo = is_ssbo, off = off, rng = rangeStr))
+            // a struct-typed @uniform is a kargs value: it binds by VALUE, so the builder takes
+            // the struct, not a buffer, and the emitter's `constant Foo&` parameter reads it
+            var kt = kargs_type_of(field._type, is_ssbo)
+            bufs |> push(BufField(name = "{field.name}", binding = binding, role = role, ssbo = is_ssbo, kt = kt, off = off, rng = rangeStr))
         }
         sort(bufs) $(a, b) => a.binding < b.binding
 
@@ -365,7 +406,7 @@ class MetalDispatch : AstStructureAnnotation {
                 delete tracked
                 return false
             }
-            var res <- classify_field_access(kfn, compiling_module(), tracked)
+            var res <- classify_field_access(kfn, compiling_module(), st, tracked)
             if (!empty(res.err)) {
                 errors := "[metal_dispatch] {fn_name}: {res.err} (or access_force=true + declared roles)"
                 delete res
@@ -426,7 +467,7 @@ class MetalDispatch : AstStructureAnnotation {
             body |> push(mk_kn_tgmem(at, tgmem))
         }
         for (bf in bufs) {
-            body |> push(mk_kn_buffer(at, "b{bf.name}", bf.binding, bf.off))
+            body |> push(mk_bind(at, bf))
         }
         for (bf in bufs) {
             if (bf.hzrole == "read" || bf.hzrole == "readwrite") {
@@ -450,7 +491,7 @@ class MetalDispatch : AstStructureAnnotation {
         fn.arguments |> emplace_new <| new Variable(at = at, name := "enc", _type = const_t(qmacro_type(type<MetalComputeEncoder?>)))
         var seen_offs : table<string>
         for (bf in bufs) {
-            fn.arguments |> emplace_new <| new Variable(at = at, name := "b{bf.name}", _type = const_t(qmacro_type(type<MetalBuffer?>)))
+            fn.arguments |> emplace_new <| mk_builder_param(at, bf)
             if (!empty(bf.off) && !key_exists(seen_offs, bf.off)) {
                 seen_offs |> insert(bf.off)
                 fn.arguments |> emplace_new <| new Variable(at = at, name := "{bf.off}", _type = const_t(qmacro_type(type<uint64>)))
@@ -497,9 +538,17 @@ class MetalDispatch : AstStructureAnnotation {
 //      of the strictness ratchet (runtime STRICT covers only rail-side dispatches)
 
 class private MetalCensusVisitor : AstVisitor {
+    nkargs : int      // per-function tallies; the driver resets and checks them around each visit
+    ndispatch : int
     def override preVisitExprCall(var expr : ExprCall?) : void {
-        if ("{expr.name}" |> ends_with("metal_dispatch_threadgroups")) {
+        let base = callee_base_name("{expr.name}")
+        if (base == "metal_dispatch_threadgroups") {
             macro_error(compiling_program(), expr.at, "direct metal_dispatch_threadgroups in a dasLLAMA engine module — dispatch through the kn_*/[metal_dispatch] capture rail (migration opt-out: options _metal_manual_dispatch = true)")
+        }
+        if (base == "kn_kargs") {
+            nkargs++
+        } elif (base == "kn_dispatch") {
+            ndispatch++
         }
     }
 }
@@ -513,7 +562,15 @@ class MetalManualDispatchCensus : AstPassMacro {
         var v = new MetalCensusVisitor()
         make_visitor(*v) $(adapter) {
             for_each_function(mod, "") $(var fn) {
+                v.nkargs = 0
+                v.ndispatch = 0
                 visit(fn, adapter)
+                // A builder that binds kargs must bind them on EVERY dispatch path. A branch that
+                // loses its kn_kargs leaves the kernel reading an unbound argument buffer — the
+                // GPU produces garbage with no error anywhere.
+                if (v.nkargs > 0 && v.nkargs != v.ndispatch) {
+                    macro_error(prog, fn.at, "{fn.name}: {v.nkargs} kn_kargs for {v.ndispatch} kn_dispatch — every dispatch path must bind its kargs")
+                }
             }
         }
         unsafe {
@@ -556,7 +613,7 @@ class MetalManualDispatchCensus : AstPassMacro {
                 var nmatch = 0
                 kfn = find_kernel_fn(st, mod, nmatch)
                 if (kfn != null && nmatch == 1) {
-                    var res <- classify_field_access(kfn, mod, tracked)
+                    var res <- classify_field_access(kfn, mod, st, tracked)
                     if (empty(res.err)) {   // an unanalyzable body keeps the declared contract as-is
                         for (field in st.fields) {
                             let role = find_arg(field.annotation, "role") ?as tString ?? ""

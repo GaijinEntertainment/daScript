@@ -3,7 +3,7 @@ options persistent_heap
 
 require dastest/testing_boost
 require matmul_variants
-require dasllama/dasllama_quant
+require dasllama/dasllama_convert
 require daslib/jobque_boost
 require math
 
@@ -17,7 +17,7 @@ def fill(var a : array<float>; count : int) {
 // Threaded-matmul num_jobs sweep at the classifier shape (32000 x 288), the heaviest matmul.
 // "each dot" = num_jobs = d; "each 10 dots" = d/10; N = hw worker count.
 [benchmark]
-def bench_matmul_par(b : B?) {
+def bench_matmul_par(b : B?) {   // nolint:STYLE038 — flat bench driver: one cell per num_jobs point
     if (!jit_enabled()) {
         to_log(LOG_WARNING, "skipped: interpreted (dasLLAMA benchmarks are JIT-only)\n")
         return

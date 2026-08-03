@@ -1,6 +1,6 @@
 options gen2
 options persistent_heap   // the server thread loads/frees a model once; explicit deletes below
-options stack = 262144    // the forward chain runs under the HTTP tick + C++->das bridge (matches main.das)
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options fast_math = true  // ggml-parity FP laxity — this is an inference tool test, not the bit-exact suite
 
 require dastest/testing_boost public
@@ -123,7 +123,7 @@ struct ClientResult {
 }
 
 [test]
-def test_openai_server_stream(t : T?) {
+def test_openai_server_stream(t : T?) {   // nolint:STYLE038 — one live server session: every SSE-framing assertion runs against that one boot
     if (model_missing(t)) {
         return
     }
