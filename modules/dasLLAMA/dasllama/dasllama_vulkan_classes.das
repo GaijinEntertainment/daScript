@@ -281,6 +281,207 @@ class MoeCombine {
     }
 }
 
+// ===== rope + KV store + qk-norm =====
+
+// the workgroup-rms machinery the head-row kernels share (one wg reduces one row)
+class RmsWgBase {
+    @workgroup part : float[64]   // one partial per subgroup (subgroupSize >= 4 floor)
+    @workgroup inv1 : float[1]
+
+    def wg_rms_inv(ss0 : float; n : uint; eps : float) : float {
+        let ss = subgroupAdd(ss0)
+        if (gl_SubgroupInvocationID == 0u) {
+            part[gl_SubgroupID] = ss
+        }
+        barrier()
+        if (gl_LocalInvocationID.x == 0u) {
+            var tot = 0.0
+            var sgi = 0u
+            while (sgi < gl_NumSubgroups) {
+                tot += part[sgi]
+                sgi++
+            }
+            inv1[0u] = 1.0 / sqrt(tot / float(n) + eps)   // the CPU rmsnorm's own form
+        }
+        barrier()
+        return inv1[0u]
+    }
+}
+
+struct QkRmsArgs {
+    hs : uint
+    nh : uint
+    nkvh : uint
+    qstride : uint
+    kstride : uint
+    kbase : uint
+    qwoff : uint
+    kwoff : uint
+    eps : float
+}
+
+// per-head RMSNorm on q/k between the projections and rope (qk_norm models), one wg per
+// head-row, in place
+[vk_dispatch(name = "qk_rms_cls", grid = "wgs", params = "wgs : int64")]
+class QkRms : RmsWgBase {
+    @ssbo @binding = 0 qrows : array<float>   // q rows, normed in place
+    @ssbo @binding = 1 krows : array<float>   // k rows, normed in place
+    @ssbo @binding = 2 wn : array<float>      // the q/k norm weight rows
+    @push_constant pa : QkRmsArgs
+
+    [spirv_kernel(local_size_x = 256, name = "qk_rms_cls_spv")]
+    def run {
+        let per = pa.nh + pa.nkvh
+        let wid = gl_WorkGroupID.x
+        let r = wid / per
+        let hh = wid % per
+        let is_q = hh < pa.nh
+        let base = is_q ? r * pa.qstride + hh * pa.hs : pa.kbase + r * pa.kstride + (hh - pa.nh) * pa.hs
+        let wbase = is_q ? pa.qwoff : pa.kwoff
+        let tid = gl_LocalInvocationID.x
+        var ss = 0.0
+        if (tid < pa.hs) {
+            let v = is_q ? qrows[base + tid] : krows[base + tid]
+            ss = v * v
+        }
+        let inv = wg_rms_inv(ss, pa.hs, pa.eps)
+        if (tid < pa.hs) {
+            let w = wn[wbase + tid]
+            if (is_q) {
+                qrows[base + tid] = w * (qrows[base + tid] * inv)
+            } else {
+                krows[base + tid] = w * (krows[base + tid] * inv)
+            }
+        }
+    }
+}
+
+struct RopeKvArgs {
+    qd : uint       // query width (the kv rows start here in kvsrc)
+    kvd : uint      // kv width (v rows start at qd + kvd)
+    hs : uint
+    half : uint     // rotation pairs per head
+    neox : uint     // pair select: 0 = NORM (2j, 2j+1), else NEOX (j, j+half)
+    kpair0 : uint   // first k pair's global index (q pairs come first)
+    npairs : uint
+    krow : uint     // this position's K mirror row base
+    vrow : uint     // ... and V mirror row base
+}
+
+// fused rope + KV-row store (decode, one token), f32 mirror: one thread per rotation pair,
+// each owning 2 distinct K + 2 V slots
+[vk_dispatch(name = "rope_kv_cls", grid = "wgs", params = "wgs : int64")]
+class RopeKvStore {
+    @ssbo @binding = 0 qrows : array<float>    // q, roped in place
+    @ssbo @binding = 1 kvsrc : array<float>    // the projection buffer: [q | k | v] rows
+    @ssbo @binding = 2 kmir : array<float>     // the K mirror plane
+    @ssbo @binding = 3 vmir : array<float>     // the V mirror plane
+    @ssbo @binding = 4 cossin : array<float>   // this position's cos row then sin row
+    @push_constant pa : RopeKvArgs
+
+    [spirv_kernel(local_size_x = 256, name = "rope_kv_cls_spv")]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.npairs) {
+            let is_k = gid >= pa.kpair0
+            let lp = is_k ? gid - pa.kpair0 : gid
+            let h = lp / pa.half
+            let j = lp % pa.half
+            let fcr = cossin[j]
+            let fci = cossin[pa.half + j]
+            let e0 = pa.neox != 0u ? j : j * 2u
+            let e1 = pa.neox != 0u ? j + pa.half : j * 2u + 1u
+            if (is_k) {
+                let kb = pa.qd + h * pa.hs
+                let a0 = kvsrc[kb + e0]
+                let a1 = kvsrc[kb + e1]
+                kmir[pa.krow + h * pa.hs + e0] = a0 * fcr - a1 * fci
+                kmir[pa.krow + h * pa.hs + e1] = a0 * fci + a1 * fcr
+                // v is not roped — copy the same two elements raw into the V plane
+                let vb = pa.qd + pa.kvd + h * pa.hs
+                vmir[pa.vrow + h * pa.hs + e0] = kvsrc[vb + e0]
+                vmir[pa.vrow + h * pa.hs + e1] = kvsrc[vb + e1]
+            } else {
+                let qb = h * pa.hs
+                let a0 = qrows[qb + e0]
+                let a1 = qrows[qb + e1]
+                qrows[qb + e0] = a0 * fcr - a1 * fci
+                qrows[qb + e1] = a0 * fci + a1 * fcr
+            }
+        }
+    }
+}
+
+struct QknRopeArgs {
+    qd : uint
+    kvd : uint
+    hs : uint
+    half : uint
+    neox : uint
+    nh : uint       // q heads (wgs >= nh are k heads)
+    krow : uint
+    vrow : uint
+    qwoff : uint    // q norm-weight row base in wn
+    kwoff : uint
+    eps : float
+}
+
+// qk_rms + rope_kv_store in ONE dispatch (qk_norm models), one wg per head-row; verbatim
+// reduce + rotation order, so bit-identical to the split pair
+[vk_dispatch(name = "qkn_rope_cls", grid = "wgs", params = "wgs : int64")]
+class QknRopeKv : RmsWgBase {
+    @ssbo @binding = 0 qrows : array<float>    // q rows, normed + roped in place
+    @ssbo @binding = 1 kvsrc : array<float>    // the projection buffer: [q | k | v] rows
+    @ssbo @binding = 2 kmir : array<float>
+    @ssbo @binding = 3 vmir : array<float>
+    @ssbo @binding = 4 cossin : array<float>
+    @ssbo @binding = 5 wn : array<float>       // the q/k norm weight rows (its OWN member now —
+                                               // the old kernel packed them into the cos buffer)
+    @push_constant pa : QknRopeArgs
+    @workgroup row : float[256]                // this head's normed q or k row (hs <= 256)
+
+    [spirv_kernel(local_size_x = 256, name = "qkn_rope_cls_spv")]
+    def run {
+        let wid = gl_WorkGroupID.x
+        let is_k = wid >= pa.nh
+        let h = is_k ? wid - pa.nh : wid
+        let tid = gl_LocalInvocationID.x
+        let sbase = is_k ? pa.qd + h * pa.hs : h * pa.hs
+        var v = 0.0
+        if (tid < pa.hs) {
+            v = is_k ? kvsrc[sbase + tid] : qrows[sbase + tid]
+        }
+        let ss = tid < pa.hs ? v * v : 0.0
+        let inv = wg_rms_inv(ss, pa.hs, pa.eps)
+        if (tid < pa.hs) {
+            row[tid] = wn[(is_k ? pa.kwoff : pa.qwoff) + tid] * (v * inv)
+        }
+        barrier()
+        // rope this head's pairs off the normed row; the pairs partition [0, hs)
+        if (tid < pa.half) {
+            let fcr = cossin[tid]
+            let fci = cossin[pa.half + tid]
+            let e0 = pa.neox != 0u ? tid : tid * 2u
+            let e1 = pa.neox != 0u ? tid + pa.half : tid * 2u + 1u
+            let a0 = row[e0]
+            let a1 = row[e1]
+            let r0 = a0 * fcr - a1 * fci
+            let r1 = a0 * fci + a1 * fcr
+            if (is_k) {
+                kmir[pa.krow + h * pa.hs + e0] = r0
+                kmir[pa.krow + h * pa.hs + e1] = r1
+            } else {
+                qrows[h * pa.hs + e0] = r0
+                qrows[h * pa.hs + e1] = r1
+            }
+        }
+        // v is not roped or normed — the k-head wgs copy their own raw row into the V plane
+        if (is_k && tid < pa.hs) {
+            vmir[pa.vrow + h * pa.hs + tid] = kvsrc[pa.qd + pa.kvd + h * pa.hs + tid]
+        }
+    }
+}
+
 // ===== the region-GEMV push params (every decode GEMV shares the shape) =====
 
 struct GemvArgs {
