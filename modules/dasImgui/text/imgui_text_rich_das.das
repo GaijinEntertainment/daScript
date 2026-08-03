@@ -404,7 +404,7 @@ def public rich_das_hybrid_edit(var ed : TextEditState; // nolint:STYLE038
         } else {
             let group_index = seg.node_first
             var group & = unsafe(st.groups[group_index])
-            let view_result <- rich_document_view("rich_das_{group_index}",
+            rich_document_view("rich_das_{group_index}",
                 group.doc, group.view, md_style, group.doc_revision)
             rich_das_route_click(ed, st, group_index)
         }
