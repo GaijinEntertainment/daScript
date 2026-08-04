@@ -203,6 +203,7 @@
         (f.bytes ? ' · ' + f.bytes + ' B' : '')));
     });
     var hwLine = [hw.cpu, hw.model_id, hw.total_cores ? hw.total_cores + ' cores' : '',
+      hw.remote_desktop ? (hw.remote_desktop === 'off' ? 'Parsec off' : 'REMOTE DESKTOP: ' + hw.remote_desktop) : '',
       hw.ram_gb ? hw.ram_gb + ' GB' : '', hw.ram_config, hw.gpu, hw.os, hw.power_plan,
       hw.smt ? 'SMT ' + hw.smt : ''].filter(Boolean).join(' · ');
     if (hwLine) lines.push('        ' + esc(hwLine));
