@@ -186,15 +186,15 @@ def imgui_mouse_stop(_input : JsonValue?) : JsonValue? {
 }
 
 struct MouseStatusResult {
-    playing      : bool
-    busy         : bool   //! any mouse gesture in flight: this timeline OR a boost click/drag coroutine (imgui_click rides the latter — `playing` alone misses it)
-    elapsed_ms   : int
-    cursor_x     : float
-    cursor_y     : float
-    queue_idx    : int
-    queue_total  : int
-    held_count   : int
-    cursor_owned : bool
+    playing      : bool   //! true while a scripted mouse timeline is being replayed.
+    busy         : bool   //! any gesture in flight: the timeline OR a boost click/drag coroutine (imgui_click rides the latter — `playing` alone misses it).
+    elapsed_ms   : int    //! milliseconds since timeline playback began (0 when idle).
+    cursor_x     : float  //! synth cursor x position.
+    cursor_y     : float  //! synth cursor y position.
+    queue_idx    : int    //! index of the next pending event in the timeline.
+    queue_total  : int    //! total number of events in the active timeline.
+    held_count   : int    //! number of synthetic mouse buttons currently held down.
+    cursor_owned : bool   //! true once the synth layer owns the cursor position.
 }
 
 [live_command(description="ImGui-bypass mouse playback status.")]
@@ -320,7 +320,7 @@ def private mod_name_to_key(name : string) : int {
 }
 
 def private needs_shift_ascii(c : int) : bool {
-    if (c >= 'A' && c <= 'Z') return true   // nolint:PERF014
+    if (c >= 'A' && c <= 'Z') return true
     return (c == '~' || c == '!' || c == '@' || c == '#'
          || c == '$' || c == '%' || c == '^' || c == '&'
          || c == '*' || c == '(' || c == ')' || c == '_'
@@ -333,9 +333,9 @@ def private base_key_ascii(c : int) : int { // nolint:STYLE037
     // ImGuiKey (int) for the base key producing `c` on US layout. `.0` reads as a float literal in daslang so digit enums don't parse — anchor the digit base on `ImGuiKey.A - 10`.
     let key_a = int(ImGuiKey.A)
     let key_0 = key_a - 10
-    if (c >= 'A' && c <= 'Z') return key_a + (c - 'A')   // nolint:PERF014
-    if (c >= 'a' && c <= 'z') return key_a + (c - 'a')   // nolint:PERF014
-    if (c >= '0' && c <= '9') return key_0 + (c - '0')   // nolint:PERF014
+    if (c >= 'A' && c <= 'Z') return key_a + (c - 'A')
+    if (c >= 'a' && c <= 'z') return key_a + (c - 'a')
+    if (is_number(c)) return key_0 + (c - '0')
     // shifted digit row: ! @ # $ % ^ & * ( ) → keys 1 2 3 4 5 6 7 8 9 0
     if (c == '!') return key_0 + 1
     if (c == '@') return key_0 + 2
