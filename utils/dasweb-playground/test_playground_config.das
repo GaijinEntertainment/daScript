@@ -43,6 +43,26 @@ def test_defaults_and_toml(t : T?) {
         t |> success(!apply_config_text(cfg, "port = [not toml", args, sources, err), "parse fails")
         t |> success(!empty(err), "error text set")
     }
+    t |> run("a wrong-typed value is an error, not a silent zero") @(t : T?) {
+        // Regression: a string where a number belongs coerced to 0 (and a
+        // number where a string belongs to ""), with provenance still logged as
+        // "toml" — the service would start on a config the file does not state.
+        var cfg = ServerArgs()
+        var sources : table<string; string>
+        var err = ""
+        let args <- no_args()
+        t |> success(!apply_config_text(cfg, "max_source_bytes = \"256k\"\n", args, sources, err), "string for a number fails")
+        t |> success(find(err, "max_source_bytes") >= 0, "error names the key")
+        t |> equal(cfg.max_source_bytes, 262144)   // default stands
+    }
+    t |> run("a number where a string belongs is an error") @(t : T?) {
+        var cfg = ServerArgs()
+        var sources : table<string; string>
+        var err = ""
+        let args <- no_args()
+        t |> success(!apply_config_text(cfg, "db = 7\n", args, sources, err), "number for a string fails")
+        t |> success(find(err, "db") >= 0, "error names the key")
+    }
 }
 
 [test]

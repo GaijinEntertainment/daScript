@@ -28,15 +28,44 @@ var private g_stop_requested = false
 var private g_server_started = false
 
 def private client_ip_of(var req : HttpRequest?) : string {
-    //! First hop of X-Forwarded-For — Caddy is the only caller in production,
-    //! so the header is trustworthy; absent (direct loopback callers, tests)
-    //! degrades to "local".
+    //! RIGHTMOST X-Forwarded-For hop. A reverse proxy APPENDS the peer it
+    //! accepted, so only the last hop is proxy-authored — every hop left of it
+    //! is whatever the client sent, and taking the first lets a caller pick its
+    //! own rate-limit bucket. No header (direct callers, tests) falls back to
+    //! the transport peer.
     let fwd = get_header(req, "X-Forwarded-For")
     if (empty(fwd)) {
-        return "local"
+        let peer = client_ip(req)
+        return empty(peer) ? "local" : peer
     }
-    let comma = find(fwd, ",")
-    return comma < 0 ? fwd : slice(fwd, 0, comma)
+    let comma = rfind(fwd, ",")
+    let last = comma < 0 ? fwd : slice(fwd, comma + 1)
+    let trimmed = strip(last)
+    return empty(trimmed) ? "local" : trimmed
+}
+
+def is_loopback_peer(peer : string) : bool {
+    //! Exact-match only: an unknown or empty peer counts as remote, and no
+    //! prefix/suffix rule can be fooled by a hostname that merely contains a
+    //! loopback address.
+    return peer == "127.0.0.1" || peer == "::1" || peer == "::ffff:127.0.0.1"
+}
+
+def private is_loopback_caller(var req : HttpRequest?) : bool {
+    //! Operator-surface gate. The transport peer is the only identity a caller
+    //! cannot forge: the service sits behind a proxy, so any browser page can
+    //! drive a cross-origin POST to these routes, and no header separates that
+    //! from a local operator.
+    return is_loopback_peer(client_ip(req))
+}
+
+def body_is_byte_faithful(buffered_bytes : int; text : string) : bool {
+    //! Whether the string view of a request body still carries every byte that
+    //! arrived. A das string ends at the first NUL, so `text` can be a silent
+    //! prefix of what the client sent — only the buffered byte count knows the
+    //! difference, and a truncated body would be hashed and stored as if it
+    //! were the whole thing.
+    return buffered_bytes == length(text)
 }
 
 def is_valid_hash(h : string) : bool {
@@ -65,7 +94,9 @@ def private log_request(method : string; path : string; status : int; ip : strin
 
 class PlaygroundServer : HvWebServer {
     def override onInit {  // the route table: one registration per endpoint
-        allow_cors()
+        // No allow_cors(): libhv's CORS middleware reflects the caller's Origin
+        // back on EVERY route, which would make each stored sample and the
+        // operator surface cross-origin readable. The playground is same-origin.
         GET("/healthz") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return resp |> TEXT_PLAIN("ok")
         }
@@ -79,7 +110,6 @@ class PlaygroundServer : HvWebServer {
             return handle_get_source(req, resp)
         }
         POST("/admin/reimport") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            // operator surface: reachable on loopback only — Caddy never routes /admin/*
             return handle_reimport(req, resp)
         }
         GET("/s/:hash") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
@@ -87,6 +117,10 @@ class PlaygroundServer : HvWebServer {
         }
         POST("/shutdown") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let t0 = ref_time_ticks()
+            if (!is_loopback_caller(req)) {
+                log_request("POST", "/shutdown", 403, client_ip_of(req), 0, 0, t0)
+                return resp |> TEXT_PLAIN("forbidden", http_status.FORBIDDEN)
+            }
             logger_info("playground", "shutdown requested")
             g_stop_requested = true
             log_request("POST", "/shutdown", 200, client_ip_of(req), 0, 3, t0)
@@ -103,8 +137,19 @@ class PlaygroundServer : HvWebServer {
 
 def private handle_put(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     let t0 = ref_time_ticks()
-    let source = string(req.body)
     let ip = client_ip_of(req)
+    // Transport shape first: a das string ends at the first NUL, so a body
+    // carrying one would be size-checked, validated, hashed and stored
+    // truncated — two different bodies sharing a pre-NUL prefix would collapse
+    // onto one hash and one public URL. Compare the buffered byte count
+    // (std::string size) against the string length and refuse the mismatch.
+    let raw_bytes = length(req.body)
+    let source = string(req.body)
+    if (!body_is_byte_faithful(raw_bytes, source)) {
+        let nul_body = write_json(JV((error = "source contains NUL bytes")))
+        log_request("POST", "/api/samples", 400, ip, raw_bytes, length(nul_body), t0)
+        return resp |> JSON(nul_body, http_status.BAD_REQUEST)
+    }
     let r = put_sample(g_db, source, ip, g_policy, current_unix_time())
     var status = http_status.OK
     var body = ""
@@ -139,6 +184,10 @@ def private handle_get_source(var req : HttpRequest?; var resp : HttpResponse?) 
     }
     // content-addressed => immutable forever
     resp |> set_header("Cache-Control", "public, max-age=31536000, immutable")
+    // The body is anonymous user input served from the site's own origin, and
+    // it is cached for a year: without nosniff a browser may sniff it as script
+    // or HTML, which would make any stored sample a same-origin script source.
+    resp |> set_header("X-Content-Type-Options", "nosniff")
     log_request("GET", "/api/samples/:hash", 200, ip, 0, length(source), t0)
     resp |> set_content_type("text/plain; charset=utf-8")
     resp.body := source
@@ -151,12 +200,18 @@ def private handle_listed(var req : HttpRequest?; var resp : HttpResponse?) : ht
     var arr <- [for (l in listed); JV((hash = l.hash, title = l.title, category = l.category,
         path = l.path, slug = l.slug))]
     let body = write_json(JV(arr))
+    resp |> set_header("Cache-Control", "public, max-age=60")
+    resp |> set_header("X-Content-Type-Options", "nosniff")
     log_request("GET", "/api/samples/listed", 200, client_ip_of(req), 0, length(body), t0)
     return resp |> JSON(body)
 }
 
 def private handle_reimport(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     let t0 = ref_time_ticks()
+    if (!is_loopback_caller(req)) {
+        log_request("POST", "/admin/reimport", 403, client_ip_of(req), 0, 0, t0)
+        return resp |> JSON(write_json(JV((error = "forbidden"))), http_status.FORBIDDEN)
+    }
     if (empty(g_curated_dir)) {
         log_request("POST", "/admin/reimport", 503, client_ip_of(req), 0, 0, t0)
         return resp |> JSON(write_json(JV((error = "curated_dir not configured"))), http_status.SERVICE_UNAVAILABLE)

@@ -7,6 +7,7 @@ require daslib/sql
 require sqlite/sqlite_migrate public
 require daslib/sql_linq
 require daslib/sha_256 public
+require daslib/utf8_utils
 require daslib/logger
 require daslib/json_boost
 require strings
@@ -17,6 +18,10 @@ require strings
 
 let RATE_WINDOW_SECONDS = 3600l
 
+//! Sort key for a listing the importer did not order (an admin promotion):
+//! after every manifest entry, in a store the dropdown renders top to bottom.
+let LISTING_POSITION_LAST = 999999
+
 [sql_table(name = "samples"),
  sql_index(fields = ("ClientIp", "CreatedAt"))]
 struct Sample {
@@ -25,12 +30,13 @@ struct Sample {
     Size : int
     CreatedAt : int64
     ClientIp : string
-    Listed : int = 0   // 0/1; bool lacks a bind adapter on the predicate/update rails
+    Listed : int = 0   // 0/1
     Title : string = ""
     Origin : string = "user"
     Category : string = ""
     PrimaryPath : string = ""   // curated: files[0] from data.json — the UI derives slug/assets from it
     Slug : string = ""          // curated: explicit deep-link slug (?example=) when the manifest has one
+    Position : int = LISTING_POSITION_LAST   // manifest order; unset sorts last
 }
 
 [sql_migration(version = 1, description = "create playground samples")]
@@ -55,6 +61,11 @@ def samples_migration_002(db : SqlRunner) {
     db |> exec("ALTER TABLE samples ADD COLUMN Slug TEXT NOT NULL DEFAULT ''")
 }
 
+[sql_migration(version = 3, description = "curated listing keeps manifest order")]
+def samples_migration_003(db : SqlRunner) {
+    db |> exec("ALTER TABLE samples ADD COLUMN Position INTEGER NOT NULL DEFAULT 999999")
+}
+
 struct StorePolicy {
     //! Every limit the store enforces; the launcher fills it from config.
     max_source_bytes : int = 262144
@@ -76,69 +87,41 @@ struct PutResult {
 }
 
 def is_valid_utf8(data : array<uint8> const# implicit) : bool {
-    //! Strict UTF-8 validation: rejects overlongs, surrogates, and > U+10FFFF.
-    var i = 0
-    let n = length(data)
-    while (i < n) {
-        let b0 = uint(data[i])
-        if (b0 < 0x80) {
-            i ++
-            continue
-        }
-        var need = 0
-        var lo = 0x80u
-        var hi = 0xBFu
-        if (b0 >= 0xC2 && b0 <= 0xDF) {
-            need = 1
-        } elif (b0 == 0xE0) {
-            need = 2
-            lo = 0xA0u
-        } elif (b0 >= 0xE1 && b0 <= 0xEC) {
-            need = 2
-        } elif (b0 == 0xED) {
-            need = 2
-            hi = 0x9Fu
-        } elif (b0 >= 0xEE && b0 <= 0xEF) {
-            need = 2
-        } elif (b0 == 0xF0) {
-            need = 3
-            lo = 0x90u
-        } elif (b0 >= 0xF1 && b0 <= 0xF3) {
-            need = 3
-        } elif (b0 == 0xF4) {
-            need = 3
-            hi = 0x8Fu
-        } else {
-            return false    // 0x80-0xC1 (bare continuation / overlong), 0xF5-0xFF
-        }
-        return false if (i + need >= n)
-        for (k in range(need)) {
-            let b = uint(data[i + 1 + k])
-            let bLo = k == 0 ? lo : 0x80u
-            let bHi = k == 0 ? hi : 0xBFu
-            return false if (b < bLo || b > bHi)
-        }
-        i += need + 1
-    }
-    return true
+    //! Strict UTF-8: rejects overlongs, surrogates, and > U+10FFFF.
+    return is_utf8_string_valid(data)
 }
 
 def is_valid_utf8(s : string) : bool {
-    var ok = true
-    peek_data(s) $(bytes) {
-        ok = is_valid_utf8(bytes)
-    }
-    return ok
+    return is_utf8_string_valid(s)
+}
+
+def private rate_exceeded(db : SqlRunner; client_ip : string; policy : StorePolicy; now : int64) : bool {
+    // count() lowers to SELECT COUNT(*), so the ceiling costs one scalar row on
+    // the (ClientIp, CreatedAt) index — this runs on every POST, ahead of
+    // hashing, and must not materialize the rows it is only counting.
+    let cutoff = now - RATE_WINDOW_SECONDS
+    let recent = _sql(db |> select_from(type<Sample>)
+        |> _where(_.ClientIp == client_ip && _.CreatedAt >= cutoff)
+        |> count())
+    return recent >= policy.max_inserts_per_ip_hour
 }
 
 def put_sample(db : SqlRunner; source : string; client_ip : string; policy : StorePolicy; now : int64) : PutResult {
     //! Validate, dedup by content hash, and store. First writer wins: a dedup
     //! hit changes nothing about the existing row.
+    //! Checks run cheapest-first, and the rate ceiling comes BEFORE validation
+    //! and hashing: it counts rows created in the window, so a throttled caller
+    //! must not be able to spend a full UTF-8 scan and SHA-256 pass per request
+    //! on work that can never be stored — including for a body that would have
+    //! deduped.
     if (empty(source)) {
         return PutResult(status = PutStatus.empty_source)
     }
     if (length(source) > policy.max_source_bytes) {
         return PutResult(status = PutStatus.too_large)
+    }
+    if (rate_exceeded(db, client_ip, policy, now)) {
+        return PutResult(status = PutStatus.rate_limited)
     }
     if (!is_valid_utf8(source)) {
         return PutResult(status = PutStatus.invalid_utf8)
@@ -146,13 +129,6 @@ def put_sample(db : SqlRunner; source : string; client_ip : string; policy : Sto
     let hash = sha256_hex(source)
     if (sample_exists(db, hash)) {
         return PutResult(status = PutStatus.ok, hash = hash, created = false)
-    }
-    let cutoff = now - RATE_WINDOW_SECONDS
-    let recent <- _sql(db |> select_from(type<Sample>)
-        |> _where(_.ClientIp == client_ip && _.CreatedAt >= cutoff)
-        |> _select(_.Hash))
-    if (length(recent) >= policy.max_inserts_per_ip_hour) {
-        return PutResult(status = PutStatus.rate_limited)
     }
     db |> insert(Sample(
         Hash = hash,
@@ -192,10 +168,12 @@ struct ListedSample {
 }
 
 def listed_samples(db : SqlRunner) : array<ListedSample> {
-    //! The curated dropdown, category-then-title ordered.
+    //! The curated dropdown in manifest order — the order the site authored is
+    //! what the dropdown shows, and entry zero is what the playground opens
+    //! with. Category/title only break ties among unordered rows.
     let rows <- _sql(db |> select_from(type<Sample>)
         |> _where(_.Listed != 0)
-        |> _order_by((_.Category, _.Title))
+        |> _order_by((_.Position, _.Category, _.Title))
         |> _select((Hash = _.Hash, Title = _.Title, Category = _.Category,
             PrimaryPath = _.PrimaryPath, Slug = _.Slug)))
     return <- [for (r in rows); ListedSample(hash = r.Hash, title = r.Title, category = r.Category,
@@ -221,11 +199,11 @@ def upsert_curated_source(db : SqlRunner; source : string; now : int64) : string
     return hash
 }
 
-def list_curated_sample(db : SqlRunner; hash : string; title : string; category : string; path : string; slug : string) {
+def list_curated_sample(db : SqlRunner; hash : string; title : string; category : string; path : string; slug : string; position : int) {
     db |> _sql_update(
         type<Sample>,
         _.Hash == hash,
-        (Listed = 1, Title = title, Category = category, PrimaryPath = path, Slug = slug))
+        (Listed = 1, Title = title, Category = category, PrimaryPath = path, Slug = slug, Position = position))
     logger_info("playground.store", "list curated sample",
         JV((hash = hash, title = title, category = category)))
 }
@@ -253,13 +231,15 @@ def demote_stale_curated(db : SqlRunner; keep : table<string>) : int {
 
 def promote_sample(db : SqlRunner; hash : string; title : string; category : string) : bool {
     //! List an existing sample in the dropdown. False when the hash is unknown.
+    //! Clears PrimaryPath: that field marks importer ownership, so a sample the
+    //! manifest once carried would otherwise be re-demoted by the next import.
     if (!sample_exists(db, hash)) {
         return false
     }
     db |> _sql_update(
         type<Sample>,
         _.Hash == hash,
-        (Listed = 1, Title = title, Category = category))
+        (Listed = 1, Title = title, Category = category, PrimaryPath = "", Position = LISTING_POSITION_LAST))
     logger_info("playground.store", "promote sample",
         JV((hash = hash, title = title, category = category)))
     return true

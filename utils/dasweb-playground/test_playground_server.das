@@ -164,7 +164,7 @@ def test_rate_limiting_by_forwarded_ip(t : T?) {
             var headers_a : table<string; string>
             headers_a |> insert("X-Forwarded-For", "203.0.113.7")
             var headers_b : table<string; string>
-            headers_b |> insert("X-Forwarded-For", "203.0.113.8, 10.0.0.1")
+            headers_b |> insert("X-Forwarded-For", "203.0.113.8, 10.0.0.1")   // identity is 10.0.0.1, the proxy-appended hop
             for (i in range(3)) {
                 POST("{base_url}/api/samples", "sample {i}", headers_a) $(resp) {
                     tt |> equal(int(resp.status_code), 200)
@@ -177,6 +177,90 @@ def test_rate_limiting_by_forwarded_ip(t : T?) {
                 tt |> equal(int(resp.status_code), 200)
             }
         }
+    }
+}
+
+[test]
+def test_forged_forwarded_hops_share_one_bucket(t : T?) {
+    //! Regression: the rate ceiling keyed on the FIRST X-Forwarded-For hop,
+    //! which a client authors. A proxy appends the peer it accepted, so only
+    //! the last hop is trustworthy — keying on the first let one caller mint a
+    //! fresh identity per request and never be throttled.
+    with_playground_server(tiny_policy()) $(base_url) {
+        t |> run("a caller cannot escape the ceiling by varying earlier hops") @(tt : T?) {
+            for (i in range(3)) {
+                var h : table<string; string>
+                h |> insert("X-Forwarded-For", "198.51.100.{i}, 10.0.0.42")
+                POST("{base_url}/api/samples", "forged {i}", h) $(resp) {
+                    tt |> equal(int(resp.status_code), 200)
+                }
+            }
+            var h4 : table<string; string>
+            h4 |> insert("X-Forwarded-For", "198.51.100.99, 10.0.0.42")
+            POST("{base_url}/api/samples", "forged 3", h4) $(resp) {
+                tt |> equal(int(resp.status_code), 429)
+            }
+        }
+    }
+}
+
+[test]
+def test_body_byte_faithfulness_guard(t : T?) {
+    //! Regression: the body was read through a NUL-terminated string, so
+    //! everything past an embedded NUL was dropped before the size check, the
+    //! validation, the hash and the stored row — two different bodies sharing a
+    //! pre-NUL prefix would collapse onto one hash and one public URL.
+    //! The guard is tested as a predicate rather than end-to-end: the dasHV
+    //! client takes the body as a NUL-terminated string too, so no dastest
+    //! client can put a NUL on the wire.
+    t |> run("a body whose bytes survive the string view is accepted") @(tt : T?) {
+        let text = "print(\"visible\")"
+        tt |> success(body_is_byte_faithful(length(text), text), "faithful body")
+        tt |> success(body_is_byte_faithful(0, ""), "empty body")
+    }
+    t |> run("a body longer than its string view is refused") @(tt : T?) {
+        let text = "print(\"visible\")"
+        // what a NUL looks like from the handler: more bytes arrived than the
+        // string carries
+        tt |> success(!body_is_byte_faithful(length(text) + 18, text), "truncated at a NUL")
+        tt |> success(!body_is_byte_faithful(1, ""), "NUL-only body")
+    }
+}
+
+[test]
+def test_stored_sources_are_served_nosniff(t : T?) {
+    //! Regression: stored anonymous input was served same-origin with a
+    //! one-year immutable cache and no nosniff, so a browser could sniff a
+    //! sample as script.
+    with_playground_server(default_policy()) $(base_url) {
+        let source = "print(\"sniff me\")"
+        let hash = posted_hash(base_url, source)
+        t |> run("GET carries X-Content-Type-Options") @(tt : T?) {
+            GET("{base_url}/api/samples/{hash}") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+                tt |> equal(get_header(resp, "X-Content-Type-Options"), "nosniff")
+            }
+        }
+    }
+}
+
+[test]
+def test_loopback_peer_predicate(t : T?) {
+    //! The operator-surface gate. Only the predicate is unit-testable here: the
+    //! test client necessarily connects FROM loopback, so the allow path is
+    //! what the harness exercises (every suite shuts the server down through
+    //! POST /shutdown) and the deny path is proven on the peer string.
+    t |> run("loopback forms are accepted") @(tt : T?) {
+        tt |> success(is_loopback_peer("127.0.0.1"), "ipv4 loopback")
+        tt |> success(is_loopback_peer("::1"), "ipv6 loopback")
+        tt |> success(is_loopback_peer("::ffff:127.0.0.1"), "v4-mapped loopback")
+    }
+    t |> run("everything else is remote") @(tt : T?) {
+        tt |> success(!is_loopback_peer(""), "unknown peer")
+        tt |> success(!is_loopback_peer("203.0.113.5"), "public address")
+        tt |> success(!is_loopback_peer("10.0.0.1"), "private LAN address")
+        tt |> success(!is_loopback_peer("127.0.0.1.evil.example"), "address as a hostname prefix")
+        tt |> success(!is_loopback_peer("127.0.0.2"), "other loopback-range address")
     }
 }
 

@@ -381,6 +381,19 @@ jobs:
         set -eux
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-server/test_openai_server.das
 
+    - name: "Test dasweb-playground"
+      # The daslang.io sample-store backend. Its suites live in-dir (a
+      # hyphenated directory requires siblings by bare name), so `--test
+      # ./tests` never reaches them — without this step the store, importer,
+      # config and HTTP tests run only by hand. The server suites bind
+      # 127.0.0.1:19011/19012 and shut themselves down.
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        for suite in test_samples_store test_curated_import test_playground_config test_playground_server; do
+          $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasweb-playground/$suite.das
+        done
+
     # Self-binders for dasClangBind + dasLLVM bindings live on the mingw
     # worker (build.yml build_windows_mingw) — see comment on the linux
     # build step above for why dasClangBind can't be enabled here.
