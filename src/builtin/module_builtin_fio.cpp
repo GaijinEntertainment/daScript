@@ -2742,11 +2742,20 @@ bool das_prefetch_map ( void *, uint64_t ) { return false; }
 bool das_prefetch_map ( void * base, uint64_t bytes ) {
     if ( !base || bytes==0 ) return false;
 #if defined(_WIN32)
-    // _WIN32, not _MSC_VER — clang-mingw is Windows too and has no madvise
+    // _WIN32, not _MSC_VER - clang-mingw is Windows too and has no madvise
+    // the condition memoryapi.h declares WIN32_MEMORY_RANGE_ENTRY and PrefetchVirtualMemory under.
+    // A host targeting Windows 7 (_WIN32_WINNT=0x0601) gets neither, and prefetch is advisory, so
+    // that target reads cold instead of failing to build.
+#if (_WIN32_WINNT >= _WIN32_WINNT_WIN8) \
+        && WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP | WINAPI_PARTITION_SYSTEM)
     WIN32_MEMORY_RANGE_ENTRY range;
     range.VirtualAddress = base;
     range.NumberOfBytes = (SIZE_T) bytes;
     return PrefetchVirtualMemory(GetCurrentProcess(), 1, &range, 0) != 0;
+#else
+    (void)base; (void)bytes;
+    return false;
+#endif
 #else
     return madvise(base, (size_t)bytes, MADV_WILLNEED)==0;
 #endif
