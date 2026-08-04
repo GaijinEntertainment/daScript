@@ -267,7 +267,7 @@ def main() : int {
             continue
         }
         if (int64(st.size) != e.bytes) {
-            to_log(LOG_ERROR, "fetch_models: {e.name} — SIZE MISMATCH (have {st.size}, provenance {e.bytes}) — different bytes would silently bench a different model\n")
+            to_log(LOG_ERROR, "fetch_models: {e.name} — SIZE MISMATCH (have {int64(st.size)}, provenance {e.bytes}) — different bytes would silently bench a different model\n")
             failed++
             continue
         }
