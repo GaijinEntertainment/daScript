@@ -2,7 +2,7 @@ options gen2
 
 require dastest/testing_boost public
 require curated_import
-require daslib/sql
+require daslib/result
 require daslib/sql_linq
 require daslib/fio
 require daslib/json_boost
