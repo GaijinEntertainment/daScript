@@ -351,6 +351,15 @@ own plan doc before implementation; the contour:
   user-visible; failed-build shows the compiler error.
 - **CI**: keep a compile-gate job proving the curated set builds (test, publishes nothing) — a
   broken sample reds CI, not the production queue.
+- **pages.yml diet (folded in here per Boris — no separate "small PR", CI makes every PR an
+  hour):** (a) DELETE the per-sample wasm64 compute builds + staging + artifact-verify from
+  pages.yml — orphaned since phase 2 turned the radio off; the queue replaces them. (b) Fold
+  the example-game wasm64 pages (arcanoid/pacman/furier/path_tracer_lab/physarum_lab) into the
+  same content-addressed build/cache rail — they change rarely, so the store cache near-always
+  hits and CI stops rebuilding them; design point: a game artifact is an html+js+wasm TRIPLE,
+  so the artifact cache must carry multi-file bundles, not just single .wasm. (c)
+  `daslang_static` (the emcc-built interpreter runtime) explicitly STAYS in CI — it is the
+  toolchain, not a sample; not touched (Boris: "amazing it actually works").
 - Checkpoint 3a: curated sample builds end-to-end through the real queue from a cold cache.
   Checkpoint 3b: user-visible flow with the building indicator, on a live server.
 
