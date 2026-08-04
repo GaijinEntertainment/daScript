@@ -1723,13 +1723,13 @@ def bench_records_path : string {
 //! Every per-box store under records/, STRICT: ``records/{box}.json`` only — a dotted stem is
 //! a tune archive, ``annotations.json`` is the hand-note overlay, ``_``-prefixed is scratch.
 //! The ONE lister both generators use; two copies drifted on the ``_`` rule once already.
-def list_record_stores : array<string> {
+def list_record_stores(root : string = "modules/dasLLAMA/performance/records") : array<string> {
     var out : array<string>
-    dir("modules/dasLLAMA/performance/records") $(fn) {
+    dir(root) $(fn) {
         if (ends_with(fn, ".json") && !starts_with(fn, "_")) {
             let stem = slice(fn, 0, length(fn) - length(".json"))
             if (stem != "annotations" && find(stem, ".") < 0) {
-                out |> push("modules/dasLLAMA/performance/records/{fn}")
+                out |> push("{root}/{fn}")
             }
         }
     }

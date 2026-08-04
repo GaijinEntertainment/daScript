@@ -164,3 +164,61 @@ def test_asr_catalog_invariants(t : T?) {
         t |> equal(libriCount, 1)   // LibriSpeech scope: Parakeet v3 only
     }
 }
+
+[test]
+def test_optional_fields_round_trip(t : T?) {
+    t |> run("encode_ms and void_clips survive write/read") @(t : T?) {
+        var models : array<BenchModel>
+        models |> emplace(make_model())
+        models[0].runs[0].tests["asr:jfk.wav"].encode_ms = 395.2lf
+        models[0].runs[0].void_clips = "jfk.wav"
+        models[0].runs[0].comment = "a hand note"
+        write_bench_records(TMP, models)
+        var back : array<BenchModel>
+        t |> success(read_bench_records(TMP, back), "store re-reads")
+        t |> equal(back[0].runs[0].tests?["asr:jfk.wav"]?.encode_ms ?? 0.0lf, 395.2lf, "encode_ms round-trips")
+        t |> equal(back[0].runs[0].void_clips, "jfk.wav", "void_clips round-trips")
+        t |> equal(back[0].runs[0].comment, "a hand note", "comment round-trips")
+        remove(TMP)
+        delete back
+        delete models
+    }
+}
+
+[test]
+def test_void_clips_annotation_lands(t : T?) {
+    t |> run("an annotation's void_clips reaches only the selected run") @(t : T?) {
+        var models : array<BenchModel>
+        models |> emplace(make_model())
+        var annos : array<BenchAnnotation>
+        annos |> emplace(BenchAnnotation(gguf = "ggml-tiny.bin", engine = "whisper-cli",
+            comment = "ref runaway on jfk", void_clips = "jfk.wav"))
+        apply_annotations(models, annos)
+        t |> equal(models[0].runs[1].void_clips, "jfk.wav", "selected run voided")
+        t |> equal(models[0].runs[0].void_clips, "", "das run untouched")
+        delete annos
+        delete models
+    }
+}
+
+[test]
+def test_list_record_stores_strictness(t : T?) {
+    t |> run("the store lister admits records/\{box\}.json ONLY") @(t : T?) {
+        var terr = ""
+        let dir = temp_directory(terr)
+        t |> success(terr == "", "temp_directory resolves")
+        let root = path_join(dir, "dasllama_test_stores")
+        mkdir_rec(root)
+        for (fn in ["m9.json", "m9.tune.abcdef123456.json", "annotations.json", "_scratch.json", "notes.txt"]) {
+            fopen(path_join(root, fn), "wb") $(f) {
+                if (f != null) {
+                    fwrite(f, "[]")
+                }
+            }
+        }
+        var stores <- list_record_stores(root)
+        t |> equal(length(stores), 1, "one store admitted")
+        t |> equal(base_name(stores[0]), "m9.json", "the box store, nothing else")
+        delete stores
+    }
+}

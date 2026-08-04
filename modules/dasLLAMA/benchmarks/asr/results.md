@@ -25,6 +25,8 @@ _Apple M1 Max, 8 threads — das q8 — daslang 0.6.4 db50a7da2, 2026-08-03._
 | hp0x2.wav |     547 |  23478 |                43842 |            - |        **0.54x** |         - |    23.3 |
 <!-- /GEN:asr Parakeet-TDT v2 m1 -->
 
+Source: `performance/records/m1.json` (the record store).
+
 ### Apple M4 Pro, 10 threads
 
 <!-- GEN:asr Parakeet-TDT v2 m4 -->
@@ -37,9 +39,11 @@ _Apple M4 Pro, 10 threads — das q8 — daslang 0.6.4 c00de5e5b, 2026-08-03._
 | gb1.wav   |     199 |   2716 |                 4455 |         4954 |        **0.61x** | **0.55x** |    73.2 |
 | hp0.wav   |     273 |   4796 |                 7493 |         8168 |        **0.64x** | **0.59x** |    57.0 |
 | hp0x2.wav |     547 |  15724 |                26572 |            - |        **0.59x** |         - |    34.8 |
+_&#9888; This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them._
+
 <!-- /GEN:asr Parakeet-TDT v2 m4 -->
 
-Source: `performance/records/m1.json` (the record store).
+Source: `performance/records/m4.json` (the record store).
 
 ### AMD Ryzen Threadripper 3990X, 16 threads
 
@@ -76,6 +80,8 @@ _Apple M1 Max, 8 threads — das q8 — daslang 0.6.4 db50a7da2, 2026-08-03._
 | hp0x2.wav |     547 |  24034 |                44887 |            - |        **0.54x** |         - |    22.7 |
 <!-- /GEN:asr Parakeet-TDT v3 m1 -->
 
+Source: `performance/records/m1.json` (the record store).
+
 ### Apple M4 Pro, 10 threads
 
 <!-- GEN:asr Parakeet-TDT v3 m4 -->
@@ -88,9 +94,11 @@ _Apple M4 Pro, 10 threads — das q8 — daslang 0.6.4 c00de5e5b, 2026-08-03._
 | gb1.wav   |     199 |   2820 |                 4490 |         4802 |        **0.63x** | **0.59x** |    70.5 |
 | hp0.wav   |     273 |   4980 |                 7472 |         8064 |        **0.67x** | **0.62x** |    54.9 |
 | hp0x2.wav |     547 |  16453 |                26559 |            - |        **0.62x** |         - |    33.2 |
+_&#9888; This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them._
+
 <!-- /GEN:asr Parakeet-TDT v3 m4 -->
 
-Source: `performance/records/m1.json` (the record store).
+Source: `performance/records/m4.json` (the record store).
 
 ### AMD Ryzen Threadripper 3990X, 16 threads
 
@@ -120,6 +128,8 @@ Source: `performance/records/zen2.json` (the record store).
 | onnx int8         |     9862 |     21.9 |
 <!-- /GEN:asr librispeech m1 -->
 
+Source: `performance/records/m1.json` (das rows bold). das leads AMX cli on every side —
+
 ### Apple M4 Pro, 10 threads
 
 <!-- GEN:asr librispeech m4 -->
@@ -130,7 +140,7 @@ Source: `performance/records/zen2.json` (the record store).
 | onnx int8         |     9425 |     22.9 |
 <!-- /GEN:asr librispeech m4 -->
 
-Source: `performance/records/m1.json` (das rows bold). das leads AMX cli on every side —
+Source: `performance/records/m4.json` (the record store).
 parakeet v2/v3 and whisper tiny — and runs 2–3.6× faster than onnx-int8. whisper-tiny is the
 quicker dictation model (p50 ~115 ms), parakeet v2/v3 the stronger.
 
@@ -187,6 +197,8 @@ _Apple M4 Pro, 10 threads — das q8/q8 — daslang 0.6.4 c00de5e5b, 2026-08-03.
 | gb1.wav   |     199 |    632 |                 906 |            - |       **0.70x** |         - |   314.6 |        269 |                  - |           - |
 | hp0.wav   |     273 |    798 |                1184 |            - |       **0.67x** |         - |   342.5 |        375 |                  - |           - |
 | hp0x2.wav |     547 |   1612 |                2428 |            - |       **0.66x** |         - |   339.0 |        757 |                  - |           - |
+_&#9888; This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them._
+
 <!-- /GEN:asr Whisper tiny m4 -->
 
 _large-v3-turbo:_
@@ -201,6 +213,8 @@ _Apple M4 Pro, 10 threads — das q8/q8 — daslang 0.6.4 c00de5e5b, 2026-08-03.
 | gb1.wav   |     199 |  10594 |               16279 |            - |       **0.65x** |         - |    18.8 |       9460 |                  - |           - |
 | hp0.wav   |     273 |  17082 |               21515 |            - |       **0.79x** |         - |    16.0 |      15661 |                  - |           - |
 | hp0x2.wav |     547 |  32622 |               43007 |            - |       **0.76x** |         - |    16.8 |      29817 |                  - |           - |
+_&#9888; This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them._
+
 <!-- /GEN:asr Whisper large-v3-turbo m4 -->
 
 Source: `performance/records/m1.json` (the record store);
@@ -272,6 +286,8 @@ _Apple M1 Max, 8 threads — das q8/q8 — daslang 0.6.4 db50a7da2, 2026-08-03._
 | gb1.wav  |     199 |  16734 |        41201 | **0.41x** |    11.9 |       8313 |           - |
 <!-- /GEN:asr Canary-Qwen 2.5B m1 -->
 
+Source: `performance/records/m1.json` (the record store).
+
 ### Apple M4 Pro, 10 threads
 
 <!-- GEN:asr Canary-Qwen 2.5B m4 -->
@@ -282,9 +298,11 @@ _Apple M4 Pro, 10 threads — das q8/q8 — daslang 0.6.4 c00de5e5b, 2026-08-03.
 | jfk.wav  |      11 |    709 |         3336 | **0.21x** |    15.5 |        266 |           - |
 | jfk3.wav |      33 |   2166 |         7705 | **0.28x** |    15.2 |        729 |           - |
 | gb1.wav  |     199 |  14532 |        18620 | **0.78x** |    13.7 |       8416 |           - |
+_&#9888; This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them._
+
 <!-- /GEN:asr Canary-Qwen 2.5B m4 -->
 
-Source: `performance/records/m1.json` (the record store).
+Source: `performance/records/m4.json` (the record store).
 The table above predates the q8 cutover (the next sweep refreshes it). On the q8 rail (M1,
 interleaved best-of-3, 2026-08-03): jfk 1304 ms = **0.16x**, jfk3 3851 = **0.18x**, gb1 17762 =
 **0.50x** — das **leads every cell**, gb1 went 125.4 s → 17.8 s across the arc (q8 decoder
@@ -310,6 +328,8 @@ _Apple M1 Max, 8 threads — das f32/q8 — daslang 0.6.4 db50a7da2, 2026-08-03.
 | hp0.wav  |     273 |  62016 |                           - |                  - |     4.4 |
 <!-- /GEN:asr Gemma-4 E2B audio m1 -->
 
+Source: `performance/records/m1.json` (the record store).
+
 ### Apple M4 Pro, 10 threads
 
 <!-- GEN:asr Gemma-4 E2B audio m4 -->
@@ -321,9 +341,11 @@ _Apple M4 Pro, 10 threads — das f32/q8 — daslang 0.6.4 20c53ec26, 2026-08-03
 | jfk3.wav |      33 |   3913 |                       15528 |          **0.25x** |     8.4 |
 | gb1.wav  |     199 |  27864 |                       97510 |          **0.29x** |     7.1 |
 | hp0.wav  |     273 |  40496 |                           - |                  - |     6.7 |
+_&#9888; This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them._
+
 <!-- /GEN:asr Gemma-4 E2B audio m4 -->
 
-Source: `performance/records/m1.json` (the record store).
+Source: `performance/records/m4.json` (the record store).
 **das leads ~3x.** On a genuine CPU-only basis, ggml's Conformer audio ops don't route through
 BLAS/AMX, so mtmd's encode is ~16 s (≈99% of its total) — das's optimized fp32 scalar Conformer
 (~1.9 s) beats it ~9x on encode. The prior "das trails 3.9x" compared das-CPU against an mtmd whose
@@ -362,6 +384,8 @@ _Apple M1 Max, 8 threads — das f32/q8 — daslang 0.6.4 b1db4b7f6, 2026-08-03.
 | hp0x2.wav |     547 | 218319 |                           - |                  - |     2.5 |
 <!-- /GEN:asr Qwen3-Omni-30B audio m1 -->
 
+Source: `performance/records/m1.json` (the record store).
+
 ### Apple M4 Pro, 10 threads
 
 <!-- GEN:asr Qwen3-Omni-30B audio m4 -->
@@ -374,9 +398,11 @@ _Apple M4 Pro, 10 threads — das f32/q8 — daslang 0.6.4 20c53ec26, 2026-08-03
 | gb1.wav   |     199 |  42863 |                      126040 |          **0.34x** |     4.6 |
 | hp0.wav   |     273 |  60046 |                           - |                  - |     4.6 |
 | hp0x2.wav |     547 | 153586 |                           - |                  - |     3.6 |
+_&#9888; This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them._
+
 <!-- /GEN:asr Qwen3-Omni-30B audio m4 -->
 
-Source: `performance/records/m1.json` (the record store).
+Source: `performance/records/m4.json` (the record store).
 **das leads ~5x.** CPU-only, the AuT tower is entirely encode-bound in ggml (~21 s jfk / ~45 s jfk3,
 ≈99% of mtmd's total); das's tower does it in ~1.7 / 4.8 s. Same CPU-vs-GPU correction as gemma4a —
 the prior "das trails 3-4x" measured mtmd's Metal-offloaded encode, mislabeled CPU-only.

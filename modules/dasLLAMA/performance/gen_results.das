@@ -321,6 +321,12 @@ def regen_asr(stores : array<string>) : int {
             print("skip: {path} did not parse as a record store\n")
             continue
         }
+        // the hand-note overlay applies here too — a provenance caveat that reaches the site
+        // but not this page would publish the same rows with two different stories
+        var inscope annos : array<BenchAnnotation>
+        if (read_annotations(annos)) {
+            apply_annotations(models, annos)
+        }
         let box = store_box(path)
         for (m in models) {
             let di = das_asr_run(m)
@@ -340,7 +346,8 @@ def regen_asr(stores : array<string>) : int {
             }
             let refis <- asr_ref_runs(m, cat[spec_i])
             var found = false
-            let body = "{asr_platform_line(m.runs[di])}\n\n{render_asr_table(m, m.runs[di], refis, cat[spec_i].buckets)}"
+            let caveat = empty(m.runs[di].comment) ? "" : "\n_&#9888; {m.runs[di].comment}_\n"
+            let body = "{asr_platform_line(m.runs[di])}\n\n{render_asr_table(m, m.runs[di], refis, cat[spec_i].buckets)}{caveat}"
             doc = replace_region(doc, "asr {cat[spec_i].display} {box}", body, found)
             if (found) {
                 nrepl++

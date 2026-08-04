@@ -254,6 +254,12 @@ on a shared path is the anti-pattern. Only a genuinely new dataflow earns its ow
 - **`dasllama_parity.das`** — CPU-reference caches for the parity instruments. Test-facing, but
   library-side because the caches outlive a single suite.
 - **`dasllama_prefix.das`** — the prefix/page cache for evaluated token history.
+- **`performance/fetch_models.das`** — the committed model-provenance manifest: per catalog
+  file, the exact HF repo + revision pin + sha256, or the on-box conversion recipe. Verify by
+  default, `--fetch` downloads; it never converts, never benches. BRINGUP.md §2 is the runbook.
+- **`benchmarks/asr/mem_census.sh`** — the peak-memory census (`/usr/bin/time -l` around one
+  asr_bench process per cell; macOS only) — the interim footprint instrument until a footprint
+  leg lands in `gen_bench_records`; its numbers live in `PERF_LEDGER.md`, never the stores.
 
 ---
 

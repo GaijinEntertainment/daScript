@@ -248,7 +248,8 @@ def asr_exec_fmt(m : AsrModel) : string {
     if (m.kind == AsrKind.whisper) return whisper_exec_fmt(m.whisper)
     if (m.kind == AsrKind.parakeet) return parakeet_exec_fmt(m.pk)
     if (m.kind == AsrKind.canary) return canary_exec_fmt(m.cenc, quant_fmt(m.dec.quant))
-    return "f32/{quant_fmt(m.dec.quant)}"   // gemma4a / qwen3a / qwen3omni: fp32 tower + the shared LLM decoder
+    if (m.kind == AsrKind.gemma4a) return gemma4a_exec_fmt(quant_fmt(m.dec.quant))
+    return qwen3a_exec_fmt(quant_fmt(m.dec.quant))   // qwen3a / qwen3omni share the AuT tower
 }
 
 def asr_encode_bucket(m : AsrModel) : string {
@@ -256,7 +257,9 @@ def asr_encode_bucket(m : AsrModel) : string {
     //! fine-grained buckets (their encode split stays a probe-side concern).
     if (m.kind == AsrKind.canary) return canary_encode_bucket()
     if (m.kind == AsrKind.whisper) return whisper_encode_bucket()
-    return ""
+    if (m.kind == AsrKind.gemma4a) return gemma4a_encode_bucket()
+    if (m.kind == AsrKind.qwen3a || m.kind == AsrKind.qwen3omni) return qwen3a_encode_bucket()
+    return ""   // parakeet: fine-grained probes only
 }
 
 def caps(m : AsrModel) : AsrCaps {

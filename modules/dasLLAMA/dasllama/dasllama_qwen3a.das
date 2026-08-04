@@ -508,6 +508,17 @@ struct Qwen3aAsrSession {
 }
 
 //! Qwen3-ASR self-detects the language (``languages`` empty) and takes context biasing via the
+//! The tower's precision half of the facade's [[asr_exec_fmt]] stamp (the decoder tag comes
+//! from the facade, which owns the shared LLM). The AuT tower loads fp32 today.
+def qwen3a_exec_fmt(dec_fmt : string) : string {
+    return "f32/{dec_fmt}"
+}
+
+//! Qwen3a/Omni carry no encode-total ``asr_prof`` bucket (fine-grained probes only).
+def qwen3a_encode_bucket : string {
+    return ""
+}
+
 //! session's ``context``; Qwen3-Omni is a chat model driven as a transcription turn — no prompt.
 def qwen3a_asr_caps(omni : bool) : AsrCaps {
     return <- AsrCaps(translate = false, timestamps = AsrTimestamps.none,

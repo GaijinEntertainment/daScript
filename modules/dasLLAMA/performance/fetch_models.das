@@ -53,6 +53,7 @@ let private HF = "https://huggingface.co"
 let private PARAKEET_RECIPE = "convert: <pinned whisper.cpp>/models/convert-parakeet-to-ggml.py --use-f32 over the nvidia/parakeet-tdt-0.6b .nemo (nemo venv; repack — sha canonical everywhere)"
 let private CANARY_ENC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv; encoder is a repack — sha canonical everywhere)"
 let private CANARY_DEC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv); bytes are per-arch (fp16 LoRA merge) — gate via asr_bench --text over jfk/jfk3/gb1 vs benchmarks/asr/canary_transcripts.expected"
+let private REF_Q8_RECIPE = "derive: setup_asr_rig.das --refs quantizes it from the fp bin beside it (whisper.cpp quantize q8_0); reference-side carrier, presence-gated"
 
 //! The full model set with provenance — LLM board carriers (`pub_catalog` names) first, then
 //! the ASR carriers (`asr_catalog` names). Local name differs from the upstream one where the
@@ -98,6 +99,17 @@ def models_provenance() : array<ProvEntry> {
         ProvEntry(name = "ggml-parakeet-tdt-0.6b-v3-f32.bin", root = "whisper", url = "",
             bytes = 2508463079l, sha256 = "b17956ca991a7f084c978a8a9d4c9785864260b6dd9b72f884344759d913ae7f",
             recipe = PARAKEET_RECIPE),
+        // the cli-reference carriers: every published das/ref ratio's OTHER side runs on these.
+        // Derived on-box by setup_asr_rig --refs (whisper.cpp quantize over the f32/f16 bins
+        // above); size varies with the quantize tool's build, so presence-gated, not sha-gated
+        ProvEntry(name = "ggml-tiny-q8_0.bin", root = "whisper", url = "", bytes = 0l,
+            recipe = REF_Q8_RECIPE),
+        ProvEntry(name = "ggml-large-v3-turbo-q8_0.bin", root = "whisper", url = "", bytes = 0l,
+            recipe = REF_Q8_RECIPE),
+        ProvEntry(name = "ggml-parakeet-tdt-0.6b-v2-q8_0.bin", root = "whisper", url = "", bytes = 0l,
+            recipe = REF_Q8_RECIPE),
+        ProvEntry(name = "ggml-parakeet-tdt-0.6b-v3-q8_0.bin", root = "whisper", url = "", bytes = 0l,
+            recipe = REF_Q8_RECIPE),
         ProvEntry(name = "gemma-4-E2B-it-Q8_0.gguf", root = "llm",
             url = "{HF}/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q8_0.gguf",
             bytes = 4967497152l, sha256 = "996d08777aadc6bfd3c7375ef70ba25a0f55240075860754fdb18d6d860aa63a"),
