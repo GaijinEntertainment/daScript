@@ -417,6 +417,28 @@ class VkDispatch : AstStructureAnnotation {
                     fn.arguments |> emplace_new <| new Variable(at = at, name := "{strip(nt[0])}", _type = pt)
                 }
             }
+            // the ceil-div grid builds with int64 literals and daslang has no promotion — any
+            // name a divide-form grid references must be an int64 param (bare single-name grids
+            // go through uint() and accept all four types)
+            if (find(grid, "/") >= 0) {
+                for (gtok in split(grid, "/")) {
+                    let gs = strip(gtok)
+                    if (is_digit_tok(gs)) {
+                        continue
+                    }
+                    var good = false
+                    for (p in split(params, ",")) {
+                        let nt <- split(p, ":")
+                        if (length(nt) == 2 && strip(nt[0]) == gs && strip(nt[1]) == "int64") {
+                            good = true
+                        }
+                    }
+                    if (!good) {
+                        errors := "[vk_dispatch] {base}: grid '{grid}' references '{gs}', which must be declared an int64 param (the generated ceil-div math is int64)"
+                        return false
+                    }
+                }
+            }
             fn.body = make_expression_block(body)
             fn.body |> force_at(at)
             if (!(compiling_module() |> add_function(fn))) {

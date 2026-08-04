@@ -1119,8 +1119,8 @@ def test_vkd_kq_batch_family(t0 : T?) {
 def test_vkd_cm_batch_family(t0 : T?) {
     t0 |> run("coopmat batch class twins == the shipped kernels (bit-exact, per available mode)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_q8_batch_cmf16_cls()) {   // any ensure engages the device; pipes gate per arm
-                feint("no Vulkan device — skipping\n")
+            if (!ensure_q8_batch_cls()) {   // probe via a NON-coopmat ensure — a cm pipeline build
+                feint("no Vulkan device — skipping\n")   // on a no-coopmat device panics, not feints
                 return
             }
             var ran = 0
@@ -1929,14 +1929,15 @@ def test_vkd_da_attn_b(t0 : T?) {
 def test_vkd_da_attn_b_h128(t0 : T?) {
     t0 |> run("h128 coopmat attention class twin == the shipped kernel (bit-exact)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_da_attn_b_h128_cls()) {
-                feint("no Vulkan device — skipping\n")
+            if (!ensure_da_attn_b_cls()) {   // probe via the NON-coopmat twin — a cm pipeline build
+                feint("no Vulkan device — skipping\n")   // on a no-coopmat device panics, not feints
                 return
             }
             if (!g_gpu.has_coopmat) {
                 feint("no coopmat on this device — skipping\n")
                 return
             }
+            verify(ensure_da_attn_b_h128_cls(), "the h128 class rail must engage on a coopmat device")
             let hs = 128
             let nheads = 4
             let kv_mul = 2

@@ -197,8 +197,8 @@ Vulkan lacks: mx4/q51 kernels, tq4/q8 KV codecs, Argmax/EmbedQ8/EmbedK6, MoE rou
 ### Anomalies
 
 1. **Dead PSOs:** `metal_prefill` 4922–4923/5320–5321 compiles `g_pso_gemm`/`g_pso_gemm64` from `math_metal`'s MSL and never dispatches them — the only thing `metal_prefill` takes from `math_metal`, so that require currently buys two dead pipeline compiles.
-2. **`GpuState.stream_reserve` (vulkan 4108) declared, read at 8916, never written** — ternary always takes legacy 1.1 GB constant; the `ensure_stream_slots` assert validates against the wrong number vs `carved_budget()` (GLM-Air-class geometries affected).
-3. `batch_y2` (vulkan 4080) — 64 MB allocated every batch-tier arm, self-documented "idle since the FFN fold".
+2. ~~`GpuState.stream_reserve` declared, never written~~ — FIXED in the vulkan class-kernels arc: the field is deleted; the stream-slot assert derives `2 * moe_gpu_stream_need()` at read time.
+3. ~~`batch_y2` host staging — 64 MB allocated every batch-tier arm, idle~~ — FIXED in the vulkan class-kernels arc: the host buffer is dropped (the device twin stays).
 4. Stale comment `math_metal:213–215` — `gemm_use64` "shared with the resident-prefill driver" is false (only `metal_q8q8_batch` + one test call it).
 5. Vulkan file header (23–49) undersells file by half — never mentions the 1,600-line resident driver + arena.
 6. `math_vulkan:17` comment names `DlimConfiguration`; actual type used is `DlimVulkanConfig`.

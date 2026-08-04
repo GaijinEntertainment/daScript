@@ -21,10 +21,11 @@ require daslib/fio   // has_env_variable — the VRAM-override probe
 
 // The Vulkan backend's shared infrastructure: device state (GpuState/g_gpu), buffer/descriptor
 // makers, upload + stacks + host-import, the weight arena, command/submit plumbing, the
-// hazard-mask rail + derived-dispatch registry, the GPU profiler, the shared fill-meta family,
-// and the single-op seams (vk_add_rms / vk_decode_attn / vk_rope_kv_store). Module-level state
-// is deliberately non-private — an internal driver family (dasllama_metal_common's precedent);
-// the drivers (dasllama_vulkan_decode / dasllama_vulkan_prefill) assign it.
+// hazard-mask rail + derived-dispatch registry, the GPU profiler, and the shared fill-meta
+// family. The single-op seams live in dasllama_vulkan_seams (on the class-kernel rail — this
+// module cannot require the classes module). Module-level state is deliberately non-private —
+// an internal driver family (dasllama_metal_common's precedent); the drivers
+// (dasllama_vulkan_decode / dasllama_vulkan_prefill) assign it.
 //
 // Submission model (v2): every stack carries its own descriptor set + host meta/xq/xs/y buffers,
 // so descriptors are written ONCE at upload and command buffers are PRE-RECORDED (per stack, plus
@@ -954,8 +955,11 @@ def vk_moe_init : bool {
     }
     g_gpu.set_layout <- create_descriptor_set_layout(g_gpu.device, dslci)
     var dpci : DescriptorPoolCreateInfo
-    dpci.maxSets = uint(5 * MAX_STACKS)   // decode + batch set per stack, 3 per FFN triple, 3 per DN step layer, batch act/rq
-    var psize = DescriptorPoolSize(type_ = VkDescriptorType.STORAGE_BUFFER, descriptorCount = uint(6 * 5 * MAX_STACKS))
+    // the class rail holds MORE live sets than the old one-rewritable-set-per-stack world (per
+    // router variant/role; rebinds abandon sets until the drop-time pool reset) — 8/stack is
+    // interim headroom; deriving the size from the model plan is the phase-5 close-out item
+    dpci.maxSets = uint(8 * MAX_STACKS)
+    var psize = DescriptorPoolSize(type_ = VkDescriptorType.STORAGE_BUFFER, descriptorCount = uint(6 * 8 * MAX_STACKS))
     dpci.pPoolSizes |> push(psize)
     g_gpu.desc_pool <- create_descriptor_pool(g_gpu.device, dpci)
 
@@ -1568,18 +1572,17 @@ struct ArenaFmt {
     wsbytes : int64
     blocks : int64           // bump cursor: 32-weight blocks (q8) or 256-weight superblocks (kq)
     cap_blocks : int64
-    // dispatch scratch — ONE set per format: bindings 0/1 stay put, only the regions change per call
-    raw_set : VkDescriptorSet
-    cls_set : VkDescriptorSet   // the class-rail twin (built lazily by the prefill module — the
-    cls_ready : bool            // classes module cannot be required from here; dies with the arena)
-    meta : HostBuf
+    // dispatch scratch — the class GEMV set builds lazily in the prefill module (the classes
+    // module cannot be required from here); dies with the arena on model drop
+    cls_set : VkDescriptorSet
+    cls_ready : bool
+    meta : HostBuf              // class-layout region pairs (GEMV) staging
     xq : HostBuf
     xs : HostBuf
     y : HostBuf              // host-cached readback (the same-submit DMA lands here)
     y_dev : uint64
     ready : bool
-    // batch-GEMM scratch (prefill): shares g_gpu.batch_xq_dev/xs_dev/y1_dev; one set + meta per fmt
-    batch_set : VkDescriptorSet
+    // batch-GEMM scratch (prefill): shares g_gpu.batch_xq_dev/xs_dev/y1_dev
     batch_meta : HostBuf
     batch_ready : bool
     // class-rail batch sets, one per router variant (built lazily by prefill; die with the arena)
@@ -1701,17 +1704,13 @@ def arena_ensure_batch(fmt : int) {
             return
         }
         ensure_batch_state()
-        a.batch_meta = make_host_buf(BATCH_META_BYTES, true)
-        a.batch_set = vk_set6(a.wqbuf, a.wsbuf, a.batch_meta.buf, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, g_gpu.batch_y1_dev,
-            a.wqbytes, a.wsbytes, BATCH_META_BYTES, BATCH_XQ_BYTES, BATCH_XS_BYTES, BATCH_Y_BYTES,
-            fixed_array(0u, 0u, 0u, 0u, 0u, VHG_YO))   // meta/acts fill pre-cmd
+        a.batch_meta = make_host_buf(BATCH_META_BYTES, true)   // the class-layout schedule staging
         a.batch_ready = true
     }
 }
 
-// Bindings 0/1 are the arena planes; 2-5 are per-dispatch scratch, written exactly as
-// ensure_gemv_scratch writes them for a per-op stack — so an arena-resident tensor runs the SAME
-// kernels with the same meta convention. Lazy: a format only pays when it actually dispatches.
+// Per-format arena dispatch scratch (the class set over it builds in the prefill module —
+// a.meta carries the class-layout region pairs). Lazy: a format only pays when it dispatches.
 def arena_ensure_scratch(fmt : int) {
     unsafe {
         var a & = g_gpu.arenas[fmt]
@@ -1723,9 +1722,6 @@ def arena_ensure_scratch(fmt : int) {
         a.xs = make_host_buf(XS_BYTES, true)
         a.y = make_host_buf(Y_BYTES, false, [cached = true])
         a.y_dev = make_device_buf(Y_BYTES)
-        a.raw_set = vk_set6(a.wqbuf, a.wsbuf, a.meta.buf, a.xq.buf, a.xs.buf, a.y_dev,
-            a.wqbytes, a.wsbytes, META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES,
-            fixed_array(0u, 0u, 0u, 0u, 0u, VHG_YO))
         a.ready = true
     }
 }

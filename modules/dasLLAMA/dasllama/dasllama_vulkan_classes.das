@@ -3558,8 +3558,11 @@ def q8_batch_cls_ensure(v : int) : bool {
         return ensure_q8_batch_mm_a_cls()
     } elif (v == 5) {
         return ensure_q8_batch_mm_cls()
+    } elif (v == 0) {
+        return ensure_q8_batch_cls()
     }
-    return ensure_q8_batch_cls()
+    panic("dasLLAMA vulkan tier: no q8 batch class for variant {v}")
+    return false
 }
 
 def q8_batch_cls_set(v : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbits : uint const[6]) : VkDescriptorSet {
@@ -3573,8 +3576,11 @@ def q8_batch_cls_set(v : int; bufs : uint64 const[6]; sizes : int64 const[6]; gb
         return set_q8_batch_mm_a_cls(bufs, sizes, gbits)
     } elif (v == 5) {
         return set_q8_batch_mm_cls(bufs, sizes, gbits)
+    } elif (v == 0) {
+        return set_q8_batch_cls(bufs, sizes, gbits)
     }
-    return set_q8_batch_cls(bufs, sizes, gbits)
+    panic("dasLLAMA vulkan tier: no q8 batch class for variant {v}")
+    return VkDescriptorSet()
 }
 
 def q8_batch_cls_enc(v : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : BatchArgs; wgs : int64) {
@@ -3588,8 +3594,10 @@ def q8_batch_cls_enc(v : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : V
         enc_q8_batch_mm_a_cls(raw, h, set_, pc, wgs)
     } elif (v == 5) {
         enc_q8_batch_mm_cls(raw, h, set_, pc, wgs)
-    } else {
+    } elif (v == 0) {
         enc_q8_batch_cls(raw, h, set_, pc, wgs)
+    } else {
+        panic("dasLLAMA vulkan tier: no q8 batch class for variant {v}")
     }
 }
 
@@ -3608,8 +3616,11 @@ def gemv_cls_ensure(fmt : int) : bool {
         return ensure_kq_gemv_k6_cls()
     } elif (fmt == int(KqFmt.q40)) {
         return ensure_kq_gemv_q40_cls()
+    } elif (fmt == int(KqFmt.q8n)) {
+        return ensure_q8n_gemv_cls()
     }
-    return ensure_q8n_gemv_cls()
+    panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
+    return false
 }
 
 def gemv_cls_set(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbits : uint const[6]) : VkDescriptorSet {
@@ -3623,11 +3634,14 @@ def gemv_cls_set(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbit
         return set_kq_gemv_k6_cls(bufs, sizes, gbits)
     } elif (fmt == int(KqFmt.q40)) {
         return set_kq_gemv_q40_cls(bufs, sizes, gbits)
+    } elif (fmt == int(KqFmt.q8n)) {
+        // q8n has no scale plane — slot 1 drops out
+        return set_q8n_gemv_cls(fixed_array(bufs[0], bufs[2], bufs[3], bufs[4], bufs[5]),
+            fixed_array(sizes[0], sizes[2], sizes[3], sizes[4], sizes[5]),
+            fixed_array(gbits[0], gbits[2], gbits[3], gbits[4], gbits[5]))
     }
-    // q8n has no scale plane — slot 1 drops out
-    return set_q8n_gemv_cls(fixed_array(bufs[0], bufs[2], bufs[3], bufs[4], bufs[5]),
-        fixed_array(sizes[0], sizes[2], sizes[3], sizes[4], sizes[5]),
-        fixed_array(gbits[0], gbits[2], gbits[3], gbits[4], gbits[5]))
+    panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
+    return VkDescriptorSet()
 }
 
 def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {
@@ -3641,8 +3655,10 @@ def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkD
         enc_kq_gemv_k6_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.q40)) {
         enc_kq_gemv_q40_cls(raw, h, set_, pc, wgs)
-    } else {
+    } elif (fmt == int(KqFmt.q8n)) {
         enc_q8n_gemv_cls(raw, h, set_, pc, wgs)
+    } else {
+        panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
     }
 }
 

@@ -776,8 +776,16 @@ def private stack_batch_enc(raw : VkCommandBuffer; var h : VkHaz; si : int; nwg 
     unsafe {
         var st & = g_gpu.stacks[si]
         let fmt = st.fmt
-        let v = (fmt == int(KqFmt.q8) ? q8_batch_cls_variant(st.batch_tile, st.batch_aligned)
-            : (fmt == int(KqFmt.q8n) ? 7 : 6))
+        // Q4_0 rides the f16 coopmat arm too (no s8-native for nibbles — mode 2 falls back to sdot4)
+        let q40cm = fmt == int(KqFmt.q40) && g_gpu.coopmat_mode == 1
+        var v = 6   // the stack's fixed class (kq); 5 = the q40 f16 MMA twin, 7 = the cm2 twin
+        if (fmt == int(KqFmt.q8)) {
+            v = q8_batch_cls_variant(st.batch_tile, st.batch_aligned)
+        } elif (fmt == int(KqFmt.q8n)) {
+            v = 7
+        } elif (q40cm) {
+            v = 5
+        }
         if ((st.batch_cls_ready & (1u << uint(v))) == 0u) {
             if (fmt == int(KqFmt.q8n)) {
                 verify(ensure_q8n_batch_cm2_cls(), "vk batch: the cm2 batch class rail must engage")
@@ -801,9 +809,14 @@ def private stack_batch_enc(raw : VkCommandBuffer; var h : VkHaz; si : int; nwg 
                 } elif (fmt == int(KqFmt.k6)) {
                     verify(ensure_kq_batch_k6_cls(), "vk batch: the k6 batch class rail must engage")
                     st.batch_cls_sets[v] = set_kq_batch_k6_cls(bufs, sizes, gbits)
-                } else {
+                } elif (q40cm) {
+                    verify(ensure_kq_batch_q40_cmf16_cls(), "vk batch: the q40 coopmat class rail must engage")
+                    st.batch_cls_sets[v] = set_kq_batch_q40_cmf16_cls(bufs, sizes, gbits)
+                } elif (fmt == int(KqFmt.q40)) {
                     verify(ensure_kq_batch_q40_cls(), "vk batch: the q40 batch class rail must engage")
                     st.batch_cls_sets[v] = set_kq_batch_q40_cls(bufs, sizes, gbits)
+                } else {
+                    panic("dasLLAMA vulkan tier: no batch class for stack format {fmt}")
                 }
             }
             st.batch_cls_ready |= 1u << uint(v)
@@ -819,8 +832,12 @@ def private stack_batch_enc(raw : VkCommandBuffer; var h : VkHaz; si : int; nwg 
             enc_kq_batch_k5_cls(raw, h, st.batch_cls_sets[v], pc, int64(nwg))
         } elif (fmt == int(KqFmt.k6)) {
             enc_kq_batch_k6_cls(raw, h, st.batch_cls_sets[v], pc, int64(nwg))
-        } else {
+        } elif (q40cm) {
+            enc_kq_batch_q40_cmf16_cls(raw, h, st.batch_cls_sets[v], pc, int64(nwg))
+        } elif (fmt == int(KqFmt.q40)) {
             enc_kq_batch_q40_cls(raw, h, st.batch_cls_sets[v], pc, int64(nwg))
+        } else {
+            panic("dasLLAMA vulkan tier: no batch class for stack format {fmt}")
         }
     }
 }
