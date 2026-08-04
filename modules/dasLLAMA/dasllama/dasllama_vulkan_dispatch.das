@@ -98,15 +98,24 @@ def private role_ok(role : string) : bool {
         role == "weight" || role == "alias")
 }
 
-// the [spirv_kernel] method of a lensed class + its captured blob global name
-def private find_kernel_fn(st : StructurePtr; mod : Module?; var nmatch : int&; var blob : string&) : Function? {
+// a [spirv_kernel] method of a lensed class + its captured blob global name. `want` names the
+// method for multi-kernel classes; "" counts every kernel method and returns the first (the
+// single-kernel form's exactly-one check rides on nmatch)
+def private find_kernel_fn(st : StructurePtr; mod : Module?; want : string; var nmatch : int&; var blob : string&) : Function? {
     var kfn : Function?
+    let wanted = empty(want) ? "" : "{st.name}`{want}"
     mod |> for_each_function("") $(fn) {
         if (!empty(fn.arguments) && fn.arguments[0]._type.structType == st) {
             for (ann in fn.annotations) {
                 if (ann.annotation.name == "spirv_kernel") {
-                    nmatch++
-                    if (kfn == null) {
+                    if (empty(wanted)) {
+                        nmatch++
+                        if (kfn == null) {
+                            kfn = fn
+                            blob = find_arg(ann.arguments, "name") ?as tString ?? "{fn.name}`spirv"
+                        }
+                    } elif (fn.name == wanted) {
+                        nmatch++
                         kfn = fn
                         blob = find_arg(ann.arguments, "name") ?as tString ?? "{fn.name}`spirv"
                     }
@@ -138,8 +147,23 @@ def private mk_if_ret(at : LineInfo; var cond : Expression?; ret_val : bool) : E
     return new ExprIfThenElse(at = at, cond = cond, if_true = make_expression_block(blk))
 }
 
+def private mk_if_do(at : LineInfo; var cond : Expression?; var stmt : Expression?) : ExpressionPtr {
+    var blk <- [unsafe(reinterpret<ExpressionPtr>(stmt))]
+    return new ExprIfThenElse(at = at, cond = cond, if_true = make_expression_block(blk))
+}
+
+def private mk_not(at : LineInfo; var e : Expression?) : ExpressionPtr {
+    return new ExprOp1(at = at, op := "!", subexpr = e)
+}
+
 [structure_macro(name = vk_dispatch)]
 class VkDispatch : AstStructureAnnotation {
+    // multi-kernel ordinal state: st.annotations is EMPTY at apply time (probe-verified
+    // 2026-08-04), but the macro INSTANCE persists across applies — arrival order assigns each
+    // instance its pipe slot; seen_ord makes a re-fired instance idempotent (keyed by name=)
+    fam_count : table<string; int>   // "{module}`{family}" -> next ordinal
+    seen_ord : table<string; int>    // "{module}`{name}" -> assigned ordinal
+
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {   // nolint:STYLE037,STYLE038 — flat per-argument validation + emit table
         let at = st.at
         let base = find_arg(args, "name") ?as tString ?? ""
@@ -147,6 +171,30 @@ class VkDispatch : AstStructureAnnotation {
         if (empty(base)) {
             errors := "[vk_dispatch]: 'name' (the generated surface's base name) is required"
             return false
+        }
+        // multi-kernel form: N [vk_dispatch] instances on one class, each passing kernel= (its
+        // [spirv_kernel] method) + the shared family= (the ensure_/set_ surface); instance N's
+        // pipe slot = its arrival order within the family
+        let kern = find_arg(args, "kernel") ?as tString ?? ""
+        let famArg = find_arg(args, "family") ?as tString ?? ""
+        let family = empty(famArg) ? base : famArg
+        let multi = !empty(kern)
+        if (!multi && !empty(famArg)) {
+            errors := "[vk_dispatch] {base}: family= without kernel= — a family instance must name its [spirv_kernel] method"
+            return false
+        }
+        let mname = "{compiling_module().name}"
+        let bkey = "{mname}`{base}"
+        let fkey = "{mname}`{family}"
+        var ord = 0
+        if (key_exists(seen_ord, bkey)) {
+            ord = seen_ord[bkey]
+        } else {
+            if (key_exists(fam_count, fkey)) {
+                ord = fam_count[fkey]
+            }
+            seen_ord[bkey] = ord
+            fam_count[fkey] = ord + 1
         }
         if (empty(grid)) {
             errors := "[vk_dispatch] {base}: 'grid' is required (1D: int | param | param/coverage)"
@@ -239,9 +287,14 @@ class VkDispatch : AstStructureAnnotation {
         // the kernel method + derived access -> per-binding read/write masks
         var nmatch = 0
         var blob = ""
-        let kfn = find_kernel_fn(st, compiling_module(), nmatch, blob)
-        if (kfn == null || nmatch != 1) {
-            errors := "[vk_dispatch] {base}: expected exactly one [spirv_kernel] method on {st.name} (found {nmatch})"
+        let kfn = find_kernel_fn(st, compiling_module(), kern, nmatch, blob)
+        if (empty(kern)) {
+            if (kfn == null || nmatch != 1) {
+                errors := "[vk_dispatch] {base}: expected exactly one [spirv_kernel] method on {st.name} (found {nmatch}) — multi-kernel classes pick per instance via kernel="
+                return false
+            }
+        } elif (kfn == null) {
+            errors := "[vk_dispatch] {base}: no [spirv_kernel] method '{kern}' on {st.name}"
             return false
         }
         var tracked : table<string>
@@ -263,6 +316,17 @@ class VkDispatch : AstStructureAnnotation {
             if (decl == "weight") {
                 if (key_exists(res.writes, bf.name)) {
                     errors := "[vk_dispatch] {base}: member '{bf.name}' declares @role='weight' but the kernel body writes it"
+                    delete res
+                    delete tracked
+                    return false
+                }
+            } elif (multi) {
+                // per-kernel view of shared members: unused-here is fine (a sibling kernel uses
+                // it), and the declared role must COVER this kernel's derived access
+                let cov = (empty(dr) || decl == "" || decl == "alias" || decl == dr
+                    || (decl == "readwrite" && (dr == "read" || dr == "write")))
+                if (!cov) {
+                    errors := "[vk_dispatch] {base}: member '{bf.name}' declares @role='{decl}' but kernel '{kern}' derives '{dr}' — the declared role must cover every kernel"
                     delete res
                     delete tracked
                     return false
@@ -291,13 +355,17 @@ class VkDispatch : AstStructureAnnotation {
         delete tracked
 
         // ===== the generated surface =====
-        let gname = "{base}`vkd"
-        if (!add_global_var(compiling_module(), gname, mk_alias_t(at, "VkdClass", false), at, false)) {
-            errors := "[vk_dispatch] {base}: can't add class-state global {gname}"
-            return false
+        // one VkdClass global + one set builder per FAMILY (ordinal 0 generates them); every
+        // instance generates its own ensure_<base> (lazy pipe slot) + enc_<base>
+        let gname = "{family}`vkd"
+        if (ord == 0) {
+            if (!add_global_var(compiling_module(), gname, mk_alias_t(at, "VkdClass", false), at, false)) {
+                errors := "[vk_dispatch] {base}: can't add class-state global {gname}"
+                return false
+            }
         }
 
-        // ensure_<base>() : bool — device up, layouts + pipeline once
+        // ensure_<base>() : bool — device up, family layouts once, THIS kernel's pipe slot once
         {
             // `array<int>(b0, b1, ...)` — the gen2 array literal (ExprMakeArray wrapped in
             // to_array_move, the spirv_shader capture shape)
@@ -314,15 +382,18 @@ class VkDispatch : AstStructureAnnotation {
             ci.arguments |> emplace_new <| new ExprConstInt(at = at, value = push_fields * 4)
             var cp = new ExprCall(at = at, name := "vkd_class_pipe")
             cp.arguments |> emplace_new <| mk_gvar(at, gname)
+            cp.arguments |> emplace_new <| new ExprConstInt(at = at, value = ord)
             cp.arguments |> emplace_new <| mk_gvar(at, blob)
             cp.arguments |> emplace_new <| new ExprConstUInt(at = at, value = rmask)
             cp.arguments |> emplace_new <| new ExprConstUInt(at = at, value = wmask)
             cp.arguments |> emplace_new <| new ExprConstString(at = at, value := blob)
+            var pm = new ExprCall(at = at, name := "vkd_pipe_made")
+            pm.arguments |> emplace_new <| mk_gvar(at, gname)
+            pm.arguments |> emplace_new <| new ExprConstInt(at = at, value = ord)
             var body <- array<ExpressionPtr>(
-                mk_if_ret(at, new ExprOp1(at = at, op := "!", subexpr = new ExprCall(at = at, name := "vk_moe_init")), false),
-                mk_if_ret(at, new ExprField(at = at, value = mk_gvar(at, gname), name := "ready"), true),
-                ci,
-                cp,
+                mk_if_ret(at, mk_not(at, new ExprCall(at = at, name := "vk_moe_init")), false),
+                mk_if_do(at, mk_not(at, new ExprField(at = at, value = mk_gvar(at, gname), name := "ready")), ci),
+                mk_if_do(at, mk_not(at, pm), cp),
                 mk_ret_bool(at, true))
             var fn = new Function(at = at, atDecl = at, name := "ensure_{base}",
                 flags = FunctionFlags.generated,
@@ -335,8 +406,8 @@ class VkDispatch : AstStructureAnnotation {
             }
         }
 
-        // set_<base>(bufs, sizes, gbits) : VkDescriptorSet — a set over the CLASS layout
-        {
+        // set_<family>(bufs, sizes, gbits) : VkDescriptorSet — a set over the FAMILY layout
+        if (ord == 0) {
             var body : array<ExpressionPtr>
             var sv = new Variable(at = at, name := "set_", _type = new TypeDecl(at = at, baseType = Type.autoinfer))
             sv.init = mk_call1(at, "vkd_alloc_set", gname)
@@ -351,7 +422,7 @@ class VkDispatch : AstStructureAnnotation {
             ws.arguments |> emplace_new <| mk_gvar(at, "gbits")
             body |> push(ws)
             body |> push(new ExprReturn(at = at, subexpr = mk_gvar(at, "set_")))
-            var fn = new Function(at = at, atDecl = at, name := "set_{base}",
+            var fn = new Function(at = at, atDecl = at, name := "set_{family}",
                 flags = FunctionFlags.generated,
                 result = mk_alias_t(at, "VkDescriptorSet", false))
             var bufs_t = make_fixed_array_type(nb, new TypeDecl(at = at, baseType = Type.tUInt64))
@@ -366,7 +437,7 @@ class VkDispatch : AstStructureAnnotation {
             fn.body = make_expression_block(body)
             fn.body |> force_at(at)
             if (!(compiling_module() |> add_function(fn))) {
-                errors := "[vk_dispatch] {base}: failed to add set_{base}"
+                errors := "[vk_dispatch] {base}: failed to add set_{family}"
                 return false
             }
         }
@@ -386,6 +457,7 @@ class VkDispatch : AstStructureAnnotation {
             dp.arguments |> emplace_new <| mk_gvar(at, "h")
             dp.arguments |> emplace_new <| mk_gvar(at, gname)
             dp.arguments |> emplace_new <| mk_gvar(at, "set_")
+            dp.arguments |> emplace_new <| new ExprConstInt(at = at, value = ord)
             dp.arguments |> emplace_new <| mk_grid_dim(at, grid)
             body |> push(dp)
             var fn = new Function(at = at, atDecl = at, name := "enc_{base}",

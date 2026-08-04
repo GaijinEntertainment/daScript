@@ -2133,12 +2133,12 @@ def make_kernel_pipe(kernel : string; var spv : array<uint>) : Pipeline {
 // hazard rail is unchanged — class pipelines register binding masks, sets carry region bits.
 
 struct VkdClass {
-    ready : bool
+    ready : bool               // layouts made (pipes fill per-kernel slots lazily)
     push_bytes : int
     bindings : array<int>      // the class's DECLARED binding indices, ascending (gaps legal)
     set_layout : DescriptorSetLayout
     pipe_layout : PipelineLayout
-    pipe : Pipeline
+    pipes : array<Pipeline>    // one per [vk_dispatch] kernel, indexed by annotation ordinal
 }
 
 def vkd_class_init(var c : VkdClass; bindings : array<int>; push_bytes : int) {
@@ -2163,6 +2163,7 @@ def vkd_class_init(var c : VkdClass; bindings : array<int>; push_bytes : int) {
     }
     c.pipe_layout <- create_pipeline_layout(g_gpu.device, plci)
     c.push_bytes = push_bytes
+    c.ready = true
 }
 
 // write a class set's descriptors + declare its region bits (the [vk_dispatch]-generated set
@@ -2184,13 +2185,20 @@ def vkd_set(c : VkdClass; set_ : VkDescriptorSet; bufs : uint64 const[]; sizes :
     g_set_bits[intptr(set_)] = sb
 }
 
-def vkd_class_pipe(var c : VkdClass; var spv : array<uint>; rmask, wmask : uint; kernel : string) {
+// true when the kernel's pipe slot is filled (slots fill lazily, one per ensure_<kernel> call)
+def vkd_pipe_made(c : VkdClass; ord : int) : bool {
+    return ord < length(c.pipes) && intptr(boost_value_to_vk(c.pipes[ord])) != 0ul
+}
+
+def vkd_class_pipe(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wmask : uint; kernel : string) {
+    if (length(c.pipes) <= ord) {
+        c.pipes |> resize(ord + 1)   // empty slots hold null handles until their kernel ensures
+    }
     var shader <- create_shader_module(g_gpu.device, spv)
-    c.pipe <- create_compute_pipeline(g_gpu.device, c.pipe_layout, shader)
-    let pk = intptr(boost_value_to_vk(c.pipe))
+    c.pipes[ord] <- create_compute_pipeline(g_gpu.device, c.pipe_layout, shader)
+    let pk = intptr(boost_value_to_vk(c.pipes[ord]))
     g_pipe_access[pk] = uint2(rmask, wmask)
     g_pipe_names[pk] = kernel
-    c.ready = true
 }
 
 def vkd_alloc_set(c : VkdClass) : VkDescriptorSet {
@@ -2214,12 +2222,13 @@ def vkd_push(raw : VkCommandBuffer; c : VkdClass; var pc : auto(PT)&) {
     vkCmdPushConstants(raw, boost_value_to_vk(c.pipe_layout), sf, 0u, uint(c.push_bytes), unsafe(addr<void?>(pc)))
 }
 
-// the class twin of hz_dispatch: same masks/coverage/barrier rail, the CLASS pipeline layout
-def vkd_dispatch(raw : VkCommandBuffer; var h : VkHaz; c : VkdClass; var set_ : VkDescriptorSet; groups : uint) {
-    let m = hz_masks(c.pipe, set_)
-    g_vk_kcov[intptr(boost_value_to_vk(c.pipe))]++
+// the class twin of hz_dispatch: same masks/coverage/barrier rail, the CLASS pipeline layout;
+// ord picks the kernel's pipe slot
+def vkd_dispatch(raw : VkCommandBuffer; var h : VkHaz; c : VkdClass; var set_ : VkDescriptorSet; ord : int; groups : uint) {
+    let m = hz_masks(c.pipes[ord], set_)
+    g_vk_kcov[intptr(boost_value_to_vk(c.pipes[ord]))]++
     vhz_dep(raw, h, m.r, m.w)
-    cmd_bind_pipeline(vk_value_to_boost(raw), c.pipe, VkPipelineBindPoint.COMPUTE)
+    cmd_bind_pipeline(vk_value_to_boost(raw), c.pipes[ord], VkPipelineBindPoint.COMPUTE)
     unsafe {
         vkCmdBindDescriptorSets(raw, VkPipelineBindPoint.COMPUTE, boost_value_to_vk(c.pipe_layout), 0u, 1u, addr(set_), 0u, null)
     }
