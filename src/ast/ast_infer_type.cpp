@@ -6329,10 +6329,25 @@ namespace das {
 
     // try infer, if failed - no macros
     // run macros til any of them does work, then reinfer and restart (i.e. infer after each macro)
+    static bool applyPreInferMacros ( Program * program ) {
+        auto nErr = program->errors.size();
+        // program->library, not Module::foreach: the latter walks every module in the
+        // process, so a nested compile would run macros from an unrelated program
+        program->library.foreach([&](Module * mod) -> bool {
+            for ( const auto & pm : mod->preInferMacros ) {
+                pm->apply(program, program->thisModule.get());
+            }
+            return true;
+        }, "*");
+        // the next pass clears program->errors, so a violation has to stop the loop
+        return program->errors.size() == nErr;
+    }
+
     void inferTypes(Program * program, TextWriter &logs, ModuleGroup &libGroup) {
         program->newLambdaIndex = 1;
         // inferPassesUsed is NOT reset here — parseDaScript resets it once per module
         // before the restartInfer: loop, so multiple inferTypes legs accumulate properly.
+        applyPreInferMacros(program);
         inferTypesDirty(program, logs, false);
         bool anyMacrosDidWork = false;
         bool anyMacrosFailedToInfer = false;
@@ -6354,6 +6369,7 @@ namespace das {
                             return false;
                         }
                         if (anyWork) { // if macro did anything, we done
+                            applyPreInferMacros(program);
                             program->reportingInferErrors = true;
                             inferTypesDirty(program, logs, true);
                             program->reportingInferErrors = false;
@@ -6460,6 +6476,9 @@ namespace das {
             program->inferPassesUsed++;   // count each body invocation; avoids undercount when loop breaks early (pass is 0-based)
             program->failToCompile = false;
             program->errors.clear();
+            if (!applyPreInferMacros(program)) {
+                break;
+            }
             InferTypes context(program, &logs);
             context.verbose = verbose || logInferPasses;
             program->visit(context);

@@ -730,6 +730,62 @@ If an expression needs to be visited, and can potentially be fully substituted, 
         expr <- visit_expression(expr,astVisitorAdapter)
     }
 
+---------------------
+Debugging a macro
+---------------------
+
+A macro that produces slightly-wrong AST does not fail where the mistake is. It
+crashes the compiler several passes later, inside type inference or code
+generation, with no line number and no indication of which macro was responsible.
+
+The ``daslib/ast_verify`` module turns that into a diagnostic at the offending
+node. Reach for it first, not last::
+
+    daslang --ast-verify program.das
+
+Without it, a macro that leaves a variable untyped crashes:
+
+.. code-block:: text
+
+    CRASH: SIGSEGV (Segmentation fault) (signal 11) at address 0x30
+
+With it, the same program reports and keeps compiling:
+
+.. code-block:: text
+
+    AST verify: let variable 'i' has no type (Variable._type is null) at program.das:6:9
+
+It checks the shapes the compiler dereferences without a null check: missing
+required children, null elements inside child lists, statements in positions
+where a value is required, malformed types such as an array with no element type,
+and declaration types on function results, arguments and structure fields.
+
+The command-line flag checks every module before each inference pass. When
+writing a macro, the inline forms see more:
+
+``verify_module(prog, mod)``
+    at the end of ``apply()``, once the tree is installed in the module.
+
+``verify_expression(expr)``
+    when the macro builds and returns a subtree. For-loop, call, variant and
+    reader macros run inside inference, where the module-level form cannot yet
+    see the result.
+
+``verify_function(fn)``
+    when the macro builds a function. ``add_function`` computes the mangled name
+    immediately, so a malformed result or argument type fails there, before any
+    later pass could report it.
+
+Each returns the number of violations and repairs what it reports, substituting a
+placeholder so the scan completes and reports every problem instead of stopping
+at the first one.
+
+Two limits are worth knowing. The check set covers shapes that crash the
+compiler, so silence does not prove a tree is correct. And a macro that breaks
+the same node on every pass will not converge: the verifier repairs it, the macro
+breaks it again, and compilation ends with ``error[30507]: type inference
+exceeded maximum allowed number of passes``. Apply such a change once.
+
 .. seealso::
 
     :ref:`Annotations <annotations>` for annotation-based macro registration,

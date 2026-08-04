@@ -952,6 +952,18 @@ def add_new_dirty_infer_macro(name : string; var someClassPtr) {
 }
 
 [macro_function]
+def add_new_pre_infer_macro(name : string; var someClassPtr) {
+    var ann = make_pass_macro(name, someClassPtr)
+    this_module() |> add_pre_infer_macro(ann)
+}
+
+[macro_function]
+def add_new_pre_simulate_macro(name : string; var someClassPtr) {
+    var ann = make_pass_macro(name, someClassPtr)
+    this_module() |> add_pre_simulate_macro(ann)
+}
+
+[macro_function]
 def add_new_lint_macro(name : string; var someClassPtr) {
     var ann = make_pass_macro(name, someClassPtr)
     this_module() |> add_lint_macro(ann)

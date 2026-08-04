@@ -5,6 +5,51 @@ code, structure macros, qmacro/quote code generation, or any code that
 manipulates AST node pointers (e.g., `TypeDeclPtr`, `ExpressionPtr`,
 `FunctionPtr`, `StructurePtr`).
 
+## Debug with the AST verifier — FIRST, not last
+
+A macro that builds slightly-wrong AST does not fail where the mistake is. It
+segfaults several passes later inside inference or codegen, with no line number
+and no clue which macro did it. `daslib/ast_verify` turns that into a diagnostic
+at the offending node, so reach for it the moment a macro misbehaves:
+
+```
+daslang --ast-verify foo.das
+```
+
+```
+CRASH: SIGSEGV (Segmentation fault) (signal 11) at address 0x30      # without
+AST verify: let variable 'i' has no type (Variable._type is null)    # with
+```
+
+It checks shapes the compiler dereferences unguarded: null required children,
+null elements in child vectors, statements in value slots, slots reached through
+an unchecked cast, malformed `TypeDecl`s (element-less containers, payload-less
+named types), declaration types (function result, arguments, struct fields), and
+flag pairings the parser always establishes.
+
+Three ways in, by how much of the tree you can see:
+
+| Call | Use when |
+|---|---|
+| `daslang --ast-verify file.das` | first move on any unexplained crash; force-includes the module and checks every non-builtin module before each inference pass |
+| `require daslib/ast_verify` | same, pinned in the source |
+| `verify_module(prog, mod)` | at the end of your `apply()`, once the tree is installed |
+| `verify_expression(expr)` | you BUILD and RETURN a subtree — for-loop / call / variant / reader macros run inside inference, where the module-level form cannot see your result yet |
+| `verify_function(fn)` | you BUILD a function. `add_function` mangles the signature immediately, so a malformed result or argument type crashes there, before any pass could run — verify before you register |
+
+Each returns the violation count, and each REPAIRS what it reports, substituting
+a placeholder so the walk finishes and surfaces every diagnostic rather than
+dying on the first. That repair is not a nicety: the verifier walks with the same
+visitor the compiler uses, and `Expr*::visit` dereferences children unguarded, so
+reporting without repairing gives you the diagnostic AND the segfault.
+
+Two things it will not do for you. It is a denylist of shapes that CRASH — a
+shape the compiler tolerates, or legitimately produces, is deliberately not
+flagged, so silence is not proof your tree is right. And a macro that re-breaks
+the same node every pass never converges: the verifier repairs, you break it
+again, and the compile ends in `error[30507]: type inference exceeded maximum
+allowed number of passes`. That is your bug — break the node once.
+
 ## AST nodes are gc_node — unique, no `inscope`, no `<-` for assignment
 
 Every AST type — `TypeDecl`, `Expression` (every subclass: `ExprBlock`,

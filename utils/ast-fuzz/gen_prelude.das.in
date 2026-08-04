@@ -1,0 +1,203 @@
+options gen2
+options indenting = 4
+
+module _ast_synth_all shared private
+
+
+require daslib/ast
+require daslib/ast_boost
+require daslib/random
+require math
+
+let private NAMES = fixed_array("x", "y", "z", "n", "s", "f", "_0", "_1", "i",
+    "a", "b", "c", "m", "next", "red", "green", "value", "length", "__nope", "")
+let private OPS = fixed_array("+", "-", "*", "/", "%", "==", "!=", "<", ">",
+    "<=", ">=", "&&", "||", "&", "|", "^", "<<", ">>", "!", "~", "+=", "??", "")
+let private TRAITS = fixed_array("sizeof", "typename", "is_pointer", "is_array",
+    "dim", "argument_count", "is_ref", "__nope")
+let private MASKS = fixed_array("x", "y", "z", "w", "xy", "xyz", "xyzw", "yx", "__nope")
+let private BASETYPES = fixed_array(Type.tInt, Type.tInt8, Type.tInt16, Type.tInt64,
+    Type.tUInt, Type.tUInt8, Type.tUInt16, Type.tUInt64, Type.tFloat, Type.tDouble,
+    Type.tBool, Type.tString, Type.tVoid, Type.tInt2, Type.tInt3, Type.tInt4,
+    Type.tFloat2, Type.tFloat3, Type.tFloat4, Type.tRange, Type.tURange, Type.tArray,
+    Type.tTable, Type.tPointer, Type.tTuple, Type.tVariant, Type.tIterator,
+    Type.tBlock, Type.tFunction, Type.tLambda, Type.autoinfer, Type.alias,
+    Type.tStructure, Type.tEnumeration, Type.tEnumeration8, Type.tEnumeration16,
+    Type.tEnumeration64, Type.tHandle, Type.tDistinct, Type.tFixedArray,
+    Type.tBitfield, Type.tBitfield8, Type.tBitfield16, Type.tBitfield64,
+    Type.tFloat16, Type.tRange64, Type.tURange64, Type.tHalf2, Type.tHalf4,
+    Type.tShort4, Type.tUShort4, Type.tByte4, Type.tUByte4, Type.tUInt2,
+    Type.tUInt3, Type.tUInt4, Type.fakeContext, Type.anyArgument, Type.option)
+let private ALIASES = fixed_array("P", "C", "D", "V", "E", "B", "__nope")
+class public GenAll {
+    seed : int4
+    max_depth : int = 5
+    kinds : table<string; int>
+    skip : table<string; bool>
+    rand_flags : bool = false
+    @do_not_delete pool_structs : array<Structure?>
+    @do_not_delete pool_enums : array<Enumeration?>
+    @do_not_delete pool_annots : array<TypeAnnotation?>
+    @do_not_delete pool_vars : array<VariablePtr>
+    @do_not_delete pool_funcs : array<Function?>
+    bind_refs : bool = false
+    pre_typed : bool = false
+    @safe_when_uninitialized at : LineInfo
+
+    def rnd(n : int) : int {
+        return n <= 1 ? 0 : abs(random_int(seed)) % n
+    }
+
+    def note(k : string) : void {
+        kinds[k] = (kinds?[k] ?? 0) + 1
+    }
+
+    def rat() : LineInfo {
+        var l = at
+        l.line = uint(rnd(4000))
+        l.column = uint(rnd(200))
+        l.last_line = l.line
+        l.last_column = l.column + uint(rnd(20))
+        return l
+    }
+
+    def rname() : string {
+        return NAMES[rnd(length(NAMES))]
+    }
+
+    def gen_type_payload(var td : TypeDeclPtr; depth : int) : void {
+        let bt = td.baseType
+        if (bt == Type.tStructure) {
+            if (!empty(pool_structs) && rnd(4) != 0) {
+                td.structType = pool_structs[rnd(length(pool_structs))]
+            }
+        } elif (bt == Type.tEnumeration || bt == Type.tEnumeration8
+                || bt == Type.tEnumeration16 || bt == Type.tEnumeration64) {
+            if (!empty(pool_enums) && rnd(4) != 0) {
+                td.enumType = pool_enums[rnd(length(pool_enums))]
+            }
+        } elif (bt == Type.tHandle) {
+            if (!empty(pool_annots) && rnd(4) != 0) {
+                td.annotation = pool_annots[rnd(length(pool_annots))]
+            }
+        } elif (bt == Type.tFixedArray) {
+            if (depth < max_depth && rnd(4) != 0) {
+                td.firstType = gen_type(depth + 1)
+            }
+            td.fixedDim = rnd(6) == 0 ? 0 : 1 + rnd(4)
+        } elif (bt == Type.tDistinct) {
+            if (depth < max_depth && rnd(4) != 0) {
+                td.firstType = gen_type(depth + 1)
+            }
+            td.alias := ALIASES[rnd(length(ALIASES))]
+        } elif (bt == Type.tBitfield || bt == Type.tBitfield8
+                || bt == Type.tBitfield16 || bt == Type.tBitfield64) {
+            for (_i in range(rnd(4))) {
+                let bi = length(td.argNames)
+                td.argNames |> resize(bi + 1)
+                td.argNames[bi] := rname()
+            }
+        }
+    }
+
+    def gen_type(depth : int) : TypeDeclPtr {
+        var td = new TypeDecl(at = rat(), baseType = BASETYPES[rnd(length(BASETYPES))])
+        if (td.baseType == Type.alias) {
+            td.alias := ALIASES[rnd(length(ALIASES))]
+        }
+        gen_type_payload(td, depth)
+        if (depth < max_depth && rnd(3) == 0) {
+            td.firstType = gen_type(depth + 1)
+        }
+        if (depth < max_depth && rnd(4) == 0) {
+            td.secondType = gen_type(depth + 1)
+        }
+        if (depth < max_depth && rnd(5) == 0) {
+            var a = gen_type(depth + 1)
+            td.argTypes |> emplace(a)
+        }
+        if (rnd(3) == 0) {
+            td.flags.constant = rnd(2) == 0
+            td.flags.ref = rnd(2) == 0
+            td.flags.temporary = rnd(2) == 0
+        }
+        return td
+    }
+
+    def gen_variable(depth : int) : VariablePtr {
+        var v <- new Variable(at = rat(), name := rname())
+        if (rnd(4) != 0) {
+            v._type = gen_type(depth + 1)
+        }
+        if (rnd(3) != 0) {
+            v.init = gen_expr(depth + 1)
+        }
+        if (rnd(5) == 0) {
+            v.flags.init_via_move = true
+        }
+        return <- v
+    }
+
+    def gen_make_struct(depth : int) : MakeStruct? {
+        var mks = new MakeStruct(uninitialized)
+        for (_i in range(1 + rnd(3))) {
+            var mf = new MakeFieldDecl(at = rat(), name := rname(),
+                value = gen_expr(depth + 1))
+            if (rnd(4) == 0) {
+                mf.tag = gen_expr(depth + 1)
+            }
+            if (rnd(4) == 0) {
+                mf.flags = MakeFieldDeclFlags.moveSemantics
+            }
+            emplace_new(*mks, mf)
+        }
+        return mks
+    }
+
+    def rflags(var e : ExpressionPtr) : void {
+        if (rnd(3) != 0) {
+            return
+        }
+        e.genFlags.alwaysSafe = rnd(2) == 0
+        e.genFlags.generated = rnd(4) == 0
+        e.genFlags.userSaidItsSafe = rnd(2) == 0
+        e.flags.constexpression = rnd(4) == 0
+        e.flags.noSideEffects = rnd(2) == 0
+        e.flags.noNativeSideEffects = rnd(2) == 0
+        e.flags.isForLoopSource = rnd(4) == 0
+        e.flags.isCallArgument = rnd(3) == 0
+    }
+
+    def rtype(var e : ExpressionPtr) : void {
+        if (!pre_typed || rnd(3) != 0) {
+            return
+        }
+        e._type = gen_type(max_depth - 1)
+    }
+
+    def terminal() : ExpressionPtr {
+        let t = rnd(4)
+        if (t == 0) {
+            note("ExprConstInt")
+            return new ExprConstInt(at = rat(), value = rnd(1000) - 500)
+        }
+        if (t == 1) {
+            note("ExprConstBool")
+            return new ExprConstBool(at = rat(), value = rnd(2) == 0)
+        }
+        if (t == 2) {
+            note("ExprConstString")
+            return new ExprConstString(at = rat(), value := rname())
+        }
+        note("ExprVar")
+        return new ExprVar(at = rat(), name := rname())
+    }
+
+    def gen_expr(depth : int) : ExpressionPtr {
+        return gen_any(depth, false)
+    }
+
+    def gen_stmt(depth : int) : ExpressionPtr {
+        return gen_any(depth, true)
+    }
+

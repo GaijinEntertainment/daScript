@@ -10,8 +10,8 @@ module ast_boost shared public
 //! macro authors: ``[macro]``, ``[reader_macro]``, ``[call_macro]``,
 //! ``[function_macro]``, ``[block_macro]``, ``[variant_macro]``,
 //! ``[tag_function]``, ``[tag_structure]``, ``[infer_macro]``,
-//! ``[optimization_macro]``, ``[lint_macro]``, ``[global_lint_macro]``,
-//! and ``[macro_function]``.
+//! ``[optimization_macro]``, ``[pre_infer_macro]``, ``[pre_simulate_macro]``,
+//! ``[lint_macro]``, ``[global_lint_macro]`` and ``[macro_function]``.
 
 require daslib/rtti
 require daslib/ast public
@@ -479,6 +479,18 @@ class SetupInferMacro : SetupAnyAnnotation {
 class SetupDirtyInferMacro : SetupAnyAnnotation {
     //! Registers annotated structure as a dirty infer macro.
     override annotation_function_call : string = "add_new_dirty_infer_macro"
+}
+
+class SetupPreInferMacro : SetupAnyAnnotation {
+    //! Registers annotated structure as a pre-infer macro: runs before every
+    //! (re-)inference pass, on a tree a macro may have just made invalid.
+    override annotation_function_call : string = "add_new_pre_infer_macro"
+}
+
+class SetupPreSimulateMacro : SetupAnyAnnotation {
+    //! Registers annotated structure as a pre-simulate macro: runs after inference,
+    //! before codegen, where every expression type is final.
+    override annotation_function_call : string = "add_new_pre_simulate_macro"
 }
 
 class SetupLintMacro : SetupAnyAnnotation {
@@ -1137,6 +1149,8 @@ def private setup {
         add_new_structure_annotation("infer_macro", new SetupInferMacro())
         add_new_structure_annotation("dirty_infer_macro", new SetupDirtyInferMacro())
         add_new_structure_annotation("optimization_macro", new SetupOptimizationMacro())
+        add_new_structure_annotation("pre_infer_macro", new SetupPreInferMacro())
+        add_new_structure_annotation("pre_simulate_macro", new SetupPreSimulateMacro())
         add_new_structure_annotation("lint_macro", new SetupLintMacro())
         add_new_structure_annotation("global_lint_macro", new SetupGlobalLintMacro())
         add_new_variant_macro("better_rtti_in_expr", new BetterRttiVisitor())
@@ -1218,7 +1232,7 @@ bitfield DebugExpressionFlags {
     lineInfo
 }
 
-def private debug_expression_impl(var writer : StringBuilderWriter; expr : Expression?; deFlags : DebugExpressionFlags; tabs : int) {
+def private debug_expression_impl(var writer : StringBuilderWriter; expr : Expression?; deFlags : DebugExpressionFlags; tabs : int) { // nolint:STYLE038 — one arm per node kind; splitting hides the table
     if (expr == null) {
         writer |> write("null")
         return
@@ -1237,7 +1251,7 @@ def private debug_expression_impl(var writer : StringBuilderWriter; expr : Expre
         if (e.at.fileInfo != null) {
             writer |> write(" file=\"{e.at.fileInfo.name}\"")
         }
-        if (e.__rtti == "ExprCall" || e.__rtti == "ExprInvoke") { // nolint:STYLE006
+        if (e.__rtti == "ExprCall" || e.__rtti == "ExprInvoke") {
             let enc = unsafe(reinterpret<ExprLooksLikeCall?>(e))
             if (int(enc.atEnclosure.line) != 0 || int(enc.atEnclosure.last_line) != 0) {
                 writer |> write(" atEnclosure={int(enc.atEnclosure.line)}:{int(enc.atEnclosure.column)}-{int(enc.atEnclosure.last_line)}:{int(enc.atEnclosure.last_column)}")
