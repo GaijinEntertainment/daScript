@@ -64,6 +64,17 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    set-builder lens possible. Cost to weigh: per-class descriptor-set layouts replace the one
    shared `VkDescriptorSetLayout`/pool — a real host-side rework. End state across both
    backends: one way to write a kernel in daslang; the backend is a target, not a dialect.
+10. **Vulkan on Mac (M1/MoltenVK) + shared dispatch-lens helpers.** Two items that ride
+   together: (a) make the vulkan tier green on the ssh M1 under MoltenVK — capability-gated
+   declines (no coopmat, the 32 KB shared-memory cap declining the dn/at chains), the known
+   `ffn_vs_ref` red bisected per-kernel via the model-less kernel-unit suite, portability_subset
+   enabled at device create (the dasVulkan-side sweep); correctness only, Metal stays the fast
+   path on that box. (b) Hoist the ~80 lines of dispatch-lens micro-grammar/validation the
+   `[vk_dispatch]` and `[metal_dispatch]` lenses duplicate (`mk_uint_cast`, `is_digit_tok`,
+   `role_ok`, `derived_role`, the `mk_grid_dim` core, `param_type`) into
+   `dasllama_kernel_access` — INVENTORY's designated shared Metal↔Vulkan component, which both
+   lenses already require. They diverged at birth (vulkan's grid folds any integer literal,
+   metal's only "1"); one owner ends that.
 
 ## Sequencing
 
