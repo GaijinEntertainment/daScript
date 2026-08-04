@@ -102,11 +102,14 @@ def is_valid_utf8(s : string) : bool {
 }
 
 def private rate_exceeded(db : SqlRunner; client_ip : string; policy : StorePolicy; now : int64) : bool {
+    // count() lowers to SELECT COUNT(*), so the ceiling costs one scalar row on
+    // the (ClientIp, CreatedAt) index — this runs on every POST, ahead of
+    // hashing, and must not materialize the rows it is only counting.
     let cutoff = now - RATE_WINDOW_SECONDS
-    let recent <- _sql(db |> select_from(type<Sample>)
+    let recent = _sql(db |> select_from(type<Sample>)
         |> _where(_.ClientIp == client_ip && _.CreatedAt >= cutoff)
-        |> _select(_.Hash))
-    return length(recent) >= policy.max_inserts_per_ip_hour
+        |> count())
+    return recent >= policy.max_inserts_per_ip_hour
 }
 
 def put_sample(db : SqlRunner; source : string; client_ip : string; policy : StorePolicy; now : int64) : PutResult {
