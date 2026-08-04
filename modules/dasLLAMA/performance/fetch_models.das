@@ -151,7 +151,13 @@ def private convert_nemo_py() : string {
 
 def private convert_hub_root() : string {
     let hf = get_env_variable("HF_HOME")
-    return empty(hf) ? "{get_env_variable("HOME")}/.cache/huggingface/hub" : "{hf}/hub"
+    return "{hf}/hub" if (!empty(hf))
+    let home = get_env_variable("HOME")
+    if (empty(home)) {
+        to_log(LOG_ERROR, "convert: neither HF_HOME nor HOME is set — cannot locate the huggingface hub cache\n")
+        return ""
+    }
+    return "{home}/.cache/huggingface/hub"
 }
 
 def private hub_download(py, expr : string) : string {
@@ -181,6 +187,7 @@ def private convert_parakeet(e : ProvEntry; path : string) {
 def private convert_canary(path : string) {
     let py = convert_nemo_py()
     let hub = convert_hub_root()
+    return if (empty(hub))
     hub_download(py, "snapshot_download; print(snapshot_download('nvidia/canary-qwen-2.5b'))")
     hub_download(py, "snapshot_download; print(snapshot_download('Qwen/Qwen3-1.7B', allow_patterns=['tokenizer*','*.json']))")
     // MTMD_BIN sits at <checkout>/build-cpu/bin/llama-mtmd-cli — its checkout carries the

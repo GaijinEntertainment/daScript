@@ -612,7 +612,7 @@ def private platform_remote_desktop() : string {
         let out = run_capture("tasklist /FI \"IMAGENAME eq parsecd.exe\" 2>nul", false)
         return find(out, "parsecd") >= 0 ? "parsec" : "off"
     }
-    return empty(run_capture("pgrep -x parsecd", true)) ? "off" : "parsec"
+    return empty(run_capture("pgrep -x parsecd 2>/dev/null", true)) ? "off" : "parsec"
 }
 
 def private is_macos() : bool {
