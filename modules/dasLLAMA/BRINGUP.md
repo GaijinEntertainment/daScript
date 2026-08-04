@@ -129,6 +129,8 @@ cmake --build build --config Release -j 16        # 15-25 min clean
 ```sh
 export DASLLAMA_MODELS_DIR=<dir>       # WHISPER_CPP_MODELS too, or point both at ONE dir
 bin/daslang modules/dasLLAMA/performance/fetch_models.das -- --fetch
+# after section 3's setup_asr_rig (the nemo venv + refs): the conversions, tool-driven
+bin/daslang modules/dasLLAMA/performance/fetch_models.das -- --convert
 bin/daslang modules/dasLLAMA/performance/fetch_models.das --   # later: verify-only, must end 0 failed
 ```
 
