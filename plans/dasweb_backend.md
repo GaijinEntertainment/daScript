@@ -73,11 +73,18 @@ Key shape decisions, each grounded in what the repo already does:
   (single tick thread) — fine for this workload, do not assume concurrency.
 - **Route lambdas**: retained with `push` semantics (never `emplace`) — GC-visibility rule from
   skills/dashv.md.
-- **Tests**: in-dir (hyphenated dir ⇒ bare-name sibling `require`, the dasllama-server
-  convention). `with_test_server` from `tests/dasHV/_dashv_test_common.das` does NOT fit
-  (needs per-thread DB open + `set_bind_host`) — write the local variant of the harness whose
-  thread lambda opens the store first. Server on `new_thread` = own context ⇒ all setup inside
-  the thread.
+- **Tests — the session rules (Boris 2026-08-04):**
+  1. **The server gets tests for ALL functionality from the get-go** — every route, every
+     store operation, every config/limit behavior has a dastest test before it's called done.
+     We have a test framework; we are not afraid to use it.
+  2. **Every bug found during the arc gets a regression test**, in the same change as the fix.
+  3. **Tests live in-dir** — `utils/dasweb-playground/test_*.das`, like other utils
+     (hyphenated dir ⇒ bare-name sibling `require`, the dasllama-server convention). NOT under
+     global `tests/`. (Exception already landed: `daslib/sha_256` is a daslib module, so its
+     tests are correctly global at `tests/daslib/test_sha_256.das`.)
+  `with_test_server` from `tests/dasHV/_dashv_test_common.das` does NOT fit (needs per-thread
+  DB open + `set_bind_host`) — write the local variant of the harness whose thread lambda
+  opens the store first. Server on `new_thread` = own context ⇒ all setup inside the thread.
 
 ### Config
 
@@ -343,6 +350,22 @@ own plan doc before implementation; the contour:
   broken sample reds CI, not the production queue.
 - Checkpoint 3a: curated sample builds end-to-end through the real queue from a cold cache.
   Checkpoint 3b: user-visible flow with the building indicator, on a live server.
+
+## Phase 4 — documentation ("for all the good stuff")
+
+Continuous minimum rides each PR anyway (CI-forced): das2rst group + doc registration for
+`daslib/sha_256` (and any later daslib addition), README per new tool dir. The dedicated
+phase at arc end covers the rest properly:
+
+- `daslib/sha_256` — stdlib reference page prose (beyond the generated stub).
+- `utils/dasweb-playground/README.md` — run/endpoints/config/supervised-deployment, the
+  dasllama-server README shape.
+- Ops runbook: box layout, Caddy routes + port registry, deploy/rollback procedure, backup
+  restore procedure, "where are the logs / what do they contain".
+- Playground user-facing bits: share-link behavior (`/s/<hash>`), wasm build states (phase 3).
+- zen4 `~/SETUP.md` wasm-toolchain section + `build_wasm_host.sh` header prose (phase 3).
+- A doc/source page only if any of this graduates to public reference material — decide then
+  (`skills/documentation_rst.md` + `skills/tutorial_prose.md` apply).
 
 ## Open questions (decide before/during phase 1)
 
