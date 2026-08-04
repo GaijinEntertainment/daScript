@@ -37,10 +37,10 @@ let private K = fixed_array<uint>(
 
 struct Sha256State {
     //! Streaming hash state. Create with ``sha256_init``; do not mutate directly.
-    h : uint[8]
-    buf : uint8[64]
-    bufLen : int
-    totalBytes : uint64
+    h : uint[8] //! Current hash values (eight 32-bit words).
+    buf : uint8[64] //! Pending input block.
+    bufLen : int //! Bytes buffered in the pending block.
+    totalBytes : uint64 //! Total bytes absorbed so far.
 }
 
 def sha256_init : Sha256State {
