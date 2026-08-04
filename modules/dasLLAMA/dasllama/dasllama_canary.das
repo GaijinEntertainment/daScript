@@ -398,6 +398,10 @@ def private cn_repack(var st : CanaryStaging; woff, n, d : int64) {
     if (woff % 32l != 0l) {
         panic("dasLLAMA canary q8: GEMM weight at {woff} is not 32-aligned")
     }
+    if (n % 32l != 0l) {
+        // n_elem%32==0 does not imply per-row alignment — straddling blocks serve wrong scales
+        panic("dasLLAMA canary q8: GEMM row width {n} is not 32-aligned — Q8_0 blocks would straddle rows")
+    }
     repack_q8q8_weight(st.qblob, st.qscales, woff, n, d)
 }
 
@@ -483,10 +487,22 @@ def load_canary_encoder(path : string; q8 : bool = false) : CanaryEncoder {
     return <- built
 }
 
+//! The loaded precision as ``<encoder>/<decoder>`` (the decoder tag comes from the facade,
+//! which owns the shared LLM): the facade's [[asr_exec_fmt]] arm.
+def canary_exec_fmt(e : CanaryEncoder; dec_fmt : string) : string {
+    return "{e.q8 ? "q8" : "f32"}/{dec_fmt}"
+}
+
+//! Canary's encode-total ``asr_prof`` bucket (the facade's [[asr_encode_bucket]] arm).
+def canary_encode_bucket : string {
+    return "cn.encode"
+}
+
 //! Mint a served encoder from a staged read WITHOUT touching disk — the in-memory image rail.
 //! The off-rail control for suites: a live encoder that came from no `.dlim` file.
-def mint_canary_encoder(var st : CanaryStaging; var out : CanaryEncoder; q8 : bool = false) {
-    cache_via_image_staged(st, out, "", q8 ? "canary-q8" : "canary-f32")
+def mint_canary_encoder(var st : CanaryStaging; var out : CanaryEncoder) {
+    // the tag is the staging's own precision — a caller-supplied flag could bake a lying tag
+    cache_via_image_staged(st, out, "", st.e.q8 ? "canary-q8" : "canary-f32")
 }
 
 // The CNRY-bin reader proper: scalars land in the served encoder, plane bytes in the staging
@@ -1149,6 +1165,7 @@ def canary_transcribe(dec : Model; enc : CanaryEncoder; var s : CanaryAsrSession
     toks |> reserve(128)   // typical transcription length; grows if a clip runs longer
     raw |> reserve(128)
     var plog_sum = 0.0lf
+    var hit_eos = false
     let tdec = ref_time_ticks()
     for (_i in range64(max_new)) {
         var best = 0
@@ -1165,6 +1182,7 @@ def canary_transcribe(dec : Model; enc : CanaryEncoder; var s : CanaryAsrSession
         plog_sum += double(s.qctx.logits[best]) - (log(lse) + double(mx))
         toks |> push(best)
         if (int64(best) == im_end) {   // EOS: emitted into the ids, then stop
+            hit_eos = true
             break
         }
         raw |> push(piece_(dec, int64(best)))
@@ -1172,6 +1190,11 @@ def canary_transcribe(dec : Model; enc : CanaryEncoder; var s : CanaryAsrSession
         eval_(dec, s.qctx, one)
     }
     asr_prof_add("cn.decode", tdec)
+    if (!hit_eos) {
+        // a budget exit truncates SILENTLY otherwise — the transcript and its timing would
+        // publish indistinguishable from a complete decode
+        to_log(LOG_WARNING, "dasLLAMA canary: decode budget exhausted at {max_new} tokens — transcript is TRUNCATED\n")
+    }
 
     var seg = TranscribeSegment(t0 = 0l, t1 = long_length(samples) * 100l / AUDIO_SAMPLE_RATE,
         text = strip(join(raw, "")))

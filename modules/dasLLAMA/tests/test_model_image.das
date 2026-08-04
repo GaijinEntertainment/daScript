@@ -1012,6 +1012,13 @@ def test_canary_encoder_q8_image_roundtrip(t : T?) {
         t |> equal(count_mismatch(a.qscales, b.qscales), 0l, "qscales element-exact")
         t |> equal(count_mismatch(a.blob, b.blob), 0l, "compact fp32 blob element-exact")
         t |> equal(count_mismatch(a.filters, b.filters), 0l, "filters element-exact")
+        // the off-rail control: a staged read minted straight into memory; the mint derives
+        // its family tag from the staging's own precision
+        var inscope stg <- stage_canary_encoder(path, true)
+        var inscope minted = CanaryEncoder()
+        mint_canary_encoder(stg, minted)
+        t |> success(minted.q8, "minted encoder is on the staging's q8 rail")
+        t |> equal(count_mismatch_i8(a.qblob, minted.qblob), 0l, "minted qblob element-exact vs staged truth")
     }
 }
 

@@ -306,7 +306,7 @@ def report(kernel : string; names : array<string>; best : array<double>; ok : ar
     // rank by MEDIAN of finalist rounds: min-over-rounds is a lottery on a non-silent box.
     // Rows screened out before the finalist phase fall back to their best-of — they cannot
     // win, and their line stays honest about what was measured.
-    var med : array<double>
+    var inscope med : array<double>
     med |> resize(length(names))
     for (i in range(length(names))) {
         med[i] = (length(g_samples) > i && !empty(g_samples[i])) ? tune_median(g_samples[i]) : best[i]
@@ -481,9 +481,9 @@ def ref_dot(a : float const?; b : float const?; n : int64) : double {
 let DOT_WALK_ROWS = 8192l
 
 def bench_dot() : string {
-    var w : array<float>
-    var x : array<float>
-    var o : array<float>
+    var inscope w : array<float>
+    var inscope x : array<float>
+    var inscope o : array<float>
     w |> resize(DOT_WALK_ROWS * N)   // 128 MB — DRAM-streaming, like a decode GEMV
     x |> resize(N)
     o |> resize(DOT_WALK_ROWS)
@@ -499,9 +499,9 @@ def bench_dot() : string {
 
     let vs <- dot_template_variants()
     let nv = length(vs)
-    var names : array<string>
-    var ok : array<bool>
-    var best : array<double>
+    var inscope names : array<string>
+    var inscope ok : array<bool>
+    var inscope best : array<double>
     names |> resize(nv)
     ok |> resize(nv)
     best |> resize(nv)
@@ -554,14 +554,14 @@ def bench_dot() : string {
 def bench_binary(kernel : string; vs : array<tuple<string; BinFn>>;
                  d0 : array<float>; s : array<float>; ref_elem : function<(a : float; b : float) : double>) : string {
     let nv = length(vs)
-    var d : array<float>
+    var inscope d : array<float>
     d |> resize(N)
     var dp = unsafe(addr(d[0]))
     let sp = unsafe(addr(s[0]))
 
-    var names : array<string>
-    var ok : array<bool>
-    var best : array<double>
+    var inscope names : array<string>
+    var inscope ok : array<bool>
+    var inscope best : array<double>
     names |> resize(nv)
     ok |> resize(nv)
     best |> resize(nv)
@@ -612,9 +612,9 @@ def bench_axpy() : string {
     let vs <- axpy_template_variants()
     let nv = length(vs)
     let scale = 0.5f
-    var d0 : array<float>
-    var s : array<float>
-    var d : array<float>
+    var inscope d0 : array<float>
+    var inscope s : array<float>
+    var inscope d : array<float>
     d0 |> resize(N)
     s |> resize(N)
     d |> resize(N)
@@ -625,9 +625,9 @@ def bench_axpy() : string {
     var dp = unsafe(addr(d[0]))
     let sp = unsafe(addr(s[0]))
 
-    var names : array<string>
-    var ok : array<bool>
-    var best : array<double>
+    var inscope names : array<string>
+    var inscope ok : array<bool>
+    var inscope best : array<double>
     names |> resize(nv)
     ok |> resize(nv)
     best |> resize(nv)
@@ -676,8 +676,8 @@ def bench_axpy() : string {
 // so the dots gate f64-relative and the converts gate EXACT (bit-equality per element).
 
 def bench_dot_f16() : string {
-    var a : array<float>
-    var b : array<uint16>
+    var inscope a : array<float>
+    var inscope b : array<uint16>
     a |> resize(N)
     b |> resize(N)
     for (i in range64(N)) {
@@ -693,9 +693,9 @@ def bench_dot_f16() : string {
 
     let vs <- dot_f16_template_variants()
     let nv = length(vs)
-    var names : array<string>
-    var ok : array<bool>
-    var best : array<double>
+    var inscope names : array<string>
+    var inscope ok : array<bool>
+    var inscope best : array<double>
     names |> resize(nv)
     ok |> resize(nv)
     best |> resize(nv)
@@ -734,9 +734,9 @@ def bench_axpy_f16() : string {
     let vs <- axpy_f16_template_variants()
     let nv = length(vs)
     let scale = 0.5f
-    var d0 : array<float>
-    var s : array<uint16>
-    var d : array<float>
+    var inscope d0 : array<float>
+    var inscope s : array<uint16>
+    var inscope d : array<float>
     d0 |> resize(N)
     s |> resize(N)
     d |> resize(N)
@@ -747,9 +747,9 @@ def bench_axpy_f16() : string {
     var dp = unsafe(addr(d[0]))
     let sp = unsafe(addr(s[0]))
 
-    var names : array<string>
-    var ok : array<bool>
-    var best : array<double>
+    var inscope names : array<string>
+    var inscope ok : array<bool>
+    var inscope best : array<double>
     names |> resize(nv)
     ok |> resize(nv)
     best |> resize(nv)
@@ -796,8 +796,8 @@ def bench_axpy_f16() : string {
 def bench_cvt_f32_to_f16() : string {
     let vs <- cvt_f32_to_f16_template_variants()
     let nv = length(vs)
-    var s : array<float>
-    var d : array<uint16>
+    var inscope s : array<float>
+    var inscope d : array<uint16>
     s |> resize(N)
     d |> resize(N)
     for (i in range64(N)) {
@@ -808,9 +808,9 @@ def bench_cvt_f32_to_f16() : string {
     var dp = unsafe(addr(d[0]))
     let sp = unsafe(addr(s[0]))
 
-    var names : array<string>
-    var ok : array<bool>
-    var best : array<double>
+    var inscope names : array<string>
+    var inscope ok : array<bool>
+    var inscope best : array<double>
     names |> resize(nv)
     ok |> resize(nv)
     best |> resize(nv)
@@ -848,8 +848,8 @@ def bench_cvt_f32_to_f16() : string {
 def bench_cvt_f16_to_f32() : string {
     let vs <- cvt_f16_to_f32_template_variants()
     let nv = length(vs)
-    var s : array<uint16>
-    var d : array<float>
+    var inscope s : array<uint16>
+    var inscope d : array<float>
     s |> resize(N)
     d |> resize(N)
     for (i in range64(N)) {
@@ -858,9 +858,9 @@ def bench_cvt_f16_to_f32() : string {
     var dp = unsafe(addr(d[0]))
     let sp = unsafe(addr(s[0]))
 
-    var names : array<string>
-    var ok : array<bool>
-    var best : array<double>
+    var inscope names : array<string>
+    var inscope ok : array<bool>
+    var inscope best : array<double>
     names |> resize(nv)
     ok |> resize(nv)
     best |> resize(nv)
@@ -901,8 +901,8 @@ def bench_scale() : string {
     let vs <- scale_inplace_template_variants()
     let nv = length(vs)
     let scale = 1.0001f   // near 1.0 so scale^REPS stays in normal float range with per-block reset
-    var d0 : array<float>
-    var d : array<float>
+    var inscope d0 : array<float>
+    var inscope d : array<float>
     d0 |> resize(N)
     d |> resize(N)
     for (i in range64(N)) {
@@ -910,9 +910,9 @@ def bench_scale() : string {
     }
     var dp = unsafe(addr(d[0]))
 
-    var names : array<string>
-    var ok : array<bool>
-    var best : array<double>
+    var inscope names : array<string>
+    var inscope ok : array<bool>
+    var inscope best : array<double>
     names |> resize(nv)
     ok |> resize(nv)
     best |> resize(nv)
@@ -962,15 +962,15 @@ def bench_scale() : string {
 def bench_softmax() : string {
     let vs <- softmax_template_variants()
     let nv = length(vs)
-    var d0 : array<float>
-    var d : array<float>
+    var inscope d0 : array<float>
+    var inscope d : array<float>
     d0 |> resize(N)
     d |> resize(N)
     for (i in range64(N)) {
         d0[i] = 4.0f * sin(float(i) * 0.11f)   // scores in [-4,4], a realistic logit spread
     }
     var dp = unsafe(addr(d[0]))
-    var want : array<double>
+    var inscope want : array<double>
     want |> resize(N)
     var mx = -1.0e30lf
     for (i in range64(N)) {
@@ -986,9 +986,9 @@ def bench_softmax() : string {
         want[i] /= wsum
     }
 
-    var names : array<string>
-    var ok : array<bool>
-    var best : array<double>
+    var inscope names : array<string>
+    var inscope ok : array<bool>
+    var inscope best : array<double>
     names |> resize(nv)
     ok |> resize(nv)
     best |> resize(nv)
@@ -1037,9 +1037,9 @@ def bench_rmsnorm() : string {
     let vs <- rmsnorm_template_variants()
     let nv = length(vs)
     let eps = 1.0e-5f
-    var x : array<float>
-    var w : array<float>
-    var o : array<float>
+    var inscope x : array<float>
+    var inscope w : array<float>
+    var inscope o : array<float>
     var xp = aligned_f32(x, N)
     var wp = aligned_f32(w, N)
     var op = aligned_f32(o, N)
@@ -1055,9 +1055,9 @@ def bench_rmsnorm() : string {
     }
     ss = 1.0lf / sqrt(ss / double(N) + double(eps))
 
-    var names : array<string>
-    var ok : array<bool>
-    var best : array<double>
+    var inscope names : array<string>
+    var inscope ok : array<bool>
+    var inscope best : array<double>
     names |> resize(nv)
     ok |> resize(nv)
     best |> resize(nv)
@@ -1105,8 +1105,8 @@ def bench_rmsnorm() : string {
 def bench_dot_q4() : string {
     let vs <- dot_q4_template_variants()
     let nv = length(vs)
-    var wf : array<float>
-    var x : array<float>
+    var inscope wf : array<float>
+    var inscope x : array<float>
     wf |> resize(N)
     x |> resize(N)
     for (i in range64(N)) {
@@ -1114,7 +1114,7 @@ def bench_dot_q4() : string {
         x[i] = cos(float(i) * 0.07f)
     }
     let qt <- quantize_q4_0(wf, N)
-    var df : array<float>
+    var inscope df : array<float>
     df |> resize(N)
     dequantize_q4_0(qt, df)
     var want = 0.0lf
@@ -1125,9 +1125,9 @@ def bench_dot_q4() : string {
     let wsp = unsafe(addr(qt.scales[0]))
     let xp = unsafe(addr(x[0]))
 
-    var names : array<string>
-    var ok : array<bool>
-    var best : array<double>
+    var inscope names : array<string>
+    var inscope ok : array<bool>
+    var inscope best : array<double>
     names |> resize(nv)
     ok |> resize(nv)
     best |> resize(nv)
@@ -1164,7 +1164,7 @@ def bench_dot_q4() : string {
 
 // the q8 weight image a composite walks: DOT_WALK_ROWS rows quantized from the analytic fill
 def private build_q8_walk(var wqi : array<int8>; var wsi : array<float>; nb : int64) {
-    var wrow : array<float>
+    var inscope wrow : array<float>
     wrow |> resize(N)
     for (r in range64(DOT_WALK_ROWS)) {
         for (i in range64(N)) {
@@ -1187,12 +1187,12 @@ def bench_dot_q8q8() : string {
     let vs <- dot_q8q8_template_variants()
     let nv = length(vs)
     let nb = N / 32l
-    var wqi : array<int8>
-    var wsi : array<float>
+    var inscope wqi : array<int8>
+    var inscope wsi : array<float>
     wqi |> resize(DOT_WALK_ROWS * N)    // 32 MB of q8 rows + 4 MB scales
     wsi |> resize(DOT_WALK_ROWS * nb)
     build_q8_walk(wqi, wsi, nb)
-    var xf : array<float>
+    var inscope xf : array<float>
     xf |> resize(N)
     for (i in range64(N)) {
         xf[i] = cos(float(i) * 0.07f)
@@ -1202,13 +1202,13 @@ def bench_dot_q8q8() : string {
     let wsp = unsafe(addr<float const?>(wsi[0]))
     let xqp = unsafe(addr<int8 const?>(xq.q[0]))
     let xsp = unsafe(addr<float const?>(xq.scales[0]))
-    var o : array<float>
+    var inscope o : array<float>
     o |> resize(DOT_WALK_ROWS)
     var op = unsafe(addr(o[0]))
 
-    var names : array<string>
-    var ok : array<bool>
-    var best : array<double>
+    var inscope names : array<string>
+    var inscope ok : array<bool>
+    var inscope best : array<double>
     names |> resize(nv)
     ok |> resize(nv)
     best |> resize(nv)
@@ -1297,9 +1297,9 @@ def private q8kv_elem(row : array<uint8>; i : int64) : double {
 }
 
 def bench_dot_q8kv() : string {
-    var a : array<float>
-    var wf : array<float>
-    var row : array<uint8>
+    var inscope a : array<float>
+    var inscope wf : array<float>
+    var inscope row : array<uint8>
     a |> resize(N)
     wf |> resize(N)
     for (i in range64(N)) {
@@ -1316,9 +1316,9 @@ def bench_dot_q8kv() : string {
 
     let vs <- dot_q8kv_template_variants()
     let nv = length(vs)
-    var names : array<string>
-    var ok : array<bool>
-    var best : array<double>
+    var inscope names : array<string>
+    var inscope ok : array<bool>
+    var inscope best : array<double>
     names |> resize(nv)
     ok |> resize(nv)
     best |> resize(nv)
@@ -1354,9 +1354,9 @@ def bench_dot_q8kv() : string {
 }
 
 def bench_dot_q8q8kv() : string {
-    var xf : array<float>
-    var wf : array<float>
-    var row : array<uint8>
+    var inscope xf : array<float>
+    var inscope wf : array<float>
+    var inscope row : array<uint8>
     xf |> resize(N)
     wf |> resize(N)
     for (i in range64(N)) {
@@ -1381,9 +1381,9 @@ def bench_dot_q8q8kv() : string {
 
     let vs <- dot_q8q8kv_template_variants()
     let nv = length(vs)
-    var names : array<string>
-    var ok : array<bool>
-    var best : array<double>
+    var inscope names : array<string>
+    var inscope ok : array<bool>
+    var inscope best : array<double>
     names |> resize(nv)
     ok |> resize(nv)
     best |> resize(nv)
@@ -1422,10 +1422,10 @@ def bench_axpy_q8kv() : string {
     let vs <- axpy_q8kv_template_variants()
     let nv = length(vs)
     let scale = 0.5f
-    var d0 : array<float>
-    var wf : array<float>
-    var row : array<uint8>
-    var d : array<float>
+    var inscope d0 : array<float>
+    var inscope wf : array<float>
+    var inscope row : array<uint8>
+    var inscope d : array<float>
     d0 |> resize(N)
     wf |> resize(N)
     d |> resize(N)
@@ -1437,9 +1437,9 @@ def bench_axpy_q8kv() : string {
     var dp = unsafe(addr(d[0]))
     let sp = unsafe(addr(row[0]))
 
-    var names : array<string>
-    var ok : array<bool>
-    var best : array<double>
+    var inscope names : array<string>
+    var inscope ok : array<bool>
+    var inscope best : array<double>
     names |> resize(nv)
     ok |> resize(nv)
     best |> resize(nv)
@@ -1486,9 +1486,9 @@ def bench_axpy_q8kv() : string {
 def bench_cvt_q8kv_to_f32() : string {
     let vs <- cvt_q8kv_to_f32_template_variants()
     let nv = length(vs)
-    var wf : array<float>
-    var row : array<uint8>
-    var d : array<float>
+    var inscope wf : array<float>
+    var inscope row : array<uint8>
+    var inscope d : array<float>
     wf |> resize(N)
     d |> resize(N)
     for (i in range64(N)) {
@@ -1498,9 +1498,9 @@ def bench_cvt_q8kv_to_f32() : string {
     var dp = unsafe(addr(d[0]))
     let sp = unsafe(addr(row[0]))
 
-    var names : array<string>
-    var ok : array<bool>
-    var best : array<double>
+    var inscope names : array<string>
+    var inscope ok : array<bool>
+    var inscope best : array<double>
     names |> resize(nv)
     ok |> resize(nv)
     best |> resize(nv)
@@ -1544,9 +1544,9 @@ def bench_cvt_q8kv_to_f32() : string {
 def bench_quantize_q8kv_row() : string {
     let vs <- quantize_q8kv_row_template_variants()
     let nv = length(vs)
-    var src : array<float>
-    var ref_row : array<uint8>
-    var d : array<uint8>
+    var inscope src : array<float>
+    var inscope ref_row : array<uint8>
+    var inscope d : array<uint8>
     src |> resize(N)
     for (i in range64(N)) {
         src[i] = 300.0f * sin(float(i) * 0.11f)
@@ -1556,9 +1556,9 @@ def bench_quantize_q8kv_row() : string {
     var dp = unsafe(addr(d[0]))
     let sp = unsafe(addr(src[0]))
 
-    var names : array<string>
-    var ok : array<bool>
-    var best : array<double>
+    var inscope names : array<string>
+    var inscope ok : array<bool>
+    var inscope best : array<double>
     names |> resize(nv)
     ok |> resize(nv)
     best |> resize(nv)
@@ -1607,8 +1607,8 @@ def bench_dot_mx4q8() : string {
     let vs <- dot_mx4q8_template_variants()
     let nv = length(vs)
     let nb = N / 32l
-    var wn : array<uint8>
-    var we : array<uint8>
+    var inscope wn : array<uint8>
+    var inscope we : array<uint8>
     wn |> resize(N / 2l)
     we |> resize(nb)
     for (i in range64(N / 2l)) {
@@ -1617,7 +1617,7 @@ def bench_dot_mx4q8() : string {
     for (i in range64(nb)) {
         we[i] = uint8(120 + (int(i) * 7) % 16)
     }
-    var xf : array<float>
+    var inscope xf : array<float>
     xf |> resize(N)
     for (i in range64(N)) {
         xf[i] = cos(float(i) * 0.07f)
@@ -1641,9 +1641,9 @@ def bench_dot_mx4q8() : string {
     let xqp = unsafe(addr(xq.q[0]))
     let xsp = unsafe(addr(xq.scales[0]))
 
-    var names : array<string>
-    var ok : array<bool>
-    var best : array<double>
+    var inscope names : array<string>
+    var inscope ok : array<bool>
+    var inscope best : array<double>
     names |> resize(nv)
     ok |> resize(nv)
     best |> resize(nv)
@@ -1689,28 +1689,28 @@ def bench_quantize() : string {
     let nv = length(vs)
     let npos = DOT_WALK_ROWS / 2l   // 4096 rows × 16 KB = 64 MB read + 17 MB written per walk
     let nb = N / 32l
-    var src : array<float>
+    var inscope src : array<float>
     src |> resize(npos * N)
     for (i in range64(npos * N)) {
         src[i] = 2.0f * sin(float(i) * 0.13f)
     }
-    var srcw : array<float>
+    var inscope srcw : array<float>
     srcw |> resize(N)
     for (i in range64(N)) {   // row 0 is the byte-exact reference row
         srcw[i] = src[i]
     }
     let want <- quantize_q8_0(srcw, N)
-    var qdst : array<int8>
-    var sdst : array<float>
+    var inscope qdst : array<int8>
+    var inscope sdst : array<float>
     qdst |> resize(npos * N)
     sdst |> resize(npos * nb)
     let srcp = unsafe(addr<float const?>(src[0]))
     var qp = unsafe(addr(qdst[0]))
     var sp = unsafe(addr(sdst[0]))
 
-    var names : array<string>
-    var ok : array<bool>
-    var best : array<double>
+    var inscope names : array<string>
+    var inscope ok : array<bool>
+    var inscope best : array<double>
     names |> resize(nv)
     ok |> resize(nv)
     best |> resize(nv)
@@ -1762,13 +1762,13 @@ def bench_quantize() : string {
 def bench_quantize_bs() : string {
     let vs <- quantize_q8_0_bs_into_ptr_template_variants()
     let nv = length(vs)
-    var src : array<float>
+    var inscope src : array<float>
     src |> resize(N)
     for (i in range64(N)) {
         src[i] = 2.0f * sin(float(i) * 0.13f)
     }
     let want <- quantize_q8_0(src, N)
-    var wantbs : array<int>
+    var inscope wantbs : array<int>
     wantbs |> resize(N / 16l)
     for (h in range64(N / 16l)) {
         var bs = 0
@@ -1777,9 +1777,9 @@ def bench_quantize_bs() : string {
         }
         wantbs[h] = bs
     }
-    var qdst : array<int8>
-    var sdst : array<float>
-    var bdst : array<int>
+    var inscope qdst : array<int8>
+    var inscope sdst : array<float>
+    var inscope bdst : array<int>
     qdst |> resize(N)
     sdst |> resize(N / 32l)
     bdst |> resize(N / 16l)
@@ -1788,9 +1788,9 @@ def bench_quantize_bs() : string {
     var sp = unsafe(addr(sdst[0]))
     var bp = unsafe(addr(bdst[0]))
 
-    var names : array<string>
-    var ok : array<bool>
-    var best : array<double>
+    var inscope names : array<string>
+    var inscope ok : array<bool>
+    var inscope best : array<double>
     names |> resize(nv)
     ok |> resize(nv)
     best |> resize(nv)
@@ -1847,15 +1847,15 @@ def bench_rope_tab() : string {
     let nv = length(vs)
     let head_size = 64l
     let half = head_size / 2l
-    var v0 : array<float>
-    var v : array<float>
+    var inscope v0 : array<float>
+    var inscope v : array<float>
     v0 |> resize(N)
     v |> resize(N)
     for (i in range64(N)) {
         v0[i] = sin(float(i) * 0.1f)
     }
-    var cosr : array<float>
-    var sinr : array<float>
+    var inscope cosr : array<float>
+    var inscope sinr : array<float>
     cosr |> resize(half)
     sinr |> resize(half)
     for (j in range64(half)) {
@@ -1867,9 +1867,9 @@ def bench_rope_tab() : string {
     let cp = unsafe(addr(cosr[0]))
     let sp = unsafe(addr(sinr[0]))
 
-    var names : array<string>
-    var ok : array<bool>
-    var best : array<double>
+    var inscope names : array<string>
+    var inscope ok : array<bool>
+    var inscope best : array<double>
     names |> resize(nv)
     ok |> resize(nv)
     best |> resize(nv)
@@ -1928,9 +1928,9 @@ def bench_gemm_tile() : string {
     let nv = length(vs)
     let K = 256l
     let NN = 16l   // C/B row stride == tile width, so the 4×16 tile is the whole C
-    var a : array<float>
-    var b : array<float>
-    var c : array<float>
+    var inscope a : array<float>
+    var inscope b : array<float>
+    var inscope c : array<float>
     var ap = aligned_f32(a, 4l * K)
     var bp = aligned_f32(b, K * NN)
     var cp = aligned_f32(c, 4l * NN)
@@ -1943,9 +1943,9 @@ def bench_gemm_tile() : string {
         }
     }
 
-    var names : array<string>
-    var ok : array<bool>
-    var best : array<double>
+    var inscope names : array<string>
+    var inscope ok : array<bool>
+    var inscope best : array<double>
     names |> resize(nv)
     ok |> resize(nv)
     best |> resize(nv)
@@ -2014,14 +2014,14 @@ def bench_laneq4x4() : string { // nolint:STYLE038 — one bench: fixture, backe
     let nb = n / 32l
     let d = 4l     // one interleaved 4-row group
     let ntok = 4l
-    var wf : array<float>
+    var inscope wf : array<float>
     wf |> resize(d * n)
     for (i in range64(d * n)) {
         wf[i] = sin(float(i) * 0.1f)
     }
     var wq <- quantize_q8_0(wf, d * n)
-    var refq : array<int8>    // row-major copies for the reference (repack rewrites wq in place)
-    var refs : array<float>
+    var inscope refq : array<int8>    // row-major copies for the reference (repack rewrites wq in place)
+    var inscope refs : array<float>
     refq |> resize(d * n)
     refs |> resize(d * nb)
     for (i in range64(d * n)) {
@@ -2035,17 +2035,17 @@ def bench_laneq4x4() : string { // nolint:STYLE038 — one bench: fixture, backe
                                                   // the laneq4x4 tile's expected interleave (the
                                                   // correctness gate below catches any mr drift)
     repack_q8q8_weight(wq.q, wq.scales, 0l, n, d)
-    var xf : array<float>
+    var inscope xf : array<float>
     xf |> resize(ntok * n)
     for (i in range64(ntok * n)) {
         xf[i] = cos(float(i) * 0.07f)
     }
-    var xq : array<int8>
-    var xs : array<float>
+    var inscope xq : array<int8>
+    var inscope xs : array<float>
     xq |> resize(ntok * n)
     xs |> resize(ntok * nb)
     quantize_q8_0_into(xf, ntok * n, xq, xs, 0l, 0l)
-    var y : array<float>
+    var inscope y : array<float>
     y |> resize(ntok * d)
     var yp = unsafe(addr(y[0]))
     let wgp = unsafe(addr(wq.q[0]))
@@ -2053,9 +2053,9 @@ def bench_laneq4x4() : string { // nolint:STYLE038 — one bench: fixture, backe
     let xqp = unsafe(addr(xq[0]))
     let xsp = unsafe(addr(xs[0]))
 
-    var names : array<string>
-    var ok : array<bool>
-    var best : array<double>
+    var inscope names : array<string>
+    var inscope ok : array<bool>
+    var inscope best : array<double>
     names |> resize(nv)
     ok |> resize(nv)
     best |> resize(nv)

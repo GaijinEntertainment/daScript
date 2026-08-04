@@ -1720,6 +1720,23 @@ def bench_records_path : string {
     return "modules/dasLLAMA/performance/records/{box_name()}.json"
 }
 
+//! Every per-box store under records/, STRICT: ``records/{box}.json`` only — a dotted stem is
+//! a tune archive, ``annotations.json`` is the hand-note overlay, ``_``-prefixed is scratch.
+//! The ONE lister both generators use; two copies drifted on the ``_`` rule once already.
+def list_record_stores : array<string> {
+    var out : array<string>
+    dir("modules/dasLLAMA/performance/records") $(fn) {
+        if (ends_with(fn, ".json") && !starts_with(fn, "_")) {
+            let stem = slice(fn, 0, length(fn) - length(".json"))
+            if (stem != "annotations" && find(stem, ".") < 0) {
+                out |> push("modules/dasLLAMA/performance/records/{fn}")
+            }
+        }
+    }
+    sort(out)
+    return <- out
+}
+
 def read_bench_records(path : string; var models : array<BenchModel>) : bool {
     if (!stat(path).is_valid) {
         return false

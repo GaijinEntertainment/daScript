@@ -3088,4 +3088,13 @@ def private restore_math_fn_defaults { // nolint:STYLE037,STYLE038 — flat seam
     if (g_bake_kq_repack == null) {
         g_bake_kq_repack = @@repack_kq_identity
     }
+    if (g_repack_q51 == null) {
+        g_repack_q51 = @@repack_q51_identity
+    }
+    if (g_repack_kq == null) {
+        g_repack_kq = @@repack_kq_identity
+    }
+    if (g_active_kq_layout == null) {
+        g_active_kq_layout = @@kq_layout_grp4_fmt
+    }
 }

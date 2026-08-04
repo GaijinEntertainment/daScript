@@ -117,21 +117,6 @@ def render_doc(profiles : array<LlmProfile>) : string {
 
 let ASR_RESULTS_PATH = "modules/dasLLAMA/benchmarks/asr/results.md"
 
-// STRICT box-store lister: records/{box}.json only — a dotted stem is a tune sidecar
-// (m1.tune.<sha>.json) and annotations.json is the hand-note overlay, not a store.
-def list_asr_stores() : array<string> {
-    var out : array<string>
-    dir("{PERF_DIR}/records") $(fn) {
-        if (ends_with(fn, ".json")) {
-            let stem = slice(fn, 0, length(fn) - length(".json"))
-            if (stem != "annotations" && find(stem, ".") < 0) {
-                out |> push("{PERF_DIR}/records/{fn}")
-            }
-        }
-    }
-    sort(out)
-    return <- out
-}
 
 // "modules/.../records/m1.json" -> "m1"
 def store_box(path : string) : string {
@@ -188,14 +173,18 @@ def is_asr_run(r : BenchRun) : bool {
     return r.workload == "asr" || r.workload == "audio-chat"
 }
 
-// the model's das ASR run index, or -1 — the row source every table hangs off
+// the model's das ASR run index, or -1 — the row source every table hangs off. Newest by
+// date, matching the site renderer's newest() — index order silently disagreed with it
 def das_asr_run(m : BenchModel) : int {
+    var pick = -1
     for (i in range(length(m.runs))) {
         if (m.runs[i].engine == "das" && is_asr_run(m.runs[i]) && m.runs[i].backend == "cpu") {
-            return i
+            if (pick < 0 || m.runs[i].date > m.runs[pick].date) {
+                pick = i
+            }
         }
     }
-    return -1
+    return pick
 }
 
 // reference runs for the table, catalog order first (spec.refs → engine names), then any
@@ -342,6 +331,7 @@ def regen_asr(stores : array<string>) : int {
             for (si in range(length(cat))) {
                 if (cat[si].das_model == m.gguf) {
                     spec_i = si
+                    break
                 }
             }
             if (spec_i < 0) {
@@ -404,7 +394,7 @@ def main() {
     }
 
     // ---- ASR scoreboard (regenerated in place from the record store, prose preserved) ----
-    let asr <- list_asr_stores()
+    let asr <- list_record_stores()
     if (empty(asr)) {
         print("no records/<box>.json under {PERF_DIR}/records — skipping ASR scoreboard\n")
     } else {

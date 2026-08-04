@@ -245,19 +245,17 @@ def private quant_fmt(q : QuantMode) : string {
 def asr_exec_fmt(m : AsrModel) : string {
     //! The loaded precision as ``<encoder>/<decoder>`` (single tag for parakeet's one carrier) —
     //! the store's ``exec_fmt`` stamp, so every benchmark row names the bits it ran on.
-    if (m.kind == AsrKind.whisper) {
-        return "{m.whisper.enc.q8 ? "q8" : "f32"}/{m.whisper.dq8 ? "q8" : "f32"}"
-    }
-    if (m.kind == AsrKind.parakeet) return m.pk.q8 ? "q8" : "f32"
-    if (m.kind == AsrKind.canary) return "{m.cenc.q8 ? "q8" : "f32"}/{quant_fmt(m.dec.quant)}"
-    return "f32/{quant_fmt(m.dec.quant)}"   // gemma4a / qwen3a / qwen3omni: fp32 encoder + LLM decoder
+    if (m.kind == AsrKind.whisper) return whisper_exec_fmt(m.whisper)
+    if (m.kind == AsrKind.parakeet) return parakeet_exec_fmt(m.pk)
+    if (m.kind == AsrKind.canary) return canary_exec_fmt(m.cenc, quant_fmt(m.dec.quant))
+    return "f32/{quant_fmt(m.dec.quant)}"   // gemma4a / qwen3a / qwen3omni: fp32 tower + the shared LLM decoder
 }
 
 def asr_encode_bucket(m : AsrModel) : string {
     //! The family's encode-total ``asr_prof`` bucket — "" for families that only carry
     //! fine-grained buckets (their encode split stays a probe-side concern).
-    if (m.kind == AsrKind.canary) return "cn.encode"
-    if (m.kind == AsrKind.whisper) return "wh.encode_total"
+    if (m.kind == AsrKind.canary) return canary_encode_bucket()
+    if (m.kind == AsrKind.whisper) return whisper_encode_bucket()
     return ""
 }
 

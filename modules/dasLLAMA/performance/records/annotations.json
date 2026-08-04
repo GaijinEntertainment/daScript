@@ -35,5 +35,54 @@
   "workload": "audio-chat",
   "comment": "Same jfk.wav decode runaway as on the M4 and zen2 boxes (the reference generates at length on that clip despite --temp 0 --reasoning off; 266 s vs 8 s on jfk3.wav) - a behavior difference, not a speed measurement.",
   "void_clips": "jfk.wav"
+ },
+ {
+  "gguf": "ggml-tiny.bin",
+  "box": "m4",
+  "engine": "das",
+  "workload": "asr",
+  "comment": "This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them."
+ },
+ {
+  "gguf": "ggml-large-v3-turbo.bin",
+  "box": "m4",
+  "engine": "das",
+  "workload": "asr",
+  "comment": "This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them."
+ },
+ {
+  "gguf": "ggml-parakeet-tdt-0.6b-v2-f32.bin",
+  "box": "m4",
+  "engine": "das",
+  "workload": "asr",
+  "comment": "This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them."
+ },
+ {
+  "gguf": "ggml-parakeet-tdt-0.6b-v3-f32.bin",
+  "box": "m4",
+  "engine": "das",
+  "workload": "asr",
+  "comment": "This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them."
+ },
+ {
+  "gguf": "canary-qwen-2.5b-decoder-f16.gguf",
+  "box": "m4",
+  "engine": "das",
+  "workload": "asr",
+  "comment": "This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them."
+ },
+ {
+  "gguf": "gemma-4-E2B-it-Q8_0.gguf",
+  "box": "m4",
+  "engine": "das",
+  "workload": "audio-chat",
+  "comment": "This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them."
+ },
+ {
+  "gguf": "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf",
+  "box": "m4",
+  "engine": "das",
+  "workload": "audio-chat",
+  "comment": "This row's das run carries no tune stamp: it was measured 2026-08-03 through a released exe whose bundle shipped a stale July sidecar (the daspkg ship-manifest mis-ship fixed in the canary-apples PR), so the winners it ran under cannot be named. The adjacent same-session reference pairing keeps the RATIO honest; absolutes are suspect until the scheduled M4 re-sweep under the fixed release re-stamps them."
  }
 ]

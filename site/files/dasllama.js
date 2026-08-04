@@ -508,7 +508,8 @@
               wav: k.slice(4), audio_s: das.tests[k].audio_s || 0,
               das_ms: dm, ref_ms: rm,
               speed: ratio(rm, dm),                    // >1 = das faster (times, so inverted)
-              voided: ((das.void_clips || '') + ',' + (ref.void_clips || '')).split(',').indexOf(k.slice(4)) >= 0,
+              voided: ((das.void_clips || '') + ',' + (ref.void_clips || '')).split(',')
+                .map(function (s) { return s.trim(); }).indexOf(k.slice(4)) >= 0,
               xrt: dm > 0 ? ((das.tests[k].audio_s || 0) * 1000) / dm : 0,
               modelNote: m.note || '',
               noted: !!(m.note || das.comment || ref.comment),

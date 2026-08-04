@@ -16,10 +16,16 @@ cell() { # label model mmproj wav
     local margs=(--model "$model")
     [[ -n "$mmproj" ]] && margs+=(--mmproj "$mmproj")
     out=$(cd "$ASR" && DASLLAMA_CPU_PREFILL=1 /usr/bin/time -l "$DAS" -jit asr_bench.das -- \
-          ${margs[@]} --wav "corpus/$wav" --reps 1 2>&1)
+          "${margs[@]}" --wav "corpus/$wav" --reps 1 2>&1)
     local rss=$(echo "$out" | awk '/maximum resident/ {print $1}')
     local fp=$(echo "$out" | awk '/peak memory footprint/ {print $1}')
     local ms=$(echo "$out" | awk -F'\t' '$1=="BENCH" {print $6}')
+    if [[ -z "$rss" || -z "$fp" ]]; then
+        # a panicked cell leaves no time(1) line; dying under set -e mid-ladder would strand
+        # the models dir with its images already removed and no census printed
+        printf "%-28s %-12s FAILED — no time(1) accounting in output:\n%s\n" "$label" "$wav" "$out"
+        return 0   # a failed cell is a visible row; set -e must not strand the ladder mid-census
+    fi
     printf "%-28s %-12s rss %6.2f GB  footprint %6.2f GB  %10s ms\n" \
         "$label" "$wav" $((rss/1073741824.0)) $((fp/1073741824.0)) "$ms"
 }

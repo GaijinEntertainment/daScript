@@ -161,11 +161,18 @@ def main() : int {
             }
             fetch_one(e, path)
             st = stat(path)
-            fetched++
+            if (st.is_valid) {   // run_capture swallows curl's exit code — the file IS the receipt
+                fetched++
+            }
         }
         if (!st.is_valid) {
-            to_log(LOG_WARNING, "fetch_models: {e.name} — ABSENT, converted on-box: {e.recipe}\n")
-            pending++
+            if (empty(e.recipe)) {
+                to_log(LOG_ERROR, "fetch_models: {e.name} — ABSENT and the fetch produced nothing ({e.url})\n")
+                failed++
+            } else {
+                to_log(LOG_WARNING, "fetch_models: {e.name} — ABSENT, converted on-box: {e.recipe}\n")
+                pending++
+            }
             continue
         }
         if (empty(e.sha256)) {

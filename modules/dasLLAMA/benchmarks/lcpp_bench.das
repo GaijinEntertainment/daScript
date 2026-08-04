@@ -170,16 +170,9 @@ def private measure_das(var m : AsrModel; samples : array<float>; reps : int; la
                         var text : string&; var encode_ms : double&) : double {
     var best = 1.0e30lf
     encode_ms = 0.0lf
-    let ebucket = asr_encode_bucket(m)
-    if (!empty(ebucket)) {
-        set_asr_prof(true)
-    }
     for (_rep in range(reps)) {
         var s <- create_session(m, lang)
         var parts : array<string>
-        if (!empty(ebucket)) {
-            asr_prof_reset()
-        }
         let t0 = ref_time_ticks()
         transcribe(m, s, samples) $(seg) {
             parts |> push(seg.text)
@@ -187,16 +180,23 @@ def private measure_das(var m : AsrModel; samples : array<float>; reps : int; la
         let ms = double(get_time_usec(t0)) / 1000.0lf
         if (ms < best) {
             best = ms
-            if (!empty(ebucket)) {
-                encode_ms = asr_prof_ms(ebucket)
-            }
         }
         text = join(parts, "")
         delete parts
         delete s
     }
+    // the encode split samples in its OWN untimed rep: every asr_prof_add site is a
+    // string-keyed table insert, so an enabled profiler inside the timed region would tax
+    // exactly the families that carry a bucket and no others
+    let ebucket = asr_encode_bucket(m)
     if (!empty(ebucket)) {
+        set_asr_prof(true)
+        asr_prof_reset()
+        var s <- create_session(m, lang)
+        transcribe(m, s, samples) $(_seg) {}
+        encode_ms = asr_prof_ms(ebucket)
         set_asr_prof(false)
+        delete s
     }
     return best
 }
