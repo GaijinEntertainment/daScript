@@ -351,6 +351,20 @@ own plan doc before implementation; the contour:
 - Checkpoint 3a: curated sample builds end-to-end through the real queue from a cold cache.
   Checkpoint 3b: user-visible flow with the building indicator, on a live server.
 
+## Pre-PR gate — security-focused code review
+
+Before the arc PR (and again before any later PR that touches the service): run `/code-review`
+over the full changed set **with an explicit security focus** — input validation, SQL injection
+surface, path handling, loopback binding, secrets in logs, the Caddy route boundary. Findings
+follow the normal verify-then-fix discipline; a finding class that survives review gets a
+CODEREVIEW.md rule so it cannot recur silently.
+
+`utils/dasweb-playground/CODEREVIEW.md` exists from the get-go (same language/structure as
+`modules/dasLLAMA/CODEREVIEW.md`) and carries the binding per-diff rules: file-placement
+(one file, one rule — keeps things from going all over the place), tests-in-dir + bug⇒test,
+the security criteria, logging criteria, lifecycle rules. `skills/make_pr.md` step 0a
+discovers it automatically for every future PR touching this directory.
+
 ## Phase 4 — documentation ("for all the good stuff")
 
 Continuous minimum rides each PR anyway (CI-forced): das2rst group + doc registration for
