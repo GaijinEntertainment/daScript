@@ -32,6 +32,9 @@ struct ServerArgs {
     @clarg_doc = "Per-IP sample-insert ceiling per hour"
     max_inserts_per_ip_hour : int = 100
 
+    @clarg_doc = "Deployed curated samples dir (data.json + sources); empty = no curated import"
+    curated_dir : string = ""
+
     @clarg_doc = "TOML config path (default: dasweb-playground.toml in cwd or beside the tool)"
     config : string = ""
 
@@ -77,7 +80,7 @@ def private cfg_from_toml(root : JsonValue?; key : string; var field : int&; aut
 }
 
 def mark_cli_sources(user_args : array<string>; var sources : table<string; string>) {
-    for (key in fixed_array("port", "db", "base_url", "max_source_bytes", "max_inserts_per_ip_hour")) {
+    for (key in fixed_array("port", "db", "base_url", "max_source_bytes", "max_inserts_per_ip_hour", "curated_dir")) {
         if (from_cli(user_args, key)) {
             sources[key] = "cli"
         }
@@ -99,6 +102,7 @@ def apply_config_text(var cfg : ServerArgs; body : string; user_args : array<str
     cfg_from_toml(root, "base_url", cfg.base_url, auth, user_args, sources)
     cfg_from_toml(root, "max_source_bytes", cfg.max_source_bytes, auth, user_args, sources)
     cfg_from_toml(root, "max_inserts_per_ip_hour", cfg.max_inserts_per_ip_hour, auth, user_args, sources)
+    cfg_from_toml(root, "curated_dir", cfg.curated_dir, auth, user_args, sources)
     unsafe {
         delete root
     }
@@ -144,5 +148,7 @@ def config_banner(cfg : ServerArgs; sources : table<string; string>) : JsonValue
         max_source_bytes_src = sources?["max_source_bytes"] ?? "default",
         max_inserts_per_ip_hour = cfg.max_inserts_per_ip_hour,
         max_inserts_per_ip_hour_src = sources?["max_inserts_per_ip_hour"] ?? "default",
+        curated_dir = cfg.curated_dir,
+        curated_dir_src = sources?["curated_dir"] ?? "default",
         config = cfg.config))
 }

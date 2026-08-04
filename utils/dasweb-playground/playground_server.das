@@ -7,6 +7,7 @@ require dashv/dashv_boost public
 require daslib/json_boost
 require daslib/logger
 require samples_store public
+require curated_import
 require strings
 
 //! The HTTP surface: route table and handlers. A handler validates
@@ -21,6 +22,7 @@ var private g_db = SqlRunner()
 var private g_db_open = false
 var private g_policy = StorePolicy()
 var private g_base_url = "https://daslang.io"
+var private g_curated_dir = ""
 var private g_stop_requested = false
 var private g_server_started = false
 
@@ -68,8 +70,15 @@ class PlaygroundServer : HvWebServer {
         POST("/api/samples") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_put(req, resp)
         }
+        GET("/api/samples/listed") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_listed(req, resp)
+        }
         GET("/api/samples/:hash") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_get_source(req, resp)
+        }
+        POST("/admin/reimport") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            // operator surface: reachable on loopback only — Caddy never routes /admin/*
+            return handle_reimport(req, resp)
         }
         GET("/s/:hash") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_share_link(req, resp)
@@ -129,6 +138,27 @@ def private handle_get_source(var req : HttpRequest?; var resp : HttpResponse?) 
     return http_status.OK
 }
 
+def private handle_listed(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    let listed <- listed_samples(g_db)
+    var arr <- [for (l in listed); JV((hash = l.hash, title = l.title, category = l.category,
+        path = l.path, slug = l.slug))]
+    let body = write_json(JV(arr))
+    log_request("GET", "/api/samples/listed", 200, client_ip_of(req), 0, length(body))
+    return resp |> JSON(body)
+}
+
+def private handle_reimport(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    if (empty(g_curated_dir)) {
+        log_request("POST", "/admin/reimport", 503, client_ip_of(req), 0, 0)
+        return resp |> JSON(write_json(JV((error = "curated_dir not configured"))), http_status.SERVICE_UNAVAILABLE)
+    }
+    let listed = import_curated(g_db, g_curated_dir, current_unix_time())
+    let status = listed >= 0 ? http_status.OK : http_status.INTERNAL_SERVER_ERROR
+    let body = write_json(JV((listed = listed)))
+    log_request("POST", "/admin/reimport", int(status), client_ip_of(req), 0, length(body))
+    return resp |> JSON(body, status)
+}
+
 def private handle_share_link(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     let hash = get_param(req, "hash")
     let ip = client_ip_of(req)
@@ -140,11 +170,13 @@ def private handle_share_link(var req : HttpRequest?; var resp : HttpResponse?) 
     return resp |> REDIRECT("/playground/index.html?s={hash}", http_status.FOUND)
 }
 
-def init_server(port : int; db_path : string; policy : StorePolicy; base_url : string) : bool {
-    //! Open the store, migrate to latest, bind loopback, start listening.
-    //! Runs in the serving thread's context — module globals bind here.
+def init_server(port : int; db_path : string; policy : StorePolicy; base_url : string; curated_dir : string = "") : bool {
+    //! Open the store, migrate to latest, import the curated set (when
+    //! configured), bind loopback, start listening. Runs in the serving
+    //! thread's context — module globals bind here.
     g_policy = policy
     g_base_url = base_url
+    g_curated_dir = curated_dir
     g_stop_requested = false
     var open_result <- try_open_sqlite(db_path)
     if (open_result |> is_err) {
@@ -157,6 +189,9 @@ def init_server(port : int; db_path : string; policy : StorePolicy; base_url : s
     let applied = migrate_to_latest(g_db)
     if (applied > 0) {
         logger_info("playground", "applied {applied} migration(s)")
+    }
+    if (!empty(g_curated_dir)) {
+        import_curated(g_db, g_curated_dir, current_unix_time())   // logs its own counts; -1 keeps prior listings
     }
     g_server = new PlaygroundServer()
     g_server->init(port)
@@ -206,9 +241,9 @@ def shutdown_server {
     }
 }
 
-def run_server(port : int; db_path : string; policy : StorePolicy; base_url : string) {
+def run_server(port : int; db_path : string; policy : StorePolicy; base_url : string; curated_dir : string = "") {
     //! Blocking convenience wrapper (tests): init, tick until /shutdown, teardown.
-    if (init_server(port, db_path, policy, base_url)) {
+    if (init_server(port, db_path, policy, base_url, curated_dir)) {
         while (update_server()) {
         }
     }

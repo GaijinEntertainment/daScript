@@ -6,3 +6,4 @@ db = "/srv/dasweb-playground/samples.db"
 base_url = "https://daslang.io"
 max_source_bytes = 262144
 max_inserts_per_ip_hour = 100
+curated_dir = "/srv/daslang.io/current/playground/samples"

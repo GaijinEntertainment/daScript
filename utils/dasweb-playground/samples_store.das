@@ -23,9 +23,12 @@ struct Sample {
     Size : int
     CreatedAt : int64
     ClientIp : string
-    Listed : bool = false
+    Listed : int = 0   // 0/1; bool lacks a bind adapter on the predicate/update rails
     Title : string = ""
     Origin : string = "user"
+    Category : string = ""
+    PrimaryPath : string = ""   // curated: files[0] from data.json — the UI derives slug/assets from it
+    Slug : string = ""          // curated: explicit deep-link slug (?example=) when the manifest has one
 }
 
 [sql_migration(version = 1, description = "create playground samples")]
@@ -41,6 +44,13 @@ def samples_migration_001(db : SqlRunner) {
         "Title TEXT NOT NULL DEFAULT ''," +
         "Origin TEXT NOT NULL DEFAULT 'user')")
     db |> exec("CREATE INDEX idx_samples_client_created ON samples (ClientIp, CreatedAt)")
+}
+
+[sql_migration(version = 2, description = "curated listing: category, primary path, slug")]
+def samples_migration_002(db : SqlRunner) {
+    db |> exec("ALTER TABLE samples ADD COLUMN Category TEXT NOT NULL DEFAULT ''")
+    db |> exec("ALTER TABLE samples ADD COLUMN PrimaryPath TEXT NOT NULL DEFAULT ''")
+    db |> exec("ALTER TABLE samples ADD COLUMN Slug TEXT NOT NULL DEFAULT ''")
 }
 
 struct StorePolicy {
@@ -167,4 +177,88 @@ def get_source(db : SqlRunner; hash : string) : string {
         |> _select(_.Source)
         |> take(1))
     return !empty(hit) ? hit[0] : ""
+}
+
+struct ListedSample {
+    hash : string
+    title : string
+    category : string
+    path : string    // primary file path (slug/assets derivation in the UI); "" for user samples
+    slug : string    // explicit deep-link slug; "" = derive from path
+}
+
+def listed_samples(db : SqlRunner) : array<ListedSample> {
+    //! The curated dropdown, category-then-title ordered.
+    let rows <- _sql(db |> select_from(type<Sample>)
+        |> _where(_.Listed != 0)
+        |> _order_by((_.Category, _.Title))
+        |> _select((Hash = _.Hash, Title = _.Title, Category = _.Category,
+            PrimaryPath = _.PrimaryPath, Slug = _.Slug)))
+    return <- [for (r in rows); ListedSample(hash = r.Hash, title = r.Title, category = r.Category,
+        path = r.PrimaryPath, slug = r.Slug)]
+}
+
+def upsert_curated_source(db : SqlRunner; source : string; now : int64) : string {
+    //! Importer entry: store a curated body bypassing user policy (no rate
+    //! ceiling, no size cap — the deploy tree is trusted). Returns the hash;
+    //! an existing row (either origin) is left untouched.
+    let hash = sha256_hex(source)
+    if (!sample_exists(db, hash)) {
+        db |> insert(Sample(
+            Hash = hash,
+            Source = source,
+            Size = length(source),
+            CreatedAt = now,
+            ClientIp = "importer",
+            Origin = "curated"))
+    }
+    return hash
+}
+
+def list_curated_sample(db : SqlRunner; hash : string; title : string; category : string; path : string; slug : string) {
+    db |> _sql_update(
+        type<Sample>,
+        _.Hash == hash,
+        (Listed = 1, Title = title, Category = category, PrimaryPath = path, Slug = slug))
+}
+
+def demote_stale_curated(db : SqlRunner; keep : table<string>) : int {
+    //! Unlist curated rows whose hash is not in `keep` (the set the importer
+    //! just minted). User-promoted samples (Origin != "curated") are untouched;
+    //! rows and permalinks always survive. Returns the demoted count.
+    let listed <- _sql(db |> select_from(type<Sample>)
+        |> _where(_.Listed != 0 && _.Origin == "curated")
+        |> _select(_.Hash))
+    var demoted = 0
+    for (h in listed) {
+        if (!key_exists(keep, h)) {
+            db |> _sql_update(type<Sample>, _.Hash == h, (Listed = 0))
+            demoted ++
+        }
+    }
+    return demoted
+}
+
+def promote_sample(db : SqlRunner; hash : string; title : string; category : string) : bool {
+    //! List an existing sample in the dropdown. False when the hash is unknown.
+    if (!sample_exists(db, hash)) {
+        return false
+    }
+    db |> _sql_update(
+        type<Sample>,
+        _.Hash == hash,
+        (Listed = 1, Title = title, Category = category))
+    return true
+}
+
+def demote_sample(db : SqlRunner; hash : string) : bool {
+    //! Remove a sample from the dropdown; the row and its permalink stay.
+    if (!sample_exists(db, hash)) {
+        return false
+    }
+    db |> _sql_update(
+        type<Sample>,
+        _.Hash == hash,
+        (Listed = 0))
+    return true
 }

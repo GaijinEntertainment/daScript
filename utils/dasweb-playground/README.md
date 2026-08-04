@@ -26,10 +26,18 @@ by `authoritative = true`. The effective config is logged at startup with per-ke
 | Route | Behavior |
 |---|---|
 | `POST /api/samples` | body = raw `.das` text → `{hash, url, created}`; 400 empty/non-utf8, 413 over size cap, 429 over per-IP ceiling |
+| `GET /api/samples/listed` | the curated dropdown: `[{hash, title, category, path, slug}]`, category-then-title ordered |
 | `GET /api/samples/<hash>` | the stored source, `text/plain`, immutable cache headers; 400 malformed hash, 404 unknown |
 | `GET /s/<hash>` | 302 → `/playground/index.html?s=<hash>`; 404 unknown |
 | `GET /healthz` | `ok` (watchdog poll target) |
 | `POST /shutdown` | graceful stop, exit 0 (watchdog contract; never routed by Caddy) |
+| `POST /admin/reimport` | re-run the curated importer; 503 when `curated_dir` unset (loopback only — Caddy never routes `/admin/*`) |
+
+Curated samples: when `curated_dir` points at the deployed playground samples tree, boot (and
+`/admin/reimport`) imports every `data.json` entry through the store — single-file entries as
+raw source, multi-file as the `{files, active}` bundle user shares use. Unchanged files dedup;
+changed files repoint the listing; vanished entries demote (permalinks always survive).
+Manual curation: `admin.das` (`--op list | promote | demote`).
 
 Dedup is content-addressed: same source ⇒ same hash ⇒ same URL, first writer's metadata wins.
 

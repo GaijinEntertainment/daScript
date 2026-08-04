@@ -63,7 +63,7 @@ def init {
         StorePolicy(
             max_source_bytes = g_cfg.max_source_bytes,
             max_inserts_per_ip_hour = g_cfg.max_inserts_per_ip_hour),
-        g_cfg.base_url)
+        g_cfg.base_url, g_cfg.curated_dir)
     if (!g_ready) {
         g_exit_code = 1
     }

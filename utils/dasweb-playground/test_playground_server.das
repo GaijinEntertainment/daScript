@@ -8,6 +8,8 @@ require daslib/json_boost
 require daslib/fio
 require strings
 
+let TEST_CURATED_PORT = 19012
+
 let TEST_PORT = 19011   // 19001..19010 are taken by tests/dasHV
 
 // Local harness: playground_server keeps lifecycle state in module globals,
@@ -15,12 +17,18 @@ let TEST_PORT = 19011   // 19001..19010 are taken by tests/dasHV
 // the server thread, and shutdown goes through POST /shutdown (which flips
 // the serving context's own flag).
 def private with_playground_server(policy : StorePolicy; blk : block<(base_url : string) : void>) {
+    with_playground_server_at(TEST_PORT, policy, "", blk)
+}
+
+def private with_playground_server_at(port : int; policy : StorePolicy; curated_dir : string; blk : block<(base_url : string) : void>) {
     with_job_status(1) $(finished) {
+        let port_copy = port
+        let curated_copy = curated_dir
         new_thread() @() {
-            run_server(TEST_PORT, ":memory:", policy, "https://test.example")
+            run_server(port_copy, ":memory:", policy, "https://test.example", curated_copy)
             finished |> notify_and_release
         }
-        let base_url = "http://127.0.0.1:{TEST_PORT}"
+        let base_url = "http://127.0.0.1:{port}"
         var ready = false
         for (_attempt in range(100)) {
             GET("{base_url}/healthz") $(resp) {
@@ -169,6 +177,57 @@ def test_rate_limiting_by_forwarded_ip(t : T?) {
                 tt |> equal(int(resp.status_code), 200)
             }
         }
+    }
+}
+
+[test]
+def test_listed_and_reimport(t : T?) {
+    t |> run("listed is empty without curated import; reimport 503s unconfigured") @(tt : T?) {
+        with_playground_server(default_policy()) $(base_url) {
+            GET("{base_url}/api/samples/listed") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+                tt |> equal(string(resp.body), "[]")
+            }
+            POST("{base_url}/admin/reimport", "") $(resp) {
+                tt |> equal(int(resp.status_code), 503)
+            }
+        }
+    }
+    t |> run("boot import feeds listed; reimport recounts") @(tt : T?) {
+        var terr = ""
+        let dir = path_join(temp_directory(terr), "pg_server_curated")
+        mkdir_rec(path_join(dir, "examples"))
+        fwrite(path_join(dir, "data.json"),
+            "\{ \"examples\": [ \{ \"name\": \"Hello world\", \"files\": [\"examples/hello.das\"] \} ] \}")
+        fwrite(path_join(dir, "examples/hello.das"), "print(\"curated hello\")")
+        with_playground_server_at(TEST_CURATED_PORT, default_policy(), dir) $(base_url) {
+            var hash = ""
+            GET("{base_url}/api/samples/listed") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+                var jerr = ""
+                var doc = read_json(string(resp.body), jerr)
+                tt |> success(doc != null && (doc.value is _array), "listed is a json array")
+                tt |> equal(length(doc.value as _array), 1)
+                let entry = (doc.value as _array)[0]
+                tt |> equal(entry?["title"] ?? "", "Hello world")
+                tt |> equal(entry?["category"] ?? "", "examples")
+                tt |> equal(entry?["path"] ?? "", "examples/hello.das")
+                hash = entry?["hash"] ?? ""
+            }
+            GET("{base_url}/api/samples/{hash}") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+                tt |> equal(string(resp.body), "print(\"curated hello\")")
+            }
+            POST("{base_url}/admin/reimport", "") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+                var jerr = ""
+                var doc = read_json(string(resp.body), jerr)
+                tt |> equal(int(doc?["listed"] ?? 0l), 1)
+            }
+        }
+        var rerr = ""
+        remove(path_join(dir, "data.json"), rerr)
+        remove(path_join(dir, "examples/hello.das"), rerr)
     }
 }
 

@@ -61,7 +61,10 @@ defect, and this section is the whole test.
 - `samples_store.das` — the store: schema structs, migrations, store operations, content
   hashing, and every policy decision (size cap, rate ceiling, listing). Zero HTTP: a require
   of `dashv` here is a defect.
-- `admin.das` — the operator CLI (promotion, reimport). Talks to the store the same way the
+- `curated_import.das` — the data.json-driven curated importer: manifest parsing, sample-file
+  reads, bundle assembly, calling the store. The only file besides the config loader that reads
+  the filesystem; a store mutation here that bypasses `samples_store` functions is a defect.
+- `admin.das` — the operator CLI (listing curation). Talks to the store the same way the
   server does; a second implementation of a store operation here is a defect.
 - `.das_package`, `watchdog.json`, `dasweb-playground.toml`, `deploy.sh` — packaging and
   deployment. A behavior change hidden in these files without a README note is a defect.
