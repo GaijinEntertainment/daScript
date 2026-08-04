@@ -550,4 +550,10 @@ jobs:
         # Atomic flip, then prune to the 5 newest releases.
         $RSH deploy@89.167.63.131 "ln -sfn /srv/daslang.io/releases/$REL /srv/daslang.io/current \
             && cd /srv/daslang.io/releases && ls -1t | tail -n +6 | xargs -r rm -rf"
+        # The curated dropdown is fed from dasweb-playground's store, which
+        # imports the tree this deploy just replaced. Without this nudge a
+        # changed or added sample stays invisible until the service restarts.
+        # Loopback-only endpoint; a non-zero here must not fail the site deploy.
+        $RSH deploy@89.167.63.131 \
+            "curl -sf -m 30 -X POST http://127.0.0.1:8101/admin/reimport || echo 'reimport nudge failed (service down?)'"
         echo "deployed $REL"

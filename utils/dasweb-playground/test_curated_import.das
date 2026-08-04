@@ -171,3 +171,61 @@ def test_import_failure_modes(t : T?) {
         }
     }
 }
+
+[test]
+def test_manifest_paths_stay_inside_the_samples_dir(t : T?) {
+    //! Regression: manifest paths were path_join'd with no containment check,
+    //! and path_join DISCARDS the base when the right side is absolute — so a
+    //! manifest entry could publish any file the service user can read as a
+    //! permanent public sample.
+    let dir = fixture_dir(t, "escape")
+    let secret = path_join(dir, "secret.txt")
+    fwrite(secret, "TOP SECRET")
+    fwrite(path_join(dir, "examples/hello.das"), "print(\"hello\")")
+    with_latest_sqlite(":memory:") $(db) {
+        t |> run("an absolute path is refused") @(tt : T?) {
+            write_manifest(dir, "\{ \"examples\": [ \{ \"name\": \"Pwn\", \"files\": [\"{secret}\"] \} ] \}")
+            tt |> equal(import_curated(db, dir, 1000l), -1)   // nothing readable => prior listings stand
+            tt |> equal(length(listed_samples(db)), 0)
+            tt |> success(!sample_exists(db, sha256_hex("TOP SECRET")), "secret was never stored")
+        }
+        t |> run("a climbing relative path is refused") @(tt : T?) {
+            write_manifest(dir, "\{ \"examples\": [" +
+                "\{ \"name\": \"Pwn\", \"files\": [\"../secret.txt\"] \}," +
+                "\{ \"name\": \"Hello world\", \"files\": [\"examples/hello.das\"] \} ] \}")
+            tt |> equal(import_curated(db, dir, 1000l), 1)   // the honest entry still imports
+            let listed <- listed_samples(db)
+            tt |> equal(length(listed), 1)
+            tt |> equal(listed[0].title, "Hello world")
+            tt |> success(!sample_exists(db, sha256_hex("TOP SECRET")), "secret was never stored")
+        }
+    }
+    var err = ""
+    remove(secret, err)
+    nuke(dir)
+}
+
+[test]
+def test_all_entries_unreadable_keeps_prior_listings(t : T?) {
+    //! Regression: a manifest that parsed but whose files were all unreadable
+    //! (partial deploy, `current` swapped mid-import, curated_dir one directory
+    //! off) demoted against an empty keep set — unlisting the whole dropdown
+    //! while reporting success.
+    let dir = fixture_dir(t, "allskipped")
+    write_manifest(dir, MANIFEST_V1)
+    fwrite(path_join(dir, "examples/hello.das"), "print(\"hello\")")
+    fwrite(path_join(dir, "examples/multi_a.das"), "require multi_b")
+    fwrite(path_join(dir, "examples/multi_b.das"), "def helper \{ \}")
+    with_latest_sqlite(":memory:") $(db) {
+        t |> equal(import_curated(db, dir, 1000l), 2)
+        t |> run("sources vanish: the dropdown survives and the import reports failure") @(tt : T?) {
+            for (f in ["examples/hello.das", "examples/multi_a.das", "examples/multi_b.das"]) {
+                var err = ""
+                remove(path_join(dir, f), err)
+            }
+            tt |> equal(import_curated(db, dir, 2000l), -1)
+            tt |> equal(length(listed_samples(db)), 2)
+        }
+    }
+    nuke(dir)
+}

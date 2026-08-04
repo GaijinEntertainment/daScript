@@ -1,0 +1,30 @@
+# dasweb-playground routes for the daslang.io vhost in /etc/caddy/Caddyfile.
+# This file is the authoritative copy of the service's public boundary — the
+# deployed Caddyfile is edited to match it, never the other way round, so a
+# route change is reviewable in the same diff as the code it exposes.
+#
+# Paste inside the `daslang.io { ... }` block, ahead of `root`/`file_server`.
+
+# dasweb-playground (sample store + share links) — loopback service :8101
+handle /s/* {
+	reverse_proxy 127.0.0.1:8101
+}
+handle /api/samples* {
+	# The service can only bounds-check a body it has already buffered, and
+	# libhv imposes no transport cap of its own — an unbounded chunked POST
+	# would grow the process to the size of the body before any handler runs.
+	# This is the only place that limit can exist. Keep it comfortably above
+	# max_source_bytes (262144) so the service, not the proxy, produces the
+	# 413 that the playground surfaces to the user.
+	request_body {
+		max_size 1MB
+	}
+	reverse_proxy 127.0.0.1:8101
+}
+
+# NOTE: /api/samples* is deliberately slashless — /api/samples/ would not match
+# the exact path POST /api/samples that share minting uses.
+#
+# /admin/* and /shutdown are deliberately absent: they are operator surfaces.
+# The service also refuses them from a non-loopback peer, so adding a route
+# here does not merely expose them — it breaks them.

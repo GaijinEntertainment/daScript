@@ -1,0 +1,1 @@
+Peer address of the connection the request arrived on, as recorded by the server when it accepted the socket. Unlike a header such as ``X-Forwarded-For``, a client cannot set this, so it is what a service checks to tell a loopback caller from a proxied one; it is empty when the server did not record an address.

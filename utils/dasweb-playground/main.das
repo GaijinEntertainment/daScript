@@ -51,7 +51,11 @@ def parse_args {
 
 [export]
 def init {
-    return if (g_exit_code != 0)
+    // request_exit() only raises a flag — it does not abort — so -? and a
+    // config error both fall through to here. Starting up anyway would open the
+    // production database, run migrations and the curated importer, and bind
+    // the port out from under the running service.
+    return if (g_exit_code != 0 || exit_requested())
     if (!g_args_parsed) {
         parse_args()   // daslang-live calls init directly; standalone main parsed already
         return if (g_exit_code != 0)

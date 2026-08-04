@@ -269,7 +269,7 @@ def document_module_dashv(_root : string) {
         group_by_regex("HTTP server configuration", mod, %regex~(STATIC|allow_cors|set_document_root|set_home_page|set_index_of|set_error_page)$%%),
         group_by_regex("HTTP response helpers", mod, %regex~(TEXT_PLAIN|JSON|REDIRECT|SERVE_FILE|DATA|set_header|set_content_type)$%%),
         group_by_regex("HTTP client requests", mod, %regex~(request|request_cb|status_message)$%%),
-        group_by_regex("Message and header access", mod, %regex~(get_header|each_header|.*content_length)$%%),
+        group_by_regex("Message and header access", mod, %regex~(get_header|each_header|client_ip|.*content_length)$%%),
         group_by_regex("Request configuration", mod, %regex~(set_basic_auth|set_bearer_token_auth|set_timeout|set_connect_timeout|allow_redirect|set_param|get_param|each_param)$%%),
         group_by_regex("Cookies", mod, %regex~(add_cookie|get_cookie|each_cookie)$%%),
         group_by_regex("Form data", mod, %regex~(set_form_data|set_form_file|get_form_data|each_form_field|save_form_file|set_url_encoded|get_url_encoded)$%%),

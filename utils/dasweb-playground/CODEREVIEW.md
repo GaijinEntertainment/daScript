@@ -69,9 +69,16 @@ defect, and this section is the whole test.
   the filesystem; a store mutation here that bypasses `samples_store` functions is a defect.
 - `admin.das` — the operator CLI (listing curation). Talks to the store the same way the
   server does; a second implementation of a store operation here is a defect.
-- `.das_package`, `watchdog.json`, `dasweb-playground.toml`, `deploy.sh` — packaging and
-  deployment. A behavior change hidden in these files without a note in `README.md` (Run
-  section) is a defect.
+- `.das_package`, `watchdog.json`, `dasweb-playground.toml`, `deploy.sh`, `caddy.snippet` —
+  packaging, deployment, and the public route boundary. A behavior change hidden in these files
+  without a note in `README.md` (Run section) is a defect.
+
+**A file an operator edits on the box is preserved across upgrades**: shipped
+`release_include_if_missing` and carried forward by `deploy.sh`. Shipping one with plain
+`release_include`, or adding one `deploy.sh` does not carry, is a defect.
+
+**Checked-in config holds development values.** The config file is discovered automatically
+beside the module, so a production path in it makes an in-repo run open the live database.
 
 **Migrations are append-only.** A diff that edits a shipped `[sql_migration]` body is a defect;
 schema change means a new version.
@@ -88,24 +95,39 @@ A diff that removes, reorders past `start`, or conditionalizes the bind is a def
 from any request-derived value is a defect.
 
 **Every request body is bounds-checked against the configured cap before it is hashed or
-stored.** (dasHV buffers the body before any handler runs, so the check happens in
-`put_sample` ahead of hashing — a hash or insert reachable without the size check is a defect.)
+stored, and the transport cap that precedes it lives in `caddy.snippet`.** The service can only
+check a body already buffered in full, so a route accepting a body without a `request_body`
+limit in front of it is a defect, as is a hash or insert reachable without the size check.
 
-**Client identity comes from `X-Forwarded-For` and is treated as data, never parsed into
-behavior beyond the rate ceiling.** Logging it is required; branching on it anywhere else is a
-defect.
+**A request body is read as bytes, and a byte count that disagrees with its string length is
+rejected.** A das string ends at the first NUL, so a body used without that guard can be stored
+truncated under a hash that does not describe it.
+
+**Client identity comes from the LAST `X-Forwarded-For` hop and is treated as data, never
+parsed into behavior beyond the rate ceiling.** A proxy appends the peer it accepted; every
+earlier hop is client-authored, so keying anything on one is a defect. Logging it is required.
+
+**Operator routes (`POST /shutdown`, `/admin/*`) verify the transport peer is loopback.** No
+header can carry that proof — a browser on any page can drive a cross-origin POST to a proxied
+route. A new operator route without the check is a defect.
+
+**No route enables CORS.** The middleware reflects the caller's `Origin` on every route at once,
+which would make stored samples and the operator surface cross-origin readable.
+
+**Responses that echo stored user input carry `X-Content-Type-Options: nosniff`.**
 
 **No shell-out anywhere in the service.**
 
-**No filesystem path derived from request data.** The importer's paths come from config plus
-the deploy-tree manifest only.
+**No filesystem path derived from request data, and a manifest-supplied path is checked to stay
+under its configured directory before it is read.** `path_join` discards the base when the right
+side is absolute, so an unchecked manifest path reads any file the service user can — and the
+importer publishes what it reads.
 
 **No `unsafe` in any route handler.** An `unsafe` elsewhere takes a same-line reason comment;
 one without the comment is a defect.
 
-**`POST /shutdown` and every admin operation stay unrouted by Caddy.** A Caddy config change in
-this directory that forwards them, or an admin endpoint added to the public route set, is a
-defect.
+**`POST /shutdown` and every admin operation stay unrouted in `caddy.snippet`.** Forwarding one
+there, or adding an admin endpoint to the public route set, is a defect.
 
 **Secrets (tokens, credentials) never appear in a log line, a response body, or an error
 message.** The config banner logs key names and provenance, never values marked secret.

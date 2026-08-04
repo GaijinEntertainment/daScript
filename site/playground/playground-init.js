@@ -41,6 +41,12 @@ function applySharedPayload(payload) {
 // is either one raw .das source or a {files, active} JSON bundle (multi-file
 // shares store the same payload the legacy #z= format compressed).
 function applySharedCodeFromServer(hash) {
+    // Claim the page synchronously, before the fetch: main.js decides whether
+    // to load its default sample as soon as ITS /api/samples/listed fetch
+    // resolves, and that response is small JSON while this one can be a large
+    // source. Setting the flag inside .then() lets the default win the race and
+    // overwrite the shared code the visitor followed the link for.
+    window.pgRestoredFromState = true;
     fetch('/api/samples/' + hash)
         .then((resp) => {
             if (!resp.ok) throw new Error('sample fetch ' + resp.status);
@@ -55,7 +61,14 @@ function applySharedCodeFromServer(hash) {
             if (!payload) payload = { files: { 'main.das': src }, active: 'main.das' };
             applySharedPayload(payload);
         })
-        .catch((e) => { console.warn('shared-sample load failed:', e); });
+        .catch((e) => {
+            // Release the claim so a dead or mistyped /s/ link opens the default
+            // sample instead of leaving the editor blank. If main.js already
+            // skipped its default because of the claim, do it here.
+            console.warn('shared-sample load failed:', e);
+            window.pgRestoredFromState = false;
+            if (typeof window.selectSample === 'function') window.selectSample('examples', 0);
+        });
 }
 
 // `#code=<percent-encoded-source>` — single-file share from the landing hero.

@@ -21,13 +21,31 @@ SHA="${1:?usage: deploy.sh <short-sha> <tarball>}"
 TARBALL="${2:?usage: deploy.sh <short-sha> <tarball>}"
 APP=/srv/apps/dasweb-playground
 
+# The service's own data dir (db + logs) lives outside the release tree so it
+# survives every flip; on a fresh box nothing has created it yet.
+install -d -o dasweb -g dasweb /srv/dasweb-playground
+
+# Snapshot the operator-owned files BEFORE touching the release tree: when this
+# same sha is redeployed, `current` points into the directory the rm below
+# removes, and the carry-forward would find nothing left to copy.
+CARRY=$(mktemp -d)
+for f in dasweb-playground.toml watchdog.json; do
+    if [ -f "$APP/current/$f" ]; then
+        cp "$APP/current/$f" "$CARRY/$f"
+    fi
+done
+
 cd "$APP/releases"
+rm -rf dasweb-playground
 tar xzf "$TARBALL"
 rm -rf "$SHA"
 mv dasweb-playground "$SHA"
-if [ -f "$APP/current/dasweb-playground.toml" ]; then
-    cp "$APP/current/dasweb-playground.toml" "$SHA/dasweb-playground.toml"
-fi
+for f in dasweb-playground.toml watchdog.json; do
+    if [ -f "$CARRY/$f" ]; then
+        cp "$CARRY/$f" "$SHA/$f"
+    fi
+done
+rm -rf "$CARRY"
 chown -R dasweb:dasweb "$SHA"
 ln -sfn "$APP/releases/$SHA" "$APP/current"
 systemctl restart dasweb-playground

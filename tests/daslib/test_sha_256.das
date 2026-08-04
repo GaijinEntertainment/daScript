@@ -32,16 +32,26 @@ def test_nist_vectors(t : T?) {
 
 [test]
 def test_padding_boundaries(t : T?) {
-    // 55/56/63/64 bytes straddle the padding split (0x80 + length must fit or spill)
-    t |> run("55 56 63 64 byte inputs agree between overloads") @(t : T?) {
-        for (n in fixed_array(55, 56, 63, 64, 65, 119, 120)) {
+    // These lengths straddle the padding split (0x80 + length must fit or spill
+    // into a second block). Digests come from an INDEPENDENT SHA-256: the two
+    // overloads share one per-byte path, so comparing them cannot catch this.
+    t |> run("digests at the padding boundaries match known values") @(tt : T?) {
+        for (c in fixed_array(
+                (55, "d5e285683cd4efc02d021a5c62014694958901005d6f71e89e0989fac77e4072"),
+                (56, "04c26261370ee7541549d16dee320c723e3fd14671e66a099afe0a377c16888e"),
+                (63, "75220b47218278e656f2013bb8f0c455a25eaf01e86c64924e9d48d89776d6f2"),
+                (64, "7ce100971f64e7001e8fe5a51973ecdfe1ced42befe7ee8d5fd6219506b5393c"),
+                (65, "9537c5fdf120482f7d58d25e9ed583f52c02b4e304ea814db1633ad565aed7e9"),
+                (119, "000b48d4edf0fa7bee3c6236ecd2785baa5db4eeb8bb54341b029e0d9fa5fb0c"),
+                (120, "13f05a0b594787f5ecd315edc96141bd3243203d1b7d4f0836f37308b276ba98"))) {
             var bytes : array<uint8>
             var str = ""
-            for (_i in range(n)) {
+            for (_i in range(c._0)) {
                 bytes |> push(uint8('x'))
                 str += "x"
             }
-            t |> equal(sha256_hex(bytes), sha256_hex(str))
+            tt |> equal(sha256_hex(str), c._1)
+            tt |> equal(sha256_hex(bytes), c._1)
             delete bytes
         }
     }

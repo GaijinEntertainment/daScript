@@ -43,40 +43,52 @@ struct ServerArgs {
     help : bool = false
 }
 
-def private cli_has_flag(user_args : array<string>; flag : string) : bool {
-    let eqform = "{flag}="
-    for (a in user_args) {
-        if (a == flag || a |> starts_with(eqform)) {
-            return true
-        }
-    }
-    return false
-}
-
 def private from_cli(user_args : array<string>; key : string) : bool {
     let flag = "--{replace(key, "_", "-")}"
-    if (cli_has_flag(user_args, flag)) {
+    if (flag_present(user_args, flag)) {
         return true
     }
-    return key == "port" && cli_has_flag(user_args, "-p")
+    return key == "port" && flag_present(user_args, "-p")
 }
 
 def private toml_has(root : JsonValue?; key : string) : bool {
     return root != null && (root.value is _object) && key_exists(root.value as _object, key)
 }
 
-def private cfg_from_toml(root : JsonValue?; key : string; var field : string&; auth : bool; user_args : array<string>; var sources : table<string; string>) {
-    if (toml_has(root, key) && (auth || !from_cli(user_args, key))) {
-        field = root?[key] ?? ""
-        sources[key] = "toml"
-    }
+def private toml_wins(root : JsonValue?; key : string; auth : bool; user_args : array<string>) : bool {
+    return toml_has(root, key) && (auth || !from_cli(user_args, key))
 }
 
-def private cfg_from_toml(root : JsonValue?; key : string; var field : int&; auth : bool; user_args : array<string>; var sources : table<string; string>) {
-    if (toml_has(root, key) && (auth || !from_cli(user_args, key))) {
-        field = int(root?[key] ?? 0l)
-        sources[key] = "toml"
+def private cfg_from_toml(root : JsonValue?; key : string; var field : string&; auth : bool; user_args : array<string>; var sources : table<string; string>; var error : string&) : bool {
+    if (!toml_wins(root, key, auth, user_args)) {
+        return true
     }
+    let v = root?[key]
+    // A wrong-typed value coerces to ""/0 through `??`, which would start the
+    // service on a silently different config than the file states.
+    if (v == null || !(v.value is _string)) {
+        error = "config key '{key}' must be a string"
+        return false
+    }
+    field = v ?? ""
+    sources[key] = "toml"
+    return true
+}
+
+def private cfg_from_toml(root : JsonValue?; key : string; var field : int&; auth : bool; user_args : array<string>; var sources : table<string; string>; var error : string&) : bool {
+    if (!toml_wins(root, key, auth, user_args)) {
+        return true
+    }
+    let v = root?[key]
+    // TOML integers arrive as _longint, floats as _number — accept both, since
+    // `port = 8101.0` is a number the user plainly meant.
+    if (v == null || !((v.value is _longint) || (v.value is _number))) {
+        error = "config key '{key}' must be a number"
+        return false
+    }
+    field = int(v ?? 0l)
+    sources[key] = "toml"
+    return true
 }
 
 def mark_cli_sources(user_args : array<string>; var sources : table<string; string>) {
@@ -97,16 +109,17 @@ def apply_config_text(var cfg : ServerArgs; body : string; user_args : array<str
         return false
     }
     let auth : bool = root?["authoritative"] ?? false
-    cfg_from_toml(root, "port", cfg.port, auth, user_args, sources)
-    cfg_from_toml(root, "db", cfg.db, auth, user_args, sources)
-    cfg_from_toml(root, "base_url", cfg.base_url, auth, user_args, sources)
-    cfg_from_toml(root, "max_source_bytes", cfg.max_source_bytes, auth, user_args, sources)
-    cfg_from_toml(root, "max_inserts_per_ip_hour", cfg.max_inserts_per_ip_hour, auth, user_args, sources)
-    cfg_from_toml(root, "curated_dir", cfg.curated_dir, auth, user_args, sources)
+    let ok = (
+        cfg_from_toml(root, "port", cfg.port, auth, user_args, sources, error) &&
+        cfg_from_toml(root, "db", cfg.db, auth, user_args, sources, error) &&
+        cfg_from_toml(root, "base_url", cfg.base_url, auth, user_args, sources, error) &&
+        cfg_from_toml(root, "max_source_bytes", cfg.max_source_bytes, auth, user_args, sources, error) &&
+        cfg_from_toml(root, "max_inserts_per_ip_hour", cfg.max_inserts_per_ip_hour, auth, user_args, sources, error) &&
+        cfg_from_toml(root, "curated_dir", cfg.curated_dir, auth, user_args, sources, error))
     unsafe {
-        delete root
+        delete root   // read_toml minted this tree; nothing outlives this scope
     }
-    return true
+    return ok
 }
 
 def load_config(var cfg : ServerArgs; var sources : table<string; string>; var error : string&) : bool {

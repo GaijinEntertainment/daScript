@@ -286,6 +286,7 @@ SET(AOT_DASLIB_FILES
     tests/daslib/test_toml.das
     tests/daslib/test_logger.das
     tests/daslib/tty_test.das
+    tests/daslib/test_sha_256.das
 )
 
 FILE(GLOB AOT_MCP_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/mcp/*.das")

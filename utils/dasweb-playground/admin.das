@@ -52,6 +52,12 @@ def main : int {
         return 1
     }
     var inscope db <- open_result._value
+    // sqlite3_open CREATES an empty file for a mistyped path, so "opened" does
+    // not mean "has the schema" — and every store call below would panic in
+    // prepare instead of reporting the path. Migrating first also makes the CLI
+    // usable against a database that predates a newly shipped migration.
+    db |> apply_recommended_pragmas()
+    migrate_to_latest(db)
     if (cfg.op == "list") {
         let listed <- listed_samples(db)
         for (l in listed) {

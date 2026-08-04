@@ -13,7 +13,7 @@ def private test_policy : StorePolicy {
 def test_migration(t : T?) {
     t |> run("fresh db migrates to latest") @(t : T?) {
         with_latest_sqlite(":memory:") $(db) {
-            t |> equal(current_schema_version(db), 2)
+            t |> equal(current_schema_version(db), 3)
         }
     }
 }
@@ -115,7 +115,7 @@ def test_curated_store_ops(t : T?) {
         }
         t |> run("list_curated_sample sets all listing fields") @(tt : T?) {
             let h = upsert_curated_source(db, "listed body", 1000l)
-            list_curated_sample(db, h, "The Title", "examples", "examples/x.das", "xslug")
+            list_curated_sample(db, h, "The Title", "examples", "examples/x.das", "xslug", 0)
             let listed <- listed_samples(db)
             tt |> equal(length(listed), 1)
             tt |> equal(listed[0].title, "The Title")
@@ -124,9 +124,9 @@ def test_curated_store_ops(t : T?) {
         }
         t |> run("demote_stale_curated demotes only curated hashes outside the keep set") @(tt : T?) {
             let ha = upsert_curated_source(db, "keep me", 1000l)
-            list_curated_sample(db, ha, "Keep", "examples", "examples/keep.das", "")
+            list_curated_sample(db, ha, "Keep", "examples", "examples/keep.das", "", 0)
             let hb = upsert_curated_source(db, "drop me", 1000l)
-            list_curated_sample(db, hb, "Drop", "examples", "examples/drop.das", "")
+            list_curated_sample(db, hb, "Drop", "examples", "examples/drop.das", "", 1)
             let user = put_sample(db, "user body", "10.0.0.1", test_policy(), 1000l)
             tt |> success(promote_sample(db, user.hash, "User", "community"), "user promote")
             var keep : table<string>
@@ -169,14 +169,66 @@ def test_rate_ceiling(t : T?) {
             tt |> equal(put_sample(db, "a3", "10.0.0.1", pol, 1020l).status, PutStatus.ok)
             tt |> equal(put_sample(db, "a4", "10.0.0.1", pol, 1030l).status, PutStatus.rate_limited)
         }
-        t |> run("dedup hits bypass the ceiling") @(tt : T?) {
-            tt |> equal(put_sample(db, "a1", "10.0.0.1", pol, 1040l).status, PutStatus.ok)
+        t |> run("a throttled client is refused even for a body that would dedup") @(tt : T?) {
+            // The ceiling is checked before hashing, so a repeated body cannot
+            // buy a free SHA-256 pass per request once the client is over.
+            tt |> equal(put_sample(db, "a1", "10.0.0.1", pol, 1040l).status, PutStatus.rate_limited)
         }
         t |> run("another ip is unaffected") @(tt : T?) {
             tt |> equal(put_sample(db, "b1", "10.0.0.2", pol, 1050l).status, PutStatus.ok)
         }
         t |> run("the window expires") @(tt : T?) {
             tt |> equal(put_sample(db, "a5", "10.0.0.1", pol, 1000l + 3601l).status, PutStatus.ok)
+        }
+    }
+}
+
+[test]
+def test_promotion_releases_importer_ownership(t : T?) {
+    //! Regression: promote_sample used to leave PrimaryPath set, so promoting a
+    //! sample the manifest once carried left it looking importer-owned and the
+    //! next import silently demoted it again, forever.
+    with_latest_sqlite(":memory:") $(db) {
+        let h = upsert_curated_source(db, "once curated", 1000l)
+        list_curated_sample(db, h, "Was Curated", "examples", "examples/gone.das", "", 0)
+        t |> run("promoting clears the importer-ownership marker") @(tt : T?) {
+            tt |> success(promote_sample(db, h, "Kept By Operator", "community"), "promote")
+            let rows <- _sql(db |> select_from(type<Sample>) |> _where(_.Hash == h))
+            tt |> equal(length(rows), 1)
+            tt |> equal(rows[0].PrimaryPath, "")
+        }
+        t |> run("a later import with an empty keep set leaves it listed") @(tt : T?) {
+            let keep : table<string>
+            tt |> equal(demote_stale_curated(db, keep), 0)
+            let listed <- listed_samples(db)
+            tt |> equal(length(listed), 1)
+            tt |> equal(listed[0].title, "Kept By Operator")
+        }
+    }
+}
+
+[test]
+def test_listing_keeps_manifest_order(t : T?) {
+    //! Regression: the dropdown ordered by (category, title), which reshuffled
+    //! the site-authored manifest order and changed which sample the playground
+    //! opens with.
+    with_latest_sqlite(":memory:") $(db) {
+        let first = upsert_curated_source(db, "opengl triangle", 1000l)
+        list_curated_sample(db, first, "OpenGL: rotating triangle", "examples", "examples/gl.das", "", 0)
+        let second = upsert_curated_source(db, "audio beep", 1000l)
+        list_curated_sample(db, second, "Audio: sine beep", "examples", "examples/beep.das", "", 1)
+        t |> run("manifest order wins over alphabetical") @(tt : T?) {
+            let listed <- listed_samples(db)
+            tt |> equal(length(listed), 2)
+            tt |> equal(listed[0].title, "OpenGL: rotating triangle")
+            tt |> equal(listed[1].title, "Audio: sine beep")
+        }
+        t |> run("an operator promotion sorts after every manifest entry") @(tt : T?) {
+            let user = put_sample(db, "user body", "10.0.0.1", test_policy(), 1000l)
+            tt |> success(promote_sample(db, user.hash, "AAA Promoted", "examples"), "promote")
+            let listed <- listed_samples(db)
+            tt |> equal(length(listed), 3)
+            tt |> equal(listed[2].title, "AAA Promoted")
         }
     }
 }

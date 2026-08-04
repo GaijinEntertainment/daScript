@@ -91,6 +91,7 @@ pageInit = function () {
                     files: [e.path || (e.hash + '.das')],
                     slug: e.slug || undefined,
                     hash: e.hash,
+                    path: e.path || '',
                 });
             }
             initSampleUi(byCat);
@@ -320,13 +321,17 @@ selectSample = function(type, id) {
         currentJitName = deriveJitName(files);
         currentAssetsUrl = deriveAssetsUrl(files);
         updateEngineAvailability(currentJitName);
-        const loadFromStaticFiles = () => Promise.all(files.map(f =>
+        // Static fallback only exists for entries that name a real file in the
+        // shipped samples tree. A promoted user sample has no such path (the
+        // store synthesized "<hash>.das"), so fetching it is a guaranteed 404.
+        const hasStaticFiles = !entry.hash || !!entry.path;
+        const loadFromStaticFiles = () => hasStaticFiles ? Promise.all(files.map(f =>
             $.ajax({ url: './samples/' + f, dataType: 'text' })
                 .then(text => ({ name: f.split('/').pop(), text }))
         )).then(loaded => {
             const byName = Object.fromEntries(loaded.map(({ name, text }) => [name, text]));
             loadSample(byName);
-        });
+        }) : Promise.resolve();
         if (entry.hash) {
             // Store-fed entry: one fetch; multi-file samples arrive as the
             // same {files, active} bundle user shares store. Static tree is
