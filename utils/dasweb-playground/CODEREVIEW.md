@@ -48,9 +48,12 @@ defect, and this section is the whole test.
 
 **A new file ships with its rule here and its tests, in the same change.**
 
-- `main.das` — the launcher: clargs + toml merge with provenance, logger init, the exported
+- `main.das` — the launcher: argv parsing into globals, logger init, the exported
   `init`/`update`/`shutdown` lifecycle, the standalone GC loop, exit-code mapping. No route,
-  no SQL, no hashing.
+  no SQL, no hashing, no merge logic.
+- `playground_config.das` — the config schema (`ServerArgs`), the defaults/toml/CLI merge with
+  per-key provenance, and the startup banner payload. No HTTP, no SQL, no filesystem beyond
+  reading the config file.
 - `playground_server.das` — the `HvWebServer` class: the route table and handlers. A handler
   validates transport-level shape, translates HTTP to one store call, and formats the response.
   A SQL statement, a hash computation, or a policy decision (size, rate, listing) in this file
