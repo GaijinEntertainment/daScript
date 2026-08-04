@@ -465,8 +465,8 @@ struct GpuState {
     batch_y1_dev : uint64    // gate / single output plane (kernel writes; also the down output)
     batch_y2_dev : uint64    // up output plane (the fused pair's second write target)
     batch_y1 : HostBuf       // host-cached readback staging for batch_y1_dev
-    batch_actrq_set : VkDescriptorSet   // batch twin of FfnCmd's fused act+requant set (y1/y2 planes)
-    batch_actrq_k_set : VkDescriptorSet // ... the Q8_K form (class sets are per-class)
+    batch_actrq_set : VkDescriptorSet   // batch twin of FfnCmd's fused act+requant set (y1/y2
+                                        // planes; the actrq family shares one layout — one set)
     batch_acts_cls_ready : bool         // both act sets built (by prefill; reset on drop)
     batch_cmd : VkCommandBuffer   // one reusable batch cmd buffer, re-recorded per submit
     batch_ready : bool
@@ -539,8 +539,7 @@ struct GpuState {
     at_prep_q_set : VkDescriptorSet
     at_prep_k_set : VkDescriptorSet
     at_attn_set : VkDescriptorSet
-    at_rq_set : VkDescriptorSet      // the Q8_K o-requant form (kq wo stacks)
-    at_rq_dn_set : VkDescriptorSet   // ... and the Q8_0 form (o_kq picks per window)
+    at_rq_set : VkDescriptorSet      // the o-requant family set (the encoder picks q8k/q8 per window)
     at_ready : bool
 }
 

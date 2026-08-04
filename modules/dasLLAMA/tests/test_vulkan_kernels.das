@@ -288,13 +288,13 @@ def test_vkd_kq_gemv_family(t0 : T?) {
                     let cg = fixed_array(1u, 2u, 4u, 8u, 16u, 32u)
                     var s_cls : VkDescriptorSet
                     if (fmt == int(KqFmt.k4)) {
-                        s_cls = set_kq_gemv_k4_cls(cb, cs, cg)
+                        s_cls = set_kq_gemv_cls(cb, cs, cg)
                     } elif (fmt == int(KqFmt.q40)) {
-                        s_cls = set_kq_gemv_q40_cls(cb, cs, cg)
+                        s_cls = set_kq_gemv_cls(cb, cs, cg)
                     } elif (fmt == int(KqFmt.k5)) {
-                        s_cls = set_kq_gemv_k5_cls(cb, cs, cg)
+                        s_cls = set_kq_gemv_cls(cb, cs, cg)
                     } else {
-                        s_cls = set_kq_gemv_k6_cls(cb, cs, cg)
+                        s_cls = set_kq_gemv_cls(cb, cs, cg)
                     }
                     var raw2 = alloc_cmd()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
@@ -406,11 +406,11 @@ def test_vkd_act_family(t0 : T?) {
                     // the class twin: gate@0, up@1, outq@2, outs@3
                     var sc : VkDescriptorSet
                     if (q8k) {
-                        sc = set_q8k_actrq_cls(fixed_array(gd, ud, hq2, hs2),
+                        sc = set_actrq_cls(fixed_array(gd, ud, hq2, hs2),
                             fixed_array(e_bytes, e_bytes, q_bytes, s_bytes),
                             fixed_array(16u, 1u, 4u, 8u))
                     } else {
-                        sc = set_q8_actrq_cls(fixed_array(gd, ud, hq2, hs2),
+                        sc = set_actrq_cls(fixed_array(gd, ud, hq2, hs2),
                             fixed_array(e_bytes, e_bytes, q_bytes, s_bytes),
                             fixed_array(16u, 1u, 4u, 8u))
                     }
@@ -1067,13 +1067,13 @@ def test_vkd_kq_batch_family(t0 : T?) {
                     vk_check(vkEndCommandBuffer(raw), null)
                     submit_wait(raw)
                     memcpy(addr<void?>(y_old[0]), host.mapped, y_bytes)
-                    var sc = (fmt == int(KqFmt.k4) ? set_kq_batch_k4_cls(fixed_array(wqd, wsd, scd, xqd, xsd, yd2), fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, xs_bytes, y_bytes), fixed_array(1u, 2u, 0u, 4u, 8u, 16u)) : VkDescriptorSet())
+                    var sc = (fmt == int(KqFmt.k4) ? set_kq_batch_cls(fixed_array(wqd, wsd, scd, xqd, xsd, yd2), fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, xs_bytes, y_bytes), fixed_array(1u, 2u, 0u, 4u, 8u, 16u)) : VkDescriptorSet())
                     if (fmt == int(KqFmt.q40)) {
-                        sc = set_kq_batch_q40_cls(fixed_array(wqd, wsd, scd, xqd, xsd, yd2), fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, xs_bytes, y_bytes), fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                        sc = set_kq_batch_cls(fixed_array(wqd, wsd, scd, xqd, xsd, yd2), fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, xs_bytes, y_bytes), fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
                     } elif (fmt == int(KqFmt.k5)) {
-                        sc = set_kq_batch_k5_cls(fixed_array(wqd, wsd, scd, xqd, xsd, yd2), fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, xs_bytes, y_bytes), fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                        sc = set_kq_batch_cls(fixed_array(wqd, wsd, scd, xqd, xsd, yd2), fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, xs_bytes, y_bytes), fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
                     } elif (fmt == int(KqFmt.k6)) {
-                        sc = set_kq_batch_k6_cls(fixed_array(wqd, wsd, scd, xqd, xsd, yd2), fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, xs_bytes, y_bytes), fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                        sc = set_kq_batch_cls(fixed_array(wqd, wsd, scd, xqd, xsd, yd2), fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, xs_bytes, y_bytes), fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
                     }
                     var raw2 = alloc_cmd()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
@@ -2244,7 +2244,7 @@ def test_vkd_requant_family(t0 : T?) {
                     submit_wait(rawb)
                     memcpy(addr<void?>(s_old[0]), host.mapped, s_bytes)
                     // the class twin: src@0, outq@1, outs@2
-                    var sc = set_cls_q8k_rq(fixed_array(sd, q2, s2),
+                    var sc = set_rq_cls(fixed_array(sd, q2, s2),
                         fixed_array(e_bytes, q_bytes, s_bytes),
                         fixed_array(1u, 4u, 8u))
                     var raw2 = alloc_cmd()
@@ -2484,7 +2484,7 @@ def test_vkd_cvt_family(t0 : T?) {
                     submit_wait(raw)
                     memcpy(addr<void?>(q_old[0]), host.mapped, q_bytes)
                     memcpy(addr<void?>(s_old[0]), reinterpret<void?>(intptr(host.mapped) + uint64(q_bytes)), s_bytes)
-                    var sc = set_cls_dn_rq(fixed_array(srcd, qd2, sd2),
+                    var sc = set_rq_cls(fixed_array(srcd, qd2, sd2),
                         fixed_array(src_bytes, q_bytes, s_bytes),
                         fixed_array(1u, 4u, 8u))
                     var raw2 = alloc_cmd()

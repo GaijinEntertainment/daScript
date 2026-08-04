@@ -131,7 +131,7 @@ def private pf_setup {
         g_rd.pf_sets[b + 0] = (qkv6
             ? set_f16cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf),
                 fixed_array(np * dim * 4l, np * dim * 2l), fixed_array(VHZ_XB, VHZ_XQ))
-            : set_cls_dn_rq(fixed_array(g_rd.pf_xb, g_rd.pf_xq, g_rd.pf_xs),
+            : set_rq_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xq, g_rd.pf_xs),
                 fixed_array(np * dim * 4l, np * dim, np * (dim / 32l) * 4l),
                 fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ)))
         // (GEMM roles 1/2/3/7/10/11/13 build lazily per router variant at record time)
@@ -154,7 +154,7 @@ def private pf_setup {
         g_rd.pf_sets[b + 6] = (wo6
             ? set_f16cvt_cls(fixed_array(g_rd.pf_attn, g_rd.pf_af),
                 fixed_array(np * qd * 4l, np * qd * 2l), fixed_array(VHZ_ATT, VHZ_AQ))
-            : set_cls_dn_rq(fixed_array(g_rd.pf_attn, g_rd.pf_aq, g_rd.pf_as),
+            : set_rq_cls(fixed_array(g_rd.pf_attn, g_rd.pf_aq, g_rd.pf_as),
                 fixed_array(np * qd * 4l, np * qd, np * (qd / 32l) * 4l),
                 fixed_array(VHZ_ATT, VHZ_AQ, VHZ_AQ)))
         // 8 addr_ffn (class: x, add partner, norms, xb out)
@@ -165,7 +165,7 @@ def private pf_setup {
         g_rd.pf_sets[b + 9] = (gu6
             ? set_f16cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf),
                 fixed_array(np * dim * 4l, np * dim * 2l), fixed_array(VHZ_XB, VHZ_XQ))
-            : set_cls_dn_rq(fixed_array(g_rd.pf_xb, g_rd.pf_xq, g_rd.pf_xs),
+            : set_rq_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xq, g_rd.pf_xs),
                 fixed_array(np * dim * 4l, np * dim, np * (dim / 32l) * 4l),
                 fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ)))
         // 12 actrq (class: gate, up, quants out, scales out; fmt 6: actf16 -> pf_hf)
@@ -173,7 +173,7 @@ def private pf_setup {
             ? set_actf16_cls(fixed_array(g_rd.pf_gate, g_rd.pf_up, g_rd.pf_hf),
                 fixed_array(np * hid * 4l, np * hid * 4l, np * hid * 2l),
                 fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ))
-            : set_q8_actrq_cls(fixed_array(g_rd.pf_gate, g_rd.pf_up, g_gpu.hq_dev, g_gpu.hs_dev),
+            : set_actrq_cls(fixed_array(g_rd.pf_gate, g_rd.pf_up, g_gpu.hq_dev, g_gpu.hs_dev),
                 fixed_array(np * hid * 4l, np * hid * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
                 fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ)))
         // 14 addr_next (class): x += ffnout, xb = rms_att[l+1]|final
@@ -193,7 +193,7 @@ def private pf_setup {
         fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim * 4l),
         fixed_array(VHZ_X, VHZ_X, 0u, VHZ_XB))
     // final quantize of the LAST row (into the decode driver's xq_dev/xs_dev) for the cls GEMV
-    g_rd.pf_sets[bp + 1] = set_cls_dn_rq(fixed_array(g_rd.pf_xb, g_rd.xq_dev, g_rd.xs_dev),
+    g_rd.pf_sets[bp + 1] = set_rq_cls(fixed_array(g_rd.pf_xb, g_rd.xq_dev, g_rd.xs_dev),
         fixed_array(np * dim * 4l, dim, (dim / 32l) * 4l),
         fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
     g_rd.pf_ready = true
@@ -439,7 +439,7 @@ def private ensure_af_state(f1, f3, f2 : int) {
     let abufs = fixed_array(g_gpu.af_ya_dev, g_gpu.af_yb_dev, g_gpu.hq_dev, g_gpu.hs_dev)
     let asizes = fixed_array(Y_BYTES, Y_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES)
     let agbits = fixed_array(VHG_Y1, VHG_Y2, VHG_HQ, VHG_HQ)
-    g_gpu.af_actrq_set = dkq ? set_q8k_actrq_cls(abufs, asizes, agbits) : set_q8_actrq_cls(abufs, asizes, agbits)
+    g_gpu.af_actrq_set = set_actrq_cls(abufs, asizes, agbits)   // one family set serves both forms
     g_gpu.af_down_set = gemv_cls_set(f2,
         fixed_array(a2.wq, a2.ws, g_gpu.af_meta_d.buf, g_gpu.hq_dev, g_gpu.hs_dev, g_gpu.af_yo_dev),
         fixed_array(a2.wqb, a2.wsb, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, Y_BYTES),
@@ -630,8 +630,7 @@ def private ensure_batch_acts_cls {
     let abufs = fixed_array(g_gpu.batch_y1_dev, g_gpu.batch_y2_dev, g_gpu.hq_dev, g_gpu.hs_dev)
     let asizes = fixed_array(BATCH_Y_BYTES, BATCH_Y_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES)
     let agbits = fixed_array(VHB_Y1, VHB_Y2, VHB_HQ, VHB_HQ)
-    g_gpu.batch_actrq_set = set_q8_actrq_cls(abufs, asizes, agbits)
-    g_gpu.batch_actrq_k_set = set_q8k_actrq_cls(abufs, asizes, agbits)
+    g_gpu.batch_actrq_set = set_actrq_cls(abufs, asizes, agbits)   // one family set serves both forms
     g_gpu.batch_acts_cls_ready = true
 }
 
@@ -800,21 +799,16 @@ def private stack_batch_enc(raw : VkCommandBuffer; var h : VkHaz; si : int; nwg 
                 if (fmt == int(KqFmt.q8)) {
                     verify(q8_batch_cls_ensure(v), "vk batch: the q8 batch class rail must engage")
                     st.batch_cls_sets[v] = q8_batch_cls_set(v, bufs, sizes, gbits)
-                } elif (fmt == int(KqFmt.k4)) {
-                    verify(ensure_kq_batch_k4_cls(), "vk batch: the k4 batch class rail must engage")
-                    st.batch_cls_sets[v] = set_kq_batch_k4_cls(bufs, sizes, gbits)
-                } elif (fmt == int(KqFmt.k5)) {
-                    verify(ensure_kq_batch_k5_cls(), "vk batch: the k5 batch class rail must engage")
-                    st.batch_cls_sets[v] = set_kq_batch_k5_cls(bufs, sizes, gbits)
-                } elif (fmt == int(KqFmt.k6)) {
-                    verify(ensure_kq_batch_k6_cls(), "vk batch: the k6 batch class rail must engage")
-                    st.batch_cls_sets[v] = set_kq_batch_k6_cls(bufs, sizes, gbits)
                 } elif (q40cm) {
                     verify(ensure_kq_batch_q40_cmf16_cls(), "vk batch: the q40 coopmat class rail must engage")
                     st.batch_cls_sets[v] = set_kq_batch_q40_cmf16_cls(bufs, sizes, gbits)
-                } elif (fmt == int(KqFmt.q40)) {
-                    verify(ensure_kq_batch_q40_cls(), "vk batch: the q40 batch class rail must engage")
-                    st.batch_cls_sets[v] = set_kq_batch_q40_cls(bufs, sizes, gbits)
+                } elif (fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5) || fmt == int(KqFmt.k6) || fmt == int(KqFmt.q40)) {
+                    // the kq family shares one layout — one set; the per-format ensure fills its pipe slot
+                    let up = (fmt == int(KqFmt.k4) ? ensure_kq_batch_k4_cls()
+                        : (fmt == int(KqFmt.k5) ? ensure_kq_batch_k5_cls()
+                        : (fmt == int(KqFmt.k6) ? ensure_kq_batch_k6_cls() : ensure_kq_batch_q40_cls())))
+                    verify(up, "vk batch: the kq batch class rail must engage")
+                    st.batch_cls_sets[v] = set_kq_batch_cls(bufs, sizes, gbits)
                 } else {
                     panic("dasLLAMA vulkan tier: no batch class for stack format {fmt}")
                 }
@@ -889,7 +883,7 @@ def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, 
         let dkq = g_gpu.stacks[s2].fmt != 0
         let awgs = (rows * nfe / (dkq ? 8l : 4l) + 255l) / 256l
         if (dkq) {
-            enc_q8k_actrq_cls(raw, h, g_gpu.batch_actrq_k_set, pca, awgs)
+            enc_q8k_actrq_cls(raw, h, g_gpu.batch_actrq_set, pca, awgs)
         } else {
             enc_q8_actrq_cls(raw, h, g_gpu.batch_actrq_set, pca, awgs)
         }
@@ -1072,7 +1066,7 @@ def private ensure_dn_cls_sets {
         fixed_array(g_gpu.batch_y2_dev, g_gpu.dn_state_dev, g_gpu.dn_ws_dev, g_gpu.dn_smalls_dev),
         fixed_array(BATCH_Y_BYTES, DN_STATE_BYTES, DN_WS_BYTES, DN_SMALLS_BYTES),
         fixed_array(VHB_Y2, VHB_ST, VHB_WS, VHB_SM))
-    g_gpu.dn_rq_set = set_cls_dn_rq(
+    g_gpu.dn_rq_set = set_rq_cls(
         fixed_array(g_gpu.dn_ws_dev, g_gpu.hq_dev, g_gpu.hs_dev),
         fixed_array(DN_WS_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES),
         fixed_array(VHB_WS, VHB_HQ, VHB_HQ))
@@ -1262,12 +1256,10 @@ def private ensure_at_state {
         fixed_array(g_gpu.at_q_dev, g_gpu.at_k_dev, g_gpu.at_v_dev, g_gpu.at_g_dev),
         fixed_array(AT_WINDOW * AT_MAX_QD * 4l, AT_CTX * AT_MAX_KV * 4l, AT_CTX * AT_MAX_KV * 4l, AT_WINDOW * AT_MAX_QD * 4l),
         fixed_array(VHB_ATQ, VHB_ATK, VHB_ATV, VHB_ATG))
-    // o requant (class: o rows, quant words, scales) — both forms; o_kq picks per window
-    let rqbufs = fixed_array(g_gpu.at_g_dev, g_gpu.hq_dev, g_gpu.hs_dev)
-    let rqsizes = fixed_array(AT_WINDOW * AT_MAX_QD * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES)
-    let rqgbits = fixed_array(VHB_ATG, VHB_HQ, VHB_HQ)
-    g_gpu.at_rq_set = set_cls_q8k_rq(rqbufs, rqsizes, rqgbits)
-    g_gpu.at_rq_dn_set = set_cls_dn_rq(rqbufs, rqsizes, rqgbits)
+    // o requant: ONE family set serves both forms — the encoder picks the kernel per window
+    g_gpu.at_rq_set = set_rq_cls(fixed_array(g_gpu.at_g_dev, g_gpu.hq_dev, g_gpu.hs_dev),
+        fixed_array(AT_WINDOW * AT_MAX_QD * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+        fixed_array(VHB_ATG, VHB_HQ, VHB_HQ))
     g_gpu.at_ready = true
     to_log(LOG_INFO, "dasLLAMA vulkan tier: attention chain engaged\n")
 }
@@ -1321,7 +1313,7 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
     if (o_kq) {
         enc_cls_q8k_rq(raw, h, g_gpu.at_rq_set, pcr, rqwgs)
     } else {
-        enc_cls_dn_rq(raw, h, g_gpu.at_rq_dn_set, pcr, rqwgs)
+        enc_cls_dn_rq(raw, h, g_gpu.at_rq_set, pcr, rqwgs)
     }
     stack_batch_enc(raw, h, s_o, nwg_o, qd, dim)
     vhz_dep(raw, h, VHB_Y1, 0u, true)

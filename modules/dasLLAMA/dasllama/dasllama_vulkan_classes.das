@@ -147,7 +147,7 @@ struct RqArgs {
 }
 
 // straight Q8_0 requant of f32 rows (the deltanet chain's quantize step)
-[vk_dispatch(name = "cls_dn_rq", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "cls_dn_rq", kernel = "run", family = "rq_cls", grid = "wgs", params = "wgs : int64")]
 class DnRequant {
     @ssbo @binding = 0 src : array<float>
     @ssbo @binding = 1 outq : array<uint>
@@ -179,7 +179,7 @@ class DnRequant {
 }
 
 // straight Q8_K requant of f32 rows (the K-quant chains' mid-step re-quantize)
-[vk_dispatch(name = "cls_q8k_rq", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "cls_q8k_rq", kernel = "run", family = "rq_cls", grid = "wgs", params = "wgs : int64")]
 class Q8kRequant {
     @ssbo @binding = 0 src : array<float>
     @ssbo @binding = 1 outq : array<uint>
@@ -277,7 +277,7 @@ class ActRqMembers {
 }
 
 // fused act + Q8_0 requant: subgroup per 4 blocks, word per lane, 8-lane shuffle amax (xor 1/2/4)
-[vk_dispatch(name = "q8_actrq_cls", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "q8_actrq_cls", kernel = "run", family = "actrq_cls", grid = "wgs", params = "wgs : int64")]
 class Q8ActRq : ActRqMembers {
     // 8-lane block quantize: amax fold over the block's 8 co-active lanes, d to outs[b],
     // returns this lane's packed word
@@ -318,7 +318,7 @@ class Q8ActRq : ActRqMembers {
 
 // the Q8_K twin: one subgroup per 256-weight superblock, whole-subgroup 5-shuffle amax,
 // butterfly byte pack
-[vk_dispatch(name = "q8k_actrq_cls", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "q8k_actrq_cls", kernel = "run", family = "actrq_cls", grid = "wgs", params = "wgs : int64")]
 class Q8kActRq : ActRqMembers {
     def blk_scale(b, lane : uint; m0 : float) : float {
         var m = m0
@@ -2026,7 +2026,7 @@ class KqBatchBase {
 }
 
 // Q4_K tile: per block acc += xs * (d*sc*idot - dmin*mn*bsum)
-[vk_dispatch(name = "kq_batch_k4_cls", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "kq_batch_k4_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
 class KqBatchK4 : KqBatchBase {
     def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
         for (ki in range(2)) {
@@ -2059,7 +2059,7 @@ class KqBatchK4 : KqBatchBase {
 }
 
 // Q4_0 tile: the k4 staging with one scale plane — per block acc += xs * d * (idot - 8*bsum)
-[vk_dispatch(name = "kq_batch_q40_cls", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "kq_batch_q40_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
 class KqBatchQ40 : KqBatchK4 {
     def override stage_ws(wsb0, wt, nsb, s, tid : uint) {
         let slane = tid % 32u
@@ -2088,7 +2088,7 @@ class KqBatchQ40 : KqBatchK4 {
 }
 
 // Q5_K tile: the k4 compose with the 5th bit OR'd in from the 40B block's qh words
-[vk_dispatch(name = "kq_batch_k5_cls", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "kq_batch_k5_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
 class KqBatchK5 : KqBatchBase {
     def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
         for (ki in range(2)) {
@@ -2128,7 +2128,7 @@ class KqBatchK5 : KqBatchBase {
 
 // Q6_K tile: composed 6-bit quants, the -32 folded per 16-half as slo/shi vs the half's block
 // sum — the lo/hi word split IS the sub-scale split
-[vk_dispatch(name = "kq_batch_k6_cls", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "kq_batch_k6_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
 class KqBatchK6 : KqBatchBase {
     def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
         for (ki in range(2)) {
@@ -3626,14 +3626,8 @@ def gemv_cls_ensure(fmt : int) : bool {
 def gemv_cls_set(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbits : uint const[6]) : VkDescriptorSet {
     if (fmt == int(KqFmt.q8)) {
         return set_q8_gemv_cls(bufs, sizes, gbits)
-    } elif (fmt == int(KqFmt.k4)) {
-        return set_kq_gemv_k4_cls(bufs, sizes, gbits)
-    } elif (fmt == int(KqFmt.k5)) {
-        return set_kq_gemv_k5_cls(bufs, sizes, gbits)
-    } elif (fmt == int(KqFmt.k6)) {
-        return set_kq_gemv_k6_cls(bufs, sizes, gbits)
-    } elif (fmt == int(KqFmt.q40)) {
-        return set_kq_gemv_q40_cls(bufs, sizes, gbits)
+    } elif (fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5) || fmt == int(KqFmt.k6) || fmt == int(KqFmt.q40)) {
+        return set_kq_gemv_cls(bufs, sizes, gbits)   // the family shares one layout — one set serves all four
     } elif (fmt == int(KqFmt.q8n)) {
         // q8n has no scale plane — slot 1 drops out
         return set_q8n_gemv_cls(fixed_array(bufs[0], bufs[2], bufs[3], bufs[4], bufs[5]),
@@ -3662,8 +3656,10 @@ def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkD
     }
 }
 
-// Q4_K: w = d*sc*q - dmin*mn*1, q in [0,15] — per 32-block axs*(d*sc*idot - dmin*mn*bsum)
-[vk_dispatch(name = "kq_gemv_k4_cls", grid = "wgs", params = "wgs : int64")]
+// Q4_K: w = d*sc*q - dmin*mn*1, q in [0,15] — per 32-block axs*(d*sc*idot - dmin*mn*bsum).
+// The four formats share family=kq_gemv_cls: ONE set layout + ONE set_kq_gemv_cls serves all
+// four pipelines (identical inherited members), each leaf keeping its own ensure_/enc_ names.
+[vk_dispatch(name = "kq_gemv_k4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK4 : KqGemvBase {
     def override blk_contrib(wsb, blk, xsb : uint) : float {
         let xb4 = xsb * 16u + blk * 2u
@@ -3680,7 +3676,7 @@ class KqGemvK4 : KqGemvBase {
 }
 
 // Q4_0: w = d*(q - 8) — the k4 nibble tiling with no min plane; -8 folds against the block sum
-[vk_dispatch(name = "kq_gemv_q40_cls", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "kq_gemv_q40_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvQ40 : KqGemvBase {
     def q40_d(wsb, blk : uint) : float {
         let dp = unpackHalf2x16(wsu[wsb * 5u + blk / 2u])
@@ -3702,7 +3698,7 @@ class KqGemvQ40 : KqGemvBase {
 }
 
 // Q5_K: the k4 fold with the 5th bit deposited from the block's qh word
-[vk_dispatch(name = "kq_gemv_k5_cls", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "kq_gemv_k5_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK5 : KqGemvBase {
     // deposit 4 packed high-bits (one per nibble lane of hb) at bit 4 of each byte lane
     def k5_dep(hb : uint) : uint {
@@ -3740,7 +3736,7 @@ class KqGemvK5 : KqGemvBase {
 
 // Q6_K: q = (ql | qh<<4) - 32 with per-16 SIGNED int8 sub-scales; the lo/hi nibble halves of a
 // block are exactly its two 16-weight sub-scale groups, so each keeps its own dot + sum
-[vk_dispatch(name = "kq_gemv_k6_cls", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "kq_gemv_k6_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK6 : KqGemvBase {
     // (ilo, ihi, blo, bhi) — an int4, since a shader function cannot return a tuple
     def k6_dot(wv, xl, xh, qhl, qhh : uint4; shift : uint) : int4 {
