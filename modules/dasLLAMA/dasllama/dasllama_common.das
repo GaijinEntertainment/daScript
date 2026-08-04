@@ -1252,12 +1252,12 @@ def apply_box_profile_runtime(path : string = "") {
         select_batch_backend(bbe)
         to_log(LOG_INFO, "dasLLAMA: box profile runtime: batch_backend = {active_batch_backend()} (profile pin '{bbe}')\n")
     }
-    // "threads" is advisory — the worker count is fixed at jobque creation, controlled by the
-    // DAS_JOBQUE_THREADS env (see tune_for_this_box.md); a profile can only recommend it. No live
-    // comparison here: get_dispatch_lanes() throws outside a job queue, and load_model may run there.
+    // "threads" is a receipt, not a knob: total lanes (workers + computing main) at mint time.
+    // The pool sizes itself (cores-1 workers + main); DAS_JOBQUE_THREADS is a manual override
+    // only — never advise setting it. No live compare: get_dispatch_lanes() throws outside a que.
     let adv = read_json_field(rt, "threads", -1l)
     if (adv > 0l) {
-        to_log(LOG_INFO, "dasLLAMA: box profile advises threads = {adv} — ensure DAS_JOBQUE_THREADS={adv}\n")
+        to_log(LOG_INFO, "dasLLAMA: box profile minted at {adv} total lanes\n")
     }
 }
 

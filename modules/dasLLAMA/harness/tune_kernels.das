@@ -97,6 +97,27 @@ typedef AxpyFn = function<(var d : float?; s : float const?; scale : float; n : 
 typedef ScaleFn = function<(var d : float?; scale : float; n : int64) : void>
 
 let N = 4096l
+
+// Pin every race stream to a 1MB-aligned base inside a fat (>=4MB) backing allocation. The M4
+// mint flips traced to per-allocation placement: L1 way size == the 16KB page on Apple
+// silicon, so the set geometry between a bench's streams is decided entirely by the
+// allocator's dice — pinning all bases to the same 1MB boundary makes the geometry identical
+// on every race, every run, every box (the deterministic degenerate case, not a lucky one).
+let PROBE_ALIGN = 1024l * 1024l           // every stream base lands on a 1MB boundary
+let PROBE_BACKING = 4l * 1024l * 1024l    // fat backing so the alignment always fits
+
+def private aligned_f32(@scratch var arr : array<float>; n : int64) : float? {
+    arr |> resize(max((n * 4l + PROBE_ALIGN) / 4l, PROBE_BACKING / 4l))
+    var p = unsafe(addr(arr[0]))
+    let mis = int64(unsafe(reinterpret<uint64>(p)) & uint64(PROBE_ALIGN - 1l))
+    if (mis != 0l) {
+        unsafe {
+            p = p + (PROBE_ALIGN - mis) / 4l
+        }
+    }
+    return p
+}
+
 let SCREEN_ROUNDS = 20
 var private ROUNDS = 80   // paranoid triples this
 let MIN_FINALISTS = 4
@@ -453,18 +474,28 @@ def ref_dot(a : float const?; b : float const?; n : int64) : double {
     return s
 }
 
+// in-situ composite: matmul_at's row walk over a weight image sized past L2. The synthetic
+// single-buffer hot loop flipped winners with allocation context on M4 (four refused mints —
+// same micros, any pinning); the streaming walk measures the regime the kernel serves in,
+// where per-allocation geometry washes into the signal that matters.
+let DOT_WALK_ROWS = 8192l
+
 def bench_dot() : string {
-    var a : array<float>
-    var b : array<float>
-    a |> resize(N)
-    b |> resize(N)
-    for (i in range64(N)) {
-        a[i] = sin(float(i) * 0.1f)
-        b[i] = cos(float(i) * 0.07f)
+    var w : array<float>
+    var x : array<float>
+    var o : array<float>
+    w |> resize(DOT_WALK_ROWS * N)   // 128 MB — DRAM-streaming, like a decode GEMV
+    x |> resize(N)
+    o |> resize(DOT_WALK_ROWS)
+    for (i in range64(DOT_WALK_ROWS * N)) {
+        w[i] = sin(float(i) * 0.1f)
     }
-    let pa = unsafe(addr(a[0]))
-    let pb = unsafe(addr(b[0]))
-    let want = ref_dot(pa, pb, N)
+    for (i in range64(N)) {
+        x[i] = cos(float(i) * 0.07f)
+    }
+    let wp = unsafe(addr<float const?>(w[0]))
+    let xp = unsafe(addr<float const?>(x[0]))
+    var op = unsafe(addr(o[0]))
 
     let vs <- dot_template_variants()
     let nv = length(vs)
@@ -477,8 +508,16 @@ def bench_dot() : string {
     for (i in range(nv)) {
         names[i] = vs[i]._0
         let f = vs[i]._1
-        let got = double(f(pa, pb, N))
-        ok[i] = abs(got - want) / (abs(want) + 1.0lf) <= TOL
+        var exact = true
+        for (r in range64(8l)) {   // spot rows vs the reference dot
+            let rp = unsafe(wp + r * N)
+            let got = double(f(rp, xp, N))
+            let want = ref_dot(rp, xp, N)
+            if (abs(got - want) / (abs(want) + 1.0lf) > TOL) {
+                exact = false
+            }
+        }
+        ok[i] = exact
         best[i] = 1.0e30lf
     }
 
@@ -493,9 +532,12 @@ def bench_dot() : string {
             }
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            for (_rep in range(REPS)) {
-                sink += f(pa, pb, N)
+            unsafe {
+                for (r in range64(DOT_WALK_ROWS)) {
+                    op[r] = f(wp + r * N, xp, N)
+                }
             }
+            sink += unsafe(op[0])
             record_sample(round, i, double(get_time_usec(t0)), best)
         }
     }
@@ -998,19 +1040,18 @@ def bench_rmsnorm() : string {
     var x : array<float>
     var w : array<float>
     var o : array<float>
-    x |> resize(N)
-    w |> resize(N)
-    o |> resize(N)
-    for (i in range64(N)) {
-        x[i] = sin(float(i) * 0.1f)
-        w[i] = 1.0f + 0.2f * cos(float(i) * 0.07f)
+    var xp = aligned_f32(x, N)
+    var wp = aligned_f32(w, N)
+    var op = aligned_f32(o, N)
+    unsafe {
+        for (i in range64(N)) {
+            xp[i] = sin(float(i) * 0.1f)
+            wp[i] = 1.0f + 0.2f * cos(float(i) * 0.07f)
+        }
     }
-    var op = unsafe(addr(o[0]))
-    let xp = unsafe(addr(x[0]))
-    let wp = unsafe(addr(w[0]))
     var ss = 0.0lf
     for (i in range64(N)) {
-        ss += double(x[i]) * double(x[i])
+        ss += double(unsafe(xp[i])) * double(unsafe(xp[i]))
     }
     ss = 1.0lf / sqrt(ss / double(N) + double(eps))
 
@@ -1027,8 +1068,8 @@ def bench_rmsnorm() : string {
         invoke(f, op, xp, wp, N, eps)
         var maxrel = 0.0lf
         for (j in range64(N)) {
-            let want = double(w[j]) * double(x[j]) * ss
-            let rel = abs(double(o[j]) - want) / (abs(want) + 1.0lf)
+            let want = double(unsafe(wp[j])) * double(unsafe(xp[j])) * ss
+            let rel = abs(double(unsafe(op[j])) - want) / (abs(want) + 1.0lf)
             if (rel > maxrel) {
                 maxrel = rel
             }
@@ -1121,32 +1162,49 @@ def bench_dot_q4() : string {
     return report("dot_q4", names, best, ok)
 }
 
+// the q8 weight image a composite walks: DOT_WALK_ROWS rows quantized from the analytic fill
+def private build_q8_walk(var wqi : array<int8>; var wsi : array<float>; nb : int64) {
+    var wrow : array<float>
+    wrow |> resize(N)
+    for (r in range64(DOT_WALK_ROWS)) {
+        for (i in range64(N)) {
+            wrow[i] = sin(float(r * N + i) * 0.1f)
+        }
+        var inscope qt <- quantize_q8_0(wrow, N)
+        for (i in range64(N)) {
+            wqi[r * N + i] = qt.q[i]
+        }
+        for (bi in range64(nb)) {
+            wsi[r * nb + bi] = qt.scales[bi]
+        }
+    }
+    delete wrow
+}
+
+// in-situ composite: the q8 GEMV row walk (mm_at_q8's shape) over a quantized weight image
+// sized past L2 — see bench_dot's rationale.
 def bench_dot_q8q8() : string {
     let vs <- dot_q8q8_template_variants()
     let nv = length(vs)
-    var wf : array<float>
+    let nb = N / 32l
+    var wqi : array<int8>
+    var wsi : array<float>
+    wqi |> resize(DOT_WALK_ROWS * N)    // 32 MB of q8 rows + 4 MB scales
+    wsi |> resize(DOT_WALK_ROWS * nb)
+    build_q8_walk(wqi, wsi, nb)
     var xf : array<float>
-    wf |> resize(N)
     xf |> resize(N)
     for (i in range64(N)) {
-        wf[i] = sin(float(i) * 0.1f)
         xf[i] = cos(float(i) * 0.07f)
     }
-    let wq <- quantize_q8_0(wf, N)
     let xq <- quantize_q8_0(xf, N)
-    let nb = N / 32l
-    var want = 0.0lf
-    for (bi in range64(nb)) {
-        var iacc = 0
-        for (k in range64(32l)) {
-            iacc += int(wq.q[bi * 32l + k]) * int(xq.q[bi * 32l + k])
-        }
-        want += double(iacc) * double(wq.scales[bi]) * double(xq.scales[bi])
-    }
-    let wqp = unsafe(addr(wq.q[0]))
-    let wsp = unsafe(addr(wq.scales[0]))
-    let xqp = unsafe(addr(xq.q[0]))
-    let xsp = unsafe(addr(xq.scales[0]))
+    let wqp = unsafe(addr<int8 const?>(wqi[0]))
+    let wsp = unsafe(addr<float const?>(wsi[0]))
+    let xqp = unsafe(addr<int8 const?>(xq.q[0]))
+    let xsp = unsafe(addr<float const?>(xq.scales[0]))
+    var o : array<float>
+    o |> resize(DOT_WALK_ROWS)
+    var op = unsafe(addr(o[0]))
 
     var names : array<string>
     var ok : array<bool>
@@ -1158,8 +1216,22 @@ def bench_dot_q8q8() : string {
         names[i] = vs[i]._0
         best[i] = 1.0e30lf
         let f = vs[i]._1
-        let got = double(f(wqp, wsp, xqp, xsp, N))
-        ok[i] = abs(got - want) / (abs(want) + 1.0lf) <= TOL
+        var exact = true
+        for (r in range64(8l)) {   // spot rows vs the exact int block sums
+            var want = 0.0lf
+            for (bi in range64(nb)) {
+                var iacc = 0
+                for (k in range64(32l)) {
+                    iacc += int(wqi[r * N + bi * 32l + k]) * int(xq.q[bi * 32l + k])
+                }
+                want += double(iacc) * double(wsi[r * nb + bi]) * double(xq.scales[bi])
+            }
+            let got = double(f(unsafe(wqp + r * N), unsafe(wsp + r * nb), xqp, xsp, N))
+            if (abs(got - want) / (abs(want) + 1.0lf) > TOL) {
+                exact = false
+            }
+        }
+        ok[i] = exact
     }
 
     var sink = 0.0f
@@ -1173,9 +1245,12 @@ def bench_dot_q8q8() : string {
             }
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            for (_rep in range(REPS)) {
-                sink += f(wqp, wsp, xqp, xsp, N)
+            unsafe {
+                for (r in range64(DOT_WALK_ROWS)) {
+                    op[r] = f(wqp + r * N, wsp + r * nb, xqp, xsp, N)
+                }
             }
+            sink += unsafe(op[0])
             record_sample(round, i, double(get_time_usec(t0)), best)
         }
     }
@@ -1607,20 +1682,29 @@ def bench_dot_mx4q8() : string {
 // scales to the module's quantize_q8_0 reference (the store loop is elementwise round+narrow; any
 // difference under a perm is a miscompile, not a tolerance question).
 
+// in-situ composite: requant_rows' batch walk — quantize every row of an activation image
+// sized past L2, writing through the qoff/soff image contract. See bench_dot's rationale.
 def bench_quantize() : string {
     let vs <- quantize_q8_0_into_ptr_template_variants()
     let nv = length(vs)
+    let npos = DOT_WALK_ROWS / 2l   // 4096 rows × 16 KB = 64 MB read + 17 MB written per walk
+    let nb = N / 32l
     var src : array<float>
-    src |> resize(N)
-    for (i in range64(N)) {
+    src |> resize(npos * N)
+    for (i in range64(npos * N)) {
         src[i] = 2.0f * sin(float(i) * 0.13f)
     }
-    let want <- quantize_q8_0(src, N)
+    var srcw : array<float>
+    srcw |> resize(N)
+    for (i in range64(N)) {   // row 0 is the byte-exact reference row
+        srcw[i] = src[i]
+    }
+    let want <- quantize_q8_0(srcw, N)
     var qdst : array<int8>
     var sdst : array<float>
-    qdst |> resize(N)
-    sdst |> resize(N / 32l)
-    let srcp = unsafe(addr(src[0]))
+    qdst |> resize(npos * N)
+    sdst |> resize(npos * nb)
+    let srcp = unsafe(addr<float const?>(src[0]))
     var qp = unsafe(addr(qdst[0]))
     var sp = unsafe(addr(sdst[0]))
 
@@ -1641,7 +1725,7 @@ def bench_quantize() : string {
                 exact = false
             }
         }
-        for (b in range64(N / 32l)) {
+        for (b in range64(nb)) {
             if (sdst[b] != want.scales[b]) {
                 exact = false
             }
@@ -1660,8 +1744,10 @@ def bench_quantize() : string {
             }
             let f = vs[i]._1
             let t0 = ref_time_ticks()
-            for (_rep in range(REPS)) {
-                invoke(f, srcp, N, qp, sp, 0l, 0l)
+            unsafe {
+                for (p in range64(npos)) {
+                    invoke(f, srcp + p * N, N, qp, sp, p * N, p * nb)
+                }
             }
             record_sample(round, i, double(get_time_usec(t0)), best)
         }
@@ -1845,18 +1931,17 @@ def bench_gemm_tile() : string {
     var a : array<float>
     var b : array<float>
     var c : array<float>
-    a |> resize(4l * K)
-    b |> resize(K * NN)
-    c |> resize(4l * NN)
-    for (i in range64(4l * K)) {
-        a[i] = sin(float(i) * 0.1f)
+    var ap = aligned_f32(a, 4l * K)
+    var bp = aligned_f32(b, K * NN)
+    var cp = aligned_f32(c, 4l * NN)
+    unsafe {
+        for (i in range64(4l * K)) {
+            ap[i] = sin(float(i) * 0.1f)
+        }
+        for (i in range64(K * NN)) {
+            bp[i] = cos(float(i) * 0.07f)
+        }
     }
-    for (i in range64(K * NN)) {
-        b[i] = cos(float(i) * 0.07f)
-    }
-    var cp = unsafe(addr(c[0]))
-    let ap = unsafe(addr(a[0]))
-    let bp = unsafe(addr(b[0]))
 
     var names : array<string>
     var ok : array<bool>
@@ -1867,8 +1952,10 @@ def bench_gemm_tile() : string {
     for (i in range(nv)) {
         names[i] = vs[i]._0
         best[i] = 1.0e30lf
-        for (j in range64(4l * NN)) {
-            c[j] = 0.0f
+        unsafe {
+            for (j in range64(4l * NN)) {
+                cp[j] = 0.0f
+            }
         }
         let f = vs[i]._1
         invoke(f, cp, ap, bp, 0l, 0l, K, NN)
@@ -1877,9 +1964,9 @@ def bench_gemm_tile() : string {
             for (col in range64(NN)) {
                 var want = 0.0lf
                 for (kk in range64(K)) {
-                    want += double(a[r * K + kk]) * double(b[kk * NN + col])
+                    want += double(unsafe(ap[r * K + kk])) * double(unsafe(bp[kk * NN + col]))
                 }
-                let rel = abs(double(c[r * NN + col]) - want) / (abs(want) + 1.0lf)
+                let rel = abs(double(unsafe(cp[r * NN + col])) - want) / (abs(want) + 1.0lf)
                 if (rel > maxrel) {
                     maxrel = rel
                 }
@@ -2251,7 +2338,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
         act_par_threshold = get_act_par_threshold(), q8_chunks_per_job = get_q8_chunks_per_job(),
         q4_chunks_per_job = get_q4_chunks_per_job(), q8_batch_chunks_per_job = get_q8_batch_chunks_per_job(),
         jobque_spin_us = get_jobque_spin_us(), jobque_join_poll = get_jobque_join_poll(),
-        threads = get_total_hw_jobs(), metal_tensor = metal_crowns))
+        threads = get_total_hw_jobs() + 1, metal_tensor = metal_crowns))   // total lanes (workers + computing main), the DAS_JOBQUE_THREADS unit
     var winners <- {
         "dot" => dotw, "axpy" => axpyw, "dot_f16" => dotf16w, "axpy_f16" => axpyf16w,
         "cvt_f32_to_f16" => cvt16w, "cvt_f16_to_f32" => cvt32w, "add_inplace" => addw,

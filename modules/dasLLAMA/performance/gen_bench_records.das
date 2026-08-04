@@ -140,9 +140,9 @@ def private rig_exe_path() : string {
     if (is_apple_box()) {
         return "{RIG_EXE_OUT}/dasllama-bench.app/Contents/MacOS/dasllama-bench"
     }
-    // .exe is required because this path is STAT'd — CreateProcess appends it when spawning, stat does not
-    let ext = get_platform_name() == "windows" ? ".exe" : ""
-    return "{RIG_EXE_OUT}/dasllama-bench/dasllama-bench{ext}"
+    // daslang -exe appends `.exe` on EVERY platform (daspkg bundle_exe_path) — and this path is
+    // STAT'd, so it must be spelled out (zen4 bringup: the bare-Linux name never existed)
+    return "{RIG_EXE_OUT}/dasllama-bench/dasllama-bench.exe"
 }
 
 def private rig_build_line() : string {
@@ -242,10 +242,14 @@ def private snapshot_tune_generation(exe : string) {
 }
 
 def private absorb_cell(var models : array<BenchModel>; var cell : array<BenchModel>; store, note : string) {
+    let hw = gather_hardware()
     for (c in cell) {
         var debug_stamped = false
         for (r in c.runs) {
             r.source = "official"
+            // the driver's probe is the hardware truth — a child exe built before a probe fix
+            // stamps stale/empty identity (zen4 bringup: every das cell read "unknown")
+            r.hardware = hw
             debug_stamped ||= r.flavor |> starts_with("debug-jit")
         }
         if (debug_stamped) {
@@ -753,7 +757,15 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
     let t0 = ref_time_ticks()
     to_log(LOG_INFO, "gen_bench_records: START {spec.display} ref {ref.tool}\n")
     logger_info("bench.records", "cell start", JV({"model" => JV(spec.display), "engine" => JV(asr_engine_name(ref.tool)), "leg" => JV("asr")}))
-    let model_path = "{spec.root}{spec.das_model}"
+    // cli tools time the ref's own carrier when the catalog names one (the q8_0 siblings);
+    // mtmd's handle stays its mmproj, onnx/nemo weights are venv-managed
+    let cli_tool = ref.tool == "parakeet-cli" || ref.tool == "whisper-cli"
+    let model_path = (cli_tool && !empty(ref.handle)) ? "{spec.root}{ref.handle}" : "{spec.root}{spec.das_model}"
+    // a slow reference caps its own clip ladder in the catalog; empty = the spec's
+    var inscope rbuckets := spec.buckets
+    if (!empty(ref.buckets)) {
+        rbuckets := ref.buckets
+    }
     var rr = BenchRun(
         engine = asr_engine_name(ref.tool),
         backend = "cpu",
@@ -764,12 +776,13 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
         date = date,
         source = "official",
         versions = versions,
+        exec_fmt = ref.exec_fmt,
         hardware = hw)
     var measured = 0
     if (ref.tool == "onnx" || ref.tool == "nemo") {
         // the onnx/nemo weights are venv-managed (the variant/HF handle in `versions` names
         // them); only the clips are local files here
-        var clips := spec.buckets
+        var clips := rbuckets
         var lib : array<string>   // the aggregate leg reads it again after the per-clip rows
         if (!empty(spec.libri_short) && ref.tool == "onnx") {
             // the dictation aggregate pairs against onnx only: one amortized process covers all
@@ -797,7 +810,7 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
                 to_log(LOG_WARNING, "gen_bench_records:   {ref.tool} output carries no BENCH rows — tail: {dtail}\n")
             }
         }
-        for (wav in spec.buckets) {
+        for (wav in rbuckets) {
             var audio_s = -1.0lf
             let ms = parse_bench_best(out, wav, audio_s)
             if (ms > 0.0lf) {
@@ -836,18 +849,19 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
         if (ref.tool == "mtmd") {
             rr.files |> emplace(file_identity("{spec.root}{ref.handle}", "mmproj"))
         }
-        for (wav in spec.buckets) {
+        for (wav in rbuckets) {
             let wav_path = "{asr_corpus_dir()}{wav}"
             to_log(LOG_INFO, "gen_bench_records:   {ref.tool} {wav} ({cfg.asr_reps} rep(s))...\n")
             var cmd = ""
+            var enc_ms = 0.0lf
             let ms = (ref.tool == "mtmd"
-                ? run_asr_mtmd(model_path, "{spec.root}{ref.handle}", wav_path, threads, cfg.asr_reps, cmd)
+                ? run_asr_mtmd(model_path, "{spec.root}{ref.handle}", wav_path, threads, cfg.asr_reps, cmd, enc_ms)
                 : run_asr_cli(ref.tool, model_path, wav_path, threads, cfg.asr_reps, cmd))
             rr.cmd = cmd   // last clip's line; they differ only in -f
             if (ms > 0.0lf) {
                 to_log(LOG_INFO, "gen_bench_records:   {ref.tool} {wav} = {ms:.0f} ms\n")
                 // audio seconds live on the das cell's matching test key; cli tools don't report it
-                rr.tests |> insert("asr:{wav}", BenchTest(ms = ms))
+                rr.tests |> insert("asr:{wav}", BenchTest(ms = ms, encode_ms = enc_ms))
                 rr.files |> emplace(file_identity(wav_path, "clip"))
                 measured++
             } else {

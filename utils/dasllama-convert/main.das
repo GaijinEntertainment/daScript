@@ -257,7 +257,7 @@ def private convert_asr(cfg : ConvertArgs; kind : string; qm : QuantMode) : int 
     } elif (kind == "parakeet") {
         tag = q8 ? "parakeet-q8" : "parakeet-f32"
     } elif (kind == "canary") {
-        tag = "canary-f32"       // the CNRY encoder is fp32-only
+        tag = q8 ? "canary-q8" : "canary-f32"
     } elif (kind == "qwen3a") {
         tag = "qwen3a-f32"
     } elif (kind == "gemma4a") {
@@ -290,7 +290,7 @@ def private convert_asr(cfg : ConvertArgs; kind : string; qm : QuantMode) : int 
         } elif (kind == "parakeet") {
             var inscope m <- load_parakeet_model(cfg.model, q8)
         } elif (kind == "canary") {
-            var inscope m <- load_canary_encoder(cfg.model)
+            var inscope m <- load_canary_encoder(cfg.model, q8)
         } elif (kind == "qwen3a") {
             var inscope m <- load_qwen3a_tower(cfg.model)
         } elif (kind == "gemma4a") {

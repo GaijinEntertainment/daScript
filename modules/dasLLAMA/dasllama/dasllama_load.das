@@ -2260,3 +2260,22 @@ def load_model_(path : string; mode : QuantMode = QuantMode.fp32) : Model {
     m.tok <- load_tokenizer_auto(path)
     return <- m
 }
+
+// Function values do not survive the -exe bake's global serialization (the
+// dasllama_config restore names the defect) — every @@-defaulted seam in this
+// module boot-restores here; a real registrar wins via the null guards.
+[init]
+def private restore_load_fn_defaults {
+    if (g_stream_collect_q8 == null) {
+        g_stream_collect_q8 = @@stream_no_collect
+    }
+    if (g_stream_collect_kq == null) {
+        g_stream_collect_kq = @@stream_no_collect
+    }
+    if (g_stream_collect_q51 == null) {
+        g_stream_collect_q51 = @@stream_no_collect
+    }
+    if (g_stream_repack == null) {
+        g_stream_repack = @@stream_no_repack
+    }
+}

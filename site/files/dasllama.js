@@ -191,6 +191,7 @@
     if (r.cmd) lines.push('<b>' + tag + '</b>  $ ' + esc(r.cmd));
     else lines.push('<b>' + tag + '</b>');
     lines.push('        ' + esc([r.engine, r.sha ? '@ ' + r.sha : '', r.version || '', r.date || '',
+      r.threads ? r.threads + ' threads' : '',
       r.source && r.source !== 'official' ? r.source : ''].filter(Boolean).join(' · ')));
     if (r.versions) lines.push('        versions: ' + esc(r.versions));
     if (r.tune) lines.push('        tune: ' + esc(r.tune));
@@ -445,6 +446,9 @@
           cell: function (r) { return esc(r.boxName); }, cls: 'dl-dim2' },
         { key: 'lane', label: 'category', get: function (r) { return r.lane; },
           cell: function (r) { return esc(r.lane); }, cls: 'dl-dim2' },
+        { key: 'threads', label: 'threads', num: true, dim: true,
+          get: function (r) { return (r.das && r.das.threads) || 0; },
+          cell: function (r) { return r.das && r.das.threads ? String(r.das.threads) : '-'; } },
         { key: 'size', label: 'size GB', num: true, dim: true, get: function (r) { return r.size; },
           cell: function (r) { return r.size ? fmt(r.size / 1073741824, 1) : '-'; } },
         { key: 'pp_das', label: 'pp512 das', num: true, grp: true, grpStart: true,
@@ -504,6 +508,7 @@
               wav: k.slice(4), audio_s: das.tests[k].audio_s || 0,
               das_ms: dm, ref_ms: rm,
               speed: ratio(rm, dm),                    // >1 = das faster (times, so inverted)
+              voided: ((das.void_clips || '') + ',' + (ref.void_clips || '')).split(',').indexOf(k.slice(4)) >= 0,
               xrt: dm > 0 ? ((das.tests[k].audio_s || 0) * 1000) / dm : 0,
               modelNote: m.note || '',
               noted: !!(m.note || das.comment || ref.comment),
@@ -536,6 +541,9 @@
             cell: function (r) { return esc(r.boxName); }, cls: 'dl-dim2' },
           { key: 'tool', label: 'reference', get: function (r) { return r.tool; },
             cell: function (r) { return esc(r.tool); }, cls: 'dl-dim2' },
+          { key: 'threads', label: 'threads', num: true, dim: true,
+            get: function (r) { return (r.das && r.das.threads) || 0; },
+            cell: function (r) { return r.das && r.das.threads ? String(r.das.threads) : '-'; } },
           { key: 'wav', label: 'clip', get: function (r) { return r.wav; },
             cell: function (r) { return esc(r.wav); }, cls: 'dl-dim2' },
           { key: 'audio_s', label: 'audio s', num: true, dim: true,
@@ -544,8 +552,11 @@
             get: function (r) { return r.das_ms; }, cell: function (r) { return ms(r.das_ms); } },
           { key: 'ref_ms', label: 'ref ms', num: true, dim: true,
             get: function (r) { return r.ref_ms; }, cell: function (r) { return ms(r.ref_ms); } },
+          // a run annotated void for this clip (ref behavior difference, e.g. a decode runaway)
+          // never headlines a ratio — the receipt still shows both raw times and the note
           { key: 'speed', label: 'speedup', num: true, grp: true,
-            get: function (r) { return r.speed; }, cell: function (r) { return ratioCell(r.speed); } },
+            get: function (r) { return r.voided ? 0 : r.speed; },
+            cell: function (r) { return r.voided ? '<td class="dl-num dl-dim">—✱</td>' : ratioCell(r.speed); } },
           // a slower-than-realtime clip lands near 1×, so keep a decimal below 10 — rounding
           // 1.5×RT to "2" would read as comfortably realtime when it is barely so
           { key: 'xrt', label: '×RT', num: true, dim: true, grpStart: true,

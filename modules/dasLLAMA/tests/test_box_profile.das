@@ -132,7 +132,7 @@ def test_partial_and_missing_are_no_ops(t : T?) {
     apply_box_profile_runtime(path)
     t |> equal(get_q8_token_block(), 128l, "invalid JSON = no-op")
 
-    // "threads" is advisory (logged) — and must NOT call get_total_hw_jobs(), which throws when no
+    // "threads" is a logged receipt — and must NOT call get_total_hw_jobs(), which throws when no
     // job queue exists (model loads may legally run outside with_job_que)
     t |> success(fwrite(path, "\{\"runtime\":\{\"threads\":8\}\}"), "threads-advisory profile written")
     apply_box_profile_runtime(path)

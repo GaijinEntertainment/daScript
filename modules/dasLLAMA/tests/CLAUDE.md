@@ -67,7 +67,8 @@ teacher-forced logits-tolerance parity cell (greedy token equality is NOT a vali
 135M — genuine near-ties flip on ~0.02 gaps under ~0.75 cross-backend noise). The ASR-family
 arms (`parakeet` transcript-exact, `qwen3a`/`canary`/`gemma4a` element-exact planes,
 `canary-dec` = the opt-in fp32 Model rail, token-exact) re-save their images from cold each
-run like the voxtral arm.
+run like the voxtral arm. The canary arm carries both lanes: the f32 element-exact cell and
+the q8 cell (read-time transcode — qblob/qscales/compact-blob element-exact vs a staged read).
 The `image-vulkan` suite (test_model_image_vulkan, arm `vulkan`) covers the OFFLINE vulkan
 bake: the runner arms DASLLAMA_GPU + a small VRAM budget so the probed config carries a
 vulkan section, the DRY tier collects a role-stamped plan with no device calls (safe on

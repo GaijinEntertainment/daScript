@@ -1,0 +1,2126 @@
+[
+ {
+  "gguf": "Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf",
+  "runs": [
+   {
+    "engine": "das",
+    "backend": "cpu",
+    "flavor": "tuned",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m /home/boris/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "pp512": {
+      "tok_s": 251.90968232469442,
+      "stddev": 2.64921498298645
+     },
+     "tg128": {
+      "tok_s": 20.033355165969496,
+      "stddev": 0.012785729952156544
+     }
+    },
+    "source": "official",
+    "sha": "7e02c2451",
+    "version": "0.6.4",
+    "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
+    "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
+    "exec_fmt": "weights k4/k5/k6/q8 native; q8 activations; f16 scales; planar x64-gen (repacked)",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "files": [
+     {
+      "role": "weights",
+      "name": "Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf",
+      "sha256": "0b21525e972670ed59e1812e170b27c26355381f0656ecc4e25617ece7dac58b",
+      "bytes": 22663387424
+     }
+    ]
+   },
+   {
+    "engine": "llama.cpp",
+    "backend": "cpu",
+    "flavor": "clean-cpu",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "/home/boris/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /home/boris/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "pp512": {
+      "tok_s": 91.494531,
+      "stddev": 0.03579
+     },
+     "tg128": {
+      "tok_s": 17.820378,
+      "stddev": 0.013407
+     }
+    },
+    "source": "official",
+    "sha": "ebd048fc5",
+    "exec_fmt": "native gguf formats; cpu runtime layout repack",
+    "files": [
+     {
+      "role": "weights",
+      "name": "Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf",
+      "sha256": "0b21525e972670ed59e1812e170b27c26355381f0656ecc4e25617ece7dac58b",
+      "bytes": 22663387424
+     }
+    ]
+   }
+  ],
+  "arch": "qwen35moe",
+  "quant": "q8",
+  "params_b": 35.505251456,
+  "active_b": 2.86261248,
+  "size_bytes": 22663387424
+ },
+ {
+  "gguf": "Qwen3.6-27B-MTP-Q4_K_M.gguf",
+  "runs": [
+   {
+    "engine": "das",
+    "backend": "cpu",
+    "flavor": "tuned",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m /home/boris/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "pp512": {
+      "tok_s": 38.791913305025275,
+      "stddev": 0.19599516689777374
+     },
+     "tg128": {
+      "tok_s": 3.4941462980390483,
+      "stddev": 0.000691255962010473
+     }
+    },
+    "source": "official",
+    "sha": "7e02c2451",
+    "version": "0.6.4",
+    "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
+    "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
+    "exec_fmt": "weights k4/k5/k6/q8 native; q8 activations; f16 scales; planar x64-gen (repacked)",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "files": [
+     {
+      "role": "weights",
+      "name": "Qwen3.6-27B-MTP-Q4_K_M.gguf",
+      "sha256": "a7cbd3ecc0e3f9b333edee61ae66bc87ed713c5d49587a8355814722ed329e0f",
+      "bytes": 17106773120
+     }
+    ]
+   },
+   {
+    "engine": "llama.cpp",
+    "backend": "cpu",
+    "flavor": "clean-cpu",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "/home/boris/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /home/boris/models/Qwen3.6-27B-MTP-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "pp512": {
+      "tok_s": 16.641652,
+      "stddev": 0.00488
+     },
+     "tg128": {
+      "tok_s": 3.351584,
+      "stddev": 0.00196
+     }
+    },
+    "source": "official",
+    "sha": "ebd048fc5",
+    "exec_fmt": "native gguf formats; cpu runtime layout repack",
+    "files": [
+     {
+      "role": "weights",
+      "name": "Qwen3.6-27B-MTP-Q4_K_M.gguf",
+      "sha256": "a7cbd3ecc0e3f9b333edee61ae66bc87ed713c5d49587a8355814722ed329e0f",
+      "bytes": 17106773120
+     }
+    ]
+   }
+  ],
+  "arch": "qwen35",
+  "quant": "q8",
+  "params_b": 27.320697856,
+  "active_b": 23.84986112,
+  "size_bytes": 17106773120
+ },
+ {
+  "gguf": "gemma-4-26B-A4B-it-Q4_K_M.gguf",
+  "runs": [
+   {
+    "engine": "das",
+    "backend": "cpu",
+    "flavor": "tuned",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m /home/boris/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "pp512": {
+      "tok_s": 81.47924461827256,
+      "stddev": 2.0518887042999268
+     },
+     "tg128": {
+      "tok_s": 15.152850930177454,
+      "stddev": 0.00961377378553152
+     }
+    },
+    "source": "official",
+    "sha": "7e02c2451",
+    "version": "0.6.4",
+    "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
+    "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
+    "exec_fmt": "weights k4/q51/q8 native; q8 activations; f16 scales; planar x64-gen (repacked)",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "files": [
+     {
+      "role": "weights",
+      "name": "gemma-4-26B-A4B-it-Q4_K_M.gguf",
+      "sha256": "f2c28b3dc4776931ac6f879e11f203dec637ea0f14267a86ec8f6165f63f293f",
+      "bytes": 16947541728
+     }
+    ]
+   },
+   {
+    "engine": "llama.cpp",
+    "backend": "cpu",
+    "flavor": "clean-cpu",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "/home/boris/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /home/boris/models/gemma-4-26B-A4B-it-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "pp512": {
+      "tok_s": 83.005002,
+      "stddev": 0.12174
+     },
+     "tg128": {
+      "tok_s": 15.406339,
+      "stddev": 0.031176
+     }
+    },
+    "source": "official",
+    "sha": "ebd048fc5",
+    "exec_fmt": "native gguf formats; cpu runtime layout repack",
+    "files": [
+     {
+      "role": "weights",
+      "name": "gemma-4-26B-A4B-it-Q4_K_M.gguf",
+      "sha256": "f2c28b3dc4776931ac6f879e11f203dec637ea0f14267a86ec8f6165f63f293f",
+      "bytes": 16947541728
+     }
+    ]
+   }
+  ],
+  "arch": "gemma4",
+  "quant": "q8",
+  "params_b": 25.233142046,
+  "active_b": 3.286564864,
+  "size_bytes": 16947541728
+ },
+ {
+  "gguf": "gemma-4-12B-it-Q4_K_M.gguf",
+  "runs": [
+   {
+    "engine": "das",
+    "backend": "cpu",
+    "flavor": "tuned",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m /home/boris/models/gemma-4-12B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "pp512": {
+      "tok_s": 87.14064733785109,
+      "stddev": 0.10298765450716019
+     },
+     "tg128": {
+      "tok_s": 7.815825182510712,
+      "stddev": 0.0017359517514705658
+     }
+    },
+    "source": "official",
+    "sha": "7e02c2451",
+    "version": "0.6.4",
+    "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
+    "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
+    "exec_fmt": "weights k4/k6/q8 native; q8 activations; f32 scales; planar x64-gen (repacked)",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "files": [
+     {
+      "role": "weights",
+      "name": "gemma-4-12B-it-Q4_K_M.gguf",
+      "sha256": "95d83ba36642b1f385fb906b5962a71763361be3bac930a709945f72d97473f8",
+      "bytes": 7381382944
+     }
+    ]
+   },
+   {
+    "engine": "llama.cpp",
+    "backend": "cpu",
+    "flavor": "clean-cpu",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "/home/boris/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /home/boris/models/gemma-4-12B-it-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "pp512": {
+      "tok_s": 41.94124,
+      "stddev": 0.02157
+     },
+     "tg128": {
+      "tok_s": 7.508619,
+      "stddev": 0.003933
+     }
+    },
+    "source": "official",
+    "sha": "ebd048fc5",
+    "exec_fmt": "native gguf formats; cpu runtime layout repack",
+    "files": [
+     {
+      "role": "weights",
+      "name": "gemma-4-12B-it-Q4_K_M.gguf",
+      "sha256": "95d83ba36642b1f385fb906b5962a71763361be3bac930a709945f72d97473f8",
+      "bytes": 7381382944
+     }
+    ]
+   }
+  ],
+  "arch": "gemma4",
+  "quant": "q8",
+  "params_b": 11.907350576,
+  "active_b": 11.90658048,
+  "size_bytes": 7381382944
+ },
+ {
+  "gguf": "gemma-4-E4B-it-Q8_0.gguf",
+  "runs": [
+   {
+    "engine": "das",
+    "backend": "cpu",
+    "flavor": "tuned",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m /home/boris/models/gemma-4-E4B-it-Q8_0.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "pp512": {
+      "tok_s": 249.22408999517774,
+      "stddev": 2.3579139709472656
+     },
+     "tg128": {
+      "tok_s": 11.910514080132453,
+      "stddev": 0.0021174459252506495
+     }
+    },
+    "source": "official",
+    "sha": "7e02c2451",
+    "version": "0.6.4",
+    "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
+    "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
+    "exec_fmt": "weights q8 native; q8 activations; f16 scales; planar x64-gen (repacked)",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "files": [
+     {
+      "role": "weights",
+      "name": "gemma-4-E4B-it-Q8_0.gguf",
+      "sha256": "34be82b17b4942d389b9b527170c4b058027abdd32531fda063d3d97dd8ce80a",
+      "bytes": 8031242688
+     }
+    ]
+   },
+   {
+    "engine": "llama.cpp",
+    "backend": "cpu",
+    "flavor": "clean-cpu",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "/home/boris/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /home/boris/models/gemma-4-E4B-it-Q8_0.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "pp512": {
+      "tok_s": 97.311849,
+      "stddev": 0.132537
+     },
+     "tg128": {
+      "tok_s": 11.142233,
+      "stddev": 0.005516
+     }
+    },
+    "source": "official",
+    "sha": "ebd048fc5",
+    "exec_fmt": "native gguf formats; cpu runtime layout repack",
+    "files": [
+     {
+      "role": "weights",
+      "name": "gemma-4-E4B-it-Q8_0.gguf",
+      "sha256": "34be82b17b4942d389b9b527170c4b058027abdd32531fda063d3d97dd8ce80a",
+      "bytes": 8031242688
+     }
+    ]
+   }
+  ],
+  "arch": "gemma4",
+  "quant": "q8",
+  "params_b": 7.51806929,
+  "active_b": 4.58883072,
+  "size_bytes": 8031242688
+ },
+ {
+  "gguf": "gpt-oss-20b-mxfp4.gguf",
+  "runs": [
+   {
+    "engine": "das",
+    "backend": "cpu",
+    "flavor": "tuned",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m /home/boris/models/gpt-oss-20b-mxfp4.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "pp512": {
+      "tok_s": 229.34258636119904,
+      "stddev": 4.147167682647705
+     },
+     "tg128": {
+      "tok_s": 23.040888326889924,
+      "stddev": 0.00530261779204011
+     }
+    },
+    "source": "official",
+    "sha": "7e02c2451",
+    "version": "0.6.4",
+    "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
+    "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
+    "exec_fmt": "weights mxfp4/q8 native; q8 activations; f16 scales; planar x64-gen (repacked)",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "files": [
+     {
+      "role": "weights",
+      "name": "gpt-oss-20b-mxfp4.gguf",
+      "sha256": "be37a636aca0fc1aae0d32325f82f6b4d21495f06823b5fbc1898ae0303e9935",
+      "bytes": 12109566560
+     }
+    ]
+   },
+   {
+    "engine": "llama.cpp",
+    "backend": "cpu",
+    "flavor": "clean-cpu",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "/home/boris/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /home/boris/models/gpt-oss-20b-mxfp4.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "pp512": {
+      "tok_s": 85.172395,
+      "stddev": 0.291737
+     },
+     "tg128": {
+      "tok_s": 22.493794,
+      "stddev": 0.024126
+     }
+    },
+    "source": "official",
+    "sha": "ebd048fc5",
+    "exec_fmt": "native gguf formats; cpu runtime layout repack",
+    "files": [
+     {
+      "role": "weights",
+      "name": "gpt-oss-20b-mxfp4.gguf",
+      "sha256": "be37a636aca0fc1aae0d32325f82f6b4d21495f06823b5fbc1898ae0303e9935",
+      "bytes": 12109566560
+     }
+    ]
+   }
+  ],
+  "arch": "gpt-oss",
+  "quant": "q8",
+  "params_b": 20.914757184,
+  "active_b": 4.18627584,
+  "size_bytes": 12109566560
+ },
+ {
+  "gguf": "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf",
+  "runs": [
+   {
+    "engine": "das",
+    "backend": "cpu",
+    "flavor": "tuned",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m /home/boris/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "pp512": {
+      "tok_s": 250.40732658093543,
+      "stddev": 1.4496427774429321
+     },
+     "tg128": {
+      "tok_s": 28.975268851017983,
+      "stddev": 0.0014476769138127565
+     }
+    },
+    "source": "official",
+    "sha": "7e02c2451",
+    "version": "0.6.4",
+    "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
+    "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
+    "exec_fmt": "weights k4/k6/q8 native; q8 activations; f32 scales; planar x64-gen (repacked)",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "files": [
+     {
+      "role": "weights",
+      "name": "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf",
+      "sha256": "6c997b8af17debdfb01d890214400ccbab00db6acc0ba8da5de1cc906c4774d0",
+      "bytes": 18556686752
+     }
+    ]
+   },
+   {
+    "engine": "llama.cpp",
+    "backend": "cpu",
+    "flavor": "clean-cpu",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "/home/boris/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /home/boris/models/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "pp512": {
+      "tok_s": 110.53892,
+      "stddev": 0.109884
+     },
+     "tg128": {
+      "tok_s": 28.133455,
+      "stddev": 0.065265
+     }
+    },
+    "source": "official",
+    "sha": "ebd048fc5",
+    "exec_fmt": "native gguf formats; cpu runtime layout repack",
+    "files": [
+     {
+      "role": "weights",
+      "name": "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf",
+      "sha256": "6c997b8af17debdfb01d890214400ccbab00db6acc0ba8da5de1cc906c4774d0",
+      "bytes": 18556686752
+     }
+    ]
+   }
+  ],
+  "arch": "qwen3moe",
+  "quant": "q8",
+  "params_b": 30.532122624,
+  "active_b": 3.35282176,
+  "size_bytes": 18556686752
+ },
+ {
+  "gguf": "Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf",
+  "runs": [
+   {
+    "engine": "das",
+    "backend": "cpu",
+    "flavor": "tuned",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m /home/boris/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "pp512": {
+      "tok_s": 44.63254144424029,
+      "stddev": 0.06602770835161209
+     },
+     "tg128": {
+      "tok_s": 4.202779271510503,
+      "stddev": 0.0018332317704334855
+     }
+    },
+    "source": "official",
+    "sha": "7e02c2451",
+    "version": "0.6.4",
+    "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
+    "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
+    "exec_fmt": "weights k4/k6 native; q8 activations; f32 scales; planar x64-gen (repacked)",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "files": [
+     {
+      "role": "weights",
+      "name": "Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf",
+      "sha256": "6d670773c3908584349d41a5048d1472226b593c881fd394e8ac196c802e81e2",
+      "bytes": 14333910592
+     }
+    ]
+   },
+   {
+    "engine": "llama.cpp",
+    "backend": "cpu",
+    "flavor": "clean-cpu",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "/home/boris/llama.cpp-ref-ebd048f/build-clean-cpu/bin/llama-bench -m /home/boris/models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf -ngl 0 -t 8 -p 512 -n 128 -r 5 -o json",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "pp512": {
+      "tok_s": 21.800127,
+      "stddev": 0.015179
+     },
+     "tg128": {
+      "tok_s": 4.253723,
+      "stddev": 0.004679
+     }
+    },
+    "source": "official",
+    "sha": "ebd048fc5",
+    "exec_fmt": "native gguf formats; cpu runtime layout repack",
+    "files": [
+     {
+      "role": "weights",
+      "name": "Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf",
+      "sha256": "6d670773c3908584349d41a5048d1472226b593c881fd394e8ac196c802e81e2",
+      "bytes": 14333910592
+     }
+    ]
+   }
+  ],
+  "arch": "llama",
+  "quant": "q8",
+  "params_b": 23.5724032,
+  "active_b": 23.57198848,
+  "size_bytes": 14333910592
+ },
+ {
+  "gguf": "ggml-parakeet-tdt-0.6b-v2-f32.bin",
+  "runs": [
+   {
+    "engine": "das",
+    "backend": "cpu",
+    "flavor": "tuned",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- --asr -m ggml-parakeet-tdt-0.6b-v2-f32.bin -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "asr:jfk.wav": {
+      "ms": 171.209,
+      "audio_s": 11,
+      "text": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+     },
+     "asr:jfk3.wav": {
+      "ms": 435.559,
+      "audio_s": 33,
+      "text": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country."
+     },
+     "asr:gb1.wav": {
+      "ms": 5536.51,
+      "audio_s": 198.734375,
+      "text": "My fellow Americans, this day has brought terrible news and great sadness to our country. At 9 o'clock this morning, Mission Control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven, Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kulpna Shavla, and Ilan Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when space flight has come to seem almost routine, it is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce outer atmosphere of the Earth. These astronauts knew the dangers, and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock and grief. You're not alone. Our entire nation grieves with you, and those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah, lift your eyes and look to the heavens. Who created all these? He who brings out the starry hosts one by one and calls them each by name. Because of his great power and mighty strength, not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth, yet we can pray that all are safely home. May God bless the grieving families, and may God continue to bless America."
+     },
+     "asr:hp0.wav": {
+      "ms": 10037.581,
+      "audio_s": 273.28725,
+      "text": "Henry F. Phillips from Wikipedia, the Free Encyclopedia at EN. Wikipedia. org Henry F. Phillips from Wikipedia, the Free Encyclopedia Henry F. Phillips 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the crosshead screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in 1936, US patent number two million forty six thousand three hundred forty three US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips screw company and the American screw company went on to devise the Pausa Drive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips screw head. The following is an info box which accompanies this article InfoBox part of the series on screw drive types slotted commonly erroneously flathead Phillips Crosshead Pausadrive SuperDrive Torx Hex Allen Robertson Tri Wing Torqueset Spannerhead Triple Square XN Others Polydrive Spline Drive Double Hex Many images accompanied this info box. This page was last modified on the 9th of April 2008 at 1704. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a US registered five hundred one C three tax deductible nonprofit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License available at WWW dot gnu dot org slash copyleft slash fdl dot html"
+     },
+     "asr:hp0x2.wav": {
+      "ms": 36938.343,
+      "audio_s": 546.5745,
+      "text": "Henry F. Phillips from Wikipedia, the free encyclopedia at EN. Wikipedia. org Henry F. Phillips from Wikipedia, the Free Encyclopedia. Henry F. Phillips eighteen ninety to nineteen fifty eight, a US businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the crosshead screw design lies in its self centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in 1936, US patent number two million forty six thousand three hundred forty three US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw as distinct from the simple milled slot of a slotted type screw. The Phillips screw company and the American screw company went on to devise the Pausa Drive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips screw head. The following is an info box which accompanies this article InfoBox part of the series on screw drive types slotted commonly erroneously flathead Phillips crosshead Pausadrive Supa drive Torques Hex Allen Robertson Triwing Torqueset Spannerhead Triple Square XN Others Polydrive Spline Drive Double Hex Many images accompanied this info box. This page was last modified on the 9th of April two thousand eight at seventeen oh four. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated a US registered five hundred one C three tax deductible nonprofit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License available at www dot gnu dot org slash copyleft slash fdl dot html Henry F Phillips from Wikipedia the free encyclopedia at EN dot wikipedia dot org Henry F Phillips from Wikipedia the Free Encyclopedia Henry F Phillips eighteen ninety to nineteen fifty eight a US businessman from Portland, Oregon has the honor of having the Phillips head screw and screwdriver named after him. The importance of the crosshead screw design lies in its self centering property useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in 1936 US patent number two million forty six thousand three hundred forty three US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw as distinct from the simple milled slot of a slotted type screw. The Phillips screw company and the American screw company went on to devise the Pausa Drive screw which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips screw head. The following is an info box which accompanies this article InfoBox part of the series on screw drive types slotted commonly erroneously flathead Phillips crosshead Pausadrive Supa drive Torques Hex Allen Robertson Triwing Torqueset Spannerhead Triple Square XN Others Polydrive Spline Drive Double Hex Many images accompanied this info box. This page was last modified on the 9th of April two thousand eight at seventeen oh four. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a US registered five hundred one C three tax deductible nonprofit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License available at WWW dot gnu dot org slash copyleft slash fdl dot html"
+     }
+    },
+    "workload": "asr",
+    "source": "official",
+    "sha": "7e02c2451",
+    "version": "0.6.4",
+    "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
+    "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
+    "exec_fmt": "q8",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "files": [
+     {
+      "role": "weights",
+      "name": "ggml-parakeet-tdt-0.6b-v2-f32.bin",
+      "sha256": "9dde716823d0dfe587cb7396a7cc251708c30a8475f6fccc8af36ee769fcd808",
+      "bytes": 2471664028
+     },
+     {
+      "role": "clip",
+      "name": "jfk.wav",
+      "sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+      "bytes": 352078
+     },
+     {
+      "role": "clip",
+      "name": "jfk3.wav",
+      "sha256": "a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+      "bytes": 1056078
+     },
+     {
+      "role": "clip",
+      "name": "gb1.wav",
+      "sha256": "b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+      "bytes": 6359578
+     },
+     {
+      "role": "clip",
+      "name": "hp0.wav",
+      "sha256": "3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+      "bytes": 8745270
+     },
+     {
+      "role": "clip",
+      "name": "hp0x2.wav",
+      "sha256": "43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
+      "bytes": 17490462
+     }
+    ]
+   },
+   {
+    "engine": "parakeet-cli",
+    "backend": "cpu",
+    "flavor": "stock",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "/home/boris/whisper.cpp/build/bin/parakeet-cli -m /home/boris/models/ggml-parakeet-tdt-0.6b-v2-q8_0.bin -f modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav -t 8 -ng",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "asr:jfk.wav": {
+      "ms": 487.69
+     },
+     "asr:jfk3.wav": {
+      "ms": 1610.77
+     },
+     "asr:gb1.wav": {
+      "ms": 16564.84
+     },
+     "asr:hp0.wav": {
+      "ms": 26981.780000000002
+     },
+     "asr:hp0x2.wav": {
+      "ms": 90030.01999999999
+     }
+    },
+    "workload": "asr",
+    "source": "official",
+    "versions": "whisper.cpp @ 6fc7c33b4",
+    "exec_fmt": "q8_0",
+    "files": [
+     {
+      "role": "weights",
+      "name": "ggml-parakeet-tdt-0.6b-v2-q8_0.bin",
+      "sha256": "e6e008e2456cef5037dbb15f0e3f6c211cc4b6819316014323301d04e799257b",
+      "bytes": 658909748
+     },
+     {
+      "role": "clip",
+      "name": "jfk.wav",
+      "sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+      "bytes": 352078
+     },
+     {
+      "role": "clip",
+      "name": "jfk3.wav",
+      "sha256": "a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+      "bytes": 1056078
+     },
+     {
+      "role": "clip",
+      "name": "gb1.wav",
+      "sha256": "b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+      "bytes": 6359578
+     },
+     {
+      "role": "clip",
+      "name": "hp0.wav",
+      "sha256": "3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+      "bytes": 8745270
+     },
+     {
+      "role": "clip",
+      "name": "hp0x2.wav",
+      "sha256": "43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
+      "bytes": 17490462
+     }
+    ]
+   },
+   {
+    "engine": "onnx",
+    "backend": "cpu",
+    "flavor": "stock",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "modules/dasLLAMA/benchmarks/asr/.venv-onnx/bin/python modules/dasLLAMA/benchmarks/asr/onnx_bench.py --variant v2-int8 --out modules/dasLLAMA/benchmarks/asr/_pybench_rows.txt --threads 8 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "asr:jfk.wav": {
+      "ms": 418.392,
+      "audio_s": 11
+     },
+     "asr:jfk3.wav": {
+      "ms": 1138.752,
+      "audio_s": 33
+     },
+     "asr:gb1.wav": {
+      "ms": 11266.878,
+      "audio_s": 198.734
+     },
+     "asr:hp0.wav": {
+      "ms": 18176.378,
+      "audio_s": 273.287
+     }
+    },
+    "workload": "asr",
+    "source": "official",
+    "versions": "onnx-asr 0.11.0 / onnxruntime 1.27.0",
+    "exec_fmt": "int8",
+    "files": [
+     {
+      "role": "clip",
+      "name": "jfk.wav",
+      "sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+      "bytes": 352078
+     },
+     {
+      "role": "clip",
+      "name": "jfk3.wav",
+      "sha256": "a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+      "bytes": 1056078
+     },
+     {
+      "role": "clip",
+      "name": "gb1.wav",
+      "sha256": "b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+      "bytes": 6359578
+     },
+     {
+      "role": "clip",
+      "name": "hp0.wav",
+      "sha256": "3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+      "bytes": 8745270
+     }
+    ]
+   }
+  ],
+  "arch": "Parakeet-TDT v2",
+  "size_bytes": 2471664028
+ },
+ {
+  "gguf": "ggml-parakeet-tdt-0.6b-v3-f32.bin",
+  "runs": [
+   {
+    "engine": "das",
+    "backend": "cpu",
+    "flavor": "tuned",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- --asr -m ggml-parakeet-tdt-0.6b-v3-f32.bin -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "asr:jfk.wav": {
+      "ms": 186.659,
+      "audio_s": 11,
+      "text": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+     },
+     "asr:jfk3.wav": {
+      "ms": 491.982,
+      "audio_s": 33,
+      "text": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+     },
+     "asr:gb1.wav": {
+      "ms": 5781.053,
+      "audio_s": 198.734375,
+      "text": "My fellow Americans, this day has brought terrible news and great sadness to our country. At nine o'clock this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia's lost. There are no survivors. On board was a crew of seven. Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kulpna Shavla, and Ilan Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when space flight has come to seem almost routine. It is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce outer atmosphere of the earth. These astronauts knew the dangers, and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. And those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah, lift your eyes and look to the heavens. Who created all these? He who brings out the starry hosts one by one and calls them each by name. Because of his great power and mighty strength, not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth. Yet we can pray that all are safely home. May God bless the grieving families, and make out may God continue to bless America."
+     },
+     "asr:hp0.wav": {
+      "ms": 10502.608,
+      "audio_s": 273.28725,
+      "text": "Henry F Phillips from Wikipedia the Free Encyclopedia at EN.Wikipedia.org Henry F Phillips from Wikipedia the Free Encyclopedia Henry F Phillips eighteen ninety to nineteen fifty eight, a US businessman from Portland, Oregon, has the honor of having the Phillips Head Screw and Screwdriver named after him. The importance of the crosshead screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in nineteen thirty six, US patent number two million forty six thousand three hundred forty three, US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the pause drive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips Screw Head. The following is an info box which accompanies this article Info Box Part of the Series on Screw Drive Types Slotted Commonly Erroneously Flathead Phillips Crosshead PauseDrive SupaDrive Torx Hex Allen Robertson Triwing Torqueset Spannerhead Triple Square XZN Others Polydrive Spline Drive Double Hex Many Images accompanied this info box This page was last modified on the ninth of April two thousand eight at seventeen oh four All text is available under the terms of the GNU Free Documentation License See Copyrights for details Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated a US registered five oh one C three Tax Deductible Nonprofit Charity This sound file and all text in the article are licensed under the GNU Free Documentation License available at WWW dot gnu dot org slash copyleft slash fdl dot html."
+     },
+     "asr:hp0x2.wav": {
+      "ms": 37697.312,
+      "audio_s": 546.5745,
+      "text": "Henry F Phillips from Wikipedia the Free Encyclopedia at EN dot Wikipedia dot org Henry F Phillips from Wikipedia the Free Encyclopedia Henry F Phillips eighteen ninety to nineteen fifty eight a US businessman from Portland, Oregon has the honor of having the Phillips Head Screw and Screwdriver named after him. The importance of the crosshead screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in nineteen thirty six, US patent number two million forty six thousand three hundred forty three US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the pausa drive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips Screw Head. The following is an info box which accompanies this article Info Box Part of the Series on Screw Drive Types Slotted Commonly Erroneously Flathead Phillips Crosshead PausaDrive SuperDrive Torx Hex Allen Robertson Tri Wing Torqueset Spannerhead Triple Square XN Others Polydrive Spline Drive Double Hex Many Images accompanied this info box This page was last modified on the ninth of April two thousand eight at seventeen oh four All Text is available under the terms of the GNU Free Documentation License See Copyrights for details Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated a US registered five hundred one C three tax deductible nonprofit charity This sound file and all text in the article are licensed under the GNU Free Documentation License available at WWW dot GNU dot org slash copyleft slash FDL dot HTML Henry F Phillips from Wikipedia the Free Encyclopedia at EN dot wikipedia dot org Henry F Phillips from Wikipedia the Free Encyclopedia Henry F Phillips eighteen ninety to nineteen fifty eight a US businessman from Portland, Oregon has the honor of having the Phillips Head Screw and Screwdriver named after him. The importance of the crosshead screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the crosshead concept forward to the point where it was adopted by screwmakers and automobile companies. Although he received patents for the design in nineteen thirty six, US patent number two million forty six thousand three hundred forty three US patents two million forty six thousand eight hundred thirty seven to two million forty six thousand eight hundred forty. It was so widely copied that by nineteen forty nine Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the pausa drive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article caption Phillips Screw Head. The following is an info box which accompanies this article Info Box Part of the Series on Screw Drive Types Slotted Commonly Erroneously Flathead Phillips Crosshead Pausa Drive SupaDrive Torx Hex Allen Robertson Tri Wing Torqueset Spannerhead Triple Square XZN Others Polydrive Spline Drive Double Hex Many Images accompanied this info box This page was last modified on the ninth of April two thousand eight at seventeen oh four All text is available under the terms of the GNU Free Documentation License See Copyrights for details Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated a US registered five hundred one C three tax deductible nonprofit charity This sound file and all text in the article are licensed under the GNU Free Documentation License available at WWW dot GNU dot org slash copyleft slash FDL dot HTML."
+     }
+    },
+    "workload": "asr",
+    "source": "official",
+    "sha": "7e02c2451",
+    "version": "0.6.4",
+    "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
+    "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
+    "exec_fmt": "q8",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "files": [
+     {
+      "role": "weights",
+      "name": "ggml-parakeet-tdt-0.6b-v3-f32.bin",
+      "sha256": "b17956ca991a7f084c978a8a9d4c9785864260b6dd9b72f884344759d913ae7f",
+      "bytes": 2508463079
+     },
+     {
+      "role": "clip",
+      "name": "jfk.wav",
+      "sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+      "bytes": 352078
+     },
+     {
+      "role": "clip",
+      "name": "jfk3.wav",
+      "sha256": "a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+      "bytes": 1056078
+     },
+     {
+      "role": "clip",
+      "name": "gb1.wav",
+      "sha256": "b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+      "bytes": 6359578
+     },
+     {
+      "role": "clip",
+      "name": "hp0.wav",
+      "sha256": "3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+      "bytes": 8745270
+     },
+     {
+      "role": "clip",
+      "name": "hp0x2.wav",
+      "sha256": "43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
+      "bytes": 17490462
+     }
+    ]
+   },
+   {
+    "engine": "parakeet-cli",
+    "backend": "cpu",
+    "flavor": "stock",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "/home/boris/whisper.cpp/build/bin/parakeet-cli -m /home/boris/models/ggml-parakeet-tdt-0.6b-v3-q8_0.bin -f modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav -t 8 -ng",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "asr:jfk.wav": {
+      "ms": 490.84000000000003
+     },
+     "asr:jfk3.wav": {
+      "ms": 1621.89
+     },
+     "asr:gb1.wav": {
+      "ms": 16583.46
+     },
+     "asr:hp0.wav": {
+      "ms": 27048.41
+     },
+     "asr:hp0x2.wav": {
+      "ms": 90034.36
+     }
+    },
+    "workload": "asr",
+    "source": "official",
+    "versions": "whisper.cpp @ 6fc7c33b4",
+    "exec_fmt": "q8_0",
+    "files": [
+     {
+      "role": "weights",
+      "name": "ggml-parakeet-tdt-0.6b-v3-q8_0.bin",
+      "sha256": "4d64e9e96c2792186d072fde0034df0ad670cf680a2f53069052ead827fd600e",
+      "bytes": 668757119
+     },
+     {
+      "role": "clip",
+      "name": "jfk.wav",
+      "sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+      "bytes": 352078
+     },
+     {
+      "role": "clip",
+      "name": "jfk3.wav",
+      "sha256": "a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+      "bytes": 1056078
+     },
+     {
+      "role": "clip",
+      "name": "gb1.wav",
+      "sha256": "b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+      "bytes": 6359578
+     },
+     {
+      "role": "clip",
+      "name": "hp0.wav",
+      "sha256": "3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+      "bytes": 8745270
+     },
+     {
+      "role": "clip",
+      "name": "hp0x2.wav",
+      "sha256": "43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
+      "bytes": 17490462
+     }
+    ]
+   },
+   {
+    "engine": "onnx",
+    "backend": "cpu",
+    "flavor": "stock",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "modules/dasLLAMA/benchmarks/asr/.venv-onnx/bin/python modules/dasLLAMA/benchmarks/asr/onnx_bench.py --variant int8 --out modules/dasLLAMA/benchmarks/asr/_pybench_rows.txt --threads 8 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "asr:jfk.wav": {
+      "ms": 388.848,
+      "audio_s": 11
+     },
+     "asr:jfk3.wav": {
+      "ms": 1123.929,
+      "audio_s": 33
+     },
+     "asr:gb1.wav": {
+      "ms": 11239.645,
+      "audio_s": 198.734
+     },
+     "asr:hp0.wav": {
+      "ms": 18175.059,
+      "audio_s": 273.287
+     }
+    },
+    "workload": "asr",
+    "source": "official",
+    "versions": "onnx-asr 0.11.0 / onnxruntime 1.27.0",
+    "exec_fmt": "int8",
+    "files": [
+     {
+      "role": "clip",
+      "name": "jfk.wav",
+      "sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+      "bytes": 352078
+     },
+     {
+      "role": "clip",
+      "name": "jfk3.wav",
+      "sha256": "a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+      "bytes": 1056078
+     },
+     {
+      "role": "clip",
+      "name": "gb1.wav",
+      "sha256": "b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+      "bytes": 6359578
+     },
+     {
+      "role": "clip",
+      "name": "hp0.wav",
+      "sha256": "3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+      "bytes": 8745270
+     }
+    ]
+   }
+  ],
+  "arch": "Parakeet-TDT v3",
+  "size_bytes": 2508463079
+ },
+ {
+  "gguf": "ggml-tiny.bin",
+  "runs": [
+   {
+    "engine": "das",
+    "backend": "cpu",
+    "flavor": "tuned",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- --asr -m ggml-tiny.bin -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "asr:jfk.wav": {
+      "ms": 94.736,
+      "audio_s": 11,
+      "encode_ms": 59.701,
+      "text": " And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
+     },
+     "asr:jfk3.wav": {
+      "ms": 218.778,
+      "audio_s": 33,
+      "encode_ms": 120.573,
+      "text": " And so my fellow Americans ask not what your country can do for you ask what you can do for your country. And so my fellow Americans ask not what your country can do for you ask what you can do for your country. And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
+     },
+     "asr:gb1.wav": {
+      "ms": 1115.691,
+      "audio_s": 198.734375,
+      "encode_ms": 483.193,
+      "text": " My fellow Americans, this day has brought terrible news and great sadness to our country. At 9 o'clock this morning, Mission Control and Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia's lost. There are no survivors. And board was a crew of seven, Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Cooltna Chavla, and Elon Ramon, a Colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when space flight has come to seem almost routine, it is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce outer atmosphere of the earth. These astronauts knew the dangers and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock in grief. You're not alone. Our entire nation agrees with you. And those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Man kind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. As farther than we can see, there is comfort and hope. The words of the prophet Isaiah, lift your eyes and look to the heavens who created all these. He who brings out the story hosts one by one and calls them each by name because of his great power and mighty strength, not one of them is missing. The same creator who names the stars also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth yet we can pray that all are safely home. May God bless the grieving families and may God continue to bless America. [BLANK_AUDIO]"
+     },
+     "asr:hp0.wav": {
+      "ms": 1398.534,
+      "audio_s": 273.28725,
+      "encode_ms": 664.9,
+      "text": " Henry F. Phillips from Wikipedia, the Free Encyclopedia at EN.Wikipedia.org. Henry F. Phillips from Wikipedia, the Free Encyclopedia. Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Phillips-head screw and screwdriver named after him. The importance of the cross-head screw design lies in its self-centering property, useful on automated production lines that used powered screwdrivers. Phillips major contribution was in driving the cross-head concept forward to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in 1936, US patent number 2,046,343,000 U.S. patents 2,046,837 to 2,046,840. It was so widely copied that by 1949, Philips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw as distinct from the simple milled slot of a slotted type screw. The Philips screw company and the American screw company went on to devise the Pawsadrive screw, which differs from the Philips in that it is designed to accommodate greater torque than the Philips. An image accompanied this article, caption, \"Philips screw head.\" The following is an info box which accompanies this article. Info box part of the series on screw drive types. Slotted commonly erroneously flat head. Phillips cross head. Positrive Super Drive. Torx. Alex Allen Robertson Tri-Wing Torxet Spannerhead Triple Square XZN Others Polydrive Spline Drive Double Hex Many images accompany this info box This page was last modified on 9 April 2008 at 1704. All text is available under the terms of the GNU-free documentation license. See Copyrights for details. Wikipedia is a registered trademark of the Wiki media foundation incorporated. A US registered 501 C3 tax deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation license. Available at www.gnu.org/copyleft/fdl.html."
+     },
+     "asr:hp0x2.wav": {
+      "ms": 2806.681,
+      "audio_s": 546.5745,
+      "encode_ms": 1332.908,
+      "text": " Henry F. Phillips from Wikipedia, the Free Encyclopedia at EN.Wikipedia.org. Henry F. Phillips from Wikipedia, the Free Encyclopedia. Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Phillips-head screw and screwdriver named after him. The importance of the cross-head screw design lies in its self-centering property, useful on automated production lines that used powered screwdrivers. Phillips major contribution was in driving the cross-head concept forward to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in 1936, US patent number 2,046,343,000 U.S. patents 2,046,837 to 2,046,840. It was so widely copied that by 1949, Philips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw as distinct from the simple milled slot of a slotted type screw. The Philips screw company and the American screw company went on to devise the Pawsadrive screw, which differs from the Philips in that it is designed to accommodate greater torque than the Philips. An image accompanied this article, caption, \"Philips screw head.\" The following is an info box which accompanies this article. Info box part of the series on screw drive types. Slotted commonly erroneously flat head. Phillips cross head. Positrive Super Drive. Torx. Alex Allen Robertson Tri-Wing Torxet Spannerhead Triple Square XZN Others Polydrive Spline Drive Double Hex Many images accompany this info box This page was last modified on 9 April 2008 at 1704. All text is available under the terms of the GNU-free documentation license. See Copyrights for details. Wikipedia is a registered trademark of the Wiki media foundation incorporated. A US registered 501 C3 tax deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation license. Available at www.gnu.org/copyleft/fdl.html. Henry F Phillips from Wikipedia, the free The Korean Cyclopedia at EN. Wikipedia.org Henry F. Phillips From Wikipedia, the Korean Cyclopedia Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon, has the honor of having the Philips' head screw and screwdriver named after him. The importance of the cross head screw design lies in its self-centering property, useful on automated production lines that use powered screw drivers. Philips' major contribution was in driving the cross head concept forward, to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in 1936, US patent number 2,046,343, US patents 2,046,837 to 2,046,847, 840. It was so widely copied that by 1949 Phillips lost his patent. The American screw company was responsible for devising a means of manufacturing the screw and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw. As distinct from the simple milled slot of a slotted type screw. The Phillips screw company and the American screw company went on to devise the Pawsadrive screw which differs from the Philips in that it is designed to accommodate greater torque than the Philips. An image accompanied this article caption \"Philips Screwhead\". The following is an info box which accompanies this article. In a info box part of the series on screw drive types. Slaughted, commonly, erroneously, flat head. Phillips, cross head. Paws of Drive, Super Drive. Torx, Hex, Allen, Robertson, Tri-wing, Torxet, Spannerhead, Triple Square, XZN, Others, Polydrive, Spline Drive, Double Hex. Many images accompanied this info box. This page was last modified on 9 April 2008 at 1704. All text is available under the terms of the Gnue-free documentation license. See Copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Inc. a US registered 501c3 tax deductible nonprofit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License. Available at www.gnu.org/copyleft/fdl.a THTML"
+     }
+    },
+    "workload": "asr",
+    "source": "official",
+    "sha": "7e02c2451",
+    "version": "0.6.4",
+    "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
+    "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
+    "exec_fmt": "q8/q8",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "files": [
+     {
+      "role": "weights",
+      "name": "ggml-tiny.bin",
+      "sha256": "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
+      "bytes": 77691713
+     },
+     {
+      "role": "clip",
+      "name": "jfk.wav",
+      "sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+      "bytes": 352078
+     },
+     {
+      "role": "clip",
+      "name": "jfk3.wav",
+      "sha256": "a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+      "bytes": 1056078
+     },
+     {
+      "role": "clip",
+      "name": "gb1.wav",
+      "sha256": "b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+      "bytes": 6359578
+     },
+     {
+      "role": "clip",
+      "name": "hp0.wav",
+      "sha256": "3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+      "bytes": 8745270
+     },
+     {
+      "role": "clip",
+      "name": "hp0x2.wav",
+      "sha256": "43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
+      "bytes": 17490462
+     }
+    ]
+   },
+   {
+    "engine": "whisper-cli",
+    "backend": "cpu",
+    "flavor": "stock",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "/home/boris/whisper.cpp/build/bin/whisper-cli -m /home/boris/models/ggml-tiny-q8_0.bin -f modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav -t 8 -bs 1 -bo 1 -nf -ng",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "asr:jfk.wav": {
+      "ms": 179.71
+     },
+     "asr:jfk3.wav": {
+      "ms": 389.51
+     },
+     "asr:gb1.wav": {
+      "ms": 2017.8000000000002
+     },
+     "asr:hp0.wav": {
+      "ms": 2659.2200000000003
+     },
+     "asr:hp0x2.wav": {
+      "ms": 5751.64
+     }
+    },
+    "workload": "asr",
+    "source": "official",
+    "versions": "whisper.cpp @ 6fc7c33b4",
+    "exec_fmt": "q8_0",
+    "files": [
+     {
+      "role": "weights",
+      "name": "ggml-tiny-q8_0.bin",
+      "sha256": "c2085835d3f50733e2ff6e4b41ae8a2b8d8110461e18821b09a15c40c42d1cca",
+      "bytes": 43537433
+     },
+     {
+      "role": "clip",
+      "name": "jfk.wav",
+      "sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+      "bytes": 352078
+     },
+     {
+      "role": "clip",
+      "name": "jfk3.wav",
+      "sha256": "a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+      "bytes": 1056078
+     },
+     {
+      "role": "clip",
+      "name": "gb1.wav",
+      "sha256": "b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+      "bytes": 6359578
+     },
+     {
+      "role": "clip",
+      "name": "hp0.wav",
+      "sha256": "3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+      "bytes": 8745270
+     },
+     {
+      "role": "clip",
+      "name": "hp0x2.wav",
+      "sha256": "43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
+      "bytes": 17490462
+     }
+    ]
+   },
+   {
+    "engine": "onnx",
+    "backend": "cpu",
+    "flavor": "stock",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "modules/dasLLAMA/benchmarks/asr/.venv-onnx/bin/python modules/dasLLAMA/benchmarks/asr/onnx_bench.py --variant whisper-tiny-int8 --out modules/dasLLAMA/benchmarks/asr/_pybench_rows.txt --threads 8 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "asr:jfk.wav": {
+      "ms": 309.614,
+      "audio_s": 11
+     }
+    },
+    "workload": "asr",
+    "source": "official",
+    "versions": "onnx-asr 0.11.0 / onnxruntime 1.27.0",
+    "exec_fmt": "int8",
+    "files": [
+     {
+      "role": "clip",
+      "name": "jfk.wav",
+      "sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+      "bytes": 352078
+     }
+    ]
+   }
+  ],
+  "arch": "Whisper tiny",
+  "size_bytes": 77691713
+ },
+ {
+  "gguf": "ggml-large-v3-turbo.bin",
+  "runs": [
+   {
+    "engine": "das",
+    "backend": "cpu",
+    "flavor": "tuned",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- --asr -m ggml-large-v3-turbo.bin -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "asr:jfk.wav": {
+      "ms": 2082.128,
+      "audio_s": 11,
+      "encode_ms": 1913.459,
+      "text": " And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+     },
+     "asr:jfk3.wav": {
+      "ms": 4303.037,
+      "audio_s": 33,
+      "encode_ms": 3818.363,
+      "text": " And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+     },
+     "asr:gb1.wav": {
+      "ms": 18019.53,
+      "audio_s": 198.734375,
+      "encode_ms": 15173.722,
+      "text": " My fellow Americans, this day has brought terrible news and great sadness to our country. At 9 o'clock this morning, Mission Control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven: Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kultna Shavla, and Ilan Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when spaceflight has come to seem almost routine, it is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce outer atmosphere of the Earth. These astronauts knew the dangers, and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock and grief. You're not alone. Our entire nation grieves with you. And those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah, \"Lift your eyes and look to the heavens who created all these. He who brings out the starry hosts one by one and calls them each by name. Because of His great power and mighty strength, not one of them is missing.\" The same Creator who names the stars also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth, yet we can pray that all are safely home. May God bless the grieving families, and may God continue to bless America. Thank you."
+     },
+     "asr:hp0.wav": {
+      "ms": 26161.437,
+      "audio_s": 273.28725,
+      "encode_ms": 22804.49,
+      "text": " Henry F. Phillips, from Wikipedia, the Free Encyclopedia, at en.wikipedia.org. Henry F. Phillips, from Wikipedia, the Free Encyclopedia. henry f phillips a u s businessman from portland oregon has the honor of having the phillips head screw and screwdriver named after him the importance of the cross-head screw design lies in its self-centering property useful on automated production lines that use powered screw-drivers philip's major contribution was in driving the cross-head concept forward to the point where it was adopted by screw makers and automobile companies Although he received patents for the design in 1936, U.S. Patent No. 2,046,343, U.S. Patents 2,046,837 to 2,046,840, It was so widely copied that by 1949 Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the PosaDrive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article. Caption, Phillips Screw Head. The following is an info box which accompanies this article. Info box, part of the series on screw drive types. Slotted, commonly, erroneously, flathead. Phillips, crosshead. Posa drive, super drive. Torx. Hex, Allen. Robertson. Tri-wing. Torxet. Spannerhead. Triple square, XZN. Others, poly drive, spline drive, double hex. Many images accompanied this info box. This page was last modified on the 9th of April, 2008, at 1704. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation, Inc., a U.S. registered 501c3 tax-deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License, available at www.gnu.org slash copyleft slash fdl.html"
+     },
+     "asr:hp0x2.wav": {
+      "ms": 50451.252,
+      "audio_s": 546.5745,
+      "encode_ms": 43815.328,
+      "text": " Henry F. Phillips, from Wikipedia, the Free Encyclopedia, at en.wikipedia.org. Henry F. Phillips, from Wikipedia, the Free Encyclopedia. henry f phillips a u s businessman from portland oregon has the honor of having the phillips head screw and screwdriver named after him the importance of the cross-head screw design lies in its self-centering property useful on automated production lines that use powered screw-drivers philip's major contribution was in driving the cross-head concept forward to the point where it was adopted by screw makers and automobile companies Although he received patents for the design in 1936, U.S. Patent No. 2,046,343, U.S. Patents 2,046,837 to 2,046,840, It was so widely copied that by 1949 Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the PosaDrive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article. Caption, Phillips Screw Head. The following is an info box which accompanies this article. Info box, part of the series on screw drive types. Slotted, commonly, erroneously, flathead. Phillips, crosshead. Posa drive, super drive. Torx. Hex, Allen. Robertson. Tri-wing. Torxet. Spannerhead. Triple square, XZN. Others, poly drive, spline drive, double hex. Many images accompanied this info box. This page was last modified on the 9th of April, 2008, at 1704. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation, Inc., a U.S. registered 501c3 tax-deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License, Available at www.gnu.org slash copyleft slash fdl.html Henry F. Phillips From Wikipedia, the free encyclopedia at en.wikipedia.org Henry F. Phillips, 1890-1958, a U.S. businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the cross-head screw design lies in its self-centering property, useful on automated production lines that use powered screwdrivers. Phillips' major contribution was in driving the cross-head concept forward, to the point where it was adopted by screw-makers and automobile companies. Although he received patents for the design in 1936, U.S. Patent No. 2,046,343, U.S. Patents 2,046,837 to 2,046,840, It was so widely copied that by 1949 Phillips lost his patent. The American Screw Company was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the 1930s dismissed the Phillips concept since it calls for a relatively complex recessed socket shape in the head of the screw, as distinct from the simple milled slot of a slotted type screw. The Phillips Screw Company and the American Screw Company went on to devise the PosaDrive screw, which differs from the Phillips in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article. Caption, Phillips Screw Head. The following is an info box which accompanies this article. Info box, part of the series on screw drive types. Slotted, commonly, erroneously, flathead. Phillips, crosshead. Posa drive, super drive. Torx. Hex Allen, Robertson, Tri-Wing, Torxet, Spannerhead, Triple Square, XZN. Others, Poly Drive, Spline Drive, Double Hex. Many images accompanied this info box. This page was last modified on the 9th of April, 2008, at 1704. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation, Inc., a U.S. registered 501c3 tax-deductible non-profit charity. This sound file and all text in the article are licensed under the GNU Free Documentation License, available at www.gnu.org slash copyleft slash fdl.html"
+     }
+    },
+    "workload": "asr",
+    "source": "official",
+    "sha": "7e02c2451",
+    "version": "0.6.4",
+    "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
+    "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
+    "exec_fmt": "q8/q8",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "files": [
+     {
+      "role": "weights",
+      "name": "ggml-large-v3-turbo.bin",
+      "sha256": "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69",
+      "bytes": 1624555275
+     },
+     {
+      "role": "clip",
+      "name": "jfk.wav",
+      "sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+      "bytes": 352078
+     },
+     {
+      "role": "clip",
+      "name": "jfk3.wav",
+      "sha256": "a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+      "bytes": 1056078
+     },
+     {
+      "role": "clip",
+      "name": "gb1.wav",
+      "sha256": "b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+      "bytes": 6359578
+     },
+     {
+      "role": "clip",
+      "name": "hp0.wav",
+      "sha256": "3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+      "bytes": 8745270
+     },
+     {
+      "role": "clip",
+      "name": "hp0x2.wav",
+      "sha256": "43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
+      "bytes": 17490462
+     }
+    ]
+   },
+   {
+    "engine": "whisper-cli",
+    "backend": "cpu",
+    "flavor": "stock",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "/home/boris/whisper.cpp/build/bin/whisper-cli -m /home/boris/models/ggml-large-v3-turbo-q8_0.bin -f modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav -t 8 -bs 1 -bo 1 -nf -ng",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "asr:jfk.wav": {
+      "ms": 6091.83
+     },
+     "asr:jfk3.wav": {
+      "ms": 12359.26
+     },
+     "asr:gb1.wav": {
+      "ms": 63593.88
+     },
+     "asr:hp0.wav": {
+      "ms": 91003.41
+     },
+     "asr:hp0x2.wav": {
+      "ms": 225174.07
+     }
+    },
+    "workload": "asr",
+    "source": "official",
+    "versions": "whisper.cpp @ 6fc7c33b4",
+    "exec_fmt": "q8_0",
+    "files": [
+     {
+      "role": "weights",
+      "name": "ggml-large-v3-turbo-q8_0.bin",
+      "sha256": "317eb69c11673c9de1e1f0d459b253999804ec71ac4c23c17ecf5fbe24e259a1",
+      "bytes": 874188075
+     },
+     {
+      "role": "clip",
+      "name": "jfk.wav",
+      "sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+      "bytes": 352078
+     },
+     {
+      "role": "clip",
+      "name": "jfk3.wav",
+      "sha256": "a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+      "bytes": 1056078
+     },
+     {
+      "role": "clip",
+      "name": "gb1.wav",
+      "sha256": "b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+      "bytes": 6359578
+     },
+     {
+      "role": "clip",
+      "name": "hp0.wav",
+      "sha256": "3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+      "bytes": 8745270
+     },
+     {
+      "role": "clip",
+      "name": "hp0x2.wav",
+      "sha256": "43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
+      "bytes": 17490462
+     }
+    ]
+   },
+   {
+    "engine": "onnx",
+    "backend": "cpu",
+    "flavor": "stock",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "modules/dasLLAMA/benchmarks/asr/.venv-onnx/bin/python modules/dasLLAMA/benchmarks/asr/onnx_bench.py --variant whisper-turbo-int8 --out modules/dasLLAMA/benchmarks/asr/_pybench_rows.txt --threads 8 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/hp0x2.wav",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "asr:jfk.wav": {
+      "ms": 2482.521,
+      "audio_s": 11
+     }
+    },
+    "workload": "asr",
+    "source": "official",
+    "versions": "onnx-asr 0.11.0 / onnxruntime 1.27.0",
+    "exec_fmt": "int8",
+    "files": [
+     {
+      "role": "clip",
+      "name": "jfk.wav",
+      "sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+      "bytes": 352078
+     }
+    ]
+   }
+  ],
+  "arch": "Whisper large-v3-turbo",
+  "size_bytes": 1624555275
+ },
+ {
+  "gguf": "canary-qwen-2.5b-decoder-f16.gguf",
+  "runs": [
+   {
+    "engine": "das",
+    "backend": "cpu",
+    "flavor": "tuned",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- --asr -m canary-qwen-2.5b-decoder-f16.gguf -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "asr:jfk.wav": {
+      "ms": 1658.674,
+      "audio_s": 11,
+      "encode_ms": 396.928,
+      "text": "And so my fellow Americans ask not what your country can do for you ask what you can do for your country"
+     },
+     "asr:jfk3.wav": {
+      "ms": 5153.218,
+      "audio_s": 33,
+      "encode_ms": 1059.069,
+      "text": "And so my fellow Americans ask not what your country can do for you, ask what you can do for your country. And so my fellow Americans ask not what your country can do for you, ask what you can do for your country. And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
+     },
+     "asr:gb1.wav": {
+      "ms": 20661.635,
+      "audio_s": 198.734375,
+      "encode_ms": 10373.756,
+      "text": "My fellow Americans, this day has brought terrible news and great sadness to our country. At nine o'clock this morning, Mission Control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. In the words of the prophet Isaiah, May God bless the grieving families and may God continue to bless America."
+     }
+    },
+    "workload": "asr",
+    "source": "official",
+    "sha": "7e02c2451",
+    "version": "0.6.4",
+    "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
+    "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
+    "exec_fmt": "q8/q8",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "files": [
+     {
+      "role": "weights",
+      "name": "canary-qwen-2.5b-decoder-f16.gguf",
+      "sha256": "9eaa11538394c48ac669ffc31739d6d3915307b1097cbff250065f42aeeb5318",
+      "bytes": 3447348960
+     },
+     {
+      "role": "mmproj",
+      "name": "canary-qwen-2.5b-encoder-f32.bin",
+      "sha256": "37d1057ced3150cfde2fb996c1fc0a3d702d23a97f9347aedb52795ebec03e5c",
+      "bytes": 3252768256
+     },
+     {
+      "role": "clip",
+      "name": "jfk.wav",
+      "sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+      "bytes": 352078
+     },
+     {
+      "role": "clip",
+      "name": "jfk3.wav",
+      "sha256": "a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+      "bytes": 1056078
+     },
+     {
+      "role": "clip",
+      "name": "gb1.wav",
+      "sha256": "b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+      "bytes": 6359578
+     }
+    ]
+   },
+   {
+    "engine": "nemo",
+    "backend": "cpu",
+    "flavor": "stock",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "modules/dasLLAMA/benchmarks/asr/.venv-nemo/bin/python modules/dasLLAMA/benchmarks/asr/canary_qwen_bench.py --threads 8 --reps 2 --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/jfk3.wav --wav modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "asr:jfk.wav": {
+      "ms": 6286.016,
+      "audio_s": 11
+     },
+     "asr:jfk3.wav": {
+      "ms": 19843.407,
+      "audio_s": 33
+     },
+     "asr:gb1.wav": {
+      "ms": 51910.167,
+      "audio_s": 199
+     }
+    },
+    "workload": "asr",
+    "source": "official",
+    "versions": "nemo 3.1.0+06312c963 / torch 2.12.1+cu130",
+    "exec_fmt": "bf16",
+    "files": [
+     {
+      "role": "clip",
+      "name": "jfk.wav",
+      "sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+      "bytes": 352078
+     },
+     {
+      "role": "clip",
+      "name": "jfk3.wav",
+      "sha256": "a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+      "bytes": 1056078
+     },
+     {
+      "role": "clip",
+      "name": "gb1.wav",
+      "sha256": "b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+      "bytes": 6359578
+     }
+    ]
+   }
+  ],
+  "arch": "Canary-Qwen 2.5B",
+  "size_bytes": 3447348960
+ },
+ {
+  "gguf": "gemma-4-E2B-it-Q8_0.gguf",
+  "runs": [
+   {
+    "engine": "das",
+    "backend": "cpu",
+    "flavor": "tuned",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- --asr -m gemma-4-E2B-it-Q8_0.gguf -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "asr:jfk.wav": {
+      "ms": 2495.232,
+      "audio_s": 11,
+      "text": "And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
+     },
+     "asr:jfk3.wav": {
+      "ms": 6937.307,
+      "audio_s": 33,
+      "text": "And so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow American country"
+     },
+     "asr:gb1.wav": {
+      "ms": 47726.87,
+      "audio_s": 198.734375,
+      "text": "Fellow Americans, this day has brought terrible news and great sadness to our country. At 9:00 this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia's lost. There are no survivors. On board was the crew of seven. Colonel Rick Husband, Captain Michael Anderson, and Admiral Clark. At 9:00 this morning, mission control in Houston lost contact with our space shuttle Columbia. And Ilan Romon. A short time later, debris was seen falling from the skies above Texas. These men and women assumed great risk. The Columbia's lost to all humanity. There are no survivors. In an age when spaceflight bore witness to dangers, Colonel Rick Husband and Captain Michael Anderson, and Admiral Clark, navigating the fierce atmosphere near the Earth, lost contact with our space shuttle Columbia and Ilan Romon, knowing they had a short time and noble purpose. Debris was seen falling from the skies above Texas. This kind of women assumed great risk for the Columbia's well-idealism, all humanity. There are no survivors. In an age when spaceflight bore witness to dangers, Colonel Rick Husband and Captain Michael Anderson, and Admiral Clark, navigating the fierce atmosphere near the Earth, lost contact with our space shuttle Columbia and Ilan Romon, knowing they had a short time and noble purpose. Debris was seen falling from the skies above Texas."
+     },
+     "asr:hp0.wav": {
+      "ms": 115335.697,
+      "audio_s": 273.28725,
+      "text": "Henry F. Phillips, from Wikipedia, the free encyclopedia at en.wikipedia.org. Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon. Henry F. has the honor of having the Phillips and screw, the free encyclopedia named after him. The importance of the crosshead screw design lies in Henry F. Phillips centering property from which of automated production lines that use powered screw drives. Henry F. Phillips, 1890-1958 was a driving the Portland, Oregon US businessman to the Portland, Oregon. It was so adonic as has the name of the free encyclopedia. Although he received patents for the design in 1930, the importance of the crosshead screw design to realizing Phillips centering property on automated production lines that use powered screw drives. Henry F. Phillips, 1890-1958 was a driving the Portland, Oregon US businessman to the Portland, Oregon. It was so adonic as has the name of the free encyclopedia. Although he received patents for the design in 1930, the importance of the crosshead screw design to realizing Phillips centering property on automated production lines that use powered screw drives. Henry F. Phillips, 1890-1958 was a driving the Portland, Oregon US businessman to the Portland, Oregon. It was so adonic as has the name of the free encyclopedia. Although he received patents for the design in 1930, the importance of the crosshead screw design to realizing Phillips centering property on automated production lines that use powered screw drives. Henry F. Phillips, 1890-1958 was a driving the Portland, Oregon US businessman to the Portland, Oregon. It was so adonic as has the name of the free encyclopedia. Although he received patents for the design in 1930, the importance of the crosshead screw design to realizing Phillips centering property on automated production lines that use powered screw drives. Henry F. Phillips, 1890-1958 was a driving the Portland, Oregon US businessman to the Portland, Oregon. It was so adonic as has the name of the free encyclopedia. Although he received patents for the design in 1930, the importance of the crosshead screw design to realizing Phillips centering property on automated production lines that use powered screw drives. Henry F. Phillips, 1890-1958 was a driving the Portland, Oregon US businessman to the Portland, Oregon. It was so adonic as has the name of the free encyclopedia. Although he received patents for the design in 1930, the importance of the crosshead screw design to realizing Phillips centering property on automated production lines that use powered screw drives. Henry F. Phillips, 1890-1958 was a driving the Portland, Oregon US businessman to the Portland, Oregon. It was so adonic as has the name of the free encyclopedia. Although he received patents for the design in 1930, the importance of the crosshead screw design to realizing Phillips centering property on automated production lines that use powered screw drives. Henry F. Phillips, 1890-1958 was a driving the Portland, Oregon US businessman to the Portland, Oregon. It was so adonic as has the name of the free encyclopedia. Although he received patents for the design in 1930, the importance of the crosshead screw design to realizing Phillips centering property on automated production lines that use powered screw drives. Henry F. Phillips, 1890-1958 was a driving the Portland, Oregon US businessman to the Portland, Oregon. It was so adonic as has the name of the free encyclopedia. Although he received patents for the design in 1930, the importance of the crosshead screw design to realizing Phillips centering property on automated production lines that use powered screw drives. Henry F. Phillips, 1890-1958 was a driving the Portland, Oregon US businessman to the Portland, Oregon. It was so adonic as has the name of the free encyclopedia. Although he received patents for the design in 1930, the importance of the crosshead screw design to realizing Phillips centering property on automated production lines that use powered screw drives. Henry F. Phillips, 1890-1958 was a driving the Portland, Oregon US businessman to the Portland, Oregon. It was so adonic as has the name of the free encyclopedia. Although he received patents for the design in 1930, the importance of the crosshead screw design to realizing Phillips centering property on automated production lines that use powered screw drives. Henry F. Phillips, 1890-1958 was a driving the Portland, Oregon US businessman to the Portland, Oregon. It was so adonic as has the name of the free encyclopedia. Although he received patents for the design in 1930, the importance of the crosshead screw design to realizing Phillips centering property on automated production lines that use powered screw drives. Henry F. Phillips, 1890-1958 was a driving the Portland, Oregon US businessman to the Portland, Oregon. It was so adonic as has the name of the free encyclopedia. Although he received patents for the design in 1930, the importance of the crosshead screw design to realizing Phillips centering property on automated production lines that use powered screw drives. Henry F. Phillips, 1890-1958 was a driving the Portland, Oregon US businessman to the Portland, Oregon. It was so adonic as has the name of the free encyclopedia. Although he received patents for the design in 1930, the importance of the crosshead screw design to realizing Phillips centering property on automated production lines that use powered screw drives. Henry F. Phillips, 1890-1958 was a driving the Portland, Oregon US businessman to the Portland, Oregon. It was so adonic as has the name of the free encyclopedia. Although he received patents for the design in 1930, the importance of the crosshead screw design to realizing Phillips centering property on automated production lines that use powered screw drives. Henry F. Phillips, 1890-1958 was a driving the Portland, Oregon US businessman to the Portland, Oregon. It was so adonic as has"
+     }
+    },
+    "workload": "audio-chat",
+    "source": "official",
+    "sha": "7e02c2451",
+    "version": "0.6.4",
+    "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
+    "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
+    "exec_fmt": "f32/q8",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "files": [
+     {
+      "role": "weights",
+      "name": "gemma-4-E2B-it-Q8_0.gguf",
+      "sha256": "996d08777aadc6bfd3c7375ef70ba25a0f55240075860754fdb18d6d860aa63a",
+      "bytes": 4967497152
+     },
+     {
+      "role": "mmproj",
+      "name": "mmproj-gemma-4-E2B-it-bf16.gguf",
+      "sha256": "711e1e8f43fa0664adbac493129be1e6c25b81af4b4cdea97c7d798b25c0a3a4",
+      "bytes": 986833664
+     },
+     {
+      "role": "clip",
+      "name": "jfk.wav",
+      "sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+      "bytes": 352078
+     },
+     {
+      "role": "clip",
+      "name": "jfk3.wav",
+      "sha256": "a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+      "bytes": 1056078
+     },
+     {
+      "role": "clip",
+      "name": "gb1.wav",
+      "sha256": "b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+      "bytes": 6359578
+     },
+     {
+      "role": "clip",
+      "name": "hp0.wav",
+      "sha256": "3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+      "bytes": 8745270
+     }
+    ]
+   },
+   {
+    "engine": "llama-mtmd-cli",
+    "backend": "cpu",
+    "flavor": "stock",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "/home/boris/llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli -m /home/boris/models/gemma-4-E2B-it-Q8_0.gguf --mmproj /home/boris/models/mmproj-gemma-4-E2B-it-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t 8",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "asr:jfk.wav": {
+      "ms": 2849.1,
+      "encode_ms": 1745.8
+     },
+     "asr:jfk3.wav": {
+      "ms": 8500.4,
+      "encode_ms": 5230.3
+     },
+     "asr:gb1.wav": {
+      "ms": 57821.5,
+      "encode_ms": 35343.1
+     }
+    },
+    "workload": "audio-chat",
+    "source": "official",
+    "versions": "llama.cpp @ ebd048fc5 + mtmd-timing.patch@93138f65",
+    "exec_fmt": "bf16/q8_0",
+    "files": [
+     {
+      "role": "weights",
+      "name": "gemma-4-E2B-it-Q8_0.gguf",
+      "sha256": "996d08777aadc6bfd3c7375ef70ba25a0f55240075860754fdb18d6d860aa63a",
+      "bytes": 4967497152
+     },
+     {
+      "role": "mmproj",
+      "name": "mmproj-gemma-4-E2B-it-bf16.gguf",
+      "sha256": "711e1e8f43fa0664adbac493129be1e6c25b81af4b4cdea97c7d798b25c0a3a4",
+      "bytes": 986833664
+     },
+     {
+      "role": "clip",
+      "name": "jfk.wav",
+      "sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+      "bytes": 352078
+     },
+     {
+      "role": "clip",
+      "name": "jfk3.wav",
+      "sha256": "a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+      "bytes": 1056078
+     },
+     {
+      "role": "clip",
+      "name": "gb1.wav",
+      "sha256": "b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+      "bytes": 6359578
+     }
+    ]
+   }
+  ],
+  "arch": "Gemma-4 E2B audio",
+  "size_bytes": 4967497152
+ },
+ {
+  "gguf": "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf",
+  "runs": [
+   {
+    "engine": "das",
+    "backend": "cpu",
+    "flavor": "tuned",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- --asr -m Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf -r 2 -t 8 --json-path modules/dasLLAMA/performance/records/_cell_zen4.json",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "asr:jfk.wav": {
+      "ms": 3615,
+      "audio_s": 11,
+      "text": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+     },
+     "asr:jfk3.wav": {
+      "ms": 7012.361,
+      "audio_s": 33,
+      "text": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+     },
+     "asr:gb1.wav": {
+      "ms": 65548.564,
+      "audio_s": 198.734375,
+      "text": "my fellow americans this day has brought terrible news and great sadness to our country at nine o'clock this morning mission control in houston lost contact with our space shuttle columbia a short time later debris was seen falling from the skies above texas the columbia is lost there are no survivors on board was a crew of seven colonel rick husband lieutenant colonel michael anderson commander laura clark captain david brown commander william mccool doctor kalpana chawla and ilan ramon a colonel in the israeli air force these men and women assumed great risk in the service to all humanity in an age when space flight has come to seem almost routine it is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce outer atmosphere of the earth these astronauts knew the dangers and they faced them willingly knowing they had a high and noble purpose in life because of their courage and daring and idealism we will miss them all the more all americans today are thinking as well of the families of these men and women who have been given this sudden shock and grief you're not alone our entire nation grieves with you and those you loved will always have the respect and gratitude of this country the cause in which they died will continue mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand our journey into space will go on in the skies today we saw destruction and tragedy yet farther than we can see there is comfort and hope in the words of the prophet isaiah lift your eyes and look to the heavens who created all these he who brings out the starry hosts one by one and calls them each by name because of his great power and mighty strength not one of them is missing the same creator who names the stars also knows the names of the seven souls we mourn today the crew of the shuttle columbia did not return safely to earth yet we can pray that all are safely home may god bless the grieving families and may god may god continue to bless america"
+     },
+     "asr:hp0.wav": {
+      "ms": 93800.944,
+      "audio_s": 273.28725,
+      "text": "Henry F. Phillips, from Wikipedia, the free encyclopedia, at en dot wikipedia dot org. Henry F. Phillips, from Wikipedia, the free encyclopedia. Henry F. Phillips, eighteen ninety to nineteen fifty eight, a U S businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the cross head screw design, lies in its self centering property, useful on automated production lines, that use powered screwdrivers. Phillips major contribution was in driving the cross head concept forward, to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in nineteen thirty six, U S patent number two million forty six thousand three hundred forty three, U S patents two million forty six thousand eight hundred thirty seven, to two million forty six thousand eight hundred forty. It was so widely copied, that by nineteen forty nine, Phillips lost his patent. The American Screw Company, was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept, since it calls for a relatively complex, recessed socket shape, in the head of the screw. As distinct from the simple milled slot, of a slotted type screw. The Phillips Screw Company, and the American Screw Company, went on to devise the Pozidriv screw, which differs from the Phillips, in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article, caption, Phillips screw head. The following is an infobox which accompanies this article. Infobox, part of the series on screw drive types. Slotted, commonly erroneously flathead. Phillips, crosshead. Pozidriv, Supadriv. Torx. Hex, Allen. Robertson. Tri-wing. Torx set. Spanner head. Triple square, XZN. Others, Poilly drive, spline drive, double hex. Many images accompanied this infobox. This page was last modified on the ninth of april two thousand eight, at seventeen oh four. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a U S registered five hundred and one C three, tax deductible nonprofit charity. This sound file and all text in the article, are licensed under the GNU Free Documentation License, available at www dot g n u dot org slash copyleft slash f d l dot h t m l."
+     },
+     "asr:hp0x2.wav": {
+      "ms": 261113.886,
+      "audio_s": 546.5745,
+      "text": "Henry F Phillips from Wikipedia, the free encyclopedia at en dot wikipedia dot org. Henry F Phillips from Wikipedia, the free encyclopedia. Henry F Phillips, eighteen ninety to nineteen fifty eight, a U S businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the cross head screw design, lies in its self centering property, useful on automated production lines, that use powered screwdrivers. Phillips major contribution was in driving the cross head concept forward, to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in nineteen thirty six, U S patent number two million forty six thousand, three hundred forty three, U S patents two million forty six thousand, eight hundred thirty seven, to two million forty six thousand, eight hundred forty. It was so widely copied, that by nineteen forty nine, Phillips lost his patent. The American Screw Company, was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept, since it calls for a relatively complex, recessed socket shape, in the head of the screw. As distinct from the simple milled slot, of a slotted type screw. The Phillips Screw Company, and the American Screw Company, went on to devise the Pozidriv screw, which differs from the Phillips, in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article, caption, Phillips screw head. The following is an infobox which accompanies this article. Infobox, part of the series on screw drive types. Slotted, commonly erroneously flathead. Phillips, crosshead. Pozidriv, Supadriv. Torx. Hex, Allen. Robertson. Tri wing. Torx set. Spanner head. Triple square, XZN. Others, Polydrive, spline drive, double hex. Many images accompanied this infobox. This page was last modified on the ninth of April, two thousand eight, at seventeen oh four. All text is available under the terms of the GNU Free Documentation License, see copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a U S registered five hundred and one C three, tax deductible nonprofit charity. This sound file and all text in the article, are licensed under the GNU Free Documentation License, available at, w w w dot g n u dot org slash copyleft slash f d l dot h t m l. Henry F Phillips, from Wikipedia, the free encyclopedia, at en dot wikipedia dot org. Henry F Phillips. From Wikipedia, the free encyclopedia. Henry F Phillips, eighteen ninety to nineteen fifty eight, a U S businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the cross head screw design, lies in its self centering property, useful on automated production lines, that use powered screwdrivers. Phillips major contribution was in driving the cross head concept forward, to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in nineteen thirty six, U S patent number two million forty six thousand, three hundred forty three, U S patents two million forty six thousand, eight hundred thirty seven, to two million forty six thousand, eight hundred forty. It was so widely copied, that by nineteen forty nine, Phillips lost his patent. The American Screw Company, was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept, since it calls for a relatively complex, recessed socket shape, in the head of the screw. As distinct from the simple milled slot, of a slotted type screw. The Phillips Screw Company, and the American Screw Company, went on to devise the Pozidriv screw, which differs from the Phillips, in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article, caption, Phillips screw head. The following is an infobox which accompanies this article. Infobox, part of the series on screw drive types. Slotted, commonly erroneously flathead. Phillips, crosshead. Pozidriv, Supadriv. Torx. Hex, Allen. Robertson. Tri wing. Torx set. Spanner head. Triple square, XZN. Others, Polydrive, spline drive, double hex. Many images accompanied this infobox. This page was last modified on the ninth of April, two thousand eight, at seventeen oh four. All text is available under the terms of the GNU Free Documentation License, see copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a U S registered five hundred and one C three, tax deductible nonprofit charity. This sound file and all text in the article, are licensed under the GNU Free Documentation License, available at, w w w dot g n u dot org slash copyleft slash f d l dot h t m l."
+     }
+    },
+    "workload": "audio-chat",
+    "source": "official",
+    "sha": "7e02c2451",
+    "version": "0.6.4",
+    "tune": "k4q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); k5q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); k6q8_tile_gen=dot_vpdpbusd_width512_mr16_nrsplit2 (manifest); q40q8_tile_gen=dot_vpdpbusd_width512_mr16 (manifest); q8q8_tile_gen=dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128 (manifest); q51q8_gemv_gen=reference (reference)",
+    "tune_sha": "b8958825af80aef76f8effdf0a7abe7c95eb8b65e549da74278ebbcd511cf2df",
+    "exec_fmt": "f32/q8",
+    "env": "DASLLAMA_BOX=zen4 DASLLAMA_MODELS_DIR=/home/boris/models/",
+    "files": [
+     {
+      "role": "weights",
+      "name": "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf",
+      "sha256": "8a50e5a7d29ae6a28fea9ca45e3bb0a142e76ec07e6787a7703cd498eb08ffaa",
+      "bytes": 32484494336
+     },
+     {
+      "role": "mmproj",
+      "name": "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf",
+      "sha256": "f0dfe825fb692d426362b1ac79678fc08daa4758f7151526cad110515f122883",
+      "bytes": 2207465568
+     },
+     {
+      "role": "clip",
+      "name": "jfk.wav",
+      "sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+      "bytes": 352078
+     },
+     {
+      "role": "clip",
+      "name": "jfk3.wav",
+      "sha256": "a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+      "bytes": 1056078
+     },
+     {
+      "role": "clip",
+      "name": "gb1.wav",
+      "sha256": "b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+      "bytes": 6359578
+     },
+     {
+      "role": "clip",
+      "name": "hp0.wav",
+      "sha256": "3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
+      "bytes": 8745270
+     },
+     {
+      "role": "clip",
+      "name": "hp0x2.wav",
+      "sha256": "43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
+      "bytes": 17490462
+     }
+    ]
+   },
+   {
+    "engine": "llama-mtmd-cli",
+    "backend": "cpu",
+    "flavor": "stock",
+    "box": "zen4",
+    "threads": 8,
+    "date": "2026-08-04",
+    "cmd": "/home/boris/llama.cpp-mtmd-ref/build-cpu/bin/llama-mtmd-cli -m /home/boris/models/Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf --mmproj /home/boris/models/mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t 8",
+    "hardware": {
+     "cpu": "AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics",
+     "arch": "x86_64",
+     "os": "Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64",
+     "total_cores": 16,
+     "ram_gb": 62,
+     "gpu": "Advanced Micro Devices, Inc. [AMD/ATI] Phoenix1 (rev d2)",
+     "smt": "on"
+    },
+    "tests": {
+     "asr:jfk.wav": {
+      "ms": 266305.2,
+      "encode_ms": 3067.1
+     },
+     "asr:jfk3.wav": {
+      "ms": 8061,
+      "encode_ms": 7997.1
+     },
+     "asr:gb1.wav": {
+      "ms": 90574.3,
+      "encode_ms": 54331.3
+     }
+    },
+    "workload": "audio-chat",
+    "source": "official",
+    "versions": "llama.cpp @ ebd048fc5 + mtmd-timing.patch@93138f65",
+    "exec_fmt": "bf16/q8_0",
+    "files": [
+     {
+      "role": "weights",
+      "name": "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf",
+      "sha256": "8a50e5a7d29ae6a28fea9ca45e3bb0a142e76ec07e6787a7703cd498eb08ffaa",
+      "bytes": 32484494336
+     },
+     {
+      "role": "mmproj",
+      "name": "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf",
+      "sha256": "f0dfe825fb692d426362b1ac79678fc08daa4758f7151526cad110515f122883",
+      "bytes": 2207465568
+     },
+     {
+      "role": "clip",
+      "name": "jfk.wav",
+      "sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+      "bytes": 352078
+     },
+     {
+      "role": "clip",
+      "name": "jfk3.wav",
+      "sha256": "a4d13f9d48ccce40db0621969fdaa39b8bf280e25b9de5eda902decdfe26f484",
+      "bytes": 1056078
+     },
+     {
+      "role": "clip",
+      "name": "gb1.wav",
+      "sha256": "b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
+      "bytes": 6359578
+     }
+    ]
+   }
+  ],
+  "arch": "Qwen3-Omni-30B audio",
+  "size_bytes": 32484494336
+ }
+]

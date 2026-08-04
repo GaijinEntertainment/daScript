@@ -24,17 +24,18 @@ what it costs today and what the fix would change.
   allocation sits on the measured hot orchestrator, so it belongs to a perf pass with A/B cells,
   not a lint sweep.
 
-- **ASR peak-RSS baseline (2026-08-02, m1, /usr/bin/time -l around the rig exe, warm=.dlim
-  present / cold=mint): whisper-turbo 1.48/5.29 GB (+3.81), parakeet-v3 6.69/6.84 (+0.15),
-  gemma4a-E2B 4.27/5.42 (+1.15), canary 13.11/14.44 (+1.33).** Two findings. (1) The MINT spike
-  is whisper-shaped: staging fp32 fblob+dblob plus the Q8 planes held at once — Phase 3
-  streaming (history/dasLLAMA/audio_image_plan.md, shipped) targeted whisper first; parakeet's mint is immaterial.
-  (2) **The SERVE peak on long clips dwarfs the mint everywhere else**: canary 13.1 GB warm on a
-  2.5B (fp32 encoder + fp32 decoder + ~199 s-clip FastConformer scratch), parakeet 6.7 GB on a
-  0.6B (546 s hp0x2 encoder scratch; attention terms scale with frame count, some quadratically).
-  What a fix changes: window/chunk the encoder attention scratch or cap resident frames — a
-  16 GB box is one clip length from swap on the canary cell. Not acted on mid-arc per the
-  standing rule; sized here so the perf pass ranks it.
+- **ASR peak-memory census (2026-08-03, m1, /usr/bin/time -l around asr_bench — the
+  reproducible ladder is `benchmarks/asr/mem_census.sh`): canary warm footprint
+  jfk 2.71 / gb1 4.29 / hp0x2 8.35 GB; canary MINT gb1 4.62 (+0.33 over warm);
+  parakeet-v3 warm hp0x2 5.61 GB.** The canary-apples arc closed the 2026-08-02 baseline's
+  two findings: the 13.1 GB canary serve peak (fp32 weights + quadratic scratch) is now
+  ~4.3 GB on gb1 (q8 end-to-end + per-job attention slabs), the mint spike is +0.3 GB
+  (read-time tensor-at-a-time transcode), and hp0x2-length canary — previously one clip from
+  swap on a 16 GB box — runs at 8.35 GB. Parakeet's hp0x2 quadratic scratch died with the
+  same slab change (−0.6 GB vs its pre-slab control). REMAINING: canary's hp0x2 tail is
+  ~4 GB of decoder-side prefill/KV at ~7k soft tokens — map it (KV codec residency, prefill
+  panel sizing) before chasing; and whisper's mint spike (1.48/5.29) predates this arc's
+  machinery, already ledgered via the streamed mint.
 
 - **Try the borrowed plane WITHOUT its bounds check, at profiling time (spotted 2026-08-01, audio
   `.dlim` arc).** `PlaneF`/`PlaneI8` `operator []` in `dasllama_plane.das` guards every read with

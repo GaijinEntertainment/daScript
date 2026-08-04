@@ -2,6 +2,7 @@ options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require profile_common
+require llvm/daslib/llvm_tune   // [tune_policy]: provisioning only — never auto-tune
 require daslib/fio
 require strings
 
@@ -16,17 +17,22 @@ let RECORDS_DIR = "modules/dasLLAMA/performance/records"
 let SITE_PATH = "site/files/dasllama/bench_records.json"
 
 def private list_stores() : array<string> {
+    // STRICT: records/{box}.json only — a dotted stem is a tune archive
+    // (m1.tune.<sha12>.json) and annotations.json is the hand-note overlay, not a store
     var out : array<string>
     dir(RECORDS_DIR) $(fn) {
         if (ends_with(fn, ".json") && !starts_with(fn, "_")) {
-            out |> push("{RECORDS_DIR}/{fn}")
+            let stem = slice(fn, 0, length(fn) - length(".json"))
+            if (stem != "annotations" && find(stem, ".") < 0) {
+                out |> push("{RECORDS_DIR}/{fn}")
+            }
         }
     }
     sort(out)
     return <- out
 }
 
-[export]
+[export, tune_policy(missing = "fallback")]
 def main : int {
     var merged : array<BenchModel>
     var stores <- list_stores()
