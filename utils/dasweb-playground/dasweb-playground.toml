@@ -1,0 +1,9 @@
+# dasweb-playground starter config. Deployed beside the binary; edits here
+# survive upgrades (release_include_if_missing). CLI flags override these
+# unless `authoritative = true` is set.
+port = 8101
+db = "/srv/dasweb-playground/samples.db"
+base_url = "https://daslang.io"
+max_source_bytes = 262144
+max_inserts_per_ip_hour = 100
+curated_dir = "/srv/daslang.io/current/playground/samples"

@@ -96,6 +96,7 @@ require daslib/generic_return
 // require daslib/heartbeat                     // qmacro(heartbeat()) conflicts when used in das2rst context
 require daslib/lint
 require daslib/logger
+require daslib/sha_256
 // require daslib/lint_everything               // global_lint_macro causes lint errors in other modules
 require daslib/profiler
 require daslib/profiler_boost
@@ -1340,6 +1341,15 @@ def document_module_logger(_root : string) {
     document("Structured JSON Lines logger", mod, "logger.rst", groups)
 }
 
+def document_module_sha_256(_root : string) {
+    var mod = find_module("sha_256")
+    var groups <- array<DocGroup>(
+        group_by_regex("One-shot hashing", mod, %regex~.*(sha256_hex)$%%),
+        group_by_regex("Streaming", mod, %regex~.*(sha256_init|sha256_update|sha256_final|sha256_hex_digest)$%%)
+    )
+    document("SHA-256", mod, "sha_256.rst", groups)
+}
+
 def document_module_lint_everything(_root : string) {
     var mod = find_module("lint_everything")
     var groups <- array<DocGroup>(
@@ -1915,6 +1925,7 @@ def main {  // nolint:STYLE038 — flat one-call-per-documented-module dispatch 
     document_module_lint_config(root)
     document_module_toml(root)
     document_module_logger(root)
+    document_module_sha_256(root)
     // document_module_lint_everything(root)       // global_lint_macro causes lint errors in other modules
     // document_module_live(root)                  // uses multiple_contexts
     document_module_lpipe(root)

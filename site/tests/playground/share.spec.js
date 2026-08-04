@@ -1,21 +1,43 @@
-// ↗ share — compressed multi-file state in a URL hash, with an optional
-// shortener that tries da.gd, then tinyurl, then spoo.me. All three are stubbed
-// via Playwright's route() so the tests do not depend on the external services.
+// ↗ share — the popover mints a stable daslang.io/s/<hash> link from the
+// sample service (POST /api/samples), falling back to the legacy compressed
+// #z= URL when the service is unreachable (e.g. the static mirror this suite
+// serves from). The service is stubbed via Playwright's route() so the tests
+// do not depend on a live backend.
 
 const { test, expect } = require('./fixtures.js');
 
 // The "fresh context" test spawns a second browser context. Under high
-// parallelism the new-context bootstrap competes with the main suite for
-// the shared http.server and can race the polling pgInit. One retry on
-// flake is plenty.
+// parallelism the new-context bootstrap competes with the shared http.server
+// and can race the polling pgInit. One retry on flake is plenty.
 test.describe.configure({ retries: 1 });
+
+const FAKE_HASH = 'a'.repeat(64);
 
 async function waitTabsReady(page) {
     await page.waitForFunction(() => !!window.pgState, null, { timeout: 10_000 });
     await page.locator('#pg-tabs .pg-tab[data-file="main.das"]').waitFor();
 }
 
-test('share popover shows a #z= URL with all files', async ({ playground }) => {
+async function stubMintOk(page) {
+    const bodies = [];
+    await page.route('**/api/samples', route => {
+        if (route.request().method() !== 'POST') return route.continue();
+        bodies.push(route.request().postData());
+        return route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                hash: FAKE_HASH,
+                url: 'https://daslang.io/s/' + FAKE_HASH,
+                created: true,
+            }),
+        });
+    });
+    return bodies;
+}
+
+test('share popover shows the minted /s/ link and posts the file bundle', async ({ playground }) => {
+    const bodies = await stubMintOk(playground);
     await waitTabsReady(playground);
     await playground.evaluate(() => {
         window.pgSwitchFile('main.das');
@@ -27,10 +49,55 @@ test('share popover shows a #z= URL with all files', async ({ playground }) => {
     await playground.locator('#share').click();
     const popover = playground.locator('.pg-share');
     await expect(popover).toBeVisible();
-    const urlInput = popover.locator('.pg-share__url');
-    const url = await urlInput.inputValue();
-    expect(url).toContain('#z=');
+    await expect(popover.locator('.pg-share__url')).toHaveValue('https://daslang.io/s/' + FAKE_HASH);
     await expect(popover.locator('.pg-share__meta')).toHaveText(/2 files/);
+
+    // Multi-file states post the same {files, active} bundle the loader reads.
+    expect(bodies.length).toBe(1);
+    const posted = JSON.parse(bodies[0]);
+    expect(Object.keys(posted.files).sort()).toEqual(['main.das', 'utils.das']);
+    expect(posted.files['main.das']).toContain('MAIN-PAYLOAD');
+    expect(posted.files['utils.das']).toContain('UTILS-PAYLOAD');
+});
+
+test('single-file share posts the raw source, not a bundle', async ({ playground }) => {
+    const bodies = await stubMintOk(playground);
+    await waitTabsReady(playground);
+    await playground.evaluate(() => {
+        window.pgSwitchFile('main.das');
+        window.code.getDoc().setValue('// SINGLE-PAYLOAD\n');
+    });
+
+    await playground.locator('#share').click();
+    await expect(playground.locator('.pg-share__url')).toHaveValue('https://daslang.io/s/' + FAKE_HASH);
+
+    expect(bodies.length).toBe(1);
+    expect(bodies[0]).toContain('SINGLE-PAYLOAD');
+    expect(() => {
+        const o = JSON.parse(bodies[0]);
+        if (o && o.files) throw new Error('bundle-shaped');
+    }).not.toThrow('bundle-shaped');
+});
+
+test('service unavailable falls back to a legacy #z= URL that round-trips', async ({ playground }) => {
+    await playground.route('**/api/samples', route => {
+        if (route.request().method() !== 'POST') return route.continue();
+        return route.fulfill({ status: 503, body: '' });
+    });
+
+    await waitTabsReady(playground);
+    await playground.evaluate(() => {
+        window.pgSwitchFile('main.das');
+        window.code.getDoc().setValue('// MAIN-FALLBACK\n');
+        window.pgAddFile('utils.das');
+        window.code.getDoc().setValue('// UTILS-FALLBACK\n');
+    });
+
+    await playground.locator('#share').click();
+    const popover = playground.locator('.pg-share');
+    await expect(popover.locator('.pg-share__meta')).toHaveText(/share service unavailable/);
+    const url = await popover.locator('.pg-share__url').inputValue();
+    expect(url).toContain('#z=');
 
     // Decoding the hash via the same LZString library must round-trip.
     const decoded = await playground.evaluate((u) => {
@@ -38,11 +105,11 @@ test('share popover shows a #z= URL with all files', async ({ playground }) => {
         return JSON.parse(window.LZString.decompressFromEncodedURIComponent(z));
     }, url);
     expect(Object.keys(decoded.files).sort()).toEqual(['main.das', 'utils.das']);
-    expect(decoded.files['main.das']).toContain('MAIN-PAYLOAD');
-    expect(decoded.files['utils.das']).toContain('UTILS-PAYLOAD');
+    expect(decoded.files['main.das']).toContain('MAIN-FALLBACK');
+    expect(decoded.files['utils.das']).toContain('UTILS-FALLBACK');
 });
 
-test('shared URL restores state in a fresh context', async ({ playground, browser }) => {
+test('legacy #z= URL restores state in a fresh context', async ({ playground, browser }) => {
     await waitTabsReady(playground);
     await playground.evaluate(() => {
         window.pgSwitchFile('main.das');
@@ -77,74 +144,24 @@ test('shared URL restores state in a fresh context', async ({ playground, browse
     await ctx.close();
 });
 
-test('Shorten button replaces the URL with the da.gd response', async ({ playground }) => {
-    // Stub the primary shortener so the test is self-contained.
-    await playground.route('https://da.gd/s**', route => {
+test('?s= loader fetches the stored sample into the editor', async ({ playground, browser }) => {
+    const ctx = await browser.newContext();
+    const page2 = await ctx.newPage();
+    await page2.route('**/api/samples/' + FAKE_HASH, route => {
         return route.fulfill({
             status: 200,
-            contentType: 'text/plain',
-            body: 'https://da.gd/ABCxyz\n',
+            contentType: 'text/plain; charset=utf-8',
+            body: '// FROM-THE-STORE\n',
         });
     });
-
-    await waitTabsReady(playground);
-    await playground.evaluate(() => window.code.getDoc().setValue('// for shortening\n'));
-    await playground.locator('#share').click();
-    await playground.locator('.pg-share__shorten').click();
-
-    await expect(playground.locator('.pg-share__url')).toHaveValue('https://da.gd/ABCxyz');
-    await expect(playground.locator('.pg-share__shorten')).toHaveText(/via da\.gd/);
-});
-
-test('Shorten falls back to tinyurl when da.gd fails', async ({ playground }) => {
-    await playground.route('https://da.gd/s**', route => route.fulfill({ status: 502, body: '' }));
-    await playground.route('https://tinyurl.com/api-create.php**', route => {
-        return route.fulfill({
-            status: 200,
-            contentType: 'text/plain',
-            body: 'https://tinyurl.com/abc123',
-        });
-    });
-
-    await waitTabsReady(playground);
-    await playground.locator('#share').click();
-    await playground.locator('.pg-share__shorten').click();
-
-    await expect(playground.locator('.pg-share__url')).toHaveValue('https://tinyurl.com/abc123');
-    await expect(playground.locator('.pg-share__shorten')).toHaveText(/via tinyurl/);
-});
-
-test('Shorten falls back to spoo.me and upgrades http to https', async ({ playground }) => {
-    await playground.route('https://da.gd/s**', route => route.fulfill({ status: 502, body: '' }));
-    await playground.route('https://tinyurl.com/api-create.php**', route => route.fulfill({ status: 502, body: '' }));
-    // spoo.me answers with JSON and an http:// short_url; the client upgrades it.
-    await playground.route('https://spoo.me/**', route => {
-        return route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify({ short_url: 'http://spoo.me/xyz789', domain: 'spoo.me' }),
-        });
-    });
-
-    await waitTabsReady(playground);
-    await playground.locator('#share').click();
-    await playground.locator('.pg-share__shorten').click();
-
-    await expect(playground.locator('.pg-share__url')).toHaveValue('https://spoo.me/xyz789');
-    await expect(playground.locator('.pg-share__shorten')).toHaveText(/via spoo\.me/);
-});
-
-test('Shorten button surfaces a failure when every service fails', async ({ playground }) => {
-    await playground.route('https://da.gd/s**', route => route.fulfill({ status: 502, body: '' }));
-    await playground.route('https://tinyurl.com/api-create.php**', route => route.fulfill({ status: 502, body: '' }));
-    await playground.route('https://spoo.me/**', route => route.fulfill({ status: 502, body: '' }));
-
-    await waitTabsReady(playground);
-    await playground.locator('#share').click();
-    const longUrl = await playground.locator('.pg-share__url').inputValue();
-    await playground.locator('.pg-share__shorten').click();
-
-    await expect(playground.locator('.pg-share__shorten')).toHaveText(/failed/);
-    // Long URL untouched so the user still has a working share.
-    await expect(playground.locator('.pg-share__url')).toHaveValue(longUrl);
+    const base = new URL(playground.url());
+    await page2.goto(base.origin + base.pathname + '?s=' + FAKE_HASH, { waitUntil: 'networkidle' });
+    await page2.locator('.CodeMirror').waitFor();
+    await page2.waitForFunction(
+        () => window.pgState && window.pgState.files['main.das'] &&
+            window.pgState.files['main.das'].getValue().includes('FROM-THE-STORE'),
+        null,
+        { timeout: 30_000 }
+    );
+    await ctx.close();
 });

@@ -1,0 +1,1 @@
+FIPS 180-4 SHA-256 in pure daslang: one-shot hashing of strings and byte arrays to lowercase hex, plus a streaming init/update/final state for data that arrives in pieces. Content addressing and integrity checks need a collision-resistant hash; the builtin 64-bit hash is not one.

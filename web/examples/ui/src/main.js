@@ -76,7 +76,28 @@ pageInit = function () {
     });
 
 
-     $.getJSON( "./samples/data.json", function(res) {
+     // The curated list comes from the sample service (store-fed, phase 2 of
+     // plans/dasweb_backend.md); the committed data.json remains the fallback
+     // for the GH Pages mirror / an empty store on first boot.
+     fetch('/api/samples/listed')
+        .then(function(r) { if (!r.ok) throw new Error('listed ' + r.status); return r.json(); })
+        .then(function(listed) {
+            if (!Array.isArray(listed) || !listed.length) throw new Error('listed empty');
+            const byCat = {};
+            for (const e of listed) {
+                const cat = e.category || 'examples';
+                (byCat[cat] = byCat[cat] || []).push({
+                    name: e.title,
+                    files: [e.path || (e.hash + '.das')],
+                    slug: e.slug || undefined,
+                    hash: e.hash,
+                });
+            }
+            initSampleUi(byCat);
+        })
+        .catch(function() { $.getJSON('./samples/data.json', initSampleUi); });
+
+     function initSampleUi(res) {
         samplesData = res;
 
 
@@ -124,7 +145,7 @@ pageInit = function () {
              selectSample("examples", 0);
          }
 
-    });
+    }
 
 
 }
@@ -232,6 +253,12 @@ function updateEngineAvailability(name) {
             if (interpRadio) interpRadio.checked = true;
         }
     };
+    // Phase 2 (plans/dasweb_backend.md): the precompiled-artifact path is
+    // retired — wasm builds move to the on-demand build service. The radio
+    // stays off until phase 3 serves real builds; the gates below stay
+    // dormant for that return.
+    disableJit();
+    return;
     // Gate 1: no memory64 → wasm64 artifacts can't run here at all.
     if (!WASM64_SUPPORTED) { disableJit(); return; }
     // Gate 2: no precompiled .wasm for this sample (multi-file or absent).
@@ -288,17 +315,33 @@ selectSample = function(type, id) {
         // Hide the canvas on every sample switch; a graphics program re-reveals
         // it on Run when it creates a WebGL context (the getContext hook).
         showCanvas(false);
-        const files = samplesData[type][vv].files;
+        const entry = samplesData[type][vv];
+        const files = entry.files;
         currentJitName = deriveJitName(files);
         currentAssetsUrl = deriveAssetsUrl(files);
         updateEngineAvailability(currentJitName);
-        Promise.all(files.map(f =>
+        const loadFromStaticFiles = () => Promise.all(files.map(f =>
             $.ajax({ url: './samples/' + f, dataType: 'text' })
                 .then(text => ({ name: f.split('/').pop(), text }))
         )).then(loaded => {
             const byName = Object.fromEntries(loaded.map(({ name, text }) => [name, text]));
             loadSample(byName);
         });
+        if (entry.hash) {
+            // Store-fed entry: one fetch; multi-file samples arrive as the
+            // same {files, active} bundle user shares store. Static tree is
+            // the fallback (mirror / store hiccup).
+            fetch('/api/samples/' + entry.hash)
+                .then(r => { if (!r.ok) throw new Error('sample ' + r.status); return r.text(); })
+                .then(text => {
+                    let bundle = null;
+                    try { const o = JSON.parse(text); if (o && o.files) bundle = o.files; } catch (e) { /* single file */ }
+                    loadSample(bundle || { 'main.das': text });
+                })
+                .catch(loadFromStaticFiles);
+        } else {
+            loadFromStaticFiles();
+        }
     }
     if (sel) sel.value = "init";
 }
