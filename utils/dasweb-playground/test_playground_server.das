@@ -228,6 +228,8 @@ def test_listed_and_reimport(t : T?) {
         var rerr = ""
         remove(path_join(dir, "data.json"), rerr)
         remove(path_join(dir, "examples/hello.das"), rerr)
+        rmdir(path_join(dir, "examples"), rerr)
+        rmdir(dir, rerr)
     }
 }
 

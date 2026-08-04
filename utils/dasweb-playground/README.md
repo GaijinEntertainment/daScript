@@ -15,6 +15,9 @@ python3 watchdog.py
 
 # release bundle
 daslang utils/daspkg/main.das -- release --root utils/dasweb-playground --out <dir>
+
+# box-side install of a shipped bundle (build recipe in the script header)
+sudo deploy.sh <short-sha> /tmp/dasweb-playground-<short-sha>.tar.gz
 ```
 
 `-?` prints flag help (the daslang host eats `--help`). Config: `dasweb-playground.toml` in cwd
@@ -53,5 +56,6 @@ mutation is logged as ndjson to `logs/dasweb-playground.log` (rotation is the wa
 daslang dastest/dastest.das -- --test utils/dasweb-playground/
 ```
 
-In-dir per the session rules: store (no HTTP), server (real HTTP on port 19011), config
-(pure merge). Every bug fix lands with its regression test.
+In-dir per the session rules: store (no HTTP), server (real HTTP on reserved ports
+19011/19012), importer (temp-dir fixtures), config (pure merge). Every bug fix lands with its
+regression test.

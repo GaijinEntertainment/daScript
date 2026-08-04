@@ -101,6 +101,45 @@ def test_dedup_first_writer_wins(t : T?) {
 }
 
 [test]
+def test_curated_store_ops(t : T?) {
+    with_latest_sqlite(":memory:") $(db) {
+        t |> run("upsert_curated_source inserts once, bypassing policy") @(tt : T?) {
+            let h1 = upsert_curated_source(db, "curated body", 1000l)
+            tt |> equal(h1, sha256_hex("curated body"))
+            let h2 = upsert_curated_source(db, "curated body", 9999l)
+            tt |> equal(h2, h1)
+            let rows <- _sql(db |> select_from(type<Sample>) |> _where(_.Hash == h1))
+            tt |> equal(length(rows), 1)
+            tt |> equal(rows[0].Origin, "curated")
+            tt |> equal(rows[0].CreatedAt, 1000l)   // second upsert did not touch the row
+        }
+        t |> run("list_curated_sample sets all listing fields") @(tt : T?) {
+            let h = upsert_curated_source(db, "listed body", 1000l)
+            list_curated_sample(db, h, "The Title", "examples", "examples/x.das", "xslug")
+            let listed <- listed_samples(db)
+            tt |> equal(length(listed), 1)
+            tt |> equal(listed[0].title, "The Title")
+            tt |> equal(listed[0].path, "examples/x.das")
+            tt |> equal(listed[0].slug, "xslug")
+        }
+        t |> run("demote_stale_curated demotes only curated hashes outside the keep set") @(tt : T?) {
+            let ha = upsert_curated_source(db, "keep me", 1000l)
+            list_curated_sample(db, ha, "Keep", "examples", "", "")
+            let hb = upsert_curated_source(db, "drop me", 1000l)
+            list_curated_sample(db, hb, "Drop", "examples", "", "")
+            let user = put_sample(db, "user body", "10.0.0.1", test_policy(), 1000l)
+            tt |> success(promote_sample(db, user.hash, "User", "community"), "user promote")
+            var keep : table<string>
+            keep |> insert(ha)
+            // demotes Drop AND the previous subtest's listed row (same db)
+            tt |> equal(demote_stale_curated(db, keep), 2)
+            let listed <- listed_samples(db)
+            tt |> equal(length(listed), 2)   // Keep + User survive
+        }
+    }
+}
+
+[test]
 def test_rejections(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         t |> run("empty source") @(tt : T?) {

@@ -2,6 +2,9 @@ options gen2
 
 require dastest/testing_boost public
 require playground_config
+require daslib/fio
+require daslib/json_boost
+require strings
 
 def private no_args : array<string> {
     return <- array<string>()
@@ -39,6 +42,44 @@ def test_defaults_and_toml(t : T?) {
         let args <- no_args()
         t |> success(!apply_config_text(cfg, "port = [not toml", args, sources, err), "parse fails")
         t |> success(!empty(err), "error text set")
+    }
+}
+
+[test]
+def test_load_config_and_banner(t : T?) {
+    t |> run("explicit missing config is an error") @(t : T?) {
+        var cfg = ServerArgs()
+        cfg.config = "no/such/dasweb.toml"
+        var sources : table<string; string>
+        var err = ""
+        t |> success(!load_config(cfg, sources, err), "missing explicit config fails")
+        t |> success(!empty(err), "error text set")
+    }
+    t |> run("explicit config file loads and merges") @(t : T?) {
+        var terr = ""
+        let dir = temp_directory(terr)
+        let path = path_join(dir, "pg_cfg_test.toml")
+        fwrite(path, "port = 9210\n")
+        var cfg = ServerArgs()
+        cfg.config = path
+        var sources : table<string; string>
+        var err = ""
+        t |> success(load_config(cfg, sources, err), "config loads")
+        t |> equal(cfg.port, 9210)
+        t |> equal(sources?["port"] ?? "", "toml")
+        var rerr = ""
+        remove(path, rerr)
+    }
+    t |> run("banner carries every key with provenance") @(t : T?) {
+        let cfg = ServerArgs()
+        var sources : table<string; string>
+        sources |> insert("port", "cli")
+        let body = write_json(config_banner(cfg, sources))
+        for (key in fixed_array("\"port\"", "\"port_src\" : \"cli\"", "\"db_src\" : \"default\"",
+                "\"base_url\"", "\"max_source_bytes_src\"", "\"max_inserts_per_ip_hour_src\"",
+                "\"curated_dir_src\"")) {
+            t |> success(find(body, key) >= 0, "banner contains {key}")
+        }
     }
 }
 

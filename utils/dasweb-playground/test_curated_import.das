@@ -24,6 +24,9 @@ def private nuke(dir : string) {
         var err = ""
         remove(path_join(dir, f), err)
     }
+    var derr = ""
+    rmdir(path_join(dir, "examples"), derr)
+    rmdir(dir, derr)
 }
 
 let MANIFEST_V1 = ("\{ \"examples\": [" +

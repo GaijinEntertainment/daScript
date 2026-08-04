@@ -7,6 +7,8 @@ require daslib/sql
 require sqlite/sqlite_migrate public
 require daslib/sql_linq
 require daslib/sha_256 public
+require daslib/logger
+require daslib/json_boost
 require strings
 
 //! The playground sample store: schema, migrations, store operations, and
@@ -158,6 +160,8 @@ def put_sample(db : SqlRunner; source : string; client_ip : string; policy : Sto
         Size = length(source),
         CreatedAt = now,
         ClientIp = client_ip))
+    logger_info("playground.store", "insert user sample",
+        JV((hash = hash, size = length(source), ip = client_ip)))
     return PutResult(status = PutStatus.ok, hash = hash, created = true)
 }
 
@@ -211,6 +215,8 @@ def upsert_curated_source(db : SqlRunner; source : string; now : int64) : string
             CreatedAt = now,
             ClientIp = "importer",
             Origin = "curated"))
+        logger_info("playground.store", "insert curated sample",
+            JV((hash = hash, size = length(source))))
     }
     return hash
 }
@@ -220,6 +226,8 @@ def list_curated_sample(db : SqlRunner; hash : string; title : string; category 
         type<Sample>,
         _.Hash == hash,
         (Listed = 1, Title = title, Category = category, PrimaryPath = path, Slug = slug))
+    logger_info("playground.store", "list curated sample",
+        JV((hash = hash, title = title, category = category)))
 }
 
 def demote_stale_curated(db : SqlRunner; keep : table<string>) : int {
@@ -233,6 +241,7 @@ def demote_stale_curated(db : SqlRunner; keep : table<string>) : int {
     for (h in listed) {
         if (!key_exists(keep, h)) {
             db |> _sql_update(type<Sample>, _.Hash == h, (Listed = 0))
+            logger_info("playground.store", "demote stale curated", JV((hash = h)))
             demoted ++
         }
     }
@@ -248,6 +257,8 @@ def promote_sample(db : SqlRunner; hash : string; title : string; category : str
         type<Sample>,
         _.Hash == hash,
         (Listed = 1, Title = title, Category = category))
+    logger_info("playground.store", "promote sample",
+        JV((hash = hash, title = title, category = category)))
     return true
 }
 
@@ -260,5 +271,6 @@ def demote_sample(db : SqlRunner; hash : string) : bool {
         type<Sample>,
         _.Hash == hash,
         (Listed = 0))
+    logger_info("playground.store", "demote sample", JV((hash = hash)))
     return true
 }

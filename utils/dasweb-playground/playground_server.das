@@ -6,6 +6,7 @@ module playground_server public
 require dashv/dashv_boost public
 require daslib/json_boost
 require daslib/logger
+require daslib/fio
 require samples_store public
 require curated_import
 require strings
@@ -55,10 +56,11 @@ def is_valid_hash(h : string) : bool {
     return ok
 }
 
-def private log_request(method : string; path : string; status : int; ip : string; bytes_in : int; bytes_out : int) {
+def private log_request(method : string; path : string; status : int; ip : string; bytes_in : int; bytes_out : int; t0 : int64) {
     logger_info("playground.req", "{method} {path} {status}",
         JV((method = method, path = path, status = status, ip = ip,
-            bytes_in = bytes_in, bytes_out = bytes_out)))
+            bytes_in = bytes_in, bytes_out = bytes_out,
+            duration_ms = get_time_usec(t0) / 1000)))
 }
 
 class PlaygroundServer : HvWebServer {
@@ -84,19 +86,23 @@ class PlaygroundServer : HvWebServer {
             return handle_share_link(req, resp)
         }
         POST("/shutdown") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            let t0 = ref_time_ticks()
             logger_info("playground", "shutdown requested")
             g_stop_requested = true
+            log_request("POST", "/shutdown", 200, client_ip_of(req), 0, 3, t0)
             return resp |> TEXT_PLAIN("bye")
         }
         ANY("*") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            let t0 = ref_time_ticks()
             let body = write_json(JV((error = "not found")))
-            log_request("{req.method}", string(req.path), 404, client_ip_of(req), 0, length(body))
+            log_request("{req.method}", string(req.path), 404, client_ip_of(req), 0, length(body), t0)
             return resp |> JSON(body, http_status.NOT_FOUND)
         }
     }
 }
 
 def private handle_put(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    let t0 = ref_time_ticks()
     let source = string(req.body)
     let ip = client_ip_of(req)
     let r = put_sample(g_db, source, ip, g_policy, current_unix_time())
@@ -114,59 +120,63 @@ def private handle_put(var req : HttpRequest?; var resp : HttpResponse?) : http_
         status = http_status.BAD_REQUEST
         body = write_json(JV((error = r.status == PutStatus.empty_source ? "empty source" : "source is not valid utf-8")))
     }
-    log_request("POST", "/api/samples", int(status), ip, length(source), length(body))
+    log_request("POST", "/api/samples", int(status), ip, length(source), length(body), t0)
     return resp |> JSON(body, status)
 }
 
 def private handle_get_source(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    let t0 = ref_time_ticks()
     let hash = get_param(req, "hash")
     let ip = client_ip_of(req)
     if (!is_valid_hash(hash)) {
-        log_request("GET", "/api/samples/:hash", 400, ip, 0, 0)
+        log_request("GET", "/api/samples/:hash", 400, ip, 0, 0, t0)
         return resp |> JSON(write_json(JV((error = "malformed hash"))), http_status.BAD_REQUEST)
     }
     let source = get_source(g_db, hash)
     if (empty(source)) {
-        log_request("GET", "/api/samples/:hash", 404, ip, 0, 0)
+        log_request("GET", "/api/samples/:hash", 404, ip, 0, 0, t0)
         return resp |> JSON(write_json(JV((error = "unknown sample"))), http_status.NOT_FOUND)
     }
     // content-addressed => immutable forever
     resp |> set_header("Cache-Control", "public, max-age=31536000, immutable")
-    log_request("GET", "/api/samples/:hash", 200, ip, 0, length(source))
+    log_request("GET", "/api/samples/:hash", 200, ip, 0, length(source), t0)
     resp |> set_content_type("text/plain; charset=utf-8")
     resp.body := source
     return http_status.OK
 }
 
 def private handle_listed(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    let t0 = ref_time_ticks()
     let listed <- listed_samples(g_db)
     var arr <- [for (l in listed); JV((hash = l.hash, title = l.title, category = l.category,
         path = l.path, slug = l.slug))]
     let body = write_json(JV(arr))
-    log_request("GET", "/api/samples/listed", 200, client_ip_of(req), 0, length(body))
+    log_request("GET", "/api/samples/listed", 200, client_ip_of(req), 0, length(body), t0)
     return resp |> JSON(body)
 }
 
 def private handle_reimport(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    let t0 = ref_time_ticks()
     if (empty(g_curated_dir)) {
-        log_request("POST", "/admin/reimport", 503, client_ip_of(req), 0, 0)
+        log_request("POST", "/admin/reimport", 503, client_ip_of(req), 0, 0, t0)
         return resp |> JSON(write_json(JV((error = "curated_dir not configured"))), http_status.SERVICE_UNAVAILABLE)
     }
     let listed = import_curated(g_db, g_curated_dir, current_unix_time())
     let status = listed >= 0 ? http_status.OK : http_status.INTERNAL_SERVER_ERROR
     let body = write_json(JV((listed = listed)))
-    log_request("POST", "/admin/reimport", int(status), client_ip_of(req), 0, length(body))
+    log_request("POST", "/admin/reimport", int(status), client_ip_of(req), 0, length(body), t0)
     return resp |> JSON(body, status)
 }
 
 def private handle_share_link(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    let t0 = ref_time_ticks()
     let hash = get_param(req, "hash")
     let ip = client_ip_of(req)
     if (!is_valid_hash(hash) || !sample_exists(g_db, hash)) {
-        log_request("GET", "/s/:hash", 404, ip, 0, 0)
+        log_request("GET", "/s/:hash", 404, ip, 0, 0, t0)
         return resp |> TEXT_PLAIN("unknown sample", http_status.NOT_FOUND)
     }
-    log_request("GET", "/s/:hash", 302, ip, 0, 0)
+    log_request("GET", "/s/:hash", 302, ip, 0, 0, t0)
     return resp |> REDIRECT("/playground/index.html?s={hash}", http_status.FOUND)
 }
 
@@ -230,7 +240,7 @@ def shutdown_server {
         }
         g_server->cleanup()
         unsafe {
-            delete g_server
+            delete g_server   // class-instance delete requires unsafe; sole owner, tick loop already stopped
         }
         g_server = null
         g_server_started = false
@@ -239,6 +249,7 @@ def shutdown_server {
         delete g_db
         g_db_open = false
     }
+    logger_info("playground", "server stopped")
 }
 
 def run_server(port : int; db_path : string; policy : StorePolicy; base_url : string; curated_dir : string = "") {

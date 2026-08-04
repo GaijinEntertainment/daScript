@@ -6,8 +6,8 @@ file.
 **What stays in this document:** criteria that can be checked against a diff. Nothing else.
 A reader must be able to apply every entry below **without reading the code, without prior
 knowledge of the service, and without opening another document.** If an entry needs any of
-those, it is not a review criterion — move it to `README.md` (or, while the service is
-pre-README, `plans/dasweb_backend.md`) and leave a one-line criterion here.
+those, it is not a review criterion — move it to `README.md` and leave a one-line criterion
+here.
 
 **Form, and it is a hard limit:**
 
@@ -25,16 +25,19 @@ pre-README, `plans/dasweb_backend.md`) and leave a one-line criterion here.
 ## Tests
 
 **Every route, every store operation, and every config or limit behavior has a dastest test in
-this directory.** A behavior that ships without its test is a defect.
+this directory.** A behavior that ships without its test is a defect. Exempt: `main.das` and
+`admin.das` argv/dispatch glue — their behaviors live in the modules they call, which are the
+tested surface.
 
 **Every bug fix lands with the regression test that fails without it, in the same change.**
 
 **`[test]` files live in this directory and require siblings by bare name** — never under the
 global `tests/` tree, and never registered in any `CMakeLists.txt`.
 
-**HTTP tests go through the in-dir server harness on this directory's reserved test port; store
-tests call `samples_store` directly with no server.** A store behavior proven only through HTTP,
-or an HTTP behavior proven only against the store, is a defect.
+**HTTP tests go through `with_playground_server_at` in `test_playground_server.das`, on this
+directory's reserved test ports 19011 and 19012; store tests call `samples_store` directly with
+no server.** A store behavior proven only through HTTP, or an HTTP behavior proven only against
+the store, is a defect.
 
 **A test that touches the filesystem uses `temp_directory`-rooted paths and deletes what it
 creates.** A test writing into the repo tree is a defect.
@@ -67,7 +70,8 @@ defect, and this section is the whole test.
 - `admin.das` — the operator CLI (listing curation). Talks to the store the same way the
   server does; a second implementation of a store operation here is a defect.
 - `.das_package`, `watchdog.json`, `dasweb-playground.toml`, `deploy.sh` — packaging and
-  deployment. A behavior change hidden in these files without a README note is a defect.
+  deployment. A behavior change hidden in these files without a note in `README.md` (Run
+  section) is a defect.
 
 **Migrations are append-only.** A diff that edits a shipped `[sql_migration]` body is a defect;
 schema change means a new version.
@@ -79,19 +83,25 @@ schema change means a new version.
 **The server binds loopback only** — `set_bind_host("127.0.0.1")` between `init` and `start`.
 A diff that removes, reorders past `start`, or conditionalizes the bind is a defect.
 
-**Every SQL statement goes through the typed rail or bound parameters.** A query assembled by
-string interpolation or `format` from any request-derived value is a defect.
+**Every SQL statement goes through the `daslib/sql_linq` rail (`_sql` / `insert` /
+`_sql_update`) or bound parameters.** A query assembled by string interpolation or `format`
+from any request-derived value is a defect.
 
 **Every request body is bounds-checked against the configured cap before it is hashed or
-stored.** A handler that reads the body before checking size is a defect.
+stored.** (dasHV buffers the body before any handler runs, so the check happens in
+`put_sample` ahead of hashing — a hash or insert reachable without the size check is a defect.)
 
 **Client identity comes from `X-Forwarded-For` and is treated as data, never parsed into
 behavior beyond the rate ceiling.** Logging it is required; branching on it anywhere else is a
 defect.
 
-**No shell-out, no filesystem path derived from request data, no `unsafe` in any handler.**
-An `unsafe` in `samples_store.das` takes a same-line reason comment; an `unsafe` in
-`playground_server.das` is a defect.
+**No shell-out anywhere in the service.**
+
+**No filesystem path derived from request data.** The importer's paths come from config plus
+the deploy-tree manifest only.
+
+**No `unsafe` in any route handler.** An `unsafe` elsewhere takes a same-line reason comment;
+one without the comment is a defect.
 
 **`POST /shutdown` and every admin operation stay unrouted by Caddy.** A Caddy config change in
 this directory that forwards them, or an admin endpoint added to the public route set, is a
@@ -105,7 +115,8 @@ message.** The config banner logs key names and provenance, never values marked 
 ## Logging
 
 **Every request emits one structured line: method, path, status, duration, client ip, bytes.**
-A route without it is a defect.
+A route without it is a defect. Exempt: `GET /healthz` — the watchdog polls it every few
+seconds and logging it would bury the signal.
 
 **Every store mutation and every job/state transition emits a structured line.** A failure path
 that can trigger without leaving a log line is a defect.

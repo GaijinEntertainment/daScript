@@ -249,9 +249,12 @@ natural throttle; the insert ceiling exists only because inserts are the cheap u
 handle /s/* {
     reverse_proxy 127.0.0.1:8101
 }
-handle /api/samples/* {
+handle /api/samples* {
     reverse_proxy 127.0.0.1:8101
 }
+# NOTE: /api/samples* (no slash) — the slash form would not match the exact
+# path POST /api/samples that share minting uses. This matches the deployed
+# Caddyfile. /admin/* and /shutdown are deliberately NOT routed.
 ```
 
 ### Playground integration (site/ change, rides the same CI deploy)
