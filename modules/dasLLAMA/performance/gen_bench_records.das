@@ -1080,19 +1080,25 @@ def main : int {
         if (legMetal) {
             settle_das(cfg)
             das_cell(file, path, "metal", exe, false, cfg, threads, cellPath, ent.note, store, models, failed)
-            settle(cfg)
+            // the ref gets COOL-SLOT entry too: it is not insensitive on high-power parts —
+            // zen2 35B read pp 81.7 twelve seconds behind a das cell vs 103.9 solo-cooled
+            settle_das(cfg)
             ref_pass(file, path, refStock, "stock", 99, false, cfg, threads, hw, box, date, ent.note, store, models, failed)
         }
         if (legNeon) {
             settle_das(cfg)
             das_cell(file, path, "cpu", exe, false, cfg, threads, cellPath, ent.note, store, models, failed)
-            settle(cfg)
+            // the ref gets COOL-SLOT entry too: it is not insensitive on high-power parts —
+            // zen2 35B read pp 81.7 twelve seconds behind a das cell vs 103.9 solo-cooled
+            settle_das(cfg)
             ref_pass(file, path, refClean, "clean-cpu", 0, false, cfg, threads, hw, box, date, ent.note, store, models, failed)
         }
         if (legAmx) {
             settle_das(cfg)
             das_cell(file, path, "cpu", exe, true, cfg, threads, cellPath, ent.note, store, models, failed)
-            settle(cfg)
+            // the ref gets COOL-SLOT entry too: it is not insensitive on high-power parts —
+            // zen2 35B read pp 81.7 twelve seconds behind a das cell vs 103.9 solo-cooled
+            settle_das(cfg)
             ref_pass(file, path, refStock, "stock", 0, true, cfg, threads, hw, box, date, ent.note, store, models, failed)
         }
     }
