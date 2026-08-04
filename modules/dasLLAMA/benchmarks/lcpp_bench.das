@@ -78,6 +78,10 @@ struct Args {
     @clarg_doc = "The --ref binary's build flavor tag for the record: stock | clean-cpu (default: stock)"
     ref_flavor : string = "stock"
 
+    @clarg_name = "ref-no-affinity"
+    @clarg_doc = "Drop --cpu-mask/--cpu-strict from the --ref invocation (see gen_bench_records --ref-no-affinity)"
+    ref_no_affinity : bool
+
     @clarg_name = "json-path"
     @clarg_doc = "With -o json: also write the records to this file — the machine rail (stdout carries engine logs too, and an untuned box's tune-relaunch merges stderr into it)"
     json_path : string
@@ -720,7 +724,9 @@ def main() : int {
         if (!empty(cfg.ref)) {
             var refArgs <- [cfg.ref, "-m", mpath, "-ngl", "{cfg.ngl}", "-t", "{threads}"]
             if (!gpu) {
-                refArgs |> push_from(lcpp_affinity_argv(threads))
+                if (!cfg.ref_no_affinity) {
+                    refArgs |> push_from(lcpp_affinity_argv(threads))
+                }
             }
             refArgs |> push_from(["-p", "{cfg.plen}", "-n", "{cfg.ngen}", "-r", "{reps}", "-o", "json"])
             refCmd = argv_line(refArgs)

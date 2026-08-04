@@ -54,6 +54,10 @@ struct Args {
     @clarg_doc = "stock llama-bench binary (default: env LLAMA_BENCH_STOCK)"
     ref_stock : string
 
+    @clarg_name = "ref-no-affinity"
+    @clarg_doc = "Drop --cpu-mask/--cpu-strict from reference invocations (zen2 3990X: driver-spawned pinned refs read ~18% low; solo runs show pins are worth nothing there anyway)"
+    ref_no_affinity : bool
+
     @clarg_short = "t"
     @clarg_doc = "Worker threads (default: the box profile)"
     threads : int = 0
@@ -666,7 +670,7 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
         args |> push_from(["-nopo", "1"])
     }
     args |> push_from(["-t", "{threads}"])
-    if (ngl == 0) {
+    if (ngl == 0 && !cfg.ref_no_affinity) {
         args |> push_from(lcpp_affinity_argv(threads))
     }
     args |> push_from(["-p", "{cfg.plen}", "-n", "{cfg.ngen}", "-r", "{cfg.reps}", "-o", "json"])
