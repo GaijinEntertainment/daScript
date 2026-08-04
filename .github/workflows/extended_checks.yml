@@ -334,6 +334,30 @@ jobs:
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./tests --ser serialized.bin
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./tests --deser serialized.bin
 
+    - name: "Compile tests/ with --ast-verify"
+      if: matrix.target == 'linux'
+      run: |
+        set -euo pipefail
+        # daslib/ast_verify reports AST shapes the compiler dereferences unguarded.
+        # A compile error is fine here (many tests assert one); only an "AST verify"
+        # line is a failure. Files dastest itself treats as expected-failures
+        # (cant_ / failed_ / invalid_) legitimately trip it, so they are skipped.
+        cat > /tmp/ast_verify_one.sh <<'EOS'
+        #!/bin/bash
+        f="$1"
+        case "$(basename "$f")" in cant_*|failed_*|invalid_*) exit 0 ;; esac
+        out=$(timeout 120 "$BIN/daslang" --ast-verify -compile-only "$f" 2>&1 || true)
+        if grep -q 'AST verify' <<< "$out"; then
+          echo "### $f"
+          grep 'AST verify' <<< "$out" | sort -u | head -5
+          exit 1
+        fi
+        EOS
+        chmod +x /tmp/ast_verify_one.sh
+        export BIN
+        find ./tests -name '*.das' -print0 \
+          | xargs -0 -P "$(nproc)" -n 1 /tmp/ast_verify_one.sh
+
     - name: "Test MCP tools"
       if: matrix.target == 'linux'
       run: |
