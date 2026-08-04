@@ -124,9 +124,9 @@ def test_curated_store_ops(t : T?) {
         }
         t |> run("demote_stale_curated demotes only curated hashes outside the keep set") @(tt : T?) {
             let ha = upsert_curated_source(db, "keep me", 1000l)
-            list_curated_sample(db, ha, "Keep", "examples", "", "")
+            list_curated_sample(db, ha, "Keep", "examples", "examples/keep.das", "")
             let hb = upsert_curated_source(db, "drop me", 1000l)
-            list_curated_sample(db, hb, "Drop", "examples", "", "")
+            list_curated_sample(db, hb, "Drop", "examples", "examples/drop.das", "")
             let user = put_sample(db, "user body", "10.0.0.1", test_policy(), 1000l)
             tt |> success(promote_sample(db, user.hash, "User", "community"), "user promote")
             var keep : table<string>

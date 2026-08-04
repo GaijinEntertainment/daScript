@@ -1,4 +1,4 @@
-﻿options gen2
+options gen2
 options indenting = 4
 
 module samples_store public
@@ -231,11 +231,14 @@ def list_curated_sample(db : SqlRunner; hash : string; title : string; category 
 }
 
 def demote_stale_curated(db : SqlRunner; keep : table<string>) : int {
-    //! Unlist curated rows whose hash is not in `keep` (the set the importer
-    //! just minted). User-promoted samples (Origin != "curated") are untouched;
-    //! rows and permalinks always survive. Returns the demoted count.
+    //! Unlist importer-owned listings whose hash is not in `keep` (the set the
+    //! importer just minted). Importer ownership = PrimaryPath set (only
+    //! list_curated_sample sets it) — NOT Origin: a curated entry that dedups
+    //! onto a pre-existing user row keeps Origin "user" yet must still demote
+    //! when it leaves the manifest. Admin promotions (PrimaryPath "") are
+    //! untouched; rows and permalinks always survive. Returns the demoted count.
     let listed <- _sql(db |> select_from(type<Sample>)
-        |> _where(_.Listed != 0 && _.Origin == "curated")
+        |> _where(_.Listed != 0 && _.PrimaryPath != "")
         |> _select(_.Hash))
     var demoted = 0
     for (h in listed) {

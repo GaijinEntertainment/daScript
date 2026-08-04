@@ -100,6 +100,23 @@ def test_reimport_repoints_and_demotes(t : T?) {
             tt |> equal(get_source(db, listed[0].hash), "print(\"v2\")")
             tt |> equal(get_source(db, old_hash), "print(\"v1\")")
         }
+        t |> run("curated entry deduping onto a user row still demotes when dropped") @(tt : T?) {
+            // user shares content FIRST; the importer then lists the same bytes
+            // (dedup keeps Origin "user"); dropping it from the manifest must
+            // still unlist it — regression for the Origin-filter miss.
+            let user_put = put_sample(db, "print(\"v2\")", "10.0.0.7", StorePolicy(), 2500l)
+            tt |> success(!user_put.created, "importer already stored these bytes")
+            write_manifest(dir, "\{ \"examples\": [ \{ \"name\": \"Multi (multi-file)\", \"slug\": \"multi\", \"files\": [\"examples/multi_a.das\", \"examples/multi_b.das\"] \} ] \}")
+            tt |> equal(import_curated(db, dir, 2600l), 1)
+            var titles : array<string>
+            for (l in listed_samples(db)) {
+                titles |> push(l.title)
+            }
+            tt |> success(find_index(titles, "Hello world") < 0, "user-origin curated listing demoted")
+            write_manifest(dir, MANIFEST_V1)
+            fwrite(path_join(dir, "examples/hello.das"), "print(\"v2\")")
+            tt |> equal(import_curated(db, dir, 2700l), 2)
+        }
         t |> run("entry removed from the manifest gets demoted, user promotions survive") @(tt : T?) {
             let user = put_sample(db, "let mine = 1", "10.0.0.1", StorePolicy(), 3000l)
             tt |> success(promote_sample(db, user.hash, "Mine", "community"), "user promote")
