@@ -1,3 +1,13 @@
+options gen2
+
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("dasweb-playground")
+    package_description("daslang.io playground backend: content-addressed sample store + share links over dasHV + SQLite")
+}
+
 [export]
 def release() {
     release_main("main.das")
