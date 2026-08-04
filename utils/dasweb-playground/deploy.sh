@@ -29,6 +29,10 @@ install -d -o dasweb -g dasweb /srv/dasweb-playground
 # same sha is redeployed, `current` points into the directory the rm below
 # removes, and the carry-forward would find nothing left to copy.
 CARRY=$(mktemp -d)
+# set -e means any failure below (a bad tarball, a full disk) exits before the
+# explicit cleanup, so the trap is what keeps /tmp from accumulating one
+# directory per failed deploy.
+trap 'rm -rf "$CARRY"' EXIT
 for f in dasweb-playground.toml watchdog.json; do
     if [ -f "$APP/current/$f" ]; then
         cp "$APP/current/$f" "$CARRY/$f"
@@ -45,7 +49,6 @@ for f in dasweb-playground.toml watchdog.json; do
         cp "$CARRY/$f" "$SHA/$f"
     fi
 done
-rm -rf "$CARRY"
 chown -R dasweb:dasweb "$SHA"
 ln -sfn "$APP/releases/$SHA" "$APP/current"
 systemctl restart dasweb-playground
