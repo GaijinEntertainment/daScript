@@ -548,6 +548,7 @@ namespace das {
             }
             virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
                 Visitor::preVisitBlockArgument(block, var, lastArg);
+                if ( !block->annotations.empty() && !var->isAccessUnused() ) var->marked_used = true;
                 // a can_shadow argument keeps its (semantic) name even when a same-named
                 // renamable declaration put that name in the map - the map is name-keyed
                 // and cannot tell them apart, the flag on the variable can
