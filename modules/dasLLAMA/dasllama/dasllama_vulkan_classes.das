@@ -43,16 +43,58 @@ def private q8_pack4(v0, v1, v2, v3 : float; id : float) : uint {
         | ((uint(q2) & 0xFFu) << 16u) | ((uint(q3) & 0xFFu) << 24u))
 }
 
-// the add+rmsnorm core: x/a/w members, the row stash, and the verbatim reduce (stride-256 accum,
-// subgroupAdd, sequential partials, 1/sqrt) — leaves add their output members + kernels
-class ArBase {
+// ... and the Q8_K twins: whole-subgroup 5-shuffle amax fold, butterfly byte pack (lanes
+// 4j..4j+3 fold one round's bytes into word j — the lane%4==0 caller stores it)
+def private q8k_amax5(m0 : float) : float {
+    var m = m0
+    m = max(m, subgroupShuffleXor(m, 1u))
+    m = max(m, subgroupShuffleXor(m, 2u))
+    m = max(m, subgroupShuffleXor(m, 4u))
+    m = max(m, subgroupShuffleXor(m, 8u))
+    m = max(m, subgroupShuffleXor(m, 16u))
+    return m
+}
+
+def private q8k_pack_butterfly(v, id : float) : uint {
+    let q = int(round(v * id))
+    let b8 = uint(q) & 0xFFu
+    let p = b8 | (subgroupShuffleXor(b8, 1u) << 8u)
+    return p | (subgroupShuffleXor(p, 2u) << 16u)
+}
+
+// the workgroup-rms machinery the row kernels share (one wg reduces one row)
+class RmsWgBase {
+    @workgroup part : float[64]   // one partial per subgroup (subgroupSize >= 4 floor)
+    @workgroup inv1 : float[1]
+
+    def wg_rms_inv(ss0 : float; n : uint; eps : float) : float {
+        let ss = subgroupAdd(ss0)
+        if (gl_SubgroupInvocationID == 0u) {
+            part[gl_SubgroupID] = ss
+        }
+        barrier()
+        if (gl_LocalInvocationID.x == 0u) {
+            var tot = 0.0
+            var sgi = 0u
+            while (sgi < gl_NumSubgroups) {
+                tot += part[sgi]
+                sgi++
+            }
+            inv1[0u] = 1.0 / sqrt(tot / float(n) + eps)   // the CPU rmsnorm's own form
+        }
+        barrier()
+        return inv1[0u]
+    }
+}
+
+// the add+rmsnorm core: x/a/w members, the row stash, and the shared workgroup reduce — leaves
+// add their output members + kernels
+class ArBase : RmsWgBase {
     @ssbo @binding = 0 xs : array<float>   // x rows, the residual stream — updated in place
     @ssbo @binding = 1 aa : array<float>   // the add partner rows
     @ssbo @binding = 2 wn : array<float>   // the norm weight row
     @push_constant pa : ArArgs
     @workgroup row : float[4096]           // AR_MAX_DIM — staged so the post-reduce reread is local
-    @workgroup part : float[64]            // one partial per subgroup (subgroupSize >= 4 floor)
-    @workgroup inv1 : float[1]
 
     // the residual add + row stash + sum-of-squares pass over one row at `base`
     def accum_row(base : uint) : float {
@@ -69,24 +111,7 @@ class ArBase {
     }
 
     // workgroup-wide rms inverse from per-thread sum-of-squares partials
-    def rms_inv(ss0 : float) : float {
-        let ss = subgroupAdd(ss0)
-        if (gl_SubgroupInvocationID == 0u) {
-            part[gl_SubgroupID] = ss
-        }
-        barrier()
-        if (gl_LocalInvocationID.x == 0u) {
-            var tot = 0.0
-            var sgi = 0u
-            while (sgi < gl_NumSubgroups) {
-                tot += part[sgi]
-                sgi++
-            }
-            inv1[0u] = 1.0 / sqrt(tot / float(pa.dim) + pa.eps)   // the CPU rmsnorm's own form
-        }
-        barrier()
-        return inv1[0u]
-    }
+    def rms_inv(ss0 : float) : float => wg_rms_inv(ss0, pa.dim, pa.eps)
 }
 
 // ar_add_rms_b's class twin: one workgroup per row, the normed output to its own member
@@ -187,13 +212,7 @@ class Q8kRequant {
     @push_constant pa : RqArgs
 
     def blk_scale(b, lane : uint; m0 : float) : float {
-        var m = m0
-        m = max(m, subgroupShuffleXor(m, 1u))
-        m = max(m, subgroupShuffleXor(m, 2u))
-        m = max(m, subgroupShuffleXor(m, 4u))
-        m = max(m, subgroupShuffleXor(m, 8u))
-        m = max(m, subgroupShuffleXor(m, 16u))
-        let d = m / 127.0
+        let d = q8k_amax5(m0) / 127.0
         if (lane == 0u) {
             outs[b] = d
         }
@@ -201,10 +220,7 @@ class Q8kRequant {
     }
 
     def pack_word(b, r, lane : uint; v, id : float) {
-        let q = int(round(v * id))
-        let b8 = uint(q) & 0xFFu
-        let p = b8 | (subgroupShuffleXor(b8, 1u) << 8u)
-        let w = p | (subgroupShuffleXor(p, 2u) << 16u)
+        let w = q8k_pack_butterfly(v, id)
         if (lane % 4u == 0u) {
             outq[b * 64u + r * 8u + lane / 4u] = w
         }
@@ -262,7 +278,14 @@ struct ActArgs {
     nblk : uint    // 32-block / superblock count (the requant kernels' guard)
 }
 
-// members shared by the act/requant kernels; act_mul is the one activation formula
+// the one activation formula (silu or tanh-gelu on v, times u) — the classes' act_mul
+// delegates pass their own pa.gelu
+def private act_mul_sel(v, u : float; gelu : uint) : float {
+    return (gelu != 0u ? (0.5 * v * (1.0 + tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)))) * u
+        : (v / (1.0 + exp(-v))) * u)
+}
+
+// members shared by the act/requant kernels
 class ActRqMembers {
     @ssbo @binding = 0 gate : array<float>     // gate rows (act's v side)
     @ssbo @binding = 1 up : array<float>       // up rows (act's u side)
@@ -270,10 +293,7 @@ class ActRqMembers {
     @ssbo @binding = 3 outs : array<float>     // per-block scales out
     @push_constant pa : ActArgs
 
-    def act_mul(v, u : float) : float {
-        return (pa.gelu != 0u ? (0.5 * v * (1.0 + tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)))) * u
-            : (v / (1.0 + exp(-v))) * u)
-    }
+    def act_mul(v, u : float) : float => act_mul_sel(v, u, pa.gelu)
 }
 
 // fused act + Q8_0 requant: subgroup per 4 blocks, word per lane, 8-lane shuffle amax (xor 1/2/4)
@@ -282,21 +302,13 @@ class Q8ActRq : ActRqMembers {
     // 8-lane block quantize: amax fold over the block's 8 co-active lanes, d to outs[b],
     // returns this lane's packed word
     def blk_pack(b, lane8 : uint; v0, v1, v2, v3 : float) : uint {
-        var m = max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3)))
-        m = max(m, subgroupShuffleXor(m, 1u))
-        m = max(m, subgroupShuffleXor(m, 2u))
-        m = max(m, subgroupShuffleXor(m, 4u))
+        let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
         let d = m / 127.0
         let id = d != 0.0 ? 1.0 / d : 0.0
         if (lane8 == 0u) {
             outs[b] = d
         }
-        let q0 = int(round(v0 * id))
-        let q1 = int(round(v1 * id))
-        let q2 = int(round(v2 * id))
-        let q3 = int(round(v3 * id))
-        return ((uint(q0) & 0xFFu) | ((uint(q1) & 0xFFu) << 8u)
-            | ((uint(q2) & 0xFFu) << 16u) | ((uint(q3) & 0xFFu) << 24u))
+        return q8_pack4(v0, v1, v2, v3, id)
     }
 
     [spirv_kernel(local_size_x = 256, name = "q8_actrq_cls_spv")]
@@ -321,25 +333,15 @@ class Q8ActRq : ActRqMembers {
 [vk_dispatch(name = "q8k_actrq_cls", kernel = "run", family = "actrq_cls", grid = "wgs", params = "wgs : int64")]
 class Q8kActRq : ActRqMembers {
     def blk_scale(b, lane : uint; m0 : float) : float {
-        var m = m0
-        m = max(m, subgroupShuffleXor(m, 1u))
-        m = max(m, subgroupShuffleXor(m, 2u))
-        m = max(m, subgroupShuffleXor(m, 4u))
-        m = max(m, subgroupShuffleXor(m, 8u))
-        m = max(m, subgroupShuffleXor(m, 16u))
-        let d = m / 127.0
+        let d = q8k_amax5(m0) / 127.0
         if (lane == 0u) {
             outs[b] = d
         }
         return d != 0.0 ? 1.0 / d : 0.0
     }
 
-    // butterfly byte pack of one quantized round: lanes 4j..4j+3 fold into the superblock's word j
     def pack_word(b, r, lane : uint; v, id : float) {
-        let q = int(round(v * id))
-        let b8 = uint(q) & 0xFFu
-        let p = b8 | (subgroupShuffleXor(b8, 1u) << 8u)
-        let w = p | (subgroupShuffleXor(p, 2u) << 16u)
+        let w = q8k_pack_butterfly(v, id)
         if (lane % 4u == 0u) {
             outq[b * 64u + r * 8u + lane / 4u] = w
         }
@@ -376,10 +378,7 @@ class ActF16 {
     @ssbo @binding = 2 outh : array<float16>
     @push_constant pa : ActArgs
 
-    def act_mul(v, u : float) : float {
-        return (pa.gelu != 0u ? (0.5 * v * (1.0 + tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)))) * u
-            : (v / (1.0 + exp(-v))) * u)
-    }
+    def act_mul(v, u : float) : float => act_mul_sel(v, u, pa.gelu)
 
     [spirv_kernel(local_size_x = 256, name = "actf16_cls_spv")]
     def run {
@@ -1161,13 +1160,22 @@ class AtAttnBase {
         }
     }
 
-    // stage one 32-position K tile from kpanel at kbase (the V reuse of this staging loads
-    // per-kernel — the two leaves' V planes differ)
+    // stage one 32-position K tile from kpanel at kbase
     def load_k(k0, kend, kbase, kvd, kvh, hs : uint) {
         var i = gl_LocalInvocationID.x
         while (i < 32u * hs) {
             let kr = k0 + i / hs
             fkv[(i / hs) * 257u + i % hs] = kr < kend ? kpanel[kbase + kr * kvd + kvh * hs + i % hs] : 0.0
+            i += 256u
+        }
+    }
+
+    // ... and the V tile reuse of the K staging at vbase (call only after all K reads completed)
+    def load_v(k0, kend, vbase, kvd, kvh, hs : uint) {
+        var i = gl_LocalInvocationID.x
+        while (i < 32u * hs) {
+            let kr = k0 + i / hs
+            fkv[(i / hs) * 257u + i % hs] = kr < kend ? vpanel[vbase + kr * kvd + kvh * hs + i % hs] : 0.0
             i += 256u
         }
     }
@@ -1241,7 +1249,6 @@ class AtAttn : AtAttnBase {
         barrier()
         let gq = pa.w0 + q0 + r
         let kend = pa.w0 + min(q0 + 8u, pa.rows)   // causal bound (exclusive) of the tile's last row
-        var i = tid
         var k0 = 0u
         while (k0 < kend) {
             load_k(k0, kend, 0u, pa.kvd, kvh, pa.hs)
@@ -1261,12 +1268,7 @@ class AtAttn : AtAttnBase {
                 o6 *= av
                 o7 *= av
             }
-            i = tid
-            while (i < 32u * pa.hs) {   // V tile reuses the K staging (all K reads completed above)
-                let kr = k0 + i / pa.hs
-                fkv[(i / pa.hs) * 257u + i % pa.hs] = kr < kend ? vpanel[kr * pa.kvd + kvh * pa.hs + i % pa.hs] : 0.0
-                i += 256u
-            }
+            load_v(k0, kend, 0u, pa.kvd, kvh, pa.hs)
             barrier()
             var c2 = 0u
             while (c2 < 32u) {
@@ -1349,7 +1351,6 @@ class DaAttnB : AtAttnBase {
         barrier()
         let gq = pa.w0 + q0 + r
         let kend = pa.w0 + min(q0 + 8u, pa.npos)   // causal bound (exclusive) of the tile's last row
-        var i = tid
         var k0 = 0u
         while (k0 < kend) {
             load_k(k0, kend, pa.kbase, pa.kvd, kvh, pa.hs)
@@ -1373,12 +1374,7 @@ class DaAttnB : AtAttnBase {
                 o6 *= av
                 o7 *= av
             }
-            i = tid
-            while (i < 32u * pa.hs) {   // V tile reuses the K staging (all K reads completed above)
-                let kr = k0 + i / pa.hs
-                fkv[(i / pa.hs) * 257u + i % pa.hs] = kr < kend ? vpanel[pa.vbase + kr * pa.kvd + kvh * pa.hs + i % pa.hs] : 0.0
-                i += 256u
-            }
+            load_v(k0, kend, pa.vbase, pa.kvd, kvh, pa.hs)
             barrier()
             var c2 = 0u
             while (c2 < 32u) {
@@ -1865,6 +1861,12 @@ class Q8Batch {
 // compose, the scale stage, and the per-block FMA (float order contractual per format) differ —
 // each is an override, and the devirtualizer inlines the family back to four standalone kernels.
 
+// deposit 4 packed high-bits (one per nibble lane of hb) at bit 4 of each byte lane (Q5_K —
+// the batch and gemv k5 variants share it)
+def private k5_dep(hb : uint) : uint {
+    return ((hb & 1u) << 4u) | ((hb & 2u) << 11u) | ((hb & 4u) << 18u) | ((hb & 8u) << 25u)
+}
+
 class KqBatchBase {
     @ssbo @binding = 0 wq : array<uint>        // weight quant planes (per-format block layout)
     @ssbo @binding = 1 wsu : array<uint>       // scale planes (5-word superblock layout)
@@ -1883,10 +1885,6 @@ class KqBatchBase {
         let rid = sched[pa.map_off + gl_WorkGroupID.x]
         let rb = rid * 4u
         return uint4(sched[rb], sched[rb + 1u], sched[rb + 2u], gl_WorkGroupID.x - sched[rb + 3u])
-    }
-
-    def k5_dep(hb : uint) : uint {
-        return ((hb & 1u) << 4u) | ((hb & 2u) << 11u) | ((hb & 4u) << 18u) | ((hb & 8u) << 25u)
     }
 
     // x tile stage: this thread's two uint4 chunks of the Q8_K activation rows
@@ -3080,31 +3078,6 @@ class Q8nCm2Batch : MoeCmBase {
 
 // ===== rope + KV store + qk-norm =====
 
-// the workgroup-rms machinery the head-row kernels share (one wg reduces one row)
-class RmsWgBase {
-    @workgroup part : float[64]   // one partial per subgroup (subgroupSize >= 4 floor)
-    @workgroup inv1 : float[1]
-
-    def wg_rms_inv(ss0 : float; n : uint; eps : float) : float {
-        let ss = subgroupAdd(ss0)
-        if (gl_SubgroupInvocationID == 0u) {
-            part[gl_SubgroupID] = ss
-        }
-        barrier()
-        if (gl_LocalInvocationID.x == 0u) {
-            var tot = 0.0
-            var sgi = 0u
-            while (sgi < gl_NumSubgroups) {
-                tot += part[sgi]
-                sgi++
-            }
-            inv1[0u] = 1.0 / sqrt(tot / float(n) + eps)   // the CPU rmsnorm's own form
-        }
-        barrier()
-        return inv1[0u]
-    }
-}
-
 struct QkRmsArgs {
     hs : uint
     nh : uint
@@ -3700,11 +3673,6 @@ class KqGemvQ40 : KqGemvBase {
 // Q5_K: the k4 fold with the 5th bit deposited from the block's qh word
 [vk_dispatch(name = "kq_gemv_k5_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK5 : KqGemvBase {
-    // deposit 4 packed high-bits (one per nibble lane of hb) at bit 4 of each byte lane
-    def k5_dep(hb : uint) : uint {
-        return ((hb & 1u) << 4u) | ((hb & 2u) << 11u) | ((hb & 4u) << 18u) | ((hb & 8u) << 25u)
-    }
-
     def k5_dot(wv, xl, xh : uint4; qh : uint) : int {
         let h0 = qh & 0xFFu
         let h1 = (qh >> 8u) & 0xFFu
