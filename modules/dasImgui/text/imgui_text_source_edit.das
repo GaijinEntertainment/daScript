@@ -3470,10 +3470,11 @@ def private apply_segment_scroll(var ed : TextEditState; m : EditMetrics;
 }
 
 def private roll_segment_frame_state(var ed : TextEditState) {
-    // per frame: focus memory rolls; a clipped-owner drag that never released sweeps
+    // per frame: focus memory rolls; any never-released drag sweeps — the ownerless latch too, which an owner-gated sweep can never clear
     ed.sibling_focus_prev = ed.sibling_focus_now
     ed.sibling_focus_now = false
-    if (ed.drag_owner_first >= 0 && !IsMouseDown(ImGuiMouseButton.Left)
+    if ((ed.drag_owner_first >= 0 || ed.selection_dragging || ed.drag_move_pending)
+            && !IsMouseDown(ImGuiMouseButton.Left)
             && !IsMouseReleased(ImGuiMouseButton.Left)) {
         ed.selection_dragging = false
         ed.drag_move_pending = false

@@ -187,6 +187,7 @@ def imgui_mouse_stop(_input : JsonValue?) : JsonValue? {
 
 struct MouseStatusResult {
     playing      : bool
+    busy         : bool   //! any mouse gesture in flight: this timeline OR a boost click/drag coroutine (imgui_click rides the latter — `playing` alone misses it)
     elapsed_ms   : int
     cursor_x     : float
     cursor_y     : float
@@ -208,6 +209,7 @@ def imgui_mouse_status(_input : JsonValue?) : JsonValue? {
     }
     return JV(MouseStatusResult(
         playing      = mouse_playing,
+        busy         = mouse_playing || synth_coroutines_active() > 0,
         elapsed_ms   = elapsed,
         cursor_x     = cur._1,
         cursor_y     = cur._2,
