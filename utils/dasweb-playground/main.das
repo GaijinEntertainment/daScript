@@ -58,7 +58,7 @@ def init {
     return if (g_exit_code != 0 || exit_requested())
     if (!g_args_parsed) {
         parse_args()   // daslang-live calls init directly; standalone main parsed already
-        return if (g_exit_code != 0)
+        return if (g_exit_code != 0 || exit_requested())   // -? leaves the code 0 and only raises the flag
     }
     // tee every to_log/print to logs/dasweb-playground.log (timestamped ndjson) AND the console
     logger_init_tee("dasweb-playground")

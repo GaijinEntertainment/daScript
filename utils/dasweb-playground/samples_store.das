@@ -92,13 +92,7 @@ def is_valid_utf8(data : array<uint8> const# implicit) : bool {
 }
 
 def is_valid_utf8(s : string) : bool {
-    //! Validates the BYTES, not the characters: the utf8_utils string overload
-    //! iterates decoded characters, which is not what a stored source is.
-    var ok = true
-    peek_data(s) $(bytes) {
-        ok = is_utf8_string_valid(bytes)
-    }
-    return ok
+    return is_utf8_string_valid(s)
 }
 
 def private rate_exceeded(db : SqlRunner; client_ip : string; policy : StorePolicy; now : int64) : bool {

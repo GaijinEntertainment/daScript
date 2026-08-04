@@ -126,6 +126,27 @@ Consequences for zen4 specifically:
   in that file documents why: emsdk LLVM snapshots repeatedly broke `ds_parser.cpp`, intermittently
   enough to survive a first green run.
 
+**Validated on zen4, 2026-08-04** — `web/build_wasm_host.sh` is checked in and was run there for
+real, not just written: 381/381 targets, `bin/daslang` links `libc++.so.1` + `libc++abi.so.1`
+(the load-bearing property), runs, and the whole tree cost ~1 GB (52 GB free, unchanged). The
+non-clang gate was exercised too: `HOST_CXX=g++` is refused, so `web/CMakeLists.txt`'s
+warn-only degradation cannot happen quietly. zen4 needed `libc++-19-dev libc++abi-19-dev`
+installed, and `/usr/bin/clang` there is clang-14 (cannot build this tree) — pass
+`HOST_CC=clang-19 HOST_CXX=clang++-19`.
+
+Two things that run surfaced, both for 3a to settle:
+
+- **The host binary lands in the tree's `bin/daslang`**, the same path an ordinary native build
+  of that tree writes. A later native build in the same worktree silently replaces the libc++
+  host with a libstdc++ one — the exact corruption this recipe exists to prevent, with no
+  signal. This is why the wasm host needs **its own worktree**, and the script now warns when
+  the resulting binary links libstdc++.
+- **dasLLVM is configured (`DAS_LLVM_DISABLED=OFF`) but its module target is not built** by the
+  CI target list (`daslang dasModuleGlfw dasModuleOpenGL`), and `require daslib/llvm_jit` did
+  not resolve against the fresh host. CI's cross-compile works regardless, so the JIT path the
+  cross-compile uses is reached some other way — resolve this when `daspkg build --wasm` runs
+  end-to-end (which needs emsdk, not yet installed). Do not assume it is fine.
+
 `web/build64` is configured as CI does it:
 `DAS_WASM_MEMORY64=ON`, `DAS_WASM_PTHREADS=ON`, `-sMEMORY64=1` in C and CXX flags, and
 `DAS_HOST_DASLANG_OVERRIDE` pointing at the host build.
