@@ -40,7 +40,7 @@ a body already buffered in full, so that limit cannot live in this process.
 | Route | Behavior |
 |---|---|
 | `POST /api/samples` | body = raw `.das` text → `{hash, url, created}`; 400 empty/non-utf8/embedded NUL, 413 over size cap, 429 over per-IP ceiling |
-| `GET /api/samples/listed` | the curated dropdown: `[{hash, title, category, path, slug}]`, in manifest order |
+| `GET /api/samples/listed` | the curated dropdown: `[{hash, title, category, path, slug}]`; manifest order within a category, categories alphabetical |
 | `GET /api/samples/<hash>` | the stored source, `text/plain`, `nosniff`, immutable cache headers; 400 malformed hash, 404 unknown |
 | `GET /s/<hash>` | 302 → `/playground/index.html?s=<hash>`; 404 unknown |
 | `GET /healthz` | `ok` (watchdog poll target) |
@@ -50,6 +50,10 @@ a body already buffered in full, so that limit cannot live in this process.
 Client identity for the rate ceiling is the **last** `X-Forwarded-For` hop — the one Caddy
 appends. Earlier hops are client-authored. The operator routes verify the transport peer
 instead, which no header can forge; no route enables CORS.
+
+Listing order is reproducible rather than authored: `read_json` parses the manifest object into
+a table, so the file's category key order is gone before the importer sees it. Categories are
+therefore visited sorted, and entries keep the manifest's order within their category.
 
 Curated samples: when `curated_dir` points at the deployed playground samples tree, boot (and
 `/admin/reimport`) imports every `data.json` entry through the store — single-file entries as

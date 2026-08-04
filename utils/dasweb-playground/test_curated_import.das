@@ -206,6 +206,43 @@ def test_manifest_paths_stay_inside_the_samples_dir(t : T?) {
 }
 
 [test]
+def test_multi_category_order_is_reproducible(t : T?) {
+    //! Regression: Position was assigned while iterating keys() of the parsed
+    //! manifest object, which is a table — hash order, not the manifest's. That
+    //! made the listing order depend on something unspecified. Categories are
+    //! now visited sorted, so the assignment is reproducible: alphabetical
+    //! across categories, manifest order within one.
+    let dir = fixture_dir(t, "multicat")
+    write_manifest(dir, "\{" +
+        "\"zeta\": [ \{ \"name\": \"Z one\", \"files\": [\"examples/hello.das\"] \}," +
+        "           \{ \"name\": \"Z two\", \"files\": [\"examples/multi_a.das\"] \} ]," +
+        "\"alpha\": [ \{ \"name\": \"A one\", \"files\": [\"examples/multi_b.das\"] \} ]" +
+        "\}")
+    fwrite(path_join(dir, "examples/hello.das"), "print(\"z1\")")
+    fwrite(path_join(dir, "examples/multi_a.das"), "print(\"z2\")")
+    fwrite(path_join(dir, "examples/multi_b.das"), "print(\"a1\")")
+    with_latest_sqlite(":memory:") $(db) {
+        t |> run("categories sort; entries keep manifest order inside one") @(tt : T?) {
+            tt |> equal(import_curated(db, dir, 1000l), 3)
+            let listed <- listed_samples(db)
+            tt |> equal(length(listed), 3)
+            tt |> equal(listed[0].title, "A one")   // "alpha" sorts before "zeta"
+            tt |> equal(listed[1].title, "Z one")   // manifest order within "zeta"
+            tt |> equal(listed[2].title, "Z two")
+        }
+        t |> run("a re-import reproduces the same order") @(tt : T?) {
+            tt |> equal(import_curated(db, dir, 2000l), 3)
+            let listed <- listed_samples(db)
+            tt |> equal(length(listed), 3)
+            tt |> equal(listed[0].title, "A one")
+            tt |> equal(listed[1].title, "Z one")
+            tt |> equal(listed[2].title, "Z two")
+        }
+    }
+    nuke(dir)
+}
+
+[test]
 def test_all_entries_unreadable_keeps_prior_listings(t : T?) {
     //! Regression: a manifest that parsed but whose files were all unreadable
     //! (partial deploy, `current` swapped mid-import, curated_dir one directory

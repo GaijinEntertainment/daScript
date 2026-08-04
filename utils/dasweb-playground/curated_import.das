@@ -89,7 +89,16 @@ def import_curated(db : SqlRunner; samples_dir : string; now : int64) : int {
     var listed = 0
     var skipped = 0
     var position = 0
-    for (category in keys(root.value as _object)) {
+    // Categories are visited in sorted order, not in table order. read_json
+    // parses a JSON object into a table, so the manifest's authored key order
+    // is already gone by here and cannot be recovered — but table iteration is
+    // hash order, which would make Position (and with it the dropdown) depend
+    // on something unspecified. Sorting makes the assignment reproducible:
+    // within a category the order IS the manifest's, and the categories
+    // themselves are alphabetical.
+    var categories <- [for (category in keys(root.value as _object)); category]
+    sort(categories)
+    for (category in categories) {
         let entries = root?[category]
         if (entries == null || !(entries.value is _array)) {
             continue

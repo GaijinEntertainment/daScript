@@ -134,18 +134,21 @@ warn-only degradation cannot happen quietly. zen4 needed `libc++-19-dev libc++ab
 installed, and `/usr/bin/clang` there is clang-14 (cannot build this tree) — pass
 `HOST_CC=clang-19 HOST_CXX=clang++-19`.
 
-Two things that run surfaced, both for 3a to settle:
+**dasLLVM is present and reachable** from that host: `require llvm/daslib/llvm_jit` and
+`require llvm/daslib/llvm_exe` (where `--jit-check-abi` lives) both resolve and run. Note the
+mount path — it is `llvm/daslib/...`, not `daslib/...`; the latter fails with
+`error[20605] missing prerequisite`, which looks exactly like a missing module and is not one.
+
+One trap that run surfaced, for 3a to carry:
 
 - **The host binary lands in the tree's `bin/daslang`**, the same path an ordinary native build
   of that tree writes. A later native build in the same worktree silently replaces the libc++
   host with a libstdc++ one — the exact corruption this recipe exists to prevent, with no
   signal. This is why the wasm host needs **its own worktree**, and the script now warns when
   the resulting binary links libstdc++.
-- **dasLLVM is configured (`DAS_LLVM_DISABLED=OFF`) but its module target is not built** by the
-  CI target list (`daslang dasModuleGlfw dasModuleOpenGL`), and `require daslib/llvm_jit` did
-  not resolve against the fresh host. CI's cross-compile works regardless, so the JIT path the
-  cross-compile uses is reached some other way — resolve this when `daspkg build --wasm` runs
-  end-to-end (which needs emsdk, not yet installed). Do not assume it is fine.
+
+Still unproven end-to-end: an actual `daspkg build --wasm` run, which needs emsdk 5.0.7 (not yet
+installed). The host half is validated; the emscripten half is not.
 
 `web/build64` is configured as CI does it:
 `DAS_WASM_MEMORY64=ON`, `DAS_WASM_PTHREADS=ON`, `-sMEMORY64=1` in C and CXX flags, and
