@@ -626,3 +626,78 @@ def public verify_program(prog : ProgramPtr) : int {
     }
     return total
 }
+
+// ===== pre-simulate verification =====
+class private AstSimulateVerifyVisitor : AstVisitor {
+    error_count : int = 0
+    @do_not_delete current_fn : Function?
+    closure_depth : int = 0
+
+
+    def report(at : LineInfo; msg : string) : void {
+        error_count++
+        to_log(LOG_ERROR, "AST verify (pre-simulate): {msg} at {describe(at)}\n")
+        compiling_program() |> macro_error(at, "AST verify (pre-simulate): {msg}")
+    }
+
+    // A template's own body is expanded per instantiation, never codegen'd as-is,
+    // so it legitimately carries no types.
+    def override canVisitFunction(fun : Function?) : bool {
+        return !fun.moreFlags.isTemplate && !fun.flags.generated
+    }
+
+    def override preVisitFunction(var fun : FunctionPtr) : void {
+        current_fn = fun
+    }
+
+    // a `return` inside a closure returns from the BLOCK, not the function
+    def override preVisitExprBlock(var expr : ExprBlock?) : void {
+        if (expr.blockFlags.isClosure) {
+            closure_depth++
+        }
+    }
+
+    def override visitExprBlock(var expr : ExprBlock?) : ExpressionPtr {
+        if (expr.blockFlags.isClosure) {
+            closure_depth--
+        }
+        return expr
+    }
+
+    def override preVisitExprReturn(var expr : ExprReturn?) : void {
+        if (expr.subexpr != null || current_fn == null || current_fn.result == null
+                || closure_depth > 0) {
+            return
+        }
+        if (current_fn.result.baseType != Type.tVoid) {
+            report(expr.at, "ExprReturn.subexpr is null in '{current_fn.name}', which returns non-void")
+        }
+    }
+
+}
+
+def public verify_module_before_simulate(prog : ProgramPtr; mod : Module?) : int {
+    //! Verifies one module is ready for codegen, returning the violation count.
+    //! Separate from [[verify_module]]: a half-inferred tree legitimately violates
+    //! these, so they can only be asserted here.
+    var v = new AstSimulateVerifyVisitor()
+    make_visitor(*v) $(adapter) {
+        visit_module(prog, adapter, mod)
+    }
+    let n = v.error_count
+    unsafe {
+        delete v
+    }
+    return n
+}
+
+[pre_simulate_macro]
+class AstSimulateVerifyMacro : AstPassMacro {
+    def override apply(prog : ProgramPtr; mod : Module?) : bool {
+        if (mod == null || mod.moduleFlags.builtIn) {
+            return true
+        }
+        verify_module_before_simulate(prog, mod)
+        return true
+    }
+}
