@@ -1,0 +1,2 @@
+Base class for creating pre-simulate pass macros via the ``[pre_simulate_macro]`` structure annotation; registers an ``AstPassMacro`` that runs after inference, before codegen.
+Name of the builtin function used to register this annotation with the compiler.

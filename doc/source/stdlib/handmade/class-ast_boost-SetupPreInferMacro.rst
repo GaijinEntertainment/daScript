@@ -1,0 +1,2 @@
+Base class for creating pre-infer pass macros via the ``[pre_infer_macro]`` structure annotation; registers an ``AstPassMacro`` that runs before each inference pass.
+Name of the builtin function used to register this annotation with the compiler.

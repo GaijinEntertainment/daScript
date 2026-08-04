@@ -2336,6 +2336,14 @@ namespace das {
         module->inferMacros.push_back(unique_ptr<PassMacro>(newM));
     }
 
+    void addModulePreInferMacro ( Module * module, PassMacroPtr newM, Context * ) {
+        module->preInferMacros.push_back(unique_ptr<PassMacro>(newM));
+    }
+
+    void addModulePreSimulateMacro ( Module * module, PassMacroPtr newM, Context * ) {
+        module->preSimulateMacros.push_back(unique_ptr<PassMacro>(newM));
+    }
+
     void addModuleLintMacro ( Module * module, PassMacroPtr newM, Context * ) {
         module->lintMacros.push_back(unique_ptr<PassMacro>(newM));
     }
@@ -2670,6 +2678,12 @@ namespace das {
             SideEffects::modifyExternal, "addModuleInferDirtyMacro")
                 ->args({"module","annotation","context"});
         // lint macro
+        addExtern<DAS_BIND_FUN(addModulePreInferMacro)>(*this, lib,  "add_pre_infer_macro",
+            SideEffects::modifyExternal, "addModulePreInferMacro")
+                ->args({"module","annotation","context"});
+        addExtern<DAS_BIND_FUN(addModulePreSimulateMacro)>(*this, lib,  "add_pre_simulate_macro",
+            SideEffects::modifyExternal, "addModulePreSimulateMacro")
+                ->args({"module","annotation","context"});
         addExtern<DAS_BIND_FUN(addModuleLintMacro)>(*this, lib,  "add_lint_macro",
             SideEffects::modifyExternal, "addModuleLintMacro")
                 ->args({"module","annotation","context"});
