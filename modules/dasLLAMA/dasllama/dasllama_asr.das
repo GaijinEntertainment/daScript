@@ -151,17 +151,22 @@ def load_asr_model(path : string) : AsrModel {
 def load_asr_model(path : string; mmproj : string) : AsrModel {
     //! The two-file route: ``path`` is the decoder GGUF, ``mmproj`` its audio front end — sniffed:
     //! ``qwen3a`` mmproj = Qwen3-ASR/Qwen3-Omni AuT tower, ``gemma4a`` = Gemma-4 Conformer, "CNRY"
-    //! bin = Canary-Qwen FastConformer. Canary decoder loads fp32 (parity gate); others load Q8. Either file may be a prepared ``.dlim`` (the mmproj routes on its baked family tag).
+    //! bin = Canary-Qwen FastConformer. Every decoder loads Q8 (the tuned rail); the fp32 parity arm rides ``QuantMode.fp32 + image_fp32`` off-facade. Either file may be a prepared ``.dlim`` (the mmproj routes on its baked family tag).
     var emagic = 0u
     var eproj = ""
+    var canary_q8 = !g_asr_force_fp32   // raw-bin default; a .dlim's baked tag overrides
     if (mmproj |> ends_with(".dlim")) {
         let tag = image_family_tag(mmproj)
         if (tag == "qwen3a-f32") {
             eproj = "qwen3a"
         } elif (tag == "gemma4a-f32") {
             eproj = "gemma4a"
+        } elif (tag == "canary-q8") {
+            emagic = CANARY_MAGIC
+            canary_q8 = true
         } elif (tag == "canary-f32") {
             emagic = CANARY_MAGIC
+            canary_q8 = false
         } else {
             panic("dasLLAMA asr: mmproj image '{mmproj}' is baked as '{tag}' — not an audio front-end image")
         }
@@ -203,12 +208,12 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
     }
     if (emagic == CANARY_MAGIC) {
         var m = AsrModel(kind = AsrKind.canary)
-        m.dec <- load_model_cached(path, QuantMode.fp32, planar_only = true, image_fp32 = true)
+        m.dec <- load_model_cached(path, QuantMode.q8, planar_only = true)
         if (m.dec.arch != "qwen3") {
             panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' — the Canary route expects a Qwen3-1.7B decoder")
         }
         m.dec.config.seq_len = min(m.dec.config.seq_len, 8192l)
-        m.cenc <- load_canary_encoder(mmproj)
+        m.cenc <- load_canary_encoder(mmproj, canary_q8)
         if (m.cenc.proj_dim != m.dec.config.dim) {
             panic("dasLLAMA asr: canary encoder projects to {m.cenc.proj_dim} but the decoder is {m.dec.config.dim}-wide — mismatched pair")
         }
@@ -229,6 +234,32 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
         panic("dasLLAMA asr: mmproj projects to {m.q3t.proj_dim} but the decoder is {m.dec.config.dim}-wide — mismatched pair")
     }
     return <- m
+}
+
+def private quant_fmt(q : QuantMode) : string {
+    if (q == QuantMode.q8) return "q8"
+    if (q == QuantMode.q4_0) return "q4"
+    return "f32"
+}
+
+def asr_exec_fmt(m : AsrModel) : string {
+    //! The loaded precision as ``<encoder>/<decoder>`` (single tag for parakeet's one carrier) —
+    //! the store's ``exec_fmt`` stamp, so every benchmark row names the bits it ran on.
+    if (m.kind == AsrKind.whisper) return whisper_exec_fmt(m.whisper)
+    if (m.kind == AsrKind.parakeet) return parakeet_exec_fmt(m.pk)
+    if (m.kind == AsrKind.canary) return canary_exec_fmt(m.cenc, quant_fmt(m.dec.quant))
+    if (m.kind == AsrKind.gemma4a) return gemma4a_exec_fmt(quant_fmt(m.dec.quant))
+    return qwen3a_exec_fmt(quant_fmt(m.dec.quant))   // qwen3a / qwen3omni share the AuT tower
+}
+
+def asr_encode_bucket(m : AsrModel) : string {
+    //! The family's encode-total ``asr_prof`` bucket — "" for families that only carry
+    //! fine-grained buckets (their encode split stays a probe-side concern).
+    if (m.kind == AsrKind.canary) return canary_encode_bucket()
+    if (m.kind == AsrKind.whisper) return whisper_encode_bucket()
+    if (m.kind == AsrKind.gemma4a) return gemma4a_encode_bucket()
+    if (m.kind == AsrKind.qwen3a || m.kind == AsrKind.qwen3omni) return qwen3a_encode_bucket()
+    return ""   // parakeet: fine-grained probes only
 }
 
 def caps(m : AsrModel) : AsrCaps {

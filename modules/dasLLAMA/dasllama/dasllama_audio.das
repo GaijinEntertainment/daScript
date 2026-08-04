@@ -852,10 +852,11 @@ def layernorm_batch(var out : array<float>; src : array<float>; blob : PlaneF; w
     layernorm_batch_at(out, src, plane_at(blob, w_off), plane_at(blob, b_off), dim, npos, eps)
 }
 
-//! Threaded per-row Q8_0 requant of a token-major activation image — the shared
-//! dasllama_convert requant, always thread-eligible here. Feeds matmul_q8q8_batch/group3.
+//! Per-row Q8_0 requant of a token-major activation image, through common's thresholded +
+//! profiled form (small rows stay serial; the work lands in the mm_requant bucket).
+//! Feeds matmul_q8q8_batch/group3.
 def asr_requant_rows_q8(x : array<float>; n, npos : int64; var xqb : array<int8>; var xsb : array<float>) {
-    requant_rows_q8(x, n, npos, xqb, xsb, true)
+    requant_rows_q8(x, n, npos, xqb, xsb)
 }
 
 //! y[p] += blob[b_off .. b_off+d) for every row (projection bias). float4 bulk + scalar
@@ -1409,6 +1410,17 @@ def asr_prof_add(name : string; t0 : int64) {
     }
     g_asr_prof[name] += int64(get_time_usec(t0))
     g_asr_prof_hits[name]++
+}
+
+//! One bucket's accumulated ms (0 when absent) — the store's encode-split reader.
+def asr_prof_ms(name : string) : double {
+    return double(g_asr_prof?[name] ?? 0l) / 1000.0lf
+}
+
+//! Reset the accumulators without printing — per-rep sampling (asr_prof_report also clears).
+def asr_prof_reset() {
+    clear(g_asr_prof)
+    clear(g_asr_prof_hits)
 }
 
 def asr_prof_report() {

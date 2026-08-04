@@ -164,9 +164,12 @@ def private load_audio_16k_mono(path : string) : array<float> {
 // Best-of-`reps` transcribe ms for one loaded model, from a warmed JIT + live jobque. `text`
 // receives the LAST rep's transcript: under fast-math a token flip is the thing that moves the
 // timing, so a run that reports only ms cannot tell a real speedup from a shorter decode.
+// `encode_ms` receives the BEST rep's encode split via the asr_prof rail (0 when the family
+// carries no encode-total bucket).
 def private measure_das(var m : AsrModel; samples : array<float>; reps : int; lang : string;
-                        var text : string&) : double {
+                        var text : string&; var encode_ms : double&) : double {
     var best = 1.0e30lf
+    encode_ms = 0.0lf
     for (_rep in range(reps)) {
         var s <- create_session(m, lang)
         var parts : array<string>
@@ -175,9 +178,24 @@ def private measure_das(var m : AsrModel; samples : array<float>; reps : int; la
             parts |> push(seg.text)
         }
         let ms = double(get_time_usec(t0)) / 1000.0lf
-        best = min(best, ms)
+        if (ms < best) {
+            best = ms
+        }
         text = join(parts, "")
         delete parts
+        delete s
+    }
+    // the encode split samples in its OWN untimed rep: every asr_prof_add site is a
+    // string-keyed table insert, so an enabled profiler inside the timed region would tax
+    // exactly the families that carry a bucket and no others
+    let ebucket = asr_encode_bucket(m)
+    if (!empty(ebucket)) {
+        set_asr_prof(true)
+        asr_prof_reset()
+        var s <- create_session(m, lang)
+        transcribe(m, s, samples) $(_seg) {}
+        encode_ms = asr_prof_ms(ebucket)
+        set_asr_prof(false)
         delete s
     }
     return best
@@ -191,9 +209,11 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
         : load_asr_model(model_path, "{spec.root}{spec.das_mmproj}"))
     var warm <- load_audio_16k_mono("{asr_corpus_dir()}{spec.buckets[0]}")
     var warm_text = ""
-    measure_das(m, warm, 1, spec.lang, warm_text)   // JIT compile + first-touch
+    var warm_enc = 0.0lf
+    measure_das(m, warm, 1, spec.lang, warm_text, warm_enc)   // JIT compile + first-touch
     delete warm
     var run = BenchRun(engine = "das", backend = "cpu", flavor = flavor_stamp("tuned"),
+        exec_fmt = asr_exec_fmt(m),
         workload = asr_workload(spec), box = box_name(), threads = threads,
         date = format_time(get_clock(), "%Y-%m-%d"), cmd = bench_cmd_line(), env = bench_env_line(),
         sha = run_capture("git rev-parse --short=9 HEAD", true), version = das_version(),
@@ -207,8 +227,9 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
         var samples <- load_audio_16k_mono("{asr_corpus_dir()}{wav}")
         let audio_s = double(length(samples)) / double(AUDIO_SAMPLE_RATE)
         var text = ""
-        let das_ms = measure_das(m, samples, reps, spec.lang, text)
-        run.tests |> insert("asr:{wav}", BenchTest(ms = das_ms, audio_s = audio_s, text = text))
+        var enc_ms = 0.0lf
+        let das_ms = measure_das(m, samples, reps, spec.lang, text, enc_ms)
+        run.tests |> insert("asr:{wav}", BenchTest(ms = das_ms, audio_s = audio_s, text = text, encode_ms = enc_ms))
         run.files |> emplace(file_identity("{asr_corpus_dir()}{wav}", "clip"))
         print("lcpp_bench --asr: {spec.display} {wav} {das_ms} ms ({audio_s} s audio)\n")
         print("  text: {text}\n")
@@ -227,7 +248,8 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
                 var samples <- load_audio_16k_mono("{asr_corpus_dir()}{wav}")
                 lib_audio += double(length(samples)) / double(AUDIO_SAMPLE_RATE)
                 var ltext = ""
-                lib_ms += measure_das(m, samples, reps, spec.lang, ltext)
+                var lenc = 0.0lf
+                lib_ms += measure_das(m, samples, reps, spec.lang, ltext, lenc)
                 run.files |> emplace(file_identity("{asr_corpus_dir()}{wav}", "clip"))
                 delete samples
             }

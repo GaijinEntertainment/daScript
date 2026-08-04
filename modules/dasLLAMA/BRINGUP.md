@@ -38,8 +38,8 @@ The tuner is the detector, so the human never has to be. For a box with existing
    ```
    Release ALWAYS mints (`--quick` is the sole inherit path, for later session iteration).
    The mint refuses a noisy box (probe cv over the gate — quiet it and re-run; nothing was
-   written), self-validates (a heavy subset re-races and the winners must reproduce), and on
-   Apple runs the e2e confirm for divergent GEMM crowns — set
+   written), self-validates (a heavy subset re-races and the winners must reproduce), and runs the
+   e2e confirm for divergent GEMM crowns (every platform; zen4-verified) — set
    `DASLLAMA_CONFIRM_MODEL=<full path to a q8 gguf>` or such crowns pin the per-ISA fallback.
    The previous sidecar snapshots to `.bak`, the DIFF prints, and the mint archives to
    `~/.tune-history/<box>/` (failures too, marked). **Review the DIFF**: uniform time shift =
@@ -121,23 +121,27 @@ cmake --build build --config Release -j 16        # 15-25 min clean
 
 ## 2. Models
 
-- **LLM**: the public catalog ggufs (see `pub_catalog()` in `gen_bench_records.das`) into a
-  models dir; `export DASLLAMA_MODELS_DIR=<dir>`. Reuse an existing models dir when the box has
-  one — do NOT re-download tens of GB (fetch script: `plans/m4_fetch_models.sh` pattern).
+- **One tool provisions and gates the whole set** — `models_provenance()` in
+  `performance/fetch_models.das` is the committed manifest: per file, the exact HF repo +
+  revision pin, canonical bytes + sha256, and the conversion recipe where no registry serves
+  the file. Verify is the default; `--fetch` downloads what is absent (resumable curl):
+
+```sh
+export DASLLAMA_MODELS_DIR=<dir>       # WHISPER_CPP_MODELS too, or point both at ONE dir
+bin/daslang modules/dasLLAMA/performance/fetch_models.das -- --fetch
+bin/daslang modules/dasLLAMA/performance/fetch_models.das --   # later: verify-only, must end 0 failed
+```
+
 - **The same filename exists in multiple HF repos with different bytes** — lmstudio's and
-  unsloth's `Mistral-Small-...-Q4_K_M.gguf` differ (416 bytes of metadata, different sha).
-  The `.sha` sidecar names the exact build; a fetch that fails the sidecar gate benches a
-  DIFFERENT file, not a re-download glitch — find the right repo, never waive the gate.
-- **ASR**: whisper/parakeet ggml carriers into `$WHISPER_CPP/models` (`WHISPER_CPP_MODELS`
-  overrides — pointing it at the LLM models dir keeps ONE dir per box); the audio-chat ggufs +
-  mmproj files live with the LLM models. Absent models skip with a warning — partial boards
-  are fine, silent substitutions are not. Provenance (verify sha against an existing box's
-  `.sha` sidecars after every fetch):
-  - `ggerganov/whisper.cpp` → `ggml-tiny.bin`, `ggml-large-v3-turbo.bin`
-  - `ggml-org/gemma-4-E2B-it-GGUF` → `gemma-4-E2B-it-Q8_0.gguf`,
-    `mmproj-gemma-4-E2B-it-BF16.gguf` (rename to the catalog's lowercase `-bf16`)
-  - `ggml-org/Qwen3-Omni-30B-A3B-Instruct-GGUF` → `Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf`,
-    `mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf`
+  unsloth's `Mistral-Small-...-Q4_K_M.gguf` differ (416 bytes of metadata, different sha), and
+  upstream re-uploads change bytes under an unchanged name (gpt-oss is revision-pinned for
+  exactly this). The manifest names the exact build; a mismatch means this box would bench a
+  DIFFERENT file, not a re-download glitch — find the recorded repo/revision, never waive.
+  Reuse an existing models dir when the box has one — verify is free, re-downloading is not.
+- **ASR**: whisper/parakeet ggml carriers land in `$WHISPER_CPP/models` (`WHISPER_CPP_MODELS`
+  overrides); the audio-chat ggufs + mmproj files live with the LLM models (the manifest
+  carries the per-file root and the E2B mmproj's lowercase `-bf16` rename). Absent models skip
+  with a warning at sweep time — partial boards are fine, silent substitutions are not.
   - the parakeet v2/v3 f32 bins and the canary encoder/decoder are CONVERSIONS from public
     NVIDIA checkpoints, and every box CONVERTS THEM ITSELF (never transfer model bins between
     boxes — box-to-box links are slow relays and the recipe is the provenance): parakeet via
@@ -217,7 +221,8 @@ done
 
 The AUDIO models ride the same rail — the converter sniffs the family (whisper/parakeet ggml
 bins, the CNRY canary encoder, audio mmproj GGUFs) and bakes the family-tagged image; ASR
-decoder GGUFs are plain decoder bakes (canary's is fp32 — the parity-pinned exception):
+decoder GGUFs are plain q8 decoder bakes (canary's included — the fp32 parity arm bakes
+separately with `-q fp32` when the oracle lane needs it):
 
 ```sh
 for m in $WHISPER_CPP/models/ggml-tiny.bin $WHISPER_CPP/models/ggml-large-v3-turbo.bin \
@@ -228,7 +233,7 @@ for m in $WHISPER_CPP/models/ggml-tiny.bin $WHISPER_CPP/models/ggml-large-v3-tur
          <models-dir>/Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf; do
     bin/daslang -jit utils/dasllama-convert/main.das -- -m "$m"
 done
-bin/daslang -jit utils/dasllama-convert/main.das -- -m <models-dir>/canary-qwen-2.5b-decoder-f16.gguf -q fp32
+bin/daslang -jit utils/dasllama-convert/main.das -- -m <models-dir>/canary-qwen-2.5b-decoder-f16.gguf
 # the GC step covers the whisper models dir too:
 bin/daslang -jit utils/dasllama-convert/main.das -- -m $WHISPER_CPP/models --clean --apply
 ```

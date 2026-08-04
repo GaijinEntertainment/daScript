@@ -516,6 +516,17 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
 
 // ===== mel (gemma4a: no preemphasis, natural-log magnitude, HTK, no per-feature norm) =====
 
+//! The tower's precision half of the facade's [[asr_exec_fmt]] stamp (the decoder tag comes
+//! from the facade, which owns the shared LLM). The Conformer tower loads fp32 today.
+def gemma4a_exec_fmt(dec_fmt : string) : string {
+    return "f32/{dec_fmt}"
+}
+
+//! Gemma4a carries no encode-total ``asr_prof`` bucket (fine-grained probes only).
+def gemma4a_encode_bucket : string {
+    return ""
+}
+
 //! gemma4a log-mel for one ≤30 s chunk: semicausal left-pad (window/2) + right-pad to the PyTorch
 //! frame count, 512 Hann (320-front), magnitude spectrum, HTK mel dot, natural log(sum, floor
 //! 0.001). Frame-major ``[n_len × n_mel]``; ``n_len`` trimmed to the PyTorch frame count.

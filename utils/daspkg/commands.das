@@ -2105,6 +2105,18 @@ def private get_daslang_path() : string {
     return get_platform_name() == "windows" ? replace(joined, "/", "\\") : joined
 }
 
+// remember the resolved scope manifest for the ship step; warn once on conflicting scopes
+def private release_note_ship_manifest(manifest : string; var ship_manifest : string&) {
+    if (empty(manifest) || !fexist(manifest)) {
+        return
+    }
+    if (empty(ship_manifest)) {
+        ship_manifest = manifest
+    } elif (ship_manifest != manifest) {
+        to_log(LOG_WARNING, "release: multiple tune-scope manifests ({ship_manifest} vs {manifest}) — shipping the first\n")
+    }
+}
+
 def cmd_release(root : string; out_dir : string; paranoid = false; quick = false) : int { // nolint:STYLE037,STYLE038 — phased orchestrator sharing bundle state end to end; the real split belongs to the daspkg cleanup pass
     let release_t0 = ref_time_ticks()
     if (paranoid && quick) {
@@ -2247,6 +2259,7 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
     //     follows. `--quick` is the ONLY mode that accepts an existing sidecar, and only a
     //     COMPLETE one (an incomplete/stale scope mints even under --quick: the frozen exe
     //     itself never tunes, so shipping it unmeasured is not an option).
+    var ship_manifest = ""   // the resolved scope manifest step 2.6 ships (see there)
     {
         var deps0 : ReleaseDeps
         if (read_release_deps(deps_file, deps0)) {
@@ -2260,6 +2273,7 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
                 }
                 if (quick && ts.complete) {
                     log("  tune: scope `{ts.name}` inherited (--quick): {sidecar_provenance_line(ts.manifest)}\n")
+                    release_note_ship_manifest(ts.manifest, ship_manifest)
                     continue
                 }
                 if (quick && !ts.complete) {
@@ -2283,6 +2297,7 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
                     return 1
                 }
                 log("  tune: scope `{ts.name}` finished in {tune_seconds}s — ships {sidecar_provenance_line(ts.manifest)}\n")
+                release_note_ship_manifest(ts.manifest, ship_manifest)
                 tuned_any = true
             }
             if (tuned_any) {
@@ -2401,7 +2416,11 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
     //     section travels with the artifact and the file documents the baked winners
     //     (provenance included). Touch it NEWER than the exe: the sidecar predates the
     //     build by construction, and a stale-looking sidecar would be ignored at runtime.
-    let sidecar_src = "{slice(main_path, 0, length(main_path) - 4)}.tune.json"
+    // prefer the tune scopes' RESOLVED manifest (honors DAS_TUNE_MANIFEST redirects) over
+    // the next-to-root guess — shipping the guess put a stale July sidecar beside a
+    // freshly-minted exe on M4's first standalone run
+    let sidecar_default = "{slice(main_path, 0, length(main_path) - 4)}.tune.json"
+    let sidecar_src = (!empty(ship_manifest) && fexist(ship_manifest)) ? ship_manifest : sidecar_default
     if (fexist(sidecar_src)) {
         let sidecar_rel = "{bundle_name}.tune.json"
         let sidecar_dst = path_join(bundle_dir, sidecar_rel)

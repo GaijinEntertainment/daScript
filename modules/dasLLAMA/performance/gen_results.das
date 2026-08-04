@@ -117,27 +117,11 @@ def render_doc(profiles : array<LlmProfile>) : string {
 
 let ASR_RESULTS_PATH = "modules/dasLLAMA/benchmarks/asr/results.md"
 
-def list_asr_profiles() : array<string> {
-    var out : array<string>
-    dir(PERF_DIR) $(fn) {
-        if (starts_with(fn, "profile_asr_") && ends_with(fn, ".json")) {
-            out |> push("{PERF_DIR}/{fn}")
-        }
-    }
-    sort(out)
-    return <- out
-}
 
-// "modules/.../profile_asr_m1.json" -> "m1"
-def box_from_path(path : string) : string {
-    var b = base_name(path)
-    if (starts_with(b, "profile_asr_")) {
-        b = slice(b, length("profile_asr_"))
-    }
-    if (ends_with(b, ".json")) {
-        b = slice(b, 0, length(b) - length(".json"))
-    }
-    return b
+// "modules/.../records/m1.json" -> "m1"
+def store_box(path : string) : string {
+    let b = base_name(path)
+    return ends_with(b, ".json") ? slice(b, 0, length(b) - length(".json")) : b
 }
 
 // Replace the text between "<!-- GEN:{key} -->" and "<!-- /GEN:{key} -->" with `body`; `found` reports
@@ -173,30 +157,66 @@ def cell_xrt(audio_s, ms : double) : string {
     return (ms > 0.0lf && audio_s > 0.0lf) ? "{audio_s * 1000.0lf / ms:.1f}" : "-"
 }
 
-def bucket_ref_ms(b : AsrBucket; tool : string) : double {
-    for (r in b.refs) {
-        if (r.tool == tool) {
-            return r.ms
-        }
-    }
-    return -1.0lf
+def test_ms(r : BenchRun; key : string) : double {
+    return r.tests?[key]?.ms ?? -1.0lf
 }
 
-def bucket_ref_enc(b : AsrBucket; tool : string) : double {
-    for (r in b.refs) {
-        if (r.tool == tool) {
-            return r.encode_ms
-        }
-    }
-    return -1.0lf
+def test_audio(r : BenchRun; key : string) : double {
+    return r.tests?[key]?.audio_s ?? -1.0lf
 }
 
-// Whether to render the encode-split columns. Gated on the DAS split being present: the JSON retains
-// the mtmd reference encode_ms regardless, but until the das-side encode is wired (asr_prof, a TODO)
-// a lone "ref enc / das -" column pair reads as incomplete — so the encode story stays in prose.
-def has_encode(m : AsrRec) : bool {
-    for (b in m.buckets) {
-        if (b.das_encode_ms > 0.0lf) {
+def test_enc(r : BenchRun; key : string) : double {
+    return r.tests?[key]?.encode_ms ?? -1.0lf
+}
+
+def is_asr_run(r : BenchRun) : bool {
+    return r.workload == "asr" || r.workload == "audio-chat"
+}
+
+// the model's das ASR run index, or -1 — the row source every table hangs off. Newest by
+// date, matching the site renderer's newest() — index order silently disagreed with it
+def das_asr_run(m : BenchModel) : int {
+    var pick = -1
+    for (i in range(length(m.runs))) {
+        if (m.runs[i].engine == "das" && is_asr_run(m.runs[i]) && m.runs[i].backend == "cpu") {
+            if (pick < 0 || m.runs[i].date > m.runs[pick].date) {
+                pick = i
+            }
+        }
+    }
+    return pick
+}
+
+// reference runs for the table, catalog order first (spec.refs → engine names), then any
+// other non-das ASR runs the store carries that the catalog does not name
+def asr_ref_runs(m : BenchModel; spec : AsrModelSpec) : array<int> {
+    var out : array<int>
+    for (rf in spec.refs) {
+        let want = asr_engine_name(rf.tool)
+        for (i in range(length(m.runs))) {
+            if (m.runs[i].engine == want && is_asr_run(m.runs[i])) {
+                out |> push(i)
+            }
+        }
+    }
+    for (i in range(length(m.runs))) {
+        if (m.runs[i].engine != "das" && is_asr_run(m.runs[i]) && find_index(out, i) < 0) {
+            out |> push(i)
+        }
+    }
+    return <- out
+}
+
+// a reference column's header stem: engine plus its precision tag when the run carries one
+def ref_label(r : BenchRun) : string {
+    return empty(r.exec_fmt) ? r.engine : "{r.engine} {r.exec_fmt}"
+}
+
+// Whether to render the encode-split columns — gated on the DAS split being present so a lone
+// "ref enc / das -" pair never reads as incomplete coverage.
+def has_encode(dr : BenchRun; wavs : array<string>) : bool {
+    for (w in wavs) {
+        if (test_enc(dr, "asr:{w}") > 0.0lf) {
             return true
         }
     }
@@ -204,9 +224,9 @@ def has_encode(m : AsrRec) : bool {
 }
 
 // One model's uniform table: file | audio s | das ms | <ref ms>… | <das/ref>… | das xRT | (enc cols).
-def render_asr_table(m : AsrRec) : string {
-    let enc = has_encode(m)
-    let nr = length(m.references)
+def render_asr_table(m : BenchModel; dr : BenchRun; refis : array<int>; wavs : array<string>) : string {
+    let enc = has_encode(dr, wavs)
+    let nr = length(refis)
     let ncols = 3 + nr + nr + 1 + (enc ? 1 + nr : 0)
     var headers : array<string>
     var aligns : array<ColAlign>
@@ -215,17 +235,17 @@ def render_asr_table(m : AsrRec) : string {
     headers |> push("file")
     headers |> push("audio s")
     headers |> push("das ms")
-    for (t in m.references) {
-        headers |> push("{t} ms")
+    for (i in refis) {
+        headers |> push("{ref_label(m.runs[i])} ms")
     }
-    for (t in m.references) {
-        headers |> push("das/{t}")
+    for (i in refis) {
+        headers |> push("das/{m.runs[i].engine}")
     }
     headers |> push("das xRT")
     if (enc) {
         headers |> push("das enc ms")
-        for (t in m.references) {
-            headers |> push("{t} enc ms")
+        for (i in refis) {
+            headers |> push("{m.runs[i].engine} enc ms")
         }
     }
     aligns |> push(ColAlign.left)
@@ -233,24 +253,30 @@ def render_asr_table(m : AsrRec) : string {
         aligns |> push(ColAlign.right)
     }
     var rows : array<array<string>>
-    rows |> reserve(length(m.buckets))
-    for (b in m.buckets) {
+    rows |> reserve(length(wavs))
+    for (w in wavs) {
+        let key = "asr:{w}"
+        let das_ms = test_ms(dr, key)
+        if (das_ms <= 0.0lf) {
+            continue
+        }
+        let audio_s = test_audio(dr, key)
         var row : array<string>
         row |> reserve(ncols)
-        row |> push(b.wav)
-        row |> push("{b.audio_s:.0f}")
-        row |> push(cell_ms(b.das_ms))
-        for (t in m.references) {
-            row |> push(cell_ms(bucket_ref_ms(b, t)))
+        row |> push(w)
+        row |> push("{audio_s:.0f}")
+        row |> push(cell_ms(das_ms))
+        for (i in refis) {
+            row |> push(cell_ms(test_ms(m.runs[i], key)))
         }
-        for (t in m.references) {
-            row |> push(cell_ms_ratio(b.das_ms, bucket_ref_ms(b, t)))
+        for (i in refis) {
+            row |> push(cell_ms_ratio(das_ms, test_ms(m.runs[i], key)))
         }
-        row |> push(cell_xrt(b.audio_s, b.das_ms))
+        row |> push(cell_xrt(audio_s, das_ms))
         if (enc) {
-            row |> push(cell_ms(b.das_encode_ms))
-            for (t in m.references) {
-                row |> push(cell_ms(bucket_ref_enc(b, t)))
+            row |> push(cell_ms(test_enc(dr, key)))
+            for (i in refis) {
+                row |> push(cell_ms(test_enc(m.runs[i], key)))
             }
         }
         rows |> emplace(row)
@@ -258,60 +284,87 @@ def render_asr_table(m : AsrRec) : string {
     return render_md_table(headers, aligns, rows)
 }
 
-// The LibriSpeech dictation aggregate (mean / p50 / p95 per side); das rows bolded.
-def render_libri(l : LibriAggregate) : string {
-    let headers <- ["side", "mean ms", "p50", "p95"]
-    let aligns <- [ColAlign.left, ColAlign.right, ColAlign.right, ColAlign.right]
+// The LibriSpeech dictation aggregate — TOTALS per side (the store carries one aggregate key,
+// not per-clip rows; the old mean/p50/p95 died with the per-clip profile shape).
+def render_libri(m : BenchModel; dr : BenchRun; refis : array<int>) : string {
+    let key = libri_test_key()
+    let headers <- ["side", "total ms", "xRT"]
+    let aligns <- [ColAlign.left, ColAlign.right, ColAlign.right]
+    let audio = test_audio(dr, key)
     var rows : array<array<string>>
-    rows |> reserve(length(l.sides))
-    for (s in l.sides) {
-        let win = starts_with(s.side, "das ")
-        rows |> emplace([
-            s.side,
-            win ? md_bold("{s.mean_ms:.0f}") : "{s.mean_ms:.0f}",
-            win ? md_bold("{s.p50_ms:.0f}") : "{s.p50_ms:.0f}",
-            win ? md_bold("{s.p95_ms:.0f}") : "{s.p95_ms:.0f}"
-        ])
+    rows |> emplace([md_bold("das"), md_bold("{test_ms(dr, key):.0f}"), md_bold(cell_xrt(audio, test_ms(dr, key)))])
+    for (i in refis) {
+        let ms = test_ms(m.runs[i], key)
+        if (ms > 0.0lf) {
+            rows |> emplace([ref_label(m.runs[i]), "{ms:.0f}", cell_xrt(audio, ms)])
+        }
     }
     return render_md_table(headers, aligns, rows)
 }
 
-// One generated table's italic platform sub-line (date + rev live here so they auto-update).
-def asr_platform_line(pl : PlatformInfo) : string {
-    let parsec = pl.parsec_off ? "Parsec off" : "Parsec ON"
-    return "_{pl.cpu}, {pl.threads} threads — daslang {pl.daslang}, {pl.date} ({parsec})._"
+// One generated table's italic platform sub-line (precision + date + rev live here so they
+// auto-update with every sweep).
+def asr_platform_line(dr : BenchRun) : string {
+    let fmt = empty(dr.exec_fmt) ? "" : " — das {dr.exec_fmt}"
+    return "_{dr.hardware.cpu}, {dr.threads} threads{fmt} — daslang {dr.version} {dr.sha}, {dr.date}._"
 }
 
-// Splice every box's generated ASR tables into results.md (prose preserved). Returns regions replaced.
-def regen_asr(profiles : array<string>) : int {
+// Splice every box store's generated ASR tables into results.md (prose preserved). Returns
+// regions replaced. Markers are "asr {display} {box}" — enrolment stays add-the-marker-pair.
+def regen_asr(stores : array<string>) : int {
     var doc = fread(ASR_RESULTS_PATH)
     var nrepl = 0
-    for (path in profiles) {
-        var p : AsrProfile
-        if (!sscan_json(fread(path), p)) {
-            print("skip: {path} did not parse as an AsrProfile\n")
+    var inscope cat <- asr_catalog()
+    for (path in stores) {
+        var models : array<BenchModel>
+        if (!read_bench_records(path, models)) {
+            print("skip: {path} did not parse as a record store\n")
             continue
         }
-        let box = box_from_path(path)
-        for (m in p.tests) {
+        // the hand-note overlay applies here too — a provenance caveat that reaches the site
+        // but not this page would publish the same rows with two different stories
+        var inscope annos : array<BenchAnnotation>
+        if (read_annotations(annos)) {
+            apply_annotations(models, annos)
+        }
+        let box = store_box(path)
+        for (m in models) {
+            let di = das_asr_run(m)
+            if (di < 0) {
+                continue
+            }
+            var spec_i = -1
+            for (si in range(length(cat))) {
+                if (cat[si].das_model == m.gguf) {
+                    spec_i = si
+                    break
+                }
+            }
+            if (spec_i < 0) {
+                print("  no catalog spec for {m.gguf} ({box}) — not rendered\n")
+                continue
+            }
+            let refis <- asr_ref_runs(m, cat[spec_i])
             var found = false
-            let body = "{asr_platform_line(p.platform)}\n\n{render_asr_table(m)}"
-            doc = replace_region(doc, "asr {m.model} {box}", body, found)
+            let caveat = empty(m.runs[di].comment) ? "" : "\n_&#9888; {m.runs[di].comment}_\n"
+            let body = "{asr_platform_line(m.runs[di])}\n\n{render_asr_table(m, m.runs[di], refis, cat[spec_i].buckets)}{caveat}"
+            doc = replace_region(doc, "asr {cat[spec_i].display} {box}", body, found)
             if (found) {
                 nrepl++
             } else {
-                print("  no marker for: asr {m.model} {box}\n")
+                print("  no marker for: asr {cat[spec_i].display} {box}\n")
+            }
+            if (test_ms(m.runs[di], libri_test_key()) > 0.0lf) {
+                var lfound = false
+                doc = replace_region(doc, "asr librispeech {box}", render_libri(m, m.runs[di], refis), lfound)
+                if (lfound) {
+                    nrepl++
+                } else {
+                    print("  no marker for: asr librispeech {box}\n")
+                }
             }
         }
-        if (!empty(p.librispeech.sides)) {
-            var found = false
-            doc = replace_region(doc, "asr librispeech {box}", render_libri(p.librispeech), found)
-            if (found) {
-                nrepl++
-            } else {
-                print("  no marker for: asr librispeech {box}\n")
-            }
-        }
+        delete models
     }
     fopen(ASR_RESULTS_PATH, "wb") $(f) {
         if (f != null) {
@@ -347,10 +400,10 @@ def main() {
         print("wrote {length(profiles)} box section(s) -> {RESULTS_PATH}\n")
     }
 
-    // ---- ASR scoreboard (regenerated in place, prose preserved) ----
-    let asr <- list_asr_profiles()
+    // ---- ASR scoreboard (regenerated in place from the record store, prose preserved) ----
+    let asr <- list_record_stores()
     if (empty(asr)) {
-        print("no profile_asr_*.json under {PERF_DIR} — skipping ASR scoreboard\n")
+        print("no records/<box>.json under {PERF_DIR}/records — skipping ASR scoreboard\n")
     } else {
         let n = regen_asr(asr)
         print("asr: replaced {n} region(s) in {ASR_RESULTS_PATH}\n")

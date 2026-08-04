@@ -234,6 +234,17 @@ def private wm_repack(var dqblob : array<int8>; var dqscales : array<float>; wof
     repack_q8q8_weight(dqblob, dqscales, woff, n, d)
 }
 
+//! The loaded precision as ``<encoder>/<decoder>`` — whisper's half of the facade's
+//! [[asr_exec_fmt]] stamp.
+def whisper_exec_fmt(w : WhisperModel) : string {
+    return "{w.enc.q8 ? "q8" : "f32"}/{w.dq8 ? "q8" : "f32"}"
+}
+
+//! Whisper's encode-total ``asr_prof`` bucket (the facade's [[asr_encode_bucket]] arm).
+def whisper_encode_bucket : string {
+    return "wh.encode_total"
+}
+
 //! Quantizes the decoder's GEMM weights to Q8_0: tied token embedding (as the [n_vocab × d]
 //! logits GEMV weight; row lookups still read fp32 dblob) + per-layer self/cross q/k/v/o + fc1/fc2.
 //! Non-GEMM slots (pe rows, norms, biases) are quantized-but-unread.

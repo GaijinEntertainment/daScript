@@ -90,6 +90,22 @@ var private g_dlim_cpu_source = @@dlim_no_cpu_source
 var private g_dlim_vulkan_source = @@dlim_no_vulkan_source
 var private g_dlim_metal_source = @@dlim_no_metal_source
 
+// Function values do not survive program serialization (a baked exe restores globals as
+// DATA — the defaults arrive null and only tier-registered seams heal), so the defaults are
+// boot-restored here; the null guards let a real registrar win in either [init] order.
+[init]
+def private restore_dlim_source_defaults {
+    if (g_dlim_cpu_source == null) {
+        g_dlim_cpu_source = @@dlim_no_cpu_source
+    }
+    if (g_dlim_vulkan_source == null) {
+        g_dlim_vulkan_source = @@dlim_no_vulkan_source
+    }
+    if (g_dlim_metal_source == null) {
+        g_dlim_metal_source = @@dlim_no_metal_source
+    }
+}
+
 //! The CPU tier registers its section filler (must run its backend select ONCE before reading
 //! the layout getters — that side effect lives in the source, never in the identity).
 def public set_dlim_cpu_source(f : function<(var c : DlimCpuConfig) : void>) {

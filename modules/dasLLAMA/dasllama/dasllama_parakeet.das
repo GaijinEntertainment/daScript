@@ -261,6 +261,11 @@ def private pk_layer_stride(d, ff, nk : int64) : int64 => 8l * d * d + 4l * ff *
 // and the depthwise kernel
 def private pk_aux_layer_stride(d, nk : int64) : int64 => 16l * d + nk * d
 
+// Attention slab height in rows: 4-aligned (the gemm_f32 row-group invariant) and tall
+// enough that the Kᵀ/pos panel re-streams stay a few percent of the gemm time — B=16
+// measured −12% on hp0x2 encode (panel re-read per 16 rows); B=64 restores it.
+let PK_ATN_BLOCK = 64l
+
 // repack one GEMM region for the active backend (scales index at woff/32, so woff must be 32-aligned)
 def private pk_repack(var st : ParakeetStaging; woff, n, d : int64) {
     if (woff % 32l != 0l) {
@@ -786,6 +791,12 @@ def stage_parakeet_model(path : string; q8 : bool = false) : ParakeetStaging {
 
 // ===== mel (frame-major!) =====
 
+//! The loaded precision (one tag — parakeet is a single carrier): the facade's
+//! [[asr_exec_fmt]] arm.
+def parakeet_exec_fmt(p : ParakeetModel) : string {
+    return p.q8 ? "q8" : "f32"
+}
+
 //! Parakeet's log-mel: preemphasis 0.97, zero center-pad n_fft/2, the file's STFT window, power
 //! spectra, mel dot, NATURAL log(sum + 2⁻²⁴), then per-feature mean/std normalization over the
 //! valid frames only (Bessel n−1, std + 1e-5), applied to all. FRAME-major ``[n_len][n_mel]``.
@@ -1160,10 +1171,15 @@ def parakeet_encode(m : ParakeetModel; var st : ParakeetState) : int64 {
     pk_ensure(st.quh2, tt * dh)
     pk_ensure(st.vh, tt * dh)
     pk_ensure(st.kth, dh * tt)
-    pk_ensure(st.scores, tt * tt)
-    pk_ensure(st.relm, tt * ww)
+    // per-job B-row slabs, NOT tt-row matrices (job li owns slab li; 4-aligned row groups
+    // stay bit-exact). Jobs never exceed blocks — 10-wide dispatches over a short clip's 3
+    // blocks cost ~20 ms/clip at jfk length (measured on the M4 board).
+    let atn_jobs = min(int64(lanes_for_work(tt * dh * (2l * tt + ww), 0)),
+        (tt + PK_ATN_BLOCK - 1l) / PK_ATN_BLOCK)
+    pk_ensure(st.scores, atn_jobs * PK_ATN_BLOCK * tt)
+    pk_ensure(st.relm, atn_jobs * PK_ATN_BLOCK * ww)
+    pk_ensure(st.oh, atn_jobs * PK_ATN_BLOCK * dh)
     pk_ensure(st.post, dh * ww)
-    pk_ensure(st.oh, tt * dh)
     pk_ensure(st.ao, tt * d)
     let scale = 1.0 / sqrt(float(dh))
 
@@ -1264,41 +1280,51 @@ def parakeet_encode(m : ParakeetModel; var st : ParakeetState) : int64 {
                 }
                 asr_prof_add("pk.attn_heads.pos", th)
                 th = ref_time_ticks()
-                // content scores (Q+u)·Kᵀ + rel scores (Q+v)·pos_hᵀ + softmax + P·V_h, threaded in
-                // 4-ROW BLOCKS: gemm_f32's 4×16 tile is row-position-dependent, so 4-aligned chunk
-                // starts keep FMA order bit-exact vs the whole-matrix call at any lane count.
-                let nblk4 = int((tt + 3l) / 4l)
-                maybe_parallel_for(0, nblk4, lanes_for_work(tt * dh * (2l * tt + ww), 0)) $(bb, be) {
+                // content scores (Q+u)·Kᵀ + rel scores (Q+v)·pos_hᵀ + softmax + P·V_h — atn_jobs
+                // jobs over B-row blocks into per-job slabs: gemm_f32 never mixes accumulation
+                // across 4-row groups, so 4-aligned starts stay bit-exact and scratch is O(jobs·B).
+                let nblkb = (tt + PK_ATN_BLOCK - 1l) / PK_ATN_BLOCK
+                let npj = (nblkb + atn_jobs - 1l) / atn_jobs
+                maybe_parallel_for(0, int(atn_jobs), int(atn_jobs)) $(jb, je) {
                     unsafe {
-                        let r0 = int64(bb) * 4l
-                        let r1 = min(int64(be) * 4l, tt)
-                        let nr = r1 - r0
-                        for (i in range64(r0 * tt, r1 * tt)) {
-                            scp[i] = 0.0
-                        }
-                        for (i in range64(r0 * ww, r1 * ww)) {
-                            rlp[i] = 0.0
-                        }
-                        gemm_f32_jo(scp + r0 * tt, qup + r0 * dh, ktp, nr, dh, tt)
-                        gemm_f32_jo(rlp + r0 * ww, qvp + r0 * dh, pop, nr, dh, ww)
-                        for (q in range64(r0, r1)) {
-                            let base = tt - 1l - q
-                            for (k in range64(tt)) {
-                                var s = (scp[q * tt + k] + rlp[q * ww + base + k]) * scale
-                                if (k >= n_real) {
-                                    s = -1e30
+                        for (li in range64(int64(jb), int64(je))) {
+                            var scs = scp + li * PK_ATN_BLOCK * tt
+                            var rls = rlp + li * PK_ATN_BLOCK * ww
+                            var ohs = ohp + li * PK_ATN_BLOCK * dh
+                            for (blk in range64(li * npj, min((li + 1l) * npj, nblkb))) {
+                                let r0 = blk * PK_ATN_BLOCK
+                                let r1 = min(r0 + PK_ATN_BLOCK, tt)
+                                let nr = r1 - r0
+                                for (i in range64(nr * tt)) {
+                                    scs[i] = 0.0
                                 }
-                                scp[q * tt + k] = s
-                            }
-                            softmax(scp + q * tt, tt)
-                        }
-                        for (i in range64(r0 * dh, r1 * dh)) {
-                            ohp[i] = 0.0
-                        }
-                        gemm_f32_jo(ohp + r0 * dh, scp + r0 * tt, vhp, nr, tt, dh)
-                        for (t in range64(r0, r1)) {
-                            for (j in range64(dh)) {
-                                aop[t * d + hoff + j] = ohp[t * dh + j]
+                                for (i in range64(nr * ww)) {
+                                    rls[i] = 0.0
+                                }
+                                gemm_f32_jo(scs, qup + r0 * dh, ktp, nr, dh, tt)
+                                gemm_f32_jo(rls, qvp + r0 * dh, pop, nr, dh, ww)
+                                for (q in range64(r0, r1)) {
+                                    let base = tt - 1l - q
+                                    var qs = scs + (q - r0) * tt
+                                    var rs = rls + (q - r0) * ww
+                                    for (k in range64(tt)) {
+                                        var s = (qs[k] + rs[base + k]) * scale
+                                        if (k >= n_real) {
+                                            s = -1e30
+                                        }
+                                        qs[k] = s
+                                    }
+                                    softmax(qs, tt)
+                                }
+                                for (i in range64(nr * dh)) {
+                                    ohs[i] = 0.0
+                                }
+                                gemm_f32_jo(ohs, scs, vhp, nr, tt, dh)
+                                for (t in range64(r0, r1)) {
+                                    for (j in range64(dh)) {
+                                        aop[t * d + hoff + j] = ohs[(t - r0) * dh + j]
+                                    }
+                                }
                             }
                         }
                     }

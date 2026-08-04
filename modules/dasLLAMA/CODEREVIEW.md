@@ -64,7 +64,10 @@ measure on fallback kernels.
 documents — `performance/gen_profile.das` (the routine in-process check),
 `benchmarks/lcpp_bench.das` (one cell), `performance/gen_bench_records.das` (a board). A new timing harness, a one-off measurement script, or a
 revived rig is a defect. `PROFILE.md` carries the three commands; the rig's shape is
-`ARCHITECTURE.md` §2.5.
+`ARCHITECTURE.md` §2.5. Carve-out: `benchmarks/asr/mem_census.sh` measures peak MEMORY
+(`/usr/bin/time -l` around a whole process — a quantity no in-process rig can observe about
+itself), until a footprint leg lands in `gen_bench_records`; it stays macOS-only and its
+numbers live in `PERF_LEDGER.md`, never in the record stores.
 
 ---
 
@@ -87,6 +90,13 @@ that adds requires across the tree instead of fixing the facade re-export. Engin
 require each other.
 
 **A new module file is registered in `.das_module` and `CMakeLists.txt` in the same change.**
+
+**`performance/fetch_models.das` is the model-provenance manifest and nothing else.** Per
+catalog file: the exact HF repo + revision pin, canonical bytes + sha256, or the conversion
+recipe where no registry serves the file. Verify is the default, `--fetch` downloads what is
+absent; it never converts, never benches, never touches tune state
+(`tune_policy(missing="fallback")`). Its gate is `fetch_models.das --` ending `0 failed` on a
+provisioned box — BRINGUP.md §2 is the runbook.
 
 ### Engine
 

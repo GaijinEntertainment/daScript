@@ -979,6 +979,50 @@ def test_canary_encoder_image_roundtrip(t : T?) {
 }
 
 [test]
+def test_canary_encoder_q8_image_roundtrip(t : T?) {
+    t |> run("canary encoder q8: mapped image planes are element-exact vs bin transcode") @(t : T?) {
+        if (!family_on(t, "canary")) return
+        if (!arm_on(t, "canary")) return
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
+        if (!model_available(t, path)) {
+            return
+        }
+        let img = image_path_for(path, "canary-q8")
+        remove(img)
+        // off-rail truth: the staging carrier re-runs the read-time transcode + repack under
+        // the same backend pin, so its planes are the served image's ground truth
+        var inscope a <- stage_canary_encoder(path, true)
+        var inscope cold <- load_canary_encoder(path, true)
+        t |> success(cold.image_map != null, "cold load serves the image it built")
+        t |> success(stat(img).is_valid, "cold load saved an image")
+        t |> success(cold.q8, "served encoder is on the q8 rail")
+        t |> equal(count_mismatch_i8(a.qblob, cold.qblob), 0l, "cold-built qblob element-exact")
+        var inscope b <- load_canary_encoder(path, true)
+        t |> success(b.image_map != null, "warm load is image-backed")
+        t |> success(b.q8, "warm encoder is on the q8 rail")
+        t |> equal(b.d_model, a.e.d_model)
+        t |> equal(b.n_layer, a.e.n_layer)
+        t |> equal(b.proj_dim, a.e.proj_dim)
+        t |> equal(length(b.layers), long_length(a.layers))
+        t |> equal(count_mismatch_i8(a.qblob, b.qblob), 0l, "qblob element-exact")
+        t |> equal(count_mismatch(a.qscales, b.qscales), 0l, "qscales element-exact")
+        t |> equal(count_mismatch(a.blob, b.blob), 0l, "compact fp32 blob element-exact")
+        t |> equal(count_mismatch(a.filters, b.filters), 0l, "filters element-exact")
+        // the off-rail control: a staged read minted straight into memory; the mint derives
+        // its family tag from the staging's own precision
+        var inscope stg <- stage_canary_encoder(path, true)
+        var inscope minted = CanaryEncoder()
+        mint_canary_encoder(stg, minted)
+        t |> success(minted.q8, "minted encoder is on the staging's q8 rail")
+        t |> equal(count_mismatch_i8(a.qblob, minted.qblob), 0l, "minted qblob element-exact vs staged truth")
+    }
+}
+
+[test]
 def test_gemma4a_encoder_image_roundtrip(t : T?) {
     t |> run("gemma4a encoder: mapped image planes are element-exact vs gguf") @(t : T?) {
         if (!family_on(t, "gemma4a")) return
