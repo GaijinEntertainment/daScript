@@ -289,7 +289,10 @@ def private setup_refs(cfg : Args) : bool {
         let dst_path = "{whisper_models_dir()}{pair.dst}"
         if (stat(src_path).is_valid && !stat(dst_path).is_valid) {
             to_log(LOG_INFO, "setup_asr_rig: quantizing {pair.src} -> {pair.dst} (q8_0)\n")
-            run_capture("\"{whisper_cpp_bin(pair.quant)}\" \"{src_path}\" \"{dst_path}\" q8_0", false)
+            // `call ` so the line never STARTS with a quote — cmd.exe strips a leading one
+            // and mangles the rest (the daspkg release_tuner_cmd rule, hit live on zen2)
+            let lead = is_windows_box() ? "call " : ""
+            run_capture("{lead}\"{whisper_cpp_bin(pair.quant)}\" \"{src_path}\" \"{dst_path}\" q8_0", false)
             if (!stat(dst_path).is_valid) {
                 to_log(LOG_WARNING, "setup_asr_rig: q8_0 sibling {pair.dst} did not materialize — the {pair.quant} run failed\n")
                 ok = false

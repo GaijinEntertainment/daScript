@@ -1286,14 +1286,14 @@ def public wait_for_key_idle(app : ImguiApp; timeout_sec : float = DEFAULT_FRAME
 }
 
 def public wait_for_mouse_idle(app : ImguiApp; timeout_sec : float = DEFAULT_FRAME_WAIT_SEC) : bool {
-    //! Poll ``imgui_mouse_status`` until ``playing == false`` or timeout; returns true on idle.
-    //! Uses one HTTP request per poll (unlike a ``wait_until`` body that pairs a snapshot
-    //! with a status call), keeping the per-subprocess connection count low on Windows.
+    //! Poll ``imgui_mouse_status`` until ``busy == false`` (both gesture rails: the timeline
+    //! AND the click/drag coroutine ``imgui_click`` rides — ``playing`` alone misses the latter,
+    //! letting a click land mid-keystrokes). One HTTP request per poll, cheap on Windows.
     let start = ref_time_ticks()
     let timeout_usec = int(timeout_sec * 1000000.0f)
     while (get_time_usec(start) < timeout_usec) {
         let r = post_command(app, "imgui_mouse_status", null)
-        if (!(r?["playing"] ?? true)) return true
+        if (!(r?["busy"] ?? (r?["playing"] ?? true))) return true
         sleep(FRAME_POLL_INTERVAL_MS)
     }
     dump_on_timeout(app, "wait_for_mouse_idle")

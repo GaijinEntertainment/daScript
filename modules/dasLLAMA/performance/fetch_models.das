@@ -26,6 +26,9 @@ struct FetchArgs {
     @clarg_doc = "Print what --fetch would download, download nothing"
     dry_run : bool
 
+    @clarg_doc = "Run the on-box conversion recipes for absent converted entries (parakeet v2/v3, canary) — needs the setup_asr_rig nemo venv + refs; POSIX boxes only"
+    convert : bool
+
     @clarg_short = "o"
     @clarg_doc = "Only entries whose local name contains this substring"
     only : string
@@ -136,6 +139,79 @@ def private entry_path(e : ProvEntry) : string {
 }
 
 // fetch straight to the destination: -C - resumes a partial file, and the size+sha gates below
+// ===== the on-box conversion drivers (--convert) =====
+// The recipes as executable steps, needing setup_asr_rig's rig: NEMO_PY (the venv python),
+// WHISPER_CPP (the pinned checkout, parakeet converter + models dir), MTMD_BIN (whose own
+// llama.cpp checkout serves the canary decoder's gguf writer — no extra env).
+
+def private convert_nemo_py() : string {
+    let p = get_env_variable("NEMO_PY")
+    return empty(p) ? "modules/dasLLAMA/benchmarks/asr/.venv-nemo/bin/python" : p
+}
+
+def private convert_hub_root() : string {
+    let hf = get_env_variable("HF_HOME")
+    return "{hf}/hub" if (!empty(hf))
+    let home = get_env_variable("HOME")
+    if (empty(home)) {
+        to_log(LOG_ERROR, "convert: neither HF_HOME nor HOME is set — cannot locate the huggingface hub cache\n")
+        return ""
+    }
+    return "{home}/.cache/huggingface/hub"
+}
+
+def private hub_download(py, expr : string) : string {
+    let out = run_capture("{py} -c \"from huggingface_hub import {expr}\"", true)
+    var last = ""
+    for (ln in split(out, "\n")) {
+        if (!empty(strip(ln))) {
+            last = strip(ln)
+        }
+    }
+    return last
+}
+
+def private convert_parakeet(e : ProvEntry; path : string) {
+    let py = convert_nemo_py()
+    let v = find(e.name, "-v3-") >= 0 ? "v3" : "v2"
+    let src = hub_download(py, "hf_hub_download; print(hf_hub_download('nvidia/parakeet-tdt-0.6b-{v}','parakeet-tdt-0.6b-{v}.nemo'))")
+    if (empty(src) || !stat(src).is_valid) {
+        to_log(LOG_ERROR, "fetch_models: --convert {e.name} — the .nemo download failed\n")
+        return
+    }
+    // the converter's default output name is ggml-model-f32.bin — --out-name is load-bearing
+    // (the zen4 bringup lost v2 to a v3 overwrite without it)
+    run_capture("{py} \"{get_env_variable("WHISPER_CPP")}/models/convert-parakeet-to-ggml.py\" --model \"{src}\" --out-dir \"{dir_name(path)}\" --use-f32 --out-name {e.name}", false)
+}
+
+def private convert_canary(path : string) {
+    let py = convert_nemo_py()
+    let hub = convert_hub_root()
+    return if (empty(hub))
+    hub_download(py, "snapshot_download; print(snapshot_download('nvidia/canary-qwen-2.5b'))")
+    hub_download(py, "snapshot_download; print(snapshot_download('Qwen/Qwen3-1.7B', allow_patterns=['tokenizer*','*.json']))")
+    // MTMD_BIN sits at <checkout>/build-cpu/bin/llama-mtmd-cli — its checkout carries the
+    // gguf writer the decoder conversion drives
+    let lcpp = dir_name(dir_name(dir_name(get_env_variable("MTMD_BIN"))))
+    run_capture("{py} modules/dasLLAMA/harness/convert_canary_to_ggml.py --src \"{hub}/models--nvidia--canary-qwen-2.5b\" --qwen3-tokenizer \"{hub}/models--Qwen--Qwen3-1.7B\" --llama-cpp \"{lcpp}\" --out-dir \"{dir_name(path)}\" --decoder-outtype f16", false)
+}
+
+// one canary invocation produces both the encoder and the decoder
+def private try_convert(e : ProvEntry; path : string; var canary_done : bool&) {
+    if (get_platform_name() == "windows") {
+        to_log(LOG_ERROR, "fetch_models: --convert is POSIX-only (the venv/converter paths differ on Windows) — run the recipes by hand: {e.recipe}\n")
+        return
+    }
+    if (find(e.name, "parakeet") >= 0) {
+        convert_parakeet(e, path)
+    } elif (find(e.name, "canary") >= 0) {
+        if (!canary_done) {
+            convert_canary(path)
+            canary_done = true
+        }
+    }
+}
+
 // are the acceptance test — curl's exit status is not (run_capture swallows it anyway)
 def private fetch_one(e : ProvEntry; path : string) {
     to_log(LOG_INFO, "fetch_models: START {e.name} ({e.bytes / 1000000l} MB)\n")
@@ -159,12 +235,17 @@ def main() : int {
     var fetched = 0
     var pending = 0
     var failed = 0
+    var canary_done = false
     for (e in models_provenance()) {
         if (!empty(cfg.only) && find(e.name, cfg.only) < 0) {
             continue
         }
         let path = entry_path(e)
         var st = stat(path)
+        if (!st.is_valid && empty(e.url) && cfg.convert && !empty(e.recipe) && e.recipe != REF_Q8_RECIPE) {
+            try_convert(e, path, canary_done)
+            st = stat(path)
+        }
         if (!st.is_valid && !empty(e.url)) {
             if (!cfg.fetch || cfg.dry_run) {
                 to_log(LOG_WARNING, "fetch_models: {e.name} — ABSENT{cfg.dry_run ? ", would fetch" : ""} ({e.url})\n")
@@ -193,7 +274,7 @@ def main() : int {
             continue
         }
         if (int64(st.size) != e.bytes) {
-            to_log(LOG_ERROR, "fetch_models: {e.name} — SIZE MISMATCH (have {st.size}, provenance {e.bytes}) — different bytes would silently bench a different model\n")
+            to_log(LOG_ERROR, "fetch_models: {e.name} — SIZE MISMATCH (have {int64(st.size)}, provenance {e.bytes}) — different bytes would silently bench a different model\n")
             failed++
             continue
         }

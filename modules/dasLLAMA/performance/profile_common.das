@@ -555,6 +555,14 @@ def tune_gate() : bool {
     return false
 }
 
+//! True when a das run cannot name the winners it measured under — an empty ``tune`` or
+//! ``tune_sha`` stamp. The store-time gate reads this: the M4 board stored 7 such rows under a
+//! mis-shipped stale sidecar (the file-level gate passed — the sidecar WAS a valid old mint;
+//! the staleness drop to fallback happened later, leaving stamps empty and nothing checking).
+def das_run_unstamped(r : BenchRun) : bool {
+    return r.engine == "das" && (empty(r.tune) || empty(r.tune_sha))
+}
+
 // Gather the platform block. `llama_cpp` (the reference commit) and `date` are passed in — the caller
 // reads them from the freshly-run baseline / the environment so they stay honest per run. CPU/OS come
 // from OS-native probes with DASLLAMA_CPU / DASLLAMA_OS env overrides for boxes without a clean probe.
@@ -592,6 +600,19 @@ struct HardwareInfo {
     @optional ram_config : string // module layout ("4×32 GB DDR4-3200") — bandwidth identity on PC
     @optional power_plan : string // Windows active power scheme — throttling identity
     @optional smt : string        // "on" | "off" when determinable; "" elsewhere
+    @optional remote_desktop : string  // measurement-time probe: "parsec" when parsecd ran,
+                                       // "off" = probed clean, "" = never probed (legacy row)
+}
+
+// The remote-desktop probe: parsecd's GPU encoder moved Metal cell times 1.7x between runs
+// (tune-hardening measurements) — "Parsec off" is a standing bench rule, so the row records
+// whether it actually was. Process-name probe; "off" is a probed verdict, "" means unprobed.
+def private platform_remote_desktop() : string {
+    if (is_windows()) {
+        let out = run_capture("tasklist /FI \"IMAGENAME eq parsecd.exe\" 2>nul", false)
+        return find(out, "parsecd") >= 0 ? "parsec" : "off"
+    }
+    return empty(run_capture("pgrep -x parsecd 2>/dev/null", true)) ? "off" : "parsec"
 }
 
 def private is_macos() : bool {
@@ -830,6 +851,7 @@ def gather_hardware : HardwareInfo {
         model_id = platform_model_id(),
         ram_config = platform_ram_config(),
         power_plan = platform_power_plan(),
+        remote_desktop = platform_remote_desktop(),
         smt = platform_smt())
 }
 

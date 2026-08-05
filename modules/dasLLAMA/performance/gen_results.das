@@ -306,7 +306,9 @@ def render_libri(m : BenchModel; dr : BenchRun; refis : array<int>) : string {
 // auto-update with every sweep).
 def asr_platform_line(dr : BenchRun) : string {
     let fmt = empty(dr.exec_fmt) ? "" : " — das {dr.exec_fmt}"
-    return "_{dr.hardware.cpu}, {dr.threads} threads{fmt} — daslang {dr.version} {dr.sha}, {dr.date}._"
+    let rd = dr.hardware.remote_desktop
+    let rdp = empty(rd) ? "" : (rd == "off" ? " (Parsec off)" : " (REMOTE DESKTOP: {rd})")
+    return "_{dr.hardware.cpu}, {dr.threads} threads{fmt} — daslang {dr.version} {dr.sha}, {dr.date}{rdp}._"
 }
 
 // Splice every box store's generated ASR tables into results.md (prose preserved). Returns

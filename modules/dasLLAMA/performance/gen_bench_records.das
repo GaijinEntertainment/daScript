@@ -4,6 +4,7 @@ options _cyclomatic_complexity = 0   // orchestrator passes; reshaped by the sin
 options _function_length = 0   // same
 
 require profile_common
+require dasllama/dasllama_env   // env_flag — the ALLOW_UNTUNED store escape
 require dasllama/dasllama_image   // dlim_clean + dlim_inventory — step-zero GC and the re-mint tripwire
 require llvm/daslib/llvm_tune   // [tune_policy]: the orchestrator never measures — it must never self-tune
 require daslib/clargs
@@ -52,6 +53,10 @@ struct Args {
     @clarg_name = "ref-stock"
     @clarg_doc = "stock llama-bench binary (default: env LLAMA_BENCH_STOCK)"
     ref_stock : string
+
+    @clarg_name = "ref-no-affinity"
+    @clarg_doc = "Drop --cpu-mask/--cpu-strict from reference invocations (zen2 3990X: driver-spawned pinned refs read ~18% low; solo runs show pins are worth nothing there anyway)"
+    ref_no_affinity : bool
 
     @clarg_short = "t"
     @clarg_doc = "Worker threads (default: the box profile)"
@@ -241,21 +246,32 @@ def private snapshot_tune_generation(exe : string) {
     }
 }
 
-def private absorb_cell(var models : array<BenchModel>; var cell : array<BenchModel>; store, note : string) {
+def private absorb_cell(var models : array<BenchModel>; var cell : array<BenchModel>; store, note : string;
+                        var failed : array<string>&) {
     let hw = gather_hardware()
     for (c in cell) {
         var debug_stamped = false
+        var unstamped = false
         for (r in c.runs) {
             r.source = "official"
             // the driver's probe is the hardware truth — a child exe built before a probe fix
             // stamps stale/empty identity (zen4 bringup: every das cell read "unknown")
             r.hardware = hw
             debug_stamped ||= r.flavor |> starts_with("debug-jit")
+            unstamped ||= das_run_unstamped(r)
         }
         if (debug_stamped) {
             // belt + braces: the rig only spawns the released exe, but a debug-stamped row
             // must never survive into the store no matter how it arrived
             to_log(LOG_ERROR, "gen_bench_records: DROPPING debug-jit cell for {c.gguf} — debug runs are not records\n")
+            continue
+        }
+        if (unstamped && !env_flag("DASLLAMA_ALLOW_UNTUNED", false)) {
+            // the store-time arm of the tune gate: the file-level gate passes a VALID-but-stale
+            // shipped sidecar (the M4 mis-ship), the runtime then drops to fallback, and the
+            // row arrives here with an empty stamp — unnameable winners are not records
+            to_log(LOG_ERROR, "gen_bench_records: DROPPING {c.gguf} — a das run carries no tune stamp, the winners it measured under cannot be named (fix the release/manifest; DASLLAMA_ALLOW_UNTUNED=1 stores a dev row)\n")
+            failed |> push("{c.gguf} unstamped")
             continue
         }
         upsert_bench_model(models, c)
@@ -362,7 +378,7 @@ def private das_cell(file, path, be, exe : string; accel : bool; cfg : Args; thr
         return
     }
     mint_check(models_dir(), "{file} das {tag}")
-    absorb_cell(models, cell, store, note)
+    absorb_cell(models, cell, store, note, failed)
     remove(cellPath)
     to_log(LOG_INFO, "gen_bench_records: DONE {file} das {tag} ({elapsed_ms(t0)} ms)\n")
     logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(tag), "elapsed_ms" => JV(elapsed_ms(t0))}))
@@ -654,7 +670,7 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
         args |> push_from(["-nopo", "1"])
     }
     args |> push_from(["-t", "{threads}"])
-    if (ngl == 0) {
+    if (ngl == 0 && !cfg.ref_no_affinity) {
         args |> push_from(lcpp_affinity_argv(threads))
     }
     args |> push_from(["-p", "{cfg.plen}", "-n", "{cfg.ngen}", "-r", "{cfg.reps}", "-o", "json"])
@@ -722,7 +738,7 @@ def private asr_das_cell(spec : AsrModelSpec; cfg : Args; threads : int; cellPat
         failed |> push("{spec.display} das asr")
         return
     }
-    absorb_cell(models, cell, store, "")
+    absorb_cell(models, cell, store, "", failed)
     remove(cellPath)
     to_log(LOG_INFO, "gen_bench_records: DONE {spec.display} das asr ({elapsed_ms(t0)} ms)\n")
     logger_info("bench.records", "cell done", JV({"model" => JV(spec.display), "engine" => JV("das"), "leg" => JV("asr"), "elapsed_ms" => JV(elapsed_ms(t0))}))
@@ -1068,19 +1084,25 @@ def main : int {
         if (legMetal) {
             settle_das(cfg)
             das_cell(file, path, "metal", exe, false, cfg, threads, cellPath, ent.note, store, models, failed)
-            settle(cfg)
+            // the ref gets COOL-SLOT entry too: it is not insensitive on high-power parts —
+            // zen2 35B read pp 81.7 twelve seconds behind a das cell vs 103.9 solo-cooled
+            settle_das(cfg)
             ref_pass(file, path, refStock, "stock", 99, false, cfg, threads, hw, box, date, ent.note, store, models, failed)
         }
         if (legNeon) {
             settle_das(cfg)
             das_cell(file, path, "cpu", exe, false, cfg, threads, cellPath, ent.note, store, models, failed)
-            settle(cfg)
+            // the ref gets COOL-SLOT entry too: it is not insensitive on high-power parts —
+            // zen2 35B read pp 81.7 twelve seconds behind a das cell vs 103.9 solo-cooled
+            settle_das(cfg)
             ref_pass(file, path, refClean, "clean-cpu", 0, false, cfg, threads, hw, box, date, ent.note, store, models, failed)
         }
         if (legAmx) {
             settle_das(cfg)
             das_cell(file, path, "cpu", exe, true, cfg, threads, cellPath, ent.note, store, models, failed)
-            settle(cfg)
+            // the ref gets COOL-SLOT entry too: it is not insensitive on high-power parts —
+            // zen2 35B read pp 81.7 twelve seconds behind a das cell vs 103.9 solo-cooled
+            settle_das(cfg)
             ref_pass(file, path, refStock, "stock", 0, true, cfg, threads, hw, box, date, ent.note, store, models, failed)
         }
     }

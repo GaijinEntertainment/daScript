@@ -12,6 +12,26 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **Batched-tg bench row: tg at B=16 sequences is the kernel story decode can't tell at B=1
+  (spotted 2026-08-04, zen2 thread ladder).** Single-sequence decode is GEMV — bandwidth-bound
+  at any thread count, so das:ref tg reads as parity (t=4 zen2: 13.10 vs 12.59) while pp shows
+  +45% on the same box. At B=16 every decode step is a 16-row GEMM: arithmetic intensity ×16,
+  weight stream amortized across the batch — the same regime pp wins in, and the serving shape
+  dasllama.io actually runs. The engine side EXISTS (`eval_batch_` in `dasllama_batch.das`,
+  synchronous B-row step; Metal has `metal_batch_decode_forward`); what's missing is only the
+  bench row: a `--tg-batch N` mode in `lcpp_bench.das` driving B sessions per step, ref via
+  `llama-batched-bench` (separate binary from `llama-bench` — check the ref checkouts build it).
+  **What a fix changes:** a board column where the kernel advantage shows in decode, and the
+  first honest throughput-serving number for the server story.
+
+- **Decode work-splitting vs thread count: tg on the 3990X ladder read flat 13.1–13.3 at t=4–8
+  then jumped +59% to 21.2 at t=12 (2026-08-04).** Read: the per-op split count is mismatched to
+  the lane count at some t (undersplit or oversplit, depending), with CCD-spread-vs-pack pin
+  placement a secondary suspect (unpinned llama-bench led das tg at t=8, 14.1 vs 13.3). Cost
+  today: optics only — single-sequence tg absolutes don't drive engine choices. Why it stays
+  ledgered: batched decode (see the batched-tg entry) turns each step into a B-row GEMM where the
+  same split/placement question prices real serving throughput; revisit there, not as a B=1 hunt.
+
 - **`g_lp_cbs` per-step buffer churn: the `@scratch` recycling never happens on the batch-decode
   pipeline path (spotted 2026-08-02, lint uplift).** `metal_batch_decode_forward` builds each
   step's command-buffer list in a LOCAL `cbs` and hands it over with `g_lp_cbs <- cbs`

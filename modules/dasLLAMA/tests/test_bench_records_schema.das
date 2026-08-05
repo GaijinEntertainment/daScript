@@ -172,12 +172,14 @@ def test_optional_fields_round_trip(t : T?) {
         models |> emplace(make_model())
         models[0].runs[0].tests["asr:jfk.wav"].encode_ms = 395.2lf
         models[0].runs[0].void_clips = "jfk.wav"
+        models[0].runs[0].hardware.remote_desktop = "off"
         models[0].runs[0].comment = "a hand note"
         write_bench_records(TMP, models)
         var back : array<BenchModel>
         t |> success(read_bench_records(TMP, back), "store re-reads")
         t |> equal(back[0].runs[0].tests?["asr:jfk.wav"]?.encode_ms ?? 0.0lf, 395.2lf, "encode_ms round-trips")
         t |> equal(back[0].runs[0].void_clips, "jfk.wav", "void_clips round-trips")
+        t |> equal(back[0].runs[0].hardware.remote_desktop, "off", "remote_desktop stamp round-trips")
         t |> equal(back[0].runs[0].comment, "a hand note", "comment round-trips")
         remove(TMP)
         delete back
@@ -220,5 +222,21 @@ def test_list_record_stores_strictness(t : T?) {
         t |> equal(length(stores), 1, "one store admitted")
         t |> equal(base_name(stores[0]), "m9.json", "the box store, nothing else")
         delete stores
+    }
+}
+
+[test]
+def test_das_run_unstamped(t : T?) {
+    t |> run("the store gate reads an empty tune stamp") @(t : T?) {
+        var r <- make_asr_run("das", "asr")
+        t |> success(das_run_unstamped(r), "no stamps = unstamped")
+        r.tune = "k4q8_tile_gen=mr8 (manifest)"
+        t |> success(das_run_unstamped(r), "tune without tune_sha is still unnameable")
+        r.tune_sha = "abc123def456"
+        t |> success(!das_run_unstamped(r), "both stamps = named winners")
+        var rr <- make_asr_run("whisper-cli", "asr")
+        t |> success(!das_run_unstamped(rr), "reference runs carry no stamp obligation")
+        delete r
+        delete rr
     }
 }
