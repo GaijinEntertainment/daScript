@@ -118,6 +118,16 @@ def unpack_sources(src_dir : string; source : string) : string {
             logger_error("buildd.core", "refusing bundle file name {name}")
             return ""
         }
+        // Refuse a file whose content is not text, rather than coercing it to
+        // "" — `?? ""` would quietly compile an EMPTY file under a hash that
+        // describes something else, and the user would read the resulting
+        // compile error as a fault in code the builder had actually discarded.
+        // Reachable: POST /api/samples stores arbitrary text, so a bundle can
+        // carry a number or an object here.
+        if (v == null || !(v.value is _string)) {
+            logger_error("buildd.core", "bundle file {name} is not text")
+            return ""
+        }
         let content : string = v ?? ""
         if (!fwrite(path_join(src_dir, name), content)) {
             logger_error("buildd.core", "cannot write {name} into {src_dir}")

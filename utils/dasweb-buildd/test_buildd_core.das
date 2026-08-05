@@ -66,6 +66,17 @@ def test_unpack_bundle(t : T?) {
             let bundle = write_json(JV((files = JV(files_obj))))
             tt |> equal(unpack_sources(dir, bundle), "")
         }
+        t |> run("a file whose content is not text is refused, not emptied") @(tt : T?) {
+            // POST /api/samples stores arbitrary text, so a stored bundle can
+            // carry a number here. Coercing it to "" would compile an EMPTY
+            // file under a hash describing something else, and the user would
+            // read the compile error as a fault in code that was discarded.
+            var files_obj <- { "main.das" => JV(123), "other.das" => JV("print(1)") }
+            let bundle = write_json(JV((files = JV(files_obj), active = "main.das")))
+            tt |> equal(unpack_sources(dir, bundle), "")
+            tt |> success(!stat(path_join(dir, "main.das")).is_reg ||
+                !empty(fread(path_join(dir, "main.das"))), "no empty stand-in was compiled")
+        }
     }
 }
 
