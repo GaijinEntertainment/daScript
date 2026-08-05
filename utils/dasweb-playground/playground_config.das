@@ -35,6 +35,18 @@ struct ServerArgs {
     @clarg_doc = "Deployed curated samples dir (data.json + sources); empty = no curated import"
     curated_dir : string = ""
 
+    @clarg_doc = "Bearer token for the remote builder endpoints; empty disables the build surface (production sets it in the toml, not on the command line)"
+    build_token : string = ""
+
+    @clarg_doc = "Artifact cache root (blobs); empty disables artifact storage and serving"
+    blobs_dir : string = "blobs"
+
+    @clarg_doc = "Seconds before a claimed build is considered abandoned and requeued"
+    build_claim_timeout_seconds : int = 600
+
+    @clarg_doc = "Claim attempts before a build job is failed"
+    max_build_attempts : int = 3
+
     @clarg_doc = "TOML config path (default: dasweb-playground.toml in cwd or beside the tool)"
     config : string = ""
 
@@ -92,7 +104,8 @@ def private cfg_from_toml(root : JsonValue?; key : string; var field : int&; aut
 }
 
 def mark_cli_sources(user_args : array<string>; var sources : table<string; string>) {
-    for (key in fixed_array("port", "db", "base_url", "max_source_bytes", "max_inserts_per_ip_hour", "curated_dir")) {
+    for (key in fixed_array("port", "db", "base_url", "max_source_bytes", "max_inserts_per_ip_hour", "curated_dir",
+        "build_token", "blobs_dir", "build_claim_timeout_seconds", "max_build_attempts")) {
         if (from_cli(user_args, key)) {
             sources[key] = "cli"
         }
@@ -115,7 +128,11 @@ def apply_config_text(var cfg : ServerArgs; body : string; user_args : array<str
         cfg_from_toml(root, "base_url", cfg.base_url, auth, user_args, sources, error) &&
         cfg_from_toml(root, "max_source_bytes", cfg.max_source_bytes, auth, user_args, sources, error) &&
         cfg_from_toml(root, "max_inserts_per_ip_hour", cfg.max_inserts_per_ip_hour, auth, user_args, sources, error) &&
-        cfg_from_toml(root, "curated_dir", cfg.curated_dir, auth, user_args, sources, error))
+        cfg_from_toml(root, "curated_dir", cfg.curated_dir, auth, user_args, sources, error) &&
+        cfg_from_toml(root, "build_token", cfg.build_token, auth, user_args, sources, error) &&
+        cfg_from_toml(root, "blobs_dir", cfg.blobs_dir, auth, user_args, sources, error) &&
+        cfg_from_toml(root, "build_claim_timeout_seconds", cfg.build_claim_timeout_seconds, auth, user_args, sources, error) &&
+        cfg_from_toml(root, "max_build_attempts", cfg.max_build_attempts, auth, user_args, sources, error))
     unsafe {
         delete root   // read_toml minted this tree; nothing outlives this scope
     }
@@ -163,5 +180,15 @@ def config_banner(cfg : ServerArgs; sources : table<string; string>) : JsonValue
         max_inserts_per_ip_hour_src = sources?["max_inserts_per_ip_hour"] ?? "default",
         curated_dir = cfg.curated_dir,
         curated_dir_src = sources?["curated_dir"] ?? "default",
+        // the token is a secret: the banner records that it is set and where
+        // it came from, never its value
+        build_token_set = !empty(cfg.build_token),
+        build_token_src = sources?["build_token"] ?? "default",
+        blobs_dir = cfg.blobs_dir,
+        blobs_dir_src = sources?["blobs_dir"] ?? "default",
+        build_claim_timeout_seconds = cfg.build_claim_timeout_seconds,
+        build_claim_timeout_seconds_src = sources?["build_claim_timeout_seconds"] ?? "default",
+        max_build_attempts = cfg.max_build_attempts,
+        max_build_attempts_src = sources?["max_build_attempts"] ?? "default",
         config = cfg.config))
 }

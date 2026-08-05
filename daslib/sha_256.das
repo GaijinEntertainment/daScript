@@ -114,8 +114,8 @@ def sha256_update(var st : Sha256State; b : uint8) {
     }
 }
 
-def sha256_update(var st : Sha256State; data : array<uint8>) {
-    //! Absorb a byte array.
+def sha256_update(var st : Sha256State; data : array<uint8> const# implicit) {
+    //! Absorb a byte array (accepts temporary views — peek_data/fmap payloads).
     for (b in data) {
         sha256_update(st, b)
     }
@@ -157,8 +157,8 @@ def sha256_hex(s : string) : string {
     return sha256_hex_digest(sha256_final(st))
 }
 
-def sha256_hex(data : array<uint8>) : string {
-    //! SHA-256 of a byte array, lowercase hex.
+def sha256_hex(data : array<uint8> const# implicit) : string {
+    //! SHA-256 of a byte array, lowercase hex (accepts temporary views).
     var st = sha256_init()
     sha256_update(st, data)
     return sha256_hex_digest(sha256_final(st))

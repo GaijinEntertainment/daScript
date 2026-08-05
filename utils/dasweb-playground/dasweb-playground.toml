@@ -12,3 +12,9 @@ base_url = "http://127.0.0.1:8101"
 max_source_bytes = 262144
 max_inserts_per_ip_hour = 100
 curated_dir = ""
+# wasm build pipeline; the deployed toml carries the real token and
+# blobs path — an empty token keeps the whole build surface disabled
+build_token = ""
+blobs_dir = "blobs"
+build_claim_timeout_seconds = 600
+max_build_attempts = 3

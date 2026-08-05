@@ -22,6 +22,17 @@ handle /api/samples* {
 	reverse_proxy 127.0.0.1:8101
 }
 
+handle /api/build/* {
+	# Artifact uploads from the builder are MB-scale multipart bodies —
+	# unlike the 1MB source cap. The bearer token gates who can spend
+	# that allowance; this cap bounds what even a token holder can buffer
+	# into the service.
+	request_body {
+		max_size 64MB
+	}
+	reverse_proxy 127.0.0.1:8101
+}
+
 # NOTE: /api/samples* is deliberately slashless — /api/samples/ would not match
 # the exact path POST /api/samples that share minting uses.
 #

@@ -7,9 +7,13 @@ require dashv/dashv_boost public
 require daslib/json_boost
 require daslib/logger
 require daslib/fio
+require daslib/strings_boost
 require samples_store public
+require build_queue public
+require build_artifacts public
 require curated_import
 require strings
+require math
 
 //! The HTTP surface: route table and handlers. A handler validates
 //! transport-level shape, translates HTTP to one samples_store call, and
@@ -24,8 +28,16 @@ var private g_db_open = false
 var private g_policy = StorePolicy()
 var private g_base_url = "https://daslang.io"
 var private g_curated_dir = ""
+var private g_build = BuildOptions()
 var private g_stop_requested = false
 var private g_server_started = false
+
+struct BuildOptions {
+    //! Transport-level build-surface config; queue policy nests from build_queue.
+    token : string = ""       // bearer for the remote builder; "" disables the build surface
+    blobs_dir : string = ""   // artifact cache root; "" disables artifact storage and serving
+    queue : BuildConfig = BuildConfig()
+}
 
 def private client_ip_of(var req : HttpRequest?) : string {
     //! RIGHTMOST X-Forwarded-For hop. A reverse proxy APPENDS the peer it
@@ -57,6 +69,51 @@ def private is_loopback_caller(var req : HttpRequest?) : bool {
     //! drive a cross-origin POST to these routes, and no header separates that
     //! from a local operator.
     return is_loopback_peer(client_ip(req))
+}
+
+def constant_time_equal(a : string; b : string) : bool {
+    //! Byte compare that never exits at the first difference, so a token guess
+    //! learns nothing from response timing. Length is not hidden.
+    let la = length(a)
+    let lb = length(b)
+    var diff = la ^ lb
+    peek_data(a) $(ab) {
+        peek_data(b) $(bb) {
+            for (i in range(max(la, lb))) {
+                let x = i < la ? int(ab[i]) : 0
+                let y = i < lb ? int(bb[i]) : 0
+                diff |= x ^ y
+            }
+        }
+    }
+    return diff == 0
+}
+
+def private bearer_token_of(var req : HttpRequest?) : string {
+    let auth = get_header(req, "Authorization")
+    if (empty(auth) || !(auth |> starts_with("Bearer "))) {
+        return ""
+    }
+    return slice(auth, 7)
+}
+
+def private build_auth_status(var req : HttpRequest?) : http_status {
+    //! OK = the caller holds the builder token. The loopback gate cannot serve
+    //! here — the builder is remote — so this surface authenticates by bearer
+    //! token from config, compared in constant time and never logged.
+    if (empty(g_build.token)) {
+        return http_status.SERVICE_UNAVAILABLE
+    }
+    return constant_time_equal(bearer_token_of(req), g_build.token) ? http_status.OK : http_status.UNAUTHORIZED
+}
+
+def private build_auth_refused(path : string; var req : HttpRequest?; var resp : HttpResponse?; auth : http_status; t0 : int64) : http_status {
+    if (auth == http_status.UNAUTHORIZED) {
+        resp |> set_header("WWW-Authenticate", "Bearer")
+    }
+    let msg = auth == http_status.UNAUTHORIZED ? "unauthorized" : "build api disabled"
+    log_request("POST", path, int(auth), client_ip_of(req), 0, 0, t0)
+    return resp |> JSON(write_json(JV((error = msg))), auth)
 }
 
 def body_is_byte_faithful(buffered_bytes : int; text : string) : bool {
@@ -111,6 +168,24 @@ class PlaygroundServer : HvWebServer {
         }
         POST("/admin/reimport") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_reimport(req, resp)
+        }
+        POST("/api/build/request/:hash") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_build_request(req, resp)
+        }
+        GET("/api/build/status/:hash") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_build_status(req, resp)
+        }
+        GET("/api/build/artifact/:toolchain/:hash/:file") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_build_artifact(req, resp)
+        }
+        POST("/api/build/toolchain") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_build_toolchain(req, resp)
+        }
+        POST("/api/build/next") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_build_next(req, resp)
+        }
+        POST("/api/build/result") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_build_result(req, resp)
         }
         GET("/s/:hash") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_share_link(req, resp)
@@ -235,14 +310,267 @@ def private handle_share_link(var req : HttpRequest?; var resp : HttpResponse?) 
     return resp |> REDIRECT("/playground/index.html?s={hash}", http_status.FOUND)
 }
 
-def init_server(port : int; db_path : string; policy : StorePolicy; base_url : string; curated_dir : string = "") : bool {
+def private handle_build_toolchain(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    let t0 = ref_time_ticks()
+    let auth = build_auth_status(req)
+    if (auth != http_status.OK) {
+        return build_auth_refused("/api/build/toolchain", req, resp, auth, t0)
+    }
+    let ip = client_ip_of(req)
+    // announcing a toolchain IS its go-live: the builder does this only after
+    // the --jit-check-abi canary ran clean on that toolchain
+    let toolchain = strip(string(req.body)) // nolint:PERF012 — the body is a ~40-byte sha; block-form peek would hand strip a temp view
+    if (!is_valid_toolchain_id(toolchain)) {
+        log_request("POST", "/api/build/toolchain", 400, ip, length(toolchain), 0, t0)
+        return resp |> JSON(write_json(JV((error = "malformed toolchain id"))), http_status.BAD_REQUEST)
+    }
+    set_current_toolchain(g_db, toolchain)
+    let body = write_json(JV((toolchain = toolchain)))
+    log_request("POST", "/api/build/toolchain", 200, ip, length(toolchain), length(body), t0)
+    return resp |> JSON(body)
+}
+
+def private handle_build_next(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    let t0 = ref_time_ticks()
+    let auth = build_auth_status(req)
+    if (auth != http_status.OK) {
+        return build_auth_refused("/api/build/next", req, resp, auth, t0)
+    }
+    let ip = client_ip_of(req)
+    // the body names the BUILDER's toolchain — a claim only ever hands out
+    // jobs minted for the toolchain that will actually build them
+    let toolchain = strip(string(req.body)) // nolint:PERF012 — the body is a ~40-byte sha; block-form peek would hand strip a temp view
+    if (!is_valid_toolchain_id(toolchain)) {
+        log_request("POST", "/api/build/next", 400, ip, length(toolchain), 0, t0)
+        return resp |> JSON(write_json(JV((error = "malformed toolchain id"))), http_status.BAD_REQUEST)
+    }
+    let job = claim_next_build(g_db, g_build.queue, toolchain, current_unix_time())
+    if (empty(job.hash)) {
+        log_request("POST", "/api/build/next", 204, ip, 0, 0, t0)
+        return http_status.NO_CONTENT
+    }
+    let source = get_source(g_db, job.hash)
+    if (empty(source)) {
+        // sample rows are never deleted, so this cannot arise; fail the job
+        // rather than let it ping-pong through the queue
+        record_build_failed(g_db, job.hash, toolchain, "source missing from store", current_unix_time())
+        log_request("POST", "/api/build/next", 204, ip, 0, 0, t0)
+        return http_status.NO_CONTENT
+    }
+    let body = write_json(JV((hash = job.hash, toolchain_id = job.toolchain, mode = job.mode, source = source)))
+    log_request("POST", "/api/build/next", 200, ip, 0, length(body), t0)
+    return resp |> JSON(body)
+}
+
+def private parse_result_manifest(text : string) : array<ArtifactFile> {
+    //! [{name, sha256}], every field validated, ≤ 16 unique names; empty
+    //! result = malformed (an ok=1 result must carry at least one file).
+    var out : array<ArtifactFile>
+    if (empty(text)) {
+        return <- out
+    }
+    var jerr = ""
+    var doc = read_json(text, jerr)
+    if (doc == null || !(doc.value is _array)) {
+        return <- out
+    }
+    var seen : table<string>
+    out |> reserve(length(doc.value as _array))
+    for (e in doc.value as _array) {
+        let name : string = e?["name"] ?? ""
+        let sha : string = e?["sha256"] ?? ""
+        if (!is_valid_artifact_filename(name) || !is_valid_artifact_hash(sha) || key_exists(seen, name)) {
+            out |> clear()
+            return <- out
+        }
+        seen |> insert(name)
+        out |> push(ArtifactFile(name = name, sha256 = sha))
+    }
+    if (length(out) > 16) {
+        out |> clear()
+    }
+    return <- out
+}
+
+def private handle_build_result(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    let t0 = ref_time_ticks()
+    let auth = build_auth_status(req)
+    if (auth != http_status.OK) {
+        return build_auth_refused("/api/build/result", req, resp, auth, t0)
+    }
+    let ip = client_ip_of(req)
+    let raw_bytes = length(req.body)
+    let hash = get_form_data(req, "hash")
+    let toolchain = get_form_data(req, "toolchain")
+    if (!is_valid_hash(hash) || !is_valid_toolchain_id(toolchain)) {
+        log_request("POST", "/api/build/result", 400, ip, raw_bytes, 0, t0)
+        return resp |> JSON(write_json(JV((error = "malformed hash or toolchain"))), http_status.BAD_REQUEST)
+    }
+    let pre = build_status(g_db, hash, toolchain)
+    if (!pre.found || pre.state != BUILD_STATE_BUILDING) {
+        // a result for a job that was requeued (or never claimed) is refused;
+        // the artifact is content-addressed, so discarded work is cheap
+        log_request("POST", "/api/build/result", 409, ip, raw_bytes, 0, t0)
+        return resp |> JSON(write_json(JV((error = "job is not building"))), http_status.CONFLICT)
+    }
+    let ok_field = get_form_data(req, "ok")
+    if (ok_field == "0") {
+        // compiler error text is line-oriented; a das string ends at the first
+        // NUL, which such text cannot contain, so get_form_data is byte-faithful here
+        record_build_failed(g_db, hash, toolchain, get_form_data(req, "error"), current_unix_time())
+        let fail_body = write_json(JV((state = BUILD_STATE_FAILED)))
+        log_request("POST", "/api/build/result", 200, ip, raw_bytes, length(fail_body), t0)
+        return resp |> JSON(fail_body)
+    }
+    if (ok_field != "1") {
+        log_request("POST", "/api/build/result", 400, ip, raw_bytes, 0, t0)
+        return resp |> JSON(write_json(JV((error = "ok must be \"0\" or \"1\""))), http_status.BAD_REQUEST)
+    }
+    if (empty(g_build.blobs_dir)) {
+        log_request("POST", "/api/build/result", 503, ip, raw_bytes, 0, t0)
+        return resp |> JSON(write_json(JV((error = "artifact storage not configured"))), http_status.SERVICE_UNAVAILABLE)
+    }
+    let files <- parse_result_manifest(get_form_data(req, "manifest"))
+    if (empty(files)) {
+        log_request("POST", "/api/build/result", 400, ip, raw_bytes, 0, t0)
+        return resp |> JSON(write_json(JV((error = "malformed manifest"))), http_status.BAD_REQUEST)
+    }
+    let stage = create_stage_dir(g_build.blobs_dir)
+    if (empty(stage)) {
+        log_request("POST", "/api/build/result", 500, ip, raw_bytes, 0, t0)
+        return resp |> JSON(write_json(JV((error = "cannot stage upload"))), http_status.INTERNAL_SERVER_ERROR)
+    }
+    for (f in files) {
+        // multipart part content is binary; save_form_file writes the raw part
+        // bytes — never read a file part through a das string
+        if (save_form_file(req, f.name, path_join(stage, f.name)) != 200) {
+            rmdir_rec(stage)
+            log_request("POST", "/api/build/result", 400, ip, raw_bytes, 0, t0)
+            return resp |> JSON(write_json(JV((error = "missing file part {f.name}"))), http_status.BAD_REQUEST)
+        }
+    }
+    if (!finalize_artifact(g_build.blobs_dir, toolchain, hash, stage, files)) {
+        log_request("POST", "/api/build/result", 400, ip, raw_bytes, 0, t0)
+        return resp |> JSON(write_json(JV((error = "artifact verification failed"))), http_status.BAD_REQUEST)
+    }
+    let names <- [for (f in files); JV(f.name)]
+    record_build_done(g_db, hash, toolchain, artifact_rel_dir(toolchain, hash), write_json(JV(names)), current_unix_time())
+    let body = write_json(JV((state = BUILD_STATE_DONE, files = length(files))))
+    log_request("POST", "/api/build/result", 200, ip, raw_bytes, length(body), t0)
+    return resp |> JSON(body)
+}
+
+def private build_status_payload(hash : string; toolchain : string) : string {
+    //! One JSON shape for request and status responses: the state plus
+    //! whatever that state carries (position / error / artifact urls).
+    let st = build_status(g_db, hash, toolchain)
+    if (!st.found) {
+        return write_json(JV((state = "none")))
+    }
+    if (st.state == BUILD_STATE_QUEUED) {
+        return write_json(JV((state = st.state, position = st.position)))
+    }
+    if (st.state == BUILD_STATE_FAILED) {
+        return write_json(JV((state = st.state, error = st.error)))
+    }
+    if (st.state == BUILD_STATE_DONE) {
+        var urls : array<JsonValue?>
+        var jerr = ""
+        var names = read_json(st.artifact_files, jerr)
+        if (names != null && names.value is _array) {
+            urls |> reserve(length(names.value as _array))
+            for (n in names.value as _array) {
+                let name : string = n ?? ""
+                urls |> push(JV("/api/build/artifact/{toolchain}/{hash}/{name}"))
+            }
+        }
+        return write_json(JV((state = st.state, toolchain = toolchain, files = JV(urls))))
+    }
+    return write_json(JV((state = st.state)))   // building
+}
+
+def private builds_enabled : bool {
+    return !empty(g_build.token) && !empty(g_build.blobs_dir)
+}
+
+def private handle_build_request(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    let t0 = ref_time_ticks()
+    let ip = client_ip_of(req)
+    let hash = get_param(req, "hash")
+    if (!is_valid_hash(hash)) {
+        log_request("POST", "/api/build/request/:hash", 400, ip, 0, 0, t0)
+        return resp |> JSON(write_json(JV((error = "malformed hash"))), http_status.BAD_REQUEST)
+    }
+    let toolchain = current_toolchain(g_db)
+    if (!builds_enabled() || empty(toolchain)) {
+        log_request("POST", "/api/build/request/:hash", 503, ip, 0, 0, t0)
+        return resp |> JSON(write_json(JV((error = "builds are not available yet"))), http_status.SERVICE_UNAVAILABLE)
+    }
+    if (!sample_exists(g_db, hash)) {
+        log_request("POST", "/api/build/request/:hash", 404, ip, 0, 0, t0)
+        return resp |> JSON(write_json(JV((error = "unknown sample"))), http_status.NOT_FOUND)
+    }
+    // no extra limiter by design: the queue plus baking time is the throttle
+    enqueue_build(g_db, hash, toolchain, BUILD_MODE_MODULE, current_unix_time())
+    let body = build_status_payload(hash, toolchain)
+    resp |> set_header("Cache-Control", "no-store")
+    log_request("POST", "/api/build/request/:hash", 200, ip, 0, length(body), t0)
+    return resp |> JSON(body)
+}
+
+def private handle_build_status(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    let t0 = ref_time_ticks()
+    let ip = client_ip_of(req)
+    let hash = get_param(req, "hash")
+    if (!is_valid_hash(hash)) {
+        log_request("GET", "/api/build/status/:hash", 400, ip, 0, 0, t0)
+        return resp |> JSON(write_json(JV((error = "malformed hash"))), http_status.BAD_REQUEST)
+    }
+    let toolchain = current_toolchain(g_db)
+    if (!builds_enabled() || empty(toolchain)) {
+        log_request("GET", "/api/build/status/:hash", 503, ip, 0, 0, t0)
+        return resp |> JSON(write_json(JV((error = "builds are not available yet"))), http_status.SERVICE_UNAVAILABLE)
+    }
+    let st = build_status(g_db, hash, toolchain)
+    let body = build_status_payload(hash, toolchain)
+    resp |> set_header("Cache-Control", "no-store")
+    let status = st.found ? http_status.OK : http_status.NOT_FOUND
+    log_request("GET", "/api/build/status/:hash", int(status), ip, 0, length(body), t0)
+    return resp |> JSON(body, status)
+}
+
+def private handle_build_artifact(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    let t0 = ref_time_ticks()
+    let ip = client_ip_of(req)
+    // resolve_artifact_file revalidates every request-derived component; a path
+    // is only ever built from parts that passed
+    let path = resolve_artifact_file(g_build.blobs_dir,
+        get_param(req, "toolchain"), get_param(req, "hash"), get_param(req, "file"))
+    if (empty(path)) {
+        log_request("GET", "/api/build/artifact", 404, ip, 0, 0, t0)
+        return resp |> JSON(write_json(JV((error = "unknown artifact"))), http_status.NOT_FOUND)
+    }
+    // content-addressed => immutable forever; artifacts are derived from user
+    // input, so nosniff rides along like it does on stored sources
+    resp |> set_header("Cache-Control", "public, max-age=31536000, immutable")
+    resp |> set_header("X-Content-Type-Options", "nosniff")
+    let rc = resp |> SERVE_FILE(path)
+    log_request("GET", "/api/build/artifact", int(rc), ip, 0, int(stat(path).size), t0)
+    return rc
+}
+
+def init_server(port : int; db_path : string; policy : StorePolicy; base_url : string; curated_dir : string = ""; build : BuildOptions = BuildOptions()) : bool {
     //! Open the store, migrate to latest, import the curated set (when
     //! configured), bind loopback, start listening. Runs in the serving
     //! thread's context — module globals bind here.
     g_policy = policy
     g_base_url = base_url
     g_curated_dir = curated_dir
+    g_build = build
     g_stop_requested = false
+    if (!empty(g_build.blobs_dir)) {
+        clear_stage_dirs(g_build.blobs_dir)   // a crash mid-upload leaks a stage dir
+    }
     var open_result <- try_open_sqlite(db_path)
     if (open_result |> is_err) {
         logger_error("playground", "could not open {db_path}: {open_result |> unwrap_err}")
@@ -307,9 +635,9 @@ def shutdown_server {
     logger_info("playground", "server stopped")
 }
 
-def run_server(port : int; db_path : string; policy : StorePolicy; base_url : string; curated_dir : string = "") {
+def run_server(port : int; db_path : string; policy : StorePolicy; base_url : string; curated_dir : string = ""; build : BuildOptions = BuildOptions()) {
     //! Blocking convenience wrapper (tests): init, tick until /shutdown, teardown.
-    if (init_server(port, db_path, policy, base_url, curated_dir)) {
+    if (init_server(port, db_path, policy, base_url, curated_dir, build)) {
         while (update_server()) {
         }
     }
