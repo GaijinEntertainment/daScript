@@ -50,6 +50,11 @@ pageInit = function () {
      // a property of the browser and the service, not of the loaded code.
      updateEngineAvailability();
 
+     // Switching engines changes what Run needs, so re-gate on the switch.
+     for (const radio of document.querySelectorAll('input[name=engine]')) {
+         radio.addEventListener('change', updateButtonStates);
+     }
+
      // The curated list comes from the sample service (store-fed, phase 2 of
      // plans/dasweb_backend.md); the committed data.json remains the fallback
      // for the GH Pages mirror / an empty store on first boot.
@@ -400,7 +405,13 @@ function updateButtonStates() {
     const ready = isWasmReady();
     const runBtn = document.getElementById('run');
     const testBtn = document.getElementById('test');
-    if (runBtn) runBtn.disabled = !ready;
+    // Run gates on what the SELECTED engine needs. The interpreter needs the
+    // local runtime loaded; the wasm engine does not — it compiles remotely and
+    // instantiates the artifact itself, and its radio is only selectable once
+    // the build service has answered. Gating both on the local runtime left Run
+    // dead for an engine that never uses it.
+    if (runBtn) runBtn.disabled = selectedEngine() === 'wasm' ? false : !ready;
+    // Test always runs interpreted, through the local runtime.
     if (testBtn) testBtn.disabled = !ready || !hasTestAnnotation();
 }
 // Kept under the old name so playground-tabs.js's existing autosave hook

@@ -432,6 +432,12 @@ jobs:
             # CodeMirror bundle (codemirror.min.js/css, simple-mode.js, daslang-*.js,
             # cm-forge.css) is served from /files/cm/ — copied via `cp -r site/files`
             # earlier, so nothing extra to copy here.
+            # Every page under site/playground, not just index.html: run-frame.html
+            # is the host each program runs in, and a playground missing it has a
+            # permanently disabled Run button (the runner never reports ready).
+            # It shipped absent once because the copy list named index.html and
+            # globbed only the .js — glob the .html too, so a new page lands.
+            cp site/playground/*.html _site/playground/
             cp site/playground/index.html _site/playground/index.html
             cp site/playground/forge-skin.css _site/playground/
             # Forge playground scripts (init shim + tabs + share + splitter).
