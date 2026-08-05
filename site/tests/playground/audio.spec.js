@@ -48,13 +48,30 @@ const installAudioTap = () => {
     }, 50);
 };
 
+// The program — and so the AudioContext — lives in the run frame, not in this
+// page. addInitScript seeds the tap into every frame, so the readings have to
+// be taken from the frame that is actually playing. It is created per run and
+// torn down by the next one, hence the re-find (and the tolerance for a frame
+// that vanished mid-poll).
+function audioFrame(page) {
+    return page.frames().find(f => f.url().includes('run-frame')) || page.mainFrame();
+}
+
+async function frameEval(page, fn) {
+    try {
+        return await audioFrame(page).evaluate(fn);
+    } catch (e) {
+        return undefined;   // frame swapped between poll and evaluate
+    }
+}
+
 async function loadPlaygroundWithTap(page) {
     await page.addInitScript(installAudioTap);
     await page.goto('/playground/');
     await page.waitForFunction(
         () => window.code && typeof window.code.setValue === 'function', null, { timeout: 20_000 });
     await page.waitForFunction(
-        () => typeof window.FS !== 'undefined' && typeof window.Module?.callMain === 'function',
+        () => !!(window.PlaygroundRunner && window.PlaygroundRunner.isReady()),
         null, { timeout: 30_000 });
     await page.waitForFunction(
         () => Array.from(document.getElementById('examples').options)
@@ -70,11 +87,12 @@ test('strudel audio sample plays then stops @wasm', async ({ page }) => {
     await page.click('#run'); // trusted gesture -> installAudioUnlock resumes the context
 
     // Plays: live Web Audio output becomes non-zero within a few seconds.
-    await expect.poll(() => page.evaluate(() => window.__peak), { timeout: 8_000 }).toBeGreaterThan(0.01);
+    await expect.poll(() => frameEval(page, () => window.__peak), { timeout: 8_000 }).toBeGreaterThan(0.01);
 
     // Stops on its own (~7s, END_SECONDS): the AudioContext leaves 'running'.
     await expect
-        .poll(() => page.evaluate(() => window.__states().every(s => s !== 'running') && window.__states().length > 0),
+        .poll(() => frameEval(page,
+            () => window.__states().every(s => s !== 'running') && window.__states().length > 0),
             { timeout: 12_000 })
         .toBe(true);
 });

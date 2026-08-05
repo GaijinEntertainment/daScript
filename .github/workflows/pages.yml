@@ -216,10 +216,13 @@ jobs:
         fi
         rm -rf modules/dasImguiImplot modules/dasImguiNodeEditor
 
-        # 2. wasm64 archives + compute samples + games. Configure web/build64 with
-        #    the prebuilt host (so the compute foreach reuses it instead of
+        # 2. wasm64 archives for the example games. Configure web/build64 with
+        #    the prebuilt host (so the game builds reuse it instead of
         #    rebuilding daslang) + memory64; daspkg build --wasm then populates the
         #    runtime/module archives into it.
+        #    This step exists only to serve the game builds below. When those move
+        #    onto the build queue (the game checkpoint of
+        #    plans/dasweb_wasm_pipeline.md), it leaves CI with them.
         #    DAS_WASM_PTHREADS=ON: daspkg `release wasm` now ALWAYS links -pthread
         #    (--shared-memory), so the module archives it links (dasGlfw/dasOpenGL/...)
         #    MUST be compiled with +atomics,+bulk-memory or wasm-ld rejects the link
@@ -235,10 +238,7 @@ jobs:
           -DDAS_HOST_DASLANG_OVERRIDE="$REPO/bin/daslang"
         ./bin/daslang utils/daspkg/main.das -- build --wasm
 
-        # 3. compute playground samples → wasm64 (web/output64/samples/examples)
-        cmake --build web/build64 --target all_wasm
-
-        # 4. /examples games → standalone wasm64 web apps (web/output64/examples/<g>/).
+        # 3. /examples games → standalone wasm64 web apps (web/output64/examples/<g>/).
         #    Non-fatal per game: a game's wasm build must never red the whole deploy
         #    (which would take the playground + the other example cards down with it).
         #    The staging step degrades a missing game wasm to its interpreted fallback.
@@ -251,7 +251,7 @@ jobs:
             fi
         done
 
-        # 5. /examples furier — the ImGui-in-wasm showcase. dasImgui is in-tree;
+        # 4. /examples furier — the ImGui-in-wasm showcase. dasImgui is in-tree;
         #    `release wasm` discovers it from the compiled require chain and
         #    drives its .das_package release_wasm_build to produce the 3 wasm64
         #    archives on demand — no daspkg install step (the example declares
@@ -265,7 +265,7 @@ jobs:
             echo "WARNING: furier wasm build failed — its examples card will be skipped this deploy."
         fi
 
-        # 6. /examples path_tracer_lab — the jobque + OpenGL showcase. Same in-tree
+        # 5. /examples path_tracer_lab — the jobque + OpenGL showcase. Same in-tree
         #    dasImgui require as furier; the threaded daspkg wasm pipeline (always
         #    -pthread, see step 2) maps its new_thread / JobQue modes to real Web
         #    Workers. Non-fatal for the same reason as furier; staged below only when
@@ -278,7 +278,7 @@ jobs:
             echo "WARNING: path_tracer_lab wasm build failed — its examples card will be skipped this deploy."
         fi
 
-        # 7. /examples physarum_lab — the threads + audio showcase. Same in-tree dasImgui require
+        # 6. /examples physarum_lab — the threads + audio showcase. Same in-tree dasImgui require
         #    as the path tracer; the threaded daspkg wasm
         #    pipeline maps its worker threads to Web Workers, and the daspkg wasm link's AudioWorklet
         #    flags carry the strudel soundtrack. Non-fatal; staged below only when all three outputs
@@ -289,6 +289,29 @@ jobs:
         else
             echo "WARNING: physarum_lab wasm build failed — its examples card will be skipped this deploy."
         fi
+
+    - name: "Compile-gate the curated playground samples"
+      # The per-sample wasm64 builds used to live here and doubled as the proof
+      # that every curated sample still compiles. They now build on demand
+      # through the build queue (plans/dasweb_wasm_pipeline.md), so this gate
+      # keeps that proof without producing anything: -dry-run compiles and
+      # simulates each sample and writes nothing. A sample broken by a compiler
+      # or daslib change must red this deploy, not the production queue, where
+      # the first person to click Run would find it.
+      run: |
+        set -eu
+        FAILED=""
+        for f in web/examples/ui/samples/examples/*.das; do
+            ./bin/daslang -dry-run "$f" > /tmp/gate.log 2>&1 || {
+                FAILED="$FAILED $(basename "$f")"
+                echo "--- $f ---"; tail -20 /tmp/gate.log
+            }
+        done
+        if [ -n "$FAILED" ]; then
+            echo "::error::curated playground sample(s) no longer compile:$FAILED"
+            exit 1
+        fi
+        echo "all curated samples compile"
 
     - name: "Verify wasm example artifacts (catch silent fallbacks)"
       # The example builds above are non-fatal (one run surfaces EVERY failure
@@ -388,12 +411,10 @@ jobs:
             cp web/output/daslang_static.wasm _site/files/wasm/
             # Pull samples from site/playground/samples — that directory is the
             # single staged source of truth: stage_site_playground populates
-            # the .das sources. Overlay the wasm64 compute .wasm built above.
+            # the .das sources. No .wasm overlay: the playground's wasm engine
+            # fetches built artifacts from the build service by content hash,
+            # so there is nothing per-sample to ship with the site.
             cp -r site/playground/samples _site/playground/samples 2>/dev/null || true
-            if [ -d web/output64/samples/examples ]; then
-                mkdir -p _site/playground/samples/examples
-                cp web/output64/samples/examples/*.wasm _site/playground/samples/examples/ 2>/dev/null || true
-            fi
             # Tutorial assets (mesh + PBR textures + HDRI) fetched at runtime by
             # samples that ship a .das.assets.json manifest (the OpenGL
             # deferred-shading rung). stage_site_playground staged them under
@@ -411,6 +432,12 @@ jobs:
             # CodeMirror bundle (codemirror.min.js/css, simple-mode.js, daslang-*.js,
             # cm-forge.css) is served from /files/cm/ — copied via `cp -r site/files`
             # earlier, so nothing extra to copy here.
+            # Every page under site/playground, not just index.html: run-frame.html
+            # is the host each program runs in, and a playground missing it has a
+            # permanently disabled Run button (the runner never reports ready).
+            # It shipped absent once because the copy list named index.html and
+            # globbed only the .js — glob the .html too, so a new page lands.
+            cp site/playground/*.html _site/playground/
             cp site/playground/index.html _site/playground/index.html
             cp site/playground/forge-skin.css _site/playground/
             # Forge playground scripts (init shim + tabs + share + splitter).

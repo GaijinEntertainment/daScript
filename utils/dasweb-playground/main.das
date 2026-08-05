@@ -67,7 +67,13 @@ def init {
         StorePolicy(
             max_source_bytes = g_cfg.max_source_bytes,
             max_inserts_per_ip_hour = g_cfg.max_inserts_per_ip_hour),
-        g_cfg.base_url, g_cfg.curated_dir)
+        g_cfg.base_url, g_cfg.curated_dir,
+        BuildOptions(
+            token = g_cfg.build_token,
+            blobs_dir = g_cfg.blobs_dir,
+            queue = BuildConfig(
+                claim_timeout_seconds = g_cfg.build_claim_timeout_seconds,
+                max_build_attempts = g_cfg.max_build_attempts)))
     if (!g_ready) {
         g_exit_code = 1
     }

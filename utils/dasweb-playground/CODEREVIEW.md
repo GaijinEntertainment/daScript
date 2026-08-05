@@ -34,10 +34,10 @@ tested surface.
 **`[test]` files live in this directory and require siblings by bare name** — never under the
 global `tests/` tree, and never registered in any `CMakeLists.txt`.
 
-**HTTP tests go through `with_playground_server_at` in `test_playground_server.das`, on this
-directory's reserved test ports 19011 and 19012; store tests call `samples_store` directly with
-no server.** A store behavior proven only through HTTP, or an HTTP behavior proven only against
-the store, is a defect.
+**HTTP tests go through a local `with_*_server` harness (`test_playground_server.das`,
+`test_build_endpoints.das`) on this directory's reserved test ports 19011, 19012, and 19013;
+store tests call `samples_store` or `build_queue` directly with no server.** A store behavior
+proven only through HTTP, or an HTTP behavior proven only against the store, is a defect.
 
 **A test that touches the filesystem uses `temp_directory`-rooted paths and deletes what it
 creates.** A test writing into the repo tree is a defect.
@@ -64,6 +64,13 @@ defect, and this section is the whole test.
 - `samples_store.das` — the store: schema structs, migrations, store operations, content
   hashing, and every policy decision (size cap, rate ceiling, listing). Zero HTTP: a require
   of `dashv` here is a defect.
+- `build_queue.das` — the build queue: `BuildJob`/`BuildMeta` schema, the migrations it owns,
+  the job state machine, and queue policy (claim timeout, attempt ceiling). Zero HTTP and zero
+  filesystem.
+- `build_artifacts.das` — the artifact cache: blobs layout, toolchain/hash/filename validation,
+  integrity verification, stage-then-rename placement, serving-path resolution, and every path
+  the cache assembles. The only build-side file that touches the filesystem; zero HTTP, zero
+  SQL.
 - `curated_import.das` — the data.json-driven curated importer: manifest parsing, sample-file
   reads, bundle assembly, calling the store. The only file besides the config loader that reads
   the filesystem; a store mutation here that bypasses `samples_store` functions is a defect.
@@ -110,6 +117,20 @@ earlier hop is client-authored, so keying anything on one is a defect. Logging i
 **Operator routes (`POST /shutdown`, `/admin/*`) verify the transport peer is loopback.** No
 header can carry that proof — a browser on any page can drive a cross-origin POST to a proxied
 route. A new operator route without the check is a defect.
+
+**Remote-builder routes (`/api/build/toolchain`, `/api/build/next`, `/api/build/result`)
+authenticate by the bearer token from config, compared with `constant_time_equal`.** A route
+that logs, echoes, or short-circuit-compares the token is a defect; an empty configured token
+must disable the surface, never open it.
+
+**Every artifact-cache path is assembled only from components validated in
+`build_artifacts`, and an upload reaches the served tree only through a stage directory
+renamed into place after every file's sha256 verifies.** A served path built from request
+data anywhere else, or a write landing directly in the served tree, is a defect.
+
+**An upload publishes exactly the file set its job's mode declares, checked here and not
+taken on the builder's word.** A build runs the user's own compile-time code, so accepting
+whatever set the builder sends would let a build put an extra file on this origin.
 
 **No route enables CORS.** The middleware reflects the caller's `Origin` on every route at once,
 which would make stored samples and the operator surface cross-origin readable.

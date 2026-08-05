@@ -205,6 +205,27 @@ Mapped onto the actual steps in `.github/workflows/pages.yml`:
 | 4–7. arcanoid, pacman, furier, path_tracer_lab, physarum_lab | **Fold** into the content-addressed cache rail. They change rarely, so the cache near-always hits and CI stops rebuilding them. |
 | "Verify wasm example artifacts" | Follows steps 4–7 wherever they land — it exists because those builds are non-fatal, and that property must survive the move. |
 
+**Done so far (2026-08-05):** step 3 is deleted, along with the per-sample `.wasm` overlay in
+the staging block — nothing fetches those artifacts any more, because the playground's wasm
+engine asks the build service by content hash. In its place a **compile gate** runs
+`daslang -dry-run` over every curated sample: it proves they still compile, writes nothing, and
+costs a fraction of what the wasm builds did.
+
+**Still on CI, and why:** steps 2 and 4–7 stay until **page mode** exists.
+
+Terminology, because "the games" has been used loosely for all of them: those steps build
+**five standalone `/examples` pages** — `arcanoid` and `pacman` (the two actual games, from
+`examples/games/`) plus `furier`, `path_tracer_lab` and `physarum_lab` (graphics showcases,
+from `examples/graphics/`). What they share is not that they are games; it is the **delivery
+shape**. Each is its own page — `html + js + wasm` — where a playground sample is a bare
+`.wasm` the already-loaded runtime instantiates. That shape is what "page mode" names, and what
+forces the artifact cache to hold a file set.
+
+`run_build.sh` refuses `page` mode today and `expected_artifact_names("page")` is deliberately
+empty, so the queue cannot yet produce what `/examples` needs. Step 2 exists only to serve
+those five builds and leaves with them. That is the page checkpoint below, and it is the
+remaining half of the diet.
+
 **Design point the game pages force — and it is NOT about multi-file sources.** Two axes that
 look like one and are not:
 
@@ -220,8 +241,9 @@ look like one and are not:
   file sets.
 
 ⇒ The cache **key** needs nothing new (the source hash already covers a bundle). The cache
-**value** needs to hold a file set only if the games fold in — which is exactly open question 1.
-If the answer is "games stay in CI", a single-`.wasm` value is sufficient and simpler.
+**value** must hold a **file set**, because the games do fold in (decided — see below). A
+single-`.wasm` value would have been simpler and is now off the table: build the value as a set
+from day one rather than retrofitting it around a shipped cache.
 
 **Separate gap this exposes, worth fixing regardless:** the old per-sample wasm path skipped
 multi-file samples entirely — `deriveJitName` in `web/examples/ui/src/main.js` returns `null`
@@ -237,17 +259,31 @@ a broken sample should red CI, not the production queue.
 ## Checkpoints
 
 - **3a:** a curated sample builds end-to-end through the real queue from a cold cache, on the
-  real boxes, with the canary clean.
+  real boxes, with the canary clean. Then a **game** does the same — it is the file-set path, and
+  it is the one the `/examples` page depends on once steps 4–7 leave CI.
 - **3b:** the user-visible flow with the building indicator, on the live server.
+
+## Decided
+
+**The example games MOVE off CI onto the queue** (Boris, 2026-08-05). This was the one question
+that shapes 3a, and it settles two things:
+
+- The artifact cache holds **file sets**, not single `.wasm` files, from day one — a game is a
+  standalone page (`html` + `js` + `wasm`) because the browser fetches the js and the js fetches
+  the wasm by name. Build the value that way rather than retrofitting it later.
+- Steps 4–7 of `pages.yml` fold into the cache rail, and "Verify wasm example artifacts" follows
+  them, keeping its non-fatal property.
+
+The objection this overrides — "it makes `/examples` depend on box health" — is weaker than it
+looks: artifacts are content-addressed **static files on the web box**, and the games change
+rarely, so the cache near-always hits. A dead builder means no *rebuilds*, not a broken page; the
+worst case is `/examples` serving the previous artifact until the box returns. That is the same
+graceful degradation the arc's trust model already promises, and reclaiming the CI time is the
+entire reason the diet was folded into this phase.
 
 ## Open questions for Boris
 
-1. **Do the example games actually move off CI**, or is the fold a nice-to-have? Moving them
-   makes the queue load-bearing for the `/examples` page; leaving them in CI keeps the page
-   independent of box health at the cost of the CI time the diet was meant to reclaim. This is
-   the one question that changes the shape of 3a — the artifact cache needs multi-file bundle
-   support from day one if the answer is yes.
-2. **Sandbox**: bwrap (lightest, one apt package) vs rootless podman (best limits) — no strong
+1. **Sandbox**: bwrap (lightest, one apt package) vs rootless podman (best limits) — no strong
    prior; whichever the box takes cleanly. Decidable while implementing.
 
 Disk is **not** a blocker (measured above), and no model pruning is needed.

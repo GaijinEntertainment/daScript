@@ -106,6 +106,9 @@
 <!-- Owns run-frame.html (one frame per program). Must precede main.js, whose
      pageInit hands it the run host and whose run path delegates to it. -->
 <script type="text/javascript" src="./playground-runner.js?v=1"></script>
+<!-- Compiles the editor's code on the build service for the wasm engine.
+     Reads its payload from playground-share.js, so both agree on one hash. -->
+<script type="text/javascript" src="./playground-wasm.js?v=1"></script>
 <script type="text/javascript" src="./main.js"></script>
 <script type="text/javascript" src="./playground-tabs.js?v=2"></script>
 <script type="text/javascript" src="./playground-share.js?v=3"></script>
@@ -131,7 +134,7 @@
             </div>
             <div class="main_header_part engine-toggle">
                 <label><input type="radio" name="engine" value="interpreter" checked> interpreter</label>
-                <label><input type="radio" name="engine" value="jit" disabled> JIT (wasm)</label>
+                <label><input type="radio" name="engine" value="wasm" disabled> wasm</label>
             </div>
         </div>
         <div class="main_header_right">

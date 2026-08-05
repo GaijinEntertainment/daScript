@@ -28,12 +28,15 @@
     /* Fill the frame exactly: the parent sizes the frame to the drawing buffer's
        aspect, so 100%/100% scales without distorting. !important because
        emscripten's GLFW writes an inline width/height onto the canvas. */
+    /* Opaque backdrop, as the pre-frame page gave the bare canvas. Belt-and-braces
+       behind the alpha:false context: nothing translucent should reach compositing. */
     #canvas {
         display: block;
         width: 100% !important;
         height: 100% !important;
         border: 0;
         outline: none;
+        background: #000;
     }
 </style>
 <canvas id="canvas" width="640" height="480" tabindex="-1"></canvas>
@@ -83,9 +86,16 @@
     // instead of assuming 4:3 — a program that opens a 16:9 window then renders
     // undistorted, and the aspect correction in its shaders stays honest.
     var origGetContext = canvas.getContext.bind(canvas);
-    canvas.getContext = function (type) {
+    canvas.getContext = function (type, attrs) {
         if (/webgl/i.test(String(type))) {
             post({ type: "canvas-visible", width: canvas.width, height: canvas.height });
+            // Opaque drawing buffer. A WebGL context defaults to alpha:true, so the
+            // framebuffer's alpha channel takes part in page compositing — and any pass
+            // blending with SRC_ALPHA (the samples' planar shadows do) LOWERS alpha exactly
+            // where it draws, turning those pixels translucent so they get pulled toward
+            // the backdrop instead of staying dark. Forced here rather than per sample: it
+            // holds for every program regardless of what GLFW asked for.
+            return origGetContext(type, Object.assign({}, attrs, { alpha: false }));
         }
         return origGetContext.apply(canvas, arguments);
     };

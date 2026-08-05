@@ -4,6 +4,7 @@ options indenting = 4
 module sha_256 shared public
 
 require strings
+require daslib/fio
 
 //! FIPS 180-4 SHA-256.
 //!
@@ -114,8 +115,8 @@ def sha256_update(var st : Sha256State; b : uint8) {
     }
 }
 
-def sha256_update(var st : Sha256State; data : array<uint8>) {
-    //! Absorb a byte array.
+def sha256_update(var st : Sha256State; data : array<uint8> const# implicit) {
+    //! Absorb a byte array (accepts temporary views — peek_data/fmap payloads).
     for (b in data) {
         sha256_update(st, b)
     }
@@ -157,9 +158,23 @@ def sha256_hex(s : string) : string {
     return sha256_hex_digest(sha256_final(st))
 }
 
-def sha256_hex(data : array<uint8>) : string {
-    //! SHA-256 of a byte array, lowercase hex.
+def sha256_hex(data : array<uint8> const# implicit) : string {
+    //! SHA-256 of a byte array, lowercase hex (accepts temporary views).
     var st = sha256_init()
     sha256_update(st, data)
     return sha256_hex_digest(sha256_final(st))
+}
+
+def sha256_file_hex(path : string) : string {
+    //! SHA-256 of a file's bytes, lowercase hex; "" when the file is
+    //! unreadable or empty.
+    var hex = ""
+    fopen(path, "rb") $(f) {
+        if (f != null) {
+            fmap(f) $(var data : array<uint8>#) {
+                hex = sha256_hex(data)
+            }
+        }
+    }
+    return hex
 }

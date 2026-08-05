@@ -35,14 +35,24 @@ SOURCES = [
     ("site/playground/playground-init.js",    "playground/playground-init.js"),
     ("site/playground/playground-tabs.js",    "playground/playground-tabs.js"),
     ("site/playground/playground-share.js",   "playground/playground-share.js"),
+    ("site/playground/playground-wasm.js",    "playground/playground-wasm.js"),
     ("site/playground/playground-splitter.js","playground/playground-splitter.js"),
     ("web/examples/ui/src/main.js",           "playground/main.js"),
+    # The landing page, because the hero editor hands its buffer off to
+    # /playground/ via #code= — that handoff is only testable with both pages
+    # served from one origin.
+    ("site/index.html",                       "index.html"),
 ]
 
 # repo dir -> served dir, copied whole. The sample tree comes from the repo (not
 # the live site) so edits to a sample are testable before they ship.
 SOURCE_TREES = [
     ("web/examples/ui/samples", "playground/samples"),
+    # Site assets (forge skin, CodeMirror, lz-string) live in the repo, so the
+    # landing page and the playground both dress themselves from the checkout
+    # rather than the live site. Staged before RUNTIME fetches, which fill only
+    # what the repo does not carry.
+    ("site/files", "files"),
     # what the samples' .das.assets.json sidecars fetch. The sidecar paths are
     # relative, so they resolve against the frame's URL — under /playground/.
     ("tutorials/_assets", "playground/tutorials/_assets"),
@@ -97,7 +107,32 @@ def fetch_runtime():
     print("runtime staged")
 
 
+# The sample service (utils/dasweb-playground) answers these in production.
+# The rig has no backend, so it answers them itself with the "nothing stored,
+# no builder" shape — which is what the page's fallbacks are written for: the
+# dropdown drops back to the repo's data.json, and the wasm engine stays off.
+#
+# Answering matters beyond tidiness. On a 404 the page's handlers throw without
+# reading the body, so the request never finishes as far as the browser is
+# concerned and the page never reaches network idle — which hangs anything
+# waiting on that, Playwright's `networkidle` included.
+API_STUBS = {
+    "/api/samples/listed": b"[]",
+    "/api/build/info": b'{"enabled": false, "toolchain": ""}',
+}
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        body = API_STUBS.get(self.path.split("?")[0])
+        if body is None:
+            return super().do_GET()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def end_headers(self):
         # Production serves these on /playground*; pthreads need the isolation.
         self.send_header("Cross-Origin-Opener-Policy", "same-origin")
@@ -109,6 +144,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, fmt, *args):
         if "404" in (fmt % args):
             sys.stderr.write("404 %s\n" % (args[0] if args else ""))
+
+
+class ThreadedServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    """One thread per connection.
+
+    The page opens several connections at once and pulls a multi-megabyte
+    runtime into each run frame. A serial server makes every other request
+    wait behind those transfers, so the page never reaches network idle and
+    anything waiting on that (Playwright's `networkidle`, the API fetches
+    that decide which engines to offer) hangs rather than failing.
+    """
+    daemon_threads = True
+    allow_reuse_address = True
 
 
 def main():
@@ -123,8 +171,7 @@ def main():
         fetch_runtime()
 
     os.chdir(SERVE)
-    socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer(("127.0.0.1", args.port), Handler) as httpd:
+    with ThreadedServer(("127.0.0.1", args.port), Handler) as httpd:
         print("serving %s at http://127.0.0.1:%d/playground/" % (SERVE, args.port))
         httpd.serve_forever()
 

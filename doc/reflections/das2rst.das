@@ -1344,7 +1344,7 @@ def document_module_logger(_root : string) {
 def document_module_sha_256(_root : string) {
     var mod = find_module("sha_256")
     var groups <- array<DocGroup>(
-        group_by_regex("One-shot hashing", mod, %regex~.*(sha256_hex)$%%),
+        group_by_regex("One-shot hashing", mod, %regex~.*(sha256_hex|sha256_file_hex)$%%),
         group_by_regex("Streaming", mod, %regex~.*(sha256_init|sha256_update|sha256_final|sha256_hex_digest)$%%)
     )
     document("SHA-256", mod, "sha_256.rst", groups)

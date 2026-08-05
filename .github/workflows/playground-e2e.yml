@@ -51,6 +51,10 @@ jobs:
           # Playground: vendor web/examples/ui IDE (no WASM artifacts)
           cp -r web/examples/ui/src/* _site/playground/
           cp -r web/examples/ui/samples _site/playground/samples 2>/dev/null || true
+          # Every page, not just index.html: run-frame.html is the host each
+          # program runs in, and without it the runner never reports ready.
+          # Glob the .html like the .js, so a new page lands on its own.
+          cp site/playground/*.html _site/playground/
           cp site/playground/index.html _site/playground/index.html
           cp site/playground/forge-skin.css _site/playground/
           # Forge playground scripts (init shim + tabs + share + splitter).

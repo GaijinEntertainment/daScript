@@ -1755,6 +1755,19 @@ namespace das {
             do {
                 if ( wcscmp(c_file.name, L".") == 0 || wcscmp(c_file.name, L"..") == 0 ) continue;
                 std::wstring child = path + L"/" + c_file.name;
+                // A junction or symlink to a directory reports _A_SUBDIR, so
+                // descending would delete the contents of whatever it points
+                // at — outside the tree being removed. Remove the link itself,
+                // which is `rm -rf`'s rule and matters wherever the tree was
+                // written by something untrusted.
+                DWORD childAttr = GetFileAttributesW(child.c_str());
+                if ( childAttr != INVALID_FILE_ATTRIBUTES && (childAttr & FILE_ATTRIBUTE_REPARSE_POINT) ) {
+                    bool unlinked = (childAttr & FILE_ATTRIBUTE_DIRECTORY)
+                        ? RemoveDirectoryW(child.c_str()) != 0
+                        : _wremove(child.c_str()) == 0;
+                    if ( !unlinked ) { _findclose(hFile); return false; }
+                    continue;
+                }
                 if ( c_file.attrib & _A_SUBDIR ) {
                     if ( !rmdir_rec_impl(child) ) { _findclose(hFile); return false; }
                 } else {
@@ -1775,7 +1788,13 @@ namespace das {
             if ( strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0 ) continue;
             string child = path + "/" + ent->d_name;
             struct stat st;
-            if ( stat(child.c_str(), &st) != 0 ) { closedir(dir); return false; }
+            // lstat, not stat: a symlink must be unlinked, never descended into.
+            // stat() reports a link-to-directory as a directory, so following it
+            // would delete the contents of whatever it points at — outside the
+            // tree being removed. That is `rm -rf`'s rule, and it matters
+            // wherever the tree being deleted was written by something
+            // untrusted (a build output directory, an unpacked archive).
+            if ( lstat(child.c_str(), &st) != 0 ) { closedir(dir); return false; }
             if ( S_ISDIR(st.st_mode) ) {
                 if ( !rmdir_rec_impl(child) ) { closedir(dir); return false; }
             } else {
