@@ -153,4 +153,7 @@
     // Expose for tests.
     window.pgBuildShareUrl = buildShareUrl;
     window.pgMintShareUrl = mintShareUrl;
+    // The wasm engine stores the same bytes before building, so both name one
+    // hash for one editor state — a shared link and its build are the same key.
+    window.pgSharePayloadBody = sharePayloadBody;
 })();

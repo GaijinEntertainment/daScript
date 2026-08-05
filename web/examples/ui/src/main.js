@@ -45,6 +45,11 @@ pageInit = function () {
     });
 
 
+     // Offer the wasm engine only where it can actually work. Asked once per
+     // page, not per sample: builds are content-addressed, so availability is
+     // a property of the browser and the service, not of the loaded code.
+     updateEngineAvailability();
+
      // The curated list comes from the sample service (store-fed, phase 2 of
      // plans/dasweb_backend.md); the committed data.json remains the fallback
      // for the GH Pages mirror / an empty store on first boot.
@@ -98,7 +103,27 @@ pageInit = function () {
          //      playground →" deep-link.
          //   3. Autosave from localStorage — handled by playground-tabs.js.
          //   4. Default first sample.
-         if (!window.pgRestoredFromState) {
+         //
+         // Deferred to DOMContentLoaded because pgRestoredFromState is set by
+         // playground-tabs.js from ITS DOMContentLoaded handler: this list
+         // arrives over the network, and when it arrives first (a warm cache, a
+         // local service, an empty store answering instantly) the default
+         // sample would load over the user's restored buffer. tabs.js registers
+         // its handler at parse time, so it always runs before this one; if the
+         // event already fired, tabs.js has already run and the flag is final.
+         whenTabsReady(function () {
+             applyInitialSelection();
+             // The buffer has now settled into whatever this visit should show.
+             // Everything above is asynchronous, so without a signal there is no
+             // way to tell "still loading" from "loaded and this is the content"
+             // — which is exactly what a test, or anything scripting the page,
+             // needs to know before it touches the editor.
+             window.pgSamplesReady = true;
+             document.dispatchEvent(new CustomEvent('pg-samples-ready'));
+         });
+
+         function applyInitialSelection() {
+             if (window.pgRestoredFromState || editorHasContent()) return;
              const params = new URLSearchParams(window.location.search);
              const wanted = params.get("example");
              if (wanted) {
@@ -120,6 +145,36 @@ pageInit = function () {
 
 }
 
+// Is there anything in the editor worth protecting? The sample list arrives
+// over the network, so its default selection can land after someone has
+// already started typing — sample zero must not overwrite their work. An
+// untouched playground holds one empty buffer, which is what lets the default
+// through on a first visit.
+function editorHasContent() {
+    try {
+        const files = window.pgState && window.pgState.files;
+        if (!files) return false;
+        const names = Object.keys(files);
+        if (names.length > 1) return true;
+        return names.some(n => (files[n].getValue() || '').trim() !== '');
+    } catch (e) {
+        return false;   // no tab state yet — nothing to protect
+    }
+}
+
+// Run fn once playground-tabs.js has decided the buffer's starting content
+// (restored from a link, from autosave, or left empty for a default sample).
+// Not DOMContentLoaded: tabs init waits for CodeMirror and can finish after
+// it, and selecting a sample fetches asynchronously — so starting before tabs
+// has spoken means finishing after it, on top of what it restored.
+function whenTabsReady(fn) {
+    if (window.pgTabsReady) {
+        fn();
+    } else {
+        document.addEventListener('pg-tabs-ready', fn, { once: true });
+    }
+}
+
 // Derive a URL-friendly slug from a sample entry. Used by the ?example=
 // query-string deep-link (daslang.io's § 01 bench cycler, and the /examples
 // page's embedded player). An explicit "slug" field wins — multi-file samples
@@ -133,16 +188,6 @@ function slugForSample(entry) {
     const f = entry.files[0];
     const base = f.split('/').pop();
     return base.replace(/\.das$/, '');
-}
-
-// Current sample's JIT-wasm basename (null for multi-file samples or when the
-// .wasm artifact is not present). Drives runJit() and the engine radio's
-// disabled state.
-var currentJitName = null;
-
-function deriveJitName(files) {
-    if (!files || files.length !== 1) return null;
-    return files[0].split('/').pop().replace(/\.das$/, '');
 }
 
 // Some samples (e.g. the OpenGL deferred-shading tutorial) load external assets
@@ -179,9 +224,9 @@ async function collectAssetUrls() {
     }
 }
 
-// Precompiled sample .wasm are now wasm64 (memory64) — browsers without
-// memory64 (Safari/iOS) cannot instantiate them, so the JIT engine must stay
-// disabled there regardless of artifact presence. Detected once at load.
+// Built artifacts are wasm64 (memory64) — browsers without memory64
+// (Safari/iOS) cannot instantiate them, so the wasm engine stays disabled
+// there no matter what the build service says. Detected once at load.
 const WASM64_SUPPORTED = (() => {
     try {
         // Validate a minimal module declaring a 64-bit (memory64) memory:
@@ -196,43 +241,28 @@ const WASM64_SUPPORTED = (() => {
     }
 })();
 
-function updateEngineAvailability(name) {
-    const jitRadio = document.querySelector('input[name=engine][value=jit]');
-    if (!jitRadio) return;
-    // When JIT becomes unavailable for the new sample, fall back to the
-    // interpreter — leaving the radio merely `disabled` but still `checked`
-    // would keep selectedEngine() returning 'jit' and runCode() would 404
-    // on the missing .wasm.
-    const disableJit = () => {
-        jitRadio.disabled = true;
-        if (jitRadio.checked) {
-            jitRadio.checked = false;
+// Whether the wasm engine can be offered at all. Unlike the retired
+// precompiled-artifact path, this no longer depends on which sample is loaded:
+// builds are content-addressed, so any editor state — including a multi-file
+// one — is buildable. What it does depend on is this browser (wasm64 artifacts
+// need memory64) and the service having a live toolchain to build against.
+function updateEngineAvailability() {
+    const wasmRadio = document.querySelector('input[name=engine][value=wasm]');
+    if (!wasmRadio) return;
+    // Leaving the radio merely `disabled` but still `checked` would keep
+    // selectedEngine() returning 'wasm' and send Run down a dead path.
+    const disableWasm = () => {
+        wasmRadio.disabled = true;
+        if (wasmRadio.checked) {
+            wasmRadio.checked = false;
             const interpRadio = document.querySelector('input[name=engine][value=interpreter]');
             if (interpRadio) interpRadio.checked = true;
         }
     };
-    // Phase 2 (plans/dasweb_backend.md): the precompiled-artifact path is
-    // retired — wasm builds move to the on-demand build service. The radio
-    // stays off until phase 3 serves real builds; the gates below stay
-    // dormant for that return.
-    disableJit();
-    return;
-    // Gate 1: no memory64 → wasm64 artifacts can't run here at all.
-    if (!WASM64_SUPPORTED) { disableJit(); return; }
-    // Gate 2: no precompiled .wasm for this sample (multi-file or absent).
-    if (!name) { disableJit(); return; }
-    // Rapid sample-switching can land HEAD-fetch responses out of order
-    // (HTTP/2). Gate the late .then/.catch on the sample still being current
-    // — currentJitName is the source of truth for "what sample is loaded".
-    fetch('./samples/examples/' + name + '.wasm', { method: 'HEAD' })
-        .then(r => {
-            if (name !== currentJitName) return;
-            if (r.ok) jitRadio.disabled = false; else disableJit();
-        })
-        .catch(() => {
-            if (name !== currentJitName) return;
-            disableJit();
-        });
+    if (!WASM64_SUPPORTED || !window.pgWasmBuild) { disableWasm(); return; }
+    window.pgWasmBuild.buildInfo()
+        .then(info => { if (info.enabled) wasmRadio.disabled = false; else disableWasm(); })
+        .catch(() => disableWasm());
 }
 
 // Hide the run frame. Revealing and sizing it is the runner's own job — the
@@ -260,9 +290,7 @@ selectSample = function(type, id) {
         showCanvas(false);
         const entry = samplesData[type][vv];
         const files = entry.files;
-        currentJitName = deriveJitName(files);
         currentAssetsUrl = deriveAssetsUrl(files);
-        updateEngineAvailability(currentJitName);
         // Static fallback only exists for entries that name a real file in the
         // shipped samples tree. A promoted user sample has no such path (the
         // store synthesized "<hash>.das"), so fetching it is a guaranteed 404.
@@ -388,12 +416,8 @@ function selectedEngine() {
 
 runCode = async function() {
     syncUrlToState();
-    if (selectedEngine() === 'jit') {
-        if (!currentJitName) {
-            printOutput("JIT unavailable: no precompiled .wasm for this sample", '#ff9393');
-            return;
-        }
-        runJit(currentJitName);
+    if (selectedEngine() === 'wasm') {
+        await runWasm();
         return;
     }
     if (!isWasmReady()) {
@@ -430,7 +454,7 @@ runTests = async function() {
 // fd_* no-ops emscripten's libc emits at link time. See
 // modules/dasLLVM/README.md "Cross-compilation" for the import surface.
 //
-// The JIT samples are compiled to wasm64 (memory64). Under memory64 every
+// Built artifacts are compiled to wasm64 (memory64). Under memory64 every
 // pointer/size argument arrives as a BigInt (not a Number), the iovec struct
 // fields are 8 bytes (not 4), and `__wasi_size_t` outputs are 8 bytes — so the
 // shim must coerce BigInt offsets for DataView and write 64-bit sizes. The
@@ -541,15 +565,43 @@ function makeWasiShim(memoryRef) {
 
 function WasiExit(code) { this.code = code; }
 
-function runJit(name) {
+// Compile the editor's code on the build service, then run what came back.
+// The first build of a given source pays a real compile; the same source
+// afterwards is a cache hit, because the build is keyed by content hash.
+async function runWasm() {
+    if (!window.pgWasmBuild) {
+        printOutput('wasm engine unavailable: build client not loaded', '#ff9393');
+        return;
+    }
+    // A build is not instant, so the button must not invite a second one.
+    const runBtn = document.getElementById('run');
+    const wasBusy = runBtn ? runBtn.disabled : false;
+    if (runBtn) runBtn.disabled = true;
+    try {
+        const result = await window.pgWasmBuild.build(line => printOutput(line, '#9aa0a6'));
+        if (!result.ok) {
+            // A compiler error is the user's own code talking — show it as-is,
+            // not decorated as an infrastructure failure.
+            printOutput(result.error, result.compileError ? '#ff9393' : '#ff2d2d');
+            return;
+        }
+        runWasmArtifact(result.files[0]);
+    } catch (e) {
+        printOutput('wasm build error: ' + (e && e.message ? e.message : e), '#ff2d2d');
+    } finally {
+        if (runBtn) runBtn.disabled = wasBusy;
+    }
+}
+
+function runWasmArtifact(url) {
     // Shim's DataView is rebuilt per-call from memRef.buffer, so we can
     // create the shim before instantiation and patch the buffer once memory
     // is exported.
     const memRef = { buffer: new ArrayBuffer(0) };
     const shim = makeWasiShim(memRef);
-    fetch('./samples/examples/' + name + '.wasm')
+    fetch(url)
         .then(r => {
-            if (!r.ok) throw new Error('HTTP ' + r.status + ' fetching ' + name + '.wasm');
+            if (!r.ok) throw new Error('HTTP ' + r.status + ' fetching the build artifact');
             return r.arrayBuffer();
         })
         .then(bytes => WebAssembly.instantiate(bytes, {
@@ -563,14 +615,14 @@ function runJit(name) {
                 if (typeof exports._initialize === 'function') exports._initialize();
                 if (typeof exports._start === 'function') exports._start();
                 else if (typeof exports.main === 'function') exports.main();
-                else printOutput('JIT error: no entry point exported in wasm', '#ff2d2d');
+                else printOutput('wasm error: no entry point exported', '#ff2d2d');
             } catch (e) {
                 if (!(e instanceof WasiExit)) {
-                    printOutput('JIT error: ' + (e && e.message ? e.message : e), '#ff2d2d');
+                    printOutput('wasm error: ' + (e && e.message ? e.message : e), '#ff2d2d');
                 }
             }
         })
-        .catch(e => printOutput('JIT load error: ' + (e && e.message ? e.message : e), '#ff2d2d'));
+        .catch(e => printOutput('wasm load error: ' + (e && e.message ? e.message : e), '#ff2d2d'));
 }
 
 clearOutput = function() {

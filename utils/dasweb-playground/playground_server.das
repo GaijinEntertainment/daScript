@@ -169,6 +169,9 @@ class PlaygroundServer : HvWebServer {
         POST("/admin/reimport") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_reimport(req, resp)
         }
+        GET("/api/build/info") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return handle_build_info(req, resp)
+        }
         POST("/api/build/request/:hash") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_build_request(req, resp)
         }
@@ -521,6 +524,19 @@ def private build_status_payload(hash : string; toolchain : string) : string {
 
 def private builds_enabled : bool {
     return !empty(g_build.token) && !empty(g_build.blobs_dir)
+}
+
+def private handle_build_info(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+    let t0 = ref_time_ticks()
+    // The playground asks this once at load to decide whether the wasm engine
+    // is offerable at all, instead of inferring it from a failed build. The
+    // toolchain is a public git sha and carries no secret.
+    let toolchain = current_toolchain(g_db)
+    let enabled = builds_enabled() && !empty(toolchain)
+    let body = write_json(JV((enabled = enabled, toolchain = toolchain)))
+    resp |> set_header("Cache-Control", "no-store")
+    log_request("GET", "/api/build/info", 200, client_ip_of(req), 0, length(body), t0)
+    return resp |> JSON(body)
 }
 
 def private handle_build_request(var req : HttpRequest?; var resp : HttpResponse?) : http_status {

@@ -86,6 +86,14 @@ def test_disabled_surface(t : T?) {
                 tt |> equal(int(resp.status_code), 503)
             }
         }
+        t |> run("build info reports the surface off") @(tt : T?) {
+            GET("{base_url}/api/build/info") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+                var doc = json_of(resp)
+                tt |> success(!(doc?["enabled"] ?? true), "enabled=false")
+                tt |> equal(doc?["toolchain"] ?? "x", "")
+            }
+        }
         t |> run("public build request is 503 too") @(tt : T?) {
             let hash = posted_hash(base_url, "print(\"disabled build\")")
             POST("{base_url}/api/build/request/{hash}", "") $(resp) {
@@ -151,6 +159,16 @@ def test_build_flow_end_to_end(t : T?) { // nolint:STYLE038 — sequential pipel
             assert(int(resp.status_code) == 200, "toolchain announced")
         }
         let hash = posted_hash(base_url, "print(\"build me\")")
+        t |> run("build info reports the surface on, with its toolchain") @(tt : T?) {
+            // the playground asks this once at load to decide whether to offer
+            // the wasm engine at all
+            GET("{base_url}/api/build/info") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+                var doc = json_of(resp)
+                tt |> success(doc?["enabled"] ?? false, "enabled=true")
+                tt |> equal(doc?["toolchain"] ?? "", TC)
+            }
+        }
         t |> run("request enqueues at position 1") @(tt : T?) {
             POST("{base_url}/api/build/request/{hash}", "") $(resp) {
                 tt |> equal(int(resp.status_code), 200)

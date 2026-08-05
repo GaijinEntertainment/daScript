@@ -10,7 +10,7 @@ async function waitTabsReady(page) {
 
 async function waitWasmReady(page) {
     await page.waitForFunction(
-        () => typeof window.FS !== 'undefined' && typeof window.Module?.callMain === 'function',
+        () => !!(window.PlaygroundRunner && window.PlaygroundRunner.isReady()),
         null,
         { timeout: 30_000 }
     );
