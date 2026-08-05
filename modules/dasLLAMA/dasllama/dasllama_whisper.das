@@ -57,8 +57,11 @@ struct WhisperModel {
     enc : AudioTower = AudioTower()
     dblob : PlaneF = PlaneF()
     dq8 : bool = false        // decoder GEMMs quantized: dqblob/dqscales carry the Q8_0 image
-    dqblob : PlaneI8 = PlaneI8()   // whole-dblob-shaped Q8_0 quants (GEMM regions repacked in place)
+    dqblob : PlaneI8 = PlaneI8()   // dense GEMM-only Q8_0 planes (dblob keeps just the non-GEMM rest)
     dqscales : PlaneF = PlaneF()   // per-32-block scales, indexed at woff/32
+    dqlayers_off : int64 = 0l      // q8 layout: per-layer GEMM base/stride in the dense dqblob
+    dqlayer_stride : int64 = 0l
+    d_te_q_off : int64 = 0l        // the tied embedding's q8 copy (the logits GEMV weight); fp32 rows stay in dblob
     d_pe_off : int64
     d_te_off : int64
     d_ln_w_off : int64
@@ -88,7 +91,7 @@ def finalize(var t : WhisperModel) {
 // the tripwire: serialize_image_meta(WhisperModel) covers 27 fields (vocab rides the meta
 // blob — string arrays can't be raw planes; enc reuses AudioTower's list); mel (rebuilt at
 // load) + image_map + image_bytes are deliberate skips.
-let private WHISPER_META_FIELDS = 27 + 3
+let private WHISPER_META_FIELDS = 30 + 3
 
 // every meta-carried WhisperModel field, explicitly, both directions (see dasllama_image)
 def private serialize_image_meta(var arch : Archive; var t : WhisperModel) {
@@ -116,6 +119,9 @@ def private serialize_image_meta(var arch : Archive; var t : WhisperModel) {
     arch |> serialize_raw(t.dq8)
     arch |> serialize_raw(t.d_pe_off)
     arch |> serialize_raw(t.d_te_off)
+    arch |> serialize_raw(t.dqlayers_off)
+    arch |> serialize_raw(t.dqlayer_stride)
+    arch |> serialize_raw(t.d_te_q_off)
     arch |> serialize_raw(t.d_ln_w_off)
     arch |> serialize_raw(t.d_ln_b_off)
     arch |> serialize_raw(t.dlayers_off)
@@ -187,6 +193,37 @@ struct DecLayerOffs {
 def dec_layer_offsets(w : WhisperModel; l : int64) : DecLayerOffs {
     let d = w.n_text_state
     let ff = 4l * d
+    if (w.dq8) {
+        // compact q8 layout — field-for-field the order whisper_dec_quantize's walk writes
+        var og = w.dqlayers_off + l * w.dqlayer_stride
+        var of = w.dlayers_off + l * w.dlayer_stride
+        var q = DecLayerOffs()
+        q.ln1_w = of; of += d
+        q.ln1_b = of; of += d
+        q.q_w = og; og += d * d
+        q.q_b = of; of += d
+        q.k_w = og; og += d * d
+        q.v_w = og; og += d * d
+        q.v_b = of; of += d
+        q.o_w = og; og += d * d
+        q.o_b = of; of += d
+        q.cln_w = of; of += d
+        q.cln_b = of; of += d
+        q.cq_w = og; og += d * d
+        q.cq_b = of; of += d
+        q.ck_w = og; og += d * d
+        q.cv_w = og; og += d * d
+        q.cv_b = of; of += d
+        q.co_w = og; og += d * d
+        q.co_b = of; of += d
+        q.ln2_w = of; of += d
+        q.ln2_b = of; of += d
+        q.fc1_w = og; og += ff * d
+        q.fc1_b = of; of += ff
+        q.fc2_w = og; og += d * ff
+        q.fc2_b = of; of += d
+        return q
+    }
     var o = w.dlayers_off + l * w.dlayer_stride
     var r = DecLayerOffs()
     r.ln1_w = o; o += d
@@ -245,22 +282,73 @@ def whisper_encode_bucket : string {
     return "wh.encode_total"
 }
 
-//! Quantizes the decoder's GEMM weights to Q8_0: tied token embedding (as the [n_vocab × d]
-//! logits GEMV weight; row lookups still read fp32 dblob) + per-layer self/cross q/k/v/o + fc1/fc2.
-//! Non-GEMM slots (pe rows, norms, biases) are quantized-but-unread.
+//! Quantizes the decoder's GEMM set to Q8_0 COMPACT planes: per-layer self/cross mats + fc1/fc2
+//! dense in dqblob; the tied token embedding gets a q8 copy (the logits GEMV weight) while its
+//! fp32 rows STAY in dblob for lookups; dblob is replaced by the non-GEMM remainder.
 def whisper_dec_quantize(var st : WhisperStaging) {
-    let total = long_length(st.dblob) & ~31l
-    st.dqblob |> resize(total)
-    st.dqscales |> resize(total / 32l)
-    quantize_q8_0_into(st.dblob, total, st.dqblob, st.dqscales, 0l, 0l)
+    let d = st.e.n_text_state
+    let ff = 4l * d
+    if (d % 32l != 0l) {
+        panic("whisper decoder q8: n_text_state {d} is not a 32-multiple — the compact layout cannot serve this decoder")
+    }
+    let qlayer = 16l * d * d
+    let qtotal = st.e.n_text_layer * qlayer + st.e.n_vocab * d
+    st.dqblob |> resize(qtotal)
+    st.dqscales |> resize(qtotal / 32l)
+    // the fp32 remainder keeps pe + the full te (row lookups) + vectors + final ln
+    var nf : array<float>
+    nf |> resize(long_length(st.dblob) - st.e.n_text_layer * qlayer)
+    var og = 0l
+    var of = 0l
+    st.e.d_pe_off = tq_keep(nf, st.dblob, of, st.e.d_pe_off, st.e.n_text_ctx * d)
+    st.e.d_te_q_off = tq_quant(st.dqblob, st.dqscales, st.dblob, og, st.e.d_te_off, st.e.n_vocab * d)
+    st.e.d_te_off = tq_keep(nf, st.dblob, of, st.e.d_te_off, st.e.n_vocab * d)
+    st.e.dqlayers_off = og
+    st.e.dqlayer_stride = qlayer
+    let old_base = st.e.dlayers_off
+    let old_stride = st.e.dlayer_stride
+    let new_base = of
+    for (l in range64(st.e.n_text_layer)) {
+        var oo = old_base + l * old_stride
+        tq_keep(nf, st.dblob, of, oo, d); oo += d                                  // ln1_w
+        tq_keep(nf, st.dblob, of, oo, d); oo += d                                  // ln1_b
+        tq_quant(st.dqblob, st.dqscales, st.dblob, og, oo, d * d); oo += d * d     // q_w
+        tq_keep(nf, st.dblob, of, oo, d); oo += d                                  // q_b
+        tq_quant(st.dqblob, st.dqscales, st.dblob, og, oo, d * d); oo += d * d     // k_w
+        tq_quant(st.dqblob, st.dqscales, st.dblob, og, oo, d * d); oo += d * d     // v_w
+        tq_keep(nf, st.dblob, of, oo, d); oo += d                                  // v_b
+        tq_quant(st.dqblob, st.dqscales, st.dblob, og, oo, d * d); oo += d * d     // o_w
+        tq_keep(nf, st.dblob, of, oo, d); oo += d                                  // o_b
+        tq_keep(nf, st.dblob, of, oo, d); oo += d                                  // cln_w
+        tq_keep(nf, st.dblob, of, oo, d); oo += d                                  // cln_b
+        tq_quant(st.dqblob, st.dqscales, st.dblob, og, oo, d * d); oo += d * d     // cq_w
+        tq_keep(nf, st.dblob, of, oo, d); oo += d                                  // cq_b
+        tq_quant(st.dqblob, st.dqscales, st.dblob, og, oo, d * d); oo += d * d     // ck_w
+        tq_quant(st.dqblob, st.dqscales, st.dblob, og, oo, d * d); oo += d * d     // cv_w
+        tq_keep(nf, st.dblob, of, oo, d); oo += d                                  // cv_b
+        tq_quant(st.dqblob, st.dqscales, st.dblob, og, oo, d * d); oo += d * d     // co_w
+        tq_keep(nf, st.dblob, of, oo, d); oo += d                                  // co_b
+        tq_keep(nf, st.dblob, of, oo, d); oo += d                                  // ln2_w
+        tq_keep(nf, st.dblob, of, oo, d); oo += d                                  // ln2_b
+        tq_quant(st.dqblob, st.dqscales, st.dblob, og, oo, ff * d); oo += ff * d   // fc1_w
+        tq_keep(nf, st.dblob, of, oo, ff); oo += ff                                // fc1_b
+        tq_quant(st.dqblob, st.dqscales, st.dblob, og, oo, d * ff); oo += d * ff   // fc2_w
+        tq_keep(nf, st.dblob, of, oo, d); oo += d                                  // fc2_b
+    }
+    st.e.dlayers_off = new_base
+    st.e.dlayer_stride = 17l * d
+    st.e.d_ln_w_off = tq_keep(nf, st.dblob, of, st.e.d_ln_w_off, d)
+    st.e.d_ln_b_off = tq_keep(nf, st.dblob, of, st.e.d_ln_b_off, d)
+    verify(og == qtotal)
+    delete st.dblob
+    st.dblob <- nf
     st.e.dq8 = true
     if (!select_matmul_backend_for_load()) {
-        return   // row-major backend reads the flat Q8_0 image as-is
+        return   // row-major backend reads the dense Q8_0 planes as-is
     }
-    let d = st.e.n_text_state
-    wm_repack(st.dqblob, st.dqscales, st.e.d_te_off, d, st.e.n_vocab)
+    wm_repack(st.dqblob, st.dqscales, st.e.d_te_q_off, d, st.e.n_vocab)
     for (l in range64(st.e.n_text_layer)) {
-        let lo = dec_layer_offsets(st.e, l)
+        let lo = dec_layer_offsets(st.e, l)   // dq8 is set: dense offsets
         wm_repack(st.dqblob, st.dqscales, lo.q_w, d, d)
         wm_repack(st.dqblob, st.dqscales, lo.k_w, d, d)
         wm_repack(st.dqblob, st.dqscales, lo.v_w, d, d)
@@ -465,12 +553,30 @@ def stage_whisper_model(path : string; q8 : bool = false) : WhisperStaging {
     return <- st
 }
 
+// a job's dense-q8 membership: a marked GEMM whose contraction is a 32-multiple
+def private wjob_quantizable(j : WFillJob) : bool => j.gemm_n != 0l && j.gemm_n % 32l == 0l
+
+// the tied token embedding streams into BOTH planes (fp32 rows for lookups, q8 for the logits GEMV)
+def private wjob_dual(j : WFillJob) : bool => j.name == "decoder.token_embedding.weight"
+
+// quantizable-GEMM element total of a job list — the dense q-plane length
+def private wq_total(jobs : array<WFillJob>) : int64 {
+    var n = 0l
+    for (j in jobs) {
+        if (wjob_quantizable(j)) {
+            n += j.n
+        }
+    }
+    return n
+}
+
 // stream one job list as a plane: per tensor, read+convert (+permute) into scratch, append.
-// Regions are 32-aligned and job-local, so per-job q8 transcode matches the eager whole-blob
-// quantize byte for byte; layout holes and the tail zero-fill (quantized zeros ARE zeros).
+// COMPACT split: fp32 keeps the non-GEMM jobs (+ the dual te) with the old layout's vector
+// holes zero-filled; the q kinds walk only the quantizable GEMM jobs, densely.
 def private wstream_plane(recs : table<string; WTensorRec>; b : array<uint8> | #;
-                          jobs : array<WFillJob>; total : int64;   // the blob's full element count — gaps zero-fill
+                          jobs : array<WFillJob>;
                           kind : int;   // 0 = fp32, 1 = q8 quants, 2 = q8 scales
+                          q8 : bool;    // compact split on (an fp32 mint streams every job into kind 0)
                           rep : bool;   // repack GEMM regions — same gate the eager quantizers take
                           var w : ImgWriter; var sections : array<ImgSection>; name : string) : bool {
     w_zeros(w, pad_to_page(w.cur) - w.cur)
@@ -478,16 +584,19 @@ def private wstream_plane(recs : table<string; WTensorRec>; b : array<uint8> | #
     var scratch : array<float>
     var q8s : array<int8>
     var qss : array<float>
-    // elements -> plane bytes for this kind (q8 quants are 1B/elem, scales 4B per 32)
     var cur = 0l
     for (j in jobs) {
-        if (j.off > cur) {
-            // a layout hole no tensor fills (whisper's biasless k slots) — the eager blob is
-            // zero there, and quantized zeros are zeros, so every kind zero-fills the same way
-            w_zeros(w, uint64(wplane_bytes(j.off - cur, kind)))
-            cur = j.off
+        let qz = q8 && wjob_quantizable(j)
+        if (kind == 0) {
+            if (j.off > cur) {
+                // a layout hole no tensor fills (whisper's biasless k slots) — kept as zeros
+                w_zeros(w, uint64((j.off - cur) * 4l))
+            }
+            cur = j.off + j.n   // a skipped GEMM advances the old-layout cursor without emitting
+            continue if (qz && !wjob_dual(j))
+        } else {
+            continue if (!qz)
         }
-        cur += j.n
         if (long_length(scratch) < j.n) {
             scratch |> resize(int(j.n))
         }
@@ -503,7 +612,7 @@ def private wstream_plane(recs : table<string; WTensorRec>; b : array<uint8> | #
             qss |> resize(int(j.n / 32l))
         }
         quantize_q8_0_into(scratch, j.n, q8s, qss, 0l, 0l)
-        if (rep && j.gemm_n != 0l && j.gemm_n % 32l == 0l) {
+        if (rep) {
             repack_q8q8_weight(q8s, qss, 0l, j.gemm_n, j.n / j.gemm_n)
         }
         unsafe {
@@ -514,9 +623,6 @@ def private wstream_plane(recs : table<string; WTensorRec>; b : array<uint8> | #
             }
         }
     }
-    if (total > cur) {
-        w_zeros(w, uint64(wplane_bytes(total - cur, kind)))
-    }
     delete scratch
     delete q8s
     delete qss
@@ -524,8 +630,25 @@ def private wstream_plane(recs : table<string; WTensorRec>; b : array<uint8> | #
     return w.ok
 }
 
-def private wplane_bytes(elems : int64; kind : int) : int64 => (
-    kind == 0 ? elems * 4l : (kind == 1 ? elems : (elems / 32l) * 4l))
+// offsets-only twin of whisper_dec_quantize's walk for the streamed mint (the
+// streamed-vs-staged image cell gates that the two stay identical)
+def private whisper_dec_compact_offsets(var e : WhisperModel) {
+    let d = e.n_text_state
+    var og = 0l
+    var of = 0l
+    e.d_pe_off = of; of += e.n_text_ctx * d
+    e.d_te_q_off = og; og += e.n_vocab * d
+    e.d_te_off = of; of += e.n_vocab * d
+    e.dqlayers_off = og
+    e.dqlayer_stride = 16l * d * d
+    og += e.n_text_layer * e.dqlayer_stride
+    e.dlayers_off = of
+    e.dlayer_stride = 17l * d
+    of += e.n_text_layer * e.dlayer_stride
+    e.d_ln_w_off = of; of += d
+    e.d_ln_b_off = of; of += d
+    e.dq8 = true
+}
 
 //! The STREAMED whisper mint — Phase 3 of the audio rail: the big planes transcode from the
 //! source mapping straight into the writer and never materialize. The staging carrier holds
@@ -541,35 +664,37 @@ def private stream_whisper_model(path : string; q8 : bool; img, tag : string; va
         var encJobs : array<WFillJob>
         var decJobs : array<WFillJob>
         let sz = whisper_index(bytes, int64(stat(path).size), st, recs, encJobs, decJobs)
-        st.e.enc.q8 = q8   // the streamed q8 planes below are what the eager quantizers would mark
-        st.e.dq8 = q8
+        if (q8) {   // the streamed meta must carry the compact offsets the eager quantizers write
+            tower_compact_offsets(st.e.enc)
+            whisper_dec_compact_offsets(st.e)
+        }
         // no selected backend = flat Q8_0 image, same repack gate the eager quantizers take
         let rep = q8 && select_matmul_backend_for_load()
         var extra = uint64(sz.enc_len * 4l) + uint64(sz.dec_len * 4l) + 2ul * uint64(IMAGE_PAGE)
         if (q8) {
-            extra += uint64(sz.enc_len + sz.dec_len)                    // quant planes
+            extra += uint64(sz.enc_len + sz.dec_len)                    // quant planes (over-estimate: compact is smaller)
             extra += uint64((sz.enc_len / 32l + sz.dec_len / 32l) * 4l) // scale planes
             extra += 4ul * uint64(IMAGE_PAGE)
         }
         cache_via_image_staged_(st, out, img, extra, tag, "q8") $(name : string;
                                                                   var w : ImgWriter; var sections : array<ImgSection>) {
             if (name == "dblob") {
-                return wstream_plane(recs, bytes, decJobs, sz.dec_len, 0, rep, w, sections, name)
+                return wstream_plane(recs, bytes, decJobs, 0, q8, rep, w, sections, name)
             }
             if (name == "enc.fblob") {
-                return wstream_plane(recs, bytes, encJobs, sz.enc_len, 0, rep, w, sections, name)
+                return wstream_plane(recs, bytes, encJobs, 0, q8, rep, w, sections, name)
             }
             if (q8 && name == "dqblob") {
-                return wstream_plane(recs, bytes, decJobs, sz.dec_len, 1, rep, w, sections, name)
+                return wstream_plane(recs, bytes, decJobs, 1, q8, rep, w, sections, name)
             }
             if (q8 && name == "dqscales") {
-                return wstream_plane(recs, bytes, decJobs, sz.dec_len, 2, rep, w, sections, name)
+                return wstream_plane(recs, bytes, decJobs, 2, q8, rep, w, sections, name)
             }
             if (q8 && name == "enc.qblob") {
-                return wstream_plane(recs, bytes, encJobs, sz.enc_len, 1, rep, w, sections, name)
+                return wstream_plane(recs, bytes, encJobs, 1, q8, rep, w, sections, name)
             }
             if (q8 && name == "enc.qscales") {
-                return wstream_plane(recs, bytes, encJobs, sz.enc_len, 2, rep, w, sections, name)
+                return wstream_plane(recs, bytes, encJobs, 2, q8, rep, w, sections, name)
             }
             return false   // filters (small) and the q8 planes of an fp32 mint stage normally
         }
@@ -1173,7 +1298,7 @@ def whisper_decode_batch(w : WhisperModel; var ds : DecoderState; tokens : array
     for (j in range64(d)) {
         ds.x1[j] = ds.xb[(n - 1l) * d + j]
     }
-    wm_mm_rq(w, ds.logits, w.d_te_off, ds.x1, ds.xqi, ds.xsi, d, w.n_vocab, 1l)
+    wm_mm_rq(w, ds.logits, w.dq8 ? w.d_te_q_off : w.d_te_off, ds.x1, ds.xqi, ds.xsi, d, w.n_vocab, 1l)
     asr_prof_add("wh.dec.logits", tl)
 }
 

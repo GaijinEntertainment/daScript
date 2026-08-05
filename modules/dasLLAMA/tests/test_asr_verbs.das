@@ -29,8 +29,8 @@ def test_family_exec_fmt_verbs(t : T?) {
         t |> equal(canary_exec_fmt(c, "q8"), "q8/q8", "canary q8 rail")
         c.q8 = false
         t |> equal(canary_exec_fmt(c, "q8"), "f32/q8", "canary fp32 parity encoder")
-        t |> equal(gemma4a_exec_fmt("q8"), "f32/q8", "gemma4a fp32 tower")
-        t |> equal(qwen3a_exec_fmt("q8"), "f32/q8", "qwen3a fp32 tower")
+        t |> equal(gemma4a_exec_fmt("q8"), "q8/q8", "gemma4a q8 tower (forced)")
+        t |> equal(qwen3a_exec_fmt("q8"), "q8/q8", "qwen3a q8 core (forced)")
     }
 }
 
@@ -39,8 +39,9 @@ def test_family_encode_buckets(t : T?) {
     t |> run("encode-total buckets are family facts") @(t : T?) {
         t |> equal(whisper_encode_bucket(), "wh.encode_total")
         t |> equal(canary_encode_bucket(), "cn.encode")
-        t |> equal(gemma4a_encode_bucket(), "")
-        t |> equal(qwen3a_encode_bucket(), "")
+        t |> equal(gemma4a_encode_bucket(), "g4a.encode")
+        t |> equal(qwen3a_encode_bucket(false), "q3a.encode")
+        t |> equal(qwen3a_encode_bucket(true), "q3o.encode")
     }
 }
 

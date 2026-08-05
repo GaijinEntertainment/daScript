@@ -12,6 +12,25 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **CPU attention: promote it from the loop-crown tier to the EMITTED tier (named 2026-08-05,
+  the E2B deep-clip fade probes; corrected same day after a double-check).** Attention is NOT
+  kernel-less: flash prefill (the default mode) tiles with online softmax and rides the
+  per-box-tuned `gemm_f32_uk_4x16` for QK^T and A·V, with full f16/q8/tq4 KV codec arms.
+  What it lacks is the EMITTED tier the weight GEMMs got: with f16 KV the flash path
+  packs-and-converts K/V to f32 first and then runs the fp32 GEMM — no f16-native dots
+  (F16C / fp16 hw-convert loads fused into the tile), no int8 QK option, softmax outside
+  the tile. The measured tier gap IS the finding: on a gb1-class ~5k-token ASR prefill the
+  emitted-tier blk_ffn crosses zen2/M1 at 1.13x while the loop-crown attn crosses at 2.9x
+  (16.4s vs 5.6s); the f16-KV default bought only -3% (read bytes halve, the fp32 compute
+  stays). It reads fine at pp512 (small share) and hurts at depth — deep prompts and batch
+  serving pay the same tax audio does, text board included. **What a fix looks like:** an
+  emitted, per-box-tuned attention family — convert-in-tile f16 dots, optional int8 QK
+  (requant Q once, vnni/sdot straight against q8 KV — q8 flips from slowest cache format to
+  likely fastest), softmax fused into the flash walk. **Why it's a WIN, not catch-up (Boris
+  2026-08-05): llama.cpp runs the same dequant-to-f32-scratch seam — an emitted tile is
+  'potentially faster' than the ref, and the deep-clip audio cards on the site are the
+  ready-made scoreboard.** NOT the quant-lane arc; a kernel arc of its own, eventually.
+
 - **Batched-tg bench row: tg at B=16 sequences is the kernel story decode can't tell at B=1
   (spotted 2026-08-04, zen2 thread ladder).** Single-sequence decode is GEMV — bandwidth-bound
   at any thread count, so das:ref tg reads as parity (t=4 zen2: 13.10 vs 12.59) while pp shows

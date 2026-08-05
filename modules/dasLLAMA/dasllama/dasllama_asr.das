@@ -73,6 +73,17 @@ struct AsrSession {
 
 // exact-fp32 knob for oracle rails: flip BEFORE load_asr_model to skip the Q8 fast path
 var private g_asr_force_fp32 = false
+// LLM-decoder ASR sessions' KV dtype. f16 is the DEFAULT (matches llama.cpp's KV — format-to-
+// format comparisons; zen2 gb1 -3%, transcripts near-tie-sane); f32 is the oracle/parity rail
+// (frozen-id cells pin it); q8_0 measured slower at ASR depths (decode overhead > bandwidth win)
+var private g_asr_kv = KVDtype.f16
+
+//! Select the KV-cache dtype for subsequent ASR decoder sessions (f16 default — matches the
+//! reference's KV; f32 is the oracle/parity rail). LLM-decoder families only: whisper and
+//! parakeet carry no LLM KV and ignore this. Applies at ``create_session``.
+def set_asr_kv(dt : KVDtype) {
+    g_asr_kv = dt
+}
 
 //! Force the fp32 (bit-exact-with-oracle) path for models loaded AFTER this call — the
 //! default load quantizes the encoder GEMMs to Q8_0 (~4x on CPU, tolerance-gated).
@@ -258,7 +269,9 @@ def asr_encode_bucket(m : AsrModel) : string {
     if (m.kind == AsrKind.canary) return canary_encode_bucket()
     if (m.kind == AsrKind.whisper) return whisper_encode_bucket()
     if (m.kind == AsrKind.gemma4a) return gemma4a_encode_bucket()
-    if (m.kind == AsrKind.qwen3a || m.kind == AsrKind.qwen3omni) return qwen3a_encode_bucket()
+    if (m.kind == AsrKind.qwen3a || m.kind == AsrKind.qwen3omni) {
+        return qwen3a_encode_bucket(m.kind == AsrKind.qwen3omni)
+    }
     return ""   // parakeet: fine-grained probes only
 }
 
@@ -281,13 +294,13 @@ def create_session(m : AsrModel; lang : string = "en") : AsrSession {
     if (m.kind == AsrKind.parakeet) {
         parakeet_check_lang(m.pk, lang)   // no language conditioning — validate, then unused
     } elif (m.kind == AsrKind.canary) {
-        s.cn <- create_canary_asr_session(m.dec, lang)
+        s.cn <- create_canary_asr_session(m.dec, lang, g_asr_kv)
     } elif (m.kind == AsrKind.gemma4a) {
-        s.g4 <- create_gemma4a_asr_session(m.dec)
+        s.g4 <- create_gemma4a_asr_session(m.dec, g_asr_kv)
     } elif (m.kind == AsrKind.qwen3omni) {
-        s.q3s <- create_qwen3a_asr_session(m.dec, m.q3t, lang, true)
+        s.q3s <- create_qwen3a_asr_session(m.dec, m.q3t, lang, true, g_asr_kv)
     } elif (m.kind == AsrKind.qwen3a) {
-        s.q3s <- create_qwen3a_asr_session(m.dec, m.q3t, lang, false)
+        s.q3s <- create_qwen3a_asr_session(m.dec, m.q3t, lang, false, g_asr_kv)
     } else {
         s.w <- create_session(m.whisper, lang)
     }

@@ -545,8 +545,8 @@ def private repack_mx4_bake(var np : uint8?; var ep : uint8?; n, d : int64) {
     repack_mx4_grp(np, ep, n, d, active_q8_layout_mr())
 }
 
-// ===== the q51 GEMV family (self-anchored — q51 does NOT ride the Q8 mr; its grid is
-// sdot-only, so x64 declines to the portable disk-order kernels via backend wiring) =====
+// ===== the q51 family (tile + GEMV; q51 does NOT ride the Q8 mr — its layout companion
+// stamps from the tile family's own grid, both platforms) =====
 
 //! The q51 layout companion: the grp interleave the stamped q51 rows core reads. Reference
 //! body = 1 (grp1 IS the disk order byte-for-byte), so a declined stamp keeps the verbatim
@@ -593,13 +593,10 @@ def q51_grp_row_dot(qg : uint8 const?; sg : uint8 const?; r, mr : int64; xqp : i
     return f
 }
 
-//! The q51 GEMV kernel (the family anchor): rows [rb, re) of one plane-region pair off the
-//! grp<mr> q51 planes. xbsp = per-32 activation quant sums (the min-term's asum — the groupn
-//! driver precomputes them once per region). Reference body = the scalar grp walk above.
-[tune_perm(mr = 4), tune_perm(mr = 8),
- tune_companion(fn = "q51q8_layout_gen", gen = "dasllama_gemm_gen::q8q8_layout"),
- tune(gen = "dasllama_gemm_gen::q51_gemv", fallback = "mr4"),
- hint(unsafe_range_check, noalias = qgp, noalias = sgp, noalias = xqp, noalias = xsp, noalias = xbsp)]
+//! The q51 GEMV kernel: rows [rb, re) of one plane-region pair off the grp<mr> q51 planes.
+//! xbsp = per-32 activation quant sums (the min-term's asum — the drivers precompute them).
+//! Companion of the q51 tile family below (same perm stamps both, the kq pattern).
+[hint(unsafe_range_check, noalias = qgp, noalias = sgp, noalias = xqp, noalias = xsp, noalias = xbsp)]
 def q51q8_gemv_gen(var yp : float?; qgp : uint8 const?; sgp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) : void {
     let mr = int64(q51q8_layout_gen())
     let nb = n / 32l
@@ -607,6 +604,29 @@ def q51q8_gemv_gen(var yp : float?; qgp : uint8 const?; sgp : uint8 const?; xqp 
         for (i in range64(rb, re)) {
             let g = i / mr
             yp[i] = q51_grp_row_dot(qgp + g * mr * nb * 20l, sgp + g * mr * nb * 4l, i % mr, mr, xqp, xsp, xbsp, n)
+        }
+    }
+}
+
+//! The q51 TILE kernel (the family anchor): 4 tokens x mr rows per call off the group's packed
+//! grp<mr> plane pair — the kq tile contract with the 32-weight block unit (Q8_0-form
+//! activations: per-32 xs and per-32 asum planes). Bit-exact vs 4 per-token GEMVs.
+[tune_perm(mr = 4), tune_perm(mr = 4, nrsplit = 2), tune_perm(mr = 8), tune_perm(mr = 8, nrsplit = 2),
+ tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"), tune_perm(dot = "maddubs", width = 256, mr = 8, nrsplit = 2, requires = "avx2"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"), tune_perm(dot = "vpdpbusd", width = 256, mr = 8, nrsplit = 2, requires = "avxvnni|avx512vnni"),
+ tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"), tune_perm(dot = "vpdpbusd", width = 512, mr = 16, nrsplit = 2, requires = "avx512vnni,avx512bw"),
+ tune_companion(fn = "q51q8_gemv_gen", gen = "dasllama_gemm_gen::q51_gemv"),
+ tune_companion(fn = "q51q8_layout_gen", gen = "dasllama_gemm_gen::q8q8_layout"),
+ tune(gen = "dasllama_gemm_gen::q51_tile",
+      fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
+ hint(unsafe_range_check, noalias = qgp, noalias = sgp, noalias = xqp, noalias = xsp, noalias = xbsp)]
+def q51q8_tile_gen(var yp : float?; qgp : uint8 const?; sgp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, t0 : int64) : void {
+    let mr = int64(q51q8_layout_gen())
+    unsafe {
+        for (t in range64(4l)) {
+            for (r in range64(mr)) {
+                yp[(t0 + t) * d + g * mr + r] = q51_grp_row_dot(qgp, sgp, r, mr, xqp + (t0 + t) * n, xsp + (t0 + t) * (n / 32l), xbsp + (t0 + t) * (n / 32l), n)
+            }
         }
     }
 }
@@ -1400,6 +1420,129 @@ def private kq_batch_groupn_gen(fmt : int; var yp : float?; kqp : uint8 const?; 
     }
 }
 
+// One (group range x token range) cell of the q51 batch walk — kq_batch_cell_gen's shape over
+// the packed grp<mr> q51 planes (no scratch: the tile ORs qh bits in register).
+def private q51_batch_cell_gen(var myp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, mr, TB : int64; ub, ue : int; tb0, tend : int64) {
+    let nb = n / 32l
+    unsafe {
+        var tb = tb0
+        while (tb < tend) {
+            let tbe = min(tb + TB, tend)
+            let tb4 = tb + ((tbe - tb) / 4l) * 4l
+            for (gi in range(ub, ue)) {
+                let g = int64(gi)
+                let qg = qp + g * mr * nb * 20l
+                let sg = sp + g * mr * nb * 4l
+                var tk = tb
+                while (tk < tb4) {
+                    q51q8_tile_gen(myp, qg, sg, xqp, xsp, xbsp, n, d, g, tk)
+                    tk += 4l
+                }
+                while (tk < tbe) {   // token tail (< 4): the rows core, one position
+                    q51q8_gemv_gen(myp + tk * d, qp, sp, xqp + tk * n, xsp + tk * nb, xbsp + tk * nb, n, g * mr, (g + 1l) * mr)
+                    tk++
+                }
+            }
+            tb += TB
+        }
+    }
+}
+
+// q51_batch slot: batched q51 GEMM over the grp planes — group chunks parallel, the cell walk
+// per chunk, row tails (d % mr) disk-order per token. The per-32 asum plane is computed once
+// per token row here (the slot signature carries no bsums).
+def private q51q8_batch_kernel_gen(var yp : float?; wq : uint8 const?; ws : uint8 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
+    let nb = n / 32l
+    let mr = int64(q51q8_layout_gen())
+    let ng = d / mr
+    var myp = yp
+    var bs : array<int>
+    bs |> resize(ntok * nb)
+    unsafe {
+        var bsp = addr(bs[0])
+        for (tk in range64(ntok)) {
+            for (bi in range64(nb)) {
+                var s = 0
+                for (j in range64(32l)) {
+                    s += int(xqp[tk * n + bi * 32l + j])
+                }
+                bsp[tk * nb + bi] = s
+            }
+        }
+        let TB = effective_token_block(g_q8_token_block, n)
+        maybe_parallel_for(0, int(ng), matmul_chunks(int(ng * mr), get_q8_batch_chunks_per_job(), n * d * ntok)) $(ub, ue) {
+            q51_batch_cell_gen(myp, wq, ws, xqp, xsp, bsp, n, d, mr, TB, ub, ue, 0l, ntok)
+        }
+        for (tk in range64(ntok)) {   // row tails (d % mr): disk-order scalar per token
+            for (i in range64(ng * mr, d)) {
+                myp[tk * d + i] = dot_q51q8_scalar(wq + i * nb * 20l, ws + i * nb * 4l, xqp + tk * n, xsp + tk * nb, n)
+            }
+        }
+    }
+    delete bs
+}
+
+// q51_batch_groupn slot: fused MoE prefill form — ONE dispatch runs every touched expert's
+// batched GEMM through the SAME cell walk, bit-exact vs a per-region loop of the batch slot.
+// Regions partition the token-row image, so the asum plane fills once per row.
+def private q51q8_batch_groupn_gen(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
+    let nb = n / 32l
+    let mr = int64(q51q8_layout_gen())
+    let ng = d / mr
+    var myp = yp
+    var maxRow = 0l
+    unsafe {
+        for (r in range64(nregions)) {
+            maxRow = max(maxRow, offs[r * 3l + 1l] + offs[r * 3l + 2l])
+        }
+    }
+    var bs : array<int>
+    bs |> resize(maxRow * nb)
+    unsafe {
+        var bsp = addr(bs[0])
+        for (r in range64(nregions)) {
+            let row0 = offs[r * 3l + 1l]
+            let cnt = offs[r * 3l + 2l]
+            for (tk in range64(row0, row0 + cnt)) {
+                for (bi in range64(nb)) {
+                    var s = 0
+                    for (j in range64(32l)) {
+                        s += int(xqp[tk * n + bi * 32l + j])
+                    }
+                    bsp[tk * nb + bi] = s
+                }
+            }
+        }
+        let TB = effective_token_block(g_q8_token_block, n)
+        maybe_parallel_for(0, int(nregions * ng), matmul_chunks_gemv(int(nregions * ng * mr), get_q8_batch_chunks_per_job(), n * d * nregions)) $(gb, ge) {
+            unsafe {
+                var gg = int64(gb)
+                while (gg < int64(ge)) {
+                    let r = gg / ng
+                    let gLocal = gg % ng
+                    let gEnd = min(int64(ge) - r * ng, ng)
+                    let sb = offs[r * 3l] / 32l
+                    let row0 = offs[r * 3l + 1l]
+                    let cnt = offs[r * 3l + 2l]
+                    q51_batch_cell_gen(myp, wq + sb * 20l, ws + sb * 4l, xqp, xsp, bsp, n, d, mr, TB, int(gLocal), int(gEnd), row0, row0 + cnt)
+                    gg = r * ng + gEnd
+                }
+            }
+        }
+        for (r in range64(nregions)) {   // row tails (d % mr): disk-order scalar per (region, token)
+            let sb = offs[r * 3l] / 32l
+            let row0 = offs[r * 3l + 1l]
+            let cnt = offs[r * 3l + 2l]
+            for (tk in range64(row0, row0 + cnt)) {
+                for (i in range64(ng * mr, d)) {
+                    myp[tk * d + i] = dot_q51q8_scalar(wq + (sb + i * nb) * 20l, ws + (sb + i * nb) * 4l, xqp + tk * n, xsp + tk * nb, n)
+                }
+            }
+        }
+    }
+    delete bs
+}
+
 // kq_groupn slot: region-list kq GEMV, the kq twin of q8q8_groupn_gen — region-contiguous group
 // spans through the format's rows core, row tails disk-order per region. Not `private`: the
 // groupn bit-exactness gate in test_kquant drives it directly.
@@ -1732,10 +1875,11 @@ def dasllama_math_gen_register() {
             kq_rows_k6 = @@k6q8_gemv_gen, kq_rows_q40 = @@q40q8_gemv_gen,
             kq_batch = @@kq_batch_kernel_gen,
             kq_groupn = @@kq_groupn_gen, kq_batch_groupn = @@kq_batch_groupn_gen,
-            // q51 family: self-anchored sdot GEMV (own grid/manifest entry) — arm64 only; the
-            // x64 twin below keeps the portable disk-order q51 slots
+            // q51 family: tile + GEMV off the grp planes (the tile family's companions stamp
+            // the GEMV/layout with the same perm)
             groupn_q51 = @@q51q8_groupn_gen, repack_q51 = @@repack_q51_gen,
             q51_layout = @@q51q8_layout_gen,
+            q51_batch = @@q51q8_batch_kernel_gen, q51_batch_groupn = @@q51q8_batch_groupn_gen,
             needs_repack = true, mx4_expand_interleaved = true, priority = 25,
             q8_layout = @@q8q8_layout_gen, kq_layout = @@kq_layout_fmt_gen, q8_wbias = @@q8q8_wbias_gen,
             q8_kgroup = @@q8q8_kgroup_gen))
@@ -1760,6 +1904,9 @@ def dasllama_math_gen_register() {
             kq_rows_k6 = @@k6q8_gemv_gen, kq_rows_q40 = @@q40q8_gemv_gen,
             kq_batch = @@kq_batch_kernel_gen,
             kq_groupn = @@kq_groupn_gen, kq_batch_groupn = @@kq_batch_groupn_gen,
+            groupn_q51 = @@q51q8_groupn_gen, repack_q51 = @@repack_q51_gen,
+            q51_layout = @@q51q8_layout_gen,
+            q51_batch = @@q51q8_batch_kernel_gen, q51_batch_groupn = @@q51q8_batch_groupn_gen,
             needs_repack = true, mx4_expand_interleaved = true, priority = 25,
             q8_layout = @@q8q8_layout_gen, kq_layout = @@kq_layout_fmt_gen, q8_wbias = @@q8q8_wbias_gen,
             q8_kgroup = @@q8q8_kgroup_gen,

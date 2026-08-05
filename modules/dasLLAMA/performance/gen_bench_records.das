@@ -870,14 +870,16 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
             to_log(LOG_INFO, "gen_bench_records:   {ref.tool} {wav} ({cfg.asr_reps} rep(s))...\n")
             var cmd = ""
             var enc_ms = 0.0lf
+            var rtext = ""
             let ms = (ref.tool == "mtmd"
-                ? run_asr_mtmd(model_path, "{spec.root}{ref.handle}", wav_path, threads, cfg.asr_reps, cmd, enc_ms)
+                ? run_asr_mtmd(model_path, "{spec.root}{ref.handle}", wav_path, threads, cfg.asr_reps, cmd, enc_ms, rtext)
                 : run_asr_cli(ref.tool, model_path, wav_path, threads, cfg.asr_reps, cmd))
             rr.cmd = cmd   // last clip's line; they differ only in -f
             if (ms > 0.0lf) {
                 to_log(LOG_INFO, "gen_bench_records:   {ref.tool} {wav} = {ms:.0f} ms\n")
                 // audio seconds live on the das cell's matching test key; cli tools don't report it
-                rr.tests |> insert("asr:{wav}", BenchTest(ms = ms, encode_ms = enc_ms))
+                // (mtmd is the one ref that stores its transcript — parity must be readable, not hoped)
+                rr.tests |> insert("asr:{wav}", BenchTest(ms = ms, encode_ms = enc_ms, text = rtext))
                 rr.files |> emplace(file_identity(wav_path, "clip"))
                 measured++
             } else {

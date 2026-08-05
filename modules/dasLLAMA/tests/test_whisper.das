@@ -9,6 +9,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_whisper
 require dasllama/dasllama_asr
 require dasllama/dasllama_audio
+require dasllama/dasllama_common   // KVDtype — the oracle cells pin the f32 parity rail
 require dasllama/dasllama_gguf
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
@@ -297,7 +298,10 @@ def test_qwen3a_tower(t : T?) {
             t |> skip("jfk.wav not present")
             return
         }
+        // reference-parity cell: pinned to the f32 rail (the q8 rail has its own A/B cell below)
+        set_qwen3a_q8(false)
         var inscope tw <- load_qwen3a_tower(path)
+        set_qwen3a_q8(true)
         t |> equal(tw.core.d_model, 896l, "d_model")
         t |> equal(tw.core.n_layer, 18l, "layers")
         t |> equal(tw.core.n_head, 14l, "heads")
@@ -599,6 +603,7 @@ def test_canary_qwen_oracle(t : T?) {
             return
         }
         // the two-file route: decoder GGUF (LoRA-merged Qwen3-1.7B) + "CNRY" FastConformer bin
+        set_asr_kv(KVDtype.f32)   // the frozen NeMo ids are the f32 parity rail
         var inscope m <- load_asr_model(dec, enc)
         let c <- caps(m)
         t |> equal(length(c.languages), 1, "English-only")
@@ -617,6 +622,7 @@ def test_canary_qwen_oracle(t : T?) {
             check_canary_clip(t, m, path_join(corpus_dir(), "librispeech/05_1089-134686-0004.wav"),
                 [2833, 5779, 29160, 451, 11896, 374, 8580, 389, 498, 13, 7684, 3729, 9972, 151645])
         }
+        set_asr_kv(KVDtype.f16)   // back to the serving default
     }
 }
 
@@ -649,6 +655,7 @@ def test_gemma4a_audio_oracle(t : T?) {
             t |> skip("gemma4a_test2.wav not present")
             return
         }
+        set_asr_kv(KVDtype.f32)   // the frozen mtmd-prefix ids are the f32 parity rail; below every skip
         with_job_que() {
             setup_dasllama_jobque_()
             var inscope s <- create_session(m, "en")
@@ -676,6 +683,7 @@ def test_gemma4a_audio_oracle(t : T?) {
             t |> success(mismatches == 0, "confident prefix token-for-token ({mismatches} mismatches)")
             t |> equal(s.detected_lang, "en", "english")
         }
+        set_asr_kv(KVDtype.f16)   // back to the serving default
     }
 }
 
@@ -722,6 +730,7 @@ def test_qwen3omni_audio_oracle(t : T?) {
         if (!model_available(t, dec) || !model_available(t, mmproj)) {
             return
         }
+        set_asr_kv(KVDtype.f32)   // the frozen mtmd ids are the f32 parity rail
         var inscope m <- load_asr_model(dec, mmproj)
         t |> equal(m.dec.arch, "qwen3vlmoe", "the Qwen3-Omni MoE thinker")
         t |> equal(m.q3t.core.n_layer, 32l, "AuT tower, 32 blocks")
@@ -743,5 +752,6 @@ def test_qwen3omni_audio_oracle(t : T?) {
                 [2833, 5779, 11, 7722, 451, 613, 645, 374, 8580, 389, 498, 13, 7684, 3729, 11,
                  9972, 13, 7684, 3729, 13, 151645])
         }
+        set_asr_kv(KVDtype.f16)   // back to the serving default
     }
 }
