@@ -142,12 +142,12 @@ namespace  das {
          static __forceinline int32_t Mod ( int32_t a, int32_t b, Context & context, LineInfo * at ) {
             if ( b==0 ) context.throw_error_at(at, "division by zero in modulo");
             double A = a, B = b;
-            return a - int32_t(A/B)*b;
+            return int32_t(a - int64_t(A/B)*b);
         }
         static __forceinline void SetMod    ( int32_t & a, int32_t b, Context & context, LineInfo * at ) {
             if ( b==0 ) context.throw_error_at(at, "division by zero in modulo");
             double A = a, B = b;
-            a = a - int32_t(A/B)*b;
+            a = int32_t(a - int64_t(A/B)*b);
         }
     };
 

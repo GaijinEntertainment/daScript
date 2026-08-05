@@ -36,11 +36,11 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x56ul   // darwin in-memory arm emits no dtor list (0x55: handled types iterate and index through the annotation's jit hooks)
+let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x57ul   // INT_MIN / -1 and % -1 guards on sdiv/srem (0x56: darwin in-memory arm emits no dtor list)
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x3140f6c8e0a8738eul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0xbe8db6d74086455aul
 
 let JIT_FNV_PRIME : uint64 = 1099511628211ul
 
