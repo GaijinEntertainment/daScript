@@ -36,19 +36,27 @@
         return rec;
     }
 
-    // The frame IS the render surface, so it owns its geometry: a box matching
-    // the program's drawing-buffer aspect, clamped to the column. Without this
-    // the frame kept its 640x480 seed, the column squeezed the width, and the
-    // canvas — which scales to fit — left a black band below itself.
-    // !important because the column's stylesheet would otherwise stretch it.
+    // Height-led, the way the page has always actually presented the canvas:
+    // take most of the viewport height and derive width from the program's
+    // drawing-buffer aspect, giving back whatever the column cannot fit.
+    //
+    // Deliberately NOT clamped to 640. The old canvas code asked for a 640 box,
+    // but the column's stylesheet outvoted it, so every visitor has been seeing
+    // a ~1085px-wide render. A frame that honours the clamp is the first thing
+    // to shrink it, and a 1024x768 program downscaled into 640 loses exactly the
+    // thin, high-contrast detail — shadow edges, thin geometry — that reads as
+    // "the render went washed out".
+    var MAX_VIEWPORT_FRACTION = 0.8;
+
     function fit(rec) {
         if (!rec || !rec.el || rec.el.style.display === "none") return;
         // Measure the column, not the host — the host sizes to its content, so
         // asking it how wide it is would just echo the frame back.
         var column = host && host.parentElement;
-        var avail = Math.min(column ? column.clientWidth : 640, 640);
-        rec.el.style.setProperty("width", avail + "px", "important");
-        rec.el.style.setProperty("height", Math.round(avail * rec.aspect) + "px", "important");
+        var maxHeight = Math.round(window.innerHeight * MAX_VIEWPORT_FRACTION);
+        var width = Math.min(column ? column.clientWidth : 640, Math.round(maxHeight / rec.aspect));
+        rec.el.style.setProperty("width", width + "px", "important");
+        rec.el.style.setProperty("height", Math.round(width * rec.aspect) + "px", "important");
     }
 
     window.addEventListener("resize", function () { fit(current); });
