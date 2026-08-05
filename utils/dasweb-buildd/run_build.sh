@@ -38,18 +38,31 @@ WORKTREE="${DASWEB_WASM_WORKTREE:?DASWEB_WASM_WORKTREE is not set}"
 DASLANG="$WORKTREE/bin/daslang"
 [ -x "$DASLANG" ] || { echo "no daslang host at $DASLANG (build web/build_wasm_host.sh first)"; exit 10; }
 
-# The wasm64 runtime archive daspkg's jit-runtime-lib links against; built by
-# `daspkg build --wasm` into web/build64.
-RUNTIME_LIB="$(ls "$WORKTREE"/web/build64/*libDaScript_runtime*.a 2>/dev/null | head -1)"
-[ -n "$RUNTIME_LIB" ] || { echo "no wasm64 runtime archive under $WORKTREE/web/build64 (run daspkg build --wasm)"; exit 11; }
+# the wasm link shells out to emcc — bring the pinned emsdk onto PATH
+EMSDK_ROOT="${EMSDK:?EMSDK is not set (the pinned emsdk root)}"
+. "$EMSDK_ROOT/emsdk_env.sh" >/dev/null 2>&1 || { echo "cannot source $EMSDK_ROOT/emsdk_env.sh"; exit 15; }
+
+# The wasm64 runtime archive jit-runtime-lib links against; `daspkg build
+# --wasm` stages it (with the module archives) into web/output64/lib.
+RUNTIME_LIB="$(ls "$WORKTREE"/web/output64/lib/*libDaScript_runtime*.a 2>/dev/null | head -1)"
+[ -n "$RUNTIME_LIB" ] || { echo "no wasm64 runtime archive under $WORKTREE/web/output64/lib (run daspkg build --wasm)"; exit 11; }
 
 run_sandboxed() {
     if command -v bwrap >/dev/null 2>&1; then
-        # no network, fresh tmpfs /tmp, worktree read-only, only the job dirs writable
+        # The emscripten cache is read-only in the sandbox and FROZEN so a
+        # hostile build can never poison what later builds link against. The
+        # toolchain-bump protocol warms it: one unsandboxed canary build after
+        # `daspkg build --wasm` populates every system-lib variant this link
+        # line needs.
+        export EM_FROZEN_CACHE=1
+        # no network, fresh tmpfs /tmp, everything read-only except the job's
+        # own dirs (mount order matters: the job binds override the tmpfs)
         exec bwrap \
             --unshare-net --unshare-pid --die-with-parent \
             --ro-bind / / \
+            --dev /dev \
             --tmpfs /tmp \
+            --ro-bind "$SRC_DIR" "$SRC_DIR" \
             --bind "$OUT_DIR" "$OUT_DIR" \
             --tmpfs "$HOME/.cache" \
             "$@"
