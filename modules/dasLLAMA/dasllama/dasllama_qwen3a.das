@@ -16,6 +16,7 @@ require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — th
 require dasllama/dasllama_math
 require dasllama/dasllama_gguf
 require dasllama/dasllama_audio
+require dasllama/dasllama_convert   // quantize_q8_0_into — the cblob q8 image
 require dasllama/dasllama_common   // apply_box_profile_runtime for the qwen3a-image identity
 require dasllama/dasllama_blocks   // embed_text_rows/eval_embd_ — the ASR turn drives the qwen3 decoder
 require dasllama/dasllama_image
@@ -34,12 +35,15 @@ let QWEN3A_TOK_PER_CHUNK = 13l  // conv output frames per chunk (100 -> 50 -> 25
 
 //! The qwen3a tower: the shared AudioTower core carries the transformer blocks + post-LN
 //! (`encoder_blocks` runs them); the conv2d frontend, per-chunk positions, and the MLP
-//! projector live in `cblob`.
+//! projector live in `cblob`, with the GEMM trio (cout/mm1/mm2) served q8 from `qcblob`.
 struct Qwen3aTower {
     core : AudioTower = AudioTower()   // d_model/heads/blocks/post_ln; has_k_bias; n_ctx = window positions
     proj_dim : int64                   // decoder embedding width (mm2 output)
     n_ch : int64                       // conv channel count (480)
+    cq8 : bool = false                 // cblob GEMM trio (cout/mm1/mm2) quantized: qcblob/qcscales armed
     cblob : PlaneF = PlaneF()
+    qcblob : PlaneI8 = PlaneI8()       // whole-cblob-shaped Q8_0 quants (trio regions repacked in place)
+    qcscales : PlaneF = PlaneF()       // per-32-block scales, indexed at woff/32
     c1_w_off : int64                   // conv2d weights, file order [oc][ic][kh][kw] (= im2col col order)
     c1_b_off : int64
     c2_w_off : int64
@@ -66,9 +70,9 @@ def finalize(var t : Qwen3aTower) {
     }
 }
 
-// the tripwire: serialize_image_meta(Qwen3aTower) covers 16 fields (core reuses AudioTower's
+// the tripwire: serialize_image_meta(Qwen3aTower) covers 17 fields (core reuses AudioTower's
 // list); image_map + image_bytes are deliberate skips.
-let private QWEN3A_TOWER_META_FIELDS = 16 + 2
+let private QWEN3A_TOWER_META_FIELDS = 17 + 2
 
 // every meta-carried Qwen3aTower field, explicitly, both directions (see dasllama_image)
 def private serialize_image_meta(var arch : Archive; var t : Qwen3aTower) {
@@ -76,6 +80,7 @@ def private serialize_image_meta(var arch : Archive; var t : Qwen3aTower) {
     serialize_image_meta(arch, t.core)
     arch |> serialize_raw(t.proj_dim)
     arch |> serialize_raw(t.n_ch)
+    arch |> serialize_raw(t.cq8)
     arch |> serialize_raw(t.c1_w_off)
     arch |> serialize_raw(t.c1_b_off)
     arch |> serialize_raw(t.c2_w_off)
@@ -99,6 +104,8 @@ def private image_post_load(var t : Qwen3aTower) {}   // no derived state — of
 struct Qwen3aStaging {
     e : Qwen3aTower = Qwen3aTower()
     cblob : array<float>
+    qcblob : array<int8>
+    qcscales : array<float>
     core : AudioTowerPlanes = AudioTowerPlanes()
 }
 
@@ -109,6 +116,8 @@ def private serialize_image_meta(var arch : Archive; var st : Qwen3aStaging) {
 // staging owns its plane bytes outright — every array here is heap, none is borrowed
 def finalize(var st : Qwen3aStaging) {
     delete st.cblob
+    delete st.qcblob
+    delete st.qcscales
     delete st.core
     delete st.e
 }
@@ -119,13 +128,24 @@ def private image_post_load(var st : Qwen3aStaging) {}
 [init]
 def private register_qwen3a_image_tags {
     register_image_family_tag("qwen3a-f32")
+    register_image_family_tag("qwen3a-q8")
+}
+
+// q8 is FORCED on the shared core AND the cblob GEMM trio (no fp32/bf16 weight lane,
+// board-wide policy); the flag is the bit-exact A/B rail for parity legs.
+var private g_q3a_q8 = true
+
+//! Select the qwen3a tower core's weight format for subsequent loads: q8 (default, forced) vs
+//! the fp32 reference route. A/B rail — parity legs flip it, serving never does.
+def set_qwen3a_q8(on : bool) {
+    g_q3a_q8 = on
 }
 
 //! Load a Qwen3-ASR mmproj GGUF (projector type `qwen3a`, bf16/f16/f32 tensors). Like
 //! ``load_model``, caches a box/knob-specific PREPARED IMAGE for fast reload;
 //! ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
 def load_qwen3a_tower(path : string) : Qwen3aTower {
-    let tag = "qwen3a-f32"
+    let tag = g_q3a_q8 ? "qwen3a-q8" : "qwen3a-f32"
     if (path |> ends_with(".dlim")) {
         // named directly — no mmproj to regenerate from, so a wrong identity panics
         apply_box_profile_runtime()
@@ -221,6 +241,9 @@ def stage_qwen3a_tower(path : string) : Qwen3aStaging {
         gguf_read_tensor_f32(m, bytes, "a.post_ln.weight", st.core.fblob, c.lnp_w_off, d)
         gguf_read_tensor_f32(m, bytes, "a.post_ln.bias", st.core.fblob, c.lnp_b_off, d)
         st.e.core <- c
+        if (g_q3a_q8) {
+            tower_quantize(st.e.core, st.core)   // arm the shared core's q8 rail (encoder_blocks reads core.q8)
+        }
 
         // conv frontend + projector blob
         let i3 = gguf_find_tensor(m, "a.conv2d.1.weight")
@@ -266,9 +289,29 @@ def stage_qwen3a_tower(path : string) : Qwen3aStaging {
         gguf_read_tensor_f32(m, bytes, "mm.a.mlp.1.bias", st.cblob, st.e.mm1_b_off, d)
         gguf_read_tensor_f32(m, bytes, "mm.a.mlp.2.weight", st.cblob, st.e.mm2_w_off, st.e.proj_dim * d)
         gguf_read_tensor_f32(m, bytes, "mm.a.mlp.2.bias", st.cblob, st.e.mm2_b_off, st.e.proj_dim)
+        if (g_q3a_q8) {
+            q3a_cblob_quantize(st.e, st.cblob, st.qcblob, st.qcscales)
+        }
     }
     fclose(f)
     return <- st
+}
+
+// whole-cblob Q8_0 image + trio repack (cout/mm1/mm2) — the core's recipe; convs, positions,
+// and biases stay fp32 (quantized-but-unread, cblob remains their truth)
+def private q3a_cblob_quantize(var t : Qwen3aTower; cblob : array<float>; var qblob : array<int8>; var qscales : array<float>) {
+    let total = long_length(cblob) & ~31l
+    qblob |> resize(total)
+    qscales |> resize(total / 32l)
+    quantize_q8_0_into(cblob, total, qblob, qscales, 0l, 0l)
+    t.cq8 = true
+    if (!select_matmul_backend_for_load()) {
+        return   // row-major backend reads the flat Q8_0 image as-is
+    }
+    let d = t.core.d_model
+    tw_repack(qblob, qscales, t.cout_w_off, 16l * t.n_ch, d)
+    tw_repack(qblob, qscales, t.mm1_w_off, d, d)
+    tw_repack(qblob, qscales, t.mm2_w_off, d, t.proj_dim)
 }
 
 //! Qwen3-ASR's log-mel (WhisperFeatureExtractor, center=True, truncation=False): 200-sample
@@ -418,6 +461,23 @@ struct Qwen3aConvState {
     y3 : array<float>
     @scratch feat : array<float>   // [13 × 16·n_ch]
     @scratch crow : array<float>   // conv_out rows for one chunk [13 × d_model]
+    // requant image for the cblob trio's activations (grow-only — never the core's s.xqi,
+    // whose size is the encoder's own pre-sized contract)
+    @scratch xq : array<int8>
+    @scratch xs : array<float>
+}
+
+// q8 route for a cblob GEMM (requant-and-multiply against the trio planes; xq/xs pre-sized by
+// the encode): falls back to the fp32 cblob when the region wasn't quantizable (same n%32
+// condition as the repack)
+def private q3a_mm_rq(t : Qwen3aTower; var y : array<float>; woff : int64; x : array<float>;
+                      var xq : array<int8>; var xs : array<float>; n, d, npos : int64) {
+    if (t.cq8 && n % 32l == 0l) {
+        asr_requant_rows_q8(x, n, npos, xq, xs)
+        matmul_q8q8_batch(y, t.qcblob, t.qcscales, woff, xq, xs, n, d, npos)
+    } else {
+        mm_blob_b(y, t.cblob, woff, x, n, d, npos)
+    }
 }
 
 //! Encode one padded mel window (`qwen3a_mel_window` output) to soft tokens in ``s.out``:
@@ -432,6 +492,11 @@ def qwen3a_encode(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConvStat
     let npos = n_chunks * QWEN3A_TOK_PER_CHUNK
     if (npos > t.core.n_ctx) {
         panic("qwen3a_encode: window has {npos} positions, tower sized for {t.core.n_ctx}")
+    }
+    if (t.cq8) {   // requant image for the cblob trio (cout: 13×feat rows; mm1/mm2: npos×d)
+        let need = max(QWEN3A_TOK_PER_CHUNK * 16l * nch, npos * d)
+        cs.xq |> resize(need)
+        cs.xs |> resize(need / 32l)
     }
 
     // conv frontend per chunk -> rows of s.x
@@ -458,7 +523,7 @@ def qwen3a_encode(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConvStat
         }
         // conv_out rows for this chunk, + per-chunk positions 0..12, into the residual stream
         cs.crow |> resize(QWEN3A_TOK_PER_CHUNK * d)
-        mm_blob_b(cs.crow, t.cblob, t.cout_w_off, cs.feat, feat, d, QWEN3A_TOK_PER_CHUNK)
+        q3a_mm_rq(t, cs.crow, t.cout_w_off, cs.feat, cs.xq, cs.xs, feat, d, QWEN3A_TOK_PER_CHUNK)
         add_bias_rows(cs.crow, t.cblob, t.cout_b_off, d, QWEN3A_TOK_PER_CHUNK)
         let xbase = ci * QWEN3A_TOK_PER_CHUNK * d
         for (i in range64(QWEN3A_TOK_PER_CHUNK * d)) {
@@ -472,11 +537,11 @@ def qwen3a_encode(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConvStat
 
     // MLP projector: mm1 + bias -> gelu_erf -> mm2 + bias
     s.ph |> resize(npos * d)
-    mm_blob_b(s.ph, t.cblob, t.mm1_w_off, s.xb, d, d, npos)
+    q3a_mm_rq(t, s.ph, t.mm1_w_off, s.xb, cs.xq, cs.xs, d, d, npos)
     add_bias_rows(s.ph, t.cblob, t.mm1_b_off, d, npos)
     gelu_erf(s.ph, npos * d)
     s.out |> resize(npos * t.proj_dim)
-    mm_blob_b(s.out, t.cblob, t.mm2_w_off, s.ph, d, t.proj_dim, npos)
+    q3a_mm_rq(t, s.out, t.mm2_w_off, s.ph, cs.xq, cs.xs, d, t.proj_dim, npos)
     add_bias_rows(s.out, t.cblob, t.mm2_b_off, t.proj_dim, npos)
 }
 
@@ -509,14 +574,15 @@ struct Qwen3aAsrSession {
 
 //! Qwen3-ASR self-detects the language (``languages`` empty) and takes context biasing via the
 //! The tower's precision half of the facade's [[asr_exec_fmt]] stamp (the decoder tag comes
-//! from the facade, which owns the shared LLM). The AuT tower loads fp32 today.
+//! from the facade, which owns the shared LLM). The AuT core serves q8 GEMM planes.
 def qwen3a_exec_fmt(dec_fmt : string) : string {
-    return "f32/{dec_fmt}"
+    return "{g_q3a_q8 ? "q8" : "f32"}/{dec_fmt}"
 }
 
-//! Qwen3a/Omni carry no encode-total ``asr_prof`` bucket (fine-grained probes only).
-def qwen3a_encode_bucket : string {
-    return ""
+//! The family's encode-total ``asr_prof`` bucket (the facade's [[asr_encode_bucket]] arm):
+//! the ASR turn and the Omni chat turn time their encodes under different keys.
+def qwen3a_encode_bucket(omni : bool) : string {
+    return omni ? "q3o.encode" : "q3a.encode"
 }
 
 //! session's ``context``; Qwen3-Omni is a chat model driven as a transcription turn — no prompt.
@@ -527,11 +593,12 @@ def qwen3a_asr_caps(omni : bool) : AsrCaps {
 
 //! The facade's session arm: language validation (Qwen3-ASR only accepts "auto"), a fresh
 //! decoder session, and the tower's encoder scratch.
-def create_qwen3a_asr_session(dec : Model; t : Qwen3aTower; lang : string; omni : bool) : Qwen3aAsrSession {
+def create_qwen3a_asr_session(dec : Model; t : Qwen3aTower; lang : string; omni : bool;
+                              kv : KVDtype = KVDtype.f32) : Qwen3aAsrSession {
     if (!omni && lang != "auto") {
         panic("dasLLAMA asr: Qwen3-ASR detects the language itself — create the session with lang=\"auto\"")
     }
-    return <- Qwen3aAsrSession(qctx <- create_session_(dec), qenc <- make_encoder_state(t.core))
+    return <- Qwen3aAsrSession(qctx <- create_session_(dec, kv, kv), qenc <- make_encoder_state(t.core))
 }
 
 // The qwen3a transcription turn: chatml with the audio span in <|audio_start|>/<|audio_end|>,
@@ -540,9 +607,11 @@ def create_qwen3a_asr_session(dec : Model; t : Qwen3aTower; lang : string; omni 
 def qwen3a_transcribe(dec : Model; t : Qwen3aTower; var s : Qwen3aAsrSession; context : string;
                       samples : array<float> | #; blk : block<(seg : TranscribeSegment)>;
                       var detected_lang : string&) : int {
+    let tprof = ref_time_ticks()
     let mel <- log_mel_qwen3a(samples, t.core.n_mel)
     var rows : array<float>
     let n_audio = qwen3a_encode_all(t, s.qenc, s.qcs, mel, rows)
+    asr_prof_add("q3a.encode", tprof)
 
     let dim = dec.config.dim
     let im_start = special_id(dec, "<|im_start|>")

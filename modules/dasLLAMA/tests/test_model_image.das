@@ -922,7 +922,7 @@ def test_qwen3a_tower_image_roundtrip(t : T?) {
         if (!model_available(t, path)) {
             return
         }
-        let img = image_path_for(path, "qwen3a-f32")
+        let img = image_path_for(path, "qwen3a-q8")
         remove(img)
         // off-rail truth: the staged read — both cached loads are image-backed and cannot
         // check each other
@@ -930,16 +930,32 @@ def test_qwen3a_tower_image_roundtrip(t : T?) {
         var inscope cold <- load_qwen3a_tower(path)
         t |> success(cold.image_map != null, "cold load serves the image it built")
         t |> success(stat(img).is_valid, "cold load saved an image")
+        t |> success(cold.core.q8, "cold tower core is on the q8 rail")
         t |> equal(count_mismatch(a.cblob, cold.cblob), 0l, "cold-built cblob element-exact")
         var inscope b <- load_qwen3a_tower(path)
         t |> success(b.image_map != null, "warm load is image-backed")
+        t |> success(b.core.q8, "warm tower core is on the q8 rail")
         t |> equal(b.core.d_model, a.e.core.d_model)
         t |> equal(b.core.n_layer, a.e.core.n_layer)
         t |> equal(b.core.n_ctx, a.e.core.n_ctx)
         t |> equal(b.proj_dim, a.e.proj_dim)
         t |> equal(b.n_ch, a.e.n_ch)
         t |> equal(count_mismatch(a.core.fblob, b.core.fblob), 0l, "core.fblob element-exact")
+        t |> equal(count_mismatch_i8(a.core.qblob, b.core.qblob), 0l, "core.qblob element-exact")
+        t |> equal(count_mismatch(a.core.qscales, b.core.qscales), 0l, "core.qscales element-exact")
         t |> equal(count_mismatch(a.cblob, b.cblob), 0l, "cblob element-exact")
+        t |> success(b.cq8, "warm tower cblob trio is on the q8 rail")
+        t |> equal(count_mismatch_i8(a.qcblob, b.qcblob), 0l, "qcblob element-exact")
+        t |> equal(count_mismatch(a.qcscales, b.qcscales), 0l, "qcscales element-exact")
+        // the f32 A/B rail still stages + serves (parity legs flip it; serving never does)
+        set_qwen3a_q8(false)
+        let img32 = image_path_for(path, "qwen3a-f32")
+        remove(img32)
+        var inscope a32 <- stage_qwen3a_tower(path)
+        var inscope c32 <- load_qwen3a_tower(path)
+        t |> success(!c32.core.q8, "f32 rail still serves")
+        t |> equal(count_mismatch(a32.core.fblob, c32.core.fblob), 0l, "f32 core.fblob element-exact")
+        set_qwen3a_q8(true)
     }
 }
 
@@ -1024,7 +1040,7 @@ def test_canary_encoder_q8_image_roundtrip(t : T?) {
 
 [test]
 def test_gemma4a_encoder_image_roundtrip(t : T?) {
-    t |> run("gemma4a encoder: mapped image planes are element-exact vs gguf") @(t : T?) {
+    t |> run("gemma4a encoder q8: mapped image planes are element-exact vs gguf transcode") @(t : T?) {
         if (!family_on(t, "gemma4a")) return
         if (!arm_on(t, "gemma4a")) return
         if (!jit_enabled()) {
@@ -1035,27 +1051,139 @@ def test_gemma4a_encoder_image_roundtrip(t : T?) {
         if (!model_available(t, path)) {
             return
         }
-        let img = image_path_for(path, "gemma4a-f32")
+        let img = image_path_for(path, "gemma4a-q8")
         remove(img)
-        // off-rail truth: both cached loads are image-backed, so they cannot check each other.
-        // The staging carrier IS the off-rail read now — a served encoder has no array form.
+        // off-rail truth: the staging carrier re-runs the read-time transcode + repack under
+        // the same backend pin, so its planes are the served image's ground truth
         var inscope a <- stage_gemma4a_encoder(path)
         var inscope cold <- load_gemma4a_encoder(path)
         t |> success(cold.image_map != null, "cold load serves the image it built")
         t |> success(stat(img).is_valid, "cold load saved an image")
-        t |> equal(count_mismatch(a.blob, cold.blob), 0l, "cold-built blob element-exact")
+        t |> success(cold.q8, "served encoder is on the q8 rail")
+        t |> equal(count_mismatch_i8(a.qblob, cold.qblob), 0l, "cold-built qblob element-exact")
         var inscope b <- load_gemma4a_encoder(path)
         t |> success(b.image_map != null, "warm load is image-backed")
+        t |> success(b.q8, "warm encoder is on the q8 rail")
         t |> equal(b.d_model, a.e.d_model)
         t |> equal(b.n_layer, a.e.n_layer)
         t |> equal(b.proj_dim, a.e.proj_dim)
         t |> equal(length(b.layers), long_length(a.layers))
-        t |> equal(count_mismatch(a.blob, b.blob), 0l, "blob element-exact")
+        t |> equal(count_mismatch_i8(a.qblob, b.qblob), 0l, "qblob element-exact")
+        t |> equal(count_mismatch(a.qscales, b.qscales), 0l, "qscales element-exact")
+        t |> equal(count_mismatch(a.blob, b.blob), 0l, "compact fp32 blob element-exact")
         t |> equal(count_mismatch(a.twiddles, b.twiddles), 0l, "twiddles element-exact")
         t |> equal(count_mismatch(a.filters, b.filters), 0l, "filters element-exact")
         t |> equal(count_mismatch(a.pos_emb, b.pos_emb), 0l, "pos_emb element-exact")
         t |> equal(count_mismatch(a.hann, b.hann), 0l, "hann element-exact")
         t |> equal(count_mismatch(a.ones, b.ones), 0l, "ones element-exact")
+        // the f32 A/B rail still stages + serves (parity legs flip it; serving never does)
+        set_gemma4a_q8(false)
+        let img32 = image_path_for(path, "gemma4a-f32")
+        remove(img32)
+        var inscope a32 <- stage_gemma4a_encoder(path)
+        var inscope c32 <- load_gemma4a_encoder(path)
+        t |> success(!c32.q8, "f32 rail still serves")
+        t |> equal(count_mismatch(a32.blob, c32.blob), 0l, "f32 blob element-exact")
+        set_gemma4a_q8(true)
+    }
+}
+
+[test]
+def test_gemma4a_transcribe_q8_ab(t : T?) {
+    t |> run("gemma4a transcribe: the q8 tower vs the f32 rail on jfk, same text") @(t : T?) {
+        if (!family_on(t, "gemma4a")) return
+        if (!arm_on(t, "gemma4a")) return
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let dec_path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
+        let mmp_path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
+        if (!model_available(t, dec_path)) return
+        if (!model_available(t, mmp_path)) return
+        var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+        if (empty(samples)) {
+            t |> skip("jfk.wav not present beside the models")
+            return
+        }
+        var q8_text = ""
+        var f32_text = ""
+        var lang = ""
+        with_job_que() {
+            setup_dasllama_jobque_()
+            // decoder off-rail (CODEREVIEW rule 20) and loaded ONCE — only the tower flips rails
+            var dec <- load_model_(dec_path, QuantMode.q8)
+            var inscope enc <- load_gemma4a_encoder(mmp_path)
+            var inscope s <- create_gemma4a_asr_session(dec)
+            t |> success(enc.q8, "leg A tower is on the q8 rail")
+            gemma4a_transcribe(dec, enc, s, samples, $(seg : TranscribeSegment) {
+                q8_text += seg.text
+            }, lang)
+            set_gemma4a_q8(false)
+            var inscope enc32 <- load_gemma4a_encoder(mmp_path)
+            var inscope s32 <- create_gemma4a_asr_session(dec)
+            t |> success(!enc32.q8, "leg B tower is on the f32 rail")
+            gemma4a_transcribe(dec, enc32, s32, samples, $(seg : TranscribeSegment) {
+                f32_text += seg.text
+            }, lang)
+            set_gemma4a_q8(true)
+            delete dec
+        }
+        // the eyeball rail: both decoded streams logged before the assert
+        to_log(LOG_INFO, "gemma4a q8 : {q8_text}\n")
+        to_log(LOG_INFO, "gemma4a f32: {f32_text}\n")
+        t |> equal(q8_text, f32_text, "q8 tower transcript matches the f32 rail")
+        delete samples
+    }
+}
+
+[test]
+def test_qwen3a_transcribe_q8_ab(t : T?) {
+    t |> run("qwen3a transcribe: the q8 tower core vs the f32 rail on jfk, same text") @(t : T?) {
+        if (!family_on(t, "qwen3a")) return
+        if (!arm_on(t, "qwen3a")) return
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let dec_path = path_join(models_dir(), "Qwen3-ASR-0.6B-Q8_0.gguf")
+        let mmp_path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
+        if (!model_available(t, dec_path)) return
+        if (!model_available(t, mmp_path)) return
+        var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+        if (empty(samples)) {
+            t |> skip("jfk.wav not present beside the models")
+            return
+        }
+        var q8_text = ""
+        var f32_text = ""
+        var lang = ""
+        with_job_que() {
+            setup_dasllama_jobque_()
+            // decoder off-rail (CODEREVIEW rule 20) and loaded ONCE — only the tower flips rails
+            var dec <- load_model_(dec_path, QuantMode.q8)
+            dec.config.seq_len = min(dec.config.seq_len, 8192l)
+            var inscope tw <- load_qwen3a_tower(mmp_path)
+            t |> success(tw.core.q8, "leg A tower core is on the q8 rail")
+            var inscope s <- create_qwen3a_asr_session(dec, tw, "auto", false)
+            qwen3a_transcribe(dec, tw, s, "", samples, $(seg : TranscribeSegment) {
+                q8_text += seg.text
+            }, lang)
+            set_qwen3a_q8(false)
+            var inscope tw32 <- load_qwen3a_tower(mmp_path)
+            t |> success(!tw32.core.q8, "leg B tower core is on the f32 rail")
+            var inscope s32 <- create_qwen3a_asr_session(dec, tw32, "auto", false)
+            qwen3a_transcribe(dec, tw32, s32, "", samples, $(seg : TranscribeSegment) {
+                f32_text += seg.text
+            }, lang)
+            set_qwen3a_q8(true)
+            delete dec
+        }
+        // the eyeball rail: both decoded streams logged before the assert
+        to_log(LOG_INFO, "qwen3a q8 : {q8_text}\n")
+        to_log(LOG_INFO, "qwen3a f32: {f32_text}\n")
+        t |> equal(q8_text, f32_text, "q8 tower transcript matches the f32 rail")
+        delete samples
     }
 }
 

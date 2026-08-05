@@ -122,7 +122,7 @@ struct Args {
     @clarg_doc = "Prompt corpus for the tg-real row (segments split on lines of two percent signs; default: data/wikitext2_prompts.txt beside this bench)"
     prompts : string = ""
 
-    @clarg_doc = "After each tg-real arm's timed reps, run one UNTIMED window with forward_profile buckets — the per-section time split of that arm. With --mtp-ab this is what attributes draft vs verify vs classifier"
+    @clarg_doc = "After the pp row and each tg-real arm's timed reps, run one UNTIMED window with forward_profile buckets — the per-section time split of that row — and print the dispatch census (backend caps, which MoE prefill arm each layer takes) after load. With --mtp-ab this is what attributes draft vs verify vs classifier"
     prof : bool
 
     @clarg_short = "?"
@@ -403,6 +403,51 @@ def private say(fmt : OutFmt; text : string) {
     }
 }
 
+// --profile census: the runtime state that picks each MoE prefill arm. A fallback path names
+// itself here instead of hiding inside a slow row (a MoE whose experts run per-position reads
+// as "half the ref" with no diagnostic otherwise).
+def private dispatch_census(t : Model; fmt : OutFmt) {
+    let c = t.config
+    say(fmt, "census: quant={t.quant} kquant_native={t.kquant_native} kq_repacked={t.kq_repacked} mx4_repacked={t.mx4_repacked} experts_mx4={t.experts_mx4}\n")
+    say(fmt, "census: caps kq={kernel_backend_has_kq()} kq_batch={kernel_backend_has_kq_batch()} kq_batch_groupn={kernel_backend_has_kq_batch_groupn()} rows={kernel_backend_has_rows()} mx4_rows={kernel_backend_has_mx4_rows()} grouped_prefill={get_moe_grouped_prefill()}\n")
+    // the layout-stamp provenance: 1 = disk order (reference layout — no interleave perm applied)
+    say(fmt, "census: layout mr: q8={active_q8_layout_mr()} kq4={kq_active_mr(t, KqFmt.k4)} q51={active_q51_layout_mr()}\n")
+    if (c.n_expert <= 0l) {
+        say(fmt, "census: dense model, no MoE dispatch\n")
+        return
+    }
+    // the same booleans ffn_moe_prefill / ffn_gemma4_prefill test, per layer — the census reports
+    // the arm each layer takes, it never predicts one
+    var grouped = 0l
+    var perpos = 0l
+    var fmts : array<string>
+    var fcnt : array<int64>
+    for (l in range64(c.n_layers)) {
+        continue if (l < c.n_layer_dense_lead)
+        let sb = moe_layer_sb_kq(t, l)
+        let kq_ok = !sb || (t.kq_repacked && kernel_backend_has_kq_batch())
+        if (t.quant == QuantMode.q8 && get_moe_grouped_prefill() && kq_ok) {
+            grouped++
+        } else {
+            perpos++
+        }
+        let key = "{fmt_at(t.we1_fmt, l)}/{fmt_at(t.we3_fmt, l)}/{fmt_at(t.we2_fmt, l)}{sb ? " sb_kq" : ""}"
+        let fi = fmts |> find_index(key)
+        if (fi < 0) {
+            fmts |> push(key)
+            fcnt |> push(1l)
+        } else {
+            fcnt[fi]++
+        }
+    }
+    let fdesc <- [for (fk, fc in fmts, fcnt); "{fk} x{fc}"]
+    say(fmt, "census: moe E={c.n_expert} k={c.n_expert_used} nfe={c.n_ff_exp} expert fmts gate/up/down: {fdesc}\n")
+    say(fmt, "census: moe prefill arms: {grouped} grouped, {perpos} per-position{perpos > 0l ? " <-- UNBATCHED reference path" : ""}\n")
+    if (t.experts_mx4) {
+        say(fmt, "census: mx4 experts — a grouped layer still drops to per-position when npos*k < 8*E (per-call economics)\n")
+    }
+}
+
 struct private RowStat {
     test : string
     mean : double
@@ -591,6 +636,9 @@ def main() : int {
         modelArch = "{t.arch}"
         activeB = active_params_b(t)
         execFmt = model_exec_fmt(t)
+        if (cfg.prof) {
+            dispatch_census(t, fmt)
+        }
         var s <- make_run_state(c)
         for (arm in range(ab ? 2 : 1)) {
             var dtag = ""
@@ -695,6 +743,16 @@ def main() : int {
                 }
                 results |> push(st)
                 delete tps
+                if (cfg.prof) {
+                    // untimed bucket window for the pp row — reset FIRST, so the report is pure prefill
+                    forward_profile_reset()
+                    let pprof <- build_prompt(plen, 998l)
+                    let ts_wall = ref_time_ticks()
+                    forward_prefill(t, s, pprof, plen, 0l)
+                    let wall_us = get_time_usec(ts_wall)
+                    say(fmt, "--- forward_profile: {st.test} (window wall {wall_us} us) ---\n")
+                    forward_profile_report()
+                }
             }
             if (ngen > 0l) {
                 forward(t, s, synth_id(0l, 999l), 0l)   // warmup — one untimed token, llama-bench's test_gen(ctx, 1)

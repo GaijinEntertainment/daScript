@@ -88,12 +88,17 @@ struct Gemma4aEncoder {
     sub_ch1 : int64    // conv1 out channels (32)
     n_bins : int64     // n_fft/2 + 1 = 257
     eps : float = GEMMA4A_NORM_EPS
+    // q8: the GEMM set transcodes to Q8_0 at read and the offset fields index qblob/qscales
+    // instead of blob (the canary pattern); convs, norms, biases and the RPE table stay fp32
+    q8 : bool
     filters : PlaneF = PlaneF()    // [n_mel × n_bins] HTK, no area norm
     hann : PlaneF = PlaneF()       // [512]: 320 Hann at the front, zeros to 512
     twiddles : PlaneF = PlaneF()   // DFT twiddle matrix [n_fft × (n_bins·2)]
     pos_emb : PlaneF = PlaneF()    // sinusoidal RPE table [13 × d_model]
     ones : PlaneF = PlaneF()       // [proj_dim] weight for the final weightless RMSNorm
     blob : PlaneF = PlaneF()
+    qblob : PlaneI8 = PlaneI8()
+    qscales : PlaneF = PlaneF()
     // subsample conv frontend + input projection
     c0_w : int64; norm0_w : int64
     c1_w : int64; norm1_w : int64
@@ -149,9 +154,9 @@ def finalize(var t : Gemma4aEncoder) {
     }
 }
 
-// the tripwire: serialize_image_meta(Gemma4aEncoder) covers 19 fields; image_map + image_bytes
-// are deliberate skips (the six planes and the layer table are sections, not meta).
-let private GEMMA4A_META_FIELDS = 19 + 2
+// the tripwire: serialize_image_meta(Gemma4aEncoder) covers 20 fields; image_map + image_bytes
+// are deliberate skips (the eight planes and the layer table are sections, not meta).
+let private GEMMA4A_META_FIELDS = 20 + 2
 
 // every meta-carried Gemma4aEncoder field, explicitly, both directions (see dasllama_image)
 def private serialize_image_meta(var arch : Archive; var t : Gemma4aEncoder) {
@@ -167,6 +172,7 @@ def private serialize_image_meta(var arch : Archive; var t : Gemma4aEncoder) {
     arch |> serialize_raw(t.sub_ch1)
     arch |> serialize_raw(t.n_bins)
     arch |> serialize_raw(t.eps)
+    arch |> serialize_raw(t.q8)
     arch |> serialize_raw(t.c0_w)
     arch |> serialize_raw(t.norm0_w)
     arch |> serialize_raw(t.c1_w)
@@ -191,6 +197,8 @@ struct Gemma4aStaging {
     pos_emb : array<float>
     ones : array<float>
     blob : array<float>
+    qblob : array<int8>       // section names must match the served plane fields (bind-by-name)
+    qscales : array<float>
     layers : array<G4aLayer>
 }
 
@@ -214,6 +222,7 @@ def private image_post_load(var st : Gemma4aStaging) {}
 [init]
 def private register_gemma4a_image_tags {
     register_image_family_tag("gemma4a-f32")
+    register_image_family_tag("gemma4a-q8")
 }
 
 //! Hot-path scratch for one clip encode — a transcribe allocates nothing per call.
@@ -245,6 +254,11 @@ struct Gemma4aState {
     sc : array<float>         // per-query score window
     out : array<float>        // projected soft tokens [npos × proj_dim]
     tmp : array<float>        // output-proj scratch [npos × proj_dim]
+    xqi : array<int8>         // q8 activation image — per-site requant (clamps differ per site)
+    xsi : array<float>
+    posf : array<float>       // RPE table copy + its q8 image, requantized once per encode
+    posq : array<int8>
+    poss : array<float>
 }
 
 def private g4a_ensure(@scratch var a : array<float>; n : int64) {
@@ -310,11 +324,11 @@ def private g4a_htk_filterbank(n_mel, n_fft, sample_rate : int64) : array<float>
     return <- out
 }
 
-//! Load a gemma4a audio mmproj GGUF (projector type `gemma4a`, bf16 tensors). Reads only the
-//! `a.*` / `mm.a.*` audio tensors (the vision tower is ignored) into one fp32 blob. Like
-//! ``load_model``, caches a box/knob-specific PREPARED IMAGE for fast reload; ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
+//! Load a gemma4a audio mmproj GGUF (`a.*` / `mm.a.*` tensors; the vision tower is ignored).
+//! The GEMM set transcodes to Q8_0 planes (forced — no fp32 weight lane); convs/norms/biases stay fp32.
+//! Caches a box/knob-specific PREPARED IMAGE like ``load_model``; ``DASLLAMA_IMAGE=0`` disables, a ``.dlim`` path loads directly.
 def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
-    let tag = "gemma4a-f32"
+    let tag = g_g4a_q8 ? "gemma4a-q8" : "gemma4a-f32"
     if (path |> ends_with(".dlim")) {
         // named directly — no mmproj to regenerate from, so a wrong identity panics
         apply_box_profile_runtime()
@@ -349,10 +363,83 @@ def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
     return <- built
 }
 
+// GEMM offsets ride the q cursor on a q8 load, the blob cursor otherwise — the field then
+// indexes whichever plane the mm route reads
+def private g4a_gemm_off(q8 : bool; var o : int64&; var qo : int64&; size : int64) : int64 {
+    if (q8) {
+        let at = qo
+        qo += size
+        return at
+    }
+    let at = o
+    o += size
+    return at
+}
+
+// GEMM read: a q8 load transcodes from the file straight into qblob/qscales (the fp32 blob
+// never holds it); an fp32 load reads it like any plain tensor
+def private g4a_read_gemm(m : GGUFMeta; b : array<uint8> | #; name : string; var st : Gemma4aStaging;
+                          @scratch var wscratch : array<float>; woff, n_elem : int64) {
+    if (!st.e.q8) {
+        gguf_read_tensor_f32(m, b, name, st.blob, woff, n_elem)
+        return
+    }
+    if (n_elem % 32l != 0l) {
+        panic("dasLLAMA gemma4a q8: GEMM tensor '{name}' has {n_elem} elements — not 32-aligned")
+    }
+    if (long_length(wscratch) < n_elem) {
+        wscratch |> reserve(n_elem)
+        wscratch |> resize(n_elem)
+    }
+    gguf_read_tensor_f32(m, b, name, wscratch, 0l, n_elem)
+    quantize_q8_0_into(wscratch, n_elem, st.qblob, st.qscales, woff, woff / 32l)
+}
+
+// repack one GEMM region for the active backend (scales index at woff/32)
+def private g4a_repack(var st : Gemma4aStaging; woff, n, d : int64) {
+    if (woff % 32l != 0l) {
+        panic("dasLLAMA gemma4a q8: GEMM weight at {woff} is not 32-aligned")
+    }
+    if (n % 32l != 0l) {
+        // n_elem%32==0 does not imply per-row alignment — straddling blocks serve wrong scales
+        panic("dasLLAMA gemma4a q8: GEMM row width {n} is not 32-aligned — Q8_0 blocks would straddle rows")
+    }
+    repack_q8q8_weight(st.qblob, st.qscales, woff, n, d)
+}
+
+// repack every GEMM region for the active backend's q8q8 kernels; without a selected
+// backend matmul_q8q8_batch reads the flat Q8_0 image as-is
+def private g4a_repack_all(var st : Gemma4aStaging) {
+    if (!st.e.q8 || !select_matmul_backend_for_load()) {
+        return
+    }
+    let d = st.e.d_model
+    let ff = st.e.n_ff
+    let feat = st.e.sub_ch1 * (st.e.n_mel / 4l)
+    g4a_repack(st, st.e.inproj_w, feat, d)
+    g4a_repack(st, st.e.outproj_w, d, st.e.proj_dim)
+    g4a_repack(st, st.e.mmproj_w, st.e.proj_dim, st.e.proj_dim)
+    for (l in range64(st.e.n_layer)) {
+        let lo = st.layers[l]
+        g4a_repack(st, lo.ff_up, d, ff)
+        g4a_repack(st, lo.ff_down, ff, d)
+        g4a_repack(st, lo.q, d, d)
+        g4a_repack(st, lo.k, d, d)
+        g4a_repack(st, lo.v, d, d)
+        g4a_repack(st, lo.o, d, d)
+        g4a_repack(st, lo.attn_k_rel, d, d)
+        g4a_repack(st, lo.conv_pw1, d, 2l * d)
+        g4a_repack(st, lo.conv_pw2, d, d)
+        g4a_repack(st, lo.ff_up_1, d, ff)
+        g4a_repack(st, lo.ff_down_1, ff, d)
+    }
+}
+
 //! The mmproj-gguf reader proper: scalars land in the served encoder, plane bytes in the staging
 //! arrays beside it. Nothing here is servable — the image build is what produces a live encoder.
 def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
     var st = Gemma4aStaging()
+    st.e.q8 = g_g4a_q8
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA gemma4a: cannot open mmproj gguf '{path}'")
@@ -394,81 +481,91 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
         }
         st.e.proj_dim = m.tensors[op].n_elem / d            // out proj [d × proj_dim]
 
-        // blob layout: subsample + output first, then per-layer
+        // blob layout: subsample + output first, then per-layer. GEMM fields ride the q cursor
+        // on a q8 load (the field then indexes qblob); convs, norms, biases stay on the blob
+        let q8 = st.e.q8
         var o = 0l
-        st.e.c0_w = o; o += st.e.sub_ch0 * 9l
+        var qo = 0l
+        st.e.c0_w = o; o += st.e.sub_ch0 * 9l                // im2col n=9 — the conv exception
         st.e.norm0_w = o; o += st.e.sub_ch0
         st.e.c1_w = o; o += st.e.sub_ch1 * st.e.sub_ch0 * 9l
         st.e.norm1_w = o; o += st.e.sub_ch1
         let feat = st.e.sub_ch1 * (st.e.n_mel / 4l)          // 32 × 32 = 1024
-        st.e.inproj_w = o; o += d * feat
-        st.e.outproj_w = o; o += st.e.proj_dim * d
+        st.e.inproj_w = g4a_gemm_off(q8, o, qo, d * feat)
+        st.e.outproj_w = g4a_gemm_off(q8, o, qo, st.e.proj_dim * d)
         st.e.outproj_b = o; o += st.e.proj_dim
-        st.e.mmproj_w = o; o += st.e.proj_dim * st.e.proj_dim
+        st.e.mmproj_w = g4a_gemm_off(q8, o, qo, st.e.proj_dim * st.e.proj_dim)
         st.layers |> resize(st.e.n_layer)
         for (l in range64(st.e.n_layer)) {
             var lo = G4aLayer()
             lo.ff_norm = o; o += d
-            lo.ff_up = o; o += ff * d
-            lo.ff_down = o; o += d * ff
+            lo.ff_up = g4a_gemm_off(q8, o, qo, ff * d)
+            lo.ff_down = g4a_gemm_off(q8, o, qo, d * ff)
             lo.ff_post_norm = o; o += d
             lo.attn_pre_norm = o; o += d
-            lo.q = o; o += d * d
-            lo.k = o; o += d * d
-            lo.v = o; o += d * d
-            lo.o = o; o += d * d
+            lo.q = g4a_gemm_off(q8, o, qo, d * d)
+            lo.k = g4a_gemm_off(q8, o, qo, d * d)
+            lo.v = g4a_gemm_off(q8, o, qo, d * d)
+            lo.o = g4a_gemm_off(q8, o, qo, d * d)
             lo.per_dim_scale = o; o += st.e.d_head
-            lo.attn_k_rel = o; o += d * d
+            lo.attn_k_rel = g4a_gemm_off(q8, o, qo, d * d)
             lo.attn_post_norm = o; o += d
             lo.norm_conv = o; o += d
-            lo.conv_pw1 = o; o += 2l * d * d
+            lo.conv_pw1 = g4a_gemm_off(q8, o, qo, 2l * d * d)
             lo.conv_dw = o; o += 5l * d
             lo.conv_norm = o; o += d
-            lo.conv_pw2 = o; o += d * d
+            lo.conv_pw2 = g4a_gemm_off(q8, o, qo, d * d)
             lo.ff_norm_1 = o; o += d
-            lo.ff_up_1 = o; o += ff * d
-            lo.ff_down_1 = o; o += d * ff
+            lo.ff_up_1 = g4a_gemm_off(q8, o, qo, ff * d)
+            lo.ff_down_1 = g4a_gemm_off(q8, o, qo, d * ff)
             lo.ff_post_norm_1 = o; o += d
             lo.ln2 = o; o += d
             st.layers[l] = lo
         }
         st.blob |> reserve(o)
         st.blob |> resize(o)
+        if (q8) {
+            st.qblob |> reserve(qo)
+            st.qblob |> resize(qo)
+            st.qscales |> reserve(qo / 32l)
+            st.qscales |> resize(qo / 32l)
+        }
 
-        // read weights
+        // read weights (GEMM set via the q8 transcode; everything else straight into the blob)
+        var inscope wscratch : array<float>
         gguf_read_tensor_f32(m, bytes, "a.conv1d.0.weight", st.blob, st.e.c0_w, st.e.sub_ch0 * 9l)
         gguf_read_tensor_f32(m, bytes, "a.conv1d.0.norm.weight", st.blob, st.e.norm0_w, st.e.sub_ch0)
         gguf_read_tensor_f32(m, bytes, "a.conv1d.1.weight", st.blob, st.e.c1_w, st.e.sub_ch1 * st.e.sub_ch0 * 9l)
         gguf_read_tensor_f32(m, bytes, "a.conv1d.1.norm.weight", st.blob, st.e.norm1_w, st.e.sub_ch1)
-        gguf_read_tensor_f32(m, bytes, "a.input_projection.weight", st.blob, st.e.inproj_w, d * feat)
-        gguf_read_tensor_f32(m, bytes, "a.pre_encode.out.weight", st.blob, st.e.outproj_w, st.e.proj_dim * d)
+        g4a_read_gemm(m, bytes, "a.input_projection.weight", st, wscratch, st.e.inproj_w, d * feat)
+        g4a_read_gemm(m, bytes, "a.pre_encode.out.weight", st, wscratch, st.e.outproj_w, st.e.proj_dim * d)
         gguf_read_tensor_f32(m, bytes, "a.pre_encode.out.bias", st.blob, st.e.outproj_b, st.e.proj_dim)
-        gguf_read_tensor_f32(m, bytes, "mm.a.input_projection.weight", st.blob, st.e.mmproj_w, st.e.proj_dim * st.e.proj_dim)
+        g4a_read_gemm(m, bytes, "mm.a.input_projection.weight", st, wscratch, st.e.mmproj_w, st.e.proj_dim * st.e.proj_dim)
         for (l in range64(st.e.n_layer)) {
             let lo = st.layers[l]
             let p = "a.blk.{l}"
             gguf_read_tensor_f32(m, bytes, "{p}.ffn_norm.weight", st.blob, lo.ff_norm, d)
-            gguf_read_tensor_f32(m, bytes, "{p}.ffn_up.weight", st.blob, lo.ff_up, ff * d)
-            gguf_read_tensor_f32(m, bytes, "{p}.ffn_down.weight", st.blob, lo.ff_down, d * ff)
+            g4a_read_gemm(m, bytes, "{p}.ffn_up.weight", st, wscratch, lo.ff_up, ff * d)
+            g4a_read_gemm(m, bytes, "{p}.ffn_down.weight", st, wscratch, lo.ff_down, d * ff)
             gguf_read_tensor_f32(m, bytes, "{p}.ffn_post_norm.weight", st.blob, lo.ff_post_norm, d)
             gguf_read_tensor_f32(m, bytes, "{p}.attn_pre_norm.weight", st.blob, lo.attn_pre_norm, d)
-            gguf_read_tensor_f32(m, bytes, "{p}.attn_q.weight", st.blob, lo.q, d * d)
-            gguf_read_tensor_f32(m, bytes, "{p}.attn_k.weight", st.blob, lo.k, d * d)
-            gguf_read_tensor_f32(m, bytes, "{p}.attn_v.weight", st.blob, lo.v, d * d)
-            gguf_read_tensor_f32(m, bytes, "{p}.attn_out.weight", st.blob, lo.o, d * d)
+            g4a_read_gemm(m, bytes, "{p}.attn_q.weight", st, wscratch, lo.q, d * d)
+            g4a_read_gemm(m, bytes, "{p}.attn_k.weight", st, wscratch, lo.k, d * d)
+            g4a_read_gemm(m, bytes, "{p}.attn_v.weight", st, wscratch, lo.v, d * d)
+            g4a_read_gemm(m, bytes, "{p}.attn_out.weight", st, wscratch, lo.o, d * d)
             gguf_read_tensor_f32(m, bytes, "{p}.per_dim_scale.weight", st.blob, lo.per_dim_scale, st.e.d_head)
-            gguf_read_tensor_f32(m, bytes, "{p}.attn_k_rel.weight", st.blob, lo.attn_k_rel, d * d)
+            g4a_read_gemm(m, bytes, "{p}.attn_k_rel.weight", st, wscratch, lo.attn_k_rel, d * d)
             gguf_read_tensor_f32(m, bytes, "{p}.attn_post_norm.weight", st.blob, lo.attn_post_norm, d)
             // 🔑 conv_norm / norm_conv are name-swapped in the GGUF (upstream tensor_mapping.py):
             // the PRE-conv RMSNorm reads the tensor named "conv_norm", the POST-depthwise one "norm_conv"
             gguf_read_tensor_f32(m, bytes, "{p}.conv_norm.weight", st.blob, lo.norm_conv, d)
-            gguf_read_tensor_f32(m, bytes, "{p}.conv_pw1.weight", st.blob, lo.conv_pw1, 2l * d * d)
+            g4a_read_gemm(m, bytes, "{p}.conv_pw1.weight", st, wscratch, lo.conv_pw1, 2l * d * d)
             gguf_read_tensor_f32(m, bytes, "{p}.conv_dw.weight", st.blob, lo.conv_dw, 5l * d)
             gguf_read_tensor_f32(m, bytes, "{p}.norm_conv.weight", st.blob, lo.conv_norm, d)
-            gguf_read_tensor_f32(m, bytes, "{p}.conv_pw2.weight", st.blob, lo.conv_pw2, d * d)
+            g4a_read_gemm(m, bytes, "{p}.conv_pw2.weight", st, wscratch, lo.conv_pw2, d * d)
             gguf_read_tensor_f32(m, bytes, "{p}.ffn_norm_1.weight", st.blob, lo.ff_norm_1, d)
-            gguf_read_tensor_f32(m, bytes, "{p}.ffn_up_1.weight", st.blob, lo.ff_up_1, ff * d)
-            gguf_read_tensor_f32(m, bytes, "{p}.ffn_down_1.weight", st.blob, lo.ff_down_1, d * ff)
+            g4a_read_gemm(m, bytes, "{p}.ffn_up_1.weight", st, wscratch, lo.ff_up_1, ff * d)
+            g4a_read_gemm(m, bytes, "{p}.ffn_down_1.weight", st, wscratch, lo.ff_down_1, d * ff)
             gguf_read_tensor_f32(m, bytes, "{p}.ffn_post_norm_1.weight", st.blob, lo.ff_post_norm_1, d)
             gguf_read_tensor_f32(m, bytes, "{p}.ln2.weight", st.blob, lo.ln2, d)
             // clamp ranges of the clamped matmuls
@@ -487,6 +584,7 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
         }
     }
     fclose(f)
+    g4a_repack_all(st)
 
     // HTK filterbank, 512 Hann (320 at the front, zeros to 512), DFT twiddles, RPE table, ones
     st.filters <- g4a_htk_filterbank(st.e.n_mel, G4A_N_FFT, AUDIO_SAMPLE_RATE)
@@ -516,15 +614,26 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
 
 // ===== mel (gemma4a: no preemphasis, natural-log magnitude, HTK, no per-feature norm) =====
 
-//! The tower's precision half of the facade's [[asr_exec_fmt]] stamp (the decoder tag comes
-//! from the facade, which owns the shared LLM). The Conformer tower loads fp32 today.
-def gemma4a_exec_fmt(dec_fmt : string) : string {
-    return "f32/{dec_fmt}"
+// q8 is FORCED (no fp32/bf16 weight lane, board-wide policy); the flag is the bit-exact A/B
+// rail for parity legs, not a supported serving mode
+var private g_g4a_q8 = true
+
+//! Select the gemma4a tower's weight format for subsequent loads: q8 (default, forced) vs the
+//! fp32 reference route. A/B rail — parity legs flip it, serving never does.
+def set_gemma4a_q8(on : bool) {
+    g_g4a_q8 = on
 }
 
-//! Gemma4a carries no encode-total ``asr_prof`` bucket (fine-grained probes only).
+//! The tower's precision half of the facade's [[asr_exec_fmt]] stamp (the decoder tag comes
+//! from the facade, which owns the shared LLM). The Conformer tower serves q8 GEMM planes.
+def gemma4a_exec_fmt(dec_fmt : string) : string {
+    return "{g_g4a_q8 ? "q8" : "f32"}/{dec_fmt}"
+}
+
+//! Gemma4a's encode-total ``asr_prof`` bucket (the facade's [[asr_encode_bucket]] arm);
+//! the per-stage `g4a.enc.*` sites split it under asr_stage_probe.
 def gemma4a_encode_bucket : string {
-    return ""
+    return "g4a.encode"
 }
 
 //! gemma4a log-mel for one ≤30 s chunk: semicausal left-pad (window/2) + right-pad to the PyTorch
@@ -646,18 +755,62 @@ def private g4a_clamp(var x : array<float>; n : int64; lo, hi : float) {
     }
 }
 
+// mm_blob_b with the q8 route: activation image (xq, xs) pre-quantized by the caller
+def private g4a_mm(enc : Gemma4aEncoder; var y : array<float>; woff : int64; x : array<float>;
+                   xq : array<int8>; xs : array<float>; n, d, npos : int64) {
+    if (enc.q8) {
+        matmul_q8q8_batch(y, enc.qblob, enc.qscales, woff, xq, xs, n, d, npos)
+    } else {
+        mm_blob_b(y, enc.blob, woff, x, n, d, npos)
+    }
+}
+
+def private g4a_requant(x : array<float>; n, npos : int64; @scratch var xq : array<int8>; @scratch var xs : array<float>) {
+    let need = npos * n
+    if (long_length(xq) < need) {
+        xq |> resize(need)
+        xs |> resize(need / 32l)
+    }
+    requant_rows_q8(x, n, npos, xq, xs)
+}
+
+// requant-and-multiply — per-site requant (the clamps differ per site, so images never share)
+def private g4a_mm_rq(enc : Gemma4aEncoder; var st : Gemma4aState; var y : array<float>;
+                      woff : int64; x : array<float>; n, d, npos : int64) {
+    if (enc.q8) {
+        g4a_requant(x, n, npos, st.xqi, st.xsi)
+    }
+    g4a_mm(enc, y, woff, x, st.xqi, st.xsi, n, d, npos)
+}
+
+// the RPE table is layer-invariant — copy the plane and requant its q8 image once per encode
+def private g4a_requant_rpe(enc : Gemma4aEncoder; var st : Gemma4aState; d : int64) {
+    if (!enc.q8) {
+        return
+    }
+    g4a_ensure(st.posf, (G4A_PAST + 1l) * d)
+    unsafe {
+        let pp = plane_at(enc.pos_emb, 0l)
+        var fp = addr(st.posf[0])
+        for (i in range64((G4A_PAST + 1l) * d)) {
+            fp[i] = pp[i]
+        }
+    }
+    g4a_requant(st.posf, d, G4A_PAST + 1l, st.posq, st.poss)
+}
+
 // clamped matmul: y = W · clamp(x); then clamp(y). x is [npos × n], y is [npos × d].
 def private g4a_mm_clamped(enc : Gemma4aEncoder; var st : Gemma4aState; var y : array<float>;
                            w_off : int64; x : array<float>; n, d, npos : int64; c : Clamp) {
     if (!c.active) {
-        mm_blob_b(y, enc.blob, w_off, x, n, d, npos)
+        g4a_mm_rq(enc, st, y, w_off, x, n, d, npos)
         return
     }
     g4a_ensure(st.xc, n * npos)
     for (i in range64(n * npos)) {
         st.xc[i] = clamp(x[i], c.imin, c.imax)
     }
-    mm_blob_b(y, enc.blob, w_off, st.xc, n, d, npos)
+    g4a_mm_rq(enc, st, y, w_off, st.xc, n, d, npos)
     g4a_clamp(y, d * npos, c.omin, c.omax)
 }
 
@@ -700,6 +853,7 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
     let dh = enc.d_head
     let n_mel = enc.n_mel
 
+    var tprof = ref_time_ticks()
     // subsample: mel [n_len × n_mel] as image [ih=n_len][iw=n_mel][c=1]
     g4a_conv_stage(enc, st, st.y0, st.mel, enc.c0_w, enc.norm0_w, n_mel, st.n_len, 1l, enc.sub_ch0)
     let t1 = (st.n_len - 1l) / 2l + 1l
@@ -712,7 +866,8 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
 
     // input projection: feat -> d_model
     g4a_ensure(st.x, npos * d)
-    mm_blob_b(st.x, enc.blob, enc.inproj_w, st.y1, feat, d, npos)
+    g4a_mm_rq(enc, st, st.x, enc.inproj_w, st.y1, feat, d, npos)
+    asr_prof_add("g4a.enc.front", tprof)
 
     g4a_ensure(st.xb, npos * d)
     g4a_ensure(st.xc, max(2l * d, ff) * npos)
@@ -730,17 +885,24 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
     let k_scale = log(1.0 + exp(1.0)) / log(2.0)
     let inv_softcap = 1.0 / G4A_SOFTCAP
 
+    g4a_requant_rpe(enc, st, d)
+
     for (l in range64(enc.n_layer)) {
         let lo = enc.layers[l]
 
         // FFN1 (macaron half)
+        tprof = ref_time_ticks()
         g4a_ffn(enc, st, lo.ff_norm, lo.ff_up, lo.ff_down, lo.ff_post_norm, lo.c_ff_up, lo.c_ff_down, d, ff, npos)
+        asr_prof_add("g4a.enc.ffn", tprof)
 
         // self-attention (causal sliding window 12, sinusoidal RPE, softcap 50)
+        tprof = ref_time_ticks()
         g4a_rms_rows(enc, st.xb, st.x, lo.attn_pre_norm, d, npos)
         g4a_mm_clamped(enc, st, st.qq, lo.q, st.xb, d, d, npos, lo.c_q)
         g4a_mm_clamped(enc, st, st.kk, lo.k, st.xb, d, d, npos, lo.c_k)
         g4a_mm_clamped(enc, st, st.vv, lo.v, st.xb, d, d, npos, lo.c_v)
+        asr_prof_add("g4a.enc.attn_mm", tprof)
+        tprof = ref_time_ticks()
         // scale Q (q_scale · per_dim_scale) and K (k_scale)
         for (i in range64(npos)) {
             for (hh in range64(n_head)) {
@@ -752,8 +914,12 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
         for (i in range64(npos * d)) {
             st.kk[i] *= k_scale
         }
-        // project the RPE table: prpe [13 × d]
-        mm_blob_b(st.prpe, enc.blob, lo.attn_k_rel, enc.pos_emb, d, d, G4A_PAST + 1l)
+        // project the RPE table: prpe [13 × d] — the q8 image was requantized before the loop
+        if (enc.q8) {
+            matmul_q8q8_batch(st.prpe, enc.qblob, enc.qscales, lo.attn_k_rel, st.posq, st.poss, d, d, G4A_PAST + 1l)
+        } else {
+            mm_blob_b(st.prpe, enc.blob, lo.attn_k_rel, enc.pos_emb, d, d, G4A_PAST + 1l)
+        }
         for (hh in range64(n_head)) {
             let hoff = hh * dh
             for (i in range64(npos)) {
@@ -783,11 +949,15 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
                 }
             }
         }
+        asr_prof_add("g4a.enc.attn_core", tprof)
+        tprof = ref_time_ticks()
         g4a_mm_clamped(enc, st, st.xb, lo.o, st.ao, d, d, npos, lo.c_o)
         g4a_rms_rows(enc, st.xb, st.xb, lo.attn_post_norm, d, npos)
         add_inplace_rows(st.x, st.xb, npos * d)
+        asr_prof_add("g4a.enc.attn_mm", tprof)
 
         // conv module: RMSNorm -> pw1 (clamp) -> GLU -> causal depthwise k=5 -> RMSNorm -> SiLU -> pw2 (clamp)
+        tprof = ref_time_ticks()
         g4a_rms_rows(enc, st.xb, st.x, lo.norm_conv, d, npos)
         g4a_mm_clamped(enc, st, st.h, lo.conv_pw1, st.xb, d, 2l * d, npos, lo.c_pw1)
         for (t in range64(npos)) {
@@ -813,18 +983,22 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
         silu(st.cvd, npos * d)
         g4a_mm_clamped(enc, st, st.xb, lo.conv_pw2, st.cvd, d, d, npos, lo.c_pw2)
         add_inplace_rows(st.x, st.xb, npos * d)
+        asr_prof_add("g4a.enc.convmod", tprof)
 
         // FFN2 (macaron half)
+        tprof = ref_time_ticks()
         g4a_ffn(enc, st, lo.ff_norm_1, lo.ff_up_1, lo.ff_down_1, lo.ff_post_norm_1, lo.c_ff_up_1, lo.c_ff_down_1, d, ff, npos)
 
         // per-layer output norm
         g4a_rms_rows(enc, st.x, st.x, lo.ln2, d, npos)
+        asr_prof_add("g4a.enc.ffn", tprof)
     }
 
     // output projection -> RMSNorm (weightless) -> mm input projection
+    tprof = ref_time_ticks()
     g4a_ensure(st.tmp, npos * enc.proj_dim)
     g4a_ensure(st.out, npos * enc.proj_dim)
-    mm_blob_b(st.tmp, enc.blob, enc.outproj_w, st.x, d, enc.proj_dim, npos)
+    g4a_mm_rq(enc, st, st.tmp, enc.outproj_w, st.x, d, enc.proj_dim, npos)
     add_bias_rows(st.tmp, enc.blob, enc.outproj_b, enc.proj_dim, npos)
     unsafe {
         var tp = addr(st.tmp[0])
@@ -833,7 +1007,8 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
             rmsnorm(tp + r * enc.proj_dim, tp + r * enc.proj_dim, wp, enc.proj_dim, enc.eps)
         }
     }
-    mm_blob_b(st.out, enc.blob, enc.mmproj_w, st.tmp, enc.proj_dim, enc.proj_dim, npos)
+    g4a_mm_rq(enc, st, st.out, enc.mmproj_w, st.tmp, enc.proj_dim, enc.proj_dim, npos)
+    asr_prof_add("g4a.enc.proj", tprof)
     return npos
 }
 
@@ -847,7 +1022,9 @@ def gemma4a_encode_all(enc : Gemma4aEncoder; var st : Gemma4aState; samples : ar
     var off = 0l
     while (off < n_in) {
         let len = min(chunk, n_in - off)
+        let tmel = ref_time_ticks()
         gemma4a_log_mel(enc, samples, off, len, st)
+        asr_prof_add("g4a.mel", tmel)
         let n = gemma4a_encode(enc, st)
         rows |> reserve(int(long_length(rows) + n * enc.proj_dim))
         for (i in range64(n * enc.proj_dim)) {
@@ -875,8 +1052,8 @@ def gemma4a_asr_caps() : AsrCaps {
 }
 
 //! The facade's session arm: a fresh decoder session (no language conditioning).
-def create_gemma4a_asr_session(dec : Model) : Gemma4aAsrSession {
-    return <- Gemma4aAsrSession(qctx <- create_session_(dec))
+def create_gemma4a_asr_session(dec : Model; kv : KVDtype = KVDtype.f32) : Gemma4aAsrSession {
+    return <- Gemma4aAsrSession(qctx <- create_session_(dec, kv, kv))
 }
 
 // Gemma-4 E-series audio transcription: gemma4a Conformer encode + mm embedder, soft tokens spliced

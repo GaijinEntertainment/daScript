@@ -4,6 +4,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 require dasllama/dasllama_asr
 require dasllama/dasllama_audio
 require dasllama/dasllama_math
+require dasllama/dasllama_common   // forward_profile_reset/report — the decoder-engine buckets
 require audio
 require math   // the parakeet mel worker resolves log at the instantiation site
 require daslib/clargs
@@ -37,6 +38,9 @@ struct ProbeArgs {
 
     @clarg_doc = "Pin fp32 weights (set_asr_fp32) — A/B the q8 default"
     fp32 : bool
+
+    @clarg_doc = "Decoder-session KV dtype: f32 (default) | f16 | q8"
+    kv : string
 
     @clarg_short = "?"
     @clarg_name = "show-help"
@@ -95,6 +99,11 @@ def main() : int {
         return 1
     }
     set_asr_fp32(cfg.fp32)
+    if (cfg.kv == "f16") {
+        set_asr_kv(KVDtype.f16)
+    } elif (cfg.kv == "q8") {
+        set_asr_kv(KVDtype.q8_0)
+    }
     var m <- empty(cfg.mmproj) ? load_asr_model(cfg.model) : load_asr_model(cfg.model, cfg.mmproj)
     let samples <- load_audio_16k_mono(cfg.wav)
     let reps = cfg.reps > 0 ? cfg.reps : 1
@@ -103,10 +112,12 @@ def main() : int {
                                    // ~10us/job fifo fork/join instead of the shipped team dispatch
         run_once(m, samples)               // warmup, unprofiled
         set_asr_prof(true)
+        forward_profile_reset()   // the decoder engine's own buckets (blk_attn/blk_ffn/mm_*)
         for (_rep in range(reps)) {
             run_once(m, samples)
         }
         asr_prof_report()
+        forward_profile_report()
     }
     return 0
 }

@@ -260,3 +260,87 @@ side is FASTER on zen4, so the cells are tower-dominated and the das tower gets 
 AVX-512; meanwhile ggml's x86 tower is ~3× its own ARM tower (ref E2B gb1 57.8 vs 198.2 s),
 removing the subsidy the Apple leads enjoyed. LEDGER: per-op profile one audio-chat cell on
 zen4, name the tower kernels without x86 arms — same work-class as the gemma-26B x86 gap.
+
+### Phase B — gemma-26B x86 stupid-kernel hunt (zen2 E: rig, started 2026-08-04)
+
+The hole: gemma-4-26B-A4B das pp 54.1 vs ref 105.7 on the fresh zen2 board (0.51×; every
+other model das leads 1.2-1.7×), zen4 similar. Boris's prior: a missing kernel or something
+equally stupid. Rig: `E:\daScript` (bundle-refresh to this branch), iteration via
+`daslang.exe -jit lcpp_bench.das -- --for-debug-purposes --profile` (debug-jit stamped, never
+records). Instruments added this phase: pp-row forward_profile window (was tg-real only) +
+the `--profile` dispatch census (backend caps, kq_repacked, per-layer grouped vs per-position
+MoE prefill arm). Control model: gpt-oss-20b-mxfp4 (healthy 1.5-1.66× on this exact box).
+
+Predictions BEFORE the first box run (2026-08-04):
+
+- **Boris**: some kind of unoptimized loop on both x86 boxes, fp32-flavored; the Mac either
+  repacks or is simply better on fallback — either way fine.
+- **Claude**: P1 60% — the census shows the 26B's kq expert layers on the PER-POSITION
+  reference path (`kq_grouped_ok` false; pick: `kq_repacked` never set on the x86 load —
+  the "arm64: … returns false off-ARM" legacy at dasllama_load.das:2168 is the suspect
+  seam). P2 25% — grouped engages but `kq_batch` runs an untuned/fallback perm at the
+  expert shapes (E=128 k=8 nfe=704 dim=2816). P3 15% — dispatch clean; real kernel gap,
+  the pp section diff names it.
+- Discriminator on record: Qwen3-30B (kq MoE) LEADS on the same board — whatever boolean
+  differs between its load and the 26B's is the finding.
+- Audio-tower x86 gap rides the same hunt (gemma4a encoder already ledgered fp32 scalar).
+
+RESULT (same night, 4 census runs + controls, all structural — fallback winners throughout,
+which the controls share, so the deltas are tune-independent):
+
+- **Mechanism: `gemma4_moe_prefill_grouped` (dasllama_ple.das) never got the `fused_kq`
+  region-list arm the generic `ffn_moe_prefill_grouped` has (blocks.das fused_kq).** The
+  gemma4 twin runs a PER-EXPERT loop: at E=128 k=8 npos=128, ~61 touched experts/layer get
+  ~8-row GEMM chains each (gather -> 3 tiny GEMMs -> act -> requant -> scalar park), ~5.5k
+  dispatches per prefill. Qwen3-30B (same E=128 k=8, same k4 sb_kq experts, generic path)
+  fuses to ONE region GEMM per mat per layer: moe_park 48 disp vs the 26B's 1824, act 48 vs
+  3776. CONFIRMED with full accounting (final run, buckets cover 100% of the 2.99s window
+  wall): mm_gemm 2.69s / 5869 dispatches = 90% of pp wall; expert-GEMM lane 183 GMAC in
+  2.69s = **68 GMAC/s vs Qwen's 234 GMAC/s (3.4x), same tiles, same box, same fallback
+  state**. Expected fix yield: pp wall 2.99 -> ~1.3s, the board 0.51x -> das leads.
+  Every kernel the fused arm needs already exists (kq_batch_groupn crowned in the zen2 mint;
+  q51/q8 groupn slots present; blocks.das:1079 accepts q51). PROPOSED FIX: port the
+  fused_kq arm into the gemma4 twin.
+- Prediction scoring: Boris called the shape ("some kind of unoptimized loop" — the
+  per-expert loop is exactly that; not fp32 though). Claude P1 (per-position path) WRONG —
+  census showed 30/30 layers grouped; P2 (missing crowns) wrong — k4/k5/k6/q40/q8q8 tiles
+  all crowned; P3 (real lane gap named by profile) is what stood, via TWO instrumentation
+  holes that had to be fixed first.
+- **Instrumentation holes fixed en route (the actual first-day yield):** (1) pp rows had NO
+  profile window (--prof wrapped tg-real only) — added; (2) blk_attn/blk_ffn coarse buckets
+  in the prefill layer loop — found 70% of gemma4 pp wall in NO bucket; (3) mm_b_kq_pre /
+  mm_b_q51_pre (kq v2 wrappers) never bucketed mm_gemm while their q8/mx4 siblings do — the
+  26B's k4 gate/up + q51 down expert GEMMs (~2.1s of a 2.96s window) were invisible.
+  Remaining known skew: generic path ALSO buckets at the caller (blocks.das) so qwen3moe/
+  gptoss double-count mm_gemm — unify to wrapper-level in the fix PR.
+- **embed 28% was an artifact**: cold mmap faults through the grp<mr>-interleaved kq planes
+  (364ms cold -> 0.49ms warm, 128 rows) — the interleave multiplies first-touch page count.
+  First-boot rep tax on every box; ledger-worthy, not the hole.
+- Sidecar answer (Boris asked): NOT missing — k4/k5/k6/q40/q8q8 tile families all crowned in
+  the zen2 mint. One absence: no q51 batch-tile family (only q51q8_gemv_gen), and part of the
+  26B's downs are q51 — check the x64-gen matmul_q51q8_batch impl during the fix.
+- Bench/tooling nits found: clargs silently ignores an unknown long flag (--profile ran as if
+  unflagged); census should count layers per expert-fmt class (FIXED same night); rig_build.cmd
+  always nukes build-ninja (no incremental arm).
+
+FUSED ARM LANDED + THE SECOND ONION LAYER (same night, Boris greenlit "obviously right fix"):
+
+- **fused_kq arm ported into gemma4_moe_prefill_grouped** (mirror of blocks.das; shares the
+  GPU tier's gather/triples/LPT/park scaffolding). Census: 29 layers fuse (k4/k4/q51), the
+  lone k4/k4/q8 layer keeps the per-expert chain (generic gate excludes q8, same as blocks).
+  **PARITY GREEN on zen2**: test_parity_gemma4_26b_q4km grew a fused-off leg — both arms
+  token-for-token vs the pinned oracle (74.9s, rc=0).
+- **Verdict on the fused arm**: kq gate/up now ~290 GMAC/s (faster than Qwen's aggregate —
+  the port works). But pp128 got mildly WORSE (36-37 vs 40.9): the down split (mm_moe_dn
+  bucket) shows why — **the q51 batch lane is the real kernel hole: 2.79s = 21 GMAC/s, 14x
+  slower than the kq tile beside it**, and it poisoned BOTH arms all along (per-expert
+  mm_b_q51_pre rides the same portable). x64-gen registers groupn_q51 (GEMV) + repack_q51
+  but NOT q51_batch / q51_batch_groupn — those slots keep the portable expand-then-dot
+  defaults (math.das:1219/1297). The Wave-2 q51 emitter built the GEMV family only; no q51
+  tile family exists in any mint. aarch64_neon has ZERO q51 registrations either — Apple
+  never noticed because Apple boards prefill on Metal; any -ngl 0 ARM run pays the same tax.
+- **Fix options (Boris to pick)**: (1) native q51 batch/groupn tile family in math_gen
+  (proper; new [tune] family); (2) composed kernel — expand region to q8 scratch once, run
+  the crowned q8q8 tile (amortizes expand over cnt rows, no new tune family, ~5-7x); (3)
+  x86 load-policy transcode q51 downs -> q8 planes (+~3GB RAM on the 26B). Claude reco:
+  2 now, 1 ledgered. Expected end state: pp window 2.99s -> ~1.0-1.2s, board 0.51x flips.

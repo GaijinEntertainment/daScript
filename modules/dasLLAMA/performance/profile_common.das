@@ -1391,21 +1391,36 @@ def run_asr_cli_multi(cli, model_path : string; wav_paths : array<string>; threa
 //! patched llama-mtmd-cli — one process per clip (30B load is heavy; MTMD_TIMING excludes it).
 //! Best total over `reps`.
 def run_asr_mtmd(model_path, mmproj_path, wav_path : string; threads, reps : int;
-                 var cmd_out : string&; var encode_out : double&) : double {
+                 var cmd_out : string&; var encode_out : double&; var text_out : string&) : double {
     var best = -1.0lf
     encode_out = 0.0lf
+    text_out = ""
     let args <- [mtmd_bin(), "-m", model_path, "--mmproj", mmproj_path, "--audio", wav_path,
                  "-p", "Transcribe the audio.", "--temp", "0", "--jinja", "--reasoning", "off",
                  "-ngl", "0", "-t", "{threads}"]
     cmd_out = argv_line(args)
     for (_rep in range(reps)) {
-        let r = parse_mtmd_ms(run_capture_argv(args))
+        let out = run_capture_argv(args)
+        let r = parse_mtmd_ms(out)
         if (r.total > 0.0lf && (best < 0.0lf || r.total < best)) {
             best = r.total
             encode_out = max(r.encode, 0.0lf)   // the best rep's already-parsed encode split
+            text_out = mtmd_response_text(out)
         }
     }
     return best
+}
+
+//! The response body out of a captured llama-mtmd-cli stdout: engine logs route to stderr, so
+//! stdout is the decoded text plus the MTMD_TIMING receipt — everything but the receipt joins.
+def mtmd_response_text(out : string) : string {
+    var parts : array<string>
+    for (line in split(out, "\n")) {
+        let s = strip(line)
+        continue if (empty(s) || find(s, "MTMD_TIMING") >= 0)
+        parts |> push(s)
+    }
+    return join(parts, " ")
 }
 
 //! The onnx/nemo bench invocation over a clip set — ONE process for all clips (python model load

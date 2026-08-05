@@ -1109,11 +1109,11 @@ def canary_asr_caps() : AsrCaps {
 }
 
 //! The facade's session arm: English-only validation, then a fresh decoder session.
-def create_canary_asr_session(dec : Model; lang : string) : CanaryAsrSession {
+def create_canary_asr_session(dec : Model; lang : string; kv : KVDtype = KVDtype.f32) : CanaryAsrSession {
     if (lang != "auto" && lang != "en") {
         panic("dasLLAMA asr: this Canary-Qwen model is English-only — create the session with lang=\"en\" or \"auto\"")
     }
-    return <- CanaryAsrSession(qctx <- create_session_(dec))
+    return <- CanaryAsrSession(qctx <- create_session_(dec, kv, kv))
 }
 
 // Canary-Qwen transcription: FastConformer-32 encode + projector, the SALM/Qwen prompt with the

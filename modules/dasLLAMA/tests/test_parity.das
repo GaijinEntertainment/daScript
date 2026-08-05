@@ -672,6 +672,10 @@ def test_parity_gemma4_26b_q4km(t : T?) {
         let path = path_join(models_dir(), "gemma-4-26B-A4B-it-Q4_K_M.gguf")
         if (!model_available(t, path)) return
         t |> success(parity_text_ok(path, QuantMode.q8, gemma4_counting_prompt(), GEMMA4_26B_Q4KM_GEN), "gemma4-26b q4km token-for-token")
+        // the fused region-list prefill (default) vs the per-expert chain — same oracle both ways
+        set_moe_fused_expert_gemms(false)
+        t |> success(parity_text_ok(path, QuantMode.q8, gemma4_counting_prompt(), GEMMA4_26B_Q4KM_GEN), "gemma4-26b q4km per-expert-prefill token-for-token")
+        set_moe_fused_expert_gemms(true)
     }
 }
 

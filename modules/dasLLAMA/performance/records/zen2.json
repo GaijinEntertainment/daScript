@@ -364,7 +364,7 @@
         "flavor":"tuned",
         "box":"zen2",
         "threads":16,
-        "date":"2026-08-04",
+        "date":"2026-08-05",
         "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- -m D:\\work\\llama.cpp\\models\\gemma-4-26B-A4B-it-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 16 -o json --json-path modules/dasLLAMA/performance/records/_cell_zen2.json",
         "hardware":{
           "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
@@ -380,18 +380,18 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":54.126516396099895,
-            "stddev":0.60480356216430664
+            "tok_s":153.84,
+            "stddev":6.3700000000000001
           },
           "tg128":{
-            "tok_s":12.845159323182935,
-            "stddev":0.1069590225815773
+            "tok_s":13.65,
+            "stddev":0.39000000000000001
           }
         },
         "source":"official",
-        "sha":"37a2c1662",
+        "sha":"082aef90c",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k5q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k6q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q40q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q8q8_tile_gen=dot_maddubs_width256_mr8_kstep2 (manifest); q51q8_gemv_gen=mr8 (manifest)",
+        "tune":"k4q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k5q8_tile_gen=dot_maddubs_width256_mr8_nrsplit2 (manifest); k6q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q40q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q8q8_tile_gen=dot_maddubs_width256_mr8_kstep4_nrsplit2 (manifest); q51q8_tile_gen=dot_maddubs_width256_mr8_nrsplit2 (manifest); q51q8_gemv_gen=dot_maddubs_width256_mr8 (manifest)",
         "tune_sha":"fe4d9873989abfef6cdca7eba5a000845d781cf3c4bb7e7673db5d83335e4ece",
         "exec_fmt":"weights k4/q51/q8 native; q8 activations; f16 scales; planar x64-gen (repacked)",
         "env":"DASLLAMA_BOX=zen2 DASLLAMA_MODELS_DIR=D:\\work\\llama.cpp\\models\\",
@@ -1950,7 +1950,7 @@
         "flavor":"tuned",
         "box":"zen2",
         "threads":16,
-        "date":"2026-08-04",
+        "date":"2026-08-05",
         "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- --asr -m gemma-4-E2B-it-Q8_0.gguf -r 2 -t 16 --json-path modules/dasLLAMA/performance/records/_cell_zen2.json",
         "hardware":{
           "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
@@ -1962,37 +1962,37 @@
           "ram_config":"8×32 GB @ 2666 MT/s",
           "power_plan":"High performance",
           "smt":"on",
-          "remote_desktop":"off"
+          "remote_desktop":"parsec"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":3046.8649999999998,
+            "ms":2861.5819999999999,
             "audio_s":11,
             "text":"And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:jfk3.wav":{
-            "ms":8244.8909999999996,
+            "ms":7597.442,
             "audio_s":33,
             "text":"And so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow Americans ask not what your country can do for you ask what you can do for your country and so my fellow American country"
           },
           "asr:gb1.wav":{
-            "ms":64673.764999999999,
+            "ms":57372.133000000002,
             "audio_s":198.734375,
-            "text":"Fellow Americans, this day has brought terrible news and great sadness to our country. At 9:00 this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia's lost. There are no survivors. On board was the crew of seven. Fellow Americans, Colonel Rick Hudson and Captain Michael Anderson and Admiral Clark. At 9:00 this morning, mission control in Houston lost contact with our space shuttle Columbia and Elon Ramon. A short time later, debris was seen falling from the skies above Texas. These men and women assumed great risk. The Columbia's lost to all humanity. There are no survivors. In an age when spaceflight bore witness to the dangers of traveling by rock, Anderson and Admiral Clark navigating the fierce atmosphere near the Earth, mission control lost contact with our space shuttle Columbia and Elon Ramon, knowing they had a short time and noble purpose. Debris was seen falling from the skies above Texas. This kind of women assumed great risk for the Columbia's will, idealism, all humanity. There are no survivors. In an age when spaceflight bore witness to the dangers of traveling by rock, Anderson and Admiral Clark navigating the fierce atmosphere near the Earth, mission control lost contact with our space shuttle Columbia and Elon Ramon, knowing they had a short time and noble purpose. Debris was seen falling from the skies above Texas. The words of all humanity are right, Columbia's will. Let your eyes. All mankind and Ireland has art in all an age when spaceflight bore witness to the dangers of traveling by rock, Anderson and Admiral Clark navigating the fierce atmosphere near the Earth, mission control lost contact with our space shuttle Columbia and Elon Ramon. We saw destruction's trajectory with our space shuttle Columbia."
+            "text":"Fellow Americans, this day has brought terrible news and great sadness to our country. At 9:00 this morning, mission control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia's lost. There are no survivors. On board was the crew of seven. Fellow Americans, Colonel Rick Hudson and Colonel Michael Anderson and Admiral Clark at 9:00 this morning, mission control in Houston lost contact with our space shuttle Columbia and Elon Ramon. A short time later, debris was seen falling from the skies above Texas. These men and women assumed great risk. The Columbia's lost to all humanity. There are no survivors. In an age when spaceflight borders the dangers of travel by rock, Anderson and Admiral Clark navigating the fierce atmosphere near 9:00 this morning, mission control lost contact with our space shuttle Columbia and Elon Ramon, knowing they had a short time and noble purpose. Debris was seen falling from the skies above Texas. This kind of women assumed great risk for the Columbia's well-idealism, all humanity. There are no survivors. In an age when spaceflight borders the dangers of travel by rock, Anderson and Admiral Clark navigating the fierce atmosphere near 9:00 this morning, mission control lost contact with our space shuttle Columbia and Elon Ramon, knowing they had a short time and noble purpose. Debris was seen falling from the skies above Texas. The words of all humanity are right."
           },
           "asr:hp0.wav":{
-            "ms":148961.35200000001,
+            "ms":80888.437000000005,
             "audio_s":273.28724999999997,
-            "text":"Henry F. Phillips, from Wikipedia, the free encyclopedia at en.wikipedia.org. Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon. Henry F. has the honor of having the Phillips screw, the free encyclopedia named after him, named after him. The importance of the crosshead screw design. Henry F. Phillips centering property from which of automated production lines that use powered screw drives. Henry F. Phillips 1890-1958 was a driving the Portland, Oregon was a Henry F. has the honor and authaving the Phillips screw. Although he received patents for the design in 1930, the importance of the crosshead screw design to Henry F. Phillips centering property on automated production lines that use powered screw drives. 1890-1958 was in driving the Portland, Oregon was a Henry F. has the honor and authaving the Phillips screw. Although he received patents for the design in 1930, the importance of the crosshead screw design to Henry F. Phillips centering property on automated production lines that use powered screw drives. 1890-1958 was in driving the Portland, Oregon was a Henry F. has the honor and authaving the Phillips screw. Although he received patents for the design in 1930, the importance of the crosshead screw design to Henry F. Phillips centering property on automated production lines that use powered screw drives. 1890-1958 was in driving the Portland, Oregon was a Henry F. has the honor and authaving the Phillips screw. Although he received patents for the design in 1930, the importance of the crosshead screw design to Henry F. Phillips centering property on automated production lines that use powered screw drives. 1890-1958 was in driving the Portland, Oregon was a Henry F. has the honor and authaving the Phillips screw. Although he received patents for the design in 1930, the importance of the crosshead screw design to Henry F. Phillips centering property on automated production lines that use powered screw drives. 1890-1958 was in driving the Portland, Oregon was a Henry F. has the honor and authaving the Phillips screw. Although he received patents for the design in 1930, the importance of the crosshead screw design to Henry F. Phillips centering property on automated production lines that use powered screw drives. 1890-1958 was in driving the Portland, Oregon was a Henry F. has the honor and authaving the Phillips screw. Although he received patents for the design in 1930, the importance of the crosshead screw design to Henry F. Phillips centering property on automated production lines that use powered screw drives. 1890-1958 was in driving the Portland, Oregon was a Henry F. has the honor and authaving the Phillips screw. Although he received patents for the design in 1930, the importance of the crosshead screw design to Henry F. Phillips centering property on automated production lines that use powered screw drives. 1890-1958 was in driving the Portland, Oregon was a Henry F. has the honor and authaving the Phillips screw. Although he received patents for the design in 1930, the importance of the crosshead screw design to Henry F. Phillips centering property on automated production lines that use powered screw drives. 1890-1958 was in driving the Portland, Oregon was a Henry F. has the honor and authaving the Phillips screw. Although he received patents for the design in 1930, the importance of the crosshead screw design to Henry F. Phillips centering property on automated production lines that use powered screw drives. 1890-1958 was in driving the Portland, Oregon was a Henry F. has the honor and authaving the Phillips screw. Although he received patents for the design in 1930, the importance of the crosshead screw design to Henry F. Phillips centering property on automated production lines that use powered screw drives. 1890-1958 was in driving the Portland, Oregon was a Henry F. has the honor and authaving the Phillips screw. Although he received patents for the design in 1930, the importance of the crosshead screw design to Henry F. Phillips centering property on automated production lines that use powered screw drives. 1890-1958 was in driving the Portland, Oregon was a Henry F. has the honor and authaving the Phillips screw. Although he received patents for the design in 1930, the importance of the crosshead screw design to Henry F. Phillips centering property on automated production lines that use powered screw drives. 1890-1958 was in driving the Portland, Oregon was a Henry F. has the honor and authaving the Phillips screw. Although he received patents for the design in 1930, the importance of the crosshead screw design to Henry F. Phillips centering property on automated production lines that use powered screw drives. 1890-1958 was in driving the Portland, Oregon was a Henry F. has the honor and authaving the Phillips screw. Although he received patents for the design in 1930, the importance of the crosshead screw design to Henry F. Phillips centering property on automated production lines that use powered screw drives. 1890-1958 was in driving the Portland, Oregon was a Henry F. has the honor and authaving the Phillips screw. Although he received patents for the design in 1930, the importance of the crosshead screw design to Henry F. Phillips centering property on automated production lines that use powered screw drives. 1890-1958 was in driving the Portland, Oregon was a Henry F. has the honor and authaving the Phillips screw. Although he received patents for the design in 1930, the importance of the crosshead screw design to Henry F. Phillips centering property on automated production lines that use powered screw drives. 1890-1958 was in driving the Portland, Oregon was a Henry F. has the honor and authaving the Phillips screw. Although he received patents for the design"
+            "text":"Henry F. Phillips, from Wikipedia, the free encyclopedia at en.wikipedia.org. Henry F. Phillips, 1890 to 1958, a US businessman from Portland, Oregon. Henry F. has the honor of having the Phillips hand screw the free encyclopedia, named after him. The importance of the crosshead screw design lies in Henry F. Phillips centering property from which of automated production lines that use powered screw drives. Henry F. Phillips, 1890-1958 was a driving the crosshead screw businessman to the Portland, Oregon. It was so adominately has the name of the free encyclopedia. Although he received patents for the design in 1930, the importance of the crosshead screw design to realize F. Phillips centering property from automated production lines that use powered screw drives. Henry F. Phillips, 1890-1958 was a driving the crosshead screw businessman to the Portland, Oregon. It was so adominately has the name of the free encyclopedia. Although he received patents for the design. The American screw company. The Phillips uses port bonds of US to devise an American screw. Henry F. Phillips, 1890-1958 was a driving the crosshead screw businessman to the Portland, Oregon. It was so adominately has the name of the free encyclopedia. Although he received patents for the design. The American screw company. The Phillips uses port bonds of US to devise an American screw. Henry F. Phillips, 1890-1958 was a driving the crosshead screw businessman to the Portland, Oregon. It was so adominately has the name of the free encyclopedia."
           }
         },
         "workload":"audio-chat",
         "source":"official",
-        "sha":"37a2c1662",
+        "sha":"a63300c2f",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k5q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k6q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q40q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q8q8_tile_gen=dot_maddubs_width256_mr8_kstep2 (manifest); q51q8_gemv_gen=mr8 (manifest)",
-        "tune_sha":"fe4d9873989abfef6cdca7eba5a000845d781cf3c4bb7e7673db5d83335e4ece",
-        "exec_fmt":"f32/q8",
+        "tune":"k4q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k5q8_tile_gen=dot_maddubs_width256_mr8_nrsplit2 (manifest); k6q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q40q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q8q8_tile_gen=dot_maddubs_width256_mr8_kstep4_nrsplit2 (manifest); q51q8_tile_gen=dot_maddubs_width256_mr8_nrsplit2 (manifest)",
+        "tune_sha":"ca9b861fc16d900abcdd0d0cb04e61840e2ad26cc7ead9e89674130d64f99aa3",
+        "exec_fmt":"q8/q8",
         "env":"DASLLAMA_BOX=zen2 DASLLAMA_MODELS_DIR=D:\\work\\llama.cpp\\models\\",
         "files":[
           {
@@ -2039,7 +2039,7 @@
         "flavor":"stock",
         "box":"zen2",
         "threads":16,
-        "date":"2026-08-04",
+        "date":"2026-08-05",
         "cmd":"D:\\Work\\llama.cpp-mtmd-ref\\build-cpu\\bin\\Release\\llama-mtmd-cli.exe -m D:\\work\\llama.cpp\\models\\gemma-4-E2B-it-Q8_0.gguf --mmproj D:\\work\\llama.cpp\\models\\mmproj-gemma-4-E2B-it-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t 16",
         "hardware":{
           "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
@@ -2051,20 +2051,20 @@
           "ram_config":"8×32 GB @ 2666 MT/s",
           "power_plan":"High performance",
           "smt":"on",
-          "remote_desktop":"off"
+          "remote_desktop":"parsec"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":2954.5999999999999,
-            "encode_ms":1759.3
+            "ms":3046.3000000000002,
+            "encode_ms":1824.0999999999999
           },
           "asr:jfk3.wav":{
-            "ms":8873.3999999999996,
-            "encode_ms":5315.3000000000002
+            "ms":8999.7000000000007,
+            "encode_ms":5353.3999999999996
           },
           "asr:gb1.wav":{
-            "ms":56969.699999999997,
-            "encode_ms":33117.699999999997
+            "ms":57804,
+            "encode_ms":33322.800000000003
           }
         },
         "workload":"audio-chat",
@@ -2117,7 +2117,7 @@
         "flavor":"tuned",
         "box":"zen2",
         "threads":16,
-        "date":"2026-08-04",
+        "date":"2026-08-05",
         "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench/dasllama-bench.exe -- --asr -m Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf -r 2 -t 16 --json-path modules/dasLLAMA/performance/records/_cell_zen2.json",
         "hardware":{
           "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
@@ -2129,42 +2129,42 @@
           "ram_config":"8×32 GB @ 2666 MT/s",
           "power_plan":"High performance",
           "smt":"on",
-          "remote_desktop":"off"
+          "remote_desktop":"parsec"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":4196.6369999999997,
+            "ms":4167.3230000000003,
             "audio_s":11,
             "text":"And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:jfk3.wav":{
-            "ms":7606.5709999999999,
+            "ms":6978.0540000000001,
             "audio_s":33,
             "text":"And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
           },
           "asr:gb1.wav":{
-            "ms":76569.142000000007,
+            "ms":69751.832999999999,
             "audio_s":198.734375,
             "text":"My fellow Americans, this day has brought terrible news and great sadness to our country. At nine o'clock this morning, Mission Control in Houston lost contact with our space shuttle Columbia. A short time later, debris was seen falling from the skies above Texas. The Columbia is lost. There are no survivors. On board was a crew of seven: Colonel Rick Husband, Lieutenant Colonel Michael Anderson, Commander Laurel Clark, Captain David Brown, Commander William McCool, Dr. Kalpana Chawla, and Ilan Ramon, a colonel in the Israeli Air Force. These men and women assumed great risk in the service to all humanity. In an age when space flight has come to seem almost routine, it is easy to overlook the dangers of travel by rocket and the difficulties of navigating the fierce outer atmosphere of the Earth. These astronauts knew the dangers, and they faced them willingly, knowing they had a high and noble purpose in life. Because of their courage and daring and idealism, we will miss them all the more. All Americans today are thinking as well of the families of these men and women who have been given this sudden shock and grief. You're not alone. Our entire nation grieves with you. And those you loved will always have the respect and gratitude of this country. The cause in which they died will continue. Mankind is led into the darkness beyond our world by the inspiration of discovery and the longing to understand. Our journey into space will go on. In the skies today, we saw destruction and tragedy. Yet farther than we can see, there is comfort and hope. In the words of the prophet Isaiah, \"Lift your eyes and look to the heavens. Who created all these? He who brings out the starry hosts one by one and calls them each by name. Because of his great power and mighty strength, not one of them is missing.\" The same Creator who names the stars also knows the names of the seven souls we mourn today. The crew of the shuttle Columbia did not return safely to Earth. Yet we can pray that all are safely home. May God bless the grieving families, and may God continue to bless America."
           },
           "asr:hp0.wav":{
-            "ms":104384.124,
+            "ms":95647.919999999998,
             "audio_s":273.28724999999997,
-            "text":"Henry F. Phillips, from Wikipedia, the free encyclopedia, at en dot wikipedia dot org. Henry F. Phillips. From Wikipedia, the free encyclopedia. Henry F. Phillips, eighteen ninety to nineteen fifty eight, a U.S. businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the cross head screw design, lies in its self centering property, useful on automated production lines, that use powered screwdrivers. Phillips major contribution was in driving the cross head concept forward, to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in nineteen thirty six, U.S. patent number two million forty six thousand, three hundred forty three, U.S. patents two million forty six thousand, eight hundred thirty seven, to two million forty six thousand, eight hundred forty. It was so widely copied, that by nineteen forty nine, Phillips lost his patent. The American Screw Company, was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept, since it calls for a relatively complex, recessed socket shape, in the head of the screw. As distinct from the simple milled slot, of a slotted type screw. The Phillips Screw Company, and the American Screw Company, went on to devise the Pozidriv screw, which differs from the Phillips, in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article, caption, Phillips screw head. The following is an infobox which accompanies this article. Infobox, part of the series on screw drive types. Slotted, commonly erroneously flathead. Phillips, crosshead. Pozidriv, Supadriv. Torx. Hex, Allen. Robertson. Tri-wing. Torx set. Spanner head. Triple square, XZN. Others, Poly Drive, spline drive, double hex. Many images accompanied this infobox. This page was last modified on the ninth of April, two thousand eight, at seventeen oh four. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a U.S. registered five hundred one C three, tax deductible nonprofit charity. This sound file and all text in the article, are licensed under the GNU Free Documentation License, available at w w w dot g n u dot org slash copyleft slash f d l dot h t m l."
+            "text":"Henry F Phillips, from Wikipedia, the free encyclopedia, at en dot wikipedia dot org. Henry F Phillips. From Wikipedia, the free encyclopedia. Henry F Phillips, eighteen ninety to nineteen fifty eight, a U S businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the cross head screw design, lies in its self centering property, useful on automated production lines, that use powered screwdrivers. Phillips major contribution was in driving the cross head concept forward, to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in nineteen thirty six, U S patent number two million forty six thousand three hundred forty three, U S patents two million forty six thousand eight hundred thirty seven, to two million forty six thousand eight hundred forty. It was so widely copied, that by nineteen forty nine, Phillips lost his patent. The American Screw Company, was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept, since it calls for a relatively complex, recessed socket shape, in the head of the screw. As distinct from the simple milled slot, of a slotted type screw. The Phillips Screw Company, and the American Screw Company, went on to devise the Pozidriv screw, which differs from the Phillips, in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article, caption, Phillips screw head. The following is an infobox which accompanies this article. Infobox, part of the series on screw drive types. Slotted, commonly erroneously flathead. Phillips, crosshead. Pozidriv, Supadriv. Torx. Hex, Allen. Robertson. Tri-wing. Torx set. Spanner head. Triple square, XZN. Others, Poilly drive, spline drive, double hex. Many images accompanied this infobox. This page was last modified on the ninth of April, two thousand eight, at seventeen oh four. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a U S registered five hundred one C three, tax deductible nonprofit charity. This sound file and all text in the article, are licensed under the GNU Free Documentation License, available at w w w dot g n u dot org slash copyleft slash f d l dot h t m l."
           },
           "asr:hp0x2.wav":{
-            "ms":262007.02299999999,
+            "ms":250960.19500000001,
             "audio_s":546.57449999999994,
-            "text":"Henry F Phillips from Wikipedia, the free encyclopedia at en dot wikipedia dot org. Henry F Phillips from Wikipedia, the free encyclopedia. Henry F Phillips, eighteen ninety to nineteen fifty eight, a U S businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the cross head screw design, lies in its self centering property, useful on automated production lines, that use powered screwdrivers. Phillips major contribution was in driving the cross head concept forward, to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in nineteen thirty six, U S patent number two million forty six thousand, three hundred forty three, U S patents two million forty six thousand, eight hundred thirty seven, to two million forty six thousand, eight hundred forty. It was so widely copied, that by nineteen forty nine, Phillips lost his patent. The American Screw Company, was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept, since it calls for a relatively complex, recessed socket shape, in the head of the screw. As distinct from the simple milled slot, of a slotted type screw. The Phillips Screw Company, and the American Screw Company, went on to devise the Pozidriv screw, which differs from the Phillips, in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article, caption, Phillips screw head. The following is an infobox which accompanies this article. Infobox, part of the series on screw drive types. Slotted, commonly erroneously flathead. Phillips, crosshead. Pozidriv, Supadriv. Torx. Hex, Allen. Robertson. Tri wing. Torx set. Spanner head. Triple square, XZN. Others, Poly Drive, spline drive, double hex. Many images accompanied this infobox. This page was last modified on the ninth of April, two thousand eight, at seventeen oh four. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a U S registered five hundred and one C three, tax deductible nonprofit charity. This sound file and all text in the article, are licensed under the GNU Free Documentation License, available at, w w w dot g n u dot org slash copyleft slash f d l dot h t m l. Henry F Phillips from Wikipedia, the free encyclopedia, at en dot wikipedia dot org. Henry F Phillips from Wikipedia, the free encyclopedia. Henry F Phillips, eighteen ninety to nineteen fifty eight, a U S businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the cross head screw design, lies in its self centering property, useful on automated production lines, that use powered screwdrivers. Phillips major contribution was in driving the cross head concept forward, to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in nineteen thirty six, U S patent number two million forty six thousand, three hundred forty three, U S patents two million forty six thousand, eight hundred thirty seven, to two million forty six thousand, eight hundred forty. It was so widely copied, that by nineteen forty nine, Phillips lost his patent. The American Screw Company, was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept, since it calls for a relatively complex, recessed socket shape, in the head of the screw. As distinct from the simple milled slot, of a slotted type screw. The Phillips Screw Company, and the American Screw Company, went on to devise the Pozidriv screw, which differs from the Phillips, in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article, caption, Phillips screw head. The following is an infobox which accompanies this article. Infobox, part of the series on screw drive types. Slotted, commonly erroneously flathead. Phillips, crosshead. Pozidriv, Supadriv. Torx. Hex, Allen. Robertson. Tri wing. Torx set. Spanner head. Triple square, XZN. Others, Poly Drive, spline drive, double hex. Many images accompanied this infobox. This page was last modified on the ninth of April, two thousand eight, at seventeen oh four. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a U S registered five hundred and one C three, tax deductible nonprofit charity. This sound file and all text in the article, are licensed under the GNU Free Documentation License, available at, w w w dot g n u dot org slash copyleft slash f d l dot h t m l."
+            "text":"Henry F Phillips from Wikipedia, the free encyclopedia at en dot wikipedia dot org. Henry F Phillips from Wikipedia, the free encyclopedia. Henry F Phillips, eighteen ninety to nineteen fifty eight, a U S businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the cross head screw design, lies in its self centering property, useful on automated production lines, that use powered screwdrivers. Phillips major contribution was in driving the cross head concept forward, to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in nineteen thirty six, U S patent number two million forty six thousand three hundred forty three, U S patents two million forty six thousand eight hundred thirty seven, to two million forty six thousand eight hundred forty. It was so widely copied, that by nineteen forty nine, Phillips lost his patent. The American Screw Company, was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept, since it calls for a relatively complex, recessed socket shape, in the head of the screw. As distinct from the simple milled slot, of a slotted type screw. The Phillips Screw Company, and the American Screw Company, went on to devise the Pozidriv screw, which differs from the Phillips, in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article, caption, Phillips screw head. The following is an infobox which accompanies this article. Infobox, part of the series on screw drive types. Slotted, commonly erroneously flathead. Phillips, crosshead. Pozidriv, Supadriv. Torx. Hex, Allen. Robertson. Tri wing. Torx set. Spanner head. Triple square, XZN. Others, Poly Drive, spline drive, double hex. Many images accompanied this infobox. This page was last modified on the ninth of April, two thousand eight, at seventeen oh four. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a U S registered five hundred and one C three, tax deductible nonprofit charity. This sound file and all text in the article, are licensed under the GNU Free Documentation License, available at, w w w dot g n u dot org slash copyleft slash f d l dot h t m l. Henry F Phillips, from Wikipedia, the free encyclopedia, at en dot wikipedia dot org. Henry F Phillips. From Wikipedia, the free encyclopedia. Henry F Phillips, eighteen ninety to nineteen fifty eight, a U S businessman from Portland, Oregon, has the honor of having the Phillips head screw and screwdriver named after him. The importance of the cross head screw design, lies in its self centering property, useful on automated production lines, that use powered screwdrivers. Phillips major contribution was in driving the cross head concept forward, to the point where it was adopted by screw makers and automobile companies. Although he received patents for the design in nineteen thirty six, U S patent number two million forty six thousand three hundred forty three, U S patents two million forty six thousand eight hundred thirty seven, to two million forty six thousand eight hundred forty. It was so widely copied, that by nineteen forty nine, Phillips lost his patent. The American Screw Company, was responsible for devising a means of manufacturing the screw, and successfully patented and licensed their method. Other screw makers of the nineteen thirties dismissed the Phillips concept, since it calls for a relatively complex, recessed socket shape, in the head of the screw. As distinct from the simple milled slot, of a slotted type screw. The Phillips Screw Company, and the American Screw Company, went on to devise the Pozidriv screw, which differs from the Phillips, in that it is designed to accommodate greater torque than the Phillips. An image accompanied this article, caption, Phillips screw head. The following is an infobox which accompanies this article. Infobox, part of the series on screw drive types. Slotted, commonly erroneously flathead. Phillips, crosshead. Pozidriv, Supadriv. Torx. Hex, Allen. Robertson. Tri wing. Torx set. Spanner head. Triple square, XZN. Others, Poly Drive, spline drive, double hex. Many images accompanied this infobox. This page was last modified on the ninth of April, two thousand eight, at seventeen oh four. All text is available under the terms of the GNU Free Documentation License. See copyrights for details. Wikipedia is a registered trademark of the Wikimedia Foundation Incorporated, a U S registered five hundred and one C three, tax deductible nonprofit charity. This sound file and all text in the article, are licensed under the GNU Free Documentation License, available at, w w w dot g n u dot org slash copyleft slash f d l dot h t m l."
           }
         },
         "workload":"audio-chat",
         "source":"official",
-        "sha":"37a2c1662",
+        "sha":"a63300c2f",
         "version":"0.6.4",
-        "tune":"k4q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k5q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k6q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q40q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q8q8_tile_gen=dot_maddubs_width256_mr8_kstep2 (manifest); q51q8_gemv_gen=mr8 (manifest)",
-        "tune_sha":"fe4d9873989abfef6cdca7eba5a000845d781cf3c4bb7e7673db5d83335e4ece",
-        "exec_fmt":"f32/q8",
+        "tune":"k4q8_tile_gen=dot_maddubs_width256_mr8 (manifest); k5q8_tile_gen=dot_maddubs_width256_mr8_nrsplit2 (manifest); k6q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q40q8_tile_gen=dot_maddubs_width256_mr8 (manifest); q8q8_tile_gen=dot_maddubs_width256_mr8_kstep4_nrsplit2 (manifest); q51q8_tile_gen=dot_maddubs_width256_mr8_nrsplit2 (manifest)",
+        "tune_sha":"ca9b861fc16d900abcdd0d0cb04e61840e2ad26cc7ead9e89674130d64f99aa3",
+        "exec_fmt":"q8/q8",
         "env":"DASLLAMA_BOX=zen2 DASLLAMA_MODELS_DIR=D:\\work\\llama.cpp\\models\\",
         "files":[
           {
@@ -2217,7 +2217,7 @@
         "flavor":"stock",
         "box":"zen2",
         "threads":16,
-        "date":"2026-08-04",
+        "date":"2026-08-05",
         "cmd":"D:\\Work\\llama.cpp-mtmd-ref\\build-cpu\\bin\\Release\\llama-mtmd-cli.exe -m D:\\work\\llama.cpp\\models\\Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf --mmproj D:\\work\\llama.cpp\\models\\mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf --audio modules/dasLLAMA/benchmarks/asr/corpus/gb1.wav -p \"Transcribe the audio.\" --temp 0 --jinja --reasoning off -ngl 0 -t 16",
         "hardware":{
           "cpu":"AMD Ryzen Threadripper 3990X 64-Core Processor",
@@ -2229,20 +2229,20 @@
           "ram_config":"8×32 GB @ 2666 MT/s",
           "power_plan":"High performance",
           "smt":"on",
-          "remote_desktop":"off"
+          "remote_desktop":"parsec"
         },
         "tests":{
           "asr:jfk.wav":{
-            "ms":293990.40000000002,
-            "encode_ms":6868.1999999999998
+            "ms":299664.79999999999,
+            "encode_ms":6603.3999999999996
           },
           "asr:jfk3.wav":{
-            "ms":11007.6,
-            "encode_ms":10927.1
+            "ms":11336.799999999999,
+            "encode_ms":11258.299999999999
           },
           "asr:gb1.wav":{
-            "ms":81619.899999999994,
-            "encode_ms":45490.699999999997
+            "ms":84854.5,
+            "encode_ms":47120.5
           }
         },
         "workload":"audio-chat",

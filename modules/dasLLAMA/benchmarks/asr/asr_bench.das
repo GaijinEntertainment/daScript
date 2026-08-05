@@ -41,6 +41,13 @@ struct BenchArgs {
     @clarg_doc = "Print the transcription text of the last rep"
     text : bool
 
+    @clarg_name = "fp32-tower"
+    @clarg_doc = "A/B lever: pin every tower to the fp32 reference rail (whisper/gemma4a/qwen3a) — the q8-vs-f32 profiling comparison's off leg"
+    fp32_tower : bool
+
+    @clarg_doc = "Decoder-session KV dtype for the LLM-decoder ASR families: f32 (default) | f16 | q8"
+    kv : string
+
     @clarg_short = "?"
     @clarg_name = "show-help"
     @clarg_doc = "Show this help and exit"
@@ -94,6 +101,23 @@ def main() : int {
     let reps = cfg.reps > 0 ? cfg.reps : 3
     let lang = empty(cfg.lang) ? "en" : cfg.lang
     let model_name = base_name(cfg.model)
+    if (cfg.fp32_tower) {
+        set_asr_fp32(true)
+        set_gemma4a_q8(false)
+        set_qwen3a_q8(false)
+        print("FP32-TOWER\ton (the A/B off leg — every tower on the reference rail)\n")
+    }
+    if (!empty(cfg.kv)) {
+        if (cfg.kv == "f16") {
+            set_asr_kv(KVDtype.f16)
+        } elif (cfg.kv == "q8") {
+            set_asr_kv(KVDtype.q8_0)
+        } elif (cfg.kv != "f32") {
+            print("unknown --kv '{cfg.kv}' (f32 | f16 | q8)\n")
+            return 1
+        }
+        print("KV\t{cfg.kv}\n")
+    }
 
     let t_load = ref_time_ticks()
     var m <- empty(cfg.mmproj) ? load_asr_model(cfg.model) : load_asr_model(cfg.model, cfg.mmproj)

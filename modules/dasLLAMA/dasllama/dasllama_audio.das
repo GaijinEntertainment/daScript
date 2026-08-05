@@ -936,9 +936,9 @@ def mm_blob_b(var y : array<float>; blob : PlaneF; woff : int64; x : PlaneF; n, 
 // ===== tower Q8 rail (parakeet's v1 recipe: whole-blob Q8_0 image + per-GEMM-region repack) =====
 
 // repack one GEMM region for the active backend (scales index at woff/32 ⇒ woff must be
-// 32-aligned); a region whose contraction width is not a 32-multiple stays fp32 — tw_mm
-// falls back per call on the same condition, so plane and route can never disagree
-def private tw_repack(var qblob : array<int8>; var qscales : array<float>; woff, n, d : int64) {
+// 32-aligned); n%32 != 0 regions stay fp32 — tw_mm falls back per call on the same condition,
+// so plane and route can never disagree. Public: qwen3a's cblob trio rides the same recipe.
+def tw_repack(var qblob : array<int8>; var qscales : array<float>; woff, n, d : int64) {
     if (n % 32l != 0l) {
         return
     }
@@ -970,7 +970,9 @@ def private tower_quantize_(var t : AudioTower; fblob : array<float>; var qblob 
     }
     let d = t.d_model
     let ff = t.n_ff
-    tw_repack(qblob, qscales, t.conv2_w_off, 3l * d, d)
+    if (t.conv2_w_off != 0l) {   // a conv-less core (qwen3a: layers at 0) has no conv2 region to repack
+        tw_repack(qblob, qscales, t.conv2_w_off, 3l * d, d)
+    }
     for (l in range64(t.n_layer)) {
         let lo = enc_layer_offsets(t, l)
         tw_repack(qblob, qscales, lo.q_w, d, d)
