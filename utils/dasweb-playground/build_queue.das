@@ -22,10 +22,15 @@ let BUILD_STATE_DONE = "done"
 let BUILD_STATE_FAILED = "failed"
 
 let BUILD_MODE_MODULE = "module"   // bare .wasm the playground runtime instantiates
-let BUILD_MODE_PAGE = "page"       // standalone html+js+wasm page (the example games)
+let BUILD_MODE_PAGE = "page"       // standalone html+js+wasm page (an /examples card)
 
 //! A failed build stores the compiler error for the user; cap what one job can hold.
 let MAX_BUILD_ERROR_BYTES = 65536
+
+//! Ceiling on how many files one upload may claim to carry. The per-mode set
+//! below is the real limit; this bounds the work of parsing a manifest that
+//! has not been checked against it yet.
+let MAX_ARTIFACT_MANIFEST_ENTRIES = 16
 
 def expected_artifact_names(mode : string) : array<string> {
     //! The EXACT file set a mode may publish. The builder enforces this too,
@@ -33,7 +38,7 @@ def expected_artifact_names(mode : string) : array<string> {
     //! not take the builder's word for what a job produced: anything the build
     //! dropped beside its real output would be served publicly from this
     //! origin. Empty = the mode publishes nothing (page mode defines its set
-    //! when the game checkpoint wires it).
+    //! when the page checkpoint wires it).
     if (mode == BUILD_MODE_MODULE) {
         return <- ["sample.wasm"]
     }

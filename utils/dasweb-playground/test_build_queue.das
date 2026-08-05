@@ -29,6 +29,21 @@ def test_migration_v4(t : T?) {
 }
 
 [test]
+def test_expected_artifact_names(t : T?) {
+    // The server enforces this set rather than trusting the builder, so it is
+    // a store behaviour and gets a store test, not only an HTTP one.
+    t |> run("module publishes exactly one named artifact") @(tt : T?) {
+        let names <- expected_artifact_names(BUILD_MODE_MODULE)
+        tt |> equal(length(names), 1)
+        tt |> equal(names[0], "sample.wasm")
+    }
+    t |> run("a mode with no declared set publishes nothing") @(tt : T?) {
+        tt |> success(empty(expected_artifact_names(BUILD_MODE_PAGE)), "page not wired yet")
+        tt |> success(empty(expected_artifact_names("bogus")), "unknown mode")
+    }
+}
+
+[test]
 def test_toolchain_meta(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         t |> run("no toolchain until announced") @(tt : T?) {

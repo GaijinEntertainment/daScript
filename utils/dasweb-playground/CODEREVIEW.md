@@ -68,8 +68,9 @@ defect, and this section is the whole test.
   the job state machine, and queue policy (claim timeout, attempt ceiling). Zero HTTP and zero
   filesystem.
 - `build_artifacts.das` — the artifact cache: blobs layout, toolchain/hash/filename validation,
-  integrity verification, stage-then-rename placement, and serving-path resolution. The only
-  build-side file that touches the filesystem; zero HTTP, zero SQL.
+  integrity verification, stage-then-rename placement, serving-path resolution, and every path
+  the cache assembles. The only build-side file that touches the filesystem; zero HTTP, zero
+  SQL.
 - `curated_import.das` — the data.json-driven curated importer: manifest parsing, sample-file
   reads, bundle assembly, calling the store. The only file besides the config loader that reads
   the filesystem; a store mutation here that bypasses `samples_store` functions is a defect.

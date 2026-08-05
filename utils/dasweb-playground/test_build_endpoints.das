@@ -282,7 +282,7 @@ def test_build_flow_end_to_end(t : T?) { // nolint:STYLE038 — sequential pipel
 }
 
 [test]
-def test_build_failure_paths(t : T?) {
+def test_build_failure_paths(t : T?) { // nolint:STYLE038 — sequential refusal scenarios, each consuming the previous step's queue state
     var err = ""
     let blobs = create_temp_directory("dasweb_ep_blobs_", err)
     let upload_src = create_temp_file("dasweb_ep_wasm_", ".bin", err)
@@ -338,6 +338,43 @@ def test_build_failure_paths(t : T?) {
             }
             GET("{base_url}/api/build/artifact/{TC}/{extra}/leak.js") $(resp) {
                 tt |> equal(int(resp.status_code), 404)
+            }
+        }
+        t |> run("a manifest with a duplicate name is refused") @(tt : T?) {
+            let dup = posted_hash(base_url, "print(\"dup manifest\")")
+            POST("{base_url}/api/build/request/{dup}", "") $(_resp) {}
+            authed_post("{base_url}/api/build/next", TC, TEST_TOKEN) $(_resp) {}
+            with_http_request() $(var req) {
+                req.method = http_method.POST
+                req.url := "{base_url}/api/build/result"
+                set_header(req, "Authorization", "Bearer {TEST_TOKEN}")
+                set_form_data(req, "hash", dup)
+                set_form_data(req, "toolchain", TC)
+                set_form_data(req, "ok", "1")
+                set_form_data(req, "manifest",
+                    "[\{\"name\":\"sample.wasm\",\"sha256\":\"{payload_sha}\"},\{\"name\":\"sample.wasm\",\"sha256\":\"{payload_sha}\"}]")
+                set_form_file(req, "sample.wasm", upload_src)
+                request(req) $(resp) {
+                    tt |> equal(int(resp.status_code), 400)
+                }
+            }
+        }
+        t |> run("a manifest naming a file the mode does not publish is refused") @(tt : T?) {
+            let odd = posted_hash(base_url, "print(\"odd manifest\")")
+            POST("{base_url}/api/build/request/{odd}", "") $(_resp) {}
+            authed_post("{base_url}/api/build/next", TC, TEST_TOKEN) $(_resp) {}
+            with_http_request() $(var req) {
+                req.method = http_method.POST
+                req.url := "{base_url}/api/build/result"
+                set_header(req, "Authorization", "Bearer {TEST_TOKEN}")
+                set_form_data(req, "hash", odd)
+                set_form_data(req, "toolchain", TC)
+                set_form_data(req, "ok", "1")
+                set_form_data(req, "manifest", "[\{\"name\":\"other.wasm\",\"sha256\":\"{payload_sha}\"}]")
+                set_form_file(req, "other.wasm", upload_src)
+                request(req) $(resp) {
+                    tt |> equal(int(resp.status_code), 400)
+                }
             }
         }
         t |> run("status for a sample never requested is 404") @(tt : T?) {

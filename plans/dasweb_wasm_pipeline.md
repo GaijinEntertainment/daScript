@@ -211,11 +211,20 @@ engine asks the build service by content hash. In its place a **compile gate** r
 `daslang -dry-run` over every curated sample: it proves they still compile, writes nothing, and
 costs a fraction of what the wasm builds did.
 
-**Still on CI, and why:** steps 2 and 4–7 (the games) stay until **page mode** exists. A game is
-a standalone `html + js + wasm` page, `run_build.sh` refuses `page` mode today, and
-`expected_artifact_names("page")` is deliberately empty — so the queue cannot yet produce what
-`/examples` needs. Step 2 only exists to serve those game builds and leaves with them. That is
-the game checkpoint below, and it is the remaining half of the diet.
+**Still on CI, and why:** steps 2 and 4–7 stay until **page mode** exists.
+
+Terminology, because "the games" has been used loosely for all of them: those steps build
+**five standalone `/examples` pages** — `arcanoid` and `pacman` (the two actual games, from
+`examples/games/`) plus `furier`, `path_tracer_lab` and `physarum_lab` (graphics showcases,
+from `examples/graphics/`). What they share is not that they are games; it is the **delivery
+shape**. Each is its own page — `html + js + wasm` — where a playground sample is a bare
+`.wasm` the already-loaded runtime instantiates. That shape is what "page mode" names, and what
+forces the artifact cache to hold a file set.
+
+`run_build.sh` refuses `page` mode today and `expected_artifact_names("page")` is deliberately
+empty, so the queue cannot yet produce what `/examples` needs. Step 2 exists only to serve
+those five builds and leaves with them. That is the page checkpoint below, and it is the
+remaining half of the diet.
 
 **Design point the game pages force — and it is NOT about multi-file sources.** Two axes that
 look like one and are not:

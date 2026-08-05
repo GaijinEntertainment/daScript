@@ -140,6 +140,59 @@ def test_build_cannot_widen_its_own_output(t : T?) {
 }
 
 [test]
+def test_job_identity_validation(t : T?) {
+    // The builder assembles a scratch path from the hash the SERVER sent, so
+    // its shape is checked on arrival — "the server said so" is not validation.
+    let good = "1111111111111111111111111111111111111111111111111111111111111111"
+    t |> run("hashes are exactly 64 lowercase hex") @(tt : T?) {
+        tt |> success(is_valid_job_hash(good), "64 hex")
+        tt |> success(!is_valid_job_hash(slice(good, 0, 63)), "too short")
+        tt |> success(!is_valid_job_hash("ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB"), "uppercase")
+        tt |> success(!is_valid_job_hash("../../../etc"), "traversal")
+        tt |> success(!is_valid_job_hash(""), "empty")
+    }
+    t |> run("toolchains are 7..64 lowercase hex") @(tt : T?) {
+        tt |> success(is_valid_job_toolchain("abc1234"), "short sha")
+        tt |> success(!is_valid_job_toolchain("abc123"), "too short")
+        tt |> success(!is_valid_job_toolchain(".."), "traversal")
+    }
+}
+
+[test]
+def test_symlinked_artifact_is_refused(t : T?) {
+    // A build writes its output directory with the user's own compile-time
+    // code. Everything downstream reads the artifact path on the HOST, outside
+    // the sandbox — so a symlink there would publish a host file. Refuse it.
+    with_temp_dir("buildd_link_") $(dir) {
+        var terr = ""
+        let secret = path_join(dir, "secret.txt")
+        fwrite(secret, "host-only content")
+        let out_dir = path_join(dir, "out")
+        mkdir_rec(out_dir)
+        let link = path_join(out_dir, "sample.wasm")
+        // daslang binds no symlink CREATION, so make one the POSIX way.
+        let rc = unsafe(popen_argv(["ln", "-s", secret, link], 30.0) $(f) {
+            if (f != null) {
+                terr = fread(f)
+            }
+        })
+        // Gate on what actually landed, not on the exit code: on Windows `ln`
+        // reports success while COPYING the file, so an exit-code-only guard
+        // would assert against a premise that is false there. The refusal is
+        // still compiled everywhere and exercised wherever a real link is made.
+        var link_err = ""
+        if (rc != 0 || !is_symlink(link, link_err)) {
+            print("skipping symlink case: this platform did not create a symlink\n")
+            return
+        }
+        t |> run("a symlinked artifact yields nothing to upload") @(tt : T?) {
+            let files <- collect_artifacts(out_dir, "module")
+            tt |> success(empty(files), "refused, so nothing is published")
+        }
+    }
+}
+
+[test]
 def test_derive_toolchain(t : T?) {
     t |> run("this repo's HEAD is a 40-hex sha") @(tt : T?) {
         let sha = derive_toolchain(".")

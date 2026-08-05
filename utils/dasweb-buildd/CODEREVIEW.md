@@ -68,7 +68,6 @@ defect, and this section is the whole test.
 - `Containerfile` — the sandbox image. It holds only what a system must provide the toolchain;
   anything a read-only mount can supply instead belongs in `run_build.sh`. A change here
   without bumping the image tag in both files, in the same commit, is a defect.
-- `_fake_build.das` — the cross-platform test stand-in for `run_build.sh`; test fixture only.
 - `.das_package`, `watchdog.json`, `dasweb-buildd.toml` — packaging and deployment. A behavior
   change hidden in these files without a note in `README.md` (Run section) is a defect.
 

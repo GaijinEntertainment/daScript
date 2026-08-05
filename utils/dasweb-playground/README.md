@@ -48,6 +48,7 @@ a body already buffered in full, so that limit cannot live in this process.
 | `GET /healthz` | `ok` (watchdog poll target) |
 | `POST /shutdown` | graceful stop, exit 0 (watchdog contract); loopback peers only, else 403 |
 | `POST /admin/reimport` | re-run the curated importer; 503 when `curated_dir` unset; loopback peers only, else 403 |
+| `GET /api/build/info` | `{enabled, toolchain}` — whether builds are available at all; the playground asks once at load to decide whether to offer the wasm engine |
 | `POST /api/build/request/<hash>` | enqueue a wasm build of a stored sample under the current toolchain → the status payload; 404 unknown sample, 503 while builds are unavailable |
 | `GET /api/build/status/<hash>` | `{state}` + state-specific fields: `position` (queued), `error` (failed), `files` = artifact URLs (done); 404 when never requested |
 | `GET /api/build/artifact/<toolchain>/<hash>/<file>` | a built artifact file, immutable cache headers + `nosniff`; every component validated, 404 otherwise |
@@ -71,8 +72,9 @@ manifest path that would escape `curated_dir` is refused, and an import in which
 readable keeps the previous listings rather than emptying the dropdown. The site deploy nudges
 `/admin/reimport` so a newly shipped sample appears without a restart.
 
-Manual curation: `admin.das` (`--op list | promote | demote`), shipped in the bundle and run
-with a daslang SDK on the box (the baked exe has no interpreter):
+Manual curation and build-queue operation: `admin.das`
+(`--op list | promote | demote | enqueue | build-status | set-toolchain`), shipped in the
+bundle and run with a daslang SDK on the box (the baked exe has no interpreter):
 
 ```bash
 /opt/daslang/bin/daslang admin.das -- --db /srv/dasweb-playground/samples.db --op list

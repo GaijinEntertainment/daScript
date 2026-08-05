@@ -114,9 +114,9 @@ podman build -t dasweb-builder:1 -f utils/dasweb-buildd/Containerfile .
 daslang dastest/dastest.das -- --test utils/dasweb-buildd/test_buildd_core.das
 ```
 
-In-dir: config (pure merge), core (source materialization, name validation, command
-invocation via `popen_argv`, artifact collection + hashing, toolchain derivation), client
-(claim/announce/result against the stub playground on reserved port 19014, including the
-multipart round trip verified byte-exact on the receiving side). `_fake_build.das` is the
-cross-platform stand-in for `run_build.sh`. CI runs the suites in `extended_checks.yml`
+In-dir: config (pure merge, provenance, token masking), core (source materialization, name and
+job-identity validation, command invocation via `popen_argv`, artifact collection + hashing,
+the symlinked-artifact refusal, toolchain derivation), client (claim/announce/result against
+the stub playground on reserved port 19014, including the multipart round trip verified
+byte-exact on the receiving side). CI runs the suites in `extended_checks.yml`
 ("Test dasweb-buildd").

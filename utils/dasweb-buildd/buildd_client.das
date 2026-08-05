@@ -39,7 +39,14 @@ def claim_build(server_url : string; token : string; toolchain : string) : Claim
                 out.toolchain = doc?["toolchain_id"] ?? ""
                 out.mode = doc?["mode"] ?? ""
                 out.source = doc?["source"] ?? ""
-                out.ok = !empty(out.hash) && !empty(out.source)
+                // Shape-check what the network handed us before any of it
+                // reaches a path: the hash names this job's scratch directory.
+                if (!is_valid_job_hash(out.hash) || !is_valid_job_toolchain(out.toolchain)) {
+                    logger_error("buildd.client", "claim rejected: malformed job identity")
+                    out = ClaimedBuild()
+                    return
+                }
+                out.ok = !empty(out.source)
             } elif (int(resp.status_code) != 204) {
                 logger_error("buildd.client", "claim refused: {int(resp.status_code)}")
             }

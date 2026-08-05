@@ -56,6 +56,49 @@ def test_defaults_and_toml(t : T?) {
 }
 
 [test]
+def test_cli_precedence(t : T?) {
+    t |> run("an explicit cli flag beats the toml") @(t : T?) {
+        var cfg = BuilddArgs()
+        cfg.port = 7777   // as if parsed from --port
+        var sources : table<string; string>
+        var err = ""
+        let args <- ["--port=7777"]
+        t |> success(apply_config_text(cfg, "port = 9999\n", args, sources, err), "toml parses")
+        t |> equal(cfg.port, 7777)
+        t |> equal(sources?["port"] ?? "absent", "absent")   // toml did not claim it
+    }
+    t |> run("authoritative flips the top and the toml wins") @(t : T?) {
+        var cfg = BuilddArgs()
+        cfg.port = 7777
+        var sources : table<string; string>
+        var err = ""
+        let args <- ["--port=7777"]
+        t |> success(apply_config_text(cfg, "authoritative = true\nport = 9999\n", args, sources, err),
+            "toml parses")
+        t |> equal(cfg.port, 9999)
+        t |> equal(sources?["port"] ?? "", "toml")
+    }
+    t |> run("hyphenated cli spelling marks the underscored key") @(t : T?) {
+        var sources : table<string; string>
+        let args <- ["--build-timeout-seconds=30"]
+        mark_cli_sources(args, sources)
+        t |> equal(sources?["build_timeout_seconds"] ?? "", "cli")
+    }
+}
+
+[test]
+def test_load_config_missing_explicit(t : T?) {
+    t |> run("an explicit config path that does not exist is an error") @(t : T?) {
+        var cfg = BuilddArgs()
+        cfg.config = "no/such/dasweb-buildd.toml"
+        var sources : table<string; string>
+        var err = ""
+        t |> success(!load_config(cfg, sources, err), "missing explicit config fails")
+        t |> success(!empty(err), "error text set")
+    }
+}
+
+[test]
 def test_banner_hides_the_token(t : T?) {
     t |> run("the banner reports set/unset and provenance, never the value") @(t : T?) {
         var cfg = BuilddArgs()

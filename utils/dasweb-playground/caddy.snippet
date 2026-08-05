@@ -22,13 +22,24 @@ handle /api/samples* {
 	reverse_proxy 127.0.0.1:8101
 }
 
-handle /api/build/* {
-	# Artifact uploads from the builder are MB-scale multipart bodies —
-	# unlike the 1MB source cap. The bearer token gates who can spend
-	# that allowance; this cap bounds what even a token holder can buffer
-	# into the service.
+# The builder's own routes, and ONLY these, carry the large-upload allowance:
+# an artifact upload is a MB-scale multipart body, unlike the 1MB source cap.
+# They are bearer-gated, so the allowance is spendable only by a token holder.
+# Listed before the public block below, which would otherwise match them —
+# Caddy takes the first matching handle.
+handle /api/build/next /api/build/result /api/build/toolchain {
 	request_body {
 		max_size 64MB
+	}
+	reverse_proxy 127.0.0.1:8101
+}
+handle /api/build/* {
+	# Everything else under /api/build is public and unauthenticated
+	# (info, request, status, artifact), so it gets the same 1MB ceiling as
+	# the other public routes. Folding these in with the builder's uploads
+	# would let an anonymous POST buffer 64MB into the service.
+	request_body {
+		max_size 1MB
 	}
 	reverse_proxy 127.0.0.1:8101
 }

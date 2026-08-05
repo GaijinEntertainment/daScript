@@ -4,8 +4,11 @@
 #   run_build.sh <src_dir> <out_dir> <mode> <entry>
 #
 # Contract with the service (buildd_core.run_build_command):
-#   - exit 0 and artifacts in <out_dir>  => success, everything servable there uploads
-#   - nonzero exit                        => failure, stdout becomes the user-facing error
+#   - exit 0                => success; the service then collects EXACTLY the
+#                              files this mode declares, by name, and ignores
+#                              anything else in <out_dir>. A build cannot widen
+#                              its own output set, and must not be changed to.
+#   - nonzero exit          => failure, stdout becomes the user-facing error
 #   - stderr is redirected into stdout here — the service captures one stream
 #
 # THE SANDBOX IS THE SECURITY BOUNDARY. Compiling user .das is remote code
@@ -38,8 +41,10 @@
 # mode=module: the per-sample recipe, verbatim from web/CMakeLists.txt
 # (all_wasm) — host daslang -exe with the wasm64 jit target against the
 # web/output64 runtime archive, emitting <out_dir>/sample.wasm.
-# mode=page: the standalone game recipe (daspkg release wasm) — lands with the
-# game checkpoint of plans/dasweb_wasm_pipeline.md; refused until then.
+# mode=page: the standalone-page recipe (daspkg release wasm) for the five
+# /examples cards — arcanoid and pacman (games) plus furier, path_tracer_lab
+# and physarum_lab (graphics showcases). Lands with the page checkpoint of
+# plans/dasweb_wasm_pipeline.md; refused until then.
 
 set -u
 exec 2>&1
@@ -107,7 +112,7 @@ module)
         --jit-runtime-lib="$RUNTIME_LIB"
     ;;
 page)
-    echo "page mode is not wired yet (lands with the game checkpoint)"
+    echo "page mode is not wired yet (lands with the page checkpoint)"
     exit 13
     ;;
 *)

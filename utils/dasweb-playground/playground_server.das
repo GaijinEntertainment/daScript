@@ -313,6 +313,16 @@ def private handle_share_link(var req : HttpRequest?; var resp : HttpResponse?) 
     return resp |> REDIRECT("/playground/index.html?s={hash}", http_status.FOUND)
 }
 
+def private body_toolchain_of(var req : HttpRequest?; var ok : bool&) : string {
+    //! A builder body is a bare toolchain id. A das string ends at the first
+    //! NUL, so "abc1234\0junk" would validate as a clean 7-hex id and be
+    //! stored as one — the same asymmetry the sample route guards against.
+    let raw_bytes = length(req.body)
+    let text = string(req.body)
+    ok = body_is_byte_faithful(raw_bytes, text)
+    return strip(text)
+}
+
 def private handle_build_toolchain(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     let t0 = ref_time_ticks()
     let auth = build_auth_status(req)
@@ -322,8 +332,9 @@ def private handle_build_toolchain(var req : HttpRequest?; var resp : HttpRespon
     let ip = client_ip_of(req)
     // announcing a toolchain IS its go-live: the builder does this only after
     // the --jit-check-abi canary ran clean on that toolchain
-    let toolchain = strip(string(req.body)) // nolint:PERF012 — the body is a ~40-byte sha; block-form peek would hand strip a temp view
-    if (!is_valid_toolchain_id(toolchain)) {
+    var faithful = false
+    let toolchain = body_toolchain_of(req, faithful)
+    if (!faithful || !is_valid_toolchain_id(toolchain)) {
         log_request("POST", "/api/build/toolchain", 400, ip, length(toolchain), 0, t0)
         return resp |> JSON(write_json(JV((error = "malformed toolchain id"))), http_status.BAD_REQUEST)
     }
@@ -342,8 +353,9 @@ def private handle_build_next(var req : HttpRequest?; var resp : HttpResponse?) 
     let ip = client_ip_of(req)
     // the body names the BUILDER's toolchain — a claim only ever hands out
     // jobs minted for the toolchain that will actually build them
-    let toolchain = strip(string(req.body)) // nolint:PERF012 — the body is a ~40-byte sha; block-form peek would hand strip a temp view
-    if (!is_valid_toolchain_id(toolchain)) {
+    var faithful = false
+    let toolchain = body_toolchain_of(req, faithful)
+    if (!faithful || !is_valid_toolchain_id(toolchain)) {
         log_request("POST", "/api/build/next", 400, ip, length(toolchain), 0, t0)
         return resp |> JSON(write_json(JV((error = "malformed toolchain id"))), http_status.BAD_REQUEST)
     }
@@ -389,7 +401,7 @@ def private parse_result_manifest(text : string) : array<ArtifactFile> {
         seen |> insert(name)
         out |> push(ArtifactFile(name = name, sha256 = sha))
     }
-    if (length(out) > 16) {
+    if (length(out) > MAX_ARTIFACT_MANIFEST_ENTRIES) {
         out |> clear()
     }
     return <- out
@@ -475,9 +487,11 @@ def private handle_build_result(var req : HttpRequest?; var resp : HttpResponse?
     }
     for (f in files) {
         // multipart part content is binary; save_form_file writes the raw part
-        // bytes — never read a file part through a das string
-        if (save_form_file(req, f.name, path_join(stage, f.name)) != 200) {
-            rmdir_rec(stage)
+        // bytes — never read a file part through a das string. The destination
+        // path comes from build_artifacts, which owns cache path assembly.
+        let dest = stage_file_path(stage, f.name)
+        if (empty(dest) || save_form_file(req, f.name, dest) != 200) {
+            discard_stage(stage)
             log_request("POST", "/api/build/result", 400, ip, raw_bytes, 0, t0)
             return resp |> JSON(write_json(JV((error = "missing file part {f.name}"))), http_status.BAD_REQUEST)
         }
@@ -560,6 +574,8 @@ def private handle_build_request(var req : HttpRequest?; var resp : HttpResponse
     enqueue_build(g_db, hash, toolchain, BUILD_MODE_MODULE, current_unix_time())
     let body = build_status_payload(hash, toolchain)
     resp |> set_header("Cache-Control", "no-store")
+    // the payload carries the stored compiler error, which is user-derived text
+    resp |> set_header("X-Content-Type-Options", "nosniff")
     log_request("POST", "/api/build/request/:hash", 200, ip, 0, length(body), t0)
     return resp |> JSON(body)
 }
@@ -580,6 +596,8 @@ def private handle_build_status(var req : HttpRequest?; var resp : HttpResponse?
     let st = build_status(g_db, hash, toolchain)
     let body = build_status_payload(hash, toolchain)
     resp |> set_header("Cache-Control", "no-store")
+    // the payload carries the stored compiler error, which is user-derived text
+    resp |> set_header("X-Content-Type-Options", "nosniff")
     let status = st.found ? http_status.OK : http_status.NOT_FOUND
     log_request("GET", "/api/build/status/:hash", int(status), ip, 0, length(body), t0)
     return resp |> JSON(body, status)
@@ -601,7 +619,7 @@ def private handle_build_artifact(var req : HttpRequest?; var resp : HttpRespons
     resp |> set_header("Cache-Control", "public, max-age=31536000, immutable")
     resp |> set_header("X-Content-Type-Options", "nosniff")
     let rc = resp |> SERVE_FILE(path)
-    log_request("GET", "/api/build/artifact", int(rc), ip, 0, int(stat(path).size), t0)
+    log_request("GET", "/api/build/artifact", int(rc), ip, 0, artifact_size(path), t0)
     return rc
 }
 

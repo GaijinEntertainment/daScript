@@ -10,7 +10,6 @@ require daslib/fio
 require buildd_config public
 require buildd_core public
 require buildd_client public
-require strings
 
 //! Lifecycle and orchestration: the loopback health/shutdown server plus the
 //! poll → build → upload loop. One job at a time, on the tick thread — a
@@ -107,7 +106,18 @@ def private run_one_job(job : ClaimedBuild) {
     //! saw must never be left to the stale-requeue sweep.
     g_job_counter ++
     let t0 = ref_time_ticks()
-    let root = path_join(scratch_root(), "dasweb-build-{g_job_counter}-{slice(job.hash, 0, 12)}")
+    // Unpredictable, freshly created, and ours: a name derived from the job
+    // would be guessable by anyone with a local account on this box, who could
+    // then pre-create the output directory or plant a symlink in it before the
+    // build runs.
+    var mk_err = ""
+    let root = create_temp_directory("dasweb-build-", mk_err)
+    if (empty(root)) {
+        logger_error("buildd", "cannot create scratch dir: {mk_err}", JV((hash = job.hash)))
+        upload_failure(g_cfg.server_url, g_cfg.token, job.hash, job.toolchain,
+            "builder could not allocate scratch space")
+        return
+    }
     let src_dir = path_join(root, "src")
     let out_dir = path_join(root, "out")
     mkdir_rec(src_dir)
@@ -115,6 +125,8 @@ def private run_one_job(job : ClaimedBuild) {
     logger_info("buildd", "job start", JV((hash = job.hash, mode = job.mode, toolchain = job.toolchain)))
     let entry = unpack_sources(src_dir, job.source)
     if (empty(entry)) {
+        logger_warning("buildd", "job failed: malformed source document",
+            JV((hash = job.hash, duration_ms = get_time_usec(t0) / 1000)))
         upload_failure(g_cfg.server_url, g_cfg.token, job.hash, job.toolchain,
             "malformed source document")
     } else {
@@ -128,6 +140,8 @@ def private run_one_job(job : ClaimedBuild) {
         } else {
             let files <- collect_artifacts(out_dir, job.mode)
             if (empty(files)) {
+                logger_warning("buildd", "job failed: no artifacts collected",
+                    JV((hash = job.hash, mode = job.mode, duration_ms = get_time_usec(t0) / 1000)))
                 upload_failure(g_cfg.server_url, g_cfg.token, job.hash, job.toolchain,
                     "build produced no artifacts\n{r.output}")
             } elif (upload_success(g_cfg.server_url, g_cfg.token, job.hash, job.toolchain, files)) {

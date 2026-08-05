@@ -17,10 +17,6 @@ require strings
 //! produces; validation here exists to fail fast and to keep user-authored
 //! names from ever becoming interesting paths on this box.
 
-//! What a build may produce; must stay within what the server serves
-//! (build_artifacts.das is authoritative).
-let ALLOWED_OUTPUT_SUFFIXES = fixed_array(".wasm", ".js", ".html", ".data", ".css")
-
 struct BuiltFile {
     name : string
     sha256 : string
@@ -64,8 +60,32 @@ def is_valid_source_filename(name : string) : bool {
     return is_boring_component(name, fixed_array(".das"))
 }
 
-def is_valid_output_filename(name : string) : bool {
-    return is_boring_component(name, ALLOWED_OUTPUT_SUFFIXES)
+def private is_lower_hex(s : string; min_len : int; max_len : int) : bool {
+    let n = length(s)
+    if (n < min_len || n > max_len) {
+        return false
+    }
+    var ok = true
+    peek_data(s) $(bytes) {
+        for (b in bytes) {
+            let c = int(b)
+            if (!(is_number(c) || (c >= 'a' && c <= 'f'))) {
+                ok = false
+            }
+        }
+    }
+    return ok
+}
+
+def is_valid_job_hash(h : string) : bool {
+    //! A claimed job's hash becomes a scratch directory name here, so its shape
+    //! is checked on arrival rather than trusted: this service talks to a
+    //! server over the network, and "the server said so" is not validation.
+    return is_lower_hex(h, 64, 64)
+}
+
+def is_valid_job_toolchain(t : string) : bool {
+    return is_lower_hex(t, 7, 64)
 }
 
 def unpack_sources(src_dir : string; source : string) : string {
@@ -137,7 +157,7 @@ def expected_artifact_names(mode : string) : array<string> {
     //! writes into this directory with the user's own compile-time code, so
     //! anything it drops beside the real output would otherwise be uploaded
     //! and served publicly. Empty = the mode publishes nothing (page mode
-    //! defines its set when the game checkpoint wires it).
+    //! defines its set when the page checkpoint wires it).
     if (mode == "module") {
         return <- ["sample.wasm"]
     }
@@ -168,6 +188,17 @@ def collect_artifacts(out_dir : string; mode : string) : array<BuiltFile> {
     out |> reserve(length(wanted))
     for (name in wanted) {
         let full = path_join(out_dir, name)
+        // A symlink here is an attack, not an artifact: the build writes this
+        // directory with the user's own compile-time code, and everything
+        // downstream (stat, hashing, the multipart upload) reads the path on
+        // the HOST, outside the sandbox. Pointed at a host file, that
+        // publishes it. Refuse the job rather than resolve the link.
+        var link_err = ""
+        if (is_symlink(full, link_err)) {
+            logger_error("buildd.core", "refusing symlinked artifact", JV((name = name, mode = mode)))
+            out |> clear()
+            return <- out
+        }
         let st = stat(full)
         if (!st.is_valid || !st.is_reg) {
             logger_error("buildd.core", "expected artifact missing", JV((name = name, mode = mode)))

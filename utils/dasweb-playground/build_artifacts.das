@@ -126,6 +126,29 @@ def create_stage_dir(blobs_dir : string) : string {
     return stage
 }
 
+def stage_file_path(stage_dir : string; name : string) : string {
+    //! Where one uploaded part lands inside a staging dir; "" when the name is
+    //! not one this cache would ever serve. Path assembly for the artifact
+    //! cache lives in this file, so there is one place to audit it.
+    if (empty(stage_dir) || !is_valid_artifact_filename(name)) {
+        return ""
+    }
+    return path_join(stage_dir, name)
+}
+
+def discard_stage(stage_dir : string) {
+    //! Drop a staging dir and everything in it — the failure path of an upload.
+    if (!empty(stage_dir)) {
+        rmdir_rec(stage_dir)
+    }
+}
+
+def artifact_size(path : string) : int {
+    //! Byte size for the request log; 0 when the path is not a readable file.
+    let st = stat(path)
+    return st.is_valid && st.is_reg ? int(st.size) : 0
+}
+
 def finalize_artifact(blobs_dir : string; toolchain : string; hash : string; stage_dir : string; files : array<ArtifactFile> const) : bool {
     //! Verify every staged file against its manifest sha, then rename the stage
     //! into place. The stage dir is consumed either way, so a failed upload
