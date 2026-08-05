@@ -122,7 +122,7 @@ def private parse_perm(gc : LlvmCodeCtx) : TilePerm {
 // The ONE decline predicate all four generators share — the tile and its companions must
 // fall back together on every rail, or repack and kernel desync (the two-function-stamp
 // contract). Rails: knob validity, schema, per-ISA leg, geometry, vreg budget, dot availability.
-def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool {
+def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint:STYLE037,STYLE038 — the flat decline ladder IS the perm contract; splitting hides which leg refused
     if (p.dotPrim == "amx_int8") {
         // the TMUL leg: 2×2 TDPBSSD macro over the grp16/kg4 plane; kstep pinned 1 (Q8's per-block scale boundary); Linux-only (arch_prctl enable)
         if ((p.kstep != 1)
@@ -927,7 +927,7 @@ def private or_bit_x10(te : TileEmit; var w, bytes, maskv : LLVMOpaqueValue?; na
 // One 256-weight SUPERBLOCK, K-quant grp<mr> form (te.kq = 4/5/6): weight vectors unpacked
 // ONCE per (sub-block, dword-group) and dotted against every token — weight-stationary,
 // bit-exact vs per-token GEMVs (tokCount=1). kq v2 folds integer sub-scales/bsums against Q8_K-form activations (the lcpp scheme).
-def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f : LLVMOpaqueValue? [8]; tokBase, tokCount : int) {
+def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f : LLVMOpaqueValue? [8]; tokBase, tokCount : int) { // nolint:STYLE037,STYLE038 — one register-coupled superblock loop nest; the k-quant decode arms share live values
     let b = te.builder
     let rq = te.rq
     let mr = te.interleave
@@ -1236,7 +1236,7 @@ struct private SliceArgs {
 // One accumulator slice: the whole k loop for tokens [tokBase, tokBase+tokCount), then the
 // per-token float-vector stores. `pred` must be terminator-free; returns the slice's merge
 // block (also terminator-free). Main loop runs kstep blocks/iteration; remainder is a kstep-1 conditional chain.
-def private emit_slice(var te : TileEmit; var sa : SliceArgs; var pred : LLVMOpaqueBasicBlock?; tokBase, tokCount : int; sfx : string) : LLVMOpaqueBasicBlock? {
+def private emit_slice(var te : TileEmit; var sa : SliceArgs; var pred : LLVMOpaqueBasicBlock?; tokBase, tokCount : int; sfx : string) : LLVMOpaqueBasicBlock? { // nolint:STYLE038 — the block/phi plumbing of one tile slice is a single control-flow unit
     let b = te.builder
     let K = sa.kstep
     let nacc = tokCount * te.rq
@@ -1333,9 +1333,9 @@ def private emit_slice(var te : TileEmit; var sa : SliceArgs; var pred : LLVMOpa
     var fF : LLVMOpaqueValue? [8]
     for (i in range(nacc)) {
         fF[i] = LLVMBuildPhi(b, te.vnf32, "ff{tokBase + i / te.rq}")
-        for (m in range(length(mergeBlocks))) {
-            var iv <- [mergeF[m][i]]
-            var ib <- [mergeBlocks[m]]
+        for (mb, mf in mergeBlocks, mergeF) {
+            var iv <- [mf[i]]
+            var ib <- [mb]
             LLVMAddIncoming(fF[i], iv, ib)
         }
     }
@@ -1356,7 +1356,7 @@ def private emit_slice(var te : TileEmit; var sa : SliceArgs; var pred : LLVMOpa
 // width-derived types + the per-ISA dot machinery for one generator invocation; false =
 // decline (belt — perm_declines already gated the same rails). needMx4 additionally wires the
 // LUT-dequant primitive (tbl1 / pshufb) and bakes the doubled-e2m1 LUT constant.
-def private setup_tile_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePerm; needMx4 : bool) : bool {
+def private setup_tile_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePerm; needMx4 : bool) : bool { // nolint:STYLE037,STYLE038 — per-perm type/width/plane setup is one coherent table
     let rt = q8q8_repack_type(p.mr, p.bias, kgroup_of(p))
     te.builder = gc.jit.builder
     te.types = gc.jit.types
@@ -1592,7 +1592,7 @@ def private amx_store(var te : TileEmit; nt, r, ts : int; var cd, reg : LLVMOpaq
 // The TMUL batch tile: one call covers 16·nt tokens × nt grp16 row-groups (nt = nrsplit).
 // Per 32-k block: nt B/A tile loads, nt² tilezero->TDPBSSD->tilestore-to-scratch, then the
 // scale fold f32-accumulates INTO yp — yp IS the k-loop accumulator (no register holds 32×32 f32 across blocks).
-def private emit_amx_tile(var gc : LlvmCodeCtx; p : TilePerm; f16s : bool) : bool {
+def private emit_amx_tile(var gc : LlvmCodeCtx; p : TilePerm; f16s : bool) : bool { // nolint:STYLE038 — the AMX tile body is barrier-coupled; phases share tile registers
     var te = TileEmit(sgF16 = f16s)
     if (!setup_amx_emit(te, gc, p)) return false
     let b = gc.jit.builder
@@ -1738,7 +1738,7 @@ def private amx_fold_tile(var te : TileEmit; var region, bi, ws : LLVMOpaqueValu
 // The software-pipelined TMUL batch tile (double-buffered C, lcpp mmq.cpp): same contract as
 // emit_amx_tile, but the per-block scale fold is deferred one k-iteration — block bi's
 // TDPBSSD spills into C[cur] while block bi−1's fold reads C[pre], overlapping TMUL with the vector fold.
-def private emit_amx_tile_pipelined(var gc : LlvmCodeCtx; p : TilePerm; f16s : bool) : bool {
+def private emit_amx_tile_pipelined(var gc : LlvmCodeCtx; p : TilePerm; f16s : bool) : bool { // nolint:STYLE037,STYLE038 — the software-pipelined AMX schedule is one register-coupled loop
     var te = TileEmit(sgF16 = f16s)
     if (!setup_amx_emit(te, gc, p)) return false
     let b = gc.jit.builder

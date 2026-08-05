@@ -285,7 +285,7 @@ def whisper_encode_bucket : string {
 //! Quantizes the decoder's GEMM set to Q8_0 COMPACT planes: per-layer self/cross mats + fc1/fc2
 //! dense in dqblob; the tied token embedding gets a q8 copy (the logits GEMV weight) while its
 //! fp32 rows STAY in dblob for lookups; dblob is replaced by the non-GEMM remainder.
-def whisper_dec_quantize(var st : WhisperStaging) { // nolint:STYLE037 — the walk mirrors dec_layer_offsets field-for-field; splitting would decouple the two orders
+def whisper_dec_quantize(var st : WhisperStaging) {
     let d = st.e.n_text_state
     let ff = 4l * d
     if (d % 32l != 0l) {
@@ -341,7 +341,7 @@ def whisper_dec_quantize(var st : WhisperStaging) { // nolint:STYLE037 — the w
     st.e.d_ln_b_off = tq_keep(nf, st.dblob, of, st.e.d_ln_b_off, d)
     verify(og == qtotal)
     delete st.dblob
-    st.dblob <- nf   // nolint:PERF030 — the full blob is released on the line above
+    st.dblob <- nf
     st.e.dq8 = true
     if (!select_matmul_backend_for_load()) {
         return   // row-major backend reads the dense Q8_0 planes as-is
