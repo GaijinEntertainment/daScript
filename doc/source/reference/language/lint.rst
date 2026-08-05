@@ -2476,6 +2476,39 @@ disables the rule for the module — the right escape for a legitimately dense
 file such as a code emitter or a ported kernel. Suppress a single deliberate
 keep with ``// nolint:STYLE038`` on the ``def`` line.
 
+STYLE039 — condition collapses to a single comparison
+======================================================
+
+A chain of comparisons on one ``int`` variable often describes a simpler range
+than it looks::
+
+    // Bad
+    if (x != 1 && x > 0) { ... }      // STYLE039
+    if (x > 5 && x > 3)  { ... }      // STYLE039
+    if (x > 0 && x < 2)  { ... }      // STYLE039
+
+    // Good
+    if (x >= 2) { ... }
+    if (x >= 6) { ... }
+    if (x == 1) { ... }
+
+This is **not** a redundant operand: in ``x != 1 && x > 0`` neither operand
+implies the other, so subsumption cannot find it. The merge is an integer-range
+fact — ``x > 0`` and ``x != 1`` leave exactly ``x >= 2``.
+
+The rule evaluates the ``&&`` / ``||`` / ``!`` tree on an interval lattice, the
+same domain LLVM's ``ConstantRange`` and Clang's ``RangeConstraintManager`` use:
+each comparison becomes a set of allowed values (``x > 0`` is ``[1, MAX]``,
+``x != 1`` is ``[MIN, 0] + [2, MAX]``), ``&&`` intersects, ``||`` unites, ``!``
+complements. If the result is one interval bounded on a single side, one point,
+or the complement of one point, it is reported as that comparison. No solver
+involved.
+
+Silent when: the result is a genuine two-sided range or two disjoint intervals
+(no single comparison is equivalent), more than one variable appears, the
+condition is already a single comparison, or the operands are not ``int``. An
+always-true condition belongs to STYLE010, not here.
+
 ------------------------------------------------------
 SMT001–SMT008 — solver-backed reachability and defects
 ------------------------------------------------------
