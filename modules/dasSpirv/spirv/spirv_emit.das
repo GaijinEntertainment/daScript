@@ -1,4 +1,8 @@
 options gen2
+// A codegen emitter: the big functions are flat opcode dispatch (visitExprCall is 272 branches over
+// the SPIR-V instruction set), where splitting hides the mapping instead of clarifying it.
+options _cyclomatic_complexity = 0
+options _function_length = 0
 
 // daslang AST -> SPIR-V codegen via the SpirvEmit AstVisitor (modeled on llvm_jit's SSA backend).
 // SPIR-V's value/pointer model (SSA + OpAccessChain) is threaded through per-node side-maps: e2id for

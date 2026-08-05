@@ -21,6 +21,13 @@
     var onOutput = null;    // set by main.js: (text, color) => void
     var onExit = null;
 
+    // A spare that aborts never becomes ready, and readiness is what gates the Run
+    // button — so a single failed runtime fetch would leave the page dead until
+    // reload. Rebuild it instead, but bounded: if the runtime is genuinely
+    // unreachable, retrying forever just spawns frames.
+    var spareAborts = 0;
+    var MAX_SPARE_ABORTS = 3;
+
     function makeFrame() {
         var rec = { el: document.createElement("iframe"), ready: false, used: false };
         rec.el.src = FRAME_SRC;
@@ -86,6 +93,7 @@
         switch (msg.type) {
             case "ready":
                 rec.ready = true;
+                if (rec === spare) spareAborts = 0;
                 if (typeof window.updateButtonStates === "function") window.updateButtonStates();
                 if (rec.pending) { var p = rec.pending; rec.pending = null; send(rec, p); }
                 break;
@@ -97,6 +105,12 @@
                 break;
             case "aborted":
                 if (onOutput) onOutput("runtime aborted: " + msg.message, "#ff2d2d");
+                if (rec === spare) {
+                    destroy(spare);
+                    spare = null;
+                    if (++spareAborts <= MAX_SPARE_ABORTS) ensureSpare();
+                    if (typeof window.updateButtonStates === "function") window.updateButtonStates();
+                }
                 break;
             case "canvas-visible":
                 if (msg.width > 0 && msg.height > 0) rec.aspect = msg.height / msg.width;

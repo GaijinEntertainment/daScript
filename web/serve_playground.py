@@ -12,7 +12,6 @@ Then just:
     python serve_playground.py            # http://127.0.0.1:8791/playground/
 """
 import argparse
-import functools
 import http.server
 import os
 import shutil
@@ -20,8 +19,12 @@ import socketserver
 import sys
 import urllib.request
 
-REPO = os.environ.get("DASWEB_REPO", r"D:\Work\daScript-dasweb")
-SERVE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_serve")
+# Derived from this file's location, not hardcoded: the script lives in the tree it
+# serves, so a checkout or worktree other than the author's would otherwise stage the
+# WRONG tree's sources and say nothing about it. DASWEB_REPO still overrides.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.environ.get("DASWEB_REPO") or os.path.dirname(_HERE)
+SERVE = os.path.join(_HERE, "_serve")
 SITE = "https://daslang.io/"
 
 # repo path -> served path
