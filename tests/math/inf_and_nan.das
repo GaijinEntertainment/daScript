@@ -44,6 +44,24 @@ def geq(a, b) {
     return a >= b
 }
 
+[sideeffects]
+def opaque(x) {
+    return x
+}
+
+[test]
+def test_abs_clears_the_sign_of_zero(t : T?) {
+    // abs(-0.0) is +0.0 in IEEE, and the bit pattern is the only way to see the sign
+    t |> run("folded") @@(t : T?) {
+        t |> equal(unsafe(reinterpret<uint>(abs(-0.0f))), 0u)
+        t |> equal(unsafe(reinterpret<uint64>(abs(-0.0lf))), 0ul)
+    }
+    t |> run("runtime") @@(t : T?) {
+        t |> equal(unsafe(reinterpret<uint>(abs(opaque(-0.0f)))), 0u)
+        t |> equal(unsafe(reinterpret<uint64>(abs(opaque(-0.0lf)))), 0ul)
+    }
+}
+
 [test]
 def test_inf_and_nan(t : T?) {
     if (host_folds_non_finite()) {
