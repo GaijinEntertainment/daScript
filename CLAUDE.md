@@ -274,6 +274,7 @@ diagnostic in any tier.
 | `def f(var why : string)` written on a path but never read | `var why : string&` - a by-value copy's write never reaches the caller | LINT023 |
 | bare `resize(need)` on an input-scaled buffer (frames, pixels, vocab) | declare it `@exact_size`; then `reserve`/`ensure_capacity` before every `resize` (or size it through `reserve_resize`-style helpers) | PERF032 - the annotation is a lint contract; the guard panics only when the big input arrives |
 | `-const` `-&` `-[]` `-#` `==const` `==&` on a **concrete** cast target | drop the contract | STYLE036: substitution contracts act only while a generic binds - inert on concrete targets |
+| `if (x != 1 && x > 0)` / `if (x > 5 && x > 3)` (one `int` variable) | `if (x >= 2)` / `if (x >= 6)` | STYLE042: the `&&`/`\|\|`/`!` tree is evaluated on an interval lattice, so comparisons that *merge* - not merely subsume - collapse. Silent on two-sided ranges, disjoint unions, >1 variable, non-`int`, already-single comparisons |
 | `slice(s, i, j)` / `chop(s, i, n)` in a loop over an outer string | `peek_data(s) $(d)` and slice the view | PERF031: each call re-strlens the whole source - O(n^2); every haystack op has a byte-view twin |
 
 For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/...) - see `skills/daslang/references/files-and-paths.md`. Never hand-roll `rfind("/")` + slice: misses Windows separators.
