@@ -1261,6 +1261,14 @@ char * das_httpreq_get_url_encoded ( HttpRequest * req, const char * key, Contex
 class Module_HV : public Module {
 public:
     Module_HV() : Module("dashv") {
+#ifdef _WIN32
+        // libhv's client path initializes Winsock lazily; the server start()
+        // path does not, so a server started before any client call fails
+        // with WSANOTINITIALISED (-10093) — a race every threaded test
+        // harness sits on. Initialize once here, before any context runs.
+        WSADATA wsaData;
+        WSAStartup(MAKEWORD(2, 2), &wsaData);
+#endif
         // libhv defaults to file_logger (bin/libhv.YYYYMMDD.log). Invisible
         // under popen + CI runners. Two env-gated opt-outs:
         //   DASLIVE_HV_LOG=stderr (or =1)  → redirect libhv to stderr
