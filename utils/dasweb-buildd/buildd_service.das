@@ -7,6 +7,7 @@ require dashv/dashv_boost public
 require daslib/json_boost
 require daslib/logger
 require daslib/fio
+require daslib/random
 require buildd_config public
 require buildd_core public
 require buildd_client public
@@ -92,12 +93,31 @@ def init_service(cfg : BuilddArgs) : bool {
     return true
 }
 
-def private scratch_root : string {
-    if (!empty(g_cfg.scratch_dir)) {
-        return g_cfg.scratch_dir
+def private new_scratch_dir(var error : string&) : string {
+    //! A freshly created, unguessable directory for one job. Unguessable
+    //! because a name a local account can predict could be pre-created, or have
+    //! a symlink planted inside it, before the build writes there.
+    //!
+    //! An operator who configured `scratch_dir` gets it honoured — that is how
+    //! builds are placed on a service-owned or roomier filesystem, and how the
+    //! parent's permissions (0700, per README) keep other accounts out.
+    //! Unset falls back to the system temp dir.
+    if (empty(g_cfg.scratch_dir)) {
+        return create_temp_directory("dasweb-build-", error)
     }
-    var err = ""
-    return temp_directory(err)
+    mkdir_rec(g_cfg.scratch_dir)
+    var seed = random_seed(int(int64(get_clock())) + g_job_counter)
+    for (_attempt in range(16)) {
+        let candidate = path_join(g_cfg.scratch_dir,
+            "dasweb-build-{uint(random_int(seed))}-{uint(random_int(seed))}")
+        // mkdir is create-or-fail: an existing directory is refused rather than
+        // reused, so a collision (or a pre-created name) cannot be walked into.
+        if (mkdir(candidate)) {
+            return candidate
+        }
+    }
+    error = "could not create a scratch dir under {g_cfg.scratch_dir}"
+    return ""
 }
 
 def private run_one_job(job : ClaimedBuild) {
@@ -111,7 +131,7 @@ def private run_one_job(job : ClaimedBuild) {
     // then pre-create the output directory or plant a symlink in it before the
     // build runs.
     var mk_err = ""
-    let root = create_temp_directory("dasweb-build-", mk_err)
+    let root = new_scratch_dir(mk_err)
     if (empty(root)) {
         logger_error("buildd", "cannot create scratch dir: {mk_err}", JV((hash = job.hash)))
         upload_failure(g_cfg.server_url, g_cfg.token, job.hash, job.toolchain,
@@ -147,6 +167,19 @@ def private run_one_job(job : ClaimedBuild) {
             } elif (upload_success(g_cfg.server_url, g_cfg.token, job.hash, job.toolchain, files)) {
                 logger_info("buildd", "job done",
                     JV((hash = job.hash, files = length(files), duration_ms = get_time_usec(t0) / 1000)))
+            } else {
+                // The build worked; publishing it did not. A server that
+                // REFUSED the artifact is reachable, so say so and let the user
+                // see a failure now instead of waiting out the claim timeout.
+                // Only a genuinely unreachable server falls through to the
+                // stale-claim sweep, which is what that sweep is for.
+                logger_error("buildd", "artifact upload refused; reporting the job failed",
+                    JV((hash = job.hash, duration_ms = get_time_usec(t0) / 1000)))
+                if (!upload_failure(g_cfg.server_url, g_cfg.token, job.hash, job.toolchain,
+                        "the builder could not publish this build's artifact")) {
+                    logger_error("buildd", "claim left unresolved: server unreachable",
+                        JV((hash = job.hash, toolchain = job.toolchain)))
+                }
             }
         }
     }

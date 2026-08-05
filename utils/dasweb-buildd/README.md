@@ -83,11 +83,15 @@ Podman passes no host environment through, so a token in this service's environm
 visible to a build. There is deliberately **no** unsandboxed fallback: no podman or no image
 means no build.
 
-Two deployment requirements that are part of the boundary, not decoration. This service must
+Three deployment requirements that are part of the boundary, not decoration. This service must
 run under a **dedicated, sudo-less account** — on a box where the login user has passwordless
-sudo, a sandbox escape as that user is a root compromise. And its bearer token must reach it
+sudo, a sandbox escape as that user is a root compromise. Its bearer token must reach it
 without becoming a readable file inside any mount (systemd `LoadCredential`, or the
-environment, which podman does not forward).
+environment, which podman does not forward). And `scratch_dir` should point at a
+**service-owned directory with mode 0700**: each job gets an unguessable subdirectory of it, and
+the parent's permissions are what keep other local accounts from reading a build's sources or
+planting anything in its output. Leaving `scratch_dir` empty uses the system temp directory
+instead, which is fine on a single-purpose box and not on a shared one.
 
 Verified on zen4 by building a hostile sample: a compile-time `[init]` that `fread`s
 `~/SETUP.md`, `~/.ssh/authorized_keys` and `/etc/shadow` gets **0 bytes** from each, a planted
