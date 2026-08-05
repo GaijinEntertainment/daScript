@@ -27,7 +27,13 @@ handle /api/samples* {
 # They are bearer-gated, so the allowance is spendable only by a token holder.
 # Listed before the public block below, which would otherwise match them —
 # Caddy takes the first matching handle.
-handle /api/build/next /api/build/result /api/build/toolchain {
+#
+# The named matcher is required, not stylistic: `handle` itself takes exactly
+# ONE path token, so `handle /a /b /c { ... }` is a parse error
+# ("Wrong argument count or unexpected line ending"). Verified with
+# `caddy validate` before this was applied.
+@build_upload path /api/build/next /api/build/result /api/build/toolchain
+handle @build_upload {
 	request_body {
 		max_size 64MB
 	}
