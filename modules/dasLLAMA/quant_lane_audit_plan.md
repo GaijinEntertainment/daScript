@@ -211,6 +211,28 @@ The x86 audio gap has the same anatomy as the q51 hole, in the fp32 lane:
   from scratch), or the q8 trio's integer-exact block dots vs long fp32 reduction chains
   change the leg's noise structure. Struct layout grew (meta 17+2, two new sections) —
   stale tower dlims (ASR x2 + Omni x1) deleted by hand; identity does not see code changes.
+## Review response (PR #3629, six-agent Opus review, 2026-08-05)
+
+- Mechanical batch (response 1/2): IMAGE_VERSION 8, --kv f32 arm + probe validation,
+  profiler disarm, pin-leak fix, RPE wrapper, family kv defaults f16, mtmd log-line filter
+  (the capture merges stderr), rel-rms cell moved to the image suite, inscope sweep,
+  doc-truth pass; CODEREVIEW.md gains the Documentation section; followup 18 = tutorial
+  resync; CLAUDE.md comment cap reworded to match STYLE014 (rest of the lint threshold
+  question = Boris's separate session).
+- **COMPACT q8 planes (response 2/2, the auditor's memory UNPROVEN -> a fix)**: the shared
+  AudioTower core, the whisper decoder rail, and the qwen3a cblob trio all stop carrying
+  fp32 copies of their GEMM regions — dense q planes + a compact fp32 remainder, offsets
+  rewritten at quantize (formulaic layers got a q8-branch offset formula; whisper's tied
+  te keeps an fp32 copy for row lookups + a q8 copy for the logits GEMV). The STREAMED
+  whisper mint got the same split (job-filtered per-plane walks + offsets-only twins);
+  the streamed-vs-staged image cell is the consistency gate between the two builders —
+  it caught the first attempt's length mismatch exactly as designed. Measured images:
+  Omni tower 3167 -> 708 MB (-78%), qwen3a tower 911 -> 212 MB (-77%), whisper tiny
+  185 -> 120 MB; large-v3-turbo re-mints at next use (projected ~3954 -> ~1.2 GB).
+  parakeet/canary/gemma4a were already compact. Gates: image arms 30/0 from cold
+  (streamed cell green), PARITY_FULL test_whisper 35/35 zero skips (all frozen-id oracles
+  token-exact on compact planes), asr_verbs 6/6.
+
   (c) CLOSED 2026-08-05: PARITY_FULL test_whisper 37/37 zero skips — the Omni oracle held
   full frozen token-for-token ids on all three clips with the trio q8 armed (its tower
   cold-minted the new-layout dlim in the same run); canary oracle green as the

@@ -42,7 +42,7 @@ struct Qwen3aTower {
     n_ch : int64                       // conv channel count (480)
     cq8 : bool = false                 // cblob GEMM trio (cout/mm1/mm2) quantized: qcblob/qcscales armed
     cblob : PlaneF = PlaneF()
-    qcblob : PlaneI8 = PlaneI8()       // whole-cblob-shaped Q8_0 quants (trio regions repacked in place)
+    qcblob : PlaneI8 = PlaneI8()       // dense trio Q8_0 planes (cblob keeps just the non-GEMM rest)
     qcscales : PlaneF = PlaneF()       // per-32-block scales, indexed at woff/32
     c1_w_off : int64                   // conv2d weights, file order [oc][ic][kh][kw] (= im2col col order)
     c1_b_off : int64
@@ -297,19 +297,43 @@ def stage_qwen3a_tower(path : string) : Qwen3aStaging {
     return <- st
 }
 
-// whole-cblob Q8_0 image + trio repack (cout/mm1/mm2) — the core's recipe; convs, positions,
-// and biases stay fp32 (quantized-but-unread, cblob remains their truth)
-def private q3a_cblob_quantize(var t : Qwen3aTower; cblob : array<float>; var qblob : array<int8>; var qscales : array<float>) {
-    let total = long_length(cblob) & ~31l
-    qblob |> resize(total)
-    qscales |> resize(total / 32l)
-    quantize_q8_0_into(cblob, total, qblob, qscales, 0l, 0l)
+// dense trio planes (cout/mm1/mm2) + compact cblob — the tower recipe; convs, positions, and
+// biases keep their fp32 truth, every stored offset is rewritten to its serving plane
+def private q3a_cblob_quantize(var t : Qwen3aTower; var cblob : array<float>; var qblob : array<int8>; var qscales : array<float>) {
+    let d = t.core.d_model
+    let feat = 16l * t.n_ch
+    if (d % 32l != 0l || feat % 32l != 0l || t.proj_dim % 32l != 0l) {
+        panic("qwen3a cblob q8: d {d} / feat {feat} / proj {t.proj_dim} are not 32-multiples — the compact trio cannot serve this tower")
+    }
+    let qtotal = d * feat + d * d + t.proj_dim * d
+    qblob |> resize(qtotal)
+    qscales |> resize(qtotal / 32l)
+    var nf : array<float>
+    nf |> resize(long_length(cblob) - qtotal)
+    var og = 0l
+    var of = 0l
+    let nch = t.n_ch
+    t.c1_w_off = tq_keep(nf, cblob, of, t.c1_w_off, nch * 9l)
+    t.c1_b_off = tq_keep(nf, cblob, of, t.c1_b_off, nch)
+    t.c2_w_off = tq_keep(nf, cblob, of, t.c2_w_off, nch * nch * 9l)
+    t.c2_b_off = tq_keep(nf, cblob, of, t.c2_b_off, nch)
+    t.c3_w_off = tq_keep(nf, cblob, of, t.c3_w_off, nch * nch * 9l)
+    t.c3_b_off = tq_keep(nf, cblob, of, t.c3_b_off, nch)
+    t.cout_w_off = tq_quant(qblob, qscales, cblob, og, t.cout_w_off, d * feat)
+    t.cout_b_off = tq_keep(nf, cblob, of, t.cout_b_off, d)
+    t.pos_off = tq_keep(nf, cblob, of, t.pos_off, QWEN3A_TOK_PER_CHUNK * d)
+    t.mm1_w_off = tq_quant(qblob, qscales, cblob, og, t.mm1_w_off, d * d)
+    t.mm1_b_off = tq_keep(nf, cblob, of, t.mm1_b_off, d)
+    t.mm2_w_off = tq_quant(qblob, qscales, cblob, og, t.mm2_w_off, t.proj_dim * d)
+    t.mm2_b_off = tq_keep(nf, cblob, of, t.mm2_b_off, t.proj_dim)
+    verify(og == qtotal)
+    delete cblob
+    cblob <- nf   // nolint:PERF030 — the full blob is released on the line above
     t.cq8 = true
     if (!select_matmul_backend_for_load()) {
-        return   // row-major backend reads the flat Q8_0 image as-is
+        return   // row-major backend reads the dense Q8_0 planes as-is
     }
-    let d = t.core.d_model
-    tw_repack(qblob, qscales, t.cout_w_off, 16l * t.n_ch, d)
+    tw_repack(qblob, qscales, t.cout_w_off, feat, d)
     tw_repack(qblob, qscales, t.mm1_w_off, d, d)
     tw_repack(qblob, qscales, t.mm2_w_off, d, t.proj_dim)
 }
