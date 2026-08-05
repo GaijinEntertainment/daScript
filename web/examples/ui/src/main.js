@@ -23,9 +23,14 @@ pageInit = function () {
     // for why (a failed run used to poison every later run in the session).
     // The frame reports its own canvas visibility, so the getContext hook and
     // the graphics/text auto-detect moved in there with it.
+    // Take the canvas's PLACE, not just its parent: the column is a flex row, so
+    // a frame merely appended lands past #output on the far right and gets
+    // shrunk. The host stands where the canvas stood and holds every frame.
     var oldCanvas = document.getElementById("canvas");
-    var runHost = oldCanvas ? oldCanvas.parentNode : editorOutput.parentNode;
-    if (oldCanvas) oldCanvas.remove();
+    var runHost = document.createElement("div");
+    runHost.className = "pg-run-host";
+    if (oldCanvas) oldCanvas.parentNode.replaceChild(runHost, oldCanvas);
+    else editorOutput.parentNode.insertBefore(runHost, editorOutput);
     PlaygroundRunner.init(runHost, function (text, color) { printOutput(text, color); });
 
     sampleList["examples"] = document.getElementById("examples");
@@ -230,32 +235,14 @@ function updateEngineAvailability(name) {
         });
 }
 
-// Force the canvas to a true 4:3 display box matching its 640x480 drawing buffer,
-// so the shader's aspect correction is right and rotations trace circles, not
-// ovals. Set inline with !important — the highest-priority source — because the
-// column's stylesheet otherwise stretches the canvas to ~80vh (portrait). Clamped
-// to the column width; re-applied on resize.
-// The run frame holds the canvas now, so sizing applies to the frame. Keep the
-// true 4:3 box the shaders' aspect correction assumes.
-function fitCanvas() {
-    const f = document.querySelector(".pg-run-frame");
-    if (!f || f.style.display === "none") return;
-    const avail = Math.min((f.parentElement ? f.parentElement.clientWidth : 640), 640);
-    f.style.setProperty("width", avail + "px", "important");
-    f.style.setProperty("height", Math.round(avail * 3 / 4) + "px", "important");
-}
-window.addEventListener("resize", fitCanvas);
-
-// Hide the run frame. Revealing it is the frame's own call — it posts
-// canvas-visible the instant a program asks for a WebGL context, which is
-// program-driven and so works for pasted code, not just samples flagged
-// graphics in data.json.
+// Hide the run frame. Revealing and sizing it is the runner's own job — the
+// frame posts canvas-visible the instant a program asks for a WebGL context,
+// which is program-driven and so works for pasted code, not just samples
+// flagged graphics in data.json.
 function showCanvas(show) {
     if (!show) {
         const f = document.querySelector(".pg-run-frame");
         if (f) f.style.display = "none";
-    } else {
-        fitCanvas();
     }
     const o = document.getElementById("output");
     if (o) o.classList.toggle("with-canvas", show);

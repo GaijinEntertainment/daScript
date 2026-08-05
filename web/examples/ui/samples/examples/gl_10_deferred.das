@@ -256,7 +256,7 @@ def point_light(lp, lcol : float3; p, nrm, vdir : float3; shininess, spec_i, rng
 }
 
 [fragment_program]
-def lighting_fs {
+def lighting_fs {  // nolint:STYLE038 -- one fragment shader; its phases share registers
     // ----- bottom filmstrip: raw G-buffer (albedo / normal / world-pos) + SSAO + shadow -----
     let TH = 0.18
     let GAP = 0.012
@@ -597,7 +597,7 @@ def draw_scene_geometry {
 }
 
 [export]
-def update : bool {
+def update : bool {  // nolint:STYLE038 -- one frame: passes are FBO-bind-ordered, splitting hides the sequence
     time += 1.0 / 60.0
     let t = time
     var dw, dh : int
@@ -609,9 +609,9 @@ def update : bool {
     }
 
     let cam_angle = t * 0.3
-    let cam = float3(cos(cam_angle) * 4.6, 2.3, sin(cam_angle) * 4.6)
+    let cam = float3(cos(cam_angle) * 5.6, 2.3, sin(cam_angle) * 5.6)
     u_view = look_at_rh(cam, float3(0.0, 1.0, 0.0), float3(0, 1, 0))
-    u_proj = perspective_rh_opengl(50.0 * PI / 180.0, float(w) / float(h), 0.1, 60.0)
+    u_proj = perspective_rh_minus1_to_1(50.0 * PI / 180.0, float(w) / float(h), 0.1, 60.0)
     u_cam_pos = cam
     let sun_yaw = t * 0.25
     let light_dir = normalize(float3(cos(sun_yaw) * 0.6, 1.05, sin(sun_yaw) * 0.6))

@@ -233,10 +233,10 @@ def update : bool {
 
     // ===== Pass 2: render the freshly-written buffer as additive point sprites =====
     let cam_angle = t * 0.3
-    let cam_r = 3.0
+    let cam_r = 4.0
     let cam_pos = float3(cam_r * cos(cam_angle), sin(cam_angle * 2.0) * 0.5, cam_r * sin(cam_angle))
     u_view = look_at_rh(cam_pos, float3(0, 0, 0), float3(0, 1, 0))
-    u_proj = perspective_rh_opengl(60.0 * PI / 180.0, aspect, 0.1, 30.0)
+    u_proj = perspective_rh_minus1_to_1(60.0 * PI / 180.0, aspect, 0.1, 30.0)
 
     glViewport(0, 0, display_w, display_h)
     glClearColor(0.02, 0.02, 0.05, 1.0)

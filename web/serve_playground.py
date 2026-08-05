@@ -36,13 +36,21 @@ SOURCES = [
     ("web/examples/ui/src/main.js",           "playground/main.js"),
 ]
 
+# repo dir -> served dir, copied whole. The sample tree comes from the repo (not
+# the live site) so edits to a sample are testable before they ship.
+SOURCE_TREES = [
+    ("web/examples/ui/samples", "playground/samples"),
+    # what the samples' .das.assets.json sidecars fetch. The sidecar paths are
+    # relative, so they resolve against the frame's URL — under /playground/.
+    ("tutorials/_assets", "playground/tutorials/_assets"),
+]
+
 # fetched from the live site: build artifacts + vendored libs, keyed by the path
 # the page requests them at (relative to the served root).
 RUNTIME = [
     "playground/daslang_static.js",
     "playground/daslang_static.wasm",
     "playground/jquery-3.6.0.min.js",
-    "playground/samples/data.json",
     "files/cm/codemirror.min.js",
     "files/cm/codemirror.min.css",
     "files/cm/simple-mode.js",
@@ -61,7 +69,15 @@ def stage():
             shutil.copy2(src, dst)
         else:
             print("  MISSING %s" % rel)
-    print("staged %d source file(s) from the repo" % len(SOURCES))
+    for rel, dest in SOURCE_TREES:
+        src = os.path.join(REPO, rel.replace("/", os.sep))
+        dst = os.path.join(SERVE, dest.replace("/", os.sep))
+        if os.path.isdir(src):
+            shutil.copytree(src, dst, dirs_exist_ok=True)
+        else:
+            print("  MISSING %s/" % rel)
+    print("staged %d source file(s) + %d tree(s) from the repo"
+          % (len(SOURCES), len(SOURCE_TREES)))
 
 
 def fetch_runtime():

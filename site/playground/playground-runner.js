@@ -26,14 +26,32 @@
         rec.el.src = FRAME_SRC;
         rec.el.className = "pg-run-frame";
         rec.el.setAttribute("title", "daslang program output");
-        // Sized to the same 4:3 box the old #canvas used; hidden until the
-        // program asks for a WebGL context (or forever, for text programs).
+        rec.aspect = 3 / 4;     // until the program reports its drawing buffer
+        // Hidden until the program asks for a WebGL context (or forever, for
+        // text programs). Geometry is fit() 's job — see below.
         rec.el.style.cssText =
             "display:none;width:640px;height:480px;border:1px solid #444;" +
             "background:#000;margin-top:20px;margin-bottom:6px;";
         host.appendChild(rec.el);
         return rec;
     }
+
+    // The frame IS the render surface, so it owns its geometry: a box matching
+    // the program's drawing-buffer aspect, clamped to the column. Without this
+    // the frame kept its 640x480 seed, the column squeezed the width, and the
+    // canvas — which scales to fit — left a black band below itself.
+    // !important because the column's stylesheet would otherwise stretch it.
+    function fit(rec) {
+        if (!rec || !rec.el || rec.el.style.display === "none") return;
+        // Measure the column, not the host — the host sizes to its content, so
+        // asking it how wide it is would just echo the frame back.
+        var column = host && host.parentElement;
+        var avail = Math.min(column ? column.clientWidth : 640, 640);
+        rec.el.style.setProperty("width", avail + "px", "important");
+        rec.el.style.setProperty("height", Math.round(avail * rec.aspect) + "px", "important");
+    }
+
+    window.addEventListener("resize", function () { fit(current); });
 
     function destroy(rec) {
         if (!rec) return;
@@ -73,7 +91,9 @@
                 if (onOutput) onOutput("runtime aborted: " + msg.message, "#ff2d2d");
                 break;
             case "canvas-visible":
+                if (msg.width > 0 && msg.height > 0) rec.aspect = msg.height / msg.width;
                 rec.el.style.display = "block";
+                fit(rec);
                 var out = document.getElementById("output");
                 if (out) out.classList.add("with-canvas");
                 break;

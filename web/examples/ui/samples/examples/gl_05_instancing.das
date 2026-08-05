@@ -84,7 +84,7 @@ var window : GLFWwindow?
 var time : float = 0.0
 
 // 1000 small cubes -- comfortably visible at 640x480 with a ~6-unit swarm radius
-// and the camera orbiting at distance 14.
+// and the camera orbiting at distance 15.
 let N_INSTANCES = 1000
 
 [vertex_buffer]
@@ -215,10 +215,10 @@ def update : bool {
 
     // camera orbits the swarm with a gentle vertical sway to show depth
     let camera_angle = t * 0.3
-    let camera_r = 14.0
+    let camera_r = 15.0
     let cam_pos = float3(camera_r * cos(camera_angle), sin(camera_angle * 2.0) * 2.0, camera_r * sin(camera_angle))
     u_view = look_at_rh(cam_pos, float3(0, 0, 0), float3(0, 1, 0))
-    u_proj = perspective_rh_opengl(60.0 * PI / 180.0, aspect, 0.1, 60.0)
+    u_proj = perspective_rh_minus1_to_1(60.0 * PI / 180.0, aspect, 0.1, 60.0)
     u_cam_pos = cam_pos
     u_time = t
 

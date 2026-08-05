@@ -354,12 +354,22 @@ class LintVisitor : AstVisitor {
         validate_var(v, false)
     }
 
+    // `_inl<site id>_…` (`_inl0_l_text`, `_inl3_res`); the digit keeps a user's `_inline_x` in scope
+    def private is_inline_temp_name(name : string) : bool {
+        if (!(name |> starts_with("_inl")) || length(name) <= 4) return false
+        var digit = false
+        peek_data(name) $(bytes) {
+            digit = is_number(int(bytes[4]))
+        }
+        return digit
+    }
+
     def validate_var(v : VariablePtr; can_make_const : bool) {
         // marked_used: a transform consumed the reads (devirtualized block holder), or author intent
         if (v.flags.generated || v.flags.marked_used) return
         let name = string(v.name)
-        // skip system vars (`__name`) and compiler-generated names (backtick-mangled, e.g. tuple destructuring)
-        if (name |> starts_with("__") || find(name, "`") >= 0) return
+        // skip names the compiler owns rather than the author: `__system`, backtick-mangled, inliner temps
+        if (name |> starts_with("__") || find(name, "`") >= 0 || is_inline_temp_name(name)) return
         if (name |> starts_with("_")) {
             if (name |> ends_with("_")) return  // _foo_ - ignore too
             if (v.access_flags.access_ref || v.access_flags.access_pass || v.access_flags.access_get || v.access_flags.access_fold) {

@@ -182,7 +182,7 @@ struct SceneVertex {
 }
 
 // Unit cube, 24 split vertices (one face-normal per corner) -- the same winding as
-// tutorial 04, proven correct under GL_BACK culling + perspective_rh_opengl. The
+// tutorial 04, proven correct under GL_BACK culling + perspective_rh_minus1_to_1. The
 // model matrix scales + hovers + spins it; here it spans [-1, 1] in object space.
 let cube_verts = [SceneVertex(
     pos=float3(1, 1, 1), normal=float3(0, 0, 1)), SceneVertex(
@@ -347,9 +347,9 @@ def update : bool {
 
     // Camera orbits the scene, slightly elevated.
     let cam_angle = t * 0.35
-    let cam_pos = float3(cos(cam_angle) * 5.0, 3.2, sin(cam_angle) * 5.0)
+    let cam_pos = float3(cos(cam_angle) * 6.0, 3.2, sin(cam_angle) * 6.0)
     u_view = look_at_rh(cam_pos, float3(0.0, CUBE_HOVER * 0.5, 0.0), float3(0, 1, 0))
-    u_proj = perspective_rh_opengl(50.0 * PI / 180.0, aspect, 0.1, 50.0)
+    u_proj = perspective_rh_minus1_to_1(50.0 * PI / 180.0, aspect, 0.1, 50.0)
     u_cam_pos = cam_pos
 
     // ===== Pass 1: shadow map from the light's point of view =====

@@ -24,10 +24,19 @@
   and talks to this frame only over postMessage.
 -->
 <style>
-    html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
-    #canvas { display: block; width: 100%; height: 100%; border: 0; outline: none; }
+    html, body { margin: 0; padding: 0; height: 100%; background: transparent; overflow: hidden; }
+    /* Fill the frame exactly: the parent sizes the frame to the drawing buffer's
+       aspect, so 100%/100% scales without distorting. !important because
+       emscripten's GLFW writes an inline width/height onto the canvas. */
+    #canvas {
+        display: block;
+        width: 100% !important;
+        height: 100% !important;
+        border: 0;
+        outline: none;
+    }
 </style>
-<canvas id="canvas" tabindex="-1"></canvas>
+<canvas id="canvas" width="640" height="480" tabindex="-1"></canvas>
 <script>
 (function () {
     "use strict";
@@ -70,9 +79,14 @@
     // Reveal the canvas the instant ANY program asks it for a WebGL context. This
     // is program-driven rather than flag-driven, so pasted and edited code gets it
     // too, not just samples tagged graphics in data.json.
+    // The drawing buffer rides along so the parent can shape the frame to it
+    // instead of assuming 4:3 — a program that opens a 16:9 window then renders
+    // undistorted, and the aspect correction in its shaders stays honest.
     var origGetContext = canvas.getContext.bind(canvas);
     canvas.getContext = function (type) {
-        if (/webgl/i.test(String(type))) post({ type: "canvas-visible" });
+        if (/webgl/i.test(String(type))) {
+            post({ type: "canvas-visible", width: canvas.width, height: canvas.height });
+        }
         return origGetContext.apply(canvas, arguments);
     };
 
