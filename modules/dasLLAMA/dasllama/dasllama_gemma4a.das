@@ -614,12 +614,12 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
 
 // ===== mel (gemma4a: no preemphasis, natural-log magnitude, HTK, no per-feature norm) =====
 
-// q8 is FORCED (no fp32/bf16 weight lane, board-wide policy); the flag is the bit-exact A/B
-// rail for parity legs, not a supported serving mode
+// q8 is the only serving format (board policy); the flag is the fp32 reference route parity
+// legs compare against
 var private g_g4a_q8 = true
 
-//! Select the gemma4a tower's weight format for subsequent loads: q8 (default, forced) vs the
-//! fp32 reference route. A/B rail — parity legs flip it, serving never does.
+//! Select the gemma4a tower's weight format for subsequent loads: q8 (the serving default) vs
+//! the fp32 reference route parity legs compare against.
 def set_gemma4a_q8(on : bool) {
     g_g4a_q8 = on
 }
@@ -631,7 +631,7 @@ def gemma4a_exec_fmt(dec_fmt : string) : string {
 }
 
 //! Gemma4a's encode-total ``asr_prof`` bucket (the facade's [[asr_encode_bucket]] arm);
-//! the per-stage `g4a.enc.*` sites split it under asr_stage_probe.
+//! the `g4a.mel` + `g4a.enc.*` sites split it under asr_stage_probe.
 def gemma4a_encode_bucket : string {
     return "g4a.encode"
 }
@@ -757,6 +757,16 @@ def private g4a_clamp(var x : array<float>; n : int64; lo, hi : float) {
 
 // mm_blob_b with the q8 route: activation image (xq, xs) pre-quantized by the caller
 def private g4a_mm(enc : Gemma4aEncoder; var y : array<float>; woff : int64; x : array<float>;
+                   xq : array<int8>; xs : array<float>; n, d, npos : int64) {
+    if (enc.q8) {
+        matmul_q8q8_batch(y, enc.qblob, enc.qscales, woff, xq, xs, n, d, npos)
+    } else {
+        mm_blob_b(y, enc.blob, woff, x, n, d, npos)
+    }
+}
+
+// plane-activation twin (the RPE projection: q8 reads the pre-quantized posq/poss image)
+def private g4a_mm(enc : Gemma4aEncoder; var y : array<float>; woff : int64; x : PlaneF;
                    xq : array<int8>; xs : array<float>; n, d, npos : int64) {
     if (enc.q8) {
         matmul_q8q8_batch(y, enc.qblob, enc.qscales, woff, xq, xs, n, d, npos)
@@ -915,11 +925,7 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
             st.kk[i] *= k_scale
         }
         // project the RPE table: prpe [13 × d] — the q8 image was requantized before the loop
-        if (enc.q8) {
-            matmul_q8q8_batch(st.prpe, enc.qblob, enc.qscales, lo.attn_k_rel, st.posq, st.poss, d, d, G4A_PAST + 1l)
-        } else {
-            mm_blob_b(st.prpe, enc.blob, lo.attn_k_rel, enc.pos_emb, d, d, G4A_PAST + 1l)
-        }
+        g4a_mm(enc, st.prpe, lo.attn_k_rel, enc.pos_emb, st.posq, st.poss, d, d, G4A_PAST + 1l)
         for (hh in range64(n_head)) {
             let hoff = hh * dh
             for (i in range64(npos)) {
@@ -1052,7 +1058,7 @@ def gemma4a_asr_caps() : AsrCaps {
 }
 
 //! The facade's session arm: a fresh decoder session (no language conditioning).
-def create_gemma4a_asr_session(dec : Model; kv : KVDtype = KVDtype.f32) : Gemma4aAsrSession {
+def create_gemma4a_asr_session(dec : Model; kv : KVDtype = KVDtype.f16) : Gemma4aAsrSession {
     return <- Gemma4aAsrSession(qctx <- create_session_(dec, kv, kv))
 }
 

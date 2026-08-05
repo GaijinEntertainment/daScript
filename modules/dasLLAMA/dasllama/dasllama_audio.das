@@ -935,9 +935,9 @@ def mm_blob_b(var y : array<float>; blob : PlaneF; woff : int64; x : PlaneF; n, 
 
 // ===== tower Q8 rail (parakeet's v1 recipe: whole-blob Q8_0 image + per-GEMM-region repack) =====
 
-// repack one GEMM region for the active backend (scales index at woff/32 ⇒ woff must be
-// 32-aligned); n%32 != 0 regions stay fp32 — tw_mm falls back per call on the same condition,
-// so plane and route can never disagree. Public: qwen3a's cblob trio rides the same recipe.
+//! Repack one GEMM region for the active backend (scales index at woff/32 ⇒ woff must be
+//! 32-aligned); n%32 != 0 regions stay fp32 — the callers fall back per call on the same
+//! condition, so plane and route can never disagree.
 def tw_repack(var qblob : array<int8>; var qscales : array<float>; woff, n, d : int64) {
     if (n % 32l != 0l) {
         return

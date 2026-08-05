@@ -375,7 +375,7 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
         requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)
     }
 
-    // 3F. fused: gate/up -> act -> requant -> down as ONE region-list dispatch for the layer
+    // 3F. fused: gate/up/down each run as ONE region-list dispatch (3 fork/joins/layer, not 3/expert)
     if (fused) {
         trace_tag(TRACE_TAG_MOE)
         let ts_gather = ref_time_ticks()

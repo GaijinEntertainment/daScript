@@ -1591,9 +1591,8 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
         return false
     }
     let q51_t0 = ref_time_ticks()
-    // the family anchors at the TILE since the batch rework — the manifest key must match the
-    // [tune] fn or the stamp misses its own crown and completeness re-tunes every start. The
-    // race still benches the gemv shape (v1 proxy; the tile-shape bench is the ledgered upgrade)
+    // the manifest key must match the [tune] fn (the TILE) or the stamp misses its own crown;
+    // the race still benches the gemv shape
     tune_progress_kernel_begin("q51q8_tile_gen", ROUNDS)
     var qrows : table<string; JsonValue?>
     let qw = q51_tune_family(qrows)

@@ -39,7 +39,7 @@ struct ProbeArgs {
     @clarg_doc = "Pin fp32 weights (set_asr_fp32) — A/B the q8 default"
     fp32 : bool
 
-    @clarg_doc = "Decoder-session KV dtype: f32 (default) | f16 | q8"
+    @clarg_doc = "Decoder-session KV dtype, LLM-decoder families only: f16 (default) | f32 | q8"
     kv : string
 
     @clarg_short = "?"
@@ -101,8 +101,13 @@ def main() : int {
     set_asr_fp32(cfg.fp32)
     if (cfg.kv == "f16") {
         set_asr_kv(KVDtype.f16)
+    } elif (cfg.kv == "f32") {
+        set_asr_kv(KVDtype.f32)
     } elif (cfg.kv == "q8") {
         set_asr_kv(KVDtype.q8_0)
+    } elif (!empty(cfg.kv)) {
+        print("unknown --kv '{cfg.kv}' (f16 | f32 | q8)\n")
+        return 1
     }
     var m <- empty(cfg.mmproj) ? load_asr_model(cfg.model) : load_asr_model(cfg.model, cfg.mmproj)
     let samples <- load_audio_16k_mono(cfg.wav)

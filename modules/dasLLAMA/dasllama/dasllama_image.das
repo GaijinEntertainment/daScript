@@ -40,7 +40,7 @@ require dasllama/dasllama_load   // the GGUF load walk (load_gguf/load_model_/lo
 // config-derived. A loader change that alters which tensors load leaves a structurally VALID stale
 // image that silently represents a different model; only this version catches it. Mismatch
 // regenerates from the gguf, never migrates.
-let IMAGE_VERSION = 7   // v7: identity string + DlimConfiguration JSON ride the meta head (readable declines; the .dlim-arc format changes batch into this one bump)
+let IMAGE_VERSION = 8   // v8: q8 audio towers — meta grew (gemma4a q8 / qwen3a cq8) and the tower flavors carry q8 planes
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and

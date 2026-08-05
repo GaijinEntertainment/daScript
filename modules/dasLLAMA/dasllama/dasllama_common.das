@@ -4280,6 +4280,7 @@ def forward_profile_report() {
         to_log(LOG_INFO, "  {k}: {v} ({100l * v / max(total, 1l)}%) | disp {dd} | chunks {cc} | inline {ii}\n")
     }
     to_log(LOG_INFO, "  TOTAL: {total}\n")
+    g_forward_prof_on = false   // disarm: a timed row after the window must not pay the prof_add tax
 }
 
 //! Greedy argmax over the current logits; returns the winning token id.

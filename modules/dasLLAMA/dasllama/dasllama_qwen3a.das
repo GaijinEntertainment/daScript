@@ -131,12 +131,12 @@ def private register_qwen3a_image_tags {
     register_image_family_tag("qwen3a-q8")
 }
 
-// q8 is FORCED on the shared core AND the cblob GEMM trio (no fp32/bf16 weight lane,
-// board-wide policy); the flag is the bit-exact A/B rail for parity legs.
+// q8 is the only serving format for the shared core AND the cblob GEMM trio (board policy);
+// the flag is the fp32 reference route parity legs compare against
 var private g_q3a_q8 = true
 
-//! Select the qwen3a tower core's weight format for subsequent loads: q8 (default, forced) vs
-//! the fp32 reference route. A/B rail — parity legs flip it, serving never does.
+//! Select the qwen3a tower's weight format for subsequent loads: q8 (the serving default) vs
+//! the fp32 reference route parity legs compare against.
 def set_qwen3a_q8(on : bool) {
     g_q3a_q8 = on
 }
@@ -461,8 +461,8 @@ struct Qwen3aConvState {
     y3 : array<float>
     @scratch feat : array<float>   // [13 × 16·n_ch]
     @scratch crow : array<float>   // conv_out rows for one chunk [13 × d_model]
-    // requant image for the cblob trio's activations (grow-only — never the core's s.xqi,
-    // whose size is the encoder's own pre-sized contract)
+    // requant image for the cblob trio's activations (sized per encode — never the core's
+    // s.xqi, which the encoder pre-sizes and writes through raw pointers)
     @scratch xq : array<int8>
     @scratch xs : array<float>
 }
@@ -572,7 +572,6 @@ struct Qwen3aAsrSession {
     qcs : Qwen3aConvState = Qwen3aConvState()
 }
 
-//! Qwen3-ASR self-detects the language (``languages`` empty) and takes context biasing via the
 //! The tower's precision half of the facade's [[asr_exec_fmt]] stamp (the decoder tag comes
 //! from the facade, which owns the shared LLM). The AuT core serves q8 GEMM planes.
 def qwen3a_exec_fmt(dec_fmt : string) : string {
@@ -585,6 +584,7 @@ def qwen3a_encode_bucket(omni : bool) : string {
     return omni ? "q3o.encode" : "q3a.encode"
 }
 
+//! Qwen3-ASR self-detects the language (``languages`` empty) and takes context biasing via the
 //! session's ``context``; Qwen3-Omni is a chat model driven as a transcription turn — no prompt.
 def qwen3a_asr_caps(omni : bool) : AsrCaps {
     return <- AsrCaps(translate = false, timestamps = AsrTimestamps.none,
@@ -594,7 +594,7 @@ def qwen3a_asr_caps(omni : bool) : AsrCaps {
 //! The facade's session arm: language validation (Qwen3-ASR only accepts "auto"), a fresh
 //! decoder session, and the tower's encoder scratch.
 def create_qwen3a_asr_session(dec : Model; t : Qwen3aTower; lang : string; omni : bool;
-                              kv : KVDtype = KVDtype.f32) : Qwen3aAsrSession {
+                              kv : KVDtype = KVDtype.f16) : Qwen3aAsrSession {
     if (!omni && lang != "auto") {
         panic("dasLLAMA asr: Qwen3-ASR detects the language itself — create the session with lang=\"auto\"")
     }

@@ -42,10 +42,10 @@ struct BenchArgs {
     text : bool
 
     @clarg_name = "fp32-tower"
-    @clarg_doc = "A/B lever: pin every tower to the fp32 reference rail (whisper/gemma4a/qwen3a) — the q8-vs-f32 profiling comparison's off leg"
+    @clarg_doc = "A/B lever: pin every tower to the fp32 reference rail — the q8-vs-f32 profiling comparison's off leg"
     fp32_tower : bool
 
-    @clarg_doc = "Decoder-session KV dtype for the LLM-decoder ASR families: f32 (default) | f16 | q8"
+    @clarg_doc = "Decoder-session KV dtype, LLM-decoder families only (whisper/parakeet have no LLM KV): f16 (default) | f32 | q8"
     kv : string
 
     @clarg_short = "?"
@@ -110,10 +110,12 @@ def main() : int {
     if (!empty(cfg.kv)) {
         if (cfg.kv == "f16") {
             set_asr_kv(KVDtype.f16)
+        } elif (cfg.kv == "f32") {
+            set_asr_kv(KVDtype.f32)
         } elif (cfg.kv == "q8") {
             set_asr_kv(KVDtype.q8_0)
-        } elif (cfg.kv != "f32") {
-            print("unknown --kv '{cfg.kv}' (f32 | f16 | q8)\n")
+        } else {
+            print("unknown --kv '{cfg.kv}' (f16 | f32 | q8)\n")
             return 1
         }
         print("KV\t{cfg.kv}\n")

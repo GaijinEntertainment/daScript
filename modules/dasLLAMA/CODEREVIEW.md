@@ -289,6 +289,17 @@ planes alongside its own is a defect.
 
 ---
 
+## Documentation
+
+**A change to user-facing API checks every tutorial and document that touches it.** User-facing
+means anything a consumer outside this repo calls or types: exported facade functions, CLI
+flags, environment knobs, file formats, and their defaults. The check covers the tutorial
+`.das` sources, their `.rst` pages, and the module documentation; a tutorial or doc that still
+shows the old call, flag, or default is a defect of the change, not of the docs.
+
+**A changed default is restated everywhere the old default was stated.** Every docstring, help
+string, and doc line that named the old value names the new one in the same diff.
+
 ## Implementation
 
 **A kernel's shape is compile-time; only its data is runtime.** The test is one question: for a

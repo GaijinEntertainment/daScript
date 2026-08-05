@@ -240,3 +240,10 @@
    image decode (dasStbImage) + per-family resize/patchify conventions. VIDEO stays out:
    not reasonable without GPU — "maybe hybrid mode, maybe one day"; its real dependency is
    the deep-prefill context wall (50k-token splices), not new kernels.
+
+18. **Tutorials + documentation resync sweep (Boris 2026-08-05).** The ASR/audio tutorials and
+   module documentation have desynced from the API as the q8/KV/lever work landed — a full
+   pass over `tutorials/` (`.das` and `.rst`) and the dasLLAMA doc pages against the current
+   facade surface (`set_asr_kv`, `--kv`, `--fp32-tower`, exec_fmt spellings, the q8 defaults).
+   Going forward the new Documentation section in CODEREVIEW.md makes this a per-change check;
+   this item is the one-time catch-up.

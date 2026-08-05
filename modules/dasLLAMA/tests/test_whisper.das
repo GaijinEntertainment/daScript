@@ -328,59 +328,6 @@ def test_qwen3a_tower(t : T?) {
 }
 
 [test]
-def test_qwen3a_tower_q8_ab(t : T?) {
-    t |> run("qwen3a tower: the q8 core tracks the f32 rail on jfk window 0") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
-        let path = path_join(samples_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
-        if (!model_available(t, path)) return
-        let samples <- read_wav_pcm16_mono(path_join(samples_dir(), "jfk.wav"))
-        if (length(samples) == 0) {
-            t |> skip("jfk.wav not present")
-            return
-        }
-        var inscope twq <- load_qwen3a_tower(path)
-        t |> success(twq.core.q8, "tower core is on the q8 rail")
-        set_qwen3a_q8(false)
-        var inscope twf <- load_qwen3a_tower(path)
-        set_qwen3a_q8(true)
-        t |> success(!twf.core.q8, "reference tower is on the f32 rail")
-        let mel <- log_mel_qwen3a(samples, twq.core.n_mel)
-        var encq <- make_encoder_state(twq.core)
-        var encf <- make_encoder_state(twf.core)
-        var csq = Qwen3aConvState()
-        var csf = Qwen3aConvState()
-        with_job_que() {
-            setup_dasllama_jobque_()
-            let win <- qwen3a_mel_window(mel, 0l)
-            qwen3a_encode(twq, encq, csq, win)
-            let winf <- qwen3a_mel_window(mel, 0l)
-            qwen3a_encode(twf, encf, csf, winf)
-        }
-        var maxd = 0.0
-        var maxa = 0.0
-        var sd = 0.0lf
-        var sa = 0.0lf
-        let nv = long_length(encq.out)
-        for (i in range64(nv)) {
-            let df = encq.out[i] - encf.out[i]
-            maxd = max(maxd, abs(df))
-            maxa = max(maxa, abs(encf.out[i]))
-            sd += double(df * df)
-            sa += double(encf.out[i] * encf.out[i])
-        }
-        let rel_rms = float(sqrt(sd / max(sa, 1.0e-18lf)))
-        to_log(LOG_INFO, "qwen3a q8-vs-f32 window 0: rel-rms {rel_rms}, maxdiff {maxd} (signal max {maxa}) over {nv} values\n")
-        // Fast element-level instrument (measured 3.2% rel-rms on 2026-08-05; it caught the
-        // conv2 phantom-repack bug). The REAL gate is transcript-level: test_qwen3a_transcribe_q8_ab
-        // (image suite) — q8 vs f32 transcripts byte-identical through the 0.6B decoder.
-        t |> success(rel_rms < 0.05, "q8 core tracks the f32 rail (element-level bar)")
-    }
-}
-
-[test]
 def test_parakeet_oracle(t : T?) {
     t |> run("parakeet-TDT greedy on jfk.wav is token-for-token with parakeet-cli") @(t : T?) {
         if (!jit_enabled()) {
@@ -697,7 +644,6 @@ def test_gemma4a_audio_oracle(t : T?) {
         if (!model_available(t, dec) || !model_available(t, mmproj)) {
             return
         }
-        set_asr_kv(KVDtype.f32)   // the frozen mtmd-prefix ids are the f32 parity rail
         var inscope m <- load_asr_model(dec, mmproj)
         t |> equal(m.g4a.n_layer, 12l, "gemma4a Conformer, 12 blocks")
         t |> equal(m.g4a.d_model, 1024l, "audio d_model 1024")
@@ -709,6 +655,7 @@ def test_gemma4a_audio_oracle(t : T?) {
             t |> skip("gemma4a_test2.wav not present")
             return
         }
+        set_asr_kv(KVDtype.f32)   // the frozen mtmd-prefix ids are the f32 parity rail; below every skip
         with_job_que() {
             setup_dasllama_jobque_()
             var inscope s <- create_session(m, "en")

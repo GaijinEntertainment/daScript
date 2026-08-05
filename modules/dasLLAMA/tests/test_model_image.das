@@ -1111,7 +1111,7 @@ def test_gemma4a_transcribe_q8_ab(t : T?) {
         var lang = ""
         with_job_que() {
             setup_dasllama_jobque_()
-            // decoder off-rail (CODEREVIEW rule 20) and loaded ONCE — only the tower flips rails
+            // decoder off-rail (CODEREVIEW: suites load decoders with load_model_) — loaded ONCE; only the tower flips rails
             var dec <- load_model_(dec_path, QuantMode.q8)
             var inscope enc <- load_gemma4a_encoder(mmp_path)
             var inscope s <- create_gemma4a_asr_session(dec)
@@ -1129,10 +1129,63 @@ def test_gemma4a_transcribe_q8_ab(t : T?) {
             set_gemma4a_q8(true)
             delete dec
         }
-        // the eyeball rail: both decoded streams logged before the assert
         to_log(LOG_INFO, "gemma4a q8 : {q8_text}\n")
         to_log(LOG_INFO, "gemma4a f32: {f32_text}\n")
         t |> equal(q8_text, f32_text, "q8 tower transcript matches the f32 rail")
+        delete samples
+    }
+}
+
+[test]
+def test_qwen3a_tower_q8_ab(t : T?) {
+    t |> run("qwen3a tower: the q8 core tracks the f32 rail on jfk window 0") @(t : T?) {
+        if (!family_on(t, "qwen3a")) return
+        if (!arm_on(t, "qwen3a")) return
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
+        if (!model_available(t, path)) return
+        var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+        if (empty(samples)) {
+            t |> skip("jfk.wav not present beside the models")
+            return
+        }
+        var inscope twq <- load_qwen3a_tower(path)
+        t |> success(twq.core.q8, "tower core is on the q8 rail")
+        set_qwen3a_q8(false)
+        var inscope twf <- load_qwen3a_tower(path)
+        set_qwen3a_q8(true)
+        t |> success(!twf.core.q8, "reference tower is on the f32 rail")
+        var inscope mel <- log_mel_qwen3a(samples, twq.core.n_mel)
+        var inscope encq <- make_encoder_state(twq.core)
+        var inscope encf <- make_encoder_state(twf.core)
+        var inscope csq = Qwen3aConvState()
+        var inscope csf = Qwen3aConvState()
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var inscope win <- qwen3a_mel_window(mel, 0l)
+            qwen3a_encode(twq, encq, csq, win)
+            var inscope winf <- qwen3a_mel_window(mel, 0l)
+            qwen3a_encode(twf, encf, csf, winf)
+        }
+        var maxd = 0.0
+        var maxa = 0.0
+        var sd = 0.0lf
+        var sa = 0.0lf
+        let nv = long_length(encq.out)
+        for (i in range64(nv)) {
+            let df = encq.out[i] - encf.out[i]
+            maxd = max(maxd, abs(df))
+            maxa = max(maxa, abs(encf.out[i]))
+            sd += double(df * df)
+            sa += double(encf.out[i] * encf.out[i])
+        }
+        let rel_rms = float(sqrt(sd / max(sa, 1.0e-18lf)))
+        to_log(LOG_INFO, "qwen3a q8-vs-f32 window 0: rel-rms {rel_rms}, maxdiff {maxd} (signal max {maxa}) over {nv} values\n")
+        // element-level tripwire; the real gate is transcript-level (test_qwen3a_transcribe_q8_ab)
+        t |> success(rel_rms < 0.05, "q8 core tracks the f32 rail (element-level bar)")
         delete samples
     }
 }
@@ -1160,7 +1213,7 @@ def test_qwen3a_transcribe_q8_ab(t : T?) {
         var lang = ""
         with_job_que() {
             setup_dasllama_jobque_()
-            // decoder off-rail (CODEREVIEW rule 20) and loaded ONCE — only the tower flips rails
+            // decoder off-rail (CODEREVIEW: suites load decoders with load_model_) — loaded ONCE; only the tower flips rails
             var dec <- load_model_(dec_path, QuantMode.q8)
             dec.config.seq_len = min(dec.config.seq_len, 8192l)
             var inscope tw <- load_qwen3a_tower(mmp_path)
@@ -1179,7 +1232,6 @@ def test_qwen3a_transcribe_q8_ab(t : T?) {
             set_qwen3a_q8(true)
             delete dec
         }
-        // the eyeball rail: both decoded streams logged before the assert
         to_log(LOG_INFO, "qwen3a q8 : {q8_text}\n")
         to_log(LOG_INFO, "qwen3a f32: {f32_text}\n")
         t |> equal(q8_text, f32_text, "q8 tower transcript matches the f32 rail")

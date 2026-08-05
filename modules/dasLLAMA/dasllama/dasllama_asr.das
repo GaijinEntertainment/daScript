@@ -78,8 +78,9 @@ var private g_asr_force_fp32 = false
 // (frozen-id cells pin it); q8_0 measured slower at ASR depths (decode overhead > bandwidth win)
 var private g_asr_kv = KVDtype.f16
 
-//! Select the KV-cache dtype for subsequent ASR decoder sessions (f32 default; f16/q8_0 the
-//! bandwidth levers). Applies at ``create_session``; live sessions keep their cache.
+//! Select the KV-cache dtype for subsequent ASR decoder sessions (f16 default — matches the
+//! reference's KV; f32 is the oracle/parity rail). LLM-decoder families only: whisper and
+//! parakeet carry no LLM KV and ignore this. Applies at ``create_session``.
 def set_asr_kv(dt : KVDtype) {
     g_asr_kv = dt
 }

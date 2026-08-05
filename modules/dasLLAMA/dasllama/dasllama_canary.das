@@ -1109,7 +1109,7 @@ def canary_asr_caps() : AsrCaps {
 }
 
 //! The facade's session arm: English-only validation, then a fresh decoder session.
-def create_canary_asr_session(dec : Model; lang : string; kv : KVDtype = KVDtype.f32) : CanaryAsrSession {
+def create_canary_asr_session(dec : Model; lang : string; kv : KVDtype = KVDtype.f16) : CanaryAsrSession {
     if (lang != "auto" && lang != "en") {
         panic("dasLLAMA asr: this Canary-Qwen model is English-only — create the session with lang=\"en\" or \"auto\"")
     }

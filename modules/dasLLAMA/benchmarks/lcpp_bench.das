@@ -403,9 +403,8 @@ def private say(fmt : OutFmt; text : string) {
     }
 }
 
-// --profile census: the runtime state that picks each MoE prefill arm. A fallback path names
-// itself here instead of hiding inside a slow row (a MoE whose experts run per-position reads
-// as "half the ref" with no diagnostic otherwise).
+// --prof census: the runtime state that picks each MoE prefill arm — a fallback path names
+// itself here instead of hiding inside a slow row
 def private dispatch_census(t : Model; fmt : OutFmt) {
     let c = t.config
     say(fmt, "census: quant={t.quant} kquant_native={t.kquant_native} kq_repacked={t.kq_repacked} mx4_repacked={t.mx4_repacked} experts_mx4={t.experts_mx4}\n")
@@ -416,12 +415,12 @@ def private dispatch_census(t : Model; fmt : OutFmt) {
         say(fmt, "census: dense model, no MoE dispatch\n")
         return
     }
-    // the same booleans ffn_moe_prefill / ffn_gemma4_prefill test, per layer — the census reports
-    // the arm each layer takes, it never predicts one
+    // mirrors the ffn_gemma4_prefill gate; ffn_moe_prefill also ANDs the mx4 per-call
+    // economics (the mx4 note below)
     var grouped = 0l
     var perpos = 0l
-    var fmts : array<string>
-    var fcnt : array<int64>
+    var inscope fmts : array<string>
+    var inscope fcnt : array<int64>
     for (l in range64(c.n_layers)) {
         continue if (l < c.n_layer_dense_lead)
         let sb = moe_layer_sb_kq(t, l)
@@ -440,7 +439,7 @@ def private dispatch_census(t : Model; fmt : OutFmt) {
             fcnt[fi]++
         }
     }
-    let fdesc <- [for (fk, fc in fmts, fcnt); "{fk} x{fc}"]
+    var inscope fdesc <- [for (fk, fc in fmts, fcnt); "{fk} x{fc}"]
     say(fmt, "census: moe E={c.n_expert} k={c.n_expert_used} nfe={c.n_ff_exp} expert fmts gate/up/down: {fdesc}\n")
     say(fmt, "census: moe prefill arms: {grouped} grouped, {perpos} per-position{perpos > 0l ? " <-- UNBATCHED reference path" : ""}\n")
     if (t.experts_mx4) {
@@ -746,7 +745,7 @@ def main() : int {
                 if (cfg.prof) {
                     // untimed bucket window for the pp row — reset FIRST, so the report is pure prefill
                     forward_profile_reset()
-                    let pprof <- build_prompt(plen, 998l)
+                    var inscope pprof <- build_prompt(plen, 998l)
                     let ts_wall = ref_time_ticks()
                     forward_prefill(t, s, pprof, plen, 0l)
                     let wall_us = get_time_usec(ts_wall)

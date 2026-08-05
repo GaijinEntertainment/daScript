@@ -1411,16 +1411,42 @@ def run_asr_mtmd(model_path, mmproj_path, wav_path : string; threads, reps : int
     return best
 }
 
-//! The response body out of a captured llama-mtmd-cli stdout: engine logs route to stderr, so
-//! stdout is the decoded text plus the MTMD_TIMING receipt — everything but the receipt joins.
+//! The response body out of a captured llama-mtmd-cli run. The capture MERGES stderr
+//! (popen_argv does, by design — same hazard json_array_tail guards for llama-bench), so
+//! engine log lines ride the stream; they are dropped by their tag shape (`identifier:` as
+//! the first token), the transcript prose never starts that way.
 def mtmd_response_text(out : string) : string {
-    var parts : array<string>
+    var inscope parts : array<string>
     for (line in split(out, "\n")) {
         let s = strip(line)
-        continue if (empty(s) || find(s, "MTMD_TIMING") >= 0)
+        continue if (empty(s) || find(s, "MTMD_TIMING") >= 0 || mtmd_log_line(s))
         parts |> push(s)
     }
     return join(parts, " ")
+}
+
+// the engine-log tag shape: a lowercase identifier ending in ':' as the first token
+// (llama_model_loader:, print_info:, main:, ...), or a bare ggml/llama/clip/mtmd prefix
+def private mtmd_log_line(s : string) : bool {
+    for (p in ["ggml", "llama_", "clip_", "mtmd_", "common_", "build:", "system_info", "encoding audio", "audio slice"]) {
+        return true if (starts_with(s, p))
+    }
+    let sp = find(s, " ")
+    let head = sp > 0 ? slice(s, 0, sp) : s
+    if (!ends_with(head, ":")) {
+        return false
+    }
+    var tag_shape = true
+    peek_data(head) $(bytes) {
+        for (i in range(length(bytes) - 1)) {
+            let c = int(bytes[i])
+            if (!((c >= 'a' && c <= 'z') || is_number(c) || c == '_' || c == '.')) {
+                tag_shape = false
+                break
+            }
+        }
+    }
+    return tag_shape
 }
 
 //! The onnx/nemo bench invocation over a clip set — ONE process for all clips (python model load
