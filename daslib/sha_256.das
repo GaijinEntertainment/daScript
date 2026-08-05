@@ -4,6 +4,7 @@ options indenting = 4
 module sha_256 shared public
 
 require strings
+require daslib/fio
 
 //! FIPS 180-4 SHA-256.
 //!
@@ -162,4 +163,18 @@ def sha256_hex(data : array<uint8> const# implicit) : string {
     var st = sha256_init()
     sha256_update(st, data)
     return sha256_hex_digest(sha256_final(st))
+}
+
+def sha256_file_hex(path : string) : string {
+    //! SHA-256 of a file's bytes, lowercase hex; "" when the file is
+    //! unreadable or empty.
+    var hex = ""
+    fopen(path, "rb") $(f) {
+        if (f != null) {
+            fmap(f) $(var data : array<uint8>#) {
+                hex = sha256_hex(data)
+            }
+        }
+    }
+    return hex
 }

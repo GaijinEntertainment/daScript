@@ -126,19 +126,6 @@ def create_stage_dir(blobs_dir : string) : string {
     return stage
 }
 
-def file_sha256_hex(path : string) : string {
-    //! sha256 of a file's bytes; "" when unreadable or empty.
-    var hex = ""
-    fopen(path, "rb") $(f) {
-        if (f != null) {
-            fmap(f) $(var data : array<uint8>#) {
-                hex = sha256_hex(data)
-            }
-        }
-    }
-    return hex
-}
-
 def finalize_artifact(blobs_dir : string; toolchain : string; hash : string; stage_dir : string; files : array<ArtifactFile> const) : bool {
     //! Verify every staged file against its manifest sha, then rename the stage
     //! into place. The stage dir is consumed either way, so a failed upload
@@ -156,7 +143,7 @@ def finalize_artifact(blobs_dir : string; toolchain : string; hash : string; sta
             rmdir_rec(stage_dir)
             return false
         }
-        let hex = file_sha256_hex(p)
+        let hex = sha256_file_hex(p)
         if (hex != f.sha256) {
             logger_error("playground.artifacts", "staged file failed integrity check",
                 JV((hash = hash, toolchain = toolchain, name = f.name)))
