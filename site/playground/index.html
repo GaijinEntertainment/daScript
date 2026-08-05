@@ -109,6 +109,9 @@
 <script type="text/javascript" src="../files/cm/daslang-mode.js"></script>
 <script type="text/javascript" src="../files/lz-string.min.js"></script>
 <script type="text/javascript" src="./playground-init.js"></script>
+<!-- Owns run-frame.html (one frame per program). Must precede main.js, whose
+     pageInit hands it the run host and whose run path delegates to it. -->
+<script type="text/javascript" src="./playground-runner.js?v=1"></script>
 <script type="text/javascript" src="./main.js"></script>
 <script type="text/javascript" src="./playground-tabs.js?v=2"></script>
 <script type="text/javascript" src="./playground-share.js?v=3"></script>

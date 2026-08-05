@@ -2764,7 +2764,7 @@ def private declare_local_var(var m : SpirvModule; var ctx : EmitCtx; v : Variab
     // own: visitExprLetVariable binds it to the pointer its initializer lowered to. Declaring one
     // here would make every write through the alias land in that private copy and leave the aliased
     // element untouched. The inliner emits these whenever an inlined call's result is assigned to an
-    // lvalue (`var __inl_pre : float& = p[i]; … ; __inl_pre = __inl_res`), which is the shape a
+    // lvalue (`var _inl_pre : float& = p[i]; … ; _inl_pre = _inl_res`), which is the shape a
     // helper reached across a require arrives in.
     if (key_exists(ctx.local_vars, intptr(v)) || v._type.flags.ref) return
     let bt = v._type.baseType
