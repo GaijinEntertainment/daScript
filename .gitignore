@@ -169,3 +169,6 @@ modules/dasLLAMA/performance/_rig/
 
 # my local box runbook (machine-specific paths; not for the shared repo)
 ZEN2.md
+
+# local playground rig scratch (web/serve_playground.py)
+web/_serve/

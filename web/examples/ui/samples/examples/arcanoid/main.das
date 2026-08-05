@@ -126,19 +126,19 @@ var @live audio_initialized = false
 
 def init_audio_samples() {
     // Paddle hit: chirp 440→880Hz, 50ms
-    snd_paddle_hit <- gen_sine_sweep(440.0, 880.0, 0.05, 0.3)
+    snd_paddle_hit <- gen_sine_sweep(440.0, 880.0, 0.05, 0.3)  // nolint:PERF030 -- init_audio_samples runs once, behind the audio_initialized guard; target is still empty
     // Brick break: noise + sine
-    snd_brick_break <- gen_noise_burst(0.08, 0.15)
+    snd_brick_break <- gen_noise_burst(0.08, 0.15)  // nolint:PERF030 -- init_audio_samples runs once, behind the audio_initialized guard; target is still empty
     let brick_tone <- gen_sine_sweep(600.0, 200.0, 0.08, 0.2)
     mix_into(snd_brick_break, brick_tone)
     // Wall bounce: short high tick
-    snd_wall_bounce <- gen_sine_sweep(1200.0, 800.0, 0.02, 0.15)
+    snd_wall_bounce <- gen_sine_sweep(1200.0, 800.0, 0.02, 0.15)  // nolint:PERF030 -- init_audio_samples runs once, behind the audio_initialized guard; target is still empty
     // Ball miss: descending tone
-    snd_ball_miss <- gen_sine_sweep(440.0, 110.0, 0.3, 0.25)
+    snd_ball_miss <- gen_sine_sweep(440.0, 110.0, 0.3, 0.25)  // nolint:PERF030 -- init_audio_samples runs once, behind the audio_initialized guard; target is still empty
     // Bonus pickup: bright rising chirp
-    snd_bonus_pickup <- gen_sine_sweep(600.0, 1200.0, 0.08, 0.25)
+    snd_bonus_pickup <- gen_sine_sweep(600.0, 1200.0, 0.08, 0.25)  // nolint:PERF030 -- init_audio_samples runs once, behind the audio_initialized guard; target is still empty
     // Bonus bad: descending buzz
-    snd_bonus_bad <- gen_sine_sweep(400.0, 200.0, 0.1, 0.2)
+    snd_bonus_bad <- gen_sine_sweep(400.0, 200.0, 0.1, 0.2)  // nolint:PERF030 -- init_audio_samples runs once, behind the audio_initialized guard; target is still empty
     // Win: ascending arpeggio
     let notes = fixed_array(523.0, 659.0, 784.0, 1047.0)  // C5 E5 G5 C6
     let note_dur = 0.12
@@ -619,11 +619,10 @@ def activate_bonus(btype : int) {
             positions |> push(b.pos)
             velocities |> push(b.vel)
         }
-        for (i in range(length(positions))) {
-            let p = positions[i]
-            let speed = length(velocities[i])
-            let vel1 = normalize(float3(velocities[i].x + sin(0.5) * speed * 0.3, 0.0, velocities[i].z)) * speed
-            let vel2 = normalize(float3(velocities[i].x + sin(-0.5) * speed * 0.3, 0.0, velocities[i].z)) * speed
+        for (p, v in positions, velocities) {
+            let speed = length(v)
+            let vel1 = normalize(float3(v.x + sin(0.5) * speed * 0.3, 0.0, v.z)) * speed
+            let vel2 = normalize(float3(v.x + sin(-0.5) * speed * 0.3, 0.0, v.z)) * speed
             create_entity() @(eid, cmp) {
                 apply_decs_template(cmp, Ball(pos = p, vel = vel1))
             }
@@ -1334,7 +1333,7 @@ def init() {
 }
 
 [export]
-def update() {
+def update() {  // nolint:STYLE037,STYLE038 -- game frame: input, sim, and render phases share mutable state
     if (!live_begin_frame()) {
         return
     }
@@ -1347,7 +1346,7 @@ def update() {
     glEnable(GL_CULL_FACE)
 
     let aspect = display_h != 0 ? float(display_w) / float(display_h) : 1.0
-    v_projection = perspective_rh_opengl(45.0 * PI / 180.0, aspect, 0.1, 100.0)
+    v_projection = perspective_rh_minus1_to_1(45.0 * PI / 180.0, aspect, 0.1, 100.0)
     v_view = look_at_rh(
         float3(0.0, 14.0, -4.0),
         float3(0.0, 0.0, 5.0),

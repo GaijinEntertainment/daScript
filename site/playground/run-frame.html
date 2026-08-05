@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>daslang run frame</title>
+<!--
+  The playground's execution sandbox. One program per frame, ever.
+
+  The playground used to call Module.callMain() repeatedly inside a single wasm
+  instance, so every run inherited the previous run's world: registered daslang
+  modules, GL objects, globals. That is fine until a run FAILS — a program that
+  throws inside init() unwinds past main()'s cleanup, so Module::Shutdown() never
+  runs, and the next run trips the duplicate-module guard
+  (DAS_FATAL_ERROR "Module 'x' already created"). One bad sample poisoned the
+  whole session, and since a playground exists to run broken code, that was the
+  normal case rather than an edge case.
+
+  Restarting is what makes this structural: the parent throws the frame away and
+  builds a new one, so no error path can leak state because there is no state to
+  leak. It also gives the parent a kill switch for a hung program (previously a
+  wedged program locked the whole tab) and disposes of the canvas and its WebGL
+  context for free.
+
+  Everything the runtime touches lives in here: Module, MEMFS, the canvas, the
+  pthread pool, the AudioContext. The parent owns the editor and the output pane
+  and talks to this frame only over postMessage.
+-->
+<style>
+    html, body { margin: 0; padding: 0; height: 100%; background: transparent; overflow: hidden; }
+    /* Fill the frame exactly: the parent sizes the frame to the drawing buffer's
+       aspect, so 100%/100% scales without distorting. !important because
+       emscripten's GLFW writes an inline width/height onto the canvas. */
+    #canvas {
+        display: block;
+        width: 100% !important;
+        height: 100% !important;
+        border: 0;
+        outline: none;
+    }
+</style>
+<canvas id="canvas" width="640" height="480" tabindex="-1"></canvas>
+<script>
+(function () {
+    "use strict";
+
+    var PARENT = window.parent;
+    var canvas = document.getElementById("canvas");
+
+    function post(msg) {
+        try { PARENT.postMessage(msg, window.location.origin); } catch (e) { /* parent gone */ }
+    }
+
+    // dasAudio creates an AudioContext deep inside the wasm run, after the click's
+    // synchronous frame, so browsers would leave it suspended. Wrap the constructor
+    // before daslang_static.js loads. The parent's Run click grants sticky
+    // activation, which is inherited here, so resume() is permitted.
+    (function installAudioUnlock() {
+        var OrigAC = window.AudioContext || window.webkitAudioContext;
+        if (!OrigAC) return;
+        var ctxs = new Set();
+        var Wrapped = function () {
+            var c = new OrigAC(...arguments);
+            ctxs.add(c);
+            try { c.resume(); } catch (e) {}
+            return c;
+        };
+        Wrapped.prototype = OrigAC.prototype;
+        window.AudioContext = Wrapped;
+        if (window.webkitAudioContext) window.webkitAudioContext = Wrapped;
+        var resumeAll = function () {
+            ctxs.forEach(function (c) {
+                if (c.state === "closed") ctxs.delete(c);
+                else if (c.state === "suspended") c.resume().catch(function () {});
+            });
+        };
+        ["pointerdown", "keydown", "click"].forEach(function (e) {
+            document.addEventListener(e, resumeAll, true);
+        });
+    })();
+
+    // Reveal the canvas the instant ANY program asks it for a WebGL context. This
+    // is program-driven rather than flag-driven, so pasted and edited code gets it
+    // too, not just samples tagged graphics in data.json.
+    // The drawing buffer rides along so the parent can shape the frame to it
+    // instead of assuming 4:3 — a program that opens a 16:9 window then renders
+    // undistorted, and the aspect correction in its shaders stays honest.
+    var origGetContext = canvas.getContext.bind(canvas);
+    canvas.getContext = function (type) {
+        if (/webgl/i.test(String(type))) {
+            post({ type: "canvas-visible", width: canvas.width, height: canvas.height });
+        }
+        return origGetContext.apply(canvas, arguments);
+    };
+
+    window.Module = {
+        canvas: canvas,
+        // Threaded build: pthread workers resolve their script from
+        // mainScriptUrlOrBlob. Name it explicitly — document.currentScript is null
+        // under some load paths, and the pool would otherwise spawn Worker(undefined).
+        mainScriptUrlOrBlob: "daslang_static.js",
+        preRun: [],
+        postRun: [],
+        print: function (text) {
+            if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(" ");
+            post({ type: "stdout", text: String(text) });
+        },
+        printErr: function (text) {
+            if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(" ");
+            post({ type: "stderr", text: String(text) });
+        },
+        onRuntimeInitialized: function () { post({ type: "ready" }); },
+        onAbort: function (err) { post({ type: "aborted", message: String(err) }); },
+    };
+
+    window.onerror = function (message) {
+        post({ type: "stderr", text: String(message) });
+    };
+
+    // --- the one program this frame will ever run ---------------------------
+
+    var didRun = false;
+
+    function writeFiles(files) {
+        var FS = window.Module.FS;
+        Object.keys(files || {}).forEach(function (name) {
+            try {
+                FS.writeFile(name, files[name]);
+            } catch (e) {
+                post({ type: "stderr", text: "FS error writing " + name + ": " + (e.message || e) });
+            }
+        });
+    }
+
+    // Assets a sample declares in its "<file>.das.assets.json" sidecar. Fetched
+    // here rather than in the parent because MEMFS lives in this frame; written at
+    // the exact cwd-relative path the program's fopen() expects.
+    async function preloadAssets(urls) {
+        if (!urls || !urls.length) return;
+        var FS = window.Module.FS;
+        for (const url of urls) {
+            try {
+                const resp = await fetch(url);
+                if (!resp.ok) throw new Error("HTTP " + resp.status);
+                const bytes = new Uint8Array(await resp.arrayBuffer());
+                const path = url.replace(/^\.?\//, "");
+                const dir = path.lastIndexOf("/") > 0 ? path.slice(0, path.lastIndexOf("/")) : "";
+                if (dir) {
+                    try { FS.mkdirTree("/" + dir); } catch (e) {}
+                }
+                FS.writeFile("/" + path, bytes);
+            } catch (e) {
+                post({ type: "stderr", text: "asset " + url + ": " + (e.message || e) });
+            }
+        }
+    }
+
+    // Emscripten's stdout/stderr TTYs line-buffer and flush only on '\n', so a
+    // final print() without a trailing newline leaves bytes pending and they
+    // never reach the panel. Synthesize a '\n' per stream that still holds
+    // bytes; the TTY flush hook turns it into a print with no spurious blank.
+    function flushStdio() {
+        var FS = window.Module.FS;
+        if (!FS || !FS.streams) return;
+        [1, 2].forEach(function (fd) {
+            var s = FS.streams[fd];
+            if (s && s.tty && s.tty.output && s.tty.output.length > 0 &&
+                s.tty.ops && typeof s.tty.ops.put_char === "function") {
+                s.tty.ops.put_char(s.tty, 10);
+            }
+        });
+    }
+
+    async function runProgram(msg) {
+        if (didRun) {
+            // A frame runs exactly one program. The parent is expected to build a
+            // new frame per run; refusing here keeps that contract honest rather
+            // than silently reintroducing the state leak this frame exists to stop.
+            post({ type: "stderr", text: "run-frame: refusing a second run in one frame" });
+            return;
+        }
+        didRun = true;
+        writeFiles(msg.files);
+        await preloadAssets(msg.assets);
+        var code = 0;
+        try {
+            window.Module.callMain(msg.args || ["main.das"]);
+            flushStdio();
+        } catch (e) {
+            flushStdio();
+            // Emscripten throws ExitStatus on a normal exit as well as on real errors.
+            if (e && typeof e.status === "number") {
+                code = e.status;
+            } else {
+                post({ type: "stderr", text: String((e && e.message) || e) });
+                code = -1;
+            }
+        }
+        post({ type: "exit", code: code });
+    }
+
+    window.addEventListener("message", function (ev) {
+        if (ev.origin !== window.location.origin) return;
+        var msg = ev.data;
+        if (!msg || typeof msg !== "object") return;
+        if (msg.type === "run") runProgram(msg);
+    });
+
+    // Load the runtime. `ready` fires from onRuntimeInitialized once wasm is live.
+    var s = document.createElement("script");
+    s.src = "daslang_static.js";
+    s.async = true;
+    s.onerror = function () {
+        post({ type: "aborted", message: "daslang_static.js failed to load" });
+    };
+    document.head.appendChild(s);
+})();
+</script>

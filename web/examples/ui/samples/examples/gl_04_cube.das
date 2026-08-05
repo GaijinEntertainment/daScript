@@ -227,13 +227,13 @@ def update : bool {
     let aspect = float(display_w) / float(h)
 
     // camera orbits the cube; pass its world position to the fragment for the rim
-    let cam_pos = float3(cos(t * 0.5) * 4.0, 1.5, sin(t * 0.5) * 4.0)
+    let cam_pos = float3(cos(t * 0.5) * 5.0, 1.5, sin(t * 0.5) * 5.0)
     // breathing scale + tumble about a tilted axis
     let breathe = 1.0 + 0.05 * sin(t * 2.0)
     let rot = quat_from_unit_vec_ang(normalize(float3(1.0, 1.0, 0.0)), t * 0.6)
     u_model = compose(float3(0, 0, 0), rot, float3(breathe))
     u_view = look_at_rh(cam_pos, float3(0, 0, 0), float3(0, 1, 0))
-    u_proj = perspective_rh_opengl(45.0 * PI / 180.0, aspect, 0.1, 50.0)
+    u_proj = perspective_rh_minus1_to_1(45.0 * PI / 180.0, aspect, 0.1, 50.0)
     u_cam_pos = cam_pos
     u_time = t
 

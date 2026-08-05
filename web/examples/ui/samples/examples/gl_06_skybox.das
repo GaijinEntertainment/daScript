@@ -389,12 +389,12 @@ def update : bool {
 
     // camera orbits the sphere, slightly elevated, gently swaying
     let camera_angle = t * 0.4
-    let cam_pos = float3(cos(camera_angle) * 4.5, 2.2 + sin(camera_angle * 2.0) * 0.6, sin(camera_angle) * 4.5)
+    let cam_pos = float3(cos(camera_angle) * 5.5, 2.2 + sin(camera_angle * 2.0) * 0.6, sin(camera_angle) * 5.5)
     let target = float3(0.0, 0.9, 0.0)
     u_view_full = look_at_rh(cam_pos, target, float3(0, 1, 0))
     // rotation-only view: eye at the origin so the skybox cube stays centred on the camera
     u_view_rot = look_at_rh(float3(0, 0, 0), normalize(target - cam_pos), float3(0, 1, 0))
-    u_proj = perspective_rh_opengl(70.0 * PI / 180.0, aspect, 0.1, 50.0)
+    u_proj = perspective_rh_minus1_to_1(70.0 * PI / 180.0, aspect, 0.1, 50.0)
     u_cam_pos = cam_pos
     u_material = cycle_metal(t)
 

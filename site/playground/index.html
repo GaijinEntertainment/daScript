@@ -33,21 +33,15 @@
     <script src="https://cdn.jsdelivr.net/npm/@docsearch/js@3" defer></script>
     <script src="../files/docsearch.js" defer></script>
 
-    <!-- Graphics canvas: force a true 4:3 box (matching the 640x480 drawing
-         buffer the shader's aspect correction assumes) so the render isn't
-         stretched and rotations trace circles, not ovals. !important beats the
-         non-important inline width/height emscripten's GLFW sets on the canvas.
-         Text output sits below it (#output), so a graphics program can both
-         draw and print(). -->
+    <!-- Graphics output: programs render inside a run frame (see
+         playground-runner.js), and the host below stands where the canvas used
+         to. The column is a flex row, so the host must not shrink — the frame
+         is sized to the program's own drawing-buffer aspect and a squeezed box
+         would stretch the render, turning rotations into ovals. Text output
+         sits beside it (#output), so a program can both draw and print(). -->
     <style>
-      #canvas {
-        display: none;
-        background: #000;
-        border: 1px solid #444;
-        margin-top: 20px;
-        margin-bottom: 6px;
-      }
-      #canvas.is-graphics { display: block; }
+      .pg-run-host { flex: 0 0 auto; align-self: flex-start; }
+      .pg-run-frame { flex: 0 0 auto; }
       #output.with-canvas { height: 40vh; }
     </style>
 </head>
@@ -109,6 +103,9 @@
 <script type="text/javascript" src="../files/cm/daslang-mode.js"></script>
 <script type="text/javascript" src="../files/lz-string.min.js"></script>
 <script type="text/javascript" src="./playground-init.js"></script>
+<!-- Owns run-frame.html (one frame per program). Must precede main.js, whose
+     pageInit hands it the run host and whose run path delegates to it. -->
+<script type="text/javascript" src="./playground-runner.js?v=1"></script>
 <script type="text/javascript" src="./main.js"></script>
 <script type="text/javascript" src="./playground-tabs.js?v=2"></script>
 <script type="text/javascript" src="./playground-share.js?v=3"></script>

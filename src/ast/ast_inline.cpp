@@ -6,6 +6,19 @@
 
 namespace das {
 
+    // Prefix for every local this pass manufactures. ONE leading underscore, not
+    // two: GLSL ES reserves any identifier containing `__`, and WebGL's compiler
+    // enforces it (desktop GL drivers do not), so a `__`-prefixed temp made every
+    // inlined shader helper fail to compile in the browser while working on the
+    // desktop. Emitting a name that is illegal in a target we support is the
+    // compiler's problem to avoid, not each backend's to sanitize. A single
+    // leading underscore is legal there and matches what the GLSL backend already
+    // generates for its own temps (`_for_range_vs`).
+    // nextInlineIdIn() parses ids straight back off this prefix, so generator and
+    // matcher must never drift — they share this constant and its length.
+    static const char * INLINE_TEMP_PREFIX = "_inl";
+    static const size_t INLINE_TEMP_PREFIX_LEN = 4;
+
     // ===== [inline] splicing, automatic block inlining, invoke devirtualization =====
     // Runs in the patch slot (Program::patchAnnotations -> patchInline), after infer and
     // buildAccessFlags, before lint and optimize. Splices are syntax-level: cloned callee
@@ -61,7 +74,7 @@ namespace das {
     //  (B) a pure (noSideEffects) non-leaf arg whose param is read at most once and not
     //      under a loop substitutes textually - evaluation can only become conditional
     //      (fewer evaluations of a pure expression), never repeated;
-    //  (C) everything else binds a `let/var __inl<N>_arg_<param>` temp at the statement
+    //  (C) everything else binds a `let/var _inl<N>_arg_<param>` temp at the statement
     //      anchor in call-argument order: impure args evaluate exactly once in call order,
     //      multi-read params bind once, `var` by-value params ARE the mutable local copy.
     //
@@ -429,7 +442,7 @@ namespace das {
 
         // rewrites a cloned callee subtree for splicing:
         //  * parameter reads become the planned substitution or a temp read
-        //  * local declarations and their reads get the __inl<N>_ prefix
+        //  * local declarations and their reads get the _inl<N>_ prefix
         //  * r2v flags are cleared: a callee from another module is post-optimize
         //    (ref folding turned r2v wrappers into flags), and the flag would survive
         //    re-infer inconsistently - infer re-derives value reads from scratch
@@ -1221,7 +1234,7 @@ namespace das {
         //    the last statement of every enclosing list - control after it is
         //    already function exit): stores substitute in place, zero overhead.
         //    ReturnCanonicalization manufactures these shapes ahead of candidacy.
-        //  * otherwise a generated `__inl<N>_ret : bool` guards the fallthrough:
+        //  * otherwise a generated `_inl<N>_ret : bool` guards the fallthrough:
         //    a return becomes `store; flag = true` (+ `break` under a loop), an
         //    inner loop that may have flagged gets `if (flag) break` right after it
         //    (the cascade), and at non-loop levels the statement tail wraps in
@@ -1910,13 +1923,13 @@ namespace das {
                 return privateUseCache[fn] = scan.verdict;
             }
 
-            // next free __inl counter across a subtree; names are function-scoped and
+            // next free _inl counter across a subtree; names are function-scoped and
             // later rounds keep splicing into the same function, so continue the sequence
             int nextInlineIdIn ( Expression * body ) {
                 int mx = 0;
                 auto consider = [&]( const string & name ) {
-                    if ( name.compare(0, 5, "__inl")==0 ) {
-                        int id = atoi(name.c_str()+5);
+                    if ( name.compare(0, INLINE_TEMP_PREFIX_LEN, INLINE_TEMP_PREFIX)==0 ) {
+                        int id = atoi(name.c_str()+INLINE_TEMP_PREFIX_LEN);
                         if ( id >= mx ) mx = id + 1;
                     }
                 };
@@ -2200,7 +2213,7 @@ namespace das {
                     if ( calleeFn->result && !calleeFn->result->isVoid() ) subjResult = calleeFn->result;
                     sa.ofs = 0; sa.params = &calleeFn->arguments;
                 }
-                // a callee body may itself contain manufactured __inl locals (interiors
+                // a callee body may itself contain manufactured _inl locals (interiors
                 // splice before their callers within a round, and the counter is
                 // function-scoped) - the site id must clear those too, or the rename map
                 // captures this site's synthesized names (the result store would retarget
@@ -2264,7 +2277,7 @@ namespace das {
                             argFlavorFail = true;
                             return;
                         }
-                        string tname = "__inl" + to_string(inlineId) + "_arg_" + P->name;
+                        string tname = INLINE_TEMP_PREFIX + to_string(inlineId) + "_arg_" + P->name;
                         bool viaClone = viaMove && init->type && init->type->constant;
                         temps.push_back(makeTemp(callLike->at, tname, init, cnst, ref, viaMove && !viaClone, viaClone));
                         sub.tempName = tname;
@@ -2480,7 +2493,7 @@ namespace das {
                     LocalNameCollect pnames;
                     pnames.rename = &rename;
                     pnames.canShadowArgs = &canShadowArgs;
-                    pnames.prefix = "__inl" + to_string(inlineId) + "_l_";
+                    pnames.prefix = INLINE_TEMP_PREFIX + to_string(inlineId) + "_l_";
                     body->visit(pnames);
                     // a substituted caller expression under a can_shadow block argument of the
                     // same name re-resolves to the block's variable - silently, that is what
@@ -2642,7 +2655,7 @@ namespace das {
                     }
                     auto & list = site.anchor.block->list;
                     if ( !rootVar ) {
-                        string tname = "__inl" + to_string(inlineId) + "_low";
+                        string tname = INLINE_TEMP_PREFIX + to_string(inlineId) + "_low";
                         inlineId ++;
                         // a non-const temp: a `var p = <temp>` consumer of pointer type
                         // rejects initialization from a const reference. a non-copyable
@@ -2714,7 +2727,7 @@ namespace das {
                 // ----- eager position: hoist the impure prefix, splice temps and body -----
                 // ALL declinable checks run BEFORE the prefix hoist mutates the statement: a
                 // `continue` after ReplaceNode has rewritten the statement discards the pending
-                // temp declarations but keeps the __inl<N>_pre* references, and the orphaned
+                // temp declarations but keeps the _inl<N>_pre* references, and the orphaned
                 // ExprVar later fails infer (30838) or segfaults the access-flags pass
                 vector<Expression *> prefix;
                 collectImpurePrefix(site.stmt, callLike, prefix);
@@ -2763,7 +2776,7 @@ namespace das {
                 // renamed locals live in the _l_ sub-namespace so a callee local named
                 // `res` (or `arg_x`, `pre0`, `low`) can never collide with the
                 // manufactured _res/_arg_*/_pre*/_low temps of the same site
-                names.prefix = "__inl" + to_string(inlineId) + "_l_";
+                names.prefix = INLINE_TEMP_PREFIX + to_string(inlineId) + "_l_";
                 body->visit(names);
                 bool captureRisk = false;
                 for ( auto & csn : canShadowArgs ) {
@@ -2777,7 +2790,7 @@ namespace das {
                 vector<ExpressionPtr> splice;
                 int preIdx = 0;
                 for ( auto pe : prefix ) {
-                    string tname = "__inl" + to_string(inlineId) + "_pre" + to_string(preIdx++);
+                    string tname = INLINE_TEMP_PREFIX + to_string(inlineId) + "_pre" + to_string(preIdx++);
                     // non-const temps throughout: the hoisted expression was a non-const
                     // rvalue (or keeps its lvalue constness via the reference binding), and
                     // a const temp read would no longer match var pointer params downstream
@@ -2836,9 +2849,9 @@ namespace das {
                     // (terminal shapes in place, the rest through a generated bool flag -
                     // see ReturnStoreRewrite). the standalone callee keeps its shape
                     ReturnStoreRewrite rsr;
-                    rsr.flagName = "__inl" + to_string(inlineId) + "_ret";
+                    rsr.flagName = INLINE_TEMP_PREFIX + to_string(inlineId) + "_ret";
                     if ( !isVoid ) {
-                        rsr.resName = "__inl" + to_string(inlineId) + "_res";
+                        rsr.resName = INLINE_TEMP_PREFIX + to_string(inlineId) + "_res";
                         splice.push_back(makeUninitDecl(callLike->at, rsr.resName, subjResult));
                     }
                     rsr.apply(bodyClone);

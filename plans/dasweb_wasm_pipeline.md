@@ -139,13 +139,24 @@ installed, and `/usr/bin/clang` there is clang-14 (cannot build this tree) — p
 mount path — it is `llvm/daslib/...`, not `daslib/...`; the latter fails with
 `error[20605] missing prerequisite`, which looks exactly like a missing module and is not one.
 
-One trap that run surfaced, for 3a to carry:
+**The wasm build MUST have its own worktree. This is a hard requirement, not hygiene** — it was
+demonstrated the expensive way while deploying #3625:
 
-- **The host binary lands in the tree's `bin/daslang`**, the same path an ordinary native build
-  of that tree writes. A later native build in the same worktree silently replaces the libc++
-  host with a libstdc++ one — the exact corruption this recipe exists to prevent, with no
-  signal. This is why the wasm host needs **its own worktree**, and the script now warns when
-  the resulting binary links libstdc++.
+- **Every build of this tree writes to the same tree-level `bin/` and `lib/`**, whatever build
+  directory it was configured in. So the emscripten build and the native build fight over one
+  output tree.
+- The wasm host build leaves `bin/daslang` linked against **libc++**. The web box has no libc++,
+  so a release bundle baked with that host would not run there — and nothing about the bake says
+  so. (`build_wasm_host.sh` now warns when the binary it produced links libstdc++, i.e. the
+  reverse mistake.)
+- Worse, an emscripten build **replaces static archives in `lib/` with WebAssembly ones**. After
+  one interrupted `daspkg build --wasm`, 8 of 23 archives in `lib/` held wasm objects — including
+  `liblibUriParser.a`, which links into daslang itself. The native rebuild then died on
+  `error adding symbols: file format not recognized`, and `file(1)` on the archive says
+  "current ar archive" (it reports the container, not the members), so the usual sanity check
+  looks clean. Only `ar x` + `file` on a member reveals it.
+- Recovery is `rm -f lib/*.a && rm -rf bin build web/build64` plus a full native rebuild. Budget
+  for it if the two ever share a tree again — which they should not.
 
 Still unproven end-to-end: an actual `daspkg build --wasm` run, which needs emsdk 5.0.7 (not yet
 installed). The host half is validated; the emscripten half is not.
@@ -194,9 +205,31 @@ Mapped onto the actual steps in `.github/workflows/pages.yml`:
 | 4–7. arcanoid, pacman, furier, path_tracer_lab, physarum_lab | **Fold** into the content-addressed cache rail. They change rarely, so the cache near-always hits and CI stops rebuilding them. |
 | "Verify wasm example artifacts" | Follows steps 4–7 wherever they land — it exists because those builds are non-fatal, and that property must survive the move. |
 
-**Design point the game pages force:** a game artifact is an **html + js + wasm triple**, not a
-single `.wasm`. The artifact cache must carry multi-file bundles from the start, or the games
-cannot fold in. Get that into the schema before building the single-file path, not after.
+**Design point the game pages force — and it is NOT about multi-file sources.** Two axes that
+look like one and are not:
+
+- **Input multiplicity is already solved, and is not what shapes the artifact.** A multi-file
+  sample (curated or user-authored) is stored as one `{files, active}` JSON document under one
+  hash — phase 1 does this already — and compiles to **one** wasm module. `arcanoid` is the
+  proof: its source dir holds `main.das` + `live_stub.das`, and `daspkg release wasm --root`
+  emits a single `arcanoid.wasm`. So N sources in never means N artifacts out.
+- **Output multiplicity is about delivery mode.** A playground sample is a bare `.wasm` that the
+  already-loaded `daslang_static` runtime instantiates — one file. A game is a **standalone
+  page**: its own `html` + `js` + `wasm`, staged as a triple, because the browser fetches the js
+  and the js fetches the wasm by name. That, and only that, is what forces the cache to hold
+  file sets.
+
+⇒ The cache **key** needs nothing new (the source hash already covers a bundle). The cache
+**value** needs to hold a file set only if the games fold in — which is exactly open question 1.
+If the answer is "games stay in CI", a single-`.wasm` value is sufficient and simpler.
+
+**Separate gap this exposes, worth fixing regardless:** the old per-sample wasm path skipped
+multi-file samples entirely — `deriveJitName` in `web/examples/ui/src/main.js` returns `null`
+when `files.length !== 1`, and the engine radio was disabled for those samples. Since users can
+author multi-file examples and share them, phase 3 should build them too. Nothing about the
+compiler prevents it (the games prove a multi-file root compiles); it was a UI-side shortcut
+tied to naming the artifact after a single source file. Content-addressing removes that
+constraint — the artifact is named by hash, not by basename.
 
 Keep a CI compile-gate job proving the curated set still builds (a test that publishes nothing) —
 a broken sample should red CI, not the production queue.
