@@ -179,6 +179,8 @@ namespace  das {
     };
 
     struct SimPolicy_Double : SimPolicy_Type<double>, SimPolicy_MathTT<double> {
+        // hides SimPolicy_MathTT::Abs, whose `a >= 0 ? a : -a` returns -0.0 unchanged
+        static __forceinline double Abs ( double a, Context &, LineInfo * ) { return fabs(a); }
         static __forceinline double Div ( double a, double b, Context &, LineInfo * ) { return a / b; }
         static __forceinline void SetDiv  ( double & a, double b, Context &, LineInfo * ) { a /= b; }
         static __forceinline double Mod ( double a, double b, Context &, LineInfo * ) { return fmod(a,b); }
@@ -232,7 +234,7 @@ namespace  das {
 
     struct SimPolicy_MathFloat {
         static __forceinline float Sign     ( float a, Context &, LineInfo * )          { return a == 0.0f ? 0.0f : (a > 0.0f) ? 1.0f : -1.0f; }
-        static __forceinline float Abs      ( float a, Context &, LineInfo * )          { return v_extract_x(v_abs(v_set_x(a))); }
+        static __forceinline float Abs      ( float a, Context &, LineInfo * )          { return fabsf(a); }
         static __forceinline float Floor    ( float a, Context &, LineInfo * )          { return v_extract_x(v_floor(v_set_x(a))); }
         static __forceinline float Ceil     ( float a, Context &, LineInfo * )          { return v_extract_x(v_ceil(v_set_x(a))); }
         static __forceinline float Round    ( float a, Context &, LineInfo * )          { return v_extract_x(v_round(v_set_x(a))); }
@@ -284,7 +286,7 @@ namespace  das {
             return v_or(v_and(v_splats(1.0f), v_cmp_gt(a, v_zero())), v_and(v_splats(-1.0f), v_cmp_lt(a, v_zero())));
         }
 
-        static __forceinline vec4f Abs      ( vec4f a, Context &, LineInfo * )          { return v_abs(a); }
+        static __forceinline vec4f Abs      ( vec4f a, Context &, LineInfo * )          { return v_andnot(v_msbit(), a); }
         static __forceinline vec4f Floor    ( vec4f a, Context &, LineInfo * )          { return v_floor(a); }
         static __forceinline vec4f Ceil     ( vec4f a, Context &, LineInfo * )          { return v_ceil(a); }
         static __forceinline vec4f Fract    ( vec4f a, Context &, LineInfo * )          { return v_sub(a, v_floor(a)); }
