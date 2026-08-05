@@ -392,6 +392,27 @@ def private parse_result_manifest(text : string) : array<ArtifactFile> {
     return <- out
 }
 
+def manifest_matches_mode(files : array<ArtifactFile> const; mode : string) : bool {
+    //! The uploaded set must be exactly the mode's published set — same names,
+    //! no extras, no omissions.
+    let wanted <- expected_artifact_names(mode)
+    if (empty(wanted) || length(files) != length(wanted)) {
+        return false
+    }
+    for (name in wanted) {
+        var found = false
+        for (f in files) {
+            if (f.name == name) {
+                found = true
+            }
+        }
+        if (!found) {
+            return false
+        }
+    }
+    return true
+}
+
 def private handle_build_result(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     let t0 = ref_time_ticks()
     let auth = build_auth_status(req)
@@ -434,6 +455,15 @@ def private handle_build_result(var req : HttpRequest?; var resp : HttpResponse?
     if (empty(files)) {
         log_request("POST", "/api/build/result", 400, ip, raw_bytes, 0, t0)
         return resp |> JSON(write_json(JV((error = "malformed manifest"))), http_status.BAD_REQUEST)
+    }
+    // The build ran the user's own compile-time code, so the artifact set is
+    // not the builder's to choose: it must be exactly what this mode
+    // publishes, or a build could smuggle an extra file onto this origin.
+    if (!manifest_matches_mode(files, pre.mode)) {
+        logger_error("playground.build", "refused unexpected artifact set",
+            JV((hash = hash, toolchain = toolchain, mode = pre.mode, files = length(files))))
+        log_request("POST", "/api/build/result", 400, ip, raw_bytes, 0, t0)
+        return resp |> JSON(write_json(JV((error = "unexpected artifact set"))), http_status.BAD_REQUEST)
     }
     let stage = create_stage_dir(g_build.blobs_dir)
     if (empty(stage)) {

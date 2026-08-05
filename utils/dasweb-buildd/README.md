@@ -43,25 +43,70 @@ The service refuses to start without a token and a build command.
    as `main.das`, or the `{files, active}` bundle with every file name validated (one boring
    `.das` path component each; anything else refuses the job).
 4. **Build**: `<build_cmd> <src_dir> <out_dir> <mode> <entry>` via argv (no shell),
-   killed after `build_timeout_seconds`. `run_build.sh` is the recipe: bwrap sandbox
-   (no network, tmpfs scratch; fail-closed — `DASWEB_BUILDD_UNSANDBOXED=1` is the bring-up
-   override), and per mode the exact CI command the queue replaced — `module` = host daslang
-   `-exe --jit-target=wasm64-unknown-emscripten` against the `web/build64` runtime archive
-   (→ `sample.wasm`); `page` (standalone game html+js+wasm) lands with the game checkpoint.
-5. **Upload**: success = multipart `POST /api/build/result` with a `[{name, sha256}]` manifest
+   killed after `build_timeout_seconds`. `run_build.sh` is the recipe — see **The sandbox**
+   below — and per mode it runs the exact CI command the queue replaced: `module` = host
+   daslang `-exe --jit-target=wasm64-unknown-emscripten` against the `web/output64` runtime
+   archive (→ `sample.wasm`); `page` (standalone game html+js+wasm) lands with the game
+   checkpoint.
+5. **Collect**: exactly the files the mode declares, by name (`expected_artifact_names`).
+   The build runs the user's compile-time code and can write anything into the output
+   directory, so anything else there is logged and dropped — a build cannot widen its own
+   output set. The server re-checks the same rule rather than trusting this service.
+6. **Upload**: success = multipart `POST /api/build/result` with a `[{name, sha256}]` manifest
    plus one file part per artifact (libhv reads the files itself — bytes never pass through a
    das string); failure = the build output as the error. Every claim this service sees resolves
    with one of the two — the queue's stale-requeue sweep is for builder *death*, not builder
    code paths.
+
+## The sandbox
+
+Compiling a user's `.das` is remote code execution by design: macros and `[init]` run at
+compile time, and plain `fio` reads files with **no `unsafe` anywhere**. So daslang's own
+policies (`no_unsafe`, `no_init`) are defense in depth and never the boundary. The boundary is
+a container.
+
+The choice of a container over a namespace-carving tool like bubblewrap is about which way a
+mistake fails. Carving starts from the whole host and subtracts, so a forgotten flag leaves a
+hole open silently. A container starts from nothing, so a forgotten mount fails the *build*,
+loudly, on the next job. Everything a build may touch is one of the `-v` lines in
+`run_build.sh`, and that list is the entire review surface: the wasm worktree, emsdk, the LLVM
+runtime libraries, the job's source (read-only) and its output directory (writable). Mounts are
+identity-mapped because emsdk and the daslang host resolve paths relative to themselves. No
+`$HOME`, no `/srv`, no config file, no key is inside.
+
+Also applied: `--network=none`, a read-only root with a tmpfs `/tmp`, `--memory` /
+`--pids-limit` / `--cpus` caps, `--cap-drop=ALL`, `--security-opt=no-new-privileges`, and
+`--userns=keep-id` so the build runs as the unprivileged account this service runs as. The
+emcc cache is mounted read-only with `EM_FROZEN_CACHE=1`, so one job cannot poison what later
+jobs link against; the toolchain-bump protocol warms it with one build outside the sandbox.
+Podman passes no host environment through, so a token in this service's environment is not
+visible to a build. There is deliberately **no** unsandboxed fallback: no podman or no image
+means no build.
+
+Two deployment requirements that are part of the boundary, not decoration. This service must
+run under a **dedicated, sudo-less account** — on a box where the login user has passwordless
+sudo, a sandbox escape as that user is a root compromise. And its bearer token must reach it
+without becoming a readable file inside any mount (systemd `LoadCredential`, or the
+environment, which podman does not forward).
+
+Verified on zen4 by building a hostile sample: a compile-time `[init]` that `fread`s
+`~/SETUP.md`, `~/.ssh/authorized_keys` and `/etc/shadow` gets **0 bytes** from each, a planted
+token environment variable comes back empty, `popen` runs but resolves no hostnames, and a
+`leak.js` it wrote beside the real output never leaves the box.
 
 A build blocks the tick thread, so `/healthz` goes dark for the build's duration; the watchdog
 only logs health transitions (it restarts on process exit, never on health), and
 `build_timeout_seconds` bounds the window.
 
 The box environment (`DASWEB_WASM_WORKTREE`, pinned emsdk, the worktree's own
-`web/build_wasm_host.sh` host build) is documented in `~/SETUP.md` on zen4 — the wasm worktree
-is dedicated because wasm and native builds poison each other's `bin/` and `lib/`
-(`plans/dasweb_wasm_pipeline.md` has the postmortem).
+`web/build_wasm_host.sh` host build, the sandbox image) is documented in `~/SETUP.md` on zen4 —
+the wasm worktree is dedicated because wasm and native builds poison each other's `bin/` and
+`lib/` (`plans/dasweb_wasm_pipeline.md` has the postmortem). Build the sandbox image once per
+`Containerfile` change:
+
+```bash
+podman build -t dasweb-builder:1 -f utils/dasweb-buildd/Containerfile .
+```
 
 ## Tests
 

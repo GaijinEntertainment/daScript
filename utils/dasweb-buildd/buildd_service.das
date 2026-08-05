@@ -126,7 +126,7 @@ def private run_one_job(job : ClaimedBuild) {
             upload_failure(g_cfg.server_url, g_cfg.token, job.hash, job.toolchain,
                 empty(r.output) ? "build failed (exit code {r.exit_code})" : r.output)
         } else {
-            let files <- collect_artifacts(out_dir)
+            let files <- collect_artifacts(out_dir, job.mode)
             if (empty(files)) {
                 upload_failure(g_cfg.server_url, g_cfg.token, job.hash, job.toolchain,
                     "build produced no artifacts\n{r.output}")

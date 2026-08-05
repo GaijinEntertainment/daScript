@@ -127,6 +127,10 @@ must disable the surface, never open it.
 renamed into place after every file's sha256 verifies.** A served path built from request
 data anywhere else, or a write landing directly in the served tree, is a defect.
 
+**An upload publishes exactly the file set its job's mode declares, checked here and not
+taken on the builder's word.** A build runs the user's own compile-time code, so accepting
+whatever set the builder sends would let a build put an extra file on this origin.
+
 **No route enables CORS.** The middleware reflects the caller's `Origin` on every route at once,
 which would make stored samples and the operator surface cross-origin readable.
 

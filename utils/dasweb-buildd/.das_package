@@ -16,4 +16,5 @@ def release() {
     release_include_from("utils/watchdog/watchdog.py")
     release_include_if_missing("watchdog.json")
     release_include("run_build.sh")                    // the sandboxed build recipe the service invokes
+    release_include("Containerfile")                   // the sandbox image definition; run_build.sh refuses to build without it
 }

@@ -27,6 +27,19 @@ let BUILD_MODE_PAGE = "page"       // standalone html+js+wasm page (the example 
 //! A failed build stores the compiler error for the user; cap what one job can hold.
 let MAX_BUILD_ERROR_BYTES = 65536
 
+def expected_artifact_names(mode : string) : array<string> {
+    //! The EXACT file set a mode may publish. The builder enforces this too,
+    //! but a build runs the user's own compile-time code, so the server does
+    //! not take the builder's word for what a job produced: anything the build
+    //! dropped beside its real output would be served publicly from this
+    //! origin. Empty = the mode publishes nothing (page mode defines its set
+    //! when the game checkpoint wires it).
+    if (mode == BUILD_MODE_MODULE) {
+        return <- ["sample.wasm"]
+    }
+    return <- array<string>()
+}
+
 [sql_table(name = "build_jobs")]
 struct BuildJob {
     // Composite primary key (Hash, ToolchainId) lives in the migration DDL —

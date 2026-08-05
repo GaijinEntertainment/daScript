@@ -92,25 +92,50 @@ def test_run_build_command(t : T?) {
 def test_collect_artifacts(t : T?) {
     with_temp_dir("buildd_out_") $(dir) {
         fwrite(path_join(dir, "sample.wasm"), "wasm bytes")
-        fwrite(path_join(dir, "index.html"), "<html/>")
-        fwrite(path_join(dir, "build.log"), "junk")
-        fwrite(path_join(dir, ".hidden.wasm"), "junk")
-        t |> run("only servable names are collected, sorted, with shas") @(tt : T?) {
-            let files <- collect_artifacts(dir)
-            tt |> equal(length(files), 2)
-            tt |> equal(files[0].name, "index.html")
-            tt |> equal(files[1].name, "sample.wasm")
-            tt |> equal(files[1].sha256, sha256_hex("wasm bytes"))
-            tt |> equal(files[0].sha256, sha256_file_hex(path_join(dir, "index.html")))
+        t |> run("module mode collects its one artifact with a sha") @(tt : T?) {
+            let files <- collect_artifacts(dir, "module")
+            tt |> equal(length(files), 1)
+            tt |> equal(files[0].name, "sample.wasm")
+            tt |> equal(files[0].sha256, sha256_hex("wasm bytes"))
         }
         t |> run("the manifest is the upload shape") @(tt : T?) {
-            let files <- collect_artifacts(dir)
+            let files <- collect_artifacts(dir, "module")
             var jerr = ""
             var doc = read_json(manifest_json(files), jerr)
             tt |> success(doc != null && doc.value is _array, "json array")
-            tt |> equal((doc.value as _array)[1]?["name"] ?? "", "sample.wasm")
-            tt |> equal((doc.value as _array)[1]?["sha256"] ?? "", sha256_hex("wasm bytes"))
+            tt |> equal((doc.value as _array)[0]?["name"] ?? "", "sample.wasm")
+            tt |> equal((doc.value as _array)[0]?["sha256"] ?? "", sha256_hex("wasm bytes"))
         }
+    }
+}
+
+[test]
+def test_build_cannot_widen_its_own_output(t : T?) {
+    // Regression, proven on zen4: a compile-time [init] in the user's own
+    // source can fwrite into the output directory. The sandbox stops it
+    // READING the box, and this stops what it writes from being published.
+    with_temp_dir("buildd_out_") $(dir) {
+        fwrite(path_join(dir, "sample.wasm"), "wasm bytes")
+        fwrite(path_join(dir, "leak.js"), "// smuggled payload")
+        fwrite(path_join(dir, "index.html"), "<script>evil()</script>")
+        fwrite(path_join(dir, "sample.o"), "object file")
+        t |> run("smuggled servable files are dropped, not uploaded") @(tt : T?) {
+            let files <- collect_artifacts(dir, "module")
+            tt |> equal(length(files), 1)
+            tt |> equal(files[0].name, "sample.wasm")
+        }
+    }
+    with_temp_dir("buildd_out_") $(dir) {
+        fwrite(path_join(dir, "leak.js"), "// smuggled payload")
+        t |> run("a build producing only smuggled files yields nothing") @(tt : T?) {
+            let files <- collect_artifacts(dir, "module")
+            tt |> success(empty(files), "no artifacts")
+        }
+    }
+    t |> run("an undefined mode publishes nothing") @(tt : T?) {
+        tt |> success(empty(expected_artifact_names("page")), "page mode not wired")
+        tt |> success(empty(expected_artifact_names("bogus")), "unknown mode")
+        tt |> equal(length(expected_artifact_names("module")), 1)
     }
 }
 

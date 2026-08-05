@@ -132,28 +132,45 @@ def run_build_command(build_cmd : string; src_dir : string; out_dir : string; mo
     return BuildRunResult(ok = rc == 0, exit_code = rc, output = output)
 }
 
-def collect_artifacts(out_dir : string) : array<BuiltFile> {
-    //! The build output dir, one level deep, sorted by name — the upload
-    //! manifest. Names the server would refuse are skipped loudly rather than
-    //! failing the set: a build may legitimately drop scratch files beside its
-    //! outputs.
-    var names : array<string>
+def expected_artifact_names(mode : string) : array<string> {
+    //! The EXACT file set a mode may publish. Not a suffix filter: the build
+    //! writes into this directory with the user's own compile-time code, so
+    //! anything it drops beside the real output would otherwise be uploaded
+    //! and served publicly. Empty = the mode publishes nothing (page mode
+    //! defines its set when the game checkpoint wires it).
+    if (mode == "module") {
+        return <- ["sample.wasm"]
+    }
+    return <- array<string>()
+}
+
+def collect_artifacts(out_dir : string; mode : string) : array<BuiltFile> {
+    //! The mode's expected artifacts, in order, hashed for the upload
+    //! manifest. Everything else in the directory is ignored and logged —
+    //! a build cannot widen its own output set.
+    var out : array<BuiltFile>
+    let wanted <- expected_artifact_names(mode)
+    if (empty(wanted)) {
+        logger_error("buildd.core", "no artifact set defined for mode '{mode}'")
+        return <- out
+    }
+    var seen : table<string>
     dir(out_dir) $(name) {
         if (name != "." && name != "..") {
-            names |> push(name)
+            seen |> insert(name)
         }
     }
-    sort(names)
-    var out : array<BuiltFile>
-    out |> reserve(length(names))
-    for (name in names) {
+    for (name in seen |> keys()) {
+        if (find_index(wanted, name) < 0) {
+            logger_warning("buildd.core", "ignoring unexpected build output", JV((name = name, mode = mode)))
+        }
+    }
+    out |> reserve(length(wanted))
+    for (name in wanted) {
         let full = path_join(out_dir, name)
         let st = stat(full)
         if (!st.is_valid || !st.is_reg) {
-            continue
-        }
-        if (!is_valid_output_filename(name)) {
-            logger_warning("buildd.core", "skipping non-artifact output {name}")
+            logger_error("buildd.core", "expected artifact missing", JV((name = name, mode = mode)))
             continue
         }
         let hex = sha256_file_hex(full)

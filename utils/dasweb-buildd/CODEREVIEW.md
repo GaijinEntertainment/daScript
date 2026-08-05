@@ -62,9 +62,12 @@ defect, and this section is the whole test.
   command invocation, artifact collection and hashing, toolchain derivation. Zero network.
 - `buildd_client.das` — the outbound HTTP calls (claim, result upload, announce). Zero
   filesystem beyond handing paths to the multipart uploader.
-- `run_build.sh` — the box-side build recipe and its sandbox wrapper; the only place a build
-  command line lives. A behavior change here without a note in `README.md` (Run section) is a
-  defect.
+- `run_build.sh` — the box-side build recipe and its sandbox invocation; the only place a build
+  command line or a sandbox mount lives. A behavior change here without a note in `README.md`
+  (The sandbox section) is a defect.
+- `Containerfile` — the sandbox image. It holds only what a system must provide the toolchain;
+  anything a read-only mount can supply instead belongs in `run_build.sh`. A change here
+  without bumping the image tag in both files, in the same commit, is a defect.
 - `_fake_build.das` — the cross-platform test stand-in for `run_build.sh`; test fixture only.
 - `.das_package`, `watchdog.json`, `dasweb-buildd.toml` — packaging and deployment. A behavior
   change hidden in these files without a note in `README.md` (Run section) is a defect.
@@ -92,8 +95,19 @@ banner logs set/unset and provenance only.
 this directory's name validation first.** A path assembled from an unvalidated request- or
 build-derived name is a defect.
 
-**Builds run through the sandbox wrapper in `run_build.sh`, fail-closed.** A change that lets a
-build run unsandboxed without the explicit override variable is a defect.
+**A build publishes exactly the file set its mode declares, by name.** The build executes the
+user's own compile-time code and can write anything into the output directory, so a
+suffix filter, a glob, or any rule that lets the build widen its own output set is a defect.
+
+**Builds run in the container sandbox defined by `Containerfile` and `run_build.sh`, and there
+is no unsandboxed path.** Every host path the build may touch is an explicit mount in that
+script; a change that adds a mount without a stated reason, or that reintroduces a
+run-outside-the-sandbox fallback, is a defect. Mounting anything that holds a secret, a key, or
+another service's data is a defect.
+
+**The sandbox is the boundary, and daslang's own policies are not.** A change justified by
+`no_unsafe`, `no_init`, or any compile-time policy flag standing in for isolation is a defect:
+compile-time code reads files with no `unsafe` at all.
 
 **Processes are spawned via `popen_argv` (no shell).** A build or git invocation through a
 shell-interpreted string is a defect.
