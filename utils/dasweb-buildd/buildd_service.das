@@ -94,14 +94,22 @@ def init_service(cfg : BuilddArgs) : bool {
 }
 
 def private new_scratch_dir(var error : string&) : string {
-    //! A freshly created, unguessable directory for one job. Unguessable
-    //! because a name a local account can predict could be pre-created, or have
-    //! a symlink planted inside it, before the build writes there.
+    //! A freshly created directory for one job, never an existing one.
     //!
-    //! An operator who configured `scratch_dir` gets it honoured — that is how
-    //! builds are placed on a service-owned or roomier filesystem, and how the
-    //! parent's permissions (0700, per README) keep other accounts out.
-    //! Unset falls back to the system temp dir.
+    //! What protects it is NOT the secrecy of its name. `mkdir` is
+    //! create-or-fail, so a name that already exists — including one an
+    //! attacker pre-created, and including a symlink — is refused rather than
+    //! adopted; and the parent's permissions (0700, per README) are what keep
+    //! other local accounts out of a build's sources and output. The random
+    //! suffix only avoids collisions between concurrent jobs.
+    //!
+    //! Be precise about the two paths, because they differ: with no
+    //! `scratch_dir` the name comes from the runtime's own temp-path
+    //! generator, which draws on `std::random_device` and IS unpredictable.
+    //! With one configured the suffix comes from daslib's LCG seeded off the
+    //! clock, which a local account could predict — the cost of that is a
+    //! nuisance (pre-creating candidates makes this function give up and fail
+    //! the job), not a plant, because of the create-or-fail rule above.
     if (empty(g_cfg.scratch_dir)) {
         return create_temp_directory("dasweb-build-", error)
     }
@@ -110,8 +118,6 @@ def private new_scratch_dir(var error : string&) : string {
     for (_attempt in range(16)) {
         let candidate = path_join(g_cfg.scratch_dir,
             "dasweb-build-{uint(random_int(seed))}-{uint(random_int(seed))}")
-        // mkdir is create-or-fail: an existing directory is refused rather than
-        // reused, so a collision (or a pre-created name) cannot be walked into.
         if (mkdir(candidate)) {
             return candidate
         }
