@@ -55,22 +55,27 @@ readers' silent-default.
    bool rule, loud garbage, required satisfied by either carrier, mutex argv-only, help
    shows `(env: NAME)`. Implemented at the three `CommandArgumentInfo` chokepoints so
    parse/enum/required inherit it untouched. 83/83 + daspkg 220-test consumer suite green.
-4. **`[EnvConfig]` + the dasLLAMA knob migration (pulled forward — Boris).**
-   **Macro half DONE** (`[EnvConfig(env_prefix="X")]` in clargs: generates
-   `env_config(type<T>) : T` with field initializers as defaults and
-   `get_env_config_info(type<T>)` for the doc/coverage rails; same `@clarg_*` vocabulary,
-   shared helpers hoisted to module scope; argv concepts rejected; garbage numerics WARN
-   and keep the default — a library load must not die on a stray variable; the consumer
-   owns the two-line global + `[init]` loader call, keeping init-order explicit).
-   **Migration half REMAINS (fresh session):** one `[EnvConfig]` struct per EnvArea in
-   dasllama_env (area = which struct — keeps clargs generic), structs GENERATED once from
-   the existing `k(o, ...)` registry list, read sites mechanically rewritten
-   `env_flag("DASLLAMA_X", d)` → config-field reads, gen_env_doc + test_env_registry
-   re-pointed at the generated info, then the registry list dies. ⚠ semantics deltas to
-   sweep for during migration: set-but-empty becomes UNSET (dasllama_env's env_flag reads
-   empty as FALSE today — grep for `VAR= ` disable idioms), and garbage now warns instead
-   of silently defaulting. Afterwards the env CODEREVIEW rule ("no get_env outside the
-   generated loader") becomes enforceable.
+4. **DONE — `[EnvConfig]` + the dasLLAMA knob migration (pulled forward — Boris).**
+   Macro half: `[EnvConfig(env_prefix="X")]` in clargs generates `env_config(type<T>) : T`
+   (field initializers as defaults, garbage numerics WARN and keep the default) plus
+   `get_env_config_info(type<T>)`; extended with int64 and `Option<T>` (tri-state) fields
+   and the doc-rail info (`default_doc` from `@clarg_default_doc`-or-initializer,
+   `is_path` from `@clarg_path`). Migration half: the 146-name registry became eleven
+   `[EnvConfig]` area structs in dasllama_env (name-for-name — verified by diffing the
+   generated name set against the old doc), loaded ONCE at context init into `let g_env_*`
+   globals (dependency order makes them safe from any requirer's globals and `[init]`s);
+   ~230 read sites across dasllama/, harness/, benchmarks/, performance/, tests/ and
+   dasllama-server became field reads (tri-states as `Option ?? computed`); tutorials keep
+   one registered raw read for pedagogy; dynamic names (bench repro forwarder, lcpp
+   levers) go through sanctioned `env_is_set`/`env_value_of`. ENVIRONMENT.md regenerates
+   from the info; test_env_registry gained STRICT teeth (zero raw env reads in
+   modules/dasLLAMA + utils/dasllama-* outside dasllama_env.das) and the CODEREVIEW env
+   rule is live. Three previously-invisible lab filters (DASMETAL_LAB_ARMS/SHAPES/
+   VARIANTS) got declared. Delta sweeps came back clean: no `VAR=`-empty disable idioms
+   (the two hits target the tune framework's own readers), no `=0` presence-flag users.
+   Deliberate semantics deltas, now documented in ENVIRONMENT.md: set-but-empty is unset;
+   garbage warns; presence-flags honor `=0`; in-process `set_env_variable` is invisible
+   to the loaded config.
 5. **The sweep** — ~391 raw `get_clock`-family sites in `modules/dasLLAMA/dasllama/` alone.
    Classify: perf-bucket accumulators → zones on the marker rail; big UNMARKED intervals
    (model load, dlim map, tokenizer init, warmup) → zones so the timeline finally shows them;
@@ -89,7 +94,9 @@ readers' silent-default.
 ## Tail end (own arc)
 
 The tree-wide (non-dasLLAMA) raw `get_env_variable` cleanup + the lint rule banning raw
-reads outside the sanctioned rails — after `[EnvConfig]` proves out in dasLLAMA.
+reads outside the sanctioned rails — `[EnvConfig]` has now proved out in dasLLAMA
+(146 knobs, zero raw reads left in the module), so the shape is settled: declare fields,
+load once, read `g_env_*`.
 
 ## Compiler gap — FIXED (Boris-approved "mirror fix", same arc)
 

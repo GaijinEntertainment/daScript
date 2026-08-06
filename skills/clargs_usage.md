@@ -140,15 +140,26 @@ flag.
 
 Libraries have no argv, so their knobs use the sibling annotation: a struct
 marked `[EnvConfig(env_prefix = "MYLIB")]` (same `@clarg_doc` / `@clarg_env`
-vocabulary, same name derivation, bool/int/float/string fields, field
+vocabulary, same name derivation, bool/int/int64/float/string fields, field
 initializers as defaults) generates `env_config(type<T>) : T` — call it once
-in an `[init]` (or a lazy loader) and cache the result in a global; hot code
-then reads plain struct fields, never the environment — plus
+(a global initializer `let g_cfg = env_config(type<T>)` loads at context
+init, before any requirer's globals or `[init]`s) and hot code then reads
+plain struct fields, never the environment — plus
 `get_env_config_info(type<T>)` for doc-generation and coverage rails.
 Same env semantics as the twins above, except garbage numeric text logs a
 warning and keeps the default (a library load must not die on a stray
 variable). Positional/count/required/short/mutex annotations are rejected —
 those are command-line concepts.
+
+Tri-state knobs — presence matters, or the effective default is computed at
+runtime — declare the field `Option<T>`: it stays `none` when the variable
+is unset, so a read site writes `cfg.layers ?? computed_default()` or
+branches on `is_some`. Two doc-rail extras: `@clarg_default_doc = "probed"`
+overrides the rendered default text when the initializer literal would
+mislead, and `@clarg_path` marks a string field as a filesystem path — both
+land in `CommandArgumentInfo` (`default_doc`, `is_path`) for generators.
+The worked example is dasLLAMA's `dasllama_env.das` (146 knobs, eleven
+area structs, its `ENVIRONMENT.md` generated from the info).
 
 ## Help-flag pitfall
 

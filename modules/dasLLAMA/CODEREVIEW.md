@@ -241,9 +241,9 @@ defect.
 
 ### Generated
 
-- `ENVIRONMENT.md` — generated from `dasllama_env.das`'s registry by `harness/gen_env_doc.das`
-  (`tests/test_env_registry.das` fails on drift). Hand-editing the .md is a defect; edit the
-  registry and regenerate. `dasllama_unicode.das`'s RANGES/WS tables are transcoded from
+- `ENVIRONMENT.md` — generated from `dasllama_env.das`'s `[EnvConfig]` declarations by
+  `harness/gen_env_doc.das` (`tests/test_env_registry.das` fails on drift). Hand-editing the .md
+  is a defect; edit the declarations and regenerate. `dasllama_unicode.das`'s RANGES/WS tables are transcoded from
   llama.cpp's unicode-data.cpp — hand-editing the tables is a defect; retranscode.
 
 ---
@@ -356,3 +356,12 @@ deliverable.
 **Every new kernel or mid-runtime loop carries `[hot_path]`.** When in doubt, compare with its
 twins: if similar functions in the family carry the annotation, the new one does too. Without
 it the function dodges the `[no_alloc]` / `[no_env]` / `[no_io]` contracts the annotation arms.
+
+**No raw environment reads.** `get_env_variable` / `has_env_variable` (and literal-name
+`env_config_*` calls) are a defect anywhere in the module outside `dasllama_env.das` — a knob is
+an `[EnvConfig]` field there, read as `g_env_*.<field>`, which is also what generates its
+`ENVIRONMENT.md` row. Tri-state knobs (presence matters, or the effective default is computed at
+runtime) are `Option<T>` fields. Dynamic names — a variable named by data, not by code — go
+through `env_is_set` / `env_value_of`. The config loads once at context init, so
+`set_env_variable` mid-process is invisible to it: arm a child process's environment instead.
+`tests/test_env_registry.das` enforces all of this.
