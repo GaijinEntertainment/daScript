@@ -831,7 +831,7 @@ def test_count_help_decoration(t : T?) {
 // ===== environment twins =====
 
 [CommandLineArgs(env_prefix = "CLET")]
-struct EnvConfig {
+struct EnvTwinConfig {
     @clarg_doc = "name"
     name : string
 
@@ -882,7 +882,7 @@ def clear_clet_env() {
 
 [test]
 def test_env_twin_names(t : T?) {
-    let info = get_command_info(type<EnvConfig>)
+    let info = get_command_info(type<EnvTwinConfig>)
     let by_field <- { for (a in info.args); a.field_name => a.env_name }
     t |> equal("CLET_NAME", by_field?["name"] ?? "?")
     t |> equal("CLET_LEVEL", by_field?["level"] ?? "?")
@@ -898,14 +898,14 @@ def test_env_fallback_and_precedence(t : T?) {
     set_env_variable("CLET_LEVEL", "9")
     set_env_variable("CLET_MODE_X", "m1")
     let no_args : array<string>
-    var r <- parse_args(type<EnvConfig>, no_args)
+    var r <- parse_args(type<EnvTwinConfig>, no_args)
     t |> success(r |> is_ok, "env-only parse succeeds")
     let cfg <- r |> move_unwrap
     t |> equal("envn", cfg.name)
     t |> equal(9, cfg.level)
     t |> equal("m1", cfg.mode)
     let a <- ["--name", "cli", "--level", "3"]
-    var r2 <- parse_args(type<EnvConfig>, a)
+    var r2 <- parse_args(type<EnvTwinConfig>, a)
     t |> success(r2 |> is_ok, "mixed parse succeeds")
     let cfg2 <- r2 |> move_unwrap
     t |> equal("cli", cfg2.name)
@@ -920,14 +920,14 @@ def test_env_bool_rule(t : T?) {
     let no_args : array<string>
     for (p in [("1", true), ("yes", true), ("banana", true), ("0", false), ("off", false), ("No", false), ("FALSE", false)]) {
         set_env_variable("CLET_VERBOSE", p._0)
-        var r <- parse_args(type<EnvConfig>, no_args)
+        var r <- parse_args(type<EnvTwinConfig>, no_args)
         t |> success(r |> is_ok, "bool parse succeeds for '{p._0}'")
         let cfg <- r |> move_unwrap
         t |> success(cfg.verbose == p._1, "'{p._0}' reads as {p._1}")
     }
     set_env_variable("CLET_VERBOSE", "0")
     let a <- ["--verbose"]
-    var r <- parse_args(type<EnvConfig>, a)
+    var r <- parse_args(type<EnvTwinConfig>, a)
     t |> success(r |> is_ok, "argv bool beats env")
     let cfg <- r |> move_unwrap
     t |> success(cfg.verbose, "--verbose wins over CLET_VERBOSE=0")
@@ -939,7 +939,7 @@ def test_env_int_garbage_is_loud(t : T?) {
     clear_clet_env()
     set_env_variable("CLET_LEVEL", "fifty")
     let no_args : array<string>
-    let r <- parse_args(type<EnvConfig>, no_args)
+    let r <- parse_args(type<EnvTwinConfig>, no_args)
     t |> success(r |> is_err, "garbage env int refuses")
     t |> success(find(r |> unwrap_err, "invalid int") != -1, "error names the bad int")
     clear_clet_env()
@@ -950,12 +950,12 @@ def test_env_enum(t : T?) {
     clear_clet_env()
     let no_args : array<string>
     set_env_variable("CLET_COLOR", "Red")
-    var r <- parse_args(type<EnvConfig>, no_args)
+    var r <- parse_args(type<EnvTwinConfig>, no_args)
     t |> success(r |> is_ok, "enum via env parses")
     let cfg <- r |> move_unwrap
     t |> success(cfg.color == Color.Red, "enum value taken from env")
     set_env_variable("CLET_COLOR", "Banana")
-    let r2 <- parse_args(type<EnvConfig>, no_args)
+    let r2 <- parse_args(type<EnvTwinConfig>, no_args)
     t |> success(r2 |> is_err, "invalid enum via env refuses")
     t |> success(find(r2 |> unwrap_err, "invalid enum value") != -1, "error names the enum problem")
     clear_clet_env()
@@ -975,12 +975,12 @@ def test_env_required_and_edges(t : T?) {
     // a bare value-less flag keeps its argv error even with the env twin set
     set_env_variable("CLET_NAME", "envn")
     let bare <- ["--name"]
-    let r3 <- parse_args(type<EnvConfig>, bare)
+    let r3 <- parse_args(type<EnvTwinConfig>, bare)
     t |> success(r3 |> is_err, "value-less argv flag stays an error")
     t |> success(find(r3 |> unwrap_err, "missing value") != -1, "error is missing value")
     // set-but-empty counts as unset
     set_env_variable("CLET_NAME", "")
-    var r4 <- parse_args(type<EnvConfig>, no_args)
+    var r4 <- parse_args(type<EnvTwinConfig>, no_args)
     t |> success(r4 |> is_ok, "empty env parse succeeds")
     let cfg4 <- r4 |> move_unwrap
     t |> equal("", cfg4.name)
@@ -1002,7 +1002,72 @@ def test_env_mutex_is_argv_only(t : T?) {
 
 [test]
 def test_env_help_decoration(t : T?) {
-    let info = get_command_info(type<EnvConfig>)
+    let info = get_command_info(type<EnvTwinConfig>)
     let help = format_help(info, "test")
     t |> success(find(help, "(env: CLET_NAME)") != -1, "help names the env twin")
+}
+
+// ===== [EnvConfig] — ambient library knobs =====
+
+[EnvConfig(env_prefix = "CLEC")]
+struct EngineKnobs {
+    @clarg_doc = "flag knob"
+    fast_math : bool = true
+
+    @clarg_doc = "int knob"
+    lanes : int = 8
+
+    @clarg_doc = "float knob"
+    scale : float = 1.5
+
+    @clarg_env = "CLEC_MODEL_PATH"
+    @clarg_doc = "string knob"
+    model : string = "default.gguf"
+}
+
+def clear_clec_env() {
+    for (name in ["CLEC_FAST_MATH", "CLEC_LANES", "CLEC_SCALE", "CLEC_MODEL_PATH"]) {
+        set_env_variable(name, "")
+    }
+}
+
+[test]
+def test_env_config_defaults_and_overrides(t : T?) {
+    clear_clec_env()
+    let d = env_config(type<EngineKnobs>)
+    t |> success(d.fast_math, "bool default holds")
+    t |> equal(8, d.lanes)
+    t |> success(d.scale > 1.49 && d.scale < 1.51, "float default holds")
+    t |> equal("default.gguf", d.model)
+    set_env_variable("CLEC_FAST_MATH", "off")
+    set_env_variable("CLEC_LANES", "24")
+    set_env_variable("CLEC_SCALE", "0.25")
+    set_env_variable("CLEC_MODEL_PATH", "m.gguf")
+    let k = env_config(type<EngineKnobs>)
+    t |> success(!k.fast_math, "bool knob reads")
+    t |> equal(24, k.lanes)
+    t |> success(k.scale > 0.24 && k.scale < 0.26, "float knob reads")
+    t |> equal("m.gguf", k.model)
+    clear_clec_env()
+}
+
+[test]
+def test_env_config_edges(t : T?) {
+    clear_clec_env()
+    set_env_variable("CLEC_LANES", "banana")   // garbage logs a warning and keeps the default
+    let k = env_config(type<EngineKnobs>)
+    t |> equal(8, k.lanes)
+    set_env_variable("CLEC_LANES", "")         // set-but-empty is unset
+    let k2 = env_config(type<EngineKnobs>)
+    t |> equal(8, k2.lanes)
+    clear_clec_env()
+}
+
+[test]
+def test_env_config_info(t : T?) {
+    let info = get_env_config_info(type<EngineKnobs>)
+    t |> equal(4, length(info.args))
+    let by_field <- { for (a in info.args); a.field_name => a.env_name }
+    t |> equal("CLEC_FAST_MATH", by_field?["fast_math"] ?? "?")
+    t |> equal("CLEC_MODEL_PATH", by_field?["model"] ?? "?")
 }

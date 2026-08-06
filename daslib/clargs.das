@@ -154,11 +154,56 @@ def env_text_is_true(v : string) : bool {
 }
 
 // set-but-empty counts as unset, matching daslib/build_const and the dasllama_env readers
-def env_raw_value(arg_info : CommandArgumentInfo) : Option<string> {
-    if (empty(arg_info.env_name) || !has_env_variable(arg_info.env_name)) return none(type<string>)
-    let v = get_env_variable(arg_info.env_name)
+def public env_config_text(name : string) : Option<string> {
+    if (empty(name) || !has_env_variable(name)) return none(type<string>)
+    let v = get_env_variable(name)
     if (empty(v)) return none(type<string>)
     return some(v)
+}
+
+def env_raw_value(arg_info : CommandArgumentInfo) : Option<string> {
+    return env_config_text(arg_info.env_name)
+}
+
+// ===== [EnvConfig] runtime readers =====
+// unset and set-but-empty yield the default; garbage numeric text logs a warning and yields the default
+
+def public env_config_flag(name : string; dflt : bool) : bool {
+    let v = env_config_text(name)
+    return is_none(v) ? dflt : env_text_is_true(unwrap(v))
+}
+
+def public env_config_int(name : string; dflt : int) : int {
+    let v = env_config_text(name)
+    if (is_none(v)) return dflt
+    let raw = unwrap(v)
+    var result : ConversionResult
+    var offset = 0
+    let parsed = int(raw, result, offset)
+    if (result != ConversionResult.ok || offset != length(raw)) {
+        to_log(LOG_WARNING, "env {name}: invalid int '{raw}', using {dflt}\n")
+        return dflt
+    }
+    return parsed
+}
+
+def public env_config_float(name : string; dflt : float) : float {
+    let v = env_config_text(name)
+    if (is_none(v)) return dflt
+    let raw = unwrap(v)
+    var result : ConversionResult
+    var offset = 0
+    let parsed = float(raw, result, offset)
+    if (result != ConversionResult.ok || offset != length(raw)) {
+        to_log(LOG_WARNING, "env {name}: invalid float '{raw}', using {dflt}\n")
+        return dflt
+    }
+    return parsed
+}
+
+def public env_config_string(name : string; dflt : string) : string {
+    let v = env_config_text(name)
+    return is_none(v) ? dflt : unwrap(v)
 }
 
 // Command-line presence only (either alias, either spelling) — mutex checks and
@@ -641,6 +686,45 @@ def option_inner_type(t : TypeDeclPtr) : TypeDeclPtr {
 }
 
 
+def find_bool_annotation(args : AnnotationArgumentList; argn : string, default_value : bool) : bool {
+    let v = find_arg(args, argn)
+    if (v is tBool) return v as tBool
+    return default_value
+}
+
+def find_string_annotation(args : AnnotationArgumentList; argn : string, default_value : string) : string {
+    let v = find_arg(args, argn)
+    if (v is tString) return v as tString
+    return default_value
+}
+
+// env twin for one field: explicit @clarg_env wins ("" opts out of prefix derivation);
+// otherwise a struct-level env_prefix derives PREFIX_LONG_NAME (hyphens to underscores,
+// upper case). Positional, count, and repeatable (array) fields have no environment form.
+def resolve_env_name(fannotations : AnnotationArgumentList; fname, raw_name, env_prefix : string;
+                     is_positional, is_count, is_array : bool; var errors : das_string&) : string {
+    let explicit_v = find_arg(fannotations, "clarg_env")
+    if (explicit_v is tString) {
+        let name = explicit_v as tString
+        if (empty(name)) return ""
+        if (is_positional) {
+            errors := "field '{fname}': @clarg_env cannot be combined with @clarg_positional"
+            return ""
+        }
+        if (is_count) {
+            errors := "field '{fname}': @clarg_env cannot be combined with @clarg_count"
+            return ""
+        }
+        if (is_array) {
+            errors := "field '{fname}': repeatable (array) fields have no environment form"
+            return ""
+        }
+        return name
+    }
+    if (empty(env_prefix) || is_positional || is_count || is_array) return ""
+    return "{env_prefix}_{to_upper(replace_multiple(raw_name, [(text="-", replacement="_")]))}"
+}
+
 [structure_macro(name=CommandLineArgs)]
 class ArgsMacro : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
@@ -665,44 +749,6 @@ class ArgsMacro : AstStructureAnnotation {
         return true
     }
 
-    def find_bool_annotation(args : AnnotationArgumentList; argn : string, default_value : bool) : bool {
-        let v = find_arg(args, argn)
-        if (v is tBool) return v as tBool
-        return default_value
-    }
-
-    def find_string_annotation(args : AnnotationArgumentList; argn : string, default_value : string) : string {
-        let v = find_arg(args, argn)
-        if (v is tString) return v as tString
-        return default_value
-    }
-
-    // env twin for one field: explicit @clarg_env wins ("" opts out of prefix derivation);
-    // otherwise a struct-level env_prefix derives PREFIX_LONG_NAME (hyphens to underscores,
-    // upper case). Positional, count, and repeatable (array) fields have no environment form.
-    def resolve_env_name(fannotations : AnnotationArgumentList; fname, raw_name, env_prefix : string;
-                         is_positional, is_count, is_array : bool; var errors : das_string&) : string {
-        let explicit_v = find_arg(fannotations, "clarg_env")
-        if (explicit_v is tString) {
-            let name = explicit_v as tString
-            if (empty(name)) return ""
-            if (is_positional) {
-                errors := "field '{fname}': @clarg_env cannot be combined with @clarg_positional"
-                return ""
-            }
-            if (is_count) {
-                errors := "field '{fname}': @clarg_env cannot be combined with @clarg_count"
-                return ""
-            }
-            if (is_array) {
-                errors := "field '{fname}': repeatable (array) fields have no environment form"
-                return ""
-            }
-            return name
-        }
-        if (empty(env_prefix) || is_positional || is_count || is_array) return ""
-        return "{env_prefix}_{to_upper(replace_multiple(raw_name, [(text="-", replacement="_")]))}"
-    }
 
     // Reject characters that produce ambiguous or unparseable short flags: '-' yields '--'
     // (collides with the script-args separator), '=' yields '-=' (collides with --flag=value
@@ -1096,5 +1142,83 @@ class ArgsMacro : AstStructureAnnotation {
         fn.flags.generated = true
         fn.body |> force_at(st.at)
         return <- fn
+    }
+}
+
+[structure_macro(name=EnvConfig)]
+class EnvConfigMacro : AstStructureAnnotation {
+    //! Ambient sibling of [CommandLineArgs] for LIBRARY knobs (no argv, no parse moment):
+    //! generates ``env_config(type<T>) : T`` — each field resolved from its env twin with the
+    //! field initializer as default — plus ``get_env_config_info(type<T>)`` for doc/coverage rails.
+    def make_env_load_expr(fname, env_name : string; bt : Type) : ExpressionPtr {
+        if (bt == Type.tBool) {
+            return qmacro_block() {
+                dst.$f(fname) = env_config_flag($v(env_name), dst.$f(fname))
+            }
+        }
+        if (bt == Type.tInt) {
+            return qmacro_block() {
+                dst.$f(fname) = env_config_int($v(env_name), dst.$f(fname))
+            }
+        }
+        if (bt == Type.tFloat) {
+            return qmacro_block() {
+                dst.$f(fname) = env_config_float($v(env_name), dst.$f(fname))
+            }
+        }
+        return qmacro_block() {
+            dst.$f(fname) = env_config_string($v(env_name), dst.$f(fname))
+        }
+    }
+
+    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+        let env_prefix = find_string_annotation(args, "env_prefix", "")
+        var info : CommandInfo
+        info.args |> reserve(length(st.fields))
+        var load_exprs : array<ExpressionPtr>
+        for (field in st.fields) {
+            if (find_bool_annotation(field.annotation, "clarg_skip", false)) continue
+            if (find_bool_annotation(field.annotation, "clarg_positional", false)
+                    || find_bool_annotation(field.annotation, "clarg_count", false)
+                    || find_bool_annotation(field.annotation, "clarg_required", false)
+                    || !empty(find_string_annotation(field.annotation, "clarg_short", ""))
+                    || !empty(find_string_annotation(field.annotation, "clarg_mutex_group", ""))) {
+                errors := "field '{field.name}': positional/count/required/short/mutex are command-line concepts — [EnvConfig] fields are plain knobs with defaults"
+                return false
+            }
+            let bt = field._type.baseType
+            if (bt != Type.tBool && bt != Type.tInt && bt != Type.tFloat && bt != Type.tString) {
+                errors := "field '{field.name}': [EnvConfig] supports bool, int, float, and string fields"
+                return false
+            }
+            let env_name = resolve_env_name(field.annotation, "{field.name}", "{field.name}", env_prefix, false, false, false, errors)
+            if (!empty(errors)) return false
+            if (empty(env_name)) {
+                errors := "field '{field.name}': no environment name — set @clarg_env or the struct-level env_prefix"
+                return false
+            }
+            info.args |> emplace(CommandArgumentInfo(
+                field_name = "{field.name}",
+                env_name = env_name,
+                doc_string = find_string_annotation(field.annotation, "clarg_doc", ""),
+                value_type = bt))
+            load_exprs |> push(make_env_load_expr("{field.name}", env_name, bt))
+        }
+        var info_fn = qmacro_function("get_env_config_info") $(typ : $t(st)) : CommandInfo {
+            var x := $v(info)
+            return <- x
+        }
+        info_fn.flags.generated = true
+        info_fn.body |> force_at(st.at)
+        compiling_module() |> add_function(info_fn)
+        var load_fn = qmacro_function("env_config") $(typ : $t(st)) : $t(st) {
+            var dst = default<$t(st)>
+            $b(load_exprs)
+            return dst
+        }
+        load_fn.flags.generated = true
+        load_fn.body |> force_at(st.at)
+        compiling_module() |> add_function(load_fn)
+        return true
     }
 }

@@ -136,6 +136,20 @@ satisfied by either carrier. Positional, `@clarg_count`, and repeatable
 line only — an env-supplied default never conflicts with an explicit
 flag.
 
+## `[EnvConfig]` — ambient library knobs
+
+Libraries have no argv, so their knobs use the sibling annotation: a struct
+marked `[EnvConfig(env_prefix = "MYLIB")]` (same `@clarg_doc` / `@clarg_env`
+vocabulary, same name derivation, bool/int/float/string fields, field
+initializers as defaults) generates `env_config(type<T>) : T` — call it once
+in an `[init]` (or a lazy loader) and cache the result in a global; hot code
+then reads plain struct fields, never the environment — plus
+`get_env_config_info(type<T>)` for doc-generation and coverage rails.
+Same env semantics as the twins above, except garbage numeric text logs a
+warning and keeps the default (a library load must not die on a stray
+variable). Positional/count/required/short/mutex annotations are rejected —
+those are command-line concepts.
+
 ## Help-flag pitfall
 
 When run under `daslang` (script-host case), the host intercepts
