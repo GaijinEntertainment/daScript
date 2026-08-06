@@ -1107,7 +1107,11 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
                     || !dn_layer_q8(t, l)) {   // kq-tagged dn planes stay on the CPU rail
                 continue
             }
-            if (moe_gpu_dense_on_gpu(int(KqFmt.q8), t.dnqkv_offs[l])) {
+            // the alias needs the WHOLE triple: the dense walk marks per-plane and its budget stop
+            // can land mid-triple — a lone dnqkv mark would route the serve into a non-resident panic
+            if (moe_gpu_dense_on_gpu(int(KqFmt.q8), t.dnqkv_offs[l])
+                    && moe_gpu_dense_on_gpu(int(KqFmt.q8), t.dngate_offs[l])
+                    && moe_gpu_dense_on_gpu(int(KqFmt.q8), t.dnout_offs[l])) {
                 set_moe_gpu_dn_layer(l, t.dnqkv_offs[l])
                 dn_marked++
                 continue
