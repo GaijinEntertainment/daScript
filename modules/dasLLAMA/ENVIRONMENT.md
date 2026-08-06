@@ -114,6 +114,7 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 | `DASLLAMA_ACCEL_F16` | flag | off | Use the BNNS f16 lane inside the Accelerate backend. |
 | `DASLLAMA_ACCEL_F16_STRIPS` | number | 0 | Strip count for the f16 lane; 0 lets the backend choose. |
 | `DASLLAMA_ACCEL_STRIPS` | number | d/256, max 8 | Strip count for the f32 sgemm lane; 0 keeps the shape-derived default. |
+| `DASLLAMA_ACCEL_HYBRID` | number | 0 (off) | Hybrid AMX+NEON row split: percent of GEMM rows served by the q8 NEON side while AMX strips serve the rest. |
 | `DASLLAMA_ACCEL_MIN_MMAC` | number | backend default | Minimum MMAC count below which Accelerate declines and the daslang kernel runs. |
 | `DASLLAMA_ACCEL_MIN_NTOK` | number | 32 | Minimum token count for the Accelerate float-batch override, floor 1. |
 

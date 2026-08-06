@@ -297,6 +297,10 @@ struct public AccelerateEnv {
     @clarg_doc = "Strip count for the f32 sgemm lane; 0 keeps the shape-derived default."
     accel_strips : Option<int64>
 
+    @clarg_default_doc = "0 (off)"
+    @clarg_doc = "Hybrid AMX+NEON row split: percent of GEMM rows served by the q8 NEON side while AMX strips serve the rest."
+    accel_hybrid : Option<int64>
+
     @clarg_default_doc = "backend default"
     @clarg_doc = "Minimum MMAC count below which Accelerate declines and the daslang kernel runs."
     accel_min_mmac : Option<int64>
