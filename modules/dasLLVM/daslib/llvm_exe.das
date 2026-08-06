@@ -1042,11 +1042,9 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
         )
     )
     var jit_reg_dyn_mod = LLVMAddFunctionWithType(g_mod, "jit_register_dynamic_module_resolve", reg_dyn_mod_type)
-    var registered_dynamic = false
     for_each_registered_dynamic_module() $(path, mod_name, das_name) {
         if (key_exists(used_modules, das_name) || key_exists(force_dynamic_modules, das_name)) {
             has_cpp_modules = true
-            registered_dynamic = true
             to_log(LOG_INFO, "LLVM EXE: include dynamic module: `{das_name}`\n")
             let rel = compute_modules_relative_suffix(path)
             let rel_str = get_string_constant_ptr(builder, rel)
@@ -1055,14 +1053,6 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
             LLVMBuildCall2(builder, reg_dyn_mod_type, jit_reg_dyn_mod, fixed_array(rel_str, abs_str, name_str), "")
         }
     }
-    // Retry the Quiet registrations above, then fatal (naming module + dlopen error) on any
-    // still unloadable — instead of the cryptic extern-lookup death. Native only: on wasm the
-    // same modules also register via static thunks and the failed resolve is BY DESIGN.
-    if (registered_dynamic && !g_target_is_wasm) {
-        var fin_dyn = LLVMAddFunctionWithType(g_mod, "jit_finalize_dynamic_modules", das_ensure_env_type)
-        LLVMBuildCall2(builder, das_ensure_env_type, fin_dyn, array<LLVMValueRef>(), "")
-    }
-
     // -list-shared-modules <path> side-effect: dump the release-deps JSON
     // for `daspkg release` to ship dylibs + traverse dep packages.
     write_release_deps(prog)
@@ -1090,6 +1080,15 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
         init_modules_fn = LLVMAddFunctionWithType(g_mod, "initialize_modules", init_modules_type)
     }
     LLVMBuildCall2(builder, init_modules_type, init_modules_fn, array<LLVMValueRef>(), "")
+
+    // Dynamic modules load Quiet (sibling DT_NEEDED ordering): retry after the last registration
+    // and fatal on anything still unloadable, naming the module + dlopen error. Native only — on
+    // wasm those modules also register via static thunks, so the failed resolve is BY DESIGN.
+    if (ships_dynamic && !g_target_is_wasm) {
+        let fin_dyn_type = LLVMFunctionType(types.t_void, array<LLVMTypeRef>())
+        var fin_dyn = LLVMAddFunctionWithType(g_mod, "jit_finalize_dynamic_modules", fin_dyn_type)
+        LLVMBuildCall2(builder, fin_dyn_type, fin_dyn, array<LLVMValueRef>(), "")
+    }
 
     // Init argc, argv
     let set_cmd_args_type = LLVMFunctionType(types.t_void,

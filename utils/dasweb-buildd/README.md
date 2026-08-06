@@ -82,7 +82,9 @@ Also applied: `--network=none`, a read-only root with a tmpfs `/tmp`, `--memory`
 `--pids-limit` / `--cpus` caps, `--cap-drop=ALL`, `--security-opt=no-new-privileges`, and
 `--userns=keep-id` so the build runs as the unprivileged account this service runs as. The
 emcc cache is mounted read-only with `EM_FROZEN_CACHE=1`, so one job cannot poison what later
-jobs link against; the toolchain-bump protocol warms it with one build outside the sandbox.
+jobs link against; the toolchain-bump protocol warms it with one build **of each mode** outside
+the sandbox — the page link is `-pthread` and needs the `-mt` system libraries a module build
+never touches.
 Podman passes no host environment through, so a token in this service's environment is not
 visible to a build. There is deliberately **no** unsandboxed fallback: no podman or no image
 means no build.
