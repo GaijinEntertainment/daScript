@@ -49,11 +49,12 @@ readers' silent-default.
    live; `decode_prof --trace` refuses loudly on a rail-less build; `test_jobque_trace`
    asserts BOTH worlds (ON = annotations land, OFF = erasure contract). Flipping the flag
    cold-rebuilds the JIT cache (semantic hash) — confirmed live.
-3. **clargs env axis** — `@clarg_env = "NAME"` per field + struct-level
-   `[clarg_env_prefix="X"]` auto-derivation (`cpu_prefill` → `X_CPU_PREFILL`,
-   `@clarg_env=""` opts out), precedence argv > env > default, help output shows the env twin
-   per option. Serves tools (detect-dupe, daspkg, dasllama-server, preflight); kills the
-   "env reads growing beside the clargs struct" pattern.
+3. **DONE — clargs env axis** — `@clarg_env = "NAME"` per field +
+   `[CommandLineArgs(env_prefix = "X")]` derivation (`cpu_prefill` → `X_CPU_PREFILL`,
+   `@clarg_env = ""` opts out), argv > env > default with argv keeping its errors, shared
+   bool rule, loud garbage, required satisfied by either carrier, mutex argv-only, help
+   shows `(env: NAME)`. Implemented at the three `CommandArgumentInfo` chokepoints so
+   parse/enum/required inherit it untouched. 83/83 + daspkg 220-test consumer suite green.
 4. **`[EnvConfig]` + the dasLLAMA knob migration (pulled forward — Boris).** A sibling
    struct annotation IN the clargs module sharing the whole field-walk/typed-parse core and
    the `@clarg_*` vocabulary — NOT an `env_only` flag on `[CommandLineArgs]` (a bool that
