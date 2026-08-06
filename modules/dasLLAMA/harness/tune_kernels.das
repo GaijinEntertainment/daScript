@@ -32,7 +32,7 @@ require math                     // mad (referenced by the cloned template bodie
 require daslib/json
 require daslib/json_boost
 require daslib/fio
-require daslib/strings_boost   // join — validate_verdict gap list + the metal_tensor crown list
+require daslib/strings_boost   // nolint:STYLE030,LINT019 — join for the metal_tensor crown list, only inside the das_metal static_if half
 
 // The shipped-fallback registry: dasllama_tuned_fallbacks() maps every [tuned] kernel to the
 // perm it falls back to ON THIS BOX, so report() never restates one as a literal.
