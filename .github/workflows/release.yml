@@ -205,12 +205,16 @@ jobs:
               ;;
           esac
 
-      - name: "Cache vcpkg + openssl"
+      - name: "Restore vcpkg + openssl"
         if: runner.os == 'Windows'
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           # vcpkg.exe + ports/triplets/scripts + installed/<triplet>/openssl. Key is
           # shared with build.yml so this reads build.yml's master-seeded slot.
+          # Restore-only, which is what that comment always meant: a plain
+          # actions/cache would also save, and a save from a release ref lands on
+          # refs/tags/… where nothing else can read it — an orphan entry against a
+          # 10GB repo-wide quota. build.yml is the single seeder for this key.
           path: vcpkg
           key: vcpkg-${{ matrix.architecture == 32 && 'x86' || 'x64' }}-windows-v2
 
