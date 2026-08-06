@@ -646,6 +646,11 @@ async function runWasm() {
 }
 
 function runWasmArtifact(url) {
+    // Every run starts from a clean slate, page frames included: a sample edited
+    // from graphics to compute-only builds as a module, and without this the
+    // previous run's page sits there rendering while this one prints — the same
+    // "my run drew nothing" confusion the run frame was introduced to end.
+    destroyPageFrame();
     // Shim's DataView is rebuilt per-call from memRef.buffer, so we can
     // create the shim before instantiation and patch the buffer once memory
     // is exported.

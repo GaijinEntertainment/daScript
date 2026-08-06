@@ -41,7 +41,7 @@ struct ServerArgs {
     @clarg_doc = "Artifact cache root (blobs); empty disables artifact storage and serving"
     blobs_dir : string = "blobs"
 
-    @clarg_doc = "Separate origin page artifacts (user-influenced html/js) are served from, e.g. https://run.daslang.io; empty = same-origin (dev only)"
+    @clarg_doc = "Separate origin page artifacts (user-influenced html/js) are served from, e.g. https://run.daslang.io; empty refuses page builds outright (set it to this server's own origin for local page testing)"
     page_origin : string = ""
 
     @clarg_doc = "Seconds before a claimed build is considered abandoned and requeued"

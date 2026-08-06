@@ -36,10 +36,12 @@ struct BuildOptions {
     //! Transport-level build-surface config; queue policy nests from build_queue.
     token : string = ""       // bearer for the remote builder; "" disables the build surface
     blobs_dir : string = ""   // artifact cache root; "" disables artifact storage and serving
-    // The separate origin page artifacts (user-influenced html/js) are served from,
-    // e.g. "https://run.daslang.io". Non-empty makes html/js artifact requests
-    // answer ONLY on that Host, and page artifact urls absolute. "" (dev/tests) =
-    // same-origin serving, no Host gate.
+    // The separate origin page artifacts (user-influenced html/js) are served
+    // from, e.g. "https://run.daslang.io". Document artifacts answer ONLY on
+    // that Host, and page artifact urls go out absolute. Empty disables page
+    // mode entirely — the build is refused and no document is served, because
+    // there is nowhere safe to serve it from. A dev box that wants page builds
+    // sets this to its OWN origin.
     page_origin : string = ""
     queue : BuildConfig = BuildConfig()
 }

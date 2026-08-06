@@ -2016,7 +2016,8 @@ namespace das {
         }
     }
 
-    // One line per still-pending (dlopen-failed) module: "  dasModuleGlfw <- <path> (<dlerror>)".
+    // One line per still-pending (dlopen-failed) module: "  Module_Glfw <- <path> (<dlerror>)"
+    // — the registrator class name, which is what was looked up, not the dylib's file name.
     // Empty string when nothing is pending. Compile-error paths append this to the misleading
     // "missing prerequisite ...; file not found" so a load failure stops reading as a path typo.
     DAS_API string describe_pending_dynamic_modules() {

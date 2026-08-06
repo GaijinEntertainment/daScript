@@ -16,9 +16,11 @@ curated_dir = ""
 # blobs path — an empty token keeps the whole build surface disabled
 build_token = ""
 blobs_dir = "blobs"
-# The separate origin page artifacts (user-influenced html/js) are served
-# from. Empty = same-origin serving with no Host gate — development only;
-# production sets https://run.daslang.io
+# The separate origin page artifacts (user-influenced html/js) are served from.
+# Empty REFUSES page builds (graphics/audio samples) rather than serving a
+# user-authored document from this origin — so leaving it unset disables the
+# feature, it does not loosen it. Production sets https://run.daslang.io; for
+# local page testing set this server's own origin, e.g. http://127.0.0.1:8101
 page_origin = ""
 build_claim_timeout_seconds = 600
 max_build_attempts = 3

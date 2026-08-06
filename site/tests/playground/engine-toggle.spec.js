@@ -184,6 +184,48 @@ test('a page-kind build runs as an embedded page frame', async ({ playground }) 
     await expect(playground.locator('iframe.pg-page-frame')).toHaveCount(0, { timeout: 5_000 });
 });
 
+test('a module-kind run clears a previous page frame', async ({ playground }) => {
+    // Edit a graphics sample into a compute-only one and the next build comes
+    // back kind:'module'. Without an explicit teardown on that path the old page
+    // keeps rendering while the module run prints — a dead program's last frame
+    // on screen, which is what the run frame exists to prevent.
+    const PAGE_URL = '/api/build/artifact/abc1234/' + FAKE_HASH + '/sample.html';
+    await stubBuildInfo(playground, true);
+    await stubStore(playground);
+    await playground.route('**' + PAGE_URL, route => route.fulfill({
+        status: 200, contentType: 'text/html', body: '<html><body>stale page</body></html>',
+    }));
+    await playground.route('**' + ARTIFACT_URL, route => route.fulfill({
+        status: 200,
+        contentType: 'application/wasm',
+        body: Buffer.from([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0]),
+    }));
+
+    // First build: page. Second: module. One status stub, two scripted rounds.
+    let round = 0;
+    await playground.route('**/api/build/request/**', route => {
+        round++;
+        return route.fulfill({
+            status: 200, contentType: 'application/json',
+            body: JSON.stringify(round === 1
+                ? { state: 'done', kind: 'page', toolchain: 'abc1234', files: [PAGE_URL] }
+                : { state: 'done', kind: 'module', toolchain: 'abc1234', files: [ARTIFACT_URL] }),
+        });
+    });
+    await reloadWithStubs(playground);
+
+    const memory64 = await playground.evaluate(() =>
+        WebAssembly.validate(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 5, 3, 1, 4, 1])));
+    test.skip(!memory64, 'browser lacks wasm64/memory64');
+
+    await playground.locator(wasmSel).check();
+    await playground.locator('#run').click();
+    await expect(playground.locator('iframe.pg-page-frame')).toHaveCount(1, { timeout: 15_000 });
+
+    await playground.locator('#run').click();
+    await expect(playground.locator('iframe.pg-page-frame')).toHaveCount(0, { timeout: 15_000 });
+});
+
 test('a failed build shows the compiler error', async ({ playground }) => {
     await stubBuildInfo(playground, true);
     await stubStore(playground);
