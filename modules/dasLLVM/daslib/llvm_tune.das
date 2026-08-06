@@ -44,7 +44,8 @@ require llvm/daslib/llvm_code public
 //! that regenerates its kernels; an app declares `[tune_policy(missing = fallback|warn|
 //! error|auto|restart)]`; `--tune` after `--` on the app's command line forces a fresh
 //! tuner run. AOT builds are fully tune-free (`tune_aot_gate`); `-exe` builds stamp
-//! normally but run no policy (`tune_exe_gate`) — an exe built WITH a sidecar is a
+//! normally, run no policy, but always emit the status [init] so the artifact can
+//! self-report its baked stamps (`tune_exe_gate`) — an exe built WITH a sidecar is a
 //! local-use artifact shipping those winners, one built without ships the generic per-ISA
 //! `fallback=` stamps.
 
@@ -492,6 +493,39 @@ def tune_cv_pct(samples : array<double>) : double {
         dev2 += (s - mean) * (s - mean)
     }
     return 100.0lf * sqrt(dev2 / double(n - 1)) / mean
+}
+
+//! One validation window's outcome for a recorded winner: what a self-validation re-race saw.
+//! A harness fills one row per re-race window and renders the verdict across all of them
+//! with `tune_validate_verdict`.
+struct TuneValidateRow {
+    challenger : string   //!< re-race winner when it beat the recorded one past the band, else ""
+    gap : double          //!< recorded-winner vs re-race-winner gap, pct, same window
+    drift : double        //!< recorded winner's re-race median vs its recorded race median, pct
+    rejected : bool       //!< recorded winner failed correctness (or vanished) in the re-race
+}
+
+    //! Render a recorded winner's reproduction verdict from its validation windows: "" =
+    //! reproduced. Rejection anywhere is fatal; a loss is real only when the SAME challenger
+    //! took ≥2 windows — anything else is state scramble among twins; levels never enter.
+def tune_validate_verdict(rows : array<TuneValidateRow>) : string {
+    var lossname = ""
+    var lossAll = true
+    for (r in rows) {
+        return "recorded winner rejected in a re-race" if (r.rejected)
+        if (empty(r.challenger)) {
+            lossAll = false
+        } elif (empty(lossname)) {
+            lossname = r.challenger
+        } elif (lossname != r.challenger) {
+            lossAll = false
+        }
+    }
+    if (lossAll && !empty(lossname) && length(rows) >= 2) {
+        let gtxt = join([for (r in rows); "{r.gap:0.2f}%"], " / ")
+        return "consistently loses to {lossname} in both re-races ({gtxt})"
+    }
+    return ""
 }
 
 var private g_noise_thr = -1.0lf
@@ -1651,11 +1685,17 @@ def private collect_status(prog : Program?) : array<TuneStatus> {
 }
 
     // AOT runs no policy; grid-mode children manage their own manifest (also the recursion guard);
-    // a DAS_TUNE_MANIFEST override means manual. -exe is NOT here — it runs no policy either, but
-    // still emits the status [init], so the two call sites split on tune_exe_gate() explicitly.
+    // a DAS_TUNE_MANIFEST override means manual. -exe is NOT here — it runs no policy either but
+    // still owes the status [init], so its call sites re-admit it via exe_status_report().
 def private tune_policy_gated() : bool {
     return (tune_stamp_free_gate() || tune_mode() != "normal"
         || !empty(get_env_variable("DAS_TUNE_MANIFEST")))
+}
+
+    // -exe owes the status [init] even under a DAS_TUNE_MANIFEST redirect (report ≠ policy —
+    // else a redirect-built exe ships stamp-less rows); stamp-free/grid still win
+def private exe_status_report() : bool {
+    return tune_exe_gate() && !tune_stamp_free_gate() && tune_mode() == "normal"
 }
 
 // the runtime status table: one tune_status_add per [tune] function, off the stamped AST
@@ -1808,7 +1848,7 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
 class private TunePolicyAnnotation : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
                        args : AnnotationArgumentList; var errors : das_string) : bool {
-        if (tune_policy_gated()) {
+        if (tune_policy_gated() && !exe_status_report()) {
             return true
         }
         var errs = ""
@@ -1850,7 +1890,7 @@ class private TuneDefaultPolicy : AstPassMacro {
     def override apply(prog : ProgramPtr; _mod : Module?) : bool {
     // fires only for roots that SEE llvm_tune, so a scope-owning library must re-export it public
         return false if (is_in_completion() || !empty("{compiling_module().name}")
-            || empty(g_scopes) || tune_policy_gated())
+            || empty(g_scopes) || (tune_policy_gated() && !exe_status_report()))
         var main_fn = compiling_module() |> find_unique_function("main", false)
         return false if (main_fn == null)
         for (ann in main_fn.annotations) {

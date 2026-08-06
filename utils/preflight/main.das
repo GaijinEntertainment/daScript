@@ -392,20 +392,58 @@ def gate_format(ctx : PreflightCtx) : GateResult {
         output = r.out)
 }
 
+// CI's lint verdict is rendered ONLY by the linux lane (extended_checks gates the step on
+// matrix.target == 'linux'), in the linux MODULE WORLD (no dasMetal/dasVulkan — platform
+// static_if halves compile out, so their requires/args read unused there and nowhere else),
+// and TWICE (interp, then the -exe compiled das-lint, which resolves modules differently).
+// A host-flavor pass alone is structurally blind to both — so this gate runs three rails.
 def gate_lint(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
     if (empty(ctx.changed_das)) {
         return GateResult(name = "lint", status = GateStatus.Skip, seconds = seconds_since(t0),
             detail = "no .das files changed vs {ctx.base}")
     }
-    var args <- [ctx.daslang, "utils/lint/main.das", "--"]
-    args |> push_from(ctx.changed_das)
-    args |> push("--quiet")
-    let r = run_argv(args)
-    return GateResult(name = "lint", status = r.rc == 0 ? GateStatus.Pass : GateStatus.Fail,
-        seconds = seconds_since(t0),
-        detail = r.rc == 0 ? "{length(ctx.changed_das)} file(s) clean" : "lint warnings — fix or nolint each (see skills/make_pr.md §1)",
-        output = r.out)
+    var files <- [for (f in ctx.changed_das); f]
+    var host_args <- [ctx.daslang, "utils/lint/main.das", "--"]
+    host_args |> push_from(files)
+    host_args |> push("--quiet")
+    let host = run_argv(host_args)
+    if (host.rc != 0) {
+        return GateResult(name = "lint", status = GateStatus.Fail, seconds = seconds_since(t0),
+            detail = "host-flavor lint warnings — fix or nolint each (see skills/make_pr.md §1)", output = host.out)
+    }
+    var mirror_args <- [ctx.daslang, "--disable-module", "dasMetal", "--disable-module", "dasVulkan",
+                        "utils/lint/main.das", "--"]
+    mirror_args |> push_from(files)
+    mirror_args |> push("--quiet")
+    let mirror = run_argv(mirror_args)
+    if (mirror.rc != 0) {
+        return GateResult(name = "lint", status = GateStatus.Fail, seconds = seconds_since(t0),
+            detail = "LINUX-lane lint warnings (host pass was clean — a platform static_if half hides the symbol here; nolint:...,LINT019 both-worlds spelling, see skills/preflight.md)", output = mirror.out)
+    }
+    // the exe rail: CI compiles utils/lint into a standalone das-lint and lints AGAIN — the
+    // -exe world resolves modules differently (dasAudio et al are not baked in). `-exe`
+    // appends .exe on every platform (CI's LINUX lane invokes $BIN/das-lint.exe verbatim)
+    let lint_exe_base = unique_temp_path("preflight_das_lint", "")
+    let build = run_argv([ctx.daslang, "-exe", "-output", lint_exe_base, "utils/lint/main.das"])
+    if (build.rc != 0) {
+        remove("{lint_exe_base}.exe")
+        remove("{lint_exe_base}.o")
+        return GateResult(name = "lint", status = GateStatus.Fail, seconds = seconds_since(t0),
+            detail = "das-lint -exe build failed — the CI exe rail would fail the same way", output = build.out)
+    }
+    var exe_args <- ["{lint_exe_base}.exe"]
+    exe_args |> push_from(files)
+    exe_args |> push("--quiet")
+    let exe = run_argv(exe_args)
+    remove("{lint_exe_base}.exe")
+    remove("{lint_exe_base}.o")
+    if (exe.rc != 0) {
+        return GateResult(name = "lint", status = GateStatus.Fail, seconds = seconds_since(t0),
+            detail = "das-lint.exe rail warnings (interp rails were clean — the -exe module world differs)", output = exe.out)
+    }
+    return GateResult(name = "lint", status = GateStatus.Pass, seconds = seconds_since(t0),
+        detail = "{length(files)} file(s) clean on all three rails (host, linux-mirror, exe)")
 }
 
 def gate_cpp_syntax(ctx : PreflightCtx) : GateResult { // nolint:STYLE038
@@ -456,9 +494,9 @@ def gate_cpp_syntax(ctx : PreflightCtx) : GateResult { // nolint:STYLE038
     }
     var flags : array<string>
     if (ctx.clang_is_cl) {
-        flags <- ["/Zs", "/EHsc", "/std:c++17", "/W0"]
+        flags <- ["/Zs", "/EHsc", "/std:c++17", "/W0"]   // nolint:PERF030 — fresh empty target, branch-initialized
     } else {
-        flags <- ["-fsyntax-only", "-std=c++17", "-w"]
+        flags <- ["-fsyntax-only", "-std=c++17", "-w"]   // nolint:PERF030 — fresh empty target, branch-initialized
     }
     var includes <- ["include", "3rdparty/fmt/include", "3rdparty/uriparser/include", "tests-cpp/3rdparty"]
     if (!empty(ctx.build_dir)) {
@@ -535,7 +573,7 @@ def docs_skip_all(reason : string; var results : array<GateResult>&) {
     skip_gates(["docs/das2rst", "docs/imgui2rst", "docs/stubs", "docs/uncategorized", "docs/untracked", "docs/sphinx-latex", "docs/sphinx-html", "docs/pdflatex"], reason, results)
 }
 
-def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:STYLE037
+def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:STYLE037,STYLE038 — the eight doc.yml gates in CI order; splitting hides the sequence
     var t0 = ref_time_ticks()
     // gate 1: das2rst runs clean (positional handmade-doc validation)
     let r1 = run_argv([ctx.daslang, "-documentation", "doc/reflections/das2rst.das"])
@@ -894,16 +932,17 @@ def gate_sequence(ctx : PreflightCtx) : GateResult {
         let bin_dir_ps = replace(bin_dir, "'", "''")
         let cwd_ps = replace(cwd, "'", "''")
         let cmd = "$env:BIN = '{bin_dir_ps}'; & 'examples/games/sequence/ci_smoke_test.ps1' '{cwd_ps}'; exit $LASTEXITCODE"
-        args <- [shell, "-NoProfile", "-Command", cmd]
+        args <- [shell, "-NoProfile", "-Command", cmd]   // nolint:PERF030 — fresh empty target, branch-initialized
     } else {
-        args <- ["env", "BIN={bin_dir}", "bash", "examples/games/sequence/ci_smoke_test.sh", cwd]
+        args <- ["env", "BIN={bin_dir}", "bash", "examples/games/sequence/ci_smoke_test.sh", cwd]   // nolint:PERF030 — fresh empty target, branch-initialized
         if (get_platform_name() == "linux" && !has_env_variable("DISPLAY")) {
             // xvfb-run is a wrapper script: -h is its documented flag; --version
             // support varies by distro version
             if (tool_available("xvfb-run", "-h")) {
                 var wrapped <- ["xvfb-run", "-a"]
                 wrapped |> push_from(args)
-                args <- wrapped
+                delete args
+                args <- wrapped   // nolint:PERF030 — old args deleted above
             } else {
                 return GateResult(name = "sequence", status = GateStatus.Skip, seconds = seconds_since(t0),
                     detail = "headless linux without xvfb-run — apt-get install xvfb")
@@ -950,7 +989,7 @@ struct GateInfo {
 def gate_table() : array<GateInfo> {
     return <- [
         GateInfo(name = "format", full_only = false, doc = "formatter --verify on tracked .das (mirrors pre-push + CI)"),
-        GateInfo(name = "lint", full_only = false, doc = "lint changed .das, zero warnings"),
+        GateInfo(name = "lint", full_only = false, doc = "lint changed .das on three rails (host, linux-mirror, -exe), zero warnings"),
         GateInfo(name = "cpp-syntax", full_only = false, doc = "clang frontend pass on changed C++; header change → full src+tests-cpp sweep"),
         GateInfo(name = "dasgen", full_only = true, doc = "gen_bind.das freshness vs include/daScript/builtin/"),
         GateInfo(name = "ci-das", full_only = true, doc = "compile-only sweep of CI-only das surface (ci_only_das.txt)"),
@@ -1056,7 +1095,7 @@ def clear_preflight_token() {
 }
 
 [export]
-def main() : int { // nolint:STYLE037
+def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; the phases ARE the readability
     var args_r <- parse_args(type<Config>)
     if (args_r |> is_err) {
         to_log(LOG_ERROR, "error: {args_r |> unwrap_err}\n\n")

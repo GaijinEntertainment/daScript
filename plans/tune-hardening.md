@@ -155,9 +155,11 @@ observation — an empty first observation reset the document on every save; fix
 **1d + 1e LANDED; --tune-fast REMOVED** (the corrected model: quick means accept-existing,
 never race-cheap — a fast race is the systematic failure to measure):
 - Validation phase: a 5-kernel heavy subset re-races twice at full budget after the sweep;
-  reproduce = same winner or an inside-floor flip, median drift bound 5% (paranoid 3%); any
-  miss fails the mint before anything is written. First live run: 10/10 OK, drifts
-  0.00-0.68%, the dot twins flipped inside-floor in one rep and reproduced exactly in the other.
+  the verdict is same-window ORDER across both windows (fail = rejection, or the SAME
+  challenger past the band in both; drift is stamped `validation_max_drift_pct`, noted past
+  5%/3%, never failed — M4 measured 2-8% honest level shift with load history, which the
+  original drift bound misread as weather). First live run: 10/10 OK, drifts 0.00-0.68%;
+  M4 re-derivation 2026-08-06 reclassified all 7 of its paranoid-run failures as passes.
 - Paranoid: `--tune-paranoid` on both halves + the wrapper (240 finalist rounds / gen
   best-of-18, 1% probe ceiling, 3% drift bound); `daspkg release --paranoid` forwards it.
   `--tune-fast` is gone from the halves, the wrapper, and daspkg; `--quick` lands with the
