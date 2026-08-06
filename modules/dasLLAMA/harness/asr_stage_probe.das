@@ -9,6 +9,7 @@ require audio
 require math   // the parakeet mel worker resolves log at the instantiation site
 require daslib/clargs
 require daslib/jobque_boost
+require daslib/jobque_profile   // JOBQUE_PROFILING_ENABLED — the probe refuses on a build without the marker rail
 
 // Per-stage ASR profile: one warmup pass, then --reps profiled passes through the engine's
 // asr_prof rail (PROF lines: label, total ms, hits, %). Parakeet first; whisper stages ride
@@ -108,6 +109,9 @@ def main() : int {
     } elif (!empty(cfg.kv)) {
         print("unknown --kv '{cfg.kv}' (f16 | f32 | q8)\n")
         return 1
+    }
+    if (!JOBQUE_PROFILING_ENABLED) {
+        panic("asr_stage_probe needs the marker rail compiled in — rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)")
     }
     var m <- empty(cfg.mmproj) ? load_asr_model(cfg.model) : load_asr_model(cfg.model, cfg.mmproj)
     let samples <- load_audio_16k_mono(cfg.wav)

@@ -11,6 +11,7 @@ require dasllama/dasllama_rope       // the RoPE angle/table generation (Model-f
 require dasllama/dasllama_gpu_tier   // the device-cooperation seam (hooks the loader/dispatch arms call)
 require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs and false-flags this as unused
 require dasllama/dasllama_math
+require daslib/jobque_profile  // JOBQUE_PROFILING_ENABLED — the compile-time gate on prof_ticks/prof_add
 require dasllama/dasllama_kv_codec public  // the KV-cache codec families — kv_store_row/kv_load_row/kv_dot/kv_axpy dispatch into them
 require dasllama/dasllama_convert   // cvt_f32_to_f16/cvt_f16_to_f32 — the f16 rows (wscale plane + the f16 KV codec)
 require dasllama/dasllama_math_default  // registers the portable Q8·Q8 backend at [init] (the fallback everywhere)
@@ -3006,7 +3007,7 @@ def mm_at_q51_groupn(var y : array<float>; t : Model; offs : array<int64>; nregi
 }
 
 def mm_b_q51_pre(var y : array<float>; t : Model; woff : int64; xqb : array<int8>; xsb : array<float>; n, d, npos : int64) {
-    let ts_gemm = ref_time_ticks()
+    let ts_gemm = prof_ticks()
     matmul_q51q8_batch(y, t.q51q, t.q51s, woff, xqb, xsb, n, d, npos)
     prof_add("mm_gemm", ts_gemm)
 }
@@ -3067,7 +3068,7 @@ def mm_b_kq(var s : Session; var y : array<float>; t : Model; fmt : KqFmt; woff 
             matmul_gpu_dense(y, woff, s.xqb, s.xsb, n, d, npos, int(fmt))   // in-kernel bsums, xbsb unused
             return
         }
-        let ts_gemm = ref_time_ticks()
+        let ts_gemm = prof_ticks()
         if (fmt == KqFmt.k4) {
             matmul_kq_batch(4, y, t.k4q, t.k4s, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
         } elif (fmt == KqFmt.k5) {
@@ -3139,7 +3140,7 @@ def mm_b_kq_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs : array<in
 // mm_b_q8_pre). Callers guard with kq_repacked && kernel_backend_has_kq_batch() — the prefill
 // gate routes kq-expert layers to the per-position reference path otherwise.
 def mm_b_kq_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d, ntok : int64) {
-    let ts_gemm = ref_time_ticks()
+    let ts_gemm = prof_ticks()
     if (fmt == KqFmt.k4) {
         matmul_kq_batch(4, y, t.k4q, t.k4s, woff, xq, xs, xbs, n, d, ntok)
     } elif (fmt == KqFmt.k5) {
@@ -3237,7 +3238,7 @@ def mm(var y : array<float>; t : Model; woff : int64; x : array<float>; var xq :
 // independent per position, so thread it (was the largest serial bucket once attention + GEMM
 // threaded). Same per-row quants as the single-row quantize_q8_0_into.
 def requant_rows_q8(x : array<float>; n, npos : int64; var xqb : array<int8>; var xsb : array<float>) {
-    let ts_rq = ref_time_ticks()
+    let ts_rq = prof_ticks()
     requant_rows_q8(x, n, npos, xqb, xsb, n * npos >= g_requant_par_threshold)
     prof_add("mm_requant", ts_rq)
 }
@@ -3245,7 +3246,7 @@ def requant_rows_q8(x : array<float>; n, npos : int64; var xqb : array<int8>; va
 // Q8_K-form batch requant (kq v2): per-256 scales + per-16 sums of the per-256-scaled
 // quants. k4-weight batch matmuls and MoE gathers consume these rows.
 def requant_rows_q8k_bs(x : array<float>; n, npos : int64; var xqb : array<int8>; var xsb : array<float>; var xbsb : array<int>) {
-    let ts_rq = ref_time_ticks()
+    let ts_rq = prof_ticks()
     requant_rows_q8k_bs(x, n, npos, xqb, xsb, xbsb, n * npos >= g_requant_par_threshold)
     prof_add("mm_requant", ts_rq)
 }
@@ -3254,7 +3255,7 @@ def requant_rows_q8k_bs(x : array<float>; n, npos : int64; var xqb : array<int8>
 // mm_at_mx4_pre): grouped MoE prefill dispatches here — no Q8 expansion — when the active backend
 // carries a native mx4 batch kernel (g_active_mx4_native_batch).
 def mm_b_mx4_pre(var y : array<float>; t : Model; woff : int64; xqb : array<int8>; xsb : array<float>; n, d, npos : int64) {
-    let ts_gemm = ref_time_ticks()
+    let ts_gemm = prof_ticks()
     matmul_mx4q8_batch(y, t.mxq, t.mxs, woff, xqb, xsb, n, d, npos)
     prof_add("mm_gemm", ts_gemm)
 }
@@ -3263,7 +3264,7 @@ def mm_b_mx4_pre(var y : array<float>; t : Model; woff : int64; xqb : array<int8
 // the grouped MoE prefill runs many GEMMs off one requant (the whole-batch image or a gathered
 // expert bucket).
 def mm_b_q8_pre(var y : array<float>; t : Model; woff : int64; xqb : array<int8>; xsb : array<float>; n, d, npos : int64) {
-    let ts_gemm = ref_time_ticks()
+    let ts_gemm = prof_ticks()
     if (t.wscale_f16) {
         matmul_q8q8_batch(y, t.qblob, t.qscales16, woff, xqb, xsb, n, d, npos)
     } else {
@@ -3685,14 +3686,14 @@ def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE0
     kv_ensure(s, pos + 1l)   // paged sessions: grow the block table BEFORE any cache-pointer hoist
 
     // token embedding: row `token` into the residual stream
-    let ts_embed = ref_time_ticks()
+    let ts_embed = prof_ticks()
     embed_row(t, token, unsafe(addr(s.x[0])))
     if (c.embed_scale != 1.0) {  // Gemma2: scale the embedding by sqrt(dim)
         scale_inplace(unsafe(addr(s.x[0])), c.embed_scale, dim)
     }
     prof_add("embed", ts_embed)
     if (has_ple(c)) {  // gemma-4 E-series: build this token's per-(layer) side input before the stack
-        let ts_ple = ref_time_ticks()
+        let ts_ple = prof_ticks()
         ple_pre_decode(t, s, token)
         prof_add("ple", ts_ple)
     }
@@ -3701,7 +3702,7 @@ def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE0
     // prefill's table: the classic path recomputes pow/cos/sin per PAIR per layer — bit-identical
     // values, trig deduplicated). Dual-rope arches get the sliding class's row alongside.
     if (g_use_rope_table) {
-        let ts_rope_build = ref_time_ticks()
+        let ts_rope_build = prof_ticks()
         // partial rotary (qwen35): the table spans rope_dim — frequencies run over the rotated span
         build_rope_table(s.rope_cos, s.rope_sin, t, c.rope_freq_base, c.rope_freq_scale, pos, 1l,
                          c.rope_dim > 0l ? c.rope_dim : c.head_size, true)
@@ -3724,10 +3725,10 @@ def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE0
     if (!stack_done) {
         blob_only_panic(t, "decode stack")
         for (l in range64(c.n_layers)) {
-            let ts_blk_attn = ref_time_ticks()
+            let ts_blk_attn = prof_ticks()
             t.blocks.attn_decode(t, s, l, pos)
             prof_add("blk_attn", ts_blk_attn)
-            let ts_blk_ffn = ref_time_ticks()
+            let ts_blk_ffn = prof_ticks()
             t.blocks.ffn_decode(t, s, l)
             prof_add("blk_ffn", ts_blk_ffn)
         }
@@ -3737,7 +3738,7 @@ def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE0
 
     // final rmsnorm (into xb to avoid aliasing x as both in/out), then classifier
     blob_only_panic(t, "final-norm/classifier step")
-    let ts_final = ref_time_ticks()
+    let ts_final = prof_ticks()
     trace_tag(TRACE_TAG_CLS)
     rms_at(s.xb, t, t.rms_final_off, s.x, dim)
     if (c.n_layer_nextn > 0l) {   // stash h_nextn (llama.cpp t_h_nextn) for the MTP draft head
@@ -4228,14 +4229,18 @@ var g_prof_mark_chunks = 0l
 var g_prof_mark_inline = 0l
 
 def forward_profile_reset() {
-    g_forward_prof_on = true
-    g_forward_prof_acc |> clear()
-    g_forward_prof_disp |> clear()
-    g_forward_prof_chunks |> clear()
-    g_forward_prof_inline |> clear()
-    g_prof_mark_disp = get_disp_count()
-    g_prof_mark_chunks = get_disp_chunks()
-    g_prof_mark_inline = get_disp_inline()
+    static_if (JOBQUE_PROFILING_ENABLED) {
+        g_forward_prof_on = true
+        g_forward_prof_acc |> clear()
+        g_forward_prof_disp |> clear()
+        g_forward_prof_chunks |> clear()
+        g_forward_prof_inline |> clear()
+        g_prof_mark_disp = get_disp_count()
+        g_prof_mark_chunks = get_disp_chunks()
+        g_prof_mark_inline = get_disp_inline()
+    } else {
+        panic("forward profiler needs the marker rail compiled in — rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)")
+    }
 }
 
 // Sections are sequential and each span ends in exactly one prof_add, so the dispatch-counter
@@ -4256,9 +4261,22 @@ def private prof_add_armed(name : string; t0 : int64) {
     g_prof_mark_inline = il
 }
 
-def prof_add(name : string; t0 : int64) {
-    return if (!g_forward_prof_on)
-    prof_add_armed(name, t0)
+//! Section-stopwatch start for `prof_add` — a real clock only when the profiling rail is compiled
+//! in (`JOBQUE_PROFILING=1` / `--jobque-profiling`); otherwise it folds to a constant and the
+//! whole start/accumulate pair erases under -jit.
+def prof_ticks() : int64 {
+    static_if (JOBQUE_PROFILING_ENABLED) {
+        return ref_time_ticks()
+    } else {
+        return 0l
+    }
+}
+
+def prof_add(name : string; t0 : int64) {   // nolint:LINT012,LINT019 — args only read when JOBQUE_PROFILING_ENABLED compiles the body in
+    static_if (JOBQUE_PROFILING_ENABLED) {
+        return if (!g_forward_prof_on)
+        prof_add_armed(name, t0)
+    }
 }
 
 //! The accumulated time (us) for one section since the last reset (0 if the section never ran).
@@ -4407,11 +4425,11 @@ def attn_qkv_rope_prefix(t : Model; var s : Session; l : int64; npos : int64; st
     // gemma-4 E-series shared-KV layer: project Q only, attend against the source layer's cache (loff aliases it)
     let kv_shared = t.kv_src[l] != l
     // attention rmsnorm, per position
-    let ts_norm0 = ref_time_ticks()
+    let ts_norm0 = prof_ticks()
     rms_batch(s.xb_b, s.x_b, t, t.rms_att_off + l * dim, dim, npos)
     prof_add("norm", ts_norm0)
     // batched q/k/v projections (each re-quantizes xb_b — cheap vs the matmul)
-    let ts_qkv = ref_time_ticks()
+    let ts_qkv = prof_ticks()
     mm_b_f(s, s.q_b, t, fmt_at(t.wq_fmt, l), t.wq_offs[l], s.xb_b, dim, qd, npos)
     if (kv_shared) {
         // E-series shared-KV layer: no K/V of its own — the source layer already filled the cache
@@ -4435,7 +4453,7 @@ def attn_qkv_rope_prefix(t : Model; var s : Session; l : int64; npos : int64; st
     }
     prof_add("mm_qkv", ts_qkv)
     if (c.qk_norm) {  // Qwen3/gemma4: per-head RMSNorm on q/k before RoPE — q_b/k_b are npos*n_heads/n_kv_heads contiguous head_size rows
-        let ts_qknorm = ref_time_ticks()
+        let ts_qknorm = prof_ticks()
         rms_batch(s.q_b, s.q_b, t, t.rms_q_offs[l], head_size, npos * n_heads)
         if (!kv_shared) {
             rms_batch(s.k_b, s.k_b, t, t.rms_k_offs[l], head_size, npos * n_kv_heads)
@@ -4444,12 +4462,12 @@ def attn_qkv_rope_prefix(t : Model; var s : Session; l : int64; npos : int64; st
     }
     // gemma4: weightless per-head RMSNorm on V (all-ones weight); V-from-K layers already normed above
     if (c.v_norm && t.wv_offs[l] >= 0l) {
-        let ts_vnorm = ref_time_ticks()
+        let ts_vnorm = prof_ticks()
         rms_batch(s.v_b, s.v_b, t, t.rms_ones_off, head_size, npos * n_kv_heads)
         prof_add("norm", ts_vnorm)
     }
     // RoPE per position in place; p-RoPE arches (gemma4) apply rope_freqs factors to GLOBAL layers only
-    let ts_rope = ref_time_ticks()
+    let ts_rope = prof_ticks()
     let swa_rope = is_sliding && has_dual_rope(c)
     // shared-KV layers rope Q only (kv_dim = 0 makes the K rope a no-op; there's no K to store)
     let rope_kv = kv_shared ? 0l : kv_dim
@@ -4475,7 +4493,7 @@ def attn_out_suffix(t : Model; var s : Session; l : int64; npos : int64) {
     let dim = c.dim
     let qd = c.n_heads * layer_head_size(c, l)
     // output projection (batched, qd -> dim) + optional bias + post-attn norm + residual
-    let ts_wo = ref_time_ticks()
+    let ts_wo = prof_ticks()
     mm_b_f(s, s.xb2_b, t, fmt_at(t.wo_fmt, l), t.wo_offs[l], s.xb_b, qd, dim, npos)
     if (c.attn_out_bias) {  // gpt-oss: + bias per position on the projected attention output
         for (p in range64(npos)) {
@@ -4483,7 +4501,7 @@ def attn_out_suffix(t : Model; var s : Session; l : int64; npos : int64) {
         }
     }
     prof_add("mm_wo", ts_wo)
-    let ts_resid0 = ref_time_ticks()
+    let ts_resid0 = prof_ticks()
     if (c.pre_post_norm) {  // Gemma2: post-attention RMSNorm per position before residual
         rms_batch(s.xb2_b, s.xb2_b, t, t.rms_post_att_off + l * dim, dim, npos)
     }
@@ -4506,14 +4524,14 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
         }
         return
     }
-    let ts_alloc = ref_time_ticks()
+    let ts_alloc = prof_ticks()
     kv_ensure(s, start_pos + npos)   // paged sessions: grow the block table BEFORE any cache-pointer hoist
     forward_prefill_alloc(t, s, npos, start_pos)
     prof_add("alloc", ts_alloc)
 
     // token embeddings -> residual stream x_b [npos x dim]
     let dim = c.dim
-    let ts_embed = ref_time_ticks()
+    let ts_embed = prof_ticks()
     for (p in range64(npos)) {
         embed_row(t, tokens[p], unsafe(addr(s.x_b[p * dim])))
     }
@@ -4522,7 +4540,7 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
     }
     prof_add("embed", ts_embed)
     if (has_ple(c)) {  // gemma-4 E-series: build each position's per-(layer) side input before the stack
-        let ts_ple = ref_time_ticks()
+        let ts_ple = prof_ticks()
         if (g_ple_gpu_gate_set && invoke(g_ple_gpu_gate, t, s, npos, start_pos)) {
             s.ple_gpu_tokens |> resize(npos)
             for (p in range64(npos)) {
@@ -4666,7 +4684,7 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
 
     // one npos x head_size/2 cos/sin table replaces per-head/per-layer pow/cos/sin recomputation
     let use_rope_tab = g_use_rope_table
-    let ts_rope_build = ref_time_ticks()
+    let ts_rope_build = prof_ticks()
     if (use_rope_tab) {
         // swa table uses the sliding class's head size and drops factors on p-RoPE arches (gemma4)
         build_rope_table(s.rope_cos, s.rope_sin, t, c.rope_freq_base, c.rope_freq_scale, start_pos, npos,
@@ -4694,11 +4712,11 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
         for (l in range64(c.n_layers)) {
             trace_marker("layer", int(l))   // nolint:PERF026 — gated on g_trace_tags; the name->id table lookup is the trace's own cost
             trace_tag(TRACE_TAG_ATTN_STD)   // per-lane trace: color the prefill attention section
-            let ts_blk_attn = ref_time_ticks()
+            let ts_blk_attn = prof_ticks()
             t.blocks.attn_prefill(t, s, l, npos, start_pos)
             prof_add("blk_attn", ts_blk_attn)   // coarse per-side cover; NESTS over the fine buckets, so TOTAL double-counts these spans
             trace_tag(TRACE_TAG_FFN_STD)
-            let ts_blk_ffn = ref_time_ticks()
+            let ts_blk_ffn = prof_ticks()
             t.blocks.ffn_prefill(t, s, l, npos)
             prof_add("blk_ffn", ts_blk_ffn)
         }
@@ -4707,7 +4725,7 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
     // final rmsnorm + classifier on the LAST position only (that's what we sample next)
     return if (stack_done && g_prefill_logits_done)   // the override already produced s.logits
     blob_only_panic(t, "prefill final-norm/classifier step")
-    let ts_final = ref_time_ticks()
+    let ts_final = prof_ticks()
     let last = npos - 1l
     rms_at(s.xb, t, t.rms_final_off, s.x_b, last * dim, dim)
     if (c.n_layer_nextn > 0l) {   // stash the last position's h_nextn for the MTP draft head

@@ -873,7 +873,7 @@ def private promote_tmp(tmp_path : string; path : string; built : bool; want_byt
 
 // per-writer name: concurrent savers must not clobber each other; last rename wins, same content
 def private tmp_name_for(path : string) : string {
-    return "{path}.{ref_time_ticks()}.tmp"
+    return "{path}.{ref_time_ticks()}.tmp"   // clock: control — unique temp-name suffix, not timing
 }
 
 def private save_image_to_file(var t; path : string; extra : uint64; tag : string; quant : string;

@@ -132,7 +132,7 @@ def prefix_attach_(var cache : PrefixCache; var pool : KVPool; var s : Session; 
         var c = unsafe(cache.chains?[hit_chain])
         if (c != null) {
             c.hits ++
-            c.last_hit_at = ref_time_ticks()
+            c.last_hit_at = ref_time_ticks()   // clock: control — LRU recency, feeds prefix_evict_lru
         }
     }
     s.n_past = matched
@@ -195,7 +195,7 @@ def prefix_insert_(var cache : PrefixCache; var pool : KVPool; s : Session; toke
         if (chain_id == 0l) {   // first NEW page: this donation gets a dashboard chain
             cache.next_chain_id ++
             chain_id = cache.next_chain_id
-            cache.chains[chain_id] <- PrefixChain(id = chain_id, born_at = ref_time_ticks(), preview = preview)
+            cache.chains[chain_id] <- PrefixChain(id = chain_id, born_at = ref_time_ticks(), preview = preview)   // clock: control — chain age, eviction bookkeeping
         }
         var e <- PrefixEntry(group = s.block_table[i], last_use = cache.tick, chain = chain_id)
         e.tokens <- [for (j in range64(i * pr, (i + 1l) * pr)); tokens[j]]

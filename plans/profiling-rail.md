@@ -95,24 +95,40 @@ readers' silent-default.
 - cv per cell on the quiet M1 ≤ 1.5%; interleaving cancels the overnight thermal drift that
   makes laptop A-then-B sequencing lie.
 
-**Step 1 — census + classification (no box needed).** Walk all 392 sites into four classes:
-- **C1 load-bearing** — the elapsed value FEEDS LOGIC (backend auto-selection, adaptive
-  gates, tune measurement, watchdog timeouts). UNTOUCHED, marked `// clock: control` so the
-  future lint can whitelist them. Getting one of these wrong breaks selection, not profiling —
-  this classification is the real per-site work and it is review, not measurement.
-- **C2 perf-bucket accumulators** (blocks.das 60, the arch files, moe/metal decode) → marker
-  zones on the rail, erased when `JOBQUE_PROFILING` is off. `decode_prof --prof` then needs
-  the rail compiled in and refuses loudly without it — same kaboom precedent as `--trace`.
-- **C3 big one-shot intervals** (model load, dlim mint/map, tokenizer init, warmup — image 27,
-  parakeet 27, audio 22...) → zones so the timeline finally shows them; log-writes inside a
-  timed interval move out or become their own zone. Cold-path: cost is irrelevant, visibility
-  is the point.
-- **C4 serve/bench stopwatches that ARE the deliverable** — stay.
+**Step 1 — census result (2026-08-06 night; true totals 319 `ref_time_ticks` + 74
+`get_time_usec` consumers + 1 nsec — plain grep; the MCP `grep_usage` silently truncated
+`dasllama_common.das` at ~line 3740, 13 reported vs 27 real — tool bug, reported):**
+- **C2-rail (erased when off): the `prof_add` family and nothing else** — 172 starts
+  (blocks 60, arch_qwen35 37, common 27, ple 22, moe 19, batch 7; every `ref_time_ticks` in
+  those six files feeds `prof_add`, verified per site). Swap: starts become `prof_ticks()`
+  (folds to `0l` off-rail), `prof_add`/`forward_profile_reset` bodies gate on
+  `static_if (JOBQUE_PROFILING_ENABLED)`; reset PANICS off-rail. Fail-fast checks added:
+  decode_prof + asr_stage_probe (unconditional — profiling is their purpose), lcpp_bench +
+  verify_batch_probe (`--prof` only).
+- **ASR family stays runtime-armed — census overturned the plan here.** All 68
+  `asr_prof_add` sites back the encode-split DELIVERABLE (`lcpp_bench` samples
+  `asr_prof_ms(ebucket)` on every ASR cell, rail or no rail), so compile-time erasure would
+  break site records on off-builds. Its always-on start ticks are ~0.01–0.03% of an encode —
+  unresolvable; left exactly as-is.
+- **C1 `// clock: control` (marked):** prefix-cache `last_hit_at`/`born_at` (LRU eviction
+  ordering) + the image tmp-name tick (uniqueness suffix, not timing).
+- **Already-runtime-gated instruments, untouched:** `g_pf_prof` (math_default), `g_conv_prof`
+  (load, incl. the one nsec site), metal step-trace (cap-armed), the vulkan `vk_prof()` log
+  families (~20 per-chunk starts, log-gated, noise-level).
+- **Metal `g_us_*` stage buckets (15 starts): untouched** — the chase/batch harnesses read
+  them as a live numbers rail (`metal_decode_stage_stats`), metal is frozen this arc, and
+  they run ~4 pairs/token (25× sparser than the CPU family).
+- **C3 one-shot cold logs (~35: load stages, image bake/map, tokenizer, layout, gpu_resident,
+  vulkan upload) and C4 serve stats (sampling `stat_*`): stay.** The planned C3→zone
+  conversion is DROPPED for this arc: cost is zero (cold), and the trace window never covers
+  model load, so zones there would record nothing — revisit only with a zone primitive plus
+  load-window tracing, as its own decision.
 
-**Step 2 — sweep in batches** (C2 by file, then C3), compile + lint per batch, cheap
-correctness gates between batches: kernels suite + image mechanics arm (model-less), one
-llama2c forward-parity file. No timing gates mid-sweep — the transform is mechanical and a
-regression wouldn't resolve anyway.
+**Step 2 — sweep executed in one batch** (the C2 set collapsed to a chokepoint gate + a
+mechanical 172-site spelling swap, so file-by-file batching bought nothing). Gates all green:
+compile_check ×4 harnesses, lint ×12 files, kernels suite 4/4, image mechanics 22 passed /
+16 skipped, llama2c forward parity 10/10, plus a both-worlds decode_prof probe (off-rail =
+fast refusal, on-rail = armed buckets report).
 
 **Step 3 — the measurement night** (box handed over, caffeinate agent on, no user apps):
 1. Tune gate: Boris confirms (2026-08-06) `m1.tune.json` is NOT stale — no kernel work since

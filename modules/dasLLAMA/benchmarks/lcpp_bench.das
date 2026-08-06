@@ -12,6 +12,7 @@ require dasllama/dasllama_asr   // --asr: load_asr_model/create_session/transcri
 require audio   // --asr: the miniaudio decoder behind load_audio_16k_mono
 require dasllama/dasllama_audio   // --asr: AUDIO_SAMPLE_RATE, the 16 kHz mono contract
 require daslib/module_path            // get_this_module_dir — the default prompt corpus beside this bench
+require daslib/jobque_profile   // JOBQUE_PROFILING_ENABLED — --prof refuses on a build without the marker rail
 require ?das_accelerate dasllama/dasllama_math_accelerate   // the --accel leg; Apple-only C++ module
 require ../performance/profile_common.das   // profile_threads + affinity_on + bench records — the standing per-box methodology
 require llvm/daslib/llvm_tune   // tune_app_script — the exe-vs-script discriminator behind --for-debug-purposes
@@ -497,6 +498,9 @@ def main() : int {
     if (cfg.help) {
         print_help(get_command_info(type<Args>), "lcpp_bench")
         return 0
+    }
+    if (cfg.prof && !JOBQUE_PROFILING_ENABLED) {
+        panic("--prof needs the marker rail compiled in — rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)")
     }
     // measurement exists only from the released exe: a -jit SCRIPT run reads whatever sidecar
     // sits beside the script and re-keys nothing — its numbers must never enter records

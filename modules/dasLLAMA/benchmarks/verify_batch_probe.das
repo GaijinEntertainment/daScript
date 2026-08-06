@@ -14,6 +14,7 @@ require daslib/clargs
 require daslib/fio
 require math
 require dasllama/dasllama_env
+require daslib/jobque_profile   // JOBQUE_PROFILING_ENABLED — --prof refuses on a build without the marker rail
 
 // Measures `b` — the marginal cost of one extra row in a batched verify — which is the single
 // quantity deciding whether ANY speculative decoding scheme can pay on a model. Each arm advances
@@ -90,6 +91,9 @@ def main() {   // nolint:STYLE038 — flat probe driver: arg handling, then one 
     if (cfg.help) {
         print_help(get_command_info(type<Args>), "verify_batch_probe")
         return
+    }
+    if (cfg.prof && !JOBQUE_PROFILING_ENABLED) {
+        panic("--prof needs the marker rail compiled in — rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)")
     }
     let plen = max(int64(cfg.plen), 1l)
     let want = max(int64(cfg.npos), 8l)

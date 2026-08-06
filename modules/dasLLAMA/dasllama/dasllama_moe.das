@@ -293,7 +293,7 @@ def private moe_experts_chain(t : Model; var s : Session; l : int64) { // nolint
     let nfe = c.n_ff_exp
     let ege = dim * nfe
     let biased = c.moe_exps_bias
-    let ts_chain = ref_time_ticks()
+    let ts_chain = prof_ticks()
     let mxrows = mx4_rows_fn()
     let is_gelu = c.ffn_act == FfnAct.gelu
     let is_oai = c.ffn_act == FfnAct.swiglu_oai
@@ -407,7 +407,7 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
     let pre_q8 = t.quant == QuantMode.q8
     let layer_kq = pre_q8 && moe_layer_kq(t, l)
     if (pre_q8) {
-        let ts_rq = ref_time_ticks()
+        let ts_rq = prof_ticks()
         if (layer_kq && moe_pair_kform(fmt_at(t.we1_fmt, l), fmt_at(t.we3_fmt, l))) {
             // kq v2: kq gate/up stacks read the Q8_K-form scratch
             quantize_q8_k_into(s.xb, dim, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)
@@ -424,7 +424,7 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
     let ege = dim * nfe
     if (pre_q8) {
         // fused-dispatch form: bit-exact vs the per-expert loop, but 3 fork/joins instead of 3k
-        let ts_gu = ref_time_ticks()
+        let ts_gu = prof_ticks()
         let biased = c.moe_exps_bias   // gpt-oss: each expert's biases fold into the workers' stores
         let f1 = fmt_at(t.we1_fmt, l)
         let f2 = fmt_at(t.we2_fmt, l)
@@ -510,7 +510,7 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
                     memcpy(reinterpret<void?>(gs + i * nb), sxs, nb * 4l)
                 }
             }
-            let ts_sub = ref_time_ticks()
+            let ts_sub = prof_ticks()
             matmul_moe_gpu_ffn_begin(s.moe_offs1, s.moe_offs3, s.moe_offs2, nhits,
                 s.moe_gxq, s.moe_gxs, dim, nfe, nhits, int(moe_gpu_expert_fmt(f1)), int(moe_gpu_expert_fmt(f3)), int(moe_gpu_expert_fmt(f2)), c.ffn_act == FfnAct.gelu)
             prof_add("heat_sub", ts_sub)   // dispatch cost ON the critical path (the split's tax)
@@ -548,7 +548,7 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
                     mm_at_q8_groupn(s.moe_gu2, t, s.moe_offs, m, s.moe_xq, s.moe_xs, dim, nfe)
                 }
                 prof_add("mm_moe", ts_gu)
-                let ts_act = ref_time_ticks()
+                let ts_act = prof_ticks()
                 gate_batch(s.moe_gu, s.moe_gu2, c.ffn_act, nfe, m)
                 prof_add("act", ts_act)
                 if (kq_sb(f2)) {
@@ -556,7 +556,7 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
                 } else {
                     requant_rows_q8(s.moe_gu, nfe, m, s.moe_dq, s.moe_ds)
                 }
-                ts_down = ref_time_ticks()
+                ts_down = prof_ticks()
                 mi = 0l
                 for (j in range64(k)) {
                     if (s.heat_hit[j] == int8(0)) {
@@ -575,10 +575,10 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
             }
             s.moe_hdn |> resize(nhits * dim)
             prof_add("mm_moe_dn", ts_down)
-            let ts_join = ref_time_ticks()
+            let ts_join = prof_ticks()
             matmul_moe_gpu_ffn_join(s.moe_hdn)
             prof_add("heat_wait", ts_join)   // GPU residue after the CPU misses — 0 = fully hidden
-            let ts_hred = ref_time_ticks()
+            let ts_hred = prof_ticks()
             var hi = 0l
             var mrow = 0l
             for (j in range64(k)) {   // original slot order — the weighted sum stays order-stable
@@ -640,7 +640,7 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
                 mm_at_q8_groupn(s.moe_gu2, t, s.moe_offs, k, s.moe_xq, s.moe_xs, dim, nfe)
             }
             prof_add("mm_moe", ts_gu)
-            let ts_act = ref_time_ticks()
+            let ts_act = prof_ticks()
             gate_batch(s.moe_gu, s.moe_gu2, c.ffn_act, nfe, k)
             prof_add("act", ts_act)
             if (kq_sb(f2)) {   // kq v2: the down stack reads Q8_K-form rows; q51/q8 the Q8_0 form
@@ -648,7 +648,7 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
             } else {
                 requant_rows_q8(s.moe_gu, nfe, k, s.moe_dq, s.moe_ds)   // books mm_requant
             }
-            let ts_down = ref_time_ticks()
+            let ts_down = prof_ticks()
             for (j in range64(k)) {
                 let e = l * ne + s.moe_idx[j]
                 s.moe_offs[j * 2l] = t.we2_offs[l] + s.moe_idx[j] * ege
@@ -673,7 +673,7 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
             prof_add("mm_moe_dn", ts_down)
         }
         if (nhits == 0l && !moe_chained) {   // the split arm reduced its own row banks; the chain reduced inline
-            let ts_red = ref_time_ticks()
+            let ts_red = prof_ticks()
             for (j in range64(k)) {   // slot order preserved — the sum is bit-identical
                 axpy(unsafe(addr(s.moe_acc[0])), unsafe(addr(s.moe_dn[j * dim])), s.moe_w[j], dim)
             }
@@ -684,7 +684,7 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
         for (j in range64(k)) {
             let e = l * ne + s.moe_idx[j]
             let base = s.moe_idx[j] * ege
-            let ts_gu = ref_time_ticks()
+            let ts_gu = prof_ticks()
             mm(s.hb, t, t.we1_offs[l] + base, s.xb, s.xq, s.xs, dim, nfe)
             mm(s.hb2, t, t.we3_offs[l] + base, s.xb, s.xq, s.xs, dim, nfe)
             if (c.moe_exps_bias) {  // gpt-oss: this expert's gate/up biases before the activation
@@ -692,16 +692,16 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
                 add_bias(s.hb2, 0l, t.fblob, t.web3_off + e * nfe, nfe)
             }
             prof_add("mm_moe", ts_gu)
-            let ts_act = ref_time_ticks()
+            let ts_act = prof_ticks()
             gate_batch(s.hb, s.hb2, c.ffn_act, nfe, 1l)
             prof_add("act", ts_act)
-            let ts_down = ref_time_ticks()
+            let ts_down = prof_ticks()
             mm(s.xb2, t, t.we2_offs[l] + base, s.hb, s.xq, s.xs, nfe, dim)
             if (c.moe_exps_bias) {  // ... and its down bias, inside the routed weight (ggml_add_id order)
                 add_bias(s.xb2, 0l, t.fblob, t.web2_off + e * dim, dim)
             }
             prof_add("mm_moe_dn", ts_down)
-            let ts_red = ref_time_ticks()
+            let ts_red = prof_ticks()
             axpy(unsafe(addr(s.moe_acc[0])), unsafe(addr(s.xb2[0])), s.moe_w[j], dim)
             prof_add("moe_reduce", ts_red)
         }
@@ -716,7 +716,7 @@ def moe_ffn_core(t : Model; var s : Session; l : int64) {
     let dim = c.dim
     let ne = c.n_expert
     trace_tag(TRACE_TAG_ROUTE)   // decode router GEMV — without this it rides the stale attn tag in traces
-    let ts_route = ref_time_ticks()
+    let ts_route = prof_ticks()
     mm_fblob(s.moe_logits, t, t.router_off + l * ne * dim, s.xb, dim, ne)
     if (c.moe_router_bias) {
         add_bias(s.moe_logits, 0l, t.fblob, t.router_b_off + l * ne, ne)
@@ -733,7 +733,7 @@ def moe_ffn_core(t : Model; var s : Session; l : int64) {
     let nsh = c.n_ff_shexp
     let she = dim * nsh
     if (sh_gpu) {
-        let ts_shs = ref_time_ticks()
+        let ts_shs = prof_ticks()
         quantize_q8_0_into(s.xb, dim, s.moe_xq, s.moe_xs, 0l, 0l)   // moe_experts_apply recomputes the same bits
         // the routed CPU path uses moe_offs (not the triples) — these are free at this gate
         s.moe_offs1 <- [t.wsh1_off + l * she, 0l, 1l]
@@ -745,7 +745,7 @@ def moe_ffn_core(t : Model; var s : Session; l : int64) {
     }
     moe_experts_apply(t, s, l)
     if (sh_gpu) {
-        let ts_shw = ref_time_ticks()
+        let ts_shw = prof_ticks()
         trace_tag(TRACE_TAG_SHEXP)
         let g = c.moe_shexp_gated ? moe_shexp_gate(t, l, unsafe(addr(s.xb[0]))) : 1.0
         matmul_moe_gpu_ffn_join(s.xb2)
@@ -755,7 +755,7 @@ def moe_ffn_core(t : Model; var s : Session; l : int64) {
     // shared expert, gated by a sigmoid scalar from its per-layer gate vector (glm4moe: ungated, g = 1)
     if (c.n_ff_shexp > 0l && !sh_gpu) {
         let pre_q8 = t.quant == QuantMode.q8
-        let ts_sh = ref_time_ticks()
+        let ts_sh = prof_ticks()
         trace_tag(TRACE_TAG_SHEXP)
         let g = c.moe_shexp_gated ? moe_shexp_gate(t, l, unsafe(addr(s.xb[0]))) : 1.0
         if (pre_q8) {

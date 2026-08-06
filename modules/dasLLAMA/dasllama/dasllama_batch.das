@@ -87,7 +87,7 @@ def private attention_batch_decode(t : Model; var ws : BatchWorkspace; sessions 
     let vtq4 = vdt == KVDtype.tq4
     if (ktq4 || vtq4) {
         // tq4 basis change at the RoPE seam (see attention_std_decode); xb_b un-rotates below
-        let ts_rot = ref_time_ticks()
+        let ts_rot = prof_ticks()
         unsafe {
             let sgp = addr < float const? >(ws.scr.kv_signs[0])
             if (ktq4) {
@@ -107,7 +107,7 @@ def private attention_batch_decode(t : Model; var ws : BatchWorkspace; sessions 
         quantize_q8_0_into(ws.scr.q_b, nrows * qd, ws.scr.attq, ws.scr.atts, 0l, 0l)
     }
     if (!kv_shared) {
-        let ts_kv = ref_time_ticks()
+        let ts_kv = prof_ticks()
         unsafe {
             let kbp = addr < float const? >(ws.scr.k_b[0])
             let vbp = addr < float const? >(ws.scr.v_b[0])
@@ -120,7 +120,7 @@ def private attention_batch_decode(t : Model; var ws : BatchWorkspace; sessions 
         prof_add("kv_store", ts_kv)
     }
     // per-(row, head): row i attends to ITS cache; lane count is work-proportional to KV traffic.
-    let ts_attn = ref_time_ticks()
+    let ts_attn = prof_ticks()
     var maxctx = 0l
     var work = 0l   // Σ 2·cnt_i·head_size MACs per head
     // runs_b row stride: a flat row is always one run; a paged row can span every page of the context
@@ -259,7 +259,7 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
     batch_decode_alloc(t, ws.scr, nrows)
     // embed each row's token into the residual stream
     let dim = c.dim
-    let ts_embed = ref_time_ticks()
+    let ts_embed = prof_ticks()
     for (i in range64(nrows)) {
         embed_row(t, tokens[i], unsafe(addr(ws.scr.x_b[i * dim])))
     }
@@ -268,12 +268,12 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
     }
     prof_add("embed", ts_embed)
     if (has_ple(c)) {  // gemma-4 E-series: per-(row, layer) side input (token-indexed, position-free)
-        let ts_ple = ref_time_ticks()
+        let ts_ple = prof_ticks()
         ple_pre_prefill(t, ws.scr, tokens, nrows)
         prof_add("ple", ts_ple)
     }
     // per-row RoPE cos/sin table(s) — row i at sessions[i]'s own position
-    let ts_rope_build = ref_time_ticks()
+    let ts_rope_build = prof_ticks()
     build_rope_table_rows(ws.scr.rope_cos, ws.scr.rope_sin, t, c.rope_freq_base, c.rope_freq_scale,
         ws.positions, nrows, c.rope_dim > 0l ? c.rope_dim : c.head_size, true)
     if (has_dual_rope(c)) {
@@ -297,7 +297,7 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
         }
     }
     // final rmsnorm + classifier over ALL rows, then per-row softcap/pins scattered per session
-    let ts_final = ref_time_ticks()
+    let ts_final = prof_ticks()
     let vocab = c.vocab_size
     if (!(stack_done && batch_decode_logits_done())) {
         blob_only_panic(t, "batch-decode final-norm/classifier step")
