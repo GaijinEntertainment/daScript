@@ -6,6 +6,7 @@ options _cyclomatic_complexity = 0   // whole-token record/setup walks — split
 options _function_length = 0   // same
 
 require dasllama/dasllama_vulkan_common   // g_gpu/g_rd state, plumbing, hazard rail, fill metas
+require dasllama/dasllama_vulkan_classes   // the class-kernel rail (generated set_/enc_ + gemv_cls_*)
 require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_math
@@ -74,12 +75,10 @@ def vk_rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab
     r.cos_elems = r.qkn_eps_off + (qk_norm ? 1l : 0l)
     r.cos_dev = make_device_buf(r.cos_elems * 4l)
     r.scal_dev = make_device_buf(64l)
-    r.ar_scal_dev = make_device_buf(64l)
     r.logits_dev = make_device_buf(vocab * 4l)
     r.dummy = make_device_buf(256l)
     r.x_host = make_host_buf(dim * 4l, false, [cached = true])
     r.cos_host = make_host_buf(head_size * 4l, false, [cached = true])
-    r.ffn_meta_h = make_host_buf(FFN_META_BYTES, false)
     r.logits_host = make_host_buf(vocab * 4l, false, [cached = true])
     r.kv_readback = make_host_buf(2l * kv_dim * 4l * KV_READBACK_ROWS, false, [cached = true])
     ensure_ffn_state()   // hq_dev/hs_dev for the FFN act+requant
@@ -139,39 +138,43 @@ def vk_rdec_set_layer(l : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv,
         let p1 = arena_planes(f1)
         let p3 = arena_planes(f3)
         let p2 = arena_planes(f2)
-        // metas
-        L.m_quant_xb = rd_meta(); L.m_q = rd_meta(); L.m_k = rd_meta(); L.m_v = rd_meta()
-        L.m_rope = rd_meta(); L.m_attn = rd_meta(); L.m_quant_at = rd_meta(); L.m_wo = rd_meta()
-        L.m_addr_ffn = rd_meta(); L.m_quant_xb2 = rd_meta(); L.m_gate = rd_meta(); L.m_up = rd_meta()
-        L.m_actrq = rd_meta(); L.m_down = rd_meta(); L.m_addr_next = rd_meta()
-        // quantize xb -> xq/xs (dn_requant: in vk_upf@0, meta@2, xq@3, xs@4)
-        L.s_quant_xb = vk_set6(g_rd.xb_dev, g_rd.dummy, L.m_quant_xb.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.dummy,
-            dim * 4l, 256l, META_BYTES, dim, (dim / 32l) * 4l, 256l,
-            fixed_array(VHZ_XB, 0u, 0u, VHZ_XQ, VHZ_XQ, 0u))
-        // q/k/v GEMV: arena[f] planes @0/1, meta@2, xq@3, xs@4, out@5
-        L.s_q = vk_set6(pq.wq, pq.ws, L.m_q.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.q_dev,
-            pq.wqb, pq.wsb, META_BYTES, dim, (dim / 32l) * 4l, qd * 4l,
+        // the static roles ride the class rail (sets from the class layouts, params ride push);
+        // only rope/qkn_rope/attn keep vk_set6 + host metas (per-token mirror row / cnt)
+        verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq() && ensure_q8_actrq_cls()
+            && (!g_rd.qk_norm || ensure_qk_rms_cls())
+            && gemv_cls_ensure(fq) && gemv_cls_ensure(fk) && gemv_cls_ensure(fv) && gemv_cls_ensure(fo)
+            && gemv_cls_ensure(f1) && gemv_cls_ensure(f3) && gemv_cls_ensure(f2),
+            "vk decode: the class rails must engage on a live device")
+        L.m_q = rd_meta(); L.m_k = rd_meta(); L.m_v = rd_meta()
+        L.m_rope = rd_meta(); L.m_attn = rd_meta(); L.m_wo = rd_meta()
+        L.m_gate = rd_meta(); L.m_up = rd_meta(); L.m_down = rd_meta()
+        // quantize xb -> xq/xs
+        L.s_quant_xb = set_rq_cls(fixed_array(g_rd.xb_dev, g_rd.xq_dev, g_rd.xs_dev),
+            fixed_array(dim * 4l, dim, (dim / 32l) * 4l),
+            fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
+        // q/k/v class GEMV: planes @0/1, regions@2, xq@3, xs@4, out@5
+        L.s_q = gemv_cls_set(fq, fixed_array(pq.wq, pq.ws, L.m_q.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.q_dev),
+            fixed_array(pq.wqb, pq.wsb, META_BYTES, dim, (dim / 32l) * 4l, qd * 4l),
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_Q))
-        L.s_k = vk_set6(pk.wq, pk.ws, L.m_k.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.kv_dev,
-            pk.wqb, pk.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l,
+        L.s_k = gemv_cls_set(fk, fixed_array(pk.wq, pk.ws, L.m_k.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.kv_dev),
+            fixed_array(pk.wqb, pk.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l),
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_KVK))
-        L.s_v = vk_set6(pv.wq, pv.ws, L.m_v.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.kv_dev,
-            pv.wqb, pv.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l,
+        L.s_v = gemv_cls_set(fv, fixed_array(pv.wq, pv.ws, L.m_v.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.kv_dev),
+            fixed_array(pv.wqb, pv.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l),
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_KVV))
         // same-format k/v share arena planes — one two-region dispatch fills both kv halves
         L.kv_merged = fk == fv
         if (L.kv_merged) {
-            L.s_kv = vk_set6(pk.wq, pk.ws, L.m_k.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.kv_dev,
-                pk.wqb, pk.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l,
+            L.s_kv = gemv_cls_set(fk, fixed_array(pk.wq, pk.ws, L.m_k.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.kv_dev),
+                fixed_array(pk.wqb, pk.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l),
                 fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_KVK | VHZ_KVV))
         }
-        // qk rmsnorm (qk_norm models): q@0 (q_dev), meta@2, norm rows@3, eps@4, k@5 (kv_dev, k at qd)
         let mirbytes = g_rd.n_layers * g_rd.seq_cap * kvd * 4l
         if (g_rd.qk_norm) {
-            L.m_qkn = rd_meta()
-            L.s_qkn = vk_set6(g_rd.q_dev, g_rd.dummy, L.m_qkn.buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.kv_dev,
-                qd * 4l, 256l, META_BYTES, g_rd.norms_bytes, 64l, (qd + 2l * kvd) * 4l,
-                fixed_array(VHZ_Q, 0u, 0u, 0u, 0u, VHZ_KVK))
+            // per-head q/k rmsnorm (class): q rows, k rows (kv_dev — kbase=qd rides the push), norms
+            L.s_qkn = set_qk_rms_cls(fixed_array(g_rd.q_dev, g_rd.kv_dev, g_rd.norms_dev),
+                fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, g_rd.norms_bytes),
+                fixed_array(VHZ_Q, VHZ_KVK, 0u))
             // the fused twin: rope's own binding plan, with the rms rows riding the cos buffer
             L.m_qkr = rd_meta()
             L.s_qkn_rope = vk_set6(g_rd.kv_dev, g_rd.k_mirror, L.m_qkr.buf, g_rd.v_mirror, g_rd.cos_dev, g_rd.q_dev,
@@ -187,49 +190,47 @@ def vk_rdec_set_layer(l : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv,
             qd * 4l, mirbytes, META_BYTES, mirbytes, 64l, qd * 4l,
             fixed_array(VHZ_Q, VHZ_MIR, 0u, VHZ_MIR, 0u, VHZ_ATT))
         // quantize attn -> aq/as
-        L.s_quant_at = vk_set6(g_rd.attn_dev, g_rd.dummy, L.m_quant_at.buf, g_rd.aq_dev, g_rd.as_dev, g_rd.dummy,
-            qd * 4l, 256l, META_BYTES, qd, (qd / 32l) * 4l, 256l,
-            fixed_array(VHZ_ATT, 0u, 0u, VHZ_AQ, VHZ_AQ, 0u))
+        L.s_quant_at = set_rq_cls(fixed_array(g_rd.attn_dev, g_rd.aq_dev, g_rd.as_dev),
+            fixed_array(qd * 4l, qd, (qd / 32l) * 4l),
+            fixed_array(VHZ_ATT, VHZ_AQ, VHZ_AQ))
         // wo GEMV -> xb2
-        L.s_wo = vk_set6(po.wq, po.ws, L.m_wo.buf, g_rd.aq_dev, g_rd.as_dev, g_rd.xb2_dev,
-            po.wqb, po.wsb, META_BYTES, qd, (qd / 32l) * 4l, dim * 4l,
+        L.s_wo = gemv_cls_set(fo, fixed_array(po.wq, po.ws, L.m_wo.buf, g_rd.aq_dev, g_rd.as_dev, g_rd.xb2_dev),
+            fixed_array(po.wqb, po.wsb, META_BYTES, qd, (qd / 32l) * 4l, dim * 4l),
             fixed_array(0u, 0u, 0u, VHZ_AQ, VHZ_AQ, VHZ_XB2))
-        // addrms: x@0 += xb2@1, meta@2, norms@3, scalars@4, xb@5
-        L.s_addr_ffn = vk_set6(g_rd.x_dev, g_rd.xb2_dev, L.m_addr_ffn.buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.xb_dev,
-            dim * 4l, dim * 4l, META_BYTES, g_rd.norms_bytes, 64l, dim * 4l,
-            fixed_array(VHZ_X, VHZ_XB2, 0u, 0u, 0u, VHZ_XB))
-        // fused twin: the normed row quantizes in place of the xb store (xs@4, xq@5)
-        L.s_addr_ffn_rq = vk_set6(g_rd.x_dev, g_rd.xb2_dev, L.m_addr_ffn.buf, g_rd.norms_dev, g_rd.xs_dev, g_rd.xq_dev,
-            dim * 4l, dim * 4l, META_BYTES, g_rd.norms_bytes, (dim / 32l) * 4l, dim,
-            fixed_array(VHZ_X, VHZ_XB2, 0u, 0u, VHZ_XQ, VHZ_XQ))
+        // addrms (class): x += xb2, norms, xb out — and the fused twin quantizing in place of xb
+        L.s_addr_ffn = set_cls_ar(fixed_array(g_rd.x_dev, g_rd.xb2_dev, g_rd.norms_dev, g_rd.xb_dev),
+            fixed_array(dim * 4l, dim * 4l, g_rd.norms_bytes, dim * 4l),
+            fixed_array(VHZ_X, VHZ_XB2, 0u, VHZ_XB))
+        L.s_addr_ffn_rq = set_cls_ar_rq(fixed_array(g_rd.x_dev, g_rd.xb2_dev, g_rd.norms_dev, g_rd.xq_dev, g_rd.xs_dev),
+            fixed_array(dim * 4l, dim * 4l, g_rd.norms_bytes, dim, (dim / 32l) * 4l),
+            fixed_array(VHZ_X, VHZ_XB2, 0u, VHZ_XQ, VHZ_XQ))
         // quantize xb (post-ffn-norm) -> xq/xs
-        L.s_quant_xb2 = vk_set6(g_rd.xb_dev, g_rd.dummy, L.m_quant_xb2.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.dummy,
-            dim * 4l, 256l, META_BYTES, dim, (dim / 32l) * 4l, 256l,
-            fixed_array(VHZ_XB, 0u, 0u, VHZ_XQ, VHZ_XQ, 0u))
+        L.s_quant_xb2 = set_rq_cls(fixed_array(g_rd.xb_dev, g_rd.xq_dev, g_rd.xs_dev),
+            fixed_array(dim * 4l, dim, (dim / 32l) * 4l),
+            fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
         // gate/up GEMV
-        L.s_gate = vk_set6(p1.wq, p1.ws, L.m_gate.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.gate_dev,
-            p1.wqb, p1.wsb, META_BYTES, dim, (dim / 32l) * 4l, hid * 4l,
+        L.s_gate = gemv_cls_set(f1, fixed_array(p1.wq, p1.ws, L.m_gate.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.gate_dev),
+            fixed_array(p1.wqb, p1.wsb, META_BYTES, dim, (dim / 32l) * 4l, hid * 4l),
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_GATE))
-        L.s_up = vk_set6(p3.wq, p3.ws, L.m_up.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.up_dev,
-            p3.wqb, p3.wsb, META_BYTES, dim, (dim / 32l) * 4l, hid * 4l,
+        L.s_up = gemv_cls_set(f3, fixed_array(p3.wq, p3.ws, L.m_up.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.up_dev),
+            fixed_array(p3.wqb, p3.wsb, META_BYTES, dim, (dim / 32l) * 4l, hid * 4l),
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_UP))
-        // act+requant: up@0, filler@1, ffn_meta@2, hq@3, hs@4, gate@5
-        L.s_actrq = vk_set6(g_rd.up_dev, g_rd.dummy, g_gpu.ffn_meta_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.gate_dev,
-            hid * 4l, 256l, FFN_META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, hid * 4l,
-            fixed_array(VHZ_UP, 0u, VHZ_META, VHZ_HQ, VHZ_HQ, VHZ_GATE))
+        // act+requant (class): gate@0, up@1, hq@2, hs@3
+        L.s_actrq = set_actrq_cls(fixed_array(g_rd.gate_dev, g_rd.up_dev, g_gpu.hq_dev, g_gpu.hs_dev),
+            fixed_array(hid * 4l, hid * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+            fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ))
         // down GEMV -> ffnout
-        L.s_down = vk_set6(p2.wq, p2.ws, L.m_down.buf, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.ffnout_dev,
-            p2.wqb, p2.wsb, META_BYTES, hid, (hid / 32l) * 4l, dim * 4l,
+        L.s_down = gemv_cls_set(f2, fixed_array(p2.wq, p2.ws, L.m_down.buf, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.ffnout_dev),
+            fixed_array(p2.wqb, p2.wsb, META_BYTES, hid, (hid / 32l) * 4l, dim * 4l),
             fixed_array(0u, 0u, 0u, VHZ_HQ, VHZ_HQ, VHZ_FFO))
-        // addrms next: x@0 += ffnout@1, norms@3, xb@5
-        L.s_addr_next = vk_set6(g_rd.x_dev, g_rd.ffnout_dev, L.m_addr_next.buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.xb_dev,
-            dim * 4l, dim * 4l, META_BYTES, g_rd.norms_bytes, 64l, dim * 4l,
-            fixed_array(VHZ_X, VHZ_FFO, 0u, 0u, 0u, VHZ_XB))
-        // fused twin — on the last layer this also serves the final norm, so the split rail's
-        // separate quant_final dispatch has no fused counterpart
-        L.s_addr_next_rq = vk_set6(g_rd.x_dev, g_rd.ffnout_dev, L.m_addr_next.buf, g_rd.norms_dev, g_rd.xs_dev, g_rd.xq_dev,
-            dim * 4l, dim * 4l, META_BYTES, g_rd.norms_bytes, (dim / 32l) * 4l, dim,
-            fixed_array(VHZ_X, VHZ_FFO, 0u, 0u, VHZ_XQ, VHZ_XQ))
+        // addrms next: x += ffnout, xb = rms_att[l+1]|final — the fused twin also serves the
+        // final norm on the last layer, so the split rail's quant_final has no fused counterpart
+        L.s_addr_next = set_cls_ar(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev),
+            fixed_array(dim * 4l, dim * 4l, g_rd.norms_bytes, dim * 4l),
+            fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB))
+        L.s_addr_next_rq = set_cls_ar_rq(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xq_dev, g_rd.xs_dev),
+            fixed_array(dim * 4l, dim * 4l, g_rd.norms_bytes, dim, (dim / 32l) * 4l),
+            fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, VHZ_XQ))
         L.made = true
     }
     g_rd.tok_recorded = false   // the recorded chain references the replaced sets
@@ -245,36 +246,27 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int) {
     let dim = g_rd.dim
     let vocab = g_rd.vocab
     unsafe {
-
-        g_rd.m_prologue = rd_meta()
-        g_rd.m_quant_final = rd_meta()
-        g_rd.cls_meta_dev = make_device_buf(CLS_META_BYTES)
-        // prologue: xb = rms_att[0](x), add off
-        g_rd.s_prologue = vk_set6(g_rd.x_dev, g_rd.dummy, g_rd.m_prologue.buf, g_rd.norms_dev, g_rd.ar_scal_dev, g_rd.xb_dev,
-            dim * 4l, 256l, META_BYTES, g_rd.norms_bytes, 64l, dim * 4l,
-            fixed_array(VHZ_X, 0u, 0u, 0u, 0u, VHZ_XB))
+        verify(ensure_cls_ar() && ensure_cls_ar_rq() && ensure_cls_dn_rq() && gemv_cls_ensure(cls_fmt),
+            "vk decode: the class rails must engage on a live device")
+        // prologue (class): xb = rms_att[0](x), add off — the aa slot binds x itself (add_on=0 never reads it)
+        g_rd.s_prologue = set_cls_ar(fixed_array(g_rd.x_dev, g_rd.x_dev, g_rd.norms_dev, g_rd.xb_dev),
+            fixed_array(dim * 4l, dim * 4l, g_rd.norms_bytes, dim * 4l),
+            fixed_array(VHZ_X, VHZ_X, 0u, VHZ_XB))
         // fused twin — subsumes layer 0's quant_xb
-        g_rd.s_prologue_rq = vk_set6(g_rd.x_dev, g_rd.dummy, g_rd.m_prologue.buf, g_rd.norms_dev, g_rd.xs_dev, g_rd.xq_dev,
-            dim * 4l, 256l, META_BYTES, g_rd.norms_bytes, (dim / 32l) * 4l, dim,
-            fixed_array(VHZ_X, 0u, 0u, 0u, VHZ_XQ, VHZ_XQ))
+        g_rd.s_prologue_rq = set_cls_ar_rq(fixed_array(g_rd.x_dev, g_rd.x_dev, g_rd.norms_dev, g_rd.xq_dev, g_rd.xs_dev),
+            fixed_array(dim * 4l, dim * 4l, g_rd.norms_bytes, dim, (dim / 32l) * 4l),
+            fixed_array(VHZ_X, VHZ_X, 0u, VHZ_XQ, VHZ_XQ))
         // quantize final xb
-        g_rd.s_quant_final = vk_set6(g_rd.xb_dev, g_rd.dummy, g_rd.m_quant_final.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.dummy,
-            dim * 4l, 256l, META_BYTES, dim, (dim / 32l) * 4l, 256l,
-            fixed_array(VHZ_XB, 0u, 0u, VHZ_XQ, VHZ_XQ, 0u))
-        // cls GEMV: arena[fmt]@0/1, device meta@2, xq@3, xs@4, logits@5
+        g_rd.s_quant_final = set_rq_cls(fixed_array(g_rd.xb_dev, g_rd.xq_dev, g_rd.xs_dev),
+            fixed_array(dim * 4l, dim, (dim / 32l) * 4l),
+            fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
+        // cls GEMV (class): the one-pair regions buffer replaces the device-filled meta
+        g_rd.cls_regions = rd_meta()
+        fill_gemv_regions(g_rd.cls_regions, cls_block)
         let pc = arena_planes(cls_fmt)
-        g_rd.cls_set = vk_set6(pc.wq, pc.ws, g_rd.cls_meta_dev, g_rd.xq_dev, g_rd.xs_dev, g_rd.logits_dev,
-            pc.wqb, pc.wsb, CLS_META_BYTES, dim, (dim / 32l) * 4l, vocab * 4l,
+        g_rd.cls_set = gemv_cls_set(cls_fmt, fixed_array(pc.wq, pc.ws, g_rd.cls_regions.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.logits_dev),
+            fixed_array(pc.wqb, pc.wsb, META_BYTES, dim, (dim / 32l) * 4l, vocab * 4l),
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_LOG))
-        // cls meta is constant (block base, n=dim, d=vocab) — device-filled once
-        var mp = reinterpret<uint?>(g_gpu.staging.mapped)
-        mp[0] = uint(dim)
-        mp[1] = uint(vocab)
-        mp[2] = 1u
-        mp[3] = 0u
-        mp[4] = uint(cls_block)
-        mp[5] = 0u
-        staged_upload(g_rd.cls_meta_dev, 0l, CLS_META_BYTES)
         g_rd.cls_fmt_marker = cls_fmt
         g_rd.tok_recorded = false   // the recorded chain references the replaced cls/prologue sets
         g_rd.ready = true
@@ -290,39 +282,20 @@ def private rd_record_token {
     let hid = g_rd.hidden
     let nlfin = g_rd.n_layers * 2l * dim   // rms_final offset in the norms buffer (dim units later)
     unsafe {
-        // constant scalars — attn ([0]=scale) and add_rms ([0]=eps, [1]=ascale)
+        // constant scalars — attn ([0]=scale); everything else rides class push constants
         var sp = reinterpret<float?>(g_gpu.staging.mapped)
         sp[0] = g_rd.scale
         staged_upload(g_rd.scal_dev, 0l, 64l)
-        sp[0] = g_rd.eps
-        sp[1] = 1.0
-        staged_upload(g_rd.ar_scal_dev, 0l, 64l)
-        // decode-owned actrq meta — the in-cmd copy re-establishes ffn_meta_dev every submit (batch rails share it)
-        var fp = reinterpret<uint?>(g_rd.ffn_meta_h.mapped)
-        fp[0] = uint(hid)
-        fp[1] = 0u
-        fp[2] = uint(hid / 32l)
-        for (i in range(5)) {
-            fp[3 + i] = 0u
-        }
-        fill_addrms_meta(g_rd.m_prologue, dim, 0l, false)   // rms_att[0] at offset 0
         for (l in range64(g_rd.n_layers)) {
             var L & = g_rd.layers[l]
-            fill_quant_meta(L.m_quant_xb, dim / 32l)
-            fill_gemv_meta(L.m_q, dim, qd, 0l, L.bq)
+            fill_gemv_regions(L.m_q, L.bq)
             if (L.kv_merged) {
-                fill_gemv_meta2(L.m_k, dim, kvd, qd, L.bk, L.bv)  // k, v regions land at qd, qd+kvd
+                fill_gemv_regions2(L.m_k, L.bk, L.bv)   // k, v regions land at qd, qd+kvd (push ybase)
             } else {
-                fill_gemv_meta(L.m_k, dim, kvd, qd, L.bk)         // k at ybase qd in kv_dev
-                fill_gemv_meta(L.m_v, dim, kvd, qd + kvd, L.bv)   // v at ybase qd+kvd
+                fill_gemv_regions(L.m_k, L.bk)
+                fill_gemv_regions(L.m_v, L.bv)
             }
             if (g_rd.qk_norm) {
-                let hs = g_rd.head_size   // nolint:LINT021 — the norm-row words compose it with int64 layout offsets
-                var mn = reinterpret<uint?>(L.m_qkn.mapped)
-                mn[0] = uint(hs); mn[1] = uint(g_rd.n_heads); mn[2] = uint(kvd / hs)
-                mn[3] = uint(qd); mn[4] = 0u; mn[5] = uint(qd)   // one row: k lives at qd in kv_dev
-                mn[6] = uint(nlfin + dim + l * 2l * hs)          // rms_q[l] past the fixed norms layout
-                mn[7] = uint(nlfin + dim + (l * 2l + 1l) * hs)   // rms_k[l]
                 fill_qkn_rope_meta(L.m_qkr, l)
             }
             var mr = reinterpret<uint?>(L.m_rope.mapped)
@@ -331,17 +304,11 @@ def private rd_record_token {
             var ma = reinterpret<uint?>(L.m_attn.mapped)
             ma[2] = uint(kvd); ma[3] = uint(g_rd.head_size); ma[4] = uint(g_rd.kv_mul)
             ma[5] = uint(l * g_rd.seq_cap * kvd); ma[6] = uint(l * g_rd.seq_cap * kvd)
-            fill_quant_meta(L.m_quant_at, qd / 32l)
-            fill_gemv_meta(L.m_wo, qd, dim, 0l, L.bo)
-            fill_addrms_meta(L.m_addr_ffn, dim, (l * 2l + 1l) * dim, true)   // rms_ffn[l]
-            fill_quant_meta(L.m_quant_xb2, dim / 32l)
-            fill_gemv_meta(L.m_gate, dim, hid, 0l, L.b1)
-            fill_gemv_meta(L.m_up, dim, hid, 0l, L.b3)
-            fill_gemv_meta(L.m_down, hid, dim, 0l, L.b2)
-            let nxt = l + 1l < g_rd.n_layers ? (l + 1l) * 2l * dim : nlfin   // rms_att[l+1] or final
-            fill_addrms_meta(L.m_addr_next, dim, nxt, true)
+            fill_gemv_regions(L.m_wo, L.bo)
+            fill_gemv_regions(L.m_gate, L.b1)
+            fill_gemv_regions(L.m_up, L.b3)
+            fill_gemv_regions(L.m_down, L.b2)
         }
-        fill_quant_meta(g_rd.m_quant_final, dim / 32l)
         var raw = g_rd.cmd
         let rf : VkCommandBufferResetFlags
         vk_check(vkResetCommandBuffer(raw, rf), null)
@@ -354,59 +321,99 @@ def private rd_record_token {
         cmd_copy_whole(raw, g_rd.x_host.buf, g_rd.x_dev, dim * 4l)
         vhz_dep(raw, h, 0u, VHZ_COS, true)
         cmd_copy_whole(raw, g_rd.cos_host.buf, g_rd.cos_dev, g_rd.head_size * 4l)
-        vhz_dep(raw, h, 0u, VHZ_META, true)
-        cmd_copy_whole(raw, g_rd.ffn_meta_h.buf, g_gpu.ffn_meta_dev, FFN_META_BYTES)
         // fused rail: a layer's activation quant rides the PREVIOUS addr_next, and qkn rides rope
         let fuse = vk_fuse_on()
         let fuse_qkr = fuse && g_rd.qk_norm
+        let rpw = g_gpu.rows_per_wg
+        var pc_rq_dim = RqArgs(inbase = 0u, nblk = uint(dim / 32l))
+        var pc_rq_qd = RqArgs(inbase = 0u, nblk = uint(qd / 32l))
+        var pc_act = ActArgs(nelem = uint(hid), gelu = 0u, nblk = uint(hid / 32l))
+        let rqwg_dim = (dim / 4l + 255l) / 256l
+        let rqwg_qd = (qd / 4l + 255l) / 256l
+        var pc_pro = ArArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = g_rd.eps, ascale = 1.0)
         if (fuse) {
-            rd_dispatch(raw, g_gpu.ar_rq_pipeline, g_rd.s_prologue_rq, 1u, h)   // rms_att[0](x) -> xq/xs
+            enc_cls_ar_rq(raw, h, g_rd.s_prologue_rq, pc_pro, 1l)   // rms_att[0](x) -> xq/xs
         } else {
-            rd_dispatch(raw, g_gpu.ar_pipeline, g_rd.s_prologue, 1u, h)   // xb = rms_att[0](x)
+            enc_cls_ar(raw, h, g_rd.s_prologue, pc_pro, 1l)   // xb = rms_att[0](x)
         }
+        pfq_ts(raw)
         for (l in range64(g_rd.n_layers)) {
             var L & = g_rd.layers[l]
             if (!fuse) {
-                rd_dispatch(raw, g_gpu.dn_rq_pipeline, L.s_quant_xb, uint((dim / 4l + 255l) / 256l), h)
+                enc_cls_dn_rq(raw, h, L.s_quant_xb, pc_rq_dim, rqwg_dim)
+                pfq_ts(raw)
             }
-            rd_dispatch_gemv(raw, L.fq, L.s_q, rd_gemv_wg(qd), h)
+            var pcq = GemvArgs(n = uint(dim), d = uint(qd), nreg = 1u, ybase = 0u)
+            gemv_cls_enc(L.fq, raw, h, L.s_q, pcq, (qd + rpw - 1l) / rpw)
+            pfq_ts(raw)
             if (L.kv_merged) {
-                rd_dispatch_gemv(raw, L.fk, L.s_kv, rd_gemv_wg(2l * kvd), h)
+                var pckv = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 2u, ybase = uint(qd))
+                gemv_cls_enc(L.fk, raw, h, L.s_kv, pckv, (2l * kvd + rpw - 1l) / rpw)
+                pfq_ts(raw)
             } else {
-                rd_dispatch_gemv(raw, L.fk, L.s_k, rd_gemv_wg(kvd), h)
-                rd_dispatch_gemv(raw, L.fv, L.s_v, rd_gemv_wg(kvd), h)
+                var pck = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 1u, ybase = uint(qd))
+                gemv_cls_enc(L.fk, raw, h, L.s_k, pck, (kvd + rpw - 1l) / rpw)
+                pfq_ts(raw)
+                var pcv = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 1u, ybase = uint(qd + kvd))
+                gemv_cls_enc(L.fv, raw, h, L.s_v, pcv, (kvd + rpw - 1l) / rpw)
+                pfq_ts(raw)
             }
             if (fuse_qkr) {
                 rd_dispatch(raw, g_gpu.qkn_rope_pipeline, L.s_qkn_rope, uint(g_rd.n_heads + kvd / g_rd.head_size), h)
             } else {
                 if (g_rd.qk_norm) {
-                    rd_dispatch(raw, g_gpu.qkn_pipeline, L.s_qkn, uint(g_rd.n_heads + kvd / g_rd.head_size), h)
+                    let hs = g_rd.head_size   // nolint:LINT021 — the norm-row words compose it with int64 layout offsets
+                    var pcn = QkRmsArgs(hs = uint(hs), nh = uint(g_rd.n_heads), nkvh = uint(kvd / hs),
+                        qstride = uint(qd), kstride = uint(kvd), kbase = uint(qd),
+                        qwoff = uint(nlfin + dim + l * 2l * hs), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hs),
+                        eps = g_rd.eps)
+                    enc_qk_rms_cls(raw, h, L.s_qkn, pcn, g_rd.n_heads + kvd / hs)
+                    pfq_ts(raw)
                 }
                 rd_dispatch(raw, g_gpu.rks_pipeline, L.s_rope, uint((qd / 2l + kvd / 2l + int64(WG_X) - 1l) / int64(WG_X)), h)
             }
             rd_dispatch(raw, g_gpu.da_pipeline, L.s_attn, uint(g_rd.n_heads), h)
-            rd_dispatch(raw, g_gpu.dn_rq_pipeline, L.s_quant_at, uint((qd / 4l + 255l) / 256l), h)
-            rd_dispatch_gemv(raw, L.fo, L.s_wo, rd_gemv_wg(dim), h)
+            enc_cls_dn_rq(raw, h, L.s_quant_at, pc_rq_qd, rqwg_qd)
+            pfq_ts(raw)
+            var pcw = GemvArgs(n = uint(qd), d = uint(dim), nreg = 1u, ybase = 0u)
+            gemv_cls_enc(L.fo, raw, h, L.s_wo, pcw, (dim + rpw - 1l) / rpw)
+            pfq_ts(raw)
+            var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint((l * 2l + 1l) * dim), eps = g_rd.eps, ascale = 1.0)
             if (fuse) {
-                rd_dispatch(raw, g_gpu.ar_rq_pipeline, L.s_addr_ffn_rq, 1u, h)
+                enc_cls_ar_rq(raw, h, L.s_addr_ffn_rq, pc8, 1l)
+                pfq_ts(raw)
             } else {
-                rd_dispatch(raw, g_gpu.ar_pipeline, L.s_addr_ffn, 1u, h)
-                rd_dispatch(raw, g_gpu.dn_rq_pipeline, L.s_quant_xb2, uint((dim / 4l + 255l) / 256l), h)
+                enc_cls_ar(raw, h, L.s_addr_ffn, pc8, 1l)
+                pfq_ts(raw)
+                enc_cls_dn_rq(raw, h, L.s_quant_xb2, pc_rq_dim, rqwg_dim)
+                pfq_ts(raw)
             }
-            rd_dispatch_gemv(raw, L.f1, L.s_gate, rd_gemv_wg(hid), h)
-            rd_dispatch_gemv(raw, L.f3, L.s_up, rd_gemv_wg(hid), h)
-            rd_dispatch(raw, g_gpu.actrq_pipeline, L.s_actrq, uint((hid / 4l + 255l) / 256l), h)
-            rd_dispatch_gemv(raw, L.f2, L.s_down, rd_gemv_wg(dim), h)
+            var pcg = GemvArgs(n = uint(dim), d = uint(hid), nreg = 1u, ybase = 0u)
+            gemv_cls_enc(L.f1, raw, h, L.s_gate, pcg, (hid + rpw - 1l) / rpw)
+            pfq_ts(raw)
+            gemv_cls_enc(L.f3, raw, h, L.s_up, pcg, (hid + rpw - 1l) / rpw)
+            pfq_ts(raw)
+            enc_q8_actrq_cls(raw, h, L.s_actrq, pc_act, (hid / 4l + 255l) / 256l)
+            pfq_ts(raw)
+            var pcd = GemvArgs(n = uint(hid), d = uint(dim), nreg = 1u, ybase = 0u)
+            gemv_cls_enc(L.f2, raw, h, L.s_down, pcd, (dim + rpw - 1l) / rpw)
+            pfq_ts(raw)
+            let nxt = l + 1l < g_rd.n_layers ? (l + 1l) * 2l * dim : nlfin   // nolint:LINT021 — rms_att[l+1]|final, composed from int64 layout offsets
+            var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
             if (fuse) {
-                rd_dispatch(raw, g_gpu.ar_rq_pipeline, L.s_addr_next_rq, 1u, h)
+                enc_cls_ar_rq(raw, h, L.s_addr_next_rq, pc14, 1l)
             } else {
-                rd_dispatch(raw, g_gpu.ar_pipeline, L.s_addr_next, 1u, h)
+                enc_cls_ar(raw, h, L.s_addr_next, pc14, 1l)
             }
+            pfq_ts(raw)
         }
         if (!fuse) {
-            rd_dispatch(raw, g_gpu.dn_rq_pipeline, g_rd.s_quant_final, uint((dim / 4l + 255l) / 256l), h)
+            enc_cls_dn_rq(raw, h, g_rd.s_quant_final, pc_rq_dim, rqwg_dim)
+            pfq_ts(raw)
         }
-        rd_dispatch_gemv(raw, g_rd.cls_fmt_marker, g_rd.cls_set, rd_gemv_wg(g_rd.vocab), h)
+        var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u)
+        gemv_cls_enc(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc, (g_rd.vocab + rpw - 1l) / rpw)
+        pfq_ts(raw)
         vhz_dep(raw, h, VHZ_LOG, 0u, true)   // compute -> transfer for the logits DMA
         cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l)
         pfq_end(raw)

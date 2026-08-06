@@ -211,12 +211,6 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
     let nlfin = g_rd.n_layers * 2l * dim
     let pairs = int(qd / 2l + kvd / 2l)
     unsafe {
-        var sp = reinterpret<float?>(g_gpu.staging.mapped)
-        sp[0] = g_rd.scale
-        staged_upload(g_rd.scal_dev, 0l, 64l)
-        sp[0] = g_rd.eps
-        sp[1] = 1.0
-        staged_upload(g_rd.ar_scal_dev, 0l, 64l)
         // prompts over the PF_WINDOW activation buffers run as sequential windows: each window's
         // rope/attention address the mirror at absolute positions, so window w attends everything
         // [0, w0 + row] the earlier windows stored. Only the last window runs fin_rq + cls.
@@ -360,7 +354,10 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 var pcf = RqArgs(inbase = uint((wlen - 1l) * dim), nblk = uint(dim / 32l))
                 enc_cls_dn_rq(raw, h, g_rd.pf_sets[bp + 1], pcf, (dim / 4l + 255l) / 256l)
                 pfq_ts(raw)
-                rd_dispatch_gemv(raw, g_rd.cls_fmt_marker, g_rd.cls_set, rd_gemv_wg(g_rd.vocab), h)
+                var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u)
+                gemv_cls_enc(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc,
+                    (g_rd.vocab + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg)
+                pfq_ts(raw)
                 vhz_dep(raw, h, VHZ_LOG, 0u, true)
                 cmd_copy_whole(raw, g_rd.logits_dev, g_rd.pf_logits_host.buf, g_rd.vocab * 4l)
             }

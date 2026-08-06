@@ -1752,28 +1752,27 @@ struct RLayer {
     bq, bk, bv, bo, b1, b3, b2 : int64
     fq, fk, fv, fo, f1, f3, f2 : int
     // the layer's descriptor sets (built once, referenced every token)
-    s_quant_xb : VkDescriptorSet    // dn_requant of the attn-norm activation
-    s_q, s_k, s_v : VkDescriptorSet  // q/k/v GEMV
-    s_kv : VkDescriptorSet          // merged k+v two-region GEMV (fk == fv: same arena planes)
+    s_quant_xb : VkDescriptorSet    // requant class set for the attn-norm activation
+    s_q, s_k, s_v : VkDescriptorSet  // q/k/v class GEMV
+    s_kv : VkDescriptorSet          // merged k+v two-region class GEMV (fk == fv: same arena planes)
     kv_merged : bool
-    s_qkn : VkDescriptorSet         // per-head q/k rmsnorm (qk_norm models only)
-    s_qkn_rope : VkDescriptorSet    // the fused qk-rmsnorm + rope + KV store (qk_norm models only)
-    s_rope : VkDescriptorSet
-    s_attn : VkDescriptorSet
+    s_qkn : VkDescriptorSet         // per-head q/k rmsnorm class set (qk_norm models only)
+    s_qkn_rope : VkDescriptorSet    // the fused qk-rmsnorm + rope + KV store (qk_norm models only; OLD rail — per-token mirror row rides its meta)
+    s_rope : VkDescriptorSet        // OLD rail — per-token mirror row
+    s_attn : VkDescriptorSet        // OLD rail — per-token cnt
     s_quant_at : VkDescriptorSet
     s_wo : VkDescriptorSet
     s_addr_ffn : VkDescriptorSet
-    s_addr_ffn_rq : VkDescriptorSet   // the fused add+rms+requant twins of addr_ffn / addr_next:
-    s_quant_xb2 : VkDescriptorSet     // same inputs, but xq/xs at bindings 4-5 instead of xb
+    s_addr_ffn_rq : VkDescriptorSet   // the fused add+rms+requant twins of addr_ffn / addr_next
+    s_quant_xb2 : VkDescriptorSet
     s_gate, s_up : VkDescriptorSet
     s_actrq : VkDescriptorSet
     s_down : VkDescriptorSet
     s_addr_next : VkDescriptorSet
     s_addr_next_rq : VkDescriptorSet
-    // per-dispatch metas (host-visible; contents rewritten per token)
-    m_quant_xb, m_q, m_k, m_v, m_qkn, m_qkr, m_rope, m_attn, m_quant_at, m_wo, m_addr_ffn : HostBuf
-    m_quant_xb2, m_gate, m_up, m_actrq, m_down, m_addr_next : HostBuf
-    next_norm_off : int64   // rms_ffn is w_off for addr_ffn; addr_next uses rms_att[l+1] or final
+    // host-visible per-dispatch buffers: the kept-old roles' metas + the class GEMV regions
+    m_q, m_k, m_v, m_qkr, m_rope, m_attn, m_wo : HostBuf
+    m_gate, m_up, m_down : HostBuf
     made : bool
 }
 
@@ -1802,24 +1801,20 @@ struct RDec {
     norms_dev : uint64            // rms_att[l]/rms_ffn[l] interleaved + final, uploaded once
     cos_dev : uint64              // this token's rope row (cos[half] + sin[half])
     scal_dev : uint64             // da_attn scalars: [0] = attn scale
-    ar_scal_dev : uint64          // add_rms scalars: [0] = eps, [1] = ascale (1.0 for the residual add)
     logits_dev : uint64
     x_host, logits_host : HostBuf
     kv_readback : HostBuf         // per-layer K/V row -> CPU cache writeback
-    cls_meta_dev : uint64
+    cls_regions : HostBuf         // the classifier class-GEMV's one-pair regions buffer
     cls_set : VkDescriptorSet
     s_prologue : VkDescriptorSet  // xb = rms_att[0](x)
     s_prologue_rq : VkDescriptorSet   // the fused twin (also does layer 0's activation quant)
-    m_prologue : HostBuf
     s_quant_final : VkDescriptorSet
-    m_quant_final : HostBuf
     dummy : uint64                // filler for unused bindings
     cls_fmt_marker : int
     layers : array<RLayer>
     cmd : VkCommandBuffer
     tok_recorded : bool           // cmd holds the whole-token chain, re-submittable as-is
     cos_host : HostBuf            // this token's rope row, copied to cos_dev in-cmd
-    ffn_meta_h : HostBuf          // decode-owned actrq meta source (g_gpu.ffn_meta is shared with the batch rails)
     // prefill batch buffers (lazy — sized MAX_NPOS x their width) + per-layer prefill sets
     pf_ready : bool
     pf_np : int64                 // MAX_NPOS the buffers were sized for
@@ -1863,27 +1858,23 @@ def fill_gemv_meta(hb : HostBuf; n, d, ybase, blk : int64) {
     }
 }
 
-// two-region form: regions land contiguously in y at ybase, ybase+d (groupn's r*d+row rule)
-def fill_gemv_meta2(hb : HostBuf; n, d, ybase, blk_a, blk_b : int64) {
+// class-GEMV regions: (rel_wblock, xblock) pairs at 0 — n/d/nreg/ybase ride the push instead
+def fill_gemv_regions(hb : HostBuf; blk : int64) {
     unsafe {
         var mp = reinterpret<uint?>(hb.mapped)
-        mp[0] = uint(n)
-        mp[1] = uint(d)
-        mp[2] = 2u
-        mp[3] = uint(ybase)
-        mp[4] = uint(blk_a)
-        mp[5] = 0u
-        mp[6] = uint(blk_b)
-        mp[7] = 0u
+        mp[0] = uint(blk)
+        mp[1] = 0u
     }
 }
 
-// dn_requant meta: [10]=input base (0) [18]=block count
-def fill_quant_meta(hb : HostBuf; nblocks : int64) {
+// two-region form: regions land contiguously in y at ybase, ybase+d (the r*d+row rule)
+def fill_gemv_regions2(hb : HostBuf; blk_a, blk_b : int64) {
     unsafe {
         var mp = reinterpret<uint?>(hb.mapped)
-        mp[10] = 0u
-        mp[18] = uint(nblocks)
+        mp[0] = uint(blk_a)
+        mp[1] = 0u
+        mp[2] = uint(blk_b)
+        mp[3] = 0u
     }
 }
 
@@ -1892,17 +1883,6 @@ def fill_cvt_meta(hb : HostBuf; elems : int64) {
     unsafe {
         var mp = reinterpret<uint?>(hb.mapped)
         mp[0] = uint(elems)
-    }
-}
-
-// word 3 is the fused ar+requant's eps/ascale offset; the split ar kernel reads only 0-2
-def fill_addrms_meta(hb : HostBuf; dim, woff : int64; add : bool) {
-    unsafe {
-        var mp = reinterpret<uint?>(hb.mapped)
-        mp[0] = uint(dim)
-        mp[1] = add ? 1u : 0u
-        mp[2] = uint(woff)
-        mp[3] = uint(g_rd.ar_scal_off)
     }
 }
 
