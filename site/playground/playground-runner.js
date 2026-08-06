@@ -55,15 +55,23 @@
     // "the render went washed out".
     var MAX_VIEWPORT_FRACTION = 0.8;
 
-    function fit(rec) {
-        if (!rec || !rec.el || rec.el.style.display === "none") return;
+    // Exposed, because the wasm engine's page frame stands in the same host and
+    // must be sized by the same rule — a second copy of this drifts, and the
+    // failure mode is silent (a frame that renders, just wrong).
+    function fitElement(el, aspect) {
+        if (!el) return;
         // Measure the column, not the host — the host sizes to its content, so
         // asking it how wide it is would just echo the frame back.
         var column = host && host.parentElement;
         var maxHeight = Math.round(window.innerHeight * MAX_VIEWPORT_FRACTION);
-        var width = Math.min(column ? column.clientWidth : 640, Math.round(maxHeight / rec.aspect));
-        rec.el.style.setProperty("width", width + "px", "important");
-        rec.el.style.setProperty("height", Math.round(width * rec.aspect) + "px", "important");
+        var width = Math.min(column ? column.clientWidth : 640, Math.round(maxHeight / aspect));
+        el.style.setProperty("width", width + "px", "important");
+        el.style.setProperty("height", Math.round(width * aspect) + "px", "important");
+    }
+
+    function fit(rec) {
+        if (!rec || !rec.el || rec.el.style.display === "none") return;
+        fitElement(rec.el, rec.aspect);
     }
 
     window.addEventListener("resize", function () { fit(current); });
@@ -142,6 +150,11 @@
         isReady: function () {
             return !!(spare && spare.ready) || !!(current && current.ready && !current.used);
         },
+
+        // Size an element the way a run frame is sized. The wasm engine's page
+        // frame lives in this same host and would otherwise have to re-derive
+        // the column-measuring rule.
+        fitElement: fitElement,
 
         // Throw away the frame that ran (if any) and promote the pre-warmed one.
         // Called before every run, and by Clear.

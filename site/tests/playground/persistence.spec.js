@@ -57,6 +57,41 @@ test('three-file state survives a reload', async ({ playground }) => {
     expect(typesText).toContain('types marker');
 });
 
+test('a restored buffer keeps the sample assets manifest', async ({ playground }) => {
+    // The buffer alone does not say which sample it came from, and the manifest
+    // is only derived when a sample is PICKED. Without carrying it through the
+    // restore, an asset-loading sample (deferred shading, skybox) runs against
+    // an empty MEMFS and panics on the first file it opens — but only on a
+    // return visit, which is what makes it read as a random failure.
+    await waitTabsReady(playground);
+    await playground.waitForFunction(() => window.pgSamplesReady === true, null, { timeout: 15_000 });
+
+    await playground.locator('#examples').selectOption({ label: 'SHA-256 (benchmark)' });
+    await expect.poll(
+        () => playground.evaluate(() => window.currentAssetsUrl),
+        { timeout: 10_000 }
+    ).toContain('.assets.json');
+    const before = await playground.evaluate(() => window.currentAssetsUrl);
+
+    // Persisted beside the buffer, not merely held in memory.
+    await expect.poll(
+        () => playground.evaluate(() => {
+            const raw = localStorage.getItem('daslang.playground.state.v1');
+            try { return JSON.parse(raw).assets; } catch (e) { return null; }
+        }),
+        { timeout: 5_000 }
+    ).toBe(before);
+
+    await playground.reload();
+    await waitTabsReady(playground);
+
+    expect(await playground.evaluate(() => window.pgRestoredFromState)).toBe(true);
+    await expect.poll(
+        () => playground.evaluate(() => window.currentAssetsUrl),
+        { timeout: 10_000 }
+    ).toBe(before);
+});
+
 test('autosave does not override URL #code hash on reload', async ({ playground }) => {
     await waitTabsReady(playground);
 
