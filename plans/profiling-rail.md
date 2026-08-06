@@ -160,14 +160,22 @@ Interleaved A → B-off → B-on ×3 per bench, strictly serial, arm A via git-c
   profiler tax is embarrassed at both levels: ~0.07% to have profiling available, ~0.7%
   fully armed.
 - cv ≤ 1.5% predicted: held (one 2.3% pp cell, one 2.4%-spread asr cell, both kept).
-6. **AMX-for-ASR audit (acceptance run)** — everything from #3562 carries: dasAccelerate,
-   the float-batch override rail, the VECLIB pin + strip-dispatch, the `min_mmac` floor.
-   Audit = which ASR encoder ops are float-plane GEMMs above the floor. ASR encoders are a
-   better AMX target than the LLM ladder was (float-heavy, encoder batch inherently large —
-   a whisper 30s window is ~1500 frames vs the ntok≥32 gate). Watch: the 35B density-vs-size
-   floor lesson (many mid-size calls amortize the wake tax but can't clear a per-call floor);
-   the BNNS-f16 lane shipped uncrowned with M4/M5 as its stated target — ASR-on-M4 may crown
-   it for the first time. Predictions before the A/Bs, per the game. CPU-side only.
+6. **AMX-for-ASR audit — the M1 leg ran 2026-08-06 (structural + measured), M4 leg remains.**
+   Structural: the override seam is exactly `matmul_batch` (f32) + `matmul_bf16_batch`
+   (bf16); every ASR tower GEMM reaches it through `tw_mm`'s fp32 fork, but the SHIPPED q8
+   towers take `matmul_q8q8_batch` (NEON, seam-invisible by the #3562 crossover verdict) —
+   only conv1 and non-32-multiple projectors ride the seam by default. The BNNS-f16 lane is
+   UNREACHABLE from ASR (bf16 seam only; towers have no bf16 planes) — the M4-crowning hope
+   needs a small f32→f16 fp-seam lane (the `f16_plane_ptr` conversion cache generalizes).
+   Measured (whisper-turbo + canary, jfk3, interleaved): fp32-NEON is 1.8–6× slower than q8
+   (`matmul_batch_core` never got the generated-GEMM treatment — not a real contender);
+   fp32+AMX landed +16–19% wall behind q8. The encoder trace tags + `asr_stage_probe
+   --trace` (built this leg) decomposed it: d=1280 GEMMs ran 5 sgemm strips / 3 idle lanes
+   (eff 4.3) while 8-strip fc1 tied q8. `DASLLAMA_ACCEL_STRIPS=8` (new knob, [EnvConfig]
+   rail): attn_proj and attn_out now BEAT q8, encode gap +15% → +4.2%; fc2's +42% residual
+   is the f16-lane target — if the 2× traffic cut scales, AMX-f16 beats the q8 encoder
+   outright. Next: the f32→f16 fp-seam lane, then the M4 leg (SME throughput + the
+   strip-count question on its AMX blocks). CPU-side only; predictions-first stands.
 
 ## Tail end (own arc)
 
