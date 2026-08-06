@@ -269,9 +269,10 @@ jobs:
     # for linux and macOS together, because /Z7 embeds debug info in every .obj —
     # and it is also where the payoff is: this job's Windows build takes ~29 min
     # cold, where build.yml's warm one takes ~14. It only fits because the repo
-    # cache limit was raised above GitHub's 10GB default; at 10GB, saving it
-    # evicted build.yml's slots and left every lane colder. If the limit ever
-    # drops back, this is the first slot to stop persisting.
+    # cache limit is raised to 20GB; at GitHub's 10GB default, saving it evicted
+    # build.yml's slots and left every lane colder. That budget is also why the
+    # nightly Windows jobs stay uncached — a slot each would put the repo over.
+    # If the limit ever drops back, this is the first slot to stop persisting.
     - name: "Refresh sccache slot"
       if: github.ref == 'refs/heads/master'
       env:
