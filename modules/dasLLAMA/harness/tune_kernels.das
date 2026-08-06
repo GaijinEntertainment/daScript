@@ -1,4 +1,5 @@
 options gen2
+options stack = 524288
 
 // Per-box kernel tuner — sweeps the FULL grid (20 perms) for every [tuned] kernel and writes
 // the winning permutation of each to box_profile.json. [dasllama_grid] emits, cross-module, each template's
@@ -145,23 +146,12 @@ var private g_samples : array<array<double>>
 // per-kernel race tables for the sidecar "race" section — "how much did it flip/win by" must
 // be answerable from the file long after the scrollback is gone
 var private g_race : table<string; JsonValue?>
-// the validation phase: after the sweep, a heavy subset re-races at the same budget, twice.
-// The verdict is same-window ORDER judged across BOTH re-races: the recorded winner fails only
-// when a re-race rejects it, or when the SAME challenger beats it past the band in both windows.
-// A one-window flip or differing challengers = state-scrambled twins, i.e. reproduction; the
-// absolute level drift is reported but never fails — a box's level moves with load history
-// (DVFS, heat soak) while same-window order holds, so cross-window medians prove nothing.
+// the validation phase: a heavy subset re-races twice after the sweep; the verdict is
+// tune_validate_verdict over the windows — same-window ORDER only, drift reported never failed
 var private g_validating = false
 var private g_validate_expect : table<string; string>
 var private g_validate_med : table<string; double>
-
-struct private ValidateRow {
-    challenger : string   // re-race winner when it beat the recorded one past the band, else ""
-    gap : double          // recorded-winner vs re-race-winner gap, pct, same window
-    drift : double        // recorded winner's re-race median vs its recorded race median, pct
-    rejected : bool       // recorded winner failed correctness (or vanished) in the re-race
-}
-var private g_validate_rows : table<string; array<ValidateRow>>
+var private g_validate_rows : table<string; array<TuneValidateRow>>
 var private VALIDATE_DRIFT_PCT = 5.0lf   // stationarity NOTE threshold (never fails); paranoid tightens in main
 let TOL = 1.0e-3lf
 let BASELINE = "vec8_u2"   // the majority hand default; kernels with their own [tuned(fallback=)] pass it to report()
@@ -343,7 +333,11 @@ def report(kernel : string; names : array<string>; best : array<double>; ok : ar
         tune_progress_note("  {kernel}: no passing variant\n")
         tune_progress_kernel_end(kernel, "", "rejected")
         if (g_validating) {
-            g_validate_rows[kernel] |> push(ValidateRow(rejected = true))
+            // only kernels with a recorded winner have anything to reproduce — a kernel that
+            // legitimately shipped winner="" must not render a false "rejected" verdict
+            if (!empty(g_validate_expect?[kernel] ?? "")) {
+                g_validate_rows[kernel] |> push(TuneValidateRow(rejected = true))
+            }
             tune_progress_note("VALIDATE {kernel}: no passing variant in the re-race\n")
         } else {
             g_results |> emplace(KernelResult(kernel = kernel, winner = "", fallback = baseline))
@@ -400,9 +394,8 @@ def private record_kernel(kernel : string; names : array<string>; med, best : ar
     g_validate_med[kernel] = med[wi]
 }
 
-// one validation window: record what happened to the recorded winner in this re-race — its
-// same-window gap to the re-race winner, its level drift vs the recorded race, and whether it
-// still passes correctness. The verdict is rendered in run_validation, across both windows.
+// one validation window: fill a TuneValidateRow for the recorded winner. No verdict here —
+// judging needs both windows and happens in run_validation
 def private validate_check(kernel : string; names : array<string>; med : array<double>;
                            ok : array<bool>; wname : string; need : double) {
     let expect0 = g_validate_expect?[kernel] ?? ""
@@ -417,7 +410,7 @@ def private validate_check(kernel : string; names : array<string>; med : array<d
             wi = i
         }
     }
-    var row = ValidateRow()
+    var row = TuneValidateRow()
     if (ei < 0 || !ok[ei]) {
         row.rejected = true
         tune_progress_note("VALIDATE {kernel}: recorded winner {expect0} rejected in this re-race\n")
@@ -439,33 +432,8 @@ def private validate_check(kernel : string; names : array<string>; med : array<d
     g_validate_rows[kernel] |> push(row)
 }
 
-// render one kernel's verdict from its two windows: rejection anywhere is fatal; a loss is
-// real only when the SAME challenger took both windows — anything else is twin scramble
-def private validate_verdict(rows : array<ValidateRow>) : string {
-    var lossname = ""
-    var lossAll = true
-    for (r in rows) {
-        if (r.rejected) {
-            return "recorded winner rejected in a re-race"
-        }
-        if (empty(r.challenger)) {
-            lossAll = false
-        } elif (empty(lossname)) {
-            lossname = r.challenger
-        } elif (lossname != r.challenger) {
-            lossAll = false
-        }
-    }
-    if (lossAll && !empty(lossname)) {
-        let gtxt = join([for (r in rows); "{r.gap:0.2f}%"], " / ")
-        return "consistently loses to {lossname} in both re-races ({gtxt})"
-    }
-    return ""
-}
-
 // re-race the heavy subset twice at the full budget; a winner that consistently fails to
-// reproduce fails the whole mint — the tuner proves its own winners before they are allowed
-// to exist as a file. DAS_TUNE_NOISE_OVERRIDE mints through a failed verdict, stamped.
+// reproduce fails the whole mint. DAS_TUNE_NOISE_OVERRIDE mints through a failed verdict, stamped
 def private run_validation() : bool {
     var subset <- [
         ("dot" => @@bench_dot), ("dot_q8q8" => @@bench_dot_q8q8), ("rmsnorm" => @@bench_rmsnorm),
@@ -487,7 +455,7 @@ def private run_validation() : bool {
         for (r in rows) {
             maxdrift = max(maxdrift, r.drift)
         }
-        let verdict = validate_verdict(rows)
+        let verdict = tune_validate_verdict(rows)
         if (!empty(verdict)) {
             fails ++
             tune_progress_note("VALIDATE {kernel}: FAIL — {verdict}\n")
@@ -501,10 +469,13 @@ def private run_validation() : bool {
     tune_provenance_note("validation_max_drift_pct", "{maxdrift:0.2f}")
     if (fails > 0) {
         if (tune_noise_override()) {
-            print("VALIDATION: {fails} winner(s) did not reproduce — DAS_TUNE_NOISE_OVERRIDE is set, minting anyway; the sidecar will carry 'validation: overridden'\n")
-            tune_provenance_note("validation", "overridden ({fails} fails)")
+            // the bar is still live here and the run continues — a raw print would be redrawn over
+            tune_progress_note("VALIDATION: {fails} winner(s) did not reproduce — DAS_TUNE_NOISE_OVERRIDE is set, minting anyway; the sidecar will carry 'validation: overridden'\n")
+            tune_provenance_note("validation", "overridden")
+            tune_provenance_note("validation_fails", "{fails}")
             return true
         }
+        tune_progress_finish()
         print("VALIDATION FAILED: {fails} winner(s) consistently did not reproduce — the winners are weather, not measurement\n")
         print("  escape hatch: DAS_TUNE_NOISE_OVERRIDE=1 mints anyway, stamped in provenance\n")
         return false

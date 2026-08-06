@@ -64,10 +64,15 @@ short races cannot resolve sub-2% twins; the debugging concession is `daspkg rel
 not a budget. The flag spec is shared: `harness/tuner_cli.das`, required by bare name (same-directory).
 
 **Self-validation judges same-window ORDER, never cross-window levels.** After the sweep,
-`tune_kernels` re-races a heavy subset twice at full budget; a kernel FAILS the mint only when a
+`tune_kernels` re-races a heavy subset twice at full budget; the verdict is
+`tune_validate_verdict` over per-window `TuneValidateRow`s: a kernel FAILS the mint only when a
 re-race rejects the recorded winner outright, or the SAME challenger beats it past the reproduce
-band (`max(1.5×floor, 1%)`) in BOTH windows. One-window flips or differing challengers are
-state-scrambled twins = reproduction; absolute median drift between race and re-race is stamped
+band (`max(1.5×floor, 1%)`) in BOTH windows — deliberately narrower than the original
+any-single-window-flip rule, because a one-window flip or differing challengers is state
+scramble among twins, not a false crown. The band still stands without the old drift backstop:
+it bounds twin scramble between QUIET mints (measured ≤1.2%), and the burst-minted-winner class
+the drift bound guarded is caught by the same-challenger consistency test instead (a burst
+crown loses both quiet re-races). Absolute median drift between race and re-race is stamped
 (`validation_max_drift_pct`) and noted past 5%/3%, but never fails — box levels move with load
 history (DVFS, heat soak) while same-window order holds, so cross-window medians prove nothing
 (measured on M4: 4–8% level drift on compute-bound kernels with in-burst cv 0.6%).

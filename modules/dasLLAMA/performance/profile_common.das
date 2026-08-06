@@ -606,13 +606,16 @@ struct HardwareInfo {
 
 // The remote-desktop probe: parsecd's GPU encoder moved Metal cell times 1.7x between runs
 // (tune-hardening measurements) — "Parsec off" is a standing bench rule, so the row records
-// whether it actually was. Process-name probe; "off" is a probed verdict, "" means unprobed.
+// whether it actually was. Path-matched probe; "off" is a probed verdict, "" means unprobed.
 def private platform_remote_desktop() : string {
     if (is_windows()) {
         let out = run_capture("tasklist /FI \"IMAGENAME eq parsecd.exe\" 2>nul", false)
         return find(out, "parsecd") >= 0 ? "parsec" : "off"
     }
-    return empty(run_capture("pgrep -x parsecd 2>/dev/null", true)) ? "off" : "parsec"
+    // macOS ships its OWN daemon named parsecd (CoreParsec.framework, a Spotlight helper) —
+    // only the Parsec app's daemon counts, so match by full path and drop the system one
+    let out = run_capture("pgrep -fl parsecd 2>/dev/null | grep -v CoreParsec.framework", true)
+    return empty(out) ? "off" : "parsec"
 }
 
 def private is_macos() : bool {

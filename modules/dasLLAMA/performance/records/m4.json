@@ -2067,7 +2067,7 @@
           "ram_gb":64,
           "gpu":"Apple M4 Pro (20-core)",
           "model_id":"Mac16,11",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "asr:jfk.wav":{
@@ -2140,7 +2140,7 @@
           "ram_gb":64,
           "gpu":"Apple M4 Pro (20-core)",
           "model_id":"Mac16,11",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "asr:jfk.wav":{
@@ -2239,7 +2239,7 @@
           "ram_gb":64,
           "gpu":"Apple M4 Pro (20-core)",
           "model_id":"Mac16,11",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "asr:jfk.wav":{
@@ -2312,7 +2312,7 @@
           "ram_gb":64,
           "gpu":"Apple M4 Pro (20-core)",
           "model_id":"Mac16,11",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "asr:jfk.wav":{
