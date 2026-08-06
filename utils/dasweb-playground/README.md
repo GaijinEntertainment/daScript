@@ -103,6 +103,26 @@ immutable headers. An upload is staged under `blobs/tmp/`, every file verified a
 manifest sha256, and the whole set renamed into place atomically — a half-written artifact is
 never served. `caddy.snippet` carries the 64MB transport cap for `/api/build/*` uploads.
 
+A build's **mode** is decided here at request time by scanning the stored source's requires
+(`detect_build_mode` in `build_queue.das`): a native graphics/audio namespace (glfw, opengl,
+audio, …) makes it a `page` build — a standalone `sample.{html,js,wasm}` emscripten page,
+because GL and audio live in emscripten's JS glue that a bare wasi module cannot carry —
+everything else stays a `module` build (one `sample.wasm` the playground runtime
+instantiates). Status responses carry `kind` so the playground knows how to run the result.
+
+**Page artifacts are user-influenced html/js and are never daslang.io content.** `page_origin`
+in the toml (production: `https://run.daslang.io`, a cookie-less grey-cloud A record to this
+box) names the only Host the service serves `.html`/`.js` artifacts on — Caddy routes that
+vhost to artifact GETs only, and the service enforces the Host itself, so a Caddyfile drift
+fails closed. Page-artifact urls in status responses go out absolute on that origin; the
+playground embeds them in an un-sandboxed iframe (`sandbox` would opaque the origin and break
+emscripten's worker spawning — the separate origin is the boundary) with
+`allow="cross-origin-isolated"`. Artifact responses carry `Cross-Origin-Resource-Policy:
+cross-origin` (embeddable under the playground's COEP) and `Cross-Origin-Embedder-Policy:
+require-corp` (the page's own agent cluster isolates, so `-pthread` programs get their
+SharedArrayBuffer; the js carries it too because a COEP'd document may only spawn workers
+whose script response itself carries an enforcing COEP).
+
 The builder's protocol on a toolchain bump: build, run the `--jit-check-abi` canary clean,
 **then** `POST /api/build/toolchain` — announcing is the go-live. Queued jobs of earlier
 toolchains are simply never claimed again; rows stay for the audit trail.

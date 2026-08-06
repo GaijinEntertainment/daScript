@@ -56,7 +56,7 @@ ENTRY="${4:?missing entry}"
 
 WORKTREE="${DASWEB_WASM_WORKTREE:?DASWEB_WASM_WORKTREE is not set}"
 EMSDK_ROOT="${EMSDK:?EMSDK is not set (the pinned emsdk root)}"
-IMAGE="${DASWEB_BUILDER_IMAGE:-dasweb-builder:1}"
+IMAGE="${DASWEB_BUILDER_IMAGE:-dasweb-builder:2}"
 LLVM_LIB="${DASWEB_LLVM_LIB:-/usr/lib/llvm-19/lib}"
 BUILD_MEMORY="${DASWEB_BUILD_MEMORY:-8g}"
 BUILD_PIDS="${DASWEB_BUILD_PIDS:-512}"
@@ -112,8 +112,18 @@ module)
         --jit-runtime-lib="$RUNTIME_LIB"
     ;;
 page)
-    echo "page mode is not wired yet (lands with the page checkpoint)"
-    exit 13
+    # sample.{html,js,wasm}: daspkg's release-wasm rail — the same one the five
+    # /examples cards use — cross-compile + emcc link with the module archives,
+    # GL/thread flags and the canvas shell. The service wrote a .das_package
+    # naming the app `sample` into SRC_DIR before this ran, so the output set
+    # is exact. The rail nests it under <out>/sample/; flatten INSIDE the
+    # sandbox so the host never touches build-controlled paths.
+    run_sandboxed /bin/bash -c '
+        set -e
+        "$1" "$2/utils/daspkg/main.das" -- release wasm --root "$3" --out "$4"
+        mv "$4/sample/sample.html" "$4/sample/sample.js" "$4/sample/sample.wasm" "$4/"
+        rm -rf "$4/sample"
+    ' _ "$DASLANG" "$WORKTREE" "$SRC_DIR" "$OUT_DIR"
     ;;
 *)
     echo "unknown mode '$MODE'"

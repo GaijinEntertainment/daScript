@@ -56,3 +56,21 @@ handle /api/build/* {
 # /admin/* and /shutdown are deliberately absent: they are operator surfaces.
 # The service also refuses them from a non-loopback peer, so adding a route
 # here does not merely expose them — it breaks them.
+
+# ---------------------------------------------------------------------------
+# run.daslang.io — the page-artifact origin. A SEPARATE top-level vhost block
+# (site block, NOT inside daslang.io { }). Page artifacts are user-influenced
+# html/js: served from this cookie-less origin they can never act as
+# daslang.io content. Only artifact GETs are routed; the service additionally
+# refuses html/js on any other Host (page_origin in the toml), so a drift here
+# fails closed. The playground embeds these pages in an iframe; the service
+# sets the CORP/COEP headers that embedding under COEP requires.
+#
+#	run.daslang.io {
+#		handle /api/build/artifact/* {
+#			reverse_proxy 127.0.0.1:8101
+#		}
+#		handle {
+#			respond "not found" 404
+#		}
+#	}

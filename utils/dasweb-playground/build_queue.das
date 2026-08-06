@@ -8,6 +8,7 @@ require sqlite/sqlite_migrate public
 require daslib/sql_linq
 require daslib/logger
 require daslib/json_boost
+require daslib/strings_boost
 require strings
 
 //! The wasm build queue: schema, migration, the job state machine, and queue
@@ -36,13 +37,63 @@ def expected_artifact_names(mode : string) : array<string> {
     //! The EXACT file set a mode may publish. The builder enforces this too,
     //! but a build runs the user's own compile-time code, so the server does
     //! not take the builder's word for what a job produced: anything the build
-    //! dropped beside its real output would be served publicly from this
-    //! origin. Empty = the mode publishes nothing (page mode defines its set
-    //! when the page checkpoint wires it).
+    //! dropped beside its real output would be served publicly. Empty = the
+    //! mode publishes nothing.
     if (mode == BUILD_MODE_MODULE) {
         return <- ["sample.wasm"]
     }
+    if (mode == BUILD_MODE_PAGE) {
+        return <- ["sample.html", "sample.js", "sample.wasm"]
+    }
     return <- array<string>()
+}
+
+// Require-path roots that force the standalone-page artifact: their native halves
+// (GL context, audio device, image decode) live in emscripten's JS glue, which a
+// bare wasi module cannot carry. strudel and live_stub are here for what they
+// require transitively (audio; a glfw window) — the scan only sees source text.
+let private PAGE_REQUIRE_ROOTS : table<string> <- {
+    "glfw", "opengl", "imgui", "audio", "minfft", "stbimage", "clipboard", "strudel", "live_stub"
+}
+
+def private text_requires_page(text : string) : bool {
+    for (line in split(text, "\n")) {
+        let t = strip(line)
+        continue if (!((t |> starts_with("require ")) || (t |> starts_with("require\t"))))
+        let rest = strip(replace(slice(t, 8), "\t", " "))
+        let sp = find(rest, " ")
+        var tok = sp >= 0 ? slice(rest, 0, sp) : rest
+        if (tok |> starts_with("?")) {
+            tok = slice(tok, 1)
+        }
+        let sl = find(tok, "/")
+        let seg = sl >= 0 ? slice(tok, 0, sl) : tok
+        if (key_exists(PAGE_REQUIRE_ROOTS, seg)) {
+            return true
+        }
+    }
+    return false
+}
+
+def detect_build_mode(source : string) : string {
+    //! module vs page, from the stored source document (raw `.das` text or the
+    //! `{files, active}` bundle): any require of a native graphics/audio
+    //! namespace, in any file, makes the artifact a standalone page.
+    var jerr = ""
+    var doc = read_json(source, jerr)
+    if (doc != null && doc.value is _object && key_exists(doc.value as _object, "files")) {
+        let files = doc?["files"]
+        if (files != null && files.value is _object) {
+            for (v in values(files.value as _object)) {
+                let text : string = v ?? ""
+                if (text_requires_page(text)) {
+                    return BUILD_MODE_PAGE
+                }
+            }
+        }
+        return BUILD_MODE_MODULE
+    }
+    return text_requires_page(source) ? BUILD_MODE_PAGE : BUILD_MODE_MODULE
 }
 
 [sql_table(name = "build_jobs")]

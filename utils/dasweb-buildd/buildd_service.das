@@ -149,7 +149,13 @@ def private run_one_job(job : ClaimedBuild) {
     mkdir_rec(src_dir)
     mkdir_rec(out_dir)
     logger_info("buildd", "job start", JV((hash = job.hash, mode = job.mode, toolchain = job.toolchain)))
-    let entry = unpack_sources(src_dir, job.source)
+    var entry = unpack_sources(src_dir, job.source)
+    // A page build compiles under a generated .das_package (the release-wasm
+    // rail wants one; job sources can never carry their own). Written by THIS
+    // service into a dir it owns, before the sandbox ever runs.
+    if (!empty(entry) && job.mode == "page" && !write_page_package(src_dir, entry)) {
+        entry = ""
+    }
     if (empty(entry)) {
         logger_warning("buildd", "job failed: malformed source document",
             JV((hash = job.hash, duration_ms = get_time_usec(t0) / 1000)))

@@ -46,8 +46,12 @@ The service refuses to start without a token and a build command.
    killed after `build_timeout_seconds`. `run_build.sh` is the recipe — see **The sandbox**
    below — and per mode it runs the exact CI command the queue replaced: `module` = host
    daslang `-exe --jit-target=wasm64-unknown-emscripten` against the `web/output64` runtime
-   archive (→ `sample.wasm`); `page` (standalone game html+js+wasm) lands with the game
-   checkpoint.
+   archive (→ `sample.wasm`); `page` = daspkg's release-wasm rail (the one the five
+   `/examples` cards use) under a `.das_package` this service generates into the scratch src
+   dir naming the app `sample` (job sources can never carry their own — bundle names must be
+   plain `.das`), flattened inside the sandbox to `sample.{html,js,wasm}`. The server decides
+   the mode at request time by scanning the source's requires; this service only obeys the
+   claimed job's mode.
 5. **Collect**: exactly the files the mode declares, by name (`expected_artifact_names`).
    The build runs the user's compile-time code and can write anything into the output
    directory, so anything else there is logged and dropped — a build cannot widen its own
@@ -102,14 +106,19 @@ A build blocks the tick thread, so `/healthz` goes dark for the build's duration
 only logs health transitions (it restarts on process exit, never on health), and
 `build_timeout_seconds` bounds the window.
 
+The image also carries the X11/GL *runtime* libraries (no X server, no GPU): the host daslang
+dlopens the tree's `.shared_module` dylibs while **compiling** a sample (`require glfw` needs
+the native module registered), and their `DT_NEEDED` X11/GL libs must resolve inside the
+container or the dlopen fails and every graphics sample reports `missing prerequisite`.
+
 The box environment (`DASWEB_WASM_WORKTREE`, pinned emsdk, the worktree's own
 `web/build_wasm_host.sh` host build, the sandbox image) is documented in `~/SETUP.md` on zen4 —
 the wasm worktree is dedicated because wasm and native builds poison each other's `bin/` and
 `lib/` (`plans/dasweb_wasm_pipeline.md` has the postmortem). Build the sandbox image once per
-`Containerfile` change:
+`Containerfile` change (bump the tag here, in `Containerfile`, and in `run_build.sh` together):
 
 ```bash
-podman build -t dasweb-builder:1 -f utils/dasweb-buildd/Containerfile .
+podman build -t dasweb-builder:2 -f utils/dasweb-buildd/Containerfile .
 ```
 
 ## Tests
