@@ -36,6 +36,12 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    only. Metal's drivers serve MoE (Wave C), DeltaNet hybrids (Wave D), gemma4 (PLE,
    sandwich norms), gpt-oss (sinks, swiglu_oai). The vulkan kernels for MoE/deltanet already
    exist in the cooperative tier — the work is resident-driver plumbing, not new shaders.
+   Walkthrough datum (2026-08-06): qwen35-0.8B serves CORRECTLY on the per-op rails but the
+   per-layer submit+fence cadence caps it at 35% tg / 8% pp of llama.cpp's whole-graph run —
+   the hybrid-ladder extension is the fix, and the carrier conversion already made
+   dn_step_cls a TokMeta class kernel, so recurrent layers can encode straight into the
+   recorded token cmd; what remains is ladder plumbing (recurrent roles in rd_record_token,
+   dn state on g_rd).
 3. **KV codecs on device** — Vulkan's mirror is f32-only; Metal carries f16/f32/q8_0/tq4
    through every attention and rope-store kernel. Port the codec seams (the CPU truth is
    `dasllama_convert`'s KV codec functions; the Metal kernels are the device reference).
@@ -106,7 +112,53 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    GGML_VK_DISABLE_COOPMAT / GGML_VK_DISABLE_COOPMAT2-style envs (verify names/behavior on
    their current master); if they hold, every tier gets an apples-to-apples baseline.
 
+12. **Arena slabs — the 4 GiB storage-range ceiling (IN-ARC follow-up commit, AFTER the
+   family sweep — Boris ruling 2026-08-06: this gates the class-kernels PR because it is the
+   MAIN FACTOR for MoltenVK/M1 enablement, where maxStorageBufferRange is far tighter than
+   4 GiB; a desktop-only fix would leave Mac unservable).** Walkthrough evidence:
+   Llama-3.1-8B Q8's fmt-0 arena wants 7.5 GB against the device's 4294967295B
+   maxStorageBufferRange — honest fail-closed decline ("arena reserve failed"), per-op
+   fallback serves tg 7.2 vs llama.cpp's 49.8 (they shard buffers automatically). Fix shape:
+   split each ArenaFmt into <= min(maxStorageBufferRange, budget) slabs; the block cursor
+   maps to a slab in find_stack/make_stack_shell; each stack's set binds its own slab —
+   kernels unchanged (stacks already address block-relative within their binding). Sweep
+   consequence until it lands: dense models above ~4.3 GB same-format weights measure on the
+   per-op fallback only — the walkthrough sticks to < 4 GB models.
+
+13. **qwen2 bias arm — the cheapest family unlock (after-sweep follow-up commit, ruled
+   2026-08-06: "unsupported family, easy to support").** The resident gate declines
+   `attn_qkv_bias` alone for the whole qwen2 line; everything downstream is the std shape the
+   ladder serves. Walkthrough row (Qwen2.5-1.5B Q8): das 35.6 tg / 465 pp on the per-op
+   fallback vs llama.cpp 202.4 / 14986 — 18% / 3%. Fix shape: per-row `+ b[row]` epilogue in
+   the qkv class GEMV (bias rows ride the arena or one extra binding, offset in the push),
+   same arm for q/k/v; then drop `attn_qkv_bias` from the :534 gate.
+
+14. **The gemma cluster arms — medium family unlock covering gemma2 AND gemma3 (walkthrough
+   2026-08-06: both UNSUPPORTED, per-op fallback; gemma2-2b 22.8 tg / 327 pp vs llama.cpp
+   124.1 / 9566, gemma3-1b 58.5 / 636 vs 236.2 / 21540).** The shared base: sandwich norms
+   (`pre_post_norm` — an extra norm role per layer) + sliding-window alternation (a
+   window-start word in decode attention — TokMeta has room). That pair alone unlocks
+   gemma3; gemma2 additionally needs the two softcap clamps (attn epilogue tanh + cls
+   epilogue); gemma4-dense sits on the same base (plus PLE — its own story). Biggest
+   family-count unlock on the board after qwen2's one-flag bias.
+
+15. **VK_EXT_pageable_device_local_memory — the missing half of the residency shield.** The
+   tier chains VK_EXT_memory_priority (priority 1.0 on every device allocation, the armed
+   "residency shield"); the companion extension — runtime `vkSetDeviceMemoryPriorityEXT` +
+   the pageable-aware device-local signal WDDM wants — has zero references in the tree.
+   Small addition: enable when present, and consider demoting cold stacks' priority instead
+   of only boosting everything.
+
 ## Sequencing
+
+**The osmosis principle (Boris, 2026-08-06, mid-walkthrough):** older/dense families are
+carried "by osmosis" — good kernels (the cm2 arc), good cache strategy, overall rail
+goodness — their per-family arms are mechanical one-flag/one-cluster work, done
+opportunistically, never a focus. The focus after plumbing is NEW model shapes: MoE, MTP,
+hybrids — where design room actually exists. On MoE specifically the 3060-era record had
+das WINNING (better MoE strategy: heat cache, expert residency, async shexp — no llama.cpp
+analog); the walkthrough shows their remaining edge is the cm2 prefill kernel alone, so
+tensor kernels + our MoE strategy = the expected win condition on coopmat2 hardware too.
 
 After the reorg arc lands (this doc is a product of it — see ARCHITECTURE.md's extraction
 ledger). First measurable milestone: zen2 resident decode/prefill numbers vs the cooperative

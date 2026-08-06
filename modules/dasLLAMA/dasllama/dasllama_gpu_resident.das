@@ -491,6 +491,10 @@ def private resident_place(t : Model; f : KqFmt; woff : int64; n, rows : int64;
 def private rdec_blocks_for(n, rows : int64; f : KqFmt) : int64 => (
     rows * (n / (f == KqFmt.q8 || f == KqFmt.q8n ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS)))
 
+// row-length servability twin of the tier's arena_rows_ok (this module is backend-agnostic)
+def private rdec_rows_ok(n : int64; f : KqFmt) : bool => (
+    n % (f == KqFmt.q8 || f == KqFmt.q8n ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS) == 0l)
+
 // cm2 (mode 4) places dense q8 planes as q8n — decode-in-load prefill GEMMs, q8n decode GEMV.
 // Promotion is per activation-group: members sharing one B-side image must agree on its form,
 // so {q,k,v} and {gate,up} promote only whole; wo / down / cls are singletons.
@@ -572,6 +576,12 @@ def resident_upload(t : Model; seq_cap : int64) : bool {   // nolint:STYLE037,ST
     }
     planes |> push((n = dim, rows = c.vocab_size, f = cls_fmt))
     for (pl in planes) {
+        if (!rdec_rows_ok(pl.n, pl.f)) {   // unplaceable row: the whole driver declines (all-or-nothing)
+            to_log(LOG_WARNING, "dasLLAMA: resident driver declined — a fmt {int(pl.f)} plane's row length {pl.n} is not a block multiple\n")
+            delete planes
+            delete need
+            return false
+        }
         let fi = int(pl.f)
         need[fi] = (need?[fi] ?? 0l) + rdec_blocks_for(pl.n, pl.rows, pl.f)
     }

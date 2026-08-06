@@ -1002,10 +1002,12 @@ def private heat_pool_make(l : int64; b1, b3, b2 : int64; f1, f3, f2 : int; n, n
     let src2 = heat_stream_src(b2, f2)
     let want = gpu_want_heat()
     // gate/up share one act image; down is free — the mid-step form follows IT (the mixed-triple rail)
-    if (src1 < 0 || src3 < 0 || src2 < 0 || vk_fmt_b32(f3) != vk_fmt_b32(f1) || want <= 0l) {
+    if (src1 < 0 || src3 < 0 || src2 < 0 || vk_fmt_b32(f3) != vk_fmt_b32(f1) || want <= 0l
+            || !arena_rows_ok(n, f1) || !arena_rows_ok(n, f3) || !arena_rows_ok(nfe, f2)) {
         let why = (want <= 0l ? "want 0"
             : (src1 < 0 || src3 < 0 || src2 < 0 ? "no mirror src {src1}/{src3}/{src2} for b {b1}/{b3}/{b2} fmt {f1}/{f3}/{f2}"
-            : "gate/up form mismatch fmt {f1}/{f3}"))
+            : (vk_fmt_b32(f3) != vk_fmt_b32(f1) ? "gate/up form mismatch fmt {f1}/{f3}"
+            : "row length not a block multiple ({n}/{nfe})")))
         to_log(LOG_INFO, "dasLLAMA vulkan tier: heat cache skips layer {l} ({why})\n")
         g_gpu.heat_pools[l] <- pool
         return

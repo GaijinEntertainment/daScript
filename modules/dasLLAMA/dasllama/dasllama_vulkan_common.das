@@ -1373,8 +1373,11 @@ def vk_moe_stream_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n, r
 
 // The resident-accept arithmetic, shared by the upload path and the slice replay's would-accept
 // probe — a divergent copy would desync the baked plan at the refusal boundary.
-// 0 = accept, 1 = VRAM budget, 2 = descriptor capacity.
+// 0 = accept, 1 = VRAM budget, 2 = descriptor capacity, 3 = unplaceable row length.
 def vk_moe_resident_verdict(n, rows : int64; fmt : int) : int {
+    if (!arena_rows_ok(n, fmt)) {   // must precede stack_plane_bytes — its block math asserts
+        return 3
+    }
     let pb = stack_plane_bytes(n, rows, fmt)
     if (g_gpu.resident_bytes + pb.wq + pb.ws > carved_budget()) {
         return 1
@@ -1396,6 +1399,10 @@ def vk_moe_would_accept(n : int64; rows : int64; fmt : int; stream : bool) : boo
 //! gathered row-major planes. stream = pinned host mirror for per-prefill DMA instead of VRAM.
 def vk_moe_upload_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n : int64; rows : int64; fmt : int; stream : bool) : bool {
     if (!vk_moe_init()) {
+        return false
+    }
+    if (!arena_rows_ok(n, fmt)) {   // unplaceable row length: this stack stays on the CPU
+        to_log(LOG_WARNING, "dasLLAMA vulkan tier: stack at {woff} declined — row length {n} is not a {fmt_unit(fmt)}-block multiple (fmt {fmt})\n")
         return false
     }
     if (stream) {
@@ -1645,6 +1652,10 @@ def arena_block_bytes(fmt : int) : tuple<wq : int64; ws : int64> {
     return (wq = kq_qsb(vk_kq_schema_id(fmt)), ws = KQ_DEV_SSB)
 }
 
+//! Row-length servability: the arena strides whole blocks, so a row that is not a block
+//! multiple cannot be placed — callers DECLINE such stacks to the CPU (never assert).
+def arena_rows_ok(n : int64; fmt : int) : bool => n % fmt_unit(fmt) == 0l
+
 def arena_blocks_for(n, rows : int64; fmt : int) : int64 {
     assert(vk_fmt_b32(fmt) || n % KQ_SUPERBLOCK_ELEMS == 0l, "dasLLAMA vulkan arena: kq row length must be a superblock multiple")
     assert(!vk_fmt_b32(fmt) || n % Q8_BLOCK_ELEMS == 0l, "dasLLAMA vulkan arena: q8 row length must be a 32-block multiple")
@@ -1716,6 +1727,10 @@ def vk_arena_reserve(fmt : int; cap_blocks : int64) : bool {
 def vk_arena_place(wq : array<uint8>; ws : array<uint8>; n : int64; rows : int64; fmt : int) : int64 {
     // q8n (fmt 6) carries its scale inside the interleaved plane — an EMPTY ws is its contract
     if (!vk_moe_init() || empty(wq) || (empty(ws) && fmt != 6)) {
+        return -1l
+    }
+    if (!arena_rows_ok(n, fmt)) {   // unplaceable row length: this plane stays on the CPU
+        to_log(LOG_WARNING, "dasLLAMA vulkan arena: plane declined — row length {n} is not a {fmt_unit(fmt)}-block multiple (fmt {fmt})\n")
         return -1l
     }
     return arena_place(unsafe(addr(wq[0])), empty(ws) ? null : unsafe(addr(ws[0])), n, rows, fmt)

@@ -183,6 +183,9 @@ def private vk_resident_bytes : int64 => g_gpu != null ? g_gpu.resident_bytes : 
 def private vk_weight_budget : int64 => vk_moe_init() ? carved_budget() : 0l
 
 def private vk_plane_bytes(n, rows : int64; fmt : int) : int64 {
+    if (!arena_rows_ok(n, fmt)) {
+        return 0l   // unplaceable row length — the plane can never upload, it costs nothing
+    }
     let pb = stack_plane_bytes(n, rows, fmt)
     return pb.wq + pb.ws
 }
