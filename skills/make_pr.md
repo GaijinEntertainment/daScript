@@ -251,7 +251,7 @@ Use `timeout: 0` (no timeout) for the cmake build — it can take 2-25 minutes.
 - RST files in `doc/source/` (handwritten tutorials, reference pages, TOCs)
 - `doc/reflections/das2rst.das` or `daslib/rst.das` / `daslib/rst_comment.das`
 
-Note that CI's doc workflow triggers on **any** `daslib/**` or `src/builtin/**` change and runs seven gates (`skills/preflight.md` has the full list); das2rst **stops at the FIRST validation panic**, so a single CI round can hide N−1 further issues — loop step 4b locally until it runs clean.
+Note that CI's doc workflow triggers on **any** `daslib/**` or `src/builtin/**` change and runs five gates (`skills/preflight.md` has the full list); das2rst **stops at the FIRST validation panic**, so a single CI round can hide N−1 further issues — loop step 4b locally until it runs clean.
 
 **Which substeps to run** — match what changed, not "all in order":
 
@@ -262,7 +262,7 @@ Note that CI's doc workflow triggers on **any** `daslib/**` or `src/builtin/**` 
 | Both daslib and handwritten RST | **all of 4a–4g** |
 | `das2rst.das` / `rst.das` itself | **all of 4a–4g** |
 
-CI runs `sphinx-build -W` (warnings-as-errors) for both HTML and LaTeX. **Any** warning fails CI. Step 4f catches every warning class — title underline/overline length, duplicate labels, broken `:ref:`, malformed tables, missing TOC entries, etc. Skipping 4f because "I only added a tutorial page" misses exactly the warnings handwritten RST tends to produce.
+CI runs `sphinx-build -W` (warnings-as-errors) for HTML. **Any** warning fails CI. Step 4f catches every warning class — title underline/overline length, duplicate labels, broken `:ref:`, malformed tables, missing TOC entries, etc. Skipping 4f because "I only added a tutorial page" misses exactly the warnings handwritten RST tends to produce.
 
 ### 4a. Add new functions to groups in `das2rst.das`
 
@@ -302,12 +302,11 @@ grep -c Uncategorized doc/source/stdlib/generated/*.rst | grep -v ':0$'
 
 Must return empty. If not, go back to step 4a and add the missing function to a group.
 
-### 4f. Sphinx build — BOTH builders
+### 4f. Sphinx build
 
-CI runs `sphinx-build -W` for **latex AND html** — they catch different warning sets (latex chokes on some table/unicode constructs html accepts). Delete `doc/sphinx-build` before both builders; preflight's docs gate does this unconditionally so stale doctrees cannot hide warnings.
+CI runs `sphinx-build -W` for html. Delete `doc/sphinx-build` first; preflight's docs gate does this unconditionally so stale doctrees cannot hide warnings.
 
 ```bash
-sphinx-build -W --keep-going -b latex -d doc/sphinx-build doc/source build/latex
 sphinx-build -b html -d doc/sphinx-build doc/source site/doc 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | tee /tmp/sphinx_out.txt
 tail -3 /tmp/sphinx_out.txt
 grep -iE "warning:|error:" /tmp/sphinx_out.txt
@@ -384,7 +383,7 @@ Never merge solely because CI is green. CI green + Copilot reviewed current tip 
 | Type-system/generics | sequence smoke (`skills/preflight.md`) + externals sweep (`skills/abi_break_sweep.md`) | Only for type-system / AST-layout / daslib-generics changes |
 | AOT build | `cmake --build build --config Release --target test_aot -j 64` | Kill daslang first. Register new test dirs |
 | AOT tests | `test_aot.exe -use-aot dastest/dastest.das -- --use-aot --test tests` | Same as regular tests. PR CI only builds the tests/language subset (`test_aot_subset`) — this local full gate + the nightly cron are the only full-AOT checks |
-| Docs | `das2rst.das` (loop until clean) + stubs + Uncategorized + untracked + Sphinx latex AND html | Any daslib/src-builtin/RST change triggers all seven gates — `skills/preflight.md` |
+| Docs | `das2rst.das` (loop until clean) + stubs + Uncategorized + untracked + Sphinx html | Any daslib/src-builtin/RST change triggers all five gates — `skills/preflight.md` |
 | Format | MCP `format_file` with comma-separated list or glob of changed `.das` files (single call) | Only changed files |
 | `.md` stop | `git diff --name-only origin/master..HEAD \| grep '\.md$'` | If any match: STOP, list changes, ask user to review BEFORE push |
 | PR | GitHub MCP `create_pull_request` or `gh pr create` | — |
