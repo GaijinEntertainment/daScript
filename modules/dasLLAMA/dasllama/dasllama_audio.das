@@ -1639,6 +1639,7 @@ def audio_encode_blocks(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     let d = t.d_model
     let nm = t.n_mel
     let tc = ref_time_ticks()
+    trace_tag(TRACE_TAG_ENC_CONV)
 
     // conv1 k3 s1 same: im2col column (dk, c) — matches the loader's weight permute
     for (i in range64(tin)) {
@@ -1689,6 +1690,7 @@ def encoder_blocks(t : AudioTower; var s : EncoderState; npos : int64) {
     for (l in range64(t.n_layer)) {
         let lo = enc_layer_offsets(t, l)
         var te = ref_time_ticks()
+        trace_tag(TRACE_TAG_ENC_ATTN_PROJ)
         layernorm_batch(s.xb, s.x, t.fblob, lo.ln1_w, lo.ln1_b, d, tt, t.eps)
         tw_requant(t, s.xb, d, tt, s.xqi, s.xsi)   // q/k/v share the post-LN activation: one requant
         tw_mm(t, s.qq, lo.q_w, s.xb, s.xqi, s.xsi, d, d, tt)
@@ -1707,18 +1709,21 @@ def encoder_blocks(t : AudioTower; var s : EncoderState; npos : int64) {
             diff_stage("b0_v", s.vv, tt * d)
         }
         te = ref_time_ticks()
+        trace_tag(TRACE_TAG_ENC_ATTN)
         enc_attention(t, s, tt)
         asr_prof_add("enc.attn_heads", te)
         if (l == 0l) {
             diff_stage("b0_attnout", s.xb2, tt * d)
         }
         te = ref_time_ticks()
+        trace_tag(TRACE_TAG_ENC_ATTN_OUT)
         tw_mm_rq(t, s.xb, lo.o_w, s.xb2, s.xqi, s.xsi, d, d, tt)
         add_bias_rows(s.xb, t.fblob, lo.o_b, d, tt)
         add_inplace_rows(s.x, s.xb, tt * d)
         asr_prof_add("enc.attn_out", te)
 
         te = ref_time_ticks()
+        trace_tag(TRACE_TAG_ENC_FC1)
         var tf = ref_time_ticks()
         layernorm_batch(s.xb, s.x, t.fblob, lo.ln2_w, lo.ln2_b, d, tt, t.eps)
         asr_prof_add("enc.ffn.fc1.ln", tf)
@@ -1736,6 +1741,7 @@ def encoder_blocks(t : AudioTower; var s : EncoderState; npos : int64) {
         enc_gelu_batch(t, s.h, t.n_ff, tt)
         asr_prof_add("enc.ffn.gelu", te)
         te = ref_time_ticks()
+        trace_tag(TRACE_TAG_ENC_FC2)
         tf = ref_time_ticks()
         tw_requant(t, s.h, t.n_ff, tt, s.xqi, s.xsi)
         asr_prof_add("enc.ffn.fc2.rq", tf)
@@ -1751,6 +1757,7 @@ def encoder_blocks(t : AudioTower; var s : EncoderState; npos : int64) {
             diff_stage("after_block0", s.x, tt * d)
         }
     }
+    trace_tag(0)   // clear: dispatches after the encoder must not inherit the last stage's color
     diff_stage("after_blocks", s.x, tt * d)
 }
 
@@ -1794,6 +1801,7 @@ def private rms_rows_blob_at(var x : array<float>; wp : float const?; dim, rows 
 [hot_path]
 def audio_encode(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     audio_encode_blocks(t, s, mel)
+    trace_tag(TRACE_TAG_ENC_PROJ)
     let tt = t.n_ctx
     let d = t.d_model
     let rows = audio_tokens_per_chunk(t)
@@ -1833,5 +1841,6 @@ def audio_encode(t : AudioTower; var s : EncoderState; mel : MelChunk) {
         gelu_erf(s.ph, rows * t.mm1_out)
         tw_mm_rq(t, s.out, t.mm2_w_off, s.ph, s.xqi, s.xsi, t.mm1_out, t.proj_dim, rows)
     }
+    trace_tag(0)   // clear: the decoder's dispatches must not inherit the projector's color
     diff_stage("out", s.out, rows * t.proj_dim)
 }

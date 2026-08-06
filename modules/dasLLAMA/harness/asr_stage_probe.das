@@ -43,6 +43,9 @@ struct ProbeArgs {
     @clarg_doc = "Decoder-session KV dtype, LLM-decoder families only: f16 (default) | f32 | q8"
     kv : string
 
+    @clarg_doc = "Save a jobque lane trace of the profiled reps to this path (perfetto JSON, encoder stages colored)"
+    trace : string
+
     @clarg_short = "?"
     @clarg_name = "show-help"
     @clarg_doc = "Show this help and exit"
@@ -120,10 +123,19 @@ def main() : int {
         setup_dasllama_jobque_()   // the engine dispatch standard — bare with_job_que profiles the
                                    // ~10us/job fifo fork/join instead of the shipped team dispatch
         run_once(m, samples)               // warmup, unprofiled
+        if (!empty(cfg.trace)) {
+            jobque_trace_start(1 << 21)   // encoder chunks are coarse — a couple of reps fit easily
+            set_trace_tags(true)
+        }
         set_asr_prof(true)
         forward_profile_reset()   // the decoder engine's own buckets (blk_attn/blk_ffn/mm_*)
         for (_rep in range(reps)) {
             run_once(m, samples)
+        }
+        if (!empty(cfg.trace)) {
+            set_trace_tags(false)
+            jobque_trace_stop()
+            print(jobque_trace_save(cfg.trace) ? "jobque trace saved: {cfg.trace}\n" : "jobque trace: nothing recorded\n")
         }
         asr_prof_report()
         forward_profile_report()

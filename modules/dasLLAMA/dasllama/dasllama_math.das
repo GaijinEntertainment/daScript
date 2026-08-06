@@ -199,6 +199,14 @@ let public TRACE_TAG_PLE = 8
 let public TRACE_TAG_ROUTE = 9   // MoE router GEMM + select/bucket (prefill section split)
 let public TRACE_TAG_PARK = 10   // MoE park/reduce bookkeeping around the expert GEMMs
 let public TRACE_TAG_DN = 11   // Gated DeltaNet layers (qwen35 hybrid) — separates dn from gated attn
+// ASR encoder stages (dasllama_audio's shared whisper-core frontend + block loop + projector)
+let public TRACE_TAG_ENC_CONV = 12
+let public TRACE_TAG_ENC_ATTN_PROJ = 13
+let public TRACE_TAG_ENC_ATTN = 14
+let public TRACE_TAG_ENC_ATTN_OUT = 15
+let public TRACE_TAG_ENC_FC1 = 16
+let public TRACE_TAG_ENC_FC2 = 17
+let public TRACE_TAG_ENC_PROJ = 18
 def public trace_tag(t : int) {   // nolint:LINT012,LINT019 — t is only read when JOBQUE_PROFILING_ENABLED compiles the body in
     static_if (JOBQUE_PROFILING_ENABLED) {
         if (g_trace_tags) {
@@ -227,6 +235,14 @@ def private register_trace_categories() {
     profile_category(TRACE_TAG_PLE, "ple", 0xC39536u)
     profile_category(TRACE_TAG_ROUTE, "router", 0x4FC3D0u)
     profile_category(TRACE_TAG_PARK, "park/reduce", 0xD678B4u)
+    profile_category(TRACE_TAG_DN, "deltanet", 0x8385E8u)
+    profile_category(TRACE_TAG_ENC_CONV, "enc conv", 0x4FA8A0u)
+    profile_category(TRACE_TAG_ENC_ATTN_PROJ, "enc attn proj", 0x7FA8E8u)
+    profile_category(TRACE_TAG_ENC_ATTN, "enc attn core", 0x4C7FC4u)
+    profile_category(TRACE_TAG_ENC_ATTN_OUT, "enc attn out", 0x91B8ECu)
+    profile_category(TRACE_TAG_ENC_FC1, "enc fc1", 0x3FA378u)
+    profile_category(TRACE_TAG_ENC_FC2, "enc fc2", 0x6BC49Eu)
+    profile_category(TRACE_TAG_ENC_PROJ, "enc proj", 0x9B7BD0u)
 }
 
 //! Configure the job queue for dasLLAMA's pure fork/join matmul dispatch: pooled fork contexts,
