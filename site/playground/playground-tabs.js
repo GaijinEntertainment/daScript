@@ -39,6 +39,12 @@
                 Object.entries(pgState.files).map(([k, doc]) => [k, doc.getValue()])
             ),
             active: pgState.active,
+            // Which sample's assets the buffer expects. The files alone do not
+            // say where they came from, and the manifest is only ever derived
+            // when a sample is PICKED — so without carrying it here, a restored
+            // buffer runs with an empty MEMFS. Absent in older saved state,
+            // which reads back as null and behaves exactly as before.
+            assets: window.currentAssetsUrl || null,
         };
     }
 
@@ -333,6 +339,10 @@
         const saved = (!hasHash && !hasExampleParam) ? loadAutosave() : null;
         if (saved && saved.files && Object.keys(saved.files).length > 0) {
             pgLoadFiles(saved.files, saved.active);
+            // main.js owns currentAssetsUrl; hand it back the manifest that was
+            // saved beside this buffer, since the restore path never calls
+            // selectSample and so would never derive one.
+            window.pgRestoredAssetsUrl = saved.assets || null;
             window.pgRestoredFromState = true;
             return;
         }

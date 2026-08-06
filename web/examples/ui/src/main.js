@@ -130,7 +130,18 @@ pageInit = function () {
          });
 
          function applyInitialSelection() {
-             if (window.pgRestoredFromState || editorHasContent()) return;
+             if (window.pgRestoredFromState || editorHasContent()) {
+                 // A restored buffer (autosave, share link, Back) never went
+                 // through selectSample, so its asset manifest was never
+                 // derived. Adopt the one saved beside the buffer — otherwise
+                 // every asset-loading sample runs against an empty MEMFS and
+                 // panics on the first file it opens, but only on a return
+                 // visit, which reads as a random failure.
+                 if (window.pgRestoredAssetsUrl) {
+                     currentAssetsUrl = window.pgRestoredAssetsUrl;
+                 }
+                 return;
+             }
              const params = new URLSearchParams(window.location.search);
              const wanted = params.get("example");
              if (wanted) {
