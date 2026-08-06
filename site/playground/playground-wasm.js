@@ -96,7 +96,8 @@
             if (!status.files || !status.files.length) {
                 return { ok: false, error: 'build reported done with no artifact' };
             }
-            return { ok: true, files: status.files, hash };
+            // kind: 'module' (bare wasi .wasm) or 'page' (standalone html+js+wasm)
+            return { ok: true, kind: status.kind || 'module', files: status.files, hash };
         }
         if (status.state === 'failed') {
             return { ok: false, error: status.error || 'build failed', compileError: true };

@@ -144,9 +144,49 @@ def test_build_cannot_widen_its_own_output(t : T?) {
         }
     }
     t |> run("an undefined mode publishes nothing") @(tt : T?) {
-        tt |> success(empty(expected_artifact_names("page")), "page mode not wired")
         tt |> success(empty(expected_artifact_names("bogus")), "unknown mode")
         tt |> equal(length(expected_artifact_names("module")), 1)
+    }
+    t |> run("page mode publishes exactly the html+js+wasm triple") @(tt : T?) {
+        let names <- expected_artifact_names("page")
+        tt |> equal(length(names), 3)
+        tt |> equal(names[0], "sample.html")
+        tt |> equal(names[1], "sample.js")
+        tt |> equal(names[2], "sample.wasm")
+    }
+    with_temp_dir("buildd_out_") $(dir) {
+        fwrite(path_join(dir, "sample.html"), "<html></html>")
+        fwrite(path_join(dir, "sample.js"), "// glue")
+        fwrite(path_join(dir, "sample.wasm"), "wasm bytes")
+        t |> run("page mode collects its triple in order") @(tt : T?) {
+            let files <- collect_artifacts(dir, "page")
+            tt |> equal(length(files), 3)
+            tt |> equal(files[0].name, "sample.html")
+            tt |> equal(files[1].name, "sample.js")
+            tt |> equal(files[2].name, "sample.wasm")
+            tt |> equal(files[2].sha256, sha256_hex("wasm bytes"))
+        }
+    }
+    with_temp_dir("buildd_out_") $(dir) {
+        fwrite(path_join(dir, "sample.html"), "<html></html>")
+        fwrite(path_join(dir, "sample.wasm"), "wasm bytes")
+        t |> run("a partial page set yields nothing — all or nothing") @(tt : T?) {
+            let files <- collect_artifacts(dir, "page")
+            tt |> success(empty(files), "missing sample.js drops the whole set")
+        }
+    }
+}
+
+[test]
+def test_write_page_package(t : T?) {
+    with_temp_dir("buildd_pkg_") $(dir) {
+        t |> run("the generated package names the app sample and the job's entry") @(tt : T?) {
+            tt |> success(write_page_package(dir, "prog.das"), "written")
+            let body = fread(path_join(dir, ".das_package"))
+            tt |> success(find(body, "release_name(\"sample\")") >= 0, "app is sample")
+            tt |> success(find(body, "release_main(\"prog.das\")") >= 0, "entry carried")
+            tt |> success(find(body, "require daslib/daspkg") >= 0, "daspkg hook file")
+        }
     }
 }
 

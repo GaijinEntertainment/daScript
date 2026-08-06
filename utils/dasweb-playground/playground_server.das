@@ -36,6 +36,13 @@ struct BuildOptions {
     //! Transport-level build-surface config; queue policy nests from build_queue.
     token : string = ""       // bearer for the remote builder; "" disables the build surface
     blobs_dir : string = ""   // artifact cache root; "" disables artifact storage and serving
+    // The separate origin page artifacts (user-influenced html/js) are served
+    // from, e.g. "https://run.daslang.io". Document artifacts answer ONLY on
+    // that Host, and page artifact urls go out absolute. Empty disables page
+    // mode entirely — the build is refused and no document is served, because
+    // there is nowhere safe to serve it from. A dev box that wants page builds
+    // sets this to its OWN origin.
+    page_origin : string = ""
     queue : BuildConfig = BuildConfig()
 }
 
@@ -521,6 +528,9 @@ def private build_status_payload(hash : string; toolchain : string) : string {
         return write_json(JV((state = st.state, error = st.error)))
     }
     if (st.state == BUILD_STATE_DONE) {
+        // page artifacts live on the run origin (separate from this one), so their
+        // urls go out absolute; module artifacts stay same-origin relative
+        let base = st.mode == BUILD_MODE_PAGE ? g_build.page_origin : ""
         var urls : array<JsonValue?>
         var jerr = ""
         var names = read_json(st.artifact_files, jerr)
@@ -528,10 +538,10 @@ def private build_status_payload(hash : string; toolchain : string) : string {
             urls |> reserve(length(names.value as _array))
             for (n in names.value as _array) {
                 let name : string = n ?? ""
-                urls |> push(JV("/api/build/artifact/{toolchain}/{hash}/{name}"))
+                urls |> push(JV("{base}/api/build/artifact/{toolchain}/{hash}/{name}"))
             }
         }
-        return write_json(JV((state = st.state, toolchain = toolchain, files = JV(urls))))
+        return write_json(JV((state = st.state, kind = st.mode, toolchain = toolchain, files = JV(urls))))
     }
     return write_json(JV((state = st.state)))   // building
 }
@@ -570,8 +580,24 @@ def private handle_build_request(var req : HttpRequest?; var resp : HttpResponse
         log_request("POST", "/api/build/request/:hash", 404, ip, 0, 0, t0)
         return resp |> JSON(write_json(JV((error = "unknown sample"))), http_status.NOT_FOUND)
     }
+    // An existing job keeps its mode (enqueue is idempotent), so only a job
+    // that does not exist yet is worth scanning the source for — this route is
+    // public and deliberately unlimited, and the scan walks every line of a
+    // document up to max_source_bytes.
+    let existing = build_status(g_db, hash, toolchain)
+    let mode = existing.found ? existing.mode : detect_build_mode(get_source(g_db, hash))
+    // Fail CLOSED. A page build's artifacts are attacker-authored html/js, and
+    // the only thing that keeps them off this origin is page_origin. Unset, the
+    // old behaviour was to build anyway and serve them from here — refuse
+    // instead, so a box deployed without the key produces no page at all.
+    if (mode == BUILD_MODE_PAGE && empty(g_build.page_origin)) {
+        logger_error("playground.build", "refusing page build: no page_origin configured",
+            JV((hash = hash, toolchain = toolchain)))
+        log_request("POST", "/api/build/request/:hash", 503, ip, 0, 0, t0)
+        return resp |> JSON(write_json(JV((error = "page builds are not available on this server"))), http_status.SERVICE_UNAVAILABLE)
+    }
     // no extra limiter by design: the queue plus baking time is the throttle
-    enqueue_build(g_db, hash, toolchain, BUILD_MODE_MODULE, current_unix_time())
+    enqueue_build(g_db, hash, toolchain, mode, current_unix_time())
     let body = build_status_payload(hash, toolchain)
     resp |> set_header("Cache-Control", "no-store")
     // the payload carries the stored compiler error, which is user-derived text
@@ -603,13 +629,31 @@ def private handle_build_status(var req : HttpRequest?; var resp : HttpResponse?
     return resp |> JSON(body, status)
 }
 
+def private page_origin_host : string {
+    //! Host half of page_origin ("https://run.daslang.io" -> "run.daslang.io").
+    let o = g_build.page_origin
+    let p = find(o, "://")
+    return p >= 0 ? slice(o, p + 3) : o
+}
+
 def private handle_build_artifact(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     let t0 = ref_time_ticks()
     let ip = client_ip_of(req)
+    let file = get_param(req, "file")
+    // A document artifact is attacker-authored content that becomes part of
+    // whatever origin serves it, so it answers ONLY on the dedicated page
+    // origin. Caddy routes accordingly; this does not take its word for it.
+    // With no page origin configured there is nowhere safe to serve one, so
+    // the answer is 404 rather than "then serve it from here" — same
+    // fail-closed rule the enqueue side applies.
+    if (is_document_artifact(file) && get_header(req, "Host") != page_origin_host()) {
+        log_request("GET", "/api/build/artifact", 404, ip, 0, 0, t0)
+        return resp |> JSON(write_json(JV((error = "page artifacts are served from the run origin"))), http_status.NOT_FOUND)
+    }
     // resolve_artifact_file revalidates every request-derived component; a path
     // is only ever built from parts that passed
     let path = resolve_artifact_file(g_build.blobs_dir,
-        get_param(req, "toolchain"), get_param(req, "hash"), get_param(req, "file"))
+        get_param(req, "toolchain"), get_param(req, "hash"), file)
     if (empty(path)) {
         log_request("GET", "/api/build/artifact", 404, ip, 0, 0, t0)
         return resp |> JSON(write_json(JV((error = "unknown artifact"))), http_status.NOT_FOUND)
@@ -618,6 +662,19 @@ def private handle_build_artifact(var req : HttpRequest?; var resp : HttpRespons
     // input, so nosniff rides along like it does on stored sources
     resp |> set_header("Cache-Control", "public, max-age=31536000, immutable")
     resp |> set_header("X-Content-Type-Options", "nosniff")
+    // CORP: the COEP'd playground embeds the run-origin page (and Safari fetches
+    // module wasm cross-origin never happen — module urls stay same-origin).
+    // COEP on the artifact itself: the page document must be require-corp for its
+    // agent cluster to cross-origin-isolate (threads), and a COEP'd document may
+    // only spawn workers whose script response ITSELF carries an enforcing COEP —
+    // so the js (and harmlessly the wasm) carry it too.
+    resp |> set_header("Cross-Origin-Resource-Policy", "cross-origin")
+    resp |> set_header("Cross-Origin-Embedder-Policy", "require-corp")
+    // COOP completes the isolation pair for a page opened DIRECTLY (top level):
+    // without it crossOriginIsolated stays false, SharedArrayBuffer is refused,
+    // and a -pthread program hangs forever on `loading-workers`. Ignored in a
+    // nested context, so it costs the embedded path nothing.
+    resp |> set_header("Cross-Origin-Opener-Policy", "same-origin")
     let rc = resp |> SERVE_FILE(path)
     log_request("GET", "/api/build/artifact", int(rc), ip, 0, artifact_size(path), t0)
     return rc

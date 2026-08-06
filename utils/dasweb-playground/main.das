@@ -71,6 +71,7 @@ def init {
         BuildOptions(
             token = g_cfg.build_token,
             blobs_dir = g_cfg.blobs_dir,
+            page_origin = g_cfg.page_origin,
             queue = BuildConfig(
                 claim_timeout_seconds = g_cfg.build_claim_timeout_seconds,
                 max_build_attempts = g_cfg.max_build_attempts)))

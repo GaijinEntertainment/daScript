@@ -20,6 +20,12 @@ require strings
 //! rather than caching something the pages cannot use.
 let ALLOWED_ARTIFACT_SUFFIXES = fixed_array(".wasm", ".js", ".html", ".data", ".css")
 
+//! The subset a browser renders or executes AS the origin that served it, so
+//! these may only answer on the dedicated page origin. Deliberately beside the
+//! list above: a new delivery suffix must be classified here in the same edit,
+//! or the origin gate silently would not cover it.
+let DOCUMENT_ARTIFACT_SUFFIXES = fixed_array(".html", ".js", ".css")
+
 struct ArtifactFile {
     name : string
     sha256 : string
@@ -52,13 +58,30 @@ def is_valid_artifact_hash(h : string) : bool {
     return is_lower_hex(h, 64, 64)
 }
 
-def private has_allowed_suffix(name : string) : bool {
+def private strip_br_sidecar(name : string) : string {
     // a .br sidecar is allowed only stacked on an allowed base name
-    var base = name
-    if (base |> ends_with(".br")) {
-        base = slice(base, 0, length(base) - 3)
+    if (name |> ends_with(".br")) {
+        return slice(name, 0, length(name) - 3)
     }
+    return name
+}
+
+def private has_allowed_suffix(name : string) : bool {
+    let base = strip_br_sidecar(name)
     for (suffix in ALLOWED_ARTIFACT_SUFFIXES) {
+        if (base |> ends_with(suffix)) {
+            return true
+        }
+    }
+    return false
+}
+
+def is_document_artifact(name : string) : bool {
+    //! Does serving this file put attacker-authored content INTO the serving
+    //! origin? The Host gate keys on this, so it strips a `.br` sidecar first —
+    //! `sample.html.br` is every bit as much a document as `sample.html`.
+    let base = strip_br_sidecar(name)
+    for (suffix in DOCUMENT_ARTIFACT_SUFFIXES) {
         if (base |> ends_with(suffix)) {
             return true
         }

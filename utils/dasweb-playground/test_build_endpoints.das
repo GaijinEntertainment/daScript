@@ -19,12 +19,17 @@ let TC = "abc1234def567890abc1234def567890abc12345"
 // POST /shutdown. Strings cross into the thread as separate locals — the
 // proven capture shape — and BuildOptions is assembled inside the thread.
 def private with_build_server(token : string; blobs_dir : string; blk : block<(base_url : string) : void>) {
+    with_page_build_server(token, blobs_dir, "", blk)
+}
+
+def private with_page_build_server(token : string; blobs_dir : string; page_origin : string; blk : block<(base_url : string) : void>) {
     with_job_status(1) $(finished) {
         let token_copy = token
         let blobs_copy = blobs_dir
+        let origin_copy = page_origin
         new_thread() @() {
             run_server(TEST_PORT, ":memory:", StorePolicy(), "https://test.example", "",
-                BuildOptions(token = token_copy, blobs_dir = blobs_copy))
+                BuildOptions(token = token_copy, blobs_dir = blobs_copy, page_origin = origin_copy))
             finished |> notify_and_release
         }
         let base_url = "http://127.0.0.1:{TEST_PORT}"
@@ -387,5 +392,137 @@ def test_build_failure_paths(t : T?) { // nolint:STYLE038 — sequential refusal
         }
     }
     remove(upload_src)
+    rmdir_rec(blobs)
+}
+
+def private upload_page_triple(base_url : string; hash : string; html_src, js_src, wasm_src : string; blk : block<(resp : HttpResponse?) : void>) {
+    with_http_request() $(var req) {
+        req.method = http_method.POST
+        req.url := "{base_url}/api/build/result"
+        set_header(req, "Authorization", "Bearer {TEST_TOKEN}")
+        set_form_data(req, "hash", hash)
+        set_form_data(req, "toolchain", TC)
+        set_form_data(req, "ok", "1")
+        set_form_data(req, "manifest", ("[" +
+            "\{\"name\":\"sample.html\",\"sha256\":\"{sha256_file_hex(html_src)}\"}," +
+            "\{\"name\":\"sample.js\",\"sha256\":\"{sha256_file_hex(js_src)}\"}," +
+            "\{\"name\":\"sample.wasm\",\"sha256\":\"{sha256_file_hex(wasm_src)}\"}]"))
+        set_form_file(req, "sample.html", html_src)
+        set_form_file(req, "sample.js", js_src)
+        set_form_file(req, "sample.wasm", wasm_src)
+        request(req) $(resp) {
+            invoke(blk, resp)
+        }
+    }
+}
+
+let GL_SOURCE = "require glfw/glfw_boost\nrequire opengl/opengl_boost\n[export]\ndef main \{\n\}\n"
+
+[test]
+def test_page_build_flow(t : T?) {
+    var err = ""
+    let blobs = create_temp_directory("dasweb_ep_blobs_", err)
+    let html_src = create_temp_file("dasweb_ep_page_", ".html", err)
+    let js_src = create_temp_file("dasweb_ep_page_", ".js", err)
+    let wasm_src = create_temp_file("dasweb_ep_page_", ".bin", err)
+    fwrite(html_src, "<html>page shell</html>")
+    fwrite(js_src, "// emscripten glue")
+    fwrite(wasm_src, "fake page wasm")
+    // page_origin == this harness's own host:port, so the Host header the das
+    // client sends is exactly the run origin — the gate's ALLOW side.
+    with_page_build_server(TEST_TOKEN, blobs, "http://127.0.0.1:{TEST_PORT}") $(base_url) {
+        authed_post("{base_url}/api/build/toolchain", TC, TEST_TOKEN) $(resp) {
+            assert(int(resp.status_code) == 200, "toolchain announced")
+        }
+        let hash = posted_hash(base_url, GL_SOURCE)
+        t |> run("a graphics sample enqueues as a page build") @(tt : T?) {
+            POST("{base_url}/api/build/request/{hash}", "") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+            }
+            authed_post("{base_url}/api/build/next", TC, TEST_TOKEN) $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+                var doc = json_of(resp)
+                tt |> equal(doc?["mode"] ?? "", "page")
+                tt |> equal(doc?["source"] ?? "", GL_SOURCE)
+            }
+        }
+        t |> run("the page triple lands and status reports kind=page with absolute urls") @(tt : T?) {
+            upload_page_triple(base_url, hash, html_src, js_src, wasm_src) $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+            }
+            GET("{base_url}/api/build/status/{hash}") $(resp) {
+                var doc = json_of(resp)
+                tt |> equal(doc?["state"] ?? "", "done")
+                tt |> equal(doc?["kind"] ?? "", "page")
+                let files = doc?["files"]
+                tt |> success(files != null && files.value is _array, "files array present")
+                let first : string = (files.value as _array)[0] ?? ""
+                tt |> equal(first, "http://127.0.0.1:{TEST_PORT}/api/build/artifact/{TC}/{hash}/sample.html")
+            }
+        }
+        t |> run("the page document serves with the isolation headers") @(tt : T?) {
+            GET("{base_url}/api/build/artifact/{TC}/{hash}/sample.html") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+                tt |> equal(string(resp.body), "<html>page shell</html>")
+                tt |> equal(get_header(resp, "Cross-Origin-Resource-Policy"), "cross-origin")
+                tt |> equal(get_header(resp, "Cross-Origin-Embedder-Policy"), "require-corp")
+                // COOP + COEP is what makes crossOriginIsolated true for a page
+                // opened directly; without it a -pthread program never gets its
+                // SharedArrayBuffer and hangs on `loading-workers`.
+                tt |> equal(get_header(resp, "Cross-Origin-Opener-Policy"), "same-origin")
+                tt |> equal(get_header(resp, "X-Content-Type-Options"), "nosniff")
+            }
+        }
+    }
+    // Same blobs, new server whose run origin is elsewhere: html/js must refuse
+    // on this Host (the gate does not trust Caddy's routing), wasm still serves.
+    with_page_build_server(TEST_TOKEN, blobs, "https://run.test.example") $(base_url) {
+        let hash = sha256_hex(GL_SOURCE)
+        t |> run("html and js artifacts answer only on the run origin's Host") @(tt : T?) {
+            GET("{base_url}/api/build/artifact/{TC}/{hash}/sample.html") $(resp) {
+                tt |> equal(int(resp.status_code), 404)
+            }
+            GET("{base_url}/api/build/artifact/{TC}/{hash}/sample.js") $(resp) {
+                tt |> equal(int(resp.status_code), 404)
+            }
+            GET("{base_url}/api/build/artifact/{TC}/{hash}/sample.wasm") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+            }
+        }
+    }
+    remove(html_src)
+    remove(js_src)
+    remove(wasm_src)
+    rmdir_rec(blobs)
+}
+
+[test]
+def test_page_build_refused_without_page_origin(t : T?) {
+    // Fail CLOSED: page artifacts are attacker-authored html/js, and page_origin
+    // is the only thing keeping them off this origin. A server without it must
+    // refuse the build outright rather than serve the result from here.
+    var err = ""
+    let blobs = create_temp_directory("dasweb_ep_blobs_", err)
+    with_build_server(TEST_TOKEN, blobs) $(base_url) {
+        authed_post("{base_url}/api/build/toolchain", TC, TEST_TOKEN) $(resp) {
+            assert(int(resp.status_code) == 200, "toolchain announced")
+        }
+        t |> run("a graphics sample is refused when no page origin is configured") @(tt : T?) {
+            let hash = posted_hash(base_url, GL_SOURCE)
+            POST("{base_url}/api/build/request/{hash}", "") $(resp) {
+                tt |> equal(int(resp.status_code), 503)
+            }
+            // and nothing was queued for it
+            GET("{base_url}/api/build/status/{hash}") $(resp) {
+                tt |> equal(int(resp.status_code), 404)
+            }
+        }
+        t |> run("a compute sample still builds normally") @(tt : T?) {
+            let hash = posted_hash(base_url, "require math\n[export]\ndef main \{\n\}\n")
+            POST("{base_url}/api/build/request/{hash}", "") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+            }
+        }
+    }
     rmdir_rec(blobs)
 }
