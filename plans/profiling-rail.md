@@ -76,12 +76,10 @@ readers' silent-default.
    Deliberate semantics deltas, now documented in ENVIRONMENT.md: set-but-empty is unset;
    garbage warns; presence-flags honor `=0`; in-process `set_env_variable` is invisible
    to the loaded config.
-5. **The sweep** — 392 raw clock-family sites (320 `ref_time_ticks`, 92 `get_time_usec`,
-   1 `get_time_nsec`) in `modules/dasLLAMA/dasllama/`. Execution plan below; the acceptance
-   instrument is AGGREGATE-ONLY — a single stopwatch pair is ~50–80 ns on the M1, 100x below
-   what any box resolves, so per-site A/Bs would be 392 readings of noise at ~40 min each.
-   Bench-harness stopwatches (lcpp_bench timing loops) stay — they ARE the measurement, not
-   instrumentation.
+5. **DONE — the sweep + the measurement night (2026-08-06, commit 86eadd98c).** Census,
+   execution, and measured verdicts below. Headline: off-tax 0.00%, disarmed rail 0.07%,
+   armed ≈0.7% — the zero-cost claim is MEASURED, and lcpp's 5–7% profiler tax is
+   embarrassed at every level.
 
 ### Phase 5 execution plan (the quiet-M1 night)
 
@@ -130,20 +128,38 @@ compile_check ×4 harnesses, lint ×12 files, kernels suite 4/4, image mechanics
 16 skipped, llama2c forward parity 10/10, plus a both-worlds decode_prof probe (off-rail =
 fast refusal, on-rail = armed buckets report).
 
-**Step 3 — the measurement night** (box handed over, caffeinate agent on, no user apps):
-1. Tune gate: Boris confirms (2026-08-06) `m1.tune.json` is NOT stale — no kernel work since
-   the mint. Do not re-mint; only revisit if the tune gate itself refuses at cell launch.
-2. Three arms, all coexisting in `.jitted_scripts` (distinct semantic hashes): **A** =
-   pre-sweep HEAD, **B-off** = post-sweep, **B-on** = post-sweep with `JOBQUE_PROFILING=1`.
-   Two benches: lcpp_bench (1B-class decode-heavy cell) + asr_bench. Cold-compile each arm
-   once (~10–20 min total), then interleave launches A, B-off, B-on, repeat ×3 — 18 cells,
-   strictly serial, one process on the box, complete logs kept, cv recorded per cell,
-   cv > 3% voids the cell and it reruns.
-3. Morning report: off-tax and on-tax with cv, per bench, against the predictions above —
-   misses are the payload.
+**Step 3 — the measurement night: RAN 2026-08-06, grid complete, no voids.**
 
-Budget: sweep is code time; the night is ~45 min compile + ~2 hrs of cells. Fits well inside
-one sleep.
+Tune-gate deviation, forced and handled: `bin/daslang` was rebuilt at 01:53 (the getConstExpr
+C++ fix), and a sidecar older than the binary reads as ABSENT by design — so the bench
+sidecars re-minted regardless of code changes (`m1.tune.json` itself was never touched).
+Protocol: pre-mint each bench sidecar ONCE on the quiet box, verify winners against the
+pre-rebuild lineage (lcpp: 27/31 identical + 3 exact twins + 1 real flip — `copy_floats`
+u4 +10.5%, a bandwidth kernel; asr: 5/5 identical), then FREEZE — all three arms share the
+one sidecar, shasum-verified after every cell. Tune-neutral by construction.
+
+Cells: Llama-3.2-1B Q8 CPU (lcpp_bench, p512 n128 r5, debug-jit flavor — relative A/B, not
+record-grade) + canary-qwen-2.5B on jfk3 (asr_bench, r4, rep-0 discarded, CPU prefill).
+Interleaved A → B-off → B-on ×3 per bench, strictly serial, arm A via git-checkout flips.
+17/18 cells cv ≤ 0.5%; worst 2.3%.
+
+**Results vs predictions:**
+- **Off-tax: 0.00% tg (82.71 → 82.71), pp and asr wall zero within ±0.25%.** Predicted
+  zero-within-noise — HIT; the "possibly 0.0–0.3% faster" tail did NOT materialize: the
+  deleted ~160 pairs/token (~10–25 µs) sit under the ±0.15% launch spread even on a quiet
+  box. The miss's payload: the always-on prof tax on the M1 was ALREADY unmeasurable — the
+  deletion's value is the guarantee-by-construction (and whatever a zen2-class box shows),
+  not a Mac speedup.
+- **On-tax, disarmed (rail compiled in, buckets not armed — the shipped-available state):
+  +0.07% tg — zero.** The 0.5–2% prediction mis-scoped this arm: bench cells never arm
+  buckets, and a disarmed rail's per-pair mechanism equals pre-sweep HEAD's, so ≈0 is
+  arithmetically forced.
+- **On-tax, armed (labeled approximate — one decode_prof 1B cell, armed by construction,
+  depth-8 window): 82.21 vs 82.77 t/s ≈ 0.7%** — inside the predicted 0.5–2% band, and the
+  bucket report itself stays outside timed windows in the benches by design. lcpp's 5–7%
+  profiler tax is embarrassed at both levels: ~0.07% to have profiling available, ~0.7%
+  fully armed.
+- cv ≤ 1.5% predicted: held (one 2.3% pp cell, one 2.4%-spread asr cell, both kept).
 6. **AMX-for-ASR audit (acceptance run)** — everything from #3562 carries: dasAccelerate,
    the float-batch override rail, the VECLIB pin + strip-dispatch, the `min_mmac` floor.
    Audit = which ASR encoder ops are float-plane GEMMs above the floor. ASR encoders are a
