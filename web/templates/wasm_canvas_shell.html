@@ -10,9 +10,16 @@
     display: flex; align-items: center; justify-content: center;
   }
   /* Letterbox, never stretch: the canvas keeps its intrinsic (game) aspect
-     ratio and scales to fit. Forcing width/height:100% would distort the
-     fixed-size backing store into the container shape — the "squished" look. */
-  #canvas { max-width: 100%; max-height: 100%; border: 0; outline: none; display: block; }
+     ratio and scales to fit. Forcing width/height:100% ALONE would distort the
+     fixed-size backing store into the container shape — the "squished" look;
+     object-fit is what keeps the aspect while allowing both directions.
+     max-width/max-height alone only ever scale DOWN, so a 640x480 program sat
+     at 640x480 in the middle of a larger frame — measured on a 906px-wide
+     playground frame, which is the "renders in the middle at 2/3" report. */
+  #canvas {
+    width: 100%; height: 100%; object-fit: contain;
+    border: 0; outline: none; display: block;
+  }
 </style>
 </head>
 <body>
