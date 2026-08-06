@@ -122,13 +122,13 @@ def vk_rdec_set_layer(l : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv,
         let qd = g_rd.qd
         let kvd = g_rd.kv_dim
         let hid = g_rd.hidden
-        let pq = arena_planes(fq)
-        let pk = arena_planes(fk)
-        let pv = arena_planes(fv)
-        let po = arena_planes(fo)
-        let p1 = arena_planes(f1)
-        let p3 = arena_planes(f3)
-        let p2 = arena_planes(f2)
+        let pq = arena_planes(fq, bq)
+        let pk = arena_planes(fk, bk)
+        let pv = arena_planes(fv, bv)
+        let po = arena_planes(fo, bo)
+        let p1 = arena_planes(f1, b1)
+        let p3 = arena_planes(f3, b3)
+        let p2 = arena_planes(f2, b2)
         // every role rides the class rail: params in push, per-token words in the shared TokMeta
         verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq() && ensure_q8_actrq_cls()
             && ensure_rope_kv_cls() && ensure_da_attn_cls()
@@ -152,8 +152,9 @@ def vk_rdec_set_layer(l : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv,
         L.s_v = gemv_cls_set(fv, fixed_array(pv.wq, pv.ws, L.m_v.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.kv_dev),
             fixed_array(pv.wqb, pv.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l),
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_KVV))
-        // same-format k/v share arena planes — one two-region dispatch fills both kv halves
-        L.kv_merged = fk == fv
+        // same-format k/v in the SAME slab share arena planes — one two-region dispatch fills both
+        // kv halves (a slab boundary between them falls back to the split sets)
+        L.kv_merged = fk == fv && arena_slab_idx(bk) == arena_slab_idx(bv)
         if (L.kv_merged) {
             L.s_kv = gemv_cls_set(fk, fixed_array(pk.wq, pk.ws, L.m_k.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.kv_dev),
                 fixed_array(pk.wqb, pk.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l),
@@ -256,10 +257,10 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int) {
         // (device for the same reason — every vocab-row subgroup reads it)
         g_rd.cls_regions_dev = make_device_buf(CLS_META_BYTES)
         var mp = reinterpret<uint?>(g_gpu.staging.mapped)
-        mp[0] = uint(cls_block)
+        mp[0] = uint(arena_local_blk(cls_block))
         mp[1] = 0u
         staged_upload(g_rd.cls_regions_dev, 0l, CLS_META_BYTES)
-        let pc = arena_planes(cls_fmt)
+        let pc = arena_planes(cls_fmt, cls_block)
         g_rd.cls_set = gemv_cls_set(cls_fmt, fixed_array(pc.wq, pc.ws, g_rd.cls_regions_dev, g_rd.xq_dev, g_rd.xs_dev, g_rd.logits_dev),
             fixed_array(pc.wqb, pc.wsb, CLS_META_BYTES, dim, (dim / 32l) * 4l, vocab * 4l),
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_LOG))

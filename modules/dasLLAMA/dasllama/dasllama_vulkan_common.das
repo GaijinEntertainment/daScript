@@ -423,10 +423,10 @@ struct GpuState {
     af_yb_dev : uint64        // up output plane
     af_yo_dev : uint64        // down output
     af_yo_host : HostBuf
-    af_gate_set : VkDescriptorSet
-    af_up_set : VkDescriptorSet
+    af_gate_sets : table<int; VkDescriptorSet>   // keyed by the blk's arena slab (bindings 0/1 move)
+    af_up_sets : table<int; VkDescriptorSet>
     af_actrq_set : VkDescriptorSet
-    af_down_set : VkDescriptorSet
+    af_down_sets : table<int; VkDescriptorSet>
     af_ready : bool
     // rope+KV-store state: qkv in, roped q out, K/V planes = one contiguous device KV scratch
     rks_qkv_dev : uint64
@@ -1456,6 +1456,21 @@ def vk_moe_drop_stacks(n : int; stream : bool) {
     }
 }
 
+// ArenaFmt owns das-heap containers (the slab array + per-slab set caches) — free them before
+// the table clear, which alone would leak them; the VK objects die in the bulk sweeps
+def private arena_drop_shells {
+    for (a in values(g_gpu.arenas)) {
+        delete a.slabs
+        a.cls_sets |> clear()          // set handles are pool-owned — clear drops them untouched
+        a.cls_batch_sets |> clear()
+        unsafe {
+            delete a.cls_sets          // empty now: frees the bucket storage only
+            delete a.cls_batch_sets
+        }
+    }
+    g_gpu.arenas |> clear()
+}
+
 //! MoeGpuDropModelFn: destroy every model-owned device object — stacks, arenas, the resident
 //! driver, all lazy dispatch state, their descriptor sets and command buffers. Device-lifetime
 //! state (instance/device/pipelines/staging/fence/profiler) survives and rebuilds lazily.
@@ -1467,7 +1482,7 @@ def vk_drop_model_state {
         // dry bake owns no device objects — reset the accounting shells only
         g_gpu.stacks |> clear()
         g_gpu.stream_stacks |> clear()
-        g_gpu.arenas |> clear()
+        arena_drop_shells()
         g_gpu.resident_bytes = 0l
         return
     }
@@ -1532,7 +1547,10 @@ def vk_drop_model_state {
     g_gpu.stacks |> clear()
     delete g_gpu.stream_stacks
     delete g_gpu.stream_slots
-    g_gpu.arenas |> clear()
+    arena_drop_shells()
+    g_gpu.af_gate_sets |> clear()
+    g_gpu.af_up_sets |> clear()
+    g_gpu.af_down_sets |> clear()
     g_gpu.ffn_cmds |> clear()
     g_gpu.qkv_cmds |> clear()
     g_gpu.dnd_steps |> clear()
@@ -1596,18 +1614,28 @@ def find_stack(w0 : int64; fmt : int; who : string) : int {
 // One buffer pair per FORMAT (kernels index both planes off ONE base, so a shared cursor only stays
 // aligned at a constant stride); tensors by block index. Sub-allocation, not a hardware-limit dodge.
 
+// one slab of a format's arena: a device plane pair holding a contiguous run of blocks. Slabs
+// exist because maxStorageBufferRange caps a single binding (4GiB on NV/AMD, tighter on MoltenVK)
+// while a big dense model's per-format weights don't — tensors never straddle a slab.
+struct ArenaSlab {
+    wqbuf : uint64           // device-local quants (0 when dry)
+    wsbuf : uint64           // ... and their scale rows, at the SAME local block index
+    wqbytes : int64          // descriptor ranges
+    wsbytes : int64
+    cap : int64              // block capacity
+    used : int64             // blocks placed (the slab's bump cursor)
+}
+
 struct ArenaFmt {
     fmt : int                // int(KqFmt): 0 = q8, 1/2/3 = k4/k5/k6, 4 = q40
-    wqbuf : uint64           // device-local quants for every tensor of this format
-    wsbuf : uint64           // ... and their scale rows, at the SAME block index
-    wqbytes : int64
-    wsbytes : int64
-    blocks : int64           // bump cursor: 32-weight blocks (q8) or 256-weight superblocks (kq)
+    slabs : array<ArenaSlab>
+    cur : int                // slab the bump cursor is in
+    slab_cap : int64         // max blocks one slab may carry (msr over both plane strides)
+    blocks : int64           // content blocks placed across all slabs (padding tails excluded)
     cap_blocks : int64
-    // dispatch scratch — the class GEMV set builds lazily in the prefill module (the classes
-    // module cannot be required from here); dies with the arena on model drop
-    cls_set : VkDescriptorSet
-    cls_ready : bool
+    // dispatch scratch — the class GEMV sets build lazily in the prefill module (the classes
+    // module cannot be required from here), one per slab; die with the arena on model drop
+    cls_sets : table<int; VkDescriptorSet>
     meta : HostBuf              // class-layout region pairs (GEMV) staging
     xq : HostBuf
     xs : HostBuf
@@ -1617,10 +1645,16 @@ struct ArenaFmt {
     // batch-GEMM scratch (prefill): shares g_gpu.batch_xq_dev/xs_dev/y1_dev
     batch_meta : HostBuf
     batch_ready : bool
-    // class-rail batch sets, one per router variant (built lazily by prefill; die with the arena)
-    cls_batch_sets : VkDescriptorSet[6]
-    cls_batch_ready : uint   // variant bitmask
+    // class-rail batch sets, keyed slab * 8 + router variant (built lazily by prefill)
+    cls_batch_sets : table<int; VkDescriptorSet>
 }
+
+//! The arena's block-index encoding: `arena_place` returns ``(slab << 32) | local``. The local
+//! half rides the kernel meta (regions/schedules), the slab half picks the bound plane pair;
+//! -1 stays the failure sentinel, and single-slab arenas return plain local indices.
+def arena_slab_idx(blk : int64) : int => int(blk >> 32l)
+
+def arena_local_blk(blk : int64) : int64 => blk & ((1l << 32l) - 1l)
 
 // per-block plane strides — the block is 32 weights for q8 and a 256-weight superblock for kq.
 // Mirrors stack_plane_bytes: it computes the same totals as count * these strides.
@@ -1662,34 +1696,70 @@ def arena_blocks_for(n, rows : int64; fmt : int) : int64 {
     return rows * (n / (vk_fmt_b32(fmt) ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS))
 }
 
+var private g_arena_slab_override = 0l
+
+//! TEST SEAM: force a tiny per-slab block capacity so the multi-slab path exercises without an
+//! over-msr model. 0 restores the device-derived cap. Affects arenas reserved AFTER the call.
+def vk_arena_test_slab_cap(blocks : int64) {
+    g_arena_slab_override = blocks
+}
+
+// per-slab block capacity: maxStorageBufferRange is the real ceiling (uint32 indexing reaches
+// 16GiB); NV/AMD report 4GiB, MoltenVK tighter — both plane strides must fit their binding
+def private arena_slab_blocks(fmt : int) : int64 {
+    if (g_arena_slab_override > 0l) {
+        return g_arena_slab_override
+    }
+    let bb = arena_block_bytes(fmt)
+    var cap = g_gpu.msr / bb.wq
+    if (bb.ws > 0l) {
+        cap = min(cap, g_gpu.msr / bb.ws)
+    }
+    return cap
+}
+
+// open the next slab, sized to what the content still needs (the last slab is usually partial).
+// The sealed slab's tail goes unused — bounded by the tensor that crossed, and said out loud.
+def private arena_open_slab(var a : ArenaFmt) {
+    let bb = arena_block_bytes(a.fmt)
+    let cap = min(a.slab_cap, a.cap_blocks - a.blocks)
+    if (!empty(a.slabs)) {
+        let tail = a.slabs[length(a.slabs) - 1].cap - a.slabs[length(a.slabs) - 1].used
+        to_log(LOG_INFO, "dasLLAMA vulkan arena: fmt {a.fmt} slab {length(a.slabs)} opens ({cap} blocks; {tail} tail blocks unused in slab {length(a.slabs) - 1})\n")
+    }
+    let qb = cap * bb.wq
+    // q8n has no scale plane — floor the ws buffer so its descriptor slots stay valid (stack-shell rule)
+    let sb = max(cap * bb.ws, 64l)
+    a.slabs |> push(ArenaSlab(cap = cap, wqbytes = qb, wsbytes = sb,
+        wqbuf = g_gpu.dry ? 0ul : make_device_buf(qb), wsbuf = g_gpu.dry ? 0ul : make_device_buf(sb)))
+}
+
 // Reserve one format's arena up front. Sizing is a decision, not a walk: the resident driver knows
 // every tensor's shape from Model metadata before a byte moves, so it either fits or declines.
+// Slabs open lazily at placement — reserve only fixes the content cap and the per-slab ceiling.
 def arena_reserve(fmt : int; cap_blocks : int64) : bool {
     if (key_exists(g_gpu.arenas, fmt)) {
-        // model reload: reset the bump cursor so it overwrites; an oversized reload then trips arena_place's -1 (decline to CPU) rather than overflowing
+        // model reload: reset the cursors so placement overwrites; an oversized reload then trips
+        // arena_place's -1 (decline to CPU) rather than overflowing
         unsafe {
-            g_gpu.arenas[fmt].blocks = 0l
+            var a & = g_gpu.arenas[fmt]
+            a.blocks = 0l
+            a.cur = 0
+            for (s in a.slabs) {
+                s.used = 0l
+            }
         }
         return true
     }
-    let bb = arena_block_bytes(fmt)
-    let qbytes = cap_blocks * bb.wq
-    // q8n has no scale plane — floor the ws buffer so its descriptor slots stay valid (stack-shell rule)
-    let sbytes = max(cap_blocks * bb.ws, 64l)
-    // maxStorageBufferRange is the real ceiling (uint32 indexing reaches 16GiB); NV/AMD report 4GiB
-    let shard_cap = g_gpu.msr
-    if (qbytes > shard_cap || sbytes > shard_cap) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan arena: fmt {fmt} needs {qbytes} quant + {sbytes} scale bytes — over the device's {shard_cap}B storage-range cap\n")
-        return false
+    unsafe {
+        g_gpu.arenas[fmt] <- ArenaFmt(fmt = fmt, cap_blocks = cap_blocks, slab_cap = arena_slab_blocks(fmt))
     }
-    var a = ArenaFmt(fmt = fmt, cap_blocks = cap_blocks, wqbytes = qbytes, wsbytes = sbytes,
-                     wqbuf = g_gpu.dry ? 0ul : make_device_buf(qbytes), wsbuf = g_gpu.dry ? 0ul : make_device_buf(sbytes))
-    g_gpu.arenas |> insert(fmt, a)
     return true
 }
 
-//! Place one [rows x n] tensor in its format's arena and upload it. Returns the BLOCK INDEX the
-//! meta needs (mp[4 + row*2] = block + row * blocks_per_row), or -1 if the arena is exhausted.
+//! Place one [rows x n] tensor in its format's arena and upload it. Returns the encoded block
+//! index the meta needs (see `arena_slab_idx`; regions carry the LOCAL half), or -1 if the arena
+//! is exhausted or one tensor exceeds a whole slab.
 def arena_place(wq : uint8 const?; ws : uint8 const?; n, rows : int64; fmt : int) : int64 {
     if (!key_exists(g_gpu.arenas, fmt)) {
         return -1l
@@ -1700,16 +1770,30 @@ def arena_place(wq : uint8 const?; ws : uint8 const?; n, rows : int64; fmt : int
         if (a.blocks + need > a.cap_blocks) {
             return -1l
         }
-        let blk = a.blocks
+        if (need > a.slab_cap) {
+            to_log(LOG_WARNING, "dasLLAMA vulkan arena: a single {need}-block tensor exceeds the {a.slab_cap}-block slab cap (fmt {fmt}) — unservable on this device\n")
+            return -1l
+        }
+        // a tensor never straddles slabs: walk to one with room (reload replays existing slabs),
+        // opening a fresh one past the end
+        while (a.cur < length(a.slabs) && a.slabs[a.cur].used + need > a.slabs[a.cur].cap) {
+            a.cur++
+        }
+        if (a.cur >= length(a.slabs)) {
+            arena_open_slab(a)
+        }
+        var s & = a.slabs[a.cur]
+        let blk = s.used
+        s.used += need
         a.blocks += need
         let bb = arena_block_bytes(fmt)
         if (!g_gpu.dry) {
-            upload_region_at(a.wqbuf, blk * bb.wq, wq, need * bb.wq)
+            upload_region_at(s.wqbuf, blk * bb.wq, wq, need * bb.wq)
             if (bb.ws > 0l) {
-                upload_region_at(a.wsbuf, blk * bb.ws, ws, need * bb.ws)
+                upload_region_at(s.wsbuf, blk * bb.ws, ws, need * bb.ws)
             }
         }
-        return blk
+        return int64(a.cur) << 32l | blk
     }
 }
 
@@ -1877,11 +1961,13 @@ var g_rd : RDec?
 // a small host-visible meta buffer (uint words), contents filled per token during recording
 def rd_meta() : HostBuf => make_host_buf(META_BYTES, true)
 
-// one arena's plane handles + sizes in ONE table lookup (das rejects two lookups in one expr)
-def arena_planes(fmt : int) : tuple<wq : uint64; ws : uint64; wqb : int64; wsb : int64> {
+// one slab's plane handles + descriptor ranges in ONE table lookup — the slab rides the encoded
+// block index's high bits (das rejects two lookups in one expr)
+def arena_planes(fmt : int; blk : int64) : tuple<wq : uint64; ws : uint64; wqb : int64; wsb : int64> {
     unsafe {
         var a & = g_gpu.arenas[fmt]
-        return (wq = a.wqbuf, ws = a.wsbuf, wqb = a.wqbytes, wsb = a.wsbytes)
+        let s & = a.slabs[arena_slab_idx(blk)]
+        return (wq = s.wqbuf, ws = s.wsbuf, wqb = s.wqbytes, wsb = s.wsbytes)
     }
 }
 
@@ -1889,18 +1975,19 @@ def arena_planes(fmt : int) : tuple<wq : uint64; ws : uint64; wqb : int64; wsb :
 def fill_gemv_regions(hb : HostBuf; blk : int64) {
     unsafe {
         var mp = reinterpret<uint?>(hb.mapped)
-        mp[0] = uint(blk)
+        mp[0] = uint(arena_local_blk(blk))
         mp[1] = 0u
     }
 }
 
-// two-region form: regions land contiguously in y at ybase, ybase+d (the r*d+row rule)
+// two-region form: regions land contiguously in y at ybase, ybase+d (the r*d+row rule).
+// Both blocks must live in ONE slab (one set binds one plane pair) — the caller guards.
 def fill_gemv_regions2(hb : HostBuf; blk_a, blk_b : int64) {
     unsafe {
         var mp = reinterpret<uint?>(hb.mapped)
-        mp[0] = uint(blk_a)
+        mp[0] = uint(arena_local_blk(blk_a))
         mp[1] = 0u
-        mp[2] = uint(blk_b)
+        mp[2] = uint(arena_local_blk(blk_b))
         mp[3] = 0u
     }
 }

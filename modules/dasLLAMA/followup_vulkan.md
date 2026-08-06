@@ -112,18 +112,18 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    GGML_VK_DISABLE_COOPMAT / GGML_VK_DISABLE_COOPMAT2-style envs (verify names/behavior on
    their current master); if they hold, every tier gets an apples-to-apples baseline.
 
-12. **Arena slabs — the 4 GiB storage-range ceiling (IN-ARC follow-up commit, AFTER the
-   family sweep — Boris ruling 2026-08-06: this gates the class-kernels PR because it is the
-   MAIN FACTOR for MoltenVK/M1 enablement, where maxStorageBufferRange is far tighter than
-   4 GiB; a desktop-only fix would leave Mac unservable).** Walkthrough evidence:
-   Llama-3.1-8B Q8's fmt-0 arena wants 7.5 GB against the device's 4294967295B
-   maxStorageBufferRange — honest fail-closed decline ("arena reserve failed"), per-op
-   fallback serves tg 7.2 vs llama.cpp's 49.8 (they shard buffers automatically). Fix shape:
-   split each ArenaFmt into <= min(maxStorageBufferRange, budget) slabs; the block cursor
-   maps to a slab in find_stack/make_stack_shell; each stack's set binds its own slab —
-   kernels unchanged (stacks already address block-relative within their binding). Sweep
-   consequence until it lands: dense models above ~4.3 GB same-format weights measure on the
-   per-op fallback only — the walkthrough sticks to < 4 GB models.
+12. **Arena slabs — the 4 GiB storage-range ceiling (LANDED in-arc 2026-08-06; was the
+   PR gate — the MAIN FACTOR for MoltenVK/M1 enablement, where maxStorageBufferRange is far
+   tighter than 4 GiB).** Walkthrough evidence that motivated it: Llama-3.1-8B Q8's fmt-0
+   arena wants 7.5 GB against the device's 4294967295B maxStorageBufferRange — honest
+   fail-closed decline, per-op fallback served tg 7.2 vs llama.cpp's 49.8. As built: each
+   ArenaFmt carries lazily-opened slabs capped at msr-derived blocks (both plane strides);
+   `arena_place` returns `(slab << 32) | local` so the encoding rides every existing seam
+   unchanged; `arena_planes(fmt, blk)` binds the tensor's slab; region/schedule metas carry
+   the local half; merged k/v splits at a slab boundary; per-call arena seams cache sets per
+   slab; a single tensor over one slab declines. Multi-slab correctness gated by
+   `test_vulkan_arena_slabs` (forced tiny slab cap). The 8B resident row itself is still
+   unmeasured — first row of the post-slab re-measure.
 
 13. **qwen2 bias arm — the cheapest family unlock (after-sweep follow-up commit, ruled
    2026-08-06: "unsupported family, easy to support").** The resident gate declines

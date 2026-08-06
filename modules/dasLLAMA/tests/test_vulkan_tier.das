@@ -2846,7 +2846,8 @@ def test_vulkan_arena(t : T?) {
 // arenas, lazy dispatch families, their descriptor sets and command buffers — while the device
 // survives. Two full cycles re-upload the SAME offsets with DIFFERENT content: a stale stack
 // registry or arena would resolve the old plane and fail the cycle's own reference. Declared
-// LAST in the file on purpose: the drop nukes every stack earlier tests uploaded.
+// after every stack-serving test on purpose: the drop nukes every stack earlier tests uploaded
+// (the slab test below shares that property).
 let DMWOFF = 50000000l
 let DMROWS = 64l
 
@@ -2947,6 +2948,87 @@ def test_vulkan_drop_model(t : T?) {
             }
         } else {
             feint("dasVulkan not installed; whole-model drop untestable here\n")
+        }
+    }
+}
+
+// The arena's slab split: maxStorageBufferRange caps one binding, so a format's arena carries
+// multiple plane pairs and the encoded block index picks the slab (tensors never straddle a
+// boundary). A forced tiny slab cap stands in for an over-4GiB dense model (the 8B-class
+// shape). Drops the whole model state first for a FRESH arena — the reserve must not reuse a
+// default-cap one — so it sits with the drop test, after every stack-serving test.
+[test]
+def test_vulkan_arena_slabs(t : T?) {
+    t |> run("vulkan arena slabs — placement crosses the slab boundary, both slabs serve gemv") @(tt : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            let SROWS = 64l
+            let SBLK = SROWS * (N / 32l)   // blocks one [SROWS x N] q8 tensor occupies
+            moe_gpu_drop_model_state()
+            vk_arena_test_slab_cap(SBLK * 5l / 2l)   // 2.5 tensors per slab: the third place crosses
+            {
+                if (!vk_arena_reserve(0, 4l * SBLK)) {
+                    feint("no Vulkan device (or the arena reserve was refused); skipping\n")
+                    return
+                }
+                var blks : array<int64>
+                for (arm in range64(3l)) {
+                    var wq : array<int8>
+                    var ws : array<float>
+                    fill_stack(wq, ws, SROWS, N, 7l + arm * 29l, false)
+                    var pq : array<uint8>
+                    var ps : array<uint8>
+                    pack_upload(wq, ws, pq, ps)
+                    blks |> push(vk_arena_place(pq, ps, N, SROWS, 0))
+                    delete wq
+                    delete ws
+                    delete pq
+                    delete ps
+                }
+                // A and B pack into slab 0 (B at a nonzero local base); C crosses into slab 1 at local 0
+                tt |> equal(0l, blks[0], "tensor A at slab 0, local 0")
+                tt |> equal(SBLK, blks[1], "tensor B at slab 0, local {SBLK}")
+                tt |> equal(1l << 32l, blks[2], "tensor C crosses into slab 1, local 0")
+                var xq : array<int8>
+                var xs : array<float>
+                fill_acts(xq, xs, 1l)
+                let nb = int(N / 32l)
+                for (arm in range(3)) {
+                    var wq : array<int8>
+                    var ws : array<float>
+                    fill_stack(wq, ws, SROWS, N, 7l + int64(arm) * 29l, false)   // same seed => same content
+                    var y : array<float>
+                    y |> resize(int(SROWS))
+                    vk_arena_gemv(y, blks[arm], N, SROWS, 0, xq, xs)
+                    var refy : array<float>
+                    refy |> resize(int(SROWS))
+                    for (c in range(int(SROWS))) {
+                        var acc = 0.0lf
+                        for (b in range(nb)) {
+                            var id = 0
+                            for (k in range(32)) {
+                                id += int(xq[b * 32 + k]) * int(wq[c * int(N) + b * 32 + k])
+                            }
+                            acc += double(ws[c * nb + b]) * double(xs[b]) * double(id)
+                        }
+                        refy[c] = float(acc)
+                    }
+                    let cc = compare_gout(y, refy)
+                    tt |> success(cc.maxdiff <= float(REL_TOL) * cc.maxref,
+                        "slab tensor {arm} within tolerance (maxdiff {cc.maxdiff} vs {float(REL_TOL) * cc.maxref} bar)")
+                    delete wq
+                    delete ws
+                    delete y
+                    delete refy
+                }
+                delete blks
+                delete xq
+                delete xs
+            } finally {
+                vk_arena_test_slab_cap(0l)   // later reserves must not inherit the tiny cap
+                moe_gpu_drop_model_state()   // nor the tiny-slab arena itself
+            }
+        } else {
+            feint("dasVulkan not installed; arena slabs untestable here\n")
         }
     }
 }
