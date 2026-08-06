@@ -220,7 +220,6 @@ struct VkStack {
     wsbytes : int64
     // decode/GEMV dispatch state (lazy — first GEMV or cls use creates it; dense-GEMM stacks
     // never do, saving ~2.3MB host + 1MB device per stack across the ~130 dense planes)
-    raw_set : VkDescriptorSet   // this stack's 6 bindings, written on first GEMV use
     meta : HostBuf
     xq : HostBuf
     xs : HostBuf
@@ -248,7 +247,7 @@ struct VkStack {
     batch_cls_sets : VkDescriptorSet[8]
     batch_cls_ready : uint
     // decode class-GEMV set over the stack's own planes/meta/scratch (lazy; role bits are
-    // re-declared per chain via hz_set_bits — the raw_set role-fluid pattern)
+    // role-fluid — re-declared per chain via hz_set_bits before each record)
     gemv_cls_set : VkDescriptorSet
     gemv_cls_made : bool
     // classifier dispatch state (lazy — set up on the first cls GEMV against this stack)
@@ -1173,11 +1172,6 @@ def ensure_gemv_scratch(si : int) {
     g_gpu.stacks[si].xs = make_host_buf(XS_BYTES, true)
     g_gpu.stacks[si].y = make_host_buf(Y_BYTES, false, [cached = true])
     g_gpu.stacks[si].y_dev = make_device_buf(Y_BYTES)
-    // default y role; role-fluid chains (gate/up pair, qkv group, dn step) re-declare before recording
-    g_gpu.stacks[si].raw_set = vk_set6(g_gpu.stacks[si].wqbuf, g_gpu.stacks[si].wsbuf,
-        g_gpu.stacks[si].meta.buf, g_gpu.stacks[si].xq.buf, g_gpu.stacks[si].xs.buf, g_gpu.stacks[si].y_dev,
-        g_gpu.stacks[si].wqbytes, ws_range(si), META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES,
-        fixed_array(0u, 0u, 0u, 0u, 0u, VHG_Y1))
     g_gpu.stacks[si].gemv_made = true
 }
 
@@ -1893,7 +1887,6 @@ def fill_qkn_rope_meta(hb : HostBuf; l : int64) {
     }
 }
 
-def rd_gemv_wg(rows : int64) : uint => uint((rows + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg)
 
 // ===== GPU per-dispatch profiler (DASLLAMA_GPU_PROF=1) =====
 // BOTTOM_OF_PIPE stamps; results ride a same-submit copy, no extra fence. Overlapped hazard
@@ -2362,11 +2355,6 @@ def vhz_dep(raw : VkCommandBuffer; var h : VkHaz; rmask, wmask : uint; transfer 
 def rd_dispatch(raw : VkCommandBuffer; pipe : Pipeline; var set : VkDescriptorSet; groups : uint; var h : VkHaz) {
     hz_dispatch(raw, h, pipe, set, groups)
     pfq_ts(raw)
-}
-
-// GEMV dispatch — the per-format kernel selected off the plane format
-def rd_dispatch_gemv(raw : VkCommandBuffer; fmt : int; var set : VkDescriptorSet; groups : uint; var h : VkHaz) {
-    rd_dispatch(raw, gemv_pipe(fmt), set, groups, h)
 }
 
 // One-shot command buffers (the KV readback rails) are freed by their caller — registering them

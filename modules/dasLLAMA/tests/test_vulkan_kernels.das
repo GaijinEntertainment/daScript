@@ -11,7 +11,7 @@ require ?vulkan dasllama/dasllama_vulkan_common
 require ?vulkan dasllama/dasllama_vulkan_classes
 require ?vulkan dasllama/dasllama_vulkan_seams
 require ?vulkan dasllama/dasllama_kqformat
-require daslib/shader_lingua_franca   // gl_GlobalInvocationID — the CPU replay drives it per lane
+require ?vulkan daslib/shader_lingua_franca   // gl_GlobalInvocationID — the CPU replay drives it per lane (only vulkan-guarded arms replay)
 
 // The model-less Vulkan kernel-unit suite ([vk_dispatch] bring-up): a class kernel dispatched
 // through the GENERATED surface (ensure/set/enc — per-class layout, push constants, hazard rail)
@@ -1560,30 +1560,6 @@ def test_vkd_cm2_batch(t0 : T?) {
             feint("dasVulkan not present — skipping\n")
         }
     }
-}
-
-def private cm_pipe_for_test(v : int) : Pipeline {
-    if (v == 0) {
-        return weak_copy(g_gpu.batch_coopmat_f16)
-    } elif (v == 1) {
-        return weak_copy(g_gpu.batch_coopmat_i8)
-    } elif (v == 2) {
-        return weak_copy(g_gpu.batch_coopmat_mm)
-    } elif (v == 3) {
-        return weak_copy(g_gpu.batch_coopmat_mm_a)
-    }
-    return weak_copy(g_gpu.batch_coopmat_mm_m)
-}
-
-def private gemv_pipe_batch_for_test(fmt : int) : Pipeline {
-    if (fmt == int(KqFmt.k4)) {
-        return weak_copy(g_gpu.batch_k4)
-    } elif (fmt == int(KqFmt.k5)) {
-        return weak_copy(g_gpu.batch_k5)
-    } elif (fmt == int(KqFmt.k6)) {
-        return weak_copy(g_gpu.batch_k6)
-    }
-    return weak_copy(g_gpu.batch_q40)
 }
 
 [test]
