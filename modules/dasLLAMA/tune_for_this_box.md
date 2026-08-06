@@ -118,7 +118,7 @@ stale — every reader treats it as absent, and the next tuner write resets it.
 ```
 bin/daslang -jit modules/dasLLAMA/harness/tune_kernels.das
 
-# paranoid: 3x the finalist budget, 1% noise-gate ceiling, tighter validation
+# paranoid: 3x the finalist budget, 1% noise-gate ceiling, tighter drift note
 bin/daslang -jit modules/dasLLAMA/harness/tune_kernels.das -- --tune-paranoid
 
 # full generator + kernel scope (also available as `daspkg release [--paranoid]`)
@@ -140,8 +140,9 @@ MEDIAN of their finalist rounds (best-of prints alongside), a winner must beat t
 fallback by more than the measured noise floor, and ties inside the floor break
 deterministically (baseline first, then grid order). Noise gates probe the box at
 start/mid/end — a failing gate refuses to tune, and a failing end gate writes nothing. After
-the sweep, a five-kernel subset re-races twice and the winners must reproduce or the mint
-fails. The measurement thread is hard-pinned by its child-process JobQue (QoS-pinned on
+the sweep, a five-kernel subset re-races twice; a winner fails the mint only when a re-race
+rejects it or the SAME challenger beats it past the band in both windows (level drift is
+stamped, never failed). The measurement thread is hard-pinned by its child-process JobQue (QoS-pinned on
 macOS, which has no core masks) and is automatically unpinned when that tuner child exits.
 Each round runs 2000 reps at N=4096. The correctness
 gate per variant (f64 reference; EXACT

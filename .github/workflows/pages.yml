@@ -65,12 +65,19 @@ jobs:
     # cached binaries/archives are reused, so docs redeploy without rebuilding
     # the runtime, games, or compute samples. Any source change to the runtime,
     # modules, daslib, daspkg, or the example sources misses the key → full rebuild.
+    # `lib` is cached with `bin` and must stay that way: bin/daslang links
+    # against lib/liblibDaScriptDyn*.so, and a hit SKIPS the host build below,
+    # so restoring the exe alone yields a binary that cannot start at all
+    # ("error while loading shared libraries"). That combination only occurs on
+    # a site-only merge — anything touching src/modules/daslib misses the key
+    # and rebuilds — which is why it stayed hidden until the first one landed.
     - name: "Cache wasm build artifacts"
       id: wasm-cache
       uses: actions/cache@v4
       with:
         path: |
           bin
+          lib
           modules/dasGlfw/dasModuleGlfw.shared_module
           modules/dasOpenGL/dasModuleOpenGL.shared_module
           modules/dasClipboard/dasModuleClipboard.shared_module

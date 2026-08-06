@@ -102,15 +102,20 @@
 <script type="text/javascript" src="../files/cm/daslang-keywords.js"></script>
 <script type="text/javascript" src="../files/cm/daslang-mode.js"></script>
 <script type="text/javascript" src="../files/lz-string.min.js"></script>
+<!-- The ?v= on each script is a cache key, not decoration: BUMP IT IN THE SAME
+     COMMIT that changes the file. Nothing here is content-hashed, so an
+     unchanged URL lets a returning visitor keep running the old script against
+     a new backend — which is how a page-mode build once came back to a runner
+     that had never heard of it and tried to fetch the page as a module. -->
 <script type="text/javascript" src="./playground-init.js"></script>
 <!-- Owns run-frame.html (one frame per program). Must precede main.js, whose
      pageInit hands it the run host and whose run path delegates to it. -->
-<script type="text/javascript" src="./playground-runner.js?v=1"></script>
+<script type="text/javascript" src="./playground-runner.js?v=2"></script>
 <!-- Compiles the editor's code on the build service for the wasm engine.
      Reads its payload from playground-share.js, so both agree on one hash. -->
-<script type="text/javascript" src="./playground-wasm.js?v=1"></script>
-<script type="text/javascript" src="./main.js"></script>
-<script type="text/javascript" src="./playground-tabs.js?v=2"></script>
+<script type="text/javascript" src="./playground-wasm.js?v=2"></script>
+<script type="text/javascript" src="./main.js?v=3"></script>
+<script type="text/javascript" src="./playground-tabs.js?v=3"></script>
 <script type="text/javascript" src="./playground-share.js?v=3"></script>
 <script type="text/javascript" src="./playground-splitter.js?v=3"></script>
 

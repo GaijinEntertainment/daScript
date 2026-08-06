@@ -130,7 +130,18 @@ pageInit = function () {
          });
 
          function applyInitialSelection() {
-             if (window.pgRestoredFromState || editorHasContent()) return;
+             if (window.pgRestoredFromState || editorHasContent()) {
+                 // A restored buffer (autosave, share link, Back) never went
+                 // through selectSample, so its asset manifest was never
+                 // derived. Adopt the one saved beside the buffer — otherwise
+                 // every asset-loading sample runs against an empty MEMFS and
+                 // panics on the first file it opens, but only on a return
+                 // visit, which reads as a random failure.
+                 if (window.pgRestoredAssetsUrl) {
+                     currentAssetsUrl = window.pgRestoredAssetsUrl;
+                 }
+                 return;
+             }
              const params = new URLSearchParams(window.location.search);
              const wanted = params.get("example");
              if (wanted) {
@@ -293,7 +304,17 @@ function showCanvas(show) {
 // separate, cookie-less run origin is the isolation boundary. The allow list
 // delegates cross-origin isolation so -pthread programs get SharedArrayBuffer.
 var pageFrame = null;
+var pageFrameFit = null;
+var pageFrameMsg = null;
 function destroyPageFrame() {
+    if (pageFrameFit) {
+        window.removeEventListener('resize', pageFrameFit);
+        pageFrameFit = null;
+    }
+    if (pageFrameMsg) {
+        window.removeEventListener('message', pageFrameMsg);
+        pageFrameMsg = null;
+    }
     if (pageFrame && pageFrame.parentNode) pageFrame.parentNode.removeChild(pageFrame);
     pageFrame = null;
 }
@@ -312,11 +333,35 @@ function runWasmPage(files) {
     pageFrame.className = 'pg-page-frame';
     pageFrame.setAttribute('title', 'daslang wasm program');
     pageFrame.setAttribute('allow', 'cross-origin-isolated; autoplay; fullscreen');
+    // Geometry is PlaygroundRunner.fitElement's job, not a percentage: this
+    // frame stands in the run host, and the host sizes to its content — so a
+    // width:100% here resolves against nothing and collapses to a tiny box.
+    // The run frame has always been sized off the COLUMN for that reason.
     pageFrame.style.cssText =
-        'display:block;width:100%;aspect-ratio:4/3;border:1px solid #444;' +
+        'display:block;border:1px solid #444;' +
         'background:#000;margin-top:20px;margin-bottom:6px;';
     pageFrame.src = htmlUrl;
     (runHostEl || editorOutput.parentNode).appendChild(pageFrame);
+    // 3/4 is the run frame's starting aspect, used until the page reports its
+    // real drawing buffer — the shell posts canvas-visible exactly as
+    // run-frame.html does, which is what lets the canvas fill without bars.
+    let pageAspect = 3 / 4;
+    pageFrameFit = function () {
+        if (typeof PlaygroundRunner !== 'undefined') PlaygroundRunner.fitElement(pageFrame, pageAspect);
+    };
+    // Accept that report only from the frame we created, and only from the
+    // origin its artifact came from.
+    const pageOrigin = new URL(htmlUrl, location.href).origin;
+    pageFrameMsg = function (ev) {
+        if (!pageFrame || ev.source !== pageFrame.contentWindow || ev.origin !== pageOrigin) return;
+        const m = ev.data;
+        if (!m || m.type !== 'canvas-visible' || !(m.width > 0) || !(m.height > 0)) return;
+        pageAspect = m.height / m.width;
+        pageFrameFit();
+    };
+    window.addEventListener('message', pageFrameMsg);
+    pageFrameFit();
+    window.addEventListener('resize', pageFrameFit);
     const o = document.getElementById('output');
     if (o) o.classList.add('with-canvas');
 }

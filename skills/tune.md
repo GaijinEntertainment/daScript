@@ -338,8 +338,10 @@ The framework carries the policy and the math; the harness carries the probe:
 - `tune_noise_threshold_pct(paranoid)` — the cv ceiling: 2% normal, 1%
   paranoid; `DAS_TUNE_NOISE_CV=<pct>` overrides for calibration.
 - `tune_noise_override()` — `DAS_TUNE_NOISE_OVERRIDE=1` turns refusals into
-  passes; the harness that honors it must stamp the sidecar
-  `noise: overridden`, so the escape always leaves a mark.
+  passes at BOTH gates: a failed noise probe (stamped `noise: overridden`)
+  and a failed validation verdict (stamped `validation: overridden`); the
+  escape always leaves a mark. It is one flag by design — "mint no matter
+  what" — so quieting a noise refusal also waives reproduction.
 - `tune_median(samples)` / `tune_cv_pct(samples)` — rank finalists by the
   median of their finalist rounds (print best-of alongside); a best-of far
   under its own median is a per-kernel noise flag.
@@ -357,15 +359,21 @@ causes; it recovers under a couple of seconds of sustained load, but a
 post-race gate would pay that settle on every mint for a window whose noise
 cannot touch the CPU medians anyway.)
 
-After the sweep, the harness validates itself: a heavy subset re-races at
-the same budget and the winners must reproduce — an inside-floor flip counts
-as reproduction (candidates within the floor are the same measurement, so
-ties break deterministically: baseline first, then grid order) — with
-medians inside a drift bound, or the **mint fails as a whole**. Two budgets
-exist: default and paranoid (3× the rounds, a 1% cv ceiling, a tighter drift
-bound). There is deliberately no fast race mode: a short race cannot resolve
-sub-2% twins, so its winners are lottery tickets; the debugging concession
-is accepting an existing sidecar, never racing cheaply.
+After the sweep, the harness validates itself: a heavy subset re-races twice
+at the same budget and the verdict is same-window ORDER (`TuneValidateRow` +
+`tune_validate_verdict`) — a winner fails only when a re-race rejects it
+outright, or the SAME challenger beats it past the reproduce band in BOTH
+windows. Anything else — an inside-floor flip, a one-window flip, differing
+challengers — is reproduction (ties break deterministically: baseline first,
+then grid order). Median drift between race and re-race is stamped
+(`validation_max_drift_pct`) and noted, never failed: a box's level moves
+with load history while same-window order holds, so cross-window medians
+prove nothing. A failed verdict fails the **mint as a whole** unless the
+override above mints through it, stamped. Two budgets exist: default and
+paranoid (3× the rounds, a 1% cv ceiling, a tighter drift note). There is
+deliberately no fast race mode: a short race cannot resolve sub-2% twins,
+so its winners are lottery tickets; the debugging concession is accepting
+an existing sidecar, never racing cheaply.
 
 ## Writing a harness
 

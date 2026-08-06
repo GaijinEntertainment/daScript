@@ -179,6 +179,45 @@ test('a page-kind build runs as an embedded page frame', async ({ playground }) 
     expect(await frame.getAttribute('sandbox')).toBeNull();
     expect(await frame.getAttribute('allow')).toContain('cross-origin-isolated');
 
+    // Sized like the interpreter's run frame — off the COLUMN, not the host.
+    // The host sizes to its CONTENT, so a percentage width is circular and
+    // collapses the frame to the CSS default iframe width (300px + border).
+    // It still renders, just far too small to use, which is why "a frame
+    // exists" is not enough to assert. Measured 302px against a 906px column
+    // on production before this was fixed — and note the collapsed width is a
+    // constant, so a loose fraction-of-column bound passes at a small viewport
+    // and misses it entirely.
+    const box = await frame.boundingBox();
+    const width = await playground.evaluate(() => {
+        const host = document.querySelector('.pg-run-host');
+        const column = host && host.parentElement ? host.parentElement.clientWidth : 0;
+        // what PlaygroundRunner.fitElement should have produced, same rule
+        const capped = Math.round(Math.round(window.innerHeight * 0.8) / (3 / 4));
+        return { column, expected: Math.min(column, capped) };
+    });
+    expect(width.column).toBeGreaterThan(320);      // else the bound below proves nothing
+    expect(box.width).toBeGreaterThan(width.expected * 0.95);
+    // 4:3 landscape, matching the run frame's starting aspect.
+    expect(box.height / box.width).toBeGreaterThan(0.6);
+    expect(box.height / box.width).toBeLessThan(0.9);
+
+    // The page reports its real drawing buffer the way run-frame.html does, and
+    // the frame reshapes to it — that report is what lets the canvas fill
+    // without letterbox bars, so a silent no-op here would look like the old
+    // "renders in the middle" bug for any program that is not 4:3.
+    await playground.evaluate(() => {
+        const f = document.querySelector('iframe.pg-page-frame');
+        window.dispatchEvent(new MessageEvent('message', {
+            source: f.contentWindow,
+            origin: new URL(f.src, location.href).origin,
+            data: { type: 'canvas-visible', width: 800, height: 200 },   // 4:1, unmistakable
+        }));
+    });
+    await expect.poll(async () => {
+        const b = await frame.boundingBox();
+        return b.height / b.width;
+    }, { timeout: 5_000 }).toBeLessThan(0.35);
+
     // Switching samples clears the page frame with the canvas.
     await playground.locator('#examples').selectOption({ label: 'SHA-256 (benchmark)' });
     await expect(playground.locator('iframe.pg-page-frame')).toHaveCount(0, { timeout: 5_000 });

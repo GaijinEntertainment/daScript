@@ -132,3 +132,40 @@ def test_tune_provenance_note_roundtrip(t : T?) {
     delete_json(doc)
     remove(sidecar)
 }
+
+[test]
+def test_tune_validate_verdict(t : T?) {
+    // reproduced: no challengers, drift never enters the verdict
+    var clean <- [TuneValidateRow(drift = 1.0lf), TuneValidateRow(drift = 7.0lf)]
+    t |> equal(tune_validate_verdict(clean), "")
+    // a one-window flip is state scramble among twins = reproduction (either order)
+    var oneflip <- [TuneValidateRow(challenger = "vec16", gap = 3.7lf), TuneValidateRow()]
+    t |> equal(tune_validate_verdict(oneflip), "")
+    var oneflip2 <- [TuneValidateRow(), TuneValidateRow(challenger = "vec16", gap = 1.7lf)]
+    t |> equal(tune_validate_verdict(oneflip2), "")
+    // differing challengers = scramble, not a loss
+    var scramble <- [TuneValidateRow(challenger = "vec16_u4", gap = 3.7lf), TuneValidateRow(challenger = "u4", gap = 1.7lf)]
+    t |> equal(tune_validate_verdict(scramble), "")
+    // the SAME challenger past the band in both windows is the garbage class
+    var loss <- [TuneValidateRow(challenger = "vec16", gap = 4.6lf), TuneValidateRow(challenger = "vec16", gap = 4.8lf)]
+    t |> success(find(tune_validate_verdict(loss), "consistently loses to vec16") >= 0)
+    // rejection anywhere is fatal, even beside a clean window
+    var rej <- [TuneValidateRow(), TuneValidateRow(rejected = true)]
+    t |> success(find(tune_validate_verdict(rej), "rejected") >= 0)
+    // a single window can never render a loss — the two-window rule is load-bearing...
+    var single <- [TuneValidateRow(challenger = "vec16", gap = 9.0lf)]
+    t |> equal(tune_validate_verdict(single), "")
+    // ...but a single-window rejection still fails
+    var singlerej <- [TuneValidateRow(rejected = true)]
+    t |> success(find(tune_validate_verdict(singlerej), "rejected") >= 0)
+    let none : array<TuneValidateRow>
+    t |> equal(tune_validate_verdict(none), "")
+    delete clean
+    delete oneflip
+    delete oneflip2
+    delete scramble
+    delete loss
+    delete rej
+    delete single
+    delete singlerej
+}
