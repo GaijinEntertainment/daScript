@@ -2,6 +2,7 @@ options gen2
 
 module clargs shared private
 
+require fio
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/strings_boost
@@ -15,6 +16,7 @@ struct public CommandArgumentInfo {
     field_name : string
     flag_name : string         // long form, e.g. "--verbose"; for positionals this is "<field_name>"
     short_flag_name : string   // e.g. "-v"; empty if no short flag declared
+    env_name : string          // environment twin, e.g. "TOOL_VERBOSE"; "" = none. Command line wins; set-but-empty env counts as unset
     doc_string : string
     value_type : Type
     is_array : bool
@@ -141,6 +143,31 @@ def public find_array_flag_raw_values(args : array<string>; flag_name : string) 
     return <- result
 }
 
+// Environment twins: an option with a non-empty env_name falls back to that variable when
+// NO spelling of the flag is on the command line — argv always wins, including its errors
+// (a bare value-less "--flag" stays "missing value" even with the variable set).
+
+// the shared boolean rule (build_const / dasllama_env): "", "0", "false", "off", "no" any-case are false
+def env_text_is_true(v : string) : bool {
+    let s = to_lower(v)
+    return !(empty(s) || s == "0" || s == "false" || s == "off" || s == "no")
+}
+
+// set-but-empty counts as unset, matching daslib/build_const and the dasllama_env readers
+def env_raw_value(arg_info : CommandArgumentInfo) : Option<string> {
+    if (empty(arg_info.env_name) || !has_env_variable(arg_info.env_name)) return none(type<string>)
+    let v = get_env_variable(arg_info.env_name)
+    if (empty(v)) return none(type<string>)
+    return some(v)
+}
+
+// Command-line presence only (either alias, either spelling) — mutex checks and
+// argv-error precedence use this, NOT the env-aware flag_present overload below.
+def argv_present(args : array<string>; arg_info : CommandArgumentInfo) : bool {
+    if (flag_present(args, arg_info.flag_name)) return true
+    return !empty(arg_info.short_flag_name) && flag_present(args, arg_info.short_flag_name)
+}
+
 // Short-flag-aware overloads: single pass over args treating long and short
 // as aliases.  Last-occurrence wins (same policy as the single-flag overloads
 // above), so e.g. `-n Alice --name Bob` resolves to "Bob".
@@ -163,6 +190,9 @@ def public find_flag_raw_value(args : array<string>; arg_info : CommandArgumentI
             result = some(slice(arg, length(short_prefix)))
         }
     }
+    if (is_none(result) && !argv_present(args, arg_info)) {
+        result = env_raw_value(arg_info)
+    }
     return result
 }
 
@@ -179,6 +209,13 @@ def public find_bool_flag_raw_value(args : array<string>; arg_info : CommandArgu
             result = some(slice(arg, length(long_prefix)))
         } elif (has_short && starts_with(arg, short_prefix)) {
             result = some(slice(arg, length(short_prefix)))
+        }
+    }
+    if (is_none(result)) {
+        let env_v = env_raw_value(arg_info)
+        if (is_some(env_v)) {
+            // env booleans take the shared spelling rule, normalized to what the strict argv parser expects
+            result = some(env_text_is_true(unwrap(env_v)) ? "true" : "false")
         }
     }
     return result
@@ -216,8 +253,9 @@ def public find_array_flag_raw_values(args : array<string>; arg_info : CommandAr
 }
 
 def public flag_present(args : array<string>; arg_info : CommandArgumentInfo) : bool {
-    if (flag_present(args, arg_info.flag_name)) return true
-    return !empty(arg_info.short_flag_name) && flag_present(args, arg_info.short_flag_name)
+    // env-aware: a value supplied via the env twin counts as present (satisfies @clarg_required)
+    if (argv_present(args, arg_info)) return true
+    return is_some(env_raw_value(arg_info))
 }
 
 // For value-bearing flags (everything except bool), a bare "--flag" with no following value token and no "=value" form is malformed input.  Each parse_argument overload below returns Result<Option<T>, string> distinguishing three states:
@@ -368,7 +406,8 @@ def public count_flag_value_violation(args : array<string>; arg_info : CommandAr
 def public find_mutex_violation(args : array<string>; info : CommandInfo) : string {
     var groups : table<string; array<string>>
     for (a in info.args) {
-        if (empty(a.mutex_group) || !flag_present(args, a)) continue
+        // argv-only on purpose: an env-supplied default must not conflict with an explicit argv choice
+        if (empty(a.mutex_group) || !argv_present(args, a)) continue
         if (!key_exists(groups, a.mutex_group)) {
             groups[a.mutex_group] <- [a.flag_name]
         } else {
@@ -459,6 +498,13 @@ def render_doc_column(arg : CommandArgumentInfo) : string {
                 write(w, v)
             }
             write(w, ")")
+        }
+        if (!empty(arg.env_name)) {
+            if (!first) {
+                write(w, " ")
+            }
+            first = false
+            write(w, "(env: {arg.env_name})")
         }
         if (arg.is_required) {
             if (!first) {
@@ -598,7 +644,7 @@ def option_inner_type(t : TypeDeclPtr) : TypeDeclPtr {
 [structure_macro(name=CommandLineArgs)]
 class ArgsMacro : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
-        let command_info = collect_command_info(st, errors)
+        let command_info = collect_command_info(st, args, errors)
         if (!empty(errors)) return false
 
         var command_info_fn = make_command_info_fn(st, command_info)
@@ -631,8 +677,90 @@ class ArgsMacro : AstStructureAnnotation {
         return default_value
     }
 
+    // env twin for one field: explicit @clarg_env wins ("" opts out of prefix derivation);
+    // otherwise a struct-level env_prefix derives PREFIX_LONG_NAME (hyphens to underscores,
+    // upper case). Positional, count, and repeatable (array) fields have no environment form.
+    def resolve_env_name(fannotations : AnnotationArgumentList; fname, raw_name, env_prefix : string;
+                         is_positional, is_count, is_array : bool; var errors : das_string&) : string {
+        let explicit_v = find_arg(fannotations, "clarg_env")
+        if (explicit_v is tString) {
+            let name = explicit_v as tString
+            if (empty(name)) return ""
+            if (is_positional) {
+                errors := "field '{fname}': @clarg_env cannot be combined with @clarg_positional"
+                return ""
+            }
+            if (is_count) {
+                errors := "field '{fname}': @clarg_env cannot be combined with @clarg_count"
+                return ""
+            }
+            if (is_array) {
+                errors := "field '{fname}': repeatable (array) fields have no environment form"
+                return ""
+            }
+            return name
+        }
+        if (empty(env_prefix) || is_positional || is_count || is_array) return ""
+        return "{env_prefix}_{to_upper(replace_multiple(raw_name, [(text="-", replacement="_")]))}"
+    }
+
+    // Reject characters that produce ambiguous or unparseable short flags: '-' yields '--'
+    // (collides with the script-args separator), '=' yields '-=' (collides with --flag=value
+    // form), whitespace can't be typed on the command line.
+    def resolve_short_flag(fannotations : AnnotationArgumentList; field_name : string; is_positional : bool;
+                           var seen_short : table<string; string>; var errors : das_string&) : string {
+        let short_char = find_string_annotation(fannotations, "clarg_short", "")
+        if (empty(short_char)) return ""
+        if (is_positional) {
+            errors := "field '{field_name}': @clarg_short cannot be combined with @clarg_positional"
+            return ""
+        }
+        if (length(short_char) != 1) {
+            errors := "field '{field_name}': @clarg_short must be a single character (got '{short_char}')"
+            return ""
+        }
+        if (short_char == "-" || short_char == "=" || short_char == " " || short_char == "\t" || short_char == "\n" || short_char == "\r") {
+            errors := "field '{field_name}': @clarg_short cannot be '-', '=', or whitespace (got '{short_char}')"
+            return ""
+        }
+        if (key_exists(seen_short, short_char)) {
+            errors := "field '{field_name}': @clarg_short '-{short_char}' already used by field '{seen_short[short_char]}'"
+            return ""
+        }
+        seen_short[short_char] = field_name
+        return "-{short_char}"
+    }
+
+    // Positional ordering/type rules; allowed types are string, Option<string>, array<string>.
+    def validate_positional(var arg : CommandArgumentInfo; fannotations : AnnotationArgumentList;
+                            var has_array_tail, saw_optional_positional : bool&; var errors : das_string&) {
+        if (arg.value_type != Type.tString) {
+            errors := "field '{arg.field_name}': @clarg_positional only supports string, Option<string>, and array<string>"
+            return
+        }
+        if (has_array_tail) {
+            errors := "field '{arg.field_name}': another @clarg_positional cannot follow an array<string> positional"
+            return
+        }
+        let is_required_positional = !arg.is_array && !arg.is_optional_wrap
+        if (is_required_positional && saw_optional_positional) {
+            errors := "field '{arg.field_name}': required @clarg_positional cannot follow an optional one"
+            return
+        }
+        if (arg.is_array) {
+            has_array_tail = true
+        } elif (arg.is_optional_wrap) {
+            saw_optional_positional = true
+        }
+        arg.is_required = is_required_positional
+        if (find_bool_annotation(fannotations, "clarg_required", false) && arg.is_optional_wrap) {
+            errors := "field '{arg.field_name}': @clarg_required cannot be combined with Option<...> @clarg_positional (declare the field as plain string instead)"
+        }
+    }
+
     // collect_command_info turns the structure info into command info.
-    def collect_command_info(st : StructurePtr; var errors : das_string&) : CommandInfo {
+    def collect_command_info(st : StructurePtr; ann_args : AnnotationArgumentList; var errors : das_string&) : CommandInfo {
+        let env_prefix = find_string_annotation(ann_args, "env_prefix", "")
         var result : CommandInfo
         result.args |> reserve(length(st.fields))
         var seen_short : table<string; string>
@@ -651,28 +779,8 @@ class ArgsMacro : AstStructureAnnotation {
                 mutex_group = find_string_annotation(field.annotation, "clarg_mutex_group", "")
             )
 
-            let short_char = find_string_annotation(field.annotation, "clarg_short", "")
-            if (!empty(short_char)) {
-                if (is_positional) {
-                    errors := "field '{arg.field_name}': @clarg_short cannot be combined with @clarg_positional"
-                    return <- result
-                }
-                if (length(short_char) != 1) {
-                    errors := "field '{arg.field_name}': @clarg_short must be a single character (got '{short_char}')"
-                    return <- result
-                }
-                // Reject characters that produce ambiguous or unparseable short flags: '-' yields '--' (collides with the script-args separator), '=' yields '-=' (collides with --flag=value form), whitespace can't be typed on the command line.
-                if (short_char == "-" || short_char == "=" || short_char == " " || short_char == "\t" || short_char == "\n" || short_char == "\r") {
-                    errors := "field '{arg.field_name}': @clarg_short cannot be '-', '=', or whitespace (got '{short_char}')"
-                    return <- result
-                }
-                if (key_exists(seen_short, short_char)) {
-                    errors := "field '{arg.field_name}': @clarg_short '-{short_char}' already used by field '{seen_short[short_char]}'"
-                    return <- result
-                }
-                seen_short[short_char] = arg.field_name
-                arg.short_flag_name = "-{short_char}"
-            }
+            arg.short_flag_name = resolve_short_flag(field.annotation, arg.field_name, is_positional, seen_short, errors)
+            if (!empty(errors)) return <- result
             arg.is_required = find_bool_annotation(field.annotation, "clarg_required", false)
             arg.value_type = field._type.baseType
             if (field._type.baseType == Type.tArray) {
@@ -698,30 +806,8 @@ class ArgsMacro : AstStructureAnnotation {
             }
 
             if (is_positional) {
-                // Allowed types: string, Option<string>, array<string>.
-                if (arg.value_type != Type.tString) {
-                    errors := "field '{arg.field_name}': @clarg_positional only supports string, Option<string>, and array<string>"
-                    return <- result
-                }
-                if (has_array_tail) {
-                    errors := "field '{arg.field_name}': another @clarg_positional cannot follow an array<string> positional"
-                    return <- result
-                }
-                let is_required_positional = !arg.is_array && !arg.is_optional_wrap
-                if (is_required_positional && saw_optional_positional) {
-                    errors := "field '{arg.field_name}': required @clarg_positional cannot follow an optional one"
-                    return <- result
-                }
-                if (arg.is_array) {
-                    has_array_tail = true
-                } elif (arg.is_optional_wrap) {
-                    saw_optional_positional = true
-                }
-                arg.is_required = is_required_positional
-                if (find_bool_annotation(field.annotation, "clarg_required", false) && arg.is_optional_wrap) {
-                    errors := "field '{arg.field_name}': @clarg_required cannot be combined with Option<...> @clarg_positional (declare the field as plain string instead)"
-                    return <- result
-                }
+                validate_positional(arg, field.annotation, has_array_tail, saw_optional_positional, errors)
+                if (!empty(errors)) return <- result
             }
 
             if (is_count) {
@@ -740,6 +826,9 @@ class ArgsMacro : AstStructureAnnotation {
             }
 
             arg.doc_string = find_string_annotation(field.annotation, "clarg_doc", "")
+            arg.env_name = resolve_env_name(field.annotation, "{field.name}", raw_name, env_prefix,
+                is_positional, is_count, arg.is_array, errors)
+            if (!empty(errors)) return <- result
             // Detect a user-declared --help/-h flag — suppresses auto-injection by parse_args_with_help.
             if (!is_positional && (arg.flag_name == "--help" || arg.short_flag_name == "-h")) {
                 result.has_user_help = true
@@ -797,7 +886,7 @@ class ArgsMacro : AstStructureAnnotation {
                 if (r |> is_err) {
                     return err("{$v(arg.flag_name)}: {r |> unwrap_err}", type<$t(st)>)
                 }
-                var opt <- r |> move_unwrap   // nolint:LINT003 — non-copyable static_if branch below consumes `opt` via `move_unwrap`, so it must stay `var`
+                var opt <- r |> move_unwrap   // nolint:LINT003,LINT019 — non-copyable static_if branch below consumes `opt` via `move_unwrap` in downstream instantiations, so it must stay `var`
                 if (opt |> is_some) {
                     static_if (typeinfo can_copy(type<$t(st.fields[field_index]._type)>)) {
                         dst.$f(arg.field_name) = opt |> unwrap
@@ -888,7 +977,7 @@ class ArgsMacro : AstStructureAnnotation {
         }
     }
 
-    def make_parse_fn(var st : StructurePtr; info : CommandInfo) : FunctionPtr {
+    def make_parse_fn(var st : StructurePtr; info : CommandInfo) : FunctionPtr {   // nolint:STYLE038 — four parallel qmacro variants (positional × mutex); the enumeration IS the function
         var name_to_index <- { for (i in range(length(st.fields))); string(st.fields[i].name) => i }
         var field_index_by_name <- { for (arg in info.args); arg.field_name => name_to_index[arg.field_name]; where key_exists(name_to_index, arg.field_name) }
 

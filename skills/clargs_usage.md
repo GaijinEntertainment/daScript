@@ -115,6 +115,27 @@ renderer, and uniform behavior across every tool.
    (clargs silently ignores unknown flag-shaped tokens, so other
    tooling's flags pass through without errors).
 
+## Environment twins
+
+Any option can also be settable from an environment variable — the
+command line always wins, env beats the default. Declare per field with
+`@clarg_env = "NAME"`, or struct-wide with
+`[CommandLineArgs(env_prefix = "TOOL")]`, which derives `TOOL_LONG_NAME`
+from each option's long name (hyphens become underscores;
+`@clarg_env = ""` opts a field out). `--help` shows the twin as
+`(env: NAME)`.
+
+Semantics (shared with `daslib/build_const` and the dasLLAMA env
+readers): booleans read `""`, `0`, `false`, `off`, `no` (any case) as
+false and anything else as true; a set-but-empty variable counts as
+unset; a garbage int/float/enum value is a parse ERROR, same as on the
+command line — and so is a bare value-less `--flag` even when the
+variable is set (argv wins, including its errors). `@clarg_required` is
+satisfied by either carrier. Positional, `@clarg_count`, and repeatable
+(array) fields have no environment form. Mutex groups check the command
+line only — an env-supplied default never conflicts with an explicit
+flag.
+
 ## Help-flag pitfall
 
 When run under `daslang` (script-host case), the host intercepts
