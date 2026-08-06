@@ -15,6 +15,7 @@ require daslib/fio
 require strings
 require profile_common
 require llvm/daslib/llvm_tune   // [tune_policy]: provisioning only — never auto-tune
+require dasllama/dasllama_env
 
 [CommandLineArgs]
 struct FetchArgs {
@@ -151,14 +152,14 @@ def private entry_path(e : ProvEntry) : string {
 // llama.cpp checkout serves the canary decoder's gguf writer — no extra env).
 
 def private convert_nemo_py() : string {
-    let p = get_env_variable("NEMO_PY")
+    let p = g_env_prof.nemo_py
     return empty(p) ? "modules/dasLLAMA/benchmarks/asr/.venv-nemo/bin/python" : p
 }
 
 def private convert_hub_root() : string {
-    let hf = get_env_variable("HF_HOME")
+    let hf = g_env_core.hf_home
     return "{hf}/hub" if (!empty(hf))
-    let home = get_env_variable("HOME")
+    let home = g_env_core.home
     if (empty(home)) {
         to_log(LOG_ERROR, "convert: neither HF_HOME nor HOME is set — cannot locate the huggingface hub cache\n")
         return ""
@@ -187,7 +188,7 @@ def private convert_parakeet(e : ProvEntry; path : string) {
     }
     // the converter's default output name is ggml-model-f32.bin — --out-name is load-bearing
     // (the zen4 bringup lost v2 to a v3 overwrite without it)
-    run_capture("{py} \"{get_env_variable("WHISPER_CPP")}/models/convert-parakeet-to-ggml.py\" --model \"{src}\" --out-dir \"{dir_name(path)}\" --use-f32 --out-name {e.name}", false)
+    run_capture("{py} \"{g_env_prof.whisper_cpp}/models/convert-parakeet-to-ggml.py\" --model \"{src}\" --out-dir \"{dir_name(path)}\" --use-f32 --out-name {e.name}", false)
 }
 
 def private convert_canary(path : string) {
@@ -198,7 +199,7 @@ def private convert_canary(path : string) {
     hub_download(py, "snapshot_download; print(snapshot_download('Qwen/Qwen3-1.7B', allow_patterns=['tokenizer*','*.json']))")
     // MTMD_BIN sits at <checkout>/build-cpu/bin/llama-mtmd-cli — its checkout carries the
     // gguf writer the decoder conversion drives
-    let lcpp = dir_name(dir_name(dir_name(get_env_variable("MTMD_BIN"))))
+    let lcpp = dir_name(dir_name(dir_name(g_env_prof.mtmd_bin)))
     run_capture("{py} modules/dasLLAMA/harness/convert_canary_to_ggml.py --src \"{hub}/models--nvidia--canary-qwen-2.5b\" --qwen3-tokenizer \"{hub}/models--Qwen--Qwen3-1.7B\" --llama-cpp \"{lcpp}\" --out-dir \"{dir_name(path)}\" --decoder-outtype f16", false)
 }
 

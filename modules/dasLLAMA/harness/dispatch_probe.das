@@ -12,9 +12,8 @@ options persistent_heap
 // Knobs: DAS_FORK_SKIP_HEAP_RESET=1 (skip restartHeaps on pooled reuse), DAS_DETAIL=1 (per-job dump)
 
 require daslib/jobque_boost
-require daslib/fio
 require math
-require strings
+require dasllama/dasllama_env
 
 let MAXJ = 64
 
@@ -132,24 +131,24 @@ def two_wave_round(njobs : int; var push_ns : array<int64>; var start_ns : array
 
 [export]
 def main {
-    let detail_all = has_env_variable("DAS_DETAIL")
+    let detail_all = g_env_harness.das_detail
     var spin_ns = 0l
-    if (has_env_variable("DAS_SPIN_NS")) {
-        spin_ns = int64(to_int(get_env_variable("DAS_SPIN_NS")))
+    if (is_some(g_env_harness.das_spin_ns)) {
+        spin_ns = unwrap(g_env_harness.das_spin_ns)
         print("spin per job: {spin_ns}ns\n")
     }
     with_job_que() {
         set_jobque_fork_pool(true, true)
-        if (has_env_variable("DAS_FORK_SKIP_HEAP_RESET")) {
+        if (g_env_harness.das_fork_skip_heap_reset) {
             set_jobque_fork_skip_heap_reset(true)
             print("fork_skip_heap_reset ON\n")
         }
-        if (has_env_variable("DAS_WORKER_SPIN_US")) {
-            let spin_us = to_int(get_env_variable("DAS_WORKER_SPIN_US"))
+        if (is_some(g_env_harness.das_worker_spin_us)) {
+            let spin_us = unwrap(g_env_harness.das_worker_spin_us)
             set_jobque_worker_spin(spin_us)
             print("worker spin: {spin_us}us\n")
         }
-        if (has_env_variable("DAS_BATCH_DISPATCH")) {
+        if (g_env_harness.das_batch_dispatch) {
             set_jobque_batch_dispatch(true)
             print("batch dispatch ON\n")
         }
@@ -160,7 +159,7 @@ def main {
         push_ns |> resize(MAXJ)
         start_ns |> resize(MAXJ)
         end_ns |> resize(MAXJ)
-        if (has_env_variable("DAS_TWO_WAVE")) {
+        if (g_env_harness.das_two_wave) {
             let nj = get_total_hw_jobs()
             print("--- two-wave {nj}+{nj} (500us spin jobs) ---\n")
             for (_w in range(3)) {

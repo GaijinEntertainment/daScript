@@ -9,6 +9,7 @@ require dasllama/dasllama_gguf   // rd_u32 / rd_u16 for the WAV reader
 require daslib/jobque_boost
 require daslib/fio
 require math
+require dasllama/dasllama_env
 
 // Silero-VAD tests. The forward gate is self-contained (the ~1.2 MB weights are checked in at
 // modules/dasLLAMA/models/silero_vad.bin) and drives a deterministic integer-LCG signal — the
@@ -21,7 +22,7 @@ def private vad_bin_path() : string {
 }
 
 def private samples_dir() : string {
-    let env = get_env_variable("DASLLAMA_MODELS_DIR")
+    let env = g_env_harness.models_dir
     return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
 }
 

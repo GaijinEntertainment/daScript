@@ -1185,7 +1185,7 @@ def load_gguf_streaming(path : string; mode : QuantMode; var t : Model; var jobs
     g_stream_want_blob = want_blob
     bump_weights_epoch()
     t.quant = mode
-    if (has_env_variable("DASLLAMA_CONV_PROF")) {
+    if (g_env_engine.conv_prof) {
         set_conv_profile(true)
     }
     let ts_load = ref_time_ticks()
@@ -1199,7 +1199,7 @@ def load_gguf_streaming(path : string; mode : QuantMode; var t : Model; var jobs
         var bases : array<void?>
         var sizes : array<int64>
         gguf_map_shards(shards, 0, bases, sizes) {
-            if (env_flag("DASLLAMA_PREFETCH", true)) {
+            if (g_env_engine.prefetch) {
                 var pf_mb = 0l
                 for (bi in range(length(bases))) {
                     if (unsafe(prefetch_map(bases[bi], uint64(sizes[bi])))) {
@@ -1237,7 +1237,7 @@ def load_gguf_streaming(path : string; mode : QuantMode; var t : Model; var jobs
     var ok = false
     let lmode = mode
     fmap(f) $(var bytes : array<uint8>#) {
-        if (env_flag("DASLLAMA_PREFETCH", true)) {
+        if (g_env_engine.prefetch) {
             var armed = false
             unsafe {
                 armed = prefetch_map(addr<void?>(bytes[0]), uint64(long_length(bytes)))
@@ -1264,7 +1264,7 @@ def private load_gguf_impl(path : string; var mode : QuantMode) : Model {
     bump_weights_epoch()
     var t = Model()
     t.quant = mode
-    if (has_env_variable("DASLLAMA_CONV_PROF")) {
+    if (g_env_engine.conv_prof) {
         set_conv_profile(true)
     }
     let ts_load = ref_time_ticks()
@@ -1275,7 +1275,7 @@ def private load_gguf_impl(path : string; var mode : QuantMode) : Model {
         var sizes : array<int64>
         gguf_map_shards(shards, 0, bases, sizes) {
             // fault the source in AHEAD of the parallel transcode (in-loop faults serialize lanes)
-            if (env_flag("DASLLAMA_PREFETCH", true)) {
+            if (g_env_engine.prefetch) {
                 var pf_mb = 0l
                 for (bi in range(length(bases))) {
                     if (unsafe(prefetch_map(bases[bi], uint64(sizes[bi])))) {
@@ -1302,7 +1302,7 @@ def private load_gguf_impl(path : string; var mode : QuantMode) : Model {
         panic("dasLLAMA: cannot open gguf '{path}'")
     }
     fmap(f) $(var bytes : array<uint8>#) {
-        if (env_flag("DASLLAMA_PREFETCH", true)) {
+        if (g_env_engine.prefetch) {
             var armed = false
             unsafe {
                 armed = prefetch_map(addr<void?>(bytes[0]), uint64(long_length(bytes)))

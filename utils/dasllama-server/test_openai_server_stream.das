@@ -12,6 +12,7 @@ require daslib/strings_boost                            // split / trim_prefix
 require daslib/fio                                      // get_env_variable / stat / path_join / sleep
 require strings                                         // starts_with / build_string
 require math                                            // min
+require dasllama/dasllama_env
 
 // S3/S4 conformance for the continuous-batching server wiring: SSE chunk framing on a streaming
 // chat, the mandatory 400 on a prompt that cannot fit the context (the scheduler would panic), two
@@ -25,7 +26,7 @@ let TEST_PORT = 18101
 let TEST_CTX = 1024l   // big enough that the eviction arm's 900-token budget outlasts a 1s client timeout
 
 def private models_dir() : string {
-    let env = get_env_variable("DASLLAMA_MODELS_DIR")
+    let env = g_env_harness.models_dir
     return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
 }
 let MODEL_PATH = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")

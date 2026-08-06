@@ -57,7 +57,7 @@ def private time_seq(queue; psos; bufss; groupss; threadss; reps : int) : double
 }
 
 def private run_rope_sidebyside(b) {   // nolint:STYLE038 — flat lab driver: buffers bound once, then one timed slot per kernel
-    let rounds = env_int("DASMETAL_LAB_ROUNDS", 3)
+    let rounds = g_env_bench.lab_rounds
     let nheads = 24l
     let hs = 128l
     let kv_dim = 1024l

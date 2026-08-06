@@ -17,24 +17,25 @@ require daslib/fio
 require math
 require strings
 require _model_tier   // model_available() presence/size-tier gate (see the file's header)
+require dasllama/dasllama_env
 
 // Whisper-proper tests. The f16/gelu/mel/id tests are self-contained; the loader and
 // transcription tests need a whisper.cpp ggml-tiny.bin (gitignored) and skip without it.
 // Oracle constants come from whisper-cli (CPU, greedy: -bs 1 -bo 1 -nf -ng) — the rig and
 // the large-v3-turbo parity runs live in modules/dasLLAMA/whisper_plan.md.
 def private whisper_models_dir() : string {
-    let env = get_env_variable("DASLLAMA_WHISPER_DIR")
+    let env = g_env_test.whisper_dir
     return empty(env) ? "/Users/borisbatkin/Work/whisper.cpp/models/" : env
 }
 
 def private samples_dir() : string {
-    let env = get_env_variable("DASLLAMA_MODELS_DIR")
+    let env = g_env_harness.models_dir
     return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
 }
 
 // the ASR corpus (jfk + LibriSpeech clips) lives under the repo's benchmarks/asr, gitignored
 def private corpus_dir() : string {
-    let env = get_env_variable("DASLLAMA_CORPUS_DIR")
+    let env = g_env_test.corpus_dir
     return empty(env) ? "/Users/borisbatkin/Work/daScript/modules/dasLLAMA/benchmarks/asr/corpus/" : env
 }
 

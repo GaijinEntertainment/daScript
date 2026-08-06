@@ -224,28 +224,27 @@ def dasllama_accelerate_disable() {
     clear_float_batch_override()
 }
 
-// env_int64 with a floor. A SET but bad value is worth a word either way — unparseable and
-// out-of-range both land below the floor via the sentinel default, so one branch covers both.
-def private env_int64_min(name : string; def_v : int64; min_v : int64) : int64 {
-    let raw = env_str(name, "")
-    return def_v if (empty(raw))
-    let v = env_int64(name, min_v - 1l)
-    if (v < min_v) {
-        to_log(LOG_WARNING, "dasLLAMA: {name} `{raw}` is not an integer >= {min_v} — keeping {def_v}\n")
+// floor guard for the loaded knobs: a SET value below the floor is worth a word (garbage text
+// already warned in the env_config loader and reads as unset).
+def private floor_or(name : string; v : Option<int64>; def_v : int64; min_v : int64) : int64 {
+    return def_v if (is_none(v))
+    let got = unwrap(v)
+    if (got < min_v) {
+        to_log(LOG_WARNING, "dasLLAMA: {name} {got} is below the floor {min_v} — keeping {def_v}\n")
         return def_v
     }
-    return v
+    return got
 }
 
 [init]
 def private dasllama_math_accelerate_init() {
-    if (!env_flag("DASLLAMA_ACCEL", false)) {
+    if (!g_env_accel.accel) {
         return
     }
-    g_accel_min_mmac = env_int64_min("DASLLAMA_ACCEL_MIN_MMAC", g_accel_min_mmac, 0l)
-    dasllama_accelerate_set_f16_strips(env_int64_min("DASLLAMA_ACCEL_F16_STRIPS", 0l, 0l))
-    if (env_flag("DASLLAMA_ACCEL_F16", false) && !dasllama_accelerate_set_f16(true)) {
+    g_accel_min_mmac = floor_or("DASLLAMA_ACCEL_MIN_MMAC", g_env_accel.accel_min_mmac, g_accel_min_mmac, 0l)
+    dasllama_accelerate_set_f16_strips(floor_or("DASLLAMA_ACCEL_F16_STRIPS", g_env_accel.accel_f16_strips, 0l, 0l))
+    if (g_env_accel.accel_f16 && !dasllama_accelerate_set_f16(true)) {
         to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_ACCEL_F16=1 but the BNNS probe failed — f16 lane stays off\n")
     }
-    dasllama_accelerate_enable(env_int64_min("DASLLAMA_ACCEL_MIN_NTOK", 32l, 1l))
+    dasllama_accelerate_enable(floor_or("DASLLAMA_ACCEL_MIN_NTOK", g_env_accel.accel_min_ntok, 32l, 1l))
 }

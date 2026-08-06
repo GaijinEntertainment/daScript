@@ -19,6 +19,7 @@ require profile_common
 require daslib/clargs
 require daslib/fio
 require math
+require dasllama/dasllama_env
 
 [CommandLineArgs]
 struct Args {
@@ -145,10 +146,10 @@ def main() {
     // environment: cap the future que's workers to threads-1 (the computing main is the last lane)
     // and pin lanes to distinct physical cores. Explicit DAS_JOBQUE_THREADS / DAS_JOBQUE_AFFINITY
     // envs still win (the A/B rail). Must run before any with_job_que — applied at worker spawn.
-    if (!has_env_variable("DAS_JOBQUE_THREADS")) {
+    if (is_none(g_env_core.jobque_threads)) {
         set_jobque_threads_cap(max(threads - 1, 1))
     }
-    if (affinity_on() && !has_env_variable("DAS_JOBQUE_AFFINITY")) {
+    if (affinity_on() && is_none(g_env_core.jobque_affinity)) {
         // 2 = HARD mask, mirroring llama-bench --cpu-strict. Mode 1 (hint) re-rolls the placement
         // lottery on every fresh que: lanes migrate onto SMT siblings and lockstep prefill goes
         // bimodal (~halved) while memory-bound decode barely notices — measured on the 3990X.
@@ -186,8 +187,8 @@ def main() {
     prof.platform.threads = lanes
     // effective das affinity mode (env rail wins over the declared default) — recorded in the profile
     var aff = max(get_jobque_affinity(), 0)
-    if (has_env_variable("DAS_JOBQUE_AFFINITY")) {
-        aff = to_int(get_env_variable("DAS_JOBQUE_AFFINITY"))
+    if (is_some(g_env_core.jobque_affinity)) {
+        aff = unwrap(g_env_core.jobque_affinity)
     }
     if (aff > 0) {
         let lcpp_aff = argv_line(lcpp_affinity_argv(threads))

@@ -50,6 +50,7 @@ require tuner_cli              // --tune-paranoid, shared with tune_kernels
 require tuner_noise            // the noise gate, shared with tune_kernels
 require math
 require strings
+require dasllama/dasllama_env
 
 // This half is a flat best-of-N; paranoid triples the round count. The confirm pass is never
 // cut: it is a correctness gate, and skipping it ships an unconfirmed crown (the SPR amx lesson).
@@ -1270,7 +1271,7 @@ def private parse_confirm_pp(outp : string) : double {
 }
 
 def private compile_fallback(fname : string) : string {
-    for (entry in split(get_env_variable("DAS_TUNE_COMPILE_FALLBACKS"), ";")) {
+    for (entry in split(g_env_core.tune_compile_fallbacks, ";")) {
         let eq = find(entry, "=")
         if (eq > 0 && slice(entry, 0, eq) == fname) {
             return slice(entry, eq + 1)
@@ -1337,7 +1338,7 @@ def private confirm_winner(winner : string) : string {
         print("confirm: winner '{winner}' IS the per-ISA fallback — no e2e confirm needed\n")
         return winner
     }
-    let model = get_env_variable("DASLLAMA_CONFIRM_MODEL")
+    let model = g_env_harness.confirm_model
     if (empty(model)) {
         print("confirm: winner '{winner}' DIVERGES from the per-ISA fallback '{fb}' — a 1-core crown must confirm end-to-end before it ships (the SPR amx lesson)\n")
         print("confirm: pinning the fallback '{fb}' — re-run with DASLLAMA_CONFIRM_MODEL=<q8 gguf> to run the confirm pass\n")
@@ -1679,7 +1680,7 @@ def main : int {
     // EXECUTION only (forced smmla variants would SIGILL on a dotprod-only host). Ship
     // .jitted_scripts to the i8mm box and run there with the same env minus this one —
     // the cache key matches, dlopen, no linker needed on the target.
-    if (has_env_variable("GEN_TUNE_COMPILE_ONLY")) {
+    if (g_env_harness.gen_tune_compile_only) {
         var vs <- q8q8_tile_gen_variants()
         print("compile-only: DLL linked, {length(vs)} tile variants, execution skipped\n")
         delete vs

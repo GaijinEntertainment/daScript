@@ -5,7 +5,6 @@ module dasllama_metal_prefill shared public
 
 require math
 require daslib/math_bits   // uint_bits_to_float in the mx4 GEMV (msl_emit as_type)
-require daslib/fio
 require dasllama/dasllama_env  // env_int/env_flag: the shared typed readers + the knob registry
 require metal/msl_shader
 require metal/das_metal_boost
@@ -4119,14 +4118,14 @@ def dasllama_metal_prefill_register() {
     // DASLLAMA_PIN_PREFILL) activates it, and unsupported shapes decline per call
     register_prefill_override("metal", @@metal_prefill_forward)
     register_ple_gpu_gate(@@metal_ple_pre_gpu_gate)
-    g_pf_env_mulmm = env_flag("DASLLAMA_METAL_MULMM", true)
-    g_pf_env_logits = env_flag("DASLLAMA_METAL_LOGITS", true)
-    g_pf_env_attn = env_flag("DASLLAMA_METAL_ATTN", true)
-    g_pf_env_unretained = env_flag("DASLLAMA_METAL_UNRETAINED", false)
-    g_pf_env_capture = env_flag("DASLLAMA_METAL_PF_CAPTURE", true)
-    g_pf_env_ncb = env_int("DASLLAMA_METAL_NCB", 0)
-    if (has_env_variable("DASLLAMA_METAL_PREFILL_SKIP")) {
-        g_pf_skip = get_env_variable("DASLLAMA_METAL_PREFILL_SKIP")
+    g_pf_env_mulmm = g_env_metal.mulmm
+    g_pf_env_logits = g_env_metal.logits
+    g_pf_env_attn = g_env_metal.attn
+    g_pf_env_unretained = g_env_metal.unretained
+    g_pf_env_capture = g_env_metal.pf_capture
+    g_pf_env_ncb = g_env_metal.ncb
+    if (!empty(g_env_metal.prefill_skip)) {
+        g_pf_skip = g_env_metal.prefill_skip
         to_log(LOG_WARNING, "dasLLAMA metal prefill: SKIP={g_pf_skip} — timing-attribution mode, output is GARBAGE\n")
     }
 }

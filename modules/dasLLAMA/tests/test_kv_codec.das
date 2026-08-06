@@ -11,6 +11,7 @@ require llvm/daslib/f16_cvt
 require daslib/jobque_boost
 require daslib/fio
 require math
+require dasllama/dasllama_env
 
 // KV-cache codec layout invariants — synthetic Configs only (no model files, never skips):
 // the per-session row-byte prefixes built by make_run_state must mirror layout_offsets' shared-
@@ -609,7 +610,7 @@ def test_kv_codec_f16(t : T?) {
 }
 
 def private llama2c_dir() : string {
-    let env = get_env_variable("DASLLAMA_LLAMA2C_DIR")
+    let env = g_env_test.llama2c_dir
     return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
 }
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
@@ -781,7 +782,7 @@ def test_kv_f16_prefill_vs_decode(t : T?) {
 // 32-block check — by design); SmolLM2-135M is the small head_size-64 carrier, same rail as
 // test_fused_decode. Override the model root with DASLLAMA_MODELS_DIR.
 def private models_dir() : string {
-    let env = get_env_variable("DASLLAMA_MODELS_DIR")
+    let env = g_env_harness.models_dir
     return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
 }
 let GGUF_PATH = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")

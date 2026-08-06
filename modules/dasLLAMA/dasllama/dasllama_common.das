@@ -551,7 +551,7 @@ def allow_cpu_prefill(on : bool = true) {
 
 [cold_path]   // one-time env resolution; the accessor is a global test after the first call
 def private load_cpu_prefill_allowed() {
-    g_cpu_prefill_allowed = env_flag("DASLLAMA_CPU_PREFILL", false) ? 1 : 0
+    g_cpu_prefill_allowed = g_env_engine.cpu_prefill ? 1 : 0
 }
 
 def private cpu_prefill_allowed : bool {

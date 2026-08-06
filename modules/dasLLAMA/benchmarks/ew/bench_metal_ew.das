@@ -79,7 +79,7 @@ def private best_of(queue; psos; bufss; groupss; threadss; tgmems; rounds : int;
 }
 
 def private run_ew_lab(b) {   // nolint:STYLE038 — flat lab driver: buffers bound once, then one timed slot per kernel
-    let rounds = env_int("DASMETAL_LAB_ROUNDS", 3)
+    let rounds = g_env_bench.lab_rounds
     let dim = 3072l
     let hidden = 8192l
     let nb = 2l

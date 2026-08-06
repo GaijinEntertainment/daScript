@@ -12,6 +12,7 @@ require daslib/clargs
 require daslib/fio
 require strings
 require math
+require dasllama/dasllama_env
 
 [CommandLineArgs]
 struct RunArgs {
@@ -127,8 +128,8 @@ def private child_envs(cfg : RunArgs; win : bool) : string {
     // FOREIGN image identity, and its save GC-purges the rig's images as dead siblings
     // (observed 2026-07-30: fam-gemma4 freed 34 GB of bench flavors). A caller-set
     // DAS_TUNE_MANIFEST inherits; a box without a minted manifest keeps sidecar behavior.
-    if (empty(get_env_variable("DAS_TUNE_MANIFEST"))) {
-        let boxEnv = get_env_variable("DASLLAMA_BOX")
+    if (empty(g_env_core.tune_manifest)) {
+        let boxEnv = g_env_prof.box
         let manifest = "modules/dasLLAMA/performance/{empty(boxEnv) ? "m1" : boxEnv}.tune.json"
         var mst : FStat
         if (stat(manifest, mst)) {
@@ -165,9 +166,9 @@ def main() : int {
         to_log(LOG_ERROR, "unknown --suite '{cfg.suite}' (decode | prefill | matrix | kernels | image | image-vulkan | coverage | all)\n")
         return 2
     }
-    var tmp = get_env_variable("TMPDIR")
+    var tmp = g_env_test.tmpdir
     if (empty(tmp)) {
-        tmp = get_env_variable("TEMP")   // the Windows spelling; TMPDIR is the POSIX one
+        tmp = g_env_test.temp_dir   // the Windows spelling; TMPDIR is the POSIX one
     }
     if (empty(tmp)) {
         tmp = "/tmp"

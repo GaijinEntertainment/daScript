@@ -11,6 +11,7 @@ require daslib/jobque_boost
 require daslib/jobque_profile   // JOBQUE_PROFILING_ENABLED — the --trace arm refuses on a build without the marker rail
 require daslib/clargs
 require math
+require dasllama/dasllama_env
 
 // Per-bucket decode profile — the position-0 detector for decode-side chases: one measurement
 // window of -n single-token forwards at depth --depth, the engine's permanent prof_add buckets
@@ -79,15 +80,15 @@ def main() {
     allow_cpu_prefill()   // CPU-protocol profile by intent — disarm the Metal-build tripwire
     let ngen = max(int64(cfg.ngen), 1l)
     let depth = max(int64(cfg.depth), 0l)
-    let t_env = has_env_variable("DAS_JOBQUE_THREADS")
-    var threads = cfg.threads > 0 ? cfg.threads : (t_env ? to_int(get_env_variable("DAS_JOBQUE_THREADS")) : profile_threads())
-    if (t_env && to_int(get_env_variable("DAS_JOBQUE_THREADS")) != threads) {
-        threads = to_int(get_env_variable("DAS_JOBQUE_THREADS"))
+    let t_env = g_env_core.jobque_threads
+    var threads = cfg.threads > 0 ? cfg.threads : (t_env ?? profile_threads())
+    if (is_some(t_env) && unwrap(t_env) != threads) {
+        threads = unwrap(t_env)
         print("warning: DAS_JOBQUE_THREADS overrides -t — running {threads} lanes\n")
-    } elif (!t_env) {
+    } elif (is_none(t_env)) {
         set_jobque_threads_cap(max(threads - 1, 1))
     }
-    let pinned = affinity_on() && !has_env_variable("DAS_JOBQUE_AFFINITY")
+    let pinned = affinity_on() && is_none(g_env_core.jobque_affinity)
     if (pinned) {
         set_jobque_affinity(2)   // 2 = hard mask, the llama-bench --cpu-strict mirror
     }

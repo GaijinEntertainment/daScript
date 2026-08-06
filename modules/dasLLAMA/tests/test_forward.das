@@ -8,12 +8,13 @@ require dasllama/dasllama_tokenizer
 require daslib/jobque_boost
 require daslib/fio
 require dasllama/dasllama_math  // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
+require dasllama/dasllama_env
 
 // End-to-end oracle: needs llama2.c's stories15M.bin + tokenizer.bin (gitignored, 60MB).
 // Skips cleanly when absent (e.g. in CI), so it's a real regression locally and a no-op elsewhere.
 // override the machine-local llama2.c checkout with DASLLAMA_LLAMA2C_DIR (e.g. on the x64 handoff box)
 def private llama2c_dir() : string {
-    let env = get_env_variable("DASLLAMA_LLAMA2C_DIR")
+    let env = g_env_test.llama2c_dir
     return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
 }
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")

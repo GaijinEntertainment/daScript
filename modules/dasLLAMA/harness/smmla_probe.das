@@ -1,7 +1,7 @@
 options gen2
 require daslib/jobque_boost   // nolint:STYLE030 — ref_time_ticks/get_time_usec
 require llvm/daslib/aarch64_neon
-require daslib/fio   // has_env_variable: the compile-only gate
+require dasllama/dasllama_env
 
 // SMMLA (i8mm) single-core scout: correctness + ALU-throughput ratio vs SDOT on the same
 // synthetic Q8 bytes. Run with -jit on i8mm silicon ONLY (M2/M3+/A15+ — the emitter is
@@ -17,12 +17,12 @@ let REPS = 40000        // outer repetitions
 let CHAINS = 4          // independent accumulator chains (hide the 3-4 cycle MMA latency)
 
 [export]
-def main() {
+def main() {   // nolint:STYLE038 — flat probe phases (gate, fill, run, report); no seam stands alone
     print("smmla probe: jit={jit_enabled()}\n")
     // pre-i8mm host rail: DAS_JIT_ARM64_FORCE_FEATURES=i8mm + this gate jits/links the DLL
     // without executing SMMLA (which would SIGILL here); ship .jitted_scripts to the i8mm box
     // and run there with the same env — the cache key matches, no linker needed on the target
-    if (has_env_variable("SMMLA_PROBE_COMPILE_ONLY")) {
+    if (g_env_harness.smmla_probe_compile_only) {
         print("compile-only: DLL linked, execution skipped (pre-i8mm host)\n")
         return
     }

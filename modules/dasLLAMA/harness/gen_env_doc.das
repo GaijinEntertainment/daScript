@@ -1,8 +1,8 @@
 options gen2
 
-// Writes modules/dasLLAMA/ENVIRONMENT.md from env_registry(). The doc is generated so it cannot
-// drift from the code: tests/test_env_registry.das re-renders and compares, and separately fails
-// on any env read in the tree whose name is not registered.
+// Writes modules/dasLLAMA/ENVIRONMENT.md from the [EnvConfig] declarations in dasllama_env. The
+// doc is generated so it cannot drift from the code: tests/test_env_registry.das re-renders and
+// compares, and separately fails on any env read that bypasses the declarations.
 //
 //   daslang modules/dasLLAMA/harness/gen_env_doc.das
 

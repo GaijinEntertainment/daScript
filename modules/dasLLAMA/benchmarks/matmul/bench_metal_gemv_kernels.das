@@ -8,7 +8,6 @@ require ?das_metal metal/das_metal_boost  // GPU driver half, Apple builds only
 require ?das_metal dasllama/dasllama_metal_gemm  // the production 32x32 GEMM MSL (the batch-crossover row)
 require dasllama/dasllama_metal_kernels  // the production GEMV MSL (v0 baseline)
 require llvm/daslib/f16_cvt  // f16 bit converts for the K-quant superblock fills
-require daslib/fio
 require math  // used only inside the Apple static_if half
 require strings
 
@@ -4092,8 +4091,8 @@ def private time_reps_sk(queue; pso_g; bufs_g; groups_g : uint3; tgmem : uint64;
     return gpu_ms / double(reps)
 }
 
-def private want(filter_env, name : string) : bool {
-    return !has_env_variable(filter_env) || find(get_env_variable(filter_env), name) >= 0
+def private want(filter, name : string) : bool {
+    return empty(filter) || find(filter, name) >= 0
 }
 
 def private sk_idx(sv : int) : int => sv == 2 ? 0 : (sv == 4 ? 1 : 2)
@@ -4182,7 +4181,7 @@ def private count_mismatch_sampled(got : array<float>; ref_v : array<float>; d, 
 }
 
 def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the lab A/B ladder: per-variant compile/dispatch/measure arms are one flow
-    let rounds = env_int("DASMETAL_LAB_ROUNDS", 3)
+    let rounds = g_env_bench.lab_rounds
     let refd = 128l
     let bmax = 16l
     var dev = metal_create_system_default_device()
@@ -4197,7 +4196,7 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
     var pso_red = pipeline_from_source(dev, lab_sk_reduce_msl, lab_sk_reduce_msl_entry, lab_sk_reduce_msl_fastmath, err_red)
     for (v, pso in variants, psos) {
         b |> success(pso != null, "pipeline compiles: {v.name}")
-        if (pso != null && want("DASMETAL_LAB_VARIANTS", v.name)) {
+        if (pso != null && want(g_env_bench.lab_variants, v.name)) {
             to_log(LOG_INFO, "{v.name}: max_threads={metal_pipeline_max_total_threads(pso)} simd_width={metal_pipeline_thread_execution_width(pso)}\n")
         }
     }
@@ -4214,7 +4213,7 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
                    ("qkv12b", 3840l, 8192l), ("wogl12b", 8192l, 3840l), ("w13_12b", 3840l, 15360l),
                    ("w2_12b", 15360l, 3840l)]
     for (sh in shapes) {
-        if (!want("DASMETAL_LAB_SHAPES", sh._0)) {
+        if (!want(g_env_bench.lab_shapes, sh._0)) {
             continue
         }
         let n = sh._1
@@ -4248,7 +4247,7 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
         var anyk5 = false
         var anyk6 = false
         for (v in variants) {
-            let on = want("DASMETAL_LAB_VARIANTS", v.name)
+            let on = want(g_env_bench.lab_variants, v.name)
             anyk4 ||= v.kq == 4 && on
             anyk5 ||= v.kq == 5 && on
             anyk6 ||= v.kq == 6 && on
@@ -4322,7 +4321,7 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
         run_v |> reserve(length(variants) * 5)
         run_b |> reserve(length(variants) * 5)
         for (v, idx in variants, count()) {
-            if (psos[idx] == null || !want("DASMETAL_LAB_VARIANTS", v.name)) {
+            if (psos[idx] == null || !want(g_env_bench.lab_variants, v.name)) {
                 continue
             }
             for (bn in v.b_list) {

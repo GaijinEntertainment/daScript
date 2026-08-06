@@ -21,7 +21,7 @@ def parity_ref_path(model_path, key : string) : string {
 }
 
 def parity_refresh : bool {
-    return env_flag("DASLLAMA_TRUTH_REFRESH", false)
+    return g_env_engine.truth_refresh
 }
 
 def save_ref_ids(path : string; ids : array<int64>) {

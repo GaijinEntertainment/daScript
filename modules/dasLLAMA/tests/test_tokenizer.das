@@ -5,6 +5,7 @@ require dasllama/dasllama_bpe
 require daslib/fio
 require strings
 require daslib/strings_boost
+require dasllama/dasllama_env
 
 // Tokenizer regression gates against llama.cpp's own test-tokenizer-0 corpora (the .inp/.out files
 // shipped next to each ggml-vocab-*.gguf). The vocab fixtures are machine-local (gitignored model
@@ -14,7 +15,7 @@ require daslib/strings_boost
 
 // override the machine-local fixture root with DASLLAMA_MODELS_DIR (e.g. on the x64 handoff box)
 def private models_dir() : string {
-    let env = get_env_variable("DASLLAMA_MODELS_DIR")
+    let env = g_env_harness.models_dir
     return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
 }
 

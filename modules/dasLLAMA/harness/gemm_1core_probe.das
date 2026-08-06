@@ -17,10 +17,10 @@ require dasllama/dasllama_math_aarch64_neon
 require dasllama/dasllama_math_gen
 require dasllama/dasllama_convert
 require daslib/jobque_boost
-require daslib/fio
 require math
 require strings
 require daslib/strings_boost
+require dasllama/dasllama_env
 
 let NTOK = 128l
 let ROUNDS = 6
@@ -252,8 +252,8 @@ def focus_bench(be : string; shape : string; n, d, ntok : int64; forked : bool) 
     // DASLLAMA_BATCH_CHUNKS="1,4" A/Bs the batch-oversplit knob INTERLEAVED within this process
     // (best-of-6 per value, adjacent in time — immune to box drift); absent = current knob, one shot
     var chunk_cands : array<int>
-    if (has_env_variable("DASLLAMA_BATCH_CHUNKS")) {
-        for (part in split(get_env_variable("DASLLAMA_BATCH_CHUNKS"), ",")) {
+    if (!empty(g_env_harness.batch_chunks)) {
+        for (part in split(g_env_harness.batch_chunks, ",")) {
             if (!empty(part)) {
                 chunk_cands |> push(to_int(part))
             }
@@ -302,10 +302,10 @@ def focus_bench(be : string; shape : string; n, d, ntok : int64; forked : bool) 
 }
 
 def focus_main {
-    let be = get_env_variable("DASLLAMA_FOCUS_BACKEND")
+    let be = g_env_harness.focus_backend
     var shape = "qo"
-    if (has_env_variable("DASLLAMA_FOCUS_SHAPE")) {
-        shape = get_env_variable("DASLLAMA_FOCUS_SHAPE")
+    if (!empty(g_env_harness.focus_shape)) {
+        shape = g_env_harness.focus_shape
     }
     var n = 2048l
     var d = 2048l
@@ -317,15 +317,13 @@ def focus_main {
         n = 5632l
     }
     var ntok = 128l
-    if (has_env_variable("DASLLAMA_FOCUS_NTOK")) {
-        ntok = int64(to_int(get_env_variable("DASLLAMA_FOCUS_NTOK")))
-    }
-    if (has_env_variable("DASLLAMA_FOCUS_FORKED")) {
+    ntok = g_env_harness.focus_ntok ?? ntok
+    if (g_env_harness.focus_forked) {
         set_target_chunk_work(1l)   // always parallel — every call goes through parallel_for
         with_job_que() {
             setup_dasllama_jobque_()
-            if (has_env_variable("DAS_JOBQUE_JOIN_SPIN")) {
-                let join_spin = to_int(get_env_variable("DAS_JOBQUE_JOIN_SPIN"))   // poll LEVEL 0..100 (ggml denomination), not µs
+            if (is_some(g_env_harness.das_jobque_join_spin)) {
+                let join_spin = unwrap(g_env_harness.das_jobque_join_spin)   // poll LEVEL 0..100 (ggml denomination), not µs
                 set_jobque_join_spin(join_spin)
                 print("join spin override: level {join_spin}\n")
             }
@@ -346,7 +344,7 @@ def main {
         print("run with -jit — off-JIT the x64 backends do not register and dot32 runs its scalar fallback\n")
         return
     }
-    if (has_env_variable("DASLLAMA_FOCUS_BACKEND")) {
+    if (!empty(g_env_harness.focus_backend)) {
         focus_main()
         return
     }

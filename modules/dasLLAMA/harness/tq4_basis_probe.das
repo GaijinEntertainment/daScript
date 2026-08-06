@@ -9,6 +9,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_kv_codec  // the tq4 codec + FWHT rotation under probe
 require dasllama/dasllama_tokenizer
 require llvm/daslib/f16_cvt
+require dasllama/dasllama_env
 
 // Basis A/B on REAL cache rows: run SmolLM2 over real text with an f32 KV cache, then re-quantize
 // every stored K (post-RoPE) and V head-row at 4 bits (production tq4 kernels) under four bases —
@@ -190,7 +191,7 @@ struct Acc {
 
 [export]
 def main {   // nolint:STYLE037,STYLE038 — flat probe driver: every basis arm walks the same cache rows through the same scratch buffers
-    let env = get_env_variable("DASLLAMA_MODELS_DIR")
+    let env = g_env_harness.models_dir
     let mdir = empty(env) ? "D:/Work/llama.cpp/models/" : env
     let path = path_join(mdir, "SmolLM2-135M-Instruct-Q8_0.gguf")
     if (!stat(path).is_valid) {

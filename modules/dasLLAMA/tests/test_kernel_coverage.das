@@ -15,6 +15,7 @@ require daslib/fio  // the zoo paths
 require math  // nolint:STYLE030,LINT019 — used only inside the das_metal static_if half
 require strings
 require _model_tier
+require dasllama/dasllama_env
 
 // The KERNEL COVERAGE census (CODEREVIEW rule 17): drive the small-model zoo across the
 // format / graph / batch-shape / KV-codec axes and report which compiled kernels were never
@@ -198,7 +199,7 @@ def test_metal_kernel_coverage(tst : T?) {
                     served++
                 }
             }
-            let famfilter = get_env_variable("DASLLAMA_TEST_FAMILY")
+            let famfilter = g_env_test.test_family
             if (empty(famfilter)) {
                 t |> success(served >= 40,
                     "the census counted {served} distinct dispatched kernels (rail floor 40)")

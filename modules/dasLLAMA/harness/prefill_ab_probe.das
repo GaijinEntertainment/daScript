@@ -7,6 +7,7 @@ require dasllama/dasllama_math
 require daslib/jobque_boost
 require daslib/fio
 require dasllama/dasllama_load   // the GGUF load walk (load_gguf/load_model_/load_checkpoint)
+require dasllama/dasllama_env
 
 def bench(tr : Model; toks : array<int64>; dt : KVDtype) {
     var s <- make_run_state(tr.config, dt, dt)
@@ -19,7 +20,7 @@ def bench(tr : Model; toks : array<int64>; dt : KVDtype) {
 
 [export]
 def main {
-    let env = get_env_variable("DASLLAMA_MODELS_DIR")
+    let env = g_env_harness.models_dir
     let mdir = empty(env) ? "D:/Work/llama.cpp/models/" : env
     var tr <- load_gguf(path_join(mdir, "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"), QuantMode.q8)
     tr.config.seq_len = 4096l

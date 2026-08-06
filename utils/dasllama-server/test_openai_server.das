@@ -12,6 +12,7 @@ require daslib/fio                                      // get_env_variable / st
 require daslib/toml                                     // read_toml: POST /config round-trip check
 require math                                            // sqrt
 require strings                                         // find (control-page content-type/body checks)
+require dasllama/dasllama_env
 
 // End-to-end conformance for the OpenAI-compatible server: spin it up on its own thread (a separate
 // context — so the model loads INSIDE that thread, since g_model is a per-context module global),
@@ -32,7 +33,7 @@ def private test_save_path() : string {
 let TEST_SAVE_PATH = test_save_path()
 
 def private models_dir() : string {
-    return get_env_variable("DASLLAMA_MODELS_DIR")   // empty -> MODEL_PATH is relative -> the test skips
+    return g_env_harness.models_dir   // empty -> MODEL_PATH is relative -> the test skips
 }
 let MODEL_PATH = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
 

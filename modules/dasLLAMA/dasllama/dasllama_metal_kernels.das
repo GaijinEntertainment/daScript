@@ -4343,7 +4343,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     var ok = true
     // the GEMV / rms / add / swiglu MSL sources are the prefill module's, verbatim (own PSOs)
     g_pso_gemv = compile_pso(metal_q8_gemv_msl, metal_q8_gemv_msl_entry, metal_q8_gemv_msl_fastmath, ok)
-    g_gemv_rows = clamp(int64(env_int("DASLLAMA_METAL_GEMV_TG", 4)), 1l, 32l)
+    g_gemv_rows = clamp(int64(g_env_metal.gemv_tg), 1l, 32l)
     g_pso_rms = compile_pso(metal_rmsnorm_msl, metal_rmsnorm_msl_entry, metal_rmsnorm_msl_fastmath, ok)
     g_pso_add = compile_pso(metal_add_msl, metal_add_msl_entry, metal_add_msl_fastmath, ok)
     g_pso_addrms = compile_pso(metal_add_rms_msl, metal_add_rms_msl_entry, metal_add_rms_msl_fastmath, ok)
@@ -4529,7 +4529,7 @@ var private g_kq_b8_mode = -1
 
 [cold_path]   // one-time env resolution; kq_b8_on is a global test after the first call
 def private load_kq_b8_mode() {
-    g_kq_b8_mode = env_int("DASLLAMA_METAL_KQ_B8", 1) != 0 ? 1 : 0
+    g_kq_b8_mode = g_env_metal.kq_b8 ? 1 : 0
 }
 
 def private kq_b8_on : bool {

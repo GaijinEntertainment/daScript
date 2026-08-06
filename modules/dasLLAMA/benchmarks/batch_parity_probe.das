@@ -11,6 +11,7 @@ require daslib/strings_boost
 require daslib/strings_convert
 require strings
 require math
+require dasllama/dasllama_env
 
 // The batched-decode NUMERIC parity probe — the teacher-forced instrument that caught the 3d
 // V-copy/v_norm race (Δ15-22 where the noise floor is ~0.5). CPU truth runs greedy and records
@@ -230,8 +231,8 @@ def main() : int {   // nolint:STYLE038 — flat probe driver: arg handling, the
         print_help(get_command_info(type<Args>), "batch_parity_probe")
         return 0
     }
-    if (has_env_variable("DASLLAMA_PIN_BACKEND")) {
-        pin_kernel_backend(get_env_variable("DASLLAMA_PIN_BACKEND"))
+    if (!empty(g_env_engine.pin_backend)) {
+        pin_kernel_backend(g_env_engine.pin_backend)
     }
     let nsteps = max(int64(cfg.steps), 1l)
     print("loading {cfg.model}\n")

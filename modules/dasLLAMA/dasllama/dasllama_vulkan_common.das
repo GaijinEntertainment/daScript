@@ -68,7 +68,7 @@ var g_mm_small = -1l
 
 def mm_small_tile : int64 {
     if (g_mm_small < 0l) {
-        let e = env_str("DASLLAMA_MM_SMALL", "")
+        let e = g_env_vulkan.mm_small
         g_mm_small = e == "64" ? 64l : (e == "128" ? 128l : BATCH_TILE)   // else fails closed to sdot4
     }
     return g_mm_small
@@ -81,7 +81,7 @@ var g_mm_smalld = -1l
 
 def mm_small_d : int64 {
     if (g_mm_smalld < 0l) {
-        g_mm_smalld = env_int64("DASLLAMA_MM_SMALLD", 64l)
+        g_mm_smalld = g_env_vulkan.mm_smalld
     }
     return g_mm_smalld
 }
@@ -546,7 +546,7 @@ var g_vk_upload_bytes = 0l
 def vk_prof : bool {
     if (!g_vk_prof_probed) {
         g_vk_prof_probed = true
-        g_vk_prof = env_flag("DASLLAMA_GPU_PROF", false)
+        g_vk_prof = g_env_gpu.gpu_prof
     }
     return g_vk_prof
 }
@@ -698,7 +698,7 @@ def resolve_coopmat_mode(has_cm, has_cm2 : bool) : int {
     // fastest MEASURED default (mm; cm2 opt-in until it beats mm); DASLLAMA_COOPMAT overrides
     var cmode = has_cm ? 3 : 0
     if (has_cm) {
-        let mode = env_str("DASLLAMA_COOPMAT", "")
+        let mode = g_env_vulkan.coopmat
         if (mode == "sdot4") {
             cmode = 0
         } elif (mode == "f16") {
@@ -769,7 +769,7 @@ def resolve_weight_cap(heap : VkHeapInfo) : int64 {
     if (vram_mb > 0l) {
         return vram_mb * 1_000_000l
     }
-    if (has_env_variable("DASLLAMA_GPU_VRAM_MB")) {
+    if (is_some(g_env_gpu.gpu_vram_mb)) {
         return WEIGHT_CAP
     }
     var cap = WEIGHT_CAP
@@ -844,7 +844,7 @@ def vk_moe_init : bool {
     g_gpu.coopmat_mode = resolve_coopmat_mode(g_gpu.has_coopmat, g_gpu.has_coopmat2)
     // dedicated transfer family: streamed copies overlap compute (DASLLAMA_VK_XFERQ=0 = bisect hatch)
     var xfam = -1
-    if (g_gpu.has_coopmat && env_flag("DASLLAMA_VK_XFERQ", true)
+    if (g_gpu.has_coopmat && g_env_vulkan.vk_xferq
             && timeline_semaphore_supported(g_gpu.phys)) {
         xfam = select_transfer_queue_family(g_gpu.phys)
     }
@@ -887,7 +887,7 @@ def vk_moe_init : bool {
     }
     // WDDM residency shield: allocations chain priority 1.0 (DASLLAMA_VK_MEMPRIO=0 = bisect hatch)
     g_gpu.has_memprio = (g_gpu.has_coopmat && memory_priority_supported(g_gpu.phys)
-        && env_flag("DASLLAMA_VK_MEMPRIO", true))
+        && g_env_vulkan.vk_memprio)
     if (g_gpu.has_memprio) {
         to_log(LOG_INFO, "dasLLAMA vulkan tier: memory-priority residency shield armed\n")
     }
@@ -905,7 +905,7 @@ def vk_moe_init : bool {
     let heap = query_heap_info(g_gpu.phys)
     g_gpu.weight_budget = resolve_weight_cap(heap)
     if (heap.budget > 0l) {
-        let vram_override = gpu_want_vram_mb() > 0l || has_env_variable("DASLLAMA_GPU_VRAM_MB")
+        let vram_override = gpu_want_vram_mb() > 0l || is_some(g_env_gpu.gpu_vram_mb)
         // the honest cliff leaves 2GB of the raw heap for the desktop (6000MB healthy, 6803 demoted)
         let cliff = clamp(heap.budget - VRAM_RESERVE, 0l, heap.size - 2_147_483_648l)
         if (vram_override && g_gpu.weight_budget > cliff) {
@@ -915,7 +915,7 @@ def vk_moe_init : bool {
     }
 
     // ReBAR: DL|HV|HC on the full-VRAM heap (the >1GB check excludes the 256MiB legacy window)
-    if (env_flag("DASLLAMA_VK_REBAR", true)) {
+    if (g_env_vulkan.vk_rebar) {
         var rmp : VkPhysicalDeviceMemoryProperties
         vkGetPhysicalDeviceMemoryProperties(g_gpu.phys, rmp)
         for (i in range(int(rmp.memoryTypeCount))) {
@@ -1282,7 +1282,7 @@ def make_imported_buf(ptr : void?; bytes : int64) : HostBuf {
 // stream arm: pinned host mirror the copy engine DMAs into a slot per prefill (no VRAM spent); P2: a flavor load IMPORTS the gather's mapped-blob window instead — zero pinned RAM, the page cache is the mirror
 def vk_moe_stream_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n, rows : int64; fmt : int) : bool {
     let pb = stack_plane_bytes(n, rows, fmt)
-    if (env_flag("DASLLAMA_VK_IMPORT", true) && !g_vk_import_declined_said) {
+    if (g_env_vulkan.vk_import && !g_vk_import_declined_said) {
         let win = moe_gpu_slice_window(woff, fmt)
         if (win.wq != null && win.wqb == pb.wq && (pb.ws <= 0l || (win.ws != null && win.wsb == pb.ws))) {
             var iq = make_imported_buf(win.wq, pb.wq)
@@ -2397,14 +2397,14 @@ var g_vhz_trace = -1      // DASLLAMA_VK_HAZARD_TRACE: log every declared node (
 
 def vhz_paranoid : bool {
     if (g_vhz_paranoid < 0) {
-        g_vhz_paranoid = env_flag("DASLLAMA_VK_HAZARD_PARANOID", false) ? 1 : 0
+        g_vhz_paranoid = g_env_vulkan.vk_hazard_paranoid ? 1 : 0
     }
     return g_vhz_paranoid != 0
 }
 
 def vhz_trace : bool {
     if (g_vhz_trace < 0) {
-        g_vhz_trace = env_flag("DASLLAMA_VK_HAZARD_TRACE", false) ? 1 : 0
+        g_vhz_trace = g_env_vulkan.vk_hazard_trace ? 1 : 0
     }
     return g_vhz_trace != 0
 }
@@ -2413,7 +2413,7 @@ var g_vk_fa = -1   // DASLLAMA_VK_FA=0 pins the generic da_attn_b (flash-attn bi
 
 def vk_fa_on : bool {
     if (g_vk_fa < 0) {
-        g_vk_fa = env_flag("DASLLAMA_VK_FA", true) ? 1 : 0
+        g_vk_fa = g_env_vulkan.vk_fa ? 1 : 0
     }
     return g_vk_fa != 0
 }
@@ -2422,7 +2422,7 @@ var g_vk_fuse = -1   // DASLLAMA_VK_FUSE=0 pins the split decode-tail dispatches
 
 def vk_fuse_on : bool {
     if (g_vk_fuse < 0) {
-        g_vk_fuse = env_flag("DASLLAMA_VK_FUSE", true) ? 1 : 0
+        g_vk_fuse = g_env_vulkan.vk_fuse ? 1 : 0
     }
     return g_vk_fuse != 0
 }

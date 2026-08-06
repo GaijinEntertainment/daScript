@@ -6,6 +6,7 @@ require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — public-path tests exercise the API through it (engine + arch registrations + chat)
 require daslib/jobque_boost
 require daslib/fio
+require dasllama/dasllama_env
 
 // Phase-3 sampling API. Greedy (SamplingParams default: temp=0, penalty=1.0) must reproduce the
 // frozen greedy oracle bit-for-bit; temp>0 sampling must be deterministic under a fixed seed.
@@ -13,7 +14,7 @@ require daslib/fio
 
 // override the machine-local model root with DASLLAMA_MODELS_DIR (e.g. on the x64 handoff box)
 def private models_dir() : string {
-    let env = get_env_variable("DASLLAMA_MODELS_DIR")
+    let env = g_env_harness.models_dir
     return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
 }
 

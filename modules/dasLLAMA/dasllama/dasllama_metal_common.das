@@ -1438,7 +1438,7 @@ var g_gr_sched_mode = -1   // DASLLAMA_METAL_SCHED: 1 = leveled reorder (default
 
 [cold_path]   // one-time env resolution; sched_enabled is a global test after the first call
 def private load_sched_mode() {
-    g_gr_sched_mode = env_int("DASLLAMA_METAL_SCHED", 1)
+    g_gr_sched_mode = g_env_metal.sched
 }
 
 def private sched_enabled : bool {
@@ -1745,11 +1745,11 @@ def metal_common_init : bool {
         return false
     }
     g_queue = metal_new_command_queue(g_dev)
-    g_attn_single_max = clamp(int64(env_int("DASLLAMA_METAL_ATTN_SINGLE", 64)), ATTN_CHUNK_ROWS, 128l)
-    g_pipe_debug = env_flag("DASLLAMA_METAL_PIPE_DEBUG", false)
-    g_mirror_cap_env = env_int("DASLLAMA_METAL_KV_MIRROR_MB", 4096)
-    g_hz_paranoid = env_int("DASLLAMA_METAL_HAZARD_PARANOID", 0) != 0
-    g_hz_strict = env_int("DASLLAMA_METAL_HAZARD_STRICT", 0) != 0
+    g_attn_single_max = clamp(int64(g_env_metal.attn_single), ATTN_CHUNK_ROWS, 128l)
+    g_pipe_debug = g_env_metal.pipe_debug
+    g_mirror_cap_env = g_env_metal.kv_mirror_mb
+    g_hz_paranoid = g_env_metal.hazard_paranoid
+    g_hz_strict = g_env_metal.hazard_strict
     return true
 }
 

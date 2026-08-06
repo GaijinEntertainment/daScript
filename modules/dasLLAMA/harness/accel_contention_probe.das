@@ -7,8 +7,8 @@ require dasllama/dasllama_math
 require dasllama/dasllama_par
 require llvm/daslib/f16_cvt
 require daslib/jobque_boost
-require daslib/fio
 require math
+require dasllama/dasllama_env
 
 // Contention rig: reproduce the MoE-router call pattern (small inline sgemm between jobque NEON
 // bursts) without a model load. Prints per-call sgemm ms + BLASGetThreading per context.
@@ -47,7 +47,7 @@ def main {
     var lane_mode : array<int>
     lane_mode |> resize(8)
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        if (get_env_variable("METAL") == "1") {
+        if (g_env_harness.metal_contention) {
             let dev = metal_create_system_default_device()
             print("metal device: {metal_device_name(dev)}\n")
         }

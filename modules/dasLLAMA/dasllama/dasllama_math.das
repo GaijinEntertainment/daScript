@@ -4,7 +4,6 @@ options _comment_hygiene = true
 module dasllama_math shared public
 
 require math
-require daslib/fio  // has_env_variable: DAS_JOBQUE_TEAM_RANK_GATE suppresses the profile's team_rank_gate knob
 require dasllama/dasllama_env  // env_flag/env_int64: the shared typed readers + the knob registry
 require dasllama/dasllama_plane  // PlaneF/PlaneI8 — the borrowed-plane weight forms below
 require dasllama/dasllama_config  // DlimVulkanConfig — the dry-bake seam's config argument
@@ -243,13 +242,13 @@ def setup_dasllama_jobque_() {
     set_jobque_worker_spin(int(min(g_jobque_spin_us, 2147483647l)))
     set_jobque_join_spin(int(min(g_jobque_join_poll, 2147483647l)))
     set_jobque_worker_limit(g_dispatch_worker_limit > 0 ? g_dispatch_worker_limit : -1)   // -1 = unlimited
-    if (g_team_rank_gate >= 0 && !has_env_variable("DAS_JOBQUE_TEAM_RANK_GATE")) {
+    if (g_team_rank_gate >= 0 && is_none(g_env_core.jobque_team_rank_gate)) {
         set_jobque_team_rank_gate(g_team_rank_gate != 0)
     }
     // The dispatch caller is load-bearing in team mode — only it publishes chains, so a
     // descheduled caller idles every lane (4B Q4 32L trace: 13 all-lane holes/token, 1.7% worst).
     // Que creation ran this thread at High; claim the top notch. DASLLAMA_CALLER_PRIO=<-2..2> is the A/B rail.
-    set_current_thread_priority(clamp(env_int("DASLLAMA_CALLER_PRIO", 2), -2, 2))
+    set_current_thread_priority(clamp(g_env_engine.caller_prio, -2, 2))
 }
 
 // dasLLAMA matmuls are lockstep linear algebra: SMT siblings share the FMA/load ports, so the

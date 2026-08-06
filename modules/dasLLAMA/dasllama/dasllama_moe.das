@@ -138,7 +138,7 @@ def private heat_note_and_advise(t : Model; l : int64; idx : array<int64>; k, ne
 
 [cold_path]   // one-time env resolution; the accessor is a global test after the first call
 def private load_expert_reuse() {
-    g_reuse_on = env_flag("DASLLAMA_EXPERT_REUSE", false) ? 1 : 0
+    g_reuse_on = g_env_engine.expert_reuse ? 1 : 0
 }
 
 def private expert_reuse_armed() : bool {

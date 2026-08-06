@@ -32,7 +32,7 @@ def public prof_log_name() : string {
 
 // Machine-local model root; override with DASLLAMA_MODELS_DIR (the x64/handoff boxes).
 def models_dir() : string {
-    let env = get_env_variable("DASLLAMA_MODELS_DIR")
+    let env = g_env_harness.models_dir
     if (empty(env)) {
         return "/Users/borisbatkin/Work/llama.cpp/models/"
     }
@@ -43,7 +43,7 @@ def models_dir() : string {
 
 // Short box tag baked into the JSON/TSV filenames (profile_llm_<box>.json). Override with DASLLAMA_BOX.
 def box_name() : string {
-    let env = get_env_variable("DASLLAMA_BOX")
+    let env = g_env_prof.box
     return empty(env) ? "m1" : env
 }
 
@@ -59,9 +59,8 @@ def public rig_tune_manifest() : string {
 //! no per-engine detection, no thread matrix (METHODOLOGY.md carries the why). Override with
 //! DASLLAMA_THREADS.
 def profile_threads() : int {
-    let env = get_env_variable("DASLLAMA_THREADS")
-    if (!empty(env)) {
-        return max(to_int(env), 1)
+    if (is_some(g_env_prof.threads)) {
+        return max(unwrap(g_env_prof.threads), 1)
     }
     // Intel hybrid (12th-gen+/Core Ultra) tripwire: the rig pins against the slow cores on
     // Apple but has NO E-core avoidance on x86 yet — measuring through E-cores would publish
@@ -408,7 +407,7 @@ def das_version() : string {
     // shell-free spawn (fio's run_and_capture → popen_argv), so no cmd and no quote/option traps;
     // CreateProcess still wants backslashes in the program path (probe-verified: `bin/daslang`
     // fails to spawn, `bin\daslang` runs), hence the normalize
-    var bin = empty(get_env_variable("DASLANG_BIN")) ? "bin/daslang" : get_env_variable("DASLANG_BIN")
+    var bin = g_env_prof.daslang_bin
     if (is_windows()) {
         bin = replace(bin, "/", "\\")
     }
@@ -427,7 +426,7 @@ def das_version() : string {
 
 // True on a Windows box (cmd sets OS=Windows_NT). macOS/Linux leave it empty.
 def private is_windows() : bool {
-    return get_env_variable("OS") == "Windows_NT"
+    return g_env_prof.win_os == "Windows_NT"
 }
 
 // Windows CPU marketing name from the registry — non-interactive (no `date`-style prompt/hang).
@@ -444,7 +443,7 @@ def private win_cpu_name() : string {
 
 // The CPU brand string: env override (DASLLAMA_CPU) → OS-native probe.
 def private platform_cpu() : string {
-    let ov = get_env_variable("DASLLAMA_CPU")
+    let ov = g_env_prof.cpu
     if (!empty(ov)) {
         return ov
     }
@@ -460,7 +459,7 @@ def private platform_cpu() : string {
 
 // The OS string: env override (DASLLAMA_OS) → OS-native probe (`ver` / sw_vers / os-release+kernel).
 def private platform_os() : string {
-    let ov = get_env_variable("DASLLAMA_OS")
+    let ov = g_env_prof.os_name
     if (!empty(ov)) {
         return ov
     }
@@ -502,7 +501,7 @@ def tune_summary() : string {
 //! ``DASLLAMA_ALLOW_UNTUNED=1`` is the dev-run escape in all three.
 def tune_gate() : bool {
     var why = ""
-    let mpath = get_env_variable("DAS_TUNE_MANIFEST")
+    let mpath = g_env_core.tune_manifest
     if (is_standalone_exe()) {
         // the release ships <exe>.tune.json from the same mint that baked the winners in
         let sc = tune_manifest_path()
@@ -547,7 +546,7 @@ def tune_gate() : bool {
     if (empty(why)) {
         return true
     }
-    if (env_flag("DASLLAMA_ALLOW_UNTUNED", false)) {
+    if (g_env_bench.allow_untuned) {
         to_log(LOG_WARNING, "tune gate: {why} — measuring anyway (DASLLAMA_ALLOW_UNTUNED=1, numbers are NOT publishable)\n")
         return true
     }
@@ -624,15 +623,14 @@ def private is_macos() : bool {
 
 def private platform_arch() : string {
     if (is_windows()) {
-        return get_env_variable("PROCESSOR_ARCHITECTURE")
+        return g_env_prof.win_arch
     }
     return run_capture("uname -m", true)
 }
 
 def private platform_ram_gb() : int {
-    let ov = get_env_variable("DASLLAMA_RAM_GB")
-    if (!empty(ov)) {
-        return to_int(ov)
+    if (is_some(g_env_prof.ram_gb)) {
+        return unwrap(g_env_prof.ram_gb)
     }
     let gib = 1024.0 * 1024.0 * 1024.0
     if (is_windows()) {
@@ -700,7 +698,7 @@ def private pick_gpu_name(names : array<string>) : string {
 }
 
 def private platform_gpu() : string {
-    let ov = get_env_variable("DASLLAMA_GPU_NAME")
+    let ov = g_env_prof.gpu_name
     if (!empty(ov)) {
         return ov
     }
@@ -742,7 +740,7 @@ def private platform_gpu() : string {
 
 def private platform_cores() : tuple<perf : int; total : int> {
     if (is_windows()) {
-        return (perf = 0, total = env_int("NUMBER_OF_PROCESSORS", 0))
+        return (perf = 0, total = g_env_prof.win_ncpu)
     }
     if (is_macos()) {
         return (
@@ -824,7 +822,7 @@ def private platform_power_plan() : string {
 def private platform_smt() : string {
     if (is_windows()) {
         let phys = physical_perf_cores()
-        let logical = env_int("NUMBER_OF_PROCESSORS", 0)
+        let logical = g_env_prof.win_ncpu
         if (phys > 0 && logical > 0) {
             return logical > phys ? "on" : "off"
         }
@@ -1066,7 +1064,7 @@ def upsert_llm(var tests : array<LlmRec>; rec : LlmRec) {
 // whisper.cpp model root (the ggml-*.bin parakeet/whisper carriers, shared by das and the *-cli
 // references). Override with WHISPER_CPP_MODELS.
 def whisper_models_dir() : string {
-    let env = get_env_variable("WHISPER_CPP_MODELS")
+    let env = g_env_prof.whisper_cpp_models
     if (empty(env)) {
         return "{whisper_cpp_root()}/models/"
     }
@@ -1213,7 +1211,7 @@ def asr_engine_name(tool : string) : string {
 // siblings of the repo root, the venvs inside the repo — so a fresh box needs NO exports
 // (the env vars remain the overrides). A laptop-absolute default here is a BRINGUP bug.
 def whisper_cpp_root() : string {
-    return env_str("WHISPER_CPP", "../whisper.cpp")
+    return g_env_prof.whisper_cpp
 }
 
 def whisper_cpp_bin(cli : string) : string {
@@ -1238,11 +1236,11 @@ def venv_python(venv : string) : string {
 }
 
 def onnx_py() : string {
-    return normalize(env_str("ONNX_PY", venv_python("modules/dasLLAMA/benchmarks/asr/.venv-onnx")))
+    return normalize(empty(g_env_prof.onnx_py) ? venv_python("modules/dasLLAMA/benchmarks/asr/.venv-onnx") : g_env_prof.onnx_py)
 }
 
 def nemo_py() : string {
-    return normalize(env_str("NEMO_PY", venv_python("modules/dasLLAMA/benchmarks/asr/.venv-nemo")))
+    return normalize(empty(g_env_prof.nemo_py) ? venv_python("modules/dasLLAMA/benchmarks/asr/.venv-nemo") : g_env_prof.nemo_py)
 }
 
 // The clean CPU-only build (llama.cpp-clean, ebd048fc5, Accelerate ON, Metal OFF, no dasprof)
@@ -1250,7 +1248,7 @@ def nemo_py() : string {
 // rode Metal (GPU) despite the "CPU-only" label — ggml's Conformer audio ops don't route through
 // BLAS/AMX, so a genuine CPU encode is ~16 s (and das's optimized scalar Conformer beats it).
 def mtmd_bin() : string {
-    let env = env_str("MTMD_BIN", "")
+    let env = g_env_prof.mtmd_bin
     if (!empty(env)) {
         return normalize(env)
     }
@@ -1692,8 +1690,8 @@ def bench_cmd_line() : string {
 //! prefix. Pair with [[bench_cmd_line]] and the row reproduces exactly.
 def bench_env_line() : string {
     var parts <- [for (name in BENCH_ENV_VARS);
-        "{name}={shell_quote(get_env_variable(name))}";
-        where has_env_variable(name)]
+        "{name}={shell_quote(env_value_of(name))}";
+        where env_is_set(name)]
     let line = join(parts, " ")
     delete parts
     return line

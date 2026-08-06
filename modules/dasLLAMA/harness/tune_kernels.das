@@ -33,6 +33,7 @@ require daslib/json
 require daslib/json_boost
 require daslib/fio
 require daslib/strings_boost   // nolint:STYLE030,LINT019 — join for the metal_tensor crown list, only inside the das_metal static_if half
+require dasllama/dasllama_env
 
 // The shipped-fallback registry: dasllama_tuned_fallbacks() maps every [tuned] kernel to the
 // perm it falls back to ON THIS BOX, so report() never restates one as a literal.
@@ -2144,13 +2145,13 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
         VALIDATE_DRIFT_PCT = 3.0lf
         noise_set_paranoid(true)
     }
-    let affinity_inherited = has_env_variable("DAS_JOBQUE_AFFINITY")
+    let affinity_inherited = is_some(g_env_core.jobque_affinity)
     if (!affinity_inherited) {
         set_jobque_affinity(2)   // JobQue pins its creator (this measurement thread) to physical CPU 0
     }
     create_job_que()   // child process exit restores affinity; runtime snapshot also reads its lane count
     let affinity_desc = (affinity_inherited
-        ? "DAS_JOBQUE_AFFINITY={get_env_variable("DAS_JOBQUE_AFFINITY")}"
+        ? "DAS_JOBQUE_AFFINITY={unwrap(g_env_core.jobque_affinity)}"
         : (get_platform_name() == "darwin" ? "QoS USER_INTERACTIVE (macOS has no core mask)" : "hard CPU0 (tuner default)"))
     let modeName = paranoid ? "PARANOID" : "default"
     tune_detail("kernel tuner: {modeName}, N={N}, {SCREEN_ROUNDS} full-grid screening rounds, finalists up to {ROUNDS} rounds x {REPS} reps, measurement affinity {affinity_desc}\n\n")

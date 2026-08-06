@@ -1029,7 +1029,7 @@ var private g_gpu_combine_probed = false
 [cold_path]   // one-time env resolution; the accessor is a global test after the first call
 def private load_gpu_combine() {
     g_gpu_combine_probed = true
-    g_gpu_combine = env_flag("DASLLAMA_GPU_COMBINE", true)
+    g_gpu_combine = g_env_gpu.gpu_combine
 }
 
 def gpu_combine_on : bool {

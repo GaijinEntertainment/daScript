@@ -17,6 +17,7 @@ require strings public
 require daslib/strings_boost   // split — the DASLLAMA_TEST_ARMS comma list
 require dasllama/dasllama_gguf   // gguf_shard_paths — split models tier on their TOTAL size
 require dasllama/dasllama_common   // decode_ — the eyeball rail detokenizes through the model
+require dasllama/dasllama_env
 
 // Models larger than this are large-tier. 6 GiB cleanly splits the ~5GB-and-under carriers
 // (incl. gemma-4-E2B at 4.97GB) from the 7.7GB+ heavies.
@@ -24,13 +25,13 @@ let LARGE_TIER_BYTES = 6ul * 1024ul * 1024ul * 1024ul
 
 // Machine-local model root; override with DASLLAMA_MODELS_DIR (e.g. the x64 handoff box).
 def models_dir() : string {
-    let env = get_env_variable("DASLLAMA_MODELS_DIR")
+    let env = g_env_harness.models_dir
     return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
 }
 
 // True when the large tier is enabled for this run (the pre-PR full sweep).
 def parity_full_mode() : bool {
-    return !empty(get_env_variable("DASLLAMA_PARITY_FULL"))
+    return g_env_test.parity_full
 }
 
 // Arm filter for the metal suites: DASLLAMA_TEST_ARMS = comma-separated substrings; when set,
@@ -38,7 +39,7 @@ def parity_full_mode() : bool {
 // run can never masquerade as full coverage. Unset/empty = every arm runs. Drive through
 // modules/dasLLAMA/tests/run.das — see modules/dasLLAMA/tests/CLAUDE.md.
 def arm_on(t : T?; name : string) : bool {
-    let filter = get_env_variable("DASLLAMA_TEST_ARMS")
+    let filter = g_env_test.test_arms
     if (empty(filter)) {
         return true
     }
@@ -59,7 +60,7 @@ def arm_on(t : T?; name : string) : bool {
 // always run. Loud-skip contract identical to arm_on. Drive through run.das --family — the
 // profiling cadence gate: a llama-format round re-verifies the llama family only.
 def family_on(t : T?; name : string) : bool {
-    let filter = get_env_variable("DASLLAMA_TEST_FAMILY")
+    let filter = g_env_test.test_family
     if (empty(filter)) {
         return true
     }

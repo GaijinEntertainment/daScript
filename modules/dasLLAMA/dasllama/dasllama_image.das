@@ -1282,7 +1282,7 @@ def private vulkan_bake_flavor(var t : Model; path : string; vk_tag : string) {
 //! Whether a cold build persists its image. Off = build it in memory and serve that, leaving no
 //! .dlim behind; the run pays a second copy of the model for it, so on by default.
 def image_save_enabled : bool {
-    return env_flag("DASLLAMA_IMAGE_SAVE", true)
+    return g_env_engine.image_save
 }
 
 // ===== the metal flavor, derived in the writer =====
@@ -1413,7 +1413,7 @@ def private guard_interp_gguf_load(path : string) {
     if (!stat(path, st) || int64(st.size) <= 4_294_967_296l) {
         return
     }
-    if (env_flag("DASLLAMA_ALLOW_INTERP_LOAD", false)) {
+    if (g_env_engine.allow_interp_load) {
         to_log(LOG_WARNING, "dasLLAMA: interpreted gguf load of {int64(st.size) >> 20l} MB — expect minutes per GB (DASLLAMA_ALLOW_INTERP_LOAD)\n")
         return
     }
@@ -1475,7 +1475,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
     // load-time flavor pick: blob-only metal when its drivers serve the config; the vulkan
     // flavor (planar + baked GPU planes) when the vulkan tier arms; planar CPU otherwise
     let want_metal = !planar_only && mode == QuantMode.q8 && get_metal_mode() != MetalMode.off && has_decode_override("metal")
-    if ((mode == QuantMode.q8 || (mode == QuantMode.fp32 && image_fp32)) && env_flag("DASLLAMA_IMAGE", true)) {
+    if ((mode == QuantMode.q8 || (mode == QuantMode.fp32 && image_fp32)) && g_env_engine.image) {
         apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
         let ts_img = ref_time_ticks()
         var t = Model()
