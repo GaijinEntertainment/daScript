@@ -1,6 +1,7 @@
 options gen2
 options indenting = 4
 options _comment_hygiene = true
+options _function_length = 145
 
 module linq_fold_decs shared public
 
@@ -284,8 +285,8 @@ def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string
     for (call in c.many["head"]) {
         let nm = call_norm_name(call)
         if (!(linqCalls |> key_exists(nm))) return null
-        var lc & = unsafe(linqCalls?[nm] ?? default<LinqCall>)
-        calls |> push((call, unsafe(addr(lc))))
+        let lc = unsafe(linqCalls?[nm])
+        calls |> push((call, lc))
     }
     let rangeSlots = ["skip", "skip_while", "take_while", "take"]
     for (sn in rangeSlots) {
@@ -293,14 +294,14 @@ def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string
             let scall = c.single[sn]
             let snm = call_norm_name(scall)
             if (!(linqCalls |> key_exists(snm))) return null
-            var lc & = unsafe(linqCalls?[snm] ?? default<LinqCall>)
-            calls |> push((scall, unsafe(addr(lc))))
+            let lc = unsafe(linqCalls?[snm])
+            calls |> push((scall, lc))
         }
     }
     if (hasTerm) {
         if (!(linqCalls |> key_exists(termName))) return null
-        var lc & = unsafe(linqCalls?[termName] ?? default<LinqCall>)
-        calls |> push((termCall, unsafe(addr(lc))))
+        let lc = unsafe(linqCalls?[termName])
+        calls |> push((termCall, lc))
     }
     let intermediateEnd = hasTerm ? length(calls) - 1 : length(calls)
     var rangeInfo = extract_decs_ranges(calls, intermediateEnd, tupName, at)
@@ -414,7 +415,7 @@ def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string
 // Decs `reverse |> take(N) [|> _select(F)] |> to_array` skip-into-tail: 2-pass walk (arch.size sum, then for_each_archetype_find with whole-arch-skip + partial-arch skip-counter + early-exit). Preserves PR #2834's 5.2× gain. When terminalSelectLam != null, projects the K reversed elements at the end (K push_clones of projection vs N push_clones of full tuple in the catch-all path).
 // `terminalSelectElemType` must be the typer-resolved element type of the termsel call result (caller reads it from `c.single["termsel"]._type.firstType`) — peel_lambda_rename_var's invoke-fallback shape for non-peelable lambdas has a null `_type` at macro stage, so deriving projType from the peeled body would mis-classify those as untyped and bail. Caller is responsible for ensuring termselElemType is non-null before this fast-path is selected; otherwise the gate falls through to the catch-all which has its own termsel handling.
 [macro_function]
-def emit_decs_reverse_skip_into_tail(var takeExpr : Expression?; bridge : DecsBridgeShape?; tupName : string; needIterWrap : bool; var terminalSelectLam : Expression?; terminalSelectElemType : TypeDeclPtr; at : LineInfo) : Expression? {  // nolint:STYLE038 - two qmacro template bodies, one per projection shape
+def emit_decs_reverse_skip_into_tail(var takeExpr : Expression?; bridge : DecsBridgeShape?; tupName : string; needIterWrap : bool; var terminalSelectLam : Expression?; terminalSelectElemType : TypeDeclPtr; at : LineInfo) : Expression? {
     let bufName = qn("buf", at)
     let takeNName = qn("take_n", at)
     let totalName = qn("decs_total", at)
