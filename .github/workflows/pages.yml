@@ -1,26 +1,32 @@
-name: Deploy to GitHub Pages
+name: Deploy daslang.io
 
 on:
   push:
     branches: [master]
   workflow_dispatch:
 
-# Only one Pages deployment at a time
+# Only one site deployment at a time
 concurrency:
   group: pages-deploy
   cancel-in-progress: true
 
+# `pages: write` and `id-token: write` are gone with actions/deploy-pages: the only
+# deploy target is now the VPS over rsync, which authenticates with an SSH key.
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    # KEEP THIS, despite nothing deploying to GitHub Pages any more. The environment
+    # is now purely a SECRET SCOPE: DASWEB_DEPLOY_KEY is an environment secret on
+    # `github-pages` (the repository has no repo-level secrets), and the VPS deploy
+    # step below treats an empty key as "fork, skip" and exits 0. Delete this block
+    # and daslang.io silently stops updating while this workflow stays green.
+    # Renaming the environment to something honest means re-entering the secret
+    # under the new name FIRST, or the same silent break.
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
     - name: "SCM Checkout"
       uses: actions/checkout@v4
@@ -379,8 +385,8 @@ jobs:
         # so under normal master deploys we always take the if-branch. The
         # else-branch survives as defense-in-depth — if the artifacts ever
         # go missing despite a green build, we stage a placeholder rather
-        # than 404'ing the route (actions/deploy-pages publishes _site as
-        # a complete snapshot, no layering over the prior deploy).
+        # than 404'ing the route (the VPS deploy rsyncs _site with --delete, so
+        # each release is a complete snapshot with no layering over the prior one).
         if [ -f web/output/daslang_static.js ] && [ -f web/output/daslang_static.wasm ]; then
             mkdir -p _site/playground _site/files/wasm
             # Copy IDE source files (CodeMirror, jQuery, main.js/css, etc.)
@@ -425,9 +431,9 @@ jobs:
             # Glob so future playground-*.js additions land automatically.
             cp site/playground/playground-*.js _site/playground/
         else
-            # WASM artifacts missing. actions/deploy-pages publishes _site as
-            # a complete snapshot (no layering over the prior deploy), so an
-            # absent _site/playground/ would 404 the route. Stage a
+            # WASM artifacts missing. The VPS deploy rsyncs _site with --delete,
+            # so each release is a complete snapshot (no layering over the prior
+            # one) and an absent _site/playground/ would 404 the route. Stage a
             # placeholder instead — the URL keeps resolving to something
             # useful while we re-roll the runtime.
             echo "WARNING: daslang_static.{js,wasm} missing under web/output — staging placeholder /playground/."
@@ -508,26 +514,16 @@ jobs:
             printf '%s' '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Physarum Lab — building</title><style>html,body{margin:0;height:100%}body{background:#0d0c0a;color:#cfc8bb;font-family:ui-monospace,Menlo,Consolas,monospace;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}p{max-width:30rem;line-height:1.6}</style></head><body><p>This example is being rebuilt and will be available shortly.</p></body></html>' > _site/examples/physarum_lab/physarum_lab.html
         fi
 
-        # GitHub Pages control files
-        touch _site/.nojekyll
-
-    - name: "Upload Pages artifact"
-      uses: actions/upload-pages-artifact@v3
-      with:
-        path: _site
-
-    - name: "Deploy to GitHub Pages"
-      # master-only so a workflow_dispatch from a branch cannot touch the
-      # production Pages site. The job-level `github-pages` environment also
-      # scopes DASWEB_DEPLOY_KEY below (master-only branch policy), so testing
-      # the VPS leg from a branch needs that policy widened deliberately.
-      if: github.ref == 'refs/heads/master'
-      id: deployment
-      uses: actions/deploy-pages@v4
-
     - name: "Deploy to daslang.io origin (VPS)"
-      # Mirror the exact _site snapshot onto the origin box (daslang.io is
-      # moving off GitHub Pages; both targets stay in sync until DNS flips).
+      # master-only, in the workflow itself. This guard used to sit on the Pages step
+      # ("so a workflow_dispatch from a branch cannot touch the production site") and
+      # went with it; without it the sole thing standing between a branch dispatch and
+      # production is the `github-pages` environment's branch policy — a setting in the
+      # GitHub UI that this repository cannot see or review. Broaden that policy for any
+      # reason and unreviewed content ships. Cheap to state here, so state it here.
+      if: github.ref == 'refs/heads/master'
+      # The ONLY deploy target. Caddy serves the box directly; there is no Jekyll
+      # in the path, so the old _site/.nojekyll marker went with the Pages steps.
       # Release layout on the box: /srv/daslang.io/releases/<rNNN-sha>, with
       # `current` an atomic symlink Caddy serves; --link-dest hard-links files
       # unchanged since the previous release so a docs-only deploy costs ~MBs.
@@ -535,8 +531,17 @@ jobs:
         DEPLOY_KEY: ${{ secrets.DASWEB_DEPLOY_KEY }}
       run: |
         set -euo pipefail
+        # A fork has no access to the secret and legitimately skips. The canonical
+        # repo does not: this is now the ONLY deploy target, so an empty key there
+        # means the site silently stops updating while the workflow reports success
+        # — which is exactly how a missing DASWEB_DEPLOY_KEY would hide. Fail loudly.
         if [ -z "$DEPLOY_KEY" ]; then
-            echo "DASWEB_DEPLOY_KEY not set (fork?) - skipping VPS deploy"
+            if [ "$GITHUB_REPOSITORY" = "GaijinEntertainment/daScript" ]; then
+                echo "::error::DASWEB_DEPLOY_KEY is empty on the canonical repo - nothing was deployed."
+                echo "It is an ENVIRONMENT secret on the 'github-pages' environment; check that the job still declares it."
+                exit 1
+            fi
+            echo "DASWEB_DEPLOY_KEY not set (fork) - skipping VPS deploy"
             exit 0
         fi
         mkdir -p ~/.ssh
