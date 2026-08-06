@@ -305,10 +305,15 @@ function showCanvas(show) {
 // delegates cross-origin isolation so -pthread programs get SharedArrayBuffer.
 var pageFrame = null;
 var pageFrameFit = null;
+var pageFrameMsg = null;
 function destroyPageFrame() {
     if (pageFrameFit) {
         window.removeEventListener('resize', pageFrameFit);
         pageFrameFit = null;
+    }
+    if (pageFrameMsg) {
+        window.removeEventListener('message', pageFrameMsg);
+        pageFrameMsg = null;
     }
     if (pageFrame && pageFrame.parentNode) pageFrame.parentNode.removeChild(pageFrame);
     pageFrame = null;
@@ -337,12 +342,24 @@ function runWasmPage(files) {
         'background:#000;margin-top:20px;margin-bottom:6px;';
     pageFrame.src = htmlUrl;
     (runHostEl || editorOutput.parentNode).appendChild(pageFrame);
-    // 3/4 is the run frame's own starting aspect. A cross-origin page cannot
-    // report its drawing buffer back the way run-frame.html does, so this stays
-    // the aspect for the whole run rather than being refined on first paint.
+    // 3/4 is the run frame's starting aspect, used until the page reports its
+    // real drawing buffer — the shell posts canvas-visible exactly as
+    // run-frame.html does, which is what lets the canvas fill without bars.
+    let pageAspect = 3 / 4;
     pageFrameFit = function () {
-        if (typeof PlaygroundRunner !== 'undefined') PlaygroundRunner.fitElement(pageFrame, 3 / 4);
+        if (typeof PlaygroundRunner !== 'undefined') PlaygroundRunner.fitElement(pageFrame, pageAspect);
     };
+    // Accept that report only from the frame we created, and only from the
+    // origin its artifact came from.
+    const pageOrigin = new URL(htmlUrl, location.href).origin;
+    pageFrameMsg = function (ev) {
+        if (!pageFrame || ev.source !== pageFrame.contentWindow || ev.origin !== pageOrigin) return;
+        const m = ev.data;
+        if (!m || m.type !== 'canvas-visible' || !(m.width > 0) || !(m.height > 0)) return;
+        pageAspect = m.height / m.width;
+        pageFrameFit();
+    };
+    window.addEventListener('message', pageFrameMsg);
     pageFrameFit();
     window.addEventListener('resize', pageFrameFit);
     const o = document.getElementById('output');

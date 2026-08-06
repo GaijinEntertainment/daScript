@@ -41,6 +41,21 @@
       var c = document.getElementById('canvas');
       // Keep focus on the canvas so keyboard input reaches the game.
       c.addEventListener('click', function () { c.focus(); });
+      // Report the drawing buffer to an embedder the moment a program asks for
+      // a GL context, so it can size its frame to the program's real aspect —
+      // the same contract run-frame.html has with the playground, which is what
+      // lets the canvas fill without letterboxing. Carries dimensions only, so
+      // the wildcard target discloses nothing; a standalone page just posts to
+      // itself and nobody listens.
+      var origGetContext = c.getContext.bind(c);
+      c.getContext = function (type) {
+        if (/webgl/i.test(String(type))) {
+          try {
+            parent.postMessage({ type: 'canvas-visible', width: c.width, height: c.height }, '*');
+          } catch (e) { /* embedder gone, or none */ }
+        }
+        return origGetContext.apply(c, arguments);
+      };
       return c;
     })(),
   };

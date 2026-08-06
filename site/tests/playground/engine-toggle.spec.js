@@ -201,6 +201,23 @@ test('a page-kind build runs as an embedded page frame', async ({ playground }) 
     expect(box.height / box.width).toBeGreaterThan(0.6);
     expect(box.height / box.width).toBeLessThan(0.9);
 
+    // The page reports its real drawing buffer the way run-frame.html does, and
+    // the frame reshapes to it — that report is what lets the canvas fill
+    // without letterbox bars, so a silent no-op here would look like the old
+    // "renders in the middle" bug for any program that is not 4:3.
+    await playground.evaluate(() => {
+        const f = document.querySelector('iframe.pg-page-frame');
+        window.dispatchEvent(new MessageEvent('message', {
+            source: f.contentWindow,
+            origin: new URL(f.src, location.href).origin,
+            data: { type: 'canvas-visible', width: 800, height: 200 },   // 4:1, unmistakable
+        }));
+    });
+    await expect.poll(async () => {
+        const b = await frame.boundingBox();
+        return b.height / b.width;
+    }, { timeout: 5_000 }).toBeLessThan(0.35);
+
     // Switching samples clears the page frame with the canvas.
     await playground.locator('#examples').selectOption({ label: 'SHA-256 (benchmark)' });
     await expect(playground.locator('iframe.pg-page-frame')).toHaveCount(0, { timeout: 5_000 });
