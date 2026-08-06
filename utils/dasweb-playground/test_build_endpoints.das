@@ -460,12 +460,16 @@ def test_page_build_flow(t : T?) {
                 tt |> equal(first, "http://127.0.0.1:{TEST_PORT}/api/build/artifact/{TC}/{hash}/sample.html")
             }
         }
-        t |> run("the page document serves with the embedding headers") @(tt : T?) {
+        t |> run("the page document serves with the isolation headers") @(tt : T?) {
             GET("{base_url}/api/build/artifact/{TC}/{hash}/sample.html") $(resp) {
                 tt |> equal(int(resp.status_code), 200)
                 tt |> equal(string(resp.body), "<html>page shell</html>")
                 tt |> equal(get_header(resp, "Cross-Origin-Resource-Policy"), "cross-origin")
                 tt |> equal(get_header(resp, "Cross-Origin-Embedder-Policy"), "require-corp")
+                // COOP + COEP is what makes crossOriginIsolated true for a page
+                // opened directly; without it a -pthread program never gets its
+                // SharedArrayBuffer and hangs on `loading-workers`.
+                tt |> equal(get_header(resp, "Cross-Origin-Opener-Policy"), "same-origin")
                 tt |> equal(get_header(resp, "X-Content-Type-Options"), "nosniff")
             }
         }

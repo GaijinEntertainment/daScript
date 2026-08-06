@@ -652,6 +652,11 @@ def private handle_build_artifact(var req : HttpRequest?; var resp : HttpRespons
     // so the js (and harmlessly the wasm) carry it too.
     resp |> set_header("Cross-Origin-Resource-Policy", "cross-origin")
     resp |> set_header("Cross-Origin-Embedder-Policy", "require-corp")
+    // COOP completes the isolation pair for a page opened DIRECTLY (top level):
+    // without it crossOriginIsolated stays false, SharedArrayBuffer is refused,
+    // and a -pthread program hangs forever on `loading-workers`. Ignored in a
+    // nested context, so it costs the embedded path nothing.
+    resp |> set_header("Cross-Origin-Opener-Policy", "same-origin")
     let rc = resp |> SERVE_FILE(path)
     log_request("GET", "/api/build/artifact", int(rc), ip, 0, artifact_size(path), t0)
     return rc
