@@ -122,8 +122,14 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    unchanged; `arena_planes(fmt, blk)` binds the tensor's slab; region/schedule metas carry
    the local half; merged k/v splits at a slab boundary; per-call arena seams cache sets per
    slab; a single tensor over one slab declines. Multi-slab correctness gated by
-   `test_vulkan_arena_slabs` (forced tiny slab cap). The 8B resident row itself is still
-   unmeasured — first row of the post-slab re-measure.
+   `test_vulkan_arena_slabs` (forced tiny slab cap). Measured: Llama-3.1-8B Q8 resident
+   across two slabs at 93.3% tg / 54.3% pp of llama.cpp (was 14% / 3% on the fallback).
+   FALLOUT FOUND: the resident ctx auto-negotiation OVERSUBSCRIBES — uncapped it armed at
+   ctx 25590 (weights + KV = 14.5GB of the 16GB card), WDDM demotion took tg to 3.65; an
+   11000MB cap (ctx 11544) restored 46.5. The negotiation fills weights + KV to the full
+   weight cap with no KV-side headroom for the live desktop; fix = a headroom margin (or
+   distrust of the queried heap "used", which read 2MB against a real desktop) in the
+   sizing walk's ctx fit.
 
 13. **qwen2 bias arm — the cheapest family unlock (after-sweep follow-up commit, ruled
    2026-08-06: "unsupported family, easy to support").** The resident gate declines

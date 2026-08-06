@@ -13,7 +13,8 @@ cap (f41e60c14). Kept for the record — no publication intent.
 |---|---|---|---|---|---|---|---|
 | tinyllama-1.1B Q8 | resident ladder (ctx 2048) | 291.6 ± 0.4 | 294.7 ± 0.7 | 99.0 | 7241.7 ± 60.3 | 20900.0 ± 192.5 | 34.6 |
 | Llama-3.2-3B Q8 | resident ladder (ctx 49128, auto cap) | 104.3 ± 0.2 | 109.7 ± 0.2 | 95.1 | 5811.7 ± 532.6 | 7696.5 ± 66.6 | 75.5 |
-| Llama-3.1-8B Q8 | DECLINED: fmt-0 arena 7.5GB > 4GiB maxStorageBufferRange (per-op fallback) | 7.2 ± 0.8 | 49.8 ± 0.1 | 14 | 110.0 ± 1.9 | 3719.8 ± 10.3 | 3 |
+| Llama-3.1-8B Q8 (pre-slab) | DECLINED: fmt-0 arena 7.5GB > 4GiB maxStorageBufferRange (per-op fallback) | 7.2 ± 0.8 | 49.8 ± 0.1 | 14 | 110.0 ± 1.9 | 3719.8 ± 10.3 | 3 |
+| Llama-3.1-8B Q8 (post-slab, VRAM_MB=11000) | resident ladder, TWO arena slabs (ctx 11544) | 46.5 ± 0.04 | 49.8 ± 0.1 | 93.3 | 2018.5 ± 2.5 | 3719.8 ± 10.3 | 54.3 |
 | Qwen2.5-1.5B Q8 | DECLINED: attn_qkv_bias (per-op fallback) | 35.6 ± 0.5 | 202.4 ± 0.6 | 18 | 465 ± 23 | 14986 ± 69 | 3 |
 | Qwen3-4B Q4_K_M | resident ladder (ctx 5606, k4/k6 + qk-norm) | 126.8 ± 0.8 | 132.8 ± 0.2 | 95.5 | 4614 ± 115 | 4955 ± 20 | 93.1 |
 | Phi-3.5-mini Q4_K_M | resident ladder (ctx 15629) | 143.3 ± 0.3 | 145.0 ± 0.3 | 98.8 | 3329.7 ± 6.9 | 5535.6 ± 296.8 | 60.2 |
@@ -66,6 +67,12 @@ re-encode cost; pp a wash. (Baselines predate the carrier conversion; post-conve
 2. Weight cap was an 8GB-era hardcode — fixed in-arc (f41e60c14): 4200 -> 14682 MB here.
 3. The 4GiB maxStorageBufferRange caps the resident arena — 8B-class dense blocked; arena
    slabs = in-arc follow-up AFTER the sweep, gates the PR (MoltenVK main factor) (item 12).
+   LANDED (14beb3a32): the 8B goes resident across two slabs at 93.3% tg / 54.3% pp — in
+   line with the other dense residents (post-slab row above; measured on a mildly busy box,
+   not walkthrough-clean). BUT the uncapped run armed at auto-ctx 25590 (weights 7.97GB +
+   KV 6.5GB = 14.5GB of the 16GB card, zero desktop headroom) and WDDM demotion took tg to
+   3.65 ± 0.01 / pp to 293 ± 47 — the ctx negotiation oversubscribes; needs a KV-side
+   headroom margin.
 4. qwen2 = one-flag unlock (attn_qkv_bias, item 13); gemma2/3/4-dense = one cluster
    (sandwich norms + SWA + softcaps, item 14). Osmosis-class work, not focus.
 5. Hybrids serve correctly on per-op rails but need the hybrid ladder for competitive tg
