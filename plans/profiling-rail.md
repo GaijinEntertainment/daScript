@@ -55,20 +55,22 @@ readers' silent-default.
    bool rule, loud garbage, required satisfied by either carrier, mutex argv-only, help
    shows `(env: NAME)`. Implemented at the three `CommandArgumentInfo` chokepoints so
    parse/enum/required inherit it untouched. 83/83 + daspkg 220-test consumer suite green.
-4. **`[EnvConfig]` + the dasLLAMA knob migration (pulled forward — Boris).** A sibling
-   struct annotation IN the clargs module sharing the whole field-walk/typed-parse core and
-   the `@clarg_*` vocabulary — NOT an `env_only` flag on `[CommandLineArgs]` (a bool that
-   flips lifecycle semantics is the confusing spelling; two names, one engine).
-   `[EnvConfig(prefix="DASLLAMA")]` generates: the global instance, the cold `[init]` loader
-   (field name → `PREFIX_FIELD_NAME`, type-dispatched read, default = field initializer), a
-   lazy accessor for cold callers, and the registry data (doc-gen + coverage test read the
-   generated list; the hand-maintained `k(o, ...)` list in `dasllama_env.das` dies).
-   Migration is generated: the existing registry carries name/kind/dflt/doc for all ~130
-   knobs → emit the struct from it once, then mechanically rewrite read sites
-   `env_flag("DASLLAMA_X", d)` → `g_lama_config.x`. Libraries stay env-only (argv is the
-   program's namespace). Read sites become plain global field reads — `[hot_path]`-legal by
-   construction; afterwards the env CODEREVIEW rule ("no get_env outside the generated
-   loader") becomes enforceable.
+4. **`[EnvConfig]` + the dasLLAMA knob migration (pulled forward — Boris).**
+   **Macro half DONE** (`[EnvConfig(env_prefix="X")]` in clargs: generates
+   `env_config(type<T>) : T` with field initializers as defaults and
+   `get_env_config_info(type<T>)` for the doc/coverage rails; same `@clarg_*` vocabulary,
+   shared helpers hoisted to module scope; argv concepts rejected; garbage numerics WARN
+   and keep the default — a library load must not die on a stray variable; the consumer
+   owns the two-line global + `[init]` loader call, keeping init-order explicit).
+   **Migration half REMAINS (fresh session):** one `[EnvConfig]` struct per EnvArea in
+   dasllama_env (area = which struct — keeps clargs generic), structs GENERATED once from
+   the existing `k(o, ...)` registry list, read sites mechanically rewritten
+   `env_flag("DASLLAMA_X", d)` → config-field reads, gen_env_doc + test_env_registry
+   re-pointed at the generated info, then the registry list dies. ⚠ semantics deltas to
+   sweep for during migration: set-but-empty becomes UNSET (dasllama_env's env_flag reads
+   empty as FALSE today — grep for `VAR= ` disable idioms), and garbage now warns instead
+   of silently defaulting. Afterwards the env CODEREVIEW rule ("no get_env outside the
+   generated loader") becomes enforceable.
 5. **The sweep** — ~391 raw `get_clock`-family sites in `modules/dasLLAMA/dasllama/` alone.
    Classify: perf-bucket accumulators → zones on the marker rail; big UNMARKED intervals
    (model load, dlim map, tokenizer init, warmup) → zones so the timeline finally shows them;
