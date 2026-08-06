@@ -18,7 +18,11 @@ defaults:
     shell: bash
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # event_name is part of the group so the nightly cron gets a lane of its own.
+  # Without it a merge landing mid-cron shares the master `github.ref` group and
+  # cancel-in-progress kills the cron — which then skips itself as a duplicate,
+  # so the sccache seeding the cron exists to do silently never happens.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
