@@ -1055,10 +1055,10 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
             LLVMBuildCall2(builder, reg_dyn_mod_type, jit_reg_dyn_mod, fixed_array(rel_str, abs_str, name_str), "")
         }
     }
-    // The registrations above load Quiet (sibling DT_NEEDED ordering); the retry pass runs here,
-    // and anything still unloadable becomes a fatal naming the module + dlopen error instead of
-    // a later cryptic "Failed to find <fn> in module <mod>" on the first extern lookup.
-    if (registered_dynamic) {
+    // Retry the Quiet registrations above, then fatal (naming module + dlopen error) on any
+    // still unloadable — instead of the cryptic extern-lookup death. Native only: on wasm the
+    // same modules also register via static thunks and the failed resolve is BY DESIGN.
+    if (registered_dynamic && !g_target_is_wasm) {
         var fin_dyn = LLVMAddFunctionWithType(g_mod, "jit_finalize_dynamic_modules", das_ensure_env_type)
         LLVMBuildCall2(builder, das_ensure_env_type, fin_dyn, array<LLVMValueRef>(), "")
     }
