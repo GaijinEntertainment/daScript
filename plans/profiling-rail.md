@@ -174,8 +174,26 @@ Interleaved A → B-off → B-on ×3 per bench, strictly serial, arm A via git-c
    (eff 4.3) while 8-strip fc1 tied q8. `DASLLAMA_ACCEL_STRIPS=8` (new knob, [EnvConfig]
    rail): attn_proj and attn_out now BEAT q8, encode gap +15% → +4.2%; fc2's +42% residual
    is the f16-lane target — if the 2× traffic cut scales, AMX-f16 beats the q8 encoder
-   outright. Next: the f32→f16 fp-seam lane, then the M4 leg (SME throughput + the
-   strip-count question on its AMX blocks). CPU-side only; predictions-first stands.
+   outright. CPU-side only; predictions-first stands.
+
+   **Both follow-ups BUILT and measured same-day (commit 897a7b57a), both opt-in:**
+   - **f32→f16 fp-seam lane** (`DASLLAMA_ACCEL_F16` now serves fp32 planes, cached
+     conversion): prediction MISSED — M1's hgemm is WORSE than sgemm on the fat-K shape
+     (fc2 +43%, squares −8..−10%, net +6%). The M1-generation AMX f16 story, consistent
+     with the lane shipping uncrowned here; the lane is the M4/SME vehicle, not an M1 win.
+   - **Hybrid AMX+NEON row split** (`DASLLAMA_ACCEL_HYBRID=<neon %>`, `tw_mm` hook, AMX
+     rows dequanted from the q8 blob through the active grp<mr> repack layout — transcript
+     IDENTICAL to q8, one precision class): correct but 1.4–2× slower at every split. A
+     token-blocked `dot_q8q8` loop is 6–8× off the generated tile kernel per row, and the
+     four-pane trace shows it as 42% idle / par 4.7 — the NEON side straggles while AMX
+     strips wait. **The concept waits on a row-range fork-callable tile core from the
+     math_gen emitter + per-shape (tune-crownable) splits** — the "no black holes" prize
+     (~1.7× combined throughput) is real but needs that sub-arc.
+   - Next: the M4 leg (SME f16 + its strip-count question); the tile row-core sub-arc if
+     the hybrid prize is pursued. Two compiler warts owed minimal repros: das-function
+     calls inside a `maybe_parallel_for` block trip the new_job qmacro rewrite
+     (30921 / "expecting lambda declaration, ExprAscend"), and `grep_usage` file
+     truncation (reported in phase 5).
 
 ## Tail end (own arc)
 
