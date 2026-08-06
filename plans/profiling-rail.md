@@ -115,9 +115,8 @@ llama2c forward-parity file. No timing gates mid-sweep — the transform is mech
 regression wouldn't resolve anyway.
 
 **Step 3 — the measurement night** (box handed over, caffeinate agent on, no user apps):
-1. Tune-gate check first: if `m1.tune.json` is stale against the current binary, re-mint ONCE
-   and use that manifest for every arm — a stale sidecar sandbags all cells equally-ish but
-   voids the board rule, and ALLOW_UNTUNED numbers are never published.
+1. Tune gate: Boris confirms (2026-08-06) `m1.tune.json` is NOT stale — no kernel work since
+   the mint. Do not re-mint; only revisit if the tune gate itself refuses at cell launch.
 2. Three arms, all coexisting in `.jitted_scripts` (distinct semantic hashes): **A** =
    pre-sweep HEAD, **B-off** = post-sweep, **B-on** = post-sweep with `JOBQUE_PROFILING=1`.
    Two benches: lcpp_bench (1B-class decode-heavy cell) + asr_bench. Cold-compile each arm
