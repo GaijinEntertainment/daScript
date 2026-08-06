@@ -3,6 +3,7 @@ options gen2
 require dastest/testing_boost
 require daslib/clargs
 require daslib/fio
+require daslib/rtti
 
 enum Color {
     Red
@@ -1070,4 +1071,101 @@ def test_env_config_info(t : T?) {
     let by_field <- { for (a in info.args); a.field_name => a.env_name }
     t |> equal("CLEC_FAST_MATH", by_field?["fast_math"] ?? "?")
     t |> equal("CLEC_MODEL_PATH", by_field?["model"] ?? "?")
+}
+
+// ===== [EnvConfig] — int64 and Option-wrapped (tri-state) fields =====
+
+[EnvConfig(env_prefix = "CLEO")]
+struct TriKnobs {
+    @clarg_doc = "int64 knob"
+    big : int64 = 42l
+
+    @clarg_doc = "tri-state flag"
+    want_gpu : Option<bool>
+
+    @clarg_doc = "tri-state int"
+    layers : Option<int>
+
+    @clarg_doc = "tri-state int64"
+    vram : Option<int64>
+
+    @clarg_doc = "tri-state string"
+    pin : Option<string>
+
+    @clarg_default_doc = "probed"
+    @clarg_path
+    @clarg_doc = "path knob with doc-default override"
+    root : string = "bin/daslang"
+}
+
+def clear_cleo_env() {
+    for (name in ["CLEO_BIG", "CLEO_WANT_GPU", "CLEO_LAYERS", "CLEO_VRAM", "CLEO_PIN", "CLEO_ROOT"]) {
+        set_env_variable(name, "")
+    }
+}
+
+[test]
+def test_env_config_tri_state(t : T?) {
+    clear_cleo_env()
+    let d = env_config(type<TriKnobs>)
+    t |> equal(42l, d.big)
+    t |> success(is_none(d.want_gpu), "unset tri-state flag stays none")
+    t |> success(is_none(d.layers), "unset tri-state int stays none")
+    t |> success(is_none(d.vram), "unset tri-state int64 stays none")
+    t |> success(is_none(d.pin), "unset tri-state string stays none")
+    t |> equal("bin/daslang", d.root)
+    t |> equal(7, d.layers ?? 7)                     // ?? falls through on none
+    set_env_variable("CLEO_BIG", "9000000000")       // above 2^31 — the int64 lane is real
+    set_env_variable("CLEO_WANT_GPU", "off")
+    set_env_variable("CLEO_LAYERS", "24")
+    set_env_variable("CLEO_VRAM", "8589934592")
+    set_env_variable("CLEO_PIN", "metal")
+    let k = env_config(type<TriKnobs>)
+    t |> equal(9000000000l, k.big)
+    t |> success(is_some(k.want_gpu) && !unwrap(k.want_gpu), "set tri-state flag reads its value")
+    t |> equal(24, k.layers ?? -1)
+    t |> equal(8589934592l, k.vram ?? -1l)
+    t |> equal("metal", k.pin ?? "?")
+    clear_cleo_env()
+}
+
+[test]
+def test_env_config_tri_state_edges(t : T?) {
+    clear_cleo_env()
+    set_env_variable("CLEO_LAYERS", "banana")   // garbage warns and keeps the default (none)
+    set_env_variable("CLEO_BIG", "banana")
+    let k = env_config(type<TriKnobs>)
+    t |> success(is_none(k.layers), "garbage tri-state int stays none")
+    t |> equal(42l, k.big)
+    set_env_variable("CLEO_LAYERS", "")         // set-but-empty is unset
+    set_env_variable("CLEO_VRAM", "")
+    let k2 = env_config(type<TriKnobs>)
+    t |> success(is_none(k2.layers) && is_none(k2.vram), "empty tri-state stays none")
+    clear_cleo_env()
+}
+
+[test]
+def test_env_config_default_doc_and_path(t : T?) {
+    let info = get_env_config_info(type<TriKnobs>)
+    t |> equal(6, length(info.args))
+    for (a in info.args) {
+        if (a.field_name == "big") {
+            t |> equal("42", a.default_doc)
+            t |> success(!a.is_optional_wrap && !a.is_path, "plain int64 field flags")
+            t |> success(a.value_type == Type.tInt64, "int64 value_type recorded")
+        } elif (a.field_name == "root") {
+            t |> equal("probed", a.default_doc)   // @clarg_default_doc wins over the initializer
+            t |> success(a.is_path, "@clarg_path recorded")
+        } elif (a.field_name == "vram") {
+            t |> equal("", a.default_doc)
+            t |> success(a.is_optional_wrap, "Option wrap recorded")
+            t |> success(a.value_type == Type.tInt64, "Option inner type recorded")
+        }
+    }
+    let engine_info = get_env_config_info(type<EngineKnobs>)
+    for (a in engine_info.args) {
+        if (a.field_name == "model") {
+            t |> equal("default.gguf", a.default_doc)   // initializer renders when no override
+        }
+    }
 }

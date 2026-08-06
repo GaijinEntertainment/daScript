@@ -18,7 +18,9 @@ struct public CommandArgumentInfo {
     short_flag_name : string   // e.g. "-v"; empty if no short flag declared
     env_name : string          // environment twin, e.g. "TOOL_VERBOSE"; "" = none. Command line wins; set-but-empty env counts as unset
     doc_string : string
+    default_doc : string       // default as doc text: @clarg_default_doc, else the rendered field initializer; "" = nothing to show
     value_type : Type
+    is_path : bool             // @clarg_path: a string knob holding a filesystem path (doc/completion hint)
     is_array : bool
     is_required : bool
     is_positional : bool       // declared with @clarg_positional; consumed in declaration order
@@ -204,6 +206,76 @@ def public env_config_float(name : string; dflt : float) : float {
 def public env_config_string(name : string; dflt : string) : string {
     let v = env_config_text(name)
     return is_none(v) ? dflt : unwrap(v)
+}
+
+def public env_config_int64(name : string; dflt : int64) : int64 {
+    let v = env_config_text(name)
+    if (is_none(v)) return dflt
+    let raw = unwrap(v)
+    var result : ConversionResult
+    var offset = 0
+    let parsed = int64(raw, result, offset)
+    if (result != ConversionResult.ok || offset != length(raw)) {
+        to_log(LOG_WARNING, "env {name}: invalid int64 '{raw}', using {dflt}\n")
+        return dflt
+    }
+    return parsed
+}
+
+// Option-typed twins for tri-state knobs: the field keeps its declared default (usually `none`)
+// when the variable is unset, so a read site can tell "explicitly set" from "compute a default".
+// Garbage numeric text warns and keeps the default, same as the plain readers.
+
+def public env_config_opt_flag(name : string; dflt : Option<bool>) : Option<bool> {
+    let v = env_config_text(name)
+    return is_none(v) ? dflt : some(env_text_is_true(unwrap(v)))
+}
+
+def public env_config_opt_int(name : string; dflt : Option<int>) : Option<int> {
+    let v = env_config_text(name)
+    if (is_none(v)) return dflt
+    let raw = unwrap(v)
+    var result : ConversionResult
+    var offset = 0
+    let parsed = int(raw, result, offset)
+    if (result != ConversionResult.ok || offset != length(raw)) {
+        to_log(LOG_WARNING, "env {name}: invalid int '{raw}', keeping the default\n")
+        return dflt
+    }
+    return some(parsed)
+}
+
+def public env_config_opt_int64(name : string; dflt : Option<int64>) : Option<int64> {
+    let v = env_config_text(name)
+    if (is_none(v)) return dflt
+    let raw = unwrap(v)
+    var result : ConversionResult
+    var offset = 0
+    let parsed = int64(raw, result, offset)
+    if (result != ConversionResult.ok || offset != length(raw)) {
+        to_log(LOG_WARNING, "env {name}: invalid int64 '{raw}', keeping the default\n")
+        return dflt
+    }
+    return some(parsed)
+}
+
+def public env_config_opt_float(name : string; dflt : Option<float>) : Option<float> {
+    let v = env_config_text(name)
+    if (is_none(v)) return dflt
+    let raw = unwrap(v)
+    var result : ConversionResult
+    var offset = 0
+    let parsed = float(raw, result, offset)
+    if (result != ConversionResult.ok || offset != length(raw)) {
+        to_log(LOG_WARNING, "env {name}: invalid float '{raw}', keeping the default\n")
+        return dflt
+    }
+    return some(parsed)
+}
+
+def public env_config_opt_string(name : string; dflt : Option<string>) : Option<string> {
+    let v = env_config_text(name)
+    return is_none(v) ? dflt : v
 }
 
 // Command-line presence only (either alias, either spelling) — mutex checks and
@@ -1148,9 +1220,34 @@ class ArgsMacro : AstStructureAnnotation {
 [structure_macro(name=EnvConfig)]
 class EnvConfigMacro : AstStructureAnnotation {
     //! Ambient sibling of [CommandLineArgs] for LIBRARY knobs (no argv, no parse moment):
-    //! generates ``env_config(type<T>) : T`` — each field resolved from its env twin with the
-    //! field initializer as default — plus ``get_env_config_info(type<T>)`` for doc/coverage rails.
-    def make_env_load_expr(fname, env_name : string; bt : Type) : ExpressionPtr {
+    //! generates ``env_config(type<T>) : T`` — bool/int/int64/float/string fields, plain or
+    //! Option-wrapped (tri-state) — plus ``get_env_config_info(type<T>)`` for doc/coverage rails.
+    def make_env_load_expr(fname, env_name : string; bt : Type; is_opt : bool) : ExpressionPtr {
+        if (is_opt) {
+            if (bt == Type.tBool) {
+                return qmacro_block() {
+                    dst.$f(fname) = env_config_opt_flag($v(env_name), dst.$f(fname))
+                }
+            }
+            if (bt == Type.tInt) {
+                return qmacro_block() {
+                    dst.$f(fname) = env_config_opt_int($v(env_name), dst.$f(fname))
+                }
+            }
+            if (bt == Type.tInt64) {
+                return qmacro_block() {
+                    dst.$f(fname) = env_config_opt_int64($v(env_name), dst.$f(fname))
+                }
+            }
+            if (bt == Type.tFloat) {
+                return qmacro_block() {
+                    dst.$f(fname) = env_config_opt_float($v(env_name), dst.$f(fname))
+                }
+            }
+            return qmacro_block() {
+                dst.$f(fname) = env_config_opt_string($v(env_name), dst.$f(fname))
+            }
+        }
         if (bt == Type.tBool) {
             return qmacro_block() {
                 dst.$f(fname) = env_config_flag($v(env_name), dst.$f(fname))
@@ -1161,6 +1258,11 @@ class EnvConfigMacro : AstStructureAnnotation {
                 dst.$f(fname) = env_config_int($v(env_name), dst.$f(fname))
             }
         }
+        if (bt == Type.tInt64) {
+            return qmacro_block() {
+                dst.$f(fname) = env_config_int64($v(env_name), dst.$f(fname))
+            }
+        }
         if (bt == Type.tFloat) {
             return qmacro_block() {
                 dst.$f(fname) = env_config_float($v(env_name), dst.$f(fname))
@@ -1169,6 +1271,19 @@ class EnvConfigMacro : AstStructureAnnotation {
         return qmacro_block() {
             dst.$f(fname) = env_config_string($v(env_name), dst.$f(fname))
         }
+    }
+
+    // @clarg_default_doc wins; else a constant initializer renders as its literal text
+    def field_default_doc(fannotations : AnnotationArgumentList; init : ExpressionPtr) : string {
+        let explicit_v = find_string_annotation(fannotations, "clarg_default_doc", "")
+        if (!empty(explicit_v)) return explicit_v
+        if (init == null) return ""
+        if (init is ExprConstBool) return (init as ExprConstBool).value ? "true" : "false"
+        if (init is ExprConstInt) return "{(init as ExprConstInt).value}"
+        if (init is ExprConstInt64) return "{(init as ExprConstInt64).value}"
+        if (init is ExprConstFloat) return "{(init as ExprConstFloat).value}"
+        if (init is ExprConstString) return "{(init as ExprConstString).value}"
+        return ""
     }
 
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
@@ -1186,9 +1301,16 @@ class EnvConfigMacro : AstStructureAnnotation {
                 errors := "field '{field.name}': positional/count/required/short/mutex are command-line concepts — [EnvConfig] fields are plain knobs with defaults"
                 return false
             }
-            let bt = field._type.baseType
-            if (bt != Type.tBool && bt != Type.tInt && bt != Type.tFloat && bt != Type.tString) {
-                errors := "field '{field.name}': [EnvConfig] supports bool, int, float, and string fields"
+            let inner = option_inner_type(field._type)
+            let is_opt = inner != null
+            let bt = is_opt ? inner.baseType : field._type.baseType
+            if (bt != Type.tBool && bt != Type.tInt && bt != Type.tInt64 && bt != Type.tFloat && bt != Type.tString) {
+                errors := "field '{field.name}': [EnvConfig] supports bool, int, int64, float, and string fields, plain or Option-wrapped"
+                return false
+            }
+            let is_path = find_bool_annotation(field.annotation, "clarg_path", false)
+            if (is_path && bt != Type.tString) {
+                errors := "field '{field.name}': @clarg_path only applies to string fields"
                 return false
             }
             let env_name = resolve_env_name(field.annotation, "{field.name}", "{field.name}", env_prefix, false, false, false, errors)
@@ -1201,8 +1323,11 @@ class EnvConfigMacro : AstStructureAnnotation {
                 field_name = "{field.name}",
                 env_name = env_name,
                 doc_string = find_string_annotation(field.annotation, "clarg_doc", ""),
-                value_type = bt))
-            load_exprs |> push(make_env_load_expr("{field.name}", env_name, bt))
+                default_doc = field_default_doc(field.annotation, field.init),
+                value_type = bt,
+                is_path = is_path,
+                is_optional_wrap = is_opt))
+            load_exprs |> push(make_env_load_expr("{field.name}", env_name, bt, is_opt))
         }
         var info_fn = qmacro_function("get_env_config_info") $(typ : $t(st)) : CommandInfo {
             var x := $v(info)
