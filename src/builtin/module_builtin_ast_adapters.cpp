@@ -2523,6 +2523,8 @@ namespace das {
             context->throw_error_at(line_info, "adapter is required");
         if (!program)
             context->throw_error_at(line_info, "program is required");
+        if (!module)
+            context->throw_error_at(line_info, "module is required");
         program->visitModule(*adapter, module);
     }
 
