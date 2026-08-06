@@ -293,6 +293,10 @@ struct public AccelerateEnv {
     @clarg_doc = "Strip count for the f16 lane; 0 lets the backend choose."
     accel_f16_strips : Option<int64>
 
+    @clarg_default_doc = "d/256, max 8"
+    @clarg_doc = "Strip count for the f32 sgemm lane; 0 keeps the shape-derived default."
+    accel_strips : Option<int64>
+
     @clarg_default_doc = "backend default"
     @clarg_doc = "Minimum MMAC count below which Accelerate declines and the daslang kernel runs."
     accel_min_mmac : Option<int64>

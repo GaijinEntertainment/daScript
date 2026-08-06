@@ -33,8 +33,17 @@ require daslib/math_bits
 var private g_wf32_scratch : array<float>
 
 // Strip count for one GEMM: cover both AMX blocks (one per P-cluster) with headroom for load
-// balance, without paying per-call sgemm setup on slivers.
-def private accel_strips(d : int64) : int => int(clamp(d / 256l, 1l, 8l))
+// balance, without paying per-call sgemm setup on slivers. The trace showed d=1280 shapes
+// capped at 5 strips / 3 idle lanes — DASLLAMA_ACCEL_STRIPS overrides for the strips A/B.
+var private g_accel_sgemm_strips = 0
+
+def dasllama_accelerate_set_strips(v : int64) {
+    g_accel_sgemm_strips = int(clamp(v, 0l, 64l))
+}
+
+def private accel_strips(d : int64) : int => (g_accel_sgemm_strips > 0
+    ? g_accel_sgemm_strips
+    : int(clamp(d / 256l, 1l, 8l)))
 
 // Strip-dispatch a single-threaded sgemm over the jobque: each lane serves rows [rb,re) of W —
 // its own sgemm call on its own core, so both AMX blocks engage with no foreign thread pool.
@@ -243,6 +252,7 @@ def private dasllama_math_accelerate_init() {
     }
     g_accel_min_mmac = floor_or("DASLLAMA_ACCEL_MIN_MMAC", g_env_accel.accel_min_mmac, g_accel_min_mmac, 0l)
     dasllama_accelerate_set_f16_strips(floor_or("DASLLAMA_ACCEL_F16_STRIPS", g_env_accel.accel_f16_strips, 0l, 0l))
+    dasllama_accelerate_set_strips(floor_or("DASLLAMA_ACCEL_STRIPS", g_env_accel.accel_strips, 0l, 0l))
     if (g_env_accel.accel_f16 && !dasllama_accelerate_set_f16(true)) {
         to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_ACCEL_F16=1 but the BNNS probe failed — f16 lane stays off\n")
     }
