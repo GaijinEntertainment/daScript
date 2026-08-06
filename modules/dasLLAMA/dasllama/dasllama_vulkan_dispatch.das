@@ -406,6 +406,27 @@ class VkDispatch : AstStructureAnnotation {
             }
         }
 
+        // [init] census seed — the kernel joins the coverage universe at program start, device
+        // or not, so a never-dispatched class kernel warns like the module-global kernels do
+        {
+            var cs = new ExprCall(at = at, name := "vkd_census_seed")
+            cs.arguments |> emplace_new <| new ExprConstString(at = at, value := blob)
+            cs.arguments |> emplace_new <| new ExprConstUInt(at = at, value = rmask)
+            cs.arguments |> emplace_new <| new ExprConstUInt(at = at, value = wmask)
+            var body <- array<ExpressionPtr>(cs)
+            var fn = new Function(at = at, atDecl = at, name := "{base}`census",
+                flags = FunctionFlags.generated,
+                result = new TypeDecl(at = at, baseType = Type.tVoid))
+            fn.flags.init = true
+            fn.flags.privateFunction = true
+            fn.body = make_expression_block(body)
+            fn.body |> force_at(at)
+            if (!(compiling_module() |> add_function(fn))) {
+                errors := "[vk_dispatch] {base}: failed to add the census [init]"
+                return false
+            }
+        }
+
         // set_<family>(bufs, sizes, gbits) : VkDescriptorSet — a set over the FAMILY layout
         if (ord == 0) {
             var body : array<ExpressionPtr>

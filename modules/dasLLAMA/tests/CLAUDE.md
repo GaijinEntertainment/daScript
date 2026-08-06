@@ -73,7 +73,9 @@ The `image-vulkan` suite (test_model_image_vulkan, arm `vulkan`) covers the OFFL
 bake: the runner arms DASLLAMA_GPU + a small VRAM budget so the probed config carries a
 vulkan section, the DRY tier collects a role-stamped plan with no device calls (safe on
 GPU-less boxes), and the flavor image round-trips the plan verbatim.
-The `coverage` suite (test_kernel_coverage, arm `coverage`) is the KERNEL COVERAGE census
+The `coverage` suite (test_kernel_coverage, arm `coverage`; arm `coverage-vk` = the vulkan
+SERVING census — needs a vulkan device + `DASLLAMA_GPU=1` + `DASLLAMA_MODELS_DIR`, MoE rows
+under `DASLLAMA_PARITY_FULL=1`) is the KERNEL COVERAGE census
 (CODEREVIEW rule 17): the small-model zoo swept across format/graph/batch/KV axes, then a
 report of per-kernel dispatch counts with LOUD WARNINGS for compiled-but-never-dispatched
 kernels — never an auto-dead verdict. A zero means "nothing THIS zoo runs dispatched it",

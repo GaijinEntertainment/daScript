@@ -2078,6 +2078,14 @@ def ensure_kernel_access {
     }
 }
 
+//! Census seed: every [vk_dispatch] kernel joins the coverage universe at program start (the
+//! macro generates an [init] calling this), so a never-dispatched class kernel gets its LOUD
+//! zero row like the module-global kernels always did.
+def vkd_census_seed(kernel : string; rmask, wmask : uint) {
+    ensure_kernel_access()
+    g_kernel_access[kernel] = uint2(rmask, wmask)
+}
+
 // declare the region bits sitting at each of a set's 6 bindings (0 = untracked); a set must be
 // declared before hz_dispatch can serve it — the strict rail panics on an undeclared set
 def hz_set_bits(set_ : VkDescriptorSet; b0, b1, b2, b3, b4, b5 : uint) {
