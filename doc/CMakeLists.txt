@@ -1,9 +1,9 @@
 # Documentation targets. Added from the root via add_subdirectory(doc) after the
 # daslang target exists (das2rst runs daslang). CMAKE_CURRENT_BINARY_DIR here is
-# <build>/doc, so stamps and generated HTML/LaTeX land under build/doc/.
+# <build>/doc, so stamps and generated HTML land under build/doc/.
 
 # Regenerate stdlib RST from daslib source comments. The freshness guards
-# (// stub / Uncategorized / untracked) stay inline in doc.yml. HTML/LaTeX build
+# (// stub / Uncategorized / untracked) stay inline in doc.yml. The HTML build
 # lives in build_doc below.
 if(NOT DAS_TOOLS_DISABLED)
     add_custom_target(check_docs_generated
@@ -65,17 +65,15 @@ if(DAS_BUILD_DOCUMENTATION)
             DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/sphinx.stamp
         )
 
-        # CI doc lane target: warnings-as-errors (-W) HTML + LaTeX, mirroring
-        # doc.yml. Explicit (non-ALL); das_documentation above stays the local /
+        # CI doc lane target: warnings-as-errors (-W) HTML, mirroring doc.yml.
+        # Explicit (non-ALL); das_documentation above stays the local /
         # install-oriented build. Both regenerate RST via the das2rst.stamp dep.
         add_custom_target(build_doc
             COMMAND ${Python3_EXECUTABLE} -m sphinx -W --keep-going
                     -b html -d "${DAS_DOC_DOCTREE_DIR}" "${DAS_DOC_SOURCE_DIR}" "${DAS_DOC_BUILD_DIR}"
-            COMMAND ${Python3_EXECUTABLE} -m sphinx -W --keep-going
-                    -b latex -d "${DAS_DOC_DOCTREE_DIR}" "${DAS_DOC_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/doc_latex"
             DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/das2rst.stamp
             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/doc
-            COMMENT "Building documentation HTML + LaTeX (Sphinx -W)"
+            COMMENT "Building documentation HTML (Sphinx -W)"
         )
 
         install(DIRECTORY ${DAS_DOC_BUILD_DIR}/

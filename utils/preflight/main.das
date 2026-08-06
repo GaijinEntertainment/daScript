@@ -9,7 +9,7 @@ options persistent_heap
 // frontend (syntax-only) pass on changed C++ — escalates to a full
 // src+tests-cpp sweep when a header changed, since a header edit can break
 // template instantiation in TUs the diff never touched. --full adds dasgen
-// freshness, the CI-only-das compile sweep, the seven doc gates, tests-cpp
+// freshness, the CI-only-das compile sweep, the six doc gates, tests-cpp
 // (ctest -L small), interpreter/JIT/AOT suites, and the sequence smoke.
 //
 // Cross-platform: Windows / macOS / Linux+WSL. Subprocesses go through
@@ -288,9 +288,8 @@ def find_clang(cli_path, build_dir : string) : tuple<exe : string; is_cl : bool>
     return (exe = "", is_cl = false)
 }
 
-// sphinx-build / latexmk are often OFF PATH on dev boxes: pip --user puts
-// sphinx in ~/Library/Python/<ver>/bin (mac) / ~/.local/bin (linux); BasicTeX
-// puts latexmk in /Library/TeX/texbin (mac). PATH wins when present.
+// sphinx-build is often OFF PATH on dev boxes: pip --user puts it in
+// ~/Library/Python/<ver>/bin (mac) / ~/.local/bin (linux). PATH wins when present.
 def find_sphinx_build() : string {
     if (tool_available("sphinx-build")) return "sphinx-build"
     if (!has_env_variable("HOME")) return ""
@@ -304,26 +303,6 @@ def find_sphinx_build() : string {
         if (fexist(p) && tool_available(p)) return p
     }
     return ""
-}
-
-def find_latexmk() : string {
-    if (tool_available("latexmk")) return "latexmk"
-    let mac_tex = "/Library/TeX/texbin/latexmk"
-    if (get_platform_name() == "darwin" && fexist(mac_tex) && tool_available(mac_tex)) return mac_tex
-    return ""
-}
-
-// latexmk logs run thousands of lines; the actionable error sits at the end.
-def last_lines(s : string; n : int) : string {
-    let lines <- split(s, "\n")
-    let total = length(lines)
-    if (total <= n) return s
-    var keep : array<string>
-    keep |> reserve(n)
-    for (i in range(total - n, total)) {
-        keep |> push(lines[i])
-    }
-    return join(keep, "\n")
 }
 
 // TUs the clang frontend pass can compile standalone: core + tests-cpp.
@@ -556,7 +535,7 @@ def gate_dasgen(ctx : PreflightCtx) : GateResult {
         output = d.out)
 }
 
-// ===== docs gates (mirror doc.yml 1-6) =====
+// ===== docs gates (mirror doc.yml) =====
 
 def skip_gates(names : array<string>; reason : string; var results : array<GateResult>&) {
     results |> reserve(length(results) + length(names))
@@ -566,14 +545,14 @@ def skip_gates(names : array<string>; reason : string; var results : array<GateR
 }
 
 def skip_sphinx_gates(reason : string; var results : array<GateResult>&) {
-    skip_gates(["docs/sphinx-latex", "docs/sphinx-html", "docs/pdflatex"], reason, results)
+    skip_gates(["docs/sphinx-html"], reason, results)
 }
 
 def docs_skip_all(reason : string; var results : array<GateResult>&) {
-    skip_gates(["docs/das2rst", "docs/imgui2rst", "docs/stubs", "docs/uncategorized", "docs/untracked", "docs/sphinx-latex", "docs/sphinx-html", "docs/pdflatex"], reason, results)
+    skip_gates(["docs/das2rst", "docs/imgui2rst", "docs/stubs", "docs/uncategorized", "docs/untracked", "docs/sphinx-html"], reason, results)
 }
 
-def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:STYLE037,STYLE038 — the eight doc.yml gates in CI order; splitting hides the sequence
+def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:STYLE037,STYLE038 — the doc.yml gates in CI order; splitting hides the sequence
     var t0 = ref_time_ticks()
     // gate 1: das2rst runs clean (positional handmade-doc validation)
     let r1 = run_argv([ctx.daslang, "-documentation", "doc/reflections/das2rst.das"])
@@ -648,8 +627,8 @@ def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:
         detail = untracked_ok ? "" : (r4.rc != 0 ? "git ls-files failed (rc={r4.rc})" : "das2rst generated new files — git add them"),
         output = r4.rc != 0 ? r4.out : join(untracked, "\n")))
 
-    // gates 5+6: sphinx -W, latex then html. Delete the doctree cache first —
-    // CI builds from a fresh clone, a stale local cache hides warnings.
+    // final gate: sphinx -W html. Delete the doctree cache first — CI builds
+    // from a fresh clone, a stale local cache hides warnings.
     let sphinx = find_sphinx_build()
     if (empty(sphinx)) {
         skip_sphinx_gates("sphinx-build not found (PATH, ~/Library/Python/*/bin, ~/.local/bin) — pip install -r doc/requirements.txt", results)
@@ -667,10 +646,8 @@ def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:
         return
     }
 
-    // doc.yml stages the docs-assets recordings before sphinx; the latex -W
-    // build reds on every missing video (html tolerates them). Stage once per
-    // tree — any staged .mp4 counts, so no per-run re-download; a stale set
-    // after a re-record still surfaces as an honest latex warning.
+    // doc.yml stages the docs-assets recordings before sphinx. Stage once per
+    // tree — any staged .mp4 counts, so no per-run re-download.
     var staged_recordings = false
     if (stat("doc/source/_static/tutorials").is_valid) {
         dir("doc/source/_static/tutorials") $(name) {
@@ -687,47 +664,16 @@ def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:
     }
 
     t0 = ref_time_ticks()
-    var latex_ok = false
-    if (staged_recordings) {
-        let r5 = run_argv([sphinx, "-W", "--keep-going", "-b", "latex", "-d", "doc/sphinx-build", "doc/source", "build/latex"])
-        latex_ok = r5.rc == 0
-        results |> emplace(GateResult(name = "docs/sphinx-latex", status = latex_ok ? GateStatus.Pass : GateStatus.Fail,
-            seconds = seconds_since(t0), detail = latex_ok ? "" : "latex builder warnings (warnings-as-errors)", output = r5.out))
-    } else {
-        results |> emplace(GateResult(name = "docs/sphinx-latex", status = GateStatus.Skip,
-            detail = "tutorial recordings not staged and gh download failed — gh auth login, then utils/docs_assets/fetch"))
-    }
-    t0 = ref_time_ticks()
-    let r6 = run_argv([sphinx, "-W", "--keep-going", "-b", "html", "-d", "doc/sphinx-build", "doc/source", "build/site"])
-    results |> emplace(GateResult(name = "docs/sphinx-html", status = r6.rc == 0 ? GateStatus.Pass : GateStatus.Fail,
-        seconds = seconds_since(t0), detail = r6.rc == 0 ? "" : "html builder warnings (warnings-as-errors)", output = r6.out))
-
-    // gate 7: compile both PDFs like CI's latex-action does (latexmk; -cd runs in
-    // build/latex so the sphinx .sty files resolve). CI marks these steps
-    // continue-on-error, so an undeclared unicode char ships broken release PDFs
-    // silently — locally it is a FAIL with a one-line remedy.
-    if (!latex_ok) {
-        results |> emplace(GateResult(name = "docs/pdflatex", status = GateStatus.Skip,
-            detail = "sphinx-latex did not produce .tex sources — nothing to compile"))
-        return
-    }
-    let latexmk = find_latexmk()
-    if (empty(latexmk)) {
-        results |> emplace(GateResult(name = "docs/pdflatex", status = GateStatus.Skip,
-            detail = "latexmk not found (PATH, /Library/TeX/texbin) — brew install --cask basictex (mac) / texlive (linux)"))
-        return
-    }
-    t0 = ref_time_ticks()
-    for (root in ["daslangstdlib.tex", "daslang.tex"]) {
-        let rl = run_argv([latexmk, "-pdf", "-interaction=nonstopmode", "-halt-on-error", "-cd", "build/latex/{root}"], 900.0)
-        if (rl.rc != 0) {
-            results |> emplace(GateResult(name = "docs/pdflatex", status = GateStatus.Fail, seconds = seconds_since(t0),
-                detail = "{root}: pdflatex rejected the docs — new unicode char? add \\DeclareUnicodeCharacter to doc/source/conf.py 'preamble'",
-                output = last_lines(rl.out, 60)))
-            return
-        }
-    }
-    results |> emplace(GateResult(name = "docs/pdflatex", status = GateStatus.Pass, seconds = seconds_since(t0)))
+    let r5 = run_argv([sphinx, "-W", "--keep-going", "-b", "html", "-d", "doc/sphinx-build", "doc/source", "build/site"])
+    let html_ok = r5.rc == 0
+    // A missing `.. video::` target is a -W warning like any other, so name the
+    // unstaged recordings when they are the likely cause rather than leaving the
+    // reader to decode a toctree error.
+    results |> emplace(GateResult(name = "docs/sphinx-html", status = html_ok ? GateStatus.Pass : GateStatus.Fail,
+        seconds = seconds_since(t0),
+        detail = html_ok ? "" : (staged_recordings ? "html builder warnings (warnings-as-errors)"
+            : "html builder warnings — tutorial recordings are NOT staged (gh auth login, then utils/docs_assets/fetch)"),
+        output = r5.out))
 }
 
 // ===== CI-only das compile sweep =====
@@ -993,7 +939,7 @@ def gate_table() : array<GateInfo> {
         GateInfo(name = "cpp-syntax", full_only = false, doc = "clang frontend pass on changed C++; header change → full src+tests-cpp sweep"),
         GateInfo(name = "dasgen", full_only = true, doc = "gen_bind.das freshness vs include/daScript/builtin/"),
         GateInfo(name = "ci-das", full_only = true, doc = "compile-only sweep of CI-only das surface (ci_only_das.txt)"),
-        GateInfo(name = "docs", full_only = true, doc = "the eight doc.yml gates (das2rst, imgui2rst, stubs, uncategorized, untracked, sphinx ×2, pdflatex)"),
+        GateInfo(name = "docs", full_only = true, doc = "the six doc.yml gates (das2rst, imgui2rst, stubs, uncategorized, untracked, sphinx html)"),
         GateInfo(name = "tests-cpp", full_only = true, doc = "ctest -L small"),
         GateInfo(name = "tests-interp", full_only = true, doc = "full interpreter suite"),
         GateInfo(name = "tests-jit", full_only = true, doc = "full JIT suite (skips when dasLLVM absent)"),
