@@ -189,11 +189,20 @@ Interleaved A → B-off → B-on ×3 per bench, strictly serial, arm A via git-c
      strips wait. **The concept waits on a row-range fork-callable tile core from the
      math_gen emitter + per-shape (tune-crownable) splits** — the "no black holes" prize
      (~1.7× combined throughput) is real but needs that sub-arc.
-   - Next: the M4 leg (SME f16 + its strip-count question); the tile row-core sub-arc if
-     the hybrid prize is pursued. Two compiler warts owed minimal repros: das-function
-     calls inside a `maybe_parallel_for` block trip the new_job qmacro rewrite
-     (30921 / "expecting lambda declaration, ExprAscend"), and `grep_usage` file
-     truncation (reported in phase 5).
+   - **PARKED (Boris, 2026-08-06): collect the tool gain first.** The hybrid perf number
+     was a strawman — it measured the missing kernel (row-major GEMV loop vs the tile
+     GEMM), not the concept. Going-in notes for the return: **token-split beats row-split**
+     (NEON takes tokens `[0,t)` via the UNCHANGED backend tile kernel on the repacked
+     weights — zero new kernel work; AMX takes `[t,ntok)` from the dequant bands; Y is
+     token-major so each side writes a contiguous slab). The open design question is the
+     concurrency mechanism: a backend call is a whole-lane team dispatch, so the AMX side
+     needs fifo-jobs-beside-a-team-op (does the team op starve fifo jobs? the rank gate
+     admits per published chunks) or capped worker admission. Predictions first, per the
+     game — and now the lane view SHOWS the problem instead of guessing at it.
+   - Next: the M4 leg (SME f16 + its strip-count question). Two compiler warts owed
+     minimal repros: das-function calls inside a `maybe_parallel_for` block trip the
+     new_job qmacro rewrite (30921 / "expecting lambda declaration, ExprAscend"), and
+     `grep_usage` file truncation (reported in phase 5).
 
 ## Tail end (own arc)
 
