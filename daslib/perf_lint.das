@@ -413,6 +413,7 @@ class PerfLintVisitor : AstVisitor {
     current_for_known_length : bool = true
     // PERF006: suppress when loop has break/continue (unpredictable iteration count)
     loop_has_early_exit : array<bool>
+    @do_not_delete perf030_released : array<Variable?>
     // PERF009: track last move-initialized variable for redundant return detection
     @do_not_delete pending_move_var : Variable?
     @safe_when_uninitialized pending_move_at : LineInfo
@@ -1962,6 +1963,9 @@ class PerfLintVisitor : AstVisitor {
         if (in_while_cond && expr.func.name == "length" && expr.func._module.name == "strings") {
             in_length_while_call++
         }
+        if (!empty(expr.arguments) && expr.func.name |> starts_with("builtin`finalize`")) {
+            perf030_mark_released(expr.arguments[0])
+        }
     }
 
     def override visitExprCall(var expr : ExprCall?) : ExpressionPtr {
@@ -2066,7 +2070,28 @@ class PerfLintVisitor : AstVisitor {
         if (lv == null || lv.flags.aliasCMRES || lv.flags.generated
                 || (lv._type != null && lv._type.flags.ref)
                 || !perf030_needs_release(expr.left._type)) return
-        perf_warning("PERF030: move-assign drops the target's old contents without release (a leak on a persistent heap); when the target can be live, delete it first AND keep a nolint (the check cannot see the delete); when it is fresh, fold the move into the declaration; or enable force_inscope_pod so the compiler collects it", expr.at)
+        let released = perf030_released |> find_index(lv)
+        if (released >= 0) {
+            perf030_released |> erase(released)
+            return
+        }
+        perf_warning("PERF030: move-assign drops the target's old contents without release (a leak on a persistent heap); when the target can be live, delete it first; when it is fresh, fold the move into the declaration; or enable force_inscope_pod so the compiler collects it", expr.at)
+    }
+
+    def perf030_mark_released(sub : ExpressionPtr) : void {
+        var e = sub
+        if (e is ExprRef2Value) {
+            e = (e as ExprRef2Value.subexpr)
+        }
+        if (e == null || !(e is ExprVar)) return
+        var v = (e as ExprVar).variable
+        if (v != null && perf030_released |> find_index(v) < 0) {
+            perf030_released |> push(v)
+        }
+    }
+
+    def override preVisitExprDelete(var expr : ExprDelete?) : void {
+        perf030_mark_released(expr.subexpr)
     }
 
     def override visitExprMove(var expr : ExprMove?) : ExpressionPtr {
