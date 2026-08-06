@@ -39,12 +39,16 @@ readers' silent-default.
 
 ## Phases
 
-1. **`daslib/build_const`** — the module above + dastest + RST. Both carriers, unified bool
-   rule, argv-beats-env precedence inside each accessor pair.
-2. **Gate the marker rail** — `jobque_profile` grows `let public JOBQUE_PROFILING_ENABLED`
-   (build_const) and `static_if` gates in every wrapper (`profile_tag`, `profile_marker`,
-   categories); `dasllama_math`'s `trace_tag`/`trace_marker` gate the same way. The runtime
-   `g_trace_tags` toggle survives as the inner knob WITHIN a trace-enabled compile.
+1. **DONE — `daslib/build_const`** (nine accessors: `build_flag`/`build_value`/`build_int`
+   both-carrier + argv/env singles; tests spawn a fixture with controlled argv/env; RST
+   wired). Set-but-empty env counts as unset on every accessor. The combined accessors are
+   the recommended spelling — a gating global's init must stay a SINGLE call (see
+   "Compiler gap" below).
+2. **DONE — marker rail gated** — `profile_tag`/`profile_marker` + dasLLAMA's
+   `trace_tag`/`trace_marker`/`set_trace_tags` erase without the flag; control plane stays
+   live; `decode_prof --trace` refuses loudly on a rail-less build; `test_jobque_trace`
+   asserts BOTH worlds (ON = annotations land, OFF = erasure contract). Flipping the flag
+   cold-rebuilds the JIT cache (semantic hash) — confirmed live.
 3. **clargs env axis** — `@clarg_env = "NAME"` per field + struct-level
    `[clarg_env_prefix="X"]` auto-derivation (`cpu_prefill` → `X_CPU_PREFILL`,
    `@clarg_env=""` opts out), precedence argv > env > default, help output shows the env twin
@@ -74,6 +78,17 @@ entry, and the coverage test's ground truth; the hand-maintained `k(o, ...)` lis
 shortcut — the `"DASLLAMA_"` literal prefix at every read site is a mechanical hook: a tiny
 macro/tool can enumerate the reads and EMIT the declarations, so the migration may be mostly
 generated.
+
+## Compiler gap (found while probing; fix candidate, discuss before building)
+
+Under `no_optimizations` (the lint/LSP compile profile — CI's lint lane), a GLOBAL's
+initializer expression is never folded, so `static_if (P)` where `let P = a || b` fails
+with `error[30229] static_if must resolve to constant` — while a literal or single-macro
+init works, and cond-side expressions (`static_if (LEVEL > 2)`, `static_if (A || B)`) fold
+fine. `static_assert` had this exact class and got a force-fold fix
+(`ast_infer_type.cpp` `savedFoldingForStaticAssert`); `static_if` conds could get the same
+treatment, or `getConstExpr`'s global-var arm could fold the init. Until then the
+single-call-init rule (documented in build_const) is the contract, not a workaround.
 
 ## Lint candidates (report at arc end, don't build mid-arc)
 
