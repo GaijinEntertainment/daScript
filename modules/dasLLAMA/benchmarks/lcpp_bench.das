@@ -369,6 +369,37 @@ def private levers_of(cfg : Args) : array<Lever> {
     return <- out
 }
 
+// Output sanity, untimed and always on: each row's warmup logits must be finite with a
+// non-degenerate argmax, or the run REFUSES — the timed windows never read output (llama-bench
+// parity), so a broken pipeline would otherwise post clean-looking numbers.
+def private bench_output_gate(t : Model; s : Session; fmt : OutFmt; tag : string) : bool {
+    let vocab = t.config.vocab_size
+    var bi = 0l
+    var bv = -3.0e38
+    var mn = 3.0e38
+    var bad = 0l
+    for (v in range64(vocab)) {
+        let x = s.logits[v]
+        if (is_nan(x) || abs(x) > 3.0e38) {
+            bad++
+        } else {
+            if (x > bv) {
+                bv = x
+                bi = v
+            }
+            if (x < mn) {
+                mn = x
+            }
+        }
+    }
+    if (bad > 0l || bv <= mn) {
+        say(fmt, "REFUSED ({tag}): warmup logits unusable — {bad} non-finite of {vocab}, max {bv} min {mn}; the serving pipeline is broken and its timings would be meaningless\n")
+        return false
+    }
+    say(fmt, "sanity ({tag}): warmup argmax {bi} \"{piece_(t, bi)}\" (logit {bv})\n")
+    return true
+}
+
 // Greedy pick over the last logits — the tg-real row's sampler. Runs INSIDE the timed window, but
 // both A/B arms pay it identically so it cancels for judging.
 def private argmax_logit(s : Session; vocab : int64) : int64 {
@@ -733,6 +764,9 @@ def main() : int {
             if (plen > 0l) {
                 let warm <- build_prompt(plen, 999l)
                 forward_prefill(t, s, warm, plen, 0l)   // warmup — untimed full-size run, as llama-bench does
+                if (!bench_output_gate(t, s, fmt, "pp{plen}{dtag}")) {
+                    panic("lcpp_bench: output sanity gate refused pp{plen}{dtag} — see the REFUSED line")
+                }
                 var tps : array<double>
                 for (rep in range(reps)) {
                     let prompt <- build_prompt(plen, int64(rep))
@@ -761,6 +795,9 @@ def main() : int {
             }
             if (ngen > 0l) {
                 forward(t, s, synth_id(0l, 999l), 0l)   // warmup — one untimed token, llama-bench's test_gen(ctx, 1)
+                if (!bench_output_gate(t, s, fmt, "tg{ngen}{dtag}")) {
+                    panic("lcpp_bench: output sanity gate refused tg{ngen}{dtag} — see the REFUSED line")
+                }
                 var tps : array<double>
                 for (rep in range(reps)) {
                     let t0 = ref_time_ticks()
