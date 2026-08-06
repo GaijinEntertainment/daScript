@@ -1591,15 +1591,17 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
         return false
     }
     let q51_t0 = ref_time_ticks()
-    tune_progress_kernel_begin("q51q8_gemv_gen", ROUNDS)
+    // the manifest key must match the [tune] fn (the TILE) or the stamp misses its own crown;
+    // the race still benches the gemv shape
+    tune_progress_kernel_begin("q51q8_tile_gen", ROUNDS)
     var qrows : table<string; JsonValue?>
     let qw = q51_tune_family(qrows)
     tune_detail("TUNE_GEN_TIME q51_family {get_time_usec(q51_t0) / 1000} ms\n")
-    tune_progress_kernel_end("q51q8_gemv_gen", qw, empty(qw) ? "rejected" : "beats")
+    tune_progress_kernel_end("q51q8_tile_gen", qw, empty(qw) ? "rejected" : "beats")
     // same gate-failure fallback as the kq loop: complete the scope on the reference body
-    pending["q51q8_gemv_gen"] = empty(qw) ? "reference" : qw
-    g_rows["q51q8_gemv_gen"] = JV(qrows)
-    print("q51q8_gemv_gen winner: {empty(qw) ? "reference (gate-failure fallback)" : qw}\n")
+    pending["q51q8_tile_gen"] = empty(qw) ? "reference" : qw
+    g_rows["q51q8_tile_gen"] = JV(qrows)
+    print("q51q8_tile_gen winner: {empty(qw) ? "reference (gate-failure fallback)" : qw}\n")
     let confirm_t0 = ref_time_ticks()
     tune_progress_kernel_begin("confirm_e2e_prefill", 0)
     let cw = confirm_winner(vs[merged]._0)

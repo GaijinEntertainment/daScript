@@ -103,10 +103,12 @@ def noise_gate(tag : string) : bool {
     var cv = probe_once(0, med)
     if (cv > thr) {
         // one settle-and-retry: a transient this run itself caused (a GPU race just drained,
-        // turbo recovering) fades in seconds; noise from OUTSIDE the process does not
-        tune_progress_note("noise probe ({tag}): cv {cv:0.2f}% > {thr:0.1f}% — settling 2s hot, re-probing\n")
+        // turbo recovering, a composite walk's writeback draining) fades in seconds; noise
+        // from OUTSIDE the process does not. 8s: the in-situ streaming composites leave the
+        // memory subsystem hotter than the old 2s window was sized for
+        tune_progress_note("noise probe ({tag}): cv {cv:0.2f}% > {thr:0.1f}% — settling 8s hot, re-probing\n")
         let cv0 = cv
-        cv = probe_once(2000, med)
+        cv = probe_once(8000, med)
         g_probe_log |> push("{tag} cv {cv0:0.2f}% -> settled {cv:0.2f}%")
     } else {
         g_probe_log |> push("{tag} cv {cv:0.2f}%")

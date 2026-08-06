@@ -12,6 +12,45 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **CPU attention: promote it from the loop-crown tier to the EMITTED tier (named 2026-08-05,
+  the E2B deep-clip fade probes; corrected same day after a double-check).** Attention is NOT
+  kernel-less: flash prefill (the default mode) tiles with online softmax and rides the
+  per-box-tuned `gemm_f32_uk_4x16` for QK^T and A·V, with full f16/q8/tq4 KV codec arms.
+  What it lacks is the EMITTED tier the weight GEMMs got: with f16 KV the flash path
+  packs-and-converts K/V to f32 first and then runs the fp32 GEMM — no f16-native dots
+  (F16C / fp16 hw-convert loads fused into the tile), no int8 QK option, softmax outside
+  the tile. The measured tier gap IS the finding: on a gb1-class ~5k-token ASR prefill the
+  emitted-tier blk_ffn crosses zen2/M1 at 1.13x while the loop-crown attn crosses at 2.9x
+  (16.4s vs 5.6s); the f16-KV default bought only -3% (read bytes halve, the fp32 compute
+  stays). It reads fine at pp512 (small share) and hurts at depth — deep prompts and batch
+  serving pay the same tax audio does, text board included. **What a fix looks like:** an
+  emitted, per-box-tuned attention family — convert-in-tile f16 dots, optional int8 QK
+  (requant Q once, vnni/sdot straight against q8 KV — q8 flips from slowest cache format to
+  likely fastest), softmax fused into the flash walk. **Why it's a WIN, not catch-up (Boris
+  2026-08-05): llama.cpp runs the same dequant-to-f32-scratch seam — an emitted tile is
+  'potentially faster' than the ref, and the deep-clip audio cards on the site are the
+  ready-made scoreboard.** NOT the quant-lane arc; a kernel arc of its own, eventually.
+
+- **Batched-tg bench row: tg at B=16 sequences is the kernel story decode can't tell at B=1
+  (spotted 2026-08-04, zen2 thread ladder).** Single-sequence decode is GEMV — bandwidth-bound
+  at any thread count, so das:ref tg reads as parity (t=4 zen2: 13.10 vs 12.59) while pp shows
+  +45% on the same box. At B=16 every decode step is a 16-row GEMM: arithmetic intensity ×16,
+  weight stream amortized across the batch — the same regime pp wins in, and the serving shape
+  dasllama.io actually runs. The engine side EXISTS (`eval_batch_` in `dasllama_batch.das`,
+  synchronous B-row step; Metal has `metal_batch_decode_forward`); what's missing is only the
+  bench row: a `--tg-batch N` mode in `lcpp_bench.das` driving B sessions per step, ref via
+  `llama-batched-bench` (separate binary from `llama-bench` — check the ref checkouts build it).
+  **What a fix changes:** a board column where the kernel advantage shows in decode, and the
+  first honest throughput-serving number for the server story.
+
+- **Decode work-splitting vs thread count: tg on the 3990X ladder read flat 13.1–13.3 at t=4–8
+  then jumped +59% to 21.2 at t=12 (2026-08-04).** Read: the per-op split count is mismatched to
+  the lane count at some t (undersplit or oversplit, depending), with CCD-spread-vs-pack pin
+  placement a secondary suspect (unpinned llama-bench led das tg at t=8, 14.1 vs 13.3). Cost
+  today: optics only — single-sequence tg absolutes don't drive engine choices. Why it stays
+  ledgered: batched decode (see the batched-tg entry) turns each step into a B-row GEMM where the
+  same split/placement question prices real serving throughput; revisit there, not as a B=1 hunt.
+
 - **`g_lp_cbs` per-step buffer churn: the `@scratch` recycling never happens on the batch-decode
   pipeline path (spotted 2026-08-02, lint uplift).** `metal_batch_decode_forward` builds each
   step's command-buffer list in a LOCAL `cbs` and hands it over with `g_lp_cbs <- cbs`
@@ -24,17 +63,18 @@ what it costs today and what the fix would change.
   allocation sits on the measured hot orchestrator, so it belongs to a perf pass with A/B cells,
   not a lint sweep.
 
-- **ASR peak-RSS baseline (2026-08-02, m1, /usr/bin/time -l around the rig exe, warm=.dlim
-  present / cold=mint): whisper-turbo 1.48/5.29 GB (+3.81), parakeet-v3 6.69/6.84 (+0.15),
-  gemma4a-E2B 4.27/5.42 (+1.15), canary 13.11/14.44 (+1.33).** Two findings. (1) The MINT spike
-  is whisper-shaped: staging fp32 fblob+dblob plus the Q8 planes held at once — Phase 3
-  streaming (history/dasLLAMA/audio_image_plan.md, shipped) targeted whisper first; parakeet's mint is immaterial.
-  (2) **The SERVE peak on long clips dwarfs the mint everywhere else**: canary 13.1 GB warm on a
-  2.5B (fp32 encoder + fp32 decoder + ~199 s-clip FastConformer scratch), parakeet 6.7 GB on a
-  0.6B (546 s hp0x2 encoder scratch; attention terms scale with frame count, some quadratically).
-  What a fix changes: window/chunk the encoder attention scratch or cap resident frames — a
-  16 GB box is one clip length from swap on the canary cell. Not acted on mid-arc per the
-  standing rule; sized here so the perf pass ranks it.
+- **ASR peak-memory census (2026-08-03, m1, /usr/bin/time -l around asr_bench — the
+  reproducible ladder is `benchmarks/asr/mem_census.sh`): canary warm footprint
+  jfk 2.71 / gb1 4.29 / hp0x2 8.35 GB; canary MINT gb1 4.62 (+0.33 over warm);
+  parakeet-v3 warm hp0x2 5.61 GB.** The canary-apples arc closed the 2026-08-02 baseline's
+  two findings: the 13.1 GB canary serve peak (fp32 weights + quadratic scratch) is now
+  ~4.3 GB on gb1 (q8 end-to-end + per-job attention slabs), the mint spike is +0.3 GB
+  (read-time tensor-at-a-time transcode), and hp0x2-length canary — previously one clip from
+  swap on a 16 GB box — runs at 8.35 GB. Parakeet's hp0x2 quadratic scratch died with the
+  same slab change (−0.6 GB vs its pre-slab control). REMAINING: canary's hp0x2 tail is
+  ~4 GB of decoder-side prefill/KV at ~7k soft tokens — map it (KV codec residency, prefill
+  panel sizing) before chasing; and whisper's mint spike (1.48/5.29) predates this arc's
+  machinery, already ledgered via the streamed mint.
 
 - **Try the borrowed plane WITHOUT its bounds check, at profiling time (spotted 2026-08-01, audio
   `.dlim` arc).** `PlaneF`/`PlaneI8` `operator []` in `dasllama_plane.das` guards every read with

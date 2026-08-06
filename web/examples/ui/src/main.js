@@ -8,61 +8,30 @@ var code;
 var sampleList = {"examples":null};
 
 
-// --- Audio autoplay unlock -------------------------------------------------
-// dasAudio programs (miniaudio's emscripten Web Audio / ScriptProcessor backend)
-// create an AudioContext deep inside the wasm run. The Run handler awaits
-// (preloadSampleAssets) before callMain, so the context is born after the click's
-// synchronous frame — browsers would leave it 'suspended'. We wrap AudioContext to
-// resume it on creation (the Run click gives sticky activation, so resume() is
-// allowed), and also resume on any later gesture. No-op for non-audio programs.
-// Installed at script-eval time, BEFORE pageInit loads daslang_static.js, so the
-// wasm's `new AudioContext()` sees the wrapper.
-(function installAudioUnlock() {
-    var OrigAC = window.AudioContext || window.webkitAudioContext;
-    if (!OrigAC) return;
-    var ctxs = new Set();
-    var Wrapped = function () {
-        var c = new OrigAC(...arguments);
-        ctxs.add(c);
-        try { c.resume(); } catch (e) {}
-        return c;
-    };
-    Wrapped.prototype = OrigAC.prototype;
-    window.AudioContext = Wrapped;
-    if (window.webkitAudioContext) window.webkitAudioContext = Wrapped;
-    var resumeAll = function () {
-        ctxs.forEach(function (c) {
-            if (c.state === "closed") ctxs.delete(c);          // drop dead contexts so the set can't grow across runs
-            else if (c.state === "suspended") c.resume().catch(function () {});
-        });
-    };
-    ["pointerdown", "keydown", "click"].forEach(function (e) { document.addEventListener(e, resumeAll, true); });
-})();
+// (the AudioContext autoplay unlock moved into run-frame.html — the wasm that
+// constructs the context lives there now, and the wrapper has to be installed in
+// that window before daslang_static.js loads)
 
 
 pageInit = function () {
 
-    $.getScript("daslang_static.js")
-
-
     editorCode = document.getElementById("code");
     editorOutput = document.getElementById("output");
 
-    // Bind the WebGL canvas so emscripten's GL (glfwCreateWindow → WebGL2) renders
-    // into it. AUTO-DETECT graphics vs text: hook getContext so the canvas reveals
-    // itself the instant ANY program creates a WebGL context on it — the precise,
-    // program-driven signal (works for pasted/edited code, not just flagged
-    // samples). The data.json "graphics" flag is only a pre-run hint for the
-    // sample picker. See showCanvas() / selectSample().
-    var glCanvas = document.getElementById("canvas");
-    if (glCanvas && typeof Module === "object" && Module) {
-        Module.canvas = glCanvas;
-        const origGetContext = glCanvas.getContext.bind(glCanvas);
-        glCanvas.getContext = function(type) {
-            if (/webgl/i.test(String(type))) showCanvas(true);
-            return origGetContext.apply(glCanvas, arguments);
-        };
-    }
+    // The runtime lives in run-frame.html, one frame per program — this page no
+    // longer loads daslang_static.js or owns a canvas. See playground-runner.js
+    // for why (a failed run used to poison every later run in the session).
+    // The frame reports its own canvas visibility, so the getContext hook and
+    // the graphics/text auto-detect moved in there with it.
+    // Take the canvas's PLACE, not just its parent: the column is a flex row, so
+    // a frame merely appended lands past #output on the far right and gets
+    // shrunk. The host stands where the canvas stood and holds every frame.
+    var oldCanvas = document.getElementById("canvas");
+    var runHost = document.createElement("div");
+    runHost.className = "pg-run-host";
+    if (oldCanvas) oldCanvas.parentNode.replaceChild(runHost, oldCanvas);
+    else editorOutput.parentNode.insertBefore(runHost, editorOutput);
+    PlaygroundRunner.init(runHost, function (text, color) { printOutput(text, color); });
 
     sampleList["examples"] = document.getElementById("examples");
 
@@ -76,7 +45,39 @@ pageInit = function () {
     });
 
 
-     $.getJSON( "./samples/data.json", function(res) {
+     // Offer the wasm engine only where it can actually work. Asked once per
+     // page, not per sample: builds are content-addressed, so availability is
+     // a property of the browser and the service, not of the loaded code.
+     updateEngineAvailability();
+
+     // Switching engines changes what Run needs, so re-gate on the switch.
+     for (const radio of document.querySelectorAll('input[name=engine]')) {
+         radio.addEventListener('change', updateButtonStates);
+     }
+
+     // The curated list comes from the sample service (store-fed, phase 2 of
+     // plans/dasweb_backend.md); the committed data.json remains the fallback
+     // for the GH Pages mirror / an empty store on first boot.
+     fetch('/api/samples/listed')
+        .then(function(r) { if (!r.ok) throw new Error('listed ' + r.status); return r.json(); })
+        .then(function(listed) {
+            if (!Array.isArray(listed) || !listed.length) throw new Error('listed empty');
+            const byCat = {};
+            for (const e of listed) {
+                const cat = e.category || 'examples';
+                (byCat[cat] = byCat[cat] || []).push({
+                    name: e.title,
+                    files: [e.path || (e.hash + '.das')],
+                    slug: e.slug || undefined,
+                    hash: e.hash,
+                    path: e.path || '',
+                });
+            }
+            initSampleUi(byCat);
+        })
+        .catch(function() { $.getJSON('./samples/data.json', initSampleUi); });
+
+     function initSampleUi(res) {
         samplesData = res;
 
 
@@ -107,7 +108,27 @@ pageInit = function () {
          //      playground →" deep-link.
          //   3. Autosave from localStorage — handled by playground-tabs.js.
          //   4. Default first sample.
-         if (!window.pgRestoredFromState) {
+         //
+         // Deferred to DOMContentLoaded because pgRestoredFromState is set by
+         // playground-tabs.js from ITS DOMContentLoaded handler: this list
+         // arrives over the network, and when it arrives first (a warm cache, a
+         // local service, an empty store answering instantly) the default
+         // sample would load over the user's restored buffer. tabs.js registers
+         // its handler at parse time, so it always runs before this one; if the
+         // event already fired, tabs.js has already run and the flag is final.
+         whenTabsReady(function () {
+             applyInitialSelection();
+             // The buffer has now settled into whatever this visit should show.
+             // Everything above is asynchronous, so without a signal there is no
+             // way to tell "still loading" from "loaded and this is the content"
+             // — which is exactly what a test, or anything scripting the page,
+             // needs to know before it touches the editor.
+             window.pgSamplesReady = true;
+             document.dispatchEvent(new CustomEvent('pg-samples-ready'));
+         });
+
+         function applyInitialSelection() {
+             if (window.pgRestoredFromState || editorHasContent()) return;
              const params = new URLSearchParams(window.location.search);
              const wanted = params.get("example");
              if (wanted) {
@@ -124,9 +145,39 @@ pageInit = function () {
              selectSample("examples", 0);
          }
 
-    });
+    }
 
 
+}
+
+// Is there anything in the editor worth protecting? The sample list arrives
+// over the network, so its default selection can land after someone has
+// already started typing — sample zero must not overwrite their work. An
+// untouched playground holds one empty buffer, which is what lets the default
+// through on a first visit.
+function editorHasContent() {
+    try {
+        const files = window.pgState && window.pgState.files;
+        if (!files) return false;
+        const names = Object.keys(files);
+        if (names.length > 1) return true;
+        return names.some(n => (files[n].getValue() || '').trim() !== '');
+    } catch (e) {
+        return false;   // no tab state yet — nothing to protect
+    }
+}
+
+// Run fn once playground-tabs.js has decided the buffer's starting content
+// (restored from a link, from autosave, or left empty for a default sample).
+// Not DOMContentLoaded: tabs init waits for CodeMirror and can finish after
+// it, and selecting a sample fetches asynchronously — so starting before tabs
+// has spoken means finishing after it, on top of what it restored.
+function whenTabsReady(fn) {
+    if (window.pgTabsReady) {
+        fn();
+    } else {
+        document.addEventListener('pg-tabs-ready', fn, { once: true });
+    }
 }
 
 // Derive a URL-friendly slug from a sample entry. Used by the ?example=
@@ -144,16 +195,6 @@ function slugForSample(entry) {
     return base.replace(/\.das$/, '');
 }
 
-// Current sample's JIT-wasm basename (null for multi-file samples or when the
-// .wasm artifact is not present). Drives runJit() and the engine radio's
-// disabled state.
-var currentJitName = null;
-
-function deriveJitName(files) {
-    if (!files || files.length !== 1) return null;
-    return files[0].split('/').pop().replace(/\.das$/, '');
-}
-
 // Some samples (e.g. the OpenGL deferred-shading tutorial) load external assets
 // — a mesh + PBR texture set — via plain fopen(). On the web fopen() reads
 // MEMFS, which starts empty, so the bytes must be fetched and written first.
@@ -163,7 +204,6 @@ function deriveJitName(files) {
 // web-vs-desktop delta (desktop fopen hits real disk). Mirrors the standalone
 // gl_tutorial.html harness used to develop the rung.
 var currentAssetsUrl = null;
-var __preloadedManifests = new Set();
 
 function deriveAssetsUrl(files) {
     if (!files || files.length !== 1) return null;
@@ -173,36 +213,25 @@ function deriveAssetsUrl(files) {
 // Fetch the current sample's asset manifest (if any) and populate MEMFS. Idempotent
 // per manifest URL — MEMFS persists for the page session, so the (potentially large)
 // fetch happens once, not on every Run. Absent sidecar / a 404 is the normal case.
-async function preloadSampleAssets() {
-    if (!currentAssetsUrl || __preloadedManifests.has(currentAssetsUrl)) return;
-    if (typeof FS === 'undefined') return;
-    let assets;
+// Read the sidecar and hand the parsed list to the run frame, which does the
+// fetching — MEMFS lives in the frame now, and it is born empty with every run,
+// so the assets go in per run rather than once per page. The browser's HTTP
+// cache absorbs the repeat cost.
+async function collectAssetUrls() {
+    if (!currentAssetsUrl) return [];
     try {
         const r = await fetch(currentAssetsUrl);
-        if (!r.ok) { __preloadedManifests.add(currentAssetsUrl); return; }
-        assets = await r.json();
+        if (!r.ok) return [];   // absent sidecar is the normal case
+        const assets = await r.json();
+        return assets.map(rel => './' + rel);
     } catch (e) {
-        return; // transient network error — leave un-cached so the next Run retries
-    }
-    try {
-        for (const rel of assets) {
-            const resp = await fetch('./' + rel);
-            if (!resp.ok) throw new Error('HTTP ' + resp.status + ' fetching ' + rel);
-            const buf = new Uint8Array(await resp.arrayBuffer());
-            const path = '/' + rel;
-            try { FS.mkdirTree(path.substring(0, path.lastIndexOf('/'))); } catch (e) { /* exists */ }
-            FS.writeFile(path, buf);
-        }
-        __preloadedManifests.add(currentAssetsUrl);
-        printOutput('preloaded ' + assets.length + ' asset(s) for this sample', '#9fe');
-    } catch (e) {
-        printOutput('asset preload failed: ' + (e && e.message ? e.message : e), '#ff9393');
+        return [];  // transient network error — the next Run retries
     }
 }
 
-// Precompiled sample .wasm are now wasm64 (memory64) — browsers without
-// memory64 (Safari/iOS) cannot instantiate them, so the JIT engine must stay
-// disabled there regardless of artifact presence. Detected once at load.
+// Built artifacts are wasm64 (memory64) — browsers without memory64
+// (Safari/iOS) cannot instantiate them, so the wasm engine stays disabled
+// there no matter what the build service says. Detected once at load.
 const WASM64_SUPPORTED = (() => {
     try {
         // Validate a minimal module declaring a 64-bit (memory64) memory:
@@ -217,62 +246,38 @@ const WASM64_SUPPORTED = (() => {
     }
 })();
 
-function updateEngineAvailability(name) {
-    const jitRadio = document.querySelector('input[name=engine][value=jit]');
-    if (!jitRadio) return;
-    // When JIT becomes unavailable for the new sample, fall back to the
-    // interpreter — leaving the radio merely `disabled` but still `checked`
-    // would keep selectedEngine() returning 'jit' and runCode() would 404
-    // on the missing .wasm.
-    const disableJit = () => {
-        jitRadio.disabled = true;
-        if (jitRadio.checked) {
-            jitRadio.checked = false;
+// Whether the wasm engine can be offered at all. Unlike the retired
+// precompiled-artifact path, this no longer depends on which sample is loaded:
+// builds are content-addressed, so any editor state — including a multi-file
+// one — is buildable. What it does depend on is this browser (wasm64 artifacts
+// need memory64) and the service having a live toolchain to build against.
+function updateEngineAvailability() {
+    const wasmRadio = document.querySelector('input[name=engine][value=wasm]');
+    if (!wasmRadio) return;
+    // Leaving the radio merely `disabled` but still `checked` would keep
+    // selectedEngine() returning 'wasm' and send Run down a dead path.
+    const disableWasm = () => {
+        wasmRadio.disabled = true;
+        if (wasmRadio.checked) {
+            wasmRadio.checked = false;
             const interpRadio = document.querySelector('input[name=engine][value=interpreter]');
             if (interpRadio) interpRadio.checked = true;
         }
     };
-    // Gate 1: no memory64 → wasm64 artifacts can't run here at all.
-    if (!WASM64_SUPPORTED) { disableJit(); return; }
-    // Gate 2: no precompiled .wasm for this sample (multi-file or absent).
-    if (!name) { disableJit(); return; }
-    // Rapid sample-switching can land HEAD-fetch responses out of order
-    // (HTTP/2). Gate the late .then/.catch on the sample still being current
-    // — currentJitName is the source of truth for "what sample is loaded".
-    fetch('./samples/examples/' + name + '.wasm', { method: 'HEAD' })
-        .then(r => {
-            if (name !== currentJitName) return;
-            if (r.ok) jitRadio.disabled = false; else disableJit();
-        })
-        .catch(() => {
-            if (name !== currentJitName) return;
-            disableJit();
-        });
+    if (!WASM64_SUPPORTED || !window.pgWasmBuild) { disableWasm(); return; }
+    window.pgWasmBuild.buildInfo()
+        .then(info => { if (info.enabled) wasmRadio.disabled = false; else disableWasm(); })
+        .catch(() => disableWasm());
 }
 
-// Force the canvas to a true 4:3 display box matching its 640x480 drawing buffer,
-// so the shader's aspect correction is right and rotations trace circles, not
-// ovals. Set inline with !important — the highest-priority source — because the
-// column's stylesheet otherwise stretches the canvas to ~80vh (portrait). Clamped
-// to the column width; re-applied on resize.
-function fitCanvas() {
-    const c = document.getElementById("canvas");
-    if (!c || !c.classList.contains("is-graphics")) return;
-    const avail = Math.min((c.parentElement ? c.parentElement.clientWidth : 640), 640);
-    c.style.setProperty("width", avail + "px", "important");
-    c.style.setProperty("height", Math.round(avail * 3 / 4) + "px", "important");
-}
-window.addEventListener("resize", fitCanvas);
-
-// Show/hide the WebGL canvas. Graphics programs render into it (item 0b's browser
-// loop); text programs keep it hidden. The output panel shrinks to share the
-// column so a graphics program can both draw (canvas) and print() (output below).
+// Hide the run frame. Revealing and sizing it is the runner's own job — the
+// frame posts canvas-visible the instant a program asks for a WebGL context,
+// which is program-driven and so works for pasted code, not just samples
+// flagged graphics in data.json.
 function showCanvas(show) {
-    const c = document.getElementById("canvas");
-    if (c) {
-        c.classList.toggle("is-graphics", show);
-        if (show) fitCanvas();
-        else { c.style.removeProperty("width"); c.style.removeProperty("height"); }
+    if (!show) {
+        const f = document.querySelector(".pg-run-frame");
+        if (f) f.style.display = "none";
     }
     const o = document.getElementById("output");
     if (o) o.classList.toggle("with-canvas", show);
@@ -288,17 +293,35 @@ selectSample = function(type, id) {
         // Hide the canvas on every sample switch; a graphics program re-reveals
         // it on Run when it creates a WebGL context (the getContext hook).
         showCanvas(false);
-        const files = samplesData[type][vv].files;
-        currentJitName = deriveJitName(files);
+        const entry = samplesData[type][vv];
+        const files = entry.files;
         currentAssetsUrl = deriveAssetsUrl(files);
-        updateEngineAvailability(currentJitName);
-        Promise.all(files.map(f =>
+        // Static fallback only exists for entries that name a real file in the
+        // shipped samples tree. A promoted user sample has no such path (the
+        // store synthesized "<hash>.das"), so fetching it is a guaranteed 404.
+        const hasStaticFiles = !entry.hash || !!entry.path;
+        const loadFromStaticFiles = () => hasStaticFiles ? Promise.all(files.map(f =>
             $.ajax({ url: './samples/' + f, dataType: 'text' })
                 .then(text => ({ name: f.split('/').pop(), text }))
         )).then(loaded => {
             const byName = Object.fromEntries(loaded.map(({ name, text }) => [name, text]));
             loadSample(byName);
-        });
+        }) : Promise.resolve();
+        if (entry.hash) {
+            // Store-fed entry: one fetch; multi-file samples arrive as the
+            // same {files, active} bundle user shares store. Static tree is
+            // the fallback (mirror / store hiccup).
+            fetch('/api/samples/' + entry.hash)
+                .then(r => { if (!r.ok) throw new Error('sample ' + r.status); return r.text(); })
+                .then(text => {
+                    let bundle = null;
+                    try { const o = JSON.parse(text); if (o && o.files) bundle = o.files; } catch (e) { /* single file */ }
+                    loadSample(bundle || { 'main.das': text });
+                })
+                .catch(loadFromStaticFiles);
+        } else {
+            loadFromStaticFiles();
+        }
     }
     if (sel) sel.value = "init";
 }
@@ -326,11 +349,8 @@ loadSample = function(filesByName) {
     window.__pendingSampleBundle = bundle;
 }
 
-// Names of files we wrote to MEMFS on the previous run. Tracked so each new
-// run can unlink files the user has since deleted or renamed — otherwise
-// `require utils` would resolve stale code from the prior run, and the
-// executed program no longer matches the visible tab state.
-var __lastWrittenFiles = new Set();
+// (stale-file tracking is gone: every run gets a fresh MEMFS in a fresh frame,
+// so a deleted or renamed tab simply isn't written the next time)
 
 // Sync the URL hash with the current playground state. Run is the natural
 // "snapshot" moment — the address bar then IS the share link (no need to hunt
@@ -342,24 +362,18 @@ function syncUrlToState() {
     if (url && url !== location.href) history.pushState(null, '', url);
 }
 
-// Multi-file MEMFS sync: unlink stale, write current pgState files. Returns
-// true when both prerequisites are ready (pgState mounted AND Emscripten's
-// FS is up); false when either is still pending. Callers that fall back to
-// the single-buffer path must check WASM readiness themselves before touching
-// FS — see isWasmReady() and the runCode/runTests guards below.
-function syncMemFsFromState() {
-    if (!window.pgState || typeof FS === 'undefined') return false;
-    const current = new Set(Object.keys(window.pgState.files));
-    for (const stale of __lastWrittenFiles) {
-        if (!current.has(stale)) {
-            try { FS.unlink(stale); } catch (e) { /* ENOENT — ignore */ }
+// Snapshot the program as a {name: text} map for the run frame. Every run gets
+// a brand-new MEMFS inside a brand-new frame, so there is nothing stale to
+// unlink — deleting a tab simply means the file is absent from the next run.
+function collectProgramFiles() {
+    if (window.pgState && window.pgState.files) {
+        const out = {};
+        for (const [name, doc] of Object.entries(window.pgState.files)) {
+            out[name] = doc.getValue();
         }
+        if (Object.keys(out).length) return out;
     }
-    for (const [name, doc] of Object.entries(window.pgState.files)) {
-        FS.writeFile(name, doc.getValue());
-    }
-    __lastWrittenFiles = current;
-    return true;
+    return { 'main.das': code.getValue() };
 }
 
 // WASM readiness: callMain + FS both exposed by the Emscripten module. False
@@ -367,9 +381,7 @@ function syncMemFsFromState() {
 // or indefinitely if the load fails. Both Run and Test buttons stay disabled
 // until this flips to true (see updateButtonStates + Module.onRuntimeInitialized).
 function isWasmReady() {
-    return typeof FS !== 'undefined'
-        && typeof Module === 'object' && Module !== null
-        && typeof Module.callMain === 'function';
+    return typeof PlaygroundRunner !== 'undefined' && PlaygroundRunner.isReady();
 }
 
 // Toggle Run + Test buttons. Run requires WASM ready; Test additionally
@@ -393,7 +405,13 @@ function updateButtonStates() {
     const ready = isWasmReady();
     const runBtn = document.getElementById('run');
     const testBtn = document.getElementById('test');
-    if (runBtn) runBtn.disabled = !ready;
+    // Run gates on what the SELECTED engine needs. The interpreter needs the
+    // local runtime loaded; the wasm engine does not — it compiles remotely and
+    // instantiates the artifact itself, and its radio is only selectable once
+    // the build service has answered. Gating both on the local runtime left Run
+    // dead for an engine that never uses it.
+    if (runBtn) runBtn.disabled = selectedEngine() === 'wasm' ? false : !ready;
+    // Test always runs interpreted, through the local runtime.
     if (testBtn) testBtn.disabled = !ready || !hasTestAnnotation();
 }
 // Kept under the old name so playground-tabs.js's existing autosave hook
@@ -405,62 +423,22 @@ function selectedEngine() {
     return el ? el.value : 'interpreter';
 }
 
-// Emscripten's stdout/stderr TTYs line-buffer bytes and flush only on '\n'.
-// daslang's last print() can omit the trailing newline (e.g. print("Hello")),
-// leaving those bytes pending in tty.output. They never surface in the output
-// panel — until the NEXT run writes a '\n', concatenating the prior tail with
-// the new run's first line. Fix: synthesize a '\n' through put_char per stream
-// that has pending bytes, which the TTY flush hook will turn into a print
-// without producing a spurious empty line.
-function flushStdioBuffers() {
-    if (typeof FS === 'undefined' || !FS.streams) return;
-    for (const fd of [1, 2]) {
-        const s = FS.streams[fd];
-        if (s && s.tty && s.tty.output && s.tty.output.length > 0 &&
-            s.tty.ops && typeof s.tty.ops.put_char === 'function') {
-            s.tty.ops.put_char(s.tty, 10);
-        }
-    }
-}
-
-// Module.callMain throws Emscripten's ExitStatus on normal exit AND can throw
-// user errors. Flush either way so the trailing print always lands in the panel.
-function callMainAndFlush(args) {
-    try {
-        Module.callMain(args);
-    } finally {
-        flushStdioBuffers();
-    }
-}
+// (stdout flushing moved into run-frame.html, where FS now lives)
 
 runCode = async function() {
     syncUrlToState();
-    if (selectedEngine() === 'jit') {
-        if (!currentJitName) {
-            printOutput("JIT unavailable: no precompiled .wasm for this sample", '#ff9393');
-            return;
-        }
-        runJit(currentJitName);
+    if (selectedEngine() === 'wasm') {
+        await runWasm();
         return;
     }
-    // Interpreter path. WASM readiness gate first — both Module.callMain and
-    // the single-buffer fallback need FS up.
     if (!isWasmReady()) {
         printOutput('daslang is still loading, please wait…', '#ff9393');
         return;
     }
-    // Reset before each run: a text program leaves the canvas hidden; a graphics
-    // program re-reveals it the instant it creates a WebGL context (the
-    // getContext hook in pageInit). Detection is program-driven, not flagged.
+    // Each run gets a fresh frame, so the previous program's canvas, GL context,
+    // module registry and MEMFS are gone before this one starts.
     showCanvas(false);
-    // Populate MEMFS with any external assets this sample needs (mesh/textures)
-    // before the program's fopen() runs. No-op for samples without a manifest.
-    await preloadSampleAssets();
-    if (syncMemFsFromState()) {
-        callMainAndFlush(['main.das']);
-        return;
-    }
-    runScript(code.getValue());
+    PlaygroundRunner.run(collectProgramFiles(), ['main.das'], await collectAssetUrls());
 }
 
 // Invoke dastest against the current main.das. `[test]` functions in the file
@@ -469,16 +447,17 @@ runCode = async function() {
 // our printOutput doesn't render ANSI escapes. --timeout=0 disables dastest's
 // wall-clock thread (suite.das wraps each file in new_thread when timeout>0),
 // keeping the run single-threaded in the WASM build.
-runTests = function() {
+runTests = async function() {
     if (!isWasmReady()) {
         printOutput('daslang is still loading, please wait…', '#ff9393');
         return;
     }
-    if (!syncMemFsFromState()) {
-        FS.writeFile('main.das', code.getValue());
-    }
     syncUrlToState();
-    callMainAndFlush(['/dastest/dastest.das', '--', '--test', '/main.das', '--timeout=0']);
+    showCanvas(false);
+    PlaygroundRunner.run(
+        collectProgramFiles(),
+        ['/dastest/dastest.das', '--', '--test', '/main.das', '--timeout=0'],
+        await collectAssetUrls());
 }
 
 // Minimal wasi_snapshot_preview1 shim — daslang STANDALONE_WASM output only
@@ -486,7 +465,7 @@ runTests = function() {
 // fd_* no-ops emscripten's libc emits at link time. See
 // modules/dasLLVM/README.md "Cross-compilation" for the import surface.
 //
-// The JIT samples are compiled to wasm64 (memory64). Under memory64 every
+// Built artifacts are compiled to wasm64 (memory64). Under memory64 every
 // pointer/size argument arrives as a BigInt (not a Number), the iovec struct
 // fields are 8 bytes (not 4), and `__wasi_size_t` outputs are 8 bytes — so the
 // shim must coerce BigInt offsets for DataView and write 64-bit sizes. The
@@ -597,15 +576,43 @@ function makeWasiShim(memoryRef) {
 
 function WasiExit(code) { this.code = code; }
 
-function runJit(name) {
+// Compile the editor's code on the build service, then run what came back.
+// The first build of a given source pays a real compile; the same source
+// afterwards is a cache hit, because the build is keyed by content hash.
+async function runWasm() {
+    if (!window.pgWasmBuild) {
+        printOutput('wasm engine unavailable: build client not loaded', '#ff9393');
+        return;
+    }
+    // A build is not instant, so the button must not invite a second one.
+    const runBtn = document.getElementById('run');
+    const wasBusy = runBtn ? runBtn.disabled : false;
+    if (runBtn) runBtn.disabled = true;
+    try {
+        const result = await window.pgWasmBuild.build(line => printOutput(line, '#9aa0a6'));
+        if (!result.ok) {
+            // A compiler error is the user's own code talking — show it as-is,
+            // not decorated as an infrastructure failure.
+            printOutput(result.error, result.compileError ? '#ff9393' : '#ff2d2d');
+            return;
+        }
+        runWasmArtifact(result.files[0]);
+    } catch (e) {
+        printOutput('wasm build error: ' + (e && e.message ? e.message : e), '#ff2d2d');
+    } finally {
+        if (runBtn) runBtn.disabled = wasBusy;
+    }
+}
+
+function runWasmArtifact(url) {
     // Shim's DataView is rebuilt per-call from memRef.buffer, so we can
     // create the shim before instantiation and patch the buffer once memory
     // is exported.
     const memRef = { buffer: new ArrayBuffer(0) };
     const shim = makeWasiShim(memRef);
-    fetch('./samples/examples/' + name + '.wasm')
+    fetch(url)
         .then(r => {
-            if (!r.ok) throw new Error('HTTP ' + r.status + ' fetching ' + name + '.wasm');
+            if (!r.ok) throw new Error('HTTP ' + r.status + ' fetching the build artifact');
             return r.arrayBuffer();
         })
         .then(bytes => WebAssembly.instantiate(bytes, {
@@ -619,14 +626,14 @@ function runJit(name) {
                 if (typeof exports._initialize === 'function') exports._initialize();
                 if (typeof exports._start === 'function') exports._start();
                 else if (typeof exports.main === 'function') exports.main();
-                else printOutput('JIT error: no entry point exported in wasm', '#ff2d2d');
+                else printOutput('wasm error: no entry point exported', '#ff2d2d');
             } catch (e) {
                 if (!(e instanceof WasiExit)) {
-                    printOutput('JIT error: ' + (e && e.message ? e.message : e), '#ff2d2d');
+                    printOutput('wasm error: ' + (e && e.message ? e.message : e), '#ff2d2d');
                 }
             }
         })
-        .catch(e => printOutput('JIT load error: ' + (e && e.message ? e.message : e), '#ff2d2d'));
+        .catch(e => printOutput('wasm load error: ' + (e && e.message ? e.message : e), '#ff2d2d'));
 }
 
 clearOutput = function() {
@@ -634,6 +641,11 @@ clearOutput = function() {
     while (editorOutput.firstChild) {
         editorOutput.removeChild(editorOutput.lastChild);
     }
+    // Clear means clear: drop the frame so the previous program's canvas and its
+    // WebGL context go with it. Previously the canvas stuck around showing a dead
+    // program's last frame, which reads as "my run drew nothing".
+    if (typeof PlaygroundRunner !== 'undefined') PlaygroundRunner.reset();
+    showCanvas(false);
 }
 
 
@@ -674,15 +686,7 @@ printOutput = function(text,color) {
 
 runScript = function(text,onComplete)
 {
-
-
-    FS.writeFile('main.das',text);
-    callMainAndFlush(['main.das']);
-
-
-
-
-    //printOutput(text,"#fff2d2");
+    PlaygroundRunner.run({ 'main.das': text }, ['main.das'], []);
 
     if (onComplete!==undefined)
         onComplete();
@@ -694,32 +698,9 @@ runScript = function(text,onComplete)
 
 
 
-var Module = {
-        // Threaded build: pthread workers load their script from Module.mainScriptUrlOrBlob, falling
-        // back to emscripten's _scriptName (= document.currentScript.src). We load daslang_static.js
-        // via $.getScript (XHR + eval), so document.currentScript is null during eval and _scriptName
-        // is undefined — the worker pool would then spawn `new Worker(undefined)`, 404 to an HTML page
-        // ("Unexpected token '<'"), and the threaded runtime would hang. Name the script explicitly.
-        mainScriptUrlOrBlob: "daslang_static.js",
-        preRun: [],
-        postRun: [],
-        print: (function() {
-
-            return function(text) {
-
-                if (arguments.length > 1)
-                    text = Array.prototype.slice.call(arguments).join(' ');
-                console.log(text);
-                printOutput(text,'#ffffff');
-            };
-        })(),
-        // Re-enable the Run / Test buttons once Emscripten has finished
-        // loading daslang_static.wasm and exposing FS + callMain. Both buttons
-        // ship disabled in index.html to avoid the early-click ReferenceError.
-        onRuntimeInitialized: function() {
-            if (typeof updateButtonStates === 'function') updateButtonStates();
-        },
-    }
+// No Module here any more: the wasm runtime, its stdout hooks and its readiness
+// signal all live in run-frame.html. playground-runner.js calls
+// updateButtonStates() when a frame reports ready.
 
 window.onerror = function(message)
 {

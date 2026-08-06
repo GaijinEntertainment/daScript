@@ -1,20 +1,18 @@
-// The interpreter/JIT (wasm) radio in the playground toolbar. Three concerns:
-//   1. Picking a sample with a precompiled .wasm enables the JIT radio.
-//   2. Picking a sample without one disables it.
-//   3. If JIT was selected when (2) happens, the radio must also be UNCHECKED
-//      and interpreter re-checked — otherwise selectedEngine() keeps returning
-//      'jit' and runCode() 404s on the missing artifact.
+// The interpreter/wasm radio in the playground toolbar, and the build flow
+// behind it (phase 3 of plans/dasweb_backend.md).
 //
-// SHA-256 is in the all_wasm cross-compile list (web/CMakeLists.txt); Macros
-// is multi-file so deriveJitName returns null synchronously — clean pair for
-// "JIT becomes available → user opts in → JIT becomes unavailable".
-//
-// The actual .wasm artifacts are only built by `cmake --build … all_wasm`,
-// which the playground-e2e CI lane runs but local dev typically skips. So we
-// stub the HEAD probe with page.route — the test asserts the radio-state
-// machine, not the cross-compile pipeline.
+// The wasm engine compiles the editor's code on the build service, so
+// availability is a property of the BROWSER (wasm64 artifacts need memory64)
+// and the SERVICE (a live toolchain) — not of the loaded sample, the way the
+// retired precompiled-artifact path worked. The service is stubbed via
+// route() so these tests do not need a live backend.
 
 const { test, expect } = require('./fixtures.js');
+
+const wasmSel = 'input[name=engine][value=wasm]';
+const interpSel = 'input[name=engine][value=interpreter]';
+const FAKE_HASH = 'b'.repeat(64);
+const ARTIFACT_URL = '/api/build/artifact/abc1234/' + FAKE_HASH + '/sample.wasm';
 
 async function waitDropdownsPopulated(page) {
     await page.waitForFunction(
@@ -24,73 +22,138 @@ async function waitDropdownsPopulated(page) {
     );
 }
 
-const jitSel = 'input[name=engine][value=jit]';
-const interpSel = 'input[name=engine][value=interpreter]';
+// The page asks /api/build/info once at load, so a stub must be installed
+// before navigation — hence routing on the context, then a reload.
+async function stubBuildInfo(page, enabled) {
+    await page.route('**/api/build/info', route => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ enabled, toolchain: enabled ? 'abc1234' : '' }),
+    }));
+}
 
-// Deterministic HEAD-probe world: 200 for sha256.wasm only, 404 for every
-// other sample's .wasm regardless of what's actually present in the served
-// tree. A narrower `route('**/samples/examples/sha256.wasm', ...)` would let
-// the startup probe for the default Hello world sample hit a real hello.wasm
-// (if a local build has staged any), and JIT would be enabled from page
-// load — the "JIT enables on sha256 select" test would then pass even if
-// the sample-switch path stopped working.
-async function stubSha256WasmAvailable(page) {
-    await page.route('**/samples/examples/*.wasm', route => {
-        if (route.request().method() !== 'HEAD') return route.continue();
-        const ok = route.request().url().endsWith('/sha256.wasm');
-        return route.fulfill({ status: ok ? 200 : 404, body: '' });
+async function stubStore(page) {
+    await page.route('**/api/samples', route => {
+        if (route.request().method() !== 'POST') return route.continue();
+        return route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ hash: FAKE_HASH, url: 'https://daslang.io/s/' + FAKE_HASH, created: true }),
+        });
     });
 }
 
-test('JIT radio enables for samples with a precompiled .wasm', async ({ playground }) => {
-    await stubSha256WasmAvailable(playground);
-    await waitDropdownsPopulated(playground);
+// Serve a scripted sequence of status payloads, one per poll.
+async function stubBuild(page, states) {
+    let i = 0;
+    await page.route('**/api/build/request/**', route => route.fulfill({
+        status: 200, contentType: 'application/json', body: JSON.stringify(states[0]),
+    }));
+    await page.route('**/api/build/status/**', route => {
+        const s = states[Math.min(++i, states.length - 1)];
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(s) });
+    });
+}
 
-    // The `playground` fixture's navigate-before-route ordering means the
-    // startup HEAD probe for the default sample's .wasm has already happened
-    // against the real http.server. Force a fresh probe by selecting a sample
-    // the stub returns 404 for — that establishes the "JIT disabled" baseline
-    // we need so the SHA-256 transition actually proves the sample-switch
-    // path works.
-    await playground.locator('#examples').selectOption({ label: 'Functions' });
-    await expect.poll(
-        () => playground.locator(jitSel).isDisabled(),
-        { timeout: 5_000 }
-    ).toBe(true);
+async function reloadWithStubs(page) {
+    await page.reload();
+    await page.locator('.CodeMirror').waitFor({ state: 'visible' });
+    await waitDropdownsPopulated(page);
+}
 
-    // Switching to SHA-256 must flip the radio to enabled — that transition
-    // is what the test name asserts.
+test('wasm radio stays disabled when the build service is unavailable', async ({ playground }) => {
+    await stubBuildInfo(playground, false);
+    await reloadWithStubs(playground);
+
+    await expect.poll(() => playground.locator(wasmSel).isDisabled(), { timeout: 5_000 }).toBe(true);
+    expect(await playground.locator(interpSel).isChecked()).toBe(true);
+
+    // Availability no longer depends on the sample — switching must not change it.
     await playground.locator('#examples').selectOption({ label: 'SHA-256 (benchmark)' });
-    await expect.poll(
-        () => playground.locator(jitSel).isDisabled(),
-        { timeout: 5_000 }
-    ).toBe(false);
+    await expect.poll(() => playground.locator(wasmSel).isDisabled(), { timeout: 5_000 }).toBe(true);
 });
 
-test('JIT radio auto-reverts to interpreter when sample has no .wasm', async ({ playground }) => {
-    await stubSha256WasmAvailable(playground);
-    await waitDropdownsPopulated(playground);
+test('wasm radio becomes selectable when the service can build', async ({ playground }) => {
+    await stubBuildInfo(playground, true);
+    await reloadWithStubs(playground);
 
-    await playground.locator('#examples').selectOption({ label: 'SHA-256 (benchmark)' });
-    await expect.poll(
-        () => playground.locator(jitSel).isDisabled(),
-        { timeout: 5_000 }
-    ).toBe(false);
+    // Skipped where the browser cannot run wasm64 at all — the engine is
+    // genuinely unavailable there and the radio is right to stay off.
+    const memory64 = await playground.evaluate(() =>
+        WebAssembly.validate(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 5, 3, 1, 4, 1])));
+    test.skip(!memory64, 'browser lacks wasm64/memory64');
 
-    // User opts into JIT.
-    await playground.locator(jitSel).check();
-    expect(await playground.locator(jitSel).isChecked()).toBe(true);
+    await expect.poll(() => playground.locator(wasmSel).isDisabled(), { timeout: 5_000 }).toBe(false);
 
-    // Macros is multi-file — currentJitName is null, JIT disables synchronously
-    // (no HEAD fetch, so the stub above isn't consulted on this path).
+    // Enabled for a multi-file sample too: content-addressing removed the
+    // one-source-file restriction the old artifact naming imposed.
     await playground.locator('#examples').selectOption({ label: 'Macros (multi-file)' });
-    await expect.poll(
-        () => playground.locator(jitSel).isDisabled(),
-        { timeout: 5_000 }
-    ).toBe(true);
+    await expect.poll(() => playground.locator(wasmSel).isDisabled(), { timeout: 5_000 }).toBe(false);
+});
 
-    // The fix: disabled radio must NOT remain checked, and interpreter must
-    // be the new active selection.
-    expect(await playground.locator(jitSel).isChecked()).toBe(false);
+test('a disabled wasm radio never stays checked', async ({ playground }) => {
+    // selectedEngine() reads the checked radio, so a disabled-but-checked wasm
+    // option would send Run down a path the page cannot serve.
+    await stubBuildInfo(playground, false);
+    await reloadWithStubs(playground);
+    await playground.evaluate((sel) => {
+        const r = document.querySelector(sel);
+        r.disabled = false;
+        r.checked = true;
+        updateEngineAvailability();
+    }, wasmSel);
+
+    await expect.poll(() => playground.locator(wasmSel).isChecked(), { timeout: 5_000 }).toBe(false);
     expect(await playground.locator(interpSel).isChecked()).toBe(true);
+});
+
+test('a queued build narrates its progress and then runs', async ({ playground }) => {
+    await stubBuildInfo(playground, true);
+    await stubStore(playground);
+    await stubBuild(playground, [
+        { state: 'queued', position: 2 },
+        { state: 'building' },
+        { state: 'done', toolchain: 'abc1234', files: [ARTIFACT_URL] },
+    ]);
+    // The artifact itself: an empty module is enough — the run path only has
+    // to reach instantiation for the progress assertions to mean something.
+    await playground.route('**' + ARTIFACT_URL, route => route.fulfill({
+        status: 200,
+        contentType: 'application/wasm',
+        body: Buffer.from([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0]),
+    }));
+    await reloadWithStubs(playground);
+
+    const memory64 = await playground.evaluate(() =>
+        WebAssembly.validate(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 5, 3, 1, 4, 1])));
+    test.skip(!memory64, 'browser lacks wasm64/memory64');
+
+    await playground.locator(wasmSel).check();
+    await playground.locator('#run').click();
+
+    const output = playground.locator('#output');
+    await expect(output).toContainText('queued for build (position 2)', { timeout: 15_000 });
+    await expect(output).toContainText('building', { timeout: 15_000 });
+    // Run is re-enabled once the build resolves — a stuck button would strand
+    // the page after any build.
+    await expect.poll(() => playground.locator('#run').isDisabled(), { timeout: 15_000 }).toBe(false);
+});
+
+test('a failed build shows the compiler error', async ({ playground }) => {
+    await stubBuildInfo(playground, true);
+    await stubStore(playground);
+    await stubBuild(playground, [
+        { state: 'queued', position: 1 },
+        { state: 'failed', error: 'error[30101]: this is the user’s own mistake' },
+    ]);
+    await reloadWithStubs(playground);
+
+    const memory64 = await playground.evaluate(() =>
+        WebAssembly.validate(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 5, 3, 1, 4, 1])));
+    test.skip(!memory64, 'browser lacks wasm64/memory64');
+
+    await playground.locator(wasmSel).check();
+    await playground.locator('#run').click();
+
+    await expect(playground.locator('#output')).toContainText('error[30101]', { timeout: 15_000 });
 });

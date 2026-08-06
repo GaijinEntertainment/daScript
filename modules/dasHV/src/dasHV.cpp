@@ -1044,6 +1044,15 @@ void das_req_REQUEST_CB_S ( HttpRequest * req, const TBlock<void,const char*> & 
     das_invoke<void>::invoke<HttpResponse*>(context,at,on_complete,resp.get());
 }
 
+// The peer address of the accepted connection. Unlike any header, a client
+// cannot set this — a service that must distinguish loopback callers from
+// proxied ones has to ask the transport, not X-Forwarded-For.
+char * das_httpr_client_ip ( HttpRequest * req, Context * context, LineInfoArg * at ) {
+    if ( !req ) return nullptr;
+    if ( req->client_addr.ip.empty() ) return nullptr;
+    return context->allocateString(req->client_addr.ip, at);
+}
+
 // Response/message header access
 char * das_httpm_get_header ( HttpMessage * msg, const char * key, Context * context, LineInfoArg * at ) {
     if ( !msg ) return nullptr;
@@ -1252,6 +1261,14 @@ char * das_httpreq_get_url_encoded ( HttpRequest * req, const char * key, Contex
 class Module_HV : public Module {
 public:
     Module_HV() : Module("dashv") {
+#ifdef _WIN32
+        // libhv's client path initializes Winsock lazily; the server start()
+        // path does not, so a server started before any client call fails
+        // with WSANOTINITIALISED (-10093) — a race every threaded test
+        // harness sits on. Initialize once here, before any context runs.
+        WSADATA wsaData;
+        WSAStartup(MAKEWORD(2, 2), &wsaData);
+#endif
         // libhv defaults to file_logger (bin/libhv.YYYYMMDD.log). Invisible
         // under popen + CI runners. Two env-gated opt-outs:
         //   DASLIVE_HV_LOG=stderr (or =1)  → redirect libhv to stderr
@@ -1466,6 +1483,10 @@ public:
         addExtern<DAS_BIND_FUN(das_req_REQUEST)> (*this, lib, "request",
             SideEffects::worstDefault, "das_req_REQUEST")
                 ->args({"request","block","context","at"});
+        // Transport-level peer address (unforgeable, unlike any header)
+        addExtern<DAS_BIND_FUN(das_httpr_client_ip)> (*this, lib, "client_ip",
+            SideEffects::worstDefault, "das_httpr_client_ip")
+                ->args({"request","context","at"});
         // Response/message header access
         addExtern<DAS_BIND_FUN(das_httpm_get_header)> (*this, lib, "get_header",
             SideEffects::worstDefault, "das_httpm_get_header")

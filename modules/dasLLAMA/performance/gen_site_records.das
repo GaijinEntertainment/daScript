@@ -2,8 +2,7 @@ options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require profile_common
-require daslib/fio
-require strings
+require llvm/daslib/llvm_tune   // [tune_policy]: provisioning only — never auto-tune
 
 // Merge every per-box record store (performance/records/<box>.json) into the one file the site
 // renders: site/files/dasllama/bench_records.json. Boxes never collide on the run key (box is part
@@ -15,21 +14,11 @@ require strings
 let RECORDS_DIR = "modules/dasLLAMA/performance/records"
 let SITE_PATH = "site/files/dasllama/bench_records.json"
 
-def private list_stores() : array<string> {
-    var out : array<string>
-    dir(RECORDS_DIR) $(fn) {
-        if (ends_with(fn, ".json") && !starts_with(fn, "_")) {
-            out |> push("{RECORDS_DIR}/{fn}")
-        }
-    }
-    sort(out)
-    return <- out
-}
 
-[export]
+[export, tune_policy(missing = "fallback")]
 def main : int {
     var merged : array<BenchModel>
-    var stores <- list_stores()
+    var stores <- list_record_stores()
     if (empty(stores)) {
         to_log(LOG_ERROR, "gen_site_records: no stores under {RECORDS_DIR} — run gen_bench_records first\n")
         return 1

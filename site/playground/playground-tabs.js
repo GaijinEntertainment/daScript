@@ -289,6 +289,19 @@
         bindTabsHandlers();
         renderTabs();
 
+        applyInitialState();
+
+        // Announce that the buffer's starting content is decided. tryInit
+        // retries itself until CodeMirror exists, so this can land well after
+        // DOMContentLoaded — which is why main.js waits for THIS rather than
+        // for the document: its default-sample selection fetches asynchronously,
+        // and if it starts before this point it lands afterwards and overwrites
+        // whatever was restored here.
+        window.pgTabsReady = true;
+        document.dispatchEvent(new CustomEvent('pg-tabs-ready'));
+    }
+
+    function applyInitialState() {
         // Priority: URL hash > ?example= > autosave > default sample > empty editor.
         // When restored from hash or autosave we set pgRestoredFromState so
         // main.js skips its default selectSample("examples", 0) call (whose

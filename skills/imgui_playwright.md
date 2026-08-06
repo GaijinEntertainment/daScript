@@ -83,6 +83,9 @@ focused, value-changed), read from the snapshot.
 - **Re-showable widgets.** `wait_for_widget` returns on a stale registry entry from a prior
   appearance, so a click fired right after can dispatch before the widget re-renders and be dropped.
   Use `wait_for_visible` for any target that may have been shown before.
+- **The `wait_for_*` return value is the SNAPSHOT, not the widget entry.** `probe?["bbox"]` on it is
+  silently null (so a computed click lands at y≈0 — the menu bar). Extract the entry first:
+  `find_widget(probe, id)?["bbox"]?["w"]`.
 
 ## Node-editor layer (`imgui_editor_playwright`, in dasImguiNodeEditor)
 

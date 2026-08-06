@@ -56,7 +56,7 @@ test('Macros sample runs successfully under WASM @wasm', async ({ playground }) 
     await pickMacroSample(playground);
     // Wait for the WASM runtime to be ready.
     await playground.waitForFunction(
-        () => typeof window.FS !== 'undefined' && typeof window.Module?.callMain === 'function',
+        () => !!(window.PlaygroundRunner && window.PlaygroundRunner.isReady()),
         null,
         { timeout: 30_000 }
     );

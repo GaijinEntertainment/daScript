@@ -1058,3 +1058,121 @@ def public matmul_moe_gpu_cls(var y : array<float>; woff : int64; xq : array<int
     }
 }
 
+
+// Function values do not survive the -exe bake's global serialization (the
+// dasllama_config restore names the defect) — every @@-defaulted seam in this
+// module boot-restores here; a real registrar wins via the null guards.
+[init]
+def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat seam list, one guard per global
+    if (g_moe_gpu_ffn == null) {
+        g_moe_gpu_ffn = @@moe_gpu_unset_ffn
+    }
+    if (g_moe_gpu_upload == null) {
+        g_moe_gpu_upload = @@moe_gpu_unset_upload
+    }
+    if (g_moe_gpu_cls == null) {
+        g_moe_gpu_cls = @@moe_gpu_unset_cls
+    }
+    if (g_moe_gpu_dense == null) {
+        g_moe_gpu_dense = @@moe_gpu_unset_dense
+    }
+    if (g_moe_gpu_drop == null) {
+        g_moe_gpu_drop = @@moe_gpu_unset_drop
+    }
+    if (g_moe_gpu_dn == null) {
+        g_moe_gpu_dn = @@moe_gpu_unset_dn
+    }
+    if (g_moe_gpu_attn == null) {
+        g_moe_gpu_attn = @@moe_gpu_unset_attn
+    }
+    if (g_rdec_reserve == null) {
+        g_rdec_reserve = @@rdec_unset_reserve
+    }
+    if (g_rdec_place == null) {
+        g_rdec_place = @@rdec_unset_place
+    }
+    if (g_rdec_prepare == null) {
+        g_rdec_prepare = @@rdec_unset_prepare
+    }
+    if (g_rdec_norms == null) {
+        g_rdec_norms = @@rdec_unset_norms
+    }
+    if (g_rdec_set_layer == null) {
+        g_rdec_set_layer = @@rdec_unset_set_layer
+    }
+    if (g_rdec_set_cls == null) {
+        g_rdec_set_cls = @@rdec_unset_set_cls
+    }
+    if (g_rdec_token == null) {
+        g_rdec_token = @@rdec_unset_token
+    }
+    if (g_rdec_prefill == null) {
+        g_rdec_prefill = @@rdec_unset_prefill
+    }
+    if (g_rdec_sync_kv == null) {
+        g_rdec_sync_kv = @@rdec_unset_sync
+    }
+    if (g_rdec_read_kv == null) {
+        g_rdec_read_kv = @@rdec_unset_read
+    }
+    if (g_rdec_read_kv_bulk == null) {
+        g_rdec_read_kv_bulk = @@rdec_unset_read_bulk
+    }
+    if (g_moe_gpu_dn_flush == null) {
+        g_moe_gpu_dn_flush = @@moe_gpu_noop_dn_flush
+    }
+    if (g_moe_gpu_dn_invalidate == null) {
+        g_moe_gpu_dn_invalidate = @@moe_gpu_noop_dn_invalidate
+    }
+    if (g_moe_gpu_heat_query == null) {
+        g_moe_gpu_heat_query = @@moe_gpu_unset_heat_query
+    }
+    if (g_moe_gpu_heat_advise == null) {
+        g_moe_gpu_heat_advise = @@moe_gpu_unset_heat_advise
+    }
+    if (g_moe_gpu_ffn_begin == null) {
+        g_moe_gpu_ffn_begin = @@moe_gpu_unset_ffn_begin
+    }
+    if (g_moe_gpu_ffn_join == null) {
+        g_moe_gpu_ffn_join = @@moe_gpu_unset_ffn_join
+    }
+    if (g_moe_gpu_qkv == null) {
+        g_moe_gpu_qkv = @@moe_gpu_unset_qkv
+    }
+    if (g_moe_gpu_drop_model == null) {
+        g_moe_gpu_drop_model = @@moe_gpu_noop_drop_model
+    }
+    if (g_moe_gpu_arm == null) {
+        g_moe_gpu_arm = @@moe_gpu_no_arm
+    }
+    if (g_moe_gpu_vram_report == null) {
+        g_moe_gpu_vram_report = @@moe_gpu_no_vram
+    }
+    if (g_moe_gpu_device_report == null) {
+        g_moe_gpu_device_report = @@moe_gpu_no_device
+    }
+    if (g_moe_gpu_budget_report == null) {
+        g_moe_gpu_budget_report = @@moe_gpu_no_budget
+    }
+    if (g_moe_gpu_plane_bytes_fn == null) {
+        g_moe_gpu_plane_bytes_fn = @@moe_gpu_no_plane_bytes
+    }
+    if (g_moe_gpu_expert_q8n == null) {
+        g_moe_gpu_expert_q8n = @@moe_gpu_no_q8n
+    }
+    if (g_moe_gpu_dry_bake == null) {
+        g_moe_gpu_dry_bake = @@moe_gpu_no_dry_bake
+    }
+    if (g_moe_gpu_slice_window == null) {
+        g_moe_gpu_slice_window = @@moe_gpu_no_slice_window
+    }
+    if (g_moe_gpu_unmap_notify == null) {
+        g_moe_gpu_unmap_notify = @@moe_gpu_no_unmap_notify
+    }
+    if (g_moe_gpu_would_accept == null) {
+        g_moe_gpu_would_accept = @@moe_gpu_always_accept
+    }
+    if (g_moe_gpu_bake_tag == null) {
+        g_moe_gpu_bake_tag = @@moe_gpu_no_bake_tag
+    }
+}

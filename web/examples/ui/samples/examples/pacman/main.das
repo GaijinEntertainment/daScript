@@ -169,13 +169,13 @@ var @live snd_level_win   : array<float>
 var @live audio_initialized = false
 
 def init_audio_samples() {
-    snd_eat_pellet <- gen_sine_sweep(600.0, 400.0, 0.04, 0.15)
-    snd_eat_power <- gen_sine_sweep(300.0, 900.0, 0.12, 0.3)
-    snd_eat_ghost <- gen_sine_sweep(800.0, 1400.0, 0.1, 0.3)
-    snd_pac_die <- gen_sine_sweep(440.0, 110.0, 0.6, 0.3)
+    snd_eat_pellet <- gen_sine_sweep(600.0, 400.0, 0.04, 0.15)  // nolint:PERF030 -- init_audio_samples runs once, behind the audio_initialized guard; target is still empty
+    snd_eat_power <- gen_sine_sweep(300.0, 900.0, 0.12, 0.3)  // nolint:PERF030 -- init_audio_samples runs once, behind the audio_initialized guard; target is still empty
+    snd_eat_ghost <- gen_sine_sweep(800.0, 1400.0, 0.1, 0.3)  // nolint:PERF030 -- init_audio_samples runs once, behind the audio_initialized guard; target is still empty
+    snd_pac_die <- gen_sine_sweep(440.0, 110.0, 0.6, 0.3)  // nolint:PERF030 -- init_audio_samples runs once, behind the audio_initialized guard; target is still empty
     let extra <- gen_noise_burst(0.3, 0.1)
     mix_into(snd_pac_die, extra)
-    snd_level_win <- gen_sine_sweep(523.0, 1047.0, 0.5, 0.25)
+    snd_level_win <- gen_sine_sweep(523.0, 1047.0, 0.5, 0.25)  // nolint:PERF030 -- init_audio_samples runs once, behind the audio_initialized guard; target is still empty
 }
 
 def play_sfx(samples : array<float>) {
@@ -775,7 +775,7 @@ def update_scatter_chase(dt : float) {
 
 var @live pac_move_acc = 0.0  // sub-cell accumulator
 
-def update_pac(dt : float) {
+def update_pac(dt : float) {  // nolint:STYLE038 -- one tick of a state machine; the phases share mutable state
     if (pac_dead || game_state != GameState.playing) { return ; }
 
     // Read input → queue next direction
@@ -1111,7 +1111,7 @@ def init() {
 }
 
 [export]
-def update() {
+def update() {  // nolint:STYLE038 -- game frame: input, sim, and render phases share mutable state
     if (!live_begin_frame()) { return ; }
     live_get_framebuffer_size(display_w, display_h)
     glViewport(0, 0, display_w, display_h)
@@ -1122,7 +1122,7 @@ def update() {
     glEnable(GL_CULL_FACE)
 
     let aspect = display_h != 0 ? float(display_w) / float(display_h) : 1.0
-    v_projection = perspective_rh_opengl(50.0 * PI / 180.0, aspect, 0.1, 200.0)
+    v_projection = perspective_rh_minus1_to_1(50.0 * PI / 180.0, aspect, 0.1, 200.0)
     // Screen shake
     var shake_off = float2(0.0)
     if (shake_timer > 0.0) {

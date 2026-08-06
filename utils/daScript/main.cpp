@@ -35,6 +35,7 @@ static string aotResult = "";
 static bool paranoid_validation = false;
 static bool profilerRequired = false;
 static bool debuggerRequired = false;
+static bool astVerifyRequired = false;
 static bool scopedStackAllocator = true;
 static bool pauseAfterErrors = false;
 static bool quiet = false;
@@ -405,6 +406,11 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
         policies.jit_output_path = jitOutPath;
         policies.dll_search_paths.emplace_back(getDasRoot() + "/lib");
     }
+    if ( astVerifyRequired ) {
+        // force-include the AST verifier the same way -jit/-debugger pull in their
+        // daslib support; its [pre_infer_macro] then runs over the program's modules.
+        access->addExtraModule("ast_verify", getDasRoot() + "/daslib/ast_verify.das");
+    }
     if ( useAot ) {
         // don't set policies.aot here - the host program (e.g. dastest) doesn't need AOT linking
         // the --use-aot flag (after --) tells dastest to enable AOT for test files it compiles
@@ -603,6 +609,7 @@ void print_help() {
         << "    --das-profiler-leaks track live heap allocations and dump leaks on context destroy\n"
         << "    -no-dynamic-modules  skip loading dynamic modules from dasroot and project root\n"
         << "    -no-lint    skip the lint pass (Program::lint)\n"
+        << "    --ast-verify  force-include daslib/ast_verify; checks AST structural invariants before each inference pass\n"
         << "    -log-compile-time  log detailed per-module compile-time breakdown (parse / infer with pass count / optimize / macro (in infer) / macro mods / simulate) + function count\n"
         << "    --          separator for script arguments\n"
         << "daslang -aot <in_script.das> <out_script.das.cpp> {-q} {-p}\n"
@@ -853,6 +860,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 printf("tracking JobStatus #%" PRIu64 "\n", id);
             } else if ( cmd=="-das-wait-debugger") {
                 debuggerRequired = true;
+            } else if ( cmd=="-ast-verify") {
+                astVerifyRequired = true;
             } else if ( cmd=="-linear-stack-allocator") {
                 scopedStackAllocator = false;
             } else if ( cmd=="-das-profiler") {

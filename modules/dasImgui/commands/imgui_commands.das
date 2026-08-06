@@ -270,16 +270,18 @@ def private keypad_chord(chord : int) : bool {
 
 def public command_poll_scope(var registry : CommandRegistry;
                               scope : CommandScope; context : string = "";
-                              mute_keypad : bool = false) {
-    //! Poll every binding in `scope` via ImGui `Shortcut` routing. Both
-    //! chords are tested; a chord fires at most ONE command per frame.
-    //! `mute_keypad` skips keypad chords (the NumLock disambiguation).
+                              mute_keypad : bool = false;
+                              route_global : bool = false) {
+    //! Poll every binding in `scope` via ImGui `Shortcut` routing; a chord
+    //! fires at most ONE command per frame. `mute_keypad` skips keypad chords;
+    //! `route_global` bypasses focus routing for self-gated pollers (the editor).
     if (!empty(registry.capture_command_id)) return
     var fired : array<int>
     for (binding in registry.bindings) {
         if (binding.scope != scope
                 || !command_enabled(registry, binding.command_id)) continue
-        let flags = (scope == CommandScope.application ? COMMAND_ROUTE_GLOBAL : 0) | (binding.repeat ? COMMAND_REPEAT : 0)
+        let flags = ((scope == CommandScope.application || route_global)
+            ? COMMAND_ROUTE_GLOBAL : 0) | (binding.repeat ? COMMAND_REPEAT : 0)
         for (chord_slot in range(2)) {
             let chord = (chord_slot == 0 ? command_binding_chord(binding)
                 : command_binding_alt_chord(binding))

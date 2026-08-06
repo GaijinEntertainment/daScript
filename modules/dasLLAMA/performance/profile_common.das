@@ -448,10 +448,17 @@ def private platform_cpu() : string {
     if (!empty(ov)) {
         return ov
     }
-    return is_windows() ? win_cpu_name() : run_capture("sysctl -n machdep.cpu.brand_string", true)
+    if (is_windows()) {
+        return win_cpu_name()
+    }
+    if (is_macos()) {
+        return run_capture("sysctl -n machdep.cpu.brand_string", true)
+    }
+    // linux: after-colon tail of `model name : AMD Ryzen 7 PRO 8700GE ...`
+    return strip(line_value(run_capture("grep -m1 \"model name\" /proc/cpuinfo", true), "model name"))
 }
 
-// The OS string: env override (DASLLAMA_OS) → OS-native probe (`ver` on Windows, sw_vers on macOS).
+// The OS string: env override (DASLLAMA_OS) → OS-native probe (`ver` / sw_vers / os-release+kernel).
 def private platform_os() : string {
     let ov = get_env_variable("DASLLAMA_OS")
     if (!empty(ov)) {
@@ -460,9 +467,11 @@ def private platform_os() : string {
     if (is_windows()) {
         return run_capture("ver", true)
     }
-    // sw_vers is macOS-only; on Linux both probes return "" and the join is a lone space —
-    // strip so empty()==true and the record stores "unknown" (or set DASLLAMA_OS on those boxes)
-    return strip("{run_capture("sw_vers -productName", true)} {run_capture("sw_vers -productVersion", true)}")
+    if (is_macos()) {
+        return strip("{run_capture("sw_vers -productName", true)} {run_capture("sw_vers -productVersion", true)}")
+    }
+    // linux: PRETTY_NAME from os-release + kernel, e.g. `Debian GNU/Linux 12 (bookworm) 6.1.0-49-amd64`
+    return strip("{run_capture(". /etc/os-release && echo $PRETTY_NAME", true)} {run_capture("uname -r", true)}")
 }
 
 def private tune_row_str(r : TuneStatus) : string {
@@ -546,6 +555,14 @@ def tune_gate() : bool {
     return false
 }
 
+//! True when a das run cannot name the winners it measured under — an empty ``tune`` or
+//! ``tune_sha`` stamp. The store-time gate reads this: the M4 board stored 7 such rows under a
+//! mis-shipped stale sidecar (the file-level gate passed — the sidecar WAS a valid old mint;
+//! the staleness drop to fallback happened later, leaving stamps empty and nothing checking).
+def das_run_unstamped(r : BenchRun) : bool {
+    return r.engine == "das" && (empty(r.tune) || empty(r.tune_sha))
+}
+
 // Gather the platform block. `llama_cpp` (the reference commit) and `date` are passed in — the caller
 // reads them from the freshly-run baseline / the environment so they stay honest per run. CPU/OS come
 // from OS-native probes with DASLLAMA_CPU / DASLLAMA_OS env overrides for boxes without a clean probe.
@@ -583,6 +600,19 @@ struct HardwareInfo {
     @optional ram_config : string // module layout ("4×32 GB DDR4-3200") — bandwidth identity on PC
     @optional power_plan : string // Windows active power scheme — throttling identity
     @optional smt : string        // "on" | "off" when determinable; "" elsewhere
+    @optional remote_desktop : string  // measurement-time probe: "parsec" when parsecd ran,
+                                       // "off" = probed clean, "" = never probed (legacy row)
+}
+
+// The remote-desktop probe: parsecd's GPU encoder moved Metal cell times 1.7x between runs
+// (tune-hardening measurements) — "Parsec off" is a standing bench rule, so the row records
+// whether it actually was. Process-name probe; "off" is a probed verdict, "" means unprobed.
+def private platform_remote_desktop() : string {
+    if (is_windows()) {
+        let out = run_capture("tasklist /FI \"IMAGENAME eq parsecd.exe\" 2>nul", false)
+        return find(out, "parsecd") >= 0 ? "parsec" : "off"
+    }
+    return empty(run_capture("pgrep -x parsecd 2>/dev/null", true)) ? "off" : "parsec"
 }
 
 def private is_macos() : bool {
@@ -821,6 +851,7 @@ def gather_hardware : HardwareInfo {
         model_id = platform_model_id(),
         ram_config = platform_ram_config(),
         power_plan = platform_power_plan(),
+        remote_desktop = platform_remote_desktop(),
         smt = platform_smt())
 }
 
@@ -1059,6 +1090,10 @@ def corpus_buckets() : array<string> {
 struct AsrRef {
     tool : string      // parakeet-cli | whisper-cli | onnx | nemo | mtmd
     handle : string
+    @optional exec_fmt : string   // the reference's precision, stamped onto its BenchRun rows
+    // non-empty = this reference times ONLY these clips (a slow tool capped below the
+    // spec's ladder); empty = the spec's buckets
+    @optional buckets : array<string>
 }
 
 //! One ASR model to profile: the das-side load (basename under `root`, plus `mmproj` for the two-file
@@ -1100,36 +1135,55 @@ def asr_catalog() : array<AsrModelSpec> {
     return <- [
         // libri_short only on Parakeet v3 — the LibriSpeech aggregate is deliberately scoped to
         // the fastest model (one-model dictation stats; anything wider is box-hours, not signal)
+        // cli references run the q8_0 siblings (setup_asr_rig --refs quantizes them from the
+        // fp bins via the upstream quantize tools): apples with the das q8 default AND the
+        // references' own measured-best config on-box
         AsrModelSpec(display = "Parakeet-TDT v2", das_model = "ggml-parakeet-tdt-0.6b-v2-f32.bin",
             das_mmproj = "", root = wroot,
-            refs <- [AsrRef(tool = "parakeet-cli", handle = ""), AsrRef(tool = "onnx", handle = "v2-int8")],
+            refs <- [AsrRef(tool = "parakeet-cli", handle = "ggml-parakeet-tdt-0.6b-v2-q8_0.bin", exec_fmt = "q8_0"),
+                     AsrRef(tool = "onnx", handle = "v2-int8", exec_fmt = "int8")],
             buckets <- corpus_buckets(), libri_short = "", lang = "en"),
         AsrModelSpec(display = "Parakeet-TDT v3", das_model = "ggml-parakeet-tdt-0.6b-v3-f32.bin",
             das_mmproj = "", root = wroot,
-            refs <- [AsrRef(tool = "parakeet-cli", handle = ""), AsrRef(tool = "onnx", handle = "int8")],
+            refs <- [AsrRef(tool = "parakeet-cli", handle = "ggml-parakeet-tdt-0.6b-v3-q8_0.bin", exec_fmt = "q8_0"),
+                     AsrRef(tool = "onnx", handle = "int8", exec_fmt = "int8")],
             buckets <- corpus_buckets(), libri_short = "v3", lang = "en"),
         AsrModelSpec(display = "Whisper tiny", das_model = "ggml-tiny.bin",
             das_mmproj = "", root = wroot,
-            refs <- [AsrRef(tool = "whisper-cli", handle = ""), AsrRef(tool = "onnx", handle = "whisper-tiny-int8")],
+            refs <- [AsrRef(tool = "whisper-cli", handle = "ggml-tiny-q8_0.bin", exec_fmt = "q8_0"),
+                     AsrRef(tool = "onnx", handle = "whisper-tiny-int8", exec_fmt = "int8")],
             buckets <- corpus_buckets(), libri_short = "", lang = "en"),
         AsrModelSpec(display = "Whisper large-v3-turbo", das_model = "ggml-large-v3-turbo.bin",
             das_mmproj = "", root = wroot,
-            refs <- [AsrRef(tool = "whisper-cli", handle = ""), AsrRef(tool = "onnx", handle = "whisper-turbo-int8")],
+            refs <- [AsrRef(tool = "whisper-cli", handle = "ggml-large-v3-turbo-q8_0.bin", exec_fmt = "q8_0"),
+                     AsrRef(tool = "onnx", handle = "whisper-turbo-int8", exec_fmt = "int8")],
             buckets <- corpus_buckets(), libri_short = "", lang = "en", tier = Tier.large),
+        // canary caps at gb1: the model's trained envelope is 40 s audio / 1024 total tokens
+        // (model card) — hp0-class single-window greedy decode runaway-loops on repetitive
+        // audio in BOTH engines, the model's limitation, not a budget choice; 40 s chunked
+        // long-form (the NVIDIA-sanctioned usage) is ledgered
         AsrModelSpec(display = "Canary-Qwen 2.5B", das_model = "canary-qwen-2.5b-decoder-f16.gguf",
             das_mmproj = "canary-qwen-2.5b-encoder-f32.bin", root = lroot,
-            refs <- [AsrRef(tool = "nemo", handle = "nvidia/canary-qwen-2.5b")],
+            refs <- [AsrRef(tool = "nemo", handle = "nvidia/canary-qwen-2.5b", exec_fmt = "bf16")],
             buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"], libri_short = "", lang = "auto", tier = Tier.large),
         // jfk3 (33 s) replaced gemma4a_test2.wav — the one corpus clip with no traceable
         // provenance; every published input must be re-fetchable (B2/B3)
+        // gemma4a caps at hp0: its audio tokenizer runs ~25 tok/s, so hp0x2 (547 s) is 13.7k
+        // tokens against the 8192 decoder window — a single-window architectural limit
+        // (asr_ctx_guard panics), the onnx-rel-pos class of honest cap, not a budget choice
         AsrModelSpec(display = "Gemma-4 E2B audio", das_model = "gemma-4-E2B-it-Q8_0.gguf",
             das_mmproj = "mmproj-gemma-4-E2B-it-bf16.gguf", root = lroot,
-            refs <- [AsrRef(tool = "mtmd", handle = "mmproj-gemma-4-E2B-it-bf16.gguf")],
-            buckets <- ["jfk3.wav"], libri_short = "", lang = "auto", tier = Tier.large),
+            // mtmd's CPU Conformer encode runs near xRT 1 — same per-rep budget cap as omni's
+            refs <- [AsrRef(tool = "mtmd", handle = "mmproj-gemma-4-E2B-it-bf16.gguf",
+                            exec_fmt = "bf16/q8_0", buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"])],
+            buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav", "hp0.wav"], libri_short = "", lang = "auto", tier = Tier.large),
         AsrModelSpec(display = "Qwen3-Omni-30B audio", das_model = "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf",
             das_mmproj = "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf", root = lroot,
-            refs <- [AsrRef(tool = "mtmd", handle = "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf")],
-            buckets <- ["jfk.wav", "jfk3.wav"], libri_short = "", lang = "auto", tier = Tier.large)
+            // mtmd's CPU-only AuT encode runs near xRT 1 (and far worse on zen2) — the long
+            // clips would blow the per-rep budget, so this reference stays on the short ladder
+            refs <- [AsrRef(tool = "mtmd", handle = "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf",
+                            exec_fmt = "bf16/q8_0", buckets <- ["jfk.wav", "jfk3.wav", "gb1.wav"])],
+            buckets <- corpus_buckets(), libri_short = "", lang = "auto", tier = Tier.large)
     ]
 }
 
@@ -1336,19 +1390,63 @@ def run_asr_cli_multi(cli, model_path : string; wav_paths : array<string>; threa
 
 //! patched llama-mtmd-cli — one process per clip (30B load is heavy; MTMD_TIMING excludes it).
 //! Best total over `reps`.
-def run_asr_mtmd(model_path, mmproj_path, wav_path : string; threads, reps : int; var cmd_out : string&) : double {
+def run_asr_mtmd(model_path, mmproj_path, wav_path : string; threads, reps : int;
+                 var cmd_out : string&; var encode_out : double&; var text_out : string&) : double {
     var best = -1.0lf
+    encode_out = 0.0lf
+    text_out = ""
     let args <- [mtmd_bin(), "-m", model_path, "--mmproj", mmproj_path, "--audio", wav_path,
                  "-p", "Transcribe the audio.", "--temp", "0", "--jinja", "--reasoning", "off",
                  "-ngl", "0", "-t", "{threads}"]
     cmd_out = argv_line(args)
     for (_rep in range(reps)) {
-        let r = parse_mtmd_ms(run_capture_argv(args))
+        let out = run_capture_argv(args)
+        let r = parse_mtmd_ms(out)
         if (r.total > 0.0lf && (best < 0.0lf || r.total < best)) {
             best = r.total
+            encode_out = max(r.encode, 0.0lf)   // the best rep's already-parsed encode split
+            text_out = mtmd_response_text(out)
         }
     }
     return best
+}
+
+//! The response body out of a captured llama-mtmd-cli run. The capture MERGES stderr
+//! (popen_argv does, by design — same hazard json_array_tail guards for llama-bench), so
+//! engine log lines ride the stream; they are dropped by their tag shape (`identifier:` as
+//! the first token), the transcript prose never starts that way.
+def mtmd_response_text(out : string) : string {
+    var inscope parts : array<string>
+    for (line in split(out, "\n")) {
+        let s = strip(line)
+        continue if (empty(s) || find(s, "MTMD_TIMING") >= 0 || mtmd_log_line(s))
+        parts |> push(s)
+    }
+    return join(parts, " ")
+}
+
+// the engine-log tag shape: a lowercase identifier ending in ':' as the first token
+// (llama_model_loader:, print_info:, main:, ...), or a bare ggml/llama/clip/mtmd prefix
+def private mtmd_log_line(s : string) : bool {
+    for (p in ["ggml", "llama_", "clip_", "mtmd_", "common_", "build:", "system_info", "encoding audio", "audio slice"]) {
+        return true if (starts_with(s, p))
+    }
+    let sp = find(s, " ")
+    let head = sp > 0 ? slice(s, 0, sp) : s
+    if (!ends_with(head, ":")) {
+        return false
+    }
+    var tag_shape = true
+    peek_data(head) $(bytes) {
+        for (i in range(length(bytes) - 1)) {
+            let c = int(bytes[i])
+            if (!((c >= 'a' && c <= 'z') || is_number(c) || c == '_' || c == '.')) {
+                tag_shape = false
+                break
+            }
+        }
+    }
+    return tag_shape
 }
 
 //! The onnx/nemo bench invocation over a clip set — ONE process for all clips (python model load
@@ -1470,92 +1568,6 @@ def libri_test_key() : string {
     return "asr:librispeech25"
 }
 
-// ===== ASR: profile JSON (the deliverable — full-fidelity: N references/model, per-bucket ms) =====
-
-//! One measured reference time for a bucket. `encode_ms` is @optional (mtmd only — the audio-tower
-//! encode+prefill split); 0.0 means "not split-timed" and is omitted from the JSON.
-struct AsrRefTime {
-    tool : string
-    ms : double
-    @optional encode_ms : double
-}
-
-//! One corpus clip of an ASR model's profile: das transcribe ms (best-of-reps) + one reference time
-//! per tool that ran (a tool that can't run this clip is absent — the renderer shows "-"). Both
-//! `das_encode_ms` (mtmd-parity audio-chat models) are @optional.
-struct AsrBucket {
-    wav : string
-    audio_s : double
-    das_ms : double
-    @optional das_encode_ms : double
-    refs : array<AsrRefTime>
-}
-
-//! One text-per-side dictation statistic over the LibriSpeech short-clip set (per-clip latency case).
-struct LibriStat {
-    side : string
-    mean_ms : double
-    p50_ms : double
-    p95_ms : double
-}
-
-//! The LibriSpeech dictation aggregate (25 short clips): one stat row per side (das/cli/onnx × model).
-struct LibriAggregate {
-    n_clips : int
-    sides : array<LibriStat>
-}
-
-//! One ASR model row: display + das load + ordered reference tool names (the table's column order) +
-//! one bucket per corpus clip.
-struct AsrRec {
-    model : string
-    das_model : string
-    references : array<string>
-    buckets : array<AsrBucket>
-}
-
-//! A complete per-box ASR profile: platform block + one row per measured model + the LibriSpeech
-//! dictation aggregate. Round-tripped with sprint_json/sscan_json — the machine-readable handoff.
-struct AsrProfile {
-    platform : PlatformInfo
-    tests : array<AsrRec>
-    librispeech : LibriAggregate
-}
-
-def profile_asr_path() : string {
-    return "modules/dasLLAMA/performance/profile_asr_{box_name()}.json"
-}
-
-def write_asr_profile(p : AsrProfile) {
-    let text = sprint_json(p, true)
-    fopen(profile_asr_path(), "wb") $(f) {
-        if (f != null) {
-            fwrite(f, text)
-        }
-    }
-}
-
-// Load the existing per-box ASR profile into `p` for a merge run; false if none exists yet.
-def read_asr_profile(var p : AsrProfile) : bool {
-    let path = profile_asr_path()
-    if (!stat(path).is_valid) {
-        return false
-    }
-    return sscan_json(fread(path), p)
-}
-
-// Update-or-insert `rec` into `tests` keyed by model name (partial per-model runs merge into one file).
-def upsert_asr(var tests : array<AsrRec>; var rec : AsrRec) {
-    for (c in tests) {
-        if (c.model == rec.model) {
-            delete c
-            c <- rec
-            return
-        }
-    }
-    tests |> emplace(rec)
-}
-
 // ===== Public bench records (schema: modules/dasLLAMA/METHODOLOGY.md "The record") =====
 
 //! One measured test row, keyed in `BenchRun.tests` by the llama-bench test name
@@ -1567,6 +1579,7 @@ struct BenchTest {
     @optional stddev : double
     @optional ms : double
     @optional audio_s : double
+    @optional encode_ms : double   // ASR encode split of the best rep, where the engine reports one
     // the ASR transcript. A duration alone cannot distinguish "faster" from "decoded fewer
     // tokens", and under fast-math that is exactly the ambiguity — so the row carries the text
     // the timing came from, and two rows can be diffed rather than trusted.
@@ -1613,6 +1626,8 @@ struct BenchRun {
     @optional files : array<InputFile> // every input the run read (weights, mmproj, clips)
     @optional comment : string  // merged from records/annotations.json by gen_site_records —
                                 // never written by sweep tools, so re-sweeps cannot wipe it
+    @optional void_clips : string // merged from annotations like `comment`: clips whose
+                                  // cross-engine ratio is declared meaningless (no-win render)
 }
 
 // Every env var the dasLLAMA engine + the tune rail consult. Capturing the WHOLE set (not a curated
@@ -1706,6 +1721,9 @@ struct BenchAnnotation {
     @optional flavor : string
     @optional workload : string
     comment : string
+    @optional void_clips : string  // comma-separated clip names whose cross-engine ratio this
+                                   // note declares meaningless (ref behavior difference) — the
+                                   // site renders no win for them
 }
 
 def annotations_path() : string {
@@ -1745,6 +1763,9 @@ def apply_annotations(var models : array<BenchModel>; annos : array<BenchAnnotat
                 for (r in m.runs) {
                     if (anno_matches_run(a, r)) {
                         r.comment = a.comment
+                        if (!empty(a.void_clips)) {
+                            r.void_clips = a.void_clips
+                        }
                     }
                 }
             }
@@ -1760,6 +1781,23 @@ def is_apple_box : bool {
 //! The official per-box record store the site build merges.
 def bench_records_path : string {
     return "modules/dasLLAMA/performance/records/{box_name()}.json"
+}
+
+//! Every per-box store under records/, STRICT: ``records/{box}.json`` only — a dotted stem is
+//! a tune archive, ``annotations.json`` is the hand-note overlay, ``_``-prefixed is scratch.
+//! The ONE lister both generators use; two copies drifted on the ``_`` rule once already.
+def list_record_stores(root : string = "modules/dasLLAMA/performance/records") : array<string> {
+    var out : array<string>
+    dir(root) $(fn) {
+        if (ends_with(fn, ".json") && !starts_with(fn, "_")) {
+            let stem = slice(fn, 0, length(fn) - length(".json"))
+            if (stem != "annotations" && find(stem, ".") < 0) {
+                out |> push("{root}/{fn}")
+            }
+        }
+    }
+    sort(out)
+    return <- out
 }
 
 def read_bench_records(path : string; var models : array<BenchModel>) : bool {

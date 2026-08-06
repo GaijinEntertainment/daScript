@@ -27,6 +27,7 @@ let WHISPER_CPP_COMMIT = "6fc7c33b4"
 let LLAMA_CPP_COMMIT = "ebd048fc5"
 let LIBRI_URL = "https://www.openslr.org/resources/12/test-clean.tar.gz"
 let HP0_URL = "https://upload.wikimedia.org/wikipedia/en/d/d4/En.henryfphillips.ogg"
+let GB1_URL = "https://upload.wikimedia.org/wikipedia/commons/1/1f/George_W_Bush_Columbia_FINAL.ogg"
 
 [CommandLineArgs]
 struct Args {
@@ -171,19 +172,31 @@ def private concat_wav(src : string; times : int; dst : string) : bool {
     return wrote
 }
 
+def private fetch_ogg_as_wav(url, tmp_name, dst : string) {
+    let ogg = "{asr_corpus_dir()}{tmp_name}"
+    run_capture("curl -sL -o \"{ogg}\" {url}", false)
+    run_capture("ffmpeg -y -loglevel error -i \"{ogg}\" -ar 16000 -ac 1 -c:a pcm_s16le \"{dst}\"", false)
+    remove(ogg)
+}
+
 def private setup_corpus() : bool {
     mkdir_rec(asr_corpus_dir())
     let samples = "{whisper_cpp_root()}/samples"
-    // jfk + gb1 ship inside the whisper.cpp checkout the rig needs anyway
+    // jfk ships inside the whisper.cpp checkout the rig needs anyway; gb1 only ever existed there
+    // via `make samples`, so prefer a checkout copy (byte-identical to the manifest source) and
+    // fall back to the same wikimedia fetch+convert the Makefile's samples target encodes
     for (name in ["jfk.wav", "gb1.wav"]) {
         let dst = "{asr_corpus_dir()}{name}"
         if (!stat(dst).is_valid) {
             let src = normalize("{samples}/{name}")
-            if (!stat(src).is_valid) {
+            if (stat(src).is_valid) {
+                run_capture(is_windows_box() ? "copy \"{src}\" \"{dst}\"" : "cp \"{src}\" \"{dst}\"", false)
+            } elif (name == "gb1.wav") {
+                fetch_ogg_as_wav(GB1_URL, "_gb1.ogg", dst)
+            } else {
                 to_log(LOG_ERROR, "setup_asr_rig: {src} missing — clone/checkout whisper.cpp first (--refs)\n")
                 return false
             }
-            run_capture(is_windows_box() ? "copy \"{src}\" \"{dst}\"" : "cp \"{src}\" \"{dst}\"", false)
         }
     }
     // hp0: wikimedia ogg → 16 kHz mono pcm16 wav (ffmpeg). Decode determinism is verified by the
@@ -191,10 +204,7 @@ def private setup_corpus() : bool {
     // box instead (BRINGUP.md).
     let hp0 = "{asr_corpus_dir()}hp0.wav"
     if (!stat(hp0).is_valid) {
-        let ogg = "{asr_corpus_dir()}_hp0.ogg"
-        run_capture("curl -sL -o \"{ogg}\" {HP0_URL}", false)
-        run_capture("ffmpeg -y -loglevel error -i \"{ogg}\" -ar 16000 -ac 1 -c:a pcm_s16le \"{hp0}\"", false)
-        remove(ogg)
+        fetch_ogg_as_wav(HP0_URL, "_hp0.ogg", hp0)
     }
     // the two long-form fixtures are concatenations of the above — regenerated, never fetched
     if (!stat("{asr_corpus_dir()}jfk3.wav").is_valid) {
@@ -269,6 +279,26 @@ def private setup_refs(cfg : Args) : bool {
         run_capture("cmake -S \"{wroot}\" -B \"{wroot}/build\" -DCMAKE_BUILD_TYPE=Release && cmake --build \"{wroot}/build\" --config Release -j 8", false)
     }
     ok = ok && stat(whisper_cpp_bin("whisper-cli")).is_valid && stat(whisper_cpp_bin("parakeet-cli")).is_valid
+    // the q8_0 reference siblings the catalog's cli refs time (upstream quantize tools;
+    // idempotent — a present sibling is never rebuilt)
+    for (pair in [(quant = "whisper-quantize", src = "ggml-tiny.bin", dst = "ggml-tiny-q8_0.bin"),
+                  (quant = "whisper-quantize", src = "ggml-large-v3-turbo.bin", dst = "ggml-large-v3-turbo-q8_0.bin"),
+                  (quant = "parakeet-quantize", src = "ggml-parakeet-tdt-0.6b-v2-f32.bin", dst = "ggml-parakeet-tdt-0.6b-v2-q8_0.bin"),
+                  (quant = "parakeet-quantize", src = "ggml-parakeet-tdt-0.6b-v3-f32.bin", dst = "ggml-parakeet-tdt-0.6b-v3-q8_0.bin")]) {
+        let src_path = "{whisper_models_dir()}{pair.src}"
+        let dst_path = "{whisper_models_dir()}{pair.dst}"
+        if (stat(src_path).is_valid && !stat(dst_path).is_valid) {
+            to_log(LOG_INFO, "setup_asr_rig: quantizing {pair.src} -> {pair.dst} (q8_0)\n")
+            // `call ` so the line never STARTS with a quote — cmd.exe strips a leading one
+            // and mangles the rest (the daspkg release_tuner_cmd rule, hit live on zen2)
+            let lead = is_windows_box() ? "call " : ""
+            run_capture("{lead}\"{whisper_cpp_bin(pair.quant)}\" \"{src_path}\" \"{dst_path}\" q8_0", false)
+            if (!stat(dst_path).is_valid) {
+                to_log(LOG_WARNING, "setup_asr_rig: q8_0 sibling {pair.dst} did not materialize — the {pair.quant} run failed\n")
+                ok = false
+            }
+        }
+    }
     // patched CPU-only mtmd
     let lroot = normalize("{cfg.refs_root}/llama.cpp-mtmd-ref")
     if (!stat(mtmd_bin()).is_valid) {
@@ -378,6 +408,11 @@ def private check_all() : bool {
     let versions = whisper_cpp_versions()
     to_log(LOG_INFO, "setup_asr_rig: {empty(versions) ? "whisper.cpp checkout not identified" : versions}\n")
     ok = ok && find(versions, "+dirty") < 0
+    for (dst in ["ggml-tiny-q8_0.bin", "ggml-large-v3-turbo-q8_0.bin",
+                 "ggml-parakeet-tdt-0.6b-v2-q8_0.bin", "ggml-parakeet-tdt-0.6b-v3-q8_0.bin"]) {
+        let present = stat("{whisper_models_dir()}{dst}").is_valid
+        to_log(present ? LOG_INFO : LOG_WARNING, "setup_asr_rig: q8_0 ref {dst} — {present ? "ok" : "MISSING (cli refs will time nothing — run --refs)"}\n")
+    }
     let mt = stat(mtmd_bin()).is_valid
     to_log(mt ? LOG_INFO : LOG_WARNING, "setup_asr_rig: llama-mtmd-cli — {mt ? mtmd_versions() : "MISSING (audio-chat refs will skip)"}\n")
     for (spec in [(name = "ONNX_PY", py = onnx_py()), (name = "NEMO_PY", py = nemo_py())]) {
@@ -411,7 +446,7 @@ def private is_windows_box() : bool {
     return get_env_variable("OS") == "Windows_NT"
 }
 
-[export]
+[export, tune_policy(missing = "fallback")]
 def main : int {
     var r <- parse_args(type<Args>)
     if (r |> is_err) {

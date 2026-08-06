@@ -305,7 +305,14 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
     let fused_gpu = (!c.moe_exps_bias && !t.experts_mx4 && c.ffn_act != FfnAct.swiglu_oai
         && (moe_gpu_layer_on_gpu(l) || moe_gpu_layer_streamed(l)) && g_moe_fused_expert_gemms && npos >= 32l && gpu_prefill_route_on())
     let gpu_comb = fused_gpu && gpu_combine_on()
-    let grows = fused_gpu ? nk : npos
+    // fused CPU: one region-list GEMM per projection; a q8 stack keeps the per-expert chain (mirror of blocks.das fused_kq)
+    let sb_fusable = t.kq_repacked && kernel_backend_has_kq_batch_groupn()
+    let fused_kq = (kq_layer && g_moe_fused_expert_gemms
+        && (kq_sb(f1) ? sb_fusable : f1 == KqFmt.q51)
+        && (kq_sb(f2) ? sb_fusable : f2 == KqFmt.q51)
+        && (kq_sb(f3) ? sb_fusable : f3 == KqFmt.q51))
+    let fused = fused_gpu || fused_kq
+    let grows = fused ? nk : npos
     s.moe_rlog |> resize(npos * ne)
     s.moe_idx_b |> resize(nk)
     s.moe_w_b |> resize(nk)
@@ -368,12 +375,12 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
         requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)
     }
 
-    // 3F. GPU tier: gate/up -> act -> requant -> down as ONE region-list dispatch for the layer
-    if (fused_gpu) {
+    // 3F. fused: gate/up/down each run as ONE region-list dispatch (3 fork/joins/layer, not 3/expert)
+    if (fused) {
         trace_tag(TRACE_TAG_MOE)
         let ts_gather = ref_time_ticks()
-        // the GPU tile computes activation block sums in-kernel — skip the per-16 sum gather
-        moe_gather_rows(s, 0l, nk, dim, k, false, moe_kform)
+        // the GPU tile computes activation block sums in-kernel — skip the per-16 sum gather there
+        moe_gather_rows(s, 0l, nk, dim, k, moe_kform && !fused_gpu, moe_kform)
         prof_add("moe_gather", ts_gather)
         // region triples (woff, row0, cnt) per touched expert; the three planes share row0/cnt
         s.moe_offs1 |> clear(); s.moe_offs1 |> reserve(ne * 3l)
@@ -415,11 +422,40 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
             }
             matmul_moe_gpu_ffn_combined(s.moe_eout, s.moe_offs1, s.moe_offs3, s.moe_offs2, nreg,
                 s.moe_gxq, s.moe_gxs, s.moe_w_b, s.moe_inv, dim, nfe, nk, npos, int(moe_gpu_expert_fmt(f1)), int(moe_gpu_expert_fmt(f3)), int(moe_gpu_expert_fmt(f2)), c.ffn_act == FfnAct.gelu)
-        } else {
+            prof_add("moe_gpu", ts_g1)
+        } elif (fused_gpu) {
             matmul_moe_gpu_ffn(s.moe_gout, s.moe_offs1, s.moe_offs3, s.moe_offs2, nreg,
                 s.moe_gxq, s.moe_gxs, dim, nfe, nk, int(moe_gpu_expert_fmt(f1)), int(moe_gpu_expert_fmt(f3)), int(moe_gpu_expert_fmt(f2)), c.ffn_act == FfnAct.gelu)
+            prof_add("moe_gpu", ts_g1)
+        } else {   // fused_kq: native-plane region-list chain, one batched GEMM per projection
+            if (kq_sb(f1)) {
+                mm_b_kq_groupn(s.moe_ghb, t, f1, s.moe_offs1, nreg, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
+            } else {
+                mm_b_q51_groupn(s.moe_ghb, t, s.moe_offs1, nreg, s.moe_gxq, s.moe_gxs, dim, nfe)
+            }
+            if (kq_sb(f3)) {
+                mm_b_kq_groupn(s.moe_ghb2, t, f3, s.moe_offs3, nreg, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
+            } else {
+                mm_b_q51_groupn(s.moe_ghb2, t, s.moe_offs3, nreg, s.moe_gxq, s.moe_gxs, dim, nfe)
+            }
+            prof_add("mm_gemm", ts_g1)
+            let ts_act = ref_time_ticks()
+            gate_batch(s.moe_ghb, s.moe_ghb2, c.ffn_act, nfe, nk)
+            prof_add("act", ts_act)
+            // kq v2: sb down stacks read Q8_K-form rows (+ per-16 sums); q51 the Q8_0 form
+            if (kq_sb(f2)) {
+                requant_rows_q8k_bs(s.moe_ghb, nfe, nk, s.moe_hq, s.moe_hs, s.moe_hbs)
+            } else {
+                requant_rows_q8(s.moe_ghb, nfe, nk, s.moe_hq, s.moe_hs)
+            }
+            let ts_g3 = ref_time_ticks()
+            if (kq_sb(f2)) {
+                mm_b_kq_groupn(s.moe_gout, t, f2, s.moe_offs2, nreg, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim)
+            } else {
+                mm_b_q51_groupn(s.moe_gout, t, s.moe_offs2, nreg, s.moe_hq, s.moe_hs, nfe, dim)
+            }
+            prof_add("mm_moe_dn", ts_g3)   // down separately from gate/up — the q51-vs-kq lane split is the diagnostic
         }
-        prof_add("moe_gpu", ts_g1)
         if (!gpu_comb) {   // combine off: park the raw down rows in bucket order for the reduce
             trace_tag(TRACE_TAG_PARK)
             let ts_park = ref_time_ticks()
@@ -441,10 +477,10 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
     }
 
     // 3. one batched GEMM chain per touched expert, parking raw down rows (skipped when 3F ran)
-    if (!fused_gpu) {
+    if (!fused) {
         trace_tag(TRACE_TAG_MOE)
     }
-    for (e in range64(fused_gpu ? 0l : ne)) {
+    for (e in range64(fused ? 0l : ne)) {
         let b0 = e == 0l ? 0l : s.moe_cnt[e - 1l]
         let cnt = s.moe_cnt[e] - b0
         if (cnt == 0l) {

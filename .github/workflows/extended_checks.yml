@@ -334,6 +334,30 @@ jobs:
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./tests --ser serialized.bin
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./tests --deser serialized.bin
 
+    - name: "Compile tests/ with --ast-verify"
+      if: matrix.target == 'linux'
+      run: |
+        set -euo pipefail
+        # daslib/ast_verify reports AST shapes the compiler dereferences unguarded.
+        # A compile error is fine here (many tests assert one); only an "AST verify"
+        # line is a failure. Files dastest itself treats as expected-failures
+        # (cant_ / failed_ / invalid_) legitimately trip it, so they are skipped.
+        cat > /tmp/ast_verify_one.sh <<'EOS'
+        #!/bin/bash
+        f="$1"
+        case "$(basename "$f")" in cant_*|failed_*|invalid_*) exit 0 ;; esac
+        out=$(timeout 120 "$BIN/daslang" --ast-verify -compile-only "$f" 2>&1 || true)
+        if grep -q 'AST verify' <<< "$out"; then
+          echo "### $f"
+          grep 'AST verify' <<< "$out" | sort -u | head -5
+          exit 1
+        fi
+        EOS
+        chmod +x /tmp/ast_verify_one.sh
+        export BIN
+        find ./tests -name '*.das' -print0 \
+          | xargs -0 -P "$(nproc)" -n 1 /tmp/ast_verify_one.sh
+
     - name: "Test MCP tools"
       if: matrix.target == 'linux'
       run: |
@@ -356,6 +380,30 @@ jobs:
       run: |
         set -eux
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasllama-server/test_openai_server.das
+
+    - name: "Test dasweb-playground"
+      # The daslang.io sample-store backend. Its suites live in-dir (a
+      # hyphenated directory requires siblings by bare name), so `--test
+      # ./tests` never reaches them — without this step the store, importer,
+      # config and HTTP tests run only by hand. The server suites bind
+      # 127.0.0.1:19011/19012/19013 and shut themselves down.
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        for suite in test_samples_store test_curated_import test_playground_config test_playground_server test_build_queue test_build_artifacts test_build_endpoints; do
+          $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasweb-playground/$suite.das
+        done
+
+    - name: "Test dasweb-buildd"
+      # The wasm build worker (compute-box side of the same pipeline). In-dir
+      # suites like the playground's; the client suite runs a stub playground
+      # on 127.0.0.1:19014 and shuts itself down.
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        for suite in test_buildd_config test_buildd_core test_buildd_client; do
+          $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/dasweb-buildd/$suite.das
+        done
 
     # Self-binders for dasClangBind + dasLLVM bindings live on the mingw
     # worker (build.yml build_windows_mingw) — see comment on the linux

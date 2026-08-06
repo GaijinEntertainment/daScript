@@ -122,7 +122,7 @@ def private parse_perm(gc : LlvmCodeCtx) : TilePerm {
 // The ONE decline predicate all four generators share — the tile and its companions must
 // fall back together on every rail, or repack and kernel desync (the two-function-stamp
 // contract). Rails: knob validity, schema, per-ISA leg, geometry, vreg budget, dot availability.
-def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool {
+def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint:STYLE037,STYLE038 — the flat decline ladder IS the perm contract; splitting hides which leg refused
     if (p.dotPrim == "amx_int8") {
         // the TMUL leg: 2×2 TDPBSSD macro over the grp16/kg4 plane; kstep pinned 1 (Q8's per-block scale boundary); Linux-only (arch_prctl enable)
         if ((p.kstep != 1)
@@ -710,41 +710,43 @@ def private emit_block_mx4(var te : TileEmit; var bi : LLVMOpaqueValue?; var f :
     }
 }
 
-// The qh bit-plane of one 16B row-quad qh vector as 0x10-or-0 bytes for k-group j (half 0 =
-// bits 4j..4j+3 per row, half 1 = the +16 chunk): constant-shuffle byte pick + and/cmpeq/sext.
+// The qh bit-plane of one width-sized row-group qh vector as 0x10-or-0 bytes for k-group j
+// (half 0 = bits 4j..4j+3 per row, half 1 = the +16 chunk): constant-shuffle byte pick +
+// and/cmpeq/sext. Width-generic: rv rows per vector, 4 qh bytes per row.
 def private qh_bits(var te : TileEmit; var qhv : LLVMOpaqueValue?; j, half : int; name : string) : LLVMOpaqueValue? {
     let b = te.builder
+    let wbytes = te.width / 8
     let byteIdx = half * 2 + j / 2
-    let shufMask <- [for (lane in range(16)); (lane / 4) * 4 + byteIdx]
+    let shufMask <- [for (lane in range(wbytes)); (lane / 4) * 4 + byteIdx]
     var picked = LLVMBuildShuffleVector(b, te.types, qhv, qhv, shufMask, "{name}p")
-    var bitElems <- [for (lane in range(16)); LLVMConstInt(te.types.t_int8, uint64(1 << ((j % 2) * 4 + lane % 4)), 0)]
-    var bmask = LLVMConstVector(array_data_ptr(bitElems), 16u)
+    var bitElems <- [for (lane in range(wbytes)); LLVMConstInt(te.types.t_int8, uint64(1 << ((j % 2) * 4 + lane % 4)), 0)]
+    var bmask = LLVMConstVector(array_data_ptr(bitElems), uint(wbytes))
     var got = LLVMBuildAnd(b, picked, bmask, "")
     var isSet = LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntEQ, got, bmask, "")
-    var sx = LLVMBuildSExt(b, isSet, te.v16i8, "")
+    var sx = LLVMBuildSExt(b, isSet, te.vwi8, "")
     return LLVMBuildAnd(b, sx, splat_i8w(te, 16), name)
 }
 
-// One 32-k block, q51 form: per (row vector, dword-group j) one nibble load ORs its qh bits in
-// register (no scratch expand); dots ride the unsigned lattice; the per-block fold is
-// (d·isum + m·asum)·xs in q51_grp_row_dot's op order, asum off the xbs plane.
+// One 32-k block, q51 form: nibble load ORs qh bits in register, unsigned-lattice dots, fold
+// (d·isum + m·asum)·xs in q51_grp_row_dot's op order; width-generic (activations stay 16B)
 def private emit_block_q51(var te : TileEmit; var bi : LLVMOpaqueValue?; var f : LLVMOpaqueValue? [8]; tokBase, tokCount : int) {
     let b = te.builder
     let rq = te.rq
+    let wbytes = te.width / 8
     var wb = LLVMBuildMul(b, bi, te.types->ConstI64(uint64(te.interleave * 20)), "wb")
     var xb = LLVMBuildMul(b, bi, te.types->ConstI64(0x20ul), "xb")
     var qh : LLVMOpaqueValue? [2]
     for (qd in range(rq)) {
-        var hoff = LLVMBuildAdd(b, wb, te.types->ConstI64(uint64(16 * te.interleave + qd * 16)), "")
-        qh[qd] = load_v16i8(te, te.wg, hoff, "qh{qd}")
+        var hoff = LLVMBuildAdd(b, wb, te.types->ConstI64(uint64(16 * te.interleave + qd * wbytes)), "")
+        qh[qd] = load_vec(te, te.vwi8, te.wg, hoff, "qh{qd}")
     }
     var wlo : LLVMOpaqueValue? [8]
     var whi : LLVMOpaqueValue? [8]
     for (j in range(4)) {
         for (qd in range(rq)) {
-            let boff = j * 4 * te.interleave + qd * 16
+            let boff = j * 4 * te.interleave + qd * wbytes
             var off = boff == 0 ? wb : LLVMBuildAdd(b, wb, te.types->ConstI64(uint64(boff)), "")
-            var nv = load_v16i8(te, te.wg, off, "nv{j * rq + qd}")
+            var nv = load_vec(te, te.vwi8, te.wg, off, "nv{j * rq + qd}")
             var lo = LLVMBuildAnd(b, nv, splat_i8w(te, 15), "")
             var hi = LLVMBuildLShr(b, nv, splat_i8w(te, 4), "")
             wlo[j * rq + qd] = LLVMBuildOr(b, lo, qh_bits(te, qh[qd], j, 0, "hl{j * rq + qd}"), "wlo{j * rq + qd}")
@@ -776,17 +778,17 @@ def private emit_block_q51(var te : TileEmit; var bi : LLVMOpaqueValue?; var f :
             }
         }
     }
-    // fold: f += (d4·isum4 + m4·asum)·xs — d/m off the interleaved f16 pair plane
-    var v8i16 = LLVMVectorType(te.types.t_int16, 8u)
+    // fold: f += (d4·isum4 + m4·asum)·xs — d/m interleaved f16 pairs, 2·rv-lane i16 load
+    var vdm16 = LLVMVectorType(te.types.t_int16, uint(te.rv * 2))
     var d4 : LLVMOpaqueValue? [2]
     var m4 : LLVMOpaqueValue? [2]
     var sIdx0 = LLVMBuildMul(b, bi, te.types->ConstI64(uint64(4 * te.interleave)), "")
     for (qd in range(rq)) {
-        var sIdx = qd == 0 ? sIdx0 : LLVMBuildAdd(b, sIdx0, te.types->ConstI64(uint64(qd * 16)), "")
+        var sIdx = qd == 0 ? sIdx0 : LLVMBuildAdd(b, sIdx0, te.types->ConstI64(uint64(qd * te.rv * 4)), "")
         var sp = LLVMBuildGEP2(b, te.types.t_int8, te.sg, sIdx, "sp{qd}")
-        var dm = LLVMBuildLoad2Aligned(b, v8i16, sp, 1u, "dm{qd}")
-        var dh = LLVMBuildShuffleVector(b, te.types, dm, dm, [0, 2, 4, 6], "")
-        var mh = LLVMBuildShuffleVector(b, te.types, dm, dm, [1, 3, 5, 7], "")
+        var dm = LLVMBuildLoad2Aligned(b, vdm16, sp, 1u, "dm{qd}")
+        var dh = LLVMBuildShuffleVector(b, te.types, dm, dm, [for (lane in range(te.rv)); lane * 2], "")
+        var mh = LLVMBuildShuffleVector(b, te.types, dm, dm, [for (lane in range(te.rv)); lane * 2 + 1], "")
         d4[qd] = LLVMBuildFPExt(b, LLVMBuildBitCast(b, dh, te.vnf16, ""), te.vnf32, "d4{qd}")
         m4[qd] = LLVMBuildFPExt(b, LLVMBuildBitCast(b, mh, te.vnf16, ""), te.vnf32, "m4{qd}")
     }
@@ -925,7 +927,7 @@ def private or_bit_x10(te : TileEmit; var w, bytes, maskv : LLVMOpaqueValue?; na
 // One 256-weight SUPERBLOCK, K-quant grp<mr> form (te.kq = 4/5/6): weight vectors unpacked
 // ONCE per (sub-block, dword-group) and dotted against every token — weight-stationary,
 // bit-exact vs per-token GEMVs (tokCount=1). kq v2 folds integer sub-scales/bsums against Q8_K-form activations (the lcpp scheme).
-def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f : LLVMOpaqueValue? [8]; tokBase, tokCount : int) {
+def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f : LLVMOpaqueValue? [8]; tokBase, tokCount : int) { // nolint:STYLE037,STYLE038 — one register-coupled superblock loop nest; the k-quant decode arms share live values
     let b = te.builder
     let rq = te.rq
     let mr = te.interleave
@@ -1234,7 +1236,7 @@ struct private SliceArgs {
 // One accumulator slice: the whole k loop for tokens [tokBase, tokBase+tokCount), then the
 // per-token float-vector stores. `pred` must be terminator-free; returns the slice's merge
 // block (also terminator-free). Main loop runs kstep blocks/iteration; remainder is a kstep-1 conditional chain.
-def private emit_slice(var te : TileEmit; var sa : SliceArgs; var pred : LLVMOpaqueBasicBlock?; tokBase, tokCount : int; sfx : string) : LLVMOpaqueBasicBlock? {
+def private emit_slice(var te : TileEmit; var sa : SliceArgs; var pred : LLVMOpaqueBasicBlock?; tokBase, tokCount : int; sfx : string) : LLVMOpaqueBasicBlock? { // nolint:STYLE038 — the block/phi plumbing of one tile slice is a single control-flow unit
     let b = te.builder
     let K = sa.kstep
     let nacc = tokCount * te.rq
@@ -1331,9 +1333,9 @@ def private emit_slice(var te : TileEmit; var sa : SliceArgs; var pred : LLVMOpa
     var fF : LLVMOpaqueValue? [8]
     for (i in range(nacc)) {
         fF[i] = LLVMBuildPhi(b, te.vnf32, "ff{tokBase + i / te.rq}")
-        for (m in range(length(mergeBlocks))) {
-            var iv <- [mergeF[m][i]]
-            var ib <- [mergeBlocks[m]]
+        for (mb, mf in mergeBlocks, mergeF) {
+            var iv <- [mf[i]]
+            var ib <- [mb]
             LLVMAddIncoming(fF[i], iv, ib)
         }
     }
@@ -1354,7 +1356,7 @@ def private emit_slice(var te : TileEmit; var sa : SliceArgs; var pred : LLVMOpa
 // width-derived types + the per-ISA dot machinery for one generator invocation; false =
 // decline (belt — perm_declines already gated the same rails). needMx4 additionally wires the
 // LUT-dequant primitive (tbl1 / pshufb) and bakes the doubled-e2m1 LUT constant.
-def private setup_tile_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePerm; needMx4 : bool) : bool {
+def private setup_tile_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePerm; needMx4 : bool) : bool { // nolint:STYLE037,STYLE038 — per-perm type/width/plane setup is one coherent table
     let rt = q8q8_repack_type(p.mr, p.bias, kgroup_of(p))
     te.builder = gc.jit.builder
     te.types = gc.jit.types
@@ -1590,7 +1592,7 @@ def private amx_store(var te : TileEmit; nt, r, ts : int; var cd, reg : LLVMOpaq
 // The TMUL batch tile: one call covers 16·nt tokens × nt grp16 row-groups (nt = nrsplit).
 // Per 32-k block: nt B/A tile loads, nt² tilezero->TDPBSSD->tilestore-to-scratch, then the
 // scale fold f32-accumulates INTO yp — yp IS the k-loop accumulator (no register holds 32×32 f32 across blocks).
-def private emit_amx_tile(var gc : LlvmCodeCtx; p : TilePerm; f16s : bool) : bool {
+def private emit_amx_tile(var gc : LlvmCodeCtx; p : TilePerm; f16s : bool) : bool { // nolint:STYLE038 — the AMX tile body is barrier-coupled; phases share tile registers
     var te = TileEmit(sgF16 = f16s)
     if (!setup_amx_emit(te, gc, p)) return false
     let b = gc.jit.builder
@@ -1736,7 +1738,7 @@ def private amx_fold_tile(var te : TileEmit; var region, bi, ws : LLVMOpaqueValu
 // The software-pipelined TMUL batch tile (double-buffered C, lcpp mmq.cpp): same contract as
 // emit_amx_tile, but the per-block scale fold is deferred one k-iteration — block bi's
 // TDPBSSD spills into C[cur] while block bi−1's fold reads C[pre], overlapping TMUL with the vector fold.
-def private emit_amx_tile_pipelined(var gc : LlvmCodeCtx; p : TilePerm; f16s : bool) : bool {
+def private emit_amx_tile_pipelined(var gc : LlvmCodeCtx; p : TilePerm; f16s : bool) : bool { // nolint:STYLE037,STYLE038 — the software-pipelined AMX schedule is one register-coupled loop
     var te = TileEmit(sgF16 = f16s)
     if (!setup_amx_emit(te, gc, p)) return false
     let b = gc.jit.builder
@@ -2346,14 +2348,13 @@ def private k6_gemv_gen(var gc : LlvmCodeCtx) : bool => kq_gemv_gen_impl(gc, 6)
 def private q40_gemv_gen(var gc : LlvmCodeCtx) : bool => kq_gemv_gen_impl(gc, 40)
 
 // The q51 rows-range GEMV over the grp<mr> q51 planes — kq_gemv_gen_impl's walk with the
-// 32-weight block unit (nb = n/32, row strides 20B quants / 4B scales per block). sdot leg
-// only in v1 — x64 perms decline to the portable disk-order kernels via backend wiring.
+// 32-weight block unit (nb = n/32, row strides 20B quants / 4B scales per block). The block
+// dots ride kq_dot_lane, so every lattice leg (sdot/maddubs/vpdpbusd) emits.
 def private q51_gemv_gen(var gc : LlvmCodeCtx) : bool {
     if (!is_kq_gemv_signature(gc.fn)) return false
     let p0 = parse_perm(gc)
     if (perm_declines(gc, p0)) return false
     let p = companion_perm(p0)
-    if (p.dotPrim != "sdot") return false
 
     var te = TileEmit(q51 = true)
     if (!setup_tile_emit(te, gc, p, false)) return false
@@ -2464,6 +2465,53 @@ def private k5_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 5)
 def private k6_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 6)
 def private q40_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 40)
 
+// The q51 4-token TILE: the kq tile walk with the 32-weight block unit and Q8_0-form
+// activations (per-32 xs floats + per-32 asum ints — emit_block_q51's contract).
+def private q51_tile_gen(var gc : LlvmCodeCtx) : bool {
+    if (!is_tile_signature(gc.fn)) return false
+    let p0 = parse_perm(gc)
+    if (perm_declines(gc, p0)) return false
+    let p = companion_perm(p0)
+
+    var te = TileEmit(q51 = true)
+    if (!setup_tile_emit(te, gc, p, false)) return false
+
+    let b = gc.jit.builder
+    var entry = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "entry")
+
+    // entry: per-token activation/scale/asum bases; the block unit is 32 weights (nb = n/32)
+    LLVMPositionBuilderAtEnd(b, entry)
+    var sa = SliceArgs(gc_impl = gc.impl, ctx = gc.jit.ctx, kstep = 1)
+    sa.yp = LLVMGetParam(gc.impl, 0u)
+    te.wg = LLVMGetParam(gc.impl, 1u)
+    te.sg = LLVMGetParam(gc.impl, 2u)
+    let xqp = LLVMGetParam(gc.impl, 3u)
+    let xsp = LLVMGetParam(gc.impl, 4u)
+    let xbsp = LLVMGetParam(gc.impl, 5u)
+    let n = LLVMGetParam(gc.impl, 6u)
+    sa.d = LLVMGetParam(gc.impl, 7u)
+    sa.g = LLVMGetParam(gc.impl, 8u)
+    sa.t0 = LLVMGetParam(gc.impl, 9u)
+    sa.nb = LLVMBuildSDiv(b, n, te.types->ConstI64(0x20ul), "nb")
+    for (tk in range(4)) {
+        var tRow = LLVMBuildAdd(b, sa.t0, te.types->ConstI64(uint64(tk)), "")
+        te.x[tk] = LLVMBuildGEP2(b, te.types.t_int8, xqp, LLVMBuildMul(b, tRow, n, ""), "x{tk}")
+        te.xs[tk] = LLVMBuildGEP2(b, te.types.t_float, xsp, LLVMBuildMul(b, tRow, sa.nb, ""), "xs{tk}")
+        te.xbs[tk] = LLVMBuildGEP2(b, te.types.t_int32, xbsp, LLVMBuildMul(b, tRow, sa.nb, ""), "xbs{tk}")
+    }
+
+    // one k-loop slice per nrsplit tokens (the q8 tile's slice shape)
+    var pred = entry
+    var tokBase = 0
+    while (tokBase < 4) {
+        pred = emit_slice(te, sa, pred, tokBase, p.nrsplit, tokBase == 0 ? "" : "_{tokBase}")
+        tokBase += p.nrsplit
+    }
+    LLVMPositionBuilderAtEnd(b, pred)
+    LLVMBuildRetVoid(b)
+    return true
+}
+
 // Called from llvm_user_modules::register_user_llvm_code_generators — the JIT invokes that in the
 // context that reads the registry, so the direct call lands in the right table copy.
 [macro_function]
@@ -2483,6 +2531,7 @@ def public register_dasllama_gemm_generators {
     register_llvm_code_generator("dasllama_gemm_gen::k5_gemv", @@k5_gemv_gen)
     register_llvm_code_generator("dasllama_gemm_gen::k6_gemv", @@k6_gemv_gen)
     register_llvm_code_generator("dasllama_gemm_gen::q51_gemv", @@q51_gemv_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::q51_tile", @@q51_tile_gen)
     register_llvm_code_generator("dasllama_gemm_gen::k4_tile", @@k4_tile_gen)
     register_llvm_code_generator("dasllama_gemm_gen::k5_tile", @@k5_tile_gen)
     register_llvm_code_generator("dasllama_gemm_gen::k6_tile", @@k6_tile_gen)

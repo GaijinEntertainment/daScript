@@ -511,6 +511,64 @@ def private ic_clock(var ctx : IconCtx) {
     Disc(ctx, 12.0f, 12.0f, 0.8f)
 }
 
+// --- Text markup ---
+def private ic_heading(var ctx : IconCtx) {
+    L(ctx, 6.0f, 5.0f, 6.0f, 19.0f); L(ctx, 18.0f, 5.0f, 18.0f, 19.0f)
+    L(ctx, 6.0f, 12.0f, 18.0f, 12.0f)
+}
+def private ic_bold(var ctx : IconCtx) {
+    L(ctx, 7.0f, 5.0f, 7.0f, 19.0f)
+    L(ctx, 7.0f, 5.0f, 12.5f, 5.0f); Arc(ctx, 12.5f, 8.25f, 3.25f, 270.0f, 450.0f)
+    L(ctx, 12.5f, 11.5f, 7.0f, 11.5f)
+    L(ctx, 7.0f, 11.5f, 13.5f, 11.5f); Arc(ctx, 13.5f, 15.25f, 3.75f, 270.0f, 450.0f)
+    L(ctx, 13.5f, 19.0f, 7.0f, 19.0f)
+}
+def private ic_italic(var ctx : IconCtx) {
+    L(ctx, 10.0f, 5.0f, 18.0f, 5.0f); L(ctx, 6.0f, 19.0f, 14.0f, 19.0f)
+    L(ctx, 14.0f, 5.0f, 10.0f, 19.0f)
+}
+def private ic_code_inline(var ctx : IconCtx) {
+    L(ctx, 9.0f, 8.0f, 4.5f, 12.0f); L(ctx, 4.5f, 12.0f, 9.0f, 16.0f)
+    L(ctx, 15.0f, 8.0f, 19.5f, 12.0f); L(ctx, 19.5f, 12.0f, 15.0f, 16.0f)
+    L(ctx, 13.3f, 5.5f, 10.7f, 18.5f)
+}
+def private ic_image(var ctx : IconCtx) {
+    RectS(ctx, 4.0f, 5.0f, 16.0f, 14.0f, 1.5f)
+    Disc(ctx, 8.7f, 9.2f, 1.4f)
+    L(ctx, 6.0f, 17.0f, 10.8f, 12.0f); L(ctx, 10.8f, 12.0f, 13.6f, 14.8f)
+    L(ctx, 13.6f, 14.8f, 16.2f, 12.2f); L(ctx, 16.2f, 12.2f, 18.6f, 14.6f)
+}
+def private ic_list_bullets(var ctx : IconCtx) {
+    Disc(ctx, 6.0f, 7.0f, 1.3f); Disc(ctx, 6.0f, 12.0f, 1.3f); Disc(ctx, 6.0f, 17.0f, 1.3f)
+    L(ctx, 10.0f, 7.0f, 19.5f, 7.0f); L(ctx, 10.0f, 12.0f, 19.5f, 12.0f); L(ctx, 10.0f, 17.0f, 19.5f, 17.0f)
+}
+def private ic_list_ordered(var ctx : IconCtx) {
+    L(ctx, 4.9f, 5.8f, 6.3f, 4.7f); L(ctx, 6.3f, 4.7f, 6.3f, 8.6f)
+    Arc(ctx, 5.9f, 11.2f, 1.5f, 190.0f, 370.0f)
+    L(ctx, 7.3f, 11.6f, 4.7f, 14.0f); L(ctx, 4.7f, 14.0f, 7.4f, 14.0f)
+    Arc(ctx, 5.9f, 17.1f, 1.35f, 220.0f, 440.0f)
+    Arc(ctx, 5.9f, 19.6f, 1.35f, 280.0f, 500.0f)
+    L(ctx, 10.0f, 6.5f, 19.5f, 6.5f); L(ctx, 10.0f, 12.3f, 19.5f, 12.3f); L(ctx, 10.0f, 18.1f, 19.5f, 18.1f)
+}
+def private ic_checkbox(var ctx : IconCtx) {
+    RectS(ctx, 4.5f, 4.5f, 15.0f, 15.0f, 2.0f)
+    L(ctx, 8.0f, 12.0f, 11.0f, 15.0f); L(ctx, 11.0f, 15.0f, 16.5f, 8.5f)
+}
+def private ic_quote(var ctx : IconCtx) {
+    Disc(ctx, 8.0f, 9.5f, 2.3f); L(ctx, 9.3f, 11.4f, 6.9f, 15.2f)
+    Disc(ctx, 15.5f, 9.5f, 2.3f); L(ctx, 16.8f, 11.4f, 14.4f, 15.2f)
+}
+def private ic_code_block(var ctx : IconCtx) {
+    RectS(ctx, 3.5f, 5.0f, 17.0f, 14.0f, 1.5f)
+    L(ctx, 7.0f, 9.0f, 10.0f, 12.0f); L(ctx, 10.0f, 12.0f, 7.0f, 15.0f)
+    L(ctx, 12.0f, 15.5f, 16.0f, 15.5f)
+}
+def private ic_table(var ctx : IconCtx) {
+    RectS(ctx, 4.0f, 5.0f, 16.0f, 14.0f, 1.0f)
+    L(ctx, 4.0f, 10.0f, 20.0f, 10.0f)
+    L(ctx, 9.3f, 10.0f, 9.3f, 19.0f); L(ctx, 14.6f, 10.0f, 14.6f, 19.0f)
+}
+
 // ===== Catalog (single source of truth) =====
 
 // One row per glyph drives the dispatch table below, the public catalog
@@ -642,7 +700,19 @@ let private CATALOG <- [
     IconDef(name="minus",         category="General",          draw=@@ ic_minus),
     IconDef(name="palette",       category="General",          draw=@@ ic_palette),
     IconDef(name="pin",           category="General",          draw=@@ ic_pin),
-    IconDef(name="clock",         category="General",          draw=@@ ic_clock)
+    IconDef(name="clock",         category="General",          draw=@@ ic_clock),
+    // Text markup
+    IconDef(name="heading",       category="Text markup",      draw=@@ ic_heading),
+    IconDef(name="bold",          category="Text markup",      draw=@@ ic_bold),
+    IconDef(name="italic",        category="Text markup",      draw=@@ ic_italic),
+    IconDef(name="code-inline",   category="Text markup",      draw=@@ ic_code_inline),
+    IconDef(name="image",         category="Text markup",      draw=@@ ic_image),
+    IconDef(name="list-bullets",  category="Text markup",      draw=@@ ic_list_bullets),
+    IconDef(name="list-ordered",  category="Text markup",      draw=@@ ic_list_ordered),
+    IconDef(name="checkbox",      category="Text markup",      draw=@@ ic_checkbox),
+    IconDef(name="quote",         category="Text markup",      draw=@@ ic_quote),
+    IconDef(name="code-block",    category="Text markup",      draw=@@ ic_code_block),
+    IconDef(name="table",         category="Text markup",      draw=@@ ic_table)
 ]
 
 var private DISPATCH : table<string; function<(var ctx : IconCtx) : void>>

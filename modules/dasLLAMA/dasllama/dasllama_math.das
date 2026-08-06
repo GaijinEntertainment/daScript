@@ -2986,3 +2986,115 @@ def rope_apply(var vec : array<float> | #; pos, head_size, n : int64; theta, fsc
         rope_apply(addr<float?>(vec[0]), pos, head_size, n, theta, fscale, has_ff, ff, neox, mscale)
     }
 }
+
+// Function values do not survive the -exe bake's global serialization (the
+// dasllama_config restore names the defect) — every @@-defaulted seam in this
+// module boot-restores here; a real registrar wins via the null guards.
+[init]
+def private restore_math_fn_defaults { // nolint:STYLE037,STYLE038 — flat seam list, one guard per global
+    if (g_repack_q8q8 == null) {
+        g_repack_q8q8 = @@repack_q8q8_identity
+    }
+    if (g_repack_mx4 == null) {
+        g_repack_mx4 = @@repack_mx4_identity
+    }
+    if (g_mm_q8q8 == null) {
+        g_mm_q8q8 = @@q8q8_unset_kernel
+    }
+    if (g_mm_q8q8_batch == null) {
+        g_mm_q8q8_batch = @@q8q8_unset_batch
+    }
+    if (g_mm_q8q8_group3 == null) {
+        g_mm_q8q8_group3 = @@q8q8_unset_group3
+    }
+    if (g_mm_mx4q8 == null) {
+        g_mm_mx4q8 = @@mx4q8_unset_kernel
+    }
+    if (g_mm_mx4q8_batch == null) {
+        g_mm_mx4q8_batch = @@mx4q8_unset_batch
+    }
+    if (g_mm_mx4q8_batch_groupn == null) {
+        g_mm_mx4q8_batch_groupn = @@mx4q8_unset_batch_groupn
+    }
+    if (g_mm_q8q8_groupn == null) {
+        g_mm_q8q8_groupn = @@q8q8_unset_groupn
+    }
+    if (g_mm_mx4q8_groupn == null) {
+        g_mm_mx4q8_groupn = @@mx4q8_unset_groupn
+    }
+    if (g_mm_q51q8_batch == null) {
+        g_mm_q51q8_batch = @@q51q8_batch_kernel
+    }
+    if (g_mm_q51q8_groupn == null) {
+        g_mm_q51q8_groupn = @@q51q8_groupn_kernel
+    }
+    if (g_mm_q51q8_batch_groupn == null) {
+        g_mm_q51q8_batch_groupn = @@q51q8_batch_groupn_kernel
+    }
+    if (g_mm_q8q8_rows == null) {
+        g_mm_q8q8_rows = @@q8q8_unset_rows
+    }
+    if (g_mm_mx4q8_rows == null) {
+        g_mm_mx4q8_rows = @@mx4q8_unset_rows
+    }
+    if (g_mm_q8q8_s16 == null) {
+        g_mm_q8q8_s16 = @@q8q8_unset_kernel_s16
+    }
+    if (g_mm_q8q8_batch_s16 == null) {
+        g_mm_q8q8_batch_s16 = @@q8q8_unset_batch_s16
+    }
+    if (g_mm_q8q8_group3_s16 == null) {
+        g_mm_q8q8_group3_s16 = @@q8q8_unset_group3_s16
+    }
+    if (g_mm_q8q8_groupn_s16 == null) {
+        g_mm_q8q8_groupn_s16 = @@q8q8_unset_groupn_s16
+    }
+    if (g_mm_q8q8_rows_s16 == null) {
+        g_mm_q8q8_rows_s16 = @@q8q8_unset_rows_s16
+    }
+    if (g_mm_kq == null) {
+        g_mm_kq = @@kq_unset_kernel
+    }
+    if (g_kq_rows_k4 == null) {
+        g_kq_rows_k4 = @@kq_unset_rows
+    }
+    if (g_kq_rows_k5 == null) {
+        g_kq_rows_k5 = @@kq_unset_rows
+    }
+    if (g_kq_rows_k6 == null) {
+        g_kq_rows_k6 = @@kq_unset_rows
+    }
+    if (g_kq_rows_q40 == null) {
+        g_kq_rows_q40 = @@kq_unset_rows
+    }
+    if (g_mm_kq_batch == null) {
+        g_mm_kq_batch = @@kq_unset_batch
+    }
+    if (g_mm_kq_groupn == null) {
+        g_mm_kq_groupn = @@kq_unset_groupn
+    }
+    if (g_mm_kq_batch_groupn == null) {
+        g_mm_kq_batch_groupn = @@kq_unset_batch_groupn
+    }
+    if (g_bake_q51_repack == null) {
+        g_bake_q51_repack = @@repack_q51_identity
+    }
+    if (g_bake_q8q8_repack == null) {
+        g_bake_q8q8_repack = @@repack_q8q8_identity
+    }
+    if (g_bake_mx4_repack == null) {
+        g_bake_mx4_repack = @@repack_mx4_identity
+    }
+    if (g_bake_kq_repack == null) {
+        g_bake_kq_repack = @@repack_kq_identity
+    }
+    if (g_repack_q51 == null) {
+        g_repack_q51 = @@repack_q51_identity
+    }
+    if (g_repack_kq == null) {
+        g_repack_kq = @@repack_kq_identity
+    }
+    if (g_active_kq_layout == null) {
+        g_active_kq_layout = @@kq_layout_grp4_fmt
+    }
+}

@@ -368,11 +368,11 @@ def update : bool {
     }
 
     // spinning ball, slowly orbiting camera -- the spin makes the 1x silhouette crawl
-    let cam_pos = float3(cos(t * 0.25) * 2.8, 0.9, sin(t * 0.25) * 2.8)
+    let cam_pos = float3(cos(t * 0.25) * 3.8, 0.9, sin(t * 0.25) * 3.8)
     let rot = quat_from_unit_vec_ang(normalize(float3(0.2, 1.0, 0.1)), t * 0.5)
     u_model = compose(float3(0, 0, 0), rot, float3(1.0))
     u_view = look_at_rh(cam_pos, float3(0, 0, 0), float3(0, 1, 0))
-    u_proj = perspective_rh_opengl(45.0 * PI / 180.0, aspect, 0.1, 50.0)
+    u_proj = perspective_rh_minus1_to_1(45.0 * PI / 180.0, aspect, 0.1, 50.0)
     u_cam_pos = cam_pos
     u_time = t
 

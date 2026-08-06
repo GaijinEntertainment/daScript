@@ -60,6 +60,9 @@ site/doc/
 doc/sphinx-build/
 doc/sphinx-build-latex/
 doc/source/stdlib/generated/
+utils/ast-fuzz/__*.das
+utils/ast-fuzz/__*.log
+utils/ast-fuzz/_ast_synth_all.das
 # Tutorial recordings: APNG intermediates land here from modules/dasImgui/tests
 # record_* drivers; the MP4 deliverables are staged here from the docs-assets
 # GitHub release by utils/docs_assets/fetch — neither is tracked.
@@ -166,3 +169,6 @@ modules/dasLLAMA/performance/_rig/
 
 # my local box runbook (machine-specific paths; not for the shared repo)
 ZEN2.md
+
+# local playground rig scratch (web/serve_playground.py)
+web/_serve/

@@ -13,6 +13,11 @@ const test = base.test.extend({
             null,
             { timeout: 10_000 }
         );
+        // The sample list arrives over the network and its default selection
+        // lands in the editor when it does. Handing the page over before that
+        // settles lets it drop into the middle of a test's own edits, which
+        // reads as an unrelated flake somewhere later in the spec.
+        await page.waitForFunction(() => window.pgSamplesReady === true, null, { timeout: 15_000 });
         await use(page);
     },
 });

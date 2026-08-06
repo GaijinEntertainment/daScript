@@ -78,6 +78,10 @@ struct Args {
     @clarg_doc = "The --ref binary's build flavor tag for the record: stock | clean-cpu (default: stock)"
     ref_flavor : string = "stock"
 
+    @clarg_name = "ref-no-affinity"
+    @clarg_doc = "Drop --cpu-mask/--cpu-strict from the --ref invocation (see gen_bench_records --ref-no-affinity)"
+    ref_no_affinity : bool
+
     @clarg_name = "json-path"
     @clarg_doc = "With -o json: also write the records to this file — the machine rail (stdout carries engine logs too, and an untuned box's tune-relaunch merges stderr into it)"
     json_path : string
@@ -118,7 +122,7 @@ struct Args {
     @clarg_doc = "Prompt corpus for the tg-real row (segments split on lines of two percent signs; default: data/wikitext2_prompts.txt beside this bench)"
     prompts : string = ""
 
-    @clarg_doc = "After each tg-real arm's timed reps, run one UNTIMED window with forward_profile buckets — the per-section time split of that arm. With --mtp-ab this is what attributes draft vs verify vs classifier"
+    @clarg_doc = "After the pp row and each tg-real arm's timed reps, run one UNTIMED window with forward_profile buckets — the per-section time split of that row — and print the dispatch census (backend caps, which MoE prefill arm each layer takes) after load. With --mtp-ab this is what attributes draft vs verify vs classifier"
     prof : bool
 
     @clarg_short = "?"
@@ -164,9 +168,12 @@ def private load_audio_16k_mono(path : string) : array<float> {
 // Best-of-`reps` transcribe ms for one loaded model, from a warmed JIT + live jobque. `text`
 // receives the LAST rep's transcript: under fast-math a token flip is the thing that moves the
 // timing, so a run that reports only ms cannot tell a real speedup from a shorter decode.
+// `encode_ms` receives the BEST rep's encode split via the asr_prof rail (0 when the family
+// carries no encode-total bucket).
 def private measure_das(var m : AsrModel; samples : array<float>; reps : int; lang : string;
-                        var text : string&) : double {
+                        var text : string&; var encode_ms : double&) : double {
     var best = 1.0e30lf
+    encode_ms = 0.0lf
     for (_rep in range(reps)) {
         var s <- create_session(m, lang)
         var parts : array<string>
@@ -175,9 +182,24 @@ def private measure_das(var m : AsrModel; samples : array<float>; reps : int; la
             parts |> push(seg.text)
         }
         let ms = double(get_time_usec(t0)) / 1000.0lf
-        best = min(best, ms)
+        if (ms < best) {
+            best = ms
+        }
         text = join(parts, "")
         delete parts
+        delete s
+    }
+    // the encode split samples in its OWN untimed rep: every asr_prof_add site is a
+    // string-keyed table insert, so an enabled profiler inside the timed region would tax
+    // exactly the families that carry a bucket and no others
+    let ebucket = asr_encode_bucket(m)
+    if (!empty(ebucket)) {
+        set_asr_prof(true)
+        asr_prof_reset()
+        var s <- create_session(m, lang)
+        transcribe(m, s, samples) $(_seg) {}
+        encode_ms = asr_prof_ms(ebucket)
+        set_asr_prof(false)
         delete s
     }
     return best
@@ -191,9 +213,11 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
         : load_asr_model(model_path, "{spec.root}{spec.das_mmproj}"))
     var warm <- load_audio_16k_mono("{asr_corpus_dir()}{spec.buckets[0]}")
     var warm_text = ""
-    measure_das(m, warm, 1, spec.lang, warm_text)   // JIT compile + first-touch
+    var warm_enc = 0.0lf
+    measure_das(m, warm, 1, spec.lang, warm_text, warm_enc)   // JIT compile + first-touch
     delete warm
     var run = BenchRun(engine = "das", backend = "cpu", flavor = flavor_stamp("tuned"),
+        exec_fmt = asr_exec_fmt(m),
         workload = asr_workload(spec), box = box_name(), threads = threads,
         date = format_time(get_clock(), "%Y-%m-%d"), cmd = bench_cmd_line(), env = bench_env_line(),
         sha = run_capture("git rev-parse --short=9 HEAD", true), version = das_version(),
@@ -207,8 +231,9 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
         var samples <- load_audio_16k_mono("{asr_corpus_dir()}{wav}")
         let audio_s = double(length(samples)) / double(AUDIO_SAMPLE_RATE)
         var text = ""
-        let das_ms = measure_das(m, samples, reps, spec.lang, text)
-        run.tests |> insert("asr:{wav}", BenchTest(ms = das_ms, audio_s = audio_s, text = text))
+        var enc_ms = 0.0lf
+        let das_ms = measure_das(m, samples, reps, spec.lang, text, enc_ms)
+        run.tests |> insert("asr:{wav}", BenchTest(ms = das_ms, audio_s = audio_s, text = text, encode_ms = enc_ms))
         run.files |> emplace(file_identity("{asr_corpus_dir()}{wav}", "clip"))
         print("lcpp_bench --asr: {spec.display} {wav} {das_ms} ms ({audio_s} s audio)\n")
         print("  text: {text}\n")
@@ -227,7 +252,8 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
                 var samples <- load_audio_16k_mono("{asr_corpus_dir()}{wav}")
                 lib_audio += double(length(samples)) / double(AUDIO_SAMPLE_RATE)
                 var ltext = ""
-                lib_ms += measure_das(m, samples, reps, spec.lang, ltext)
+                var lenc = 0.0lf
+                lib_ms += measure_das(m, samples, reps, spec.lang, ltext, lenc)
                 run.files |> emplace(file_identity("{asr_corpus_dir()}{wav}", "clip"))
                 delete samples
             }
@@ -374,6 +400,50 @@ def private say(fmt : OutFmt; text : string) {
         print(text)
     } else {
         fwrite(fstderr(), text)
+    }
+}
+
+// --prof census: the runtime state that picks each MoE prefill arm — a fallback path names
+// itself here instead of hiding inside a slow row
+def private dispatch_census(t : Model; fmt : OutFmt) {
+    let c = t.config
+    say(fmt, "census: quant={t.quant} kquant_native={t.kquant_native} kq_repacked={t.kq_repacked} mx4_repacked={t.mx4_repacked} experts_mx4={t.experts_mx4}\n")
+    say(fmt, "census: caps kq={kernel_backend_has_kq()} kq_batch={kernel_backend_has_kq_batch()} kq_batch_groupn={kernel_backend_has_kq_batch_groupn()} rows={kernel_backend_has_rows()} mx4_rows={kernel_backend_has_mx4_rows()} grouped_prefill={get_moe_grouped_prefill()}\n")
+    // the layout-stamp provenance: 1 = disk order (reference layout — no interleave perm applied)
+    say(fmt, "census: layout mr: q8={active_q8_layout_mr()} kq4={kq_active_mr(t, KqFmt.k4)} q51={active_q51_layout_mr()}\n")
+    if (c.n_expert <= 0l) {
+        say(fmt, "census: dense model, no MoE dispatch\n")
+        return
+    }
+    // mirrors the ffn_gemma4_prefill gate; ffn_moe_prefill also ANDs the mx4 per-call
+    // economics (the mx4 note below)
+    var grouped = 0l
+    var perpos = 0l
+    var inscope fmts : array<string>
+    var inscope fcnt : array<int64>
+    for (l in range64(c.n_layers)) {
+        continue if (l < c.n_layer_dense_lead)
+        let sb = moe_layer_sb_kq(t, l)
+        let kq_ok = !sb || (t.kq_repacked && kernel_backend_has_kq_batch())
+        if (t.quant == QuantMode.q8 && get_moe_grouped_prefill() && kq_ok) {
+            grouped++
+        } else {
+            perpos++
+        }
+        let key = "{fmt_at(t.we1_fmt, l)}/{fmt_at(t.we3_fmt, l)}/{fmt_at(t.we2_fmt, l)}{sb ? " sb_kq" : ""}"
+        let fi = fmts |> find_index(key)
+        if (fi < 0) {
+            fmts |> push(key)
+            fcnt |> push(1l)
+        } else {
+            fcnt[fi]++
+        }
+    }
+    var inscope fdesc <- [for (fk, fc in fmts, fcnt); "{fk} x{fc}"]
+    say(fmt, "census: moe E={c.n_expert} k={c.n_expert_used} nfe={c.n_ff_exp} expert fmts gate/up/down: {fdesc}\n")
+    say(fmt, "census: moe prefill arms: {grouped} grouped, {perpos} per-position{perpos > 0l ? " <-- UNBATCHED reference path" : ""}\n")
+    if (t.experts_mx4) {
+        say(fmt, "census: mx4 experts — a grouped layer still drops to per-position when npos*k < 8*E (per-call economics)\n")
     }
 }
 
@@ -565,6 +635,9 @@ def main() : int {
         modelArch = "{t.arch}"
         activeB = active_params_b(t)
         execFmt = model_exec_fmt(t)
+        if (cfg.prof) {
+            dispatch_census(t, fmt)
+        }
         var s <- make_run_state(c)
         for (arm in range(ab ? 2 : 1)) {
             var dtag = ""
@@ -669,6 +742,16 @@ def main() : int {
                 }
                 results |> push(st)
                 delete tps
+                if (cfg.prof) {
+                    // untimed bucket window for the pp row — reset FIRST, so the report is pure prefill
+                    forward_profile_reset()
+                    var inscope pprof <- build_prompt(plen, 998l)
+                    let ts_wall = ref_time_ticks()
+                    forward_prefill(t, s, pprof, plen, 0l)
+                    let wall_us = get_time_usec(ts_wall)
+                    say(fmt, "--- forward_profile: {st.test} (window wall {wall_us} us) ---\n")
+                    forward_profile_report()
+                }
             }
             if (ngen > 0l) {
                 forward(t, s, synth_id(0l, 999l), 0l)   // warmup — one untimed token, llama-bench's test_gen(ctx, 1)
@@ -698,7 +781,9 @@ def main() : int {
         if (!empty(cfg.ref)) {
             var refArgs <- [cfg.ref, "-m", mpath, "-ngl", "{cfg.ngl}", "-t", "{threads}"]
             if (!gpu) {
-                refArgs |> push_from(lcpp_affinity_argv(threads))
+                if (!cfg.ref_no_affinity) {
+                    refArgs |> push_from(lcpp_affinity_argv(threads))
+                }
             }
             refArgs |> push_from(["-p", "{cfg.plen}", "-n", "{cfg.ngen}", "-r", "{reps}", "-o", "json"])
             refCmd = argv_line(refArgs)

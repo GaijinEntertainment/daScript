@@ -4,6 +4,7 @@ options _cyclomatic_complexity = 0   // orchestrator passes; reshaped by the sin
 options _function_length = 0   // same
 
 require profile_common
+require dasllama/dasllama_env   // env_flag — the ALLOW_UNTUNED store escape
 require dasllama/dasllama_image   // dlim_clean + dlim_inventory — step-zero GC and the re-mint tripwire
 require llvm/daslib/llvm_tune   // [tune_policy]: the orchestrator never measures — it must never self-tune
 require daslib/clargs
@@ -52,6 +53,10 @@ struct Args {
     @clarg_name = "ref-stock"
     @clarg_doc = "stock llama-bench binary (default: env LLAMA_BENCH_STOCK)"
     ref_stock : string
+
+    @clarg_name = "ref-no-affinity"
+    @clarg_doc = "Drop --cpu-mask/--cpu-strict from reference invocations (zen2 3990X: driver-spawned pinned refs read ~18% low; solo runs show pins are worth nothing there anyway)"
+    ref_no_affinity : bool
 
     @clarg_short = "t"
     @clarg_doc = "Worker threads (default: the box profile)"
@@ -140,9 +145,9 @@ def private rig_exe_path() : string {
     if (is_apple_box()) {
         return "{RIG_EXE_OUT}/dasllama-bench.app/Contents/MacOS/dasllama-bench"
     }
-    // .exe is required because this path is STAT'd — CreateProcess appends it when spawning, stat does not
-    let ext = get_platform_name() == "windows" ? ".exe" : ""
-    return "{RIG_EXE_OUT}/dasllama-bench/dasllama-bench{ext}"
+    // daslang -exe appends `.exe` on EVERY platform (daspkg bundle_exe_path) — and this path is
+    // STAT'd, so it must be spelled out (zen4 bringup: the bare-Linux name never existed)
+    return "{RIG_EXE_OUT}/dasllama-bench/dasllama-bench.exe"
 }
 
 def private rig_build_line() : string {
@@ -241,17 +246,32 @@ def private snapshot_tune_generation(exe : string) {
     }
 }
 
-def private absorb_cell(var models : array<BenchModel>; var cell : array<BenchModel>; store, note : string) {
+def private absorb_cell(var models : array<BenchModel>; var cell : array<BenchModel>; store, note : string;
+                        var failed : array<string>&) {
+    let hw = gather_hardware()
     for (c in cell) {
         var debug_stamped = false
+        var unstamped = false
         for (r in c.runs) {
             r.source = "official"
+            // the driver's probe is the hardware truth — a child exe built before a probe fix
+            // stamps stale/empty identity (zen4 bringup: every das cell read "unknown")
+            r.hardware = hw
             debug_stamped ||= r.flavor |> starts_with("debug-jit")
+            unstamped ||= das_run_unstamped(r)
         }
         if (debug_stamped) {
             // belt + braces: the rig only spawns the released exe, but a debug-stamped row
             // must never survive into the store no matter how it arrived
             to_log(LOG_ERROR, "gen_bench_records: DROPPING debug-jit cell for {c.gguf} — debug runs are not records\n")
+            continue
+        }
+        if (unstamped && !env_flag("DASLLAMA_ALLOW_UNTUNED", false)) {
+            // the store-time arm of the tune gate: the file-level gate passes a VALID-but-stale
+            // shipped sidecar (the M4 mis-ship), the runtime then drops to fallback, and the
+            // row arrives here with an empty stamp — unnameable winners are not records
+            to_log(LOG_ERROR, "gen_bench_records: DROPPING {c.gguf} — a das run carries no tune stamp, the winners it measured under cannot be named (fix the release/manifest; DASLLAMA_ALLOW_UNTUNED=1 stores a dev row)\n")
+            failed |> push("{c.gguf} unstamped")
             continue
         }
         upsert_bench_model(models, c)
@@ -358,7 +378,7 @@ def private das_cell(file, path, be, exe : string; accel : bool; cfg : Args; thr
         return
     }
     mint_check(models_dir(), "{file} das {tag}")
-    absorb_cell(models, cell, store, note)
+    absorb_cell(models, cell, store, note, failed)
     remove(cellPath)
     to_log(LOG_INFO, "gen_bench_records: DONE {file} das {tag} ({elapsed_ms(t0)} ms)\n")
     logger_info("bench.records", "cell done", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(tag), "elapsed_ms" => JV(elapsed_ms(t0))}))
@@ -650,7 +670,7 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
         args |> push_from(["-nopo", "1"])
     }
     args |> push_from(["-t", "{threads}"])
-    if (ngl == 0) {
+    if (ngl == 0 && !cfg.ref_no_affinity) {
         args |> push_from(lcpp_affinity_argv(threads))
     }
     args |> push_from(["-p", "{cfg.plen}", "-n", "{cfg.ngen}", "-r", "{cfg.reps}", "-o", "json"])
@@ -718,7 +738,7 @@ def private asr_das_cell(spec : AsrModelSpec; cfg : Args; threads : int; cellPat
         failed |> push("{spec.display} das asr")
         return
     }
-    absorb_cell(models, cell, store, "")
+    absorb_cell(models, cell, store, "", failed)
     remove(cellPath)
     to_log(LOG_INFO, "gen_bench_records: DONE {spec.display} das asr ({elapsed_ms(t0)} ms)\n")
     logger_info("bench.records", "cell done", JV({"model" => JV(spec.display), "engine" => JV("das"), "leg" => JV("asr"), "elapsed_ms" => JV(elapsed_ms(t0))}))
@@ -753,7 +773,15 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
     let t0 = ref_time_ticks()
     to_log(LOG_INFO, "gen_bench_records: START {spec.display} ref {ref.tool}\n")
     logger_info("bench.records", "cell start", JV({"model" => JV(spec.display), "engine" => JV(asr_engine_name(ref.tool)), "leg" => JV("asr")}))
-    let model_path = "{spec.root}{spec.das_model}"
+    // cli tools time the ref's own carrier when the catalog names one (the q8_0 siblings);
+    // mtmd's handle stays its mmproj, onnx/nemo weights are venv-managed
+    let cli_tool = ref.tool == "parakeet-cli" || ref.tool == "whisper-cli"
+    let model_path = (cli_tool && !empty(ref.handle)) ? "{spec.root}{ref.handle}" : "{spec.root}{spec.das_model}"
+    // a slow reference caps its own clip ladder in the catalog; empty = the spec's
+    var inscope rbuckets := spec.buckets
+    if (!empty(ref.buckets)) {
+        rbuckets := ref.buckets
+    }
     var rr = BenchRun(
         engine = asr_engine_name(ref.tool),
         backend = "cpu",
@@ -764,12 +792,13 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
         date = date,
         source = "official",
         versions = versions,
+        exec_fmt = ref.exec_fmt,
         hardware = hw)
     var measured = 0
     if (ref.tool == "onnx" || ref.tool == "nemo") {
         // the onnx/nemo weights are venv-managed (the variant/HF handle in `versions` names
         // them); only the clips are local files here
-        var clips := spec.buckets
+        var clips := rbuckets
         var lib : array<string>   // the aggregate leg reads it again after the per-clip rows
         if (!empty(spec.libri_short) && ref.tool == "onnx") {
             // the dictation aggregate pairs against onnx only: one amortized process covers all
@@ -797,7 +826,7 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
                 to_log(LOG_WARNING, "gen_bench_records:   {ref.tool} output carries no BENCH rows — tail: {dtail}\n")
             }
         }
-        for (wav in spec.buckets) {
+        for (wav in rbuckets) {
             var audio_s = -1.0lf
             let ms = parse_bench_best(out, wav, audio_s)
             if (ms > 0.0lf) {
@@ -836,18 +865,21 @@ def private asr_ref_pass(spec : AsrModelSpec; ref : AsrRef; versions : string; c
         if (ref.tool == "mtmd") {
             rr.files |> emplace(file_identity("{spec.root}{ref.handle}", "mmproj"))
         }
-        for (wav in spec.buckets) {
+        for (wav in rbuckets) {
             let wav_path = "{asr_corpus_dir()}{wav}"
             to_log(LOG_INFO, "gen_bench_records:   {ref.tool} {wav} ({cfg.asr_reps} rep(s))...\n")
             var cmd = ""
+            var enc_ms = 0.0lf
+            var rtext = ""
             let ms = (ref.tool == "mtmd"
-                ? run_asr_mtmd(model_path, "{spec.root}{ref.handle}", wav_path, threads, cfg.asr_reps, cmd)
+                ? run_asr_mtmd(model_path, "{spec.root}{ref.handle}", wav_path, threads, cfg.asr_reps, cmd, enc_ms, rtext)
                 : run_asr_cli(ref.tool, model_path, wav_path, threads, cfg.asr_reps, cmd))
             rr.cmd = cmd   // last clip's line; they differ only in -f
             if (ms > 0.0lf) {
                 to_log(LOG_INFO, "gen_bench_records:   {ref.tool} {wav} = {ms:.0f} ms\n")
                 // audio seconds live on the das cell's matching test key; cli tools don't report it
-                rr.tests |> insert("asr:{wav}", BenchTest(ms = ms))
+                // (mtmd is the one ref that stores its transcript — parity must be readable, not hoped)
+                rr.tests |> insert("asr:{wav}", BenchTest(ms = ms, encode_ms = enc_ms, text = rtext))
                 rr.files |> emplace(file_identity(wav_path, "clip"))
                 measured++
             } else {
@@ -1054,19 +1086,25 @@ def main : int {
         if (legMetal) {
             settle_das(cfg)
             das_cell(file, path, "metal", exe, false, cfg, threads, cellPath, ent.note, store, models, failed)
-            settle(cfg)
+            // the ref gets COOL-SLOT entry too: it is not insensitive on high-power parts —
+            // zen2 35B read pp 81.7 twelve seconds behind a das cell vs 103.9 solo-cooled
+            settle_das(cfg)
             ref_pass(file, path, refStock, "stock", 99, false, cfg, threads, hw, box, date, ent.note, store, models, failed)
         }
         if (legNeon) {
             settle_das(cfg)
             das_cell(file, path, "cpu", exe, false, cfg, threads, cellPath, ent.note, store, models, failed)
-            settle(cfg)
+            // the ref gets COOL-SLOT entry too: it is not insensitive on high-power parts —
+            // zen2 35B read pp 81.7 twelve seconds behind a das cell vs 103.9 solo-cooled
+            settle_das(cfg)
             ref_pass(file, path, refClean, "clean-cpu", 0, false, cfg, threads, hw, box, date, ent.note, store, models, failed)
         }
         if (legAmx) {
             settle_das(cfg)
             das_cell(file, path, "cpu", exe, true, cfg, threads, cellPath, ent.note, store, models, failed)
-            settle(cfg)
+            // the ref gets COOL-SLOT entry too: it is not insensitive on high-power parts —
+            // zen2 35B read pp 81.7 twelve seconds behind a das cell vs 103.9 solo-cooled
+            settle_das(cfg)
             ref_pass(file, path, refStock, "stock", 0, true, cfg, threads, hw, box, date, ent.note, store, models, failed)
         }
     }

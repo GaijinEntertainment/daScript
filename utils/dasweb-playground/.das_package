@@ -1,0 +1,19 @@
+options gen2
+
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("dasweb-playground")
+    package_description("daslang.io playground backend: content-addressed sample store + share links over dasHV + SQLite")
+}
+
+[export]
+def release() {
+    release_main("main.das")
+    release_name("dasweb-playground")
+    release_include_if_missing("dasweb-playground.toml") // initialize once; preserve deployed edits on upgrades
+    release_include_from("utils/watchdog/watchdog.py")
+    release_include_if_missing("watchdog.json")          // carries the port too — an operator edit must survive upgrades
+    release_include("admin.das")                         // operator curation CLI; run with a daslang SDK on the box
+}

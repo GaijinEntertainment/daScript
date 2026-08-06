@@ -1252,12 +1252,12 @@ def apply_box_profile_runtime(path : string = "") {
         select_batch_backend(bbe)
         to_log(LOG_INFO, "dasLLAMA: box profile runtime: batch_backend = {active_batch_backend()} (profile pin '{bbe}')\n")
     }
-    // "threads" is advisory — the worker count is fixed at jobque creation, controlled by the
-    // DAS_JOBQUE_THREADS env (see tune_for_this_box.md); a profile can only recommend it. No live
-    // comparison here: get_dispatch_lanes() throws outside a job queue, and load_model may run there.
+    // "threads" is a receipt, not a knob: total lanes (workers + computing main) at mint time.
+    // The pool sizes itself (cores-1 workers + main); DAS_JOBQUE_THREADS is a manual override
+    // only — never advise setting it. No live compare: get_dispatch_lanes() throws outside a que.
     let adv = read_json_field(rt, "threads", -1l)
     if (adv > 0l) {
-        to_log(LOG_INFO, "dasLLAMA: box profile advises threads = {adv} — ensure DAS_JOBQUE_THREADS={adv}\n")
+        to_log(LOG_INFO, "dasLLAMA: box profile minted at {adv} total lanes\n")
     }
 }
 
@@ -3006,7 +3006,9 @@ def mm_at_q51_groupn(var y : array<float>; t : Model; offs : array<int64>; nregi
 }
 
 def mm_b_q51_pre(var y : array<float>; t : Model; woff : int64; xqb : array<int8>; xsb : array<float>; n, d, npos : int64) {
+    let ts_gemm = ref_time_ticks()
     matmul_q51q8_batch(y, t.q51q, t.q51s, woff, xqb, xsb, n, d, npos)
+    prof_add("mm_gemm", ts_gemm)
 }
 
 def mm_b_q51_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
@@ -3137,6 +3139,7 @@ def mm_b_kq_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs : array<in
 // mm_b_q8_pre). Callers guard with kq_repacked && kernel_backend_has_kq_batch() — the prefill
 // gate routes kq-expert layers to the per-position reference path otherwise.
 def mm_b_kq_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d, ntok : int64) {
+    let ts_gemm = ref_time_ticks()
     if (fmt == KqFmt.k4) {
         matmul_kq_batch(4, y, t.k4q, t.k4s, woff, xq, xs, xbs, n, d, ntok)
     } elif (fmt == KqFmt.k5) {
@@ -3148,6 +3151,7 @@ def mm_b_kq_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq :
     } else {
         panic("mm_b_kq_pre: '{fmt}' has no kq plane pair")
     }
+    prof_add("mm_gemm", ts_gemm)
 }
 
 def kq_plane_q(t : Model; fmt : KqFmt; woff : int64) : uint8 const? {
@@ -4276,6 +4280,7 @@ def forward_profile_report() {
         to_log(LOG_INFO, "  {k}: {v} ({100l * v / max(total, 1l)}%) | disp {dd} | chunks {cc} | inline {ii}\n")
     }
     to_log(LOG_INFO, "  TOTAL: {total}\n")
+    g_forward_prof_on = false   // disarm: a timed row after the window must not pay the prof_add tax
 }
 
 //! Greedy argmax over the current logits; returns the winning token id.
@@ -4689,9 +4694,13 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
         for (l in range64(c.n_layers)) {
             trace_marker("layer", int(l))   // nolint:PERF026 — gated on g_trace_tags; the name->id table lookup is the trace's own cost
             trace_tag(TRACE_TAG_ATTN_STD)   // per-lane trace: color the prefill attention section
+            let ts_blk_attn = ref_time_ticks()
             t.blocks.attn_prefill(t, s, l, npos, start_pos)
+            prof_add("blk_attn", ts_blk_attn)   // coarse per-side cover; NESTS over the fine buckets, so TOTAL double-counts these spans
             trace_tag(TRACE_TAG_FFN_STD)
+            let ts_blk_ffn = ref_time_ticks()
             t.blocks.ffn_prefill(t, s, l, npos)
+            prof_add("blk_ffn", ts_blk_ffn)
         }
     }
 

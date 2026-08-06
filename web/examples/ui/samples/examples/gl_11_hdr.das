@@ -408,7 +408,7 @@ def draw_fullscreen {
 }
 
 [export]
-def update : bool {
+def update : bool {  // nolint:STYLE038 -- one frame: passes are FBO-bind-ordered, splitting hides the sequence
     time += 1.0 / 60.0
     let t = time
     var display_w, display_h : int
@@ -417,10 +417,10 @@ def update : bool {
     // camera orbits the swarm with a gentle vertical sway; scene projection uses the
     // fixed HDR aspect since the scene renders into the HDR_W x HDR_H target.
     let camera_angle = t * 0.3
-    let camera_r = 14.0
+    let camera_r = 15.0
     let cam_pos = float3(camera_r * cos(camera_angle), sin(camera_angle * 2.0) * 2.0, camera_r * sin(camera_angle))
     u_view = look_at_rh(cam_pos, float3(0, 0, 0), float3(0, 1, 0))
-    u_proj = perspective_rh_opengl(60.0 * PI / 180.0, float(HDR_W) / float(HDR_H), 0.1, 60.0)
+    u_proj = perspective_rh_minus1_to_1(60.0 * PI / 180.0, float(HDR_W) / float(HDR_H), 0.1, 60.0)
     u_cam_pos = cam_pos
     u_time = t
 

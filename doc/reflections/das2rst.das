@@ -96,6 +96,7 @@ require daslib/generic_return
 // require daslib/heartbeat                     // qmacro(heartbeat()) conflicts when used in das2rst context
 require daslib/lint
 require daslib/logger
+require daslib/sha_256
 // require daslib/lint_everything               // global_lint_macro causes lint errors in other modules
 require daslib/profiler
 require daslib/profiler_boost
@@ -268,7 +269,7 @@ def document_module_dashv(_root : string) {
         group_by_regex("HTTP server configuration", mod, %regex~(STATIC|allow_cors|set_document_root|set_home_page|set_index_of|set_error_page)$%%),
         group_by_regex("HTTP response helpers", mod, %regex~(TEXT_PLAIN|JSON|REDIRECT|SERVE_FILE|DATA|set_header|set_content_type)$%%),
         group_by_regex("HTTP client requests", mod, %regex~(request|request_cb|status_message)$%%),
-        group_by_regex("Message and header access", mod, %regex~(get_header|each_header|.*content_length)$%%),
+        group_by_regex("Message and header access", mod, %regex~(get_header|each_header|client_ip|.*content_length)$%%),
         group_by_regex("Request configuration", mod, %regex~(set_basic_auth|set_bearer_token_auth|set_timeout|set_connect_timeout|allow_redirect|set_param|get_param|each_param)$%%),
         group_by_regex("Cookies", mod, %regex~(add_cookie|get_cookie|each_cookie)$%%),
         group_by_regex("Form data", mod, %regex~(set_form_data|set_form_file|get_form_data|each_form_field|save_form_file|set_url_encoded|get_url_encoded)$%%),
@@ -1340,6 +1341,15 @@ def document_module_logger(_root : string) {
     document("Structured JSON Lines logger", mod, "logger.rst", groups)
 }
 
+def document_module_sha_256(_root : string) {
+    var mod = find_module("sha_256")
+    var groups <- array<DocGroup>(
+        group_by_regex("One-shot hashing", mod, %regex~.*(sha256_hex|sha256_file_hex)$%%),
+        group_by_regex("Streaming", mod, %regex~.*(sha256_init|sha256_update|sha256_final|sha256_hex_digest)$%%)
+    )
+    document("SHA-256", mod, "sha_256.rst", groups)
+}
+
 def document_module_lint_everything(_root : string) {
     var mod = find_module("lint_everything")
     var groups <- array<DocGroup>(
@@ -1915,6 +1925,7 @@ def main {  // nolint:STYLE038 — flat one-call-per-documented-module dispatch 
     document_module_lint_config(root)
     document_module_toml(root)
     document_module_logger(root)
+    document_module_sha_256(root)
     // document_module_lint_everything(root)       // global_lint_macro causes lint errors in other modules
     // document_module_live(root)                  // uses multiple_contexts
     document_module_lpipe(root)

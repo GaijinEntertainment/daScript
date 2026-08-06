@@ -237,6 +237,10 @@ struct public MarkdownViewState {
     hovered_inline_node : int = -1
     hovered_fragment : int = -1
     hovered_display_byte : int = -1
+    // previous frame's hover, carried across the begin/end pair
+    hover_before_inline_node : int = -1
+    hover_before_fragment : int = -1
+    hover_before_display_byte : int = -1
     selection_revision : int = 0
     selection_commit_revision : int = 0
     selection_copy_revision : int = 0
@@ -292,7 +296,7 @@ def private clear_node_cache(var entry : MarkdownNodeViewCache) {
     delete entry.content.runs
     delete entry.layout.lines
     delete entry.layout.fragments
-    entry = MarkdownNodeViewCache()
+    entry = MarkdownNodeViewCache() // nolint:PERF030 (owned fields deleted above; the move target is already empty)
 }
 
 def private clear_selection(var state : MarkdownViewState) {
@@ -408,6 +412,51 @@ def public markdown_view_selection_focus_screen_y(
         return (valid = true, y = state.selection_screen_bounds.y)
     }
     return (valid = false, y = 0.0f)
+}
+
+def public markdown_view_source_line(state : MarkdownViewState const;
+                                     source_byte : int) : tuple<valid : bool; y : float; height : float> {
+    //! READ-ONLY source byte -> rendered line (screen top + height); never
+    //! touches selection — even a zero-width one paints spans, since the
+    //! anchor/focus flavors land on different runs around unrendered syntax.
+    let position = source_byte_position(state, source_byte, false)
+    if (!position.valid || position.inline_node < 0
+            || position.inline_node >= length(state.nodes)) {
+        return (valid = false, y = 0.0f, height = 0.0f)
+    }
+    let entry & = unsafe(state.nodes[position.inline_node])
+    return (valid = false, y = 0.0f, height = 0.0f) if (!entry.layout_valid)
+    var line_y = entry.screen_origin.y
+    var line_height = GetTextLineHeight()
+    for (line in entry.layout.lines) {
+        // line ranges are [start, end) - a wrap-boundary byte belongs to the
+        // NEXT visual row; the paragraph-final byte stays on the last row
+        if (position.display_byte >= line.source.start_byte) {
+            line_y = entry.screen_origin.y + line.y
+            line_height = max(line.height, 1.0f)
+            break if (position.display_byte < line.source.end_byte)
+        }
+    }
+    return (valid = true, y = line_y, height = line_height)
+}
+
+def public markdown_view_source_line_tint(state : MarkdownViewState const;
+                                          source_byte : int;
+                                          color : float4) : tuple<valid : bool; y : float> {
+    //! Tint the rendered line holding `source_byte` (current-line style) —
+    //! the caret-follow indication; a pure overlay, no selection involved.
+    let line = markdown_view_source_line(state, source_byte)
+    return (valid = false, y = 0.0f) if (!line.valid)
+    let window_pos = GetWindowPos()
+    let window_size = GetWindowSize()
+    if (line.y + line.height >= window_pos.y
+            && line.y <= window_pos.y + window_size.y) {
+        var dl = GetWindowDrawList()
+        *dl |> AddRectFilled(float2(window_pos.x, line.y),
+            float2(window_pos.x + window_size.x, line.y + line.height),
+            GetColorU32(color))
+    }
+    return (valid = true, y = line.y)
 }
 
 def public markdown_view_expand_for_byte(var state : MarkdownViewState;
@@ -677,7 +726,7 @@ def public markdown_view_dispose(var state : MarkdownViewState) {
     unsafe { delete state.nodes }
     delete state.image_bindings
     markdown_view_clear_syntax(state)
-    state = MarkdownViewState()
+    state = MarkdownViewState() // nolint:PERF030 (owned fields deleted above; the move target is already empty)
 }
 
 def private retain_image_bindings(var state : MarkdownViewState;
@@ -860,6 +909,103 @@ def public markdown_cached_fragment_rect(entry : MarkdownNodeViewCache const;
         entry.screen_origin.y + fragment.rect.y,
         entry.screen_origin.x + fragment.rect.z + dx,
         entry.screen_origin.y + fragment.rect.w)
+}
+
+def private node_screen_bottom(doc : RichDocument const;
+                               state : MarkdownViewState const;
+                               node_index : int) : float {
+    // lowest stamped screen bottom in the subtree; -1 = nothing stamped
+    var bottom = -1.0f
+    let cache & = unsafe(state.nodes[node_index])
+    if (cache.screen_revision == state.render_revision) {
+        bottom = cache.screen_origin.y + cache.layout.size.y
+    }
+    var child = doc.nodes[node_index].first_child
+    while (child >= 0) {
+        bottom = max(bottom, node_screen_bottom(doc, state, child))
+        child = doc.nodes[child].next_sibling
+    }
+    return bottom
+}
+
+def public markdown_view_node_band(doc : RichDocument const;
+                                   state : MarkdownViewState const;
+                                   node_index : int) : float2 {
+    //! (top, bottom) of a top-level block's rendered extent this frame;
+    //! (-1,-1) when nothing in its subtree was stamped.
+    return float2(-1.0f, -1.0f) if (node_index < 0
+        || node_index >= length(doc.nodes)
+        || length(state.nodes) < length(doc.nodes))
+    let bottom = node_screen_bottom(doc, state, node_index)
+    return float2(-1.0f, -1.0f) if (bottom < 0.0f)
+    return float2(node_screen_top(doc, state, node_index), bottom)
+}
+
+def private node_screen_top(doc : RichDocument const;
+                            state : MarkdownViewState const;
+                            node_index : int) : float {
+    var top = 3.0e38f
+    let cache & = unsafe(state.nodes[node_index])
+    if (cache.screen_revision == state.render_revision) {
+        top = cache.screen_origin.y
+    }
+    var child = doc.nodes[node_index].first_child
+    while (child >= 0) {
+        top = min(top, node_screen_top(doc, state, child))
+        child = doc.nodes[child].next_sibling
+    }
+    return top
+}
+
+def public markdown_view_node_above(doc : RichDocument const;
+                                    state : MarkdownViewState const;
+                                    screen_y : float) : int {
+    //! The top-level block whose rendered extent ends nearest ABOVE screen_y
+    //! — the anchor for clicks in the spacing gap between blocks. -1 = none.
+    return -1 if (doc.root < 0 || length(state.nodes) < length(doc.nodes))
+    var best = -1
+    var best_bottom = -1.0f
+    var child = doc.nodes[doc.root].first_child
+    while (child >= 0) {
+        let bottom = node_screen_bottom(doc, state, child)
+        if (bottom >= 0.0f && bottom <= screen_y && bottom > best_bottom) {
+            best = child
+            best_bottom = bottom
+        }
+        child = doc.nodes[child].next_sibling
+    }
+    return best
+}
+
+def private nearest_line_point(entry : MarkdownNodeViewCache const;
+                               local : float2) : float2 {
+    // nearest-fragment clamp; rects are UNALIGNED layout coords - unshift the probe by each line's alignment offset
+    let layout & = unsafe(entry.layout)
+    var best = float2(-1.0f, -1.0f)
+    var best_cost = 3.0e38f
+    for (line_index in range(length(layout.lines))) {
+        let line = layout.lines[line_index]
+        continue if (line.fragment_count <= 0)
+        let lx = local.x - markdown_line_alignment_offset(entry, line_index)
+        let line_bottom = line.y + line.height
+        let y_cost = (local.y < line.y ? line.y - local.y
+            : (local.y > line_bottom ? local.y - line_bottom : 0.0f))
+        for (index in range(line.first_fragment,
+                line.first_fragment + line.fragment_count)) {
+            let fragment = layout.fragments[index]
+            continue if (fragment.is_control)
+            let x_cost = (lx < fragment.rect.x ? fragment.rect.x - lx
+                : (lx > fragment.rect.z ? lx - fragment.rect.z : 0.0f))
+            let cost = y_cost * 1000.0f + x_cost
+            if (cost < best_cost) {
+                best_cost = cost
+                best = float2(
+                    clamp(lx, fragment.rect.x, fragment.rect.z - 0.5f),
+                    clamp(local.y, fragment.rect.y + 0.5f, fragment.rect.w - 0.5f))
+            }
+        }
+    }
+    return best
 }
 
 def public markdown_cached_fragment_font_size(entry : MarkdownNodeViewCache const;
@@ -1258,7 +1404,7 @@ def private ensure_layout(doc : RichDocument const; node_index : int; // nolint:
     state.layout_misses++
 }
 
-def private render_inline(doc : RichDocument const; node_index : int; // nolint:STYLE037
+def private render_inline(doc : RichDocument const; node_index : int; // nolint:STYLE037,STYLE038 — the one-pass inline layout/draw core; state threads through every span, a split re-plumbs it all
                           var state : MarkdownViewState; max_width : float;
                           var style : MarkdownViewStyle;
                           font_scale : float; forced_style : int;
@@ -1321,18 +1467,21 @@ def private render_inline(doc : RichDocument const; node_index : int; // nolint:
     var hovered = -1
     var hovered_fragment_index = -1
     var hovered_image_control = false
-    for (fragment_index in range(length(layout.fragments))) {
-        let fragment = layout.fragments[fragment_index]
-        let rect = markdown_cached_fragment_rect(cache, fragment)
-        if (!fragment.is_control && IsMouseHoveringRect(
-                float2(rect.x, rect.y), float2(rect.z, rect.w), true)) {
-            hovered_fragment_index = fragment_index
-        }
-        if (fragment.semantic_id >= 0 && IsMouseHoveringRect(
-                float2(rect.x, rect.y), float2(rect.z, rect.w), true)) {
-            hovered = fragment.semantic_id
-            hovered_image_control = (fragment.is_control
-                && fragment.control_kind == CONTROL_IMAGE_PLACEHOLDER)
+    // drawlist hit rects bypass ImGui's arbitration: the WINDOW gate stops menu/popup click-through
+    if (IsWindowHovered(ImGuiHoveredFlags.None)) {
+        for (fragment_index in range(length(layout.fragments))) {
+            let fragment = layout.fragments[fragment_index]
+            let rect = markdown_cached_fragment_rect(cache, fragment)
+            if (!fragment.is_control && IsMouseHoveringRect(
+                    float2(rect.x, rect.y), float2(rect.z, rect.w), true)) {
+                hovered_fragment_index = fragment_index
+            }
+            if (fragment.semantic_id >= 0 && IsMouseHoveringRect(
+                    float2(rect.x, rect.y), float2(rect.z, rect.w), true)) {
+                hovered = fragment.semantic_id
+                hovered_image_control = (fragment.is_control
+                    && fragment.control_kind == CONTROL_IMAGE_PLACEHOLDER)
+            }
         }
     }
 
@@ -1342,13 +1491,26 @@ def private render_inline(doc : RichDocument const; node_index : int; // nolint:
         state.selection_click_claimed = true
     }
 
-    var hit = TextFlowHit()
+    var probe = float2(0.0f, 0.0f)
+    var probe_valid = false
     if (hovered_fragment_index >= 0) {
         let hovered_fragment = layout.fragments[hovered_fragment_index]
         let align_x = markdown_line_alignment_offset(cache, hovered_fragment.line_index)
+        probe = GetMousePos() - origin - float2(align_x, 0.0f)
+        probe_valid = true
+    } elif (IsWindowHovered(ImGuiHoveredFlags.None)
+            && IsMouseClicked(ImGuiMouseButton.Left, false)
+            && IsMouseHoveringRect(origin,
+                origin + float2(available, max(layout.size.y, line_height)), true)) {
+        // an off-glyph CLICK inside the block lands at the nearest line caret
+        probe = nearest_line_point(cache, GetMousePos() - origin)
+        probe_valid = probe.x >= 0.0f
+    }
+    var hit = TextFlowHit()
+    if (probe_valid) {
         hit = text_flow_hit_test_ranges(content.text, layout,
-            GetMousePos() - origin - float2(align_x, 0.0f)) $(text : string;
-                                                              start_byte, end_byte, style_id : int) : float {
+            probe) $(text : string;
+                     start_byte, end_byte, style_id : int) : float {
                 var font = font_for_style(style_id, style.fonts, fallback_font)
                 let styled_size = font_size_for_style(
                     font_size, key.inline_code_scale, style_id)
@@ -1484,6 +1646,7 @@ def private render_inline(doc : RichDocument const; node_index : int; // nolint:
                 include_selection_screen_rect(state, line_rect)
                 state.selection_paint_rect_count++
                 if (IsMouseReleased(ImGuiMouseButton.Right)
+                        && IsWindowHovered(ImGuiHoveredFlags.None)
                         && IsMouseHoveringRect(
                             float2(line_rect.x, line_rect.y),
                             float2(line_rect.z, line_rect.w), true)) {
@@ -1680,21 +1843,20 @@ def private render_children(doc : RichDocument const; node_index : int;
     }
 }
 
-def private render_list(doc : RichDocument const; node_index : int; // nolint:STYLE038
-                        var state : MarkdownViewState;
-                        var style : MarkdownViewStyle;
-                        var result : MarkdownViewResult) {
-    let list = doc.nodes[node_index]
-    var item = list.first_child
-    var ordinal = list.start_number > 0 ? list.start_number : 1
-    while (item >= 0) {
-        let node = doc.nodes[item]
-        var cache & = unsafe(state.nodes[item])
-        if (!cache.marker_valid) {
-            cache.marker = list.kind == RichNodeKind.ordered_list ? "{ordinal}." : "•"
-            cache.marker_valid = true
-        }
-        cache.control_screen_valid = false
+def private render_list_item_head(doc : RichDocument const; ordered : bool;
+                                  item, ordinal : int;
+                                  var state : MarkdownViewState;
+                                  var style : MarkdownViewStyle;
+                                  var result : MarkdownViewResult) {
+    // marker (or task checkbox) + the tight-list direct-inline run
+    let node = doc.nodes[item]
+    var cache & = unsafe(state.nodes[item])
+    if (!cache.marker_valid) {
+        cache.marker = ordered ? "{ordinal}." : "•"
+        cache.marker_valid = true
+    }
+    cache.control_screen_valid = false
+    {
         if (node.is_task) {
             let marker_pos = GetCursorScreenPos()
             // Reserve one state-independent square and draw both states ourselves, so toggling can never reflow.
@@ -1757,15 +1919,35 @@ def private render_list(doc : RichDocument const; node_index : int; // nolint:ST
                           style, 1.0f, 0, RichAlignment.default_, result, true)
             block_spacing(style, style.paragraph_spacing)
         }
-        var child = node.first_child
-        while (child >= 0) {
-            let kind = doc.nodes[child].kind
-            if (!md_node_kind_is_inline(kind)) {
-                render_block(doc, child, state, style, result)
-            }
-            child = doc.nodes[child].next_sibling
+    }
+}
+
+def private render_list_item(doc : RichDocument const; ordered : bool;
+                             item, ordinal : int;
+                             var state : MarkdownViewState;
+                             var style : MarkdownViewStyle;
+                             var result : MarkdownViewResult) {
+    render_list_item_head(doc, ordered, item, ordinal, state, style, result)
+    var child = doc.nodes[item].first_child
+    while (child >= 0) {
+        if (!md_node_kind_is_inline(doc.nodes[child].kind)) {
+            render_block(doc, child, state, style, result)
         }
-        item = node.next_sibling
+        child = doc.nodes[child].next_sibling
+    }
+}
+
+def private render_list(doc : RichDocument const; node_index : int;
+                        var state : MarkdownViewState;
+                        var style : MarkdownViewStyle;
+                        var result : MarkdownViewResult) {
+    let list = doc.nodes[node_index]
+    let ordered = list.kind == RichNodeKind.ordered_list
+    var item = list.first_child
+    var ordinal = list.start_number > 0 ? list.start_number : 1
+    while (item >= 0) {
+        render_list_item(doc, ordered, item, ordinal, state, style, result)
+        item = doc.nodes[item].next_sibling
         ordinal++
     }
     block_spacing(style, list.is_tight ? 2.0f : style.block_spacing)
@@ -1991,6 +2173,149 @@ def private render_block(doc : RichDocument const; node_index : int;
     }
 }
 
+def private chain_child_toward(doc : RichDocument const;
+                               ancestor, descendant : int) : int {
+    // the child of `ancestor` on the parent chain to `descendant`; -1 if none
+    return -1 if (descendant < 0 || descendant == ancestor)
+    var node = descendant
+    while (node >= 0 && doc.nodes[node].parent != ancestor) {
+        node = doc.nodes[node].parent
+    }
+    return node
+}
+
+def private render_children_partial(doc : RichDocument const;
+                                    parent, exclude : int;
+                                    var state : MarkdownViewState;
+                                    var style : MarkdownViewStyle;
+                                    var result : MarkdownViewResult;
+                                    before : bool; blocks_only : bool = false) {
+    let chain = chain_child_toward(doc, parent, exclude)
+    var child = doc.nodes[parent].first_child
+    var past_chain = false
+    while (child >= 0) {
+        let skip = (blocks_only
+            && md_node_kind_is_inline(doc.nodes[child].kind))
+        if (child == chain) {
+            if (before) {
+                if (!skip) {
+                    render_block_partial(doc, child, exclude, state, style,
+                        result, true)
+                }
+                break
+            }
+            if (!skip) {
+                render_block_partial(doc, child, exclude, state, style,
+                    result, false)
+            }
+            past_chain = true
+        } elif (!skip && (before || past_chain)) {
+            render_block(doc, child, state, style, result)
+        }
+        child = doc.nodes[child].next_sibling
+    }
+}
+
+def private render_list_partial(doc : RichDocument const;
+                                list_index, chain, exclude : int;
+                                var state : MarkdownViewState;
+                                var style : MarkdownViewStyle;
+                                var result : MarkdownViewResult; before : bool) {
+    let list = doc.nodes[list_index]
+    let ordered = list.kind == RichNodeKind.ordered_list
+    var item = list.first_child
+    var ordinal = list.start_number > 0 ? list.start_number : 1
+    var past_chain = false
+    while (item >= 0) {
+        if (item == chain) {
+            // deeper exclude keeps the item's marker + inline head on BEFORE
+            if (before) {
+                if (exclude != chain) {
+                    render_list_item_head(doc, ordered, item, ordinal,
+                        state, style, result)
+                    render_children_partial(doc, item, exclude, state, style,
+                        result, true, true)
+                }
+                break
+            }
+            if (exclude != chain) {
+                render_children_partial(doc, item, exclude, state, style,
+                    result, false, true)
+            }
+            past_chain = true
+        } elif (before || past_chain) {
+            render_list_item(doc, ordered, item, ordinal, state, style, result)
+        }
+        item = doc.nodes[item].next_sibling
+        ordinal++
+    }
+    if (!before) {
+        block_spacing(style, list.is_tight ? 2.0f : style.block_spacing)
+    }
+}
+
+def private render_block_partial(doc : RichDocument const;
+                                 node_index, exclude : int;
+                                 var state : MarkdownViewState;
+                                 var style : MarkdownViewStyle;
+                                 var result : MarkdownViewResult;
+                                 before : bool) {
+    return if (node_index < 0 || node_index >= length(doc.nodes)
+        || node_index == exclude)
+    let node = doc.nodes[node_index]
+    let chain = chain_child_toward(doc, node_index, exclude)
+    if (chain < 0) {
+        // exclude is not inside this subtree: render it whole
+        render_block(doc, node_index, state, style, result)
+        return
+    }
+    if (node.kind == RichNodeKind.quote) {
+        let p0 = GetCursorScreenPos()
+        let indent = zoomed(style, style.quote_indent)
+        Indent(indent)
+        render_children_partial(doc, node_index, exclude, state, style,
+            result, before)
+        Unindent(indent)
+        let p1 = GetCursorScreenPos()
+        if (p1.y > p0.y) {
+            var dl = GetWindowDrawList()
+            let bar_x = zoomed(style, 3.0f)
+            *dl |> AddLine(p0 + float2(bar_x, 0.0f),
+                           float2(p0.x + bar_x, p1.y),
+                           GetColorU32(style.quote_color), zoomed(style, 2.0f))
+        }
+    } elif (node.kind == RichNodeKind.unordered_list
+            || node.kind == RichNodeKind.ordered_list) {
+        render_list_partial(doc, node_index, chain, exclude, state, style,
+            result, before)
+    } else {
+        // document + defensive default: split by children, no extra chrome
+        render_children_partial(doc, node_index, exclude, state, style,
+            result, before, node.kind == RichNodeKind.list_item)
+    }
+}
+
+def public markdown_view_block_before(doc : RichDocument const;
+                                      top_node, exclude_node : int;
+                                      var state : MarkdownViewState;
+                                      var style : MarkdownViewStyle;
+                                      var result : MarkdownViewResult) {
+    //! Render the part of top_node's subtree strictly BEFORE exclude_node in
+    //! source order: whole siblings, partial quote/list ancestors. When
+    //! exclude_node == top_node nothing renders. Call between begin/end.
+    render_block_partial(doc, top_node, exclude_node, state, style, result, true)
+}
+
+def public markdown_view_block_after(doc : RichDocument const;
+                                     top_node, exclude_node : int;
+                                     var state : MarkdownViewState;
+                                     var style : MarkdownViewStyle;
+                                     var result : MarkdownViewResult) {
+    //! Mirror of `markdown_view_block_before`: the part strictly AFTER
+    //! exclude_node, including the ancestors' trailing spacing.
+    render_block_partial(doc, top_node, exclude_node, state, style, result, false)
+}
+
 [unused_argument(doc)]
 def private finish_selection(doc : RichDocument const;
                              var state : MarkdownViewState;
@@ -2054,15 +2379,17 @@ def public markdown_selection_export(state : MarkdownViewState const) : MdSelect
     return <- result
 }
 
-def public markdown_view(id : string; doc : RichDocument const; // nolint:STYLE038
-                         var state : MarkdownViewState;
-                         var style : MarkdownViewStyle;
-                         document_revision : int = 0) : MarkdownViewResult {
-    var result = MarkdownViewResult()
+def public markdown_view_begin(id : string; doc : RichDocument const;
+                               var state : MarkdownViewState;
+                               var style : MarkdownViewStyle;
+                               document_revision : int = 0) : bool {
+    //! First half of `markdown_view`. True: render via the top_blocks /
+    //! block_before/after calls, then ALWAYS `markdown_view_end`. False:
+    //! invalid doc, error text drawn, nothing pushed - skip render and end.
     if (!doc.ok || doc.root < 0) {
         TextColored(float4(1.0f, 0.35f, 0.35f, 1.0f),
                     empty(doc.error) ? "Invalid Markdown document" : doc.error)
-        return <- result
+        return false
     }
     prepare_view_state(doc, state, document_revision)
     state.render_revision++
@@ -2071,9 +2398,9 @@ def public markdown_view(id : string; doc : RichDocument const; // nolint:STYLE0
     state.viewport_top = GetWindowPos().y + GetFrameHeight()
     state.viewport_bottom = (GetWindowPos().y + GetWindowSize().y
         - GetStyle().WindowPadding.y)
-    let old_hovered_inline_node = state.hovered_inline_node
-    let old_hovered_fragment = state.hovered_fragment
-    let old_hovered_display_byte = state.hovered_display_byte
+    state.hover_before_inline_node = state.hovered_inline_node
+    state.hover_before_fragment = state.hovered_fragment
+    state.hover_before_display_byte = state.hovered_display_byte
     state.hovered_inline_node = -1
     state.hovered_fragment = -1
     state.hovered_display_byte = -1
@@ -2091,15 +2418,41 @@ def public markdown_view(id : string; doc : RichDocument const; // nolint:STYLE0
         state.selection_dragged = true
     }
     navigate_selection_keyboard(state, style)
-    var pushed_font = false
     if (style.fonts.regular != null) {
         let size = (style.fonts.size_px > 0.0f
             ? style.fonts.size_px : GetFontSize()) * view_zoom(style)
         PushFont(style.fonts.regular, size)
-        pushed_font = true
     }
     PushID(id)
-    render_block(doc, doc.root, state, style, result)
+    return true
+}
+
+def public markdown_view_top_blocks(doc : RichDocument const;
+                                    var state : MarkdownViewState;
+                                    var style : MarkdownViewStyle;
+                                    var result : MarkdownViewResult;
+                                    first_ordinal : int; last_ordinal : int = -1) {
+    //! Render root's top-level blocks with ordinals in [first..last] (inclusive;
+    //! last = -1 renders to the end). Call between begin/end.
+    return if (doc.root < 0)
+    var child = doc.nodes[doc.root].first_child
+    var ordinal = 0
+    while (child >= 0) {
+        break if (last_ordinal >= 0 && ordinal > last_ordinal)
+        if (ordinal >= first_ordinal) {
+            render_block(doc, child, state, style, result)
+        }
+        child = doc.nodes[child].next_sibling
+        ordinal++
+    }
+}
+
+def public markdown_view_end(doc : RichDocument const;
+                             var state : MarkdownViewState;
+                             style : MarkdownViewStyle;
+                             var result : MarkdownViewResult) {
+    //! Second half of `markdown_view`: selection commit/copy/hover bookkeeping,
+    //! id+font pop. Pairs with a true `markdown_view_begin`.
     PopID()
     ensure_keyboard_caret_visible(state)
     if (IsMouseClicked(ImGuiMouseButton.Left, false)
@@ -2145,14 +2498,26 @@ def public markdown_view(id : string; doc : RichDocument const; // nolint:STYLE0
             clipboard_dispose_content(content)
         }
     }
-    if (old_hovered_inline_node != state.hovered_inline_node
-            || old_hovered_fragment != state.hovered_fragment
-            || old_hovered_display_byte != state.hovered_display_byte) {
+    if (state.hover_before_inline_node != state.hovered_inline_node
+            || state.hover_before_fragment != state.hovered_fragment
+            || state.hover_before_display_byte != state.hovered_display_byte) {
         state.hover_revision++
     }
-    if (pushed_font) {
+    if (style.fonts.regular != null) {
         PopFont()
     }
+}
+
+def public markdown_view(id : string; doc : RichDocument const;
+                         var state : MarkdownViewState;
+                         var style : MarkdownViewStyle;
+                         document_revision : int = 0) : MarkdownViewResult {
+    var result = MarkdownViewResult()
+    if (!markdown_view_begin(id, doc, state, style, document_revision)) {
+        return <- result
+    }
+    render_block(doc, doc.root, state, style, result)
+    markdown_view_end(doc, state, style, result)
     return <- result
 }
 

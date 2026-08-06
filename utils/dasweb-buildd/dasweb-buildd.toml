@@ -1,0 +1,18 @@
+# dasweb-buildd starter config. Deployed beside the binary; edits there
+# survive upgrades (release_include_if_missing). CLI flags override these
+# unless `authoritative = true` is set.
+#
+# These are DEVELOPMENT values on purpose — the file is discovered
+# automatically beside the module. Deployed values on zen4 (real token,
+# server_url = "https://daslang.io", worktree = the wasm worktree,
+# build_cmd = "bash run_build.sh") live on the box; README.md (Run) lists them.
+port = 8111
+server_url = "http://127.0.0.1:8101"
+token = ""
+worktree = ""
+toolchain = ""
+build_cmd = ""
+scratch_dir = ""
+poll_interval_seconds = 5
+build_timeout_seconds = 600
+announce = true

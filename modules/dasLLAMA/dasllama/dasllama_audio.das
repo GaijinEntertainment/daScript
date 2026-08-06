@@ -620,9 +620,11 @@ struct AudioTower {
     mm1_out : int64 = 0l      // projector hidden width (ultravox: pre-swiglu, voxtral: pre-gelu)
     has_k_bias : bool = false // qwen3a attention carries a k bias; whisper towers don't
     fblob : PlaneF = PlaneF()
-    q8 : bool = false         // encoder GEMMs quantized: qblob/qscales carry the Q8_0 image
-    qblob : PlaneI8 = PlaneI8()   // whole-fblob-shaped Q8_0 quants (GEMM regions repacked in place)
+    q8 : bool = false         // encoder GEMMs quantized: qblob/qscales carry the COMPACT Q8_0 set
+    qblob : PlaneI8 = PlaneI8()   // dense GEMM-only Q8_0 planes (fblob keeps just the non-GEMM rest)
     qscales : PlaneF = PlaneF()   // per-32-block scales, indexed at woff/32
+    qlayers_off : int64 = 0l  // q8 layout: per-layer GEMM base/stride in the dense qblob
+    qlayer_stride : int64 = 0l
     conv1_w_off : int64
     conv1_b_off : int64
     conv2_w_off : int64
@@ -652,7 +654,7 @@ def finalize(var t : AudioTower) {
 
 // the tripwire: serialize_image_meta(AudioTower) covers 28 fields; image_map + image_bytes
 // are deliberate skips. A new non-array AudioTower field trips this until BOTH agree.
-let private TOWER_META_FIELDS = 28 + 2
+let private TOWER_META_FIELDS = 30 + 2
 
 // every non-array AudioTower field, explicitly, both directions (see dasllama_image).
 // Public: WhisperModel's serialize_image_meta reuses it for its nested `enc` tower.
@@ -686,6 +688,8 @@ def serialize_image_meta(var arch : Archive; var t : AudioTower) {
     arch |> serialize_raw(t.normpre_off)
     arch |> serialize_raw(t.normmid_off)
     arch |> serialize_raw(t.mm2_w_off)
+    arch |> serialize_raw(t.qlayers_off)
+    arch |> serialize_raw(t.qlayer_stride)
 }
 
 [unused_argument(t)]
@@ -777,6 +781,30 @@ struct LayerOffs {
 def enc_layer_offsets(t : AudioTower; l : int64) : LayerOffs {
     let d = t.d_model
     let ff = t.n_ff
+    if (t.q8) {
+        // compact q8 layout: GEMM mats dense in qblob, vectors dense in the compact fblob —
+        // field-for-field the order tower_quantize_'s walk writes
+        var og = t.qlayers_off + l * t.qlayer_stride
+        var of = t.layers_off + l * t.layer_stride
+        var q = LayerOffs()
+        q.ln1_w = of; of += d
+        q.ln1_b = of; of += d
+        q.q_w = og; og += d * d
+        q.q_b = of; of += d
+        q.k_w = og; og += d * d
+        q.k_b = of; of += d
+        q.v_w = og; og += d * d
+        q.v_b = of; of += d
+        q.o_w = og; og += d * d
+        q.o_b = of; of += d
+        q.ln2_w = of; of += d
+        q.ln2_b = of; of += d
+        q.fc1_w = og; og += ff * d
+        q.fc1_b = of; of += ff
+        q.fc2_w = og; og += d * ff
+        q.fc2_b = of; of += d
+        return q
+    }
     var o = t.layers_off + l * t.layer_stride
     var r = LayerOffs()
     r.ln1_w = o; o += d
@@ -852,10 +880,11 @@ def layernorm_batch(var out : array<float>; src : array<float>; blob : PlaneF; w
     layernorm_batch_at(out, src, plane_at(blob, w_off), plane_at(blob, b_off), dim, npos, eps)
 }
 
-//! Threaded per-row Q8_0 requant of a token-major activation image — the shared
-//! dasllama_convert requant, always thread-eligible here. Feeds matmul_q8q8_batch/group3.
+//! Per-row Q8_0 requant of a token-major activation image, through common's thresholded +
+//! profiled form (small rows stay serial; the work lands in the mm_requant bucket).
+//! Feeds matmul_q8q8_batch/group3.
 def asr_requant_rows_q8(x : array<float>; n, npos : int64; var xqb : array<int8>; var xsb : array<float>) {
-    requant_rows_q8(x, n, npos, xqb, xsb, true)
+    requant_rows_q8(x, n, npos, xqb, xsb)
 }
 
 //! y[p] += blob[b_off .. b_off+d) for every row (projection bias). float4 bulk + scalar
@@ -934,10 +963,10 @@ def mm_blob_b(var y : array<float>; blob : PlaneF; woff : int64; x : PlaneF; n, 
 
 // ===== tower Q8 rail (parakeet's v1 recipe: whole-blob Q8_0 image + per-GEMM-region repack) =====
 
-// repack one GEMM region for the active backend (scales index at woff/32 ⇒ woff must be
-// 32-aligned); a region whose contraction width is not a 32-multiple stays fp32 — tw_mm
-// falls back per call on the same condition, so plane and route can never disagree
-def private tw_repack(var qblob : array<int8>; var qscales : array<float>; woff, n, d : int64) {
+//! Repack one GEMM region for the active backend (scales index at woff/32 ⇒ woff must be
+//! 32-aligned); n%32 != 0 regions stay fp32 — the callers fall back per call on the same
+//! condition, so plane and route can never disagree.
+def tw_repack(var qblob : array<int8>; var qscales : array<float>; woff, n, d : int64) {
     if (n % 32l != 0l) {
         return
     }
@@ -958,20 +987,170 @@ def tower_quantize(var t : AudioTower; var pl : AudioTowerPlanes) {
     tower_quantize_(t, pl.fblob, pl.qblob, pl.qscales)
 }
 
-def private tower_quantize_(var t : AudioTower; fblob : array<float>; var qblob : array<int8>; var qscales : array<float>) {
-    let total = long_length(fblob) & ~31l   // GEMM regions are 32-aligned and 32-sized; a ragged blob tail can't be one
-    qblob |> resize(total)
-    qscales |> resize(total / 32l)
-    quantize_q8_0_into(fblob, total, qblob, qscales, 0l, 0l)
-    t.q8 = true
-    if (!select_matmul_backend_for_load()) {
-        return   // row-major backend reads the flat Q8_0 image as-is
+//! Copy one fp32 region into a compact blob, returning its new offset (the shared piece
+//! of the compact-q8 recipe — whisper's decoder rail walks with it too).
+def tq_keep(var nf : array<float>; fblob : array<float>; var of : int64&; off, n : int64) : int64 {
+    for (i in range64(n)) {
+        nf[of + i] = fblob[off + i]
     }
+    let r = of
+    of += n
+    return r
+}
+
+//! Quantize one GEMM region into dense q planes, returning its new (32-aligned) offset.
+def tq_quant(var qblob : array<int8>; var qscales : array<float>; fblob : array<float>; var og : int64&; off, n : int64) : int64 {
+    unsafe {
+        quantize_q8_0_into_ptr(addr(fblob[off]), n, addr(qblob[0]), addr(qscales[0]), og, og / 32l)
+    }
+    let r = og
+    og += n
+    return r
+}
+
+//! Rewrite a tower's stored offsets to the compact-q8 layout WITHOUT touching data — the
+//! streamed mint's twin of tower_quantize_'s walk (the streamed-vs-staged image cell gates
+//! that the two stay identical).
+def tower_compact_offsets(var t : AudioTower) {
     let d = t.d_model
     let ff = t.n_ff
-    tw_repack(qblob, qscales, t.conv2_w_off, 3l * d, d)
+    let has_conv = t.conv2_w_off != 0l
+    var og = 0l
+    var of = 0l
+    if (has_conv) {
+        t.conv1_w_off = of; of += d * 3l * t.n_mel
+        t.conv1_b_off = of; of += d
+        t.conv2_w_off = og; og += 3l * d * d
+        t.conv2_b_off = of; of += d
+        t.pos_off = of; of += t.n_ctx * d
+    }
+    t.qlayers_off = og
+    t.qlayer_stride = 4l * d * d + 2l * ff * d
+    og += t.n_layer * t.qlayer_stride
+    t.layers_off = of
+    t.layer_stride = 9l * d + ff
+    of += t.n_layer * t.layer_stride
+    t.lnp_w_off = of; of += d
+    t.lnp_b_off = of; of += d
+    if (t.proj_dim > 0l) {
+        let m1in = d * t.stack_factor
+        let m2in = t.proj_kind == AudioProjKind.ultravox ? t.mm1_out / 2l : t.mm1_out
+        if (t.proj_kind == AudioProjKind.qwen2a) {
+            t.proj_w_off = og; og += t.proj_dim * d
+            t.proj_b_off = of; of += t.proj_dim
+        } else {
+            if (t.proj_kind == AudioProjKind.ultravox) {
+                t.normpre_off = of; of += m1in
+            }
+            if (m1in % 32l == 0l) {
+                t.proj_w_off = og; og += t.mm1_out * m1in
+            } else {
+                t.proj_w_off = of; of += t.mm1_out * m1in
+            }
+            if (t.proj_kind == AudioProjKind.ultravox) {
+                t.normmid_off = of; of += m2in
+            }
+            if (m2in % 32l == 0l) {
+                t.mm2_w_off = og; og += t.proj_dim * m2in
+            } else {
+                t.mm2_w_off = of; of += t.proj_dim * m2in
+            }
+        }
+    }
+    t.q8 = true
+}
+
+def private tower_quantize_(var t : AudioTower; var fblob : array<float>; var qblob : array<int8>; var qscales : array<float>) { // nolint:STYLE037 — the walk mirrors enc_layer_offsets field-for-field; splitting would decouple the two orders
+    let d = t.d_model
+    let ff = t.n_ff
+    if (d % 32l != 0l || ff % 32l != 0l) {
+        panic("audio tower q8: d_model {d} / n_ff {ff} are not 32-multiples — the compact layout cannot serve this tower")
+    }
+    let has_conv = t.conv2_w_off != 0l   // a conv-less core (qwen3a: layers at 0) has no conv front end
+    let m1in = d * t.stack_factor
+    let m2in = t.proj_kind == AudioProjKind.ultravox ? t.mm1_out / 2l : t.mm1_out
+    // a projector mat whose contraction is not a 32-multiple stays fp32 (tw_mm's own condition)
+    let qlayer = 4l * d * d + 2l * ff * d
+    var pq1 = false
+    var pq2 = false
+    var qtotal = t.n_layer * qlayer + (has_conv ? 3l * d * d : 0l)
+    if (t.proj_dim > 0l) {
+        pq1 = t.proj_kind == AudioProjKind.qwen2a || m1in % 32l == 0l
+        pq2 = t.proj_kind != AudioProjKind.qwen2a && m2in % 32l == 0l
+        qtotal += pq1 ? (t.proj_kind == AudioProjKind.qwen2a ? t.proj_dim * d : t.mm1_out * m1in) : 0l
+        qtotal += pq2 ? t.proj_dim * m2in : 0l
+    }
+    qblob |> resize(qtotal)
+    qscales |> resize(qtotal / 32l)
+    var nf : array<float>
+    nf |> resize(long_length(fblob) - qtotal)
+    var og = 0l
+    var of = 0l
+    if (has_conv) {   // conv1 always stays fp32 (3·n_mel contraction; served via mm_blob_b)
+        t.conv1_w_off = tq_keep(nf, fblob, of, t.conv1_w_off, d * 3l * t.n_mel)
+        t.conv1_b_off = tq_keep(nf, fblob, of, t.conv1_b_off, d)
+        t.conv2_w_off = tq_quant(qblob, qscales, fblob, og, t.conv2_w_off, 3l * d * d)
+        t.conv2_b_off = tq_keep(nf, fblob, of, t.conv2_b_off, d)
+        t.pos_off = tq_keep(nf, fblob, of, t.pos_off, t.n_ctx * d)
+    }
+    // layers: the exact field order enc_layer_offsets' q8 branch reads back
+    t.qlayers_off = og
+    t.qlayer_stride = qlayer
+    let old_base = t.layers_off
+    let old_stride = t.layer_stride
+    let new_base = of
     for (l in range64(t.n_layer)) {
-        let lo = enc_layer_offsets(t, l)
+        var oo = old_base + l * old_stride
+        tq_keep(nf, fblob, of, oo, d); oo += d                            // ln1_w
+        tq_keep(nf, fblob, of, oo, d); oo += d                            // ln1_b
+        tq_quant(qblob, qscales, fblob, og, oo, d * d); oo += d * d       // q_w
+        tq_keep(nf, fblob, of, oo, d); oo += d                            // q_b
+        tq_quant(qblob, qscales, fblob, og, oo, d * d); oo += d * d       // k_w
+        tq_keep(nf, fblob, of, oo, d); oo += d                            // k_b
+        tq_quant(qblob, qscales, fblob, og, oo, d * d); oo += d * d       // v_w
+        tq_keep(nf, fblob, of, oo, d); oo += d                            // v_b
+        tq_quant(qblob, qscales, fblob, og, oo, d * d); oo += d * d       // o_w
+        tq_keep(nf, fblob, of, oo, d); oo += d                            // o_b
+        tq_keep(nf, fblob, of, oo, d); oo += d                            // ln2_w
+        tq_keep(nf, fblob, of, oo, d); oo += d                            // ln2_b
+        tq_quant(qblob, qscales, fblob, og, oo, ff * d); oo += ff * d     // fc1_w
+        tq_keep(nf, fblob, of, oo, ff); oo += ff                          // fc1_b
+        tq_quant(qblob, qscales, fblob, og, oo, d * ff); oo += d * ff     // fc2_w
+        tq_keep(nf, fblob, of, oo, d); oo += d                            // fc2_b
+    }
+    t.layers_off = new_base
+    t.layer_stride = 9l * d + ff
+    t.lnp_w_off = tq_keep(nf, fblob, of, t.lnp_w_off, d)
+    t.lnp_b_off = tq_keep(nf, fblob, of, t.lnp_b_off, d)
+    if (t.proj_dim > 0l) {   // whisper .bin towers have no projector
+        if (t.proj_kind == AudioProjKind.qwen2a) {
+            t.proj_w_off = tq_quant(qblob, qscales, fblob, og, t.proj_w_off, t.proj_dim * d)
+            t.proj_b_off = tq_keep(nf, fblob, of, t.proj_b_off, t.proj_dim)
+        } else {
+            if (t.proj_kind == AudioProjKind.ultravox) {
+                t.normpre_off = tq_keep(nf, fblob, of, t.normpre_off, m1in)
+            }
+            t.proj_w_off = (pq1 ? tq_quant(qblob, qscales, fblob, og, t.proj_w_off, t.mm1_out * m1in)
+                : tq_keep(nf, fblob, of, t.proj_w_off, t.mm1_out * m1in))
+            if (t.proj_kind == AudioProjKind.ultravox) {
+                t.normmid_off = tq_keep(nf, fblob, of, t.normmid_off, m2in)
+            }
+            t.mm2_w_off = (pq2 ? tq_quant(qblob, qscales, fblob, og, t.mm2_w_off, t.proj_dim * m2in)
+                : tq_keep(nf, fblob, of, t.mm2_w_off, t.proj_dim * m2in))
+        }
+    }
+    verify(og == qtotal)
+    delete fblob
+    fblob <- nf   // nolint:PERF030 — the full blob is released on the line above
+    t.q8 = true
+    if (!select_matmul_backend_for_load()) {
+        return   // row-major backend reads the dense Q8_0 planes as-is
+    }
+    if (has_conv) {
+        tw_repack(qblob, qscales, t.conv2_w_off, 3l * d, d)
+    }
+    for (l in range64(t.n_layer)) {
+        let lo = enc_layer_offsets(t, l)   // t.q8 is set: dense offsets
         tw_repack(qblob, qscales, lo.q_w, d, d)
         tw_repack(qblob, qscales, lo.k_w, d, d)
         tw_repack(qblob, qscales, lo.v_w, d, d)
@@ -979,15 +1158,14 @@ def private tower_quantize_(var t : AudioTower; fblob : array<float>; var qblob 
         tw_repack(qblob, qscales, lo.fc1_w, d, ff)
         tw_repack(qblob, qscales, lo.fc2_w, ff, d)
     }
-    if (t.proj_dim > 0l) {   // whisper .bin towers have no projector
+    if (t.proj_dim > 0l) {
         if (t.proj_kind == AudioProjKind.qwen2a) {
             tw_repack(qblob, qscales, t.proj_w_off, d, t.proj_dim)
-        } elif (t.proj_kind == AudioProjKind.ultravox) {
-            tw_repack(qblob, qscales, t.proj_w_off, d * t.stack_factor, t.mm1_out)
-            tw_repack(qblob, qscales, t.mm2_w_off, t.mm1_out / 2l, t.proj_dim)
-        } else {   // voxtral
-            tw_repack(qblob, qscales, t.proj_w_off, d * t.stack_factor, t.mm1_out)
-            tw_repack(qblob, qscales, t.mm2_w_off, t.mm1_out, t.proj_dim)
+        } elif (pq1) {
+            tw_repack(qblob, qscales, t.proj_w_off, m1in, t.mm1_out)
+        }
+        if (pq2) {
+            tw_repack(qblob, qscales, t.mm2_w_off, m2in, t.proj_dim)
         }
     }
 }
@@ -1409,6 +1587,17 @@ def asr_prof_add(name : string; t0 : int64) {
     }
     g_asr_prof[name] += int64(get_time_usec(t0))
     g_asr_prof_hits[name]++
+}
+
+//! One bucket's accumulated ms (0 when absent) — the store's encode-split reader.
+def asr_prof_ms(name : string) : double {
+    return double(g_asr_prof?[name] ?? 0l) / 1000.0lf
+}
+
+//! Reset the accumulators without printing — per-rep sampling (asr_prof_report also clears).
+def asr_prof_reset() {
+    clear(g_asr_prof)
+    clear(g_asr_prof_hits)
 }
 
 def asr_prof_report() {

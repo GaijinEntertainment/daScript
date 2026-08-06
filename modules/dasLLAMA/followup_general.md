@@ -205,3 +205,45 @@
    Done = each of the three gets a feed-the-function suite (a block kernel against a reference
    forward step; `moe_ffn_core` routing against a hand-checked top-k case; the PLE pre-step
    against a fixture), or a written carve-out on the rule for pointer-dispatched move-outs.
+
+15. **Accelerate (+AMX) arm for the audio-tower tables (Boris 2026-08-05; explicitly NOT the
+   quant-lane arc).** Once the towers are q8-forced, the `--accel` flavor rows should serve the
+   tower mms through the accelerate tier the way the LLM float-batch slots already do — the
+   override hook (`g_mm_fp_batch_override`) and the tier plumbing exist, so the wiring is
+   expected to be crazy cheap. Metal tower offload is explicitly deferred ("not metal (yet)").
+   Done = accel-flavor audio cells dispatch tower mms through the accelerate driver with the
+   crossover verdict recorded, default cpu rows unchanged.
+
+16. **Profiling framework refactor — zero-overhead-when-off (Boris 2026-08-05, during the
+   audio-tower probe work).** The current rails are runtime-gated hand sites: every
+   `prof_add`/`asr_prof_add` call site takes `ref_time_ticks()` unconditionally and branches on
+   a global inside the callee — "cute", but each new probe sprinkles more always-on ticks
+   through hot loops (today's `g4a.enc.*` sites included), two parallel rails exist
+   (`forward_profile` buckets vs `asr_prof` string table) with different arming and reporting,
+   and the generic-path `mm_gemm` double-count chore is a symptom of sites living at the wrong
+   level. Wanted: ONE macro-based rail where a profile site **compiles to nothing** unless
+   profiling is armed at COMPILE time — under `-jit` every run compiles at launch, so the
+   `--prof` decision can reach the macro (compile-time option/env read by the pass macro, or a
+   lens-module require, the `dasllama_metal_lens` pattern), and the released bench app bakes
+   the sites OUT of its timed paths entirely while a probe launch bakes them IN. Done = one
+   site syntax for both rails, `--prof`-off builds contain zero profiling instructions
+   (verified in emitted IR), the double-count chore resolved by construction, and the census +
+   report surface preserved.
+
+17. **Vision stills — when, not if (Boris 2026-08-05).** Image-in/text-out on the existing
+   mmproj carriers (the `v.*` towers the audio work already ships past unread). Explicitly
+   SEQUENCED: after the vulkan side comes together AND dasllama.io serves sidecars + hosts
+   ladders — not before. Scope expectation from the audio comparison: first family ≈ a
+   gemma4a-sized arc (vanilla ViT / MobileNet blocks, no DSP frontend, no realtime bar; the
+   soft-token splice, q8 tower rail, .dlim lane, and mtmd oracle harness all transfer;
+   qwen3vl's M-RoPE + deepstack are pre-registered and merely activate). One-time plumbing:
+   image decode (dasStbImage) + per-family resize/patchify conventions. VIDEO stays out:
+   not reasonable without GPU — "maybe hybrid mode, maybe one day"; its real dependency is
+   the deep-prefill context wall (50k-token splices), not new kernels.
+
+18. **Tutorials + documentation resync sweep (Boris 2026-08-05).** The ASR/audio tutorials and
+   module documentation have desynced from the API as the q8/KV/lever work landed — a full
+   pass over `tutorials/` (`.das` and `.rst`) and the dasLLAMA doc pages against the current
+   facade surface (`set_asr_kv`, `--kv`, `--fp32-tower`, exec_fmt spellings, the q8 defaults).
+   Going forward the new Documentation section in CODEREVIEW.md makes this a per-change check;
+   this item is the one-time catch-up.

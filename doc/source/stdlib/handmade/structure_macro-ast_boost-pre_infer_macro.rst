@@ -1,0 +1,1 @@
+The ``[pre_infer_macro]`` structure annotation — registers an ``AstPassMacro`` subclass that is invoked before every type inference pass, on a tree a macro may have just modified.
