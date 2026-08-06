@@ -422,10 +422,13 @@ def gate_lint(ctx : PreflightCtx) : GateResult {
             detail = "LINUX-lane lint warnings (host pass was clean — a platform static_if half hides the symbol here; nolint:...,LINT019 both-worlds spelling, see skills/preflight.md)", output = mirror.out)
     }
     // the exe rail: CI compiles utils/lint into a standalone das-lint and lints AGAIN — the
-    // -exe world resolves modules differently (dasAudio et al are not baked in)
-    let lint_exe_base = "{get_das_root()}/_preflight_das_lint"
+    // -exe world resolves modules differently (dasAudio et al are not baked in). `-exe`
+    // appends .exe on every platform (CI's LINUX lane invokes $BIN/das-lint.exe verbatim)
+    let lint_exe_base = unique_temp_path("preflight_das_lint", "")
     let build = run_argv([ctx.daslang, "-exe", "-output", lint_exe_base, "utils/lint/main.das"])
     if (build.rc != 0) {
+        remove("{lint_exe_base}.exe")
+        remove("{lint_exe_base}.o")
         return GateResult(name = "lint", status = GateStatus.Fail, seconds = seconds_since(t0),
             detail = "das-lint -exe build failed — the CI exe rail would fail the same way", output = build.out)
     }
