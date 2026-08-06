@@ -515,6 +515,13 @@ jobs:
         fi
 
     - name: "Deploy to daslang.io origin (VPS)"
+      # master-only, in the workflow itself. This guard used to sit on the Pages step
+      # ("so a workflow_dispatch from a branch cannot touch the production site") and
+      # went with it; without it the sole thing standing between a branch dispatch and
+      # production is the `github-pages` environment's branch policy — a setting in the
+      # GitHub UI that this repository cannot see or review. Broaden that policy for any
+      # reason and unreviewed content ships. Cheap to state here, so state it here.
+      if: github.ref == 'refs/heads/master'
       # The ONLY deploy target. Caddy serves the box directly; there is no Jekyll
       # in the path, so the old _site/.nojekyll marker went with the Pages steps.
       # Release layout on the box: /srv/daslang.io/releases/<rNNN-sha>, with
