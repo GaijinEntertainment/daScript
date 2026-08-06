@@ -30,6 +30,7 @@ Mistral-7B Q8 skipped (7.7GB — behind the arena-slab ceiling, only Q8 in the z
 | Qwen3.5-0.8B Q8 (deltanet) | per-op rails: 18 dn triples + 6 attn quads + dn chains (no hybrid ladder) | 97.7 ± 0.3 | 276.9 ± 0.7 | 35 | 1376.1 ± 4.2 | 17075.0 ± 163.4 | 8 |
 | Qwen1.5-MoE-A2.7B Q8 (14.2GiB) | MoE tier: experts [2..24) resident, [0..2) streamed, shexp async | 30.8 ± 0.1 | 32.6 ± 0.2 | 94.4 | 414.6 ± 2.0 | 1315.1 ± 64.7 | 31.5 |
 | Qwen3-30B-A3B Q4_K_M (18.6GiB) | MoE tier AUTO: experts [13..48) resident, [0..13) streamed, 48 attn quads | 36.9 ± 0.6 | 35.7 ± 0.5 | **103.2** | 463.2 ± 1.2 | 503.0 ± 19.6 | 92.1 |
+| Qwen3.6-35B-A3B Q4_K_M (20.6GiB, deltanet+MoE) | MoE tier AUTO: 110 dense + 40 shexp + 30 dn triples + 10 attn quads + experts [17..40) resident / [0..17) streamed | 37.2 ± 0.02 | 35.5 ± 0.3 | **104.7** | 399.3 ± 0.9 | 365.9 ± 21.8 | **109.1** |
 
 Qwen3-30B note: llama.cpp's plain `-ngl 99` FAILS (ErrorOutOfDeviceMemory, no auto-spill);
 its row needed hand-tuned `--n-cpu-moe 13` — the layer count copied from das's automatic
@@ -70,3 +71,7 @@ re-encode cost; pp a wash. (Baselines predate the carrier conversion; post-conve
 5. Hybrids serve correctly on per-op rails but need the hybrid ladder for competitive tg
    (item 2 datum); MoE decode is near-parity ALREADY on the cooperative tier — the MoE
    strategy layer (heat cache, residency, async shexp) has no llama.cpp analog.
+6. The doesn't-fit MoE class is a das WIN on coopmat2 hardware: Qwen3-30B 103% tg,
+   Qwen3.6-35B (deltanet+MoE) 105% tg AND 109% pp — both fully automatic placements vs
+   their hand-tuned --n-cpu-moe (counts copied from our logs; plain -ngl 99 OOMs). The
+   newest shapes are where das leads TODAY, before the cm2 kernel arc.
