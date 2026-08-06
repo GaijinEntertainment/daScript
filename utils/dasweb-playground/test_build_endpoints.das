@@ -495,3 +495,34 @@ def test_page_build_flow(t : T?) {
     remove(wasm_src)
     rmdir_rec(blobs)
 }
+
+[test]
+def test_page_build_refused_without_page_origin(t : T?) {
+    // Fail CLOSED: page artifacts are attacker-authored html/js, and page_origin
+    // is the only thing keeping them off this origin. A server without it must
+    // refuse the build outright rather than serve the result from here.
+    var err = ""
+    let blobs = create_temp_directory("dasweb_ep_blobs_", err)
+    with_build_server(TEST_TOKEN, blobs) $(base_url) {
+        authed_post("{base_url}/api/build/toolchain", TC, TEST_TOKEN) $(resp) {
+            assert(int(resp.status_code) == 200, "toolchain announced")
+        }
+        t |> run("a graphics sample is refused when no page origin is configured") @(tt : T?) {
+            let hash = posted_hash(base_url, GL_SOURCE)
+            POST("{base_url}/api/build/request/{hash}", "") $(resp) {
+                tt |> equal(int(resp.status_code), 503)
+            }
+            // and nothing was queued for it
+            GET("{base_url}/api/build/status/{hash}") $(resp) {
+                tt |> equal(int(resp.status_code), 404)
+            }
+        }
+        t |> run("a compute sample still builds normally") @(tt : T?) {
+            let hash = posted_hash(base_url, "require math\n[export]\ndef main \{\n\}\n")
+            POST("{base_url}/api/build/request/{hash}", "") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+            }
+        }
+    }
+    rmdir_rec(blobs)
+}

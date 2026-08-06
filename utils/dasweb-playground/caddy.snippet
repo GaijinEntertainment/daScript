@@ -68,6 +68,13 @@ handle /api/build/* {
 #
 #	run.daslang.io {
 #		handle /api/build/artifact/* {
+#			# Same reason as every other proxied route: libhv buffers a body in
+#			# full before any handler runs, and the service only registers GET
+#			# here — so without this an unbounded POST to an artifact path grows
+#			# the process before falling through to the 404.
+#			request_body {
+#				max_size 1MB
+#			}
 #			reverse_proxy 127.0.0.1:8101
 #		}
 #		handle {

@@ -41,10 +41,12 @@
 # mode=module: the per-sample recipe, verbatim from web/CMakeLists.txt
 # (all_wasm) — host daslang -exe with the wasm64 jit target against the
 # web/output64 runtime archive, emitting <out_dir>/sample.wasm.
-# mode=page: the standalone-page recipe (daspkg release wasm) for the five
-# /examples cards — arcanoid and pacman (games) plus furier, path_tracer_lab
-# and physarum_lab (graphics showcases). Lands with the page checkpoint of
-# plans/dasweb_wasm_pipeline.md; refused until then.
+# mode=page: the standalone-page recipe — daspkg release wasm, the same rail
+# the five /examples cards use — for any sample whose requires pull in a native
+# graphics/audio module, since GL and audio live in emscripten's JS glue that a
+# bare wasi module cannot carry. The service writes the .das_package naming the
+# app `sample` into SRC_DIR first; the rail nests its output under <out>/sample,
+# which is flattened here INSIDE the sandbox.
 
 set -u
 exec 2>&1

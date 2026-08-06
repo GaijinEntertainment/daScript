@@ -578,8 +578,23 @@ def private handle_build_request(var req : HttpRequest?; var resp : HttpResponse
         log_request("POST", "/api/build/request/:hash", 404, ip, 0, 0, t0)
         return resp |> JSON(write_json(JV((error = "unknown sample"))), http_status.NOT_FOUND)
     }
+    // An existing job keeps its mode (enqueue is idempotent), so only a job
+    // that does not exist yet is worth scanning the source for — this route is
+    // public and deliberately unlimited, and the scan walks every line of a
+    // document up to max_source_bytes.
+    let existing = build_status(g_db, hash, toolchain)
+    let mode = existing.found ? existing.mode : detect_build_mode(get_source(g_db, hash))
+    // Fail CLOSED. A page build's artifacts are attacker-authored html/js, and
+    // the only thing that keeps them off this origin is page_origin. Unset, the
+    // old behaviour was to build anyway and serve them from here — refuse
+    // instead, so a box deployed without the key produces no page at all.
+    if (mode == BUILD_MODE_PAGE && empty(g_build.page_origin)) {
+        logger_error("playground.build", "refusing page build: no page_origin configured",
+            JV((hash = hash, toolchain = toolchain)))
+        log_request("POST", "/api/build/request/:hash", 503, ip, 0, 0, t0)
+        return resp |> JSON(write_json(JV((error = "page builds are not available on this server"))), http_status.SERVICE_UNAVAILABLE)
+    }
     // no extra limiter by design: the queue plus baking time is the throttle
-    let mode = detect_build_mode(get_source(g_db, hash))
     enqueue_build(g_db, hash, toolchain, mode, current_unix_time())
     let body = build_status_payload(hash, toolchain)
     resp |> set_header("Cache-Control", "no-store")
@@ -623,14 +638,15 @@ def private handle_build_artifact(var req : HttpRequest?; var resp : HttpRespons
     let t0 = ref_time_ticks()
     let ip = client_ip_of(req)
     let file = get_param(req, "file")
-    // A page artifact is user-influenced EXECUTABLE content: as a document it must
-    // never be same-origin with this site, so with a run origin configured, html/js
-    // answer only on that Host. Caddy routes accordingly; this does not trust it.
-    if (((file |> ends_with(".html")) || (file |> ends_with(".js"))) && !empty(g_build.page_origin)) {
-        if (get_header(req, "Host") != page_origin_host()) {
-            log_request("GET", "/api/build/artifact", 404, ip, 0, 0, t0)
-            return resp |> JSON(write_json(JV((error = "page artifacts are served from the run origin"))), http_status.NOT_FOUND)
-        }
+    // A document artifact is attacker-authored content that becomes part of
+    // whatever origin serves it, so it answers ONLY on the dedicated page
+    // origin. Caddy routes accordingly; this does not take its word for it.
+    // With no page origin configured there is nowhere safe to serve one, so
+    // the answer is 404 rather than "then serve it from here" — same
+    // fail-closed rule the enqueue side applies.
+    if (is_document_artifact(file) && get_header(req, "Host") != page_origin_host()) {
+        log_request("GET", "/api/build/artifact", 404, ip, 0, 0, t0)
+        return resp |> JSON(write_json(JV((error = "page artifacts are served from the run origin"))), http_status.NOT_FOUND)
     }
     // resolve_artifact_file revalidates every request-derived component; a path
     // is only ever built from parts that passed

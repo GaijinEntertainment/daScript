@@ -97,7 +97,8 @@ def test_load_config_and_banner(t : T?) {
         let body = write_json(config_banner(cfg, sources))
         for (key in fixed_array("\"port\"", "\"port_src\" : \"cli\"", "\"db_src\" : \"default\"",
                 "\"base_url\"", "\"max_source_bytes_src\"", "\"max_inserts_per_ip_hour_src\"",
-                "\"curated_dir_src\"", "\"blobs_dir_src\"", "\"build_claim_timeout_seconds_src\"",
+                "\"curated_dir_src\"", "\"blobs_dir_src\"", "\"page_origin_src\"",
+                "\"build_claim_timeout_seconds_src\"",
                 "\"max_build_attempts_src\"", "\"build_token_src\"")) {
             t |> success(find(body, key) >= 0, "banner contains {key}")
         }
@@ -112,13 +113,29 @@ def test_build_keys_merge(t : T?) {
         var err = ""
         let args <- no_args()
         let body = ("build_token = \"s3cret\"\nblobs_dir = \"/srv/blobs\"\n" +
+            "page_origin = \"https://run.test.example\"\n" +
             "build_claim_timeout_seconds = 900\nmax_build_attempts = 5\n")
         t |> success(apply_config_text(cfg, body, args, sources, err), "toml parses")
         t |> equal(cfg.build_token, "s3cret")
         t |> equal(cfg.blobs_dir, "/srv/blobs")
+        t |> equal(cfg.page_origin, "https://run.test.example")
         t |> equal(cfg.build_claim_timeout_seconds, 900)
         t |> equal(cfg.max_build_attempts, 5)
         t |> equal(sources?["build_token"] ?? "", "toml")
+        t |> equal(sources?["page_origin"] ?? "", "toml")
+    }
+    t |> run("page_origin defaults empty, which disables page builds") @(t : T?) {
+        let cfg = ServerArgs()
+        t |> success(empty(cfg.page_origin), "no page origin unless configured")
+    }
+    t |> run("a trailing slash on the origin is normalized away") @(t : T?) {
+        // Left in, the host half would carry the '/' and never match a Host
+        // header — every page artifact 404s with nothing explaining why.
+        t |> equal(normalize_origin("https://run.daslang.io/"), "https://run.daslang.io")
+        t |> equal(normalize_origin("https://run.daslang.io///"), "https://run.daslang.io")
+        t |> equal(normalize_origin("https://run.daslang.io"), "https://run.daslang.io")
+        t |> equal(normalize_origin(""), "")
+        t |> equal(normalize_origin("/"), "")
     }
     t |> run("a wrong-typed build key is an error, not a silent zero") @(t : T?) {
         var cfg = ServerArgs()

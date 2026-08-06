@@ -143,6 +143,19 @@ def apply_config_text(var cfg : ServerArgs; body : string; user_args : array<str
     return ok
 }
 
+def normalize_origin(origin : string) : string {
+    //! An operator writing `https://run.daslang.io/` means the same origin as
+    //! one without the slash, but the two are not interchangeable downstream:
+    //! the host half would carry the `/` and then never equal a Host header, so
+    //! every page artifact 404s with nothing explaining why. Normalize once,
+    //! here, rather than teaching each consumer to tolerate both spellings.
+    var s = origin
+    while (!empty(s) && (s |> ends_with("/"))) {
+        s = slice(s, 0, length(s) - 1)
+    }
+    return s
+}
+
 def load_config(var cfg : ServerArgs; var sources : table<string; string>; var error : string&) : bool {
     //! CLI marks + config discovery (explicit --config, else dasweb-playground.toml
     //! in cwd, else beside the tool) + merge. Missing explicit config is an error;
@@ -169,6 +182,8 @@ def load_config(var cfg : ServerArgs; var sources : table<string; string>; var e
         }
     }
     delete user_args
+    // after every source has had its say, so a CLI value normalizes too
+    cfg.page_origin = normalize_origin(cfg.page_origin)
     return ok
 }
 
