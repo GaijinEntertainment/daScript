@@ -260,12 +260,16 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int) {
         g_rd.s_quant_final = set_rq_cls(fixed_array(g_rd.xb_dev, g_rd.xq_dev, g_rd.xs_dev),
             fixed_array(dim * 4l, dim, (dim / 32l) * 4l),
             fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
-        // cls GEMV (class): the one-pair regions buffer replaces the device-filled meta
-        g_rd.cls_regions = rd_meta()
-        fill_gemv_regions(g_rd.cls_regions, cls_block)
+        // cls GEMV (class): a device one-pair regions buffer replaces the device-filled meta
+        // (device for the same reason — every vocab-row subgroup reads it)
+        g_rd.cls_regions_dev = make_device_buf(CLS_META_BYTES)
+        var mp = reinterpret<uint?>(g_gpu.staging.mapped)
+        mp[0] = uint(cls_block)
+        mp[1] = 0u
+        staged_upload(g_rd.cls_regions_dev, 0l, CLS_META_BYTES)
         let pc = arena_planes(cls_fmt)
-        g_rd.cls_set = gemv_cls_set(cls_fmt, fixed_array(pc.wq, pc.ws, g_rd.cls_regions.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.logits_dev),
-            fixed_array(pc.wqb, pc.wsb, META_BYTES, dim, (dim / 32l) * 4l, vocab * 4l),
+        g_rd.cls_set = gemv_cls_set(cls_fmt, fixed_array(pc.wq, pc.ws, g_rd.cls_regions_dev, g_rd.xq_dev, g_rd.xs_dev, g_rd.logits_dev),
+            fixed_array(pc.wqb, pc.wsb, CLS_META_BYTES, dim, (dim / 32l) * 4l, vocab * 4l),
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_LOG))
         g_rd.cls_fmt_marker = cls_fmt
         g_rd.tok_recorded = false   // the recorded chain references the replaced cls/prologue sets
@@ -603,32 +607,39 @@ def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
     var qkv_region = fixed_array(woq, 0l, 1l)
     var z_region = fixed_array(woz, 0l, 1l)
     var o_region = fixed_array(woo, 0l, 1l)
-    unsafe {
-        fill_stack_meta_rows(s_qkv, addr(qkv_region[0]), 1l, dim, cd, 1l, 0l)
-        fill_stack_meta_rows(s_z, addr(z_region[0]), 1l, dim, di, 1l, 0l, cd)
-        fill_stack_meta_rows(s_o, addr(o_region[0]), 1l, di, dim, 1l, 0l)
+    unsafe {   // regions are ours to pin: dn stacks never serve FFN GEMVs
+        fill_stack_sched_rows(s_qkv, addr(qkv_region[0]), 1l, 1l, 0l)
+        fill_stack_sched_rows(s_z, addr(z_region[0]), 1l, 1l, 0l)
+        fill_stack_sched_rows(s_o, addr(o_region[0]), 1l, 1l, 0l)
     }
     var st = DnStep(state_dev = make_device_buf(nvh * ds * ds * 4l),
                     smalls_dev = make_device_buf(DND_SMALLS_BYTES),
                     cmd = alloc_cmd(), s_qkv = s_qkv, s_z = s_z, s_o = s_o,
                     state_bytes = nvh * ds * ds * 4l, ring_bytes = cd * taps * 4l,
                     parity = 0, valid = false, dirty = false)
-    // z GEMV: z planes/meta (y base cd), the qkv stack's SHARED acts image and y buffer — the fused kernel sees qkv rows AND the z row on one binding
-    st.z_set = vk_set6(g_gpu.stacks[s_z].wqbuf, g_gpu.stacks[s_z].wsbuf, g_gpu.stacks[s_z].meta.buf,
-        g_gpu.stacks[s_qkv].xq.buf, g_gpu.stacks[s_qkv].xs.buf, g_gpu.stacks[s_qkv].y_dev,
-        g_gpu.stacks[s_z].wqbytes, g_gpu.stacks[s_z].wsbytes, META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES,
+    let fqkv = g_gpu.stacks[s_qkv].fmt
+    let fz = g_gpu.stacks[s_z].fmt
+    let fo = g_gpu.stacks[s_o].fmt
+    verify(gemv_cls_ensure(fz) && gemv_cls_ensure(fo),
+        "vk decode: the gemv class rail must engage on a live device")
+    // z GEMV: z planes/regions, the qkv stack's SHARED acts image and y buffer (y base cd rides
+    // the push) — the fused kernel sees qkv rows AND the z row on one binding
+    st.z_set = gemv_cls_set(fz, fixed_array(g_gpu.stacks[s_z].wqbuf, g_gpu.stacks[s_z].wsbuf, g_gpu.stacks[s_z].meta.buf,
+            g_gpu.stacks[s_qkv].xq.buf, g_gpu.stacks[s_qkv].xs.buf, g_gpu.stacks[s_qkv].y_dev),
+        fixed_array(g_gpu.stacks[s_z].wqbytes, ws_range(s_z), META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES),
         fixed_array(0u, 0u, 0u, 0u, 0u, VHG_Y2))
     // fused step: o scales@0, THIS in-place state@1 (residency IS this binding), o quants@3, parity-ring smalls@4, the shared y@5
     st.fused_set = vk_set6(g_gpu.dnd_os_dev, st.state_dev, g_gpu.dn_meta_dev, g_gpu.dnd_oq_dev, st.smalls_dev, g_gpu.stacks[s_qkv].y_dev,
         DND_OS_BYTES, st.state_bytes, DN_META_BYTES, DND_OQ_BYTES, DND_SMALLS_BYTES, Y_BYTES,
         fixed_array(VHG_WS, VHG_ST, VHG_META, VHG_WS, VHG_SM, VHG_Y1 | VHG_Y2))
-    // out GEMV: out planes@0/1, the stack's once-filled host meta@2, the o image@3/4, its y_dev@5
-    st.out_set = vk_set6(g_gpu.stacks[s_o].wqbuf, g_gpu.stacks[s_o].wsbuf, g_gpu.stacks[s_o].meta.buf,
-        g_gpu.dnd_oq_dev, g_gpu.dnd_os_dev, g_gpu.stacks[s_o].y_dev,
-        g_gpu.stacks[s_o].wqbytes, g_gpu.stacks[s_o].wsbytes, META_BYTES, DND_OQ_BYTES, DND_OS_BYTES, Y_BYTES,
+    // out GEMV: out planes@0/1, its once-filled regions@2, the o image@3/4, its y_dev@5
+    st.out_set = gemv_cls_set(fo, fixed_array(g_gpu.stacks[s_o].wqbuf, g_gpu.stacks[s_o].wsbuf, g_gpu.stacks[s_o].meta.buf,
+            g_gpu.dnd_oq_dev, g_gpu.dnd_os_dev, g_gpu.stacks[s_o].y_dev),
+        fixed_array(g_gpu.stacks[s_o].wqbytes, ws_range(s_o), META_BYTES, DND_OQ_BYTES, DND_OS_BYTES, Y_BYTES),
         fixed_array(0u, 0u, 0u, VHG_WS, VHG_WS, VHG_YO))
-    // the qkv stack's raw_set plays Y1 in this chain (role-fluid sets re-declare per record)
-    hz_set_bits(g_gpu.stacks[s_qkv].raw_set, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
+    // the qkv stack's class set plays Y1 in this chain (role-fluid sets re-declare per record)
+    var qset = stack_gemv_cls_set(s_qkv)
+    hz_set_bits(qset, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
     let raw = st.cmd
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw, begin), null)
@@ -639,10 +650,14 @@ def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
     cmd_copy_range(raw, g_gpu.dnd_bg.buf, 2l * nvh * 4l, st.smalls_dev, 8l, 4l)   // the ring parity word
     vhz_dep(raw, h, 0u, VHG_META, true)
     cmd_copy_whole(raw, g_gpu.dnd_meta.buf, g_gpu.dn_meta_dev, DN_META_BYTES)
-    hz_dispatch(raw, h, gemv_pipe(0), g_gpu.stacks[s_qkv].raw_set, uint((cd + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
-    hz_dispatch(raw, h, gemv_pipe(0), st.z_set, uint((di + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
+    let rpw = g_gpu.rows_per_wg
+    var pcqkv = GemvArgs(n = uint(dim), d = uint(cd), nreg = 1u, ybase = 0u)
+    gemv_cls_enc(fqkv, raw, h, qset, pcqkv, (cd + rpw - 1l) / rpw)
+    var pcz = GemvArgs(n = uint(dim), d = uint(di), nreg = 1u, ybase = uint(cd))
+    gemv_cls_enc(fz, raw, h, st.z_set, pcz, (di + rpw - 1l) / rpw)
     hz_dispatch(raw, h, weak_copy(g_gpu.dnd_fused_pipeline), st.fused_set, uint(nvh))
-    hz_dispatch(raw, h, gemv_pipe(0), st.out_set, uint((dim + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
+    var pco = GemvArgs(n = uint(di), d = uint(dim), nreg = 1u, ybase = 0u)
+    gemv_cls_enc(fo, raw, h, st.out_set, pco, (dim + rpw - 1l) / rpw)
     vhz_dep(raw, h, VHG_YO, 0u, true)
     cmd_copy_whole(raw, g_gpu.stacks[s_o].y_dev, g_gpu.stacks[s_o].y.buf, dim * 4l)
     if (vk_prof()) {
@@ -768,25 +783,47 @@ def vk_dn_step_invalidate {
 
 // ===== decode dispatch (the FFN's GEMV arm) =====
 
-// pre-record (or refresh on a row-count change) the triple's chain: gate+up GEMV pair, fused
-// act+requant, down GEMV, y DMA. Per token only the stacks' host-visible metas, the activation
-// image, and the ffn params staging change — the recorded buffer resubmits as-is.
-def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64) : VkCommandBuffer {
+// lazy per-stack class-GEMV set (dies with the stack); role bits re-declare per chain via hz_set_bits
+def private stack_gemv_cls_set(si : int) : VkDescriptorSet {
+    unsafe {
+        var st & = g_gpu.stacks[si]
+        if (!st.gemv_cls_made) {
+            verify(gemv_cls_ensure(st.fmt), "vk decode: the gemv class rail must engage on a live device")
+            st.gemv_cls_set = gemv_cls_set(st.fmt,
+                fixed_array(st.wqbuf, st.wsbuf, st.meta.buf, st.xq.buf, st.xs.buf, st.y_dev),
+                fixed_array(st.wqbytes, ws_range(si), META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES),
+                fixed_array(0u, 0u, 0u, 0u, 0u, 0u))
+            st.gemv_cls_made = true
+        }
+        return st.gemv_cls_set
+    }
+}
+
+// pre-record (or refresh on a row-count / activation-form change) the triple's chain: gate+up
+// GEMV pair, fused act+requant, down GEMV, y DMA. Per token only the stacks' host-visible
+// regions and the activation image change — the recorded buffer resubmits as-is.
+def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64; is_gelu : bool) : VkCommandBuffer {
     let key = (int64(s1) * int64(MAX_STACKS) + int64(s3)) * int64(MAX_STACKS) + int64(s2)
     if (!key_exists(g_gpu.ffn_cmds, key)) {
         var fc = FfnCmd(cmd = alloc_cmd(), nrows = 0l)
-        // fused act+requant bindings: up@0, params@2, hq/hs@3/4, gate@5; binding 1 is unused filler
-        fc.actrq_set = vk_set6(g_gpu.stacks[s3].y_dev, g_gpu.stacks[s1].wsbuf, g_gpu.ffn_meta_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_gpu.stacks[s1].y_dev,
-            Y_BYTES, ws_range(s1), FFN_META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, Y_BYTES,
-            fixed_array(VHG_Y2, 0u, VHG_META, VHG_HQ, VHG_HQ, VHG_Y1))
-        // down: its own planes + host-visible meta, hq/hs as the activation image, its y_dev
-        fc.down_set = vk_set6(g_gpu.stacks[s2].wqbuf, g_gpu.stacks[s2].wsbuf, g_gpu.stacks[s2].meta.buf, g_gpu.hq_dev, g_gpu.hs_dev, g_gpu.stacks[s2].y_dev,
-            g_gpu.stacks[s2].wqbytes, ws_range(s2), META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, Y_BYTES,
+        // the requant form follows the DOWN stack (q8n counts as q8 — decode acts stay Q8_0)
+        let dkq = !vk_fmt_b32(g_gpu.stacks[s2].fmt)
+        verify((dkq ? ensure_q8k_actrq_cls() : ensure_q8_actrq_cls()) && gemv_cls_ensure(g_gpu.stacks[s2].fmt),
+            "vk decode: the class rails must engage on a live device")
+        // fused act+requant (class): gate@0, up@1, hq@2, hs@3 — one family set serves both forms
+        fc.actrq_set = set_actrq_cls(
+            fixed_array(g_gpu.stacks[s1].y_dev, g_gpu.stacks[s3].y_dev, g_gpu.hq_dev, g_gpu.hs_dev),
+            fixed_array(Y_BYTES, Y_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+            fixed_array(VHG_Y1, VHG_Y2, VHG_HQ, VHG_HQ))
+        // down: its own planes + regions, hq/hs as the activation image, its y_dev
+        fc.down_set = gemv_cls_set(g_gpu.stacks[s2].fmt,
+            fixed_array(g_gpu.stacks[s2].wqbuf, g_gpu.stacks[s2].wsbuf, g_gpu.stacks[s2].meta.buf, g_gpu.hq_dev, g_gpu.hs_dev, g_gpu.stacks[s2].y_dev),
+            fixed_array(g_gpu.stacks[s2].wqbytes, ws_range(s2), META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, Y_BYTES),
             fixed_array(0u, 0u, 0u, VHG_HQ, VHG_HQ, VHG_YO))
         g_gpu.ffn_cmds |> insert(key, fc)
     }
     var fc = g_gpu.ffn_cmds[key]
-    if (fc.nrows != nrows) {
+    if (fc.nrows != nrows || fc.gelu != is_gelu) {
         if (fc.nrows != 0l) {
             let rf : VkCommandBufferResetFlags
             vk_check(vkResetCommandBuffer(fc.cmd, rf), null)
@@ -794,20 +831,29 @@ def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64) : VkCommandBuff
         let raw = fc.cmd
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
-        // gate/up roles on the two stacks' raw_sets, this chain's view (re-declared per record)
-        hz_set_bits(g_gpu.stacks[s1].raw_set, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
-        hz_set_bits(g_gpu.stacks[s3].raw_set, 0u, 0u, 0u, 0u, 0u, VHG_Y2)
+        // gate/up roles on the two stacks' class sets, this chain's view (re-declared per record)
+        var gset = stack_gemv_cls_set(s1)
+        var uset = stack_gemv_cls_set(s3)
+        hz_set_bits(gset, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
+        hz_set_bits(uset, 0u, 0u, 0u, 0u, 0u, VHG_Y2)
         var h : VkHaz
-        vhz_dep(raw, h, 0u, VHG_META, true)
-        cmd_copy_whole(raw, g_gpu.ffn_meta.buf, g_gpu.ffn_meta_dev, FFN_META_BYTES)
-        let ggu = uint((nrows * nfe + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg)
-        hz_dispatch(raw, h, gemv_pipe(g_gpu.stacks[s1].fmt), g_gpu.stacks[s1].raw_set, ggu)
-        hz_dispatch(raw, h, gemv_pipe(g_gpu.stacks[s3].fmt), g_gpu.stacks[s3].raw_set, ggu)
+        let rpw = g_gpu.rows_per_wg
+        let ggu = (nrows * nfe + rpw - 1l) / rpw
+        var pcg = GemvArgs(n = uint(n), d = uint(nfe), nreg = uint(nrows), ybase = 0u)
+        gemv_cls_enc(g_gpu.stacks[s1].fmt, raw, h, gset, pcg, ggu)
+        gemv_cls_enc(g_gpu.stacks[s3].fmt, raw, h, uset, pcg, ggu)
         // the requant form follows the DOWN stack (q8n counts as q8 — decode acts stay Q8_0)
         let dkq = !vk_fmt_b32(g_gpu.stacks[s2].fmt)
-        hz_dispatch(raw, h, weak_copy(dkq ? g_gpu.actrq_k_pipeline : g_gpu.actrq_pipeline),
-            fc.actrq_set, uint((nrows * nfe / (dkq ? 8l : 4l) + 255l) / 256l))
-        hz_dispatch(raw, h, gemv_pipe(g_gpu.stacks[s2].fmt), fc.down_set, uint((nrows * n + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
+        var pca = ActArgs(nelem = uint(nrows * nfe), gelu = is_gelu ? 1u : 0u,
+            nblk = uint(nrows * nfe / (dkq ? 256l : 32l)))
+        let awgs = (nrows * nfe / (dkq ? 8l : 4l) + 255l) / 256l
+        if (dkq) {
+            enc_q8k_actrq_cls(raw, h, fc.actrq_set, pca, awgs)
+        } else {
+            enc_q8_actrq_cls(raw, h, fc.actrq_set, pca, awgs)
+        }
+        var pcd = GemvArgs(n = uint(nfe), d = uint(n), nreg = uint(nrows), ybase = 0u)
+        gemv_cls_enc(g_gpu.stacks[s2].fmt, raw, h, fc.down_set, pcd, (nrows * n + rpw - 1l) / rpw)
         vhz_dep(raw, h, VHG_YO, 0u, true)
         cmd_copy_whole(raw, g_gpu.stacks[s2].y_dev, g_gpu.stacks[s2].y.buf, nrows * n * 4l)
         if (vk_prof()) {
@@ -815,7 +861,7 @@ def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64) : VkCommandBuff
         }
         vk_check(vkEndCommandBuffer(raw), null)
         g_gpu.ffn_cmds[key] = FfnCmd(cmd = fc.cmd, actrq_set = fc.actrq_set,
-            down_set = fc.down_set, nrows = nrows)
+            down_set = fc.down_set, nrows = nrows, gelu = is_gelu)
     }
     return fc.cmd
 }
@@ -823,7 +869,7 @@ def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64) : VkCommandBuff
 // fill metas/acts and fetch the recorded chain — shared by the sync GEMV form and the async
 // begin/join pair. Returns the down stack index alongside the cmd (join reads its y staging).
 def private ffn_gemv_prep(offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, nfe, nrows : int64; f1, f3, f2 : int; is_gelu : bool) : tuple<cmd : VkCommandBuffer; s2 : int> {
-    ensure_ffn_state()   // fill_ffn_meta below writes its staging: a shexp-only run dispatches FFN first
+    ensure_ffn_state()   // hq/hs planes for the act+requant: a shexp-only run dispatches FFN first
     let s1 = find_stack(unsafe(offs1[0]), f1)
     let s3 = find_stack(unsafe(offs3[0]), f3)
     let s2 = find_stack(unsafe(offs2[0]), f2)
@@ -833,17 +879,15 @@ def private ffn_gemv_prep(offs1 : int64 const?; offs3 : int64 const?; offs2 : in
     assert(!vk_fmt_b32(f3) == kq_in,
         "dasLLAMA vulkan tier: gate/up form mismatch — they share one activation image")
     let xunit_in = fmt_unit(f1)
-    let xunit_mid = fmt_unit(f2)
     ensure_gemv_scratch(s1)
     ensure_gemv_scratch(s3)
     ensure_gemv_scratch(s2)
-    fill_stack_meta_rows(s1, offs1, nregions, n, nfe, nrows, n / xunit_in)
-    fill_stack_meta_rows(s3, offs3, nregions, n, nfe, nrows, n / xunit_in)
-    fill_stack_meta_rows(s2, offs2, nregions, nfe, n, nrows, nfe / xunit_mid)
+    fill_stack_sched_rows(s1, offs1, nregions, nrows, n / xunit_in)
+    fill_stack_sched_rows(s3, offs3, nregions, nrows, n / xunit_in)
+    fill_stack_sched_rows(s2, offs2, nregions, nrows, nfe / fmt_unit(f2))
     fill_stack_acts(s1, xqp, xsp, nrows * n)
     fill_stack_acts(s3, xqp, xsp, nrows * n)
-    fill_ffn_meta(nrows * nfe, nrows * nfe / xunit_mid, is_gelu)
-    return (cmd = ffn_cmd_for(s1, s3, s2, nrows, n, nfe), s2 = s2)
+    return (cmd = ffn_cmd_for(s1, s3, s2, nrows, n, nfe, is_gelu), s2 = s2)
 }
 
 def vk_moe_ffn_gemv(var goutp : float?; offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, nfe, nrows : int64; f1, f3, f2 : int; is_gelu : bool) {
@@ -886,34 +930,41 @@ def private qkv_cmd_make(sq, sk, sv : int; woq, wok, wov : int64; n, dq, dk, dv 
     var qreg = fixed_array(woq, 0l, 1l)
     var kreg = fixed_array(wok, 0l, 1l)
     var vreg = fixed_array(wov, 0l, 1l)
-    unsafe {   // metas are ours to pin: these stacks serve no other decode GEMV
-        fill_stack_meta_rows(sq, addr(qreg[0]), 1l, n, dq, 1l, 0l)
-        fill_stack_meta_rows(sk, addr(kreg[0]), 1l, n, dk, 1l, 0l, dq)
-        fill_stack_meta_rows(sv, addr(vreg[0]), 1l, n, dv, 1l, 0l, dq + dk)
+    unsafe {   // regions are ours to pin: these stacks serve no other decode GEMV
+        fill_stack_sched_rows(sq, addr(qreg[0]), 1l, 1l, 0l)
+        fill_stack_sched_rows(sk, addr(kreg[0]), 1l, 1l, 0l)
+        fill_stack_sched_rows(sv, addr(vreg[0]), 1l, 1l, 0l)
     }
     var qc = QkvCmd(cmd = alloc_cmd(), sq = sq, ybytes = (dq + dk + dv) * 4l)
     assert(qc.ybytes <= Y_BYTES, "dasLLAMA vulkan tier: qkv group exceeds output capacity")
+    let fk = g_gpu.stacks[sk].fmt
+    let fv = g_gpu.stacks[sv].fmt
+    verify(gemv_cls_ensure(fk) && gemv_cls_ensure(fv),
+        "vk decode: the gemv class rail must engage on a live device")
     // three disjoint row levels on the shared y (Y1/Y2/Y3): k/v sets ride the q stack's acts image
-    qc.k_set = vk_set6(g_gpu.stacks[sk].wqbuf, g_gpu.stacks[sk].wsbuf, g_gpu.stacks[sk].meta.buf,
-        g_gpu.stacks[sq].xq.buf, g_gpu.stacks[sq].xs.buf, g_gpu.stacks[sq].y_dev,
-        g_gpu.stacks[sk].wqbytes, g_gpu.stacks[sk].wsbytes, META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES,
+    qc.k_set = gemv_cls_set(fk, fixed_array(g_gpu.stacks[sk].wqbuf, g_gpu.stacks[sk].wsbuf, g_gpu.stacks[sk].meta.buf,
+            g_gpu.stacks[sq].xq.buf, g_gpu.stacks[sq].xs.buf, g_gpu.stacks[sq].y_dev),
+        fixed_array(g_gpu.stacks[sk].wqbytes, ws_range(sk), META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES),
         fixed_array(0u, 0u, 0u, 0u, 0u, VHG_Y2))
-    qc.v_set = vk_set6(g_gpu.stacks[sv].wqbuf, g_gpu.stacks[sv].wsbuf, g_gpu.stacks[sv].meta.buf,
-        g_gpu.stacks[sq].xq.buf, g_gpu.stacks[sq].xs.buf, g_gpu.stacks[sq].y_dev,
-        g_gpu.stacks[sv].wqbytes, g_gpu.stacks[sv].wsbytes, META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES,
+    qc.v_set = gemv_cls_set(fv, fixed_array(g_gpu.stacks[sv].wqbuf, g_gpu.stacks[sv].wsbuf, g_gpu.stacks[sv].meta.buf,
+            g_gpu.stacks[sq].xq.buf, g_gpu.stacks[sq].xs.buf, g_gpu.stacks[sq].y_dev),
+        fixed_array(g_gpu.stacks[sv].wqbytes, ws_range(sv), META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES),
         fixed_array(0u, 0u, 0u, 0u, 0u, VHG_Y3))
     let raw = qc.cmd
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw, begin), null)
     let fq = g_gpu.stacks[sq].fmt
-    let fk = g_gpu.stacks[sk].fmt
-    let fv = g_gpu.stacks[sv].fmt
-    // the q stack's raw_set plays Y1 in this chain (role-fluid, re-declared per record)
-    hz_set_bits(g_gpu.stacks[sq].raw_set, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
+    // the q stack's class set plays Y1 in this chain (role-fluid, re-declared per record)
+    var qset = stack_gemv_cls_set(sq)
+    hz_set_bits(qset, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
     var h : VkHaz
-    hz_dispatch(raw, h, gemv_pipe(fq), g_gpu.stacks[sq].raw_set, uint((dq + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
-    hz_dispatch(raw, h, gemv_pipe(fk), qc.k_set, uint((dk + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
-    hz_dispatch(raw, h, gemv_pipe(fv), qc.v_set, uint((dv + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
+    let rpw = g_gpu.rows_per_wg
+    var pcq = GemvArgs(n = uint(n), d = uint(dq), nreg = 1u, ybase = 0u)
+    gemv_cls_enc(fq, raw, h, qset, pcq, (dq + rpw - 1l) / rpw)
+    var pck = GemvArgs(n = uint(n), d = uint(dk), nreg = 1u, ybase = uint(dq))
+    gemv_cls_enc(fk, raw, h, qc.k_set, pck, (dk + rpw - 1l) / rpw)
+    var pcv = GemvArgs(n = uint(n), d = uint(dv), nreg = 1u, ybase = uint(dq + dk))
+    gemv_cls_enc(fv, raw, h, qc.v_set, pcv, (dv + rpw - 1l) / rpw)
     vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_Y3, 0u, true)
     cmd_copy_whole(raw, g_gpu.stacks[sq].y_dev, g_gpu.stacks[sq].y.buf, qc.ybytes)
     vk_check(vkEndCommandBuffer(raw), null)
@@ -1104,9 +1155,9 @@ def vk_moe_heat_query(l : int64; idx : int64 const?; k : int64; var hit : int8?;
 
 // ===== classifier dispatch (the head GEMV) =====
 
-// One-time dispatch state for a resident classifier plane: the meta never changes (ONE region
-// covering the whole plane, activations at image row 0), so it uploads device-local once and
-// the command buffer records once — per token only the activation refresh and the submit remain.
+// One-time dispatch state for a resident classifier plane: the regions pair never changes (ONE
+// region covering the whole plane, activations at image row 0), so it uploads device-local once
+// and the command buffer records once — per token only the activation refresh and the submit remain.
 def private ensure_cls(si : int; woff, n, d : int64) {
     if (g_gpu.stacks[si].cls_made) {
         return
@@ -1116,19 +1167,27 @@ def private ensure_cls(si : int; woff, n, d : int64) {
     let unit = fmt_unit(g_gpu.stacks[si].fmt)
     let rel = woff - g_gpu.stacks[si].base
     assert(rel % unit == 0l, "dasLLAMA vulkan tier: unaligned classifier plane offset")
-    fill_gemv_meta(g_gpu.staging, n, d, 0l, rel / unit)
-    g_gpu.stacks[si].cls_meta_dev = make_device_buf(CLS_META_BYTES)
-    staged_upload(g_gpu.stacks[si].cls_meta_dev, 0l, CLS_META_BYTES)
-    g_gpu.stacks[si].cls_set = vk_set6(g_gpu.stacks[si].wqbuf, g_gpu.stacks[si].wsbuf, g_gpu.stacks[si].cls_meta_dev,
-        g_gpu.stacks[si].xq.buf, g_gpu.stacks[si].xs.buf, g_gpu.stacks[si].y_dev,
-        g_gpu.stacks[si].wqbytes, g_gpu.stacks[si].wsbytes, CLS_META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES,
+    let fmt = g_gpu.stacks[si].fmt
+    verify(gemv_cls_ensure(fmt), "vk decode: the gemv class rail must engage on a live device")
+    unsafe {
+        var mp = reinterpret<uint?>(g_gpu.staging.mapped)
+        mp[0] = uint(rel / unit)
+        mp[1] = 0u
+    }
+    g_gpu.stacks[si].cls_regions_dev = make_device_buf(CLS_META_BYTES)
+    staged_upload(g_gpu.stacks[si].cls_regions_dev, 0l, CLS_META_BYTES)
+    g_gpu.stacks[si].cls_set = gemv_cls_set(fmt,
+        fixed_array(g_gpu.stacks[si].wqbuf, g_gpu.stacks[si].wsbuf, g_gpu.stacks[si].cls_regions_dev,
+            g_gpu.stacks[si].xq.buf, g_gpu.stacks[si].xs.buf, g_gpu.stacks[si].y_dev),
+        fixed_array(g_gpu.stacks[si].wqbytes, ws_range(si), CLS_META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES),
         fixed_array(0u, 0u, 0u, 0u, 0u, VHG_YO))
     var raw = alloc_cmd()
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw, begin), null)
     var h : VkHaz
-    hz_dispatch(raw, h, gemv_pipe(g_gpu.stacks[si].fmt), g_gpu.stacks[si].cls_set,
-        uint((d + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg))
+    let rpw = g_gpu.rows_per_wg
+    var pc = GemvArgs(n = uint(n), d = uint(d), nreg = 1u, ybase = 0u)
+    gemv_cls_enc(fmt, raw, h, g_gpu.stacks[si].cls_set, pc, (d + rpw - 1l) / rpw)
     vhz_dep(raw, h, VHG_YO, 0u, true)
     cmd_copy_whole(raw, g_gpu.stacks[si].y_dev, g_gpu.stacks[si].y.buf, d * 4l)
     vk_check(vkEndCommandBuffer(raw), null)

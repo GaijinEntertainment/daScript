@@ -123,7 +123,6 @@ def pf_gemm_pipe(fmt6 : bool; d, cnt : int64) : Pipeline {
 let BATCH_CHUNK_ROWS = 8_192l      // dispatch row-window cap (bounds y and the wg map)
 let BATCH_HQ_BYTES = 33_554_432l   // device requantized-hidden quants (the down GEMM's activations)
 let BATCH_HS_BYTES = 8_388_608l    // ... its scale plane
-let FFN_META_BYTES = 64l           // act/requant params (element count, gelu flag, block count)
                                            // + the combine's [n, k, r0, r1] at words 4..7
 let COMB_WI_BYTES = 2_097_152l     // combine w / inv plane cap (npos*k grid entries x 4B)
 let CLS_META_BYTES = 64l           // classifier GEMV params (one region, filled once)
@@ -181,7 +180,7 @@ let DND_OS_BYTES = (DN_MAX_HEADS * DN_MAX_DS / 32l) * 4l
 let DND_SMALLS_BYTES = DN_SMALLS_BYTES + DN_MAX_CD * (DN_MAX_DCONV - 1l) * 4l
 
 // heat-cache pool stacks live in a SYNTHETIC element-offset space far above any real plane
-// offset, so find_stack / fill_stack_meta_rows / the whole FFN GEMV rail run verbatim on them
+// offset, so find_stack / fill_stack_sched_rows / the whole FFN GEMV rail run verbatim on them
 let HEAT_BASE = 1l << 42l
 let HEAT_STRIDE = 1l << 32l          // per pool-stack offset room (>> nslots * ege)
 let HEAT_UPLOAD_CAP = 2              // steady-state expert uploads per advise call
@@ -248,10 +247,14 @@ struct VkStack {
     batch_map_off : int64
     batch_cls_sets : VkDescriptorSet[8]
     batch_cls_ready : uint
+    // decode class-GEMV set over the stack's own planes/meta/scratch (lazy; role bits are
+    // re-declared per chain via hz_set_bits — the raw_set role-fluid pattern)
+    gemv_cls_set : VkDescriptorSet
+    gemv_cls_made : bool
     // classifier dispatch state (lazy — set up on the first cls GEMV against this stack)
     cls_set : VkDescriptorSet
-    cls_meta_dev : uint64    // device meta — vocab-row dispatches run ~150K subgroups, each
-                             // reading params; host-visible meta would be uncached PCIe reads
+    cls_regions_dev : uint64   // device regions pair — vocab-row dispatches run ~150K subgroups,
+                               // each reading it; host-visible would be uncached PCIe reads
     cls_cmd : VkCommandBuffer
     cls_made : bool
 }
@@ -284,9 +287,10 @@ struct StreamSlot {
 // resubmitted as-is
 struct FfnCmd {
     cmd : VkCommandBuffer
-    actrq_set : VkDescriptorSet   // gate y_dev + up y_dev (vk_upf) -> hq/hs device planes
-    down_set : VkDescriptorSet    // down stack planes + hq/hs as activations + its y_dev
+    actrq_set : VkDescriptorSet   // gate y_dev + up y_dev -> hq/hs device planes (class set)
+    down_set : VkDescriptorSet    // down stack planes + hq/hs as activations + its y_dev (class set)
     nrows : int64                 // row count cmd was recorded with
+    gelu : bool                   // activation form recorded into the push (re-record key with nrows)
 }
 
 // one recurrent layer's pre-recorded deltanet decode-step chain + its device-resident state.
@@ -453,8 +457,6 @@ struct GpuState {
     // FFN mid-chain state (lazy — first FFN dispatch creates it)
     hq_dev : uint64          // device requantized-hidden quants (the down GEMM's activation image)
     hs_dev : uint64          // ... its scales
-    ffn_meta : HostBuf       // act/requant params staging
-    ffn_meta_dev : uint64
     ffn_ready : bool
     // prefill batch state (lazy — first batch dispatch creates it; decode-only runs skip it)
     batch_xq_dev : uint64    // device-local gathered-activation quants (chunk window)
@@ -1804,7 +1806,8 @@ struct RDec {
     logits_dev : uint64
     x_host, logits_host : HostBuf
     kv_readback : HostBuf         // per-layer K/V row -> CPU cache writeback
-    cls_regions : HostBuf         // the classifier class-GEMV's one-pair regions buffer
+    cls_regions_dev : uint64      // the classifier class-GEMV's one-pair regions buffer (device —
+                                  // vocab-row dispatches read it from ~150K subgroups)
     cls_set : VkDescriptorSet
     s_prologue : VkDescriptorSet  // xb = rms_att[0](x)
     s_prologue_rq : VkDescriptorSet   // the fused twin (also does layer 0's activation quant)
@@ -1842,19 +1845,6 @@ def arena_planes(fmt : int) : tuple<wq : uint64; ws : uint64; wqb : int64; wsb :
     unsafe {
         var a & = g_gpu.arenas[fmt]
         return (wq = a.wqbuf, ws = a.wsbuf, wqb = a.wqbytes, wsb = a.wsbytes)
-    }
-}
-
-// gemv meta: [0]=n [1]=d [2]=nregions=1 [3]=ybase(row) [4]=weight block [5]=xblock base
-def fill_gemv_meta(hb : HostBuf; n, d, ybase, blk : int64) {
-    unsafe {
-        var mp = reinterpret<uint?>(hb.mapped)
-        mp[0] = uint(n)
-        mp[1] = uint(d)
-        mp[2] = 1u
-        mp[3] = uint(ybase)
-        mp[4] = uint(blk)
-        mp[5] = 0u
     }
 }
 
@@ -1995,7 +1985,6 @@ let VHZ_GATE = 0x800u     // ffn gate plane
 let VHZ_UP = 0x1000u      // ffn up plane
 let VHZ_HQ = 0x2000u      // requantized hidden hq+hs
 let VHZ_FFO = 0x4000u     // ffn down out
-let VHZ_META = 0x8000u    // ffn_meta_dev
 let VHZ_LOG = 0x10000u    // logits
 let VHZ_COS = 0x20000u    // rope cos/sin rows
 
@@ -2516,25 +2505,21 @@ def submit_wait(var raw : VkCommandBuffer) {
     wait_fence()
 }
 
-// refresh a stack's mapped GEMV meta, one entry per ROW (cnt > 1 regions expand so output lands
-// row-major): [n, d, nrows, ybase, (rel_wblock, xblock)*], block units per format (32 q8 / 256 kq).
-def fill_stack_meta_rows(si : int; offs : int64 const?; nregions : int64; n, d, nrows, xnb : int64; ybase : int64 = 0l) {
-    assert((4l + nrows * 2l) * 4l <= META_BYTES, "dasLLAMA vulkan tier: FFN meta exceeds capacity")
+// refresh a stack's mapped class-GEMV regions, one (rel_wblock, xblock) pair per ROW (cnt > 1
+// regions expand so output lands row-major); n/d/nreg/ybase ride the GemvArgs push instead
+def fill_stack_sched_rows(si : int; offs : int64 const?; nregions : int64; nrows, xnb : int64) {
+    assert(nrows * 2l * 4l <= META_BYTES, "dasLLAMA vulkan tier: FFN regions exceed capacity")
     let unit = fmt_unit(g_gpu.stacks[si].fmt)
     unsafe {
         var mp = reinterpret<uint?>(g_gpu.stacks[si].meta.mapped)
-        mp[0] = uint(n)
-        mp[1] = uint(d)
-        mp[2] = uint(nrows)
-        mp[3] = uint(ybase)
         for (r in range64(nregions)) {
             let rel = offs[r * 3l] - g_gpu.stacks[si].base
             let row0 = offs[r * 3l + 1l]
             let cnt = offs[r * 3l + 2l]
             assert(rel % unit == 0l, "dasLLAMA vulkan tier: unaligned region offset")
             for (i in range64(cnt)) {
-                mp[4l + (row0 + i) * 2l] = uint(rel / unit)
-                mp[5l + (row0 + i) * 2l] = uint((row0 + i) * xnb)
+                mp[(row0 + i) * 2l] = uint(rel / unit)
+                mp[(row0 + i) * 2l + 1l] = uint((row0 + i) * xnb)
             }
         }
     }
@@ -2557,8 +2542,6 @@ def ensure_ffn_state {
     }
     g_gpu.hq_dev = make_device_buf(BATCH_HQ_BYTES)
     g_gpu.hs_dev = make_device_buf(BATCH_HS_BYTES)
-    g_gpu.ffn_meta = make_host_buf(FFN_META_BYTES, false)   // transfer_src staging
-    g_gpu.ffn_meta_dev = make_device_buf(FFN_META_BYTES)
     g_gpu.ffn_ready = true
 }
 
@@ -2601,20 +2584,6 @@ def ensure_batch_state {
     g_gpu.resident_bytes += BATCH_XQ_BYTES + BATCH_XS_BYTES
     g_gpu.batch_ready = true
     to_log(LOG_INFO, "dasLLAMA vulkan tier: prefill batch tier engaged\n")
-}
-
-def fill_ffn_meta(elems, nblocks : int64; is_gelu : bool; comb_n : int64 = 0l; comb_k : int64 = 0l; comb_r0 : int64 = 0l; comb_r1 : int64 = 0l; xf_words : int64 = 0l) {
-    unsafe {
-        var mp = reinterpret<uint?>(g_gpu.ffn_meta.mapped)
-        mp[0] = uint(elems)
-        mp[1] = is_gelu ? 1u : 0u
-        mp[2] = uint(nblocks)
-        mp[3] = uint(xf_words)   // cm2 chain: the dequant kernel's word count (q8 image / 4)
-        mp[4] = uint(comb_n)
-        mp[5] = uint(comb_k)
-        mp[6] = uint(comb_r0)
-        mp[7] = uint(comb_r1)
-    }
 }
 
 // the 20-word deltanet params block — ONE layout for the prefill window chain (dn_meta) and the
