@@ -4,11 +4,13 @@ require daslib/jobque_boost
 require daslib/jobque_profile
 require daslib/fio
 require daslib/json_boost
-require strings
 
 // Round-trip of the per-lane event tracer with the jobque_profile registries: arm, register
 // categories + markers, run a team dispatch storm with a tagged op and unit markers, save,
 // re-read the JSON, and assert the self-describing header + events survived.
+// Two worlds by design: with JOBQUE_PROFILING=1 the annotations must land in the trace;
+// without it profile_tag/profile_marker compile away, and the same run proves the erasure
+// contract — no tags, no unit markers, header and spans intact.
 
 def read_text_file(path : string) : string {
     var text = ""
@@ -30,6 +32,88 @@ def team_storm(nj, total : int) {
         }
     }
     delete results
+}
+
+
+// parse the saved trace and assert the self-describing header + events — the ON world
+// checks the annotations landed, the OFF world checks they were compiled away
+def private verify_saved_trace(t : T?; text : string; tokId : int) {
+    var jerr = ""
+    let root = read_json(text, jerr)
+    t |> success(root != null, "trace file parses as JSON: {jerr}")
+
+    // jobqueProfile header
+    let prof = root?["jobqueProfile"]
+    t |> success(prof != null, "jobqueProfile header present")
+    t |> equal(1, prof?["version"] ?? 0)
+    t |> success((prof?["lanes"] ?? 0) >= 1, "at least the caller lane")
+    var sawSeven = false
+    var sawAlpha = false
+    if (prof?["categories"] != null) {
+        for (cat in prof?["categories"] as _array) {
+            let cname = cat?["name"] ?? ""
+            if (cname == "seven") {
+                sawSeven = true
+                t |> equal(7, cat?["id"] ?? 0)
+                t |> equal("#112233", cat?["color"] ?? "")
+            } elif (cname == "alpha") {
+                sawAlpha = true
+                t |> equal(1, cat?["id"] ?? 0)
+                t |> success(length(cat?["color"] ?? "") == 7, "auto color is #RRGGBB")
+            }
+        }
+    }
+    t |> success(sawSeven, "explicit category saved")
+    t |> success(sawAlpha, "auto category saved")
+    var sawTokenMarker = false
+    if (prof?["markers"] != null) {
+        for (mk in prof?["markers"] as _array) {
+            if ((mk?["name"] ?? "") == "token") {
+                sawTokenMarker = true
+                t |> equal(tokId, mk?["id"] ?? -1)
+            }
+        }
+    }
+    t |> success(sawTokenMarker, "marker kind saved")
+
+    // events: spans exist; both unit markers landed as perfetto instants; any publish
+    // recorded during the tagged storm carries tag 7 in stage>>8 (workers may be absent
+    // on a 1-core box — then the dispatch inlines and no publish is recorded)
+    t |> success(root?["traceEvents"] != null, "traceEvents present")
+    var nSpans = 0
+    var markerArgs : array<int>
+    var nTaggedPublish = 0
+    var nUntaggedPublish = 0
+    for (ev in root?["traceEvents"] as _array) {
+        let ph = ev?["ph"] ?? ""
+        if (ph == "X") {
+            nSpans++
+            if ((ev?["name"] ?? "") == "publish") {
+                let packed = ev?["args"]?["stage"] ?? 0
+                if ((packed >> 8) == 7) {
+                    nTaggedPublish++
+                } else {
+                    nUntaggedPublish++
+                }
+            }
+        } elif (ph == "i" && (ev?["name"] ?? "") == "token") {
+            markerArgs |> push(ev?["args"]?["arg"] ?? -1)
+        }
+    }
+    t |> success(nSpans > 0, "recorded work spans")
+    static_if (JOBQUE_PROFILING_ENABLED) {
+        t |> equal(0, nUntaggedPublish)
+        feint("tagged publishes: {nTaggedPublish}\n")
+        sort(markerArgs)
+        t |> equal(3, length(markerArgs))
+        t |> equal(-7, markerArgs[0])
+        t |> equal(41, markerArgs[1])
+        t |> equal(42, markerArgs[2])
+    } else {
+        // annotations compiled away — nothing tagged and no unit markers can exist
+        t |> equal(0, nTaggedPublish)
+        t |> equal(0, length(markerArgs))
+    }
 }
 
 [test]
@@ -66,76 +150,7 @@ def test_trace_round_trip(t : T?) {
 
             let text = read_text_file(path)
             t |> success(!empty(text), "trace file is not empty")
-            var jerr = ""
-            let root = read_json(text, jerr)
-            t |> success(root != null, "trace file parses as JSON: {jerr}")
-
-            // jobqueProfile header
-            let prof = root?["jobqueProfile"]
-            t |> success(prof != null, "jobqueProfile header present")
-            t |> equal(1, prof?["version"] ?? 0)
-            t |> success((prof?["lanes"] ?? 0) >= 1, "at least the caller lane")
-            var sawSeven = false
-            var sawAlpha = false
-            if (prof?["categories"] != null) {
-                for (cat in prof?["categories"] as _array) {
-                    let cname = cat?["name"] ?? ""
-                    if (cname == "seven") {
-                        sawSeven = true
-                        t |> equal(7, cat?["id"] ?? 0)
-                        t |> equal("#112233", cat?["color"] ?? "")
-                    } elif (cname == "alpha") {
-                        sawAlpha = true
-                        t |> equal(1, cat?["id"] ?? 0)
-                        t |> success(length(string(cat?["color"] ?? "")) == 7, "auto color is #RRGGBB")
-                    }
-                }
-            }
-            t |> success(sawSeven, "explicit category saved")
-            t |> success(sawAlpha, "auto category saved")
-            var sawTokenMarker = false
-            if (prof?["markers"] != null) {
-                for (mk in prof?["markers"] as _array) {
-                    if ((mk?["name"] ?? "") == "token") {
-                        sawTokenMarker = true
-                        t |> equal(tokId, mk?["id"] ?? -1)
-                    }
-                }
-            }
-            t |> success(sawTokenMarker, "marker kind saved")
-
-            // events: spans exist; both unit markers landed as perfetto instants; any publish
-            // recorded during the tagged storm carries tag 7 in stage>>8 (workers may be absent
-            // on a 1-core box — then the dispatch inlines and no publish is recorded)
-            t |> success(root?["traceEvents"] != null, "traceEvents present")
-            var nSpans = 0
-            var markerArgs : array<int>
-            var nTaggedPublish = 0
-            var nUntaggedPublish = 0
-            for (ev in root?["traceEvents"] as _array) {
-                let ph = ev?["ph"] ?? ""
-                if (ph == "X") {
-                    nSpans++
-                    if ((ev?["name"] ?? "") == "publish") {
-                        let packed = ev?["args"]?["stage"] ?? 0
-                        if ((packed >> 8) == 7) {
-                            nTaggedPublish++
-                        } else {
-                            nUntaggedPublish++
-                        }
-                    }
-                } elif (ph == "i" && (ev?["name"] ?? "") == "token") {
-                    markerArgs |> push(ev?["args"]?["arg"] ?? -1)
-                }
-            }
-            t |> success(nSpans > 0, "recorded work spans")
-            t |> equal(0, nUntaggedPublish)
-            feint("tagged publishes: {nTaggedPublish}\n")
-            sort(markerArgs)
-            t |> equal(3, length(markerArgs))
-            t |> equal(-7, markerArgs[0])
-            t |> equal(41, markerArgs[1])
-            t |> equal(42, markerArgs[2])
+            verify_saved_trace(t, text, tokId)
         }
     }
 }

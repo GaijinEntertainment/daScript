@@ -181,10 +181,12 @@ def public get_team_rank_gate() : int { return g_team_rank_gate }
 // by OP rather than stage-count. Gated — set_trace_tags(true) rides with jobque_trace_start in
 // the profiling harness; production dispatches never pay the extern call.
 var g_trace_tags = false
-def public set_trace_tags(on : bool) {
-    g_trace_tags = on
-    if (on && is_job_que_available()) {   // registries live on the que; stay que-independent like trace_tag
-        register_trace_categories()
+def public set_trace_tags(on : bool) {   // nolint:LINT012,LINT019 — on is only read when JOBQUE_PROFILING_ENABLED compiles the body in
+    static_if (JOBQUE_PROFILING_ENABLED) {
+        g_trace_tags = on
+        if (on && is_job_que_available()) {   // registries live on the que; stay que-independent like trace_tag
+            register_trace_categories()
+        }
     }
 }
 let public TRACE_TAG_ATTN_CHAIN = 1
@@ -198,15 +200,19 @@ let public TRACE_TAG_PLE = 8
 let public TRACE_TAG_ROUTE = 9   // MoE router GEMM + select/bucket (prefill section split)
 let public TRACE_TAG_PARK = 10   // MoE park/reduce bookkeeping around the expert GEMMs
 let public TRACE_TAG_DN = 11   // Gated DeltaNet layers (qwen35 hybrid) — separates dn from gated attn
-def public trace_tag(t : int) {
-    if (g_trace_tags) {
-        jobque_trace_tag(t)
+def public trace_tag(t : int) {   // nolint:LINT012,LINT019 — t is only read when JOBQUE_PROFILING_ENABLED compiles the body in
+    static_if (JOBQUE_PROFILING_ENABLED) {
+        if (g_trace_tags) {
+            jobque_trace_tag(t)
+        }
     }
 }
-def public trace_marker(name : string; arg : int) {
+def public trace_marker(name : string; arg : int) {   // nolint:LINT012,LINT019 — args only read when JOBQUE_PROFILING_ENABLED compiles the body in
     // instant unit boundary ("token", "layer", "step") on the caller lane; same gate as trace_tag
-    if (g_trace_tags && is_job_que_available()) {
-        profile_marker(name, arg)
+    static_if (JOBQUE_PROFILING_ENABLED) {
+        if (g_trace_tags && is_job_que_available()) {
+            profile_marker(name, arg)
+        }
     }
 }
 // names/colors match the lane-timeline viewer's dark-theme palette, so saved traces carry

@@ -8,6 +8,7 @@ require dasllama/dasllama_image   // load_model_cached — the .dlim rail, witho
 require ?das_accelerate dasllama/dasllama_math_accelerate   // the --accel leg; Apple-only C++ module
 require ../performance/profile_common.das   // profile_threads + affinity_on — the standing per-box methodology
 require daslib/jobque_boost
+require daslib/jobque_profile   // JOBQUE_PROFILING_ENABLED — the --trace arm refuses on a build without the marker rail
 require daslib/clargs
 require math
 
@@ -116,6 +117,7 @@ def main() {
         }
         forward(t, s, synth_id(0l, 999l), depth)   // warmup token — untimed, outside the window
         if (!empty(cfg.trace)) {
+            if (!JOBQUE_PROFILING_ENABLED) panic("--trace needs the marker rail compiled in — rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)")
             jobque_trace_start(1 << 21)   // decode makes ~30k chunk events/token — size for a ~32-token window
             set_trace_tags(true)
         }

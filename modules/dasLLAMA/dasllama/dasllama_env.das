@@ -394,6 +394,12 @@ def private reg_example(var o : array<EnvKnob>) {
 }
 
 def private reg_core(var o : array<EnvKnob>) {
+    k(o, "HF_HOME", EnvKind.path, EnvArea.core, "~/.cache/huggingface",
+      "Hugging Face hub root; fetch_models --convert resolves checkpoint blobs under <HF_HOME>/hub. Falls back to HOME's default cache location when unset.")
+    k(o, "HOME", EnvKind.path, EnvArea.core, "",
+      "Ambient platform variable; read only to derive the default Hugging Face cache when HF_HOME is unset.")
+    k(o, "JOBQUE_PROFILING", EnvKind.flag, EnvArea.core, "off",
+      "Compile the jobque marker rail in (read at COMPILE time by daslib/build_const). Without it trace_tag/trace_marker erase from the program; decode_prof --trace refuses on a build without it.")
     k(o, "DAS_JOBQUE_THREADS", EnvKind.number, EnvArea.core, "conservative default",
       "Total compute lanes for job queues (N-1 workers plus the caller). Overrides set_jobque_threads_cap; see skills/environment_variables.md.")
     k(o, "DAS_JOBQUE_AFFINITY", EnvKind.number, EnvArea.core, "0",
