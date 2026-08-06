@@ -427,6 +427,16 @@ def public set_moe_gpu_heat_route(on : bool) {
     g_moe_gpu_heat_route = on
 }
 
+var g_vk_rdec_rerecord = false
+
+//! Probe lever (--rerecord-ab): re-encode the resident ladder's recorded-once token cmd every
+//! token — measures the re-record cost the carrier class twins would pay for push-borne pos/cnt.
+def public set_vk_rdec_rerecord(on : bool) {
+    g_vk_rdec_rerecord = on
+}
+
+def public vk_rdec_rerecord_on : bool => g_vk_rdec_rerecord
+
 // ===== shared-expert residency (decode, async behind the routed experts) =====
 
 var g_moe_gpu_shexp_layers : table<int64>   // layers whose shexp gate/up/down triple is resident

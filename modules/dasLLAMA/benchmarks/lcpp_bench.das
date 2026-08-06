@@ -109,6 +109,9 @@ struct Args {
     @clarg_doc = "A/B MTP/NextN self-speculation in-process, OFF then ON (needs a NextN head in the GGUF). Runs the tg-real row, NOT the llama-bench tg row — acceptance is meaningless on synthetic ids. Reports the draft accept rate; mutually exclusive with the other A/B levers"
     mtp_ab : bool
 
+    @clarg_doc = "A/B the resident ladder's per-token re-encode in-process: every row runs twice, recorded-once then re-encoded every token. Prices the carrier class twins' push-borne pos/cnt (vulkan resident decode only); mutually exclusive with the other A/B levers"
+    rerecord_ab : bool
+
     @clarg_doc = "Refuse to mint artifacts: load only an existing prepared .dlim image, panic otherwise (the gen_bench_records --oracle contract)"
     frozen : bool
 
@@ -359,6 +362,9 @@ def private levers_of(cfg : Args) : array<Lever> {
     if (cfg.mtp_ab) {
         // set_mtp_spec must be live BEFORE the prefill — it warms the draft head's KV
         out |> emplace(Lever(flag = "mtp", tag = "mtp", route = @@set_mtp_spec, env = "", real = true))
+    }
+    if (cfg.rerecord_ab) {
+        out |> emplace(Lever(flag = "rerecord", tag = "rerecord", route = @@set_vk_rdec_rerecord, env = ""))
     }
     return <- out
 }

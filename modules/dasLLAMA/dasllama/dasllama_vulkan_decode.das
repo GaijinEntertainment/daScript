@@ -280,11 +280,8 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int) {
 // Record the whole-token cmd ONCE per set_layer/set_cls epoch: constant metas + scalars fill here;
 // per-token state is only x/cos (in-cmd copies) and the rope/attn position words (host-visible)
 def private rd_record_token {
-    let dim = g_rd.dim
-    let qd = g_rd.qd
-    let kvd = g_rd.kv_dim
-    let hid = g_rd.hidden
-    let nlfin = g_rd.n_layers * 2l * dim   // rms_final offset in the norms buffer (dim units later)
+    let qd = g_rd.qd   // nolint:LINT021 — the mirror-row words compose it with int64 layout offsets
+    let kvd = g_rd.kv_dim   // nolint:LINT021 — same: layers x seq_cap x kvd needs the 64-bit product
     unsafe {
         // constant scalars — attn ([0]=scale); everything else rides class push constants
         var sp = reinterpret<float?>(g_gpu.staging.mapped)
@@ -313,6 +310,19 @@ def private rd_record_token {
             fill_gemv_regions(L.m_up, L.b3)
             fill_gemv_regions(L.m_down, L.b2)
         }
+    }
+    rd_encode_token()
+}
+
+// The encode half alone: reset + re-encode the token cmd over the already-filled metas/sets.
+// The --rerecord-ab probe calls this per token to price the class twins' push-borne pos/cnt.
+def private rd_encode_token {
+    let dim = g_rd.dim
+    let qd = g_rd.qd
+    let kvd = g_rd.kv_dim
+    let hid = g_rd.hidden
+    let nlfin = g_rd.n_layers * 2l * dim   // rms_final offset in the norms buffer (dim units later)
+    unsafe {
         var raw = g_rd.cmd
         let rf : VkCommandBufferResetFlags
         vk_check(vkResetCommandBuffer(raw, rf), null)
@@ -491,6 +501,8 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var
     assert(g_rd != null && g_rd.ready, "vk_rdec_token before prepare/set_cls")
     if (!g_rd.tok_recorded) {
         rd_record_token()
+    } elif (vk_rdec_rerecord_on()) {
+        rd_encode_token()   // probe arm: pay the full re-encode every token
     }
     let kvd = g_rd.kv_dim   // nolint:LINT021 — the mirror-row offset (layers x seq_cap x kv_dim) needs the 64-bit product
     unsafe {
