@@ -771,7 +771,7 @@ def is_linq_call(var expr : Expression?) : bool {
             funcName = string(call.func.name)
         }
         if (linqCalls.key_exists(funcName)) {
-            let linqCall & = unsafe(linqCalls?[funcName] ?? default<LinqCall>)
+            let linqCall = unsafe(linqCalls?[funcName])
             if (linqCall.moduleName == call.func._module.name) return true
         }
     }
@@ -798,8 +798,8 @@ def normalize_order_reverse(var calls : array<tuple<ExprCall?; LinqCall?>>) {
             }
         }
         if (flipped != "" && linqCalls.key_exists(flipped)) {
-            var linqCall & = unsafe(linqCalls?[flipped] ?? default<LinqCall>)
-            calls[i] = (calls[i]._0, unsafe(addr(linqCall)))
+            let linqCall = unsafe(linqCalls?[flipped])
+            calls[i] = (calls[i]._0, linqCall)
             calls |> erase(i + 1)
             // Don't advance `i` — the newly flipped order call might itself be followed by another reverse (`order_by(k).reverse().reverse()` → `order_by_descending(k).reverse()` → `order_by(k)`).
         } else {
@@ -920,10 +920,10 @@ def flatten_linq(var expr : Expression?)  {
             }
             let funcName = string(topFunc.name)
             if (!linqCalls.key_exists(funcName)) break
-            var linqCall & = unsafe(linqCalls?[funcName] ?? default<LinqCall>)
+            let linqCall = unsafe(linqCalls?[funcName])
             if (linqCall.moduleName != topFunc._module.name) break
             if (!linqCall.skip) {
-                calls.push((topCall, unsafe(addr(linqCall))))
+                calls.push((topCall, linqCall))
             }
             top = topCall.arguments[0]
         } else {
@@ -1643,6 +1643,520 @@ def emit_accumulator_lane(
     ), adapter, at)
 }
 
+def private emit_ee_first(var preludeStmts : array<Expression?>, var perMatchStmts : array<Expression?>, var tailStmts : array<Expression?>, var dispatch : LoopDispatch, directReturn : bool, valueName : string, var projection : Expression?, elementType : TypeDeclPtr, at : LineInfo) : bool {
+    var retType = mut_result_type(projection, elementType)
+    if (directReturn) {
+        perMatchStmts |> push <| qmacro_expr() {
+            return $i(valueName)
+        }
+        // Tail: panic + unreachable default-return (matches linq.das line 2383).
+        tailStmts |> push_from <| qmacro_block_to_array() {
+            panic("sequence contains no elements")
+            return default<$t(retType)>
+        }
+    } else {
+        // decs: the nested archetype lambda can't return out of the invoke — retain + `return true`, tail returns.
+        let foundName = qn("found", at)
+        let resultName = qn("fst", at)
+        preludeStmts |> push_from <| qmacro_block_to_array() {
+            var $i(foundName) = false
+            var $i(resultName) : $t(retType)
+        }
+        perMatchStmts |> push_from <| qmacro_block_to_array() {
+            $i(resultName) := $i(valueName)
+            $i(foundName) = true
+            return true
+        }
+        tailStmts |> push_from <| qmacro_block_to_array() {
+            if (!$i(foundName)) {
+                panic("sequence contains no elements")
+            }
+            return $i(resultName)
+        }
+        dispatch = LoopDispatch(Find = null)
+    }
+    return true
+}
+
+def private emit_ee_first_or_default(var preludeStmts : array<Expression?>, var perMatchStmts : array<Expression?>, var tailStmts : array<Expression?>, var dispatch : LoopDispatch, directReturn : bool, valueName : string, var projection : Expression?, elementType : TypeDeclPtr, terminatorCall : ExprCall?, at : LineInfo) : bool {
+    // Bind `d` once at the top of the block (eager evaluation, matches linq.das line 2397).
+    let defaultName = qn("dval", at)
+    preludeStmts |> push <| qmacro_expr() {
+        let $i(defaultName) = $e(terminatorCall.arguments[1])
+    }
+    if (directReturn) {
+        perMatchStmts |> push <| qmacro_expr() {
+            return $i(valueName)
+        }
+        tailStmts |> push <| qmacro_expr() {
+            return $i(defaultName)
+        }
+    } else {
+        var retType = mut_result_type(projection, elementType)
+        let foundName = qn("found", at)
+        let resultName = qn("fst", at)
+        preludeStmts |> push_from <| qmacro_block_to_array() {
+            var $i(foundName) = false
+            var $i(resultName) : $t(retType)
+        }
+        perMatchStmts |> push_from <| qmacro_block_to_array() {
+            $i(resultName) := $i(valueName)
+            $i(foundName) = true
+            return true
+        }
+        tailStmts |> push_from <| qmacro_block_to_array() {
+            if (!$i(foundName)) {
+                return $i(defaultName)
+            }
+            return $i(resultName)
+        }
+        dispatch = LoopDispatch(Find = null)
+    }
+    return true
+}
+
+def private emit_ee_any(var preludeStmts : array<Expression?>, var perMatchStmts : array<Expression?>, var tailStmts : array<Expression?>, var dispatch : LoopDispatch, directReturn : bool, valueName : string, terminatorCall : ExprCall?, at : LineInfo) : bool {
+    let argCount = length(terminatorCall.arguments)
+    var predExpr : Expression?
+    if (argCount > 1) {
+        predExpr = peel_lambda_rename_var(terminatorCall.arguments[1], valueName)
+    }
+    if (directReturn) {
+        if (argCount > 1) {
+            perMatchStmts |> push <| qmacro_expr() {
+                if ($e(predExpr)) {
+                    return true
+                }
+            }
+        } else {
+            perMatchStmts |> push <| qmacro_expr() {
+                return true
+            }
+        }
+        tailStmts |> push <| qmacro_expr() {
+            return false
+        }
+    } elif (dispatch is Find) {
+        // decs + take/take_while: the range cap's `return true` and a real match share the inner sentinel,
+        // so route the match through a found flag and use the find result only as iteration control.
+        if (argCount > 1 && predExpr == null) return false
+        let foundName = qn("found", at)
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(foundName) = false
+        }
+        if (argCount > 1) {
+            perMatchStmts |> push <| qmacro_expr() {
+                if ($e(predExpr)) {
+                    $i(foundName) = true
+                    return true
+                }
+            }
+        } else {
+            perMatchStmts |> push_from <| qmacro_block_to_array() {
+                $i(foundName) = true
+                return true
+            }
+        }
+        tailStmts |> push <| qmacro_expr() {
+            return $i(foundName)
+        }
+    } else {
+        // decs, no range: the find result IS the answer (inner `return true` on the first match).
+        if (argCount > 1 && predExpr == null) return false
+        if (argCount > 1) {
+            perMatchStmts |> push <| qmacro_expr() {
+                if ($e(predExpr)) return true
+            }
+        } else {
+            perMatchStmts |> push <| qmacro_expr() {
+                return true
+            }
+        }
+        dispatch = LoopDispatch(FindReturn = null)
+    }
+    return true
+}
+
+def private emit_ee_all(var preludeStmts : array<Expression?>, var perMatchStmts : array<Expression?>, var tailStmts : array<Expression?>, var dispatch : LoopDispatch, directReturn : bool, valueName : string, terminatorCall : ExprCall?, at : LineInfo) : bool {
+    var predExpr = peel_lambda_rename_var(terminatorCall.arguments[1], valueName)
+    if (directReturn) {
+        perMatchStmts |> push <| qmacro_expr() {
+            if (!$e(predExpr)) {
+                return false
+            }
+        }
+        tailStmts |> push <| qmacro_expr() {
+            return true
+        }
+    } elif (dispatch is Find) {
+        // decs + take/take_while: a counterexample and the range cap both inner-return true; route the
+        // counterexample through a found flag, tail returns !found.
+        if (predExpr == null) return false
+        let foundName = qn("found", at)
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(foundName) = false
+        }
+        perMatchStmts |> push <| qmacro_expr() {
+            if (!$e(predExpr)) {
+                $i(foundName) = true
+                return true
+            }
+        }
+        tailStmts |> push <| qmacro_expr() {
+            return !$i(foundName)
+        }
+    } else {
+        // decs, no range: `all` == "no counterexample" — inner returns true on FAIL, so negate the find.
+        if (predExpr == null) return false
+        perMatchStmts |> push <| qmacro_expr() {
+            if (!$e(predExpr)) return true
+        }
+        dispatch = LoopDispatch(FindReturnNegated = null)
+    }
+    return true
+}
+
+def private emit_ee_contains(var preludeStmts : array<Expression?>, var perMatchStmts : array<Expression?>, var tailStmts : array<Expression?>, var dispatch : LoopDispatch, directReturn : bool, valueName : string, terminatorCall : ExprCall?, at : LineInfo) : bool {
+    // `v` is bound once at the top of the block; per-element compare uses the bound name
+    let containsValName = qn("cval", at)
+    preludeStmts |> push <| qmacro_expr() {
+        let $i(containsValName) = $e(terminatorCall.arguments[1])
+    }
+    if (directReturn) {
+        perMatchStmts |> push <| qmacro_expr() {
+            if ($i(valueName) == $i(containsValName)) {
+                return true
+            }
+        }
+        tailStmts |> push <| qmacro_expr() {
+            return false
+        }
+    } elif (dispatch is Find) {
+        // decs + take/take_while: value-match and range cap share the sentinel; route through found flag.
+        let foundName = qn("found", at)
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(foundName) = false
+        }
+        perMatchStmts |> push <| qmacro_expr() {
+            if ($i(valueName) == $i(containsValName)) {
+                $i(foundName) = true
+                return true
+            }
+        }
+        tailStmts |> push <| qmacro_expr() {
+            return $i(foundName)
+        }
+    } else {
+        // decs, no range: the find result IS the answer.
+        perMatchStmts |> push <| qmacro_expr() {
+            if ($i(valueName) == $i(containsValName)) return true
+        }
+        dispatch = LoopDispatch(FindReturn = null)
+    }
+    return true
+}
+
+def private emit_ee_last(var preludeStmts : array<Expression?>, var perMatchStmts : array<Expression?>, var tailStmts : array<Expression?>, opName : string, valueName : string, itName : string, var projection : Expression?, var whereCond : Expression?, var postTakeWhereCond : Expression?, var skipExpr : Expression?, var takeExpr : Expression?, var skipWhileCond : Expression?, var takeWhileCond : Expression?, var intermediateBinds : array<Expression?>, var preCondStmts : array<Expression?>, elementType : TypeDeclPtr, terminatorCall : ExprCall?, var adapter : SourceAdapter?, at : LineInfo, var earlyLane : Expression?&) : bool {
+    // Full walk; per-match overwrites a single bind; tail returns it after found-check (panic/default for empty).
+    var retType = mut_result_type(projection, elementType)
+    let foundName = qn("found", at)
+    let lastBindName = qn("lst", at)
+    // No-predicate `last` via the source's backward fast path: a bare `source.last()` (no where / range /
+    // projection) is the last element, reachable in one backward DOM step. Predicated/ranged last stays
+    // forward — reverse DOM traversal is ~2x cache-hostile per node and a deep match would regress (profiled).
+    if (adapter != null && whereCond == null && postTakeWhereCond == null && skipExpr == null
+            && takeExpr == null && skipWhileCond == null && takeWhileCond == null
+            && empty(intermediateBinds) && empty(preCondStmts) && projection == null) {
+        var lastDefault : Expression?
+        if (opName == "last_or_default") {
+            lastDefault = clone_expression(terminatorCall.arguments[1])
+        }
+        var back = adapter->emit_reverse_last_backward(itName, null, null, lastDefault, elementType, retType, at)
+        if (back != null) {
+            earlyLane = back
+            return true
+        }
+    }
+    // Deferred materialization (XML): a full walk clones the whole row on EVERY match, but only the LAST
+    // survives. Store the node HANDLE per match; build the full row once, at the tail.
+    let deferLast = (adapter != null && adapter->defers_materialization()
+        && projection == null && adapter->handle_type() != null)
+    if (deferLast) {
+        var handleType = adapter->handle_type()
+        let lastNodeName = qn("lst_node", at)
+        let matItName = qn("lst_mat", at)
+        var matStmt = adapter->materialize_handle(qmacro($i(lastNodeName)), matItName, at)
+        preludeStmts |> push_from <| qmacro_block_to_array() {
+            var $i(foundName) = false
+            var $i(lastNodeName) = default<$t(handleType)>
+        }
+        perMatchStmts |> push_from <| qmacro_block_to_array() {
+            $i(foundName) = true
+            $i(lastNodeName) = $e(adapter->current_handle_expr(at))
+        }
+        if (opName == "last") {
+            tailStmts |> push_from <| qmacro_block_to_array() {
+                if (!$i(foundName)) {
+                    panic("sequence contains no elements")
+                }
+                var $i(matItName) = default<$t(retType)>
+                $e(matStmt)
+                return <- $i(matItName)
+            }
+        } else {
+            let defaultName = qn("dval", at)
+            let dvCanCopy = (terminatorCall.arguments[1]._type != null && terminatorCall.arguments[1]._type.canCopy)
+            preludeStmts |> push(emit_default_bind(defaultName, terminatorCall.arguments[1], dvCanCopy))
+            tailStmts |> push_from <| qmacro_block_to_array() {
+                if (!$i(foundName)) {
+                    $e(emit_default_return(defaultName, dvCanCopy))
+                }
+                var $i(matItName) = default<$t(retType)>
+                $e(matStmt)
+                return <- $i(matItName)
+            }
+        }
+    } else {
+        preludeStmts |> push_from <| qmacro_block_to_array() {
+            var $i(foundName) = false
+            var $i(lastBindName) : $t(retType)
+        }
+        perMatchStmts |> push_from <| qmacro_block_to_array() {
+            $i(foundName) = true
+            $i(lastBindName) := $i(valueName)
+        }
+        if (opName == "last") {
+            tailStmts |> push_from <| qmacro_block_to_array() {
+                if (!$i(foundName)) {
+                    panic("sequence contains no elements")
+                }
+                return <- $i(lastBindName)
+            }
+        } else {
+            // Bind `d` once at the top (eager, matches linq.das line 2621); copy/move probe matches linq.das can_copy/clone_to_move branch.
+            let defaultName = qn("dval", at)
+            let dvCanCopy = (terminatorCall.arguments[1]._type != null && terminatorCall.arguments[1]._type.canCopy)
+            preludeStmts |> push(emit_default_bind(defaultName, terminatorCall.arguments[1], dvCanCopy))
+            tailStmts |> push_from <| qmacro_block_to_array() {
+                if (!$i(foundName)) {
+                    $e(emit_default_return(defaultName, dvCanCopy))
+                }
+                return <- $i(lastBindName)
+            }
+        }
+    }
+    return true
+}
+
+def private emit_ee_single(var preludeStmts : array<Expression?>, var perMatchStmts : array<Expression?>, var tailStmts : array<Expression?>, var dispatch : LoopDispatch, directReturn : bool, opName : string, valueName : string, var projection : Expression?, elementType : TypeDeclPtr, terminatorCall : ExprCall?, at : LineInfo) : bool {
+    // Full walk; on the SECOND match `single` panics and `single_or_default` returns the default; same for empty source.
+    var retType = mut_result_type(projection, elementType)
+    let foundName = qn("found", at)
+    let bindName = qn("sng", at)
+    preludeStmts |> push_from <| qmacro_block_to_array() {
+        var $i(foundName) = false
+        var $i(bindName) : $t(retType)
+    }
+    if (opName == "single") {
+        perMatchStmts |> push_from <| qmacro_block_to_array() {
+            if ($i(foundName)) {
+                panic("sequence contains more than one element")
+            }
+            $i(foundName) = true
+            $i(bindName) := $i(valueName)
+        }
+        tailStmts |> push_from <| qmacro_block_to_array() {
+            if (!$i(foundName)) {
+                panic("sequence contains no elements")
+            }
+            return <- $i(bindName)
+        }
+    } else {
+        let defaultName = qn("dval", at)
+        let dvCanCopy = (terminatorCall.arguments[1]._type != null && terminatorCall.arguments[1]._type.canCopy)
+        preludeStmts |> push(emit_default_bind(defaultName, terminatorCall.arguments[1], dvCanCopy))
+        if (directReturn) {
+            // `single_or_default` early-returns default on the SECOND match (subsequent matches don't matter).
+            perMatchStmts |> push_from <| qmacro_block_to_array() {
+                if ($i(foundName)) {
+                    $e(emit_default_return(defaultName, dvCanCopy))
+                }
+                $i(foundName) = true
+                $i(bindName) := $i(valueName)
+            }
+            tailStmts |> push_from <| qmacro_block_to_array() {
+                if (!$i(foundName)) {
+                    $e(emit_default_return(defaultName, dvCanCopy))
+                }
+                return <- $i(bindName)
+            }
+        } else {
+            // decs: the nested archetype lambda can't return the default mid-walk — set a stop flag and
+            // `return true` (exits the find walk); the tail returns default when stopped or never found.
+            let stopName = qn("stop", at)
+            preludeStmts |> push <| qmacro_expr() {
+                var $i(stopName) = false
+            }
+            perMatchStmts |> push_from <| qmacro_block_to_array() {
+                if ($i(foundName)) {
+                    $i(stopName) = true
+                    return true
+                }
+                $i(foundName) = true
+                $i(bindName) := $i(valueName)
+            }
+            tailStmts |> push_from <| qmacro_block_to_array() {
+                if ($i(stopName) || !$i(foundName)) {
+                    $e(emit_default_return(defaultName, dvCanCopy))
+                }
+                return <- $i(bindName)
+            }
+            dispatch = LoopDispatch(Find = null)
+        }
+    }
+    return true
+}
+
+def private emit_ee_element_at(var preludeStmts : array<Expression?>, var perMatchStmts : array<Expression?>, var tailStmts : array<Expression?>, var dispatch : LoopDispatch, directReturn : bool, opName : string, valueName : string, var projection : Expression?, elementType : TypeDeclPtr, terminatorCall : ExprCall?, at : LineInfo) : bool {
+    // Counter-style early-exit: return the N-th element that survives upstream where/select. Negative index panics or returns default pre-loop.
+    var retType = mut_result_type(projection, elementType)
+    let idxName = qn("idx", at)
+    let cntName = qn("ec", at)
+    preludeStmts |> push <| qmacro_expr() {
+        let $i(idxName) = $e(terminatorCall.arguments[1])
+    }
+    if (opName == "element_at") {
+        preludeStmts |> push <| qmacro_expr() {
+            if ($i(idxName) < 0) {
+                panic("element index out of range")
+            }
+        }
+    } else {
+        // `var t : TT; return <- t` (move-init) works for both copyable and non-copyable element types; matches linq.das line 2547.
+        let tName = qn("emptyT", at)
+        preludeStmts |> push_from <| qmacro_block_to_array() {
+            if ($i(idxName) < 0) {
+                var $i(tName) : $t(retType)
+                return <- $i(tName)
+            }
+        }
+    }
+    preludeStmts |> push <| qmacro_expr() {
+        var $i(cntName) = 0
+    }
+    if (directReturn) {
+        perMatchStmts |> push_from <| qmacro_block_to_array() {
+            if ($i(cntName) == $i(idxName)) {
+                return $i(valueName)
+            }
+            $i(cntName) ++
+        }
+        if (opName == "element_at") {
+            let tName = qn("emptyT", at)
+            tailStmts |> push_from <| qmacro_block_to_array() {
+                panic("element index out of range")
+                var $i(tName) : $t(retType)
+                return <- $i(tName)
+            }
+        } else {
+            let tName = qn("emptyT", at)
+            tailStmts |> push_from <| qmacro_block_to_array() {
+                var $i(tName) : $t(retType)
+                return <- $i(tName)
+            }
+        }
+    } else {
+        // decs: retain the matched element + `return true` (the nested lambda can't return it out); tail returns it.
+        let foundName = qn("found", at)
+        let resultName = qn("eares", at)
+        preludeStmts |> push_from <| qmacro_block_to_array() {
+            var $i(foundName) = false
+            var $i(resultName) : $t(retType)
+        }
+        perMatchStmts |> push_from <| qmacro_block_to_array() {
+            if ($i(cntName) == $i(idxName)) {
+                $i(resultName) := $i(valueName)
+                $i(foundName) = true
+                return true
+            }
+            $i(cntName) ++
+        }
+        if (opName == "element_at") {
+            tailStmts |> push_from <| qmacro_block_to_array() {
+                if (!$i(foundName)) {
+                    panic("element index out of range")
+                }
+                return <- $i(resultName)
+            }
+        } else {
+            let tName = qn("emptyT", at)
+            tailStmts |> push_from <| qmacro_block_to_array() {
+                if (!$i(foundName)) {
+                    var $i(tName) : $t(retType)
+                    return <- $i(tName)
+                }
+                return <- $i(resultName)
+            }
+        }
+        dispatch = LoopDispatch(Find = null)
+    }
+    return true
+}
+
+def private emit_ee_aggregate(var preludeStmts : array<Expression?>, var perMatchStmts : array<Expression?>, var tailStmts : array<Expression?>, valueName : string, terminatorCall : ExprCall?, at : LineInfo) : bool {
+    // Peel single-return `block<(acc, x):AGG>` body inline; fall back to invoke on multi-stmt. Workhorse seed picks `=` / `return`; non-workhorse uses `<-` / `return <-` (matches linq.das:1466 static_if).
+    var seedExpr = clone_expression(terminatorCall.arguments[1])
+    var aggFn = clone_expression(terminatorCall.arguments[2])
+    var accType = clone_type(seedExpr._type)
+    if (accType != null) {
+        accType.flags.constant = false
+        accType.flags.ref = false
+    }
+    let aggAccName = qn("agg", at)
+    let aggIsWorkhorse = (seedExpr._type != null && seedExpr._type.isWorkhorseType)
+    if (aggIsWorkhorse) {
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(aggAccName) : $t(accType) = $e(seedExpr)
+        }
+    } else {
+        preludeStmts |> push <| qmacro_expr() {
+            var $i(aggAccName) : $t(accType) <- $e(seedExpr)
+        }
+    }
+    var peeled = peel_lambda_rename_2vars(aggFn, aggAccName, valueName)
+    if (peeled != null) {
+        if (aggIsWorkhorse) {
+            perMatchStmts |> push <| qmacro_expr() {
+                $i(aggAccName) = $e(peeled)
+            }
+        } else {
+            perMatchStmts |> push <| qmacro_expr() {
+                $i(aggAccName) <- $e(peeled)
+            }
+        }
+    } else {
+        if (aggIsWorkhorse) {
+            perMatchStmts |> push <| qmacro_expr() {
+                $i(aggAccName) = invoke($e(aggFn), $i(aggAccName), $i(valueName))
+            }
+        } else {
+            perMatchStmts |> push <| qmacro_expr() {
+                $i(aggAccName) <- invoke($e(aggFn), $i(aggAccName), $i(valueName))
+            }
+        }
+    }
+    if (aggIsWorkhorse) {
+        tailStmts |> push <| qmacro_expr() {
+            return $i(aggAccName)
+        }
+    } else {
+        tailStmts |> push <| qmacro_expr() {
+            return <- $i(aggAccName)
+        }
+    }
+    return true
+}
+
 [macro_function]
 def emit_early_exit_lane(
                          opName : string;
@@ -1700,489 +2214,25 @@ def emit_early_exit_lane(
     let directReturn = (adapter == null || adapter->supports_direct_return())
     var dispatch = directReturn ? LoopDispatch(Each = null) : adapter->effective_dispatch(LoopDispatch(Each = null))
     if (opName == "first") {
-        var retType = mut_result_type(projection, elementType)
-        if (directReturn) {
-            perMatchStmts |> push <| qmacro_expr() {
-                return $i(valueName)
-            }
-            // Tail: panic + unreachable default-return (matches linq.das line 2383).
-            tailStmts <- qmacro_block_to_array() {
-                panic("sequence contains no elements")
-                return default<$t(retType)>
-            }
-        } else {
-            // decs: the nested archetype lambda can't return out of the invoke — retain + `return true`, tail returns.
-            let foundName = qn("found", at)
-            let resultName = qn("fst", at)
-            preludeStmts |> push_from <| qmacro_block_to_array() {
-                var $i(foundName) = false
-                var $i(resultName) : $t(retType)
-            }
-            perMatchStmts |> push_from <| qmacro_block_to_array() {
-                $i(resultName) := $i(valueName)
-                $i(foundName) = true
-                return true
-            }
-            tailStmts |> push_from <| qmacro_block_to_array() {
-                if (!$i(foundName)) {
-                    panic("sequence contains no elements")
-                }
-                return $i(resultName)
-            }
-            dispatch = LoopDispatch(Find = null)
-        }
+        if (!emit_ee_first(preludeStmts, perMatchStmts, tailStmts, dispatch, directReturn, valueName, projection, elementType, at)) return null
     } elif (opName == "first_or_default") {
-        // Bind `d` once at the top of the block (eager evaluation, matches linq.das line 2397).
-        let defaultName = qn("dval", at)
-        preludeStmts |> push <| qmacro_expr() {
-            let $i(defaultName) = $e(terminatorCall.arguments[1])
-        }
-        if (directReturn) {
-            perMatchStmts |> push <| qmacro_expr() {
-                return $i(valueName)
-            }
-            tailStmts |> push <| qmacro_expr() {
-                return $i(defaultName)
-            }
-        } else {
-            var retType = mut_result_type(projection, elementType)
-            let foundName = qn("found", at)
-            let resultName = qn("fst", at)
-            preludeStmts |> push_from <| qmacro_block_to_array() {
-                var $i(foundName) = false
-                var $i(resultName) : $t(retType)
-            }
-            perMatchStmts |> push_from <| qmacro_block_to_array() {
-                $i(resultName) := $i(valueName)
-                $i(foundName) = true
-                return true
-            }
-            tailStmts |> push_from <| qmacro_block_to_array() {
-                if (!$i(foundName)) {
-                    return $i(defaultName)
-                }
-                return $i(resultName)
-            }
-            dispatch = LoopDispatch(Find = null)
-        }
+        if (!emit_ee_first_or_default(preludeStmts, perMatchStmts, tailStmts, dispatch, directReturn, valueName, projection, elementType, terminatorCall, at)) return null
     } elif (opName == "any") {
-        let argCount = length(terminatorCall.arguments)
-        var predExpr : Expression?
-        if (argCount > 1) {
-            predExpr = peel_lambda_rename_var(terminatorCall.arguments[1], valueName)
-        }
-        if (directReturn) {
-            if (argCount > 1) {
-                perMatchStmts |> push <| qmacro_expr() {
-                    if ($e(predExpr)) {
-                        return true
-                    }
-                }
-            } else {
-                perMatchStmts |> push <| qmacro_expr() {
-                    return true
-                }
-            }
-            tailStmts |> push <| qmacro_expr() {
-                return false
-            }
-        } elif (dispatch is Find) {
-            // decs + take/take_while: the range cap's `return true` and a real match share the inner sentinel,
-            // so route the match through a found flag and use the find result only as iteration control.
-            if (argCount > 1 && predExpr == null) return null
-            let foundName = qn("found", at)
-            preludeStmts |> push <| qmacro_expr() {
-                var $i(foundName) = false
-            }
-            if (argCount > 1) {
-                perMatchStmts |> push <| qmacro_expr() {
-                    if ($e(predExpr)) {
-                        $i(foundName) = true
-                        return true
-                    }
-                }
-            } else {
-                perMatchStmts |> push_from <| qmacro_block_to_array() {
-                    $i(foundName) = true
-                    return true
-                }
-            }
-            tailStmts |> push <| qmacro_expr() {
-                return $i(foundName)
-            }
-        } else {
-            // decs, no range: the find result IS the answer (inner `return true` on the first match).
-            if (argCount > 1 && predExpr == null) return null
-            if (argCount > 1) {
-                perMatchStmts |> push <| qmacro_expr() {
-                    if ($e(predExpr)) return true
-                }
-            } else {
-                perMatchStmts |> push <| qmacro_expr() {
-                    return true
-                }
-            }
-            dispatch = LoopDispatch(FindReturn = null)
-        }
+        if (!emit_ee_any(preludeStmts, perMatchStmts, tailStmts, dispatch, directReturn, valueName, terminatorCall, at)) return null
     } elif (opName == "all") {
-        var predExpr = peel_lambda_rename_var(terminatorCall.arguments[1], valueName)
-        if (directReturn) {
-            perMatchStmts |> push <| qmacro_expr() {
-                if (!$e(predExpr)) {
-                    return false
-                }
-            }
-            tailStmts |> push <| qmacro_expr() {
-                return true
-            }
-        } elif (dispatch is Find) {
-            // decs + take/take_while: a counterexample and the range cap both inner-return true; route the
-            // counterexample through a found flag, tail returns !found.
-            if (predExpr == null) return null
-            let foundName = qn("found", at)
-            preludeStmts |> push <| qmacro_expr() {
-                var $i(foundName) = false
-            }
-            perMatchStmts |> push <| qmacro_expr() {
-                if (!$e(predExpr)) {
-                    $i(foundName) = true
-                    return true
-                }
-            }
-            tailStmts |> push <| qmacro_expr() {
-                return !$i(foundName)
-            }
-        } else {
-            // decs, no range: `all` == "no counterexample" — inner returns true on FAIL, so negate the find.
-            if (predExpr == null) return null
-            perMatchStmts |> push <| qmacro_expr() {
-                if (!$e(predExpr)) return true
-            }
-            dispatch = LoopDispatch(FindReturnNegated = null)
-        }
+        if (!emit_ee_all(preludeStmts, perMatchStmts, tailStmts, dispatch, directReturn, valueName, terminatorCall, at)) return null
     } elif (opName == "contains") {
-        // `v` is bound once at the top of the block; per-element compare uses the bound name
-        let containsValName = qn("cval", at)
-        preludeStmts |> push <| qmacro_expr() {
-            let $i(containsValName) = $e(terminatorCall.arguments[1])
-        }
-        if (directReturn) {
-            perMatchStmts |> push <| qmacro_expr() {
-                if ($i(valueName) == $i(containsValName)) {
-                    return true
-                }
-            }
-            tailStmts |> push <| qmacro_expr() {
-                return false
-            }
-        } elif (dispatch is Find) {
-            // decs + take/take_while: value-match and range cap share the sentinel; route through found flag.
-            let foundName = qn("found", at)
-            preludeStmts |> push <| qmacro_expr() {
-                var $i(foundName) = false
-            }
-            perMatchStmts |> push <| qmacro_expr() {
-                if ($i(valueName) == $i(containsValName)) {
-                    $i(foundName) = true
-                    return true
-                }
-            }
-            tailStmts |> push <| qmacro_expr() {
-                return $i(foundName)
-            }
-        } else {
-            // decs, no range: the find result IS the answer.
-            perMatchStmts |> push <| qmacro_expr() {
-                if ($i(valueName) == $i(containsValName)) return true
-            }
-            dispatch = LoopDispatch(FindReturn = null)
-        }
+        if (!emit_ee_contains(preludeStmts, perMatchStmts, tailStmts, dispatch, directReturn, valueName, terminatorCall, at)) return null
     } elif (opName == "last" || opName == "last_or_default") {
-        // Full walk; per-match overwrites a single bind; tail returns it after found-check (panic/default for empty).
-        var retType = mut_result_type(projection, elementType)
-        let foundName = qn("found", at)
-        let lastBindName = qn("lst", at)
-        // No-predicate `last` via the source's backward fast path: a bare `source.last()` (no where / range /
-        // projection) is the last element, reachable in one backward DOM step. Predicated/ranged last stays
-        // forward — reverse DOM traversal is ~2x cache-hostile per node and a deep match would regress (profiled).
-        if (adapter != null && whereCond == null && postTakeWhereCond == null && skipExpr == null
-                && takeExpr == null && skipWhileCond == null && takeWhileCond == null
-                && empty(intermediateBinds) && empty(preCondStmts) && projection == null) {
-            var lastDefault : Expression?
-            if (opName == "last_or_default") {
-                lastDefault = clone_expression(terminatorCall.arguments[1])
-            }
-            var back = adapter->emit_reverse_last_backward(itName, null, null, lastDefault, elementType, retType, at)
-            if (back != null) return back
-        }
-        // Deferred materialization (XML): a full walk clones the whole row on EVERY match, but only the LAST
-        // survives. Store the node HANDLE per match; build the full row once, at the tail.
-        let deferLast = (adapter != null && adapter->defers_materialization()
-            && projection == null && adapter->handle_type() != null)
-        if (deferLast) {
-            var handleType = adapter->handle_type()
-            let lastNodeName = qn("lst_node", at)
-            let matItName = qn("lst_mat", at)
-            var matStmt = adapter->materialize_handle(qmacro($i(lastNodeName)), matItName, at)
-            preludeStmts |> push_from <| qmacro_block_to_array() {
-                var $i(foundName) = false
-                var $i(lastNodeName) = default<$t(handleType)>
-            }
-            perMatchStmts |> push_from <| qmacro_block_to_array() {
-                $i(foundName) = true
-                $i(lastNodeName) = $e(adapter->current_handle_expr(at))
-            }
-            if (opName == "last") {
-                tailStmts <- qmacro_block_to_array() {
-                    if (!$i(foundName)) {
-                        panic("sequence contains no elements")
-                    }
-                    var $i(matItName) = default<$t(retType)>
-                    $e(matStmt)
-                    return <- $i(matItName)
-                }
-            } else {
-                let defaultName = qn("dval", at)
-                let dvCanCopy = (terminatorCall.arguments[1]._type != null && terminatorCall.arguments[1]._type.canCopy)
-                preludeStmts |> push(emit_default_bind(defaultName, terminatorCall.arguments[1], dvCanCopy))
-                tailStmts <- qmacro_block_to_array() {
-                    if (!$i(foundName)) {
-                        $e(emit_default_return(defaultName, dvCanCopy))
-                    }
-                    var $i(matItName) = default<$t(retType)>
-                    $e(matStmt)
-                    return <- $i(matItName)
-                }
-            }
-        } else {
-            preludeStmts |> push_from <| qmacro_block_to_array() {
-                var $i(foundName) = false
-                var $i(lastBindName) : $t(retType)
-            }
-            perMatchStmts |> push_from <| qmacro_block_to_array() {
-                $i(foundName) = true
-                $i(lastBindName) := $i(valueName)
-            }
-            if (opName == "last") {
-                tailStmts <- qmacro_block_to_array() {
-                    if (!$i(foundName)) {
-                        panic("sequence contains no elements")
-                    }
-                    return <- $i(lastBindName)
-                }
-            } else {
-                // Bind `d` once at the top (eager, matches linq.das line 2621); copy/move probe matches linq.das can_copy/clone_to_move branch.
-                let defaultName = qn("dval", at)
-                let dvCanCopy = (terminatorCall.arguments[1]._type != null && terminatorCall.arguments[1]._type.canCopy)
-                preludeStmts |> push(emit_default_bind(defaultName, terminatorCall.arguments[1], dvCanCopy))
-                tailStmts <- qmacro_block_to_array() {
-                    if (!$i(foundName)) {
-                        $e(emit_default_return(defaultName, dvCanCopy))
-                    }
-                    return <- $i(lastBindName)
-                }
-            }
-        }
+        var earlyLane : Expression?
+        if (!emit_ee_last(preludeStmts, perMatchStmts, tailStmts, opName, valueName, itName, projection, whereCond, postTakeWhereCond, skipExpr, takeExpr, skipWhileCond, takeWhileCond, intermediateBinds, preCondStmts, elementType, terminatorCall, adapter, at, earlyLane)) return null
+        if (earlyLane != null) return earlyLane
     } elif (opName == "single" || opName == "single_or_default") {
-        // Full walk; on the SECOND match `single` panics and `single_or_default` returns the default; same for empty source.
-        var retType = mut_result_type(projection, elementType)
-        let foundName = qn("found", at)
-        let bindName = qn("sng", at)
-        preludeStmts |> push_from <| qmacro_block_to_array() {
-            var $i(foundName) = false
-            var $i(bindName) : $t(retType)
-        }
-        if (opName == "single") {
-            perMatchStmts |> push_from <| qmacro_block_to_array() {
-                if ($i(foundName)) {
-                    panic("sequence contains more than one element")
-                }
-                $i(foundName) = true
-                $i(bindName) := $i(valueName)
-            }
-            tailStmts <- qmacro_block_to_array() {
-                if (!$i(foundName)) {
-                    panic("sequence contains no elements")
-                }
-                return <- $i(bindName)
-            }
-        } else {
-            let defaultName = qn("dval", at)
-            let dvCanCopy = (terminatorCall.arguments[1]._type != null && terminatorCall.arguments[1]._type.canCopy)
-            preludeStmts |> push(emit_default_bind(defaultName, terminatorCall.arguments[1], dvCanCopy))
-            if (directReturn) {
-                // `single_or_default` early-returns default on the SECOND match (subsequent matches don't matter).
-                perMatchStmts |> push_from <| qmacro_block_to_array() {
-                    if ($i(foundName)) {
-                        $e(emit_default_return(defaultName, dvCanCopy))
-                    }
-                    $i(foundName) = true
-                    $i(bindName) := $i(valueName)
-                }
-                tailStmts <- qmacro_block_to_array() {
-                    if (!$i(foundName)) {
-                        $e(emit_default_return(defaultName, dvCanCopy))
-                    }
-                    return <- $i(bindName)
-                }
-            } else {
-                // decs: the nested archetype lambda can't return the default mid-walk — set a stop flag and
-                // `return true` (exits the find walk); the tail returns default when stopped or never found.
-                let stopName = qn("stop", at)
-                preludeStmts |> push <| qmacro_expr() {
-                    var $i(stopName) = false
-                }
-                perMatchStmts |> push_from <| qmacro_block_to_array() {
-                    if ($i(foundName)) {
-                        $i(stopName) = true
-                        return true
-                    }
-                    $i(foundName) = true
-                    $i(bindName) := $i(valueName)
-                }
-                tailStmts <- qmacro_block_to_array() {
-                    if ($i(stopName) || !$i(foundName)) {
-                        $e(emit_default_return(defaultName, dvCanCopy))
-                    }
-                    return <- $i(bindName)
-                }
-                dispatch = LoopDispatch(Find = null)
-            }
-        }
+        if (!emit_ee_single(preludeStmts, perMatchStmts, tailStmts, dispatch, directReturn, opName, valueName, projection, elementType, terminatorCall, at)) return null
     } elif (opName == "element_at" || opName == "element_at_or_default") {
-        // Counter-style early-exit: return the N-th element that survives upstream where/select. Negative index panics or returns default pre-loop.
-        var retType = mut_result_type(projection, elementType)
-        let idxName = qn("idx", at)
-        let cntName = qn("ec", at)
-        preludeStmts |> push <| qmacro_expr() {
-            let $i(idxName) = $e(terminatorCall.arguments[1])
-        }
-        if (opName == "element_at") {
-            preludeStmts |> push <| qmacro_expr() {
-                if ($i(idxName) < 0) {
-                    panic("element index out of range")
-                }
-            }
-        } else {
-            // `var t : TT; return <- t` (move-init) works for both copyable and non-copyable element types; matches linq.das line 2547.
-            let tName = qn("emptyT", at)
-            preludeStmts |> push_from <| qmacro_block_to_array() {
-                if ($i(idxName) < 0) {
-                    var $i(tName) : $t(retType)
-                    return <- $i(tName)
-                }
-            }
-        }
-        preludeStmts |> push <| qmacro_expr() {
-            var $i(cntName) = 0
-        }
-        if (directReturn) {
-            perMatchStmts |> push_from <| qmacro_block_to_array() {
-                if ($i(cntName) == $i(idxName)) {
-                    return $i(valueName)
-                }
-                $i(cntName) ++
-            }
-            if (opName == "element_at") {
-                let tName = qn("emptyT", at)
-                tailStmts <- qmacro_block_to_array() {
-                    panic("element index out of range")
-                    var $i(tName) : $t(retType)
-                    return <- $i(tName)
-                }
-            } else {
-                let tName = qn("emptyT", at)
-                tailStmts |> push_from <| qmacro_block_to_array() {
-                    var $i(tName) : $t(retType)
-                    return <- $i(tName)
-                }
-            }
-        } else {
-            // decs: retain the matched element + `return true` (the nested lambda can't return it out); tail returns it.
-            let foundName = qn("found", at)
-            let resultName = qn("eares", at)
-            preludeStmts |> push_from <| qmacro_block_to_array() {
-                var $i(foundName) = false
-                var $i(resultName) : $t(retType)
-            }
-            perMatchStmts |> push_from <| qmacro_block_to_array() {
-                if ($i(cntName) == $i(idxName)) {
-                    $i(resultName) := $i(valueName)
-                    $i(foundName) = true
-                    return true
-                }
-                $i(cntName) ++
-            }
-            if (opName == "element_at") {
-                tailStmts |> push_from <| qmacro_block_to_array() {
-                    if (!$i(foundName)) {
-                        panic("element index out of range")
-                    }
-                    return <- $i(resultName)
-                }
-            } else {
-                let tName = qn("emptyT", at)
-                tailStmts |> push_from <| qmacro_block_to_array() {
-                    if (!$i(foundName)) {
-                        var $i(tName) : $t(retType)
-                        return <- $i(tName)
-                    }
-                    return <- $i(resultName)
-                }
-            }
-            dispatch = LoopDispatch(Find = null)
-        }
+        if (!emit_ee_element_at(preludeStmts, perMatchStmts, tailStmts, dispatch, directReturn, opName, valueName, projection, elementType, terminatorCall, at)) return null
     } elif (opName == "aggregate") {
-        // Peel single-return `block<(acc, x):AGG>` body inline; fall back to invoke on multi-stmt. Workhorse seed picks `=` / `return`; non-workhorse uses `<-` / `return <-` (matches linq.das:1466 static_if).
-        var seedExpr = clone_expression(terminatorCall.arguments[1])
-        var aggFn = clone_expression(terminatorCall.arguments[2])
-        var accType = clone_type(seedExpr._type)
-        if (accType != null) {
-            accType.flags.constant = false
-            accType.flags.ref = false
-        }
-        let aggAccName = qn("agg", at)
-        let aggIsWorkhorse = (seedExpr._type != null && seedExpr._type.isWorkhorseType)
-        if (aggIsWorkhorse) {
-            preludeStmts |> push <| qmacro_expr() {
-                var $i(aggAccName) : $t(accType) = $e(seedExpr)
-            }
-        } else {
-            preludeStmts |> push <| qmacro_expr() {
-                var $i(aggAccName) : $t(accType) <- $e(seedExpr)
-            }
-        }
-        var peeled = peel_lambda_rename_2vars(aggFn, aggAccName, valueName)
-        if (peeled != null) {
-            if (aggIsWorkhorse) {
-                perMatchStmts |> push <| qmacro_expr() {
-                    $i(aggAccName) = $e(peeled)
-                }
-            } else {
-                perMatchStmts |> push <| qmacro_expr() {
-                    $i(aggAccName) <- $e(peeled)
-                }
-            }
-        } else {
-            if (aggIsWorkhorse) {
-                perMatchStmts |> push <| qmacro_expr() {
-                    $i(aggAccName) = invoke($e(aggFn), $i(aggAccName), $i(valueName))
-                }
-            } else {
-                perMatchStmts |> push <| qmacro_expr() {
-                    $i(aggAccName) <- invoke($e(aggFn), $i(aggAccName), $i(valueName))
-                }
-            }
-        }
-        if (aggIsWorkhorse) {
-            tailStmts |> push <| qmacro_expr() {
-                return $i(aggAccName)
-            }
-        } else {
-            tailStmts |> push <| qmacro_expr() {
-                return <- $i(aggAccName)
-            }
-        }
+        if (!emit_ee_aggregate(preludeStmts, perMatchStmts, tailStmts, valueName, terminatorCall, at)) return null
     } else {
         return null
     }
@@ -2574,7 +2624,7 @@ def build_join_adapter_pieces(
     var resultBody = peel_lambda_rename_2vars(resultLam, tupAName, tupBName)
     if (keyaBody == null || keybBody == null || resultBody == null) return null
     var collectInner <- qmacro_expr() {
-        // nolint:PERF006 per-key bucket size unknown ahead of time
+        // nolint:PERF006,LINT019 per-key bucket size unknown ahead of time
         $i(jhashName)[$e(keybBody)] |> push_clone($i(tupBName))
     }
     var probeOuter <- qmacro_expr() {
@@ -2965,7 +3015,7 @@ def emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Exp
             var dPrologue : array<Expression?>
             var dTail : array<Expression?>
             if (oc.firstName == "first") {
-                dPrologue <- qmacro_block_to_array() {
+                dPrologue |> push_from <| qmacro_block_to_array() {
                     var $i(bestKeyName) = default<$t(keyType)>
                     var $i(bestNodeName) = default<$t(handleType)>
                     var $i(seenName) = false
@@ -2985,7 +3035,7 @@ def emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Exp
                 var dDefRet = (oc.selectLam != null
                     ? peel_lambda_replace_var(oc.selectLam, qmacro($i(dBindName)))
                     : qmacro($i(dBindName)))
-                dPrologue <- qmacro_block_to_array() {
+                dPrologue |> push_from <| qmacro_block_to_array() {
                     let $i(dBindName) = $e(oc.firstDefaultExpr)
                     var $i(bestKeyName) = default<$t(keyType)>
                     var $i(bestNodeName) = default<$t(handleType)>
@@ -3032,11 +3082,11 @@ def emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Exp
         } else {
             firstRetExpr = qmacro($i(bestName))
         }
-        prologue <- qmacro_block_to_array() {
+        prologue |> push_from <| qmacro_block_to_array() {
             var $i(bestName) = default<$t(elemType)>
             var $i(seenName) = false
         }
-        tailStmts <- qmacro_block_to_array() {
+        tailStmts |> push_from <| qmacro_block_to_array() {
             panic("sequence contains no elements") if (!$i(seenName))
             return $e(firstRetExpr)
         }
@@ -3051,12 +3101,12 @@ def emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Exp
             bestRetExpr = qmacro($i(bestName))
             dRetExpr = qmacro($i(dBindName))
         }
-        prologue <- qmacro_block_to_array() {
+        prologue |> push_from <| qmacro_block_to_array() {
             let $i(dBindName) = $e(oc.firstDefaultExpr)
             var $i(bestName) = default<$t(elemType)>
             var $i(seenName) = false
         }
-        tailStmts <- qmacro_block_to_array() {
+        tailStmts |> push_from <| qmacro_block_to_array() {
             return $e(bestRetExpr) if ($i(seenName))
             return $e(dRetExpr)
         }
@@ -3160,7 +3210,7 @@ def emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expr
         laneBufType = build_surrogate_type(keyType, handleType, at)
         let xkeyName = qn("order_xkey", at)
         let outBufName = qn("order_out_buf", at)
-        var surrCmp = build_surrogate_cmp(oc.orderName == "order_by_descending", at)   // nolint:PERF023 reused 3× across heap/order splices
+        var surrCmp = build_surrogate_cmp(oc.orderName == "order_by_descending", at)   // reused 3× across heap/order splices
         var admitTest = (oc.orderName == "order_by_descending"
             ? qmacro(_::less($i(bhBufName)[0]._0, $i(xkeyName)))
             : qmacro(_::less($i(xkeyName), $i(bhBufName)[0]._0)))
@@ -3678,14 +3728,14 @@ def emit_reverse_walk_overwrite_scalar(var c : Captures; var ctx : EmitCtx; at :
     }
     var tailStmts : array<Expression?>
     if (terminatorName == "first") {
-        tailStmts <- qmacro_block_to_array() {
+        tailStmts |> push_from <| qmacro_block_to_array() {
             if (!$i(foundName)) {
                 panic("sequence contains no elements")
             }
             return $e(lastRetExpr)
         }
     } else {
-        tailStmts <- qmacro_block_to_array() {
+        tailStmts |> push_from <| qmacro_block_to_array() {
             return $i(foundName) ? $e(lastRetExpr) : $e(dRetExpr)
         }
     }
@@ -4310,7 +4360,7 @@ def emit_hashtable_dedup(var c : Captures; var ctx : EmitCtx; at : LineInfo) : E
             $e(consumeBody)
         }
     }
-    var perMatchStmts : array<Expression?>    // nolint:STYLE012 — array-literal-of-qmacro_expr is parse-fragile
+    var perMatchStmts : array<Expression?>    // array-literal-of-qmacro_expr is parse-fragile
     if (bindProjection) {
         perMatchStmts |> push <| qmacro_expr() {
             let $i(pvName) = $e(projection)
@@ -4698,7 +4748,7 @@ def mk_reducer_first_deferred(spec : ReducerSpec; at : LineInfo; entryName, itNa
     return (missInit, null)
 }
 
-// nolint:STYLE014 — average per group, 2-slot acc (`._0` = sum:double, `._1` = count:uint64). Emits:
+// average per group, 2-slot acc (`._0` = sum:double, `._1` = count:uint64). Emits:
 //   missInit  → entry._slot = (double(it), 1ul)
 //   hitUpdate → entry._slot._0 += double(it); entry._slot._1 ++
 [macro_function]
@@ -4716,7 +4766,7 @@ def mk_reducer_average(spec : ReducerSpec; at : LineInfo; entryName, itName : st
     return (missInit, hitUpdate)
 }
 
-// nolint:STYLE014 — average of inner `_select` per group (2-slot acc); inner projection evaluated once into a temp:
+// average of inner `_select` per group (2-slot acc); inner projection evaluated once into a temp:
 //   missInit  → let t = <inner>; entry._slot = (double(t), 1ul)
 //   hitUpdate → let t = <inner>; entry._slot._0 += double(t); entry._slot._1 ++
 [macro_function, unused_argument(itName)]
@@ -5443,8 +5493,8 @@ def emit_group_by(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expressi
     for (call in c.many["head"]) {
         let nm = call_norm_name(call)
         if (!(linqCalls |> key_exists(nm))) return null
-        var lc & = unsafe(linqCalls?[nm] ?? default<LinqCall>)
-        headCalls |> push((call, unsafe(addr(lc))))
+        let lc = unsafe(linqCalls?[nm])
+        headCalls |> push((call, lc))
     }
     var adapter = ctx.src->build_group_by_adapter(c, ctx, at)
     if (adapter == null) return null
@@ -5860,7 +5910,7 @@ def build_join_standalone_pieces(
     if (!isGroupJoin) {
         var core = build_join_pair_core(joinCall, whereLam, selectLam, countOnly, tupAName, bElemName, namePrefix, at)
         if (core == null) return null
-        preludeStmts <- core.preludeStmts
+        preludeStmts |> push_from(core.preludeStmts)
         returnStmt = core.returnStmt
         invokeRetType = core.invokeRetType
         if (countOnly && whereLam == null) {
@@ -6189,7 +6239,7 @@ def emit_array_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expres
         }
         allStmts |> push <| qmacro_expr() {
             for ($i(tupBName) in $i(srcBName)) {
-                // nolint:PERF006 per-key bucket size unknown ahead of time
+                // nolint:PERF006,LINT019 per-key bucket size unknown ahead of time
                 $i(hashName)[$e(keybBody)] |> push_clone($i(tupBName))
             }
         }

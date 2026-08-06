@@ -284,8 +284,8 @@ def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string
     for (call in c.many["head"]) {
         let nm = call_norm_name(call)
         if (!(linqCalls |> key_exists(nm))) return null
-        var lc & = unsafe(linqCalls?[nm] ?? default<LinqCall>)
-        calls |> push((call, unsafe(addr(lc))))
+        let lc = unsafe(linqCalls?[nm])
+        calls |> push((call, lc))
     }
     let rangeSlots = ["skip", "skip_while", "take_while", "take"]
     for (sn in rangeSlots) {
@@ -293,14 +293,14 @@ def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string
             let scall = c.single[sn]
             let snm = call_norm_name(scall)
             if (!(linqCalls |> key_exists(snm))) return null
-            var lc & = unsafe(linqCalls?[snm] ?? default<LinqCall>)
-            calls |> push((scall, unsafe(addr(lc))))
+            let lc = unsafe(linqCalls?[snm])
+            calls |> push((scall, lc))
         }
     }
     if (hasTerm) {
         if (!(linqCalls |> key_exists(termName))) return null
-        var lc & = unsafe(linqCalls?[termName] ?? default<LinqCall>)
-        calls |> push((termCall, unsafe(addr(lc))))
+        let lc = unsafe(linqCalls?[termName])
+        calls |> push((termCall, lc))
     }
     let intermediateEnd = hasTerm ? length(calls) - 1 : length(calls)
     var rangeInfo = extract_decs_ranges(calls, intermediateEnd, tupName, at)
