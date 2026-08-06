@@ -42,8 +42,8 @@ readers' silent-default.
 1. **DONE — `daslib/build_const`** (nine accessors: `build_flag`/`build_value`/`build_int`
    both-carrier + argv/env singles; tests spawn a fixture with controlled argv/env; RST
    wired). Set-but-empty env counts as unset on every accessor. The combined accessors are
-   the recommended spelling — a gating global's init must stay a SINGLE call (see
-   "Compiler gap" below).
+   the recommended spelling; composed initializers also resolve everywhere since the
+   compiler fix below.
 2. **DONE — marker rail gated** — `profile_tag`/`profile_marker` + dasLLAMA's
    `trace_tag`/`trace_marker`/`set_trace_tags` erase without the flag; control plane stays
    live; `decode_prof --trace` refuses loudly on a rail-less build; `test_jobque_trace`
@@ -54,13 +54,27 @@ readers' silent-default.
    `@clarg_env=""` opts out), precedence argv > env > default, help output shows the env twin
    per option. Serves tools (detect-dupe, daspkg, dasllama-server, preflight); kills the
    "env reads growing beside the clargs struct" pattern.
-4. **The sweep** — ~391 raw `get_clock`-family sites in `modules/dasLLAMA/dasllama/` alone.
+4. **`[EnvConfig]` + the dasLLAMA knob migration (pulled forward — Boris).** A sibling
+   struct annotation IN the clargs module sharing the whole field-walk/typed-parse core and
+   the `@clarg_*` vocabulary — NOT an `env_only` flag on `[CommandLineArgs]` (a bool that
+   flips lifecycle semantics is the confusing spelling; two names, one engine).
+   `[EnvConfig(prefix="DASLLAMA")]` generates: the global instance, the cold `[init]` loader
+   (field name → `PREFIX_FIELD_NAME`, type-dispatched read, default = field initializer), a
+   lazy accessor for cold callers, and the registry data (doc-gen + coverage test read the
+   generated list; the hand-maintained `k(o, ...)` list in `dasllama_env.das` dies).
+   Migration is generated: the existing registry carries name/kind/dflt/doc for all ~130
+   knobs → emit the struct from it once, then mechanically rewrite read sites
+   `env_flag("DASLLAMA_X", d)` → `g_lama_config.x`. Libraries stay env-only (argv is the
+   program's namespace). Read sites become plain global field reads — `[hot_path]`-legal by
+   construction; afterwards the env CODEREVIEW rule ("no get_env outside the generated
+   loader") becomes enforceable.
+5. **The sweep** — ~391 raw `get_clock`-family sites in `modules/dasLLAMA/dasllama/` alone.
    Classify: perf-bucket accumulators → zones on the marker rail; big UNMARKED intervals
    (model load, dlim map, tokenizer init, warmup) → zones so the timeline finally shows them;
    log-writes-inside-timed-intervals → move the I/O out or make the write its own zone so the
    tax is visible instead of silently folded into the surrounding bucket. Bench-harness
    stopwatches (lcpp_bench timing loops) stay — they ARE the measurement, not instrumentation.
-5. **AMX-for-ASR audit (acceptance run)** — everything from #3562 carries: dasAccelerate,
+6. **AMX-for-ASR audit (acceptance run)** — everything from #3562 carries: dasAccelerate,
    the float-batch override rail, the VECLIB pin + strip-dispatch, the `min_mmac` floor.
    Audit = which ASR encoder ops are float-plane GEMMs above the floor. ASR encoders are a
    better AMX target than the LLM ladder was (float-heavy, encoder batch inherently large —
@@ -69,15 +83,10 @@ readers' silent-default.
    the BNNS-f16 lane shipped uncrowned with M4/M5 as its stated target — ASR-on-M4 may crown
    it for the first time. Predictions before the A/Bs, per the game. CPU-side only.
 
-## Tail end (own arc, NOT this one)
+## Tail end (own arc)
 
-**`[env_config]` library-knob migration** — module-declared knob structs whose macro generates
-the cold-path read-once loader (PERF027 by construction), typed access, the doc-gen registry
-entry, and the coverage test's ground truth; the hand-maintained `k(o, ...)` list in
-`dasllama_env.das` dies. ~130 knobs. When we get there, look at the code again for the
-shortcut — the `"DASLLAMA_"` literal prefix at every read site is a mechanical hook: a tiny
-macro/tool can enumerate the reads and EMIT the declarations, so the migration may be mostly
-generated.
+The tree-wide (non-dasLLAMA) raw `get_env_variable` cleanup + the lint rule banning raw
+reads outside the sanctioned rails — after `[EnvConfig]` proves out in dasLLAMA.
 
 ## Compiler gap — FIXED (Boris-approved "mirror fix", same arc)
 
