@@ -310,6 +310,7 @@ struct DnStep {
     state_bytes : int64
     ring_bytes : int64
     parity : int             // ring image holding current history (the kernel writes the other)
+    tok : HostBuf            // the step's TokMeta block (parity, host-poked per step)
     valid : bool
     dirty : bool
 }
@@ -429,6 +430,7 @@ struct GpuState {
     rks_qkv_dev : uint64
     rks_q_dev : uint64
     rks_scal : HostBuf        // the cos+sin row (kernel data, not params)
+    rks_tok : HostBuf         // the shared TokMeta block (pos/cnt/parity, host-poked per call)
     rks_k_dev : uint64        // f32 K mirror (rows x kv_dim, absolute positions)
     rks_v_dev : uint64        // f32 V mirror
     rks_q_host : HostBuf
@@ -525,7 +527,6 @@ struct GpuState {
     dn_ready : bool
     dn_shared_ok : bool  // device shared-mem cap fits dn_conv's 33 KB tile (false on Apple/MoltenVK)
     // deltanet decode-step state (lazy — first npos == 1 DN dispatch creates it)
-    dnd_meta : HostBuf            // step meta staging (npos = 1 geometry, filled once)
     dnd_bg : HostBuf              // per-token raw β/γ + ring-parity staging (copied into the layer smalls)
     dnd_oq_dev : uint64           // the o row's Q8_0 image (fused-step out, the out GEMV's activations)
     dnd_os_dev : uint64
@@ -1779,9 +1780,9 @@ struct RLayer {
     s_kv : VkDescriptorSet          // merged k+v two-region class GEMV (fk == fv: same arena planes)
     kv_merged : bool
     s_qkn : VkDescriptorSet         // per-head q/k rmsnorm class set (qk_norm models only)
-    s_qkn_rope : VkDescriptorSet    // the fused qk-rmsnorm + rope + KV store (qk_norm models only; OLD rail — per-token mirror row rides its meta)
-    s_rope : VkDescriptorSet        // OLD rail — per-token mirror row
-    s_attn : VkDescriptorSet        // OLD rail — per-token cnt
+    s_qkn_rope : VkDescriptorSet    // the fused qk-rmsnorm + rope + KV store (qk_norm models only; per-token words ride the shared TokMeta)
+    s_rope : VkDescriptorSet        // rope + KV store class set
+    s_attn : VkDescriptorSet        // decode attention class set
     s_quant_at : VkDescriptorSet
     s_wo : VkDescriptorSet
     s_addr_ffn : VkDescriptorSet
@@ -1792,8 +1793,8 @@ struct RLayer {
     s_down : VkDescriptorSet
     s_addr_next : VkDescriptorSet
     s_addr_next_rq : VkDescriptorSet
-    // host-visible per-dispatch buffers: the kept-old roles' metas + the class GEMV regions
-    m_q, m_k, m_v, m_qkr, m_rope, m_attn, m_wo : HostBuf
+    // host-visible per-dispatch buffers: the class GEMV region pairs
+    m_q, m_k, m_v, m_wo : HostBuf
     m_gate, m_up, m_down : HostBuf
     made : bool
 }
@@ -1806,9 +1807,7 @@ struct RDec {
     norms_bytes : int64           // full norms buffer size (grows past the fixed layout under qk_norm)
     ar_scal_off : int64            // eps/ascale pair, appended to the norms buffer (float units) —
                                    // the fused ar+requant needs binding 4 for its scale output
-    cos_elems : int64              // cos/sin row + (under qk_norm) the rms_q/rms_k rows + eps
-    qkn_row_off : int64             // rms_q[0] in the cos buffer (float units); rms_k[l] follows each
-    qkn_eps_off : int64             // eps, past the rms rows in the cos buffer
+    cos_elems : int64              // the cos/sin row (head_size floats)
     eps, scale : float
     // per-token device buffers
     x_dev, xb_dev : uint64        // residual, normed activation
@@ -1822,7 +1821,6 @@ struct RDec {
     k_mirror, v_mirror : uint64   // [n_layers x seq_cap x kv_dim] f32
     norms_dev : uint64            // rms_att[l]/rms_ffn[l] interleaved + final, uploaded once
     cos_dev : uint64              // this token's rope row (cos[half] + sin[half])
-    scal_dev : uint64             // da_attn scalars: [0] = attn scale
     logits_dev : uint64
     x_host, logits_host : HostBuf
     kv_readback : HostBuf         // per-layer K/V row -> CPU cache writeback
@@ -1838,6 +1836,7 @@ struct RDec {
     cmd : VkCommandBuffer
     tok_recorded : bool           // cmd holds the whole-token chain, re-submittable as-is
     cos_host : HostBuf            // this token's rope row, copied to cos_dev in-cmd
+    tok_meta : HostBuf            // the shared TokMeta block (pos/cnt), host-poked per token
     // prefill batch buffers (lazy — sized MAX_NPOS x their width) + per-layer prefill sets
     pf_ready : bool
     pf_np : int64                 // MAX_NPOS the buffers were sized for
@@ -1895,24 +1894,6 @@ def fill_cvt_meta(hb : HostBuf; elems : int64) {
         mp[0] = uint(elems)
     }
 }
-
-// the fused qk-rmsnorm+rope meta; words 9-11 index the COS buffer, not the norms buffer
-def fill_qkn_rope_meta(hb : HostBuf; l : int64) {
-    unsafe {
-        let hs = g_rd.head_size   // nolint:LINT021 — the row-offset words compose it with int64 layout offsets
-        var mp = reinterpret<uint?>(hb.mapped)
-        mp[0] = uint(g_rd.qd)
-        mp[1] = uint(g_rd.kv_dim)
-        mp[2] = uint(hs)
-        mp[3] = uint(hs / 2l)
-        mp[4] = g_rd.neox ? 1u : 0u
-        mp[5] = uint(g_rd.n_heads)
-        mp[9] = uint(g_rd.qkn_row_off + l * 2l * hs)
-        mp[10] = uint(g_rd.qkn_row_off + (l * 2l + 1l) * hs)
-        mp[11] = uint(g_rd.qkn_eps_off)
-    }
-}
-
 
 // ===== GPU per-dispatch profiler (DASLLAMA_GPU_PROF=1) =====
 // BOTTOM_OF_PIPE stamps; results ride a same-submit copy, no extra fence. Overlapped hazard
@@ -2059,7 +2040,7 @@ var @scratch g_pipe_names : table<uint64; string>   // VkPipeline -> kernel name
 var @scratch g_vk_kcov : table<uint64; int64>       // VkPipeline -> dispatches (CODEREVIEW rule 17)
 
 struct SetBits {
-    b : uint[6]
+    b : uint[8]   // per-binding region bits; class sets go to 8 bindings, vk_set6 uses 0-5
 }
 
 def ensure_kernel_access {
@@ -2173,7 +2154,7 @@ def vkd_set(c : VkdClass; set_ : VkDescriptorSet; bufs : uint64 const[]; sizes :
     update_descriptor_sets(g_gpu.device, writes, no_copies)
     var sb : SetBits
     for (i in range(length(gbits))) {
-        if (c.bindings[i] < 6) {
+        if (c.bindings[i] < 8) {
             sb.b[c.bindings[i]] = gbits[i]
         }
     }
@@ -2236,7 +2217,7 @@ def hz_masks(pipe : Pipeline; var set_ : VkDescriptorSet) : tuple<r : uint; w : 
     let sb = g_set_bits[sk]
     var r = 0u
     var w = 0u
-    for (i in range(6)) {
+    for (i in range(8)) {
         let bit = 1u << uint(i)
         if ((acc.x & bit) != 0u) {
             r |= sb.b[i]

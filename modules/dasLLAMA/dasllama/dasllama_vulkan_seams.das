@@ -75,13 +75,14 @@ def private ensure_rks_state {
     g_gpu.rks_k_dev = make_device_buf(RKS_MAX_CTX * RKS_MAX_KVD * 4l)
     g_gpu.rks_v_dev = make_device_buf(RKS_MAX_CTX * RKS_MAX_KVD * 4l)
     g_gpu.rks_scal = make_host_buf(XS_BYTES, true)   // the cos+sin row (data, not params)
+    g_gpu.rks_tok = make_host_buf(16l, true)   // TokMeta: per-call pos/cnt, shared with the attn seam
     g_gpu.rks_q_host = make_host_buf(RKS_MAX_QD * 4l, false, [cached = true])
     g_gpu.rks_kv_host = make_host_buf(2l * RKS_MAX_KVD * 4l, false, [cached = true])
     g_gpu.rks_set = set_rope_kv_cls(
-        fixed_array(g_gpu.rks_q_dev, g_gpu.rks_qkv_dev, g_gpu.rks_k_dev, g_gpu.rks_v_dev, g_gpu.rks_scal.buf),
+        fixed_array(g_gpu.rks_q_dev, g_gpu.rks_qkv_dev, g_gpu.rks_k_dev, g_gpu.rks_v_dev, g_gpu.rks_scal.buf, g_gpu.rks_tok.buf),
         fixed_array(RKS_MAX_QD * 4l, (RKS_MAX_QD + 2l * RKS_MAX_KVD) * 4l,
-            RKS_MAX_CTX * RKS_MAX_KVD * 4l, RKS_MAX_CTX * RKS_MAX_KVD * 4l, XS_BYTES),
-        fixed_array(VHG_Y1, 0u, VHG_Y2, VHG_Y3, 0u))   // roped q / K mirror / V mirror
+            RKS_MAX_CTX * RKS_MAX_KVD * 4l, RKS_MAX_CTX * RKS_MAX_KVD * 4l, XS_BYTES, 16l),
+        fixed_array(VHG_Y1, 0u, VHG_Y2, VHG_Y3, 0u, 0u))   // roped q / K mirror / V mirror
     g_gpu.rks_ready = true
 }
 
@@ -98,6 +99,8 @@ def vk_rope_kv_store(var qkv : array<float>; var qout : array<float>; var krow :
     let npairs = kpair0 + int(kv_dim / 2l)
     unsafe {
         memcpy(g_gpu.rks_scal.mapped, addr<void?>(cossin[0]), head_size * 4l)   // cos[half] + sin[half]
+        var tm = reinterpret<TokMeta?>(g_gpu.rks_tok.mapped)
+        tm.pos = uint(pos)   // mirror row = layerbase(0) + pos * kvd
         upload_region_at(g_gpu.rks_qkv_dev, 0l, addr<uint8 const?>(qkv[0]), (qd + 2l * kv_dim) * 4l)
         // q ropes in place in its own plane — seed it with the raw q rows
         upload_region_at(g_gpu.rks_q_dev, 0l, addr<uint8 const?>(qkv[0]), qd * 4l)
@@ -107,7 +110,7 @@ def vk_rope_kv_store(var qkv : array<float>; var qout : array<float>; var krow :
         var h : VkHaz
         var pc = RopeKvArgs(qd = uint(qd), kvd = uint(kv_dim), hs = uint(head_size),
             half = uint(half), neox = neox ? 1u : 0u, kpair0 = uint(kpair0),
-            npairs = uint(npairs), krow = uint(pos * kv_dim), vrow = uint(pos * kv_dim))
+            npairs = uint(npairs), layerbase = 0u)
         enc_rope_kv_cls(raw, h, g_gpu.rks_set, pc, (int64(npairs) + int64(WG_X) - 1l) / int64(WG_X))
         vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_Y3, 0u, true)   // one declaration for the q/k/v readback group
         cmd_copy_whole(raw, g_gpu.rks_q_dev, g_gpu.rks_q_host.buf, qd * 4l)
@@ -131,10 +134,10 @@ def private ensure_da_state {
     g_gpu.da_out_dev = make_device_buf(RKS_MAX_QD * 4l)
     g_gpu.da_out_host = make_host_buf(RKS_MAX_QD * 4l, false, [cached = true])
     g_gpu.da_set = set_da_attn_cls(
-        fixed_array(g_gpu.da_q_dev, g_gpu.rks_k_dev, g_gpu.rks_v_dev, g_gpu.da_out_dev),
+        fixed_array(g_gpu.da_q_dev, g_gpu.rks_k_dev, g_gpu.rks_v_dev, g_gpu.da_out_dev, g_gpu.rks_tok.buf),
         fixed_array(RKS_MAX_QD * 4l, RKS_MAX_CTX * RKS_MAX_KVD * 4l,
-            RKS_MAX_CTX * RKS_MAX_KVD * 4l, RKS_MAX_QD * 4l),
-        fixed_array(0u, 0u, 0u, VHG_YO))   // q/mirrors fill pre-cmd (fence-ordered)
+            RKS_MAX_CTX * RKS_MAX_KVD * 4l, RKS_MAX_QD * 4l, 16l),
+        fixed_array(0u, 0u, 0u, VHG_YO, 0u))   // q/mirrors fill pre-cmd (fence-ordered)
     g_gpu.da_ready = true
 }
 
@@ -147,11 +150,13 @@ def vk_decode_attn(var q : array<float>; var out : array<float>; cnt, qd, kv_dim
     let n_heads = int(qd / head_size)
     unsafe {
         upload_region_at(g_gpu.da_q_dev, 0l, addr<uint8 const?>(q[0]), qd * 4l)
+        var tm = reinterpret<TokMeta?>(g_gpu.rks_tok.mapped)
+        tm.cnt = uint(cnt)
         var raw = alloc_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
-        var pc = DaAttnArgs(cnt = uint(cnt), kvd = uint(kv_dim), hs = uint(head_size),
+        var pc = DaAttnArgs(kvd = uint(kv_dim), hs = uint(head_size),
             kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale)
         enc_da_attn_cls(raw, h, g_gpu.da_set, pc, int64(n_heads))
         vhz_dep(raw, h, VHG_YO, 0u, true)

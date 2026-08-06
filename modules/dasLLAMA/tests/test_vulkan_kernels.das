@@ -649,15 +649,18 @@ def test_vkd_rope_family(t0 : T?) {
                     vk_check(vkEndCommandBuffer(rawc), null)
                     submit_wait(rawc)
                     memcpy(addr<void?>(old_v[0]), host.mapped, m_bytes)
-                    // the class twin: q@0, kvsrc@1, kmir@2, vmir@3, cossin@4
-                    var sc = set_rope_kv_cls(fixed_array(q2, kvd_dev, km2, vm2, csd),
-                        fixed_array(q_bytes, kv_bytes, m_bytes, m_bytes, cs_bytes),
-                        fixed_array(16u, 1u, 2u, 4u, 8u))
+                    // the class twin: q@0, kvsrc@1, kmir@2, vmir@3, cossin@4, tok@5 (pos 0 -> row 0)
+                    var tokb = make_host_buf(16l, true)
+                    var tm = reinterpret<TokMeta?>(tokb.mapped)
+                    tm.pos = 0u
+                    var sc = set_rope_kv_cls(fixed_array(q2, kvd_dev, km2, vm2, csd, tokb.buf),
+                        fixed_array(q_bytes, kv_bytes, m_bytes, m_bytes, cs_bytes, 16l),
+                        fixed_array(16u, 1u, 2u, 4u, 8u, 0u))
                     var raw2 = alloc_cmd()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
                     var h2 : VkHaz
                     var pc = RopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(half),
-                        neox = 1u, kpair0 = uint(kpair0), npairs = uint(npairs), krow = 0u, vrow = 0u)
+                        neox = 1u, kpair0 = uint(kpair0), npairs = uint(npairs), layerbase = 0u)
                     enc_rope_kv_cls(raw2, h2, sc, pc, wgs)
                     vhz_dep(raw2, h2, 2u | 4u | 16u, 0u, true)
                     cmd_copy_whole(raw2, q2, host.buf, q_bytes)
@@ -1632,14 +1635,17 @@ def test_vkd_da_attn(t0 : T?) {
                 vk_check(vkEndCommandBuffer(raw), null)
                 submit_wait(raw)
                 memcpy(addr<void?>(y_old[0]), host.mapped, q_bytes)
-                // the class twin: q@0, K@1, V@2, y@3
-                var sc = set_da_attn_cls(fixed_array(qd, kd, vd, yd2),
-                    fixed_array(q_bytes, m_bytes, m_bytes, q_bytes),
-                    fixed_array(1u, 2u, 4u, 16u))
+                // the class twin: q@0, K@1, V@2, y@3, tok@4 (cnt rides TokMeta)
+                var tokb = make_host_buf(16l, true)
+                var tmc = reinterpret<TokMeta?>(tokb.mapped)
+                tmc.cnt = uint(cnt)
+                var sc = set_da_attn_cls(fixed_array(qd, kd, vd, yd2, tokb.buf),
+                    fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l),
+                    fixed_array(1u, 2u, 4u, 16u, 0u))
                 var raw2 = alloc_cmd()
                 vk_check(vkBeginCommandBuffer(raw2, begin), null)
                 var h2 : VkHaz
-                var pc = DaAttnArgs(cnt = uint(cnt), kvd = uint(kvd), hs = uint(hs),
+                var pc = DaAttnArgs(kvd = uint(kvd), hs = uint(hs),
                     kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale)
                 enc_da_attn_cls(raw2, h2, sc, pc, int64(nheads))
                 vhz_dep(raw2, h2, 16u, 0u, true)
@@ -2771,8 +2777,11 @@ def test_vkd_rope_b_pair(t0 : T?) {
             // --- qkn_rope_kv: qk-rms + rope + kv-store in one dispatch, one wg per head-row ---
             {
                 let neox = 1
+                // ONE mirror row both planes: the class twin composes it as layerbase + pos*kvd
+                // (the serving ladder always wrote equal K/V rows; the independent-rows freedom
+                // was the old kernel's meta accident, not a contract)
                 let krow = 192
-                let vrow = 320
+                let vrow = 192
                 let eps = 0.00001
                 let mirn2 = vrow + nkvh * hs
                 var q0h : array<float>
@@ -2865,12 +2874,15 @@ def test_vkd_rope_b_pair(t0 : T?) {
                                 fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
                             hz_dispatch(raw, h, weak_copy(g_gpu.qkn_rope_pipeline), so, uint(wgs))
                         } else {
-                            var sc = set_qkn_rope_cls(fixed_array(qdev, kvdv, kmd, vmd, csd, wnd),
-                                fixed_array(q_bytes, kv_bytes, m_bytes, m_bytes, cs_bytes, wn_bytes),
-                                fixed_array(16u, 1u, 2u, 4u, 8u, 8u))
+                            var tokb = make_host_buf(16l, true)
+                            var tmq = reinterpret<TokMeta?>(tokb.mapped)
+                            tmq.pos = 0u   // mirror row = layerbase alone
+                            var sc = set_qkn_rope_cls(fixed_array(qdev, kvdv, kmd, vmd, csd, wnd, tokb.buf),
+                                fixed_array(q_bytes, kv_bytes, m_bytes, m_bytes, cs_bytes, wn_bytes, 16l),
+                                fixed_array(16u, 1u, 2u, 4u, 8u, 8u, 0u))
                             var pc = QknRopeArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs),
                                 half = uint(half), neox = uint(neox), nh = uint(nh),
-                                krow = uint(krow), vrow = uint(vrow), qwoff = 0u,
+                                layerbase = uint(krow), qwoff = 0u,
                                 kwoff = uint(hs), eps = eps)
                             enc_qkn_rope_cls(raw, h, sc, pc, int64(wgs))
                         }
@@ -3271,15 +3283,18 @@ def test_vkd_dn_family(t0 : T?) {
                                 fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
                             hz_dispatch(raw, h, weak_copy(g_gpu.dnd_fused_pipeline), so, uint(nvh))
                         } else {
-                            var sc = set_dn_step_cls(fixed_array(projd, std, smd, scd, qdv),
-                                fixed_array(proj_bytes, st_bytes, sm_bytes, sc_bytes, q_bytes),
-                                fixed_array(16u, 2u, 8u, 1u, 4u))
+                            var tokb = make_host_buf(16l, true)
+                            var tmd = reinterpret<TokMeta?>(tokb.mapped)
+                            tmd.parity = uint(par)
+                            var sc = set_dn_step_cls(fixed_array(projd, std, smd, scd, qdv, tokb.buf),
+                                fixed_array(proj_bytes, st_bytes, sm_bytes, sc_bytes, q_bytes, 16l),
+                                fixed_array(16u, 2u, 8u, 1u, 4u, 0u))
                             var pc = DnStepArgs(cd = uint(cd), kd = uint(kd), nkh = uint(nkh),
                                 ds = uint(ds), dconv = uint(dconv), beta_off = uint(beta_off),
                                 g_off = uint(g_off), taps_off = uint(taps_off),
                                 wnorm_off = uint(wnorm_off), a_off = uint(a_off),
                                 dt_off = uint(dt_off), hist_off = uint(hist_off),
-                                par = uint(par), eps = eps, qscale = qscale)
+                                eps = eps, qscale = qscale)
                             enc_dn_step_cls(raw, h, sc, pc, int64(nvh))
                         }
                         vhz_dep(raw, h, 1u | 2u | 4u | 8u, 0u, true)

@@ -278,8 +278,8 @@ class VkDispatch : AstStructureAnnotation {
             }
         }
         sort(blist)
-        if (blist[length(blist) - 1] > 5) {
-            errors := "[vk_dispatch] {base}: binding {blist[length(blist) - 1]} — the hazard rail's SetBits caps at binding 5"
+        if (blist[length(blist) - 1] > 7) {
+            errors := "[vk_dispatch] {base}: binding {blist[length(blist) - 1]} — the hazard rail's SetBits caps at binding 7"
             return false
         }
         let nb = length(blist)   // the set builder's arity: one buffer/size/bits entry per declared binding

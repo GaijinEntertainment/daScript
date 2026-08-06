@@ -15,6 +15,17 @@ require math
 // families become one base class + per-format overrides, devirtualized at emission). Kernels
 // here carry clean per-member bindings and push-constant params; region lists stay SSBO.
 
+// The ONE per-token word block (a tiny host-poked SSBO, shared by every carrier kernel's set):
+// push constants freeze at record time, so the recorded-once token cmd keeps its per-token
+// state here — everything else stays structural in the push (--rerecord-ab priced the
+// alternative at -8..-11% tg).
+struct TokMeta {
+    pos : uint      // this token's absolute position (mirror row = layerbase + pos * kvd)
+    cnt : uint      // cached positions incl. this one
+    parity : uint   // deltanet conv-ring parity
+    _pad : uint
+}
+
 // ===== add + rmsnorm =====
 
 struct ArArgs {
@@ -539,9 +550,8 @@ struct DnStepArgs {
     a_off : uint
     dt_off : uint
     hist_off : uint
-    par : uint     // ring parity (the old kernel smuggled it through a float scale slot)
     eps : float
-    qscale : float
+    qscale : float   // the conv-ring parity rides tok[0].parity
 }
 
 // the decode-step FUSED chain (one workgroup per v-head): conv preamble -> chunk-length-1 delta
@@ -554,6 +564,7 @@ class DnStepFused {
     @ssbo @binding = 2 smalls : array<float>   // beta/g/taps/wnorm/a/dt + the conv HISTORY ring (rw)
     @ssbo @binding = 3 outs : array<float>     // the head's Q8_0 scales
     @ssbo @binding = 4 outq : array<uint>      // ... and quant words
+    @ssbo @binding = 5 tok : array<TokMeta>    // the shared per-token block (element 0)
     @push_constant pa : DnStepArgs
     @workgroup dq : float[128]
     @workgroup dk : float[128]
@@ -567,8 +578,9 @@ class DnStepFused {
         let h = gl_WorkGroupID.x
         let ds = pa.ds
         let taps = pa.dconv - 1u
-        let rrb = pa.hist_off + pa.par * pa.cd * taps
-        let wrb = pa.hist_off + (1u - pa.par) * pa.cd * taps
+        let par = tok[0u].parity
+        let rrb = pa.hist_off + par * pa.cd * taps
+        let wrb = pa.hist_off + (1u - par) * pa.cd * taps
         let tid = gl_LocalInvocationID.x
         let kh = h % pa.nkh
         var e = tid
@@ -788,7 +800,7 @@ class DnScanP1 : DnScanBase {
     @push_constant pa : DnScanP1Args
 
     [spirv_kernel(local_size_x = 256, name = "dn_scan_p1_cls_spv")]
-    def run {   // nolint:STYLE037,STYLE038 — the verbatim phase-1 pass, parity-locked to the shipped kernel
+    def run {   // nolint:STYLE038 — the verbatim phase-1 pass, parity-locked to the shipped kernel
         let ds = pa.ds
         let tid = gl_LocalInvocationID.x
         let CS = 64u
@@ -952,7 +964,7 @@ class DnScanP2 : DnScanBase {
     @push_constant pa : DnScanP2Args
 
     [spirv_kernel(local_size_x = 256, name = "dn_scan_p2_cls_spv")]
-    def run {   // nolint:STYLE037,STYLE038 — the verbatim phase-2 walk, parity-locked to the shipped kernel
+    def run {
         let h = gl_WorkGroupID.x
         let ds = pa.ds
         let tid = gl_LocalInvocationID.x
@@ -1057,7 +1069,7 @@ class AtPrep {
     @workgroup hsinv : float[64]               // per-head inverse rms (heads <= 64)
 
     [spirv_kernel(local_size_x = 256, name = "at_prep_cls_spv")]
-    def run {   // nolint:STYLE037,STYLE038 — the verbatim prep pass, parity-locked to the shipped kernels
+    def run {
         let p = gl_WorkGroupID.x
         let hs = pa.hs
         let half = pa.half
@@ -1229,7 +1241,7 @@ class AtAttn : AtAttnBase {
     @push_constant pa : AtAttnArgs
 
     [spirv_kernel(local_size_x = 256, name = "at_attn_cls_spv")]
-    def run {   // nolint:STYLE037,STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
+    def run {
         let qtiles = (pa.rows + 7u) / 8u
         let h = gl_WorkGroupID.x / qtiles
         let q0 = (gl_WorkGroupID.x % qtiles) * 8u
@@ -1329,7 +1341,7 @@ class DaAttnB : AtAttnBase {
     @push_constant pa : DaAttnBArgs
 
     [spirv_kernel(local_size_x = 256, name = "da_attn_b_cls_spv")]
-    def run {   // nolint:STYLE037,STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
+    def run {   // nolint:STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
         let qd = pa.nh * pa.hs
         let dpl = pa.hs / 32u
         let qtiles = (pa.npos + 7u) / 8u
@@ -1605,13 +1617,12 @@ class DaAttnBH128 {
 // ===== decode attention =====
 
 struct DaAttnArgs {
-    cnt : uint      // KV positions to attend
     kvd : uint      // kv row width
     hs : uint       // head size
     kv_mul : uint   // GQA group (query heads per kv head)
     kbase : uint    // layer base into the shared K mirror (0 for the standalone seam)
     vbase : uint
-    scale : float
+    scale : float   // the KV count to attend rides tok[0].cnt
 }
 
 // decode attention (one query row): one wg per head, GQA, f32 K/V mirror. Online softmax over
@@ -1622,6 +1633,7 @@ class DaAttn {
     @ssbo @binding = 1 kmir : array<float>   // the K mirror plane
     @ssbo @binding = 2 vmir : array<float>   // the V mirror plane
     @ssbo @binding = 3 y : array<float>      // attention out rows
+    @ssbo @binding = 4 tok : array<TokMeta>  // the shared per-token block (element 0)
     @push_constant pa : DaAttnArgs
     @workgroup qrow : float[256]   // this head's query row (hs <= 256)
     @workgroup sc : float[256]     // chunk scores, then the cross-group V partial reduce
@@ -1631,6 +1643,7 @@ class DaAttn {
     [spirv_kernel(local_size_x = 256, name = "da_attn_cls_spv")]
     def run {   // nolint:STYLE038 — the verbatim online-softmax pass, parity-locked to the shipped kernel
         let hs = pa.hs
+        let cnt = tok[0u].cnt
         let h = gl_WorkGroupID.x
         let kvh = h / pa.kv_mul
         let tid = gl_LocalInvocationID.x
@@ -1649,8 +1662,8 @@ class DaAttn {
         var acc = 0.0             // this thread's V partial (group g's slice of dim c)
         var mrun = -3.0e38        // running max — uniform, tracked in lockstep by every thread
         var c0 = 0u
-        while (c0 < pa.cnt) {
-            let clen = min(256u, pa.cnt - c0)
+        while (c0 < cnt) {
+            let clen = min(256u, cnt - c0)
             // chunk scores: thread tid owns position c0 + tid
             var s = -3.0e38
             if (tid < clen) {
@@ -2248,7 +2261,7 @@ class CmF16Batch : MoeCmBase {
     @workgroup cm_out : float[1024]    // 4 subgroups x 16x16 f32 scratch (bounds-checked write-out)
 
     [spirv_kernel(local_size_x = 128, name = "q8_batch_cmf16_cls_spv")]
-    def run {   // nolint:STYLE037,STYLE038 — the verbatim tile pass, parity-locked to the shipped kernel
+    def run {   // nolint:STYLE038 — the verbatim tile pass, parity-locked to the shipped kernel
         let reg = region_rec()
         let wblk0 = reg.x
         let row0 = reg.y
@@ -2351,7 +2364,7 @@ class CmI8Batch : MoeCmBase {
     @workgroup cmi_acc : float[1024]   // 4 subgroups x 16x16 f32 accumulator
 
     [spirv_kernel(local_size_x = 128, name = "q8_batch_cmi8_cls_spv")]
-    def run {   // nolint:STYLE037,STYLE038 — the verbatim tile pass, parity-locked to the shipped kernel
+    def run {
         let reg = region_rec()
         let wblk0 = reg.x
         let row0 = reg.y
@@ -2629,7 +2642,7 @@ class MmABatch : MoeCmBase {
     @workgroup cma_b : uint[2560]     // B tile: 128 token rows x one block
 
     [spirv_kernel(local_size_x = 128, name = "q8_batch_mm_a_cls_spv")]
-    def run {   // nolint:STYLE037,STYLE038 — the verbatim tile pass, parity-locked to the shipped kernel
+    def run {   // nolint:STYLE038 — the verbatim tile pass, parity-locked to the shipped kernel
         let reg = region_rec()
         let wblk0 = reg.x
         let row0 = reg.y
@@ -2778,7 +2791,7 @@ class MmMBatch : MoeCmBase {
     @workgroup cml_o : float16[1024]  // 4 warps x 16x16 f16-acc store bounce (edge tiles only)
 
     [spirv_kernel(local_size_x = 128, name = "q8_batch_mm_m_cls_spv")]
-    def run {   // nolint:STYLE037,STYLE038 — the verbatim tile pass, parity-locked to the shipped kernel
+    def run {   // nolint:STYLE038 — the verbatim tile pass, parity-locked to the shipped kernel
         let reg = region_rec()
         let wblk0 = reg.x
         let row0 = reg.y
@@ -2902,7 +2915,7 @@ class KqQ40CmF16 : MoeCmBase {
     @workgroup cm_out : float[1024]    // 4 subgroups x 16x16 f32 scratch (bounds-checked write-out)
 
     [spirv_kernel(local_size_x = 128, name = "kq_batch_q40_cmf16_cls_spv")]
-    def run {   // nolint:STYLE037,STYLE038 — the verbatim tile pass, parity-locked to the shipped kernel
+    def run {   // nolint:STYLE038 — the verbatim tile pass, parity-locked to the shipped kernel
         let reg = region_rec()
         let wsb0 = reg.x
         let row0 = reg.y
@@ -3021,7 +3034,7 @@ class Q8nCm2Batch : MoeCmBase {
     @ssbo @binding = 5 y : array<float>
 
     [spirv_kernel(local_size_x = 256, name = "q8n_batch_cm2_cls_spv")]
-    def run {   // nolint:STYLE037,STYLE038 — the verbatim tile pass, parity-locked to the shipped kernel
+    def run {
         let reg = region_rec()
         let wblk0 = reg.x
         let row0 = reg.y
@@ -3134,8 +3147,7 @@ struct RopeKvArgs {
     neox : uint     // pair select: 0 = NORM (2j, 2j+1), else NEOX (j, j+half)
     kpair0 : uint   // first k pair's global index (q pairs come first)
     npairs : uint
-    krow : uint     // this position's K mirror row base
-    vrow : uint     // ... and V mirror row base
+    layerbase : uint   // this layer's K/V mirror base; the row rides tok[0].pos
 }
 
 // fused rope + KV-row store (decode, one token), f32 mirror: one thread per rotation pair,
@@ -3147,6 +3159,7 @@ class RopeKvStore {
     @ssbo @binding = 2 kmir : array<float>     // the K mirror plane
     @ssbo @binding = 3 vmir : array<float>     // the V mirror plane
     @ssbo @binding = 4 cossin : array<float>   // this position's cos row then sin row
+    @ssbo @binding = 5 tok : array<TokMeta>    // the shared per-token block (element 0)
     @push_constant pa : RopeKvArgs
 
     [spirv_kernel(local_size_x = 256, name = "rope_kv_cls_spv")]
@@ -3162,15 +3175,16 @@ class RopeKvStore {
             let e0 = pa.neox != 0u ? j : j * 2u
             let e1 = pa.neox != 0u ? j + pa.half : j * 2u + 1u
             if (is_k) {
+                let mrow = pa.layerbase + tok[0u].pos * pa.kvd
                 let kb = pa.qd + h * pa.hs
                 let a0 = kvsrc[kb + e0]
                 let a1 = kvsrc[kb + e1]
-                kmir[pa.krow + h * pa.hs + e0] = a0 * fcr - a1 * fci
-                kmir[pa.krow + h * pa.hs + e1] = a0 * fci + a1 * fcr
+                kmir[mrow + h * pa.hs + e0] = a0 * fcr - a1 * fci
+                kmir[mrow + h * pa.hs + e1] = a0 * fci + a1 * fcr
                 // v is not roped — copy the same two elements raw into the V plane
                 let vb = pa.qd + pa.kvd + h * pa.hs
-                vmir[pa.vrow + h * pa.hs + e0] = kvsrc[vb + e0]
-                vmir[pa.vrow + h * pa.hs + e1] = kvsrc[vb + e1]
+                vmir[mrow + h * pa.hs + e0] = kvsrc[vb + e0]
+                vmir[mrow + h * pa.hs + e1] = kvsrc[vb + e1]
             } else {
                 let qb = h * pa.hs
                 let a0 = qrows[qb + e0]
@@ -3251,8 +3265,7 @@ struct QknRopeArgs {
     half : uint
     neox : uint
     nh : uint       // q heads (wgs >= nh are k heads)
-    krow : uint
-    vrow : uint
+    layerbase : uint   // this layer's K/V mirror base; the row rides tok[0].pos
     qwoff : uint    // q norm-weight row base in wn
     kwoff : uint
     eps : float
@@ -3269,6 +3282,7 @@ class QknRopeKv : RmsWgBase {
     @ssbo @binding = 4 cossin : array<float>
     @ssbo @binding = 5 wn : array<float>       // the q/k norm weight rows (its OWN member now —
                                                // the old kernel packed them into the cos buffer)
+    @ssbo @binding = 6 tok : array<TokMeta>    // the shared per-token block (element 0)
     @push_constant pa : QknRopeArgs
     @workgroup row : float[256]                // this head's normed q or k row (hs <= 256)
 
@@ -3300,8 +3314,9 @@ class QknRopeKv : RmsWgBase {
             let r0 = a0 * fcr - a1 * fci
             let r1 = a0 * fci + a1 * fcr
             if (is_k) {
-                kmir[pa.krow + h * pa.hs + e0] = r0
-                kmir[pa.krow + h * pa.hs + e1] = r1
+                let mrow = pa.layerbase + tok[0u].pos * pa.kvd
+                kmir[mrow + h * pa.hs + e0] = r0
+                kmir[mrow + h * pa.hs + e1] = r1
             } else {
                 qrows[h * pa.hs + e0] = r0
                 qrows[h * pa.hs + e1] = r1
@@ -3309,7 +3324,8 @@ class QknRopeKv : RmsWgBase {
         }
         // v is not roped or normed — the k-head wgs copy their own raw row into the V plane
         if (is_k && tid < pa.hs) {
-            vmir[pa.vrow + h * pa.hs + tid] = kvsrc[pa.qd + pa.kvd + h * pa.hs + tid]
+            let mrow = pa.layerbase + tok[0u].pos * pa.kvd
+            vmir[mrow + h * pa.hs + tid] = kvsrc[pa.qd + pa.kvd + h * pa.hs + tid]
         }
     }
 }
