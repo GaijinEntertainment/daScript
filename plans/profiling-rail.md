@@ -76,12 +76,59 @@ readers' silent-default.
    Deliberate semantics deltas, now documented in ENVIRONMENT.md: set-but-empty is unset;
    garbage warns; presence-flags honor `=0`; in-process `set_env_variable` is invisible
    to the loaded config.
-5. **The sweep** — ~391 raw `get_clock`-family sites in `modules/dasLLAMA/dasllama/` alone.
-   Classify: perf-bucket accumulators → zones on the marker rail; big UNMARKED intervals
-   (model load, dlim map, tokenizer init, warmup) → zones so the timeline finally shows them;
-   log-writes-inside-timed-intervals → move the I/O out or make the write its own zone so the
-   tax is visible instead of silently folded into the surrounding bucket. Bench-harness
-   stopwatches (lcpp_bench timing loops) stay — they ARE the measurement, not instrumentation.
+5. **The sweep** — 392 raw clock-family sites (320 `ref_time_ticks`, 92 `get_time_usec`,
+   1 `get_time_nsec`) in `modules/dasLLAMA/dasllama/`. Execution plan below; the acceptance
+   instrument is AGGREGATE-ONLY — a single stopwatch pair is ~50–80 ns on the M1, 100x below
+   what any box resolves, so per-site A/Bs would be 392 readings of noise at ~40 min each.
+   Bench-harness stopwatches (lcpp_bench timing loops) stay — they ARE the measurement, not
+   instrumentation.
+
+### Phase 5 execution plan (the quiet-M1 night)
+
+**Predictions, on record before any cell runs (the game):**
+- Off-tax (pre-sweep HEAD vs post-sweep with profiling off): **zero within noise; if anything
+  post-sweep is 0.0–0.3% faster on tg** (the always-on bucket pairs — ~160 clock pairs/token
+  ≈ 10–25 µs against a ~10 ms 1B token — get DELETED from the off build). pp: no measurable
+  delta (same pairs amortize over the whole batch).
+- On-tax (post-sweep on vs off, marker zones at bucket density): **0.5–2% tg** — must
+  embarrass lcpp's 5–7% profiler tax or the design failed.
+- cv per cell on the quiet M1 ≤ 1.5%; interleaving cancels the overnight thermal drift that
+  makes laptop A-then-B sequencing lie.
+
+**Step 1 — census + classification (no box needed).** Walk all 392 sites into four classes:
+- **C1 load-bearing** — the elapsed value FEEDS LOGIC (backend auto-selection, adaptive
+  gates, tune measurement, watchdog timeouts). UNTOUCHED, marked `// clock: control` so the
+  future lint can whitelist them. Getting one of these wrong breaks selection, not profiling —
+  this classification is the real per-site work and it is review, not measurement.
+- **C2 perf-bucket accumulators** (blocks.das 60, the arch files, moe/metal decode) → marker
+  zones on the rail, erased when `JOBQUE_PROFILING` is off. `decode_prof --prof` then needs
+  the rail compiled in and refuses loudly without it — same kaboom precedent as `--trace`.
+- **C3 big one-shot intervals** (model load, dlim mint/map, tokenizer init, warmup — image 27,
+  parakeet 27, audio 22...) → zones so the timeline finally shows them; log-writes inside a
+  timed interval move out or become their own zone. Cold-path: cost is irrelevant, visibility
+  is the point.
+- **C4 serve/bench stopwatches that ARE the deliverable** — stay.
+
+**Step 2 — sweep in batches** (C2 by file, then C3), compile + lint per batch, cheap
+correctness gates between batches: kernels suite + image mechanics arm (model-less), one
+llama2c forward-parity file. No timing gates mid-sweep — the transform is mechanical and a
+regression wouldn't resolve anyway.
+
+**Step 3 — the measurement night** (box handed over, caffeinate agent on, no user apps):
+1. Tune-gate check first: if `m1.tune.json` is stale against the current binary, re-mint ONCE
+   and use that manifest for every arm — a stale sidecar sandbags all cells equally-ish but
+   voids the board rule, and ALLOW_UNTUNED numbers are never published.
+2. Three arms, all coexisting in `.jitted_scripts` (distinct semantic hashes): **A** =
+   pre-sweep HEAD, **B-off** = post-sweep, **B-on** = post-sweep with `JOBQUE_PROFILING=1`.
+   Two benches: lcpp_bench (1B-class decode-heavy cell) + asr_bench. Cold-compile each arm
+   once (~10–20 min total), then interleave launches A, B-off, B-on, repeat ×3 — 18 cells,
+   strictly serial, one process on the box, complete logs kept, cv recorded per cell,
+   cv > 3% voids the cell and it reruns.
+3. Morning report: off-tax and on-tax with cv, per bench, against the predictions above —
+   misses are the payload.
+
+Budget: sweep is code time; the night is ~45 min compile + ~2 hrs of cells. Fits well inside
+one sleep.
 6. **AMX-for-ASR audit (acceptance run)** — everything from #3562 carries: dasAccelerate,
    the float-batch override rail, the VECLIB pin + strip-dispatch, the `min_mmac` floor.
    Audit = which ASR encoder ops are float-plane GEMMs above the floor. ASR encoders are a
