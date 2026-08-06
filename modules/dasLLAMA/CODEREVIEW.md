@@ -346,3 +346,9 @@ platform-neutral file is a defect.
 **Every program root declares `options stack = 524288`.** A test, harness, benchmark, or tool
 that picks its own number — larger or smaller — is a defect, and so is a new root that omits the
 declaration. See `ARCHITECTURE.md` §2.7.
+
+**No ad-hoc profiling.** A clock read paired with a print or log of the elapsed interval is a
+defect anywhere in the module — instrumentation goes through the `jobque_profile` marker rail
+(`profile_tag` / `profile_marker` and the `trace_*` wrappers in `dasllama_math.das`). The
+carve-out is `benchmarks/` and `performance/`, where the measured number is the file's
+deliverable.

@@ -17,6 +17,7 @@ and other compile-time utilities.
    generated/is_local.rst
    generated/safe_addr.rst
    generated/static_let.rst
+   generated/build_const.rst
    generated/lpipe.rst
    generated/assert_once.rst
    generated/unroll.rst
