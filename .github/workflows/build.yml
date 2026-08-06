@@ -272,9 +272,15 @@ jobs:
       with:
         arch: ${{ matrix.architecture == 32 && 'x86' || 'x64' }}
 
-    - name: "Cache vcpkg + openssl"
+    # Restore here, save below on master only. A plain actions/cache also SAVES,
+    # and a save from a PR run is scoped to refs/pull/N/merge, where no sibling PR
+    # can read it — so the cache looked populated (6 entries, ~836MB of quota) while
+    # every Windows job still missed and rebuilt openssl from source, 8.5 min a run.
+    # This job is the SEEDER for both arch keys; every other Windows job in the repo
+    # is restore-only, so there is exactly one writer per key and no save race.
+    - name: "Restore vcpkg + openssl"
       if: runner.os == 'Windows'
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         # vcpkg.exe + ports/triplets/scripts + installed/<triplet>/openssl. Build
         # intermediates (buildtrees/downloads/packages) are trimmed pre-save below.
@@ -292,6 +298,17 @@ jobs:
         echo "CMAKE_TOOLCHAIN_FILE=$(pwd)/vcpkg/scripts/buildsystems/vcpkg.cmake" >> $GITHUB_ENV
         # Drop build intermediates so the saved cache holds only installed/ — ~1.2GiB -> ~0.1GiB.
         rm -rf vcpkg/buildtrees vcpkg/downloads vcpkg/packages
+
+    # Master only, so the entry lands on refs/heads/master where every branch and
+    # PR can read it. One writer per arch key: the Release cell of each Windows
+    # architecture (Debug shares the x64 key and would otherwise race it —
+    # "Unable to reserve cache with key ..., another job may be creating this cache").
+    - name: "Save vcpkg + openssl"
+      if: runner.os == 'Windows' && github.ref == 'refs/heads/master' && matrix.cmake_preset == 'Release'
+      uses: actions/cache/save@v4
+      with:
+        path: vcpkg
+        key: vcpkg-${{ matrix.architecture == 32 && 'x86' || 'x64' }}-windows-v2
 
     - name: "Install: Required Dev Packages"
       run: |
@@ -598,8 +615,9 @@ jobs:
       with:
         arch: x64
 
-    - name: "Cache vcpkg + openssl"
-      uses: actions/cache@v4
+    # Restore-only: the PR matrix job above is the single seeder for this key.
+    - name: "Restore vcpkg + openssl"
+      uses: actions/cache/restore@v4
       with:
         path: vcpkg
         key: vcpkg-x64-windows-v2
@@ -618,11 +636,13 @@ jobs:
     - name: "Configure sccache"
       run: echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
 
-    - name: "Restore sccache objects"
-      uses: actions/cache/restore@v4
-      with:
-        path: ${{ runner.temp }}/sccache
-        key: sccache-windows-64-RelWithDebInfo-none
+    # NOT persisted across runs, deliberately. This slot held 564MB of the repo's
+    # 10GB cache quota, and this job is nightly-only — nothing waits on it. That
+    # quota is contended: a Windows object cache is ~4.4GB (920 TUs x ~4.8MB,
+    # /Z7 embeds debug info in every .obj), and the PR-facing slots kept evicting
+    # each other, which is what left every PR building cold. Paying ~15 min once a
+    # night here is the cheapest quota we can free. Re-add a restore/save pair on
+    # key sccache-windows-64-RelWithDebInfo-none if the repo cache limit is raised.
 
     - name: "Build: Daslang RelWithDebInfo"
       run: |
@@ -635,19 +655,6 @@ jobs:
           -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} \
           -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
         cmake --build ./build --config RelWithDebInfo --parallel
-
-    - name: "Refresh sccache slot"
-      if: github.ref == 'refs/heads/master'
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: gh cache delete "sccache-windows-64-RelWithDebInfo-none" -R ${{ github.repository }} || true
-
-    - name: "Save sccache objects"
-      if: github.ref == 'refs/heads/master'
-      uses: actions/cache/save@v4
-      with:
-        path: ${{ runner.temp }}/sccache
-        key: sccache-windows-64-RelWithDebInfo-none
 
     - name: "Test: interpreter"
       run: cmake --build ./build --config RelWithDebInfo --target run_tests_interpreter || cmake --build ./build --config RelWithDebInfo --target run_tests_interpreter_isolated
@@ -701,8 +708,9 @@ jobs:
       with:
         arch: x64
 
-    - name: "Cache vcpkg + openssl"
-      uses: actions/cache@v4
+    # Restore-only: the PR matrix job above is the single seeder for this key.
+    - name: "Restore vcpkg + openssl"
+      uses: actions/cache/restore@v4
       with:
         path: vcpkg
         key: vcpkg-x64-windows-v2
@@ -721,11 +729,8 @@ jobs:
     - name: "Configure sccache"
       run: echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
 
-    - name: "Restore sccache objects"
-      uses: actions/cache/restore@v4
-      with:
-        path: ${{ runner.temp }}/sccache
-        key: sccache-windows-64-Release-none-llvm-on-nightly
+    # NOT persisted across runs — same quota reasoning as the RelWithDebInfo
+    # nightly above. This slot held another 758MB for a job nobody waits on.
 
     - name: "Build: Daslang Release with LLVM"
       run: |
@@ -738,19 +743,6 @@ jobs:
           -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} \
           -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
         cmake --build ./build --config Release --parallel
-
-    - name: "Refresh sccache slot"
-      if: github.ref == 'refs/heads/master'
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: gh cache delete "sccache-windows-64-Release-none-llvm-on-nightly" -R ${{ github.repository }} || true
-
-    - name: "Save sccache objects"
-      if: github.ref == 'refs/heads/master'
-      uses: actions/cache/save@v4
-      with:
-        path: ${{ runner.temp }}/sccache
-        key: sccache-windows-64-Release-none-llvm-on-nightly
 
     - name: "Test: JIT + interpreter"
       run: |
