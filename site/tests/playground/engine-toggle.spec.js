@@ -139,6 +139,51 @@ test('a queued build narrates its progress and then runs', async ({ playground }
     await expect.poll(() => playground.locator('#run').isDisabled(), { timeout: 15_000 }).toBe(false);
 });
 
+test('a page-kind build runs as an embedded page frame', async ({ playground }) => {
+    // Graphics/audio samples build as standalone html+js+wasm pages (kind:
+    // 'page'); the playground embeds the html artifact in an iframe instead of
+    // instantiating a bare module. Served absolute from the run origin in
+    // production — here same-origin, which the embed path treats identically.
+    const PAGE_URL = '/api/build/artifact/abc1234/' + FAKE_HASH + '/sample.html';
+    await stubBuildInfo(playground, true);
+    await stubStore(playground);
+    await stubBuild(playground, [
+        { state: 'queued', position: 1 },
+        {
+            state: 'done', kind: 'page', toolchain: 'abc1234',
+            files: [PAGE_URL,
+                '/api/build/artifact/abc1234/' + FAKE_HASH + '/sample.js',
+                '/api/build/artifact/abc1234/' + FAKE_HASH + '/sample.wasm'],
+        },
+    ]);
+    await playground.route('**' + PAGE_URL, route => route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: '<html><body>page artifact stands</body></html>',
+    }));
+    await reloadWithStubs(playground);
+
+    const memory64 = await playground.evaluate(() =>
+        WebAssembly.validate(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 5, 3, 1, 4, 1])));
+    test.skip(!memory64, 'browser lacks wasm64/memory64');
+
+    await playground.locator(wasmSel).check();
+    await playground.locator('#run').click();
+
+    const frame = playground.locator('iframe.pg-page-frame');
+    await expect(frame).toHaveCount(1, { timeout: 15_000 });
+    expect(await frame.getAttribute('src')).toContain('sample.html');
+    // No sandbox attribute BY DESIGN: it would opaque the origin and break
+    // emscripten's same-origin worker spawning — the separate run origin is
+    // the isolation boundary.
+    expect(await frame.getAttribute('sandbox')).toBeNull();
+    expect(await frame.getAttribute('allow')).toContain('cross-origin-isolated');
+
+    // Switching samples clears the page frame with the canvas.
+    await playground.locator('#examples').selectOption({ label: 'SHA-256 (benchmark)' });
+    await expect(playground.locator('iframe.pg-page-frame')).toHaveCount(0, { timeout: 5_000 });
+});
+
 test('a failed build shows the compiler error', async ({ playground }) => {
     await stubBuildInfo(playground, true);
     await stubStore(playground);
