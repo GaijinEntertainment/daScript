@@ -1658,6 +1658,11 @@ def private tune_policy_gated() : bool {
         || !empty(get_env_variable("DAS_TUNE_MANIFEST")))
 }
 
+    // -exe owes the status [init] even under a DAS_TUNE_MANIFEST redirect (report ≠ policy); stamp-free/grid still win
+def private exe_status_report() : bool {
+    return tune_exe_gate() && !tune_stamp_free_gate() && tune_mode() == "normal"
+}
+
 // the runtime status table: one tune_status_add per [tune] function, off the stamped AST
 // truth — emitted by policy runs AND by -exe builds (an artifact must be able to report
 // which perms it carries: log_tune_status / tune_status work inside a standalone exe)
@@ -1808,7 +1813,8 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
 class private TunePolicyAnnotation : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
                        args : AnnotationArgumentList; var errors : das_string) : bool {
-        if (tune_policy_gated()) {
+        // the DAS_TUNE_MANIFEST redirect gates the POLICY, never the -exe self-report (else a redirect-built exe ships stamp-less rows)
+        if (tune_policy_gated() && !exe_status_report()) {
             return true
         }
         var errs = ""
@@ -1850,7 +1856,7 @@ class private TuneDefaultPolicy : AstPassMacro {
     def override apply(prog : ProgramPtr; _mod : Module?) : bool {
     // fires only for roots that SEE llvm_tune, so a scope-owning library must re-export it public
         return false if (is_in_completion() || !empty("{compiling_module().name}")
-            || empty(g_scopes) || tune_policy_gated())
+            || empty(g_scopes) || (tune_policy_gated() && !exe_status_report()))
         var main_fn = compiling_module() |> find_unique_function("main", false)
         return false if (main_fn == null)
         for (ann in main_fn.annotations) {

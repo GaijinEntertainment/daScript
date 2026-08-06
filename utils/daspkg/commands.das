@@ -2290,7 +2290,7 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
                     // a nonzero tuner is a REFUSAL (noise gate, validation) or a failure —
                     // either way the winners were not measured, and unmeasured winners do
                     // not ship. DAS_TUNE_NOISE_OVERRIDE mints anyway (stamped).
-                    to_log(LOG_ERROR, "release: tuner for scope `{ts.name}` refused/failed after {tune_seconds}s (rc={trc}) — not shipping unmeasured winners; quiet the box and re-run, or --quick to inherit a complete sidecar\n{tout}\n")
+                    to_log(LOG_ERROR, "release: tuner for scope `{ts.name}` refused/failed after {tune_seconds}s (rc={trc}) — not shipping unmeasured winners; quiet the box and re-run, --quick to inherit a complete sidecar, or DAS_TUNE_NOISE_OVERRIDE=1 to mint anyway (stamped in provenance)\n{tout}\n")
                     if (fexist(deps_file)) {
                         remove(deps_file)
                     }
@@ -2430,7 +2430,13 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
             return 1
         }
         var terr : string
-        if (!set_mtime(sidecar_dst, get_clock(), terr)) {
+        // get_clock() is whole-second: stamping "now" truncates to X.000 while the exe copy
+        // earlier in the SAME second keeps its sub-second mtime (X.176 beat X.000 on M4 and
+        // the shipped sidecar read stale → das rows dropped for carrying no tune stamp).
+        // +5s is strictly newer than anything this release writes; a slightly future-dated
+        // sidecar is harmless — staleness only checks older-than-exe.
+        let ahead = unsafe(reinterpret<clock>(int64(get_clock()) + 5l))
+        if (!set_mtime(sidecar_dst, ahead, terr)) {
             to_log(LOG_WARNING, "release: cannot touch {sidecar_dst}: {terr} — the shipped sidecar may read as stale\n")
         }
         log("  ship: {sidecar_rel} (tune sidecar)\n")

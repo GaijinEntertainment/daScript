@@ -63,6 +63,17 @@ short races cannot resolve sub-2% twins; the debugging concession is `daspkg rel
 (accept the existing sidecar, race nothing). The confirm pass is never cut — a correctness gate,
 not a budget. The flag spec is shared: `harness/tuner_cli.das`, required by bare name (same-directory).
 
+**Self-validation judges same-window ORDER, never cross-window levels.** After the sweep,
+`tune_kernels` re-races a heavy subset twice at full budget; a kernel FAILS the mint only when a
+re-race rejects the recorded winner outright, or the SAME challenger beats it past the reproduce
+band (`max(1.5×floor, 1%)`) in BOTH windows. One-window flips or differing challengers are
+state-scrambled twins = reproduction; absolute median drift between race and re-race is stamped
+(`validation_max_drift_pct`) and noted past 5%/3%, but never fails — box levels move with load
+history (DVFS, heat soak) while same-window order holds, so cross-window medians prove nothing
+(measured on M4: 4–8% level drift on compute-bound kernels with in-burst cv 0.6%).
+`DAS_TUNE_NOISE_OVERRIDE=1` mints through BOTH gates — a failed noise probe and a failed
+validation verdict — stamped `noise: overridden` / `validation: overridden` in provenance.
+
 **The shipped fallback has ONE source.** `[tuned]` banks each kernel's resolved fallback and
 `[dasllama_fallbacks]` (a dummy struct in `tune_kernels.das`, declared after the requires that
 pull the kernels in) emits `dasllama_tuned_fallbacks() : table<string;string>` from that bank.
