@@ -71,8 +71,9 @@ re-encode cost; pp a wash. (Baselines predate the carrier conversion; post-conve
    line with the other dense residents (post-slab row above; measured on a mildly busy box,
    not walkthrough-clean). BUT the uncapped run armed at auto-ctx 25590 (weights 7.97GB +
    KV 6.5GB = 14.5GB of the 16GB card, zero desktop headroom) and WDDM demotion took tg to
-   3.65 ± 0.01 / pp to 293 ± 47 — the ctx negotiation oversubscribes; needs a KV-side
-   headroom margin.
+   3.65 ± 0.01 / pp to 293 ± 47 — the ctx negotiation oversubscribed. Fixed same day: the
+   plan counts driver scratch and the auto arm keeps 2GiB desktop headroom — uncapped arms
+   at ctx 16627 and holds 44.9 ± 0.05 tg / 1967 ± 14 pp, no knobs.
 4. qwen2 = one-flag unlock (attn_qkv_bias, item 13); gemma2/3/4-dense = one cluster
    (sandwich norms + SWA + softcaps, item 14). Osmosis-class work, not focus.
 5. Hybrids serve correctly on per-op rails but need the hybrid ladder for competitive tg

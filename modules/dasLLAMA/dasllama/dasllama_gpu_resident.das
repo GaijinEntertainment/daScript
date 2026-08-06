@@ -361,9 +361,28 @@ def private moe_gpu_gather_upload(t : Model; f : KqFmt; woff : int64; n, rows, s
 struct ResidentPlan {
     weight_bytes : int64
     kv_bytes : int64
+    scratch_bytes : int64   //!< the driver's own device scratch (prefill window + decode smalls)
+    headroom_bytes : int64  //!< desktop slack the auto arm leaves unfilled (0 when VRAM is pinned)
     budget_bytes : int64
     fits : bool
     reason : string       //!< "" when it fits; otherwise why, with a remedy where one exists
+}
+
+let private RDEC_PF_ROWS = 512l                    // mirrors PF_WINDOW (dasllama_vulkan_prefill)
+let private RDEC_VRAM_HEADROOM = 2_147_483_648l    // auto-arm slack past the tier's desktop reserve:
+                                                   // filling weights + KV to the cap brim measured a
+                                                   // 12x WDDM-demotion collapse on a live desktop
+let private RDEC_MISC_BYTES = 67_108_864l          // decode smalls + batch act planes + metas
+
+// the driver's device allocations past weights + KV — the prefill window buffers dominate.
+// An estimate, deliberately a touch high; the flat term carries the decode/batch smalls.
+def private rdec_scratch_bytes(t : Model) : int64 {
+    let c = t.config
+    let qd = layer_qd(c, 0l)
+    let hid = layer_hidden(t, 0l)
+    let wide = max(max(c.dim, qd), hid)
+    return RDEC_PF_ROWS * (16l * c.dim + 2l * wide + 10l * qd + 12l * layer_kv_dim(c, 0l)
+        + 8l * hid + 4l * layer_head_size(c, 0l)) + c.vocab_size * 4l + RDEC_MISC_BYTES
 }
 
 //! Size `t` for the resident driver at `seq_cap` context. Declines (fits = false) carry a reason:
@@ -388,6 +407,9 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
         vrow += kv_row_bytes(vdt, layer_kv_dim(c, l))
     }
     p.kv_bytes = seq_cap * (krow + vrow)
+    p.scratch_bytes = rdec_scratch_bytes(t)
+    // a pinned VRAM_MB is the user's contract — fill it; the auto arm keeps desktop slack
+    p.headroom_bytes = gpu_want_vram_mb() > 0l ? 0l : RDEC_VRAM_HEADROOM
     // every 2D plane a dense forward reads: the attention quad, the FFN triple, the classifier
     for (l in range64(c.n_layers)) {
         let qd = layer_qd(c, l)
@@ -413,15 +435,16 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
     }
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     p.weight_bytes += moe_gpu_plane_bytes(c.dim, c.vocab_size, int(cls_fmt))
-    let total = p.weight_bytes + p.kv_bytes
-    p.fits = total <= p.budget_bytes
+    let total = p.weight_bytes + p.kv_bytes + p.scratch_bytes
+    let usable = p.budget_bytes - p.headroom_bytes
+    p.fits = total <= usable
     if (!p.fits) {
         // a shorter context is the remedy that actually works — weights are fixed, KV is not
-        let kv_fit = max(p.budget_bytes - p.weight_bytes, 0l)
+        let kv_fit = max(usable - p.weight_bytes - p.scratch_bytes, 0l)
         let cap_fit = (krow + vrow) > 0l ? kv_fit / (krow + vrow) : 0l
         p.reason = (cap_fit >= 512l
-            ? "needs {total >> 20l} MB of {p.budget_bytes >> 20l} MB at ctx {seq_cap} — would fit at ctx {cap_fit}"
-            : "needs {total >> 20l} MB of {p.budget_bytes >> 20l} MB (weights alone {p.weight_bytes >> 20l} MB)")
+            ? "needs {total >> 20l} MB of {usable >> 20l} MB at ctx {seq_cap} — would fit at ctx {cap_fit}"
+            : "needs {total >> 20l} MB of {usable >> 20l} MB (weights alone {p.weight_bytes >> 20l} MB)")
     }
     return p
 }
@@ -961,7 +984,8 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         if (!plan.fits && plan.weight_bytes > 0l && plan.kv_bytes > 0l) {
             // weights are fixed, the KV mirror is not: retry at the context that fits (the plan's
             // own remedy), as long as it stays a usable window. The driver guards decode past the cap.
-            let fit_ctx = (plan.budget_bytes - plan.weight_bytes) / (plan.kv_bytes / seq_cap)
+            let fit_ctx = (max(plan.budget_bytes - plan.headroom_bytes - plan.weight_bytes
+                - plan.scratch_bytes, 0l)) / (plan.kv_bytes / seq_cap)
             if (fit_ctx >= rdec_min_ctx()) {
                 seq_cap = fit_ctx
                 plan = resident_plan(t, seq_cap, KVDtype.f32, KVDtype.f32)
