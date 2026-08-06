@@ -142,7 +142,7 @@ class public CollectExternVisitor : AstVisitor {
         return ib
     }
 
-    def CollectExternVisitor(standalone_context : LLVMOpaqueValue?; _ctx : LLVMContextRef;
+    def CollectExternVisitor(standalone_context : LLVMOpaqueValue?; _ctx : LLVMContextRef; // nolint:STYLE038 — LLVM type-table setup: one cached type/fn-type per line
                              _builder : LLVMBuilderRef,
                              _mod : LLVMOpaqueModule?; var _types : PrimitiveTypes?,
                              uids : UidNodes?; register_all : bool; _jit_mod : LlvmJitMode) {
@@ -549,8 +549,8 @@ class public CollectExternVisitor : AstVisitor {
     }
 }
 
-def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVMContextRef; builder : LLVMBuilderRef,
-                               mod : LLVMOpaqueModule?; var types : PrimitiveTypes?;
+def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVMContextRef; builder : LLVMBuilderRef, // nolint:STYLE038 — flat emission walk: one registration form per function class
+                               mod : LLVMOpaqueModule ?; var types : PrimitiveTypes?;
                                var funcs : array<FunctionPtr>; var uids : UidNodes?;
                                var used_modules : table<string; bool>&;
                                dynamic_modules : table<string; bool>;
@@ -884,8 +884,8 @@ def private emit_module_registration(m : Module?; dynamic_modules : table<string
 
 // Creates main function that initializes a standalone JIT context, registers
 // all compiled functions, runs init scripts, then calls the program entry point.
-def public inject_main(program_context : Context?; ctx : LLVMContextRef;
-                       prog : Program?; entry_point : string; mod : LLVMOpaqueModule?;
+def public inject_main(program_context : Context?; ctx : LLVMContextRef; // nolint:STYLE037,STYLE038 — the standalone-exe entry emitter: one emission block per runtime feature, in startup order
+                       prog : Program ?; entry_point : string; mod : LLVMOpaqueModule?;
                        var types : PrimitiveTypes?, var uids : UidNodes?; strict : bool;
                        register_all_modules : bool = false) : tuple<fn : LLVMOpaqueValue?; link_whole_lib : bool> {
     g_exe_emitted_reg |> clear()   // per-codegen-run: one registration call per module thunk
@@ -1042,9 +1042,11 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
         )
     )
     var jit_reg_dyn_mod = LLVMAddFunctionWithType(g_mod, "jit_register_dynamic_module_resolve", reg_dyn_mod_type)
+    var registered_dynamic = false
     for_each_registered_dynamic_module() $(path, mod_name, das_name) {
         if (key_exists(used_modules, das_name) || key_exists(force_dynamic_modules, das_name)) {
             has_cpp_modules = true
+            registered_dynamic = true
             to_log(LOG_INFO, "LLVM EXE: include dynamic module: `{das_name}`\n")
             let rel = compute_modules_relative_suffix(path)
             let rel_str = get_string_constant_ptr(builder, rel)
@@ -1052,6 +1054,13 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
             let name_str = get_string_constant_ptr(builder, mod_name)
             LLVMBuildCall2(builder, reg_dyn_mod_type, jit_reg_dyn_mod, fixed_array(rel_str, abs_str, name_str), "")
         }
+    }
+    // The registrations above load Quiet (sibling DT_NEEDED ordering); the retry pass runs here,
+    // and anything still unloadable becomes a fatal naming the module + dlopen error instead of
+    // a later cryptic "Failed to find <fn> in module <mod>" on the first extern lookup.
+    if (registered_dynamic) {
+        var fin_dyn = LLVMAddFunctionWithType(g_mod, "jit_finalize_dynamic_modules", das_ensure_env_type)
+        LLVMBuildCall2(builder, das_ensure_env_type, fin_dyn, array<LLVMValueRef>(), "")
     }
 
     // -list-shared-modules <path> side-effect: dump the release-deps JSON
@@ -1168,6 +1177,12 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     // jit_register_all_builtin_modules calls register_builtin_modules, which lives only in the
     // compiler lib — so this flag forces a whole-lib link (else "undefined reference" at link).
     if (register_all_modules) {
+        needs_whole_lib = true
+    }
+    // Every .shared_module NEEDs the FULL liblibDaScriptDyn, and dlopen resolves that only from
+    // libs already in-process or on the .so's own RUNPATH (never the exe's). A runtime-only exe
+    // fails every module dlopen silently, so shipping a dynamic module forces the full-lib link.
+    if (ships_dynamic) {
         needs_whole_lib = true
     }
 
