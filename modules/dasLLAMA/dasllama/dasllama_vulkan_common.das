@@ -49,11 +49,9 @@ let META_BYTES = 4_096l            // params + region table
 let MAX_STACKS = 384               // stack-table capacity (and the ffn-cmd key radix). Dense/
                                            // shexp/qkv rails add ~250 small stacks on top of
                                            // experts+cls; starving a LATER walk section costs
-let DESC_POOL_CHUNK = 256          // sets per descriptor-pool chunk — the chain grows by one
-                                           // chunk on exhaustion (llama.cpp's shape); NVIDIA
-                                           // doesn't enforce pool caps, MoltenVK/Intel DO —
-                                           // never trust a fixed pool that works on this box
-                                           // (a 224 cap silently cut 6 DN layers = -14% tg)
+let DESC_POOL_CHUNK = 256          // sets per descriptor-pool chunk — grows by one chunk on
+                                           // exhaustion (llama.cpp's shape); NVIDIA ignores pool caps,
+                                           // MoltenVK/Intel enforce — a fixed 224-set pool silently cut 6 DN layers (-14% tg)
 let WG_X = 64u                     // kernel workgroup width (spec-const axis 0 can retune it)
 let BATCH_XQ_BYTES = 33_554_432l   // device-local gathered-activation scratch (chunk cap)
 let BATCH_XS_BYTES = 8_388_608l    // ... its scale plane
@@ -1575,10 +1573,10 @@ def find_stream_group(w0 : int64; fmt : int) : int {
     return -1
 }
 
-def find_stack(w0 : int64; fmt : int) : int {
+def find_stack(w0 : int64; fmt : int; who : string) : int {
     let i = find_stack_idx(w0, fmt)
     if (i < 0) {
-        panic("dasLLAMA vulkan tier: dispatch against a non-resident weight region (fmt {fmt} element offset {w0})")
+        panic("dasLLAMA vulkan tier: {who} dispatch against a non-resident weight region (fmt {fmt} element offset {w0}) — stale route mark, or a model swapped in without moe_gpu_drop_model()")
     }
     return i
 }

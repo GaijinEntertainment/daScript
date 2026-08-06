@@ -366,7 +366,7 @@ def private rd_record_token {
                 rd_dispatch(raw, g_gpu.qkn_rope_pipeline, L.s_qkn_rope, uint(g_rd.n_heads + kvd / g_rd.head_size), h)
             } else {
                 if (g_rd.qk_norm) {
-                    let hs = g_rd.head_size   // nolint:LINT021 — the norm-row words compose it with int64 layout offsets
+                    let hs = g_rd.head_size
                     var pcn = QkRmsArgs(hs = uint(hs), nh = uint(g_rd.n_heads), nkvh = uint(kvd / hs),
                         qstride = uint(qd), kstride = uint(kvd), kbase = uint(qd),
                         qwoff = uint(nlfin + dim + l * 2l * hs), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hs),
@@ -622,8 +622,7 @@ def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
     let fo = g_gpu.stacks[s_o].fmt
     verify(gemv_cls_ensure(fz) && gemv_cls_ensure(fo),
         "vk decode: the gemv class rail must engage on a live device")
-    // z GEMV: z planes/regions, the qkv stack's SHARED acts image and y buffer (y base cd rides
-    // the push) — the fused kernel sees qkv rows AND the z row on one binding
+    // z GEMV rides the qkv stack's SHARED acts image and y buffer (y base cd in the push) — the fused kernel sees qkv rows AND the z row on one binding
     st.z_set = gemv_cls_set(fz, fixed_array(g_gpu.stacks[s_z].wqbuf, g_gpu.stacks[s_z].wsbuf, g_gpu.stacks[s_z].meta.buf,
             g_gpu.stacks[s_qkv].xq.buf, g_gpu.stacks[s_qkv].xs.buf, g_gpu.stacks[s_qkv].y_dev),
         fixed_array(g_gpu.stacks[s_z].wqbytes, ws_range(s_z), META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES),
@@ -870,9 +869,9 @@ def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64; is_gelu : bool)
 // begin/join pair. Returns the down stack index alongside the cmd (join reads its y staging).
 def private ffn_gemv_prep(offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, nfe, nrows : int64; f1, f3, f2 : int; is_gelu : bool) : tuple<cmd : VkCommandBuffer; s2 : int> {
     ensure_ffn_state()   // hq/hs planes for the act+requant: a shexp-only run dispatches FFN first
-    let s1 = find_stack(unsafe(offs1[0]), f1)
-    let s3 = find_stack(unsafe(offs3[0]), f3)
-    let s2 = find_stack(unsafe(offs2[0]), f2)
+    let s1 = find_stack(unsafe(offs1[0]), f1, "decode ffn gate")
+    let s3 = find_stack(unsafe(offs3[0]), f3, "decode ffn up")
+    let s2 = find_stack(unsafe(offs2[0]), f2, "decode ffn down")
     assert(nrows * max(nfe, n) * 4l <= Y_BYTES, "dasLLAMA vulkan tier: FFN dispatch exceeds output capacity")
     // gate/up share one activation image (same xqp below) so forms must agree; down's is its own
     let kq_in = !vk_fmt_b32(f1)
@@ -975,9 +974,9 @@ def private qkv_cmd_make(sq, sk, sv : int; woq, wok, wov : int64; n, dq, dk, dv 
 //! must share a quant CLASS (one activation image); the caller's gate enforces it.
 def vk_moe_qkv(var yq : float?; var yk : float?; var yv : float?; woq, wok, wov : int64;
                fq, fk, fv : int; xqp : int8 const?; xsp : float const?; n, dq, dk, dv : int64) {
-    let sq = find_stack(woq, fq)
-    let sk = find_stack(wok, fk)
-    let sv = find_stack(wov, fv)
+    let sq = find_stack(woq, fq, "decode qkv q")
+    let sk = find_stack(wok, fk, "decode qkv k")
+    let sv = find_stack(wov, fv, "decode qkv v")
     if (!key_exists(g_gpu.qkv_cmds, woq)) {
         qkv_cmd_make(sq, sk, sv, woq, wok, wov, n, dq, dk, dv)
     }
@@ -1199,7 +1198,7 @@ def private ensure_cls(si : int; woff, n, d : int64) {
 //! in the plane's own quant form (Q8_0 per-32 / Q8_K per-256), result DMA'd to the host-cached
 //! staging in the same submit.
 def vk_moe_cls(var yp : float?; woff : int64; xqp : int8 const?; xsp : float const?; n, d : int64; fmt : int) {
-    let si = find_stack(woff, fmt)
+    let si = find_stack(woff, fmt, "classifier")
     assert(d * 4l <= Y_BYTES, "dasLLAMA vulkan tier: classifier vocab exceeds output capacity")
     ensure_cls(si, woff, n, d)
     fill_stack_acts(si, xqp, xsp, n)

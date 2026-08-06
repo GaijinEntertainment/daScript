@@ -843,7 +843,7 @@ def private cmd_copy_batch_meta(raw : VkCommandBuffer; si : int) {
 // one reusable cmd buffer, re-recorded per submit — prefill submits are few and multi-ms, so
 // recording cost is noise. comb_npos > 0: down rows stay device-side, accumulating into comb_y_dev;
 // only the last chunk appends the k-fold-smaller combined DMA. Hidden planes never leave the device.
-def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, n, nfe, gout_bytes : int64;   // nolint:STYLE038 — the verbatim window chain, one seam
+def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, n, nfe, gout_bytes : int64;
                                  axq_bytes, axs_bytes, mid_nblk : int64; is_gelu : bool;
                                  comb_npos : uint = 0u; comb_first : bool = false; comb_last : bool = false;
                                  comb_wi_bytes : int64 = 0l; comb_y_bytes : int64 = 0l;
@@ -906,9 +906,9 @@ def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, 
 // batch arm: chunked over row windows, down GEMM reuses y1 for output. npos > 0: the combine
 // kernel folds each chunk's down rows into comb_y_dev, read back once after the last chunk.
 def vk_moe_ffn_batch(var goutp : float?; offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; wp : float const?; invp : uint const?; n, nfe, nrows, npos : int64; f1, f3, f2 : int; is_gelu : bool) {
-    let s1 = find_stack(unsafe(offs1[0]), f1)
-    let s3 = find_stack(unsafe(offs3[0]), f3)
-    let s2 = find_stack(unsafe(offs2[0]), f2)
+    let s1 = find_stack(unsafe(offs1[0]), f1, "prefill ffn gate")
+    let s3 = find_stack(unsafe(offs3[0]), f3, "prefill ffn up")
+    let s2 = find_stack(unsafe(offs2[0]), f2, "prefill ffn down")
     // gate/up share one activation image (forms must agree); down's intermediate is its own unit
     let kq_in = !vk_fmt_b32(f1)
     assert(!vk_fmt_b32(f3) == kq_in,
@@ -1008,7 +1008,7 @@ def private record_dense_cmd(si : int; nwg : uint; n, d, y_bytes : int64; axq_by
 //! ([d x n] at element offset woff), a one-region ride on the batch tile rail. Chunked like
 //! the FFN arm; activations arrive pre-quantized in the plane's own form.
 def vk_moe_dense(var yp : float?; woff : int64; xqp : int8 const?; xsp : float const?; n, d, nrows : int64; fmt : int) {
-    let si = find_stack(woff, fmt)
+    let si = find_stack(woff, fmt, "dense batch")
     let xunit = fmt_unit(fmt)
     ensure_batch_state()
     ensure_batch_set(si, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y1)
@@ -1073,7 +1073,7 @@ def private ensure_dn_cls_sets {
 // one deltanet window: acts/meta/smalls staging copies, qkv + z tiles, conv, scan, the conv-tail
 // extraction (before out-proj overwrites the qkv rows in y1), o requant, out-proj tile, y DMA;
 // the state uploads on the first window and reads back on the last
-def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;   // nolint:STYLE038 — the verbatim window chain, one seam
+def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;
                           rows, cd, kd, di, dim, taps, nvh, nkh, ds : int64;
                           axq_bytes, axs_bytes : int64; first, last : bool; eps : float) {
     let raw = g_gpu.batch_cmd
@@ -1148,9 +1148,9 @@ def vk_moe_dn(var yp : float?; woq, woz, woo : int64;
               convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?;
               var stp : float?; var tailp : float?; histp : float const?;
               npos, dim, cd, kd, di, nvh, nkh, ds, dconv : int64; eps : float) {
-    let s_qkv = find_stack(woq, 0)
-    let s_z = find_stack(woz, 0)
-    let s_o = find_stack(woo, 0)
+    let s_qkv = find_stack(woq, 0, "dn qkv")
+    let s_z = find_stack(woz, 0, "dn z-gate")
+    let s_o = find_stack(woo, 0, "dn out")
     let taps = dconv - 1l
     if (npos == 1l) {   // the decode step — device-resident state, one pre-recorded submit
         vk_moe_dn_step(yp, s_qkv, s_z, s_o, woq, woz, woo, xqp, xsp, bp, gp,
@@ -1264,7 +1264,7 @@ def private ensure_at_state {
 // one attention window: acts/meta/smalls staging copies, q|gate + k + v tiles, the prep pair
 // (deinterleave/qk-rms/rope; k lands at absolute positions), v append + k/v host DMA in the
 // transfer window, the flash attention pass, o requant, wo tile, y DMA
-def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o : uint;   // nolint:STYLE038 — the verbatim window chain, one seam
+def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o : uint;
                           rows, w0, qd, kv_dim, dim, n_heads, hs, half, n_kv, kv_mul, o_nblk : int64;
                           axq_bytes, axs_bytes, sm_bytes : int64; o_kq, gated, qknorm : bool;
                           eps, scale : float) {
@@ -1331,10 +1331,10 @@ def vk_moe_attn(var yp : float?; var kp : float?; var vp : float?;
                 cosp : float const?; sinp : float const?;
                 npos, dim, qd, kv_dim, hs, rot, n_heads, kv_mul : int64;
                 scale : float; eps : float; gated : bool; qknorm : bool) {
-    let s_q = find_stack(woq, fq)
-    let s_k = find_stack(wok, fk)
-    let s_v = find_stack(wov, fv)
-    let s_o = find_stack(woo, fo)
+    let s_q = find_stack(woq, fq, "prefill attn q")
+    let s_k = find_stack(wok, fk, "prefill attn k")
+    let s_v = find_stack(wov, fv, "prefill attn v")
+    let s_o = find_stack(woo, fo, "prefill attn o")
     // q/k/v share one activation image, so their format class must agree (the FFN triple rule);
     // the wo stack is free — the requant form follows it
     let kq = fq != 0
