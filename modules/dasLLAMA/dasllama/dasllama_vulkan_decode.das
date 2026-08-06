@@ -7,6 +7,7 @@ options _function_length = 0   // same
 
 require dasllama/dasllama_vulkan_common   // g_gpu/g_rd state, plumbing, hazard rail, fill metas
 require dasllama/dasllama_vulkan_classes   // the class-kernel rail (generated set_/enc_ + gemv_cls_*)
+require dasllama/dasllama_kqformat   // kq_sb — the Q8_K-form activation pick per consumer plane
 require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_math
@@ -26,10 +27,11 @@ def vk_rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab
     if (!vk_moe_init()) {
         return false
     }
-    // the shaders index the KV mirror with 32-bit uint meta offsets and the buffer must fit a 2GiB
-    // shard — a huge seq_cap would overflow both. The budget gate should decline first; guard anyway.
-    if (n_layers * seq_cap * kv_dim > 2_000_000_000l) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan resident: KV mirror ({n_layers} x {seq_cap} x {kv_dim}) exceeds 32-bit index / 2GiB shard\n")
+    // each mirror side binds as ONE SSBO range: past maxStorageBufferRange (or the shaders' uint
+    // word index) every read is undefined. The ctx negotiation caps first; guard direct callers.
+    if (n_layers * seq_cap * kv_dim * 4l > vk_max_storage_range()
+            || n_layers * seq_cap * kv_dim > 4_294_967_295l) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: KV mirror ({n_layers} x {seq_cap} x {kv_dim}) exceeds maxStorageBufferRange {vk_max_storage_range()} / the 32-bit word index\n")
         return false
     }
     // the residual-stream kernels stage a whole row in ar_row, and the per-head ones a whole head
@@ -129,10 +131,13 @@ def vk_rdec_set_layer(l : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv,
         let p1 = arena_planes(f1, b1)
         let p3 = arena_planes(f3, b3)
         let p2 = arena_planes(f2, b2)
-        // every role rides the class rail: params in push, per-token words in the shared TokMeta
+        // every role rides the class rail: params in push, per-token words in the shared TokMeta;
+        // kq consumers take the Q8_K quant/act forms (per-256 scales)
+        let anykq = kq_sb(fq) || kq_sb(fo) || kq_sb(f1) || kq_sb(f2)
         verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq() && ensure_q8_actrq_cls()
             && ensure_rope_kv_cls() && ensure_da_attn_cls()
             && (!g_rd.qk_norm || (ensure_qk_rms_cls() && ensure_qkn_rope_cls()))
+            && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls()))
             && gemv_cls_ensure(fq) && gemv_cls_ensure(fk) && gemv_cls_ensure(fv) && gemv_cls_ensure(fo)
             && gemv_cls_ensure(f1) && gemv_cls_ensure(f3) && gemv_cls_ensure(f2),
             "vk decode: the class rails must engage on a live device")
@@ -239,7 +244,8 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int) {
     let dim = g_rd.dim
     let vocab = g_rd.vocab
     unsafe {
-        verify(ensure_cls_ar() && ensure_cls_ar_rq() && ensure_cls_dn_rq() && gemv_cls_ensure(cls_fmt),
+        verify(ensure_cls_ar() && ensure_cls_ar_rq() && ensure_cls_dn_rq() && gemv_cls_ensure(cls_fmt)
+            && (!kq_sb(cls_fmt) || ensure_cls_q8k_rq()),
             "vk decode: the class rails must engage on a live device")
         // prologue (class): xb = rms_att[0](x), add off — the aa slot binds x itself (add_on=0 never reads it)
         g_rd.s_prologue = set_cls_ar(fixed_array(g_rd.x_dev, g_rd.x_dev, g_rd.norms_dev, g_rd.xb_dev),
@@ -290,6 +296,17 @@ def private rd_record_token {
     rd_encode_token()
 }
 
+// The fused ar+rq twin emits Q8_0 only — true when every x-quant consumer (each layer's qkv and
+// gate/up groups, plus the classifier) reads a Q8_0-form image, i.e. the fuse may serve them all.
+def private rd_x_quants_b32 : bool {
+    for (L in g_rd.layers) {
+        if (kq_sb(L.fq) || kq_sb(L.f1)) {
+            return false
+        }
+    }
+    return !kq_sb(g_rd.cls_fmt_marker)
+}
+
 // The encode half alone: reset + re-encode the token cmd over the already-filled metas/sets.
 // The --rerecord-ab probe calls this per token to price the class twins' push-borne pos/cnt.
 def private rd_encode_token {
@@ -311,15 +328,20 @@ def private rd_encode_token {
         cmd_copy_whole(raw, g_rd.x_host.buf, g_rd.x_dev, dim * 4l)
         vhz_dep(raw, h, 0u, VHZ_COS, true)
         cmd_copy_whole(raw, g_rd.cos_host.buf, g_rd.cos_dev, g_rd.head_size * 4l)
-        // fused rail: a layer's activation quant rides the PREVIOUS addr_next, and qkn rides rope
-        let fuse = vk_fuse_on()
+        // fused rail (Q8_0-emitting — a kq x-quant consumer forces the split rail via the gate)
+        let fuse = vk_fuse_on() && rd_x_quants_b32()
         let fuse_qkr = fuse && g_rd.qk_norm
         let rpw = g_gpu.rows_per_wg
         var pc_rq_dim = RqArgs(inbase = 0u, nblk = uint(dim / 32l))
         var pc_rq_qd = RqArgs(inbase = 0u, nblk = uint(qd / 32l))
+        var pc_rq_dim_k = RqArgs(inbase = 0u, nblk = uint(dim / 256l))
+        var pc_rq_qd_k = RqArgs(inbase = 0u, nblk = uint(qd / 256l))
         var pc_act = ActArgs(nelem = uint(hid), gelu = 0u, nblk = uint(hid / 32l))
+        var pc_act_k = ActArgs(nelem = uint(hid), gelu = 0u, nblk = uint(hid / 256l))
         let rqwg_dim = (dim / 4l + 255l) / 256l
         let rqwg_qd = (qd / 4l + 255l) / 256l
+        let rqwg_dim_k = (dim / 8l + 255l) / 256l
+        let rqwg_qd_k = (qd / 8l + 255l) / 256l
         var pc_pro = ArArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = g_rd.eps, ascale = 1.0)
         if (fuse) {
             enc_cls_ar_rq(raw, h, g_rd.s_prologue_rq, pc_pro, 1l)   // rms_att[0](x) -> xq/xs
@@ -330,7 +352,11 @@ def private rd_encode_token {
         for (l in range64(g_rd.n_layers)) {
             var L & = g_rd.layers[l]
             if (!fuse) {
-                enc_cls_dn_rq(raw, h, L.s_quant_xb, pc_rq_dim, rqwg_dim)
+                if (kq_sb(L.fq)) {
+                    enc_cls_q8k_rq(raw, h, L.s_quant_xb, pc_rq_dim_k, rqwg_dim_k)
+                } else {
+                    enc_cls_dn_rq(raw, h, L.s_quant_xb, pc_rq_dim, rqwg_dim)
+                }
                 pfq_ts(raw)
             }
             var pcq = GemvArgs(n = uint(dim), d = uint(qd), nreg = 1u, ybase = 0u)
@@ -376,7 +402,11 @@ def private rd_encode_token {
                 kbase = mirbase, vbase = mirbase, scale = g_rd.scale)
             enc_da_attn_cls(raw, h, L.s_attn, pca, g_rd.n_heads)
             pfq_ts(raw)
-            enc_cls_dn_rq(raw, h, L.s_quant_at, pc_rq_qd, rqwg_qd)
+            if (kq_sb(L.fo)) {
+                enc_cls_q8k_rq(raw, h, L.s_quant_at, pc_rq_qd_k, rqwg_qd_k)
+            } else {
+                enc_cls_dn_rq(raw, h, L.s_quant_at, pc_rq_qd, rqwg_qd)
+            }
             pfq_ts(raw)
             var pcw = GemvArgs(n = uint(qd), d = uint(dim), nreg = 1u, ybase = 0u)
             gemv_cls_enc(L.fo, raw, h, L.s_wo, pcw, (dim + rpw - 1l) / rpw)
@@ -388,7 +418,11 @@ def private rd_encode_token {
             } else {
                 enc_cls_ar(raw, h, L.s_addr_ffn, pc8, 1l)
                 pfq_ts(raw)
-                enc_cls_dn_rq(raw, h, L.s_quant_xb2, pc_rq_dim, rqwg_dim)
+                if (kq_sb(L.f1)) {
+                    enc_cls_q8k_rq(raw, h, L.s_quant_xb2, pc_rq_dim_k, rqwg_dim_k)
+                } else {
+                    enc_cls_dn_rq(raw, h, L.s_quant_xb2, pc_rq_dim, rqwg_dim)
+                }
                 pfq_ts(raw)
             }
             var pcg = GemvArgs(n = uint(dim), d = uint(hid), nreg = 1u, ybase = 0u)
@@ -396,7 +430,11 @@ def private rd_encode_token {
             pfq_ts(raw)
             gemv_cls_enc(L.f3, raw, h, L.s_up, pcg, (hid + rpw - 1l) / rpw)
             pfq_ts(raw)
-            enc_q8_actrq_cls(raw, h, L.s_actrq, pc_act, (hid / 4l + 255l) / 256l)
+            if (kq_sb(L.f2)) {
+                enc_q8k_actrq_cls(raw, h, L.s_actrq, pc_act_k, (hid / 8l + 255l) / 256l)
+            } else {
+                enc_q8_actrq_cls(raw, h, L.s_actrq, pc_act, (hid / 4l + 255l) / 256l)
+            }
             pfq_ts(raw)
             var pcd = GemvArgs(n = uint(hid), d = uint(dim), nreg = 1u, ybase = 0u)
             gemv_cls_enc(L.f2, raw, h, L.s_down, pcd, (dim + rpw - 1l) / rpw)
@@ -411,7 +449,11 @@ def private rd_encode_token {
             pfq_ts(raw)
         }
         if (!fuse) {
-            enc_cls_dn_rq(raw, h, g_rd.s_quant_final, pc_rq_dim, rqwg_dim)
+            if (kq_sb(g_rd.cls_fmt_marker)) {
+                enc_cls_q8k_rq(raw, h, g_rd.s_quant_final, pc_rq_dim_k, rqwg_dim_k)
+            } else {
+                enc_cls_dn_rq(raw, h, g_rd.s_quant_final, pc_rq_dim, rqwg_dim)
+            }
             pfq_ts(raw)
         }
         var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u)
@@ -434,8 +476,8 @@ def private rdq_role_names(fuse, fuse_qkr, qk_norm : bool) : array<string> {
 }
 
 def private rdq_sample {
-    // stamp count follows each layer's own kv_merged (K-quant ggufs mix formats per layer)
-    let fuse = vk_fuse_on()
+    // the fuse gate must MATCH rd_encode_token's or the aggregation walks the wrong shape
+    let fuse = vk_fuse_on() && rd_x_quants_b32()
     let fuse_qkr = fuse && g_rd.qk_norm
     var want = fuse ? 3 : 4   // anchor + prologue + [fin_rq — split rail only] + cls
     // fused is 13 either way: merging qkn into rope exactly offsets keeping a separate rope

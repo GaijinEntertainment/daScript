@@ -518,6 +518,9 @@ def private rdec_blocks_for(n, rows : int64; f : KqFmt) : int64 => (
 def private rdec_rows_ok(n : int64; f : KqFmt) : bool => (
     n % (f == KqFmt.q8 || f == KqFmt.q8n ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS) == 0l)
 
+// a plane's activation-quant form: 0 = Q8_0 per-32, 1 = Q8_K superblock, 2 = the cm2 f16 feed
+def private rdec_quant_class(f : KqFmt) : int => f == KqFmt.q8n ? 2 : (kq_sb(f) ? 1 : 0)
+
 // cm2 (mode 4) places dense q8 planes as q8n — decode-in-load prefill GEMMs, q8n decode GEMV.
 // Promotion is per activation-group: members sharing one B-side image must agree on its form,
 // so {q,k,v} and {gate,up} promote only whole; wo / down / cls are singletons.
@@ -628,9 +631,16 @@ def resident_upload(t : Model; seq_cap : int64) : bool {   // nolint:STYLE037,ST
                       c.norm_eps, c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs)), c.qk_norm)) {
         return false
     }
-    // place every plane, wire each layer
+    // place + wire each layer. One quantized X image feeds each consumer group (qkv shares one,
+    // gate/up another), so a group must agree on its quant form — mixed groups decline
     for (l in range64(c.n_layers)) {
         let lf = resident_layer_fmts(t, l)
+        let cq = rdec_quant_class(lf.fq)
+        if (cq != rdec_quant_class(lf.fk) || cq != rdec_quant_class(lf.fv)
+                || rdec_quant_class(lf.f1) != rdec_quant_class(lf.f3)) {
+            to_log(LOG_WARNING, "dasLLAMA: resident driver declined — layer {l} mixes activation-quant forms (qkv {int(lf.fq)}/{int(lf.fk)}/{int(lf.fv)}, ffn {int(lf.f1)}/{int(lf.f3)})\n")
+            return false
+        }
         let bq = resident_place(t, lf.fq, t.wq_offs[l], dim, qd, mr, kg, wb)
         let bk = resident_place(t, lf.fk, t.wk_offs[l], dim, kvd, mr, kg, wb)
         let bv = resident_place(t, lf.fv, t.wv_offs[l], dim, kvd, mr, kg, wb)
@@ -980,6 +990,13 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     // Any decline (shape, fit, placement) falls through to the per-op rails unchanged.
     if (moe_gpu_resident_installed() && gpu_want_auto() && t.config.n_expert == 0l) {
         var seq_cap = t.config.seq_len
+        // each side of the f32 KV mirror binds as ONE SSBO range — the device's max binding
+        // range caps the armable ctx (past it every mirror read is undefined, not slow)
+        let bcap = moe_gpu_binding_cap()
+        let mrow = t.config.n_layers * layer_kv_dim(t.config, 0l) * 4l
+        if (bcap > 0l && mrow > 0l) {
+            seq_cap = min(seq_cap, bcap / mrow)
+        }
         var plan = resident_plan(t, seq_cap, KVDtype.f32, KVDtype.f32)
         if (!plan.fits && plan.weight_bytes > 0l && plan.kv_bytes > 0l) {
             // weights are fixed, the KV mirror is not: retry at the context that fits (the plan's

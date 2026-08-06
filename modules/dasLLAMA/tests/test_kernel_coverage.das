@@ -292,7 +292,11 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
             vk_cov_model(t, path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf"), "llama", [2])
             // gemma3 q8: the per-op arena rails + qk_norm
             vk_cov_model(t, path_join(models_dir(), "gemma-3-1b-it-Q8_0.gguf"), "gemma3", none)
-            // qwen3 Q4_K_M: the native K-quant formats (k4/k5/k6 GEMV + batch tiles) + qk_norm
+            // qwen3 q8: the resident fused qk_norm rail (qkn_rope) — the kq row below rides the
+            // split rail by construction, so this is the fused twin's only carrier
+            vk_cov_model(t, path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf"), "qwen3", none)
+            // qwen3 Q4_K_M: the native K-quant formats (k4/k6 GEMV + batch tiles) + the Q8_K
+            // activation quant forms + qk_norm on the split rail
             vk_cov_model(t, path_join(models_dir(), "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"), "qwen3", none)
             // qwen3.5 q8: the DeltaNet chains (conv/step/scan + the decode step)
             vk_cov_model(t, path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf"), "qwen35", none)
@@ -314,8 +318,9 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
             }
             let famfilter = get_env_variable("DASLLAMA_TEST_FAMILY")
             if (empty(famfilter)) {
-                // default-mode floor: 26 measured on the 6-model zoo (coopmat-mode variants and
-                // fuse-off twins legitimately idle here); 24 catches a gross wiring regression
+                // floor calibration: 25 measured on the default 5-model zoo (MoE rows skip without
+                // PARITY_FULL; coopmat-mode variants and mode-gated twins legitimately idle here);
+                // 24 catches a gross wiring regression without tripping on one near-boundary row
                 t |> success(served >= 24, "the serving census dispatched {served} distinct kernels (rail floor 24)")
             } else {
                 to_log(LOG_INFO, "census floor not asserted (family filter '{famfilter}'): {served} served\n")

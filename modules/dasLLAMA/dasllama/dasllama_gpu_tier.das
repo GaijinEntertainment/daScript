@@ -806,6 +806,17 @@ def public set_moe_gpu_budget_hooks(budget : function<() : int64>; plane : funct
 //! Device-local bytes the armed tier may spend on resident weights (0 = no tier).
 def public moe_gpu_weight_budget() : int64 => invoke(g_moe_gpu_budget_report)
 
+def private moe_gpu_no_binding_cap : int64 => 0l
+var private g_moe_gpu_binding_cap = @@moe_gpu_no_binding_cap
+
+//! The tier's largest legal single-SSBO binding range in bytes (0 = no tier / unknown). The
+//! resident KV mirror binds one range per side, so the ctx negotiation must cap against it.
+def public set_moe_gpu_binding_cap(f : function<() : int64>) {
+    g_moe_gpu_binding_cap = f
+}
+
+def public moe_gpu_binding_cap() : int64 => invoke(g_moe_gpu_binding_cap)
+
 def private moe_gpu_no_q8n : bool => false
 var private g_moe_gpu_expert_q8n = @@moe_gpu_no_q8n
 
@@ -1163,6 +1174,9 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     }
     if (g_moe_gpu_budget_report == null) {
         g_moe_gpu_budget_report = @@moe_gpu_no_budget
+    }
+    if (g_moe_gpu_binding_cap == null) {
+        g_moe_gpu_binding_cap = @@moe_gpu_no_binding_cap
     }
     if (g_moe_gpu_plane_bytes_fn == null) {
         g_moe_gpu_plane_bytes_fn = @@moe_gpu_no_plane_bytes

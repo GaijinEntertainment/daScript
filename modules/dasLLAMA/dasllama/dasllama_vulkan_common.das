@@ -1704,6 +1704,10 @@ def vk_arena_test_slab_cap(blocks : int64) {
     g_arena_slab_override = blocks
 }
 
+//! The device's maxStorageBufferRange — the ceiling on any single SSBO binding (arena slabs,
+//! the resident KV mirror).
+def vk_max_storage_range : int64 => g_gpu != null ? g_gpu.msr : 0l
+
 // per-slab block capacity: maxStorageBufferRange is the real ceiling (uint32 indexing reaches
 // 16GiB); NV/AMD report 4GiB, MoltenVK tighter — both plane strides must fit their binding
 def private arena_slab_blocks(fmt : int) : int64 {

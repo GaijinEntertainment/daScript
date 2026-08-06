@@ -33,15 +33,15 @@ require math
 
 let private PF_ROLES = 16l   // quant_xb q k v rope attn quant_at wo addr_ffn quant_xb2 gate up actrq down addr_next qkn
 
-// one prefill GEMM role on the class rail: class-layout schedule into the role's meta buf, a
-// per-(role, router-variant) cached set (the variant moves with wlen — the last window is
-// shorter), BatchArgs push. fmt-6 roles ride the cm2 decode-in-load class (sparse bindings).
-def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt6 : bool;
+// one prefill GEMM role on the class rail: schedule fill + a per-(role, variant) cached set +
+// BatchArgs push. fmt picks the class: 6 = cm2 twin, kq = the kq tile family, else the q8
+// router (whose variant moves with wlen — the last window is shorter).
+def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : int;
                         wq, ws, ab, sb, yb : uint64; wqn, wsn, an, sn, yn : int64;
                         abit, ybit : uint; n, d, blk, wlen : int64) {
-    let groups = int64(fill_arena_batch_sched(g_rd.pf_meta[idx], d, blk, wlen, fmt6 ? 6 : 0))
+    let groups = int64(fill_arena_batch_sched(g_rd.pf_meta[idx], d, blk, wlen, fmt))
     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-    if (fmt6) {
+    if (fmt == 6) {
         let key = idx * 8 + 7
         if (!key_exists(g_rd.pf_cls_gemm, key)) {
             verify(ensure_q8n_batch_cm2_cls(), "vk prefill: the cm2 batch class rail must engage")
@@ -51,6 +51,18 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt6 : 
                 fixed_array(0u, 0u, abit, ybit))
         }
         enc_q8n_batch_cm2_cls(raw, h, g_rd.pf_cls_gemm[key], pc, groups)
+    } elif (kq_sb(fmt)) {
+        // the role's format is static, so the slot never collides with the q8 router's variants
+        let q40cm = fmt == int(KqFmt.q40) && g_gpu.coopmat_mode == 1
+        let key = idx * 8 + 6
+        if (!key_exists(g_rd.pf_cls_gemm, key)) {
+            verify(kq_batch_cls_ensure(fmt, q40cm), "vk prefill: the kq batch class rail must engage")
+            g_rd.pf_cls_gemm[key] = kq_batch_cls_set_for(fmt, q40cm,
+                fixed_array(wq, ws, g_rd.pf_meta[idx].buf, ab, sb, yb),
+                fixed_array(wqn, wsn, BATCH_META_BYTES, an, sn, yn),
+                fixed_array(0u, 0u, 0u, abit, abit, ybit))
+        }
+        kq_batch_cls_enc_for(fmt, q40cm, raw, h, g_rd.pf_cls_gemm[key], pc, groups)
     } else {
         let v = q8_batch_cls_variant(q8_batch_tile_for(d, wlen), q8_batch_aligned(d, wlen))
         let key = idx * 8 + v
@@ -95,10 +107,12 @@ def private pf_setup {
     g_rd.pf_logits_host = make_host_buf(g_rd.vocab * 4l, false, [cached = true])
     g_rd.pf_cmd = alloc_cmd()
     ensure_batch_state()   // hq_dev/hs_dev for the FFN act
-    // fmt-6 (cm2) groups feed the twin f16 rows instead of q8 images
+    // fmt-6 feeds f16 rows; kq consumers take the Q8_K quant/act forms (per-256 scales)
     var any6 = false
+    var anykq = kq_sb(g_rd.cls_fmt_marker)
     for (L in g_rd.layers) {
         any6 = any6 || L.fq == 6 || L.fo == 6 || L.f1 == 6 || L.f2 == 6
+        anykq = anykq || kq_sb(L.fq) || kq_sb(L.fo) || kq_sb(L.f1) || kq_sb(L.f2)
     }
     if (any6) {
         g_rd.pf_xf = make_device_buf(np * dim * 2l)
@@ -118,7 +132,8 @@ def private pf_setup {
     verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_rope_kv_b_cls()
         && (fa128s ? ensure_da_attn_b_h128_cls() : ensure_da_attn_b_cls())
         && ensure_q8_actrq_cls() && (!g_rd.qk_norm || ensure_qk_rms_cls())
-        && (!any6 || (ensure_f16cvt_cls() && ensure_actf16_cls())),
+        && (!any6 || (ensure_f16cvt_cls() && ensure_actf16_cls()))
+        && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls())),
         "vk prefill: the class rails must engage on a live device")
     for (l in range64(g_rd.n_layers)) {
         var L & = unsafe(g_rd.layers[l])
@@ -248,10 +263,18 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 let fo6 = g_rd.layers[l].fo == 6
                 let gu6 = g_rd.layers[l].f1 == 6
                 let dn6 = g_rd.layers[l].f2 == 6
+                // kq consumers take the Q8_K quant/act forms (the arm declines mixed groups)
+                let fqk = kq_sb(g_rd.layers[l].fq)
+                let fok = kq_sb(g_rd.layers[l].fo)
+                let guk = kq_sb(g_rd.layers[l].f1)
+                let dnk = kq_sb(g_rd.layers[l].f2)
                 let mirb = l * g_rd.seq_cap * kvd   // nolint:LINT021 — the mirror offset multiply must run 64-bit before the push-field narrow
                 if (fq6) {
                     var pc0 = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
                     enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 4l + 255l) / 256l)
+                } elif (fqk) {
+                    var pc0 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 256l))
+                    enc_cls_q8k_rq(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 8l + 255l) / 256l)
                 } else {
                     var pc0 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
                     enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 4l + 255l) / 256l)
@@ -265,11 +288,11 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 let xsb = fq6 ? g_rd.dummy : g_rd.pf_xs
                 let xqn = fq6 ? np * dim * 2l : np * dim
                 let xsn = fq6 ? 256l : np * (dim / 32l) * 4l
-                pf_gemm_enc(raw, h, b + 1, fq6, pq.wq, pq.ws, xqb, xsb, g_rd.pf_q,
+                pf_gemm_enc(raw, h, b + 1, g_rd.layers[l].fq, pq.wq, pq.ws, xqb, xsb, g_rd.pf_q,
                     pq.wqb, pq.wsb, xqn, xsn, np * qd * 4l, VHZ_XQ, VHZ_Q, dim, qd, g_rd.layers[l].bq, wlen)
-                pf_gemm_enc(raw, h, b + 2, fq6, pk.wq, pk.ws, xqb, xsb, g_rd.pf_kv,
+                pf_gemm_enc(raw, h, b + 2, g_rd.layers[l].fk, pk.wq, pk.ws, xqb, xsb, g_rd.pf_kv,
                     pk.wqb, pk.wsb, xqn, xsn, np * 2l * kvd * 4l, VHZ_XQ, VHZ_KVK, dim, kvd, g_rd.layers[l].bk, wlen)
-                pf_gemm_enc(raw, h, b + 3, fq6, pv.wq, pv.ws, xqb, xsb, g_rd.pf_v,
+                pf_gemm_enc(raw, h, b + 3, g_rd.layers[l].fv, pv.wq, pv.ws, xqb, xsb, g_rd.pf_v,
                     pv.wqb, pv.wsb, xqn, xsn, np * kvd * 4l, VHZ_XQ, VHZ_VST, dim, kvd, g_rd.layers[l].bv, wlen)
                 vhz_dep(raw, h, VHZ_VST, VHZ_KVV, true)
                 cmd_copy_range(raw, g_rd.pf_v, 0l, g_rd.pf_kv, wlen * kvd * 4l, wlen * kvd * 4l)   // v into pf_kv's v half
@@ -298,6 +321,9 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 if (fo6) {
                     var pc6 = ActArgs(nelem = uint(wlen * qd), gelu = 0u, nblk = 0u)
                     enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 6], pc6, (wlen * qd / 4l + 255l) / 256l)
+                } elif (fok) {
+                    var pc6 = RqArgs(inbase = 0u, nblk = uint(wlen * qd / 256l))
+                    enc_cls_q8k_rq(raw, h, g_rd.pf_sets[b + 6], pc6, (wlen * qd / 8l + 255l) / 256l)
                 } else {
                     var pc6 = RqArgs(inbase = 0u, nblk = uint(wlen * qd / 32l))
                     enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 6], pc6, (wlen * qd / 4l + 255l) / 256l)
@@ -308,7 +334,7 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 let asb = fo6 ? g_rd.dummy : g_rd.pf_as
                 let aqn = fo6 ? np * qd * 2l : np * qd
                 let asn = fo6 ? 256l : np * (qd / 32l) * 4l
-                pf_gemm_enc(raw, h, b + 7, fo6, po.wq, po.ws, aqb, asb, g_rd.pf_xb2,
+                pf_gemm_enc(raw, h, b + 7, g_rd.layers[l].fo, po.wq, po.ws, aqb, asb, g_rd.pf_xb2,
                     po.wqb, po.wsb, aqn, asn, np * dim * 4l, VHZ_AQ, VHZ_XB2, qd, dim, g_rd.layers[l].bo, wlen)
                 var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint((l * 2l + 1l) * dim), eps = g_rd.eps, ascale = 1.0)
                 enc_cls_ar(raw, h, g_rd.pf_sets[b + 8], pc8, wlen)
@@ -316,6 +342,9 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 if (gu6) {
                     var pc9 = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
                     enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 4l + 255l) / 256l)
+                } elif (guk) {
+                    var pc9 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 256l))
+                    enc_cls_q8k_rq(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 8l + 255l) / 256l)
                 } else {
                     var pc9 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
                     enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 4l + 255l) / 256l)
@@ -327,14 +356,18 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 let gsb = gu6 ? g_rd.dummy : g_rd.pf_xs
                 let gqn = gu6 ? np * dim * 2l : np * dim
                 let gsn = gu6 ? 256l : np * (dim / 32l) * 4l
-                pf_gemm_enc(raw, h, b + 10, gu6, p1.wq, p1.ws, gqb, gsb, g_rd.pf_gate,
+                pf_gemm_enc(raw, h, b + 10, g_rd.layers[l].f1, p1.wq, p1.ws, gqb, gsb, g_rd.pf_gate,
                     p1.wqb, p1.wsb, gqn, gsn, np * hid * 4l, VHZ_XQ, VHZ_GATE, dim, hid, g_rd.layers[l].b1, wlen)
-                pf_gemm_enc(raw, h, b + 11, gu6, p3.wq, p3.ws, gqb, gsb, g_rd.pf_up,
+                pf_gemm_enc(raw, h, b + 11, g_rd.layers[l].f3, p3.wq, p3.ws, gqb, gsb, g_rd.pf_up,
                     p3.wqb, p3.wsb, gqn, gsn, np * hid * 4l, VHZ_XQ, VHZ_UP, dim, hid, g_rd.layers[l].b3, wlen)
-                var pc12 = ActArgs(nelem = uint(wlen * hid), gelu = 0u, nblk = uint(wlen * hid / 32l))
                 if (dn6) {
+                    var pc12 = ActArgs(nelem = uint(wlen * hid), gelu = 0u, nblk = uint(wlen * hid / 32l))
                     enc_actf16_cls(raw, h, g_rd.pf_sets[b + 12], pc12, (wlen * hid / 4l + 255l) / 256l)
+                } elif (dnk) {
+                    var pc12 = ActArgs(nelem = uint(wlen * hid), gelu = 0u, nblk = uint(wlen * hid / 256l))
+                    enc_q8k_actrq_cls(raw, h, g_rd.pf_sets[b + 12], pc12, (wlen * hid / 8l + 255l) / 256l)
                 } else {
+                    var pc12 = ActArgs(nelem = uint(wlen * hid), gelu = 0u, nblk = uint(wlen * hid / 32l))
                     enc_q8_actrq_cls(raw, h, g_rd.pf_sets[b + 12], pc12, (wlen * hid / 4l + 255l) / 256l)
                 }
                 pfq_ts(raw)
@@ -343,7 +376,7 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 let hsb = dn6 ? g_rd.dummy : g_gpu.hs_dev
                 let hqn = dn6 ? np * hid * 2l : np * hid
                 let hsn = dn6 ? 256l : np * (hid / 32l) * 4l
-                pf_gemm_enc(raw, h, b + 13, dn6, p2.wq, p2.ws, hqb, hsb, g_rd.pf_ffnout,
+                pf_gemm_enc(raw, h, b + 13, g_rd.layers[l].f2, p2.wq, p2.ws, hqb, hsb, g_rd.pf_ffnout,
                     p2.wqb, p2.wsb, hqn, hsn, np * dim * 4l, VHZ_HQ, VHZ_FFO, hid, dim, g_rd.layers[l].b2, wlen)
                 let nxt = l + 1l < g_rd.n_layers ? (l + 1l) * 2l * dim : nlfin   // nolint:LINT021 — composed from int64 layout offsets
                 var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
@@ -351,8 +384,13 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
                 pfq_ts(raw)
             }
             if (last) {
-                var pcf = RqArgs(inbase = uint((wlen - 1l) * dim), nblk = uint(dim / 32l))
-                enc_cls_dn_rq(raw, h, g_rd.pf_sets[bp + 1], pcf, (dim / 4l + 255l) / 256l)
+                if (kq_sb(g_rd.cls_fmt_marker)) {
+                    var pcf = RqArgs(inbase = uint((wlen - 1l) * dim), nblk = uint(dim / 256l))
+                    enc_cls_q8k_rq(raw, h, g_rd.pf_sets[bp + 1], pcf, (dim / 8l + 255l) / 256l)
+                } else {
+                    var pcf = RqArgs(inbase = uint((wlen - 1l) * dim), nblk = uint(dim / 32l))
+                    enc_cls_dn_rq(raw, h, g_rd.pf_sets[bp + 1], pcf, (dim / 4l + 255l) / 256l)
+                }
                 pfq_ts(raw)
                 var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u)
                 gemv_cls_enc(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc,
@@ -800,16 +838,9 @@ def private stack_batch_enc(raw : VkCommandBuffer; var h : VkHaz; si : int; nwg 
                 if (fmt == int(KqFmt.q8)) {
                     verify(q8_batch_cls_ensure(v), "vk batch: the q8 batch class rail must engage")
                     st.batch_cls_sets[v] = q8_batch_cls_set(v, bufs, sizes, gbits)
-                } elif (q40cm) {
-                    verify(ensure_kq_batch_q40_cmf16_cls(), "vk batch: the q40 coopmat class rail must engage")
-                    st.batch_cls_sets[v] = set_kq_batch_q40_cmf16_cls(bufs, sizes, gbits)
-                } elif (fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5) || fmt == int(KqFmt.k6) || fmt == int(KqFmt.q40)) {
-                    // the kq family shares one layout — one set; the per-format ensure fills its pipe slot
-                    let up = (fmt == int(KqFmt.k4) ? ensure_kq_batch_k4_cls()
-                        : (fmt == int(KqFmt.k5) ? ensure_kq_batch_k5_cls()
-                        : (fmt == int(KqFmt.k6) ? ensure_kq_batch_k6_cls() : ensure_kq_batch_q40_cls())))
-                    verify(up, "vk batch: the kq batch class rail must engage")
-                    st.batch_cls_sets[v] = set_kq_batch_cls(bufs, sizes, gbits)
+                } elif (q40cm || kq_sb(fmt)) {
+                    verify(kq_batch_cls_ensure(fmt, q40cm), "vk batch: the kq batch class rail must engage")
+                    st.batch_cls_sets[v] = kq_batch_cls_set_for(fmt, q40cm, bufs, sizes, gbits)
                 } else {
                     panic("dasLLAMA vulkan tier: no batch class for stack format {fmt}")
                 }
@@ -821,16 +852,8 @@ def private stack_batch_enc(raw : VkCommandBuffer; var h : VkHaz; si : int; nwg 
             q8_batch_cls_enc(v, raw, h, st.batch_cls_sets[v], pc, int64(nwg))
         } elif (fmt == int(KqFmt.q8n)) {
             enc_q8n_batch_cm2_cls(raw, h, st.batch_cls_sets[v], pc, int64(nwg))
-        } elif (fmt == int(KqFmt.k4)) {
-            enc_kq_batch_k4_cls(raw, h, st.batch_cls_sets[v], pc, int64(nwg))
-        } elif (fmt == int(KqFmt.k5)) {
-            enc_kq_batch_k5_cls(raw, h, st.batch_cls_sets[v], pc, int64(nwg))
-        } elif (fmt == int(KqFmt.k6)) {
-            enc_kq_batch_k6_cls(raw, h, st.batch_cls_sets[v], pc, int64(nwg))
-        } elif (q40cm) {
-            enc_kq_batch_q40_cmf16_cls(raw, h, st.batch_cls_sets[v], pc, int64(nwg))
-        } elif (fmt == int(KqFmt.q40)) {
-            enc_kq_batch_q40_cls(raw, h, st.batch_cls_sets[v], pc, int64(nwg))
+        } elif (q40cm || kq_sb(fmt)) {
+            kq_batch_cls_enc_for(fmt, q40cm, raw, h, st.batch_cls_sets[v], pc, int64(nwg))
         } else {
             panic("dasLLAMA vulkan tier: no batch class for stack format {fmt}")
         }

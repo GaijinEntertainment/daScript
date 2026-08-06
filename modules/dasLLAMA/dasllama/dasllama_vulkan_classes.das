@@ -3590,6 +3590,52 @@ def q8_batch_cls_enc(v : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : V
     }
 }
 
+// ===== the kq batch tile router (class side) =====
+// The family shares one set layout ("kq_batch_cls"); the q40 f16-MMA twin (coopmat_mode 1 —
+// no s8-native for nibbles) carries its own. The stack and resident-prefill encoders share it.
+
+def kq_batch_cls_ensure(fmt : int; q40cm : bool) : bool {
+    if (q40cm) {
+        return ensure_kq_batch_q40_cmf16_cls()
+    } elif (fmt == int(KqFmt.k4)) {
+        return ensure_kq_batch_k4_cls()
+    } elif (fmt == int(KqFmt.k5)) {
+        return ensure_kq_batch_k5_cls()
+    } elif (fmt == int(KqFmt.k6)) {
+        return ensure_kq_batch_k6_cls()
+    } elif (fmt == int(KqFmt.q40)) {
+        return ensure_kq_batch_q40_cls()
+    }
+    panic("dasLLAMA vulkan tier: no kq batch class for format {fmt}")
+    return false
+}
+
+def kq_batch_cls_set_for(fmt : int; q40cm : bool; bufs : uint64 const[6]; sizes : int64 const[6]; gbits : uint const[6]) : VkDescriptorSet {
+    if (q40cm) {
+        return set_kq_batch_q40_cmf16_cls(bufs, sizes, gbits)
+    }
+    if (!kq_sb(fmt)) {
+        panic("dasLLAMA vulkan tier: no kq batch class for format {fmt}")
+    }
+    return set_kq_batch_cls(bufs, sizes, gbits)
+}
+
+def kq_batch_cls_enc_for(fmt : int; q40cm : bool; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : BatchArgs; wgs : int64) {
+    if (q40cm) {
+        enc_kq_batch_q40_cmf16_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.k4)) {
+        enc_kq_batch_k4_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.k5)) {
+        enc_kq_batch_k5_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.k6)) {
+        enc_kq_batch_k6_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.q40)) {
+        enc_kq_batch_q40_cls(raw, h, set_, pc, wgs)
+    } else {
+        panic("dasLLAMA vulkan tier: no kq batch class for format {fmt}")
+    }
+}
+
 // ===== format-dispatched class-GEMV rail =====
 // The drivers' 5-way gemv_pipe(fmt) becomes a 5-way ensure/set/enc: every decode GEMV class
 // shares the 6-buffer shape (wq, ws, regions, xq, xs, y) and GemvArgs; q8n drops the scale slot.
