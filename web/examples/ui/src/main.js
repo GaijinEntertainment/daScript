@@ -304,7 +304,12 @@ function showCanvas(show) {
 // separate, cookie-less run origin is the isolation boundary. The allow list
 // delegates cross-origin isolation so -pthread programs get SharedArrayBuffer.
 var pageFrame = null;
+var pageFrameFit = null;
 function destroyPageFrame() {
+    if (pageFrameFit) {
+        window.removeEventListener('resize', pageFrameFit);
+        pageFrameFit = null;
+    }
     if (pageFrame && pageFrame.parentNode) pageFrame.parentNode.removeChild(pageFrame);
     pageFrame = null;
 }
@@ -323,11 +328,23 @@ function runWasmPage(files) {
     pageFrame.className = 'pg-page-frame';
     pageFrame.setAttribute('title', 'daslang wasm program');
     pageFrame.setAttribute('allow', 'cross-origin-isolated; autoplay; fullscreen');
+    // Geometry is PlaygroundRunner.fitElement's job, not a percentage: this
+    // frame stands in the run host, and the host sizes to its content — so a
+    // width:100% here resolves against nothing and collapses to a tiny box.
+    // The run frame has always been sized off the COLUMN for that reason.
     pageFrame.style.cssText =
-        'display:block;width:100%;aspect-ratio:4/3;border:1px solid #444;' +
+        'display:block;border:1px solid #444;' +
         'background:#000;margin-top:20px;margin-bottom:6px;';
     pageFrame.src = htmlUrl;
     (runHostEl || editorOutput.parentNode).appendChild(pageFrame);
+    // 3/4 is the run frame's own starting aspect. A cross-origin page cannot
+    // report its drawing buffer back the way run-frame.html does, so this stays
+    // the aspect for the whole run rather than being refined on first paint.
+    pageFrameFit = function () {
+        if (typeof PlaygroundRunner !== 'undefined') PlaygroundRunner.fitElement(pageFrame, 3 / 4);
+    };
+    pageFrameFit();
+    window.addEventListener('resize', pageFrameFit);
     const o = document.getElementById('output');
     if (o) o.classList.add('with-canvas');
 }
