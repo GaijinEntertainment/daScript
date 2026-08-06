@@ -53,7 +53,9 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    cross-checks every `@role`; Vulkan has only the runtime `hz_masks` panic. Port the census
    to the vulkan lens.
 9. **Class-level vulkan kernels (SEPARATE ARC, separate PR — Boris ruling: not part of the
-   reorg megarefactor).** Investigate porting the Metal kernel model to the SPIR-V emitter:
+   reorg megarefactor). IN FLIGHT: `bbatkin/vulkan-class-kernels` — the conversion is
+   complete (serving is 100% class kernels; census carries the evidence), the old-kernel
+   sweep + the two PRs close it.** Investigate porting the Metal kernel model to the SPIR-V emitter:
    a kernel is a class with `@ssbo`/`@uniform`/`@workgroup` members and ordinary methods,
    free functions and inheritance lower 1:1 (the msl_emit Phase-0 machinery is the model).
    The module-global bindings are the root cause of the hand-written `vk_set6` ladders (no
@@ -75,6 +77,34 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    `dasllama_kernel_access` — INVENTORY's designated shared Metal↔Vulkan component, which both
    lenses already require. They diverged at birth (vulkan's grid folds any integer literal,
    metal's only "1"); one owner ends that.
+
+11. **cm2 prefill GEMM across formats — close the llama.cpp prefill gap (NEXT ARC, ruled
+   2026-08-06).** Walkthrough evidence (zen2, RTX 5060 Ti, class-kernel branch vs llama.cpp
+   b9860 Vulkan, tinyllama-1.1B Q8, pp512/tg128 x5): decode tg 291.6 vs 294.7 = **99% —
+   parity**; prefill pp 7242 vs 20900 = **34.6% — 2.9x behind**. Their prefill runs
+   NV_coopmat2 matrix-core GEMMs; ours ran the default mode-3 mul_mm hand-staged L-tile.
+   The stack below is NOT the gap: dasSpirv emits SPV_KHR_cooperative_matrix AND
+   SPV_NV_cooperative_matrix2 (tensor addressing, workgroup-scope tiles, `[spirv_decode]`
+   decode-in-load), dasVulkan enables both extensions, and the tier detects
+   `has_coopmat`/`has_coopmat2`. What is missing, in order:
+   (a) the cm2 decode-in-load GEMM exists ONLY for fmt-6 q8n stacks (mode 4, an experiment
+   arm with its own xf16/actf16/f16cvt side chain) — generalize it to the formats serving
+   actually uses (q8, k4/k5/k6, q40);
+   (b) tile-shape quality/tuning — per-device shapes like llama.cpp's, fold into the tune
+   rail (item 7 composes);
+   (c) mode selection defaults — `has_coopmat2` should pick the cm2 path by itself instead
+   of the `DASLLAMA_COOPMAT` env force.
+   PROBE RESULT (same box/model/shapes, DASLLAMA_COOPMAT=cm2): pp512 5917 ± 125 — our cm2
+   arm loses to our own mm tile (7242) and sits at 28% of llama.cpp's cm2 (20900). The gap
+   is KERNEL QUALITY, not coverage — (b) is the arc's center, (a) rides it. Also: mode 4
+   drags decode onto the q8n GEMV chain and costs 14% tg (291.6 -> 250.7) — the prefill-GEMM
+   mode must decouple from the decode-GEMV format pick.
+   Methodology for the arc (Boris, 2026-08-06): benchmark per CAPABILITY TIER, not just
+   flagship-vs-flagship — force both sides down the ladder and compare like-for-like
+   (pretend the 5060 Ti is a 3060: no coopmat2, then no coopmat). Ours: DASLLAMA_COOPMAT=
+   sdot4|f16|int8|mm|cm2. Theirs: INVESTIGATE llama.cpp's switches — ggml-vulkan has
+   GGML_VK_DISABLE_COOPMAT / GGML_VK_DISABLE_COOPMAT2-style envs (verify names/behavior on
+   their current master); if they hold, every tier gets an apples-to-apples baseline.
 
 ## Sequencing
 

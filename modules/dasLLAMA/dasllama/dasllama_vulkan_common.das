@@ -35,9 +35,11 @@ require daslib/fio   // has_env_variable — the VRAM-override probe
 
 // ===== device state (process-lifetime; never finalized by design) =====
 
-let WEIGHT_CAP = 4_200_000_000l    // default ceiling — NV/WDDM heapBudget IGNORES other
-                                           // processes (reported 7608 of 8192MB under a 1.7GB desktop);
-                                           // over-commit = silent SysMem demotion, act role 35x slower
+let WEIGHT_CAP = 4_200_000_000l    // fallback ceiling when the heap cannot be queried, and the
+                                           // value the DASLLAMA_GPU_VRAM_MB=0 misreporting-driver hatch
+                                           // pins; a queried heap derives the cap from its SIZE instead
+let DESKTOP_RESERVE = 2_147_483_648l   // raw-heap leave-behind for the desktop — the demotion-cliff
+                                           // term (measured on 8GB: 6000MB healthy, 6803 demoted)
 let VRAM_RESERVE = 805_306_368l    // headroom below the queried heap budget when it clamps
                                            // the cap down: the tier's own scratch (~210MB batch
                                            // planes) + eviction slack
@@ -784,11 +786,12 @@ def resolve_weight_cap(heap : VkHeapInfo) : int64 {
     if (has_env_variable("DASLLAMA_GPU_VRAM_MB")) {
         return WEIGHT_CAP
     }
-    var cap = WEIGHT_CAP
     if (heap.size > 0l) {
-        cap = clamp(heap.size - VRAM_RESERVE, 0l, cap)
+        // whole heap minus the desktop's leave-behind — the same term the demotion-cliff
+        // warning trusts, so a 16GB card caps at ~14GB instead of the old hardcoded 4.2
+        return max(heap.size - DESKTOP_RESERVE, 0l)
     }
-    return cap
+    return WEIGHT_CAP
 }
 
 // The stream-slot carve, derived AT READ TIME — g_gpu.weight_budget stores the UNCARVED cap.
@@ -919,7 +922,7 @@ def vk_moe_init : bool {
     if (heap.budget > 0l) {
         let vram_override = gpu_want_vram_mb() > 0l || has_env_variable("DASLLAMA_GPU_VRAM_MB")
         // the honest cliff leaves 2GB of the raw heap for the desktop (6000MB healthy, 6803 demoted)
-        let cliff = clamp(heap.budget - VRAM_RESERVE, 0l, heap.size - 2_147_483_648l)
+        let cliff = clamp(heap.budget - VRAM_RESERVE, 0l, heap.size - DESKTOP_RESERVE)
         if (vram_override && g_gpu.weight_budget > cliff) {
             to_log(LOG_WARNING, "dasLLAMA vulkan tier: DASLLAMA_GPU_VRAM_MB {g_gpu.weight_budget / 1000000l} MB is above the demotion cliff — WDDM will silently demote buffers to SysMem (act-role collapse); lower it to <= {cliff / 1000000l} MB\n")
         }
