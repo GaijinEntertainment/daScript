@@ -46,9 +46,13 @@ let XQ_BYTES = 1_048_576l          // per-stack activation quants capacity
 let XS_BYTES = 262_144l            // ... their scales
 let Y_BYTES = 1_048_576l           // per-stack output capacity
 let META_BYTES = 4_096l            // params + region table
-let MAX_STACKS = 384               // descriptor pool capacity. Dense/shexp/qkv rails add
-                                           // ~250 small stacks on top of experts+cls; starving a
-                                           // LATER walk section here costs far more than the pool
+let MAX_STACKS = 384               // stack-table capacity (and the ffn-cmd key radix). Dense/
+                                           // shexp/qkv rails add ~250 small stacks on top of
+                                           // experts+cls; starving a LATER walk section costs
+let DESC_POOL_CHUNK = 256          // sets per descriptor-pool chunk — the chain grows by one
+                                           // chunk on exhaustion (llama.cpp's shape); NVIDIA
+                                           // doesn't enforce pool caps, MoltenVK/Intel DO —
+                                           // never trust a fixed pool that works on this box
                                            // (a 224 cap silently cut 6 DN layers = -14% tg)
 let WG_X = 64u                     // kernel workgroup width (spec-const axis 0 can retune it)
 let BATCH_XQ_BYTES = 33_554_432l   // device-local gathered-activation scratch (chunk cap)
@@ -341,7 +345,8 @@ struct GpuState {
     queue : VkQueue
     pool : CommandPool
     set_layout : DescriptorSetLayout
-    desc_pool : DescriptorPool
+    desc_pools : array<DescriptorPool>   // the pool chain: fixed chunks, grown on exhaustion
+    desc_pool_at : int                   // chain cursor — allocation fills chunk [at], overflow advances; drop resets to 0
     pipe_layout : PipelineLayout
     pipeline : Pipeline
     batch_pipeline : Pipeline   // prefill batched-GEMM kernel (same set/pipe layout)
@@ -954,14 +959,7 @@ def vk_moe_init : bool {
         dslci.pBindings |> emplace(b0)
     }
     g_gpu.set_layout <- create_descriptor_set_layout(g_gpu.device, dslci)
-    var dpci : DescriptorPoolCreateInfo
-    // the class rail holds MORE live sets than the old one-rewritable-set-per-stack world (per
-    // router variant/role; rebinds abandon sets until the drop-time pool reset) — 8/stack is
-    // interim headroom; deriving the size from the model plan is the phase-5 close-out item
-    dpci.maxSets = uint(8 * MAX_STACKS)
-    var psize = DescriptorPoolSize(type_ = VkDescriptorType.STORAGE_BUFFER, descriptorCount = uint(6 * 8 * MAX_STACKS))
-    dpci.pPoolSizes |> push(psize)
-    g_gpu.desc_pool <- create_descriptor_pool(g_gpu.device, dpci)
+    desc_pool_grow()   // chunk 0 — the chain grows on demand from here
 
     var plci : PipelineLayoutCreateInfo
     plci.pSetLayouts <- [weak_copy(g_gpu.set_layout)]
@@ -1097,17 +1095,43 @@ def vk_upload_report(direct : bool) {
     }
 }
 
-def alloc_desc_set : VkDescriptorSet {
+// one more chunk on the descriptor-pool chain (fixed size — see DESC_POOL_CHUNK)
+def desc_pool_grow {
+    var dpci : DescriptorPoolCreateInfo
+    dpci.maxSets = uint(DESC_POOL_CHUNK)
+    var psize = DescriptorPoolSize(type_ = VkDescriptorType.STORAGE_BUFFER, descriptorCount = uint(6 * DESC_POOL_CHUNK))
+    dpci.pPoolSizes |> push(psize)
+    g_gpu.desc_pools |> emplace(create_descriptor_pool(g_gpu.device, dpci))
+}
+
+// allocate one set of `layout` from the chain: fill chunk [desc_pool_at], advance (or grow) on
+// OUT_OF_POOL_MEMORY / FRAGMENTED_POOL — deterministic since sets are never individually freed;
+// any other failure stays fail-closed through vk_check
+def alloc_set_from_chain(var layout) : VkDescriptorSet {
     var dsai = VkDescriptorSetAllocateInfo()
-    dsai.descriptorPool = boost_value_to_vk(g_gpu.desc_pool)
     dsai.descriptorSetCount = 1u
-    var raw_set_layout = boost_value_to_vk(g_gpu.set_layout)
     var raw : VkDescriptorSet
     unsafe {
-        dsai.pSetLayouts = addr(raw_set_layout)
-        vk_check(vkAllocateDescriptorSets(dev_raw(), dsai, addr(raw)), null)
+        dsai.pSetLayouts = addr(layout)
+        while (true) {
+            if (g_gpu.desc_pool_at >= length(g_gpu.desc_pools)) {
+                desc_pool_grow()
+            }
+            dsai.descriptorPool = boost_value_to_vk(g_gpu.desc_pools[g_gpu.desc_pool_at])
+            let res = vkAllocateDescriptorSets(dev_raw(), dsai, addr(raw))
+            return raw if (res == VkResult.SUCCESS)
+            if (res == VkResult.ERROR_OUT_OF_POOL_MEMORY || res == VkResult.ERROR_FRAGMENTED_POOL) {
+                g_gpu.desc_pool_at++   // this chunk is full — move to (or grow) the next
+            } else {
+                vk_check(res, null)   // genuine device/host failure — fail closed
+            }
+        }
     }
     return raw
+}
+
+def alloc_desc_set : VkDescriptorSet {
+    return alloc_set_from_chain(boost_value_to_vk(g_gpu.set_layout))
 }
 
 def write_buf_desc(var writes : array<WriteDescriptorSet>; set_ : VkDescriptorSet; binding : uint; buf : uint64; bytes : int64) {
@@ -1458,9 +1482,13 @@ def vk_drop_model_state {
         }
         g_gpu.model_cmds |> clear()
     }
-    // every descriptor set came from the one pool and every one is model-owned
+    // every descriptor set came from the chain and every one is model-owned — reset every chunk
+    // (chunks are kept, not destroyed: the next model refills from chunk 0)
     let rdpf : VkDescriptorPoolResetFlags
-    vk_check(vkResetDescriptorPool(dev_raw(), boost_value_to_vk(g_gpu.desc_pool), rdpf), null)
+    for (dp in g_gpu.desc_pools) {
+        vk_check(vkResetDescriptorPool(dev_raw(), boost_value_to_vk(dp), rdpf), null)
+    }
+    g_gpu.desc_pool_at = 0
     g_set_bits |> clear()   // pool reset recycles set handles — stale region bits must not survive
     // device buffers: dev_mem tracks every make_device_buf result — all model-owned
     for (buf, mem in keys(g_gpu.dev_mem), values(g_gpu.dev_mem)) {
@@ -2163,16 +2191,7 @@ def vkd_class_pipe(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wm
 }
 
 def vkd_alloc_set(c : VkdClass) : VkDescriptorSet {
-    var dsai = VkDescriptorSetAllocateInfo()
-    dsai.descriptorPool = boost_value_to_vk(g_gpu.desc_pool)
-    dsai.descriptorSetCount = 1u
-    var raw_set_layout = boost_value_to_vk(c.set_layout)
-    var raw : VkDescriptorSet
-    unsafe {
-        dsai.pSetLayouts = addr(raw_set_layout)
-        vk_check(vkAllocateDescriptorSets(dev_raw(), dsai, addr(raw)), null)
-    }
-    return raw
+    return alloc_set_from_chain(boost_value_to_vk(c.set_layout))
 }
 
 // push the class's params struct (all-4-byte-scalar, [vk_dispatch]-validated); generic so the
