@@ -27,7 +27,13 @@ handle /api/samples* {
 # They are bearer-gated, so the allowance is spendable only by a token holder.
 # Listed before the public block below, which would otherwise match them —
 # Caddy takes the first matching handle.
-handle /api/build/next /api/build/result /api/build/toolchain {
+#
+# The named matcher is required, not stylistic: `handle` itself takes exactly
+# ONE path token, so `handle /a /b /c { ... }` is a parse error
+# ("Wrong argument count or unexpected line ending"). Verified with
+# `caddy validate` before this was applied.
+@build_upload path /api/build/next /api/build/result /api/build/toolchain
+handle @build_upload {
 	request_body {
 		max_size 64MB
 	}
@@ -50,3 +56,28 @@ handle /api/build/* {
 # /admin/* and /shutdown are deliberately absent: they are operator surfaces.
 # The service also refuses them from a non-loopback peer, so adding a route
 # here does not merely expose them — it breaks them.
+
+# ---------------------------------------------------------------------------
+# run.daslang.io — the page-artifact origin. A SEPARATE top-level vhost block
+# (site block, NOT inside daslang.io { }). Page artifacts are user-influenced
+# html/js: served from this cookie-less origin they can never act as
+# daslang.io content. Only artifact GETs are routed; the service additionally
+# refuses html/js on any other Host (page_origin in the toml), so a drift here
+# fails closed. The playground embeds these pages in an iframe; the service
+# sets the CORP/COEP headers that embedding under COEP requires.
+#
+#	run.daslang.io {
+#		handle /api/build/artifact/* {
+#			# Same reason as every other proxied route: libhv buffers a body in
+#			# full before any handler runs, and the service only registers GET
+#			# here — so without this an unbounded POST to an artifact path grows
+#			# the process before falling through to the 404.
+#			request_body {
+#				max_size 1MB
+#			}
+#			reverse_proxy 127.0.0.1:8101
+#		}
+#		handle {
+#			respond "not found" 404
+#		}
+#	}

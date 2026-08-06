@@ -41,6 +41,9 @@ struct ServerArgs {
     @clarg_doc = "Artifact cache root (blobs); empty disables artifact storage and serving"
     blobs_dir : string = "blobs"
 
+    @clarg_doc = "Separate origin page artifacts (user-influenced html/js) are served from, e.g. https://run.daslang.io; empty refuses page builds outright (set it to this server's own origin for local page testing)"
+    page_origin : string = ""
+
     @clarg_doc = "Seconds before a claimed build is considered abandoned and requeued"
     build_claim_timeout_seconds : int = 600
 
@@ -105,7 +108,7 @@ def private cfg_from_toml(root : JsonValue?; key : string; var field : int&; aut
 
 def mark_cli_sources(user_args : array<string>; var sources : table<string; string>) {
     for (key in fixed_array("port", "db", "base_url", "max_source_bytes", "max_inserts_per_ip_hour", "curated_dir",
-        "build_token", "blobs_dir", "build_claim_timeout_seconds", "max_build_attempts")) {
+        "build_token", "blobs_dir", "page_origin", "build_claim_timeout_seconds", "max_build_attempts")) {
         if (from_cli(user_args, key)) {
             sources[key] = "cli"
         }
@@ -131,12 +134,26 @@ def apply_config_text(var cfg : ServerArgs; body : string; user_args : array<str
         cfg_from_toml(root, "curated_dir", cfg.curated_dir, auth, user_args, sources, error) &&
         cfg_from_toml(root, "build_token", cfg.build_token, auth, user_args, sources, error) &&
         cfg_from_toml(root, "blobs_dir", cfg.blobs_dir, auth, user_args, sources, error) &&
+        cfg_from_toml(root, "page_origin", cfg.page_origin, auth, user_args, sources, error) &&
         cfg_from_toml(root, "build_claim_timeout_seconds", cfg.build_claim_timeout_seconds, auth, user_args, sources, error) &&
         cfg_from_toml(root, "max_build_attempts", cfg.max_build_attempts, auth, user_args, sources, error))
     unsafe {
         delete root   // read_toml minted this tree; nothing outlives this scope
     }
     return ok
+}
+
+def normalize_origin(origin : string) : string {
+    //! An operator writing `https://run.daslang.io/` means the same origin as
+    //! one without the slash, but the two are not interchangeable downstream:
+    //! the host half would carry the `/` and then never equal a Host header, so
+    //! every page artifact 404s with nothing explaining why. Normalize once,
+    //! here, rather than teaching each consumer to tolerate both spellings.
+    var s = origin
+    while (!empty(s) && (s |> ends_with("/"))) {
+        s = slice(s, 0, length(s) - 1)
+    }
+    return s
 }
 
 def load_config(var cfg : ServerArgs; var sources : table<string; string>; var error : string&) : bool {
@@ -165,6 +182,8 @@ def load_config(var cfg : ServerArgs; var sources : table<string; string>; var e
         }
     }
     delete user_args
+    // after every source has had its say, so a CLI value normalizes too
+    cfg.page_origin = normalize_origin(cfg.page_origin)
     return ok
 }
 
@@ -186,6 +205,8 @@ def config_banner(cfg : ServerArgs; sources : table<string; string>) : JsonValue
         build_token_src = sources?["build_token"] ?? "default",
         blobs_dir = cfg.blobs_dir,
         blobs_dir_src = sources?["blobs_dir"] ?? "default",
+        page_origin = cfg.page_origin,
+        page_origin_src = sources?["page_origin"] ?? "default",
         build_claim_timeout_seconds = cfg.build_claim_timeout_seconds,
         build_claim_timeout_seconds_src = sources?["build_claim_timeout_seconds"] ?? "default",
         max_build_attempts = cfg.max_build_attempts,

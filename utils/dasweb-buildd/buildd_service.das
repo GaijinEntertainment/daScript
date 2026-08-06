@@ -150,11 +150,17 @@ def private run_one_job(job : ClaimedBuild) {
     mkdir_rec(out_dir)
     logger_info("buildd", "job start", JV((hash = job.hash, mode = job.mode, toolchain = job.toolchain)))
     let entry = unpack_sources(src_dir, job.source)
-    if (empty(entry)) {
-        logger_warning("buildd", "job failed: malformed source document",
+    // A page build compiles under a generated .das_package (the release-wasm
+    // rail wants one; job sources can never carry their own). Written by THIS
+    // service into a dir it owns, before the sandbox ever runs.
+    let packaged = empty(entry) || job.mode != "page" || write_page_package(src_dir, entry)
+    if (empty(entry) || !packaged) {
+        // Two different faults, and the user must not be told their source is
+        // malformed when the builder is what failed.
+        let why = empty(entry) ? "malformed source document" : "builder could not prepare the build directory"
+        logger_warning("buildd", "job failed: {why}",
             JV((hash = job.hash, duration_ms = get_time_usec(t0) / 1000)))
-        upload_failure(g_cfg.server_url, g_cfg.token, job.hash, job.toolchain,
-            "malformed source document")
+        upload_failure(g_cfg.server_url, g_cfg.token, job.hash, job.toolchain, why)
     } else {
         let r = run_build_command(g_cfg.build_cmd, src_dir, out_dir, job.mode, entry,
             float(g_cfg.build_timeout_seconds))

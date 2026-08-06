@@ -166,12 +166,38 @@ def expected_artifact_names(mode : string) : array<string> {
     //! The EXACT file set a mode may publish. Not a suffix filter: the build
     //! writes into this directory with the user's own compile-time code, so
     //! anything it drops beside the real output would otherwise be uploaded
-    //! and served publicly. Empty = the mode publishes nothing (page mode
-    //! defines its set when the page checkpoint wires it).
+    //! and served publicly. Empty = the mode publishes nothing.
     if (mode == "module") {
         return <- ["sample.wasm"]
     }
+    if (mode == "page") {
+        return <- ["sample.html", "sample.js", "sample.wasm"]
+    }
     return <- array<string>()
+}
+
+def write_page_package(src_dir : string; entry : string) : bool {
+    //! The .das_package a page build compiles under — daspkg's release-wasm rail
+    //! wants one, and a job's sources can never carry their own (bundle names
+    //! must be plain `.das`). Naming the app `sample` pins the exact artifact
+    //! set. `entry` is already validated (is_valid_source_filename), so the
+    //! interpolation cannot escape the string.
+    let body = ("options gen2\n" +
+        "require daslib/daspkg\n\n" +
+        "[export]\n" +
+        "def package() \{\n" +
+        "    package_name(\"sample\")\n" +
+        "\}\n\n" +
+        "[export]\n" +
+        "def release() \{\n" +
+        "    release_name(\"sample\")\n" +
+        "    release_main(\"{entry}\")\n" +
+        "\}\n")
+    if (!fwrite(path_join(src_dir, ".das_package"), body)) {
+        logger_error("buildd.core", "cannot write .das_package into {src_dir}")
+        return false
+    }
+    return true
 }
 
 def collect_artifacts(out_dir : string; mode : string) : array<BuiltFile> {
@@ -209,15 +235,20 @@ def collect_artifacts(out_dir : string; mode : string) : array<BuiltFile> {
             out |> clear()
             return <- out
         }
+        // All or nothing: the server refuses any set that is not exactly the
+        // mode's — uploading a partial one would only trade this clear log
+        // line for a refused upload later.
         let st = stat(full)
         if (!st.is_valid || !st.is_reg) {
             logger_error("buildd.core", "expected artifact missing", JV((name = name, mode = mode)))
-            continue
+            out |> clear()
+            return <- out
         }
         let hex = sha256_file_hex(full)
         if (empty(hex)) {
-            logger_warning("buildd.core", "skipping unreadable or empty output {name}")
-            continue
+            logger_error("buildd.core", "expected artifact unreadable or empty", JV((name = name, mode = mode)))
+            out |> clear()
+            return <- out
         }
         out |> push(BuiltFile(name = name, sha256 = hex, path = full))
     }

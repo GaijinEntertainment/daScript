@@ -1287,6 +1287,9 @@ namespace das {
         }
     }
 
+    // from module_builtin_fio.cpp — modules whose .shared_module dlopen failed (Quiet)
+    DAS_API string describe_pending_dynamic_modules();
+
     ProgramPtr reportPrerequisitesErrors (
             string fileName,
             vector<MissingRecord> & missing,
@@ -1318,6 +1321,7 @@ namespace das {
         TextWriter err;
         LineInfo at;
         bool first = true;
+        bool anyNotFound = false;
         for ( auto & mis : missing ) {
             if ( first && !mis.chain.empty() ) {
                 at.fileInfo = mis.chain.back();
@@ -1329,6 +1333,7 @@ namespace das {
             switch ( mis.hintType ) {
                 case MissingHint::FileNotFound: {
                     err << "missing prerequisite '" << mis.name << "'; file not found\n";
+                    anyNotFound = true;
                     break;
                 }
                 case MissingHint::WrongModuleName: {
@@ -1354,6 +1359,14 @@ namespace das {
                 }
             }
             reportChain(err, mis.chain);
+        }
+        // A native module whose .shared_module failed to dlopen reports as "file not found",
+        // which reads as a path typo. Name the load failures so the real cause is visible.
+        if ( anyNotFound ) {
+            auto pendingNote = describe_pending_dynamic_modules();
+            if ( !pendingNote.empty() ) {
+                err << "note: these dynamic modules failed to load — a missing module may live in one of them:\n" << pendingNote;
+            }
         }
         for ( auto & mis : circular ) {
             if ( first && !mis.chain.empty() ) {

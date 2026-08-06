@@ -4,6 +4,7 @@ var editorOutput;
 var samplesData;
 
 var code;
+var runHostEl;   // where run frames (interpreter) and page frames (wasm pages) stand
 
 var sampleList = {"examples":null};
 
@@ -31,6 +32,7 @@ pageInit = function () {
     runHost.className = "pg-run-host";
     if (oldCanvas) oldCanvas.parentNode.replaceChild(runHost, oldCanvas);
     else editorOutput.parentNode.insertBefore(runHost, editorOutput);
+    runHostEl = runHost;   // page-shape wasm artifacts (runWasmPage) share the canvas's place
     PlaygroundRunner.init(runHost, function (text, color) { printOutput(text, color); });
 
     sampleList["examples"] = document.getElementById("examples");
@@ -278,9 +280,45 @@ function showCanvas(show) {
     if (!show) {
         const f = document.querySelector(".pg-run-frame");
         if (f) f.style.display = "none";
+        destroyPageFrame();   // a page-shape wasm run goes with the canvas
     }
     const o = document.getElementById("output");
     if (o) o.classList.toggle("with-canvas", show);
+}
+
+// Page-shape wasm artifacts (GL/audio programs) run as their own document from
+// the run origin — a full emscripten page with its js glue and canvas. The
+// iframe is deliberately NOT sandboxed: the `sandbox` attribute makes its
+// origin opaque, which breaks emscripten's same-origin worker spawning — the
+// separate, cookie-less run origin is the isolation boundary. The allow list
+// delegates cross-origin isolation so -pthread programs get SharedArrayBuffer.
+var pageFrame = null;
+function destroyPageFrame() {
+    if (pageFrame && pageFrame.parentNode) pageFrame.parentNode.removeChild(pageFrame);
+    pageFrame = null;
+}
+function runWasmPage(files) {
+    let htmlUrl = null;
+    for (const u of files) if (/\.html$/.test(u)) htmlUrl = u;
+    if (!htmlUrl) {
+        printOutput('page build reported no html artifact', '#ff2d2d');
+        return;
+    }
+    // Same clean-slate rule as the interpreter: the previous run's canvas and
+    // page frame go before this one stands.
+    if (typeof PlaygroundRunner !== 'undefined') PlaygroundRunner.reset();
+    destroyPageFrame();
+    pageFrame = document.createElement('iframe');
+    pageFrame.className = 'pg-page-frame';
+    pageFrame.setAttribute('title', 'daslang wasm program');
+    pageFrame.setAttribute('allow', 'cross-origin-isolated; autoplay; fullscreen');
+    pageFrame.style.cssText =
+        'display:block;width:100%;aspect-ratio:4/3;border:1px solid #444;' +
+        'background:#000;margin-top:20px;margin-bottom:6px;';
+    pageFrame.src = htmlUrl;
+    (runHostEl || editorOutput.parentNode).appendChild(pageFrame);
+    const o = document.getElementById('output');
+    if (o) o.classList.add('with-canvas');
 }
 
 selectSample = function(type, id) {
@@ -596,7 +634,10 @@ async function runWasm() {
             printOutput(result.error, result.compileError ? '#ff9393' : '#ff2d2d');
             return;
         }
-        runWasmArtifact(result.files[0]);
+        // The build's kind decides the delivery: a bare wasi module instantiates
+        // right here; a page-shape artifact (GL/audio) runs as its own document.
+        if (result.kind === 'page') runWasmPage(result.files);
+        else runWasmArtifact(result.files[0]);
     } catch (e) {
         printOutput('wasm build error: ' + (e && e.message ? e.message : e), '#ff2d2d');
     } finally {
@@ -605,6 +646,11 @@ async function runWasm() {
 }
 
 function runWasmArtifact(url) {
+    // Every run starts from a clean slate, page frames included: a sample edited
+    // from graphics to compute-only builds as a module, and without this the
+    // previous run's page sits there rendering while this one prints — the same
+    // "my run drew nothing" confusion the run frame was introduced to end.
+    destroyPageFrame();
     // Shim's DataView is rebuilt per-call from memRef.buffer, so we can
     // create the shim before instantiation and patch the buffer once memory
     // is exported.

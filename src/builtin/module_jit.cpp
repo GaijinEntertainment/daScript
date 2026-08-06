@@ -49,6 +49,8 @@ namespace das {
     void * register_dynamic_module(const char *, const char *, int, Context *, LineInfoArg *);
     void register_native_path(const char *, const char *, const char *, Context *, LineInfoArg *);
     bool builtin_fexist ( const char * path );
+    DAS_API void retry_pending_dynamic_modules();
+    DAS_API int report_pending_dynamic_modules();
 
     // JitFunction typedef lives in arraytype.h (the SimFunction::jitFunction mirror shares it)
 
@@ -419,6 +421,18 @@ extern "C" {
         static_cast<JitContext *>(ctx)->initFunctionAddr(index, globPtr);
     }
 
+    // A missing MODULE and a missing FUNCTION die on the same lookup — distinguish them,
+    // because the former is a load failure (dlopen), not a signature mismatch.
+    static bool jit_module_is_registered ( const char * moduleName ) {
+        bool exists = false;
+        Module::foreach([&](Module * module) -> bool {
+            if ( module->name != moduleName ) return true;
+            exists = true;
+            return false;
+        });
+        return exists;
+    }
+
     DAS_API void jit_init_extern_function ( const char * moduleName,
                                             const char * funcMangledName,
                                             void ** dllGlobal ) {
@@ -449,6 +463,9 @@ extern "C" {
             });
         }
         if (!found) {
+            if ( !jit_module_is_registered(moduleName) ) {
+                DAS_FATAL_ERROR("Failed to find %s: module %s is not registered (its .shared_module may have failed to load — see errors above).\n", funcMangledName, moduleName);
+            }
             DAS_FATAL_ERROR("Failed to find %s in module %s.\n", funcMangledName, moduleName);
         }
     }
@@ -462,6 +479,9 @@ extern "C" {
             return false;
         });
         if (!result) {
+            if ( !jit_module_is_registered(moduleName) ) {
+                DAS_FATAL_ERROR("Failed to find annotation %s: module %s is not registered (its .shared_module may have failed to load — see errors above).\n", annName, moduleName);
+            }
             DAS_FATAL_ERROR("Failed to find annotation %s in module %s.\n", annName, moduleName);
         }
         return result;
@@ -1722,6 +1742,18 @@ DAS_API void * jit_register_dynamic_module_resolve ( const char * rel_path,
                                                      const char * mod_name ) {
     das::string chosen = resolve_dynamic_module_path(rel_path, fallback_abs_path);
     return das::register_dynamic_module(chosen.c_str(), mod_name, 0/*Quiet*/, nullptr, nullptr);
+}
+
+// Emitted by inject_main after the per-module jit_register_dynamic_module_resolve calls.
+// Those load Quiet (sibling DT_NEEDED ordering makes a first-attempt failure normal), so
+// run the fixed-point retry, then treat anything still unloadable as fatal: every module
+// the exe registers is required by its program, and continuing only defers the death to
+// the first extern lookup, whose message no longer names the real cause.
+DAS_API void jit_finalize_dynamic_modules () {
+    das::retry_pending_dynamic_modules();
+    if ( int failed = das::report_pending_dynamic_modules() ) {
+        DAS_FATAL_ERROR("%d dynamic module(s) failed to load (see above).\n", failed);
+    }
 }
 
 DAS_API void jit_register_native_path ( const char * mod_name, const char * src_path, const char * dst_path ) {
