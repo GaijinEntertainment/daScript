@@ -352,3 +352,7 @@ defect anywhere in the module — instrumentation goes through the `jobque_profi
 (`profile_tag` / `profile_marker` and the `trace_*` wrappers in `dasllama_math.das`). The
 carve-out is `benchmarks/` and `performance/`, where the measured number is the file's
 deliverable.
+
+**Every new kernel or mid-runtime loop carries `[hot_path]`.** When in doubt, compare with its
+twins: if similar functions in the family carry the annotation, the new one does too. Without
+it the function dodges the `[no_alloc]` / `[no_env]` / `[no_io]` contracts the annotation arms.

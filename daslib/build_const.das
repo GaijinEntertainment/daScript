@@ -28,12 +28,10 @@ module build_const shared private
 //! integer — argv or env — is a COMPILE ERROR, not a silent default: a typo in an
 //! explicit knob should stop the build.
 //!
-//! Keep a gating global's initializer to a SINGLE ``build_*`` call (or compose inside
-//! the ``static_if`` condition instead): the call splices a literal, which ``static_if``
-//! resolves in every compile profile, while an initializer EXPRESSION over several calls
-//! (``a || b``) relies on infer-time folding that lint/IDE profiles disable
-//! (``no_optimizations``) — there it fails with ``static_if must resolve to constant``.
-//! Arguments must be literals.
+//! Initializers compose freely — ``let P = build_has_arg("--x") || build_env_flag("X")``
+//! resolves in every compile profile (``static_if`` computes a const global's init on
+//! the side even where lint/IDE profiles disable in-place folding) — but the combined
+//! accessors say the same thing in one call. Arguments must be literals.
 
 require fio
 require strings

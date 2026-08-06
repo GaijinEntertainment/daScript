@@ -79,16 +79,16 @@ shortcut — the `"DASLLAMA_"` literal prefix at every read site is a mechanical
 macro/tool can enumerate the reads and EMIT the declarations, so the migration may be mostly
 generated.
 
-## Compiler gap (found while probing; fix candidate, discuss before building)
+## Compiler gap — FIXED (Boris-approved "mirror fix", same arc)
 
 Under `no_optimizations` (the lint/LSP compile profile — CI's lint lane), a GLOBAL's
-initializer expression is never folded, so `static_if (P)` where `let P = a || b` fails
-with `error[30229] static_if must resolve to constant` — while a literal or single-macro
-init works, and cond-side expressions (`static_if (LEVEL > 2)`, `static_if (A || B)`) fold
-fine. `static_assert` had this exact class and got a force-fold fix
-(`ast_infer_type.cpp` `savedFoldingForStaticAssert`); `static_if` conds could get the same
-treatment, or `getConstExpr`'s global-var arm could fold the init. Until then the
-single-call-init rule (documented in build_const) is the contract, not a workaround.
+initializer expression was never folded, so `static_if (P)` where `let P = a || b` failed
+with `error[30229]` there while working in normal compiles. Fixed in `getConstExpr`
+(`ast_infer_type_helper.cpp`): the global-var arm recurses into a non-literal init, and
+new ExprOp1/ExprOp2 arms fold pure builtin operators over constant children on a
+DETACHED clone — never in place, so lint rules still see original source shapes.
+Regression: `tests/typer_errors/test_static_if_profiles.das` (composed inits resolve;
+genuinely non-constant conds still refuse).
 
 ## Lint candidates (report at arc end, don't build mid-arc)
 
