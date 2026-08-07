@@ -122,8 +122,8 @@ def build_victim(cfg : Config; seed : int) : string {
         if (cfg.synth_depth > 0) {
             w |> write("options _ast_synth_depth = {cfg.synth_depth}\n")
         }
-        w |> write("options _ast_synth_funcs = {cfg.synth_funcs > 0 ? cfg.synth_funcs : 3}\n")
-        w |> write("options _ast_synth_decls = {cfg.synth_decls > 0 ? cfg.synth_decls : 3}\n")
+        w |> write("options _ast_synth_funcs = {cfg.synth_funcs > 0 ? cfg.synth_funcs : 1}\n")
+        w |> write("options _ast_synth_decls = {cfg.synth_decls > 0 ? cfg.synth_decls : 1}\n")
         if (cfg.synth_bind) {
             w |> write("options _ast_synth_bind = true\n")
         }

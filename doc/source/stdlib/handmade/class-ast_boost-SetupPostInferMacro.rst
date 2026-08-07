@@ -1,0 +1,2 @@
+Base class for creating post-inference pass macros via the ``[post_infer_macro]`` structure annotation; registers an ``AstPassMacro`` that runs once inference is done, before lint / folding / codegen.
+Name of the builtin function used to register this annotation with the compiler.

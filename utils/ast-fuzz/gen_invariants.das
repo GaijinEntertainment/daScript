@@ -360,8 +360,16 @@ def bind_of(kind : string) : string {
     return ""
 }
 
-def pool_for(fname : string) : string {
+def pool_for(fname : string; kind : string = "") : string {
     if (fname == "op") {
+        // the grammar admits only these in a unary / ternary slot, so a binary name
+        // there can never resolve and ExprOp1.func stays null into codegen
+        if (kind == "ExprOp1") {
+            return "UNARY_OPS"
+        }
+        if (kind == "ExprOp3") {
+            return "TERNARY_OPS"
+        }
         return "OPS"
     }
     if (fname == "mask") {
@@ -435,7 +443,8 @@ def emit_synth_all(kinds : array<string>; bases : table<string; string>; flds : 
                 } elif (f.ty == "type") {
                     ctor += ", {f.name} = gen_type(depth + 1)"
                 } elif (f.ty == "str") {
-                    ctor += ", {f.name} := {pool_for(f.name)}[rnd(length({pool_for(f.name)}))]"
+                    let pool = pool_for(f.name, k)
+                    ctor += ", {f.name} := {pool}[rnd(length({pool}))]"
                 } else {
                     vecs |> push(f)
                 }

@@ -11,6 +11,8 @@ require math
 
 let private NAMES = fixed_array("x", "y", "z", "n", "s", "f", "_0", "_1", "i",
     "a", "b", "c", "m", "next", "red", "green", "value", "length", "__nope", "")
+let private UNARY_OPS = fixed_array("-", "+", "~", "!", "++", "--", "+++", "---")
+let private TERNARY_OPS = fixed_array("?")
 let private OPS = fixed_array("+", "-", "*", "/", "%", "==", "!=", "<", ">",
     "<=", ">=", "&&", "||", "&", "|", "^", "<<", ">>", "!", "~", "+=", "??", "")
 let private TRAITS = fixed_array("sizeof", "typename", "is_pointer", "is_array",

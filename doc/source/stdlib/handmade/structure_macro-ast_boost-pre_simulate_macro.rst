@@ -1,1 +1,0 @@
-The ``[pre_simulate_macro]`` structure annotation — registers an ``AstPassMacro`` subclass that is invoked after inference and before codegen, where every expression type is final.

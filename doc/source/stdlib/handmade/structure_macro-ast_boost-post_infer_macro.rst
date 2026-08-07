@@ -1,0 +1,1 @@
+The ``[post_infer_macro]`` structure annotation — registers an ``AstPassMacro`` subclass that is invoked once inference is done, before lint / folding / codegen, where every expression type is final.
