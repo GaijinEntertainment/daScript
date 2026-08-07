@@ -531,12 +531,28 @@ def drive_audio {
     }
 }
 
-// The playground runs this interpreted on wasm — every pass, the deposit and the diffuse are ~15x
-// slower than the AOT wasm64 card — so open with a lighter agent load there. The slider ceiling
-// stays the same; get_running_platform_name is the runtime (never const-folded) platform.
+// The interpreted playground runs the sim ~30x slower than the compiled wasm64 card, so it opens
+// with a lighter agent load (the slider ceiling stays the same). MEASURED, not sniffed: the card
+// is minted by the --jit-target=wasm64 exe rail, not AOT codegen, so is_in_aot() is false on
+// BOTH wasm runtimes — a timed spin is the only signal that separates them. Web-only: desktop
+// keeps the full defaults whatever its speed.
+var g_light_defaults = false
+
+def private measure_slow_runtime : bool {
+    // pure-ALU spin, measured on daslang.io 2026-08-07: 2ms compiled wasm64, 140ms
+    // interpreted — a 70x gap the 20ms threshold splits with x7 margin on either side.
+    // (A builtin-heavy loop like sin narrows the gap enough to misread; don't.)
+    let t0 = ref_time_ticks()
+    var acc = 0u
+    for (_i in range(10000000)) {
+        acc = acc * 1664525u + 1013904223u
+    }
+    // acc feeds the result so the loop cannot fold away; the right arm is always true
+    return get_time_usec(t0) > 20000 && acc != 12345u
+}
+
 def default_agents : int {
-    let web_interp = get_running_platform_name() == "emscripten" && !is_in_aot()
-    return web_interp ? DEF_AGENTS_WEB_INTERP : DEF_AGENTS
+    return g_light_defaults ? DEF_AGENTS_WEB_INTERP : DEF_AGENTS
 }
 
 def reset_to_defaults {
@@ -639,6 +655,9 @@ def init() {
     field |> resize(2 * TW * TH)
     upload_rgba |> resize(TW * TH)
     clear_field()
+    if (get_running_platform_name() == "emscripten") {
+        g_light_defaults = measure_slow_runtime()
+    }
     g_target_agents = default_agents()
     reseed_agents()
     // Open at the detected core count, floored to 4 so it never looks single-threaded on a browser
