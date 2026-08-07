@@ -192,7 +192,12 @@ namespace das {
         size = (size + alignMask) & ~alignMask;
         nsize = (nsize + alignMask) & ~alignMask;
         char * nptr = allocate(nsize);
-        DAS_VERIFYF(nptr,"out of memory?");
+        // Fail the way allocate() does — by returning null. Context::reallocate
+        // already turns that into throw_out_of_memory, so the caller gets a real
+        // daslang error naming the request size. Asserting here instead reached
+        // neither: it fired before the null could propagate, so an out-of-memory
+        // during array growth could never be reported or recovered, only aborted.
+        if ( !nptr ) return nullptr;
         memcpy ( nptr, ptr, das::min(size,nsize) );
 #if DAS_TRACK_ALLOCATIONS
         if ( trackAllocations ) {
