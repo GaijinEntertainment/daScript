@@ -154,9 +154,26 @@ negative-control run (poisoned oracle → red with dumps) before the poison is r
   Padded-CSR MoeFix carries gather=1 bkt indirection with the kernels' last-live-entry
   clamp, a zero-count expert, 2-col-tile shape; twins contiguous-only. All 11 arms
   negative-controlled in one +10 poison of moe_mm_truth.
-- TODO next: AttnQKMmT/AVMmT 2 (race_attn_pair prefill.das:4597; attn_trio_gate in the
-  prefill test is the oracle donor); fused QKV/W13Sw 5 (K:869-2260); batched GEMV B-forms
-  4 (K:1881-2129); MoE plumbing 8 + prefill misc 5.
+- ✅ attention GEMM pair (2, `test_metal_gemm_kernels`): AttnQKMm[T]/AVMm[T] — causal +
+  window block-skip sentinels, GQA, 2-slab hs; QK arms pin npos==np32 (the tensor twin
+  stages K pads RAW where the base guards); the AV npos<np32 arm proves the V pad guard
+  with garbage pads.
+- ✅ fused QKV rope-store + W13Sw (5, `test_metal_gemv_kernels`): Q8GemvQkvRsF16/F32 (one
+  stacked blob at per-segment offsets, norm/neox remap, bias; qo and the f32 mirror
+  BIT-exact), Q8GemvW13Sw silu+gelu, GemvW13SwB2/B4. **The B twins' first run caught a
+  missing tgmem bind in the GATE — panel kernels read garbage tgmem silently; every
+  @workgroup-carrying kernel's gate must mirror the production kn_tgmem.**
+- ✅ fixed-B GEMV twins (4, same file): GemvB2/B4 (x-staged panels, BIT-exact),
+  Q8MvB2/B4 (streamed skinny, 64-tg; padded xs4, nrows store gate, pad-column clamp).
+- ✅ MoE plumbing (8, `test_metal_prefill_kernels`): SwigluOai + Pf twin (ghost rows
+  asserted untouched), G4RouterNorm, MoeWScale (uint-bit compare on the mixed sel buffer),
+  MoeRouterB, MoeCount→MoeBucket chained (cnt/basep/bkt/inv all exact), MoeReduce.
+  Poison lesson: derived-truth compares need their OWN poison (a cnt poison left
+  basep/bkt/inv unproven — their wants derive from sel).
+- ✅ prefill misc (5, same file): PleGatherQ8/PleFinish, AddBiasRows, PfCat2, DnBa
+  (fast stripe + tail). **CENSUS COMPLETE — every metal kernel family now carries direct
+  per-class CPU-oracle gates in the kernels suite (7 files, ~180 gates, all
+  negative-controlled).**
 
 ## Leg (c) — hoist the dispatch-lens micro-grammar into dasllama_kernel_access
 
