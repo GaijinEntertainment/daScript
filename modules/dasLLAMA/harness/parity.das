@@ -58,23 +58,26 @@ def private parse_ids(s : string) : array<int64> {
 }
 
 [export]
-def main {
+def main : int {
+    // non-zero on EVERY path that ends without printing GEN_IDS — a wrong flag once produced
+    // two empty streams whose diff "passed" (the leg (a) vacuous-parity lesson); callers diff
+    // the streams AND branch on the exit code
     var res <- parse_args(type<Args>)
     if (res |> is_err) {
         print("error: {res |> unwrap_err}\n\n")
         print_help(get_command_info(type<Args>), "parity")
-        return
+        return 2
     }
     let cfg <- res |> move_unwrap
     if (cfg.help) {
         print_help(get_command_info(type<Args>), "parity")
-        return
+        return 0
     }
     let n_gen = cfg.ngen
     let prompt <- parse_ids(cfg.ids)
     if (empty(prompt) || n_gen <= 0) {
         print_help(get_command_info(type<Args>), "parity")
-        return
+        return 2
     }
 
     if (cfg.kquant_native >= 0) {   // load-time layout decision, must precede load_gguf
@@ -120,4 +123,5 @@ def main {
             print("NOTE: generate stopped early ({count}/{n_gen}) — emitted BOS\n")
         }
     }
+    return 0
 }

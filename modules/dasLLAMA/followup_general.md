@@ -103,8 +103,8 @@
    measurement required; the kernels-suite oracles cover correctness only), Mx4 is a third
    stay-out (pre-loop vtab staging + bias-seeded accumulator locals need a prologue hook), and
    Q8/Mx4 joining the base renumbers cnt/basep/bkt 6/7/8 → 7/8/9 (encoder + oracle-gate churn).
-   Parked pending a ruling: fold into reification vs a measured mini-leg (plans/vulkan-on-mac.md
-   leg (b)).
+   Ruled 2026-08-07: folds into the reification arc (the families get restamped there; the
+   constraints above apply — see plans/vulkan-on-mac.md leg (b) recon).
 
 9. **Prefill compiles its own PSO for kernels decode already has.** `enc_qk_norm_pf` in
    dasllama_metal_prefill.das is `enc_qk_norm`'s body with `g_pf_pso_qknorm` in place of

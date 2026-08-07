@@ -122,7 +122,17 @@ def test_vkd_ar_class(t0 : T?) {
             var xc : array<float>
             yc |> resize(dim)
             xc |> resize(dim)
+            // Sentinel-prefill the twin's output plane: a GPU-vs-GPU compare is vacuous-prone —
+            // when BOTH kernels are dead (the MoltenVK 1.4.1 silent-discard cliff) two zeroed
+            // buffers match trivially. A sentinel no real computation can produce turns every
+            // dead combination into a loud mismatch.
+            var ysent : array<float>
+            ysent |> resize(dim)
+            for (i in range(dim)) {
+                ysent[i] = -999.25
+            }
             unsafe {
+                upload_region_at(yd, 0l, addr<uint8 const?>(ysent[0]), bytes)
                 upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bytes)
                 upload_region_at(ad, 0l, addr<uint8 const?>(a[0]), bytes)
                 upload_region_at(wd, 0l, addr<uint8 const?>(w[0]), bytes)
@@ -164,16 +174,16 @@ def test_vkd_ar_class(t0 : T?) {
             delete y2
             delete yc
             delete xc
+            delete ysent
         } else {
             feint("dasVulkan not present — skipping\n")
         }
     }
 }
 
-// ===== the kq GEMV family: class twins vs the SHIPPED kernels, per format =====
+// ===== the kq GEMV family: class kernels vs the CPU oracle, per format =====
 // Synthetic planes — any bit pattern is valid K-quant data, EXCEPT the scale words, which are
-// composed from finite halves so a NaN can't poison the bit-compare. Identical inputs, identical
-// lane geometry (64-wide, one lane per 32-block) => the class twin must match BIT-EXACTLY.
+// composed from finite halves so a NaN can't poison the compare.
 
 def private safe_half(i : uint) : uint {
     let tab = fixed_array(0x3C00u, 0xB800u, 0x3400u, 0x4200u, 0x2E00u, 0xBC00u, 0x3E00u, 0xB000u)

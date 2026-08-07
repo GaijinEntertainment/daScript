@@ -212,7 +212,10 @@ this leg only builds the mechanism and takes the free wins the oracle suite cove
   the entire generated surface, so there is nothing for a family to share. If reification
   later wants cross-class PSO/source sharing (followup_general #9's duplicate-PSO shape),
   that is a PSO-lifecycle question, not a lens-surface one.
-- **MoeMulMm inheritance: NOT the planned free win — needs a ruling.** The in-source truth
+- **MoeMulMm inheritance: RULED 2026-08-07 — folds into the reification arc** (Boris; the
+  families get restamped there anyway). With that, leg (b) is CLOSED. The recon that drove
+  the ruling stays below for the reification arc's planning.
+- The recon: the trio was NOT the planned free win. The in-source truth
   (`followup_general.md` #8 + the class bodies) contradicts "verbatim/zero-risk": K6 caches
   superblock scalars ACROSS loop iterations (`sv`/`dall`, every 8th kb), Q8 walks advancing
   weight pointers, and Mx4 (not in #8) needs a pre-loop hook (vtab staging into @workgroup +
@@ -221,9 +224,7 @@ this leg only builds the mechanism and takes the free wins the oracle suite cove
   without it (index-math / reload-per-kb) — but every route changes hot prefill kernel
   inner loops (measurement discipline applies, oracle gates cover correctness only), and
   Q8/Mx4 joining the base means renumbering their cnt/basep/bkt bindings 6/7/8 → 7/8/9
-  (production encoders + oracle gates churn). Options: (i) defer to reification where these
-  families get restamped anyway (recommended), (ii) a measured mini-leg now with
-  interleaved A/B benches per format.
+  (production encoders + oracle gates churn).
 
 ## Ledger
 
@@ -235,6 +236,10 @@ this leg only builds the mechanism and takes the free wins the oracle suite cove
 - Vulkan-side leftovers spotted by the census, for the reification arc: the 7 `MoeCmBase`
   leaves (799 LOC over a 10-LOC base, three near-identical `Mm*Batch` bodies), and the
   batch-tile shell existing twice (`Q8Batch` standalone vs `KqBatchBase`).
+- Metal-side, for the reification arc (ruled 2026-08-07): `MetalMoeMulMmK6/Q8/Mx4` join
+  `MetalMoeMulMmBase` there — constraints in the leg (b) recon above + followup_general #8
+  (cross-iteration state, prologue hook, cnt/basep/bkt renumber 6/7/8 → 7/8/9; interleaved
+  A/B measurement per format, oracle gates cover correctness only).
 - PR #3644 body overclaims two family shapes vs source: flash attention shares 2 leaves
   (not 3 — the h128 coopmat twin is standalone, corpus comment says so), deltanet is 2-on-base
   + 3 standalone (not a 5-kernel family). Merged PR text stays; recorded here so the
