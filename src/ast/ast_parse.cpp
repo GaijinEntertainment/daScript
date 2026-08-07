@@ -59,6 +59,15 @@ DAS_CC_API das::smart_ptr<das::FileAccess> get_file_access( char * pak ) {
 
 namespace das {
 
+    void applyPostInferMacros ( Program * program ) {
+        program->library.foreach([&](Module * mod) -> bool {
+            for ( const auto & pm : mod->postInferMacros ) {
+                pm->apply(program, program->thisModule.get());
+            }
+            return true;
+        }, "*");
+    }
+
     // defined in ast_module.cpp (runtime); appends a parsed builtin module's content
     bool appendBuiltinModuleContent ( Module * target, ProgramPtr program, const string & modName );
 
@@ -975,6 +984,9 @@ namespace das {
                 *totInfer += inferLegT;
             }
             if ( !program->failed() ) {
+                // buildAccessFlags is the FIRST pass to read the finished tree, and it
+                // dereferences expr->type unguarded - so the verifier has to precede it
+                applyPostInferMacros(program.get());
                 program->buildAccessFlags(logs);    // this is used by the lint pass
                 if ( program->patchAnnotations() ) {
                     // A patchAnnotations() pass can both mutate the AST (astChanged) AND record a
@@ -1037,6 +1049,9 @@ namespace das {
             }
             if ( !program->failed() ) {
                 program->normalizeOptionTypes();
+                // lint / folding / codegen are the first consumers of the finished tree, and
+                // they dereference expr->type unguarded - so this is where a verifier can see it
+                applyPostInferMacros(program.get());
                 if (!program->failed())
                     program->lint(logs, libGroup);
                 if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
@@ -1048,6 +1063,7 @@ namespace das {
                         callCompilationCallback(moduleName, fileName, "optimize");
                         optimizeProgram(program.get(),logs,libGroup);
                     } else {
+                        applyPostInferMacros(program.get());
                         program->buildAccessFlags(logs);
                     }
                 }

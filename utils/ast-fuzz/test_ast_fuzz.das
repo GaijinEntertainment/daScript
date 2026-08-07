@@ -24,6 +24,37 @@ def test_verifier_reports_null_child(t : T?) {
 }
 
 [test]
+def test_verifier_cuts_a_cycle(t : T?) {
+    var out : string
+    let ec = run([BIN, "utils/ast-fuzz/selftest/cycle.das"], out, 60.0)
+    t |> success(!died(ec, out), "compile crashed (exit {ec})\n{out}")
+    t |> success(find(out, "points at its own ancestor") >= 0,
+        "did not report the cycle\n{out}")
+}
+
+[test]
+def test_verifier_drops_a_null_vector_entry(t : T?) {
+    var out : string
+    let ec = run([BIN, "utils/ast-fuzz/selftest/null_entry.das"], out, 60.0)
+    t |> success(!died(ec, out), "compile crashed (exit {ec})\n{out}")
+    t |> success(find(out, "ExprLet.variables holds 1 null entry") >= 0,
+        "did not report the null entry\n{out}")
+}
+
+[test]
+def test_untyped_node_is_not_folded(t : T?) {
+    // _fold_untyped_victim.das is a saved generator seed whose string-builder element
+    // reaches const folding without a type; folding used to simulate it and segfault.
+    // Underscore-prefixed so dastest does not compile it directly - it needs the
+    // generated builder, which gen_invariants writes here.
+    var gen : string
+    run([BIN, "utils/ast-fuzz/gen_invariants.das"], gen, 180.0)
+    var out : string
+    let ec = run([BIN, "utils/ast-fuzz/_fold_untyped_victim.das"], out, 60.0)
+    t |> success(!died(ec, out), "folding an untyped node crashed (exit {ec})\n{out}")
+}
+
+[test]
 def test_ast_verify_clean_on_valid_code(t : T?) {
     var out : string
     let ec = run([BIN, "--ast-verify", "utils/ast-fuzz/selftest/cli_victim.das"], out, 60.0)
