@@ -526,3 +526,54 @@ def test_page_build_refused_without_page_origin(t : T?) {
     }
     rmdir_rec(blobs)
 }
+
+[test]
+def test_large_artifact_serves_whole(t : T?) {
+    // Regression: libhv closes a connection whose queued unsent body exceeds its
+    // 16MB write-buf cap, so a large artifact came back TRUNCATED after a clean
+    // 200 (deterministic through caddy's pooled connections, timing-dependent on
+    // loopback). The writer-rail SERVE_FILE covers the body with the cap; this
+    // proves a cap-sized artifact round-trips byte-exact.
+    var err = ""
+    let blobs = create_temp_directory("dasweb_ep_bigblobs_", err)
+    let upload_src = create_temp_file("dasweb_ep_bigwasm_", ".bin", err)
+    let payload = repeat("0123456789abcdef", 20 * 1024 * 1024 / 16)   // 20MB > the 16MB cap
+    fwrite(upload_src, payload)
+    let payload_sha = sha256_hex(payload)
+    with_build_server(TEST_TOKEN, blobs) $(base_url) {
+        authed_post("{base_url}/api/build/toolchain", TC, TEST_TOKEN) $(resp) {
+            assert(int(resp.status_code) == 200, "toolchain announced")
+        }
+        let hash = posted_hash(base_url, "print(\"big artifact\")")
+        POST("{base_url}/api/build/request/{hash}", "") $(resp) {
+            assert(int(resp.status_code) == 200, "build requested")
+        }
+        authed_post("{base_url}/api/build/next", TC, TEST_TOKEN) $(resp) {
+            assert(int(resp.status_code) == 200, "job claimed")
+        }
+        t |> run("a 20MB result lands") @(tt : T?) {
+            with_http_request() $(var req) {
+                req.method = http_method.POST
+                req.url := "{base_url}/api/build/result"
+                set_header(req, "Authorization", "Bearer {TEST_TOKEN}")
+                set_form_data(req, "hash", hash)
+                set_form_data(req, "toolchain", TC)
+                set_form_data(req, "ok", "1")
+                set_form_data(req, "manifest", "[\{\"name\":\"sample.wasm\",\"sha256\":\"{payload_sha}\"}]")
+                set_form_file(req, "sample.wasm", upload_src)
+                request(req) $(resp) {
+                    tt |> equal(int(resp.status_code), 200)
+                }
+            }
+        }
+        t |> run("the 20MB artifact arrives whole, byte-exact") @(tt : T?) {
+            GET("{base_url}/api/build/artifact/{TC}/{hash}/sample.wasm") $(resp) {
+                tt |> equal(int(resp.status_code), 200)
+                tt |> equal(resp.content_length, length(payload))
+                tt |> success(string(resp.body) == payload, "body matches the uploaded bytes")
+            }
+        }
+    }
+    remove(upload_src)
+    rmdir_rec(blobs)
+}
