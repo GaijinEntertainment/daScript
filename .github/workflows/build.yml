@@ -278,8 +278,10 @@ jobs:
     # every Windows job still missed and rebuilt openssl from source, 8.5 min a run.
     # This job is the SEEDER for both arch keys; every other Windows job in the repo
     # is restore-only, so there is exactly one writer per key and no save race.
+    # Not on the cron: nightlies consume no cache (they are not a show-stopper),
+    # so the scheduled run builds openssl from source and then re-seeds below.
     - name: "Restore vcpkg + openssl"
-      if: runner.os == 'Windows'
+      if: runner.os == 'Windows' && github.event_name != 'schedule'
       uses: actions/cache/restore@v4
       with:
         # vcpkg.exe + ports/triplets/scripts + installed/<triplet>/openssl. Build
@@ -373,12 +375,16 @@ jobs:
           echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
           echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
         fi
-    # Stable per-config key, one fixed slot. Restore always; on master,
-    # delete + re-save the same key after Build so the slot is overwritten
-    # with fresh objects (GHA caches are immutable — plain save under an
-    # existing key is a no-op, so we delete first). PRs read-only. Bounded
-    # footprint: N configs × one tarball, no run_id pileup.
+    # Stable per-config key, one fixed slot. On master, delete + re-save the
+    # same key after Build so the slot is overwritten with fresh objects (GHA
+    # caches are immutable — plain save under an existing key is a no-op, so we
+    # delete first). PRs read-only. Bounded footprint: N configs × one tarball,
+    # no run_id pileup. The cron does NOT restore — nightlies consume no cache
+    # and build cold by policy — but its save still lands a complete fresh
+    # object set, and that save is the seeder every PR lane warms from (master
+    # PUSH runs are usually pre_job-skipped as same-content duplicates).
     - name: "Restore sccache objects"
+      if: github.event_name != 'schedule'
       uses: actions/cache/restore@v4
       with:
         path: ${{ runner.temp }}/sccache
@@ -616,7 +622,9 @@ jobs:
         arch: x64
 
     # Restore-only: the PR matrix job above is the single seeder for this key.
+    # Skipped on the cron: nightlies consume no cache. Dispatch still restores.
     - name: "Restore vcpkg + openssl"
+      if: github.event_name != 'schedule'
       uses: actions/cache/restore@v4
       with:
         path: vcpkg
@@ -709,7 +717,9 @@ jobs:
         arch: x64
 
     # Restore-only: the PR matrix job above is the single seeder for this key.
+    # Skipped on the cron: nightlies consume no cache. Dispatch still restores.
     - name: "Restore vcpkg + openssl"
+      if: github.event_name != 'schedule'
       uses: actions/cache/restore@v4
       with:
         path: vcpkg
@@ -869,10 +879,10 @@ jobs:
       uses: msys2/setup-msys2@v2
       with:
         msystem: CLANG64
-        # update:false keeps the cached pkg snapshot stable+small (no per-PR full
-        # `pacman -Syu` writing a fresh ~1.65GiB cache that evicts master slots).
+        # cache:false — this job is nightly/dispatch-only and nightlies consume
+        # no cache; the msys2 pkg snapshot alone was ~1.65GiB of quota.
         update: false
-        cache: true
+        cache: false
         install: >-
           mingw-w64-clang-x86_64-toolchain
           mingw-w64-clang-x86_64-cmake
@@ -896,12 +906,8 @@ jobs:
       run: |
         echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
         echo "SCCACHE_GHA_ENABLED=false" >> $GITHUB_ENV
-    - name: "Restore sccache objects"
-      uses: actions/cache/restore@v4
-      with:
-        path: ${{ runner.temp }}/sccache
-        key: sccache-mingw-clang64-release
-
+    # No slot restore/save: this job is nightly/dispatch-only and nightlies
+    # consume no cache. sccache stays as a per-run local-disk launcher only.
     - name: "Build: Daslang (clang-mingw64)"
       run: |
         set -eux
@@ -916,21 +922,6 @@ jobs:
           -DDAS_LLVM_DISABLED=OFF
         cmake --build ./build-mingw --parallel
         sccache --show-stats || true
-
-    # On master, overwrite the fixed cache slot with fresh objects (GHA caches
-    # are immutable, so delete then save). PRs are read-only.
-    - name: "Refresh sccache slot"
-      if: github.ref == 'refs/heads/master'
-      shell: bash
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: gh cache delete "sccache-mingw-clang64-release" -R ${{ github.repository }} || true
-    - name: "Save sccache objects"
-      if: github.ref == 'refs/heads/master'
-      uses: actions/cache/save@v4
-      with:
-        path: ${{ runner.temp }}/sccache
-        key: sccache-mingw-clang64-release
 
     - name: "Test: interpreter sweep"
       run: |
@@ -1056,7 +1047,10 @@ jobs:
     # CMakeLists change) pays it; on a hit find_package(OpenSSL) finds it and the
     # from-source ExternalProject is skipped. (On Ninja CMAKE_<LANG>_COMPILER_LAUNCHER
     # now works, so sccache could be added here later; OpenSSL from-source is unchanged.)
+    # Skipped on the cron: nightlies consume no cache, so the scheduled run
+    # builds OpenSSL from source (~8 min, budgeted). Dispatch still caches.
     - name: "Cache OpenSSL (clang-cl from-source build)"
+      if: github.event_name != 'schedule'
       uses: actions/cache@v4
       with:
         path: |

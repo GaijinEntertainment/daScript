@@ -9,7 +9,8 @@ on:
   # but the master PUSH run is usually skipped by pre_job as a concurrent duplicate
   # of the PR that just merged (4 of 15 recent merges actually ran), so seeding was
   # left to chance. A cron run is on master, has no concurrent twin, and lands the
-  # slot every night. It also hosts the checks too slow to sit on every PR.
+  # slot every night. It also hosts the checks too slow to sit on every PR,
+  # and the whole windows lane (nightly-only, uncached — see the matrix).
   schedule:
     - cron: '0 4 * * *'
   workflow_dispatch:
@@ -56,28 +57,18 @@ jobs:
       actions: write
     strategy:
       fail-fast: false
+      # The windows lane runs on the nightly cron and manual dispatch only —
+      # retired from the per-PR path: it re-runs the same shared das surface
+      # MSVC-slower while adding no windows-only checks (build.yml's windows
+      # cells are the per-PR MSVC gate), and it runs uncached by design (see
+      # the sccache comment below). The event ternary appears on BOTH the
+      # target axis and the include list: an include whose target is absent
+      # from the axis would be ADDED as a standalone cell, not dropped.
       matrix:
-        target: [linux, darwin15, windows]
+        target: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["linux", "darwin15", "windows"]') || fromJSON('["linux", "darwin15"]') }}
         architecture: [64, arm64]
 
-        include:
-          - target: linux
-            runner: ubuntu-latest
-            build_system: cmake
-            cmake_generator: Ninja
-
-          - target: darwin15
-            architecture: arm64
-            runner: macos-15
-            architecture_string: arm64
-            build_system: cmake
-            cmake_generator: Ninja
-
-          - target: windows
-            runner: windows-latest
-            build_system: cmake
-            cmake_generator: Ninja
-            architecture_string: x64
+        include: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('[{"target":"linux","runner":"ubuntu-latest","build_system":"cmake","cmake_generator":"Ninja"},{"target":"darwin15","architecture":"arm64","runner":"macos-15","architecture_string":"arm64","build_system":"cmake","cmake_generator":"Ninja"},{"target":"windows","runner":"windows-latest","build_system":"cmake","cmake_generator":"Ninja","architecture_string":"x64"}]') || fromJSON('[{"target":"linux","runner":"ubuntu-latest","build_system":"cmake","cmake_generator":"Ninja"},{"target":"darwin15","architecture":"arm64","runner":"macos-15","architecture_string":"arm64","build_system":"cmake","cmake_generator":"Ninja"}]') }}
 
         exclude:
           - target: linux
@@ -161,8 +152,10 @@ jobs:
     # to refs/pull/N/merge — invisible to every sibling PR. That is what actually
     # happened: 6 cache entries for 2 keys, all PR-scoped, ~836MB of quota, and
     # every Windows job still missing and rebuilding openssl (8.5 min a run).
+    # Not on the cron: nightlies consume no cache, so the scheduled windows lane
+    # builds openssl from source (~8 min, budgeted). Dispatch still restores.
     - name: "Restore vcpkg + openssl"
-      if: runner.os == 'Windows'
+      if: runner.os == 'Windows' && github.event_name != 'schedule'
       uses: actions/cache/restore@v4
       with:
         # vcpkg.exe + ports/triplets/scripts + installed/<triplet>/openssl.
@@ -184,36 +177,33 @@ jobs:
     # matrix config — mirrors build.yml. The GHA backend writes one cache item
     # per TU (quota fragmentation, frequent concurrent-write failures); local
     # disk keeps all objects in $SCCACHE_DIR persisted as a single tarball.
-    # Windows MSVC compiles are cacheable because daslang builds /Z7
-    # (CMakeCommon.txt) — debug info embedded in the .obj; sccache refuses /Zi.
+    # Linux + darwin only: the windows lane is nightly-only and nightlies run
+    # UNCACHED by policy (they are not a show-stopper; a windows /Z7 object
+    # slot alone would be ~5-6GB of quota serving one un-waited-on run a day).
     - uses: mozilla-actions/sccache-action@v0.0.10
-    - run: |
+      if: matrix.target != 'windows'
+    - if: matrix.target != 'windows'
+      run: |
         echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
         echo "SCCACHE_GHA_ENABLED=false" >> $GITHUB_ENV
-        # Non-Windows: export the launcher via env (also wraps the GLFW/libhv
-        # ExternalProject sub-builds — harmless on gcc/clang). Windows must NOT
-        # export it: the env leaks into the sub-cmakes where sccache + MSVC /Zi
-        # (those sub-builds keep /Zi) + parallel Ninja collide on the shared
-        # glfw.pdb (C1041). Windows passes the launcher as -D on the main
-        # configure only (Build step), scoping sccache to daslang's /Z7 TUs.
+        # The launcher exported via env also wraps the GLFW/libhv
+        # ExternalProject sub-builds — harmless on gcc/clang.
         # SCCACHE_CACHE_SIZE bounds the slot: the default is 10G, so an unbounded
         # slot grows until it evicts other caches in the repository. 500M holds a
         # full linux/macOS object set with room — build.yml's linux Release slot
-        # sits at ~94MB. Windows needs far more because /Z7 embeds debug info in
-        # every .obj: build.yml's Windows Release slot measures 5.1GB for ~920 TUs.
-        if [ "$RUNNER_OS" != "Windows" ]; then
-          echo "SCCACHE_CACHE_SIZE=500M" >> $GITHUB_ENV
-          echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
-          echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
-        else
-          echo "SCCACHE_CACHE_SIZE=6G" >> $GITHUB_ENV
-        fi
+        # sits at ~94MB.
+        echo "SCCACHE_CACHE_SIZE=500M" >> $GITHUB_ENV
+        echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+        echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
     # Stable per-config key in its own `sccache-extended-*` namespace so it never
-    # clobbers build.yml's slots. Restore always; save only on master (delete
-    # first — GHA caches are immutable, so a plain save under an existing key is
-    # a no-op). PRs read-only. The nightly cron is what makes the save reliable:
-    # the master PUSH run is usually skipped as a concurrent duplicate.
+    # clobbers build.yml's slots. PRs restore read-only; save only on master
+    # (delete first — GHA caches are immutable, so a plain save under an existing
+    # key is a no-op). The nightly cron is what makes the save reliable (the
+    # master PUSH run is usually skipped as a concurrent duplicate), and it does
+    # NOT restore — nightlies consume no cache; a cold build still saves a
+    # complete fresh object set for the PR lanes to warm from.
     - name: "Restore sccache objects"
+      if: matrix.target != 'windows' && github.event_name != 'schedule'
       uses: actions/cache/restore@v4
       with:
         path: ${{ runner.temp }}/sccache
@@ -230,10 +220,8 @@ jobs:
             # vcpkg so dasHV skips its perl+nmake source build.
             echo "BIN=./bin" >> $GITHUB_ENV
             export PATH="/c/Strawberry/perl/bin:$PATH"
-            # Launcher passed as -D here (not env) so it scopes to daslang's own
-            # /Z7 targets and does NOT leak into the GLFW/libhv /Zi sub-builds.
+            # No sccache launcher: this lane is nightly-only and runs uncached.
             cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DCMAKE_BUILD_TYPE:STRING=Release \
-              -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
               $ACTIVE_MODULES -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
             cmake --build ./build --config Release --target daslang das-fmt daslang_static --parallel
             ;;
@@ -265,22 +253,14 @@ jobs:
             ;;
         esac
 
-    # Windows is by far the most expensive slot — ~5GB of objects against ~250MB
-    # for linux and macOS together, because /Z7 embeds debug info in every .obj —
-    # and it is also where the payoff is: this job's Windows build takes ~29 min
-    # cold, where build.yml's warm one takes ~14. It only fits because the repo
-    # cache limit is raised to 20GB; at GitHub's 10GB default, saving it evicted
-    # build.yml's slots and left every lane colder. That budget is also why the
-    # nightly Windows jobs stay uncached — a slot each would put the repo over.
-    # If the limit ever drops back, this is the first slot to stop persisting.
     - name: "Refresh sccache slot"
-      if: github.ref == 'refs/heads/master'
+      if: matrix.target != 'windows' && github.ref == 'refs/heads/master'
       env:
         GH_TOKEN: ${{ github.token }}
         SCKEY: sccache-extended-${{ matrix.target }}-${{ matrix.architecture }}
       run: gh cache delete "$SCKEY" -R ${{ github.repository }} || true
     - name: "Save sccache objects"
-      if: github.ref == 'refs/heads/master'
+      if: matrix.target != 'windows' && github.ref == 'refs/heads/master'
       uses: actions/cache/save@v4
       with:
         path: ${{ runner.temp }}/sccache
