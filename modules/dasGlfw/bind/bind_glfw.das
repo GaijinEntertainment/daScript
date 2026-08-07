@@ -27,7 +27,11 @@ class GlfwGen : CppGenBind {
     }
     def init_skip_func {
         glfw_skip_func <- {
-            "glfwDestroyWindow" => true
+            "glfwDestroyWindow" => true,
+            // Hand-bound so the web build can reconcile the canvas size first — see
+            // DasGlfw_PollEvents in dasGLFW.main.cpp. Every GLFW app polls once a
+            // frame, which is what makes that the one place the fix has to live.
+            "glfwPollEvents" => true
         }
         // No emscripten_skip_function override: the 11 GLFW functions emcc's JS GLFW
         // (library_glfw.js) does not provide are implemented as honest C stubs in

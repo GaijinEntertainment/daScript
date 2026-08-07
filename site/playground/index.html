@@ -110,11 +110,11 @@
 <script type="text/javascript" src="./playground-init.js"></script>
 <!-- Owns run-frame.html (one frame per program). Must precede main.js, whose
      pageInit hands it the run host and whose run path delegates to it. -->
-<script type="text/javascript" src="./playground-runner.js?v=2"></script>
+<script type="text/javascript" src="./playground-runner.js?v=3"></script>
 <!-- Compiles the editor's code on the build service for the wasm engine.
      Reads its payload from playground-share.js, so both agree on one hash. -->
 <script type="text/javascript" src="./playground-wasm.js?v=2"></script>
-<script type="text/javascript" src="./main.js?v=3"></script>
+<script type="text/javascript" src="./main.js?v=4"></script>
 <script type="text/javascript" src="./playground-tabs.js?v=3"></script>
 <script type="text/javascript" src="./playground-share.js?v=3"></script>
 <script type="text/javascript" src="./playground-splitter.js?v=3"></script>
@@ -143,6 +143,7 @@
             </div>
         </div>
         <div class="main_header_right">
+            <label class="engine-toggle" title="show the program's frame rate over the canvas"><input type="checkbox" id="show-fps" checked> fps</label>
             <button id="clear" class="button_header button_header--ghost" onclick="clearOutput()">clear</button>
         </div>
     </div>
