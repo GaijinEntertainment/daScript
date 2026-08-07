@@ -76,9 +76,6 @@ void Module_dasGLFW::initFunctions_3() {
 	makeExtern< void * (*)(GLFWwindow *) , glfwGetWindowUserPointer , SimNode_ExtFuncCall >(lib,"glfwGetWindowUserPointer","glfwGetWindowUserPointer")
 		->args({"window"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from GLFW/glfw3.h:4534:14
-	makeExtern< void (*)() , glfwPollEvents , SimNode_ExtFuncCall >(lib,"glfwPollEvents","glfwPollEvents")
-		->addToModule(*this, SideEffects::worstDefault);
 // from GLFW/glfw3.h:4579:14
 	makeExtern< void (*)() , glfwWaitEvents , SimNode_ExtFuncCall >(lib,"glfwWaitEvents","glfwWaitEvents")
 		->addToModule(*this, SideEffects::worstDefault);

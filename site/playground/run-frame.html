@@ -51,22 +51,43 @@
     var PARENT = window.parent;
     var canvas = document.getElementById("canvas");
 
-    // Emscripten's GLFW stamps the program's window size onto the canvas as an INLINE
-    // "width: Npx !important" at window creation — and inline !important beats the
-    // stylesheet's, so the canvas shrank to program pixels inside a frame the parent
-    // sized to the column. Undo it whenever it appears: the drawing buffer keeps the
-    // program's size, CSS keeps the fill-the-frame presentation. Self-terminating:
-    // our own rewrite re-fires the observer, sees 100%, and does nothing.
-    new MutationObserver(function () {
-        if (canvas.style.width !== "100%") {
-            canvas.style.setProperty("width", "100%", "important");
-            canvas.style.setProperty("height", "100%", "important");
-        }
-    }).observe(canvas, { attributes: true, attributeFilter: ["style"] });
+    // (The canvas is NOT restyled here on purpose. Emscripten's GLFW stamps the program's
+    // window size onto it as an inline "width: Npx !important", and fighting that stamp is
+    // what made the CSS box disagree with the drawing buffer — the program then rendered at
+    // one size while the browser delivered mouse events in another. dasGlfw's glfwPollEvents
+    // now reconciles the window size to this frame's box every frame, so the stamp already
+    // IS the frame's size and there is nothing to undo.)
 
     function post(msg) {
         try { PARENT.postMessage(msg, window.location.origin); } catch (e) { /* parent gone */ }
     }
+
+    // Feed for the parent's fps badge. Counts animation frames in which the PROGRAM
+    // drew, not raw rAF ticks: a threaded program (the path tracer) leaves rAF firing
+    // at display rate while presenting well under one frame a second, and reporting
+    // 60 there would hide exactly the interpreter-vs-wasm gap the badge exists to show.
+    (function installFpsMeter() {
+        var drew = false, frames = 0, last = performance.now();
+        var DRAWS = ["drawArrays", "drawElements", "drawArraysInstanced", "drawElementsInstanced", "drawRangeElements"];
+        [window.WebGLRenderingContext, window.WebGL2RenderingContext].forEach(function (ctor) {
+            if (!ctor || !ctor.prototype) return;
+            DRAWS.forEach(function (name) {
+                var original = ctor.prototype[name];
+                if (typeof original !== "function") return;
+                ctor.prototype[name] = function () { drew = true; return original.apply(this, arguments); };
+            });
+        });
+        (function tick() {
+            if (drew) { frames++; drew = false; }
+            var now = performance.now();
+            if (now - last >= 500) {
+                post({ type: "fps", value: frames * 1000 / (now - last) });
+                frames = 0;
+                last = now;
+            }
+            requestAnimationFrame(tick);
+        })();
+    })();
 
     // dasAudio creates an AudioContext deep inside the wasm run, after the click's
     // synchronous frame, so browsers would leave it suspended. Wrap the constructor

@@ -34,6 +34,7 @@ pageInit = function () {
     else editorOutput.parentNode.insertBefore(runHost, editorOutput);
     runHostEl = runHost;   // page-shape wasm artifacts (runWasmPage) share the canvas's place
     PlaygroundRunner.init(runHost, function (text, color) { printOutput(text, color); });
+    initFpsToggle();
 
     sampleList["examples"] = document.getElementById("examples");
 
@@ -283,6 +284,23 @@ function updateEngineAvailability() {
         .catch(() => disableWasm());
 }
 
+// The fps badge is on by default: comparing the two engines is the reason it exists,
+// and a counter you have to go and enable is one nobody turns on. A visitor who opts
+// out keeps that across visits — a preference, not per-run state.
+const FPS_PREF_KEY = 'pg-show-fps';
+function initFpsToggle() {
+    const box = document.getElementById('show-fps');
+    if (!box) return;
+    let on = true;
+    try { on = localStorage.getItem(FPS_PREF_KEY) !== '0'; } catch (e) { /* storage blocked */ }
+    box.checked = on;
+    if (typeof PlaygroundRunner !== 'undefined') PlaygroundRunner.setFpsVisible(on);
+    box.addEventListener('change', function () {
+        if (typeof PlaygroundRunner !== 'undefined') PlaygroundRunner.setFpsVisible(box.checked);
+        try { localStorage.setItem(FPS_PREF_KEY, box.checked ? '1' : '0'); } catch (e) { /* storage blocked */ }
+    });
+}
+
 // Hide the run frame. Revealing and sizing it is the runner's own job — the
 // frame posts canvas-visible the instant a program asks for a WebGL context,
 // which is program-driven and so works for pasted code, not just samples
@@ -355,7 +373,14 @@ function runWasmPage(files) {
     pageFrameMsg = function (ev) {
         if (!pageFrame || ev.source !== pageFrame.contentWindow || ev.origin !== pageOrigin) return;
         const m = ev.data;
-        if (!m || m.type !== 'canvas-visible' || !(m.width > 0) || !(m.height > 0)) return;
+        if (!m) return;
+        // The artifact is cross-origin by design, so its own fps meter reporting in is
+        // the only way this side can know the frame rate. The badge lives in the runner.
+        if (m.type === 'fps') {
+            if (typeof PlaygroundRunner !== 'undefined') PlaygroundRunner.noteFps(m.value);
+            return;
+        }
+        if (m.type !== 'canvas-visible' || !(m.width > 0) || !(m.height > 0)) return;
         pageAspect = m.height / m.width;
         pageFrameFit();
     };

@@ -575,6 +575,41 @@ namespace das {
         DasGlfw_ChainCharDispatch(w, codepoint);
     }
 
+    // THE canvas-size reconcile. On the web a "window" is faked out of two numbers that
+    // nothing keeps in sync: the canvas CSS box (what the user sees, and the space the
+    // browser delivers mouse events in) and the canvas backing store (what GL renders
+    // into). A host page restyling the canvas — a playground frame, a fullscreened
+    // example card — moves the first and never tells GLFW, so the app goes on believing
+    // a size that no longer exists: ImGui lays out in stale units while clicks arrive in
+    // real ones, and "fullscreen" only magnifies the old render.
+    //
+    // The CSS box is the only externally-true size, so make GLFW agree with it. One
+    // glfwSetWindowSize moves the GLFW window size AND the backing store together, and
+    // everything downstream (glfwGetFramebufferSize, ImGui's DisplaySize via its own GLFW
+    // backend) then follows exactly as it does on desktop.
+    //
+    // It lives on glfwPollEvents because that is the one call every GLFW app makes every
+    // frame, whichever way it created its window — glfw_live (games), the imgui harness,
+    // or a raw glfwCreateWindow sample. Before poll, so the size is already true when the
+    // app reads it this frame. Desktop keeps the plain glfwPollEvents: a real OS window
+    // needs no reconciling, and DAS_glfwCanvasCssWidth returns 0 there anyway.
+    void DasGlfw_PollEvents () {
+#ifdef __EMSCRIPTEN__
+        if ( GLFWwindow * window = glfwGetCurrentContext() ) {
+            int cw = DAS_glfwCanvasCssWidth();
+            int ch = DAS_glfwCanvasCssHeight();
+            if ( cw > 0 && ch > 0 ) {
+                int ww = 0, wh = 0;
+                glfwGetWindowSize(window, &ww, &wh);
+                if ( ww != cw || wh != ch ) {
+                    glfwSetWindowSize(window, cw, ch);
+                }
+            }
+        }
+#endif
+        glfwPollEvents();
+    }
+
     void DasGlfw_DestroyWindow ( GLFWwindow * window ) {
         auto it = Module_dasGLFW::g_Callbacks.find(window);
         if ( it!=Module_dasGLFW::g_Callbacks.end() ) Module_dasGLFW::g_Callbacks.erase(it);
@@ -606,6 +641,8 @@ namespace das {
             SideEffects::worstDefault,"DasGlfw_SetScrollCallback");
         addExtern<DAS_BIND_FUN(DasGlfw_DestroyWindow)>(*this,lib,"glfwDestroyWindow",
             SideEffects::worstDefault,"DasGlfw_DestroyWindow");
+        addExtern<DAS_BIND_FUN(DasGlfw_PollEvents)>(*this,lib,"glfwPollEvents",
+            SideEffects::worstDefault,"DasGlfw_PollEvents");
         // chain + synthetic event API
         addExtern<DAS_BIND_FUN(DasGlfw_ChainAddCursorPos)>(*this,lib,"glfw_chain_add_cursor_pos",
             SideEffects::worstDefault,"DasGlfw_ChainAddCursorPos");

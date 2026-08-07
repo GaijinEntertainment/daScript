@@ -59,6 +59,34 @@
       return c;
     })(),
   };
+
+  // Feed for an embedder's fps badge (the playground's, today). Counts animation
+  // frames in which the program DREW rather than raw rAF ticks — a threaded program
+  // keeps rAF at display rate while presenting far fewer frames, and the whole point
+  // of the badge is to show the real rate. Wildcard target like canvas-visible above:
+  // it carries one number, and a standalone page just posts to itself.
+  (function installFpsMeter() {
+    var drew = false, frames = 0, last = performance.now();
+    var DRAWS = ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced', 'drawRangeElements'];
+    [window.WebGLRenderingContext, window.WebGL2RenderingContext].forEach(function (ctor) {
+      if (!ctor || !ctor.prototype) return;
+      DRAWS.forEach(function (name) {
+        var original = ctor.prototype[name];
+        if (typeof original !== 'function') return;
+        ctor.prototype[name] = function () { drew = true; return original.apply(this, arguments); };
+      });
+    });
+    (function tick() {
+      if (drew) { frames++; drew = false; }
+      var now = performance.now();
+      if (now - last >= 500) {
+        try { parent.postMessage({ type: 'fps', value: frames * 1000 / (now - last) }, '*'); } catch (e) { /* no embedder */ }
+        frames = 0;
+        last = now;
+      }
+      requestAnimationFrame(tick);
+    })();
+  })();
 </script>
 {{{ SCRIPT }}}
 </body>
