@@ -223,8 +223,8 @@ namespace das {
         // function address
         virtual void preVisit(ExprAddr * addr) override {
             Visitor::preVisit(addr);
-            if (builtInDependencies || (addr->func && !addr->func->builtIn)) {
-                DAS_ASSERT(addr->func);
+            if ( !addr->func ) return;
+            if (builtInDependencies || !addr->func->builtIn) {
                 if (func) {
                     func->useFunctions.insert(addr->func);
                 } else if (gVar) {
@@ -250,9 +250,8 @@ namespace das {
         // new
         virtual void preVisit(ExprNew * call) override {
             Visitor::preVisit(call);
-            if ( call->initializer ) {
+            if ( call->func && call->initializer ) {
                 if (builtInDependencies || !call->func->builtIn) {
-                    DAS_ASSERT(call->func);
                     if (func) {
                         func->useFunctions.insert(call->func);
                     } else if (gVar) {
@@ -274,8 +273,8 @@ namespace das {
         // Op1
         virtual void preVisit(ExprOp1 * expr) override {
             Visitor::preVisit(expr);
+            if ( !expr->func ) return;
             if (builtInDependencies || !expr->func->builtIn) {
-                DAS_ASSERT(expr->func);
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else if (gVar) {
@@ -286,8 +285,8 @@ namespace das {
         // Op2
         virtual void preVisit(ExprOp2 * expr) override {
             Visitor::preVisit(expr);
+            if ( !expr->func ) return;
             if (builtInDependencies || !expr->func->builtIn) {
-                DAS_ASSERT(expr->func);
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else if (gVar) {
@@ -298,8 +297,8 @@ namespace das {
         // Op3
         virtual void preVisit(ExprOp3 * expr) override {
             Visitor::preVisit(expr);
-            if ( expr->func && (builtInDependencies || !expr->func->builtIn) ) {
-                DAS_ASSERT(expr->func);
+            if ( !expr->func ) return;
+            if (builtInDependencies || !expr->func->builtIn) {
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else if (gVar) {

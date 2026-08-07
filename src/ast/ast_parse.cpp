@@ -777,7 +777,7 @@ namespace das {
         Program * prog = nullptr;
         explicit GcCollectOnExit ( gc_guard & s ) : scope(s) {}
         ~GcCollectOnExit() {
-            if ( prog ) {
+            if ( prog && prog->thisModule ) {
                 prog->thisModule->gc_collect(&scope.guard_root);
             }
             clearAllFunctionLookups();
