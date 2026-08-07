@@ -137,12 +137,17 @@ negative-control run (poisoned oracle → red with dumps) before the poison is r
   arenas; one authoring bug caught — arena row spacing < deepest KV slab), and the D family
   (DF16/DF32/DQ8/DTq4 + parallel CombD; D reuses the batched fixture at nheads=2 kv_mul=2
   hs=128 — same kv_dim; grid (nheads, ceil(nsgs/4), B) × 128).
-- TODO next: the GEMM
-  cluster (batch GEMM q8 7, KqMulMm 6, MulMm twins 3, MoeMulMm rest 7 — move
-  kq_fill_planes/kq_row_ref/buf_mismatch_env from the gemv file into
-  _metal_kernel_common when the second consumer lands); then fused QKV/W13Sw 5 +
-  batched GEMV B-forms 4; then MoE plumbing 8 + prefill misc 5. Metal-4 tensor twins
-  feint on M1 — run them on the M4 box (`ssh m4`) once written.
+- ✅ `test_metal_gemm_kernels` — KqMulMm K4/K5/K6 + _t tensor twins, Q8MulMmT,
+  Bf16MulMm/T (9). kq/env helpers now shared via `_metal_kernel_common`. **Corrected
+  assumption: the M1 toolchain compiles AND correctly executes ALL Metal-4 tensor
+  kernels** — the capability-skip (visible to_log; `feint` prints nothing by design, so
+  never grep for it) never fired; every tensor twin ran and matched its oracle. The
+  race crowns simdgroup on M1 for SPEED; correctness coverage is live here.
+- TODO next: batch GEMM q8 7 (Q8GemmB/BSk/SkReduce/BT/BSkT/64B/64BT, K:2269-2570,
+  Q8GemmArgs/SkReduceArgs at K:3148-3168); MoeMulMm rest 6 concrete (race_moe_mulmm_q8/
+  mx4 in prefill.das:4273/4364 carry exact bindings; K4/K5 inherit Base, K6 standalone);
+  AttnQKMmT/AVMmT 2 (race_attn_pair prefill.das:4597); fused QKV/W13Sw 5 (K:869-2260);
+  batched GEMV B-forms 4 (K:1881-2129); MoE plumbing 8 + prefill misc 5.
 
 ## Leg (c) — hoist the dispatch-lens micro-grammar into dasllama_kernel_access
 
