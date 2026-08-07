@@ -508,7 +508,8 @@ namespace das {
             // append side effects of the functions it calls
             for ( auto & depF : fnc->useFunctions ) {
                 auto dep = depF;
-                if ( dep != fnc ) {
+                // markSymbolUse records the callee of an unresolved call as null
+                if ( dep && dep != fnc ) {
                     uint32_t depFlags = getSideEffects(dep);
                     depFlags &= ~uint32_t(SideEffects::modifyArgument);
                     flags |= depFlags;
@@ -616,6 +617,7 @@ namespace das {
     // Op1
         virtual void preVisit ( ExprOp1 * expr ) override {
             Visitor::preVisit(expr);
+            if ( !expr->func ) return;      // unresolved operator; lint reports it
             auto sef = getSideEffects(expr->func);
             markPassMutableOperand(expr->func, 0, expr->subexpr);
             if ( sef & uint32_t(SideEffects::modifyArgument) ) {
@@ -625,6 +627,7 @@ namespace das {
     // Op2
         virtual void preVisit ( ExprOp2 * expr ) override {
             Visitor::preVisit(expr);
+            if ( !expr->func ) return;      // unresolved operator; lint reports it
             auto sef = getSideEffects(expr->func);
             markPassMutableOperand(expr->func, 0, expr->left);
             markPassMutableOperand(expr->func, 1, expr->right);
@@ -687,6 +690,7 @@ namespace das {
                 func->sideEffectFlags |= uint32_t(SideEffects::modifyExternal);
             }
             if ( expr->initializer ) {
+                if ( !expr->func ) return;      // unresolved; lint reports it
                 markPassMutableArguments(expr->func, expr->arguments);
                 // if modified, modify CALL
                 auto sef = getSideEffects(expr->func);
@@ -726,6 +730,7 @@ namespace das {
             if ( !expr->func ) {
                 return;
             }
+            if ( !expr->func ) return;          // unresolved; lint reports it
             markPassMutableArguments(expr->func, expr->arguments);
             // if modified, modify NEW
             auto sef = getSideEffects(expr->func);
