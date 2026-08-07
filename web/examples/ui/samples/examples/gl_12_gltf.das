@@ -727,11 +727,11 @@ def init {
     prog_up = create_shader_program(@@post_vs, @@up_fs)
     prog_composite = create_shader_program(@@post_vs, @@composite_fs)
 
-    g_scene <- load_gltf(MODEL)
+    g_scene <- load_gltf(MODEL) // nolint:PERF030 — fresh at the one-time init
     if (empty(g_scene.meshes)) {
         panic("no meshes loaded from {MODEL}")
     }
-    g_model <- upload_gltf(g_scene)
+    g_model <- upload_gltf(g_scene) // nolint:PERF030 — fresh at the one-time init
     compute_root()
 
     glGenVertexArrays(1, safe_addr(floor_vao))
@@ -846,7 +846,7 @@ def draw_fullscreen {
 }
 
 [export]
-def update : bool {
+def update : bool { // nolint:STYLE038 — one frame of the tutorial pipeline
     time += 1.0 / 60.0
     let t = time
     var display_w, display_h : int
