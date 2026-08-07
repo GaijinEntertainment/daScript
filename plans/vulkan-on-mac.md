@@ -76,8 +76,10 @@ no perf bar. Note followup item 16: vulkan arms need direct dastest + `-load_mod
   Llama-3.2-1B Q8_0 AND Q4_K_M native k-quant — resident driver, device prefill + decode,
   at/dn chains honestly on the CPU rail.
 - Tails: (1) file the MoltenVK argbuf-miscompile upstream (probe files
-  `tests/_probe_{cls,batch}_m1.das` are the repro seed — keep until filed, delete before
-  PR); (2) GPU-vs-GPU suite arms (ar twin-vs-seam) are vacuous-prone — when both kernels
+  `tests/_probe_{cls,batch}_m1.das` are the repro seed — UNTRACKED local files on the M1,
+  so they never ride the PR; keep them until the upstream issue is RESOLVED, not merely
+  filed — maintainers ask follow-ups, and deleting an untracked file is unrecoverable);
+  (2) GPU-vs-GPU suite arms (ar twin-vs-seam) are vacuous-prone — when both kernels
   are dead they match trivially (bit us under the 1.4.1 cliff); sentinel-prefill them;
   (3) a `--quant kq` parity run vacuously "passed" on empty streams before the wc -l check —
   the harness should exit non-zero when GEN_IDS was never printed.
@@ -229,7 +231,10 @@ this leg only builds the mechanism and takes the free wins the oracle suite cove
 ## MoltenVK argbuf upstream report — DRAFT (awaiting Boris go-ahead to file)
 
 To be filed at KhronosGroup/MoltenVK (posts under Boris's gh auth — not filed yet).
-Probe files `tests/_probe_{cls,batch}_m1.das` stay until filed, then delete (plan rule).
+Probe files `tests/_probe_{cls,batch}_m1.das` (untracked, this M1 only) stay until the
+issue is RESOLVED — they are our tool for maintainer follow-ups and for re-verifying
+against future MoltenVK releases. The filed issue itself must be self-contained (SPIR-V +
+layout attached), so the probes' single-copy locality is acceptable.
 
 > **Title:** Compute dispatches silently lose all device stores under Metal argument
 > buffers (default path) on Apple Silicon — correct with
