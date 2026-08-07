@@ -958,9 +958,9 @@ def add_new_pre_infer_macro(name : string; var someClassPtr) {
 }
 
 [macro_function]
-def add_new_pre_simulate_macro(name : string; var someClassPtr) {
+def add_new_post_infer_macro(name : string; var someClassPtr) {
     var ann = make_pass_macro(name, someClassPtr)
-    this_module() |> add_pre_simulate_macro(ann)
+    this_module() |> add_post_infer_macro(ann)
 }
 
 [macro_function]

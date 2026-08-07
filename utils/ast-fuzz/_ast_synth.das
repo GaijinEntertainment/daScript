@@ -105,9 +105,11 @@ def private add_synth_functions(mod : Module?; seedInt : int; count : int; depth
         var g = new GenAll(seed = random_seed(seedInt + i * 6151), max_depth = depth,
             at = LineInfo())
         let nargs = abs(random_int(seed)) % 3
+        // the body is replaced with random statements below, so a non-void result is
+        // error[30310] every time and the program never reaches codegen
         var fn <- new Function(at = LineInfo(), atDecl = LineInfo(),
             name := "synth_gen_{seedInt}_{i}",
-            result = g.gen_type(depth))
+            result = new TypeDecl(at = LineInfo(), baseType = Type.tVoid))
         for (a in range(nargs)) {
             var av <- new Variable(at = LineInfo(), name := "a{a}", _type = g.gen_type(depth))
             fn.arguments |> emplace(av)

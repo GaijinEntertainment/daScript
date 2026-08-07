@@ -3696,12 +3696,6 @@ namespace das
         if ( policies.keep_alive ) {
             updateKeepAliveFlags();
         }
-        library.foreach([&](Module * mod) -> bool {
-            for ( const auto & pm : mod->preSimulateMacros ) {
-                pm->apply(this, thisModule.get());
-            }
-            return true;
-        }, "*");
         isSimulating = true;
         context.failed = true;
         context.verySafeContext = options.getBoolOption("very_safe_context",policies.very_safe_context);

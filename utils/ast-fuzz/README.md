@@ -157,7 +157,7 @@ Two compiler-side hooks, both no-ops unless the module is loaded:
   consumed in the same pass, and at the substitution site it is not yet installed
   in the module — so checking there sees the old tree. Checking per pass, with
   the tree in place, is what catches them.
-- **before codegen** (`ast_simulate.cpp`), as a `[pre_simulate_macro]`, where a
+- **once inference is done** (`ast_parse.cpp`), as a `[post_infer_macro]`, where a
   function's inferred result type is final. That is the only point at which a
   bare `return` in a non-void function is decidable: the infer-time twin has to
   skip an unresolved result type, because a function's result keeps moving until
