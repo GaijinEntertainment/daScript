@@ -524,6 +524,7 @@ namespace das {
         // ExprIfThenElse
         bool isConstExprFunc(Function *fun) const;
         ExpressionPtr getConstExpr(Expression *expr);
+        das_set<Variable *> constExprFolding;   // globals whose init is mid-fold in getConstExpr — breaks init cycles (A = B + 1; B = A + 1)
         virtual bool canVisitIfSubexpr(ExprIfThenElse *expr) override;
         virtual void preVisit(ExprIfThenElse *expr) override;
         virtual ExpressionPtr visit(ExprIfThenElse *expr) override;

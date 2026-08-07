@@ -1174,13 +1174,20 @@ namespace das {
                     if (variable->init->rtti_isConstant()) {
                         variable->access_fold = true;
                         return variable->init->clone();
-                    } else if (auto foldedInit = getConstExpr(variable->init)) {
+                    } else if (constExprFolding.count(variable) == 0) {
                         // a const global's init EXPRESSION only folds in place when infer-time
                         // folding is on; under lint/IDE profiles (no_optimizations) it stays an
                         // op tree, so compute the value on the side — static_if over such a
-                        // global must resolve identically in every compile profile
-                        variable->access_fold = true;
-                        return foldedInit;
+                        // global must resolve identically in every compile profile. The in-flight
+                        // set breaks init cycles (A = B + 1; B = A + 1): a revisited global reads
+                        // as non-constant and the standard init-loop diagnostic reports it.
+                        constExprFolding.insert(variable);
+                        auto foldedInit = getConstExpr(variable->init);
+                        constExprFolding.erase(variable);
+                        if (foldedInit) {
+                            variable->access_fold = true;
+                            return foldedInit;
+                        }
                     }
                 }
             }

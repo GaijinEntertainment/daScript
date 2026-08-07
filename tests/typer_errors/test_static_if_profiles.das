@@ -35,6 +35,11 @@ def test_static_if_lint_profile(t : T?) {
         let r = compile_lint_profile("{get_das_root()}/tests/typer_errors/_static_if_composed_init.das")
         t |> success(r.ok, "expected a clean compile, got: {r.issues}")
     }
+    t |> run("mutually recursive initializers report the init loop, not a crash") @(t : T?) {
+        let r = compile_lint_profile("{get_das_root()}/tests/typer_errors/_static_if_mutual_global.das")
+        t |> success(!r.ok, "expected the compile to refuse")
+        t |> success(find(r.issues, "initialization loop") >= 0, "wrong error: {r.issues}")
+    }
     t |> run("a genuinely non-constant condition still refuses") @(t : T?) {
         let r = compile_lint_profile("{get_das_root()}/tests/typer_errors/_static_if_nonconst.das")
         t |> success(!r.ok, "expected the compile to refuse")
