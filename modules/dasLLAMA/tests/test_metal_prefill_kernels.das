@@ -3,6 +3,7 @@ options _function_length = 0        // per-kernel gates: hand-bound buffers/unif
 options _cyclomatic_complexity = 0  // same — the arm ladders follow the kernel's own binding/variant axes
 
 require dastest/testing_boost public
+require daslib/math_bits           // float<->uint bits — the moe_wscale sel-buffer pun
 require dasllama/dasllama_math
 require dasllama/dasllama_convert  // used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
 require ?das_metal dasllama/dasllama_metal_prefill  // the Phase-6 prefill kernel set (Apple builds)
@@ -464,6 +465,17 @@ def test_metal_prefill_kernels(t : T?) {
                 axpy_sig_gate(t, dev, queue, 1, 96)    // shexp combine (stage 3): decode shape
                 axpy_sig_gate(t, dev, queue, 5, 64)    // ... and the per-position prefill shape
 
+                // ===== MoE plumbing (router batch GEMV, CSR pair, wscale, reduce, swiglu-oai) =====
+                swiglu_oai_gate(t, dev, queue, 256)
+                swiglu_oai_pf_gate(t, dev, queue, 16, [32, 40, 8], 32)   // 32 ghost rows stay untouched
+                g4_router_norm_gate(t, dev, queue, 5, 96)
+                moe_wscale_gate(t, dev, queue, 13, 2, 7)
+                moe_router_b_gate(t, dev, queue, 64, 7, 13, false)       // ne=7: row guard; np=13: stream clamp
+                moe_router_b_gate(t, dev, queue, 64, 7, 13, true)
+                moe_csr_gate(t, dev, queue, 13, 5, 2)
+                moe_csr_gate(t, dev, queue, 40, 3, 4)                    // an expert crosses one 32-pad tile
+                moe_reduce_gate(t, dev, queue, 96, 9, 2)
+
                 metal_release(queue)
             }
             t |> equal(metal_log_leaks_if_any(), 0l)
@@ -471,6 +483,486 @@ def test_metal_prefill_kernels(t : T?) {
             feint("das_metal is not built on this platform; nothing to compare\n")
         }
     }
+}
+
+// ===== MoE plumbing gates (Wave C: swiglu-oai, g4 router norm, wscale, router, CSR, reduce) =====
+
+def private swiglu_oai_ref(g, u : double) : double {
+    let x = min(g, 7.0lf)
+    let y = clamp(u, -7.0lf, 7.0lf)
+    return (x / (1.0lf + exp(-1.702lf * x))) * (y + 1.0lf)
+}
+
+// the decode form (MetalSwigluOai): in-place clamped swiglu over a flat span, the enc_ew2 shape
+def private swiglu_oai_gate(t : T?; dev, queue; total : int) {
+    let tag = "swiglu_oai total={total}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_swiglu_oai_msl, metal_swiglu_oai_msl_entry, metal_swiglu_oai_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    var g : array<float>
+    var u : array<float>
+    g |> resize(total)
+    u |> resize(total)
+    for (i in range(total)) {
+        g[i] = float((i * 7) % 23 - 11)   // past the +-7 clamps on both sides
+        u[i] = float((i * 5 + 3) % 23 - 11)
+    }
+    var want : array<float>
+    want |> resize(total)
+    for (i in range(total)) {
+        want[i] = float(swiglu_oai_ref(double(g[i]), double(u[i])))
+    }
+    var bg = buf_upload(dev, g)
+    var bu = buf_upload(dev, u)
+    var btot = buf_u32(dev, uint(total))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bg, 0ul, 0)
+        metal_set_buffer(enc, bu, 0ul, 1)
+        metal_set_buffer(enc, btot, 0ul, 2)
+        metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    t |> equal(buf_mismatch_approx(bg, want), 0)
+    metal_release(bg)
+    metal_release(bu)
+    metal_release(btot)
+    metal_release(pso)
+    delete g
+    delete u
+    delete want
+}
+
+// the prefill twin (MetalSwigluOaiPf): same math over the padded bucket panel, plus the
+// liveness bound — ghost rows past the last bucket's padded end must stay UNTOUCHED
+def private swiglu_oai_pf_gate(t : T?; dev, queue; nfe : int; counts : array<int>; extra_rows : int) {
+    let tag = "swiglu_oai_pf nfe={nfe}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_swiglu_oai_pf_msl, metal_swiglu_oai_pf_msl_entry, metal_swiglu_oai_pf_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let ne = length(counts)
+    var cnt : array<uint>
+    var basep : array<uint>
+    cnt |> reserve(ne)
+    basep |> reserve(ne)
+    var pad = 0
+    for (c in counts) {
+        cnt |> push(uint(c))
+        basep |> push(uint(pad))
+        pad += (c + 31) / 32 * 32
+    }
+    let live = pad * nfe
+    let total = (pad + extra_rows) * nfe
+    var g : array<float>
+    var u : array<float>
+    g |> resize(total)
+    u |> resize(total)
+    for (i in range(total)) {
+        g[i] = float((i * 7) % 23 - 11)
+        u[i] = float((i * 5 + 3) % 23 - 11)
+    }
+    var want : array<float>
+    want |> resize(total)
+    for (i in range(total)) {
+        want[i] = i < live ? float(swiglu_oai_ref(double(g[i]), double(u[i]))) : g[i]
+    }
+    var bg = buf_upload(dev, g)
+    var bu = buf_upload(dev, u)
+    var btot = buf_u32(dev, uint(total))
+    var bcnt = buf_upload(dev, cnt)
+    var bbase = buf_upload(dev, basep)
+    var bne = buf_u32(dev, uint(ne))
+    var bnfe = buf_u32(dev, uint(nfe))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bg, 0ul, 0)
+        metal_set_buffer(enc, bu, 0ul, 1)
+        metal_set_buffer(enc, btot, 0ul, 2)
+        metal_set_buffer(enc, bcnt, 0ul, 3)
+        metal_set_buffer(enc, bbase, 0ul, 4)
+        metal_set_buffer(enc, bne, 0ul, 5)
+        metal_set_buffer(enc, bnfe, 0ul, 6)
+        metal_dispatch_threadgroups(enc, uint3(uint((total / 4 + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    t |> equal(buf_mismatch_approx(bg, want), 0)
+    metal_release(bg)
+    metal_release(bu)
+    metal_release(btot)
+    metal_release(bcnt)
+    metal_release(bbase)
+    metal_release(bne)
+    metal_release(bnfe)
+    metal_release(pso)
+    delete cnt
+    delete basep
+    delete g
+    delete u
+    delete want
+}
+
+// gemma4 router-input norm (MetalG4RouterNorm): y = x * (1/sqrt(mean(x^2)+eps)) * invd * rs
+def private g4_router_norm_gate(t : T?; dev, queue; rows, dim : int) {
+    let tag = "g4_router_norm rows={rows} dim={dim}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_g4_router_norm_msl, metal_g4_router_norm_msl_entry, metal_g4_router_norm_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let eps = 1.0e-5
+    let invd = 1.0 / sqrt(float(dim))
+    var x : array<float>
+    var rs : array<float>
+    x |> resize(rows * dim)
+    rs |> resize(dim)
+    for (i in range(rows * dim)) {
+        x[i] = 0.13 * float(i % 29) - 1.7
+    }
+    for (i in range(dim)) {
+        rs[i] = 0.07 * float(i % 17) - 0.5
+    }
+    var want : array<float>
+    want |> resize(rows * dim)
+    for (r in range(rows)) {
+        var ss = 0.0lf
+        for (c in range(dim)) {
+            ss += double(x[r * dim + c]) * double(x[r * dim + c])
+        }
+        let inv = (1.0lf / sqrt(ss / double(dim) + double(eps))) * double(invd)
+        for (c in range(dim)) {
+            want[r * dim + c] = float(double(x[r * dim + c]) * inv * double(rs[c]))
+        }
+    }
+    var bx = buf_upload(dev, x)
+    var brs = buf_upload(dev, rs)
+    var by = buf_fill(dev, rows * dim, -1000.0)
+    var bdim = buf_u32(dev, uint(dim))
+    var beps = buf_f32(dev, eps)
+    var binvd = buf_f32(dev, invd)
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_threadgroup_memory_length(enc, metal_g4_router_norm_msl_tgmem, 0)
+        metal_set_buffer(enc, bx, 0ul, 0)
+        metal_set_buffer(enc, brs, 0ul, 1)
+        metal_set_buffer(enc, by, 0ul, 2)
+        metal_set_buffer(enc, bdim, 0ul, 3)
+        metal_set_buffer(enc, beps, 0ul, 4)
+        metal_set_buffer(enc, binvd, 0ul, 5)
+        metal_dispatch_threadgroups(enc, uint3(uint(rows), 1u, 1u), uint3(256u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    t |> equal(buf_mismatch_approx(by, want), 0)
+    metal_release(bx)
+    metal_release(brs)
+    metal_release(by)
+    metal_release(bdim)
+    metal_release(beps)
+    metal_release(binvd)
+    metal_release(pso)
+    delete x
+    delete rs
+    delete want
+}
+
+// gemma4 per-expert down-scale fold (MetalMoeWScale): selw[r][j] *= ds[seli[r][j]] in place on
+// the mixed sel buffer (uint idx half + float w half) — compared as raw uint bits
+def private moe_wscale_gate(t : T?; dev, queue; rows, nk, ne : int) {
+    let tag = "moe_wscale rows={rows} nk={nk}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_moe_wscale_msl, metal_moe_wscale_msl_entry, metal_moe_wscale_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    var ds : array<float>
+    ds |> resize(ne)
+    for (e in range(ne)) {
+        ds[e] = float((e * 3) % 7 - 3) * 0.5
+    }
+    var sel : array<uint>
+    var want : array<uint>
+    sel |> resize(rows * 2 * nk)
+    want |> resize(rows * 2 * nk)
+    for (r in range(rows)) {
+        for (j in range(nk)) {
+            let idx = uint((r * 3 + j * 5) % ne)
+            let w = float((r + j * 7) % 9 - 4) * 0.25
+            sel[r * 2 * nk + j] = idx
+            sel[r * 2 * nk + nk + j] = float_bits_to_uint(w)
+            want[r * 2 * nk + j] = idx
+            want[r * 2 * nk + nk + j] = float_bits_to_uint(w * ds[int(idx)])
+        }
+    }
+    var bsel = buf_upload(dev, sel)
+    var bds = buf_upload(dev, ds)
+    var bnk = buf_u32(dev, uint(nk))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bsel, 0ul, 0)   // uint idx view
+        metal_set_buffer(enc, bsel, 0ul, 1)   // float w view of the same buffer
+        metal_set_buffer(enc, bds, 0ul, 2)
+        metal_set_buffer(enc, bnk, 0ul, 3)
+        metal_dispatch_threadgroups(enc, uint3(uint(rows), 1u, 1u), uint3(32u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    t |> equal(buf_mismatch_exact(bsel, want), 0)
+    metal_release(bsel)
+    metal_release(bds)
+    metal_release(bnk)
+    metal_release(pso)
+    delete ds
+    delete sel
+    delete want
+}
+
+// the batched prefill router GEMV (MetalMoeRouterB): logits[st][e] = w[e]·x[st] (+ rb[e]),
+// 8 streams per tg column, pad streams clamp and their stores gate — BIT-exact fixture
+def private moe_router_b_gate(t : T?; dev, queue; dim, ne, npos : int; hasb : bool) {
+    let tag = "moe_router_b dim={dim} ne={ne} np={npos}{hasb ? " bias" : ""}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_moe_router_b_msl, metal_moe_router_b_msl_entry, metal_moe_router_b_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    var w : array<float>
+    var x : array<float>
+    var rb : array<float>
+    w |> resize(ne * dim)
+    x |> resize(npos * dim)
+    rb |> resize(ne)
+    for (i in range(ne * dim)) {
+        w[i] = float((i * 5) % 9 - 4) * 0.5
+    }
+    for (i in range(npos * dim)) {
+        x[i] = float((i * 7 + 2) % 9 - 4) * 0.25
+    }
+    for (e in range(ne)) {
+        rb[e] = float((e * 11) % 9 - 4) * 0.125
+    }
+    var want : array<float>
+    want |> resize(npos * ne)
+    for (st in range(npos)) {
+        for (e in range(ne)) {
+            var acc = 0.0lf
+            for (c in range(dim)) {
+                acc += double(w[e * dim + c]) * double(x[st * dim + c])
+            }
+            if (hasb) {
+                acc += double(rb[e])
+            }
+            want[st * ne + e] = float(acc)
+        }
+    }
+    var bw = buf_upload(dev, w)
+    var bx = buf_upload(dev, x)
+    var by = buf_fill(dev, npos * ne, -1000.0)
+    var bdim = buf_u32(dev, uint(dim))
+    var bne = buf_u32(dev, uint(ne))
+    var brb = buf_upload(dev, rb)
+    var bhasb = buf_u32(dev, hasb ? 1u : 0u)
+    var bnp = buf_u32(dev, uint(npos))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bw, 0ul, 0)
+        metal_set_buffer(enc, bx, 0ul, 1)
+        metal_set_buffer(enc, by, 0ul, 2)
+        metal_set_buffer(enc, bdim, 0ul, 3)
+        metal_set_buffer(enc, bne, 0ul, 4)
+        metal_set_buffer(enc, bdim, 0ul, 5)   // per-stream x stride = dim
+        metal_set_buffer(enc, brb, 0ul, 6)
+        metal_set_buffer(enc, bhasb, 0ul, 7)
+        metal_set_buffer(enc, bnp, 0ul, 8)
+        metal_dispatch_threadgroups(enc, uint3(uint((ne + 3) / 4), uint((npos + 7) / 8), 1u), uint3(128u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    t |> equal(buf_mismatch_exact(by, want), 0)
+    metal_release(bw)
+    metal_release(bx)
+    metal_release(by)
+    metal_release(bdim)
+    metal_release(bne)
+    metal_release(brb)
+    metal_release(bhasb)
+    metal_release(bnp)
+    metal_release(pso)
+    delete w
+    delete x
+    delete rb
+    delete want
+}
+
+// the atomics-free CSR pair (MetalMoeCount -> MetalMoeBucket) chained as production dispatches
+// them: cnt, then padded-prefix basep + serial-order bkt/inv — all four outputs checked exactly
+// (pad bkt slots stay at the 0xFFFFFFFF sentinel)
+def private moe_csr_gate(t : T?; dev, queue; npos, ne, nk : int) {
+    let tag = "moe_csr np={npos} ne={ne} nk={nk}"
+    var err : string
+    var psoC = pipeline_from_source(dev, metal_moe_count_msl, metal_moe_count_msl_entry, metal_moe_count_msl_fastmath, err)
+    t |> success(psoC != null, "{tag}: count pipeline: {err}")
+    return if (psoC == null)
+    var psoB = pipeline_from_source(dev, metal_moe_bucket_msl, metal_moe_bucket_msl_entry, metal_moe_bucket_msl_fastmath, err)
+    t |> success(psoB != null, "{tag}: bucket pipeline: {err}")
+    if (psoB == null) {
+        metal_release(psoC)
+        return
+    }
+    let total = npos * nk
+    var sel : array<uint>
+    sel |> resize(npos * 2 * nk)
+    for (r in range(npos)) {
+        for (j in range(nk)) {
+            sel[r * 2 * nk + j] = uint((r * 3 + j * 5 + 1) % ne)
+            sel[r * 2 * nk + nk + j] = float_bits_to_uint(1.0)   // weight half — unread here
+        }
+    }
+    var cntw : array<uint>
+    var basew : array<uint>
+    cntw |> resize(ne)
+    basew |> resize(ne)
+    for (e in range(ne)) {
+        var n = 0u
+        for (tt in range(total)) {
+            if (int(sel[(tt / nk) * 2 * nk + tt % nk]) == e) {
+                n++
+            }
+        }
+        cntw[e] = n
+    }
+    var pad = 0
+    for (e in range(ne)) {
+        basew[e] = uint(pad)
+        pad += (int(cntw[e]) + 31) / 32 * 32
+    }
+    var bktw : array<uint>
+    var invw : array<uint>
+    bktw |> resize(pad)
+    invw |> resize(total)
+    for (i in range(pad)) {
+        bktw[i] = 0xFFFFFFFF
+    }
+    for (e in range(ne)) {
+        var b = int(basew[e])
+        for (tt in range(total)) {
+            if (int(sel[(tt / nk) * 2 * nk + tt % nk]) == e) {
+                bktw[b] = uint(tt)
+                invw[tt] = uint(b)
+                b++
+            }
+        }
+    }
+    var bsel = buf_upload(dev, sel)
+    var bcnt = buf_fill(dev, ne, 0xFFFFFFFF)
+    var bbase = buf_fill(dev, ne, 0xFFFFFFFF)
+    var bbkt = buf_fill(dev, pad, 0xFFFFFFFF)
+    var binv = buf_fill(dev, total, 0xFFFFFFFF)
+    var btot = buf_u32(dev, uint(total))
+    var bnk = buf_u32(dev, uint(nk))
+    var bne = buf_u32(dev, uint(ne))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, psoC)
+        metal_set_buffer(enc, bsel, 0ul, 0)
+        metal_set_buffer(enc, bcnt, 0ul, 1)
+        metal_set_buffer(enc, btot, 0ul, 2)
+        metal_set_buffer(enc, bnk, 0ul, 3)
+        metal_dispatch_threadgroups(enc, uint3(uint(ne), 1u, 1u), uint3(32u, 1u, 1u))
+        metal_set_pipeline(enc, psoB)
+        metal_set_buffer(enc, bsel, 0ul, 0)
+        metal_set_buffer(enc, bbase, 0ul, 1)
+        metal_set_buffer(enc, bbkt, 0ul, 2)
+        metal_set_buffer(enc, binv, 0ul, 3)
+        metal_set_buffer(enc, btot, 0ul, 4)
+        metal_set_buffer(enc, bnk, 0ul, 5)
+        metal_set_buffer(enc, bcnt, 0ul, 6)
+        metal_set_buffer(enc, bne, 0ul, 7)
+        metal_dispatch_threadgroups(enc, uint3(uint(ne), 1u, 1u), uint3(32u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_exact(bcnt, cntw), 0)
+        t |> equal(buf_mismatch_exact(bbase, basew), 0)
+        t |> equal(buf_mismatch_exact(bbkt, bktw), 0)
+        t |> equal(buf_mismatch_exact(binv, invw), 0)
+    }
+    metal_release(bsel)
+    metal_release(bcnt)
+    metal_release(bbase)
+    metal_release(bbkt)
+    metal_release(binv)
+    metal_release(btot)
+    metal_release(bnk)
+    metal_release(bne)
+    metal_release(psoC)
+    metal_release(psoB)
+    delete sel
+    delete cntw
+    delete basew
+    delete bktw
+    delete invw
+}
+
+// the ordered weighted reduce (MetalMoeReduce): y[r] = sum_j selw[r][j] * dn[inv[r*k+j]] in
+// slot order — BIT-exact on the pow2 fixture
+def private moe_reduce_gate(t : T?; dev, queue; dim, npos, nk : int) {
+    let tag = "moe_reduce dim={dim} np={npos} nk={nk}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_moe_reduce_msl, metal_moe_reduce_msl_entry, metal_moe_reduce_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let nrows_dn = npos * nk + 7
+    var dn : array<float>
+    dn |> resize(nrows_dn * dim)
+    for (i in range(nrows_dn * dim)) {
+        dn[i] = float((i * 5) % 9 - 4) * 0.5
+    }
+    var sel : array<uint>
+    sel |> resize(npos * 2 * nk)
+    var inv : array<uint>
+    inv |> resize(npos * nk)
+    for (r in range(npos)) {
+        for (j in range(nk)) {
+            sel[r * 2 * nk + j] = 0u
+            sel[r * 2 * nk + nk + j] = float_bits_to_uint(float((r + j * 3) % 9 - 4) * 0.25)
+            inv[r * nk + j] = uint(((r * nk + j) * 3 + 1) % nrows_dn)
+        }
+    }
+    var want : array<float>
+    want |> resize(npos * dim)
+    for (r in range(npos)) {
+        for (g in range(dim)) {
+            var acc = 0.0
+            for (j in range(nk)) {
+                acc += uint_bits_to_float(sel[r * 2 * nk + nk + j]) * dn[int(inv[r * nk + j]) * dim + g]
+            }
+            want[r * dim + g] = acc
+        }
+    }
+    var bdn = buf_upload(dev, dn)
+    var bsel = buf_upload(dev, sel)
+    var binv = buf_upload(dev, inv)
+    var by = buf_fill(dev, npos * dim, -1000.0)
+    var bdim = buf_u32(dev, uint(dim))
+    var bnk = buf_u32(dev, uint(nk))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bdn, 0ul, 0)
+        metal_set_buffer(enc, bsel, 0ul, 1)   // float w view
+        metal_set_buffer(enc, binv, 0ul, 2)
+        metal_set_buffer(enc, by, 0ul, 3)
+        metal_set_buffer(enc, bdim, 0ul, 4)
+        metal_set_buffer(enc, bnk, 0ul, 5)
+        metal_dispatch_threadgroups(enc, uint3(uint((dim + 255) / 256), uint(npos), 1u), uint3(256u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    t |> equal(buf_mismatch_exact(by, want), 0)
+    metal_release(bdn)
+    metal_release(bsel)
+    metal_release(binv)
+    metal_release(by)
+    metal_release(bdim)
+    metal_release(bnk)
+    metal_release(pso)
+    delete dn
+    delete sel
+    delete inv
+    delete want
 }
 
 // The classifier GEMV kernel on exact-arithmetic data: [d x n] Q8 rows (the 34B blob form —
