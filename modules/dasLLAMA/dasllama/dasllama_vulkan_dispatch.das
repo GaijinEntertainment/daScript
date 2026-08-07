@@ -19,7 +19,7 @@ require dasllama_kernel_access   // the shared body-walk classifier (field mode)
 //   enc_<name>(raw, h, set_, pc, ...)   — push constants + hazard dispatch
 // The read/write axis is DERIVED from the kernel body (shared classifier, field mode); declared
 // @role is a cross-checked assertion, weight/alias stay declared. The hazard rail is untouched:
-// the class pipeline registers binding masks, sets carry region bits exactly as vk_set6's do.
+// the class pipeline registers binding masks, sets carry per-binding region bits.
 
 struct private VkBufField {
     name : string

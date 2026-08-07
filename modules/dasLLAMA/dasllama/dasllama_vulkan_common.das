@@ -5,7 +5,6 @@ module dasllama_vulkan_common shared public
 options _cyclomatic_complexity = 0   // the init/teardown state walks are the domain shape
 options _function_length = 0   // same
 
-require dasllama/dasllama_vulkan_kernels   // the *_spv blobs + the derived-access spec
 require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_math
@@ -106,23 +105,12 @@ def q8_batch_tile_for(d, cnt : int64) : int64 {
 def q8_batch_aligned(d, cnt : int64) : bool
     => d % 128l == 0l && cnt % 128l == 0l && q8_batch_tile_for(d, cnt) == 128l
 
-def q8_batch_pipe_for(d, cnt : int64) : Pipeline
-    => q8_batch_pipe(q8_batch_tile_for(d, cnt), q8_batch_aligned(d, cnt))
-
 // a batch dispatch's tile pick + (rows, cols) edges: the cm2 twin (fmt 6) tiles 64w x 128t, q8
 // rides the router above, kq the fixed BATCH_TILE — one source so wg counts, meta fills, and the
-// pipe pick can never disagree
+// class pick can never disagree
 def batch_tile_edges(fmt : int; d, cnt : int64) : tuple<tile : int64; td : int64; tc : int64> {
     let tile = fmt == 0 ? q8_batch_tile_for(d, cnt) : BATCH_TILE
     return (tile = tile, td = fmt == 6 ? 64l : tile, tc = fmt == 6 ? 128l : tile)
-}
-
-// resident prefill GEMM pipe: a fmt-6 role rides the cm2 twin, everything else the q8 tile router
-def pf_gemm_pipe(fmt6 : bool; d, cnt : int64) : Pipeline {
-    if (fmt6) {
-        return weak_copy(g_gpu.batch_cm2)
-    }
-    return q8_batch_pipe_for(d, cnt)
 }
 let BATCH_CHUNK_ROWS = 8_192l      // dispatch row-window cap (bounds y and the wg map)
 let BATCH_HQ_BYTES = 33_554_432l   // device requantized-hidden quants (the down GEMM's activations)
@@ -345,52 +333,8 @@ struct GpuState {
     fam : uint
     queue : VkQueue
     pool : CommandPool
-    set_layout : DescriptorSetLayout
     desc_pools : array<DescriptorPool>   // the pool chain: fixed chunks, grown on exhaustion
     desc_pool_at : int                   // chain cursor — allocation fills chunk [at], overflow advances; drop resets to 0
-    pipe_layout : PipelineLayout
-    pipeline : Pipeline
-    batch_pipeline : Pipeline   // prefill batched-GEMM kernel (same set/pipe layout)
-    batch_coopmat_f16 : Pipeline  // prefill Q8_0 GEMM on tensor cores, f16-dequant (DASLLAMA_COOPMAT=f16)
-    batch_coopmat_i8 : Pipeline   // prefill Q8_0 GEMM on tensor cores, native s8 (DASLLAMA_COOPMAT=int8)
-    batch_coopmat_q40 : Pipeline  // prefill Q4_0 GEMM on tensor cores, f16-dequant (COOPMAT=f16, fmt 4)
-    batch_coopmat_mm : Pipeline   // prefill Q8_0 GEMM, the mul_mm 128x128 L-tile (DASLLAMA_COOPMAT=mm)
-    batch_coopmat_mm_m : Pipeline // ... its 64x64 M-tile twin, routed in for small-cnt dispatches
-    batch_coopmat_mm_a : Pipeline // ... the aligned-L twin (no staging guards/edge path — 2.2x the L rate)
-    batch_cm2 : Pipeline          // the cm2 decode-in-load prefill twin (mode 4, fmt-6 q8n stacks)
-    gemv_q8n : Pipeline           // the q8n native-block decode GEMV (mode 4's fmt-6 groupn twin)
-    xf16_pipeline : Pipeline      // cm2 chain: Q8_0 activation image -> f16 plane
-    actf16_pipeline : Pipeline    // cm2 chain: act(g)*u -> f16 hidden plane (the actrq stand-in)
-    f16cvt_pipeline : Pipeline    // arena cm2 chain: f32 rows -> f16 plane (the quant-role stand-in)
-    actrq_pipeline : Pipeline   // fused act(g)*u + q8_0 requant of the hidden rows
-    gemv_k4 : Pipeline          // native K-quant GEMVs (per-format decode kernels)
-    gemv_k5 : Pipeline
-    gemv_k6 : Pipeline
-    gemv_q40 : Pipeline
-    actrq_k_pipeline : Pipeline // fused act + Q8_K requant twin (per-256 scale) for the kq chains
-    batch_k4 : Pipeline         // native K-quant prefill tiles (per-format batch kernels)
-    batch_k5 : Pipeline
-    batch_k6 : Pipeline
-    batch_q40 : Pipeline
-    comb_pipeline : Pipeline    // routed weighted-sum combine (device-side reduce, prefill batches)
-    dn_conv_pipeline : Pipeline // deltanet conv + SiLU + q/k L2-norm (one workgroup per position)
-    dnd_fused_pipeline : Pipeline // deltanet decode step, whole chain fused (one workgroup per v-head)
-    dn_scan_p1_pipeline : Pipeline // deltanet scan phase 1: chunk-local pieces (wg per head x chunk)
-    dn_scan_p2_pipeline : Pipeline // deltanet scan phase 2: sequential state chain (wg per v-head)
-    dn_rq_pipeline : Pipeline   // plain Q8_0 requant of the scan's o rows (out-proj image)
-    at_prep_q_pipeline : Pipeline   // attention q(|gate) deinterleave + qk-rms + partial rope
-    at_prep_k_pipeline : Pipeline   // attention k rms + rope, written at absolute batch positions
-    at_attn_pipeline : Pipeline     // flash-style causal attention (GQA, online softmax, out-gate)
-    q8k_rq_pipeline : Pipeline      // plain Q8_K requant (the kq wo GEMM's activation image)
-    ar_pipeline : Pipeline          // add + RMSNorm, one wg per row (meta[1]=0 = norm only); decode dispatches 1 wg
-    ar_rq_pipeline : Pipeline       // resident driver: the above + the Q8_0 requant, one pass (DASLLAMA_VK_FUSE)
-    rks_pipeline : Pipeline         // resident driver: fused rope + KV-row store (f32 mirror)
-    qkn_rope_pipeline : Pipeline    // resident driver: per-head q/k rmsnorm + rope + KV store, one pass
-    da_pipeline : Pipeline          // resident driver: decode attention over the f32 KV mirror
-    rks_b_pipeline : Pipeline       // prefill: batched rope + KV-store
-    da_b_pipeline : Pipeline        // prefill: batched causal attention (generic hs)
-    da_b128_pipeline : Pipeline     // prefill: the hs=128 coopmat flash-attention twin (coopmat devices)
-    qkn_pipeline : Pipeline         // resident driver: per-head q/k rmsnorm (qk_norm models), decode + prefill
     staging : HostBuf
     fence : VkFence          // the one reusable submit fence (reset after every wait)
     rows_per_wg : int64      // subgroups per workgroup = output rows per workgroup
@@ -950,90 +894,20 @@ def vk_moe_init : bool {
     pci.flags.reset_command_buffer = true   // per-stack buffers re-record if a shape ever changes
     g_gpu.pool <- create_command_pool(g_gpu.device, pci)
 
-    // one layout, MAX_STACKS sets: each resident stack gets its own set at upload time
-    var dslci : DescriptorSetLayoutCreateInfo
-    dslci.pBindings |> reserve(6)
-    for (bind in range(6)) {
-        var b0 = DescriptorSetLayoutBinding(binding = uint(bind),
-                                            descriptorType = VkDescriptorType.STORAGE_BUFFER,
-                                            descriptorCount = 1u)
-        b0.stageFlags.compute = true
-        dslci.pBindings |> emplace(b0)
-    }
-    g_gpu.set_layout <- create_descriptor_set_layout(g_gpu.device, dslci)
     desc_pool_grow()   // chunk 0 — the chain grows on demand from here
-
-    var plci : PipelineLayoutCreateInfo
-    plci.pSetLayouts <- [weak_copy(g_gpu.set_layout)]
-    g_gpu.pipe_layout <- create_pipeline_layout(g_gpu.device, plci)
     g_pipe_access |> clear()
-    g_gpu.pipeline <- make_kernel_pipe("q8_moe_groupn", q8_moe_groupn_spv)
-    g_gpu.batch_pipeline <- make_kernel_pipe("q8_moe_batch", q8_moe_batch_spv)   // same 6-binding layout
-    if (g_gpu.coopmat_mode == 1) {   // f16 tensor-core prefill GEMMs (coopmat device only)
-        g_gpu.batch_coopmat_f16 <- make_kernel_pipe("q8_moe_batch_cmf16", q8_moe_batch_cmf16_spv)
-        g_gpu.batch_coopmat_q40 <- make_kernel_pipe("kq_moe_batch_q40_cmf16", kq_moe_batch_q40_cmf16_spv)
-    } elif (g_gpu.coopmat_mode == 2) {   // native-s8 tensor-core prefill GEMM
-        g_gpu.batch_coopmat_i8 <- make_kernel_pipe("q8_moe_batch_cmi8", q8_moe_batch_cmi8_spv)
-    } elif (g_gpu.coopmat_mode >= 3) {   // the mul_mm L/M-tile prefill GEMMs (routed per dispatch;
-        // mode 4 keeps the whole mm ladder for fmt-0 stacks and adds the cm2 rails for fmt-6)
-        g_gpu.batch_coopmat_mm <- make_kernel_pipe("q8_moe_batch_mm", q8_moe_batch_mm_spv)
-        g_gpu.batch_coopmat_mm_m <- make_kernel_pipe("q8_moe_batch_mm_m", q8_moe_batch_mm_m_spv)
-        g_gpu.batch_coopmat_mm_a <- make_kernel_pipe("q8_moe_batch_mm_a", q8_moe_batch_mm_a_spv)
-        if (g_gpu.coopmat_mode == 4) {
-            g_gpu.batch_cm2 <- make_kernel_pipe("q8n_moe_batch_cm2", q8n_moe_batch_cm2_spv)
-            g_gpu.gemv_q8n <- make_kernel_pipe("q8n_moe_groupn", q8n_moe_groupn_spv)
-            g_gpu.xf16_pipeline <- make_kernel_pipe("q8_moe_xf16", q8_moe_xf16_spv)
-            g_gpu.actf16_pipeline <- make_kernel_pipe("q8_moe_actf16", q8_moe_actf16_spv)
-            g_gpu.f16cvt_pipeline <- make_kernel_pipe("rd_f16cvt", rd_f16cvt_spv)
-        }
-    }
-    g_gpu.actrq_pipeline <- make_kernel_pipe("q8_moe_actrq", q8_moe_actrq_spv)
-    g_gpu.gemv_k4 <- make_kernel_pipe("kq_moe_gemv_k4", kq_moe_gemv_k4_spv)
-    g_gpu.gemv_k5 <- make_kernel_pipe("kq_moe_gemv_k5", kq_moe_gemv_k5_spv)
-    g_gpu.gemv_k6 <- make_kernel_pipe("kq_moe_gemv_k6", kq_moe_gemv_k6_spv)
-    g_gpu.gemv_q40 <- make_kernel_pipe("kq_moe_gemv_q40", kq_moe_gemv_q40_spv)
-    g_gpu.actrq_k_pipeline <- make_kernel_pipe("q8k_moe_actrq", q8k_moe_actrq_spv)
-    g_gpu.batch_k4 <- make_kernel_pipe("kq_moe_batch_k4", kq_moe_batch_k4_spv)
-    g_gpu.batch_k5 <- make_kernel_pipe("kq_moe_batch_k5", kq_moe_batch_k5_spv)
-    g_gpu.batch_k6 <- make_kernel_pipe("kq_moe_batch_k6", kq_moe_batch_k6_spv)
-    g_gpu.batch_q40 <- make_kernel_pipe("kq_moe_batch_q40", kq_moe_batch_q40_spv)
-    g_gpu.comb_pipeline <- make_kernel_pipe("moe_combine", moe_combine_spv)
-    // dn_conv stages a full row in shared (cv_row+cv_scale = 33024 B); Apple
-    // caps threadgroup memory at 32 KB and pipeline COMPILE fails, so the chain gates by limit
+    // every kernel is a [vk_dispatch] class (own set/pipeline layouts, pipelines built lazily
+    // via ensure_*); only the shared-memory capability gates settle here (dn_conv/at_* stage
+    // 33024 B rows; Apple caps threadgroup memory at 32 KB and pipeline COMPILE fails)
     var limits_props : VkPhysicalDeviceProperties
     vkGetPhysicalDeviceProperties(g_gpu.phys, limits_props)
     g_gpu.dn_shared_ok = limits_props.limits.maxComputeSharedMemorySize >= 33024u
-    if (g_gpu.dn_shared_ok) {
-        g_gpu.dn_conv_pipeline <- make_kernel_pipe("dn_conv", dn_conv_spv)
-        g_gpu.dnd_fused_pipeline <- make_kernel_pipe("dn_step_fused", dn_step_fused_spv)
-        g_gpu.dn_scan_p1_pipeline <- make_kernel_pipe("dn_scan_p1", dn_scan_p1_spv)
-        g_gpu.dn_scan_p2_pipeline <- make_kernel_pipe("dn_scan_p2", dn_scan_p2_spv)
-        g_gpu.dn_rq_pipeline <- make_kernel_pipe("dn_requant", dn_requant_spv)
-    } else {
+    if (!g_gpu.dn_shared_ok) {
         set_moe_gpu_dn_route(false)
         set_moe_gpu_dnd_route(false)
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: deltanet chain declined — device shared-memory cap {int(limits_props.limits.maxComputeSharedMemorySize)} B < dn_conv's 33024 B tile; recurrent layers stay on the CPU rail\n")
-    }
-    // at_* stages a full projection row in shared like dn_conv (33024 B) — same limit gate
-    if (g_gpu.dn_shared_ok) {
-        g_gpu.at_prep_q_pipeline <- make_kernel_pipe("at_prep_q", at_prep_q_spv)
-        g_gpu.at_prep_k_pipeline <- make_kernel_pipe("at_prep_k", at_prep_k_spv)
-        g_gpu.at_attn_pipeline <- make_kernel_pipe("at_attn", at_attn_spv)
-    } else {
         set_moe_gpu_attn_route(false)
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: deltanet + prefill-attention chains declined — device shared-memory cap {int(limits_props.limits.maxComputeSharedMemorySize)} B < the 33024 B row tile; those layers stay on the CPU rail\n")
     }
-    g_gpu.q8k_rq_pipeline <- make_kernel_pipe("q8k_requant", q8k_requant_spv)
-    g_gpu.ar_pipeline <- make_kernel_pipe("ar_add_rms_b", ar_add_rms_b_spv)   // decode seams dispatch it 1-wg
-    g_gpu.rks_pipeline <- make_kernel_pipe("rope_kv_store", rope_kv_store_spv)
-    g_gpu.da_pipeline <- make_kernel_pipe("da_attn", da_attn_spv)
-    g_gpu.rks_b_pipeline <- make_kernel_pipe("rope_kv_store_b", rope_kv_store_b_spv)
-    g_gpu.da_b_pipeline <- make_kernel_pipe("da_attn_b", da_attn_b_spv)
-    if (g_gpu.has_coopmat) {
-        g_gpu.da_b128_pipeline <- make_kernel_pipe("da_attn_b_h128", da_attn_b_h128_spv)
-    }
-    g_gpu.qkn_pipeline <- make_kernel_pipe("qk_rms", qk_rms_spv)
-    g_gpu.ar_rq_pipeline <- make_kernel_pipe("ar_add_rms_rq", ar_add_rms_rq_spv)
-    g_gpu.qkn_rope_pipeline <- make_kernel_pipe("qkn_rope_kv", qkn_rope_kv_spv)
 
     var fence <- create_fence(g_gpu.device, FenceCreateInfo())   // never finalized (process-lifetime)
     g_gpu.fence = boost_value_to_vk(fence)
@@ -1132,37 +1006,12 @@ def alloc_set_from_chain(var layout) : VkDescriptorSet {
     return raw
 }
 
-def alloc_desc_set : VkDescriptorSet {
-    return alloc_set_from_chain(boost_value_to_vk(g_gpu.set_layout))
-}
-
 def write_buf_desc(var writes : array<WriteDescriptorSet>; set_ : VkDescriptorSet; binding : uint; buf : uint64; bytes : int64) {
     var w = WriteDescriptorSet(dstSet = vk_value_to_boost(set_), dstBinding = binding,
                                descriptorType = VkDescriptorType.STORAGE_BUFFER, descriptorCount = 1u)
     var binfo = DescriptorBufferInfo(buffer = nonowning_buf(buf), range_ = uint64(bytes))
     w.pBufferInfo |> push(binfo)
     writes |> emplace(w)
-}
-
-// (re)write all six bindings of a set + declare its hazard region bits — every dispatchable set
-// in the family is built through here (or vk_set6, which allocates first)
-def vk_write6(set_ : VkDescriptorSet; b0, b1, b2, b3, b4, b5 : uint64; s0, s1, s2, s3, s4, s5 : int64; gbits : uint[6]) {
-    var writes : array<WriteDescriptorSet>
-    write_buf_desc(writes, set_, 0u, b0, s0)
-    write_buf_desc(writes, set_, 1u, b1, s1)
-    write_buf_desc(writes, set_, 2u, b2, s2)
-    write_buf_desc(writes, set_, 3u, b3, s3)
-    write_buf_desc(writes, set_, 4u, b4, s4)
-    write_buf_desc(writes, set_, 5u, b5, s5)
-    let no_copies : array<CopyDescriptorSet>
-    update_descriptor_sets(g_gpu.device, writes, no_copies)
-    hz_set_bits(set_, gbits)
-}
-
-def vk_set6(b0, b1, b2, b3, b4, b5 : uint64; s0, s1, s2, s3, s4, s5 : int64; gbits : uint[6]) : VkDescriptorSet {
-    var set_ = alloc_desc_set()
-    vk_write6(set_, b0, b1, b2, b3, b4, b5, s0, s1, s2, s3, s4, s5, gbits)
-    return set_
 }
 
 // weight plane byte sizes for one [rows x n] stack in the tier's device layout
@@ -2149,28 +1998,13 @@ var @scratch g_pipe_names : table<uint64; string>   // VkPipeline -> kernel name
 var @scratch g_vk_kcov : table<uint64; int64>       // VkPipeline -> dispatches (CODEREVIEW rule 17)
 
 struct SetBits {
-    b : uint[8]   // per-binding region bits; class sets go to 8 bindings, vk_set6 uses 0-5
-}
-
-def ensure_kernel_access {
-    if (!empty(g_kernel_access)) {
-        return
-    }
-    for (ent in split(vk_kernels_access_spec(), ";")) {
-        if (ent == "") {
-            continue
-        }
-        let nv <- split(ent, "=")
-        let rw <- split(nv[1], ",")
-        g_kernel_access |> insert(nv[0], uint2(uint(to_int(rw[0])), uint(to_int(rw[1]))))
-    }
+    b : uint[8]   // per-binding region bits (up to 8 declared bindings per class)
 }
 
 //! Census seed: every [vk_dispatch] kernel joins the coverage universe at program start (the
 //! macro generates an [init] calling this), so a never-dispatched class kernel gets its LOUD
-//! zero row like the module-global kernels always did.
+//! zero row.
 def vkd_census_seed(kernel : string; rmask, wmask : uint) {
-    ensure_kernel_access()
     g_kernel_access[kernel] = uint2(rmask, wmask)
 }
 
@@ -2196,21 +2030,11 @@ def hz_set_bits(set_ : VkDescriptorSet; gbits : uint[6]) {
 }
 
 def hz_pipe_register(pipe : Pipeline; kernel : string) {
-    ensure_kernel_access()
     if (!key_exists(g_kernel_access, kernel)) {
-        panic("dasLLAMA vulkan lens: no derived access for kernel {kernel}")
+        panic("dasLLAMA vulkan tier: no derived access for kernel {kernel}")
     }
     g_pipe_access[intptr(boost_value_to_vk(pipe))] = g_kernel_access[kernel]
     g_pipe_names[intptr(boost_value_to_vk(pipe))] = kernel
-}
-
-// create a kernel's pipeline and register its lens-derived access masks (the shader-module local
-// is deliberately never finalized — same lifetime the hand-written creation block had)
-def make_kernel_pipe(kernel : string; var spv : array<uint>) : Pipeline {
-    var shader <- create_shader_module(g_gpu.device, spv)
-    var pipe <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, shader)
-    hz_pipe_register(pipe, kernel)
-    return <- pipe
 }
 
 // ===== the class-kernel dispatch rail ([vk_dispatch]-generated code calls these) =====
@@ -2338,19 +2162,9 @@ def hz_masks(pipe : Pipeline; var set_ : VkDescriptorSet) : tuple<r : uint; w : 
     return (r, w)
 }
 
-// the derived-mask dispatch node: declare via the composed masks, bind, dispatch
-def hz_dispatch(raw : VkCommandBuffer; var h : VkHaz; pipe : Pipeline; var set_ : VkDescriptorSet; groups : uint) {
-    let m = hz_masks(pipe, set_)
-    g_vk_kcov[intptr(boost_value_to_vk(pipe))]++
-    vhz_dep(raw, h, m.r, m.w)
-    cmd_bind_pipeline(vk_value_to_boost(raw), pipe, VkPipelineBindPoint.COMPUTE)
-    cmd_bind_dispatch(raw, set_, groups)
-}
-
-//! Per-kernel dispatch counts (name -> count) — every kernel in the lens spec appears, so a 0
-//! row is "spec'd but never dispatched" (the coverage census, CODEREVIEW rule 17).
+//! Per-kernel dispatch counts (name -> count) — every seeded [vk_dispatch] kernel appears, so a
+//! 0 row is "compiled but never dispatched" (the coverage census, CODEREVIEW rule 17).
 def public vk_kernel_coverage() : table<string; int64> {
-    ensure_kernel_access()
     var out <- {for (name in keys(g_kernel_access)); name => 0l}
     for (k, n in keys(g_vk_kcov), values(g_vk_kcov)) {
         out[g_pipe_names?[k] ?? "pipe_{k}"] += n
@@ -2382,7 +2196,7 @@ def public vk_kernel_coverage_report {
             to_log(LOG_WARNING, "vulkan kernel coverage: {name} NEVER DISPATCHED this run — coverage gap or dead kernel (human call)\n")
         }
     }
-    to_log(LOG_INFO, "vulkan kernel coverage: {served} dispatched, {dead} never-dispatched of {length(names)} in the lens spec\n")
+    to_log(LOG_INFO, "vulkan kernel coverage: {served} dispatched, {dead} never-dispatched of {length(names)} seeded kernels\n")
     delete names
     delete cov
 }
@@ -2467,11 +2281,6 @@ def vhz_dep(raw : VkCommandBuffer; var h : VkHaz; rmask, wmask : uint; transfer 
     }
 }
 
-def rd_dispatch(raw : VkCommandBuffer; pipe : Pipeline; var set : VkDescriptorSet; groups : uint; var h : VkHaz) {
-    hz_dispatch(raw, h, pipe, set, groups)
-    pfq_ts(raw)
-}
-
 // One-shot command buffers (the KV readback rails) are freed by their caller — registering them
 // in model_cmds would grow it per hydration until the next model drop.
 def alloc_transient_cmd : VkCommandBuffer {
@@ -2496,76 +2305,6 @@ def alloc_cmd : VkCommandBuffer {
     var raw = alloc_transient_cmd()
     g_gpu.model_cmds |> push(raw)   // all persistent cmds are model-owned; freed by the model drop
     return raw
-}
-
-def cmd_bind_dispatch(raw : VkCommandBuffer; var set_ : VkDescriptorSet; groups : uint) {
-    unsafe {
-        vkCmdBindDescriptorSets(raw, VkPipelineBindPoint.COMPUTE, boost_value_to_vk(g_gpu.pipe_layout), 0u, 1u, addr(set_), 0u, null)
-    }
-    vkCmdDispatch(raw, groups, 1u, 1u)
-}
-
-// the GEMV pipeline for a stack's format (the arena fmt slot IS the KqFmt ordinal)
-def gemv_pipe(fmt : int) : Pipeline {
-    if (fmt == int(KqFmt.q8)) {
-        return weak_copy(g_gpu.pipeline)
-    } elif (fmt == int(KqFmt.k4)) {
-        return weak_copy(g_gpu.gemv_k4)
-    } elif (fmt == int(KqFmt.k5)) {
-        return weak_copy(g_gpu.gemv_k5)
-    } elif (fmt == int(KqFmt.k6)) {
-        return weak_copy(g_gpu.gemv_k6)
-    } elif (fmt == int(KqFmt.q40)) {
-        return weak_copy(g_gpu.gemv_q40)
-    } elif (fmt == int(KqFmt.q8n)) {
-        return weak_copy(g_gpu.gemv_q8n)
-    }
-    panic("dasLLAMA vulkan tier: no GEMV kernel for stack format {fmt}")
-    return weak_copy(g_gpu.pipeline)
-}
-
-var g_mm_m_logged = false   // one-time mul_mm M-tile engagement log
-
-// The Q8_0 prefill batch pipeline, switched to the tensor-core coopmat variant when DASLLAMA_COOPMAT
-// selected one (weak alias — g_gpu owns). `tile` = the edge the caller's meta used; picks L vs M in mm mode.
-def q8_batch_pipe(tile : int64; aligned : bool = false) : Pipeline {
-    if (g_gpu.coopmat_mode == 1) {
-        return weak_copy(g_gpu.batch_coopmat_f16)
-    } elif (g_gpu.coopmat_mode == 2) {
-        return weak_copy(g_gpu.batch_coopmat_i8)
-    } elif (g_gpu.coopmat_mode >= 3) {
-        if (tile == BATCH_TILE) {   // the small tier IS the sdot4 kernel — measured, not a fallback
-            return weak_copy(g_gpu.batch_pipeline)
-        }
-        if (tile == 64l) {
-            if (!g_mm_m_logged) {
-                g_mm_m_logged = true
-                to_log(LOG_INFO, "dasLLAMA vulkan tier: mul_mm M-tile engaged\n")
-            }
-            return weak_copy(g_gpu.batch_coopmat_mm_m)
-        }
-        return weak_copy(aligned ? g_gpu.batch_coopmat_mm_a : g_gpu.batch_coopmat_mm)
-    }
-    return weak_copy(g_gpu.batch_pipeline)
-}
-
-def batch_pipe(fmt : int; tile : int64; aligned : bool = false) : Pipeline {
-    if (fmt == 0) {
-        return q8_batch_pipe(tile, aligned)
-    } elif (fmt == 1) {
-        return weak_copy(g_gpu.batch_k4)
-    } elif (fmt == 2) {
-        return weak_copy(g_gpu.batch_k5)
-    } elif (fmt == 3) {
-        return weak_copy(g_gpu.batch_k6)
-    } elif (fmt == 4) {
-        // Q4_0 rides the f16 coopmat arm too (no s8-native for nibbles — mode 2 falls back to sdot4)
-        return weak_copy(g_gpu.coopmat_mode == 1 ? g_gpu.batch_coopmat_q40 : g_gpu.batch_q40)
-    } elif (fmt == 6) {
-        return weak_copy(g_gpu.batch_cm2)
-    }
-    panic("dasLLAMA vulkan tier: no batch tile for stack format {fmt}")
-    return weak_copy(g_gpu.batch_pipeline)
 }
 
 def submit_nowait(var raw : VkCommandBuffer) {

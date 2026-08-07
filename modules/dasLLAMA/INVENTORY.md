@@ -256,7 +256,7 @@ Vulkan lacks: mx4/q51 kernels, tq4/q8 KV codecs, Argmax/EmbedQ8/EmbedK6, MoE rou
 
 **`dasllama_metal_shapes.das` — 361, `shared public`.** Requires only `dasllama_common` + `dasllama_math` — NO `das_metal` (so a non-Apple box can bake an M1 `.dlim`). `MetalDecodeDecline` (22 values, 4 RETIRED), `MetalNeed` bitfield, `metal_needs`/`record_needs`, kq-fmt GPU-support predicates, `kv_share_ok`, `dn_metal_ok`, `moe_site_ok`/`moe_metal_ok`, `decode_shape_decline` (296–343), `[init]` → `register_metal_servable`. Consumed by `metal_common` (public re-export) + `dasllama_transformer:24` — **unconditionally** (no `?das_metal` guard; deliberate portability, means the enums compile into every non-Apple build).
 
-**`dasllama_vulkan_lens.das` — 139, `shared private`.** `[vk_access]` inert marker + `[call_macro] vk_kernel_access_spec`: scans `@ssbo @binding` globals, walks every `[compute_shader]` fn with `classify_global_access`, emits `"kernel=rmask,wmask;…"` const string consumed at `math_vulkan:6225` (`ensure_kernel_access`). Single consumer.
+**`dasllama_vulkan_lens.das` — DELETED with the class-kernel arc** (its module-global `[compute_shader]` world is gone; `dasllama_vulkan_dispatch.das`'s `[vk_dispatch]` macro derives per-class access via `classify_field_access` and seeds the census directly).
 
 **`dasllama_kernel_access.das` — 371, `shared public` — the ONE genuinely shared Metal↔Vulkan component.** `AccessResult`, `AccessVisitor` (models coopmat/simdgroup/tmm2d/tg_store builtins; strictness ratchet at 247–264: tracked buffer passed whole → err), `classify_access` (same-module callee recursion), `classify_global_access` (vulkan) / `classify_field_access` (metal).
 
@@ -267,7 +267,7 @@ Vulkan lacks: mx4/q51 kernels, tq4/q8 KV codecs, Argmax/EmbedQ8/EmbedK6, MoE rou
 | Capability | Metal | Vulkan | Verdict |
 |---|---|---|---|
 | Body-walk read/write classifier | `classify_field_access` | `classify_global_access` | **SHARED** — one impl (`kernel_access.das`) |
-| Lens output | generates whole `enc_*` builder as AST | emits spec STRING, runtime re-parses | structurally different |
+| Lens output | generates whole `enc_*` builder as AST | generates `ensure_*`/`set_*`/`enc_*` as AST (`[vk_dispatch]`) | mirrored since the class-kernel arc |
 | Escape hatch | `access_force=true` (0 uses) | `[vk_access(...)]` (0 uses) | mirrored, unexercised |
 | Hazard granularity | exact byte ranges (`MemRange`, `@span`) | region BITS (3 namespaces × 6 bindings) | metal finer; vulkan coarser/cheaper |
 | Per-dispatch gate | `hz_gate` | `vhz_dep` (6353) | mirrored incl. `_PARANOID` env twin |

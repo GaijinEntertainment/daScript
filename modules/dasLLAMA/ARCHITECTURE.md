@@ -153,12 +153,12 @@ that a question answered for one backend has an obvious address in the other. Th
 
 | role | holds | must not hold |
 |---|---|---|
-| `dasllama_<gpu>_kernels`<br>`dasllama_metal_kernels`, `dasllama_vulkan_kernels` | kernel source, the derived-access/PSO census | device state, engine types |
+| the kernel home<br>`dasllama_metal_kernels`, `dasllama_vulkan_classes` | kernel source, the derived-access/PSO census | device state, engine types |
 | `dasllama_<gpu>_common`<br>`dasllama_metal_common`, `dasllama_vulkan_common` | device state, buffer/command plumbing, hazard + capture rail, profiler | driver policy |
 | `dasllama_<gpu>_decode`<br>`dasllama_metal_decode`, `dasllama_vulkan_decode` | the resident token-step driver + decode-time arms | kernel bodies |
 | `dasllama_<gpu>_prefill`<br>`dasllama_metal_prefill`, `dasllama_vulkan_prefill` | the batched prefill driver + batch arms | kernel bodies |
 | `dasllama_<gpu>_shapes`<br>`dasllama_metal_shapes` | PORTABLE servability gates — no GPU C++ require, so any box can bake | device calls |
-| `dasllama_<gpu>_lens`<br>`dasllama_metal_lens`, `dasllama_vulkan_lens` | the kernel-access macro | anything else |
+| the kernel-access lens<br>`dasllama_metal_lens` (Metal), `dasllama_vulkan_dispatch` (Vulkan — the `[vk_dispatch]` macro derives access per class) | the kernel-access macro | anything else |
 
 - **Vulkan additionally has an ENTRY, `dasllama_math_vulkan.das`** — capability probe/arm, `.dlim`
   identity source, cross-arm routers, the `[init]` installs. It re-exports the family `public`,
@@ -212,9 +212,9 @@ entry here:**
   That inversion is why their kernels↔common require directions differ.
 - **UMA vs discrete VRAM**: Metal never grows residency machinery (memory is memory); arenas,
   upload economics, mirrors and hydration are Vulkan's alone.
-- **Lens depth**: the Metal lens generates `enc_*` builders from kernel classes; Vulkan's
-  hand-built `vk_set6`/`vk_write6` ladders stand until the class-kernel arc
-  (`followup_vulkan.md` item 9) gives SPIR-V the same interface surface.
+- **Lens depth**: both lenses generate `enc_*` builders from kernel classes now — Metal via
+  `[metal_dispatch]`, Vulkan via `[vk_dispatch]` (per-class set layouts + push constants; the
+  class-kernel arc retired the hand-built 6-slot set ladders outright).
 - **Vulkan has no shapes module yet** — `resident_upload` declines ad hoc by feature name; the
   gap is `followup_vulkan.md` item 1, not a precedent to copy.
 

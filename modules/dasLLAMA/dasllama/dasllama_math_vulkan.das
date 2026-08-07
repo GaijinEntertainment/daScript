@@ -5,7 +5,7 @@ module dasllama_math_vulkan shared public
 options _cyclomatic_complexity = 0   // the capability-probe/arm ladders are the domain shape
 options _function_length = 0   // same
 
-require dasllama/dasllama_vulkan_kernels public   // the facade: consumers reach the whole backend through this module
+require dasllama/dasllama_vulkan_classes public   // the facade: consumers reach the whole backend through this module
 require dasllama/dasllama_vulkan_common public
 require dasllama/dasllama_vulkan_decode public
 require dasllama/dasllama_vulkan_prefill public
@@ -18,7 +18,7 @@ require dasllama/dasllama_config
 
 // dasLLAMA Vulkan GPU tier — the backend ENTRY: capability probe + arm, the dry-bake arm, the
 // .dlim identity source, the FFN router, and the [init] that installs every hook. The backend
-// body lives in the family this module re-exports: dasllama_vulkan_kernels (shaders),
+// body lives in the family this module re-exports: dasllama_vulkan_classes (the kernel home),
 // dasllama_vulkan_common (device state + rails), dasllama_vulkan_decode / _prefill (drivers).
 //
 // Per-layer MoE expert-stack offload: the loader gathers offloaded layers' PREPARED planes into

@@ -9,7 +9,7 @@ require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_classes
 
 // The single-op resident-driver seams (vk_add_rms / vk_rope_kv_store / vk_decode_attn) on the
-// CLASS rail: generated per-class sets + push-constant params — no meta buffers, no vk_set6.
+// CLASS rail: generated per-class sets + push-constant params — no meta buffers.
 // Scratch buffers live on g_gpu (dasllama_vulkan_common); this module owns their class sets.
 
 // residual-stream scratch for the add+rms kernel (lazy — only a resident-driver run creates it)

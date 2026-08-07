@@ -11,9 +11,9 @@ require dasllama/dasllama_vulkan_dispatch
 require dasllama/dasllama_kqformat
 require math
 
-// The CLASS-KERNEL home (the [spirv_kernel]/[vk_dispatch] port of dasllama_vulkan_kernels —
-// families become one base class + per-format overrides, devirtualized at emission). Kernels
-// here carry clean per-member bindings and push-constant params; region lists stay SSBO.
+// The Vulkan KERNEL home: every kernel is a [spirv_kernel]/[vk_dispatch] class — families are
+// one base class + per-format overrides, devirtualized at emission. Kernels carry clean
+// per-member bindings and push-constant params; region lists stay SSBO.
 
 // The ONE per-token word block (a tiny host-poked SSBO, shared by every carrier kernel's set):
 // push constants freeze at record time, so the recorded-once token cmd keeps its per-token
@@ -3518,7 +3518,7 @@ class KqGemvBase {
 }
 
 // ===== the q8 batch tile router (class side) =====
-// Mirrors q8_batch_pipe's (mode, tile, aligned) pick as a variant ordinal — all six classes
+// The (mode, tile, aligned) pick as a variant ordinal — all six classes
 // share the 6-buffer member layout + BatchArgs, but each carries its own set layout.
 // variant: 0 = sdot4 tile, 1 = cmf16, 2 = cmi8, 3 = mm M-tile, 4 = mm aligned-L, 5 = mm L
 
@@ -3637,7 +3637,7 @@ def kq_batch_cls_enc_for(fmt : int; q40cm : bool; raw : VkCommandBuffer; var h :
 }
 
 // ===== format-dispatched class-GEMV rail =====
-// The drivers' 5-way gemv_pipe(fmt) becomes a 5-way ensure/set/enc: every decode GEMV class
+// The drivers' 5-way format pick as ensure/set/enc: every decode GEMV class
 // shares the 6-buffer shape (wq, ws, regions, xq, xs, y) and GemvArgs; q8n drops the scale slot.
 
 def gemv_cls_ensure(fmt : int) : bool {
