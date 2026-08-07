@@ -1061,3 +1061,13 @@ def requant_rows_q8k_bs(x : array<float>; n, npos : int64; var xqb : array<int8>
         }
     }
 }
+
+//! Saturating f32 -> f16 range convert: out-of-range clamps to +-65504, so inf can never enter
+//! a downstream GEMM — the f16-plane bake's spelling (`cvt_f32_to_f16` is the raw fast convert).
+def cvt_f32_to_f16_sat(var d : uint16?; s : float const?; n : int64) {
+    unsafe {
+        for (i in range64(n)) {
+            d[i] = uint16(f32_to_f16(clamp(s[i], -65504.0, 65504.0)))
+        }
+    }
+}

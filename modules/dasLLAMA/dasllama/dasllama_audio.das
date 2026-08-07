@@ -11,7 +11,6 @@ require daslib/fio
 require daslib/apply
 require daslib/archive
 require dasllama/dasllama_math
-require ?das_accelerate dasllama/dasllama_math_accelerate  // accel_hybrid_q8 — the tw_mm hybrid row split (Apple builds only)
 require dasllama/dasllama_plane public   // PlaneF/PlaneI8 — plane forms of the blob helpers; re-exported for deleters
 require dasllama/dasllama_par
 require dasllama/dasllama_gguf
@@ -1177,12 +1176,6 @@ def private tower_quantize_(var t : AudioTower; var fblob : array<float>; var qb
 def private tw_mm(t : AudioTower; var y : array<float>; woff : int64; x : array<float>;
                   xq : array<int8>; xs : array<float>; n, d, npos : int64) {
     if (t.q8 && n % 32l == 0l) {
-        // hybrid split (DASLLAMA_ACCEL_HYBRID): qblob rows on NEON, fblob rows on AMX
-        static_if (typeinfo builtin_module_exists(das_accelerate)) {
-            if (accel_hybrid_active() && accel_hybrid_q8(y, t.qblob, t.qscales, woff, x, xq, xs, n, d, npos)) {
-                return
-            }
-        }
         matmul_q8q8_batch(y, t.qblob, t.qscales, woff, xq, xs, n, d, npos)
     } else {
         mm_blob_b(y, t.fblob, woff, x, n, d, npos)
