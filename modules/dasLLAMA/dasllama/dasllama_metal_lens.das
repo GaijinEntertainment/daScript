@@ -101,12 +101,6 @@ def private mk_builder_param(at : LineInfo; var bf : BufField) : VariablePtr {
     return new Variable(at = at, name := "{bf.name}", _type = bf.kt)
 }
 
-def private mk_var_call(at : LineInfo; call_name, arg0 : string) : ExpressionPtr {
-    var c = new ExprCall(at = at, name := call_name)
-    c.arguments |> emplace_new <| new ExprVar(at = at, name := arg0)
-    return c
-}
-
 // @span product: factors 'param' | int, folded left — "n*4" -> uint64(n * 4l)
 // (is_digit_tok / mk_uint_cast / mk_grid_dim / role_ok / derived_role / param_type — the
 // micro-grammar shared with [vk_dispatch] — live in dasllama_kernel_access)
@@ -438,7 +432,7 @@ class MetalDispatch : AstStructureAnnotation {
                 body |> push(mk_hz(at, "hz_write", bf))
             }
         }
-        body |> push(mk_var_call(at, "hz_gate", "enc"))
+        body |> push(mk_call1(at, "hz_gate", "enc"))
         body |> push(mk_kn_dispatch(at, grid, tgi, tgs))
 
         // Build the builder: void return, enc + one MetalBuffer? per @ssbo/@uniform field (its

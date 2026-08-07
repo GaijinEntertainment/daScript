@@ -68,12 +68,6 @@ def private find_kernel_fn(st : StructurePtr; mod : Module?; want : string; var 
     return kfn
 }
 
-def private mk_call1(at : LineInfo; nm, a0 : string) : ExpressionPtr {
-    var c = new ExprCall(at = at, name := nm)
-    c.arguments |> emplace_new <| mk_gvar(at, a0)
-    return c
-}
-
 def private mk_ret_bool(at : LineInfo; v : bool) : ExpressionPtr {
     return new ExprReturn(at = at, subexpr = new ExprConstBool(at = at, value = v))
 }

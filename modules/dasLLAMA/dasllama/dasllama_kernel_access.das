@@ -605,6 +605,13 @@ def mk_uint_cast(at : LineInfo; var inner : Expression?) : Expression? {
     return c
 }
 
+//! one-argument call: nm(a0), with a0 a variable reference
+def mk_call1(at : LineInfo; nm, a0 : string) : ExpressionPtr {
+    var c = new ExprCall(at = at, name := nm)
+    c.arguments |> emplace_new <| new ExprVar(at = at, name := a0)
+    return c
+}
+
 //! One grid dim: int literal -> uint const ; "name" -> uint(name) ; "name/cov" -> ceil-divide.
 //! A literal coverage folds the bias — uint((name + 255l) / 256l) — matching the hand-written
 //! spelling; a named coverage (global or param) emits uint((name + cov - 1l) / cov).
