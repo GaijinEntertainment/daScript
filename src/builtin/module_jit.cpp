@@ -1304,12 +1304,22 @@ extern "C" {
         // -sSTANDALONE_WASM: emit self-contained .wasm with wasi imports only.
         // -fwasm-exceptions + -sWASM_LEGACY_EXCEPTIONS=0: match the runtime
         // archive's modern wasm EH, avoid emcc's JS invoke_* trampolines.
-        // -sINITIAL_MEMORY=128MB: standalone wasm cannot grow memory under
-        // wasmtime (-sALLOW_MEMORY_GROWTH adds an unsatisfiable
-        // emscripten_notify_memory_growth import), so reserve up front. Cost
-        // is virtual address space only — lazy paging keeps RSS proportional
-        // to actual use. 128MB covers all current playground benchmarks; see
-        // #2805.
+        // -sINITIAL_MEMORY=128MB: reserve up front so typical programs never pay
+        // growth churn. Cost is virtual address space only — lazy paging keeps RSS
+        // proportional to actual use.
+        // -sABORTING_MALLOC=0: state the contract we rely on rather than inherit it.
+        // Every das allocation path null-checks (LinearChunkAllocator::allocate ->
+        // StringHeapAllocator::impl_allocateString -> context->throw_out_of_memory),
+        // which only works while a failed malloc RETURNS. ALLOW_MEMORY_GROWTH happens
+        // to imply this today; spelling it out keeps the guarantee if growth is ever
+        // turned back off for a host that needs a fixed memory.
+        // -sALLOW_MEMORY_GROWTH=1: 128MB is NOT enough for every program (the f2s
+        // playground benchmark retains ~130MB of string heap and died at the cap).
+        // Previously omitted because growth added an unsatisfiable
+        // emscripten_notify_memory_growth import under a bare wasi host (#2805);
+        // that is fixed upstream — verified on the pinned emsdk 5.0.7 that a
+        // STANDALONE_WASM build with growth imports NOTHING from env, so wasmtime is
+        // unaffected. Measured on that emsdk: usable heap 120MB -> 2040MB.
         const std::string runtimeArg = withRuntime ? fmt::format("\"{}\" ", runtimeLibPath) : "";
         // -sMEMORY64=1: wasm64 (memory64) target — 8-byte pointers. The object and
         // runtime archive must also be wasm64 (built with -sMEMORY64=1); the linker
@@ -1322,11 +1332,11 @@ extern "C" {
         // incorrect". Same trick create_shared_library uses (see above).
         #if defined(_WIN32) || defined(_WIN64)
         const std::string cmd = fmt::format(
-            FMT_STRING("\"\"{}\" \"{}\" {}-o \"{}\" -sSTANDALONE_WASM -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -sINITIAL_MEMORY=128MB{} 2>&1\""),
+            FMT_STRING("\"\"{}\" \"{}\" {}-o \"{}\" -sSTANDALONE_WASM -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -sINITIAL_MEMORY=128MB -sABORTING_MALLOC=0 -sALLOW_MEMORY_GROWTH=1{} 2>&1\""),
             linker.c_str(), objFilePath, runtimeArg, wasmPath, mem64Arg);
         #else
         const std::string cmd = fmt::format(
-            FMT_STRING("\"{}\" \"{}\" {}-o \"{}\" -sSTANDALONE_WASM -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -sINITIAL_MEMORY=128MB{} 2>&1"),
+            FMT_STRING("\"{}\" \"{}\" {}-o \"{}\" -sSTANDALONE_WASM -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -sINITIAL_MEMORY=128MB -sABORTING_MALLOC=0 -sALLOW_MEMORY_GROWTH=1{} 2>&1"),
             linker.c_str(), objFilePath, runtimeArg, wasmPath, mem64Arg);
         #endif
         return run_link_cmd(cmd.c_str(), wasmPath, "Wasm", context);

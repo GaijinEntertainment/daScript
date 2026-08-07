@@ -4,6 +4,12 @@
 
 #include <stdarg.h>
 
+#ifdef __EMSCRIPTEN__
+// write(2) + _Exit for the allocation-free out-of-memory report below.
+#include <unistd.h>
+#include <stdlib.h>
+#endif
+
 namespace das
 {
     // Context
@@ -1089,11 +1095,34 @@ namespace das
     }
 
     void Context::throw_out_of_memory ( bool isStringHeap, uint64_t size, const LineInfo * at ) {
+#ifdef __EMSCRIPTEN__
+        // Wasm-only escape: reporting an out-of-memory must not itself allocate.
+        // The normal path (throw_error_at -> throw_fatal_error) assigns
+        // exceptionMessage, a das::string — an allocation, made at the one moment
+        // allocation cannot succeed. A desktop host has swap and an OS that keeps
+        // serving small requests, so it never realistically gets here; wasm has a
+        // hard ceiling, so it does, and the failure surfaces as an opaque trap with
+        // nothing printed. Format into a stack buffer and write(2) straight to the
+        // fd instead: no heap, no stdio buffer, no C++ exception machinery. Exiting
+        // is correct — a panic is fatal in daslang, and there is nothing to unwind
+        // to that would not need the heap we just ran out of.
+        char buf[256];
+        const int n = snprintf(buf, sizeof(buf),
+            "\nout of %s memory: requested %llu bytes\n",
+            isStringHeap ? "string heap" : "heap", (unsigned long long) size);
+        if ( n > 0 ) {
+            const size_t len = size_t(n) < sizeof(buf) ? size_t(n) : sizeof(buf) - 1;
+            ssize_t ignored = write(2, buf, len); (void) ignored;
+        }
+        (void) at;
+        _Exit(1);
+#else
         if ( isStringHeap ) {
             throw_error_at(at, "out of string heap memory, requested %llu bytes, used %llu / limit %llu", (unsigned long long) size, (unsigned long long) stringHeap->bytesAllocated(), (unsigned long long) stringHeap->getLimit());
         } else {
             throw_error_at(at, "out of heap memory, requested %llu bytes, used %llu / limit %llu", (unsigned long long) size, (unsigned long long) heap->bytesAllocated(), (unsigned long long) heap->getLimit());
         }
+#endif
     }
 
     void Context::throw_error_ex ( DAS_FORMAT_STRING_PREFIX const char * message, ... ) {
