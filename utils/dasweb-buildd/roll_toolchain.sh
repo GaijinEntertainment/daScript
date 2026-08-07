@@ -104,8 +104,10 @@ run bash -c '. "$1/emsdk_env.sh" >/dev/null 2>&1 && cd "$2" && ./bin/daslang uti
 # builds via its own .das_package recipe — normally run by daspkg's
 # ensure_external_wasm_archives, which the SANDBOX cannot run (no cmake, and the
 # worktree is mounted read-only), so it runs here, host-side, per toolchain.
-# The build command and archive set MIRROR modules/dasImgui/.das_package —
-# a change to either without the other is a defect (see CODEREVIEW.md).
+# The build command and archives MIRROR modules/dasImgui/.das_package, minus
+# liblibDasModuleClipboard.a — that one is in daspkg's own in-tree list and is
+# staged by step 3. A change to either side without the other is a defect
+# (see CODEREVIEW.md).
 say "4/6  bake the dasImgui wasm archives"
 run bash -c '
     set -euo pipefail
