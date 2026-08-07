@@ -2553,6 +2553,13 @@ namespace das
 
     ExpressionPtr SimulateVisitor::visit(ExprVar * expr) {
         const auto &at = expr->at;
+        if ( !expr->variable || !expr->variable->type || !expr->type ) {
+            // const folding simulates subexpressions mid-inference, so an unresolved
+            // variable can arrive here instead of being caught by codegen
+            context.thisProgram->error("internal compilation error, variable '" + expr->name
+                + "' is not resolved", "", "", at, CompilationError::internal_variable);
+            return nullptr;
+        }
         if ( expr->block ) {
             auto blk = expr->pBlock;
             if (expr->variable->type->isRef()) {
