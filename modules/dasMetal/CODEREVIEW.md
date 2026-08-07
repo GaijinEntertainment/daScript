@@ -29,3 +29,11 @@ rewrite or a move, never silent tolerance) lands in the same batch as the round'
    per-type overloads, monomorphized generics, `static_if` on a compile-time witness. Where
    the emitter cannot specialize, say so in `MASTERPLAN.md` rather than shipping the value
    form as the answer. Assert the LITERAL in an emitted-text fixture, not the das source.
+6. **The two emitters mirror: a kernel-model capability lands on both backends, or its
+   asymmetry is recorded.** This emitter and dasSpirv (`modules/dasSpirv`) lower the same
+   kernel model — classes with resource members, ordinary methods, free-function callees,
+   inheritance with devirtualized overrides. A capability added to the kernel model here
+   lands on the SPIR-V side too (and the reverse), unless it is genuinely target-specific
+   (Metal-4 tensors vs cooperative matrix, simdgroup vs subgroup semantics); a deliberate
+   asymmetry is recorded in `MASTERPLAN.md`. A diff that grows the kernel model on one side
+   with no sibling change and no ledger entry is a defect.
