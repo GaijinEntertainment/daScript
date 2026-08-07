@@ -722,9 +722,13 @@ function runWasmArtifact(url) {
     // "my run drew nothing" confusion the run frame was introduced to end.
     destroyPageFrame();
     // Shim's DataView is rebuilt per-call from memRef.buffer, so we can
-    // create the shim before instantiation and patch the buffer once memory
-    // is exported.
-    const memRef = { buffer: new ArrayBuffer(0) };
+    // create the shim before instantiation and wire the buffer once memory
+    // is exported. The wire must be a LIVE getter, not a snapshot: artifacts
+    // link with -sALLOW_MEMORY_GROWTH, and the first grow detaches the old
+    // ArrayBuffer — a cached reference then throws "Cannot perform DataView
+    // constructor on a detached ArrayBuffer" on the next fd_write.
+    let wasmMemory = null;
+    const memRef = { get buffer() { return wasmMemory ? wasmMemory.buffer : new ArrayBuffer(0); } };
     const shim = makeWasiShim(memRef);
     fetch(url)
         .then(r => {
@@ -736,7 +740,7 @@ function runWasmArtifact(url) {
             env: new Proxy({}, { get: (_, name) => name === 'memory' ? undefined : () => -1 }),
         }))
         .then(({ instance }) => {
-            memRef.buffer = instance.exports.memory.buffer;
+            wasmMemory = instance.exports.memory;
             const exports = instance.exports;
             try {
                 if (typeof exports._initialize === 'function') exports._initialize();
