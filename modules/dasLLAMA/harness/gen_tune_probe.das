@@ -43,7 +43,7 @@ require llvm/daslib/llvm_tune
 require daslib/random
 require daslib/json   // JsonValue — the null runtime arg of the deferred sidecar merge
 require daslib/json_boost   // JV over tuples — the per-variant race rows
-require daslib/fio   // has_env_variable: the compile-only mint gate (slice J recipe)
+require daslib/fio   // fread/fopen — the probe's transcript capture
 require daslib/strings_boost   // split — the confirm pass parses child output
 require daslib/command_line    // get_das_exe — the confirm pass spawns daslang children
 require tuner_cli              // --tune-paranoid, shared with tune_kernels

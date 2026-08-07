@@ -3,7 +3,7 @@ options gen2
 module dasllama_parity shared public
 
 require daslib/fio
-require dasllama/dasllama_env  // the shared typed env readers + the knob registry
+require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require daslib/strings_boost
 require daslib/strings_convert
 require strings

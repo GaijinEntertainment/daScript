@@ -5,7 +5,7 @@ module dasllama_math_accelerate shared public
 
 require dasllama/dasllama_math
 require dasllama/dasllama_convert  // cvt_f32_to_f16 — the BNNS f16 batch prep
-require dasllama/dasllama_env  // env_flag/env_int64: the shared typed readers + the knob registry
+require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require dasllama/dasllama_par
 require das_accelerate
 require llvm/daslib/f16_cvt

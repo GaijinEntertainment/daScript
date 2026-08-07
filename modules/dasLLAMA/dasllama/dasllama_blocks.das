@@ -10,7 +10,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_par
 require dasllama/dasllama_convert
 require dasllama/dasllama_kv_codec   // fwht_signs_row/fwht_unsign_row — the Hadamard rotation in gated attention
-require dasllama/dasllama_env       // env_flag: the per-kernel runtime switches
+require dasllama/dasllama_env       // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require math
 
 // The std/dense/MoE transformer block kernels — attention and FFN, decode and prefill — plus the

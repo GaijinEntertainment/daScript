@@ -4,7 +4,7 @@ options _comment_hygiene = true
 module dasllama_common shared public
 
 require daslib/fio
-require dasllama/dasllama_env  // the shared typed env readers + the knob registry
+require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require dasllama/dasllama_config  // DlimConfiguration — this module registers the cpu/metal sources
 require dasllama/dasllama_kqformat public   // KqFmt + kq_sb + the stride truth — re-exported so every requirer keeps seeing the enum
 require dasllama/dasllama_rope       // the RoPE angle/table generation (Model-facing wrappers below pass config params in)

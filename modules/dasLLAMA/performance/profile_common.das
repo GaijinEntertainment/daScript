@@ -10,7 +10,7 @@ options indenting = 4
 module profile_common shared public
 
 require daslib/fio public
-require dasllama/dasllama_env  // env_int/env_str: the shared typed readers + the knob registry
+require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require strings public
 require math
 require daslib/strings_boost public

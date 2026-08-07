@@ -5,7 +5,7 @@ options _function_length = 0        // one MSL kernel body + its hand-bound disp
 options _cyclomatic_complexity = 0  // same — the lab runners are flat knockout ladders
 
 require ?das_metal metal/das_metal_boost  // GPU driver half, Apple builds only
-require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
+require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require metal/msl_shader
 require dasllama/dasllama_metal_prefill   // the production MoE mul_mm MSL (zero copy drift)
 require dasllama/dasllama_metal_kernels   // the production MoE GEMV + geglu MSL (zero copy drift)

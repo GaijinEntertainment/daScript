@@ -89,6 +89,11 @@ directly from outside the module is a defect, and so is a split
 that adds requires across the tree instead of fixing the facade re-export. Engine internals may
 require each other.
 
+**`dasllama_env.das` — every environment knob's single home.** All `[EnvConfig]` area structs
+and their `g_env_*` globals live here; `ENVIRONMENT.md` generates from them, and
+`tests/test_env_registry.das` enforces both directions. A knob declared anywhere else is a
+defect.
+
 **A new module file is registered in `.das_module` and `CMakeLists.txt` in the same change.**
 
 **`performance/fetch_models.das` is the model-provenance manifest and nothing else.** Per
@@ -347,15 +352,22 @@ platform-neutral file is a defect.
 that picks its own number — larger or smaller — is a defect, and so is a new root that omits the
 declaration. See `ARCHITECTURE.md` §2.7.
 
-**No ad-hoc profiling.** A clock read paired with a print or log of the elapsed interval is a
-defect anywhere in the module — instrumentation goes through the `jobque_profile` marker rail
-(`profile_tag` / `profile_marker` and the `trace_*` wrappers in `dasllama_math.das`). The
-carve-out is `benchmarks/` and `performance/`, where the measured number is the file's
-deliverable.
+**No ad-hoc profiling.** A NEW clock read paired with a print or log of the elapsed interval is
+a defect in engine code — instrumentation goes through the sanctioned rails: the
+`jobque_profile` markers (`profile_tag` / `profile_marker` and the `trace_*` wrappers in
+`dasllama_math.das`), the `prof_add`/`forward_profile_*` decode buckets
+(`dasllama_common.das`), and the `asr_prof_add` encode buckets (`dasllama_audio.das`).
+Carve-outs where a timed line is the deliverable or a one-shot report: `benchmarks/`,
+`performance/`, `harness/`, and cold one-shot load/mint progress logs (image bake/map, load
+stages, tokenizer build). A clock whose value feeds logic is not instrumentation — mark it
+`// clock: control` so the sweep and the future lint leave it alone.
 
-**Every new kernel or mid-runtime loop carries `[hot_path]`.** When in doubt, compare with its
-twins: if similar functions in the family carry the annotation, the new one does too. Without
-it the function dodges the `[no_alloc]` / `[no_env]` / `[no_io]` contracts the annotation arms.
+**Every new kernel or mid-runtime loop is COVERED by `[hot_path]`.** The annotation sits at
+the REGION ENTRY — the `*_encode` / `*_decode` / step drivers — and the `[no_alloc]` /
+`[no_env]` / `[no_io]` contracts arm transitively down the call graph, so interior kernels
+stay bare. A new function is a defect only when no annotated entry reaches it: a new entry
+point carries the annotation itself; a new backend entry (kernel-backend override, batch
+donor) carries it too, because backends are also reached from un-annotated harness paths.
 
 **No raw environment reads.** `get_env_variable` / `has_env_variable` (and literal-name
 `env_config_*` calls) are a defect anywhere in the module outside `dasllama_env.das` — a knob is

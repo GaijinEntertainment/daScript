@@ -5,7 +5,7 @@ module dasllama_metal_prefill shared public
 
 require math
 require daslib/math_bits   // uint_bits_to_float in the mx4 GEMV (msl_emit as_type)
-require dasllama/dasllama_env  // env_int/env_flag: the shared typed readers + the knob registry
+require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require metal/msl_shader
 require metal/das_metal_boost
 require dasllama/dasllama_common

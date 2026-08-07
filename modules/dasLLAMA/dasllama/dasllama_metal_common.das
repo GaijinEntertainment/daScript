@@ -6,7 +6,7 @@ module dasllama_metal_common shared public
 
 require math
 require strings
-require dasllama/dasllama_env  // env_int/env_flag: the shared typed readers + the knob registry
+require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require metal/das_metal_boost
 require dasllama/dasllama_common
 require dasllama/dasllama_math

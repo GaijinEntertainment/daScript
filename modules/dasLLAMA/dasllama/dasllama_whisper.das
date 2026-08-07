@@ -6,7 +6,7 @@ options _cyclomatic_complexity = 0   // model forward/serialize walks mirror the
 options _function_length = 0   // same
 
 require math
-require dasllama/dasllama_env  // the shared typed env readers + the knob registry
+require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require daslib/fio
 require daslib/array_boost
 require daslib/apply

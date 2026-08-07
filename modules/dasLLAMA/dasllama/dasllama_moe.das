@@ -7,7 +7,7 @@ require dasllama/dasllama_common
 require dasllama/dasllama_math
 require dasllama/dasllama_par
 require dasllama/dasllama_convert   // the q8_0/q8_k row quantizers the expert dispatch feeds
-require dasllama/dasllama_env       // env_flag: the two instrument gates
+require dasllama/dasllama_env       // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require math
 
 // MoE expert routing and dispatch: the top-k router, the per-expert FFN accumulation, the shared

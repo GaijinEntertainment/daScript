@@ -17,7 +17,6 @@ require dasllama/dasllama_par
 require math
 require strings
 require daslib/strings_boost
-require daslib/fio   // has_env_variable — the VRAM-override probe
 
 // The Vulkan backend's shared infrastructure: device state (GpuState/g_gpu), buffer/descriptor
 // makers, upload + stacks + host-import, the weight arena, command/submit plumbing, the

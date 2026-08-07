@@ -4,7 +4,7 @@ options _function_length = 0        // one MSL kernel body + its hand-bound disp
 options _cyclomatic_complexity = 0  // same — the side-by-side runners are flat arm ladders
 
 require dastest/testing_boost
-require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
+require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require metal/msl_shader
 require ?das_metal metal/das_metal_boost  // GPU driver half, Apple builds only
 require dasllama/dasllama_metal_decode  // the production batch attention MSL (zero copy drift)

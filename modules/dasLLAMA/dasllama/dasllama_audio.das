@@ -5,7 +5,7 @@ module dasllama_audio shared public
 options _function_length = 0   // per-family transcribe pipelines mirror the model schema
 
 require math
-require dasllama/dasllama_env  // the shared typed env readers + the knob registry
+require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require strings
 require daslib/fio
 require daslib/apply

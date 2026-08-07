@@ -4,7 +4,7 @@ options _comment_hygiene = true
 module dasllama_metal_decode shared public
 
 require math
-require dasllama/dasllama_env  // env_int/env_flag/env_str: the shared typed readers + the knob registry
+require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require metal/das_metal_boost
 require dasllama/dasllama_common
 require dasllama/dasllama_math

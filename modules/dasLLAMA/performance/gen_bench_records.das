@@ -4,7 +4,7 @@ options _cyclomatic_complexity = 0   // orchestrator passes; reshaped by the sin
 options _function_length = 0   // same
 
 require profile_common
-require dasllama/dasllama_env   // env_flag — the ALLOW_UNTUNED store escape
+require dasllama/dasllama_env   // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require dasllama/dasllama_image   // dlim_clean + dlim_inventory — step-zero GC and the re-mint tripwire
 require llvm/daslib/llvm_tune   // [tune_policy]: the orchestrator never measures — it must never self-tune
 require daslib/clargs

@@ -4,7 +4,7 @@ options _comment_hygiene = true
 module dasllama_math shared public
 
 require math
-require dasllama/dasllama_env  // env_flag/env_int64: the shared typed readers + the knob registry
+require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require dasllama/dasllama_plane  // PlaneF/PlaneI8 — the borrowed-plane weight forms below
 require dasllama/dasllama_config  // DlimVulkanConfig — the dry-bake seam's config argument
 require daslib/jobque_boost public  // matmul's threaded path expands parallel_for; consumers need its symbols

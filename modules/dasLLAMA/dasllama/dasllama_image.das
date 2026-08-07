@@ -6,7 +6,7 @@ options _cyclomatic_complexity = 0   // image walk/GC bodies mirror the archive 
 options _function_length = 0   // same
 
 require daslib/fio
-require dasllama/dasllama_env  // the shared typed env readers + the knob registry
+require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require daslib/apply
 require strings
 require daslib/strings_boost   // split — the identity-lane parser
