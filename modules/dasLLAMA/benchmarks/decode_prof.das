@@ -61,7 +61,7 @@ struct Args {
 def private synth_id(i, seed : int64) : int64 => 1000l + ((i * 17l + seed * 131l) % 5000l)
 
 [export]
-def main() : int {
+def main() : int {   // nolint:STYLE038 — flat profiler driver: arg/env/tier handling, then the one measurement window
     if (!jit_enabled()) {
         print("This profiler is JIT-only — run with: daslang -jit <file>\n")
         return 1

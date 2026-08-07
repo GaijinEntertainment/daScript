@@ -2,10 +2,10 @@ options gen2
 
 require dastest/testing_boost public
 require dasllama/dasllama_math
-require daslib/jobque_boost  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
-require daslib/math_bits  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
-require math  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
-require ?das_accelerate dasllama/dasllama_math_accelerate  // nolint:STYLE030 — the "+AMX" float-batch override under test; Apple-only C++ module
+require daslib/jobque_boost
+require daslib/math_bits
+require math
+require ?das_accelerate dasllama/dasllama_math_accelerate
 
 // The "+AMX" float-batch override (Accelerate sgemm — AMX on M1-M3, SME on M4+) vs the portable
 // fp32/bf16 batch matmuls on deterministic data. sgemm accumulates f32 in coprocessor order —

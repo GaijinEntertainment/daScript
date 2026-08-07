@@ -80,8 +80,7 @@ class BuildFlagMacro : AstCallMacro {
                 on_argv = true
                 res = true
             } elif (starts_with(a, eq_prefix)) {
-                // --flag=value spelling, same truth rule as the env carrier — so
-                // --jobque-profiling=1 arms and --jobque-profiling=0 disarms explicitly
+                // --flag=value spelling, same truth rule as the env carrier
                 on_argv = true
                 res = env_text_is_true(a |> trim_prefix(eq_prefix))
             }
