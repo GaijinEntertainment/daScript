@@ -201,7 +201,7 @@ namespace das
         }
         uint32_t base, sh;
         if ( em < ((127u - 14u) << 23) ) {      // subnormal half
-            sh = 126u - (em >> 23) + 13u + 1u;
+            sh = 126u - (em >> 23);
             base = (em & 0x7fffffu) | 0x800000u;
         } else {                                // normal half
             sh = 13u;
