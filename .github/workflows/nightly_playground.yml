@@ -19,11 +19,6 @@ on:
   schedule:
     # after extended_checks' 04:00 sweep, while the build boxes are idle
     - cron: '30 4 * * *'
-  # TEMPORARY — REMOVE BEFORE MERGE. A workflow_dispatch workflow is not
-  # dispatchable until it lives on the default branch, so this is the only way
-  # to exercise the full sweep on CI before this PR lands.
-  push:
-    branches: [bbatkin/dasweb-sample-verifier]
   workflow_dispatch:
     inputs:
       filter:
