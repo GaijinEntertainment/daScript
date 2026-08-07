@@ -1,0 +1,104 @@
+name: nightly playground
+
+# Drives the LIVE playground on daslang.io in headless Chromium and reports,
+# per curated sample and per engine, whether the program actually runs: boots,
+# keeps painting, issues draw calls, prints what it should, and logs no GL or
+# runtime error. Failures land as a per-sample table in the step summary and
+# turn the workflow red.
+#
+# Production is the target on purpose. The bugs this exists to catch were
+# production state no local rebuild could see — page artifacts truncated behind
+# caddy, wasm archives missing on one build box, a failed build cached under its
+# content hash. Sample sources and toolchain id are content-addressed, so a
+# night with no sample edit and no toolchain bump is mostly cache hits.
+#
+# Nothing here is cached: nightlies consume no GitHub Actions cache (that budget
+# belongs to the per-PR lanes), and there is no compile step to accelerate.
+
+on:
+  schedule:
+    # after extended_checks' 04:00 sweep, while the build boxes are idle
+    - cron: '30 4 * * *'
+  workflow_dispatch:
+    inputs:
+      filter:
+        description: 'only samples whose name contains this substring'
+        required: false
+        default: ''
+      mode:
+        description: 'interpreter, wasm, or both (blank = both)'
+        required: false
+        default: ''
+      base_url:
+        description: 'site to verify'
+        required: false
+        default: 'https://daslang.io'
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify_samples:
+    # The cron only runs on the canonical repo: it verifies daslang.io, which a
+    # fork neither owns nor can fix, and a red nightly emails the fork owner.
+    # workflow_dispatch still works anywhere (point --base-url at a staging box).
+    if: github.event_name != 'schedule' || github.repository == 'GaijinEntertainment/daScript'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+    - name: "SCM Checkout"
+      uses: actions/checkout@v4
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        # deliberately no `cache:` — see the header
+
+    - name: "Install runner dependencies"
+      working-directory: utils/dasweb-verify/browser
+      run: npm ci
+
+    - name: "Install Chromium"
+      working-directory: utils/dasweb-verify/browser
+      run: npx playwright install chromium --with-deps
+
+    - name: "Protocol unit tests"
+      working-directory: utils/dasweb-verify/browser
+      run: node --test
+
+    - name: "Verify curated samples"
+      working-directory: utils/dasweb-verify/browser
+      # Dispatch inputs reach bash through env, never through ${{ }} pasted into the
+      # script body. An expression is substituted as TEXT before the shell parses the
+      # line, so a quote, $(…) or backtick in an input would break the command or run
+      # on the runner with the job's token. A quoted "$VAR" expansion cannot — the
+      # value is already a string by the time bash sees it. Sample names alone make
+      # this reachable without malice: they carry ( ) : and , characters.
+      env:
+        BASE_URL: ${{ github.event.inputs.base_url || 'https://daslang.io' }}
+        FILTER: ${{ github.event.inputs.filter }}
+        MODE: ${{ github.event.inputs.mode }}
+      run: |
+        set -euo pipefail
+        args=(--base-url "$BASE_URL")
+        if [ -n "${FILTER:-}" ]; then args+=(--filter "$FILTER"); fi
+        if [ -n "${MODE:-}" ]; then args+=(--mode "$MODE"); fi
+        echo "verifying ${BASE_URL}"
+        node runner.mjs "${args[@]}"
+
+    - name: "Failure screenshots"
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: sample-failures
+        path: utils/dasweb-verify/browser/artifacts
+        if-no-files-found: ignore
+        retention-days: 14

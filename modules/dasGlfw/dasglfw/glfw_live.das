@@ -78,7 +78,12 @@ def public live_create_window(title : string; width, height : int) : GLFWwindow?
         panic("glfw_live: can't create window")
     }
     glfwMakeContextCurrent(live_window)
-    glEnable(GL_MULTISAMPLE)
+    // WebGL2/GLES3 has no GL_MULTISAMPLE capability — multisampling is decided by
+    // the context attributes there — so enabling it raises INVALID_ENUM on every
+    // window this creates under emscripten, once, before any sample code runs.
+    if (get_running_platform_name() != "emscripten") {
+        glEnable(GL_MULTISAMPLE)
+    }
     init_opengl_cache()
     return live_window
 }
@@ -671,7 +676,7 @@ def private mod_name_to_bit(name : string) : int {
 // event with `keycode == 0` (text-input widgets still receive it via
 // CharCallback).
 def private needs_shift_ascii(c : int) : bool {
-    if (c >= 'A' && c <= 'Z') return true   // nolint:PERF014 (uppercase-only, is_alpha would also match lowercase)
+    if (c >= 'A' && c <= 'Z') return true   // uppercase-only; is_alpha would also match lowercase
     // shifted punctuation on a US layout. Listed as char literals (not a single
     // string) so the parser doesn't treat `{` / `}` as interpolation delimiters.
     return (c == '~' || c == '!' || c == '@' || c == '#'
@@ -684,8 +689,8 @@ def private needs_shift_ascii(c : int) : bool {
 
 def private base_keycode_ascii(c : int) : int { // nolint:STYLE037 — keycode mapping ladder, splitting is noise
     // letters — distinguishing case to compute the right keycode offset
-    if (c >= 'A' && c <= 'Z') return GLFW_KEY_A + (c - 'A')   // nolint:PERF014 (need uppercase-only offset)
-    if (c >= 'a' && c <= 'z') return GLFW_KEY_A + (c - 'a')   // nolint:PERF014 (need lowercase-only offset)
+    if (c >= 'A' && c <= 'Z') return GLFW_KEY_A + (c - 'A')   // need the uppercase-only offset
+    if (c >= 'a' && c <= 'z') return GLFW_KEY_A + (c - 'a')   // need the lowercase-only offset
     // digits 0-9 → GLFW_KEY_0..9
     if (c >= '0' && c <= '9') return GLFW_KEY_0 + (c - '0')   // nolint:PERF014 (need digit-only offset)
     // shifted digit row: ! @ # $ % ^ & * ( )  → keys 1 2 3 4 5 6 7 8 9 0
