@@ -730,7 +730,10 @@ int das_writer_respond ( Handle<hv::WebSocketServer> h, hv::HttpResponseWriter *
         wr->WriteStatus((http_status)st);
         wr->WriteHeader("Content-Type", ct.c_str());
         cover_body_write_bufsize(wr, b.size());
-        wr->End(b);
+        int rc = wr->End(b);
+        if ( rc < 0 ) {
+            hloge("dasHV: writer respond failed rc=%d body=%zu", rc, b.size());
+        }
         if ( adapter ) adapter->release_writer(w);
     });
     return 0;
@@ -763,7 +766,11 @@ int das_writer_serve_file ( Handle<hv::WebSocketServer> h, hv::HttpResponseWrite
         if ( st != 200 ) wr->response->body.clear();
         wr->response->status_code = (http_status)st;
         cover_body_write_bufsize(wr, wr->response->body.size());
-        wr->WriteResponse(wr->response.get());
+        int rc = wr->WriteResponse(wr->response.get());
+        if ( rc < 0 ) {
+            hloge("dasHV: writer SERVE_FILE failed rc=%d file=%s body=%zu",
+                rc, path.c_str(), wr->response->body.size());
+        }
         wr->End();
         if ( adapter ) adapter->release_writer(w);
     });
@@ -872,11 +879,33 @@ http_status das_resp_redirect ( HttpResponse * resp, const char * location, http
     return (http_status)resp->Redirect(location ? location : "/", status);
 }
 
+// The buffered rail cannot raise the connection's write-buf cap — the write happens after
+// the handler returns, with no channel in reach — so a body over the libhv default gets the
+// connection closed MID-SEND: a truncated response after a clean 200, logged only in libhv's
+// side log. Refuse loudly instead; a big body belongs on the writer rail, which covers it.
+static const size_t DAS_HV_BUFFERED_BODY_MAX = (1u << 24) - (1u << 20);
+
+static http_status das_resp_refuse_oversize ( HttpResponse * resp, const char * what, size_t size ) {
+    hloge("dasHV: buffered %s refused: %zu bytes exceeds the %zu write-buf budget; "
+          "serve it through a STREAM route's SERVE_FILE/respond", what, size, DAS_HV_BUFFERED_BODY_MAX);
+    resp->content_type = TEXT_PLAIN;
+    resp->body = "response too large for the buffered rail; serve it through a STREAM route";
+    return (http_status)HTTP_STATUS_INTERNAL_SERVER_ERROR;
+}
+
 http_status das_resp_file ( HttpResponse * resp, const char * filepath ) {
-    return (http_status)resp->File(filepath ? filepath : "");
+    std::string path = filepath ? filepath : "";
+    size_t fs = hv_filesize(path.c_str());
+    if ( fs > DAS_HV_BUFFERED_BODY_MAX ) {
+        return das_resp_refuse_oversize(resp, "SERVE_FILE", fs);
+    }
+    return (http_status)resp->File(path.c_str());
 }
 
 http_status das_resp_data ( HttpResponse * resp, const char * data, int32_t len, http_status status ) {
+    if ( len > 0 && (size_t)len > DAS_HV_BUFFERED_BODY_MAX ) {
+        return das_resp_refuse_oversize(resp, "DATA", (size_t)len);
+    }
     resp->content_type = APPLICATION_OCTET_STREAM;
     resp->body.assign(data, len);
     return status;
