@@ -9,7 +9,8 @@ those, it is not a review criterion — move it to `README.md` and leave a one-l
 here.
 
 **This file reviews itself: a rule a reviewer cannot apply as written is a defect of this
-file.** Mark it like any other finding; the fix is a rewrite or a move, not silent tolerance.
+file.** Mark it like any other finding — a checklist defect blocks nothing, but its fix (a
+rewrite or a move, never silent tolerance) lands in the same batch as the round's other fixes.
 
 **Form, and it is a hard limit:**
 
