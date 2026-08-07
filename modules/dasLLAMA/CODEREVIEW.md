@@ -3,10 +3,15 @@
 Run this list on every dasLLAMA change before it ships — including changes to this file.
 
 **What stays in this document:** criteria that can be checked against a diff. Nothing else.
-A reader must be able to apply every entry below **without reading the code, without prior
-knowledge of the module, and without opening another document.** If an entry needs any of
-those, it is not a review criterion — move it to `ARCHITECTURE.md` and leave a one-line
-criterion here.
+A reader must be able to apply every entry below **without reading the code and without prior
+knowledge of the module.** A rule may cite `ARCHITECTURE.md` for the reason behind it; it may
+not require that section to be read before the criterion can be applied. If an entry needs
+code-reading or prior knowledge, it is not a review criterion — move it to `ARCHITECTURE.md`
+and leave a one-line criterion here.
+
+**This file reviews itself: a rule a reviewer cannot apply as written is a defect of this
+file.** Mark it like any other finding — a checklist defect blocks nothing, but its fix (a
+rewrite or a move, never silent tolerance) lands in the same batch as the round's other fixes.
 
 **Form, and it is a hard limit:**
 
@@ -19,15 +24,18 @@ criterion here.
   functions or files must name them or it cannot be checked — that name is the criterion. An
   illustrative aside ("the way the X family does it") has no such excuse: nothing keeps it in
   sync with the code, and a stale example is worse than none.
-- **No history, no rationale, no direction of travel.** The reason lives in `ARCHITECTURE.md`;
-  planned work lives in the follow-up ledgers.
+- **One sentence of WHY is allowed where it makes the criterion decidable; anything longer
+  belongs in `ARCHITECTURE.md`.** No history, no PR numbers, no direction of travel; planned
+  work lives in the follow-up ledgers.
 
 ---
 
 ## Tests
 
-**Run `modules/dasLLAMA/tests` before any PR.** Model and GPU suites go through the scoped
-runner `modules/dasLLAMA/tests/run.das`; invoking dastest directly on those suites is a defect.
+**Run `modules/dasLLAMA/tests` before any PR.** The suites `run.das` lists
+(`--suite decode|prefill|matrix|kernels|image|image-vulkan|coverage`) are invoked only through
+`modules/dasLLAMA/tests/run.das`; dastest run directly on one of those is a defect. Every
+other suite — the vulkan ones included — runs under dastest directly.
 
 **Every test runs under `-jit`.** Never the interpreter, never AOT. A test invocation without
 `-jit` is a defect even if it passes.
@@ -51,23 +59,31 @@ suspicious green, must be readable as text in the log, not only as an id or floa
 
 **A new GPU kernel ships with a small model in the kernel coverage suite** that dispatches it.
 
+**A kernel-unit arm compares its kernel against a CPU oracle, never against another GPU
+dispatch.** Two dispatches that break the same way compare equal — a GPU-vs-GPU parity arm
+passes vacuously on a shape neither side handles.
+
+**A test arm's skip gate keys on a device capability or mode predicate (`coopmat_mode`,
+`has_coopmat2`, `dn_shared_ok`), never on the existence of a runtime artifact such as a
+pipeline or a cached set.** An artifact gate goes permanently false when its producer moves,
+and the arm then skips forever while the suite stays green.
+
 **A test suite loads models with `load_model_`, never the image rail.** Image-rail coverage
 belongs to the image suites alone. See `ARCHITECTURE.md` §2.1.
 
-**A measured number proves its kernel provenance, in whatever world it ran.** The bench gate has
-one arm per world: a standalone exe checks the sidecar the release shipped beside it, a
-`DAS_TUNE_MANIFEST` run checks that file, a plain script checks that every `[tune]` row stamps a
-manifest winner. A rig invocation that no arm covers is a defect — it will refuse, or worse,
-measure on fallback kernels.
+**A new measuring entry point calls `tune_gate()` (`performance/profile_common.das`) before its
+first timed rep.** A timed rep without the gate can measure fallback kernels silently. The
+three worlds the gate covers are `ARCHITECTURE.md` §2.5.
 
-**No new benchmark harness is written.** Performance is measured by the three rigs `PROFILE.md`
-documents — `performance/gen_profile.das` (the routine in-process check),
-`benchmarks/lcpp_bench.das` (one cell), `performance/gen_bench_records.das` (a board). A new timing harness, a one-off measurement script, or a
-revived rig is a defect. `PROFILE.md` carries the three commands; the rig's shape is
-`ARCHITECTURE.md` §2.5. Carve-out: `benchmarks/asr/mem_census.sh` measures peak MEMORY
-(`/usr/bin/time -l` around a whole process — a quantity no in-process rig can observe about
-itself), until a footprint leg lands in `gen_bench_records`; it stays macOS-only and its
-numbers live in `PERF_LEDGER.md`, never in the record stores.
+**No new benchmark harness is written.** Performance is measured by the rigs `PROFILE.md`
+documents — `performance/gen_profile.das` (the routine check) and
+`performance/gen_bench_records.das` (`--oracle` = the regression gate, bare = the publishing
+board); both spawn `benchmarks/lcpp_bench.das`, the only thing that measures. A new timing
+harness, a one-off measurement script, or a revived rig is a defect. `PROFILE.md` carries the
+commands; the rig's shape is `ARCHITECTURE.md` §2.5. Carve-out: `benchmarks/asr/mem_census.sh`
+measures peak MEMORY (`/usr/bin/time -l` around a whole process — a quantity no in-process rig
+can observe about itself); it stays macOS-only and its numbers live in `PERF_LEDGER.md`, never
+in the record stores.
 
 ---
 
@@ -81,15 +97,16 @@ carve-outs.
 **A new file ships with its rule here, its charter in `ARCHITECTURE.md` §1, and its tests, in
 the same change.** A file without its records is a defect.
 
-**A consumer OUTSIDE `modules/dasLLAMA` requires the facade, never an engine internal.**
-Examples, tutorials and external tools require `dasllama/dasllama` (or
-`dasllama/dasllama_transformer`), which re-export the engine. In-module tests, harnesses and
-benchmarks may require internals — that is what they test. A facade-reachable symbol required
-directly from outside the module is a defect, and so is a split
-that adds requires across the tree instead of fixing the facade re-export. Engine internals may
-require each other.
+**A symbol the facade re-exports is required through `dasllama/dasllama` (or
+`dasllama/dasllama_transformer`), never from the engine file that defines it.** An engine-level
+symbol the facade does not re-export may be required directly. In-module tests, harnesses and
+benchmarks may require internals — that is what they test. A split that adds facade-reachable
+requires across the tree instead of fixing the facade re-export is a defect. Engine internals
+may require each other.
 
-**A new module file is registered in `.das_module` and `CMakeLists.txt` in the same change.**
+**A new module file is registered in `.das_module` in the same change.** The install rule is a
+directory glob; `CMakeLists.txt`'s `ADD_MODULE_DAS` list is a subset and is touched only when a
+file joins it.
 
 **`performance/fetch_models.das` is the model-provenance manifest and nothing else.** Per
 catalog file: the exact HF repo + revision pin, canonical bytes + sha256, or the conversion
@@ -122,6 +139,8 @@ provisioned box — BRINGUP.md §2 is the runbook.
 - `dasllama_par.das` — the parallel-for macro.
 - `dasllama_prefix.das` — the prefix cache for evaluated token history.
 - `dasllama_parity.das` — CPU reference caches for parity instruments.
+- `dasllama_env.das` — the environment-knob registry and nothing else; `ENVIRONMENT.md`
+  generates from it.
 
 ### Formats and data movement
 
@@ -139,6 +158,7 @@ provisioned box — BRINGUP.md §2 is the runbook.
   weight carrier holds planes; only this file knows how one is bound, read, or dropped.
 - `dasllama_tokenizer.das` — the SentencePiece tokenizer.
 - `dasllama_bpe.das` — the byte-level BPE tokenizer.
+- `dasllama_unicode.das` — the transcoded unicode RANGES/WS tables and their lookups.
 
 ### CPU kernel tiers
 
@@ -159,14 +179,22 @@ provisioned box — BRINGUP.md §2 is the runbook.
 A backend is a family of role files, and the role names the contents. `<gpu>` is `metal` or
 `vulkan`.
 
-- `dasllama_<gpu>_kernels.das` — kernel source and the dispatch census. No device state.
+- the kernel home — kernel source, no device state: `dasllama_metal_kernels.das` (Metal),
+  `dasllama_vulkan_classes.das` (Vulkan — every kernel a `[spirv_kernel]`/`[vk_dispatch]`
+  class). The dispatch census tables and report are `<gpu>_common`'s.
+- `dasllama_vulkan_dispatch.das` — the `[vk_dispatch]` structure macro: generates the
+  `ensure_*`/`set_*`/`enc_*` surface, derives per-binding access, seeds the census. Macro code
+  only; a kernel body or device call here is a defect.
+- `dasllama_vulkan_seams.das` — the per-op class-rail seams (`vk_add_rms`, `vk_rope_kv_store`,
+  `vk_decode_attn`) and nothing else.
 - `dasllama_<gpu>_common.das` — device state, buffer and command plumbing, the hazard and capture
   rail, the profiler.
 - `dasllama_<gpu>_decode.das` — the resident token-step driver and its decode-time arms.
 - `dasllama_<gpu>_prefill.das` — the batched prefill driver and its batch arms.
-- `dasllama_<gpu>_shapes.das` — model-shape servability gates, portable: no GPU requires, so any
-  box can bake.
-- `dasllama_<gpu>_lens.das` — the kernel-access macro.
+- `dasllama_metal_shapes.das` — model-shape servability gates, portable: no GPU requires, so
+  any box can bake. Vulkan has no shapes file (`ARCHITECTURE.md` §1.5).
+- the kernel-access lens — `dasllama_metal_lens.das` (Metal); on Vulkan the dispatch macro
+  derives access, there is no separate lens file.
 - `dasllama_math_vulkan.das` — the Vulkan family entry: probe, arm, image identity, routers,
   init hooks. Its name is a require contract; renaming it is a defect.
 - `dasllama_metal_gemm.das` — the Metal batch-GEMM donor.
@@ -186,16 +214,18 @@ other module creating a device is a defect.
 **A PSO set is compiled and released by the module that owns its kernels.** Decode:
 `metal_decode_init` / `metal_kernels_release` in `dasllama_metal_kernels`. Prefill:
 `metal_prefill_init` / `metal_prefill_shutdown` in `dasllama_metal_prefill`. A PSO compiled or
-released anywhere else is a defect.
+released anywhere else is a defect. Vulkan: a pipeline is created only by a
+`[vk_dispatch]`-generated `ensure_*` and torn down by `vk_drop_model_state`; a hand-written
+pipeline build anywhere else is a defect.
 
 **Race code for a kernel family lives beside the family** — kernels races its families, prefill
 races its own; the shared scaffolding (`race_buf`, `race_envelope_ok`, `race_pair_ms`) is
 `<gpu>_common`'s. A race harness anywhere else is a defect.
 
-**A METAL decline reason is an enum value in the shapes module; decline counting lives in
-`metal_common`.** A string-typed metal decline, or a counter beside the decline site, is a
-defect. The vulkan tier's decline reasons are strings carried by `dasllama_gpu_resident` — that
-is its current contract, not a defect.
+**A Metal decline reason is a `MetalDecodeDecline` / `MetalPrefillDecline` value in
+`dasllama_metal_shapes.das`; decline counting lives in `dasllama_metal_common.das`.** A
+string-typed metal decline, or a counter beside the decline site, is a defect. (Vulkan decline
+typing is `followup_vulkan.md` item 1.)
 
 **The backend asymmetries are the closed list in `ARCHITECTURE.md` §1.5.** A diff that makes
 Metal and Vulkan differ in a new way lands with its entry there, or it is a defect.
@@ -226,9 +256,9 @@ prompt, a decode loop, a caps value, or a language rule in the facade is a defec
 **A GEMM in a family file goes through a `*_mm` wrapper or `mm_blob_b`.** A hand-written
 dot-product loop beside them is a defect.
 
-**Every `*_encode` and `*_log_mel` carries `[hot_path]` and lints at zero.** Reused buffers
-take `@scratch`; debug and profiling legs take `[cold_path]`. A nolint where either annotation
-fits is a defect.
+**Every `*_encode` and `*_log_mel` in `dasllama_audio.das` and the family files carries
+`[hot_path]` and lints at zero.** Reused buffers take `@scratch`; debug and profiling legs
+take `[cold_path]`. A nolint where either annotation fits is a defect.
 
 **A mel frontend builds on the FFT-plan machinery in `dasllama_audio.das`.** A hand-rolled DFT
 in a family file is a defect.
@@ -236,8 +266,8 @@ in a family file is a defect.
 **Every family has a token-for-token oracle cell, and every oracle cell logs its transcript
 as an `eyeball:` line.** An id-only comparison is a defect.
 
-**An option `caps()` does not declare panics at the call site.** Silently ignoring one is a
-defect.
+**A `create_session` / `transcribe` option that the model's `caps()` does not declare panics
+at the call site** (`dasllama_asr.das`). Accepting it and silently ignoring it is a defect.
 
 ### Generated
 
@@ -343,6 +373,21 @@ shapes that cannot reduce, not for code written oversized.
 **Platform backends implement narrow registered contracts.** Platform-specific code in a
 platform-neutral file is a defect.
 
+### Vulkan
+
+**A buffer bound as one SSBO range stays under `vk_max_storage_range()`, checked where its
+size is NEGOTIATED, not where it binds.** The bind site cannot shrink a buffer that was sized
+wrong; past the range every read is undefined, not slow.
+
+**A resident-driver change ships with `harness/parity.das` GPU-vs-CPU runs on one q8 and one
+kq model** — the vulkan arm is `DASLLAMA_GPU=1` (never `--ngl`, which is the Metal arm and
+panics without Metal). Kernel-unit green does not cover driver wiring, and the two
+activation-quant classes ride different enc paths — one model class cannot witness the other's.
+
+**A descriptor set cached across dispatches lives in state `vk_drop_model_state` clears** — a
+`*_ready` latch or a field inside `g_gpu` / the arena. A set cached in anything the drop does
+not touch dangles into the next model.
+
 **Every program root declares `options stack = 524288`.** A test, harness, benchmark, or tool
 that picks its own number — larger or smaller — is a defect, and so is a new root that omits the
-declaration. See `ARCHITECTURE.md` §2.7.
+declaration. See `ARCHITECTURE.md` §2.8.

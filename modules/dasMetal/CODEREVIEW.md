@@ -1,5 +1,9 @@
 # dasMetal Code Review Checklist
 
+**This file reviews itself: a rule a reviewer cannot apply as written is a defect of this
+file.** Mark it like any other finding — a checklist defect blocks nothing, but its fix (a
+rewrite or a move, never silent tolerance) lands in the same batch as the round's other fixes.
+
 1. **Any new bit of functionality ships with test coverage for EVERY new scenario it
    introduces.** The emitter has two test homes and a change usually needs both:
    `tests/msl/` — text-level fixtures (`_msl_common.das` kernels), per-construct census
@@ -18,10 +22,18 @@
    clean compile error naming the construct — never a silently wrong kernel. New error
    paths get their needle asserted in `tests/msl/test_msl_fail_closed.das`.
 5. **An emitter feature must not make dynamic dispatch easy.** The consumer rule is
-   dasLLAMA CODEREVIEW #21 — kernel SHAPE is compile-time, only DATA is runtime — and the
+   dasLLAMA CODEREVIEW's "A kernel's shape is compile-time; only its data is runtime" — and the
    emitter is where that is won or lost. A capability that carries a shape constant into
    the kernel as a value (a size parameter, a selector field, anything the shader compiler
    would have to inline-and-fold to recover) needs a specialization path beside it:
    per-type overloads, monomorphized generics, `static_if` on a compile-time witness. Where
    the emitter cannot specialize, say so in `MASTERPLAN.md` rather than shipping the value
    form as the answer. Assert the LITERAL in an emitted-text fixture, not the das source.
+6. **The two emitters mirror: a kernel-model capability lands on both backends, or its
+   asymmetry is recorded.** This emitter and dasSpirv (`modules/dasSpirv`) lower the same
+   kernel model — classes with resource members, ordinary methods, free-function callees,
+   inheritance with devirtualized overrides. A capability added to the kernel model here
+   lands on the SPIR-V side too (and the reverse), unless it is genuinely target-specific
+   (Metal-4 tensors vs cooperative matrix, simdgroup vs subgroup semantics); a deliberate
+   asymmetry is recorded in `MASTERPLAN.md`. A diff that grows the kernel model on one side
+   with no sibling change and no ledger entry is a defect.

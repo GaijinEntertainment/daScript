@@ -42,7 +42,7 @@ def test_msl_uniform_struct(t : T?) {
 [test]
 def test_msl_shape_stays_literal(t : T?) {
     t |> run("a per-type overload keeps the shape constant LITERAL in the emitted text") <| @(t : T?) {
-        // dasLLAMA CODEREVIEW #21: shape is compile-time. Each instance must carry its own
+        // dasLLAMA CODEREVIEW "shape is compile-time": each instance must carry its own
         // constant, not take a stride as a parameter and hope the shader compiler folds it.
         t |> success(find(ukstride_msl, "xs[(blk * 34u)]") >= 0, "the int8 instance multiplies by a literal 34u")
         t |> success(find(ukstride_msl, "xs[(blk * 18u)]") >= 0, "the uint8 instance multiplies by a literal 18u")

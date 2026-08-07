@@ -5,7 +5,6 @@ module dasllama_vulkan_common shared public
 options _cyclomatic_complexity = 0   // the init/teardown state walks are the domain shape
 options _function_length = 0   // same
 
-require dasllama/dasllama_vulkan_kernels   // the *_spv blobs + the derived-access spec
 require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_math
@@ -21,10 +20,11 @@ require daslib/fio   // has_env_variable — the VRAM-override probe
 
 // The Vulkan backend's shared infrastructure: device state (GpuState/g_gpu), buffer/descriptor
 // makers, upload + stacks + host-import, the weight arena, command/submit plumbing, the
-// hazard-mask rail + derived-dispatch registry, the GPU profiler, the shared fill-meta family,
-// and the single-op seams (vk_add_rms / vk_decode_attn / vk_rope_kv_store). Module-level state
-// is deliberately non-private — an internal driver family (dasllama_metal_common's precedent);
-// the drivers (dasllama_vulkan_decode / dasllama_vulkan_prefill) assign it.
+// hazard-mask rail + derived-dispatch registry, the GPU profiler, and the shared fill-meta
+// family. The single-op seams live in dasllama_vulkan_seams (on the class-kernel rail — this
+// module cannot require the classes module). Module-level state is deliberately non-private —
+// an internal driver family (dasllama_metal_common's precedent); the drivers
+// (dasllama_vulkan_decode / dasllama_vulkan_prefill) assign it.
 //
 // Submission model (v2): every stack carries its own descriptor set + host meta/xq/xs/y buffers,
 // so descriptors are written ONCE at upload and command buffers are PRE-RECORDED (per stack, plus
@@ -34,9 +34,11 @@ require daslib/fio   // has_env_variable — the VRAM-override probe
 
 // ===== device state (process-lifetime; never finalized by design) =====
 
-let WEIGHT_CAP = 4_200_000_000l    // default ceiling — NV/WDDM heapBudget IGNORES other
-                                           // processes (reported 7608 of 8192MB under a 1.7GB desktop);
-                                           // over-commit = silent SysMem demotion, act role 35x slower
+let WEIGHT_CAP = 4_200_000_000l    // fallback ceiling when the heap cannot be queried, and the
+                                           // value the DASLLAMA_GPU_VRAM_MB=0 misreporting-driver hatch
+                                           // pins; a queried heap derives the cap from its SIZE instead
+let DESKTOP_RESERVE = 2_147_483_648l   // raw-heap leave-behind for the desktop — the demotion-cliff
+                                           // term (measured on 8GB: 6000MB healthy, 6803 demoted)
 let VRAM_RESERVE = 805_306_368l    // headroom below the queried heap budget when it clamps
                                            // the cap down: the tier's own scratch (~210MB batch
                                            // planes) + eviction slack
@@ -45,10 +47,12 @@ let XQ_BYTES = 1_048_576l          // per-stack activation quants capacity
 let XS_BYTES = 262_144l            // ... their scales
 let Y_BYTES = 1_048_576l           // per-stack output capacity
 let META_BYTES = 4_096l            // params + region table
-let MAX_STACKS = 384               // descriptor pool capacity. Dense/shexp/qkv rails add
-                                           // ~250 small stacks on top of experts+cls; starving a
-                                           // LATER walk section here costs far more than the pool
-                                           // (a 224 cap silently cut 6 DN layers = -14% tg)
+let MAX_STACKS = 384               // stack-table capacity (and the ffn-cmd key radix). Dense/
+                                           // shexp/qkv rails add ~250 small stacks on top of
+                                           // experts+cls; starving a LATER walk section costs
+let DESC_POOL_CHUNK = 256          // sets per descriptor-pool chunk — grows by one chunk on
+                                           // exhaustion (llama.cpp's shape); NVIDIA ignores pool caps,
+                                           // MoltenVK/Intel enforce — a fixed 224-set pool silently cut 6 DN layers (-14% tg)
 let WG_X = 64u                     // kernel workgroup width (spec-const axis 0 can retune it)
 let BATCH_XQ_BYTES = 33_554_432l   // device-local gathered-activation scratch (chunk cap)
 let BATCH_XS_BYTES = 8_388_608l    // ... its scale plane
@@ -101,28 +105,16 @@ def q8_batch_tile_for(d, cnt : int64) : int64 {
 def q8_batch_aligned(d, cnt : int64) : bool
     => d % 128l == 0l && cnt % 128l == 0l && q8_batch_tile_for(d, cnt) == 128l
 
-def q8_batch_pipe_for(d, cnt : int64) : Pipeline
-    => q8_batch_pipe(q8_batch_tile_for(d, cnt), q8_batch_aligned(d, cnt))
-
 // a batch dispatch's tile pick + (rows, cols) edges: the cm2 twin (fmt 6) tiles 64w x 128t, q8
 // rides the router above, kq the fixed BATCH_TILE — one source so wg counts, meta fills, and the
-// pipe pick can never disagree
+// class pick can never disagree
 def batch_tile_edges(fmt : int; d, cnt : int64) : tuple<tile : int64; td : int64; tc : int64> {
     let tile = fmt == 0 ? q8_batch_tile_for(d, cnt) : BATCH_TILE
     return (tile = tile, td = fmt == 6 ? 64l : tile, tc = fmt == 6 ? 128l : tile)
 }
-
-// resident prefill GEMM pipe: a fmt-6 role rides the cm2 twin, everything else the q8 tile router
-def pf_gemm_pipe(fmt6 : bool; d, cnt : int64) : Pipeline {
-    if (fmt6) {
-        return weak_copy(g_gpu.batch_cm2)
-    }
-    return q8_batch_pipe_for(d, cnt)
-}
 let BATCH_CHUNK_ROWS = 8_192l      // dispatch row-window cap (bounds y and the wg map)
 let BATCH_HQ_BYTES = 33_554_432l   // device requantized-hidden quants (the down GEMM's activations)
 let BATCH_HS_BYTES = 8_388_608l    // ... its scale plane
-let FFN_META_BYTES = 64l           // act/requant params (element count, gelu flag, block count)
                                            // + the combine's [n, k, r0, r1] at words 4..7
 let COMB_WI_BYTES = 2_097_152l     // combine w / inv plane cap (npos*k grid entries x 4B)
 let CLS_META_BYTES = 64l           // classifier GEMV params (one region, filled once)
@@ -180,7 +172,7 @@ let DND_OS_BYTES = (DN_MAX_HEADS * DN_MAX_DS / 32l) * 4l
 let DND_SMALLS_BYTES = DN_SMALLS_BYTES + DN_MAX_CD * (DN_MAX_DCONV - 1l) * 4l
 
 // heat-cache pool stacks live in a SYNTHETIC element-offset space far above any real plane
-// offset, so find_stack / fill_stack_meta_rows / the whole FFN GEMV rail run verbatim on them
+// offset, so find_stack / fill_stack_sched_rows / the whole FFN GEMV rail run verbatim on them
 let HEAT_BASE = 1l << 42l
 let HEAT_STRIDE = 1l << 32l          // per pool-stack offset room (>> nslots * ege)
 let HEAT_UPLOAD_CAP = 2              // steady-state expert uploads per advise call
@@ -220,7 +212,6 @@ struct VkStack {
     wsbytes : int64
     // decode/GEMV dispatch state (lazy — first GEMV or cls use creates it; dense-GEMM stacks
     // never do, saving ~2.3MB host + 1MB device per stack across the ~130 dense planes)
-    raw_set : VkDescriptorSet   // this stack's 6 bindings, written on first GEMV use
     meta : HostBuf
     xq : HostBuf
     xs : HostBuf
@@ -236,10 +227,25 @@ struct VkStack {
     batch_tile : int64       // the tile edge the last fill_batch_meta routed — the bind must match
     batch_aligned : bool     // ... and whether that fill qualified for the guard-free aligned-L pipe
     batch_made : bool
+    // class-rail batch state: the bound-plane args (for lazy per-variant set builds), the last
+    // fill's map offset, and per-router-variant sets (cleared on rebind; die with the stack)
+    batch_xs : uint64
+    batch_xq_bytes : int64
+    batch_xs_bytes : int64
+    batch_y_bytes : int64
+    batch_xbit : uint
+    batch_ybit : uint
+    batch_map_off : int64
+    batch_cls_sets : VkDescriptorSet[8]
+    batch_cls_ready : uint
+    // decode class-GEMV set over the stack's own planes/meta/scratch (lazy; role bits are
+    // role-fluid — re-declared per chain via hz_set_bits before each record)
+    gemv_cls_set : VkDescriptorSet
+    gemv_cls_made : bool
     // classifier dispatch state (lazy — set up on the first cls GEMV against this stack)
     cls_set : VkDescriptorSet
-    cls_meta_dev : uint64    // device meta — vocab-row dispatches run ~150K subgroups, each
-                             // reading params; host-visible meta would be uncached PCIe reads
+    cls_regions_dev : uint64   // device regions pair — vocab-row dispatches run ~150K subgroups,
+                               // each reading it; host-visible would be uncached PCIe reads
     cls_cmd : VkCommandBuffer
     cls_made : bool
 }
@@ -272,9 +278,10 @@ struct StreamSlot {
 // resubmitted as-is
 struct FfnCmd {
     cmd : VkCommandBuffer
-    actrq_set : VkDescriptorSet   // gate y_dev + up y_dev (vk_upf) -> hq/hs device planes
-    down_set : VkDescriptorSet    // down stack planes + hq/hs as activations + its y_dev
+    actrq_set : VkDescriptorSet   // gate y_dev + up y_dev -> hq/hs device planes (class set)
+    down_set : VkDescriptorSet    // down stack planes + hq/hs as activations + its y_dev (class set)
     nrows : int64                 // row count cmd was recorded with
+    gelu : bool                   // activation form recorded into the push (re-record key with nrows)
 }
 
 // one recurrent layer's pre-recorded deltanet decode-step chain + its device-resident state.
@@ -293,6 +300,7 @@ struct DnStep {
     state_bytes : int64
     ring_bytes : int64
     parity : int             // ring image holding current history (the kernel writes the other)
+    tok : HostBuf            // the step's TokMeta block (parity, host-poked per step)
     valid : bool
     dirty : bool
 }
@@ -325,51 +333,8 @@ struct GpuState {
     fam : uint
     queue : VkQueue
     pool : CommandPool
-    set_layout : DescriptorSetLayout
-    desc_pool : DescriptorPool
-    pipe_layout : PipelineLayout
-    pipeline : Pipeline
-    batch_pipeline : Pipeline   // prefill batched-GEMM kernel (same set/pipe layout)
-    batch_coopmat_f16 : Pipeline  // prefill Q8_0 GEMM on tensor cores, f16-dequant (DASLLAMA_COOPMAT=f16)
-    batch_coopmat_i8 : Pipeline   // prefill Q8_0 GEMM on tensor cores, native s8 (DASLLAMA_COOPMAT=int8)
-    batch_coopmat_q40 : Pipeline  // prefill Q4_0 GEMM on tensor cores, f16-dequant (COOPMAT=f16, fmt 4)
-    batch_coopmat_mm : Pipeline   // prefill Q8_0 GEMM, the mul_mm 128x128 L-tile (DASLLAMA_COOPMAT=mm)
-    batch_coopmat_mm_m : Pipeline // ... its 64x64 M-tile twin, routed in for small-cnt dispatches
-    batch_coopmat_mm_a : Pipeline // ... the aligned-L twin (no staging guards/edge path — 2.2x the L rate)
-    batch_cm2 : Pipeline          // the cm2 decode-in-load prefill twin (mode 4, fmt-6 q8n stacks)
-    gemv_q8n : Pipeline           // the q8n native-block decode GEMV (mode 4's fmt-6 groupn twin)
-    xf16_pipeline : Pipeline      // cm2 chain: Q8_0 activation image -> f16 plane
-    actf16_pipeline : Pipeline    // cm2 chain: act(g)*u -> f16 hidden plane (the actrq stand-in)
-    f16cvt_pipeline : Pipeline    // arena cm2 chain: f32 rows -> f16 plane (the quant-role stand-in)
-    actrq_pipeline : Pipeline   // fused act(g)*u + q8_0 requant of the hidden rows
-    gemv_k4 : Pipeline          // native K-quant GEMVs (per-format decode kernels)
-    gemv_k5 : Pipeline
-    gemv_k6 : Pipeline
-    gemv_q40 : Pipeline
-    actrq_k_pipeline : Pipeline // fused act + Q8_K requant twin (per-256 scale) for the kq chains
-    batch_k4 : Pipeline         // native K-quant prefill tiles (per-format batch kernels)
-    batch_k5 : Pipeline
-    batch_k6 : Pipeline
-    batch_q40 : Pipeline
-    comb_pipeline : Pipeline    // routed weighted-sum combine (device-side reduce, prefill batches)
-    dn_conv_pipeline : Pipeline // deltanet conv + SiLU + q/k L2-norm (one workgroup per position)
-    dnd_fused_pipeline : Pipeline // deltanet decode step, whole chain fused (one workgroup per v-head)
-    dn_scan_p1_pipeline : Pipeline // deltanet scan phase 1: chunk-local pieces (wg per head x chunk)
-    dn_scan_p2_pipeline : Pipeline // deltanet scan phase 2: sequential state chain (wg per v-head)
-    dn_rq_pipeline : Pipeline   // plain Q8_0 requant of the scan's o rows (out-proj image)
-    at_prep_q_pipeline : Pipeline   // attention q(|gate) deinterleave + qk-rms + partial rope
-    at_prep_k_pipeline : Pipeline   // attention k rms + rope, written at absolute batch positions
-    at_attn_pipeline : Pipeline     // flash-style causal attention (GQA, online softmax, out-gate)
-    q8k_rq_pipeline : Pipeline      // plain Q8_K requant (the kq wo GEMM's activation image)
-    ar_pipeline : Pipeline          // add + RMSNorm, one wg per row (meta[1]=0 = norm only); decode dispatches 1 wg
-    ar_rq_pipeline : Pipeline       // resident driver: the above + the Q8_0 requant, one pass (DASLLAMA_VK_FUSE)
-    rks_pipeline : Pipeline         // resident driver: fused rope + KV-row store (f32 mirror)
-    qkn_rope_pipeline : Pipeline    // resident driver: per-head q/k rmsnorm + rope + KV store, one pass
-    da_pipeline : Pipeline          // resident driver: decode attention over the f32 KV mirror
-    rks_b_pipeline : Pipeline       // prefill: batched rope + KV-store
-    da_b_pipeline : Pipeline        // prefill: batched causal attention (generic hs)
-    da_b128_pipeline : Pipeline     // prefill: the hs=128 coopmat flash-attention twin (coopmat devices)
-    qkn_pipeline : Pipeline         // resident driver: per-head q/k rmsnorm (qk_norm models), decode + prefill
+    desc_pools : array<DescriptorPool>   // the pool chain: fixed chunks, grown on exhaustion
+    desc_pool_at : int                   // chain cursor — allocation fills chunk [at], overflow advances; drop resets to 0
     staging : HostBuf
     fence : VkFence          // the one reusable submit fence (reset after every wait)
     rows_per_wg : int64      // subgroups per workgroup = output rows per workgroup
@@ -389,8 +354,6 @@ struct GpuState {
     ar_a_dev : uint64
     ar_w_dev : uint64
     ar_y_dev : uint64
-    ar_meta : HostBuf
-    ar_scal : HostBuf
     ar_host : HostBuf
     ar_set : VkDescriptorSet
     ar_ready : bool
@@ -404,16 +367,16 @@ struct GpuState {
     af_yb_dev : uint64        // up output plane
     af_yo_dev : uint64        // down output
     af_yo_host : HostBuf
-    af_gate_set : VkDescriptorSet
-    af_up_set : VkDescriptorSet
+    af_gate_sets : table<int; VkDescriptorSet>   // keyed by the blk's arena slab (bindings 0/1 move)
+    af_up_sets : table<int; VkDescriptorSet>
     af_actrq_set : VkDescriptorSet
-    af_down_set : VkDescriptorSet
+    af_down_sets : table<int; VkDescriptorSet>
     af_ready : bool
     // rope+KV-store state: qkv in, roped q out, K/V planes = one contiguous device KV scratch
     rks_qkv_dev : uint64
     rks_q_dev : uint64
-    rks_scal : HostBuf
-    rks_meta : HostBuf
+    rks_scal : HostBuf        // the cos+sin row (kernel data, not params)
+    rks_tok : HostBuf         // the shared TokMeta block (pos/cnt/parity, host-poked per call)
     rks_k_dev : uint64        // f32 K mirror (rows x kv_dim, absolute positions)
     rks_v_dev : uint64        // f32 V mirror
     rks_q_host : HostBuf
@@ -422,8 +385,6 @@ struct GpuState {
     rks_ready : bool
     // decode-attention state: q in, out; reads the rks K/V mirror planes
     da_q_dev : uint64
-    da_scal : HostBuf
-    da_meta : HostBuf
     da_out_dev : uint64
     da_out_host : HostBuf
     da_set : VkDescriptorSet
@@ -446,8 +407,6 @@ struct GpuState {
     // FFN mid-chain state (lazy — first FFN dispatch creates it)
     hq_dev : uint64          // device requantized-hidden quants (the down GEMM's activation image)
     hs_dev : uint64          // ... its scales
-    ffn_meta : HostBuf       // act/requant params staging
-    ffn_meta_dev : uint64
     ffn_ready : bool
     // prefill batch state (lazy — first batch dispatch creates it; decode-only runs skip it)
     batch_xq_dev : uint64    // device-local gathered-activation quants (chunk window)
@@ -458,8 +417,9 @@ struct GpuState {
     batch_y1_dev : uint64    // gate / single output plane (kernel writes; also the down output)
     batch_y2_dev : uint64    // up output plane (the fused pair's second write target)
     batch_y1 : HostBuf       // host-cached readback staging for batch_y1_dev
-    batch_y2 : HostBuf       // ... and batch_y2_dev (idle since the FFN fold — kept for debug taps)
-    batch_actrq_set : VkDescriptorSet   // batch twin of FfnCmd's fused act+requant set (y1/y2 planes)
+    batch_actrq_set : VkDescriptorSet   // batch twin of FfnCmd's fused act+requant set (y1/y2
+                                        // planes; the actrq family shares one layout — one set)
+    batch_acts_cls_ready : bool         // both act sets built (by prefill; reset on drop)
     batch_cmd : VkCommandBuffer   // one reusable batch cmd buffer, re-recorded per submit
     batch_ready : bool
     // cm2 batch state (lazy — first q8n batch dispatch creates it; mode 4 only)
@@ -486,7 +446,6 @@ struct GpuState {
     stream_max_dn_wq : int64
     stream_max_dn_ws : int64
     stream_ready : bool
-    stream_reserve : int64        // bytes carved out of weight_budget for the 2 stream slots
     // dedicated transfer family (phase 5): mirror->slot copies overlap compute, handed off via a
     // timeline semaphore the next compute submit waits on. -1 = single-queue mode (the old rail).
     xfer_fam : int = -1
@@ -507,20 +466,19 @@ struct GpuState {
     dn_state_dev : uint64
     dn_ws_dev : uint64            // per-head scan slabs + the gated o rows
     dn_conv_set : VkDescriptorSet
-    dn_scan_set : VkDescriptorSet
+    dn_scan_set : VkDescriptorSet      // scan phase 1 (class sets are per-class — p2 has its own)
+    dn_scan_p2_set : VkDescriptorSet
     dn_rq_set : VkDescriptorSet
+    dn_cls_ready : bool                // the window chain's class sets (built by prefill)
     dn_ready : bool
     dn_shared_ok : bool  // device shared-mem cap fits dn_conv's 33 KB tile (false on Apple/MoltenVK)
     // deltanet decode-step state (lazy — first npos == 1 DN dispatch creates it)
-    dnd_meta : HostBuf            // step meta staging (npos = 1 geometry, filled once)
     dnd_bg : HostBuf              // per-token raw β/γ + ring-parity staging (copied into the layer smalls)
     dnd_oq_dev : uint64           // the o row's Q8_0 image (fused-step out, the out GEMV's activations)
     dnd_os_dev : uint64
     dnd_steps : table<int64; DnStep>   // qkv plane offset -> the layer's step chain
     dnd_ready : bool
     // attention chain state (lazy — first attention dispatch creates it)
-    at_meta : HostBuf             // attention kernel params staging
-    at_meta_dev : uint64
     at_smalls : HostBuf           // eps/scale/rms rows + the window's cos/sin rope rows
     at_smalls_dev : uint64
     at_q_dev : uint64             // the window's normed+roped q rows
@@ -532,7 +490,7 @@ struct GpuState {
     at_prep_q_set : VkDescriptorSet
     at_prep_k_set : VkDescriptorSet
     at_attn_set : VkDescriptorSet
-    at_rq_set : VkDescriptorSet
+    at_rq_set : VkDescriptorSet      // the o-requant family set (the encoder picks q8k/q8 per window)
     at_ready : bool
 }
 
@@ -772,11 +730,12 @@ def resolve_weight_cap(heap : VkHeapInfo) : int64 {
     if (has_env_variable("DASLLAMA_GPU_VRAM_MB")) {
         return WEIGHT_CAP
     }
-    var cap = WEIGHT_CAP
     if (heap.size > 0l) {
-        cap = clamp(heap.size - VRAM_RESERVE, 0l, cap)
+        // whole heap minus the desktop's leave-behind — the same term the demotion-cliff
+        // warning trusts, so a 16GB card caps at ~14GB instead of the old hardcoded 4.2
+        return max(heap.size - DESKTOP_RESERVE, 0l)
     }
-    return cap
+    return WEIGHT_CAP
 }
 
 // The stream-slot carve, derived AT READ TIME — g_gpu.weight_budget stores the UNCARVED cap.
@@ -907,7 +866,7 @@ def vk_moe_init : bool {
     if (heap.budget > 0l) {
         let vram_override = gpu_want_vram_mb() > 0l || has_env_variable("DASLLAMA_GPU_VRAM_MB")
         // the honest cliff leaves 2GB of the raw heap for the desktop (6000MB healthy, 6803 demoted)
-        let cliff = clamp(heap.budget - VRAM_RESERVE, 0l, heap.size - 2_147_483_648l)
+        let cliff = clamp(heap.budget - VRAM_RESERVE, 0l, heap.size - DESKTOP_RESERVE)
         if (vram_override && g_gpu.weight_budget > cliff) {
             to_log(LOG_WARNING, "dasLLAMA vulkan tier: DASLLAMA_GPU_VRAM_MB {g_gpu.weight_budget / 1000000l} MB is above the demotion cliff — WDDM will silently demote buffers to SysMem (act-role collapse); lower it to <= {cliff / 1000000l} MB\n")
         }
@@ -935,94 +894,20 @@ def vk_moe_init : bool {
     pci.flags.reset_command_buffer = true   // per-stack buffers re-record if a shape ever changes
     g_gpu.pool <- create_command_pool(g_gpu.device, pci)
 
-    // one layout, MAX_STACKS sets: each resident stack gets its own set at upload time
-    var dslci : DescriptorSetLayoutCreateInfo
-    dslci.pBindings |> reserve(6)
-    for (bind in range(6)) {
-        var b0 = DescriptorSetLayoutBinding(binding = uint(bind),
-                                            descriptorType = VkDescriptorType.STORAGE_BUFFER,
-                                            descriptorCount = 1u)
-        b0.stageFlags.compute = true
-        dslci.pBindings |> emplace(b0)
-    }
-    g_gpu.set_layout <- create_descriptor_set_layout(g_gpu.device, dslci)
-    var dpci : DescriptorPoolCreateInfo
-    dpci.maxSets = uint(5 * MAX_STACKS)   // decode + batch set per stack, 3 per FFN triple, 3 per DN step layer, batch act/rq
-    var psize = DescriptorPoolSize(type_ = VkDescriptorType.STORAGE_BUFFER, descriptorCount = uint(6 * 5 * MAX_STACKS))
-    dpci.pPoolSizes |> push(psize)
-    g_gpu.desc_pool <- create_descriptor_pool(g_gpu.device, dpci)
-
-    var plci : PipelineLayoutCreateInfo
-    plci.pSetLayouts <- [weak_copy(g_gpu.set_layout)]
-    g_gpu.pipe_layout <- create_pipeline_layout(g_gpu.device, plci)
+    desc_pool_grow()   // chunk 0 — the chain grows on demand from here
     g_pipe_access |> clear()
-    g_gpu.pipeline <- make_kernel_pipe("q8_moe_groupn", q8_moe_groupn_spv)
-    g_gpu.batch_pipeline <- make_kernel_pipe("q8_moe_batch", q8_moe_batch_spv)   // same 6-binding layout
-    if (g_gpu.coopmat_mode == 1) {   // f16 tensor-core prefill GEMMs (coopmat device only)
-        g_gpu.batch_coopmat_f16 <- make_kernel_pipe("q8_moe_batch_cmf16", q8_moe_batch_cmf16_spv)
-        g_gpu.batch_coopmat_q40 <- make_kernel_pipe("kq_moe_batch_q40_cmf16", kq_moe_batch_q40_cmf16_spv)
-    } elif (g_gpu.coopmat_mode == 2) {   // native-s8 tensor-core prefill GEMM
-        g_gpu.batch_coopmat_i8 <- make_kernel_pipe("q8_moe_batch_cmi8", q8_moe_batch_cmi8_spv)
-    } elif (g_gpu.coopmat_mode >= 3) {   // the mul_mm L/M-tile prefill GEMMs (routed per dispatch;
-        // mode 4 keeps the whole mm ladder for fmt-0 stacks and adds the cm2 rails for fmt-6)
-        g_gpu.batch_coopmat_mm <- make_kernel_pipe("q8_moe_batch_mm", q8_moe_batch_mm_spv)
-        g_gpu.batch_coopmat_mm_m <- make_kernel_pipe("q8_moe_batch_mm_m", q8_moe_batch_mm_m_spv)
-        g_gpu.batch_coopmat_mm_a <- make_kernel_pipe("q8_moe_batch_mm_a", q8_moe_batch_mm_a_spv)
-        if (g_gpu.coopmat_mode == 4) {
-            g_gpu.batch_cm2 <- make_kernel_pipe("q8n_moe_batch_cm2", q8n_moe_batch_cm2_spv)
-            g_gpu.gemv_q8n <- make_kernel_pipe("q8n_moe_groupn", q8n_moe_groupn_spv)
-            g_gpu.xf16_pipeline <- make_kernel_pipe("q8_moe_xf16", q8_moe_xf16_spv)
-            g_gpu.actf16_pipeline <- make_kernel_pipe("q8_moe_actf16", q8_moe_actf16_spv)
-            g_gpu.f16cvt_pipeline <- make_kernel_pipe("rd_f16cvt", rd_f16cvt_spv)
-        }
-    }
-    g_gpu.actrq_pipeline <- make_kernel_pipe("q8_moe_actrq", q8_moe_actrq_spv)
-    g_gpu.gemv_k4 <- make_kernel_pipe("kq_moe_gemv_k4", kq_moe_gemv_k4_spv)
-    g_gpu.gemv_k5 <- make_kernel_pipe("kq_moe_gemv_k5", kq_moe_gemv_k5_spv)
-    g_gpu.gemv_k6 <- make_kernel_pipe("kq_moe_gemv_k6", kq_moe_gemv_k6_spv)
-    g_gpu.gemv_q40 <- make_kernel_pipe("kq_moe_gemv_q40", kq_moe_gemv_q40_spv)
-    g_gpu.actrq_k_pipeline <- make_kernel_pipe("q8k_moe_actrq", q8k_moe_actrq_spv)
-    g_gpu.batch_k4 <- make_kernel_pipe("kq_moe_batch_k4", kq_moe_batch_k4_spv)
-    g_gpu.batch_k5 <- make_kernel_pipe("kq_moe_batch_k5", kq_moe_batch_k5_spv)
-    g_gpu.batch_k6 <- make_kernel_pipe("kq_moe_batch_k6", kq_moe_batch_k6_spv)
-    g_gpu.batch_q40 <- make_kernel_pipe("kq_moe_batch_q40", kq_moe_batch_q40_spv)
-    g_gpu.comb_pipeline <- make_kernel_pipe("moe_combine", moe_combine_spv)
-    // dn_conv stages a full row in shared (cv_row+cv_scale = 33024 B); Apple
-    // caps threadgroup memory at 32 KB and pipeline COMPILE fails, so the chain gates by limit
+    // every kernel is a [vk_dispatch] class (own set/pipeline layouts, pipelines built lazily
+    // via ensure_*); only the shared-memory capability gates settle here (dn_conv/at_* stage
+    // 33024 B rows; Apple caps threadgroup memory at 32 KB and pipeline COMPILE fails)
     var limits_props : VkPhysicalDeviceProperties
     vkGetPhysicalDeviceProperties(g_gpu.phys, limits_props)
     g_gpu.dn_shared_ok = limits_props.limits.maxComputeSharedMemorySize >= 33024u
-    if (g_gpu.dn_shared_ok) {
-        g_gpu.dn_conv_pipeline <- make_kernel_pipe("dn_conv", dn_conv_spv)
-        g_gpu.dnd_fused_pipeline <- make_kernel_pipe("dn_step_fused", dn_step_fused_spv)
-        g_gpu.dn_scan_p1_pipeline <- make_kernel_pipe("dn_scan_p1", dn_scan_p1_spv)
-        g_gpu.dn_scan_p2_pipeline <- make_kernel_pipe("dn_scan_p2", dn_scan_p2_spv)
-        g_gpu.dn_rq_pipeline <- make_kernel_pipe("dn_requant", dn_requant_spv)
-    } else {
+    if (!g_gpu.dn_shared_ok) {
         set_moe_gpu_dn_route(false)
         set_moe_gpu_dnd_route(false)
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: deltanet chain declined — device shared-memory cap {int(limits_props.limits.maxComputeSharedMemorySize)} B < dn_conv's 33024 B tile; recurrent layers stay on the CPU rail\n")
-    }
-    // at_* stages a full projection row in shared like dn_conv (33024 B) — same limit gate
-    if (g_gpu.dn_shared_ok) {
-        g_gpu.at_prep_q_pipeline <- make_kernel_pipe("at_prep_q", at_prep_q_spv)
-        g_gpu.at_prep_k_pipeline <- make_kernel_pipe("at_prep_k", at_prep_k_spv)
-        g_gpu.at_attn_pipeline <- make_kernel_pipe("at_attn", at_attn_spv)
-    } else {
         set_moe_gpu_attn_route(false)
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: deltanet + prefill-attention chains declined — device shared-memory cap {int(limits_props.limits.maxComputeSharedMemorySize)} B < the 33024 B row tile; those layers stay on the CPU rail\n")
     }
-    g_gpu.q8k_rq_pipeline <- make_kernel_pipe("q8k_requant", q8k_requant_spv)
-    g_gpu.ar_pipeline <- make_kernel_pipe("ar_add_rms_b", ar_add_rms_b_spv)   // decode seams dispatch it 1-wg
-    g_gpu.rks_pipeline <- make_kernel_pipe("rope_kv_store", rope_kv_store_spv)
-    g_gpu.da_pipeline <- make_kernel_pipe("da_attn", da_attn_spv)
-    g_gpu.rks_b_pipeline <- make_kernel_pipe("rope_kv_store_b", rope_kv_store_b_spv)
-    g_gpu.da_b_pipeline <- make_kernel_pipe("da_attn_b", da_attn_b_spv)
-    if (g_gpu.has_coopmat) {
-        g_gpu.da_b128_pipeline <- make_kernel_pipe("da_attn_b_h128", da_attn_b_h128_spv)
-    }
-    g_gpu.qkn_pipeline <- make_kernel_pipe("qk_rms", qk_rms_spv)
-    g_gpu.ar_rq_pipeline <- make_kernel_pipe("ar_add_rms_rq", ar_add_rms_rq_spv)
-    g_gpu.qkn_rope_pipeline <- make_kernel_pipe("qkn_rope_kv", qkn_rope_kv_spv)
 
     var fence <- create_fence(g_gpu.device, FenceCreateInfo())   // never finalized (process-lifetime)
     g_gpu.fence = boost_value_to_vk(fence)
@@ -1086,15 +971,37 @@ def vk_upload_report(direct : bool) {
     }
 }
 
-def alloc_desc_set : VkDescriptorSet {
+// one more chunk on the descriptor-pool chain (fixed size — see DESC_POOL_CHUNK)
+def desc_pool_grow {
+    var dpci : DescriptorPoolCreateInfo
+    dpci.maxSets = uint(DESC_POOL_CHUNK)
+    var psize = DescriptorPoolSize(type_ = VkDescriptorType.STORAGE_BUFFER, descriptorCount = uint(6 * DESC_POOL_CHUNK))
+    dpci.pPoolSizes |> push(psize)
+    g_gpu.desc_pools |> emplace(create_descriptor_pool(g_gpu.device, dpci))
+}
+
+// allocate one set of `layout` from the chain: fill chunk [desc_pool_at], advance (or grow) on
+// OUT_OF_POOL_MEMORY / FRAGMENTED_POOL — deterministic since sets are never individually freed;
+// any other failure stays fail-closed through vk_check
+def alloc_set_from_chain(var layout) : VkDescriptorSet {
     var dsai = VkDescriptorSetAllocateInfo()
-    dsai.descriptorPool = boost_value_to_vk(g_gpu.desc_pool)
     dsai.descriptorSetCount = 1u
-    var raw_set_layout = boost_value_to_vk(g_gpu.set_layout)
     var raw : VkDescriptorSet
     unsafe {
-        dsai.pSetLayouts = addr(raw_set_layout)
-        vk_check(vkAllocateDescriptorSets(dev_raw(), dsai, addr(raw)), null)
+        dsai.pSetLayouts = addr(layout)
+        while (true) {
+            if (g_gpu.desc_pool_at >= length(g_gpu.desc_pools)) {
+                desc_pool_grow()
+            }
+            dsai.descriptorPool = boost_value_to_vk(g_gpu.desc_pools[g_gpu.desc_pool_at])
+            let res = vkAllocateDescriptorSets(dev_raw(), dsai, addr(raw))
+            return raw if (res == VkResult.SUCCESS)
+            if (res == VkResult.ERROR_OUT_OF_POOL_MEMORY || res == VkResult.ERROR_FRAGMENTED_POOL) {
+                g_gpu.desc_pool_at++   // this chunk is full — move to (or grow) the next
+            } else {
+                vk_check(res, null)   // genuine device/host failure — fail closed
+            }
+        }
     }
     return raw
 }
@@ -1105,27 +1012,6 @@ def write_buf_desc(var writes : array<WriteDescriptorSet>; set_ : VkDescriptorSe
     var binfo = DescriptorBufferInfo(buffer = nonowning_buf(buf), range_ = uint64(bytes))
     w.pBufferInfo |> push(binfo)
     writes |> emplace(w)
-}
-
-// (re)write all six bindings of a set + declare its hazard region bits — every dispatchable set
-// in the family is built through here (or vk_set6, which allocates first)
-def vk_write6(set_ : VkDescriptorSet; b0, b1, b2, b3, b4, b5 : uint64; s0, s1, s2, s3, s4, s5 : int64; gbits : uint[6]) {
-    var writes : array<WriteDescriptorSet>
-    write_buf_desc(writes, set_, 0u, b0, s0)
-    write_buf_desc(writes, set_, 1u, b1, s1)
-    write_buf_desc(writes, set_, 2u, b2, s2)
-    write_buf_desc(writes, set_, 3u, b3, s3)
-    write_buf_desc(writes, set_, 4u, b4, s4)
-    write_buf_desc(writes, set_, 5u, b5, s5)
-    let no_copies : array<CopyDescriptorSet>
-    update_descriptor_sets(g_gpu.device, writes, no_copies)
-    hz_set_bits(set_, gbits)
-}
-
-def vk_set6(b0, b1, b2, b3, b4, b5 : uint64; s0, s1, s2, s3, s4, s5 : int64; gbits : uint[6]) : VkDescriptorSet {
-    var set_ = alloc_desc_set()
-    vk_write6(set_, b0, b1, b2, b3, b4, b5, s0, s1, s2, s3, s4, s5, gbits)
-    return set_
 }
 
 // weight plane byte sizes for one [rows x n] stack in the tier's device layout
@@ -1161,11 +1047,6 @@ def ensure_gemv_scratch(si : int) {
     g_gpu.stacks[si].xs = make_host_buf(XS_BYTES, true)
     g_gpu.stacks[si].y = make_host_buf(Y_BYTES, false, [cached = true])
     g_gpu.stacks[si].y_dev = make_device_buf(Y_BYTES)
-    // default y role; role-fluid chains (gate/up pair, qkv group, dn step) re-declare before recording
-    g_gpu.stacks[si].raw_set = vk_set6(g_gpu.stacks[si].wqbuf, g_gpu.stacks[si].wsbuf,
-        g_gpu.stacks[si].meta.buf, g_gpu.stacks[si].xq.buf, g_gpu.stacks[si].xs.buf, g_gpu.stacks[si].y_dev,
-        g_gpu.stacks[si].wqbytes, ws_range(si), META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES,
-        fixed_array(0u, 0u, 0u, 0u, 0u, VHG_Y1))
     g_gpu.stacks[si].gemv_made = true
 }
 
@@ -1341,8 +1222,11 @@ def vk_moe_stream_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n, r
 
 // The resident-accept arithmetic, shared by the upload path and the slice replay's would-accept
 // probe — a divergent copy would desync the baked plan at the refusal boundary.
-// 0 = accept, 1 = VRAM budget, 2 = descriptor capacity.
+// 0 = accept, 1 = VRAM budget, 2 = descriptor capacity, 3 = unplaceable row length.
 def vk_moe_resident_verdict(n, rows : int64; fmt : int) : int {
+    if (!arena_rows_ok(n, fmt)) {   // must precede stack_plane_bytes — its block math asserts
+        return 3
+    }
     let pb = stack_plane_bytes(n, rows, fmt)
     if (g_gpu.resident_bytes + pb.wq + pb.ws > carved_budget()) {
         return 1
@@ -1366,6 +1250,10 @@ def vk_moe_upload_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n : 
     if (!vk_moe_init()) {
         return false
     }
+    if (!arena_rows_ok(n, fmt)) {   // unplaceable row length: this stack stays on the CPU
+        to_log(LOG_WARNING, "dasLLAMA vulkan tier: stack at {woff} declined — row length {n} is not a {fmt_unit(fmt)}-block multiple (fmt {fmt})\n")
+        return false
+    }
     if (stream) {
         return vk_moe_stream_stack(wq, ws, woff, n, rows, fmt)
     }
@@ -1375,7 +1263,7 @@ def vk_moe_upload_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n : 
         return false
     }
     if (verdict == 2) {
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: descriptor capacity reached at {length(g_gpu.stacks)} stacks\n")
+        to_log(LOG_WARNING, "dasLLAMA vulkan tier: descriptor capacity reached at {length(g_gpu.stacks)} stacks — remaining layers stay on the CPU\n")
         return false
     }
     let pb = stack_plane_bytes(n, rows, fmt)
@@ -1417,6 +1305,21 @@ def vk_moe_drop_stacks(n : int; stream : bool) {
     }
 }
 
+// ArenaFmt owns das-heap containers (the slab array + per-slab set caches) — free them before
+// the table clear, which alone would leak them; the VK objects die in the bulk sweeps
+def private arena_drop_shells {
+    for (a in values(g_gpu.arenas)) {
+        delete a.slabs
+        a.cls_sets |> clear()          // set handles are pool-owned — clear drops them untouched
+        a.cls_batch_sets |> clear()
+        unsafe {
+            delete a.cls_sets          // empty now: frees the bucket storage only
+            delete a.cls_batch_sets
+        }
+    }
+    g_gpu.arenas |> clear()
+}
+
 //! MoeGpuDropModelFn: destroy every model-owned device object — stacks, arenas, the resident
 //! driver, all lazy dispatch state, their descriptor sets and command buffers. Device-lifetime
 //! state (instance/device/pipelines/staging/fence/profiler) survives and rebuilds lazily.
@@ -1428,7 +1331,7 @@ def vk_drop_model_state {
         // dry bake owns no device objects — reset the accounting shells only
         g_gpu.stacks |> clear()
         g_gpu.stream_stacks |> clear()
-        g_gpu.arenas |> clear()
+        arena_drop_shells()
         g_gpu.resident_bytes = 0l
         return
     }
@@ -1452,9 +1355,13 @@ def vk_drop_model_state {
         }
         g_gpu.model_cmds |> clear()
     }
-    // every descriptor set came from the one pool and every one is model-owned
+    // every descriptor set came from the chain and every one is model-owned — reset every chunk
+    // (chunks are kept, not destroyed: the next model refills from chunk 0)
     let rdpf : VkDescriptorPoolResetFlags
-    vk_check(vkResetDescriptorPool(dev_raw(), boost_value_to_vk(g_gpu.desc_pool), rdpf), null)
+    for (dp in g_gpu.desc_pools) {
+        vk_check(vkResetDescriptorPool(dev_raw(), boost_value_to_vk(dp), rdpf), null)
+    }
+    g_gpu.desc_pool_at = 0
     g_set_bits |> clear()   // pool reset recycles set handles — stale region bits must not survive
     // device buffers: dev_mem tracks every make_device_buf result — all model-owned
     for (buf, mem in keys(g_gpu.dev_mem), values(g_gpu.dev_mem)) {
@@ -1489,7 +1396,10 @@ def vk_drop_model_state {
     g_gpu.stacks |> clear()
     delete g_gpu.stream_stacks
     delete g_gpu.stream_slots
-    g_gpu.arenas |> clear()
+    arena_drop_shells()
+    g_gpu.af_gate_sets |> clear()
+    g_gpu.af_up_sets |> clear()
+    g_gpu.af_down_sets |> clear()
     g_gpu.ffn_cmds |> clear()
     g_gpu.qkv_cmds |> clear()
     g_gpu.dnd_steps |> clear()
@@ -1504,9 +1414,11 @@ def vk_drop_model_state {
     g_gpu.da_ready = false
     g_gpu.ffn_ready = false
     g_gpu.batch_ready = false
+    g_gpu.batch_acts_cls_ready = false
     g_gpu.comb_ready = false
     g_gpu.stream_ready = false
     g_gpu.dn_ready = false
+    g_gpu.dn_cls_ready = false
     g_gpu.dnd_ready = false
     g_gpu.at_ready = false
     g_gpu.ffn_pend_s2 = -1
@@ -1539,10 +1451,10 @@ def find_stream_group(w0 : int64; fmt : int) : int {
     return -1
 }
 
-def find_stack(w0 : int64; fmt : int) : int {
+def find_stack(w0 : int64; fmt : int; who : string) : int {
     let i = find_stack_idx(w0, fmt)
     if (i < 0) {
-        panic("dasLLAMA vulkan tier: dispatch against a non-resident weight region (fmt {fmt} element offset {w0})")
+        panic("dasLLAMA vulkan tier: {who} dispatch against a non-resident weight region (fmt {fmt} element offset {w0}) — stale route mark, or a model swapped in without moe_gpu_drop_model()")
     }
     return i
 }
@@ -1551,27 +1463,47 @@ def find_stack(w0 : int64; fmt : int) : int {
 // One buffer pair per FORMAT (kernels index both planes off ONE base, so a shared cursor only stays
 // aligned at a constant stride); tensors by block index. Sub-allocation, not a hardware-limit dodge.
 
+// one slab of a format's arena: a device plane pair holding a contiguous run of blocks. Slabs
+// exist because maxStorageBufferRange caps a single binding (4GiB on NV/AMD, tighter on MoltenVK)
+// while a big dense model's per-format weights don't — tensors never straddle a slab.
+struct ArenaSlab {
+    wqbuf : uint64           // device-local quants (0 when dry)
+    wsbuf : uint64           // ... and their scale rows, at the SAME local block index
+    wqbytes : int64          // descriptor ranges
+    wsbytes : int64
+    cap : int64              // block capacity
+    used : int64             // blocks placed (the slab's bump cursor)
+}
+
 struct ArenaFmt {
     fmt : int                // int(KqFmt): 0 = q8, 1/2/3 = k4/k5/k6, 4 = q40
-    wqbuf : uint64           // device-local quants for every tensor of this format
-    wsbuf : uint64           // ... and their scale rows, at the SAME block index
-    wqbytes : int64
-    wsbytes : int64
-    blocks : int64           // bump cursor: 32-weight blocks (q8) or 256-weight superblocks (kq)
+    slabs : array<ArenaSlab>
+    cur : int                // slab the bump cursor is in
+    slab_cap : int64         // max blocks one slab may carry (msr over both plane strides)
+    blocks : int64           // content blocks placed across all slabs (padding tails excluded)
     cap_blocks : int64
-    // dispatch scratch — ONE set per format: bindings 0/1 stay put, only the meta changes per call
-    raw_set : VkDescriptorSet
-    meta : HostBuf
+    // dispatch scratch — the class GEMV sets build lazily in the prefill module (the classes
+    // module cannot be required from here), one per slab; die with the arena on model drop
+    cls_sets : table<int; VkDescriptorSet>
+    meta : HostBuf              // class-layout region pairs (GEMV) staging
     xq : HostBuf
     xs : HostBuf
     y : HostBuf              // host-cached readback (the same-submit DMA lands here)
     y_dev : uint64
     ready : bool
-    // batch-GEMM scratch (prefill): shares g_gpu.batch_xq_dev/xs_dev/y1_dev; one set + meta per fmt
-    batch_set : VkDescriptorSet
+    // batch-GEMM scratch (prefill): shares g_gpu.batch_xq_dev/xs_dev/y1_dev
     batch_meta : HostBuf
     batch_ready : bool
+    // class-rail batch sets, keyed slab * 8 + router variant (built lazily by prefill)
+    cls_batch_sets : table<int; VkDescriptorSet>
 }
+
+//! The arena's block-index encoding: `arena_place` returns ``(slab << 32) | local``. The local
+//! half rides the kernel meta (regions/schedules), the slab half picks the bound plane pair;
+//! -1 stays the failure sentinel, and single-slab arenas return plain local indices.
+def arena_slab_idx(blk : int64) : int => int(blk >> 32l)
+
+def arena_local_blk(blk : int64) : int64 => blk & ((1l << 32l) - 1l)
 
 // per-block plane strides — the block is 32 weights for q8 and a 256-weight superblock for kq.
 // Mirrors stack_plane_bytes: it computes the same totals as count * these strides.
@@ -1603,40 +1535,84 @@ def arena_block_bytes(fmt : int) : tuple<wq : int64; ws : int64> {
     return (wq = kq_qsb(vk_kq_schema_id(fmt)), ws = KQ_DEV_SSB)
 }
 
+//! Row-length servability: the arena strides whole blocks, so a row that is not a block
+//! multiple cannot be placed — callers DECLINE such stacks to the CPU (never assert).
+def arena_rows_ok(n : int64; fmt : int) : bool => n % fmt_unit(fmt) == 0l
+
 def arena_blocks_for(n, rows : int64; fmt : int) : int64 {
     assert(vk_fmt_b32(fmt) || n % KQ_SUPERBLOCK_ELEMS == 0l, "dasLLAMA vulkan arena: kq row length must be a superblock multiple")
     assert(!vk_fmt_b32(fmt) || n % Q8_BLOCK_ELEMS == 0l, "dasLLAMA vulkan arena: q8 row length must be a 32-block multiple")
     return rows * (n / (vk_fmt_b32(fmt) ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS))
 }
 
+var private g_arena_slab_override = 0l
+
+//! TEST SEAM: force a tiny per-slab block capacity so the multi-slab path exercises without an
+//! over-msr model. 0 restores the device-derived cap. Affects arenas reserved AFTER the call.
+def vk_arena_test_slab_cap(blocks : int64) {
+    g_arena_slab_override = blocks
+}
+
+//! The device's maxStorageBufferRange — the ceiling on any single SSBO binding (arena slabs,
+//! the resident KV mirror).
+def vk_max_storage_range : int64 => g_gpu != null ? g_gpu.msr : 0l
+
+// per-slab block capacity: maxStorageBufferRange is the real ceiling (uint32 indexing reaches
+// 16GiB); NV/AMD report 4GiB, MoltenVK tighter — both plane strides must fit their binding
+def private arena_slab_blocks(fmt : int) : int64 {
+    if (g_arena_slab_override > 0l) {
+        return g_arena_slab_override
+    }
+    let bb = arena_block_bytes(fmt)
+    var cap = g_gpu.msr / bb.wq
+    if (bb.ws > 0l) {
+        cap = min(cap, g_gpu.msr / bb.ws)
+    }
+    return cap
+}
+
+// open the next slab, sized to what the content still needs (the last slab is usually partial).
+// The sealed slab's tail goes unused — bounded by the tensor that crossed, and said out loud.
+def private arena_open_slab(var a : ArenaFmt) {
+    let bb = arena_block_bytes(a.fmt)
+    let cap = min(a.slab_cap, a.cap_blocks - a.blocks)
+    if (!empty(a.slabs)) {
+        let tail = a.slabs[length(a.slabs) - 1].cap - a.slabs[length(a.slabs) - 1].used
+        to_log(LOG_INFO, "dasLLAMA vulkan arena: fmt {a.fmt} slab {length(a.slabs)} opens ({cap} blocks; {tail} tail blocks unused in slab {length(a.slabs) - 1})\n")
+    }
+    let qb = cap * bb.wq
+    // q8n has no scale plane — floor the ws buffer so its descriptor slots stay valid (stack-shell rule)
+    let sb = max(cap * bb.ws, 64l)
+    a.slabs |> push(ArenaSlab(cap = cap, wqbytes = qb, wsbytes = sb,
+        wqbuf = g_gpu.dry ? 0ul : make_device_buf(qb), wsbuf = g_gpu.dry ? 0ul : make_device_buf(sb)))
+}
+
 // Reserve one format's arena up front. Sizing is a decision, not a walk: the resident driver knows
 // every tensor's shape from Model metadata before a byte moves, so it either fits or declines.
+// Slabs open lazily at placement — reserve only fixes the content cap and the per-slab ceiling.
 def arena_reserve(fmt : int; cap_blocks : int64) : bool {
     if (key_exists(g_gpu.arenas, fmt)) {
-        // model reload: reset the bump cursor so it overwrites; an oversized reload then trips arena_place's -1 (decline to CPU) rather than overflowing
+        // model reload: reset the cursors so placement overwrites; an oversized reload then trips
+        // arena_place's -1 (decline to CPU) rather than overflowing
         unsafe {
-            g_gpu.arenas[fmt].blocks = 0l
+            var a & = g_gpu.arenas[fmt]
+            a.blocks = 0l
+            a.cur = 0
+            for (s in a.slabs) {
+                s.used = 0l
+            }
         }
         return true
     }
-    let bb = arena_block_bytes(fmt)
-    let qbytes = cap_blocks * bb.wq
-    // q8n has no scale plane — floor the ws buffer so its descriptor slots stay valid (stack-shell rule)
-    let sbytes = max(cap_blocks * bb.ws, 64l)
-    // maxStorageBufferRange is the real ceiling (uint32 indexing reaches 16GiB); NV/AMD report 4GiB
-    let shard_cap = g_gpu.msr
-    if (qbytes > shard_cap || sbytes > shard_cap) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan arena: fmt {fmt} needs {qbytes} quant + {sbytes} scale bytes — over the device's {shard_cap}B storage-range cap\n")
-        return false
+    unsafe {
+        g_gpu.arenas[fmt] <- ArenaFmt(fmt = fmt, cap_blocks = cap_blocks, slab_cap = arena_slab_blocks(fmt))
     }
-    var a = ArenaFmt(fmt = fmt, cap_blocks = cap_blocks, wqbytes = qbytes, wsbytes = sbytes,
-                     wqbuf = g_gpu.dry ? 0ul : make_device_buf(qbytes), wsbuf = g_gpu.dry ? 0ul : make_device_buf(sbytes))
-    g_gpu.arenas |> insert(fmt, a)
     return true
 }
 
-//! Place one [rows x n] tensor in its format's arena and upload it. Returns the BLOCK INDEX the
-//! meta needs (mp[4 + row*2] = block + row * blocks_per_row), or -1 if the arena is exhausted.
+//! Place one [rows x n] tensor in its format's arena and upload it. Returns the encoded block
+//! index the meta needs (see `arena_slab_idx`; regions carry the LOCAL half), or -1 if the arena
+//! is exhausted or one tensor exceeds a whole slab.
 def arena_place(wq : uint8 const?; ws : uint8 const?; n, rows : int64; fmt : int) : int64 {
     if (!key_exists(g_gpu.arenas, fmt)) {
         return -1l
@@ -1647,16 +1623,30 @@ def arena_place(wq : uint8 const?; ws : uint8 const?; n, rows : int64; fmt : int
         if (a.blocks + need > a.cap_blocks) {
             return -1l
         }
-        let blk = a.blocks
+        if (need > a.slab_cap) {
+            to_log(LOG_WARNING, "dasLLAMA vulkan arena: a single {need}-block tensor exceeds the {a.slab_cap}-block slab cap (fmt {fmt}) — unservable on this device\n")
+            return -1l
+        }
+        // a tensor never straddles slabs: walk to one with room (reload replays existing slabs),
+        // opening a fresh one past the end
+        while (a.cur < length(a.slabs) && a.slabs[a.cur].used + need > a.slabs[a.cur].cap) {
+            a.cur++
+        }
+        if (a.cur >= length(a.slabs)) {
+            arena_open_slab(a)
+        }
+        var s & = a.slabs[a.cur]
+        let blk = s.used
+        s.used += need
         a.blocks += need
         let bb = arena_block_bytes(fmt)
         if (!g_gpu.dry) {
-            upload_region_at(a.wqbuf, blk * bb.wq, wq, need * bb.wq)
+            upload_region_at(s.wqbuf, blk * bb.wq, wq, need * bb.wq)
             if (bb.ws > 0l) {
-                upload_region_at(a.wsbuf, blk * bb.ws, ws, need * bb.ws)
+                upload_region_at(s.wsbuf, blk * bb.ws, ws, need * bb.ws)
             }
         }
-        return blk
+        return int64(a.cur) << 32l | blk
     }
 }
 
@@ -1676,6 +1666,10 @@ def vk_arena_place(wq : array<uint8>; ws : array<uint8>; n : int64; rows : int64
     if (!vk_moe_init() || empty(wq) || (empty(ws) && fmt != 6)) {
         return -1l
     }
+    if (!arena_rows_ok(n, fmt)) {   // unplaceable row length: this plane stays on the CPU
+        to_log(LOG_WARNING, "dasLLAMA vulkan arena: plane declined — row length {n} is not a {fmt_unit(fmt)}-block multiple (fmt {fmt})\n")
+        return -1l
+    }
     return arena_place(unsafe(addr(wq[0])), empty(ws) ? null : unsafe(addr(ws[0])), n, rows, fmt)
 }
 
@@ -1687,17 +1681,13 @@ def arena_ensure_batch(fmt : int) {
             return
         }
         ensure_batch_state()
-        a.batch_meta = make_host_buf(BATCH_META_BYTES, true)
-        a.batch_set = vk_set6(a.wqbuf, a.wsbuf, a.batch_meta.buf, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, g_gpu.batch_y1_dev,
-            a.wqbytes, a.wsbytes, BATCH_META_BYTES, BATCH_XQ_BYTES, BATCH_XS_BYTES, BATCH_Y_BYTES,
-            fixed_array(0u, 0u, 0u, 0u, 0u, VHG_YO))   // meta/acts fill pre-cmd
+        a.batch_meta = make_host_buf(BATCH_META_BYTES, true)   // the class-layout schedule staging
         a.batch_ready = true
     }
 }
 
-// Bindings 0/1 are the arena planes; 2-5 are per-dispatch scratch, written exactly as
-// ensure_gemv_scratch writes them for a per-op stack — so an arena-resident tensor runs the SAME
-// kernels with the same meta convention. Lazy: a format only pays when it actually dispatches.
+// Per-format arena dispatch scratch (the class set over it builds in the prefill module —
+// a.meta carries the class-layout region pairs). Lazy: a format only pays when it dispatches.
 def arena_ensure_scratch(fmt : int) {
     unsafe {
         var a & = g_gpu.arenas[fmt]
@@ -1709,108 +1699,15 @@ def arena_ensure_scratch(fmt : int) {
         a.xs = make_host_buf(XS_BYTES, true)
         a.y = make_host_buf(Y_BYTES, false, [cached = true])
         a.y_dev = make_device_buf(Y_BYTES)
-        a.raw_set = vk_set6(a.wqbuf, a.wsbuf, a.meta.buf, a.xq.buf, a.xs.buf, a.y_dev,
-            a.wqbytes, a.wsbytes, META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES,
-            fixed_array(0u, 0u, 0u, 0u, 0u, VHG_YO))
         a.ready = true
     }
 }
 
-// residual-stream scratch for the add+rms kernel (lazy — only a resident-driver run creates it)
-def ensure_ar_state {
-    if (g_gpu.ar_ready) {
-        return
-    }
-    let bytes = AR_MAX_DIM * 4l
-    g_gpu.ar_x_dev = make_device_buf(bytes)
-    g_gpu.ar_a_dev = make_device_buf(bytes)
-    g_gpu.ar_w_dev = make_device_buf(bytes)
-    g_gpu.ar_y_dev = make_device_buf(bytes)
-    g_gpu.ar_meta = make_host_buf(META_BYTES, true)
-    g_gpu.ar_scal = make_host_buf(XS_BYTES, true)
-    g_gpu.ar_host = make_host_buf(bytes, false, [cached = true])   // x and y readback
-    g_gpu.ar_set = vk_set6(g_gpu.ar_x_dev, g_gpu.ar_a_dev, g_gpu.ar_meta.buf, g_gpu.ar_w_dev, g_gpu.ar_scal.buf, g_gpu.ar_y_dev,
-        bytes, bytes, META_BYTES, bytes, XS_BYTES, bytes,
-        fixed_array(VHG_X, 0u, 0u, 0u, 0u, VHG_YO))   // a/w/meta/scal fill pre-cmd
-    g_gpu.ar_ready = true
-}
+// The single-op seams (vk_add_rms / vk_rope_kv_store / vk_decode_attn) live in
+// dasllama_vulkan_seams — the class rail; their scratch handles stay on g_gpu here.
 
-//! Resident-driver seam: x = (x + a) * ascale then y = rms(x) * w, in ONE dispatch. `add` false
-//! runs the plain norm (the stack prologue). x is updated in place — it IS the residual stream.
-def vk_add_rms(var x : array<float>; a : array<float>; w : array<float>; var y : array<float>;
-               dim : int64; eps, ascale : float; add : bool) {
-    verify(vk_moe_init())   // assert() refuses side-effecting expressions; the probe must run
-    assert(dim <= AR_MAX_DIM, "dasLLAMA vulkan: add_rms dim exceeds AR_MAX_DIM")
-    ensure_ar_state()
-    let bytes = dim * 4l
-    unsafe {
-        var mp = reinterpret<uint?>(g_gpu.ar_meta.mapped)
-        mp[0] = uint(dim)
-        mp[1] = add ? 1u : 0u
-        mp[2] = 0u   // standalone seam: norm weight starts at 0
-        var sp = reinterpret<float?>(g_gpu.ar_scal.mapped)
-        sp[0] = eps
-        sp[1] = ascale
-        upload_region_at(g_gpu.ar_x_dev, 0l, addr<uint8 const?>(x[0]), bytes)
-        upload_region_at(g_gpu.ar_w_dev, 0l, addr<uint8 const?>(w[0]), bytes)
-        if (add) {
-            upload_region_at(g_gpu.ar_a_dev, 0l, addr<uint8 const?>(a[0]), bytes)
-        }
-        var raw = alloc_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
-        hz_dispatch(raw, h, weak_copy(g_gpu.ar_pipeline), g_gpu.ar_set, 1u)   // one workgroup owns the whole row (it reduces)
-        vhz_dep(raw, h, VHG_YO, 0u, true)   // x reads back post-fence in the second cmd
-        cmd_copy_whole(raw, g_gpu.ar_y_dev, g_gpu.ar_host.buf, bytes)
-        vk_check(vkEndCommandBuffer(raw), null)
-        submit_wait(raw)
-        memcpy(addr<void?>(y[0]), g_gpu.ar_host.mapped, bytes)
-        // x is the residual stream: read the updated row back too
-        var raw2 = alloc_cmd()
-        vk_check(vkBeginCommandBuffer(raw2, begin), null)
-        cmd_copy_whole(raw2, g_gpu.ar_x_dev, g_gpu.ar_host.buf, bytes)
-        vk_check(vkEndCommandBuffer(raw2), null)
-        submit_wait(raw2)
-        memcpy(addr<void?>(x[0]), g_gpu.ar_host.mapped, bytes)
-    }
-}
-
-// The arena FFN chain's four sets. Bindings mirror ffn_cmd_for exactly — only bindings 0/1 change,
-// from a stack's own plane pair to its format's arena. Each role needs its OWN set because the
-// weight base lives at a fixed meta offset, so it cannot vary within one set.
-def ensure_af_state(f1, f3, f2 : int) {
-    if (g_gpu.af_ready) {
-        return
-    }
-    ensure_ffn_state()
-    g_gpu.af_meta_g = make_host_buf(META_BYTES, true)
-    g_gpu.af_meta_u = make_host_buf(META_BYTES, true)
-    g_gpu.af_meta_d = make_host_buf(META_BYTES, true)
-    g_gpu.af_xq = make_host_buf(XQ_BYTES, true)
-    g_gpu.af_xs = make_host_buf(XS_BYTES, true)
-    g_gpu.af_ya_dev = make_device_buf(Y_BYTES)
-    g_gpu.af_yb_dev = make_device_buf(Y_BYTES)
-    g_gpu.af_yo_dev = make_device_buf(Y_BYTES)
-    g_gpu.af_yo_host = make_host_buf(Y_BYTES, false, [cached = true])
-    let a1 = arena_planes(f1)
-    let a3 = arena_planes(f3)
-    let a2 = arena_planes(f2)
-    g_gpu.af_gate_set = vk_set6(a1.wq, a1.ws, g_gpu.af_meta_g.buf, g_gpu.af_xq.buf, g_gpu.af_xs.buf, g_gpu.af_ya_dev,
-        a1.wqb, a1.wsb, META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES,
-        fixed_array(0u, 0u, 0u, 0u, 0u, VHG_Y1))
-    g_gpu.af_up_set = vk_set6(a3.wq, a3.ws, g_gpu.af_meta_u.buf, g_gpu.af_xq.buf, g_gpu.af_xs.buf, g_gpu.af_yb_dev,
-        a3.wqb, a3.wsb, META_BYTES, XQ_BYTES, XS_BYTES, Y_BYTES,
-        fixed_array(0u, 0u, 0u, 0u, 0u, VHG_Y2))
-    // the act+requant set has no weights: up@0, gate@5, hq/hs out (binding 1 is filler)
-    g_gpu.af_actrq_set = vk_set6(g_gpu.af_yb_dev, a1.ws, g_gpu.ffn_meta_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_gpu.af_ya_dev,
-        Y_BYTES, a1.wsb, FFN_META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, Y_BYTES,
-        fixed_array(VHG_Y2, 0u, VHG_META, VHG_HQ, VHG_HQ, VHG_Y1))
-    g_gpu.af_down_set = vk_set6(a2.wq, a2.ws, g_gpu.af_meta_d.buf, g_gpu.hq_dev, g_gpu.hs_dev, g_gpu.af_yo_dev,
-        a2.wqb, a2.wsb, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, Y_BYTES,
-        fixed_array(0u, 0u, 0u, VHG_HQ, VHG_HQ, VHG_YO))
-    g_gpu.af_ready = true
-}
+// The arena FFN chain (ensure_af_state + vk_arena_ffn) lives in dasllama_vulkan_prefill on the
+// class rail; its scratch handles stay on g_gpu here.
 
 //! True when a Vulkan device is up (probes lazily). Non-panicking — the resident-driver seams that
 //! `verify(vk_moe_init())` are fine on this hardware, but a test wants to feint on a headless box.
@@ -1821,117 +1718,8 @@ let RKS_MAX_KVD = 1_024l
 let RKS_MAX_CTX = 4_096l   // K/V mirror rows in the standalone-kernel scratch
 let KV_READBACK_ROWS = 256l   // bulk mirror->host hydration chunk (rows per submit)
 
-def ensure_rks_state {
-    if (g_gpu.rks_ready) {
-        return
-    }
-    g_gpu.rks_qkv_dev = make_device_buf((RKS_MAX_QD + 2l * RKS_MAX_KVD) * 4l)
-    g_gpu.rks_q_dev = make_device_buf(RKS_MAX_QD * 4l)
-    g_gpu.rks_k_dev = make_device_buf(RKS_MAX_CTX * RKS_MAX_KVD * 4l)
-    g_gpu.rks_v_dev = make_device_buf(RKS_MAX_CTX * RKS_MAX_KVD * 4l)
-    g_gpu.rks_scal = make_host_buf(XS_BYTES, true)
-    g_gpu.rks_meta = make_host_buf(META_BYTES, true)
-    g_gpu.rks_q_host = make_host_buf(RKS_MAX_QD * 4l, false, [cached = true])
-    g_gpu.rks_kv_host = make_host_buf(2l * RKS_MAX_KVD * 4l, false, [cached = true])
-    g_gpu.rks_set = vk_set6(g_gpu.rks_qkv_dev, g_gpu.rks_k_dev, g_gpu.rks_meta.buf, g_gpu.rks_v_dev, g_gpu.rks_scal.buf, g_gpu.rks_q_dev,
-        (RKS_MAX_QD + 2l * RKS_MAX_KVD) * 4l, RKS_MAX_CTX * RKS_MAX_KVD * 4l, META_BYTES,
-        RKS_MAX_CTX * RKS_MAX_KVD * 4l, XS_BYTES, RKS_MAX_QD * 4l,
-        fixed_array(0u, VHG_Y2, 0u, VHG_Y3, 0u, VHG_Y1))   // K mirror / V mirror / roped q
-    g_gpu.rks_ready = true
-}
-
-
-def ensure_da_state {
-    if (g_gpu.da_ready) {
-        return
-    }
-    ensure_rks_state()   // shares the K/V mirror planes
-    g_gpu.da_q_dev = make_device_buf(RKS_MAX_QD * 4l)
-    g_gpu.da_out_dev = make_device_buf(RKS_MAX_QD * 4l)
-    g_gpu.da_scal = make_host_buf(XS_BYTES, true)
-    g_gpu.da_meta = make_host_buf(META_BYTES, true)
-    g_gpu.da_out_host = make_host_buf(RKS_MAX_QD * 4l, false, [cached = true])
-    g_gpu.da_set = vk_set6(g_gpu.da_q_dev, g_gpu.rks_k_dev, g_gpu.da_meta.buf, g_gpu.rks_v_dev, g_gpu.da_scal.buf, g_gpu.da_out_dev,
-        RKS_MAX_QD * 4l, RKS_MAX_CTX * RKS_MAX_KVD * 4l, META_BYTES,
-        RKS_MAX_CTX * RKS_MAX_KVD * 4l, XS_BYTES, RKS_MAX_QD * 4l,
-        fixed_array(0u, 0u, 0u, 0u, 0u, VHG_YO))   // q/mirrors fill pre-cmd (fence-ordered)
-    g_gpu.da_ready = true
-}
-
-//! Resident-driver seam: decode attention of the roped q row against the `cnt` cached positions in
-//! the device K/V mirror (the same planes vk_rope_kv_store wrote), GQA per kv_mul, into out[0..qd).
-def vk_decode_attn(var q : array<float>; var out : array<float>; cnt, qd, kv_dim, head_size, kv_mul : int64; scale : float) {
-    verify(vk_moe_init())
-    assert(head_size <= 256l && qd <= RKS_MAX_QD, "dasLLAMA vulkan: decode-attn geometry over scratch")
-    ensure_da_state()
-    let n_heads = int(qd / head_size)
-    unsafe {
-        var mp = reinterpret<uint?>(g_gpu.da_meta.mapped)
-        mp[0] = uint(cnt)
-        mp[1] = uint(qd)
-        mp[2] = uint(kv_dim)
-        mp[3] = uint(head_size)
-        mp[4] = uint(kv_mul)
-        mp[5] = 0u   // standalone seam: mirror base 0
-        mp[6] = 0u
-        var sp = reinterpret<float?>(g_gpu.da_scal.mapped)
-        sp[0] = scale
-        upload_region_at(g_gpu.da_q_dev, 0l, addr<uint8 const?>(q[0]), qd * 4l)
-        var raw = alloc_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
-        hz_dispatch(raw, h, weak_copy(g_gpu.da_pipeline), g_gpu.da_set, uint(n_heads))
-        vhz_dep(raw, h, VHG_YO, 0u, true)
-        cmd_copy_whole(raw, g_gpu.da_out_dev, g_gpu.da_out_host.buf, qd * 4l)
-        vk_check(vkEndCommandBuffer(raw), null)
-        submit_wait(raw)
-        memcpy(addr<void?>(out[0]), g_gpu.da_out_host.mapped, qd * 4l)
-    }
-}
-
-//! Resident-driver seam (standalone-kernel form): rope the q row in place, rope the k row into the
-//! device K mirror at row `pos`, copy v raw into the V mirror at `pos`; then read q + that row's
-//! K/V back for parity. `neox` picks llama's adjacent-pair vs qwen/gemma's half-offset rope.
-def vk_rope_kv_store(var qkv : array<float>; var qout : array<float>; var krow : array<float>; var vrow : array<float>;
-                     cossin : array<float>; qd, kv_dim, head_size, pos : int64; neox : bool) {
-    verify(vk_moe_init())
-    let half = int(head_size / 2l)
-    assert(qd <= RKS_MAX_QD && kv_dim <= RKS_MAX_KVD && pos < RKS_MAX_CTX, "dasLLAMA vulkan: rope_kv geometry over scratch")
-    ensure_rks_state()
-    let kpair0 = int(qd / 2l)
-    let npairs = kpair0 + int(kv_dim / 2l)
-    unsafe {
-        var mp = reinterpret<uint?>(g_gpu.rks_meta.mapped)
-        mp[0] = uint(qd)
-        mp[1] = uint(kv_dim)
-        mp[2] = uint(head_size)
-        mp[3] = uint(half)
-        mp[4] = neox ? 1u : 0u
-        mp[5] = uint(kpair0)
-        mp[6] = uint(npairs)
-        mp[7] = uint(pos * kv_dim)   // K mirror row offset (f32 elements)
-        mp[8] = uint(pos * kv_dim)   // V mirror row offset
-        memcpy(g_gpu.rks_scal.mapped, addr<void?>(cossin[0]), head_size * 4l)   // cos[half] + sin[half]
-        upload_region_at(g_gpu.rks_qkv_dev, 0l, addr<uint8 const?>(qkv[0]), (qd + 2l * kv_dim) * 4l)
-        // q enters the kernel via vk_y (binding 5) = rks_q_dev — seed it with the raw q rows
-        upload_region_at(g_gpu.rks_q_dev, 0l, addr<uint8 const?>(qkv[0]), qd * 4l)
-        var raw = alloc_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
-        hz_dispatch(raw, h, weak_copy(g_gpu.rks_pipeline), g_gpu.rks_set, uint((npairs + int(WG_X) - 1) / int(WG_X)))
-        vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_Y3, 0u, true)   // one declaration for the q/k/v readback group
-        cmd_copy_whole(raw, g_gpu.rks_q_dev, g_gpu.rks_q_host.buf, qd * 4l)
-        cmd_copy_range(raw, g_gpu.rks_k_dev, pos * kv_dim * 4l, g_gpu.rks_kv_host.buf, 0l, kv_dim * 4l)
-        cmd_copy_range(raw, g_gpu.rks_v_dev, pos * kv_dim * 4l, g_gpu.rks_kv_host.buf, kv_dim * 4l, kv_dim * 4l)
-        vk_check(vkEndCommandBuffer(raw), null)
-        submit_wait(raw)
-        memcpy(addr<void?>(qout[0]), g_gpu.rks_q_host.mapped, qd * 4l)
-        memcpy(addr<void?>(krow[0]), g_gpu.rks_kv_host.mapped, kv_dim * 4l)
-        memcpy(addr<void?>(vrow[0]), reinterpret<float?>(g_gpu.rks_kv_host.mapped) + kv_dim, kv_dim * 4l)
-    }
-}
+// ensure_rks_state / ensure_da_state / vk_rope_kv_store / vk_decode_attn moved to
+// dasllama_vulkan_seams (the class rail).
 
 // ===== resident-driver state + the fill-meta family (the driver itself is decode/prefill) =====
 // One cb/token: residual + KV mirror stay device-side, host only uploads x + rope row, reads logits.
@@ -1942,28 +1730,27 @@ struct RLayer {
     bq, bk, bv, bo, b1, b3, b2 : int64
     fq, fk, fv, fo, f1, f3, f2 : int
     // the layer's descriptor sets (built once, referenced every token)
-    s_quant_xb : VkDescriptorSet    // dn_requant of the attn-norm activation
-    s_q, s_k, s_v : VkDescriptorSet  // q/k/v GEMV
-    s_kv : VkDescriptorSet          // merged k+v two-region GEMV (fk == fv: same arena planes)
+    s_quant_xb : VkDescriptorSet    // requant class set for the attn-norm activation
+    s_q, s_k, s_v : VkDescriptorSet  // q/k/v class GEMV
+    s_kv : VkDescriptorSet          // merged k+v two-region class GEMV (fk == fv: same arena planes)
     kv_merged : bool
-    s_qkn : VkDescriptorSet         // per-head q/k rmsnorm (qk_norm models only)
-    s_qkn_rope : VkDescriptorSet    // the fused qk-rmsnorm + rope + KV store (qk_norm models only)
-    s_rope : VkDescriptorSet
-    s_attn : VkDescriptorSet
+    s_qkn : VkDescriptorSet         // per-head q/k rmsnorm class set (qk_norm models only)
+    s_qkn_rope : VkDescriptorSet    // the fused qk-rmsnorm + rope + KV store (qk_norm models only; per-token words ride the shared TokMeta)
+    s_rope : VkDescriptorSet        // rope + KV store class set
+    s_attn : VkDescriptorSet        // decode attention class set
     s_quant_at : VkDescriptorSet
     s_wo : VkDescriptorSet
     s_addr_ffn : VkDescriptorSet
-    s_addr_ffn_rq : VkDescriptorSet   // the fused add+rms+requant twins of addr_ffn / addr_next:
-    s_quant_xb2 : VkDescriptorSet     // same inputs, but xq/xs at bindings 4-5 instead of xb
+    s_addr_ffn_rq : VkDescriptorSet   // the fused add+rms+requant twins of addr_ffn / addr_next
+    s_quant_xb2 : VkDescriptorSet
     s_gate, s_up : VkDescriptorSet
     s_actrq : VkDescriptorSet
     s_down : VkDescriptorSet
     s_addr_next : VkDescriptorSet
     s_addr_next_rq : VkDescriptorSet
-    // per-dispatch metas (host-visible; contents rewritten per token)
-    m_quant_xb, m_q, m_k, m_v, m_qkn, m_qkr, m_rope, m_attn, m_quant_at, m_wo, m_addr_ffn : HostBuf
-    m_quant_xb2, m_gate, m_up, m_actrq, m_down, m_addr_next : HostBuf
-    next_norm_off : int64   // rms_ffn is w_off for addr_ffn; addr_next uses rms_att[l+1] or final
+    // host-visible per-dispatch buffers: the class GEMV region pairs
+    m_q, m_k, m_v, m_wo : HostBuf
+    m_gate, m_up, m_down : HostBuf
     made : bool
 }
 
@@ -1975,9 +1762,7 @@ struct RDec {
     norms_bytes : int64           // full norms buffer size (grows past the fixed layout under qk_norm)
     ar_scal_off : int64            // eps/ascale pair, appended to the norms buffer (float units) —
                                    // the fused ar+requant needs binding 4 for its scale output
-    cos_elems : int64              // cos/sin row + (under qk_norm) the rms_q/rms_k rows + eps
-    qkn_row_off : int64             // rms_q[0] in the cos buffer (float units); rms_k[l] follows each
-    qkn_eps_off : int64             // eps, past the rms rows in the cos buffer
+    cos_elems : int64              // the cos/sin row (head_size floats)
     eps, scale : float
     // per-token device buffers
     x_dev, xb_dev : uint64        // residual, normed activation
@@ -1991,25 +1776,22 @@ struct RDec {
     k_mirror, v_mirror : uint64   // [n_layers x seq_cap x kv_dim] f32
     norms_dev : uint64            // rms_att[l]/rms_ffn[l] interleaved + final, uploaded once
     cos_dev : uint64              // this token's rope row (cos[half] + sin[half])
-    scal_dev : uint64             // da_attn scalars: [0] = attn scale
-    ar_scal_dev : uint64          // add_rms scalars: [0] = eps, [1] = ascale (1.0 for the residual add)
     logits_dev : uint64
     x_host, logits_host : HostBuf
     kv_readback : HostBuf         // per-layer K/V row -> CPU cache writeback
-    cls_meta_dev : uint64
+    cls_regions_dev : uint64      // the classifier class-GEMV's one-pair regions buffer (device —
+                                  // vocab-row dispatches read it from ~150K subgroups)
     cls_set : VkDescriptorSet
     s_prologue : VkDescriptorSet  // xb = rms_att[0](x)
     s_prologue_rq : VkDescriptorSet   // the fused twin (also does layer 0's activation quant)
-    m_prologue : HostBuf
     s_quant_final : VkDescriptorSet
-    m_quant_final : HostBuf
     dummy : uint64                // filler for unused bindings
     cls_fmt_marker : int
     layers : array<RLayer>
     cmd : VkCommandBuffer
     tok_recorded : bool           // cmd holds the whole-token chain, re-submittable as-is
     cos_host : HostBuf            // this token's rope row, copied to cos_dev in-cmd
-    ffn_meta_h : HostBuf          // decode-owned actrq meta source (g_gpu.ffn_meta is shared with the batch rails)
+    tok_meta : HostBuf            // the shared TokMeta block (pos/cnt), host-poked per token
     // prefill batch buffers (lazy — sized MAX_NPOS x their width) + per-layer prefill sets
     pf_ready : bool
     pf_np : int64                 // MAX_NPOS the buffers were sized for
@@ -2021,6 +1803,7 @@ struct RDec {
     pf_logits_host : HostBuf
     pf_meta : array<HostBuf>      // one host meta per (layer, role) + prologue/final/cls
     pf_sets : array<VkDescriptorSet>
+    pf_cls_gemm : table<int; VkDescriptorSet>   // GEMM-role class sets, keyed idx*8 + router variant
     pf_cmd : VkCommandBuffer
 }
 
@@ -2031,48 +1814,34 @@ var g_rd : RDec?
 // a small host-visible meta buffer (uint words), contents filled per token during recording
 def rd_meta() : HostBuf => make_host_buf(META_BYTES, true)
 
-// one arena's plane handles + sizes in ONE table lookup (das rejects two lookups in one expr)
-def arena_planes(fmt : int) : tuple<wq : uint64; ws : uint64; wqb : int64; wsb : int64> {
+// one slab's plane handles + descriptor ranges in ONE table lookup — the slab rides the encoded
+// block index's high bits (das rejects two lookups in one expr)
+def arena_planes(fmt : int; blk : int64) : tuple<wq : uint64; ws : uint64; wqb : int64; wsb : int64> {
     unsafe {
         var a & = g_gpu.arenas[fmt]
-        return (wq = a.wqbuf, ws = a.wsbuf, wqb = a.wqbytes, wsb = a.wsbytes)
+        let s & = a.slabs[arena_slab_idx(blk)]
+        return (wq = s.wqbuf, ws = s.wsbuf, wqb = s.wqbytes, wsb = s.wsbytes)
     }
 }
 
-// gemv meta: [0]=n [1]=d [2]=nregions=1 [3]=ybase(row) [4]=weight block [5]=xblock base
-def fill_gemv_meta(hb : HostBuf; n, d, ybase, blk : int64) {
+// class-GEMV regions: (rel_wblock, xblock) pairs at 0 — n/d/nreg/ybase ride the push instead
+def fill_gemv_regions(hb : HostBuf; blk : int64) {
     unsafe {
         var mp = reinterpret<uint?>(hb.mapped)
-        mp[0] = uint(n)
-        mp[1] = uint(d)
-        mp[2] = 1u
-        mp[3] = uint(ybase)
-        mp[4] = uint(blk)
-        mp[5] = 0u
+        mp[0] = uint(arena_local_blk(blk))
+        mp[1] = 0u
     }
 }
 
-// two-region form: regions land contiguously in y at ybase, ybase+d (groupn's r*d+row rule)
-def fill_gemv_meta2(hb : HostBuf; n, d, ybase, blk_a, blk_b : int64) {
+// two-region form: regions land contiguously in y at ybase, ybase+d (the r*d+row rule).
+// Both blocks must live in ONE slab (one set binds one plane pair) — the caller guards.
+def fill_gemv_regions2(hb : HostBuf; blk_a, blk_b : int64) {
     unsafe {
         var mp = reinterpret<uint?>(hb.mapped)
-        mp[0] = uint(n)
-        mp[1] = uint(d)
-        mp[2] = 2u
-        mp[3] = uint(ybase)
-        mp[4] = uint(blk_a)
-        mp[5] = 0u
-        mp[6] = uint(blk_b)
-        mp[7] = 0u
-    }
-}
-
-// dn_requant meta: [10]=input base (0) [18]=block count
-def fill_quant_meta(hb : HostBuf; nblocks : int64) {
-    unsafe {
-        var mp = reinterpret<uint?>(hb.mapped)
-        mp[10] = 0u
-        mp[18] = uint(nblocks)
+        mp[0] = uint(arena_local_blk(blk_a))
+        mp[1] = 0u
+        mp[2] = uint(arena_local_blk(blk_b))
+        mp[3] = 0u
     }
 }
 
@@ -2083,36 +1852,6 @@ def fill_cvt_meta(hb : HostBuf; elems : int64) {
         mp[0] = uint(elems)
     }
 }
-
-// word 3 is the fused ar+requant's eps/ascale offset; the split ar kernel reads only 0-2
-def fill_addrms_meta(hb : HostBuf; dim, woff : int64; add : bool) {
-    unsafe {
-        var mp = reinterpret<uint?>(hb.mapped)
-        mp[0] = uint(dim)
-        mp[1] = add ? 1u : 0u
-        mp[2] = uint(woff)
-        mp[3] = uint(g_rd.ar_scal_off)
-    }
-}
-
-// the fused qk-rmsnorm+rope meta; words 9-11 index the COS buffer, not the norms buffer
-def fill_qkn_rope_meta(hb : HostBuf; l : int64) {
-    unsafe {
-        let hs = g_rd.head_size   // nolint:LINT021 — the row-offset words compose it with int64 layout offsets
-        var mp = reinterpret<uint?>(hb.mapped)
-        mp[0] = uint(g_rd.qd)
-        mp[1] = uint(g_rd.kv_dim)
-        mp[2] = uint(hs)
-        mp[3] = uint(hs / 2l)
-        mp[4] = g_rd.neox ? 1u : 0u
-        mp[5] = uint(g_rd.n_heads)
-        mp[9] = uint(g_rd.qkn_row_off + l * 2l * hs)
-        mp[10] = uint(g_rd.qkn_row_off + (l * 2l + 1l) * hs)
-        mp[11] = uint(g_rd.qkn_eps_off)
-    }
-}
-
-def rd_gemv_wg(rows : int64) : uint => uint((rows + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg)
 
 // ===== GPU per-dispatch profiler (DASLLAMA_GPU_PROF=1) =====
 // BOTTOM_OF_PIPE stamps; results ride a same-submit copy, no extra fence. Overlapped hazard
@@ -2204,7 +1943,6 @@ let VHZ_GATE = 0x800u     // ffn gate plane
 let VHZ_UP = 0x1000u      // ffn up plane
 let VHZ_HQ = 0x2000u      // requantized hidden hq+hs
 let VHZ_FFO = 0x4000u     // ffn down out
-let VHZ_META = 0x8000u    // ffn_meta_dev
 let VHZ_LOG = 0x10000u    // logits
 let VHZ_COS = 0x20000u    // rope cos/sin rows
 
@@ -2257,24 +1995,17 @@ var g_kernel_access : table<string; uint2>   // kernel name -> (read-bindings, w
 var g_pipe_access : table<uint64; uint2>     // VkPipeline -> (read-bindings, write-bindings)
 var g_set_bits : table<uint64; SetBits>      // VkDescriptorSet -> per-binding region-bit masks
 var @scratch g_pipe_names : table<uint64; string>   // VkPipeline -> kernel name (the coverage census)
-var @scratch g_vk_kcov : table<uint64; int64>       // VkPipeline -> dispatches (CODEREVIEW rule 17)
+var @scratch g_vk_kcov : table<uint64; int64>       // VkPipeline -> dispatches (CODEREVIEW: "A new GPU kernel ships with a small model in the kernel coverage suite")
 
 struct SetBits {
-    b : uint[6]
+    b : uint[8]   // per-binding region bits (up to 8 declared bindings per class)
 }
 
-def ensure_kernel_access {
-    if (!empty(g_kernel_access)) {
-        return
-    }
-    for (ent in split(vk_kernels_access_spec(), ";")) {
-        if (ent == "") {
-            continue
-        }
-        let nv <- split(ent, "=")
-        let rw <- split(nv[1], ",")
-        g_kernel_access |> insert(nv[0], uint2(uint(to_int(rw[0])), uint(to_int(rw[1]))))
-    }
+//! Census seed: every [vk_dispatch] kernel joins the coverage universe at program start (the
+//! macro generates an [init] calling this), so a never-dispatched class kernel gets its LOUD
+//! zero row.
+def vkd_census_seed(kernel : string; rmask, wmask : uint) {
+    g_kernel_access[kernel] = uint2(rmask, wmask)
 }
 
 // declare the region bits sitting at each of a set's 6 bindings (0 = untracked); a set must be
@@ -2299,21 +2030,109 @@ def hz_set_bits(set_ : VkDescriptorSet; gbits : uint[6]) {
 }
 
 def hz_pipe_register(pipe : Pipeline; kernel : string) {
-    ensure_kernel_access()
     if (!key_exists(g_kernel_access, kernel)) {
-        panic("dasLLAMA vulkan lens: no derived access for kernel {kernel}")
+        panic("dasLLAMA vulkan tier: no derived access for kernel {kernel}")
     }
     g_pipe_access[intptr(boost_value_to_vk(pipe))] = g_kernel_access[kernel]
     g_pipe_names[intptr(boost_value_to_vk(pipe))] = kernel
 }
 
-// create a kernel's pipeline and register its lens-derived access masks (the shader-module local
-// is deliberately never finalized — same lifetime the hand-written creation block had)
-def make_kernel_pipe(kernel : string; var spv : array<uint>) : Pipeline {
+// ===== the class-kernel dispatch rail ([vk_dispatch]-generated code calls these) =====
+// A [spirv_kernel] class gets its OWN set/pipeline layout (push range from @push_constant); the
+// hazard rail is unchanged — class pipelines register binding masks, sets carry region bits.
+
+struct VkdClass {
+    ready : bool               // layouts made (pipes fill per-kernel slots lazily)
+    push_bytes : int
+    bindings : array<int>      // the class's DECLARED binding indices, ascending (gaps legal)
+    set_layout : DescriptorSetLayout
+    pipe_layout : PipelineLayout
+    pipes : array<Pipeline>    // one per [vk_dispatch] kernel, indexed by annotation ordinal
+}
+
+def vkd_class_init(var c : VkdClass; bindings : array<int>; push_bytes : int) {
+    var dslci : DescriptorSetLayoutCreateInfo
+    dslci.pBindings |> reserve(length(bindings))
+    c.bindings |> reserve(length(bindings))
+    for (bind in bindings) {
+        var b0 = DescriptorSetLayoutBinding(binding = uint(bind),
+                                            descriptorType = VkDescriptorType.STORAGE_BUFFER,
+                                            descriptorCount = 1u)
+        b0.stageFlags.compute = true
+        dslci.pBindings |> emplace(b0)
+        c.bindings |> push(bind)
+    }
+    c.set_layout <- create_descriptor_set_layout(g_gpu.device, dslci)
+    var plci : PipelineLayoutCreateInfo
+    plci.pSetLayouts <- [weak_copy(c.set_layout)]
+    if (push_bytes > 0) {
+        var sf : VkShaderStageFlags
+        sf.compute = true
+        plci.pPushConstantRanges |> push(PushConstantRange(stageFlags = sf, offset = 0u, size = uint(push_bytes)))
+    }
+    c.pipe_layout <- create_pipeline_layout(g_gpu.device, plci)
+    c.push_bytes = push_bytes
+    c.ready = true
+}
+
+// write a class set's descriptors + declare its region bits (the [vk_dispatch]-generated set
+// builder's engine; generic over the class's binding count, i-th entry -> i-th declared binding)
+def vkd_set(c : VkdClass; set_ : VkDescriptorSet; bufs : uint64 const[]; sizes : int64 const[]; gbits : uint const[]) {
+    assert(length(bufs) == length(c.bindings), "vkd_set: buffer count != the class's binding count")
+    var writes : array<WriteDescriptorSet>
+    for (i in range(length(bufs))) {
+        write_buf_desc(writes, set_, uint(c.bindings[i]), bufs[i], sizes[i])
+    }
+    let no_copies : array<CopyDescriptorSet>
+    update_descriptor_sets(g_gpu.device, writes, no_copies)
+    var sb : SetBits
+    for (i in range(length(gbits))) {
+        if (c.bindings[i] < 8) {
+            sb.b[c.bindings[i]] = gbits[i]
+        }
+    }
+    g_set_bits[intptr(set_)] = sb
+}
+
+// true when the kernel's pipe slot is filled (slots fill lazily, one per ensure_<kernel> call)
+def vkd_pipe_made(c : VkdClass; ord : int) : bool {
+    return ord < length(c.pipes) && intptr(boost_value_to_vk(c.pipes[ord])) != 0ul
+}
+
+def vkd_class_pipe(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wmask : uint; kernel : string) {
+    if (length(c.pipes) <= ord) {
+        c.pipes |> resize(ord + 1)   // empty slots hold null handles until their kernel ensures
+    }
     var shader <- create_shader_module(g_gpu.device, spv)
-    var pipe <- create_compute_pipeline(g_gpu.device, g_gpu.pipe_layout, shader)
-    hz_pipe_register(pipe, kernel)
-    return <- pipe
+    c.pipes[ord] <- create_compute_pipeline(g_gpu.device, c.pipe_layout, shader)
+    let pk = intptr(boost_value_to_vk(c.pipes[ord]))
+    g_pipe_access[pk] = uint2(rmask, wmask)
+    g_pipe_names[pk] = kernel
+}
+
+def vkd_alloc_set(c : VkdClass) : VkDescriptorSet {
+    return alloc_set_from_chain(boost_value_to_vk(c.set_layout))
+}
+
+// push the class's params struct (all-4-byte-scalar, [vk_dispatch]-validated); generic so the
+// generated encoder passes the struct plainly and the one unsafe address-of lives here
+def vkd_push(raw : VkCommandBuffer; c : VkdClass; var pc : auto(PT)&) {
+    var sf : VkShaderStageFlags
+    sf.compute = true
+    vkCmdPushConstants(raw, boost_value_to_vk(c.pipe_layout), sf, 0u, uint(c.push_bytes), unsafe(addr<void?>(pc)))
+}
+
+// the class twin of hz_dispatch: same masks/coverage/barrier rail, the CLASS pipeline layout;
+// ord picks the kernel's pipe slot
+def vkd_dispatch(raw : VkCommandBuffer; var h : VkHaz; c : VkdClass; var set_ : VkDescriptorSet; ord : int; groups : uint) {
+    let m = hz_masks(c.pipes[ord], set_)
+    g_vk_kcov[intptr(boost_value_to_vk(c.pipes[ord]))]++
+    vhz_dep(raw, h, m.r, m.w)
+    cmd_bind_pipeline(vk_value_to_boost(raw), c.pipes[ord], VkPipelineBindPoint.COMPUTE)
+    unsafe {
+        vkCmdBindDescriptorSets(raw, VkPipelineBindPoint.COMPUTE, boost_value_to_vk(c.pipe_layout), 0u, 1u, addr(set_), 0u, null)
+    }
+    vkCmdDispatch(raw, groups, 1u, 1u)
 }
 
 // derive this dispatch's hazard masks: the set's region bits distributed over the kernel's
@@ -2331,7 +2150,7 @@ def hz_masks(pipe : Pipeline; var set_ : VkDescriptorSet) : tuple<r : uint; w : 
     let sb = g_set_bits[sk]
     var r = 0u
     var w = 0u
-    for (i in range(6)) {
+    for (i in range(8)) {
         let bit = 1u << uint(i)
         if ((acc.x & bit) != 0u) {
             r |= sb.b[i]
@@ -2343,19 +2162,9 @@ def hz_masks(pipe : Pipeline; var set_ : VkDescriptorSet) : tuple<r : uint; w : 
     return (r, w)
 }
 
-// the derived-mask dispatch node: declare via the composed masks, bind, dispatch
-def hz_dispatch(raw : VkCommandBuffer; var h : VkHaz; pipe : Pipeline; var set_ : VkDescriptorSet; groups : uint) {
-    let m = hz_masks(pipe, set_)
-    g_vk_kcov[intptr(boost_value_to_vk(pipe))]++
-    vhz_dep(raw, h, m.r, m.w)
-    cmd_bind_pipeline(vk_value_to_boost(raw), pipe, VkPipelineBindPoint.COMPUTE)
-    cmd_bind_dispatch(raw, set_, groups)
-}
-
-//! Per-kernel dispatch counts (name -> count) — every kernel in the lens spec appears, so a 0
-//! row is "spec'd but never dispatched" (the coverage census, CODEREVIEW rule 17).
+//! Per-kernel dispatch counts (name -> count) — every seeded [vk_dispatch] kernel appears, so a
+//! 0 row is "compiled but never dispatched" (the coverage census).
 def public vk_kernel_coverage() : table<string; int64> {
-    ensure_kernel_access()
     var out <- {for (name in keys(g_kernel_access)); name => 0l}
     for (k, n in keys(g_vk_kcov), values(g_vk_kcov)) {
         out[g_pipe_names?[k] ?? "pipe_{k}"] += n
@@ -2387,7 +2196,7 @@ def public vk_kernel_coverage_report {
             to_log(LOG_WARNING, "vulkan kernel coverage: {name} NEVER DISPATCHED this run — coverage gap or dead kernel (human call)\n")
         }
     }
-    to_log(LOG_INFO, "vulkan kernel coverage: {served} dispatched, {dead} never-dispatched of {length(names)} in the lens spec\n")
+    to_log(LOG_INFO, "vulkan kernel coverage: {served} dispatched, {dead} never-dispatched of {length(names)} seeded kernels\n")
     delete names
     delete cov
 }
@@ -2472,16 +2281,6 @@ def vhz_dep(raw : VkCommandBuffer; var h : VkHaz; rmask, wmask : uint; transfer 
     }
 }
 
-def rd_dispatch(raw : VkCommandBuffer; pipe : Pipeline; var set : VkDescriptorSet; groups : uint; var h : VkHaz) {
-    hz_dispatch(raw, h, pipe, set, groups)
-    pfq_ts(raw)
-}
-
-// GEMV dispatch — the per-format kernel selected off the plane format
-def rd_dispatch_gemv(raw : VkCommandBuffer; fmt : int; var set : VkDescriptorSet; groups : uint; var h : VkHaz) {
-    rd_dispatch(raw, gemv_pipe(fmt), set, groups, h)
-}
-
 // One-shot command buffers (the KV readback rails) are freed by their caller — registering them
 // in model_cmds would grow it per hydration until the next model drop.
 def alloc_transient_cmd : VkCommandBuffer {
@@ -2506,76 +2305,6 @@ def alloc_cmd : VkCommandBuffer {
     var raw = alloc_transient_cmd()
     g_gpu.model_cmds |> push(raw)   // all persistent cmds are model-owned; freed by the model drop
     return raw
-}
-
-def cmd_bind_dispatch(raw : VkCommandBuffer; var set_ : VkDescriptorSet; groups : uint) {
-    unsafe {
-        vkCmdBindDescriptorSets(raw, VkPipelineBindPoint.COMPUTE, boost_value_to_vk(g_gpu.pipe_layout), 0u, 1u, addr(set_), 0u, null)
-    }
-    vkCmdDispatch(raw, groups, 1u, 1u)
-}
-
-// the GEMV pipeline for a stack's format (the arena fmt slot IS the KqFmt ordinal)
-def gemv_pipe(fmt : int) : Pipeline {
-    if (fmt == int(KqFmt.q8)) {
-        return weak_copy(g_gpu.pipeline)
-    } elif (fmt == int(KqFmt.k4)) {
-        return weak_copy(g_gpu.gemv_k4)
-    } elif (fmt == int(KqFmt.k5)) {
-        return weak_copy(g_gpu.gemv_k5)
-    } elif (fmt == int(KqFmt.k6)) {
-        return weak_copy(g_gpu.gemv_k6)
-    } elif (fmt == int(KqFmt.q40)) {
-        return weak_copy(g_gpu.gemv_q40)
-    } elif (fmt == int(KqFmt.q8n)) {
-        return weak_copy(g_gpu.gemv_q8n)
-    }
-    panic("dasLLAMA vulkan tier: no GEMV kernel for stack format {fmt}")
-    return weak_copy(g_gpu.pipeline)
-}
-
-var g_mm_m_logged = false   // one-time mul_mm M-tile engagement log
-
-// The Q8_0 prefill batch pipeline, switched to the tensor-core coopmat variant when DASLLAMA_COOPMAT
-// selected one (weak alias — g_gpu owns). `tile` = the edge the caller's meta used; picks L vs M in mm mode.
-def q8_batch_pipe(tile : int64; aligned : bool = false) : Pipeline {
-    if (g_gpu.coopmat_mode == 1) {
-        return weak_copy(g_gpu.batch_coopmat_f16)
-    } elif (g_gpu.coopmat_mode == 2) {
-        return weak_copy(g_gpu.batch_coopmat_i8)
-    } elif (g_gpu.coopmat_mode >= 3) {
-        if (tile == BATCH_TILE) {   // the small tier IS the sdot4 kernel — measured, not a fallback
-            return weak_copy(g_gpu.batch_pipeline)
-        }
-        if (tile == 64l) {
-            if (!g_mm_m_logged) {
-                g_mm_m_logged = true
-                to_log(LOG_INFO, "dasLLAMA vulkan tier: mul_mm M-tile engaged\n")
-            }
-            return weak_copy(g_gpu.batch_coopmat_mm_m)
-        }
-        return weak_copy(aligned ? g_gpu.batch_coopmat_mm_a : g_gpu.batch_coopmat_mm)
-    }
-    return weak_copy(g_gpu.batch_pipeline)
-}
-
-def batch_pipe(fmt : int; tile : int64; aligned : bool = false) : Pipeline {
-    if (fmt == 0) {
-        return q8_batch_pipe(tile, aligned)
-    } elif (fmt == 1) {
-        return weak_copy(g_gpu.batch_k4)
-    } elif (fmt == 2) {
-        return weak_copy(g_gpu.batch_k5)
-    } elif (fmt == 3) {
-        return weak_copy(g_gpu.batch_k6)
-    } elif (fmt == 4) {
-        // Q4_0 rides the f16 coopmat arm too (no s8-native for nibbles — mode 2 falls back to sdot4)
-        return weak_copy(g_gpu.coopmat_mode == 1 ? g_gpu.batch_coopmat_q40 : g_gpu.batch_q40)
-    } elif (fmt == 6) {
-        return weak_copy(g_gpu.batch_cm2)
-    }
-    panic("dasLLAMA vulkan tier: no batch tile for stack format {fmt}")
-    return weak_copy(g_gpu.batch_pipeline)
 }
 
 def submit_nowait(var raw : VkCommandBuffer) {
@@ -2618,25 +2347,21 @@ def submit_wait(var raw : VkCommandBuffer) {
     wait_fence()
 }
 
-// refresh a stack's mapped GEMV meta, one entry per ROW (cnt > 1 regions expand so output lands
-// row-major): [n, d, nrows, ybase, (rel_wblock, xblock)*], block units per format (32 q8 / 256 kq).
-def fill_stack_meta_rows(si : int; offs : int64 const?; nregions : int64; n, d, nrows, xnb : int64; ybase : int64 = 0l) {
-    assert((4l + nrows * 2l) * 4l <= META_BYTES, "dasLLAMA vulkan tier: FFN meta exceeds capacity")
+// refresh a stack's mapped class-GEMV regions, one (rel_wblock, xblock) pair per ROW (cnt > 1
+// regions expand so output lands row-major); n/d/nreg/ybase ride the GemvArgs push instead
+def fill_stack_sched_rows(si : int; offs : int64 const?; nregions : int64; nrows, xnb : int64) {
+    assert(nrows * 2l * 4l <= META_BYTES, "dasLLAMA vulkan tier: FFN regions exceed capacity")
     let unit = fmt_unit(g_gpu.stacks[si].fmt)
     unsafe {
         var mp = reinterpret<uint?>(g_gpu.stacks[si].meta.mapped)
-        mp[0] = uint(n)
-        mp[1] = uint(d)
-        mp[2] = uint(nrows)
-        mp[3] = uint(ybase)
         for (r in range64(nregions)) {
             let rel = offs[r * 3l] - g_gpu.stacks[si].base
             let row0 = offs[r * 3l + 1l]
             let cnt = offs[r * 3l + 2l]
             assert(rel % unit == 0l, "dasLLAMA vulkan tier: unaligned region offset")
             for (i in range64(cnt)) {
-                mp[4l + (row0 + i) * 2l] = uint(rel / unit)
-                mp[5l + (row0 + i) * 2l] = uint((row0 + i) * xnb)
+                mp[(row0 + i) * 2l] = uint(rel / unit)
+                mp[(row0 + i) * 2l + 1l] = uint((row0 + i) * xnb)
             }
         }
     }
@@ -2659,8 +2384,6 @@ def ensure_ffn_state {
     }
     g_gpu.hq_dev = make_device_buf(BATCH_HQ_BYTES)
     g_gpu.hs_dev = make_device_buf(BATCH_HS_BYTES)
-    g_gpu.ffn_meta = make_host_buf(FFN_META_BYTES, false)   // transfer_src staging
-    g_gpu.ffn_meta_dev = make_device_buf(FFN_META_BYTES)
     g_gpu.ffn_ready = true
 }
 
@@ -2681,18 +2404,8 @@ def ensure_dn_state {
     g_gpu.dn_tail_host = make_host_buf(DN_TAIL_BYTES, true, [cached = true])
     g_gpu.dn_state_dev = make_device_buf(DN_STATE_BYTES)
     g_gpu.dn_ws_dev = make_device_buf(DN_WS_BYTES)
-    // conv bindings: qkv@5, conv output@0 (vk_upf view of hq_dev), smalls@4, params@2; 1/3 fillers
-    g_gpu.dn_conv_set = vk_set6(g_gpu.hq_dev, g_gpu.dn_meta_dev, g_gpu.dn_meta_dev, g_gpu.dn_meta_dev, g_gpu.dn_smalls_dev, g_gpu.batch_y1_dev,
-        BATCH_HQ_BYTES, DN_META_BYTES, DN_META_BYTES, DN_META_BYTES, DN_SMALLS_BYTES, BATCH_Y_BYTES,
-        fixed_array(VHB_HQ, 0u, VHB_META, 0u, VHB_SM, VHB_Y1))
-    // scan bindings: conv rows@0, state@1, slabs/o@3, smalls@4, z rows@5, params@2
-    g_gpu.dn_scan_set = vk_set6(g_gpu.hq_dev, g_gpu.dn_state_dev, g_gpu.dn_meta_dev, g_gpu.dn_ws_dev, g_gpu.dn_smalls_dev, g_gpu.batch_y2_dev,
-        BATCH_HQ_BYTES, DN_STATE_BYTES, DN_META_BYTES, DN_WS_BYTES, DN_SMALLS_BYTES, BATCH_Y_BYTES,
-        fixed_array(VHB_HQ, VHB_ST, VHB_META, VHB_WS, VHB_SM, VHB_Y2))
-    // requant bindings: o rows@0, quant words@3, scales@4 (out-proj activation image), params@2; 1/5 fillers
-    g_gpu.dn_rq_set = vk_set6(g_gpu.dn_ws_dev, g_gpu.dn_meta_dev, g_gpu.dn_meta_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_gpu.dn_meta_dev,
-        DN_WS_BYTES, DN_META_BYTES, DN_META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, DN_META_BYTES,
-        fixed_array(VHB_WS, 0u, VHB_META, VHB_HQ, VHB_HQ, 0u))
+    // the window chain's class sets build in dasllama_vulkan_prefill (this module cannot require
+    // the classes module)
     g_gpu.dn_ready = true
     to_log(LOG_INFO, "dasLLAMA vulkan tier: deltanet chain engaged\n")
 }
@@ -2707,29 +2420,12 @@ def ensure_batch_state {
     g_gpu.batch_y1_dev = make_device_buf(BATCH_Y_BYTES)
     g_gpu.batch_y2_dev = make_device_buf(BATCH_Y_BYTES)
     g_gpu.batch_y1 = make_host_buf(BATCH_Y_BYTES, true, [cached = true])
-    g_gpu.batch_y2 = make_host_buf(BATCH_Y_BYTES, true, [cached = true])
     g_gpu.batch_cmd = alloc_cmd()
-    // fused act+requant bindings: up@0, params@2, hq/hs@3/4, gate@5; binding 1 is unused filler
-    g_gpu.batch_actrq_set = vk_set6(g_gpu.batch_y2_dev, g_gpu.batch_xs_dev, g_gpu.ffn_meta_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_gpu.batch_y1_dev,
-        BATCH_Y_BYTES, BATCH_XS_BYTES, FFN_META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, BATCH_Y_BYTES,
-        fixed_array(VHB_Y2, 0u, VHB_META, VHB_HQ, VHB_HQ, VHB_Y1))
+    // the fused act+requant class sets build in dasllama_vulkan_prefill (this module cannot
+    // require the classes module)
     g_gpu.resident_bytes += BATCH_XQ_BYTES + BATCH_XS_BYTES
     g_gpu.batch_ready = true
     to_log(LOG_INFO, "dasLLAMA vulkan tier: prefill batch tier engaged\n")
-}
-
-def fill_ffn_meta(elems, nblocks : int64; is_gelu : bool; comb_n : int64 = 0l; comb_k : int64 = 0l; comb_r0 : int64 = 0l; comb_r1 : int64 = 0l; xf_words : int64 = 0l) {
-    unsafe {
-        var mp = reinterpret<uint?>(g_gpu.ffn_meta.mapped)
-        mp[0] = uint(elems)
-        mp[1] = is_gelu ? 1u : 0u
-        mp[2] = uint(nblocks)
-        mp[3] = uint(xf_words)   // cm2 chain: the dequant kernel's word count (q8 image / 4)
-        mp[4] = uint(comb_n)
-        mp[5] = uint(comb_k)
-        mp[6] = uint(comb_r0)
-        mp[7] = uint(comb_r1)
-    }
 }
 
 // the 20-word deltanet params block — ONE layout for the prefill window chain (dn_meta) and the

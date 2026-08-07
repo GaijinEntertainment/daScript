@@ -15,7 +15,8 @@ Process and criteria: `skills/doc_archiving.md`.
   fleet measurements, the model-expansion wave plan; the 2026-07-29 doc-reorg sweep added
   the API_REWORK plan half — its living ledger split to `modules/dasLLAMA/PERF_LEDGER.md` —
   plus the public-bench, GEMM-generator, x64, KV-codec, lens and audio-wave plan/research
-  docs); `dasLLAMA/benchmarks/` — retired model-speed bench scripts, all superseded by the
+  docs; the vulkan class-kernel arc added its plan + the per-family walkthrough record);
+  `dasLLAMA/benchmarks/` — retired model-speed bench scripts, all superseded by the
   one bench (`modules/dasLLAMA/benchmarks/lcpp_bench.das`, 2026-07-25 unification)
 - `dasSQLITE/` — the typed-SQL API rework corpus (`API_*.md`, `TUTORIALS.md`, the
   `tutorial-mockup/` design artifacts); the living contract stays at
@@ -119,3 +120,5 @@ listed in the log below — search it first when hunting for a doc.
 - 2026-08-02 `modules/dasLLAMA/performance/results_metal_qwen3_4b.md` → `history/dasLLAMA/performance/results_metal_qwen3_4b.md` — pre-board qwen3-4B metal profiling record (same supersession)
 - 2026-08-02 `modules/dasLLAMA/performance/results_metal_qwen3moe.md` → `history/dasLLAMA/performance/results_metal_qwen3moe.md` — pre-board qwen3moe metal profiling record (same supersession)
 - 2026-08-02 `modules/dasLLAMA/performance/baseline_metal_{3b,gemma,qwen35,qwen3_4b,qwen3moe}_m1.tsv` → `history/dasLLAMA/performance/` — hand-authored companions of the results_metal set, moved with their docs
+- 2026-08-06 `plans/vulkan_class_kernels.md` → `history/dasLLAMA/vulkan_class_kernels_plan.md` — the vulkan class-kernel arc plan (`[spirv_kernel]`/`[vk_dispatch]`; shipped — serving is 100% class kernels, the module-global kernel world deleted)
+- 2026-08-06 `modules/dasLLAMA/vulkan_family_walkthrough.md` → `history/dasLLAMA/vulkan_family_walkthrough.md` — per-family das-vs-llama.cpp vulkan walkthrough record (debug-grade rows; verdicts live on as `followup_vulkan.md` items 11/13/14)

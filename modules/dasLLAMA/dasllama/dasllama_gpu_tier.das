@@ -427,6 +427,16 @@ def public set_moe_gpu_heat_route(on : bool) {
     g_moe_gpu_heat_route = on
 }
 
+var g_vk_rdec_rerecord = false
+
+//! Probe lever (--rerecord-ab): re-encode the resident ladder's recorded-once token cmd every
+//! token — measures the re-record cost the carrier class twins would pay for push-borne pos/cnt.
+def public set_vk_rdec_rerecord(on : bool) {
+    g_vk_rdec_rerecord = on
+}
+
+def public vk_rdec_rerecord_on : bool => g_vk_rdec_rerecord
+
 // ===== shared-expert residency (decode, async behind the routed experts) =====
 
 var g_moe_gpu_shexp_layers : table<int64>   // layers whose shexp gate/up/down triple is resident
@@ -796,6 +806,17 @@ def public set_moe_gpu_budget_hooks(budget : function<() : int64>; plane : funct
 //! Device-local bytes the armed tier may spend on resident weights (0 = no tier).
 def public moe_gpu_weight_budget() : int64 => invoke(g_moe_gpu_budget_report)
 
+def private moe_gpu_no_binding_cap : int64 => 0l
+var private g_moe_gpu_binding_cap = @@moe_gpu_no_binding_cap
+
+//! The tier's largest legal single-SSBO binding range in bytes (0 = no tier / unknown). The
+//! resident KV mirror binds one range per side, so the ctx negotiation must cap against it.
+def public set_moe_gpu_binding_cap(f : function<() : int64>) {
+    g_moe_gpu_binding_cap = f
+}
+
+def public moe_gpu_binding_cap() : int64 => invoke(g_moe_gpu_binding_cap)
+
 def private moe_gpu_no_q8n : bool => false
 var private g_moe_gpu_expert_q8n = @@moe_gpu_no_q8n
 
@@ -1153,6 +1174,9 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     }
     if (g_moe_gpu_budget_report == null) {
         g_moe_gpu_budget_report = @@moe_gpu_no_budget
+    }
+    if (g_moe_gpu_binding_cap == null) {
+        g_moe_gpu_binding_cap = @@moe_gpu_no_binding_cap
     }
     if (g_moe_gpu_plane_bytes_fn == null) {
         g_moe_gpu_plane_bytes_fn = @@moe_gpu_no_plane_bytes

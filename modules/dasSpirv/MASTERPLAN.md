@@ -150,6 +150,12 @@ Three behavioral layers + two enforcement gates (all in main-tree `tests/spirv/`
   point `test_compute` at the emitted blob.
 - Phase 3: port `triangle.vert`/`.frag`, delete their `.spv`.
 
+## Cross-backend parity — the kernel-model asymmetry ledger
+
+The mirror rule (CODEREVIEW.md, both emitters) keeps the kernel model symmetric with the MSL
+emitter. The ledger of deliberate/pending asymmetries is shared — ONE list, not two — and
+lives in `modules/dasMetal/MASTERPLAN.md` under the same heading.
+
 ## Top risks
 
 1. **Type/constant dedup correctness** — keys must be injective + complete (pointer key

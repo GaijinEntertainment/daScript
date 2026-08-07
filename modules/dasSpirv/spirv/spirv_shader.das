@@ -56,6 +56,11 @@ def push_constants_function_name(fnMain : FunctionPtr) {
 class SpirvShader : AstFunctionAnnotation {
     // overridden per stage; drives the entry-point execution model + execution mode in generate_spirv
     def shader_stage() : ShaderStage => ShaderStage.Compute
+    // overridden by [spirv_kernel]: the kernel class whose annotated members are the resources.
+    // null = the module-globals frontend (every stage annotation below).
+    def kernel_self_of(func : FunctionPtr) : Structure const? {
+        return null
+    }
     // Backend-specific hooks. Base = no-op (keeps dasSpirv usable without a host backend). A backend
     // subclass (e.g. dasVulkan's SpirvVulkanShader) overrides all four: the _dummy form reserves an
     // empty function during apply() so consumer code references resolve in the first inference pass;
@@ -174,7 +179,7 @@ class SpirvShader : AstFunctionAnnotation {
         var glob <- find_variable(compiling_module(), argName)
         if (glob != null && glob.init == null && glob.name == argName) {
             var refl : SpirvReflection
-            var words <- generate_spirv(func, err, shader_stage(), local_size, local_size_ids, mesh_cfg, early_frag, refl)
+            var words <- generate_spirv(func, err, shader_stage(), local_size, local_size_ids, mesh_cfg, early_frag, refl, kernel_self_of(func))
             if (err |> empty()) {
                 glob.init = build_uint_array_literal(words, func.at)
                 // Fill the companion reflection global in the same fixup (gated on the blob's
@@ -201,6 +206,25 @@ class SpirvShader : AstFunctionAnnotation {
 
 [function_macro(name="compute_shader")]
 class SpirvComputeShader : SpirvShader {
+}
+
+// [spirv_kernel] — the CLASS-KERNEL frontend: [compute_shader]'s sibling for a kernel authored as
+// a class (resources = annotated members, kernels = methods — the dasMetal [metal_kernel] model).
+// `self.member` accesses classify + resolve exactly like module globals (classify_kernel_members /
+// member_var_of); the module-globals frontend is untouched. Same annotation args (name,
+// local_size_*, local_size_*_id).
+[function_macro(name="spirv_kernel")]
+class SpirvKernelShader : SpirvShader {
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+        if (func.classParent == null) {
+            errors := "[spirv_kernel] must annotate a class method — resources are the class's annotated members"
+            return false
+        }
+        return SpirvShader`apply(self, func, group, args, errors)
+    }
+    def override kernel_self_of(func : FunctionPtr) : Structure const? {
+        return func.classParent
+    }
 }
 
 [function_macro(name="vertex_shader")]

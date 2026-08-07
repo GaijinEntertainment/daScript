@@ -122,3 +122,20 @@ def test_fail_closed_rejections(t : T?) {
         check_rejects(t, "_fc_image_readonly_store", "is @readonly (NonWritable)")
     }
 }
+
+[test]
+def test_fail_closed_kernel_class(t : T?) {
+    t |> run("the [spirv_kernel] class frontend rejects bad classes cleanly") <| @(t : T?) {
+        // the annotation demands a class method, and the member scan fail-closes on unannotated /
+        // mixed / mis-bound members and buffer-less classes
+        check_rejects(t, "_fc_kernel_free", "must annotate a class method")
+        check_rejects(t, "_fc_kernel_plain_member", "is none of @ssbo/@uniform/@push_constant/@workgroup/@private_global")
+        check_rejects(t, "_fc_kernel_mixed", "mixes resource kinds")
+        check_rejects(t, "_fc_kernel_set", "a kernel class is one descriptor set")
+        check_rejects(t, "_fc_kernel_nobinding", "has no @binding")
+        check_rejects(t, "_fc_kernel_wg_binding", "take no binding")
+        check_rejects(t, "_fc_kernel_no_ssbo", "has no @ssbo members")
+        check_rejects(t, "_fc_kernel_method_rec", "method call cycle")
+        check_rejects(t, "_fc_kernel_method_abstract", "has no resolvable body")
+    }
+}
