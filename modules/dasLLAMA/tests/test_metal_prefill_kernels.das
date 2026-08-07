@@ -476,6 +476,13 @@ def test_metal_prefill_kernels(t : T?) {
                 moe_csr_gate(t, dev, queue, 40, 3, 4)                    // an expert crosses one 32-pad tile
                 moe_reduce_gate(t, dev, queue, 96, 9, 2)
 
+                // ===== prefill misc (PLE pre-step, bias epilogue, MTP cat, deltanet ba) =====
+                ple_gather_q8_gate(t, dev, queue, 11, 3, 32, 5)
+                ple_finish_gate(t, dev, queue, 3, 64, 5)
+                add_bias_rows_gate(t, dev, queue, 7, 96)
+                pf_cat2_gate(t, dev, queue, 5, 48)
+                dn_ba_gate(t, dev, queue, 768, 11, 3)   // fast stripe + strided tail + row guard
+
                 metal_release(queue)
             }
             t |> equal(metal_log_leaks_if_any(), 0l)
@@ -962,6 +969,306 @@ def private moe_reduce_gate(t : T?; dev, queue; dim, npos, nk : int) {
     delete dn
     delete sel
     delete inv
+    delete want
+}
+
+// ===== prefill misc gates (PLE pre-step, bias epilogue, MTP cat, deltanet ba GEMV) =====
+
+// q8 blob region shared by the ple/dn gates: pow2 scales + small-int quants (the common
+// fixture's shape, local because this file predates _metal_kernel_common)
+def private misc_q8_region(nblk : int; var blob : array<uint8>; var wdeq : array<float>) {
+    let lut = fixed_array(0.25, 0.5, 1.0, 2.0)
+    blob |> resize(nblk * 34)
+    wdeq |> resize(nblk * 32)
+    unsafe {
+        for (b in range(nblk)) {
+            let d = lut[(b * 7 + 1) % 4]
+            let dbits = f32_to_f16(d)
+            blob[b * 34] = uint8(dbits & 0xFF)
+            blob[b * 34 + 1] = uint8(dbits >> 8u)
+            for (c in range(32)) {
+                let q = (b * 5 + c * 11) % 16 - 8
+                blob[b * 34 + 2 + c] = uint8(q & 0xFF)
+                wdeq[b * 32 + c] = float(q) * d
+            }
+        }
+    }
+}
+
+// PLE stage 1 (MetalPleGatherQ8): token-row q8 dequant into the layer-major side panel,
+// sqrt(ple) folded into the scale
+def private ple_gather_q8_gate(t : T?; dev, queue; vocab, nlayers, ple, npos : int) {
+    let tag = "ple_gather_q8 v={vocab} nl={nlayers} ple={ple} np={npos}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_ple_gather_q8_msl, metal_ple_gather_q8_msl_entry, metal_ple_gather_q8_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let rowlen = nlayers * ple
+    var blob : array<uint8>
+    var wdeq : array<float>
+    misc_q8_region(vocab * rowlen / 32, blob, wdeq)
+    var tok : array<uint>
+    tok |> resize(npos)
+    for (p in range(npos)) {
+        tok[p] = uint((p * 7 + 2) % vocab)
+    }
+    let sc0 = sqrt(float(ple))
+    var want : array<float>
+    want |> resize(nlayers * npos * ple)
+    for (l in range(nlayers)) {
+        for (p in range(npos)) {
+            for (i in range(ple)) {
+                want[(l * npos + p) * ple + i] = wdeq[int(tok[p]) * rowlen + l * ple + i] * sc0
+            }
+        }
+    }
+    var ka = PleArgs(npos = uint(npos), ple = uint(ple), nlayers = uint(nlayers), sc0 = sc0,
+        inv_sd = 1.0, eps = 1.0e-6, inv_s2 = 1.0)
+    var bw = buf_upload(dev, blob)
+    var btok = buf_upload(dev, tok)
+    var by = buf_fill(dev, nlayers * npos * ple, -1000.0)
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bw, 0ul, 0)   // half-scale view
+        metal_set_buffer(enc, bw, 0ul, 1)   // byte view
+        metal_set_buffer(enc, btok, 0ul, 2)
+        metal_set_buffer(enc, by, 0ul, 3)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
+        metal_dispatch_threadgroups(enc, uint3(uint(nlayers), uint(npos), 1u), uint3(uint(ple), 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    t |> equal(buf_mismatch_approx(by, want), 0)
+    metal_release(bw)
+    metal_release(btok)
+    metal_release(by)
+    metal_release(pso)
+    delete blob
+    delete wdeq
+    delete tok
+    delete want
+}
+
+// PLE stage 3 (MetalPleFinish): per (layer, position) slice, in place on the panel —
+// side = (side + pnorm * (v * rsqrt(mean(v^2) + eps))) / sqrt(2), v = proj/sqrt(dim)
+def private ple_finish_gate(t : T?; dev, queue; nlayers, ple, npos : int) {
+    let tag = "ple_finish nl={nlayers} ple={ple} np={npos}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_ple_finish_msl, metal_ple_finish_msl_entry, metal_ple_finish_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let rowlen = nlayers * ple
+    let eps = 1.0e-5
+    let inv_sd = 0.125   // stands in for 1/sqrt(dim)
+    let inv_s2 = 1.0 / sqrt(2.0)
+    var proj : array<float>
+    var pnorm : array<float>
+    var side : array<float>
+    proj |> resize(npos * rowlen)
+    pnorm |> resize(ple)
+    side |> resize(nlayers * npos * ple)
+    for (i in range(npos * rowlen)) {
+        proj[i] = 0.11 * float(i % 31) - 1.6
+    }
+    for (i in range(ple)) {
+        pnorm[i] = 0.09 * float(i % 13) - 0.5
+    }
+    for (i in range(nlayers * npos * ple)) {
+        side[i] = 0.07 * float(i % 19) - 0.6
+    }
+    var want : array<float>
+    want |> resize(nlayers * npos * ple)
+    for (l in range(nlayers)) {
+        for (p in range(npos)) {
+            var ss = 0.0lf
+            for (i in range(ple)) {
+                let v = double(proj[p * rowlen + l * ple + i]) * double(inv_sd)
+                ss += v * v
+            }
+            let inv = 1.0lf / sqrt(ss / double(ple) + double(eps))
+            for (i in range(ple)) {
+                let v = double(proj[p * rowlen + l * ple + i]) * double(inv_sd)
+                let yi = (l * npos + p) * ple + i
+                want[yi] = float((double(side[yi]) + double(pnorm[i]) * (v * inv)) * double(inv_s2))
+            }
+        }
+    }
+    var ka = PleArgs(npos = uint(npos), ple = uint(ple), nlayers = uint(nlayers), sc0 = 1.0,
+        inv_sd = inv_sd, eps = eps, inv_s2 = inv_s2)
+    var bproj = buf_upload(dev, proj)
+    var bpn = buf_upload(dev, pnorm)
+    var by = buf_upload(dev, side)
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_threadgroup_memory_length(enc, metal_ple_finish_msl_tgmem, 0)
+        metal_set_buffer(enc, bproj, 0ul, 0)
+        metal_set_buffer(enc, bpn, 0ul, 1)
+        metal_set_buffer(enc, by, 0ul, 2)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
+        metal_dispatch_threadgroups(enc, uint3(uint(nlayers), uint(npos), 1u), uint3(uint(ple), 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    t |> equal(buf_mismatch_approx(by, want), 0)
+    metal_release(bproj)
+    metal_release(bpn)
+    metal_release(by)
+    metal_release(pso)
+    delete proj
+    delete pnorm
+    delete side
+    delete want
+}
+
+// the QKV bias epilogue (MetalAddBiasRows): x[r*n + i] += b[i] in place, BIT-exact
+def private add_bias_rows_gate(t : T?; dev, queue; nrows, n : int) {
+    let tag = "add_bias_rows rows={nrows} n={n}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_add_bias_rows_msl, metal_add_bias_rows_msl_entry, metal_add_bias_rows_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let total = nrows * n
+    var x : array<float>
+    var b : array<float>
+    x |> resize(total)
+    b |> resize(n)
+    for (i in range(total)) {
+        x[i] = float((i * 5) % 9 - 4) * 0.5
+    }
+    for (i in range(n)) {
+        b[i] = float((i * 7 + 1) % 9 - 4) * 0.25
+    }
+    var want : array<float>
+    want |> resize(total)
+    for (i in range(total)) {
+        want[i] = x[i] + b[i % n]
+    }
+    var bx = buf_upload(dev, x)
+    var bb = buf_upload(dev, b)
+    var bn = buf_u32(dev, uint(n))
+    var btot = buf_u32(dev, uint(total))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bx, 0ul, 0)
+        metal_set_buffer(enc, bb, 0ul, 1)
+        metal_set_buffer(enc, bn, 0ul, 2)
+        metal_set_buffer(enc, btot, 0ul, 3)
+        metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    t |> equal(buf_mismatch_exact(bx, want), 0)
+    metal_release(bx)
+    metal_release(bb)
+    metal_release(bn)
+    metal_release(btot)
+    metal_release(pso)
+    delete x
+    delete b
+    delete want
+}
+
+// the MTP eh_proj interleave (MetalPfCat2): y[p] = [a[p] ; b[p]], pure copy — BIT-exact
+def private pf_cat2_gate(t : T?; dev, queue; npos, d : int) {
+    let tag = "pf_cat2 np={npos} d={d}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_pf_cat2_msl, metal_pf_cat2_msl_entry, metal_pf_cat2_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let total = npos * d
+    var a : array<float>
+    var b : array<float>
+    a |> resize(total)
+    b |> resize(total)
+    for (i in range(total)) {
+        a[i] = float(i * 3 % 17) * 0.5
+        b[i] = float(i * 5 % 19) * 0.25 - 2.0
+    }
+    var want : array<float>
+    want |> resize(npos * 2 * d)
+    for (p in range(npos)) {
+        for (i in range(d)) {
+            want[p * 2 * d + i] = a[p * d + i]
+            want[p * 2 * d + d + i] = b[p * d + i]
+        }
+    }
+    var ba = buf_upload(dev, a)
+    var bb = buf_upload(dev, b)
+    var by = buf_fill(dev, npos * 2 * d, -1000.0)
+    var bd = buf_u32(dev, uint(d))
+    var btot = buf_u32(dev, uint(total))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, by, 0ul, 0)
+        metal_set_buffer(enc, ba, 0ul, 1)
+        metal_set_buffer(enc, bb, 0ul, 2)
+        metal_set_buffer(enc, bd, 0ul, 3)
+        metal_set_buffer(enc, btot, 0ul, 4)
+        metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    t |> equal(buf_mismatch_exact(by, want), 0)
+    metal_release(ba)
+    metal_release(bb)
+    metal_release(by)
+    metal_release(bd)
+    metal_release(btot)
+    metal_release(pso)
+    delete a
+    delete b
+    delete want
+}
+
+// the deltanet beta/alpha projection GEMV (MetalDnBa): narrow q8 blob rows per position —
+// ndim large enough to walk both the 4-chunk fast stripe AND the strided tail, BIT-exact
+def private dn_ba_gate(t : T?; dev, queue; ndim, ddim, npos : int) {
+    let tag = "dn_ba n={ndim} d={ddim} np={npos}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_dn_ba_msl, metal_dn_ba_msl_entry, metal_dn_ba_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    var blob : array<uint8>
+    var wdeq : array<float>
+    misc_q8_region(ddim * ndim / 32, blob, wdeq)
+    var x : array<float>
+    x |> resize(npos * ndim)
+    for (i in range(npos * ndim)) {
+        x[i] = float((i * 5 + i / 17) % 9 - 4) * 0.5
+    }
+    var want : array<float>
+    want |> resize(npos * ddim)
+    for (p in range(npos)) {
+        for (r in range(ddim)) {
+            var acc = 0.0lf
+            for (c in range(ndim)) {
+                acc += double(wdeq[r * ndim + c]) * double(x[p * ndim + c])
+            }
+            want[p * ddim + r] = float(acc)
+        }
+    }
+    var bw = buf_upload(dev, blob)
+    var bx = buf_upload(dev, x)
+    var by = buf_fill(dev, npos * ddim, -1000.0)
+    var bn = buf_u32(dev, uint(ndim))
+    var bd = buf_u32(dev, uint(ddim))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bw, 0ul, 0)   // half-scale view
+        metal_set_buffer(enc, bw, 0ul, 1)   // byte view
+        metal_set_buffer(enc, bx, 0ul, 2)
+        metal_set_buffer(enc, by, 0ul, 3)
+        metal_set_buffer(enc, bn, 0ul, 4)
+        metal_set_buffer(enc, bd, 0ul, 5)
+        metal_dispatch_threadgroups(enc, uint3(uint((ddim + 7) / 8), uint(npos), 1u), uint3(256u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    t |> equal(buf_mismatch_exact(by, want), 0)
+    metal_release(bw)
+    metal_release(bx)
+    metal_release(by)
+    metal_release(bn)
+    metal_release(bd)
+    metal_release(pso)
+    delete blob
+    delete wdeq
+    delete x
     delete want
 }
 
