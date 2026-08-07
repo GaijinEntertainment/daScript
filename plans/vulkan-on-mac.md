@@ -54,6 +54,28 @@ honest), and a couple of the small models we actually run serving "on vulkan and
 no perf bar. Note followup item 16: vulkan arms need direct dastest + `-load_module`, never
 `run.das`.
 
+### Leg (a) bring-up log (2026-08-07)
+
+- Ladder green: boost compute example end-to-end on MoltenVK (daslang-authored SPIR-V,
+  256/256 correct); kernel suite first run 27/40.
+- LANDED: per-class @workgroup footprint gate in the lens (`vkd_wg_fits` before the pipe
+  build — at/dn chains decline by name; suite 37/40, 0 errors; footprints byte-match
+  MoltenVK's own numbers). LANDED: first-6 eyeball dumps in the suite compare helpers.
+- **MoltenVK 1.4.1 BUG, fixed by 1.4.2 (brew upgrade — PIN ≥1.4.2):** compute dispatch with
+  static workgroup memory over ~15.6-16 KB is SILENTLY DISCARDED — no validation error, no
+  MVK log, fence signals, copies run, kernel never executes. Bisected via marker-probe
+  classes (probe files `tests/_probe_{cls,batch}_m1.das`, delete before PR).
+- **REMAINING RED (the arc's open bug): the batch-tile kernel shape launches but its device
+  stores never land** — q8_batch + kq_batch×4 all-zero output, rope_b partial. Deterministic
+  per build; flips with semantically-irrelevant edits (store-guard constant, sibling classes
+  in the module) — AGX/MoltenVK compiler-sensitivity signature. All indexing statically
+  in-bounds; surface/bindings/push/grid all exonerated by probe matrix (6-binding f16
+  replica of the surface echoes every binding correctly).
+- **Suite-honesty finding: the ar-class arm passes VACUOUSLY on M1** — it compares GPU vs
+  GPU (class twin vs seam); when both kernels are dead they match trivially. GPU-vs-GPU
+  arms need sentinel prefill or a CPU oracle. (ArBase row[4096] = 16,644 B tg was over the
+  1.4.1 cliff.)
+
 ## Leg (oracles) — per-class CPU oracles for the metal corpus, loud and eyeballable
 
 Ruled 2026-08-07: "yes, very much so. all the way to text to log. if its broken i wanna know
