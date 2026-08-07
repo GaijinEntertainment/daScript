@@ -1604,6 +1604,10 @@ def test_vulkan_deltanet(t : T?) {
                 feint("no Vulkan device (or probe/budget refused the upload); skipping\n")
                 return
             }
+            if (!g_gpu.dn_shared_ok) {
+                feint("dn/attention chains declined on this device (shared-memory cap) — skipping\n")
+                return
+            }
             pack_upload(wz, wsz, wqb, wsb)
             t |> success(moe_gpu_upload_stack(wqb, wsb, DNZ_WOFF, DND, DNDI, 0), "z stack uploaded")
             pack_upload(wo, wso, wqb, wsb)
@@ -1758,6 +1762,10 @@ def test_vulkan_deltanet_step(t : T?) {
             pack_upload(wqkv, wsqkv, wqb, wsb)
             if (!moe_gpu_upload_stack(wqb, wsb, DNSQ_WOFF, DND, DNCD, 0)) {
                 feint("no Vulkan device (or probe/budget refused the upload); skipping\n")
+                return
+            }
+            if (!g_gpu.dn_shared_ok) {
+                feint("dn/attention chains declined on this device (shared-memory cap) — skipping\n")
                 return
             }
             pack_upload(wz, wsz, wqb, wsb)
@@ -2107,6 +2115,10 @@ def test_vulkan_attention(t : T?) {
             pack_upload(wqg, wsqg, wqb, wsb)
             if (!moe_gpu_upload_stack(wqb, wsb, ATQ_WOFF, ATD, 2l * ATQD, 0)) {
                 feint("no Vulkan device (or probe/budget refused the upload); skipping\n")
+                return
+            }
+            if (!g_gpu.dn_shared_ok) {
+                feint("dn/attention chains declined on this device (shared-memory cap) — skipping\n")
                 return
             }
             pack_upload(wqp, wsqp, wqb, wsb)

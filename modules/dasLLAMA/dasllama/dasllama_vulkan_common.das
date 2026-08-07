@@ -16,6 +16,7 @@ require dasllama/dasllama_par
 require math
 require strings
 require daslib/strings_boost
+require daslib/fio
 
 // The Vulkan backend's shared infrastructure: device state (GpuState/g_gpu), buffer/descriptor
 // makers, upload + stacks + host-import, the weight arena, command/submit plumbing, the
@@ -783,6 +784,12 @@ def vk_moe_init : bool {
         return true
     }
     g_init_failed = true   // cleared only on full success
+    // MoltenVK's Metal argument-buffers default miscompiles the batch tiles — dispatches launch
+    // but device stores never land, silently (probe-verified 2026-08-07, MVK 1.4.2; suite 40/40
+    // with discrete bindings). Foreign knob, set-if-unset; an explicit user value wins.
+    if (!env_is_set("MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS")) {
+        set_env_variable("MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS", "0")
+    }
     if (volkInitialize() != 0) {
         to_log(LOG_ERROR, "dasLLAMA vulkan tier: no Vulkan loader\n")
         return false
