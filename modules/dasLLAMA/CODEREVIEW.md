@@ -379,4 +379,4 @@ chain, so a set cached anywhere else dangles into the next model.
 
 **Every program root declares `options stack = 524288`.** A test, harness, benchmark, or tool
 that picks its own number — larger or smaller — is a defect, and so is a new root that omits the
-declaration. See `ARCHITECTURE.md` §2.7.
+declaration. See `ARCHITECTURE.md` §2.8.

@@ -58,20 +58,16 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
 8. **Compile-time dispatch census** — Metal's `[lint_macro]` manual-dispatch census
    cross-checks every `@role`; Vulkan has only the runtime `hz_masks` panic. Port the census
    to the vulkan lens.
-9. **Class-level vulkan kernels (SEPARATE ARC, separate PR — Boris ruling: not part of the
-   reorg megarefactor). IN FLIGHT: `bbatkin/vulkan-class-kernels` — the conversion is
-   complete (serving is 100% class kernels; census carries the evidence), the old-kernel
-   sweep + the two PRs close it.** Investigate porting the Metal kernel model to the SPIR-V emitter:
-   a kernel is a class with `@ssbo`/`@uniform`/`@workgroup` members and ordinary methods,
-   free functions and inheritance lower 1:1 (the msl_emit Phase-0 machinery is the model).
-   The module-global bindings are the root cause of the hand-written `vk_set6` ladders (no
-   per-kernel interface to generate an encoder from), the `vk_meta` word-map convention
-   (no named per-kernel params), whole-module binding-slot coupling, and global-state CPU
-   oracles. SPIR-V has no classes, so members lower to per-kernel global `OpVariable`s under
-   the hood — the class is the namespacing + interface surface, which then makes a generated
-   set-builder lens possible. Cost to weigh: per-class descriptor-set layouts replace the one
-   shared `VkDescriptorSetLayout`/pool — a real host-side rework. End state across both
-   backends: one way to write a kernel in daslang; the backend is a target, not a dialect.
+9. **Class-level vulkan kernels — SHIPPED (the `bbatkin/vulkan-class-kernels` arc).** The
+   Metal kernel model is ported to the SPIR-V emitter: a kernel is a class with
+   `@ssbo`/`@uniform`/`@workgroup` members and ordinary methods (`[spirv_kernel]`), the
+   `[vk_dispatch]` lens generates the ensure/set/enc surface per class, and the old world —
+   module-global kernels, the `vk_set6` ladders, the `vk_meta` word maps, the shared 6-slot
+   layout — is deleted outright. Serving is 100% class kernels (the `coverage-vk` census is
+   the evidence); every kernel carries a CPU-oracle parity gate in `test_vulkan_kernels.das`.
+   End state across both backends: one way to write a kernel in daslang; the backend is a
+   target, not a dialect. Remaining relatives live as their own items: the lens-helper hoist
+   + M1 (item 10), cm2 kernel quality (item 11), the reification macro layer (next arc).
 10. **Vulkan on Mac (M1/MoltenVK) + shared dispatch-lens helpers.** Two items that ride
    together: (a) make the vulkan tier green on the ssh M1 under MoltenVK — capability-gated
    declines (no coopmat, the 32 KB shared-memory cap declining the dn/at chains), the known
@@ -149,7 +145,26 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    epilogue); gemma4-dense sits on the same base (plus PLE — its own story). Biggest
    family-count unlock on the board after qwen2's one-flag bias.
 
-15. **VK_EXT_pageable_device_local_memory — the missing half of the residency shield.** The
+15. **mm L-tile zeroes its whole dispatch on a non-128-multiple weight dim (latent, found by
+   the CPU-oracle conversion).** The mode-3 `MmBatch` L-tile GEMM writes all-zeros for the
+   ENTIRE dispatch when the weight dim `d` is not a multiple of 128 — and the retired
+   hand-written kernel did exactly the same, which is why old-vs-new parity stayed green on
+   it (zeros == zeros; the vacuous-parity failure mode the oracle conversion exists to
+   catch). Serving is unaffected today because every served model dim is a 128-multiple,
+   and the suite fixture pins row-edge coverage only. Repro: give the `v2` mm arm a fixture
+   with `d = 192` — the whole output zeroes. Fix shape: a d-edge guard/masked tail in the
+   L-tile stage (check `MmABatch`/`MmMBatch` for the same edge), then widen the fixture
+   back to a non-128-multiple `d`.
+
+16. **`run.das` cannot arm vulkan — GPU coverage needs direct dastest.** The runner spawns
+   without `-load_module dasVulkan` and injects `DASLLAMA_CPU_PREFILL`, so any vulkan-armed
+   arm under it silently runs CPU (the census suite's `coverage-vk` arm is the standing
+   example — it must be run via direct dastest + `-load_module`). Candidate fix: teach the
+   runner a GPU lane (propagate `-load_module`, drop the CPU_PREFILL injection for
+   vulkan-tagged tests) or make it refuse loudly when a test declares a vulkan requirement
+   it cannot satisfy.
+
+17. **VK_EXT_pageable_device_local_memory — the missing half of the residency shield.** The
    tier chains VK_EXT_memory_priority (priority 1.0 on every device allocation, the armed
    "residency shield"); the companion extension — runtime `vkSetDeviceMemoryPriorityEXT` +
    the pageable-aware device-local signal WDDM wants — has zero references in the tree.

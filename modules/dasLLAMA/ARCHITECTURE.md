@@ -163,6 +163,11 @@ that a question answered for one backend has an obvious address in the other. Th
 - **Vulkan additionally has an ENTRY, `dasllama_math_vulkan.das`** — capability probe/arm, `.dlim`
   identity source, cross-arm routers, the `[init]` installs. It re-exports the family `public`,
   and its NAME is common's `?vulkan` require contract: **never rename it.**
+- **Vulkan additionally has `dasllama_vulkan_seams.das`** — the thin whole-op call seams the tier
+  and suites dispatch through (`vk_add_rms`, `vk_rope_kv_store`, `vk_decode_attn`). It exists
+  because of a require direction: common cannot require the classes module (classes requires
+  common back), so any seam that encodes a class kernel must sit above both. A seam here wraps
+  ensure/set/enc — kernel bodies and driver policy stay out.
 - **Metal has NO `math_` entry** — the family enters via the transformer's `?das_metal` requires
   plus unconditional shapes. Its below-common piece is **`dasllama_metal_gemm.das`** (the batch
   GEMM donor that common requires `?das_metal`), which owns its device by necessity:
@@ -405,7 +410,30 @@ that runs before the window is staged must ask the capability half only, or it g
 forever and its feature silently never runs. Split such predicates rather than reordering the
 caller; an optimistic capability answer is safe when the late path has a fallback, and here it does.
 
-### 2.7 Every program root declares the same stack budget
+### 2.7 A quantized activation carries its scale lattice (Vulkan)
+
+Two activation quant forms ride the vulkan rail, and they differ in the SCALE LATTICE, not the
+int8 payload: the Q8_0 form scales per 32 values, the superblock form per 256 (with per-32
+sub-scales inside). A compiled kernel indexes ONE lattice — the q8 GEMV/GEMM rail reads per-32
+scales; the k-quant (k4/k5/k6/q40) kernels index the per-256 lattice. `kq_sb(fmt)` is the
+predicate (§1.2), and it answers for the WEIGHT plane the dispatch consumes.
+
+Three consequences the code is shaped around:
+
+- **A quant/act encoder is picked by the CONSUMING plane's format, never by a rail-wide
+  default.** Every site that encodes activations for a GEMV/GEMM keys its encoder (and its
+  grid: superblock counts are `n/256`) on the consumer's `kq_sb`. The failure mode is silent
+  per-dispatch: the wrong lattice indexes garbage scales, outputs stay finite, and nothing
+  panics — only end-to-end token parity (`harness/parity.das`) catches it, which is why
+  CODEREVIEW gates resident changes on a parity run over both a q8 and a k-quant model.
+- **The fused add-rms+requant twin exists only for the per-32 form.** The rail gates it on
+  "every consumer of this buffer is Q8_0-scaled" (`rd_x_quants_b32`), and the profiler stamp
+  shape must ride the SAME gate, or profiles desync from what actually dispatched.
+- **A GEMV group sharing one activation buffer must be lattice-homogeneous.** q/k/v share one
+  quantized x; gate/up share another. Resident arming classifies each member's consumer form
+  and DECLINES a mixed group rather than serving one member wrong scales.
+
+### 2.8 Every program root declares the same stack budget
 
 `options stack` is main-module-only: it does not unify up from required modules, so no library in
 the forward chain can declare the depth it needs. Every program that drives the engine — each test,

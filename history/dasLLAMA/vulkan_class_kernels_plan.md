@@ -1,5 +1,8 @@
 # Vulkan class kernels arc — port the Metal kernel model to the SPIR-V/Vulkan tier
 
+> ARCHIVED (2026-08-06): the arc shipped — serving is 100% class kernels, the module-global
+> kernel world is deleted. This is the working plan, kept as the record.
+
 ## Context
 
 `modules/dasLLAMA/followup_vulkan.md` item 9, promoted to its own arc (Boris ruling: separate from
