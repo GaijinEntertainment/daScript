@@ -215,18 +215,26 @@ class VkDispatch : AstStructureAnnotation {
         var bufs : array<VkBufField>
         var push_t : TypeDeclPtr
         var push_fields = 0
+        var wg_bytes = 0   // @workgroup footprint — ensure_ gates it against the device cap
         for (field in st.fields) {
             var is_ssbo = false
             var is_push = false
+            var is_wg = false
             for (annDecl in field.annotation) {
                 if (annDecl.name == "ssbo") {
                     is_ssbo = true
                 } elif (annDecl.name == "push_constant") {
                     is_push = true
+                } elif (annDecl.name == "workgroup") {
+                    is_wg = true
                 } elif (annDecl.name == "uniform") {
                     errors := "[vk_dispatch] {base}: member '{field.name}' is @uniform — UBO members are not lensed yet; params ride the @push_constant struct"
                     return false
                 }
+            }
+            if (is_wg) {
+                wg_bytes += field._type.sizeOf
+                continue
             }
             if (is_push) {
                 if (push_t != null) {
@@ -390,11 +398,19 @@ class VkDispatch : AstStructureAnnotation {
             var pm = new ExprCall(at = at, name := "vkd_pipe_made")
             pm.arguments |> emplace_new <| mk_gvar(at, gname)
             pm.arguments |> emplace_new <| new ExprConstInt(at = at, value = ord)
-            var body <- array<ExpressionPtr>(
-                mk_if_ret(at, mk_not(at, new ExprCall(at = at, name := "vk_moe_init")), false),
-                mk_if_do(at, mk_not(at, new ExprField(at = at, value = mk_gvar(at, gname), name := "ready")), ci),
-                mk_if_do(at, mk_not(at, pm), cp),
-                mk_ret_bool(at, true))
+            var body : array<ExpressionPtr>
+            body |> push(mk_if_ret(at, mk_not(at, new ExprCall(at = at, name := "vk_moe_init")), false))
+            if (wg_bytes > 0) {
+                // over-cap classes decline by name BEFORE the pipeline build (MoltenVK's 32 KB
+                // threadgroup cap fails the COMPILE otherwise — an opaque INITIALIZATION_FAILED)
+                var wf = new ExprCall(at = at, name := "vkd_wg_fits")
+                wf.arguments |> emplace_new <| new ExprConstInt(at = at, value = wg_bytes)
+                wf.arguments |> emplace_new <| new ExprConstString(at = at, value := base)
+                body |> push(mk_if_ret(at, mk_not(at, wf), false))
+            }
+            body |> push(mk_if_do(at, mk_not(at, new ExprField(at = at, value = mk_gvar(at, gname), name := "ready")), ci))
+            body |> push(mk_if_do(at, mk_not(at, pm), cp))
+            body |> push(mk_ret_bool(at, true))
             var fn = new Function(at = at, atDecl = at, name := "ensure_{base}",
                 flags = FunctionFlags.generated,
                 result = new TypeDecl(at = at, baseType = Type.tBool))

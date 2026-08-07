@@ -471,6 +471,7 @@ struct GpuState {
     dn_cls_ready : bool                // the window chain's class sets (built by prefill)
     dn_ready : bool
     dn_shared_ok : bool  // device shared-mem cap fits dn_conv's 33 KB tile (false on Apple/MoltenVK)
+    max_wg_bytes : uint  // maxComputeSharedMemorySize — the per-class workgroup-footprint gate reads it
     // deltanet decode-step state (lazy — first npos == 1 DN dispatch creates it)
     dnd_bg : HostBuf              // per-token raw β/γ + ring-parity staging (copied into the layer smalls)
     dnd_oq_dev : uint64           // the o row's Q8_0 image (fused-step out, the out GEMV's activations)
@@ -900,6 +901,7 @@ def vk_moe_init : bool {
     // 33024 B rows; Apple caps threadgroup memory at 32 KB and pipeline COMPILE fails)
     var limits_props : VkPhysicalDeviceProperties
     vkGetPhysicalDeviceProperties(g_gpu.phys, limits_props)
+    g_gpu.max_wg_bytes = limits_props.limits.maxComputeSharedMemorySize
     g_gpu.dn_shared_ok = limits_props.limits.maxComputeSharedMemorySize >= 33024u
     if (!g_gpu.dn_shared_ok) {
         set_moe_gpu_dn_route(false)
@@ -2047,6 +2049,23 @@ struct VkdClass {
     set_layout : DescriptorSetLayout
     pipe_layout : PipelineLayout
     pipes : array<Pipeline>    // one per [vk_dispatch] kernel, indexed by annotation ordinal
+}
+
+// once-per-class named decline log for the workgroup-footprint gate below
+var private g_wg_declined : table<string>
+
+// the [vk_dispatch]-generated ensure_ calls this BEFORE building the pipeline: a class whose
+// @workgroup members exceed the device's shared-memory cap declines by name instead of dying
+// in vkCreateComputePipelines (MoltenVK: "Threadgroup memory size exceeds the maximum")
+def vkd_wg_fits(wg_bytes : int; kname : string) : bool {
+    if (uint(wg_bytes) <= g_gpu.max_wg_bytes) {
+        return true
+    }
+    if (!key_exists(g_wg_declined, kname)) {
+        g_wg_declined |> insert(kname)
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: {kname}: workgroup footprint {wg_bytes} B exceeds device cap {int(g_gpu.max_wg_bytes)} B — kernel declined\n")
+    }
+    return false
 }
 
 def vkd_class_init(var c : VkdClass; bindings : array<int>; push_bytes : int) {
