@@ -226,12 +226,53 @@ this leg only builds the mechanism and takes the free wins the oracle suite cove
   Q8/Mx4 joining the base means renumbering their cnt/basep/bkt bindings 6/7/8 → 7/8/9
   (production encoders + oracle gates churn).
 
+## MoltenVK argbuf upstream report — DRAFT (awaiting Boris go-ahead to file)
+
+To be filed at KhronosGroup/MoltenVK (posts under Boris's gh auth — not filed yet).
+Probe files `tests/_probe_{cls,batch}_m1.das` stay until filed, then delete (plan rule).
+
+> **Title:** Compute dispatches silently lose all device stores under Metal argument
+> buffers (default path) on Apple Silicon — correct with
+> MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0
+>
+> **Environment:** MoltenVK 1.4.2 (brew), vulkan-loader 1.4.357.0, macOS 26.5.2,
+> Apple M1 Max.
+>
+> **Observed:** with the Metal argument-buffers path enabled (the Apple Silicon
+> default), a subset of our compute pipelines dispatch "successfully" — no validation
+> error, no MoltenVK log output, vkQueueSubmit/fences signal, buffer-to-buffer copies
+> in the same submission run — but the kernels' device stores never land: output SSBOs
+> read back exactly the sentinel/zero contents they were uploaded with. The same
+> pipelines, same SPIR-V, same machine produce correct results with
+> `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0` (discrete bindings).
+>
+> **Scope observed:** 3 of 40 kernels in our compute test suite fail this way; the
+> failing three are our "batch"-shaped GEMM/rope kernels (5-7 storage-buffer bindings,
+> one push-constant block, 1-D dispatch). Simple elementwise/reduction kernels with
+> the same binding style pass. Binding count alone does not discriminate (passing
+> kernels use up to 7 bindings too). All 40 pass with argument buffers disabled, on
+> the same run.
+>
+> **Repro:** SPIR-V blobs of one failing kernel + its VkDescriptorSetLayout /
+> pipeline-layout description + dispatch parameters attached. Toggling only
+> `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS` flips pass/fail deterministically.
+>
+> (Attachment TODO before filing: dump the SPIR-V of one failing kernel — e.g. the
+> q8 batch tile — plus its exact set layout; optionally distill to a standalone C
+> repro if requested by maintainers.)
+
+Local re-verification 2026-08-07: `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=1` on the
+kernel suite → 37/40, the same three arms (q8 batch tile, kq batch family ×4 formats,
+batch rope + fused qkn-rope), all reds are stores-never-landed shapes; unset (tier
+forces =0) → 40/40.
+
 ## Ledger
 
-- Subgroup lingua-franca lift (~10 symbols out of metal_builtins/spirv_builtins into
-  `shader_lingua_franca`): in-arc if cheap, unblocks cross-backend sharing of the
-  elementwise/reduction family later. The stale "if dasSpirv grows subgroup support"
-  comment in metal_builtins.das:17 goes with it.
+- Subgroup lingua-franca lift: ✅ DONE 2026-08-07 — the overlap was exactly the 4
+  `gl_Subgroup*` ID globals (both emitters lower by bare name; the arithmetic/shuffle stubs
+  keep their per-backend spellings, simd_* vs subgroup*). Moved to `shader_lingua_franca`,
+  deleted from both builtins modules, stale metal_builtins comment fixed. Green: metal
+  kernels 7/7, vulkan 40/40, tests/{spirv,msl,metal} subgroup + fail-closed suites.
 - rsqrt measurement (followup_vulkan item 18) — separate, needs bench discipline.
 - Vulkan-side leftovers spotted by the census, for the reification arc: the 7 `MoeCmBase`
   leaves (799 LOC over a 10-LOC base, three near-identical `Mm*Batch` bodies), and the

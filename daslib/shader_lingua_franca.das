@@ -60,6 +60,14 @@ var gl_LocalInvocationIndex : uint    // 1D flattening of gl_LocalInvocationID
 // module shared by several shaders (each with its own local_size) cannot name that size any other way.
 var gl_WorkGroupSize        : uint3   // the local_size the shader was compiled with
 
+// The subgroup IDs, KHR_shader_subgroup spellings — both rails speak them (SPIR-V: the Subgroup*
+// BuiltIns; MSL: the simdgroup thread-position attributes, noted per line). A CPU replay that
+// sets gl_SubgroupSize = 1u and gl_SubgroupInvocationID = 0u keeps width-1 semantics exact.
+var gl_SubgroupSize         : uint    // lanes per subgroup (Metal: [[threads_per_simdgroup]])
+var gl_SubgroupInvocationID : uint    // this lane's index within its subgroup ([[thread_index_in_simdgroup]])
+var gl_NumSubgroups         : uint    // subgroups per workgroup ([[simdgroups_per_threadgroup]])
+var gl_SubgroupID           : uint    // this subgroup's index within the workgroup ([[simdgroup_index_in_threadgroup]])
+
 // ===== matrix constructors =====
 // matCxR(col0, ...) builds a matrix from its columns (GLSL core `mat4(vec4,...)`); daslang matrices
 // are column-major, so the emitter lowers the call to one OpCompositeConstruct (glslang's mat4(cols)).
