@@ -54,7 +54,8 @@ def private suite_files(name : string) : array<string> {
     } elif (name == "kernels") {
         return <- [ "modules/dasLLAMA/tests/test_metal_prefill_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_decode_kernels.das",
-                    "modules/dasLLAMA/tests/test_metal_rope_kernels.das" ]
+                    "modules/dasLLAMA/tests/test_metal_rope_kernels.das",
+                    "modules/dasLLAMA/tests/test_metal_gemv_kernels.das" ]
     } elif (name == "image") {
         return <- [ "modules/dasLLAMA/tests/test_model_image.das" ]
     } elif (name == "image-vulkan") {
@@ -68,6 +69,7 @@ def private suite_files(name : string) : array<string> {
                     "modules/dasLLAMA/tests/test_metal_prefill_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_decode_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_rope_kernels.das",
+                    "modules/dasLLAMA/tests/test_metal_gemv_kernels.das",
                     "modules/dasLLAMA/tests/test_model_image.das" ]
     }
     var none : array<string>
