@@ -1,4 +1,5 @@
 options gen2
+options no_aot   // build_const folds from the COMPILE-time environment — an AOT artifact bakes the builder's env and desyncs at run by design
 
 require dastest/testing_boost public
 require daslib/fio

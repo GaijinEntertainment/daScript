@@ -8,7 +8,7 @@ require dasllama/dasllama_par
 require llvm/daslib/f16_cvt
 require daslib/jobque_boost
 require math
-require dasllama/dasllama_env
+require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — the read sites sit in the apple static_if half; the linux lint flavor sees the require as unused
 
 // Contention rig: reproduce the MoE-router call pattern (small inline sgemm between jobque NEON
 // bursts) without a model load. Prints per-call sgemm ms + BLASGetThreading per context.

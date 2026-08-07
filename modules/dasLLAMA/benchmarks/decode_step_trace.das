@@ -11,7 +11,7 @@ require daslib/clargs
 require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
 require math   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
 require strings   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
-require dasllama/dasllama_env
+require dasllama/dasllama_env   // nolint:STYLE029,LINT019 — the read sites sit in the apple static_if half; the linux lint flavor sees the require as unused
 
 // The per-step decode TRACE probe — the spec-chain bimodality diagnostic. Runs ONE long greedy
 // decode with the driver's per-step trace armed and prints per-`bucket` summaries: wall / gpu /
