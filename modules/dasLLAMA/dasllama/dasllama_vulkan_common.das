@@ -2210,10 +2210,43 @@ def vkd_pipe_made(c : VkdClass; ord : int) : bool {
     return ord < length(c.pipes) && intptr(boost_value_to_vk(c.pipes[ord])) != 0ul
 }
 
+// DASLLAMA_VK_SPV_OVERRIDE=<dir>: serve <dir>/<kernel>.spv instead of the emitted words at
+// pipeline creation — the offline-spirv-opt / hand-patched-blob A/B instrument
+var g_spv_override = "\t"   // unread marker (an env value is never a tab)
+def spv_override_dir : string {
+    if (g_spv_override == "\t") {
+        g_spv_override = g_env_vulkan.vk_spv_override
+    }
+    return g_spv_override
+}
+
+def private spv_override_load(kernel : string; var spv : array<uint>) {
+    let dir = spv_override_dir()
+    if (empty(dir)) {
+        return
+    }
+    fopen("{dir}/{kernel}.spv", "rb") $(f) {
+        if (f == null) {
+            return
+        }
+        fmap(f) $(var data : array<uint8>#) {
+            let nb = length(data) / 4
+            if (nb > 0) {
+                spv |> resize(nb)
+                unsafe {
+                    memcpy(addr<void?>(spv[0]), addr<void?>(data[0]), int64(nb) * 4l)
+                }
+                to_log(LOG_INFO, "dasLLAMA vulkan tier: SPV OVERRIDE {kernel} ({nb} words)\n")
+            }
+        }
+    }
+}
+
 def vkd_class_pipe(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wmask : uint; kernel : string) {
     if (length(c.pipes) <= ord) {
         c.pipes |> resize(ord + 1)   // empty slots hold null handles until their kernel ensures
     }
+    spv_override_load(kernel, spv)
     var shader <- create_shader_module(g_gpu.device, spv)
     c.pipes[ord] <- create_compute_pipeline(g_gpu.device, c.pipe_layout, shader)
     let pk = intptr(boost_value_to_vk(c.pipes[ord]))

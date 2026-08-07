@@ -278,6 +278,10 @@ struct public VulkanEnv {
     @clarg_doc = "cm2 split-k: 0 = occupancy heuristic, 1 = off, N = force N k-chunks (A/B instrument; shrinks if N strands an empty tail)."
     cm2_splitk : int64 = 0l
 
+    @clarg_path
+    @clarg_doc = "Directory of <kernel>.spv files served instead of the emitted words at pipeline creation (offline spirv-opt / hand-patched A/B instrument)."
+    vk_spv_override : string = ""
+
     @clarg_doc = "Barrier at every dispatch (correctness bisect)."
     vk_hazard_paranoid : bool = false
 
