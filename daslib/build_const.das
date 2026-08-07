@@ -73,15 +73,20 @@ class BuildFlagMacro : AstCallMacro {
         let name = string((expr.arguments[1] as ExprConstString).value)
         var res = false
         var on_argv = false
+        let eq_prefix = flag + "="
         let args <- get_command_line_arguments()
         for (a in args) {
             if (a == flag) {
                 on_argv = true
+                res = true
+            } elif (starts_with(a, eq_prefix)) {
+                // --flag=value spelling, same truth rule as the env carrier — so
+                // --jobque-profiling=1 arms and --jobque-profiling=0 disarms explicitly
+                on_argv = true
+                res = env_text_is_true(a |> trim_prefix(eq_prefix))
             }
         }
-        if (on_argv) {
-            res = true
-        } elif (has_env_variable(name)) {
+        if (!on_argv && has_env_variable(name)) {
             res = env_text_is_true(get_env_variable(name))
         }
         return <- qmacro($v(res))
@@ -144,9 +149,10 @@ class BuildHasArgMacro : AstCallMacro {
         macro_verify(expr.arguments[0] is ExprConstString, prog, expr.at, "build_has_arg: flag must be a string literal, got {describe(expr.arguments[0])}")
         let flag = string((expr.arguments[0] as ExprConstString).value)
         var found = false
+        let eq_prefix = flag + "="
         let args <- get_command_line_arguments()
         for (a in args) {
-            if (a == flag) {
+            if (a == flag || starts_with(a, eq_prefix)) {
                 found = true
             }
         }

@@ -28,10 +28,10 @@ number it produced is a 4-thread number.
 | `DAS_JOBQUE_TEAM_RANK_GATE` | number | Team-dispatch rank gate. When set, it takes precedence over a box profile's own `team_rank_gate`. |
 | `DAS_TEAM_PROF` | flag | Per-team dispatch profiling counters. |
 
+| `JOBQUE_PROFILING` | flag | Compile the jobque marker rail in. Read at COMPILE time (`daslib/build_const` constant `JOBQUE_PROFILING_ENABLED` in `daslib/jobque_profile`): without it, `profile_tag`/`profile_marker` calls — and everything gated `static_if (JOBQUE_PROFILING_ENABLED)` — erase from the program entirely, so instrumented hot paths cost zero. `--jobque-profiling` on the command line is the argv twin (argv beats env). Interp/`-jit` resolve it per run; an `-exe` build bakes it. |
+
 `set_jobque_affinity()` and `set_jobque_threads_cap()` are the programmatic equivalents; the
 environment wins over both, which is what makes them usable for an A/B without touching source.
-
-| `JOBQUE_PROFILING` | flag | Compile the jobque marker rail in. Read at COMPILE time (`daslib/build_const` constant `JOBQUE_PROFILING_ENABLED` in `daslib/jobque_profile`): without it, `profile_tag`/`profile_marker` calls — and everything gated `static_if (JOBQUE_PROFILING_ENABLED)` — erase from the program entirely, so instrumented hot paths cost zero. `--jobque-profiling` on the command line is the argv twin (argv beats env). Interp/`-jit` resolve it per run; an `-exe` build bakes it. |
 
 ## JIT
 

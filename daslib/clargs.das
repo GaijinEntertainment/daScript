@@ -155,11 +155,15 @@ def env_text_is_true(v : string) : bool {
     return !(empty(s) || s == "0" || s == "false" || s == "off" || s == "no")
 }
 
-// set-but-empty counts as unset, matching daslib/build_const and the dasllama_env readers
+// set-but-empty counts as unset, matching daslib/build_const — and warns, because the old
+// dasllama registry read FOO= as false, so a silent flip of a disable idiom must be loud
 def public env_config_text(name : string) : Option<string> {
     if (empty(name) || !has_env_variable(name)) return none(type<string>)
     let v = get_env_variable(name)
-    if (empty(v)) return none(type<string>)
+    if (empty(v)) {
+        to_log(LOG_WARNING, "env {name} is set but empty — treated as unset (use {name}=0 to disable a flag)\n")
+        return none(type<string>)
+    }
     return some(v)
 }
 
@@ -1291,6 +1295,7 @@ class EnvConfigMacro : AstStructureAnnotation {
         var info : CommandInfo
         info.args |> reserve(length(st.fields))
         var load_exprs : array<ExpressionPtr>
+        var seen_env : table<string; string>   // resolved env name -> first field: one variable, one field
         for (field in st.fields) {
             if (find_bool_annotation(field.annotation, "clarg_skip", false)) continue
             if (find_bool_annotation(field.annotation, "clarg_positional", false)
@@ -1319,6 +1324,11 @@ class EnvConfigMacro : AstStructureAnnotation {
                 errors := "field '{field.name}': no environment name — set @clarg_env or the struct-level env_prefix"
                 return false
             }
+            if (key_exists(seen_env, env_name)) {
+                errors := "field '{field.name}': environment name {env_name} already drives field '{seen_env[env_name]}' — one variable must not feed two fields"
+                return false
+            }
+            seen_env[env_name] = "{field.name}"
             info.args |> emplace(CommandArgumentInfo(
                 field_name = "{field.name}",
                 env_name = env_name,

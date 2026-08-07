@@ -39,6 +39,13 @@ let READ_MARKERS = [
     "env_config_text(\""
 ]
 
+// The sanctioned dynamic-name spellings: legal anywhere in the module, but a LITERAL name
+// through them must still be declared — they feed the coverage scan, never the strict ban.
+let SANCTIONED_MARKERS = [
+    "env_is_set(\"",
+    "env_value_of(\""
+]
+
 // The declarations themselves name every knob but read none of them; generated AOT trees are
 // copies of sources already scanned.
 def private skip_path(path : string) : bool {
@@ -48,8 +55,8 @@ def private skip_path(path : string) : bool {
             || find(p, "test_env_registry.das") >= 0)
 }
 
-def private collect_names(text : string; var out : table<string>) {
-    for (marker in READ_MARKERS) {
+def private collect_names(text : string; markers : array<string>; var out : table<string>) {
+    for (marker in markers) {
         var from = 0
         while (true) {
             let hit = find(text, marker, from)
@@ -108,17 +115,22 @@ def test_no_env_reads_outside_the_declarations(t : T?) {
 def test_every_env_read_is_declared(t : T?) {
     t |> run("every environment variable read anywhere has an [EnvConfig] declaration") @(t : T?) {
         var used : table<string>
+        var files_scanned = 0
         for (root in STRICT_ROOTS) {
             walk_das("{get_das_root()}/{root}") $(path, text) {
-                collect_names(text, used)
+                files_scanned++
+                collect_names(text, READ_MARKERS, used)
+                collect_names(text, SANCTIONED_MARKERS, used)
             }
         }
         for (root in COVERAGE_ROOTS) {
             walk_das("{get_das_root()}/{root}") $(path, text) {
-                collect_names(text, used)
+                collect_names(text, READ_MARKERS, used)
+                collect_names(text, SANCTIONED_MARKERS, used)
             }
         }
-        t |> success(length(used) > 0, "scan found {length(used)} names — with the strict rule green this is tutorials-only, but zero means the walk broke")
+        t |> success(files_scanned > 100, "walk visited {files_scanned} files under the strict roots — a real walk sees hundreds; a broken walk must not let both enforcement tests pass vacuously")
+        t |> success(length(used) > 0, "scan found {length(used)} names — zero means even the sanctioned-spelling scan broke")
         var names <- registered_env_names()
         var known : table<string>
         for (n in names) {

@@ -64,6 +64,13 @@ def test_build_const(t : T?) {
         t |> equal("PROF=true;NAME=cli;LEVEL=3;HAS=true;AVAL=av;AINT=5;EFLAG=false;EVAL=edef;EINT=2;GATE=on", got)
     }
 
+    t |> run("flag accepts the =value spelling with the shared bool rule") @(t : T?) {
+        let got_on = run_fixture(t, tmp_dir, "flageq_on", "--bct-prof=1")
+        t |> equal("PROF=true;NAME=fallback;LEVEL=7;HAS=false;AVAL=adef;AINT=1;EFLAG=false;EVAL=edef;EINT=2;GATE=on", got_on)
+        let got_off = run_fixture(t, tmp_dir, "flageq_off", "--bct-prof=0")
+        t |> equal("PROF=false;NAME=fallback;LEVEL=7;HAS=false;AVAL=adef;AINT=1;EFLAG=false;EVAL=edef;EINT=2;GATE=off", got_off)
+    }
+
     t |> run("last occurrence wins") @(t : T?) {
         let got = run_fixture(t, tmp_dir, "lastwins", "--bct-name first --bct-name=second")
         t |> equal("PROF=false;NAME=second;LEVEL=7;HAS=false;AVAL=adef;AINT=1;EFLAG=false;EVAL=edef;EINT=2;GATE=off", got)
