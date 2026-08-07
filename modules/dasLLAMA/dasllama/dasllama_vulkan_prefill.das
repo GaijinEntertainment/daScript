@@ -187,8 +187,8 @@ def private pf_setup {
     }
     let mirbytes = g_rd.n_layers * g_rd.seq_cap * kvd * 4l
     let normbytes = g_rd.norms_bytes
-    // the non-GEMM roles ride the class rail; cm2 flash attention outranks the h128 coopmat twin
-    g_rd.pf_facm2 = g_gpu.has_coopmat2_fa && vk_fa_on() && (g_rd.head_size == 64l || g_rd.head_size == 128l)
+    // cm2 fa is hs=64-only: the h128 f32 tile set spills the wg staging budget (~14x slower)
+    g_rd.pf_facm2 = g_gpu.has_coopmat2_fa && vk_fa_on() && g_rd.head_size == 64l
     let fa128s = !g_rd.pf_facm2 && g_gpu.has_coopmat && g_rd.head_size == 128l && vk_fa_on()
     verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_rope_kv_b_cls()
         && (fa128s ? ensure_da_attn_b_h128_cls() : ensure_da_attn_b_cls())
