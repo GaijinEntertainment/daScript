@@ -3168,6 +3168,30 @@ class Q8Cm2LBatch : MoeCmBase {
             tensorLayoutCreate(flo)
             tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
             tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
+            // the no-split arm keeps LITERAL loop bounds and store base: the k0/k1/ybase form
+            // in this hot loop measured -27% pp on the 5060 Ti even when the values were 0/pa.n/0
+            if (pa.ksplit == 0u) {
+                var k = 0u
+                for (_i in range(int(pa.n / 512u))) {
+                    for [unroll] (_j in range(8)) {
+                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
+                        coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+                        acc = coopmatMulAdd(a, b, acc)
+                        k += 64u
+                    }
+                }
+                while (k < pa.n) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+                coopmatClamp(acc, -65504.0, 65504.0)
+                var accw : coopmatWgAcc_f32_128x256
+                coopmatConvert(accw, acc)
+                coopmatStoreTensor(accw, y, 0u, flo, t0, 256u, m0, 128u, tv)
+                return
+            }
             var k = k0
             for (_i in range(int((k1 - k0) / 512u))) {
                 for [unroll] (_j in range(8)) {
@@ -3210,7 +3234,30 @@ class Q8Cm2LBatch : MoeCmBase {
         tensorLayoutSetStride(tlo, pa.d, 1u)
         // the 8x-unrolled main loop (their UNROLL_K = BK*8 = 512), then the sub-512 tail.
         // The hint is honored: a manual 4x expansion A/Bed dead even (2719 +- 20 vs 2749 +- 12
-        // on the 3B row), so the loop form stays
+        // on the 3B row), so the loop form stays. Same literal-bound specialization as the
+        // fast path — the no-split arm never reads k0/k1/ybase
+        if (pa.ksplit == 0u) {
+            var k = 0u
+            for (_i in range(int(pa.n / 512u))) {
+                for [unroll] (_j in range(8)) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
+                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+            }
+            while (k < pa.n) {
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+            coopmatClamp(acc, -65504.0, 65504.0)
+            var accw : coopmatWgAcc_f32_128x256
+            coopmatConvert(accw, acc)
+            coopmatStoreTensor(accw, y, 0u, tlo, t0, 256u, m0, 128u, tv)
+            return
+        }
         var k = k0
         for (_i in range(int((k1 - k0) / 512u))) {
             for [unroll] (_j in range(8)) {
@@ -3285,7 +3332,8 @@ class Q8Cm2MBatch : MoeCmBase {
         var acc : coopmatWgAcc_f16_128x128
         let t0 = row0 + xt * 128u
         let m0 = wt * 128u
-        // FAST PATH — see Q8Cm2LBatch; identical rule at the m width
+        // FAST PATH — see Q8Cm2LBatch; identical rule at the m width, same literal-bound
+        // no-split specialization (the k0/k1/ybase form in the hot loop measured -27% pp)
         if (m0 + 128u <= pa.d && xt * 128u + 128u <= cnt && (pa.n & 63u) == 0u) {
             var fla : tensorLayout2D
             tensorLayoutCreate(fla)
@@ -3300,6 +3348,28 @@ class Q8Cm2MBatch : MoeCmBase {
             tensorLayoutCreate(flo)
             tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
             tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
+            if (pa.ksplit == 0u) {
+                var k = 0u
+                for (_i in range(int(pa.n / 512u))) {
+                    for [unroll] (_j in range(8)) {
+                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
+                        coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
+                        acc = coopmatMulAdd(a, b, acc)
+                        k += 64u
+                    }
+                }
+                while (k < pa.n) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+                coopmatClamp(acc, -65504.0, 65504.0)
+                var accw : coopmatWgAcc_f32_128x128
+                coopmatConvert(accw, acc)
+                coopmatStoreTensor(accw, y, 0u, flo, t0, 128u, m0, 128u, tv)
+                return
+            }
             var k = k0
             for (_i in range(int((k1 - k0) / 512u))) {
                 for [unroll] (_j in range(8)) {
@@ -3335,6 +3405,28 @@ class Q8Cm2MBatch : MoeCmBase {
         tensorLayoutCreate(tlo)
         tensorLayoutSetDimension(tlo, row0 + cnt, pa.d)
         tensorLayoutSetStride(tlo, pa.d, 1u)
+        if (pa.ksplit == 0u) {
+            var k = 0u
+            for (_i in range(int(pa.n / 512u))) {
+                for [unroll] (_j in range(8)) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
+                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+            }
+            while (k < pa.n) {
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+            coopmatClamp(acc, -65504.0, 65504.0)
+            var accw : coopmatWgAcc_f32_128x128
+            coopmatConvert(accw, acc)
+            coopmatStoreTensor(accw, y, 0u, tlo, t0, 128u, m0, 128u, tv)
+            return
+        }
         var k = k0
         for (_i in range(int((k1 - k0) / 512u))) {
             for [unroll] (_j in range(8)) {
