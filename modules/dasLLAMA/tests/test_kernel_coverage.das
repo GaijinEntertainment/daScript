@@ -17,7 +17,7 @@ require math  // nolint:STYLE030,LINT019 — used only inside the das_metal stat
 require strings
 require _model_tier
 
-// The KERNEL COVERAGE census (CODEREVIEW rule 17): drive the small-model zoo across the
+// The KERNEL COVERAGE census (CODEREVIEW: "A new GPU kernel ships with a small model in the kernel coverage suite"): drive the small-model zoo across the
 // format / graph / batch-shape / KV-codec axes and report which compiled kernels were never
 // dispatched — LOUD WARNINGS, never an auto-dead verdict. A zero means "nothing this zoo runs
 // dispatched it", never "unreachable" — deleting a kernel additionally needs a reachability

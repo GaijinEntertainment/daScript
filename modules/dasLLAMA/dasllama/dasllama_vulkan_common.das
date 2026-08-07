@@ -1995,7 +1995,7 @@ var g_kernel_access : table<string; uint2>   // kernel name -> (read-bindings, w
 var g_pipe_access : table<uint64; uint2>     // VkPipeline -> (read-bindings, write-bindings)
 var g_set_bits : table<uint64; SetBits>      // VkDescriptorSet -> per-binding region-bit masks
 var @scratch g_pipe_names : table<uint64; string>   // VkPipeline -> kernel name (the coverage census)
-var @scratch g_vk_kcov : table<uint64; int64>       // VkPipeline -> dispatches (CODEREVIEW rule 17)
+var @scratch g_vk_kcov : table<uint64; int64>       // VkPipeline -> dispatches (CODEREVIEW: "A new GPU kernel ships with a small model in the kernel coverage suite")
 
 struct SetBits {
     b : uint[8]   // per-binding region bits (up to 8 declared bindings per class)
@@ -2163,7 +2163,7 @@ def hz_masks(pipe : Pipeline; var set_ : VkDescriptorSet) : tuple<r : uint; w : 
 }
 
 //! Per-kernel dispatch counts (name -> count) — every seeded [vk_dispatch] kernel appears, so a
-//! 0 row is "compiled but never dispatched" (the coverage census, CODEREVIEW rule 17).
+//! 0 row is "compiled but never dispatched" (the coverage census).
 def public vk_kernel_coverage() : table<string; int64> {
     var out <- {for (name in keys(g_kernel_access)); name => 0l}
     for (k, n in keys(g_vk_kcov), values(g_vk_kcov)) {

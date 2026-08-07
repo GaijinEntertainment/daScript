@@ -195,7 +195,7 @@
     errors on an opaque dispatch unless the function carries an explicit opt-out annotation, which
     turns an invisible class of bug into an enumerated, reviewable list. Note this is ADVISORY — it
     flags "this function hand-binds", not "this function is wrong". Until it exists the rule is
-    structural: nothing dispatches a kernel except its `enc_*` builder (CODEREVIEW rule 21).
+    structural: nothing dispatches a kernel except its `enc_*` builder (CODEREVIEW: "Nothing dispatches a kernel except its enc_* builder").
 
 14. **`dasllama_blocks` / `dasllama_moe` / `dasllama_ple` have no direct tests.** All three
    are pointer-dispatched forward-loop internals moved out of `dasllama_common` during the reorg;

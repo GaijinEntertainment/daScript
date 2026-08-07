@@ -21,7 +21,7 @@ file.** Mark it like any other finding; the fix is a rewrite or a move, not sile
    clean compile error naming the construct — never a silently wrong kernel. New error
    paths get their needle asserted in `tests/msl/test_msl_fail_closed.das`.
 5. **An emitter feature must not make dynamic dispatch easy.** The consumer rule is
-   dasLLAMA CODEREVIEW #21 — kernel SHAPE is compile-time, only DATA is runtime — and the
+   dasLLAMA CODEREVIEW's "A kernel's shape is compile-time; only its data is runtime" — and the
    emitter is where that is won or lost. A capability that carries a shape constant into
    the kernel as a value (a size parameter, a selector field, anything the shader compiler
    would have to inline-and-fold to recover) needs a specialization path beside it:

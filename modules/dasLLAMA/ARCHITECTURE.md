@@ -392,6 +392,14 @@ why writing one is a review defect.
 an untuned invocation re-execs into a full retune rather than measuring — so re-mint the box
 manifest and check its winners against the stored rows' `tune` stamps before trusting a delta.
 
+**A measured number proves its kernel provenance through `tune_gate()`
+(`performance/profile_common.das`), one arm per world it can run in.** Three worlds, because
+`tune_status()` populates in exactly one of them: a standalone exe checks the sidecar the
+release shipped beside it; a `DAS_TUNE_MANIFEST` run checks that file; a plain script checks
+that every `[tune]` row stamps a manifest winner. An invocation no arm covers refuses — or
+worse, measures on fallback kernels — which is why every measuring entry point calls the gate
+before its first timed rep.
+
 **The retune re-exec bites scaffolding, and the pin for it is checked in.** Any bare `daslang`
 run that requires the engine — a probe, a one-off script, a REPL experiment — re-execs into a
 full retune when no manifest is armed. `performance/last_known_good_sidecar.json` exists for
@@ -424,8 +432,8 @@ Three consequences the code is shaped around:
   default.** Every site that encodes activations for a GEMV/GEMM keys its encoder (and its
   grid: superblock counts are `n/256`) on the consumer's `kq_sb`. The failure mode is silent
   per-dispatch: the wrong lattice indexes garbage scales, outputs stay finite, and nothing
-  panics — only end-to-end token parity (`harness/parity.das`) catches it, which is why
-  CODEREVIEW gates resident changes on a parity run over both a q8 and a k-quant model.
+  panics — only end-to-end token parity (`harness/parity.das`) catches it, so a resident
+  change is witnessed only by parity runs over both a q8 and a k-quant model.
 - **The fused add-rms+requant twin exists only for the per-32 form.** The rail gates it on
   "every consumer of this buffer is Q8_0-scaled" (`rd_x_quants_b32`), and the profiler stamp
   shape must ride the SAME gate, or profiles desync from what actually dispatched.
