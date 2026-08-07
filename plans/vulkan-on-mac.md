@@ -143,11 +143,20 @@ negative-control run (poisoned oracle → red with dumps) before the poison is r
   kernels** — the capability-skip (visible to_log; `feint` prints nothing by design, so
   never grep for it) never fired; every tensor twin ran and matched its oracle. The
   race crowns simdgroup on M1 for SPEED; correctness coverage is live here.
-- TODO next: batch GEMM q8 7 (Q8GemmB/BSk/SkReduce/BT/BSkT/64B/64BT, K:2269-2570,
-  Q8GemmArgs/SkReduceArgs at K:3148-3168); MoeMulMm rest 6 concrete (race_moe_mulmm_q8/
-  mx4 in prefill.das:4273/4364 carry exact bindings; K4/K5 inherit Base, K6 standalone);
-  AttnQKMmT/AVMmT 2 (race_attn_pair prefill.das:4597); fused QKV/W13Sw 5 (K:869-2260);
-  batched GEMV B-forms 4 (K:1881-2129); MoE plumbing 8 + prefill misc 5.
+- ✅ batch GEMM q8 (7, in `test_metal_gemm_kernels`): Q8GemmB[T] dense + fused-QKV ys
+  stride (gap columns sentinel-asserted), Q8GemmBSk[T]+SkReduce as the production
+  two-dispatch chain (part planes AND reduced y checked; ksplit 2 + kbn==1), Q8Gemm64B[T].
+  Shared q8 fixture q8_blob_fill/q8_x_fill. **Poison-size lesson: an additive oracle
+  poison sums like a random walk while the envelope bar grows linearly in k — a +0.01
+  poison only tripped the shortest slice; size poisons to beat rel·env at the LONGEST dot.**
+- ✅ MoE gathered mul_mm (7, same file): MoeMulMmK4/K5/K6 (k6 d-tail binding),
+  MoeMulMmQ8[T], MoeMulMmMx4[T] (exact e8m0 decode in truth; bias fold both ways).
+  Padded-CSR MoeFix carries gather=1 bkt indirection with the kernels' last-live-entry
+  clamp, a zero-count expert, 2-col-tile shape; twins contiguous-only. All 11 arms
+  negative-controlled in one +10 poison of moe_mm_truth.
+- TODO next: AttnQKMmT/AVMmT 2 (race_attn_pair prefill.das:4597; attn_trio_gate in the
+  prefill test is the oracle donor); fused QKV/W13Sw 5 (K:869-2260); batched GEMV B-forms
+  4 (K:1881-2129); MoE plumbing 8 + prefill misc 5.
 
 ## Leg (c) — hoist the dispatch-lens micro-grammar into dasllama_kernel_access
 

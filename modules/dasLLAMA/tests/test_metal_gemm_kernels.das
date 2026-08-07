@@ -883,6 +883,175 @@ def private moe_mulmm_mx4_gate(t : T?; dev, queue; tensor : bool; kdim, ndim : i
     delete env
 }
 
+// ===== the prefill attention GEMM pair + Metal-4 tensor twins =====
+
+// MetalAttnQKMm[T]: raw scores att[h x qrows x np32] = scale * q · k over surviving 32x64
+// blocks — blocks fully above the causal diagonal (or fully outside the sliding window) exit
+// without writing, which the sentinel whole-slab compare asserts. QK arms keep npos == np32:
+// the tensor twin stages K pad rows RAW (no zero guard — the base has one), so pads must not
+// exist for the pair to agree.
+def private attn_qk_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul, mp, np32, qoff, window : int) {
+    let tag = "attn_qk_mm{tensor ? "t" : ""} h={heads} hs={hs} m={mp} n={np32} qoff={qoff} w={window}"
+    var err : string
+    var pso = (tensor
+        ? pipeline_from_source(dev, metal_attn_qk_mm_t_msl, metal_attn_qk_mm_t_msl_entry, metal_attn_qk_mm_t_msl_fastmath, err)
+        : pipeline_from_source(dev, metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, err))
+    if (tensor && pso == null) {
+        to_log(LOG_INFO, "{tag}: no Metal-4 tensor support on this box — arm skipped\n")
+        return
+    }
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let qd = heads * hs
+    let kvd = (heads / kv_mul) * hs
+    let scale = 0.125
+    var qv : array<float>
+    q8_x_fill(mp * qd, qv)
+    var kv : array<float>
+    kv |> resize(np32 * kvd)
+    for (i in range(np32 * kvd)) {
+        kv[i] = float((i * 7 + 3) % 15 - 7) * 0.5
+    }
+    var want : array<float>
+    var env : array<float>
+    want |> resize(heads * mp * np32)
+    env |> resize(heads * mp * np32)
+    for (i in range(heads * mp * np32)) {
+        want[i] = -1000.0
+        env[i] = 0.0
+    }
+    for (h in range(heads)) {
+        let kvhoff = (h / kv_mul) * hs
+        for (m in range(mp)) {
+            let mBase = m / 32 * 32
+            for (nb in range(np32 / 64)) {
+                let nBase = nb * 64
+                let skip = (nBase > qoff + mBase + 31
+                    || (window > 0 && qoff + mBase + 1 > window && nBase + 64 <= qoff + mBase + 1 - window))
+                continue if (skip)
+                for (pos in range(nBase, nBase + 64)) {
+                    var acc = 0.0lf
+                    var ev = 0.0lf
+                    for (c in range(hs)) {
+                        let p = double(qv[m * qd + h * hs + c]) * double(scale) * double(kv[pos * kvd + kvhoff + c])
+                        acc += p
+                        ev += abs(p)
+                    }
+                    want[(h * mp + m) * np32 + pos] = float(acc)
+                    env[(h * mp + m) * np32 + pos] = float(ev)
+                }
+            }
+        }
+    }
+    var ka = AttnArgs(qd = uint(qd), kv_dim = uint(kvd), head_size = uint(hs), kv_mul = uint(kv_mul),
+        npos = uint(np32), np32 = uint(np32), scale = scale, qoff = uint(qoff), qrows = uint(mp),
+        window = uint(window))
+    var bq = buf_upload(dev, qv)
+    var bk = buf_upload(dev, kv)
+    var batt = buf_fill(dev, heads * mp * np32, -1000.0)
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_threadgroup_memory_length(enc, tensor ? metal_attn_qk_mm_t_msl_tgmem : metal_attn_qk_mm_msl_tgmem, 0)
+        metal_set_buffer(enc, bq, 0ul, 0)
+        metal_set_buffer(enc, bk, 0ul, 1)
+        metal_set_buffer(enc, batt, 0ul, 2)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 3)
+        metal_dispatch_threadgroups(enc, uint3(uint(mp / 32), uint(np32 / 64), uint(heads)), uint3(128u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_env(batt, want, env, 2e-3, tag), 0)
+    }
+    metal_release(bq)
+    metal_release(bk)
+    metal_release(batt)
+    metal_release(pso)
+    delete qv
+    delete kv
+    delete want
+    delete env
+}
+
+// MetalAttnAVMm[T]: xb[m x qd] = P · V with the normalized-P slab causally zero past
+// qoff+m and past npos. The tensor twin zero-guards V rows >= npos — the npos < np32 arm
+// fills the pad rows with garbage to prove the guard is live.
+def private attn_av_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul, mp, np32, npos, qoff : int) {
+    let tag = "attn_av_mm{tensor ? "t" : ""} h={heads} hs={hs} m={mp} n={np32} npos={npos}"
+    var err : string
+    var pso = (tensor
+        ? pipeline_from_source(dev, metal_attn_av_mm_t_msl, metal_attn_av_mm_t_msl_entry, metal_attn_av_mm_t_msl_fastmath, err)
+        : pipeline_from_source(dev, metal_attn_av_mm_msl, metal_attn_av_mm_msl_entry, metal_attn_av_mm_msl_fastmath, err))
+    if (tensor && pso == null) {
+        to_log(LOG_INFO, "{tag}: no Metal-4 tensor support on this box — arm skipped\n")
+        return
+    }
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let qd = heads * hs
+    let kvd = (heads / kv_mul) * hs
+    var attf : array<float>
+    attf |> resize(heads * mp * np32)
+    for (h in range(heads)) {
+        for (m in range(mp)) {
+            for (pos in range(np32)) {
+                let live = pos <= qoff + m && pos < npos
+                attf[(h * mp + m) * np32 + pos] = live ? float((h * 31 + m * 7 + pos * 3) % 13 - 6) * 0.25 : 0.0
+            }
+        }
+    }
+    var vv : array<float>
+    vv |> resize(np32 * kvd)
+    for (i in range(np32 * kvd)) {
+        vv[i] = i / kvd < npos ? float((i * 7 + 3) % 15 - 7) * 0.5 : 999.0   // garbage pads: the guard's proof
+    }
+    var want : array<float>
+    var env : array<float>
+    want |> resize(mp * qd)
+    env |> resize(mp * qd)
+    for (h in range(heads)) {
+        let kvhoff = (h / kv_mul) * hs
+        for (m in range(mp)) {
+            for (col in range(hs)) {
+                var acc = 0.0lf
+                var ev = 0.0lf
+                for (pos in range(npos)) {
+                    let p = double(attf[(h * mp + m) * np32 + pos]) * double(vv[pos * kvd + kvhoff + col])
+                    acc += p
+                    ev += abs(p)
+                }
+                want[m * qd + h * hs + col] = float(acc)
+                env[m * qd + h * hs + col] = float(ev)
+            }
+        }
+    }
+    var ka = AttnArgs(qd = uint(qd), kv_dim = uint(kvd), head_size = uint(hs), kv_mul = uint(kv_mul),
+        npos = uint(npos), np32 = uint(np32), scale = 1.0, qoff = uint(qoff), qrows = uint(mp))
+    var batt = buf_upload(dev, attf)
+    var bv = buf_upload(dev, vv)
+    var bxb = buf_fill(dev, mp * qd, -1000.0)
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_threadgroup_memory_length(enc, tensor ? metal_attn_av_mm_t_msl_tgmem : metal_attn_av_mm_msl_tgmem, 0)
+        metal_set_buffer(enc, batt, 0ul, 0)
+        metal_set_buffer(enc, bv, 0ul, 1)
+        metal_set_buffer(enc, bxb, 0ul, 2)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 3)
+        metal_dispatch_threadgroups(enc, uint3(uint(mp / 32), uint(hs / 64), uint(heads)), uint3(128u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_env(bxb, want, env, 2e-3, tag), 0)
+    }
+    metal_release(batt)
+    metal_release(bv)
+    metal_release(bxb)
+    metal_release(pso)
+    delete attf
+    delete vv
+    delete want
+    delete env
+}
+
 [test]
 def test_metal_gemm_kernels(t : T?) {
     t |> run("prefill GEMM corpus (kq mul_mm trio + bf16 + Metal-4 tensor twins) == CPU references") <| @(t : T?) {
@@ -925,6 +1094,20 @@ def test_metal_gemm_kernels(t : T?) {
                 moe_mulmm_mx4_gate(t, dev, queue, false, 128, 64, [8, 33], false, false)
                 moe_mulmm_mx4_gate(t, dev, queue, true, 128, 64, [8, 33], false, true)
                 moe_mulmm_mx4_gate(t, dev, queue, true, 128, 64, [8, 33], false, false)
+                // the prefill attention GEMM pair: causal-skip, window-skip, GQA, 2-slab hs,
+                // and the AV pad-guard arm (npos < np32, garbage V pads)
+                attn_qk_mm_gate(t, dev, queue, false, 4, 64, 2, 64, 128, 0, 0)
+                attn_qk_mm_gate(t, dev, queue, true, 4, 64, 2, 64, 128, 0, 0)
+                attn_qk_mm_gate(t, dev, queue, false, 4, 64, 2, 32, 256, 224, 128)
+                attn_qk_mm_gate(t, dev, queue, true, 4, 64, 2, 32, 256, 224, 128)
+                attn_qk_mm_gate(t, dev, queue, false, 2, 128, 1, 32, 64, 32, 0)   // two K-slabs
+                attn_qk_mm_gate(t, dev, queue, true, 2, 128, 1, 32, 64, 32, 0)
+                attn_av_mm_gate(t, dev, queue, false, 4, 64, 2, 64, 128, 128, 64)
+                attn_av_mm_gate(t, dev, queue, true, 4, 64, 2, 64, 128, 128, 64)
+                attn_av_mm_gate(t, dev, queue, false, 4, 64, 2, 64, 128, 96, 64)
+                attn_av_mm_gate(t, dev, queue, true, 4, 64, 2, 64, 128, 96, 64)
+                attn_av_mm_gate(t, dev, queue, false, 2, 128, 1, 32, 64, 64, 32)  // vBase=64 tile
+                attn_av_mm_gate(t, dev, queue, true, 2, 128, 1, 32, 64, 64, 32)
                 metal_release(queue)
             }
             t |> equal(metal_log_leaks_if_any(), 0l)
