@@ -132,11 +132,12 @@ negative-control run (poisoned oracle → red with dumps) before the poison is r
   trio (dequant_k*_plane_superblock + double dot; envelope-aware bar 2e-4·Σ|w·x|).
 - ✅ `test_metal_misc_kernels` — CopyRow, Argmax (exact ties), EmbedQ8/K6 (bit-exact),
   AddRms/AddRmsB/PreAddRms, QkNorm (in-place + V-fusion), Geglu, Suppress/Softcap.
-- ✅ `test_metal_attn_kernels` — the f32/q8/tq4 codec twins, single-tg + split-K + comb
-  (fixtures quantize via the shipped stores, oracle attends over the cvt dequant truth;
-  sinks/softcap/window/chlo per codec).
-- TODO next: SqAttn batched 8 + CombB + D family 5 (row-table fixtures — the classes sit
-  at K:2630-3180 and K:3592-3777+DQ8/DTq4, sqd_* stage helpers nearby); then the GEMM
+- ✅ `test_metal_attn_kernels` — the SqAttn matrix is COMPLETE (23/23 classes direct):
+  f32/q8/tq4 codec twins (single + split-K + comb), the 9 batched twins (ragged row-table
+  arenas; one authoring bug caught — arena row spacing < deepest KV slab), and the D family
+  (DF16/DF32/DQ8/DTq4 + parallel CombD; D reuses the batched fixture at nheads=2 kv_mul=2
+  hs=128 — same kv_dim; grid (nheads, ceil(nsgs/4), B) × 128).
+- TODO next: the GEMM
   cluster (batch GEMM q8 7, KqMulMm 6, MulMm twins 3, MoeMulMm rest 7 — move
   kq_fill_planes/kq_row_ref/buf_mismatch_env from the gemv file into
   _metal_kernel_common when the second consumer lands); then fused QKV/W13Sw 5 +
