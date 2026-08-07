@@ -9,7 +9,7 @@ mirror, or says honestly that there isn't one.
 **`utils/preflight` automates these gates.** `daslang utils/preflight/main.das`
 runs the fast tier (format + lint + clang frontend pass on changed C++ —
 escalating to a full src+tests-cpp sweep when a header changed; seconds);
-`-- --full` adds dasgen freshness, the CI-only-das compile sweep, the six doc
+`-- --full` adds dasgen freshness, the CI-only-das compile sweep, the doc
 gates, ctest, the interp/JIT/AOT suites, and the sequence smoke. `--list-gates`
 shows the menu; `--only <names>` / `--skip <names>` select subsets. Gates whose
 host tool or module is missing report `SKIP` with an install/rebuild hint. The
@@ -39,7 +39,7 @@ the CI ref, never a working-tree copy.
 | `extended_checks.yml` | every PR | linux + darwin15-arm64 + windows, ALL release modules ON |
 | `wasm_build.yml` | every PR | emscripten build of `web/` on 3 OSes + `wasm_cross` |
 | `build_eastl.yml` | every PR | EASTL shadow-config build + no-fileio build (linux clang) |
-| `doc.yml` | only if `doc/**`, `daslib/**`, or `src/builtin/**` changed | seven doc gates |
+| `doc.yml` | only if `doc/**`, `daslib/**`, or `src/builtin/**` changed | five doc gates |
 | `playground-e2e.yml` | only if `site/**` / `web/examples/ui/**` changed | Playwright on the web playground |
 
 > A manual **`workflow_dispatch`** of `build.yml` runs the **whole** workflow — every per-PR job, both nightly toolchains, *and* the full AOT sweep. The cron `schedule` runs the two toolchains + the full build matrix (Release cells add the full AOT sweep; Debug cells ride along — `matrix` isn't available in a job-level `if`, so they can't be excluded); `bundle_smoke` and `build_linux_gcc` are gated off `schedule`.
@@ -149,18 +149,23 @@ cmake -B build -DDAS_HV_DISABLED=OFF -DDAS_LLVM_DISABLED=OFF -DDAS_AUDIO_DISABLE
 | Lint changed `.das` | preflight's `lint` gate — THREE rails, mirroring CI exactly: host-flavor interp, the LINUX-lane mirror (`--disable-module dasMetal --disable-module dasVulkan` — CI's verdict is rendered ONLY by the linux lane, where platform `static_if` halves compile out and their requires/args read unused), and the `-exe`-compiled `das-lint` (different module resolution). Manual single-rail form: `git diff --name-only origin/master..HEAD -- '*.das' \| xargs <daslang> utils/lint/main.das -- --quiet` | zero warnings on ALL rails; a mirror-only STYLE030/LINT012 takes the both-worlds `nolint:...,LINT019` spelling |
 | daslang_static sweep | `cmake --build build --config Release --target daslang_static`, then `bin/Release/daslang_static.exe dastest/dastest.das -- --color --failures-only --test tests` | rarely built locally; catches static-registration / no-dynamic-modules divergence |
 | Ser/deser sweep | `<daslang> dastest/dastest.das -- --test tests --ser serialized.bin` then `... --deser serialized.bin` | run after touching AST serialization (`ast_serializer.cpp`, flag-bit additions) |
+| AST verify sweep — **not a PR gate** | `find tests -name '*.das' ! -name 'cant_*' ! -name 'failed_*' ! -name 'invalid_*' -print0 \| xargs -0 -P8 -n1 <daslang> --ast-verify -compile-only` — only an `AST verify` line is a failure; compile errors are expected (many tests assert one) | Runs on `extended_checks.yml`'s 04:00 cron, not per PR: ~23 min, one daslang process per test file. Force it early with `gh workflow run extended_checks.yml`. Run it locally after touching macro or AST-building code — `skills/das_macros.md` |
 | MCP tools test | `<daslang> dastest/dastest.das -- --color --failures-only --test utils/mcp/test_tools.das` | linux-only in CI but runs anywhere; MCP signature changes break it silently — run after editing `utils/mcp/` |
 | dasImgui build | nothing to install — dasImgui is in-tree (`modules/dasImgui`) and builds in this lane like any other default-ON module | the old `daspkg install dasImgui` externals-coupling gate is gone; the external ABI canaries (dasImguiImplot, dasImguiNodeEditor + the rest of the daspkg-index) now run in `nightly_daspkg_index.yml`. See `skills/abi_break_sweep.md` |
 | Coverage | `<daslang> dastest/dastest.das -- --cov-path coverage.lcov --color --test tests/language --timeout 1800` + `dascov` | rarely needed locally |
 
-## doc.yml — the seven gates
+## doc.yml — the five gates
 
 Only triggered when `doc/**`, `daslib/**`, or `src/builtin/**` changed — but
-`daslib/**` means **any daslib edit** runs all seven. CI stops at the FIRST
+`daslib/**` means **any daslib edit** runs all five. CI stops at the FIRST
 das2rst panic, so one CI round can hide N-1 further issues — loop gate 1
 locally until clean. Needs a daslang built with `DAS_HV_DISABLED=OFF` and
 `DAS_PUGIXML_DISABLED=OFF` (das2rst documents those modules). Step-by-step
 workflow: `skills/make_pr.md` §4; conventions: `skills/documentation_rst.md`.
+
+**There is no LaTeX or PDF gate.** The docs are HTML only — no `latex_documents`
+in `conf.py`, no texlive in CI, no PDFs on the release. So a unicode character
+that pdflatex lacked a glyph for is no longer a build concern anywhere.
 
 | # | Gate | Local mirror |
 |---|---|---|
@@ -168,18 +173,13 @@ workflow: `skills/make_pr.md` §4; conventions: `skills/documentation_rst.md`.
 | 2 | no `// stub` in handmade docs | `grep -rl '// stub' doc/source/stdlib/handmade/` → must be empty |
 | 3 | no `Uncategorized` sections | `grep -rl '^Uncategorized$' doc/source/stdlib/generated/` → must be empty; fix via `group_by_regex` in das2rst.das |
 | 4 | no untracked generated RST | `git ls-files --others --exclude-standard doc/source/stdlib/` → must be empty; `git add` the new files |
-| 5 | LaTeX sphinx, warnings-as-errors | `sphinx-build -W --keep-going -b latex -d doc/sphinx-build doc/source build/latex` |
-| 6 | HTML sphinx, warnings-as-errors | `sphinx-build -W --keep-going -b html -d doc/sphinx-build doc/source build/site` — delete `doc/sphinx-build` first; cached builds hide errors |
-| 7 | both PDFs compile (latexmk, mirrors CI's latex-action) | `latexmk -pdf -interaction=nonstopmode -halt-on-error -cd build/latex/daslangstdlib.tex` then `…/daslang.tex` |
+| 5 | HTML sphinx, warnings-as-errors | `sphinx-build -W --keep-going -b html -d doc/sphinx-build doc/source build/site` — delete `doc/sphinx-build` first; cached builds hide errors |
 
-Gate 7 is **stricter than CI on purpose**: CI marks the PDF compiles
-`continue_on_error`, so an undeclared unicode char (the U+2261 incident)
-ships broken release PDFs without ever going red. The fix is always one
-line — `\DeclareUnicodeCharacter{XXXX}{…}` in `doc/source/conf.py`
-`latex_elements['preamble']` (sphinx's bundled set covers most common chars;
-only stragglers need declaring). Tool discovery: preflight probes PATH, then
-`~/Library/Python/*/bin` + `~/.local/bin` for sphinx-build and
-`/Library/TeX/texbin` for latexmk (mac: `brew install --cask basictex`).
+Tool discovery: preflight probes PATH, then `~/Library/Python/*/bin` +
+`~/.local/bin` for sphinx-build. A `.. video::` whose recording is missing from
+`doc/source/_static/tutorials/` is a `-W` warning like any other, so preflight
+stages the docs-assets release once per tree and says so in the gate detail when
+staging failed and the build then red.
 
 ## wasm_build.yml
 

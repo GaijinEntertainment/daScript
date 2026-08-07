@@ -30,7 +30,9 @@ attachments (never sampled, only blitted out):
 * the **1x** target -- ``glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, w, h)`` colour
   plus a depth renderbuffer;
 * the **MSAA** target -- ``glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples,
-  GL_RGBA8, w, h)`` colour plus a multisample depth renderbuffer.
+  GL_RGBA8, w, h)`` colour plus a multisample depth renderbuffer;
+* the **resolve** target -- single-sample ``GL_RGBA8`` colour, no depth. The MSAA target
+  resolves into this before anything reaches the window; the next section says why.
 
 The sample count is ``min(4, GL_MAX_SAMPLES)``. With N samples per pixel each triangle
 edge is rasterised against N sub-pixel sample points, so coverage along the edge is
@@ -39,20 +41,39 @@ graded instead of binary -- that graded coverage becomes a smooth edge after the
 The resolve blit, and the comparison
 ------------------------------------
 
-The same ball is drawn into both targets, then composed onto the screen with two blits::
+The same ball is drawn into both targets. The MSAA target is then resolved into the
+single-sample target, and only after that is the comparison composed onto the screen::
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo_msaa)
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo_resolve)
+    glBlitFramebuffer(0, 0, target_w, target_h, 0, 0, target_w, target_h, GL_COLOR_BUFFER_BIT, GL_NEAREST)
 
     let half = target_w / 2
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0u)
     glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo_1x)
     glBlitFramebuffer(0, 0, half, target_h, 0, 0, half, target_h, GL_COLOR_BUFFER_BIT, GL_NEAREST)
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo_msaa)
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo_resolve)
     glBlitFramebuffer(half, 0, target_w, target_h, half, 0, target_w, target_h, GL_COLOR_BUFFER_BIT, GL_NEAREST)
 
 Blitting *from* the multisample read framebuffer averages its N colour samples per pixel
-into one -- that blit **is** the resolve. A multisample-resolve blit requires the source
-and destination rectangles to be the same size, so both blits are 1:1 and the targets
-track the live display size (recreated on resize). A scissored clear then paints the
-divider over the seam.
+into one -- that blit **is** the resolve.
+
+.. note::
+
+   **Resolve into your own buffer, not into the window.** A resolve blit carries two
+   requirements that an ordinary blit does not: the source and destination rectangles
+   must be identical, and the two colour buffers must have the **same format**. The
+   window's format is chosen by whoever created the GL context, not by the program --
+   a page that requests ``alpha: false`` gets an ``RGB8`` default framebuffer, which
+   an ``RGBA8`` multisample buffer does not match. The blit then fails with
+   ``GL_INVALID_OPERATION`` and writes nothing, while a non-multisampled blit beside it
+   succeeds, because that one is allowed to convert formats. The symptom is one half of
+   a comparison rendering and the other staying black.
+
+   Resolving into a single-sample target the program owns satisfies both rules by
+   construction, and leaves the final blits free to convert.
+
+A scissored clear then paints the divider over the seam.
 
 MSAA is invisible to the shader
 -------------------------------

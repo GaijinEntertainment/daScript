@@ -78,6 +78,10 @@ var index_count = 0
 // two full-size render targets: a 1x path and an N-sample MSAA path
 var fbo_1x, color_1x, depth_1x : uint
 var fbo_msaa, color_msaa, depth_msaa : uint
+// single-sample landing pad the MSAA target resolves INTO, before anything reaches
+// the window. See the blit sequence in update() for why the resolve cannot go
+// straight to the default framebuffer.
+var fbo_resolve, color_resolve : uint
 var target_w = 0
 var target_h = 0
 var samples = 4
@@ -260,6 +264,8 @@ def setup_targets(w, h : int) {
         glDeleteRenderbuffers(1, safe_addr(depth_1x))
         glDeleteRenderbuffers(1, safe_addr(color_msaa))
         glDeleteRenderbuffers(1, safe_addr(depth_msaa))
+        glDeleteFramebuffers(1, safe_addr(fbo_resolve))
+        glDeleteRenderbuffers(1, safe_addr(color_resolve))
     }
     // 1x path
     glGenRenderbuffers(1, safe_addr(color_1x))
@@ -288,6 +294,17 @@ def setup_targets(w, h : int) {
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth_msaa)
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
         panic("MSAA framebuffer incomplete")
+    }
+    // Resolve target: single-sample, and the SAME internal format as the MSAA colour
+    // buffer. Both requirements come from the resolve blit below.
+    glGenRenderbuffers(1, safe_addr(color_resolve))
+    glBindRenderbuffer(GL_RENDERBUFFER, color_resolve)
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, w, h)
+    glGenFramebuffers(1, safe_addr(fbo_resolve))
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo_resolve)
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, color_resolve)
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        panic("resolve framebuffer incomplete")
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0u)
     target_w = w
@@ -385,11 +402,27 @@ def update : bool {
     // Compose the comparison: LEFT half of the screen from the 1x image, RIGHT half from
     // the resolved MSAA image. Both blits are 1:1 (same-size source/dest rectangles), as
     // a multisample-resolve blit requires.
+    // RESOLVE FIRST, COMPOSE SECOND. A blit whose READ framebuffer is multisampled is
+    // the resolve, and GL constrains it hard: source and destination rectangles must be
+    // identical, and the two colour buffers must have the SAME FORMAT. Resolving straight
+    // to the window satisfies neither reliably -- the window's format is chosen by the
+    // host, not by us. The playground creates its WebGL context with `alpha: false`, so
+    // the default framebuffer is RGB8; our RGBA8 multisample buffer does not match it and
+    // the blit fails with GL_INVALID_OPERATION, leaving the MSAA half BLACK while the 1x
+    // half still draws -- a NON-multisampled blit is allowed to convert formats.
+    //
+    // So resolve into our own single-sample RGBA8 target, where both rules hold by
+    // construction. After that both halves are ordinary single-sample sources and the
+    // final blits to the window may convert freely.
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo_msaa)
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo_resolve)
+    glBlitFramebuffer(0, 0, target_w, target_h, 0, 0, target_w, target_h, GL_COLOR_BUFFER_BIT, GL_NEAREST)
+
     let half = target_w / 2
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0u)
     glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo_1x)
     glBlitFramebuffer(0, 0, half, target_h, 0, 0, half, target_h, GL_COLOR_BUFFER_BIT, GL_NEAREST)
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo_msaa)
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo_resolve)
     glBlitFramebuffer(half, 0, target_w, target_h, half, 0, target_w, target_h, GL_COLOR_BUFFER_BIT, GL_NEAREST)
 
     // a bright divider down the seam: left of it is 1x (jaggy), right is 4x MSAA (smooth)

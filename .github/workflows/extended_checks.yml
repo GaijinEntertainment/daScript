@@ -4,13 +4,25 @@ on:
   push:
     branches: [master]
   pull_request:
+  # 04:00 UTC — after build.yml (02:00), the daspkg index (02:30) and imgui (03:00).
+  # The nightly is what SEEDS the sccache slots below. Their save is master-only,
+  # but the master PUSH run is usually skipped by pre_job as a concurrent duplicate
+  # of the PR that just merged (4 of 15 recent merges actually ran), so seeding was
+  # left to chance. A cron run is on master, has no concurrent twin, and lands the
+  # slot every night. It also hosts the checks too slow to sit on every PR.
+  schedule:
+    - cron: '0 4 * * *'
   workflow_dispatch:
 defaults:
   run:
     shell: bash
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # event_name is part of the group so the nightly cron gets a lane of its own.
+  # Without it a merge landing mid-cron shares the master `github.ref` group and
+  # cancel-in-progress kills the cron — which then skips itself as a duplicate,
+  # so the sccache seeding the cron exists to do silently never happens.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
@@ -32,7 +44,11 @@ jobs:
   extended_checks:
   ###########################################################
     needs: pre_job
-    if: needs.pre_job.outputs.should_skip != 'true'
+    # Same shape as build.yml: the nightly cron bypasses pre_job (and runs only on
+    # the canonical repo, so forks don't), everything else keeps the duplicate-skip.
+    if: >-
+      (github.event_name == 'schedule' && github.repository == 'GaijinEntertainment/daScript')
+      || (github.event_name != 'schedule' && needs.pre_job.outputs.should_skip != 'true')
     runs-on: ${{ matrix.runner }}
     # actions: write needed for `gh cache delete` in the sccache refresh step.
     permissions:
@@ -140,12 +156,16 @@ jobs:
             ;;
         esac
 
-    - name: "Cache vcpkg + openssl"
+    # RESTORE-ONLY on purpose. build.yml owns this key and seeds it on master;
+    # a plain actions/cache here would also SAVE, and a save from a PR is scoped
+    # to refs/pull/N/merge — invisible to every sibling PR. That is what actually
+    # happened: 6 cache entries for 2 keys, all PR-scoped, ~836MB of quota, and
+    # every Windows job still missing and rebuilding openssl (8.5 min a run).
+    - name: "Restore vcpkg + openssl"
       if: runner.os == 'Windows'
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
-        # vcpkg.exe + ports/triplets/scripts + installed/<triplet>/openssl. Key is
-        # shared with build.yml so this reads build.yml's master-seeded slot.
+        # vcpkg.exe + ports/triplets/scripts + installed/<triplet>/openssl.
         path: vcpkg
         key: vcpkg-x64-windows-v2
 
@@ -176,14 +196,23 @@ jobs:
         # (those sub-builds keep /Zi) + parallel Ninja collide on the shared
         # glfw.pdb (C1041). Windows passes the launcher as -D on the main
         # configure only (Build step), scoping sccache to daslang's /Z7 TUs.
+        # SCCACHE_CACHE_SIZE bounds the slot: the default is 10G, so an unbounded
+        # slot grows until it evicts other caches in the repository. 500M holds a
+        # full linux/macOS object set with room — build.yml's linux Release slot
+        # sits at ~94MB. Windows needs far more because /Z7 embeds debug info in
+        # every .obj: build.yml's Windows Release slot measures 5.1GB for ~920 TUs.
         if [ "$RUNNER_OS" != "Windows" ]; then
+          echo "SCCACHE_CACHE_SIZE=500M" >> $GITHUB_ENV
           echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
           echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+        else
+          echo "SCCACHE_CACHE_SIZE=6G" >> $GITHUB_ENV
         fi
     # Stable per-config key in its own `sccache-extended-*` namespace so it never
     # clobbers build.yml's slots. Restore always; save only on master (delete
     # first — GHA caches are immutable, so a plain save under an existing key is
-    # a no-op). PRs read-only.
+    # a no-op). PRs read-only. The nightly cron is what makes the save reliable:
+    # the master PUSH run is usually skipped as a concurrent duplicate.
     - name: "Restore sccache objects"
       uses: actions/cache/restore@v4
       with:
@@ -236,6 +265,14 @@ jobs:
             ;;
         esac
 
+    # Windows is by far the most expensive slot — ~5GB of objects against ~250MB
+    # for linux and macOS together, because /Z7 embeds debug info in every .obj —
+    # and it is also where the payoff is: this job's Windows build takes ~29 min
+    # cold, where build.yml's warm one takes ~14. It only fits because the repo
+    # cache limit is raised to 20GB; at GitHub's 10GB default, saving it evicted
+    # build.yml's slots and left every lane colder. That budget is also why the
+    # nightly Windows jobs stay uncached — a slot each would put the repo over.
+    # If the limit ever drops back, this is the first slot to stop persisting.
     - name: "Refresh sccache slot"
       if: github.ref == 'refs/heads/master'
       env:
@@ -335,7 +372,16 @@ jobs:
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./tests --deser serialized.bin
 
     - name: "Compile tests/ with --ast-verify"
-      if: matrix.target == 'linux'
+      # NIGHTLY ONLY (cron or manual dispatch), because of what it costs: 22.7 min,
+      # a third of this job, and it moved the whole PR pipeline from ~57 min to
+      # ~75 min the day it landed. The cost is structural — it launches one daslang
+      # per test file (~1487 of them at ~3.6s each) and every process re-parses
+      # daslib from scratch. dastest compiles AND RUNS the same 1703 files in a
+      # single process in 2.3 min.
+      # Nightly is the right cadence for what it catches: malformed AST out of
+      # macro code, which lands in daslib/ and macro-authoring changes, not in the
+      # average PR. On demand: gh workflow run extended_checks.yml
+      if: matrix.target == 'linux' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
       run: |
         set -euo pipefail
         # daslib/ast_verify reports AST shapes the compiler dereferences unguarded.

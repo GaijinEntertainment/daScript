@@ -47,7 +47,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     env:
-      SCCACHE_GHA_ENABLED: "true"
+      # The GHA backend writes ONE cache entry per translation unit. This job alone
+      # was holding 649 of the repository's 677 cache entries — the fragmentation
+      # every other workflow's sccache comment warns about — inside a 10GB repo-wide
+      # quota that the PR lanes were already losing their slots to. Nothing here
+      # persists across runs now: this is a nightly, nobody waits on it, and the
+      # objects it cached were worth less than the quota they cost.
+      SCCACHE_GHA_ENABLED: "false"
     strategy:
       fail-fast: false
       matrix:
