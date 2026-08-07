@@ -228,13 +228,18 @@ this leg only builds the mechanism and takes the free wins the oracle suite cove
   Q8/Mx4 joining the base means renumbering their cnt/basep/bkt bindings 6/7/8 → 7/8/9
   (production encoders + oracle gates churn).
 
-## MoltenVK argbuf upstream report — DRAFT (awaiting Boris go-ahead to file)
+## MoltenVK argbuf upstream report — ✅ FILED 2026-08-07
 
-To be filed at KhronosGroup/MoltenVK (posts under Boris's gh auth — not filed yet).
-Probe files `tests/_probe_{cls,batch}_m1.das` (untracked, this M1 only) stay until the
-issue is RESOLVED — they are our tool for maintainer follow-ups and for re-verifying
-against future MoltenVK releases. The filed issue itself must be self-contained (SPIR-V +
-layout attached), so the probes' single-copy locality is acceptable.
+**KhronosGroup/MoltenVK#2793**, with the SPIR-V attached as a gist
+(https://gist.github.com/borisbat/83e9e55b5cdc2ea558a97a63ec38207c — 9 disassemblies:
+7 failing + 2 passing controls, per-kernel fact table). Pre-filing gate passed: all 9
+blobs `spirv-val` clean (default + vulkan1.2), so the bug is MoltenVK's, not ours.
+`rope_kv_cls` (pass) vs `rope_kv_b_cls` (fail) is the near-identical A/B pair; no single
+SPIR-V axis (bindings, push size, workgroup use) separates the sets. No existing upstream
+issue matched the symptom. Probe toolkit (untracked, this M1 only) stays until the issue
+is RESOLVED: `tests/_probe_{cls,batch}_m1.das` + `tests/_probe_spv_dump.das` (the blob
+dumper that produced the gist; rebuild binaries from hex via the packed-uint32 recipe in
+the gist README).
 
 > **Title:** Compute dispatches silently lose all device stores under Metal argument
 > buffers (default path) on Apple Silicon — correct with
