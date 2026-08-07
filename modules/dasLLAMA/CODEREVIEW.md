@@ -51,6 +51,15 @@ suspicious green, must be readable as text in the log, not only as an id or floa
 
 **A new GPU kernel ships with a small model in the kernel coverage suite** that dispatches it.
 
+**A kernel-unit arm compares its kernel against a CPU oracle, never against another GPU
+dispatch.** Two dispatches that break the same way compare equal — a GPU-vs-GPU parity arm
+passes vacuously on a shape neither side handles.
+
+**A test arm's skip gate keys on a device capability or mode predicate (`coopmat_mode`,
+`has_coopmat2`, `dn_shared_ok`), never on the existence of a runtime artifact such as a
+pipeline or a cached set.** An artifact gate goes permanently false when its producer moves,
+and the arm then skips forever while the suite stays green.
+
 **A test suite loads models with `load_model_`, never the image rail.** Image-rail coverage
 belongs to the image suites alone. See `ARCHITECTURE.md` §2.1.
 
@@ -159,14 +168,22 @@ provisioned box — BRINGUP.md §2 is the runbook.
 A backend is a family of role files, and the role names the contents. `<gpu>` is `metal` or
 `vulkan`.
 
-- `dasllama_<gpu>_kernels.das` — kernel source and the dispatch census. No device state.
+- the kernel home — kernel source and the dispatch census, no device state:
+  `dasllama_metal_kernels.das` (Metal), `dasllama_vulkan_classes.das` (Vulkan — every kernel a
+  `[spirv_kernel]`/`[vk_dispatch]` class).
+- `dasllama_vulkan_dispatch.das` — the `[vk_dispatch]` structure macro: generates the
+  `ensure_*`/`set_*`/`enc_*` surface, derives per-binding access, seeds the census. Macro code
+  only; a kernel body or device call here is a defect.
+- `dasllama_vulkan_seams.das` — the per-op class-rail seams (`vk_add_rms`, `vk_rope_kv_store`,
+  `vk_decode_attn`) and nothing else.
 - `dasllama_<gpu>_common.das` — device state, buffer and command plumbing, the hazard and capture
   rail, the profiler.
 - `dasllama_<gpu>_decode.das` — the resident token-step driver and its decode-time arms.
 - `dasllama_<gpu>_prefill.das` — the batched prefill driver and its batch arms.
 - `dasllama_<gpu>_shapes.das` — model-shape servability gates, portable: no GPU requires, so any
   box can bake.
-- `dasllama_<gpu>_lens.das` — the kernel-access macro.
+- the kernel-access lens — `dasllama_metal_lens.das` (Metal); on Vulkan the dispatch macro
+  derives access, there is no separate lens file.
 - `dasllama_math_vulkan.das` — the Vulkan family entry: probe, arm, image identity, routers,
   init hooks. Its name is a require contract; renaming it is a defect.
 - `dasllama_metal_gemm.das` — the Metal batch-GEMM donor.
@@ -342,6 +359,20 @@ shapes that cannot reduce, not for code written oversized.
 
 **Platform backends implement narrow registered contracts.** Platform-specific code in a
 platform-neutral file is a defect.
+
+### Vulkan
+
+**A buffer bound as one SSBO range stays under `vk_max_storage_range()`, checked where its
+size is NEGOTIATED, not where it binds.** The bind site cannot shrink a buffer that was sized
+wrong; past the range every read is undefined, not slow.
+
+**A resident-driver change ships with a `harness/parity.das` GPU-vs-CPU run on one q8 and one
+kq model.** Kernel-unit green does not cover driver wiring, and the two activation-quant
+classes ride different enc paths — one model class cannot witness the other's.
+
+**A cached class descriptor set lives behind a latch the model drop resets** — a `*_ready`
+flag or a field inside state the drop clears. `vk_drop_model_state` resets the descriptor pool
+chain, so a set cached anywhere else dangles into the next model.
 
 **Every program root declares `options stack = 524288`.** A test, harness, benchmark, or tool
 that picks its own number — larger or smaller — is a defect, and so is a new root that omits the
