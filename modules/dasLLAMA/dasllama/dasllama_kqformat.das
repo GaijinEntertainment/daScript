@@ -27,6 +27,9 @@ enum KqFmt : uint8 {
 //! a `fmt != KqFmt.q8` test does not imply the kq lattice; branch on kq_sb where it does.
 def kq_sb(f : KqFmt) : bool => f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.q40
 
+//! The same predicate over the int id space the GPU drivers carry per stack/plane.
+def kq_sb(fmt : int) : bool => fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5) || fmt == int(KqFmt.k6) || fmt == int(KqFmt.q40)
+
 //! KqFmt -> the kernel/IR format id space (4/5/6/40) — the ONE bridge between the enum and the
 //! int ids the generated kernels take as runtime params. q8/q51/q8n are not kq superblock
 //! formats and panic.

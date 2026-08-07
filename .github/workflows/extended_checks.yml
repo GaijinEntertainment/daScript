@@ -196,15 +196,17 @@ jobs:
         # (those sub-builds keep /Zi) + parallel Ninja collide on the shared
         # glfw.pdb (C1041). Windows passes the launcher as -D on the main
         # configure only (Build step), scoping sccache to daslang's /Z7 TUs.
-        # SCCACHE_CACHE_SIZE bounds the slot: the default is 10G, which is the
-        # WHOLE repo cache quota, so an unbounded slot grows until it evicts every
-        # other cache in the repository. 500M holds a full linux/macOS object set
-        # with room — build.yml's linux Release slot sits at ~94MB. Only these two
-        # persist their slot (see the save step below), so Windows needs no cap.
+        # SCCACHE_CACHE_SIZE bounds the slot: the default is 10G, so an unbounded
+        # slot grows until it evicts other caches in the repository. 500M holds a
+        # full linux/macOS object set with room — build.yml's linux Release slot
+        # sits at ~94MB. Windows needs far more because /Z7 embeds debug info in
+        # every .obj: build.yml's Windows Release slot measures 5.1GB for ~920 TUs.
         if [ "$RUNNER_OS" != "Windows" ]; then
           echo "SCCACHE_CACHE_SIZE=500M" >> $GITHUB_ENV
           echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
           echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+        else
+          echo "SCCACHE_CACHE_SIZE=6G" >> $GITHUB_ENV
         fi
     # Stable per-config key in its own `sccache-extended-*` namespace so it never
     # clobbers build.yml's slots. Restore always; save only on master (delete
@@ -263,23 +265,22 @@ jobs:
             ;;
         esac
 
-    # Linux + macOS only, and that is a QUOTA decision, not a correctness one.
-    # The repo cache limit is 10GB total. A Windows object cache is ~4.4GB on its
-    # own (920 TUs x ~4.8MB, because /Z7 embeds debug info in every .obj) and
-    # build.yml already holds two of them (Release 4.4GB + Debug 1.2GB). A third
-    # does not fit: saving it would evict build.yml's slots and every lane would
-    # end up colder than it is now. Linux + macOS together cost ~250MB and fit
-    # easily. If the repo cache limit is ever raised (it is a billable repo/org
-    # setting — ~$1/month at 25GB), drop the `matrix.target != 'windows'` clause
-    # from both steps and Windows picks up a warm build too.
+    # Windows is by far the most expensive slot — ~5GB of objects against ~250MB
+    # for linux and macOS together, because /Z7 embeds debug info in every .obj —
+    # and it is also where the payoff is: this job's Windows build takes ~29 min
+    # cold, where build.yml's warm one takes ~14. It only fits because the repo
+    # cache limit is raised to 20GB; at GitHub's 10GB default, saving it evicted
+    # build.yml's slots and left every lane colder. That budget is also why the
+    # nightly Windows jobs stay uncached — a slot each would put the repo over.
+    # If the limit ever drops back, this is the first slot to stop persisting.
     - name: "Refresh sccache slot"
-      if: github.ref == 'refs/heads/master' && matrix.target != 'windows'
+      if: github.ref == 'refs/heads/master'
       env:
         GH_TOKEN: ${{ github.token }}
         SCKEY: sccache-extended-${{ matrix.target }}-${{ matrix.architecture }}
       run: gh cache delete "$SCKEY" -R ${{ github.repository }} || true
     - name: "Save sccache objects"
-      if: github.ref == 'refs/heads/master' && matrix.target != 'windows'
+      if: github.ref == 'refs/heads/master'
       uses: actions/cache/save@v4
       with:
         path: ${{ runner.temp }}/sccache

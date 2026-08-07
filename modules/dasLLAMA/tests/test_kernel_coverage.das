@@ -10,6 +10,7 @@ require ?das_metal dasllama/dasllama_metal_common  // the coverage census rail
 require ?das_metal dasllama/dasllama_metal_decode  // decode stats + shutdown rails
 require ?das_metal metal/das_metal_boost  // device probe
 require ?vulkan dasllama/dasllama_vulkan_common  // the vulkan census rail (spec-only here)
+require dasllama/dasllama_gpu_resident  // moe_gpu_drop_model — the census's model-switch drops
 require daslib/jobque_boost
 require daslib/fio  // the zoo paths
 require math  // nolint:STYLE030,LINT019 — used only inside the das_metal static_if half
@@ -17,7 +18,7 @@ require strings
 require _model_tier
 require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — the read sites sit in the apple static_if half; the linux lint flavor sees the require as unused
 
-// The KERNEL COVERAGE census (CODEREVIEW rule 17): drive the small-model zoo across the
+// The KERNEL COVERAGE census (CODEREVIEW: "A new GPU kernel ships with a small model in the kernel coverage suite"): drive the small-model zoo across the
 // format / graph / batch-shape / KV-codec axes and report which compiled kernels were never
 // dispatched — LOUD WARNINGS, never an auto-dead verdict. A zero means "nothing this zoo runs
 // dispatched it", never "unreachable" — deleting a kernel additionally needs a reachability
@@ -26,8 +27,8 @@ require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — the read sites si
 // we run?") and the home a NEW kernel's small-model run joins. Expected warnings on the small tier: MoE / mx4 / suppress and other
 // kernels whose carriers sit above the tier (their census rows serve under
 // DASLLAMA_PARITY_FULL=1); the report stays honest about what THIS run covered. The vulkan
-// half here is the device-free rail unit (spec parse + zero table); the serving vulkan census
-// runs on the PC box beside the vulkan tier suites.
+// half: arm `coverage` = the device-free rail unit (spec parse + zero table); arm `coverage-vk`
+// = the SERVING census (needs a vulkan device + DASLLAMA_GPU=1 + the local model zoo).
 
 def private counting_prompt(start, last : int) : string {
     return build_string() $(var w) {
@@ -214,6 +215,119 @@ def test_metal_kernel_coverage(tst : T?) {
             set_wscale_f16(prior_wscale)
         } else {
             feint("das_metal is not built on this platform; nothing to census\n")
+        }
+    }
+}
+
+[unused_argument(t, path, family, nbs)]   // without vulkan the gated body is empty
+def private vk_cov_model(t : T?; path, family : string; nbs : array<int>) {
+    // one model's vulkan coverage sweep: GPU prefill (the counting prompt clears the npos gate),
+    // two greedy decode steps, a continuation prefill, then one batched step per requested B.
+    // No parity asserts — the census wants DISPATCH DIVERSITY, the parity suites own truth.
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (!family_on(t, family) || !arm_on(t, "coverage-vk") || !model_available(t, path)) {
+            return
+        }
+        var tr <- load_model_(path, QuantMode.q8)
+        tr.config.seq_len = min(tr.config.seq_len, 512l)
+        let vocab = tr.config.vocab_size
+        with_job_que() {
+            setup_dasllama_jobque()
+            var s = make_run_state(tr.config, KVDtype.f32, KVDtype.f32)
+            let p <- encode(tr, counting_prompt(1, 40), true, false)
+            eval_(tr, s, p)
+            var cur = greedy_top(s.logits, vocab)
+            for (_i in range(2)) {
+                var one <- [cur]
+                eval_(tr, s, one)
+                delete one
+                cur = greedy_top(s.logits, vocab)
+            }
+            var p2 <- encode(tr, counting_prompt(50, 90), false, false)
+            eval_(tr, s, p2)
+            delete p2
+            delete s
+            for (nb in nbs) {
+                var ss : array<Session>
+                ss |> reserve(nb)
+                var sess : array<Session?>
+                var curs : array<int64>
+                for (i in range(nb)) {
+                    ss |> emplace <| make_run_state(tr.config, KVDtype.f32, KVDtype.f32)
+                    let pb <- encode(tr, counting_prompt(3 + i, 44 + i), true, false)
+                    eval_(tr, ss[i], pb)
+                    unsafe {
+                        sess |> push(addr(ss[i]))
+                    }
+                    curs |> push(greedy_top(ss[i].logits, vocab))
+                }
+                var ws <- create_batch_workspace_(tr)
+                eval_batch_(tr, ws, sess, curs)
+                sess |> clear()   // borrowed handles — delete of array<T?> cascades to the pointees
+                unsafe {
+                    delete ws
+                    delete sess
+                }
+                delete curs
+                delete ss
+            }
+        }
+        // the model-switch contract: whoever puts a DIFFERENT model on the GPU drops the old one
+        // first (the slot machinery / server do) — without this the stack table accumulates
+        // across the zoo until the MAX_STACKS decline
+        moe_gpu_drop_model()
+        delete tr
+    }
+}
+
+[test]
+def test_vulkan_kernel_coverage_serving(tst : T?) {
+    tst |> run("Vulkan serving census: the local zoo across resident/arena/kq/deltanet/MoE") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!arm_on(t, "coverage-vk")) {
+                return
+            }
+            vk_kernel_coverage_reset()
+            let none : array<int>
+            // llama q8: the resident dense ladder (device prefill + decode) + a B=2 batch step
+            vk_cov_model(t, path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf"), "llama", [2])
+            // gemma3 q8: the per-op arena rails + qk_norm
+            vk_cov_model(t, path_join(models_dir(), "gemma-3-1b-it-Q8_0.gguf"), "gemma3", none)
+            // qwen3 q8: the resident fused qk_norm rail (qkn_rope) — the kq row below rides the
+            // split rail by construction, so this is the fused twin's only carrier
+            vk_cov_model(t, path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf"), "qwen3", none)
+            // qwen3 Q4_K_M: the native K-quant formats (k4/k6 GEMV + batch tiles) + the Q8_K
+            // activation quant forms + qk_norm on the split rail
+            vk_cov_model(t, path_join(models_dir(), "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"), "qwen3", none)
+            // qwen3.5 q8: the DeltaNet chains (conv/step/scan + the decode step)
+            vk_cov_model(t, path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf"), "qwen35", none)
+            // the MoE rows (expert FFN/qkv chains + heat cache) sit above the small tier
+            vk_cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf"), "qwen2moe", none)
+            vk_cov_model(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf"), "qwen3moe", none)
+            vk_kernel_coverage_report()
+            var cov <- vk_kernel_coverage()
+            var served = 0
+            for (n in values(cov)) {
+                if (n > 0l) {
+                    served++
+                }
+            }
+            delete cov
+            if (served == 0) {
+                feint("no vulkan dispatches — arm DASLLAMA_GPU=1 on a device box (the census needs the serving tier)\n")
+                return
+            }
+            let famfilter = get_env_variable("DASLLAMA_TEST_FAMILY")
+            if (empty(famfilter)) {
+                // floor calibration: 25 measured on the default 5-model zoo (MoE rows skip without
+                // PARITY_FULL; coopmat-mode variants and mode-gated twins legitimately idle here);
+                // 24 catches a gross wiring regression without tripping on one near-boundary row
+                t |> success(served >= 24, "the serving census dispatched {served} distinct kernels (rail floor 24)")
+            } else {
+                to_log(LOG_INFO, "census floor not asserted (family filter '{famfilter}'): {served} served\n")
+            }
+        } else {
+            feint("vulkan is not built on this platform; nothing to census\n")
         }
     }
 }

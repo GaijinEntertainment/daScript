@@ -73,7 +73,7 @@ def family_on(t : T?; name : string) : bool {
     return false
 }
 
-// EYEBALL RAIL (CODEREVIEW rule 18): every token-for-token generate cell logs both decoded
+// EYEBALL RAIL (CODEREVIEW: "Every test that compares logits also logs decoded text"): every token-for-token generate cell logs both decoded
 // streams — a red (or a stale-cache green) should read as TEXT in the log, not as an id diff.
 // Decoded model text may carry raw newlines that would split a one-line log record, so every
 // eyeball string renders through the \n escape.

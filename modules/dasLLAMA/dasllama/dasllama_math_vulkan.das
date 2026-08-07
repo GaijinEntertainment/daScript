@@ -5,7 +5,7 @@ module dasllama_math_vulkan shared public
 options _cyclomatic_complexity = 0   // the capability-probe/arm ladders are the domain shape
 options _function_length = 0   // same
 
-require dasllama/dasllama_vulkan_kernels public   // the facade: consumers reach the whole backend through this module
+require dasllama/dasllama_vulkan_classes public   // the facade: consumers reach the whole backend through this module
 require dasllama/dasllama_vulkan_common public
 require dasllama/dasllama_vulkan_decode public
 require dasllama/dasllama_vulkan_prefill public
@@ -18,7 +18,7 @@ require dasllama/dasllama_config
 
 // dasLLAMA Vulkan GPU tier — the backend ENTRY: capability probe + arm, the dry-bake arm, the
 // .dlim identity source, the FFN router, and the [init] that installs every hook. The backend
-// body lives in the family this module re-exports: dasllama_vulkan_kernels (shaders),
+// body lives in the family this module re-exports: dasllama_vulkan_classes (the kernel home),
 // dasllama_vulkan_common (device state + rails), dasllama_vulkan_decode / _prefill (drivers).
 //
 // Per-layer MoE expert-stack offload: the loader gathers offloaded layers' PREPARED planes into
@@ -182,7 +182,13 @@ def private vk_resident_bytes : int64 => g_gpu != null ? g_gpu.resident_bytes : 
 // "would this fit?" on a cold tier.
 def private vk_weight_budget : int64 => vk_moe_init() ? carved_budget() : 0l
 
+// the largest legal single-SSBO binding range (maxStorageBufferRange) — the KV mirror's ceiling
+def private vk_binding_cap : int64 => vk_moe_init() ? vk_max_storage_range() : 0l
+
 def private vk_plane_bytes(n, rows : int64; fmt : int) : int64 {
+    if (!arena_rows_ok(n, fmt)) {
+        return 0l   // unplaceable row length — the plane can never upload, it costs nothing
+    }
     let pb = stack_plane_bytes(n, rows, fmt)
     return pb.wq + pb.ws
 }
@@ -297,6 +303,7 @@ def dasllama_math_vulkan_register() {
     set_moe_gpu_vram_report(@@vk_resident_bytes)
     set_moe_gpu_device_report(@@vk_device_name)
     set_moe_gpu_budget_hooks(@@vk_weight_budget, @@vk_plane_bytes)
+    set_moe_gpu_binding_cap(@@vk_binding_cap)
     set_moe_gpu_expert_q8n_probe(@@vk_expert_q8n)
     install_moe_gpu_resident(@@vk_arena_reserve, @@vk_arena_place, @@vk_rdec_prepare,
         @@vk_rdec_upload_norms, @@vk_rdec_set_layer, @@vk_rdec_set_cls, @@vk_rdec_token, @@vk_rdec_prefill,

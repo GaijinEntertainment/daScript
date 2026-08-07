@@ -4,6 +4,10 @@ Folder-scoped review rules. When a PR touches files under this folder, the
 code review lists and enforces these (see `skills/make_pr.md` — CODEREVIEW.md
 discovery runs after the master rebase).
 
+**This file reviews itself: a rule a reviewer cannot apply as written is a defect of this
+file.** Mark it like any other finding — a checklist defect blocks nothing, but its fix (a
+rewrite or a move, never silent tolerance) lands in the same batch as the round's other fixes.
+
 * New functionality ships with tests — same PR, no follow-up promises.
 * Tests go under `modules/dasImgui/tests`.
 * No tests go under `tests/dasImgui` — that folder must not exist.

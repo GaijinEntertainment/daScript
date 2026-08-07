@@ -259,15 +259,29 @@ Three behavioral layers + enforcement gates:
     shapes. Gates: kernel unit parity tests, 40/40 greedy parity (tolerance path), then the
     clean round (Parsec OFF — Boris window): CPU vs hybrid vs resident vs lcpp `-ngl 99`.
 
-## Cross-backend parity (deferred — not a gate)
+## Cross-backend parity — the kernel-model asymmetry ledger
 
-Stacking `[compute_shader, metal_kernel]` on one function was the original parity idea;
-class-member authoring defers it — dasSpirv's frontend reads module globals, not class
-members. The primary correctness oracle is the CPU-reference run of the same das body
-(Test architecture, layer 3), which is cheaper and stricter than a second GPU. Cross-GPU
-parity (zen2 Vulkan vs M-box Metal) returns as a nice-to-have if/when dasSpirv gains the
-same class-member authoring — an in-tree follow-up, ours to make, not a dasMetal
-prerequisite.
+The mirror rule (CODEREVIEW.md, both emitters) records deliberate or pending kernel-model
+asymmetries HERE — one ledger for both backends (dasSpirv's MASTERPLAN points at this
+section). The primary correctness oracle remains the CPU-reference run of the same das body,
+cheaper and stricter than a second GPU; cross-GPU parity of one source is a nice-to-have now
+that both emitters read class members. Current entries:
+
+- **Class-member authoring is symmetric now.** dasSpirv gained `[spirv_kernel]` classes (this
+  emitter's model, ported wholesale in the vulkan class-kernel arc) — the original blocker on
+  stacking both shader annotations on one body is gone. Free-function callees and
+  devirtualized overrides are symmetric too (msl_emit's devirtualization table was the donor).
+- **Multi-kernel-per-class + `family=` surface sharing: Vulkan leads.** `[vk_dispatch]`
+  accepts N kernel methods per class (`kernel=` picks, `family=` shares one set surface
+  across sibling classes); `[metal_dispatch]` still enforces one kernel per class
+  (`find_kernel_fn` nmatch==1). Pending follow-up: relax the metal lens the same way — the
+  reification layer builds on that surface.
+- **Inheritance in the kernel corpus: Vulkan leans on it, Metal does not yet.** The vulkan
+  classes are base+leaf families (kq GEMV/batch, flash attention, deltanet); the metal
+  classes are flat, with at least one base duplicated inline (MetalMoeMulMmK6). Dedup
+  opportunity, not a correctness gap.
+- **Grid-literal validation: Vulkan rejects non-int64 ceil-div grid params at macro apply;
+  the metal lens still carries that silent infer trap.** Pending metal-side fix.
 
 ## Top risks
 

@@ -121,12 +121,13 @@ modules/dasLLAMA/
     dasllama_metal_shapes.das #   the Metal drivers' MODEL-SHAPE gates, extracted PORTABLE (no das_metal) so any box can bake a metal-flavor .dlim
     dasllama_metal_lens.das   #   the [metal_dispatch] lens — @role's read/write axis DERIVED from the kernel body
     dasllama_math_vulkan.das  #   Vulkan backend ENTRY: probe/arm, dry-bake, .dlim identity, routers, [init] (re-exports the family)
-    dasllama_vulkan_kernels.das #  the Vulkan [compute_shader] kernel set + derived-access spec (no device state)
+    dasllama_vulkan_classes.das #  the Vulkan KERNEL home — every kernel a [spirv_kernel]/[vk_dispatch] class (no device state)
+    dasllama_vulkan_dispatch.das # the [vk_dispatch] structure macro — generates ensure_/set_/enc_ + the census seed per class
     dasllama_vulkan_common.das #   Vulkan device state (GpuState/g_gpu) + buffer/command plumbing + hazard rail + arena + profiler
+    dasllama_vulkan_seams.das #    the per-op class-rail seams (vk_add_rms / vk_rope_kv_store / vk_decode_attn)
     dasllama_vulkan_decode.das #   Vulkan resident DECODE driver + decode arms (FFN GEMV, qkv, cls, dnd step, heat cache)
     dasllama_vulkan_prefill.das #  Vulkan resident PREFILL driver + batch arms (FFN batch, dense, dn, attention, streamed mirrors)
-    dasllama_vulkan_lens.das  #   the Vulkan kernel-access lens — per-binding hazard masks derived from the kernel body
-    dasllama_kernel_access.das #  the shared body-walk read/write classifier both GPU lenses run on
+    dasllama_kernel_access.das #  the shared body-walk read/write classifier the GPU lenses run on
     dasllama_gpu_resident.das #   the vulkan MoE GPU-resident expert tier — bake plan, upload/stream slots, per-layer placement
     dasllama_math_gen.das     #   the generated GEMM tier — registers "arm64-gen"/"x64-gen" (load-select repack backends; traversals read the stamped layout)
     dasllama_gemm_schema.das  #   tune_perm grid + layout schema shared by the generator and the runtime

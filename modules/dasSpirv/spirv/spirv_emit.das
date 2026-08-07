@@ -140,6 +140,14 @@ struct EmitCtx {
     call_temps    : table<uint64; CallTemp>     // intptr(ref-arg Expression) -> its copy-in/out Function-storage temp
     decode_funcs  : table<uint64; DecodeFn>     // intptr(Function) -> registered cm2 decode function ([spirv_decode], referenced via @@ from coopmatLoadTensorDecode)
     decode_order  : array<uint64>               // decode_funcs keys in stable emission order (first-reference order)
+    // class-kernel frontend ([spirv_kernel] on a class method): `self.member` resolves through
+    // member_vars to a synthetic Variable classified exactly like a module global
+    self_arg      : uint64                      // intptr(the CURRENT function's self argument Variable); 0 = not a class kernel. Swapped per method body during emission.
+    kernel_class  : Structure const?            // the kernel class (resolve_kernel_method's dispatch table); null = module-globals frontend
+    member_vars   : table<string; VariablePtr>  // member name -> its synthetic Variable (key into globals)
+    member_syms   : array<VariablePtr>          // the synthetic Variables (rooted here for gc_node)
+    invoke_fields : table<uint64>               // intptr(ExprField) of a self-method invoke's method-field read — visitExprField skips these (the invoke arm consumes them structurally)
+    invoke_targets : table<uint64; uint64>      // intptr(ExprInvoke) -> intptr(devirtualized Function), resolved at discovery
 }
 
 // A user-defined daslang function called from a shader: emitted as its own OpFunction. Ids are
@@ -151,6 +159,8 @@ struct UserFunc {
     ret_type : uint         // result type id (void's type id when is_void)
     is_void : bool
     valid   : bool          // false = signature rejected at registration (error already emitted)
+    is_method : bool        // a kernel-class method: self (arg 0) is dropped from the signature —
+                            // members are module-scope OpVariables, so the body needs no receiver
 }
 
 // Per ref-argument copy-in/copy-out scratch: a Function-storage OpVariable hoisted into the calling
@@ -1843,6 +1853,97 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
     errors |> push("unsupported global '{vname}' (expected gl_* builtin, @ssbo, @uniform, @push_constant, @workgroup, @ray_payload / @incoming_ray_payload / @hit_attribute, a constant `let`, or an opaque type e.g. sampler2D / image2D / subpassInput / accelerationStructureEXT)")
 }
 
+// ===== the class-kernel member scan ([spirv_kernel]) =====
+// Each annotated member becomes a synthetic Variable classified through classify_global, so after
+// the scan a member is indistinguishable from a module global at every emission site. Duplicate
+// @binding across members is deliberately LEGAL (same-binding type views — the vec4-view idiom the
+// module-globals frontend relies on); @set must be 0 or absent (one descriptor set per class).
+struct private KernelMemberScan {
+    is_ssbo : bool
+    is_uniform : bool
+    is_push : bool
+    is_workgroup : bool
+    is_private : bool
+    set_idx : int
+    has_binding : bool
+}
+
+// the member-scan validation ladder — every arm is one refusal reason
+def private kernel_member_ok(s : KernelMemberScan; nm : string; var errors : array<string>) : bool {
+    let ncls = ((s.is_ssbo ? 1 : 0) + (s.is_uniform ? 1 : 0) + (s.is_push ? 1 : 0) +
+        (s.is_workgroup ? 1 : 0) + (s.is_private ? 1 : 0))
+    if (ncls == 0) {
+        errors |> push("kernel member '{nm}' is none of @ssbo/@uniform/@push_constant/@workgroup/@private_global — every member must declare its resource kind")
+        return false
+    }
+    if (ncls > 1) {
+        errors |> push("kernel member '{nm}' mixes resource kinds — pick exactly one of @ssbo/@uniform/@push_constant/@workgroup/@private_global")
+        return false
+    }
+    if (s.set_idx != 0) {
+        errors |> push("kernel member '{nm}' has @set = {s.set_idx} — a kernel class is one descriptor set; only @set = 0 (or none) is allowed")
+        return false
+    }
+    if ((s.is_workgroup || s.is_private || s.is_push) && s.has_binding) {
+        errors |> push("kernel member '{nm}' has @binding but is not a descriptor — @workgroup/@private_global/@push_constant members take no binding")
+        return false
+    }
+    if ((s.is_ssbo || s.is_uniform) && !s.has_binding) {
+        errors |> push("kernel member '{nm}' has no @binding — every @ssbo/@uniform member needs an explicit binding index")
+        return false
+    }
+    return true
+}
+
+def private classify_kernel_members(var m : SpirvModule; var ctx : EmitCtx; kernel_self : Structure const?; stage : ShaderStage; var reflection : SpirvReflection; var errors : array<string>) {
+    var ssbo_count = 0
+    for (fld in kernel_self.fields) {
+        if ((fld.name == "__rtti" || fld.name == "__finalize") ||
+                (fld._type != null && (fld._type.baseType == Type.tFunction || fld._type.baseType == Type.tLambda))) {
+            continue   // methods (classes store them as fields) + the class runtime fields
+        }
+        var s : KernelMemberScan
+        for (annDecl in fld.annotation) {
+            if (annDecl.name == "ssbo") {
+                s.is_ssbo = true
+            } elif (annDecl.name == "uniform") {
+                s.is_uniform = true
+            } elif (annDecl.name == "push_constant") {
+                s.is_push = true
+            } elif (annDecl.name == "workgroup") {
+                s.is_workgroup = true
+            } elif (annDecl.name == "private_global") {
+                s.is_private = true
+            } elif (annDecl.name == "set" && annDecl.basicType == Type.tInt) {
+                s.set_idx = annDecl.iValue
+            } elif (annDecl.name == "binding" && annDecl.basicType == Type.tInt) {
+                s.has_binding = true
+            }
+        }
+        if (!kernel_member_ok(s, "{fld.name}", errors)) {
+            continue
+        }
+        if (fld._type == null) {
+            errors |> push("kernel member '{fld.name}' has no resolved type")
+            continue
+        }
+        if (s.is_ssbo) {
+            ssbo_count++
+        }
+        var sv = new Variable(at = fld.at, name := fld.name)
+        sv._type = clone_type(fld._type)
+        for (annDecl in fld.annotation) {
+            sv.annotation |> add_annotation_argument(annDecl)
+        }
+        ctx.member_syms |> push(sv)
+        ctx.member_vars |> insert("{fld.name}", sv)
+        classify_global(m, ctx, sv, stage, reflection, errors)
+    }
+    if (ssbo_count == 0) {
+        errors |> push("kernel class '{kernel_self.name}' has no @ssbo members — a kernel with no buffers cannot observe or produce anything")
+    }
+}
+
 // ===== member index of a struct field by name =====
 // ExprField.fieldIndex is still -1 at the annotation's patch (pre-fold) stage, so resolve the
 // member position by name from the (fully-known) struct type instead.
@@ -1856,10 +1957,94 @@ def private field_index_by_name(st : Structure?; name : string) : int {
     return -1
 }
 
+// ===== kernel-class member access -> its synthetic Variable (or null) =====
+// The class-kernel frontend ([spirv_kernel] on a method): `self.member` resolves to the synthetic
+// per-member Variable classify_kernel_members registered, so every downstream ctx.globals lookup
+// sees a member exactly as it sees a module global. Base must be the kernel method's own self.
+def private member_var_of(ctx : EmitCtx const?; e : ExpressionPtr) : Variable const? {
+    if (ctx.self_arg == 0ul) return null
+    var pe = e
+    var r2v = pe ?as ExprRef2Value
+    if (r2v != null) {
+        pe = r2v.subexpr
+    }
+    let fld = pe ?as ExprField
+    if (fld == null) return null
+    var be = fld.value
+    var br2v = be ?as ExprRef2Value
+    if (br2v != null) {
+        be = br2v.subexpr
+    }
+    let bv = be ?as ExprVar
+    if (bv == null || !bv.varFlags.argument || intptr(bv.variable) != ctx.self_arg) return null
+    return ctx.member_vars?["{fld.name}"] ?? null
+}
+
+// ===== self-method invoke shape ([spirv_kernel] method calls) =====
+// `self->m(args)` arrives as ExprInvoke [Cls.method field (base = ExprTypeDecl), receiver, args...]
+// (probe-verified: isInvokeMethod=true, receiver is arguments[1]). Returns the method-field when
+// the receiver is the given function's self, else null.
+def private invoke_self_method_field(self_arg : uint64; expr : ExprInvoke const?) : ExprField const? {
+    if (self_arg == 0ul || expr == null || length(expr.arguments) < 2) return null
+    var pe = expr.arguments[0]
+    var r2v = pe ?as ExprRef2Value
+    if (r2v != null) {
+        pe = r2v.subexpr
+    }
+    let fld = pe ?as ExprField
+    if (fld == null) return null
+    var be = expr.arguments[1]
+    // an inherited method's receiver may arrive cast to the base class — peel value/cast wrappers
+    while (be != null) {
+        if (be is ExprRef2Value) {
+            be = (be as ExprRef2Value).subexpr
+        } elif (be is ExprCast) {
+            be = (be as ExprCast).subexpr
+        } else {
+            break
+        }
+    }
+    let bv = be ?as ExprVar
+    if (bv == null || !bv.varFlags.argument || intptr(bv.variable) != self_arg) return null
+    return fld
+}
+
+// Devirtualization: the concrete kernel class's method-field init IS the dispatch table — a kernel
+// names exactly one instance, so the field init (inherited or overriding) resolves every method
+// call statically, matching the CPU vtable result (the msl_emit resolve_method model).
+def private resolve_kernel_method(ctx : EmitCtx const?; mname : string; var errors : array<string>) : FunctionPtr {
+    for (fld in ctx.kernel_class.fields) {
+        if (fld.name == mname) {
+            var ie = fld.init
+            while (ie != null) {
+                if (ie is ExprRef2Value) {
+                    ie = (ie as ExprRef2Value).subexpr
+                } elif (ie is ExprCast) {
+                    ie = (ie as ExprCast).subexpr
+                } else {
+                    break
+                }
+            }
+            let ea = ie ?as ExprAddr
+            if (ea != null && ea.func != null) {
+                return unsafe(reinterpret<FunctionPtr>(ea.func))
+            }
+            errors |> push("method '{mname}' of '{ctx.kernel_class.name}' has no resolvable body (abstract, or its field is not a plain method)")
+            return null
+        }
+    }
+    errors |> push("method '{mname}' is not a member of kernel class '{ctx.kernel_class.name}'")
+    return null
+}
+
 // ===== emit a global ExprVar's Variable (or null) =====
-def private global_var_of(e : ExpressionPtr) : Variable const? {
+// A kernel-class member access (`self.member`) resolves here too — the synthetic Variable makes
+// the member indistinguishable from a module global at every call site.
+def private global_var_of(ctx : EmitCtx const?; e : ExpressionPtr) : Variable const? {
     let ev = e ?as ExprVar
-    if (ev == null || ev.varFlags.local || ev.varFlags.argument || ev.varFlags._block) return null
+    if (ev == null || ev.varFlags.local || ev.varFlags.argument || ev.varFlags._block) {
+        return member_var_of(ctx, e)
+    }
     return ev.variable
 }
 
@@ -1867,7 +2052,7 @@ def private global_var_of(e : ExpressionPtr) : Variable const? {
 // Peels ExprAt/ExprField/ExprSwizzle/ExprRef2Value down to the underlying ExprVar and returns its
 // global Variable (or null if the chain doesn't root in a global). Lets the atomic handler read the
 // target's storage class to pick Workgroup vs Device memory scope.
-def private root_global_of(e : ExpressionPtr) : Variable const? {
+def private root_global_of(ctx : EmitCtx const?; e : ExpressionPtr) : Variable const? {
     if (e == null) return null
     let ev = e ?as ExprVar
     if (ev != null) {
@@ -1875,13 +2060,17 @@ def private root_global_of(e : ExpressionPtr) : Variable const? {
         return ev.variable
     }
     let at = e ?as ExprAt
-    if (at != null) return root_global_of(at.subexpr)
+    if (at != null) return root_global_of(ctx, at.subexpr)
     let fld = e ?as ExprField
-    if (fld != null) return root_global_of(fld.value)
+    if (fld != null) {
+        let mv = member_var_of(ctx, e)   // a member access roots the chain, same as a global
+        if (mv != null) return mv
+        return root_global_of(ctx, fld.value)
+    }
     let sw = e ?as ExprSwizzle
-    if (sw != null) return root_global_of(sw.value)
+    if (sw != null) return root_global_of(ctx, sw.value)
     let r2v = e ?as ExprRef2Value
-    if (r2v != null) return root_global_of(r2v.subexpr)
+    if (r2v != null) return root_global_of(ctx, r2v.subexpr)
     return null
 }
 
@@ -2873,6 +3062,13 @@ def private collect_locals(var m : SpirvModule; var ctx : EmitCtx; e : Expressio
         collect_locals(m, ctx, fr.body, errors)
         return
     }
+    // a class-kernel method body arrives wrapped in with(self) under no_optimizations (lint/LSP)
+    // compiles — transparent here exactly as the expression walk treats it
+    let wth = e ?as ExprWith
+    if (wth != null) {
+        collect_locals(m, ctx, wth.body, errors)
+        return
+    }
 }
 
 // ===== compound assignment + increment/decrement =====
@@ -2963,7 +3159,7 @@ class SpirvEmit : AstVisitor {
     // component of one has to be extracted rather than chained.
     def is_addressable(e : ExpressionPtr) : bool {
         if (key_exists(e2ptr, intptr(e))) return true
-        let gv = global_var_of(e)
+        let gv = global_var_of(ctx, e)
         if (gv != null) return !(ctx.globals?[intptr(gv)] ?? GlobalInfo()).is_constant
         let ev = e ?as ExprVar
         if (ev != null && (ev.varFlags.local || ev.varFlags.argument || ev.varFlags._block)) {
@@ -2979,7 +3175,7 @@ class SpirvEmit : AstVisitor {
     // right Dim / Arrayed / Depth -- the caller does not need to know array vs scalar.
     def resolve_sampler_arg(arg : ExpressionPtr; intrinsic_name : string) : tuple<sg : Variable const?; sg_type : TypeDecl?; simg : uint; ok : bool> {
         var bm & = unsafe(*m)
-        let direct = global_var_of(arg)
+        let direct = global_var_of(ctx, arg)
         if (direct != null) {
             let gi = ctx.globals?[intptr(direct)] ?? GlobalInfo()
             if (gi.is_sampler) {
@@ -2999,7 +3195,7 @@ class SpirvEmit : AstVisitor {
             errs |> push("{intrinsic_name}: first argument must be a sampler global or a descriptor-array element (samplers[idx])")
             return (sg = null, sg_type = null, simg = 0u, ok = false)
         }
-        let arr_g = global_var_of(at.subexpr)
+        let arr_g = global_var_of(ctx, at.subexpr)
         if (arr_g == null) {
             errs |> push("{intrinsic_name}: descriptor-array index must target a sampler-array global")
             return (sg = null, sg_type = null, simg = 0u, ok = false)
@@ -3039,7 +3235,7 @@ class SpirvEmit : AstVisitor {
     // the array as a whole -- the mirror of resolve_sampler_arg for the read-write image rail.
     def resolve_image_arg(arg : ExpressionPtr; intrinsic_name : string) : tuple<gi : GlobalInfo; img : uint; ok : bool> {
         var bm & = unsafe(*m)
-        let direct = global_var_of(arg)
+        let direct = global_var_of(ctx, arg)
         if (direct != null) {
             let gi = ctx.globals?[intptr(direct)] ?? GlobalInfo()
             if (gi.is_storage_image_array) {
@@ -3059,7 +3255,7 @@ class SpirvEmit : AstVisitor {
             errs |> push("{intrinsic_name}: first argument must be a storage-image global or a descriptor-array element (pool[idx])")
             return (gi = GlobalInfo(), img = 0u, ok = false)
         }
-        let arr_g = global_var_of(at.subexpr)
+        let arr_g = global_var_of(ctx, at.subexpr)
         let agi = arr_g != null ? (ctx.globals?[intptr(arr_g)] ?? GlobalInfo()) : GlobalInfo()
         if (arr_g == null || !agi.is_storage_image_array) {
             errs |> push("{intrinsic_name}: descriptor-array index must target a storage-image array global")
@@ -3080,7 +3276,7 @@ class SpirvEmit : AstVisitor {
     // An OpAccessChain result type must name the storage class it chains INTO, so a field of a struct
     // local and a field of an SSBO element cannot share one default.
     def root_storage_of(e : ExpressionPtr) : SpvStorageClass {
-        let rv = root_global_of(e)
+        let rv = root_global_of(ctx, e)
         let rgi = rv != null ? (ctx.globals?[intptr(rv)] ?? GlobalInfo()) : GlobalInfo()
         if (rgi.var_id != 0u) return rgi.storage
         let lv = root_local_var_of(e)
@@ -3119,7 +3315,7 @@ class SpirvEmit : AstVisitor {
         // a module-scope constant (`let` fold or @constant_id spec constant) used as a write target:
         // constants have no OpVariable, so there is no pointer to store through. Name the actual
         // mistake instead of the generic internal message.
-        let wg = global_var_of(e)
+        let wg = global_var_of(ctx, e)
         if (wg != null && (ctx.globals?[intptr(wg)] ?? GlobalInfo()).is_constant) {
             errs |> push("cannot assign to '{wg.name}' — module-scope constants (incl. @constant_id spec constants) are read-only in a shader")
             return (id = 0u, pty = 0u)
@@ -3138,7 +3334,7 @@ class SpirvEmit : AstVisitor {
         var bm & = unsafe(*m)
         var agi = GlobalInfo()
         var accel_idx = 0u
-        let accel_g = global_var_of(arg)
+        let accel_g = global_var_of(ctx, arg)
         if (accel_g != null) {
             agi = ctx.globals?[intptr(accel_g)] ?? GlobalInfo()
             if (!agi.is_accel || agi.is_accel_array) {
@@ -3147,7 +3343,7 @@ class SpirvEmit : AstVisitor {
             }
         } else {
             let accel_at = arg ?as ExprAt
-            let arr_g = accel_at != null ? global_var_of(accel_at.subexpr) : null
+            let arr_g = accel_at != null ? global_var_of(ctx, accel_at.subexpr) : null
             agi = arr_g != null ? (ctx.globals?[intptr(arr_g)] ?? GlobalInfo()) : GlobalInfo()
             if (arr_g == null || !agi.is_accel_array) {
                 errs |> push("{who}: the acceleration-structure argument must be an accelerationStructureEXT global or a descriptor-array element (tlas[idx])")
@@ -3198,7 +3394,7 @@ class SpirvEmit : AstVisitor {
     // the tiles from SHARED -- loading straight from @ssbo global is memory-bound (no reuse).
     def coop_buf_ptr(buf_arg : ExpressionPtr; idx : uint; who : string) : uint {
         var bm & = unsafe(*m)
-        let g = global_var_of(buf_arg)
+        let g = global_var_of(ctx, buf_arg)
         let gi = g != null ? (ctx.globals?[intptr(g)] ?? GlobalInfo()) : GlobalInfo()
         if (g != null && gi.is_ssbo) {
             let ptr_t = type_pointer(bm, gi.storage, gi.elem_type)
@@ -3376,6 +3572,9 @@ class SpirvEmit : AstVisitor {
         let k = intptr(expr)
         if (expr.varFlags.local || expr.varFlags.argument || expr.varFlags._block) {
             let vk = intptr(expr.variable)
+            if (ctx.self_arg != 0ul && vk == ctx.self_arg) {
+                return expr   // the kernel class's self: every use resolves via member_var_of at the access site
+            }
             if (key_exists(ctx.local_vars, vk)) {
                 let lv = ctx.local_vars?[vk] ?? LocalVar()
                 e2ptr[k] = lv.ptr_id
@@ -3412,7 +3611,7 @@ class SpirvEmit : AstVisitor {
         // (several) chains the component pointer off that base. Emitting a value here would be an
         // OpLoad of the whole destination that nothing reads.
         if (k == copy_dst && key_exists(e2ptr, intptr(expr.value))) return expr
-        let gv = global_var_of(expr.value)
+        let gv = global_var_of(ctx, expr.value)
         // single-component global -> AccessChain to that one component (keeps it an lvalue: g.x = …).
         // A CONSTANT global (gl_WorkGroupSize, a module-scope `let`) has no OpVariable to chain
         // through, so it takes the value path below: CompositeExtract off the folded OpConstant.
@@ -3519,7 +3718,7 @@ class SpirvEmit : AstVisitor {
             e2pty[k] = pointee
             return
         }
-        let bv = global_var_of(base_expr)
+        let bv = global_var_of(ctx, base_expr)
         if (bv == null) {
             // descriptor array of SSBOs: bufs[slot][i]. The inner ExprAt (bufs[slot]) emits nothing --
             // a lone descriptor slot is not an addressable value -- so the OUTER one reads the pair
@@ -3527,7 +3726,7 @@ class SpirvEmit : AstVisitor {
             // chains `g[slot].data[i]`.
             let dinner = base_expr ?as ExprAt
             if (dinner != null) {
-                let dav = global_var_of(dinner.subexpr)
+                let dav = global_var_of(ctx, dinner.subexpr)
                 if (dav != null) {
                     let dgi = ctx.globals?[intptr(dav)] ?? GlobalInfo()
                     if (dgi.is_ssbo_array) {
@@ -3557,7 +3756,7 @@ class SpirvEmit : AstVisitor {
                 let idx = value_of(index_expr)
                 if (idx == 0u) return   // index failed to lower (error already pushed)
                 let base = ptr_of(base_expr)
-                let rv = root_global_of(base_expr)
+                let rv = root_global_of(ctx, base_expr)
                 let storage = root_storage_of(base_expr)
                 let rname = rv != null ? string(rv.name) : "(?)"
                 let pointee = field_pointee_type(bm, result_expr._type, "{rname}[]", storage)
@@ -3634,6 +3833,10 @@ class SpirvEmit : AstVisitor {
 
     // ----- the load marker: read an lvalue child as a value -----
     def override visitExprRef2Value(var expr : ExprRef2Value?) : ExpressionPtr {
+        // a self-method invoke's operand wrappers are consumed structurally by the invoke arm
+        if (key_exists(ctx.invoke_fields, intptr(expr))) {
+            return expr
+        }
         e2id[intptr(expr)] = value_of(expr.subexpr)
         return expr
     }
@@ -4029,7 +4232,23 @@ class SpirvEmit : AstVisitor {
     def override visitExprField(var expr : ExprField?) : ExpressionPtr {
         var bm & = unsafe(*m)
         let k = intptr(expr)
-        let bv = global_var_of(expr.value)
+        // a self-method invoke's method-field read is consumed structurally by the invoke arm
+        if (key_exists(ctx.invoke_fields, k)) {
+            return expr
+        }
+        // kernel-class member access (`self.member`): seed the member's OpVariable pointer exactly
+        // as a module global's ExprVar seeds it — every downstream chain/load path is shared.
+        let mvar = member_var_of(ctx, expr)
+        if (mvar != null) {
+            let mgi = ctx.globals?[intptr(mvar)] ?? GlobalInfo()
+            if (mgi.var_id == 0u) {   // the member scan rejected it (error already pushed there)
+                errs |> push("kernel member '{expr.name}' is not classified")
+            }
+            e2ptr[k] = mgi.var_id
+            e2pty[k] = mgi.value_type
+            return expr
+        }
+        let bv = global_var_of(ctx, expr.value)
         if (bv == null) {
             if (key_exists(e2ptr, intptr(expr.value))) {
                 let base = ptr_of(expr.value)
@@ -4115,12 +4334,24 @@ class SpirvEmit : AstVisitor {
     // in before the call, then copy the (mutated) temp back to the original lvalue after — SPIR-V's
     // Logical addressing forbids handing an access-chain pointer straight to a call.
     def emit_user_call(var bm : SpirvModule; expr : ExprCall?; uf : UserFunc) {
-        let f = expr.func
+        emit_call_core(bm, uf, expr.arguments, 0, 0, intptr(expr))
+    }
+
+    // Shared OpFunctionCall core. `skip` = leading arguments to drop, `fshift` = how far the
+    // remaining arguments sit AHEAD of f.arguments — a method invoke is [Cls.method field,
+    // receiver, args...] against f.arguments [self, params...], so skip=2 / fshift=1 pairs
+    // args[i] with f.arguments[i-1] (and the callee's self was dropped at registration).
+    def emit_call_core(var bm : SpirvModule; uf : UserFunc; arguments : dasvector`ptr`Expression; skip, fshift : int; resKey : uint64) {
+        let f = uf.fn
         let res = alloc_id(bm)
         var ops <- [uf.ret_type, res, uf.fn_id]
         var ref_temps : array<tuple<temp : uint; orig : uint; vt : uint>>
-        for (arg, i in expr.arguments, count()) {
-            let is_ref = i < length(f.arguments) && is_out_param(f.arguments[i]._type)
+        for (arg, i in arguments, count()) {
+            if (i < skip) {
+                continue
+            }
+            let fi = i - fshift
+            let is_ref = fi < length(f.arguments) && is_out_param(f.arguments[fi]._type)
             if (is_ref) {
                 let ct = ctx.call_temps?[intptr(arg)] ?? CallTemp()
                 if (ct.ptr_id == 0u) {
@@ -4158,7 +4389,7 @@ class SpirvEmit : AstVisitor {
         }
         delete ref_temps
         if (!uf.is_void) {
-            e2id[intptr(expr)] = res
+            e2id[resKey] = res
         }
     }
 
@@ -4309,7 +4540,7 @@ class SpirvEmit : AstVisitor {
             }
             // the payload operand names the @ray_payload / @incoming_ray_payload VARIABLE itself (a
             // pointer, per SPV_KHR_ray_tracing), so the last argument must be a payload global.
-            let payload_g = global_var_of(expr.arguments[10])
+            let payload_g = global_var_of(ctx, expr.arguments[10])
             let pgi = payload_g != null ? (ctx.globals?[intptr(payload_g)] ?? GlobalInfo()) : GlobalInfo()
             if (payload_g == null || !pgi.is_ray_payload) {
                 errs |> push("traceRayEXT: the payload argument must be a @ray_payload / @incoming_ray_payload global")
@@ -4845,7 +5076,7 @@ class SpirvEmit : AstVisitor {
             let arg0 = expr.arguments[0]
             let r2v = arg0 ?as ExprRef2Value
             let lvexpr = r2v != null ? r2v.subexpr : arg0
-            let rg = root_global_of(lvexpr)
+            let rg = root_global_of(ctx, lvexpr)
             if (rg == null) {
                 errs |> push("{name}: target must be a @workgroup or @ssbo global lvalue")
                 return expr
@@ -5145,7 +5376,7 @@ class SpirvEmit : AstVisitor {
         // to extract from), and a buffer image carries no mips -- SPIR-V forbids a Lod operand on
         // Dim=Buffer -- so it fetches with the bare index and no image operands.
         if (name == "texelFetch" && length(expr.arguments) == 2) {
-            let tb = global_var_of(expr.arguments[0])
+            let tb = global_var_of(ctx, expr.arguments[0])
             if (tb == null) {
                 errs |> push("texelFetch: the two-argument form expects a textureBuffer global")
                 return expr
@@ -5201,8 +5432,8 @@ class SpirvEmit : AstVisitor {
                 errs |> push("sampleTexture: implicit-LOD sampling is only valid in a fragment shader")
                 return expr
             }
-            let tg = global_var_of(expr.arguments[0])
-            let sgv = global_var_of(expr.arguments[1])
+            let tg = global_var_of(ctx, expr.arguments[0])
+            let sgv = global_var_of(ctx, expr.arguments[1])
             if (tg == null || sgv == null) {
                 errs |> push("sampleTexture: texture and sampler must be globals")
                 return expr
@@ -5284,7 +5515,7 @@ class SpirvEmit : AstVisitor {
                 errs |> push("subpassLoad expects (input)")
                 return expr
             }
-            let ig = global_var_of(expr.arguments[0])
+            let ig = global_var_of(ctx, expr.arguments[0])
             if (ig == null) {
                 errs |> push("subpassLoad: argument must be a subpassInput global")
                 return expr
@@ -6010,6 +6241,11 @@ class SpirvEmit : AstVisitor {
         errs |> push("null coalescing (??) is not supported in SPIR-V shaders")
     }
     def override preVisitExprCast(expr : ExprCast?) : void {
+        // a self-method invoke's receiver may arrive upcast to the base class — structural, consumed
+        // by the invoke arm
+        if (key_exists(ctx.invoke_fields, intptr(expr))) {
+            return
+        }
         errs |> push("cast is not supported in SPIR-V shaders")
     }
     def override preVisitExprPtr2Ref(expr : ExprPtr2Ref?) : void {
@@ -6163,7 +6399,24 @@ class SpirvEmit : AstVisitor {
         errs |> push("debug is not supported in SPIR-V shaders")
     }
     def override preVisitExprInvoke(expr : ExprInvoke?) : void {
-        errs |> push("invoke is not supported in SPIR-V shaders")
+        // a discovered kernel-class self-method call lowers to OpFunctionCall (visitExprInvoke);
+        // every other invoke shape stays rejected
+        if (!key_exists(ctx.invoke_targets, intptr(expr))) {
+            errs |> push("invoke is not supported in SPIR-V shaders (only a kernel-class self-method call lowers)")
+        }
+    }
+    def override visitExprInvoke(var expr : ExprInvoke?) : ExpressionPtr {
+        let tgt = ctx.invoke_targets?[intptr(expr)] ?? 0ul
+        if (tgt == 0ul) {
+            return expr   // rejected in preVisit
+        }
+        let uf = ctx.user_funcs?[tgt] ?? UserFunc()
+        if (!uf.valid) {
+            return expr   // signature error already pushed at registration
+        }
+        var bm & = unsafe(*m)
+        emit_call_core(bm, uf, expr.arguments, 2, 1, intptr(expr))
+        return expr
     }
     def override preVisitExprErase(expr : ExprErase?) : void {
         errs |> push("erase is not supported in SPIR-V shaders")
@@ -6260,9 +6513,9 @@ def private is_out_param(at : TypeDecl?) : bool {
 // Only 16/32-bit scalar/vector/matrix results+params are supported (by value, or by reference for
 // params); anything else is rejected here with a clean error so a later call site doesn't emit
 // invalid SPIR-V.
-def private register_user_func(var m : SpirvModule; var ctx : EmitCtx; f : Function const?; var errors : array<string>) {
+def private register_user_func(var m : SpirvModule; var ctx : EmitCtx; f : Function const?; var errors : array<string>; is_method : bool = false) {
     if (key_exists(ctx.user_funcs, intptr(f))) return
-    var uf = UserFunc(fn = f, valid = true, is_void = false, fn_id = 0u, type_id = 0u, ret_type = 0u)
+    var uf = UserFunc(fn = f, valid = true, is_void = false, fn_id = 0u, type_id = 0u, ret_type = 0u, is_method = is_method)
     if (f.result.baseType == Type.tVoid) {
         uf.is_void = true
         uf.ret_type = type_void(m)
@@ -6279,7 +6532,10 @@ def private register_user_func(var m : SpirvModule; var ctx : EmitCtx; f : Funct
         uf.valid = false
     }
     var ptypes : array<uint>
-    for (arg in f.arguments) {
+    for (arg, ai in f.arguments, count()) {
+        if (is_method && ai == 0) {
+            continue   // self: dropped — members are module-scope OpVariables, no receiver needed
+        }
         let at = arg._type
         // A struct parameter is exempt from the value-type guard below: its fields are what must be
         // emittable, and emit_value_type reports any that is not. is_out_param draws the read-only /
@@ -6458,6 +6714,96 @@ def private has_cycle_from(u : uint64; var adj : table<uint64; array<uint64>>; v
     return false
 }
 
+// Discovery for kernel-class method calls: find every `self->m(...)` invoke in a body, resolve it
+// through the class's field inits (devirtualized), and record the target + its method-field node
+// for the emission arms. The driver below registers each method and recurses into its body.
+class private SpirvMethodScan : AstVisitor {
+    adapter : VisitorAdapter?
+    @do_not_delete ctx : EmitCtx?
+    self_arg : uint64            // the SCANNED function's self argument
+    found : array<FunctionPtr>   // methods invoked from this body, in discovery order
+    errs : array<string>
+    def override preVisitExprInvoke(expr : ExprInvoke?) : void {
+        if (key_exists(ctx.invoke_targets, intptr(expr))) return
+        let fld = invoke_self_method_field(self_arg, expr)
+        if (fld == null) return   // not a self-method shape: the emission preVisit rejects it
+        var lerr : array<string>
+        var mfn = resolve_kernel_method(ctx, "{fld.name}", lerr)
+        errs |> push_from(lerr)
+        delete lerr
+        if (mfn == null) return
+        ctx.invoke_targets |> insert(intptr(expr), intptr(mfn))
+        // suppress the structural operands: the method-field read + its wrapper, and the WHOLE
+        // receiver chain (a base-class method's receiver arrives upcast: Ref2Value/Cast wrappers
+        // down to self) — the invoke arm consumes them without producing values
+        ctx.invoke_fields |> insert(intptr(fld))
+        ctx.invoke_fields |> insert(intptr(expr.arguments[0]))
+        var rc = expr.arguments[1]
+        while (rc != null) {
+            ctx.invoke_fields |> insert(intptr(rc))
+            if (rc is ExprRef2Value) {
+                rc = (rc as ExprRef2Value).subexpr
+            } elif (rc is ExprCast) {
+                rc = (rc as ExprCast).subexpr
+            } else {
+                break
+            }
+        }
+        found |> push(mfn)
+    }
+}
+
+// Register every kernel-class method reachable from `body_fn` (depth-first; `stack` carries the
+// call chain for cycle detection — SPIR-V forbids recursion). A method's OTHER dependencies
+// (globals, free functions) classify through collect_dependencies exactly like the entry's.
+def private discover_kernel_methods(var m : SpirvModule; var ctx : EmitCtx; body_fn : FunctionPtr; entry : FunctionPtr; stage : ShaderStage; var reflection : SpirvReflection; var stack : array<uint64>; var errors : array<string>) {
+    var sc = new SpirvMethodScan(ctx = unsafe(addr(ctx)),
+        self_arg = empty(body_fn.arguments) ? 0ul : intptr(body_fn.arguments[0]))
+    make_visitor(*sc) $(sc_adapter) {
+        sc.adapter = sc_adapter
+        visit(body_fn.body, sc.adapter)
+    }
+    errors |> push_from(sc.errs)
+    var found <- sc.found
+    unsafe {
+        delete sc
+    }
+    for (mfn in found) {
+        let key = intptr(mfn)
+        var cyc = false
+        for (s in stack) {
+            if (s == key) {
+                cyc = true
+            }
+        }
+        if (cyc) {
+            errors |> push("method '{mfn.name}' is part of a method call cycle — recursion is not supported in SPIR-V shaders")
+            continue
+        }
+        if (key_exists(ctx.user_funcs, key)) continue
+        register_user_func(m, ctx, mfn, errors, true)
+        collect_dependencies(mfn) $(vfun, vvar) {
+            for (v in vvar) {
+                if (!key_exists(ctx.globals, intptr(v))) {
+                    classify_global(m, ctx, v, stage, reflection, errors)
+                }
+            }
+            for (uffn in vfun) {
+                if (is_user_shader_func(uffn, entry)) {
+                    register_user_func(m, ctx, uffn, errors)
+                }
+            }
+        }
+        stack |> push(key)
+        discover_kernel_methods(m, ctx, mfn, entry, stage, reflection, stack, errors)
+        stack |> pop()
+    }
+    found |> clear()   // borrowed AST pointers — release the buffer only
+    unsafe {
+        delete found
+    }
+}
+
 // SPIR-V (without recursion capability) forbids any function being part of a call cycle. Build the
 // call graph over {entry} + user_funcs and report a clean error on any cycle (direct or mutual).
 def private detect_recursion(var ctx : EmitCtx; entry : FunctionPtr; var errors : array<string>) : bool {
@@ -6504,15 +6850,11 @@ class SpirvTempAlloc : AstVisitor {
     @do_not_delete m   : SpirvModule?
     @do_not_delete ctx : EmitCtx?
     errs : array<string>
-    def override preVisitExprCall(expr : ExprCall?) : void {
-        let f = expr.func
-        if (f == null || !key_exists(ctx.user_funcs, intptr(f))) return
-        let uf = ctx.user_funcs?[intptr(f)] ?? UserFunc()
-        if (!uf.valid) return
+    def alloc_arg_temps(f : Function const?; arguments : dasvector`ptr`Expression; skip, fshift : int) {
         var bm & = unsafe(*m)
-        for (arg, i in expr.arguments, count()) {
-            if (i >= length(f.arguments)) break
-            let pt = f.arguments[i]._type
+        for (arg, i in arguments, count()) {
+            if (i < skip || i - fshift >= length(f.arguments)) continue
+            let pt = f.arguments[i - fshift]._type
             if (is_out_param(pt)) {
                 if (key_exists(ctx.call_temps, intptr(arg))) continue
                 let vt = emit_value_type(bm, pt, errs)
@@ -6522,6 +6864,22 @@ class SpirvTempAlloc : AstVisitor {
                 ctx.call_temps |> insert(intptr(arg), CallTemp(ptr_id = pid, value_type = vt))
             }
         }
+    }
+    def override preVisitExprCall(expr : ExprCall?) : void {
+        let f = expr.func
+        if (f == null || !key_exists(ctx.user_funcs, intptr(f))) return
+        let uf = ctx.user_funcs?[intptr(f)] ?? UserFunc()
+        if (!uf.valid) return
+        alloc_arg_temps(f, expr.arguments, 0, 0)
+    }
+    // a self-method invoke's by-reference arguments need the same copy-in/out temps (args 0/1 are
+    // the method-field read + the receiver — same skip/shift rule as the call core)
+    def override preVisitExprInvoke(expr : ExprInvoke?) : void {
+        let tgt = ctx.invoke_targets?[intptr(expr)] ?? 0ul
+        if (tgt == 0ul) return
+        let uf = ctx.user_funcs?[tgt] ?? UserFunc()
+        if (!uf.valid) return
+        alloc_arg_temps(uf.fn, expr.arguments, 2, 1)
     }
 }
 
@@ -6543,7 +6901,16 @@ def private alloc_call_temps(var m : SpirvModule; var ctx : EmitCtx; f : Functio
 def private emit_user_function(var m : SpirvModule; var ctx : EmitCtx; uf : UserFunc; var errors : array<string>) {
     let f = unsafe(reinterpret<FunctionPtr>(uf.fn))   // read-only emission; strip pointee const
     emit(m, SEC_FUNCS, SpvOp.Function, uf.ret_type, uf.fn_id, 0u, uf.type_id)
-    for (arg in f.arguments) {
+    // a kernel-class method emits under ITS OWN self, so its member accesses resolve; self itself
+    // has no parameter (dropped at registration)
+    let prev_self = ctx.self_arg
+    if (uf.is_method && !empty(f.arguments)) {
+        ctx.self_arg = intptr(f.arguments[0])
+    }
+    for (arg, ai in f.arguments, count()) {
+        if (uf.is_method && ai == 0) {
+            continue
+        }
         let at = arg._type
         let vt = emit_value_type(m, at, errors)
         let pid = alloc_id(m)
@@ -6575,6 +6942,7 @@ def private emit_user_function(var m : SpirvModule; var ctx : EmitCtx; uf : User
         }
     }
     emit(m, SEC_FUNCS, SpvOp.FunctionEnd)
+    ctx.self_arg = prev_self
 }
 
 // ===== entry =====
@@ -6590,7 +6958,7 @@ def private execution_model(stage : ShaderStage) : SpvExecutionModel {
 }
 
 [macro_function]
-def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderStage; local_size : int3; local_size_ids : int3; mesh_config : MeshOutputConfig; early_fragment_tests : bool; var reflection : SpirvReflection) : array<uint> {
+def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderStage; local_size : int3; local_size_ids : int3; mesh_config : MeshOutputConfig; early_fragment_tests : bool; var reflection : SpirvReflection; kernel_self : Structure const? = null) : array<uint> {
     var m = make_module()
     var ctx : EmitCtx
     ctx.stage = stage
@@ -6640,6 +7008,18 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
     // gl_WorkGroupSize folds to this, so it has to be on ctx before the globals are classified.
     ctx.local_size = local_size
 
+    // class-kernel frontend: classify the annotated members ahead of the module globals so
+    // `self.member` resolves through member_vars at every emission site (member_var_of).
+    if (kernel_self != null) {
+        ctx.kernel_class = kernel_self
+        if (!empty(fn.arguments)) {
+            ctx.self_arg = intptr(fn.arguments[0])
+        } else {
+            errors |> push("[spirv_kernel] '{fn.name}': expected a class method (no self argument)")
+        }
+        classify_kernel_members(m, ctx, kernel_self, stage, reflection, errors)
+    }
+
     collect_dependencies(fn) $(vfun, vvar) {
         for (v in vvar) {
             classify_global(m, ctx, v, stage, reflection, errors)
@@ -6651,6 +7031,14 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
                 register_user_func(m, ctx, uffn, errors)
             }
         }
+    }
+    // class-kernel frontend: methods reached via self-method invokes register here (devirtualized,
+    // self-dropped); the entry sits on the discovery stack so a call back into it reports a cycle.
+    if (kernel_self != null) {
+        var mstack : array<uint64>
+        mstack |> push(intptr(fn))
+        discover_kernel_methods(m, ctx, fn, fn, stage, reflection, mstack, errors)
+        delete mstack
     }
     detect_recursion(ctx, fn, errors)
 
