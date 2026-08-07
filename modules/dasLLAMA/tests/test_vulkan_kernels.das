@@ -202,8 +202,13 @@ def private approx(x, y : float) : bool => abs(x - y) <= 2e-3 * max(1.0, max(abs
 
 def private mismatch_rel(got, want : array<float>; bar : float) : int {
     var bad = 0
-    for (g, w in got, want) {
+    for (i in range(length(got))) {
+        let g = got[i]
+        let w = want[i]
         if (abs(g - w) > bar * max(1.0, max(abs(g), abs(w)))) {
+            if (bad < 6) {   // the eyeball dump: enough to tell tolerance drift from garbage
+                to_log(LOG_ERROR, "  mismatch [{i}] gpu {g} cpu {w}\n")
+            }
             bad++
         }
     }
@@ -216,8 +221,13 @@ def private mismatch_approx(got, want : array<float>) : int => mismatch_rel(got,
 // running-sum magnitude, not the (possibly cancelled-small) result
 def private mismatch_bars(got, want : array<float>; rel, absf : float) : int {
     var bad = 0
-    for (g, w in got, want) {
+    for (i in range(length(got))) {
+        let g = got[i]
+        let w = want[i]
         if (abs(g - w) > absf && abs(g - w) > rel * max(1.0, max(abs(g), abs(w)))) {
+            if (bad < 6) {
+                to_log(LOG_ERROR, "  mismatch [{i}] gpu {g} cpu {w}\n")
+            }
             bad++
         }
     }
