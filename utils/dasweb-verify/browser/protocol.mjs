@@ -77,9 +77,12 @@ export function stdoutMatches(lines, pattern) {
     return lines.some((line) => re.test(String(line.text ?? '')));
 }
 
-// A page-shape artifact is served from its own origin (run.daslang.io) — the
-// separate, cookie-less run origin IS the isolation boundary, so anything
-// same-origin or relative here means the page did not get a real artifact.
+// Production serves page-shape artifacts from a separate cookie-less run origin,
+// but that is a property of the DEPLOYMENT, not a rule to hard-code here —
+// --base-url points at staging boxes that may serve them from one origin. So this
+// validates only what must always hold: an absolute http(s) URL naming an .html
+// artifact. The src can come from nowhere else — main.js sets iframe.pg-page-frame
+// from the build result alone.
 export function artifactUrlFrom(src, siteUrl) {
     if (!src) return '';
     let url;

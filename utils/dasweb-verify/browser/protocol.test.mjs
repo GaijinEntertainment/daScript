@@ -99,6 +99,11 @@ test('artifactUrlFrom takes only a real cross-origin page artifact', () => {
     assert.equal(P.artifactUrlFrom('about:blank', 'https://daslang.io'), '');
     // The frame src before an artifact lands, and non-page artifacts, are not URLs to open.
     assert.equal(P.artifactUrlFrom('https://run.daslang.io/b/abc/sample.wasm', 'https://daslang.io'), '');
+    // Same-origin is accepted ON PURPOSE: the separate run origin is a production
+    // deployment choice, and --base-url may point at a staging box without one.
+    assert.equal(
+        P.artifactUrlFrom('/api/build/artifact/abc/def/sample.html', 'https://daslang.io'),
+        'https://daslang.io/api/build/artifact/abc/def/sample.html');
 });
 
 test('planRows expands modes, applies the filter, and keeps unknown samples as FAIL', () => {

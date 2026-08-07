@@ -76,6 +76,8 @@ const HELP = `dasweb-verify browser leg
   --summary PATH     append the markdown report here (default $GITHUB_STEP_SUMMARY)
   --artifacts DIR    where failure screenshots go
   --headed           run with a visible browser
+  --console          echo every browser console message (the only way to read the
+                     WHY behind a GL error — the browser logs it where no page can)
   --list             print the plan and exit, no browser
 `;
 
