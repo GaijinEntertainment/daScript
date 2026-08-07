@@ -130,6 +130,10 @@ appending a dated entry; state the timeless WHY, and if the motivating incident 
 keeping, archive it in `/history`. (Carve-out: `probe-verified <date>` tags on syntax/behavior
 claims are verification provenance, not history — they stay.)
 
+**Every CODEREVIEW.md reviews itself.** Each carries the self-review rule — a rule a reviewer
+cannot apply as written is a defect of the checklist, marked like any other finding — and a
+NEW CODEREVIEW.md includes that rule from its first commit.
+
 **Doc improvements at stopping points.** Propose-first applies only to what's left: restructuring, removing existing guidance, **or proposing a new skill file when you see a recurring pattern that no existing skill covers**. Doc edits direct future Claude behavior, so structural diffs still get review — but factual drift must be self-healing, not queued behind it.
 
 ### Writing a new skill

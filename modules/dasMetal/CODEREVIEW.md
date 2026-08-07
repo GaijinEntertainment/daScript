@@ -1,5 +1,8 @@
 # dasMetal Code Review Checklist
 
+**This file reviews itself: a rule a reviewer cannot apply as written is a defect of this
+file.** Mark it like any other finding; the fix is a rewrite or a move, not silent tolerance.
+
 1. **Any new bit of functionality ships with test coverage for EVERY new scenario it
    introduces.** The emitter has two test homes and a change usually needs both:
    `tests/msl/` — text-level fixtures (`_msl_common.das` kernels), per-construct census
