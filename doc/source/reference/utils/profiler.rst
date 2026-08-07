@@ -1,5 +1,10 @@
 .. _utils_profiler:
 
+.. index::
+   single: Utils; profiler
+   single: Utils; Profiling
+   single: Utils; Memory leak tracking
+
 .. This page has NO content of its own. The single source is the markdown skill
    skills/profiler.md, which also ships in the SDK bundle (it is named in
    install/skills.list), so daslang.io and the SDK can never disagree. Edit the .md.

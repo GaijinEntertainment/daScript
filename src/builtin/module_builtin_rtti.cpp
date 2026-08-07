@@ -934,6 +934,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(completion)>("completion");
             addField<DAS_BIND_MANAGED_FIELD(building_documentation)>("building_documentation");
             addField<DAS_BIND_MANAGED_FIELD(lint_check)>("lint_check");
+            addField<DAS_BIND_MANAGED_FIELD(no_lint)>("no_lint");
             addField<DAS_BIND_MANAGED_FIELD(no_init_check)>("no_init_check");
             addField<DAS_BIND_MANAGED_FIELD(export_all)>("export_all");
             addField<DAS_BIND_MANAGED_FIELD(serialize_main_module)>("serialize_main_module");
