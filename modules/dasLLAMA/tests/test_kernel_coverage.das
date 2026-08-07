@@ -317,7 +317,7 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
                 feint("no vulkan dispatches — arm DASLLAMA_GPU=1 on a device box (the census needs the serving tier)\n")
                 return
             }
-            let famfilter = get_env_variable("DASLLAMA_TEST_FAMILY")
+            let famfilter = g_env_test.test_family
             if (empty(famfilter)) {
                 // floor calibration: 25 measured on the default 5-model zoo (MoE rows skip without
                 // PARITY_FULL; coopmat-mode variants and mode-gated twins legitimately idle here);
