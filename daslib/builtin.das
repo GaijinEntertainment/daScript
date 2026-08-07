@@ -2090,8 +2090,8 @@ def map_to_ro_array(data : void?; len : int; blk : block<(arg : array<auto(TT)>#
 
 def swap(var a, b : auto(TT)&) {
     var t : TT -& <- a
-    a <- b
-    b <- t
+    a <- b   // nolint:PERF030
+    b <- t   // nolint:PERF030
 }
 
 def subarray(a : auto(TT)[]; r : range) {

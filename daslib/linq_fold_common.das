@@ -1,6 +1,8 @@
 options gen2
 options indenting = 4
 options _comment_hygiene = true
+options _cyclomatic_complexity = 58
+options _function_length = 558
 
 module linq_fold_common shared public
 
@@ -771,7 +773,7 @@ def is_linq_call(var expr : Expression?) : bool {
             funcName = string(call.func.name)
         }
         if (linqCalls.key_exists(funcName)) {
-            let linqCall & = unsafe(linqCalls?[funcName] ?? default<LinqCall>)
+            let linqCall = unsafe(linqCalls?[funcName])
             if (linqCall.moduleName == call.func._module.name) return true
         }
     }
@@ -798,8 +800,8 @@ def normalize_order_reverse(var calls : array<tuple<ExprCall?; LinqCall?>>) {
             }
         }
         if (flipped != "" && linqCalls.key_exists(flipped)) {
-            var linqCall & = unsafe(linqCalls?[flipped] ?? default<LinqCall>)
-            calls[i] = (calls[i]._0, unsafe(addr(linqCall)))
+            let linqCall = unsafe(linqCalls?[flipped])
+            calls[i] = (calls[i]._0, linqCall)
             calls |> erase(i + 1)
             // Don't advance `i` — the newly flipped order call might itself be followed by another reverse (`order_by(k).reverse().reverse()` → `order_by_descending(k).reverse()` → `order_by(k)`).
         } else {
@@ -920,10 +922,10 @@ def flatten_linq(var expr : Expression?)  {
             }
             let funcName = string(topFunc.name)
             if (!linqCalls.key_exists(funcName)) break
-            var linqCall & = unsafe(linqCalls?[funcName] ?? default<LinqCall>)
+            let linqCall = unsafe(linqCalls?[funcName])
             if (linqCall.moduleName != topFunc._module.name) break
             if (!linqCall.skip) {
-                calls.push((topCall, unsafe(addr(linqCall))))
+                calls.push((topCall, linqCall))
             }
             top = topCall.arguments[0]
         } else {
@@ -1706,7 +1708,7 @@ def emit_early_exit_lane(
                 return $i(valueName)
             }
             // Tail: panic + unreachable default-return (matches linq.das line 2383).
-            tailStmts <- qmacro_block_to_array() {
+            tailStmts |> push_from <| qmacro_block_to_array() {
                 panic("sequence contains no elements")
                 return default<$t(retType)>
             }
@@ -1933,7 +1935,7 @@ def emit_early_exit_lane(
                 $i(lastNodeName) = $e(adapter->current_handle_expr(at))
             }
             if (opName == "last") {
-                tailStmts <- qmacro_block_to_array() {
+                tailStmts |> push_from <| qmacro_block_to_array() {
                     if (!$i(foundName)) {
                         panic("sequence contains no elements")
                     }
@@ -1945,7 +1947,7 @@ def emit_early_exit_lane(
                 let defaultName = qn("dval", at)
                 let dvCanCopy = (terminatorCall.arguments[1]._type != null && terminatorCall.arguments[1]._type.canCopy)
                 preludeStmts |> push(emit_default_bind(defaultName, terminatorCall.arguments[1], dvCanCopy))
-                tailStmts <- qmacro_block_to_array() {
+                tailStmts |> push_from <| qmacro_block_to_array() {
                     if (!$i(foundName)) {
                         $e(emit_default_return(defaultName, dvCanCopy))
                     }
@@ -1964,7 +1966,7 @@ def emit_early_exit_lane(
                 $i(lastBindName) := $i(valueName)
             }
             if (opName == "last") {
-                tailStmts <- qmacro_block_to_array() {
+                tailStmts |> push_from <| qmacro_block_to_array() {
                     if (!$i(foundName)) {
                         panic("sequence contains no elements")
                     }
@@ -1975,7 +1977,7 @@ def emit_early_exit_lane(
                 let defaultName = qn("dval", at)
                 let dvCanCopy = (terminatorCall.arguments[1]._type != null && terminatorCall.arguments[1]._type.canCopy)
                 preludeStmts |> push(emit_default_bind(defaultName, terminatorCall.arguments[1], dvCanCopy))
-                tailStmts <- qmacro_block_to_array() {
+                tailStmts |> push_from <| qmacro_block_to_array() {
                     if (!$i(foundName)) {
                         $e(emit_default_return(defaultName, dvCanCopy))
                     }
@@ -2000,7 +2002,7 @@ def emit_early_exit_lane(
                 $i(foundName) = true
                 $i(bindName) := $i(valueName)
             }
-            tailStmts <- qmacro_block_to_array() {
+            tailStmts |> push_from <| qmacro_block_to_array() {
                 if (!$i(foundName)) {
                     panic("sequence contains no elements")
                 }
@@ -2019,7 +2021,7 @@ def emit_early_exit_lane(
                     $i(foundName) = true
                     $i(bindName) := $i(valueName)
                 }
-                tailStmts <- qmacro_block_to_array() {
+                tailStmts |> push_from <| qmacro_block_to_array() {
                     if (!$i(foundName)) {
                         $e(emit_default_return(defaultName, dvCanCopy))
                     }
@@ -2040,7 +2042,7 @@ def emit_early_exit_lane(
                     $i(foundName) = true
                     $i(bindName) := $i(valueName)
                 }
-                tailStmts <- qmacro_block_to_array() {
+                tailStmts |> push_from <| qmacro_block_to_array() {
                     if ($i(stopName) || !$i(foundName)) {
                         $e(emit_default_return(defaultName, dvCanCopy))
                     }
@@ -2085,7 +2087,7 @@ def emit_early_exit_lane(
             }
             if (opName == "element_at") {
                 let tName = qn("emptyT", at)
-                tailStmts <- qmacro_block_to_array() {
+                tailStmts |> push_from <| qmacro_block_to_array() {
                     panic("element index out of range")
                     var $i(tName) : $t(retType)
                     return <- $i(tName)
@@ -2574,7 +2576,7 @@ def build_join_adapter_pieces(
     var resultBody = peel_lambda_rename_2vars(resultLam, tupAName, tupBName)
     if (keyaBody == null || keybBody == null || resultBody == null) return null
     var collectInner <- qmacro_expr() {
-        // nolint:PERF006 per-key bucket size unknown ahead of time
+        // nolint:PERF006,LINT019 per-key bucket size unknown ahead of time
         $i(jhashName)[$e(keybBody)] |> push_clone($i(tupBName))
     }
     var probeOuter <- qmacro_expr() {
@@ -2965,7 +2967,7 @@ def emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Exp
             var dPrologue : array<Expression?>
             var dTail : array<Expression?>
             if (oc.firstName == "first") {
-                dPrologue <- qmacro_block_to_array() {
+                dPrologue |> push_from <| qmacro_block_to_array() {
                     var $i(bestKeyName) = default<$t(keyType)>
                     var $i(bestNodeName) = default<$t(handleType)>
                     var $i(seenName) = false
@@ -2985,7 +2987,7 @@ def emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Exp
                 var dDefRet = (oc.selectLam != null
                     ? peel_lambda_replace_var(oc.selectLam, qmacro($i(dBindName)))
                     : qmacro($i(dBindName)))
-                dPrologue <- qmacro_block_to_array() {
+                dPrologue |> push_from <| qmacro_block_to_array() {
                     let $i(dBindName) = $e(oc.firstDefaultExpr)
                     var $i(bestKeyName) = default<$t(keyType)>
                     var $i(bestNodeName) = default<$t(handleType)>
@@ -3032,11 +3034,11 @@ def emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Exp
         } else {
             firstRetExpr = qmacro($i(bestName))
         }
-        prologue <- qmacro_block_to_array() {
+        prologue |> push_from <| qmacro_block_to_array() {
             var $i(bestName) = default<$t(elemType)>
             var $i(seenName) = false
         }
-        tailStmts <- qmacro_block_to_array() {
+        tailStmts |> push_from <| qmacro_block_to_array() {
             panic("sequence contains no elements") if (!$i(seenName))
             return $e(firstRetExpr)
         }
@@ -3051,12 +3053,12 @@ def emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Exp
             bestRetExpr = qmacro($i(bestName))
             dRetExpr = qmacro($i(dBindName))
         }
-        prologue <- qmacro_block_to_array() {
+        prologue |> push_from <| qmacro_block_to_array() {
             let $i(dBindName) = $e(oc.firstDefaultExpr)
             var $i(bestName) = default<$t(elemType)>
             var $i(seenName) = false
         }
-        tailStmts <- qmacro_block_to_array() {
+        tailStmts |> push_from <| qmacro_block_to_array() {
             return $e(bestRetExpr) if ($i(seenName))
             return $e(dRetExpr)
         }
@@ -3160,7 +3162,7 @@ def emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expr
         laneBufType = build_surrogate_type(keyType, handleType, at)
         let xkeyName = qn("order_xkey", at)
         let outBufName = qn("order_out_buf", at)
-        var surrCmp = build_surrogate_cmp(oc.orderName == "order_by_descending", at)   // nolint:PERF023 reused 3× across heap/order splices
+        var surrCmp = build_surrogate_cmp(oc.orderName == "order_by_descending", at)   // reused 3× across heap/order splices
         var admitTest = (oc.orderName == "order_by_descending"
             ? qmacro(_::less($i(bhBufName)[0]._0, $i(xkeyName)))
             : qmacro(_::less($i(xkeyName), $i(bhBufName)[0]._0)))
@@ -3678,14 +3680,14 @@ def emit_reverse_walk_overwrite_scalar(var c : Captures; var ctx : EmitCtx; at :
     }
     var tailStmts : array<Expression?>
     if (terminatorName == "first") {
-        tailStmts <- qmacro_block_to_array() {
+        tailStmts |> push_from <| qmacro_block_to_array() {
             if (!$i(foundName)) {
                 panic("sequence contains no elements")
             }
             return $e(lastRetExpr)
         }
     } else {
-        tailStmts <- qmacro_block_to_array() {
+        tailStmts |> push_from <| qmacro_block_to_array() {
             return $i(foundName) ? $e(lastRetExpr) : $e(dRetExpr)
         }
     }
@@ -4310,7 +4312,7 @@ def emit_hashtable_dedup(var c : Captures; var ctx : EmitCtx; at : LineInfo) : E
             $e(consumeBody)
         }
     }
-    var perMatchStmts : array<Expression?>    // nolint:STYLE012 — array-literal-of-qmacro_expr is parse-fragile
+    var perMatchStmts : array<Expression?>    // array-literal-of-qmacro_expr is parse-fragile
     if (bindProjection) {
         perMatchStmts |> push <| qmacro_expr() {
             let $i(pvName) = $e(projection)
@@ -4698,7 +4700,7 @@ def mk_reducer_first_deferred(spec : ReducerSpec; at : LineInfo; entryName, itNa
     return (missInit, null)
 }
 
-// nolint:STYLE014 — average per group, 2-slot acc (`._0` = sum:double, `._1` = count:uint64). Emits:
+// average per group, 2-slot acc (`._0` = sum:double, `._1` = count:uint64). Emits:
 //   missInit  → entry._slot = (double(it), 1ul)
 //   hitUpdate → entry._slot._0 += double(it); entry._slot._1 ++
 [macro_function]
@@ -4716,7 +4718,7 @@ def mk_reducer_average(spec : ReducerSpec; at : LineInfo; entryName, itName : st
     return (missInit, hitUpdate)
 }
 
-// nolint:STYLE014 — average of inner `_select` per group (2-slot acc); inner projection evaluated once into a temp:
+// average of inner `_select` per group (2-slot acc); inner projection evaluated once into a temp:
 //   missInit  → let t = <inner>; entry._slot = (double(t), 1ul)
 //   hitUpdate → let t = <inner>; entry._slot._0 += double(t); entry._slot._1 ++
 [macro_function, unused_argument(itName)]
@@ -5443,8 +5445,8 @@ def emit_group_by(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expressi
     for (call in c.many["head"]) {
         let nm = call_norm_name(call)
         if (!(linqCalls |> key_exists(nm))) return null
-        var lc & = unsafe(linqCalls?[nm] ?? default<LinqCall>)
-        headCalls |> push((call, unsafe(addr(lc))))
+        let lc = unsafe(linqCalls?[nm])
+        headCalls |> push((call, lc))
     }
     var adapter = ctx.src->build_group_by_adapter(c, ctx, at)
     if (adapter == null) return null
@@ -5860,7 +5862,7 @@ def build_join_standalone_pieces(
     if (!isGroupJoin) {
         var core = build_join_pair_core(joinCall, whereLam, selectLam, countOnly, tupAName, bElemName, namePrefix, at)
         if (core == null) return null
-        preludeStmts <- core.preludeStmts
+        preludeStmts |> push_from(core.preludeStmts)
         returnStmt = core.returnStmt
         invokeRetType = core.invokeRetType
         if (countOnly && whereLam == null) {
@@ -6189,7 +6191,7 @@ def emit_array_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expres
         }
         allStmts |> push <| qmacro_expr() {
             for ($i(tupBName) in $i(srcBName)) {
-                // nolint:PERF006 per-key bucket size unknown ahead of time
+                // nolint:PERF006,LINT019 per-key bucket size unknown ahead of time
                 $i(hashName)[$e(keybBody)] |> push_clone($i(tupBName))
             }
         }

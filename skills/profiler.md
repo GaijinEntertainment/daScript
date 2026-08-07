@@ -1,9 +1,3 @@
-```{index}
-single: Utils; profiler
-single: Utils; Profiling
-single: Utils; Memory leak tracking
-```
-
 # Profiler --- Runtime Profiling
 
 The daslang profiler is an **instrumenting** profiler implemented as a debug
