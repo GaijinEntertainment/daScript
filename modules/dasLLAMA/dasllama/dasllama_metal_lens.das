@@ -195,15 +195,23 @@ def private const_t(var t : TypeDecl?) : TypeDecl? {
     return t
 }
 
-// the [metal_kernel] method of a lensed class — the body the access classifier walks
-def private find_kernel_fn(st : StructurePtr; mod : Module?; var nmatch : int&) : Function? {
+// the [metal_kernel] method of a lensed class — the body the access classifier walks. `want`
+// names the method for multi-kernel classes; "" counts every kernel method and returns the
+// first (the single-kernel form's exactly-one check rides on nmatch)
+def private find_kernel_fn(st : StructurePtr; mod : Module?; want : string; var nmatch : int&) : Function? {
     var kfn : Function?
+    let wanted = empty(want) ? "" : "{st.name}`{want}"
     mod |> for_each_function("") $(fn) {
         if (!empty(fn.arguments) && fn.arguments[0]._type.structType == st) {
             for (ann in fn.annotations) {
                 if (ann.annotation.name == "metal_kernel") {
-                    nmatch++
-                    if (kfn == null) {
+                    if (empty(wanted)) {
+                        nmatch++
+                        if (kfn == null) {
+                            kfn = fn
+                        }
+                    } elif (fn.name == wanted) {
+                        nmatch++
                         kfn = fn
                     }
                 }
@@ -304,6 +312,11 @@ class MetalDispatch : AstStructureAnnotation {
         // error); weight/alias stay declared — frame policy and hazard ownership are not kernel
         // facts — but a body WRITE to either is refused. access_force=true restores the fully
         // declared contract (every @ssbo must carry a @role) when a body is unanalyzable.
+        // Multi-kernel form ([vk_dispatch]'s sibling): N [metal_dispatch] instances on one
+        // class, each naming its [metal_kernel] method via kernel= — every instance emits its
+        // own builder, binds the full field set, and STAGES its own kernel's derived access.
+        let kern = find_arg(args, "kernel") ?as tString ?? ""
+        let multi = !empty(kern)
         let accessForce = find_arg(args, "access_force") ?as tBool ?? false
         for (bf in bufs) {   // default: staging follows the (declared or later-derived) role
             bf.hzrole = bf.role
@@ -323,14 +336,19 @@ class MetalDispatch : AstStructureAnnotation {
                 }
             }
             var nmatch = 0
-            let kfn = find_kernel_fn(st, compiling_module(), nmatch)
-            if (kfn == null) {
+            let kfn = find_kernel_fn(st, compiling_module(), kern, nmatch)
+            if (multi && kfn == null) {
+                errors := "[metal_dispatch] {fn_name}: no [metal_kernel] method '{kern}' on {st.name}"
+                delete tracked
+                return false
+            }
+            if (!multi && kfn == null) {
                 errors := "[metal_dispatch] {fn_name}: no [metal_kernel] method on {st.name} to derive buffer access from (access_force=true to declare instead)"
                 delete tracked
                 return false
             }
-            if (nmatch != 1) {
-                errors := "[metal_dispatch] {fn_name}: {nmatch} [metal_kernel] methods matched {st.name} — expected exactly one"
+            if (!multi && nmatch != 1) {
+                errors := "[metal_dispatch] {fn_name}: {nmatch} [metal_kernel] methods matched {st.name} — multi-kernel classes pick per instance via kernel="
                 delete tracked
                 return false
             }
@@ -353,6 +371,19 @@ class MetalDispatch : AstStructureAnnotation {
                         delete tracked
                         return false
                     }
+                } elif (multi) {
+                    // per-kernel view of shared fields: unused-here is fine (a sibling kernel
+                    // uses it), the declared role must COVER this kernel's derived access, and
+                    // staging follows THIS kernel's actual access, not the declared union
+                    let cov = (empty(dr) || decl == "" || decl == "alias" || decl == dr
+                        || (decl == "readwrite" && (dr == "read" || dr == "write")))
+                    if (!cov) {
+                        errors := "[metal_dispatch] {fn_name}: field '{bf.name}' declares @role='{decl}' but kernel '{kern}' derives '{dr}' — the declared role must cover every kernel"
+                        delete res
+                        delete tracked
+                        return false
+                    }
+                    bf.hzrole = dr
                 } elif (decl == "alias") {
                     // an alias view stages its OWN derived access: the tracker keys ranges by
                     // buffer, so both views' staging unions into the buffer-level truth (a write
@@ -539,7 +570,7 @@ class MetalManualDispatchCensus : AstPassMacro {
             }
             if (!lensed && !empty(tracked)) {
                 var nmatch = 0
-                kfn = find_kernel_fn(st, mod, nmatch)
+                kfn = find_kernel_fn(st, mod, "", nmatch)
                 if (kfn != null && nmatch == 1) {
                     var res <- classify_field_access(kfn, mod, st, tracked)
                     if (empty(res.err)) {   // an unanalyzable body keeps the declared contract as-is

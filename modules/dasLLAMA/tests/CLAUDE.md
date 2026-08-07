@@ -61,7 +61,9 @@ model-less per-class CPU-oracle units covering the FULL metal kernel census, ~2-
 no arms; remember it exists — kernel uniform/binding changes MUST update its hand-bound
 dispatches. Shared fixtures (buf helpers, eyeball-dump compares, kq plane + q8 blob
 builders) live in `_metal_kernel_common.das`; the prefill file predates it and keeps local
-twins. A new gate gets a NEGATIVE CONTROL before its first commit (poison the oracle → red
+twins. `_mtl_toy.das` is the `[metal_dispatch]` multi-kernel (kernel=) fixture — its gate in
+the misc file dispatches through the GENERATED builders (kn_ rail), not hand binds.
+A new gate gets a NEGATIVE CONTROL before its first commit (poison the oracle → red
 with dumps → revert); size an additive poison to beat rel·env at the longest dot, and give
 every derived-truth compare its own poison. A kernel with `@workgroup` state needs
 `metal_set_threadgroup_memory_length` in the gate exactly as in its production encoder —

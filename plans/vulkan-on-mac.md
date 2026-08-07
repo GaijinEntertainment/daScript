@@ -196,10 +196,34 @@ Verified: kernels suite 7/7 files green, vulkan kernels 40/40, tier 36/36, cm2 6
 Port `family=` + multi-kernel to `[metal_dispatch]` TOGETHER (the vulkan evidence: family
 surface sharing carried the value, multi-kernel is the substrate reification stamps into),
 fix the metal lens grid-literal infer trap, and adopt inheritance where the copies are
-verbatim today — `MetalMoeMulMmK6/Q8/Mx4` each copy ~60 lines of the base K4/K5/Q51 already
-inherit (~230 LOC, zero-risk). Wider merging (the pass-sets, the format families) waits for
-reification; this leg only builds the mechanism and takes the free wins the oracle suite
-covers.
+verbatim today. Wider merging (the pass-sets, the format families) waits for reification;
+this leg only builds the mechanism and takes the free wins the oracle suite covers.
+
+**Status 2026-08-07:**
+- Grid-literal trap: ✅ fixed by the leg (c) hoist (shared `mk_grid_dim` folds any literal).
+- **Multi-kernel: ✅ LANDED as `kernel=`** — N `[metal_dispatch]` instances on one class
+  (one bracket group; stacked brackets don't parse), each naming its `[metal_kernel]`
+  method; every instance emits its own builder, binds the full field set, and stages ITS
+  kernel's derived access; declared roles must COVER every kernel (vk's rule). Proven by
+  `tests/_mtl_toy.das` (+ gate in the misc kernels file): ast_dump shows divergent staging
+  (shift stages no xs), cover-rule poison refuses at compile, oracle poison reds at runtime,
+  suite green under HAZARD_STRICT. `family=` was NOT ported — it is vulkan-specific plumbing
+  (the shared VkdClass global + set_ builder + pipe-slot ordinals); metal's enc_ builder is
+  the entire generated surface, so there is nothing for a family to share. If reification
+  later wants cross-class PSO/source sharing (followup_general #9's duplicate-PSO shape),
+  that is a PSO-lifecycle question, not a lens-surface one.
+- **MoeMulMm inheritance: NOT the planned free win — needs a ruling.** The in-source truth
+  (`followup_general.md` #8 + the class bodies) contradicts "verbatim/zero-risk": K6 caches
+  superblock scalars ACROSS loop iterations (`sv`/`dall`, every 8th kb), Q8 walks advancing
+  weight pointers, and Mx4 (not in #8) needs a pre-loop hook (vtab staging into @workgroup +
+  bias-seeding the accumulator LOCALS). #8's named unlock (pointer-typed helper params,
+  `@threadgroup`/device) HAS since landed in msl_emit, and Q8/K6 are also expressible
+  without it (index-math / reload-per-kb) — but every route changes hot prefill kernel
+  inner loops (measurement discipline applies, oracle gates cover correctness only), and
+  Q8/Mx4 joining the base means renumbering their cnt/basep/bkt bindings 6/7/8 → 7/8/9
+  (production encoders + oracle gates churn). Options: (i) defer to reification where these
+  families get restamped anyway (recommended), (ii) a measured mini-leg now with
+  interleaved A/B benches per format.
 
 ## Ledger
 

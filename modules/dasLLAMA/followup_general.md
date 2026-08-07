@@ -97,6 +97,14 @@
    Both become expressible the moment a helper can take a pointer or a thread-space reference it
    may advance, which is the annotation work already ruled in (`@threadgroup p : float4?` and its
    `device` default). Done = k6 and q8 derive from the same base, and the family is five for five.
+   Status 2026-08-07 (vulkan-on-mac leg (b) recon): the pointer-param unlock HAS landed in
+   msl_emit (address-space-checked pointer params), and Q8/K6 are also expressible without it
+   (index-math / reload-per-kb) — but every route changes these hot inner loops (interleaved A/B
+   measurement required; the kernels-suite oracles cover correctness only), Mx4 is a third
+   stay-out (pre-loop vtab staging + bias-seeded accumulator locals need a prologue hook), and
+   Q8/Mx4 joining the base renumbers cnt/basep/bkt 6/7/8 → 7/8/9 (encoder + oracle-gate churn).
+   Parked pending a ruling: fold into reification vs a measured mini-leg (plans/vulkan-on-mac.md
+   leg (b)).
 
 9. **Prefill compiles its own PSO for kernels decode already has.** `enc_qk_norm_pf` in
    dasllama_metal_prefill.das is `enc_qk_norm`'s body with `g_pf_pso_qknorm` in place of

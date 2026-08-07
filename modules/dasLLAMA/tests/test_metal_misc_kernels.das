@@ -7,6 +7,7 @@ require dasllama/dasllama_convert   // dequant_k6_plane_superblock_at — the em
 require ?das_metal dasllama/dasllama_metal_kernels  // the decode elementwise/misc kernel set (Apple builds)
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require ?das_metal _metal_kernel_common   // shared buf helpers + eyeball-dump compares
+require ?das_metal _mtl_toy               // the [metal_dispatch] multi-kernel fixture
 require llvm/daslib/f16_cvt         // f32_to_f16 — packing the synthetic scale planes
 require math
 
@@ -570,6 +571,51 @@ def private softcap_row_gate(t : T?; dev, queue; total : int; cap : float) {
     delete want
 }
 
+// The [metal_dispatch] multi-kernel mechanism, end to end: MtlToy's two kernel= instances
+// dispatch through their GENERATED builders (kn_ rail, not hand binds) chained in one encoder
+// — scale (ys = xs*gain) then shift (ys += gain). Each builder stages only its own kernel's
+// derived access (verified by ast_dump: shift stages no xs); under the suite's HAZARD_STRICT
+// an unstaged dispatch would panic. Single mul / single add per element -> bit-exact oracle.
+def private mtl_toy_lens_gate(t : T?; dev, queue; n : int) {
+    let tag = "mtl_toy multi-kernel n={n}"
+    var err : string
+    g_mtl_toy_scale_pso = pipeline_from_source(dev, mtl_toy_scale_msl, mtl_toy_scale_msl_entry, mtl_toy_scale_msl_fastmath, err)
+    t |> success(g_mtl_toy_scale_pso != null, "{tag}: scale pipeline: {err}")
+    g_mtl_toy_shift_pso = pipeline_from_source(dev, mtl_toy_shift_msl, mtl_toy_shift_msl_entry, mtl_toy_shift_msl_fastmath, err)
+    t |> success(g_mtl_toy_shift_pso != null, "{tag}: shift pipeline: {err}")
+    return if (g_mtl_toy_scale_pso == null || g_mtl_toy_shift_pso == null)
+    let gain = 0.5
+    var xv : array<float>
+    xv |> resize(n)
+    for (i in range(n)) {
+        xv[i] = 0.11 * float(i % 73) - 4.2
+    }
+    var want : array<float>
+    want |> resize(n + 16)
+    for (i in range(n + 16)) {
+        want[i] = i < n ? xv[i] * gain + gain : -1000.0   // the ka.n guard must leave the pad untouched
+    }
+    var bxs = buf_upload(dev, xv)
+    var bys = buf_fill(dev, n + 16, -1000.0)
+    var ka = MtToyArgs(n = uint(n), gain = gain)
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        enc_mtl_toy_scale(enc, bxs, bys, ka, int64(n))
+        enc_mtl_toy_shift(enc, bxs, bys, ka, int64(n))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_exact(bys, want, tag), 0)
+    }
+    metal_release(bxs)
+    metal_release(bys)
+    metal_release(g_mtl_toy_scale_pso)
+    metal_release(g_mtl_toy_shift_pso)
+    g_mtl_toy_scale_pso = null
+    g_mtl_toy_shift_pso = null
+    delete xv
+    delete want
+}
+
 [test]
 def test_metal_misc_kernels(t : T?) {
     t |> run("decode elementwise/misc kernels == direct CPU oracles") <| @(t : T?) {
@@ -595,6 +641,7 @@ def test_metal_misc_kernels(t : T?) {
                 geglu_gate(t, dev, queue, 800)
                 suppress_row_gate(t, dev, queue, 2000, 37)
                 softcap_row_gate(t, dev, queue, 900, 30.0)
+                mtl_toy_lens_gate(t, dev, queue, 1000)      // n%64 != 0 — the tail workgroup's guard
                 metal_release(queue)
             }
             t |> equal(metal_log_leaks_if_any(), 0l)
