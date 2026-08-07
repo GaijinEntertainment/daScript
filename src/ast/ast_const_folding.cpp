@@ -360,6 +360,8 @@ namespace das {
     }
 
     ExpressionPtr FoldingVisitor::evalAndFold ( Expression * expr ) {
+        // nothing to fold without a type, and simulating an untyped node segfaults
+        if ( !expr->type ) return expr;
         if ( expr->type->baseType == Type::tString ) return evalAndFoldString(expr);
         if ( expr->rtti_isConstant() ) return expr->clone();
         bool failed;
@@ -429,6 +431,7 @@ namespace das {
     }
 
     ExpressionPtr FoldingVisitor::evalAndFoldString ( Expression * expr ) {
+        if ( !expr->type ) return expr;
         if ( expr->rtti_isStringConstant() ) return expr->clone();
         bool failed;
         vec4f value = eval(expr, failed);
