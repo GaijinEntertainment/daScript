@@ -99,13 +99,18 @@ def public profile_category(name : string; color : uint = 0u) : int {
     return id
 }
 
+[cold_path]   // once per marker name: register with the que + remember the id
+def private profile_marker_register(name : string) : int {
+    let id = jobque_trace_marker_name(name)
+    g_markerIds[name] = id
+    return id
+}
+
 def public profile_marker_id(name : string) : int {
     //! Register/look up a marker kind (e.g. "token", "frame"); idempotent per name.
     let existing = g_markerIds?[name] ?? -1
     if (existing >= 0) return existing
-    let id = jobque_trace_marker_name(name)
-    g_markerIds[name] = id
-    return id
+    return profile_marker_register(name)
 }
 
 def public profile_marker(id : int; arg : int = 0) {   // nolint:LINT012,LINT019 — args only read when JOBQUE_PROFILING_ENABLED compiles the body in
