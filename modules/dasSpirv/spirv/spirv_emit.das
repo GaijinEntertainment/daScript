@@ -148,6 +148,7 @@ struct EmitCtx {
     member_syms   : array<VariablePtr>          // the synthetic Variables (rooted here for gc_node)
     invoke_fields : table<uint64>               // intptr(ExprField) of a self-method invoke's method-field read — visitExprField skips these (the invoke arm consumes them structurally)
     invoke_targets : table<uint64; uint64>      // intptr(ExprInvoke) -> intptr(devirtualized Function), resolved at discovery
+    decode_methods : table<uint64; FunctionPtr> // intptr(ExprField of coopmatLoadTensorDecode's self.<method> argument) -> the devirtualized decode Function, resolved at discovery
 }
 
 // A user-defined daslang function called from a shader: emitted as its own OpFunction. Ids are
@@ -175,6 +176,10 @@ struct CallTemp {
 // with the rigid (PhysicalStorageBuffer block pointer, uint[2], uint[2]) signature and referenced by
 // id as OpCooperativeMatrixLoadTensorNV's DecodeFunc operand. Ids pre-allocate at registration so the
 // load arm can reference the not-yet-emitted body (bodies follow the user functions).
+// The CLASS-METHOD form ([spirv_decode] on a kernel-class method, referenced as `self.<method>`)
+// carries a leading self that exists only at das level: the emitted signature is the same rigid
+// 3-param shape, and the body's member reads resolve through member_vars like any method body —
+// that member access (a scale plane, @workgroup staging) is the form's whole point.
 struct DecodeFn {
     fn      : Function const?
     fn_id   : uint          // OpFunction result id (0 when !valid)
@@ -182,6 +187,7 @@ struct DecodeFn {
     ret_type : uint         // the tile component type (f16 / f32 / s8)
     block_type : uint       // the std430-packed Block struct the PSB pointer points at
     block_ptr_type : uint   // OpTypePointer PhysicalStorageBuffer <block_type>
+    has_self : bool         // class-method form: arguments[0] is the das-level self, params shift by one
     valid   : bool
 }
 
@@ -4891,16 +4897,28 @@ class SpirvEmit : AstVisitor {
                 let da0 = expr.arguments[8]
                 let r2v = da0 ?as ExprRef2Value
                 let da = r2v != null ? r2v.subexpr : da0
+                var dfn : Function const?
                 let fa = da ?as ExprAddr
-                if (fa == null || fa.func == null) {
-                    errs |> push("coopmatLoadTensorDecode: the last argument must be @@<decode function>")
+                if (fa != null && fa.func != null) {
+                    dfn = fa.func
+                } else {
+                    // `self.<method>` — the class-method form: discovery resolved the field through
+                    // the concrete class's dispatch table (SpirvMethodScan), giving the decode body
+                    // member access (scale planes, @workgroup staging)
+                    let mf = da ?as ExprField
+                    if (mf != null) {
+                        dfn = ctx.decode_methods?[intptr(mf)] ?? null
+                    }
+                }
+                if (dfn == null) {
+                    errs |> push("coopmatLoadTensorDecode: the last argument must be @@<decode function> or self.<decode method>")
                     return expr
                 }
-                if (!function_has_annotation(fa.func, "spirv_decode")) {
-                    errs |> push("coopmatLoadTensorDecode: '{fa.func.name}' must be annotated [spirv_decode]")
+                if (!function_has_annotation(dfn, "spirv_decode")) {
+                    errs |> push("coopmatLoadTensorDecode: '{dfn.name}' must be annotated [spirv_decode]")
                     return expr
                 }
-                let fid = register_decode_func(bm, *ctx, fa.func, errs)
+                let fid = register_decode_func(bm, *ctx, dfn, errs)
                 if (fid == 0u) return expr
                 ta_mask = uint(SpvTensorAddressingOperands.DecodeFunc)
                 ta_extra = fid
@@ -6590,11 +6608,23 @@ def private register_decode_func(var m : SpirvModule; var ctx : EmitCtx; f : Fun
         errors |> push("decode function '{f.name}': result must be float16, float, or int8 (the tile's component type)")
         df.valid = false
     }
-    if (length(f.arguments) != 3) {
+    // the class-method form carries a das-level-only leading self (kernel-class frontend); the
+    // emitted signature is the rigid 3-param shape either way, so validation just shifts by one
+    df.has_self = length(f.arguments) == 4 && "{f.arguments[0].name}" == "self"
+    if (length(f.arguments) == 4 && !df.has_self) {
+        errors |> push("decode function '{f.name}': a 4-parameter decode must be a class method (leading self)")
+        df.valid = false
+    }
+    if (df.has_self && ctx.kernel_class == null) {
+        errors |> push("decode function '{f.name}': the class-method form requires a class kernel ([spirv_kernel] on a method)")
+        df.valid = false
+    }
+    if (length(f.arguments) != 3 && length(f.arguments) != 4) {
         errors |> push("decode function '{f.name}': signature must be (block : <struct>; blockCoord, coordInBlock : uint2)")
         df.valid = false
     } else {
-        let a0 = f.arguments[0]._type
+        let ab = df.has_self ? 1 : 0
+        let a0 = f.arguments[ab]._type
         if (a0 == null || a0.baseType != Type.tStructure || a0.structType == null) {
             errors |> push("decode function '{f.name}': the first parameter must be the block struct")
             df.valid = false
@@ -6607,10 +6637,10 @@ def private register_decode_func(var m : SpirvModule; var ctx : EmitCtx; f : Fun
                 df.block_ptr_type = type_pointer(m, SpvStorageClass.PhysicalStorageBuffer, blk.type_id)
             }
         }
-        for (i in range(1, 3)) {
+        for (i in range(ab + 1, ab + 3)) {
             let at = f.arguments[i]._type
             if (at == null || at.baseType != Type.tUInt2) {
-                errors |> push("decode function '{f.name}': parameter {i + 1} must be uint2 (the tensor coordinates)")
+                errors |> push("decode function '{f.name}': parameter {i - ab + 1} must be uint2 (the tensor coordinates)")
                 df.valid = false
             }
         }
@@ -6634,11 +6664,18 @@ def private register_decode_func(var m : SpirvModule; var ctx : EmitCtx; f : Fun
 // (LocalVar.storage + e2align carry that through ptr_of/value_of).
 def private emit_decode_function(var m : SpirvModule; var ctx : EmitCtx; df : DecodeFn; var errors : array<string>) {
     let f = unsafe(reinterpret<FunctionPtr>(df.fn))   // read-only emission; strip pointee const
+    // the class-method form: the leading self exists only at das level — bind it as the body's
+    // self_arg so member reads resolve through member_vars, and shift the emitted params by one
+    let ab = df.has_self ? 1 : 0
+    let saved_self = ctx.self_arg
+    if (df.has_self) {
+        ctx.self_arg = intptr(f.arguments[0])
+    }
     emit(m, SEC_FUNCS, SpvOp.Function, df.ret_type, df.fn_id, 0u, df.type_id)
     let p0 = alloc_id(m)
     emit(m, SEC_FUNCS, SpvOp.FunctionParameter, df.block_ptr_type, p0)
     emit(m, SEC_DECOR, SpvOp.Decorate, p0, uint(SpvDecoration.Aliased))
-    ctx.local_vars |> insert(intptr(f.arguments[0]), LocalVar(ptr_id = p0, value_type = df.block_type,
+    ctx.local_vars |> insert(intptr(f.arguments[ab]), LocalVar(ptr_id = p0, value_type = df.block_type,
         is_opaque = true, storage = SpvStorageClass.PhysicalStorageBuffer))
     let arr2 = type_array(m, type_uint(m), 2)
     var coord_pids : uint[2]
@@ -6661,7 +6698,7 @@ def private emit_decode_function(var m : SpirvModule; var ctx : EmitCtx; df : De
         emit(m, SEC_FUNCS, SpvOp.CompositeExtract, ut, e1, coord_pids[i - 1], 1u)
         let vid = alloc_id(m)
         emit(m, SEC_FUNCS, SpvOp.CompositeConstruct, uv2, vid, e0, e1)
-        ctx.locals |> insert(intptr(f.arguments[i]), vid)
+        ctx.locals |> insert(intptr(f.arguments[ab + i]), vid)
     }
     ctx.terminated = false
     collect_locals(m, ctx, f.body, errors)
@@ -6672,6 +6709,7 @@ def private emit_decode_function(var m : SpirvModule; var ctx : EmitCtx; df : De
         emit(m, SEC_FUNCS, SpvOp.Unreachable)
     }
     emit(m, SEC_FUNCS, SpvOp.FunctionEnd)
+    ctx.self_arg = saved_self
 }
 
 // Mini-visitor: collect the user-function call targets directly invoked from one function body
@@ -6722,7 +6760,41 @@ class private SpirvMethodScan : AstVisitor {
     @do_not_delete ctx : EmitCtx?
     self_arg : uint64            // the SCANNED function's self argument
     found : array<FunctionPtr>   // methods invoked from this body, in discovery order
+    found_decode : array<FunctionPtr>   // [spirv_decode] methods referenced as `self.<method>`, in discovery order
     errs : array<string>
+    // the decode-method reference (coopmatLoadTensorDecode(..., self.<method>)): resolve the field
+    // through the dispatch table now and suppress its structural read — the load arm passes the
+    // function by ID (the DecodeFunc operand), no value is ever produced
+    def override preVisitExprCall(expr : ExprCall?) : void {
+        if (expr.func == null || length(expr.arguments) != 9) return
+        var co = expr.func
+        while (co.fromGeneric != null) {
+            co = co.fromGeneric
+        }
+        if ("{co.name}" != "coopmatLoadTensorDecode") return
+        let da0 = expr.arguments[8]
+        let r2v = da0 ?as ExprRef2Value
+        let da = r2v != null ? r2v.subexpr : da0
+        let fld = da ?as ExprField
+        // fld == null is the @@fn form — consumed whole by the load arm
+        if (fld == null || key_exists(ctx.decode_methods, intptr(fld))) return
+        var be = fld.value
+        let br2v = be ?as ExprRef2Value
+        if (br2v != null) {
+            be = br2v.subexpr
+        }
+        let bv = be ?as ExprVar
+        if (bv == null || !bv.varFlags.argument || intptr(bv.variable) != self_arg) return
+        var lerr : array<string>
+        var mfn = resolve_kernel_method(ctx, "{fld.name}", lerr)
+        errs |> push_from(lerr)
+        delete lerr
+        if (mfn == null) return
+        ctx.decode_methods |> insert(intptr(fld), mfn)
+        ctx.invoke_fields |> insert(intptr(fld))
+        ctx.invoke_fields |> insert(intptr(da0))
+        found_decode |> push(mfn)
+    }
     def override preVisitExprInvoke(expr : ExprInvoke?) : void {
         if (key_exists(ctx.invoke_targets, intptr(expr))) return
         let fld = invoke_self_method_field(self_arg, expr)
@@ -6765,8 +6837,30 @@ def private discover_kernel_methods(var m : SpirvModule; var ctx : EmitCtx; body
     }
     errors |> push_from(sc.errs)
     var found <- sc.found
+    var found_decode <- sc.found_decode
     unsafe {
         delete sc
+    }
+    // a decode method is emitted by the decode rail, never as a user function — but its free
+    // callees and any module globals it touches classify exactly like a method's (its MEMBER
+    // reads need nothing: classify_kernel_members registered every member up front)
+    for (dfn in found_decode) {
+        collect_dependencies(dfn) $(vfun, vvar) {
+            for (v in vvar) {
+                if (!key_exists(ctx.globals, intptr(v))) {
+                    classify_global(m, ctx, v, stage, reflection, errors)
+                }
+            }
+            for (uffn in vfun) {
+                if (is_user_shader_func(uffn, entry)) {
+                    register_user_func(m, ctx, uffn, errors)
+                }
+            }
+        }
+    }
+    found_decode |> clear()   // borrowed AST pointers — release the buffer only
+    unsafe {
+        delete found_decode
     }
     for (mfn in found) {
         let key = intptr(mfn)

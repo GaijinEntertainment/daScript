@@ -42,7 +42,7 @@ def private check_rejects(t : T?; fixture, needle : string) {
 }
 
 [test]
-def test_fail_closed_rejections(t : T?) {
+def test_fail_closed_rejections(t : T?) {   // nolint:STYLE038 — flat one-check-per-fixture list
     t |> run("emitter rejects shader-illegal constructs cleanly") <| @(t : T?) {
         check_rejects(t, "_fc_call", "cannot call 'safe_acos'")
         check_rejects(t, "_fc_global", "unsupported global 'g_scale'")
@@ -76,6 +76,9 @@ def test_fail_closed_rejections(t : T?) {
         check_rejects(t, "_fc_mutual", "recursion is not supported")
         check_rejects(t, "_fc_badparam", "parameter 'x' of type tInt64 is not supported")
         check_rejects(t, "_fc_badret", "return type tInt64 is not supported")
+        // a 4-parameter [spirv_decode] is legal only as a kernel-class method (the leading self is
+        // erased from the emitted signature); a free function with 4 params is rejected outright
+        check_rejects(t, "_fc_decode4", "must be a class method (leading self)")
         // subpass input attachments + subpassLoad are fragment-only
         check_rejects(t, "_fc_subpass_stage", "subpassInput 'fc_subpass' is fragment-only")
         // mesh-shader output config: bad topology string (parsed in patch) + non-positive count (emit gate)
