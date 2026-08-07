@@ -190,12 +190,17 @@ def test_write_page_package(t : T?) {
             tt |> success(find(body, "release_embed_file") < 0, "no embeds without assets")
         }
         t |> run("declared assets become absolute-src embeds at /<path>") @(tt : T?) {
+            mkdir_rec(path_join(dir, "wt/tutorials/_assets/gltf"))
+            fwrite(path_join(dir, "wt/tutorials/_assets/gltf/BoomBox.glb"), "glb bytes")
+            let wt = replace(path_join(dir, "wt"), "\\", "/")
             let assets <- [ "tutorials/_assets/gltf/BoomBox.glb" ]
-            tt |> success(write_page_package(dir, "prog.das", assets, "/wt"), "written")
+            tt |> success(write_page_package(dir, "prog.das", assets, wt), "written")
             let body = fread(path_join(dir, ".das_package"))
             tt |> success(
-                find(body, "release_embed_file(\"/wt/tutorials/_assets/gltf/BoomBox.glb\", \"/tutorials/_assets/gltf/BoomBox.glb\")") >= 0,
+                find(body, "release_embed_file(\"{wt}/tutorials/_assets/gltf/BoomBox.glb\", \"/tutorials/_assets/gltf/BoomBox.glb\")") >= 0,
                 "embed line carries absolute src and MEMFS dst")
+            // embedded files live in the data segment: the package must widen INITIAL_MEMORY
+            tt |> success(find(body, "release_emcc_arg(\"-sINITIAL_MEMORY=") >= 0, "initial memory covers embeds")
         }
     }
 }

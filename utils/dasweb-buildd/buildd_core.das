@@ -244,12 +244,22 @@ def write_page_package(src_dir : string; entry : string; assets : array<string>;
     //! escape their string literals. Asset sources are absolute worktree paths
     //! (daspkg's path_join resolution keeps an absolute src as-is); each embeds
     //! at /<path> where the program's fopen("<path>") finds it.
+    var asset_bytes = 0l
     let embeds = build_string() $(writer) {
         for (a in assets) {
             // forward slashes regardless of host: emcc accepts them everywhere, and
             // the generated literal must never contain a backslash escape
             let src = replace(path_join(worktree, a), "\\", "/")
+            var sz_err = ""
+            asset_bytes += file_size(path_join(worktree, a), sz_err)
             writer |> write("    release_embed_file(\"{src}\", \"/{a}\")\n")
+        }
+        // Embedded files live in the wasm data segment, which must fit INITIAL_MEMORY
+        // at link (wasm-ld: "initial memory too small") — growth only helps later.
+        // Base 16MB link default + the embeds + slack, rounded to the 64KB wasm page.
+        if (asset_bytes > 0l) {
+            let initial : int64 = (asset_bytes + int64(24 * 1024 * 1024) + int64(0xFFFF)) & ~int64(0xFFFF)
+            writer |> write("    release_emcc_arg(\"-sINITIAL_MEMORY={initial}\")\n")
         }
     }
     let body = ("options gen2\n" +
