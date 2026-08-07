@@ -99,7 +99,7 @@ Vulkan GPU backend. Present only where the dasVulkan package is installed.
 | `DASLLAMA_VK_IMPORT` | flag | on | Stream mirrors import the mapped .dlim (VK_EXT_external_memory_host) instead of pinned copies; =0 restores the copy path. |
 | `DASLLAMA_TRIM` | flag | off | Serve from P3-trimmed vulkan images (big CPU weight families dropped; folded into the flavor identity). |
 | `DASLLAMA_VK_MEMPRIO` | flag | on | Tag allocations high-priority (VK_EXT_memory_priority) so the driver demotes desktop memory, not ours. |
-| `DASLLAMA_VK_FA` | flag | on | Vulkan flash-attention kernel; 0 falls back to the chunked path. |
+| `DASLLAMA_VK_FA` | flag | on | Vulkan flash attention: the decode fa kernel pick AND the cm2 prefill fa tile; 0 falls back to the chunked/scalar paths. |
 | `DASLLAMA_VK_REBAR` | flag | on | Use a ReBAR device-local host-visible heap when one larger than 1GB is present. |
 | `DASLLAMA_CM2_TILE` | number | 0 | cm2 prefill tile pick: 0 = occupancy heuristic, 128 = force the m tile, 256 = force the l tile (A/B instrument). |
 | `DASLLAMA_CM2_SPLITK` | number | 0 | cm2 split-k: 0 = occupancy heuristic, 1 = off, N = force N k-chunks (A/B instrument; shrinks if N strands an empty tail). |

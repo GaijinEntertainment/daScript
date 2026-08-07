@@ -123,6 +123,7 @@ def cm2_splitk_env : int64 {
     return g_cm2_splitk
 }
 
+
 // the cm2 tile pick, llama.cpp's guess mirrored onto our two tiles (no s tile — GEMV owns the
 // narrow-n end): l unless the m grid fills the SMs better. Pure in (d, cnt, sm_count), so the
 // pipe pick and the meta fill can never disagree
@@ -411,6 +412,7 @@ struct GpuState {
     rows_per_wg : int64      // subgroups per workgroup = output rows per workgroup
     has_coopmat : bool       // device supports VK_KHR_cooperative_matrix (the f16/int8 tensor tiles)
     has_coopmat2 : bool      // device supports NV_cooperative_matrix2 (tensor-addressed wg tiles + decode fns)
+    has_coopmat2_fa : bool   // ... plus the cm2 flash-attention trio (reductions, conversions, per-element ops)
     coopmat_mode : int       // Q8_0 prefill GEMM: 0 = sdot4, 1 = f16 coopmat, 2 = int8 coopmat, 3 = mul_mm L-tile (default), 4 = cm2 decode-in-load
     sm_count : int           // shaderSMCount (VK_NV_shader_sm_builtins; 0 = unknown -> l-tile always, no split-k)
     weight_budget : int64    // resident-weight cap — queried heap budget minus reserve, or VRAM_BUDGET
@@ -896,6 +898,7 @@ def vk_moe_init : bool {
     // coopmat requested whenever supported — the fa twin needs it even in sdot4 GEMM mode
     g_gpu.has_coopmat = cooperative_matrix_supported(g_gpu.phys)
     g_gpu.has_coopmat2 = g_gpu.has_coopmat && cooperative_matrix2_supported(g_gpu.phys)
+    g_gpu.has_coopmat2_fa = g_gpu.has_coopmat2 && cooperative_matrix2_fa_supported(g_gpu.phys)
     g_gpu.coopmat_mode = resolve_coopmat_mode(g_gpu.has_coopmat, g_gpu.has_coopmat2)
     g_gpu.sm_count = query_sm_count(g_gpu.phys)
     // dedicated transfer family: streamed copies overlap compute (DASLLAMA_VK_XFERQ=0 = bisect hatch)
@@ -1895,6 +1898,12 @@ struct RDec {
     pf_xf, pf_af, pf_hf : uint64  // cm2 (fmt-6) f16 twin feeds: xb rows, attn rows, hidden rows
     pf_splitk : uint64            // cm2 split-k f32 partial planes (SplitKReduce input)
     pf_splitk_bytes : int64
+    // cm2 flash attention (armed by pf_setup when the device carries the fa trio and hs is 64/128):
+    // f16 mirror shadows fed per window by fa_kvcvt, one cvt set pair (bases ride the push)
+    pf_facm2 : bool
+    kh_mirror, vh_mirror : uint64   // [n_layers x seq_cap x kv_dim] f16
+    pf_facvt_k_set : VkDescriptorSet
+    pf_facvt_v_set : VkDescriptorSet
     pf_logits_host : HostBuf
     pf_meta : array<HostBuf>      // one host meta per (layer, role) + prologue/final/cls
     pf_sets : array<VkDescriptorSet>
@@ -2038,6 +2047,7 @@ let VHZ_GATE = 0x800u     // ffn gate plane
 let VHZ_UP = 0x1000u      // ffn up plane
 let VHZ_HQ = 0x2000u      // requantized hidden hq+hs
 let VHZ_FFO = 0x4000u     // ffn down out
+let VHZ_MIRH = 0x8000u    // f16 k/v mirror shadows (the cm2 flash-attention feed)
 let VHZ_LOG = 0x10000u    // logits
 let VHZ_COS = 0x20000u    // rope cos/sin rows
 
@@ -2362,7 +2372,7 @@ def vhz_trace : bool {
     return g_vhz_trace != 0
 }
 
-var g_vk_fa = -1   // DASLLAMA_VK_FA=0 pins the generic da_attn_b (flash-attn bisect hatch)
+var g_vk_fa = -1   // DASLLAMA_VK_FA=0 pins the generic da_attn_b AND disables the cm2 prefill fa tile (flash-attn bisect hatch)
 
 def vk_fa_on : bool {
     if (g_vk_fa < 0) {

@@ -400,6 +400,32 @@ class F16Cvt {
     }
 }
 
+struct FaCvtArgs {
+    base : uint    // element base of the window (w0 * kvd)
+    nelem : uint   // window element count (rows * kvd; kvd is 32-aligned so 4-wide is exact)
+}
+
+// windowed f32 -> f16 at a base offset: the flash-attention K/V shadow append — each window
+// converts only its new rows, so the f16 planes accumulate alongside the f32 originals
+[vk_dispatch(name = "fa_kvcvt_cls", grid = "wgs", params = "wgs : int64")]
+class FaKvCvt {
+    @ssbo @binding = 0 src : array<float>
+    @ssbo @binding = 1 outh : array<float16>
+    @push_constant pa : FaCvtArgs
+
+    [spirv_kernel(local_size_x = 256, name = "fa_kvcvt_cls_spv")]
+    def run {
+        let e = gl_GlobalInvocationID.x * 4u
+        if (e < pa.nelem) {
+            let s = pa.base + e
+            outh[s] = float16(src[s])
+            outh[s + 1u] = float16(src[s + 1u])
+            outh[s + 2u] = float16(src[s + 2u])
+            outh[s + 3u] = float16(src[s + 3u])
+        }
+    }
+}
+
 // ===== the MoE combine =====
 
 struct CombineArgs {
@@ -1295,6 +1321,205 @@ class AtAttn : AtAttnBase {
                 jj++
             }
         }
+    }
+}
+
+// ===== cm2 flash attention (llama.cpp's flash_attn_cm2 shape: Br=Bc=64, online softmax on
+// whole-workgroup tiles). One wg per (head, 64-query tile); Q loads as an f32 accumulator and
+// use-converts to f16 A; K^T loads through the transpose view from the f16 K shadow; the causal
+// mask computes on the fly in a per-element callback (no mask buffer); softmax state, the P
+// conversion, and the O rescale ride the reduce/per-element/componentwise rails. =====
+
+[spirv_combine]
+def facm2_max(a, b : float) : float => max(a, b)
+
+[spirv_combine, unused_argument(b)]
+def facm2_smear(a, b : float) : float => a
+
+[spirv_per_element, unused_argument(r, c)]
+def facm2_exp(r, c : uint; v : float) : float => exp(v)
+
+[spirv_per_element, unused_argument(r, c)]
+def facm2_pick(r, c : uint; v, o : float) : float => max(v, o)
+
+// causal: key kbase+c may not exceed query w0+q0+r (-FLT_MAX/2 keeps Mold-M NaN-free, llama.cpp's
+// choice); padding rows keep their causal window so no row is all -inf (rowsum stays positive)
+[spirv_per_element]
+def facm2_mask(r, c : uint; v : float; qbase, kbase : uint) : float => kbase + c > qbase + r ? -1.7e38 : v
+
+[spirv_per_element, unused_argument(r, c)]
+def facm2_recip(r, c : uint; v : float) : float => v == 0.0 ? 0.0 : 1.0 / v
+
+struct FaCm2Args {
+    rows : uint     // window query rows
+    w0 : uint       // window base (queries attend positions [0, w0 + row])
+    qd : uint       // q/o row stride (n_heads * hs)
+    kvd : uint      // k/v row stride (n_kv * hs)
+    kv_mul : uint   // GQA ratio (head / kv_mul = kv head)
+    kvbase : uint   // element base of this layer's plane in the K/V shadow mirrors
+    scale : float
+}
+
+// hs=64 (tinyllama-class). The h128 twin below differs only in the head-size-shaped tiles —
+// duplication tolerated until the kernel-reification arc.
+[vk_dispatch(name = "fa_cm2_h64_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H64 {
+    @ssbo @binding = 0 qpanel : array<float>     // the prepped/roped window q rows (window-local)
+    @ssbo @binding = 1 kh : array<float16>       // f16 K shadow at absolute positions
+    @ssbo @binding = 2 vh : array<float16>       // f16 V shadow at absolute positions
+    @ssbo @binding = 3 outp : array<float>       // attention out plane (rows x qd)
+    @push_constant pa : FaCm2Args
+
+    [spirv_kernel(local_size_x = 128, name = "fa_cm2_h64_cls_spv")]
+    def run {
+        let qtiles = (pa.rows + 63u) / 64u
+        let h = gl_WorkGroupID.x / qtiles
+        let q0 = (gl_WorkGroupID.x % qtiles) * 64u
+        let kvh = h / pa.kv_mul
+        let kvlen = pa.w0 + pa.rows
+        var tlq : tensorLayout2DPad
+        tensorLayoutCreate(tlq)
+        tensorLayoutSetDimension(tlq, pa.rows, pa.qd)
+        tensorLayoutSetStride(tlq, pa.qd, 1u)
+        var tlk : tensorLayout2DPad
+        tensorLayoutCreate(tlk)
+        tensorLayoutSetDimension(tlk, kvlen, pa.kvd)
+        tensorLayoutSetStride(tlk, pa.kvd, 1u)
+        var tlo : tensorLayout2DPad
+        tensorLayoutCreate(tlo)
+        tensorLayoutSetDimension(tlo, pa.rows, pa.qd)
+        tensorLayoutSetStride(tlo, pa.qd, 1u)
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        var q : coopmatWgAcc_f32_64x64
+        coopmatLoadTensor(q, qpanel, 0u, tlq, q0, 64u, h * 64u, 64u)
+        coopmatScale(q, pa.scale)
+        var qf : coopmatWgA_f16_64x64
+        coopmatConvert(qf, q)
+        var mrow : coopmatWgAcc_f32_64x64
+        coopmatFill(mrow, -1.7e38)
+        var lrow : coopmatWgAcc_f32_64x64
+        var o : coopmatWgAcc_f32_64x64
+        let kmax = pa.w0 + min(q0 + 64u, pa.rows)   // causal bound (exclusive) of the tile's last row
+        var j = 0u
+        while (j < kmax) {
+            var s : coopmatWgAcc_f32_64x64
+            var kt : coopmatWgB_f16_64x64
+            coopmatLoadTensor(kt, kh, pa.kvbase, tlk, j, 64u, kvh * 64u, 64u, tv)
+            s = coopmatMulAdd(qf, kt, s)
+            coopmatPerElement(s, s, @@facm2_mask, pa.w0 + q0, j)
+            var rmax : coopmatWgAcc_f32_64x64
+            coopmatReduce(rmax, s, COOPMAT_REDUCE_ROW, @@facm2_max)
+            var mold : coopmatWgAcc_f32_64x64
+            coopmatCopy(mold, mrow)
+            coopmatPerElement(mrow, rmax, @@facm2_pick, mold)
+            coopmatSub(s, s, mrow)
+            coopmatPerElement(s, s, @@facm2_exp)                        // P = e^(S - M), in place
+            var em : coopmatWgAcc_f32_64x64
+            coopmatSub(em, mold, mrow)
+            coopmatPerElement(em, em, @@facm2_exp)                      // eM = e^(Mold - M)
+            var pf : coopmatWgA_f16_64x64
+            coopmatConvert(pf, s)
+            var rsum : coopmatWgAcc_f32_64x64
+            var one : coopmatWgB_f16_64x64
+            coopmatFill(one, 1.0)
+            rsum = coopmatMulAdd(pf, one, rsum)                         // rowsum by ones-matrix multiply
+            coopmatMulElem(lrow, em, lrow)
+            coopmatAdd(lrow, lrow, rsum)                                // L = eM*L + rowsum
+            var emd : coopmatWgAcc_f32_64x64
+            coopmatReduce(emd, em, COOPMAT_REDUCE_ROW, @@facm2_smear)
+            coopmatMulElem(o, emd, o)
+            var vt : coopmatWgB_f16_64x64
+            coopmatLoadTensor(vt, vh, pa.kvbase, tlk, j, 64u, kvh * 64u, 64u)
+            o = coopmatMulAdd(pf, vt, o)                                // O = eMdiag*O + P @ V
+            j += 64u
+        }
+        var ld : coopmatWgAcc_f32_64x64
+        coopmatReduce(ld, lrow, COOPMAT_REDUCE_ROW, @@facm2_smear)
+        coopmatPerElement(ld, ld, @@facm2_recip)
+        coopmatMulElem(o, ld, o)                                        // O /= L (padding rows discard at store)
+        coopmatStoreTensor(o, outp, 0u, tlo, q0, 64u, h * 64u, 64u)
+    }
+}
+
+// hs=128 (llama-3.2-3B-class): same algorithm on the 64x128 / 128x64 tile shapes
+[vk_dispatch(name = "fa_cm2_h128_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H128 {
+    @ssbo @binding = 0 qpanel : array<float>
+    @ssbo @binding = 1 kh : array<float16>
+    @ssbo @binding = 2 vh : array<float16>
+    @ssbo @binding = 3 outp : array<float>
+    @push_constant pa : FaCm2Args
+
+    [spirv_kernel(local_size_x = 128, name = "fa_cm2_h128_cls_spv")]
+    def run {
+        let qtiles = (pa.rows + 63u) / 64u
+        let h = gl_WorkGroupID.x / qtiles
+        let q0 = (gl_WorkGroupID.x % qtiles) * 64u
+        let kvh = h / pa.kv_mul
+        let kvlen = pa.w0 + pa.rows
+        var tlq : tensorLayout2DPad
+        tensorLayoutCreate(tlq)
+        tensorLayoutSetDimension(tlq, pa.rows, pa.qd)
+        tensorLayoutSetStride(tlq, pa.qd, 1u)
+        var tlk : tensorLayout2DPad
+        tensorLayoutCreate(tlk)
+        tensorLayoutSetDimension(tlk, kvlen, pa.kvd)
+        tensorLayoutSetStride(tlk, pa.kvd, 1u)
+        var tlo : tensorLayout2DPad
+        tensorLayoutCreate(tlo)
+        tensorLayoutSetDimension(tlo, pa.rows, pa.qd)
+        tensorLayoutSetStride(tlo, pa.qd, 1u)
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        var q : coopmatWgAcc_f32_64x128
+        coopmatLoadTensor(q, qpanel, 0u, tlq, q0, 64u, h * 128u, 128u)
+        coopmatScale(q, pa.scale)
+        var qf : coopmatWgA_f16_64x128
+        coopmatConvert(qf, q)
+        var mrow : coopmatWgAcc_f32_64x64
+        coopmatFill(mrow, -1.7e38)
+        var lrow : coopmatWgAcc_f32_64x64
+        var o : coopmatWgAcc_f32_64x128
+        let kmax = pa.w0 + min(q0 + 64u, pa.rows)
+        var j = 0u
+        while (j < kmax) {
+            var s : coopmatWgAcc_f32_64x64
+            var kt : coopmatWgB_f16_128x64
+            coopmatLoadTensor(kt, kh, pa.kvbase, tlk, j, 64u, kvh * 128u, 128u, tv)
+            s = coopmatMulAdd(qf, kt, s)
+            coopmatPerElement(s, s, @@facm2_mask, pa.w0 + q0, j)
+            var rmax : coopmatWgAcc_f32_64x64
+            coopmatReduce(rmax, s, COOPMAT_REDUCE_ROW, @@facm2_max)
+            var mold : coopmatWgAcc_f32_64x64
+            coopmatCopy(mold, mrow)
+            coopmatPerElement(mrow, rmax, @@facm2_pick, mold)
+            coopmatSub(s, s, mrow)
+            coopmatPerElement(s, s, @@facm2_exp)
+            var em : coopmatWgAcc_f32_64x64
+            coopmatSub(em, mold, mrow)
+            coopmatPerElement(em, em, @@facm2_exp)
+            var pf : coopmatWgA_f16_64x64
+            coopmatConvert(pf, s)
+            var rsum : coopmatWgAcc_f32_64x64
+            var one : coopmatWgB_f16_64x64
+            coopmatFill(one, 1.0)
+            rsum = coopmatMulAdd(pf, one, rsum)
+            coopmatMulElem(lrow, em, lrow)
+            coopmatAdd(lrow, lrow, rsum)
+            var emd : coopmatWgAcc_f32_64x128
+            coopmatReduce(emd, em, COOPMAT_REDUCE_ROW, @@facm2_smear)
+            coopmatMulElem(o, emd, o)
+            var vt : coopmatWgB_f16_64x128
+            coopmatLoadTensor(vt, vh, pa.kvbase, tlk, j, 64u, kvh * 128u, 128u)
+            o = coopmatMulAdd(pf, vt, o)
+            j += 64u
+        }
+        var ld : coopmatWgAcc_f32_64x128
+        coopmatReduce(ld, lrow, COOPMAT_REDUCE_ROW, @@facm2_smear)
+        coopmatPerElement(ld, ld, @@facm2_recip)
+        coopmatMulElem(o, ld, o)
+        coopmatStoreTensor(o, outp, 0u, tlo, q0, 64u, h * 128u, 128u)
     }
 }
 

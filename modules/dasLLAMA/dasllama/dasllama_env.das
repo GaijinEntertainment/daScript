@@ -266,7 +266,7 @@ struct public VulkanEnv {
     @clarg_doc = "Tag allocations high-priority (VK_EXT_memory_priority) so the driver demotes desktop memory, not ours."
     vk_memprio : bool = true
 
-    @clarg_doc = "Vulkan flash-attention kernel; 0 falls back to the chunked path."
+    @clarg_doc = "Vulkan flash attention: the decode fa kernel pick AND the cm2 prefill fa tile; 0 falls back to the chunked/scalar paths."
     vk_fa : bool = true
 
     @clarg_doc = "Use a ReBAR device-local host-visible heap when one larger than 1GB is present."

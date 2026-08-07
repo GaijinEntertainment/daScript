@@ -1896,6 +1896,126 @@ def test_vkd_at_attn(t0 : T?) {
 }
 
 [test]
+def test_vkd_fa_cm2(t0 : T?) {
+    t0 |> run("cm2 flash-attention family == the CPU oracle (h64 + h128, shadow cvt in-chain)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_fa_kvcvt_cls()) {   // engage the device without touching coopmat rails
+                feint("no Vulkan device — skipping\n")
+                return
+            }
+            if (!g_gpu.has_coopmat2_fa) {
+                feint("device lacks the cm2 flash-attention trio — skipping\n")
+                return
+            }
+            verify(ensure_fa_cm2_h64_cls() && ensure_fa_cm2_h128_cls(), "fa class rails must engage on an fa-capable device")
+            let nheads = 4
+            let kv_mul = 2
+            let rows = 77    // partial 64-tile: q0=64 has 13 valid rows — clamp loads + store discard run
+            let w0 = 64      // nonzero window base: the causal bound crosses K tiles mid-window
+            let scale = 0.125
+            for (hs in [64, 128]) {
+                let qd = nheads * hs
+                let kvd = (nheads / kv_mul) * hs
+                let kpos = w0 + rows
+                var qh : array<float>
+                var kh : array<float>
+                var vh : array<float>
+                qh |> resize(rows * qd)
+                kh |> resize(kpos * kvd)
+                vh |> resize(kpos * kvd)
+                for (i in range(rows * qd)) {
+                    qh[i] = float((i * 41) % 73) * 0.05 - 1.8
+                }
+                for (i in range(kpos * kvd)) {
+                    kh[i] = float((i * 17) % 97) * 0.03 - 1.4
+                    vh[i] = float((i * 53) % 89) * 0.04 - 1.7
+                }
+                let q_bytes = int64(rows * qd) * 4l
+                let m_bytes = int64(kpos * kvd) * 4l
+                let sh_bytes = int64(kpos * kvd) * 2l
+                let qdev = make_device_buf(q_bytes)
+                let kdev = make_device_buf(m_bytes)
+                let vdev = make_device_buf(m_bytes)
+                let khdev = make_device_buf(sh_bytes)
+                let vhdev = make_device_buf(sh_bytes)
+                let yd = make_device_buf(q_bytes)
+                var host = make_host_buf(q_bytes, true, [cached = true])
+                var y_cls : array<float>
+                y_cls |> resize(rows * qd)
+                unsafe {
+                    upload_region_at(qdev, 0l, addr<uint8 const?>(qh[0]), q_bytes)
+                    upload_region_at(kdev, 0l, addr<uint8 const?>(kh[0]), m_bytes)
+                    upload_region_at(vdev, 0l, addr<uint8 const?>(vh[0]), m_bytes)
+                    var sck = set_fa_kvcvt_cls(fixed_array(kdev, khdev),
+                        fixed_array(m_bytes, sh_bytes), fixed_array(2u, 16u))
+                    var scv = set_fa_kvcvt_cls(fixed_array(vdev, vhdev),
+                        fixed_array(m_bytes, sh_bytes), fixed_array(8u, 32u))
+                    var sfa = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yd),
+                        fixed_array(q_bytes, sh_bytes, sh_bytes, q_bytes),
+                        fixed_array(1u, 16u, 32u, 4u))
+                    var raw2 = alloc_cmd()
+                    let begin = VkCommandBufferBeginInfo()
+                    vk_check(vkBeginCommandBuffer(raw2, begin), null)
+                    var h2 : VkHaz
+                    var pcv = FaCvtArgs(base = 0u, nelem = uint(kpos * kvd))
+                    let cvtwgs = int64((kpos * kvd / 4 + 255) / 256)
+                    enc_fa_kvcvt_cls(raw2, h2, sck, pcv, cvtwgs)
+                    enc_fa_kvcvt_cls(raw2, h2, scv, pcv, cvtwgs)
+                    var pcf = FaCm2Args(rows = uint(rows), w0 = uint(w0), qd = uint(qd),
+                        kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u, scale = scale)
+                    let fawgs = int64(nheads * ((rows + 63) / 64))
+                    if (hs == 64) {
+                        enc_fa_cm2_h64_cls(raw2, h2, sfa, pcf, fawgs)
+                    } else {
+                        enc_fa_cm2_h128_cls(raw2, h2, sfa, pcf, fawgs)
+                    }
+                    vhz_dep(raw2, h2, 4u, 0u, true)
+                    cmd_copy_whole(raw2, yd, host.buf, q_bytes)
+                    vk_check(vkEndCommandBuffer(raw2), null)
+                    submit_wait(raw2)
+                    memcpy(addr<void?>(y_cls[0]), host.mapped, q_bytes)
+                }
+                // oracle mirrors the kernel's f16 grid: q pre-scales then rounds (the kernel's
+                // MatrixTimesScalar-then-convert), K/V round through the shadow; softmax stays f32
+                var qh2 : array<float>
+                var kh2 : array<float>
+                var vh2 : array<float>
+                qh2 |> resize(rows * qd)
+                kh2 |> resize(kpos * kvd)
+                vh2 |> resize(kpos * kvd)
+                for (i in range(rows * qd)) {
+                    qh2[i] = float(float16(qh[i] * scale))
+                }
+                for (i in range(kpos * kvd)) {
+                    kh2[i] = float(float16(kh[i]))
+                    vh2[i] = float(float16(vh[i]))
+                }
+                var y_ref : array<float>
+                y_ref |> resize(rows * qd)
+                for (r in range(rows)) {
+                    for (hh in range(nheads)) {
+                        attn_row_oracle(qh2, r * qd + hh * hs, kh2, 0, vh2, 0, kvd, hh, hs, kv_mul,
+                            w0 + r + 1, 1.0, y_ref, r * qd + hh * hs)
+                    }
+                }
+                let bad = mismatch_approx(y_cls, y_ref)
+                t |> success(bad == 0, "fa_cm2 hs {hs} matches the CPU oracle ({bad} of {rows * qd} off)")
+                delete qh
+                delete kh
+                delete vh
+                delete qh2
+                delete kh2
+                delete vh2
+                delete y_ref
+                delete y_cls
+            }
+        } else {
+            feint("dasVulkan not present — skipping\n")
+        }
+    }
+}
+
+[test]
 def test_vkd_da_attn_b(t0 : T?) {
     t0 |> run("batched decode attention class kernel == the CPU oracle (mirror offsets)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
