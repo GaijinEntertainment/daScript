@@ -645,7 +645,7 @@ def private handle_build_artifact(srv : WebSocketServer; var req : HttpRequest?;
     // STREAM registers ANY-method matching; the artifact surface is GET-only
     // (caddy's 1MB request-body cap on this route assumes no handler reads one)
     if (req.method != http_method.GET) {
-        log_request("GET", "/api/build/artifact", 404, ip, 0, 0, t0)
+        log_request("{req.method}", "/api/build/artifact", 404, ip, 0, 0, t0)
         respond(srv, writer, int(http_status.NOT_FOUND), "application/json",
             write_json(JV((error = "unknown artifact"))))
         return

@@ -903,7 +903,8 @@ http_status das_resp_file ( HttpResponse * resp, const char * filepath ) {
 }
 
 http_status das_resp_data ( HttpResponse * resp, const char * data, int32_t len, http_status status ) {
-    if ( len > 0 && (size_t)len > DAS_HV_BUFFERED_BODY_MAX ) {
+    if ( !data || len < 0 ) len = 0;
+    if ( (size_t)len > DAS_HV_BUFFERED_BODY_MAX ) {
         return das_resp_refuse_oversize(resp, "DATA", (size_t)len);
     }
     resp->content_type = APPLICATION_OCTET_STREAM;
