@@ -9,6 +9,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_kv_codec  // quantize_tq4kv_row/cvt_tq4kv_to_f32 — the codec under probe
 require dasllama/dasllama_tokenizer
 require llvm/daslib/f16_cvt
+require dasllama/dasllama_env
 
 // Is one channel order enough, or is it MoE-shaped? Run SmolLM2 over 5 text domains, learn a
 // pair-granular hot/quiet partition per (layer, head, side) two ways — GLOBAL (pooled, normalized
@@ -91,7 +92,7 @@ def pair_order_from(scores : array<double>; np : int64; var order : array<int>) 
 
 [export]
 def main {   // nolint:STYLE037,STYLE038 — two stats passes over (layer, head, side, domain) sharing every accumulator
-    let env = get_env_variable("DASLLAMA_MODELS_DIR")
+    let env = g_env_harness.models_dir
     let mdir = empty(env) ? "D:/Work/llama.cpp/models/" : env
     let path = path_join(mdir, "SmolLM2-135M-Instruct-Q8_0.gguf")
     if (!stat(path).is_valid) {

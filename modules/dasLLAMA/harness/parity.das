@@ -6,10 +6,10 @@ require daslib/jobque_boost
 require strings
 require daslib/strings_boost
 require daslib/clargs
-require daslib/fio   // has_env_variable / get_env_variable (the DASLLAMA_BATCH_GRID_2D A/B rail)
 require math
 require dasllama/dasllama_math  // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
 require dasllama/dasllama_layout  // convert_model_to_metal_blob — the blob-flavor transform
+require dasllama/dasllama_env
 
 // dasLLAMA parity harness — the dasLLAMA side of the token-for-token oracle check.
 // Feed the prompt token IDs the reference (harness/oracle/simple_ids) produced, greedily generate N
@@ -98,8 +98,8 @@ def main {
         setup_dasllama_jobque_()
         // A/B rail: force the 2-D batch chunk grid (0 = 1-D, 1 = fine, 2 = aligned) — the
         // knob-on GEN_IDS gate; parity stays raw-defaults otherwise
-        if (has_env_variable("DASLLAMA_BATCH_GRID_2D")) {
-            set_batch_grid_2d(to_int(get_env_variable("DASLLAMA_BATCH_GRID_2D")))
+        if (is_some(g_env_harness.batch_grid_2d)) {
+            set_batch_grid_2d(unwrap(g_env_harness.batch_grid_2d))
             print("batch grid 2d override: {get_batch_grid_2d()}\n")
         }
         let ids <- generate(t, s, prompt, length(prompt) + n_gen)

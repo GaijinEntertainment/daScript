@@ -5,7 +5,7 @@ options _function_length = 0        // one MSL kernel body + its hand-bound disp
 options _cyclomatic_complexity = 0  // same — the lab runners are flat knockout ladders
 
 require ?das_metal metal/das_metal_boost  // GPU driver half, Apple builds only
-require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
+require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require metal/msl_shader
 require dasllama/dasllama_metal_prefill   // the production MoE mul_mm MSL (zero copy drift)
 require dasllama/dasllama_metal_kernels   // the production MoE GEMV + geglu MSL (zero copy drift)
@@ -520,8 +520,8 @@ def private ref_q51_row(wq : array<uint8>; ws : array<uint8>; xf : array<float>;
 
 // ===== host plumbing =====
 
-def private want(filter_env, name : string) : bool {
-    return !has_env_variable(filter_env) || find(get_env_variable(filter_env), name) >= 0
+def private want(filter, name : string) : bool {
+    return empty(filter) || find(filter, name) >= 0
 }
 
 // generic (untyped param) — non-Apple builds never compile the Metal-typed body
@@ -1174,10 +1174,10 @@ def private check_gmx4(queue; gbufs : array<MetalBuffer?>; cpso; name : string;
 // applegpu disasm rail: DASMETAL_LAB_DUMP_MSL=<dir> writes the gmx4 kernel sources — checked at
 // the top of main (no device, no fills: the dump needs only the compile-time MSL globals)
 def private dump_gmx4_msl : bool {
-    if (!has_env_variable("DASMETAL_LAB_DUMP_MSL")) {
+    if (empty(g_env_bench.lab_dump_msl)) {
         return false
     }
-    let dd = get_env_variable("DASMETAL_LAB_DUMP_MSL")
+    let dd = g_env_bench.lab_dump_msl
     fwrite("{dd}/gmx4_prod.metal", metal_moe_gemv_mx4_msl)
     fwrite("{dd}/gmx4_arith.metal", lab_moe_mx4_a_msl)
     fwrite("{dd}/gmx4_tgv.metal", lab_moe_mx4_t_msl)
@@ -1263,7 +1263,7 @@ def private run_gmx4_lab(dev; queue; rounds : int; passes : int64) {
     }
     for (_rd in range(rounds)) {
         for (a in garms) {
-            if (!want("DASMETAL_LAB_ARMS", a._0)) {
+            if (!want(g_env_bench.lab_arms, a._0)) {
                 continue
             }
             let kind = a._1
@@ -1286,7 +1286,7 @@ def private run_gmx4_lab(dev; queue; rounds : int; passes : int64) {
     }
     print("--- gmx4 (gpt-oss shapes: E={GE} nfe={GNFE} dim={GDIM} k={GK}, {int(bytes_pass) / 1048576} MB routed/pass) ---\n")
     for (a in garms) {
-        if (!want("DASMETAL_LAB_ARMS", a._0)) {
+        if (!want(g_env_bench.lab_arms, a._0)) {
             continue
         }
         let per = gbest[a._0]
@@ -1774,7 +1774,7 @@ def private run_gmm4_lab(dev; queue; rounds : int; passes : int64) {
     }
     for (_rd in range(rounds)) {
         for (a in garms) {
-            if (!want("DASMETAL_LAB_ARMS", a._0)) {
+            if (!want(g_env_bench.lab_arms, a._0)) {
                 continue
             }
             let kind = a._1
@@ -1806,7 +1806,7 @@ def private run_gmm4_lab(dev; queue; rounds : int; passes : int64) {
     }
     print("--- gmm4 (gptoss pp512 shapes: E={GE} nk={GK} ntok={GNTOK}, {int(GNFE)}x{int(GDIM)} planes, {int(mac_mm) / 1000000000} GMAC/mm; in-graph ref 5.51 ms/mm) ---\n")
     for (a in garms) {
-        if (!want("DASMETAL_LAB_ARMS", a._0)) {
+        if (!want(g_env_bench.lab_arms, a._0)) {
             continue
         }
         let per = gbest[a._0]
@@ -1849,8 +1849,8 @@ def private main_apple(dummy) {
     if (dump_gmx4_msl()) {
         return
     }
-    let rounds = env_int("DASMETAL_LAB_ROUNDS", 3)
-    let passes = int64(env_int("DASMETAL_LAB_PASSES", 4))
+    let rounds = g_env_bench.lab_rounds
+    let passes = int64(g_env_bench.lab_passes)
     var dev = metal_create_system_default_device()
     if (dev == null) {
         print("no Metal device\n")
@@ -2055,7 +2055,7 @@ def private main_apple(dummy) {
     // true_ser runs pattern-free on a serial encoder — pattern 1 barriers would double-count
     for (_rd in range(rounds)) {
         for (a in arms) {
-            if (!want("DASMETAL_LAB_ARMS", a._0)) {
+            if (!want(g_env_bench.lab_arms, a._0)) {
                 continue
             }
             let name = a._0
@@ -2075,7 +2075,7 @@ def private main_apple(dummy) {
     }
     print("--- best per arm ({int(bytes_pass) / 1048576} MB routed weights/pass) ---\n")
     for (a in arms) {
-        if (!want("DASMETAL_LAB_ARMS", a._0)) {
+        if (!want(g_env_bench.lab_arms, a._0)) {
             continue
         }
         let per = best[a._0]
@@ -2095,7 +2095,7 @@ def private main_apple(dummy) {
     }
     for (_rd in range(rounds)) {
         for (a in sarms) {
-            if (!want("DASMETAL_LAB_ARMS", a._0)) {
+            if (!want(g_env_bench.lab_arms, a._0)) {
                 continue
             }
             let name = a._0
@@ -2125,7 +2125,7 @@ def private main_apple(dummy) {
     }
     print("--- per-site kernel matrix (w13 {int(bytes_w13) / 1048576} MB, w2 {int(bytes_w2) / 1048576} MB per pass) ---\n")
     for (a in sarms) {
-        if (!want("DASMETAL_LAB_ARMS", a._0)) {
+        if (!want(g_env_bench.lab_arms, a._0)) {
             continue
         }
         let per = sbest[a._0]

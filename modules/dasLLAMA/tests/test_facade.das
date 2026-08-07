@@ -6,6 +6,7 @@ require dasllama/dasllama   // the public facade — public-path tests exercise 
 require dasllama/dasllama_tokenizer
 require dasllama/dasllama_bpe
 require daslib/fio
+require dasllama/dasllama_env
 
 // The unified tokenizer facade (encode/decode/piece over auto-selected SPM/BPE) must produce
 // exactly what a caller writes today against the raw backend — so migrating onto it is a no-op.
@@ -13,7 +14,7 @@ require daslib/fio
 
 // override the machine-local model root with DASLLAMA_MODELS_DIR (e.g. on the x64 handoff box)
 def private models_dir() : string {
-    let env = get_env_variable("DASLLAMA_MODELS_DIR")
+    let env = g_env_harness.models_dir
     return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
 }
 

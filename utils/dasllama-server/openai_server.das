@@ -774,7 +774,7 @@ var private g_hardware_line = ""   // "<cpu> · N worker lanes · <gpu>" — com
 // The CPU marketing name: registry on Windows, /proc/cpuinfo on Linux, sysctl on macOS.
 def private cpu_brand : string {
     var out = ""
-    if (get_env_variable("OS") == "Windows_NT") {
+    if (get_platform_name() == "windows") {
         var args <- ["reg", "query", "HKLM\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
                      "/v", "ProcessorNameString"]
         run_and_capture(args, out, 10.0)

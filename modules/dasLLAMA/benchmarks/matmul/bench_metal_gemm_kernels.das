@@ -4,12 +4,11 @@ options _function_length = 0        // one MSL kernel body + its hand-bound disp
 options _cyclomatic_complexity = 0  // same — run_lab is the flat variant ladder
 
 require dastest/testing_boost
-require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
+require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require metal/msl_shader
 require ?das_metal metal/das_metal_boost  // GPU driver half, Apple builds only
 require ?das_metal dasllama/dasllama_metal_gemm  // the production kernel MSL (v0 baseline)
 require dasllama/dasllama_metal_kernels  // the production mul_mm companions (v25 = zero copy drift)
-require daslib/fio
 require math  // used only inside the Apple static_if half
 require strings
 
@@ -4094,13 +4093,13 @@ def private time_reps(queue; pso; bufs; groups : uint3; threads : uint; reps : i
     return gpu_ms / double(reps)
 }
 
-def private want(filter_env, name : string) : bool {
-    return !has_env_variable(filter_env) || find(get_env_variable(filter_env), name) >= 0
+def private want(filter, name : string) : bool {
+    return empty(filter) || find(filter, name) >= 0
 }
 
 def private run_lab(b : B?; variants) {
-    let ntok = int64(env_int("DASLLAMA_BENCH_NTOK", 512))
-    let rounds = env_int("DASMETAL_LAB_ROUNDS", 3)
+    let ntok = g_env_bench.bench_ntok ?? 512l
+    let rounds = g_env_bench.lab_rounds
     let ref_rows = 2l
     var dev = metal_create_system_default_device()
     if (dev == null) {
@@ -4112,7 +4111,7 @@ def private run_lab(b : B?; variants) {
     var psos <- [for (v in variants); compile_lab_pso(dev, v)]
     for (v, pso in variants, psos) {
         b |> success(pso != null, "pipeline compiles: {v.name}")
-        if (pso != null && want("DASMETAL_LAB_VARIANTS", v.name)) {
+        if (pso != null && want(g_env_bench.lab_variants, v.name)) {
             // register-pressure signal: a reg-limited kernel reports max_threads < 1024
             to_log(LOG_INFO, "{v.name}: max_threads={metal_pipeline_max_total_threads(pso)} simd_width={metal_pipeline_thread_execution_width(pso)}\n")
         }
@@ -4125,7 +4124,7 @@ def private run_lab(b : B?; variants) {
                    ("w2_3b", 8192l, 3072l)]
     let mp_max = align_up(ntok, 64l)
     for (sh in shapes) {
-        if (!want("DASMETAL_LAB_SHAPES", sh._0)) {
+        if (!want(g_env_bench.lab_shapes, sh._0)) {
             continue
         }
         let n = sh._1
@@ -4159,17 +4158,17 @@ def private run_lab(b : B?; variants) {
         // the f32-X / blob legs' buffers — built only when a variant that needs them will run
         var xf32On = false
         for (v in variants) {
-            if ((v.f32x || v.blob36 || v.blob34 || v.blob34p) && want("DASMETAL_LAB_VARIANTS", v.name) && (d % int64(v.bn)) == 0l) {
+            if ((v.f32x || v.blob36 || v.blob34 || v.blob34p) && want(g_env_bench.lab_variants, v.name) && (d % int64(v.bn)) == 0l) {
                 xf32On = true
             }
         }
         var blob36On = false
         var blob34On = false
         for (v in variants) {
-            if (v.blob36 && want("DASMETAL_LAB_VARIANTS", v.name) && (d % int64(v.bn)) == 0l) {
+            if (v.blob36 && want(g_env_bench.lab_variants, v.name) && (d % int64(v.bn)) == 0l) {
                 blob36On = true
             }
-            if ((v.blob34 || v.blob34p) && want("DASMETAL_LAB_VARIANTS", v.name) && (d % int64(v.bn)) == 0l) {
+            if ((v.blob34 || v.blob34p) && want(g_env_bench.lab_variants, v.name) && (d % int64(v.bn)) == 0l) {
                 blob34On = true
             }
         }
@@ -4202,7 +4201,7 @@ def private run_lab(b : B?; variants) {
         for (v, pso, idx in variants, psos, count()) {
             alive[idx] = false
             est_ms[idx] = -1.0lf
-            if (pso == null || (d % int64(v.bn)) != 0l || !want("DASMETAL_LAB_VARIANTS", v.name)) {
+            if (pso == null || (d % int64(v.bn)) != 0l || !want(g_env_bench.lab_variants, v.name)) {
                 continue
             }
             let mp = align_up(ntok, int64(v.bm))

@@ -9,6 +9,7 @@ require daslib/json_boost
 require llvm/daslib/llvm_tune   // tune_history_archive + tune_median — the mint diff/archive
 require tuner_cli               // --tune-paranoid, shared with both halves
 require math
+require dasllama/dasllama_env
 
 // The dasllama scope tuner — the wrapper the policy rail (auto default / --tune / daspkg
 // release) spawns. Runs BOTH halves as child daslang processes, each upserting the same
@@ -30,11 +31,11 @@ def private regime_env_prefix() : string {
         return ""
     }
     var pfx = ""
-    if (!has_env_variable("DAS_JOBQUE_THREADS")) {
+    if (is_none(g_env_core.jobque_threads)) {
         let lanes = min(get_total_hw_cores(), 16)
         pfx = "set DAS_JOBQUE_THREADS={lanes}&& "
     }
-    if (!has_env_variable("DAS_JOBQUE_AFFINITY")) {
+    if (is_none(g_env_core.jobque_affinity)) {
         pfx = "{pfx}set DAS_JOBQUE_AFFINITY=2&& "   // hard mask — mode 1's hint re-rolls SMT placement per que
     }
     return pfx
@@ -153,14 +154,14 @@ def private run_half(name : string; paranoid : bool) : bool {
 def main : int {
     let t0 = ref_time_ticks()
     let paranoid = tuner_paranoid_requested()
-    print("dasllama_tuner: sidecar = {get_env_variable("DAS_TUNE_MANIFEST")}\n")
+    print("dasllama_tuner: sidecar = {g_env_core.tune_manifest}\n")
     let modeDesc = (paranoid
         ? "PARANOID (kernels 20 screening / 240 max, generators best-of-18, 1% gate, validation)"
         : "default (kernels 20 screening / 80 max, generators best-of-6, validation)")
     print("dasllama_tuner: mode = {modeDesc}\n")
     // pre-mint snapshot: COPY, not rename — the halves UPSERT, and a rename would drop other
     // scopes' keys from the shared file. The post-mint diff reads it back.
-    let sidecar = get_env_variable("DAS_TUNE_MANIFEST")
+    let sidecar = g_env_core.tune_manifest
     var oldText = ""
     if (!empty(sidecar)) {
         oldText = fread(sidecar)

@@ -2,10 +2,10 @@ options gen2
 
 require dastest/testing_boost public
 require dasllama/dasllama_math
-require daslib/jobque_boost  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
-require daslib/math_bits  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
-require math  // nolint:STYLE030 — used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
-require ?das_accelerate dasllama/dasllama_math_accelerate  // nolint:STYLE030 — the "+AMX" float-batch override under test; Apple-only C++ module
+require daslib/jobque_boost
+require daslib/math_bits
+require math
+require ?das_accelerate dasllama/dasllama_math_accelerate
 
 // The "+AMX" float-batch override (Accelerate sgemm — AMX on M1-M3, SME on M4+) vs the portable
 // fp32/bf16 batch matmuls on deterministic data. sgemm accumulates f32 in coprocessor order —
@@ -73,22 +73,30 @@ def private ref_and_accel(ntok : int; run_mm : block<(var y : array<float>) : vo
     return <- res
 }
 
-def private check_fp32(t : T?; ntok : int; expect_exact : bool) {
+def private check_fp32(t : T?; ntok : int; expect_exact : bool; f16_lane : bool = false) {
     var w : array<float>
     w |> resize(D * N)
     fill01(w, 3u)
     var x : array<float>
     x |> resize(ntok * N)
     fill01(x, 7u)
+    if (f16_lane && !t_accel_set_f16(true)) {
+        to_log(LOG_WARNING, "BNNS probe failed on this OS — f16 lane arm feints\n")
+        t |> success(true)
+        return
+    }
     let r <- ref_and_accel(ntok) $(var y) {
         matmul_batch(y, w, 0l, x, int64(N), int64(D), int64(ntok))
+    }
+    if (f16_lane) {
+        t_accel_set_f16(false)
     }
     if (expect_exact) {
         for (va, vb in r.yref, r.yacc) {
             t |> equal(va, vb)
         }
     } else {
-        t |> success(max_rel_err(r.yref, r.yacc) < 1e-4)
+        t |> success(max_rel_err(r.yref, r.yacc) < (f16_lane ? 1e-2 : 1e-4))
     }
 }
 
@@ -138,6 +146,30 @@ def test_accel_float_batch(t : T?) {
             }
             t |> run("below-gate ntok falls through bit-exact") @(t : T?) {
                 check_fp32(t, SMALL_NTOK, true)
+            }
+            t |> run("fp32 BNNS f16 lane vs portable (tolerance)") @(t : T?) {
+                check_fp32(t, NTOK, false, true)
+            }
+            t |> run("strips override serves correctly, incl. rows < strips") @(t : T?) {
+                dasllama_accelerate_set_strips(8l)
+                check_fp32(t, NTOK, false)
+                var w : array<float>
+                w |> resize(4 * N)
+                fill01(w, 5u)
+                var x : array<float>
+                x |> resize(NTOK * N)
+                fill01(x, 9u)
+                var yref : array<float>
+                yref |> resize(NTOK * 4)
+                var yacc : array<float>
+                yacc |> resize(NTOK * 4)
+                clear_float_batch_override()
+                matmul_batch(yref, w, 0l, x, int64(N), 4l, int64(NTOK))
+                t_accel_enable()
+                matmul_batch(yacc, w, 0l, x, int64(N), 4l, int64(NTOK))
+                t_accel_disable()
+                dasllama_accelerate_set_strips(0l)
+                t |> success(max_rel_err(yref, yacc) < 1e-4)
             }
         }
     } else {

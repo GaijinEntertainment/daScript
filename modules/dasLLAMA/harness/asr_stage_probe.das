@@ -9,6 +9,7 @@ require audio
 require math   // the parakeet mel worker resolves log at the instantiation site
 require daslib/clargs
 require daslib/jobque_boost
+require daslib/jobque_profile   // JOBQUE_PROFILING_ENABLED — the probe refuses on a build without the marker rail
 
 // Per-stage ASR profile: one warmup pass, then --reps profiled passes through the engine's
 // asr_prof rail (PROF lines: label, total ms, hits, %). Parakeet first; whisper stages ride
@@ -41,6 +42,9 @@ struct ProbeArgs {
 
     @clarg_doc = "Decoder-session KV dtype, LLM-decoder families only: f16 (default) | f32 | q8"
     kv : string
+
+    @clarg_doc = "Save a jobque lane trace of the profiled reps to this path (perfetto JSON, encoder stages colored)"
+    trace : string
 
     @clarg_short = "?"
     @clarg_name = "show-help"
@@ -109,6 +113,10 @@ def main() : int {
         print("unknown --kv '{cfg.kv}' (f16 | f32 | q8)\n")
         return 1
     }
+    if (!empty(cfg.trace) && !JOBQUE_PROFILING_ENABLED) {
+        print("--trace needs the marker rail compiled in — rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)\n")
+        return 1
+    }
     var m <- empty(cfg.mmproj) ? load_asr_model(cfg.model) : load_asr_model(cfg.model, cfg.mmproj)
     let samples <- load_audio_16k_mono(cfg.wav)
     let reps = cfg.reps > 0 ? cfg.reps : 1
@@ -116,10 +124,23 @@ def main() : int {
         setup_dasllama_jobque_()   // the engine dispatch standard — bare with_job_que profiles the
                                    // ~10us/job fifo fork/join instead of the shipped team dispatch
         run_once(m, samples)               // warmup, unprofiled
+        if (!empty(cfg.trace)) {
+            jobque_trace_start(1 << 21)   // encoder chunks are coarse — a couple of reps fit easily
+            set_trace_tags(true)
+        }
         set_asr_prof(true)
-        forward_profile_reset()   // the decoder engine's own buckets (blk_attn/blk_ffn/mm_*)
+        static_if (JOBQUE_PROFILING_ENABLED) {
+            forward_profile_reset()   // the decoder engine's own buckets (blk_attn/blk_ffn/mm_*)
+        } else {
+            print("note: decoder-engine buckets need JOBQUE_PROFILING=1 — printing the ASR stage table only\n")
+        }
         for (_rep in range(reps)) {
             run_once(m, samples)
+        }
+        if (!empty(cfg.trace)) {
+            set_trace_tags(false)
+            jobque_trace_stop()
+            print(jobque_trace_save(cfg.trace) ? "jobque trace saved: {cfg.trace}\n" : "jobque trace: nothing recorded\n")
         }
         asr_prof_report()
         forward_profile_report()

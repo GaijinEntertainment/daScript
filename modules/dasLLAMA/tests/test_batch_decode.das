@@ -9,13 +9,14 @@ require llvm/daslib/f16_cvt
 require daslib/jobque_boost
 require daslib/fio
 require math
+require dasllama/dasllama_env
 
 // Batched decode vs sequential: eval_batch_ must reproduce the per-session forward() stream —
 // token-for-token greedy, per-step logits, and the final KV caches. Needs llama2.c's
 // stories15M.bin (gitignored); skips cleanly when absent, same contract as test_forward.
 // The reference pins the fused decode chain OFF (the std path is what the batch worker mirrors).
 def private llama2c_dir() : string {
-    let env = get_env_variable("DASLLAMA_LLAMA2C_DIR")
+    let env = g_env_test.llama2c_dir
     return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
 }
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
@@ -269,7 +270,7 @@ def test_batch_decode_q8_kv(t : T?) {
         }
         // stories15M's head_size 48 is rejected by the q8_0 32-block check (by design) — this arm
         // runs the SmolLM2 GGUF carrier instead, same rail as test_fused_decode
-        let env = get_env_variable("DASLLAMA_MODELS_DIR")
+        let env = g_env_harness.models_dir
         let mdir = empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
         let path = path_join(mdir, "SmolLM2-135M-Instruct-Q8_0.gguf")
         if (!stat(path).is_valid) {
@@ -298,7 +299,7 @@ def test_batch_decode_tq4_kv(t : T?) {
         // stories15M's head_size 48 fails the tq4 pow2 check (by design) — SmolLM2 (head 64) carrier,
         // same rail as test_batch_decode_q8_kv. Parity, not quality: both paths rotate + quantize
         // through the same kernels, so batch == sequential holds at fp32 tolerance
-        let env = get_env_variable("DASLLAMA_MODELS_DIR")
+        let env = g_env_harness.models_dir
         let mdir = empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
         let path = path_join(mdir, "SmolLM2-135M-Instruct-Q8_0.gguf")
         if (!stat(path).is_valid) {

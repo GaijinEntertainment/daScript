@@ -104,6 +104,11 @@ benchmarks may require internals — that is what they test. A split that adds f
 requires across the tree instead of fixing the facade re-export is a defect. Engine internals
 may require each other.
 
+**`dasllama_env.das` — every environment knob's single home.** All `[EnvConfig]` area structs
+and their `g_env_*` globals live here; `ENVIRONMENT.md` generates from them, and
+`tests/test_env_registry.das` enforces both directions. A knob declared anywhere else is a
+defect.
+
 **A new module file is registered in `.das_module` in the same change.** The install rule is a
 directory glob; `CMakeLists.txt`'s `ADD_MODULE_DAS` list is a subset and is touched only when a
 file joins it.
@@ -271,9 +276,9 @@ at the call site** (`dasllama_asr.das`). Accepting it and silently ignoring it i
 
 ### Generated
 
-- `ENVIRONMENT.md` — generated from `dasllama_env.das`'s registry by `harness/gen_env_doc.das`
-  (`tests/test_env_registry.das` fails on drift). Hand-editing the .md is a defect; edit the
-  registry and regenerate. `dasllama_unicode.das`'s RANGES/WS tables are transcoded from
+- `ENVIRONMENT.md` — generated from `dasllama_env.das`'s `[EnvConfig]` declarations by
+  `harness/gen_env_doc.das` (`tests/test_env_registry.das` fails on drift). Hand-editing the .md
+  is a defect; edit the declarations and regenerate. `dasllama_unicode.das`'s RANGES/WS tables are transcoded from
   llama.cpp's unicode-data.cpp — hand-editing the tables is a defect; retranscode.
 
 ---
@@ -391,3 +396,29 @@ not touch dangles into the next model.
 **Every program root declares `options stack = 524288`.** A test, harness, benchmark, or tool
 that picks its own number — larger or smaller — is a defect, and so is a new root that omits the
 declaration. See `ARCHITECTURE.md` §2.8.
+
+**No ad-hoc profiling.** A NEW clock read paired with a print or log of the elapsed interval is
+a defect in engine code — instrumentation goes through the sanctioned rails: the
+`jobque_profile` markers (`profile_tag` / `profile_marker` and the `trace_*` wrappers in
+`dasllama_math.das`), the `prof_add`/`forward_profile_*` decode buckets
+(`dasllama_common.das`), and the `asr_prof_add` encode buckets (`dasllama_audio.das`).
+Carve-outs where a timed line is the deliverable or a one-shot report: `benchmarks/`,
+`performance/`, `harness/`, and cold one-shot load/mint progress logs (image bake/map, load
+stages, tokenizer build). A clock whose value feeds logic is not instrumentation — mark it
+`// clock: control` so the sweep and the future lint leave it alone.
+
+**Every new kernel or mid-runtime loop is COVERED by `[hot_path]`.** The annotation sits at
+the REGION ENTRY — the `*_encode` / `*_decode` / step drivers — and the `[no_alloc]` /
+`[no_env]` / `[no_io]` contracts arm transitively down the call graph, so interior kernels
+stay bare. A new function is a defect only when no annotated entry reaches it: a new entry
+point carries the annotation itself; a new backend entry (kernel-backend override, batch
+donor) carries it too, because backends are also reached from un-annotated harness paths.
+
+**No raw environment reads.** `get_env_variable` / `has_env_variable` (and literal-name
+`env_config_*` calls) are a defect anywhere in the module outside `dasllama_env.das` — a knob is
+an `[EnvConfig]` field there, read as `g_env_*.<field>`, which is also what generates its
+`ENVIRONMENT.md` row. Tri-state knobs (presence matters, or the effective default is computed at
+runtime) are `Option<T>` fields. Dynamic names — a variable named by data, not by code — go
+through `env_is_set` / `env_value_of`. The config loads once at context init, so
+`set_env_variable` mid-process is invisible to it: arm a child process's environment instead.
+`tests/test_env_registry.das` enforces all of this.

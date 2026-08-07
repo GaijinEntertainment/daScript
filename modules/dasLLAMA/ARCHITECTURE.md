@@ -29,7 +29,7 @@ thing live instead. Files with no contested edge get one short line.
 ## 1. File charters
 
 Every file under `dasllama/` appears here. Two carry generated CONTENT rather than being
-generated themselves: `dasllama_env.das` is the hand-written env registry (`ENVIRONMENT.md` is
+generated themselves: `dasllama_env.das` holds the `[EnvConfig]` knob declarations (`ENVIRONMENT.md` is
 generated FROM it by `harness/gen_env_doc.das`), and `dasllama_unicode.das` is hand-written
 around transcoded data tables (RANGES/WS from llama.cpp's unicode-data.cpp — retranscode,
 never hand-edit the tables).

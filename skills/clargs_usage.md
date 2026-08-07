@@ -115,6 +115,52 @@ renderer, and uniform behavior across every tool.
    (clargs silently ignores unknown flag-shaped tokens, so other
    tooling's flags pass through without errors).
 
+## Environment twins
+
+Any option can also be settable from an environment variable — the
+command line always wins, env beats the default. Declare per field with
+`@clarg_env = "NAME"`, or struct-wide with
+`[CommandLineArgs(env_prefix = "TOOL")]`, which derives `TOOL_LONG_NAME`
+from each option's long name (hyphens become underscores;
+`@clarg_env = ""` opts a field out). `--help` shows the twin as
+`(env: NAME)`.
+
+Semantics (shared with `daslib/build_const` and the dasLLAMA env
+readers): booleans read `""`, `0`, `false`, `off`, `no` (any case) as
+false and anything else as true; a set-but-empty variable counts as
+unset; a garbage int/float/enum value is a parse ERROR, same as on the
+command line — and so is a bare value-less `--flag` even when the
+variable is set (argv wins, including its errors). `@clarg_required` is
+satisfied by either carrier. Positional, `@clarg_count`, and repeatable
+(array) fields have no environment form. Mutex groups check the command
+line only — an env-supplied default never conflicts with an explicit
+flag.
+
+## `[EnvConfig]` — ambient library knobs
+
+Libraries have no argv, so their knobs use the sibling annotation: a struct
+marked `[EnvConfig(env_prefix = "MYLIB")]` (same `@clarg_doc` / `@clarg_env`
+vocabulary, same name derivation, bool/int/int64/float/string fields, field
+initializers as defaults) generates `env_config(type<T>) : T` — call it once
+(a global initializer `let g_cfg = env_config(type<T>)` loads at context
+init, before any requirer's globals or `[init]`s) and hot code then reads
+plain struct fields, never the environment — plus
+`get_env_config_info(type<T>)` for doc-generation and coverage rails.
+Same env semantics as the twins above, except garbage numeric text logs a
+warning and keeps the default (a library load must not die on a stray
+variable). Positional/count/required/short/mutex annotations are rejected —
+those are command-line concepts.
+
+Tri-state knobs — presence matters, or the effective default is computed at
+runtime — declare the field `Option<T>`: it stays `none` when the variable
+is unset, so a read site writes `cfg.layers ?? computed_default()` or
+branches on `is_some`. Two doc-rail extras: `@clarg_default_doc = "probed"`
+overrides the rendered default text when the initializer literal would
+mislead, and `@clarg_path` marks a string field as a filesystem path — both
+land in `CommandArgumentInfo` (`default_doc`, `is_path`) for generators.
+The worked example is dasLLAMA's `dasllama_env.das` (146 knobs, eleven
+area structs, its `ENVIRONMENT.md` generated from the info).
+
 ## Help-flag pitfall
 
 When run under `daslang` (script-host case), the host intercepts

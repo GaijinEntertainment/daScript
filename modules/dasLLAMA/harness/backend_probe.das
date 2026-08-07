@@ -4,10 +4,10 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 require dasllama/dasllama_transformer
 require dasllama/dasllama_math
 require dasllama/dasllama_math_gen
-require daslib/fio   // get_env_variable
+require dasllama/dasllama_env
 
 def private probe_model() : string {
-    var dir = get_env_variable("DASLLAMA_MODELS_DIR")
+    var dir = g_env_harness.models_dir
     if (empty(dir)) {
         dir = "/Users/borisbatkin/Work/llama.cpp/models/"
     }

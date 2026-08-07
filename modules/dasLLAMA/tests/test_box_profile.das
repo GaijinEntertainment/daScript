@@ -4,6 +4,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_common
 require dasllama/dasllama_math  // the knob setters/getters (incl. set/get_q8_token_block) + the backend registry (engine-level, not re-exported)
 require daslib/fio
+require dasllama/dasllama_env
 
 // The tune sidecar's "runtime" section: apply_box_profile_runtime(path) sets the runtime knobs
 // and logs each applied entry. The explicit-path form keeps the test independent of the app's
@@ -85,7 +86,7 @@ def test_team_rank_gate_tristate(t : T?) {
 
     // setup_dasllama_jobque_ lands the stored knob on the live que — unless the env override is
     // present (the sweep rigs' A/B rail; also how the gate-forced suite run reaches this test)
-    if (!has_env_variable("DAS_JOBQUE_TEAM_RANK_GATE")) {
+    if (is_none(g_env_core.jobque_team_rank_gate)) {
         with_job_que() {
             set_team_rank_gate(1)
             setup_dasllama_jobque_()

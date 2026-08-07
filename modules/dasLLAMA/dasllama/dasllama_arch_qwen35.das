@@ -180,10 +180,10 @@ def private deltanet_decode_gpu(t : Model; var s : Session; l : int64) {
     let ds = c.ssm_d_state
     let dconv = c.ssm_d_conv
     let taps = dconv - 1l
-    let ts_norm0 = ref_time_ticks()
+    let ts_norm0 = prof_ticks()
     rms_at(s.xb, t, t.rms_att_off + l * dim, s.x, dim)
     prof_add("norm", ts_norm0)
-    let ts_qkv = ref_time_ticks()
+    let ts_qkv = prof_ticks()
     if (t.dn_ba_f32) {   // F32-on-disk beta/alpha matmul fp32, like llama.cpp
         mm_fblob(s.dn_beta, t, t.dn_betaf_off + l * dim * nvh, s.xb, dim, nvh)
         mm_fblob(s.dn_g, t, t.dn_alphaf_off + l * dim * nvh, s.xb, dim, nvh)
@@ -193,7 +193,7 @@ def private deltanet_decode_gpu(t : Model; var s : Session; l : int64) {
     }
     quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)   // one Q8_0 image serves the qkv AND z GEMVs
     prof_add("mm_qkv", ts_qkv)
-    let ts_gpu = ref_time_ticks()
+    let ts_gpu = prof_ticks()
     s.dn_tail |> resize(taps * cd)   // contract slot only — the step arm never writes it
     unsafe {
         matmul_moe_gpu_dn(s.xb2, t.dnqkv_offs[l], t.dngate_offs[l], t.dnout_offs[l],
@@ -207,7 +207,7 @@ def private deltanet_decode_gpu(t : Model; var s : Session; l : int64) {
             1l, dim, cd, kd, di, nvh, nkh, ds, dconv, c.norm_eps)
     }
     prof_add("dn_gpu", ts_gpu)
-    let ts_resid = ref_time_ticks()
+    let ts_resid = prof_ticks()
     add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb2[0])), dim)
     prof_add("act_resid", ts_resid)
 }
@@ -224,10 +224,10 @@ def private deltanet_decode(t : Model; var s : Session; l : int64) {
     let cd = dn_conv_dim(c)
     let di = c.ssm_d_inner
     let nvh = c.ssm_dt_rank
-    let ts_norm0 = ref_time_ticks()
+    let ts_norm0 = prof_ticks()
     rms_at(s.xb, t, t.rms_att_off + l * dim, s.x, dim)
     prof_add("norm", ts_norm0)
-    let ts_qkv = ref_time_ticks()
+    let ts_qkv = prof_ticks()
     mm_f(s.dn_qkv, t, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, cd)
     mm_f(s.dn_z, t, fmt_at(t.dngate_fmt, l), t.dngate_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, di)
     if (t.dn_ba_f32) {   // F32-on-disk beta/alpha matmul fp32, like llama.cpp
@@ -238,16 +238,16 @@ def private deltanet_decode(t : Model; var s : Session; l : int64) {
         mm_f(s.dn_g, t, KqFmt.q8, t.dnalpha_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, nvh)
     }
     prof_add("mm_qkv", ts_qkv)
-    let ts_attn = ref_time_ticks()
+    let ts_attn = prof_ticks()
     unsafe {
         dn_token_core(t, s, l, addr < float const? >(s.dn_qkv[0]), addr(s.dn_z[0]),
             addr(s.dn_beta[0]), addr(s.dn_g[0]), addr(s.dn_o[0]))
     }
     prof_add("attn", ts_attn)
-    let ts_wo = ref_time_ticks()
+    let ts_wo = prof_ticks()
     mm_f(s.xb2, t, fmt_at(t.dnout_fmt, l), t.dnout_offs[l], s.dn_o, s.xq, s.xs, s.xbs, di, dim)
     prof_add("mm_wo", ts_wo)
-    let ts_resid = ref_time_ticks()
+    let ts_resid = prof_ticks()
     add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb2[0])), dim)
     prof_add("act_resid", ts_resid)
 }
@@ -270,10 +270,10 @@ def private attention_qwen35_gated_decode(t : Model; var s : Session; l : int64;
     var vcl = kv_layer_vbase(s, l, c.seq_len)
     let kstart = 0l
     let cnt = pos + 1l
-    let ts_norm0 = ref_time_ticks()
+    let ts_norm0 = prof_ticks()
     rms_at(s.xb, t, t.rms_att_off + l * dim, s.x, dim)
     prof_add("norm", ts_norm0)
-    let ts_qkv = ref_time_ticks()
+    let ts_qkv = prof_ticks()
     mm_f(s.dn_qg, t, fmt_at(t.wq_fmt, l), t.wq_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, 2l * qd)
     mm_f(s.k, t, fmt_at(t.wk_fmt, l), t.wk_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, kv_dim)
     mm_f(s.v, t, fmt_at(t.wv_fmt, l), t.wv_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, kv_dim)
@@ -292,11 +292,11 @@ def private attention_qwen35_gated_decode(t : Model; var s : Session; l : int64;
         }
     }
     prof_add("mm_qkv", ts_qkv)
-    let ts_qknorm = ref_time_ticks()
+    let ts_qknorm = prof_ticks()
     rms_batch(s.q, s.q, t, t.rms_q_offs[l], head_size, n_heads)
     rms_batch(s.k, s.k, t, t.rms_k_offs[l], head_size, n_kv_heads)
     prof_add("norm", ts_qknorm)
-    let ts_rope = ref_time_ticks()
+    let ts_rope = prof_ticks()
     if (g_use_rope_table) {
         unsafe {
             let crow = addr < float const? >(s.rope_cos[0])
@@ -315,7 +315,7 @@ def private attention_qwen35_gated_decode(t : Model; var s : Session; l : int64;
     let vtq4 = s.kv_dtype_v == KVDtype.tq4
     if (ktq4 || vtq4) {
         // tq4 basis change at the RoPE seam: attention runs rotated; xb un-rotates per head after
-        let ts_rot = ref_time_ticks()
+        let ts_rot = prof_ticks()
         unsafe {
             let sgp = addr < float const? >(s.kv_signs[0])
             if (ktq4) {
@@ -340,7 +340,7 @@ def private attention_qwen35_gated_decode(t : Model; var s : Session; l : int64;
     if (s.kv_dtype_k == KVDtype.q8_0 || ktq4) {
         quantize_q8_0_into(s.q, qd, s.attq, s.atts, 0l, 0l)
     }
-    let ts_kv = ref_time_ticks()
+    let ts_kv = prof_ticks()
     unsafe {
         kv_store_row(kcl, s.kv_dtype_k, kv_dim, kv_phys_row(s, pos), 0l, kv_dim,
             addr < float const? >(s.k[0]))
@@ -348,7 +348,7 @@ def private attention_qwen35_gated_decode(t : Model; var s : Session; l : int64;
             addr < float const? >(s.v[0]))
     }
     prof_add("kv_store", ts_kv)
-    let ts_attn = ref_time_ticks()
+    let ts_attn = prof_ticks()
     let seq_len = c.seq_len
     let attn_softcap = c.attn_logit_softcap
     let attn_lanes = min(int(n_heads), lanes_for_work(2l * cnt * head_size * n_heads, g_gemv_lane_cap))
@@ -386,7 +386,7 @@ def private attention_qwen35_gated_decode(t : Model; var s : Session; l : int64;
         }
     }
     // per-head sigmoid output gate on the attention output, before the out projection (exp4)
-    let ts_wo = ref_time_ticks()
+    let ts_wo = prof_ticks()
     unsafe {
         var xbp2 = addr(s.xb[0])
         let gp2 = addr < float const? >(s.dn_qgate[0])
@@ -398,7 +398,7 @@ def private attention_qwen35_gated_decode(t : Model; var s : Session; l : int64;
     }
     mm_f(s.xb2, t, fmt_at(t.wo_fmt, l), t.wo_offs[l], s.xb, s.xq, s.xs, s.xbs, qd, dim)
     prof_add("mm_wo", ts_wo)
-    let ts_resid = ref_time_ticks()
+    let ts_resid = prof_ticks()
     add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb2[0])), dim)
     prof_add("act_resid", ts_resid)
 }
@@ -660,7 +660,7 @@ def private deltanet_prefill_chunked(t : Model; var s : Session; l : int64; npos
     let nvh = c.ssm_dt_rank
     let nkh = c.ssm_n_group
     let ds = c.ssm_d_state
-    let ts_conv = ref_time_ticks()
+    let ts_conv = prof_ticks()
     dn_conv_batch(t, s, l, npos)
     prof_add("dn_conv", ts_conv)
     var conv0 : float const?
@@ -687,7 +687,7 @@ def private deltanet_prefill_chunked(t : Model; var s : Session; l : int64; npos
     }
     let wssz = dn_cws_head_size(c)
     let vec = g_act_vec   // read on the caller, captured — fork workers must not read globals
-    let ts_scan = ref_time_ticks()
+    let ts_scan = prof_ticks()
     maybe_parallel_for(0, int(nvh), min(int(nvh), get_dispatch_lanes())) $(rb, re) {
         unsafe {
             for (hh in range(rb, re)) {
@@ -717,10 +717,10 @@ def private deltanet_prefill_gpu(t : Model; var s : Session; l : int64; npos : i
     let ds = c.ssm_d_state
     let dconv = c.ssm_d_conv
     let taps = dconv - 1l
-    let ts_norm0 = ref_time_ticks()
+    let ts_norm0 = prof_ticks()
     rms_batch(s.xb_b, s.x_b, t, t.rms_att_off + l * dim, dim, npos)
     prof_add("dn_norm", ts_norm0)
-    let ts_in = ref_time_ticks()
+    let ts_in = prof_ticks()
     if (t.dn_ba_f32) {   // raw beta/alpha rows — the transforms run in-kernel
         mm_fblob_b(s.dn_beta_b, t, t.dn_betaf_off + l * dim * nvh, s.xb_b, dim, nvh, npos)
         mm_fblob_b(s.dn_g_b, t, t.dn_alphaf_off + l * dim * nvh, s.xb_b, dim, nvh, npos)
@@ -730,7 +730,7 @@ def private deltanet_prefill_gpu(t : Model; var s : Session; l : int64; npos : i
     }
     requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)   // one Q8_0 image serves the qkv AND z GEMMs
     prof_add("dn_mm_in", ts_in)
-    let ts_gpu = ref_time_ticks()
+    let ts_gpu = prof_ticks()
     s.dn_tail |> resize(taps * cd)
     unsafe {
         matmul_moe_gpu_dn(s.xb2_b, t.dnqkv_offs[l], t.dngate_offs[l], t.dnout_offs[l],
@@ -744,7 +744,7 @@ def private deltanet_prefill_gpu(t : Model; var s : Session; l : int64; npos : i
             npos, dim, cd, kd, di, nvh, nkh, ds, dconv, c.norm_eps)
     }
     prof_add("dn_gpu", ts_gpu)
-    let ts_resid = ref_time_ticks()
+    let ts_resid = prof_ticks()
     unsafe {   // conv-history advance from the tail rows (channel-major — the decode layout)
         var st = addr(s.dn_conv_state[s.dn_conv_prefix[l]])
         let tp = addr < float const? >(s.dn_tail[0])
@@ -772,10 +772,10 @@ def private deltanet_prefill(t : Model; var s : Session; l : int64; npos : int64
     let cd = dn_conv_dim(c)
     let di = c.ssm_d_inner
     let nvh = c.ssm_dt_rank
-    let ts_norm0 = ref_time_ticks()
+    let ts_norm0 = prof_ticks()
     rms_batch(s.xb_b, s.x_b, t, t.rms_att_off + l * dim, dim, npos)
     prof_add("dn_norm", ts_norm0)
-    let ts_qkv = ref_time_ticks()
+    let ts_qkv = prof_ticks()
     mm_b_f(s, s.dn_qkv_b, t, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], s.xb_b, dim, cd, npos)
     mm_b_f(s, s.dn_z_b, t, fmt_at(t.dngate_fmt, l), t.dngate_offs[l], s.xb_b, dim, di, npos)
     if (t.dn_ba_f32) {   // F32-on-disk beta/alpha matmul fp32, like llama.cpp
@@ -789,7 +789,7 @@ def private deltanet_prefill(t : Model; var s : Session; l : int64; npos : int64
     if (g_dn_prefill_mode == DnPrefillMode.chunked && npos > 1l) {   // single rows: recurrent is cheaper
         deltanet_prefill_chunked(t, s, l, npos)   // buckets dn_conv + dn_scan inside
     } else {
-        let ts_core = ref_time_ticks()
+        let ts_core = prof_ticks()
         unsafe {
             let qkvp = addr < float const? >(s.dn_qkv_b[0])
             var zp = addr(s.dn_z_b[0])
@@ -802,10 +802,10 @@ def private deltanet_prefill(t : Model; var s : Session; l : int64; npos : int64
         }
         prof_add("dn_core", ts_core)
     }
-    let ts_wo = ref_time_ticks()
+    let ts_wo = prof_ticks()
     mm_b_f(s, s.xb2_b, t, fmt_at(t.dnout_fmt, l), t.dnout_offs[l], s.dn_o_b, di, dim, npos)
     prof_add("dn_mm_out", ts_wo)
-    let ts_resid = ref_time_ticks()
+    let ts_resid = prof_ticks()
     add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
     prof_add("dn_resid", ts_resid)
 }
@@ -829,10 +829,10 @@ def private attention_qwen35_gated_prefill(t : Model; var s : Session; l : int64
     let rot = c.rope_dim > 0l ? c.rope_dim : head_size
     var kcl = kv_layer_kbase(s, l, c.seq_len)
     var vcl = kv_layer_vbase(s, l, c.seq_len)
-    let ts_norm0 = ref_time_ticks()
+    let ts_norm0 = prof_ticks()
     rms_batch(s.xb_b, s.x_b, t, t.rms_att_off + l * dim, dim, npos)
     prof_add("norm", ts_norm0)
-    let ts_qkv = ref_time_ticks()
+    let ts_qkv = prof_ticks()
     mm_b_f(s, s.dn_qg_b, t, fmt_at(t.wq_fmt, l), t.wq_offs[l], s.xb_b, dim, 2l * qd, npos)
     mm_b_f(s, s.k_b, t, fmt_at(t.wk_fmt, l), t.wk_offs[l], s.xb_b, dim, kv_dim, npos)
     mm_b_f(s, s.v_b, t, fmt_at(t.wv_fmt, l), t.wv_offs[l], s.xb_b, dim, kv_dim, npos)
@@ -856,11 +856,11 @@ def private attention_qwen35_gated_prefill(t : Model; var s : Session; l : int64
         }
     }
     prof_add("mm_qkv", ts_qkv)
-    let ts_qknorm = ref_time_ticks()
+    let ts_qknorm = prof_ticks()
     rms_batch(s.q_b, s.q_b, t, t.rms_q_offs[l], head_size, npos * n_heads)
     rms_batch(s.k_b, s.k_b, t, t.rms_k_offs[l], head_size, npos * n_kv_heads)
     prof_add("norm", ts_qknorm)
-    let ts_rope = ref_time_ticks()
+    let ts_rope = prof_ticks()
     unsafe {
         let half = rot / 2l
         var qbp = addr(s.q_b[0])
@@ -883,7 +883,7 @@ def private attention_qwen35_gated_prefill(t : Model; var s : Session; l : int64
     let ktq4 = s.kv_dtype_k == KVDtype.tq4
     let vtq4 = s.kv_dtype_v == KVDtype.tq4
     if (ktq4 || vtq4) {   // tq4 basis change (attention_std_prefill's twin); xb_b un-rotates below
-        let ts_rot = ref_time_ticks()
+        let ts_rot = prof_ticks()
         unsafe {
             let sgp = addr < float const? >(s.kv_signs[0])
             if (ktq4) {
@@ -896,14 +896,14 @@ def private attention_qwen35_gated_prefill(t : Model; var s : Session; l : int64
         }
         prof_add("tq4_rot", ts_rot)
     }
-    let ts_kv = ref_time_ticks()
+    let ts_kv = prof_ticks()
     let store_nrun = kv_runs(s, start_pos, start_pos + npos, s.kv_runs)
     unsafe {
         kv_store_batch(kcl, vcl, s.kv_dtype_k, s.kv_dtype_v, s.k_b, s.v_b,
             addr < KVRun const? >(s.kv_runs[0]), store_nrun, start_pos, npos, kv_dim)
     }
     prof_add("kv_store", ts_kv)
-    let ts_attn = ref_time_ticks()
+    let ts_attn = prof_ticks()
     prefill_attention(s, kcl, vcl, npos, start_pos, head_size, qd, kv_dim, n_heads, kv_mul, scale,
                       false, 0l, c.attn_logit_softcap, null)
     prof_add("attn", ts_attn)
@@ -913,7 +913,7 @@ def private attention_qwen35_gated_prefill(t : Model; var s : Session; l : int64
         }
     }
     // threaded + exp4: serial scalar loop was npos·qd (2.1M @pp512) libm exps, ~10ms all-lane hole/layer
-    let ts_gate = ref_time_ticks()
+    let ts_gate = prof_ticks()
     unsafe {
         var xbp = addr(s.xb_b[0])
         let gbp = addr < float const? >(s.dn_qgate_b[0])

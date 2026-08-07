@@ -84,6 +84,7 @@ require daslib/bitfield_boost
 require daslib/bitfield_trait
 require daslib/async_boost
 require daslib/command_line
+require daslib/build_const
 require daslib/consume
 require daslib/dap
 require daslib/das_source_formatter
@@ -1143,6 +1144,13 @@ def document_module_linq_fold(_root : string) {
     document("LINQ fold macros (_fold / _old_fold)", mod, "linq_fold.rst", groups)
 }
 
+def document_module_build_const(_root : string) {
+    var mod = find_module("build_const")
+    var groups <- array<DocGroup>(
+    )
+    document("Compile-time build constants", mod, "build_const.rst", groups)
+}
+
 def document_module_command_line(_root : string) {
     var mod = find_module("command_line")
     var groups <- array<DocGroup>(
@@ -1879,6 +1887,7 @@ def main {  // nolint:STYLE038 — flat one-call-per-documented-module dispatch 
     document_module_bitfield_boost(root)
     document_module_bitfield_trait(root)
     document_module_bool_array(root)
+    document_module_build_const(root)
     document_module_class_boost(root)
     document_module_command_line(root)
     document_module_constexpr(root)

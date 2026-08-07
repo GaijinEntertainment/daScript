@@ -8,8 +8,10 @@ require dasllama/dasllama_image   // load_model_cached — the .dlim rail, witho
 require ?das_accelerate dasllama/dasllama_math_accelerate   // the --accel leg; Apple-only C++ module
 require ../performance/profile_common.das   // profile_threads + affinity_on — the standing per-box methodology
 require daslib/jobque_boost
+require daslib/jobque_profile   // JOBQUE_PROFILING_ENABLED — the tool refuses on a build without the marker rail (its bucket report needs it)
 require daslib/clargs
 require math
+require dasllama/dasllama_env
 
 // Per-bucket decode profile — the position-0 detector for decode-side chases: one measurement
 // window of -n single-token forwards at depth --depth, the engine's permanent prof_add buckets
@@ -59,34 +61,34 @@ struct Args {
 def private synth_id(i, seed : int64) : int64 => 1000l + ((i * 17l + seed * 131l) % 5000l)
 
 [export]
-def main() {
+def main() : int {   // nolint:STYLE038 — flat profiler driver: arg/env/tier handling, then the one measurement window
     if (!jit_enabled()) {
         print("This profiler is JIT-only — run with: daslang -jit <file>\n")
-        return
+        return 1
     }
     var r <- parse_args(type<Args>)
     if (r |> is_err) {
         print("error: {r |> unwrap_err}\n\n")
         print_help(get_command_info(type<Args>), "decode_prof")
-        return
+        return 1
     }
     let cfg <- r |> move_unwrap
     if (cfg.help) {
         print_help(get_command_info(type<Args>), "decode_prof")
-        return
+        return 0
     }
     allow_cpu_prefill()   // CPU-protocol profile by intent — disarm the Metal-build tripwire
     let ngen = max(int64(cfg.ngen), 1l)
     let depth = max(int64(cfg.depth), 0l)
-    let t_env = has_env_variable("DAS_JOBQUE_THREADS")
-    var threads = cfg.threads > 0 ? cfg.threads : (t_env ? to_int(get_env_variable("DAS_JOBQUE_THREADS")) : profile_threads())
-    if (t_env && to_int(get_env_variable("DAS_JOBQUE_THREADS")) != threads) {
-        threads = to_int(get_env_variable("DAS_JOBQUE_THREADS"))
+    let t_env = g_env_core.jobque_threads
+    var threads = cfg.threads > 0 ? cfg.threads : (t_env ?? profile_threads())
+    if (is_some(t_env) && unwrap(t_env) != threads) {
+        threads = unwrap(t_env)
         print("warning: DAS_JOBQUE_THREADS overrides -t — running {threads} lanes\n")
-    } elif (!t_env) {
+    } elif (is_none(t_env)) {
         set_jobque_threads_cap(max(threads - 1, 1))
     }
-    let pinned = affinity_on() && !has_env_variable("DAS_JOBQUE_AFFINITY")
+    let pinned = affinity_on() && is_none(g_env_core.jobque_affinity)
     if (pinned) {
         set_jobque_affinity(2)   // 2 = hard mask, the llama-bench --cpu-strict mirror
     }
@@ -99,8 +101,12 @@ def main() {
             dasllama_accelerate_enable(32l)   // the shipped +AMX defaults: min ntok 32, work floor 512 MMAC
         } else {
             print("--accel requested but das_accelerate is not built on this platform — no accel tier to profile\n")
-            return
+            return 1
         }
+    }
+    if (!JOBQUE_PROFILING_ENABLED) {
+        print("decode_prof needs the marker rail compiled in — rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)\n")
+        return 1
     }
     print("loading {cfg.model}\n")
     with_job_que() {
@@ -136,4 +142,5 @@ def main() {
         delete s
         delete t
     }
+    return 0
 }

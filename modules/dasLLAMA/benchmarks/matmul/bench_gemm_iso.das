@@ -9,9 +9,9 @@ require dasllama/dasllama_math_gen  // registers the arm64-gen/x64-gen repack ti
 require ?das_metal dasllama/dasllama_metal_gemm  // registers the "metal" GPU batch donor (DASLLAMA_PIN_BATCH_BACKEND=metal) on Apple builds
 require dasllama/dasllama_convert
 require daslib/jobque_boost
-require daslib/fio
 require math
 require strings
+require dasllama/dasllama_env
 
 // Isolated batched-GEMM throughput, ours (production matmul_q8q8_batch) on REAL model matmul
 // shapes at the prefill batch width (ntok = 512), THREADED, reported as GMAC/s aggregate AND per
@@ -151,47 +151,45 @@ def bench_gemm_iso(b : B?) {
     with_job_que() {
         setup_dasllama_jobque_()
         // A/B the fork-pool restartHeaps opt-out: set DAS_FORK_SKIP_HEAP_RESET to skip it
-        let skip_reset = has_env_variable("DAS_FORK_SKIP_HEAP_RESET")
+        let skip_reset = g_env_harness.das_fork_skip_heap_reset
         if (skip_reset) {
             set_jobque_fork_skip_heap_reset(true)
         }
         to_log(LOG_INFO, "fork_skip_heap_reset = {skip_reset}\n")
         // A/B the worker spin window (0 disables — suspect on thermally-bound boxes: 32 spinners
         // through the serial gaps depress package clocks for the WHOLE process)
-        if (has_env_variable("DAS_WORKER_SPIN_US")) {
-            let spin_us = to_int(get_env_variable("DAS_WORKER_SPIN_US"))
+        if (is_some(g_env_harness.das_worker_spin_us)) {
+            let spin_us = unwrap(g_env_harness.das_worker_spin_us)
             set_jobque_worker_spin(spin_us)
             to_log(LOG_INFO, "worker spin override: {spin_us}us\n")
         }
         // A/B the batch-oversplit knob (chunks per hw job) across alternating runs
-        if (has_env_variable("DASLLAMA_BATCH_CHUNKS")) {
-            let bc = to_int(get_env_variable("DASLLAMA_BATCH_CHUNKS"))
+        if (!empty(g_env_harness.batch_chunks)) {
+            let bc = to_int(g_env_harness.batch_chunks)
             set_q8_batch_chunks_per_job(bc)
             to_log(LOG_INFO, "batch chunks override: {bc}\n")
         }
         // A/B the matmul min-grain (rows per chunk floor); 0 = clamp off (pre-grain behavior)
-        if (has_env_variable("DASLLAMA_MIN_CHUNK_ROWS")) {
-            let mg = to_int(get_env_variable("DASLLAMA_MIN_CHUNK_ROWS"))
+        if (is_some(g_env_bench.min_chunk_rows)) {
+            let mg = unwrap(g_env_bench.min_chunk_rows)
             set_matmul_min_chunk_rows(mg)
             to_log(LOG_INFO, "min chunk rows override: {mg}\n")
         }
         // backend pin for row-major A/Bs on one binary (e.g. portable vs arm64-sdot), same
         // env contract as llama3_perf; the repack half below still switches to the repack tier
-        if (has_env_variable("DASLLAMA_PIN_BACKEND")) {
-            pin_kernel_backend(get_env_variable("DASLLAMA_PIN_BACKEND"))
+        if (!empty(g_env_engine.pin_backend)) {
+            pin_kernel_backend(g_env_engine.pin_backend)
         }
-        if (has_env_variable("DASLLAMA_PIN_BATCH_BACKEND")) {
-            select_batch_backend(get_env_variable("DASLLAMA_PIN_BATCH_BACKEND"))
+        if (!empty(g_env_engine.pin_batch_backend)) {
+            select_batch_backend(g_env_engine.pin_batch_backend)
         }
-        if (has_env_variable("DASLLAMA_BENCH_NTOK")) {
-            NTOK = int64(to_int(get_env_variable("DASLLAMA_BENCH_NTOK")))
-        }
-        let model = has_env_variable("DASLLAMA_BENCH_MODEL") ? get_env_variable("DASLLAMA_BENCH_MODEL") : "tinyllama"
+        NTOK = g_env_bench.bench_ntok ?? NTOK
+        let model = g_env_bench.bench_model
         var shapes <- shapes_for(model)
         to_log(LOG_INFO, "model={model} ntok={NTOK}\n")
         // DASLLAMA_BENCH_SKIP_ROWMAJOR skips the row-major half — a pin-lattice sweep re-runs
         // the repack half per manifest and the row-major rows would repeat identically
-        if (!has_env_variable("DASLLAMA_BENCH_SKIP_ROWMAJOR")) {
+        if (!g_env_bench.bench_skip_rowmajor) {
             to_log(LOG_INFO, "=== {active_kernel_backend()} backend (row-major) ===\n")
             for (s in shapes) {
                 bench_one("{s._0} {model} {s._1}x{s._2}", s._1, s._2, reps_for(s._1, s._2), false)

@@ -13,6 +13,8 @@ require daslib/strings_boost
 require daslib/clargs
 require daslib/fio
 require math
+require dasllama/dasllama_env
+require daslib/jobque_profile   // JOBQUE_PROFILING_ENABLED — --prof refuses on a build without the marker rail
 
 // Measures `b` — the marginal cost of one extra row in a batched verify — which is the single
 // quantity deciding whether ANY speculative decoding scheme can pay on a model. Each arm advances
@@ -90,6 +92,10 @@ def main() {   // nolint:STYLE038 — flat probe driver: arg handling, then one 
         print_help(get_command_info(type<Args>), "verify_batch_probe")
         return
     }
+    if (cfg.prof && !JOBQUE_PROFILING_ENABLED) {
+        print("--prof needs the marker rail compiled in — rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)\n")
+        return
+    }
     let plen = max(int64(cfg.plen), 1l)
     let want = max(int64(cfg.npos), 8l)
     let corpus = empty(cfg.prompts) ? path_join(get_this_module_dir(), "data/wikitext2_prompts.txt") : cfg.prompts
@@ -98,11 +104,11 @@ def main() {   // nolint:STYLE038 — flat probe driver: arg handling, then one 
         print("error: no prompts in {corpus}\n")
         return
     }
-    let threads = has_env_variable("DAS_JOBQUE_THREADS") ? to_int(get_env_variable("DAS_JOBQUE_THREADS")) : profile_threads()
-    if (!has_env_variable("DAS_JOBQUE_THREADS")) {
+    let threads = g_env_core.jobque_threads ?? profile_threads()
+    if (is_none(g_env_core.jobque_threads)) {
         set_jobque_threads_cap(max(threads - 1, 1))
     }
-    let pinned = affinity_on() && !has_env_variable("DAS_JOBQUE_AFFINITY")
+    let pinned = affinity_on() && is_none(g_env_core.jobque_affinity)
     if (pinned) {
         set_jobque_affinity(2)
     }

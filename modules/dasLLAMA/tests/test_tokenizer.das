@@ -5,6 +5,7 @@ require dasllama/dasllama_bpe
 require daslib/fio
 require strings
 require daslib/strings_boost
+require dasllama/dasllama_env
 
 // Tokenizer regression gates against llama.cpp's own test-tokenizer-0 corpora (the .inp/.out files
 // shipped next to each ggml-vocab-*.gguf). The vocab fixtures are machine-local (gitignored model
@@ -14,7 +15,7 @@ require daslib/strings_boost
 
 // override the machine-local fixture root with DASLLAMA_MODELS_DIR (e.g. on the x64 handoff box)
 def private models_dir() : string {
-    let env = get_env_variable("DASLLAMA_MODELS_DIR")
+    let env = g_env_harness.models_dir
     return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
 }
 
@@ -32,8 +33,8 @@ def private ids_equal(a, b : array<int64>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        return false if (a[i] != b[i])
+    for (av, bv in a, b) {
+        return false if (av != bv)
     }
     return true
 }
@@ -52,12 +53,12 @@ def private corpus_gate(t : T?; vocab_path : string) {
     t |> equal(length(inputs), length(outlines))
     var npass = 0
     var rt_ok = 0
-    for (i in range(length(inputs))) {
-        let got <- bpe_encode(tk, inputs[i])
-        if (ids_equal(got, parse_out_ids(outlines[i]))) {
+    for (inp, outl in inputs, outlines) {
+        let got <- bpe_encode(tk, inp)
+        if (ids_equal(got, parse_out_ids(outl))) {
             npass++
         }
-        if (bpe_decode_ids(tk, got) == inputs[i]) {
+        if (bpe_decode_ids(tk, got) == inp) {
             rt_ok++
         }
     }

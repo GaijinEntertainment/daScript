@@ -86,7 +86,7 @@ modules/dasLLAMA/
   PROFILE.md                  # the three profiling rigs — the routine in-process check, the oracle cell, the rig that publishes
   PERF_LEDGER.md              # the living perf backlog — parked ideas, not chased mid-wave
   tune_for_this_box.md        # per-box tuning + the measurement discipline (SDK-installed)
-  ENVIRONMENT.md              # GENERATED from dasllama_env's registry (harness/gen_env_doc.das writes it; tests/test_env_registry.das gates drift) — every knob
+  ENVIRONMENT.md              # GENERATED from dasllama_env's [EnvConfig] declarations (harness/gen_env_doc.das writes it; tests/test_env_registry.das gates drift) — every knob
   THINKING.md                 # design notes and open questions
   followup_vulkan.md          # PLANNED: grow the vulkan resident driver to Metal's contract shape
   whisper_plan.md             # per-family bring-up records + findings:
@@ -102,7 +102,7 @@ modules/dasLLAMA/
                               #  set results_metal_*.md + baseline_metal_*.tsv — are
                               #  archived under history/dasLLAMA/)
   dasllama/                   # the module — require dasllama/<name>
-    dasllama_env.das          #   the env-var registry + the typed readers every knob goes through (ENVIRONMENT.md is generated from it)
+    dasllama_env.das          #   the [EnvConfig] knob declarations, loaded once into the g_env_* globals every read site uses (ENVIRONMENT.md is generated from it)
     dasllama_math.das         #   numeric primitives + matmul/dot kernels + Q8·Q8 kernel-backend registry + dispatch shaping
     dasllama_kv_codec.das     #   the KV-cache codec — per cache format (f16/q8_0/tq4) the WHOLE family: store/read/dot/axpy (+ tq4 FWHT rotation)
     dasllama_kqformat.das     #   format identity — the KqFmt enum, per-format strides/geometry/stream codes, the one enum->kernel-id bridge

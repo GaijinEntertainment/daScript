@@ -1174,6 +1174,55 @@ namespace das {
                     if (variable->init->rtti_isConstant()) {
                         variable->access_fold = true;
                         return variable->init->clone();
+                    } else if (constExprFolding.count(variable) == 0) {
+                        // a const global's init EXPRESSION only folds in place when infer-time
+                        // folding is on; under lint/IDE profiles (no_optimizations) it stays an
+                        // op tree, so compute the value on the side — static_if over such a
+                        // global must resolve identically in every compile profile. The in-flight
+                        // set breaks init cycles (A = B + 1; B = A + 1): a revisited global reads
+                        // as non-constant and the standard init-loop diagnostic reports it.
+                        constExprFolding.insert(variable);
+                        auto foldedInit = getConstExpr(variable->init);
+                        constExprFolding.erase(variable);
+                        if (foldedInit) {
+                            variable->access_fold = true;
+                            return foldedInit;
+                        }
+                    }
+                }
+            }
+        }
+        if (expr->rtti_isOp1()) {
+            // fold a pure builtin operator over a constant operand on a DETACHED clone —
+            // never in place, so profiles that keep source shapes for lint rules still see
+            // the original expression. mirrors the in-place fold in InferTypes::visit(ExprOp1).
+            auto op1 = static_cast<ExprOp1 *>(expr);
+            if (op1->func && op1->subexpr->type && isConstExprFunc(op1->func)) {
+                if (auto scc = getConstExpr(op1->subexpr)) {
+                    auto cloned = expr->clone();
+                    auto clonedOp = static_cast<ExprOp1 *>(cloned);
+                    clonedOp->subexpr = scc;
+                    auto folded = evalAndFold(clonedOp);
+                    if (folded && folded->rtti_isConstant()) {
+                        return folded;
+                    }
+                }
+            }
+        }
+        if (expr->rtti_isOp2()) {
+            // two-operand twin of the ExprOp1 arm above, mirroring InferTypes::visit(ExprOp2)
+            auto op2 = static_cast<ExprOp2 *>(expr);
+            if (op2->func && op2->left->type && op2->right->type && isConstExprFunc(op2->func)) {
+                auto lcc = getConstExpr(op2->left);
+                auto rcc = lcc ? getConstExpr(op2->right) : nullptr;
+                if (lcc && rcc) {
+                    auto cloned = expr->clone();
+                    auto clonedOp = static_cast<ExprOp2 *>(cloned);
+                    clonedOp->left = lcc;
+                    clonedOp->right = rcc;
+                    auto folded = evalAndFold(clonedOp);
+                    if (folded && folded->rtti_isConstant()) {
+                        return folded;
                     }
                 }
             }

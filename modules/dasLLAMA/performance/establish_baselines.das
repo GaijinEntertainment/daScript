@@ -13,8 +13,8 @@ options indenting = 4
 require profile_common
 require daslib/clargs
 require strings
-require daslib/fio
 require llvm/daslib/llvm_tune   // [tune_policy]: this tool benches llama.cpp only — never auto-tune
+require dasllama/dasllama_env
 
 [CommandLineArgs]
 struct Args {
@@ -47,7 +47,7 @@ struct Args {
 // Accelerate/AMX/BLAS, no op-profile instrumentation): the CPU-only build for ngl==0 — the fair
 // kernel-vs-kernel reference — and the Metal-enabled build for GPU-offload sweeps.
 def llama_bench_bin(ngl : int) : string {
-    let env = get_env_variable("LLAMA_BENCH")
+    let env = g_env_prof.llama_bench
     if (!empty(env)) {
         return env
     }

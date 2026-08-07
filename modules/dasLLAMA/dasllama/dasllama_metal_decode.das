@@ -4,8 +4,7 @@ options _comment_hygiene = true
 module dasllama_metal_decode shared public
 
 require math
-require daslib/fio
-require dasllama/dasllama_env  // env_int/env_flag/env_str: the shared typed readers + the knob registry
+require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require metal/das_metal_boost
 require dasllama/dasllama_common
 require dasllama/dasllama_math
@@ -3146,24 +3145,24 @@ var private g_env_mtp_debug = ""
 
 [cold_path]   // one-time env resolution for the batched decode knobs; the caller tests one global
 def private load_batch_knobs() {
-    g_bgemm_min = int64(max(env_int("DASLLAMA_METAL_BATCH_GEMM_MIN", 5), 2))
-    g_bsk = env_int("DASLLAMA_METAL_BATCH_SK", 1) != 0
-    g_bncb = int64(clamp(env_int("DASLLAMA_METAL_BATCH_NCB", 4), 1, 16))
-    g_bconcurrent = env_int("DASLLAMA_METAL_BATCH_CONCURRENT", 1) != 0
-    g_bfuse = env_int("DASLLAMA_METAL_BATCH_FUSE", 1) != 0
-    g_bmv = env_int("DASLLAMA_METAL_BATCH_MV", 1) != 0
-    g_bmv8 = env_int("DASLLAMA_METAL_BATCH_MV8", 1) != 0
-    g_b_pipe = env_int("DASLLAMA_METAL_BATCH_PIPE", 0) != 0
+    g_bgemm_min = int64(max(g_env_metal.batch_gemm_min, 2))
+    g_bsk = g_env_metal.batch_sk
+    g_bncb = int64(clamp(g_env_metal.batch_ncb, 1, 16))
+    g_bconcurrent = g_env_metal.batch_concurrent
+    g_bfuse = g_env_metal.batch_fuse
+    g_bmv = g_env_metal.batch_mv
+    g_bmv8 = g_env_metal.batch_mv8
+    g_b_pipe = g_env_metal.batch_pipe
 }
 
 [cold_path]   // one-time env resolution; decode_concurrent is a global test after the first call
 def private load_decode_concurrent() {
-    g_dconc = env_int("DASLLAMA_METAL_DECODE_CONCURRENT", 1)
+    g_dconc = g_env_metal.decode_concurrent ? 1 : 0
 }
 
 [cold_path]   // one-time env resolution; decode_fuse_pre is a global test after the first call
 def private load_decode_fuse() {
-    g_dfuse = env_int("DASLLAMA_METAL_FUSE", 1)
+    g_dfuse = g_env_metal.fuse ? 1 : 0
 }
 
 [init]
@@ -3175,15 +3174,15 @@ def dasllama_metal_decode_register() {
     register_batch_decode_override("metal", @@metal_batch_decode_forward)
     register_mtp_spec_override("metal", @@metal_mtp_spec_eval)
     register_mtp_seam_override("metal", @@metal_mtp_seam_row)
-    g_env_logits = env_flag("DASLLAMA_METAL_LOGITS", true)
-    g_env_batch_mm = env_flag("DASLLAMA_METAL_BATCH_MM", false)
-    g_env_attn_d = env_flag("DASLLAMA_METAL_ATTN_D", true)
-    g_env_mtp_debug = env_str("DASLLAMA_MTP_DEBUG", "")
-    if (has_env_variable("DASLLAMA_METAL_DECODE_SKIP")) {
-        g_skip = get_env_variable("DASLLAMA_METAL_DECODE_SKIP")
+    g_env_logits = g_env_metal.logits
+    g_env_batch_mm = g_env_metal.batch_mm
+    g_env_attn_d = g_env_metal.attn_d
+    g_env_mtp_debug = g_env_metal.mtp_debug
+    if (!empty(g_env_metal.decode_skip)) {
+        g_skip = g_env_metal.decode_skip
         to_log(LOG_WARNING, "dasLLAMA metal decode: SKIP={g_skip} — timing-attribution mode, output is GARBAGE\n")
     }
-    if (has_env_variable("DASLLAMA_METAL_SPEC")) {   // the spec chain's A/B rail: 0 off, 1 forced, -1 adaptive
-        set_metal_decode_speculate(env_int("DASLLAMA_METAL_SPEC", -1))
+    if (is_some(g_env_metal.spec)) {   // the spec chain's A/B rail: 0 off, 1 forced, -1 adaptive
+        set_metal_decode_speculate(unwrap(g_env_metal.spec))
     }
 }

@@ -44,7 +44,7 @@ def private vk_dlim_wants_fill(var v : DlimVulkanConfig) {
     v.dense = gpu_want_dense()
     v.dense_attn = gpu_want_dense_attn()
     v.dense_shexp = gpu_want_dense_shexp()
-    v.trim = env_flag("DASLLAMA_TRIM", false)
+    v.trim = g_env_vulkan.trim
 }
 
 //! Arm the tier for an OFFLINE bake: the load walk runs its full accept/refuse arithmetic

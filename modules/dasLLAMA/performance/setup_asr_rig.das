@@ -326,7 +326,7 @@ def private probe_python_version(cand : string) : int {
 // Meson source build), so only 3.10-3.12 qualifies; a uv-managed interpreter is the fallback
 // when every PATH python is outside the range.
 def private base_python() : string {
-    let pinned = normalize(env_str("DASLLAMA_BASE_PYTHON", ""))
+    let pinned = normalize(g_env_prof.base_python)
     if (!empty(pinned)) {
         let pv = probe_python_version(pinned)
         if (pv >= 310 && pv < 313) {
@@ -443,7 +443,7 @@ def private check_all() : bool {
 }
 
 def private is_windows_box() : bool {
-    return get_env_variable("OS") == "Windows_NT"
+    return g_env_prof.win_os == "Windows_NT"
 }
 
 [export, tune_policy(missing = "fallback")]

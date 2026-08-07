@@ -8,6 +8,7 @@ require dasllama/dasllama_prefix
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + target_chunk_work
 require daslib/jobque_boost
 require daslib/fio
+require dasllama/dasllama_env
 
 // Prefix cache (S5) — accounting, the attach cap, LRU budget, and token verification on a tiny
 // synthetic Config (no model files, never skips); then warm == cold BIT-EXACT reuse on stories15M
@@ -136,7 +137,7 @@ def test_prefix_verify_tokens(t : T?) {
 // ===== warm == cold bit-exactness on a real model (env-gated, JIT-only) =====
 
 def private llama2c_dir() : string {
-    let env = get_env_variable("DASLLAMA_LLAMA2C_DIR")
+    let env = g_env_test.llama2c_dir
     return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
 }
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")

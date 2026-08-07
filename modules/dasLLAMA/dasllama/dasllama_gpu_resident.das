@@ -482,7 +482,7 @@ let private RDEC_MIN_CTX = 4096l        // smallest ctx worth arming a capped mi
 // the auto-cap floor, env-overridable: DASLLAMA_GPU_MIN_CTX lets a short-context session arm a
 // model whose capped mirror lands under the default floor (e.g. a 3B on an 8GB card fits at 3429)
 def private rdec_min_ctx : int64 {
-    let v = env_int64("DASLLAMA_GPU_MIN_CTX", 0l)   // unset or non-numeric keeps the default floor
+    let v = g_env_gpu.gpu_min_ctx   // unset or non-numeric keeps the default floor
     return v > 0l ? max(v, 256l) : RDEC_MIN_CTX
 }
 
@@ -553,7 +553,7 @@ def resident_upload(t : Model; seq_cap : int64) : bool {   // nolint:STYLE037,ST
     }
     // the driver is all-or-nothing across prefill AND decode (the KV lives in the device mirror
     // only), so a pin away from it declines BEFORE any upload — the per-op rails take over
-    let pin = env_str("DASLLAMA_PIN_PREFILL", "")
+    let pin = g_env_engine.pin_prefill
     if ((!empty(pin) && pin != "vulkan") || !empty(active_prefill_override())) {
         return false
     }

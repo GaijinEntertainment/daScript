@@ -4,7 +4,7 @@ options _cyclomatic_complexity = 0   // orchestrator passes; reshaped by the sin
 options _function_length = 0   // same
 
 require profile_common
-require dasllama/dasllama_env   // env_flag — the ALLOW_UNTUNED store escape
+require dasllama/dasllama_env   // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require dasllama/dasllama_image   // dlim_clean + dlim_inventory — step-zero GC and the re-mint tripwire
 require llvm/daslib/llvm_tune   // [tune_policy]: the orchestrator never measures — it must never self-tune
 require daslib/clargs
@@ -224,8 +224,7 @@ def private mint_check(dir, whose : string) {
 }
 
 def private daslang_bin() : string {
-    let env = get_env_variable("DASLANG_BIN")
-    return empty(env) ? "bin/daslang" : env
+    return g_env_prof.daslang_bin
 }
 
 def private elapsed_ms(t0 : int64) : int {
@@ -266,7 +265,7 @@ def private absorb_cell(var models : array<BenchModel>; var cell : array<BenchMo
             to_log(LOG_ERROR, "gen_bench_records: DROPPING debug-jit cell for {c.gguf} — debug runs are not records\n")
             continue
         }
-        if (unstamped && !env_flag("DASLLAMA_ALLOW_UNTUNED", false)) {
+        if (unstamped && !g_env_bench.allow_untuned) {
             // the store-time arm of the tune gate: the file-level gate passes a VALID-but-stale
             // shipped sidecar (the M4 mis-ship), the runtime then drops to fallback, and the
             // row arrives here with an empty stamp — unnameable winners are not records
@@ -954,7 +953,7 @@ def main : int {
     // older than a freshly built exe, the staleness rule drops every kernel to fallback, and the
     // cell measures nothing real. So the rig CLEARS the override rather than setting one, and an
     // inherited value from the caller's shell is cleared too.
-    if (!empty(get_env_variable("DAS_TUNE_MANIFEST"))) {
+    if (!empty(g_env_core.tune_manifest)) {
         to_log(LOG_INFO, "gen_bench_records: clearing inherited DAS_TUNE_MANIFEST — the bench exe carries its own winners\n")
         set_env_variable("DAS_TUNE_MANIFEST", "")
     }
@@ -1038,8 +1037,8 @@ def main : int {
         return oracle_main(cfg, legNeon, legAmx, legMetal, omodels,
             othreads, "modules/dasLLAMA/performance/records/_cell_{box_name()}.json", oexe)
     }
-    var refClean = empty(cfg.ref_clean) ? get_env_variable("LLAMA_BENCH_CLEAN") : cfg.ref_clean
-    var refStock = empty(cfg.ref_stock) ? get_env_variable("LLAMA_BENCH_STOCK") : cfg.ref_stock
+    var refClean = empty(cfg.ref_clean) ? g_env_prof.llama_bench_clean : cfg.ref_clean
+    var refStock = empty(cfg.ref_stock) ? g_env_prof.llama_bench_stock : cfg.ref_stock
     if (!empty(refClean) && !stat(refClean).is_valid) {
         to_log(LOG_WARNING, "gen_bench_records: clean-cpu ref `{refClean}` not found — neon cells run das-only\n")
         refClean = ""

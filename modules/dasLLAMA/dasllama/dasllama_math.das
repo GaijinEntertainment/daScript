@@ -4,8 +4,7 @@ options _comment_hygiene = true
 module dasllama_math shared public
 
 require math
-require daslib/fio  // has_env_variable: DAS_JOBQUE_TEAM_RANK_GATE suppresses the profile's team_rank_gate knob
-require dasllama/dasllama_env  // env_flag/env_int64: the shared typed readers + the knob registry
+require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require dasllama/dasllama_plane  // PlaneF/PlaneI8 — the borrowed-plane weight forms below
 require dasllama/dasllama_config  // DlimVulkanConfig — the dry-bake seam's config argument
 require daslib/jobque_boost public  // matmul's threaded path expands parallel_for; consumers need its symbols
@@ -181,10 +180,12 @@ def public get_team_rank_gate() : int { return g_team_rank_gate }
 // by OP rather than stage-count. Gated — set_trace_tags(true) rides with jobque_trace_start in
 // the profiling harness; production dispatches never pay the extern call.
 var g_trace_tags = false
-def public set_trace_tags(on : bool) {
-    g_trace_tags = on
-    if (on && is_job_que_available()) {   // registries live on the que; stay que-independent like trace_tag
-        register_trace_categories()
+def public set_trace_tags(on : bool) {   // nolint:LINT012,LINT019 — on is only read when JOBQUE_PROFILING_ENABLED compiles the body in
+    static_if (JOBQUE_PROFILING_ENABLED) {
+        g_trace_tags = on
+        if (on && is_job_que_available()) {   // registries live on the que; stay que-independent like trace_tag
+            register_trace_categories()
+        }
     }
 }
 let public TRACE_TAG_ATTN_CHAIN = 1
@@ -198,15 +199,27 @@ let public TRACE_TAG_PLE = 8
 let public TRACE_TAG_ROUTE = 9   // MoE router GEMM + select/bucket (prefill section split)
 let public TRACE_TAG_PARK = 10   // MoE park/reduce bookkeeping around the expert GEMMs
 let public TRACE_TAG_DN = 11   // Gated DeltaNet layers (qwen35 hybrid) — separates dn from gated attn
-def public trace_tag(t : int) {
-    if (g_trace_tags) {
-        jobque_trace_tag(t)
+// ASR encoder stages (dasllama_audio's shared whisper-core frontend + block loop + projector)
+let public TRACE_TAG_ENC_CONV = 12
+let public TRACE_TAG_ENC_ATTN_PROJ = 13
+let public TRACE_TAG_ENC_ATTN = 14
+let public TRACE_TAG_ENC_ATTN_OUT = 15
+let public TRACE_TAG_ENC_FC1 = 16
+let public TRACE_TAG_ENC_FC2 = 17
+let public TRACE_TAG_ENC_PROJ = 18
+def public trace_tag(t : int) {   // nolint:LINT012,LINT019 — t is only read when JOBQUE_PROFILING_ENABLED compiles the body in
+    static_if (JOBQUE_PROFILING_ENABLED) {
+        if (g_trace_tags) {
+            jobque_trace_tag(t)
+        }
     }
 }
-def public trace_marker(name : string; arg : int) {
+def public trace_marker(name : string; arg : int) {   // nolint:LINT012,LINT019 — args only read when JOBQUE_PROFILING_ENABLED compiles the body in
     // instant unit boundary ("token", "layer", "step") on the caller lane; same gate as trace_tag
-    if (g_trace_tags && is_job_que_available()) {
-        profile_marker(name, arg)
+    static_if (JOBQUE_PROFILING_ENABLED) {
+        if (g_trace_tags && is_job_que_available()) {
+            profile_marker(name, arg)
+        }
     }
 }
 // names/colors match the lane-timeline viewer's dark-theme palette, so saved traces carry
@@ -222,6 +235,14 @@ def private register_trace_categories() {
     profile_category(TRACE_TAG_PLE, "ple", 0xC39536u)
     profile_category(TRACE_TAG_ROUTE, "router", 0x4FC3D0u)
     profile_category(TRACE_TAG_PARK, "park/reduce", 0xD678B4u)
+    profile_category(TRACE_TAG_DN, "deltanet", 0x8385E8u)
+    profile_category(TRACE_TAG_ENC_CONV, "enc conv", 0x4FA8A0u)
+    profile_category(TRACE_TAG_ENC_ATTN_PROJ, "enc attn proj", 0x7FA8E8u)
+    profile_category(TRACE_TAG_ENC_ATTN, "enc attn core", 0x4C7FC4u)
+    profile_category(TRACE_TAG_ENC_ATTN_OUT, "enc attn out", 0x91B8ECu)
+    profile_category(TRACE_TAG_ENC_FC1, "enc fc1", 0x3FA378u)
+    profile_category(TRACE_TAG_ENC_FC2, "enc fc2", 0x6BC49Eu)
+    profile_category(TRACE_TAG_ENC_PROJ, "enc proj", 0x9B7BD0u)
 }
 
 //! Configure the job queue for dasLLAMA's pure fork/join matmul dispatch: pooled fork contexts,
@@ -237,13 +258,13 @@ def setup_dasllama_jobque_() {
     set_jobque_worker_spin(int(min(g_jobque_spin_us, 2147483647l)))
     set_jobque_join_spin(int(min(g_jobque_join_poll, 2147483647l)))
     set_jobque_worker_limit(g_dispatch_worker_limit > 0 ? g_dispatch_worker_limit : -1)   // -1 = unlimited
-    if (g_team_rank_gate >= 0 && !has_env_variable("DAS_JOBQUE_TEAM_RANK_GATE")) {
+    if (g_team_rank_gate >= 0 && is_none(g_env_core.jobque_team_rank_gate)) {
         set_jobque_team_rank_gate(g_team_rank_gate != 0)
     }
     // The dispatch caller is load-bearing in team mode — only it publishes chains, so a
     // descheduled caller idles every lane (4B Q4 32L trace: 13 all-lane holes/token, 1.7% worst).
     // Que creation ran this thread at High; claim the top notch. DASLLAMA_CALLER_PRIO=<-2..2> is the A/B rail.
-    set_current_thread_priority(clamp(env_int("DASLLAMA_CALLER_PRIO", 2), -2, 2))
+    set_current_thread_priority(clamp(g_env_engine.caller_prio, -2, 2))
 }
 
 // dasLLAMA matmuls are lockstep linear algebra: SMT siblings share the FMA/load ports, so the

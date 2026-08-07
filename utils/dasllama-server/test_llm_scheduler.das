@@ -8,6 +8,7 @@ require dasllama/dasllama                               // facade: load/encode/g
 require daslib/jobque_boost
 require daslib/fio
 require math
+require dasllama/dasllama_env
 
 // Unit gates for the continuous-batching scheduler — all through the SchedEvent seam, zero HTTP:
 // scheduler ≡ generate bit-exact (1 stream), chunk-size invariance under classic prefill, staggered
@@ -15,7 +16,7 @@ require math
 // (SmolLM2-135M GGUF via DASLLAMA_MODELS_DIR), same skip contract as test_openai_server.
 
 def private models_dir() : string {
-    let env = get_env_variable("DASLLAMA_MODELS_DIR")
+    let env = g_env_harness.models_dir
     return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
 }
 let MODEL_PATH = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")

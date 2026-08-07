@@ -12,6 +12,7 @@ require dasllama/dasllama_asr   // --asr: load_asr_model/create_session/transcri
 require audio   // --asr: the miniaudio decoder behind load_audio_16k_mono
 require dasllama/dasllama_audio   // --asr: AUDIO_SAMPLE_RATE, the 16 kHz mono contract
 require daslib/module_path            // get_this_module_dir — the default prompt corpus beside this bench
+require daslib/jobque_profile   // JOBQUE_PROFILING_ENABLED — --prof refuses on a build without the marker rail
 require ?das_accelerate dasllama/dasllama_math_accelerate   // the --accel leg; Apple-only C++ module
 require ../performance/profile_common.das   // profile_threads + affinity_on + bench records — the standing per-box methodology
 require llvm/daslib/llvm_tune   // tune_app_script — the exe-vs-script discriminator behind --for-debug-purposes
@@ -20,6 +21,7 @@ require daslib/clargs
 require daslib/fio
 require daslib/md_boost
 require math
+require dasllama/dasllama_env
 
 // llama-bench mirror — EXACTLY llama.cpp's test shapes, rep counts, and timing boundaries, and
 // NOTHING else. Two independent rows, each = one untimed warmup + -r timed reps, mean ± stdev:
@@ -534,6 +536,10 @@ def main() : int {
         print_help(get_command_info(type<Args>), "lcpp_bench")
         return 0
     }
+    if (cfg.prof && !JOBQUE_PROFILING_ENABLED) {
+        print("--prof needs the marker rail compiled in — rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)\n")
+        return 1
+    }
     // measurement exists only from the released exe: a -jit SCRIPT run reads whatever sidecar
     // sits beside the script and re-keys nothing — its numbers must never enter records
     g_debug_run = !empty(tune_app_script())
@@ -570,12 +576,12 @@ def main() : int {
     // (gen_profile's pattern): cap the future que's workers (computing main is the last lane) and
     // hard-pin lanes to distinct physical cores on the boxes that pin. -t is the explicit ask, but
     // DAS_JOBQUE_THREADS / DAS_JOBQUE_AFFINITY envs still win the que's actual lane count.
-    let t_env = has_env_variable("DAS_JOBQUE_THREADS")
-    var threads = cfg.threads > 0 ? cfg.threads : (t_env ? to_int(get_env_variable("DAS_JOBQUE_THREADS")) : profile_threads())
-    if (t_env && to_int(get_env_variable("DAS_JOBQUE_THREADS")) != threads) {
-        threads = to_int(get_env_variable("DAS_JOBQUE_THREADS"))
+    let t_env = g_env_core.jobque_threads
+    var threads = cfg.threads > 0 ? cfg.threads : (t_env ?? profile_threads())
+    if (is_some(t_env) && unwrap(t_env) != threads) {
+        threads = unwrap(t_env)
         say(fmt, "warning: DAS_JOBQUE_THREADS overrides -t — running {threads} lanes\n")
-    } elif (!t_env) {
+    } elif (is_none(t_env)) {
         // the PC measurement regime caps at 16 lanes (an explicit env or -t always wins) —
         // a big-SMT box at full width measures the scheduler, not the kernels
         if (get_platform_name() == "windows" && cfg.threads <= 0 && threads > 16) {
@@ -584,13 +590,13 @@ def main() : int {
         }
         set_jobque_threads_cap(max(threads - 1, 1))
     }
-    let pinned = affinity_on() && !has_env_variable("DAS_JOBQUE_AFFINITY")
+    let pinned = affinity_on() && is_none(g_env_core.jobque_affinity)
     if (pinned) {
         set_jobque_affinity(2)   // 2 = hard mask, the llama-bench --cpu-strict mirror (mode 1 re-rolls SMT placement)
     }
     // the regime is set BY THE BENCH, printed so nobody has to guess: N lanes = N-1 pool
     // workers + the computing main thread (DAS_JOBQUE_THREADS counts LANES, not workers)
-    say(fmt, "regime: {threads} lanes ({max(threads - 1, 1)} pool workers + main), affinity {pinned ? "hard mask (bench-forced)" : (has_env_variable("DAS_JOBQUE_AFFINITY") ? "env override" : "off (platform default)")}\n")
+    say(fmt, "regime: {threads} lanes ({max(threads - 1, 1)} pool workers + main), affinity {pinned ? "hard mask (bench-forced)" : (is_some(g_env_core.jobque_affinity) ? "env override" : "off (platform default)")}\n")
     if (cfg.asr) {   // the audio cell shares every lane decision above, then runs its own protocol
         return asr_cell_main(cfg.model, cfg.json_path, reps, threads) ? 0 : 1
     }
@@ -618,8 +624,8 @@ def main() : int {
     }
     // an unarmed lever silently measures the SAME thing twice — the one A/B failure that looks
     // like a real result, so it warns rather than being left to the reader
-    if (ab && !empty(levers[0].env) && !has_env_variable(levers[0].env)
-            && !(cfg.prefill_ab && has_env_variable("DASLLAMA_GPU_MOE_STREAM"))) {
+    if (ab && !empty(levers[0].env) && !env_is_set(levers[0].env)
+            && !(cfg.prefill_ab && is_some(g_env_gpu.gpu_moe_stream))) {
         print("warning: --{levers[0].flag}-ab without {levers[0].env}=1 — nothing armed, both arms identical\n")
     }
     // -m accepts a comma-separated list: one process benches every model in turn, so a sweep
@@ -777,7 +783,7 @@ def main() : int {
                 }
                 let st = row_stat("pp{plen}{dtag}", tps)
                 say(fmt, "{st.test}: {st.mean:.2f} ± {st.sd:.2f} tok/s ({reps} reps)\n")
-                if (has_env_variable("DASLLAMA_BENCH_VERBOSE")) {
+                if (g_env_bench.bench_verbose) {
                     say(fmt, "  reps: {tps}\n")
                 }
                 results |> push(st)
@@ -809,7 +815,7 @@ def main() : int {
                 }
                 let st = row_stat("tg{ngen}{dtag}", tps)
                 say(fmt, "{st.test}: {st.mean:.2f} ± {st.sd:.2f} tok/s ({reps} reps)\n")
-                if (has_env_variable("DASLLAMA_BENCH_VERBOSE")) {
+                if (g_env_bench.bench_verbose) {
                     say(fmt, "  reps: {tps}\n")
                 }
                 results |> push(st)

@@ -1,7 +1,9 @@
 # daslang environment variables
 
 Every environment variable daslang itself reads. Module-specific knobs live with their module —
-dasLLAMA's ~130 are in `modules/dasLLAMA/ENVIRONMENT.md`, generated from its own registry.
+dasLLAMA's ~146 are in `modules/dasLLAMA/ENVIRONMENT.md`, generated from `[EnvConfig]` struct
+declarations in `dasllama/dasllama_env.das` (daslib/clargs) — each knob is a struct field loaded
+once at context init; read sites touch `g_env_*` fields, never the environment.
 
 Nothing here is required for normal use. These are diagnostic and tuning levers: reach for one when
 you are measuring, bisecting, or working around a box, not as part of a build.
@@ -25,6 +27,8 @@ number it produced is a 4-thread number.
 | `DAS_JOBQUE_TEAM_EAGER_EXIT` | flag | Team workers leave as soon as their share is done rather than waiting at the barrier. |
 | `DAS_JOBQUE_TEAM_RANK_GATE` | number | Team-dispatch rank gate. When set, it takes precedence over a box profile's own `team_rank_gate`. |
 | `DAS_TEAM_PROF` | flag | Per-team dispatch profiling counters. |
+
+| `JOBQUE_PROFILING` | flag | Compile the jobque marker rail in. Read at COMPILE time (`daslib/build_const` constant `JOBQUE_PROFILING_ENABLED` in `daslib/jobque_profile`): without it, `profile_tag`/`profile_marker` calls — and everything gated `static_if (JOBQUE_PROFILING_ENABLED)` — erase from the program entirely, so instrumented hot paths cost zero. `--jobque-profiling` on the command line is the argv twin (argv beats env). Interp/`-jit` resolve it per run; an `-exe` build bakes it. |
 
 `set_jobque_affinity()` and `set_jobque_threads_cap()` are the programmatic equivalents; the
 environment wins over both, which is what makes them usable for an A/B without touching source.
@@ -107,6 +111,12 @@ If a variable is genuinely warranted:
    to zero. Plain `to_int` answers `0` on garbage, which silently reads as "explicitly zero".
 3. **Document it in the same commit.** A knob that exists only in the source is a knob nobody can
    use and nobody can remove.
+
+In `.das` code, `[EnvConfig]` (daslib/clargs, see `skills/clargs_usage.md`) gives all three for
+the price of one struct field: the initializer is the typed default, garbage warns and keeps it,
+the loader runs once, and the declaration carries the doc line. dasLLAMA runs entirely on this
+rail (`dasllama/dasllama_env.das`) and its CODEREVIEW bans raw reads outside it — prefer the same
+shape for any new module that grows more than a knob or two.
 
 On the C++ side every core read goes through an accessor declared in
 `include/daScript/misc/env_cfg.h` rather than a `getenv` at the use site. The accessor is

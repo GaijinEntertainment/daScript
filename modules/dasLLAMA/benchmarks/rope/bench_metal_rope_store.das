@@ -2,7 +2,7 @@ options gen2
 options persistent_heap
 
 require dastest/testing_boost
-require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
+require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require metal/msl_shader
 require ?das_metal metal/das_metal_boost  // GPU driver half, Apple builds only
 require dasllama/dasllama_metal_decode  // the production rope+KV-store MSL (zero copy drift)
@@ -57,7 +57,7 @@ def private time_seq(queue; psos; bufss; groupss; threadss; reps : int) : double
 }
 
 def private run_rope_sidebyside(b) {   // nolint:STYLE038 — flat lab driver: buffers bound once, then one timed slot per kernel
-    let rounds = env_int("DASMETAL_LAB_ROUNDS", 3)
+    let rounds = g_env_bench.lab_rounds
     let nheads = 24l
     let hs = 128l
     let kv_dim = 1024l

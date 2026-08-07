@@ -6,35 +6,48 @@ require daslib/fio
 require strings
 require daslib/strings_boost
 
-// Keeps ENVIRONMENT.md honest. The doc is GENERATED from env_registry(), so the only way it can go
-// stale is a source reading a variable nobody registered — which is exactly what the coverage test
-// below catches. Adding an env read without a registry entry fails here, in the same commit.
+// Keeps ENVIRONMENT.md and the [EnvConfig] declarations honest. The doc is GENERATED from the
+// declarations in dasllama_env.das, so the only way it can go stale is an env read that bypasses
+// them — which is exactly what the two scans below catch, in the same commit.
 //
-// The reader-semantics cases pin the normalization the registry promises: "unset" falls back,
-// "garbage" falls back (plain to_int would silently answer 0), and the two boolean spellings the
-// tree grew organically (== "1" opt-in, != "0" opt-out) resolve the same way.
+// Two tiers of enforcement: engine/tool code (modules/dasLLAMA, utils/dasllama-*) may not read
+// the environment AT ALL outside dasllama_env.das — knobs are g_env_* struct fields, and
+// dynamic-name reads go through env_is_set/env_value_of. Examples and tutorials may keep a raw
+// read for pedagogy, but only of a DECLARED name.
 
-let SCAN_ROOTS = [
+let STRICT_ROOTS = [
     "modules/dasLLAMA",
     "utils/dasllama-server",
-    "utils/dasllama-convert",
+    "utils/dasllama-convert"
+]
+
+let COVERAGE_ROOTS = [
     "examples/dasLLAMA",
     "tutorials/dasLLAMA"
 ]
 
-// Every spelling that reads an environment variable by literal name.
+// Every spelling that reads an environment variable — raw fio reads plus the clargs loaders
+// (a literal name through env_config_* would bypass the declarations just as surely).
 let READ_MARKERS = [
     "get_env_variable(\"",
     "has_env_variable(\"",
-    "env_flag(\"",
-    "env_int(\"",
-    "env_int64(\"",
-    "env_str(\"",
-    "env_int64_min(\""   // the Accelerate floor+warn wrapper; it still names the knob literally
+    "env_config_flag(\"",
+    "env_config_int(\"",
+    "env_config_int64(\"",
+    "env_config_float(\"",
+    "env_config_string(\"",
+    "env_config_text(\""
 ]
 
-// The registry itself names every knob as a literal but reads none of them; generated AOT trees
-// are copies of sources already scanned.
+// The sanctioned dynamic-name spellings: legal anywhere in the module, but a LITERAL name
+// through them must still be declared — they feed the coverage scan, never the strict ban.
+let SANCTIONED_MARKERS = [
+    "env_is_set(\"",
+    "env_value_of(\""
+]
+
+// The declarations themselves name every knob but read none of them; generated AOT trees are
+// copies of sources already scanned.
 def private skip_path(path : string) : bool {
     let p = replace(path, "\\", "/")
     return (find(p, "_aot_generated") >= 0
@@ -42,8 +55,8 @@ def private skip_path(path : string) : bool {
             || find(p, "test_env_registry.das") >= 0)
 }
 
-def private collect_names(text : string; var out : table<string>) {
-    for (marker in READ_MARKERS) {
+def private collect_names(text : string; markers : array<string>; var out : table<string>) {
+    for (marker in markers) {
         var from = 0
         while (true) {
             let hit = find(text, marker, from)
@@ -61,40 +74,67 @@ def private collect_names(text : string; var out : table<string>) {
 }
 
 // dir_rec yields BASE NAMES, not paths, so the walk is hand-rolled to keep the path it needs
-// for fread. Generated AOT trees are copies of sources already scanned — skipping them keeps
-// the walk from reading the same 60k-line file twice per directory.
-def private walk_das(dirpath : string; var out : table<string>) {
+// for fread.
+def private walk_das(dirpath : string; blk : block<(path : string; text : string) : void>) {
     dir(dirpath) $(name : string) {
         return if (name == "." || name == "..")
         let full = "{dirpath}/{name}"
         if (stat(full).is_dir) {
             return if (name == "_aot_generated" || name == "_llvm_aot_generated")
-            walk_das(full, out)
+            walk_das(full, blk)
         } elif (ends_with(name, ".das") && !skip_path(full)) {
             let text = fread(full)
             if (!empty(text)) {
-                collect_names(text, out)
+                blk |> invoke(full, text)
             }
         }
     }
 }
 
-def private scan_tree(var out : table<string>) {
-    for (root in SCAN_ROOTS) {
-        walk_das("{get_das_root()}/{root}", out)
+[test]
+def test_no_env_reads_outside_the_declarations(t : T?) {
+    t |> run("engine and tool code reads knobs as g_env_* fields, never the environment") @(t : T?) {
+        var offenders : array<string>
+        for (root in STRICT_ROOTS) {
+            walk_das("{get_das_root()}/{root}") $(path, text) {
+                for (marker in READ_MARKERS) {
+                    if (find(text, marker) >= 0) {
+                        offenders |> push("{path}: {marker}...\")")
+                        break
+                    }
+                }
+            }
+        }
+        t |> success(empty(offenders),
+            "raw environment read(s) outside dasllama_env.das: {join(offenders, "; ")} — declare the knob as an [EnvConfig] field and read the g_env_* global (dynamic names: env_is_set/env_value_of)")
+        delete offenders
     }
 }
 
 [test]
-def test_every_env_read_is_registered(t : T?) {
-    t |> run("every environment variable dasLLAMA reads has a registry entry") @(t : T?) {
+def test_every_env_read_is_declared(t : T?) {
+    t |> run("every environment variable read anywhere has an [EnvConfig] declaration") @(t : T?) {
         var used : table<string>
-        scan_tree(used)
-        t |> success(length(used) > 50, "scan found {length(used)} names — the walk looks broken")
-        var reg <- env_registry()
+        var files_scanned = 0
+        for (root in STRICT_ROOTS) {
+            walk_das("{get_das_root()}/{root}") $(path, text) {
+                files_scanned++
+                collect_names(text, READ_MARKERS, used)
+                collect_names(text, SANCTIONED_MARKERS, used)
+            }
+        }
+        for (root in COVERAGE_ROOTS) {
+            walk_das("{get_das_root()}/{root}") $(path, text) {
+                collect_names(text, READ_MARKERS, used)
+                collect_names(text, SANCTIONED_MARKERS, used)
+            }
+        }
+        t |> success(files_scanned > 100, "walk visited {files_scanned} files under the strict roots — a real walk sees hundreds; a broken walk must not let both enforcement tests pass vacuously")
+        t |> success(length(used) > 0, "scan found {length(used)} names — zero means even the sanctioned-spelling scan broke")
+        var names <- registered_env_names()
         var known : table<string>
-        for (e in reg) {
-            known |> insert(e.name)
+        for (n in names) {
+            known |> insert(n)
         }
         var missing : array<string>
         for (n in keys(used)) {
@@ -103,15 +143,13 @@ def test_every_env_read_is_registered(t : T?) {
             }
         }
         t |> success(empty(missing),
-            "unregistered environment variable(s): {join(missing, ", ")} — add them to env_registry() in dasllama_env.das")
-        delete reg
+            "undeclared environment variable(s): {join(missing, ", ")} — add the field to the area struct in dasllama_env.das")
+        delete names
         delete missing
     }
 }
 
-// The tree grew five of these independently (env_or x2 shapes, pf_env_int, win_env_int, a 1-arg
-// env_int64), each with its own idea of what "unset" and "garbage" mean. One more would also
-// reintroduce a blind spot in the coverage scan above, which only knows the shared spellings.
+// A fresh helper would dodge both scans above and reintroduce a private idea of "unset".
 let BANNED_HELPERS = [
     "def private env_or(",
     "def env_or(",
@@ -124,48 +162,33 @@ let BANNED_HELPERS = [
     "def env_str(",
     "def private env_str(",
     "def env_flag(",
-    "def private env_flag("
+    "def private env_flag(",
+    "def env_int64_min(",
+    "def private env_int64_min("
 ]
-
-def private find_banned(var out : array<string>) {
-    for (root in SCAN_ROOTS) {
-        walk_banned("{get_das_root()}/{root}", out)
-    }
-}
-
-def private walk_banned(dirpath : string; var out : array<string>) {
-    dir(dirpath) $(name : string) {
-        return if (name == "." || name == "..")
-        let full = "{dirpath}/{name}"
-        if (stat(full).is_dir) {
-            return if (name == "_aot_generated" || name == "_llvm_aot_generated")
-            walk_banned(full, out)
-        } elif (ends_with(name, ".das") && !skip_path(full)) {
-            let text = fread(full)
-            return if (empty(text))
-            for (sig in BANNED_HELPERS) {
-                if (find(text, sig) >= 0) {
-                    out |> push("{name}: {sig}...)")
-                }
-            }
-        }
-    }
-}
 
 [test]
 def test_no_ad_hoc_env_helpers(t : T?) {
-    t |> run("every env read goes through the dasllama_env readers") @(t : T?) {
+    t |> run("nobody re-declares a private env reader") @(t : T?) {
         var offenders : array<string>
-        find_banned(offenders)
+        for (root in STRICT_ROOTS) {
+            walk_das("{get_das_root()}/{root}") $(path, text) {
+                for (sig in BANNED_HELPERS) {
+                    if (find(text, sig) >= 0) {
+                        offenders |> push("{base_name(path)}: {sig}...)")
+                    }
+                }
+            }
+        }
         t |> success(empty(offenders),
-            "re-declared env helper(s): {join(offenders, "; ")} — call env_flag/env_int/env_int64/env_str from dasllama_env instead")
+            "re-declared env helper(s): {join(offenders, "; ")} — knobs are [EnvConfig] fields in dasllama_env.das")
         delete offenders
     }
 }
 
 [test]
 def test_environment_md_is_current(t : T?) {
-    t |> run("the checked-in ENVIRONMENT.md matches what the registry renders") @(t : T?) {
+    t |> run("the checked-in ENVIRONMENT.md matches what the declarations render") @(t : T?) {
         let path = "{get_das_root()}/modules/dasLLAMA/ENVIRONMENT.md"
         let onDisk = fread(path)
         t |> success(!empty(onDisk), "cannot read {path}")
@@ -180,53 +203,38 @@ def test_environment_md_is_current(t : T?) {
 
 [test]
 def test_registry_has_no_duplicates(t : T?) {
-    t |> run("registry lists each name once") @(t : T?) {
-        var reg <- env_registry()
+    t |> run("each knob is declared once across the area structs") @(t : T?) {
+        var names <- registered_env_names()
+        t |> success(length(names) > 140, "only {length(names)} declared names — an area struct dropped out")
         var seen : table<string>
         var dupes : array<string>
-        for (e in reg) {
-            if (key_exists(seen, e.name)) {
-                dupes |> push(e.name)
+        for (n in names) {
+            if (key_exists(seen, n)) {
+                dupes |> push(n)
             } else {
-                seen |> insert(e.name)
+                seen |> insert(n)
             }
         }
-        t |> success(empty(dupes), "duplicate registry entries: {join(dupes, ", ")}")
-        delete reg
+        t |> success(empty(dupes), "duplicate declarations: {join(dupes, ", ")}")
+        delete names
         delete dupes
     }
 }
 
 [test]
-def test_registry_entries_are_documented(t : T?) {
-    t |> run("every entry carries a non-empty doc line") @(t : T?) {
-        var reg <- env_registry()
+def test_every_knob_is_documented(t : T?) {
+    t |> run("every rendered doc row carries a non-empty Effect column") @(t : T?) {
         var undocumented : array<string>
-        for (e in reg) {
-            if (empty(e.doc)) {
-                undocumented |> push(e.name)
+        for (line in split(env_markdown(), "\n")) {
+            continue if (!starts_with(line, "| `"))
+            // | `NAME` | kind | default | doc |
+            var cols <- split(line, "|")
+            if (length(cols) >= 5 && empty(strip(cols[4]))) {
+                undocumented |> push(strip(cols[1]))
             }
+            delete cols
         }
-        t |> success(empty(undocumented), "undocumented entries: {join(undocumented, ", ")}")
-        delete reg
+        t |> success(empty(undocumented), "undocumented knob(s): {join(undocumented, ", ")}")
         delete undocumented
-    }
-}
-
-[test]
-def test_env_flag_normalization(t : T?) {
-    t |> run("env_flag folds the opt-in and opt-out spellings onto one rule") @(t : T?) {
-        // an unset knob is the default, either way round
-        t |> success(env_flag("DASLLAMA_UNSET_FIXTURE_KNOB", true), "unset should yield dflt=true")
-        t |> success(!env_flag("DASLLAMA_UNSET_FIXTURE_KNOB", false), "unset should yield dflt=false")
-    }
-}
-
-[test]
-def test_env_number_readers_reject_garbage(t : T?) {
-    t |> run("env_int / env_int64 fall back rather than answering 0") @(t : T?) {
-        t |> equal(env_int("DASLLAMA_UNSET_FIXTURE_KNOB", 42), 42)
-        t |> equal(env_int64("DASLLAMA_UNSET_FIXTURE_KNOB", 42l), 42l)
-        t |> equal(env_str("DASLLAMA_UNSET_FIXTURE_KNOB", "fallback"), "fallback")
     }
 }

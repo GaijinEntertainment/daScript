@@ -10,7 +10,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_par
 require dasllama/dasllama_convert
 require dasllama/dasllama_kv_codec   // fwht_signs_row/fwht_unsign_row — the Hadamard rotation in gated attention
-require dasllama/dasllama_env       // env_flag: the per-kernel runtime switches
+require dasllama/dasllama_env       // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require math
 
 // The std/dense/MoE transformer block kernels — attention and FFN, decode and prefill — plus the
@@ -78,7 +78,7 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
     let fo = fmt_at(t.wo_fmt, l)
     let any_kq = fq != KqFmt.q8 || fk != KqFmt.q8 || fv != KqFmt.q8 || fo != KqFmt.q8
     // attention rmsnorm + input quantize: one image per consumed form — q8 reads Q8_0, kq reads Q8_K (kq v2)
-    let ts_norm0 = ref_time_ticks()
+    let ts_norm0 = prof_ticks()
     rms_at(s.xb, t, t.rms_att_off + l * dim, s.x, dim)
     if (fq == KqFmt.q8 || fk == KqFmt.q8 || fv == KqFmt.q8) {
         quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)
@@ -87,7 +87,7 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
         quantize_q8_k_into(s.xb, dim, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)
     }
     prof_add("norm", ts_norm0)
-    let ts_chain = ref_time_ticks()
+    let ts_chain = prof_ticks()
     trace_tag(TRACE_TAG_ATTN_CHAIN)
     // stage geometry (same grain math as the per-op dispatches; the C++ side clamps chunks <= range)
     let nslots = int(n_heads + 2l * n_kv_heads)
@@ -488,7 +488,7 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
     prof_add("attn_chain", ts_chain)
     if (post_norm) {  // Gemma2/3: post-attention RMSNorm before the residual add — same serial
         // tail as the un-fused path (dim-sized, microseconds), bit-identical order
-        let ts_resid = ref_time_ticks()
+        let ts_resid = prof_ticks()
         rms_at(s.xb2, t, t.rms_post_att_off + l * dim, s.xb2, dim)
         add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb2[0])), dim)
         prof_add("act_resid", ts_resid)
@@ -519,11 +519,11 @@ def attention_std_decode(t : Model; var s : Session; l : int64; pos : int64) { /
     let kstart = (is_sliding && pos + 1l > c.sliding_window) ? (pos + 1l - c.sliding_window) : 0l
     let cnt = pos + 1l - kstart
     // attention rmsnorm
-    let ts_norm0 = ref_time_ticks()
+    let ts_norm0 = prof_ticks()
     rms_at(s.xb, t, t.rms_att_off + l * dim, s.x, dim)
     prof_add("norm", ts_norm0)
     // q, k, v projections (independent — share s.xb; fused into one parallel dispatch when Q8)
-    let ts_qkv = ref_time_ticks()
+    let ts_qkv = prof_ticks()
     if (kv_shared) {
         mm_f(s.q, t, fmt_at(t.wq_fmt, l), t.wq_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, qd)   // Q only
     } else {
@@ -536,7 +536,7 @@ def attention_std_decode(t : Model; var s : Session; l : int64; pos : int64) { /
     }
     prof_add("mm_qkv", ts_qkv)
     if (c.qk_norm) {  // Qwen3/gemma4: per-head RMSNorm on q/k before RoPE — q/k are n_heads/n_kv_heads rows of head_size
-        let ts_qknorm = ref_time_ticks()
+        let ts_qknorm = prof_ticks()
         rms_batch(s.q, s.q, t, t.rms_q_offs[l], head_size, n_heads)
         if (!kv_shared) {
             rms_batch(s.k, s.k, t, t.rms_k_offs[l], head_size, n_kv_heads)
@@ -545,12 +545,12 @@ def attention_std_decode(t : Model; var s : Session; l : int64; pos : int64) { /
     }
     // gemma4: weightless per-head RMSNorm on V; V-from-K layers already normed V inside mm_qkv
     if (c.v_norm && t.wv_offs[l] >= 0l) {
-        let ts_vnorm = ref_time_ticks()
+        let ts_vnorm = prof_ticks()
         rms_batch(s.v, s.v, t, t.rms_ones_off, head_size, n_kv_heads)
         prof_add("norm", ts_vnorm)
     }
     // table path: leaves called DIRECTLY, same as rope_batch_tab, to dodge pass-through-const-write-elision
-    let ts_rope = ref_time_ticks()
+    let ts_rope = prof_ticks()
     // partial rotary (glm4moe: 64 of 128) — table rows span rot/2 pairs; loader guarantees NEOX
     let rot = c.rope_dim > 0l ? c.rope_dim : head_size
     if (g_use_rope_table) {
@@ -592,7 +592,7 @@ def attention_std_decode(t : Model; var s : Session; l : int64; pos : int64) { /
     let vtq4 = s.kv_dtype_v == KVDtype.tq4
     if (ktq4 || vtq4) {
         // tq4 basis change: q/k/v rotate per head, attention runs in that basis, xb un-rotates after (⟨Hq,Hk⟩ = ⟨q,k⟩)
-        let ts_rot = ref_time_ticks()
+        let ts_rot = prof_ticks()
         unsafe {
             let sgp = addr < float const? >(s.kv_signs[0])
             if (ktq4) {
@@ -622,7 +622,7 @@ def attention_std_decode(t : Model; var s : Session; l : int64; pos : int64) { /
     }
     // store k, v for this position (shared-KV layers: nothing to store — source layer already cached it)
     if (!kv_shared) {
-        let ts_kv = ref_time_ticks()
+        let ts_kv = prof_ticks()
         unsafe {
             kv_store_row(kcl, s.kv_dtype_k, kv_dim, kv_phys_row(s, pos), 0l, kv_dim,
                 addr < float const? >(s.k[0]))
@@ -632,7 +632,7 @@ def attention_std_decode(t : Model; var s : Session; l : int64; pos : int64) { /
         prof_add("kv_store", ts_kv)
     }
     // attention threaded over heads: disjoint att rows per head, result-identical to the inline loop
-    let ts_attn = ref_time_ticks()
+    let ts_attn = prof_ticks()
     let seq_len = c.seq_len
     let attn_softcap = c.attn_logit_softcap
     // work-proportional lanes; tiny-cnt early-decode attention (~2K MACs at cnt=1) inlines instead
@@ -674,13 +674,13 @@ def attention_std_decode(t : Model; var s : Session; l : int64; pos : int64) { /
         }
     }
     // output projection (qd -> dim), optional bias + post-attention norm, residual
-    let ts_wo = ref_time_ticks()
+    let ts_wo = prof_ticks()
     mm_f(s.xb2, t, fmt_at(t.wo_fmt, l), t.wo_offs[l], s.xb, s.xq, s.xs, s.xbs, qd, dim)
     if (c.attn_out_bias) {  // gpt-oss: + bias on the projected attention output
         add_bias(s.xb2, 0l, t.bo, l * dim, dim)
     }
     prof_add("mm_wo", ts_wo)
-    let ts_resid0 = ref_time_ticks()
+    let ts_resid0 = prof_ticks()
     if (c.pre_post_norm) {  // Gemma2: post-attention RMSNorm before the residual add
         rms_at(s.xb2, t, t.rms_post_att_off + l * dim, s.xb2, dim)
     }
@@ -701,7 +701,7 @@ def attention_gpu_prefill(t : Model; var s : Session; l : int64; npos : int64; g
     let rot = c.rope_dim > 0l ? c.rope_dim : head_size
     let fq = fmt_at(t.wq_fmt, l)
     let kq_cls = fq != KqFmt.q8
-    let ts_norm0 = ref_time_ticks()
+    let ts_norm0 = prof_ticks()
     rms_batch(s.xb_b, s.x_b, t, t.rms_att_off + l * dim, dim, npos)
     if (kq_cls) {   // the chain's activation image follows the q/k/v stack class
         s.kxqb |> resize(npos * dim)
@@ -715,7 +715,7 @@ def attention_gpu_prefill(t : Model; var s : Session; l : int64; npos : int64; g
         build_rope_table(s.rope_cos, s.rope_sin, t, c.rope_freq_base, c.rope_freq_scale, 0l, npos, rot, true)
     }
     prof_add("at_norm", ts_norm0)
-    let ts_gpu = ref_time_ticks()
+    let ts_gpu = prof_ticks()
     unsafe {
         if (kq_cls) {
             matmul_moe_gpu_attn(s.xb2_b, s.k_b, s.v_b,
@@ -741,7 +741,7 @@ def attention_gpu_prefill(t : Model; var s : Session; l : int64; npos : int64; g
     }
     prof_add("at_gpu", ts_gpu)
     // the cache store runs the normal CPU codec off the DMA'd k/v rows
-    let ts_kv = ref_time_ticks()
+    let ts_kv = prof_ticks()
     var kcl = kv_layer_kbase(s, l, c.seq_len)
     var vcl = kv_layer_vbase(s, l, c.seq_len)
     let store_nrun = kv_runs(s, 0l, npos, s.kv_runs)
@@ -750,7 +750,7 @@ def attention_gpu_prefill(t : Model; var s : Session; l : int64; npos : int64; g
             addr < KVRun const? >(s.kv_runs[0]), store_nrun, 0l, npos, kv_dim)
     }
     prof_add("kv_store", ts_kv)
-    let ts_resid = ref_time_ticks()
+    let ts_resid = prof_ticks()
     add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
     prof_add("at_resid", ts_resid)
 }
@@ -787,7 +787,7 @@ def attention_std_prefill(t : Model; var s : Session; l : int64; npos : int64; s
     let vtq4 = s.kv_dtype_v == KVDtype.tq4
     if (ktq4 || vtq4) {
         // tq4 basis change at the RoPE seam (see attention_std_decode); xb_b un-rotates below
-        let ts_rot = ref_time_ticks()
+        let ts_rot = prof_ticks()
         unsafe {
             let sgp = addr < float const? >(s.kv_signs[0])
             if (ktq4) {
@@ -804,7 +804,7 @@ def attention_std_prefill(t : Model; var s : Session; l : int64; npos : int64; s
     }
     // separate pass (provably identical to interleaving); shared-KV layers store nothing — already cached
     if (!kv_shared) {
-        let ts_kv = ref_time_ticks()
+        let ts_kv = prof_ticks()
         let store_nrun = kv_runs(s, start_pos, start_pos + npos, s.kv_runs)   // where the new rows land
         unsafe {
             kv_store_batch(kcl, vcl, s.kv_dtype_k, s.kv_dtype_v, s.k_b, s.v_b,
@@ -813,7 +813,7 @@ def attention_std_prefill(t : Model; var s : Session; l : int64; npos : int64; s
         prof_add("kv_store", ts_kv)
     }
     // causal attention into xb_b; output for position p lands at xb_b[p*qd..], feeding wo below
-    let ts_attn = ref_time_ticks()
+    let ts_attn = prof_ticks()
     let sinksp = (c.attn_sinks
         ? unsafe(addr < float const? >(t.fblob[t.sinks_off + l * n_heads]))
         : null)
@@ -836,22 +836,22 @@ def ffn_dense_prefill(t : Model; var s : Session; l : int64; npos : int64) {
     let dim = c.dim
     let hidden = layer_hidden(t, l)   // gemma-4 E2B varies FFN width per layer
     // ffn rmsnorm, per position
-    let ts_norm1 = ref_time_ticks()
+    let ts_norm1 = prof_ticks()
     rms_batch(s.xb_b, s.x_b, t, t.rms_ffn_off + l * dim, dim, npos)
     prof_add("norm", ts_norm1)
     // gated FFN (batched): hb = act(W1·xb) * (W3·xb) — act/mul elementwise, so batch-flat
-    let ts_ffn = ref_time_ticks()
+    let ts_ffn = prof_ticks()
     mm_b_f(s, s.hb_b, t, fmt_at(t.w1_fmt, l), t.w1_offs[l], s.xb_b, dim, hidden, npos)
     mm_b_f(s, s.hb2_b, t, fmt_at(t.w3_fmt, l), t.w3_offs[l], s.xb_b, dim, hidden, npos)
     prof_add("mm_ffn", ts_ffn)
-    let ts_act = ref_time_ticks()
+    let ts_act = prof_ticks()
     gate_batch(s.hb_b, s.hb2_b, c.ffn_act, hidden, npos)   // fused act*gate (exp4 unless act_vec off)
     prof_add("act", ts_act)
     // down projection (batched) + optional post-FFN norm + residual
-    let ts_ffn2 = ref_time_ticks()
+    let ts_ffn2 = prof_ticks()
     mm_b_f(s, s.xb_b, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], s.hb_b, hidden, dim, npos)
     prof_add("mm_ffn_down", ts_ffn2)   // own bucket: down is long-K + often a different format (Q4_K_M keeps it q6_K)
-    let ts_resid1 = ref_time_ticks()
+    let ts_resid1 = prof_ticks()
     if (c.pre_post_norm) {  // Gemma2: post-FFN RMSNorm per position before residual
         rms_batch(s.xb_b, s.xb_b, t, t.rms_post_ffn_off + l * dim, dim, npos)
     }
@@ -1029,7 +1029,7 @@ var private g_gpu_combine_probed = false
 [cold_path]   // one-time env resolution; the accessor is a global test after the first call
 def private load_gpu_combine() {
     g_gpu_combine_probed = true
-    g_gpu_combine = env_flag("DASLLAMA_GPU_COMBINE", true)
+    g_gpu_combine = g_env_gpu.gpu_combine
 }
 
 def gpu_combine_on : bool {
@@ -1109,7 +1109,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
 
     // 1. route every position: one batched router GEMM, then the shared select per row; shexp gate dots ride along
     trace_tag(TRACE_TAG_ROUTE)
-    let ts_route = ref_time_ticks()
+    let ts_route = prof_ticks()
     mm_fblob_b(s.moe_rlog, t, t.router_off + l * ne * dim, s.xb_b, dim, ne, npos)
     // per-row bias+select+gate dot, threaded: serial loop was ~2-3ms every-lane-idle/layer here
     unsafe {
@@ -1180,7 +1180,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
     // 3F. fused: gate/up/down each run as ONE region-list dispatch (3 fork/joins/layer, not 3/expert)
     if (fused) {
         trace_tag(TRACE_TAG_MOE)
-        let ts_gather = ref_time_ticks()
+        let ts_gather = prof_ticks()
         // the GPU tile computes activation block sums in-kernel — skip the per-16 sum gather
         moe_gather_rows(s, 0l, nk, dim, k, moe_kform && !fused_gpu, moe_kform)
         prof_add("moe_gather", ts_gather)
@@ -1227,7 +1227,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
             }
             nreg++
         }
-        let ts_g1 = ref_time_ticks()
+        let ts_g1 = prof_ticks()
         if (gpu_comb) {   // GPU tier: gate+up/act/requant/down AND the routed weighted-sum combine
             // gout comes back as npos combined rows; the 33MB-class bucket-row readback + park scatter disappear
             s.moe_inv |> resize(nk)
@@ -1261,7 +1261,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
                 matmul_mx4q8_batch_groupn(s.moe_ghb2, t.mxq, t.mxs, s.moe_offs3, nreg, s.moe_gxq, s.moe_gxs, dim, nfe)
             }
             prof_add("mm_gemm", ts_g1)
-            let ts_act = ref_time_ticks()
+            let ts_act = prof_ticks()
             gate_batch(s.moe_ghb, s.moe_ghb2, c.ffn_act, nfe, nk)
             prof_add("act", ts_act)
             if (fused_kq && kq_sb(f2)) {   // kq v2: sb down stacks read Q8_K-form rows (+ per-16 sums); q51/q8 the Q8_0 form
@@ -1269,7 +1269,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
             } else {
                 requant_rows_q8(s.moe_ghb, nfe, nk, s.moe_hq, s.moe_hs)
             }
-            let ts_g3 = ref_time_ticks()
+            let ts_g3 = prof_ticks()
             if (fused_kq && kq_sb(f2)) {
                 mm_b_kq_groupn(s.moe_gout, t, f2, s.moe_offs2, nreg, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim)
             } elif (fused_kq) {
@@ -1284,7 +1284,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         // threaded bucket scatter: serial was an ~8ms ALL-LANE hole here (~67MB traffic at pp512/30B)
         if (!gpu_comb) {
             trace_tag(TRACE_TAG_PARK)
-            let ts_park = ref_time_ticks()
+            let ts_park = prof_ticks()
             unsafe {
                 let gp = addr < float const? >(s.moe_gout[0])
                 var ep = addr(s.moe_eout[0])
@@ -1312,7 +1312,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         if (cnt == 0l) {
             continue
         }
-        let ts_gather = ref_time_ticks()
+        let ts_gather = prof_ticks()
         moe_gather_rows(s, b0, cnt, dim, k, moe_kform, moe_kform)
         prof_add("moe_gather", ts_gather)
         let eg = l * ne + e
@@ -1337,16 +1337,16 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
             mm_b_mx4_pre(s.moe_ghb, t, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
             mm_b_mx4_pre(s.moe_ghb2, t, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
         } elif (t.experts_mx4) {   // exact Q8 expansion of this expert, then the proven batch GEMMs
-            let ts_ex = ref_time_ticks()
+            let ts_ex = prof_ticks()
             expand_mx4_region_q8(t, t.we1_offs[l] + base, dim, nfe, s.mx4_wq, s.mx4_ws)
             prof_add("moe_expand", ts_ex)
-            let ts_g1 = ref_time_ticks()
+            let ts_g1 = prof_ticks()
             matmul_q8q8_batch(s.moe_ghb, s.mx4_wq, s.mx4_ws, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
             prof_add("mm_gemm", ts_g1)
-            let ts_ex2 = ref_time_ticks()
+            let ts_ex2 = prof_ticks()
             expand_mx4_region_q8(t, t.we3_offs[l] + base, dim, nfe, s.mx4_wq, s.mx4_ws)
             prof_add("moe_expand", ts_ex2)
-            let ts_g2 = ref_time_ticks()
+            let ts_g2 = prof_ticks()
             matmul_q8q8_batch(s.moe_ghb2, s.mx4_wq, s.mx4_ws, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
             prof_add("mm_gemm", ts_g2)
         } else {
@@ -1359,7 +1359,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
                 add_bias(s.moe_ghb2, r * nfe, t.fblob, t.web3_off + eg * nfe, nfe)
             }
         }
-        let ts_act = ref_time_ticks()
+        let ts_act = prof_ticks()
         gate_batch(s.moe_ghb, s.moe_ghb2, c.ffn_act, nfe, cnt)
         prof_add("act", ts_act)
         if (kq_sb(f2)) {   // kq v2: Q8_K-form rows + the per-16 sums the fold consumes; q51/q8 the Q8_0 form
@@ -1374,10 +1374,10 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         } elif (t.experts_mx4 && g_active_mx4_native_batch) {
             mm_b_mx4_pre(s.moe_gout, t, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, nfe, dim, cnt)
         } elif (t.experts_mx4) {
-            let ts_ex3 = ref_time_ticks()
+            let ts_ex3 = prof_ticks()
             expand_mx4_region_q8(t, t.we2_offs[l] + base, nfe, dim, s.mx4_wq, s.mx4_ws)
             prof_add("moe_expand", ts_ex3)
-            let ts_g3 = ref_time_ticks()
+            let ts_g3 = prof_ticks()
             matmul_q8q8_batch(s.moe_gout, s.mx4_wq, s.mx4_ws, s.moe_hq, s.moe_hs, nfe, dim, cnt)
             prof_add("mm_gemm", ts_g3)
         } else {
@@ -1388,7 +1388,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
                 add_bias(s.moe_gout, r * dim, t.fblob, t.web2_off + eg * dim, dim)
             }
         }
-        let ts_park = ref_time_ticks()
+        let ts_park = prof_ticks()
         for (r in range64(cnt)) {
             copy_floats(s.moe_gout, r * dim, s.moe_eout, s.moe_bkt[b0 + r] * dim, dim)
         }
@@ -1401,7 +1401,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         let she = dim * nsh
         mm_b_q8_pre(s.moe_ghb, t, t.wsh1_off + l * she, s.xqb, s.xsb, dim, nsh, npos)
         mm_b_q8_pre(s.moe_ghb2, t, t.wsh3_off + l * she, s.xqb, s.xsb, dim, nsh, npos)
-        let ts_act2 = ref_time_ticks()
+        let ts_act2 = prof_ticks()
         gate_batch(s.moe_ghb, s.moe_ghb2, c.ffn_act, nsh, npos)
         prof_add("act", ts_act2)
         requant_rows_q8(s.moe_ghb, nsh, npos, s.moe_hq, s.moe_hs)
@@ -1410,7 +1410,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
 
     // 5. ordered reduce into xb2_b, decode's accumulation order (bit-identical); plain mul+add, not axpy
     trace_tag(TRACE_TAG_PARK)
-    let ts_red = ref_time_ticks()
+    let ts_red = prof_ticks()
     unsafe {
         var ap = addr(s.xb2_b[0])
         let ep = addr<float const?>(s.moe_eout[0])
@@ -1452,7 +1452,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
     }
     prof_add("moe_reduce", ts_red)
     // post-norm + residual (the layer-output scale tail is shared with the reference path)
-    let ts_resid = ref_time_ticks()
+    let ts_resid = prof_ticks()
     if (c.pre_post_norm) {
         rms_batch(s.xb2_b, s.xb2_b, t, t.rms_post_ffn_off + l * dim, dim, npos)
     }
@@ -1471,7 +1471,7 @@ def ffn_moe_prefill(t : Model; var s : Session; l : int64; npos : int64) {
         return
     }
     let dim = c.dim
-    let ts_norm = ref_time_ticks()
+    let ts_norm = prof_ticks()
     rms_batch(s.xb_b, s.x_b, t, t.rms_ffn_off + l * dim, dim, npos)
     prof_add("norm", ts_norm)
     // native-MXFP4 grouped path pays a per-touched-expert Q8 expansion (~120MB/expert); under ~8 rows/expert the per-position mx4 GEMVs are cheaper
@@ -1510,13 +1510,13 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
     kv_ensure(s, start_pos + npos)   // paged sessions: grow the block table BEFORE any cache-pointer hoist
     forward_prefill_alloc(t, s, npos, start_pos)
     let dim = t.config.dim
-    let ts_embed = ref_time_ticks()
+    let ts_embed = prof_ticks()
     for (i in range64(npos * dim)) {
         s.x_b[i] = embd[i]
     }
     prof_add("embed", ts_embed)
     if (has_ple(t.config)) {  // gemma-4 E-series: PLE side input (padding-token gather for the media path)
-        let ts_ple = ref_time_ticks()
+        let ts_ple = prof_ticks()
         ple_pre_prefill_pad(t, s, npos)
         prof_add("ple", ts_ple)
     }
@@ -1610,11 +1610,11 @@ def ffn_moe_decode(t : Model; var s : Session; l : int64) {
         return
     }
     let dim = c.dim
-    let ts_norm = ref_time_ticks()
+    let ts_norm = prof_ticks()
     rms_at(s.xb, t, t.rms_ffn_off + l * dim, s.x, dim)
     prof_add("norm", ts_norm)
     moe_ffn_core(t, s, l)
-    let ts_resid = ref_time_ticks()
+    let ts_resid = prof_ticks()
     if (c.pre_post_norm) {
         rms_at(s.moe_acc, t, t.rms_post_ffn_off + l * dim, s.moe_acc, dim)
     }
@@ -1630,7 +1630,7 @@ def dense_ffn_inplace(t : Model; var s : Session; l : int64) {
     let c = t.config
     let dim = c.dim
     let hidden = layer_hidden(t, l)   // gemma-4 E2B varies FFN width per layer
-    let ts_ffn = ref_time_ticks()
+    let ts_ffn = prof_ticks()
     let f1 = fmt_at(t.w1_fmt, l)
     let f2 = fmt_at(t.w2_fmt, l)
     let f3 = fmt_at(t.w3_fmt, l)
@@ -1645,10 +1645,10 @@ def dense_ffn_inplace(t : Model; var s : Session; l : int64) {
         mm_pre_f(s.hb, t, f1, t.w1_offs[l], s.xq, s.xs, s.kxq, s.kxs, s.kxbs, dim, hidden)
         mm_pre_f(s.hb2, t, f3, t.w3_offs[l], s.xq, s.xs, s.kxq, s.kxs, s.kxbs, dim, hidden)
         prof_add("mm_ffn", ts_ffn)
-        let ts_act = ref_time_ticks()
+        let ts_act = prof_ticks()
         gate_batch(s.hb, s.hb2, c.ffn_act, hidden, 1l)
         prof_add("act", ts_act)
-        let ts_down = ref_time_ticks()
+        let ts_down = prof_ticks()
         if (f2 == KqFmt.q8) {
             quantize_q8_0_into(s.hb, hidden, s.xq, s.xs, 0l, 0l)
         } else {   // kq v2
@@ -1665,13 +1665,13 @@ def dense_ffn_inplace(t : Model; var s : Session; l : int64) {
         s.ffn_offs[3] = 0l
         mm_at_q8_groupn(s.ffn_gu, t, s.ffn_offs, 2l, s.xq, s.xs, dim, hidden)
         prof_add("mm_ffn", ts_ffn)
-        let ts_act = ref_time_ticks()
+        let ts_act = prof_ticks()
         unsafe {
             gate_batch(addr(s.ffn_gu[0]), addr < float const? >(s.ffn_gu[hidden]), c.ffn_act, hidden, 1l)
         }
         prof_add("act", ts_act)
         // down projection off the gated half
-        let ts_down = ref_time_ticks()
+        let ts_down = prof_ticks()
         quantize_q8_0_into(s.ffn_gu, hidden, s.xq, s.xs, 0l, 0l)
         mm_at_q8_pre(s.xb, t, t.w2_offs[l], s.xq, s.xs, hidden, dim)
         prof_add("mm_ffn_down", ts_down)
@@ -1679,10 +1679,10 @@ def dense_ffn_inplace(t : Model; var s : Session; l : int64) {
         mm(s.hb, t, t.w1_offs[l], s.xb, s.xq, s.xs, dim, hidden)
         mm(s.hb2, t, t.w3_offs[l], s.xb, s.xq, s.xs, dim, hidden)
         prof_add("mm_ffn", ts_ffn)
-        let ts_act = ref_time_ticks()
+        let ts_act = prof_ticks()
         gate_batch(s.hb, s.hb2, c.ffn_act, hidden, 1l)   // fused act*gate; same kernel as prefill (npos=1 → inline)
         prof_add("act", ts_act)
-        let ts_ffn2 = ref_time_ticks()
+        let ts_ffn2 = prof_ticks()
         mm(s.xb, t, t.w2_offs[l], s.hb, s.xq, s.xs, hidden, dim)
         prof_add("mm_ffn_down", ts_ffn2)
     }
@@ -1698,12 +1698,12 @@ def ffn_dense_decode(t : Model; var s : Session; l : int64) {
     let c = t.config
     let dim = c.dim
     // ffn rmsnorm
-    let ts_norm1 = ref_time_ticks()
+    let ts_norm1 = prof_ticks()
     rms_at(s.xb, t, t.rms_ffn_off + l * dim, s.x, dim)
     prof_add("norm", ts_norm1)
     // gated FFN: hb = act(W1·xb) * (W3·xb) — silu (SwiGLU) or gelu (GeGLU, Gemma2)
     dense_ffn_inplace(t, s, l)
-    let ts_resid1 = ref_time_ticks()
+    let ts_resid1 = prof_ticks()
     if (c.pre_post_norm) {  // Gemma2: post-FFN RMSNorm before the residual add
         rms_at(s.xb, t, t.rms_post_ffn_off + l * dim, s.xb, dim)
     }
@@ -1728,7 +1728,7 @@ def ffn_chain_decode(t : Model; var s : Session; l : int64) { // nolint:STYLE038
     let f2 = fmt_at(t.w2_fmt, l)
     let f3 = fmt_at(t.w3_fmt, l)
     let any_kq = f1 != KqFmt.q8 || f2 != KqFmt.q8 || f3 != KqFmt.q8
-    let ts_norm1 = ref_time_ticks()
+    let ts_norm1 = prof_ticks()
     rms_at(s.xb, t, t.rms_ffn_off + l * dim, s.x, dim)
     // one input quantize per consumed form: q8 gate/up read Q8_0, kq gate/up read Q8_K (kq v2)
     if (f1 == KqFmt.q8 || f3 == KqFmt.q8) {
@@ -1738,7 +1738,7 @@ def ffn_chain_decode(t : Model; var s : Session; l : int64) { // nolint:STYLE038
         quantize_q8_k_into(s.xb, dim, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)
     }
     prof_add("norm", ts_norm1)
-    let ts_chain = ref_time_ticks()
+    let ts_chain = prof_ticks()
     trace_tag(TRACE_TAG_FFN_CHAIN)
     let mmrows = mm_q8q8_rows_fn()
     let is_gelu = c.ffn_act == FfnAct.gelu
@@ -1869,7 +1869,7 @@ def ffn_chain_decode(t : Model; var s : Session; l : int64) { // nolint:STYLE038
     }
     prof_add("ffn_chain", ts_chain)
     if (defer_add) {  // same serial tail as the un-fused path (dim-sized, microseconds), bit-identical order
-        let ts_resid = ref_time_ticks()
+        let ts_resid = prof_ticks()
         if (post_norm) {  // Gemma2/3/4: post-FFN RMSNorm before the residual add
             rms_at(s.xb, t, t.rms_post_ffn_off + l * dim, s.xb, dim)
         }

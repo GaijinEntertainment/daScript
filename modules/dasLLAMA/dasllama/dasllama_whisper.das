@@ -6,7 +6,7 @@ options _cyclomatic_complexity = 0   // model forward/serialize walks mirror the
 options _function_length = 0   // same
 
 require math
-require dasllama/dasllama_env  // the shared typed env readers + the knob registry
+require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require daslib/fio
 require daslib/array_boost
 require daslib/apply
@@ -462,7 +462,7 @@ def load_whisper_model(path : string; q8 : bool = false) : WhisperModel {
         to_log(LOG_INFO, "dasLLAMA: prepared whisper image mapped in {get_time_usec(ts_img) / 1000} ms — {path}\n")
         return <- t
     }
-    if (env_flag("DASLLAMA_IMAGE", true)) {
+    if (g_env_engine.image) {
         apply_box_profile_runtime()   // a backend pin must precede the identity (it names the backend)
         let img = image_path_for(path, tag)
         let ts_img = ref_time_ticks()

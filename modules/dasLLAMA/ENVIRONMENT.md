@@ -1,16 +1,15 @@
 # dasLLAMA environment variables
 
-GENERATED from `env_registry()` in `dasllama/dasllama_env.das` — do not edit by hand.
-Regenerate with `daslang modules/dasLLAMA/harness/gen_env_doc.das`; a knob read anywhere
-in the tree without a registry entry fails `tests/test_env_registry.das`.
+GENERATED from the `[EnvConfig]` declarations in `dasllama/dasllama_env.das` — do not edit
+by hand. Regenerate with `daslang modules/dasLLAMA/harness/gen_env_doc.das`; a knob read
+anywhere in the tree without a declaration fails `tests/test_env_registry.das`.
 
-Types: **flag** is unset-means-default, `0`/`false`/`off`/`no`/empty is false and
-anything else true; **number** falls back to the default when unset or unparseable;
-**text** and **path** are taken verbatim. Every read goes through `env_flag` /
-`env_int` / `env_int64` / `env_str`, so the rules are the same everywhere.
-
-A knob is read ONCE, at init or behind a one-time gate — reading the environment on a
-per-token path is what PERF027 exists to catch (see `skills/perf_lint.md`).
+Types: **flag** is unset-means-default, `0`/`false`/`off`/`no` (any case) is false and
+anything else true; **number** falls back to the default when unset or unparseable, with
+a logged warning on garbage; **text** and **path** are taken verbatim. A SET-BUT-EMPTY
+variable counts as unset everywhere. Every knob loads ONCE, at context init, into the
+`g_env_*` globals — hot code reads struct fields, and `set_env_variable` after startup
+is invisible (arm a child process's environment instead).
 
 ## Engine
 
@@ -26,10 +25,11 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_PIN_BATCH_BACKEND` | text | unset | Pin the batched (prefill) matmul backend independently of the decode one. |
 | `DASLLAMA_EXPERT_REUSE` | flag | off | Arm the MoE expert-reuse counter (probes and servers; benches use set_expert_reuse instead). |
 | `DASLLAMA_NOISY` | flag | off | Print engine diagnostics (tier selection, upload plan, arm/decline reasons). |
-| `DASLLAMA_CALLER_PRIO` | number | unset | A/B rail for the dispatch caller's thread priority, -2..2; unset claims the top notch. |
+| `DASLLAMA_CALLER_PRIO` | number | 2 (the top notch) | A/B rail for the dispatch caller's thread priority, -2..2; unset claims the top notch. |
 | `DASLLAMA_TRUTH_REFRESH` | flag | off | Regenerate the stored parity truth files instead of comparing against them. |
 | `DASLLAMA_CONV_PROF` | flag | off | Bucket gguf -> image conversion time by kind over the weight walk; one clock pair per tensor. |
 | `DASLLAMA_ALLOW_INTERP_LOAD` | flag | off | Permit a big gguf load without -jit; the transforms run interpreted, so expect minutes per GB. |
+| `DASLLAMA_PREFETCH` | flag | on | Advisory source-mapping readahead at gguf load (cold-conversion fix); =0 restores on-demand faulting. |
 | `DASLLAMA_GPU` | flag | off | One switch for the measured-best GPU rail set; any DASLLAMA_GPU_* knob still overrides individually. |
 | `DASLLAMA_GPU_MOE_LAYERS` | number | -1 (auto) | How many MoE expert layers to hold resident on the GPU; -1 lets the upload walk place the split. |
 | `DASLLAMA_GPU_MOE_STREAM` | number | -1 (auto) | How many MoE layers to stream rather than hold resident; -1 is auto. |
@@ -47,7 +47,6 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_GPU_COMBINE` | flag | on | Device-side routed MoE combine; 0 falls back to the host combine. |
 | `DASLLAMA_GPU_HEAT` | number | 0 | Expert heat threshold: hold the N hottest experts resident regardless of layer placement. |
 | `DASLLAMA_GPU_PROF` | flag | off | Report lifetime GPU queue submissions (real commands plus staging round-trips). |
-| `DASLLAMA_PREFETCH` | flag | on | Advisory source-mapping readahead at gguf load (cold-conversion fix); =0 restores on-demand faulting. |
 
 ## Metal backend
 
@@ -92,8 +91,8 @@ Vulkan GPU backend. Present only where the dasVulkan package is installed.
 
 | Variable | Type | Default | Effect |
 |---|---|---|---|
-| `DASLLAMA_COOPMAT` | number | auto | Cooperative-matrix mode; the flash-attention twin needs it even when the GEMM runs sdot4. |
-| `DASLLAMA_MM_SMALL` | number | 32 | Small-batch tier: 32 = sdot4 (default, beats both coopmat tiles below the crossover), 64 = coopmat M, 128 = always-L. |
+| `DASLLAMA_COOPMAT` | text | auto | Cooperative-matrix mode; the flash-attention twin needs it even when the GEMM runs sdot4. |
+| `DASLLAMA_MM_SMALL` | text | 32 | Small-batch tier: 32 = sdot4 (default, beats both coopmat tiles below the crossover), 64 = coopmat M, 128 = always-L. |
 | `DASLLAMA_MM_SMALLD` | number | 64 | Small-d cutoff routing narrow roles (k/v) to the small tier; widening measured worse, so this is an instrument. |
 | `DASLLAMA_VK_FUSE` | flag | on | Fused decode tail (add+rms+requant, qk-norm+rope); 0 pins the split dispatches for a same-build A/B. |
 | `DASLLAMA_VK_XFERQ` | flag | on | Stream expert uploads on the dedicated transfer queue, overlapped via a timeline semaphore; 0 keeps the single-queue rail. |
@@ -114,6 +113,7 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 | `DASLLAMA_ACCEL` | flag | off | Arm the Apple Accelerate / AMX float-batch override. |
 | `DASLLAMA_ACCEL_F16` | flag | off | Use the BNNS f16 lane inside the Accelerate backend. |
 | `DASLLAMA_ACCEL_F16_STRIPS` | number | 0 | Strip count for the f16 lane; 0 lets the backend choose. |
+| `DASLLAMA_ACCEL_STRIPS` | number | d/256, max 8 | Strip count for the f32 sgemm lane; 0 keeps the shape-derived default. |
 | `DASLLAMA_ACCEL_MIN_MMAC` | number | backend default | Minimum MMAC count below which Accelerate declines and the daslang kernel runs. |
 | `DASLLAMA_ACCEL_MIN_NTOK` | number | 32 | Minimum token count for the Accelerate float-batch override, floor 1. |
 
@@ -123,8 +123,8 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 |---|---|---|---|
 | `DASLLAMA_MODELS_DIR` | path | unset | Directory holding the .gguf models the probes, benches and tests load. |
 | `DASLLAMA_CONFIRM_MODEL` | path | unset | Model used by the tuner's confirm gate. Must be a FULL path, not a bare filename. |
-| `DASLLAMA_BATCH_CHUNKS` | number | unset | Override the batched-dispatch chunk count in the 1-core GEMM probe. |
-| `DASLLAMA_BATCH_GRID_2D` | flag | off | Use the 2D batch grid in the parity probe. |
+| `DASLLAMA_BATCH_CHUNKS` | text | unset | Override the batched-dispatch chunk count in the 1-core GEMM probe. |
+| `DASLLAMA_BATCH_GRID_2D` | number | unset | Use the 2D batch grid in the parity probe. |
 | `DASLLAMA_FOCUS_BACKEND` | text | unset | Restrict the 1-core GEMM probe to one backend. |
 | `DASLLAMA_FOCUS_SHAPE` | text | unset | Restrict the 1-core GEMM probe to one shape. |
 | `DASLLAMA_FOCUS_NTOK` | number | unset | Restrict the 1-core GEMM probe to one token count. |
@@ -150,11 +150,14 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 | `DASLLAMA_BENCH_SKIP_ROWMAJOR` | flag | off | Skip the row-major arm of the isolated GEMM bench. |
 | `DASLLAMA_BENCH_VERBOSE` | flag | off | Per-run detail from the llama.cpp comparison bench. |
 | `DASLLAMA_MIN_CHUNK_ROWS` | number | unset | Override the minimum rows per dispatch chunk in the GEMM bench. |
-| `DASLLAMA_FUSED_DECODE` | flag | off | Exercise the fused decode arm in the emission bench. |
+| `DASLLAMA_FUSED_DECODE` | flag | unset | Exercise the fused decode arm in the emission bench. |
 | `DASMETAL_LAB_ROUNDS` | number | 3 | Timing rounds per cell in the Metal kernel labs. |
 | `DASMETAL_LAB_PASSES` | number | 4 | Passes per round in the Metal MoE lab. |
 | `DASMETAL_LAB_ATTN_NSGS` | number | 16 | Simdgroups per threadgroup in the Metal attention lab. |
-| `DASMETAL_LAB_DUMP_MSL` | flag | off | Dump generated MSL from the Metal labs instead of running it. |
+| `DASMETAL_LAB_DUMP_MSL` | text | unset | Dump generated MSL from the Metal labs instead of running it. |
+| `DASMETAL_LAB_ARMS` | text | unset | Substring filter restricting which arms the Metal MoE lab runs. |
+| `DASMETAL_LAB_SHAPES` | text | unset | Substring filter restricting which shapes the Metal GEMV/GEMM labs run. |
+| `DASMETAL_LAB_VARIANTS` | text | unset | Substring filter restricting which kernel variants the Metal GEMV/GEMM labs run. |
 | `PROBE_PATH` | path | _wcliff.bin | Scratch file the write-cliff probe writes, cwd-relative by default; point it at the drive under test. |
 | `PROBE_GB` | number | 50 | Gigabytes the write-cliff probe writes before reporting. |
 
@@ -162,17 +165,17 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 
 | Variable | Type | Default | Effect |
 |---|---|---|---|
-| `DASLLAMA_GPU_NAME` | text | probed | Override the GPU name recorded in a box profile. |
 | `DASLANG_BIN` | path | bin/daslang | daslang binary the profiling harness shells out to. |
 | `DASLLAMA_BOX` | text | probed | Override the box identifier recorded in a profile. |
 | `DASLLAMA_CPU` | text | probed | Override the CPU name recorded in a profile. |
 | `DASLLAMA_OS` | text | probed | Override the OS name recorded in a profile. |
 | `DASLLAMA_RAM_GB` | number | probed | Override the RAM size in GiB recorded in a profile. |
 | `DASLLAMA_THREADS` | number | probed | Override the thread count recorded in a profile. |
+| `DASLLAMA_GPU_NAME` | text | probed | Override the GPU name recorded in a box profile. |
 | `LLAMA_BENCH` | path | unset | Path to the llama-bench binary used to establish reference baselines. |
 | `LLAMA_BENCH_CLEAN` | path | unset | Path to a clean-build llama-bench for the reference column. |
 | `LLAMA_BENCH_STOCK` | path | unset | Path to a stock-build llama-bench for the reference column. |
-| `WHISPER_CPP` | path | unset | whisper.cpp checkout used for ASR reference baselines. |
+| `WHISPER_CPP` | path | ../whisper.cpp | whisper.cpp checkout used for ASR reference baselines. |
 | `WHISPER_CPP_MODELS` | path | unset | Directory of whisper.cpp models for ASR reference baselines. |
 | `MTMD_BIN` | path | unset | llama-mtmd-cli binary for multimodal reference baselines. |
 | `DASLLAMA_BASE_PYTHON` | path | unset | Base CPython 3.10-3.12 for creating the ASR oracle venvs, when neither PATH names nor uv resolve one in range. |
@@ -207,6 +210,8 @@ Owned by daslang, not by dasLLAMA — listed because dasLLAMA's behaviour depend
 
 | Variable | Type | Default | Effect |
 |---|---|---|---|
+| `HF_HOME` | path | ~/.cache/huggingface | Hugging Face hub root; fetch_models --convert resolves checkpoint blobs under <HF_HOME>/hub. Falls back to HOME's default cache location when unset. |
+| `HOME` | path | unset | Ambient platform variable; read only to derive the default Hugging Face cache when HF_HOME is unset. |
 | `DAS_JOBQUE_THREADS` | number | conservative default | Total compute lanes for job queues (N-1 workers plus the caller). Overrides set_jobque_threads_cap; see skills/environment_variables.md. |
 | `DAS_JOBQUE_AFFINITY` | number | 0 | Worker affinity: 0 off, 1 ideal-processor hint, 2 hard mask. Matters on big SMT boxes. |
 | `DAS_JOBQUE_TEAM_RANK_GATE` | number | profile-driven | Team-dispatch rank gate. When set, it suppresses the box profile's own team_rank_gate knob. |
@@ -214,3 +219,4 @@ Owned by daslang, not by dasLLAMA — listed because dasLLAMA's behaviour depend
 | `DAS_TUNE_MODE` | text | unset | Kernel-tuning mode. The [tune] framework owns these; see skills/tune.md. |
 | `DAS_TUNE_POLICY` | text | unset | Kernel-tuning policy override. The [tune] framework owns these; see skills/tune.md. |
 | `DAS_TUNE_COMPILE_FALLBACKS` | text | unset | Semicolon-separated kernel fallbacks for the generated tune probe. |
+| `JOBQUE_PROFILING` | flag | off | Compile the jobque marker rail in (read at COMPILE time by daslib/build_const). Without it trace_tag/trace_marker erase from the program; decode_prof --trace refuses on a build without it. |

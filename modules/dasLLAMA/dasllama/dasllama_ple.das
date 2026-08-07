@@ -159,11 +159,11 @@ def private gemma4_moe_ffn(t : Model; var s : Session; l : int64) {
     let ne = c.n_expert
     let k = c.n_expert_used
     // routed branch — input, custom router, select, per-expert down scale, experts, post-norm
-    let ts_norm0 = ref_time_ticks()
+    let ts_norm0 = prof_ticks()
     rms_at(s.xb, t, t.rms_pre_ffn2_off + l * dim, s.moe_ao, dim)
     prof_add("norm", ts_norm0)
     trace_tag(TRACE_TAG_ROUTE)   // decode router GEMV — without this it rides the stale attn tag in traces
-    let ts_route = ref_time_ticks()
+    let ts_route = prof_ticks()
     gemma4_router_tmp(t, s, l)
     mm_fblob(s.moe_logits, t, t.router_off + l * ne * dim, s.xb2, dim, ne)
     moe_select(c, unsafe(addr(s.moe_logits[0])), s.moe_idx, s.moe_w, 0l)
@@ -172,21 +172,21 @@ def private gemma4_moe_ffn(t : Model; var s : Session; l : int64) {
     }
     prof_add("moe_route", ts_route)
     moe_experts_apply(t, s, l)
-    let ts_norm1 = ref_time_ticks()
+    let ts_norm1 = prof_ticks()
     rms_at(s.moe_acc, t, t.rms_post_ffn2_off + l * dim, s.moe_acc, dim)
     prof_add("norm", ts_norm1)
     // dense parallel shared expert (its own pre/post norms), into s.xb
-    let ts_sh = ref_time_ticks()
+    let ts_sh = prof_ticks()
     trace_tag(TRACE_TAG_SHEXP)
     rms_at(s.xb, t, t.rms_ffn_off + l * dim, s.moe_ao, dim)
     dense_ffn_inplace(t, s, l)
     rms_at(s.xb, t, t.rms_post_ffn1_off + l * dim, s.xb, dim)
     prof_add("mm_shexp", ts_sh)
     // combine then the shared post_ffw_norm on the sum
-    let ts_comb = ref_time_ticks()
+    let ts_comb = prof_ticks()
     add_inplace(unsafe(addr(s.moe_acc[0])), unsafe(addr(s.xb[0])), dim)
     prof_add("act_resid", ts_comb)
-    let ts_norm2 = ref_time_ticks()
+    let ts_norm2 = prof_ticks()
     rms_at(s.moe_acc, t, t.rms_post_ffn_off + l * dim, s.moe_acc, dim)
     prof_add("norm", ts_norm2)
 }
@@ -198,7 +198,7 @@ def ffn_gemma4_decode(t : Model; var s : Session; l : int64) {
     if (c.n_expert <= 0l) {
         ffn_dense_decode(t, s, l)   // out_scale deferred to after the PLE block when has_ple
         if (has_ple(c)) {  // E-series: per-layer embedding block sits between the FFN residual and out_scale
-            let ts_ple = ref_time_ticks()
+            let ts_ple = prof_ticks()
             ple_block_decode(t, s, l)
             if (c.layer_out_scale) {
                 scale_inplace(unsafe(addr(s.x[0])), t.fblob[t.out_scale_off + l], c.dim)
@@ -208,11 +208,11 @@ def ffn_gemma4_decode(t : Model; var s : Session; l : int64) {
         return
     }
     let dim = c.dim
-    let ts_copy = ref_time_ticks()
+    let ts_copy = prof_ticks()
     copy_floats(s.x, 0l, s.moe_ao, 0l, dim)
     prof_add("act_resid", ts_copy)
     gemma4_moe_ffn(t, s, l)
-    let ts_resid = ref_time_ticks()
+    let ts_resid = prof_ticks()
     if (c.layer_out_scale) {
         add_scale_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.moe_acc[0])), t.fblob[t.out_scale_off + l], dim)
     } else {
@@ -229,7 +229,7 @@ def ffn_gemma4_prefill(t : Model; var s : Session; l : int64; npos : int64) {
     if (c.n_expert <= 0l) {
         ffn_dense_prefill(t, s, l, npos)   // out_scale deferred to after the PLE block when has_ple
         if (has_ple(c)) {  // E-series per-layer embedding block, then out_scale
-            let ts_ple = ref_time_ticks()
+            let ts_ple = prof_ticks()
             ple_block_prefill(t, s, l, npos)
             if (c.layer_out_scale) {
                 scale_inplace(unsafe(addr(s.x_b[0])), t.fblob[t.out_scale_off + l], npos * c.dim)
@@ -333,7 +333,7 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
 
     // 1. route every position: double-RMS router input, one batched GEMM, per-row select + down-scale fold
     trace_tag(TRACE_TAG_ROUTE)
-    let ts_route = ref_time_ticks()
+    let ts_route = prof_ticks()
     gemma4_router_batch(t, s.xb2_b, s.x_b, l, dim, npos)
     mm_fblob_b(s.moe_rlog, t, t.router_off + l * ne * dim, s.xb2_b, dim, ne, npos)
     for (p in range64(npos)) {
@@ -378,7 +378,7 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
     // 3F. fused: gate/up/down each run as ONE region-list dispatch (3 fork/joins/layer, not 3/expert)
     if (fused) {
         trace_tag(TRACE_TAG_MOE)
-        let ts_gather = ref_time_ticks()
+        let ts_gather = prof_ticks()
         // the GPU tile computes activation block sums in-kernel — skip the per-16 sum gather there
         moe_gather_rows(s, 0l, nk, dim, k, moe_kform && !fused_gpu, moe_kform)
         prof_add("moe_gather", ts_gather)
@@ -414,7 +414,7 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
             s.moe_offs2 |> push(cnt)
             nreg++
         }
-        let ts_g1 = ref_time_ticks()
+        let ts_g1 = prof_ticks()
         if (gpu_comb) {   // gout comes back as npos combined rows — the park + CPU reduce disappear
             s.moe_inv |> resize(nk)
             for (j in range64(nk)) {
@@ -439,7 +439,7 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
                 mm_b_q51_groupn(s.moe_ghb2, t, s.moe_offs3, nreg, s.moe_gxq, s.moe_gxs, dim, nfe)
             }
             prof_add("mm_gemm", ts_g1)
-            let ts_act = ref_time_ticks()
+            let ts_act = prof_ticks()
             gate_batch(s.moe_ghb, s.moe_ghb2, c.ffn_act, nfe, nk)
             prof_add("act", ts_act)
             // kq v2: sb down stacks read Q8_K-form rows (+ per-16 sums); q51 the Q8_0 form
@@ -448,7 +448,7 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
             } else {
                 requant_rows_q8(s.moe_ghb, nfe, nk, s.moe_hq, s.moe_hs)
             }
-            let ts_g3 = ref_time_ticks()
+            let ts_g3 = prof_ticks()
             if (kq_sb(f2)) {
                 mm_b_kq_groupn(s.moe_gout, t, f2, s.moe_offs2, nreg, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim)
             } else {
@@ -458,7 +458,7 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
         }
         if (!gpu_comb) {   // combine off: park the raw down rows in bucket order for the reduce
             trace_tag(TRACE_TAG_PARK)
-            let ts_park = ref_time_ticks()
+            let ts_park = prof_ticks()
             unsafe {
                 let gp = addr<float const?>(s.moe_gout[0])
                 var ep = addr(s.moe_eout[0])
@@ -486,7 +486,7 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
         if (cnt == 0l) {
             continue
         }
-        let ts_gather = ref_time_ticks()
+        let ts_gather = prof_ticks()
         moe_gather_rows(s, b0, cnt, dim, k, moe_kform, moe_kform)
         prof_add("moe_gather", ts_gather)
         let base = e * dim * nfe
@@ -504,7 +504,7 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
         } else {
             mm_b_q8_pre(s.moe_ghb2, t, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
         }
-        let ts_act = ref_time_ticks()
+        let ts_act = prof_ticks()
         gate_batch(s.moe_ghb, s.moe_ghb2, c.ffn_act, nfe, cnt)
         prof_add("act", ts_act)
         if (kq_sb(f2)) {
@@ -518,7 +518,7 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
             requant_rows_q8(s.moe_ghb, nfe, cnt, s.moe_hq, s.moe_hs)
             mm_b_q8_pre(s.moe_gout, t, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, nfe, dim, cnt)
         }
-        let ts_park = ref_time_ticks()
+        let ts_park = prof_ticks()
         for (r in range64(cnt)) {
             copy_floats(s.moe_gout, r * dim, s.moe_eout, s.moe_bkt[b0 + r] * dim, dim)
         }
@@ -526,7 +526,7 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
     }
 
     // 4. ordered reduce into xb2_b: k weighted routed outputs in slot order, matching decode's accumulation order
-    let ts_red = ref_time_ticks()
+    let ts_red = prof_ticks()
     unsafe {
         var ap = addr(s.xb2_b[0])
         let ep = addr < float const? >(s.moe_eout[0])
@@ -561,7 +561,7 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
     rms_batch(s.xb2_b, s.xb2_b, t, t.rms_post_ffn2_off + l * dim, dim, npos)
 
     // 5. dense parallel shared expert over ALL positions: rms_ffn -> GeGLU -> post_ffw_norm_1 into gout
-    let ts_sh = ref_time_ticks()
+    let ts_sh = prof_ticks()
     rms_batch(s.xb_b, s.x_b, t, t.rms_ffn_off + l * dim, dim, npos)
     mm_b_f(s, s.hb_b, t, fmt_at(t.w1_fmt, l), t.w1_offs[l], s.xb_b, dim, hidden, npos)
     mm_b_f(s, s.hb2_b, t, fmt_at(t.w3_fmt, l), t.w3_offs[l], s.xb_b, dim, hidden, npos)
@@ -573,7 +573,7 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
     // 6. combine (routed + dense), shared post_ffw_norm, residual add; layer-output scale is the caller's job
     add_inplace(unsafe(addr(s.xb2_b[0])), unsafe(addr(s.moe_gout[0])), npos * dim)
     rms_batch(s.xb2_b, s.xb2_b, t, t.rms_post_ffn_off + l * dim, dim, npos)
-    let ts_resid = ref_time_ticks()
+    let ts_resid = prof_ticks()
     add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
     prof_add("act_resid", ts_resid)
 }

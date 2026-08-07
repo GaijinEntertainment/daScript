@@ -7,8 +7,8 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 require dasllama/dasllama_math   // setup_dasllama_jobque_ (the engine-standard jobque config)
 require daslib/jobque_boost
 require daslib/clargs
-require daslib/fio   // has_env_variable / get_env_variable (the DASLLAMA_FUSED_DECODE A/B override)
 require math
+require dasllama/dasllama_env
 
 // EMISSION baseline — the realistic CPU-inference shape: many independent SHORT prompts, each a
 // fresh session (the agent/assistant workload), measuring what a user feels per request:
@@ -83,9 +83,9 @@ def main() {   // nolint:STYLE038 — flat bench driver: arg handling, then one 
     let plen = max(int64(cfg.plen), 1l)
     let ngen = max(int64(cfg.ngen), 2l)
     apply_box_profile_runtime()   // the tuned per-box stack (backend/batch pins, grains) — what load_model users get
-    if (has_env_variable("DASLLAMA_PIN_BACKEND")) {   // A/B rail, same as prefill_perf/llama3_perf: pin BEFORE load
-        pin_kernel_backend(get_env_variable("DASLLAMA_PIN_BACKEND"))
-        print("backend pin: {get_env_variable("DASLLAMA_PIN_BACKEND")}\n")
+    if (!empty(g_env_engine.pin_backend)) {   // A/B rail, same as prefill_perf/llama3_perf: pin BEFORE load
+        pin_kernel_backend(g_env_engine.pin_backend)
+        print("backend pin: {g_env_engine.pin_backend}\n")
     }
     print("loading {cfg.model}\n")
     var t <- load_gguf(cfg.model, cfg.quant)
@@ -106,13 +106,13 @@ def main() {   // nolint:STYLE038 — flat bench driver: arg handling, then one 
             print("team dispatch: on\n")
         }
         // A/B the fused per-block decode chains (default on; 0 = per-op dispatches)
-        if (has_env_variable("DASLLAMA_FUSED_DECODE")) {
-            set_fused_decode(get_env_variable("DASLLAMA_FUSED_DECODE") != "0")
+        if (is_some(g_env_bench.fused_decode)) {
+            set_fused_decode(unwrap(g_env_bench.fused_decode))
             print("fused decode override: {get_fused_decode()}\n")
         }
         // A/B the 2-D batch chunk grid over the profile's pin (0 = 1-D, 1 = fine, 2 = aligned)
-        if (has_env_variable("DASLLAMA_BATCH_GRID_2D")) {
-            set_batch_grid_2d(to_int(get_env_variable("DASLLAMA_BATCH_GRID_2D")))
+        if (is_some(g_env_harness.batch_grid_2d)) {
+            set_batch_grid_2d(unwrap(g_env_harness.batch_grid_2d))
             print("batch grid 2d override: {get_batch_grid_2d()}\n")
         }
         // one throwaway warmup prompt: JIT compilation + first-touch paging stay out of prompt 0

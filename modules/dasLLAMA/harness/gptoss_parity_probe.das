@@ -9,8 +9,8 @@ options persistent_heap
 require dasllama/dasllama
 require dasllama/dasllama_math
 require daslib/jobque_boost
-require daslib/fio
 require strings
+require dasllama/dasllama_env
 
 let GPTOSS_PROMPT <- [16l, 11l, 220l, 17l, 11l, 220l, 18l, 11l, 220l, 19l,
                       11l, 220l, 20l, 11l, 220l, 21l, 11l, 220l, 22l, 11l]
@@ -57,7 +57,7 @@ def gen_and_compare(tr : Model; prompt, want : array<int64>; tag : string) {
 
 [export]
 def main {
-    let pin = get_env_variable("DASLLAMA_PIN_BACKEND")
+    let pin = g_env_engine.pin_backend
     if (!empty(pin)) {
         pin_kernel_backend(pin)
         print("pinned backend: {pin}\n")

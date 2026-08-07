@@ -8,6 +8,7 @@ require daslib/jobque_boost
 require daslib/fio
 require math
 require dasllama/dasllama_math  // setup_dasllama_jobque_ + target_chunk_work + fused knob
+require dasllama/dasllama_env
 
 // Fused decode chains (team_parallel_stages: qkv→attn→wo and w1/w3→w2 as ONE dispatch each) vs
 // the per-op dispatch path: bit-exact equivalence. The fused path claims bit-identical arithmetic
@@ -17,13 +18,13 @@ require dasllama/dasllama_math  // setup_dasllama_jobque_ + target_chunk_work + 
 // dispatch decisions per-op path included).
 
 def private llama2c_dir() : string {
-    let env = get_env_variable("DASLLAMA_LLAMA2C_DIR")
+    let env = g_env_test.llama2c_dir
     return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
 }
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 // override the machine-local model root with DASLLAMA_MODELS_DIR (same rail as test_parity)
 def private models_dir() : string {
-    let env = get_env_variable("DASLLAMA_MODELS_DIR")
+    let env = g_env_harness.models_dir
     return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
 }
 let N_STEPS = 24
@@ -366,7 +367,7 @@ def test_fused_decode_moe_chain(t : T?) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
         }
-        if (empty(get_env_variable("DASLLAMA_PARITY_FULL"))) {
+        if (!g_env_test.parity_full) {
             t |> skip("large-tier fixture (set DASLLAMA_PARITY_FULL=1)")
             return
         }

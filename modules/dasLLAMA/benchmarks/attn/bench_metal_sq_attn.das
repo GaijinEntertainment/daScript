@@ -4,7 +4,7 @@ options _function_length = 0        // one MSL kernel body + its hand-bound disp
 options _cyclomatic_complexity = 0  // same — the side-by-side runners are flat arm ladders
 
 require dastest/testing_boost
-require dasllama/dasllama_env  // env_int: the shared typed readers + the knob registry
+require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require metal/msl_shader
 require ?das_metal metal/das_metal_boost  // GPU driver half, Apple builds only
 require dasllama/dasllama_metal_decode  // the production batch attention MSL (zero copy drift)
@@ -1048,7 +1048,7 @@ def private time_pair(queue; pso_a; bufs_a; groups_a : uint3; threads_a : uint; 
 // built flat) vs the lab part/comb variants. Same k/v/q buffers, same CPU oracle,
 // interleaved best-of timing.
 def private run_attn_b2_sidebyside(b) {
-    let rounds = env_int("DASMETAL_LAB_ROUNDS", 3)
+    let rounds = g_env_bench.lab_rounds
     let nheads = 24l
     let head_size = 128l
     let kv_dim = 1024l
@@ -1131,7 +1131,7 @@ def private run_attn_b2_sidebyside(b) {
         // fixed sg budget of 16: beats 32 (16k 1.00 vs 1.05) and the depth-doubling heuristic
         // (64/128 = more entry traffic, shorter loops) — FEWER long-running workers win because
         // the tgmem-resident accumulator loop amortizes; the knob is for re-sweeps
-        let nsgsd = min(nch32, int64(env_int("DASMETAL_LAB_ATTN_NSGS", 16)))
+        let nsgsd = min(nch32, int64(g_env_bench.lab_attn_nsgs))
         var nsgsdbuf = upload_u32(dev, uint(nsgsd))
         // rt row: (kbase, vbase, capacity, cnt) — flat single-layer mirror at base 0
         var rte <- [0u, 0u, uint(depth), uint(depth), 0u, 0u, uint(depth), uint(depth)]
@@ -1270,7 +1270,7 @@ def private run_attn_b2_sidebyside(b) {
 }
 
 def private run_sq_attn(b) {   // untyped param = generic — non-Apple builds never compile the Metal-typed body
-    let rounds = env_int("DASMETAL_LAB_ROUNDS", 3)
+    let rounds = g_env_bench.lab_rounds
     // llama-3B geometry
     let nheads = 24l
     let head_size = 128l
