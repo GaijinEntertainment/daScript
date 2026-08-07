@@ -24,7 +24,11 @@
   and talks to this frame only over postMessage.
 -->
 <style>
-    html, body { margin: 0; padding: 0; height: 100%; background: transparent; overflow: hidden; }
+    /* Opaque body, NOT transparent: under the playground's cross-origin isolation the
+       browser composites this document on an opaque white backing, so "transparent"
+       never reveals the parent's black frame — any area the canvas doesn't cover
+       renders WHITE (seen as a white L around a 512px program in a column-wide frame). */
+    html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; }
     /* Fill the frame exactly: the parent sizes the frame to the drawing buffer's
        aspect, so 100%/100% scales without distorting. !important because
        emscripten's GLFW writes an inline width/height onto the canvas. */
@@ -46,6 +50,19 @@
 
     var PARENT = window.parent;
     var canvas = document.getElementById("canvas");
+
+    // Emscripten's GLFW stamps the program's window size onto the canvas as an INLINE
+    // "width: Npx !important" at window creation — and inline !important beats the
+    // stylesheet's, so the canvas shrank to program pixels inside a frame the parent
+    // sized to the column. Undo it whenever it appears: the drawing buffer keeps the
+    // program's size, CSS keeps the fill-the-frame presentation. Self-terminating:
+    // our own rewrite re-fires the observer, sees 100%, and does nothing.
+    new MutationObserver(function () {
+        if (canvas.style.width !== "100%") {
+            canvas.style.setProperty("width", "100%", "important");
+            canvas.style.setProperty("height", "100%", "important");
+        }
+    }).observe(canvas, { attributes: true, attributeFilter: ["style"] });
 
     function post(msg) {
         try { PARENT.postMessage(msg, window.location.origin); } catch (e) { /* parent gone */ }
