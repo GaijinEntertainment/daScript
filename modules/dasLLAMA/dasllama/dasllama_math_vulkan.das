@@ -194,11 +194,6 @@ def private vk_plane_bytes(n, rows : int64; fmt : int) : int64 {
     return pb.wq + pb.ws
 }
 
-// the loader's upload router asks this before gathering q8 expert stacks. Mode 4 used to want
-// them as fmt-6 q8n blocks; the cm2 l-tile decodes NATIVE fmt-0 planes in-load, so the format
-// fork is gone — decode GEMV and prefill GEMM share one plane form.
-def private vk_expert_q8n : bool => false
-
 def private vk_device_name : string {
     if (g_gpu == null) {
         return ""
@@ -252,7 +247,6 @@ def private vk_caps_fill(phys : VkPhysicalDevice; var v : DlimVulkanConfig) {
     let has_cm = cooperative_matrix_supported(phys)
     let has_cm2 = has_cm && cooperative_matrix2_supported(phys)
     v.coopmat_mode = resolve_coopmat_mode(has_cm, has_cm2)
-    v.expert_q8n = false   // mode 4 serves native fmt-0 through the l-tile — no q8n gather
     v.subgroup_size = int(subgroup_properties(phys).subgroupSize)
     var props : VkPhysicalDeviceProperties
     vkGetPhysicalDeviceProperties(phys, props)
@@ -305,7 +299,6 @@ def dasllama_math_vulkan_register() {
     set_moe_gpu_device_report(@@vk_device_name)
     set_moe_gpu_budget_hooks(@@vk_weight_budget, @@vk_plane_bytes)
     set_moe_gpu_binding_cap(@@vk_binding_cap)
-    set_moe_gpu_expert_q8n_probe(@@vk_expert_q8n)
     install_moe_gpu_resident(@@vk_arena_reserve, @@vk_arena_place, @@vk_rdec_prepare,
         @@vk_rdec_upload_norms, @@vk_rdec_set_layer, @@vk_rdec_set_cls, @@vk_rdec_token, @@vk_rdec_prefill,
         @@vk_rdec_sync_kv, @@vk_rdec_read_kv, @@vk_rdec_read_kv_bulk)

@@ -375,27 +375,21 @@ typedef GatherStackFn = function<(t : Model; woff : int64; n, rows, slice_rows :
 typedef GatherStackKqFn = function<(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_rows : int64;
                                     repacked : bool; mr : int64;
                                     var wq : array<uint8>; var ws : array<uint8>) : void>
-typedef GatherStackQ8nFn = function<(t : Model; woff : int64; n, rows, slice_rows : int64;
-                                     mr, kgroup, wbias : int64; var wq : array<uint8>) : void>
-
 var private g_layout_repack_q8 : ModelRepackFn
 var private g_layout_repack_kq : ModelRepackFn
 var private g_layout_repack_mx4 : ModelRepackFn
 var private g_layout_repack_q51 : ModelRepackFn
 var private g_layout_gather : GatherStackFn
 var private g_layout_gather_kq : GatherStackKqFn
-var private g_layout_gather_q8n : GatherStackQ8nFn
 var private g_layout_hooks_set = false
 
-def register_model_layout(rq8, rkq, rmx4, rq51 : ModelRepackFn; gs : GatherStackFn; gskq : GatherStackKqFn;
-                          gsq8n : GatherStackQ8nFn) {
+def register_model_layout(rq8, rkq, rmx4, rq51 : ModelRepackFn; gs : GatherStackFn; gskq : GatherStackKqFn) {
     g_layout_repack_q8 = rq8
     g_layout_repack_kq = rkq
     g_layout_repack_mx4 = rmx4
     g_layout_repack_q51 = rq51
     g_layout_gather = gs
     g_layout_gather_kq = gskq
-    g_layout_gather_q8n = gsq8n
     g_layout_hooks_set = true
 }
 
@@ -438,12 +432,6 @@ def layout_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_
                            repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
     layout_hooks_check()
     invoke(g_layout_gather_kq, t, fmt, woff, n, rows, slice_rows, repacked, mr, wq, ws)
-}
-
-def layout_gather_stack_q8n(t : Model; woff : int64; n, rows, slice_rows : int64;
-                            mr, kgroup, wbias : int64; var wq : array<uint8>) {
-    layout_hooks_check()
-    invoke(g_layout_gather_q8n, t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq)
 }
 
 // ===== whole-model GPU residency hook (registered by dasllama_gpu_resident at [init]) =====
@@ -1409,10 +1397,6 @@ def wscale_convert_f16(var t : Model) {
     to_log(LOG_INFO, "dasLLAMA: weight-scale plane converted to f16 ({n} scales, -{n * 2l} bytes)\n")
 }
 
-// The device format of an EXPERT stack: q8 rides the cm2 native-block layout (q8n, fmt 6) when
-// the armed tier asks for it; every other format ships as-is. Upload and dispatch must agree on
-// the answer — both go through this one helper.
-def moe_gpu_expert_fmt(f : KqFmt) : KqFmt => f == KqFmt.q8 && moe_gpu_expert_q8n() ? KqFmt.q8n : f
 
 // the active grp<mr> interleave of a repacked kq plane (1 = disk order / not repacked)
 def kq_active_mr(t : Model; f : KqFmt) : int64 {

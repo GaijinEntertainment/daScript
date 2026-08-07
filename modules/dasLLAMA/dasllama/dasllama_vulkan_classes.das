@@ -259,28 +259,6 @@ class Q8kRequant {
     }
 }
 
-// Q8_0 words -> f16 rows (the cm2 chain's activation feed; one word = 4 quants per thread)
-[vk_dispatch(name = "cls_xf16", grid = "wgs", params = "wgs : int64")]
-class Q8Xf16 {
-    @ssbo @binding = 0 xqw : array<uint>
-    @ssbo @binding = 1 axs : array<float>     // one scale per 8 words (a 32-quant block)
-    @ssbo @binding = 2 outh : array<float16>
-    @push_constant pa : RqArgs                // nblk carries the WORD count here
-
-    [spirv_kernel(local_size_x = 256, name = "cls_xf16_spv")]
-    def run {
-        let w = gl_GlobalInvocationID.x
-        if (w < pa.nblk) {
-            let v = int(xqw[w])
-            let s = axs[w / 8u]
-            outh[w * 4u] = float16(float((v << 24) >> 24) * s)
-            outh[w * 4u + 1u] = float16(float((v << 16) >> 24) * s)
-            outh[w * 4u + 2u] = float16(float((v << 8) >> 24) * s)
-            outh[w * 4u + 3u] = float16(float(v >> 24) * s)
-        }
-    }
-}
-
 // ===== act + requant (the FFN mid-chain elementwise family) =====
 
 struct ActArgs {
@@ -3011,86 +2989,7 @@ class KqQ40CmF16 : MoeCmBase {
     }
 }
 
-// ===== the cm2 (NV_cooperative_matrix2) prefill twin =====
-
-struct VkBlockQ8N {
-    d : float16
-    qs : uint16[16]
-}
-
-[spirv_decode, unused_argument(bc)]
-def private decode_q8n_cls(blk : VkBlockQ8N; bc, cib : uint2) : float16 {
-    let s = uint(blk.qs[int((cib.y & 30u) >> 1u)])
-    let sh = 24 - int(cib.y & 1u) * 8
-    let q = (int(s) << sh) >> 24
-    return blk.d * float16(float(q))
-}
-
-// mode 4, fmt-6 q8n stacks: 34B blocks decoded IN-LOAD, wg-scope tensor tiles, f16 activations;
-// layout dims bound every access — edge tiles clamp, no guard code. Bindings 1/4 unused (sparse)
-[vk_dispatch(name = "q8n_batch_cm2_cls", grid = "wgs", params = "wgs : int64")]
-class Q8nCm2Batch : MoeCmBase {
-    @ssbo @binding = 0 wqn : array<VkBlockQ8N>   // the 34B q8n weight blocks
-    @ssbo @binding = 3 xf16 : array<float16>     // f16 activation plane (the twin's B side)
-    @ssbo @binding = 5 y : array<float>
-
-    [spirv_kernel(local_size_x = 256, name = "q8n_batch_cm2_cls_spv")]
-    def run {
-        let reg = region_rec()
-        let wblk0 = reg.x
-        let row0 = reg.y
-        let cnt = reg.z
-        let tix = reg.w
-        let ttiles = (cnt + 127u) / 128u
-        let xt = tix % ttiles             // token 128-tile (fastest)
-        let wt = tix / ttiles             // weight 64-tile
-        // A: the region's [d x n] q8n plane — block addressing, decode-in-load
-        var tla : tensorLayout2DPad
-        tensorLayoutCreate(tla)
-        tensorLayoutSetBlockSize(tla, 1u, 32u)
-        tensorLayoutSetDimension(tla, pa.d, pa.n)
-        tensorLayoutSetStride(tla, pa.n / 32u, 1u)
-        // B: the f16 activation rows, transpose-viewed; the dimension cuts at the region's end
-        var tlb : tensorLayout2DPad
-        tensorLayoutCreate(tlb)
-        tensorLayoutSetDimension(tlb, row0 + cnt, pa.n)
-        tensorLayoutSetStride(tlb, pa.n, 1u)
-        // out: token-major y through the transpose view. MUST be the clamp-Constant layout type:
-        // only clamped layouts DISCARD out-of-bounds stores — an Undefined-clamp store from a
-        // partial token tile stomps the neighboring region's rows
-        var tlo : tensorLayout2DPad
-        tensorLayoutCreate(tlo)
-        tensorLayoutSetDimension(tlo, row0 + cnt, pa.d)
-        tensorLayoutSetStride(tlo, pa.d, 1u)
-        var tv : tensorView2Dt
-        tensorViewCreate(tv)
-        var a : coopmatWgA_f16_64x16
-        var b0 : coopmatWgB_f16_16x64
-        var b1 : coopmatWgB_f16_16x64
-        var acc0 : coopmatWgAcc_f16_64x64
-        var acc1 : coopmatWgAcc_f16_64x64
-        let t0 = row0 + xt * 128u
-        var k = 0u
-        while (k < pa.n) {
-            coopmatLoadTensorDecode(a, wqn, wblk0, tla, wt * 64u, 64u, k, 16u, @@decode_q8n_cls)
-            coopmatLoadTensor(b0, xf16, 0u, tlb, t0, 64u, k, 16u, tv)
-            coopmatLoadTensor(b1, xf16, 0u, tlb, t0 + 64u, 64u, k, 16u, tv)
-            acc0 = coopmatMulAdd(a, b0, acc0)
-            acc1 = coopmatMulAdd(a, b1, acc1)
-            k += 16u
-        }
-        coopmatClamp(acc0, -65504.0, 65504.0)
-        coopmatClamp(acc1, -65504.0, 65504.0)
-        var accw0 : coopmatWgAcc_f32_64x64
-        coopmatConvert(accw0, acc0)
-        coopmatStoreTensor(accw0, y, 0u, tlo, t0, 64u, wt * 64u, 64u, tv)
-        var accw1 : coopmatWgAcc_f32_64x64
-        coopmatConvert(accw1, acc1)
-        coopmatStoreTensor(accw1, y, 0u, tlo, t0 + 64u, 64u, wt * 64u, 64u, tv)
-    }
-}
-
-// ===== the fmt-0 cm2 l-tile (the l-geometry re-cut: native planes, no q8n side stack) =====
+// ===== the cm2 (NV_cooperative_matrix2) prefill tiles: native fmt-0 planes, decode-in-load =====
 
 struct VkQ8Blk {
     qs : uint[8]   // one fmt-0 q8 block: 32 packed int8 quants; the scale lives in wsh
@@ -3789,60 +3688,6 @@ class Q8Gemv {
     }
 }
 
-// q8n_moe_groupn's class twin: the region skeleton on the 34B blocks — 17 u16 per block, u16-pair
-// loads combined to words, 8 lanes per block, d broadcast-read from u16[0]. No binding-1 scale
-// plane (scales are inline), so the class layout carries the GAP — sparse bindings by design.
-[vk_dispatch(name = "q8n_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class Q8nGemv {
-    @ssbo @binding = 0 wq16 : array<uint16>    // the 34B blocks as u16 words ([d][16 quant pairs])
-    @ssbo @binding = 2 regions : array<uint>
-    @ssbo @binding = 3 xqw : array<uint>
-    @ssbo @binding = 4 axs : array<float>
-    @ssbo @binding = 5 y : array<float>
-    @push_constant pa : GemvArgs
-
-    [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "q8n_gemv_cls_spv")]
-    def run {
-        let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
-        if (rg < pa.nreg * pa.d) {
-            let r = rg / pa.d
-            let row = rg % pa.d
-            let nb = pa.n / 32u
-            let wb0 = regions[r * 2u] + row * nb
-            let xb0 = regions[r * 2u + 1u]
-            let lane = gl_SubgroupInvocationID
-            let my_word = lane % 8u
-            let my_boff = lane / 8u
-            let bpp = gl_SubgroupSize / 8u
-            var acc = 0.0
-            var bi0 = 0u
-            while (bi0 < nb) {
-                let b = bi0 + my_boff
-                var idot = 0
-                var dbits = 0u
-                if (b < nb) {
-                    let base = (wb0 + b) * 17u
-                    let lo = uint(wq16[base + 1u + my_word * 2u])
-                    let hi = uint(wq16[base + 2u + my_word * 2u])
-                    idot = sdot4(lo | (hi << 16u), xqw[(xb0 + b) * 8u + my_word])
-                    dbits = uint(wq16[base])
-                }
-                idot += subgroupShuffleXor(idot, 1u)
-                idot += subgroupShuffleXor(idot, 2u)
-                idot += subgroupShuffleXor(idot, 4u)
-                if (my_word == 0u && b < nb) {
-                    acc += float(idot) * unpackHalf2x16(dbits).x * axs[xb0 + b]
-                }
-                bi0 += bpp
-            }
-            let total = subgroupAdd(acc)
-            if (subgroupElect()) {
-                y[pa.ybase + rg] = total
-            }
-        }
-    }
-}
-
 // ===== the K-quant decode GEMV family: one base shell, per-format block contributions =====
 // ONE LANE PER 32-BLOCK via uint4 loads (512B/warp in flight, one scale decode per block).
 // The four formats share the region walk, the lane->block map, and the subgroup fold — only
@@ -4036,8 +3881,8 @@ def kq_batch_cls_enc_for(fmt : int; q40cm : bool; raw : VkCommandBuffer; var h :
 }
 
 // ===== format-dispatched class-GEMV rail =====
-// The drivers' 5-way format pick as ensure/set/enc: every decode GEMV class
-// shares the 6-buffer shape (wq, ws, regions, xq, xs, y) and GemvArgs; q8n drops the scale slot.
+// The drivers' format pick as ensure/set/enc: every decode GEMV class
+// shares the 6-buffer shape (wq, ws, regions, xq, xs, y) and GemvArgs.
 
 def gemv_cls_ensure(fmt : int) : bool {
     if (fmt == int(KqFmt.q8)) {
@@ -4050,8 +3895,6 @@ def gemv_cls_ensure(fmt : int) : bool {
         return ensure_kq_gemv_k6_cls()
     } elif (fmt == int(KqFmt.q40)) {
         return ensure_kq_gemv_q40_cls()
-    } elif (fmt == int(KqFmt.q8n)) {
-        return ensure_q8n_gemv_cls()
     }
     panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
     return false
@@ -4062,11 +3905,6 @@ def gemv_cls_set(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbit
         return set_q8_gemv_cls(bufs, sizes, gbits)
     } elif (fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5) || fmt == int(KqFmt.k6) || fmt == int(KqFmt.q40)) {
         return set_kq_gemv_cls(bufs, sizes, gbits)   // the family shares one layout — one set serves all four
-    } elif (fmt == int(KqFmt.q8n)) {
-        // q8n has no scale plane — slot 1 drops out
-        return set_q8n_gemv_cls(fixed_array(bufs[0], bufs[2], bufs[3], bufs[4], bufs[5]),
-            fixed_array(sizes[0], sizes[2], sizes[3], sizes[4], sizes[5]),
-            fixed_array(gbits[0], gbits[2], gbits[3], gbits[4], gbits[5]))
     }
     panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
     return VkDescriptorSet()
@@ -4083,8 +3921,6 @@ def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkD
         enc_kq_gemv_k6_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.q40)) {
         enc_kq_gemv_q40_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.q8n)) {
-        enc_q8n_gemv_cls(raw, h, set_, pc, wgs)
     } else {
         panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
     }

@@ -222,18 +222,6 @@ def private moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, row
     layout_gather_stack_kq(t, fmt, woff, n, rows, slice_rows, repacked, mr, wq, ws)
 }
 
-def private moe_gpu_gather_stack_q8n(t : Model; woff : int64; n, rows, slice_rows : int64;
-                                     mr, kgroup, wbias : int64; var wq : array<uint8>) {
-    var no_ws : array<uint8>
-    if (vk_bake_slice(t, 6, woff, n, rows, wq, no_ws)) {
-        return
-    }
-    if (t.planes_trimmed) {
-        panic("dasLLAMA: planes_trimmed image - live gather impossible (baked plan diverged, or a re-gather was requested); rebake without --trim or match the image's config")
-    }
-    layout_gather_stack_q8n(t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq)
-}
-
 //! P3 trim (generate-then-free): pack the emb/cls region into embq/embs, mark the model
 //! trimmed, and FREE the big CPU weight families — the save then writes them as empty planes.
 //! Arena-only plans qualify (pure resident-driver dense); false = declined, nothing changed.
@@ -334,16 +322,13 @@ def private dense_shexp_uploadable(t : Model; l : int64) : bool {
 }
 
 
-// Gather one stack through its format's reader (q8 planes, q8n interleaved blocks, or native kq
-// planes) and hand it to the tier's upload hook with the format tag.
+// Gather one stack through its format's reader (q8 planes or native kq planes) and hand it to
+// the tier's upload hook with the format tag.
 def private moe_gpu_gather_upload(t : Model; f : KqFmt; woff : int64; n, rows, slice_rows : int64;
                                   mr, kgroup, wbias : int64; var wq : array<uint8>; var ws : array<uint8>;
                                   stream : bool = false) : bool {
     if (f == KqFmt.q8) {
         moe_gpu_gather_stack(t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
-    } elif (f == KqFmt.q8n) {
-        moe_gpu_gather_stack_q8n(t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq)
-        ws |> resize(0)   // no scale plane — the tier takes an EMPTY ws for fmt 6
     } else {
         let kmr = kq_active_mr(t, f)
         moe_gpu_gather_stack_kq(t, f, woff, n, rows, slice_rows, t.kq_repacked, kmr, wq, ws)
@@ -493,10 +478,7 @@ def private resident_place(t : Model; f : KqFmt; woff : int64; n, rows : int64;
                            mr, kgroup, wbias : int64) : int64 {
     var wq : array<uint8>
     var ws : array<uint8>
-    if (f == KqFmt.q8n) {
-        moe_gpu_gather_stack_q8n(t, woff, n, rows, rows, mr, kgroup, wbias, wq)
-        // no scale plane — the tier takes an EMPTY ws for fmt 6
-    } elif (f == KqFmt.q8) {
+    if (f == KqFmt.q8) {
         moe_gpu_gather_stack(t, woff, n, rows, rows, mr, kgroup, wbias, wq, ws)
     } else {
         let kmr = kq_active_mr(t, f)
@@ -512,35 +494,19 @@ def private resident_place(t : Model; f : KqFmt; woff : int64; n, rows : int64;
 }
 
 def private rdec_blocks_for(n, rows : int64; f : KqFmt) : int64 => (
-    rows * (n / (f == KqFmt.q8 || f == KqFmt.q8n ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS)))
+    rows * (n / (f == KqFmt.q8 ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS)))
 
 // row-length servability twin of the tier's arena_rows_ok (this module is backend-agnostic)
 def private rdec_rows_ok(n : int64; f : KqFmt) : bool => (
-    n % (f == KqFmt.q8 || f == KqFmt.q8n ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS) == 0l)
+    n % (f == KqFmt.q8 ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS) == 0l)
 
-// a plane's activation-quant form: 0 = Q8_0 per-32, 1 = Q8_K superblock, 2 = the cm2 f16 feed
-def private rdec_quant_class(f : KqFmt) : int => f == KqFmt.q8n ? 2 : (kq_sb(f) ? 1 : 0)
+// a plane's activation-quant form: 0 = Q8_0 per-32, 1 = Q8_K superblock
+def private rdec_quant_class(f : KqFmt) : int => kq_sb(f) ? 1 : 0
 
-// cm2 (mode 4) places dense q8 planes as q8n — decode-in-load prefill GEMMs, q8n decode GEMV.
-// Promotion is per activation-group: members sharing one B-side image must agree on its form,
-// so {q,k,v} and {gate,up} promote only whole; wo / down / cls are singletons.
 def private resident_layer_fmts(t : Model; l : int64) : tuple<fq : KqFmt; fk : KqFmt; fv : KqFmt; fo : KqFmt; f1 : KqFmt; f3 : KqFmt; f2 : KqFmt> {
-    var fq = fmt_at(t.wq_fmt, l)
-    var fk = fmt_at(t.wk_fmt, l)
-    var fv = fmt_at(t.wv_fmt, l)
-    if (fq == KqFmt.q8 && fk == KqFmt.q8 && fv == KqFmt.q8 && moe_gpu_expert_q8n()) {
-        fq = KqFmt.q8n
-        fk = KqFmt.q8n
-        fv = KqFmt.q8n
-    }
-    var f1 = fmt_at(t.w1_fmt, l)
-    var f3 = fmt_at(t.w3_fmt, l)
-    if (f1 == KqFmt.q8 && f3 == KqFmt.q8 && moe_gpu_expert_q8n()) {
-        f1 = KqFmt.q8n
-        f3 = KqFmt.q8n
-    }
-    return (fq = fq, fk = fk, fv = fv, fo = moe_gpu_expert_fmt(fmt_at(t.wo_fmt, l)),
-            f1 = f1, f3 = f3, f2 = moe_gpu_expert_fmt(fmt_at(t.w2_fmt, l)))
+    return (fq = fmt_at(t.wq_fmt, l), fk = fmt_at(t.wk_fmt, l), fv = fmt_at(t.wv_fmt, l),
+            fo = fmt_at(t.wo_fmt, l), f1 = fmt_at(t.w1_fmt, l), f3 = fmt_at(t.w3_fmt, l),
+            f2 = fmt_at(t.w2_fmt, l))
 }
 
 //! Reserve arenas + place every dense plane + wire the resident decode driver. Returns false (and
@@ -577,7 +543,7 @@ def resident_upload(t : Model; seq_cap : int64) : bool {   // nolint:STYLE037,ST
         return false
     }
     let neox = c.rope_neox
-    let cls_fmt = moe_gpu_expert_fmt(c.shared_weights ? t.emb_fmt : t.wcls_fmt)
+    let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     // reject non-uniform per-layer geometry (the recorder assumes fixed dims across layers)
     for (l in range64(c.n_layers)) {
         if (layer_hidden(t, l) != hid0 || layer_head_size(c, l) != hs || layer_kv_dim(c, l) != kvd
@@ -1315,13 +1281,13 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
             break
         }
         var got = 0
-        if (moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f1), t.we1_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws)) {
+        if (moe_gpu_gather_upload(t, f1, t.we1_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws)) {
             got++
         }
-        if (got == 1 && moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f3), t.we3_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws)) {
+        if (got == 1 && moe_gpu_gather_upload(t, f3, t.we3_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws)) {
             got++
         }
-        if (got == 2 && moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f2), t.we2_offs[l], nfe, ne * dim, dim, mr, kgroup, wbias, wq, ws)) {
+        if (got == 2 && moe_gpu_gather_upload(t, f2, t.we2_offs[l], nfe, ne * dim, dim, mr, kgroup, wbias, wq, ws)) {
             got++
         }
         if (got < 3) {
@@ -1355,13 +1321,13 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
             break
         }
         var got = 0
-        if (moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f1), t.we1_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws, [stream = true])) {
+        if (moe_gpu_gather_upload(t, f1, t.we1_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws, [stream = true])) {
             got++
         }
-        if (got == 1 && moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f3), t.we3_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws, [stream = true])) {
+        if (got == 1 && moe_gpu_gather_upload(t, f3, t.we3_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws, [stream = true])) {
             got++
         }
-        if (got == 2 && moe_gpu_gather_upload(t, moe_gpu_expert_fmt(f2), t.we2_offs[l], nfe, ne * dim, dim, mr, kgroup, wbias, wq, ws, [stream = true])) {
+        if (got == 2 && moe_gpu_gather_upload(t, f2, t.we2_offs[l], nfe, ne * dim, dim, mr, kgroup, wbias, wq, ws, [stream = true])) {
             got++
         }
         if (got < 3) {

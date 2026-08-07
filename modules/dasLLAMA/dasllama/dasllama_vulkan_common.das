@@ -181,7 +181,7 @@ def batch_tile_edges(fmt : int; d, cnt : int64; cm2l : bool = false) : tuple<til
         return (tile = 128l, td = 128l, tc = cm2_tile_cols(d, cnt))
     }
     let tile = fmt == 0 ? q8_batch_tile_for(d, cnt) : BATCH_TILE
-    return (tile = tile, td = fmt == 6 ? 64l : tile, tc = fmt == 6 ? 128l : tile)
+    return (tile = tile, td = tile, tc = tile)
 }
 let BATCH_CHUNK_ROWS = 8_192l      // dispatch row-window cap (bounds y and the wg map)
 let BATCH_HQ_BYTES = 33_554_432l   // device requantized-hidden quants (the down GEMM's activations)
@@ -494,12 +494,6 @@ struct GpuState {
     batch_acts_cls_ready : bool         // both act sets built (by prefill; reset on drop)
     batch_cmd : VkCommandBuffer   // one reusable batch cmd buffer, re-recorded per submit
     batch_ready : bool
-    // cm2 batch state (lazy — first q8n batch dispatch creates it; mode 4 only)
-    batch_xf_dev : uint64    // f16 gathered-activation plane (the gate/up twins' B side)
-    batch_hf_dev : uint64    // f16 hidden plane (the down twin's B side)
-    batch_xf_set : VkDescriptorSet   // the Q8_0 -> f16 dequant dispatch
-    batch_hf_set : VkDescriptorSet   // the act -> f16 dispatch
-    cm2_batch_ready : bool
     // combined-output state (lazy — first combined prefill dispatch creates it)
     comb_stage : HostBuf     // staging: routing w plane + grid->bucket map (device copies at first-chunk head)
     comb_w_dev : uint64
@@ -812,7 +806,7 @@ def resolve_weight_cap(heap : VkHeapInfo) : int64 {
 }
 
 // The stream-slot carve, derived AT READ TIME — g_gpu.weight_budget stores the UNCARVED cap.
-// Init-time carving was timing-dependent (the expert_q8n probe can init the device BEFORE the
+// Init-time carving was timing-dependent (a capability probe can init the device BEFORE the
 // loader reports its slot need), which made a dry bake's plan diverge from the live walk's.
 def carved_budget : int64 {
     var r = g_gpu.weight_budget
@@ -1129,7 +1123,7 @@ def stack_plane_bytes(n, rows : int64; fmt : int) : tuple<wq : int64; ws : int64
 // ensure_gemv_scratch). Resident stacks pass their exact plane sizes; streaming pseudo-stacks
 // pass slot capacities and a base of -1 (re-based per layer).
 def make_stack_shell(base, elems : int64; fmt : int; wqcap, wscap : int64; xfer_shared : bool = false) : int {
-    // q8n has no scale plane (wscap 0) — floor the buffer so its descriptor slot stays valid
+    // floor the ws buffer so a scale-less stack's descriptor slot stays valid
     var st = VkStack(base = base, elems = elems, fmt = fmt, wqbytes = wqcap,
                      wqbuf = g_gpu.dry ? 0ul : make_device_buf(wqcap, xfer_shared),
                      wsbuf = g_gpu.dry ? 0ul : make_device_buf(max(wscap, 64l), xfer_shared), wsbytes = wscap)
@@ -1272,7 +1266,7 @@ def vk_moe_stream_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n, r
         if (win.wq != null && win.wqb == pb.wq && (pb.ws <= 0l || (win.ws != null && win.wsb == pb.ws))) {
             var iq = make_imported_buf(win.wq, pb.wq)
             if (iq.buf != 0ul) {
-                // ws: import the real window, or a tiny pinned dummy for the descriptor floor (q8n)
+                // ws: import the real window, or a tiny pinned dummy for the descriptor floor
                 let is_ = pb.ws > 0l ? make_imported_buf(win.ws, pb.ws) : make_host_buf(64l, false, [xfer_shared = true])
                 if (is_.buf != 0ul) {
                     var ss = StreamStack(base = woff, elems = rows * n, fmt = fmt,
@@ -1308,7 +1302,7 @@ def vk_moe_stream_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n, r
         }
         unsafe {
             par_memcpy(ss.hwq.mapped, reinterpret<void?>(wq), pb.wq)
-            if (pb.ws > 0l) {   // q8n mirrors carry no scale plane
+            if (pb.ws > 0l) {
                 par_memcpy(ss.hws.mapped, reinterpret<void?>(ws), pb.ws)
             }
         }
@@ -1621,19 +1615,16 @@ def vk_kq_schema_id(fmt : int) : int {
     return 0
 }
 
-// fmt space here = int(KqFmt): 0 q8, 6 q8n (both 32-elem blocks), 1-4 the kq lattice + q40
-def vk_fmt_b32(fmt : int) : bool => fmt == 0 || fmt == 6
+// fmt space here = int(KqFmt): 0 q8 (32-elem blocks), 1-4 the kq lattice + q40
+def vk_fmt_b32(fmt : int) : bool => fmt == 0
 
-// meta/activation block unit of a stack format — q8 AND q8n count 32-weight blocks, the kq
+// meta/activation block unit of a stack format — q8 counts 32-weight blocks, the kq
 // lattice counts 256-weight superblocks
 def fmt_unit(fmt : int) : int64 => vk_fmt_b32(fmt) ? 32l : 256l
 
 def arena_block_bytes(fmt : int) : tuple<wq : int64; ws : int64> {
     if (fmt == 0) {
         return (wq = Q8_QPB, ws = Q8_SPB)     // 32 int8 quants + one f16 scale
-    }
-    if (fmt == 6) {
-        return (wq = Q8N_BPB, ws = 0l)        // q8n: one interleaved 34B plane, scale inside
     }
     // decoded scale row: [f16 d][f16 dmin][8 sc][8 mn]
     return (wq = kq_qsb(vk_kq_schema_id(fmt)), ws = KQ_DEV_SSB)
@@ -1685,8 +1676,7 @@ def private arena_open_slab(var a : ArenaFmt) {
         to_log(LOG_INFO, "dasLLAMA vulkan arena: fmt {a.fmt} slab {length(a.slabs)} opens ({cap} blocks; {tail} tail blocks unused in slab {length(a.slabs) - 1})\n")
     }
     let qb = cap * bb.wq
-    // q8n has no scale plane — floor the ws buffer so its descriptor slots stay valid (stack-shell rule)
-    let sb = max(cap * bb.ws, 64l)
+    let sb = max(cap * bb.ws, 64l)   // ws floor keeps the descriptor slots valid (stack-shell rule)
     a.slabs |> push(ArenaSlab(cap = cap, wqbytes = qb, wsbytes = sb,
         wqbuf = g_gpu.dry ? 0ul : make_device_buf(qb), wsbuf = g_gpu.dry ? 0ul : make_device_buf(sb)))
 }
@@ -1766,8 +1756,7 @@ def vk_arena_reserve(fmt : int; cap_blocks : int64) : bool {
 //! Arena seam: place + upload one [rows x n] tensor from the loader's gathered device-layout
 //! planes. Returns its block index (what the meta's weight base wants), or -1 if exhausted.
 def vk_arena_place(wq : array<uint8>; ws : array<uint8>; n : int64; rows : int64; fmt : int) : int64 {
-    // q8n (fmt 6) carries its scale inside the interleaved plane — an EMPTY ws is its contract
-    if (!vk_moe_init() || empty(wq) || (empty(ws) && fmt != 6)) {
+    if (!vk_moe_init() || empty(wq) || empty(ws)) {
         return -1l
     }
     if (!arena_rows_ok(n, fmt)) {   // unplaceable row length: this plane stays on the CPU
@@ -2069,8 +2058,6 @@ let VHB_ATG = 0x800u      // at gate/o rows
 let VHB_ATK = 0x1000u     // at roped-k panel
 let VHB_ATV = 0x2000u     // at v panel (absolute positions)
 let VHB_VRAW = 0x4000u    // at raw-v window
-let VHB_XF = 0x8000u      // cm2: f16 gathered-activation plane (dequant out, gate/up twin B)
-let VHB_HF = 0x10000u     // cm2: f16 hidden plane (actf16 out, down twin B)
 
 // serial-seam region bits (decode GEMV preps, arena + standalone seams) — third namespace, same rail
 let VHG_META = 0x1u       // ffn/dn params staged to device

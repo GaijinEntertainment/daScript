@@ -817,16 +817,6 @@ def public set_moe_gpu_binding_cap(f : function<() : int64>) {
 
 def public moe_gpu_binding_cap() : int64 => invoke(g_moe_gpu_binding_cap)
 
-def private moe_gpu_no_q8n : bool => false
-var private g_moe_gpu_expert_q8n = @@moe_gpu_no_q8n
-
-//! The tier asks the loader to gather q8 EXPERT stacks as gguf-native q8n blocks (fmt 6, the
-//! cm2 decode-in-load layout, no scale plane). Registered beside the budget hooks; the probe
-//! may create the device — it must answer before the first gather.
-def public set_moe_gpu_expert_q8n_probe(f : function<() : bool>) {
-    g_moe_gpu_expert_q8n = f
-}
-
 [unused_argument(v)]
 def private moe_gpu_no_dry_bake(v : DlimVulkanConfig) : bool => false
 
@@ -905,7 +895,6 @@ def public set_moe_gpu_bake_tag(f : function<() : string>) {
 
 def public moe_gpu_bake_tag : string => invoke(g_moe_gpu_bake_tag)
 
-def public moe_gpu_expert_q8n() : bool => invoke(g_moe_gpu_expert_q8n)
 
 //! Device-layout bytes one [rows x n] plane of `fmt` occupies (quants + scales). 0 = no tier.
 def public moe_gpu_plane_bytes(n, rows : int64; fmt : int) : int64 => invoke(g_moe_gpu_plane_bytes_fn, n, rows, fmt)
@@ -979,8 +968,8 @@ def public moe_gpu_upload_stack(wq : array<uint8> | #; ws : array<uint8> | #; wo
     if (!g_moe_gpu_installed) {
         return false
     }
-    // empty planes hand the tier null: q8n stacks carry no scale plane, and the slice replay's
-    // refusal-boundary serve is empty on purpose (the tier refuses on arithmetic, no bytes read)
+    // empty planes hand the tier null: the slice replay's refusal-boundary serve is empty on
+    // purpose (the tier refuses on arithmetic, no bytes read)
     var wqp : uint8 const?
     if (!empty(wq)) {
         wqp = unsafe(addr<uint8 const?>(wq[0]))
@@ -1180,9 +1169,6 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     }
     if (g_moe_gpu_plane_bytes_fn == null) {
         g_moe_gpu_plane_bytes_fn = @@moe_gpu_no_plane_bytes
-    }
-    if (g_moe_gpu_expert_q8n == null) {
-        g_moe_gpu_expert_q8n = @@moe_gpu_no_q8n
     }
     if (g_moe_gpu_dry_bake == null) {
         g_moe_gpu_dry_bake = @@moe_gpu_no_dry_bake

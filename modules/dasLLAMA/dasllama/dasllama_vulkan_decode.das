@@ -845,7 +845,7 @@ def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64; is_gelu : bool)
     let key = (int64(s1) * int64(MAX_STACKS) + int64(s3)) * int64(MAX_STACKS) + int64(s2)
     if (!key_exists(g_gpu.ffn_cmds, key)) {
         var fc = FfnCmd(cmd = alloc_cmd(), nrows = 0l)
-        // the requant form follows the DOWN stack (q8n counts as q8 — decode acts stay Q8_0)
+        // the requant form follows the DOWN stack
         let dkq = !vk_fmt_b32(g_gpu.stacks[s2].fmt)
         verify((dkq ? ensure_q8k_actrq_cls() : ensure_q8_actrq_cls()) && gemv_cls_ensure(g_gpu.stacks[s2].fmt),
             "vk decode: the class rails must engage on a live device")
@@ -881,7 +881,7 @@ def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64; is_gelu : bool)
         var pcg = GemvArgs(n = uint(n), d = uint(nfe), nreg = uint(nrows), ybase = 0u)
         gemv_cls_enc(g_gpu.stacks[s1].fmt, raw, h, gset, pcg, ggu)
         gemv_cls_enc(g_gpu.stacks[s3].fmt, raw, h, uset, pcg, ggu)
-        // the requant form follows the DOWN stack (q8n counts as q8 — decode acts stay Q8_0)
+        // the requant form follows the DOWN stack
         let dkq = !vk_fmt_b32(g_gpu.stacks[s2].fmt)
         var pca = ActArgs(nelem = uint(nrows * nfe), gelu = is_gelu ? 1u : 0u,
             nblk = uint(nrows * nfe / (dkq ? 256l : 32l)))
@@ -1100,7 +1100,7 @@ def private heat_record_slice(raw : VkCommandBuffer; src_si, dst_si : int; e, sl
     let rbs = g_gpu.stream_stacks[src_si].wsbytes / rows_src
     cmd_copy_range(raw, g_gpu.stream_stacks[src_si].hwq.buf, e * rpe * rbq,
         g_gpu.stacks[dst_si].wqbuf, slot * rpe * rbq, rpe * rbq)
-    if (rbs > 0l) {   // q8n mirrors carry no scale plane
+    if (rbs > 0l) {
         cmd_copy_range(raw, g_gpu.stream_stacks[src_si].hws.buf, e * rpe * rbs,
             g_gpu.stacks[dst_si].wsbuf, slot * rpe * rbs, rpe * rbs)
     }
@@ -1204,7 +1204,6 @@ def private ensure_cls(si : int; woff, n, d : int64) {
         return
     }
     ensure_gemv_scratch(si)
-    // fmt_unit, not `fmt != 0`: a q8n cls plane (fmt 6, retagged on q8n boxes) counts 32-blocks
     let unit = fmt_unit(g_gpu.stacks[si].fmt)
     let rel = woff - g_gpu.stacks[si].base
     assert(rel % unit == 0l, "dasLLAMA vulkan tier: unaligned classifier plane offset")

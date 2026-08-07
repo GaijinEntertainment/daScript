@@ -33,29 +33,6 @@ def half_at(a : array<uint>; hi : int) : float {
 
 def half_bytes(a : array<uint>; i : int) : float => unpackHalf2x16(uint(byte_u8(a, i) | (byte_u8(a, i + 1) << 8))).x
 
-// q8n (gguf-native 34B blocks: f16 d + 32 int8) GEMM oracle over region records, f16 x plane
-def q8n_gemm_oracle(wq, xf : array<uint>; recs : array<uint>; nrec, n, d : int; var y : array<float>) {
-    let nbb = n / 32
-    for (rr in range(nrec)) {
-        let wblk0 = int(recs[rr * 4])
-        let row0 = int(recs[rr * 4 + 1])
-        let cnt = int(recs[rr * 4 + 2])
-        for (r in range(cnt)) {
-            for (c in range(d)) {
-                var acc = 0.0
-                for (kb in range(nbb)) {
-                    let bb = (wblk0 + c * nbb + kb) * 34
-                    let dv = half_bytes(wq, bb)
-                    for (j in range(32)) {
-                        acc += dv * float(byte_s8(wq, bb + 2 + j)) * half_at(xf, (row0 + r) * n + kb * 32 + j)
-                    }
-                }
-                y[(row0 + r) * d + c] = acc
-            }
-        }
-    }
-}
-
 // q8 batch GEMM oracle over region records ([wblk0, row0, cnt, wg0] x nrec): per (row, col),
 // int dots per 32-block (exact) folded by the f16 weight scale and the f32 x scale in block
 // order — the device tiles reassociate, so approx bars

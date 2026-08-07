@@ -106,8 +106,8 @@ def private heat_advise_layer(t : Model; l : int64; h : HeatLayer) {
     }
     if (want > 0l) {
         moe_gpu_heat_advise(l, t.we1_offs[l], t.we3_offs[l], t.we2_offs[l],
-            int(moe_gpu_expert_fmt(fmt_at(t.we1_fmt, l))), int(moe_gpu_expert_fmt(fmt_at(t.we3_fmt, l))),
-            int(moe_gpu_expert_fmt(fmt_at(t.we2_fmt, l))), c.dim, c.n_ff_exp, ids, want)
+            int(fmt_at(t.we1_fmt, l)), int(fmt_at(t.we3_fmt, l)),
+            int(fmt_at(t.we2_fmt, l)), c.dim, c.n_ff_exp, ids, want)
     }
     delete ids
 }
@@ -478,7 +478,7 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
                 }
             }
             matmul_moe_gpu_ffn(s.moe_dn, s.moe_offs1, s.moe_offs3, s.moe_offs2, k,
-                s.moe_gxq, s.moe_gxs, dim, nfe, k, int(moe_gpu_expert_fmt(f1)), int(moe_gpu_expert_fmt(f3)), int(moe_gpu_expert_fmt(f2)), c.ffn_act == FfnAct.gelu)
+                s.moe_gxq, s.moe_gxs, dim, nfe, k, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
             prof_add("mm_moe", ts_gu)
         } elif (nhits > 0l) {
             // split-FFN: compacted hit regions (pool coordinates, rows 0..nhits) dispatch async
@@ -512,7 +512,7 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
             }
             let ts_sub = prof_ticks()
             matmul_moe_gpu_ffn_begin(s.moe_offs1, s.moe_offs3, s.moe_offs2, nhits,
-                s.moe_gxq, s.moe_gxs, dim, nfe, nhits, int(moe_gpu_expert_fmt(f1)), int(moe_gpu_expert_fmt(f3)), int(moe_gpu_expert_fmt(f2)), c.ffn_act == FfnAct.gelu)
+                s.moe_gxq, s.moe_gxs, dim, nfe, nhits, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
             prof_add("heat_sub", ts_sub)   // dispatch cost ON the critical path (the split's tax)
             // the missed experts run the CPU groupn chain while the GPU crunches the hits
             var ts_down = ts_gu

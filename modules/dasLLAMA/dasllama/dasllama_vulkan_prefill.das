@@ -33,13 +33,13 @@ require math
 
 let private PF_ROLES = 16l   // quant_xb q k v rope attn quant_at wo addr_ffn quant_xb2 gate up actrq down addr_next qkn
 
-// mode 4 feeds every dense prefill GEMM f16 rows: fmt-6 stacks by construction, and NATIVE fmt-0
-// stacks through the l-tile (the decode GEMV keeps its q8 chain — the format pick is decoupled)
-def private pf_f16_feed(f : int) : bool => f == 6 || (f == int(KqFmt.q8) && g_gpu.coopmat_mode == 4)
+// mode 4 feeds the dense q8 prefill GEMMs f16 rows through the cm2 tiles (the decode GEMV
+// keeps its q8 chain — the format pick is decoupled)
+def private pf_f16_feed(f : int) : bool => f == int(KqFmt.q8) && g_gpu.coopmat_mode == 4
 
 // one prefill GEMM role on the class rail: schedule fill + a per-(role, variant) cached set +
-// BatchArgs push. fmt picks the class: 6 = cm2 twin, fmt-0 in mode 4 = the cm2 l-tile, kq = the
-// kq tile family, else the q8 router (whose variant moves with wlen — the last window is shorter).
+// BatchArgs push. fmt picks the class: fmt-0 in mode 4 = the cm2 l/m tiles, kq = the kq tile
+// family, else the q8 router (whose variant moves with wlen — the last window is shorter).
 def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : int;
                         wq, ws, ab, sb, yb : uint64; wqn, wsn, an, sn, yn : int64;
                         abit, ybit : uint; n, d, blk, wlen : int64) {
@@ -56,17 +56,7 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
     }
     let groups = int64(fill_arena_batch_sched(g_rd.pf_meta[idx], d, blk, wlen, fmt, cm2l, nsplit))
     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = nsplit > 1l ? uint(ksplit) : 0u)
-    if (fmt == 6) {
-        let key = idx * 16 + 7
-        if (!key_exists(g_rd.pf_cls_gemm, key)) {
-            verify(ensure_q8n_batch_cm2_cls(), "vk prefill: the cm2 batch class rail must engage")
-            g_rd.pf_cls_gemm[key] = set_q8n_batch_cm2_cls(
-                fixed_array(wq, g_rd.pf_meta[idx].buf, ab, yb),
-                fixed_array(wqn, BATCH_META_BYTES, an, yn),
-                fixed_array(0u, 0u, abit, ybit))
-        }
-        enc_q8n_batch_cm2_cls(raw, h, g_rd.pf_cls_gemm[key], pc, groups)
-    } elif (cm2l) {
+    if (cm2l) {
         // native fmt-0 decode-in-load; a split pick reroutes the GEMM into the scratch planes
         let split = nsplit > 1l
         if (split) {
@@ -212,7 +202,7 @@ def private pf_setup {
         let wo6 = pf_f16_feed(L.fo)
         let gu6 = pf_f16_feed(L.f1)
         let dn6 = pf_f16_feed(L.f2)
-        // 0 quant_xb: pf_xb -> pf_xq/pf_xs (fmt 6: f16 convert -> pf_xf)
+        // 0 quant_xb: pf_xb -> pf_xq/pf_xs (f16-fed: f16 convert -> pf_xf)
         g_rd.pf_sets[b + 0] = (qkv6
             ? set_f16cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf),
                 fixed_array(np * dim * 4l, np * dim * 2l), fixed_array(VHZ_XB, VHZ_XQ))
@@ -235,7 +225,7 @@ def private pf_setup {
             g_rd.pf_sets[b + 5] = (fa128s ? set_da_attn_b_h128_cls(abufs5, asizes5, agbits5)
                 : set_da_attn_b_cls(abufs5, asizes5, agbits5))
         }
-        // 6 quant_at: pf_attn -> pf_aq/pf_as (fmt 6: f16 convert -> pf_af)
+        // 6 quant_at: pf_attn -> pf_aq/pf_as (f16-fed: f16 convert -> pf_af)
         g_rd.pf_sets[b + 6] = (wo6
             ? set_f16cvt_cls(fixed_array(g_rd.pf_attn, g_rd.pf_af),
                 fixed_array(np * qd * 4l, np * qd * 2l), fixed_array(VHZ_ATT, VHZ_AQ))
@@ -246,14 +236,14 @@ def private pf_setup {
         g_rd.pf_sets[b + 8] = set_cls_ar(fixed_array(g_rd.pf_x, g_rd.pf_xb2, g_rd.norms_dev, g_rd.pf_xb),
             fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim * 4l),
             fixed_array(VHZ_X, VHZ_XB2, 0u, VHZ_XB))
-        // 9 quant_xb2: pf_xb -> pf_xq (fmt 6: f16 convert -> pf_xf)
+        // 9 quant_xb2: pf_xb -> pf_xq (f16-fed: f16 convert -> pf_xf)
         g_rd.pf_sets[b + 9] = (gu6
             ? set_f16cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf),
                 fixed_array(np * dim * 4l, np * dim * 2l), fixed_array(VHZ_XB, VHZ_XQ))
             : set_rq_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xq, g_rd.pf_xs),
                 fixed_array(np * dim * 4l, np * dim, np * (dim / 32l) * 4l),
                 fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ)))
-        // 12 actrq (class: gate, up, quants out, scales out; fmt 6: actf16 -> pf_hf)
+        // 12 actrq (class: gate, up, quants out, scales out; f16-fed: actf16 -> pf_hf)
         g_rd.pf_sets[b + 12] = (dn6
             ? set_actf16_cls(fixed_array(g_rd.pf_gate, g_rd.pf_up, g_rd.pf_hf),
                 fixed_array(np * hid * 4l, np * hid * 4l, np * hid * 2l),
@@ -670,7 +660,7 @@ def vk_arena_gemv(var y : array<float>; blk : int64; n, d : int64; fmt : int; xq
     let xqp = unsafe(addr(xq[0]))
     let xsp = unsafe(addr(xs[0]))
     arena_ensure_scratch(fmt)
-    let unit = fmt_unit(fmt)   // q8 AND q8n take 32-block Q8_0 activations
+    let unit = fmt_unit(fmt)   // q8 takes 32-block Q8_0 activations
     let nb = n / unit
     assert(n <= XQ_BYTES && nb * 4l <= XS_BYTES, "dasLLAMA vulkan arena: activations exceed scratch capacity")
     assert(d * 4l <= Y_BYTES, "dasLLAMA vulkan arena: gemv output exceeds y capacity")
@@ -705,31 +695,6 @@ def vk_arena_gemv(var y : array<float>; blk : int64; n, d : int64; fmt : int; xq
 }
 
 // ===== prefill batch dispatch (the FFN's batched-GEMM arm) =====
-
-// cm2 batch state: the two f16 planes (2 bytes per element — 2x the q8 image caps bound the
-// same chunk rows) and the dequant/act convert sets. Mode 4 + fmt-6 stacks only.
-def private ensure_cm2_batch {
-    if (g_gpu.cm2_batch_ready) {
-        return
-    }
-    ensure_batch_state()
-    verify(ensure_cls_xf16() && ensure_actf16_cls(), "vk cm2 batch: the class rails must engage on a live device")
-    g_gpu.batch_xf_dev = make_device_buf(2l * BATCH_XQ_BYTES)
-    g_gpu.batch_hf_dev = make_device_buf(2l * BATCH_HQ_BYTES)
-    // dequant (class: quant words, scales, f16 out)
-    g_gpu.batch_xf_set = set_cls_xf16(
-        fixed_array(g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, g_gpu.batch_xf_dev),
-        fixed_array(BATCH_XQ_BYTES, BATCH_XS_BYTES, 2l * BATCH_XQ_BYTES),
-        fixed_array(VHB_ACT, VHB_ACT, VHB_XF))
-    // act-f16 (class: gate, up, f16 hidden out)
-    g_gpu.batch_hf_set = set_actf16_cls(
-        fixed_array(g_gpu.batch_y1_dev, g_gpu.batch_y2_dev, g_gpu.batch_hf_dev),
-        fixed_array(BATCH_Y_BYTES, BATCH_Y_BYTES, 2l * BATCH_HQ_BYTES),
-        fixed_array(VHB_Y1, VHB_Y2, VHB_HF))
-    g_gpu.resident_bytes += 2l * BATCH_XQ_BYTES + 2l * BATCH_HQ_BYTES
-    g_gpu.cm2_batch_ready = true
-    to_log(LOG_INFO, "dasLLAMA vulkan tier: cm2 prefill chain engaged (decode-in-load, f16 activations)\n")
-}
 
 // the fused act+requant class sets (both forms — the mid-step form follows the down stack)
 def private ensure_batch_acts_cls {
@@ -879,50 +844,38 @@ def private fill_batch_meta(si : int; offs : int64 const?; nregions : int64; n, 
 }
 
 // one stack batch tile on the class rail: the class picked by the stack's format (q8 rides the
-// tile router; kq formats and the cm2 twin are fixed), a per-(stack, variant) cached set over
-// the planes ensure_batch_set recorded, BatchArgs push. n/d must MATCH the fill's values.
+// tile router; kq formats are fixed), a per-(stack, variant) cached set over the planes
+// ensure_batch_set recorded, BatchArgs push. n/d must MATCH the fill's values.
 def private stack_batch_enc(raw : VkCommandBuffer; var h : VkHaz; si : int; nwg : uint; n, d : int64) {
     unsafe {
         var st & = g_gpu.stacks[si]
         let fmt = st.fmt
         // Q4_0 rides the f16 coopmat arm too (no s8-native for nibbles — mode 2 falls back to sdot4)
         let q40cm = fmt == int(KqFmt.q40) && g_gpu.coopmat_mode == 1
-        var v = 6   // the stack's fixed class (kq); 5 = the q40 f16 MMA twin, 7 = the cm2 twin
+        var v = 6   // the stack's fixed class (kq); 5 = the q40 f16 MMA twin
         if (fmt == int(KqFmt.q8)) {
             v = q8_batch_cls_variant(st.batch_tile, st.batch_aligned)
-        } elif (fmt == int(KqFmt.q8n)) {
-            v = 7
         } elif (q40cm) {
             v = 5
         }
         if ((st.batch_cls_ready & (1u << uint(v))) == 0u) {
-            if (fmt == int(KqFmt.q8n)) {
-                verify(ensure_q8n_batch_cm2_cls(), "vk batch: the cm2 batch class rail must engage")
-                st.batch_cls_sets[v] = set_q8n_batch_cm2_cls(
-                    fixed_array(st.wqbuf, st.batch_meta_dev, st.batch_xq, st.batch_y),
-                    fixed_array(st.wqbytes, BATCH_META_BYTES, st.batch_xq_bytes, st.batch_y_bytes),
-                    fixed_array(0u, VHB_META, st.batch_xbit, st.batch_ybit))
+            let bufs = fixed_array(st.wqbuf, st.wsbuf, st.batch_meta_dev, st.batch_xq, st.batch_xs, st.batch_y)
+            let sizes = fixed_array(st.wqbytes, ws_range(si), BATCH_META_BYTES, st.batch_xq_bytes, st.batch_xs_bytes, st.batch_y_bytes)
+            let gbits = fixed_array(0u, 0u, VHB_META, st.batch_xbit, st.batch_xbit, st.batch_ybit)
+            if (fmt == int(KqFmt.q8)) {
+                verify(q8_batch_cls_ensure(v), "vk batch: the q8 batch class rail must engage")
+                st.batch_cls_sets[v] = q8_batch_cls_set(v, bufs, sizes, gbits)
+            } elif (q40cm || kq_sb(fmt)) {
+                verify(kq_batch_cls_ensure(fmt, q40cm), "vk batch: the kq batch class rail must engage")
+                st.batch_cls_sets[v] = kq_batch_cls_set_for(fmt, q40cm, bufs, sizes, gbits)
             } else {
-                let bufs = fixed_array(st.wqbuf, st.wsbuf, st.batch_meta_dev, st.batch_xq, st.batch_xs, st.batch_y)
-                let sizes = fixed_array(st.wqbytes, ws_range(si), BATCH_META_BYTES, st.batch_xq_bytes, st.batch_xs_bytes, st.batch_y_bytes)
-                let gbits = fixed_array(0u, 0u, VHB_META, st.batch_xbit, st.batch_xbit, st.batch_ybit)
-                if (fmt == int(KqFmt.q8)) {
-                    verify(q8_batch_cls_ensure(v), "vk batch: the q8 batch class rail must engage")
-                    st.batch_cls_sets[v] = q8_batch_cls_set(v, bufs, sizes, gbits)
-                } elif (q40cm || kq_sb(fmt)) {
-                    verify(kq_batch_cls_ensure(fmt, q40cm), "vk batch: the kq batch class rail must engage")
-                    st.batch_cls_sets[v] = kq_batch_cls_set_for(fmt, q40cm, bufs, sizes, gbits)
-                } else {
-                    panic("dasLLAMA vulkan tier: no batch class for stack format {fmt}")
-                }
+                panic("dasLLAMA vulkan tier: no batch class for stack format {fmt}")
             }
             st.batch_cls_ready |= 1u << uint(v)
         }
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(st.batch_map_off))
         if (fmt == int(KqFmt.q8)) {
             q8_batch_cls_enc(v, raw, h, st.batch_cls_sets[v], pc, int64(nwg))
-        } elif (fmt == int(KqFmt.q8n)) {
-            enc_q8n_batch_cm2_cls(raw, h, st.batch_cls_sets[v], pc, int64(nwg))
         } elif (q40cm || kq_sb(fmt)) {
             kq_batch_cls_enc_for(fmt, q40cm, raw, h, st.batch_cls_sets[v], pc, int64(nwg))
         } else {
@@ -964,24 +917,16 @@ def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, 
         cmd_copy_whole(raw, g_gpu.comb_stage.buf, g_gpu.comb_w_dev, comb_wi_bytes)
         cmd_copy_range(raw, g_gpu.comb_stage.buf, COMB_WI_BYTES, g_gpu.comb_inv_dev, 0l, comb_wi_bytes)
     }
-    if (g_gpu.stacks[s1].fmt == int(KqFmt.q8n)) {   // the cm2 chain: dequant feed, twin GEMMs, f16 mid-step
-        var pcx = RqArgs(inbase = 0u, nblk = uint(axq_bytes / 4l))
-        enc_cls_xf16(raw, h, g_gpu.batch_xf_set, pcx, (axq_bytes / 4l + 255l) / 256l)
-    }
     stack_batch_enc(raw, h, s1, nwg_gu, n, nfe)
     stack_batch_enc(raw, h, s3, nwg_gu, n, nfe)
     // the mid-step form follows the DOWN stack — its GEMM is the consumer of the hidden plane
     var pca = ActArgs(nelem = uint(rows * nfe), gelu = is_gelu ? 1u : 0u, nblk = uint(mid_nblk))
-    if (g_gpu.stacks[s2].fmt == int(KqFmt.q8n)) {
-        enc_actf16_cls(raw, h, g_gpu.batch_hf_set, pca, (rows * nfe / 4l + 255l) / 256l)
+    let dkq = g_gpu.stacks[s2].fmt != 0
+    let awgs = (rows * nfe / (dkq ? 8l : 4l) + 255l) / 256l
+    if (dkq) {
+        enc_q8k_actrq_cls(raw, h, g_gpu.batch_actrq_set, pca, awgs)
     } else {
-        let dkq = g_gpu.stacks[s2].fmt != 0
-        let awgs = (rows * nfe / (dkq ? 8l : 4l) + 255l) / 256l
-        if (dkq) {
-            enc_q8k_actrq_cls(raw, h, g_gpu.batch_actrq_set, pca, awgs)
-        } else {
-            enc_q8_actrq_cls(raw, h, g_gpu.batch_actrq_set, pca, awgs)
-        }
+        enc_q8_actrq_cls(raw, h, g_gpu.batch_actrq_set, pca, awgs)
     }
     stack_batch_enc(raw, h, s2, nwg_dn, nfe, n)
     if (comb_npos > 0u) {
@@ -1015,22 +960,9 @@ def vk_moe_ffn_batch(var goutp : float?; offs1 : int64 const?; offs3 : int64 con
     let xunit_mid = fmt_unit(f2)
     ensure_batch_state()
     ensure_batch_acts_cls()
-    if (f1 == 6 || f2 == 6) {
-        ensure_cm2_batch()   // any twin in the chain needs the f16 planes + convert sets
-    }
-    // a q8n gate/up pair loads the dequantized f16 plane as B; a q8n down loads the f16 hidden
-    if (f1 == 6) {
-        ensure_batch_set(s1, g_gpu.batch_y1_dev, g_gpu.batch_xf_dev, g_gpu.batch_xs_dev, 2l * BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_XF, VHB_Y1)
-        ensure_batch_set(s3, g_gpu.batch_y2_dev, g_gpu.batch_xf_dev, g_gpu.batch_xs_dev, 2l * BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_XF, VHB_Y2)
-    } else {
-        ensure_batch_set(s1, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y1)
-        ensure_batch_set(s3, g_gpu.batch_y2_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y2)
-    }
-    if (f2 == 6) {
-        ensure_batch_set(s2, g_gpu.batch_y1_dev, g_gpu.batch_hf_dev, g_gpu.hs_dev, 2l * BATCH_HQ_BYTES, BATCH_HS_BYTES, VHB_HF, VHB_Y1)
-    } else {
-        ensure_batch_set(s2, g_gpu.batch_y1_dev, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES, VHB_HQ, VHB_Y1)
-    }
+    ensure_batch_set(s1, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y1)
+    ensure_batch_set(s3, g_gpu.batch_y2_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y2)
+    ensure_batch_set(s2, g_gpu.batch_y1_dev, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES, VHB_HQ, VHB_Y1)
     let comb = npos > 0l
     var comb_k = 0l
     if (comb) {
@@ -1569,7 +1501,7 @@ def private copy_stream_group(si, g : int; sync : bool) {
         let sk = g * 3 + k
         let psi = k == 0 ? slot.s1 : (k == 1 ? slot.s3 : slot.s2)
         cmd_copy_whole(raw, g_gpu.stream_stacks[sk].hwq.buf, g_gpu.stacks[psi].wqbuf, g_gpu.stream_stacks[sk].wqbytes)
-        if (g_gpu.stream_stacks[sk].wsbytes > 0l) {   // q8n mirrors carry no scale plane
+        if (g_gpu.stream_stacks[sk].wsbytes > 0l) {
             cmd_copy_whole(raw, g_gpu.stream_stacks[sk].hws.buf, g_gpu.stacks[psi].wsbuf, g_gpu.stream_stacks[sk].wsbytes)
         }
     }
