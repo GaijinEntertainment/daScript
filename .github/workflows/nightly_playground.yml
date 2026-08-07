@@ -74,14 +74,25 @@ jobs:
       working-directory: utils/dasweb-verify/browser
       run: node --test
 
-    - name: "Verify curated samples on ${{ github.event.inputs.base_url || 'https://daslang.io' }}"
+    - name: "Verify curated samples"
       working-directory: utils/dasweb-verify/browser
+      # Dispatch inputs reach bash through env, never through ${{ }} pasted into the
+      # script body. An expression is substituted as TEXT before the shell parses the
+      # line, so a quote, $(…) or backtick in an input would break the command or run
+      # on the runner with the job's token. A quoted "$VAR" expansion cannot — the
+      # value is already a string by the time bash sees it. Sample names alone make
+      # this reachable without malice: they carry ( ) : and , characters.
+      env:
+        BASE_URL: ${{ github.event.inputs.base_url || 'https://daslang.io' }}
+        FILTER: ${{ github.event.inputs.filter }}
+        MODE: ${{ github.event.inputs.mode }}
       run: |
-        set -o pipefail
-        node runner.mjs \
-          --base-url "${{ github.event.inputs.base_url || 'https://daslang.io' }}" \
-          ${{ github.event.inputs.filter && format('--filter "{0}"', github.event.inputs.filter) || '' }} \
-          ${{ github.event.inputs.mode && format('--mode {0}', github.event.inputs.mode) || '' }}
+        set -euo pipefail
+        args=(--base-url "$BASE_URL")
+        if [ -n "${FILTER:-}" ]; then args+=(--filter "$FILTER"); fi
+        if [ -n "${MODE:-}" ]; then args+=(--mode "$MODE"); fi
+        echo "verifying ${BASE_URL}"
+        node runner.mjs "${args[@]}"
 
     - name: "Failure screenshots"
       if: failure()
