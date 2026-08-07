@@ -1442,7 +1442,10 @@ class FaCm2H64 {
     }
 }
 
-// hs=128 (llama-3.2-3B-class): same algorithm on the 64x128 / 128x64 tile shapes
+// hs=128 (llama-3.2-3B-class): same algorithm at Bc=32 (llama.cpp's hsk>=256 cut — K^T/V/softmax
+// state at 32 columns, KV loop steps 32). Oracle-exact but NOT serving: it runs ~14x slow, same
+// as the Bc=64 shape did, while llama.cpp's h128 64x64 is fast on this driver — the divergence is
+// module/pipeline-level, not tile geometry (see the pf_facm2 gate)
 [vk_dispatch(name = "fa_cm2_h128_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
 class FaCm2H128 {
     @ssbo @binding = 0 qpanel : array<float>
@@ -1477,32 +1480,32 @@ class FaCm2H128 {
         coopmatScale(q, pa.scale)
         var qf : coopmatWgA_f16_64x128
         coopmatConvert(qf, q)
-        var mrow : coopmatWgAcc_f32_64x64
+        var mrow : coopmatWgAcc_f32_64x32
         coopmatFill(mrow, -1.7e38)
-        var lrow : coopmatWgAcc_f32_64x64
+        var lrow : coopmatWgAcc_f32_64x32
         var o : coopmatWgAcc_f32_64x128
         let kmax = pa.w0 + min(q0 + 64u, pa.rows)
         var j = 0u
         while (j < kmax) {
-            var s : coopmatWgAcc_f32_64x64
-            var kt : coopmatWgB_f16_128x64
-            coopmatLoadTensor(kt, kh, pa.kvbase, tlk, j, 64u, kvh * 128u, 128u, tv)
+            var s : coopmatWgAcc_f32_64x32
+            var kt : coopmatWgB_f16_128x32
+            coopmatLoadTensor(kt, kh, pa.kvbase, tlk, j, 32u, kvh * 128u, 128u, tv)
             s = coopmatMulAdd(qf, kt, s)
             coopmatPerElement(s, s, @@facm2_mask, pa.w0 + q0, j)
-            var rmax : coopmatWgAcc_f32_64x64
+            var rmax : coopmatWgAcc_f32_64x32
             coopmatReduce(rmax, s, COOPMAT_REDUCE_ROW, @@facm2_max)
-            var mold : coopmatWgAcc_f32_64x64
+            var mold : coopmatWgAcc_f32_64x32
             coopmatCopy(mold, mrow)
             coopmatPerElement(mrow, rmax, @@facm2_pick, mold)
             coopmatSub(s, s, mrow)
             coopmatPerElement(s, s, @@facm2_exp)
-            var em : coopmatWgAcc_f32_64x64
+            var em : coopmatWgAcc_f32_64x32
             coopmatSub(em, mold, mrow)
             coopmatPerElement(em, em, @@facm2_exp)
-            var pf : coopmatWgA_f16_64x64
+            var pf : coopmatWgA_f16_64x32
             coopmatConvert(pf, s)
-            var rsum : coopmatWgAcc_f32_64x64
-            var one : coopmatWgB_f16_64x64
+            var rsum : coopmatWgAcc_f32_64x32
+            var one : coopmatWgB_f16_32x32
             coopmatFill(one, 1.0)
             rsum = coopmatMulAdd(pf, one, rsum)
             coopmatMulElem(lrow, em, lrow)
@@ -1510,10 +1513,10 @@ class FaCm2H128 {
             var emd : coopmatWgAcc_f32_64x128
             coopmatReduce(emd, em, COOPMAT_REDUCE_ROW, @@facm2_smear)
             coopmatMulElem(o, emd, o)
-            var vt : coopmatWgB_f16_64x128
-            coopmatLoadTensor(vt, vh, pa.kvbase, tlk, j, 64u, kvh * 128u, 128u)
+            var vt : coopmatWgB_f16_32x128
+            coopmatLoadTensor(vt, vh, pa.kvbase, tlk, j, 32u, kvh * 128u, 128u)
             o = coopmatMulAdd(pf, vt, o)
-            j += 64u
+            j += 32u
         }
         var ld : coopmatWgAcc_f32_64x128
         coopmatReduce(ld, lrow, COOPMAT_REDUCE_ROW, @@facm2_smear)
