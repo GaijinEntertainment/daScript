@@ -75,7 +75,9 @@ jobs:
 
     # sccache with local-disk backend, RESTORE-ONLY from extended_checks'
     # master-seeded slot — this workflow never saves, so it cannot clobber
-    # the per-PR cache slots. A cold slot just means a slower build.
+    # the per-PR cache slots. The restore is skipped on the cron (nightlies
+    # consume no cache and build cold by policy); a manual dispatch — the
+    # on-demand ABI sweep someone is waiting on — still restores warm.
     - uses: mozilla-actions/sccache-action@v0.0.10
     - run: |
         echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
@@ -83,6 +85,7 @@ jobs:
         echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
         echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
     - name: "Restore sccache objects (read-only)"
+      if: github.event_name != 'schedule'
       uses: actions/cache/restore@v4
       with:
         path: ${{ runner.temp }}/sccache
