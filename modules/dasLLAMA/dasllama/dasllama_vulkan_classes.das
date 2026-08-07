@@ -1744,6 +1744,7 @@ struct BatchArgs {
     n : uint         // reduction dim
     d : uint         // output cols
     map_off : uint   // the per-wg map's word offset in sched (region records sit at 0)
+    ksplit : uint    // cm2 split-k: 256-aligned k chunk per partial plane; 0 = no split
 }
 
 // 32x32 tiles through shared so weight rows stream once per 32 rows; K advances 8 blocks per
@@ -3120,8 +3121,22 @@ class Q8Cm2LBatch : MoeCmBase {
         let wblk0 = reg.x
         let row0 = reg.y
         let cnt = reg.z
-        let tix = reg.w
         let ttiles = (cnt + 255u) / 256u
+        // split-k: wgs stack nsplit planes of (wtiles x ttiles); plane ks covers k [k0, k1) and
+        // stores f32 partials at ybase (the reduce sums the planes into y). SINGLE-REGION (dense)
+        // dispatches only — the plane size rides row0 + cnt, so multi-region planes would collide
+        var tix = reg.w
+        var ks = 0u
+        var k1 = pa.n
+        var ybase = 0u
+        if (pa.ksplit != 0u) {
+            let ptiles = ((pa.d + 127u) / 128u) * ttiles
+            ks = tix / ptiles
+            tix -= ks * ptiles
+            k1 = min(pa.n, (ks + 1u) * pa.ksplit)
+            ybase = ks * (row0 + cnt) * pa.d
+        }
+        let k0 = ks * pa.ksplit
         let xt = tix % ttiles             // token 256-tile (fastest)
         let wt = tix / ttiles             // weight 128-tile
         if (gl_LocalInvocationID.x == 0u) {
@@ -3153,8 +3168,8 @@ class Q8Cm2LBatch : MoeCmBase {
             tensorLayoutCreate(flo)
             tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
             tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
-            var k = 0u
-            for (_i in range(int(pa.n / 512u))) {
+            var k = k0
+            for (_i in range(int((k1 - k0) / 512u))) {
                 for [unroll] (_j in range(8)) {
                     coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
                     coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
@@ -3162,7 +3177,7 @@ class Q8Cm2LBatch : MoeCmBase {
                     k += 64u
                 }
             }
-            while (k < pa.n) {
+            while (k < k1) {
                 coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
                 coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
                 acc = coopmatMulAdd(a, b, acc)
@@ -3171,7 +3186,7 @@ class Q8Cm2LBatch : MoeCmBase {
             coopmatClamp(acc, -65504.0, 65504.0)
             var accw : coopmatWgAcc_f32_128x256
             coopmatConvert(accw, acc)
-            coopmatStoreTensor(accw, y, 0u, flo, t0, 256u, m0, 128u, tv)
+            coopmatStoreTensor(accw, y, ybase, flo, t0, 256u, m0, 128u, tv)
             return
         }
         // EDGE PATH — clamp-Constant layouts everywhere. A: the region's [d x n] q8 plane, block
@@ -3196,8 +3211,8 @@ class Q8Cm2LBatch : MoeCmBase {
         // the 8x-unrolled main loop (their UNROLL_K = BK*8 = 512), then the sub-512 tail.
         // The hint is honored: a manual 4x expansion A/Bed dead even (2719 +- 20 vs 2749 +- 12
         // on the 3B row), so the loop form stays
-        var k = 0u
-        for (_i in range(int(pa.n / 512u))) {
+        var k = k0
+        for (_i in range(int((k1 - k0) / 512u))) {
             for [unroll] (_j in range(8)) {
                 coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
                 coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
@@ -3205,7 +3220,7 @@ class Q8Cm2LBatch : MoeCmBase {
                 k += 64u
             }
         }
-        while (k < pa.n) {
+        while (k < k1) {
             coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
             coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
             acc = coopmatMulAdd(a, b, acc)
@@ -3214,7 +3229,170 @@ class Q8Cm2LBatch : MoeCmBase {
         coopmatClamp(acc, -65504.0, 65504.0)
         var accw : coopmatWgAcc_f32_128x256
         coopmatConvert(accw, acc)
-        coopmatStoreTensor(accw, y, 0u, tlo, t0, 256u, m0, 128u, tv)
+        coopmatStoreTensor(accw, y, ybase, tlo, t0, 256u, m0, 128u, tv)
+    }
+}
+
+// the m-tile sibling (llama.cpp's cm2 quant "m": BN=128, same A / BK / thread count) — picked by
+// cm2_tile_cols when the l grid underfills the SMs; body mirrors Q8Cm2LBatch at 128-token width
+[vk_dispatch(name = "q8_batch_cm2m_cls", grid = "wgs", params = "wgs : int64")]
+class Q8Cm2MBatch : MoeCmBase {
+    @ssbo @binding = 0 wq : array<VkQ8Blk>       // fmt-0 weight quant blocks (8 words each)
+    @ssbo @binding = 1 wsh : array<float16>      // per-block weight scales (the second plane)
+    @ssbo @binding = 3 xf16 : array<float16>     // f16 activation plane
+    @ssbo @binding = 5 y : array<float>
+    @workgroup wg_blk0 : uint                    // the region's block base, staged for the decode method
+
+    [spirv_decode]
+    def decode_q8(blk : VkQ8Blk; bc, cib : uint2) : float16 {
+        let w = blk.qs[int(cib.y >> 2u)]
+        let q = (int(w) << ((3 - int(cib.y & 3u)) * 8)) >> 24
+        return wsh[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(q))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "q8_batch_cm2m_cls_spv")]
+    def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
+        let reg = region_rec()
+        let wblk0 = reg.x
+        let row0 = reg.y
+        let cnt = reg.z
+        let ttiles = (cnt + 127u) / 128u
+        // split-k: wgs stack nsplit planes of (wtiles x ttiles); plane ks covers k [k0, k1) and
+        // stores f32 partials at ybase (the reduce sums the planes into y). SINGLE-REGION (dense)
+        // dispatches only — the plane size rides row0 + cnt, so multi-region planes would collide
+        var tix = reg.w
+        var ks = 0u
+        var k1 = pa.n
+        var ybase = 0u
+        if (pa.ksplit != 0u) {
+            let ptiles = ((pa.d + 127u) / 128u) * ttiles
+            ks = tix / ptiles
+            tix -= ks * ptiles
+            k1 = min(pa.n, (ks + 1u) * pa.ksplit)
+            ybase = ks * (row0 + cnt) * pa.d
+        }
+        let k0 = ks * pa.ksplit
+        let xt = tix % ttiles             // token 128-tile (fastest)
+        let wt = tix / ttiles             // weight 128-tile
+        if (gl_LocalInvocationID.x == 0u) {
+            wg_blk0 = wblk0
+        }
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        barrier()   // wg_blk0 visible before the first decode load
+        var a : coopmatWgA_f16_128x64
+        var b : coopmatWgB_f16_64x128
+        var acc : coopmatWgAcc_f16_128x128
+        let t0 = row0 + xt * 128u
+        let m0 = wt * 128u
+        // FAST PATH — see Q8Cm2LBatch; identical rule at the m width
+        if (m0 + 128u <= pa.d && xt * 128u + 128u <= cnt && (pa.n & 63u) == 0u) {
+            var fla : tensorLayout2D
+            tensorLayoutCreate(fla)
+            tensorLayoutSetBlockSize(fla, 1u, 32u)
+            tensorLayoutSetDimension(fla, pa.d, pa.n)
+            tensorLayoutSetStride(fla, pa.n >> 5u, 1u)
+            var flb : tensorLayout2D
+            tensorLayoutCreate(flb)
+            tensorLayoutSetDimension(flb, row0 + cnt, pa.n)
+            tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
+            var flo : tensorLayout2D
+            tensorLayoutCreate(flo)
+            tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
+            tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
+            var k = k0
+            for (_i in range(int((k1 - k0) / 512u))) {
+                for [unroll] (_j in range(8)) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+            }
+            while (k < k1) {
+                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
+                coopmatLoadTensor(b, xf16, 0u, flb, t0, 128u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+            coopmatClamp(acc, -65504.0, 65504.0)
+            var accw : coopmatWgAcc_f32_128x128
+            coopmatConvert(accw, acc)
+            coopmatStoreTensor(accw, y, ybase, flo, t0, 128u, m0, 128u, tv)
+            return
+        }
+        // EDGE PATH — clamp-Constant layouts everywhere (store discard load-bearing)
+        var tla : tensorLayout2DPad
+        tensorLayoutCreate(tla)
+        tensorLayoutSetBlockSize(tla, 1u, 32u)
+        tensorLayoutSetDimension(tla, pa.d, pa.n)
+        tensorLayoutSetStride(tla, pa.n / 32u, 1u)
+        var tlb : tensorLayout2DPad
+        tensorLayoutCreate(tlb)
+        tensorLayoutSetDimension(tlb, row0 + cnt, pa.n)
+        tensorLayoutSetStride(tlb, pa.n, 1u)
+        var tlo : tensorLayout2DPad
+        tensorLayoutCreate(tlo)
+        tensorLayoutSetDimension(tlo, row0 + cnt, pa.d)
+        tensorLayoutSetStride(tlo, pa.d, 1u)
+        var k = k0
+        for (_i in range(int((k1 - k0) / 512u))) {
+            for [unroll] (_j in range(8)) {
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+        }
+        while (k < k1) {
+            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
+            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, 64u, tv)
+            acc = coopmatMulAdd(a, b, acc)
+            k += 64u
+        }
+        coopmatClamp(acc, -65504.0, 65504.0)
+        var accw : coopmatWgAcc_f32_128x128
+        coopmatConvert(accw, acc)
+        coopmatStoreTensor(accw, y, ybase, tlo, t0, 128u, m0, 128u, tv)
+    }
+}
+
+// ===== the split-k reduce (sums the cm2 partial planes into y) =====
+
+struct SkRedArgs {
+    nelem : uint   // one partial plane's float count (cnt x d; always a 4-multiple, d is 32-aligned)
+    k : uint       // planes
+}
+
+// 4 floats per thread, like the elementwise family
+[vk_dispatch(name = "splitk_reduce_cls", grid = "wgs", params = "wgs : int64")]
+class SplitKReduce {
+    @ssbo @binding = 0 part : array<float>
+    @ssbo @binding = 1 y : array<float>
+    @push_constant pa : SkRedArgs
+
+    [spirv_kernel(local_size_x = 256, name = "splitk_reduce_cls_spv")]
+    def run {
+        let e = gl_GlobalInvocationID.x * 4u
+        if (e < pa.nelem) {
+            var s0 = 0.0
+            var s1 = 0.0
+            var s2 = 0.0
+            var s3 = 0.0
+            var p = 0u
+            while (p < pa.k) {
+                let b = p * pa.nelem + e
+                s0 += part[b]
+                s1 += part[b + 1u]
+                s2 += part[b + 2u]
+                s3 += part[b + 3u]
+                p++
+            }
+            y[e] = s0
+            y[e + 1u] = s1
+            y[e + 2u] = s2
+            y[e + 3u] = s3
+        }
     }
 }
 

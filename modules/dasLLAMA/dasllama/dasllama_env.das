@@ -272,6 +272,12 @@ struct public VulkanEnv {
     @clarg_doc = "Use a ReBAR device-local host-visible heap when one larger than 1GB is present."
     vk_rebar : bool = true
 
+    @clarg_doc = "cm2 prefill tile pick: 0 = occupancy heuristic, 128 = force the m tile, 256 = force the l tile (A/B instrument)."
+    cm2_tile : int64 = 0l
+
+    @clarg_doc = "cm2 split-k: 0 = occupancy heuristic, 1 = off, N = force N k-chunks (A/B instrument; shrinks if N strands an empty tail)."
+    cm2_splitk : int64 = 0l
+
     @clarg_doc = "Barrier at every dispatch (correctness bisect)."
     vk_hazard_paranoid : bool = false
 

@@ -429,6 +429,10 @@ struct coopmatWgA_f16_128x64 {}
 struct coopmatWgB_f16_64x256 {}
 struct coopmatWgAcc_f16_128x256 {}
 struct coopmatWgAcc_f32_128x256 {}
+// the m-tile siblings (llama.cpp's cm2 quant "m": BN=128, same A / BK)
+struct coopmatWgB_f16_64x128 {}
+struct coopmatWgAcc_f16_128x128 {}
+struct coopmatWgAcc_f32_128x128 {}
 // the int8 twins (q8 x q8 -> s32 at workgroup scope; K-tile 32)
 struct coopmatWgA_s8_64x32 {}
 struct coopmatWgB_s8_32x16 {}
@@ -455,6 +459,10 @@ def public coopmatMulAdd(a : coopmatWgA_f16_64x16; b : coopmatWgB_f16_16x64; c :
 def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x256; c : coopmatWgAcc_f16_128x256) : coopmatWgAcc_f16_128x256 { return c }
 [unused_argument(a, b), sideeffects]
 def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x256; c : coopmatWgAcc_f32_128x256) : coopmatWgAcc_f32_128x256 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x128; c : coopmatWgAcc_f16_128x128) : coopmatWgAcc_f16_128x128 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x128; c : coopmatWgAcc_f32_128x128) : coopmatWgAcc_f32_128x128 { return c }
 [unused_argument(a, b), sideeffects]
 def public coopmatMulAdd(a : coopmatWgA_s8_64x32; b : coopmatWgB_s8_32x16; c : coopmatWgAcc_s32_64x16) : coopmatWgAcc_s32_64x16 { return c }
 [unused_argument(a, b), sideeffects]
@@ -517,3 +525,5 @@ def public coopmatConvert(var dst : coopmatWgAcc_f32_64x32; src : coopmatWgAcc_f
 def public coopmatConvert(var dst : coopmatWgAcc_f32_64x64; src : coopmatWgAcc_f16_64x64) : void {}
 [unused_argument(dst, src), sideeffects]
 def public coopmatConvert(var dst : coopmatWgAcc_f32_128x256; src : coopmatWgAcc_f16_128x256) : void {}
+[unused_argument(dst, src), sideeffects]
+def public coopmatConvert(var dst : coopmatWgAcc_f32_128x128; src : coopmatWgAcc_f16_128x128) : void {}

@@ -44,8 +44,18 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
                         wq, ws, ab, sb, yb : uint64; wqn, wsn, an, sn, yn : int64;
                         abit, ybit : uint; n, d, blk, wlen : int64) {
     let cm2l = fmt == int(KqFmt.q8) && g_gpu.coopmat_mode == 4
-    let groups = int64(fill_arena_batch_sched(g_rd.pf_meta[idx], d, blk, wlen, fmt, cm2l))
-    var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
+    // cm2 tile + split picks (pure in d/wlen/n/sm_count) — computed once, fed to fill AND enc
+    var nsplit = 1l
+    var ksplit = 0l
+    var cm2_tc = 0l
+    if (cm2l) {
+        cm2_tc = batch_tile_edges(fmt, d, wlen, true).tc
+        let sp = cm2_split_k(d, wlen, n, cm2_tc)
+        nsplit = sp.nsplit
+        ksplit = sp.ksplit
+    }
+    let groups = int64(fill_arena_batch_sched(g_rd.pf_meta[idx], d, blk, wlen, fmt, cm2l, nsplit))
+    var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = nsplit > 1l ? uint(ksplit) : 0u)
     if (fmt == 6) {
         let key = idx * 16 + 7
         if (!key_exists(g_rd.pf_cls_gemm, key)) {
@@ -57,16 +67,48 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
         }
         enc_q8n_batch_cm2_cls(raw, h, g_rd.pf_cls_gemm[key], pc, groups)
     } elif (cm2l) {
-        // native fmt-0 decode-in-load; ab carries f16 rows, the activation-scale slot is unbound
-        let key = idx * 16 + 8
-        if (!key_exists(g_rd.pf_cls_gemm, key)) {
-            verify(ensure_q8_batch_cm2l_cls(), "vk prefill: the cm2 l-tile class rail must engage")
-            g_rd.pf_cls_gemm[key] = set_q8_batch_cm2l_cls(
-                fixed_array(wq, ws, g_rd.pf_meta[idx].buf, ab, yb),
-                fixed_array(wqn, wsn, BATCH_META_BYTES, an, yn),
-                fixed_array(0u, 0u, 0u, abit, ybit))
+        // native fmt-0 decode-in-load; a split pick reroutes the GEMM into the scratch planes
+        let split = nsplit > 1l
+        if (split) {
+            assert(nsplit * wlen * d * 4l <= g_rd.pf_splitk_bytes, "vk prefill: split-k planes exceed the scratch bound")
         }
-        enc_q8_batch_cm2l_cls(raw, h, g_rd.pf_cls_gemm[key], pc, groups)
+        let yob = split ? g_rd.pf_splitk : yb
+        let yon = split ? g_rd.pf_splitk_bytes : yn
+        let yog = split ? VHG_SK : ybit
+        let ml = cm2_tc == 256l
+        let key = idx * 16 + (ml ? (split ? 9 : 8) : (split ? 11 : 10))
+        if (!key_exists(g_rd.pf_cls_gemm, key)) {
+            if (ml) {
+                verify(ensure_q8_batch_cm2l_cls(), "vk prefill: the cm2 l-tile class rail must engage")
+                g_rd.pf_cls_gemm[key] = set_q8_batch_cm2l_cls(
+                    fixed_array(wq, ws, g_rd.pf_meta[idx].buf, ab, yob),
+                    fixed_array(wqn, wsn, BATCH_META_BYTES, an, yon),
+                    fixed_array(0u, 0u, 0u, abit, yog))
+            } else {
+                verify(ensure_q8_batch_cm2m_cls(), "vk prefill: the cm2 m-tile class rail must engage")
+                g_rd.pf_cls_gemm[key] = set_q8_batch_cm2m_cls(
+                    fixed_array(wq, ws, g_rd.pf_meta[idx].buf, ab, yob),
+                    fixed_array(wqn, wsn, BATCH_META_BYTES, an, yon),
+                    fixed_array(0u, 0u, 0u, abit, yog))
+            }
+        }
+        if (ml) {
+            enc_q8_batch_cm2l_cls(raw, h, g_rd.pf_cls_gemm[key], pc, groups)
+        } else {
+            enc_q8_batch_cm2m_cls(raw, h, g_rd.pf_cls_gemm[key], pc, groups)
+        }
+        if (split) {
+            let rkey = idx * 16 + 12
+            if (!key_exists(g_rd.pf_cls_gemm, rkey)) {
+                verify(ensure_splitk_reduce_cls(), "vk prefill: the split-k reduce class rail must engage")
+                g_rd.pf_cls_gemm[rkey] = set_splitk_reduce_cls(
+                    fixed_array(g_rd.pf_splitk, yb),
+                    fixed_array(g_rd.pf_splitk_bytes, yn),
+                    fixed_array(VHG_SK, ybit))
+            }
+            var pcr = SkRedArgs(nelem = uint(wlen * d), k = uint(nsplit))
+            enc_splitk_reduce_cls(raw, h, g_rd.pf_cls_gemm[rkey], pcr, (wlen * d + 1_023l) / 1_024l)
+        }
     } elif (kq_sb(fmt)) {
         // the role's format is static, so the slot never collides with the q8 router's variants
         let q40cm = fmt == int(KqFmt.q40) && g_gpu.coopmat_mode == 1
@@ -134,6 +176,18 @@ def private pf_setup {
         g_rd.pf_xf = make_device_buf(np * dim * 2l)
         g_rd.pf_af = make_device_buf(np * qd * 2l)
         g_rd.pf_hf = make_device_buf(np * hid * 2l)
+    }
+    // cm2 split-k scratch: heuristic bound 128*256*2*SMs floats (tiles * nsplit <= 2 * cores)
+    if (any6 && g_gpu.coopmat_mode == 4) {
+        var skb = 262_144l * int64(g_gpu.sm_count)
+        let fsk = cm2_splitk_env()
+        if (fsk > 1l) {
+            skb = max(skb, np * wide * fsk * 4l)
+        }
+        if (skb > 0l) {
+            g_rd.pf_splitk = make_device_buf(skb)
+            g_rd.pf_splitk_bytes = skb
+        }
     }
     let nsets = int(g_rd.n_layers * PF_ROLES + 2l)   // + prologue, final quantize of the last row
     g_rd.pf_sets |> resize(nsets)
@@ -552,12 +606,12 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
 
 // single-region batch schedule over an arena block: 4-word record at 0, all tiles map to region
 // 0 at map_off = 4. Returns the dispatch workgroup count. `cm2l` must match the dispatched
-// class's tile rule (the l-tile's f16-fed prefill form — see batch_tile_edges).
-def private fill_arena_batch_sched(hb : HostBuf; d, blk, npos : int64; fmt : int; cm2l : bool = false) : uint {
+// class's tile rule (batch_tile_edges); `nsplit` stacks split-k planes onto the same map.
+def private fill_arena_batch_sched(hb : HostBuf; d, blk, npos : int64; fmt : int; cm2l : bool = false; nsplit : int64 = 1l) : uint {
     let te = batch_tile_edges(fmt, d, npos, cm2l)
     let wtiles = (d + te.td - 1l) / te.td
     let rtiles = (npos + te.tc - 1l) / te.tc
-    let total = rtiles * wtiles
+    let total = rtiles * wtiles * nsplit
     assert((4l + total) * 4l <= BATCH_META_BYTES, "dasLLAMA vulkan arena: batch schedule exceeds capacity")
     unsafe {
         var mp = reinterpret<uint?>(hb.mapped)

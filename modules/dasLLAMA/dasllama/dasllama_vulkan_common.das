@@ -105,12 +105,80 @@ def q8_batch_tile_for(d, cnt : int64) : int64 {
 def q8_batch_aligned(d, cnt : int64) : bool
     => d % 128l == 0l && cnt % 128l == 0l && q8_batch_tile_for(d, cnt) == 128l
 
+// cm2 prefill tile/split instruments (A/B levers; 0 = the occupancy heuristic)
+var g_cm2_tile = -1l
+var g_cm2_splitk = -1l
+
+def cm2_tile_env : int64 {
+    if (g_cm2_tile < 0l) {
+        g_cm2_tile = g_env_vulkan.cm2_tile
+    }
+    return g_cm2_tile
+}
+
+def cm2_splitk_env : int64 {
+    if (g_cm2_splitk < 0l) {
+        g_cm2_splitk = g_env_vulkan.cm2_splitk
+    }
+    return g_cm2_splitk
+}
+
+// the cm2 tile pick, llama.cpp's guess mirrored onto our two tiles (no s tile — GEMV owns the
+// narrow-n end): l unless the m grid fills the SMs better. Pure in (d, cnt, sm_count), so the
+// pipe pick and the meta fill can never disagree
+def cm2_tile_cols(d, cnt : int64) : int64 {
+    let forced = cm2_tile_env()
+    if (forced == 128l || forced == 256l) {
+        return forced
+    }
+    let cores = int64(g_gpu.sm_count)
+    if (cores == 0l) {
+        return 256l
+    }
+    let wtiles = (d + 127l) / 128l
+    let tiles_l = wtiles * ((cnt + 255l) / 256l)
+    let tiles_m = wtiles * ((cnt + 127l) / 128l)
+    // prefer l when either grid overfills the SMs, or l fits with a 3-way split where m would
+    // not fit with a 2-way one (llama.cpp's prefer_large, verbatim)
+    let prefer_large = (tiles_m > cores || tiles_l > cores
+        || (tiles_l <= cores / 3l && tiles_m > cores / 2l))
+    return cnt > 128l && prefer_large ? 256l : 128l
+}
+
+// llama.cpp's split-k guess: long K on an under-half-full grid splits the reduction across
+// f32 partial planes (SplitKReduce sums them). Returns (chunks, 256-aligned chunk); (1, 0) = off
+def cm2_split_k(d, cnt, n, tc : int64) : tuple<nsplit : int64; ksplit : int64> {
+    let forced = cm2_splitk_env()
+    let cores = int64(g_gpu.sm_count)
+    var sk = 1l
+    if (forced > 0l) {
+        sk = forced
+    } elif (cores != 0l && n >= 2048l && d >= 128l && cnt >= tc) {
+        let tiles = ((d + 127l) / 128l) * ((cnt + tc - 1l) / tc)
+        if (tiles <= cores / 2l) {
+            sk = cores / tiles
+        } elif (tiles <= cores * 2l / 3l) {
+            sk = 3l
+        }
+        sk = min(sk, 8l)
+    }
+    // 256-align the chunk; shed splits a rounded-up chunk would strand past the end of K
+    while (sk > 1l) {
+        let ck = ((n + sk - 1l) / sk + 255l) & ~255l
+        if (ck * (sk - 1l) < n) {
+            return (nsplit = sk, ksplit = ck)
+        }
+        sk--
+    }
+    return (nsplit = 1l, ksplit = 0l)
+}
+
 // a batch dispatch's tile pick + (rows, cols) edges — one source so wg counts, meta fills, and
-// the class pick can never disagree. `cm2l` = the l-tile (128w x 256t, mode 4's f16-fed prefill
-// GEMMs on native fmt-0 planes): only callers that STAGE f16 activations may pass it
+// the class pick can never disagree. `cm2l` = the cm2 tile family (128w x 256t l / 128t m,
+// mode 4's f16-fed prefill GEMMs): only callers that STAGE f16 activations may pass it
 def batch_tile_edges(fmt : int; d, cnt : int64; cm2l : bool = false) : tuple<tile : int64; td : int64; tc : int64> {
     if (cm2l) {
-        return (tile = 128l, td = 128l, tc = 256l)
+        return (tile = 128l, td = 128l, tc = cm2_tile_cols(d, cnt))
     }
     let tile = fmt == 0 ? q8_batch_tile_for(d, cnt) : BATCH_TILE
     return (tile = tile, td = fmt == 6 ? 64l : tile, tc = fmt == 6 ? 128l : tile)
@@ -344,6 +412,7 @@ struct GpuState {
     has_coopmat : bool       // device supports VK_KHR_cooperative_matrix (the f16/int8 tensor tiles)
     has_coopmat2 : bool      // device supports NV_cooperative_matrix2 (tensor-addressed wg tiles + decode fns)
     coopmat_mode : int       // Q8_0 prefill GEMM: 0 = sdot4, 1 = f16 coopmat, 2 = int8 coopmat, 3 = mul_mm L-tile (default), 4 = cm2 decode-in-load
+    sm_count : int           // shaderSMCount (VK_NV_shader_sm_builtins; 0 = unknown -> l-tile always, no split-k)
     weight_budget : int64    // resident-weight cap — queried heap budget minus reserve, or VRAM_BUDGET
     dry : bool               // OFFLINE BAKE: accept/refuse arithmetic runs, every device call is gated off
     msr : int64              // maxStorageBufferRange — device-queried at init, config-supplied when dry
@@ -774,6 +843,21 @@ def vk_arm_moltenvk_env {
     }
 }
 
+// SM count via VK_NV_shader_sm_builtins (NVIDIA-only, like cm2 itself) — the occupancy input
+// the cm2 tile/split heuristics divide by; 0 keeps both off (l-tile always, no split-k)
+def private query_sm_count(phys : VkPhysicalDevice) : int {
+    if (!device_extension_available(phys, "VK_NV_shader_sm_builtins")) {
+        return 0
+    }
+    var sp = VkPhysicalDeviceShaderSMBuiltinsPropertiesNV()
+    var p2 = VkPhysicalDeviceProperties2()
+    unsafe {
+        p2.pNext = addr<void?>(sp)
+    }
+    vkGetPhysicalDeviceProperties2(phys, p2)
+    return int(sp.shaderSMCount)
+}
+
 def vk_moe_init : bool {
     if (g_init_failed) {   // checked FIRST: a partially-built g_gpu must never report ready
         return false
@@ -819,6 +903,7 @@ def vk_moe_init : bool {
     g_gpu.has_coopmat = cooperative_matrix_supported(g_gpu.phys)
     g_gpu.has_coopmat2 = g_gpu.has_coopmat && cooperative_matrix2_supported(g_gpu.phys)
     g_gpu.coopmat_mode = resolve_coopmat_mode(g_gpu.has_coopmat, g_gpu.has_coopmat2)
+    g_gpu.sm_count = query_sm_count(g_gpu.phys)
     // dedicated transfer family: streamed copies overlap compute (DASLLAMA_VK_XFERQ=0 = bisect hatch)
     var xfam = -1
     if (g_gpu.has_coopmat && g_env_vulkan.vk_xferq
@@ -828,7 +913,7 @@ def vk_moe_init : bool {
     if (g_gpu.has_coopmat2 && g_gpu.coopmat_mode == 4) {
         // #77's creator: coopmat2 + BDA + vulkanMemoryModel + the query-then-enable extras
         g_gpu.device <- create_device_storage_8_16_int_dot_coopmat2(g_gpu.phys, g_gpu.fam, xfam)
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: Q8_0 prefill on NV_coopmat2 tensor tiles (decode-in-load)\n")
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: Q8_0 prefill on NV_coopmat2 tensor tiles (decode-in-load, {g_gpu.sm_count} SMs)\n")
     } elif (g_gpu.has_coopmat) {
         g_gpu.device <- create_device_storage_8_16_int_dot_coopmat(g_gpu.phys, g_gpu.fam, xfam)
         if (g_gpu.coopmat_mode != 0) {
@@ -1819,6 +1904,8 @@ struct RDec {
     pf_gate, pf_up, pf_ffnout, pf_xb2 : uint64
     pf_cos : uint64               // [MAX_NPOS x hs] rope rows
     pf_xf, pf_af, pf_hf : uint64  // cm2 (fmt-6) f16 twin feeds: xb rows, attn rows, hidden rows
+    pf_splitk : uint64            // cm2 split-k f32 partial planes (SplitKReduce input)
+    pf_splitk_bytes : int64
     pf_logits_host : HostBuf
     pf_meta : array<HostBuf>      // one host meta per (layer, role) + prologue/final/cls
     pf_sets : array<VkDescriptorSet>
@@ -1996,6 +2083,7 @@ let VHG_ST = 0x40u        // dn recurrent state (in place)
 let VHG_WS = 0x80u        // dn o scratch (oq+os)
 let VHG_X = 0x100u        // add_rms residual x (in place)
 let VHG_YO = 0x200u       // the host-bound result plane (the DMA source)
+let VHG_SK = 0x400u       // cm2 split-k partial planes (the reduce's input scratch)
 
 struct VkHaz {
     w : uint            // bits with a pending (unbarriered) write
