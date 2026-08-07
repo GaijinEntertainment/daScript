@@ -500,7 +500,8 @@ def main() : int {
         return 0
     }
     if (cfg.prof && !JOBQUE_PROFILING_ENABLED) {
-        panic("--prof needs the marker rail compiled in — rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)")
+        print("--prof needs the marker rail compiled in — rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)\n")
+        return 1
     }
     // measurement exists only from the released exe: a -jit SCRIPT run reads whatever sidecar
     // sits beside the script and re-keys nothing — its numbers must never enter records

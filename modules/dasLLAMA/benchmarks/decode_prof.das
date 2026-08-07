@@ -61,21 +61,21 @@ struct Args {
 def private synth_id(i, seed : int64) : int64 => 1000l + ((i * 17l + seed * 131l) % 5000l)
 
 [export]
-def main() {
+def main() : int {
     if (!jit_enabled()) {
         print("This profiler is JIT-only — run with: daslang -jit <file>\n")
-        return
+        return 1
     }
     var r <- parse_args(type<Args>)
     if (r |> is_err) {
         print("error: {r |> unwrap_err}\n\n")
         print_help(get_command_info(type<Args>), "decode_prof")
-        return
+        return 1
     }
     let cfg <- r |> move_unwrap
     if (cfg.help) {
         print_help(get_command_info(type<Args>), "decode_prof")
-        return
+        return 0
     }
     allow_cpu_prefill()   // CPU-protocol profile by intent — disarm the Metal-build tripwire
     let ngen = max(int64(cfg.ngen), 1l)
@@ -101,10 +101,13 @@ def main() {
             dasllama_accelerate_enable(32l)   // the shipped +AMX defaults: min ntok 32, work floor 512 MMAC
         } else {
             print("--accel requested but das_accelerate is not built on this platform — no accel tier to profile\n")
-            return
+            return 1
         }
     }
-    if (!JOBQUE_PROFILING_ENABLED) panic("decode_prof needs the marker rail compiled in — rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)")
+    if (!JOBQUE_PROFILING_ENABLED) {
+        print("decode_prof needs the marker rail compiled in — rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)\n")
+        return 1
+    }
     print("loading {cfg.model}\n")
     with_job_que() {
         setup_dasllama_jobque_()
@@ -139,4 +142,5 @@ def main() {
         delete s
         delete t
     }
+    return 0
 }

@@ -93,7 +93,8 @@ def main() {   // nolint:STYLE038 — flat probe driver: arg handling, then one 
         return
     }
     if (cfg.prof && !JOBQUE_PROFILING_ENABLED) {
-        panic("--prof needs the marker rail compiled in — rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)")
+        print("--prof needs the marker rail compiled in — rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)\n")
+        return
     }
     let plen = max(int64(cfg.plen), 1l)
     let want = max(int64(cfg.npos), 8l)

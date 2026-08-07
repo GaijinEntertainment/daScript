@@ -113,8 +113,9 @@ def main() : int {
         print("unknown --kv '{cfg.kv}' (f16 | f32 | q8)\n")
         return 1
     }
-    if (!JOBQUE_PROFILING_ENABLED) {
-        panic("asr_stage_probe needs the marker rail compiled in — rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)")
+    if (!empty(cfg.trace) && !JOBQUE_PROFILING_ENABLED) {
+        print("--trace needs the marker rail compiled in — rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)\n")
+        return 1
     }
     var m <- empty(cfg.mmproj) ? load_asr_model(cfg.model) : load_asr_model(cfg.model, cfg.mmproj)
     let samples <- load_audio_16k_mono(cfg.wav)
@@ -128,7 +129,11 @@ def main() : int {
             set_trace_tags(true)
         }
         set_asr_prof(true)
-        forward_profile_reset()   // the decoder engine's own buckets (blk_attn/blk_ffn/mm_*)
+        static_if (JOBQUE_PROFILING_ENABLED) {
+            forward_profile_reset()   // the decoder engine's own buckets (blk_attn/blk_ffn/mm_*)
+        } else {
+            print("note: decoder-engine buckets need JOBQUE_PROFILING=1 — printing the ASR stage table only\n")
+        }
         for (_rep in range(reps)) {
             run_once(m, samples)
         }

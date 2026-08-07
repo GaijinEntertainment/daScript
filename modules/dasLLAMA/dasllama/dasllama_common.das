@@ -4239,7 +4239,9 @@ def forward_profile_reset() {
         g_prof_mark_chunks = get_disp_chunks()
         g_prof_mark_inline = get_disp_inline()
     } else {
-        panic("forward profiler needs the marker rail compiled in — rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)")
+        // a library function must not kill the process over a usage condition (see CLAUDE.md);
+        // the loud line names the fix and the report half prints the same note
+        to_log(LOG_ERROR, "forward profiler needs the marker rail compiled in — rerun with JOBQUE_PROFILING=1 (or --jobque-profiling); no buckets will accumulate\n")
     }
 }
 
@@ -4286,6 +4288,10 @@ def forward_profile_get(name : string) : int64 {
 
 //! Print the accumulated per-section times (us) since the last reset.
 def forward_profile_report() {
+    static_if (!JOBQUE_PROFILING_ENABLED) {
+        to_log(LOG_INFO, "forward profile: the marker rail is not compiled in (JOBQUE_PROFILING=1)\n")
+        return
+    }
     var total = 0l
     for (v in values(g_forward_prof_acc)) {
         total += v
