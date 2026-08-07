@@ -107,31 +107,9 @@ def private mk_var_call(at : LineInfo; call_name, arg0 : string) : ExpressionPtr
     return c
 }
 
-def private mk_uint_cast(at : LineInfo; var inner : Expression?) : Expression? {
-    var c = new ExprCall(at = at, name := "uint")
-    c.arguments |> emplace_new <| inner
-    return c
-}
-
-// every character must be a digit — a "4l"/"4x" typo falls through to the name path, where the
-// generated builder fails loudly (unresolved variable) instead of silently truncating via to_int
-def private is_digit_tok(s : string) : bool {
-    if (empty(s)) {
-        return false
-    }
-    var all_digits = true
-    peek_data(s) $(arr) {
-        for (c in arr) {
-            if (!is_number(int(c))) {
-                all_digits = false
-                break
-            }
-        }
-    }
-    return all_digits
-}
-
 // @span product: factors 'param' | int, folded left — "n*4" -> uint64(n * 4l)
+// (is_digit_tok / mk_uint_cast / mk_grid_dim / role_ok / derived_role / param_type — the
+// micro-grammar shared with [vk_dispatch] — live in dasllama_kernel_access)
 def private mk_range_len(at : LineInfo; spec : string) : Expression? {
     var e : Expression?
     for (tok in split(spec, "*")) {
@@ -164,34 +142,8 @@ def private mk_hz(at : LineInfo; call_name : string; bf : BufField) : Expression
     return c
 }
 
-// One grid dim: "1" -> 1u ; "name" -> uint(name) ; "name/cov" -> ceil. A literal coverage folds
-// the bias — uint((name + 255l) / 256l) — matching the hand-written spelling; a named coverage
-// (global or param) emits uint((name + cov - 1l) / cov).
-def private mk_grid_dim(at : LineInfo; spec : string) : Expression? {
-    let s = strip(spec)
-    if (s == "1") {
-        return new ExprConstUInt(at = at, value = 1u)
-    }
-    let parts <- split(s, "/")
-    if (length(parts) == 1) {
-        return mk_uint_cast(at, new ExprVar(at = at, name := s))
-    }
-    let name = strip(parts[0])
-    let cov = strip(parts[1])
-    var div : Expression?
-    if (is_digit_tok(cov)) {
-        let cv = int64(to_int(cov))
-        var add = new ExprOp2(at = at, op := "+", left = new ExprVar(at = at, name := name), right = new ExprConstInt64(at = at, value = cv - 1l))
-        div = new ExprOp2(at = at, op := "/", left = add, right = new ExprConstInt64(at = at, value = cv))
-    } else {
-        var add = new ExprOp2(at = at, op := "+", left = new ExprVar(at = at, name := name), right = new ExprVar(at = at, name := cov))
-        var sub = new ExprOp2(at = at, op := "-", left = add, right = new ExprConstInt64(at = at, value = 1l))
-        div = new ExprOp2(at = at, op := "/", left = sub, right = new ExprVar(at = at, name := cov))
-    }
-    return mk_uint_cast(at, div)
-}
-
-// grid = comma-separated per WorkGroupID dim; padded to uint3 with trailing 1u.
+// grid = comma-separated per WorkGroupID dim (mk_grid_dim, shared); padded to uint3 with
+// trailing 1u.
 def private mk_grid(at : LineInfo; grid : string) : Expression? {
     let dims <- split(grid, ",")
     var c = new ExprCall(at = at, name := "uint3")
@@ -243,23 +195,6 @@ def private const_t(var t : TypeDecl?) : TypeDecl? {
     return t
 }
 
-def private param_type(tok : string; var ok : bool&) : TypeDecl? {
-    if (tok == "int64") { return qmacro_type(type<int64>) }
-    if (tok == "uint64") { return qmacro_type(type<uint64>) }
-    if (tok == "int") { return qmacro_type(type<int>) }
-    if (tok == "uint") { return qmacro_type(type<uint>) }
-    ok = false
-    return qmacro_type(type<int64>)
-}
-
-def private role_ok(role : string) : bool {
-    // alias = a second view of a buffer another field already declares (hazard lives there);
-    // weight = never written during a step (untracked by design); "" = derived from the body.
-    // read/write/readwrite stay legal as cross-checked overrides of the derivation.
-    return (role == "" || role == "read" || role == "write" || role == "readwrite" ||
-        role == "weight" || role == "alias")
-}
-
 // the [metal_kernel] method of a lensed class — the body the access classifier walks
 def private find_kernel_fn(st : StructurePtr; mod : Module?; var nmatch : int&) : Function? {
     var kfn : Function?
@@ -276,13 +211,6 @@ def private find_kernel_fn(st : StructurePtr; mod : Module?; var nmatch : int&) 
         }
     }
     return kfn
-}
-
-// derived direction of one tracked field off the classifier result
-def private derived_role(res : AccessResult; name : string) : string {
-    let r = key_exists(res.reads, name)
-    let w = key_exists(res.writes, name)
-    return w ? (r ? "readwrite" : "write") : (r ? "read" : "")
 }
 
 [structure_macro(name = metal_dispatch)]
@@ -309,7 +237,7 @@ class MetalDispatch : AstStructureAnnotation {
             return false
         }
         if (empty(grid)) {
-            errors := "[metal_dispatch] {fn_name}: 'grid' is required (per WorkGroupID dim: 1 | param | param/coverage)"
+            errors := "[metal_dispatch] {fn_name}: 'grid' is required (per WorkGroupID dim: int | param | param/coverage)"
             return false
         }
         // micro-grammar validation up front — a malformed spec must fail the compile here, not
@@ -328,7 +256,7 @@ class MetalDispatch : AstStructureAnnotation {
         for (dspec in split(grid, ",")) {
             let dparts <- split(dspec, "/")
             if (length(dparts) > 2) {
-                errors := "[metal_dispatch] {fn_name}: grid dim '{strip(dspec)}' has more than one '/' (1 | param | param/coverage)"
+                errors := "[metal_dispatch] {fn_name}: grid dim '{strip(dspec)}' has more than one '/' (int | param | param/coverage)"
                 return false
             }
         }
@@ -506,7 +434,7 @@ class MetalDispatch : AstStructureAnnotation {
                     return false
                 }
                 var ok = true
-                var pt = param_type(strip(nt[1]), ok)
+                var pt = param_type(at, strip(nt[1]), ok)
                 if (!ok) {
                     errors := "[metal_dispatch] {fn_name}: param '{strip(p)}' has unsupported type '{strip(nt[1])}' (int/uint/int64/uint64)"
                     return false
@@ -618,9 +546,7 @@ class MetalManualDispatchCensus : AstPassMacro {
                         for (field in st.fields) {
                             let role = find_arg(field.annotation, "role") ?as tString ?? ""
                             continue if (role != "read" && role != "write" && role != "readwrite")
-                            let r = key_exists(res.reads, "{field.name}")
-                            let w = key_exists(res.writes, "{field.name}")
-                            let dr = w ? (r ? "readwrite" : "write") : (r ? "read" : "")
+                            let dr = derived_role(res, "{field.name}")
                             if (dr != role) {
                                 let drName = empty(dr) ? "unused" : dr
                                 macro_error(prog, field.at, "@ssbo field '{field.name}' of {st.name} declares @role='{role}' but the kernel body derives '{drName}' — fix the stale declaration")

@@ -37,66 +37,8 @@ def private mk_gvar(at : LineInfo; nm : string) : ExpressionPtr {
     return new ExprVar(at = at, name := nm)
 }
 
-def private mk_uint_cast(at : LineInfo; var inner : Expression?) : Expression? {
-    var c = new ExprCall(at = at, name := "uint")
-    c.arguments |> emplace_new <| inner
-    return c
-}
-
-def private is_digit_tok(s : string) : bool {
-    if (empty(s)) {
-        return false
-    }
-    var all_digits = true
-    peek_data(s) $(arr) {
-        for (ch in arr) {
-            if (!is_number(int(ch))) {
-                all_digits = false
-                break
-            }
-        }
-    }
-    return all_digits
-}
-
-// one grid dim (1D dispatch): "name" -> uint(name) ; "name/cov" -> ceil-divide ; int -> literal
-def private mk_grid_dim(at : LineInfo; spec : string) : Expression? {
-    let s = strip(spec)
-    if (is_digit_tok(s)) {
-        return new ExprConstUInt(at = at, value = uint(to_int(s)))
-    }
-    let parts <- split(s, "/")
-    if (length(parts) == 1) {
-        return mk_uint_cast(at, new ExprVar(at = at, name := s))
-    }
-    let nm = strip(parts[0])
-    let cov = strip(parts[1])
-    var div : Expression?
-    if (is_digit_tok(cov)) {
-        let cv = int64(to_int(cov))
-        var add = new ExprOp2(at = at, op := "+", left = new ExprVar(at = at, name := nm), right = new ExprConstInt64(at = at, value = cv - 1l))
-        div = new ExprOp2(at = at, op := "/", left = add, right = new ExprConstInt64(at = at, value = cv))
-    } else {
-        var add = new ExprOp2(at = at, op := "+", left = new ExprVar(at = at, name := nm), right = new ExprVar(at = at, name := cov))
-        var sub = new ExprOp2(at = at, op := "-", left = add, right = new ExprConstInt64(at = at, value = 1l))
-        div = new ExprOp2(at = at, op := "/", left = sub, right = new ExprVar(at = at, name := cov))
-    }
-    return mk_uint_cast(at, div)
-}
-
-def private param_type(at : LineInfo; tok : string; var ok : bool&) : TypeDeclPtr {
-    if (tok == "int64") { return new TypeDecl(at = at, baseType = Type.tInt64) }
-    if (tok == "uint64") { return new TypeDecl(at = at, baseType = Type.tUInt64) }
-    if (tok == "int") { return new TypeDecl(at = at, baseType = Type.tInt) }
-    if (tok == "uint") { return new TypeDecl(at = at, baseType = Type.tUInt) }
-    ok = false
-    return new TypeDecl(at = at, baseType = Type.tInt64)
-}
-
-def private role_ok(role : string) : bool {
-    return (role == "" || role == "read" || role == "write" || role == "readwrite" ||
-        role == "weight" || role == "alias")
-}
+// (is_digit_tok / mk_uint_cast / mk_grid_dim / role_ok / derived_role / param_type — the
+// micro-grammar shared with [metal_dispatch] — live in dasllama_kernel_access)
 
 // a [spirv_kernel] method of a lensed class + its captured blob global name. `want` names the
 // method for multi-kernel classes; "" counts every kernel method and returns the first (the
@@ -124,12 +66,6 @@ def private find_kernel_fn(st : StructurePtr; mod : Module?; want : string; var 
         }
     }
     return kfn
-}
-
-def private derived_role(res : AccessResult; name : string) : string {
-    let r = key_exists(res.reads, name)
-    let w = key_exists(res.writes, name)
-    return w ? (r ? "readwrite" : "write") : (r ? "read" : "")
 }
 
 def private mk_call1(at : LineInfo; nm, a0 : string) : ExpressionPtr {

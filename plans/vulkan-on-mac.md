@@ -175,11 +175,21 @@ negative-control run (poisoned oracle → red with dumps) before the poison is r
   per-class CPU-oracle gates in the kernels suite (7 files, ~180 gates, all
   negative-controlled).**
 
-## Leg (c) — hoist the dispatch-lens micro-grammar into dasllama_kernel_access
+## Leg (c) — hoist the dispatch-lens micro-grammar into dasllama_kernel_access ✅ DONE 2026-08-07
 
 The ~80 duplicated lines (`mk_uint_cast`, `is_digit_tok`, `role_ok`, `derived_role`, the
 `mk_grid_dim` core, `param_type`) — one owner; vulkan's grid folds any integer literal,
 metal's only "1", and the hoist ends that divergence. Both lenses already require the module.
+
+Landed: the six helpers are public in `dasllama_kernel_access` (a "dispatch-lens
+micro-grammar" section); both lenses lost their privates and call the shared ones. Bonus
+dedup found in the target itself: kernel_access's private `all_digits` was a third copy of
+`is_digit_tok` — deleted; and the metal census's inline re-derivation now calls
+`derived_role`. The shared `mk_grid_dim` is vulkan's superset form, so `[metal_dispatch]`
+grids now fold any integer literal (previously only "1" — other literals were an unresolved
+variable, so no compiling code changes meaning). Metal `param_type` switched from
+`qmacro_type` to direct `TypeDecl` construction (the vulkan spelling, same scalars).
+Verified: kernels suite 7/7 files green, vulkan kernels 40/40, tier 36/36, cm2 6/6.
 
 ## Leg (b) — kernel-model asymmetry closure (metal catches up to the vulkan lens)
 
