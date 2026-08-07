@@ -123,6 +123,36 @@ the wasm worktree is dedicated because wasm and native builds poison each other'
 podman build -t dasweb-builder:2 -f utils/dasweb-buildd/Containerfile .
 ```
 
+## The toolchain-bump protocol
+
+The toolchain id is the wasm worktree's HEAD sha, so moving the worktree re-keys every cached
+artifact and each sample pays a real build on its next click. Roll once, after a batch of work
+has landed — never per-merge.
+
+Moving the worktree is not by itself a roll. `run_build.sh` consumes two built things, and a
+daslang change lands in one or the other: `bin/daslang`, the cross-compile host that emits the
+emcc link line (where link flags live), and `web/output64/lib/*_runtime*.a`, the runtime archive
+linked into every artifact (where runtime behaviour lives). Pulling without rebuilding both
+announces a new id whose artifacts still carry the old code — the cache is invalidated and
+nothing is fixed. The host additionally bakes its own C++ ABI into every module it codegens, so
+it is built by `web/build_wasm_host.sh` rather than an ordinary cmake invocation; a host whose
+stdlib or exception config differs from the target corrupts the wasm heap at runtime with no
+build-time diagnostic.
+
+The emcc cache is mounted read-only into the sandbox, so a job cannot populate it: the roll
+warms it outside the sandbox with one build of **each** mode, because the page rail links
+`-pthread` and pulls `-mt` system libraries a module build never touches.
+
+`roll_toolchain.sh` performs all of it, on the box, as the box user:
+
+```bash
+./roll_toolchain.sh --dry-run     # print the plan, touch nothing
+./roll_toolchain.sh               # roll to origin/master
+```
+
+It refuses to start if the worktree has modified tracked files, and reports the old and new id.
+Verify afterwards with the browser leg of `utils/dasweb-verify`, which drives the live site.
+
 ## Tests
 
 ```bash

@@ -139,6 +139,70 @@ test('a queued build narrates its progress and then runs', async ({ playground }
     await expect.poll(() => playground.locator('#run').isDisabled(), { timeout: 15_000 }).toBe(false);
 });
 
+// Artifacts link with -sALLOW_MEMORY_GROWTH, and growing a wasm memory DETACHES
+// its previous ArrayBuffer. The wasi shim must therefore read the buffer live
+// from the Memory object on every call — a snapshot taken at instantiation dies
+// on the first fd_write after a grow ("Cannot perform DataView constructor on a
+// detached ArrayBuffer"), which is how the f2s benchmark failed the day growth
+// was enabled. This module prints, grows, prints again.
+function growingModuleBytes() {
+    const leb = (n) => { const out = []; do { let b = n & 0x7f; n >>>= 7; if (n) b |= 0x80; out.push(b); } while (n); return out; };
+    const str = (s) => [s.length, ...[...s].map(c => c.charCodeAt(0))];
+    const sec = (id, bytes) => [id, ...leb(bytes.length), ...bytes];
+    const vec = (items) => [items.length, ...items.flat()];
+
+    const type = sec(1, vec([
+        [0x60, 4, 0x7f, 0x7f, 0x7f, 0x7f, 1, 0x7f],   // (i32 i32 i32 i32) -> i32 : fd_write
+        [0x60, 0, 0],                                  // () -> ()               : _start
+    ]));
+    const imp = sec(2, vec([
+        [...str('wasi_snapshot_preview1'), ...str('fd_write'), 0x00, 0],
+    ]));
+    const func = sec(3, vec([[1]]));
+    const mem = sec(5, vec([[0x00, 1]]));              // min 1 page, NO max -> growable
+    const exp = sec(7, vec([
+        [...str('memory'), 0x02, 0],
+        [...str('_start'), 0x00, 1],                   // func 0 is the import
+    ]));
+    // iovec1 @16 -> "one\n" (0,4); iovec2 @24 -> "two\n" (4,4); nwritten @32
+    const wr = (iov) => [0x41, 1, 0x41, iov, 0x41, 1, 0x41, 32, 0x10, 0, 0x1a]; // fd_write(1,iov,1,32); drop
+    const body = [0, ...wr(16), 0x41, 1, 0x40, 0x00, 0x1a, ...wr(24), 0x0b];    // print; grow(1); print
+    const code = sec(10, vec([[...leb(body.length), ...body]]));
+    const dataBytes = [
+        ...'one\ntwo\n'.split('').map(c => c.charCodeAt(0)), 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 4, 0, 0, 0,                        // iovec1: ptr 0, len 4
+        4, 0, 0, 0, 4, 0, 0, 0,                        // iovec2: ptr 4, len 4
+    ];
+    const data = sec(11, vec([[0, 0x41, 0, 0x0b, ...leb(dataBytes.length), ...dataBytes]]));
+    return Buffer.from([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, ...type, ...imp, ...func, ...mem, ...exp, ...code, ...data]);
+}
+
+test('module-rail stdout survives a wasm memory grow', async ({ playground }) => {
+    await stubBuildInfo(playground, true);
+    await stubStore(playground);
+    await stubBuild(playground, [{ state: 'done', toolchain: 'abc1234', files: [ARTIFACT_URL] }]);
+    await playground.route('**' + ARTIFACT_URL, route => route.fulfill({
+        status: 200,
+        contentType: 'application/wasm',
+        body: growingModuleBytes(),
+    }));
+    await reloadWithStubs(playground);
+
+    const memory64 = await playground.evaluate(() =>
+        WebAssembly.validate(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 5, 3, 1, 4, 1])));
+    test.skip(!memory64, 'browser lacks wasm64/memory64');
+
+    await playground.locator(wasmSel).check();
+    await playground.locator('#run').click();
+
+    const output = playground.locator('#output');
+    await expect(output).toContainText('one', { timeout: 15_000 });
+    // "two" is written AFTER memory.grow — a shim holding the pre-grow buffer
+    // throws here instead of printing.
+    await expect(output).toContainText('two', { timeout: 15_000 });
+    await expect(output).not.toContainText('wasm error');
+});
+
 test('a page-kind build runs as an embedded page frame', async ({ playground }) => {
     // Graphics/audio samples build as standalone html+js+wasm pages (kind:
     // 'page'); the playground embeds the html artifact in an iframe instead of

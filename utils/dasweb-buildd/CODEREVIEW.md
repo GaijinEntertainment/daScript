@@ -69,6 +69,11 @@ defect, and this section is the whole test.
 - `run_build.sh` — the box-side build recipe and its sandbox invocation; the only place a build
   command line or a sandbox mount lives. A behavior change here without a note in `README.md`
   (The sandbox section) is a defect.
+- `roll_toolchain.sh` — the box-side toolchain-bump recipe: moving the worktree, rebuilding the
+  cross-compile host and the wasm archives, warming the emcc cache in both modes, restarting the
+  service. The only place a roll step lives. A step added or removed here without a note in
+  `README.md` (The toolchain-bump protocol section) is a defect, and a roll path that moves the
+  worktree without rebuilding both the host and the runtime archive is a defect.
 - `Containerfile` — the sandbox image. It holds only what a system must provide the toolchain;
   anything a read-only mount can supply instead belongs in `run_build.sh`. A change here
   without bumping the image tag in both files, in the same commit, is a defect.
