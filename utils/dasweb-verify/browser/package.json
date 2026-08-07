@@ -1,0 +1,14 @@
+{
+  "name": "dasweb-verify-browser",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Nightly browser leg of the curated-sample verifier: drives the live daslang.io playground",
+  "scripts": {
+    "verify": "node runner.mjs",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}

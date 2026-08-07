@@ -1,0 +1,64 @@
+{
+  "_comment": [
+    "Per-sample expectations for the browser leg. Keyed by the picker name the",
+    "deployed manifest carries (playground/samples/data.json). A deployed sample",
+    "with no row here is a FAIL — new samples cannot skip verification silently.",
+    "Budgets and thresholds live here, not in sample sources: tuning a timeout",
+    "must never edit sample content and bust its content-addressed build cache."
+  ],
+  "defaults": {
+    "kind": "graphics",
+    "modes": ["interpreter", "wasm"],
+    "action": "run",
+    "budget_ms": 45000,
+    "build_budget_ms": 420000,
+    "min_observe_ms": 8000,
+    "min_rafs": 30,
+    "min_draws": 10
+  },
+  "samples": {
+    "OpenGL: rotating triangle": {},
+    "OpenGL: mandelbrot": {},
+    "OpenGL: SDF raymarcher": {},
+    "OpenGL: synthwave cube": {},
+    "OpenGL: cube swarm (instancing)": {},
+    "OpenGL: skybox + reflections (cubemap)": {},
+    "OpenGL: particle swarm (transform feedback)": {},
+    "OpenGL: shadow map (two-pass)": {},
+    "OpenGL: MSAA (multisample + blit resolve)": {},
+    "OpenGL: deferred shading (cat on brick, MRT G-buffer)": { "budget_ms": 90000 },
+    "OpenGL: HDR + bloom (float FBO)": {},
+    "OpenGL: glTF PBR capstone (deferred + HDR bloom)": { "budget_ms": 90000 },
+
+    "Game: Arcanoid (3D, arrow keys + space)": {},
+    "Game: Pac-Man (3D, arrow keys + space)": {},
+    "ImGui: Fourier Series (epicycles)": {},
+    "Path Tracer Lab (jobque + threads + GPU)": { "budget_ms": 120000, "min_rafs": 10, "min_draws": 3 },
+    "Physarum Lab (threads + audio)": { "budget_ms": 90000, "min_rafs": 15, "min_draws": 5 },
+
+    "Audio: sine beep": { "kind": "audio" },
+    "Audio: strudel synth arpeggio": { "kind": "audio" },
+
+    "Hello world": { "kind": "console", "stdout": "Hello World" },
+    "Loops": { "kind": "console", "stdout": "0123456789" },
+    "Functions": { "kind": "console", "stdout": "^hello$" },
+    "Macros (multi-file)": { "kind": "console", "stdout": "Section 3: mixed sources" },
+    "Tests": { "kind": "console", "action": "test", "modes": ["interpreter"], "stdout": "SUCCESS!" },
+
+    "Dictionary (benchmark)": { "kind": "console", "stdout": "^\"dictionary\", " },
+    "SHA-256 (benchmark)": { "kind": "console", "stdout": "^\"sha256\", " },
+    "Exp loop (benchmark)": { "kind": "console", "stdout": "^\"exp loop\", " },
+    "String→Float (benchmark)": { "kind": "console", "stdout": "^\"string2float\", " },
+    "Float→String (benchmark)": { "kind": "console", "stdout": "^\"float2string\", " },
+    "Fibonacci loop (benchmark)": { "kind": "console", "stdout": "^\"fibonacci loop\", " },
+    "Fibonacci recursive (benchmark)": { "kind": "console", "stdout": "^\"fibonacci recursive\", " },
+    "Mandelbrot (benchmark)": { "kind": "console", "stdout": "^\"mandelbrot\", " },
+    "N-bodies (benchmark)": { "kind": "console", "stdout": "^\"n-bodies\", " },
+    "Particles (benchmark)": { "kind": "console", "stdout": "^\"particles kinematics\", " },
+    "Primes loop (benchmark)": { "kind": "console", "stdout": "^\"primes loop\", " },
+    "N-Queens (benchmark)": { "kind": "console", "stdout": "^\"queen\", " },
+    "Spectral norm (benchmark)": { "kind": "console", "stdout": "^\"spectral norm\", " },
+    "Table sort (benchmark)": { "kind": "console", "stdout": "^\"sort\", " },
+    "Tree (benchmark)": { "kind": "console", "stdout": "^\"tree\", ", "budget_ms": 120000 }
+  }
+}
