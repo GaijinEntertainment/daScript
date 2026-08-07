@@ -65,16 +65,22 @@ no perf bar. Note followup item 16: vulkan arms need direct dastest + `-load_mod
   static workgroup memory over ~15.6-16 KB is SILENTLY DISCARDED — no validation error, no
   MVK log, fence signals, copies run, kernel never executes. Bisected via marker-probe
   classes (probe files `tests/_probe_{cls,batch}_m1.das`, delete before PR).
-- **REMAINING RED (the arc's open bug): the batch-tile kernel shape launches but its device
-  stores never land** — q8_batch + kq_batch×4 all-zero output, rope_b partial. Deterministic
-  per build; flips with semantically-irrelevant edits (store-guard constant, sibling classes
-  in the module) — AGX/MoltenVK compiler-sensitivity signature. All indexing statically
-  in-bounds; surface/bindings/push/grid all exonerated by probe matrix (6-binding f16
-  replica of the surface echoes every binding correctly).
-- **Suite-honesty finding: the ar-class arm passes VACUOUSLY on M1** — it compares GPU vs
-  GPU (class twin vs seam); when both kernels are dead they match trivially. GPU-vs-GPU
-  arms need sentinel prefill or a CPU oracle. (ArBase row[4096] = 16,644 B tg was over the
-  1.4.1 cliff.)
+- **RESOLVED — the batch-tile all-zero red was MoltenVK's Metal argument-buffers path**
+  (its Apple Silicon default): dispatches launch but device stores never land, silently.
+  `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0` (discrete bindings) fixes it outright; tier
+  init forces it via the env rail (`MoltenVkEnv`, tri-state — an explicit user value wins,
+  and `=1` is the standing one-env repro: kernel suite 37/40). LANDED with the rail knob +
+  ENVIRONMENT.md row + decline feints in the three tier arms that drive dn/attn directly.
+- **LEG (a) BAR MET (2026-08-07):** kernel suite 40/40, tier 36/36, cm2 6/6 honest feints,
+  image-vulkan 4/4; `harness/parity.das` CPU==GPU GEN_IDS EXACT (32/32 tokens) on
+  Llama-3.2-1B Q8_0 AND Q4_K_M native k-quant — resident driver, device prefill + decode,
+  at/dn chains honestly on the CPU rail.
+- Tails: (1) file the MoltenVK argbuf-miscompile upstream (probe files
+  `tests/_probe_{cls,batch}_m1.das` are the repro seed — keep until filed, delete before
+  PR); (2) GPU-vs-GPU suite arms (ar twin-vs-seam) are vacuous-prone — when both kernels
+  are dead they match trivially (bit us under the 1.4.1 cliff); sentinel-prefill them;
+  (3) a `--quant kq` parity run vacuously "passed" on empty streams before the wc -l check —
+  the harness should exit non-zero when GEN_IDS was never printed.
 
 ## Leg (oracles) — per-class CPU oracles for the metal corpus, loud and eyeballable
 
