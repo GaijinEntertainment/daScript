@@ -568,6 +568,132 @@ def private sq_partb_gate(t : T?; dev, queue; codec : string; cnts : array<int>;
     delete want
 }
 
+// ===== the fused single-pass "D" family (hs == 128): part + parallel cross-slice comb =====
+// D reuses build_batch_fix: nheads=2, kv_mul=2, hs=128 gives the SAME kv_dim/qd as the hs=64
+// shape, so only the oracle's head geometry differs. D is plain causal (no window/softcap/sink).
+
+let private D_HS = 128
+let private D_NHEADS = 2
+let private D_KVMUL = 2
+
+def private attn_oracle_d(kdeq, vdeq : array<float>; kvbase : int; q : array<float>; qbase, h, cnt : int; scale : float) : array<float> {
+    let khoff = (h / D_KVMUL) * D_HS
+    var sc : array<float>
+    sc |> resize(cnt)
+    var mm = -3.0e38
+    for (j in range(cnt)) {
+        var s = 0.0
+        for (d in range(D_HS)) {
+            s += q[qbase + h * D_HS + d] * kdeq[kvbase + j * KV_DIM + khoff + d]
+        }
+        sc[j] = s * scale
+        mm = max(mm, sc[j])
+    }
+    var tot = 0.0
+    for (j in range(cnt)) {
+        sc[j] = exp(sc[j] - mm)
+        tot += sc[j]
+    }
+    var out : array<float>
+    out |> resize(D_HS)
+    for (d in range(D_HS)) {
+        var acc = 0.0
+        for (j in range(cnt)) {
+            acc += sc[j] * vdeq[kvbase + j * KV_DIM + khoff + d]
+        }
+        out[d] = acc / tot
+    }
+    delete sc
+    return <- out
+}
+
+def private sq_d_gate(t : T?; dev, queue; codec : string; cnts : array<int>; nsgs : int) {
+    let tag = "sq_attn_d_{codec} B={length(cnts)} nsgs={nsgs}"
+    var err : string
+    let src = codec == "f16" ? metal_sq_attn_d16_msl : (codec == "f32" ? metal_sq_attn_d32_msl : (codec == "q8" ? metal_sq_attn_d_q8_msl : metal_sq_attn_d_tq4_msl))
+    let entry = codec == "f16" ? metal_sq_attn_d16_msl_entry : (codec == "f32" ? metal_sq_attn_d32_msl_entry : (codec == "q8" ? metal_sq_attn_d_q8_msl_entry : metal_sq_attn_d_tq4_msl_entry))
+    let fm = codec == "f16" ? metal_sq_attn_d16_msl_fastmath : (codec == "f32" ? metal_sq_attn_d32_msl_fastmath : (codec == "q8" ? metal_sq_attn_d_q8_msl_fastmath : metal_sq_attn_d_tq4_msl_fastmath))
+    let tgm = codec == "f16" ? metal_sq_attn_d16_msl_tgmem : (codec == "f32" ? metal_sq_attn_d32_msl_tgmem : (codec == "q8" ? metal_sq_attn_d_q8_msl_tgmem : metal_sq_attn_d_tq4_msl_tgmem))
+    var pso_d = pipeline_from_source(dev, src, entry, fm, err)
+    t |> success(pso_d != null, "{tag}: part pipeline: {err}")
+    var pso_c = pipeline_from_source(dev, metal_sq_attn_comb_d_msl, metal_sq_attn_comb_d_msl_entry, metal_sq_attn_comb_d_msl_fastmath, err)
+    t |> success(pso_c != null, "{tag}: comb pipeline: {err}")
+    if (pso_d == null || pso_c == null) {
+        metal_release(pso_d)
+        metal_release(pso_c)
+        return
+    }
+    let nb2 = length(cnts)
+    let qstride = QD + 36                   // q reads through a float4 view — keep the stride % 4
+    let quant = codec == "q8" || codec == "tq4"
+    var fx : BatchAttnFix
+    build_batch_fix(codec, cnts, qstride, fx)
+    let scale = 1.0 / sqrt(float(D_HS))
+    var want : array<float>
+    want |> resize(nb2 * QD)
+    for (r in range(nb2)) {
+        for (h in range(D_NHEADS)) {
+            var col <- attn_oracle_d(fx.kdeq, fx.vdeq, fx.roff[r], fx.q, r * qstride, h, cnts[r], scale)
+            for (d in range(D_HS)) {
+                want[r * QD + h * D_HS + d] = col[d]
+            }
+            delete col
+        }
+    }
+    var bk = quant ? buf_upload(dev, fx.kslab) : (codec == "f16" ? buf_upload(dev, fx.kh) : buf_upload(dev, fx.kf))
+    var bv = quant ? buf_upload(dev, fx.vslab) : (codec == "f16" ? buf_upload(dev, fx.vh) : buf_upload(dev, fx.vf))
+    var bq = buf_upload(dev, fx.q)
+    var bpart = buf_fill(dev, nb2 * D_NHEADS * nsgs * (D_HS + 4), -1000.0)
+    var by = buf_fill(dev, nb2 * QD, -1000.0)
+    var brt = buf_upload(dev, fx.rt)
+    var kad = SqAttnDArgs(lay = uint(B_LAY), kstride = uint(quant ? NBLK : KV_DIM), nheads = uint(D_NHEADS),
+        kv_mul = uint(D_KVMUL), hs = uint(D_HS), scale = scale, qstride = uint(qstride), nsgs = uint(nsgs))
+    var kac = SqAttnCombDArgs(nchmax = uint(nsgs), nheads = uint(D_NHEADS), hs = uint(D_HS))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso_d)
+        metal_set_threadgroup_memory_length(enc, tgm, 0)
+        if (quant) {
+            metal_set_buffer(enc, bk, 0ul, 0)
+            metal_set_buffer(enc, bk, 0ul, 1)
+            metal_set_buffer(enc, bv, 0ul, 2)
+            metal_set_buffer(enc, bv, 0ul, 3)
+            metal_set_buffer(enc, bq, 0ul, 4)
+            metal_set_buffer(enc, bpart, 0ul, 5)
+            metal_set_buffer(enc, brt, 0ul, 6)
+            metal_set_bytes(enc, unsafe(addr<void?>(kad)), uint64(typeinfo sizeof(kad)), 7)
+        } else {
+            metal_set_buffer(enc, bk, 0ul, 0)
+            metal_set_buffer(enc, bv, 0ul, 1)
+            metal_set_buffer(enc, bq, 0ul, 2)
+            metal_set_buffer(enc, bpart, 0ul, 3)
+            metal_set_buffer(enc, brt, 0ul, 4)
+            metal_set_bytes(enc, unsafe(addr<void?>(kad)), uint64(typeinfo sizeof(kad)), 5)
+        }
+        metal_dispatch_threadgroups(enc, uint3(uint(D_NHEADS), uint((nsgs + 3) / 4), uint(nb2)), uint3(128u, 1u, 1u))
+        metal_set_pipeline(enc, pso_c)
+        metal_set_threadgroup_memory_length(enc, metal_sq_attn_comb_d_msl_tgmem, 0)
+        metal_set_buffer(enc, bpart, 0ul, 0)
+        metal_set_buffer(enc, by, 0ul, 1)
+        metal_set_buffer(enc, brt, 0ul, 2)
+        metal_set_bytes(enc, unsafe(addr<void?>(kac)), uint64(typeinfo sizeof(kac)), 3)
+        metal_dispatch_threadgroups(enc, uint3(uint(D_NHEADS), uint(nb2), 1u), uint3(uint(D_HS), 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_bars(by, want, 2e-3, 0.0, tag), 0)
+    }
+    metal_release(bk)
+    metal_release(bv)
+    metal_release(bq)
+    metal_release(bpart)
+    metal_release(by)
+    metal_release(brt)
+    metal_release(pso_d)
+    metal_release(pso_c)
+    delete fx
+    delete want
+}
+
 [test]
 def test_metal_attn_codec_kernels(t : T?) {
     t |> run("sq_attn codec twins (f32/q8/tq4, single + split-K) == CPU attention over the dequant truth") <| @(t : T?) {
@@ -605,6 +731,11 @@ def test_metal_attn_codec_kernels(t : T?) {
                 sq_partb_gate(t, dev, queue, "q8", [64, 200], 80, false)
                 sq_partb_gate(t, dev, queue, "tq4", [30, 100, 200], 0, false)
                 sq_partb_gate(t, dev, queue, "tq4", [30, 100, 200], 80, true)
+                // the fused single-pass D family (hs = 128): slice-group counts off the 4-sg grid
+                sq_d_gate(t, dev, queue, "f16", [21, 64, 200], 3)
+                sq_d_gate(t, dev, queue, "f32", [40, 130], 5)
+                sq_d_gate(t, dev, queue, "q8", [21, 64, 200], 3)
+                sq_d_gate(t, dev, queue, "tq4", [30, 100], 2)
                 metal_release(queue)
             }
             t |> equal(metal_log_leaks_if_any(), 0l)
