@@ -50,6 +50,15 @@ def opaque(x) {
 }
 
 [test]
+def test_half_subnormals_survive_conversion(t : T?) {
+    // half min normal is 6.104e-5; below that the value must stay subnormal, not flush
+    t |> equal(float(half(opaque(3.0517578e-5f))), 3.0517578e-5f)
+    t |> equal(float(half(opaque(5.9604645e-8f))), 5.9604645e-8f)   // min subnormal
+    t |> equal(float(half(opaque(6.097555e-5f))), 6.097555e-5f)     // max subnormal
+    t |> equal(float(half(opaque(2.9802322e-8f))), 0.0f)            // half of min: to zero
+}
+
+[test]
 def test_abs_clears_the_sign_of_zero(t : T?) {
     // abs(-0.0) is +0.0 in IEEE, and the bit pattern is the only way to see the sign
     t |> run("folded") @@(t : T?) {
