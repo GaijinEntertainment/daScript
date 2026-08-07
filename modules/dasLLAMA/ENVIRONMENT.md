@@ -104,6 +104,14 @@ Vulkan GPU backend. Present only where the dasVulkan package is installed.
 | `DASLLAMA_VK_HAZARD_PARANOID` | flag | off | Barrier at every dispatch (correctness bisect). |
 | `DASLLAMA_VK_HAZARD_TRACE` | flag | off | Log every detected hazard and the barrier it produced. |
 
+## MoltenVK (macOS)
+
+MoltenVK's own configuration — listed because the vulkan tier arms it on Apple.
+
+| Variable | Type | Default | Effect |
+|---|---|---|---|
+| `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS` | flag | unset (tier forces 0) | MoltenVK's own knob. Its argument-buffers default miscompiles the batch tile kernels (stores never land, silently); the tier forces discrete bindings when this is unset. |
+
 ## Accelerate / AMX backend
 
 Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.

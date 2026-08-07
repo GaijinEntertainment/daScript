@@ -279,6 +279,15 @@ struct public VulkanEnv {
     vk_hazard_trace : bool = false
 }
 
+// ===== MoltenVK (foreign knobs the vulkan tier arms on Apple) =====
+
+[EnvConfig(env_prefix = "MVK_CONFIG")]
+struct public MoltenVkEnv {
+    @clarg_default_doc = "unset (tier forces 0)"
+    @clarg_doc = "MoltenVK's own knob. Its argument-buffers default miscompiles the batch tile kernels (stores never land, silently); the tier forces discrete bindings when this is unset."
+    use_metal_argument_buffers : Option<bool>
+}
+
 // ===== Accelerate / AMX backend =====
 
 [EnvConfig(env_prefix = "DASLLAMA")]
@@ -630,6 +639,7 @@ let public g_env_engine = env_config(type<EngineEnv>)
 let public g_env_gpu = env_config(type<GpuTierEnv>)
 let public g_env_metal = env_config(type<MetalEnv>)
 let public g_env_vulkan = env_config(type<VulkanEnv>)
+let public g_env_mvk = env_config(type<MoltenVkEnv>)
 let public g_env_accel = env_config(type<AccelerateEnv>)
 let public g_env_harness = env_config(type<HarnessEnv>)
 let public g_env_bench = env_config(type<BenchmarkEnv>)
@@ -719,6 +729,9 @@ def public env_markdown() : string {
         write_section(w, "Vulkan backend",
             "Vulkan GPU backend. Present only where the dasVulkan package is installed.")
         write_info_rows(w, get_env_config_info(type<VulkanEnv>))
+        write_section(w, "MoltenVK (macOS)",
+            "MoltenVK's own configuration — listed because the vulkan tier arms it on Apple.")
+        write_info_rows(w, get_env_config_info(type<MoltenVkEnv>))
         write_section(w, "Accelerate / AMX backend",
             "Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.")
         write_info_rows(w, get_env_config_info(type<AccelerateEnv>))
@@ -752,6 +765,7 @@ def public registered_env_names() : array<string> {
     push_info_names(out, get_env_config_info(type<GpuTierEnv>))
     push_info_names(out, get_env_config_info(type<MetalEnv>))
     push_info_names(out, get_env_config_info(type<VulkanEnv>))
+    push_info_names(out, get_env_config_info(type<MoltenVkEnv>))
     push_info_names(out, get_env_config_info(type<AccelerateEnv>))
     push_info_names(out, get_env_config_info(type<HarnessEnv>))
     push_info_names(out, get_env_config_info(type<BenchmarkEnv>))

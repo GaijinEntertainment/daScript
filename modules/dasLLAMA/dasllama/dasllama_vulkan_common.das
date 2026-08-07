@@ -786,8 +786,8 @@ def vk_moe_init : bool {
     g_init_failed = true   // cleared only on full success
     // MoltenVK's Metal argument-buffers default miscompiles the batch tiles — dispatches launch
     // but device stores never land, silently (probe-verified 2026-08-07, MVK 1.4.2; suite 40/40
-    // with discrete bindings). Foreign knob, set-if-unset; an explicit user value wins.
-    if (!env_is_set("MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS")) {
+    // with discrete bindings). Foreign knob: write-only here, before the loader dlopens the ICD.
+    if (is_none(g_env_mvk.use_metal_argument_buffers)) {
         set_env_variable("MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS", "0")
     }
     if (volkInitialize() != 0) {
