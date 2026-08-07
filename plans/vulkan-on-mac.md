@@ -94,6 +94,28 @@ prefill family ride token-parity/support-matrix/census only — exactly the vacu
 exposure vulkan's item 15 documented. Build the per-class oracle bar the vulkan suite already
 has (`test_vulkan_kernels` is the donor pattern back-ported to its own donor):
 
+**Census (2026-08-07, full 137-class cross-reference):** 32 DIRECT-ORACLE (23%),
+17 HELPER-ONLY, 88 NONE (64%). Zero-direct families: RopeStore (9), KqGemv/KqMv (13),
+batch GEMM q8 + tensor twins (7), KqMulMm (6), fused QKV-GEMV/W13Sw (5), batched GEMV
+B-form (4); every batched (`*B*`) decode class and every Metal-4 tensor twin (12) is
+NONE/HELPER-ONLY; elementwise/misc decode is 12/15 NONE (AddRms, PreAddRms, QkNorm, Embed,
+Argmax, CopyRow, Suppress/Softcap, FwhtUnsign…); MoE prefill plumbing (RouterB, Count,
+Bucket, Reduce, SwigluOaiPf) all NONE. DeltaNet is the model family: 8/9 DIRECT already.
+Lensing ≠ coverage: 21 of the 41 lensed classes are NONE.
+
+**Suite shape:** shared `_metal_kernel_common.das` fixture module (buf helpers, mismatch
+compares with the first-6 gpu/cpu eyeball dump + shape line, synthetic quant planes) + new
+per-family files joining the `kernels` suite in run.das: `test_metal_attn_kernels`
+(codec twins + batched + D family), `test_metal_rope_kernels` (RopeStore + FwhtUnsign),
+`test_metal_gemv_kernels` (KqGemv/KqMv/MoeGemv-kq/B-forms/fused QKV+W13Sw),
+`test_metal_gemm_kernels` (batch GEMM, KqMulMm, MulMm/MoeMulMm twins),
+`test_metal_misc_kernels` (elementwise + MoE plumbing + prefill misc). Drive =
+`pipeline_from_source` on the emitted `metal_*_msl` globals (the established model-less
+pattern); Metal-4 tensor twins feint where the device lacks tensor support (M4 box runs
+them). Known boundary, ledgered: no kernel-unit arm drives the lensed `enc_*` builders, so
+binding order/grid arithmetic stays parity-covered — an enc_-drive via `metal_decode_init`
+is a possible follow-on, not this leg's bar.
+
 - Model-less, synthetic data, seconds per cell, standard dastest rail (metal tests run fine
   under `run.das`).
 - **A mismatch prints an eyeballable dump to the log**: first-N failing indices with cpu
@@ -101,6 +123,25 @@ has (`test_vulkan_kernels` is the donor pattern back-ported to its own donor):
   drift from garbage at a glance, before any rerun.
 - Ordering constraint: this leg lands BEFORE leg (b) restructures metal classes — the suite
   is the safety net for the merge.
+
+**Oracle-leg progress (2026-08-07):** every new file is committed green with a
+negative-control run (poisoned oracle → red with dumps) before the poison is reverted.
+- ✅ `test_metal_rope_kernels` — RopeStore all 9 + FwhtUnsign (byte-exact q8/tq4 mirrors vs
+  quantize_*_row; whole-arena sentinel compares on batched row tables).
+- ✅ `test_metal_gemv_kernels` — KqGemv K4/K5/K5C/K6, KqMv B2/B4/B8×K4/K5/K6, MoeGemv kq
+  trio (dequant_k*_plane_superblock + double dot; envelope-aware bar 2e-4·Σ|w·x|).
+- ✅ `test_metal_misc_kernels` — CopyRow, Argmax (exact ties), EmbedQ8/K6 (bit-exact),
+  AddRms/AddRmsB/PreAddRms, QkNorm (in-place + V-fusion), Geglu, Suppress/Softcap.
+- ✅ `test_metal_attn_kernels` — the f32/q8/tq4 codec twins, single-tg + split-K + comb
+  (fixtures quantize via the shipped stores, oracle attends over the cvt dequant truth;
+  sinks/softcap/window/chlo per codec).
+- TODO next: SqAttn batched 8 + CombB + D family 5 (row-table fixtures — the classes sit
+  at K:2630-3180 and K:3592-3777+DQ8/DTq4, sqd_* stage helpers nearby); then the GEMM
+  cluster (batch GEMM q8 7, KqMulMm 6, MulMm twins 3, MoeMulMm rest 7 — move
+  kq_fill_planes/kq_row_ref/buf_mismatch_env from the gemv file into
+  _metal_kernel_common when the second consumer lands); then fused QKV/W13Sw 5 +
+  batched GEMV B-forms 4; then MoE plumbing 8 + prefill misc 5. Metal-4 tensor twins
+  feint on M1 — run them on the M4 box (`ssh m4`) once written.
 
 ## Leg (c) — hoist the dispatch-lens micro-grammar into dasllama_kernel_access
 
