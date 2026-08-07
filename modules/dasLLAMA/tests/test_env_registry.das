@@ -46,6 +46,13 @@ let SANCTIONED_MARKERS = [
     "env_value_of(\""
 ]
 
+// Foreign-knob WRITES (arming a library's environment, e.g. MoltenVK's) are legal outside
+// dasllama_env.das — but the name must still be a declared knob, or a rename moves the read
+// while the write silently keeps the old spelling.
+let WRITE_MARKERS = [
+    "set_env_variable(\""
+]
+
 // The declarations themselves name every knob but read none of them; generated AOT trees are
 // copies of sources already scanned.
 def private skip_path(path : string) : bool {
@@ -121,12 +128,14 @@ def test_every_env_read_is_declared(t : T?) {
                 files_scanned++
                 collect_names(text, READ_MARKERS, used)
                 collect_names(text, SANCTIONED_MARKERS, used)
+                collect_names(text, WRITE_MARKERS, used)
             }
         }
         for (root in COVERAGE_ROOTS) {
             walk_das("{get_das_root()}/{root}") $(path, text) {
                 collect_names(text, READ_MARKERS, used)
                 collect_names(text, SANCTIONED_MARKERS, used)
+                collect_names(text, WRITE_MARKERS, used)
             }
         }
         t |> success(files_scanned > 100, "walk visited {files_scanned} files under the strict roots — a real walk sees hundreds; a broken walk must not let both enforcement tests pass vacuously")

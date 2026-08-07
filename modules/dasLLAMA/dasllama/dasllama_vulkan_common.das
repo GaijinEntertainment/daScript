@@ -16,6 +16,7 @@ require dasllama/dasllama_par
 require math
 require strings
 require daslib/strings_boost
+require daslib/fio
 
 // The Vulkan backend's shared infrastructure: device state (GpuState/g_gpu), buffer/descriptor
 // makers, upload + stacks + host-import, the weight arena, command/submit plumbing, the
@@ -471,6 +472,7 @@ struct GpuState {
     dn_cls_ready : bool                // the window chain's class sets (built by prefill)
     dn_ready : bool
     dn_shared_ok : bool  // device shared-mem cap fits dn_conv's 33 KB tile (false on Apple/MoltenVK)
+    max_wg_bytes : uint  // maxComputeSharedMemorySize — the per-class workgroup-footprint gate reads it
     // deltanet decode-step state (lazy — first npos == 1 DN dispatch creates it)
     dnd_bg : HostBuf              // per-token raw β/γ + ring-parity staging (copied into the layer smalls)
     dnd_oq_dev : uint64           // the o row's Q8_0 image (fused-step out, the out GEMV's activations)
@@ -756,6 +758,19 @@ def carved_budget : int64 {
 var g_vk_dry_want = false
 var g_vk_dry_cfg = DlimVulkanConfig()
 
+var private g_mvk_env_armed = false
+
+//! Arm MoltenVK's env BEFORE the first volkInitialize anywhere — MVK_CONFIG_* is read into a
+//! process global at first access, so a write after any instance creation is invisible. The
+//! argument-buffers default silently loses batch-tile stores (KhronosGroup/MoltenVK#2793).
+def vk_arm_moltenvk_env {
+    return if (g_mvk_env_armed)
+    g_mvk_env_armed = true
+    if (is_none(g_env_mvk.use_metal_argument_buffers)) {   // an explicit user value wins
+        set_env_variable("MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS", "0")
+    }
+}
+
 def vk_moe_init : bool {
     if (g_init_failed) {   // checked FIRST: a partially-built g_gpu must never report ready
         return false
@@ -782,6 +797,7 @@ def vk_moe_init : bool {
         return true
     }
     g_init_failed = true   // cleared only on full success
+    vk_arm_moltenvk_env()
     if (volkInitialize() != 0) {
         to_log(LOG_ERROR, "dasLLAMA vulkan tier: no Vulkan loader\n")
         return false
@@ -900,6 +916,7 @@ def vk_moe_init : bool {
     // 33024 B rows; Apple caps threadgroup memory at 32 KB and pipeline COMPILE fails)
     var limits_props : VkPhysicalDeviceProperties
     vkGetPhysicalDeviceProperties(g_gpu.phys, limits_props)
+    g_gpu.max_wg_bytes = limits_props.limits.maxComputeSharedMemorySize
     g_gpu.dn_shared_ok = limits_props.limits.maxComputeSharedMemorySize >= 33024u
     if (!g_gpu.dn_shared_ok) {
         set_moe_gpu_dn_route(false)
@@ -2047,6 +2064,23 @@ struct VkdClass {
     set_layout : DescriptorSetLayout
     pipe_layout : PipelineLayout
     pipes : array<Pipeline>    // one per [vk_dispatch] kernel, indexed by annotation ordinal
+}
+
+// once-per-class named decline log for the workgroup-footprint gate below
+var private g_wg_declined : table<string>
+
+// the [vk_dispatch]-generated ensure_ calls this BEFORE building the pipeline: a class whose
+// @workgroup members exceed the device's shared-memory cap declines by name instead of dying
+// in vkCreateComputePipelines (MoltenVK: "Threadgroup memory size exceeds the maximum")
+def vkd_wg_fits(wg_bytes : int; kname : string) : bool {
+    if (uint(wg_bytes) <= g_gpu.max_wg_bytes) {
+        return true
+    }
+    if (!key_exists(g_wg_declined, kname)) {
+        g_wg_declined |> insert(kname)
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: {kname}: workgroup footprint {wg_bytes} B exceeds device cap {int(g_gpu.max_wg_bytes)} B — kernel declined\n")
+    }
+    return false
 }
 
 def vkd_class_init(var c : VkdClass; bindings : array<int>; push_bytes : int) {

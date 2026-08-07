@@ -240,14 +240,9 @@ def public subpassLoad(i : subpassInput) : float4 {
 [unused_argument(cluster_size), sideeffects]
 def public subgroupClusteredAdd(v : auto(TT); cluster_size : uint) : TT { return v }
 
-// The subgroup builtin variables (all uint Inputs). gl_SubgroupSize / gl_SubgroupInvocationID carry no
-// execution-model restriction -- any stage may read them. gl_SubgroupID / gl_NumSubgroups describe the
-// subgroup's place in a WORKGROUP, so they are legal only in the workgroup-dispatched stages
-// (compute / mesh / task); the emitter enforces that split.
-var gl_SubgroupSize         : uint      // BuiltIn SubgroupSize (Input) — lanes per subgroup (32 on NV, 32/64 on AMD)
-var gl_SubgroupInvocationID : uint      // BuiltIn SubgroupLocalInvocationId (Input) — this lane's index within its subgroup
-var gl_NumSubgroups         : uint      // BuiltIn NumSubgroups (Input) — subgroups per workgroup
-var gl_SubgroupID           : uint      // BuiltIn SubgroupId (Input) — this subgroup's index within the workgroup
+// The subgroup builtins (gl_Subgroup*, all uint Inputs) live in shader_lingua_franca (shared —
+// MSL lowers the same names to simdgroup attributes). Emitter-enforced SPIR-V stage split:
+// Size/InvocationID read anywhere; gl_SubgroupID / gl_NumSubgroups only in compute/mesh/task.
 
 // unpack8/pack32/sdot4/usdot4 live in daslib/shader_lingua_franca (re-exported above) — the
 // emitter lowers them by name: OpBitcast for the packs, OpSDot/OpSUDot for the dots.

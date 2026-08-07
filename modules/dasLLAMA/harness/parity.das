@@ -58,23 +58,25 @@ def private parse_ids(s : string) : array<int64> {
 }
 
 [export]
-def main {
+def main : int {
+    // non-zero on EVERY path that ends without printing GEN_IDS tokens — two empty streams
+    // diff clean, so callers must branch on the exit code, not the diff alone
     var res <- parse_args(type<Args>)
     if (res |> is_err) {
         print("error: {res |> unwrap_err}\n\n")
         print_help(get_command_info(type<Args>), "parity")
-        return
+        return 2
     }
     let cfg <- res |> move_unwrap
     if (cfg.help) {
         print_help(get_command_info(type<Args>), "parity")
-        return
+        return 0
     }
     let n_gen = cfg.ngen
     let prompt <- parse_ids(cfg.ids)
     if (empty(prompt) || n_gen <= 0) {
         print_help(get_command_info(type<Args>), "parity")
-        return
+        return 2
     }
 
     if (cfg.kquant_native >= 0) {   // load-time layout decision, must precede load_gguf
@@ -94,6 +96,7 @@ def main {
     }
     let c = t.config
     var s = make_run_state(c, cfg.kv, cfg.kv)
+    var rc = 0
     with_job_que() {
         setup_dasllama_jobque_()
         // A/B rail: force the 2-D batch chunk grid (0 = 1-D, 1 = fine, 2 = aligned) — the
@@ -119,5 +122,9 @@ def main {
         if (count < n_gen) {
             print("NOTE: generate stopped early ({count}/{n_gen}) — emitted BOS\n")
         }
+        if (count <= 0) {   // an empty GEN_IDS line is nothing to diff — fail loudly
+            rc = 3
+        }
     }
+    return rc
 }

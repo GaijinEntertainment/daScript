@@ -53,7 +53,12 @@ def private suite_files(name : string) : array<string> {
         return <- [ "modules/dasLLAMA/tests/test_metal_support_matrix.das" ]
     } elif (name == "kernels") {
         return <- [ "modules/dasLLAMA/tests/test_metal_prefill_kernels.das",
-                    "modules/dasLLAMA/tests/test_metal_decode_kernels.das" ]
+                    "modules/dasLLAMA/tests/test_metal_decode_kernels.das",
+                    "modules/dasLLAMA/tests/test_metal_rope_kernels.das",
+                    "modules/dasLLAMA/tests/test_metal_gemv_kernels.das",
+                    "modules/dasLLAMA/tests/test_metal_misc_kernels.das",
+                    "modules/dasLLAMA/tests/test_metal_attn_kernels.das",
+                    "modules/dasLLAMA/tests/test_metal_gemm_kernels.das" ]
     } elif (name == "image") {
         return <- [ "modules/dasLLAMA/tests/test_model_image.das" ]
     } elif (name == "image-vulkan") {
@@ -66,6 +71,11 @@ def private suite_files(name : string) : array<string> {
                     "modules/dasLLAMA/tests/test_metal_support_matrix.das",
                     "modules/dasLLAMA/tests/test_metal_prefill_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_decode_kernels.das",
+                    "modules/dasLLAMA/tests/test_metal_rope_kernels.das",
+                    "modules/dasLLAMA/tests/test_metal_gemv_kernels.das",
+                    "modules/dasLLAMA/tests/test_metal_misc_kernels.das",
+                    "modules/dasLLAMA/tests/test_metal_attn_kernels.das",
+                    "modules/dasLLAMA/tests/test_metal_gemm_kernels.das",
                     "modules/dasLLAMA/tests/test_model_image.das" ]
     }
     var none : array<string>

@@ -43,6 +43,13 @@ def vk_rdec_prepare(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab
     if (g_gpu.dry) {
         return true   // guards above ARE the plan decision; everything below is device state
     }
+    // The driver is all-or-nothing across prefill AND decode: when the device workgroup cap
+    // declines prefill's batched attention (the largest footprint; ensure_ declines by name via
+    // vkd_wg_fits), residency declines WITH it, pre-upload. Dry-plan gap: followup_vulkan.
+    if (!(g_gpu.has_coopmat && head_size == 128l && vk_fa_on() ? ensure_da_attn_b_h128_cls() : ensure_da_attn_b_cls())) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the batched-attention class rail declined on this device — resident driver declines, the per-op rails serve\n")
+        return false
+    }
     g_rd = new RDec(ready = false, n_layers = n_layers, dim = dim, qd = qd, kv_dim = kv_dim,
                  head_size = head_size, n_heads = n_heads, kv_mul = n_heads / (kv_dim / head_size),
                  hidden = hidden, vocab = vocab, seq_cap = seq_cap, neox = neox, eps = eps, scale = scale,

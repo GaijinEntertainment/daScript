@@ -101,36 +101,6 @@ def private mk_builder_param(at : LineInfo; var bf : BufField) : VariablePtr {
     return new Variable(at = at, name := "{bf.name}", _type = bf.kt)
 }
 
-def private mk_var_call(at : LineInfo; call_name, arg0 : string) : ExpressionPtr {
-    var c = new ExprCall(at = at, name := call_name)
-    c.arguments |> emplace_new <| new ExprVar(at = at, name := arg0)
-    return c
-}
-
-def private mk_uint_cast(at : LineInfo; var inner : Expression?) : Expression? {
-    var c = new ExprCall(at = at, name := "uint")
-    c.arguments |> emplace_new <| inner
-    return c
-}
-
-// every character must be a digit — a "4l"/"4x" typo falls through to the name path, where the
-// generated builder fails loudly (unresolved variable) instead of silently truncating via to_int
-def private is_digit_tok(s : string) : bool {
-    if (empty(s)) {
-        return false
-    }
-    var all_digits = true
-    peek_data(s) $(arr) {
-        for (c in arr) {
-            if (!is_number(int(c))) {
-                all_digits = false
-                break
-            }
-        }
-    }
-    return all_digits
-}
-
 // @span product: factors 'param' | int, folded left — "n*4" -> uint64(n * 4l)
 def private mk_range_len(at : LineInfo; spec : string) : Expression? {
     var e : Expression?
@@ -162,33 +132,6 @@ def private mk_hz(at : LineInfo; call_name : string; bf : BufField) : Expression
         c.arguments |> emplace_new <| mk_range_len(at, bf.rng)
     }
     return c
-}
-
-// One grid dim: "1" -> 1u ; "name" -> uint(name) ; "name/cov" -> ceil. A literal coverage folds
-// the bias — uint((name + 255l) / 256l) — matching the hand-written spelling; a named coverage
-// (global or param) emits uint((name + cov - 1l) / cov).
-def private mk_grid_dim(at : LineInfo; spec : string) : Expression? {
-    let s = strip(spec)
-    if (s == "1") {
-        return new ExprConstUInt(at = at, value = 1u)
-    }
-    let parts <- split(s, "/")
-    if (length(parts) == 1) {
-        return mk_uint_cast(at, new ExprVar(at = at, name := s))
-    }
-    let name = strip(parts[0])
-    let cov = strip(parts[1])
-    var div : Expression?
-    if (is_digit_tok(cov)) {
-        let cv = int64(to_int(cov))
-        var add = new ExprOp2(at = at, op := "+", left = new ExprVar(at = at, name := name), right = new ExprConstInt64(at = at, value = cv - 1l))
-        div = new ExprOp2(at = at, op := "/", left = add, right = new ExprConstInt64(at = at, value = cv))
-    } else {
-        var add = new ExprOp2(at = at, op := "+", left = new ExprVar(at = at, name := name), right = new ExprVar(at = at, name := cov))
-        var sub = new ExprOp2(at = at, op := "-", left = add, right = new ExprConstInt64(at = at, value = 1l))
-        div = new ExprOp2(at = at, op := "/", left = sub, right = new ExprVar(at = at, name := cov))
-    }
-    return mk_uint_cast(at, div)
 }
 
 // grid = comma-separated per WorkGroupID dim; padded to uint3 with trailing 1u.
@@ -243,32 +186,23 @@ def private const_t(var t : TypeDecl?) : TypeDecl? {
     return t
 }
 
-def private param_type(tok : string; var ok : bool&) : TypeDecl? {
-    if (tok == "int64") { return qmacro_type(type<int64>) }
-    if (tok == "uint64") { return qmacro_type(type<uint64>) }
-    if (tok == "int") { return qmacro_type(type<int>) }
-    if (tok == "uint") { return qmacro_type(type<uint>) }
-    ok = false
-    return qmacro_type(type<int64>)
-}
-
-def private role_ok(role : string) : bool {
-    // alias = a second view of a buffer another field already declares (hazard lives there);
-    // weight = never written during a step (untracked by design); "" = derived from the body.
-    // read/write/readwrite stay legal as cross-checked overrides of the derivation.
-    return (role == "" || role == "read" || role == "write" || role == "readwrite" ||
-        role == "weight" || role == "alias")
-}
-
-// the [metal_kernel] method of a lensed class — the body the access classifier walks
-def private find_kernel_fn(st : StructurePtr; mod : Module?; var nmatch : int&) : Function? {
+// the [metal_kernel] method of a lensed class — the body the access classifier walks. `want`
+// names the method for multi-kernel classes; "" counts every kernel method and returns the
+// first (the single-kernel form's exactly-one check rides on nmatch)
+def private find_kernel_fn(st : StructurePtr; mod : Module?; want : string; var nmatch : int&) : Function? {
     var kfn : Function?
+    let wanted = empty(want) ? "" : "{st.name}`{want}"
     mod |> for_each_function("") $(fn) {
         if (!empty(fn.arguments) && fn.arguments[0]._type.structType == st) {
             for (ann in fn.annotations) {
                 if (ann.annotation.name == "metal_kernel") {
-                    nmatch++
-                    if (kfn == null) {
+                    if (empty(wanted)) {
+                        nmatch++
+                        if (kfn == null) {
+                            kfn = fn
+                        }
+                    } elif (fn.name == wanted) {
+                        nmatch++
                         kfn = fn
                     }
                 }
@@ -276,13 +210,6 @@ def private find_kernel_fn(st : StructurePtr; mod : Module?; var nmatch : int&) 
         }
     }
     return kfn
-}
-
-// derived direction of one tracked field off the classifier result
-def private derived_role(res : AccessResult; name : string) : string {
-    let r = key_exists(res.reads, name)
-    let w = key_exists(res.writes, name)
-    return w ? (r ? "readwrite" : "write") : (r ? "read" : "")
 }
 
 [structure_macro(name = metal_dispatch)]
@@ -309,7 +236,7 @@ class MetalDispatch : AstStructureAnnotation {
             return false
         }
         if (empty(grid)) {
-            errors := "[metal_dispatch] {fn_name}: 'grid' is required (per WorkGroupID dim: 1 | param | param/coverage)"
+            errors := "[metal_dispatch] {fn_name}: 'grid' is required (per WorkGroupID dim: int | param | param/coverage)"
             return false
         }
         // micro-grammar validation up front — a malformed spec must fail the compile here, not
@@ -328,7 +255,7 @@ class MetalDispatch : AstStructureAnnotation {
         for (dspec in split(grid, ",")) {
             let dparts <- split(dspec, "/")
             if (length(dparts) > 2) {
-                errors := "[metal_dispatch] {fn_name}: grid dim '{strip(dspec)}' has more than one '/' (1 | param | param/coverage)"
+                errors := "[metal_dispatch] {fn_name}: grid dim '{strip(dspec)}' has more than one '/' (int | param | param/coverage)"
                 return false
             }
         }
@@ -376,6 +303,11 @@ class MetalDispatch : AstStructureAnnotation {
         // error); weight/alias stay declared — frame policy and hazard ownership are not kernel
         // facts — but a body WRITE to either is refused. access_force=true restores the fully
         // declared contract (every @ssbo must carry a @role) when a body is unanalyzable.
+        // Multi-kernel form ([vk_dispatch]'s sibling): N [metal_dispatch] instances on one
+        // class, each naming its [metal_kernel] method via kernel= — every instance emits its
+        // own builder, binds the full field set, and STAGES its own kernel's derived access.
+        let kern = find_arg(args, "kernel") ?as tString ?? ""
+        let multi = !empty(kern)
         let accessForce = find_arg(args, "access_force") ?as tBool ?? false
         for (bf in bufs) {   // default: staging follows the (declared or later-derived) role
             bf.hzrole = bf.role
@@ -395,14 +327,19 @@ class MetalDispatch : AstStructureAnnotation {
                 }
             }
             var nmatch = 0
-            let kfn = find_kernel_fn(st, compiling_module(), nmatch)
-            if (kfn == null) {
+            let kfn = find_kernel_fn(st, compiling_module(), kern, nmatch)
+            if (multi && kfn == null) {
+                errors := "[metal_dispatch] {fn_name}: no [metal_kernel] method '{kern}' on {st.name}"
+                delete tracked
+                return false
+            }
+            if (!multi && kfn == null) {
                 errors := "[metal_dispatch] {fn_name}: no [metal_kernel] method on {st.name} to derive buffer access from (access_force=true to declare instead)"
                 delete tracked
                 return false
             }
-            if (nmatch != 1) {
-                errors := "[metal_dispatch] {fn_name}: {nmatch} [metal_kernel] methods matched {st.name} — expected exactly one"
+            if (!multi && nmatch != 1) {
+                errors := "[metal_dispatch] {fn_name}: {nmatch} [metal_kernel] methods matched {st.name} — multi-kernel classes pick per instance via kernel="
                 delete tracked
                 return false
             }
@@ -425,6 +362,19 @@ class MetalDispatch : AstStructureAnnotation {
                         delete tracked
                         return false
                     }
+                } elif (multi) {
+                    // per-kernel view of shared fields: unused-here is fine (a sibling kernel
+                    // uses it), the declared role must COVER this kernel's derived access, and
+                    // staging follows THIS kernel's actual access, not the declared union
+                    let cov = (empty(dr) || decl == "" || decl == "alias" || decl == dr
+                        || (decl == "readwrite" && (dr == "read" || dr == "write")))
+                    if (!cov) {
+                        errors := "[metal_dispatch] {fn_name}: field '{bf.name}' declares @role='{decl}' but kernel '{kern}' derives '{dr}' — the declared role must cover every kernel"
+                        delete res
+                        delete tracked
+                        return false
+                    }
+                    bf.hzrole = dr
                 } elif (decl == "alias") {
                     // an alias view stages its OWN derived access: the tracker keys ranges by
                     // buffer, so both views' staging unions into the buffer-level truth (a write
@@ -479,7 +429,7 @@ class MetalDispatch : AstStructureAnnotation {
                 body |> push(mk_hz(at, "hz_write", bf))
             }
         }
-        body |> push(mk_var_call(at, "hz_gate", "enc"))
+        body |> push(mk_call1(at, "hz_gate", "enc"))
         body |> push(mk_kn_dispatch(at, grid, tgi, tgs))
 
         // Build the builder: void return, enc + one MetalBuffer? per @ssbo/@uniform field (its
@@ -506,7 +456,7 @@ class MetalDispatch : AstStructureAnnotation {
                     return false
                 }
                 var ok = true
-                var pt = param_type(strip(nt[1]), ok)
+                var pt = param_type(at, strip(nt[1]), ok)
                 if (!ok) {
                     errors := "[metal_dispatch] {fn_name}: param '{strip(p)}' has unsupported type '{strip(nt[1])}' (int/uint/int64/uint64)"
                     return false
@@ -611,16 +561,14 @@ class MetalManualDispatchCensus : AstPassMacro {
             }
             if (!lensed && !empty(tracked)) {
                 var nmatch = 0
-                kfn = find_kernel_fn(st, mod, nmatch)
+                kfn = find_kernel_fn(st, mod, "", nmatch)
                 if (kfn != null && nmatch == 1) {
                     var res <- classify_field_access(kfn, mod, st, tracked)
                     if (empty(res.err)) {   // an unanalyzable body keeps the declared contract as-is
                         for (field in st.fields) {
                             let role = find_arg(field.annotation, "role") ?as tString ?? ""
                             continue if (role != "read" && role != "write" && role != "readwrite")
-                            let r = key_exists(res.reads, "{field.name}")
-                            let w = key_exists(res.writes, "{field.name}")
-                            let dr = w ? (r ? "readwrite" : "write") : (r ? "read" : "")
+                            let dr = derived_role(res, "{field.name}")
                             if (dr != role) {
                                 let drName = empty(dr) ? "unused" : dr
                                 macro_error(prog, field.at, "@ssbo field '{field.name}' of {st.name} declares @role='{role}' but the kernel body derives '{drName}' — fix the stale declaration")

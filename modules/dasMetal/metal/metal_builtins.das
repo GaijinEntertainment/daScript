@@ -13,13 +13,9 @@ module metal_builtins shared public
 require daslib/shader_lingua_franca public
 require daslib/math_bits   // uint_bits_to_float — the tensor-op CPU stubs decode bf16/f16 halfwords
 
-// ===== compute builtins (Metal-only additions) =====
-// simdgroup IDs, GLSL subgroup spellings (KHR_shader_subgroup names — portable if dasSpirv grows
-// subgroup support later); the emitter lowers each to Metal's simdgroup attribute.
-var gl_SubgroupInvocationID : uint      // lane within the simdgroup   -> [[thread_index_in_simdgroup]]
-var gl_SubgroupSize : uint              // simdgroup execution width   -> [[threads_per_simdgroup]]
-var gl_NumSubgroups : uint              // simdgroups per threadgroup  -> [[simdgroups_per_threadgroup]]
-var gl_SubgroupID : uint                // simdgroup within the group  -> [[simdgroup_index_in_threadgroup]]
+// ===== compute builtins =====
+// The subgroup IDs (gl_Subgroup* — KHR_shader_subgroup spellings) live in shader_lingua_franca
+// (shared): dasSpirv speaks them too, and both emitters lower the same names.
 
 // ===== loop shaping =====
 // ===== simdgroup reductions + shuffles (Metal spellings — the Metal value-add) =====

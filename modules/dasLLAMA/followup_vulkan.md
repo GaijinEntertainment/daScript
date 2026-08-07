@@ -176,6 +176,19 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    Small addition: enable when present, and consider demoting cold stacks' priority instead
    of only boosting everything.
 
+18. **`rsqrt` vs `1.0/sqrt` — the RMS-norm parity spelling (ledgered 2026-08-07, found by
+   the cross-backend similarity audit).** The three rails spell the same inverse norm two
+   ways: CPU `1.0 / sqrt(ss)` (`dasllama_math.das` rmsnorm_template), Vulkan pinned to that
+   exact form for CPU==GPU bit-parity (`dasllama_vulkan_classes.das` RmsWgBase, the comment
+   says so), Metal `rsqrt(..)` — and Metal's divergence SURVIVES its token-for-token decode
+   parity arms, so the bit-pin may be softer than assumed. Until settled, any shared or
+   reified RMS body must carry the spelling as an explicit policy knob — never silently
+   unify. DECIDE BY MEASUREMENT, not taste: (a) the cost of `1.0/sqrt` vs `rsqrt` on each
+   GPU rail (one op per row — expected noise, but measured is measured); (b) the cost and
+   golden-output shift of switching the CPU reference itself to rsqrt form. If the CPU
+   switches, both backends unify on `rsqrt` and the vulkan pin dissolves; if not, the knob
+   stays and documents why.
+
 ## Sequencing
 
 **The osmosis principle (Boris, 2026-08-06, mid-walkthrough):** older/dense families are
@@ -191,3 +204,11 @@ After the reorg arc lands (this doc is a product of it — see ARCHITECTURE.md's
 ledger). First measurable milestone: zen2 resident decode/prefill numbers vs the cooperative
 tier on the same models, which also decides how hard items 3–4 are pushed. Item 1 (shapes
 module) is independent and can land any time — it is pure structure.
+
+19. **The dry bake cannot see the workgroup cap.** `vk_moe_init`'s dry path returns before
+    `vkGetPhysicalDeviceProperties`, so `g_gpu.max_wg_bytes` stays 0 and `DlimVulkanConfig`
+    has no twin field — an offline-baked plan cannot record which class kernels the target
+    device will decline (`vkd_wg_fits` declines everything under a 0 cap if a generated
+    `ensure_*` runs dry). The live path declines residency in `vk_rdec_prepare`; the plan
+    side needs `max_wg_bytes` in the probed config + the dlim identity, mirroring
+    `max_storage_range`.

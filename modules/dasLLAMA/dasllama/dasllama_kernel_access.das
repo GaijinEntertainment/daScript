@@ -7,9 +7,10 @@ require daslib/ast
 require daslib/ast_boost
 require daslib/rtti
 require strings   // ends_with — generic-instance call names carry a module prefix
+require daslib/strings_boost   // split / strip — the shared grid/params micro-format tokenizers
 
 // Interprocedural read/write classifier over a declared set of tracked module globals — the
-// shared analysis half of the GPU dispatch lenses (vulkan today, metal's @role next). Given a
+// shared analysis half of the GPU dispatch lenses ([metal_dispatch] + [vk_dispatch]). Given a
 // kernel function, it walks the body (recursing into same-module helpers) and reports which
 // tracked globals are read and which are written. Anything it cannot prove — a tracked global
 // passed whole as an argument to a call it does not model — lands in `err` so the lens can fail
@@ -96,18 +97,6 @@ def private tmm2d_c_arg(cname : string) : int {
     return cname |> ends_with("tmm2d_q8_f32") || cname |> ends_with("tmm2d_q8_f16s") ? 11 : -1
 }
 
-def private all_digits(s : string) : bool {
-    var ok = !empty(s)
-    peek_data(s) $(bytes) {
-        for (b in bytes) {
-            if (!is_number(int(b))) {
-                ok = false
-            }
-        }
-    }
-    return ok
-}
-
 // The plain function name behind a resolved call. Post-infer a call carries the mangled form —
 // `__::<module>`<name>` for a plain function, plus a decimal instance hash for a generic
 // instance — and every instance of one generic shares its parameters' constness.
@@ -118,7 +107,7 @@ def public callee_base_name(cname : string) : string {
         n = slice(n, cc + 2)
     }
     var tick = rfind(n, "`")
-    if (tick >= 0 && all_digits(slice(n, tick + 1))) {
+    if (tick >= 0 && is_digit_tok(slice(n, tick + 1))) {
         n = slice(n, 0, tick)
         tick = rfind(n, "`")
     }
@@ -570,4 +559,93 @@ def classify_global_access(fn : Function?; mod : Module?; tracked : table<string
 //! the concrete class, like the emitter does); free callees stay intra-body.
 def classify_field_access(fn : Function?; mod : Module?; st : StructurePtr; tracked : table<string>) : AccessResult {
     return <- classify_access(fn, mod, st, tracked, true)
+}
+
+// ===== the dispatch-lens micro-grammar =====
+// The spec-token predicates + AST-emission core both lenses ([metal_dispatch] / [vk_dispatch])
+// share; one owner so the grid/tg/params grammars cannot drift apart again.
+
+//! every character is a digit — a "4l"/"4x" typo falls through to the name path, where the
+//! generated surface fails loudly (unresolved variable) instead of silently truncating via to_int
+def is_digit_tok(s : string) : bool {
+    if (empty(s)) {
+        return false
+    }
+    var ok = true
+    peek_data(s) $(arr) {
+        for (c in arr) {
+            if (!is_number(int(c))) {
+                ok = false
+                break
+            }
+        }
+    }
+    return ok
+}
+
+//! the legal @role spellings. alias = a second view of a buffer another field already declares
+//! (hazard lives there); weight = never written during a step (untracked by design); "" = derived
+//! from the body. read/write/readwrite stay legal as cross-checked overrides of the derivation.
+def role_ok(role : string) : bool {
+    return (role == "" || role == "read" || role == "write" || role == "readwrite" ||
+        role == "weight" || role == "alias")
+}
+
+//! derived direction of one tracked field off the classifier result
+def derived_role(res : AccessResult; name : string) : string {
+    let r = key_exists(res.reads, name)
+    let w = key_exists(res.writes, name)
+    return w ? (r ? "readwrite" : "write") : (r ? "read" : "")
+}
+
+//! wrap an expression in uint(...)
+def mk_uint_cast(at : LineInfo; var inner : Expression?) : Expression? {
+    var c = new ExprCall(at = at, name := "uint")
+    c.arguments |> emplace_new <| inner
+    return c
+}
+
+//! one-argument call: nm(a0), with a0 a variable reference
+def mk_call1(at : LineInfo; nm, a0 : string) : ExpressionPtr {
+    var c = new ExprCall(at = at, name := nm)
+    c.arguments |> emplace_new <| new ExprVar(at = at, name := a0)
+    return c
+}
+
+//! One grid dim: int literal -> uint const ; "name" -> uint(name) ; "name/cov" -> ceil-divide.
+//! A literal coverage folds the bias — uint((name + 255l) / 256l) — matching the hand-written
+//! spelling; a named coverage (global or param) emits uint((name + cov - 1l) / cov).
+def mk_grid_dim(at : LineInfo; spec : string) : Expression? {
+    let s = strip(spec)
+    if (is_digit_tok(s)) {
+        return new ExprConstUInt(at = at, value = uint(to_int(s)))
+    }
+    let parts <- split(s, "/")
+    if (length(parts) == 1) {
+        return mk_uint_cast(at, new ExprVar(at = at, name := s))
+    }
+    let nm = strip(parts[0])
+    let cov = strip(parts[1])
+    var div : Expression?
+    if (is_digit_tok(cov)) {
+        let cv = int64(to_int(cov))
+        var add = new ExprOp2(at = at, op := "+", left = new ExprVar(at = at, name := nm), right = new ExprConstInt64(at = at, value = cv - 1l))
+        div = new ExprOp2(at = at, op := "/", left = add, right = new ExprConstInt64(at = at, value = cv))
+    } else {
+        var add = new ExprOp2(at = at, op := "+", left = new ExprVar(at = at, name := nm), right = new ExprVar(at = at, name := cov))
+        var sub = new ExprOp2(at = at, op := "-", left = add, right = new ExprConstInt64(at = at, value = 1l))
+        div = new ExprOp2(at = at, op := "/", left = sub, right = new ExprVar(at = at, name := cov))
+    }
+    return mk_uint_cast(at, div)
+}
+
+//! map a params-string type token to a fresh TypeDecl (the size/offset scalars a generated
+//! dispatch surface takes as parameters); ok = false on an unsupported token
+def param_type(at : LineInfo; tok : string; var ok : bool&) : TypeDeclPtr {
+    if (tok == "int64") { return new TypeDecl(at = at, baseType = Type.tInt64) }
+    if (tok == "uint64") { return new TypeDecl(at = at, baseType = Type.tUInt64) }
+    if (tok == "int") { return new TypeDecl(at = at, baseType = Type.tInt) }
+    if (tok == "uint") { return new TypeDecl(at = at, baseType = Type.tUInt) }
+    ok = false
+    return new TypeDecl(at = at, baseType = Type.tInt64)
 }

@@ -59,9 +59,17 @@ suspicious green, must be readable as text in the log, not only as an id or floa
 
 **A new GPU kernel ships with a small model in the kernel coverage suite** that dispatches it.
 
-**A kernel-unit arm compares its kernel against a CPU oracle, never against another GPU
-dispatch.** Two dispatches that break the same way compare equal — a GPU-vs-GPU parity arm
-passes vacuously on a shape neither side handles.
+**A kernel-unit arm compares its kernel against a CPU oracle.** A GPU-vs-GPU arm is allowed
+only where the property under test is cross-dispatch bit-identity that no CPU oracle can
+witness — and then its output buffers are prefilled with a sentinel value before the runs.
+Two dead dispatches compare equal; the sentinel is what turns that into a red. An IN-PLACE
+output plane cannot hold both its input and a sentinel: pair its compare with a liveness
+check that the plane actually changed.
+
+**A harness that prints output for another tool to compare fails loudly when it has nothing
+to print.** If the run ends without producing its comparison lines — wrong flags, failed
+load, anything — the process returns a non-zero exit code. Two empty outputs diff clean; the
+exit code is what keeps that from reading as a pass.
 
 **A test arm's skip gate keys on a device capability or mode predicate (`coopmat_mode`,
 `has_coopmat2`, `dn_shared_ok`), never on the existence of a runtime artifact such as a
@@ -94,8 +102,9 @@ defect, and this section is the whole test — a rule here names only its own fi
 never where a neighbouring concern lives. `ARCHITECTURE.md` §1 carries the boundaries and the
 carve-outs.
 
-**A new file ships with its rule here, its charter in `ARCHITECTURE.md` §1, and its tests, in
-the same change.** A file without its records is a defect.
+**A new file under `dasllama/` ships with its rule here, its charter in `ARCHITECTURE.md` §1,
+and its tests, in the same change.** A file without its records is a defect. A new file under
+`tests/` registers in `tests/CLAUDE.md` (and in `tests/run.das` when it joins a suite) instead.
 
 **A symbol the facade re-exports is required through `dasllama/dasllama` (or
 `dasllama/dasllama_transformer`), never from the engine file that defines it.** An engine-level
@@ -198,13 +207,18 @@ A backend is a family of role files, and the role names the contents. `<gpu>` is
 - `dasllama_<gpu>_prefill.das` — the batched prefill driver and its batch arms.
 - `dasllama_metal_shapes.das` — model-shape servability gates, portable: no GPU requires, so
   any box can bake. Vulkan has no shapes file (`ARCHITECTURE.md` §1.5).
-- the kernel-access lens — `dasllama_metal_lens.das` (Metal); on Vulkan the dispatch macro
-  derives access, there is no separate lens file.
+- `dasllama_metal_lens.das` — the `[metal_dispatch]` structure macro: generates the `enc_*`
+  builders, derives per-field access (`kernel=` picks the method; a multi-kernel class takes
+  one lens instance per kernel), runs the manual-dispatch census. Macro code only; a kernel
+  body or device call here is a defect. On Vulkan the dispatch macro itself derives access —
+  there is no separate lens file.
 - `dasllama_math_vulkan.das` — the Vulkan family entry: probe, arm, image identity, routers,
   init hooks. Its name is a require contract; renaming it is a defect.
 - `dasllama_metal_gemm.das` — the Metal batch-GEMM donor.
 - `dasllama_gpu_tier.das` — the device-cooperation SPI: hook types, install slots, status.
-- `dasllama_kernel_access.das` — the shared body-walk read/write classifier both lenses run on.
+- `dasllama_kernel_access.das` — the shared body-walk read/write classifier both lenses run on,
+  and the dispatch-lens micro-grammar (grid/tg/params spec parsing and emission). A grammar
+  helper duplicated into a lens file is a defect.
 - `dasllama_gpu_resident.das` — the whole-model GPU residency rail: the flavor bake, the stack
   upload, and the device-resident decode/prefill overrides. No device call and no GPU require
   belongs here; a device-specific arm is a defect. See `ARCHITECTURE.md` §1.5.
@@ -219,9 +233,10 @@ other module creating a device is a defect.
 **A PSO set is compiled and released by the module that owns its kernels.** Decode:
 `metal_decode_init` / `metal_kernels_release` in `dasllama_metal_kernels`. Prefill:
 `metal_prefill_init` / `metal_prefill_shutdown` in `dasllama_metal_prefill`. A PSO compiled or
-released anywhere else is a defect. Vulkan: a pipeline is created only by a
+released anywhere else in the engine is a defect. Vulkan: a pipeline is created only by a
 `[vk_dispatch]`-generated `ensure_*` and torn down by `vk_drop_model_state`; a hand-written
-pipeline build anywhere else is a defect.
+pipeline build anywhere else in the engine is a defect. Tests are exempt: a kernel-unit gate
+compiles its own short-lived pipeline from the emitted source and releases it in the same gate.
 
 **Race code for a kernel family lives beside the family** — kernels races its families, prefill
 races its own; the shared scaffolding (`race_buf`, `race_envelope_ok`, `race_pair_ms`) is
@@ -354,9 +369,14 @@ ignores a field. A twin that shifts the other's fields to different slots is a d
 
 **No value reaches an encoder twice.** A scalar uniform buffer passed alongside the identical
 value as a parameter is a defect; so is a kargs field the fields beside it already determine.
+Carve-out: a builder parameter the `grid=`/`tg=` spec consumes HOST-side (the dispatch
+geometry) may repeat a kargs field the kernel reads device-side — those are two consumers,
+not one value bound twice.
 
-**Nothing dispatches a kernel except its `enc_*` builder.** A hand-rolled bind list anywhere
-else — a race harness, a benchmark, a probe — is a defect.
+**Nothing in the engine, a benchmark, or a race harness dispatches a kernel except its
+`enc_*` builder.** A hand-rolled bind list in `dasllama/`, `benchmarks/`, or `performance/`
+is a defect. The kernel-unit gates under `tests/` hand-bind on purpose: the gate is an
+independent witness of the binding contract, so a builder defect cannot mask a kernel defect.
 
 **A cache keyed by a host address carries the span and the form in its key.** A hit must cover
 the request, and different upload forms live in separate tables.
@@ -377,21 +397,6 @@ shapes that cannot reduce, not for code written oversized.
 
 **Platform backends implement narrow registered contracts.** Platform-specific code in a
 platform-neutral file is a defect.
-
-### Vulkan
-
-**A buffer bound as one SSBO range stays under `vk_max_storage_range()`, checked where its
-size is NEGOTIATED, not where it binds.** The bind site cannot shrink a buffer that was sized
-wrong; past the range every read is undefined, not slow.
-
-**A resident-driver change ships with `harness/parity.das` GPU-vs-CPU runs on one q8 and one
-kq model** — the vulkan arm is `DASLLAMA_GPU=1` (never `--ngl`, which is the Metal arm and
-panics without Metal). Kernel-unit green does not cover driver wiring, and the two
-activation-quant classes ride different enc paths — one model class cannot witness the other's.
-
-**A descriptor set cached across dispatches lives in state `vk_drop_model_state` clears** — a
-`*_ready` latch or a field inside `g_gpu` / the arena. A set cached in anything the drop does
-not touch dangles into the next model.
 
 **Every program root declares `options stack = 524288`.** A test, harness, benchmark, or tool
 that picks its own number — larger or smaller — is a defect, and so is a new root that omits the
@@ -421,4 +426,23 @@ an `[EnvConfig]` field there, read as `g_env_*.<field>`, which is also what gene
 runtime) are `Option<T>` fields. Dynamic names — a variable named by data, not by code — go
 through `env_is_set` / `env_value_of`. The config loads once at context init, so
 `set_env_variable` mid-process is invisible to it: arm a child process's environment instead.
+A WRITE of a foreign library's knob (`set_env_variable` with a literal name) is allowed only
+before that library first reads it, and the name must be a declared `[EnvConfig]` knob — the
+registry test scans writes too, so a re-spelled name fails it.
 `tests/test_env_registry.das` enforces all of this.
+
+
+### Vulkan
+
+**A buffer bound as one SSBO range stays under `vk_max_storage_range()`, checked where its
+size is NEGOTIATED, not where it binds.** The bind site cannot shrink a buffer that was sized
+wrong; past the range every read is undefined, not slow.
+
+**A resident-driver change ships with `harness/parity.das` GPU-vs-CPU runs on one q8 and one
+kq model** — the vulkan arm is `DASLLAMA_GPU=1` (never `--ngl`, which is the Metal arm and
+panics without Metal). Kernel-unit green does not cover driver wiring, and the two
+activation-quant classes ride different enc paths — one model class cannot witness the other's.
+
+**A descriptor set cached across dispatches lives in state `vk_drop_model_state` clears** — a
+`*_ready` latch or a field inside `g_gpu` / the arena. A set cached in anything the drop does
+not touch dangles into the next model.

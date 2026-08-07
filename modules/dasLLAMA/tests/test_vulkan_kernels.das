@@ -112,6 +112,9 @@ def test_vkd_ar_class(t0 : T?) {
             var y2 : array<float>
             y2 |> resize(dim)
             vk_add_rms(x2, a, w, y2, int64(dim), eps, ascale, true)
+            // the residual plane is IN-PLACE, so it cannot hold a sentinel — this liveness check
+            // is its non-vacuity witness (add_on with a[0] = -3.0 must change x2)
+            t |> success(x2[0] != x[0], "the seam wrote the residual stream")
             // the class twin through the generated surface
             let xd = make_device_buf(bytes)
             let ad = make_device_buf(bytes)
@@ -122,7 +125,17 @@ def test_vkd_ar_class(t0 : T?) {
             var xc : array<float>
             yc |> resize(dim)
             xc |> resize(dim)
+            // Sentinel-prefill the twin's output plane: a GPU-vs-GPU compare is vacuous-prone —
+            // when BOTH kernels are dead (the MoltenVK 1.4.1 silent-discard cliff) two zeroed
+            // buffers match trivially. A sentinel no real computation can produce turns every
+            // dead combination into a loud mismatch.
+            var ysent : array<float>
+            ysent |> resize(dim)
+            for (i in range(dim)) {
+                ysent[i] = -999.25
+            }
             unsafe {
+                upload_region_at(yd, 0l, addr<uint8 const?>(ysent[0]), bytes)
                 upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bytes)
                 upload_region_at(ad, 0l, addr<uint8 const?>(a[0]), bytes)
                 upload_region_at(wd, 0l, addr<uint8 const?>(w[0]), bytes)
@@ -164,16 +177,16 @@ def test_vkd_ar_class(t0 : T?) {
             delete y2
             delete yc
             delete xc
+            delete ysent
         } else {
             feint("dasVulkan not present — skipping\n")
         }
     }
 }
 
-// ===== the kq GEMV family: class twins vs the SHIPPED kernels, per format =====
+// ===== the kq GEMV family: class kernels vs the CPU oracle, per format =====
 // Synthetic planes — any bit pattern is valid K-quant data, EXCEPT the scale words, which are
-// composed from finite halves so a NaN can't poison the bit-compare. Identical inputs, identical
-// lane geometry (64-wide, one lane per 32-block) => the class twin must match BIT-EXACTLY.
+// composed from finite halves so a NaN can't poison the compare.
 
 def private safe_half(i : uint) : uint {
     let tab = fixed_array(0x3C00u, 0xB800u, 0x3400u, 0x4200u, 0x2E00u, 0xBC00u, 0x3E00u, 0xB000u)
@@ -202,8 +215,13 @@ def private approx(x, y : float) : bool => abs(x - y) <= 2e-3 * max(1.0, max(abs
 
 def private mismatch_rel(got, want : array<float>; bar : float) : int {
     var bad = 0
-    for (g, w in got, want) {
-        if (abs(g - w) > bar * max(1.0, max(abs(g), abs(w)))) {
+    for (i in range(length(got))) {
+        let g = got[i]
+        let w = want[i]
+        if (!(abs(g - w) <= bar * max(1.0, max(abs(g), abs(w))))) {
+            if (bad < 6) {   // the eyeball dump: enough to tell tolerance drift from garbage
+                to_log(LOG_ERROR, "  mismatch [{i}] gpu {g} cpu {w}\n")
+            }
             bad++
         }
     }
@@ -216,8 +234,13 @@ def private mismatch_approx(got, want : array<float>) : int => mismatch_rel(got,
 // running-sum magnitude, not the (possibly cancelled-small) result
 def private mismatch_bars(got, want : array<float>; rel, absf : float) : int {
     var bad = 0
-    for (g, w in got, want) {
-        if (abs(g - w) > absf && abs(g - w) > rel * max(1.0, max(abs(g), abs(w)))) {
+    for (i in range(length(got))) {
+        let g = got[i]
+        let w = want[i]
+        if (!(abs(g - w) <= absf) && !(abs(g - w) <= rel * max(1.0, max(abs(g), abs(w))))) {
+            if (bad < 6) {
+                to_log(LOG_ERROR, "  mismatch [{i}] gpu {g} cpu {w}\n")
+            }
             bad++
         }
     }
@@ -251,7 +274,7 @@ def private mismatch_qbytes(got, want : array<uint>; tol : int) : int {
             let b = int(w >> uint(sh * 8)) & 0xFF
             let sa = a >= 128 ? a - 256 : a
             let sb = b >= 128 ? b - 256 : b
-            if (abs(sa - sb) > tol) {
+            if (!(abs(sa - sb) <= tol)) {
                 bad++
             }
         }
@@ -1555,8 +1578,12 @@ def test_vkd_da_attn(t0 : T?) {
 def test_vkd_at_attn(t0 : T?) {
     t0 |> run("prefill attention class kernel == the CPU oracle (partial tiles, gated)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_at_attn_cls()) {
+            if (!vk_moe_init()) {
                 feint("no Vulkan device — skipping\n")
+                return
+            }
+            if (!ensure_at_attn_cls()) {
+                feint("at_attn class declined on this device (workgroup cap) — skipping\n")
                 return
             }
             let nheads = 4
@@ -1651,8 +1678,12 @@ def test_vkd_at_attn(t0 : T?) {
 def test_vkd_da_attn_b(t0 : T?) {
     t0 |> run("batched decode attention class kernel == the CPU oracle (mirror offsets)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_da_attn_b_cls()) {
+            if (!vk_moe_init()) {
                 feint("no Vulkan device — skipping\n")
+                return
+            }
+            if (!ensure_da_attn_b_cls()) {
+                feint("da_attn_b class declined on this device (workgroup cap) — skipping\n")
                 return
             }
             let nheads = 4
@@ -1741,8 +1772,12 @@ def test_vkd_da_attn_b(t0 : T?) {
 def test_vkd_da_attn_b_h128(t0 : T?) {
     t0 |> run("h128 coopmat attention class kernel == the CPU oracle") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                feint("no Vulkan device — skipping\n")
+                return
+            }
             if (!ensure_da_attn_b_cls()) {   // probe via the NON-coopmat twin — a cm pipeline build
-                feint("no Vulkan device — skipping\n")   // on a no-coopmat device panics, not feints
+                feint("da_attn_b class declined on this device (workgroup cap) — skipping\n")   // on a no-coopmat device panics, not feints
                 return
             }
             if (!g_gpu.has_coopmat) {
@@ -2585,8 +2620,12 @@ def test_vkd_rope_b_pair(t0 : T?) {
 def test_vkd_at_prep(t0 : T?) {
     t0 |> run("attention prep class (q+k collapse) == the CPU oracle (gated+qknorm+partial rope)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_at_prep_cls()) {
+            if (!vk_moe_init()) {
                 feint("no Vulkan device — skipping\n")
+                return
+            }
+            if (!ensure_at_prep_cls()) {
+                feint("at_prep class declined on this device (workgroup cap) — skipping\n")
                 return
             }
             let nh = 4
@@ -2748,7 +2787,7 @@ def test_vkd_at_prep(t0 : T?) {
 def test_vkd_dn_family(t0 : T?) {
     t0 |> run("deltanet class kernels == the CPU oracle (conv, fused step, 2-phase scan)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_dn_conv_cls()) {
+            if (!vk_moe_init()) {
                 feint("no Vulkan device — skipping\n")
                 return
             }
@@ -2756,7 +2795,7 @@ def test_vkd_dn_family(t0 : T?) {
                 feint("dn chain declined on this device (shared-memory cap) — skipping\n")
                 return
             }
-            verify(ensure_dn_step_cls() && ensure_dn_scan_p1_cls() && ensure_dn_scan_p2_cls(),
+            verify(ensure_dn_conv_cls() && ensure_dn_step_cls() && ensure_dn_scan_p1_cls() && ensure_dn_scan_p2_cls(),
                 "the dn class rails must engage on a device over the shared cap")
             let ds = 64
             let nkh = 2

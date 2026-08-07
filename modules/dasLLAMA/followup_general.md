@@ -97,6 +97,14 @@
    Both become expressible the moment a helper can take a pointer or a thread-space reference it
    may advance, which is the annotation work already ruled in (`@threadgroup p : float4?` and its
    `device` default). Done = k6 and q8 derive from the same base, and the family is five for five.
+   Status 2026-08-07 (vulkan-on-mac leg (b) recon): the pointer-param unlock HAS landed in
+   msl_emit (address-space-checked pointer params), and Q8/K6 are also expressible without it
+   (index-math / reload-per-kb) — but every route changes these hot inner loops (interleaved A/B
+   measurement required; the kernels-suite oracles cover correctness only), Mx4 is a third
+   stay-out (pre-loop vtab staging + bias-seeded accumulator locals need a prologue hook), and
+   Q8/Mx4 joining the base renumbers cnt/basep/bkt 6/7/8 → 7/8/9 (encoder + oracle-gate churn).
+   Ruled 2026-08-07: folds into the reification arc (the families get restamped there; the
+   constraints above apply — see plans/vulkan-on-mac.md leg (b) recon).
 
 9. **Prefill compiles its own PSO for kernels decode already has.** `enc_qk_norm_pf` in
    dasllama_metal_prefill.das is `enc_qk_norm`'s body with `g_pf_pso_qknorm` in place of
@@ -247,3 +255,28 @@
    facade surface (`set_asr_kv`, `--kv`, `--fp32-tower`, exec_fmt spellings, the q8 defaults).
    Going forward the new Documentation section in CODEREVIEW.md makes this a per-change check;
    this item is the one-time catch-up.
+
+19. **Oracle-suite hardening round 2 (PR #3653's review round, deferred by ruling).** The
+    kernels suite is census-complete but the bug-scan agents mapped axis-coverage holes where
+    a targeted kernel mutation stays green: the Part/PartB split-K softcap path (hardcoded 0.0
+    in those gates — distinct from the fixed single/batched arms), the SqAttnB q8 K-vs-V base
+    aliasing (rt.y = rt.x in the quant branch), the D-family khoff ≡ 0 under kv_mul=2/nheads=2,
+    gemm ndim=64 hiding the nBase column-tile term, gemv output buffers sized exactly (row
+    guards unobservable — pair with sentinel-padded planes), the argmax tie pair never sharing
+    a simdgroup (the simd_shuffle_xor tie-break unwitnessed), the misc softcap fixture spanning
+    only ±0.3·cap, rope bias planes zero-filled where production dummy-binds arbitrary bytes
+    (fill non-zero when hasbias=0), the neox×hasbias confound in the rope-store quant mirrors,
+    kq gemv weight reads past exactly-sized buffers (blocks MTL_SHADER_VALIDATION=1 runs), the
+    copy_row gate's tg=64 vs production 256, the dead b4 pad-column clamp cell, the q8 region
+    fixture's sel collapsing to a k-slot function (routing untested, padding only), and the 12
+    prefill-file gates still on dump-less tag-less local compares. Also latent: the two rope
+    oracles index tcos/tsin at [0, hs/2) while sizing rot/2 — reads OOB and ropes the
+    pass-through tail the moment a cell pairs neox=false with rot < hs (the flat gate's
+    identity-pad pattern is the fix). Also: migrate the prefill file's tag-less mismatch trio
+    to the shared dumping compares (~25 call sites).
+
+20. **`vk_moe_would_accept` / resident probes vs the wg-cap decline.** The resident decline
+    for an over-cap batched-attention class now lives in `vk_rdec_prepare` (live path only).
+    The offline plan cannot see the cap (followup_vulkan item 19) and `vk_moe_would_accept`
+    answers only format/geometry — a would-accept probe that consults device caps would let
+    schedulers plan without a live ensure_ round-trip.

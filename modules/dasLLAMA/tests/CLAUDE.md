@@ -56,8 +56,19 @@ fam-qwen35/fam-qwen35moe are deltanet hybrids whose batch cell asserts the per-r
 shape — metal batch steps 0, both rows served on the single-decode path; fam-qwen2moe's
 batch cell asserts the `graph` DECLINE on the planar model — shexp has no batch arm, and a
 blob twin's CPU batch fallback would trip the blob-only panic). The
-`kernels` suite (test_metal_prefill_kernels + test_metal_decode_kernels — model-less kernel units, ~80s) has no arms;
-remember it exists — kernel uniform/binding changes MUST update its hand-bound dispatches.
+`kernels` suite (7 files: test_metal_{prefill,decode,rope,gemv,misc,attn,gemm}_kernels —
+model-less per-class CPU-oracle units covering the FULL metal kernel census, ~2-3 min) has
+no arms; remember it exists — kernel uniform/binding changes MUST update its hand-bound
+dispatches. Shared fixtures (buf helpers, eyeball-dump compares, kq plane + q8 blob
+builders) live in `_metal_kernel_common.das`; the prefill file predates it and keeps only its
+tag-less mismatch compares local (same arity would collide — the buf_* twins are retired).
+`_mtl_toy.das` is the `[metal_dispatch]` multi-kernel (kernel=) fixture — its gate in
+the misc file dispatches through the GENERATED builders (kn_ rail), not hand binds.
+A new gate gets a NEGATIVE CONTROL before its first commit (poison the oracle → red
+with dumps → revert); size an additive poison to beat rel·env at the longest dot, and give
+every derived-truth compare its own poison. A kernel with `@workgroup` state needs
+`metal_set_threadgroup_memory_length` in the gate exactly as in its production encoder —
+missing tgmem reads garbage silently.
 The `image` suite (test_model_image — the prepared-image .dlim rail): `mechanics` (synthetic
 carrier, model-free, runs in CI) `smol metal tower whisper voxtral parakeet qwen3a canary
 canary-dec gemma4a`; the voxtral arm re-saves a
