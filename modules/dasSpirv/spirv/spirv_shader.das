@@ -286,3 +286,26 @@ class SpirvDecodeAnnotation : AstFunctionAnnotation {
         return true
     }
 }
+
+// [spirv_combine] — a cm2 REDUCE combine function: referenced via @@name from coopmatReduce and
+// emitted as a SPIR-V function of the by-value (T, T) -> T shape (T = the tile component type).
+// [spirv_per_element] — a cm2 per-element function for coopmatPerElement: by-value
+// (row : uint, col : uint, elem : T, extras...) -> T; extras mirror the call site's trailing
+// arguments (a coopmat extra arrives as its per-element component). Marker only — signature
+// validation happens at emission (register_callback_func); bodies stay CPU-callable so oracle
+// math can run the exact combine/per-element code the GPU runs.
+[function_macro(name="spirv_combine")]
+class SpirvCombineAnnotation : AstFunctionAnnotation {
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+        func.moreFlags.neverInline = true
+        return true
+    }
+}
+
+[function_macro(name="spirv_per_element")]
+class SpirvPerElementAnnotation : AstFunctionAnnotation {
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+        func.moreFlags.neverInline = true
+        return true
+    }
+}
