@@ -45,6 +45,15 @@ def private is_self_field(ef : ExprField const?; tracked : table<string>) : bool
     return base is ExprVar && (base as ExprVar).name == "self"
 }
 
+// `self.<name>` regardless of tracking — the method-field-reference test (function-typed fields)
+def private is_self_method_ref(ef : ExprField const?) : bool {
+    var base = ef.value
+    if (base is ExprRef2Value) {
+        base = (base as ExprRef2Value).subexpr
+    }
+    return base is ExprVar && (base as ExprVar).name == "self"
+}
+
 def private write_root_name(e : Expression const?; tracked : table<string>; fieldMode : bool; var node : Expression const?&) : string {
     var cur = e
     while (true) {
@@ -419,6 +428,11 @@ class private AccessVisitor : AstVisitor {
             if (ACCESS_DEBUG) {
                 print("[access-dbg] read {expr.name} at={int(expr.at.line)}:{int(expr.at.column)} (field)\n")
             }
+        } elif (fieldMode && is_self_method_ref(expr)) {
+            // a method-FIELD read (`self.<method>` — the cm2 decode-method reference): follow the
+            // method like an invoke would, so its member accesses classify (the driver's
+            // class_method gate filters non-method names, so untracked data members are harmless)
+            callees |> insert(string(expr.name))
         }
         return expr
     }

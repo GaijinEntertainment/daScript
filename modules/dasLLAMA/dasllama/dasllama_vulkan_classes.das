@@ -3089,6 +3089,93 @@ class Q8nCm2Batch : MoeCmBase {
     }
 }
 
+// ===== the fmt-0 cm2 l-tile (the l-geometry re-cut: native planes, no q8n side stack) =====
+
+struct VkQ8Blk {
+    qs : uint[8]   // one fmt-0 q8 block: 32 packed int8 quants; the scale lives in wsh
+}
+
+// llama.cpp's cm2 quant "l" geometry on the NATIVE fmt-0 two-plane layout: 256 threads, one
+// 128-weight x 256-token tile per wg, BK=64 (2 blocks) per step, 8x-unrolled k loop. The decode
+// METHOD reads the separate scale plane by block index — the reason the class-method decode form
+// exists. Binding 4 unused (sparse)
+[vk_dispatch(name = "q8_batch_cm2l_cls", grid = "wgs", params = "wgs : int64")]
+class Q8Cm2LBatch : MoeCmBase {
+    @ssbo @binding = 0 wq : array<VkQ8Blk>       // fmt-0 weight quant blocks (8 words each)
+    @ssbo @binding = 1 wsh : array<float16>      // per-block weight scales (the second plane)
+    @ssbo @binding = 3 xf16 : array<float16>     // f16 activation plane
+    @ssbo @binding = 5 y : array<float>
+    @workgroup wg_blk0 : uint                    // the region's block base, staged for the decode method
+
+    [spirv_decode]
+    def decode_q8(blk : VkQ8Blk; bc, cib : uint2) : float16 {
+        let w = blk.qs[int(cib.y >> 2u)]
+        let q = (int(w) << ((3 - int(cib.y & 3u)) * 8)) >> 24
+        return wsh[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(q))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "q8_batch_cm2l_cls_spv")]
+    def run {
+        let reg = region_rec()
+        let wblk0 = reg.x
+        let row0 = reg.y
+        let cnt = reg.z
+        let tix = reg.w
+        let ttiles = (cnt + 255u) / 256u
+        let xt = tix % ttiles             // token 256-tile (fastest)
+        let wt = tix / ttiles             // weight 128-tile
+        if (gl_LocalInvocationID.x == 0u) {
+            wg_blk0 = wblk0
+        }
+        // A: the region's [d x n] q8 plane — block addressing; layout coords are region-local, so
+        // the decode method's scale index is wg_blk0 + bc.x * nbb + bc.y off the staged base
+        var tla : tensorLayout2DPad
+        tensorLayoutCreate(tla)
+        tensorLayoutSetBlockSize(tla, 1u, 32u)
+        tensorLayoutSetDimension(tla, pa.d, pa.n)
+        tensorLayoutSetStride(tla, pa.n / 32u, 1u)
+        // B: the f16 activation rows, transpose-viewed; the dimension cuts at the region's end
+        var tlb : tensorLayout2DPad
+        tensorLayoutCreate(tlb)
+        tensorLayoutSetDimension(tlb, row0 + cnt, pa.n)
+        tensorLayoutSetStride(tlb, pa.n, 1u)
+        // out: token-major y through the transpose view. MUST be the clamp-Constant layout type:
+        // only clamped layouts DISCARD out-of-bounds stores from a partial tile
+        var tlo : tensorLayout2DPad
+        tensorLayoutCreate(tlo)
+        tensorLayoutSetDimension(tlo, row0 + cnt, pa.d)
+        tensorLayoutSetStride(tlo, pa.d, 1u)
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        barrier()   // wg_blk0 visible before the first decode load
+        var a : coopmatWgA_f16_128x64
+        var b : coopmatWgB_f16_64x256
+        var acc : coopmatWgAcc_f16_128x256
+        let t0 = row0 + xt * 256u
+        let m0 = wt * 128u
+        // the 8x-unrolled main loop (their UNROLL_K = BK*8 = 512), then the sub-512 tail
+        var k = 0u
+        for (_i in range(int(pa.n / 512u))) {
+            for [unroll] (_j in range(8)) {
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+        }
+        while (k < pa.n) {
+            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode_q8)
+            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 256u, k, 64u, tv)
+            acc = coopmatMulAdd(a, b, acc)
+            k += 64u
+        }
+        coopmatClamp(acc, -65504.0, 65504.0)
+        var accw : coopmatWgAcc_f32_128x256
+        coopmatConvert(accw, acc)
+        coopmatStoreTensor(accw, y, 0u, tlo, t0, 256u, m0, 128u, tv)
+    }
+}
+
 // ===== rope + KV store + qk-norm =====
 
 struct QkRmsArgs {

@@ -85,6 +85,34 @@ def q8_gemm_oracle(wq : array<uint>; wsw : array<uint>; xq : array<uint>; xs : a
     }
 }
 
+// fmt-0 x f16 GEMM oracle (the cm2 l-tile's shape): q8 weight blocks dequantized by the wsh f16
+// scale, f16 activations, per (row, col) in block order — the device tiles reassociate, so
+// approx bars
+def q8f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
+                      recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nbb = n / 32
+    for (rr in range(nrec)) {
+        let wblk0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        let cnt = int(recs[rr * 4 + 2])
+        for (r in range(cnt)) {
+            for (c in range(d)) {
+                var acc = 0.0
+                for (b in range(nbb)) {
+                    let wb = wblk0 + c * nbb + b
+                    let wsf = wb % 2 == 0 ? unpackHalf2x16(wsw[wb / 2]).x : unpackHalf2x16(wsw[wb / 2]).y
+                    var bacc = 0.0
+                    for (j in range(32)) {
+                        bacc += float(byte_s8(wq, wb * 32 + j)) * half_at(xf, (row0 + r) * n + b * 32 + j)
+                    }
+                    acc += bacc * wsf
+                }
+                y[(row0 + r) * d + c] = acc
+            }
+        }
+    }
+}
+
 // a kq class instance with plane members bound — its blk_contrib IS the per-block dequant
 // bit-math under test, callable on the CPU (no subgroup machinery inside)
 def kq_cls_ref(fmt : int; wq, ws, xq : array<uint>; xs : array<float>) : KqGemvBase? {
