@@ -225,6 +225,13 @@ DETACHED clone — never in place, so lint rules still see original source shape
 Regression: `tests/typer_errors/test_static_if_profiles.das` (composed inits resolve;
 genuinely non-constant conds still refuse).
 
+## Side-arc follow-ups (miniature, next stopping point)
+
+- **dastest: always name who timed out.** The tsan lane's batch pass reported "1 errors —
+  Test timed out after 1800s" with NO test name (--failures-only + 80 worker subprocesses),
+  so a timeout costs a full serial rerun just to attribute it. The timeout error line must
+  carry the test file/name in every mode. (Hit live babysitting PR #3643, 2026-08-07.)
+
 ## Lint candidates (report at arc end, don't build mid-arc)
 
 - Raw clock-pair timing in engine dirs once the marker rail is canonical.
