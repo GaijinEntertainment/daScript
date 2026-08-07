@@ -525,6 +525,364 @@ def private q8_gemm64_b_gate(t : T?; dev, queue; tensor : bool; mp32, kdim, ndim
     delete env
 }
 
+// ===== the MoE gathered mul_mm family (Wave C) =====
+
+// Padded CSR route fixture: expert e's rows start at a 32-aligned base (the route prefix
+// contract). gather=1 rows read X through bkt (flat slot / nk); padded tail rows clamp to the
+// LAST live entry exactly as the kernels do, so srcrow carries the already-clamped answer.
+struct private MoeFix {
+    ne : int
+    pad : int           // total padded bucket rows
+    maxtiles : int      // grid.x — experts with fewer padded tiles exit in-kernel
+    cnt : array<uint>
+    basep : array<uint>
+    bkt : array<uint>
+    srcrow : array<int> // per padded bucket row: the X row its result reads
+}
+
+def private moe_fix(counts : array<int>; gather : bool; nk, nx : int) : MoeFix {
+    var fx : MoeFix
+    fx.ne = length(counts)
+    fx.cnt |> reserve(fx.ne)
+    fx.basep |> reserve(fx.ne)
+    var pad = 0
+    var mt = 1
+    for (c in counts) {
+        fx.cnt |> push(uint(c))
+        fx.basep |> push(uint(pad))
+        let rows = (c + 31) / 32 * 32
+        mt = max(mt, rows / 32)
+        pad += rows
+    }
+    fx.pad = pad
+    fx.maxtiles = mt
+    fx.srcrow |> resize(pad)
+    if (gather) {
+        fx.bkt |> resize(pad)
+        for (e in range(fx.ne)) {
+            let rb = int(fx.basep[e])
+            let rows = (counts[e] + 31) / 32 * 32
+            for (r in range(rows)) {
+                if (r < counts[e]) {
+                    fx.bkt[rb + r] = uint((r * 7 + e * 5 + 3) % (nx * nk))
+                }
+                fx.srcrow[rb + r] = int(fx.bkt[rb + min(r, counts[e] - 1)]) / nk
+            }
+        }
+    } else {
+        for (r in range(pad)) {
+            fx.srcrow[r] = r
+        }
+    }
+    return <- fx
+}
+
+// shared truth walk: want/env over the whole padded bucket panel from a flat [nrows_w x kdim]
+// dequant plane (row of expert e, col j at wdeq[(e*ndim + j)*kdim]), plus an optional bias row
+def private moe_mm_truth(fx : MoeFix; wdeq, xf, wb : array<float>; kdim, ndim : int; hasb : bool;
+                         var want, env : array<float>) {
+    want |> resize(fx.pad * ndim)
+    env |> resize(fx.pad * ndim)
+    for (e in range(fx.ne)) {
+        let rows = (int(fx.cnt[e]) + 31) / 32 * 32
+        for (r in range(rows)) {
+            let row = int(fx.basep[e]) + r
+            let src = fx.srcrow[row]
+            for (j in range(ndim)) {
+                var acc = 0.0lf
+                var ev = 0.0lf
+                for (c in range(kdim)) {
+                    let p = double(wdeq[(e * ndim + j) * kdim + c]) * double(xf[src * kdim + c])
+                    acc += p
+                    ev += abs(p)
+                }
+                if (hasb) {
+                    acc += double(wb[e * ndim + j])
+                    ev += abs(double(wb[e * ndim + j]))
+                }
+                want[row * ndim + j] = float(acc)
+                env[row * ndim + j] = float(ev)
+            }
+        }
+    }
+}
+
+// The gathered K-quant mul_mm trio (MetalMoeMulMmK4/K5/K6): per-expert superblock planes off
+// the shared kq fixture, truth through the shipped dequant_k*_plane_superblock. Binds at the
+// MetalMoeMulMmBase family numbers (0..2 weight views, x 3, y 4, cnt/base/bkt 7..9); k6's
+// binding 0 is the f16 d-tail view of the scale plane.
+def private moe_mulmm_kq_gate(t : T?; dev, queue; fmt : int; kdim, ndim : int; counts : array<int>; gather : bool) {
+    let tag = "moe_mulmm_k{fmt}{gather ? " gather" : ""} k={kdim} n={ndim}"
+    var err : string
+    let src = fmt == 4 ? metal_moe_mulmm_k4_msl : (fmt == 5 ? metal_moe_mulmm_k5_msl : metal_moe_mulmm_k6_msl)
+    let entry = fmt == 4 ? metal_moe_mulmm_k4_msl_entry : (fmt == 5 ? metal_moe_mulmm_k5_msl_entry : metal_moe_mulmm_k6_msl_entry)
+    let fm = fmt == 4 ? metal_moe_mulmm_k4_msl_fastmath : (fmt == 5 ? metal_moe_mulmm_k5_msl_fastmath : metal_moe_mulmm_k6_msl_fastmath)
+    let tgm = fmt == 4 ? metal_moe_mulmm_k4_msl_tgmem : (fmt == 5 ? metal_moe_mulmm_k5_msl_tgmem : metal_moe_mulmm_k6_msl_tgmem)
+    var pso = pipeline_from_source(dev, src, entry, fm, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let ne = length(counts)
+    let nb = kdim / 256
+    let eplane = ndim * nb
+    let nsb = ne * eplane
+    var kq : array<uint8>
+    var ks : array<uint8>
+    kq_fill_planes(fmt, nsb, kq, ks)
+    let nk = 2
+    let nx = 24
+    var fx <- moe_fix(counts, gather, nk, nx)
+    var xf : array<float>
+    xf |> resize((gather ? nx : fx.pad) * kdim)
+    for (i in range(length(xf))) {
+        xf[i] = float((i * 5) % 9 - 4)
+    }
+    var wdeq : array<float>
+    wdeq |> resize(ne * ndim * kdim)
+    var wrow : array<float>
+    wrow |> resize(kdim)
+    for (e in range(ne)) {
+        for (j in range(ndim)) {
+            kq_row_ref(fmt, e * eplane + j * nb, nb, nsb, kq, ks, wrow)
+            for (c in range(kdim)) {
+                wdeq[(e * ndim + j) * kdim + c] = wrow[c]
+            }
+        }
+    }
+    var wb : array<float>
+    var want : array<float>
+    var env : array<float>
+    moe_mm_truth(fx, wdeq, xf, wb, kdim, ndim, false, want, env)
+    var ka = MoeMmArgs(kdim = uint(kdim), ndim = uint(ndim), eplane = uint(eplane),
+        nk = uint(nk), gather = gather ? 1u : 0u)
+    var bks = buf_upload(dev, ks)
+    var bkq = buf_upload(dev, kq)
+    var bx = buf_upload(dev, xf)
+    var by = buf_fill(dev, fx.pad * ndim, -1000.0)
+    var bcnt = buf_upload(dev, fx.cnt)
+    var bbase = buf_upload(dev, fx.basep)
+    var bbkt = gather ? buf_upload(dev, fx.bkt) : buf_u32(dev, 0u)   // gather=0: unread 4B stand-in
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_threadgroup_memory_length(enc, tgm, 0)
+        metal_set_buffer(enc, bks, fmt == 6 ? uint64(nsb * 16) : 0ul, 0)   // k6: the f16 d tail
+        metal_set_buffer(enc, bks, 0ul, 1)
+        metal_set_buffer(enc, bkq, 0ul, 2)
+        metal_set_buffer(enc, bx, 0ul, 3)
+        metal_set_buffer(enc, by, 0ul, 4)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+        metal_set_buffer(enc, bcnt, 0ul, 7)
+        metal_set_buffer(enc, bbase, 0ul, 8)
+        metal_set_buffer(enc, bbkt, 0ul, 9)
+        metal_dispatch_threadgroups(enc, uint3(uint(fx.maxtiles), uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_env(by, want, env, 2e-4, tag), 0)
+    }
+    metal_release(bks)
+    metal_release(bkq)
+    metal_release(bx)
+    metal_release(by)
+    metal_release(bcnt)
+    metal_release(bbase)
+    metal_release(bbkt)
+    metal_release(pso)
+    delete kq
+    delete ks
+    delete fx
+    delete xf
+    delete wdeq
+    delete wrow
+    delete wb
+    delete want
+    delete env
+}
+
+// The gathered q8 mul_mm (MetalMoeMulMmQ8) and its tensor twin — the twin serves CONTIGUOUS
+// (gather=0, down-site) shapes only and never binds bkt.
+def private moe_mulmm_q8_gate(t : T?; dev, queue; tensor : bool; kdim, ndim : int; counts : array<int>; gather : bool) {
+    let tag = "moe_mulmm_q8{tensor ? "t" : ""}{gather ? " gather" : ""} k={kdim} n={ndim}"
+    var err : string
+    var pso = (tensor
+        ? pipeline_from_source(dev, metal_moe_mulmm_q8_t_msl, metal_moe_mulmm_q8_t_msl_entry, metal_moe_mulmm_q8_t_msl_fastmath, err)
+        : pipeline_from_source(dev, metal_moe_mulmm_q8_msl, metal_moe_mulmm_q8_msl_entry, metal_moe_mulmm_q8_msl_fastmath, err))
+    if (tensor && pso == null) {
+        to_log(LOG_INFO, "{tag}: no Metal-4 tensor support on this box — arm skipped\n")
+        return
+    }
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let ne = length(counts)
+    let nkb = kdim / 32
+    var blob : array<uint8>
+    var wdeq : array<float>
+    q8_blob_fill(ne * ndim, nkb, blob, wdeq)
+    let nk = 2
+    let nx = 24
+    var fx <- moe_fix(counts, gather, nk, nx)
+    var xf : array<float>
+    q8_x_fill((gather ? nx : fx.pad) * kdim, xf)
+    var wb : array<float>
+    var want : array<float>
+    var env : array<float>
+    moe_mm_truth(fx, wdeq, xf, wb, kdim, ndim, false, want, env)
+    var ka = MoeMmArgs(kdim = uint(kdim), ndim = uint(ndim), eplane = uint(ndim * nkb),
+        nk = uint(nk), gather = gather ? 1u : 0u)
+    var bw = buf_upload(dev, blob)
+    var bx = buf_upload(dev, xf)
+    var by = buf_fill(dev, fx.pad * ndim, -1000.0)
+    var bcnt = buf_upload(dev, fx.cnt)
+    var bbase = buf_upload(dev, fx.basep)
+    var bbkt = gather ? buf_upload(dev, fx.bkt) : buf_u32(dev, 0u)
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        if (!tensor) {
+            metal_set_threadgroup_memory_length(enc, metal_moe_mulmm_q8_msl_tgmem, 0)
+        }
+        metal_set_buffer(enc, bw, 0ul, 0)   // half-scale view
+        metal_set_buffer(enc, bw, 0ul, 1)   // byte view of the same blob
+        metal_set_buffer(enc, bx, 0ul, 2)
+        metal_set_buffer(enc, by, 0ul, 3)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+        metal_set_buffer(enc, bcnt, 0ul, 6)
+        metal_set_buffer(enc, bbase, 0ul, 7)
+        if (!tensor) {
+            metal_set_buffer(enc, bbkt, 0ul, 8)
+        }
+        metal_dispatch_threadgroups(enc, uint3(uint(fx.maxtiles), uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_env(by, want, env, 2e-3, tag), 0)
+    }
+    metal_release(bw)
+    metal_release(bx)
+    metal_release(by)
+    metal_release(bcnt)
+    metal_release(bbase)
+    metal_release(bbkt)
+    metal_release(pso)
+    delete blob
+    delete wdeq
+    delete fx
+    delete xf
+    delete wb
+    delete want
+    delete env
+}
+
+// The gathered MXFP4 mul_mm (MetalMoeMulMmMx4) and its tensor twin: nibble plane + e8m0 scale
+// plane + host-built vtab, per-expert bias folded when hasb (accumulator seed in the base,
+// rank-1 chunk in the twin). Truth replicates the kernels' exact e8m0 decode.
+def private moe_mulmm_mx4_gate(t : T?; dev, queue; tensor : bool; kdim, ndim : int; counts : array<int>; gather, hasb : bool) {
+    let tag = "moe_mulmm_mx4{tensor ? "t" : ""}{gather ? " gather" : ""}{hasb ? " bias" : ""} k={kdim} n={ndim}"
+    var err : string
+    var pso = (tensor
+        ? pipeline_from_source(dev, metal_moe_mulmm_mx4_t_msl, metal_moe_mulmm_mx4_t_msl_entry, metal_moe_mulmm_mx4_t_msl_fastmath, err)
+        : pipeline_from_source(dev, metal_moe_mulmm_mx4_msl, metal_moe_mulmm_mx4_msl_entry, metal_moe_mulmm_mx4_msl_fastmath, err))
+    if (tensor && pso == null) {
+        to_log(LOG_INFO, "{tag}: no Metal-4 tensor support on this box — arm skipped\n")
+        return
+    }
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let ne = length(counts)
+    let nkb = kdim / 32
+    let tblk = ne * ndim * nkb
+    var vtab : array<float>
+    vtab |> resize(16)
+    for (i in range(8)) {
+        let v = float(fixed_array(0, 1, 2, 3, 4, 6, 8, 12)[i])
+        vtab[i] = v
+        vtab[i + 8] = -v
+    }
+    var nplane : array<uint>
+    nplane |> resize(tblk * 4)
+    for (i in range(tblk * 4)) {
+        nplane[i] = uint(i * 3 + 1) * 2654435761u
+    }
+    var eplane8 : array<uint8>
+    eplane8 |> resize(tblk)
+    for (i in range(tblk)) {
+        eplane8[i] = uint8(124 + (i * 3 + 1) % 8)   // pow2 scales 2^-4..2^3 — f16-exact products
+    }
+    var wdeq : array<float>
+    wdeq |> resize(ne * ndim * kdim)
+    for (blk in range(tblk)) {
+        let sc = uint(eplane8[blk])
+        let d = uint_bits_to_float(sc < 2u ? (0x00200000u << sc) : ((sc - 1u) << 23u))
+        for (k in range(32)) {
+            let byi = k % 16
+            let nby = (nplane[blk * 4 + byi / 4] >> uint((byi % 4) * 8)) & 255u
+            wdeq[blk * 32 + k] = vtab[int(k < 16 ? (nby & 15u) : (nby >> 4u))] * d
+        }
+    }
+    var wb : array<float>
+    wb |> resize(ne * ndim)
+    for (i in range(ne * ndim)) {
+        wb[i] = float((i * 11) % 9 - 4) * 0.25
+    }
+    let nk = 2
+    let nx = 24
+    var fx <- moe_fix(counts, gather, nk, nx)
+    var xf : array<float>
+    q8_x_fill((gather ? nx : fx.pad) * kdim, xf)
+    var want : array<float>
+    var env : array<float>
+    moe_mm_truth(fx, wdeq, xf, wb, kdim, ndim, hasb, want, env)
+    var ka = MoeMmArgs(kdim = uint(kdim), ndim = uint(ndim), eplane = uint(ndim * nkb),
+        nk = uint(nk), gather = gather ? 1u : 0u, hasb = hasb ? 1u : 0u)
+    var bnq = buf_upload(dev, nplane)
+    var bee = buf_upload(dev, eplane8)
+    var bvt = buf_upload(dev, vtab)
+    var bwb = buf_upload(dev, wb)
+    var bx = buf_upload(dev, xf)
+    var by = buf_fill(dev, fx.pad * ndim, -1000.0)
+    var bcnt = buf_upload(dev, fx.cnt)
+    var bbase = buf_upload(dev, fx.basep)
+    var bbkt = gather ? buf_upload(dev, fx.bkt) : buf_u32(dev, 0u)
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_threadgroup_memory_length(enc, tensor ? metal_moe_mulmm_mx4_t_msl_tgmem : metal_moe_mulmm_mx4_msl_tgmem, 0)
+        metal_set_buffer(enc, bnq, 0ul, 0)
+        metal_set_buffer(enc, bee, 0ul, 1)
+        metal_set_buffer(enc, bx, 0ul, 2)
+        metal_set_buffer(enc, by, 0ul, 3)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+        metal_set_buffer(enc, bcnt, 0ul, 6)
+        metal_set_buffer(enc, bbase, 0ul, 7)
+        if (!tensor) {
+            metal_set_buffer(enc, bbkt, 0ul, 8)
+        }
+        metal_set_buffer(enc, bwb, 0ul, 12)
+        metal_set_buffer(enc, bvt, 0ul, 13)
+        metal_dispatch_threadgroups(enc, uint3(uint(fx.maxtiles), uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_env(by, want, env, 2e-3, tag), 0)
+    }
+    metal_release(bnq)
+    metal_release(bee)
+    metal_release(bvt)
+    metal_release(bwb)
+    metal_release(bx)
+    metal_release(by)
+    metal_release(bcnt)
+    metal_release(bbase)
+    metal_release(bbkt)
+    metal_release(pso)
+    delete vtab
+    delete nplane
+    delete eplane8
+    delete wdeq
+    delete wb
+    delete fx
+    delete xf
+    delete want
+    delete env
+}
+
 [test]
 def test_metal_gemm_kernels(t : T?) {
     t |> run("prefill GEMM corpus (kq mul_mm trio + bf16 + Metal-4 tensor twins) == CPU references") <| @(t : T?) {
@@ -554,6 +912,19 @@ def test_metal_gemm_kernels(t : T?) {
                 q8_gemm_sk_gate(t, dev, queue, true, 128, 64, 2)
                 q8_gemm64_b_gate(t, dev, queue, false, 64, 128, 128)
                 q8_gemm64_b_gate(t, dev, queue, true, 64, 128, 128)
+                // the MoE gathered mul_mm family: kq trio + q8/mx4 with their tensor twins
+                // (a zero-count expert rides the first arm; twins are contiguous-only by design)
+                moe_mulmm_kq_gate(t, dev, queue, 4, 256, 64, [32, 0, 40, 8], true)
+                moe_mulmm_kq_gate(t, dev, queue, 5, 256, 64, [32, 40, 8], true)
+                moe_mulmm_kq_gate(t, dev, queue, 6, 256, 64, [32, 40, 8], true)
+                moe_mulmm_kq_gate(t, dev, queue, 4, 256, 128, [8, 33], false)   // 2 col tiles + contiguous
+                moe_mulmm_q8_gate(t, dev, queue, false, 96, 64, [32, 40, 8], true)
+                moe_mulmm_q8_gate(t, dev, queue, false, 128, 64, [8, 33], false)
+                moe_mulmm_q8_gate(t, dev, queue, true, 128, 64, [8, 33], false)
+                moe_mulmm_mx4_gate(t, dev, queue, false, 96, 64, [32, 40, 8], true, true)
+                moe_mulmm_mx4_gate(t, dev, queue, false, 128, 64, [8, 33], false, false)
+                moe_mulmm_mx4_gate(t, dev, queue, true, 128, 64, [8, 33], false, true)
+                moe_mulmm_mx4_gate(t, dev, queue, true, 128, 64, [8, 33], false, false)
                 metal_release(queue)
             }
             t |> equal(metal_log_leaks_if_any(), 0l)
