@@ -33,8 +33,8 @@ def private ids_equal(a, b : array<int64>) : bool {
     if (length(a) != length(b)) {
         return false
     }
-    for (i in range(length(a))) {
-        return false if (a[i] != b[i])
+    for (av, bv in a, b) {
+        return false if (av != bv)
     }
     return true
 }
@@ -53,12 +53,12 @@ def private corpus_gate(t : T?; vocab_path : string) {
     t |> equal(length(inputs), length(outlines))
     var npass = 0
     var rt_ok = 0
-    for (i in range(length(inputs))) {
-        let got <- bpe_encode(tk, inputs[i])
-        if (ids_equal(got, parse_out_ids(outlines[i]))) {
+    for (inp, outl in inputs, outlines) {
+        let got <- bpe_encode(tk, inp)
+        if (ids_equal(got, parse_out_ids(outl))) {
             npass++
         }
-        if (bpe_decode_ids(tk, got) == inputs[i]) {
+        if (bpe_decode_ids(tk, got) == inp) {
             rt_ok++
         }
     }

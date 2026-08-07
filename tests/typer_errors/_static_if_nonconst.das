@@ -1,3 +1,6 @@
+expect 30229
+expect 30165
+
 options gen2
 
 // compiled by test_static_if_profiles.das: a genuinely non-constant condition must

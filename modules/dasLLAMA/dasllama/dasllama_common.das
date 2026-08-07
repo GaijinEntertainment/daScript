@@ -4710,7 +4710,7 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
             panic("dasLLAMA: CPU batched prefill of {npos} tokens on a Metal-capable build (override `{g_prefill_override_name}` {empty(g_prefill_override_name) ? "not selected" : "declined"}) — select the metal prefill (set_metal_mode / DASLLAMA_PIN_PREFILL=metal), or declare CPU intent: allow_cpu_prefill() / DASLLAMA_CPU_PREFILL=1")
         }
         for (l in range64(c.n_layers)) {
-            trace_marker("layer", int(l))   // nolint:PERF026 — gated on g_trace_tags; the name->id table lookup is the trace's own cost
+            trace_marker("layer", int(l))
             trace_tag(TRACE_TAG_ATTN_STD)   // per-lane trace: color the prefill attention section
             let ts_blk_attn = prof_ticks()
             t.blocks.attn_prefill(t, s, l, npos, start_pos)

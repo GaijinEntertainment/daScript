@@ -1,5 +1,5 @@
 options gen2
-require daslib/jobque_boost   // nolint:STYLE030 — ref_time_ticks/get_time_usec
+require daslib/jobque_boost
 require llvm/daslib/aarch64_neon
 require dasllama/dasllama_env
 
