@@ -185,6 +185,38 @@ def kq_fill_planes(fmt, nsb : int; var kq : array<uint8>; var ks : array<uint8>)
     }
 }
 
+// ===== q8 (34B-block) blob fixture =====
+
+// one 34B-block q8 blob (nrows x nkb blocks) + its exact dequant: pow2 scales and small-int
+// quants keep every staged f16/f32 value exact, leaving only accumulation order to the envelope
+def q8_blob_fill(nrows, nkb : int; var blob : array<uint8>; var wdeq : array<float>) {
+    let lut = fixed_array(0.25, 0.5, 1.0, 2.0)
+    blob |> resize(nrows * nkb * 34)
+    wdeq |> resize(nrows * nkb * 32)
+    unsafe {
+        for (b in range(nrows * nkb)) {
+            let d = lut[(b * 7 + 1) % 4]
+            let dbits = f32_to_f16(d)
+            blob[b * 34] = uint8(dbits & 0xFFu)
+            blob[b * 34 + 1] = uint8(dbits >> 8u)
+            for (c in range(32)) {
+                let q = (b * 5 + c * 11) % 16 - 8
+                blob[b * 34 + 2 + c] = uint8(q & 0xFF)
+                wdeq[b * 32 + c] = float(q) * d
+            }
+        }
+    }
+}
+
+// exact-under-f16-staging X rows: small ints scaled by pow2 (the q8 gates' shared shape)
+def q8_x_fill(nn : int; var xf : array<float>) {
+    let lut = fixed_array(0.25, 0.5, 1.0, 2.0)
+    xf |> resize(nn)
+    for (i in range(nn)) {
+        xf[i] = float((i * 5 + i / 17) % 16 - 8) * lut[(i / 3) % 4]
+    }
+}
+
 // reference dequant of one row (nb superblocks starting at superblock sb_base) off the planes
 def kq_row_ref(fmt, sb_base, nb, nsb_total : int; kq, ks : array<uint8>; var wrow : array<float>) {
     for (ib in range(nb)) {

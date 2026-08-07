@@ -4,7 +4,6 @@ options _cyclomatic_complexity = 0  // same — the arm ladders follow the kerne
 
 require dastest/testing_boost public
 require daslib/math_bits            // float_bits_to_uint / uint_bits_to_float — the bf16 halfword pun
-require llvm/daslib/f16_cvt         // f32_to_f16 — packing the q8 blob's scale halfwords
 require ?das_metal dasllama/dasllama_metal_kernels  // the kq mul_mm trio (Apple builds)
 require ?das_metal dasllama/dasllama_metal_prefill  // the mul_mm twins (bf16 + Metal-4 tensor forms)
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
@@ -111,36 +110,6 @@ def private kq_mulmm_gate(t : T?; dev, queue; fmt : int; tensor : bool; m, kdim,
     delete want
     delete env
     delete wrow
-}
-
-// one 34B-block q8 blob (nrows x nkb blocks) + its exact dequant: pow2 scales and small-int
-// quants keep every staged f16/f32 value exact, leaving only accumulation order to the envelope
-def private q8_blob_fill(nrows, nkb : int; var blob : array<uint8>; var wdeq : array<float>) {
-    let lut = fixed_array(0.25, 0.5, 1.0, 2.0)
-    blob |> resize(nrows * nkb * 34)
-    wdeq |> resize(nrows * nkb * 32)
-    unsafe {
-        for (b in range(nrows * nkb)) {
-            let d = lut[(b * 7 + 1) % 4]
-            let dbits = f32_to_f16(d)
-            blob[b * 34] = uint8(dbits & 0xFFu)
-            blob[b * 34 + 1] = uint8(dbits >> 8u)
-            for (c in range(32)) {
-                let q = (b * 5 + c * 11) % 16 - 8
-                blob[b * 34 + 2 + c] = uint8(q & 0xFF)
-                wdeq[b * 32 + c] = float(q) * d
-            }
-        }
-    }
-}
-
-// exact-under-f16-staging X rows: small ints scaled by pow2 (the q8 gates' shared shape)
-def private q8_x_fill(nn : int; var xf : array<float>) {
-    let lut = fixed_array(0.25, 0.5, 1.0, 2.0)
-    xf |> resize(nn)
-    for (i in range(nn)) {
-        xf[i] = float((i * 5 + i / 17) % 16 - 8) * lut[(i / 3) % 4]
-    }
 }
 
 // the Metal-4 tensor twin of the (already direct-covered) MetalQ8MulMm — same bindings, no tgmem

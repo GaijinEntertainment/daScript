@@ -277,6 +277,303 @@ def private moe_kq_gemv_gate(t : T?; dev, queue; fmt, n, d, net, k, nst : int; p
     delete wrow
 }
 
+// ===== the fused QKV rope-store pair (MetalQ8GemvQkvRsF16/F32) =====
+
+// One dispatch = q8 GEMV over all three QKV segments + rope + segment stores: q rows to qo
+// (f32), k rows roped into the mirror (f16 clamped / f32), v rows straight. Segments bind ONE
+// blob at per-segment byte offsets — the production @off scheme. The exact-arithmetic fixture
+// makes qo (and the f32 twin's k/v) BIT-exact; the f16 twin's k/v differ only by store rounding.
+def private qkv_rs_gate(t : T?; dev, queue; f16 : bool; neox, has_bias : bool; ndim, qd, kvd, hs : int) {
+    let tag = "qkv_rs{f16 ? 16 : 32}{neox ? " neox" : ""}{has_bias ? " bias" : ""} n={ndim} qd={qd} kvd={kvd}"
+    var err : string
+    var pso = (f16
+        ? pipeline_from_source(dev, metal_q8_gemv_qkv_rs16_msl, metal_q8_gemv_qkv_rs16_msl_entry, metal_q8_gemv_qkv_rs16_msl_fastmath, err)
+        : pipeline_from_source(dev, metal_q8_gemv_qkv_rs32_msl, metal_q8_gemv_qkv_rs32_msl_entry, metal_q8_gemv_qkv_rs32_msl_fastmath, err))
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let ddim = qd + 2 * kvd
+    let half = hs / 2
+    let nb = ndim / 32
+    var blob : array<uint8>
+    var wdeq : array<float>
+    q8_blob_fill(ddim, nb, blob, wdeq)   // one stacked blob: q rows, then k, then v (segment offsets)
+    var xf : array<float>
+    q8_x_fill(ndim, xf)
+    var tcos : array<float>
+    var tsin : array<float>
+    tcos |> resize(half)
+    tsin |> resize(half)
+    for (j in range(half)) {
+        tcos[j] = float((j * 3) % 5 - 2) * 0.5
+        tsin[j] = float((j * 7 + 1) % 5 - 2) * 0.25
+    }
+    var bias : array<float>
+    bias |> resize(ddim)
+    for (i in range(ddim)) {
+        bias[i] = float((i * 13) % 9 - 4) * 0.25
+    }
+    var qwant : array<float>
+    var kwant : array<float>
+    var vwant : array<float>
+    qwant |> resize(qd)
+    kwant |> resize(kvd)
+    vwant |> resize(kvd)
+    for (pr in range(ddim / 2)) {
+        var row = pr * 2
+        var row2 = row + 1
+        if (neox && row < qd + kvd) {
+            let lp = row < qd ? pr : pr - qd / 2
+            let seg = row < qd ? 0 : qd
+            row = seg + (lp / half) * hs + lp % half
+            row2 = row + half
+        }
+        var a0 = 0.0lf
+        var a1 = 0.0lf
+        for (c in range(ndim)) {
+            a0 += double(wdeq[row * ndim + c]) * double(xf[c])
+            a1 += double(wdeq[row2 * ndim + c]) * double(xf[c])
+        }
+        if (has_bias) {
+            a0 += double(bias[row])
+            a1 += double(bias[row2])
+        }
+        if (row < qd) {
+            let j = neox ? row % hs : (row % hs) / 2
+            qwant[row] = float(a0 * double(tcos[j]) - a1 * double(tsin[j]))
+            qwant[row2] = float(a0 * double(tsin[j]) + a1 * double(tcos[j]))
+        } elif (row < qd + kvd) {
+            let ik = row - qd
+            let j = neox ? ik % hs : (ik % hs) / 2
+            kwant[ik] = float(a0 * double(tcos[j]) - a1 * double(tsin[j]))
+            kwant[row2 - qd] = float(a0 * double(tsin[j]) + a1 * double(tcos[j]))
+        } else {
+            let iv = row - qd - kvd
+            vwant[iv] = float(a0)
+            vwant[iv + 1] = float(a1)
+        }
+    }
+    var ka = Q8QkvRsArgs(ndim = uint(ndim), ddim = uint(ddim), qd = uint(qd), kvd = uint(kvd),
+        hs = uint(hs), neox = neox ? 1u : 0u, has_bias = has_bias ? 1u : 0u)
+    let koffb = uint64(qd * nb * 34)         // k segment's byte offset into the stacked blob
+    let voffb = uint64((qd + kvd) * nb * 34)
+    var bw = buf_upload(dev, blob)
+    var bx = buf_upload(dev, xf)
+    var bqo = buf_fill(dev, qd, -1000.0)
+    var bkd = f16 ? buf_fill(dev, kvd, float16(-1000.0)) : buf_fill(dev, kvd, -1000.0)
+    var bvd = f16 ? buf_fill(dev, kvd, float16(-1000.0)) : buf_fill(dev, kvd, -1000.0)
+    var bcos = buf_upload(dev, tcos)
+    var bsin = buf_upload(dev, tsin)
+    var bbias = buf_upload(dev, bias)
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bw, 0ul, 0)      // wq byte view
+        metal_set_buffer(enc, bw, 0ul, 1)      // wq half-scale view
+        metal_set_buffer(enc, bx, 0ul, 2)
+        metal_set_buffer(enc, bqo, 0ul, 3)
+        metal_set_buffer(enc, bkd, 0ul, 4)
+        metal_set_buffer(enc, bvd, 0ul, 5)
+        metal_set_buffer(enc, bcos, 0ul, 6)
+        metal_set_buffer(enc, bsin, 0ul, 7)
+        metal_set_buffer(enc, bbias, 0ul, 8)
+        metal_set_buffer(enc, bw, koffb, 9)    // wk views at the k segment's offset
+        metal_set_buffer(enc, bw, koffb, 10)
+        metal_set_buffer(enc, bw, voffb, 11)   // wv views
+        metal_set_buffer(enc, bw, voffb, 12)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 13)
+        metal_dispatch_threadgroups(enc, uint3(uint((ddim / 2 + 3) / 4), 1u, 1u), uint3(128u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_exact(bqo, qwant, "{tag} q"), 0)
+        if (f16) {
+            t |> equal(buf_mismatch_f16(bkd, kwant, 1e-3, 0.0, "{tag} k"), 0)
+            t |> equal(buf_mismatch_f16(bvd, vwant, 1e-3, 0.0, "{tag} v"), 0)
+        } else {
+            t |> equal(buf_mismatch_exact(bkd, kwant, "{tag} k"), 0)
+            t |> equal(buf_mismatch_exact(bvd, vwant, "{tag} v"), 0)
+        }
+    }
+    metal_release(bw)
+    metal_release(bx)
+    metal_release(bqo)
+    metal_release(bkd)
+    metal_release(bvd)
+    metal_release(bcos)
+    metal_release(bsin)
+    metal_release(bbias)
+    metal_release(pso)
+    delete blob
+    delete wdeq
+    delete xf
+    delete tcos
+    delete tsin
+    delete bias
+    delete qwant
+    delete kwant
+    delete vwant
+}
+
+// ===== the fused W1|W3 + activation family =====
+
+def private silu_gelu_ref(g, u : double; gelu : bool) : float {
+    if (!gelu) {
+        return float((g / (1.0lf + exp(-g))) * u)
+    }
+    let ga = 0.7978845608028654lf * (g + 0.044715lf * g * g * g)
+    return float(0.5lf * g * (2.0lf - 2.0lf / (1.0lf + exp(2.0lf * ga))) * u)
+}
+
+// MetalQ8GemvW13Sw: one simdgroup dots gate row (w1) AND up row (w3), stores act(g)·u.
+def private w13sw_gate(t : T?; dev, queue; gelu : bool; ndim, hidden : int) {
+    let tag = "w13sw{gelu ? " gelu" : ""} n={ndim} h={hidden}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_q8_gemv_w13sw16_msl, metal_q8_gemv_w13sw16_msl_entry, metal_q8_gemv_w13sw16_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let nb = ndim / 32
+    var blob1 : array<uint8>
+    var wdeq1 : array<float>
+    var blob3 : array<uint8>
+    var wdeq3 : array<float>
+    q8_blob_fill(2 * hidden, nb, blob1, wdeq1)   // one generator, two slices: w1 rows then w3 rows
+    blob3 |> resize(hidden * nb * 34)
+    wdeq3 |> resize(hidden * ndim)
+    for (i in range(hidden * nb * 34)) {
+        blob3[i] = blob1[hidden * nb * 34 + i]
+    }
+    for (i in range(hidden * ndim)) {
+        wdeq3[i] = wdeq1[hidden * ndim + i]
+    }
+    var xf : array<float>
+    q8_x_fill(ndim, xf)
+    var want : array<float>
+    want |> resize(hidden)
+    for (r in range(hidden)) {
+        var g = 0.0lf
+        var u = 0.0lf
+        for (c in range(ndim)) {
+            g += double(wdeq1[r * ndim + c]) * double(xf[c])
+            u += double(wdeq3[r * ndim + c]) * double(xf[c])
+        }
+        want[r] = silu_gelu_ref(g, u, gelu)
+    }
+    var bw1 = buf_upload(dev, blob1)
+    var bw3 = buf_upload(dev, blob3)
+    var bx = buf_upload(dev, xf)
+    var bh = buf_fill(dev, hidden, -1000.0)
+    var bn = buf_u32(dev, uint(ndim))
+    var bhid = buf_u32(dev, uint(hidden))
+    var bact = buf_u32(dev, gelu ? 1u : 0u)
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bw1, 0ul, 0)
+        metal_set_buffer(enc, bw1, 0ul, 1)
+        metal_set_buffer(enc, bx, 0ul, 2)
+        metal_set_buffer(enc, bh, 0ul, 3)
+        metal_set_buffer(enc, bn, 0ul, 4)
+        metal_set_buffer(enc, bhid, 0ul, 5)
+        metal_set_buffer(enc, bw3, 0ul, 6)
+        metal_set_buffer(enc, bw3, 0ul, 7)
+        metal_set_buffer(enc, bact, 0ul, 8)
+        metal_dispatch_threadgroups(enc, uint3(uint((hidden + 3) / 4), 1u, 1u), uint3(128u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_approx(bh, want, tag), 0)
+    }
+    metal_release(bw1)
+    metal_release(bw3)
+    metal_release(bx)
+    metal_release(bh)
+    metal_release(bn)
+    metal_release(bhid)
+    metal_release(bact)
+    metal_release(pso)
+    delete blob1
+    delete wdeq1
+    delete blob3
+    delete wdeq3
+    delete xf
+    delete want
+}
+
+// MetalGemvW13SwB2/B4: the fixed-B batch twins (silu only; binding 1 is SKIPPED by the class —
+// scale views sit at 2/9). ndim = 320 walks one full 256-elem X panel plus the strided tail.
+def private w13sw_b_gate(t : T?; dev, queue; bwidth, ndim, hidden : int) {
+    let tag = "w13sw_b{bwidth} n={ndim} h={hidden}"
+    var err : string
+    var pso = (bwidth == 2
+        ? pipeline_from_source(dev, metal_gemv_w13sw_b2_msl, metal_gemv_w13sw_b2_msl_entry, metal_gemv_w13sw_b2_msl_fastmath, err)
+        : pipeline_from_source(dev, metal_gemv_w13sw_b4_msl, metal_gemv_w13sw_b4_msl_entry, metal_gemv_w13sw_b4_msl_fastmath, err))
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let nb = ndim / 32
+    var blob1 : array<uint8>
+    var wdeq1 : array<float>
+    var blob3 : array<uint8>
+    var wdeq3 : array<float>
+    q8_blob_fill(2 * hidden, nb, blob1, wdeq1)
+    blob3 |> resize(hidden * nb * 34)
+    wdeq3 |> resize(hidden * ndim)
+    for (i in range(hidden * nb * 34)) {
+        blob3[i] = blob1[hidden * nb * 34 + i]
+    }
+    for (i in range(hidden * ndim)) {
+        wdeq3[i] = wdeq1[hidden * ndim + i]
+    }
+    var xf : array<float>
+    q8_x_fill(bwidth * ndim, xf)
+    var want : array<float>
+    want |> resize(bwidth * hidden)
+    for (b in range(bwidth)) {
+        for (r in range(hidden)) {
+            var g = 0.0lf
+            var u = 0.0lf
+            for (c in range(ndim)) {
+                g += double(wdeq1[r * ndim + c]) * double(xf[b * ndim + c])
+                u += double(wdeq3[r * ndim + c]) * double(xf[b * ndim + c])
+            }
+            want[b * hidden + r] = silu_gelu_ref(g, u, false)
+        }
+    }
+    var bw1 = buf_upload(dev, blob1)
+    var bw3 = buf_upload(dev, blob3)
+    var bx = buf_upload(dev, xf)
+    var by = buf_fill(dev, bwidth * hidden, -1000.0)
+    var bn = buf_u32(dev, uint(ndim))
+    var bhid = buf_u32(dev, uint(hidden))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_threadgroup_memory_length(enc, bwidth == 2 ? metal_gemv_w13sw_b2_msl_tgmem : metal_gemv_w13sw_b4_msl_tgmem, 0)
+        metal_set_buffer(enc, bw1, 0ul, 0)
+        metal_set_buffer(enc, bw1, 0ul, 2)
+        metal_set_buffer(enc, bx, 0ul, 3)
+        metal_set_buffer(enc, by, 0ul, 4)
+        metal_set_buffer(enc, bn, 0ul, 5)
+        metal_set_buffer(enc, bhid, 0ul, 6)
+        metal_set_buffer(enc, bw3, 0ul, 8)
+        metal_set_buffer(enc, bw3, 0ul, 9)
+        metal_dispatch_threadgroups(enc, uint3(uint((hidden + 3) / 4), 1u, 1u), uint3(128u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_approx(by, want, tag), 0)
+    }
+    metal_release(bw1)
+    metal_release(bw3)
+    metal_release(bx)
+    metal_release(by)
+    metal_release(bn)
+    metal_release(bhid)
+    metal_release(pso)
+    delete blob1
+    delete wdeq1
+    delete blob3
+    delete wdeq3
+    delete xf
+    delete want
+}
+
 [test]
 def test_metal_kq_gemv_kernels(t : T?) {
     t |> run("kq GEMV / KqMv / MoeGemv-kq kernels == the plane-dequant CPU reference") <| @(t : T?) {
@@ -305,6 +602,16 @@ def test_metal_kq_gemv_kernels(t : T?) {
                     moe_kq_gemv_gate(t, dev, queue, fmt, 512, 9, 5, 3, 2, false)
                     moe_kq_gemv_gate(t, dev, queue, fmt, 512, 9, 5, 3, 2, true)
                 }
+                // the fused QKV rope-store pair: norm/neox x bias x f16/f32 mirror
+                qkv_rs_gate(t, dev, queue, true, false, true, 64, 16, 8, 8)
+                qkv_rs_gate(t, dev, queue, true, true, false, 64, 16, 8, 8)
+                qkv_rs_gate(t, dev, queue, false, true, true, 64, 16, 8, 8)
+                qkv_rs_gate(t, dev, queue, false, false, false, 64, 16, 8, 8)
+                // the fused W1|W3 + activation family (h=18: the row guard / min-clamp tails)
+                w13sw_gate(t, dev, queue, false, 320, 18)
+                w13sw_gate(t, dev, queue, true, 64, 8)
+                w13sw_b_gate(t, dev, queue, 2, 320, 18)
+                w13sw_b_gate(t, dev, queue, 4, 320, 18)
                 metal_release(queue)
             }
             t |> equal(metal_log_leaks_if_any(), 0l)
