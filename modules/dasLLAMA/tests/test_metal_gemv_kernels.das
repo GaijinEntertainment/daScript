@@ -574,6 +574,132 @@ def private w13sw_b_gate(t : T?; dev, queue; bwidth, ndim, hidden : int) {
     delete want
 }
 
+// ===== the fixed-B batched q8 GEMV twins =====
+
+// MetalGemvB2/B4 (x-staged panel form): dense [B x ndim] X, y at ROW stride ys — the exact
+// fixture makes every output BIT-exact, and ys > ddim gap columns stay sentinel.
+def private gemv_b_gate(t : T?; dev, queue; bwidth, ndim, ddim, ys : int) {
+    let tag = "gemv_b{bwidth} n={ndim} d={ddim} ys={ys}"
+    var err : string
+    var pso = (bwidth == 2
+        ? pipeline_from_source(dev, metal_gemv_b2_msl, metal_gemv_b2_msl_entry, metal_gemv_b2_msl_fastmath, err)
+        : pipeline_from_source(dev, metal_gemv_b4_msl, metal_gemv_b4_msl_entry, metal_gemv_b4_msl_fastmath, err))
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    var blob : array<uint8>
+    var wdeq : array<float>
+    q8_blob_fill(ddim, ndim / 32, blob, wdeq)
+    var xf : array<float>
+    q8_x_fill(bwidth * ndim, xf)
+    var want : array<float>
+    want |> resize(bwidth * ys)
+    for (i in range(bwidth * ys)) {
+        want[i] = -1000.0
+    }
+    for (b in range(bwidth)) {
+        for (r in range(ddim)) {
+            var acc = 0.0lf
+            for (c in range(ndim)) {
+                acc += double(wdeq[r * ndim + c]) * double(xf[b * ndim + c])
+            }
+            want[b * ys + r] = float(acc)
+        }
+    }
+    var bw = buf_upload(dev, blob)
+    var bx = buf_upload(dev, xf)
+    var by = buf_fill(dev, bwidth * ys, -1000.0)
+    var bn = buf_u32(dev, uint(ndim))
+    var bd = buf_u32(dev, uint(ddim))
+    var bys = buf_u32(dev, uint(ys))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_threadgroup_memory_length(enc, bwidth == 2 ? metal_gemv_b2_msl_tgmem : metal_gemv_b4_msl_tgmem, 0)
+        metal_set_buffer(enc, bw, 0ul, 0)   // byte view
+        metal_set_buffer(enc, bw, 0ul, 2)   // half-scale view
+        metal_set_buffer(enc, bx, 0ul, 3)
+        metal_set_buffer(enc, by, 0ul, 4)
+        metal_set_buffer(enc, bn, 0ul, 5)
+        metal_set_buffer(enc, bd, 0ul, 6)
+        metal_set_buffer(enc, bys, 0ul, 7)
+        metal_dispatch_threadgroups(enc, uint3(uint((ddim + 3) / 4), 1u, 1u), uint3(128u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_exact(by, want, tag), 0)
+    }
+    metal_release(bw)
+    metal_release(bx)
+    metal_release(by)
+    metal_release(bn)
+    metal_release(bd)
+    metal_release(bys)
+    metal_release(pso)
+    delete blob
+    delete wdeq
+    delete xf
+    delete want
+}
+
+// MetalQ8MvB2/B4 (streamed skinny form, 64-thread tg, n % 256): X rows at float4 stride xs4,
+// b4 stores gate on nrows (the b<nrows pad columns compute and discard, x reads clamp to the
+// last live row). b2 always writes both columns — B=1 rides an unread y row by design.
+def private q8_mv_b_gate(t : T?; dev, queue; bwidth, ndim, ddim, nrows, xs4, ys : int) {
+    let tag = "q8_mv_b{bwidth} n={ndim} d={ddim} nr={nrows} xs4={xs4} ys={ys}"
+    var err : string
+    var pso = (bwidth == 2
+        ? pipeline_from_source(dev, metal_q8_mv_b2_msl, metal_q8_mv_b2_msl_entry, metal_q8_mv_b2_msl_fastmath, err)
+        : pipeline_from_source(dev, metal_q8_mv_b4_msl, metal_q8_mv_b4_msl_entry, metal_q8_mv_b4_msl_fastmath, err))
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    var blob : array<uint8>
+    var wdeq : array<float>
+    q8_blob_fill(ddim, ndim / 32, blob, wdeq)
+    var xf : array<float>
+    q8_x_fill(nrows * xs4 * 4, xf)
+    let nwr = bwidth == 2 ? 2 : nrows   // b2 stores both columns unconditionally
+    var want : array<float>
+    want |> resize(nwr * ys)
+    for (i in range(nwr * ys)) {
+        want[i] = -1000.0
+    }
+    for (b in range(nwr)) {
+        let src = min(b, nrows - 1)     // the b4 pad-column x clamp
+        for (r in range(ddim)) {
+            var acc = 0.0lf
+            for (c in range(ndim)) {
+                acc += double(wdeq[r * ndim + c]) * double(xf[src * xs4 * 4 + c])
+            }
+            want[b * ys + r] = float(acc)
+        }
+    }
+    var ka = Q8MvArgs(ndim = uint(ndim), ddim = uint(ddim), nrows = uint(nrows),
+        xs4 = uint(xs4), ys = uint(ys))
+    var bw = buf_upload(dev, blob)
+    var bx = buf_upload(dev, xf)
+    var by = buf_fill(dev, nwr * ys, -1000.0)
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bw, 0ul, 0)   // half-scale view
+        metal_set_buffer(enc, bw, 0ul, 1)   // byte view
+        metal_set_buffer(enc, bx, 0ul, 2)
+        metal_set_buffer(enc, by, 0ul, 3)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
+        metal_dispatch_threadgroups(enc, uint3(uint(bwidth == 2 ? (ddim + 3) / 4 : (ddim + 7) / 8), 1u, 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_exact(by, want, tag), 0)
+    }
+    metal_release(bw)
+    metal_release(bx)
+    metal_release(by)
+    metal_release(pso)
+    delete blob
+    delete wdeq
+    delete xf
+    delete want
+}
+
 [test]
 def test_metal_kq_gemv_kernels(t : T?) {
     t |> run("kq GEMV / KqMv / MoeGemv-kq kernels == the plane-dequant CPU reference") <| @(t : T?) {
@@ -612,6 +738,16 @@ def test_metal_kq_gemv_kernels(t : T?) {
                 w13sw_gate(t, dev, queue, true, 64, 8)
                 w13sw_b_gate(t, dev, queue, 2, 320, 18)
                 w13sw_b_gate(t, dev, queue, 4, 320, 18)
+                // the fixed-B q8 GEMV twins: panel+tail ndim, min-clamp d, ys gaps, padded xs4,
+                // and the b4 nrows=3 store gate / pad-column clamp
+                gemv_b_gate(t, dev, queue, 2, 320, 18, 18)
+                gemv_b_gate(t, dev, queue, 2, 256, 8, 24)
+                gemv_b_gate(t, dev, queue, 4, 320, 18, 18)
+                gemv_b_gate(t, dev, queue, 4, 256, 8, 24)
+                q8_mv_b_gate(t, dev, queue, 2, 512, 11, 2, 128, 11)
+                q8_mv_b_gate(t, dev, queue, 2, 256, 8, 2, 68, 20)
+                q8_mv_b_gate(t, dev, queue, 4, 512, 11, 3, 128, 11)
+                q8_mv_b_gate(t, dev, queue, 4, 256, 8, 4, 64, 8)
                 metal_release(queue)
             }
             t |> equal(metal_log_leaks_if_any(), 0l)
