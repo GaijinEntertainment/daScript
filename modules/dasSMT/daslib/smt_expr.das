@@ -160,7 +160,7 @@ def public string_val(ctx : Z3_context; v : string) : SString {
 // pointers); the pointees are opaque to das — never dereferenced, so the
 // const strip cannot license a miscompile
 def private dc(p : Z3_ast const) : Z3_ast {
-    return unsafe(reinterpret<Z3_ast -const>(p))
+    return unsafe(reinterpret<Z3_ast>(p))
 }
 
 // ===== SInt arithmetic =====
@@ -571,12 +571,8 @@ def public max(a, b : SInt) : SInt {
 }
 
 // ===== SBv8/SBv16/SBv32/SBv64 — bitvectors (wrap-around machine arithmetic) =====
-// width is part of the das TYPE; the operator families are written ONCE over
-// the OR-type of all widths, with a static width-mismatch guard: das OR-params
-// bind independently, so `concept_assert` turns SBv32 ⊗ SBv64 into a
-// compile-time error at the call site. Comparisons are UNSIGNED, matching das
-// uint semantics; s_lt/s_le/s_gt/s_ge are the signed forms, sar the
-// arithmetic shift.
+// Width is part of the das TYPE: one operator family over the OR-type of all widths,
+// with a `concept_assert` guard. Compares are UNSIGNED; s_lt/s_le/s_gt/s_ge signed.
 
 //! A symbolic 8-bit bitvector.
 struct public SBv8 {
@@ -967,6 +963,317 @@ def public ite(c : SBool; t, f : SBv8 | SBv16 | SBv32 | SBv64) {
     }
 }
 
+// ===== SFloat/SDouble — IEEE-754 floating point (Z3 FPA theory) =====
+// Unlike SReal (exact rational, no NaN) these model das float/double exactly, so
+// `x != x` is satisfiable. Rounded ops use round-nearest-ties-to-even, as das does.
+
+//! A symbolic 32-bit IEEE float — the exact model of das `float`.
+struct public SFloat {
+    ast : Z3_ast const
+    ctx : Z3_context const
+}
+
+//! A symbolic 64-bit IEEE float — the exact model of das `double`.
+struct public SDouble {
+    ast : Z3_ast const
+    ctx : Z3_context const
+}
+
+def public float_const(s : Solver; name : string) : SFloat {
+    return float_const(s.ctx, name)
+}
+
+def public float_const(ctx : Z3_context; name : string) : SFloat {
+    return SFloat(ast = Z3_mk_const(ctx, Z3_mk_string_symbol(ctx, name), Z3_mk_fpa_sort_32(ctx)), ctx = ctx)
+}
+
+def public float_val(ctx : Z3_context; v : float) : SFloat {
+    return SFloat(ast = Z3_mk_fpa_numeral_float(ctx, v, Z3_mk_fpa_sort_32(ctx)), ctx = ctx)
+}
+
+def private mk_fp(_sample : SFloat; ast : Z3_ast; ctx : Z3_context) : SFloat {
+    return SFloat(ast = ast, ctx = ctx)
+}
+
+def public double_const(s : Solver; name : string) : SDouble {
+    return double_const(s.ctx, name)
+}
+
+def public double_const(ctx : Z3_context; name : string) : SDouble {
+    return SDouble(ast = Z3_mk_const(ctx, Z3_mk_string_symbol(ctx, name), Z3_mk_fpa_sort_64(ctx)), ctx = ctx)
+}
+
+def public double_val(ctx : Z3_context; v : double) : SDouble {
+    return SDouble(ast = Z3_mk_fpa_numeral_double(ctx, v, Z3_mk_fpa_sort_64(ctx)), ctx = ctx)
+}
+
+def private mk_fp(_sample : SDouble; ast : Z3_ast; ctx : Z3_context) : SDouble {
+    return SDouble(ast = ast, ctx = ctx)
+}
+
+// numeral of the same width as `a` — width read from the Z3 sort, so this is
+// generic. A double literal narrowed to a 32-bit sort rounds, matching the das
+// float(...) conversion.
+def private fp_num(a : SFloat | SDouble; v : double) {
+    return mk_fp(a, Z3_mk_fpa_numeral_double(a.ctx, v, Z3_get_sort(a.ctx, a.ast)), a.ctx)
+}
+
+def public operator +(a, b : SFloat | SDouble) {
+    static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
+        concept_assert(false, "float width mismatch")
+        return mk_fp(a, a.ast, a.ctx)
+    } else {
+        return mk_fp(a, Z3_mk_fpa_add(a.ctx, Z3_mk_fpa_rne(a.ctx), a.ast, b.ast), a.ctx)
+    }
+}
+
+def public operator +(a : SFloat | SDouble; b : float) {
+    return a + fp_num(a, double(b))
+}
+
+def public operator +(a : SFloat | SDouble; b : double) {
+    return a + fp_num(a, b)
+}
+
+def public operator -(a, b : SFloat | SDouble) {
+    static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
+        concept_assert(false, "float width mismatch")
+        return mk_fp(a, a.ast, a.ctx)
+    } else {
+        return mk_fp(a, Z3_mk_fpa_sub(a.ctx, Z3_mk_fpa_rne(a.ctx), a.ast, b.ast), a.ctx)
+    }
+}
+
+def public operator -(a : SFloat | SDouble; b : float) {
+    return a - fp_num(a, double(b))
+}
+
+def public operator -(a : SFloat | SDouble; b : double) {
+    return a - fp_num(a, b)
+}
+
+def public operator *(a, b : SFloat | SDouble) {
+    static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
+        concept_assert(false, "float width mismatch")
+        return mk_fp(a, a.ast, a.ctx)
+    } else {
+        return mk_fp(a, Z3_mk_fpa_mul(a.ctx, Z3_mk_fpa_rne(a.ctx), a.ast, b.ast), a.ctx)
+    }
+}
+
+def public operator *(a : SFloat | SDouble; b : float) {
+    return a * fp_num(a, double(b))
+}
+
+def public operator *(a : SFloat | SDouble; b : double) {
+    return a * fp_num(a, b)
+}
+
+def public operator /(a, b : SFloat | SDouble) {
+    static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
+        concept_assert(false, "float width mismatch")
+        return mk_fp(a, a.ast, a.ctx)
+    } else {
+        return mk_fp(a, Z3_mk_fpa_div(a.ctx, Z3_mk_fpa_rne(a.ctx), a.ast, b.ast), a.ctx)
+    }
+}
+
+def public operator /(a : SFloat | SDouble; b : float) {
+    return a / fp_num(a, double(b))
+}
+
+def public operator /(a : SFloat | SDouble; b : double) {
+    return a / fp_num(a, b)
+}
+
+def public operator -(a : SFloat | SDouble) {
+    return mk_fp(a, Z3_mk_fpa_neg(a.ctx, a.ast), a.ctx)
+}
+
+def public abs(a : SFloat | SDouble) {
+    return mk_fp(a, Z3_mk_fpa_abs(a.ctx, a.ast), a.ctx)
+}
+
+def public sqrt(a : SFloat | SDouble) {
+    return mk_fp(a, Z3_mk_fpa_sqrt(a.ctx, Z3_mk_fpa_rne(a.ctx), a.ast), a.ctx)
+}
+
+def public min(a, b : SFloat | SDouble) {
+    static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
+        concept_assert(false, "float width mismatch")
+        return mk_fp(a, a.ast, a.ctx)
+    } else {
+        return mk_fp(a, Z3_mk_fpa_min(a.ctx, a.ast, b.ast), a.ctx)
+    }
+}
+
+def public max(a, b : SFloat | SDouble) {
+    static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
+        concept_assert(false, "float width mismatch")
+        return mk_fp(a, a.ast, a.ctx)
+    } else {
+        return mk_fp(a, Z3_mk_fpa_max(a.ctx, a.ast, b.ast), a.ctx)
+    }
+}
+
+// `==` is Z3_mk_fpa_eq (IEEE), NOT Z3_mk_eq (structural). Structural equality
+// would make NaN == NaN true and +0 == -0 false — the exact inverse of runtime.
+def public operator ==(a, b : SFloat | SDouble) : SBool {
+    static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
+        concept_assert(false, "float width mismatch")
+        return SBool(ast = a.ast, ctx = a.ctx)
+    } else {
+        return SBool(ast = Z3_mk_fpa_eq(a.ctx, a.ast, b.ast), ctx = a.ctx)
+    }
+}
+
+def public operator ==(a : SFloat | SDouble; b : float) : SBool {
+    return a == fp_num(a, double(b))
+}
+
+def public operator ==(a : SFloat | SDouble; b : double) : SBool {
+    return a == fp_num(a, b)
+}
+
+def public operator !=(a, b : SFloat | SDouble) : SBool {
+    return s_not(a == b)
+}
+
+def public operator !=(a : SFloat | SDouble; b : float) : SBool {
+    return s_not(a == b)
+}
+
+def public operator !=(a : SFloat | SDouble; b : double) : SBool {
+    return s_not(a == b)
+}
+
+def public operator <(a, b : SFloat | SDouble) : SBool {
+    static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
+        concept_assert(false, "float width mismatch")
+        return SBool(ast = a.ast, ctx = a.ctx)
+    } else {
+        return SBool(ast = Z3_mk_fpa_lt(a.ctx, a.ast, b.ast), ctx = a.ctx)
+    }
+}
+
+def public operator <(a : SFloat | SDouble; b : float) : SBool {
+    return a < fp_num(a, double(b))
+}
+
+def public operator <(a : SFloat | SDouble; b : double) : SBool {
+    return a < fp_num(a, b)
+}
+
+def public operator <=(a, b : SFloat | SDouble) : SBool {
+    static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
+        concept_assert(false, "float width mismatch")
+        return SBool(ast = a.ast, ctx = a.ctx)
+    } else {
+        return SBool(ast = Z3_mk_fpa_leq(a.ctx, a.ast, b.ast), ctx = a.ctx)
+    }
+}
+
+def public operator <=(a : SFloat | SDouble; b : float) : SBool {
+    return a <= fp_num(a, double(b))
+}
+
+def public operator <=(a : SFloat | SDouble; b : double) : SBool {
+    return a <= fp_num(a, b)
+}
+
+def public operator >(a, b : SFloat | SDouble) : SBool {
+    static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
+        concept_assert(false, "float width mismatch")
+        return SBool(ast = a.ast, ctx = a.ctx)
+    } else {
+        return SBool(ast = Z3_mk_fpa_gt(a.ctx, a.ast, b.ast), ctx = a.ctx)
+    }
+}
+
+def public operator >(a : SFloat | SDouble; b : float) : SBool {
+    return a > fp_num(a, double(b))
+}
+
+def public operator >(a : SFloat | SDouble; b : double) : SBool {
+    return a > fp_num(a, b)
+}
+
+def public operator >=(a, b : SFloat | SDouble) : SBool {
+    static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
+        concept_assert(false, "float width mismatch")
+        return SBool(ast = a.ast, ctx = a.ctx)
+    } else {
+        return SBool(ast = Z3_mk_fpa_geq(a.ctx, a.ast, b.ast), ctx = a.ctx)
+    }
+}
+
+def public operator >=(a : SFloat | SDouble; b : float) : SBool {
+    return a >= fp_num(a, double(b))
+}
+
+def public operator >=(a : SFloat | SDouble; b : double) : SBool {
+    return a >= fp_num(a, b)
+}
+
+//! True when the value is NaN — the predicate SReal cannot express.
+def public is_nan(a : SFloat | SDouble) : SBool {
+    return SBool(ast = Z3_mk_fpa_is_nan(a.ctx, a.ast), ctx = a.ctx)
+}
+
+def public is_inf(a : SFloat | SDouble) : SBool {
+    return SBool(ast = Z3_mk_fpa_is_infinite(a.ctx, a.ast), ctx = a.ctx)
+}
+
+def public is_zero(a : SFloat | SDouble) : SBool {
+    return SBool(ast = Z3_mk_fpa_is_zero(a.ctx, a.ast), ctx = a.ctx)
+}
+
+def public ite(c : SBool; t, f : SFloat | SDouble) {
+    static_if (typeinfo stripped_typename(t) != typeinfo stripped_typename(f)) {
+        concept_assert(false, "float width mismatch in ite arms")
+        return mk_fp(t, t.ast, t.ctx)
+    } else {
+        return mk_fp(t, Z3_mk_ite(c.ctx, c.ast, t.ast, f.ast), c.ctx)
+    }
+}
+
+// ===== conversions between the numeric sorts =====
+
+//! Int -> FP goes through Real, which Z3 in practice cannot decide: measured as a
+//! hang (`timeout`) even for `i < 3 && to_float(i) > 5.0f`. Set a solver timeout
+//! before using these, and prefer keeping a formula on one side of the boundary.
+def public to_float(a : SInt) : SFloat {
+    let r = Z3_mk_int2real(a.ctx, a.ast)
+    return SFloat(ast = Z3_mk_fpa_to_fp_real(a.ctx, Z3_mk_fpa_rne(a.ctx), r, Z3_mk_fpa_sort_32(a.ctx)), ctx = a.ctx)
+}
+
+def public to_double(a : SInt) : SDouble {
+    let r = Z3_mk_int2real(a.ctx, a.ast)
+    return SDouble(ast = Z3_mk_fpa_to_fp_real(a.ctx, Z3_mk_fpa_rne(a.ctx), r, Z3_mk_fpa_sort_64(a.ctx)), ctx = a.ctx)
+}
+
+def public to_float(a : SDouble) : SFloat {
+    return SFloat(ast = Z3_mk_fpa_to_fp_float(a.ctx, Z3_mk_fpa_rne(a.ctx), a.ast, Z3_mk_fpa_sort_32(a.ctx)), ctx = a.ctx)
+}
+
+def public to_double(a : SFloat) : SDouble {
+    return SDouble(ast = Z3_mk_fpa_to_fp_float(a.ctx, Z3_mk_fpa_rne(a.ctx), a.ast, Z3_mk_fpa_sort_64(a.ctx)), ctx = a.ctx)
+}
+
+//! Truncation toward zero, matching das `int(x)`. Z3 leaves the result
+//! uninterpreted for NaN, infinities and out-of-range inputs — which is the safe
+//! direction: an unconstrained result can never make a formula look unsatisfiable.
+def public to_int(a : SFloat | SDouble) : SInt {
+    let bv = Z3_mk_fpa_to_sbv(a.ctx, Z3_mk_fpa_round_toward_zero(a.ctx), a.ast, 32u)
+    return SInt(ast = Z3_mk_bv2int(a.ctx, bv, true), ctx = a.ctx)
+}
+
+//! Exact rational value. Unspecified for NaN and infinities — guard with
+//! `is_nan` / `is_inf` when the input may not be finite.
+def public to_real(a : SFloat | SDouble) : SReal {
+    return SReal(ast = Z3_mk_fpa_to_real(a.ctx, a.ast), ctx = a.ctx)
+}
+
 //! `s_lift` — value-or-symbolic normalizer used by generated code ([smt_fn],
 //! constrain blocks): concrete das values become numerals, symbolic pass through.
 def public s_lift(ctx : Z3_context; v : int) : SInt {
@@ -1028,9 +1335,8 @@ def public s_lift(_ctx : Z3_context; v : SBv64) : SBv64 {
 // ===== quantifiers =====
 
 //! Bounded combinators — expand a predicate over concrete indices into one
-//! conjunction/disjunction AT FORMULA-BUILD TIME. These are NOT SMT
-//! quantifiers (see `smt_forall`/`smt_exists` below for the real thing);
-//! for fixed small n the expansion is the encoding solvers handle best.
+//! conjunction/disjunction AT FORMULA-BUILD TIME. NOT SMT quantifiers (see
+//! `smt_forall`/`smt_exists` below); for small fixed n this encodes best.
 def public all_of(n : int; blk : block<(i : int) : SBool>) : SBool {
     assert(n > 0)
     var conds <- [for (i in range(n)); invoke(blk, i)]
@@ -1169,6 +1475,22 @@ def public eval_bv(m : Model; x : SBv8 | SBv16 | SBv32 | SBv64) : uint64 {
     return v
 }
 
+// Readback via the IEEE bit pattern, not the rational value — exact for NaN, the
+// infinities and negative zero, all of which Z3_mk_fpa_to_real leaves unspecified.
+def private eval_ieee_bits(m : Model; ast : Z3_ast) : uint64 {
+    var v = 0ul
+    Z3_get_numeral_uint64(m.ctx, eval_ast(m, Z3_mk_fpa_to_ieee_bv(m.ctx, ast)), safe_addr(v))
+    return v
+}
+
+def public eval_float(m : Model; x : SFloat) : float {
+    return unsafe(reinterpret<float>(uint(eval_ieee_bits(m, x.ast))))
+}
+
+def public eval_double(m : Model; x : SDouble) : double {
+    return unsafe(reinterpret<double>(eval_ieee_bits(m, x.ast)))
+}
+
 // one-shots on the solver's current model
 def public model_int(s : Solver; x : SInt) : int {
     var r = 0
@@ -1198,6 +1520,22 @@ def public model_string(s : Solver; x : SString) : string {
     var r = ""
     with_model(s) $(m) {
         r = eval_string(m, x)
+    }
+    return r
+}
+
+def public model_float(s : Solver; x : SFloat) : float {
+    var r = 0.0f
+    with_model(s) $(m) {
+        r = eval_float(m, x)
+    }
+    return r
+}
+
+def public model_double(s : Solver; x : SDouble) : double {
+    var r = 0.0lf
+    with_model(s) $(m) {
+        r = eval_double(m, x)
     }
     return r
 }
@@ -1298,5 +1636,13 @@ def public to_string(e : SReal) : string {
 }
 
 def public to_string(e : SString) : string {
+    return Z3_ast_to_string(e.ctx, e.ast)
+}
+
+def public to_string(e : SFloat) : string {
+    return Z3_ast_to_string(e.ctx, e.ast)
+}
+
+def public to_string(e : SDouble) : string {
     return Z3_ast_to_string(e.ctx, e.ast)
 }

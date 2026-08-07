@@ -77,11 +77,11 @@ def public load_lint_config_from_path(path : string; var disabled_codes : table<
     var root : JsonValue? = read_toml(body, error)
     // bad TOML or no [rules] table → defaults stand
     if (root == null || !(root.value is _object)) return
-    var root_obj & = unsafe(root.value as _object)   // nolint:LINT003 — table [] requires mutable binding
+    var root_obj & = unsafe(root.value as _object)   // table [] requires mutable binding
     if (!key_exists(root_obj, "rules")) return
     var rules_obj : JsonValue? = root_obj["rules"]
     if (rules_obj == null || !(rules_obj.value is _object)) return
-    var rules & = unsafe(rules_obj.value as _object)   // nolint:LINT003 — iteration requires mutable view
+    var rules & = unsafe(rules_obj.value as _object)   // iteration requires mutable view
     for (code, val_jv in keys(rules), values(rules)) {
         if (val_jv == null || !(val_jv.value is _bool)) continue
         let enabled = val_jv.value as _bool
@@ -99,10 +99,12 @@ def public load_lint_config_from_path(path : string; var disabled_codes : table<
     }
 }
 
-//! Seeds ``disabled_codes`` with the canonical default-off rule set (currently just STYLE005). Call before ``load_lint_config`` so that a ``STYLE005 = true`` directive in ``.lint_config`` can re-enable it.
+//! Seeds ``disabled_codes`` with the canonical default-off rule set (STYLE005, and SMT002 from the opt-in ``smt`` module). Call before ``load_lint_config`` so that a ``STYLE005 = true`` directive in ``.lint_config`` can re-enable it.
 def public seed_default_disabled(var disabled_codes : table<string>) : void {
-    if (!key_exists(disabled_codes, "STYLE005")) {
-        disabled_codes |> insert("STYLE005")
+    for (code in ["STYLE005", "SMT002"]) {
+        if (!key_exists(disabled_codes, code)) {
+            disabled_codes |> insert(code)
+        }
     }
 }
 
@@ -119,11 +121,11 @@ def private ensure_cache_loaded() : void {
     var error : string
     var root : JsonValue? = read_toml(body, error)
     if (root == null || !(root.value is _object)) return
-    var root_obj & = unsafe(root.value as _object)   // nolint:LINT003 — table [] requires mutable binding
+    var root_obj & = unsafe(root.value as _object)   // table [] requires mutable binding
     if (!key_exists(root_obj, "rules")) return
     var rules_obj : JsonValue? = root_obj["rules"]
     if (rules_obj == null || !(rules_obj.value is _object)) return
-    var rules & = unsafe(rules_obj.value as _object)   // nolint:LINT003 — iteration requires mutable view
+    var rules & = unsafe(rules_obj.value as _object)   // iteration requires mutable view
     for (code, val_jv in keys(rules), values(rules)) {
         if (val_jv == null || !(val_jv.value is _bool)) continue
         let enabled = val_jv.value as _bool
