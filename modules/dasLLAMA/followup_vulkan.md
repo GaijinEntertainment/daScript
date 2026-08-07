@@ -68,17 +68,22 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    End state across both backends: one way to write a kernel in daslang; the backend is a
    target, not a dialect. Remaining relatives live as their own items: the lens-helper hoist
    + M1 (item 10), cm2 kernel quality (item 11), the reification macro layer (next arc).
-10. **Vulkan on Mac (M1/MoltenVK) + shared dispatch-lens helpers.** Two items that ride
-   together: (a) make the vulkan tier green on the ssh M1 under MoltenVK — capability-gated
+10. **The MAC SESSION (ruled 2026-08-06): Vulkan on Mac + the kernel-model asymmetry closure
+   + shared dispatch-lens helpers.** Three items that ride together in one session on the
+   M-box: (a) make the vulkan tier green on the ssh M1 under MoltenVK — capability-gated
    declines (no coopmat, the 32 KB shared-memory cap declining the dn/at chains), the known
    `ffn_vs_ref` red bisected per-kernel via the model-less kernel-unit suite, portability_subset
-   enabled at device create (the dasVulkan-side sweep); correctness only, Metal stays the fast
-   path on that box. (b) Hoist the ~80 lines of dispatch-lens micro-grammar/validation the
-   `[vk_dispatch]` and `[metal_dispatch]` lenses duplicate (`mk_uint_cast`, `is_digit_tok`,
-   `role_ok`, `derived_role`, the `mk_grid_dim` core, `param_type`) into
-   `dasllama_kernel_access` — INVENTORY's designated shared Metal↔Vulkan component, which both
-   lenses already require. They diverged at birth (vulkan's grid folds any integer literal,
-   metal's only "1"); one owner ends that.
+   enabled at device create (landed dasVulkan-side); correctness only, Metal stays the fast
+   path on that box. (b) Close the kernel-model asymmetry ledger
+   (`modules/dasMetal/MASTERPLAN.md` §Cross-backend parity): relax `[metal_dispatch]` to
+   multi-kernel + `family=` like `[vk_dispatch]`, adopt inheritance in the metal kernel
+   corpus where families exist, fix the metal lens's grid-literal infer trap. (c) Hoist the
+   ~80 lines of dispatch-lens micro-grammar/validation the `[vk_dispatch]` and
+   `[metal_dispatch]` lenses duplicate (`mk_uint_cast`, `is_digit_tok`, `role_ok`,
+   `derived_role`, the `mk_grid_dim` core, `param_type`) into `dasllama_kernel_access` —
+   INVENTORY's designated shared Metal↔Vulkan component, which both lenses already require.
+   They diverged at birth (vulkan's grid folds any integer literal, metal's only "1"); one
+   owner ends that, and (b) rides on the hoisted core.
 
 11. **cm2 prefill GEMM across formats — close the llama.cpp prefill gap (NEXT ARC, ruled
    2026-08-06).** Walkthrough evidence (zen2, RTX 5060 Ti, class-kernel branch vs llama.cpp
