@@ -190,7 +190,11 @@ that a question answered for one backend has an obvious address in the other. Th
   why it compiles on every box. It requires common back for `Model`/`Session`, so like the Metal
   drivers it is required from the transformer umbrella, never from common.
 - **`dasllama_kernel_access.das`** — the shared body-walk read/write classifier both GPU lenses run
-  on. Backend-specific lowering stays in that backend's lens.
+  on, plus the dispatch-lens micro-grammar (the grid/tg/params spec tokenizers and the shared
+  AST-emission core: `is_digit_tok`, `role_ok`, `derived_role`, `mk_uint_cast`, `mk_grid_dim`,
+  `param_type`). One owner by design — the two lenses' grammars drifted apart when each carried a
+  private copy (metal folded only the literal "1" where vulkan folded any integer).
+  Backend-specific lowering stays in that backend's lens.
 
 **PSO lifecycle — the family shares ONE device and queue** (`metal_common_init`; the second-device
 question was surveyed and closed against). The decode PSO set lives as `g_pso_*` in
@@ -217,9 +221,15 @@ entry here:**
   That inversion is why their kernels↔common require directions differ.
 - **UMA vs discrete VRAM**: Metal never grows residency machinery (memory is memory); arenas,
   upload economics, mirrors and hydration are Vulkan's alone.
-- **Lens depth**: both lenses generate `enc_*` builders from kernel classes now — Metal via
+- **Lens depth**: both lenses generate `enc_*` builders from kernel classes — Metal via
   `[metal_dispatch]`, Vulkan via `[vk_dispatch]` (per-class set layouts + push constants; the
-  class-kernel arc retired the hand-built 6-slot set ladders outright).
+  class-kernel arc retired the hand-built 6-slot set ladders outright) — and both speak the
+  multi-kernel form (`kernel=` names the method, one macro instance per kernel, declared roles
+  must cover every kernel).
+- **`family=` is Vulkan-only.** A vulkan family shares the per-class surface — the `VkdClass`
+  global, the `set_*` builder, the pipe slots — across classes with one binding layout. Metal's
+  `enc_*` builder is the entire generated surface, so there is nothing for a family to share;
+  cross-class PSO/source sharing on Metal is a PSO-lifecycle question, not a lens one.
 - **Vulkan has no shapes module yet** — `resident_upload` declines ad hoc by feature name; the
   gap is `followup_vulkan.md` item 1, not a precedent to copy.
 
