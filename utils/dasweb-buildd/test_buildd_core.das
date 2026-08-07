@@ -181,11 +181,66 @@ def test_build_cannot_widen_its_own_output(t : T?) {
 def test_write_page_package(t : T?) {
     with_temp_dir("buildd_pkg_") $(dir) {
         t |> run("the generated package names the app sample and the job's entry") @(tt : T?) {
-            tt |> success(write_page_package(dir, "prog.das"), "written")
+            let no_assets : array<string>
+            tt |> success(write_page_package(dir, "prog.das", no_assets, ""), "written")
             let body = fread(path_join(dir, ".das_package"))
             tt |> success(find(body, "release_name(\"sample\")") >= 0, "app is sample")
             tt |> success(find(body, "release_main(\"prog.das\")") >= 0, "entry carried")
             tt |> success(find(body, "require daslib/daspkg") >= 0, "daspkg hook file")
+            tt |> success(find(body, "release_embed_file") < 0, "no embeds without assets")
+        }
+        t |> run("declared assets become absolute-src embeds at /<path>") @(tt : T?) {
+            mkdir_rec(path_join(dir, "wt/tutorials/_assets/gltf"))
+            fwrite(path_join(dir, "wt/tutorials/_assets/gltf/BoomBox.glb"), "glb bytes")
+            let wt = replace(path_join(dir, "wt"), "\\", "/")
+            let assets <- [ "tutorials/_assets/gltf/BoomBox.glb" ]
+            tt |> success(write_page_package(dir, "prog.das", assets, wt), "written")
+            let body = fread(path_join(dir, ".das_package"))
+            tt |> success(
+                find(body, "release_embed_file(\"{wt}/tutorials/_assets/gltf/BoomBox.glb\", \"/tutorials/_assets/gltf/BoomBox.glb\")") >= 0,
+                "embed line carries absolute src and MEMFS dst")
+            // embedded files live in the data segment: the package must widen INITIAL_MEMORY
+            tt |> success(find(body, "release_emcc_arg(\"-sINITIAL_MEMORY=") >= 0, "initial memory covers embeds")
+        }
+    }
+}
+
+[test]
+def test_declared_assets(t : T?) {
+    t |> run("wasm-assets lines parse; everything else is ignored") @(tt : T?) {
+        let src = ("options gen2\n" +
+            "// wasm-assets: tutorials/_assets/gltf/BoomBox.glb\n" +
+            "  // wasm-assets:   tutorials/_assets/hdri/cannon_2k.hdr  \n" +
+            "// wasm-assets:\n" +
+            "// not-assets: tutorials/_assets/x.bin\n" +
+            "require math\n")
+        let got <- collect_declared_assets(src)
+        tt |> equal(length(got), 2)
+        tt |> equal(got[0], "tutorials/_assets/gltf/BoomBox.glb")
+        tt |> equal(got[1], "tutorials/_assets/hdri/cannon_2k.hdr")
+    }
+    t |> run("asset paths are shape-checked: allowlist prefix, boring components") @(tt : T?) {
+        tt |> success(is_valid_asset_path("tutorials/_assets/cat/textures/concrete_cat_statue_diff_2k.jpg"), "real shape")
+        tt |> success(!is_valid_asset_path("/etc/passwd"), "absolute")
+        tt |> success(!is_valid_asset_path("tutorials/_assets/../../secrets.txt"), "traversal")
+        tt |> success(!is_valid_asset_path("examples/hello.das"), "outside the allowlist")
+        tt |> success(!is_valid_asset_path("tutorials/_assets/a\\b.bin"), "backslash")
+        tt |> success(!is_valid_asset_path("tutorials/_assets//x.bin"), "empty component")
+        tt |> success(!is_valid_asset_path("tutorials/_assets/"), "no file")
+    }
+    t |> run("validation fails closed with the offending path in the message") @(tt : T?) {
+        with_temp_dir("buildd_assets_") $(wt) {
+            mkdir_rec(path_join(wt, "tutorials/_assets/gltf"))
+            fwrite(path_join(wt, "tutorials/_assets/gltf/BoomBox.glb"), "glb bytes")
+            let ok_assets <- [ "tutorials/_assets/gltf/BoomBox.glb" ]
+            var err = ""
+            tt |> success(validate_asset_paths(ok_assets, wt, err), "existing asset passes")
+            let missing <- [ "tutorials/_assets/gltf/NoSuch.glb" ]
+            tt |> success(!validate_asset_paths(missing, wt, err), "missing asset refuses")
+            tt |> success(find(err, "NoSuch.glb") >= 0, "message names the path")
+            let bad <- [ "tutorials/_assets/../x" ]
+            tt |> success(!validate_asset_paths(bad, wt, err), "bad shape refuses")
+            remove(path_join(wt, "tutorials/_assets/gltf/BoomBox.glb"))
         }
     }
 }

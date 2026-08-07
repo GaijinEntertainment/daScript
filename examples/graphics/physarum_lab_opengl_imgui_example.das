@@ -57,6 +57,7 @@ let {
     DEF_DIFFUSE = 0.10f
     DEF_EXPOSURE = 1.4f
     DEF_AGENTS = 60000
+    DEF_AGENTS_WEB_INTERP = 10000   // playground opening load — the interpreted-on-wasm runner is ~15x slower
     DEF_COL_LOW = float3(0.0, 0.0, 0.0)
     DEF_COL_MID = float3(1.0, 0.35, 0.0)
     DEF_COL_HIGH = float3(1.0, 0.96, 0.78)
@@ -135,6 +136,8 @@ var display_program : uint
 var vao, vbo, ebo : uint
 var texture : uint                    // the field uploaded here for display
 var upload_rgba : array<float4>       // RGBA staging for the upload (WebGL2 wants RGBA/FLOAT for RGBA32F)
+var g_field_dirty = true              // re-stage the texture only when the field changed (the 512^2
+                                      // staging loop is the main per-frame cost on the interpreted runner)
 
 // ----- display shader: textured fullscreen quad, tonemap + colormap -----
 var @in @location v_position : float2
@@ -327,7 +330,10 @@ def start_update_pass(n : int) {
             st |> notify_and_release   // more bands than agents — balance the wait-group, skip the thread
             continue
         }
-        new_job() <| @capture(= pagents, = pfield, = read_offset, = lo, = hi, = prm, = st) {
+        // new_thread per band (the Path Tracer pattern), NOT new_job: the persistent jobque wedges
+        // the interpreted wasm runner (playground), while per-pass threads work on every runner and
+        // map onto the same pre-spawned Web Worker pool in the compiled build.
+        new_thread() <| @capture(= pagents, = pfield, = read_offset, = lo, = hi, = prm, = st) {
             update_agents_band(pagents, pfield, read_offset, lo, hi, prm)
             st |> notify_and_release
         }
@@ -337,11 +343,12 @@ def start_update_pass(n : int) {
 // Scatter every agent's deposit into the live field (serial on the main thread — race-free).
 def deposit_agents {
     let off = read_off()
+    let dep = g_deposit          // hoisted: the interpreter re-reads a global on every iteration
     for (i in range(g_agent_count)) {
         let a = agents[i]
         let ix = wrap_i(int(floor(a.x)), TW)
         let iy = wrap_i(int(floor(a.y)), TH)
-        field[off + iy * TW + ix] += g_deposit
+        field[off + iy * TW + ix] += dep
     }
 }
 
@@ -350,6 +357,8 @@ def deposit_agents {
 def diffuse_decay {
     let so = read_off()
     let dofs = (1 - g_field_idx) * TW * TH
+    let dif = g_diffuse          // hoisted out of the 512^2 loop — see deposit_agents
+    let dec = g_decay
     for (y in range(TH)) {
         let ym = wrap_i(y - 1, TH) * TW
         let yc = y * TW
@@ -362,7 +371,7 @@ def diffuse_decay {
                 field[so + yp + xm] + field[so + yp + x] + field[so + yp + xp])
             let c = field[so + yc + x]
             let mean = sum * (1.0f / 9.0f)
-            field[dofs + yc + x] = (c + (mean - c) * g_diffuse) * g_decay
+            field[dofs + yc + x] = (c + (mean - c) * dif) * dec
         }
     }
     g_field_idx = 1 - g_field_idx
@@ -386,17 +395,20 @@ def apply_mouse_seed {
     let cy = wrap_i(int((1.0f - mp.y / ds.y) * float(TH)), TH)   // flip Y: GL origin is bottom-left
     let off = read_off()
     let R = 9
+    let r2 = float(R * R)
+    let dep8 = g_deposit * 8.0f
     for (dy in range(-R, R + 1)) {
         for (dx in range(-R, R + 1)) {
             let d2 = float(dx * dx + dy * dy)
-            if (d2 > float(R * R)) {
+            if (d2 > r2) {
                 continue
             }
             let ix = wrap_i(cx + dx, TW)
             let iy = wrap_i(cy + dy, TH)
-            field[off + iy * TW + ix] += g_deposit * 8.0f * exp(-d2 * 0.04f)
+            field[off + iy * TW + ix] += dep8 * exp(-d2 * 0.04f)
         }
     }
+    g_field_dirty = true
 }
 
 // The pass state machine, driven once per frame from update() on the main thread.
@@ -418,6 +430,7 @@ def advance_sim {
         g_prev_pass_tick = ref_time_ticks()
         deposit_agents()
         diffuse_decay()
+        g_field_dirty = true
         g_sim_frame++
     }
     // structural changes are safe here: no worker is touching agents/field
@@ -425,6 +438,7 @@ def advance_sim {
         clear_field()
         reseed_agents()
         g_reseed_pending = false
+        g_field_dirty = true
     } elif (g_target_agents != g_agent_count) {
         reseed_agents()
     }
@@ -435,6 +449,8 @@ def advance_sim {
 // ===== display + ui =====
 
 def upload_field {
+    return if (!g_field_dirty)
+    g_field_dirty = false
     let off = read_off()
     for (i in range(TW * TH)) {
         upload_rgba[i] = float4(field[off + i], 0.0f, 0.0f, 1.0f)
@@ -515,6 +531,30 @@ def drive_audio {
     }
 }
 
+// The interpreted playground runs the sim ~30x slower than the compiled wasm64 card, so it opens
+// with a lighter agent load (the slider ceiling stays the same). MEASURED, not sniffed: the card
+// is minted by the --jit-target=wasm64 exe rail, not AOT codegen, so is_in_aot() is false on
+// BOTH wasm runtimes — a timed spin is the only signal that separates them. Web-only: desktop
+// keeps the full defaults whatever its speed.
+var g_light_defaults = false
+
+def private measure_slow_runtime : bool {
+    // pure-ALU spin, measured on daslang.io 2026-08-07: 2ms compiled wasm64, 140ms
+    // interpreted — a 70x gap the 20ms threshold splits with x7 margin on either side.
+    // (A builtin-heavy loop like sin narrows the gap enough to misread; don't.)
+    let t0 = ref_time_ticks()
+    var acc = 0u
+    for (_i in range(10000000)) {
+        acc = acc * 1664525u + 1013904223u
+    }
+    // acc feeds the result so the loop cannot fold away; the right arm is always true
+    return get_time_usec(t0) > 20000 && acc != 12345u
+}
+
+def default_agents : int {
+    return g_light_defaults ? DEF_AGENTS_WEB_INTERP : DEF_AGENTS
+}
+
 def reset_to_defaults {
     g_sensor_angle_deg = DEF_SENSOR_ANGLE
     g_sensor_dist = DEF_SENSOR_DIST
@@ -527,7 +567,7 @@ def reset_to_defaults {
     g_col_low = DEF_COL_LOW
     g_col_mid = DEF_COL_MID
     g_col_high = DEF_COL_HIGH
-    g_target_agents = DEF_AGENTS
+    g_target_agents = default_agents()
     g_threads = clamp(get_total_hw_threads(), 4, MAX_BANDS)
 }
 
@@ -615,13 +655,14 @@ def init() {
     field |> resize(2 * TW * TH)
     upload_rgba |> resize(TW * TH)
     clear_field()
+    if (get_running_platform_name() == "emscripten") {
+        g_light_defaults = measure_slow_runtime()
+    }
+    g_target_agents = default_agents()
     reseed_agents()
     // Open at the detected core count, floored to 4 so it never looks single-threaded on a browser
     // that clamps navigator.hardwareConcurrency, and capped at MAX_BANDS. Drag the slider up to oversubscribe.
     g_threads = clamp(get_total_hw_threads(), 4, MAX_BANDS)
-    // Persistent job queue for the agent passes (start_update_pass uses new_job). Created once here so it
-    // spans the externally-driven frame loop (emscripten set_main_loop) — a with_job_que block can't.
-    create_job_que()
     if (g_audio_enabled) {
         setup_audio()
     }
@@ -670,7 +711,6 @@ def shutdown() {
             g_audio_owned = false
         }
     }
-    destroy_job_que()
     harness_shutdown()
 }
 

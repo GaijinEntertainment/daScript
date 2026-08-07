@@ -59,10 +59,20 @@ STREAM("/events") <| @(var req : HttpRequest?; var writer : HttpResponseWriter?)
 ```
 
 - **Writer ops are handle-first** — `respond` / `sse_event` / `write_chunked` / `end_headers` /
-  `close_writer` / `release_writer` / `is_writer_connected` all take the **server handle first**,
-  then the `writer`. That is deliberate: generation runs on the tick thread, and the op posts the
-  socket write to the connection's event loop (`adapter->loop()->runInLoop`) so writes marshal to
-  the right loop.
+  `set_header` / `SERVE_FILE` / `close_writer` / `release_writer` / `is_writer_connected` all take
+  the **server handle first**, then the `writer`. That is deliberate: generation runs on the tick
+  thread, and the op posts the socket write to the connection's event loop
+  (`adapter->loop()->runInLoop`) so writes marshal to the right loop.
+- **Large or binary bodies must go through the writer rail.** The buffered path cannot raise
+  libhv's per-connection write-buf cap (16MB) — a bigger body would get the connection closed
+  MID-BODY, a truncated response after a clean 200 — so buffered `SERVE_FILE`/`DATA` REFUSE a
+  body over ~15MB with a 500 naming the writer rail (fail closed, never truncate).
+  `SERVE_FILE(server, writer, path)` reads the file on the connection loop (binary-safe, content
+  type from the file name) and covers the body with the cap; `respond` covers its body the same
+  way. Set extra headers first with `set_header(server, writer, k, v)` — they serialize when the
+  terminal op writes. Writer-rail write failures are still async: the das call cannot return
+  them; they land as `dasHV:` ERROR lines in libhv's log (`bin/libhv.*.log` by default — route
+  with `DASLIVE_HV_LOG=stderr`), and `is_writer_connected` flips false afterwards.
 - `is_writer_connected(server, writer)` — true while the writer's client connection is still open
   (false for null / unknown / released writers). The async write ops never report a dead peer, so
   a long-lived stream **polls this to evict abandoned clients** (see `openai_server.das`'s

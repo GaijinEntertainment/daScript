@@ -29,9 +29,8 @@ struct BuildRunResult {
     output : string   // combined stdout+stderr (the build script redirects its own stderr)
 }
 
-def private is_boring_component(name : string; suffixes) : bool {
-    let n = length(name)
-    if (n < 2 || n > 128) {
+def private is_boring_chars(name : string) : bool {
+    if (empty(name) || name |> starts_with(".") || find(name, "..") >= 0) {
         return false
     }
     var ok = true
@@ -43,7 +42,12 @@ def private is_boring_component(name : string; suffixes) : bool {
             }
         }
     }
-    if (!ok || name |> starts_with(".") || find(name, "..") >= 0) {
+    return ok
+}
+
+def private is_boring_component(name : string; suffixes) : bool {
+    let n = length(name)
+    if (n < 2 || n > 128 || !is_boring_chars(name)) {
         return false
     }
     for (suffix in suffixes) {
@@ -58,6 +62,61 @@ def is_valid_source_filename(name : string) : bool {
     //! Bundle file names are user-authored; one boring `.das` path component
     //! or the job is refused before anything touches the filesystem.
     return is_boring_component(name, fixed_array(".das"))
+}
+
+// ===== declared page assets =====
+
+let WASM_ASSETS_MARKER = "// wasm-assets:"
+let WASM_ASSETS_PREFIX = "tutorials/_assets/"
+
+def collect_declared_assets(source : string) : array<string> {
+    //! `// wasm-assets: <path>` lines in a page entry — one worktree-relative
+    //! asset path each, embedded into the artifact's MEMFS at /<path> so the
+    //! program's fopen("<path>") finds it (the same mapping the interpreted
+    //! runner's sidecar preload uses).
+    var out : array<string>
+    for (line in split(source, "\n")) {
+        let trimmed = line |> strip
+        if (trimmed |> starts_with(WASM_ASSETS_MARKER)) {
+            let p = slice(trimmed, length(WASM_ASSETS_MARKER)) |> strip
+            if (!empty(p)) {
+                out |> push(p)
+            }
+        }
+    }
+    return <- out
+}
+
+def is_valid_asset_path(path : string) : bool {
+    //! User-authored, becomes a filesystem path AND a generated .das_package
+    //! string literal: boring '/'-joined components, confined to the assets
+    //! allowlist. Anything else refuses the job before the filesystem is touched.
+    if (!(path |> starts_with(WASM_ASSETS_PREFIX)) ||
+            find(path, "\\") >= 0 || find(path, "//") >= 0 || path |> ends_with("/")) {
+        return false
+    }
+    for (part in split(path, "/")) {
+        if (!is_boring_chars(part)) {
+            return false
+        }
+    }
+    return true
+}
+
+def validate_asset_paths(assets : array<string>; worktree : string; var error : string&) : bool {
+    //! Shape first, existence second — the message is the user's own declaration
+    //! talking, so it names the exact line that refused.
+    for (a in assets) {
+        if (!is_valid_asset_path(a)) {
+            error = "invalid wasm-assets path `{a}`: one relative path under {WASM_ASSETS_PREFIX}, plain characters only"
+            return false
+        }
+        if (!fexist(path_join(worktree, a))) {
+            error = "wasm-assets path `{a}` does not exist in the build toolchain"
+            return false
+        }
+    }
+    return true
 }
 
 def private is_lower_hex(s : string; min_len : int; max_len : int) : bool {
@@ -176,12 +235,33 @@ def expected_artifact_names(mode : string) : array<string> {
     return <- array<string>()
 }
 
-def write_page_package(src_dir : string; entry : string) : bool {
+def write_page_package(src_dir : string; entry : string; assets : array<string>; worktree : string) : bool {
     //! The .das_package a page build compiles under — daspkg's release-wasm rail
     //! wants one, and a job's sources can never carry their own (bundle names
     //! must be plain `.das`). Naming the app `sample` pins the exact artifact
-    //! set. `entry` is already validated (is_valid_source_filename), so the
-    //! interpolation cannot escape the string.
+    //! set. `entry` is already validated (is_valid_source_filename) and every
+    //! asset path passed validate_asset_paths, so the interpolations cannot
+    //! escape their string literals. Asset sources are absolute worktree paths
+    //! (daspkg's path_join resolution keeps an absolute src as-is); each embeds
+    //! at /<path> where the program's fopen("<path>") finds it.
+    var asset_bytes = 0l
+    let embeds = build_string() $(writer) {
+        for (a in assets) {
+            // forward slashes regardless of host: emcc accepts them everywhere, and
+            // the generated literal must never contain a backslash escape
+            let src = replace(path_join(worktree, a), "\\", "/")
+            var sz_err = ""
+            asset_bytes += file_size(path_join(worktree, a), sz_err)
+            writer |> write("    release_embed_file(\"{src}\", \"/{a}\")\n")
+        }
+        // Embedded files live in the wasm data segment, which must fit INITIAL_MEMORY
+        // at link (wasm-ld: "initial memory too small") — growth only helps later.
+        // Base 16MB link default + the embeds + slack, rounded to the 64KB wasm page.
+        if (asset_bytes > 0l) {
+            let initial : int64 = (asset_bytes + int64(24 * 1024 * 1024) + int64(0xFFFF)) & ~int64(0xFFFF)
+            writer |> write("    release_emcc_arg(\"-sINITIAL_MEMORY={initial}\")\n")
+        }
+    }
     let body = ("options gen2\n" +
         "require daslib/daspkg\n\n" +
         "[export]\n" +
@@ -192,6 +272,7 @@ def write_page_package(src_dir : string; entry : string) : bool {
         "def release() \{\n" +
         "    release_name(\"sample\")\n" +
         "    release_main(\"{entry}\")\n" +
+        embeds +
         "\}\n")
     if (!fwrite(path_join(src_dir, ".das_package"), body)) {
         logger_error("buildd.core", "cannot write .das_package into {src_dir}")

@@ -706,6 +706,18 @@ static void post_writer_op ( Handle<hv::WebSocketServer> h, hv::HttpResponseWrit
     }
 }
 
+// libhv closes any connection whose queued unsent bytes exceed the channel's max write
+// bufsize (1<<24 by default): a buffered body larger than the socket drains in one write()
+// gets the connection dropped MID-BODY — a truncated response after a clean 200. Raise the
+// cap to cover the body; never lower it, so later responses on a kept-alive connection
+// inherit at least the default.
+static void cover_body_write_bufsize ( hv::HttpResponseWriter * wr, size_t body_size ) {
+    size_t want = body_size + (1u << 20);
+    if ( want < (1u << 24) ) want = (1u << 24);
+    if ( want > 0xFFFFFFFFu ) want = 0xFFFFFFFFu;
+    wr->setMaxWriteBufsize((uint32_t)want);
+}
+
 // Whole-body response through the writer (the non-streaming path): status + content-type + body, then
 // end + release. Lets one async (writer) route serve both streamed and buffered responses.
 int das_writer_respond ( Handle<hv::WebSocketServer> h, hv::HttpResponseWriter * w, int32_t status,
@@ -717,7 +729,49 @@ int das_writer_respond ( Handle<hv::WebSocketServer> h, hv::HttpResponseWriter *
     post_writer_op(h, w, [adapter,w,st,ct,b](hv::HttpResponseWriter* wr){
         wr->WriteStatus((http_status)st);
         wr->WriteHeader("Content-Type", ct.c_str());
-        wr->End(b);
+        cover_body_write_bufsize(wr, b.size());
+        int rc = wr->End(b);
+        if ( rc < 0 ) {
+            hloge("dasHV: writer respond failed rc=%d body=%zu", rc, b.size());
+        }
+        if ( adapter ) adapter->release_writer(w);
+    });
+    return 0;
+}
+
+// Set a header on a writer-rail response. Order matters only relative to the terminal op:
+// headers land on the writer's response object and serialize when `respond` / SERVE_FILE
+// writes it out, so every set_header must be issued before that call.
+int das_writer_set_header ( Handle<hv::WebSocketServer> h, hv::HttpResponseWriter * w,
+        const char * key, const char * value ) {
+    std::string k = key ? key : "";
+    std::string v = value ? value : "";
+    if ( k.empty() ) return -1;
+    post_writer_op(h, w, [k,v](hv::HttpResponseWriter* wr){
+        wr->WriteHeader(k.c_str(), v.c_str());
+    });
+    return 0;
+}
+
+// Whole-file response through the writer — the writer-rail twin of SERVE_FILE. The file is
+// read on the connection loop, so the bytes never pass through a das string (whose
+// `const char*` marshalling truncates binary at the first NUL). Content type follows the
+// file name; headers already set through the writer ride along; a missing file is a 404
+// with an empty body.
+int das_writer_serve_file ( Handle<hv::WebSocketServer> h, hv::HttpResponseWriter * w, const char * filepath ) {
+    auto adapter = lookup_server(h);
+    std::string path = filepath ? filepath : "";
+    post_writer_op(h, w, [adapter,w,path](hv::HttpResponseWriter* wr){
+        int st = wr->response->File(path.c_str());
+        if ( st != 200 ) wr->response->body.clear();
+        wr->response->status_code = (http_status)st;
+        cover_body_write_bufsize(wr, wr->response->body.size());
+        int rc = wr->WriteResponse(wr->response.get());
+        if ( rc < 0 ) {
+            hloge("dasHV: writer SERVE_FILE failed rc=%d file=%s body=%zu",
+                rc, path.c_str(), wr->response->body.size());
+        }
+        wr->End();
         if ( adapter ) adapter->release_writer(w);
     });
     return 0;
@@ -825,11 +879,34 @@ http_status das_resp_redirect ( HttpResponse * resp, const char * location, http
     return (http_status)resp->Redirect(location ? location : "/", status);
 }
 
+// The buffered rail cannot raise the connection's write-buf cap — the write happens after
+// the handler returns, with no channel in reach — so a body over the libhv default gets the
+// connection closed MID-SEND: a truncated response after a clean 200, logged only in libhv's
+// side log. Refuse loudly instead; a big body belongs on the writer rail, which covers it.
+static const size_t DAS_HV_BUFFERED_BODY_MAX = (1u << 24) - (1u << 20);
+
+static http_status das_resp_refuse_oversize ( HttpResponse * resp, const char * what, size_t size ) {
+    hloge("dasHV: buffered %s refused: %zu bytes exceeds the %zu write-buf budget; "
+          "serve it through a STREAM route's SERVE_FILE/respond", what, size, DAS_HV_BUFFERED_BODY_MAX);
+    resp->content_type = TEXT_PLAIN;
+    resp->body = "response too large for the buffered rail; serve it through a STREAM route";
+    return (http_status)HTTP_STATUS_INTERNAL_SERVER_ERROR;
+}
+
 http_status das_resp_file ( HttpResponse * resp, const char * filepath ) {
-    return (http_status)resp->File(filepath ? filepath : "");
+    std::string path = filepath ? filepath : "";
+    size_t fs = hv_filesize(path.c_str());
+    if ( fs > DAS_HV_BUFFERED_BODY_MAX ) {
+        return das_resp_refuse_oversize(resp, "SERVE_FILE", fs);
+    }
+    return (http_status)resp->File(path.c_str());
 }
 
 http_status das_resp_data ( HttpResponse * resp, const char * data, int32_t len, http_status status ) {
+    if ( !data || len < 0 ) len = 0;
+    if ( (size_t)len > DAS_HV_BUFFERED_BODY_MAX ) {
+        return das_resp_refuse_oversize(resp, "DATA", (size_t)len);
+    }
     resp->content_type = APPLICATION_OCTET_STREAM;
     resp->body.assign(data, len);
     return status;
@@ -1607,6 +1684,12 @@ public:
         addExtern<DAS_BIND_FUN(das_writer_set_keepalive_timeout)> (*this, lib, "set_writer_keepalive_timeout",
             SideEffects::worstDefault, "das_writer_set_keepalive_timeout")
                 ->args({"server","writer","timeout_ms"});
+        addExtern<DAS_BIND_FUN(das_writer_set_header)> (*this, lib, "set_header",
+            SideEffects::worstDefault, "das_writer_set_header")
+                ->args({"server","writer","key","value"});
+        addExtern<DAS_BIND_FUN(das_writer_serve_file)> (*this, lib, "SERVE_FILE",
+            SideEffects::worstDefault, "das_writer_serve_file")
+                ->args({"server","writer","filepath"});
         addExtern<DAS_BIND_FUN(das_writer_close)> (*this, lib, "close_writer",
             SideEffects::worstDefault, "das_writer_close")
                 ->args({"server","writer"});

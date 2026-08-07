@@ -43,7 +43,7 @@ class AdvancedTestServer : HvWebServer {
 
         // Binary data
         GET("/binary") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            var payload = "BINARYDATA12"
+            let payload = "BINARYDATA12"
             return resp |> DATA(payload, 12)
         }
 
@@ -69,6 +69,12 @@ class AdvancedTestServer : HvWebServer {
         POST("/ack") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return http_status.NO_CONTENT
         }
+
+        // Oversize buffered file — the buffered rail cannot cover a body past libhv's
+        // write-buf cap, so SERVE_FILE must refuse loudly (500), never truncate a 200
+        GET("/bigfile") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return resp |> SERVE_FILE("{self.static_dir}/big.bin")
+        }
     }
 }
 
@@ -82,6 +88,8 @@ def with_advanced_test_server(port : int; blk : block<(base_url : string) : void
     mkdir_rec(static_root)
     write_test_file("{static_root}/index.html", "<h1>Test</h1>")
     write_test_file("{static_root}/data.json", "\{\"key\":\"value\"\}")
+    // 17MB — past the buffered rail's write-buf budget, for the oversize-refusal test
+    write_test_file("{static_root}/big.bin", repeat("0123456789abcdef", 17 * 1024 * 1024 / 16))
 
     with_job_status(1) $(started) {
         with_job_status(1) $(finished) {
@@ -117,6 +125,7 @@ def with_advanced_test_server(port : int; blk : block<(base_url : string) : void
     // Cleanup
     remove("{static_root}/index.html")
     remove("{static_root}/data.json")
+    remove("{static_root}/big.bin")
     remove(static_root)
 }
 
@@ -126,7 +135,7 @@ def with_advanced_test_server(port : int; blk : block<(base_url : string) : void
 
 [test]
 def test_static_file_serving(t : T?) {
-    with_advanced_test_server(PORT_SERVER_ADVANCED) <| $(base_url) {
+    with_advanced_test_server(PORT_SERVER_ADVANCED) $(base_url) {
         t |> run("serves HTML file") @(t : T?) {
             GET("{base_url}/static/index.html") <| $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
@@ -149,7 +158,7 @@ def test_static_file_serving(t : T?) {
 
 [test]
 def test_cors(t : T?) {
-    with_advanced_test_server(PORT_SERVER_ADVANCED) <| $(base_url) {
+    with_advanced_test_server(PORT_SERVER_ADVANCED) $(base_url) {
         t |> run("CORS headers present on response") @(t : T?) {
             with_http_request() <| $(var req) {
                 req.method = http_method.OPTIONS
@@ -167,7 +176,7 @@ def test_cors(t : T?) {
 
 [test]
 def test_redirect(t : T?) {
-    with_advanced_test_server(PORT_SERVER_ADVANCED) <| $(base_url) {
+    with_advanced_test_server(PORT_SERVER_ADVANCED) $(base_url) {
         t |> run("REDIRECT returns 301 with Location header") @(t : T?) {
             with_http_request() <| $(var req) {
                 req.method = http_method.GET
@@ -191,7 +200,7 @@ def test_redirect(t : T?) {
 
 [test]
 def test_custom_headers_caching(t : T?) {
-    with_advanced_test_server(PORT_SERVER_ADVANCED) <| $(base_url) {
+    with_advanced_test_server(PORT_SERVER_ADVANCED) $(base_url) {
         t |> run("custom Cache-Control and ETag headers") @(t : T?) {
             GET("{base_url}/cached") <| $(resp) {
                 let cc = get_header(resp, "Cache-Control")
@@ -207,7 +216,7 @@ def test_custom_headers_caching(t : T?) {
 
 [test]
 def test_binary_data(t : T?) {
-    with_advanced_test_server(PORT_SERVER_ADVANCED) <| $(base_url) {
+    with_advanced_test_server(PORT_SERVER_ADVANCED) $(base_url) {
         t |> run("DATA returns binary with octet-stream content-type") @(t : T?) {
             GET("{base_url}/binary") <| $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
@@ -221,7 +230,7 @@ def test_binary_data(t : T?) {
 
 [test]
 def test_custom_content_type(t : T?) {
-    with_advanced_test_server(PORT_SERVER_ADVANCED) <| $(base_url) {
+    with_advanced_test_server(PORT_SERVER_ADVANCED) $(base_url) {
         t |> run("HTML response with text/html content-type") @(t : T?) {
             GET("{base_url}/html") <| $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
@@ -235,7 +244,7 @@ def test_custom_content_type(t : T?) {
 
 [test]
 def test_status_404(t : T?) {
-    with_advanced_test_server(PORT_SERVER_ADVANCED) <| $(base_url) {
+    with_advanced_test_server(PORT_SERVER_ADVANCED) $(base_url) {
         t |> run("404 error with JSON body") @(t : T?) {
             GET("{base_url}/not-found") <| $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.NOT_FOUND))
@@ -249,7 +258,7 @@ def test_status_404(t : T?) {
 
 [test]
 def test_status_201_created(t : T?) {
-    with_advanced_test_server(PORT_SERVER_ADVANCED) <| $(base_url) {
+    with_advanced_test_server(PORT_SERVER_ADVANCED) $(base_url) {
         t |> run("201 Created with Location header") @(t : T?) {
             POST("{base_url}/items", "new item") <| $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.CREATED))
@@ -262,10 +271,22 @@ def test_status_201_created(t : T?) {
 
 [test]
 def test_status_204_no_content(t : T?) {
-    with_advanced_test_server(PORT_SERVER_ADVANCED) <| $(base_url) {
+    with_advanced_test_server(PORT_SERVER_ADVANCED) $(base_url) {
         t |> run("204 No Content") @(t : T?) {
             POST("{base_url}/ack", "done") <| $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.NO_CONTENT))
+            }
+        }
+    }
+}
+
+[test]
+def test_buffered_oversize_refused(t : T?) {
+    with_advanced_test_server(PORT_SERVER_ADVANCED) $(base_url) {
+        t |> run("a buffered SERVE_FILE past the write-buf budget answers 500, never a truncated 200") @(t : T?) {
+            GET("{base_url}/bigfile") <| $(resp) {
+                t |> equal(int(resp.status_code), 500)
+                t |> success(find(string(resp.body), "STREAM route") >= 0, "the refusal names the writer rail")
             }
         }
     }

@@ -126,6 +126,21 @@ def private new_scratch_dir(var error : string&) : string {
     return ""
 }
 
+def private declared_page_assets(src_dir, entry, mode, worktree : string; var why : string&) : array<string> {
+    //! Assets a page entry declares (`// wasm-assets: <path>`) embed into the
+    //! artifact's MEMFS. User-authored paths: validated against the worktree
+    //! allowlist BEFORE the generated package references them; an invalid line
+    //! sets `why` (the user's own declaration talking) and yields no assets.
+    if (empty(entry) || mode != "page") {
+        return <- array<string>()
+    }
+    var out <- collect_declared_assets(fread(path_join(src_dir, entry)))
+    if (!validate_asset_paths(out, worktree, why)) {
+        out |> clear()
+    }
+    return <- out
+}
+
 def private run_one_job(job : ClaimedBuild) {
     //! One claimed job, start to finish: materialize, build, upload, clean up.
     //! Every outcome resolves the job on the server — a claim this function
@@ -150,14 +165,18 @@ def private run_one_job(job : ClaimedBuild) {
     mkdir_rec(out_dir)
     logger_info("buildd", "job start", JV((hash = job.hash, mode = job.mode, toolchain = job.toolchain)))
     let entry = unpack_sources(src_dir, job.source)
+    var asset_why = ""
+    let assets <- declared_page_assets(src_dir, entry, job.mode, g_cfg.worktree, asset_why)
     // A page build compiles under a generated .das_package (the release-wasm
     // rail wants one; job sources can never carry their own). Written by THIS
     // service into a dir it owns, before the sandbox ever runs.
-    let packaged = empty(entry) || job.mode != "page" || write_page_package(src_dir, entry)
+    let packaged = (empty(entry) || job.mode != "page" ||
+        (empty(asset_why) && write_page_package(src_dir, entry, assets, g_cfg.worktree)))
     if (empty(entry) || !packaged) {
-        // Two different faults, and the user must not be told their source is
+        // Three different faults, and the user must not be told their source is
         // malformed when the builder is what failed.
-        let why = empty(entry) ? "malformed source document" : "builder could not prepare the build directory"
+        let why = (empty(entry) ? "malformed source document"
+            : (!empty(asset_why) ? asset_why : "builder could not prepare the build directory"))
         logger_warning("buildd", "job failed: {why}",
             JV((hash = job.hash, duration_ms = get_time_usec(t0) / 1000)))
         upload_failure(g_cfg.server_url, g_cfg.token, job.hash, job.toolchain, why)

@@ -185,8 +185,11 @@ class PlaygroundServer : HvWebServer {
         GET("/api/build/status/:hash") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_build_status(req, resp)
         }
-        GET("/api/build/artifact/:toolchain/:hash/:file") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return handle_build_artifact(req, resp)
+        // Writer rail, not a buffered GET: artifacts run to tens of MB, and libhv drops a
+        // connection whose queued unsent body exceeds its write-buf cap — the writer-rail
+        // SERVE_FILE raises the cap over the body, the buffered path cannot.
+        STREAM("/api/build/artifact/:toolchain/:hash/:file") <| @(var req : HttpRequest?; var writer : HttpResponseWriter?) {
+            handle_build_artifact(server, req, writer)
         }
         POST("/api/build/toolchain") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return handle_build_toolchain(req, resp)
@@ -636,9 +639,17 @@ def private page_origin_host : string {
     return p >= 0 ? slice(o, p + 3) : o
 }
 
-def private handle_build_artifact(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+def private handle_build_artifact(srv : WebSocketServer; var req : HttpRequest?; var writer : HttpResponseWriter?) {
     let t0 = ref_time_ticks()
     let ip = client_ip_of(req)
+    // STREAM registers ANY-method matching; the artifact surface is GET-only
+    // (caddy's 1MB request-body cap on this route assumes no handler reads one)
+    if (req.method != http_method.GET) {
+        log_request("{req.method}", "/api/build/artifact", 404, ip, 0, 0, t0)
+        respond(srv, writer, int(http_status.NOT_FOUND), "application/json",
+            write_json(JV((error = "unknown artifact"))))
+        return
+    }
     let file = get_param(req, "file")
     // A document artifact is attacker-authored content that becomes part of
     // whatever origin serves it, so it answers ONLY on the dedicated page
@@ -648,7 +659,9 @@ def private handle_build_artifact(var req : HttpRequest?; var resp : HttpRespons
     // fail-closed rule the enqueue side applies.
     if (is_document_artifact(file) && get_header(req, "Host") != page_origin_host()) {
         log_request("GET", "/api/build/artifact", 404, ip, 0, 0, t0)
-        return resp |> JSON(write_json(JV((error = "page artifacts are served from the run origin"))), http_status.NOT_FOUND)
+        respond(srv, writer, int(http_status.NOT_FOUND), "application/json",
+            write_json(JV((error = "page artifacts are served from the run origin"))))
+        return
     }
     // resolve_artifact_file revalidates every request-derived component; a path
     // is only ever built from parts that passed
@@ -656,28 +669,31 @@ def private handle_build_artifact(var req : HttpRequest?; var resp : HttpRespons
         get_param(req, "toolchain"), get_param(req, "hash"), file)
     if (empty(path)) {
         log_request("GET", "/api/build/artifact", 404, ip, 0, 0, t0)
-        return resp |> JSON(write_json(JV((error = "unknown artifact"))), http_status.NOT_FOUND)
+        respond(srv, writer, int(http_status.NOT_FOUND), "application/json",
+            write_json(JV((error = "unknown artifact"))))
+        return
     }
     // content-addressed => immutable forever; artifacts are derived from user
     // input, so nosniff rides along like it does on stored sources
-    resp |> set_header("Cache-Control", "public, max-age=31536000, immutable")
-    resp |> set_header("X-Content-Type-Options", "nosniff")
+    set_header(srv, writer, "Cache-Control", "public, max-age=31536000, immutable")
+    set_header(srv, writer, "X-Content-Type-Options", "nosniff")
     // CORP: the COEP'd playground embeds the run-origin page (and Safari fetches
     // module wasm cross-origin never happen — module urls stay same-origin).
     // COEP on the artifact itself: the page document must be require-corp for its
     // agent cluster to cross-origin-isolate (threads), and a COEP'd document may
     // only spawn workers whose script response ITSELF carries an enforcing COEP —
     // so the js (and harmlessly the wasm) carry it too.
-    resp |> set_header("Cross-Origin-Resource-Policy", "cross-origin")
-    resp |> set_header("Cross-Origin-Embedder-Policy", "require-corp")
+    set_header(srv, writer, "Cross-Origin-Resource-Policy", "cross-origin")
+    set_header(srv, writer, "Cross-Origin-Embedder-Policy", "require-corp")
     // COOP completes the isolation pair for a page opened DIRECTLY (top level):
     // without it crossOriginIsolated stays false, SharedArrayBuffer is refused,
     // and a -pthread program hangs forever on `loading-workers`. Ignored in a
     // nested context, so it costs the embedded path nothing.
-    resp |> set_header("Cross-Origin-Opener-Policy", "same-origin")
-    let rc = resp |> SERVE_FILE(path)
-    log_request("GET", "/api/build/artifact", int(rc), ip, 0, artifact_size(path), t0)
-    return rc
+    set_header(srv, writer, "Cross-Origin-Opener-Policy", "same-origin")
+    // writer-rail SERVE_FILE: reads the file on the connection loop and covers the
+    // body with the channel's write-buf cap — see the route registration for why
+    SERVE_FILE(srv, writer, path)
+    log_request("GET", "/api/build/artifact", 200, ip, 0, artifact_size(path), t0)
 }
 
 def init_server(port : int; db_path : string; policy : StorePolicy; base_url : string; curated_dir : string = ""; build : BuildOptions = BuildOptions()) : bool {
