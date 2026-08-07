@@ -81,15 +81,20 @@ jobs:
       id: wasm-cache
       uses: actions/cache@v4
       with:
+        # Shared modules are globbed, not enumerated: das2rst dlopens EVERY
+        # dynamic module its doc sweep requires (stbimage via dasGLTF, pugixml,
+        # hv, unit-test, ...), and an enumerated list silently drops whichever
+        # one the sweep grows next. A hit restores only what the list names, the
+        # native build is skipped, and das2rst dies on the first missing module
+        # — reachable only on a site-only merge (anything touching src/modules/
+        # daslib misses the key), the same way the lib/ omission above stayed
+        # hidden. #3652 was the first such merge; this is the second member of
+        # that class, so the list goes.
         path: |
           bin
           lib
-          modules/dasGlfw/dasModuleGlfw.shared_module
-          modules/dasOpenGL/dasModuleOpenGL.shared_module
-          modules/dasClipboard/dasModuleClipboard.shared_module
-          modules/dasImgui/dasModuleImgui.shared_module
-          modules/dasImgui/imguiApp.shared_module
-          modules/dasImgui/imguiAppHeadless.shared_module
+          modules/**/*.shared_module
+          examples/**/*.shared_module
           web/output
           web/output64
           site/playground/samples
