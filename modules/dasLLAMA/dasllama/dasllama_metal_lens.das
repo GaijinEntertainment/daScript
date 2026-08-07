@@ -102,8 +102,6 @@ def private mk_builder_param(at : LineInfo; var bf : BufField) : VariablePtr {
 }
 
 // @span product: factors 'param' | int, folded left — "n*4" -> uint64(n * 4l)
-// (is_digit_tok / mk_uint_cast / mk_grid_dim / role_ok / derived_role / param_type — the
-// micro-grammar shared with [vk_dispatch] — live in dasllama_kernel_access)
 def private mk_range_len(at : LineInfo; spec : string) : Expression? {
     var e : Expression?
     for (tok in split(spec, "*")) {
@@ -136,8 +134,7 @@ def private mk_hz(at : LineInfo; call_name : string; bf : BufField) : Expression
     return c
 }
 
-// grid = comma-separated per WorkGroupID dim (mk_grid_dim, shared); padded to uint3 with
-// trailing 1u.
+// grid = comma-separated per WorkGroupID dim; padded to uint3 with trailing 1u.
 def private mk_grid(at : LineInfo; grid : string) : Expression? {
     let dims <- split(grid, ",")
     var c = new ExprCall(at = at, name := "uint3")

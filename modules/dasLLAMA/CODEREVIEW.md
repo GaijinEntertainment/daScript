@@ -62,7 +62,9 @@ suspicious green, must be readable as text in the log, not only as an id or floa
 **A kernel-unit arm compares its kernel against a CPU oracle.** A GPU-vs-GPU arm is allowed
 only where the property under test is cross-dispatch bit-identity that no CPU oracle can
 witness — and then its output buffers are prefilled with a sentinel value before the runs.
-Two dead dispatches compare equal; the sentinel is what turns that into a red.
+Two dead dispatches compare equal; the sentinel is what turns that into a red. An IN-PLACE
+output plane cannot hold both its input and a sentinel: pair its compare with a liveness
+check that the plane actually changed.
 
 **A harness that prints output for another tool to compare fails loudly when it has nothing
 to print.** If the run ends without producing its comparison lines — wrong flags, failed
@@ -100,8 +102,9 @@ defect, and this section is the whole test — a rule here names only its own fi
 never where a neighbouring concern lives. `ARCHITECTURE.md` §1 carries the boundaries and the
 carve-outs.
 
-**A new file ships with its rule here, its charter in `ARCHITECTURE.md` §1, and its tests, in
-the same change.** A file without its records is a defect.
+**A new file under `dasllama/` ships with its rule here, its charter in `ARCHITECTURE.md` §1,
+and its tests, in the same change.** A file without its records is a defect. A new file under
+`tests/` registers in `tests/CLAUDE.md` (and in `tests/run.das` when it joins a suite) instead.
 
 **A symbol the facade re-exports is required through `dasllama/dasllama` (or
 `dasllama/dasllama_transformer`), never from the engine file that defines it.** An engine-level
@@ -366,6 +369,9 @@ ignores a field. A twin that shifts the other's fields to different slots is a d
 
 **No value reaches an encoder twice.** A scalar uniform buffer passed alongside the identical
 value as a parameter is a defect; so is a kargs field the fields beside it already determine.
+Carve-out: a builder parameter the `grid=`/`tg=` spec consumes HOST-side (the dispatch
+geometry) may repeat a kargs field the kernel reads device-side — those are two consumers,
+not one value bound twice.
 
 **Nothing in the engine, a benchmark, or a race harness dispatches a kernel except its
 `enc_*` builder.** A hand-rolled bind list in `dasllama/`, `benchmarks/`, or `performance/`
@@ -391,21 +397,6 @@ shapes that cannot reduce, not for code written oversized.
 
 **Platform backends implement narrow registered contracts.** Platform-specific code in a
 platform-neutral file is a defect.
-
-### Vulkan
-
-**A buffer bound as one SSBO range stays under `vk_max_storage_range()`, checked where its
-size is NEGOTIATED, not where it binds.** The bind site cannot shrink a buffer that was sized
-wrong; past the range every read is undefined, not slow.
-
-**A resident-driver change ships with `harness/parity.das` GPU-vs-CPU runs on one q8 and one
-kq model** — the vulkan arm is `DASLLAMA_GPU=1` (never `--ngl`, which is the Metal arm and
-panics without Metal). Kernel-unit green does not cover driver wiring, and the two
-activation-quant classes ride different enc paths — one model class cannot witness the other's.
-
-**A descriptor set cached across dispatches lives in state `vk_drop_model_state` clears** — a
-`*_ready` latch or a field inside `g_gpu` / the arena. A set cached in anything the drop does
-not touch dangles into the next model.
 
 **Every program root declares `options stack = 524288`.** A test, harness, benchmark, or tool
 that picks its own number — larger or smaller — is a defect, and so is a new root that omits the
@@ -435,4 +426,23 @@ an `[EnvConfig]` field there, read as `g_env_*.<field>`, which is also what gene
 runtime) are `Option<T>` fields. Dynamic names — a variable named by data, not by code — go
 through `env_is_set` / `env_value_of`. The config loads once at context init, so
 `set_env_variable` mid-process is invisible to it: arm a child process's environment instead.
+A WRITE of a foreign library's knob (`set_env_variable` with a literal name) is allowed only
+before that library first reads it, and the name must be a declared `[EnvConfig]` knob — the
+registry test scans writes too, so a re-spelled name fails it.
 `tests/test_env_registry.das` enforces all of this.
+
+
+### Vulkan
+
+**A buffer bound as one SSBO range stays under `vk_max_storage_range()`, checked where its
+size is NEGOTIATED, not where it binds.** The bind site cannot shrink a buffer that was sized
+wrong; past the range every read is undefined, not slow.
+
+**A resident-driver change ships with `harness/parity.das` GPU-vs-CPU runs on one q8 and one
+kq model** — the vulkan arm is `DASLLAMA_GPU=1` (never `--ngl`, which is the Metal arm and
+panics without Metal). Kernel-unit green does not cover driver wiring, and the two
+activation-quant classes ride different enc paths — one model class cannot witness the other's.
+
+**A descriptor set cached across dispatches lives in state `vk_drop_model_state` clears** — a
+`*_ready` latch or a field inside `g_gpu` / the arena. A set cached in anything the drop does
+not touch dangles into the next model.

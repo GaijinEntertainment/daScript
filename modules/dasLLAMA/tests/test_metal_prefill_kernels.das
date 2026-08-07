@@ -1,4 +1,5 @@
 options gen2
+options stack = 524288   // every dasLLAMA program root takes this budget
 options _function_length = 0        // per-kernel gates: hand-bound buffers/uniforms + dispatch + oracle compare, one flat run each
 options _cyclomatic_complexity = 0  // same — the arm ladders follow the kernel's own binding/variant axes
 
@@ -9,6 +10,7 @@ require dasllama/dasllama_convert  // used only inside the Apple static_if half;
 require ?das_metal dasllama/dasllama_metal_prefill  // the Phase-6 prefill kernel set (Apple builds)
 require ?das_metal dasllama/dasllama_metal_kernels  // the Wave C MoE routing kernel set (Apple builds)
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
+require ?das_metal _metal_kernel_common   // shared buf helpers + fixtures; only the tag-less mismatch compares stay local
 require llvm/daslib/f16_cvt  // f32_to_f16: the q51 gates hand-pack f16 d/m scale halfwords
 require math
 
@@ -975,26 +977,6 @@ def private moe_reduce_gate(t : T?; dev, queue; dim, npos, nk : int) {
 // ===== prefill misc gates (PLE pre-step, bias epilogue, MTP cat, deltanet ba GEMV) =====
 
 // q8 blob region shared by the ple/dn gates: pow2 scales + small-int quants (the common
-// fixture's shape, local because this file predates _metal_kernel_common)
-def private misc_q8_region(nblk : int; var blob : array<uint8>; var wdeq : array<float>) {
-    let lut = fixed_array(0.25, 0.5, 1.0, 2.0)
-    blob |> resize(nblk * 34)
-    wdeq |> resize(nblk * 32)
-    unsafe {
-        for (b in range(nblk)) {
-            let d = lut[(b * 7 + 1) % 4]
-            let dbits = f32_to_f16(d)
-            blob[b * 34] = uint8(dbits & 0xFF)
-            blob[b * 34 + 1] = uint8(dbits >> 8u)
-            for (c in range(32)) {
-                let q = (b * 5 + c * 11) % 16 - 8
-                blob[b * 34 + 2 + c] = uint8(q & 0xFF)
-                wdeq[b * 32 + c] = float(q) * d
-            }
-        }
-    }
-}
-
 // PLE stage 1 (MetalPleGatherQ8): token-row q8 dequant into the layer-major side panel,
 // sqrt(ple) folded into the scale
 def private ple_gather_q8_gate(t : T?; dev, queue; vocab, nlayers, ple, npos : int) {
@@ -1006,7 +988,7 @@ def private ple_gather_q8_gate(t : T?; dev, queue; vocab, nlayers, ple, npos : i
     let rowlen = nlayers * ple
     var blob : array<uint8>
     var wdeq : array<float>
-    misc_q8_region(vocab * rowlen / 32, blob, wdeq)
+    q8_blob_fill(1, vocab * rowlen / 32, blob, wdeq)
     var tok : array<uint>
     tok |> resize(npos)
     for (p in range(npos)) {
@@ -1226,7 +1208,7 @@ def private dn_ba_gate(t : T?; dev, queue; ndim, ddim, npos : int) {
     return if (pso == null)
     var blob : array<uint8>
     var wdeq : array<float>
-    misc_q8_region(ddim * ndim / 32, blob, wdeq)
+    q8_blob_fill(1, ddim * ndim / 32, blob, wdeq)
     var x : array<float>
     x |> resize(npos * ndim)
     for (i in range(npos * ndim)) {
@@ -2552,55 +2534,6 @@ def private axpy_sig_gate(t : T?; dev, queue; npos, dim : int) {
 }
 
 // ===== local GPU plumbing (generic bodies instantiate only inside the static_if above) =====
-
-def private buf_upload(dev; arr : array<auto(TT)>) : auto {
-    var buf = metal_new_buffer(dev, uint64(long_length(arr)) * uint64(typeinfo sizeof(arr[0])))
-    var p = unsafe(reinterpret<TT -const?>(metal_buffer_contents(buf)))
-    for (k in range(length(arr))) {
-        unsafe(p[k]) = arr[k]
-    }
-    return buf
-}
-
-def private buf_store(buf; arr : array<auto(TT)>) {
-    var p = unsafe(reinterpret<TT -const?>(metal_buffer_contents(buf)))
-    for (k in range(length(arr))) {
-        unsafe(p[k]) = arr[k]
-    }
-}
-
-def private buf_fill(dev; nn : int; value : auto(TT)) : auto {
-    var buf = metal_new_buffer(dev, uint64(nn) * uint64(typeinfo sizeof(value)))
-    var p = unsafe(reinterpret<TT -const?>(metal_buffer_contents(buf)))
-    for (k in range(nn)) {
-        unsafe(p[k]) = value
-    }
-    return buf
-}
-
-def private buf_u32(dev; v : uint) : auto {
-    var buf = metal_new_buffer(dev, 4ul)
-    var p = unsafe(reinterpret<uint?>(metal_buffer_contents(buf)))
-    unsafe(p[0]) = v
-    return buf
-}
-
-def private buf_f32(dev; v : float) : auto {
-    var buf = metal_new_buffer(dev, 4ul)
-    var p = unsafe(reinterpret<float?>(metal_buffer_contents(buf)))
-    unsafe(p[0]) = v
-    return buf
-}
-
-def private buf_download(buf; nn : int; t : type<auto(TT)>) : array<TT -const> {
-    var out : array<TT -const>
-    out |> resize(nn)
-    let p = unsafe(reinterpret<TT -const?>(metal_buffer_contents(buf)))
-    for (k in range(nn)) {
-        out[k] = unsafe(p[k])
-    }
-    return <- out
-}
 
 def private buf_mismatch_exact(buf; want : array<auto(TT)>) : int {
     let p = unsafe(reinterpret<TT -const?>(metal_buffer_contents(buf)))

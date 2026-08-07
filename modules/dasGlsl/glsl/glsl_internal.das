@@ -1157,7 +1157,7 @@ class GlslExport : AstVisitor {
         *writer |> write("\} {arg.name}")
         return true
     }
-    def override preVisitGlobalLetVariable(arg : VariablePtr; lastArg : bool) {  // nolint:STYLE037 - one arm per global-annotation kind
+    def override preVisitGlobalLetVariable(arg : VariablePtr; lastArg : bool) {  // nolint:STYLE037,STYLE038 - one arm per global-annotation kind, flat
         line(arg.at)
         // 16/8-bit lattice globals fail closed: varyings have no f16 attribute-upload path in
         // dasOpenGL, loose uniforms have no glUniform f16 setters, blocks are gated at patch
@@ -1885,6 +1885,13 @@ class GlslExport : AstVisitor {
         }
         if (en == "gl_InstanceIndex" && expr.variable != null && expr.variable._module.name == "shader_lingua_franca") {
             *writer |> write("gl_InstanceID")
+            return
+        }
+        // the subgroup IDs live in the shared lingua franca for the SPIR-V/MSL rails; this rail
+        // has no subgroup lowering — fail closed instead of emitting an undeclared identifier
+        if ((en == "gl_SubgroupSize" || en == "gl_SubgroupInvocationID" || en == "gl_NumSubgroups"
+                || en == "gl_SubgroupID") && expr.variable != null && expr.variable._module.name == "shader_lingua_franca") {
+            error("{en} is not lowered by the GLSL rail (no subgroup support)", expr.at)
             return
         }
         *writer |> write(en)

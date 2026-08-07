@@ -1,4 +1,5 @@
 options gen2
+options stack = 524288   // every dasLLAMA program root takes this budget
 options _function_length = 0        // per-kernel gates: hand-bound buffers/uniforms + dispatch + oracle compare, one flat run each
 options _cyclomatic_complexity = 0  // same — the arm ladders follow the kernel's own binding/variant axes
 
@@ -19,9 +20,10 @@ require math
 // accumulation reassociates); bf16 truth dequants the halfword pun exactly; the q8 fixtures
 // use pow2 scales + small-int values so every staged f16 value is exact. Prefill shapes ride
 // the mul_mm grid contract: m % 32, ndim % 64, kdim % 256 (kq) or % 32, y token-major
-// [m x ndim]. A tensor twin whose PSO does not compile on this box/toolchain logs a visible
-// skip (no Metal-4 tensor support — the M4 box runs those arms); the simdgroup bases must
-// always compile. Off-Apple (or with no Metal device) every check feints.
+// [m x ndim]. A tensor twin skips only when the CAPABILITY probe says the toolchain has no
+// Metal-4 tensor support (metal4_tensor_available); with the toolchain proven, a PSO that
+// fails to compile is a RED, and the simdgroup bases always assert. Off-Apple (or with no
+// Metal device) every check feints.
 
 def private kq_mulmm_gate(t : T?; dev, queue; fmt : int; tensor : bool; m, kdim, ndim : int) {
     let tag = "kq_mulmm_k{fmt}{tensor ? "t" : ""} m={m} k={kdim} n={ndim}"
@@ -39,8 +41,8 @@ def private kq_mulmm_gate(t : T?; dev, queue; fmt : int; tensor : bool; m, kdim,
         ? (fmt == 4 ? metal_kq_mulmm_k4_t_msl_tgmem : (fmt == 5 ? metal_kq_mulmm_k5_t_msl_tgmem : metal_kq_mulmm_k6_t_msl_tgmem))
         : (fmt == 4 ? metal_kq_mulmm_k4_msl_tgmem : (fmt == 5 ? metal_kq_mulmm_k5_msl_tgmem : metal_kq_mulmm_k6_msl_tgmem)))
     var pso = pipeline_from_source(dev, src, entry, fm, err)
-    if (tensor && pso == null) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor support on this box — arm skipped\n")
+    if (tensor && pso == null && !metal4_tensor_available(dev)) {
+        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box — arm skipped\n")
         return
     }
     t |> success(pso != null, "{tag}: pipeline: {err}")
@@ -112,15 +114,37 @@ def private kq_mulmm_gate(t : T?; dev, queue; fmt : int; tensor : bool; m, kdim,
     delete wrow
 }
 
+// The tensor arms' skip gate: a CAPABILITY probe, not the artifact under test (an artifact
+// gate skips forever green when its producer regresses). Probed once, OR of two independent
+// tensor sources — a single regressed source still reds its own arm while the other proves
+// the toolchain; only both regressing together would misread as no-support.
+var private g_m4_probed = false
+var private g_m4_ok = false
+
+def private metal4_tensor_available(dev) : bool {
+    if (!g_m4_probed) {
+        g_m4_probed = true
+        var err : string
+        var p1 = pipeline_from_source(dev, metal_q8_mulmm_t_msl, metal_q8_mulmm_t_msl_entry, metal_q8_mulmm_t_msl_fastmath, err)
+        var p2 = pipeline_from_source(dev, metal_bf16_mulmm_t_msl, metal_bf16_mulmm_t_msl_entry, metal_bf16_mulmm_t_msl_fastmath, err)
+        g_m4_ok = p1 != null || p2 != null
+        metal_release(p1)
+        metal_release(p2)
+    }
+    return g_m4_ok
+}
+
 // the Metal-4 tensor twin of the (already direct-covered) MetalQ8MulMm — same bindings, no tgmem
 def private q8_mulmm_t_gate(t : T?; dev, queue; m, kdim, ndim : int) {
     let tag = "q8_mulmm_t m={m} k={kdim} n={ndim}"
     var err : string
     var pso = pipeline_from_source(dev, metal_q8_mulmm_t_msl, metal_q8_mulmm_t_msl_entry, metal_q8_mulmm_t_msl_fastmath, err)
-    if (pso == null) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor support on this box — arm skipped\n")
+    if (pso == null && !metal4_tensor_available(dev)) {
+        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box — arm skipped\n")
         return
     }
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
     let nb = kdim / 32
     var blob : array<uint8>
     var wdeq : array<float>
@@ -183,11 +207,14 @@ def private bf16_mulmm_gate(t : T?; dev, queue; tensor : bool; m, kdim, ndim : i
     var pso = (tensor
         ? pipeline_from_source(dev, metal_bf16_mulmm_t_msl, metal_bf16_mulmm_t_msl_entry, metal_bf16_mulmm_t_msl_fastmath, err)
         : pipeline_from_source(dev, metal_bf16_mulmm_msl, metal_bf16_mulmm_msl_entry, metal_bf16_mulmm_msl_fastmath, err))
-    if (pso == null) {
-        // the base needs bfloat MSL support, the twin Metal-4 tensor — either absence is a box fact
-        to_log(LOG_INFO, "{tag}: pipeline unavailable on this box — arm skipped\n")
+    if (tensor && pso == null && !metal4_tensor_available(dev)) {
+        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box — arm skipped\n")
         return
     }
+    // the simdgroup BASE asserts — production compiles it unconditionally, and this arm is its
+    // only coverage; a broken bf16 A-stage must red here, not skip
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
     var wb : array<uint16>
     wb |> resize(ndim * kdim)
     var wdeq : array<float>
@@ -262,8 +289,8 @@ def private q8_gemm_b_gate(t : T?; dev, queue; tensor : bool; mp32, kdim, ndim, 
     var pso = (tensor
         ? pipeline_from_source(dev, metal_q8_gemm_b_t_msl, metal_q8_gemm_b_t_msl_entry, metal_q8_gemm_b_t_msl_fastmath, err)
         : pipeline_from_source(dev, metal_q8_gemm_b_msl, metal_q8_gemm_b_msl_entry, metal_q8_gemm_b_msl_fastmath, err))
-    if (tensor && pso == null) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor support on this box — arm skipped\n")
+    if (tensor && pso == null && !metal4_tensor_available(dev)) {
+        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box — arm skipped\n")
         return
     }
     t |> success(pso != null, "{tag}: pipeline: {err}")
@@ -335,8 +362,8 @@ def private q8_gemm_sk_gate(t : T?; dev, queue; tensor : bool; kdim, ndim, kspli
     var pso = (tensor
         ? pipeline_from_source(dev, metal_q8_gemm_b_sk_t_msl, metal_q8_gemm_b_sk_t_msl_entry, metal_q8_gemm_b_sk_t_msl_fastmath, err)
         : pipeline_from_source(dev, metal_q8_gemm_b_sk_msl, metal_q8_gemm_b_sk_msl_entry, metal_q8_gemm_b_sk_msl_fastmath, err))
-    if (tensor && pso == null) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor support on this box — arm skipped\n")
+    if (tensor && pso == null && !metal4_tensor_available(dev)) {
+        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box — arm skipped\n")
         return
     }
     t |> success(pso != null, "{tag}: pipeline: {err}")
@@ -435,8 +462,8 @@ def private q8_gemm64_b_gate(t : T?; dev, queue; tensor : bool; mp32, kdim, ndim
     var pso = (tensor
         ? pipeline_from_source(dev, metal_q8_gemm64_b_t_msl, metal_q8_gemm64_b_t_msl_entry, metal_q8_gemm64_b_t_msl_fastmath, err)
         : pipeline_from_source(dev, metal_q8_gemm64_b_msl, metal_q8_gemm64_b_msl_entry, metal_q8_gemm64_b_msl_fastmath, err))
-    if (tensor && pso == null) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor support on this box — arm skipped\n")
+    if (tensor && pso == null && !metal4_tensor_available(dev)) {
+        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box — arm skipped\n")
         return
     }
     t |> success(pso != null, "{tag}: pipeline: {err}")
@@ -675,8 +702,8 @@ def private moe_mulmm_q8_gate(t : T?; dev, queue; tensor : bool; kdim, ndim : in
     var pso = (tensor
         ? pipeline_from_source(dev, metal_moe_mulmm_q8_t_msl, metal_moe_mulmm_q8_t_msl_entry, metal_moe_mulmm_q8_t_msl_fastmath, err)
         : pipeline_from_source(dev, metal_moe_mulmm_q8_msl, metal_moe_mulmm_q8_msl_entry, metal_moe_mulmm_q8_msl_fastmath, err))
-    if (tensor && pso == null) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor support on this box — arm skipped\n")
+    if (tensor && pso == null && !metal4_tensor_available(dev)) {
+        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box — arm skipped\n")
         return
     }
     t |> success(pso != null, "{tag}: pipeline: {err}")
@@ -749,8 +776,8 @@ def private moe_mulmm_mx4_gate(t : T?; dev, queue; tensor : bool; kdim, ndim : i
     var pso = (tensor
         ? pipeline_from_source(dev, metal_moe_mulmm_mx4_t_msl, metal_moe_mulmm_mx4_t_msl_entry, metal_moe_mulmm_mx4_t_msl_fastmath, err)
         : pipeline_from_source(dev, metal_moe_mulmm_mx4_msl, metal_moe_mulmm_mx4_msl_entry, metal_moe_mulmm_mx4_msl_fastmath, err))
-    if (tensor && pso == null) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor support on this box — arm skipped\n")
+    if (tensor && pso == null && !metal4_tensor_available(dev)) {
+        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box — arm skipped\n")
         return
     }
     t |> success(pso != null, "{tag}: pipeline: {err}")
@@ -865,8 +892,8 @@ def private attn_qk_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul
     var pso = (tensor
         ? pipeline_from_source(dev, metal_attn_qk_mm_t_msl, metal_attn_qk_mm_t_msl_entry, metal_attn_qk_mm_t_msl_fastmath, err)
         : pipeline_from_source(dev, metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, err))
-    if (tensor && pso == null) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor support on this box — arm skipped\n")
+    if (tensor && pso == null && !metal4_tensor_available(dev)) {
+        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box — arm skipped\n")
         return
     }
     t |> success(pso != null, "{tag}: pipeline: {err}")
@@ -950,8 +977,8 @@ def private attn_av_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul
     var pso = (tensor
         ? pipeline_from_source(dev, metal_attn_av_mm_t_msl, metal_attn_av_mm_t_msl_entry, metal_attn_av_mm_t_msl_fastmath, err)
         : pipeline_from_source(dev, metal_attn_av_mm_msl, metal_attn_av_mm_msl_entry, metal_attn_av_mm_msl_fastmath, err))
-    if (tensor && pso == null) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor support on this box — arm skipped\n")
+    if (tensor && pso == null && !metal4_tensor_available(dev)) {
+        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box — arm skipped\n")
         return
     }
     t |> success(pso != null, "{tag}: pipeline: {err}")

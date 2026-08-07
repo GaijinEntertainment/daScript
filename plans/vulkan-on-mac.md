@@ -64,7 +64,8 @@ no perf bar. Note followup item 16: vulkan arms need direct dastest + `-load_mod
 - **MoltenVK 1.4.1 BUG, fixed by 1.4.2 (brew upgrade — PIN ≥1.4.2):** compute dispatch with
   static workgroup memory over ~15.6-16 KB is SILENTLY DISCARDED — no validation error, no
   MVK log, fence signals, copies run, kernel never executes. Bisected via marker-probe
-  classes (probe files `tests/_probe_{cls,batch}_m1.das`, delete before PR).
+  classes (probe files `tests/_probe_{cls,batch}_m1.das` — untracked; retention ruled in the
+  filed-report section below: keep until MoltenVK#2793 is resolved).
 - **RESOLVED — the batch-tile all-zero red was MoltenVK's Metal argument-buffers path**
   (its Apple Silicon default): dispatches launch but device stores never land, silently.
   `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0` (discrete bindings) fixes it outright; tier
@@ -241,40 +242,8 @@ is RESOLVED: `tests/_probe_{cls,batch}_m1.das` + `tests/_probe_spv_dump.das` (th
 dumper that produced the gist; rebuild binaries from hex via the packed-uint32 recipe in
 the gist README).
 
-> **Title:** Compute dispatches silently lose all device stores under Metal argument
-> buffers (default path) on Apple Silicon — correct with
-> MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0
->
-> **Environment:** MoltenVK 1.4.2 (brew), vulkan-loader 1.4.357.0, macOS 26.5.2,
-> Apple M1 Max.
->
-> **Observed:** with the Metal argument-buffers path enabled (the Apple Silicon
-> default), a subset of our compute pipelines dispatch "successfully" — no validation
-> error, no MoltenVK log output, vkQueueSubmit/fences signal, buffer-to-buffer copies
-> in the same submission run — but the kernels' device stores never land: output SSBOs
-> read back exactly the sentinel/zero contents they were uploaded with. The same
-> pipelines, same SPIR-V, same machine produce correct results with
-> `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0` (discrete bindings).
->
-> **Scope observed:** 3 of 40 kernels in our compute test suite fail this way; the
-> failing three are our "batch"-shaped GEMM/rope kernels (5-7 storage-buffer bindings,
-> one push-constant block, 1-D dispatch). Simple elementwise/reduction kernels with
-> the same binding style pass. Binding count alone does not discriminate (passing
-> kernels use up to 7 bindings too). All 40 pass with argument buffers disabled, on
-> the same run.
->
-> **Repro:** SPIR-V blobs of one failing kernel + its VkDescriptorSetLayout /
-> pipeline-layout description + dispatch parameters attached. Toggling only
-> `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS` flips pass/fail deterministically.
->
-> (Attachment TODO before filing: dump the SPIR-V of one failing kernel — e.g. the
-> q8 batch tile — plus its exact set layout; optionally distill to a standalone C
-> repro if requested by maintainers.)
-
-Local re-verification 2026-08-07: `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=1` on the
-kernel suite → 37/40, the same three arms (q8 batch tile, kq batch family ×4 formats,
-batch rope + fused qkn-rope), all reds are stores-never-landed shapes; unset (tier
-forces =0) → 40/40.
+The filed body is the issue itself; the local re-verification (argbufs=1 → the same
+three batch arms 37/40; unset → 40/40) is recorded there.
 
 ## Ledger
 

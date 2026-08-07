@@ -1,4 +1,5 @@
 options gen2
+options stack = 524288   // every dasLLAMA program root takes this budget
 options _function_length = 0        // per-kernel gates: hand-bound buffers/uniforms + dispatch + oracle compare, one flat run each
 options _cyclomatic_complexity = 0  // same — the arm ladders follow the kernel's own binding/variant axes
 

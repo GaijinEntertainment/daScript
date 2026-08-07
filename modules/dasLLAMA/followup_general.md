@@ -255,3 +255,28 @@
    facade surface (`set_asr_kv`, `--kv`, `--fp32-tower`, exec_fmt spellings, the q8 defaults).
    Going forward the new Documentation section in CODEREVIEW.md makes this a per-change check;
    this item is the one-time catch-up.
+
+19. **Oracle-suite hardening round 2 (PR #3653's review round, deferred by ruling).** The
+    kernels suite is census-complete but the bug-scan agents mapped axis-coverage holes where
+    a targeted kernel mutation stays green: the Part/PartB split-K softcap path (hardcoded 0.0
+    in those gates — distinct from the fixed single/batched arms), the SqAttnB q8 K-vs-V base
+    aliasing (rt.y = rt.x in the quant branch), the D-family khoff ≡ 0 under kv_mul=2/nheads=2,
+    gemm ndim=64 hiding the nBase column-tile term, gemv output buffers sized exactly (row
+    guards unobservable — pair with sentinel-padded planes), the argmax tie pair never sharing
+    a simdgroup (the simd_shuffle_xor tie-break unwitnessed), the misc softcap fixture spanning
+    only ±0.3·cap, rope bias planes zero-filled where production dummy-binds arbitrary bytes
+    (fill non-zero when hasbias=0), the neox×hasbias confound in the rope-store quant mirrors,
+    kq gemv weight reads past exactly-sized buffers (blocks MTL_SHADER_VALIDATION=1 runs), the
+    copy_row gate's tg=64 vs production 256, the dead b4 pad-column clamp cell, the q8 region
+    fixture's sel collapsing to a k-slot function (routing untested, padding only), and the 12
+    prefill-file gates still on dump-less tag-less local compares. Also latent: the two rope
+    oracles index tcos/tsin at [0, hs/2) while sizing rot/2 — reads OOB and ropes the
+    pass-through tail the moment a cell pairs neox=false with rot < hs (the flat gate's
+    identity-pad pattern is the fix). Also: migrate the prefill file's tag-less mismatch trio
+    to the shared dumping compares (~25 call sites).
+
+20. **`vk_moe_would_accept` / resident probes vs the wg-cap decline.** The resident decline
+    for an over-cap batched-attention class now lives in `vk_rdec_prepare` (live path only).
+    The offline plan cannot see the cap (followup_vulkan item 19) and `vk_moe_would_accept`
+    answers only format/geometry — a would-accept probe that consults device caps would let
+    schedulers plan without a live ensure_ round-trip.

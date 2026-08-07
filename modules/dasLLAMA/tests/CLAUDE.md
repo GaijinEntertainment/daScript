@@ -60,8 +60,9 @@ blob twin's CPU batch fallback would trip the blob-only panic). The
 model-less per-class CPU-oracle units covering the FULL metal kernel census, ~2-3 min) has
 no arms; remember it exists — kernel uniform/binding changes MUST update its hand-bound
 dispatches. Shared fixtures (buf helpers, eyeball-dump compares, kq plane + q8 blob
-builders) live in `_metal_kernel_common.das`; the prefill file predates it and keeps local
-twins. `_mtl_toy.das` is the `[metal_dispatch]` multi-kernel (kernel=) fixture — its gate in
+builders) live in `_metal_kernel_common.das`; the prefill file predates it and keeps only its
+tag-less mismatch compares local (same arity would collide — the buf_* twins are retired).
+`_mtl_toy.das` is the `[metal_dispatch]` multi-kernel (kernel=) fixture — its gate in
 the misc file dispatches through the GENERATED builders (kn_ rail), not hand binds.
 A new gate gets a NEGATIVE CONTROL before its first commit (poison the oracle → red
 with dumps → revert); size an additive poison to beat rel·env at the longest dot, and give

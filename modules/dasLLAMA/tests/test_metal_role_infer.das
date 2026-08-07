@@ -33,6 +33,26 @@ def private compile_issues(file_path : string; lint : bool = false) : tuple<ok :
 def private fixture(name : string) : string => "{get_das_root()}/modules/dasLLAMA/tests/_role_fixtures/{name}.das"
 
 [test]
+def test_grid_micro_grammar(t : T?) {
+    t |> run("the grid micro-grammar folds integer literals and refuses malformed tokens") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            // the shared mk_grid_dim (dasllama_kernel_access) folds ANY digit token — the metal
+            // lens folded only "1" before the hoist; "4l" must fall to the name path and fail
+            let good = compile_issues(fixture("_rf_grid_literal"))
+            t |> success(good.ok, "grid = \"4, n/4\" compiles (literal dim + literal coverage): {good.issues}")
+            let bad = compile_issues(fixture("_rf_grid_badtok"))
+            t |> success(!bad.ok, "grid = \"4l\" must be refused, not truncated through to_int")
+            t |> success(find(bad.issues, "4l") >= 0, "the refusal names the bad token")
+            if (bad.ok) {
+                to_log(LOG_ERROR, "ROLE-INFER: bad grid token compiled clean\n")
+            }
+        } else {
+            feint("das_metal is not built on this platform; the lens does not load\n")
+        }
+    }
+}
+
+[test]
 def test_role_whole_buffer_rule(t : T?) {
     t |> run("a buffer passed whole to a helper takes the callee parameter's direction") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {

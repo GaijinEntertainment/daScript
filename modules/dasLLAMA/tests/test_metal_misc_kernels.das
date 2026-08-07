@@ -1,4 +1,5 @@
 options gen2
+options stack = 524288   // every dasLLAMA program root takes this budget
 options _function_length = 0        // per-kernel gates: hand-bound buffers/uniforms + dispatch + oracle compare, one flat run each
 options _cyclomatic_complexity = 0  // same — the arm ladders follow the kernel's own binding/variant axes
 
@@ -573,9 +574,9 @@ def private softcap_row_gate(t : T?; dev, queue; total : int; cap : float) {
 
 // The [metal_dispatch] multi-kernel mechanism, end to end: MtlToy's two kernel= instances
 // dispatch through their GENERATED builders (kn_ rail, not hand binds) chained in one encoder
-// — scale (ys = xs*gain) then shift (ys += gain). Each builder stages only its own kernel's
-// derived access (verified by ast_dump: shift stages no xs); under the suite's HAZARD_STRICT
-// an unstaged dispatch would panic. Single mul / single add per element -> bit-exact oracle.
+// — scale (ys = xs*gain) then shift (ys += gain). The per-kernel STAGING divergence (shift
+// stages no xs) is proven at compile time — ast_dump of the builders + the lens cover rule;
+// the hazard rail is un-armed in suites, so this gate witnesses binds/kargs/grid, not staging.
 def private mtl_toy_lens_gate(t : T?; dev, queue; n : int) {
     let tag = "mtl_toy multi-kernel n={n}"
     var err : string
@@ -583,7 +584,13 @@ def private mtl_toy_lens_gate(t : T?; dev, queue; n : int) {
     t |> success(g_mtl_toy_scale_pso != null, "{tag}: scale pipeline: {err}")
     g_mtl_toy_shift_pso = pipeline_from_source(dev, mtl_toy_shift_msl, mtl_toy_shift_msl_entry, mtl_toy_shift_msl_fastmath, err)
     t |> success(g_mtl_toy_shift_pso != null, "{tag}: shift pipeline: {err}")
-    return if (g_mtl_toy_scale_pso == null || g_mtl_toy_shift_pso == null)
+    if (g_mtl_toy_scale_pso == null || g_mtl_toy_shift_pso == null) {
+        metal_release(g_mtl_toy_scale_pso)   // release-null is a no-op; the survivor must not leak
+        metal_release(g_mtl_toy_shift_pso)
+        g_mtl_toy_scale_pso = null
+        g_mtl_toy_shift_pso = null
+        return
+    }
     let gain = 0.5
     var xv : array<float>
     xv |> resize(n)

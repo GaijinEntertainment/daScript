@@ -758,6 +758,19 @@ def carved_budget : int64 {
 var g_vk_dry_want = false
 var g_vk_dry_cfg = DlimVulkanConfig()
 
+var private g_mvk_env_armed = false
+
+//! Arm MoltenVK's env BEFORE the first volkInitialize anywhere — MVK_CONFIG_* is read into a
+//! process global at first access, so a write after any instance creation is invisible. The
+//! argument-buffers default silently loses batch-tile stores (KhronosGroup/MoltenVK#2793).
+def vk_arm_moltenvk_env {
+    return if (g_mvk_env_armed)
+    g_mvk_env_armed = true
+    if (is_none(g_env_mvk.use_metal_argument_buffers)) {   // an explicit user value wins
+        set_env_variable("MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS", "0")
+    }
+}
+
 def vk_moe_init : bool {
     if (g_init_failed) {   // checked FIRST: a partially-built g_gpu must never report ready
         return false
@@ -784,12 +797,7 @@ def vk_moe_init : bool {
         return true
     }
     g_init_failed = true   // cleared only on full success
-    // MoltenVK's Metal argument-buffers default miscompiles the batch tiles — dispatches launch
-    // but device stores never land, silently (probe-verified 2026-08-07, MVK 1.4.2; suite 40/40
-    // with discrete bindings). Foreign knob: write-only here, before the loader dlopens the ICD.
-    if (is_none(g_env_mvk.use_metal_argument_buffers)) {
-        set_env_variable("MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS", "0")
-    }
+    vk_arm_moltenvk_env()
     if (volkInitialize() != 0) {
         to_log(LOG_ERROR, "dasLLAMA vulkan tier: no Vulkan loader\n")
         return false

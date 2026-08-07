@@ -204,3 +204,11 @@ After the reorg arc lands (this doc is a product of it — see ARCHITECTURE.md's
 ledger). First measurable milestone: zen2 resident decode/prefill numbers vs the cooperative
 tier on the same models, which also decides how hard items 3–4 are pushed. Item 1 (shapes
 module) is independent and can land any time — it is pure structure.
+
+19. **The dry bake cannot see the workgroup cap.** `vk_moe_init`'s dry path returns before
+    `vkGetPhysicalDeviceProperties`, so `g_gpu.max_wg_bytes` stays 0 and `DlimVulkanConfig`
+    has no twin field — an offline-baked plan cannot record which class kernels the target
+    device will decline (`vkd_wg_fits` declines everything under a 0 cap if a generated
+    `ensure_*` runs dry). The live path declines residency in `vk_rdec_prepare`; the plan
+    side needs `max_wg_bytes` in the probed config + the dlim identity, mirroring
+    `max_storage_range`.

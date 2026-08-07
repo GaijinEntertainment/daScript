@@ -37,9 +37,6 @@ def private mk_gvar(at : LineInfo; nm : string) : ExpressionPtr {
     return new ExprVar(at = at, name := nm)
 }
 
-// (is_digit_tok / mk_uint_cast / mk_grid_dim / role_ok / derived_role / param_type — the
-// micro-grammar shared with [metal_dispatch] — live in dasllama_kernel_access)
-
 // a [spirv_kernel] method of a lensed class + its captured blob global name. `want` names the
 // method for multi-kernel classes; "" counts every kernel method and returns the first (the
 // single-kernel form's exactly-one check rides on nmatch)

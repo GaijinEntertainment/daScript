@@ -1,4 +1,5 @@
 options gen2
+options stack = 524288   // every dasLLAMA program root takes this budget
 options _function_length = 0        // per-kernel gates: hand-bound buffers/uniforms + dispatch + oracle compare, one flat run each
 options _cyclomatic_complexity = 0  // same — the arm ladders follow the kernel's own binding/variant axes
 
@@ -149,6 +150,14 @@ def private sq_codec_single_gate(t : T?; dev, queue; codec : string; cnt : int; 
     codec_rows(codec, 1, cnt, kslab, kdeq)
     codec_rows(codec, 2, cnt, vslab, vdeq)
     var q <- q_rows()
+    if (softcap > 0.0) {
+        // softcap must be OBSERVABLE: at the base fixture's |raw| <= 0.07 the tanh is identity
+        // to 1e-8 and the arm passes with the branch deleted. x300 puts |raw| ~ 21, moving the
+        // compared output by 1.4e-2 (measured) against the shared 2e-3 bar.
+        for (qv in q) {
+            qv *= 300.0
+        }
+    }
     let sink_v = 0.375
     let scale = 1.0 / sqrt(float(HS))
     var want <- oracle_all(kdeq, vdeq, 0, q, 0, cnt, scale, softcap, hass ? sink_v : -3.0e38, 0)
@@ -431,6 +440,12 @@ def private sq_b_gate(t : T?; dev, queue; codec : string; cnts : array<int>; sof
     let quant = codec == "q8" || codec == "tq4"
     var fx : BatchAttnFix
     build_batch_fix(codec, cnts, qstride, fx)
+    if (softcap > 0.0) {
+        // same x300 amplitude boost as the single gate — softcap under the base fixture is identity
+        for (qv in fx.q) {
+            qv *= 300.0
+        }
+    }
     let sink_v = 0.375
     let scale = 1.0 / sqrt(float(HS))
     var want <- batch_want(fx, cnts, qstride, scale, softcap, hass ? sink_v : -3.0e38, 0)

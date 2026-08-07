@@ -20,9 +20,10 @@ rewrite or a move, never silent tolerance) lands in the same batch as the round'
    on the CPU with identical semantics; that CPU run IS the test oracle
    (`daslib/shader_lingua_franca` carries the exact CPU bodies of the GPU builtins). A
    construct that cannot run on the CPU has no place in the emitter.
-4. **Fail closed, specifically.** Anything outside the lowered subset must produce a clean
-   compile error naming the construct — never a silently wrong blob. A new error path gets a
-   `_fail_closed/` fixture and its needle asserted in `tests/spirv/test_fail_closed.das`.
+4. **Fail closed, specifically — on EVERY rail that can see the construct.** Anything outside
+   this emitter's lowered subset must produce a clean compile error naming the construct —
+   never a silently wrong blob. A new error path gets a `_fail_closed/` fixture and its
+   needle asserted in `tests/spirv/test_fail_closed.das`.
 5. **An emitter feature must not make dynamic dispatch easy.** The consumer rule is dasLLAMA
    CODEREVIEW's "A kernel's shape is compile-time; only its data is runtime" — and the
    emitter is where that is won or lost. A capability that carries a shape constant into the
@@ -39,4 +40,8 @@ rewrite or a move, never silent tolerance) lands in the same batch as the round'
    lands on the Metal side too (and the reverse), unless it is genuinely target-specific
    (cooperative matrix vs Metal-4 tensors, subgroup vs simdgroup semantics); a deliberate
    asymmetry is recorded in `MASTERPLAN.md`. A diff that grows the kernel model on one side
-   with no sibling change and no ledger entry is a defect.
+   with no sibling change and no ledger entry is a defect. The mirror has a THIRD party:
+   `daslib/shader_lingua_franca` is recognized wholesale — by module, not by symbol — by
+   every shader rail, dasGlsl included. A declaration moved INTO it is thereby granted to
+   all of them, and each rail either lowers it or rejects it by name (with a fail-closed
+   fixture in that rail's test home) in the same change.

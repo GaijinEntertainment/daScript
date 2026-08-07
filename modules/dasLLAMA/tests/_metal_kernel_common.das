@@ -75,7 +75,7 @@ def buf_mismatch_bars(buf; want : array<float>; rel, absf : float; tag : string)
     for (k in range(length(want))) {
         let g = unsafe(p[k])
         let w = want[k]
-        if (abs(g - w) > absf && abs(g - w) > rel * max(1.0, max(abs(g), abs(w)))) {
+        if (!(abs(g - w) <= absf) && !(abs(g - w) <= rel * max(1.0, max(abs(g), abs(w))))) {
             if (bad < DUMP_CAP) {
                 to_log(LOG_ERROR, "  {tag} mismatch [{k}] gpu {g} cpu {w}\n")
             }
@@ -97,7 +97,7 @@ def buf_mismatch_f16(buf; want : array<float>; rel, absf : float; tag : string) 
     for (k in range(length(want))) {
         let g = float(unsafe(p[k]))
         let w = want[k]
-        if (abs(g - w) > absf && abs(g - w) > rel * max(1.0, max(abs(g), abs(w)))) {
+        if (!(abs(g - w) <= absf) && !(abs(g - w) <= rel * max(1.0, max(abs(g), abs(w))))) {
             if (bad < DUMP_CAP) {
                 to_log(LOG_ERROR, "  {tag} mismatch [{k}] gpu {g} cpu {w}\n")
             }
@@ -115,7 +115,7 @@ def buf_mismatch_env(buf; want, env : array<float>; rel : float; tag : string) :
     for (k in range(length(want))) {
         let g = unsafe(p[k])
         let w = want[k]
-        if (abs(g - w) > max(rel * env[k], 1e-3)) {
+        if (!(abs(g - w) <= max(rel * env[k], 1e-3))) {
             if (bad < DUMP_CAP) {
                 to_log(LOG_ERROR, "  {tag} mismatch [{k}] gpu {g} cpu {w} env {env[k]}\n")
             }

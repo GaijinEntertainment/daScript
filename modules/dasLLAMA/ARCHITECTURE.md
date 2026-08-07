@@ -191,10 +191,10 @@ that a question answered for one backend has an obvious address in the other. Th
   drivers it is required from the transformer umbrella, never from common.
 - **`dasllama_kernel_access.das`** — the shared body-walk read/write classifier both GPU lenses run
   on, plus the dispatch-lens micro-grammar (the grid/tg/params spec tokenizers and the shared
-  AST-emission core: `is_digit_tok`, `role_ok`, `derived_role`, `mk_uint_cast`, `mk_grid_dim`,
-  `param_type`). One owner by design — the two lenses' grammars drifted apart when each carried a
-  private copy (metal folded only the literal "1" where vulkan folded any integer).
-  Backend-specific lowering stays in that backend's lens.
+  AST-emission core: `is_digit_tok`, `role_ok`, `derived_role`, `mk_uint_cast`, `mk_call1`,
+  `mk_grid_dim`, `param_type`). One owner by design — the two lenses' grammars drifted apart
+  when each carried a private copy (metal folded only the literal "1" where vulkan folded any
+  integer). Backend-specific lowering stays in that backend's lens.
 
 **PSO lifecycle — the family shares ONE device and queue** (`metal_common_init`; the second-device
 question was surveyed and closed against). The decode PSO set lives as `g_pso_*` in
@@ -230,6 +230,11 @@ entry here:**
   global, the `set_*` builder, the pipe slots — across classes with one binding layout. Metal's
   `enc_*` builder is the entire generated surface, so there is nothing for a family to share;
   cross-class PSO/source sharing on Metal is a PSO-lifecycle question, not a lens one.
+- **The workgroup-footprint gate is Vulkan-only.** `[vk_dispatch]` sums a class's `@workgroup`
+  members and its generated `ensure_*` declines by name (`vkd_wg_fits`) before the pipeline
+  build, because MoltenVK's over-cap failure is an opaque `INITIALIZATION_FAILED` — and the
+  resident driver declines residency with it (`vk_rdec_prepare`). `[metal_dispatch]` has no
+  footprint gate: Metal's own pipeline compile fails loudly with the footprint in the error.
 - **Vulkan has no shapes module yet** — `resident_upload` declines ad hoc by feature name; the
   gap is `followup_vulkan.md` item 1, not a precedent to copy.
 
