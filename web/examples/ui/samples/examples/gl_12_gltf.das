@@ -1,4 +1,8 @@
 options gen2
+// The wasm page build embeds these into the artifact (fopen reads them from MEMFS);
+// the interpreted runner preloads the same set from the .assets.json sidecar.
+// wasm-assets: tutorials/_assets/gltf/BoomBox.glb
+// wasm-assets: tutorials/_assets/hdri/cannon_2k.hdr
 require glfw/glfw_boost
 require opengl/opengl_boost
 require gltf/gltf_boost

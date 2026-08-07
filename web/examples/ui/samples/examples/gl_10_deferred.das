@@ -1,4 +1,15 @@
 options gen2
+// The wasm page build embeds these into the artifact (fopen reads them from MEMFS);
+// the interpreted runner preloads the same set from the .assets.json sidecar.
+// wasm-assets: tutorials/_assets/cat/concrete_cat_statue.obj
+// wasm-assets: tutorials/_assets/cat/textures/concrete_cat_statue_diff_2k.jpg
+// wasm-assets: tutorials/_assets/cat/textures/concrete_cat_statue_nor_gl_2k.jpg
+// wasm-assets: tutorials/_assets/cat/textures/concrete_cat_statue_arm_2k.jpg
+// wasm-assets: tutorials/_assets/brick/Bricks031_1K-JPG_Color.jpg
+// wasm-assets: tutorials/_assets/brick/Bricks031_1K-JPG_NormalGL.jpg
+// wasm-assets: tutorials/_assets/brick/Bricks031_1K-JPG_AmbientOcclusion.jpg
+// wasm-assets: tutorials/_assets/brick/Bricks031_1K-JPG_Roughness.jpg
+// wasm-assets: tutorials/_assets/hdri/cannon_2k.hdr
 require glfw/glfw_boost
 require opengl/opengl_boost
 require geometry/geom_gen
