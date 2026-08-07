@@ -3115,7 +3115,7 @@ class Q8Cm2LBatch : MoeCmBase {
     }
 
     [spirv_kernel(local_size_x = 256, name = "q8_batch_cm2l_cls_spv")]
-    def run {
+    def run {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
         let reg = region_rec()
         let wblk0 = reg.x
         let row0 = reg.y
@@ -3127,8 +3127,56 @@ class Q8Cm2LBatch : MoeCmBase {
         if (gl_LocalInvocationID.x == 0u) {
             wg_blk0 = wblk0
         }
-        // A: the region's [d x n] q8 plane — block addressing; layout coords are region-local, so
-        // the decode method's scale index is wg_blk0 + bc.x * nbb + bc.y off the staged base
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        barrier()   // wg_blk0 visible before the first decode load
+        var a : coopmatWgA_f16_128x64
+        var b : coopmatWgB_f16_64x256
+        var acc : coopmatWgAcc_f16_128x256
+        let t0 = row0 + xt * 256u
+        let m0 = wt * 128u
+        // FAST PATH — every access of this tile provably in bounds and K a whole number of
+        // BK steps: unclamped (clamp-Undefined) layouts, and the B/out strides masked to a
+        // multiple of 8 f16 (identity here — pa.n and pa.d are 32-multiples — but the mask makes
+        // the alignment PROVABLE to the driver's address analysis, llama.cpp's stride &= ~7)
+        if (m0 + 128u <= pa.d && xt * 256u + 256u <= cnt && (pa.n & 63u) == 0u) {
+            var fla : tensorLayout2D
+            tensorLayoutCreate(fla)
+            tensorLayoutSetBlockSize(fla, 1u, 32u)
+            tensorLayoutSetDimension(fla, pa.d, pa.n)
+            tensorLayoutSetStride(fla, pa.n >> 5u, 1u)
+            var flb : tensorLayout2D
+            tensorLayoutCreate(flb)
+            tensorLayoutSetDimension(flb, row0 + cnt, pa.n)
+            tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
+            var flo : tensorLayout2D
+            tensorLayoutCreate(flo)
+            tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
+            tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
+            var k = 0u
+            for (_i in range(int(pa.n / 512u))) {
+                for [unroll] (_j in range(8)) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+                    acc = coopmatMulAdd(a, b, acc)
+                    k += 64u
+                }
+            }
+            while (k < pa.n) {
+                coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode_q8)
+                coopmatLoadTensor(b, xf16, 0u, flb, t0, 256u, k, 64u, tv)
+                acc = coopmatMulAdd(a, b, acc)
+                k += 64u
+            }
+            coopmatClamp(acc, -65504.0, 65504.0)
+            var accw : coopmatWgAcc_f32_128x256
+            coopmatConvert(accw, acc)
+            coopmatStoreTensor(accw, y, 0u, flo, t0, 256u, m0, 128u, tv)
+            return
+        }
+        // EDGE PATH — clamp-Constant layouts everywhere. A: the region's [d x n] q8 plane, block
+        // addressing; layout coords are region-local, so the decode method's scale index is
+        // wg_blk0 + bc.x * nbb + bc.y off the staged base
         var tla : tensorLayout2DPad
         tensorLayoutCreate(tla)
         tensorLayoutSetBlockSize(tla, 1u, 32u)
@@ -3145,15 +3193,9 @@ class Q8Cm2LBatch : MoeCmBase {
         tensorLayoutCreate(tlo)
         tensorLayoutSetDimension(tlo, row0 + cnt, pa.d)
         tensorLayoutSetStride(tlo, pa.d, 1u)
-        var tv : tensorView2Dt
-        tensorViewCreate(tv)
-        barrier()   // wg_blk0 visible before the first decode load
-        var a : coopmatWgA_f16_128x64
-        var b : coopmatWgB_f16_64x256
-        var acc : coopmatWgAcc_f16_128x256
-        let t0 = row0 + xt * 256u
-        let m0 = wt * 128u
-        // the 8x-unrolled main loop (their UNROLL_K = BK*8 = 512), then the sub-512 tail
+        // the 8x-unrolled main loop (their UNROLL_K = BK*8 = 512), then the sub-512 tail.
+        // The hint is honored: a manual 4x expansion A/Bed dead even (2719 +- 20 vs 2749 +- 12
+        // on the 3B row), so the loop form stays
         var k = 0u
         for (_i in range(int(pa.n / 512u))) {
             for [unroll] (_j in range(8)) {
