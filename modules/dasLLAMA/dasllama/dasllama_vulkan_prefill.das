@@ -33,16 +33,21 @@ require math
 
 let private PF_ROLES = 16l   // quant_xb q k v rope attn quant_at wo addr_ffn quant_xb2 gate up actrq down addr_next qkn
 
+// mode 4 feeds every dense prefill GEMM f16 rows: fmt-6 stacks by construction, and NATIVE fmt-0
+// stacks through the l-tile (the decode GEMV keeps its q8 chain — the format pick is decoupled)
+def private pf_f16_feed(f : int) : bool => f == 6 || (f == int(KqFmt.q8) && g_gpu.coopmat_mode == 4)
+
 // one prefill GEMM role on the class rail: schedule fill + a per-(role, variant) cached set +
-// BatchArgs push. fmt picks the class: 6 = cm2 twin, kq = the kq tile family, else the q8
-// router (whose variant moves with wlen — the last window is shorter).
+// BatchArgs push. fmt picks the class: 6 = cm2 twin, fmt-0 in mode 4 = the cm2 l-tile, kq = the
+// kq tile family, else the q8 router (whose variant moves with wlen — the last window is shorter).
 def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : int;
                         wq, ws, ab, sb, yb : uint64; wqn, wsn, an, sn, yn : int64;
                         abit, ybit : uint; n, d, blk, wlen : int64) {
-    let groups = int64(fill_arena_batch_sched(g_rd.pf_meta[idx], d, blk, wlen, fmt))
+    let cm2l = fmt == int(KqFmt.q8) && g_gpu.coopmat_mode == 4
+    let groups = int64(fill_arena_batch_sched(g_rd.pf_meta[idx], d, blk, wlen, fmt, cm2l))
     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
     if (fmt == 6) {
-        let key = idx * 8 + 7
+        let key = idx * 16 + 7
         if (!key_exists(g_rd.pf_cls_gemm, key)) {
             verify(ensure_q8n_batch_cm2_cls(), "vk prefill: the cm2 batch class rail must engage")
             g_rd.pf_cls_gemm[key] = set_q8n_batch_cm2_cls(
@@ -51,10 +56,21 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
                 fixed_array(0u, 0u, abit, ybit))
         }
         enc_q8n_batch_cm2_cls(raw, h, g_rd.pf_cls_gemm[key], pc, groups)
+    } elif (cm2l) {
+        // native fmt-0 decode-in-load; ab carries f16 rows, the activation-scale slot is unbound
+        let key = idx * 16 + 8
+        if (!key_exists(g_rd.pf_cls_gemm, key)) {
+            verify(ensure_q8_batch_cm2l_cls(), "vk prefill: the cm2 l-tile class rail must engage")
+            g_rd.pf_cls_gemm[key] = set_q8_batch_cm2l_cls(
+                fixed_array(wq, ws, g_rd.pf_meta[idx].buf, ab, yb),
+                fixed_array(wqn, wsn, BATCH_META_BYTES, an, yn),
+                fixed_array(0u, 0u, 0u, abit, ybit))
+        }
+        enc_q8_batch_cm2l_cls(raw, h, g_rd.pf_cls_gemm[key], pc, groups)
     } elif (kq_sb(fmt)) {
         // the role's format is static, so the slot never collides with the q8 router's variants
         let q40cm = fmt == int(KqFmt.q40) && g_gpu.coopmat_mode == 1
-        let key = idx * 8 + 6
+        let key = idx * 16 + 6
         if (!key_exists(g_rd.pf_cls_gemm, key)) {
             verify(kq_batch_cls_ensure(fmt, q40cm), "vk prefill: the kq batch class rail must engage")
             g_rd.pf_cls_gemm[key] = kq_batch_cls_set_for(fmt, q40cm,
@@ -65,7 +81,7 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
         kq_batch_cls_enc_for(fmt, q40cm, raw, h, g_rd.pf_cls_gemm[key], pc, groups)
     } else {
         let v = q8_batch_cls_variant(q8_batch_tile_for(d, wlen), q8_batch_aligned(d, wlen))
-        let key = idx * 8 + v
+        let key = idx * 16 + v
         if (!key_exists(g_rd.pf_cls_gemm, key)) {
             verify(q8_batch_cls_ensure(v), "vk prefill: the q8 batch class rail must engage")
             g_rd.pf_cls_gemm[key] = q8_batch_cls_set(v,
@@ -107,11 +123,11 @@ def private pf_setup {
     g_rd.pf_logits_host = make_host_buf(g_rd.vocab * 4l, false, [cached = true])
     g_rd.pf_cmd = alloc_cmd()
     ensure_batch_state()   // hq_dev/hs_dev for the FFN act
-    // fmt-6 feeds f16 rows; kq consumers take the Q8_K quant/act forms (per-256 scales)
+    // f16-fed groups (pf_f16_feed) take f16 convert roles; kq consumers the Q8_K quant/act forms
     var any6 = false
     var anykq = kq_sb(g_rd.cls_fmt_marker)
     for (L in g_rd.layers) {
-        any6 = any6 || L.fq == 6 || L.fo == 6 || L.f1 == 6 || L.f2 == 6
+        any6 = any6 || pf_f16_feed(L.fq) || pf_f16_feed(L.fo) || pf_f16_feed(L.f1) || pf_f16_feed(L.f2)
         anykq = anykq || kq_sb(L.fq) || kq_sb(L.fo) || kq_sb(L.f1) || kq_sb(L.f2)
     }
     if (any6) {
@@ -138,10 +154,10 @@ def private pf_setup {
     for (l in range64(g_rd.n_layers)) {
         var L & = unsafe(g_rd.layers[l])
         let b = int(l * PF_ROLES)
-        let qkv6 = L.fq == 6
-        let wo6 = L.fo == 6
-        let gu6 = L.f1 == 6
-        let dn6 = L.f2 == 6
+        let qkv6 = pf_f16_feed(L.fq)
+        let wo6 = pf_f16_feed(L.fo)
+        let gu6 = pf_f16_feed(L.f1)
+        let dn6 = pf_f16_feed(L.f2)
         // 0 quant_xb: pf_xb -> pf_xq/pf_xs (fmt 6: f16 convert -> pf_xf)
         g_rd.pf_sets[b + 0] = (qkv6
             ? set_f16cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf),
@@ -257,12 +273,12 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
             pfq_ts(raw)
             for (l in range64(g_rd.n_layers)) {
                 let b = int(l * PF_ROLES)
-                // fmt-6 (cm2) roles: f32->f16 convert feeds the decode-in-load twin; the fill's fmt
-                // must match the dispatched pipe's tile rule, so both key off the same group flag
-                let fq6 = g_rd.layers[l].fq == 6
-                let fo6 = g_rd.layers[l].fo == 6
-                let gu6 = g_rd.layers[l].f1 == 6
-                let dn6 = g_rd.layers[l].f2 == 6
+                // f16-fed roles (fmt-6, and fmt-0 under mode 4's l-tile): f32->f16 convert feeds
+                // the decode-in-load GEMM; the fill's tile rule keys off the same group flag
+                let fq6 = pf_f16_feed(g_rd.layers[l].fq)
+                let fo6 = pf_f16_feed(g_rd.layers[l].fo)
+                let gu6 = pf_f16_feed(g_rd.layers[l].f1)
+                let dn6 = pf_f16_feed(g_rd.layers[l].f2)
                 // kq consumers take the Q8_K quant/act forms (the arm declines mixed groups)
                 let fqk = kq_sb(g_rd.layers[l].fq)
                 let fok = kq_sb(g_rd.layers[l].fo)
@@ -535,9 +551,10 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
 }
 
 // single-region batch schedule over an arena block: 4-word record at 0, all tiles map to region
-// 0 at map_off = 4. Returns the dispatch workgroup count.
-def private fill_arena_batch_sched(hb : HostBuf; d, blk, npos : int64; fmt : int) : uint {
-    let te = batch_tile_edges(fmt, d, npos)
+// 0 at map_off = 4. Returns the dispatch workgroup count. `cm2l` must match the dispatched
+// class's tile rule (the l-tile's f16-fed prefill form — see batch_tile_edges).
+def private fill_arena_batch_sched(hb : HostBuf; d, blk, npos : int64; fmt : int; cm2l : bool = false) : uint {
+    let te = batch_tile_edges(fmt, d, npos, cm2l)
     let wtiles = (d + te.td - 1l) / te.td
     let rtiles = (npos + te.tc - 1l) / te.tc
     let total = rtiles * wtiles

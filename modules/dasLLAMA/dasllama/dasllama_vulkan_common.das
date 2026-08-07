@@ -105,10 +105,13 @@ def q8_batch_tile_for(d, cnt : int64) : int64 {
 def q8_batch_aligned(d, cnt : int64) : bool
     => d % 128l == 0l && cnt % 128l == 0l && q8_batch_tile_for(d, cnt) == 128l
 
-// a batch dispatch's tile pick + (rows, cols) edges: the cm2 twin (fmt 6) tiles 64w x 128t, q8
-// rides the router above, kq the fixed BATCH_TILE — one source so wg counts, meta fills, and the
-// class pick can never disagree
-def batch_tile_edges(fmt : int; d, cnt : int64) : tuple<tile : int64; td : int64; tc : int64> {
+// a batch dispatch's tile pick + (rows, cols) edges — one source so wg counts, meta fills, and
+// the class pick can never disagree. `cm2l` = the l-tile (128w x 256t, mode 4's f16-fed prefill
+// GEMMs on native fmt-0 planes): only callers that STAGE f16 activations may pass it
+def batch_tile_edges(fmt : int; d, cnt : int64; cm2l : bool = false) : tuple<tile : int64; td : int64; tc : int64> {
+    if (cm2l) {
+        return (tile = 128l, td = 128l, tc = 256l)
+    }
     let tile = fmt == 0 ? q8_batch_tile_for(d, cnt) : BATCH_TILE
     return (tile = tile, td = fmt == 6 ? 64l : tile, tc = fmt == 6 ? 128l : tile)
 }

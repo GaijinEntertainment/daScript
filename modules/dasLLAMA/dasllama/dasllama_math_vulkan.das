@@ -194,10 +194,10 @@ def private vk_plane_bytes(n, rows : int64; fmt : int) : int64 {
     return pb.wq + pb.ws
 }
 
-// the loader's upload router asks this before gathering q8 expert stacks: mode 4 (cm2) wants
-// them as fmt-6 q8n blocks (decode-in-load). Probes the device — the answer must precede the
-// first gather.
-def private vk_expert_q8n : bool => vk_moe_init() && g_gpu.coopmat_mode == 4
+// the loader's upload router asks this before gathering q8 expert stacks. Mode 4 used to want
+// them as fmt-6 q8n blocks; the cm2 l-tile decodes NATIVE fmt-0 planes in-load, so the format
+// fork is gone — decode GEMV and prefill GEMM share one plane form.
+def private vk_expert_q8n : bool => false
 
 def private vk_device_name : string {
     if (g_gpu == null) {
@@ -252,7 +252,7 @@ def private vk_caps_fill(phys : VkPhysicalDevice; var v : DlimVulkanConfig) {
     let has_cm = cooperative_matrix_supported(phys)
     let has_cm2 = has_cm && cooperative_matrix2_supported(phys)
     v.coopmat_mode = resolve_coopmat_mode(has_cm, has_cm2)
-    v.expert_q8n = v.coopmat_mode == 4
+    v.expert_q8n = false   // mode 4 serves native fmt-0 through the l-tile — no q8n gather
     v.subgroup_size = int(subgroup_properties(phys).subgroupSize)
     var props : VkPhysicalDeviceProperties
     vkGetPhysicalDeviceProperties(phys, props)
