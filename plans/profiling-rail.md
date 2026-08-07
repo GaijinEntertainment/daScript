@@ -189,9 +189,12 @@ Interleaved A → B-off → B-on ×3 per bench, strictly serial, arm A via git-c
      strips wait. **The concept waits on a row-range fork-callable tile core from the
      math_gen emitter + per-shape (tune-crownable) splits** — the "no black holes" prize
      (~1.7× combined throughput) is real but needs that sub-arc.
-   - **PARKED (Boris, 2026-08-06): collect the tool gain first.** The hybrid perf number
-     was a strawman — it measured the missing kernel (row-major GEMV loop vs the tile
-     GEMM), not the concept. Going-in notes for the return: **token-split beats row-split**
+   - **PARKED (Boris, 2026-08-06): collect the tool gain first — and REMOVED from the PR
+     post-review.** The hybrid perf number was a strawman — it measured the missing kernel
+     (row-major GEMV loop vs the tile GEMM), not the concept — and review also showed the
+     two halves computed on DIFFERENT activations (f32 vs q8), contradicting the
+     one-precision-class claim. The code lives in the PR's history; the design returns as
+     token-split. Going-in notes for the return: **token-split beats row-split**
      (NEON takes tokens `[0,t)` via the UNCHANGED backend tile kernel on the repacked
      weights — zero new kernel work; AMX takes `[t,ntok)` from the dequant bands; Y is
      token-major so each side writes a contiguous slab). The open design question is the
