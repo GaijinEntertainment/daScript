@@ -10,7 +10,7 @@ require pugixml/PUGIXML_boost
 
 `PUGIXML_boost` re-exports the C++ `pugixml` module — never `require` both.
 
-The module is gated by the CMake option `DAS_PUGIXML_DISABLED`, which defaults to `OFF` — dasPUGIXML is built by default. Set it to `ON` only to opt out; there is nothing to turn on for ordinary use.
+The module is gated by the CMake option `DAS_PUGIXML_DISABLED`, which defaults to `OFF` in the standard top-level build — dasPUGIXML is built by default. Set it to `ON` only to opt out; there is nothing to turn on for ordinary use. (The `web/` wasm host build is the exception: it defaults the option to `ON`.)
 
 ## Loading & parsing — RAII blocks
 
@@ -190,7 +190,7 @@ Supports nested structs, enums, arrays, tables, tuples, variants, vector types (
 - **Errors are `ok` bool flags, not exceptions** — always branch on the second block parameter before using `doc`.
 - **No escape past the RAII block** — `xml_document?` and any `xml_node` derived from it are valid only inside the block. Returning them past the block exit is use-after-free.
 - **Missing attributes don't error**: `root["does_not_exist"] as int` returns `0`. Use the `is` test if you need to distinguish "missing" from "zero".
-- **Build flag**: if `require pugixml/PUGIXML_boost` fails at compile time, this build turned the module off — `DAS_PUGIXML_DISABLED` was set to `ON`, against its `OFF` default.
+- **Build flag**: if `require pugixml/PUGIXML_boost` fails at compile time, this build turned the module off — `DAS_PUGIXML_DISABLED` was set to `ON` (the top-level build defaults it to `OFF`; the `web/` wasm host defaults it to `ON`).
 - **CMake install for tutorial data**: a tutorial that ships sample XML (e.g. [tutorials/dasPUGIXML/books.xml](tutorials/dasPUGIXML/books.xml)) needs a `*.xml` glob in its install rule, not just `*.das` — the dasPUGIXML rule in `tutorials/CMakeLists.txt` globs both for exactly this reason. Data-only files are the easy thing to forget.
 
 ## Reference
