@@ -509,9 +509,9 @@ def load_parakeet_model(path : string; q8 : bool = false) : ParakeetModel {
         let ts_img = ref_time_ticks()
         var t = ParakeetModel()
         if (!load_image(path, t, tag)) {
-            panic("dasLLAMA: '{path}' is not a prepared parakeet image for this box/knobs (identity {image_identity(tag)}) — regenerate it from the source model")
+            panic("dasLLAMA: '{path}' is not a prepared parakeet image for this box/knobs (identity {image_identity(tag)}) - regenerate it from the source model")
         }
-        to_log(LOG_INFO, "dasLLAMA: prepared parakeet image mapped in {get_time_usec(ts_img) / 1000} ms — {path}\n")
+        to_log(LOG_INFO, "dasLLAMA: prepared parakeet image mapped in {get_time_usec(ts_img) / 1000} ms - {path}\n")
         return <- t
     }
     if (g_env_engine.image) {
@@ -520,7 +520,7 @@ def load_parakeet_model(path : string; q8 : bool = false) : ParakeetModel {
         let ts_img = ref_time_ticks()
         var t = ParakeetModel()
         if (load_image(img, t, tag)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared parakeet image mapped in {get_time_usec(ts_img) / 1000} ms — {img}\n")
+            to_log(LOG_INFO, "dasLLAMA: prepared parakeet image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
             return <- t
         }
         var inscope st <- stage_parakeet_model(path, q8)
@@ -609,7 +609,7 @@ def stage_parakeet_model(path : string; q8 : bool = false) : ParakeetStaging {
         st.e.n_max_tokens = int64(rd_i32(bytes, o)); o += 4l
         st.e.blank_id = int(st.e.n_vocab)
         if (st.e.n_fft != 512l) {   // FFT_FRAME in the mel worker is sized for 512-pt frames
-            panic("dasLLAMA parakeet: n_fft {st.e.n_fft} — the mel path is built for the family's 512-pt STFT")
+            panic("dasLLAMA parakeet: n_fft {st.e.n_fft} - the mel path is built for the family's 512-pt STFT")
         }
         st.e.fft <- build_fft_plan(st.e.n_fft)
 
@@ -1125,7 +1125,7 @@ def parakeet_encode(m : ParakeetModel; var st : ParakeetState) : int64 {
     // features per time row: v[f + w3·c] = y6[t][f][c]; then pre_out into the residual stream
     let tt = t3
     if (tt > LOCAL_ATTN_THRESHOLD) {
-        panic("dasLLAMA parakeet: {tt} encoder frames crosses the local-attention switch — clip audio to under ~10.9 minutes")
+        panic("dasLLAMA parakeet: {tt} encoder frames crosses the local-attention switch - clip audio to under ~10.9 minutes")
     }
     let feat = w3 * nch
     pk_ensure(st.xf, tt * feat)

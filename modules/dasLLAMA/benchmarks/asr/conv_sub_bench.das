@@ -935,7 +935,7 @@ def main() : int {
     let frames = a.frames > 0 ? int64(a.frames) : 1101l
     let rounds = a.rounds > 0 ? a.rounds : 12
     if (!jit_enabled()) {
-        print("WARNING: run with -jit — interpreted timings do not reflect the engine\n")
+        print("WARNING: run with -jit - interpreted timings do not reflect the engine\n")
     }
     apply_box_profile_runtime()
     with_job_que() {

@@ -18,7 +18,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("with_font — boost v2 §3.6", 720, 360)
+    harness_init("with_font - boost v2 §3.6", 720, 360)
 }
 
 [export]
@@ -33,7 +33,7 @@ def update() {
 
         let default_font = GetFont()
         with_font(default_font) {
-            text(INSIDE, (text = "inside with_font block — same glyphs since the font matches."))
+            text(INSIDE, (text = "inside with_font block - same glyphs since the font matches."))
             if (button(BTN_INSIDE, (text = "button under custom font"))) {}
         }
 

@@ -20,7 +20,7 @@ let LIPSUM = ("Lorem ipsum dolor sit amet, consectetur adipiscing elit, "
 
 [export]
 def init() {
-    harness_init("with_text_wrap_pos — scope wrapper", 720, 540)
+    harness_init("with_text_wrap_pos - scope wrapper", 720, 540)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
 }
@@ -33,7 +33,7 @@ def update() {
     SetNextWindowSize(ImVec2(660.0, 480.0), ImGuiCond.Always)
     window(MAIN_WIN, (text = "with_text_wrap_pos", closable = false,
                       flags = ImGuiWindowFlags.None)) {
-        text("Default wrap (0.0f → window right edge):")
+        text("Default wrap (0.0f -> window right edge):")
         with_text_wrap_pos(0.0f) {
             text_unformatted((text = LIPSUM))
         }

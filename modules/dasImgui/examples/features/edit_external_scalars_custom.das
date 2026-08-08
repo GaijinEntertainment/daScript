@@ -29,7 +29,7 @@ var private g_input_double : double = 1.5lf
 
 [export]
 def init() {
-    harness_init("edit_external_scalars_custom — boost v2 §3.7", 760, 520)
+    harness_init("edit_external_scalars_custom - boost v2 §3.7", 760, 520)
 }
 
 [export]
@@ -38,7 +38,7 @@ def update() {
     harness_new_frame()
 
     SetNextWindowSize(ImVec2(720.0, 460.0), ImGuiCond.Always)
-    window(MAIN_WIN, (text = "edit_*_scalar — generic T", closable = false,
+    window(MAIN_WIN, (text = "edit_*_scalar - generic T", closable = false,
                       flags = ImGuiWindowFlags.None)) {
         text(LEAD_DRAG, (text = "edit_drag_scalar across int8, uint16, int64."))
         edit_drag_scalar(safe_addr(g_drag_i8), (id = "DRAG_I8",

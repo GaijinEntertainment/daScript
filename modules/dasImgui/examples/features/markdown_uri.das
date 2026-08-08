@@ -50,13 +50,13 @@ def update() {
                               flags = ImGuiWindowFlags.None)) {
         with_font(g_font, 19.0f) {
             text("Markdown inline-flow foundation")
-            text_disabled("One semantic URI → many visual fragments → one hover/click/copy action")
+            text_disabled("One semantic URI -> many visual fragments -> one hover/click/copy action")
             separator()
 
             let web_target = "https://example.com/文档/naïve/é/very-long-resource-name?mode=full&emoji=👩‍💻#résumé"
             let web = markdown_uri_paragraph(
                 "web", "A wrapped Unicode URI: ", web_target,
-                " — followed by ordinary paragraph text.", web_target, 620.0f)
+                " - followed by ordinary paragraph text.", web_target, 620.0f)
             report_result("web", web_target, web)
 
             spacing()

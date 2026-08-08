@@ -673,7 +673,7 @@ class public LlvmJitVisitor : AstVisitor {
             return true
         }
         if (!has_llvm_code_generator(gen_name)) {
-            failed("[llvm_code] on {fun.name}: no generator registered under '{gen_name}' — is its module required from llvm/daslib/llvm_user_modules.das?")
+            failed("[llvm_code] on {fun.name}: no generator registered under '{gen_name}' - is its module required from llvm/daslib/llvm_user_modules.das?")
             return true
         }
         let fnmna = uid.get_dll_fn_name(fun)
@@ -3551,7 +3551,7 @@ class public LlvmJitVisitor : AstVisitor {
 
 // ExprQuote
     def override preVisitExprQuote(expr : ExprQuote?) : void {
-        unsupported(expr, "raw quote( ) is not jit-able — daslib/quote lowering (jit_enabled / aot_macros gates) did not run for this module")
+        unsupported(expr, "raw quote( ) is not jit-able - daslib/quote lowering (jit_enabled / aot_macros gates) did not run for this module")
     }
 
 // ExprIfThenElse
@@ -7954,7 +7954,7 @@ class public DisableJitVisitor : AstVisitor {
         // jit_enabled programs get quotes lowered by daslib/quote's QuotePass before we
         // ever run; a raw one means lowering didn't fire for the defining module (macro
         // modules stay raw by design) — skip the function instead of failing the file
-        to_log(LOG_WARNING, "LLVM JIT: raw quote( ) — daslib/quote lowering (jit_enabled / aot_macros gates) did not run for this module at {expr.at}, falling back to interpreter.\n")
+        to_log(LOG_WARNING, "LLVM JIT: raw quote( ) - daslib/quote lowering (jit_enabled / aot_macros gates) did not run for this module at {expr.at}, falling back to interpreter.\n")
         disable = true
     }
 

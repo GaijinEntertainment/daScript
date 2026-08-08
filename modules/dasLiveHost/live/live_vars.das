@@ -47,7 +47,7 @@ class LiveVarsLint : AstPassMacro {
         mod |> for_each_global() $(g) {
             if (g.annotation |> find_arg("live") ?as tBool ?? false) {
                 if (g._type.flags.constant) {
-                    macro_error(prog, g.at, "@live cannot be used on constant (let) variables — they never change: {g.name}")
+                    macro_error(prog, g.at, "@live cannot be used on constant (let) variables - they never change: {g.name}")
                 }
             }
         }

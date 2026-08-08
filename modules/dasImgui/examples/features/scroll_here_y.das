@@ -24,7 +24,7 @@ var private g_jump_target = -1
 
 [export]
 def init() {
-    harness_init("set_scroll_here_y — jump-to-row", 540, 540)
+    harness_init("set_scroll_here_y - jump-to-row", 540, 540)
 }
 
 [export]

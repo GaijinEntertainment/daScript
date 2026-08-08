@@ -96,7 +96,7 @@ def update() {
 
         separator()
         text("Captures so far: {g_capture_count}. Note the '# ' header decoration and the")
-        text("injected line below — neither is part of the on-screen report above:")
+        text("injected line below - neither is part of the on-screen report above:")
         child(CLIP_CHILD, (text = "clip", size = float2(640.0f, 200.0f),
                            child_flags = ImGuiChildFlags.Borders,
                            window_flags = ImGuiWindowFlags.None)) {

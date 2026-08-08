@@ -21,7 +21,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("focus_control — keyboard focus rail", 560, 360)
+    harness_init("focus_control - keyboard focus rail", 560, 360)
 }
 
 [export]

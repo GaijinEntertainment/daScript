@@ -52,14 +52,14 @@ def private close(t : T?; got, want : float; tol : float; what : string) {
 
 [test]
 def test_e8m0_half(t : T?) {
-    t |> run("normal range — powers of two around 1.0") @(t : T?) {
+    t |> run("normal range - powers of two around 1.0") @(t : T?) {
         t |> equal(e8m0_half(127u), 0.5)
         t |> equal(e8m0_half(128u), 1.0)
         t |> equal(e8m0_half(129u), 2.0)
         t |> equal(e8m0_half(130u), 4.0)
         t |> equal(e8m0_half(120u), 0.00390625)   // 2^-8
     }
-    t |> run("edges — denormal bit patterns and the top of the range") @(t : T?) {
+    t |> run("edges - denormal bit patterns and the top of the range") @(t : T?) {
         t |> equal(unsafe(reinterpret<uint>(e8m0_half(0u))), 0x00200000)   // 2^-128
         t |> equal(unsafe(reinterpret<uint>(e8m0_half(1u))), 0x00400000)   // 2^-127
         t |> equal(e8m0_half(2u), 1.1754943508222875e-38)                  // 2^-126 = FLT_MIN

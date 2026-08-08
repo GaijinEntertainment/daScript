@@ -24,7 +24,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("unindent — boost v2 §3.5", 720, 420)
+    harness_init("unindent - boost v2 §3.5", 720, 420)
 }
 
 [export]
@@ -33,19 +33,19 @@ def update() {
     harness_new_frame()
 
     SetNextWindowSize(ImVec2(680.0, 360.0), ImGuiCond.Always)
-    window(MAIN_WIN, (text = "indent / unindent — manual bracketing",
+    window(MAIN_WIN, (text = "indent / unindent - manual bracketing",
                       closable = false, flags = ImGuiWindowFlags.None)) {
         text(LEAD, (text = "indent + unindent bracket a section manually. Default uses ImGui's IndentSpacing."))
 
         text(BEFORE, (text = "Before indent (column 0)"))
         indent(IND_1)
-        text(INSIDE_1, (text = "After indent — one level deeper"))
+        text(INSIDE_1, (text = "After indent - one level deeper"))
         indent(IND_2, (indent_w = 32.0f))
         text(INSIDE_2, (text = "After a second 32px indent"))
         unindent(UND_2, (indent_w = 32.0f))
-        text(BACK_1, (text = "After unindent(32) — back to one level"))
+        text(BACK_1, (text = "After unindent(32) - back to one level"))
         unindent(UND_1)
-        text(BACK_0, (text = "After unindent — back to column 0"))
+        text(BACK_0, (text = "After unindent - back to column 0"))
 
         separator(SEP)
         text(LEAD_2, (text = "Asymmetric: 3 indents, 1 large unindent."))
@@ -55,7 +55,7 @@ def update() {
         indent(IND_C)
         text(THREE_DEEP, (text = "3 indents deep"))
         unindent(UND_BIG, (indent_w = 64.0f))
-        text(POP_TO_NEAR_MARGIN, (text = "After unindent(64) — closer to margin"))
+        text(POP_TO_NEAR_MARGIN, (text = "After unindent(64) - closer to margin"))
     }
 
     harness_end_frame()

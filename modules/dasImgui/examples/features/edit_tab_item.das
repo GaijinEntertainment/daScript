@@ -24,7 +24,7 @@ var private g_tab_b_open : bool = true
 
 [export]
 def init() {
-    harness_init("edit_tab_item — closable tab bound to bool", 640, 360)
+    harness_init("edit_tab_item - closable tab bound to bool", 640, 360)
 }
 
 [export]
@@ -47,12 +47,12 @@ def update() {
             edit_tab_item(safe_addr(g_tab_a_open),
                           (id = "TAB_A", text = "alpha",
                            flags = ImGuiTabItemFlags.None)) {
-                text(BODY_A, (text = "alpha tab body — close me with the X."))
+                text(BODY_A, (text = "alpha tab body - close me with the X."))
             }
             edit_tab_item(safe_addr(g_tab_b_open),
                           (id = "TAB_B", text = "beta",
                            flags = ImGuiTabItemFlags.None)) {
-                text(BODY_B, (text = "beta tab body — close me with the X."))
+                text(BODY_B, (text = "beta tab body - close me with the X."))
             }
         }
         text(STATUS, (text = "a={g_tab_a_open} b={g_tab_b_open}"))

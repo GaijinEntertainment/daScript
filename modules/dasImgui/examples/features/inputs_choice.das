@@ -28,7 +28,7 @@ var SHIRT_ROW : table<int; ClickState>
 
 [export]
 def init() {
-    harness_init("Phase 0b.2 — choice inputs", 720, 500)
+    harness_init("Phase 0b.2 - choice inputs", 720, 500)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
 }
@@ -39,7 +39,7 @@ def update() {
     harness_new_frame()
 
     SetNextWindowSize(ImVec2(660.0, 460.0), ImGuiCond.Always)
-    window(MAIN_WIN, (text = "Choice inputs — phase 0b.2", closable = false,
+    window(MAIN_WIN, (text = "Choice inputs - phase 0b.2", closable = false,
                       flags = ImGuiWindowFlags.None)) {
         text("Combo (dropdown selector)")
         separator()

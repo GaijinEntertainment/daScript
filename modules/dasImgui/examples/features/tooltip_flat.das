@@ -21,7 +21,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("tooltip_flat — boost v2 §3.2", 720, 360)
+    harness_init("tooltip_flat - boost v2 §3.2", 720, 360)
 }
 
 [export]
@@ -36,7 +36,7 @@ def update() {
         if (button(HOVER_BTN, (text = "hover me"))) {}
         set_item_tooltip(TOOLTIP_ON_BUTTON, (text = "Fires only while HOVER_BTN is hovered."))
 
-        text(MID, (text = "Unconditional tooltip below — drives a popup any time hover-stack is active."))
+        text(MID, (text = "Unconditional tooltip below - drives a popup any time hover-stack is active."))
         if (button(ALWAYS_BTN, (text = "always-tooltip target"))) {}
         if (IsItemHovered(ImGuiHoveredFlags.None)) {
             set_tooltip(TOOLTIP_ALWAYS, (text = "Fires whenever the surrounding hover gate matches."))

@@ -56,7 +56,7 @@ class HarnessLintVisitor : AstVisitor {
         if (key_exists(FORBIDDEN_MODULES, mname)) {
             let fname = string(expr.func.name)
             compiling_program() |> macro_error(expr.at,
-                "HARNESS001: {mname}::{fname} is forbidden in files that require imgui_harness — use the harness helpers (harness_init / harness_begin_frame / harness_new_frame / harness_end_frame / harness_shutdown) instead. Per-file escape: `options _allow_glfw_calls = true` (scaffolding only)")
+                "HARNESS001: {mname}::{fname} is forbidden in files that require imgui_harness - use the harness helpers (harness_init / harness_begin_frame / harness_new_frame / harness_end_frame / harness_shutdown) instead. Per-file escape: `options _allow_glfw_calls = true` (scaffolding only)")
         }
     }
 }

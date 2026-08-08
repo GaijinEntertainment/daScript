@@ -45,7 +45,7 @@ def setup_default_layout(dock_id : uint) {
 
 [export]
 def init() {
-    harness_init("dockspace_in_window — boost v2", 720, 480)
+    harness_init("dockspace_in_window - boost v2", 720, 480)
     var io & = unsafe(GetIO())
     io.ConfigFlags |= ImGuiConfigFlags.DockingEnable
 }

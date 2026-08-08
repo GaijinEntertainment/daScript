@@ -23,7 +23,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("tree_node_ex — boost v2 §3.4", 720, 480)
+    harness_init("tree_node_ex - boost v2 §3.4", 720, 480)
 }
 
 [export]

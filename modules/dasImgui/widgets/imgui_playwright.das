@@ -460,7 +460,7 @@ def public expect_render(app : ImguiApp;
         let key_list <- [for (k in keys(obj)); k]
         keys_buf = "[" + join(key_list, ", ") + "]"
     }
-    panic("expect_render({widget_ident}) timeout after {timeout_sec}s — widget never reported rendered:true.\nRegistered widgets: {keys_buf}")
+    panic("expect_render({widget_ident}) timeout after {timeout_sec}s - widget never reported rendered:true.\nRegistered widgets: {keys_buf}")
 }
 
 def public await_quiescent(app : ImguiApp;
@@ -468,7 +468,7 @@ def public await_quiescent(app : ImguiApp;
     //! Assertion wrapper over ``await_imgui(transport, "quiescent", timeout)``; panics on timeout.
     //! For a non-asserting poll, call ``await_imgui`` directly.
     if (await_imgui(app.transport, "quiescent", timeout_sec)) return
-    panic("await_quiescent timeout after {timeout_sec}s — server never reported quiescent")
+    panic("await_quiescent timeout after {timeout_sec}s - server never reported quiescent")
 }
 
 // ===== Command verbs =====
@@ -918,7 +918,7 @@ let private RECORD_STALL_US = 2 * 1000000
 def private warn_capture_stalled() {
     return if (g_stall_warned)
     g_stall_warned = true
-    print("[record] frame capture stalled (app not rendering during a hold) — content-time " +
+    print("[record] frame capture stalled (app not rendering during a hold) - content-time " +
           "gating degraded to wall-clock for this session. See dasImgui issue #190.\n")
 }
 
@@ -1691,6 +1691,6 @@ def public with_recording_app(feature_path : string; // nolint:STYLE038
 
 def private record_failures_message() : string {
     //! Join the accumulated self-verification misses into one loud teardown message.
-    return ("recording self-verification failed — {length(g_record_failures)} interaction(s) did not register:\n" +
+    return ("recording self-verification failed - {length(g_record_failures)} interaction(s) did not register:\n" +
             join(g_record_failures, "\n---\n"))
 }

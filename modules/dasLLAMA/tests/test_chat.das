@@ -593,7 +593,7 @@ def private detok(m : Model; ids : array<int64>) : string {
 // test_audio's; nothing else pins these template tags against a real vocab).
 [test]
 def test_chat_audio_markers(t : T?) {
-    t |> run("voxtral audio turn opens with [BEGIN_AUDIO] (no closing marker — mtmd shape)") @(t : T?) {
+    t |> run("voxtral audio turn opens with [BEGIN_AUDIO] (no closing marker - mtmd shape)") @(t : T?) {
         let path = path_join(models_dir(), "voxtral-mini-3b-q8_0.gguf")
         if (!model_available(t, path)) {
             return

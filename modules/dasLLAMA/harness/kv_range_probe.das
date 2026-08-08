@@ -72,7 +72,7 @@ def private report_layer(l : int64; tag : string; r : Range) {
 def main() {   // nolint:STYLE038 — flat probe driver: args, load, prefill, slab walk, report
     allow_cpu_prefill()   // CPU harness by intent — disarm the Metal-build tripwire
     if (!jit_enabled()) {
-        print("This probe is JIT-only — run with: daslang -jit <file>\n")
+        print("This probe is JIT-only - run with: daslang -jit <file>\n")
         return
     }
     var res <- parse_args(type<Args>)
@@ -150,8 +150,8 @@ def main() {   // nolint:STYLE038 — flat probe driver: args, load, prefill, sl
     }
     let f16_ok = kall.amax < 65504.0 && vall.amax < 65504.0
     print(f16_ok
-        ? "VERDICT: every K/V value is inside the finite f16 range — the f16 codec stores are clamp-free on this model.\n"
-        : "VERDICT: values EXCEED f16 max — the store clamp will engage; investigate before defaulting to f16.\n")
+        ? "VERDICT: every K/V value is inside the finite f16 range - the f16 codec stores are clamp-free on this model.\n"
+        : "VERDICT: values EXCEED f16 max - the store clamp will engage; investigate before defaulting to f16.\n")
     delete khist
     delete vhist
     delete s

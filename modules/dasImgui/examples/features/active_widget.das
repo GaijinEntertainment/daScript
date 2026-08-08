@@ -24,7 +24,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("Phase 2.1 — active_widget foundation", 800, 600)
+    harness_init("Phase 2.1 - active_widget foundation", 800, 600)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
 }
@@ -35,7 +35,7 @@ def update() {
     harness_new_frame()
 
     SetNextWindowSize(ImVec2(720.0, 280.0), ImGuiCond.Always)
-    window(MAIN_WIN, (text = "active_widget — phase 2.1", closable = false,
+    window(MAIN_WIN, (text = "active_widget - phase 2.1", closable = false,
                       flags = ImGuiWindowFlags.None)) {
         text("Foundation gate: GetActiveID + reverse maps + Result wire.")
         text("Drag the slider to make snapshot.io.active_widget resolve.")

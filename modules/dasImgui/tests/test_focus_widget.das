@@ -52,8 +52,8 @@ def test_imgui_focus_keyboard(t : T?) {
         // Gate 4: display-only widget rejects focus dispatch.
         let bad_resp = focus(d, "MAIN_WIN/DEMO_TEXT")
         t |> equal(bad_resp?["ok"] ?? true, false,
-                   "display-only target → response.ok = false")
+                   "display-only target -> response.ok = false")
         t |> success(!empty(bad_resp?["error"] ?? ""),
-                     "display-only target → response.error populated")
+                     "display-only target -> response.error populated")
     }
 }

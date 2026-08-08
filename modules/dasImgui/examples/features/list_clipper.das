@@ -22,7 +22,7 @@ let private ITEM_COUNT = 1000
 
 [export]
 def init() {
-    harness_init("list_clipper — 1000-row virtual list", 480, 480)
+    harness_init("list_clipper - 1000-row virtual list", 480, 480)
 }
 
 [export]
@@ -33,7 +33,7 @@ def update() {
     SetNextWindowSize(ImVec2(440.0, 440.0), ImGuiCond.Always)
     window(MAIN_WIN, (text = "list_clipper", closable = false,
                       flags = ImGuiWindowFlags.None)) {
-        text(LEAD, (text = "1000-row virtual list — only the visible chunk is rendered each frame."))
+        text(LEAD, (text = "1000-row virtual list - only the visible chunk is rendered each frame."))
 
         child(SCROLL_AREA, (text = "scroll", size = float2(400.0f, 360.0f),
                             child_flags = ImGuiChildFlags.Borders,

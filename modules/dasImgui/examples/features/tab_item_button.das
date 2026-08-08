@@ -26,7 +26,7 @@ var private DYN_TAB : table<int; TabItemState>
 
 [export]
 def init() {
-    harness_init("tab_item_button — leading/trailing tab buttons", 720, 360)
+    harness_init("tab_item_button - leading/trailing tab buttons", 720, 360)
     // Seed with 3 tabs so the bar is non-empty on frame 1.
     ACTIVE_TABS |> reserve(3)
     for (_ in range(3)) {

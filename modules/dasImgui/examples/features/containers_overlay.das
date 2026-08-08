@@ -28,7 +28,7 @@ var TASK_ROW : table<int; ClickState>
 
 [export]
 def init() {
-    harness_init("Phase 0b.3 — containers (overlay family)", 800, 640)
+    harness_init("Phase 0b.3 - containers (overlay family)", 800, 640)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
 }
@@ -93,14 +93,14 @@ def update() { // nolint:STYLE038
         button(MANUAL_TIP_BTN, (text = "Hover for manual tooltip"))
         if (IsItemHovered(ImGuiHoveredFlags.None)) {
             tooltip(MANUAL_TIP) {
-                text("BeginTooltip — caller-gated")
+                text("BeginTooltip - caller-gated")
             }
         }
 
         spacing()
 
         // ----- Block-arg combo + list_box -----
-        text("combo_select / list_box — body emits Selectables")
+        text("combo_select / list_box - body emits Selectables")
         separator()
         var palette_label = "(none)"
         if (PALETTE_COMBO.value >= 0 && PALETTE_COMBO.value < length(PALETTE_NAMES)) {

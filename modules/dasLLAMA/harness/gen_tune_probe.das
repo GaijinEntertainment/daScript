@@ -819,7 +819,7 @@ def q51_tune_family(var rows_out : table<string; JsonValue?>) : string {
         if (!ok) {
             // best = "" rejects the family; the shared cleanup past the loop frees everything
             // (deleting tvs HERE, mid-iteration, is the locked-array trap)
-            print("q51 {v._0} (mr={mr}): MISMATCH (maxdiff {maxdiff}) — aborting tune\n")
+            print("q51 {v._0} (mr={mr}): MISMATCH (maxdiff {maxdiff}) - aborting tune\n")
             delete sq; delete ss; delete hq; delete hs
             best = ""
             break
@@ -928,13 +928,13 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>) : stri
         run_kq_tile(tvs[vi]._1, kbfx, bbuf[mi].q, bbuf[mi].s, vmr[vi], ky)
         var maxdiff = 0.0
         if (!close_to_kq_ref(kbfx, ky, maxdiff)) {
-            print("k{fmt} {tvs[vi]._0}: tile MISMATCH (maxdiff {maxdiff}) — aborting tune\n")
+            print("k{fmt} {tvs[vi]._0}: tile MISMATCH (maxdiff {maxdiff}) - aborting tune\n")
             return ""
         }
         run_kq_gemv(gtab[tvs[vi]._0], khfx, hbuf[mi].q, hbuf[mi].s, vmr[vi], kyh)
         var gmaxdiff = 0.0
         if (!close_to_kq_ref(khfx, kyh, gmaxdiff)) {
-            print("k{fmt} {tvs[vi]._0}: gemv MISMATCH (maxdiff {gmaxdiff}) — aborting tune\n")
+            print("k{fmt} {tvs[vi]._0}: gemv MISMATCH (maxdiff {gmaxdiff}) - aborting tune\n")
             return ""
         }
     }
@@ -1310,14 +1310,14 @@ def private confirm_pp_run(model, manifest_path, expected : string) : double {
     let outp = run_child(cmd)
     let stamped = parse_stamp_suffix(outp)
     if (stamped != expected) {
-        print("confirm: arm expected stamp '{expected}' but the child stamped '{stamped}' — scoring 0\n")
+        print("confirm: arm expected stamp '{expected}' but the child stamped '{stamped}' - scoring 0\n")
         return 0.0lf
     }
     let pp = parse_confirm_pp(outp)
     if (pp <= 0.0lf) {   // surface WHY (a swallowed 'cannot open gguf' once cost a debug round)
         var lns <- split(outp, "\n")
         let n = length(lns)
-        print("confirm: arm '{expected}' produced no CONFIRM_PP — child output tail:\n")
+        print("confirm: arm '{expected}' produced no CONFIRM_PP - child output tail:\n")
         for (i in range(max(0, n - 6), n)) {
             if (!empty(lns[i])) print("confirm:   | {lns[i]}\n")
         }
@@ -1331,17 +1331,17 @@ def private confirm_pp_run(model, manifest_path, expected : string) : double {
 def private confirm_winner(winner : string) : string {
     let fb = discover_fallback_stamp()
     if (empty(fb)) {
-        print("confirm: fallback-discovery child failed — keeping the winner unguarded (pre-confirm behavior)\n")
+        print("confirm: fallback-discovery child failed - keeping the winner unguarded (pre-confirm behavior)\n")
         return winner
     }
     if (fb == winner) {
-        print("confirm: winner '{winner}' IS the per-ISA fallback — no e2e confirm needed\n")
+        print("confirm: winner '{winner}' IS the per-ISA fallback - no e2e confirm needed\n")
         return winner
     }
     let model = g_env_harness.confirm_model
     if (empty(model)) {
-        print("confirm: winner '{winner}' DIVERGES from the per-ISA fallback '{fb}' — a 1-core crown must confirm end-to-end before it ships (the SPR amx lesson)\n")
-        print("confirm: pinning the fallback '{fb}' — re-run with DASLLAMA_CONFIRM_MODEL=<q8 gguf> to run the confirm pass\n")
+        print("confirm: winner '{winner}' DIVERGES from the per-ISA fallback '{fb}' - a 1-core crown must confirm end-to-end before it ships (the SPR amx lesson)\n")
+        print("confirm: pinning the fallback '{fb}' - re-run with DASLLAMA_CONFIRM_MODEL=<q8 gguf> to run the confirm pass\n")
         // pin the fallback so the sidecar is COMPLETE — leaving the entry missing makes the
         // startup completeness gate re-tune on every run (the runtime rides the fallback either way)
         return fb
@@ -1352,7 +1352,7 @@ def private confirm_winner(winner : string) : string {
     // reads a box-less manifest as foreign -> absent, the challenger arm stamps the fallback,
     // and the confirm can never pass (both arms score 0 -> auto-reject)
     if (!fwrite(tmpm, "\{\"kernels\": \{\"q8q8_tile_gen\": \"{winner}\"\}, \"provenance\": \{\"box\": \"{tune_box_identity()}\"\}\}")) {
-        print("confirm: cannot write {tmpm} — is das_root writable?\n")
+        print("confirm: cannot write {tmpm} - is das_root writable?\n")
         return ""
     }
     var bestF = 0.0lf
@@ -1363,14 +1363,14 @@ def private confirm_winner(winner : string) : string {
     }
     remove(tmpm)
     if (bestF <= 0.0lf) {
-        print("confirm: the FALLBACK arm produced no pp number — not writing anything (fix the box, rerun)\n")
+        print("confirm: the FALLBACK arm produced no pp number - not writing anything (fix the box, rerun)\n")
         return ""
     }
     if (bestW > bestF * CONFIRM_MARGIN) {
-        print("confirm: challenger '{winner}' {bestW} tok/s BEATS fallback '{fb}' {bestF} tok/s — CONFIRMED\n")
+        print("confirm: challenger '{winner}' {bestW} tok/s BEATS fallback '{fb}' {bestF} tok/s - CONFIRMED\n")
         return winner
     }
-    print("confirm: challenger '{winner}' {bestW} tok/s does NOT beat fallback '{fb}' {bestF} tok/s by x{CONFIRM_MARGIN} — REJECTED, pinning the fallback\n")
+    print("confirm: challenger '{winner}' {bestW} tok/s does NOT beat fallback '{fb}' {bestF} tok/s by x{CONFIRM_MARGIN} - REJECTED, pinning the fallback\n")
     return fb
 }
 
@@ -1438,7 +1438,7 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
         }
     }
     if (skipped > 0) {
-        tune_detail("skipped {skipped} declined perm(s) — the shared reference body benches once as '{repname}'\n")
+        tune_detail("skipped {skipped} declined perm(s) - the shared reference body benches once as '{repname}'\n")
     }
     delete wtab
     let nv = length(vs)
@@ -1497,13 +1497,13 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
         run_tile(vs[vi]._1, ctab[vs[vi]._0], fx, bufs[vi].q, bufs[vi].s, vmr[vi], vts[vi], vgs[vi], y)
         var maxdiff = 0.0
         if (!close_to_ref(fx, y, maxdiff)) {
-            print("{vs[vi]._0}: tile MISMATCH (maxdiff {maxdiff}) — aborting tune\n")
+            print("{vs[vi]._0}: tile MISMATCH (maxdiff {maxdiff}) - aborting tune\n")
             return false
         }
         run_gemv(gtab[vs[vi]._0], gfx, gbufs[vi].q, gbufs[vi].s, vmr[vi], yg)
         var gmaxdiff = 0.0
         if (!close_to_ref(gfx, yg, gmaxdiff)) {
-            print("{vs[vi]._0}: gemv MISMATCH (maxdiff {gmaxdiff}) — aborting tune\n")
+            print("{vs[vi]._0}: gemv MISMATCH (maxdiff {gmaxdiff}) - aborting tune\n")
             return false
         }
     }
@@ -1570,7 +1570,7 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
     tune_detail("TUNE_GEN_TIME q8q8_family {get_time_usec(tune_total_t0) / 1000} ms\n")
     tune_progress_kernel_end("q8q8_tile_gen", vs[merged]._0, "beats")
     if (!noise_gate("mid1")) {
-        print("aborting mid-run — no sidecar written\n")
+        print("aborting mid-run - no sidecar written\n")
         return false
     }
     for (fmt in fixed_array(4l, 5l, 6l, 40l)) {
@@ -1588,7 +1588,7 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
         g_rows[entry] = JV(krows)
     }
     if (!noise_gate("mid2")) {
-        print("aborting mid-run — no sidecar written\n")
+        print("aborting mid-run - no sidecar written\n")
         return false
     }
     let q51_t0 = ref_time_ticks()
@@ -1617,7 +1617,7 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
     // the only write, behind the last gate: a noisy end-probe means NO entry is written — the
     // winners above were raced in conditions the probe just proved untrustworthy
     if (ok && !noise_gate("end")) {
-        print("aborting at the end-of-run gate — no sidecar written\n")
+        print("aborting at the end-of-run gate - no sidecar written\n")
         ok = false
     }
     if (ok) {
@@ -1634,7 +1634,7 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
         g_rows |> clear()   // pointees transferred into race (clear does not finalize)
         ok = tune_sidecar_section_merge("race", race) && ok
         print(ok ? "wrote {length(pending)} generator entries -> {tune_manifest_path()}\n"
-            : "FAILED to write {tune_manifest_path()} — if the app dir is read-only, set DAS_TUNE_MANIFEST to a writable path\n")
+            : "FAILED to write {tune_manifest_path()} - if the app dir is read-only, set DAS_TUNE_MANIFEST to a writable path\n")
     }
     delete pending
     tune_detail("TUNE_GEN_TIME total {get_time_usec(tune_total_t0) / 1000} ms\n")
@@ -1668,7 +1668,7 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
 [export, tune_policy(missing = "fallback")]
 def main : int {
     if (!jit_enabled()) {
-        print("run with -jit — the generator only fires under the LLVM JIT\n")
+        print("run with -jit - the generator only fires under the LLVM JIT\n")
         return 1
     }
     if (tuner_paranoid_requested()) {

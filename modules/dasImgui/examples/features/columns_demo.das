@@ -18,7 +18,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("§4.6 — columns demo", 640, 480)
+    harness_init("§4.6 - columns demo", 640, 480)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
 }

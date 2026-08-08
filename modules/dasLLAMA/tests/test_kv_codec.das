@@ -446,7 +446,7 @@ def test_kv_codec_q8_dots(t : T?) {
 
 [test]
 def test_kv_codec_q8_axpy(t : T?) {
-    t |> run("axpy_q8kv: one mad per element — bit-exact on any perm") @(t : T?) {
+    t |> run("axpy_q8kv: one mad per element - bit-exact on any perm") @(t : T?) {
         let n = 64l
         var src : array<float>
         fill_sin(src, n, 2.5, 0.61, 0.23)
@@ -484,7 +484,7 @@ def test_kv_codec_q8_axpy(t : T?) {
 
 [test]
 def test_kv_codec_tq4_dot(t : T?) {
-    t |> run("dot_q8tq4kv: integer inner sum — bit-exact vs the block reference") @(t : T?) {
+    t |> run("dot_q8tq4kv: integer inner sum - bit-exact vs the block reference") @(t : T?) {
         let n = 64l
         var src : array<float>
         fill_sin(src, n, 1.4, 0.83, 0.51)
@@ -517,7 +517,7 @@ def test_kv_codec_tq4_dot(t : T?) {
 
 [test]
 def test_kv_codec_tq4_axpy(t : T?) {
-    t |> run("axpy_tq4kv: one mad per nibble element — bit-exact on any perm") @(t : T?) {
+    t |> run("axpy_tq4kv: one mad per nibble element - bit-exact on any perm") @(t : T?) {
         let n = 64l
         var src : array<float>
         fill_sin(src, n, 1.4, 0.83, 0.51)

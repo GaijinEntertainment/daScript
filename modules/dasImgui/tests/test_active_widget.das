@@ -84,8 +84,8 @@ def test_active_widget_foundation(t : T?) {
         // Gate 7: error path — unknown target produces Result.err shape.
         let err_resp = click(d, "DOES_NOT_EXIST")
         t |> equal(err_resp?["ok"] ?? true, false,
-                   "unknown target → response.ok = false")
+                   "unknown target -> response.ok = false")
         t |> success(!empty(err_resp?["error"] ?? ""),
-                     "unknown target → response.error populated")
+                     "unknown target -> response.error populated")
     }
 }

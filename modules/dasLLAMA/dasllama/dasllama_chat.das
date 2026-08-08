@@ -370,7 +370,7 @@ def create_chat_(model : Model; system : string = ""; max_new : int64 = 256l; kv
 //! decoder/mmproj pair panics here, not at respond time.
 def create_chat_(model : Model; var tower : AudioTower; system : string = ""; max_new : int64 = 256l; kv_dtype : KVDtype = KVDtype.f16) : ChatSession {
     if (tower.proj_dim != model.config.dim) {
-        panic("dasLLAMA chat: mmproj projects to {tower.proj_dim} but the decoder is {model.config.dim}-wide — mismatched pair")
+        panic("dasLLAMA chat: mmproj projects to {tower.proj_dim} but the decoder is {model.config.dim}-wide - mismatched pair")
     }
     var c <- create_chat_(model, system, max_new, kv_dtype)
     c.enc <- make_encoder_state(tower)
@@ -383,7 +383,7 @@ def create_chat_(model : Model; var tower : AudioTower; system : string = ""; ma
 //! same turn; call inside with_job_que() (the encoder threads its kernels).
 def add_user_audio_(var c : ChatSession; samples : array<float> | #) {
     if (c.tower.d_model == 0l) {
-        panic("dasLLAMA chat: this chat has no audio tower — create it with create_chat(model, tower)")
+        panic("dasLLAMA chat: this chat has no audio tower - create it with create_chat(model, tower)")
     }
     let chunks <- log_mel_chunks(samples, c.tower.n_mel)
     let rows = audio_tokens_per_chunk(c.tower)

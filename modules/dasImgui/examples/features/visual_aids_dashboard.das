@@ -37,7 +37,7 @@ def update() {
     SetNextWindowSize(ImVec2(600.0, 320.0), ImGuiCond.Always)
     window(MAIN_WIN, (text = "visual_aids stage", closable = false,
                       flags = ImGuiWindowFlags.None)) {
-        text(LEAD, (text = "Targets below — drive imgui_highlight / narrate / focus_rect against them."))
+        text(LEAD, (text = "Targets below - drive imgui_highlight / narrate / focus_rect against them."))
 
         if (button(TARGET_BTN, (text = "Target button"))) {}
         same_line()

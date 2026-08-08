@@ -67,7 +67,7 @@ def main() {
 
     to_log(LOG_INFO, "corpus: {length(inputs)} inputs, {length(outlines)} outputs\n")
     if (length(inputs) != length(outlines)) {
-        to_log(LOG_ERROR, "MISALIGNED corpus — input/output counts differ\n")
+        to_log(LOG_ERROR, "MISALIGNED corpus - input/output counts differ\n")
         return
     }
 

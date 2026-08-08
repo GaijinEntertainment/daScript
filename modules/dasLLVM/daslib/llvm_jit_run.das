@@ -386,7 +386,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {
     // on a host machine decline every generated kernel to its reference body).
     let exe_host_cpu = gen_exe && empty(target_triple) && has_generated_kernel(prog, jit_all_functions)
     if (exe_host_cpu) {
-        to_log(LOG_INFO, "LLVM EXE: targeting the current box (CPU + features) — the build carries [llvm_code] kernels\n")
+        to_log(LOG_INFO, "LLVM EXE: targeting the current box (CPU + features) - the build carries [llvm_code] kernels\n")
     }
     // AOT objects target the host CPU: the .o is statically linked into a binary that runs on this
     // box (same contract as the JIT), so bake host features — this force-appends +dotprod on aarch64,
@@ -563,7 +563,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {
                 panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
             }
             if (compile_only) {
-                to_log(LOG_INFO, "LLVM JIT: compile-only — module built, optimized and verified; no artifact written, nothing installed\n")
+                to_log(LOG_INFO, "LLVM JIT: compile-only - module built, optimized and verified; no artifact written, nothing installed\n")
             } elif (emit_aot_object) {
                 emit_object_only(g_mod, output_path, use_host_cpu)
             } elif (gen_wasm) {

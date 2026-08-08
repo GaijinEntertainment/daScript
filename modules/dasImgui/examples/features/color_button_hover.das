@@ -19,7 +19,7 @@ var private STATE_MESSAGE = "Hover any swatch."
 
 [export]
 def init() {
-    harness_init("color_button_hover — hover target", 560, 320)
+    harness_init("color_button_hover - hover target", 560, 320)
 }
 
 [export]

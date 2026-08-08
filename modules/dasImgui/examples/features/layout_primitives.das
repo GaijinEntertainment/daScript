@@ -19,7 +19,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("layout_primitives — boost v2 §3.2", 720, 420)
+    harness_init("layout_primitives - boost v2 §3.2", 720, 420)
 }
 
 [export]
@@ -44,10 +44,10 @@ def update() {
         // dummy — zero-content rectangle that consumes layout space
         text(LAY_DUMMY_PREV, (text = "before dummy"))
         dummy(LAY_DUMMY, (size = float2(60.0f, 30.0f)))
-        text(LAY_DUMMY_NEXT, (text = "after dummy (offset by 60×30)"))
+        text(LAY_DUMMY_NEXT, (text = "after dummy (offset by 60x30)"))
 
         new_line(LAY_NEW_LINE)
-        text(LAY_AFTER_NEW, (text = "after new_line — guaranteed fresh row."))
+        text(LAY_AFTER_NEW, (text = "after new_line - guaranteed fresh row."))
     }
 
     harness_end_frame()

@@ -1010,7 +1010,7 @@ def public write_wasm(mod : LLVMOpaqueModule?; out_path : string; triple : strin
     let real_triple = (!(triple |> empty()) ? triple : "wasm64-unknown-emscripten")
     let runtime_lib = find_runtime_lib(explicit_runtime)
     if (needs_runtime && is_none(runtime_lib)) {
-        to_log(LOG_WARNING, "wasm: runtime symbols referenced but libDaScript_runtime.a not found at web/output64/lib/ — run the web/ emscripten build to link in the runtime, or pass --jit-runtime-lib=<path>\n")
+        to_log(LOG_WARNING, "wasm: runtime symbols referenced but libDaScript_runtime.a not found at web/output64/lib/ - run the web/ emscripten build to link in the runtime, or pass --jit-runtime-lib=<path>\n")
     }
     // Match the feature set web/CMakeLists.txt compiles the runtime archive with // nolint:STYLE014
     // (-msimd128 -mnontrapping-fptoint). Without +simd128 the host LLVM lowers

@@ -61,7 +61,7 @@ def private status_row_color(s : string) : uint {
 
 [export]
 def init() {
-    harness_init("table_set_bg_color — row & cell background tints", 560, 380)
+    harness_init("table_set_bg_color - row & cell background tints", 560, 380)
 }
 
 [export]

@@ -95,7 +95,7 @@ def main() : int {
         return 0
     }
     if (!jit_enabled()) {
-        print("This benchmark is JIT-only — run with: daslang -jit <file>\n")
+        print("This benchmark is JIT-only - run with: daslang -jit <file>\n")
         return 1
     }
     let reps = cfg.reps > 0 ? cfg.reps : 3
@@ -105,7 +105,7 @@ def main() : int {
         set_asr_fp32(true)
         set_gemma4a_q8(false)
         set_qwen3a_q8(false)
-        print("FP32-TOWER\ton (the A/B off leg — every tower on the reference rail)\n")
+        print("FP32-TOWER\ton (the A/B off leg - every tower on the reference rail)\n")
     }
     if (!empty(cfg.kv)) {
         if (cfg.kv == "f16") {

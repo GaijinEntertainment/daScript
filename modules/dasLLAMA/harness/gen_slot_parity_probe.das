@@ -122,7 +122,7 @@ def main {
         // loudly instead.
         pin_kernel_backend(genbe)
         if (active_kernel_backend() != genbe) {
-            print("SKIP: {genbe} unavailable (declined stamp — no manifest for this box?)\n")
+            print("SKIP: {genbe} unavailable (declined stamp - no manifest for this box?)\n")
             return
         }
         repack_q8q8_weight(wq, ws, woff0, n, d0)

@@ -194,7 +194,7 @@ def main() : int {
     let hh = a.turbo ? 20l : 6l
     let rounds = a.rounds > 0 ? a.rounds : 40
     if (!jit_enabled()) {
-        print("WARNING: run with -jit — interpreted timings do not reflect the engine\n")
+        print("WARNING: run with -jit - interpreted timings do not reflect the engine\n")
     }
     let kscale = 1.0 / sqrt(sqrt(float(d / hh)))
     print("cross_kv scatter bench: ta={TA} d={d} heads={hh} hs={d / hh}, {rounds} rounds\n")
@@ -222,7 +222,7 @@ def main() : int {
     ok &&= gate("kx_blk4", kx_b, kx_c, TA * d)
     ok &&= gate("vx_f4", vx_a, vx_c, TA * d)
     if (!ok) {
-        print("REJECTED: variant diverges — timings skipped\n")
+        print("REJECTED: variant diverges - timings skipped\n")
         return 1
     }
 

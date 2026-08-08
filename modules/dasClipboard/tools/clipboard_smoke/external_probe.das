@@ -4,8 +4,8 @@ options indenting = 4
 require clipboard/clipboard
 require daslib/clargs
 
-let DAS_MARKER = "daScript → .NET clipboard smoke — 文書"
-let EXTERNAL_MARKER = ".NET → daScript clipboard smoke — Привет"
+let DAS_MARKER = "daScript -> .NET clipboard smoke - 文書"
+let EXTERNAL_MARKER = ".NET -> daScript clipboard smoke - Привет"
 
 def private expected_image() : array<uint8> {
     return <- [
@@ -25,8 +25,8 @@ def private equal_bytes(a, b : array<uint8> const) : bool {
 def private write_for_external_consumer() {
     var content = ClipboardContent(
         plain_text = DAS_MARKER,
-        markdown = "**daScript to .NET** — [文書](editor://workspace/文書)",
-        html = "<p><strong>daScript to .NET</strong> — <a href=\"editor://workspace/文書\">文書</a></p>",
+        markdown = "**daScript to .NET** - [文書](editor://workspace/文書)",
+        html = "<p><strong>daScript to .NET</strong> - <a href=\"editor://workspace/文書\">文書</a></p>",
         uri_list = "editor://workspace/文書\r\nhttps://example.com/naïve\r\n",
         image = ClipboardImage(width = 2, height = 2, stride = 8))
     content.formats.plain_text = true
@@ -46,8 +46,8 @@ def private read_external_consumer_offer() {
     var pixels <- expected_image()
     let valid = (status == ClipboardStatus.ok &&
         content.formats.plain_text && content.plain_text == EXTERNAL_MARKER &&
-        content.formats.markdown && content.markdown == "**.NET to daScript** — Привет" &&
-        content.formats.html && content.html == "<p><strong>.NET to daScript</strong> — Привет</p>" &&
+        content.formats.markdown && content.markdown == "**.NET to daScript** - Привет" &&
+        content.formats.html && content.html == "<p><strong>.NET to daScript</strong> - Привет</p>" &&
         content.formats.uri_list && content.uri_list == "https://example.com/from-dotnet\r\n" &&
         content.formats.image_rgba8 &&
         content.image.width == 2 && content.image.height == 2 && content.image.stride == 8 &&

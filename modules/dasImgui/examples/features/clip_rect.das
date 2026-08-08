@@ -20,7 +20,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("with_clip_rect — clip scope", 520, 320)
+    harness_init("with_clip_rect - clip scope", 520, 320)
 }
 
 [export]
@@ -65,7 +65,7 @@ def update() {
         }
 
         dummy(BAND_SLOT, (size = float2(460.0f, 100.0f)))
-        text(NOTE, (text = "(The right circle's overflow is clipped at the band edge — the left one spills past.)"))
+        text(NOTE, (text = "(The right circle's overflow is clipped at the band edge - the left one spills past.)"))
     }
 
     harness_end_frame()

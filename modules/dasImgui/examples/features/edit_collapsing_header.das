@@ -24,7 +24,7 @@ var private VISIBLE_B = true
 
 [export]
 def init() {
-    harness_init("edit_collapsing_header — closable", 480, 360)
+    harness_init("edit_collapsing_header - closable", 480, 360)
 }
 
 [export]
@@ -38,13 +38,13 @@ def update() {
         text(LEAD, (text = "Click the X on either header to hide it; use the buttons to restore."))
 
         if (edit_collapsing_header(safe_addr(VISIBLE_A), (id = "HDR_A", text = "Header A"))) {
-            text(BODY_A_1, (text = "  body A — first line"))
-            text(BODY_A_2, (text = "  body A — second line"))
+            text(BODY_A_1, (text = "  body A - first line"))
+            text(BODY_A_2, (text = "  body A - second line"))
         }
 
         if (edit_collapsing_header(safe_addr(VISIBLE_B), (id = "HDR_B", text = "Header B"))) {
-            text(BODY_B_1, (text = "  body B — first line"))
-            text(BODY_B_2, (text = "  body B — second line"))
+            text(BODY_B_1, (text = "  body B - first line"))
+            text(BODY_B_2, (text = "  body B - second line"))
         }
 
         separator(SEP)

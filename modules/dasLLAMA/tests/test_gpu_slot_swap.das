@@ -134,7 +134,7 @@ def private slot_swap_cycle(path : string) : SwapResult {
 
 [test]
 def test_gpu_slot_swap(t : T?) {
-    t |> run("resident drop/re-arm slot swap — IDS parity across two cycles (needs tinyllama q8 + vulkan)") @(t : T?) {
+    t |> run("resident drop/re-arm slot swap - IDS parity across two cycles (needs tinyllama q8 + vulkan)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let path = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
             if (!model_available(t, path)) {

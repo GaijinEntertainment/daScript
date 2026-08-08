@@ -102,7 +102,7 @@ def prefix_attach_(var cache : PrefixCache; var pool : KVPool; var s : Session; 
         panic("prefix_attach: the session is not paged out of this pool")
     }
     if (s.n_past != 0l || !empty(s.block_table)) {
-        panic("prefix_attach: the session already holds context (n_past {s.n_past}, {length(s.block_table)} pages) — attach only to a fresh session")
+        panic("prefix_attach: the session already holds context (n_past {s.n_past}, {length(s.block_table)} pages) - attach only to a fresh session")
     }
     let np = long_length(prompt)
     let pr = pool.page_rows

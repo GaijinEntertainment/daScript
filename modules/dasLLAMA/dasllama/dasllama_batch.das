@@ -191,7 +191,7 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
         return
     }
     if (long_length(tokens) != nrows) {
-        panic("eval_batch: {long_length(sessions)} sessions but {long_length(tokens)} tokens — one token per session")
+        panic("eval_batch: {long_length(sessions)} sessions but {long_length(tokens)} tokens - one token per session")
     }
     for (i in range64(nrows)) {
         if (sessions[i] == null) {
@@ -202,7 +202,7 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
         }
         for (j in range64(i)) {
             if (sessions[i] == sessions[j]) {
-                panic("eval_batch: sessions[{j}] and sessions[{i}] are the same session — rows must be distinct")
+                panic("eval_batch: sessions[{j}] and sessions[{i}] are the same session - rows must be distinct")
             }
         }
     }
@@ -210,14 +210,14 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
     for (i in range64(1l, nrows)) {
         let sp = sessions[i]
         if (sp.kv_dtype_k != s0.kv_dtype_k || sp.kv_dtype_v != s0.kv_dtype_v) {
-            panic("eval_batch: sessions[{i}] KV dtype differs from sessions[0] — the batch must be uniform")
+            panic("eval_batch: sessions[{i}] KV dtype differs from sessions[0] - the batch must be uniform")
         }
         if (sp.kv_pool != s0.kv_pool) {
-            panic("eval_batch: sessions[{i}] KV pool differs from sessions[0] — one pool (or all-flat) per batch")
+            panic("eval_batch: sessions[{i}] KV pool differs from sessions[0] - one pool (or all-flat) per batch")
         }
         // long_length: a full-seq 1B's flat f16 cache is exactly 2^31 bytes — length() throws
         if (s0.kv_pool == null && (long_length(sp.key_cache) != long_length(s0.key_cache) || long_length(sp.value_cache) != long_length(s0.value_cache))) {
-            panic("eval_batch: sessions[{i}] cache size differs from sessions[0] — same model + same seq_len required")
+            panic("eval_batch: sessions[{i}] cache size differs from sessions[0] - same model + same seq_len required")
         }
     }
     // per-row fallback keeps every configuration correct: B == 1 keeps the fused decode chain, q4_0

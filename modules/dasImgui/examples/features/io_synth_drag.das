@@ -21,7 +21,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("Phase 2.2 — io_synth_drag", 800, 600)
+    harness_init("Phase 2.2 - io_synth_drag", 800, 600)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
     DEMO_SLIDER.bounds = (0.0f, 1000.0f)
@@ -33,9 +33,9 @@ def update() {
     harness_new_frame()
 
     SetNextWindowSize(ImVec2(720.0, 220.0), ImGuiCond.Always)
-    window(MAIN_WIN, (text = "io_synth_drag — phase 2.2", closable = false,
+    window(MAIN_WIN, (text = "io_synth_drag - phase 2.2", closable = false,
                       flags = ImGuiWindowFlags.None)) {
-        text("Synthetic drag: mouse press → moves → release (via imgui_mouse_play).")
+        text("Synthetic drag: mouse press -> moves -> release (via imgui_mouse_play).")
         text("During the drag, io.active_widget == 'MAIN_WIN/DEMO_SLIDER'.")
         slider_float(DEMO_SLIDER, (text = "Drag me"))
         text("slider value = {DEMO_SLIDER.value}")

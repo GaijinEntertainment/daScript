@@ -352,7 +352,7 @@ def report(kernel : string; names : array<string>; best : array<double>; ok : ar
     let div = med[winner] > 0.0lf ? (med[winner] - best[winner]) / med[winner] * 100.0lf : 0.0lf
     let divThr = max(3.0lf * noise_floor_pct(), 2.0lf)
     if (div > divThr) {
-        tune_progress_note("  {kernel}: NOISY — winner's best-of runs {div:0.1f}% under its median (flag at {divThr:0.1f}%)\n")
+        tune_progress_note("  {kernel}: NOISY - winner's best-of runs {div:0.1f}% under its median (flag at {divThr:0.1f}%)\n")
     }
     var wname = names[winner]
     // a winner inside the measured noise floor HOLDS the shipped baseline: flipping the perm
@@ -427,7 +427,7 @@ def private validate_check(kernel : string; names : array<string>; med : array<d
             tune_progress_note("VALIDATE {kernel}: {wname} beat the recorded {expect0} by {row.gap:0.2f}% this window (band {band:0.2f}%)\n")
         } else {
             let fliptxt = wname != expect0 ? " (inside-floor flip vs {expect0})" : ""
-            tune_progress_note("VALIDATE {kernel}: window OK — winner {wname}{fliptxt}, level drift {row.drift:0.2f}%\n")
+            tune_progress_note("VALIDATE {kernel}: window OK - winner {wname}{fliptxt}, level drift {row.drift:0.2f}%\n")
         }
     }
     g_validate_rows[kernel] |> push(row)
@@ -459,25 +459,25 @@ def private run_validation() : bool {
         let verdict = tune_validate_verdict(rows)
         if (!empty(verdict)) {
             fails ++
-            tune_progress_note("VALIDATE {kernel}: FAIL — {verdict}\n")
+            tune_progress_note("VALIDATE {kernel}: FAIL - {verdict}\n")
         }
     }
     // stationarity is reported, not judged: the level moving between windows says the box's
     // clock state changed, not that any winner is wrong — same-window order above decides
     if (maxdrift > VALIDATE_DRIFT_PCT) {
-        tune_progress_note("validation: level drifted up to {maxdrift:0.2f}% between race and re-race (note at {VALIDATE_DRIFT_PCT:0.1f}%) — box is not stationary; order verdicts are same-window and unaffected\n")
+        tune_progress_note("validation: level drifted up to {maxdrift:0.2f}% between race and re-race (note at {VALIDATE_DRIFT_PCT:0.1f}%) - box is not stationary; order verdicts are same-window and unaffected\n")
     }
     tune_provenance_note("validation_max_drift_pct", "{maxdrift:0.2f}")
     if (fails > 0) {
         if (tune_noise_override()) {
             // the bar is still live here and the run continues — a raw print would be redrawn over
-            tune_progress_note("VALIDATION: {fails} winner(s) did not reproduce — DAS_TUNE_NOISE_OVERRIDE is set, minting anyway; the sidecar will carry 'validation: overridden'\n")
+            tune_progress_note("VALIDATION: {fails} winner(s) did not reproduce - DAS_TUNE_NOISE_OVERRIDE is set, minting anyway; the sidecar will carry 'validation: overridden'\n")
             tune_provenance_note("validation", "overridden")
             tune_provenance_note("validation_fails", "{fails}")
             return true
         }
         tune_progress_finish()
-        print("VALIDATION FAILED: {fails} winner(s) consistently did not reproduce — the winners are weather, not measurement\n")
+        print("VALIDATION FAILED: {fails} winner(s) consistently did not reproduce - the winners are weather, not measurement\n")
         print("  escape hatch: DAS_TUNE_NOISE_OVERRIDE=1 mints anyway, stamped in provenance\n")
         return false
     }
@@ -2224,7 +2224,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
     let copyw = bench_binary("copy_floats", cpy_vs, cpy_d0, cpy_s, @@(_a, b : float) : double => double(b))
     kernel_done("copy_floats", kernel_t0)
     if (!noise_gate("mid1")) {
-        print("aborting mid-run — no sidecar written\n")
+        print("aborting mid-run - no sidecar written\n")
         return 1
     }
     kernel_t0 = kernel_begin("softmax")
@@ -2255,7 +2255,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
     let quantq8kvw = bench_quantize_q8kv_row()
     kernel_done("quantize_q8kv_row", kernel_t0)
     if (!noise_gate("mid2")) {
-        print("aborting mid-run — no sidecar written\n")
+        print("aborting mid-run - no sidecar written\n")
         return 1
     }
     kernel_t0 = kernel_begin("dot_mx4q8")
@@ -2280,7 +2280,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
     // self-validation, inside the measurement window: the winners just picked must reproduce
     // in a fresh re-race or nothing ships
     if (!run_validation()) {
-        print("aborting — no sidecar written\n")
+        print("aborting - no sidecar written\n")
         return 1
     }
 
@@ -2293,7 +2293,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
     // would pay a mandatory settle just to measure through that. The Metal twin race guards
     // itself: interleaved base/twin A/B, so common-mode noise cancels.
     if (!noise_gate("end")) {
-        print("aborting at the end-of-run gate — no sidecar written\n")
+        print("aborting at the end-of-run gate - no sidecar written\n")
         return 1
     }
 
@@ -2310,11 +2310,11 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
         }
     }
     tune_detail(changed == 0
-        ? "\nevery kernel keeps its shipped fallback — the tuner found nothing new on this box.\n"
+        ? "\nevery kernel keeps its shipped fallback - the tuner found nothing new on this box.\n"
         : "\n{changed} kernel(s) beat their shipped fallback on this box.\n")
     // the one count still written by hand; say so rather than let the bar quietly misreport
     if (length(g_results) != TUNED_KERNEL_COUNT) {
-        print("note: TUNED_KERNEL_COUNT is {TUNED_KERNEL_COUNT} but {length(g_results)} kernels ran — the progress bar was scaled wrong; update the constant\n")
+        print("note: TUNED_KERNEL_COUNT is {TUNED_KERNEL_COUNT} but {length(g_results)} kernels ran - the progress bar was scaled wrong; update the constant\n")
     }
 
     // Metal-4 tensor twin race: each tensor pso twin runs against its shipped simdgroup kernel
@@ -2400,7 +2400,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
             print("{fread(ppath)}\n")
         }
     } else {
-        print("FAILED to write {ppath} — if the app dir is read-only, set DAS_TUNE_MANIFEST to a writable path\n")
+        print("FAILED to write {ppath} - if the app dir is read-only, set DAS_TUNE_MANIFEST to a writable path\n")
     }
     delete winners
     return wrote ? 0 : 1

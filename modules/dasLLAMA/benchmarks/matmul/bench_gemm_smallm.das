@@ -508,7 +508,7 @@ def main() : int {
     }
     let rounds = a.rounds > 0 ? a.rounds : 5
     if (!jit_enabled()) {
-        print("WARNING: run with -jit — interpreted timings do not reflect the engine\n")
+        print("WARNING: run with -jit - interpreted timings do not reflect the engine\n")
     }
     apply_box_profile_runtime()
     if (!a.hand) {

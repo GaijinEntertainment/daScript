@@ -62,9 +62,9 @@ def main() {
     }
     print("close/flush: {get_time_nsec(t_close) / 1000000l} ms\n")
     print("window rate: fastest {fastest:.0f} MB/s, slowest {slowest:.0f} MB/s")
-    print(fastest > 0.0lf ? " — cliff {fastest / max(slowest, 1.0lf):.1f}x\n" : "\n")
+    print(fastest > 0.0lf ? " - cliff {fastest / max(slowest, 1.0lf):.1f}x\n" : "\n")
     delete buf
     if (!remove(path)) {
-        print("warning: could not remove {path} — delete it by hand\n")
+        print("warning: could not remove {path} - delete it by hand\n")
     }
 }

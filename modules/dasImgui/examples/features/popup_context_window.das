@@ -21,7 +21,7 @@ var private LAST_PICK = "(none yet)"
 
 [export]
 def init() {
-    harness_init("popup_context_window — right-click anywhere", 520, 280)
+    harness_init("popup_context_window - right-click anywhere", 520, 280)
 }
 
 [export]

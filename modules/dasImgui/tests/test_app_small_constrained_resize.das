@@ -28,7 +28,7 @@ def test_app_small_constrained_resize_smoke(t : T?) {
         t |> equal(combo_entry?["kind"] ?? "", "combo",
                    "constraint combo registers as kind=combo")
         t |> equal(combo_entry?["payload"]?["value"] ?? 0, 6,
-                   "default constraint type is 6 (Aspect Ratio 16:9 — callback path)")
+                   "default constraint type is 6 (Aspect Ratio 16:9 - callback path)")
 
         var btn200 = find_widget(snap0, "SMALL_CONSTR_WIN/SMALL_CONSTR_BTN_200")
         t |> equal(btn200?["kind"] ?? "", "button",

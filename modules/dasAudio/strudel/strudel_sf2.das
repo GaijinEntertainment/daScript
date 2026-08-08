@@ -790,12 +790,12 @@ def public sf2_parse(data : array<uint8>) : SF2File? {  // nolint:STYLE037 - one
             max_sample_end = max(max_sample_end, int(s.end))
         }
         if (max_sample_end > length(result.sample_data)) {
-            to_log(0, "SF2: '{result.name}' references {max_sample_end} sample frames but only {length(result.sample_data)} are present — truncated soundfont, unsupported.\n")
+            to_log(0, "SF2: '{result.name}' references {max_sample_end} sample frames but only {length(result.sample_data)} are present - truncated soundfont, unsupported.\n")
             return null
         }
     }
 
-    to_log(0, "SF2: loaded \"{result.name}\" — {num_presets} presets, {num_inst} instruments, {length(result.samples)} samples, {length(result.sample_data)} sample frames\n")
+    to_log(0, "SF2: loaded \"{result.name}\" - {num_presets} presets, {num_inst} instruments, {length(result.samples)} samples, {length(result.sample_data)} sample frames\n")
     return <- result
 }
 

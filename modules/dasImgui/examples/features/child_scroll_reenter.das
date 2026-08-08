@@ -24,7 +24,7 @@ var private SCROLL_ROW : table<int; NarrativeState>
 
 [export]
 def init() {
-    harness_init("child_scroll_reenter — boost v2", 520, 520)
+    harness_init("child_scroll_reenter - boost v2", 520, 520)
 }
 
 [export]

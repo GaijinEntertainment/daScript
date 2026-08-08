@@ -78,7 +78,7 @@ def update() {
                 }
             }
         }
-        text("with_menu_ex / MenuItemEx — last menu action: {g_last_menu_action}")
+        text("with_menu_ex / MenuItemEx - last menu action: {g_last_menu_action}")
         separator()
 
         // ----- raw-ImGuiID popup: OpenPopupEx / IsPopupOpen / with_popup_ex -----
@@ -113,7 +113,7 @@ def update() {
         text("Hover me for an OverridePrevious tooltip (with_tooltip_ex)")
         if (IsItemHovered()) {
             with_tooltip_ex(ImGuiTooltipFlags.OverridePrevious, ImGuiWindowFlags.None) {
-                text("tooltip via with_tooltip_ex — replaces, not appends")
+                text("tooltip via with_tooltip_ex - replaces, not appends")
             }
         }
         // with_tooltip_hidden begins an off-screen tooltip purely to MEASURE its
@@ -121,7 +121,7 @@ def update() {
         with_tooltip_hidden() {
             text("measured offscreen by with_tooltip_hidden")
         }
-        text("with_tooltip_hidden ran (offscreen measure — nothing shown)")
+        text("with_tooltip_hidden ran (offscreen measure - nothing shown)")
     }
 
     harness_end_frame()

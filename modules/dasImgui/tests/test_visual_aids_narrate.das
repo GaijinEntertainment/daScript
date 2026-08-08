@@ -106,7 +106,7 @@ def test_anchor_hud_zone_pulls_right_up(t : T?) {
     let a = compute_narrate_anchor(true, bb, BOX_SMALL, VIEW_HD, MARGIN, GAP, SHADOW, hud_h, no_others, NO_AVOID)
     let expected_x = 700.0f + GAP                                                                 // = 716
     let expected_y = VIEW_HD.y - MARGIN - BOX_SMALL.y - SHADOW.y - hud_h                          // = 558
-    t |> success(near2(a, float2(expected_x, expected_y)), "case 7: HUD-zone clamp pulls right candidate up, no target overlap → wins")
+    t |> success(near2(a, float2(expected_x, expected_y)), "case 7: HUD-zone clamp pulls right candidate up, no target overlap -> wins")
 }
 
 [test]

@@ -23,7 +23,7 @@ let SAMPLES = 64
 
 [export]
 def init() {
-    harness_init("Phase 2.7 — plot_getter", 800, 600)
+    harness_init("Phase 2.7 - plot_getter", 800, 600)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
 }
@@ -34,7 +34,7 @@ def update() {
     harness_new_frame()
 
     SetNextWindowSize(ImVec2(720.0, 360.0), ImGuiCond.Always)
-    window(MAIN_WIN, (text = "plot_getter — phase 2.7", closable = false,
+    window(MAIN_WIN, (text = "plot_getter - phase 2.7", closable = false,
                       flags = ImGuiWindowFlags.None)) {
         text("Sine wave generated per-sample by the getter lambda.")
         plot_lines_getter(SINE_PLOT, "sin(i*0.1)", SAMPLES,

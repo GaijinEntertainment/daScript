@@ -118,7 +118,7 @@ def test_plane_release_owns_nothing(t : T?) {
 
 [test]
 def test_plane_two_views_one_backing(t : T?) {
-    t |> run("two planes may view the same bytes — neither owns them") @(t : T?) {
+    t |> run("two planes may view the same bytes - neither owns them") @(t : T?) {
         var inscope b : array<uint8>
         fake_image(b)
         var a = PlaneF()

@@ -34,14 +34,14 @@ def update() {
 
         if (button(COPY_BTN, (text = "copy to clipboard"))) {
             log_to_clipboard(-1)
-            log_text("Line A — direct log_text submission")
-            log_text("Line B — second log_text line")
-            log_text("Line C — third and final")
+            log_text("Line A - direct log_text submission")
+            log_text("Line B - second log_text line")
+            log_text("Line C - third and final")
             log_finish()
         }
 
         separator(SEP)
-        text(STATIC_1, (text = "Static line above the log session — NOT captured."))
+        text(STATIC_1, (text = "Static line above the log session - NOT captured."))
         text(STATIC_2, (text = "(The clipboard payload only contains the three Line A/B/C lines.)"))
     }
 

@@ -26,7 +26,7 @@ var private g_angle_rad : float = 0.7854f  // π/4 → ~45° initial
 
 [export]
 def init() {
-    harness_init("edit_external_special — boost v2 §3.7", 720, 320)
+    harness_init("edit_external_special - boost v2 §3.7", 720, 320)
 }
 
 [export]

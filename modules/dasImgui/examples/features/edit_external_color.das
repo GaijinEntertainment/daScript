@@ -25,7 +25,7 @@ var private g_pck4 : float4 = float4(0.1f, 0.2f, 0.3f, 0.4f)
 
 [export]
 def init() {
-    harness_init("edit_external_color — boost v2 §3.7", 800, 620)
+    harness_init("edit_external_color - boost v2 §3.7", 800, 620)
 }
 
 [export]

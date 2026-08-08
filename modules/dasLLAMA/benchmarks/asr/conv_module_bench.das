@@ -417,7 +417,7 @@ def main() : int {
     let tt = a.tt > 0 ? int64(a.tt) : 138l
     let rounds = a.rounds > 0 ? a.rounds : 40
     if (!jit_enabled()) {
-        print("WARNING: run with -jit — interpreted timings do not reflect the engine\n")
+        print("WARNING: run with -jit - interpreted timings do not reflect the engine\n")
     }
     print("conv_module bench: tt={tt} d={DD} k={NK}, {rounds} rounds\n")
     if (a.glu || !a.dw) {

@@ -386,7 +386,7 @@ class WidgetCallMacro : AstCallMacro {
             // 2..N) has a default initializer (e.g. same_line / indent, but not
             // separator / spacing which have none).
             if (render_fn == null || !all_user_args_defaulted()) {
-                macro_error(prog, expr.at, "{kind_name}(...): missing widget body — pass `(named=arg, …)` or, for narrative widgets, a single string literal")
+                macro_error(prog, expr.at, "{kind_name}(...): missing widget body - pass `(named=arg, ...)` or, for narrative widgets, a single string literal")
                 return <- default<ExpressionPtr>
             }
             bareName = synth_bare_name(expr.at)
@@ -399,7 +399,7 @@ class WidgetCallMacro : AstCallMacro {
                 // interpolated string_builder, valid only when the signature is
                 // exactly (state; widget_ident; text : string).
                 if (!accepts_positional_string()) {
-                    macro_error(prog, head.at, "{kind_name}: positional-string form `{kind_name}(\"…\")` is only valid for single-string narrative widgets (text/text_unformatted/text_wrapped/text_disabled/bullet_text/separator_text). Use the named-tuple form `{kind_name}((…))` instead.")
+                    macro_error(prog, head.at, "{kind_name}: positional-string form `{kind_name}(\"...\")` is only valid for single-string narrative widgets (text/text_unformatted/text_wrapped/text_disabled/bullet_text/separator_text). Use the named-tuple form `{kind_name}((...))` instead.")
                     return <- default<ExpressionPtr>
                 }
                 bareName = synth_bare_name(expr.at)
@@ -461,11 +461,11 @@ class WidgetCallMacro : AstCallMacro {
             if (cursor is ExprVar) {
                 bareName = string((cursor as ExprVar).name)
             } else {
-                macro_error(prog, expr.at, "{kind_name}(...): first argument must be an identifier, named-tuple `(…)`, dotted-flag `IDENT.FLAG[.FLAG…]`, indexed `IDENT[key]`, or (for narrative widgets) a string literal; got {describe(expr.arguments[0])}")
+                macro_error(prog, expr.at, "{kind_name}(...): first argument must be an identifier, named-tuple `(...)`, dotted-flag `IDENT.FLAG[.FLAG...]`, indexed `IDENT[key]`, or (for narrative widgets) a string literal; got {describe(expr.arguments[0])}")
                 return <- default<ExpressionPtr>
             }
             if (indexExpr != null && !empty(flagsReversed)) {
-                macro_error(prog, expr.at, "{kind_name}({bareName}[k]): dotted flags (.PUBLIC/.NOTLIVE) not supported on indexed form — declare the table global with required annotations directly")
+                macro_error(prog, expr.at, "{kind_name}({bareName}[k]): dotted flags (.PUBLIC/.NOTLIVE) not supported on indexed form - declare the table global with required annotations directly")
                 return <- default<ExpressionPtr>
             }
             // Indexed (table-form) widget: table global is user-declared, wrapper
@@ -719,7 +719,7 @@ class WidgetCallMacro : AstCallMacro {
         if (tabType.firstType == null ||
             (tabType.firstType.baseType != Type.tInt && tabType.firstType.baseType != Type.tString)) {
             macro_error(prog, expr.at,
-                "{kind_name}({bareName}[k]): only `table<int; …>` and `table<string; …>` are supported for indexed widgets (got `{describe(tabType)}`).")
+                "{kind_name}({bareName}[k]): only `table<int; ...>` and `table<string; ...>` are supported for indexed widgets (got `{describe(tabType)}`).")
             return <- default<ExpressionPtr>
         }
         let indexedAddrFnName = "__widget_addr$indexed${kind_name}${bareName}"
@@ -946,7 +946,7 @@ class EditExternalCallMacro : AstCallMacro {
         }
         if (!idPresent) {
             macro_error(prog, expr.at,
-                "{kind_name}(ptr, (id=\"...\", ...)): external-pointer widgets require an explicit `id=\"...\"` for the telemetry path. No auto-generation — pick a stable unique identifier.")
+                "{kind_name}(ptr, (id=\"...\", ...)): external-pointer widgets require an explicit `id=\"...\"` for the telemetry path. No auto-generation - pick a stable unique identifier.")
             return <- default<ExpressionPtr>
         }
         if (empty(idLit)) {

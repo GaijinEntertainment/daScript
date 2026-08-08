@@ -24,7 +24,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("Phase 2.4 — focus_widget", 800, 600)
+    harness_init("Phase 2.4 - focus_widget", 800, 600)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
 }
@@ -35,10 +35,10 @@ def update() {
     harness_new_frame()
 
     SetNextWindowSize(ImVec2(720.0, 240.0), ImGuiCond.Always)
-    window(MAIN_WIN, (text = "focus_widget — phase 2.4", closable = false,
+    window(MAIN_WIN, (text = "focus_widget - phase 2.4", closable = false,
                       flags = ImGuiWindowFlags.None)) {
         text("imgui_focus inserts into g_pending_focus; widget_prelude consumes.")
-        text("DEMO_TEXT is display-only — focus dispatch returns Result.err.")
+        text("DEMO_TEXT is display-only - focus dispatch returns Result.err.")
         text_show(DEMO_TEXT, "static label")
         if (button(DEMO_BTN, (text = "I can be focused too"))) {
             print("DEMO_BTN clicked\n")

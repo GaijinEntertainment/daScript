@@ -20,7 +20,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("collapsing_header_closable — boost v2 §3.5", 720, 420)
+    harness_init("collapsing_header_closable - boost v2 §3.5", 720, 420)
 }
 
 [export]
@@ -29,9 +29,9 @@ def update() {
     harness_new_frame()
 
     SetNextWindowSize(ImVec2(680.0, 360.0), ImGuiCond.Always)
-    window(MAIN_WIN, (text = "collapsing_header(closable=…)",
+    window(MAIN_WIN, (text = "collapsing_header(closable=...)",
                       closable = false, flags = ImGuiWindowFlags.None)) {
-        text(LEAD, (text = "Two collapsing headers — first closable (X button), second not."))
+        text(LEAD, (text = "Two collapsing headers - first closable (X button), second not."))
 
         collapsing_header(HEADER_CLOSE, (text = "Closable section",
                                           closable = true,
@@ -44,7 +44,7 @@ def update() {
         collapsing_header(HEADER_STD, (text = "Standard (non-closable) section",
                                         closable = false,
                                         flags = ImGuiTreeNodeFlags.None)) {
-            text(BODY_STD, (text = "No X button — header collapses via the caret arrow only."))
+            text(BODY_STD, (text = "No X button - header collapses via the caret arrow only."))
         }
     }
 

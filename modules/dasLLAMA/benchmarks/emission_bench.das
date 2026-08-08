@@ -65,7 +65,7 @@ def private greedy_top(s : Session; vocab : int64) : int64 {
 [export]
 def main() {   // nolint:STYLE038 — flat bench driver: arg handling, then one timed cell per prompt bucket
     if (!jit_enabled()) {
-        print("This benchmark is JIT-only — run with: daslang -jit <file>\n")
+        print("This benchmark is JIT-only - run with: daslang -jit <file>\n")
         return
     }
     var r <- parse_args(type<Args>)

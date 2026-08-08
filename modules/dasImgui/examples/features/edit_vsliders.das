@@ -27,7 +27,7 @@ var private g_count_i2 : int = 75
 
 [export]
 def init() {
-    harness_init("edit_vsliders — boost v2 §3.7", 640, 420)
+    harness_init("edit_vsliders - boost v2 §3.7", 640, 420)
 }
 
 [export]

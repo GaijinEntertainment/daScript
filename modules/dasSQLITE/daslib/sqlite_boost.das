@@ -839,7 +839,7 @@ def try_check_schema(db : SqlRunner; t : type<auto(TT)>) : SqlError {
     if (got_result |> is_err) return some(got_result |> unwrap_err)
     let got <- got_result._value
     if (empty(got)) return some("check_schema: table \"{table_name}\" not found in DB.")
-    if (length(want) != length(got)) return some("check_schema: \"{table_name}\" column count mismatch — struct has {length(want)} field(s), DB has {length(got)} column(s).")
+    if (length(want) != length(got)) return some("check_schema: \"{table_name}\" column count mismatch - struct has {length(want)} field(s), DB has {length(got)} column(s).")
     // Name-keyed: [sql_table] emits SELECTs with explicit columns, so struct/DB order can differ.
     // With equal counts, missing-from-struct is implied by no name match in the want-loop.
     var by_name : table<string; int>
@@ -851,21 +851,21 @@ def try_check_schema(db : SqlRunner; t : type<auto(TT)>) : SqlError {
         if (g_idx < 0) return some("check_schema: \"{table_name}\" struct field \"{w.name}\" not found in DB columns.")
         let g = got[g_idx]
         let g_type = g.data_type
-        if (w.data_type != g_type) return some("check_schema: \"{table_name}\".\"{w.name}\" SqlType mismatch — struct expects {sqlite_sql_type(w.data_type)}, DB has {sqlite_sql_type(g_type)} (declared \"{g.decl_type}\").")
+        if (w.data_type != g_type) return some("check_schema: \"{table_name}\".\"{w.name}\" SqlType mismatch - struct expects {sqlite_sql_type(w.data_type)}, DB has {sqlite_sql_type(g_type)} (declared \"{g.decl_type}\").")
         // SQLite quirk: INTEGER PRIMARY KEY reports notnull=0 in pragma_table_info — treat PK as NOT NULL.
         let g_nullable = !g.not_null && !g.pk
         if (w.is_nullable != g_nullable) {
             if (w.is_nullable) {
-                return some("check_schema: \"{table_name}\".\"{w.name}\" nullability mismatch — struct allows NULL (Option<T>), DB column is NOT NULL.")
+                return some("check_schema: \"{table_name}\".\"{w.name}\" nullability mismatch - struct allows NULL (Option<T>), DB column is NOT NULL.")
             } else {
-                return some("check_schema: \"{table_name}\".\"{w.name}\" nullability mismatch — struct is non-optional, DB column allows NULL.")
+                return some("check_schema: \"{table_name}\".\"{w.name}\" nullability mismatch - struct is non-optional, DB column allows NULL.")
             }
         }
         if (w.is_pk != g.pk) {
             if (w.is_pk) {
-                return some("check_schema: \"{table_name}\".\"{w.name}\" PK mismatch — struct has @sql_primary_key, DB column is not PRIMARY KEY.")
+                return some("check_schema: \"{table_name}\".\"{w.name}\" PK mismatch - struct has @sql_primary_key, DB column is not PRIMARY KEY.")
             } else {
-                return some("check_schema: \"{table_name}\".\"{w.name}\" PK mismatch — DB column is PRIMARY KEY but struct field is missing @sql_primary_key.")
+                return some("check_schema: \"{table_name}\".\"{w.name}\" PK mismatch - DB column is PRIMARY KEY but struct field is missing @sql_primary_key.")
             }
         }
     }
@@ -1677,7 +1677,7 @@ class private SqlFts5Macro : AstStructureAnnotation {
                     present = !empty(find_annotation(field.annotation, rej.name, ""))
                 }
                 if (present) {
-                    errors := "[sql_fts5]: field '{fname}' has @{rej.name} — {rej.why}"
+                    errors := "[sql_fts5]: field '{fname}' has @{rej.name} - {rej.why}"
                     return false
                 }
             }
@@ -1687,16 +1687,16 @@ class private SqlFts5Macro : AstStructureAnnotation {
             let col_anno = find_arg(field.annotation, "sql_column")
             if (col_anno is tString) {
                 if (is_fts_rank) {
-                    errors := "[sql_fts5]: field '{fname}' has both @sql_fts_rank and @sql_column — rank is hardcoded to FTS5's hidden `rank` column. Drop the @sql_column rename."
+                    errors := "[sql_fts5]: field '{fname}' has both @sql_fts_rank and @sql_column - rank is hardcoded to FTS5's hidden `rank` column. Drop the @sql_column rename."
                     return false
                 }
                 let cv = col_anno as tString
                 if (empty(cv)) {
-                    errors := "[sql_fts5]: field '{fname}' @sql_column = \"\" is invalid — provide a non-empty SQL column name."
+                    errors := "[sql_fts5]: field '{fname}' @sql_column = \"\" is invalid - provide a non-empty SQL column name."
                     return false
                 }
                 if (find(cv, "\"") >= 0 || find(cv, "\\") >= 0) {
-                    errors := "[sql_fts5]: field '{fname}' @sql_column=\"{cv}\" — embedded `\"` / `\\` are rejected (SQL identifier hygiene). Use a plain identifier."
+                    errors := "[sql_fts5]: field '{fname}' @sql_column=\"{cv}\" - embedded `\"` / `\\` are rejected (SQL identifier hygiene). Use a plain identifier."
                     return false
                 }
                 col_name = cv
@@ -1704,20 +1704,20 @@ class private SqlFts5Macro : AstStructureAnnotation {
             // @sql_fts_rank: read-only float column, reads FTS5's hidden `rank`. No daslang init allowed.
             if (is_fts_rank) {
                 if (is_fts_unindexed) {
-                    errors := "[sql_fts5]: field '{fname}' cannot be both @sql_fts_rank and @sql_fts_unindexed — rank is FTS5's hidden relevance column, not stored metadata."
+                    errors := "[sql_fts5]: field '{fname}' cannot be both @sql_fts_rank and @sql_fts_unindexed - rank is FTS5's hidden relevance column, not stored metadata."
                     return false
                 }
                 col_name = "rank"   // FTS5 hidden column — not a declared content column
                 if (field.init != null) {
-                    errors := "[sql_fts5]: field '{fname}' is @sql_fts_rank — read-only column populated from FTS5's hidden `rank` on SELECT. Remove the daslang field initializer."
+                    errors := "[sql_fts5]: field '{fname}' is @sql_fts_rank - read-only column populated from FTS5's hidden `rank` on SELECT. Remove the daslang field initializer."
                     return false
                 }
                 if (is_optional) {
-                    errors := "[sql_fts5]: field '{fname}' is @sql_fts_rank — must not be Option<T>. FTS5 always materializes a relevance score on a MATCH-using SELECT."
+                    errors := "[sql_fts5]: field '{fname}' is @sql_fts_rank - must not be Option<T>. FTS5 always materializes a relevance score on a MATCH-using SELECT."
                     return false
                 }
                 if (field._type.baseType != Type.tFloat && field._type.baseType != Type.tDouble) {
-                    errors := "[sql_fts5]: field '{fname}' is @sql_fts_rank — must be a float / double (FTS5 BM25 score). Got '{describe(field._type)}'."
+                    errors := "[sql_fts5]: field '{fname}' is @sql_fts_rank - must be a float / double (FTS5 BM25 score). Got '{describe(field._type)}'."
                     return false
                 }
                 rank_count++
@@ -1730,7 +1730,7 @@ class private SqlFts5Macro : AstStructureAnnotation {
                 let is_text = ((bt == Type.tString)
                             || (is_optional && field._type.firstType != null && field._type.firstType.baseType == Type.tString))
                 if (!is_text) {
-                    errors := "[sql_fts5]: field '{fname}' has unsupported type '{describe(field._type)}' — FTS5 content columns must be `string` or `Option<string>`. Tag the field with `@sql_fts_rank` if it's the relevance score column."
+                    errors := "[sql_fts5]: field '{fname}' has unsupported type '{describe(field._type)}' - FTS5 content columns must be `string` or `Option<string>`. Tag the field with `@sql_fts_rank` if it's the relevance score column."
                     return false
                 }
                 content_count++
@@ -1776,7 +1776,7 @@ class private SqlFts5Macro : AstStructureAnnotation {
         // [sql_index] siblings would be meaningless on a virtual table — reject up front.
         for (annDecl in st.annotations) {
             if (annDecl.annotation.name == "sql_index") {
-                errors := "[sql_fts5] on struct '{st.name}': sibling [sql_index] is not supported — FTS5 builds its own inverted index. Drop the [sql_index]."
+                errors := "[sql_fts5] on struct '{st.name}': sibling [sql_index] is not supported - FTS5 builds its own inverted index. Drop the [sql_index]."
                 return false
             }
         }
@@ -1785,8 +1785,8 @@ class private SqlFts5Macro : AstStructureAnnotation {
         let select_all_sql = build_fts5_select_all_sql(table_name, fields)
         let insert_sql = build_fts5_insert_sql(table_name, fields)
         let st_name = string(st.name)
-        let panic_msg_pk = "[sql_fts5] {st_name}: cannot {0} on an FTS5 virtual table — row-shaped UPDATE/DELETE-by-PK is not supported. Use `_sql_delete(type<{st_name}>, predicate)` for typed predicate deletes; UPDATE still requires delete + re-INSERT or raw SQL."
-        let panic_msg_bind = "[sql_fts5] {st_name}: cannot {0} on an FTS5 virtual table — row-shaped mutation helpers are not supported. Use `_sql_delete(type<{st_name}>, predicate)` for typed predicate deletes; UPDATE still requires delete + re-INSERT or raw SQL."
+        let panic_msg_pk = "[sql_fts5] {st_name}: cannot {0} on an FTS5 virtual table - row-shaped UPDATE/DELETE-by-PK is not supported. Use `_sql_delete(type<{st_name}>, predicate)` for typed predicate deletes; UPDATE still requires delete + re-INSERT or raw SQL."
+        let panic_msg_bind = "[sql_fts5] {st_name}: cannot {0} on an FTS5 virtual table - row-shaped mutation helpers are not supported. Use `_sql_delete(type<{st_name}>, predicate)` for typed predicate deletes; UPDATE still requires delete + re-INSERT or raw SQL."
         var fn_table_name = make_const_string_helper_fn(st, "_sql_table_name", table_name)
         compiling_module() |> add_function(fn_table_name)
         var fn_drop = make_const_string_helper_fn(st, "_sql_drop_table_if_exists_sql",
@@ -1967,7 +1967,7 @@ class private RegisterFunctionMacro : AstCallMacro {
             let r = sql_fn_tag_for_type(fnExpr._type.argTypes[i])
             if (!r.ok) {
                 macro_error(prog, call.at,
-                    "register_function: argument #{i + 1} of fn has unsupported type '{describe(fnExpr._type.argTypes[i])}' — supported: int, int64, float, double, bool, string")
+                    "register_function: argument #{i + 1} of fn has unsupported type '{describe(fnExpr._type.argTypes[i])}' - supported: int, int64, float, double, bool, string")
                 return null
             }
             tags |> push(r.tag)
@@ -1979,7 +1979,7 @@ class private RegisterFunctionMacro : AstCallMacro {
         let retR = sql_fn_tag_for_type(fnExpr._type.firstType)
         if (!retR.ok) {
             macro_error(prog, call.at,
-                "register_function: return type '{describe(fnExpr._type.firstType)}' is unsupported — supported: int, int64, float, double, bool, string")
+                "register_function: return type '{describe(fnExpr._type.firstType)}' is unsupported - supported: int, int64, float, double, bool, string")
             return null
         }
         var dbExpr   = call.arguments[0]

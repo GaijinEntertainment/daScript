@@ -45,7 +45,7 @@ def test_imgui_drag_value_changes(t : T?) {
         // Gate 2: error path — unknown target produces Result.err.
         let err_resp = drag(d, "DOES_NOT_EXIST", 100.0f, 0.0f)
         t |> equal(err_resp?["ok"] ?? true, false,
-                   "unknown drag target → response.ok = false")
+                   "unknown drag target -> response.ok = false")
 
         // Gate 3: drag with known target returns ok-Result. 8 steps over
         // ~120 px gives the slider plenty of pixel travel for a noticeable

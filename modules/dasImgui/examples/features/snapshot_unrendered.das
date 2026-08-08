@@ -21,7 +21,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("Phase 1.1 — snapshot unrendered", 800, 600)
+    harness_init("Phase 1.1 - snapshot unrendered", 800, 600)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
 }
@@ -30,7 +30,7 @@ def init() {
 // slider below — auto-emitting NEVER_RENDERED as a global and appending a
 // register_widget(...) line to [init], so it's in g_widgets though never painted.
 def private register_only_never_rendered() {
-    slider_float(NEVER_RENDERED, (text = "Hidden — never painted"))
+    slider_float(NEVER_RENDERED, (text = "Hidden - never painted"))
 }
 
 [export]
@@ -39,7 +39,7 @@ def update() {
     harness_new_frame()
 
     SetNextWindowSize(ImVec2(720.0, 240.0), ImGuiCond.Always)
-    window(MAIN_WIN, (text = "Phase 1.1 — registry covers unrendered widgets",
+    window(MAIN_WIN, (text = "Phase 1.1 - registry covers unrendered widgets",
                       closable = false, flags = ImGuiWindowFlags.None)) {
         text("VISIBLE_VAL renders every frame. NEVER_RENDERED never does.")
         text("imgui_snapshot must list both, with rendered:false on the second.")

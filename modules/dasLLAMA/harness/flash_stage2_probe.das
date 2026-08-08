@@ -150,7 +150,7 @@ def private stage2_stream(kp, vp : float const?; var sink : float&) {
 [export]
 def main() {
     if (!jit_enabled()) {
-        print("JIT-only probe — run with: daslang -jit <file>\n")
+        print("JIT-only probe - run with: daslang -jit <file>\n")
         return
     }
     let nsl = (CNT + SLICE - 1l) / SLICE

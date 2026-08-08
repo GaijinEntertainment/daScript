@@ -136,14 +136,14 @@ def test_shape(n, d, ntok : int64) : bool {   // nolint:STYLE038 — one shape's
         gmd = max(gmd, df)
         gok &&= df <= max(CLOSE_ABS, CLOSE_REL * abs(yr))
     }
-    print("n={n} d={d} ntok={ntok} mr={mr}: tile {exact}/{length(ygen)} exact, maxdiff {md} — {ok ? "OK" : "MISMATCH"}; gemv maxdiff {gmd} — {gok ? "OK" : "MISMATCH"}\n")
+    print("n={n} d={d} ntok={ntok} mr={mr}: tile {exact}/{length(ygen)} exact, maxdiff {md} - {ok ? "OK" : "MISMATCH"}; gemv maxdiff {gmd} - {gok ? "OK" : "MISMATCH"}\n")
     return ok && gok
 }
 
 [export]
 def main {
     if (!jit_enabled()) {
-        print("run with -jit — the generator only fires under the LLVM JIT\n")
+        print("run with -jit - the generator only fires under the LLVM JIT\n")
         return
     }
     var found = false
@@ -151,7 +151,7 @@ def main {
         found ||= nm == "arm64-gen"
     }
     if (!found) {
-        print("arm64-gen not registered (non-arm64 host?) — nothing to test\n")
+        print("arm64-gen not registered (non-arm64 host?) - nothing to test\n")
         return
     }
     var ok = test_shape(64l, 8l, 4l)      // nb=2: paired-block loop only
