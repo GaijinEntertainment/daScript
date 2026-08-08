@@ -1363,11 +1363,11 @@ def values(var a : table<auto(keyT); auto(valT)> ==const | #) : iterator<valT&> 
 }
 
 def each_kv(a : table<auto(keyT)> ==const | #) {
-    concept_assert(false, "can't each_kv a table<...; void> — iterate keys() instead")
+    concept_assert(false, "can't each_kv a table<...; void> - iterate keys() instead")
 }
 
 def each_kv(var a : table<auto(keyT)> ==const | #) {
-    concept_assert(false, "can't each_kv a table<...; void> — iterate keys() instead")
+    concept_assert(false, "can't each_kv a table<...; void> - iterate keys() instead")
 }
 
 def each_kv(a : table<auto(keyT); auto(valT)[]> ==const | #) {
@@ -1572,9 +1572,20 @@ def each(lam : lambda<(var arg : auto(argT)) : bool>) : iterator<argT -&> {
 }
 
 [nodiscard]
-def each_ref(lam : lambda<(var arg : auto(argT)?) : bool>) : iterator<argT&> {
+def each_ref(lam : lambda<(var arg : auto(argT)?&) : bool>) : iterator<argT&> {
     var it : iterator<argT&>
     _builtin_make_lambda_iterator(it, lam, typeinfo sizeof(type<void?>))
+    unsafe {
+        return <- it
+    }
+}
+
+// trap for the by-value shape: the runtime hands the lambda the iteration-slot address,
+// so only a reference parameter can write the slot - a by-value pointer never can
+[nodiscard]
+def each_ref(lam : lambda<(var arg : auto(argT)? ==&) : bool>) : iterator<argT&> {
+    concept_assert(false, "each_ref lambda must take its argument as a reference to a pointer: (var arg : T? &)")
+    var it : iterator<argT&>
     unsafe {
         return <- it
     }
