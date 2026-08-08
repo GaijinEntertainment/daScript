@@ -36,6 +36,10 @@ def good_intended() : string {
     return "┌─┐"    // nolint:STYLE039 (box drawing is the point)
 }
 
+def good_escape_spelling() : string {
+    return "\xEF\xBB\xBF"    // UTF-8 BOM via ASCII escapes - the source spelling is already log-safe
+}
+
 [export]
 def main() {
     print("{bad_em_dash()} {bad_multiply_suffix()} {bad_interpolated(3)} {good_ascii()} {good_intended()}\n")

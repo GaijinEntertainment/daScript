@@ -637,18 +637,47 @@ class StyleLintVisitor : AstVisitor {
         style_warning("STYLE035: non-int numeric variable '{v.name}' is compared with a cast character literal; make '{v.name}' int and compare directly with the character literal", v.at)
     }
 
-    def override preVisitExprConstString(expr : ExprConstString?) : void {
-        if (!ascii_strings || expr.genFlags.generated) return
-        let s = string(expr.value)
+    def string_has_non_ascii(s : string const implicit; var badOffset : int&; var badByte : int&) : bool {
+        var hit = false
         peek_data(s) $(arr) {
             for (i in range(length(arr))) {
                 let b = int(arr[i])
                 if (b >= 128) {
-                    style_warning("STYLE039: non-ASCII byte {b} at offset {i} in string literal; emitted strings must be ASCII - spell it out (e.g. '-' for an em-dash), or '// nolint:STYLE039' when the character is intended", expr.at)
+                    badOffset = i
+                    badByte = b
+                    hit = true
                     break
                 }
             }
         }
+        return hit
+    }
+
+    def source_span_has_non_ascii(at : LineInfo) : bool {
+        if (at.fileInfo == null) return true   // no source to inspect - trust the value
+        var hit = false
+        let l1 = max(int(at.last_line), int(at.line))
+        for (ln in range(int(at.line), l1 + 1)) {
+            get_file_source_line(at.fileInfo, uint(ln)) $(line) {
+                var o = 0
+                var b = 0
+                if (string_has_non_ascii(line, o, b)) {
+                    hit = true
+                }
+            }
+            if (hit) break
+        }
+        return hit
+    }
+
+    def override preVisitExprConstString(expr : ExprConstString?) : void {
+        var badOffset = 0
+        var badByte = 0
+        // a non-ASCII VALUE spelled in pure-ASCII source ('\xEF\xBB\xBF' escapes) is already log-safe
+        if (!ascii_strings || expr.genFlags.generated
+                || !string_has_non_ascii(string(expr.value), badOffset, badByte)
+                || !source_span_has_non_ascii(expr.at)) return
+        style_warning("STYLE039: non-ASCII byte {badByte} at offset {badOffset} in string literal; emitted strings must be ASCII - spell it out (e.g. '-' for an em-dash), or '// nolint:STYLE039' when the character is intended", expr.at)
     }
 
     def override preVisitExprOp2(expr : ExprOp2?) : void {
