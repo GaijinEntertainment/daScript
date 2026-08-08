@@ -237,7 +237,7 @@ def test_text_viewer_checkbox_save_reload_roundtrip(t : T?) { // nolint:STYLE038
                  "roundtrip test receives a dedicated temporary directory")
     if (!empty(temp_error) || empty(temp_dir)) return
     let fixture = path_join(temp_dir, "checkbox.md")
-    let bom = "\xEF\xBB\xBF"  // nolint:STYLE039 (UTF-8 BOM fixture)
+    let bom = "\xEF\xBB\xBF"  // UTF-8 BOM fixture (escape spelling is ASCII-safe, STYLE039-silent)
     let original = bom + "# Tasks\r\n\r\n- [ ] first\r\n- [X] second\n"
     let expected = bom + "# Tasks\r\n\r\n- [x] first\r\n- [X] second\n"
     t |> success(fwrite(fixture, original), "mixed-ending BOM fixture is written")
