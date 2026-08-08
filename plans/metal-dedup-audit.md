@@ -30,13 +30,13 @@ K4/K5 (binding TYPE differs), K5C (verified no twin anywhere), Q8Gemm vs Q8Gemm6
 | 11 | ✅ **Swiglu/Geglu/Add/Sigmul quad** | MetalEw2T + abstract combine override (method splice beat @template_call — reads ascale) | −29 landed | DONE: stamps verified; enc_ew2 untouched (slot 3 already bound) |
 | 12 | ✅ **Q8Gemm tensor triple (BT/BSkT/64BT)** | `TILE_N` + `IS_SK` + `LDC_ND` (MetalQ8GemmTensorT) | −27 landed | DONE: BT/64BT byte-identical, SkT = locals inlined |
 | 13 | ⏸ **Comb/CombB** | RE-GRADED: instances cannot add fields — the batch's rt table + args struct would dummy-ripple through the lensed single's builder + call sites | fold into the LENS arc | the lens migration reshapes these encoders anyway; merging first would double-touch |
-| 14 | ▶ **Router/RouterB** | DECIDED, next session's opener: NR-width template (KqMv `float[NR]` precedent) — Router is ALREADY stream-batched (grid.y); RouterB is the 8-position-BLOCKED prefill form. Template carries ns (single's lensed builder gains one param; call sites pass 1). Single is latency-trivial by its own comment — NR=1 stamp shape change is safe; the merge materializes the bit-identical-logits invariant structurally | −15..20 | |
+| 14 | ✅ **Router/RouterB** | NR-width template (MetalMoeRouterT: NR/NRU + BATCHED fold axis + ns@8) | −16 landed | DONE: batch stamp byte-identical (entry rename only); single re-shapes — clamp/store-gate fold away, ns binds dead (g_zero at the 11 enc sites); router oracles exact both forms; fam-gptoss matrix serves both stamps through the regenerated lensed builder. Bit-identical logits now structural — one dot order |
 | 15 | ⏸ **SwigluOai/SwigluOaiPf** | RE-GRADED: gate answered — instances canNOT add bindings; the Pf twin adds 4 (cnt/basep/ne/nfe), so the single would carry dummy binds | fold into the LENS arc | net ≈ −8 after encoder additions; not worth pre-lens |
 | 16 | ✅ **enc_rms_last delete** | default `xoff` param on pf_enc_rms | −14 landed | DONE |
 
-Tier-1 CLOSED 2026-08-08 (single session, 8 commits f39e6c46d..d963f6480): 13 of 16 landed
-at −584 LOC net; 13/15 re-graded into the lens arc (instances cannot add fields — the audit's
-estimates assumed they could); 14 decided + queued as the next opener. Riders: TWO tool fixes
+Tier-1 CLOSED 2026-08-08 (commits f39e6c46d..): 14 of 16 landed at −600 LOC net (13 in the
+audit session, item 14 the following one); 13/15 re-graded into the lens arc (instances
+cannot add fields — the audit's estimates assumed they could). Riders: TWO tool fixes
 (msl_emit const-select fold = the value-position static_if invariant; kernel_access resolves
 buffer access through splice-method calls) and ONE measured production win (k6 prefill GEMM
 reload-per-kb: the cached superblock scalars cost an occupancy tier — −1.7..−10.5% per shape,

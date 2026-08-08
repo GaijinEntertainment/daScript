@@ -3596,7 +3596,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_unsign = compile_pso(metal_fwht_unsign_msl, metal_fwht_unsign_msl_entry, metal_fwht_unsign_msl_fastmath, ok)
     g_pso_qknorm = compile_pso(metal_qk_norm_msl, metal_qk_norm_msl_entry, metal_qk_norm_msl_fastmath, ok)
     g_pso_argmax = compile_pso(metal_argmax_msl, metal_argmax_msl_entry, metal_argmax_msl_fastmath, ok)
-    g_pso_moe_router = compile_pso(metal_moe_router_msl, metal_moe_router_msl_entry, metal_moe_router_msl_fastmath, ok)
+    g_pso_moe_router = compile_pso(MetalMoeRouter_metal_moe_router_msl, MetalMoeRouter_metal_moe_router_msl_entry, MetalMoeRouter_metal_moe_router_msl_fastmath, ok)
     g_pso_moe_select = compile_pso(metal_moe_select_msl, metal_moe_select_msl_entry, metal_moe_select_msl_fastmath, ok)
     g_pso_moe_gemv_q8 = compile_pso(metal_moe_gemv_q8_msl, metal_moe_gemv_q8_msl_entry, metal_moe_gemv_q8_msl_fastmath, ok)
     g_pso_moe_kq_k4 = compile_pso(metal_moe_gemv_k4_msl, metal_moe_gemv_k4_msl_entry, metal_moe_gemv_k4_msl_fastmath, ok)
@@ -5058,9 +5058,10 @@ class MetalKqMulMmK6 : MetalKqMulMmK45T {
 }
 
 // Router GEMV over the uploaded fp32 router slab: y[ne] = W[ne x dim] . x per stream. ne <= 256
-// rows — latency-trivial next to the expert GEMVs. grid.y = stream (batch; single decode = 1).
-[metal_dispatch(name = "enc_moe_router", pso = "g_pso_moe_router", tg = "g_gemv_rows*32", grid = "ne/g_gemv_rows, nst", params = "ne : int64, nst : int64")]
-class MetalMoeRouter {
+// rows. Each sg serves NR positions per weight load (slab SLC traffic /NR); BATCHED stamps
+// clamp tails via ns, singles fold the clamp away and bind ns dead (g_zero).
+[ |> template_struct_instance]
+class template MetalMoeRouterT {
     @ssbo @binding = 0 @role = "weight" w : array<float4>    // [ne x dim] router weights, float4 view
     @ssbo @binding = 1 x : array<float4>    // [streams x dim] activations, float4 view
     @ssbo @binding = 2 @span = "ne*nst*4" y : array<float>     // [streams x ne] logits out
@@ -5069,30 +5070,53 @@ class MetalMoeRouter {
     @uniform @binding = 5 xs : uint         // per-stream x stride, elements
     @ssbo @binding = 6 @role = "weight" rb : array<float>    // [ne] router bias row (hasb models — gpt-oss)
     @uniform @binding = 7 hasb : uint
+    @uniform @binding = 8 ns : uint         // stream count (npos) — read by BATCHED stamps only
+    @template_constant NR : int = 1
+    @template_constant NRU : uint = 1u      // NR's uint spelling (st0 math) — override BOTH together
+    @template_constant BATCHED : bool = false
 
-    [metal_kernel(name="metal_moe_router_msl")]
+    [metal_kernel]
     def metal_moe_router {
         let row = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
         if (row >= ddim) {
             return
         }
-        let st = gl_WorkGroupID.y
+        let st0 = gl_WorkGroupID.y * NRU
         let lane = gl_SubgroupInvocationID
         let nb4 = ndim / 4u
-        let x0e = st * (xs / 4u)
-        var acc = 0.0
+        let xs4 = xs / 4u
+        var acc : float[NR]
         var k = lane
         while (k < nb4) {
             let wv = w[row * nb4 + k]
-            let xv = x[x0e + k]
-            acc += wv.x * xv.x + wv.y * xv.y + wv.z * xv.z + wv.w * xv.w
+            for [unroll_full] (i in range(NR)) {
+                let st = BATCHED ? min(st0 + uint(i), ns - 1u) : st0
+                let xv = x[st * xs4 + k]
+                acc[i] += wv.x * xv.x + wv.y * xv.y + wv.z * xv.z + wv.w * xv.w
+            }
             k += gl_SubgroupSize
         }
-        acc = simd_sum(acc)
-        if (lane == 0u) {
-            y[st * ddim + row] = hasb != 0u ? acc + rb[row] : acc
+        for [unroll_full] (i in range(NR)) {
+            let s = simd_sum(acc[i])
+            if (BATCHED ? lane == 0u && st0 + uint(i) < ns : lane == 0u) {
+                y[(st0 + uint(i)) * ddim + row] = hasb != 0u ? s + rb[row] : s
+            }
         }
     }
+}
+
+// grid.y = stream (batch decode; single = 1). Latency-trivial next to the expert GEMVs.
+[metal_dispatch(name = "enc_moe_router", pso = "g_pso_moe_router", tg = "g_gemv_rows*32", grid = "ne/g_gemv_rows, nst", params = "ne : int64, nst : int64")]
+class MetalMoeRouter : MetalMoeRouterT {
+}
+
+// Position-blocked prefill twin: 8 positions per sg (the prefill router's entire cost is slab
+// traffic). Hand-bound by the prefill driver — @span inert. Same per-lane k stride and
+// per-position dot order as the single: logits stay bit-identical.
+class MetalMoeRouterB : MetalMoeRouterT {
+    override NR = 8
+    override NRU = 8u
+    override BATCHED = true
 }
 
 // Router select — moe_select_core's softmax + top-k + norm_topk on one simdgroup per stream

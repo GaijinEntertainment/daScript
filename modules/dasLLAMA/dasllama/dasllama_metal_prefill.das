@@ -375,49 +375,8 @@ class MetalKqMulMmK6T {
 // Router GEMV -> single-simdgroup select -> expert-indexed GEMV twins (grid.y = slot; the
 // kernel reads sel[slot] GPU-side — no CPU readback, encode-ahead/spec stays compatible).
 
-// Position-blocked prefill router: MetalMoeRouter's shape but each sg serves 8 positions per
-// weight load — slab SLC traffic /8 (the prefill router's entire cost); tails clamp, stores gate.
-// Per-lane k stride and per-position dot order match MetalMoeRouter, so logits stay bit-identical.
-class MetalMoeRouterB {
-    @ssbo @binding = 0 @role = "weight" w : array<float4>    // [ne x dim] router weights, float4 view
-    @ssbo @binding = 1 @role = "read" x : array<float4>    // [streams x dim] activations, float4 view
-    @ssbo @binding = 2 @role = "write" y : array<float>     // [streams x ne] logits out
-    @uniform @binding = 3 ndim : uint       // dim (% 32)
-    @uniform @binding = 4 ddim : uint       // ne
-    @uniform @binding = 5 xs : uint         // per-stream x stride, elements
-    @ssbo @binding = 6 @role = "weight" rb : array<float>    // [ne] router bias row (hasb models — gpt-oss)
-    @uniform @binding = 7 hasb : uint
-    @uniform @binding = 8 ns : uint         // stream count (npos)
-
-    [metal_kernel(name="metal_moe_router_b_msl")]
-    def metal_moe_router_b {
-        let row = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
-        if (row >= ddim) {
-            return
-        }
-        let st0 = gl_WorkGroupID.y * 8u
-        let lane = gl_SubgroupInvocationID
-        let nb4 = ndim / 4u
-        let xs4 = xs / 4u
-        var acc : float[8]
-        var k = lane
-        while (k < nb4) {
-            let wv = w[row * nb4 + k]
-            for [unroll_full] (i in range(8)) {
-                let st = min(st0 + uint(i), ns - 1u)
-                let xv = x[st * xs4 + k]
-                acc[i] += wv.x * xv.x + wv.y * xv.y + wv.z * xv.z + wv.w * xv.w
-            }
-            k += gl_SubgroupSize
-        }
-        for [unroll_full] (i in range(8)) {
-            let s = simd_sum(acc[i])
-            if (lane == 0u && st0 + uint(i) < ns) {
-                y[(st0 + uint(i)) * ddim + row] = hasb != 0u ? s + rb[row] : s
-            }
-        }
-    }
-}
+// The position-blocked prefill router (MetalMoeRouterB) lives in dasllama_metal_kernels as the
+// BATCHED NR=8 stamp of the MetalMoeRouterT template — same k stride, logits bit-identical.
 
 // The MoE gathered mul_mm family (mx4/q8 plus their tensor twins, and k4/k5/k6/q51) binds its
 // uniforms as ONE kargs value at slot 5 — each form ignores the fields it does not read: a tensor
@@ -1967,7 +1926,7 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
     if (g_pf_avmm_tensor) {
         g_pf_pso_avmm_t = compile_pso(metal_attn_av_mm_t_msl, metal_attn_av_mm_t_msl_entry, metal_attn_av_mm_t_msl_fastmath, ok)
     }
-    g_pf_pso_moe_router_b = compile_pso(metal_moe_router_b_msl, metal_moe_router_b_msl_entry, metal_moe_router_b_msl_fastmath, ok)
+    g_pf_pso_moe_router_b = compile_pso(MetalMoeRouterB_metal_moe_router_msl, MetalMoeRouterB_metal_moe_router_msl_entry, MetalMoeRouterB_metal_moe_router_msl_fastmath, ok)
     g_pf_pso_moe_count = compile_pso(metal_moe_count_msl, metal_moe_count_msl_entry, metal_moe_count_msl_fastmath, ok)
     g_pf_pso_moe_bucket = compile_pso(metal_moe_bucket_msl, metal_moe_bucket_msl_entry, metal_moe_bucket_msl_fastmath, ok)
     g_pf_pso_moe_reduce = compile_pso(metal_moe_reduce_msl, metal_moe_reduce_msl_entry, metal_moe_reduce_msl_fastmath, ok)

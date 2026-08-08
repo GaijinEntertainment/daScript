@@ -728,7 +728,7 @@ def private moe_wscale_gate(t : T?; dev, queue; rows, nk, ne : int) {
 def private moe_router_b_gate(t : T?; dev, queue; dim, ne, npos : int; hasb : bool) {
     let tag = "moe_router_b dim={dim} ne={ne} np={npos}{hasb ? " bias" : ""}"
     var err : string
-    var pso = pipeline_from_source(dev, metal_moe_router_b_msl, metal_moe_router_b_msl_entry, metal_moe_router_b_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, MetalMoeRouterB_metal_moe_router_msl, MetalMoeRouterB_metal_moe_router_msl_entry, MetalMoeRouterB_metal_moe_router_msl_fastmath, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     var w : array<float>
@@ -1543,7 +1543,7 @@ def private moe_select_gate(t : T?; dev, queue; ne, k, nst : int; ties : bool; g
 // The router GEMV on exact f32 data (integer w and x — every fma partial is exact), BIT-exact.
 def private moe_router_gate(t : T?; dev, queue; n, ne : int) {
     var err : string
-    var pso = pipeline_from_source(dev, metal_moe_router_msl, metal_moe_router_msl_entry, metal_moe_router_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, MetalMoeRouter_metal_moe_router_msl, MetalMoeRouter_metal_moe_router_msl_entry, MetalMoeRouter_metal_moe_router_msl_fastmath, err)
     t |> success(pso != null, "moe router pipeline: {err}")
     if (pso == null) {
         return
@@ -1584,6 +1584,7 @@ def private moe_router_gate(t : T?; dev, queue; n, ne : int) {
         metal_set_buffer(enc, bxs, 0ul, 5)
         metal_set_buffer(enc, bhb0, 0ul, 6)
         metal_set_buffer(enc, bhb0, 0ul, 7)
+        metal_set_buffer(enc, bhb0, 0ul, 8)   // ns — dead in the NR=1 stamp
         metal_dispatch_threadgroups(enc, uint3(uint((ne + 3) / 4), 1u, 1u), uint3(128u, 1u, 1u))
     }
     t |> success(ran, "moe router dispatch n={n} ne={ne}: {err}")

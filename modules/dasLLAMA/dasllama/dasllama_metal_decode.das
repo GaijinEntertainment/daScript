@@ -599,9 +599,9 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                 if (t.dn_ba_f32) {
                     // F32-on-disk β/α (35B): fblob slabs ride the router f32 GEMV
                     var bw_bt = upload_region(addr < void? >(t.fblob[t.dn_betaf_off + l * dim * nvh]), uint64(dim * nvh * 4l))
-                    enc_moe_router(enc, bw_bt, r.bxb, r.bdn_b, r.u_dim, r.u_nvh, r.u_dim, g_one, g_zero, nvh, 1l)
+                    enc_moe_router(enc, bw_bt, r.bxb, r.bdn_b, r.u_dim, r.u_nvh, r.u_dim, g_one, g_zero, g_zero, nvh, 1l)
                     var bw_al = upload_region(addr < void? >(t.fblob[t.dn_alphaf_off + l * dim * nvh]), uint64(dim * nvh * 4l))
-                    enc_moe_router(enc, bw_al, r.bxb, r.bdn_g, r.u_dim, r.u_nvh, r.u_dim, g_one, g_zero, nvh, 1l)
+                    enc_moe_router(enc, bw_al, r.bxb, r.bdn_g, r.u_dim, r.u_nvh, r.u_dim, g_one, g_zero, g_zero, nvh, 1l)
                 } else {
                     enc_site_gemv(enc, t, KqFmt.q8, t.dnbeta_offs[l], nvh, dim, r.bxb, r.bdn_b, r.u_dim, r.u_nvh)
                     enc_site_gemv(enc, t, KqFmt.q8, t.dnalpha_offs[l], nvh, dim, r.bxb, r.bdn_g, r.u_dim, r.u_nvh)
@@ -806,9 +806,9 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                 if (g4) {
                     var bw_rs = upload_region(addr < void? >(t.fblob[t.moe_router_scale_off + l * dim]), uint64(dim * 4l))
                     enc_g4_router_norm(enc, r.bx, bw_rs, r.bmoe_rt, r.u_dim, r.u_eps, r.u_moe_invd, 1l)
-                    enc_moe_router(enc, bw_rt, r.bmoe_rt, r.bmoe_lg, r.u_dim, r.u_moe_ne, r.u_dim, brb, bhrb, c.n_expert, 1l)
+                    enc_moe_router(enc, bw_rt, r.bmoe_rt, r.bmoe_lg, r.u_dim, r.u_moe_ne, r.u_dim, brb, bhrb, g_zero, c.n_expert, 1l)
                 } else {
-                    enc_moe_router(enc, bw_rt, r.bxb, r.bmoe_lg, r.u_dim, r.u_moe_ne, r.u_dim, brb, bhrb, c.n_expert, 1l)
+                    enc_moe_router(enc, bw_rt, r.bxb, r.bmoe_lg, r.u_dim, r.u_moe_ne, r.u_dim, brb, bhrb, g_zero, c.n_expert, 1l)
                 }
                 enc_moe_select(enc, r.bmoe_lg, r.bmoe_sel, r.bmoe_sel, r.u_moe_ne, r.u_moe_k, r.u_moe_gmode, 1l)
                 if (g4) {
@@ -818,7 +818,7 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
                 if (r.u_moe_nsh != null) {
                     // shexp raw gate dot (σ in the combine) — bmoe_lg[0] is free once select consumed it
                     var bw_shg = upload_region(addr < void? >(t.fblob[t.shexp_gate_off + l * dim]), uint64(dim * 4l))
-                    enc_moe_router(enc, bw_shg, r.bxb, r.bmoe_lg, r.u_dim, r.u_one32, r.u_dim, g_one, g_zero, 1l, 1l)
+                    enc_moe_router(enc, bw_shg, r.bxb, r.bmoe_lg, r.u_dim, r.u_one32, r.u_dim, g_one, g_zero, g_zero, 1l, 1l)
                 }
                 if (g_skip != "moe_rt") {   // moe_rt knockout: the routed expert GEMVs only (router/select stay live)
                     if (t.experts_mx4) {
@@ -1173,9 +1173,9 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
             if (t.dn_ba_f32) {
                 // F32-on-disk β/α: the router-slab f32 GEMV, one stream per verify row
                 var bw_bt = upload_region(addr < void? >(t.fblob[t.dn_betaf_off + l * dim * nvh]), uint64(dim * nvh * 4l))
-                enc_moe_router(enc, bw_bt, r.bxb, r.bdn_b, r.u_dim, r.u_nvh, r.u_dim, g_one, g_zero, nvh, 2l)
+                enc_moe_router(enc, bw_bt, r.bxb, r.bdn_b, r.u_dim, r.u_nvh, r.u_dim, g_one, g_zero, g_zero, nvh, 2l)
                 var bw_al = upload_region(addr < void? >(t.fblob[t.dn_alphaf_off + l * dim * nvh]), uint64(dim * nvh * 4l))
-                enc_moe_router(enc, bw_al, r.bxb, r.bdn_g, r.u_dim, r.u_nvh, r.u_dim, g_one, g_zero, nvh, 2l)
+                enc_moe_router(enc, bw_al, r.bxb, r.bdn_g, r.u_dim, r.u_nvh, r.u_dim, g_one, g_zero, g_zero, nvh, 2l)
             } else {
                 let bdnb = blob_of(g_dev, t, t.dnbeta_offs[l])
                 enc_gemv_b(enc, false, bdnb.buf, bdnb.boff, r.bxb, r.bdn_b, r.u_dim, r.u_nvh, r.u_nvh, nvh)
@@ -1281,11 +1281,11 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
                 brb = upload_region(addr < void? >(t.fblob[t.router_b_off + l * c.n_expert]), uint64(c.n_expert * 4l))
                 bhrb = r.u_moe_gmode
             }
-            enc_moe_router(enc, bw_rt, r.bxb, r.bmoe_lg, r.u_dim, r.u_moe_ne, r.u_dim, brb, bhrb, c.n_expert, 2l)
+            enc_moe_router(enc, bw_rt, r.bxb, r.bmoe_lg, r.u_dim, r.u_moe_ne, r.u_dim, brb, bhrb, g_zero, c.n_expert, 2l)
             enc_moe_select(enc, r.bmoe_lg, r.bmoe_sel, r.bmoe_sel, r.u_moe_ne, r.u_moe_k, r.u_moe_gmode, 2l)
             if (r.u_moe_nsh != null) {
                 var bw_shg = upload_region(addr < void? >(t.fblob[t.shexp_gate_off + l * dim]), uint64(dim * 4l))
-                enc_moe_router(enc, bw_shg, r.bxb, r.bmoe_lg, r.u_dim, r.u_one32, r.u_dim, g_one, g_zero, 1l, 2l)
+                enc_moe_router(enc, bw_shg, r.bxb, r.bmoe_lg, r.u_dim, r.u_one32, r.u_dim, g_one, g_zero, g_zero, 1l, 2l)
             }
             var v1a = MoeGemvArgs(ndim = r.k_dim, ddim = r.k_moe_nfe, eplane = fe1 == KqFmt.q8 || fe1 == KqFmt.q51 ? r.k_moe_eblk : r.k_moe_esb,
                             xs = 0u, ss = r.k_moe_ss, bxs = r.k_dim, bys = r.k_moe_knfe, hasb = 0u)
@@ -2741,9 +2741,9 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
                     enc_rms_b(enc, bx, bw_p2, bmg4x, u_dim, u_eps, nrows)
                     var bw_rs = upload_region(addr < void? >(t.fblob[t.moe_router_scale_off + l * dim]), uint64(dim * 4l))
                     enc_g4_router_norm(enc, bx, bw_rs, bmg4rt, u_dim, u_eps, u_moe_invd, nrows)
-                    enc_moe_router(enc, bw_rt, bmg4rt, bmlg, u_dim, u_moe_ne, u_dim, brb, bhrb, c.n_expert, nrows)
+                    enc_moe_router(enc, bw_rt, bmg4rt, bmlg, u_dim, u_moe_ne, u_dim, brb, bhrb, g_zero, c.n_expert, nrows)
                 } else {
-                    enc_moe_router(enc, bw_rt, bxb, bmlg, u_dim, u_moe_ne, u_dim, brb, bhrb, c.n_expert, nrows)
+                    enc_moe_router(enc, bw_rt, bxb, bmlg, u_dim, u_moe_ne, u_dim, brb, bhrb, g_zero, c.n_expert, nrows)
                 }
                 enc_moe_select(enc, bmlg, bmsel, bmsel, u_moe_ne, u_moe_k, u_moe_gmode, nrows)
                 if (g4moe) {
