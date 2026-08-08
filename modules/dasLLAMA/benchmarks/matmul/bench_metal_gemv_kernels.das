@@ -82,6 +82,16 @@ require strings
 // further forms = ledger: uint16-mask nibble hybrid ~+5%, upload-time qh bit-plane transpose
 // ~+10% but kills k5q zero-copy); the small-d kv3b shape prefers nr0=1 k5_b1c (wall -5% there,
 // b2r +22% — under-occupied at 256 tgs) — production picks per site like the gemm policies.
+//
+// KqMv B2 colbase round (M1 Max, 2026-08-08, the reification followup; 3 launches per arm,
+// interleaved, cls3b = the DRAM-honest cell): a LIVE colbase term on the B2 kernels costs real
+// percent — k4 +1.9/+2.0/+2.0% cls3b (naive form) and +1.9/+1.8/+2.0% (hoisted form; NOT the
+// per-b mul — same occupancy, and both hoisted B4s measure dead-neutral vs production), k6
+// +0.5% cls3b both forms; k5 is the exception, its colbase form measures neutral-to-BETTER
+// (-1.4% cls3b, max_threads 448 -> 512). The dead-decl preview (kq_mvb2s_*: production text +
+// an unused colbase line — the static_if template stamp's only residue) is FREE: +-0.1% cls3b
+// all launches. Template verdict: k5 = plain colbase form; k4/k6 = TILED static_if
+// branch-duplicating only the b-loop and writeback tail (B4 byte-identical, B2 + dead decl).
 
 // ===== kernel variants =====
 // Shared contract (f32-X planar): b0 wq [d x n] Q8 byte4 view, b1 ws [d x n/32] f32 scales,
@@ -3710,6 +3720,669 @@ class MetalKqLabK4ExtX8 {
     }
 }
 
+// ===== the KqMv B2 colbase A/B (reification followup) =====
+// The reification sweep left KqMv B2/B4 unmerged: B2's body omits B4's column-tiling term (its
+// dispatch pins gcols = 1), so a width-stamped template puts always-zero colbase math on the
+// B=2 decode GEMV. These arms measure exactly that: kq_mvb2_* = the production B2 MSL verbatim
+// (required, zero copy drift); kq_mvb2u_* = the text the template would stamp at NR=2 — B4's
+// colbase form at width 2. Production binding contract (KqMvArgs uniform at 5), tg 64,
+// grid ceil(d/8) x 1 — wgid.y is always 0, so colbase folds to 0 at runtime, never in the ISA.
+// The *h twins are the HOISTED shared form (colrow = colbase * nb4 once per thread, cb4 =
+// colrow + cx4 once per chunk, xb4 = cb4 + b * nb4): production folds uint(b) * nb4 at unroll
+// time, so the naive colbase form leaves a runtime mul per b-iteration — the hoist reduces the
+// delta to one add per chunk. It rewrites BOTH widths, so B4 gets its own prod/hoisted arms
+// (kq_mvb4_* / kq_mvb4h_*, nr = 4 args, gcols still 1 — the nlive == 4 dispatch).
+// The *s twins are the STATIC_IF-stamp preview: a TILED template constant branch-duplicating
+// only the b-loop and writeback tail emits production text for both widths EXCEPT one dead
+// `colbase` decl at B2 (the emitter keeps unused lets; the tail's use site forces a body-top
+// decl). These arms = production B2 text + that dead line — the only delta the route leaves.
+
+class MetalKqMvLabB2K4U {
+    @ssbo @binding = 0 ksh : array<float16>
+    @ssbo @binding = 1 ks4 : array<uint4>
+    @ssbo @binding = 2 kqu : array<uint>
+    @ssbo @binding = 3 x : array<float4>
+    @ssbo @binding = 4 y : array<float>
+    @uniform @binding = 5 ka : KqMvArgs
+
+    [metal_kernel(name="lab_kq_mvb2u_k4_msl")]
+    def lab_kq_mvb2u_k4 {
+        let lane = gl_SubgroupInvocationID
+        let tx = lane % 8u
+        let ty = lane / 8u
+        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
+        let colbase = gl_WorkGroupID.y * 2u
+        let nb = ka.ndim / 256u
+        let q4i = tx / 4u
+        let hp = (tx % 4u) / 2u
+        let lo = (tx % 2u) * 4u
+        let jl = 2u * q4i + hp
+        let nsh = (tx % 4u) < 2u ? 0u : 4u
+        let nb4 = ka.ndim / 4u
+        var sumf : float[2]
+        var sb = 0u
+        while (sb < nb) {
+            let blk = row * nb + sb
+            let sv = ks4[blk]
+            let dd = float(ksh[blk * 8u])
+            let dm = float(ksh[blk * 8u + 1u])
+            for [unroll_full] (ch in range(2)) {
+                let sy = (sv.y >> (8u * jl)) & 255u
+                let szv = (sv.z >> (8u * jl)) & 255u
+                let sw = (sv.w >> (8u * jl)) & 255u
+                let sc = ch == 0 ? (sy & 63u) : ((sw & 0x0Fu) | ((sy >> 6u) << 4u))
+                let mn = ch == 0 ? (szv & 63u) : ((sw >> 4u) | ((szv >> 6u) << 4u))
+                let dl = dd * float(sc)
+                let ml = dm * float(mn)
+                let qb = blk * 32u + (q4i + uint(ch) * 2u) * 8u + lo
+                var w : float[16]
+                for [unroll_full] (u in range(4)) {
+                    let qv = kqu[qb + uint(u)]
+                    for [unroll_full] (e in range(4)) {
+                        let byv = (qv >> (8u * uint(e))) & 255u
+                        w[4 * u + e] = float((byv >> nsh) & 0x0Fu) * dl - ml
+                    }
+                }
+                let cx4 = sb * 64u + (q4i + uint(ch) * 2u) * 16u + ((tx % 4u) < 2u ? 0u : 8u) + lo
+                for [unroll_full] (b in range(2)) {
+                    let xb4 = (colbase + uint(b)) * nb4 + cx4
+                    var acc = 0.0
+                    for [unroll_full] (u in range(4)) {
+                        let v = x[xb4 + uint(u)]
+                        acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
+                    }
+                    sumf[b] += acc
+                }
+            }
+            sb++
+        }
+        for [unroll_full] (b in range(2)) {
+            var s = sumf[b]
+            s += simd_shuffle_down(s, 4u)
+            s += simd_shuffle_down(s, 2u)
+            s += simd_shuffle_down(s, 1u)
+            if (tx == 0u && row < ka.ddim && colbase + uint(b) < ka.nr) {
+                y[(colbase + uint(b)) * ka.ys + row] = s
+            }
+        }
+    }
+}
+
+class MetalKqMvLabB2K5U {
+    @ssbo @binding = 0 ksh : array<float16>
+    @ssbo @binding = 1 ks4 : array<uint4>
+    @ssbo @binding = 2 kqu : array<uint>
+    @ssbo @binding = 3 x : array<float4>
+    @ssbo @binding = 4 y : array<float>
+    @uniform @binding = 5 ka : KqMvArgs
+
+    [metal_kernel(name="lab_kq_mvb2u_k5_msl")]
+    def lab_kq_mvb2u_k5 {
+        let lane = gl_SubgroupInvocationID
+        let tx = lane % 8u
+        let ty = lane / 8u
+        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
+        let colbase = gl_WorkGroupID.y * 2u
+        let nb = ka.ndim / 256u
+        let q4i = tx / 4u
+        let hp = (tx % 4u) / 2u
+        let lo = (tx % 2u) * 4u
+        let jl = 2u * q4i + hp
+        let nib = (tx % 4u) < 2u
+        let nsh = nib ? 0u : 4u
+        let nb4 = ka.ndim / 4u
+        var sumf : float[2]
+        var sb = 0u
+        while (sb < nb) {
+            let blk = row * nb + sb
+            let sv = ks4[blk]
+            let dd = float(ksh[blk * 8u])
+            let dm = float(ksh[blk * 8u + 1u])
+            var hq : uint[4]
+            for [unroll_full] (u in range(4)) {
+                hq[u] = kqu[blk * 40u + 32u + lo + uint(u)]
+            }
+            for [unroll_full] (ch in range(2)) {
+                let sy = (sv.y >> (8u * jl)) & 255u
+                let szv = (sv.z >> (8u * jl)) & 255u
+                let sw = (sv.w >> (8u * jl)) & 255u
+                let sc = ch == 0 ? (sy & 63u) : ((sw & 0x0Fu) | ((sy >> 6u) << 4u))
+                let mn = ch == 0 ? (szv & 63u) : ((sw >> 4u) | ((szv >> 6u) << 4u))
+                let dl = dd * float(sc)
+                let ml = dm * float(mn)
+                let qb = blk * 40u + (q4i + uint(ch) * 2u) * 8u + lo
+                let hsh = jl + 4u * uint(ch)
+                var w : float[16]
+                for [unroll_full] (u in range(4)) {
+                    let qv = kqu[qb + uint(u)]
+                    for [unroll_full] (e in range(4)) {
+                        let byv = (qv >> (8u * uint(e))) & 255u
+                        let hb = (hq[u] >> (8u * uint(e) + hsh)) & 1u
+                        w[4 * u + e] = float(((byv >> nsh) & 0x0Fu) | (hb << 4u)) * dl - ml
+                    }
+                }
+                let cx4 = sb * 64u + (q4i + uint(ch) * 2u) * 16u + (nib ? 0u : 8u) + lo
+                for [unroll_full] (b in range(2)) {
+                    let xb4 = (colbase + uint(b)) * nb4 + cx4
+                    var acc = 0.0
+                    for [unroll_full] (u in range(4)) {
+                        let v = x[xb4 + uint(u)]
+                        acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
+                    }
+                    sumf[b] += acc
+                }
+            }
+            sb++
+        }
+        for [unroll_full] (b in range(2)) {
+            var s = sumf[b]
+            s += simd_shuffle_down(s, 4u)
+            s += simd_shuffle_down(s, 2u)
+            s += simd_shuffle_down(s, 1u)
+            if (tx == 0u && row < ka.ddim && colbase + uint(b) < ka.nr) {
+                y[(colbase + uint(b)) * ka.ys + row] = s
+            }
+        }
+    }
+}
+
+class MetalKqMvLabB2K6U {
+    @ssbo @binding = 0 kdh : array<float16>
+    @ssbo @binding = 1 kscb : array<uint8>
+    @ssbo @binding = 2 kqu : array<uint>
+    @ssbo @binding = 3 x : array<float4>
+    @ssbo @binding = 4 y : array<float>
+    @uniform @binding = 5 ka : KqMvArgs
+
+    [metal_kernel(name="lab_kq_mvb2u_k6_msl")]
+    def lab_kq_mvb2u_k6 {
+        let lane = gl_SubgroupInvocationID
+        let tx = lane % 8u
+        let ty = lane / 8u
+        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
+        let colbase = gl_WorkGroupID.y * 2u
+        let nb = ka.ndim / 256u
+        let s = tx / 2u
+        let o4 = (tx % 2u) * 4u
+        let qoff = (s % 2u) * 8u + o4
+        let shr = s < 2u ? 0u : 4u
+        let hsh = 2u * s
+        let nb4 = ka.ndim / 4u
+        var sumf : float[2]
+        var sb = 0u
+        while (sb < nb) {
+            let blk = row * nb + sb
+            let dd = float(kdh[blk])
+            for [unroll_full] (ch in range(2)) {
+                let ip = uint(ch)
+                let qb = blk * 48u + ip * 16u + qoff
+                let hb = blk * 48u + 32u + ip * 8u + o4
+                let g = ip * 8u + s * 2u + (tx % 2u)
+                let sc = float((int(kscb[blk * 16u + g]) ^ 128) - 128)
+                let dl = dd * sc
+                let ml = dl * 32.0
+                var w : float[16]
+                for [unroll_full] (u in range(4)) {
+                    let qu = kqu[qb + uint(u)]
+                    let hu = kqu[hb + uint(u)]
+                    let qv = ((qu >> shr) & 0x0F0F0F0F) | (((hu >> hsh) & 0x03030303) << 4u)
+                    for [unroll_full] (e in range(4)) {
+                        w[4 * u + e] = float((qv >> (8u * uint(e))) & 255u) * dl - ml
+                    }
+                }
+                let cx4 = sb * 64u + ip * 32u + s * 8u + o4
+                for [unroll_full] (b in range(2)) {
+                    let xb4 = (colbase + uint(b)) * nb4 + cx4
+                    var acc = 0.0
+                    for [unroll_full] (u in range(4)) {
+                        let v = x[xb4 + uint(u)]
+                        acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
+                    }
+                    sumf[b] += acc
+                }
+            }
+            sb++
+        }
+        for [unroll_full] (b in range(2)) {
+            var sm = sumf[b]
+            sm += simd_shuffle_down(sm, 4u)
+            sm += simd_shuffle_down(sm, 2u)
+            sm += simd_shuffle_down(sm, 1u)
+            if (tx == 0u && row < ka.ddim && colbase + uint(b) < ka.nr) {
+                y[(colbase + uint(b)) * ka.ys + row] = sm
+            }
+        }
+    }
+}
+
+class MetalKqMvLabB2K4H {
+    @ssbo @binding = 0 ksh : array<float16>
+    @ssbo @binding = 1 ks4 : array<uint4>
+    @ssbo @binding = 2 kqu : array<uint>
+    @ssbo @binding = 3 x : array<float4>
+    @ssbo @binding = 4 y : array<float>
+    @uniform @binding = 5 ka : KqMvArgs
+
+    [metal_kernel(name="lab_kq_mvb2h_k4_msl")]
+    def lab_kq_mvb2h_k4 {
+        let lane = gl_SubgroupInvocationID
+        let tx = lane % 8u
+        let ty = lane / 8u
+        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
+        let colbase = gl_WorkGroupID.y * 2u
+        let nb = ka.ndim / 256u
+        let q4i = tx / 4u
+        let hp = (tx % 4u) / 2u
+        let lo = (tx % 2u) * 4u
+        let jl = 2u * q4i + hp
+        let nsh = (tx % 4u) < 2u ? 0u : 4u
+        let nb4 = ka.ndim / 4u
+        let colrow = colbase * nb4
+        var sumf : float[2]
+        var sb = 0u
+        while (sb < nb) {
+            let blk = row * nb + sb
+            let sv = ks4[blk]
+            let dd = float(ksh[blk * 8u])
+            let dm = float(ksh[blk * 8u + 1u])
+            for [unroll_full] (ch in range(2)) {
+                let sy = (sv.y >> (8u * jl)) & 255u
+                let szv = (sv.z >> (8u * jl)) & 255u
+                let sw = (sv.w >> (8u * jl)) & 255u
+                let sc = ch == 0 ? (sy & 63u) : ((sw & 0x0Fu) | ((sy >> 6u) << 4u))
+                let mn = ch == 0 ? (szv & 63u) : ((sw >> 4u) | ((szv >> 6u) << 4u))
+                let dl = dd * float(sc)
+                let ml = dm * float(mn)
+                let qb = blk * 32u + (q4i + uint(ch) * 2u) * 8u + lo
+                var w : float[16]
+                for [unroll_full] (u in range(4)) {
+                    let qv = kqu[qb + uint(u)]
+                    for [unroll_full] (e in range(4)) {
+                        let byv = (qv >> (8u * uint(e))) & 255u
+                        w[4 * u + e] = float((byv >> nsh) & 0x0Fu) * dl - ml
+                    }
+                }
+                let cx4 = sb * 64u + (q4i + uint(ch) * 2u) * 16u + ((tx % 4u) < 2u ? 0u : 8u) + lo
+                let cb4 = colrow + cx4
+                for [unroll_full] (b in range(2)) {
+                    let xb4 = cb4 + uint(b) * nb4
+                    var acc = 0.0
+                    for [unroll_full] (u in range(4)) {
+                        let v = x[xb4 + uint(u)]
+                        acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
+                    }
+                    sumf[b] += acc
+                }
+            }
+            sb++
+        }
+        for [unroll_full] (b in range(2)) {
+            var s = sumf[b]
+            s += simd_shuffle_down(s, 4u)
+            s += simd_shuffle_down(s, 2u)
+            s += simd_shuffle_down(s, 1u)
+            if (tx == 0u && row < ka.ddim && colbase + uint(b) < ka.nr) {
+                y[(colbase + uint(b)) * ka.ys + row] = s
+            }
+        }
+    }
+}
+
+class MetalKqMvLabB4K4H {
+    @ssbo @binding = 0 ksh : array<float16>
+    @ssbo @binding = 1 ks4 : array<uint4>
+    @ssbo @binding = 2 kqu : array<uint>
+    @ssbo @binding = 3 x : array<float4>
+    @ssbo @binding = 4 y : array<float>
+    @uniform @binding = 5 ka : KqMvArgs
+
+    [metal_kernel(name="lab_kq_mvb4h_k4_msl")]
+    def lab_kq_mvb4h_k4 {
+        let lane = gl_SubgroupInvocationID
+        let tx = lane % 8u
+        let ty = lane / 8u
+        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
+        let colbase = gl_WorkGroupID.y * 4u
+        let nb = ka.ndim / 256u
+        let q4i = tx / 4u
+        let hp = (tx % 4u) / 2u
+        let lo = (tx % 2u) * 4u
+        let jl = 2u * q4i + hp
+        let nsh = (tx % 4u) < 2u ? 0u : 4u
+        let nb4 = ka.ndim / 4u
+        let colrow = colbase * nb4
+        var sumf : float[4]
+        var sb = 0u
+        while (sb < nb) {
+            let blk = row * nb + sb
+            let sv = ks4[blk]
+            let dd = float(ksh[blk * 8u])
+            let dm = float(ksh[blk * 8u + 1u])
+            for [unroll_full] (ch in range(2)) {
+                let sy = (sv.y >> (8u * jl)) & 255u
+                let szv = (sv.z >> (8u * jl)) & 255u
+                let sw = (sv.w >> (8u * jl)) & 255u
+                let sc = ch == 0 ? (sy & 63u) : ((sw & 0x0Fu) | ((sy >> 6u) << 4u))
+                let mn = ch == 0 ? (szv & 63u) : ((sw >> 4u) | ((szv >> 6u) << 4u))
+                let dl = dd * float(sc)
+                let ml = dm * float(mn)
+                let qb = blk * 32u + (q4i + uint(ch) * 2u) * 8u + lo
+                var w : float[16]
+                for [unroll_full] (u in range(4)) {
+                    let qv = kqu[qb + uint(u)]
+                    for [unroll_full] (e in range(4)) {
+                        let byv = (qv >> (8u * uint(e))) & 255u
+                        w[4 * u + e] = float((byv >> nsh) & 0x0Fu) * dl - ml
+                    }
+                }
+                let cx4 = sb * 64u + (q4i + uint(ch) * 2u) * 16u + ((tx % 4u) < 2u ? 0u : 8u) + lo
+                let cb4 = colrow + cx4
+                for [unroll_full] (b in range(4)) {
+                    let xb4 = cb4 + uint(b) * nb4
+                    var acc = 0.0
+                    for [unroll_full] (u in range(4)) {
+                        let v = x[xb4 + uint(u)]
+                        acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
+                    }
+                    sumf[b] += acc
+                }
+            }
+            sb++
+        }
+        for [unroll_full] (b in range(4)) {
+            var s = sumf[b]
+            s += simd_shuffle_down(s, 4u)
+            s += simd_shuffle_down(s, 2u)
+            s += simd_shuffle_down(s, 1u)
+            if (tx == 0u && row < ka.ddim && colbase + uint(b) < ka.nr) {
+                y[(colbase + uint(b)) * ka.ys + row] = s
+            }
+        }
+    }
+}
+
+class MetalKqMvLabB2K6H {
+    @ssbo @binding = 0 kdh : array<float16>
+    @ssbo @binding = 1 kscb : array<uint8>
+    @ssbo @binding = 2 kqu : array<uint>
+    @ssbo @binding = 3 x : array<float4>
+    @ssbo @binding = 4 y : array<float>
+    @uniform @binding = 5 ka : KqMvArgs
+
+    [metal_kernel(name="lab_kq_mvb2h_k6_msl")]
+    def lab_kq_mvb2h_k6 {
+        let lane = gl_SubgroupInvocationID
+        let tx = lane % 8u
+        let ty = lane / 8u
+        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
+        let colbase = gl_WorkGroupID.y * 2u
+        let nb = ka.ndim / 256u
+        let s = tx / 2u
+        let o4 = (tx % 2u) * 4u
+        let qoff = (s % 2u) * 8u + o4
+        let shr = s < 2u ? 0u : 4u
+        let hsh = 2u * s
+        let nb4 = ka.ndim / 4u
+        let colrow = colbase * nb4
+        var sumf : float[2]
+        var sb = 0u
+        while (sb < nb) {
+            let blk = row * nb + sb
+            let dd = float(kdh[blk])
+            for [unroll_full] (ch in range(2)) {
+                let ip = uint(ch)
+                let qb = blk * 48u + ip * 16u + qoff
+                let hb = blk * 48u + 32u + ip * 8u + o4
+                let g = ip * 8u + s * 2u + (tx % 2u)
+                let sc = float((int(kscb[blk * 16u + g]) ^ 128) - 128)
+                let dl = dd * sc
+                let ml = dl * 32.0
+                var w : float[16]
+                for [unroll_full] (u in range(4)) {
+                    let qu = kqu[qb + uint(u)]
+                    let hu = kqu[hb + uint(u)]
+                    let qv = ((qu >> shr) & 0x0F0F0F0F) | (((hu >> hsh) & 0x03030303) << 4u)
+                    for [unroll_full] (e in range(4)) {
+                        w[4 * u + e] = float((qv >> (8u * uint(e))) & 255u) * dl - ml
+                    }
+                }
+                let cx4 = sb * 64u + ip * 32u + s * 8u + o4
+                let cb4 = colrow + cx4
+                for [unroll_full] (b in range(2)) {
+                    let xb4 = cb4 + uint(b) * nb4
+                    var acc = 0.0
+                    for [unroll_full] (u in range(4)) {
+                        let v = x[xb4 + uint(u)]
+                        acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
+                    }
+                    sumf[b] += acc
+                }
+            }
+            sb++
+        }
+        for [unroll_full] (b in range(2)) {
+            var sm = sumf[b]
+            sm += simd_shuffle_down(sm, 4u)
+            sm += simd_shuffle_down(sm, 2u)
+            sm += simd_shuffle_down(sm, 1u)
+            if (tx == 0u && row < ka.ddim && colbase + uint(b) < ka.nr) {
+                y[(colbase + uint(b)) * ka.ys + row] = sm
+            }
+        }
+    }
+}
+
+class MetalKqMvLabB4K6H {
+    @ssbo @binding = 0 kdh : array<float16>
+    @ssbo @binding = 1 kscb : array<uint8>
+    @ssbo @binding = 2 kqu : array<uint>
+    @ssbo @binding = 3 x : array<float4>
+    @ssbo @binding = 4 y : array<float>
+    @uniform @binding = 5 ka : KqMvArgs
+
+    [metal_kernel(name="lab_kq_mvb4h_k6_msl")]
+    def lab_kq_mvb4h_k6 {
+        let lane = gl_SubgroupInvocationID
+        let tx = lane % 8u
+        let ty = lane / 8u
+        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
+        let colbase = gl_WorkGroupID.y * 4u
+        let nb = ka.ndim / 256u
+        let s = tx / 2u
+        let o4 = (tx % 2u) * 4u
+        let qoff = (s % 2u) * 8u + o4
+        let shr = s < 2u ? 0u : 4u
+        let hsh = 2u * s
+        let nb4 = ka.ndim / 4u
+        let colrow = colbase * nb4
+        var sumf : float[4]
+        var sb = 0u
+        while (sb < nb) {
+            let blk = row * nb + sb
+            let dd = float(kdh[blk])
+            for [unroll_full] (ch in range(2)) {
+                let ip = uint(ch)
+                let qb = blk * 48u + ip * 16u + qoff
+                let hb = blk * 48u + 32u + ip * 8u + o4
+                let g = ip * 8u + s * 2u + (tx % 2u)
+                let sc = float((int(kscb[blk * 16u + g]) ^ 128) - 128)
+                let dl = dd * sc
+                let ml = dl * 32.0
+                var w : float[16]
+                for [unroll_full] (u in range(4)) {
+                    let qu = kqu[qb + uint(u)]
+                    let hu = kqu[hb + uint(u)]
+                    let qv = ((qu >> shr) & 0x0F0F0F0F) | (((hu >> hsh) & 0x03030303) << 4u)
+                    for [unroll_full] (e in range(4)) {
+                        w[4 * u + e] = float((qv >> (8u * uint(e))) & 255u) * dl - ml
+                    }
+                }
+                let cx4 = sb * 64u + ip * 32u + s * 8u + o4
+                let cb4 = colrow + cx4
+                for [unroll_full] (b in range(4)) {
+                    let xb4 = cb4 + uint(b) * nb4
+                    var acc = 0.0
+                    for [unroll_full] (u in range(4)) {
+                        let v = x[xb4 + uint(u)]
+                        acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
+                    }
+                    sumf[b] += acc
+                }
+            }
+            sb++
+        }
+        for [unroll_full] (b in range(4)) {
+            var sm = sumf[b]
+            sm += simd_shuffle_down(sm, 4u)
+            sm += simd_shuffle_down(sm, 2u)
+            sm += simd_shuffle_down(sm, 1u)
+            if (tx == 0u && row < ka.ddim && colbase + uint(b) < ka.nr) {
+                y[(colbase + uint(b)) * ka.ys + row] = sm
+            }
+        }
+    }
+}
+
+class MetalKqMvLabB2K4S {
+    @ssbo @binding = 0 ksh : array<float16>
+    @ssbo @binding = 1 ks4 : array<uint4>
+    @ssbo @binding = 2 kqu : array<uint>
+    @ssbo @binding = 3 x : array<float4>
+    @ssbo @binding = 4 y : array<float>
+    @uniform @binding = 5 ka : KqMvArgs
+
+    [metal_kernel(name="lab_kq_mvb2s_k4_msl")]
+    def lab_kq_mvb2s_k4 {
+        let lane = gl_SubgroupInvocationID
+        let tx = lane % 8u
+        let ty = lane / 8u
+        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
+        let colbase = gl_WorkGroupID.y * 2u   // nolint:LINT002 deliberately DEAD — the static_if stamp's residue
+        let nb = ka.ndim / 256u
+        let q4i = tx / 4u
+        let hp = (tx % 4u) / 2u
+        let lo = (tx % 2u) * 4u
+        let jl = 2u * q4i + hp
+        let nsh = (tx % 4u) < 2u ? 0u : 4u
+        let nb4 = ka.ndim / 4u
+        var sumf : float[2]
+        var sb = 0u
+        while (sb < nb) {
+            let blk = row * nb + sb
+            let sv = ks4[blk]
+            let dd = float(ksh[blk * 8u])
+            let dm = float(ksh[blk * 8u + 1u])
+            for [unroll_full] (ch in range(2)) {
+                let sy = (sv.y >> (8u * jl)) & 255u
+                let szv = (sv.z >> (8u * jl)) & 255u
+                let sw = (sv.w >> (8u * jl)) & 255u
+                let sc = ch == 0 ? (sy & 63u) : ((sw & 0x0Fu) | ((sy >> 6u) << 4u))
+                let mn = ch == 0 ? (szv & 63u) : ((sw >> 4u) | ((szv >> 6u) << 4u))
+                let dl = dd * float(sc)
+                let ml = dm * float(mn)
+                let qb = blk * 32u + (q4i + uint(ch) * 2u) * 8u + lo
+                var w : float[16]
+                for [unroll_full] (u in range(4)) {
+                    let qv = kqu[qb + uint(u)]
+                    for [unroll_full] (e in range(4)) {
+                        let byv = (qv >> (8u * uint(e))) & 255u
+                        w[4 * u + e] = float((byv >> nsh) & 0x0Fu) * dl - ml
+                    }
+                }
+                let cx4 = sb * 64u + (q4i + uint(ch) * 2u) * 16u + ((tx % 4u) < 2u ? 0u : 8u) + lo
+                for [unroll_full] (b in range(2)) {
+                    let xb4 = uint(b) * nb4 + cx4
+                    var acc = 0.0
+                    for [unroll_full] (u in range(4)) {
+                        let v = x[xb4 + uint(u)]
+                        acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
+                    }
+                    sumf[b] += acc
+                }
+            }
+            sb++
+        }
+        for [unroll_full] (b in range(2)) {
+            var s = sumf[b]
+            s += simd_shuffle_down(s, 4u)
+            s += simd_shuffle_down(s, 2u)
+            s += simd_shuffle_down(s, 1u)
+            if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
+                y[uint(b) * ka.ys + row] = s
+            }
+        }
+    }
+}
+
+class MetalKqMvLabB2K6S {
+    @ssbo @binding = 0 kdh : array<float16>
+    @ssbo @binding = 1 kscb : array<uint8>
+    @ssbo @binding = 2 kqu : array<uint>
+    @ssbo @binding = 3 x : array<float4>
+    @ssbo @binding = 4 y : array<float>
+    @uniform @binding = 5 ka : KqMvArgs
+
+    [metal_kernel(name="lab_kq_mvb2s_k6_msl")]
+    def lab_kq_mvb2s_k6 {
+        let lane = gl_SubgroupInvocationID
+        let tx = lane % 8u
+        let ty = lane / 8u
+        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
+        let colbase = gl_WorkGroupID.y * 2u   // nolint:LINT002 deliberately DEAD — the static_if stamp's residue
+        let nb = ka.ndim / 256u
+        let s = tx / 2u
+        let o4 = (tx % 2u) * 4u
+        let qoff = (s % 2u) * 8u + o4
+        let shr = s < 2u ? 0u : 4u
+        let hsh = 2u * s
+        let nb4 = ka.ndim / 4u
+        var sumf : float[2]
+        var sb = 0u
+        while (sb < nb) {
+            let blk = row * nb + sb
+            let dd = float(kdh[blk])
+            for [unroll_full] (ch in range(2)) {
+                let ip = uint(ch)
+                let qb = blk * 48u + ip * 16u + qoff
+                let hb = blk * 48u + 32u + ip * 8u + o4
+                let g = ip * 8u + s * 2u + (tx % 2u)
+                let sc = float((int(kscb[blk * 16u + g]) ^ 128) - 128)
+                let dl = dd * sc
+                let ml = dl * 32.0
+                var w : float[16]
+                for [unroll_full] (u in range(4)) {
+                    let qu = kqu[qb + uint(u)]
+                    let hu = kqu[hb + uint(u)]
+                    let qv = ((qu >> shr) & 0x0F0F0F0F) | (((hu >> hsh) & 0x03030303) << 4u)
+                    for [unroll_full] (e in range(4)) {
+                        w[4 * u + e] = float((qv >> (8u * uint(e))) & 255u) * dl - ml
+                    }
+                }
+                let cx4 = sb * 64u + ip * 32u + s * 8u + o4
+                for [unroll_full] (b in range(2)) {
+                    let xb4 = uint(b) * nb4 + cx4
+                    var acc = 0.0
+                    for [unroll_full] (u in range(4)) {
+                        let v = x[xb4 + uint(u)]
+                        acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
+                    }
+                    sumf[b] += acc
+                }
+            }
+            sb++
+        }
+        for [unroll_full] (b in range(2)) {
+            var sm = sumf[b]
+            sm += simd_shuffle_down(sm, 4u)
+            sm += simd_shuffle_down(sm, 2u)
+            sm += simd_shuffle_down(sm, 1u)
+            if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
+                y[uint(b) * ka.ys + row] = sm
+            }
+        }
+    }
+}
+
 // ===== driver (Apple-only; every Metal-typed helper is a generic so non-Apple never compiles it) =====
 
 struct private LabVariant {
@@ -3729,6 +4402,7 @@ struct private LabVariant {
     kq : int = 0                            // K-quant plane arm: 4 = k4 (b0/b1 k4s dual view, b2 k4q)
     kq_ggml : bool = false                  // K-quant lcpp wall arm (b0/b1 = ggml interleaved stream)
     kq16 : bool = false                     // kq arm reads the 16B compact scale blocks instead
+    kq_mvb : bool = false                   // production small-batch KqMv contract (KqMvArgs uniform at 5)
     tgsz : int = 128                        // threads per threadgroup (kq arms ride lcpp's 64)
     rtg : int = 4                           // output rows per threadgroup (grid.x = ceil(d/rtg))
 }
@@ -4022,6 +4696,17 @@ def private upload_u32(dev; v : uint) {
     return buf
 }
 
+// KqMvArgs uniform for the kq_mvb arms: ys = ddim (the lab's y layout), nr = the arm's batch width
+def private upload_kqmv_args(dev; n, d, nr : uint) {
+    var buf = metal_new_buffer(dev, 16ul)
+    var p = unsafe(reinterpret<uint?>(metal_buffer_contents(buf)))
+    unsafe(p[0]) = n
+    unsafe(p[1]) = d
+    unsafe(p[2]) = d
+    unsafe(p[3]) = nr
+    return buf
+}
+
 def private download_floats(buf; var dst : array<float>; count : int64) {
     dst |> resize(count)
     unsafe {
@@ -4125,8 +4810,20 @@ let KQA_Q6 = 7
 let KQA_SC6 = 8
 let KQA_D6 = 9
 let KQA_G6 = 10
+let KQA_MVARGS = 11
+let KQA_MVARGS4 = 12
 
 def private make_bufs(v : LabVariant; var wbuf; var sbuf; var xfbuf; var xtbuf; var xqbuf; var xsbuf; var ybuf; var ndimbuf; var ddimbuf; var bbuf; var partbuf; var skbuf; var kqarr) {
+    if (v.kq_mvb) {    // production KqMv contract: plane views 0-2, x, y, KqMvArgs uniform at 5
+        var argsbuf = v.b_list[0] == 4 ? kqarr[KQA_MVARGS4] : kqarr[KQA_MVARGS]
+        if (v.kq == 5) {
+            return <- [kqarr[KQA_C5], kqarr[KQA_C5], kqarr[KQA_Q5], xfbuf, ybuf, argsbuf]
+        }
+        if (v.kq == 6) {
+            return <- [kqarr[KQA_D6], kqarr[KQA_SC6], kqarr[KQA_Q6], xfbuf, ybuf, argsbuf]
+        }
+        return <- [kqarr[KQA_C4], kqarr[KQA_C4], kqarr[KQA_Q4], xfbuf, ybuf, argsbuf]
+    }
     if (v.kq_ggml) {   // interleaved stream bound per view (f16 / uint / byte where the arm needs it)
         if (v.kq == 5) {
             return <- [kqarr[KQA_G5], kqarr[KQA_G5], kqarr[KQA_G5], xfbuf, ybuf, ndimbuf, ddimbuf]
@@ -4246,11 +4943,13 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
         var anyk4 = false
         var anyk5 = false
         var anyk6 = false
+        var anymvb = false
         for (v in variants) {
             let on = want(g_env_bench.lab_variants, v.name)
             anyk4 ||= v.kq == 4 && on
             anyk5 ||= v.kq == 5 && on
             anyk6 ||= v.kq == 6 && on
+            anymvb ||= v.kq_mvb && on
         }
         var k4q_h : array<uint8>
         var k4s_h : array<uint8>
@@ -4300,7 +4999,9 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
         var ksc6buf = anyk6 ? upload_array(dev, k6sc_h, nsball * 16l) : null
         var kd6buf = anyk6 ? upload_array(dev, k6d_h, nsball * 2l) : null
         var kg6buf = anyk6 ? upload_array(dev, k6g_h, nsball * 210l) : null
-        var kqarr <- [kq4buf, ks4buf, kg4buf, kc4buf, kq5buf, kc5buf, kg5buf, kq6buf, ksc6buf, kd6buf, kg6buf]
+        var kqmvargs = anymvb ? upload_kqmv_args(dev, uint(n), uint(d), 2u) : null
+        var kqmvargs4 = anymvb ? upload_kqmv_args(dev, uint(n), uint(d), 4u) : null
+        var kqarr <- [kq4buf, ks4buf, kg4buf, kc4buf, kq5buf, kc5buf, kg5buf, kq6buf, ksc6buf, kd6buf, kg6buf, kqmvargs, kqmvargs4]
         var xfbuf = upload_array(dev, xf, xrows * n * 4l)
         var xtbuf = upload_array(dev, xft, n * bmax * 4l)
         var xqbuf = upload_array(dev, xq, xrows * n)
@@ -4440,6 +5141,10 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
             metal_release(ksc6buf)
             metal_release(kd6buf)
             metal_release(kg6buf)
+        }
+        if (anymvb) {
+            metal_release(kqmvargs)
+            metal_release(kqmvargs4)
         }
         kqarr |> clear()   // borrowed handles — released above
         unsafe {
@@ -4647,7 +5352,35 @@ def bench_metal_gemv_kernels(b : B?) {   // nolint:STYLE038 — flat variant reg
             LabVariant(name = "k4_extx4", src = lab_k4_extx4_msl, entry = lab_k4_extx4_msl_entry,
                        b_list <- [4], kq = 4, kq16 = true, tgsz = 64, rtg = 8, tgmem = lab_k4_extx4_msl_tgmem),
             LabVariant(name = "k4_extx8", src = lab_k4_extx8_msl, entry = lab_k4_extx8_msl_entry,
-                       b_list <- [8], kq = 4, kq16 = true, tgsz = 64, rtg = 8, tgmem = lab_k4_extx8_msl_tgmem)
+                       b_list <- [8], kq = 4, kq16 = true, tgsz = 64, rtg = 8, tgmem = lab_k4_extx8_msl_tgmem),
+            LabVariant(name = "kq_mvb2_k4", src = metal_kq_mvb2_k4_msl, entry = metal_kq_mvb2_k4_msl_entry,
+                       b_list <- [2], kq = 4, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8),
+            LabVariant(name = "kq_mvb2u_k4", src = lab_kq_mvb2u_k4_msl, entry = lab_kq_mvb2u_k4_msl_entry,
+                       b_list <- [2], kq = 4, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8),
+            LabVariant(name = "kq_mvb2_k5", src = metal_kq_mvb2_k5_msl, entry = metal_kq_mvb2_k5_msl_entry,
+                       b_list <- [2], kq = 5, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8),
+            LabVariant(name = "kq_mvb2u_k5", src = lab_kq_mvb2u_k5_msl, entry = lab_kq_mvb2u_k5_msl_entry,
+                       b_list <- [2], kq = 5, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8),
+            LabVariant(name = "kq_mvb2_k6", src = metal_kq_mvb2_k6_msl, entry = metal_kq_mvb2_k6_msl_entry,
+                       b_list <- [2], kq = 6, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8),
+            LabVariant(name = "kq_mvb2u_k6", src = lab_kq_mvb2u_k6_msl, entry = lab_kq_mvb2u_k6_msl_entry,
+                       b_list <- [2], kq = 6, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8),
+            LabVariant(name = "kq_mvb2h_k4", src = lab_kq_mvb2h_k4_msl, entry = lab_kq_mvb2h_k4_msl_entry,
+                       b_list <- [2], kq = 4, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8),
+            LabVariant(name = "kq_mvb4_k4", src = metal_kq_mvb4_k4_msl, entry = metal_kq_mvb4_k4_msl_entry,
+                       b_list <- [4], kq = 4, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8),
+            LabVariant(name = "kq_mvb4h_k4", src = lab_kq_mvb4h_k4_msl, entry = lab_kq_mvb4h_k4_msl_entry,
+                       b_list <- [4], kq = 4, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8),
+            LabVariant(name = "kq_mvb2h_k6", src = lab_kq_mvb2h_k6_msl, entry = lab_kq_mvb2h_k6_msl_entry,
+                       b_list <- [2], kq = 6, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8),
+            LabVariant(name = "kq_mvb4_k6", src = metal_kq_mvb4_k6_msl, entry = metal_kq_mvb4_k6_msl_entry,
+                       b_list <- [4], kq = 6, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8),
+            LabVariant(name = "kq_mvb4h_k6", src = lab_kq_mvb4h_k6_msl, entry = lab_kq_mvb4h_k6_msl_entry,
+                       b_list <- [4], kq = 6, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8),
+            LabVariant(name = "kq_mvb2s_k4", src = lab_kq_mvb2s_k4_msl, entry = lab_kq_mvb2s_k4_msl_entry,
+                       b_list <- [2], kq = 4, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8),
+            LabVariant(name = "kq_mvb2s_k6", src = lab_kq_mvb2s_k6_msl, entry = lab_kq_mvb2s_k6_msl_entry,
+                       b_list <- [2], kq = 6, kq16 = true, kq_mvb = true, tgsz = 64, rtg = 8)
         ]
         run_lab(b, variants)
         delete variants
