@@ -92,7 +92,7 @@ def test_get_route(t : T?) {
     with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("GET route returns text") @(t : T?) {
             GET("{base_url}/hello") <| $(resp) {
-                t |> equal(string(resp.body), "Hello, world!")
+                t |> equal(resp.body, "Hello, world!")
                 t |> equal(int(resp.status_code), int(http_status.OK))
             }
         }
@@ -104,7 +104,7 @@ def test_post_route(t : T?) {
     with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("POST route echoes body") @(t : T?) {
             POST("{base_url}/echo", "hello server") <| $(resp) {
-                t |> equal(string(resp.body), "hello server")
+                t |> equal(resp.body, "hello server")
             }
         }
     }
@@ -115,7 +115,7 @@ def test_put_route(t : T?) {
     with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("PUT route receives body") @(t : T?) {
             PUT("{base_url}/resource", "updated") <| $(resp) {
-                t |> equal(string(resp.body), "PUT:updated")
+                t |> equal(resp.body, "PUT:updated")
             }
         }
     }
@@ -126,7 +126,7 @@ def test_patch_route(t : T?) {
     with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("PATCH route receives body") @(t : T?) {
             PATCH("{base_url}/resource", "partial") <| $(resp) {
-                t |> equal(string(resp.body), "PATCH:partial")
+                t |> equal(resp.body, "PATCH:partial")
             }
         }
     }
@@ -140,7 +140,7 @@ def test_delete_route(t : T?) {
                 req.method = http_method.DELETE
                 req.url := "{base_url}/resource"
                 request(req) <| $(resp) {
-                    t |> equal(string(resp.body), "deleted")
+                    t |> equal(resp.body, "deleted")
                 }
             }
         }
@@ -157,7 +157,7 @@ def test_head_route(t : T?) {
                 request(req) <| $(resp) {
                     t |> equal(int(resp.status_code), int(http_status.OK))
                     let exists = get_header(resp, "X-Resource-Exists")
-                    t |> equal(string(exists), "true")
+                    t |> equal(exists, "true")
                 }
             }
         }
@@ -185,12 +185,12 @@ def test_path_params(t : T?) {
     with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) $(base_url) {
         t |> run("single path param") @(t : T?) {
             GET("{base_url}/users/42") <| $(resp) {
-                t |> equal(string(resp.body), "user:42")
+                t |> equal(resp.body, "user:42")
             }
         }
         t |> run("multiple path params") @(t : T?) {
             GET("{base_url}/users/7/posts/99") <| $(resp) {
-                t |> equal(string(resp.body), "user=7,post=99")
+                t |> equal(resp.body, "user=7,post=99")
             }
         }
     }
@@ -215,9 +215,9 @@ def test_response_headers_server(t : T?) {
         t |> run("set_header on response") @(t : T?) {
             GET("{base_url}/headers") <| $(resp) {
                 let custom = get_header(resp, "X-Custom")
-                t |> equal(string(custom), "test-value")
+                t |> equal(custom, "test-value")
                 let reqid = get_header(resp, "X-Request-Id")
-                t |> equal(string(reqid), "12345")
+                t |> equal(reqid, "12345")
             }
         }
     }
@@ -229,7 +229,7 @@ def test_json_response_server(t : T?) {
         t |> run("JSON response with correct content-type") @(t : T?) {
             GET("{base_url}/api/status") <| $(resp) {
                 let ct = get_header(resp, "Content-Type")
-                t |> success(find(string(ct), "application/json") >= 0, "Content-Type is JSON")
+                t |> success(find(ct, "application/json") >= 0, "Content-Type is JSON")
                 // Parse the body
                 var err : string
                 var parsed = read_json(string(resp.body), err)
@@ -275,17 +275,17 @@ def test_wildcard_priority(t : T?) {
     with_test_server(type<WildcardPriorityServer>, PORT_WILDCARD_PRIORITY) $(base_url) {
         t |> run("literal GET /status outranks ANY *") @(t : T?) {
             GET("{base_url}/status") <| $(resp) {
-                t |> equal(string(resp.body), "specific")
+                t |> equal(resp.body, "specific")
             }
         }
         t |> run("ANY * catches unknown GET paths") @(t : T?) {
             GET("{base_url}/unknown") <| $(resp) {
-                t |> equal(string(resp.body), "catchall")
+                t |> equal(resp.body, "catchall")
             }
         }
         t |> run("ANY * catches unknown POST paths") @(t : T?) {
             POST("{base_url}/unknown", "") <| $(resp) {
-                t |> equal(string(resp.body), "catchall")
+                t |> equal(resp.body, "catchall")
             }
         }
     }

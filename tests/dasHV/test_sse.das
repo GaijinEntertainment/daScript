@@ -55,7 +55,7 @@ def test_sse_basic(t : T?) {
             GET("{base_url}/events") <| $(var resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
                 let ct = get_header(resp, "Content-Type")
-                t |> success(find(string(ct), "text/event-stream") >= 0, "Content-Type is event-stream")
+                t |> success(find(ct, "text/event-stream") >= 0, "Content-Type is event-stream")
             }
         }
         t |> run("SSE response body contains events") @(t : T?) {

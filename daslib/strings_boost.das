@@ -24,6 +24,7 @@ def wide(text : string implicit; width : int) {
 }
 
 
+[temp_string_result]
 def join(it; separator : string implicit) {
     //! joins iterable `it` elements into a single string with `separator` between elements
     static_if (!typeinfo is_iterable(it)) {
@@ -49,6 +50,7 @@ def join(it; separator : string implicit) {
     }
 }
 
+[temp_string_result]
 def join(var it : iterator<auto(TT)>; separator : string implicit) {
     //! joins iterable `it` elements into a single string with `separator` between elements
     let st = build_string() $(var writer) {
@@ -69,6 +71,7 @@ def join(var it : iterator<auto(TT)>; separator : string implicit) {
     return st
 }
 
+[temp_string_result]
 def private join_implement(iterable; separator : string; blk) : string {
     //! joins iterable `it` elements into a single string with `separator` between elements
     let st = build_string() $(var writer) {

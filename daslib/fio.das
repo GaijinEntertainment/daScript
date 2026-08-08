@@ -363,6 +363,7 @@ def match_glob(pattern : string; path : string) : bool {
 }
 
 //! Convert a path to use forward slashes regardless of host OS.
+[temp_string_result]
 def to_generic_path(s : string) : string {
     return replace(s, "\\", "/")
 }

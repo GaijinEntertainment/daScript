@@ -37,8 +37,8 @@ class CookieTestServer : HvWebServer {
         GET("/read-cookies") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let session = get_cookie(req, "session")
             let theme = get_cookie(req, "theme")
-            var s = !empty(session) ? string(session) : "missing"
-            var th = !empty(theme) ? string(theme) : "missing"
+            var s = !empty(session) ? session : "missing"
+            var th = !empty(theme) ? theme : "missing"
             return resp |> TEXT_PLAIN("session={s},theme={th}")
         }
 
@@ -123,7 +123,7 @@ def test_add_cookie_request(t : T?) {
                 add_cookie(req, "session", "xyz789")
                 add_cookie(req, "theme", "light")
                 request(req) <| $(resp) {
-                    t |> equal(string(resp.body), "session=xyz789,theme=light")
+                    t |> equal(resp.body, "session=xyz789,theme=light")
                 }
             }
         }
@@ -138,7 +138,7 @@ def test_get_cookie_missing(t : T?) {
                 req.method = http_method.GET
                 req.url := "{base_url}/read-missing-cookie"
                 request(req) <| $(resp) {
-                    t |> equal(string(resp.body), "empty")
+                    t |> equal(resp.body, "empty")
                 }
             }
         }
@@ -174,7 +174,7 @@ def test_each_cookie_empty(t : T?) {
                 req.method = http_method.GET
                 req.url := "{base_url}/list-cookies"
                 request(req) <| $(resp) {
-                    t |> equal(string(resp.body), "")
+                    t |> equal(resp.body, "")
                 }
             }
         }

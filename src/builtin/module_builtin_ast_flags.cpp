@@ -213,7 +213,7 @@ namespace das {
         auto ft = new TypeDecl(Type::tBitfield);
         ft->alias = "MoreFunctionFlags2";
         ft->argNames = {
-            "localFunction", "tempStringResult"
+            "localFunction", "tempStringResult", "mayQueueTempString"
         };
         return ft;
     }

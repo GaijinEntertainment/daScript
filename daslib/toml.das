@@ -1638,6 +1638,7 @@ def private write_toml_table(var writer : StringBuilderWriter; tab : table<strin
     return true
 }
 
+[temp_string_result]
 def public write_toml(root : JsonValue?; var error : string&) : string {
     //! Serializes a ``read_toml``-shaped tree back to TOML 1.0 text: keys sorted per table,
     //! sub-tables as ``[a.b]`` sections, all-table arrays as ``[[a.b]]``. Date-times round-trip

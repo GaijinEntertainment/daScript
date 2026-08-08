@@ -1690,7 +1690,7 @@ def regex_foreach(var regex : Regex; str : string; blk : block<(at : range) : bo
     }
 }
 
-[unsafe_deref]
+[unsafe_deref, temp_string_result]
 def regex_replace(var regex : Regex; str : string; blk : block<(at : string) : string>) {
     //! Iterates through all matches for the given regular expression in `str`.
     if (empty(str)) return ""
@@ -1815,7 +1815,7 @@ def private expand_replacement(regex : Regex; str : string; replacement : string
     }
 }
 
-[unsafe_deref]
+[unsafe_deref, temp_string_result]
 def regex_replace(var regex : Regex; str : string; replacement : string) : string {
     //! Replaces all matches of the regular expression in `str` with `replacement`.
     if (empty(str)) return ""
@@ -1931,6 +1931,7 @@ def regex_match_all(var regex : Regex; str : string) : array<range> {
     return <- result
 }
 
+[temp_string_result]
 def regex_group_by_name(regex : Regex; name : string; str : string) : string {
     //! Returns the matched string for the given named group.
     //! Returns empty string if the group name is not found.

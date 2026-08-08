@@ -555,6 +555,25 @@ namespace das {
                 fnc->visit(cfr);
                 if ( cfr.allFresh ) fnc->tempStringResult = true;
             }
+            // may-queue-temp-string: executing this body may hit a queue site - a builder that
+            // marking may make temp, a call that wrapping may make a site, or (via invoke) code
+            // we cannot see. A caller holding a PARKED temp across such a call gets it flushed
+            // while live - the interprocedural half of the one-site rule. Bottom-up like
+            // captureString; same cycle exposure (the `asked` early-return under-reports)
+            if ( !fnc->mayQueueTempString ) {
+                bool mayQueue = fnc->hasStringBuilder || (flags & uint32_t(SideEffects::invoke)) != 0;
+                if ( !mayQueue ) {
+                    for ( auto & depF : fnc->useFunctions ) {
+                        if ( depF == fnc ) continue;
+                        if ( depF->mayQueueTempString || depF->tempStringResult
+                            || (depF->builtIn && depF->invoke) ) {
+                            mayQueue = true;
+                            break;
+                        }
+                    }
+                }
+                if ( mayQueue ) fnc->mayQueueTempString = true;
+            }
             fnc->sideEffectFlags |= flags;
             return flags;
         }

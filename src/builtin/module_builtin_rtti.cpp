@@ -1935,17 +1935,17 @@ namespace das {
                     ->args({"from","to"});
             addExtern<DAS_BIND_FUN(rtti_get_das_type_name)>(*this, lib,  "get_das_type_name",
                 SideEffects::none, "rtti_get_das_type_name")
-                    ->args({"type","context","at"});
+                    ->args({"type","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(rtti_add_annotation_argument)>(*this, lib,  "add_annotation_argument",
                 SideEffects::none, "rtti_add_annotation_argument")
                     ->args({"annotation","name"});
             // data printer
             addExtern<DAS_BIND_FUN(builtin_print_data)>(*this, lib, "sprint_data",
                 SideEffects::none, "builtin_print_data")
-                    ->args({"data","type","flags","context","at"});
+                    ->args({"data","type","flags","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_print_data_v)>(*this, lib, "sprint_data",
                 SideEffects::none, "builtin_print_data_v")
-                    ->args({"data","type","flags","context","at"});
+                    ->args({"data","type","flags","context","at"})->setTempStringResult();
             // sprint_json_at / sscan_json_at — addr+TypeInfo entry points.
             // Unlike sprint_json / sscan_json (which use any+SimNode_CallBase::types[]
             // and require a typed value expression at the call site), these take an
@@ -1959,21 +1959,21 @@ namespace das {
             // the read-only semantics are correct in code but invisible to the typer.
             addExtern<DAS_BIND_FUN(builtin_json_sprint_at)>(*this, lib, "sprint_json_at",
                 SideEffects::modifyExternal, "builtin_json_sprint_at")
-                    ->args({"addr","type","humanReadable","context","at"});
+                    ->args({"addr","type","humanReadable","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_json_sscan_at)>(*this, lib, "sscan_json_at",
                 SideEffects::modifyArgumentAndExternal, "builtin_json_sscan_at")
                     ->args({"json","addr","type","context","at"});
             // debug typeinfo
             addExtern<DAS_BIND_FUN(builtin_debug_type)>(*this, lib, "describe",
                 SideEffects::none, "builtin_debug_type")
-                    ->args({"type","context","at"});
+                    ->args({"type","context","at"})->setTempStringResult();
             auto dl = addExtern<DAS_BIND_FUN(builtin_debug_line)>(*this, lib, "describe",
                 SideEffects::none, "builtin_debug_line")
-                    ->args({"lineinfo","fully","context","at"});
+                    ->args({"lineinfo","fully","context","at"})->setTempStringResult();
             dl->arguments[1]->init = new ExprConstBool(false);
             addExtern<DAS_BIND_FUN(builtin_get_typeinfo_mangled_name)>(*this, lib, "get_mangled_name",
                 SideEffects::none, "builtin_get_typeinfo_mangled_name")
-                    ->args({"type","context","at"});
+                    ->args({"type","context","at"})->setTempStringResult();
             // function mnh lookup
             addExtern<DAS_BIND_FUN(builtin_get_function_info_by_mnh)>(*this, lib, "get_function_info",
                 SideEffects::none, "builtin_get_function_info_by_mnh")
@@ -2039,7 +2039,7 @@ namespace das {
                     ->args({"info","context","at"});
             addExtern<DAS_BIND_FUN(rtti_get_source_line)>(*this, lib, "rtti_get_source_line",
                 SideEffects::accessExternal, "rtti_get_source_line")
-                    ->args({"info","line","context","at"});
+                    ->args({"info","line","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(rtti_is_nolint_suppressed)>(*this, lib, "rtti_is_nolint_suppressed",
                 SideEffects::accessExternal, "rtti_is_nolint_suppressed")
                     ->args({"info","line","code","context","at"});

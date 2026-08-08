@@ -134,7 +134,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 var js = read_json(string(resp.body), err)
                 t |> success(js != null, "models JSON parses")
                 if (js != null) {
-                    t |> equal(string(js?["object"] ?? ""), "list")
+                    t |> equal(js?["object"] ?? "", "list")
                     unsafe {
                         delete js
                     }
@@ -143,7 +143,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
             // GET / — the control page ships beside the server sources and serves as text/html
             GET("{base_url}/") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
-                t |> success(find(string(get_header(resp, "Content-Type")), "text/html") >= 0, "control page is text/html")
+                t |> success(find(get_header(resp, "Content-Type"), "text/html") >= 0, "control page is text/html")
                 t |> success(find(string(resp.body), "dasllama-server") >= 0, "control page body served")
             }
             // /v1/stats — identity fields the control page polls
@@ -153,7 +153,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 var js = read_json(string(resp.body), err)
                 t |> success(js != null, "stats JSON parses")
                 if (js != null) {
-                    t |> equal(string(js?["model"] ?? ""), "test-llm")
+                    t |> equal(js?["model"] ?? "", "test-llm")
                     t |> success((js?["ctx"] ?? 0l) > 0l, "stats reports ctx")
                     t |> success(!(js?["draining"] ?? true), "not draining while serving")
                     t |> success((js?["max_streams"] ?? 0l) > 0l, "stats reports max_streams")
@@ -170,11 +170,11 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 var js = read_json(string(resp.body), err)
                 t |> success(js != null, "images JSON parses")
                 if (js != null) {
-                    t |> equal(string(js?["baking"] ?? "?"), "")
+                    t |> equal(js?["baking"] ?? "?", "")
                     let ms = js?["models"]
                     t |> success(ms != null && ms is _array && length(ms as _array) == 1, "one slot listed")
                     if (ms != null && ms is _array && length(ms as _array) == 1) {
-                        t |> equal(string((ms as _array)[0]?["model"] ?? ""), "test-llm")
+                        t |> equal((ms as _array)[0]?["model"] ?? "", "test-llm")
                     }
                     unsafe {
                         delete js
@@ -186,7 +186,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 t |> equal(int(resp.status_code), int(http_status.OK))
                 var err : string
                 var js = read_json(string(resp.body), err)
-                t |> success(js != null && string(js?["state"] ?? "") == "idle", "bake starts idle")
+                t |> success(js != null && (js?["state"] ?? "") == "idle", "bake starts idle")
                 unsafe {
                     delete js
                 }
@@ -202,7 +202,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 var js = read_json(string(resp.body), err)
                 t |> success(js != null, "embeddings JSON parses")
                 if (js != null) {
-                    t |> equal(string(js?["object"] ?? ""), "list")
+                    t |> equal(js?["object"] ?? "", "list")
                     let r = from_JV(js, type<EmbResp>)
                     t |> success(length(r.data) == 1, "one embedding returned")
                     if (length(r.data) == 1) {
@@ -242,7 +242,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 var js = read_json(string(resp.body), err)
                 t |> success(js != null, "chat JSON parses")
                 if (js != null) {
-                    t |> equal(string(js?["object"] ?? ""), "chat.completion")
+                    t |> equal(js?["object"] ?? "", "chat.completion")
                     unsafe {
                         delete js
                     }
@@ -325,7 +325,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 t |> success(js != null, "config JSON parses")
                 if (js != null) {
                     t |> equal(js?["surface"]?["config"]?["port"] ?? 0l, int64(TEST_PORT))
-                    t |> equal(string(js?["surface"]?["sources"]?["port"] ?? ""), "cli")
+                    t |> equal(js?["surface"]?["sources"]?["port"] ?? "", "cli")
                     t |> success(js?["status"]?["gpu"] != null, "gpu status object present")
                     t |> success(find(string(resp.body), "model_files") >= 0, "model files enumerated")
                     unsafe {
@@ -347,7 +347,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 if (troot != null) {
                     t |> success(troot?["authoritative"] ?? false, "saved config is authoritative")
                     t |> equal(troot?["port"] ?? 0l, 8123l)
-                    t |> equal(string(troot?["model"] ?? ""), "m.gguf")
+                    t |> equal(troot?["model"] ?? "", "m.gguf")
                     t |> success(troot?["mtp"] ?? false, "bool key round-trips")
                     unsafe {
                         delete troot
@@ -374,9 +374,9 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                     var saw_tail = false
                     if (js?["streams"] != null && ((js?["streams"]).value is _array)) {
                         for (e in ((js?["streams"]).value as _array)) {
-                            if (string(e?["state"] ?? "") == "finished") {
+                            if ((e?["state"] ?? "") == "finished") {
                                 saw_finished = true
-                                saw_tail = saw_tail || ((e?["n_gen"] ?? 0l) > 0l && !empty(string(e?["gen_tail"] ?? "")))
+                                saw_tail = saw_tail || ((e?["n_gen"] ?? 0l) > 0l && !empty(e?["gen_tail"] ?? ""))
                             }
                         }
                     }
@@ -389,7 +389,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                         for (e in ((js?["cache"]).value as _array)) {
                             cache_rows ++
                             cache_hit = cache_hit || (e?["hits"] ?? 0l) > 0l
-                            cache_preview = cache_preview || !empty(string(e?["preview"] ?? ""))
+                            cache_preview = cache_preview || !empty(e?["preview"] ?? "")
                         }
                     }
                     t |> success(cache_rows > 0l, "prefix-cache chains surfaced")
@@ -411,7 +411,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                     t |> success((js?["weights_bytes"] ?? 0l) > 100000000l, "weights bytes reported")
                     t |> success((js?["kv_bytes"] ?? 0l) > 0l, "kv pool bytes reported")
                     t |> success((js?["ttft_avg_ms"] ?? 0.0lf) > 0.0lf, "ttft aggregate reported")
-                    t |> success(!empty(string(js?["hardware"] ?? "")), "hardware line composed")
+                    t |> success(!empty(js?["hardware"] ?? ""), "hardware line composed")
                     t |> equal(js?["asr_done_jobs"] ?? -1l, 0l)
                     unsafe {
                         delete js
@@ -479,7 +479,7 @@ def test_openai_server_metal_mode(t : T?) {
                 var js = read_json(string(resp.body), err)
                 t |> success(js != null, "chat JSON parses under metal mode")
                 if (js != null) {
-                    t |> success(!empty(string(js?["choices"]?[0]?["message"]?["content"] ?? "")),
+                    t |> success(!empty(js?["choices"]?[0]?["message"]?["content"] ?? ""),
                         "chat completion returns content under metal mode")
                     unsafe {
                         delete js
@@ -669,7 +669,7 @@ def test_openai_server_multimodel(t : T?) {   // nolint:STYLE038 — one live tw
                 var js = read_json(string(resp.body), err)
                 t |> success(js != null, "routed chat JSON parses")
                 if (js != null) {
-                    t |> equal(string(js?["model"] ?? ""), "smol")
+                    t |> equal(js?["model"] ?? "", "smol")
                     unsafe {
                         delete js
                     }
@@ -682,7 +682,7 @@ def test_openai_server_multimodel(t : T?) {   // nolint:STYLE038 — one live tw
                 var err : string
                 var js = read_json(string(resp.body), err)
                 if (js != null) {
-                    t |> equal(string(js?["model"] ?? ""), "tiny")
+                    t |> equal(js?["model"] ?? "", "tiny")
                     unsafe {
                         delete js
                     }
@@ -705,7 +705,7 @@ def test_openai_server_multimodel(t : T?) {   // nolint:STYLE038 — one live tw
                 var js = read_json(string(resp.body), err)
                 t |> success(js != null, "post-activate stats JSON parses")
                 if (js != null) {
-                    t |> equal(string(js?["active_model"] ?? ""), "smol")
+                    t |> equal(js?["active_model"] ?? "", "smol")
                     unsafe {
                         delete js
                     }
@@ -745,13 +745,13 @@ def test_openai_server_multimodel(t : T?) {   // nolint:STYLE038 — one live tw
                     if (mv != null && mv.value is _array) {
                         t |> equal(length(mv.value as _array), 2)
                         for (e in mv.value as _array) {
-                            let nm = string(e?["name"] ?? "")
+                            let nm = e?["name"] ?? ""
                             if (nm == "tiny") {
                                 t |> success(e?["is_default"] ?? false, "tiny is the default slot")
                                 t |> success((e?["cached_tokens"] ?? 0l) > 0l, "tiny's prefix cache hit across the smol interleave")
                             } elif (nm == "smol") {
-                                t |> equal(string(e?["backend"] ?? ""), "cpu")
-                                t |> equal(string(e?["backend_effective"] ?? ""), "cpu")
+                                t |> equal(e?["backend"] ?? "", "cpu")
+                                t |> equal(e?["backend_effective"] ?? "", "cpu")
                                 t |> equal(e?["cached_tokens"] ?? -1l, 0l)
                                 t |> equal(e?["holds_gpu"] ?? true, false)
                             }
@@ -783,8 +783,8 @@ def test_openai_server_multimodel(t : T?) {   // nolint:STYLE038 — one live tw
                     t |> success(mv != null && mv.value is _array, "[[models]] survives the TOML round-trip")
                     if (mv != null && mv.value is _array) {
                         t |> equal(length(mv.value as _array), 2)
-                        t |> equal(string((mv.value as _array)[0]?["name"] ?? ""), "a")
-                        t |> equal(string((mv.value as _array)[0]?["backend"] ?? ""), "cpu")
+                        t |> equal((mv.value as _array)[0]?["name"] ?? "", "a")
+                        t |> equal((mv.value as _array)[0]?["backend"] ?? "", "cpu")
                     }
                     unsafe {
                         delete troot

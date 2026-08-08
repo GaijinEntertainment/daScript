@@ -1563,18 +1563,18 @@ public:
         // Transport-level peer address (unforgeable, unlike any header)
         addExtern<DAS_BIND_FUN(das_httpr_client_ip)> (*this, lib, "client_ip",
             SideEffects::worstDefault, "das_httpr_client_ip")
-                ->args({"request","context","at"});
+                ->args({"request","context","at"})->setTempStringResult();
         // Response/message header access
         addExtern<DAS_BIND_FUN(das_httpm_get_header)> (*this, lib, "get_header",
             SideEffects::worstDefault, "das_httpm_get_header")
-                ->args({"message","key","context","at"});
+                ->args({"message","key","context","at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(das_httpm_each_header)> (*this, lib, "each_header",
             SideEffects::worstDefault, "das_httpm_each_header")
                 ->args({"message","block","context","at"});
         // Response status message
         addExtern<DAS_BIND_FUN(das_httpr_status_message)> (*this, lib, "status_message",
             SideEffects::worstDefault, "das_httpr_status_message")
-                ->args({"response","context","at"});
+                ->args({"response","context","at"})->setTempStringResult();
         // Request configuration
         addExtern<DAS_BIND_FUN(das_httpr_set_basic_auth)> (*this, lib, "set_basic_auth",
             SideEffects::worstDefault, "das_httpr_set_basic_auth")
@@ -1596,7 +1596,7 @@ public:
                 ->args({"request","key","value"});
         addExtern<DAS_BIND_FUN(das_httpr_get_param)> (*this, lib, "get_param",
             SideEffects::worstDefault, "das_httpr_get_param")
-                ->args({"request","key","context","at"});
+                ->args({"request","key","context","at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(das_httpr_each_param)> (*this, lib, "each_param",
             SideEffects::worstDefault, "das_httpr_each_param")
                 ->args({"request","block","context","at"});
@@ -1612,7 +1612,7 @@ public:
                 ->args({"request","name","value","domain","path","max_age","secure","httponly"});
         addExtern<DAS_BIND_FUN(das_httpreq_get_cookie)> (*this, lib, "get_cookie",
             SideEffects::worstDefault, "das_httpreq_get_cookie")
-                ->args({"request","name","context","at"});
+                ->args({"request","name","context","at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(das_httpreq_each_cookie)> (*this, lib, "each_cookie",
             SideEffects::worstDefault, "das_httpreq_each_cookie")
                 ->args({"request","block","context","at"});
@@ -1625,7 +1625,7 @@ public:
                 ->args({"response","name","value","domain","path","max_age","secure","httponly"});
         addExtern<DAS_BIND_FUN(das_httpresp_get_cookie)> (*this, lib, "get_cookie",
             SideEffects::worstDefault, "das_httpresp_get_cookie")
-                ->args({"response","name","context","at"});
+                ->args({"response","name","context","at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(das_httpresp_each_cookie)> (*this, lib, "each_cookie",
             SideEffects::worstDefault, "das_httpresp_each_cookie")
                 ->args({"response","block","context","at"});
@@ -1639,7 +1639,7 @@ public:
         // Form data - server side (HttpRequest*)
         addExtern<DAS_BIND_FUN(das_httpreq_get_form_data)> (*this, lib, "get_form_data",
             SideEffects::worstDefault, "das_httpreq_get_form_data")
-                ->args({"request","name","context","at"});
+                ->args({"request","name","context","at"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(das_httpreq_save_form_file)> (*this, lib, "save_form_file",
             SideEffects::worstDefault, "das_httpreq_save_form_file")
                 ->args({"request","name","path"});
@@ -1652,7 +1652,7 @@ public:
                 ->args({"request","key","value"});
         addExtern<DAS_BIND_FUN(das_httpreq_get_url_encoded)> (*this, lib, "get_url_encoded",
             SideEffects::worstDefault, "das_httpreq_get_url_encoded")
-                ->args({"request","key","context","at"});
+                ->args({"request","key","context","at"})->setTempStringResult();
         // Streaming request (client-side)
         addExtern<DAS_BIND_FUN(das_req_REQUEST_CB)> (*this, lib, "request_cb",
             SideEffects::worstDefault, "das_req_REQUEST_CB")

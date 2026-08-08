@@ -331,7 +331,7 @@ def test_websockets(t : T?) {
 
             // Then make HTTP requests
             GET("{http_url}/ping") <| $(resp) {
-                t |> equal(string(resp.body), "pong")
+                t |> equal(resp.body, "pong")
             }
 
             GET("{http_url}/ws-clients") <| $(resp) {

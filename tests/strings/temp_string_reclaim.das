@@ -40,7 +40,7 @@ def test_temp_string_reclaim_flatness(t : T?) {
         let after = string_heap_bytes_allocated()
         t |> success(summ > 0)
         // only the final parked temp may remain
-        t |> success(after - before < 256ul, "string heap should stay flat")
+        t |> success(int64(after) - int64(before) < 256l, "string heap should stay flat")
     }
 
     t |> run("flagged-call chain is reclaimed link by link") @@(t) {
@@ -51,7 +51,7 @@ def test_temp_string_reclaim_flatness(t : T?) {
         }
         let after = string_heap_bytes_allocated()
         t |> success(summ > 0)
-        t |> success(after - before < 256ul, "chain temps should all be reclaimed")
+        t |> success(int64(after) - int64(before) < 256l, "chain temps should all be reclaimed")
     }
 }
 
@@ -130,7 +130,7 @@ def test_temp_string_reclaim_propagation(t : T?) {
         }
         let after = string_heap_bytes_allocated()
         t |> success(summ > 0)
-        t |> success(after - before < 256ul, "propagated flag should reclaim like the extern")
+        t |> success(int64(after) - int64(before) < 256l, "propagated flag should reclaim like the extern")
     }
 
     t |> run("ternary of fresh producers qualifies") @@(t) {
@@ -141,7 +141,7 @@ def test_temp_string_reclaim_propagation(t : T?) {
         }
         let after = string_heap_bytes_allocated()
         t |> success(summ > 0)
-        t |> success(after - before < 256ul, "ternary branches are both fresh")
+        t |> success(int64(after) - int64(before) < 256l, "ternary branches are both fresh")
         for (i in range(20)) {
             let expected_len = (i & 1) == 0 ? length("V{i}") : length("{i}")
             t |> equal(length(wrap_pick((i & 1) == 0, i, i)), expected_len)
@@ -175,7 +175,7 @@ def test_temp_string_reclaim_let_local(t : T?) {
         }
         let after = string_heap_bytes_allocated()
         t |> success(summ > 0)
-        t |> success(after - before < 256ul, "let-local temps should be reclaimed")
+        t |> success(int64(after) - int64(before) < 256l, "let-local temps should be reclaimed")
     }
 
     t |> run("builder let-local is marked, not wrapped - reclaimed for free") @@(t) {
@@ -187,7 +187,7 @@ def test_temp_string_reclaim_let_local(t : T?) {
         }
         let after = string_heap_bytes_allocated()
         t |> success(summ > 0)
-        t |> success(after - before < 256ul, "builder let-local temps should be reclaimed")
+        t |> success(int64(after) - int64(before) < 256l, "builder let-local temps should be reclaimed")
     }
 
     t |> run("adjacent let-locals: the earlier one must not be wrapped") @@(t) {
@@ -217,3 +217,4 @@ def test_temp_string_reclaim_let_local(t : T?) {
         }
     }
 }
+

@@ -600,6 +600,7 @@ def private write_value(var writer : StringBuilderWriter; jsv : JsonValue?; dept
     }
 }
 
+[temp_string_result]
 def write_json(val : JsonValue?) : string {
     //! returns JSON (textual) representation of JsonValue as a string.
     let st = build_string() $(var writer) {
@@ -662,6 +663,7 @@ def private write_value_compact(var writer : StringBuilderWriter; jsv : JsonValu
     }
 }
 
+[temp_string_result]
 def write_json_compact(val : JsonValue?) : string {
     //! ``write_json`` on one line: no newlines or indentation, ``", "`` / ``": "`` separators —
     //! the python ``json.dumps`` / jinja ``tojson`` shape chat templates and wire protocols carry.

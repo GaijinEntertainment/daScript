@@ -1524,8 +1524,8 @@ class PerfLintVisitor : AstVisitor {
     // --- PERF020: T(x) where x is already T — redundant workhorse cast ---
 
     def check_perf020_redundant_cast(call : ExprCall?) : void {
-        // a generic's one source line serves every instance — `float(x)` is a no-op where the element binds float and the required widen where it binds float16, so the verdict is not actionable there
-        if (call == null || call.func == null || length(call.arguments) != 1
+        // generic instances are not actionable (one source line, per-type verdicts); any arg count — the string overloads bind {str,context,at}, and an exact-1 gate let every string(<string>) no-op through
+        if (call == null || call.func == null || empty(call.arguments)
             || (current_function != null && current_function.fromGeneric != null)) return
         let fname = string(call.func.fromGeneric != null ? call.func.fromGeneric.name : call.func.name)
         let target = perf020_target_basetype(fname)
@@ -1534,7 +1534,9 @@ class PerfLintVisitor : AstVisitor {
         if (arg is ExprRef2Value) {
             arg = (arg as ExprRef2Value.subexpr)
         }
-        if (arg == null || arg._type == null || arg._type.baseType != target) return
+        // string(msg#) is exempt: a load-bearing clone (temporary -> permanent), not a no-op
+        if (arg == null || arg._type == null || arg._type.baseType != target
+                || (target == Type.tString && arg._type.flags.temporary)) return
         perf_warning("PERF020: redundant {fname}(...) cast — argument is already {fname}", call.at)
     }
 

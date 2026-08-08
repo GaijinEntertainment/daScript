@@ -25,8 +25,8 @@ class FormTestServer : HvWebServer {
         POST("/form-echo") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let name = get_form_data(req, "name")
             let value = get_form_data(req, "value")
-            var n = !empty(name) ? string(name) : "missing"
-            var v = !empty(value) ? string(value) : "missing"
+            var n = !empty(name) ? name : "missing"
+            var v = !empty(value) ? value : "missing"
             return resp |> TEXT_PLAIN("name={n},value={v}")
         }
 
@@ -65,8 +65,8 @@ class FormTestServer : HvWebServer {
         POST("/url-encoded") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let username = get_url_encoded(req, "username")
             let password = get_url_encoded(req, "password")
-            var u = !empty(username) ? string(username) : "missing"
-            var p = !empty(password) ? string(password) : "missing"
+            var u = !empty(username) ? username : "missing"
+            var p = !empty(password) ? password : "missing"
             return resp |> TEXT_PLAIN("user={u},pass={p}")
         }
 
@@ -81,8 +81,8 @@ class FormTestServer : HvWebServer {
         PUT("/form-echo") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let name = get_form_data(req, "name")
             let value = get_form_data(req, "value")
-            var n = !empty(name) ? string(name) : "missing"
-            var v = !empty(value) ? string(value) : "missing"
+            var n = !empty(name) ? name : "missing"
+            var v = !empty(value) ? value : "missing"
             return resp |> TEXT_PLAIN("PUT:name={n},value={v}")
         }
 
@@ -90,8 +90,8 @@ class FormTestServer : HvWebServer {
         PATCH("/form-echo") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let name = get_form_data(req, "name")
             let value = get_form_data(req, "value")
-            var n = !empty(name) ? string(name) : "missing"
-            var v = !empty(value) ? string(value) : "missing"
+            var n = !empty(name) ? name : "missing"
+            var v = !empty(value) ? value : "missing"
             return resp |> TEXT_PLAIN("PATCH:name={n},value={v}")
         }
     }
@@ -152,7 +152,7 @@ def test_set_form_data(t : T?) {
                 set_form_data(req, "name", "Alice")
                 set_form_data(req, "value", "42")
                 request(req) <| $(resp) {
-                    t |> equal(string(resp.body), "name=Alice,value=42")
+                    t |> equal(resp.body, "name=Alice,value=42")
                 }
             }
         }
@@ -234,7 +234,7 @@ def test_get_form_data_missing(t : T?) {
                 req.url := "{base_url}/form-missing"
                 set_form_data(req, "existing", "value")
                 request(req) <| $(resp) {
-                    t |> equal(string(resp.body), "empty")
+                    t |> equal(resp.body, "empty")
                 }
             }
         }
@@ -255,7 +255,7 @@ def test_url_encoded(t : T?) {
                 set_url_encoded(req, "username", "admin")
                 set_url_encoded(req, "password", "secret")
                 request(req) <| $(resp) {
-                    t |> equal(string(resp.body), "user=admin,pass=secret")
+                    t |> equal(resp.body, "user=admin,pass=secret")
                 }
             }
         }
@@ -271,7 +271,7 @@ def test_url_encoded_missing(t : T?) {
                 req.url := "{base_url}/url-encoded-missing"
                 set_url_encoded(req, "existing", "value")
                 request(req) <| $(resp) {
-                    t |> equal(string(resp.body), "empty")
+                    t |> equal(resp.body, "empty")
                 }
             }
         }
@@ -308,7 +308,7 @@ def test_put_form_data(t : T?) {
             var headers <- { "X-Test" => "put-form" }
             var form_data <- { "name" => "Alice", "value" => "42" }
             PUT("{base_url}/form-echo", "", headers, form_data) <| $(resp) {
-                t |> equal(string(resp.body), "PUT:name=Alice,value=42")
+                t |> equal(resp.body, "PUT:name=Alice,value=42")
             }
             delete headers
             delete form_data
@@ -323,7 +323,7 @@ def test_patch_form_data(t : T?) {
             var headers <- { "X-Test" => "patch-form" }
             var form_data <- { "name" => "Bob", "value" => "99" }
             PATCH("{base_url}/form-echo", "", headers, form_data) <| $(resp) {
-                t |> equal(string(resp.body), "PATCH:name=Bob,value=99")
+                t |> equal(resp.body, "PATCH:name=Bob,value=99")
             }
             delete headers
             delete form_data

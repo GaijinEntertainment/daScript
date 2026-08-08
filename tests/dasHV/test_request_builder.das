@@ -30,12 +30,12 @@ class RequestBuilderServer : HvWebServer {
         // Echo back a specific request header value
         GET("/echo-header") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let val = get_header(req, "X-Custom")
-            return resp |> TEXT_PLAIN(string(val))
+            return resp |> TEXT_PLAIN(val)
         }
         // Echo back Content-Type from the request
         POST("/echo-content-type") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let ct = get_header(req, "Content-Type")
-            return resp |> TEXT_PLAIN(string(ct))
+            return resp |> TEXT_PLAIN(ct)
         }
         // Echo back query param
         GET("/echo-param") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
@@ -46,7 +46,7 @@ class RequestBuilderServer : HvWebServer {
         // Echo back Authorization header
         GET("/check-auth") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let auth = get_header(req, "Authorization")
-            return resp |> TEXT_PLAIN(string(auth))
+            return resp |> TEXT_PLAIN(auth)
         }
         // Redirect chain
         GET("/redirect-src") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
@@ -70,7 +70,7 @@ def test_with_http_request_basic(t : T?) {
                 req.method = http_method.GET
                 req.url := "{base_url}/ping"
                 request(req) <| $(resp) {
-                    t |> equal(string(resp.body), "pong")
+                    t |> equal(resp.body, "pong")
                     t |> equal(int(resp.status_code), int(http_status.OK))
                 }
             }
@@ -87,7 +87,7 @@ def test_request_with_body(t : T?) {
                 req.url := "{base_url}/echo"
                 req.body := "request builder body"
                 request(req) <| $(resp) {
-                    t |> equal(string(resp.body), "request builder body")
+                    t |> equal(resp.body, "request builder body")
                 }
             }
         }
@@ -103,7 +103,7 @@ def test_set_header_on_request(t : T?) {
                 req.url := "{base_url}/echo-header"
                 set_header(req, "X-Custom", "test-value-123")
                 request(req) <| $(resp) {
-                    t |> equal(string(resp.body), "test-value-123")
+                    t |> equal(resp.body, "test-value-123")
                 }
             }
         }
@@ -137,7 +137,7 @@ def test_timeout_settings(t : T?) {
                 set_timeout(req, 30)
                 set_connect_timeout(req, 5)
                 request(req) <| $(resp) {
-                    t |> equal(string(resp.body), "pong")
+                    t |> equal(resp.body, "pong")
                 }
             }
         }
@@ -154,7 +154,7 @@ def test_query_params(t : T?) {
                 set_param(req, "page", "5")
                 set_param(req, "limit", "20")
                 request(req) <| $(resp) {
-                    t |> equal(string(resp.body), "page=5,limit=20")
+                    t |> equal(resp.body, "page=5,limit=20")
                 }
             }
         }
@@ -164,7 +164,7 @@ def test_query_params(t : T?) {
                 req.url := "{base_url}/ping"
                 set_param(req, "key", "value")
                 let val = get_param(req, "key")
-                t |> equal(string(val), "value")
+                t |> equal(val, "value")
             }
         }
     }
@@ -213,7 +213,7 @@ def test_redirect_control(t : T?) {
                 request(req) <| $(resp) {
                     t |> equal(int(resp.status_code), int(http_status.MOVED_PERMANENTLY))
                     let location = get_header(resp, "Location")
-                    t |> success(!empty(string(location)), "Location header present")
+                    t |> success(!empty(location), "Location header present")
                 }
             }
         }
@@ -224,7 +224,7 @@ def test_redirect_control(t : T?) {
                 allow_redirect(req, true)
                 request(req) <| $(resp) {
                     t |> equal(int(resp.status_code), int(http_status.OK))
-                    t |> equal(string(resp.body), "arrived")
+                    t |> equal(resp.body, "arrived")
                 }
             }
         }

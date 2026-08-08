@@ -1097,6 +1097,30 @@ namespace das {
         return w;
     }
 
+    // does this subtree CALL INTO code that may hit a queue site? Lexical sites are handled
+    // by inhibition/scanning; this is the interprocedural half - a call to a may-queue das
+    // function, an invoke (unknown target), or an invoke-carrying extern (runs lambdas we
+    // cannot see). A parked temp must not be live across any of these.
+    class CallsIntoQueueSite : public Visitor {
+    public:
+        bool found = false;
+        virtual void preVisit ( ExprInvoke * expr ) override {
+            Visitor::preVisit(expr);
+            found = true;
+        }
+        virtual void preVisit ( ExprCall * expr ) override {
+            Visitor::preVisit(expr);
+            auto f = expr->func;
+            if ( !f || f->mayQueueTempString || (f->builtIn && f->invoke) ) found = true;
+        }
+    };
+
+    static bool callsIntoQueueSite ( Expression * e ) {
+        CallsIntoQueueSite cq;
+        e->visit(cq);
+        return cq.found;
+    }
+
     class MarkTempStrings : public Visitor {
     public:
         MarkTempStrings ( Function * wrapperFn, bool insertWrappers_ )
@@ -1116,21 +1140,30 @@ namespace das {
             if ( inhibit ) return;
             // BBATKIN: if captureString side effects are not calculated correctly, this will blow up!!!
             if ( efun->policyBased || efun->invoke || efun->captureString ) return;
+            if ( efun->mayQueueTempString ) return;     // the callee's own body could flush the parked temp while still reading it
             for ( int ai=int(expr->arguments.size())-1; ai>=0; ai-- ) {
                 auto & arg = expr->arguments[ai];
+                bool eligible = arg->rtti_isStringBuilder() || isWrapperCall(arg)
+                    || (insertWrappers && isFreshStringCall(arg));
+                if ( !eligible ) continue;
+                // a SIBLING calling into may-queue code flushes this site while it is live
+                // (argument evaluation order is unspecified) - then no site at all
+                bool siblingDanger = false;
+                for ( int aj=int(expr->arguments.size())-1; aj>=0 && !siblingDanger; aj-- ) {
+                    if ( aj!=ai && callsIntoQueueSite(expr->arguments[aj]) ) siblingDanger = true;
+                }
+                if ( siblingDanger ) break;
                 if ( arg->rtti_isStringBuilder() ) {
                     static_cast<ExprStringBuilder *>(arg)->isTempString = true;
                     siteOf[expr] = arg;
-                    break;
                 } else if ( isWrapperCall(arg) ) {          // already wrapped - a re-run on the same tree
                     siteOf[expr] = arg;
-                    break;
-                } else if ( insertWrappers && isFreshStringCall(arg) ) {
+                } else {
                     auto w = makeTempStringWrapper(wrapper, arg);
                     arg = w;
                     siteOf[expr] = w;
-                    break;
                 }
+                break;
             }
         }
         virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
@@ -1182,6 +1215,7 @@ namespace das {
             if ( blockDepth ) return;
             auto f = call->func;
             if ( !f || f->captureString || f->invoke || f->policyBased ) return;
+            if ( f->mayQueueTempString ) return;    // its body could flush the parked temp mid-read
             auto barg = peelR2V(arg);
             if ( barg->rtti_isVar() && static_cast<ExprVar *>(barg)->variable==var ) safe ++;
         }
@@ -1197,9 +1231,16 @@ namespace das {
             Visitor::preVisit(expr);
             if ( expr->isTempString ) found = true;
         }
+        virtual void preVisit ( ExprInvoke * expr ) override {
+            Visitor::preVisit(expr);
+            found = true;       // unknown target - may queue
+        }
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
-            if ( expr->func==wrapper ) found = true;
+            auto f = expr->func;
+            // lexical sites (the wrapper) plus the interprocedural half: calls whose bodies
+            // may queue. A plain [temp_string_result] call is NOT a site by itself
+            if ( !f || f==wrapper || f->mayQueueTempString || (f->builtIn && f->invoke) ) found = true;
         }
     };
 

@@ -196,6 +196,19 @@ regression trap: it fails loudly if an impl later grows a `return str` shortcut.
 Coordinator finishes: one full preflight + test_aot_subset, batched into the arc PR
 (one PR per arc; sweep = final commit series, reviewed once at landing).
 
+## Follow-up arc (Boris, 2026-08-08): concat-to-builder rewrite
+
+Rewrite resolved builtin string+string `ExprOp2` into `ExprStringBuilder` post-infer
+(`foo() + "bar"` → `"{foo()}bar"`), splicing nested builders so `(a+b)+c` collapses to one
+flat builder = ONE allocation instead of one per `+` (intermediates are never born — beats
+reclaiming them). Retires the "SimPolicy_String::Add is fresh but unflaggable" gap (P5
+batch A finding): rewritten sites plug into the existing rightmost-builder temp marking for
+free. Semantics: fires only for the resolved builtin (no promotion in das ⇒ no formatting
+divergence), L2R order preserved, both-empty→null agrees. Placement: post-infer, before
+optimization (all-const builders still fold). Carry-over rule: builder eval computes ALL
+element values before writing any, so only the LAST element could ever host a queue site —
+v1 keeps element interiors site-free.
+
 ## Risks / notes
 
 - Everything rides captureString propagation being correct (the BBATKIN comment at
@@ -205,5 +218,41 @@ Coordinator finishes: one full preflight + test_aot_subset, batched into the arc
   temp=true. Either thread the flag or document; nothing depends on it today.
 - AOT semantic hash: wrapper is inserted pre-emission by the same pipeline → hashes
   consistently. No LLVM_JIT_CODEGEN_VERSION bump (no emitter change).
-- PERF012/PERF007 overlap: direct-arg `string(das_string)` hits should be lint-fixed
-  (drop the conversion), not celebrated as wrapper wins.
+- PERF012/PERF007 overlap — **CORRECTED by the P5 sweep (batch D)**: the headline
+  `find(string(resp.body))` shape is NOT a redundant clone — `find`/`read_json`/`to_int`
+  take `string const implicit`, which does not bind `$::das_string`, so those ~40 sites
+  are genuine conversions AND genuine wrapper-gain sites. The actually-redundant shape was
+  `string(<already-string>)` — dasHV getters and `json ?? ""` no-op casts (103 sites
+  dropped). PERF020 never caught those because its guard required exactly ONE argument
+  while the string overloads bind {str,context,at} — fixed in daslib/perf_lint.das in this
+  arc (temporary-string args stay exempt: `string(msg#)` is a load-bearing clone).
+
+## P5 sweep results (2026-08-08, five Opus batches)
+
+- Batch A (runtime+fio): 42 flagged (21 fio path/file helpers incl. base_name/dir_name/
+  path_join/getcwd/fread/fgets/temp-file family; 21 runtime incl. sprint/sprint_json/
+  fmt x10/clone_string/string(das_string)). 7 declined: pass_string is a passthrough,
+  compiling_* return environment pointers, platform names are static literals, the
+  wrapper itself. Finding: string `+` (SimPolicy_String::Add) is verified fresh but
+  registered via the shared addFunctionConcat template — unreachable for the flag;
+  retired by the concat-to-builder follow-up arc instead.
+- Batch B (ast/rtti/debugger): 28 flagged, 0 declined — all single-expression
+  allocateString of locally-built strings (describe*/get_mangled_name*/sprint_data/
+  get_stackwalk). rtti_get_source_line copies a span out of FileInfo's long-lived buffer
+  — it gets the row-(b) trap treatment in spirit (macro-time only).
+- Batch C (external modules): 11 flagged (8 dasHV getters, 2 dasImgui in the hand-written
+  main.cpp that survives binder regen, 1 dasTerminal). 6 declined — ImGui statics/
+  engine-owned pointers, all in GENERATED binder files. dasLLAMA has NO C++ externs
+  (pure das module); its vocab-string hazard is das-side and the propagation rule
+  covers it conservatively.
+- Batch D (site cleanups): 103 no-op casts dropped across 13 files (see the corrected
+  note above); let-local `string(resp.body)` forms left for P3.
+- Batch E (daslib gaps): 14 [temp_string_result] annotations across 8 files, each
+  probe-verified (AST flag probe + runtime heap check); ~40 functions confirmed covered
+  by propagation with no annotation; declines recorded (pad/trim/wide/ansi passthroughs,
+  cast_to_string bit-pun). Finding: strings_boost.das:97 join(var iterator; sep; blk)
+  overload is uncompilable today (error 30939 via join_implement's non-var param) —
+  pre-existing, reported, not fixed in this arc.
+- Sweep verification rows: tests/strings/temp_string_reclaim_sweep.das (flatness per
+  batch family + identity-input passthrough traps for md_escape/to_generic_path/
+  base_name/join).
