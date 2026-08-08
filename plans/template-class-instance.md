@@ -257,6 +257,27 @@ roles) — their instances are 2-4 lines. All 16 kernels: MSL byte-identical
 (entry-normalized diff empty), kernels suite 7/7. Combs (3) have no format axis — as-is.
 Next per the cluster table: KqMv (batch width as a stamp constant, 9→4).
 
+### KqMv survey (2026-08-08): the family RESISTS the mechanical stamp — census row was optimistic
+
+Three structural facts, all from diffs (not the peek the cluster table used):
+1. **B8 trio is a different algorithm**, not a width twin — tgmem X-panel staging
+   (`@workgroup txp : float4[512]`, barriers, cooperative load), float4 accumulators,
+   register-preloaded quants. Nothing to stamp against B2/B4.
+2. **B2 deliberately lacks B4's column tiling.** B4's `colbase = gl_WorkGroupID.y * 4u`
+   is LIVE (enc_kq_mvb: nlive 5-8 with kq_b8 off → gcols 2); B2's dispatch pins
+   gcols = 1, and its body omits the term outright — a hot-path specialization, not
+   drift. Merging means always-zero arithmetic on the B=2 decode GEMV (text change →
+   interleaved A/B per followup_general #8) or static_if that cannot reproduce
+   byte-identical text (folded branches emit scoped blocks; the term threads through
+   3 sites).
+3. **K4↔K5's qh overlay modifies the innermost w-decode line** (`| (hb << 4u)` inside
+   the e-loop) plus the block stride — a byte-identical static_if merge would have to
+   branch-duplicate the inner loops. K6 is its own layout (census already said leaf).
+
+Options: (a) measured unification — a perf session (M1, interleaved A/B, ≥3
+launches/arm) that may well conclude the specializations earn their keep; (b) leave
+KqMv, continue with RopeStore (10→~5, format×tier shaped like SqAttn). Boris's call.
+
 ### Stage 2 first vehicle (2026-08-07): plain SqAttn tier, 4→2 templates
 
 `MetalSqAttn{F16,F32}` → `MetalSqAttnKvT` (typedef `KT`); `MetalSqAttn{Q8,Tq4}` →
