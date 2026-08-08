@@ -289,16 +289,38 @@ directions on ca5862d8e); the clamp-vs-raw pattern is now free for any format pa
 **Fenced → the profiling followup** (every one needs interleaved A/B on the M1; oracles
 cover correctness only):
 - ~~KqMv B2→colbase-form unification~~ **DONE 2026-08-08** — see the measured round below.
-  The K4/K5 FORMAT-axis merge stays ruled out: the qh overlay + hq staging + block stride
-  would static_if-duplicate most of the body (the 43-49%-different measurement stands);
-  two templates sharing nothing but scaffolding is not a merge.
+  The K4/K5 FORMAT-axis merge stays ruled out for the plain GEMVs: the qh overlay + hq
+  staging + block stride would static_if-duplicate most of the body (the 43-49%-different
+  measurement stands). BUT the mul_mm and B8 shapes merged on exactly that axis — see below.
 - MoeMulMm K6/Q8/Mx4 joining `MetalMoeMulMmBase` (followup_general #8: cross-iteration
   state / prologue hook / binding renumber — every route rewrites hot inner loops).
-- The plain GEMV width pairs — `MetalGemvB2/B4`, `MetalQ8MvB2/B4`,
-  `MetalGemvW13SwB2/B4`: NOT scaled twins (panel sizes, staging-loop shapes, and for
-  Q8Mv the whole thread geometry differ) — unifying means picking one shape per pair
-  and measuring it at both widths. Prior from the KqMv round: width specializations
-  CAN be load-bearing at percent level — expect these to need the measurement, not skip it.
+- ~~The plain GEMV width pairs~~ — Gemv + W13Sw **DONE 2026-08-08 free** (see below);
+  Q8Mv B2/B4 CLOSED: 16-vs-8 lanes/row thread geometry IS the specialization (a
+  pick-one-geometry unification is an optimization experiment, not a dedup).
+
+### The TILED/WIDE static_if round (2026-08-08, after the KqMv restamp): 4 more free pairs
+
+The KqMv lesson generalized: any STATEMENT-shaped divergence merges free by branch-duplicating
+just the divergent statements per `static_if` — the fold emits each instance's production text.
+The earlier "not scaled twins / genuinely different" verdicts assumed one shared spelling.
+Merged (each gated: entry-normalized MSL diff + tgmem, kernels suite 7/7):
+- `MetalKqMulMmK45T` (91a70c3d9): the non-MoE prefill GEMM K4/K5 — QH arm duplicates only the
+  dequant k-loop (nsh repeated per arm for line order). Both stamps byte-identical, −72 LOC.
+- `MetalKqMvB8K45T` (6fa3ac6d8): the B8 X-panel pair — QH arms run through the acc loop (w4 is
+  arm-scoped). K5 byte-identical; K4 + one dead zero-init hq array (never read). −45 LOC.
+- `MetalGemvB24T` + `MetalGemvW13SwB24T` (3bdc3331d): the width pairs — WIDE carries the panel
+  load split (one slot/thread at B2, two at B4), NR/PANEL the sizes; `float4[PANEL]` field
+  substitution reproduces tgmem 0x800/0x1000. All four stamps byte-identical, −80 LOC.
+Closed on diffs the same round: KqGemv K4/K5 + MoeGemv K4/K5 (per-format lane geometries — the
+census's "MoeGemv base+5 ~200 LOC" was optimistic like the KqMv row; only the ~10-line gather
+prologue is shared), Bf16MulMm↔Q8MulMm (field sets differ — a template must declare every
+field its body references, the same blocker as MoE Q8/Mx4).
+
+**Next (Boris's ordering 2026-08-08): the enc_ twins followup commit.** The kernel merges
+unified binding contracts, so the per-format encoder wrappers converged into literal twins
+(e.g. `enc_attn_q8`/`enc_attn_tq4` and their `_part` pair — identical bodies modulo the
+generated `_c` builder they call). Scope: collapse each format-wrapper family into one
+fmt-taking dispatcher; touches decode/prefill callers → gate with the attn/batch decode arms.
 
 ### KqMv B2/B4 measured round + restamp (2026-08-08): 9→3 templates + B8 trio, −116 LOC
 
