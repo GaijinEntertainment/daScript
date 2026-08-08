@@ -122,6 +122,8 @@ module is unnamed, so it reports as ``<main>``, with its three functions
 
    Previous tutorial: :ref:`tutorial_macro_with_boost`
 
+   Next tutorial: :ref:`tutorial_macro_template_struct_instance`
+
    Standard library: ``daslib/validate_code.das`` registers ``shader_like``
    the same way.
 

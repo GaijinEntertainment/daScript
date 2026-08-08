@@ -1,7 +1,9 @@
-# `[template_class_instance]` — class-template reification (stamped instances)
+# `[template_struct_instance]` — template reification (stamped instances)
 
-Boris + Claude, 2026-08-08. **Stage 0 (probes) DONE — results below; zero C++ changes
-needed.** Stage 1 = the daslib implementation, tests, tutorial (nothing metal/llama). Stage 2 =
+Boris + Claude, 2026-08-07. **Stage 0 (probes) DONE — results below; zero C++ changes
+needed. Stage 1 IMPLEMENTED 2026-08-07 on `bbatkin/template-struct-instance` (macro +
+tests + tutorial, all green; landed deltas below).** Naming + const-marking ruled (see
+Decisions). Stage 2 =
 the dasLLAMA kernel restamp, planned separately once stage 1 lands; its worklist is the
 reification cluster table in `plans/vulkan-on-mac.md` (SqAttn 23→~6 first, then KqMv,
 MulMm/MoeMulMm with followup_general #8's A/B measurement discipline, RopeStore).
@@ -15,11 +17,11 @@ of the methods (types baked, constants folded, no virtual hops), and every downs
 structure annotation (`[metal_dispatch]` and friends) sees a finished concrete class.
 
 ```das
-[|> template_class_instance]                  // rides down to every instance, prepended
+[|> template_struct_instance]                 // rides down to every instance, prepended
 class template MoeMulMmT {
     @ssbo @binding = 3 @role = "read" xf : array<float4>
     @workgroup ta : KT[2048]                  // KT: unresolved alias = type parameter
-    @template_const WIDE : bool = true        // constant parameter, erased at reify
+    @template_constant WIDE : bool = true     // constant parameter, erased at reify
     def run {
         static_if (WIDE) { ... } else { ... } // folds per instance, in infer, for free
         stage_a(wb, kb, il0, tA0)
@@ -43,7 +45,7 @@ pass axis → the already-landed `kernel=` multi-kernel. Dissolves followup_gene
 blockers by construction (the whole stamped body is the instance's — K6's cross-iteration
 scalars and Q8's advancing pointers live inline; Mx4's prologue is its own `run`).
 
-## Stage 0 — probe results (2026-08-08, this M1, bin/daslang @ bbatkin/profiling-rail)
+## Stage 0 — probe results (2026-08-07, this M1, bin/daslang @ bbatkin/profiling-rail)
 
 Everything below is witnessed, not inferred. Probe files lived in the job scratch dir
 (gone with the job); the mini-reifier probe is the stage-1 skeleton and is reproduced by
@@ -119,35 +121,50 @@ RESOLVED — what looked like a C++ gap was the reifier's own bug (Boris's push-
     variants differing only by the erroring line proved the masking. Never certify a
     macro rail green while any other error is present.
 
-## Stage 1 — daslib implementation (no C++ changes required)
+## Stage 1 — daslib implementation (LANDED; no C++ changes)
 
-daslib (`[template_class_instance]`, typemacro_boost family, knows nothing of metal):
-- The probe macro is the skeleton (~130 lines, ran the full matrix green; appendix
-  below). Generalizations over the probe: enumerate the template's unresolved alias
-  names by walking its field/method types (probe hardcoded "KT"); each must be bound by
-  an instance typedef or `errors :=` names the missing one. Constants = template fields
-  marked `@template_const`: take the instance's (possibly overridden) init, require it
-  literal/const-foldable, add the `replaceVariable` rule, erase the field. Clone loop:
-  collect-then-add, skip ctor + `'__finalize` + instance-owned names, both rename
-  spellings (`Tem`m` and `_::Tem`m`), repair every field type + init through the rules,
-  normalize `__finalize` to the parentless shape + clear `flags.parentType` (finding 10),
-  then `parent = null`.
-- Struct twin: same implementation; `isClass` discriminates the (absent) rtti/finalize
-  handling. Whether it registers as a second name `[template_struct_instance]` or one
-  name serves both = Boris's naming call.
-- The typemacro rail (`[template_structure]`, `[template_tuple]`) stays untouched — it
-  serves the type-position/container use case; this serves the annotation-driven one.
+Home: `daslib/typemacro_boost.das`, beside its named siblings `[template_structure]` /
+`[template_tuple]` (the file already requires templates_boost publicly). The apply is
+factored into `[macro_function]` helpers (`tsi_bind_aliases` / `tsi_is_const_init` /
+`tsi_bind_constants` / `tsi_stamp_methods` / `tsi_normalize_fields`), per the pre-PR
+rail's STYLE037/038 pre-scoping. One name serves both rails; the typemacro rail stays
+untouched.
 
-Tests (`tests/typemacro/`): struct rail green today — land those with the macro; class
-rail lands with the C++ fix. Negative fixtures: unbound alias → named error; parent not a
-template → error; `@template_const` init not a literal → error; instance field-name
-collision with a template field → error. Plus an override-wins arm, a two-instance arm
-(same template stamped twice in one module), and a cross-module arm (template in a
-required module).
+Landed deltas vs the stage-0 spec (each probe-verified):
+- **`st.parent = tem.parent`, not `null`** — a `class template X : ConcreteBase` keeps
+  its base in the stamped instance (upcast + dispatch-through-base green); same move as
+  `apply_qmacro_template_class:1355`. The `__finalize` parentless-shape normalization
+  works under a live grandparent too.
+- **Rules also run over instance-authored method bodies** (in place, no clone) — a
+  `@template_constant` read inside a `def override` body substitutes like everywhere
+  else; constants behave as class-wide compile-time values.
+- **Unbound-alias check counts module-level typedefs as bound** (walks
+  `for_each_typedef` across the program library) — a field typed by an ordinary module
+  alias no longer false-positives; only a genuinely unbindable parameter gets the named
+  error, listing every missing name.
+- **`@template_constant` accepts signed literals** (`-1` is `ExprOp1` over the const
+  pre-fold; `tsi_is_const_init` peels one unary `+`/`-`).
+- **`KT(1)`-style ctor-casts in template bodies need no rule** — infer resolves
+  call-position alias names through the instance's structure aliases (probe-verified).
 
-Docs: tutorial chapter under `tutorials/macros/` (the concept deserves one — Boris);
-`skills/das_macros.md` gains the `[|>` inherited-annotation fact (done, this session);
-doc-comment surface per `skills/daslib_modules.md` when the macro lands.
+Tests (`tests/typemacro/`, 25/25 green interp AND `-jit`; AOT emits folded bodies —
+`ToyNarrow`gated` compiles to `return x + 100`): `test_template_struct_instance.das`
+(class rail incl. static_if fold + override-wins + const defaults arm, struct rail with
+two instances + const in field init, template-with-base arm, cross-module arm via
+`_template_struct_instance_mod.das`); negatives `failed_tsi_unbound_alias` /
+`_not_template_parent` / `_nonconst` (expect 20800) + `_field_collision` (expect 20503,
+parser-level). `tests/aot/CMakeLists.txt` typemacro glob now excludes `failed_*`.
+
+Docs: macro tutorial 20 (`tutorials/macros/20_template_struct_instance.das` +
+`template_struct_instance_mod.das`, RST under `doc/source/reference/tutorials/macros/`,
+toctree + tutorial-19 next-link updated; Sphinx -W clean). `skills/das_macros.md` carries
+the `[|>` inherited-annotation fact.
+
+Known lint interaction (report to Boris): **STYLE029 false-positives on a require whose
+only visible use is a reified template parent** — the reifier erases the parent link
+before lint runs, so the require looks redundant while being load-bearing. Nolint'd with
+reason in the tutorial usage file; a proper fix needs STYLE029 to see parse-time usage
+(or a reifier breadcrumb). Also: the formatter canonicalizes `[|>` to `[ |>`.
 
 ## Stage-1 pre-PR rail (Boris, 2026-08-08: expect bulk lint, don't be surprised by it)
 
@@ -171,14 +188,15 @@ before the `skills/make_pr.md` checklist:
    LINT003 let-vs-var, PERF007 das_string compares, PERF017 `empty()`, STYLE016 guard
    merges — all already observed on the probe.
 
-## Decisions needed (Boris)
+## Decisions (ruled, Boris 2026-08-07)
 
-1. `@template_const` explicit marking (recommended: greppable, and "force it's a
-   constant" has a place to hang the diagnostic) vs implicit "any overridden literal
-   field is a constant".
-2. One annotation name for both class and struct rails, or the
-   `template_class_instance` / `template_struct_instance` pair.
-3. Stage-1 go.
+1. `@template_constant` — EXPLICIT marking. Constants are fields the template marks;
+   unmarked overridden fields stay ordinary fields.
+2. ONE annotation, named `[template_struct_instance]` — matches the existing
+   `template_structure` family; there is no `template_class` in the family, so no
+   class-flavored name yet. When class-flavored template macros show up, we add
+   `template_class_instance` alongside.
+3. Stage-1 GO given.
 
 ## Stage 2 pointer (not planned here)
 
@@ -191,9 +209,10 @@ dedup is genuinely is-a). The 96 unlensed classes ride the same wave as lens ado
 
 ## Appendix — the stage-0 reifier skeleton (matrix-green verbatim, minus probe prints)
 
-Hardcodes one alias ("KT") and one const ("WIDE") — stage 1 generalizes exactly those
-two spots. Ran green: same-module + cross-module class templates, struct templates,
-override arms, multi-clone, used/unused instances.
+Hardcodes one alias ("KT") and one const ("WIDE") — stage 1 generalized exactly those
+two spots (plus `st.parent = tem.parent` instead of `null`; see the landed deltas). Ran
+green: same-module + cross-module class templates, struct templates, override arms,
+multi-clone, used/unused instances.
 
 ```das
 [structure_macro(name = "tci_probe")]

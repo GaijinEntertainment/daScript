@@ -317,8 +317,8 @@ FILE(GLOB AOT_FIXED_ARRAY_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS
 list(FILTER AOT_FIXED_ARRAY_FILES EXCLUDE REGEX "failed_|/_")
 
 FILE(GLOB AOT_TYPEMACRO_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/typemacro/*.das")
-# Exclude the _-prefixed macro module (compile-time only, options no_aot)
-list(FILTER AOT_TYPEMACRO_FILES EXCLUDE REGEX "/_")
+# Exclude the _-prefixed macro modules (compile-time only, options no_aot) and failed_* expect-fixtures
+list(FILTER AOT_TYPEMACRO_FILES EXCLUDE REGEX "failed_|/_")
 
 FILE(GLOB AOT_LANGUAGE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/language/*.das")
 # Exclude expect-error tests and no_aot files

@@ -211,6 +211,7 @@ Run any tutorial from the project root::
    tutorials/macros/17_qmacro.rst
    tutorials/macros/18_with_boost.rst
    tutorials/macros/19_add_module_option.rst
+   tutorials/macros/20_template_struct_instance.rst
 
 .. _tutorials_dashv:
 

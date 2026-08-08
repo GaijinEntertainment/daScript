@@ -1,0 +1,158 @@
+options gen2
+
+require dastest/testing_boost public
+require _template_struct_instance_mod
+
+typedef ModLevelT = float // module-level typedef: must not trip the unbound-alias check
+
+[ |> template_struct_instance]
+class template TKern {
+    x : KT
+    g : ModLevelT
+    @template_constant WIDE : bool = true
+    @template_constant OFFS : int = -3
+
+    def plain : int {
+        return x
+    }
+    def gated : int {
+        static_if (WIDE) {
+            return x + 1
+        } else {
+            return x + 100
+        }
+    }
+    def doubled : int {
+        return 2 * x
+    }
+    def offset : int {
+        return x + OFFS
+    }
+}
+
+class ToyNarrow : TKern {
+    typedef KT = int
+    override WIDE = false
+    override OFFS = -7
+
+    def override doubled : int { // instance-authored override must win over the template's
+        return 20 * x
+    }
+    def probe : int { // template constant read from an instance-authored method
+        return WIDE ? -1 : 1000 + x
+    }
+}
+
+class ToyWide : TKern { // keeps the template's constant defaults
+    typedef KT = int
+}
+
+[ |> template_struct_instance]
+struct template PairT {
+    a, b : KT
+    @template_constant SCALE : int = 1
+    sum : int = SCALE * 100
+}
+
+struct PairInt3 : PairT {
+    typedef KT = int
+    override SCALE = 3
+}
+
+struct PairInt7 : PairT {
+    typedef KT = int
+    override SCALE = 7
+    extra : KT = 5
+}
+
+class Counter {
+    hits : int = 0
+
+    def bump : void {
+        hits++
+    }
+    def abstract tag : int
+}
+
+[ |> template_struct_instance]
+class template CKern : Counter {
+    x : KT
+    @template_constant STEP : int = 1
+
+    def override tag : int {
+        return x + STEP
+    }
+}
+
+class CInt : CKern {
+    typedef KT = int
+    override STEP = 50
+}
+
+class XModInt : XModKern {
+    typedef KT = int
+    override BIAS = 1000
+}
+
+[test]
+def test_tsi_class_rail(t : T?) {
+    t |> run("stamped methods, static_if fold, override wins, constants") @(t : T?) {
+        unsafe {
+            var inscope k <- new ToyNarrow()
+            k.x = 42
+            t |> equal(k->plain(), 42)
+            t |> equal(k->gated(), 142)   // WIDE=false picks the static_if else-branch
+            t |> equal(k->doubled(), 840) // the instance override, not the template's 2*x
+            t |> equal(k->offset(), 35)   // signed-literal constant: OFFS=-7
+            t |> equal(k->probe(), 1042)  // constant substituted in an instance-authored body
+        }
+    }
+    t |> run("second instance keeps the template's constant defaults") @(t : T?) {
+        unsafe {
+            var inscope k <- new ToyWide()
+            k.x = 42
+            t |> equal(k->gated(), 43)   // WIDE=true default
+            t |> equal(k->offset(), 39)  // OFFS=-3 default
+            t |> equal(k->doubled(), 84) // the template's own doubled
+        }
+    }
+}
+
+[test]
+def test_tsi_struct_rail(t : T?) {
+    t |> run("two instances of one struct template") @(t : T?) {
+        let p = PairInt3(a = 2, b = 3)
+        let q = PairInt7(a = 10, b = 20)
+        t |> equal(p.sum, 300) // SCALE=3 folded into the field init
+        t |> equal(q.sum, 700)
+        t |> equal(q.extra, 5) // instance-own field
+        t |> equal(p.a + p.b, 5)
+        t |> equal(q.a + q.b, 30)
+    }
+}
+
+[test]
+def test_tsi_base_class(t : T?) {
+    t |> run("template's own base class survives reification") @(t : T?) {
+        unsafe {
+            var inscope k <- new CInt()
+            k.x = 7
+            k->bump()
+            k->bump()
+            var base : Counter? = k
+            t |> equal(k.hits, 2)       // inherited base method
+            t |> equal(base->tag(), 57) // dispatch through the base hits the stamped override
+        }
+    }
+}
+
+[test]
+def test_tsi_cross_module(t : T?) {
+    t |> run("template required from another module") @(t : T?) {
+        unsafe {
+            var inscope k <- new XModInt()
+            k.x = 42
+            t |> equal(k->value(), 1042)
+        }
+    }
+}
