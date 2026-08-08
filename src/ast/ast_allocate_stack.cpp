@@ -603,21 +603,9 @@ namespace das {
     // ExprCall
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
-            // what we do here is check, if the function can't possibly capture string
-            // and if so, we mark the LAST string builder as temporary
-            auto efun = expr->func;
-            if ( !efun ) return;
-            if ( /*efun->builtIn &&*/       // BBATKIN: if captureString side effects are not calculated correctly, this will blow up!!!
-                 !efun->policyBased && !efun->invoke && !efun->captureString ) {
-                for ( int ai=int(expr->arguments.size())-1; ai>=0; ai-- ) {
-                    auto & arg = expr->arguments[ai];
-                    if ( arg->rtti_isStringBuilder() ) {
-                        auto sb = static_cast<ExprStringBuilder*>(arg);
-                        sb->isTempString = true;
-                        break;
-                    }
-                }
-            }
+            // temp-string marking (builders and [temp_string_result] calls) lives in
+            // MarkTempStrings - one global pass at the head of Program::allocateStack
+            if ( !expr->func ) return;
             if ( inStruct ) return;
             if ( !expr->doesNotNeedSp ) {
                 if ( expr->func->copyOnReturn || expr->func->moveOnReturn ) {
@@ -1073,9 +1061,107 @@ namespace das {
         }
     };
 
+    // Temp-string reclaim: pick ONE queue site per consuming call and route it through the
+    // 1-slot dispose queue - a marked string builder (allocates, then queues itself) or a
+    // [temp_string_result] call wrapped in _temp_string_result (frees the previously queued
+    // temp, parks the fresh result).
+    //
+    // Soundness: a queued temp lives until its consuming call returns, and the only code that
+    // can run in that window is the evaluation of the SIBLING arguments. Extern (interop)
+    // argument evaluation order is UNSPECIFIED (right-to-left on MSVC), so a nested queue site
+    // in ANY sibling subtree could flush the site while it is still live and the persistent-heap
+    // shoe would reissue the cell - a silent use-after-free. Hence ONE site per call, and site
+    // creation is inhibited in every sibling subtree. (The old per-call "mark the last builder"
+    // scan violated this: compare(to_upper("{b}"), "{a}") corrupted arg1 on every iteration.)
+    class MarkTempStrings : public Visitor {
+    public:
+        MarkTempStrings ( Function * wrapperFn, bool insertWrappers_ )
+            : wrapper(wrapperFn), insertWrappers(insertWrappers_) {}
+    protected:
+        Function *  wrapper = nullptr;
+        bool        insertWrappers = false;
+        int32_t     inhibit = 0;
+        das_hash_map<ExprCall *, Expression *> siteOf;
+        bool isWrapperCall ( Expression * e ) const {
+            return wrapper && e->rtti_isCall() && static_cast<ExprCall *>(e)->func == wrapper;
+        }
+        static bool isFreshStringCall ( Expression * e ) {
+            if ( !e->rtti_isCall() ) return false;
+            auto c = static_cast<ExprCall *>(e);
+            return c->func && c->func->tempStringResult && c->type && c->type->isString() && !c->type->ref;
+        }
+        virtual void preVisit ( ExprCall * expr ) override {
+            Visitor::preVisit(expr);
+            auto efun = expr->func;
+            if ( !efun || efun==wrapper ) return;
+            if ( inhibit ) return;
+            // BBATKIN: if captureString side effects are not calculated correctly, this will blow up!!!
+            if ( efun->policyBased || efun->invoke || efun->captureString ) return;
+            for ( int ai=int(expr->arguments.size())-1; ai>=0; ai-- ) {
+                auto & arg = expr->arguments[ai];
+                if ( arg->rtti_isStringBuilder() ) {
+                    static_cast<ExprStringBuilder *>(arg)->isTempString = true;
+                    siteOf[expr] = arg;
+                    break;
+                } else if ( isWrapperCall(arg) ) {          // already wrapped - a re-run on the same tree
+                    siteOf[expr] = arg;
+                    break;
+                } else if ( insertWrappers && isFreshStringCall(arg) ) {
+                    auto w = new ExprCall(arg->at, wrapper->name);
+                    w->func = wrapper;
+                    w->generated = true;
+                    w->notDiscarded = true;
+                    w->type = new TypeDecl(*wrapper->result);
+                    w->arguments.push_back(arg);
+                    auto fakeContext = new ExprFakeContext(arg->at);
+                    fakeContext->generated = true;
+                    fakeContext->type = new TypeDecl(Type::fakeContext);
+                    w->arguments.push_back(fakeContext);
+                    auto fakeLineInfo = new ExprFakeLineInfo(arg->at);
+                    fakeLineInfo->generated = true;
+                    fakeLineInfo->type = new TypeDecl(Type::fakeLineInfo);
+                    w->arguments.push_back(fakeLineInfo);
+                    arg = w;
+                    siteOf[expr] = w;
+                    break;
+                }
+            }
+        }
+        virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
+            Visitor::preVisitCallArg(call, arg, last);
+            auto it = siteOf.find(call);
+            if ( it!=siteOf.end() && it->second!=arg ) inhibit ++;
+        }
+        virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
+            auto it = siteOf.find(call);
+            if ( it!=siteOf.end() && it->second!=arg ) inhibit --;
+            return Visitor::visitCallArg(call, arg, last);
+        }
+        virtual ExpressionPtr visit ( ExprCall * expr ) override {
+            siteOf.erase(expr);
+            return Visitor::visit(expr);
+        }
+    };
+
     // program
 
     void Program::allocateStack(TextWriter & logs, bool permanent, bool everything) {
+        // temp-string sites: builder marking + [temp_string_result] wrapping (must precede AllocateStack).
+        // wrappers only pay where freeTempString can reclaim: persistent string heap, not interned;
+        // the intern case also no-ops at runtime, this just skips the wrapper call overhead
+        {
+            bool reclaimDisabled = options.getBoolOption("disable_temp_string_reclaim", policies.disable_temp_string_reclaim);
+            bool persistentHeap = options.getBoolOption("persistent_heap", policies.persistent_heap);
+            bool internStrings = options.getBoolOption("intern_strings", policies.intern_strings);
+            Function * wrapperFn = nullptr;
+            if ( !reclaimDisabled && persistentHeap && !internStrings ) {
+                if ( auto bmod = Module::require("$") ) {
+                    wrapperFn = bmod->findUniqueFunction("_temp_string_result");
+                }
+            }
+            MarkTempStrings mts(wrapperFn, wrapperFn!=nullptr);
+            visit(mts);
+        }
         // string heap
         AllocateConstString vstr;
         for (auto & pm : library.modules) {

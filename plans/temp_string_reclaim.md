@@ -46,16 +46,19 @@ shape measures −36B vs +1.6MB for every conversion shape, 200k calls).
   - `[temp_string_result]` annotation = manual override, symmetric with `[capture_string]`.
   - Bind the bit in the das-side flags table (module_builtin_ast_flags.cpp:205, slot
     ordering discipline). Rides the existing flags word → serialization/shared-modules free.
-- **CodeOfPolicies gate, like dse** (`ast.h:1610` neighborhood): `/*option*/ bool` so the
-  measurable analysis cost is skippable. NOT auto-keyed to `persistent_heap`: f2s runs
-  without it and still needs the reclaim (within-run growth; the 1-slot queue frees the
-  last-allocated string = top-of-chunk pop, which works on the default linear string heap —
-  that's the measured −36B builder number). "Non-persistent ⇒ unneeded" is the
-  host-restarts-contexts-per-frame case — those hosts opt out in their policies. Polarity:
-  `disable_temp_string_reclaim = false` (default-ON, mirrors dse) unless Boris overrides
-  at implementation time. Cost mitigation
-  regardless of default: skip the walk outright when no call to a flagged function exists
-  in the program (bit set during the existing captureString walk — near-zero when unused).
+- **CodeOfPolicies gate, like dse** (`ast.h:1610` neighborhood): `disable_temp_string_reclaim`,
+  default-ON (false). **CORRECTION (P1 impl, 2026-08-07): wrappers ARE keyed to the
+  persistent string heap after all** — Boris's original instinct was right and the plan's
+  earlier counter-argument was factually wrong. The daslang CLI forces
+  `policies.persistent_heap = true` (utils/daScript/main.cpp:433), so every measurement
+  (−36B builder-direct, +1.6MB conversion shapes, f2s's 130MB) was taken on the persistent
+  SHOE allocator, where free works anywhere and the freed cell is immediately reusable. On
+  the default linear heap `HeapChunk::free` reclaims ONLY the top-of-chunk block, and the
+  queue flush order (allocate new temp → free old temp) means the freed string is never on
+  top — reclaim is structurally a no-op there. Insertion rule:
+  `!disable_temp_string_reclaim && persistent_heap && !intern_strings` (intern no-ops in
+  freeTempString at runtime anyway; skipping just saves the wrapper call). Builder temp
+  MARKING stays unconditional on all heaps — existing behavior, harmless no-op frees.
 - **One insertion pass, one scan, post-optimization** — runs just before allocate_stack
   (captureString is final by then; tree is stable; no optimizer interference with a
   side-effecting wrapper). It takes over the builder scan currently in
@@ -63,6 +66,22 @@ shape measures −36B vs +1.6MB for every conversion shape, 200k calls).
   per consuming call (`!policyBased && !invoke && !captureString`), mark/wrap only the
   **rightmost eligible argument overall** — builder OR flagged call. Two scans would
   dangle: wrapper on arg0 conversion + builder temp on arg1 flushes arg0 before the call.
+- **P1 FINDING (2026-08-07): the old per-call rightmost-builder rule was ALREADY unsound —
+  a live silent miscompile on master.** Extern (interop) argument evaluation order is
+  UNSPECIFIED (the templated pack expansion — right-to-left on MSVC; ast_allocate_stack's
+  own "order of evaluation for interop functions is not specified" comment). So a nested
+  builder in a SIBLING argument can queue after the marked builder and flush it while its
+  pointer is already parked in the arg slot; the persistent shoe reissues the cell to the
+  very next same-size allocation. Repro: `compare_ignore_case(to_upper("{b}"), "{a}")`
+  compares a string against itself — **200,000 of 200,000 iterations corrupted** on the
+  stock CLI. Fix (rides P1, all three backends, since it is marking-level): ONE queue site
+  per consuming call, chosen rightmost-first among top-level-eligible args (builder /
+  flagged call / existing wrapper), and site creation INHIBITED in every sibling argument
+  subtree (`MarkTempStrings` in ast_allocate_stack.cpp — inhibit counter around
+  preVisitCallArg/visitCallArg). Sites nested deeper in a SITELESS call's args stay legal:
+  such a site's value dies inside its own arg subtree before any sibling can evaluate.
+  Regression test: "nested builder cannot flush a sibling site" row in
+  tests/strings/temp_string_reclaim.das.
 - **Unifying invariant** (also enables P3): queue a fresh string at creation iff no other
   queue-site can execute while the value is still live. Rightmost-direct-arg is the
   degenerate case (live until enclosing call returns; nothing eligible evaluates after).
@@ -110,8 +129,10 @@ the new pass; extend eligibility to flagged calls; wrap via ExprCall insertion. 
 - mixed `foo(string(a), "{b}")` and `foo(string(a), string(b))` → only rightmost queued,
   values correct (the dangle case).
 - `return string(x)` NOT wrapped; capturing consumer (table insert) NOT wrapped.
-- intern-strings context: no-op, values correct.
-- builder behavior unchanged (existing tests keep passing — the scan moved, semantics identical).
+- intern-strings context: the gate skips wrapper insertion outright (freeTempString no-ops
+  at runtime under intern anyway) — covered by the gate condition, no dedicated test file.
+- builder behavior unchanged for single-site shapes (existing tests keep passing); the
+  multi-site sibling shapes CHANGE deliberately — that was the miscompile.
 
 **P2 — das-side propagation.** Return-expr rule in the captureString pass + annotation
 override. Pilot: verify `format`/`build_string`-style daslib fns pick the flag up
