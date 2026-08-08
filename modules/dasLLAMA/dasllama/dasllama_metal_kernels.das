@@ -3932,8 +3932,8 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_kq_mvb8_k4 = compile_pso(metal_kq_mvb8_k4_msl, metal_kq_mvb8_k4_msl_entry, metal_kq_mvb8_k4_msl_fastmath, ok)
     g_pso_kq_mvb8_k5 = compile_pso(metal_kq_mvb8_k5_msl, metal_kq_mvb8_k5_msl_entry, metal_kq_mvb8_k5_msl_fastmath, ok)
     g_pso_kq_mvb8_k6 = compile_pso(metal_kq_mvb8_k6_msl, metal_kq_mvb8_k6_msl_entry, metal_kq_mvb8_k6_msl_fastmath, ok)
-    g_pso_kq_mm_b4 = compile_pso(metal_kq_mulmm_k4_msl, metal_kq_mulmm_k4_msl_entry, metal_kq_mulmm_k4_msl_fastmath, ok)
-    g_pso_kq_mm_b5 = compile_pso(metal_kq_mulmm_k5_msl, metal_kq_mulmm_k5_msl_entry, metal_kq_mulmm_k5_msl_fastmath, ok)
+    g_pso_kq_mm_b4 = compile_pso(MetalKqMulMmK4_metal_kq_mulmm_msl, MetalKqMulMmK4_metal_kq_mulmm_msl_entry, MetalKqMulMmK4_metal_kq_mulmm_msl_fastmath, ok)
+    g_pso_kq_mm_b5 = compile_pso(MetalKqMulMmK5_metal_kq_mulmm_msl, MetalKqMulMmK5_metal_kq_mulmm_msl_entry, MetalKqMulMmK5_metal_kq_mulmm_msl_fastmath, ok)
     g_pso_kq_mm_b6 = compile_pso(metal_kq_mulmm_k6_msl, metal_kq_mulmm_k6_msl_entry, metal_kq_mulmm_k6_msl_fastmath, ok)
     // the batched-step set (P4)
     g_pso_gemv_b2 = compile_pso(metal_gemv_b2_msl, metal_gemv_b2_msl_entry, metal_gemv_b2_msl_fastmath, ok)
@@ -4092,7 +4092,7 @@ def enc_kq_gemm_mm_b(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?;
         kn_buffer(enc, bs, doff, 0)
     } else {
         kn_pipeline(enc, fmt == KqFmt.k4 ? g_pso_kq_mm_b4 : g_pso_kq_mm_b5)
-        kn_tgmem(enc, fmt == KqFmt.k4 ? metal_kq_mulmm_k4_msl_tgmem : metal_kq_mulmm_k5_msl_tgmem, 0)
+        kn_tgmem(enc, fmt == KqFmt.k4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_tgmem : MetalKqMulMmK5_metal_kq_mulmm_msl_tgmem, 0)
         kn_buffer(enc, bs, soff, 0)
     }
     kn_buffer(enc, bs, soff, 1)
@@ -5265,19 +5265,25 @@ class MetalQ8MulMm {
     }
 }
 
-class MetalKqMulMmK4 {
+// The K4/K5 prefill GEMM pair as one template — q5_K = q4_K's kmask scale decode + the qh
+// overlay, so QH branch-duplicates only the dequant k-loop (both stamps byte-identical;
+// nsh repeated per arm to keep line order). K6 (own scale layout) and Q8 (blob walk) stay.
+[ |> template_struct_instance]
+class template MetalKqMulMmK45T {
     @ssbo @binding = 0 @role = "weight" ksh : array<float16> // 16B compact scale blocks, half view (d at 8*blk, dmin at 8*blk+1)
     @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>   // the same buffer, uint4 view
-    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
+    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // quant plane, uint view (qs at BLK*blk; k5 qh at BLK*blk+32)
     @ssbo @binding = 3 @role = "read" xf : array<float4>
     @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 kdim : uint
     @uniform @binding = 6 ndim : uint
     @workgroup ta : float16[2048]
     @workgroup tb : float16[1024]
+    @template_constant BLK : uint = 32u  // superblock quant-plane stride in uints
+    @template_constant QH : bool = false // q5_K: the 5th-bit overlay plane rides after the nibbles
 
-    [metal_kernel(name="metal_kq_mulmm_k4_msl")]
-    def metal_kq_mulmm_k4 {   // nolint:STYLE038 — MSL kernel body; the mul_mm tiles are simdgroup-barrier coupled
+    [metal_kernel]
+    def metal_kq_mulmm {   // nolint:STYLE038 — MSL kernel body; the mul_mm tiles are simdgroup-barrier coupled
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
         let mBase = gl_WorkGroupID.x * 32u
@@ -5322,13 +5328,26 @@ class MetalKqMulMmK4 {
             }
             let dsc = float(ksh[blk * 8u]) * float(sc)
             let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
-            let qb = blk * 32u + (js / 2u) * 8u + il0 * 4u
-            let nsh = (js & 1u) * 4u
-            for [unroll_full] (k in range(4)) {
-                let u = kqu[qb + uint(k)]
-                for [unroll_full] (c in range(4)) {
-                    let q = (u >> (8u * uint(c) + nsh)) & 15u
-                    va[k * 4 + c] = float16(dsc * float(q) - dmn)
+            let qb = blk * BLK + (js / 2u) * 8u + il0 * 4u
+            static_if (QH) {
+                let hb = blk * BLK + 32u + il0 * 4u
+                let nsh = (js & 1u) * 4u
+                for [unroll_full] (k in range(4)) {
+                    let u = kqu[qb + uint(k)]
+                    let hu = kqu[hb + uint(k)]
+                    for [unroll_full] (c in range(4)) {
+                        let q = ((u >> (8u * uint(c) + nsh)) & 15u) | (((hu >> (8u * uint(c) + js)) & 1u) << 4u)
+                        va[k * 4 + c] = float16(dsc * float(q) - dmn)
+                    }
+                }
+            } else {
+                let nsh = (js & 1u) * 4u
+                for [unroll_full] (k in range(4)) {
+                    let u = kqu[qb + uint(k)]
+                    for [unroll_full] (c in range(4)) {
+                        let q = (u >> (8u * uint(c) + nsh)) & 15u
+                        va[k * 4 + c] = float16(dsc * float(q) - dmn)
+                    }
                 }
             }
             barrier()
@@ -5364,105 +5383,14 @@ class MetalKqMulMmK4 {
     }
 }
 
-class MetalKqMulMmK5 {
-    @ssbo @binding = 0 @role = "weight" ksh : array<float16> // 16B compact scale blocks (the Q4_K form)
-    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>
-    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k5 quant plane, uint view (qs at 40*blk, qh at 40*blk+32)
-    @ssbo @binding = 3 @role = "read" xf : array<float4>
-    @ssbo @binding = 4 @role = "write" y : array<float>
-    @uniform @binding = 5 kdim : uint
-    @uniform @binding = 6 ndim : uint
-    @workgroup ta : float16[2048]
-    @workgroup tb : float16[1024]
+class MetalKqMulMmK4 : MetalKqMulMmK45T {
+    override BLK = 32u
+    override QH = false
+}
 
-    [metal_kernel(name="metal_kq_mulmm_k5_msl")]
-    def metal_kq_mulmm_k5 {   // nolint:STYLE038 — MSL kernel body; the mul_mm tiles are simdgroup-barrier coupled
-        let lid = gl_LocalInvocationID.x
-        let sg = gl_SubgroupID
-        let mBase = gl_WorkGroupID.x * 32u
-        let nBase = gl_WorkGroupID.y * 64u
-        var mc : simdgroup_float8x8[8]
-        var ma : simdgroup_half8x8[4]
-        var mb : simdgroup_half8x8[2]
-        var va : float16[16]
-        let kdim4 = kdim / 4u
-        let nkb = kdim / 32u
-        let lr0 = lid / 2u
-        let il0 = lid % 2u
-        let syA = lr0 / 8u
-        let lxA = lr0 % 8u
-        let tA0 = (il0 * 2u * 8u + syA) * 64u + lxA
-        let lr1 = lid / 4u
-        let iy = (lid % 4u) * 8u
-        let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
-        let aB = (sg % 2u) * 256u
-        let bB = (sg / 2u) * 128u
-        let nsb = kdim / 256u
-        let wrow = nBase + lr0
-        var xcur = unsafe(addr(xf[(mBase + lr1) * kdim4 + iy / 4u]))
-        var kb = 0u
-        while (kb < nkb) {
-            let sb = kb / 8u
-            let js = kb % 8u
-            let blk = wrow * nsb + sb
-            let b0 = unsafe(xcur[0])
-            let b1 = unsafe(xcur[1])
-            let sv = ks4[blk]
-            var sc = 0u
-            var mn = 0u
-            if (js < 4u) {
-                sc = (sv.y >> (8u * js)) & 63u
-                mn = (sv.z >> (8u * js)) & 63u
-            } else {
-                let j2 = js - 4u
-                let hi = sv.w >> (8u * j2)
-                sc = (hi & 15u) | (((sv.y >> (8u * j2 + 6u)) & 3u) << 4u)
-                mn = ((hi >> 4u) & 15u) | (((sv.z >> (8u * j2 + 6u)) & 3u) << 4u)
-            }
-            let dsc = float(ksh[blk * 8u]) * float(sc)
-            let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
-            let qb = blk * 40u + (js / 2u) * 8u + il0 * 4u
-            let hb = blk * 40u + 32u + il0 * 4u
-            let nsh = (js & 1u) * 4u
-            for [unroll_full] (k in range(4)) {
-                let u = kqu[qb + uint(k)]
-                let hu = kqu[hb + uint(k)]
-                for [unroll_full] (c in range(4)) {
-                    let q = ((u >> (8u * uint(c) + nsh)) & 15u) | (((hu >> (8u * uint(c) + js)) & 1u) << 4u)
-                    va[k * 4 + c] = float16(dsc * float(q) - dmn)
-                }
-            }
-            barrier()
-            for [unroll_full] (i in range(16)) {
-                ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
-            }
-            tg_store_half4(tb, ibB, b0)
-            tg_store_half4(tb, ibB + 4u, b1)
-            barrier()
-            var acur = unsafe(addr(ta[aB]))
-            var bcur = unsafe(addr(tb[bB]))
-            for [unroll_full] (_ik in range(4)) {
-                for [unroll_full] (i in range(4)) {
-                    simdgroup_load(ma[i], acur, uint(i) * 64u, 8u)
-                }
-                for [unroll_full] (i in range(2)) {
-                    simdgroup_load(mb[i], bcur, uint(i) * 64u, 8u)
-                }
-                for [unroll_full] (i in range(8)) {
-                    simdgroup_multiply_accumulate(mc[i], mb[i / 4], ma[i % 4], mc[i])
-                }
-                acur = unsafe(acur + 512)
-                bcur = unsafe(bcur + 256)
-            }
-            xcur = unsafe(xcur + 8)
-            kb++
-        }
-        let row0 = mBase + (sg / 2u) * 16u
-        let col0 = nBase + (sg % 2u) * 32u
-        for [unroll_full] (i in range(8)) {
-            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ndim + col0 + uint(i % 4) * 8u, ndim)
-        }
-    }
+class MetalKqMulMmK5 : MetalKqMulMmK45T {
+    override BLK = 40u
+    override QH = true
 }
 
 class MetalKqMulMmK6 {

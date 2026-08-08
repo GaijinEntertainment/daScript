@@ -30,16 +30,16 @@ def private kq_mulmm_gate(t : T?; dev, queue; fmt : int; tensor : bool; m, kdim,
     var err : string
     let src = (tensor
         ? (fmt == 4 ? metal_kq_mulmm_k4_t_msl : (fmt == 5 ? metal_kq_mulmm_k5_t_msl : metal_kq_mulmm_k6_t_msl))
-        : (fmt == 4 ? metal_kq_mulmm_k4_msl : (fmt == 5 ? metal_kq_mulmm_k5_msl : metal_kq_mulmm_k6_msl)))
+        : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl : metal_kq_mulmm_k6_msl)))
     let entry = (tensor
         ? (fmt == 4 ? metal_kq_mulmm_k4_t_msl_entry : (fmt == 5 ? metal_kq_mulmm_k5_t_msl_entry : metal_kq_mulmm_k6_t_msl_entry))
-        : (fmt == 4 ? metal_kq_mulmm_k4_msl_entry : (fmt == 5 ? metal_kq_mulmm_k5_msl_entry : metal_kq_mulmm_k6_msl_entry)))
+        : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_entry : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_entry : metal_kq_mulmm_k6_msl_entry)))
     let fm = (tensor
         ? (fmt == 4 ? metal_kq_mulmm_k4_t_msl_fastmath : (fmt == 5 ? metal_kq_mulmm_k5_t_msl_fastmath : metal_kq_mulmm_k6_t_msl_fastmath))
-        : (fmt == 4 ? metal_kq_mulmm_k4_msl_fastmath : (fmt == 5 ? metal_kq_mulmm_k5_msl_fastmath : metal_kq_mulmm_k6_msl_fastmath)))
+        : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_fastmath : metal_kq_mulmm_k6_msl_fastmath)))
     let tgm = (tensor
         ? (fmt == 4 ? metal_kq_mulmm_k4_t_msl_tgmem : (fmt == 5 ? metal_kq_mulmm_k5_t_msl_tgmem : metal_kq_mulmm_k6_t_msl_tgmem))
-        : (fmt == 4 ? metal_kq_mulmm_k4_msl_tgmem : (fmt == 5 ? metal_kq_mulmm_k5_msl_tgmem : metal_kq_mulmm_k6_msl_tgmem)))
+        : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_tgmem : metal_kq_mulmm_k6_msl_tgmem)))
     var pso = pipeline_from_source(dev, src, entry, fm, err)
     if (tensor && pso == null && !metal4_tensor_available(dev)) {
         to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box — arm skipped\n")

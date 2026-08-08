@@ -2487,12 +2487,12 @@ def private pf_enc_kq_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt
     } elif (fmt == KqFmt.k4) {
         let twin4 = g_pf_kq_mm4_tensor && g_pf_pso_kq_mm4_t != null
         kn_pipeline(enc, twin4 ? g_pf_pso_kq_mm4_t : g_pso_kq_mm_b4)
-        kn_tgmem(enc, twin4 ? metal_kq_mulmm_k4_t_msl_tgmem : metal_kq_mulmm_k4_msl_tgmem, 0)
+        kn_tgmem(enc, twin4 ? metal_kq_mulmm_k4_t_msl_tgmem : MetalKqMulMmK4_metal_kq_mulmm_msl_tgmem, 0)
         kn_buffer(enc, bs.buf, bs.soff, 0)
     } else {
         let twin5 = g_pf_kq_mm5_tensor && g_pf_pso_kq_mm5_t != null
         kn_pipeline(enc, twin5 ? g_pf_pso_kq_mm5_t : g_pso_kq_mm_b5)
-        kn_tgmem(enc, twin5 ? metal_kq_mulmm_k5_t_msl_tgmem : metal_kq_mulmm_k5_msl_tgmem, 0)
+        kn_tgmem(enc, twin5 ? metal_kq_mulmm_k5_t_msl_tgmem : MetalKqMulMmK5_metal_kq_mulmm_msl_tgmem, 0)
         kn_buffer(enc, bs.buf, bs.soff, 0)
     }
     kn_buffer(enc, bs.buf, bs.soff, 1)
@@ -4725,10 +4725,10 @@ def metal_tensor_race : array<MetalTensorRaceResult> {
         results |> emplace(r)
     }
     results |> emplace(race_kq_mulmm(dev, queue, "kq_mulmm_k4",
-        metal_kq_mulmm_k4_msl, metal_kq_mulmm_k4_msl_entry, metal_kq_mulmm_k4_msl_fastmath, metal_kq_mulmm_k4_msl_tgmem,
+        MetalKqMulMmK4_metal_kq_mulmm_msl, MetalKqMulMmK4_metal_kq_mulmm_msl_entry, MetalKqMulMmK4_metal_kq_mulmm_msl_fastmath, MetalKqMulMmK4_metal_kq_mulmm_msl_tgmem,
         metal_kq_mulmm_k4_t_msl, metal_kq_mulmm_k4_t_msl_entry, metal_kq_mulmm_k4_t_msl_fastmath, metal_kq_mulmm_k4_t_msl_tgmem, 32, false))
     results |> emplace(race_kq_mulmm(dev, queue, "kq_mulmm_k5",
-        metal_kq_mulmm_k5_msl, metal_kq_mulmm_k5_msl_entry, metal_kq_mulmm_k5_msl_fastmath, metal_kq_mulmm_k5_msl_tgmem,
+        MetalKqMulMmK5_metal_kq_mulmm_msl, MetalKqMulMmK5_metal_kq_mulmm_msl_entry, MetalKqMulMmK5_metal_kq_mulmm_msl_fastmath, MetalKqMulMmK5_metal_kq_mulmm_msl_tgmem,
         metal_kq_mulmm_k5_t_msl, metal_kq_mulmm_k5_t_msl_entry, metal_kq_mulmm_k5_t_msl_fastmath, metal_kq_mulmm_k5_t_msl_tgmem, 40, false))
     results |> emplace(race_kq_mulmm(dev, queue, "kq_mulmm_k6",
         metal_kq_mulmm_k6_msl, metal_kq_mulmm_k6_msl_entry, metal_kq_mulmm_k6_msl_fastmath, metal_kq_mulmm_k6_msl_tgmem,
