@@ -401,14 +401,14 @@ def private lower_branch(var ctx : FlatCtx?; br : ExpressionPtr; structPred : Ex
 def private lower_loop_exit(var ctx : FlatCtx?; structPred : ExpressionPtr; var out : array<ExpressionPtr>; isBreak : bool) {
     if (empty(ctx.loopMasks)) {
         ctx.ok = false
-        ctx.err = "flatten: internal error — {isBreak ? "break" : "continue"} outside a flattened loop"
+        ctx.err = "flatten: internal error - {isBreak ? "break" : "continue"} outside a flattened loop"
         return
     }
     let lm = ctx.loopMasks[length(ctx.loopMasks) - 1]
     let nm = isBreak ? lm.loopLive : lm.iterLive
     if (nm == "") {
         ctx.ok = false
-        ctx.err = "flatten: internal error — {isBreak ? "break" : "continue"} mask was not allocated"
+        ctx.err = "flatten: internal error - {isBreak ? "break" : "continue"} mask was not allocated"
         return
     }
     emit_narrow(out, nm, live_pred(ctx, structPred, nm))
@@ -830,9 +830,9 @@ def private verify_flat(var twin : FunctionPtr) : string {
     }
     var msg = ""
     if (v.sawBranch) {
-        msg = "flatten: internal error — a branch (if/else) survived lowering in '{twin.name}'"
+        msg = "flatten: internal error - a branch (if/else) survived lowering in '{twin.name}'"
     } elif (v.sawCall) {
-        msg = "flatten: internal error — user call '{v.callName}' survived lowering in '{twin.name}'"
+        msg = "flatten: internal error - user call '{v.callName}' survived lowering in '{twin.name}'"
     }
     unsafe {
         delete v
@@ -881,7 +881,7 @@ class private FoldResidualVisitor : AstVisitor {
     }
     def override preVisitExprSwizzle(var expr : ExprSwizzle?) : void {
         if (is_unfolded_swizzle_lanes(expr)) {
-            found |> push("an un-folded swizzle over decomposable lanes ('ctor(…).mask' should re-pack)")
+            found |> push("an un-folded swizzle over decomposable lanes ('ctor(...).mask' should re-pack)")
         }
     }
 }

@@ -801,7 +801,7 @@ def public opt_residuals(var func : FunctionPtr; barriers : table<string>; no_fa
         visit(func.body, a)
     }
     if (fr.foundMad) {
-        res |> push("an un-fused mul-add ('a*b ± c' should be mad)")
+        res |> push("an un-fused mul-add ('a*b +/- c' should be mad)")
     }
     if (fr.foundLerp) {
         res |> push("an un-refused lerp shape (mad(b-a,t,a))")
@@ -813,7 +813,7 @@ def public opt_residuals(var func : FunctionPtr; barriers : table<string>; no_fa
         res |> push("an un-packed ctor lane pattern (should re-vectorize / extract the shared factor)")
     }
     if (fr.foundDot) {
-        res |> push("an un-fused lane sum ('v.x + v.y + …' should be dot(v, mask))")
+        res |> push("an un-fused lane sum ('v.x + v.y + ...' should be dot(v, mask))")
     }
     if (fr.foundHadd) {
         res |> push("an un-fused scalar sum ('a + b + c + d' should be hadd(float4(...)))")

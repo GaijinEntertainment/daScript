@@ -254,7 +254,7 @@ class private LinqFold : AstCallMacro {
         if (!(prog._options |> find_arg("_no_linq_perf_warn") ?as tBool ?? false)) {
             var (top, calls) = flatten_linq(call.arguments[0])
             if (!empty(calls) && extract_decs_bridge(top) != null) {
-                to_compiler_log("{describe(call.at)}: *warning* `_fold`: from_decs_template source survived dispatch — no splice arm claimed this chain, so the bridge materializes a temp `res` array and the tier-2 cascade runs on the materialized buffer. Rewrite the chain to a recognized decs shape (see doc/source/reference/linq_fold_patterns.rst), or suppress with `options _no_linq_perf_warn = true`.\n")
+                to_compiler_log("{describe(call.at)}: *warning* `_fold`: from_decs_template source survived dispatch - no splice arm claimed this chain, so the bridge materializes a temp `res` array and the tier-2 cascade runs on the materialized buffer. Rewrite the chain to a recognized decs shape (see doc/source/reference/linq_fold_patterns.rst), or suppress with `options _no_linq_perf_warn = true`.\n")
             }
         }
         // Tier 2 — array-shape pipeline with `_inplace` reuse + explicit `delete`.

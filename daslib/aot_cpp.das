@@ -603,7 +603,7 @@ class NoAotMarker : AstVisitor {
     def override preVisitExprQuote(expr : ExprQuote?) {
         if (func != null && !func.flags.noAot) {
             func.flags.noAot = true
-            to_log(LOG_ERROR, "{describe(expr.at)}: quote( ) survived to AOT with aot_macros enabled — daslib/quote lowering did not run; require daslib/templates_boost (or daslib/quote) in the module containing the quote. Function '{func.name}' excluded from AOT.\n")
+            to_log(LOG_ERROR, "{describe(expr.at)}: quote( ) survived to AOT with aot_macros enabled - daslib/quote lowering did not run; require daslib/templates_boost (or daslib/quote) in the module containing the quote. Function '{func.name}' excluded from AOT.\n")
         }
     }
 };

@@ -161,7 +161,7 @@ def public env_config_text(name : string) : Option<string> {
     if (empty(name) || !has_env_variable(name)) return none(type<string>)
     let v = get_env_variable(name)
     if (empty(v)) {
-        to_log(LOG_WARNING, "env {name} is set but empty — treated as unset (use {name}=0 to disable a flag)\n")
+        to_log(LOG_WARNING, "env {name} is set but empty - treated as unset (use {name}=0 to disable a flag)\n")
         return none(type<string>)
     }
     return some(v)
@@ -1303,7 +1303,7 @@ class EnvConfigMacro : AstStructureAnnotation {
                     || find_bool_annotation(field.annotation, "clarg_required", false)
                     || !empty(find_string_annotation(field.annotation, "clarg_short", ""))
                     || !empty(find_string_annotation(field.annotation, "clarg_mutex_group", ""))) {
-                errors := "field '{field.name}': positional/count/required/short/mutex are command-line concepts — [EnvConfig] fields are plain knobs with defaults"
+                errors := "field '{field.name}': positional/count/required/short/mutex are command-line concepts - [EnvConfig] fields are plain knobs with defaults"
                 return false
             }
             let inner = option_inner_type(field._type)
@@ -1321,11 +1321,11 @@ class EnvConfigMacro : AstStructureAnnotation {
             let env_name = resolve_env_name(field.annotation, "{field.name}", "{field.name}", env_prefix, false, false, false, errors)
             if (!empty(errors)) return false
             if (empty(env_name)) {
-                errors := "field '{field.name}': no environment name — set @clarg_env or the struct-level env_prefix"
+                errors := "field '{field.name}': no environment name - set @clarg_env or the struct-level env_prefix"
                 return false
             }
             if (key_exists(seen_env, env_name)) {
-                errors := "field '{field.name}': environment name {env_name} already drives field '{seen_env[env_name]}' — one variable must not feed two fields"
+                errors := "field '{field.name}': environment name {env_name} already drives field '{seen_env[env_name]}' - one variable must not feed two fields"
                 return false
             }
             seen_env[env_name] = "{field.name}"

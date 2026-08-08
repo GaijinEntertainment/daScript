@@ -222,7 +222,7 @@ def private _parse_near(var st : ParseState) : int {
         n.words |> push(_consume_name(st))
     }
     if (!closed_paren) {
-        _set_err(st, "unterminated NEAR — expected ')'")
+        _set_err(st, "unterminated NEAR - expected ')'")
         return -1
     }
     if (length(n.words) < 2) {

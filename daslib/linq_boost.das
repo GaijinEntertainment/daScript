@@ -452,7 +452,7 @@ def private parse_equi_join_on(var on_pred : Expression?; prog : ProgramPtr; at 
     }
     var op2 = ret.subexpr as ExprOp2
     if (op2.op != "==") {
-        macro_error(prog, on_pred.at, "equi-join `on` predicate must use `==` — theta joins and `&&`-chained multi-key equality are not supported; use raw SQL instead")
+        macro_error(prog, on_pred.at, "equi-join `on` predicate must use `==` - theta joins and `&&`-chained multi-key equality are not supported; use raw SQL instead")
         return parts
     }
     parts.ok = true
