@@ -1005,10 +1005,6 @@ namespace das
                 SideEffects::none, "builtin_string_toupper")->args({"str","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_string_tolower)>(*this, lib, "to_lower",
                 SideEffects::none, "builtin_string_tolower")->args({"str","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(builtin_string_tolower_in_place)>(*this, lib, "to_lower_in_place",
-                SideEffects::none, "builtin_string_tolower_in_place")->arg("str")->setCaptureString()->unsafeOperation = true;
-            addExtern<DAS_BIND_FUN(builtin_string_toupper_in_place)>(*this, lib, "to_upper_in_place",
-                SideEffects::none, "builtin_string_toupper_in_place")->arg("str")->setCaptureString()->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_string_split_by_char)>(*this, lib, "builtin_string_split_by_char",
                 SideEffects::modifyExternal, "builtin_string_split_by_char")->args({"str","delimiter","block","context","lineinfo"});
             addExtern<DAS_BIND_FUN(builtin_string_split)>(*this, lib, "builtin_string_split",

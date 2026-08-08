@@ -478,7 +478,7 @@ def document_module_strings(_root : string) {
         group_by_regex("String builder", mod, %regex~(build_string|format|write|write_char|write_chars|write_escape_string|build_hash)$%%),
         group_by_regex("das::string manipulation", mod, %regex~(append|resize|with_das_string)$%%),
         group_by_regex("String modifications", mod, %regex~(chop|escape|unescape|repeat|replace|reverse|slice|
-strip|strip_left|strip_right|to_lower|to_lower_in_place|to_upper|to_upper_in_place|rtrim|safe_unescape|ltrim|trim)$%%),
+strip|strip_left|strip_right|to_lower|to_upper|rtrim|safe_unescape|ltrim|trim)$%%),
         group_by_regex("Search substrings", mod, %regex~(find|rfind).*%%),
         group_by_regex("String comparison", mod, %regex~(compare_ignore_case)$%%),
         group_by_regex("String conversion routines", mod, %regex~(double|float|int|uint|int64|uint64|to_double|to_float|to_int|to_uint|to_int64|to_uint64|string|to_char|fmt|int8|to_int8|uint8|to_uint8|int16|to_int16|uint16|to_uint16|to_cpp_float)$%%),
