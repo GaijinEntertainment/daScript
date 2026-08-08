@@ -101,14 +101,14 @@ def private kq_gemv_gate(t : T?; dev, queue; vform : string; n, d : int) {
 def private kq_mvb_gate(t : T?; dev, queue; fmt, bwidth, n, d, nr, ys : int) {
     let tag = "kq_mvb{bwidth}_k{fmt} n={n} d={d} nr={nr} ys={ys}"
     var err : string
-    let src = (bwidth == 2 ? (fmt == 4 ? metal_kq_mvb2_k4_msl : (fmt == 5 ? metal_kq_mvb2_k5_msl : metal_kq_mvb2_k6_msl))
-        : (bwidth == 4 ? (fmt == 4 ? metal_kq_mvb4_k4_msl : (fmt == 5 ? metal_kq_mvb4_k5_msl : metal_kq_mvb4_k6_msl))
+    let src = (bwidth == 2 ? (fmt == 4 ? MetalKqMvB2K4_metal_kq_mv_k4_msl : (fmt == 5 ? MetalKqMvB2K5_metal_kq_mv_k5_msl : MetalKqMvB2K6_metal_kq_mv_k6_msl))
+        : (bwidth == 4 ? (fmt == 4 ? MetalKqMvB4K4_metal_kq_mv_k4_msl : (fmt == 5 ? MetalKqMvB4K5_metal_kq_mv_k5_msl : MetalKqMvB4K6_metal_kq_mv_k6_msl))
             : (fmt == 4 ? metal_kq_mvb8_k4_msl : (fmt == 5 ? metal_kq_mvb8_k5_msl : metal_kq_mvb8_k6_msl))))
-    let entry = (bwidth == 2 ? (fmt == 4 ? metal_kq_mvb2_k4_msl_entry : (fmt == 5 ? metal_kq_mvb2_k5_msl_entry : metal_kq_mvb2_k6_msl_entry))
-        : (bwidth == 4 ? (fmt == 4 ? metal_kq_mvb4_k4_msl_entry : (fmt == 5 ? metal_kq_mvb4_k5_msl_entry : metal_kq_mvb4_k6_msl_entry))
+    let entry = (bwidth == 2 ? (fmt == 4 ? MetalKqMvB2K4_metal_kq_mv_k4_msl_entry : (fmt == 5 ? MetalKqMvB2K5_metal_kq_mv_k5_msl_entry : MetalKqMvB2K6_metal_kq_mv_k6_msl_entry))
+        : (bwidth == 4 ? (fmt == 4 ? MetalKqMvB4K4_metal_kq_mv_k4_msl_entry : (fmt == 5 ? MetalKqMvB4K5_metal_kq_mv_k5_msl_entry : MetalKqMvB4K6_metal_kq_mv_k6_msl_entry))
             : (fmt == 4 ? metal_kq_mvb8_k4_msl_entry : (fmt == 5 ? metal_kq_mvb8_k5_msl_entry : metal_kq_mvb8_k6_msl_entry))))
-    let fm = (bwidth == 2 ? (fmt == 4 ? metal_kq_mvb2_k4_msl_fastmath : (fmt == 5 ? metal_kq_mvb2_k5_msl_fastmath : metal_kq_mvb2_k6_msl_fastmath))
-        : (bwidth == 4 ? (fmt == 4 ? metal_kq_mvb4_k4_msl_fastmath : (fmt == 5 ? metal_kq_mvb4_k5_msl_fastmath : metal_kq_mvb4_k6_msl_fastmath))
+    let fm = (bwidth == 2 ? (fmt == 4 ? MetalKqMvB2K4_metal_kq_mv_k4_msl_fastmath : (fmt == 5 ? MetalKqMvB2K5_metal_kq_mv_k5_msl_fastmath : MetalKqMvB2K6_metal_kq_mv_k6_msl_fastmath))
+        : (bwidth == 4 ? (fmt == 4 ? MetalKqMvB4K4_metal_kq_mv_k4_msl_fastmath : (fmt == 5 ? MetalKqMvB4K5_metal_kq_mv_k5_msl_fastmath : MetalKqMvB4K6_metal_kq_mv_k6_msl_fastmath))
             : (fmt == 4 ? metal_kq_mvb8_k4_msl_fastmath : (fmt == 5 ? metal_kq_mvb8_k5_msl_fastmath : metal_kq_mvb8_k6_msl_fastmath))))
     var pso = pipeline_from_source(dev, src, entry, fm, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
