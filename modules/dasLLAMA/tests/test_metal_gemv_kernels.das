@@ -504,8 +504,8 @@ def private w13sw_b_gate(t : T?; dev, queue; bwidth, ndim, hidden : int) {
     let tag = "w13sw_b{bwidth} n={ndim} h={hidden}"
     var err : string
     var pso = (bwidth == 2
-        ? pipeline_from_source(dev, metal_gemv_w13sw_b2_msl, metal_gemv_w13sw_b2_msl_entry, metal_gemv_w13sw_b2_msl_fastmath, err)
-        : pipeline_from_source(dev, metal_gemv_w13sw_b4_msl, metal_gemv_w13sw_b4_msl_entry, metal_gemv_w13sw_b4_msl_fastmath, err))
+        ? pipeline_from_source(dev, MetalGemvW13SwB2_metal_gemv_w13sw_msl, MetalGemvW13SwB2_metal_gemv_w13sw_msl_entry, MetalGemvW13SwB2_metal_gemv_w13sw_msl_fastmath, err)
+        : pipeline_from_source(dev, MetalGemvW13SwB4_metal_gemv_w13sw_msl, MetalGemvW13SwB4_metal_gemv_w13sw_msl_entry, MetalGemvW13SwB4_metal_gemv_w13sw_msl_fastmath, err))
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     let nb = ndim / 32
@@ -545,7 +545,7 @@ def private w13sw_b_gate(t : T?; dev, queue; bwidth, ndim, hidden : int) {
     var bhid = buf_u32(dev, uint(hidden))
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, bwidth == 2 ? metal_gemv_w13sw_b2_msl_tgmem : metal_gemv_w13sw_b4_msl_tgmem, 0)
+        metal_set_threadgroup_memory_length(enc, bwidth == 2 ? MetalGemvW13SwB2_metal_gemv_w13sw_msl_tgmem : MetalGemvW13SwB4_metal_gemv_w13sw_msl_tgmem, 0)
         metal_set_buffer(enc, bw1, 0ul, 0)
         metal_set_buffer(enc, bw1, 0ul, 2)
         metal_set_buffer(enc, bx, 0ul, 3)
@@ -583,8 +583,8 @@ def private gemv_b_gate(t : T?; dev, queue; bwidth, ndim, ddim, ys : int) {
     let tag = "gemv_b{bwidth} n={ndim} d={ddim} ys={ys}"
     var err : string
     var pso = (bwidth == 2
-        ? pipeline_from_source(dev, metal_gemv_b2_msl, metal_gemv_b2_msl_entry, metal_gemv_b2_msl_fastmath, err)
-        : pipeline_from_source(dev, metal_gemv_b4_msl, metal_gemv_b4_msl_entry, metal_gemv_b4_msl_fastmath, err))
+        ? pipeline_from_source(dev, MetalGemvB2_metal_gemv_msl, MetalGemvB2_metal_gemv_msl_entry, MetalGemvB2_metal_gemv_msl_fastmath, err)
+        : pipeline_from_source(dev, MetalGemvB4_metal_gemv_msl, MetalGemvB4_metal_gemv_msl_entry, MetalGemvB4_metal_gemv_msl_fastmath, err))
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     var blob : array<uint8>
@@ -614,7 +614,7 @@ def private gemv_b_gate(t : T?; dev, queue; bwidth, ndim, ddim, ys : int) {
     var bys = buf_u32(dev, uint(ys))
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, bwidth == 2 ? metal_gemv_b2_msl_tgmem : metal_gemv_b4_msl_tgmem, 0)
+        metal_set_threadgroup_memory_length(enc, bwidth == 2 ? MetalGemvB2_metal_gemv_msl_tgmem : MetalGemvB4_metal_gemv_msl_tgmem, 0)
         metal_set_buffer(enc, bw, 0ul, 0)   // byte view
         metal_set_buffer(enc, bw, 0ul, 2)   // half-scale view
         metal_set_buffer(enc, bx, 0ul, 3)

@@ -1792,7 +1792,11 @@ class MetalFwhtUnsign {
 // Fixed-B batched GEMV twins, X-STAGED: the tg's 4 rows share one X panel staged in tgmem
 // (cooperative load) instead of per-lane device reads (lab: B=2 +40-88%, B=4 ~2x; per-lane-
 // consecutive chunking measured 30-45% WORSE). Geometry pinned at 128 threads = 4 rows.
-class MetalGemvB2 {
+
+// The width pair as one template — the only structural split is the panel load (one slot per
+// thread at B2, two at B4), which WIDE carries; both stamps byte-identical.
+[ |> template_struct_instance]
+class template MetalGemvB24T {
     @ssbo @binding = 0 @role = "weight" wqb : array<int8>    // 34B-block W blob, byte view (quants at 34*b + 2)
     @ssbo @binding = 2 @role = "weight" wsh : array<float16> // the same buffer, half-scale view (block b at 17*b)
     @ssbo @binding = 3 @role = "read" x : array<float4>    // [B x n] f32 rows, float4 view
@@ -1800,20 +1804,30 @@ class MetalGemvB2 {
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
     @uniform @binding = 7 ys : uint         // y ROW stride (== ddim dense)
-    @workgroup txp : float4[128]            // [2 streams x 64 float4] X panel chunk
+    @workgroup txp : float4[PANEL]          // [NR streams x 64 float4] X panel chunk
+    @template_constant NR : int = 2
+    @template_constant PANEL : int = 128    // NR * 64 slots — override together with NR and WIDE
+    @template_constant WIDE : bool = false  // B4: two panel slots per thread
 
-    [metal_kernel(name="metal_gemv_b2_msl")]
-    def metal_gemv_b2 {
+    [metal_kernel]
+    def metal_gemv {
         let lid = gl_LocalInvocationID.x
         let row = min(gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID, ddim - 1u)
         let lane = gl_SubgroupInvocationID
         let nb4 = ndim / 4u
         let nb = ndim / 32u
-        var acc : float[2]
+        var acc : float[NR]
         var cb = 0u
         while (cb + 64u <= nb4) {
             barrier()                       // previous round done reading the panel
-            txp[lid] = x[(lid / 64u) * nb4 + cb + lid % 64u]
+            static_if (WIDE) {
+                for [unroll_full] (j in range(2)) {
+                    let slot = uint(j) * 128u + lid
+                    txp[slot] = x[(slot / 64u) * nb4 + cb + slot % 64u]
+                }
+            } else {
+                txp[lid] = x[(lid / 64u) * nb4 + cb + lid % 64u]
+            }
             barrier()
             for [unroll_full] (i in range(2)) {
                 let k = cb + uint(i) * 32u + lane
@@ -1822,7 +1836,7 @@ class MetalGemvB2 {
                 let w4 = float4(float(wqb[qb]), float(wqb[qb + 1u]), float(wqb[qb + 2u]),
                     float(wqb[qb + 3u])) * float(wsh[bi * 17u])
                 let kt = uint(i) * 32u + lane
-                for [unroll_full] (b in range(2)) {
+                for [unroll_full] (b in range(NR)) {
                     let xv = txp[uint(b) * 64u + kt]
                     acc[b] += w4.x * xv.x + w4.y * xv.y + w4.z * xv.z + w4.w * xv.w
                 }
@@ -1835,13 +1849,13 @@ class MetalGemvB2 {
             let qb = bi * 34u + 2u + (k % 8u) * 4u
             let w4 = float4(float(wqb[qb]), float(wqb[qb + 1u]), float(wqb[qb + 2u]),
                 float(wqb[qb + 3u])) * float(wsh[bi * 17u])
-            for [unroll_full] (b in range(2)) {
+            for [unroll_full] (b in range(NR)) {
                 let xv = x[uint(b) * nb4 + k]
                 acc[b] += w4.x * xv.x + w4.y * xv.y + w4.z * xv.z + w4.w * xv.w
             }
             k += gl_SubgroupSize
         }
-        for [unroll_full] (b in range(2)) {
+        for [unroll_full] (b in range(NR)) {
             let s = simd_sum(acc[b])
             if (lane == 0u) {
                 y[uint(b) * ys + row] = s
@@ -1850,65 +1864,16 @@ class MetalGemvB2 {
     }
 }
 
-class MetalGemvB4 {
-    @ssbo @binding = 0 @role = "weight" wqb : array<int8>
-    @ssbo @binding = 2 @role = "weight" wsh : array<float16>
-    @ssbo @binding = 3 @role = "read" x : array<float4>
-    @ssbo @binding = 4 @role = "write" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
-    @uniform @binding = 7 ys : uint         // y ROW stride (== ddim dense)
-    @workgroup txp : float4[256]            // [4 streams x 64 float4] X panel chunk
+class MetalGemvB2 : MetalGemvB24T {
+    override NR = 2
+    override PANEL = 128
+    override WIDE = false
+}
 
-    [metal_kernel(name="metal_gemv_b4_msl")]
-    def metal_gemv_b4 {
-        let lid = gl_LocalInvocationID.x
-        let row = min(gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID, ddim - 1u)
-        let lane = gl_SubgroupInvocationID
-        let nb4 = ndim / 4u
-        let nb = ndim / 32u
-        var acc : float[4]
-        var cb = 0u
-        while (cb + 64u <= nb4) {
-            barrier()                       // previous round done reading the panel
-            for [unroll_full] (j in range(2)) {
-                let slot = uint(j) * 128u + lid
-                txp[slot] = x[(slot / 64u) * nb4 + cb + slot % 64u]
-            }
-            barrier()
-            for [unroll_full] (i in range(2)) {
-                let k = cb + uint(i) * 32u + lane
-                let bi = row * nb + k / 8u
-                let qb = bi * 34u + 2u + (k % 8u) * 4u
-                let w4 = float4(float(wqb[qb]), float(wqb[qb + 1u]), float(wqb[qb + 2u]),
-                    float(wqb[qb + 3u])) * float(wsh[bi * 17u])
-                let kt = uint(i) * 32u + lane
-                for [unroll_full] (b in range(4)) {
-                    let xv = txp[uint(b) * 64u + kt]
-                    acc[b] += w4.x * xv.x + w4.y * xv.y + w4.z * xv.z + w4.w * xv.w
-                }
-            }
-            cb += 64u
-        }
-        var k = cb + lane
-        while (k < nb4) {
-            let bi = row * nb + k / 8u
-            let qb = bi * 34u + 2u + (k % 8u) * 4u
-            let w4 = float4(float(wqb[qb]), float(wqb[qb + 1u]), float(wqb[qb + 2u]),
-                float(wqb[qb + 3u])) * float(wsh[bi * 17u])
-            for [unroll_full] (b in range(4)) {
-                let xv = x[uint(b) * nb4 + k]
-                acc[b] += w4.x * xv.x + w4.y * xv.y + w4.z * xv.z + w4.w * xv.w
-            }
-            k += gl_SubgroupSize
-        }
-        for [unroll_full] (b in range(4)) {
-            let s = simd_sum(acc[b])
-            if (lane == 0u) {
-                y[uint(b) * ys + row] = s
-            }
-        }
-    }
+class MetalGemvB4 : MetalGemvB24T {
+    override NR = 4
+    override PANEL = 256
+    override WIDE = true
 }
 
 // Skinny-batch GEMV: streamed form beats x-staged panel kernels ~12% at B <= 4. 64 threads = 2
@@ -2040,7 +2005,10 @@ class MetalQ8MvB4 {
 // Fused fixed-B W1|W3 GEMV + swiglu (batch twin of MetalQ8GemvW13Sw): each subgroup dots the
 // gate row r AND up row r+hidden, writing silu(gate)*up directly — replaces the w1/w3/swiglu
 // triple with one dispatch. B2 form serves B <= 2; B4 serves 3..4.
-class MetalGemvW13SwB2 {
+
+// Same WIDE panel-load split as MetalGemvB24T above.
+[ |> template_struct_instance]
+class template MetalGemvW13SwB24T {
     @ssbo @binding = 0 @role = "weight" wqb1 : array<int8>   // w1 blob, byte view @ its tensor offset
     @ssbo @binding = 2 @role = "weight" wsh1 : array<float16>   // ... half-scale view
     @ssbo @binding = 3 @role = "read" x : array<float4>    // [B x ndim] f32 rows, float4 view
@@ -2049,21 +2017,31 @@ class MetalGemvW13SwB2 {
     @uniform @binding = 6 hidden : uint     // output rows
     @ssbo @binding = 8 @role = "weight" wqb3 : array<int8>   // w3 blob views
     @ssbo @binding = 9 @role = "weight" wsh3 : array<float16>
-    @workgroup txp : float4[128]            // [2 streams x 64 float4] X panel chunk
+    @workgroup txp : float4[PANEL]          // [NR streams x 64 float4] X panel chunk
+    @template_constant NR : int = 2
+    @template_constant PANEL : int = 128    // NR * 64 slots — override together with NR and WIDE
+    @template_constant WIDE : bool = false  // B4: two panel slots per thread
 
-    [metal_kernel(name="metal_gemv_w13sw_b2_msl")]
-    def metal_gemv_w13sw_b2 {
+    [metal_kernel]
+    def metal_gemv_w13sw {
         let lid = gl_LocalInvocationID.x
         let row = min(gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID, hidden - 1u)
         let lane = gl_SubgroupInvocationID
         let nb4 = ndim / 4u
         let nb = ndim / 32u
-        var accg : float[2]
-        var accu : float[2]
+        var accg : float[NR]
+        var accu : float[NR]
         var cb = 0u
         while (cb + 64u <= nb4) {
             barrier()                       // previous round done reading the panel
-            txp[lid] = x[(lid / 64u) * nb4 + cb + lid % 64u]
+            static_if (WIDE) {
+                for [unroll_full] (j in range(2)) {
+                    let slot = uint(j) * 128u + lid
+                    txp[slot] = x[(slot / 64u) * nb4 + cb + slot % 64u]
+                }
+            } else {
+                txp[lid] = x[(lid / 64u) * nb4 + cb + lid % 64u]
+            }
             barrier()
             for [unroll_full] (i in range(2)) {
                 let k = cb + uint(i) * 32u + lane
@@ -2074,7 +2052,7 @@ class MetalGemvW13SwB2 {
                 let wu = float4(float(wqb3[qb]), float(wqb3[qb + 1u]), float(wqb3[qb + 2u]),
                     float(wqb3[qb + 3u])) * float(wsh3[bi * 17u])
                 let kt = uint(i) * 32u + lane
-                for [unroll_full] (b in range(2)) {
+                for [unroll_full] (b in range(NR)) {
                     let xv = txp[uint(b) * 64u + kt]
                     accg[b] += wg.x * xv.x + wg.y * xv.y + wg.z * xv.z + wg.w * xv.w
                     accu[b] += wu.x * xv.x + wu.y * xv.y + wu.z * xv.z + wu.w * xv.w
@@ -2090,14 +2068,14 @@ class MetalGemvW13SwB2 {
                 float(wqb1[qb + 3u])) * float(wsh1[bi * 17u])
             let wu = float4(float(wqb3[qb]), float(wqb3[qb + 1u]), float(wqb3[qb + 2u]),
                 float(wqb3[qb + 3u])) * float(wsh3[bi * 17u])
-            for [unroll_full] (b in range(2)) {
+            for [unroll_full] (b in range(NR)) {
                 let xv = x[uint(b) * nb4 + k]
                 accg[b] += wg.x * xv.x + wg.y * xv.y + wg.z * xv.z + wg.w * xv.w
                 accu[b] += wu.x * xv.x + wu.y * xv.y + wu.z * xv.z + wu.w * xv.w
             }
             k += gl_SubgroupSize
         }
-        for [unroll_full] (b in range(2)) {
+        for [unroll_full] (b in range(NR)) {
             let g = simd_sum(accg[b])
             let u = simd_sum(accu[b])
             if (lane == 0u) {
@@ -2107,74 +2085,16 @@ class MetalGemvW13SwB2 {
     }
 }
 
-class MetalGemvW13SwB4 {
-    @ssbo @binding = 0 @role = "weight" wqb1 : array<int8>
-    @ssbo @binding = 2 @role = "weight" wsh1 : array<float16>
-    @ssbo @binding = 3 @role = "read" x : array<float4>
-    @ssbo @binding = 4 @role = "write" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 hidden : uint
-    @ssbo @binding = 8 @role = "weight" wqb3 : array<int8>
-    @ssbo @binding = 9 @role = "weight" wsh3 : array<float16>
-    @workgroup txp : float4[256]            // [4 streams x 64 float4] X panel chunk
+class MetalGemvW13SwB2 : MetalGemvW13SwB24T {
+    override NR = 2
+    override PANEL = 128
+    override WIDE = false
+}
 
-    [metal_kernel(name="metal_gemv_w13sw_b4_msl")]
-    def metal_gemv_w13sw_b4 {
-        let lid = gl_LocalInvocationID.x
-        let row = min(gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID, hidden - 1u)
-        let lane = gl_SubgroupInvocationID
-        let nb4 = ndim / 4u
-        let nb = ndim / 32u
-        var accg : float[4]
-        var accu : float[4]
-        var cb = 0u
-        while (cb + 64u <= nb4) {
-            barrier()
-            for [unroll_full] (j in range(2)) {
-                let slot = uint(j) * 128u + lid
-                txp[slot] = x[(slot / 64u) * nb4 + cb + slot % 64u]
-            }
-            barrier()
-            for [unroll_full] (i in range(2)) {
-                let k = cb + uint(i) * 32u + lane
-                let bi = row * nb + k / 8u
-                let qb = bi * 34u + 2u + (k % 8u) * 4u
-                let wg = float4(float(wqb1[qb]), float(wqb1[qb + 1u]), float(wqb1[qb + 2u]),
-                    float(wqb1[qb + 3u])) * float(wsh1[bi * 17u])
-                let wu = float4(float(wqb3[qb]), float(wqb3[qb + 1u]), float(wqb3[qb + 2u]),
-                    float(wqb3[qb + 3u])) * float(wsh3[bi * 17u])
-                let kt = uint(i) * 32u + lane
-                for [unroll_full] (b in range(4)) {
-                    let xv = txp[uint(b) * 64u + kt]
-                    accg[b] += wg.x * xv.x + wg.y * xv.y + wg.z * xv.z + wg.w * xv.w
-                    accu[b] += wu.x * xv.x + wu.y * xv.y + wu.z * xv.z + wu.w * xv.w
-                }
-            }
-            cb += 64u
-        }
-        var k = cb + lane
-        while (k < nb4) {
-            let bi = row * nb + k / 8u
-            let qb = bi * 34u + 2u + (k % 8u) * 4u
-            let wg = float4(float(wqb1[qb]), float(wqb1[qb + 1u]), float(wqb1[qb + 2u]),
-                float(wqb1[qb + 3u])) * float(wsh1[bi * 17u])
-            let wu = float4(float(wqb3[qb]), float(wqb3[qb + 1u]), float(wqb3[qb + 2u]),
-                float(wqb3[qb + 3u])) * float(wsh3[bi * 17u])
-            for [unroll_full] (b in range(4)) {
-                let xv = x[uint(b) * nb4 + k]
-                accg[b] += wg.x * xv.x + wg.y * xv.y + wg.z * xv.z + wg.w * xv.w
-                accu[b] += wu.x * xv.x + wu.y * xv.y + wu.z * xv.z + wu.w * xv.w
-            }
-            k += gl_SubgroupSize
-        }
-        for [unroll_full] (b in range(4)) {
-            let g = simd_sum(accg[b])
-            let u = simd_sum(accu[b])
-            if (lane == 0u) {
-                y[uint(b) * hidden + row] = (g / (1.0 + exp(-g))) * u
-            }
-        }
-    }
+class MetalGemvW13SwB4 : MetalGemvW13SwB24T {
+    override NR = 4
+    override PANEL = 256
+    override WIDE = true
 }
 
 // M-pad-32 batch GEMM (B >= 5, cost B-independent to 32 rows): MulMm's staging discipline on a
@@ -3936,12 +3856,12 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_kq_mm_b5 = compile_pso(MetalKqMulMmK5_metal_kq_mulmm_msl, MetalKqMulMmK5_metal_kq_mulmm_msl_entry, MetalKqMulMmK5_metal_kq_mulmm_msl_fastmath, ok)
     g_pso_kq_mm_b6 = compile_pso(metal_kq_mulmm_k6_msl, metal_kq_mulmm_k6_msl_entry, metal_kq_mulmm_k6_msl_fastmath, ok)
     // the batched-step set (P4)
-    g_pso_gemv_b2 = compile_pso(metal_gemv_b2_msl, metal_gemv_b2_msl_entry, metal_gemv_b2_msl_fastmath, ok)
-    g_pso_gemv_b4 = compile_pso(metal_gemv_b4_msl, metal_gemv_b4_msl_entry, metal_gemv_b4_msl_fastmath, ok)
+    g_pso_gemv_b2 = compile_pso(MetalGemvB2_metal_gemv_msl, MetalGemvB2_metal_gemv_msl_entry, MetalGemvB2_metal_gemv_msl_fastmath, ok)
+    g_pso_gemv_b4 = compile_pso(MetalGemvB4_metal_gemv_msl, MetalGemvB4_metal_gemv_msl_entry, MetalGemvB4_metal_gemv_msl_fastmath, ok)
     g_pso_mv_b2 = compile_pso(metal_q8_mv_b2_msl, metal_q8_mv_b2_msl_entry, metal_q8_mv_b2_msl_fastmath, ok)
     g_pso_mv_b4 = compile_pso(metal_q8_mv_b4_msl, metal_q8_mv_b4_msl_entry, metal_q8_mv_b4_msl_fastmath, ok)
-    g_pso_w13sw_b2 = compile_pso(metal_gemv_w13sw_b2_msl, metal_gemv_w13sw_b2_msl_entry, metal_gemv_w13sw_b2_msl_fastmath, ok)
-    g_pso_w13sw_b4 = compile_pso(metal_gemv_w13sw_b4_msl, metal_gemv_w13sw_b4_msl_entry, metal_gemv_w13sw_b4_msl_fastmath, ok)
+    g_pso_w13sw_b2 = compile_pso(MetalGemvW13SwB2_metal_gemv_w13sw_msl, MetalGemvW13SwB2_metal_gemv_w13sw_msl_entry, MetalGemvW13SwB2_metal_gemv_w13sw_msl_fastmath, ok)
+    g_pso_w13sw_b4 = compile_pso(MetalGemvW13SwB4_metal_gemv_w13sw_msl, MetalGemvW13SwB4_metal_gemv_w13sw_msl_entry, MetalGemvW13SwB4_metal_gemv_w13sw_msl_fastmath, ok)
     g_gemm_b_tensor = metal_tensor_crowned("gemmb_q8")
     g_pso_gemm_b = (g_gemm_b_tensor
         ? compile_pso(metal_q8_gemm_b_t_msl, metal_q8_gemm_b_t_msl_entry, metal_q8_gemm_b_t_msl_fastmath, ok)
@@ -4388,7 +4308,7 @@ def enc_ew2(enc : MetalComputeEncoder?; pso : MetalComputePipeline?; ba : MetalB
 def enc_gemv_b(enc : MetalComputeEncoder?; four : bool; bw : MetalBuffer?; boff : uint64;
                bx, by, bn, bd, bys : MetalBuffer?; d : int64; yoff : uint64 = 0ul) {
     kn_pipeline(enc, four ? g_pso_gemv_b4 : g_pso_gemv_b2)
-    kn_tgmem(enc, four ? metal_gemv_b4_msl_tgmem : metal_gemv_b2_msl_tgmem, 0)
+    kn_tgmem(enc, four ? MetalGemvB4_metal_gemv_msl_tgmem : MetalGemvB2_metal_gemv_msl_tgmem, 0)
     kn_buffer(enc, bw, boff, 0)   // byte view
     kn_buffer(enc, bw, boff, 2)   // half-scale view
     kn_buffer(enc, bx, 0ul, 3)
@@ -4444,7 +4364,7 @@ def enc_mv_site(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint6
 def enc_gemv_w13sw_b(enc : MetalComputeEncoder?; four : bool; bw : MetalBuffer?; w1off, w3off : uint64;
                      bx, by, bn, bhid : MetalBuffer?; hidden : int64) {
     kn_pipeline(enc, four ? g_pso_w13sw_b4 : g_pso_w13sw_b2)
-    kn_tgmem(enc, four ? metal_gemv_w13sw_b4_msl_tgmem : metal_gemv_w13sw_b2_msl_tgmem, 0)
+    kn_tgmem(enc, four ? MetalGemvW13SwB4_metal_gemv_w13sw_msl_tgmem : MetalGemvW13SwB2_metal_gemv_w13sw_msl_tgmem, 0)
     kn_buffer(enc, bw, w1off, 0)   // w1: byte view
     kn_buffer(enc, bw, w1off, 2)   // w1: half-scale view
     kn_buffer(enc, bw, w3off, 8)   // w3: byte view
