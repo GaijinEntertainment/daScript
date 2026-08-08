@@ -149,6 +149,28 @@ Docs: tutorial chapter under `tutorials/macros/` (the concept deserves one — B
 `skills/das_macros.md` gains the `[|>` inherited-annotation fact (done, this session);
 doc-comment surface per `skills/daslib_modules.md` when the macro lands.
 
+## Stage-1 pre-PR rail (Boris, 2026-08-08: expect bulk lint, don't be surprised by it)
+
+The macro + tests + tutorial touch enough files that lint fires in bulk. In order,
+before the `skills/make_pr.md` checklist:
+
+1. **Fresh branch off latest master** (verify base == master; the stage-0 doc commits
+   ride along — they currently sit on the merged `bbatkin/vulkan-on-mac` branch and get
+   cherry-picked or land via master first).
+2. **Full lint sweep, both flavors**: MCP `lint` per changed file AND the CI
+   linux-flavor mirror (MCP lint ≠ CI lint) — put the whole finding set on the table
+   before any fix.
+3. **Fan out Opus agents over the findings** — one per file or rule-family, each under
+   the house discipline: fix the root cause; STYLE037/038 split only along a natural
+   seam, else `// nolint` with a tail-comment reason on the `def` line; lint TOOL bugs
+   get fixed, not worked around; no blanket suppressions. Merge, re-lint to zero.
+4. **Known pressure points from the stage-0 skeleton** (write these right at authoring
+   time, so the agents handle only residue): the single ~130-line `apply` trips
+   STYLE037/038 — factor into `[macro_function]` helpers from the start (alias
+   enumeration, const harvest, method cloning, generated-field normalization); plus
+   LINT003 let-vs-var, PERF007 das_string compares, PERF017 `empty()`, STYLE016 guard
+   merges — all already observed on the probe.
+
 ## Decisions needed (Boris)
 
 1. `@template_const` explicit marking (recommended: greppable, and "force it's a
