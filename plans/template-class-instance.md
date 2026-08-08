@@ -1,7 +1,7 @@
 # `[template_class_instance]` — class-template reification (stamped instances)
 
-Boris + Claude, 2026-08-08. **Stage 0 (probes) DONE — results below.** Stage 1 = the
-daslib + C++ implementation, tests, tutorial (daslib-only, nothing metal/llama). Stage 2 =
+Boris + Claude, 2026-08-08. **Stage 0 (probes) DONE — results below; zero C++ changes
+needed.** Stage 1 = the daslib implementation, tests, tutorial (nothing metal/llama). Stage 2 =
 the dasLLAMA kernel restamp, planned separately once stage 1 lands; its worklist is the
 reification cluster table in `plans/vulkan-on-mac.md` (SqAttn 23→~6 first, then KqMv,
 MulMm/MoeMulMm with followup_general #8's A/B measurement discipline, RopeStore).
@@ -91,40 +91,47 @@ GREEN — proven and load-bearing for the design:
    stage-2 note only: the metal lens derives roles pre-infer and would see BOTH branches
    (union roles — conservative); revisit only if a real family over-declares.
 
-RED — the one genuine gap, C++-side, small and well-bounded:
+RESOLVED — what looked like a C++ gap was the reifier's own bug (Boris's push-back on
+"small C++ change" forced the trace that found it):
 
-10. **Deriving from a `class template` always leaves the TEMPLATE's own generated
-    machinery unresolved.** `makeClassRtti`/`makeClassFinalize` run unconditionally on
-    `isClass` (`parser_impl.cpp:366`) — including templates — and infer's
-    `visitStructureField` processes template structs, so the template's
-    `__finalize : auto = cast<auto> @@Tem'__finalize` init can never resolve (the
-    finalizer body references unbound aliases) → `error[30805]` anchored at the template,
-    reported at final verify. A standalone template is inert; a derived-from one is not.
+10. **Templates are ALREADY fully inference-inert by existing design** — no C++ change
+    needed. `canVisitStructure` skips `isTemplate` structs outright
+    (`ast_infer_type.cpp:277`), `canVisitFunction` skips template functions (`:671`),
+    parsed template-class methods are auto-flagged (`ds2_parser.ypp:2635`), and
+    `makeClassFinalize` marks the template's own finalizer
+    `func->isTemplate = baseClass->isTemplate` (`ast_generate.cpp:2258`).
+    The real 30805: `makeClassFinalize` gives a DERIVED class's `__finalize` field the
+    with-parent shape — `cast<auto>(@@Cls'__finalize)` init + `parentType` flag
+    (`ast_generate.cpp:2233`) — which resolves ONLY through a live parent
+    (`visitStructureField`'s `decl.parentType && st->parent` path,
+    `ast_infer_type.cpp:331`). The reifier cut the parent and left that shape orphaned:
+    no resolution path, `cast<auto>` reported at final verify, anchored at whatever
+    LineInfo the inherited copy carried (template's or child's — which misled the first
+    diagnosis). The fix is IN THE REIFIER, ~8 lines: when clearing `parent`, normalize
+    generated fields to the parentless shape `makeClassFinalize` itself produces
+    (`ast_generate.cpp:2239`) — strip the `cast<auto>` from `__finalize`'s init to the
+    bare `@@fn`, and clear `flags.parentType` on every field. With that, the ENTIRE
+    previously-red matrix is green with exact runtime values (`plain=42 gated=142
+    doubled=840`): same-module and cross-module templates, 1 and 2 clones, override
+    arms, used and unused instances, struct and class rails.
     ⚠ Probe trap worth recording: runs where an UNRELATED error fired earlier looked
     "green" for the class rail — compilation stopped before final verify. Two probe
     variants differing only by the erroring line proved the masking. Never certify a
     macro rail green while any other error is present.
 
-## Stage 1 — daslib + C++ implementation
-
-C++ (contained):
-- Make template classes inference-inert, mirroring template functions: skip
-  `visitStructureField` (and the struct's init/layout verification) for
-  `st->isTemplate`, or mark the generated finalizer/rtti template-flagged when the
-  structure is a template. Acceptance: the class-rail probe shape compiles green with the
-  das-side reifier; a standalone `class template` stays green; existing
-  `tests/typemacro/_template_structure_class_mod.das` (typemacro rail) unaffected.
-- Keep the debug-info `!st.isTemplate` verify — unreachable post-reify (parent cleared).
+## Stage 1 — daslib implementation (no C++ changes required)
 
 daslib (`[template_class_instance]`, typemacro_boost family, knows nothing of metal):
-- The probe macro is the skeleton (~120 lines). Generalizations over the probe:
-  enumerate the template's unresolved alias names by walking its field/method types
-  (probe hardcoded "KT"); each must be bound by an instance typedef or `errors :=` names
-  the missing one. Constants = template fields marked `@template_const`: take the
-  instance's (possibly overridden) init, require it literal/const-foldable, add the
-  `replaceVariable` rule, erase the field. Clone loop: collect-then-add, skip ctor +
-  `'__finalize` + instance-owned names, both rename spellings, repair every field type +
-  init through the rules, then `parent = null`.
+- The probe macro is the skeleton (~130 lines, ran the full matrix green; appendix
+  below). Generalizations over the probe: enumerate the template's unresolved alias
+  names by walking its field/method types (probe hardcoded "KT"); each must be bound by
+  an instance typedef or `errors :=` names the missing one. Constants = template fields
+  marked `@template_const`: take the instance's (possibly overridden) init, require it
+  literal/const-foldable, add the `replaceVariable` rule, erase the field. Clone loop:
+  collect-then-add, skip ctor + `'__finalize` + instance-owned names, both rename
+  spellings (`Tem`m` and `_::Tem`m`), repair every field type + init through the rules,
+  normalize `__finalize` to the parentless shape + clear `flags.parentType` (finding 10),
+  then `parent = null`.
 - Struct twin: same implementation; `isClass` discriminates the (absent) rtti/finalize
   handling. Whether it registers as a second name `[template_struct_instance]` or one
   name serves both = Boris's naming call.
@@ -159,3 +166,105 @@ dasLLAMA restamp per the cluster table (`plans/vulkan-on-mac.md`): SqAttn first
 per format, oracles cover correctness only; Q8/Mx4 joining renumbers cnt/basep/bkt
 6/7/8 → 7/8/9 (encoder + oracle churn accepted once). MoeGemv stays inheritance (its
 dedup is genuinely is-a). The 96 unlensed classes ride the same wave as lens adoption.
+
+## Appendix — the stage-0 reifier skeleton (matrix-green verbatim, minus probe prints)
+
+Hardcodes one alias ("KT") and one const ("WIDE") — stage 1 generalizes exactly those
+two spots. Ran green: same-module + cross-module class templates, struct templates,
+override arms, multi-clone, used/unused instances.
+
+```das
+[structure_macro(name = "tci_probe")]
+class TciProbe : AstStructureAnnotation {
+    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+        if (st.flags.isTemplate) return true // on the template itself: nothing to do
+        if (st.parent == null || !st.parent.flags.isTemplate) {
+            errors := "parent is not a class template"
+            return false
+        }
+        var tem = st.parent
+        let temName = string(tem.name)
+        let instName = string(st.name)
+        var mod = compiling_module()
+        var instType = new TypeDecl(at = st.at, baseType = Type.tStructure, structType = st)
+        var kt = get_structure_alias(st, "KT")               // stage 1: enumerate template aliases
+        var wideInit : ExpressionPtr                          // stage 1: fields marked @template_const
+        var wideIdx = -1
+        for (i in range(length(st.fields))) {
+            if (st.fields[i].name == "WIDE") {
+                wideInit = st.fields[i].init
+                wideIdx = i
+            }
+        }
+        var ownMethods : table<string>                        // instance-authored methods win
+        for_each_function(mod, "", $(func) {
+            if (func.flags.isClassMethod && func.classParent == st) {
+                var parts <- split(string(func.name), "`")
+                ownMethods |> insert(parts[length(parts) - 1])
+            }
+        })
+        var rules : Template
+        rules |> replaceStructWithTypeDecl(tem) <| clone_type(instType)
+        rules |> replaceTypeWithTypeDecl(temName) <| clone_type(instType)
+        rules |> replaceTypeWithTypeDecl("KT") <| clone_type(kt)
+        rules |> replaceVariable("WIDE") <| clone_expression(wideInit)
+        for_each_function(tem._module, "", $(func) {          // both rename spellings: field
+            if (func.flags.isClassMethod && func.classParent == tem) {   // inits hold @@_::Tem`m
+                let fn = string(func.name)
+                var parts <- split(fn, "`")
+                let mname = parts[length(parts) - 1]
+                rules |> renameVariable(fn, "{instName}`{mname}")
+                rules |> renameVariable("_::{fn}", "_::{instName}`{mname}")
+            }
+        })
+        var toClone : array<FunctionPtr>                      // collect THEN add
+        for_each_function(tem._module, "", $(func) {
+            if (!(func.flags.isClassMethod && func.classParent == tem)) return
+            let fn = string(func.name)
+            var parts <- split(fn, "`")
+            let mname = parts[length(parts) - 1]
+            if (mname == temName || fn == "{temName}'__finalize" || key_exists(ownMethods, mname)) {
+                return // ctor + 'finalize (quote spelling): instance has its own; overrides win
+            }
+            toClone |> push(func)
+        })
+        for (func in toClone) {
+            var parts <- split(string(func.name), "`")
+            let mname = parts[length(parts) - 1]
+            var fc <- clone_function(func)
+            fc.name := "{instName}`{mname}"
+            fc.moreFlags.isTemplate = false
+            fc.classParent = st
+            fc.result = apply_template(rules, func.at, clone_type(func.result))
+            for (arg in fc.arguments) {
+                arg._type = apply_template(rules, arg.at, clone_type(arg._type))
+            }
+            fc.body = apply_template(rules, func.at, clone_expression(func.body), false)
+            if (!(mod |> add_function(fc))) {
+                errors := "can't add {instName}`{mname}"
+            }
+        }
+        for (f in st.fields) {                                // repair fields through the rules
+            f._type = apply_template(rules, f.at, clone_type(f._type))
+            if (f.init != null) {
+                f.init = apply_template(rules, f.at, clone_expression(f.init))
+            }
+            // derived-class generated __finalize has the with-parent shape (cast<auto> init +
+            // parentType, ast_generate.cpp:2233) resolvable only through a live parent; we cut
+            // the parent, so normalize to the parentless shape (ibid:2239): bare @@fn, no flag
+            f.flags.parentType = false
+            if (f.name == "__finalize" && f.init != null && f.init is ExprCast) {
+                let c = f.init as ExprCast
+                if (c.castType != null && c.castType.baseType == Type.autoinfer) {
+                    f.init = clone_expression(c.subexpr)
+                }
+            }
+        }
+        if (wideIdx >= 0) {
+            st.fields |> erase(wideIdx)                       // consts never become fields
+        }
+        st.parent = null
+        return true
+    }
+}
+```
