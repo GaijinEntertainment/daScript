@@ -656,12 +656,17 @@ class StyleLintVisitor : AstVisitor {
     def source_span_has_non_ascii(at : LineInfo) : bool {
         if (at.fileInfo == null) return true   // no source to inspect - trust the value
         var hit = false
-        let l1 = max(int(at.last_line), int(at.line))
-        for (ln in range(int(at.line), l1 + 1)) {
+        let l0 = int(at.line)
+        let l1 = max(int(at.last_line), l0)
+        for (ln in range(l0, l1 + 1)) {
             get_file_source_line(at.fileInfo, uint(ln)) $(line) {
+                // slice to the literal's span - typography in a neighboring comment must not fire
+                let len = length(line)
+                let from = ln == l0 ? min(int(at.column), len) : 0
+                let to = ln == l1 ? min(int(at.last_column), len) : len
                 var o = 0
                 var b = 0
-                if (string_has_non_ascii(line, o, b)) {
+                if (to > from && string_has_non_ascii(slice(line, from, to), o, b)) {
                     hit = true
                 }
             }

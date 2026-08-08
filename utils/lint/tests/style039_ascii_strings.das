@@ -40,6 +40,10 @@ def good_escape_spelling() : string {
     return "\xEF\xBB\xBF"    // UTF-8 BOM via ASCII escapes - the source spelling is already log-safe
 }
 
+def good_escape_beside_typography() : string {
+    return "\xEF\xBB\xBF"    // BOM — the em-dash in THIS comment must not fire the escape-spelled literal
+}
+
 [export]
 def main() {
     print("{bad_em_dash()} {bad_multiply_suffix()} {bad_interpolated(3)} {good_ascii()} {good_intended()}\n")
