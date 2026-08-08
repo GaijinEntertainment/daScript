@@ -32,12 +32,21 @@ Similar to the return statement, move semantic ``yield <-`` is allowed:
 
 .. code-block:: das
 
-    return <- generator<TT> {
-        for ( w in src ) {
-            yield <- invoke(blk,w)  // move invoke result
+    def make_gen ( src : array<int>; fn : lambda<(x:int):array<int>> ) : iterator<array<int>> {
+        return <- generator<array<int>> capture(clone(src)) {
+            for ( w in src ) {
+                yield <- invoke(fn,w)   // move invoke result
+            }
+            return false
         }
-        return false
     }
+
+A generator is compiled into a lambda, so it can only capture what a lambda can hold.
+A ``block`` is not one of those — capturing it is ``error[30129]: can't capture variable`` —
+so a callable which the generator invokes must be a ``lambda`` or a function pointer.
+Non-copyable values such as ``array<T>`` are not captured implicitly either
+(``error[31003]: implicit capture by move requires unsafe``); name them in the capture
+section, as ``capture(clone(src))`` above does, or wrap the generator in ``unsafe``.
 
 Generators can output ref types. They can have a capture section:
 
@@ -82,18 +91,24 @@ Generators can have loops and other control structures:
         return false
     }
 
-Generators can have a ``finally`` expression on its blocks, with the exception of the if-then-else blocks:
+Generators can have a ``finally`` expression on its blocks, with the exception of the if-then-else blocks.
+A ``finally`` belongs to the block it follows, so a ``finally`` on a loop body runs once per iteration,
+and its ``yield`` interleaves with the yields of the loop:
 
 .. code-block:: das
 
-    let gen <- generator<int>{
-        for ( t in range(0,9) ) {
+    var gen <- generator<int>{
+        for ( t in range(0,3) ) {
             yield t
         } finally {
             yield 9
         }
         return false
     }
+    for ( t in gen ) {
+        print("{t} ")
+    }
+    // output: 0 9 1 9 2 9
 
 ----------------------
 implementation details

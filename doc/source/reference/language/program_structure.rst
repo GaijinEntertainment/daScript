@@ -144,16 +144,21 @@ that requires the current one:
 Aliasing
 ^^^^^^^^^^^^^^^^^^^
 
-When two modules share the same name, the ``as`` keyword provides a local alias:
+The ``as`` keyword gives a required module a local qualifier of your choosing:
 
 .. code-block:: das
 
-    require event
-    require sub/event as sub_event
+    require ./sub/event.das as sub_event
 
     def handle {
         sub_event::process()          // qualified call using the alias
     }
+
+Aliasing only applies to **path** requires — those beginning with ``./``, ``../`` or ``%/``
+and naming the ``.das`` file explicitly. Under the default resolver a module-name require
+registers no qualifier at all, so ``require daslib/random as rng`` compiles but silently
+leaves ``rng::`` undefined; use the path form ``require %/daslib/random.das as rng`` when an
+alias is needed.
 
 (see :ref:`Modules <modules>` for details on module function visibility and the ``_`` / ``__``
 module prefixes).

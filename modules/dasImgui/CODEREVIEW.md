@@ -1,37 +1,65 @@
-# Code review rules — modules/dasImgui
+# dasImgui Code Review Checklist
 
-Folder-scoped review rules. When a PR touches files under this folder, the
-code review lists and enforces these (see `skills/make_pr.md` — CODEREVIEW.md
-discovery runs after the master rebase).
+Run this list on every dasImgui change before it ships — including changes to this file.
+
+**What stays in this document:** criteria that can be checked against a diff. Nothing else.
+A reader must be able to apply every entry below **without reading the code and without prior
+knowledge of the module.** A rule may cite `modules/dasImgui/CLAUDE.md` for the reason behind
+it; it may not require that section to be read before the criterion can be applied. If an
+entry needs code-reading or prior knowledge, it is not a review criterion — move it to
+`modules/dasImgui/CLAUDE.md` and leave a one-line criterion here.
 
 **This file reviews itself: a rule a reviewer cannot apply as written is a defect of this
 file.** Mark it like any other finding — a checklist defect blocks nothing, but its fix (a
 rewrite or a move, never silent tolerance) lands in the same batch as the round's other fixes.
 
-* New functionality ships with tests — same PR, no follow-up promises.
-* Tests go under `modules/dasImgui/tests`.
-* No tests go under `tests/dasImgui` — that folder must not exist.
-* Before a PR: run the suite —
-  `daslang dastest/dastest.das -- --test modules/dasImgui/tests --headless --isolated-mode --isolated-mode-threads 4 --exclude glfw_synth --exclude key_hud --exclude embedded_terminal`
-  (also available as `preflight --only imgui`; nightly_imgui.yml is the suite's
-  only CI lane, so the local run is the pre-push gate).
-* On local **Windows** runs, additionally pass the high-POST excludes from
-  `modules/dasImgui/CLAUDE.md` (libhv's 16-POST-per-subprocess stall):
-  `inputs_drag inputs_numeric inputs_slider indexed_dynamic inputs_color inputs_choice inputs_text`.
-* Tests are kept multiplatform — no hardcoded platform-specific paths,
-  separators, or OS-only assumptions; resolve locations via `get_das_root()` /
-  module-relative helpers, never absolute or machine-local paths.
+**Form, and it is a hard limit:**
+
+- **One rule is one short paragraph.** An entry that needs more than that is describing how to
+  write code, not how to review it. Split it or move it.
+- **No numbers.** These are criteria, not a spec, and numbering invites citation. Anything that
+  needs a stable reference lives in `modules/dasImgui/CLAUDE.md`.
+- **Cite files by name; cite `modules/dasImgui/CLAUDE.md` by section.** Never cite an entry in
+  this file.
+- **Name the API a rule is about; never name an example of it.** A rule governing specific
+  functions or files must name them or it cannot be checked — that name is the criterion. An
+  illustrative aside has no such excuse: nothing keeps it in sync with the code, and a stale
+  example is worse than none.
+- **One sentence of WHY is allowed where it makes the criterion decidable; anything longer
+  belongs in `modules/dasImgui/CLAUDE.md`.** No history, no PR numbers, no direction of
+  travel; planned work lives in the follow-up ledgers.
+
+---
+
+## Tests
+
+**New functionality ships with tests — same PR, no follow-up promises.**
+
+**Tests go under `modules/dasImgui/tests`.** No tests go under `tests/dasImgui` — that folder
+must not exist.
+
+**Before a PR: run the suite** —
+`daslang dastest/dastest.das -- --test modules/dasImgui/tests --headless --isolated-mode --isolated-mode-threads 4 --exclude glfw_synth --exclude key_hud --exclude embedded_terminal`
+(also available as `preflight --only imgui`). `nightly_imgui.yml` is the suite's only CI lane,
+so the local run is the pre-push gate.
+
+**On local Windows runs, additionally pass the high-POST excludes** from
+`modules/dasImgui/CLAUDE.md` § Tests:
+`inputs_drag inputs_numeric inputs_slider indexed_dynamic inputs_color inputs_choice inputs_text`.
+
+**Tests are kept multiplatform** — no hardcoded platform-specific paths, separators, or
+OS-only assumptions; locations resolve via `get_das_root()` / module-relative helpers, never
+absolute or machine-local paths.
 
 ## Grammar canary — tree-sitter-daslang drift contract
 
-* Any change to `tree-sitter-daslang/grammar.js` requires: regenerating
-  `parser.c`, rebuilding ALL THREE consumers (the tree_sitter_daslang shared
-  module/DLL, `daslang`, `daslang-live`), and a green
-  `tests/test_grammar_canary.das`. A grammar error region silently SWALLOWS
-  every fold/outline after it (the bare-named-args gap hid exactly this way) —
-  "it still parses" is not evidence.
-* New syntax (`src/parser/ds2_parser.ypp` or `grammar.js`) lands with a new
-  canary section in `test_grammar_canary.das` in the same PR — the canary only
-  protects syntax it pins.
-* A red canary names the section that broke. Never ship around it by deleting
-  or loosening sections.
+**Any change to `tree-sitter-daslang/grammar.js` regenerates `parser.c`, rebuilds all three
+consumers** (the tree_sitter_daslang shared module/DLL, `daslang`, `daslang-live`) **and shows
+a green `tests/test_grammar_canary.das` — in the same change.** "It still parses" is not the
+gate; the canary is.
+
+**New syntax (`src/parser/ds2_parser.ypp` or `grammar.js`) lands with a new canary section in
+`test_grammar_canary.das` in the same PR** — the canary only protects syntax it pins.
+
+**A red canary names the section that broke. Never ship around it by deleting or loosening
+sections.**

@@ -7,11 +7,42 @@ The `perf_lint` module detects common performance anti-patterns in daslang code 
 ## Architecture
 
 - **Module:** `daslib/perf_lint.das` — `module perf_lint shared private`
-- **Entry point:** `[lint_macro] class PerfLintMacro : AstPassMacro` calls `perf_lint(prog, true)`
+- **Entry point:** `[lint_macro] class PerfLintMacro : AstPassMacro` calls `perf_lint(prog, true, build_lint_macro_disabled(prog))` — the policy table comes from `daslib/lint_config` (default-off seeds + `.lint_config` + `$DAS_LINT_DISABLE`)
 - **Visitor:** `class PerfLintVisitor : AstVisitor` — walks the AST with loop depth tracking
 - **Error reporting:** `macro_performance_warning(compiling_program(), at, message)` — reports as error code 31208
 - **Utility:** `utils/lint/main.das` — unified lint checker (all 3 passes: paranoid, perf, style)
 - **Tests:** `utils/lint/tests/` — one file per rule with `expect 31208:N`
+
+## Lint policy and entry points
+
+Rule enablement is not per-rule bespoke logic — it goes through the shared policy layer in
+`daslib/lint_config.das`, which every runner uses:
+
+- `seed_default_disabled(disabled)` — seeds the canonical default-off set. A rule that should
+  ship silent goes here, nowhere else.
+- `load_lint_config(...)` — layers the repo `.lint_config` TOML `[rules]` table on top, so a
+  `PERF007 = false` / `STYLE005 = true` directive can override either direction.
+- `build_lint_macro_disabled(prog)` — what the three `[lint_macro]` `apply()` methods call. It
+  honors the module-local `options _enable_default_off_rules = true` opt-in (skips the seed step
+  so default-off rules fire for that module), then layers `.lint_config`.
+- `$DAS_LINT_DISABLE` — a whole-run denylist, no source edit.
+- CLI: `--disable CODE,...` / `--enable CODE,...` on `utils/lint/main.das`. `--enable` is a
+  whitelist (only listed rules run); on overlap `--disable` wins.
+
+Five public entry points, all in `daslib/perf_lint.das`:
+
+```das
+def public perf_lint(prog; compile_time_errors) : int
+def public perf_lint(prog; compile_time_errors; disabled_codes : table<string>) : int
+def public perf_lint_collect(prog; var warnings : array<string>) : int
+def public perf_lint_collect(prog; var warnings; disabled_codes, enabled_codes : table<string>) : int
+def public perf_lint_collect_issues(prog; var issues : array<LintIssue>; disabled_codes, enabled_codes) : int
+```
+
+The two-argument forms are thin wrappers; every real caller (the MCP subtool, `utils/lint/main.das`,
+the LSP) uses a filtered overload. `perf_lint_collect_issues` is the structured form — `LintIssue`
+(defined in `daslib/lint_config.das`) carries the rule code and position, which is what the LSP
+needs to place a diagnostic.
 
 ## How to Add a New Rule
 
@@ -37,8 +68,10 @@ Override the appropriate visitor method(s). Common patterns:
 ### 3. Report the warning
 
 ```das
-self->perf_warning("PERFxxx: description; suggested fix", expr.at)
+perf_warning("PERFxxx: description; suggested fix", expr.at)
 ```
+
+Call it bare — the compiler promotes a bare method call inside a class method, and `self->perf_warning(...)` trips this tree's own STYLE028.
 
 The `perf_warning` method handles both compile-time (`macro_performance_warning`) and runtime (`print`) modes.
 
@@ -48,6 +81,7 @@ Create `utils/lint/tests/perfXXX_rule_name.das`:
 
 ```das
 options gen2
+options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // PERF0xx: Brief rule title
 //
 // Problem: What the bad pattern does and why it's slow.
@@ -74,16 +108,18 @@ def good_example() {
 }
 ```
 
+Nearly every fixture under `utils/lint/tests/` carries the `auto_inline_functions` line — without it, inline splices rewrite the shapes the fixture asserts and the warning counts go flaky.
+
 ### 5. Update documentation
 
-Add the rule to `doc/source/reference/language/perf_lint.rst` with a brief example (repo-only).
+Add the rule to `doc/source/reference/language/lint.rst` — one file covers LINT, PERF and STYLE — with a brief example (repo-only).
 
 ## Visitor State
 
 The visitor tracks:
 
 - `loop_depth : int` — nesting level (0 = not in a loop). Incremented for `for` and `while`.
-- `var_stack : array<tuple<v:Variable?; depth:int; is_iter:bool>>` — unified variable stack tracking all declared variables with their loop depth and whether they are loop iteration variables
+- `var_stack : array<VarStackEntry>` — unified variable stack (`@do_not_delete v : Variable?`, `depth`, `is_iter`) tracking every declared variable with its loop depth and whether it is a loop iteration variable
 - `scope_stack : array<int>` — saves `var_stack` length on block/loop entry for pop-on-exit
 - `in_while_cond : bool` — true while visiting the condition expression of a `while` loop
 - `in_closure : int` — closure depth, to avoid false positives from lambdas/blocks defined inside loops (they execute later, not in the loop)
@@ -108,10 +144,10 @@ After compilation, `Expression._type` is resolved. Check `expr._type.baseType ==
 |---|---|---|---|
 | PERF001 | `str += "..."` in loop | High | O(n^2) string allocation; use `build_string()` |
 | PERF002 | `character_at(s, i)` in loop with loop var index | High | O(n) per call; use `peek_data()` |
-| PERF003 | `character_at` anywhere | Info | O(n) due to strlen; consider `peek_data()` |
+| PERF003 | `character_at` anywhere | Info | index-0 form (`character_at(s, 0)`) → `first_character(s)`; otherwise O(n) due to strlen, consider `peek_data()` |
 | PERF004 | `str = "{str}..."` in loop | High | O(n^2) string interpolation; use `build_string()` |
 | PERF005 | `length(str)` in while condition | Medium | strlen recomputed each iteration; cache it |
-| PERF006 | `push`/`emplace` in loop without `reserve()` | Medium | repeated reallocations; `reserve()` before loop |
+| PERF006 | `push`/`push_clone`/`emplace` into an outer-scope array inside a **known-length** loop without a prior `reserve()` | Medium | repeated reallocations; `reserve()` before the loop. Silent inside closures, under an `if`, or when the loop has `break`/`continue` (iteration count unpredictable) |
 | PERF007 | `string(das_string)` in comparison | Medium | unnecessary allocation; das_string supports == directly |
 | PERF008 | `get_ptr(x)` for `is`/`as` type checks | Low | unnecessary; smart_ptr supports type checks directly |
 | PERF009 | `var x <- expr; return <- x` (move-init) **or** `var x := src; return <- x` (clone-init, lowered to `<- clone_to_move(...)`) | Low | move flavor → `return <- expr`; clone flavor → `return clone_to_move(src)` (NOT `return <- src`, which would move/destroy the source). `pending_move_is_clone` flag (set when `v.init` is an `ExprCall` to `clone_to_move`) selects the message. Composes with STYLE032 (`push_from`→`:=`). |
@@ -128,12 +164,9 @@ After compilation, `Expression._type` is resolved. Check `expr._type.baseType ==
 | PERF020 | `T(x)` where `x` is already workhorse type `T` (15 names: `int`/`int8`/`int16`/`int64`, `uint`/`uint8`/`uint16`/`uint64`, `float`, `double`, `string`, `bitfield`/`bitfield8`/`bitfield16`/`bitfield64`) | Low | drop the cast — it's a no-op. Match: `call.func.fromGeneric?.name ?? call.func.name` is in the workhorse-cast set AND `arg._type.baseType` equals the cast's target type (Ref/Const/Temp qualifiers ignored). User-named bitfield/enum constructors (`MyBitfield(x)`, `MyEnum(x)`), vector constructors (`int2`/`float3`/…), and `string(das_string)` are out of scope by construction |
 | PERF021 | `cond ? T(a) : T(b)` — the same workhorse cast `T` applied on both branches of a ternary | Low | hoist the cast out: `T(cond ? a : b)` — one cast instead of two. Fires anywhere, including in closures |
 | PERF022 | `for (s in A) { B \|> push(s) }` / `push_clone(s)` where body is exactly that one statement, single iter-var, source is `array<T>` / C-array, destination is `array<T>` | Medium | use `B \|> push_from(A)` / `push_clone_from(A)` (bulk reserve+copy in `daslib/builtin.das`). Single-name `push`/`push_clone` is overloaded between single-element and bulk forms (ambiguous when destination is `array<T[]>`); the `_from` suffix names the bulk intent. Warns at the for-loop's `.at` rather than the inner push's `.at` to avoid colliding with PERF006 under `perf_warning`'s same-location dedup. `emplace` is out of scope: for-iter-var is const-ref, but `emplace` requires var-ref, so the hand-rolled shape doesn't compile. Range/iterator/generator sources are not flagged — no bulk overload to migrate to |
-| PERF023 | `var X = clone_expression(E)` whose only uses are `$e(X)` splice tags inside `qmacro` / `qmacro_block` / `qmacro_expr` / `qmacro_block_to_array` bodies | Medium | drop the pre-clone, inline `$e(E)` at each splice site. `apply_template` (templates_boost.das:418; its substitution visitor clones at :252) calls `clone_expression` on every substitution input, so the user-side pre-clone is wasted work. Detection: post-expansion, `$e(X)` becomes `add_ptr_ref(X)` inside an `ExprMakeBlock`; the visitor tracks `perf023_splice_depth++` on entry to any `add_ptr_ref` call and classifies each candidate's `ExprVar` reference as "safe" if `depth > 0` else "disqualified". Fires only when ALL uses are safe AND at least one is observed. Multi-clone-of-same-source is still flagged (e.g. `var a = clone_expression(takeExpr); var b = clone_expression(takeExpr)` for two `$e(...)` slots): inlining `$e(takeExpr)` at both slots preserves "N independent clones" semantics because apply_template clones each substitution. The lint runs unconditionally inside closures because the rules-block IS a closure (`apply_qrules` builds an `ExprBlock` with `isClosure` flag). Closure-scoped *decls* are skipped — only parent-scope `var X = clone_expression(...)` is a candidate. `clone_type` is out of scope (no matching `add_type_ptr_ref` splice wrapper in the user-facing qmacro grammar) |
+| PERF023 | `var X = clone_expression(E)` whose only uses are `$e(X)` splice tags inside `qmacro` / `qmacro_block` / `qmacro_expr` / `qmacro_block_to_array` bodies | Medium | drop the pre-clone, inline `$e(E)` at each splice site. `apply_template` (templates_boost.das:407; its substitution visitor clones at :244/:257) calls `clone_expression` on every substitution input, so the user-side pre-clone is wasted work. Detection: post-expansion, `$e(X)` becomes `add_ptr_ref(X)` inside an `ExprMakeBlock`; the visitor tracks `perf023_splice_depth++` on entry to any `add_ptr_ref` call and classifies each candidate's `ExprVar` reference as "safe" if `depth > 0` else "disqualified". Fires only when ALL uses are safe AND at least one is observed. Multi-clone-of-same-source is still flagged (e.g. `var a = clone_expression(takeExpr); var b = clone_expression(takeExpr)` for two `$e(...)` slots): inlining `$e(takeExpr)` at both slots preserves "N independent clones" semantics because apply_template clones each substitution. The lint runs unconditionally inside closures because the rules-block IS a closure (`apply_qrules` builds an `ExprBlock` with `isClosure` flag). Closure-scoped *decls* are skipped — only parent-scope `var X = clone_expression(...)` is a candidate. `clone_type` is out of scope (no matching `add_type_ptr_ref` splice wrapper in the user-facing qmacro grammar) |
 | PERF024 | `func(clone_*(X))` (Arm A) or `var X = clone_*(E); func(X)` with no other uses (Arm B) where `func` carries a `[clone(paramName)]` annotation at the matching arg position | Medium | drop the outer clone wrap — the callee clones internally. `[clone(p1, p2)]` is a C++-registered metadata-only annotation (zero runtime cost); each annotated function promises to clone the named params internally. Detection in `preVisitExprCallArgument`: compute the callee's annotated param indices, identity-match the current arg's position via `intptr`, peel `ExprRef2Value` wrapper (typer inserts it whenever a ref-typed var — e.g. `var X : Expression?` — is passed to a non-ref param), then either flag `clone_*(...)` directly (Arm A) or mark a bare ExprVar candidate as safe (Arm B). Arm B reuses PERF023's seed-+-classify shape with a per-function `Perf024Candidate` array and `perf024_skip_iptr` flag. Annotation is wrong when the function MUTATES its input in place (e.g. `apply_template` / all `apply_qmacro_*` / `apply_qblock_*` go through `TemplateVisitor` which substitutes in place) — pre-clones at mutating callsites are load-bearing, NOT redundant; verify by reading the body before annotating |
 | PERF025 | `"{string(x)}"` — a `string(value)` cast as a direct string-interpolation element, where `value` is stringify-equivalent: signed `int`/`int8`/`int16`/`int64`, `float`, `double`, `string`, `das_string` (`tHandle` + annotation `"das_string"`) | Low | drop the cast — interpolation already converts via the builder's `DebugDataWalker`, so the cast just allocates an intermediate string. Detection in `preVisitExprStringBuilderElement` (per-element hook): `perf025_unwrap_element` peels one `ExprRef2Value`, `perf025_string_call_value` matches a `string(...)` call (skipping explicit `string(x, true)` hex) and returns its value arg, `perf025_value_kind` classifies it. **Unsigned** ints (`uint`/`uint8`/`uint16`/`uint64`) still warn but append a `:d`-tag hint — they interpolate as **hex** by default (`"{42u}"` → `0x2a`), unlike `string()`'s decimal, so the bare drop changes output. **Skipped (kind 0):** `array<uint8>`/`uri`/`text_range` (value-shape change, not just format), `string()` nested as an arg to another call (`"{length(string(x))}"` — only direct elements are flagged), and any type with no `string()` overload. Reports at the `string` call's `.at`; for a `string(string)` arg PERF025 claims the location and the overlapping PERF020 is deduped. `string(x)` under a `_::fmt(":fmt", …)` format wrapper cannot occur — `fmt` has no string-valued overload, so `"{string(x):fmt}"` does not compile |
-
-| PERF029 | `for (i in range(length(X)))` where `i` subscripts X plus sibling arrays in lockstep | Medium | zip them: `for (a, b in X, Y)` — extends PERF018 to parallel arrays |
-| PERF030 | `a <- b` move-assign onto a live heap-carrying bare variable (arrays/tables/lambdas/composites carrying one) | High | old contents dropped unreleased — a leak on a persistent heap. When the target can be live, `delete a` first — that fixes the LEAK, but the check is syntactic and still warns (only the `force_inscope_pod` rewrite marks moves `podDelete`), so a genuine delete-first site carries both the `delete` and a `// nolint:PERF030 — released on the line above`. When the target is provably fresh/empty, fold the move into the declaration (`var a <- expr`) or suppress with the proof as the reason. Excluded: element targets (`tab[k] <- v`), CMRES/`return <- r` lowering, and **generated moves** — the early-out relocation splits `var inscope x <- init` into let + generated move (fresh target, `finally` releases), which must stay silent |
 | PERF026 | heap traffic on a hot path — reached from a function carrying `[hot_path]` / `[no_alloc]` | High | see **Hot-path contracts** below |
 | PERF027 | environment lookup on a hot path (`[hot_path]` / `[no_env]`) | High | `get_env_variable` calls `getenv` AND allocates the result in the context heap on every call; resolve at `[init]` or behind a `[cold_path]` loader and cache |
 | PERF028 | console / file I/O on a hot path (`[hot_path]` / `[no_io]`) | Medium | the debug line that never got removed; this is the rule to reach for `DAS_LINT_DISABLE=PERF028` on |

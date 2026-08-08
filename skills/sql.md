@@ -101,7 +101,7 @@ db |> create_table(type<Car>)            // ... use freely; closes when `db` goe
 ```das
 [sql_table(name = "Users")]
 struct User {
-    @sql_primary_key Id : int                       // INTEGER PRIMARY KEY (AUTOINCREMENT for int)
+    @sql_primary_key Id : int                       // INTEGER PRIMARY KEY (rowid alias)
     Name : string                                   // TEXT NOT NULL
     Email : string                                  // TEXT NOT NULL
     @sql_unique
@@ -124,7 +124,7 @@ Field annotations:
 
 | Annotation | Effect |
 |---|---|
-| `@sql_primary_key` | INTEGER PRIMARY KEY (AUTOINCREMENT for `int`); rejected on `Option<T>` and `@sql_computed` |
+| `@sql_primary_key` | `INTEGER PRIMARY KEY` — the rowid alias, so an unset `int` PK is auto-assigned on insert. Not SQLite's `AUTOINCREMENT` (never emitted). Rejected on `Option<T>` and `@sql_computed` |
 | `@sql_column = "..."` | Rename the on-disk column (escape hatch for daslang field names that clash with SQL keywords or the existing schema) |
 | `@sql_unique` | Single-column UNIQUE via portable generated index `uq_<table>_<column>` |
 | `@sql_references = "Parent"` | Foreign key to another `[sql_table]` struct's primary key |
@@ -146,7 +146,7 @@ struct UserAcct { ... }
 
 `fields` is a single string or a tuple of strings. `unique` defaults to `false`. `name` defaults to `idx_<table>_<col1>_<col2>`. Multiple `[sql_index]` lines are stackable. `@sql_unique` uses the same provider-neutral index rail for the one-column case; `[sql_index]` adds explicit naming and composite keys. Composite UNIQUE via `[sql_index(unique = true, fields = (...))]` is the prerequisite for `_sql_upsert` composite-conflict targets.
 
-`db |> create_table(type<T>)` issues the CREATE TABLE + every `[sql_index]` DDL. `db |> drop_table_if_exists(type<T>)` is the idempotent teardown. `db |> check_schema(type<T>)` validates the open DB matches the struct on (name, type, NOT NULL, PRIMARY KEY) — recommended startup pattern for code that opens a DB it didn't just create.
+`db |> create_table(type<T>)` issues the CREATE TABLE + every `[sql_index]` DDL. `db |> drop_table_if_exists(type<T>)` is the idempotent teardown. `db |> check_schema(type<T>)` validates the open DB matches the struct on (name, type, NOT NULL, PRIMARY KEY) — recommended startup pattern for code that opens a DB it didn't just create. **`check_schema` fails on a struct carrying `@sql_computed`**: it compares against `PRAGMA table_info`, which does not list generated columns, so it reports a column-count mismatch. Skip the check for computed-column tables.
 
 ## Nullability — `Option<T>` everywhere, never `T?`
 
@@ -192,8 +192,8 @@ let cars <- _sql(db |> select_from(type<Car>)
                     |> _order_by(_.Name)
                     |> _select((Name = _.Name, Price = _.Price))
                     |> take(5))
-// SQL: SELECT "Name" AS "Name", "Price" AS "Price" FROM "Cars"
-//      WHERE ("Price" > ?) AND ("Name" LIKE ? ESCAPE '\') ORDER BY "Name" LIMIT ?
+// SQL: SELECT "Name", "Price" FROM "Cars"
+//      WHERE ("Price" > ?) AND ("Name" LIKE ? ESCAPE '\') ORDER BY "Name" ASC LIMIT ?
 // Binds: [cutoff, "T%", 5]
 ```
 
@@ -454,7 +454,7 @@ struct Account {
 
 let in_berlin <- _sql(db |> select_from(type<Account>)
                         |> _where(_.Profile.Addr.City == "Berlin"))
-// SQL: SELECT Id, Profile FROM "Accounts" WHERE json_extract("Profile", '$.Addr.City') = ?
+// SQL: SELECT "Id", "Profile" FROM "Accounts" WHERE json_extract("Profile", '$.Addr.City') = ?
 ```
 
 Both forms panic on bad stored data — malformed JSON trips `read_json`, corrupt archive bytes trip `mem_archive_load`. `try_select_from` / `try_query` only catch sqlite3-level prepare/step errors; they do NOT convert adapter panics to `Err`. See `skills/json.md` for JSON value modeling. See [tutorials/sql/28-json.das](../tutorials/sql/28-json.das) for the full surface.
@@ -491,7 +491,7 @@ Mutation paths are blocked:
 **Captured locals via `to_sql_literal`**: SQLite stores view bodies as TEXT in `sqlite_schema` and rejects `?` inside DDL, so `_create_view` cannot use `?` binds. Instead it stringifies each bind expression once at view-creation time and inlines the literal. All numeric primitives, `bool`, and `string` work out of the box. User types extend with a one-line overload:
 
 ```das
-enum Status { Pending = 1; Shipped = 2 }
+enum Status { Pending = 1, Shipped = 2 }
 def to_sql_literal(s : Status) : string => "{int(s)}"
 ```
 
@@ -515,7 +515,7 @@ db |> insert(Doc(Id = 42l, Body = "The quick brown fox jumps"))
 let foxes <- _sql(db |> select_from(type<Doc>)
                      |> _where(_.Id == 42l && (_.Body |> text_match("quick fox")))
                      |> _order_by(_.Rank))
-// SELECT "Id", "Body", rank FROM "docs_idx" WHERE "Id" = ? AND "Body" MATCH ? ORDER BY rank
+// SELECT "Id", "Body", rank FROM "docs_idx" WHERE ("Id" = ?) AND ("Body" MATCH ?) ORDER BY "Rank" ASC
 
 let removed = db |> _sql_delete(type<Doc>, _.Body |> text_match("obsolete"))
 ```
@@ -535,8 +535,7 @@ SQLite and DuckDB only — PostgreSQL has no client-side UDFs, so `[sql_function
 Two flavors. Per-connection `register_function` for explicit one-off registration; `[sql_function]` annotation for auto-registration on every open + chain visibility.
 
 ```das
-def damage(base : float; armor : int; mult : float) : float =>
-    base * (1.0f - float(armor) / 100.0f) * mult
+def damage(base : float; armor : int; mult : float) : float => base * (1.0f - float(armor) / 100.0f) * mult
 
 // Per-connection
 db |> register_function("damage", @@damage, true /* deterministic */)
@@ -702,14 +701,18 @@ All have `try_` siblings returning `SqlError` (or `Result<array<string>, string>
 
 ```das
 db |> attach("other.db", "ext")                  // try_attach for non-panic
-db |> with_attached("other.db", "ext") $(db) {
-    let n = db |> with_schema("ext") |> select_from(type<RemoteRow>)
-    // ...
+db |> with_schema("ext") $(arch) {
+    let rows <- _sql(arch |> select_from(type<RemoteRow>))
 }
 db |> detach("ext")
+
+// attach + detach in one — the block param is already schema-qualified
+db |> with_attached("other.db", "ext") $(tenant) {
+    let rows <- _sql(tenant |> select_from(type<RemoteRow>))
+}
 ```
 
-`with_schema(name)` returns a runner wrapper that qualifies subsequent queries against the named attached schema. The attached connection shares the same `sqlite3*` handle, so `[sql_function]`-registered functions stay visible without a second install hook.
+`with_schema(name) $(scoped) { ... }` invokes the block with a runner that qualifies every query as `"<schema>"."<table>"`. It is block-shaped and returns `void` deliberately: the qualified runner aliases `db`'s `sqlite3*` handle and must not outlive it, so it can't be `inscope`'d. `with_attached` attaches, hands you exactly such a runner, and detaches in `finally` — don't call `with_schema` again inside it. Because the attached DB shares the same `sqlite3*` handle, `[sql_function]`-registered functions stay visible without a second install hook.
 
 ## Raw-SQL escape hatch
 
@@ -720,14 +723,25 @@ db |> exec("INSERT INTO Users (Name) VALUES (?)", "alice")          // 0/1/2/3 p
 let v = db |> query_scalar("SELECT COUNT(*) FROM Users", type<int>)
 let row = db |> query_one("SELECT Id, Name FROM Users WHERE Id = ?", type<User>, 42)
 let opt = db |> query_one_opt("SELECT Id, Name FROM Users WHERE Email = ?", type<User>, email)
-let many <- db |> query("SELECT type, name FROM sqlite_master WHERE type=?", type<MasterRow>, "table")
+let many <- db |> query("SELECT type, name FROM sqlite_master WHERE type=?", type<MasterTable>, "table")
+```
+
+The row struct of a raw `query` / `query_one` **must carry `[sql_table]`** — a plain struct fails deep inside the boost with `error[30341] … _::_sql_read_row(sqlite3_stmt? const&, MasterTable)`. And `type` is a daslang keyword, so a column named `type` needs a renamed field:
+
+```das
+[sql_table(name = "sqlite_master_rows")]
+struct MasterTable {
+    @sql_column = "type"
+    row_type : string
+    name : string
+}
 ```
 
 All have `try_` and (for the read family) `_opt` siblings. 4+ positional binds isn't shipped — if you need them, build the SQL with the values inlined for trusted constants, or stick with `_sql` macros for user-controlled values.
 
 `query_scalar` ships overloads for `int`, `int64`, `float`, `double`, `bool`, `string`. Other types come through the typed `query_one` family with a `[sql_table]`-shaped struct.
 
-For listing tables, columns, etc., catalog spelling is genuinely provider-specific — there's no abstract `list_tables` helper. Use `query("SELECT type, name FROM sqlite_master WHERE type='table'", type<MasterTable>)`. See [tutorials/sql/30-list_tables.das](../tutorials/sql/30-list_tables.das).
+For listing tables, columns, etc., catalog spelling is genuinely provider-specific — there's no abstract `list_tables` helper. Use `query("SELECT type, name FROM sqlite_master WHERE type='table'", type<MasterTable>)` with the annotated struct above. See [tutorials/sql/30-list_tables.das](../tutorials/sql/30-list_tables.das).
 
 ## Threading and contexts
 
@@ -760,6 +774,8 @@ Strings produced by `query` / `_sql` are allocated on the calling context's heap
 - **PRAGMA can't use `?` binds** — values are inlined into the SQL string by `set_pragma`; same for VACUUM INTO's path. `_sql(...)` `?` binds are fine in regular SELECTs.
 - **Views can't use `?` binds in their body** — `_create_view` inlines literals via `to_sql_literal`; values are frozen at creation time.
 - **`@safe_when_uninitialized` on `Option<T>` fields** — under `strict_smart_pointers` the `[sql_table]` row reader needs it on Option-bearing structs and on raw `array<uint8>` BLOB fields.
+- **`check_schema` and `@sql_computed` don't mix** — it reads `PRAGMA table_info`, which omits generated columns, so it reports a column-count mismatch on a table that is in fact correct.
+- **A raw-`query` row struct needs `[sql_table]`** — and a column whose name is a daslang keyword (`type`, `class`) needs `@sql_column = "type"` on a renamed field.
 - **`Result::Err` from `try_select_from` only catches sqlite3-level errors** — adapter panics (malformed JSON, corrupt archive) are NOT converted to Err. Validate JSON shape externally if you need defensive reads.
 - **Bulk insert composability** — `try_insert(rows)` auto-uses `BEGIN IMMEDIATE/COMMIT` standalone, `SAVEPOINT/RELEASE` when nested. Don't wrap a bulk insert in a manual `with_transaction` block expecting to skip the inner txn — the inner already does the right thing.
 - **String predicate operators emit LIKE patterns** — `starts_with(s)`, `ends_with(s)`, `contains(s)` use `LIKE ? ESCAPE '\'` with `%` / `_` escaped via the helpers `like_escape_prefix` / `like_escape_suffix` / `like_escape_substring`. They can't use a B-tree index for substring search — for large columns prefer `[sql_fts5]` with `text_match`.
