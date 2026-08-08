@@ -229,9 +229,11 @@ namespace das
         };
         virtual bool lint(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &,
                 const AnnotationArgumentList &, string & err) override {
-            // post-infer, so an inferred (auto) return type is concrete by now
-            if ( !func->result || !func->result->isString() ) {
-                err = "[temp_string_result] requires a function that returns a string";
+            // post-infer, so an inferred (auto) return type is concrete by now. The contract is
+            // a BY-VALUE fresh allocation: a reference or temporary result points into storage
+            // the callee still owns, which is exactly what the flag promises never happens
+            if ( !func->result || !func->result->isString() || func->result->ref || func->result->temporary ) {
+                err = "[temp_string_result] requires a function that returns a string by value (not string& or string#)";
                 return false;
             }
             return true;
