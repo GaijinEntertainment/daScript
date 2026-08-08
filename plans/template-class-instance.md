@@ -274,9 +274,33 @@ Three structural facts, all from diffs (not the peek the cluster table used):
    the e-loop) plus the block stride — a byte-identical static_if merge would have to
    branch-duplicate the inner loops. K6 is its own layout (census already said leaf).
 
-Options: (a) measured unification — a perf session (M1, interleaved A/B, ≥3
-launches/arm) that may well conclude the specializations earn their keep; (b) leave
-KqMv, continue with RopeStore (10→~5, format×tier shaped like SqAttn). Boris's call.
+Ruled (Boris, same day): measured cases go to the PROFILING FOLLOWUP; tonight sweeps
+everything the byte-identity gate admits. Prediction on record: the specializations are
+accidental — they will merge.
+
+### Tonight's sweep COMPLETE (2026-08-08): the free merges are exhausted
+
+**Stamped:** SqAttn 23→10 templates + 3 combs (all five tiers); RopeStore float pairs —
+`MetalRopeStore{F16,F32}` + `MetalRopeStoreB{F16,F32}` from 2 templates (typedef KT +
+`@template_constant CLAMP16` gating the store block via `static_if`). **The static_if
+fold emits byte-identical MSL — zero trace, lets and all** (probe-verified both branch
+directions on ca5862d8e); the clamp-vs-raw pattern is now free for any format pair.
+
+**Fenced → the profiling followup** (every one needs interleaved A/B on the M1; oracles
+cover correctness only):
+- KqMv B2→colbase-form unification (+ K4/K5 static_if if the first arm is clean).
+- MoeMulMm K6/Q8/Mx4 joining `MetalMoeMulMmBase` (followup_general #8: cross-iteration
+  state / prologue hook / binding renumber — every route rewrites hot inner loops).
+- The plain GEMV width pairs — `MetalGemvB2/B4`, `MetalQ8MvB2/B4`,
+  `MetalGemvW13SwB2/B4`: NOT scaled twins (panel sizes, staging-loop shapes, and for
+  Q8Mv the whole thread geometry differ) — unifying means picking one shape per pair
+  and measuring it at both widths.
+
+**Genuinely different, NOT merge candidates** (surveyed, closed): rope-store quant
+stores (Q8/Tq4/BQ8/BTq4 — the tq4 rotate, 168 diff lines), `KqGemvK5C` (a measured
+alternative lowering the encoder picks per shape), `Q8Gemm` vs `Q8Gemm64` (90 vs 316
+lines), KqMv B8 trio (tgmem X-panel algorithm). The tensor (tmm2d) `*T` twins are
+followup_general #12's deletion audit, not merges.
 
 ### Stage 2 first vehicle (2026-08-07): plain SqAttn tier, 4→2 templates
 
