@@ -744,9 +744,16 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
         }
         scan_body(ctx, o1.subexpr)
     } elif (e is ExprOp3) {
-        scan_body(ctx, (e as ExprOp3).subexpr)
-        scan_body(ctx, (e as ExprOp3).left)
-        scan_body(ctx, (e as ExprOp3).right)
+        let o3 = e as ExprOp3
+        if (o3.subexpr is ExprConstBool) {
+            // compile-time select (stamped @template_constant cond) — untaken arm is dead text,
+            // must not register builtins or write marks
+            scan_body(ctx, (o3.subexpr as ExprConstBool).value ? o3.left : o3.right)
+        } else {
+            scan_body(ctx, o3.subexpr)
+            scan_body(ctx, o3.left)
+            scan_body(ctx, o3.right)
+        }
     } elif (e is ExprIfThenElse) {
         scan_body(ctx, (e as ExprIfThenElse).cond)
         scan_body(ctx, (e as ExprIfThenElse).if_true)
@@ -1227,6 +1234,11 @@ def private emit_value(var ctx : MslCtx; e : Expression?) : string {
         if (op3.op != "?") {
             err(ctx, op3.at, "ternary operator `{op3.op}` is not supported")
             return "/*op {op3.op}*/"
+        }
+        if (op3.subexpr is ExprConstBool) {
+            // compile-time select folds to the taken side — the value-position twin of the
+            // static_if zero-trace invariant (stamped @template_constant conditions)
+            return emit_value(ctx, (op3.subexpr as ExprConstBool).value ? op3.left : op3.right)
         }
         let c = emit_value(ctx, op3.subexpr)
         let tv = emit_value(ctx, op3.left)

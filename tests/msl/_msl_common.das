@@ -107,7 +107,7 @@ class Control {
     @ssbo @binding = 8 out3 : array<float>
 
     [metal_kernel(name="control_msl"), marker(no_coverage)]
-    def control {
+    def control {   // nolint:STYLE037,STYLE038 — conformance fixture; flat one-statement-per-opcode enumeration is the design
         let i = gl_GlobalInvocationID.x
         let x = a[i]
         let y = b[i]
@@ -141,6 +141,9 @@ class Control {
         let dnap = acc--
         zed += (acc + snap) + dnap
         out1[i] = hot ? zed : (zed + 7u)
+        // const-cond selects (the stamped @template_constant shape) fold to the taken side
+        out1[i] += true ? zed : 12345u
+        out1[i] += false ? 54321u : (zed + 1u)
         let m = p[i]
         let w = q[i]
         var iacc = 0
