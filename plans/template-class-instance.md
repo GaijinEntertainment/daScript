@@ -146,6 +146,13 @@ Landed deltas vs the stage-0 spec (each probe-verified):
   pre-fold; `tsi_is_const_init` peels one unary `+`/`-`).
 - **`KT(1)`-style ctor-casts in template bodies need no rule** — infer resolves
   call-position alias names through the instance's structure aliases (probe-verified).
+- **`late_bind = true`** (decision 4) — annotation argument on the template, rides the
+  inherited copy down to every instance; test arm binds KT from a sibling structure
+  annotation that runs after the reifier.
+- **`@template_call`** (decision 5) — harvest mirrors `@template_constant`
+  (validate `@@name`/string init, `renameCall` rule, erase field, slot-vs-method-name
+  collision check); tests cover default, `@@` rebind, string rebind, and `@@` address
+  targets through a function-pointer taker; negative fixture for a non-callee init.
 
 Tests (`tests/typemacro/`, 25/25 green interp AND `-jit`; AOT emits folded bodies —
 `ToyNarrow`gated` compiles to `return x + 100`): `test_template_struct_instance.das`
@@ -197,6 +204,20 @@ before the `skills/make_pr.md` checklist:
    class-flavored name yet. When class-flavored template macros show up, we add
    `template_class_instance` alongside.
 3. Stage-1 GO given.
+4. Unbound-alias check: keep the eager named error by default;
+   `[ |> template_struct_instance(late_bind = true)]` on the template waives it for
+   macro-supplied parameters (option D). Probe round proved: natural resolution covers
+   signatures/bodies/fields on the clones (no rules needed), a `[dirty_infer_macro]`
+   can bind an alias mid-infer (NOT `[infer_macro]` — that one runs only on a clean
+   tree), and `finish`/`patch` never fire for a failed struct, so a deferred named
+   error is impossible — the opt-out knob is the only way to keep the good message.
+5. Call-parameter axis (`@template_call`, IMPLEMENTED same round): the field name is
+   what template bodies call, the init (`@@name` or string) is the default target,
+   instances redirect with `override sdot = @@ssdot`. Rides the rules engine's
+   existing `renameCall`/call2name, which rewrites calls AND `@@` address targets —
+   erased like a constant, direct call in the stamped class. Replaces the closed-set
+   `static_if` route for callee selection with an open one (a new instance can route
+   to a function the template never names).
 
 ## Stage 2 pointer (not planned here)
 

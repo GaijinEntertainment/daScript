@@ -21,7 +21,8 @@ An instance is just a class that inherits from the template:
 
 - a ``typedef`` inside the instance binds a type parameter;
 - an ``override`` of a ``@template_constant`` field binds a constant;
-- an instance method with ``def override`` replaces the template's method.
+- an instance method with ``def override`` replaces the template's method;
+- an ``override`` of a ``@template_call`` field redirects a free-function call.
 
 
 The template
@@ -72,8 +73,8 @@ Three things to notice:
   stamped and concrete.
 
 
-The three instance patterns
-===========================
+The four instance patterns
+==========================
 
 Full source: :download:`20_template_struct_instance.das <../../../../../tutorials/macros/20_template_struct_instance.das>`
 
@@ -107,6 +108,38 @@ Constants also fold inside field initializers and inside methods the instance
 writes itself — a ``@template_constant`` behaves like a per-instance
 compile-time value everywhere in the class body.
 
+The fourth pattern parameterizes a **free-function call**. The template calls
+a function by name; ``@template_call`` marks that name as rebindable — the
+field name is what the body spells, the init is where the call goes:
+
+.. code-block:: das
+
+    [ |> template_struct_instance]
+    class template public MixT {
+        acc : int = 0
+        @template_call dot_i = @@dot_i
+
+        def feed(a, b : int) {
+            acc += dot_i(a, b)
+        }
+    }
+
+    class MixPlain : MixT {         // dot_i calls stay on the real dot_i
+    }
+
+    class MixLoud : MixT {
+        override dot_i = @@dot_i_scaled
+    }
+
+``MixLoud`` redirects every ``dot_i(...)`` call — and every ``@@dot_i``
+address — to ``dot_i_scaled``. The value may also be a string
+(``override dot_i = "dot_i_scaled"``). Like a constant, the field is erased:
+the stamped class makes a plain direct call, so there is no function pointer
+in the object and nothing blocks inlining. Compare this with the
+``static_if`` route: a constant switch picks between branches the template
+already spells out, while a call parameter is open — a new instance can
+route to a function the template has never heard of.
+
 
 What the reifier does
 =====================
@@ -115,16 +148,20 @@ The macro runs at parse time, when the instance class is declared. It:
 
 1. binds every template alias to the instance's ``typedef`` declarations
    (module-level aliases stay untouched — only a genuinely unbound name is
-   an error);
+   an error; ``[ |> template_struct_instance(late_bind = true)]`` waives the
+   check for templates whose parameters another macro supplies later in the
+   compile);
 2. harvests every ``@template_constant`` value, replaces its reads with the
    literal, and erases the field;
-3. clones each template method onto the instance, retyping signatures and
+3. harvests every ``@template_call`` target and renames the matching calls
+   and ``@@`` addresses, erasing the field;
+4. clones each template method onto the instance, retyping signatures and
    bodies, skipping methods the instance defines itself;
-4. cuts the template out of the instance's ancestry. If the template itself
+5. cuts the template out of the instance's ancestry. If the template itself
    derives from a concrete base class, the instance keeps that base — normal
    inheritance, upcasts, and virtual dispatch through the base still work.
 
-After step 4 the instance is an ordinary class. Anything that inspects it
+After step 5 the instance is an ordinary class. Anything that inspects it
 later — other structure annotations, RTTI, AOT — sees plain concrete code.
 
 
@@ -136,6 +173,8 @@ Output
     FloatTop:  kept 3.25 out of 3
     IntLatest: kept 7 out of 3
     IntShouty: BEST 10 OF 3!
+    MixPlain:  acc=6
+    MixLoud:   acc=600
 
 
 .. seealso::

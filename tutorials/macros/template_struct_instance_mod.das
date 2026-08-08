@@ -34,3 +34,25 @@ class template public TopKeeperT {
         return "kept {best} out of {n}"
     }
 }
+
+def public dot_i(a, b : int) : int {
+    return a * b
+}
+
+def public dot_i_scaled(a, b : int) : int {
+    return a * b * 100
+}
+
+// A call parameter. `@template_call` names a free function the body calls:
+// the field name is what the body spells, the init is where the call goes,
+// and instances redirect it with `override`. The field is erased like a
+// constant — the stamped class makes a direct call, nothing is dispatched.
+[ |> template_struct_instance]
+class template public MixT {
+    acc : int = 0
+    @template_call dot_i = @@dot_i
+
+    def feed(a, b : int) {
+        acc += dot_i(a, b)
+    }
+}

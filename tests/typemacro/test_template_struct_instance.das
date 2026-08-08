@@ -94,6 +94,50 @@ class XModInt : XModKern {
     override BIAS = 1000
 }
 
+[tsi_test_bind_kt]
+class LateInt : LateKern {
+    // no typedef — [tsi_test_bind_kt] supplies KT after the reifier; late_bind waives the check
+}
+
+def tsi_sdot(a, b : int) : int {
+    return a * b
+}
+
+def tsi_ssdot(a, b : int) : int {
+    return a * b * 1000
+}
+
+def tsi_via_ptr(f : function<(a, b : int) : int>; a, b : int) : int {
+    return invoke(f, a, b)
+}
+
+[ |> template_struct_instance]
+class template DotT {
+    x : KT
+    @template_call tsi_sdot = @@tsi_sdot // the field name is what bodies call; the init is the default target
+
+    def run(v : KT) : KT {
+        return tsi_sdot(x, v)
+    }
+    def run_ptr(v : KT) : KT {
+        return tsi_via_ptr(@@tsi_sdot, x, v) // @@ address targets rebind too
+    }
+}
+
+class DotDefault : DotT {
+    typedef KT = int
+}
+
+class DotWide : DotT {
+    typedef KT = int
+    override tsi_sdot = @@tsi_ssdot
+}
+
+class DotStr : DotT {
+    typedef KT = int
+    override tsi_sdot = "tsi_ssdot"
+}
+
 [test]
 def test_tsi_class_rail(t : T?) {
     t |> run("stamped methods, static_if fold, override wins, constants") @(t : T?) {
@@ -153,6 +197,36 @@ def test_tsi_cross_module(t : T?) {
             var inscope k <- new XModInt()
             k.x = 42
             t |> equal(k->value(), 1042)
+        }
+    }
+}
+
+[test]
+def test_tsi_late_bind(t : T?) {
+    t |> run("late_bind = true defers alias binding to a later macro") @(t : T?) {
+        unsafe {
+            var inscope k <- new LateInt()
+            k.x = 40
+            t |> equal(k->take(2), 42)
+        }
+    }
+}
+
+[test]
+def test_tsi_call_rebind(t : T?) {
+    t |> run("@template_call rebinds calls and @@ addresses per instance") @(t : T?) {
+        unsafe {
+            var inscope a <- new DotDefault()
+            var inscope b <- new DotWide()
+            var inscope c <- new DotStr()
+            a.x = 6
+            b.x = 6
+            c.x = 6
+            t |> equal(a->run(7), 42)        // default: the real tsi_sdot
+            t |> equal(b->run(7), 42000)     // @@tsi_ssdot rebind
+            t |> equal(c->run(7), 42000)     // string-form rebind
+            t |> equal(a->run_ptr(7), 42)    // @@ address target, default
+            t |> equal(b->run_ptr(7), 42000) // @@ address target, rebound
         }
     }
 }

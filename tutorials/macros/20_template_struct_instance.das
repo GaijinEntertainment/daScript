@@ -8,10 +8,11 @@ options gen2
 // `typedef`s pick the types, its `override`s pick the constants, and its
 // own methods replace the template's.
 //
-// Three patterns are demonstrated:
+// Four patterns are demonstrated:
 //   1. Type parameter     — typedef KT = float
 //   2. Constant parameter — override KEEP_LATEST = true, folded by static_if
 //   3. Method override    — the instance's own method wins
+//   4. Call parameter     — override dot_i = @@dot_i_scaled redirects a call
 //
 // Run: daslang tutorials/macros/20_template_struct_instance.das
 
@@ -50,6 +51,19 @@ class IntShouty : TopKeeperT {
     }
 }
 
+// --- 4. Call parameter ---
+// MixT's feed() calls dot_i(). MixPlain keeps that call on the real dot_i;
+// MixLoud redirects every dot_i call — and every @@dot_i address — to
+// dot_i_scaled. The redirect happens at stamp time, so the stamped class
+// makes a plain direct call: no function pointer, nothing to inline through.
+
+class MixPlain : MixT {
+}
+
+class MixLoud : MixT {
+    override dot_i = @@dot_i_scaled
+}
+
 [export]
 def main {
     unsafe {
@@ -70,6 +84,13 @@ def main {
         shouty->feed(3)
         shouty->feed(7)
         print("IntShouty: {shouty->report()}\n")
+
+        var inscope plain <- new MixPlain()
+        var inscope loud <- new MixLoud()
+        plain->feed(2, 3)
+        loud->feed(2, 3)
+        print("MixPlain:  acc={plain.acc}\n")
+        print("MixLoud:   acc={loud.acc}\n")
     }
 }
 
@@ -77,3 +98,5 @@ def main {
 //   FloatTop:  kept 3.25 out of 3
 //   IntLatest: kept 7 out of 3
 //   IntShouty: BEST 10 OF 3!
+//   MixPlain:  acc=6
+//   MixLoud:   acc=600
