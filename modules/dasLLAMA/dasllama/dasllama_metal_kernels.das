@@ -5339,6 +5339,17 @@ class MetalMoeGemvQ8 {
     }
 }
 
+// q4_K/q5_K kmask halfword-pair scale decode — sc/min byte pairs for both 32-halves of the
+// lane's superblock quadrant (x = sc lo-pair, y = min lo-pair, z = sc hi-pair, w = min hi-pair).
+def private kmask_scales(sv : uint4; iq : uint) : uint4 {
+    let hw0 = (sv.y >> (16u * iq)) & 0xFFFF
+    let hw2 = (sv.z >> (16u * iq)) & 0xFFFF
+    let hw4 = (sv.w >> (16u * iq)) & 0xFFFF
+    return uint4(hw0 & 0x3F3F, hw2 & 0x3F3F,
+        (hw4 & 0x0F0F) | ((hw0 & 0xC0C0) >> 2u),
+        ((hw4 >> 4u) & 0x0F0F) | ((hw2 & 0xC0C0) >> 2u))
+}
+
 // Expert-indexed Q4_K GEMV — MetalKqGemvK4's dot; the superblock index shifts by sel[slot] * esb.
 // x rides a float4 view: the 32-scalar-x-load form was load-issue-bound at the routed expert
 // shapes (nfe-row planes) — the vector view is 2.25x there (lab: bench_metal_moe_lab, 142→321 wGB/s).
@@ -5407,14 +5418,7 @@ class MetalMoeGemvK4 {
             }
             for [unroll_full] (r in range(2)) {
                 let blk = eb + (first_row + uint(r)) * nb + ib
-                let sv = ks4[blk]
-                let hw0 = (sv.y >> (16u * iq)) & 0xFFFF
-                let hw2 = (sv.z >> (16u * iq)) & 0xFFFF
-                let hw4 = (sv.w >> (16u * iq)) & 0xFFFF
-                let sc0 = hw0 & 0x3F3F
-                let sc1 = hw2 & 0x3F3F
-                let sc2 = (hw4 & 0x0F0F) | ((hw0 & 0xC0C0) >> 2u)
-                let sc3 = ((hw4 >> 4u) & 0x0F0F) | ((hw2 & 0xC0C0) >> 2u)
+                let scs = kmask_scales(ks4[blk], iq)
                 let qb = blk * 32u + iq * 8u + ir * 2u
                 let q1a = kqu[qb]
                 let q1b = kqu[qb + 1u]
@@ -5437,12 +5441,12 @@ class MetalMoeGemvK4 {
                 }
                 let dd = float(ksh[blk * 8u])
                 let dm = float(ksh[blk * 8u + 1u])
-                sumf[r] += dd * ((acc1[0] + 0.00390625 * acc1[1]) * float(sc0 & 255u)
-                    + (acc1[2] + 0.00390625 * acc1[3]) * float(sc0 >> 8u) * 0.0625
-                    + (acc2[0] + 0.00390625 * acc2[1]) * float(sc2 & 255u)
-                    + (acc2[2] + 0.00390625 * acc2[3]) * float(sc2 >> 8u) * 0.0625)
-                sumf[r] -= dm * (sumy[0] * float(sc1 & 255u) + sumy[1] * float(sc1 >> 8u)
-                    + sumy[2] * float(sc3 & 255u) + sumy[3] * float(sc3 >> 8u))
+                sumf[r] += dd * ((acc1[0] + 0.00390625 * acc1[1]) * float(scs.x & 255u)
+                    + (acc1[2] + 0.00390625 * acc1[3]) * float(scs.x >> 8u) * 0.0625
+                    + (acc2[0] + 0.00390625 * acc2[1]) * float(scs.z & 255u)
+                    + (acc2[2] + 0.00390625 * acc2[3]) * float(scs.z >> 8u) * 0.0625)
+                sumf[r] -= dm * (sumy[0] * float(scs.y & 255u) + sumy[1] * float(scs.y >> 8u)
+                    + sumy[2] * float(scs.w & 255u) + sumy[3] * float(scs.w >> 8u))
             }
             ib += 4u
         }
@@ -5507,14 +5511,7 @@ class MetalMoeGemvK5 {
             }
             for [unroll_full] (r in range(2)) {
                 let blk = eb + (first_row + uint(r)) * nb + ib
-                let sv = ks4[blk]
-                let hw0 = (sv.y >> (16u * iq)) & 0xFFFF
-                let hw2 = (sv.z >> (16u * iq)) & 0xFFFF
-                let hw4 = (sv.w >> (16u * iq)) & 0xFFFF
-                let sc0 = hw0 & 0x3F3F
-                let sc1 = hw2 & 0x3F3F
-                let sc2 = (hw4 & 0x0F0F) | ((hw0 & 0xC0C0) >> 2u)
-                let sc3 = ((hw4 >> 4u) & 0x0F0F) | ((hw2 & 0xC0C0) >> 2u)
+                let scs = kmask_scales(ks4[blk], iq)
                 let qs0 = blk * 160u + iq * 32u + l0
                 let qh0 = blk * 160u + 128u + l0
                 var acc : float[4]
@@ -5529,10 +5526,10 @@ class MetalMoeGemvK5 {
                 }
                 let dd = float(ksh[blk * 8u])
                 let dm = float(ksh[blk * 8u + 1u])
-                sumf[r] += dd * (float(sc0 & 255u) * acc[0] + float(sc0 >> 8u) * acc[1]
-                    + float(sc2 & 255u) * acc[2] + float(sc2 >> 8u) * acc[3])
-                sumf[r] -= dm * (sumy[0] * float(sc1 & 255u) + sumy[1] * float(sc1 >> 8u)
-                    + sumy[2] * float(sc3 & 255u) + sumy[3] * float(sc3 >> 8u))
+                sumf[r] += dd * (float(scs.x & 255u) * acc[0] + float(scs.x >> 8u) * acc[1]
+                    + float(scs.z & 255u) * acc[2] + float(scs.z >> 8u) * acc[3])
+                sumf[r] -= dm * (sumy[0] * float(scs.y & 255u) + sumy[1] * float(scs.y >> 8u)
+                    + sumy[2] * float(scs.w & 255u) + sumy[3] * float(scs.w >> 8u))
             }
             ib += 4u
         }
@@ -6005,14 +6002,7 @@ class MetalKqGemvK4 {
             }
             for [unroll_full] (r in range(2)) {
                 let blk = (first_row + uint(r)) * nb + ib
-                let sv = ks4[blk]
-                let hw0 = (sv.y >> (16u * iq)) & 0xFFFF
-                let hw2 = (sv.z >> (16u * iq)) & 0xFFFF
-                let hw4 = (sv.w >> (16u * iq)) & 0xFFFF
-                let sc0 = hw0 & 0x3F3F
-                let sc1 = hw2 & 0x3F3F
-                let sc2 = (hw4 & 0x0F0F) | ((hw0 & 0xC0C0) >> 2u)
-                let sc3 = ((hw4 >> 4u) & 0x0F0F) | ((hw2 & 0xC0C0) >> 2u)
+                let scs = kmask_scales(ks4[blk], iq)
                 let qb = blk * 32u + iq * 8u + ir * 2u
                 let q1a = kqu[qb]
                 let q1b = kqu[qb + 1u]
@@ -6035,12 +6025,12 @@ class MetalKqGemvK4 {
                 }
                 let dd = float(ksh[blk * 8u])
                 let dm = float(ksh[blk * 8u + 1u])
-                sumf[r] += dd * ((acc1[0] + 0.00390625 * acc1[1]) * float(sc0 & 255u)
-                    + (acc1[2] + 0.00390625 * acc1[3]) * float(sc0 >> 8u) * 0.0625
-                    + (acc2[0] + 0.00390625 * acc2[1]) * float(sc2 & 255u)
-                    + (acc2[2] + 0.00390625 * acc2[3]) * float(sc2 >> 8u) * 0.0625)
-                sumf[r] -= dm * (sumy[0] * float(sc1 & 255u) + sumy[1] * float(sc1 >> 8u)
-                    + sumy[2] * float(sc3 & 255u) + sumy[3] * float(sc3 >> 8u))
+                sumf[r] += dd * ((acc1[0] + 0.00390625 * acc1[1]) * float(scs.x & 255u)
+                    + (acc1[2] + 0.00390625 * acc1[3]) * float(scs.x >> 8u) * 0.0625
+                    + (acc2[0] + 0.00390625 * acc2[1]) * float(scs.z & 255u)
+                    + (acc2[2] + 0.00390625 * acc2[3]) * float(scs.z >> 8u) * 0.0625)
+                sumf[r] -= dm * (sumy[0] * float(scs.y & 255u) + sumy[1] * float(scs.y >> 8u)
+                    + sumy[2] * float(scs.w & 255u) + sumy[3] * float(scs.w >> 8u))
             }
             ib += 4u
         }
@@ -6094,14 +6084,7 @@ class MetalKqGemvK5 {
             }
             for [unroll_full] (r in range(2)) {
                 let blk = (first_row + uint(r)) * nb + ib
-                let sv = ks4[blk]
-                let hw0 = (sv.y >> (16u * iq)) & 0xFFFF
-                let hw2 = (sv.z >> (16u * iq)) & 0xFFFF
-                let hw4 = (sv.w >> (16u * iq)) & 0xFFFF
-                let sc0 = hw0 & 0x3F3F
-                let sc1 = hw2 & 0x3F3F
-                let sc2 = (hw4 & 0x0F0F) | ((hw0 & 0xC0C0) >> 2u)
-                let sc3 = ((hw4 >> 4u) & 0x0F0F) | ((hw2 & 0xC0C0) >> 2u)
+                let scs = kmask_scales(ks4[blk], iq)
                 let qs0 = blk * 160u + iq * 32u + l0
                 let qh0 = blk * 160u + 128u + l0
                 var acc : float[4]
@@ -6116,10 +6099,10 @@ class MetalKqGemvK5 {
                 }
                 let dd = float(ksh[blk * 8u])
                 let dm = float(ksh[blk * 8u + 1u])
-                sumf[r] += dd * (float(sc0 & 255u) * acc[0] + float(sc0 >> 8u) * acc[1]
-                    + float(sc2 & 255u) * acc[2] + float(sc2 >> 8u) * acc[3])
-                sumf[r] -= dm * (sumy[0] * float(sc1 & 255u) + sumy[1] * float(sc1 >> 8u)
-                    + sumy[2] * float(sc3 & 255u) + sumy[3] * float(sc3 >> 8u))
+                sumf[r] += dd * (float(scs.x & 255u) * acc[0] + float(scs.x >> 8u) * acc[1]
+                    + float(scs.z & 255u) * acc[2] + float(scs.z >> 8u) * acc[3])
+                sumf[r] -= dm * (sumy[0] * float(scs.y & 255u) + sumy[1] * float(scs.y >> 8u)
+                    + sumy[2] * float(scs.w & 255u) + sumy[3] * float(scs.w >> 8u))
             }
             ib += 4u
         }
@@ -6176,14 +6159,7 @@ class MetalKqGemvK5C {
                 sumy[3] += yh[l + 8]
             }
             let blk = first_row * nb + ib
-            let sv = ks4[blk]
-            let hw0 = (sv.y >> (16u * iq)) & 0xFFFF
-            let hw2 = (sv.z >> (16u * iq)) & 0xFFFF
-            let hw4 = (sv.w >> (16u * iq)) & 0xFFFF
-            let sc0 = hw0 & 0x3F3F
-            let sc1 = hw2 & 0x3F3F
-            let sc2 = (hw4 & 0x0F0F) | ((hw0 & 0xC0C0) >> 2u)
-            let sc3 = ((hw4 >> 4u) & 0x0F0F) | ((hw2 & 0xC0C0) >> 2u)
+            let scs = kmask_scales(ks4[blk], iq)
             let qs0 = blk * 160u + iq * 32u + l0
             let qh0 = blk * 160u + 128u + l0
             var acc1 : float[4]
@@ -6203,12 +6179,12 @@ class MetalKqGemvK5C {
             }
             let dd = float(ksh[blk * 8u])
             let dm = float(ksh[blk * 8u + 1u])
-            sumf += dd * (float(sc0 & 255u) * (acc1[0] + 16.0 * acc2[0])
-                + float(sc0 >> 8u) * (acc1[1] * 0.0625 + 16.0 * acc2[1])
-                + float(sc2 & 255u) * (acc1[2] + 16.0 * acc2[2])
-                + float(sc2 >> 8u) * (acc1[3] * 0.0625 + 16.0 * acc2[3]))
-            sumf -= dm * (sumy[0] * float(sc1 & 255u) + sumy[1] * float(sc1 >> 8u)
-                + sumy[2] * float(sc3 & 255u) + sumy[3] * float(sc3 >> 8u))
+            sumf += dd * (float(scs.x & 255u) * (acc1[0] + 16.0 * acc2[0])
+                + float(scs.x >> 8u) * (acc1[1] * 0.0625 + 16.0 * acc2[1])
+                + float(scs.z & 255u) * (acc1[2] + 16.0 * acc2[2])
+                + float(scs.z >> 8u) * (acc1[3] * 0.0625 + 16.0 * acc2[3]))
+            sumf -= dm * (sumy[0] * float(scs.y & 255u) + sumy[1] * float(scs.y >> 8u)
+                + sumy[2] * float(scs.w & 255u) + sumy[3] * float(scs.w >> 8u))
             ib += 4u
         }
         let s = simd_sum(sumf)

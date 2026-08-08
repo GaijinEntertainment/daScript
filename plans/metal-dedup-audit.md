@@ -24,7 +24,7 @@ K4/K5 (binding TYPE differs), K5C (verified no twin anywhere), Q8Gemm vs Q8Gemm6
 | 5 | **RopeStore Q8/BQ8 + Tq4/BTq4** | free helper w/ row-base params (sq_fill_scores precedent) | −95..115 | ~73% verbatim per pair; the census's wrong-axis closure |
 | 6 | ✅ **MetalAddRmsB delete** | row axis on AddRms (RmsNorm precedent) | −61 landed | DONE: misc oracle green both modes; enc_add_rms_b redispatches the same PSO |
 | 7 | ✅ **KqMulMmK4T/K5T** | template `BLK/QH` (MetalKqMulMmK45TensorT) | −46 landed | DONE: both stamps byte-identical |
-| 8 | **K4/K5 scale-decode block** | shared helper | −40 | 13 lines byte-identical x5: MoeGemvK4/K5, KqGemvK4/K5/K5C |
+| 8 | ✅ **K4/K5 scale-decode block** | free `def kmask_scales` (uint4 in/out) | −37 landed | DONE: 5 sites; occupancy unchanged (704/512 max_threads before and after); kernels suite 11/11 |
 | 9 | ✅ **MetalPfCopy delete** | enc_copy_row at both sites | −33 landed | DONE: gemma4e coverage cell serves metal_copy_row x3 (V-from-K); MTP-warm site inspection-gated (CPU-prefill-only in tests); copy oracle repointed |
 | 10 | ✅ **enc_qk/av/qk_mm/av_mm dispatch helper** | enc_attn3 | −28 landed | DONE: encoder-only, zero GPU text change |
 | 11 | ✅ **Swiglu/Geglu/Add/Sigmul quad** | MetalEw2T + abstract combine override (method splice beat @template_call — reads ascale) | −29 landed | DONE: stamps verified; enc_ew2 untouched (slot 3 already bound) |
