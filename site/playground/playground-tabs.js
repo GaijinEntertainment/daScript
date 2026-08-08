@@ -180,6 +180,14 @@
         return true;
     }
 
+    // The "new" button's storage half: drop the autosaved session and collapse
+    // the tab strip to a single empty main.das. main.js then reloads the sample
+    // — the split keeps storage ownership here and sample ownership there.
+    function pgResetSession() {
+        try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* storage blocked */ }
+        pgLoadFiles({ [ENTRY]: '' });
+    }
+
     function pgLoadFiles(filesByName, activeOverride) {
         if (!filesByName || typeof filesByName !== 'object') return;
         // Build fresh Doc per file. Preserve insertion order, but if main.das
@@ -291,6 +299,7 @@
         window.pgDeleteFile = pgDeleteFile;
         window.pgRenameFile = pgRenameFile;
         window.pgStateJson = getStateJson;
+        window.pgResetSession = pgResetSession;
 
         bindTabsHandlers();
         renderTabs();

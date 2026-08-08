@@ -114,8 +114,8 @@
 <!-- Compiles the editor's code on the build service for the wasm engine.
      Reads its payload from playground-share.js, so both agree on one hash. -->
 <script type="text/javascript" src="./playground-wasm.js?v=2"></script>
-<script type="text/javascript" src="./main.js?v=5"></script>
-<script type="text/javascript" src="./playground-tabs.js?v=3"></script>
+<script type="text/javascript" src="./main.js?v=6"></script>
+<script type="text/javascript" src="./playground-tabs.js?v=4"></script>
 <script type="text/javascript" src="./playground-share.js?v=3"></script>
 <script type="text/javascript" src="./playground-splitter.js?v=3"></script>
 
@@ -127,6 +127,10 @@
             </div>
             <div class="main_header_part">
                 <select id="examples" class="select_header" onchange="selectSample('examples')"></select>
+            </div>
+            <div class="main_header_part">
+                <button id="new" class="button_header button_header--ghost" type="button"
+                    title="discard this session and reload the sample fresh">✚ new</button>
             </div>
             <div class="main_header_part">
                 <button id="share" class="button_header button_header--ghost" type="button">↗ share</button>
