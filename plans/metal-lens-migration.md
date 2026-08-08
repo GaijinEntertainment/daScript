@@ -62,15 +62,27 @@ Each phase gets decided in detail when reached.
 
 ## Phasing (decide-when-reached)
 
-- **P0** — drop-ins: lens the cat-d classes, delete their encoders. Gates: builder
-  `dump=true` byte-identity vs the hand twin (the lens's own proof rail), kernels arm.
-  STARTED 2026-08-08: `@default` shipped (lens `mk_buf_ref` ternary — `??` on pointers
-  DEREFS, use `!= null ?:`; `default` keyword whitelisted into annotation-argument-name in
-  BOTH grammars, one line each) + first two users lensed in place: MetalRope (`@off = voff`,
-  `rot @default = head_size`) and MetalAttnSoftmax (`sink @default = g_one`), hand encoders
-  deleted. Gates run: kernels 11/11, prefill-base llama token-exact (null-sink default path),
-  fam-gptoss maxd bit-identical to pre-change (real-sink path). Known delta vs hand twins:
-  derived staging adds the hz_read the hand encoders under-staged on in-place buffers.
+- **P0** — drop-ins: lens the cat-d classes, delete their encoders. ✅ DONE 2026-08-08.
+  Batch 1: `@default` shipped (lens `mk_buf_ref` ternary — `??` on pointers DEREFS, use
+  `!= null ?:`; `default` keyword whitelisted into annotation-argument-name in BOTH grammars,
+  one line each) + MetalRope (`@off = voff`, `rot @default = head_size`) and MetalAttnSoftmax
+  (`sink @default = g_one`) lensed, hand encoders deleted. Batch 2: the six attn classes
+  (QK/AV direct as enc_qk/enc_av; the mm four as `_c`-suffixed cores — enc_qk_mm_c/_t_c,
+  enc_av_mm_c/_t_c — with enc_qk_mm/enc_av_mm kept as hand twin-picking wrappers), enc_attn3
+  DELETED; + MetalPleFinish, MetalMoeReduce, MetalSwigluOaiPf, MetalPfCat2 (the inline site
+  became a pf_enc_cat2 call). The T twins needed no @role — the classifier's ptr-local +
+  tmm2d_tg_store arms derive them. Grid equivalences used: mp/nk64 are 64-padded so ceil-div
+  == the hand exact div; swiglu's total/256 == (total/4+63)/64 by the nested ceil-div
+  identity. Gates: kernels suite 7/7; prefill-base llama token-exact (mm path); fam-phi3
+  matrix (hs=96 ⇒ the non-mm trio); fam-gptoss PARITY_FULL maxd bit-identical
+  (0.25608706/0.23721886 — swiglu_oai + moe_reduce + mm attn); gemma4e E4B coverage row
+  census `metal_ple_finish = 2`; cat2 + ple_finish `dump=true` statement-identity vs the
+  deleted hand forms. Known deltas vs hand twins: derived staging adds the hz_read the hand
+  encoders under-staged on in-place buffers (softmax att, ple_finish y, swiglu g).
+  ⚠ OPEN (pre-existing, surfaced here): (1) the MTP GPU-warm prefill (pf_enc_cat2's only
+  runtime path) has NO in-suite gate — test_mtp is planar-only, so cat2's proof is the dump
+  identity; (2) enc_qk_mm_t_c/enc_av_mm_t_c compile + derive on the M1 but Metal-4 tensor
+  cannot execute there — M4-leg spot check when that rig round happens.
 - **P1** — @off/dual-view sites. No lens changes expected.
 - **P2** — format-axis: per-class builders + thin wrappers. Gates: kernels arm + one
   PARITY_FULL family cell per touched axis (gptoss/qwen3moe pattern from item 14).

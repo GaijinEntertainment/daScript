@@ -185,6 +185,7 @@ class MetalPleGatherQ8 {
 // E-series PLE finish (GPU pre-step, stage 2): per (layer, position) ple-slice, mirror of
 // ple_pre_finish's tail — v = proj/sqrt(dim); side = (side + pnorm·(v·rsqrt(mean(v²)+eps)))/sqrt(2),
 // in place on the layer-major panel the gather wrote. proj arrives position-major off the GEMM.
+[metal_dispatch(name = "pf_enc_ple_finish", pso = "g_pf_pso_ple_finish", tgmem = "metal_ple_finish_msl_tgmem", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
 class MetalPleFinish {
     @ssbo @binding = 0 @role = "read" proj : array<float>  // [mp x n_layers*ple] position-major model_proj·embd
     @ssbo @binding = 1 @role = "weight" pnorm : array<float> // [ple] proj-norm weight
@@ -480,6 +481,7 @@ class MetalMoeMulMmMx4T {
 // the prefill twin over the padded bucket panel: same math, plus ghost rows past the last
 // bucket's padded end (mpad worst-case vs the GPU-side true count) exit on a uniform-broadcast
 // liveness bound — they are never read by the down mm.
+[metal_dispatch(name = "pf_enc_swiglu_oai", pso = "g_pf_pso_swiglu_oai", tg = 64, grid = "total/256", params = "total : int64")]
 class MetalSwigluOaiPf {
     @ssbo @binding = 0 @role = "readwrite" g : array<float4>
     @ssbo @binding = 1 @role = "read" u : array<float4>
@@ -607,6 +609,7 @@ class MetalMoeBucket {
 
 // the ordered weighted reduce: per (position, dim slice), the k slots in slot order via inv —
 // bit-stable vs the CPU park-and-accumulate; pad bucket rows are never referenced
+[metal_dispatch(name = "pf_enc_moe_reduce", pso = "g_pf_pso_moe_reduce", tg = 256, grid = "dim/256, npos", params = "dim : int64, npos : int64")]
 class MetalMoeReduce {
     @ssbo @binding = 0 @role = "read" dn : array<float>    // [padded rows x dim] bucket-ordered down outputs
     @ssbo @binding = 1 @role = "read" selw : array<float>  // selection rows, float view (w of row r at r*2k + k)
@@ -1114,6 +1117,7 @@ struct AttnArgs {
 // One threadgroup (128 threads = 4 simdgroups) per 32x32 score block; blocks fully above the
 // causal diagonal exit early. Q staging folds `scale` in; K stages transposed, rows >= npos
 // zeroed (pads can carry NaN). head_size walks in 64-wide K-SLABS — hs 64 is one slab, 128 two.
+[metal_dispatch(name = "enc_qk", pso = "g_pf_pso_qk", tgmem = "metal_attn_qk_msl_tgmem", tg = 128, grid = "mp/32, nk64/32, heads", params = "mp : int64, nk64 : int64, heads : int64")]
 class MetalAttnQK {
     @ssbo @binding = 0 @role = "read" q : array<float>     // [mp x qd], roped
     @ssbo @binding = 1 @role = "read" k : array<float>     // [nk64 x kv_dim], roped (existing rows + the chunk)
@@ -1282,6 +1286,7 @@ class MetalAttnSoftmax {
 // One threadgroup (128 threads = 4 simdgroups) per 32x32 output block: O = P.V walking j in
 // 32-blocks up to the causal limit qi0+32 (P's zeroed tail keeps whole blocks exact). V rows
 // >= npos stage as 0 (pad rows can carry NaN; 0*NaN would still poison). hs % 32 == 0 required.
+[metal_dispatch(name = "enc_av", pso = "g_pf_pso_av", tgmem = "metal_attn_av_msl_tgmem", tg = 128, grid = "mp/32, head_size/32, heads", params = "mp : int64, heads : int64, head_size : int64")]
 class MetalAttnAV {
     @ssbo @binding = 0 @role = "read" att : array<float>   // [n_heads x qrows x np32] normalized P
     @ssbo @binding = 1 @role = "read" v : array<float>     // [nk64 x kv_dim] raw V (existing rows + the chunk)
@@ -1349,6 +1354,7 @@ class MetalAttnAV {
 
 // Metal-4 staged-tile twin of MetalAttnQKMm: flat f16 tiles per head-dim chunk (Q pre-scaled
 // at staging like the base), same causal/window block skips (threadgroup-uniform).
+[metal_dispatch(name = "enc_qk_mm_t_c", pso = "g_pf_pso_qkmm_t", tgmem = "metal_attn_qk_mm_t_msl_tgmem", tg = 128, grid = "mp/32, nk64/64, heads", params = "mp : int64, nk64 : int64, heads : int64")]
 class MetalAttnQKMmT {
     @ssbo @binding = 0 q : array<float>
     @ssbo @binding = 1 k : array<float>
@@ -1393,6 +1399,7 @@ class MetalAttnQKMmT {
     }
 }
 
+[metal_dispatch(name = "enc_qk_mm_c", pso = "g_pf_pso_qkmm", tgmem = "metal_attn_qk_mm_msl_tgmem", tg = 128, grid = "mp/32, nk64/64, heads", params = "mp : int64, nk64 : int64, heads : int64")]
 class MetalAttnQKMm : MetalMmTileBase {
     @ssbo @binding = 0 @role = "read" q : array<float4>    // [mp x qd/4], roped
     @ssbo @binding = 1 @role = "read" k : array<float4>    // [nk64 x kv_dim/4], roped (existing rows + the chunk)
@@ -1485,6 +1492,7 @@ class MetalAttnQKMm : MetalMmTileBase {
 
 // Metal-4 staged-tile twin of MetalAttnAVMm: P x V over flat f16 tiles; V staged TRANSPOSED
 // (col-major source) with pad positions >= npos zeroed (0 * stale-NaN would poison the tile).
+[metal_dispatch(name = "enc_av_mm_t_c", pso = "g_pf_pso_avmm_t", tgmem = "metal_attn_av_mm_t_msl_tgmem", tg = 128, grid = "mp/32, head_size/64, heads", params = "mp : int64, heads : int64, head_size : int64")]
 class MetalAttnAVMmT {
     @ssbo @binding = 0 att : array<float>
     @ssbo @binding = 1 v : array<float>
@@ -1526,6 +1534,7 @@ class MetalAttnAVMmT {
     }
 }
 
+[metal_dispatch(name = "enc_av_mm_c", pso = "g_pf_pso_avmm", tgmem = "metal_attn_av_mm_msl_tgmem", tg = 128, grid = "mp/32, head_size/64, heads", params = "mp : int64, heads : int64, head_size : int64")]
 class MetalAttnAVMm : MetalMmTileBase {
     @ssbo @binding = 0 @role = "read" att : array<float4>  // [n_heads x qrows x np32/4] normalized P
     @ssbo @binding = 1 @role = "read" v : array<float4>    // [nk64 x kv_dim/4] raw V (existing rows + the chunk)
@@ -1593,6 +1602,7 @@ class MetalAttnAVMm : MetalMmTileBase {
 
 // Interleave two [npos x d] panels into the [npos x 2d] MTP eh_proj input — the draft-warm
 // cat rows [enorm(embed) ; hnorm(hidden)]; one thread per source element.
+[metal_dispatch(name = "pf_enc_cat2", pso = "g_pf_pso_cat2", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalPfCat2 {
     @ssbo @binding = 0 @role = "write" y : array<float>
     @ssbo @binding = 1 @role = "read" a : array<float>
@@ -2162,20 +2172,8 @@ def private pf_enc_ple_gather(enc : MetalComputeEncoder?; bemb : MetalBuffer?; e
     kn_dispatch(enc, uint3(ka.nlayers, ka.npos, 1u), uint3(ka.ple, 1u, 1u))
 }
 
-// PLE stage 3: rms + combine, in place on the panel the gather wrote
-def private pf_enc_ple_finish(enc : MetalComputeEncoder?; bproj, bpnorm, by : MetalBuffer?;
-                              var ka : PleArgs) {
-    kn_pipeline(enc, g_pf_pso_ple_finish)
-    kn_tgmem(enc, metal_ple_finish_msl_tgmem, 0)
-    kn_buffer(enc, bproj, 0ul, 0)
-    kn_buffer(enc, bpnorm, 0ul, 1)
-    kn_buffer(enc, by, 0ul, 2)
-    kn_kargs(enc, ka, 4)
-    hz_read(bproj)
-    hz_write(by)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(ka.nlayers, ka.npos, 1u), uint3(ka.ple, 1u, 1u))
-}
+// pf_enc_ple_finish is [metal_dispatch]-generated from MetalPleFinish (PLE stage 3: rms +
+// combine, in place on the panel the gather wrote).
 
 // ===== MoE prefill encoders (Wave C stage 2b) =====
 
@@ -2346,21 +2344,8 @@ def private pf_enc_moe_mm_mx4(enc : MetalComputeEncoder?; t : Model; stack_off, 
     kn_dispatch(enc, uint3(tiles, uint(rows / 64l), ne), uint3(128u, 1u, 1u))
 }
 
-def private pf_enc_moe_reduce(enc : MetalComputeEncoder?; bdn, bsel, binv, by, bdim, bnk : MetalBuffer?; dim, npos : int64) {
-    kn_pipeline(enc, g_pf_pso_moe_reduce)
-    kn_buffer(enc, bdn, 0ul, 0)
-    kn_buffer(enc, bsel, 0ul, 1)   // the float w view — row layout in-kernel
-    kn_buffer(enc, binv, 0ul, 2)
-    kn_buffer(enc, by, 0ul, 3)
-    kn_buffer(enc, bdim, 0ul, 4)
-    kn_buffer(enc, bnk, 0ul, 5)
-    hz_read(bdn)
-    hz_read(bsel)
-    hz_read(binv)
-    hz_write(by)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint((dim + 255l) / 256l), uint(npos), 1u), uint3(256u, 1u, 1u))
-}
+// pf_enc_moe_reduce is [metal_dispatch]-generated from MetalMoeReduce (bsel binds the float
+// w view — row layout in-kernel).
 
 def private enc_add_bias_rows(enc : MetalComputeEncoder?; bx, bb, bn, btotal : MetalBuffer?; total : int64; off : uint64 = 0ul) {
     kn_pipeline(enc, g_pf_pso_addbias)
@@ -2389,46 +2374,24 @@ def private enc_qk_norm_pf(enc : MetalComputeEncoder?; bx, bw : MetalBuffer?; va
 
 
 
-// the attention dispatches: same (in, in, out) buffer list + kargs at 3, 128-thread tgs. The mm
-// pair's key grid spans nk64 (= np32 — existing rows + the chunk on a continuation); bqoff/bqrows
-// in ka carry the causal shift and the score slab's row extent.
-def private enc_attn3(enc : MetalComputeEncoder?; pso : MetalComputePipeline?; tgm : uint64;
-                      ba, bb, bc : MetalBuffer?; var ka : AttnArgs; gx, gy, gz : int64) {
-    kn_pipeline(enc, pso)
-    kn_tgmem(enc, tgm, 0)
-    kn_buffer(enc, ba, 0ul, 0)
-    kn_buffer(enc, bb, 0ul, 1)
-    kn_buffer(enc, bc, 0ul, 2)
-    kn_kargs(enc, ka, 3)
-    hz_read(ba)
-    hz_read(bb)
-    hz_write(bc)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(gx), uint(gy), uint(gz)), uint3(128u, 1u, 1u))
-}
+// enc_qk / enc_av / enc_softmax are [metal_dispatch]-generated from MetalAttnQK / MetalAttnAV /
+// MetalAttnSoftmax (sink @default = g_one — identity on null). The mm wrappers below pick the
+// Metal-4 tensor twin's generated builder (_t_c) when it compiled.
 
 def private enc_qk_mm(enc : MetalComputeEncoder?; bq, bk, batt : MetalBuffer?; var ka : AttnArgs; mp, nk64, heads : int64) {
-    let twinq = g_pf_qkmm_tensor && g_pf_pso_qkmm_t != null
-    enc_attn3(enc, twinq ? g_pf_pso_qkmm_t : g_pf_pso_qkmm,
-        twinq ? metal_attn_qk_mm_t_msl_tgmem : metal_attn_qk_mm_msl_tgmem,
-        bq, bk, batt, ka, mp / 32l, nk64 / 64l, heads)
+    if (g_pf_qkmm_tensor && g_pf_pso_qkmm_t != null) {
+        enc_qk_mm_t_c(enc, bq, bk, batt, ka, mp, nk64, heads)
+    } else {
+        enc_qk_mm_c(enc, bq, bk, batt, ka, mp, nk64, heads)
+    }
 }
 
 def private enc_av_mm(enc : MetalComputeEncoder?; batt, bv, bxb : MetalBuffer?; var ka : AttnArgs; mp, heads, head_size : int64) {
-    let twina = g_pf_avmm_tensor && g_pf_pso_avmm_t != null
-    enc_attn3(enc, twina ? g_pf_pso_avmm_t : g_pf_pso_avmm,
-        twina ? metal_attn_av_mm_t_msl_tgmem : metal_attn_av_mm_msl_tgmem,
-        batt, bv, bxb, ka, mp / 32l, head_size / 64l, heads)
-}
-
-def private enc_qk(enc : MetalComputeEncoder?; bq, bk, batt : MetalBuffer?; var ka : AttnArgs; mp, nk64, heads : int64) {
-    enc_attn3(enc, g_pf_pso_qk, metal_attn_qk_msl_tgmem, bq, bk, batt, ka, mp / 32l, nk64 / 32l, heads)
-}
-
-// enc_softmax is [metal_dispatch]-generated from MetalAttnSoftmax (sink @default = g_one — identity on null).
-
-def private enc_av(enc : MetalComputeEncoder?; batt, bv, bxb : MetalBuffer?; var ka : AttnArgs; mp, heads, head_size : int64) {
-    enc_attn3(enc, g_pf_pso_av, metal_attn_av_msl_tgmem, batt, bv, bxb, ka, mp / 32l, head_size / 32l, heads)
+    if (g_pf_avmm_tensor && g_pf_pso_avmm_t != null) {
+        enc_av_mm_t_c(enc, batt, bv, bxb, ka, mp, heads, head_size)
+    } else {
+        enc_av_mm_c(enc, batt, bv, bxb, ka, mp, heads, head_size)
+    }
 }
 
 // swiglu and add share the (a, b, total) elementwise shape
@@ -2468,24 +2431,9 @@ def private pf_enc_slab_gemv_b(enc : MetalComputeEncoder?; bw, bx, by, bn, bd, b
     kn_dispatch(enc, uint3(uint((d + 3l) / 4l), uint((npos + 7l) / 8l), 1u), uint3(128u, 1u, 1u))
 }
 
-// the float4-lane swiglu_oai: grid over total/4 threads — total % 4 == 0 by the callers'
-// 32-row-padded panel contract; cnt/basep feed the ghost-tail liveness bound
-def private pf_enc_swiglu_oai(enc : MetalComputeEncoder?; bg, bu, btot, bcnt, bbase, bne, bnfe : MetalBuffer?; total : int64) {
-    kn_pipeline(enc, g_pf_pso_swiglu_oai)
-    kn_buffer(enc, bg, 0ul, 0)
-    kn_buffer(enc, bu, 0ul, 1)
-    kn_buffer(enc, btot, 0ul, 2)
-    kn_buffer(enc, bcnt, 0ul, 3)
-    kn_buffer(enc, bbase, 0ul, 4)
-    kn_buffer(enc, bne, 0ul, 5)
-    kn_buffer(enc, bnfe, 0ul, 6)
-    hz_read(bu)
-    hz_read(bcnt)
-    hz_read(bbase)
-    hz_write(bg)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint((total / 4l + 63l) / 64l), 1u, 1u), uint3(64u, 1u, 1u))
-}
+// pf_enc_swiglu_oai is [metal_dispatch]-generated from MetalSwigluOaiPf — the float4-lane
+// swiglu_oai; the generated total/256 grid == the hand (total/4 + 63)/64 by the nested
+// ceil-div identity (exact for every total, not just the callers' %4 == 0 contract).
 
 // GPU-PLE gate (register_ple_gpu_gate): true iff THIS window's metal prefill will engage AND
 // the pre-step kernels cover the model — q8 emb table, kept-bf16 model_proj, slice/shape gates.
@@ -2910,7 +2858,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     hz_gate(enc)
                     kn_dispatch(enc, uint3(uint(mp / 32l), uint(ple_all / 64l), 1u), uint3(128u, 1u, 1u))
                     var bw_pn = upload_region(addr < void? >(t.fblob[t.ple_pnorm_off]), uint64(ple_n * 4l))
-                    pf_enc_ple_finish(enc, bple_proj, bw_pn, bple, pka)
+                    pf_enc_ple_finish(enc, bple_proj, bw_pn, bple, pka, c.n_layers, npos, ple_n)
                 }
                 s.ple_gpu_pending = false
             }
@@ -2926,17 +2874,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     pf_enc_rms(enc, bx, bw_fin, bwm_tmp, u_dim, u_eps, npos)
                     var bw_hn = upload_region(addr < void? >(t.fblob[t.mtp_hnorm_off]), uint64(dim * 4l))
                     pf_enc_rms(enc, bwm_tmp, bw_hn, bxb2, u_dim, u_eps, npos)
-                    kn_pipeline(enc, g_pf_pso_cat2)
-                    kn_buffer(enc, bwm_cat, 0ul, 0)
-                    kn_buffer(enc, bxb, 0ul, 1)
-                    kn_buffer(enc, bxb2, 0ul, 2)
-                    kn_buffer(enc, u_dim, 0ul, 3)
-                    kn_buffer(enc, u_wm_tot, 0ul, 4)
-                    hz_read(bxb)
-                    hz_read(bxb2)
-                    hz_write(bwm_cat)
-                    hz_gate(enc)
-                    kn_dispatch(enc, uint3(uint((npos * dim + 63l) / 64l), 1u, 1u), uint3(64u, 1u, 1u))
+                    pf_enc_cat2(enc, bwm_cat, bxb, bxb2, u_dim, u_wm_tot, npos * dim)
                     if (t.mtp_ehproj_fmt == KqFmt.q8) {
                         let behp = blob_of(g_dev, t, t.mtp_ehproj_off)
                         enc_gemm_mm(enc, behp.buf, behp.boff, bwm_cat, bx, u_dim2, u_dim, mp, dim)
