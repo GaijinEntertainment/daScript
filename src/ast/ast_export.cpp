@@ -12,7 +12,14 @@ namespace das {
             return !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
         }
         virtual bool canVisitStructureFieldInit ( Structure * ) override { return true; }
-        virtual bool canVisitArgumentInit ( Function *, const VariablePtr &, Expression * ) override { return false; }
+        // default-argument initializers are the same dangling-ref story as field inits:
+        // MarkSymbolUse never visits them (canVisitArgumentInit is false there), so a
+        // function/global whose ONLY anchor is `def f(x = helper())` is never marked used,
+        // removeUnusedSymbols frees it, and the surviving f keeps the raw pointer in
+        // arg->init - serialization then reads it (SIGSEGV in getMangledName under --ser).
+        // infer already inlined every default into its call sites, so nulling the husk here
+        // costs nothing
+        virtual bool canVisitArgumentInit ( Function *, const VariablePtr &, Expression * ) override { return true; }
         virtual void preVisit(ExprAddr * expr) override {
             Visitor::preVisit(expr);
             if ( expr->func && !expr->func->used && !expr->func->builtIn ) {
