@@ -706,7 +706,9 @@ def private tsi_bind_calls(var st : StructurePtr; temMethods : array<FunctionPtr
         }
         var callee = ""
         if (!tsi_callee_name(f.init, callee, errors)) return false
+        // both spellings, same as method renames: `_::slot(...)` / `@@_::slot` must rebind too
         rules |> renameCall(slot, callee)
+        rules |> renameCall("_::{slot}", "_::{callee}")
         callIdx |> push(i)
     }
     for (i in range(length(callIdx))) {

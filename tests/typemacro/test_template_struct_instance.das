@@ -122,6 +122,9 @@ class template DotT {
     def run_ptr(v : KT) : KT {
         return tsi_via_ptr(@@tsi_sdot, x, v) // @@ address targets rebind too
     }
+    def run_qual(v : KT) : KT {
+        return _::tsi_sdot(x, v) // module-qualified spelling rebinds too
+    }
 }
 
 class DotDefault : DotT {
@@ -227,6 +230,8 @@ def test_tsi_call_rebind(t : T?) {
             t |> equal(c->run(7), 42000)     // string-form rebind
             t |> equal(a->run_ptr(7), 42)    // @@ address target, default
             t |> equal(b->run_ptr(7), 42000) // @@ address target, rebound
+            t |> equal(a->run_qual(7), 42)   // _:: qualified spelling, default
+            t |> equal(b->run_qual(7), 42000) // _:: qualified spelling, rebound
         }
     }
 }
