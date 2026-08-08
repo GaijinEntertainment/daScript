@@ -84,7 +84,17 @@ member types keep the hard error (the old field gate, now scoped to what state c
       token-for-token parity through the production encoder covers the refactored family
       tail in real serving (the q8 branch's binds are proven by the oracle gate + lab at
       the same slots; the q8-MoE serving census rides the standing PARITY_FULL cadence).
-- [ ] Commit C: Mx4 join
+- [x] Commit C: Mx4 join — DONE 2026-08-08 (two commits: the gmm4 lab repair first — the
+      prod arm predated the kargs migration and sat unreachable; kargs@5 + kinds aligned +
+      run_gmm4_lab moved ahead of the rot — then the join). The rider: stage_a = the
+      stateless index decode (mx4 never carried pointers), stage_init = the vtab staging,
+      stage_acc (NEW base hook, takes the accumulator array) = the per-expert bias seed;
+      bias member renamed wb → wbias (run()'s `wb` local would shadow it in flattened MSL —
+      and local_msl_name now suffixes member-shadowing locals in the emitter as the general
+      guard). Gates: kernels suite 7/7 (mx4 bias/gather oracle gates at family binds), gmm4
+      stash-interleaved A/B (3 pairs, M1): joined 4.7461/4.7462/4.7462 vs standalone
+      4.7453/4.7454/4.7454 ms/mm — +0.02% flat, bit-exact, per-arm spread 0.002% (the
+      kernel is DRAM-bound at ~67 wGB/s; no residue win, no regression — the join is free).
 - [ ] Tail: MoE-lab per-site repair (followup_general #8) — rebind enc_lab_w13*/w2/pair to
       MoeGemvArgs kargs; drop the dead tail duplicate run_gmm6_lab call in main_apple
 - [ ] spirv_emit parity: dasGlsl/dasVulkan lowers no method classes today; if a joined class

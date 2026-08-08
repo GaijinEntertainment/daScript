@@ -579,118 +579,6 @@ class MetalMoeMulMmMx4T {
     }
 }
 
-// Gathered MXFP4 mul_mm — the gathered-GEMM shape with the mx4 A stage: each thread's 16-elem
-// half IS one nibble half of the 32-block (il0 = 0 low, 1 high). Per-expert bias (hasb) seeds
-// the accumulator tiles (stride-0 loads of wb[e]) — ggml_add_id order, bias precedes the reduce.
-class MetalMoeMulMmMx4 {
-    @ssbo @binding = 0 @role = "weight" mxq4 : array<uint4>  // nibble plane, uint4 view (one block = one load)
-    @ssbo @binding = 1 @role = "weight" mxe : array<uint8>
-    @ssbo @binding = 2 @role = "read" xf : array<float4>
-    @ssbo @binding = 3 @role = "write" y : array<float>
-    @uniform @binding = 5 ka : MoeMmArgs
-    @ssbo @binding = 6 @role = "read" cnt : array<uint>
-    @ssbo @binding = 7 @role = "read" basep : array<uint>
-    @ssbo @binding = 8 @role = "read" bkt : array<uint>
-    @ssbo @binding = 12 @role = "weight" wb : array<float>   // [ne x ndim] per-expert bias rows (hasb models)
-    @ssbo @binding = 13 @role = "weight" vtab : array<float> // [16] signed doubled-e2m1 values (host-built)
-    @workgroup ta : float16[2048]
-    @workgroup tb : float16[1024]
-    @workgroup vt : float[32]
-
-    [metal_kernel(name="metal_moe_mulmm_mx4_msl")]
-    def metal_moe_mulmm_mx4 {   // nolint:STYLE038 — MSL kernel body; the mul_mm tiles are simdgroup-barrier coupled
-        let e = gl_WorkGroupID.z
-        let ce = cnt[e]
-        let mBase = gl_WorkGroupID.x * 32u
-        if (mBase >= (ce + 31u) / 32u * 32u) {
-            return
-        }
-        let rbase = basep[e]
-        let lid = gl_LocalInvocationID.x
-        if (lid < 32u) {
-            vt[lid] = vtab[lid % 16u]
-        }
-        barrier()
-        let sg = gl_SubgroupID
-        let nBase = gl_WorkGroupID.y * 64u
-        var mc : simdgroup_float8x8[8]
-        if (ka.hasb != 0u) {
-            // bias as the accumulator seed: every row of tile i gets wb[e][col] (stride-0 load);
-            // padded ghost rows are harmlessly biased — never read
-            let wb0 = e * ka.ndim + nBase + (sg % 2u) * 32u
-            for [unroll_full] (i in range(8)) {
-                simdgroup_load(mc[i], wb, wb0 + uint(i % 4) * 8u, 0u)
-            }
-        }
-        var ma : simdgroup_half8x8[4]
-        var mb : simdgroup_half8x8[2]
-        var va : float16[16]
-        let kdim4 = ka.kdim / 4u
-        let nkb = ka.kdim / 32u
-        let lr0 = lid / 2u
-        let il0 = lid % 2u
-        let syA = lr0 / 8u
-        let lxA = lr0 % 8u
-        let tA0 = (il0 * 2u * 8u + syA) * 64u + lxA
-        let lr1 = lid / 4u
-        let iy = (lid % 4u) * 8u
-        let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
-        let aB = (sg % 2u) * 256u
-        let bB = (sg / 2u) * 128u
-        let eb = e * ka.eplane + (nBase + lr0) * nkb
-        var srcrow = rbase + mBase + lr1
-        if (ka.gather != 0u) {
-            srcrow = bkt[rbase + min(mBase + lr1, ce - 1u)] / ka.nk
-        }
-        var xcur = unsafe(addr(xf[srcrow * kdim4 + iy / 4u]))
-        var kb = 0u
-        while (kb < nkb) {
-            let blk = eb + kb
-            let b0 = unsafe(xcur[0])
-            let b1 = unsafe(xcur[1])
-            let sc = uint(mxe[blk])
-            let d = uint_bits_to_float(sc < 2u ? (0x00200000u << sc) : ((sc - 1u) << 23u))   // exact e8m0_half, denormal e < 2 included
-            let u4 = mxq4[blk]
-            for [unroll_full] (w in range(4)) {
-                let uw = w == 0 ? u4.x : (w == 1 ? u4.y : (w == 2 ? u4.z : u4.w))
-                for [unroll_full] (c in range(4)) {
-                    let nby = (uw >> (uint(c) * 8u)) & 255u
-                    va[w * 4 + c] = float16(vt[il0 == 0u ? (nby & 15u) : (nby >> 4u)] * d)
-                }
-            }
-            barrier()
-            for [unroll_full] (i in range(16)) {
-                ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
-            }
-            tg_store_half4(tb, ibB, b0)
-            tg_store_half4(tb, ibB + 4u, b1)
-            barrier()
-            var acur = unsafe(addr(ta[aB]))
-            var bcur = unsafe(addr(tb[bB]))
-            for [unroll_full] (_ik in range(4)) {
-                for [unroll_full] (i in range(4)) {
-                    simdgroup_load(ma[i], acur, uint(i) * 64u, 8u)
-                }
-                for [unroll_full] (i in range(2)) {
-                    simdgroup_load(mb[i], bcur, uint(i) * 64u, 8u)
-                }
-                for [unroll_full] (i in range(8)) {
-                    simdgroup_multiply_accumulate(mc[i], mb[i / 4], ma[i % 4], mc[i])
-                }
-                acur = unsafe(acur + 512)
-                bcur = unsafe(bcur + 256)
-            }
-            xcur = unsafe(xcur + 8)
-            kb++
-        }
-        let row0 = rbase + mBase + (sg / 2u) * 16u
-        let col0 = nBase + (sg % 2u) * 32u
-        for [unroll_full] (i in range(8)) {
-            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ka.ndim + col0 + uint(i % 4) * 8u, ka.ndim)
-        }
-    }
-}
-
 // the prefill twin over the padded bucket panel: same math, plus ghost rows past the last
 // bucket's padded end (mpad worst-case vs the GPU-side true count) exit on a uniform-broadcast
 // liveness bound — they are never read by the down mm.
@@ -896,6 +784,8 @@ class MetalMoeMulMmBase {
 
     def stage_init(wb, il0 : uint) {}   // format prologue: bind carried-pointer state (q8's walk)
 
+    def stage_acc(var acc : simdgroup_float8x8[8]) {}   // accumulator seed hook (mx4's per-expert bias)
+
     def run {
         let e = gl_WorkGroupID.z
         let ce = cnt[e]
@@ -908,6 +798,7 @@ class MetalMoeMulMmBase {
         let sg = gl_SubgroupID
         let nBase = gl_WorkGroupID.y * 64u
         var mc : simdgroup_float8x8[8]
+        stage_acc(mc)
         var ma : simdgroup_half8x8[4]
         var mb : simdgroup_half8x8[2]
         let kdim4 = ka.kdim / 4u
@@ -1183,6 +1074,64 @@ class MetalMoeMulMmK6 : MetalMoeMulMmBase {
 
     [metal_kernel(name="metal_moe_mulmm_k6_msl")]
     def metal_moe_mulmm_k6 {
+        run()
+    }
+}
+
+// Gathered MXFP4 mul_mm — the family base with the mx4 A stage: each thread's 16-elem half IS
+// one nibble half of the 32-block (il0 = 0 low, 1 high); stage_init stages the doubled-e2m1
+// value table, stage_acc seeds per-expert bias (hasb; ggml_add_id order, bias precedes reduce).
+class MetalMoeMulMmMx4 : MetalMoeMulMmBase {
+    @ssbo @binding = 0 @role = "weight" mxq4 : array<uint4>  // nibble plane, uint4 view (one block = one load)
+    @ssbo @binding = 1 @role = "weight" mxe : array<uint8>
+    @ssbo @binding = 12 @role = "weight" wbias : array<float> // [ne x ndim] per-expert bias rows (hasb models)
+    @ssbo @binding = 13 @role = "weight" vtab : array<float>  // [16] signed doubled-e2m1 values (host-built)
+    @workgroup vt : float[32]
+
+    def override wbase(e, nBase, lr0 : uint) : uint => e * ka.eplane + (nBase + lr0) * (ka.kdim / 32u)
+
+    def override stage_init(wb, il0 : uint) {
+        let lid = gl_LocalInvocationID.x
+        if (lid < 32u) {
+            vt[lid] = vtab[lid % 16u]
+        }
+        barrier()
+    }
+
+    def override stage_acc(var acc : simdgroup_float8x8[8]) {
+        if (ka.hasb != 0u) {
+            // bias as the accumulator seed: every row of tile i gets wbias[e][col] (stride-0
+            // load); padded ghost rows are harmlessly biased — never read
+            let e = gl_WorkGroupID.z
+            let sg = gl_SubgroupID
+            let wb0 = e * ka.ndim + gl_WorkGroupID.y * 64u + (sg % 2u) * 32u
+            for [unroll_full] (i in range(8)) {
+                simdgroup_load(acc[i], wbias, wb0 + uint(i % 4) * 8u, 0u)
+            }
+        }
+    }
+
+    def override stage_a(wb, kb, il0, tA0 : uint) {
+        var va : float16[16]
+        let blk = wb + kb
+        let sc = uint(mxe[blk])
+        let d = uint_bits_to_float(sc < 2u ? (0x00200000u << sc) : ((sc - 1u) << 23u))   // exact e8m0_half, denormal e < 2 included
+        let u4 = mxq4[blk]
+        for [unroll_full] (w in range(4)) {
+            let uw = w == 0 ? u4.x : (w == 1 ? u4.y : (w == 2 ? u4.z : u4.w))
+            for [unroll_full] (c in range(4)) {
+                let nby = (uw >> (uint(c) * 8u)) & 255u
+                va[w * 4 + c] = float16(vt[il0 == 0u ? (nby & 15u) : (nby >> 4u)] * d)
+            }
+        }
+        barrier()
+        for [unroll_full] (i in range(16)) {
+            ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
+        }
+    }
+
+    [metal_kernel(name="metal_moe_mulmm_mx4_msl")]
+    def metal_moe_mulmm_mx4 {
         run()
     }
 }
@@ -2619,12 +2568,16 @@ def private pf_enc_moe_mm_mx4(enc : MetalComputeEncoder?; t : Model; stack_off, 
     kn_tgmem(enc, twin ? metal_moe_mulmm_mx4_t_msl_tgmem : metal_moe_mulmm_mx4_msl_tgmem, 0)
     kn_buffer(enc, mp.qbuf, mp.qoff, 0)
     kn_buffer(enc, mp.sbuf, mp.soff, 1)
-    kn_buffer(enc, bx, 0ul, 2)
-    kn_buffer(enc, by, 0ul, 3)
     kn_kargs(enc, ka, 5)
-    kn_buffer(enc, bcnt, 0ul, 6)
-    kn_buffer(enc, bbase, 0ul, 7)
-    kn_buffer(enc, bbkt, 0ul, 8)
+    if (twin) {   // the tensor twin keeps its compact layout
+        kn_buffer(enc, bx, 0ul, 2)
+        kn_buffer(enc, by, 0ul, 3)
+        kn_buffer(enc, bcnt, 0ul, 6)
+        kn_buffer(enc, bbase, 0ul, 7)
+        kn_buffer(enc, bbkt, 0ul, 8)
+    } else {      // the joined family rider binds at the MetalMoeMulMmBase numbers
+        kn_moe_mm_family_tail(enc, bx, by, bcnt, bbase, bbkt)
+    }
     kn_buffer(enc, bwb, 0ul, 12)
     kn_buffer(enc, g_mx4_vtab, 0ul, 13)
     hz_read(bx)
@@ -4309,12 +4262,8 @@ def private race_moe_mulmm_mx4(dev : MetalDevice?; queue : MetalCommandQueue?) :
         kn_tgmem(enc, metal_moe_mulmm_mx4_msl_tgmem, 0)
         kn_buffer(enc, bnq, 0ul, 0)
         kn_buffer(enc, bee, 0ul, 1)
-        kn_buffer(enc, bxa, 0ul, 2)
-        kn_buffer(enc, by_base, 0ul, 3)
         kn_kargs(enc, rka, 5)
-        kn_buffer(enc, bcnt, 0ul, 6)
-        kn_buffer(enc, bbase, 0ul, 7)
-        kn_buffer(enc, bbkt, 0ul, 8)
+        kn_moe_mm_family_tail(enc, bxa, by_base, bcnt, bbase, bbkt)
         kn_buffer(enc, bwbb, 0ul, 12)
         kn_buffer(enc, bvt, 0ul, 13)
         kn_dispatch(enc, grid, tg)

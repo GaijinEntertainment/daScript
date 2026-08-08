@@ -93,23 +93,24 @@
    wants), but it reaches inference, mangling, and every cast, so it is a language design task
    and not a step in this arc. Parked deliberately, not forgotten.
 
-8. **MoE mul_mm family: K6 + Q8 JOINED — Mx4 remains.** K6 joined 2026-08-08 (021fffd87,
-   stateless stage_a, −2.0% vs its standalone). Q8 joined 2026-08-08 via msl_emit's
-   flatten/scope-splice arc (plans/msl-flatten.md): the stateless index form measured OUT
-   (+3.4–3.6%, gmm8 lab), so the join keeps the carried-pointer walk — plain `scur`/`qp`
-   members + a `stage_init` hook, lowered to kernel-entry thread-locals; the joined rider is
-   −0.5..−0.9% vs the deleted standalone (3 interleaved stash pairs, bit-exact), and its
-   binding contract moved to the family numbers (xf@3 y@4 cnt@7 basep@8 bkt@9 — encoder,
-   gemm-test gate, gmm8 lab all rebound; the tensor twin keeps its compact layout). The
-   family is five of six. **Mx4 is the remaining candidate**: its prologue (pre-loop vtab
-   staging + bias-seeded accumulators) fits the same stage_init mechanism now that it
-   exists — measure, don't assume. Side find from the gmm8 dump: the `addr()` escape for a
-   pointer walk defeats the const analysis — production Q8's weight buffers emit as
-   non-const `device half*` (and win anyway, so constness is not the term).
+8. **MoE mul_mm family: COMPLETE — all six formats ride MetalMoeMulMmBase.** K6 joined
+   2026-08-08 (021fffd87, stateless stage_a, −2.0%). Q8 and Mx4 joined the same day via
+   msl_emit's flatten/scope-splice arc (plans/msl-flatten.md): Q8 keeps the carried-pointer
+   walk (plain `scur`/`qp` members bound in `stage_init`, advanced in stage_a — the
+   stateless index form measured OUT +3.4–3.6%), −0.5..−0.9% vs its deleted standalone;
+   Mx4 rides `stage_init` (vtab staging) + `stage_acc` (per-expert bias seed into the
+   accumulator array), +0.02% flat vs its standalone (DRAM-bound — the join is free). Both
+   binding contracts moved to the family numbers (xf@3 y@4 cnt@7 basep@8 bkt@9;
+   `kn_moe_mm_family_tail` spells the tail once; tensor twins keep their compact layouts).
+   Side find from the gmm8 dump: the `addr()` escape for a pointer walk defeats the const
+   analysis — Q8's weight buffers emit as non-const `device half*` (and win anyway, so
+   constness is not the term).
    ALSO: the MoE lab's per-site section (enc_lab_w13*/w2/pair arms) ROTTED at the kargs
-   migration (c45724dae) — its encoders bind the old uniform slots and the w1 k4 check panics;
-   the lab now runs gmm6/gmm8 first so the rot doesn't block them. Repair = rebind those
-   encoders to MoeGemvArgs kargs buffers and re-verify each arm.
+   migration (c45724dae) — its encoders bind the old uniform slots and the w1 k4 check
+   panics; gmm6/gmm8/gmm4 now run first so the rot doesn't block them (the gmm4 prod arm's
+   own pre-kargs rot was repaired as part of the Mx4 join). Repair = rebind those encoders
+   to MoeGemvArgs kargs buffers and re-verify each arm; also drop the dead tail duplicate
+   run_gm*_lab calls in main_apple.
 
 9. **Prefill compiles its own PSO for kernels decode already has.** `enc_qk_norm_pf` in
    dasllama_metal_prefill.das is `enc_qk_norm`'s body with `g_pf_pso_qknorm` in place of

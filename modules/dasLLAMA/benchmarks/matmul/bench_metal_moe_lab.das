@@ -1569,20 +1569,20 @@ let GM_LVT = 17     // lcpp halved LUT
 let GM_U0 = 18      // hasb = 0 (lab arms run the prod kernel without the bias fold)
 let GM_KA = 19      // MoeMmArgs kargs (the joined family contract)
 
-// the production kernel's contract (kargs@5; repaired from the pre-kargs slots at the same
-// migration that rotted the per-site section)
+// the production kernel's contract: kargs@5 + the MetalMoeMulMmBase family tail (mx4 joined
+// the family 2026-08-08)
 def private enc_gmm4_prod(gb; pso; tgmem : uint64; enc; yslot : int) {
     metal_set_pipeline(enc, pso)
     metal_set_threadgroup_memory_length(enc, tgmem, 0)
     metal_set_buffer(enc, gb[GM_GQ], 0ul, 0)
     metal_set_buffer(enc, gb[GM_GE], 0ul, 1)
-    metal_set_buffer(enc, gb[GM_X], 0ul, 2)
-    metal_set_buffer(enc, gb[yslot], 0ul, 3)
+    metal_set_buffer(enc, gb[GM_X], 0ul, 3)
+    metal_set_buffer(enc, gb[yslot], 0ul, 4)
     metal_set_buffer(enc, gb[GM_KA], 0ul, 5)
-    metal_set_buffer(enc, gb[GM_CNT], 0ul, 6)
-    metal_set_buffer(enc, gb[GM_BASE], 0ul, 7)
-    metal_set_buffer(enc, gb[GM_BKT], 0ul, 8)
-    metal_set_buffer(enc, gb[GM_VT], 0ul, 12)   // wb slot — never read at hasb=0, any float buffer satisfies binding validation
+    metal_set_buffer(enc, gb[GM_CNT], 0ul, 7)
+    metal_set_buffer(enc, gb[GM_BASE], 0ul, 8)
+    metal_set_buffer(enc, gb[GM_BKT], 0ul, 9)
+    metal_set_buffer(enc, gb[GM_VT], 0ul, 12)   // wbias slot — never read at hasb=0, any float buffer satisfies binding validation
     metal_set_buffer(enc, gb[GM_VT], 0ul, 13)
     metal_dispatch_threadgroups(enc, uint3(uint((GNTOK + 31l) / 32l), uint(GNFE / 64l), uint(GE)), uint3(128u, 1u, 1u))
 }

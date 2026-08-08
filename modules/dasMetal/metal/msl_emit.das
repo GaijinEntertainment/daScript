@@ -2365,11 +2365,16 @@ def private emit_tmm2d(var ctx : MslCtx; ec : ExprCall?; indent : string; var li
     lines |> push("{indent}{hname}({join(vals, ", ")});")
 }
 
-// spliced bodies: a local that would shadow a substituted single-identifier argument takes
-// the splice suffix — everything else keeps its das name
+// A local that would shadow a substituted single-identifier argument takes the splice suffix.
+// A local that would shadow a MEMBER is suffixed too: under flatten members are kernel-scope
+// names, and a caller-frame local must not capture a member reference emitted inside a nested
+// splice (e.g. run()'s `wb` local vs a rider's `wb` buffer).
 def private local_msl_name(ctx : MslCtx; name : string) : string {
     let base = msl_safe_name(name)
-    return ctx.splice_depth > 0 && key_exists(ctx.splice_forbidden, base) ? "{base}_s{ctx.splice_seq}" : base
+    if (ctx.splice_depth > 0 && key_exists(ctx.splice_forbidden, base)) {
+        return "{base}_s{ctx.splice_seq}"
+    }
+    return key_exists(ctx.members, name) ? "{base}_l" : base
 }
 
 def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var lines : array<string>) {
