@@ -30,16 +30,16 @@ def private kq_mulmm_gate(t : T?; dev, queue; fmt : int; tensor : bool; m, kdim,
     var err : string
     let src = (tensor
         ? (fmt == 4 ? metal_kq_mulmm_k4_t_msl : (fmt == 5 ? metal_kq_mulmm_k5_t_msl : metal_kq_mulmm_k6_t_msl))
-        : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl : metal_kq_mulmm_k6_msl)))
+        : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl : MetalKqMulMmK6_metal_kq_mulmm_msl)))
     let entry = (tensor
         ? (fmt == 4 ? metal_kq_mulmm_k4_t_msl_entry : (fmt == 5 ? metal_kq_mulmm_k5_t_msl_entry : metal_kq_mulmm_k6_t_msl_entry))
-        : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_entry : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_entry : metal_kq_mulmm_k6_msl_entry)))
+        : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_entry : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_entry : MetalKqMulMmK6_metal_kq_mulmm_msl_entry)))
     let fm = (tensor
         ? (fmt == 4 ? metal_kq_mulmm_k4_t_msl_fastmath : (fmt == 5 ? metal_kq_mulmm_k5_t_msl_fastmath : metal_kq_mulmm_k6_t_msl_fastmath))
-        : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_fastmath : metal_kq_mulmm_k6_msl_fastmath)))
+        : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_fastmath : MetalKqMulMmK6_metal_kq_mulmm_msl_fastmath)))
     let tgm = (tensor
         ? (fmt == 4 ? metal_kq_mulmm_k4_t_msl_tgmem : (fmt == 5 ? metal_kq_mulmm_k5_t_msl_tgmem : metal_kq_mulmm_k6_t_msl_tgmem))
-        : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_tgmem : metal_kq_mulmm_k6_msl_tgmem)))
+        : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_tgmem : MetalKqMulMmK6_metal_kq_mulmm_msl_tgmem)))
     var pso = pipeline_from_source(dev, src, entry, fm, err)
     if (tensor && pso == null && !metal4_tensor_available(dev)) {
         to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box — arm skipped\n")
@@ -288,7 +288,7 @@ def private q8_gemm_b_gate(t : T?; dev, queue; tensor : bool; mp32, kdim, ndim, 
     var err : string
     var pso = (tensor
         ? pipeline_from_source(dev, metal_q8_gemm_b_t_msl, metal_q8_gemm_b_t_msl_entry, metal_q8_gemm_b_t_msl_fastmath, err)
-        : pipeline_from_source(dev, metal_q8_gemm_b_msl, metal_q8_gemm_b_msl_entry, metal_q8_gemm_b_msl_fastmath, err))
+        : pipeline_from_source(dev, MetalQ8GemmB_metal_q8_gemm_b_msl, MetalQ8GemmB_metal_q8_gemm_b_msl_entry, MetalQ8GemmB_metal_q8_gemm_b_msl_fastmath, err))
     if (tensor && pso == null && !metal4_tensor_available(dev)) {
         to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box — arm skipped\n")
         return
@@ -328,7 +328,7 @@ def private q8_gemm_b_gate(t : T?; dev, queue; tensor : bool; mp32, kdim, ndim, 
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
         if (!tensor) {
-            metal_set_threadgroup_memory_length(enc, metal_q8_gemm_b_msl_tgmem, 0)
+            metal_set_threadgroup_memory_length(enc, MetalQ8GemmB_metal_q8_gemm_b_msl_tgmem, 0)
         }
         metal_set_buffer(enc, bw, 0ul, 0)   // byte view
         metal_set_buffer(enc, bw, 0ul, 2)   // half-scale view of the same blob
@@ -361,7 +361,7 @@ def private q8_gemm_sk_gate(t : T?; dev, queue; tensor : bool; kdim, ndim, kspli
     var err : string
     var pso = (tensor
         ? pipeline_from_source(dev, metal_q8_gemm_b_sk_t_msl, metal_q8_gemm_b_sk_t_msl_entry, metal_q8_gemm_b_sk_t_msl_fastmath, err)
-        : pipeline_from_source(dev, metal_q8_gemm_b_sk_msl, metal_q8_gemm_b_sk_msl_entry, metal_q8_gemm_b_sk_msl_fastmath, err))
+        : pipeline_from_source(dev, MetalQ8GemmBSk_metal_q8_gemm_b_msl, MetalQ8GemmBSk_metal_q8_gemm_b_msl_entry, MetalQ8GemmBSk_metal_q8_gemm_b_msl_fastmath, err))
     if (tensor && pso == null && !metal4_tensor_available(dev)) {
         to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box — arm skipped\n")
         return
@@ -419,7 +419,7 @@ def private q8_gemm_sk_gate(t : T?; dev, queue; tensor : bool; kdim, ndim, kspli
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
         if (!tensor) {
-            metal_set_threadgroup_memory_length(enc, metal_q8_gemm_b_sk_msl_tgmem, 0)
+            metal_set_threadgroup_memory_length(enc, MetalQ8GemmBSk_metal_q8_gemm_b_msl_tgmem, 0)
         }
         metal_set_buffer(enc, bw, 0ul, 0)   // byte view
         metal_set_buffer(enc, bw, 0ul, 2)   // half-scale view of the same blob

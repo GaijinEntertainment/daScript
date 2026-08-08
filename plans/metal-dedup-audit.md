@@ -17,10 +17,10 @@ K4/K5 (binding TYPE differs), K5C (verified no twin anywhere), Q8Gemm vs Q8Gemm6
 
 | # | Item | Mechanism | Est. LOC | Notes |
 |---|---|---|---|---|
-| 1 | **MetalDnBa ≡ MetalQ8Gemv** (prefill vs kernels) | template `BATCHED` axis | −45..50 | ~95% shared, FOUR tokens differ (a `p` axis in 3 index exprs); live cross-file drift risk; single-file dedup couldn't see it |
-| 2 | **accumulate-quad helper** | shared `def` | −85 module-wide | 15 lines VERBATIM x6: Bf16MulMm, MoeMulMmBase, AttnQKMm, AttnAVMm, KqMulMmK45T, KqMulMmK6 |
-| 3 | **KqMulMmK6 joins K45T** | 3rd `static_if` arm | −75..80 | 58% byte-identical, fields type-match (rename-only); perf-verify (hot GEMM) |
-| 4 | **Q8GemmB/BSk** (the eyeball find) | template `IS_SK` | −65..75 | 56% byte-identical core; all statement-shaped |
+| 1 | ✅ **MetalDnBa ≡ MetalQ8Gemv** (prefill vs kernels) | template `BATCHED` axis | −47 landed | DONE 87b5769f5 (+ f39e6c46d msl_emit const-select fold, the enabler): Q8Gemv MSL byte-identical; DnBa differs only by `p` inlined as gl_WorkGroupID.y; kernels suite green |
+| 2 | ✅ **accumulate-quad helper** | base-class method (free-`def` blocked: emitter rejects simdgroup/threadgroup params) | −83 landed | DONE 30b203548: MetalMmTileBase owns ta/tb + acc_quad; SEVEN sites (audit missed Q8MulMm); all 13 kernels statement-identical modulo splice braces |
+| 3 | ✅ **KqMulMmK6 joins K45T** | 3rd `static_if` arm (SIXBIT) | −75 landed **+ perf WIN** | DONE: the perf-verify found the cached sv/dall hoist cost an occupancy tier (896→1024 max_threads) — reload-per-kb is −1.7..−10.5% per shape (bench_metal_kq_mm_lab, 3 launches, bit-exact); K4/K5 stamps byte-identical |
+| 4 | ✅ **Q8GemmB/BSk** (the eyeball find) | template `IS_SK` (MetalQ8GemmBSplitT) | −69 landed | DONE: B stamp byte-identical (const-select folds); SK delta = sl/kbn/kb0 inlined (uniform, LICM); kernels suite 11/11 |
 | 5 | **RopeStore Q8/BQ8 + Tq4/BTq4** | free helper w/ row-base params (sq_fill_scores precedent) | −95..115 | ~73% verbatim per pair; the census's wrong-axis closure |
 | 6 | **MetalAddRmsB delete** | row-index no-op edit on AddRms (RmsNorm/enc_rms_b precedent) | −50..55 + a PSO | row≡0 at grid=1 compiler-verified |
 | 7 | **KqMulMmK4T/K5T** (prefill tensor twins) | template `BLK/QH` — exactly their merged parents | −48 | ~97% identical |

@@ -46,7 +46,7 @@ def main {
         check(dev, "rope", metal_rope_msl, metal_rope_msl_entry, metal_rope_msl_fastmath)
         check(dev, "kq_mulmm_k4", MetalKqMulMmK4_metal_kq_mulmm_msl, MetalKqMulMmK4_metal_kq_mulmm_msl_entry, MetalKqMulMmK4_metal_kq_mulmm_msl_fastmath)
         check(dev, "kq_mulmm_k5", MetalKqMulMmK5_metal_kq_mulmm_msl, MetalKqMulMmK5_metal_kq_mulmm_msl_entry, MetalKqMulMmK5_metal_kq_mulmm_msl_fastmath)
-        check(dev, "kq_mulmm_k6", metal_kq_mulmm_k6_msl, metal_kq_mulmm_k6_msl_entry, metal_kq_mulmm_k6_msl_fastmath)
+        check(dev, "kq_mulmm_k6", MetalKqMulMmK6_metal_kq_mulmm_msl, MetalKqMulMmK6_metal_kq_mulmm_msl_entry, MetalKqMulMmK6_metal_kq_mulmm_msl_fastmath)
         check(dev, "kq_gemv_k4", metal_kq_gemv_k4_msl, metal_kq_gemv_k4_msl_entry, metal_kq_gemv_k4_msl_fastmath)
         check(dev, "kq_gemv_k5", metal_kq_gemv_k5_msl, metal_kq_gemv_k5_msl_entry, metal_kq_gemv_k5_msl_fastmath)
         check(dev, "kq_gemv_k6", metal_kq_gemv_k6_msl, metal_kq_gemv_k6_msl_entry, metal_kq_gemv_k6_msl_fastmath)

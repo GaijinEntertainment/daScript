@@ -2100,16 +2100,21 @@ class MetalGemvW13SwB4 : MetalGemvW13SwB24T {
 // M-pad-32 batch GEMM (B >= 5, cost B-independent to 32 rows): MulMm's staging discipline on a
 // 32x32 tile, 110 instr/k-block vs the old 235 (1.16-1.33x on every decode shape). Pad token rows
 // carry stale bytes by design — C rows are per-token independent, pad Y rows are never read back.
-class MetalQ8GemmB {
+// IS_SK: grid.y gains a k-slice axis, each threadgroup walks its own partial-C plane (a separate
+// MetalSkReduce dispatch sums them — no float atomics, deterministic); the only way to grow the
+// grid past d/32 on starved sites at M-pad-32.
+[ |> template_struct_instance]
+class template MetalQ8GemmBSplitT {
     @ssbo @binding = 0 @role = "weight" wqb : array<int8>    // 34B-block W blob, byte view (quants at 34*b + 2)
     @ssbo @binding = 2 @role = "weight" wsh : array<float16> // the same buffer, half-scale view (block b at 17*b)
-    @ssbo @binding = 3 @role = "read" x : array<float4>    // X [M' x n] f32 rows (M' = 32-padded B)
-    @ssbo @binding = 4 @role = "write" y : array<float>     // Y [M' x d]
+    @ssbo @binding = 3 @role = "read" x : array<float4>    // X [M' x n] f32 rows (M' = 32-padded B; the SK form runs at M' = 32)
+    @ssbo @binding = 4 @role = "write" y : array<float>     // Y [M' x d] rows at ka.ys stride; SK: [ksplit x 32 x d] partial-C planes
     @uniform @binding = 5 ka : Q8GemmArgs
     @workgroup tw : float16[1024]           // W: 4 k-tiles x 4 row-tiles of 8x8, (k row, wrow col)
     @workgroup tx : float16[1024]           // X: 4 k-tiles x 4 token-tiles of 8x8, (token row, k col)
+    @template_constant IS_SK : bool = false
 
-    [metal_kernel(name="metal_q8_gemm_b_msl")]
+    [metal_kernel]
     def metal_q8_gemm_b {
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
@@ -2128,11 +2133,13 @@ class MetalQ8GemmB {
         let tX0 = (il * 4u + lr / 8u) * 64u + (lr % 8u) * 8u
         let aQ = (sg % 2u) * 128u           // wrow tile-pair base within a k-tile slab
         let bQ = (sg / 2u) * 128u           // token tile-pair base
-        var qp = unsafe(addr(wqb[((nBase + lr) * nkb) * 34u + 2u + il * 8u]))
-        var sph = unsafe(addr(wsh[((nBase + lr) * nkb) * 17u]))
-        var xp = unsafe(addr(x[(mBase + lr) * kdim4 + il * 2u]))
+        // SK: this slice's first k-block is gl_WorkGroupID.y * (nkb / ka.ksplit) — the const-select
+        // folds keep the dense stamp byte-identical while the SK stamp inlines the slice origin
+        var qp = unsafe(addr(wqb[(IS_SK ? (nBase + lr) * nkb + gl_WorkGroupID.y * (nkb / ka.ksplit) : (nBase + lr) * nkb) * 34u + 2u + il * 8u]))
+        var sph = unsafe(addr(wsh[(IS_SK ? (nBase + lr) * nkb + gl_WorkGroupID.y * (nkb / ka.ksplit) : (nBase + lr) * nkb) * 17u]))
+        var xp = unsafe(addr(x[(IS_SK ? (mBase + lr) * kdim4 + gl_WorkGroupID.y * (nkb / ka.ksplit) * 8u : (mBase + lr) * kdim4) + il * 2u]))
         var kb = 0u
-        while (kb < nkb) {
+        while (kb < (IS_SK ? nkb / ka.ksplit : nkb)) {
             let sA = float(unsafe(sph[0]))
             let b0 = unsafe(xp[0])
             let b1 = unsafe(xp[1])
@@ -2177,106 +2184,30 @@ class MetalQ8GemmB {
             xp = unsafe(xp + 8u)
             kb++
         }
-        let row0 = mBase + (sg / 2u) * 16u
-        let col0 = nBase + (sg % 2u) * 16u
-        simdgroup_store(mc[0], y, row0 * ka.ys + col0, ka.ys)
-        simdgroup_store(mc[1], y, row0 * ka.ys + (col0 + 8u), ka.ys)
-        simdgroup_store(mc[2], y, (row0 + 8u) * ka.ys + col0, ka.ys)
-        simdgroup_store(mc[3], y, (row0 + 8u) * ka.ys + (col0 + 8u), ka.ys)
+        static_if (IS_SK) {
+            let pbase = gl_WorkGroupID.y * 32u * ka.ndim
+            let row0 = mBase + (sg / 2u) * 16u
+            let col0 = nBase + (sg % 2u) * 16u
+            simdgroup_store(mc[0], y, pbase + row0 * ka.ndim + col0, ka.ndim)
+            simdgroup_store(mc[1], y, pbase + row0 * ka.ndim + (col0 + 8u), ka.ndim)
+            simdgroup_store(mc[2], y, pbase + (row0 + 8u) * ka.ndim + col0, ka.ndim)
+            simdgroup_store(mc[3], y, pbase + (row0 + 8u) * ka.ndim + (col0 + 8u), ka.ndim)
+        } else {
+            let row0 = mBase + (sg / 2u) * 16u
+            let col0 = nBase + (sg % 2u) * 16u
+            simdgroup_store(mc[0], y, row0 * ka.ys + col0, ka.ys)
+            simdgroup_store(mc[1], y, row0 * ka.ys + (col0 + 8u), ka.ys)
+            simdgroup_store(mc[2], y, (row0 + 8u) * ka.ys + col0, ka.ys)
+            simdgroup_store(mc[3], y, (row0 + 8u) * ka.ys + (col0 + 8u), ka.ys)
+        }
     }
 }
 
-// Split-K twin of MetalQ8GemmB: grid.y gains a k-slice axis, each threadgroup walks its own
-// partial-C plane, and a separate MetalSkReduce dispatch sums them (no float atomics,
-// deterministic). At M-pad-32 this is the only way to grow the grid past d/32 on starved sites.
-class MetalQ8GemmBSk {
-    @ssbo @binding = 0 @role = "weight" wqb : array<int8>    // 34B-block W blob, byte view (quants at 34*b + 2)
-    @ssbo @binding = 2 @role = "weight" wsh : array<float16> // the same buffer, half-scale view (block b at 17*b)
-    @ssbo @binding = 3 @role = "read" x : array<float4>    // X [32 x n] f32 rows
-    @ssbo @binding = 4 @role = "write" part : array<float>  // [ksplit x 32 x d] partial-C planes
-    @uniform @binding = 5 ka : Q8GemmArgs
-    @workgroup tw : float16[1024]           // W: 4 k-tiles x 4 row-tiles of 8x8, (k row, wrow col)
-    @workgroup tx : float16[1024]           // X: 4 k-tiles x 4 token-tiles of 8x8, (token row, k col)
+class MetalQ8GemmB : MetalQ8GemmBSplitT {
+}
 
-    [metal_kernel(name="metal_q8_gemm_b_sk_msl")]
-    def metal_q8_gemm_b_sk {
-        let lid = gl_LocalInvocationID.x
-        let sg = gl_SubgroupID
-        let ntileN = ka.ndim / 32u
-        let mBase = (gl_WorkGroupID.x / ntileN) * 32u
-        let nBase = (gl_WorkGroupID.x % ntileN) * 32u
-        let sl = gl_WorkGroupID.y
-        var mc : simdgroup_float8x8[4]      // this simdgroup's 16x16 quadrant: 2 token x 2 wrow tiles
-        var ma : simdgroup_half8x8[2]
-        var mb : simdgroup_half8x8[2]
-        let kdim4 = ka.kdim / 4u
-        let nkb = ka.kdim / 32u
-        let kbn = nkb / ka.ksplit
-        let kb0 = sl * kbn
-        // staging split: thread handles row lr (0..31) x k-eighth il (0..3) — 8 elems of W AND X
-        let lr = lid / 4u
-        let il = lid % 4u
-        let tW0 = (il * 4u + lr / 8u) * 64u + (lr % 8u)
-        let tX0 = (il * 4u + lr / 8u) * 64u + (lr % 8u) * 8u
-        let aQ = (sg % 2u) * 128u           // wrow tile-pair base within a k-tile slab
-        let bQ = (sg / 2u) * 128u           // token tile-pair base
-        var qp = unsafe(addr(wqb[((nBase + lr) * nkb + kb0) * 34u + 2u + il * 8u]))
-        var sph = unsafe(addr(wsh[((nBase + lr) * nkb + kb0) * 17u]))
-        var xp = unsafe(addr(x[(mBase + lr) * kdim4 + kb0 * 8u + il * 2u]))
-        var kb = 0u
-        while (kb < kbn) {
-            let sA = float(unsafe(sph[0]))
-            let b0 = unsafe(xp[0])
-            let b1 = unsafe(xp[1])
-            let w40 = float4(float(unsafe(qp[0u])), float(unsafe(qp[1u])),
-                float(unsafe(qp[2u])), float(unsafe(qp[3u]))) * sA
-            let w41 = float4(float(unsafe(qp[4u])), float(unsafe(qp[5u])),
-                float(unsafe(qp[6u])), float(unsafe(qp[7u]))) * sA
-            barrier()                       // previous math done reading the tiles
-            tw[tW0] = float16(w40.x)
-            tw[tW0 + 8u] = float16(w40.y)
-            tw[tW0 + 16u] = float16(w40.z)
-            tw[tW0 + 24u] = float16(w40.w)
-            tw[tW0 + 32u] = float16(w41.x)
-            tw[tW0 + 40u] = float16(w41.y)
-            tw[tW0 + 48u] = float16(w41.z)
-            tw[tW0 + 56u] = float16(w41.w)
-            tx[tX0] = float16(b0.x)
-            tx[tX0 + 1u] = float16(b0.y)
-            tx[tX0 + 2u] = float16(b0.z)
-            tx[tX0 + 3u] = float16(b0.w)
-            tx[tX0 + 4u] = float16(b1.x)
-            tx[tX0 + 5u] = float16(b1.y)
-            tx[tX0 + 6u] = float16(b1.z)
-            tx[tX0 + 7u] = float16(b1.w)
-            barrier()
-            var acur = unsafe(addr(tw[aQ]))
-            var bcur = unsafe(addr(tx[bQ]))
-            for [unroll_full] (_kt in range(4)) {
-                simdgroup_load(ma[0], acur, 0u, 8u)
-                simdgroup_load(ma[1], acur, 64u, 8u)
-                simdgroup_load(mb[0], bcur, 0u, 8u)
-                simdgroup_load(mb[1], bcur, 64u, 8u)
-                simdgroup_multiply_accumulate(mc[0], mb[0], ma[0], mc[0])
-                simdgroup_multiply_accumulate(mc[1], mb[0], ma[1], mc[1])
-                simdgroup_multiply_accumulate(mc[2], mb[1], ma[0], mc[2])
-                simdgroup_multiply_accumulate(mc[3], mb[1], ma[1], mc[3])
-                acur = unsafe(acur + 256)
-                bcur = unsafe(bcur + 256)
-            }
-            qp = unsafe(qp + 34u)
-            sph = unsafe(sph + 17u)
-            xp = unsafe(xp + 8u)
-            kb++
-        }
-        let pbase = sl * 32u * ka.ndim
-        let row0 = mBase + (sg / 2u) * 16u
-        let col0 = nBase + (sg % 2u) * 16u
-        simdgroup_store(mc[0], part, pbase + row0 * ka.ndim + col0, ka.ndim)
-        simdgroup_store(mc[1], part, pbase + row0 * ka.ndim + (col0 + 8u), ka.ndim)
-        simdgroup_store(mc[2], part, pbase + (row0 + 8u) * ka.ndim + col0, ka.ndim)
-        simdgroup_store(mc[3], part, pbase + (row0 + 8u) * ka.ndim + (col0 + 8u), ka.ndim)
-    }
+class MetalQ8GemmBSk : MetalQ8GemmBSplitT {
+    override IS_SK = true
 }
 
 // the split-K reduce: y = sum of the ksplit partial planes (one thread per output element);
@@ -3854,7 +3785,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_kq_mvb8_k6 = compile_pso(metal_kq_mvb8_k6_msl, metal_kq_mvb8_k6_msl_entry, metal_kq_mvb8_k6_msl_fastmath, ok)
     g_pso_kq_mm_b4 = compile_pso(MetalKqMulMmK4_metal_kq_mulmm_msl, MetalKqMulMmK4_metal_kq_mulmm_msl_entry, MetalKqMulMmK4_metal_kq_mulmm_msl_fastmath, ok)
     g_pso_kq_mm_b5 = compile_pso(MetalKqMulMmK5_metal_kq_mulmm_msl, MetalKqMulMmK5_metal_kq_mulmm_msl_entry, MetalKqMulMmK5_metal_kq_mulmm_msl_fastmath, ok)
-    g_pso_kq_mm_b6 = compile_pso(metal_kq_mulmm_k6_msl, metal_kq_mulmm_k6_msl_entry, metal_kq_mulmm_k6_msl_fastmath, ok)
+    g_pso_kq_mm_b6 = compile_pso(MetalKqMulMmK6_metal_kq_mulmm_msl, MetalKqMulMmK6_metal_kq_mulmm_msl_entry, MetalKqMulMmK6_metal_kq_mulmm_msl_fastmath, ok)
     // the batched-step set (P4)
     g_pso_gemv_b2 = compile_pso(MetalGemvB2_metal_gemv_msl, MetalGemvB2_metal_gemv_msl_entry, MetalGemvB2_metal_gemv_msl_fastmath, ok)
     g_pso_gemv_b4 = compile_pso(MetalGemvB4_metal_gemv_msl, MetalGemvB4_metal_gemv_msl_entry, MetalGemvB4_metal_gemv_msl_fastmath, ok)
@@ -3865,11 +3796,11 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_gemm_b_tensor = metal_tensor_crowned("gemmb_q8")
     g_pso_gemm_b = (g_gemm_b_tensor
         ? compile_pso(metal_q8_gemm_b_t_msl, metal_q8_gemm_b_t_msl_entry, metal_q8_gemm_b_t_msl_fastmath, ok)
-        : compile_pso(metal_q8_gemm_b_msl, metal_q8_gemm_b_msl_entry, metal_q8_gemm_b_msl_fastmath, ok))
+        : compile_pso(MetalQ8GemmB_metal_q8_gemm_b_msl, MetalQ8GemmB_metal_q8_gemm_b_msl_entry, MetalQ8GemmB_metal_q8_gemm_b_msl_fastmath, ok))
     g_gemm_b_sk_tensor = metal_tensor_crowned("gemmb_sk_q8")
     g_pso_gemm_b_sk = (g_gemm_b_sk_tensor
         ? compile_pso(metal_q8_gemm_b_sk_t_msl, metal_q8_gemm_b_sk_t_msl_entry, metal_q8_gemm_b_sk_t_msl_fastmath, ok)
-        : compile_pso(metal_q8_gemm_b_sk_msl, metal_q8_gemm_b_sk_msl_entry, metal_q8_gemm_b_sk_msl_fastmath, ok))
+        : compile_pso(MetalQ8GemmBSk_metal_q8_gemm_b_msl, MetalQ8GemmBSk_metal_q8_gemm_b_msl_entry, MetalQ8GemmBSk_metal_q8_gemm_b_msl_fastmath, ok))
     g_pso_skred = compile_pso(metal_sk_reduce_msl, metal_sk_reduce_msl_entry, metal_sk_reduce_msl_fastmath, ok)
     g_gemm64_b_tensor = metal_tensor_crowned("gemm64b_q8")
     g_pso_gemm64_b = (g_gemm64_b_tensor
@@ -4008,7 +3939,7 @@ def enc_kq_gemm_mm_b(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?;
                      bk, bn : MetalBuffer?; mp, rows : int64) {
     if (fmt == KqFmt.k6) {
         kn_pipeline(enc, g_pso_kq_mm_b6)
-        kn_tgmem(enc, metal_kq_mulmm_k6_msl_tgmem, 0)
+        kn_tgmem(enc, MetalKqMulMmK6_metal_kq_mulmm_msl_tgmem, 0)
         kn_buffer(enc, bs, doff, 0)
     } else {
         kn_pipeline(enc, fmt == KqFmt.k4 ? g_pso_kq_mm_b4 : g_pso_kq_mm_b5)
@@ -4390,7 +4321,7 @@ def enc_gemm_b(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64;
                bx, by : MetalBuffer?; var ka : Q8GemmArgs; mp32, d : int64; yoff : uint64 = 0ul) {
     kn_pipeline(enc, g_pso_gemm_b)
     if (!g_gemm_b_tensor) {
-        kn_tgmem(enc, metal_q8_gemm_b_msl_tgmem, 0)
+        kn_tgmem(enc, MetalQ8GemmB_metal_q8_gemm_b_msl_tgmem, 0)
     }
     kn_buffer(enc, bw, boff, 0)   // byte view
     kn_buffer(enc, bw, boff, 2)   // half-scale view
@@ -4410,7 +4341,7 @@ def enc_gemm_sk_b(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64;
                   bx, bpart : MetalBuffer?; var ka : Q8GemmArgs; d, nsk : int64) {
     kn_pipeline(enc, g_pso_gemm_b_sk)
     if (!g_gemm_b_sk_tensor) {
-        kn_tgmem(enc, metal_q8_gemm_b_sk_msl_tgmem, 0)
+        kn_tgmem(enc, MetalQ8GemmBSk_metal_q8_gemm_b_msl_tgmem, 0)
     }
     kn_buffer(enc, bw, boff, 0)   // byte view
     kn_buffer(enc, bw, boff, 2)   // half-scale view
@@ -4938,13 +4869,13 @@ def metal_tensor_race_decode : array<MetalTensorRaceResult> {
     var rka = gemm_ka(int64(kdim), int64(ndim), int64(ndim))
     var rka_sk = gemm_sk_ka(int64(kdim), int64(ndim), 4l)
     results |> emplace(race_decode_family(dev, queue, "gemmb_q8",
-        metal_q8_gemm_b_msl, metal_q8_gemm_b_msl_entry, metal_q8_gemm_b_msl_fastmath, metal_q8_gemm_b_msl_tgmem,
+        MetalQ8GemmB_metal_q8_gemm_b_msl, MetalQ8GemmB_metal_q8_gemm_b_msl_entry, MetalQ8GemmB_metal_q8_gemm_b_msl_fastmath, MetalQ8GemmB_metal_q8_gemm_b_msl_tgmem,
         metal_q8_gemm_b_t_msl, metal_q8_gemm_b_t_msl_entry, metal_q8_gemm_b_t_msl_fastmath,
         32, kdim, ndim, 32 * ndim, uint3(uint(ndim / 32), 1u, 1u), rka) $(enc, slot_y) {
         kn_buffer(enc, slot_y, 0ul, 4)
     })
     results |> emplace(race_decode_family(dev, queue, "gemmb_sk_q8",
-        metal_q8_gemm_b_sk_msl, metal_q8_gemm_b_sk_msl_entry, metal_q8_gemm_b_sk_msl_fastmath, metal_q8_gemm_b_sk_msl_tgmem,
+        MetalQ8GemmBSk_metal_q8_gemm_b_msl, MetalQ8GemmBSk_metal_q8_gemm_b_msl_entry, MetalQ8GemmBSk_metal_q8_gemm_b_msl_fastmath, MetalQ8GemmBSk_metal_q8_gemm_b_msl_tgmem,
         metal_q8_gemm_b_sk_t_msl, metal_q8_gemm_b_sk_t_msl_entry, metal_q8_gemm_b_sk_t_msl_fastmath,
         32, kdim, ndim, 4 * 32 * ndim, uint3(uint(ndim / 32), 4u, 1u), rka_sk) $(enc, slot_y) {
         kn_buffer(enc, slot_y, 0ul, 4)
@@ -5113,20 +5044,21 @@ class MetalQ8MulMm : MetalMmTileBase {
     }
 }
 
-// The K4/K5 prefill GEMM pair as one template — q5_K = q4_K's kmask scale decode + the qh
-// overlay, so QH branch-duplicates only the dequant k-loop (both stamps byte-identical;
-// nsh repeated per arm to keep line order). K6 (own scale layout) and Q8 (blob walk) stay.
+// The K-quant prefill GEMM trio as one template — q5_K = q4_K's kmask decode + the QH overlay
+// (nsh repeated per arm to keep line order); q6_K = the SIXBIT arm (own scale/quant decode,
+// everything around it shared). Q8 (blob walk) stays its own class.
 [ |> template_struct_instance]
 class template MetalKqMulMmK45T : MetalMmTileBase {
-    @ssbo @binding = 0 @role = "weight" ksh : array<float16> // 16B compact scale blocks, half view (d at 8*blk, dmin at 8*blk+1)
-    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>   // the same buffer, uint4 view
-    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // quant plane, uint view (qs at BLK*blk; k5 qh at BLK*blk+32)
+    @ssbo @binding = 0 @role = "weight" ksh : array<float16> // k4/k5: 16B scale blocks, half view (d at 8*blk, dmin at 8*blk+1); k6: the d plane (bound at byte nsb*16)
+    @ssbo @binding = 1 @role = "weight" ks4 : array<uint4>   // the same buffer, uint4 view (k6: 16 int8 sub-scales at blk, bound at 0)
+    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // quant plane, uint view (qs at BLK*blk; k5 qh at BLK*blk+32; k6 ql at 48*blk, qh at 48*blk+32)
     @ssbo @binding = 3 @role = "read" xf : array<float4>
     @ssbo @binding = 4 @role = "write" y : array<float>
     @uniform @binding = 5 kdim : uint
     @uniform @binding = 6 ndim : uint
-    @template_constant BLK : uint = 32u  // superblock quant-plane stride in uints
+    @template_constant BLK : uint = 32u  // superblock quant-plane stride in uints (unused in the SIXBIT arm — k6 strides are hardcoded 48/16/8)
     @template_constant QH : bool = false // q5_K: the 5th-bit overlay plane rides after the nibbles
+    @template_constant SIXBIT : bool = false // q6_K: int8 sub-scales x super-d, ql/qh compose
 
     [metal_kernel]
     def metal_kq_mulmm {   // nolint:STYLE038 — MSL kernel body; the mul_mm tiles are simdgroup-barrier coupled
@@ -5160,39 +5092,75 @@ class template MetalKqMulMmK45T : MetalMmTileBase {
             let blk = wrow * nsb + sb
             let b0 = unsafe(xcur[0])
             let b1 = unsafe(xcur[1])
-            let sv = ks4[blk]
-            var sc = 0u
-            var mn = 0u
-            if (js < 4u) {
-                sc = (sv.y >> (8u * js)) & 63u
-                mn = (sv.z >> (8u * js)) & 63u
-            } else {
-                let j2 = js - 4u
-                let hi = sv.w >> (8u * j2)
-                sc = (hi & 15u) | (((sv.y >> (8u * j2 + 6u)) & 3u) << 4u)
-                mn = ((hi >> 4u) & 15u) | (((sv.z >> (8u * j2 + 6u)) & 3u) << 4u)
-            }
-            let dsc = float(ksh[blk * 8u]) * float(sc)
-            let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
-            let qb = blk * BLK + (js / 2u) * 8u + il0 * 4u
-            static_if (QH) {
-                let hb = blk * BLK + 32u + il0 * 4u
-                let nsh = (js & 1u) * 4u
+            static_if (SIXBIT) {
+                // q6_K: scalars reload per kb (uniform, L1-served) — the hoisted sv/dall cache cost
+                // an occupancy tier (896 vs 1024 max_threads) and measured 1.7-10% slower per shape
+                // (bench_metal_kq_mm_lab, 3 launches, bit-exact)
+                let half6 = js / 4u
+                let gg = js % 4u
+                let sv = ks4[blk]
+                let dall = float(ksh[blk])
+                let si = half6 * 8u + gg * 2u + il0
+                let scw = si < 8u ? (si < 4u ? sv.x : sv.y) : (si < 12u ? sv.z : sv.w)
+                let s6 = float(((int(scw >> ((si & 3u) * 8u)) & 255) ^ 128) - 128)
+                let dsc = dall * s6
+                let dmn = dsc * 32.0   // -32 folded to the fma form (k4's dmn shape)
+                // byte-position shift folded into exact power-of-two pre-scales (lcpp dequantize_q6_K
+                // shape): q<<8c is an exact f32 integer (6-bit quants), dsc/2^8c is an exponent shift,
+                // so each fma sees the same real product — bit-identical, one shift fewer per element
+                let dsc1 = dsc * 0.00390625
+                let dsc2 = dsc * 0.0000152587890625
+                let dsc3 = dsc * 0.000000059604644775390625
+                let qb = blk * 48u + half6 * 16u + (gg & 1u) * 8u + il0 * 4u
+                let hb = blk * 48u + 32u + half6 * 8u + il0 * 4u
+                let nsh = (gg / 2u) * 4u
+                let hsh = gg * 2u
                 for [unroll_full] (k in range(4)) {
                     let u = kqu[qb + uint(k)]
                     let hu = kqu[hb + uint(k)]
-                    for [unroll_full] (c in range(4)) {
-                        let q = ((u >> (8u * uint(c) + nsh)) & 15u) | (((hu >> (8u * uint(c) + js)) & 1u) << 4u)
-                        va[k * 4 + c] = float16(dsc * float(q) - dmn)
-                    }
+                    // all 4 bytes composed at once — cross-byte bleed of the uint-wide shifts is
+                    // masked off; per element only mask+fma remain (shift folded into dsc1..3)
+                    let qv = ((u >> nsh) & 0x0F0F0F0F) | (((hu >> hsh) & 0x03030303) << 4u)
+                    va[k * 4] = float16(dsc * float(qv & 255u) - dmn)
+                    va[k * 4 + 1] = float16(dsc1 * float(qv & 65280u) - dmn)
+                    va[k * 4 + 2] = float16(dsc2 * float(qv & 16711680u) - dmn)
+                    va[k * 4 + 3] = float16(dsc3 * float(qv & 4278190080u) - dmn)
                 }
             } else {
-                let nsh = (js & 1u) * 4u
-                for [unroll_full] (k in range(4)) {
-                    let u = kqu[qb + uint(k)]
-                    for [unroll_full] (c in range(4)) {
-                        let q = (u >> (8u * uint(c) + nsh)) & 15u
-                        va[k * 4 + c] = float16(dsc * float(q) - dmn)
+                let sv = ks4[blk]
+                var sc = 0u
+                var mn = 0u
+                if (js < 4u) {
+                    sc = (sv.y >> (8u * js)) & 63u
+                    mn = (sv.z >> (8u * js)) & 63u
+                } else {
+                    let j2 = js - 4u
+                    let hi = sv.w >> (8u * j2)
+                    sc = (hi & 15u) | (((sv.y >> (8u * j2 + 6u)) & 3u) << 4u)
+                    mn = ((hi >> 4u) & 15u) | (((sv.z >> (8u * j2 + 6u)) & 3u) << 4u)
+                }
+                let dsc = float(ksh[blk * 8u]) * float(sc)
+                let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
+                let qb = blk * BLK + (js / 2u) * 8u + il0 * 4u
+                static_if (QH) {
+                    let hb = blk * BLK + 32u + il0 * 4u
+                    let nsh = (js & 1u) * 4u
+                    for [unroll_full] (k in range(4)) {
+                        let u = kqu[qb + uint(k)]
+                        let hu = kqu[hb + uint(k)]
+                        for [unroll_full] (c in range(4)) {
+                            let q = ((u >> (8u * uint(c) + nsh)) & 15u) | (((hu >> (8u * uint(c) + js)) & 1u) << 4u)
+                            va[k * 4 + c] = float16(dsc * float(q) - dmn)
+                        }
+                    }
+                } else {
+                    let nsh = (js & 1u) * 4u
+                    for [unroll_full] (k in range(4)) {
+                        let u = kqu[qb + uint(k)]
+                        for [unroll_full] (c in range(4)) {
+                            let q = (u >> (8u * uint(c) + nsh)) & 15u
+                            va[k * 4 + c] = float16(dsc * float(q) - dmn)
+                        }
                     }
                 }
             }
@@ -5225,98 +5193,10 @@ class MetalKqMulMmK5 : MetalKqMulMmK45T {
     override QH = true
 }
 
-class MetalKqMulMmK6 : MetalMmTileBase {
-    @ssbo @binding = 0 @role = "weight" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
-    @ssbo @binding = 1 @role = "weight" ksc : array<uint4>   // 16B sub-scale blocks (16 int8 at blk), same buffer at 0
-    @ssbo @binding = 2 @role = "weight" kqu : array<uint>    // k6 quant plane, uint view (ql at 48*blk, qh at 48*blk+32)
-    @ssbo @binding = 3 @role = "read" xf : array<float4>
-    @ssbo @binding = 4 @role = "write" y : array<float>
-    @uniform @binding = 5 kdim : uint
-    @uniform @binding = 6 ndim : uint
-
-    [metal_kernel(name="metal_kq_mulmm_k6_msl")]
-    def metal_kq_mulmm_k6 {   // nolint:STYLE038 — MSL kernel body; the mul_mm tiles are simdgroup-barrier coupled
-        let lid = gl_LocalInvocationID.x
-        let sg = gl_SubgroupID
-        let mBase = gl_WorkGroupID.x * 32u
-        let nBase = gl_WorkGroupID.y * 64u
-        var mc : simdgroup_float8x8[8]
-        var ma : simdgroup_half8x8[4]
-        var mb : simdgroup_half8x8[2]
-        var va : float16[16]
-        let kdim4 = kdim / 4u
-        let nkb = kdim / 32u
-        let lr0 = lid / 2u
-        let il0 = lid % 2u
-        let syA = lr0 / 8u
-        let lxA = lr0 % 8u
-        let tA0 = (il0 * 2u * 8u + syA) * 64u + lxA
-        let lr1 = lid / 4u
-        let iy = (lid % 4u) * 8u
-        let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
-        let aB = (sg % 2u) * 256u
-        let bB = (sg / 2u) * 128u
-        let nsb = kdim / 256u
-        let wrow = nBase + lr0
-        var xcur = unsafe(addr(xf[(mBase + lr1) * kdim4 + iy / 4u]))
-        var sv : uint4
-        var dall = 0.0
-        var kb = 0u
-        while (kb < nkb) {
-            let sb = kb / 8u
-            let js = kb % 8u
-            let blk = wrow * nsb + sb
-            let b0 = unsafe(xcur[0])
-            let b1 = unsafe(xcur[1])
-            let half6 = js / 4u
-            let gg = js % 4u
-            if (js == 0u) {   // superblock scalars change every 8th kb; uniform branch, no divergence
-                sv = ksc[blk]
-                dall = float(kdh[blk])
-            }
-            let si = half6 * 8u + gg * 2u + il0
-            let scw = si < 8u ? (si < 4u ? sv.x : sv.y) : (si < 12u ? sv.z : sv.w)
-            let s6 = float(((int(scw >> ((si & 3u) * 8u)) & 255) ^ 128) - 128)
-            let dsc = dall * s6
-            let dmn = dsc * 32.0   // -32 folded to the fma form (k4's dmn shape)
-            // byte-position shift folded into exact power-of-two pre-scales (lcpp dequantize_q6_K
-            // shape): q<<8c is an exact f32 integer (6-bit quants), dsc/2^8c is an exponent shift,
-            // so each fma sees the same real product — bit-identical, one shift fewer per element
-            let dsc1 = dsc * 0.00390625
-            let dsc2 = dsc * 0.0000152587890625
-            let dsc3 = dsc * 0.000000059604644775390625
-            let qb = blk * 48u + half6 * 16u + (gg & 1u) * 8u + il0 * 4u
-            let hb = blk * 48u + 32u + half6 * 8u + il0 * 4u
-            let nsh = (gg / 2u) * 4u
-            let hsh = gg * 2u
-            for [unroll_full] (k in range(4)) {
-                let u = kqu[qb + uint(k)]
-                let hu = kqu[hb + uint(k)]
-                // all 4 bytes composed at once — cross-byte bleed of the uint-wide shifts is
-                // masked off; per element only mask+fma remain (shift folded into dsc1..3)
-                let qv = ((u >> nsh) & 0x0F0F0F0F) | (((hu >> hsh) & 0x03030303) << 4u)
-                va[k * 4] = float16(dsc * float(qv & 255u) - dmn)
-                va[k * 4 + 1] = float16(dsc1 * float(qv & 65280u) - dmn)
-                va[k * 4 + 2] = float16(dsc2 * float(qv & 16711680u) - dmn)
-                va[k * 4 + 3] = float16(dsc3 * float(qv & 4278190080u) - dmn)
-            }
-            barrier()
-            for [unroll_full] (i in range(16)) {
-                ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
-            }
-            tg_store_half4(tb, ibB, b0)
-            tg_store_half4(tb, ibB + 4u, b1)
-            barrier()
-            acc_quad(aB, bB, ma, mb, mc)
-            xcur = unsafe(xcur + 8)
-            kb++
-        }
-        let row0 = mBase + (sg / 2u) * 16u
-        let col0 = nBase + (sg % 2u) * 32u
-        for [unroll_full] (i in range(8)) {
-            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ndim + col0 + uint(i % 4) * 8u, ndim)
-        }
-    }
+// q6_K rides the SIXBIT arm; scalars reload per kb — the cached form cost an occupancy tier
+// (896 vs 1024 max_threads; bench_metal_kq_mm_lab measured -1.7..-10% per shape).
+class MetalKqMulMmK6 : MetalKqMulMmK45T {
+    override SIXBIT = true
 }
 
 // Router GEMV over the uploaded fp32 router slab: y[ne] = W[ne x dim] . x per stream. ne <= 256
