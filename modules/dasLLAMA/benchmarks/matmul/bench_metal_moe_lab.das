@@ -1189,7 +1189,9 @@ def private dump_gmx4_msl : bool {
     fwrite("{dd}/gmm4_lcpp.metal", lab_moe_mm_mx4_lcpp_msl)
     fwrite("{dd}/gmm6_prod.metal", metal_moe_mulmm_k6_msl)
     fwrite("{dd}/gmm6_reload.metal", lab_moe_mm_k6_reload_msl)
-    print("gmx4+gmm4+gmm6 MSL dumped to {dd}\n")
+    fwrite("{dd}/gmm8_prod.metal", metal_moe_mulmm_q8_msl)
+    fwrite("{dd}/gmm8_index.metal", lab_moe_mm_q8_index_msl)
+    print("gmx4+gmm4+gmm6+gmm8 MSL dumped to {dd}\n")
     return true
 }
 
@@ -2221,6 +2223,332 @@ def private run_gmm6_lab(dev; queue; rounds : int; passes : int64) {
     metal_release(pso_r)
 }
 
+// ===== gmm8: gathered q8_0 MUL_MM section (qwen3moe-q8 pp512 shapes — the reification followup) =====
+// The A/B that decides how MetalMoeMulMmQ8 joins MetalMoeMulMmBase: production walks its two
+// weight views on CARRIED POINTERS (scur +17 / qp +34 per k-block — the dense twin's AGX comment
+// says pointer measured better, no number attached), while a stateless stage_a re-derives both
+// offsets from wb + kb every call. gmm8_prod = the production kernel verbatim; gmm8_index = the
+// exact text the stateless hook produces, at the BASE binding layout (xf@3 y@4 cnt/basep/bkt@7/8/9).
+
+let Q8E = 128l          // experts (Qwen3-30B-A3B geometry, q8_0 weights)
+let Q8NFE = 768l        // expert ffn width
+let Q8DIM = 2048l       // model dim
+let Q8K = 8l            // experts per token
+let Q8NTOK = 512l       // pp512 token rows
+let Q8NKB = Q8DIM / 32l             // q8_0 blocks per weight row
+let Q8EPL = Q8NFE * Q8NKB           // blocks per expert plane
+let Q8LAYERS = 8l
+let Q8ROWS = Q8NTOK * Q8K
+
+// production body with the weight-pointer walk replaced by per-kb index math — blk = wb0 + kb,
+// scale at blk*17 (half view), quants at blk*34+2 (byte view); everything else verbatim
+class LabMoeMmQ8Index {
+    @ssbo @binding = 0 wsh : array<float16>
+    @ssbo @binding = 1 wqb : array<int8>
+    @ssbo @binding = 3 xf : array<float4>
+    @ssbo @binding = 4 y : array<float>
+    @uniform @binding = 5 ka : MoeMmArgs
+    @ssbo @binding = 7 cnt : array<uint>
+    @ssbo @binding = 8 basep : array<uint>
+    @ssbo @binding = 9 bkt : array<uint>
+    @workgroup ta : float16[2048]
+    @workgroup tb : float16[1024]
+
+    [metal_kernel(name="lab_moe_mm_q8_index_msl")]
+    def lab_moe_mm_q8_index {   // nolint:STYLE038 — MSL kernel body; the mul_mm tiles are simdgroup-barrier coupled
+        let e = gl_WorkGroupID.z
+        let ce = cnt[e]
+        let mBase = gl_WorkGroupID.x * 32u
+        if (mBase >= (ce + 31u) / 32u * 32u) {
+            return
+        }
+        let rbase = basep[e]
+        let lid = gl_LocalInvocationID.x
+        let sg = gl_SubgroupID
+        let nBase = gl_WorkGroupID.y * 64u
+        var mc : simdgroup_float8x8[8]
+        var ma : simdgroup_half8x8[4]
+        var mb : simdgroup_half8x8[2]
+        var va : float16[16]
+        let kdim4 = ka.kdim / 4u
+        let nkb = ka.kdim / 32u
+        let lr0 = lid / 2u
+        let il0 = lid % 2u
+        let syA = lr0 / 8u
+        let lxA = lr0 % 8u
+        let tA0 = (il0 * 2u * 8u + syA) * 64u + lxA
+        let lr1 = lid / 4u
+        let iy = (lid % 4u) * 8u
+        let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
+        let aB = (sg % 2u) * 256u
+        let bB = (sg / 2u) * 128u
+        let wb0 = e * ka.eplane + (nBase + lr0) * nkb
+        var srcrow = rbase + mBase + lr1
+        if (ka.gather != 0u) {
+            srcrow = bkt[rbase + min(mBase + lr1, ce - 1u)] / ka.nk
+        }
+        var xcur = unsafe(addr(xf[srcrow * kdim4 + iy / 4u]))
+        var kb = 0u
+        while (kb < nkb) {
+            let b0 = unsafe(xcur[0])
+            let b1 = unsafe(xcur[1])
+            let blk = wb0 + kb                // the index form: both offsets re-derived every k-block
+            let sA = float(wsh[blk * 17u])
+            let qb = blk * 34u + 2u + il0 * 16u
+            for [unroll_full] (i in range(16)) {
+                va[i] = float16(float(wqb[qb + uint(i)]) * sA)
+            }
+            barrier()
+            for [unroll_full] (i in range(16)) {
+                ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
+            }
+            tg_store_half4(tb, ibB, b0)
+            tg_store_half4(tb, ibB + 4u, b1)
+            barrier()
+            var acur = unsafe(addr(ta[aB]))
+            var bcur = unsafe(addr(tb[bB]))
+            for [unroll_full] (_ik in range(4)) {
+                for [unroll_full] (i in range(4)) {
+                    simdgroup_load(ma[i], acur, uint(i) * 64u, 8u)
+                }
+                for [unroll_full] (i in range(2)) {
+                    simdgroup_load(mb[i], bcur, uint(i) * 64u, 8u)
+                }
+                for [unroll_full] (i in range(8)) {
+                    simdgroup_multiply_accumulate(mc[i], mb[i / 4], ma[i % 4], mc[i])
+                }
+                acur = unsafe(acur + 512)
+                bcur = unsafe(bcur + 256)
+            }
+            xcur = unsafe(xcur + 8)
+            kb++
+        }
+        let row0 = rbase + mBase + (sg / 2u) * 16u
+        let col0 = nBase + (sg % 2u) * 32u
+        for [unroll_full] (i in range(8)) {
+            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ka.ndim + col0 + uint(i % 4) * 8u, ka.ndim)
+        }
+    }
+}
+
+// CPU reference for one gathered output element: x row dot the q8_0-decoded weight row `col`
+// of expert plane eoff (in 32-elem blocks) — blob layout [d f16 | 32 int8 quants] per block
+def private ref_q8_row(blob : array<uint8>; xrow : array<float>; eoff, col : int64) : float {
+    var acc = 0.0
+    for (kb in range64(Q8NKB)) {
+        let bi = eoff + col * Q8NKB + kb
+        let d = f16_to_f32(uint(blob[bi * 34l]) | (uint(blob[bi * 34l + 1l]) << 8u))
+        for (l in range64(32l)) {
+            let q = (int(blob[bi * 34l + 2l + l]) ^ 128) - 128
+            acc += d * float(q) * xrow[kb * 32l + l]
+        }
+    }
+    return acc
+}
+
+// gb slots for the gmm8 arms (ONE blob buffer serves both weight views, bound at 0 and 1)
+let G8_BLOB = 0
+let G8_X = 1
+let G8_Y = 2
+let G8_KA = 3
+let G8_CNT = 4
+let G8_BASE = 5
+let G8_BKT = 6
+
+// prod = standalone layout (xf@2 y@3 cnt/basep/bkt@6/7/8); index = family-base layout
+def private enc_gmm8(gb; pso; tgmem : uint64; prod_layout : bool; enc) {
+    metal_set_pipeline(enc, pso)
+    metal_set_threadgroup_memory_length(enc, tgmem, 0)
+    metal_set_buffer(enc, gb[G8_BLOB], 0ul, 0)
+    metal_set_buffer(enc, gb[G8_BLOB], 0ul, 1)
+    let sh = prod_layout ? 0 : 1
+    metal_set_buffer(enc, gb[G8_X], 0ul, 2 + sh)
+    metal_set_buffer(enc, gb[G8_Y], 0ul, 3 + sh)
+    metal_set_buffer(enc, gb[G8_KA], 0ul, 5)
+    metal_set_buffer(enc, gb[G8_CNT], 0ul, 6 + sh)
+    metal_set_buffer(enc, gb[G8_BASE], 0ul, 7 + sh)
+    metal_set_buffer(enc, gb[G8_BKT], 0ul, 8 + sh)
+    metal_dispatch_threadgroups(enc, uint3(uint((Q8NTOK + 31l) / 32l), uint(Q8NFE / 64l), uint(Q8E)), uint3(128u, 1u, 1u))
+}
+
+def private check_gmm8(queue; gb : array<MetalBuffer?>; pso; tgmem : uint64; prod_layout : bool; name : string;
+                       blob : array<uint8>; gx : array<float>;
+                       cnt, basep, bkt : array<uint>) {
+    let t = time_arm(queue, false) $(enc : MetalComputeEncoder?) {
+        enc_gmm8(gb, pso, tgmem, prod_layout, enc)
+    }
+    var xrow : array<float>
+    xrow |> resize(int(Q8DIM))
+    var worst = 0.0
+    unsafe {
+        var y = reinterpret<float const?>(metal_buffer_contents(gb[G8_Y]))
+        for (e in [0l, 17l, Q8E - 1l]) {
+            for (r in [0l, int64(cnt[e]) - 1l]) {
+                let tok = int64(bkt[int64(basep[e]) + r] / uint(Q8K))
+                for (i in range64(Q8DIM)) {
+                    xrow[i] = gx[tok * Q8DIM + i]
+                }
+                for (col in [0l, 1l, 500l, Q8NFE - 1l]) {
+                    let want_v = ref_q8_row(blob, xrow, int64(e) * Q8EPL, col)
+                    let got = y[(int64(basep[e]) + r) * Q8NFE + col]
+                    let rel = abs(got - want_v) / max(1.0, abs(want_v))
+                    if (rel > 1e-5) {
+                        print("  MISMATCH e={e} r={r} col={col}: got {got} want {want_v} (rel {rel})\n")
+                    }
+                    worst = max(worst, rel)
+                }
+            }
+        }
+    }
+    delete xrow
+    if (worst > 1e-4) {
+        panic("{name} correctness: worst rel diff {worst}")
+    }
+    print("{name} correctness: worst rel {worst}  (single mm {t / 1000.0lf} ms)\n")
+}
+
+def private run_gmm8_lab(dev; queue; rounds : int; passes : int64) {
+    var pso_p = compile_or_die(dev, metal_moe_mulmm_q8_msl, metal_moe_mulmm_q8_msl_entry, metal_moe_mulmm_q8_msl_fastmath)
+    var pso_i = compile_or_die(dev, lab_moe_mm_q8_index_msl, lab_moe_mm_q8_index_msl_entry, lab_moe_mm_q8_index_msl_fastmath)
+    let t_fill = ref_time_ticks()
+    let nball = Q8E * Q8EPL
+    // exact-arithmetic q8_0 fill: pow2 d halves, TRUE small-int8 quant bytes in [-7, 7]
+    var blob : array<uint8>
+    blob |> resize(int(nball * 34l))
+    for (bi in range64(nball)) {
+        let dh = uint(0x3400) + (uint((bi * 13l) % 3l) << 10u)   // 0.25 / 0.5 / 1.0 halves
+        blob[bi * 34l] = uint8(dh & 255u)
+        blob[bi * 34l + 1l] = uint8(dh >> 8u)
+        for (l in range64(32l)) {
+            blob[bi * 34l + 2l + l] = uint8((int((bi * 32l + l) * 37l % 15l) - 7) & 255)
+        }
+    }
+    var gx : array<float>
+    gx |> resize(int(Q8NTOK * Q8DIM))
+    for (i in range(length(gx))) {
+        gx[i] = float((i * 5) % 13 - 6)
+    }
+    // routing tables: the gmm4 pattern at k = 8 (odd stride mod E, hash jitter on the base)
+    var cnt : array<uint>
+    cnt |> resize(int(Q8E))
+    var selE : array<int>
+    selE |> resize(int(Q8ROWS))
+    for (tk in range64(Q8NTOK)) {
+        let base = int64((uint(int(tk)) * 2654435761u) >> 25u)
+        for (s in range64(Q8K)) {
+            let e = int((base + s * 13l) % Q8E)
+            selE[tk * Q8K + s] = e
+            cnt[e]++
+        }
+    }
+    var basep : array<uint>
+    basep |> resize(int(Q8E))
+    var ppad = 0l
+    for (e in range64(Q8E)) {
+        basep[e] = uint(ppad)
+        ppad += (int64(cnt[e]) + 31l) / 32l * 32l
+    }
+    var bkt : array<uint>
+    bkt |> resize(int(ppad))
+    var fill : array<uint>
+    fill |> resize(int(Q8E))
+    for (tk in range64(Q8NTOK)) {
+        for (s in range64(Q8K)) {
+            let e = selE[tk * Q8K + s]
+            bkt[int64(basep[e]) + int64(fill[e])] = uint(tk * Q8K + s)
+            fill[e]++
+        }
+    }
+    var cntb : array<uint8>
+    cntb |> resize(length(cnt) * 4)
+    var basepb : array<uint8>
+    basepb |> resize(length(basep) * 4)
+    var bktb : array<uint8>
+    bktb |> resize(length(bkt) * 4)
+    var kab : array<uint8>
+    kab |> resize(24)
+    unsafe {
+        memcpy(addr < void? >(cntb[0]), addr < void? >(cnt[0]), length(cnt) * 4)
+        memcpy(addr < void? >(basepb[0]), addr < void? >(basep[0]), length(basep) * 4)
+        memcpy(addr < void? >(bktb[0]), addr < void? >(bkt[0]), length(bkt) * 4)
+        var kap = addr<uint?>(kab[0])
+        kap[0] = uint(Q8DIM)    // kdim
+        kap[1] = uint(Q8NFE)    // ndim
+        kap[2] = uint(Q8EPL)    // eplane, q8_0 blocks
+        kap[3] = uint(Q8K)      // nk
+        kap[4] = 1u             // gather
+        kap[5] = 0u             // hasb
+    }
+    print("gmm8 host fill: {get_time_usec(t_fill) / 1000} ms ({int(nball * 34l) / 1048576} MB planes; rows {Q8ROWS} padded {ppad})\n")
+
+    var gb : array<MetalBuffer?>
+    gb |> push(upload_bytes(dev, blob))                                        // G8_BLOB
+    gb |> push(upload_floats(dev, gx))                                         // G8_X
+    gb |> push(metal_new_buffer_untracked(dev, uint64(ppad * Q8NFE * 4l)))     // G8_Y
+    gb |> push(upload_bytes(dev, kab))                                         // G8_KA
+    gb |> push(upload_bytes(dev, cntb))                                        // G8_CNT
+    gb |> push(upload_bytes(dev, basepb))                                      // G8_BASE
+    gb |> push(upload_bytes(dev, bktb))                                        // G8_BKT
+
+    check_gmm8(queue, gb, pso_p, metal_moe_mulmm_q8_msl_tgmem, true, "gmm8_prod", blob, gx, cnt, basep, bkt)
+    check_gmm8(queue, gb, pso_i, lab_moe_mm_q8_index_msl_tgmem, false, "gmm8_index", blob, gx, cnt, basep, bkt)
+
+    let mac_mm = double(Q8ROWS * Q8NFE * Q8DIM)
+    var garms <- [("gmm8_prod", 0), ("gmm8_index", 1)]
+    var gbest : table<string; double>
+    for (a in garms) {
+        gbest[a._0] = 1e18lf
+    }
+    for (_rd in range(rounds)) {
+        for (a in garms) {
+            if (!want(g_env_bench.lab_arms, a._0)) {
+                continue
+            }
+            let us = time_arm(queue, false) $(enc : MetalComputeEncoder?) {
+                for (_p in range64(passes)) {
+                    for (_l in range64(Q8LAYERS)) {
+                        enc_gmm8(gb, a._1 == 1 ? pso_i : pso_p, a._1 == 1 ? lab_moe_mm_q8_index_msl_tgmem : metal_moe_mulmm_q8_msl_tgmem, a._1 == 0, enc)
+                        metal_memory_barrier(enc)
+                    }
+                }
+            }
+            let per = us / double(passes)
+            if (per < gbest[a._0]) {
+                gbest[a._0] = per
+            }
+        }
+    }
+    print("--- gmm8 (qwen3moe-q8 pp512 shapes: E={Q8E} nk={Q8K} ntok={Q8NTOK}, {int(Q8NFE)}x{int(Q8DIM)} planes, {int(mac_mm) / 1000000000} GMAC/mm) ---\n")
+    for (a in garms) {
+        if (!want(g_env_bench.lab_arms, a._0)) {
+            continue
+        }
+        let per_mm = gbest[a._0] / double(Q8LAYERS)
+        print("  {a._0}: {gbest[a._0] / 1000.0lf} ms/pass  {per_mm / 1000.0lf} ms/mm  {mac_mm / per_mm / 1000.0lf} GMAC/s\n")
+    }
+
+    delete blob
+    delete gx
+    delete cnt
+    delete selE
+    delete basep
+    delete bkt
+    delete fill
+    delete cntb
+    delete basepb
+    delete bktb
+    delete gbest
+    for (b in gb) {
+        metal_release(b)
+    }
+    gb |> clear()   // handles are metal_release-owned — delete on a ptr array would free pointees
+    unsafe {
+        delete gb
+    }
+    metal_release(pso_p)
+    metal_release(pso_i)
+}
+
 def private main_apple(dummy) {
     if (dump_gmx4_msl()) {
         return
@@ -2234,10 +2562,11 @@ def private main_apple(dummy) {
     }
     print("device={metal_device_name(dev)} rounds={rounds} passes={passes}\n")
     var queue = metal_new_command_queue(dev)
-    // gmm6 runs FIRST: the per-site section below ROTTED at the kargs migration (c45724dae moved
+    // gmm6/gmm8 run FIRST: the per-site section below ROTTED at the kargs migration (c45724dae moved
     // the MoE GEMV family onto MoeGemvArgs; enc_lab_w13* still bind the old uniform slots, so its
-    // correctness check panics) — repair is a standalone followup, it must not block this section
+    // correctness check panics) — repair is a standalone followup, it must not block these sections
     run_gmm6_lab(dev, queue, rounds, passes)
+    run_gmm8_lab(dev, queue, rounds, passes)
     var psos : array<MetalComputePipeline?>
     psos |> push(compile_or_die(dev, metal_moe_gemv_k4_msl, metal_moe_gemv_k4_msl_entry, metal_moe_gemv_k4_msl_fastmath))
     psos |> push(compile_or_die(dev, metal_moe_gemv_q51_msl, metal_moe_gemv_q51_msl_entry, metal_moe_gemv_q51_msl_fastmath))

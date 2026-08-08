@@ -93,19 +93,26 @@
    wants), but it reaches inference, mangling, and every cast, so it is a language design task
    and not a step in this arc. Parked deliberately, not forgotten.
 
-8. **MoE mul_mm family: K6 JOINED 2026-08-08 (021fffd87) — Q8/Mx4 remain.** K6's superblock-scalar
-   cache (`sv`/`dall`, reloaded every 8th k-block) measured SLOWER than reload-per-kb (gmm6 lab
-   section in bench_metal_moe_lab, qwen3moe pp512 shapes, 3 launches: −2.4% ms/mm), so the
-   stateless `stage_a` override was both the join and a perf win — the joined kernel is −2.0% vs
-   its old standalone form, bit-exact. The family is four of six (k4/k5/q51/k6). Remaining:
-   Q8 walks advancing weight pointers (`scur`/`qp` — index-math measured WORSE on AGX per the
-   kernel's own comment, so its route is stage_a taking/advancing pointer params — the
-   address-space-checked pointer-param unlock is in msl_emit) plus the cnt/basep/bkt
-   6/7/8 → 7/8/9 renumber (encoder + oracle churn, accepted once); Mx4 needs a prologue hook
-   (pre-loop vtab staging + bias-seeded accumulators). Boris ruled 2026-08-08: measure and
-   refactor, rollback is the safety net. NEW LEAD from the join: the family emits as a struct
-   with run()/stage_a METHODS, and the method-call MSL shape leaves ~0.5% vs flat text (measured
-   joined-vs-flat-reload) — an msl_emit method-flattening pass would pay across ALL riders.
+8. **MoE mul_mm family: K6 JOINED 2026-08-08 (021fffd87) — Q8/Mx4 measured OUT.** K6's
+   superblock-scalar cache (`sv`/`dall`, reloaded every 8th k-block) measured SLOWER than
+   reload-per-kb (gmm6 lab section in bench_metal_moe_lab, qwen3moe pp512 shapes, 3 launches:
+   −2.4% ms/mm), so the stateless `stage_a` override was both the join and a perf win — the
+   joined kernel is −2.0% vs its old standalone form, bit-exact. The family is four of six
+   (k4/k5/q51/k6). **Q8's stateless join is REFUTED by measurement** (gmm8 lab section,
+   2026-08-08: index-math stage_a form +3.4–3.6% vs the production carried-pointer walk, 3/3
+   launches, both arms bit-exact; occupancy identical 1024/1024 — the cost is in-loop
+   addressing, two muls per k-block vs three pointer bumps, NOT registers; the dense twin's
+   unquantified AGX comment now has a number). A pointer-preserving join is BLOCKED on msl_emit:
+   kernel-class members must be @ssbo/@uniform/@workgroup (plain thread-local members are a
+   compile error), so a rider cannot hold loop-carried pointer state across `stage_a` calls.
+   Mx4's prologue hook (pre-loop vtab staging + bias-seeded accumulators) is blocked on the
+   same missing mechanism. Both stay standalone until the msl_emit lead below lands — one
+   design covers both: method-flattening WITH scope splicing (a `stage_init` hook whose locals
+   stay live across the spliced stage_a = template-grade text from class-grade source). That
+   flattening lead is also worth ~0.5% on ALL current riders (the method-call MSL shape
+   measured that much shy of flat text, joined-vs-flat-reload). Side find from the gmm8 dump:
+   the `addr()` escape for a pointer walk defeats the const analysis — production Q8's weight
+   buffers emit as non-const `device half*` (and win anyway, so constness is not the term).
    ALSO: the MoE lab's per-site section (enc_lab_w13*/w2/pair arms) ROTTED at the kargs
    migration (c45724dae) — its encoders bind the old uniform slots and the w1 k4 check panics;
    the lab now runs gmm6 first so the rot doesn't block it. Repair = rebind those encoders to

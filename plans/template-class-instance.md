@@ -294,10 +294,15 @@ cover correctness only):
   measurement stands). BUT the mul_mm and B8 shapes merged on exactly that axis — see below.
 - ~~MoeMulMm K6~~ **JOINED 2026-08-08** (021fffd87, Boris ruling "measure and refactor"):
   the scalar cache measured SLOWER than reload-per-kb (gmm6 lab, −2.4% ms/mm ×3 launches) —
-  the stateless stage_a is both the join and a −2.0% win vs the old standalone. Q8 (pointer
-  walk → pointer-param stage_a + the 6/7/8→7/8/9 renumber) and Mx4 (prologue hook) remain
-  per followup_general #8; new leads there: the msl_emit method-flattening ~0.5% and the
-  MoE-lab per-site rot repair.
+  the stateless stage_a is both the join and a −2.0% win vs the old standalone.
+- ~~MoeMulMm Q8/Mx4~~ **measured OUT 2026-08-08** (gmm8 lab section): the stateless
+  index-math stage_a form is +3.4–3.6% vs Q8's production carried-pointer walk (3/3
+  launches, bit-exact both arms, occupancy identical 1024/1024 — in-loop addressing, not
+  registers). A pointer-preserving join needs loop-carried rider state, which msl_emit's
+  field gate forbids (members must be @ssbo/@uniform/@workgroup); Mx4's prologue hook is
+  blocked on the same mechanism. Both stay standalone; the unlock is the followup #8
+  msl_emit lead — method-flattening WITH scope splicing (also worth ~0.5% on all riders).
+  The MoE-lab per-site rot repair stays ledgered there too.
 - ~~The plain GEMV width pairs~~ — Gemv + W13Sw **DONE 2026-08-08 free** (see below);
   Q8Mv B2/B4 CLOSED: 16-vs-8 lanes/row thread geometry IS the specialization (a
   pick-one-geometry unification is an optimization experiment, not a dedup).
