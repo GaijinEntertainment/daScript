@@ -73,7 +73,17 @@ member types keep the hard error (the old field gate, now scoped to what state c
       (mean −0.54% — the predicted ~0.5% method-call residue recovered; prediction HIT),
       per-arm spread ≤0.11%, gmm8_prod anchor ±0.09%, all 24 correctness cells worst rel 0
       in both modes.
-- [ ] Commit B: `stage_init` hook on MetalMoeMulMmBase + Q8 join (gmm8 gate)
+- [x] Commit B: `stage_init` hook + Q8 join — DONE 2026-08-08. The rider keeps the
+      carried-pointer walk via plain members; standalone deleted; binding contract moved to
+      the family numbers (encoder pf_enc_moe_mm, gemm-test gate, gmm8 lab, q8 race harness
+      all rebound — tensor twin keeps its compact layout; kn_moe_mm_family_tail helper now
+      spells the family tail once for q8/q51/k-quants). Gates: kernels suite 7/7 (q8 oracle
+      gates at the new binds, poisoned-y negative control inherent), gmm8 stash-interleaved
+      A/B (3 pairs, M1): joined 2.1796/2.1718/2.1790 vs standalone 2.1950/2.1907/2.1907
+      ms/mm — joined −0.70/−0.86/−0.53%, bit-exact every launch; fam-qwen3moe (k4 flavor)
+      token-for-token parity through the production encoder covers the refactored family
+      tail in real serving (the q8 branch's binds are proven by the oracle gate + lab at
+      the same slots; the q8-MoE serving census rides the standing PARITY_FULL cadence).
 - [ ] Commit C: Mx4 join
 - [ ] Tail: MoE-lab per-site repair (followup_general #8) — rebind enc_lab_w13*/w2/pair to
       MoeGemvArgs kargs; drop the dead tail duplicate run_gmm6_lab call in main_apple

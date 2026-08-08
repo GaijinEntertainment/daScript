@@ -877,103 +877,9 @@ class MetalMoeMulMmQ8T {
     }
 }
 
-// Gathered q8 mul_mm — MetalQ8MulMm per expert (grid.z): weight base e*eblk, X rows gathered
-// via bkt (gather=1: src row = entry/k; gather=0: contiguous bucket rows — the down site),
-// C tiles land at the expert's padded bucket rows; tiles past the padded count exit.
-class MetalMoeMulMmQ8 {
-    @ssbo @binding = 0 @role = "weight" wsh : array<float16> // the expert STACK's blob slice, half-scale view
-    @ssbo @binding = 1 @role = "weight" wqb : array<int8>    // the same blob buffer, byte view
-    @ssbo @binding = 2 @role = "read" xf : array<float4>
-    @ssbo @binding = 3 @role = "write" y : array<float>
-    @uniform @binding = 5 ka : MoeMmArgs
-    @ssbo @binding = 6 @role = "read" cnt : array<uint>
-    @ssbo @binding = 7 @role = "read" basep : array<uint>
-    @ssbo @binding = 8 @role = "read" bkt : array<uint>
-    @workgroup ta : float16[2048]
-    @workgroup tb : float16[1024]
-
-    [metal_kernel(name="metal_moe_mulmm_q8_msl")]
-    def metal_moe_mulmm_q8 {
-        let e = gl_WorkGroupID.z
-        let ce = cnt[e]
-        let mBase = gl_WorkGroupID.x * 32u
-        if (mBase >= (ce + 31u) / 32u * 32u) {
-            return
-        }
-        let rbase = basep[e]
-        let lid = gl_LocalInvocationID.x
-        let sg = gl_SubgroupID
-        let nBase = gl_WorkGroupID.y * 64u
-        var mc : simdgroup_float8x8[8]
-        var ma : simdgroup_half8x8[4]
-        var mb : simdgroup_half8x8[2]
-        var va : float16[16]
-        let kdim4 = ka.kdim / 4u
-        let nkb = ka.kdim / 32u
-        let lr0 = lid / 2u
-        let il0 = lid % 2u
-        let syA = lr0 / 8u
-        let lxA = lr0 % 8u
-        let tA0 = (il0 * 2u * 8u + syA) * 64u + lxA
-        let lr1 = lid / 4u
-        let iy = (lid % 4u) * 8u
-        let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
-        let aB = (sg % 2u) * 256u
-        let bB = (sg / 2u) * 128u
-        let blk0 = e * ka.eplane + (nBase + lr0) * nkb
-        var srcrow = rbase + mBase + lr1
-        if (ka.gather != 0u) {
-            srcrow = bkt[rbase + min(mBase + lr1, ce - 1u)] / ka.nk
-        }
-        var scur = unsafe(addr(wsh[blk0 * 17u]))
-        var qp = unsafe(addr(wqb[blk0 * 34u + 2u + il0 * 16u]))
-        var xcur = unsafe(addr(xf[srcrow * kdim4 + iy / 4u]))
-        var kb = 0u
-        while (kb < nkb) {
-            let sA = float(unsafe(scur[0]))
-            let b0 = unsafe(xcur[0])
-            let b1 = unsafe(xcur[1])
-            for [unroll_full] (i in range(16)) {
-                va[i] = float16(float(unsafe(qp[i])) * sA)
-            }
-            barrier()
-            for [unroll_full] (i in range(16)) {
-                ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
-            }
-            tg_store_half4(tb, ibB, b0)
-            tg_store_half4(tb, ibB + 4u, b1)
-            barrier()
-            var acur = unsafe(addr(ta[aB]))
-            var bcur = unsafe(addr(tb[bB]))
-            for [unroll_full] (_ik in range(4)) {
-                for [unroll_full] (i in range(4)) {
-                    simdgroup_load(ma[i], acur, uint(i) * 64u, 8u)
-                }
-                for [unroll_full] (i in range(2)) {
-                    simdgroup_load(mb[i], bcur, uint(i) * 64u, 8u)
-                }
-                for [unroll_full] (i in range(8)) {
-                    simdgroup_multiply_accumulate(mc[i], mb[i / 4], ma[i % 4], mc[i])
-                }
-                acur = unsafe(acur + 512)
-                bcur = unsafe(bcur + 256)
-            }
-            scur = unsafe(scur + 17)
-            qp = unsafe(qp + 34)
-            xcur = unsafe(xcur + 8)
-            kb++
-        }
-        let row0 = rbase + mBase + (sg / 2u) * 16u
-        let col0 = nBase + (sg % 2u) * 32u
-        for [unroll_full] (i in range(8)) {
-            simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ka.ndim + col0 + uint(i % 4) * 8u, ka.ndim)
-        }
-    }
-}
-
 // The MoE mul_mm family: one 32x64 simdgroup tile loop over an expert's rows, identical for every
-// weight format — a format differs only in its k-block decode and the expert-plane origin that
-// decode addresses from, hence exactly two overrides. Q8/Mx4 stay out: followup_general.md #8.
+// weight format — a format differs in its k-block decode, the expert-plane origin it addresses
+// from, and (q8) the carried-pointer state stage_init binds. Mx4 stays out: followup_general.md #8.
 class MetalMoeMulMmBase {
     @ssbo @binding = 3 @role = "read" xf : array<float4>
     @ssbo @binding = 4 @role = "write" y : array<float>
@@ -987,6 +893,8 @@ class MetalMoeMulMmBase {
     // a format owns bindings 0..2 — its weight views; its plane stride rides ka.eplane
     def abstract wbase(e, nBase, lr0 : uint) : uint    // expert plane origin, in the format's block unit
     def abstract stage_a(wb, kb, il0, tA0 : uint) : void   // decode one k-block into the A tile
+
+    def stage_init(wb, il0 : uint) {}   // format prologue: bind carried-pointer state (q8's walk)
 
     def run {
         let e = gl_WorkGroupID.z
@@ -1021,6 +929,7 @@ class MetalMoeMulMmBase {
         var xcur = unsafe(addr(xf[srcrow * kdim4 + iy / 4u]))
         var kb = 0u
         let wb = wbase(e, nBase, lr0)
+        stage_init(wb, il0)
         while (kb < nkb) {
             let b0 = unsafe(xcur[0])
             let b1 = unsafe(xcur[1])
@@ -1051,6 +960,42 @@ class MetalMoeMulMmBase {
         for [unroll_full] (i in range(8)) {
             simdgroup_store(mc[i], y, (row0 + uint(i / 4) * 8u) * ka.ndim + col0 + uint(i % 4) * 8u, ka.ndim)
         }
+    }
+}
+
+// Gathered q8 mul_mm — the family base with the CARRIED-POINTER A stage: stage_init binds the
+// scale/quant walk once, stage_a advances (+17 halves / +34 bytes per k-block; the stateless
+// index form measured +3.4-3.6% in the gmm8 lab — the pointer walk IS the win).
+class MetalMoeMulMmQ8 : MetalMoeMulMmBase {
+    @ssbo @binding = 0 @role = "weight" wsh : array<float16> // the expert STACK's blob slice, half-scale view
+    @ssbo @binding = 1 @role = "weight" wqb : array<int8>    // the same blob buffer, byte view
+    scur : float16 const?   // carried scale pointer
+    qp : int8 const?        // carried quant pointer
+
+    def override wbase(e, nBase, lr0 : uint) : uint => e * ka.eplane + (nBase + lr0) * (ka.kdim / 32u)
+
+    def override stage_init(wb, il0 : uint) {
+        scur = unsafe(addr(wsh[wb * 17u]))
+        qp = unsafe(addr(wqb[wb * 34u + 2u + il0 * 16u]))
+    }
+
+    def override stage_a(wb, kb, il0, tA0 : uint) {
+        var va : float16[16]
+        let sA = float(unsafe(scur[0]))
+        for [unroll_full] (i in range(16)) {
+            va[i] = float16(float(unsafe(qp[i])) * sA)
+        }
+        barrier()
+        for [unroll_full] (i in range(16)) {
+            ta[tA0 + uint(i / 8) * 512u + uint(i % 8) * 8u] = va[i]
+        }
+        scur = unsafe(scur + 17)
+        qp = unsafe(qp + 34)
+    }
+
+    [metal_kernel(name="metal_moe_mulmm_q8_msl")]
+    def metal_moe_mulmm_q8 {
+        run()
     }
 }
 
@@ -2579,6 +2524,15 @@ def private pf_enc_moe_route(enc : MetalComputeEncoder?; t : Model; l : int64;
 
 // one gathered expert mul_mm site: grid (ceil(npos/32) tiles, rows/64, ne experts); the twin
 // exits tiles past the expert's padded count.
+// the MetalMoeMulMmBase family tail: xf@3 y@4 cnt@7 basep@8 bkt@9 (kargs@5 binds at the site)
+def private kn_moe_mm_family_tail(enc : MetalComputeEncoder?; bx, by, bcnt, bbase, bbkt : MetalBuffer?) {
+    kn_buffer(enc, bx, 0ul, 3)
+    kn_buffer(enc, by, 0ul, 4)
+    kn_buffer(enc, bcnt, 0ul, 7)
+    kn_buffer(enc, bbase, 0ul, 8)
+    kn_buffer(enc, bbkt, 0ul, 9)
+}
+
 def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; stack_off, rows, npos : int64;
                           bx, by, bcnt, bbase, bbkt : MetalBuffer?; var ka : MoeMmArgs;
                           contiguous : bool = false) {
@@ -2588,17 +2542,18 @@ def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; st
         let bw = blob_of(g_dev, t, stack_off)
         let twin = g_pf_moe_mm_q8_tensor && contiguous && g_pf_pso_moe_mm_q8_t != null
         kn_pipeline(enc, twin ? g_pf_pso_moe_mm_q8_t : g_pf_pso_moe_mm_q8)
-        if (!twin) {
-            kn_tgmem(enc, metal_moe_mulmm_q8_msl_tgmem, 0)
-        }
         kn_buffer(enc, bw.buf, bw.boff, 0)
         kn_buffer(enc, bw.buf, bw.boff, 1)
-        kn_buffer(enc, bx, 0ul, 2)
-        kn_buffer(enc, by, 0ul, 3)
         kn_kargs(enc, ka, 5)
-        kn_buffer(enc, bcnt, 0ul, 6)
-        kn_buffer(enc, bbase, 0ul, 7)
-        kn_buffer(enc, bbkt, 0ul, 8)
+        if (twin) {   // the tensor twin keeps its own compact layout (contiguous-only, no bkt)
+            kn_buffer(enc, bx, 0ul, 2)
+            kn_buffer(enc, by, 0ul, 3)
+            kn_buffer(enc, bcnt, 0ul, 6)
+            kn_buffer(enc, bbase, 0ul, 7)
+        } else {      // the joined family rider binds at the MetalMoeMulMmBase numbers
+            kn_tgmem(enc, metal_moe_mulmm_q8_msl_tgmem, 0)
+            kn_moe_mm_family_tail(enc, bx, by, bcnt, bbase, bbkt)
+        }
         hz_read(bx)
         hz_read(bcnt)
         hz_read(bbase)
@@ -2612,13 +2567,8 @@ def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; st
         kn_tgmem(enc, metal_moe_mulmm_q51_msl_tgmem, 0)
         kn_buffer(enc, qp.sbuf, qp.soff, 0)
         kn_buffer(enc, qp.qbuf, qp.qoff, 1)
-        // q51 binds at the MetalMoeMulMmBase family's numbers (3..9); 2 is the k-quant third view
-        kn_buffer(enc, bx, 0ul, 3)
-        kn_buffer(enc, by, 0ul, 4)
         kn_kargs(enc, ka, 5)
-        kn_buffer(enc, bcnt, 0ul, 7)
-        kn_buffer(enc, bbase, 0ul, 8)
-        kn_buffer(enc, bbkt, 0ul, 9)
+        kn_moe_mm_family_tail(enc, bx, by, bcnt, bbase, bbkt)   // slot 2 is the k-quant third view
         hz_read(bx)
         hz_read(bcnt)
         hz_read(bbase)
@@ -2644,12 +2594,8 @@ def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; st
         }
         kn_buffer(enc, bs.buf, bs.soff, 1)
         kn_buffer(enc, bq.buf, bq.qoff, 2)
-        kn_buffer(enc, bx, 0ul, 3)
-        kn_buffer(enc, by, 0ul, 4)
         kn_kargs(enc, ka, 5)
-        kn_buffer(enc, bcnt, 0ul, 7)
-        kn_buffer(enc, bbase, 0ul, 8)
-        kn_buffer(enc, bbkt, 0ul, 9)
+        kn_moe_mm_family_tail(enc, bx, by, bcnt, bbase, bbkt)
         hz_read(bx)
         hz_read(bcnt)
         hz_read(bbase)
@@ -4257,12 +4203,8 @@ def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : 
         kn_tgmem(enc, metal_moe_mulmm_q8_msl_tgmem, 0)
         kn_buffer(enc, bw, 0ul, 0)
         kn_buffer(enc, bw, 0ul, 1)
-        kn_buffer(enc, bxa, 0ul, 2)
-        kn_buffer(enc, by_base, 0ul, 3)
         kn_kargs(enc, rka, 5)
-        kn_buffer(enc, bcnt, 0ul, 6)
-        kn_buffer(enc, bbase, 0ul, 7)
-        kn_buffer(enc, bbkt, 0ul, 8)
+        kn_moe_mm_family_tail(enc, bxa, by_base, bcnt, bbase, bbkt)
         kn_dispatch(enc, grid, tg)
     }, $(enc) {
         kn_pipeline(enc, twin_pso)

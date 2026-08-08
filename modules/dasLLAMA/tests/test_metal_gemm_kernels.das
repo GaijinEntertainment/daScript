@@ -732,18 +732,21 @@ def private moe_mulmm_q8_gate(t : T?; dev, queue; tensor : bool; kdim, ndim : in
     var bbkt = gather ? buf_upload(dev, fx.bkt) : buf_u32(dev, 0u)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
-        if (!tensor) {
-            metal_set_threadgroup_memory_length(enc, metal_moe_mulmm_q8_msl_tgmem, 0)
-        }
         metal_set_buffer(enc, bw, 0ul, 0)   // half-scale view
         metal_set_buffer(enc, bw, 0ul, 1)   // byte view of the same blob
-        metal_set_buffer(enc, bx, 0ul, 2)
-        metal_set_buffer(enc, by, 0ul, 3)
         metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
-        metal_set_buffer(enc, bcnt, 0ul, 6)
-        metal_set_buffer(enc, bbase, 0ul, 7)
-        if (!tensor) {
-            metal_set_buffer(enc, bbkt, 0ul, 8)
+        if (tensor) {   // the tensor twin keeps its compact layout (contiguous-only, no bkt)
+            metal_set_buffer(enc, bx, 0ul, 2)
+            metal_set_buffer(enc, by, 0ul, 3)
+            metal_set_buffer(enc, bcnt, 0ul, 6)
+            metal_set_buffer(enc, bbase, 0ul, 7)
+        } else {        // the joined family rider binds at the MetalMoeMulMmBase numbers
+            metal_set_threadgroup_memory_length(enc, metal_moe_mulmm_q8_msl_tgmem, 0)
+            metal_set_buffer(enc, bx, 0ul, 3)
+            metal_set_buffer(enc, by, 0ul, 4)
+            metal_set_buffer(enc, bcnt, 0ul, 7)
+            metal_set_buffer(enc, bbase, 0ul, 8)
+            metal_set_buffer(enc, bbkt, 0ul, 9)
         }
         metal_dispatch_threadgroups(enc, uint3(uint(fx.maxtiles), uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
     }

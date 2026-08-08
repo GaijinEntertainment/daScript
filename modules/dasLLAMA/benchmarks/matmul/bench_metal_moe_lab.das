@@ -2355,27 +2355,26 @@ let G8_CNT = 4
 let G8_BASE = 5
 let G8_BKT = 6
 
-// prod = standalone layout (xf@2 y@3 cnt/basep/bkt@6/7/8); index = family-base layout
-def private enc_gmm8(gb; pso; tgmem : uint64; prod_layout : bool; enc) {
+// both arms bind the MetalMoeMulMmBase family layout (prod joined the family 2026-08-08)
+def private enc_gmm8(gb; pso; tgmem : uint64; enc) {
     metal_set_pipeline(enc, pso)
     metal_set_threadgroup_memory_length(enc, tgmem, 0)
     metal_set_buffer(enc, gb[G8_BLOB], 0ul, 0)
     metal_set_buffer(enc, gb[G8_BLOB], 0ul, 1)
-    let sh = prod_layout ? 0 : 1
-    metal_set_buffer(enc, gb[G8_X], 0ul, 2 + sh)
-    metal_set_buffer(enc, gb[G8_Y], 0ul, 3 + sh)
+    metal_set_buffer(enc, gb[G8_X], 0ul, 3)
+    metal_set_buffer(enc, gb[G8_Y], 0ul, 4)
     metal_set_buffer(enc, gb[G8_KA], 0ul, 5)
-    metal_set_buffer(enc, gb[G8_CNT], 0ul, 6 + sh)
-    metal_set_buffer(enc, gb[G8_BASE], 0ul, 7 + sh)
-    metal_set_buffer(enc, gb[G8_BKT], 0ul, 8 + sh)
+    metal_set_buffer(enc, gb[G8_CNT], 0ul, 7)
+    metal_set_buffer(enc, gb[G8_BASE], 0ul, 8)
+    metal_set_buffer(enc, gb[G8_BKT], 0ul, 9)
     metal_dispatch_threadgroups(enc, uint3(uint((Q8NTOK + 31l) / 32l), uint(Q8NFE / 64l), uint(Q8E)), uint3(128u, 1u, 1u))
 }
 
-def private check_gmm8(queue; gb : array<MetalBuffer?>; pso; tgmem : uint64; prod_layout : bool; name : string;
+def private check_gmm8(queue; gb : array<MetalBuffer?>; pso; tgmem : uint64; name : string;
                        blob : array<uint8>; gx : array<float>;
                        cnt, basep, bkt : array<uint>) {
     let t = time_arm(queue, false) $(enc : MetalComputeEncoder?) {
-        enc_gmm8(gb, pso, tgmem, prod_layout, enc)
+        enc_gmm8(gb, pso, tgmem, enc)
     }
     var xrow : array<float>
     xrow |> resize(int(Q8DIM))
@@ -2490,8 +2489,8 @@ def private run_gmm8_lab(dev; queue; rounds : int; passes : int64) {
     gb |> push(upload_bytes(dev, basepb))                                      // G8_BASE
     gb |> push(upload_bytes(dev, bktb))                                        // G8_BKT
 
-    check_gmm8(queue, gb, pso_p, metal_moe_mulmm_q8_msl_tgmem, true, "gmm8_prod", blob, gx, cnt, basep, bkt)
-    check_gmm8(queue, gb, pso_i, lab_moe_mm_q8_index_msl_tgmem, false, "gmm8_index", blob, gx, cnt, basep, bkt)
+    check_gmm8(queue, gb, pso_p, metal_moe_mulmm_q8_msl_tgmem, "gmm8_prod", blob, gx, cnt, basep, bkt)
+    check_gmm8(queue, gb, pso_i, lab_moe_mm_q8_index_msl_tgmem, "gmm8_index", blob, gx, cnt, basep, bkt)
 
     let mac_mm = double(Q8ROWS * Q8NFE * Q8DIM)
     var garms <- [("gmm8_prod", 0), ("gmm8_index", 1)]
@@ -2507,7 +2506,7 @@ def private run_gmm8_lab(dev; queue; rounds : int; passes : int64) {
             let us = time_arm(queue, false) $(enc : MetalComputeEncoder?) {
                 for (_p in range64(passes)) {
                     for (_l in range64(Q8LAYERS)) {
-                        enc_gmm8(gb, a._1 == 1 ? pso_i : pso_p, a._1 == 1 ? lab_moe_mm_q8_index_msl_tgmem : metal_moe_mulmm_q8_msl_tgmem, a._1 == 0, enc)
+                        enc_gmm8(gb, a._1 == 1 ? pso_i : pso_p, a._1 == 1 ? lab_moe_mm_q8_index_msl_tgmem : metal_moe_mulmm_q8_msl_tgmem, enc)
                         metal_memory_barrier(enc)
                     }
                 }

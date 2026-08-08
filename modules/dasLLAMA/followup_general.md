@@ -93,30 +93,23 @@
    wants), but it reaches inference, mangling, and every cast, so it is a language design task
    and not a step in this arc. Parked deliberately, not forgotten.
 
-8. **MoE mul_mm family: K6 JOINED 2026-08-08 (021fffd87) — Q8/Mx4 measured OUT.** K6's
-   superblock-scalar cache (`sv`/`dall`, reloaded every 8th k-block) measured SLOWER than
-   reload-per-kb (gmm6 lab section in bench_metal_moe_lab, qwen3moe pp512 shapes, 3 launches:
-   −2.4% ms/mm), so the stateless `stage_a` override was both the join and a perf win — the
-   joined kernel is −2.0% vs its old standalone form, bit-exact. The family is four of six
-   (k4/k5/q51/k6). **Q8's stateless join is REFUTED by measurement** (gmm8 lab section,
-   2026-08-08: index-math stage_a form +3.4–3.6% vs the production carried-pointer walk, 3/3
-   launches, both arms bit-exact; occupancy identical 1024/1024 — the cost is in-loop
-   addressing, two muls per k-block vs three pointer bumps, NOT registers; the dense twin's
-   unquantified AGX comment now has a number). A pointer-preserving join is BLOCKED on msl_emit:
-   kernel-class members must be @ssbo/@uniform/@workgroup (plain thread-local members are a
-   compile error), so a rider cannot hold loop-carried pointer state across `stage_a` calls.
-   Mx4's prologue hook (pre-loop vtab staging + bias-seeded accumulators) is blocked on the
-   same missing mechanism. Both stay standalone until the msl_emit lead below lands — one
-   design covers both: method-flattening WITH scope splicing (a `stage_init` hook whose locals
-   stay live across the spliced stage_a = template-grade text from class-grade source). That
-   flattening lead is also worth ~0.5% on ALL current riders (the method-call MSL shape
-   measured that much shy of flat text, joined-vs-flat-reload). Side find from the gmm8 dump:
-   the `addr()` escape for a pointer walk defeats the const analysis — production Q8's weight
-   buffers emit as non-const `device half*` (and win anyway, so constness is not the term).
+8. **MoE mul_mm family: K6 + Q8 JOINED — Mx4 remains.** K6 joined 2026-08-08 (021fffd87,
+   stateless stage_a, −2.0% vs its standalone). Q8 joined 2026-08-08 via msl_emit's
+   flatten/scope-splice arc (plans/msl-flatten.md): the stateless index form measured OUT
+   (+3.4–3.6%, gmm8 lab), so the join keeps the carried-pointer walk — plain `scur`/`qp`
+   members + a `stage_init` hook, lowered to kernel-entry thread-locals; the joined rider is
+   −0.5..−0.9% vs the deleted standalone (3 interleaved stash pairs, bit-exact), and its
+   binding contract moved to the family numbers (xf@3 y@4 cnt@7 basep@8 bkt@9 — encoder,
+   gemm-test gate, gmm8 lab all rebound; the tensor twin keeps its compact layout). The
+   family is five of six. **Mx4 is the remaining candidate**: its prologue (pre-loop vtab
+   staging + bias-seeded accumulators) fits the same stage_init mechanism now that it
+   exists — measure, don't assume. Side find from the gmm8 dump: the `addr()` escape for a
+   pointer walk defeats the const analysis — production Q8's weight buffers emit as
+   non-const `device half*` (and win anyway, so constness is not the term).
    ALSO: the MoE lab's per-site section (enc_lab_w13*/w2/pair arms) ROTTED at the kargs
    migration (c45724dae) — its encoders bind the old uniform slots and the w1 k4 check panics;
-   the lab now runs gmm6 first so the rot doesn't block it. Repair = rebind those encoders to
-   MoeGemvArgs kargs buffers and re-verify each arm.
+   the lab now runs gmm6/gmm8 first so the rot doesn't block them. Repair = rebind those
+   encoders to MoeGemvArgs kargs buffers and re-verify each arm.
 
 9. **Prefill compiles its own PSO for kernels decode already has.** `enc_qk_norm_pf` in
    dasllama_metal_prefill.das is `enc_qk_norm`'s body with `g_pf_pso_qknorm` in place of
