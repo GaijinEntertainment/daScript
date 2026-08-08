@@ -153,7 +153,7 @@ class TypeMacroMacro : AstFunctionAnnotation {
         compiling_module() |> add_structure(cls)
         return true
     }
-    def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
+    def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool { // nolint:STYLE037 — pre-existing typemacro patch pass; the if/elif AST routing is one order-coupled flow
         for (ann in func.annotations) {
             if (ann.annotation.name == "typemacro_function") {
                 if (!(find_arg(ann.arguments, "patched") is nothing)) return true
@@ -389,7 +389,7 @@ class TemplateTypeMacroMacro : AstFunctionAnnotation {
         }
         return true
     }
-    def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
+    def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool { // nolint:STYLE038 — pre-existing typemacro patch pass; sequential AST build, no free-standing seam
         for (ann in func.annotations) {
             if (ann.annotation.name == "typemacro_template_function") {
                 if (!(find_arg(ann.arguments, "patched") is nothing)) return true
@@ -531,7 +531,7 @@ class TemplateStructure : AstStructureAnnotation {
 [structure_macro(name="template_tuple")]
 class TemplateTuple : AstStructureAnnotation {
     //! Like ``[template_structure]``, but produces a typemacro that returns a named tuple instead of cloning a structure. Result is structural — no module home, no per-consumer cloning. Use for sum-type / discriminated- pair shapes (``Option``, ``Result``) where structural identity across transitive ``require ... public`` is the desired behavior (issue #2598).
-    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool { // nolint:STYLE038 — pre-existing tuple-typemacro emission; one sequential build, no free-standing seam
         if (length(args) == 0) {
             errors := "expecting at least one template argument name"
             return false

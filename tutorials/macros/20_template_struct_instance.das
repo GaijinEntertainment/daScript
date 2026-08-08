@@ -16,7 +16,7 @@ options gen2
 //
 // Run: daslang tutorials/macros/20_template_struct_instance.das
 
-require template_struct_instance_mod // nolint:STYLE029 — TopKeeperT comes from here; the reifier erases the parent link before lint can see it
+require template_struct_instance_mod // nolint:STYLE029,LINT019 — TopKeeperT comes from here; the reifier erases the parent link before STYLE029 (MCP rail) can see it
 
 // --- 1. Type parameter ---
 // `typedef KT = float` binds the template's type parameter. Everything else
