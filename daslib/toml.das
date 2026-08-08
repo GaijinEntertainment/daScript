@@ -1218,7 +1218,7 @@ def private resolve_header(var state : TomlState&; path : array<string>; is_arra
             }
             if (existing.value is _array) {
                 // Array of tables — descend into last entry (TOML semantics: super-path of [[a]] is the LAST [[a]] element).
-                var arr & = get_array(existing)                    // nolint:LINT003 — index must yield mutable for `cur = ...`
+                var arr & = get_array(existing)                    // nolint:LINT003,LINT019 — index must yield mutable for `cur = ...`; LINT003 fires only in downstream compiles
                 if (empty(arr)) {
                     err = "empty array-of-tables traversal at '{key}'"
                     return null

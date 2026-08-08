@@ -261,7 +261,7 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                                     push(str, uint8('\\'))
                                     push(str, uint8('u'))
                                     for (b in hex_str) {
-                                        push(str, b) // nolint:PERF006 hex_str is 4 bytes max
+                                        push(str, b) // nolint:PERF006,LINT019 hex_str is 4 bytes max; PERF006 fires only in downstream compiles
                                     }
                                     if (!valid_hex) {
                                         push(str, uint8(ahead))
