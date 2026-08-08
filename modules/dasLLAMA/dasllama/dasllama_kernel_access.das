@@ -383,6 +383,17 @@ class private AccessVisitor : AstVisitor {
         let ef = a0 ?as ExprField
         if (ef != null) {
             callees |> insert(string(ef.name))
+            // splice-method args: a tracked buffer passed whole resolves through the method's
+            // parameter direction, exactly like a free-helper call
+            var aidx = 0
+            for (a in expr.arguments) {
+                if (aidx > 1) {
+                    // post-infer invoke shape is [method-field, self, args...] — bank with the
+                    // self-free arg base the pre-infer ExprCall path uses
+                    bank_call_arg(a, string(ef.name), aidx - 2)
+                }
+                aidx++
+            }
         }
     }
 
@@ -410,7 +421,7 @@ class private AccessVisitor : AstVisitor {
     }
 }
 
-def private analyze_one(fn : Function?; mod : Module?; tracked : table<string>; fieldMode : bool; var res : AccessResult; var callees : table<string>) {
+def private analyze_one(fn : Function?; mod : Module?; st : StructurePtr; tracked : table<string>; fieldMode : bool; var res : AccessResult; var callees : table<string>) {
     var astVisitor = new AccessVisitor()
     astVisitor.tracked := tracked
     astVisitor.fieldMode = fieldMode
@@ -426,7 +437,27 @@ def private analyze_one(fn : Function?; mod : Module?; tracked : table<string>; 
     // buffers handed whole to a helper: the callee's parameter decides. A name that does not
     // resolve to exactly one declaration keeps the ratchet — it could be written through.
     for (wa in astVisitor.whole) {
-        let dir = callee_param_dir(mod, wa.callee, wa.idx)
+        var dir = callee_param_dir(mod, wa.callee, wa.idx)
+        if (ACCESS_DEBUG) {
+            print("[access-dbg] whole {wa.buf} -> {wa.callee}[{wa.idx}] free-dir='{dir}'\n")
+        }
+        if (empty(dir) && fieldMode) {
+            // class (splice) methods: the parameter lives on the method function itself — the
+            // invoke's arg index matches (both count self at 0)
+            let mfn = class_method(mod, st, wa.callee)
+            if (mfn != null) {
+                var found = false
+                var conflict = false
+                // + 1: the method function's arguments count self at 0, the banked idx does not
+                scan_param_dir(mfn, callee_base_name("{mfn.name}"), wa.idx + 1, dir, found, conflict)
+                if (!found || conflict) {
+                    dir = ""
+                }
+            }
+            if (ACCESS_DEBUG) {
+                print("[access-dbg]   method-dir {wa.buf} -> {wa.callee}[{wa.idx}] = '{dir}' (mfn={mfn != null})\n")
+            }
+        }
         if (empty(dir)) {
             let escape = fieldMode ? "declare the @role (access_force)" : "declare [vk_access]"
             astVisitor.err = "tracked buffer '{wa.buf}' passed whole to call '{wa.callee}' — teach the intrinsic table or {escape}"
@@ -498,7 +529,7 @@ def private classify_access(fn : Function?; mod : Module?; st : StructurePtr; tr
     var pending : table<string>
     var visited : table<string>
     var callees : table<string>
-    analyze_one(fn, mod, tracked, fieldMode, res, callees)
+    analyze_one(fn, mod, st, tracked, fieldMode, res, callees)
     visited |> insert(string(fn.name))
     // Field mode does not recurse into FREE callees — shader intrinsics have das shims whose
     // locals would false-positive on bare-name matching. It DOES recurse into the kernel class's
@@ -523,11 +554,11 @@ def private classify_access(fn : Function?; mod : Module?; st : StructurePtr; tr
         var next : table<string>
         let mfn = fieldMode ? class_method(mod, st, name) : null
         if (mfn != null) {
-            analyze_one(mfn, mod, tracked, fieldMode, res, next)
+            analyze_one(mfn, mod, st, tracked, fieldMode, res, next)
         } else {
             mod |> for_each_function(name) $(cfn) {
                 if (cfn.name == name) {
-                    analyze_one(cfn, mod, tracked, fieldMode, res, next)
+                    analyze_one(cfn, mod, st, tracked, fieldMode, res, next)
                 }
             }
         }

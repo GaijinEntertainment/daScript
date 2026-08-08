@@ -21,7 +21,7 @@ K4/K5 (binding TYPE differs), K5C (verified no twin anywhere), Q8Gemm vs Q8Gemm6
 | 2 | ✅ **accumulate-quad helper** | base-class method (free-`def` blocked: emitter rejects simdgroup/threadgroup params) | −83 landed | DONE 30b203548: MetalMmTileBase owns ta/tb + acc_quad; SEVEN sites (audit missed Q8MulMm); all 13 kernels statement-identical modulo splice braces |
 | 3 | ✅ **KqMulMmK6 joins K45T** | 3rd `static_if` arm (SIXBIT) | −75 landed **+ perf WIN** | DONE: the perf-verify found the cached sv/dall hoist cost an occupancy tier (896→1024 max_threads) — reload-per-kb is −1.7..−10.5% per shape (bench_metal_kq_mm_lab, 3 launches, bit-exact); K4/K5 stamps byte-identical |
 | 4 | ✅ **Q8GemmB/BSk** (the eyeball find) | template `IS_SK` (MetalQ8GemmBSplitT) | −69 landed | DONE: B stamp byte-identical (const-select folds); SK delta = sl/kbn/kb0 inlined (uniform, LICM); kernels suite 11/11 |
-| 5 | **RopeStore Q8/BQ8 + Tq4/BTq4** | free helper w/ row-base params (sq_fill_scores precedent) | −95..115 | ~73% verbatim per pair; the census's wrong-axis closure |
+| 5 | ✅ **RopeStore Q8/BQ8 + Tq4/BTq4** | base classes w/ PARAMETERIZED splice methods (beats free helpers: methods take @workgroup buf + writable ssbo params; member args substitute) | −108 landed | DONE: rope oracle green all four; needed a kernel_access fix — method-call args now resolve through method param dirs (was silently deriving 'read' through splice calls) |
 | 6 | ✅ **MetalAddRmsB delete** | row axis on AddRms (RmsNorm precedent) | −61 landed | DONE: misc oracle green both modes; enc_add_rms_b redispatches the same PSO |
 | 7 | ✅ **KqMulMmK4T/K5T** | template `BLK/QH` (MetalKqMulMmK45TensorT) | −46 landed | DONE: both stamps byte-identical |
 | 8 | ✅ **K4/K5 scale-decode block** | free `def kmask_scales` (uint4 in/out) | −37 landed | DONE: 5 sites; occupancy unchanged (704/512 max_threads before and after); kernels suite 11/11 |
@@ -29,9 +29,9 @@ K4/K5 (binding TYPE differs), K5C (verified no twin anywhere), Q8Gemm vs Q8Gemm6
 | 10 | ✅ **enc_qk/av/qk_mm/av_mm dispatch helper** | enc_attn3 | −28 landed | DONE: encoder-only, zero GPU text change |
 | 11 | ✅ **Swiglu/Geglu/Add/Sigmul quad** | MetalEw2T + abstract combine override (method splice beat @template_call — reads ascale) | −29 landed | DONE: stamps verified; enc_ew2 untouched (slot 3 already bound) |
 | 12 | ✅ **Q8Gemm tensor triple (BT/BSkT/64BT)** | `TILE_N` + `IS_SK` + `LDC_ND` (MetalQ8GemmTensorT) | −27 landed | DONE: BT/64BT byte-identical, SkT = locals inlined |
-| 13 | **Comb/CombB** | template `BATCHED` | −15..20 | chunk-range prologue is the only real delta |
-| 14 | **Router/RouterB** | template `BATCH` width (1 vs 8) | −15..20 | bit-identical-logits invariant is currently a COMMENT |
-| 15 | **SwigluOai/SwigluOaiPf** | template + optional guard | −16 | byte-identical clamp math x2 files; gated: can an instance ADD bindings? |
+| 13 | ⏸ **Comb/CombB** | RE-GRADED: instances cannot add fields — the batch's rt table + args struct would dummy-ripple through the lensed single's builder + call sites | fold into the LENS arc | the lens migration reshapes these encoders anyway; merging first would double-touch |
+| 14 | ▶ **Router/RouterB** | DECIDED, next session's opener: NR-width template (KqMv `float[NR]` precedent) — Router is ALREADY stream-batched (grid.y); RouterB is the 8-position-BLOCKED prefill form. Template carries ns (single's lensed builder gains one param; call sites pass 1). Single is latency-trivial by its own comment — NR=1 stamp shape change is safe; the merge materializes the bit-identical-logits invariant structurally | −15..20 | |
+| 15 | ⏸ **SwigluOai/SwigluOaiPf** | RE-GRADED: gate answered — instances canNOT add bindings; the Pf twin adds 4 (cnt/basep/ne/nfe), so the single would carry dummy binds | fold into the LENS arc | net ≈ −8 after encoder additions; not worth pre-lens |
 | 16 | ✅ **enc_rms_last delete** | default `xoff` param on pf_enc_rms | −14 landed | DONE |
 
 Tier-1 total ≈ −550..650 LOC, most of it verbatim-duplicate risk removal.
