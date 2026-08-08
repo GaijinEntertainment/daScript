@@ -11,7 +11,7 @@ options gen2
 //
 // ta = 1500 encoder positions (30 s window), hs = 64 on every whisper size.
 
-require dasllama/dasllama_common // nolint:STYLE029,STYLE030 — jit_enabled() via the ?-conditional llvm_tune re-export; a direct require would hard-require dasLLVM
+require dasllama/dasllama_common // nolint:STYLE029,STYLE030,LINT019 — jit_enabled() via the ?-conditional llvm_tune re-export; a direct require would hard-require dasLLVM
 require daslib/clargs
 require math
 
@@ -158,8 +158,8 @@ def vx_f4(var vx : array<float>; tmp : array<float>; d, hh, ta : int64) {
 // ===== harness =====
 
 def sized(var a : array<float>; n : int64) {
-    a |> reserve(int(n))
-    a |> resize(int(n))
+    a |> reserve(n)
+    a |> resize(n)
 }
 
 def fill_sin(var a : array<float>; scale, step : float) {
@@ -194,7 +194,7 @@ def main() : int {
     let hh = a.turbo ? 20l : 6l
     let rounds = a.rounds > 0 ? a.rounds : 40
     if (!jit_enabled()) {
-        print("WARNING: run with -jit — interpreted timings do not reflect the engine\n")
+        print("WARNING: run with -jit - interpreted timings do not reflect the engine\n")
     }
     let kscale = 1.0 / sqrt(sqrt(float(d / hh)))
     print("cross_kv scatter bench: ta={TA} d={d} heads={hh} hs={d / hh}, {rounds} rounds\n")
@@ -222,7 +222,7 @@ def main() : int {
     ok &&= gate("kx_blk4", kx_b, kx_c, TA * d)
     ok &&= gate("vx_f4", vx_a, vx_c, TA * d)
     if (!ok) {
-        print("REJECTED: variant diverges — timings skipped\n")
+        print("REJECTED: variant diverges - timings skipped\n")
         return 1
     }
 

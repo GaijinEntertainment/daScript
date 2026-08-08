@@ -320,7 +320,7 @@ class LintVisitor : AstVisitor {
         if (!noLint && genericDepth == 0 && expr is ExprOp1 && !expr.genFlags.generated) {
             let op1 = expr as ExprOp1
             if (op1.op == "+" || op1.op == "-") {
-                lint_error("LINT015: free-floating unary '{op1.op}' expression as a statement — its value is silently discarded; this is almost always a continuation line missing its parens, wrap the multi-line RHS in (...)", expr.at)
+                lint_error("LINT015: free-floating unary '{op1.op}' expression as a statement - its value is silently discarded; this is almost always a continuation line missing its parens, wrap the multi-line RHS in (...)", expr.at)
             }
         }
         // Mark this block as terminated only when `expr` IS a direct-child terminator.

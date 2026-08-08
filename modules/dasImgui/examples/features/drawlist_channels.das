@@ -20,7 +20,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("drawlist channels — split / merge", 520, 300)
+    harness_init("drawlist channels - split / merge", 520, 300)
 }
 
 [export]
@@ -43,8 +43,8 @@ def update() {
             // ---- Channel 1 (foreground): submit content first to measure ----
             dl |> channels_set_current(1)
             let text_pos = float2(origin.x + 24.0f, origin.y + 20.0f)
-            dl |> add_text(text_pos, white, "FOREGROUND TEXT — painted before the bg")
-            let txt_sz = CalcTextSize("FOREGROUND TEXT — painted before the bg")
+            dl |> add_text(text_pos, white, "FOREGROUND TEXT - painted before the bg")
+            let txt_sz = CalcTextSize("FOREGROUND TEXT - painted before the bg")
 
             // ---- Channel 0 (background): paint the card behind ----
             dl |> channels_set_current(0)
@@ -57,7 +57,7 @@ def update() {
         }
 
         dummy(CARD_SLOT, (size = float2(460.0f, 80.0f)))
-        text(NOTE, (text = "(Without channels_split, the foreground text would render BENEATH the later card_bg rect — wrong z-order.)"))
+        text(NOTE, (text = "(Without channels_split, the foreground text would render BENEATH the later card_bg rect - wrong z-order.)"))
     }
 
     harness_end_frame()

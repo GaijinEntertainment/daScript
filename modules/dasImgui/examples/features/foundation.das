@@ -23,7 +23,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("Phase 0b.0 — foundation", 800, 600)
+    harness_init("Phase 0b.0 - foundation", 800, 600)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
 }
@@ -34,9 +34,9 @@ def update() {
     harness_new_frame()
 
     SetNextWindowSize(ImVec2(720.0, 320.0), ImGuiCond.Always)
-    window(MAIN_WIN, (text = "Foundation — phase 0b.0", closable = false,
+    window(MAIN_WIN, (text = "Foundation - phase 0b.0", closable = false,
                       flags = ImGuiWindowFlags.None)) {
-        text("Three [widget] decls — every global below is auto-emitted.")
+        text("Three [widget] decls - every global below is auto-emitted.")
 
         // Button — return form. Identifier `SAVE_BTN` auto-emits the module-scope
         // `var SAVE_BTN : ClickState` global on first compile; `(text = "Save")` is

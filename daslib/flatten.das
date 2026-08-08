@@ -252,7 +252,7 @@ def private inline_call(var ctx : FlatCtx?; call : ExprCall?; structPred : Expre
 // Lift every user call out of a value expression into inline frames, in eval order,
 // returning the call-free rewrite. Plain recursion, NOT a visitor — inlining recurses back
 // through the pipeline, and nested make_visitor traversals corrupt the visitor machinery.
-def private lift_expr(var ctx : FlatCtx?; e : ExpressionPtr; structPred : ExpressionPtr; var out : array<ExpressionPtr>) : ExpressionPtr {
+def private lift_expr(var ctx : FlatCtx?; e : ExpressionPtr; structPred : ExpressionPtr; var out : array<ExpressionPtr>) : ExpressionPtr {   // nolint:STYLE037,STYLE038 - exact-type `is` ladder, one arm per expression kind
     if (e == null) return null
     if (e is ExprCall) {
         let c = e as ExprCall
@@ -401,20 +401,20 @@ def private lower_branch(var ctx : FlatCtx?; br : ExpressionPtr; structPred : Ex
 def private lower_loop_exit(var ctx : FlatCtx?; structPred : ExpressionPtr; var out : array<ExpressionPtr>; isBreak : bool) {
     if (empty(ctx.loopMasks)) {
         ctx.ok = false
-        ctx.err = "flatten: internal error — {isBreak ? "break" : "continue"} outside a flattened loop"
+        ctx.err = "flatten: internal error - {isBreak ? "break" : "continue"} outside a flattened loop"
         return
     }
     let lm = ctx.loopMasks[length(ctx.loopMasks) - 1]
     let nm = isBreak ? lm.loopLive : lm.iterLive
     if (nm == "") {
         ctx.ok = false
-        ctx.err = "flatten: internal error — {isBreak ? "break" : "continue"} mask was not allocated"
+        ctx.err = "flatten: internal error - {isBreak ? "break" : "continue"} mask was not allocated"
         return
     }
     emit_narrow(out, nm, live_pred(ctx, structPred, nm))
 }
 
-def private lower_stmt(var ctx : FlatCtx?; stmt : ExpressionPtr; structPred : ExpressionPtr; var out : array<ExpressionPtr>) {
+def private lower_stmt(var ctx : FlatCtx?; stmt : ExpressionPtr; structPred : ExpressionPtr; var out : array<ExpressionPtr>) {   // nolint:STYLE037 - exact-type `is` ladder, one arm per statement kind
     if (stmt is ExprReturn) {
         let r = stmt as ExprReturn
         if (ctx.hasRet && r.subexpr != null) {
@@ -499,7 +499,7 @@ class private LetNameScan : AstVisitor {
     names : array<string>
     def override preVisitExprLet(expr : ExprLet?) : void {
         for (v in expr.variables) {
-            names |> push("{v.name}")   // nolint:PERF006 -- macro-time, count is the (small) local set
+            names |> push("{v.name}")   // nolint:PERF006,LINT019 -- macro-time, count is the (small) local set; PERF006 fires only in downstream compiles
         }
     }
 }
@@ -602,7 +602,7 @@ def private for_source_substs(var ctx : FlatCtx?; src : Expression?; at : LineIn
 // Fixed-count loop unrolling: a `for` over a constant range/array literal clones its body once
 // per iteration (loop var → that iteration's constant), each copy lowered under the SAME
 // predicate; per-copy locals are renamed. break/continue allocate runtime masks. while errors.
-def private lower_for(var ctx : FlatCtx?; efor : ExprFor?; structPred : ExpressionPtr; var out : array<ExpressionPtr>) {
+def private lower_for(var ctx : FlatCtx?; efor : ExprFor?; structPred : ExpressionPtr; var out : array<ExpressionPtr>) {   // nolint:STYLE038 - one linear unroll pass; the phases share the per-source value lists
     let nIter = length(efor.iterators)
     if (nIter == 0 || length(efor.sources) != nIter) {
         ctx.ok = false
@@ -830,9 +830,9 @@ def private verify_flat(var twin : FunctionPtr) : string {
     }
     var msg = ""
     if (v.sawBranch) {
-        msg = "flatten: internal error — a branch (if/else) survived lowering in '{twin.name}'"
+        msg = "flatten: internal error - a branch (if/else) survived lowering in '{twin.name}'"
     } elif (v.sawCall) {
-        msg = "flatten: internal error — user call '{v.callName}' survived lowering in '{twin.name}'"
+        msg = "flatten: internal error - user call '{v.callName}' survived lowering in '{twin.name}'"
     }
     unsafe {
         delete v
@@ -881,7 +881,7 @@ class private FoldResidualVisitor : AstVisitor {
     }
     def override preVisitExprSwizzle(var expr : ExprSwizzle?) : void {
         if (is_unfolded_swizzle_lanes(expr)) {
-            found |> push("an un-folded swizzle over decomposable lanes ('ctor(…).mask' should re-pack)")
+            found |> push("an un-folded swizzle over decomposable lanes ('ctor(...).mask' should re-pack)")
         }
     }
 }

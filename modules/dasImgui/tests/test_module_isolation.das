@@ -79,7 +79,7 @@ def test_imgui_visual_aids_has_no_direct_glfw_require(t : T?) {
         }
     }
     t |> equal(length(offenders), 0,
-               "imgui_visual_aids must not directly require any GLFW module — see project_dasimgui_cpp_glfw_split_deferred")
+               "imgui_visual_aids must not directly require any GLFW module - see project_dasimgui_cpp_glfw_split_deferred")
     for (off in offenders) {
         to_log(LOG_ERROR, "test_module_isolation: offending require in {target}: {off}")
     }

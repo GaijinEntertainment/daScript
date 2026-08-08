@@ -120,7 +120,7 @@ def load_asr_model(path : string) : AsrModel {
             pm.pk <- load_parakeet_model(path, tag == "parakeet-q8")
             return <- pm
         }
-        panic("dasLLAMA asr: '{path}' is baked as '{tag}' — a decoder/tower image needs the pair: load_asr_model(decoder, mmproj)")
+        panic("dasLLAMA asr: '{path}' is baked as '{tag}' - a decoder/tower image needs the pair: load_asr_model(decoder, mmproj)")
     }
     let f = fopen(path, "rb")
     if (f == null) {
@@ -139,7 +139,7 @@ def load_asr_model(path : string) : AsrModel {
     }
     fclose(f)
     if (magic == 0x46554747u) {   // "GGUF"
-        panic("dasLLAMA asr: '{path}' is a GGUF decoder — pass its mmproj too: load_asr_model(path, mmproj_path)")
+        panic("dasLLAMA asr: '{path}' is a GGUF decoder - pass its mmproj too: load_asr_model(path, mmproj_path)")
     }
     if (magic != 0x67676d6cu) {
         panic("dasLLAMA asr: '{path}' is neither a GGUF nor a ggml bin")
@@ -152,7 +152,7 @@ def load_asr_model(path : string) : AsrModel {
     // whisper vocabs: 51864 (.en) / 51865 (multilingual) / 51866 (large-v3 family); anything
     // else with the ggml magic (e.g. a legacy GPT-2 bin, 50257) fails HERE, not deep in the loader
     if (vocab < 51864 || vocab > 51999) {
-        panic("dasLLAMA asr: '{path}' has n_vocab {vocab} — matches neither whisper (51864-51866) nor parakeet (~1k)")
+        panic("dasLLAMA asr: '{path}' has n_vocab {vocab} - matches neither whisper (51864-51866) nor parakeet (~1k)")
     }
     var m = AsrModel(kind = AsrKind.whisper)
     m.whisper <- load_whisper_model(path, !g_asr_force_fp32)
@@ -179,7 +179,7 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
             emagic = CANARY_MAGIC
             canary_q8 = false
         } else {
-            panic("dasLLAMA asr: mmproj image '{mmproj}' is baked as '{tag}' — not an audio front-end image")
+            panic("dasLLAMA asr: mmproj image '{mmproj}' is baked as '{tag}' - not an audio front-end image")
         }
     } else {
         let ef = fopen(mmproj, "rb")
@@ -208,12 +208,12 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
         var m = AsrModel(kind = AsrKind.gemma4a)
         m.dec <- load_model_cached(path, QuantMode.q8, planar_only = true)
         if (m.dec.arch != "gemma4") {
-            panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' — the gemma4a audio route expects a Gemma-4 decoder")
+            panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' - the gemma4a audio route expects a Gemma-4 decoder")
         }
         m.dec.config.seq_len = min(m.dec.config.seq_len, 8192l)
         m.g4a <- load_gemma4a_encoder(mmproj)
         if (m.g4a.proj_dim != m.dec.config.dim) {
-            panic("dasLLAMA asr: gemma4a encoder projects to {m.g4a.proj_dim} but the decoder is {m.dec.config.dim}-wide — mismatched pair")
+            panic("dasLLAMA asr: gemma4a encoder projects to {m.g4a.proj_dim} but the decoder is {m.dec.config.dim}-wide - mismatched pair")
         }
         return <- m
     }
@@ -221,12 +221,12 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
         var m = AsrModel(kind = AsrKind.canary)
         m.dec <- load_model_cached(path, QuantMode.q8, planar_only = true)
         if (m.dec.arch != "qwen3") {
-            panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' — the Canary route expects a Qwen3-1.7B decoder")
+            panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' - the Canary route expects a Qwen3-1.7B decoder")
         }
         m.dec.config.seq_len = min(m.dec.config.seq_len, 8192l)
         m.cenc <- load_canary_encoder(mmproj, canary_q8)
         if (m.cenc.proj_dim != m.dec.config.dim) {
-            panic("dasLLAMA asr: canary encoder projects to {m.cenc.proj_dim} but the decoder is {m.dec.config.dim}-wide — mismatched pair")
+            panic("dasLLAMA asr: canary encoder projects to {m.cenc.proj_dim} but the decoder is {m.dec.config.dim}-wide - mismatched pair")
         }
         return <- m
     }
@@ -237,12 +237,12 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
     if (m.dec.arch == "qwen3vlmoe") {
         m.kind = AsrKind.qwen3omni
     } elif (m.dec.arch != "qwen3vl" && m.dec.arch != "qwen3") {
-        panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' — the GGUF ASR route expects a Qwen3-ASR (qwen3/qwen3vl) or Qwen3-Omni (qwen3vlmoe) decoder")
+        panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' - the GGUF ASR route expects a Qwen3-ASR (qwen3/qwen3vl) or Qwen3-Omni (qwen3vlmoe) decoder")
     }
     m.dec.config.seq_len = min(m.dec.config.seq_len, 8192l)
     m.q3t <- load_qwen3a_tower(mmproj)
     if (m.q3t.proj_dim != m.dec.config.dim) {
-        panic("dasLLAMA asr: mmproj projects to {m.q3t.proj_dim} but the decoder is {m.dec.config.dim}-wide — mismatched pair")
+        panic("dasLLAMA asr: mmproj projects to {m.q3t.proj_dim} but the decoder is {m.dec.config.dim}-wide - mismatched pair")
     }
     return <- m
 }
@@ -343,7 +343,7 @@ def feed(m : AsrModel; var s : AsrSession; samples : array<float> | #) {
     //! Push a chunk of 16 kHz mono PCM onto the session's stream (pair with drain/flush).
     //! Whisper only — qwen3a transcribes whole clips (caps().streaming is false there).
     if (m.kind != AsrKind.whisper) {
-        panic("dasLLAMA asr: feed/drain/flush are whisper-only — this model transcribes whole clips")
+        panic("dasLLAMA asr: feed/drain/flush are whisper-only - this model transcribes whole clips")
     }
     feed(s.w, samples)
 }
@@ -351,7 +351,7 @@ def feed(m : AsrModel; var s : AsrSession; samples : array<float> | #) {
 def drain(m : AsrModel; var s : AsrSession; blk : block<(seg : TranscribeSegment)>) : int {
     //! Transcribe every complete 30 s window of the fed stream; sub-window audio stays pending.
     if (m.kind != AsrKind.whisper) {
-        panic("dasLLAMA asr: feed/drain/flush are whisper-only — this model transcribes whole clips")
+        panic("dasLLAMA asr: feed/drain/flush are whisper-only - this model transcribes whole clips")
     }
     s.w.translate = s.translate
     s.w.no_timestamps = s.no_timestamps
@@ -361,7 +361,7 @@ def drain(m : AsrModel; var s : AsrSession; blk : block<(seg : TranscribeSegment
 def flush(m : AsrModel; var s : AsrSession; blk : block<(seg : TranscribeSegment)>) : int {
     //! Transcribe everything left on the fed stream (including the tail) and clear it.
     if (m.kind != AsrKind.whisper) {
-        panic("dasLLAMA asr: feed/drain/flush are whisper-only — this model transcribes whole clips")
+        panic("dasLLAMA asr: feed/drain/flush are whisper-only - this model transcribes whole clips")
     }
     s.w.translate = s.translate
     s.w.no_timestamps = s.no_timestamps

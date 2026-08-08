@@ -116,7 +116,7 @@ def main() {
         "threads" => JV(threads), "affinity" => JV(affinity_on()), "ngl" => JV(cfg.ngl), "bench" => JV(llama_bench_bin(cfg.ngl))}))
     print("establishing LLM baselines: box={box_name()} tier={cfg.tier} threads={threads} affinity={affinity_on()} ngl={cfg.ngl}\n")
     print("log: {logger_get_path()}  (tail for live, timestamped progress)\n")
-    print("NOTE: this runs llama.cpp llama-bench (a measurement) — Parsec must be off.\n\n")
+    print("NOTE: this runs llama.cpp llama-bench (a measurement) - Parsec must be off.\n\n")
     // The baseline is persisted after EVERY model (upsert into the loaded file, rewrite): a crash or
     // hang on any model never costs the ones already measured, and partial / repeat runs accumulate.
     var merged <- read_llm_baselines(suffix)

@@ -522,15 +522,15 @@ def private forced_logits_maxd(tc, tg : Model; prompt, teach : array<int64>; tag
         delete sa
         delete sb
     }
-    to_log(LOG_INFO, "{tag} eyeball — prompt: {eyeball_text(tc, prompt)}\n")
-    to_log(LOG_INFO, "{tag} eyeball — CPU cont: {eyeball_text(tc, teach)} | GPU greedy-would-be: {eyeball_text(tc, picks)}\n")
+    to_log(LOG_INFO, "{tag} eyeball - prompt: {eyeball_text(tc, prompt)}\n")
+    to_log(LOG_INFO, "{tag} eyeball - CPU cont: {eyeball_text(tc, teach)} | GPU greedy-would-be: {eyeball_text(tc, picks)}\n")
     delete picks
     return maxd
 }
 
 [test]
 def test_metal_flavor_image(tst : T?) {
-    tst |> run("SmolLM2 q8: metal flavor — blob mint + map + GPU serve + CPU tripwire") @(t : T?) {
+    tst |> run("SmolLM2 q8: metal flavor - blob mint + map + GPU serve + CPU tripwire") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             if (!family_on(t, "llama")) return
             if (!arm_on(t, "metal")) {

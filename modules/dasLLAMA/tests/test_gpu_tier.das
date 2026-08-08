@@ -71,7 +71,7 @@ def private arm_off() : bool => false
 
 [test]
 def test_gpu_tier_contract(t : T?) {
-    t |> run("uninstalled slots decline — never serve") @(t : T?) {
+    t |> run("uninstalled slots decline - never serve") @(t : T?) {
         t |> success(!moe_gpu_resident_installed(), "resident must start uninstalled")
         t |> success(!rdec_reserve(4, 100l), "unset reserve must decline")
         var wq : array<uint8>

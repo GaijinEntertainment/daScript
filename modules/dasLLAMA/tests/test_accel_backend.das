@@ -81,7 +81,7 @@ def private check_fp32(t : T?; ntok : int; expect_exact : bool; f16_lane : bool 
     x |> resize(ntok * N)
     fill01(x, 7u)
     if (f16_lane && !t_accel_set_f16(true)) {
-        to_log(LOG_WARNING, "BNNS probe failed on this OS — f16 lane arm feints\n")
+        to_log(LOG_WARNING, "BNNS probe failed on this OS - f16 lane arm feints\n")
         t |> success(true)
         return
     }
@@ -117,7 +117,7 @@ def private check_bf16(t : T?; ntok : int; f16_lane : bool) {
     x |> resize(ntok * N)
     fill01(x, 7u)
     if (f16_lane && !t_accel_set_f16(true)) {
-        to_log(LOG_WARNING, "BNNS probe failed on this OS — f16 lane arm feints\n")
+        to_log(LOG_WARNING, "BNNS probe failed on this OS - f16 lane arm feints\n")
         t |> success(true)
         return
     }

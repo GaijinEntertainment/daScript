@@ -204,7 +204,7 @@ struct private SqlQuery {
     selectColTypes : array<TypeDeclPtr>
     selectColSqlFragments : array<string>
     projRecordNames : array<string>
-    // nolint:STYLE014 Snapshot of the join's `into` projection registry, captured at the end of process_join_call. Survives `analyze_grouped_projection`'s clear-and-repopulate of projRecordNames (which holds the outer named-tuple's record names mid-projection). Read by find_projection_alias / render_projection_alias_sql so post-join `_.<alias>` resolution inside aggregates / HAVING / ORDER BY / computed group keys keeps pointing at the join's projected slots, not the outer projection's freshly-clobbered names.
+    // Snapshot of the join's `into` projection registry, captured at the end of process_join_call. Survives `analyze_grouped_projection`'s clear-and-repopulate of projRecordNames (which holds the outer named-tuple's record names mid-projection). Read by find_projection_alias / render_projection_alias_sql so post-join `_.<alias>` resolution inside aggregates / HAVING / ORDER BY / computed group keys keeps pointing at the join's projected slots, not the outer projection's freshly-clobbered names.
     joinProjRecordNames : array<string>
     joinSelectCols : array<string>
     joinSelectColAliases : array<string>
@@ -224,19 +224,19 @@ struct private SqlQuery {
     // Triggers the SQLite bare-aggregate inner-subquery wrap (`SELECT *, MIN(pk) FROM t GROUP BY K`)
     // in `peel_count_terminal`'s 2-arg `count(P)` branch and `peel_column_aggregate` distinct path.
     distinctByCol : string
-    // nolint:STYLE014 True when an immediately-preceding `reverse()` chain op flipped the bare-aggregate from MIN(pk) to MAX(pk) — picks the LAST row per K by source/PK order, mirroring linq's `reverse() |> _distinct_by(K)` semantics.
+    // True when an immediately-preceding `reverse()` chain op flipped the bare-aggregate from MIN(pk) to MAX(pk) — picks the LAST row per K by source/PK order, mirroring linq's `reverse() |> _distinct_by(K)` semantics.
     distinctByLast : bool
     orderByCols : array<string>
     orderByInlineExprs : array<ExpressionPtr>
     groupByCols : array<string>
-    // nolint:STYLE014 Parallel to groupByCols: null for `_.Field` keys (groupByCols holds the daslang field name quoted, emitter translates); body for computed-expression keys (groupByCols holds the rendered SQL fragment).
+    // Parallel to groupByCols: null for `_.Field` keys (groupByCols holds the daslang field name quoted, emitter translates); body for computed-expression keys (groupByCols holds the rendered SQL fragment).
     groupByKeyExprs : array<ExpressionPtr>
     groupByKeyTypes : array<TypeDeclPtr>
     havingSql : string
     havingBindExprs : array<ExpressionPtr>
     groupedSelectExprs : array<string>
     groupedSelectTypes : array<TypeDeclPtr>
-    // nolint:STYLE014 Parallel to groupedSelectExprs: true when the projection entry is `_._1 |> first()` — a whole-row entry that expands to all source columns in the outer SELECT and reconstructs a struct in the row builder. When ANY entry is true, the outer FROM wraps a `SELECT *, MIN(pk) FROM t GROUP BY <keyCol>` bare-aggregate subquery (mirrors `_distinct_by` passthrough) so each group's first row's columns survive into the outer projection.
+    // Parallel to groupedSelectExprs: true when the projection entry is `_._1 |> first()` — a whole-row entry that expands to all source columns in the outer SELECT and reconstructs a struct in the row builder. When ANY entry is true, the outer FROM wraps a `SELECT *, MIN(pk) FROM t GROUP BY <keyCol>` bare-aggregate subquery (mirrors `_distinct_by` passthrough) so each group's first row's columns survive into the outer projection.
     groupedSelectIsRow : array<bool>
     matr        : Materializer = Materializer.Array
     proj        : ProjectionShape = ProjectionShape.FullRow
@@ -264,7 +264,7 @@ struct private SqlQuery {
     inView      : bool
     hadError    : bool
     lastError   : string
-    // nolint:STYLE014 When true, pred_to_sql's bind fallthrough inlines ExprConst* literals into the SQL string instead of pushing `?` binds — used by expression-key contexts (e.g. _group_by) where the rendered fragment is re-used in multiple SQL positions and can't carry binds.
+    // When true, pred_to_sql's bind fallthrough inlines ExprConst* literals into the SQL string instead of pushing `?` binds — used by expression-key contexts (e.g. _group_by) where the rendered fragment is re-used in multiple SQL positions and can't carry binds.
     inlineConstants : bool
     // Multi-Q lowering: phase-order conflict (e.g. `take(n) |> _where(p)`) snapshots
     // the inner subtree's SQL+binds here; outer FROM renders as `(<innerSql>) AS t0`.
@@ -518,7 +518,7 @@ def private projection_alias_list(q : SqlQuery) : string {
     }
 }
 
-// nolint:STYLE015 Renders a join's `into`-projection alias as a fully-qualified SQL column fragment. Computed slots (e.g. LEFT JOIN's `is_some` probe at analyze_projection's named-tuple branch) carry a pre-rendered fragment in `q.joinSelectColSqlFragments[i]`; simple field projections rebuild it from `(alias, srcRootType, srcField)`. Returns `""` if the alias's source can't be resolved (defensive — should not happen for joins that v1 supports).
+// Renders a join's `into`-projection alias as a fully-qualified SQL column fragment. Computed slots (e.g. LEFT JOIN's `is_some` probe at analyze_projection's named-tuple branch) carry a pre-rendered fragment in `q.joinSelectColSqlFragments[i]`; simple field projections rebuild it from `(alias, srcRootType, srcField)`. Returns `""` if the alias's source can't be resolved (defensive — should not happen for joins that v1 supports).
 [macro_function]
 def private render_projection_alias_sql(var q : SqlQuery&; aliasIdx : int) : string {
     if (!empty(q.joinSelectColSqlFragments[aliasIdx])) return q.joinSelectColSqlFragments[aliasIdx]
@@ -620,7 +620,7 @@ def private is_nullable_column_ref(var node : ExpressionPtr; var q : SqlQuery&) 
 
 // ===== Chain analysis (walk pipe-composed chain backwards) =====
 
-// nolint:STYLE015 Shared subquery-wrap, dialect-routed on `caps.distinct_on`. Without it: SQLite's bare-aggregate optimization — `SELECT *, MIN/MAX(pk) FROM t GROUP BY K` picks the row with the min (useMax=false) or max (useMax=true) pk per K, preserving all `*` columns at those values (SQLite-only semantics; strict engines reject bare columns beside GROUP BY). With it: PostgreSQL-style `SELECT DISTINCT ON (K) * FROM t ORDER BY K, pk [DESC]` (a PG extension, also implemented by DuckDB) — first row per K in pk order (DESC = last). Both forms: MIN/ASC matches linq `_distinct_by`'s "first row per K", MAX/DESC matches `reverse() |> _distinct_by(K)` "last row per K" — when pk is monotonic with insertion order.
+// Shared subquery-wrap, dialect-routed on `caps.distinct_on`. Without it: SQLite's bare-aggregate optimization — `SELECT *, MIN/MAX(pk) FROM t GROUP BY K` picks the row with the min (useMax=false) or max (useMax=true) pk per K, preserving all `*` columns at those values (SQLite-only semantics; strict engines reject bare columns beside GROUP BY). With it: PostgreSQL-style `SELECT DISTINCT ON (K) * FROM t ORDER BY K, pk [DESC]` (a PG extension, also implemented by DuckDB) — first row per K in pk order (DESC = last). Both forms: MIN/ASC matches linq `_distinct_by`'s "first row per K", MAX/DESC matches `reverse() |> _distinct_by(K)` "last row per K" — when pk is monotonic with insertion order.
 [macro_function]
 def private build_distinct_by_inner_subquery(q : SqlQuery; pkField : string; useMax : bool) : string {
     let sqlK = field_to_column_name(q.rootType, q.distinctByCol)
@@ -633,14 +633,14 @@ def private build_distinct_by_inner_subquery(q : SqlQuery; pkField : string; use
     return "SELECT *, {aggOp}(\"{pkCol}\") FROM \"{q.tableName}\" GROUP BY \"{sqlK}\""
 }
 
-// nolint:STYLE015 v1 only supports `_distinct_by` applied directly to a single `select_from` source, with no other chain operators anywhere in the chain. Supported terminators: `_distinct_by(K) |> {count,long_count}(P)` and `_distinct_by(K) |> _select(F) |> {sum,min,max,average}()`. Compositions with `_where` / `_order_by` / `take` / `skip` / `_join` / `_group_by` / set ops / additional `distinct` are deferred to chunk N+1.
+// v1 only supports `_distinct_by` applied directly to a single `select_from` source, with no other chain operators anywhere in the chain. Supported terminators: `_distinct_by(K) |> {count,long_count}(P)` and `_distinct_by(K) |> _select(F) |> {sum,min,max,average}()`. Compositions with `_where` / `_order_by` / `take` / `skip` / `_join` / `_group_by` / set ops / additional `distinct` are deferred to chunk N+1.
 [macro_function]
 def private check_distinct_by_v1_gating(var q : SqlQuery&; linqName : string; allowSelectCol : bool;
                                         prog : ProgramPtr; at : LineInfo) : bool {
     if (!empty(q.whereSql) || q.seenJoin || q.seenSetOp
             || q.seenGroupBy || q.seenHaving || q.seenTake || q.seenSkip
             || q.seenOrderBy || q.seenDistinct) {
-        macro_error(prog, at, "_sql: `_distinct_by(K) |> {linqName}(...)` v1 requires `_distinct_by` applied directly to a single `select_from` source — other chain operators (`_where` / `_order_by` / `take` / `skip` / `_join` / `_group_by` / set ops / additional `distinct`) are not yet supported in the same chain")
+        macro_error(prog, at, "_sql: `_distinct_by(K) |> {linqName}(...)` v1 requires `_distinct_by` applied directly to a single `select_from` source - other chain operators (`_where` / `_order_by` / `take` / `skip` / `_join` / `_group_by` / set ops / additional `distinct`) are not yet supported in the same chain")
         q.hadError = true
         return false
     }
@@ -689,7 +689,7 @@ def private finalize_distinct_by_aggregate_wrap(var q : SqlQuery&; sqlOp : strin
     q.seenTerminal = true
 }
 
-// nolint:STYLE015 Passthrough finalize for row-returning `_distinct_by(K)` chains (`|> to_array`, `|> first`). Outer SELECT preserves source columns from `fill_default_columns`; outer ORDER BY / LIMIT / OFFSET piggyback on `build_sql_select`'s existing emission over `q.innerSql`. Permits trailing `_order_by` / `take` / `skip`; everything else gated by `check_distinct_by_passthrough_gating`.
+// Passthrough finalize for row-returning `_distinct_by(K)` chains (`|> to_array`, `|> first`). Outer SELECT preserves source columns from `fill_default_columns`; outer ORDER BY / LIMIT / OFFSET piggyback on `build_sql_select`'s existing emission over `q.innerSql`. Permits trailing `_order_by` / `take` / `skip`; everything else gated by `check_distinct_by_passthrough_gating`.
 [macro_function]
 def private finalize_distinct_by_passthrough_wrap(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) {
     let pkField = find_single_pk_field(q.rootType, prog, at)
@@ -701,25 +701,25 @@ def private finalize_distinct_by_passthrough_wrap(var q : SqlQuery&; prog : Prog
     q.fromRowType = q.rootType
 }
 
-// nolint:STYLE015 Narrower than `check_distinct_by_v1_gating`: passthrough permits `_order_by` / `take` / `skip` (handled by outer SELECT around the bare-aggregate subquery); rejects `_where` / `_join` / `_group_by` / `_having` / set ops / additional `distinct` (each requires explicit composition logic and may have semantic ambiguity).
+// Narrower than `check_distinct_by_v1_gating`: passthrough permits `_order_by` / `take` / `skip` (handled by outer SELECT around the bare-aggregate subquery); rejects `_where` / `_join` / `_group_by` / `_having` / set ops / additional `distinct` (each requires explicit composition logic and may have semantic ambiguity).
 [macro_function]
 def private check_distinct_by_passthrough_gating(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {
     if (!empty(q.whereSql) || q.seenJoin || q.seenSetOp
             || q.seenGroupBy || q.seenHaving || q.seenDistinct) {
-        macro_error(prog, at, "_sql: `_distinct_by(K)` composed with `_where` / `_join` / `_group_by` / `_having` / set ops / `distinct` is not yet supported — v1 permits only trailing `_order_by` / `take` / `skip` between `_distinct_by` and the row terminator")
+        macro_error(prog, at, "_sql: `_distinct_by(K)` composed with `_where` / `_join` / `_group_by` / `_having` / set ops / `distinct` is not yet supported - v1 permits only trailing `_order_by` / `take` / `skip` between `_distinct_by` and the row terminator")
         q.hadError = true
         return false
     }
     // A phase-divert (e.g. `take(N) |> _distinct_by(K)` — take's PHASE_TAKE > distinct_by's PHASE_DISTINCT triggers divert_to_inner) populates q.innerSql + q.innerBindExprs before _distinct_by peels. finalize_distinct_by_passthrough_wrap would overwrite q.innerSql (silently dropping the pre-distinct op) and leave q.innerBindExprs orphaned (bind/placeholder mismatch). Reject loudly until composition with pre-distinct phase-divert is designed.
     if (!empty(q.innerSql) || !empty(q.innerBindExprs)) {
-        macro_error(prog, at, "_sql: chain operators that phase-divert before `_distinct_by(K)` (e.g. `take(N) |> _distinct_by(K)` or `skip(N) |> _distinct_by(K)`) are not yet supported — restructure so `_distinct_by` sits directly above the source (e.g. `_distinct_by(K) |> take(N)` for cap-after-distinct semantics)")
+        macro_error(prog, at, "_sql: chain operators that phase-divert before `_distinct_by(K)` (e.g. `take(N) |> _distinct_by(K)` or `skip(N) |> _distinct_by(K)`) are not yet supported - restructure so `_distinct_by` sits directly above the source (e.g. `_distinct_by(K) |> take(N)` for cap-after-distinct semantics)")
         q.hadError = true
         return false
     }
     return true
 }
 
-// nolint:STYLE015 Post-pass invoked by every `analyze_chain` consumer (_sql / _try_sql / _sql_text / _each_sql / _create_view). When the chain set `q.distinctByCol` but no aggregate terminator finalized the inner-subquery wrap (i.e. row-returning chain like `|> to_array` or `|> first`), this runs the gating + passthrough finalize. Returns false on macro_error; true otherwise.
+// Post-pass invoked by every `analyze_chain` consumer (_sql / _try_sql / _sql_text / _each_sql / _create_view). When the chain set `q.distinctByCol` but no aggregate terminator finalized the inner-subquery wrap (i.e. row-returning chain like `|> to_array` or `|> first`), this runs the gating + passthrough finalize. Returns false on macro_error; true otherwise.
 [macro_function]
 def private maybe_finalize_distinct_by_passthrough(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {
     if (empty(q.distinctByCol) || q.proj == ProjectionShape.Aggregate) return true
@@ -752,10 +752,10 @@ def private peel_column_aggregate(var node : ExpressionPtr; var q : SqlQuery&;
     let hasFrag = !empty(q.selectColSqlFragments[0])
     let sqlCol = field_to_column_name(q.rootType, col)
     let aggArg = hasFrag ? q.selectColSqlFragments[0] : "\"{sqlCol}\""
-    // nolint:STYLE015 Bare-aggregate `_distinct_by(_.K) |> _select(_.F) |> {agg}()` wrap: same SQL as for count(P) but with SUM/MIN/MAX/AVG over the projected column and no outer WHERE.
+    // Bare-aggregate `_distinct_by(_.K) |> _select(_.F) |> {agg}()` wrap: same SQL as for count(P) but with SUM/MIN/MAX/AVG over the projected column and no outer WHERE.
     if (!empty(q.distinctByCol)) {
         if (hasFrag) {
-            macro_error(prog, at, "_sql: `_distinct_by(K) |> _select(<computed>) |> {linqName}()` is not yet supported — project a single column for the distinct-by aggregate path")
+            macro_error(prog, at, "_sql: `_distinct_by(K) |> _select(<computed>) |> {linqName}()` is not yet supported - project a single column for the distinct-by aggregate path")
             return true
         }
         if (!check_distinct_by_v1_gating(q, linqName, true, prog, at)) return true
@@ -782,7 +782,7 @@ def private peel_column_aggregate(var node : ExpressionPtr; var q : SqlQuery&;
     return true
 }
 
-// nolint:STYLE015 Verifies the receiver IS the lambda's bound param — outer captures (`outer.Brand`) reject loudly instead of emitting a wrong `COUNT(DISTINCT "Brand")` against the SQL source.
+// Verifies the receiver IS the lambda's bound param — outer captures (`outer.Brand`) reject loudly instead of emitting a wrong `COUNT(DISTINCT "Brand")` against the SQL source.
 [macro_function]
 def private try_peel_distinct_by_field(var node : ExpressionPtr; var distinctSource : ExpressionPtr&;
                                        var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : string {
@@ -816,13 +816,13 @@ def private try_peel_distinct_by_field(var node : ExpressionPtr; var distinctSou
     var fieldName : string
     if (!qmatch(body, $e(receiver).$f(fieldName)).matched
             || receiver == null || !(receiver is ExprVar)) {
-        macro_error(prog, at, "_sql: _distinct_by key must be `<arg>.<field>` (single column reference) — computed keys are not yet translatable to SQL")
+        macro_error(prog, at, "_sql: _distinct_by key must be `<arg>.<field>` (single column reference) - computed keys are not yet translatable to SQL")
         q.hadError = true
         return ""
     }
     let argName = string((receiver as ExprVar).name)
     if (argName != expectedArgName) {
-        macro_error(prog, at, "_sql: _distinct_by key references `{argName}` but the lambda's argument is `{expectedArgName}` — outer captures can't be translated, the key must read `{expectedArgName}.<field>`")
+        macro_error(prog, at, "_sql: _distinct_by key references `{argName}` but the lambda's argument is `{expectedArgName}` - outer captures can't be translated, the key must read `{expectedArgName}.<field>`")
         q.hadError = true
         return ""
     }
@@ -830,7 +830,7 @@ def private try_peel_distinct_by_field(var node : ExpressionPtr; var distinctSou
     return fieldName
 }
 
-// nolint:STYLE015 Shared `count` / `long_count` peeler — `isLong` widens binding to int64; recognizes `_distinct_by(_.col)` wrap.
+// Shared `count` / `long_count` peeler — `isLong` widens binding to int64; recognizes `_distinct_by(_.col)` wrap.
 [macro_function]
 def private peel_count_terminal(var node : ExpressionPtr; var q : SqlQuery&;
                                 linqName : string; isLong : bool;
@@ -842,7 +842,7 @@ def private peel_count_terminal(var node : ExpressionPtr; var q : SqlQuery&;
         q.hadError = true
         return true
     }
-    // nolint:STYLE015 2-arg `count(P)` / `long_count(P)`: only supported when fronted by `_distinct_by(_.K)` — emits the SQLite bare-aggregate inner-subquery wrap (`SELECT COUNT(*) FROM (SELECT *, MIN(pk) FROM t GROUP BY K) WHERE P`).
+    // 2-arg `count(P)` / `long_count(P)`: only supported when fronted by `_distinct_by(_.K)` — emits the SQLite bare-aggregate inner-subquery wrap (`SELECT COUNT(*) FROM (SELECT *, MIN(pk) FROM t GROUP BY K) WHERE P`).
     if (cCall.arguments |> length == 2) {
         var body = peel_lambda_single_return(cCall.arguments[1])
         if (body == null) {
@@ -905,12 +905,12 @@ def private extract_key_selector_field(var keyLambda : ExpressionPtr; expectedAr
     // Pin receiver to ExprVar so nested chains (`l.opt.X`) don't match silently with a meaningless argName.
     if (!qmatch(ret.subexpr, $e(receiver).$f(fieldName)).matched
             || receiver == null || !(receiver is ExprVar)) {
-        macro_error(prog, at, "_sql: _join key selector body must be `<arg>.Field` (column ref); computed key expressions are not yet translatable to SQL — use raw SQL or restructure the join")
+        macro_error(prog, at, "_sql: _join key selector body must be `<arg>.Field` (column ref); computed key expressions are not yet translatable to SQL - use raw SQL or restructure the join")
         return ""
     }
     let argName = string((receiver as ExprVar).name)
     if (argName != expectedArgName) {
-        macro_error(prog, at, "_sql: _join key selector references arg `{argName}`, expected `{expectedArgName}` — the on-clause must read `(l, r) => l.X == r.Y` referring to the join's own params, not outer captures")
+        macro_error(prog, at, "_sql: _join key selector references arg `{argName}`, expected `{expectedArgName}` - the on-clause must read `(l, r) => l.X == r.Y` referring to the join's own params, not outer captures")
         return ""
     }
     return fieldName
@@ -919,7 +919,7 @@ def private extract_key_selector_field(var keyLambda : ExpressionPtr; expectedAr
 // Multi-join LHS wrap: snapshot q's inner-join chain into a subquery (innerSql + binds),
 // then reset q so the outer join installs its own state. Outer's `into` resolves against q.fromRowType.
 [macro_function]
-def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo;
+def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo;   // nolint:STYLE038 - flat field-by-field snapshot of SqlQuery; the enumeration IS the function
                                         fillPassthrough : bool = false; keepLimitInner : bool = false) : bool {
     // nolint:STYLE015
     // keepLimitInner: take(n)/skip(n) BEFORE an aggregate applies to the pre-aggregate rows, so LIMIT/OFFSET
@@ -935,7 +935,7 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
     // and the outer SELECT renders the aggregate. SingleColumn rejection still stands because
     // inner_projection_type expects a named tuple.
     if (q.proj == ProjectionShape.SingleColumn) {
-        macro_error(prog, at, "_sql: multi-join LHS must project a named row (use `into` to produce a tuple); got scalar projection — reshape so each LHS column is named")
+        macro_error(prog, at, "_sql: multi-join LHS must project a named row (use `into` to produce a tuple); got scalar projection - reshape so each LHS column is named")
         return false
     }
     // nolint:STYLE015
@@ -1083,7 +1083,7 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
     return true
 }
 
-// nolint:STYLE014 Shared post-analyze pass (mirror of maybe_finalize_distinct_by_passthrough), run by every
+// Shared post-analyze pass (mirror of maybe_finalize_distinct_by_passthrough), run by every
 // _sql / _sql_text / _each_sql / _create_view consumer so emitted SQL is identical. take(n)/skip(n) before an
 // aggregate wraps the pre-aggregate chain into an inner subquery (LIMIT/OFFSET inner) + aggregate on the outer.
 [macro_function]
@@ -1117,21 +1117,21 @@ def private apply_passthrough_projection(var q : SqlQuery&; projType : TypeDeclP
     q.projRecordNames |> reserve(n)
     for (i in range(n)) {
         let alias = string(projType.argNames[i])
-        q.selectCols |> push(alias) // nolint:PERF006 reserved above
-        q.selectColAliases |> push("") // nolint:PERF006 reserved above
-        q.selectColSqlFragments |> push("\"{alias}\"") // nolint:PERF006 reserved above
-        q.selectColTypes |> push(clone_type(projType.argTypes[i])) // nolint:PERF006 reserved above
-        q.projRecordNames |> push(alias) // nolint:PERF006 reserved above
+        q.selectCols |> push(alias)
+        q.selectColAliases |> push("")
+        q.selectColSqlFragments |> push("\"{alias}\"")
+        q.selectColTypes |> push(clone_type(projType.argTypes[i]))
+        q.projRecordNames |> push(alias)
     }
     q.proj = ProjectionShape.NamedTuple
     return true
 }
 
 [macro_function]
-def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
+def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;   // nolint:STYLE037,STYLE038 - one arm per join shape; the arms share the projection registry
                               kind : JoinKind; prog : ProgramPtr; at : LineInfo) : bool {
     if (q.seenJoin) {
-        macro_error(prog, at, "_sql: internal — process_join_call entered with q.seenJoin already true (chain shape error)")
+        macro_error(prog, at, "_sql: internal - process_join_call entered with q.seenJoin already true (chain shape error)")
         return false
     }
     if (length(jCall.arguments) != 5) {
@@ -1159,7 +1159,7 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
     // join's `into` projection.
     if (!q.seenJoin) {
         if (q.seenSelect) {
-            macro_error(prog, at, "_sql: _join must precede `_select` in source order — the join's `into` lambda is the projection. Drop the trailing `_select(...)` or restructure the chain.")
+            macro_error(prog, at, "_sql: _join must precede `_select` in source order - the join's `into` lambda is the projection. Drop the trailing `_select(...)` or restructure the chain.")
             return false
         }
         if (q.seenGroupBy) {
@@ -1194,7 +1194,7 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
         return false
     }
     if (subQ.seenSelect) {
-        macro_error(prog, at, "_sql: _join right side cannot use `_select(...)` — the join's `into` lambda projects from both sources")
+        macro_error(prog, at, "_sql: _join right side cannot use `_select(...)` - the join's `into` lambda projects from both sources")
         return false
     }
     if (subQ.seenTerminal || subQ.seenToArray) {
@@ -1307,22 +1307,22 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
     q.joinSelectColTypes |> reserve(nProj)
     q.joinSelectColSqlFragments |> reserve(nProj)
     for (i in range(nProj)) {
-        q.joinProjRecordNames |> push(q.projRecordNames[i]) // nolint:PERF006 reserved above
-        q.joinSelectCols |> push(q.selectCols[i]) // nolint:PERF006 reserved above
-        q.joinSelectColAliases |> push(q.selectColAliases[i]) // nolint:PERF006 reserved above
-        q.joinSelectColTypes |> push(q.selectColTypes[i]) // nolint:PERF006 reserved above
-        q.joinSelectColSqlFragments |> push(q.selectColSqlFragments[i]) // nolint:PERF006 reserved above
+        q.joinProjRecordNames |> push(q.projRecordNames[i])
+        q.joinSelectCols |> push(q.selectCols[i])
+        q.joinSelectColAliases |> push(q.selectColAliases[i])
+        q.joinSelectColTypes |> push(q.selectColTypes[i])
+        q.joinSelectColSqlFragments |> push(q.selectColSqlFragments[i])
     }
     q.seenSelect = true
     return true
 }
 
 [macro_function]
-def private process_cross_join_call(var jCall : ExprCall?; var q : SqlQuery&;
+def private process_cross_join_call(var jCall : ExprCall?; var q : SqlQuery&;   // nolint:STYLE037,STYLE038 - one arm per cross-join shape; the arms share the projection registry
                                     prog : ProgramPtr; at : LineInfo) : bool {
     // 3-arg shape (srca, srcb, into); mirrors process_join_call's reject + projection handling.
     if (q.seenJoin) {
-        macro_error(prog, at, "_sql: internal — process_cross_join_call entered with q.seenJoin already true (chain shape error)")
+        macro_error(prog, at, "_sql: internal - process_cross_join_call entered with q.seenJoin already true (chain shape error)")
         return false
     }
     if (length(jCall.arguments) != 3) {
@@ -1341,7 +1341,7 @@ def private process_cross_join_call(var jCall : ExprCall?; var q : SqlQuery&;
         if (!snapshot_q_to_subquery_wrap(q, prog, at)) return false
     } else {
         if (q.seenSelect) {
-            macro_error(prog, at, "_sql: _cross_join must precede `_select` in source order — the cross's `into` lambda is the projection. Drop the trailing `_select(...)` or restructure the chain.")
+            macro_error(prog, at, "_sql: _cross_join must precede `_select` in source order - the cross's `into` lambda is the projection. Drop the trailing `_select(...)` or restructure the chain.")
             return false
         }
         if (q.seenGroupBy) {
@@ -1362,7 +1362,7 @@ def private process_cross_join_call(var jCall : ExprCall?; var q : SqlQuery&;
         return false
     }
     if (subQ.seenSelect) {
-        macro_error(prog, at, "_sql: _cross_join right side cannot use `_select(...)` — the cross's `into` lambda projects from both sources")
+        macro_error(prog, at, "_sql: _cross_join right side cannot use `_select(...)` - the cross's `into` lambda projects from both sources")
         return false
     }
     if (subQ.seenTerminal || subQ.seenToArray) {
@@ -1459,12 +1459,12 @@ def private collect_query_binds(var q : SqlQuery&; var out : array<ExpressionPtr
         total += length(j.rightOnBindExprs)
     }
     out |> reserve(out |> length + total)
-    out |> push_from(q.projBindExprs)   // nolint:STYLE033 — variadic push_from forwards ==const; array<Expression?> sources fail 31400
+    out |> push_from(q.projBindExprs)   //variadic push_from forwards ==const; array<Expression?> sources fail 31400
     out |> push_from(q.innerBindExprs)
     for (j in q.joins) {
         out |> push_from(j.rightOnBindExprs)
     }
-    out |> push_from(q.bindExprs)   // nolint:STYLE033 — variadic push_from forwards ==const; array<Expression?> sources fail 31400
+    out |> push_from(q.bindExprs)   //variadic push_from forwards ==const; array<Expression?> sources fail 31400
     out |> push_from(q.havingBindExprs)
     out |> push_from(q.setOpRhsBinds)
     let forced_one_row = ((q.matr == Materializer.One || q.matr == Materializer.OneOpt)
@@ -1558,12 +1558,12 @@ def private divert_to_inner(var node : ExpressionPtr; var q : SqlQuery&;
     var subQ = SqlQuery(inView = q.inView)
     if (!analyze_chain(node, subQ, prog, at)) return false
     if (subQ.seenTerminal || subQ.seenToArray) {
-        macro_error(prog, at, "_sql: terminals (`_first`, `_to_array`, etc.) cannot appear inside a subquery — keep the terminal at the outermost chain position")
+        macro_error(prog, at, "_sql: terminals (`_first`, `_to_array`, etc.) cannot appear inside a subquery - keep the terminal at the outermost chain position")
         return false
     }
     if (subQ.proj == ProjectionShape.SingleColumn || subQ.proj == ProjectionShape.Aggregate) {
         // SingleColumn / Aggregate inner has no row for the outer to filter — reject both shapes.
-        macro_error(prog, at, "_sql: cannot lower a chain whose inner subquery projects a single value (`_select(_.X)` or an aggregate) into an outer query — there is no named row to filter on. Restructure the chain so the divergent op runs before the projection, or wrap the projection in a named tuple `(X=_.X)`.")
+        macro_error(prog, at, "_sql: cannot lower a chain whose inner subquery projects a single value (`_select(_.X)` or an aggregate) into an outer query - there is no named row to filter on. Restructure the chain so the divergent op runs before the projection, or wrap the projection in a named tuple `(X=_.X)`.")
         return false
     }
     // Mirror the top-level emit_sql_macro_body path: a nested `_distinct_by(K)` chain (set by analyze_chain via the wrapped chain-op branch) needs the bare-aggregate inner-subquery wrap built BEFORE build_sql_string runs — otherwise the subquery silently drops the dedup (same silent-drop bug chunk N+1 fixed at the top level).
@@ -1577,7 +1577,7 @@ def private divert_to_inner(var node : ExpressionPtr; var q : SqlQuery&;
         }
     }
     if (anyRowEntry) {
-        macro_error(prog, at, "_sql: `_group_by |> _select((K=_._0, R=_._1 |> first()))` cannot be wrapped as an inner subquery — the whole-row entry expands to multiple unaliased columns that the outer query can't reference by name. Restructure so the chain that triggers wrap (e.g. `_where`) runs before `_group_by`, or split into separate `_sql` calls.")
+        macro_error(prog, at, "_sql: `_group_by |> _select((K=_._0, R=_._1 |> first()))` cannot be wrapped as an inner subquery - the whole-row entry expands to multiple unaliased columns that the outer query can't reference by name. Restructure so the chain that triggers wrap (e.g. `_where`) runs before `_group_by`, or split into separate `_sql` calls.")
         return false
     }
     // nolint:STYLE015 force_aliases=true: outer references inner cols by alias. Without AS, SQLite
@@ -1646,7 +1646,7 @@ def private peel_to_array_terminal(var node : ExpressionPtr) : ExpressionPtr {
 }
 
 [macro_function]
-def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {
+def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {   // nolint:STYLE037,STYLE038 - one arm per linq chain operator; the dispatch table IS the analyzer
     if (node == null) {
         macro_error(prog, at, "_sql: empty chain")
         return false
@@ -1676,7 +1676,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 return false
             }
             if (fCall.arguments |> length != 1) {
-                macro_error(prog, at, "_sql: `_first(predicate)` is not yet supported — use `|> _where(predicate) |> _first()` instead")
+                macro_error(prog, at, "_sql: `_first(predicate)` is not yet supported - use `|> _where(predicate) |> _first()` instead")
                 return false
             }
             q.matr = Materializer.One
@@ -1719,7 +1719,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             }
             if (q.seenDistinct || !empty(q.distinctByCol) || q.seenSetOp
                     || q.seenTake || q.seenSkip || q.seenOrderBy) {
-                macro_error(prog, at, "_sql: `_aggregate` v1 supports filtered table/join sources only — `distinct`, `_distinct_by`, set ops, ordering, take, and skip need an explicit subquery-composition rail")
+                macro_error(prog, at, "_sql: `_aggregate` v1 supports filtered table/join sources only - `distinct`, `_distinct_by`, set ops, ordering, take, and skip need an explicit subquery-composition rail")
                 return false
             }
             if (q.seenSelect && !q.seenJoin) {
@@ -1766,7 +1766,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             return analyze_chain(dCall.arguments[0], q, prog, at)
         }
     }
-    // nolint:STYLE015 Stage op: `_distinct_by(_.K)` records the key for the bare-aggregate inner-subquery wrap that the outer aggregate terminator applies. Skipped by `peel_count_terminal`'s 1-arg fast path (`COUNT(DISTINCT K)`); reached only when `_distinct_by` is wrapped by other chain ops or the terminator is `count(P)` / `long_count(P)`.
+    // Stage op: `_distinct_by(_.K)` records the key for the bare-aggregate inner-subquery wrap that the outer aggregate terminator applies. Skipped by `peel_count_terminal`'s 1-arg fast path (`COUNT(DISTINCT K)`); reached only when `_distinct_by` is wrapped by other chain ops or the terminator is `count(P)` / `long_count(P)`.
     {
         var dbCall = match_call_in_linq(node, "distinct_by")
         if (dbCall != null) {
@@ -1783,18 +1783,18 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             return analyze_chain(distinctSource, q, prog, at)
         }
     }
-    // nolint:STYLE015 Stage op: `reverse()` upstream of `_distinct_by(K)` flips the bare-aggregate from MIN(pk) to MAX(pk) — picks the LAST row per K by source/PK order. Only valid when wrapped by `_distinct_by` (SQL has no inherent row ordering to reverse; bare `reverse()` makes no sense without an ORDER BY).
+    // Stage op: `reverse()` upstream of `_distinct_by(K)` flips the bare-aggregate from MIN(pk) to MAX(pk) — picks the LAST row per K by source/PK order. Only valid when wrapped by `_distinct_by` (SQL has no inherent row ordering to reverse; bare `reverse()` makes no sense without an ORDER BY).
     {
         var rCall = match_call_in_linq(node, "reverse")
         if (rCall != null) {
             let dr = maybe_divert(q, PHASE_DISTINCT, node, prog, at)
             if (dr != 0) return dr > 0
             if (empty(q.distinctByCol)) {
-                macro_error(prog, at, "_sql: `reverse()` requires an immediately-outer `_distinct_by(_.K)` — SQL has no inherent row ordering to reverse; use `_order_by_descending(...)` for sort reversal, or `reverse() |> _distinct_by(_.K)` for last-per-K semantics")
+                macro_error(prog, at, "_sql: `reverse()` requires an immediately-outer `_distinct_by(_.K)` - SQL has no inherent row ordering to reverse; use `_order_by_descending(...)` for sort reversal, or `reverse() |> _distinct_by(_.K)` for last-per-K semantics")
                 return false
             }
             if (q.distinctByLast) {
-                macro_error(prog, at, "_sql: duplicate `reverse()` in chain — double-reverse is a no-op; remove both")
+                macro_error(prog, at, "_sql: duplicate `reverse()` in chain - double-reverse is a no-op; remove both")
                 return false
             }
             if (rCall.arguments |> length != 1) {
@@ -2012,7 +2012,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 macro_error(prog, at, "_sql: _group_by key lambda has unexpected shape")
                 return false
             }
-            // nolint:STYLE015 Source first so q.rootType is set before pred_to_sql on computed keys.
+            // Source first so q.rootType is set before pred_to_sql on computed keys.
             if (!analyze_chain(gbCall.arguments[0], q, prog, at)
                     || !collect_group_keys(body, q, prog, at)) return false
             q.seenGroupBy = true
@@ -2150,7 +2150,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     {
         var smCall = match_call_in_linq(node, "select_many_pair")
         if (smCall != null) {
-            macro_error(prog, at, "_sql: correlated `from … from x in <expr>` (SelectMany over a SQL source) is not translatable to SQL — the inner collection is a per-row value, not a `[sql_table]`. Use an explicit `join` on a related table, or materialize the SQL rows with `to_array()` first and flatten in memory.")
+            macro_error(prog, at, "_sql: correlated `from ... from x in <expr>` (SelectMany over a SQL source) is not translatable to SQL - the inner collection is a per-row value, not a `[sql_table]`. Use an explicit `join` on a related table, or materialize the SQL rows with `to_array()` first and flatten in memory.")
             return false
         }
     }
@@ -2260,7 +2260,7 @@ def private try_recognize_json_path_proj(val : ExpressionPtr; var q : SqlQuery&;
     let colName = chain[nChain - 1]
     let srcType = source_rootType_for_idx(q, srcIdx)
     if (has_field_annotation(srcType, colName, "sql_blob")) {
-        macro_error(prog, at, "_sql: cannot project @sql_blob column path '{colName}.…'; round-trip the row and access the field in daslang, or use raw SQL")
+        macro_error(prog, at, "_sql: cannot project @sql_blob column path '{colName}....'; round-trip the row and access the field in daslang, or use raw SQL")
         return -1
     }
     if (!has_field_annotation(srcType, colName, "sql_json")) return 0
@@ -2350,7 +2350,7 @@ def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog
 }
 
 [macro_function]
-def private analyze_projection_impl(var body : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {
+def private analyze_projection_impl(var body : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {   // nolint:STYLE037,STYLE038 - one arm per projection shape; the arms share the select-column registry
     if (body == null) {
         macro_error(prog, at, "_sql: _select: missing projection")
         return false
@@ -2368,7 +2368,7 @@ def private analyze_projection_impl(var body : ExpressionPtr; var q : SqlQuery&;
     if (body is ExprVar) {
         let argName = string((body as ExprVar).name)
         if (!q.seenJoin) {
-            macro_error(prog, at, "_sql: identity `_select` (e.g. `$(x) => x`) is not supported in single-source mode — omit the `_select` for a full row, or project named columns")
+            macro_error(prog, at, "_sql: identity `_select` (e.g. `$(x) => x`) is not supported in single-source mode - omit the `_select` for a full row, or project named columns")
             return false
         }
         let srcIdx = resolve_proj_arg_to_source(q, argName, prog, at)
@@ -2377,7 +2377,7 @@ def private analyze_projection_impl(var body : ExpressionPtr; var q : SqlQuery&;
         let bodyType = body._type
         if (srcType == null || srcType.structType == null
                 || bodyType == null || bodyType.structType == null) {
-            macro_error(prog, at, "_sql: whole-source join projection `{argName}` must be a non-nullable struct row — nullable outer-join sides and scalar/tuple identities are not supported; project named scalar fields instead")
+            macro_error(prog, at, "_sql: whole-source join projection `{argName}` must be a non-nullable struct row - nullable outer-join sides and scalar/tuple identities are not supported; project named scalar fields instead")
             return false
         }
         let n = length(srcType.structType.fields)
@@ -2394,11 +2394,11 @@ def private analyze_projection_impl(var body : ExpressionPtr; var q : SqlQuery&;
         let sourceAlias = source_alias_for_idx(q, srcIdx)
         for (field in srcType.structType.fields) {
             let fieldName = string(field.name)
-            q.selectCols |> push(fieldName) // nolint:PERF006 reserved above
-            q.selectColAliases |> push(sourceAlias) // nolint:PERF006 reserved above
-            q.selectColTypes |> push(clone_type(field._type)) // nolint:PERF006 reserved above
-            q.selectColSqlFragments |> push("") // nolint:PERF006 reserved above
-            q.projRecordNames |> push(fieldName) // nolint:PERF006 reserved above
+            q.selectCols |> push(fieldName)
+            q.selectColAliases |> push(sourceAlias)
+            q.selectColTypes |> push(clone_type(field._type))
+            q.selectColSqlFragments |> push("")
+            q.projRecordNames |> push(fieldName)
         }
         q.projectedRowType = clone_type(srcType)
         q.proj = ProjectionShape.FullRow
@@ -2581,7 +2581,7 @@ def private group_key_column_name(q : SqlQuery; idx : int) : string {
 }
 
 [macro_function]
-def private try_translate_group_aggregate(var node : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo;
+def private try_translate_group_aggregate(var node : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo;   // nolint:STYLE037,STYLE038 - one arm per SQL aggregate function
                                           var sqlOut : string&; var typeOut : TypeDeclPtr&) : bool {
     var n = node
     if (n is ExprRef2Value) {
@@ -2638,7 +2638,7 @@ def private try_translate_group_aggregate(var node : ExpressionPtr; var q : SqlQ
                     }
                     let frag = render_projection_alias_sql(q, aliasIdx)
                     if (empty(frag)) {
-                        macro_error(prog, at, "_sql: {fname}(_.{col}): cannot render projection alias (alias source '{q.joinSelectColAliases[aliasIdx]}' unresolved — multi-source joins beyond t0/t1 not supported in v1)")
+                        macro_error(prog, at, "_sql: {fname}(_.{col}): cannot render projection alias (alias source '{q.joinSelectColAliases[aliasIdx]}' unresolved - multi-source joins beyond t0/t1 not supported in v1)")
                         return true
                     }
                     sqlOut = "{sqlOp}({frag})"
@@ -2669,9 +2669,9 @@ def private try_translate_group_aggregate(var node : ExpressionPtr; var q : SqlQ
     return false
 }
 
-// nolint:STYLE015 Translates one `_aggregate` tuple slot. The terminal's block argument represents the full filtered rowset: `rows |> count` becomes COUNT(*), while `rows |> _select($(r:T) => r.Field) |> min/max/sum/average` wraps the exact source column. Post-join fields resolve through the join's `into` projection registry, so a whole-source projection (`$(l,r)=>r`) remains fully qualified.
+// Translates one `_aggregate` tuple slot. The terminal's block argument represents the full filtered rowset: `rows |> count` becomes COUNT(*), while `rows |> _select($(r:T) => r.Field) |> min/max/sum/average` wraps the exact source column. Post-join fields resolve through the join's `into` projection registry, so a whole-source projection (`$(l,r)=>r`) remains fully qualified.
 [macro_function]
-def private try_translate_global_aggregate(var node : ExpressionPtr; rowsArgName : string;
+def private try_translate_global_aggregate(var node : ExpressionPtr; rowsArgName : string;   // nolint:STYLE037,STYLE038 - one arm per SQL aggregate function
                                            var q : SqlQuery&; prog : ProgramPtr; at : LineInfo;
                                            var sqlOut : string&; var typeOut : TypeDeclPtr&) : bool {
     var n = node
@@ -2810,7 +2810,7 @@ def private analyze_global_aggregate_projection(var aggregateLambda : Expression
     if (tupT == null || tupT.baseType != Type.tTuple
             || empty(tupT.argNames)
             || length(tupT.argNames) != length(mkTup.values)) {
-        macro_error(prog, at, "_sql: `_aggregate` result must be a NAMED tuple — every aggregate needs `Name = expression`")
+        macro_error(prog, at, "_sql: `_aggregate` result must be a NAMED tuple - every aggregate needs `Name = expression`")
         return false
     }
     q.selectCols |> clear
@@ -2844,7 +2844,7 @@ def private analyze_global_aggregate_projection(var aggregateLambda : Expression
     return true
 }
 
-// nolint:STYLE015 Recognizes `_._1 |> first()` (== `first(_._1)`) in a `_select` after `_group_by`. Mirrors `try_translate_group_aggregate`'s name+receiver match shape — qmatch's `_._1.first()` doesn't match the call form.
+// Recognizes `_._1 |> first()` (== `first(_._1)`) in a `_select` after `_group_by`. Mirrors `try_translate_group_aggregate`'s name+receiver match shape — qmatch's `_._1.first()` doesn't match the call form.
 [macro_function]
 def private is_first_of_group_call(var node : ExpressionPtr) : bool {
     var n = node
@@ -2863,7 +2863,7 @@ def private is_first_of_group_call(var node : ExpressionPtr) : bool {
 }
 
 [macro_function]
-def private analyze_grouped_projection(var body : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {
+def private analyze_grouped_projection(var body : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {   // nolint:STYLE037,STYLE038 - one arm per grouped-projection slot shape
     if (body == null) {
         macro_error(prog, at, "_sql: _select after _group_by: missing projection")
         return false
@@ -2876,7 +2876,7 @@ def private analyze_grouped_projection(var body : ExpressionPtr; var q : SqlQuer
         }
     }
     if (!(body is ExprMakeTuple)) {
-        macro_error(prog, at, "_sql: _select after _group_by must be a named-tuple projection — `(Key=_._0, N=_._1 |> length, AvgX=_._1 |> select($(u:T) => u.X) |> average)`. Got: {describe(body)}")
+        macro_error(prog, at, "_sql: _select after _group_by must be a named-tuple projection - `(Key=_._0, N=_._1 |> length, AvgX=_._1 |> select($(u:T) => u.X) |> average)`. Got: {describe(body)}")
         return false
     }
     var mkTup = body as ExprMakeTuple
@@ -2884,7 +2884,7 @@ def private analyze_grouped_projection(var body : ExpressionPtr; var q : SqlQuer
     if (tupT == null || tupT.baseType != Type.tTuple
             || empty(tupT.argNames)
             || length(tupT.argNames) != length(mkTup.values)) {
-        macro_error(prog, at, "_sql: _select after _group_by must be a NAMED tuple — every entry needs `Name=expr`")
+        macro_error(prog, at, "_sql: _select after _group_by must be a NAMED tuple - every entry needs `Name=expr`")
         return false
     }
     q.groupedSelectExprs |> clear
@@ -2984,7 +2984,7 @@ def private analyze_grouped_projection(var body : ExpressionPtr; var q : SqlQuer
         return false
     }
     if (hasFirstRow && hasAggregate) {
-        macro_error(prog, at, "_sql: `_._1 |> first()` mixed with column aggregates (length/sum/min/max/average) in the same projection is not yet supported — use separate `_sql` calls, or restrict to key + first() entries only")
+        macro_error(prog, at, "_sql: `_._1 |> first()` mixed with column aggregates (length/sum/min/max/average) in the same projection is not yet supported - use separate `_sql` calls, or restrict to key + first() entries only")
         return false
     }
     if (hasFirstRow) {
@@ -3024,7 +3024,7 @@ def private collect_one_order_key(var val : ExpressionPtr; var q : SqlQuery&; di
             }
             let frag = render_projection_alias_sql(q, aliasIdx)
             if (empty(frag)) {
-                macro_error(prog, at, "_sql: order-by key _.{fieldName}: cannot render projection alias (alias source '{q.joinSelectColAliases[aliasIdx]}' unresolved — multi-source joins beyond t0/t1 not supported in v1)")
+                macro_error(prog, at, "_sql: order-by key _.{fieldName}: cannot render projection alias (alias source '{q.joinSelectColAliases[aliasIdx]}' unresolved - multi-source joins beyond t0/t1 not supported in v1)")
                 return false
             }
             q.orderByCols |> push("{frag} {direction}")
@@ -3053,7 +3053,7 @@ def private collect_one_order_key(var val : ExpressionPtr; var q : SqlQuery&; di
     return false
 }
 
-def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; direction : string; prog : ProgramPtr; at : LineInfo) : bool {
+def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; direction : string; prog : ProgramPtr; at : LineInfo) : bool {   // nolint:STYLE037 - one arm per order-key expression shape
     if (body == null) {
         macro_error(prog, at, "_sql: _order_by: missing key expression")
         return false
@@ -3174,7 +3174,7 @@ def private render_inlined_key_sql(var body : ExpressionPtr; var q : SqlQuery&; 
     if (q.hadError || empty(frag)) return ""
     if (length(q.bindExprs) > beforeBinds) {
         q.bindExprs |> resize(beforeBinds)
-        macro_error(prog, at, "_sql: {ctx} expression key references a runtime value — only column refs (`_.X`) and constant literals (`100`, `0.5`) are allowed inside the key expression; got: {describe(body)}")
+        macro_error(prog, at, "_sql: {ctx} expression key references a runtime value - only column refs (`_.X`) and constant literals (`100`, `0.5`) are allowed inside the key expression; got: {describe(body)}")
         q.hadError = true
         return ""
     }
@@ -3191,7 +3191,7 @@ def private push_group_key(var entry : ExpressionPtr; var q : SqlQuery&; prog : 
             if (aliasIdx >= 0) {
                 let frag = render_projection_alias_sql(q, aliasIdx)
                 if (empty(frag)) {
-                    macro_error(prog, at, "_sql: _group_by(_.{fieldName}): cannot render projection alias (alias source '{q.joinSelectColAliases[aliasIdx]}' unresolved — multi-source joins beyond t0/t1 not supported in v1)")
+                    macro_error(prog, at, "_sql: _group_by(_.{fieldName}): cannot render projection alias (alias source '{q.joinSelectColAliases[aliasIdx]}' unresolved - multi-source joins beyond t0/t1 not supported in v1)")
                     q.hadError = true
                     return false
                 }
@@ -3332,7 +3332,7 @@ def private pred_to_sql_boolctx(var node : ExpressionPtr; var q : SqlQuery&; pro
     return s
 }
 
-def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : string {
+def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : string {   // nolint:STYLE037,STYLE038 - one arm per predicate node kind; the ladder IS the translator
     if (node == null) return pred_fail(q, prog, at, "_sql: _where: null sub-expression")
     if (node is ExprRef2Value) {
         node = (node as ExprRef2Value).subexpr
@@ -3341,7 +3341,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
     // Logical NOT — `_not_in` lowers to `!contains(subq, x)`; dispatch on textual name (pre-typer).
     {
         var inner : ExpressionPtr
-        if (qmatch(node, !$e(inner)).matched) { // nolint:STYLE016 — structural NOT-peel, not a guard chain
+        if (qmatch(node, !$e(inner)).matched) { // structural NOT-peel, not a guard chain
             if (inner != null && inner is ExprCall) {
                 var icall = inner as ExprCall
                 let iname = string(icall.name)
@@ -3395,7 +3395,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
         var lhs, rhs : ExpressionPtr
         if (qmatch(node, $e(lhs) == $e(rhs)).matched) {
             // `== none()` would silently bind a 0-byte placeholder; nudge to is_some/is_none.
-            if (is_none_call(lhs) || is_none_call(rhs)) return pred_fail(q, prog, at, "_sql: `_.Col == none()` is not translated. Use `_.Col |> is_none()` (or `is_some()` for the negation) — `none()` returns Option<T>, equality against it would silently bind an empty placeholder.")
+            if (is_none_call(lhs) || is_none_call(rhs)) return pred_fail(q, prog, at, "_sql: `_.Col == none()` is not translated. Use `_.Col |> is_none()` (or `is_some()` for the negation) - `none()` returns Option<T>, equality against it would silently bind an empty placeholder.")
             return "{pred_to_sql(lhs, q, prog, at)} = {pred_to_sql(rhs, q, prog, at)}"
         }
     }
@@ -3532,7 +3532,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                     let aliasIdx = find_projection_alias(q, fieldName)
                     if (aliasIdx < 0) return pred_fail(q, prog, at, "_sql: post-join `_.{fieldName}`: '{fieldName}' is not a projection alias of the preceding _join (valid aliases: {projection_alias_list(q)})")
                     let frag = render_projection_alias_sql(q, aliasIdx)
-                    if (empty(frag)) return pred_fail(q, prog, at, "_sql: cannot render projection alias '{fieldName}' (alias source '{q.joinSelectColAliases[aliasIdx]}' unresolved — multi-source joins beyond t0/t1 not supported in v1)")
+                    if (empty(frag)) return pred_fail(q, prog, at, "_sql: cannot render projection alias '{fieldName}' (alias source '{q.joinSelectColAliases[aliasIdx]}' unresolved - multi-source joins beyond t0/t1 not supported in v1)")
                     return frag
                 }
                 var srcIdx = lookup_arg_source(q, argName)
@@ -3701,7 +3701,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                     let positive = cname |> find("not") < 0
                     return pred_fail(q, prog, at,
                         positive
-                            ? "_sql: `_.Col == none()` is not translated. Use `_.Col |> is_none()` (or `is_some()` for the negation) — `none()` returns Option<T>, equality against it would silently bind an empty placeholder."
+                            ? "_sql: `_.Col == none()` is not translated. Use `_.Col |> is_none()` (or `is_some()` for the negation) - `none()` returns Option<T>, equality against it would silently bind an empty placeholder."
                             : "_sql: `_.Col != none()` is not translated. Use `_.Col |> is_some()` (the inverse of is_none).")
                 }
             }
@@ -3843,7 +3843,7 @@ let private WORKHORSE_CAST_SQL : table<string; string> <- {
 }
 
 [macro_function]
-def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : string {
+def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : string {   // nolint:STYLE037,STYLE038 - one arm per translatable daslang function name
     if (call == null) return ""
     var fname : string
     if (call.func != null) {
@@ -3902,7 +3902,7 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
         var fieldName : string
         if (qmatch(call.arguments[0], $e(receiver).$f(fieldName)).matched
             && has_field_annotation(q.rootType, fieldName, "sql_fts_unindexed")) {
-            return pred_fail(q, prog, at, "_sql: text_match() cannot target @sql_fts_unindexed field '{fieldName}' — UNINDEXED metadata is stored and filterable with ordinary comparisons, but deliberately excluded from FTS5 MATCH. Match an indexed string field instead.")
+            return pred_fail(q, prog, at, "_sql: text_match() cannot target @sql_fts_unindexed field '{fieldName}' - UNINDEXED metadata is stored and filterable with ordinary comparisons, but deliberately excluded from FTS5 MATCH. Match an indexed string field instead.")
         }
         let lhs = pred_to_sql(call.arguments[0], q, prog, at)
         return "" if (q.hadError)
@@ -4062,8 +4062,8 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
         let info = sql_function_info_from_func(call.func)
         if (!empty(info.name)) {
             // The annotation is neutral (daslib/sql_boost) — fail closed on non-UDF providers.
-            if (!sql_provider_at(q.providerIdx).caps.client_udfs) return pred_fail(q, prog, at, "_sql: [sql_function] '{info.name}' cannot be used on provider '{sql_provider_at(q.providerIdx).name}' — it does not support client-registered UDFs (caps.client_udfs); define the function server-side (e.g. CREATE FUNCTION via exec) and inline the call in raw SQL instead")
-            if (info.directonly && q.inView) return pred_fail(q, prog, at, "_sql: [sql_function(directonly=true)] '{info.name}' cannot be used in `_create_view` body — SQLite forbids SQLITE_DIRECTONLY functions in views (drop directonly=true, or call the function only from application SQL)")
+            if (!sql_provider_at(q.providerIdx).caps.client_udfs) return pred_fail(q, prog, at, "_sql: [sql_function] '{info.name}' cannot be used on provider '{sql_provider_at(q.providerIdx).name}' - it does not support client-registered UDFs (caps.client_udfs); define the function server-side (e.g. CREATE FUNCTION via exec) and inline the call in raw SQL instead")
+            if (info.directonly && q.inView) return pred_fail(q, prog, at, "_sql: [sql_function(directonly=true)] '{info.name}' cannot be used in `_create_view` body - SQLite forbids SQLITE_DIRECTONLY functions in views (drop directonly=true, or call the function only from application SQL)")
             let sql = build_string() $(var w) {
                 w |> write(info.name)
                 w |> write("(")
@@ -4215,8 +4215,8 @@ def private build_sql_string(var q : SqlQuery&; force_aliases : bool = false) : 
 }
 
 [macro_function]
-def private build_sql_select(var q : SqlQuery&; force_aliases : bool = false) : string {
-    return build_string() $(var w) {
+def private build_sql_select(var q : SqlQuery&; force_aliases : bool = false) : string {   // nolint:STYLE038 - one write per SQL clause, in emission order
+    return build_string() $(var w) {   // nolint:STYLE037 - one write per SQL clause, in emission order
         w |> write("SELECT ")
         if (q.distinctFlag) {
             w |> write("DISTINCT ")
@@ -4362,7 +4362,7 @@ def private build_sql_select(var q : SqlQuery&; force_aliases : bool = false) : 
             w |> write(" WHERE ")
             w |> write(q.whereSql)
         }
-        // nolint:STYLE015 groupByCols hold either daslang field names (quoted) or pre-rendered SQL expression fragments; discriminate via groupByKeyExprs.
+        // groupByCols hold either daslang field names (quoted) or pre-rendered SQL expression fragments; discriminate via groupByKeyExprs.
         if (!empty(q.groupByCols)) {
             w |> write(" GROUP BY ")
             for (i in range(length(q.groupByCols))) {
@@ -4436,7 +4436,7 @@ class private SqlTextMacro : AstCallMacro {
 
 [call_macro(name="_create_view")]
 class private SqlCreateViewMacro : AstCallMacro {
-    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {   // nolint:STYLE037,STYLE038 - flat argument validation then one emit per view helper
         macro_verify(call.arguments |> length == 3, prog, call.at,
             "_create_view expects (db, type<V>, chain) — got {length(call.arguments)} args")
         var viewT : TypeDeclPtr
@@ -4451,7 +4451,7 @@ class private SqlCreateViewMacro : AstCallMacro {
         }
         if (!has_struct_annotation(viewT, "sql_view")) {
             macro_error(prog, call.at,
-                "_create_view: type<V> must carry [sql_view] — got '{viewT.structType.name}' without [sql_view]. Add `[sql_view(name=\"…\")]` to the struct.")
+                "_create_view: type<V> must carry [sql_view] - got '{viewT.structType.name}' without [sql_view]. Add `[sql_view(name=\"...\")]` to the struct.")
             return null
         }
         // View name from `[sql_view(name="…")]`, fallback to struct name.
@@ -4481,14 +4481,14 @@ class private SqlCreateViewMacro : AstCallMacro {
             return null
         }
         if (q.seenToArray) {
-            macro_error(prog, call.at, "_create_view: chain ends in `_to_array()` — views are by definition arrays of rows; drop the `_to_array()` terminal.")
+            macro_error(prog, call.at, "_create_view: chain ends in `_to_array()` - views are by definition arrays of rows; drop the `_to_array()` terminal.")
             return null
         }
         if (!maybe_finalize_distinct_by_passthrough(q, prog, call.at)
                 || !maybe_wrap_take_before_aggregate(q, prog, call.at)) return null
         // CREATE VIEW DDL is run once; baking a runtime column name at view-creation time is surprising. Reject.
         if (!empty(q.orderByInlineExprs)) {
-            macro_error(prog, call.at, "_create_view: `_order_by(<runtime string>)` not supported — the runtime column name would be baked in at CREATE VIEW time. Use a compile-time `_.Field` ordering inside the view, or build a chain with `_sql(...)` outside.")
+            macro_error(prog, call.at, "_create_view: `_order_by(<runtime string>)` not supported - the runtime column name would be baked in at CREATE VIEW time. Use a compile-time `_.Field` ordering inside the view, or build a chain with `_sql(...)` outside.")
             return null
         }
         // Each bind goes through `_::to_sql_literal(...)`: evaluated once at CREATE VIEW DDL time, inlined into view body.
@@ -4505,7 +4505,7 @@ class private SqlCreateViewMacro : AstCallMacro {
             nProj = length(q.selectCols)
         }
         if (nProj != nFields) {
-            macro_error(prog, call.at, "_create_view: column count mismatch — projection has {nProj} columns, [sql_view] '{viewT.structType.name}' has {nFields} fields")
+            macro_error(prog, call.at, "_create_view: column count mismatch - projection has {nProj} columns, [sql_view] '{viewT.structType.name}' has {nFields} fields")
             return null
         }
         // Per-position type check via describe().
@@ -4529,7 +4529,7 @@ class private SqlCreateViewMacro : AstCallMacro {
             let projDesc = describe(projType)
             let fieldDesc = describe(fieldT)
             if (projDesc != fieldDesc) {
-                macro_error(prog, call.at, "_create_view: column #{i+1} type mismatch — projection emits '{projDesc}', [sql_view] '{viewT.structType.name}.{viewT.structType.fields[i].name}' is '{fieldDesc}'")
+                macro_error(prog, call.at, "_create_view: column #{i+1} type mismatch - projection emits '{projDesc}', [sql_view] '{viewT.structType.name}.{viewT.structType.fields[i].name}' is '{fieldDesc}'")
                 return null
             }
         }
@@ -4591,24 +4591,24 @@ def private emit_pragma_or_vacuum(prog : ProgramPtr; var call : ExprCallMacro?;
     let argCount = isPragma ? 3 : 2
     let argShape = isPragma ? "(db, name : string, value : string)" : "(db, path : string)"
     if (call.arguments |> length != argCount) {
-        macro_error(prog, call.at, "{macroName} expects {argCount} args {argShape} — got {length(call.arguments)}")
+        macro_error(prog, call.at, "{macroName} expects {argCount} args {argShape} - got {length(call.arguments)}")
         return null
     }
     if (isPragma) {
         let nameT = call.arguments[1]._type
         let valueT = call.arguments[2]._type
         if (nameT == null || nameT.baseType != Type.tString) {
-            macro_error(prog, call.at, "_sql_pragma: name must be `string` — got '{describe(nameT)}'")
+            macro_error(prog, call.at, "_sql_pragma: name must be `string` - got '{describe(nameT)}'")
             return null
         }
         if (valueT == null || valueT.baseType != Type.tString) {
-            macro_error(prog, call.at, "_sql_pragma: value must be `string` — for int / bool pragmas use `try_set_pragma` (or `set_pragma`)")
+            macro_error(prog, call.at, "_sql_pragma: value must be `string` - for int / bool pragmas use `try_set_pragma` (or `set_pragma`)")
             return null
         }
     } else {
         let pathT = call.arguments[1]._type
         if (pathT == null || pathT.baseType != Type.tString) {
-            macro_error(prog, call.at, "_sql_vacuum_into: path must be `string` — got '{describe(pathT)}'")
+            macro_error(prog, call.at, "_sql_vacuum_into: path must be `string` - got '{describe(pathT)}'")
             return null
         }
     }
@@ -4719,7 +4719,7 @@ def private find_single_pk_field(rootT : TypeDeclPtr; prog : ProgramPtr; at : Li
         }
         if (hasPk) {
             if (!empty(found)) {
-                macro_error(prog, at, "_sql: bare-aggregate `_distinct_by` wrap requires exactly one `@sql_primary_key` field; got multiple (`{found}`, `{field.name}`) — composite primary keys not supported in this lowering")
+                macro_error(prog, at, "_sql: bare-aggregate `_distinct_by` wrap requires exactly one `@sql_primary_key` field; got multiple (`{found}`, `{field.name}`) - composite primary keys not supported in this lowering")
                 return ""
             }
             found = string(field.name)
@@ -4765,7 +4765,7 @@ def private resolve_nested_field_type(rootT : TypeDeclPtr; colName : string; jso
     return cur
 }
 
-// nolint:STYLE015 Builds an `ExprMakeStruct` for the `_._1 |> first()` row entry: reconstructs the source struct via per-field `read_via_adapter(stmt, baseCol+j, type<FieldT>)` calls — same pattern as sqlite_boost's `make_sql_read_row_fn` but inline at this macro pass with the offset baked in.
+// Builds an `ExprMakeStruct` for the `_._1 |> first()` row entry: reconstructs the source struct via per-field `read_via_adapter(stmt, baseCol+j, type<FieldT>)` calls — same pattern as sqlite_boost's `make_sql_read_row_fn` but inline at this macro pass with the offset baked in.
 [macro_function]
 def private build_row_make_struct(var rowT : TypeDeclPtr; baseCol : int; at : LineInfo) : ExpressionPtr {
     var mkStruct = new ExprMakeStruct(at = at, makeType = clone_type(rowT))
@@ -4867,7 +4867,7 @@ def private build_row_builder(var q : SqlQuery&; prog : ProgramPtr; at : LineInf
     return qmacro(_::_sql_read_row(_sql_stmt, type<$t(rowType)>))
 }
 
-// nolint:STYLE015 Single-source row-var normalization: `_sql` resolves one source against placeholder `_`,
+// Single-source row-var normalization: `_sql` resolves one source against placeholder `_`,
 // but linq_das splices the C# range var verbatim (`$(c) => c.field`) — rename a single-param op lambda's
 // bound var to `_`. Gated on PURE single-source; join/set-op key lambdas bind distinct sources, left alone.
 [macro_function]
@@ -4917,7 +4917,7 @@ def private normalize_single_source_arg_names(var node : ExpressionPtr) {
 [macro_function]
 def private reject_bare_group_by(q : SqlQuery; prog : ProgramPtr; at : LineInfo) : bool {
     if (q.seenGroupBy && !q.seenSelect && q.proj == ProjectionShape.FullRow) {
-        macro_error(prog, at, "_sql: `_group_by` requires a following `_select` with aggregates (e.g. `|> _select((K = _._0, N = _._1 |> count()))`) — a bare `_group_by` over a SQL source has no meaningful translation (SQLite would return one arbitrary row per group). For IGrouping-style `(key, [rows])` groups use an in-memory source (array / decs / XML).")
+        macro_error(prog, at, "_sql: `_group_by` requires a following `_select` with aggregates (e.g. `|> _select((K = _._0, N = _._1 |> count()))`) - a bare `_group_by` over a SQL source has no meaningful translation (SQLite would return one arbitrary row per group). For IGrouping-style `(key, [rows])` groups use an in-memory source (array / decs / XML).")
         return false
     }
     return true
@@ -4933,7 +4933,7 @@ def private emit_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro?; is
     if (!analyze_chain(call.arguments[0], q, prog, call.at) || !reject_bare_group_by(q, prog, call.at)) return null
     // distinct() upstream of an aggregate is a no-op in SQL — meaningful form is COUNT(DISTINCT col), not yet implemented.
     if (q.proj == ProjectionShape.Aggregate && q.distinctFlag) {
-        macro_error(prog, call.at, "_sql: distinct() before an aggregate is not translatable — `SELECT DISTINCT` over a single-row aggregate result is always a no-op; the meaningful form is `COUNT(DISTINCT col)` etc. (aggregate-distinct), which is not yet implemented")
+        macro_error(prog, call.at, "_sql: distinct() before an aggregate is not translatable - `SELECT DISTINCT` over a single-row aggregate result is always a no-op; the meaningful form is `COUNT(DISTINCT col)` etc. (aggregate-distinct), which is not yet implemented")
         return null
     }
     // Row-returning `_distinct_by(K)` chains (`|> to_array`, `|> first`): wrap the source FROM in a bare-aggregate subquery. Aggregate terminators already finalized inside peel_count_terminal / peel_column_aggregate.
@@ -5003,15 +5003,15 @@ def private emit_each_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro
     if (!analyze_chain(call.arguments[0], q, prog, call.at) || !reject_bare_group_by(q, prog, call.at)) return null
     // Reject terminals (iterator, not scalar/row/array). Order matters: aggregates set both Aggregate+One, so dispatch on proj first.
     if (q.seenToArray) {
-        macro_error(prog, call.at, "_each_sql: chain ends in `_to_array()` — _each_sql streams rows lazily; drop the terminal, or switch to `_sql(...)` for materialization")
+        macro_error(prog, call.at, "_each_sql: chain ends in `_to_array()` - _each_sql streams rows lazily; drop the terminal, or switch to `_sql(...)` for materialization")
         return null
     }
     if (q.proj == ProjectionShape.Aggregate) {
-        macro_error(prog, call.at, "_each_sql: chain ends in an aggregate (_count/_sum/_avg/_min/_max) — aggregates collapse to one scalar; iteration is degenerate. Use `_sql(...)` for the scalar value, or drop the aggregate to iterate over rows.")
+        macro_error(prog, call.at, "_each_sql: chain ends in an aggregate (_count/_sum/_avg/_min/_max) - aggregates collapse to one scalar; iteration is degenerate. Use `_sql(...)` for the scalar value, or drop the aggregate to iterate over rows.")
         return null
     }
     if (q.matr == Materializer.One || q.matr == Materializer.OneOpt) {
-        macro_error(prog, call.at, "_each_sql: chain ends in `_first()` / `_first_opt()` — those terminals materialize a single row. Use `_sql(...)` for the same chain, or drop the terminal to iterate.")
+        macro_error(prog, call.at, "_each_sql: chain ends in `_first()` / `_first_opt()` - those terminals materialize a single row. Use `_sql(...)` for the same chain, or drop the terminal to iterate.")
         return null
     }
     if (!maybe_finalize_distinct_by_passthrough(q, prog, call.at)
@@ -5061,7 +5061,7 @@ class private EachSqlMacro : AstCallMacro {
 // ===== _sql_update / _sql_delete — predicate-based mutations =====
 
 [macro_function]
-def private analyze_set_clause(var setExpr : ExpressionPtr; var q : SqlQuery&;
+def private analyze_set_clause(var setExpr : ExpressionPtr; var q : SqlQuery&;   // nolint:STYLE037,STYLE038 - one arm per SET-clause assignment shape
                                var setSqlClauses : array<string>&;
                                var setBindExprs : array<ExpressionPtr>&;
                                prog : ProgramPtr; at : LineInfo) : bool {
@@ -5079,7 +5079,7 @@ def private analyze_set_clause(var setExpr : ExpressionPtr; var q : SqlQuery&;
     }
     var mkTup = body as ExprMakeTuple
     if (empty(mkTup.values)) {
-        macro_error(prog, at, "_sql_update: set clause is empty — UPDATE with no columns is invalid SQL. Pass at least one (Col=expr) pair.")
+        macro_error(prog, at, "_sql_update: set clause is empty - UPDATE with no columns is invalid SQL. Pass at least one (Col=expr) pair.")
         return false
     }
     // recordNames may live on tupT.argNames (typed) or mkTup.recordNames (raw, canVisitArgument=false).
@@ -5245,7 +5245,7 @@ def private emit_update_body(prog : ProgramPtr; var call : ExprCallMacro?;
     // Combine binds: SET first, then WHERE.
     var allBinds : array<ExpressionPtr>
     allBinds |> reserve(length(setBindExprs) + length(q.bindExprs))
-    allBinds |> push_from(setBindExprs)   // nolint:STYLE033 — same 31400 as collect_query_binds
+    allBinds |> push_from(setBindExprs)   //same 31400 as collect_query_binds
     allBinds |> push_from(q.bindExprs)
     var frags : array<SqlFrag>
     sql_to_frags(sql, allBinds, frags)
@@ -5318,7 +5318,7 @@ def private emit_delete_body(prog : ProgramPtr; var call : ExprCallMacro?;
 def private validate_outer_args(prog : ProgramPtr; var call : ExprCallMacro?; var rootT : TypeDeclPtr&;
                                 expected_arity : int; sig_text : string) : bool {
     if (length(call.arguments) != expected_arity) {
-        macro_error(prog, call.at, "{call.name}: expected {sig_text} — got {length(call.arguments)} args")
+        macro_error(prog, call.at, "{call.name}: expected {sig_text} - got {length(call.arguments)} args")
         return false
     }
     var typeE = call.arguments[1]
@@ -5327,7 +5327,7 @@ def private validate_outer_args(prog : ProgramPtr; var call : ExprCallMacro?; va
         return false
     }
     if (has_struct_annotation(rootT, "sql_view")) {
-        macro_error(prog, call.at, "{call.name}: cannot mutate [sql_view] '{rootT.structType.name}' — views are read-only. Mutate the underlying table(s) and re-query the view.")
+        macro_error(prog, call.at, "{call.name}: cannot mutate [sql_view] '{rootT.structType.name}' - views are read-only. Mutate the underlying table(s) and re-query the view.")
         return false
     }
     return true
@@ -5429,7 +5429,7 @@ def private is_field_computed(field) : bool {
 [macro_function]
 def private validate_outer_upsert_args(prog : ProgramPtr; var call : ExprCallMacro?; var rootT : TypeDeclPtr&) : bool {
     if (length(call.arguments) != 4) {
-        macro_error(prog, call.at, "{call.name}: expected (db, row, on_conflict, do_update) — got {length(call.arguments)} args")
+        macro_error(prog, call.at, "{call.name}: expected (db, row, on_conflict, do_update) - got {length(call.arguments)} args")
         return false
     }
     var rowE = call.arguments[1]
@@ -5438,11 +5438,11 @@ def private validate_outer_upsert_args(prog : ProgramPtr; var call : ExprCallMac
         return false
     }
     if (rowE._type.isGoodArrayType) {
-        macro_error(prog, call.at, "{call.name}: bulk array<T> upsert is deferred to a follow-up — pass a single row for now and call inside a transaction loop if you need batching")
+        macro_error(prog, call.at, "{call.name}: bulk array<T> upsert is deferred to a follow-up - pass a single row for now and call inside a transaction loop if you need batching")
         return false
     }
     if (has_struct_annotation(rowE._type, "sql_view")) {
-        macro_error(prog, call.at, "{call.name}: cannot upsert into [sql_view] '{rowE._type.structType.name}' — views are read-only. Mutate the underlying table(s) and re-query the view.")
+        macro_error(prog, call.at, "{call.name}: cannot upsert into [sql_view] '{rowE._type.structType.name}' - views are read-only. Mutate the underlying table(s) and re-query the view.")
         return false
     }
     rootT = clone_type(rowE._type)
@@ -5528,7 +5528,7 @@ def private validate_conflict_cols(rootT : TypeDeclPtr; conflictCols : array<str
 }
 
 [macro_function]
-def private analyze_upsert_set_clause(var setExpr : ExpressionPtr; var rootT : TypeDeclPtr; tableName : string;
+def private analyze_upsert_set_clause(var setExpr : ExpressionPtr; var rootT : TypeDeclPtr; tableName : string;   // nolint:STYLE037,STYLE038 - one arm per upsert SET-clause assignment shape
                                       providerIdx : int;
                                       var setSqlClauses : array<string>&;
                                       var setBindExprs : array<ExpressionPtr>&;
@@ -5547,16 +5547,16 @@ def private analyze_upsert_set_clause(var setExpr : ExpressionPtr; var rootT : T
     }
     var mkTup = body as ExprMakeTuple
     if (empty(mkTup.values)) {
-        macro_error(prog, at, "_sql_upsert: do_update is empty — pass at least one (Col=expr) pair")
+        macro_error(prog, at, "_sql_upsert: do_update is empty - pass at least one (Col=expr) pair")
         return false
     }
     var tupT = mkTup._type
     var recordNames : array<string>
     if (tupT != null && tupT.baseType == Type.tTuple
             && length(tupT.argNames) == length(mkTup.values)) {
-        recordNames <- [for (n in tupT.argNames); string(n)]
+        recordNames <- [for (n in tupT.argNames); string(n)]   // nolint:PERF030 - target is the fresh empty decl above; the two fills are mutually exclusive branches
     } elif (length(mkTup.recordNames) == length(mkTup.values)) {
-        recordNames <- [for (n in mkTup.recordNames); string(n)]
+        recordNames <- [for (n in mkTup.recordNames); string(n)]   // nolint:PERF030 - target is the fresh empty decl above; the two fills are mutually exclusive branches
     } else {
         macro_error(prog, at, "_sql_upsert: do_update must be a NAMED-tuple literal `(Col=expr, ...)`; could not extract per-element column names")
         return false

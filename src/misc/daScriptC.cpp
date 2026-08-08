@@ -1411,14 +1411,14 @@ int das_func_info_get_stack_size ( das_func_info * info ) {
 // together pin every byte between `capacity` and `flags`.
 
 static_assert(sizeof(das_array) == sizeof(Array),
-    "das_array size must match das::Array — update daScriptC.h to mirror arraytype.h");
+    "das_array size must match das::Array - update daScriptC.h to mirror arraytype.h");
 static_assert(offsetof(das_array, data)     == offsetof(Array, data),     "das_array.data offset drift");
 static_assert(offsetof(das_array, size)     == offsetof(Array, size),     "das_array.size offset drift");
 static_assert(offsetof(das_array, capacity) == offsetof(Array, capacity), "das_array.capacity offset drift");
 static_assert(offsetof(das_array, flags)    == offsetof(Array, flags),    "das_array.flags offset drift");
 
 static_assert(sizeof(das_table) == sizeof(Table),
-    "das_table size must match das::Table — update daScriptC.h to mirror arraytype.h");
+    "das_table size must match das::Table - update daScriptC.h to mirror arraytype.h");
 static_assert(offsetof(das_table, data)       == offsetof(Table, data),       "das_table.data offset drift");
 static_assert(offsetof(das_table, size)       == offsetof(Table, size),       "das_table.size offset drift");
 static_assert(offsetof(das_table, capacity)   == offsetof(Table, capacity),   "das_table.capacity offset drift");

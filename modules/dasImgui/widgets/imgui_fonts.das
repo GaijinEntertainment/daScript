@@ -110,7 +110,7 @@ def public load_unicode_ui_font(size_px : float;
     } elif (get_running_platform_name() == "osx") {
         merge_unicode_source("/System/Library/Fonts/Apple Symbols.ttf", size_px, loaded_sources)
         merge_unicode_source("/System/Library/Fonts/Apple Color Emoji.ttc", size_px, loaded_sources)
-        merge_unicode_source("/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc", size_px, loaded_sources)
+        merge_unicode_source("/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc", size_px, loaded_sources)  // nolint:STYLE039 (macOS ships this font under its Japanese name)
     } else {
         merge_unicode_source("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", size_px, loaded_sources)
         merge_unicode_source("/usr/share/fonts/truetype/noto/NotoSansSymbols2-Regular.ttf", size_px, loaded_sources)

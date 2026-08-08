@@ -30,7 +30,7 @@ let FONTS = ["Sans", "Serif", "Mono", "Cursive", "Display"]
 
 [export]
 def init() {
-    harness_init("Phase 0b.4 — text inputs", 760, 620)
+    harness_init("Phase 0b.4 - text inputs", 760, 620)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
 }
@@ -41,33 +41,33 @@ def update() {
     harness_new_frame()
 
     SetNextWindowSize(ImVec2(720.0, 580.0), ImGuiCond.Always)
-    window(MAIN_WIN, (text = "Text inputs — phase 0b.4", closable = false,
+    window(MAIN_WIN, (text = "Text inputs - phase 0b.4", closable = false,
                       flags = ImGuiWindowFlags.None)) {
-        text("input_text — fixed 256-byte buffer")
+        text("input_text - fixed 256-byte buffer")
         separator()
         input_text(NAME, (text = "Name"))
         text("name = '{NAME.value}'")
 
         spacing()
-        text("input_text_with_hint — placeholder when empty")
+        text("input_text_with_hint - placeholder when empty")
         separator()
         input_text_with_hint(EMAIL, (text = "Email", hint = "you@example.com"))
         text("email = '{EMAIL.value}'")
 
         spacing()
-        text("input_text_multiline — CR/LF tolerant")
+        text("input_text_multiline - CR/LF tolerant")
         separator()
         input_text_multiline(BIO, (text = "Bio", size = float2(0.0f, 90.0f)))
         text("bio length = {length(BIO.value)} bytes")
 
         spacing()
-        text("input_text_growable — CallbackResize grows buffer past 256B")
+        text("input_text_growable - CallbackResize grows buffer past 256B")
         separator()
         input_text_growable(GROW, (text = "Free-form"))
         text("capacity = {GROW.capacity}, length = {length(GROW.value)} bytes")
 
         spacing()
-        text("combo_getter — procedural list (no array<string>)")
+        text("combo_getter - procedural list (no array<string>)")
         separator()
         combo_getter(FONT, (text = "Font", items_count = length(FONTS),
             getter = @(idx : int; var result : string&) : bool {

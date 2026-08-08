@@ -26,7 +26,7 @@ var private g_angle_rad : float = 0.7854f  // π/4 → ~45° initial
 
 [export]
 def init() {
-    harness_init("edit_external_special — boost v2 §3.7", 720, 320)
+    harness_init("edit_external_special - boost v2 sec 3.7", 720, 320)
 }
 
 [export]
@@ -43,7 +43,7 @@ def update() {
                                                    v_degrees_min = -180.0f,
                                                    v_degrees_max = 180.0f,
                                                    format = "%.0f deg"))
-        text(STATUS, (text = "g_angle_rad = {g_angle_rad} (≈ {int(g_angle_rad * 180.0f / PI)}°)"))
+        text(STATUS, (text = "g_angle_rad = {g_angle_rad} (~{int(g_angle_rad * 180.0f / PI)} deg)"))
     }
 
     harness_end_frame()

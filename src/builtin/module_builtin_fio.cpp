@@ -715,7 +715,7 @@ namespace das {
         auto len = cast<int32_t>::to(args[2]);
         // a negative count is an int32 wrap upstream; fread would sign-extend it to a huge
         // size_t and stream out of bounds — refuse loudly instead
-        if ( len < 0 ) context.throw_error_at(call->debugInfo, "read of negative byte count %i (int32 wrap?) — use the 64-bit rail (long_fread)", len);
+        if ( len < 0 ) context.throw_error_at(call->debugInfo, "read of negative byte count %i (int32 wrap?) - use the 64-bit rail (long_fread)", len);
         int32_t res = (int32_t) fread(buf,1,len,fp);
         return cast<int32_t>::from(res);
     }
@@ -727,7 +727,7 @@ namespace das {
         if ( !fp ) context.throw_error_at(call->debugInfo, "can't write NULL");
         auto buf = cast<void *>::to(args[1]);
         auto len = cast<int32_t>::to(args[2]);
-        if ( len < 0 ) context.throw_error_at(call->debugInfo, "write of negative byte count %i (int32 wrap?) — use the 64-bit rail (long_fwrite)", len);
+        if ( len < 0 ) context.throw_error_at(call->debugInfo, "write of negative byte count %i (int32 wrap?) - use the 64-bit rail (long_fwrite)", len);
         int32_t res = (int32_t) fwrite(buf,1,len,fp);
         return cast<int32_t>::from(res);
     }
@@ -1944,11 +1944,11 @@ namespace das {
         string dlErr = lib ? string() : getDynamicLibraryError();
         if ( trace_module_load() ) {
             LOG(LogLevel::info) << "[module] " << (mod_name ? mod_name : "(null)") << " <- " << actualPath
-                << " : " << (lib ? "loaded" : ("FAILED — " + dlErr)) << "\n";
+                << " : " << (lib ? "loaded" : ("FAILED - " + dlErr)) << "\n";
         }
         if (!lib) {
             if (static_cast<RegisterOnError>(on_error) != RegisterOnError::Quiet) {
-                auto err_msg = "dynamic module `" + string(mod_name) + "` — failed to load: " + actualPath
+                auto err_msg = "dynamic module `" + string(mod_name) + "` - failed to load: " + actualPath
                     + (dlErr.empty() ? string("\n") : (" (" + dlErr + ")\n"));
                 if (context) context->to_err(at, err_msg.c_str());
                 else LOG(LogLevel::error) << err_msg;
@@ -1967,7 +1967,7 @@ namespace das {
         const auto regName = getDynModuleRegistratorName(mod_name);
         auto rawFn = getFunctionAddress(lib, regName.c_str());
         if (!rawFn) {
-            auto err_msg = "dynamic module `" + string(mod_name) + "` — function `" + regName + "` not found in `" + actualPath + "`\n";
+            auto err_msg = "dynamic module `" + string(mod_name) + "` - function `" + regName + "` not found in `" + actualPath + "`\n";
             if (context) context->to_err(at, err_msg.c_str());
             else LOG(LogLevel::error) << err_msg;
             if (context && static_cast<RegisterOnError>(on_error) == RegisterOnError::Fail) {
@@ -1979,7 +1979,7 @@ namespace das {
         auto fn = reinterpret_cast<Module*(*)(int)>(rawFn);
         auto mod = fn(DAS_BUILD_ID);
         if (!mod) {
-            auto err_msg = "dynamic module `" + string(mod_name) + "` — build-id mismatch (host " + to_string(DAS_BUILD_ID) + "); rebuild the module for current configuration\n";
+            auto err_msg = "dynamic module `" + string(mod_name) + "` - build-id mismatch (host " + to_string(DAS_BUILD_ID) + "); rebuild the module for current configuration\n";
             if (context) context->to_err(at, err_msg.c_str());
             else LOG(LogLevel::error) << err_msg;
             if (context && static_cast<RegisterOnError>(on_error) == RegisterOnError::Fail) {

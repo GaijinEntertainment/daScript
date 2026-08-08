@@ -1016,8 +1016,8 @@ def private log_load_report(t : Model) {
     to_log(LOG_INFO, "dasLLAMA noisy: backend '{active_kernel_backend()}' | kquant_native {get_kquant_native()} q40_native {get_kq_q40_native()} q50_native {get_kq_q50_native()}\n")
     // the tier arms at [init], before a --noisy CLI flag can land — restate it here so the flag alone suffices
     to_log(LOG_INFO, "dasLLAMA noisy: GPU tier installed {moe_gpu_tier_installed()} | want auto {gpu_want_auto()}, moe layers {gpu_want_moe_layers()}, stream {gpu_want_moe_stream()}\n")
-    to_log(LOG_INFO, "dasLLAMA noisy: format tags — q8 {tally_fmt(t, KqFmt.q8)}, k4 {tally_fmt(t, KqFmt.k4)}, k5 {tally_fmt(t, KqFmt.k5)}, k6 {tally_fmt(t, KqFmt.k6)}, q40 {tally_fmt(t, KqFmt.q40)}, q51 {tally_fmt(t, KqFmt.q51)}\n")
-    to_log(LOG_INFO, "dasLLAMA noisy: plane MB — q8 {float(long_length(t.qblob)) / mb} (+scales {float(long_length(t.qscales) * 4l) / mb}), k4 {float(long_length(t.k4q) + long_length(t.k4s)) / mb}, k5 {float(long_length(t.k5q) + long_length(t.k5s)) / mb}, k6 {float(long_length(t.k6q) + long_length(t.k6s)) / mb}, q40 {float(long_length(t.q40q) + long_length(t.q40s)) / mb}, q51 {float(long_length(t.q51q) + long_length(t.q51s)) / mb}, f32 {float(long_length(t.wblob) * 4l) / mb}\n")
+    to_log(LOG_INFO, "dasLLAMA noisy: format tags - q8 {tally_fmt(t, KqFmt.q8)}, k4 {tally_fmt(t, KqFmt.k4)}, k5 {tally_fmt(t, KqFmt.k5)}, k6 {tally_fmt(t, KqFmt.k6)}, q40 {tally_fmt(t, KqFmt.q40)}, q51 {tally_fmt(t, KqFmt.q51)}\n")
+    to_log(LOG_INFO, "dasLLAMA noisy: plane MB - q8 {float(long_length(t.qblob)) / mb} (+scales {float(long_length(t.qscales) * 4l) / mb}), k4 {float(long_length(t.k4q) + long_length(t.k4s)) / mb}, k5 {float(long_length(t.k5q) + long_length(t.k5s)) / mb}, k6 {float(long_length(t.k6q) + long_length(t.k6s)) / mb}, q40 {float(long_length(t.q40q) + long_length(t.q40s)) / mb}, q51 {float(long_length(t.q51q) + long_length(t.q51s)) / mb}, f32 {float(long_length(t.wblob) * 4l) / mb}\n")
 }
 
 // GGML disk type -> plane format tag (non-K-quant types ride the classic q8 path)
@@ -1194,7 +1194,7 @@ def load_gguf_streaming(path : string; mode : QuantMode; var t : Model; var jobs
     if (length(shards) > 1) {
         // split gguf: every shard mapping stays alive across the plan-load AND the blk-save
         // (the transcode kernels resolve per-shard bases through the meta)
-        to_log(LOG_INFO, "dasLLAMA: split gguf — {length(shards)} shards (streaming)\n")
+        to_log(LOG_INFO, "dasLLAMA: split gguf - {length(shards)} shards (streaming)\n")
         var sok = false
         var bases : array<void?>
         var sizes : array<int64>
@@ -1270,7 +1270,7 @@ def private load_gguf_impl(path : string; var mode : QuantMode) : Model {
     let ts_load = ref_time_ticks()
     let shards <- gguf_shard_paths(path)
     if (length(shards) > 1) {
-        to_log(LOG_INFO, "dasLLAMA: split gguf — {length(shards)} shards\n")
+        to_log(LOG_INFO, "dasLLAMA: split gguf - {length(shards)} shards\n")
         var bases : array<void?>
         var sizes : array<int64>
         gguf_map_shards(shards, 0, bases, sizes) {
@@ -1455,7 +1455,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 panic("dasLLAMA: nextn_predict_layers = {t.config.n_layer_nextn} but blk.{layers}.nextn.eh_proj.weight is missing")
             }
             if (gguf_find_tensor(m, "blk.0.attn_norm.weight") < 0) {
-                panic("dasLLAMA: MTP-only sidecar GGUF (no trunk tensors) is not supported — use the full -MTP file")
+                panic("dasLLAMA: MTP-only sidecar GGUF (no trunk tensors) is not supported - use the full -MTP file")
             }
             // glm4moe's MTP shares the trunk's embedding and classifier with the draft head, and the
             // GGUF materializes copies of both — so draft through the TRUNK's tables and skip them.
@@ -1464,14 +1464,14 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             let nhead = gguf_find_tensor(m, "blk.{layers}.nextn.shared_head_head.weight")
             if ((nemb >= 0 && m.tensors[nemb].n_elem != vocab * dim)
                     || (nhead >= 0 && m.tensors[nhead].n_elem != vocab * dim)) {
-                to_log(LOG_WARNING, "dasLLAMA: NextN embed_tokens/shared_head_head are not the trunk's shape — MTP draft head disabled\n")
+                to_log(LOG_WARNING, "dasLLAMA: NextN embed_tokens/shared_head_head are not the trunk's shape - MTP draft head disabled\n")
                 t.config.n_layer_nextn = 0l
             }
         } elif (gguf_find_tensor(m, "blk.{layers}.nextn.eh_proj.weight") >= 0
                 || gguf_find_tensor(m, "blk.{layers - 1l}.nextn.eh_proj.weight") >= 0) {
             // the second probe catches a malformed file whose block_count already counts the
             // draft block — its nextn tensors sit one below the first probe's index
-            panic("dasLLAMA: file ships NextN tensors but no nextn_predict_layers key — refusing to guess")
+            panic("dasLLAMA: file ships NextN tensors but no nextn_predict_layers key - refusing to guess")
         }
         // KV-head count: scalar (uniform), or gemma4's per-layer array — which must collapse to the
         // TWO layer classes (one value on sliding layers, one on global) the engine models
@@ -1644,7 +1644,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         // QK-norm ships per-FILE within some families (GLM-4.5 355B carries attn_q_norm, Air
         // doesn't) — an arch that didn't opt in would silently skip the norms, so refuse instead
         if (!t.config.qk_norm && gguf_find_tensor(m, "blk.0.attn_q_norm.weight") >= 0) {
-            panic("dasLLAMA: file ships attn_q_norm but arch '{arch}' does not configure qk_norm — refusing to mis-run")
+            panic("dasLLAMA: file ships attn_q_norm but arch '{arch}' does not configure qk_norm - refusing to mis-run")
         }
         // llama4-style per-position attention temperature tuning (mistral3 carries the key, shipped
         // as 0 = disabled) — no Q-scaling path here, fail closed rather than silently mis-attend
@@ -1737,11 +1737,11 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         // 1). Not adding a PLE q4 rail — strict loads panic here, resilient (server) fall back to q8.
         if (mode == QuantMode.q4_0 && has_ple(t.config)) {
             if (get_resilient_load()) {
-                to_log(LOG_WARNING, "dasLLAMA: q4 serving mode has no per-layer-embedding rail — this model falls back to q8\n")
+                to_log(LOG_WARNING, "dasLLAMA: q4 serving mode has no per-layer-embedding rail - this model falls back to q8\n")
                 mode = QuantMode.q8
                 t.quant = QuantMode.q8
             } else {
-                panic("dasLLAMA: q4 serving mode has no per-layer-embedding rail — serve this model with quant q8")
+                panic("dasLLAMA: q4 serving mode has no per-layer-embedding rail - serve this model with quant q8")
             }
         }
         // a separate output.weight means the classifier is not tied to the embeddings
@@ -1811,7 +1811,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         // (mx4 experts, grouped deltanet, bf16 PLE) disarm HERE — before sizing — so the
         // eager path proceeds with fully materialized planes and an empty job list
         if (g_fill_plan_mode && (mode != QuantMode.q8 || t.experts_mx4 || t.dn_grouped || t.ple_model_bf16)) {
-            to_log(LOG_INFO, "dasLLAMA: streaming plan disarmed — unstreamed rail (mode {mode}, mx4 {t.experts_mx4}, dn-grouped {t.dn_grouped}, bf16-ple {t.ple_model_bf16}); converting eagerly\n")
+            to_log(LOG_INFO, "dasLLAMA: streaming plan disarmed - unstreamed rail (mode {mode}, mx4 {t.experts_mx4}, dn-grouped {t.dn_grouped}, bf16-ple {t.ple_model_bf16}); converting eagerly\n")
             g_fill_plan_mode = false
         }
         let sz = layout_offsets(t)
@@ -1835,7 +1835,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             // and the blob layout holds (bind alignment, no repack)
             t.metal_blob = metal_model_servable(t) && blob_stream_eligible(t)
             if (!t.metal_blob) {
-                to_log(LOG_INFO, "dasLLAMA: streaming plan disarmed — the metal blob flavor is unavailable for this model; converting eagerly\n")
+                to_log(LOG_INFO, "dasLLAMA: streaming plan disarmed - the metal blob flavor is unavailable for this model; converting eagerly\n")
                 g_fill_plan_mode = false
             }
         }

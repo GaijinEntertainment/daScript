@@ -128,7 +128,7 @@ def private uC(cpts : array<int>; pos : int) : int {
     return (pos >= 0 && pos < length(cpts)) ? cpts[pos] : -1
 }
 
-def private pretok_split(cpts : array<int>; group_digits : bool; marks : bool = false) : array<int> {
+def private pretok_split(cpts : array<int>; group_digits : bool; marks : bool = false) : array<int> {   // nolint:STYLE037,STYLE038 - one arm per alternation of the llama3 pre-tokenizer regex; splitting hides the regex shape
     var offs : array<int>
     let n = length(cpts)
     var prev_end = 0
@@ -247,7 +247,7 @@ def private uLo(cpts : array<int>; pos : int) : bool {
 // gpt-4o / o200k pre-split (llama.cpp LLAMA_VOCAB_PRE_TYPE_GPT4O — gpt-oss). Differs from llama3:
 // contractions suffix letter runs (no standalone arm), letter runs are case-structured
 // (upper* lower+ | upper+ lower*), and punctuation runs may also trail '/'.
-def private pretok_split_gpt4o(cpts : array<int>) : array<int> {
+def private pretok_split_gpt4o(cpts : array<int>) : array<int> {   // nolint:STYLE037,STYLE038 - one arm per alternation of the o200k pre-tokenizer regex; splitting hides the regex shape
     var offs : array<int>
     let n = length(cpts)
     var prev_end = 0
@@ -342,7 +342,7 @@ def private pretok_split_gpt4o(cpts : array<int>) : array<int> {
 // tekken pre-split (Mistral/Voxtral). llama.cpp has no custom splitter — it runs generic std::wregex
 // TRUE ECMAScript alternation with greedy backtracking (up*lo+ tried first), so "你A" splits "你"|"A"
 // unlike gpt-4o's merged-run reduction. No contraction arm; single-digit \p{N}; '/' in punct tail.
-def private pretok_split_tekken(cpts : array<int>) : array<int> {
+def private pretok_split_tekken(cpts : array<int>) : array<int> {   // nolint:STYLE037,STYLE038 - one arm per alternation of the tekken pre-tokenizer regex; splitting hides the regex shape
     var offs : array<int>
     let n = length(cpts)
     var prev_end = 0
@@ -497,7 +497,7 @@ def private emit_byte_fallback(tk : BpeTokenizer; s : string; var ids : array<in
 // short-circuits the merge loop (llama.cpp gemma-4 newline fix).
 def private bpe_encode_spm_space(tk : BpeTokenizer; text : string) : array<int64> {
     var ids : array<int64>
-    let cpts <- utf8_to_cpts(replace(text, " ", "▁"))
+    let cpts <- utf8_to_cpts(replace(text, " ", "▁"))   // nolint:STYLE039 (U+2581 is the SentencePiece space marker - vocabulary data, not prose)
     let n = length(cpts)
     var pos = 0
     while (pos < n) {
@@ -549,13 +549,13 @@ def bpe_encode(tk : BpeTokenizer; text : string) : array<int64> {
     // additionally absorbs combining marks into letter runs
     var offs : array<int>
     if (tk.pre == "gpt-4o") {
-        offs <- pretok_split_gpt4o(cpts)
+        offs <- pretok_split_gpt4o(cpts)   // nolint:PERF030 - offs is fresh (declared empty just above); exactly one arm runs
     } elif (tk.pre == "tekken") {
-        offs <- pretok_split_tekken(cpts)
+        offs <- pretok_split_tekken(cpts)   // nolint:PERF030 - offs is fresh (declared empty just above); exactly one arm runs
     } elif (tk.pre == "qwen35") {
-        offs <- pretok_split(cpts, false, true)
+        offs <- pretok_split(cpts, false, true)   // nolint:PERF030 - offs is fresh (declared empty just above); exactly one arm runs
     } else {
-        offs <- pretok_split(cpts, tk.pre != "qwen2")
+        offs <- pretok_split(cpts, tk.pre != "qwen2")   // nolint:PERF030 - offs is fresh (declared empty just above); exactly one arm runs
     }
     var pos = 0
     for (off in offs) {
@@ -638,7 +638,7 @@ def bpe_decode(tk : BpeTokenizer; id : int64) : string {
             let bv = byte_token_val(tk.vocab[id])
             return bv >= 0 ? string([uint8(bv)]) : ""
         }
-        return tk.token_type[id] == 4l ? tk.vocab[id] : replace(tk.vocab[id], "▁", " ")
+        return tk.token_type[id] == 4l ? tk.vocab[id] : replace(tk.vocab[id], "▁", " ")   // nolint:STYLE039 (U+2581 is the SentencePiece space marker - vocabulary data, not prose)
     }
     let cpts <- utf8_to_cpts(tk.vocab[id])
     return build_string() $(var wr) {

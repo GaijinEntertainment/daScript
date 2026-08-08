@@ -21,7 +21,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("Phase 2.5 — await_quiescent", 800, 600)
+    harness_init("Phase 2.5 - await_quiescent", 800, 600)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
     DEMO_SLIDER.bounds = (0.0f, 1000.0f)
@@ -33,7 +33,7 @@ def update() {
     harness_new_frame()
 
     SetNextWindowSize(ImVec2(720.0, 200.0), ImGuiCond.Always)
-    window(MAIN_WIN, (text = "await_quiescent — phase 2.5", closable = false,
+    window(MAIN_WIN, (text = "await_quiescent - phase 2.5", closable = false,
                       flags = ImGuiWindowFlags.None)) {
         text("imgui_await reports quiescent + frame + pending_coroutines + active_id.")
         slider_float(DEMO_SLIDER, (text = "Optional: drag to spawn a coroutine"))

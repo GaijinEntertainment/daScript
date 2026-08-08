@@ -98,7 +98,7 @@ def private ensure_ref_worktree(src, full, short_sha : string) : string {
     }
     let head = capture_out("git -C \"{dest}\" rev-parse HEAD")
     if (head != full) {
-        print("error: {dest} exists but is at {head}, not {full} — remove it (git -C \"{src}\" worktree remove \"{dest}\") and re-run\n")
+        print("error: {dest} exists but is at {head}, not {full} - remove it (git -C \"{src}\" worktree remove \"{dest}\") and re-run\n")
         return ""
     }
     print("worktree {dest} already at {short_sha}\n")
@@ -124,7 +124,7 @@ def main : int {
     }
     for (f in flavors) {
         if (f != "clean-cpu" && f != "stock") {
-            print("error: unknown flavor `{f}` — expected clean-cpu | stock\n")
+            print("error: unknown flavor `{f}` - expected clean-cpu | stock\n")
             return 1
         }
     }
@@ -140,7 +140,7 @@ def main : int {
     let want = empty(cfg.sha) ? DEFAULT_REF_SHA : cfg.sha
     let full = capture_out("git -C \"{src}\" rev-parse --verify --quiet \"{want}^\{commit\}\"")
     if (empty(full)) {
-        print("error: `{want}` is not a commit in {src} — fetch it first (git -C \"{src}\" fetch origin)\n")
+        print("error: `{want}` is not a commit in {src} - fetch it first (git -C \"{src}\" fetch origin)\n")
         return 1
     }
     let short_sha = slice(full, 0, 7)

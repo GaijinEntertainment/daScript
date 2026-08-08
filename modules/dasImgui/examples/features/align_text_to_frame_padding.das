@@ -30,7 +30,7 @@ def update() {
     SetNextWindowSize(ImVec2(480.0, 200.0), ImGuiCond.Always)
     window(MAIN_WIN, (text = "align_text_to_frame_padding", closable = false,
                       flags = ImGuiWindowFlags.None)) {
-        text(LEAD, (text = "Row A vs Row B — same widgets, only difference is the align prefix."))
+        text(LEAD, (text = "Row A vs Row B - same widgets, only difference is the align prefix."))
 
         // Row A — bare label, looks top-aligned against the framed button.
         text(LABEL_A, (text = "Row A:"))

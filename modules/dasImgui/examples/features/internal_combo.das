@@ -92,7 +92,7 @@ def update() {
         separator()
 
         // ----- 2. custom-preview combo: the closed preview is custom-drawn -----
-        text("Custom-preview combo: BeginCombo(CustomPreview) + BeginComboPreview —")
+        text("Custom-preview combo: BeginCombo(CustomPreview) + BeginComboPreview -")
         text("  the closed-state preview is a hand-drawn colour swatch + name.")
         let cp_open = with_custom_preview_combo("##color_combo", ImGuiComboFlags.None) {
             if (selectable_label(CP_R, "Red", g_color == 0)) {

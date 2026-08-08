@@ -1,6 +1,7 @@
 options gen2
 options _comment_hygiene = true
 options indenting = 4
+options _ascii_strings = false   // non-ASCII source fixtures are what these tests parse
 
 require dastest/testing_boost public
 require imgui/imgui_markdown_model public

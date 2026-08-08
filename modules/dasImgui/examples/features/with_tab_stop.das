@@ -17,7 +17,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("with_tab_stop — scope wrapper", 560, 400)
+    harness_init("with_tab_stop - scope wrapper", 560, 400)
 }
 
 [export]

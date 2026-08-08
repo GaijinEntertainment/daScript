@@ -103,7 +103,7 @@ def check_continuation(t : T?; tr : Model; prompt : array<int64>; split : int64;
 
 [test]
 def test_prefill_fp32(t : T?) {
-    t |> run("prefill == N× forward, fp32 (needs stories15M.bin)") @(t : T?) {
+    t |> run("prefill == Nx forward, fp32 (needs stories15M.bin)") @(t : T?) {
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
@@ -128,7 +128,7 @@ def test_prefill_fp32(t : T?) {
 
 [test]
 def test_prefill_q8(t : T?) {
-    t |> run("prefill == N× forward, Q8 (needs stories15M.bin)") @(t : T?) {
+    t |> run("prefill == Nx forward, Q8 (needs stories15M.bin)") @(t : T?) {
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return

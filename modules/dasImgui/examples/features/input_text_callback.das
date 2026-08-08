@@ -36,7 +36,7 @@ def private completion_cb(var data : ImGuiInputTextCallbackData) : int {
 
 [export]
 def init() {
-    harness_init("input_text_callback — TAB-complete", 520, 240)
+    harness_init("input_text_callback - TAB-complete", 520, 240)
 }
 
 [export]

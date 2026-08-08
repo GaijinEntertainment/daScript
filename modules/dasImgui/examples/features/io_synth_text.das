@@ -23,7 +23,7 @@ var auto_focused = false
 
 [export]
 def init() {
-    harness_init("Phase 2.2 — io_synth_text", 800, 600)
+    harness_init("Phase 2.2 - io_synth_text", 800, 600)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
 }
@@ -34,7 +34,7 @@ def update() {
     harness_new_frame()
 
     SetNextWindowSize(ImVec2(720.0, 220.0), ImGuiCond.Always)
-    window(MAIN_WIN, (text = "io_synth_text — phase 2.2", closable = false,
+    window(MAIN_WIN, (text = "io_synth_text - phase 2.2", closable = false,
                       flags = ImGuiWindowFlags.None)) {
         text("Synthetic keyboard: imgui_key_type streams key+char events.")
         text("DEMO_INPUT auto-focused on first render via SetKeyboardFocusHere.")

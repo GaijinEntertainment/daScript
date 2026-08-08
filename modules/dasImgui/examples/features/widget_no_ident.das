@@ -42,7 +42,7 @@ def update() {
         // Form 3: positional-string sugar (single-string text family only).
         text("positional-string form")
         text_unformatted("text_unformatted positional form")
-        text_wrapped("text_wrapped positional form — long enough to wrap and exercise the auto-emit across a reflow")
+        text_wrapped("text_wrapped positional form - long enough to wrap and exercise the auto-emit across a reflow")
         text_disabled("text_disabled positional form")
         bullet_text("bullet_text positional form")
         separator_text("separator_text positional form")

@@ -2,6 +2,7 @@ options gen2
 options _comment_hygiene = true
 options gc
 options persistent_heap
+options _ascii_strings = false   // the embedded demo document is deliberately non-ASCII
 
 require imgui/imgui_harness
 require imgui/imgui_commands

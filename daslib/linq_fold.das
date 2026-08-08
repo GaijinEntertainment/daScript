@@ -41,7 +41,7 @@ require ?pugixml pugixml/linq_fold_xml       // optional XML source adapter — 
 require daslib/linq_fold_sql                 // SQL source pass-through — provider-neutral, fires only when sql_linq is in the program
 
 [macro_function]
-def private fold_linq_default(var expr : Expression?) : Expression? {
+def private fold_linq_default(var expr : Expression?) : Expression? {   // nolint:STYLE037 - one arm per linq call shape in the folded chain
     var blk = new ExprBlock(at = expr.at)
     var (top, calls) = flatten_linq(expr)
     if (empty(calls)) return null
@@ -88,7 +88,7 @@ def private fold_linq_default(var expr : Expression?) : Expression? {
             } else {
                 // Macro emits `var pass_N = call` and a later `return <- pass_N`;
                 blk.list |> emplace_new <| qmacro_expr() {
-                    var $i(newArgName) = $e(newCall)  // nolint:PERF009
+                    var $i(newArgName) = $e(newCall)  // nolint:PERF009,LINT019 - qmacro template line; PERF009 fires only in the downstream expansion
                 }
                 (blk.list.back() as ExprLet).variables[0].flags.can_shadow = true
                 if (argIndex != 0) {
@@ -254,7 +254,7 @@ class private LinqFold : AstCallMacro {
         if (!(prog._options |> find_arg("_no_linq_perf_warn") ?as tBool ?? false)) {
             var (top, calls) = flatten_linq(call.arguments[0])
             if (!empty(calls) && extract_decs_bridge(top) != null) {
-                to_compiler_log("{describe(call.at)}: *warning* `_fold`: from_decs_template source survived dispatch — no splice arm claimed this chain, so the bridge materializes a temp `res` array and the tier-2 cascade runs on the materialized buffer. Rewrite the chain to a recognized decs shape (see doc/source/reference/linq_fold_patterns.rst), or suppress with `options _no_linq_perf_warn = true`.\n")
+                to_compiler_log("{describe(call.at)}: *warning* `_fold`: from_decs_template source survived dispatch - no splice arm claimed this chain, so the bridge materializes a temp `res` array and the tier-2 cascade runs on the materialized buffer. Rewrite the chain to a recognized decs shape (see doc/source/reference/linq_fold_patterns.rst), or suppress with `options _no_linq_perf_warn = true`.\n")
             }
         }
         // Tier 2 — array-shape pipeline with `_inplace` reuse + explicit `delete`.

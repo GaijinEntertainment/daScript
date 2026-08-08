@@ -4,7 +4,7 @@ require terminal/terminal
 require strings
 
 [export]
-def main {
+def main {  // nolint:STYLE038 - flat smoke list: one feed + assert group per snapshot feature, no shared state to extract
     var inscope state <- terminal_create(8, 2)
     terminal_feed(state, "hello")
     let initial_transport_error = terminal_transport_error(state)
@@ -69,9 +69,9 @@ def main {
 
     var inscope special_state <- terminal_create(8, 2)
     terminal_feed(special_state,
-        "{to_char(27)}[44mX{to_char(27)}[0m{to_char(27)}[4mU{to_char(27)}[0m中")
+        "{to_char(27)}[44mX{to_char(27)}[0m{to_char(27)}[4mU{to_char(27)}[0m中")  // nolint:STYLE039 - CJK glyph is the double-width cell payload
     terminal_viewport_snapshot(special_state, 0, viewport)
-    assert(viewport.screen_text == "XU中")
+    assert(viewport.screen_text == "XU中")  // nolint:STYLE039 - CJK glyph is the double-width cell payload
     assert(length(viewport.buffer.cells) == 3)
     assert(viewport.buffer.cells[0].column == 0)
     assert(viewport.buffer.cells[1].column == 1)

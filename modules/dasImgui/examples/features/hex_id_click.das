@@ -23,7 +23,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("Phase 2.3 — hex_id_click", 800, 600)
+    harness_init("Phase 2.3 - hex_id_click", 800, 600)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
 }
@@ -34,7 +34,7 @@ def update() {
     harness_new_frame()
 
     SetNextWindowSize(ImVec2(720.0, 220.0), ImGuiCond.Always)
-    window(MAIN_WIN, (text = "hex_id_click — phase 2.3", closable = false,
+    window(MAIN_WIN, (text = "hex_id_click - phase 2.3", closable = false,
                       flags = ImGuiWindowFlags.None)) {
         text("Click via name or hex_id: imgui_click resolves both forms.")
         text("Hex strings ('0x...') reverse-map through g_id_to_path to L2.")

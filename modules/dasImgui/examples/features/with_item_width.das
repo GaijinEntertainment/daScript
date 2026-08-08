@@ -17,7 +17,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("with_item_width — scope wrapper", 720, 480)
+    harness_init("with_item_width - scope wrapper", 720, 480)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
 }

@@ -790,7 +790,7 @@ def public imgui_memory_report() {
     let dstr = int64(str_now) - int64(g_mem_str_baseline)
     to_log(LOG_INFO, "imgui mem: heap {heap_now/1024ul}kb (peak {g_mem_heap_max/1024ul}kb, delta {dheap}), str {str_now/1024ul}kb (peak {g_mem_str_max/1024ul}kb, delta {dstr})\n")
     if (dheap > 65536l || dstr > 65536l) {
-        to_log(LOG_WARNING, "imgui mem: WARNING growth since baseline — heap +{dheap} str +{dstr} bytes (per-frame leak / GC pressure)\n")
+        to_log(LOG_WARNING, "imgui mem: WARNING growth since baseline - heap +{dheap} str +{dstr} bytes (per-frame leak / GC pressure)\n")
     }
 }
 

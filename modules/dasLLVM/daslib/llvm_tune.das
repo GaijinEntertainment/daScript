@@ -896,7 +896,7 @@ def private take_companions(func : FunctionPtr; var errors : das_string) : array
         } else {
             c.fn = compiling_module() |> find_unique_function(c.fnname, true)
             if (c.fn == null) {
-                errors := "[tune] on {func.name}: companion function '{c.fnname}' not found — declare exactly one, before the tuned function, in the same module"
+                errors := "[tune] on {func.name}: companion function '{c.fnname}' not found - declare exactly one, before the tuned function, in the same module"
             } elif (c.fn.result.baseType == Type.autoinfer) {
                 errors := "[tune] on {func.name}: companion {c.fnname} needs an explicit return type"
             } else {
@@ -1082,7 +1082,7 @@ class private TuneAnnotation : AstFunctionAnnotation {
         let genKey = gv as tString
         var perms <- take_perms(func, errors)
         if (empty(errors) && empty(perms)) {
-            errors := "[tune] on {func.name}: no [tune_perm(...)] rows — list them BEFORE tune(...) in the same annotation bracket"
+            errors := "[tune] on {func.name}: no [tune_perm(...)] rows - list them BEFORE tune(...) in the same annotation bracket"
         }
         var comps <- take_companions(func, errors)
         if (!empty(errors)) {
@@ -1536,7 +1536,7 @@ def private announce_tuning(scopeName : string; force, selfRestarts : bool) {
     let tail = (selfRestarts
         ? "the process restarts itself when it is done"
         : "the process exits when it is done, and must be restarted to pick up the winners")
-    print("llvm_tune: scope '{scopeName}' {why} — tuning now. This takes a while; {tail}.\n")
+    print("llvm_tune: scope '{scopeName}' {why} - tuning now. This takes a while; {tail}.\n")
 }
 
 // spawn the scope's tuner, relaying its output LIVE — RUNTIME only (the auto and restart
@@ -1584,7 +1584,7 @@ def tune_auto_prepare(scopeName : string; manifestPath : string; tunerPath : str
     if (tune_sidecar_entries_complete(manifestPath, fnames)) {
         g_tuned_scopes++
     } else {
-        print("llvm_tune: tuner left scope '{scopeName}' incomplete in {manifestPath} — missing: {tune_sidecar_missing_entries(manifestPath, fnames)}\n")
+        print("llvm_tune: tuner left scope '{scopeName}' incomplete in {manifestPath} - missing: {tune_sidecar_missing_entries(manifestPath, fnames)}\n")
     }
 }
 
@@ -1634,7 +1634,7 @@ def tune_restart_needed(scopeName : string; manifestPath : string; tunerPath : s
     }
     if (empty(tunerPath)) {
         print("llvm_tune: scope '{scopeName}' is untuned on this box\n")
-        print("llvm_tune: no tuner declared — produce {manifestPath} with the library's tuner, then restart\n")
+        print("llvm_tune: no tuner declared - produce {manifestPath} with the library's tuner, then restart\n")
         return true
     }
     announce_tuning(scopeName, false, false)
@@ -1642,7 +1642,7 @@ def tune_restart_needed(scopeName : string; manifestPath : string; tunerPath : s
     if (tune_sidecar_entries_complete(manifestPath, fnames)) {
         print("llvm_tune: scope '{scopeName}' tuned -> {manifestPath}\nllvm_tune: restart to apply the winners\n")
     } else {
-        print("llvm_tune: tuner left scope '{scopeName}' incomplete in {manifestPath} — missing: {tune_sidecar_missing_entries(manifestPath, fnames)}\n")
+        print("llvm_tune: tuner left scope '{scopeName}' incomplete in {manifestPath} - missing: {tune_sidecar_missing_entries(manifestPath, fnames)}\n")
     }
     return true
 }
@@ -1735,7 +1735,7 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
             policy = penv
         }
         if (policy != "fallback" && policy != "warn" && policy != "error" && policy != "auto" && policy != "restart") {
-            errors = "[tune_policy] on {func.name}: missing=\"{policy}\" — use fallback | warn | error | auto | restart"
+            errors = "[tune_policy] on {func.name}: missing=\"{policy}\" - use fallback | warn | error | auto | restart"
             return false
         }
         let force = apply_cli_tune_flags()
@@ -1754,22 +1754,22 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
             if (force || policy == "auto") {
     // a runtime guard tunes and RE-EXECS: restamping a required module's compiled function is a cross-module mutation re-infer cannot survive
                 if (empty(scope.tunerPath)) {
-                    errors = "[tune_policy]: scope '{scope.scopeName}' declares no tuner= — cannot {force ? "--tune" : "auto-tune"}; produce {scope.manifestPath} manually"
+                    errors = "[tune_policy]: scope '{scope.scopeName}' declares no tuner= - cannot {force ? "--tune" : "auto-tune"}; produce {scope.manifestPath} manually"
                 } else {
                     autoScopes |> push(scope)
                 }
             } elif (policy == "error") {
-                errors = "[tune_policy]: scope '{scope.scopeName}' is untuned on this box — run: {empty(scope.tunerPath) ? "<no tuner declared>" : tuner_cmd(scope)} (or start with --tune)"
+                errors = "[tune_policy]: scope '{scope.scopeName}' is untuned on this box - run: {empty(scope.tunerPath) ? "<no tuner declared>" : tuner_cmd(scope)} (or start with --tune)"
             } elif (policy == "warn") {
                 print("llvm_tune: WARNING scope '{scope.scopeName}' is untuned on this box (fallback stamps in effect)\nllvm_tune: run: {empty(scope.tunerPath) ? "<no tuner declared>" : tuner_cmd(scope)} (or start with --tune)\n")
             } elif (policy == "restart") {
     // graceful guard, not exit(): a hard exit from an [init] skips environment shutdown
                 if (!(func.body is ExprBlock)) {
-                    errors = "[tune_policy]: restart — {func.name} has no body block"
+                    errors = "[tune_policy]: restart - {func.name} has no body block"
                 } elif (func.result.baseType != Type.tVoid && func.result.baseType != Type.tInt
                         && func.result.baseType != Type.autoinfer) {
                     // autoinfer = undeclared result, void by convention for main
-                    errors = "[tune_policy]: restart — {func.name} must return void or int"
+                    errors = "[tune_policy]: restart - {func.name} must return void or int"
                 } else {
                     let fnames = scope_fnames_joined(scope)
                     var guard : ExpressionPtr
@@ -1801,7 +1801,7 @@ def private apply_tune_policy(var func : FunctionPtr; declared : string; var err
             } elif (func.result.baseType != Type.tVoid && func.result.baseType != Type.tInt
                     && func.result.baseType != Type.autoinfer) {
                 // autoinfer = undeclared result, void by convention for main
-                errors = "[tune_policy]: auto/--tune — {func.name} must return void or int"
+                errors = "[tune_policy]: auto/--tune - {func.name} must return void or int"
             } else {
                 var guards : array<ExpressionPtr>
                 guards |> reserve(length(autoScopes) + 1)

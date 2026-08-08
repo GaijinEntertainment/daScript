@@ -72,8 +72,8 @@ def update() { // nolint:STYLE038
     window(BT_WIN, (text = "buttons tutorial", closable = false,
                     flags = ImGuiWindowFlags.None)) {
 
-        text("Six shapes — ClickState everywhere; state.click_count accumulates.")
-        text(BT_HINT, (text = "Plain / small / arrow / invisible / image / tab_item — pick by visual fit."))
+        text("Six shapes - ClickState everywhere; state.click_count accumulates.")
+        text(BT_HINT, (text = "Plain / small / arrow / invisible / image / tab_item - pick by visual fit."))
         separator()
 
         // ---- Stage 1: button — the workhorse ----
@@ -95,7 +95,7 @@ def update() { // nolint:STYLE038
         spacing()
 
         // ---- Stage 4: invisible_button — hit area without a glyph ----
-        text("Invisible hotspot below (120×24, no glyph):")
+        text("Invisible hotspot below (120x24, no glyph):")
         invisible_button(BT_HOT, (text = "##hotspot", size = float2(120.0f, 24.0f)))
         text("BT_HOT clicks = {BT_HOT.click_count}  // overlay on a drawlist / image / etc.")
         spacing()
@@ -106,12 +106,12 @@ def update() { // nolint:STYLE038
             image_button(BT_IMG, (text = "##font",
                                   user_texture_id = io.Fonts.TexRef,
                                   size = float2(48.0f, 48.0f)))
-            text("BT_IMG clicks = {BT_IMG.click_count}  // textured 48×48 of the font atlas")
+            text("BT_IMG clicks = {BT_IMG.click_count}  // textured 48x48 of the font atlas")
         }
         spacing()
 
         // ---- Stage 6: tab_item_button — must live inside a tab_bar ----
-        text("tab_item_button — leading '?' tallies, trailing '+' grows the bar:")
+        text("tab_item_button - leading '?' tallies, trailing '+' grows the bar:")
         tab_bar(BT_BAR, (text = "MyBar",
                           flags = ImGuiTabBarFlags.FittingPolicyShrink)) {
             tab_item_button(BT_HELP, (text = "?",

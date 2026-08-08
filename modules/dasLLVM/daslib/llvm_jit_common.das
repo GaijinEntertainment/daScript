@@ -645,7 +645,7 @@ def public init_jit_target_flags(target_triple : string = ""; host_features : bo
 }
 
 [macro_function]
-def public init_jit(cg_opt_level : uint; target_triple : string = ""; host_features : bool = true) {
+def public init_jit(cg_opt_level : uint; target_triple : string = ""; host_features : bool = true) {  // nolint:STYLE038 - flat one-call-per-item LLVM target/machine/pass setup; the calls are order-coupled and a split would only hide the sequence
     // also prevent double init (g_mod != null)
     return if (is_in_completion() || is_compiling_macros() || g_mod != null)
     LLVMLinkInMCJIT()
@@ -1010,7 +1010,7 @@ def public write_wasm(mod : LLVMOpaqueModule?; out_path : string; triple : strin
     let real_triple = (!(triple |> empty()) ? triple : "wasm64-unknown-emscripten")
     let runtime_lib = find_runtime_lib(explicit_runtime)
     if (needs_runtime && is_none(runtime_lib)) {
-        to_log(LOG_WARNING, "wasm: runtime symbols referenced but libDaScript_runtime.a not found at web/output64/lib/ — run the web/ emscripten build to link in the runtime, or pass --jit-runtime-lib=<path>\n")
+        to_log(LOG_WARNING, "wasm: runtime symbols referenced but libDaScript_runtime.a not found at web/output64/lib/ - run the web/ emscripten build to link in the runtime, or pass --jit-runtime-lib=<path>\n")
     }
     // Match the feature set web/CMakeLists.txt compiles the runtime archive with // nolint:STYLE014
     // (-msimd128 -mnontrapping-fptoint). Without +simd128 the host LLVM lowers
@@ -1106,7 +1106,7 @@ def public failed_T(v : TypeDeclPtr; msg : string) {
     failed("{msg}. var = {describe(v)} at {describe(v.at)}")
 }
 
-def public base_type_to_llvm_type(t : Type) {
+def public base_type_to_llvm_type(t : Type) {  // nolint:STYLE037 - exact-type dispatch table over Type; one arm per base type is the shape
     return g_prim_t.t_int32 if (t == Type.tInt || t == Type.tUInt || t == Type.tBitfield || t == Type.tEnumeration)
     return g_prim_t.t_int64 if (t == Type.tInt64 || t == Type.tUInt64 || t == Type.tBitfield64 || t == Type.tEnumeration64)
     return g_prim_t.t_int16 if (t == Type.tInt16 || t == Type.tUInt16 || t == Type.tBitfield16 || t == Type.tEnumeration16)

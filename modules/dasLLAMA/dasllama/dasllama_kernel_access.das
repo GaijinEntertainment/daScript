@@ -363,7 +363,7 @@ class private AccessVisitor : AstVisitor {
         } elif (fieldMode && cur is ExprField && is_self_field(cur as ExprField, tracked)) {
             bname = string((cur as ExprField).name)
         } elif (fieldMode && cur is ExprVar && (cur as ExprVar).name == "self") {
-            err = "'self' passed whole to call '{cname}' — the classifier cannot see through method helpers; use access_force with declared roles"
+            err = "'self' passed whole to call '{cname}' - the classifier cannot see through method helpers; use access_force with declared roles"
         }
         return if (empty(bname))
         claimed |> insert("{bname}:{cur.at.line}:{cur.at.column}")
@@ -429,7 +429,7 @@ def private analyze_one(fn : Function?; mod : Module?; tracked : table<string>; 
         let dir = callee_param_dir(mod, wa.callee, wa.idx)
         if (empty(dir)) {
             let escape = fieldMode ? "declare the @role (access_force)" : "declare [vk_access]"
-            astVisitor.err = "tracked buffer '{wa.buf}' passed whole to call '{wa.callee}' — teach the intrinsic table or {escape}"
+            astVisitor.err = "tracked buffer '{wa.buf}' passed whole to call '{wa.callee}' - teach the intrinsic table or {escape}"
         } elif (dir == "write") {
             res.writes |> insert(wa.buf)
         } else {

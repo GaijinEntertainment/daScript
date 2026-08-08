@@ -78,7 +78,7 @@ def private load_corpus(path : string) : array<string> {
 def main() {   // nolint:STYLE038 — flat probe driver: arg handling, then one A/B cell per batch size
     allow_cpu_prefill()   // CPU-protocol probe by intent — disarm the Metal-build tripwire
     if (!jit_enabled()) {
-        print("This probe is JIT-only — run with: daslang -jit <file>\n")
+        print("This probe is JIT-only - run with: daslang -jit <file>\n")
         return
     }
     var r <- parse_args(type<Args>)
@@ -93,7 +93,7 @@ def main() {   // nolint:STYLE038 — flat probe driver: arg handling, then one 
         return
     }
     if (cfg.prof && !JOBQUE_PROFILING_ENABLED) {
-        print("--prof needs the marker rail compiled in — rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)\n")
+        print("--prof needs the marker rail compiled in - rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)\n")
         return
     }
     let plen = max(int64(cfg.plen), 1l)
@@ -129,7 +129,7 @@ def main() {   // nolint:STYLE038 — flat probe driver: arg handling, then one 
         }
         let need = plen + WARM_STEPS * 8l + want + 16l
         if (long_length(ids) < need) {
-            print("error: corpus tokenizes to {long_length(ids)} ids, need {need} — pass a longer --prompts\n")
+            print("error: corpus tokenizes to {long_length(ids)} ids, need {need} - pass a longer --prompts\n")
             delete ids
             delete t
             return

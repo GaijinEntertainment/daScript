@@ -240,7 +240,7 @@ def test_kv_runs_flat(t : T?) {
 
 [test]
 def test_kv_store_row_f16(t : T?) {
-    t |> run("f16 kv_store_row: RNE convert on store, clamp to ±65504, exact read-back") @(t : T?) {
+    t |> run("f16 kv_store_row: RNE convert on store, clamp to +/-65504, exact read-back") @(t : T?) {
         let c = mk_config(3l, 4l, 2l, 16l, 4l)
         let kv_dim = layer_kv_dim(c, 1l)
         var s <- make_run_state(c, KVDtype.f16, KVDtype.f16)
@@ -299,7 +299,7 @@ def private fill_q8_query(var q : array<int8>; var qs : array<float>; n : int64;
 
 [test]
 def test_kv_codec_signs(t : T?) {
-    t |> run("tq4_fill_signs: ±1 values, smaller head sizes are a prefix") @(t : T?) {
+    t |> run("tq4_fill_signs: +/-1 values, smaller head sizes are a prefix") @(t : T?) {
         var signs : array<float>
         tq4_fill_signs(signs, 64l)
         var ok_pm = true
@@ -446,7 +446,7 @@ def test_kv_codec_q8_dots(t : T?) {
 
 [test]
 def test_kv_codec_q8_axpy(t : T?) {
-    t |> run("axpy_q8kv: one mad per element — bit-exact on any perm") @(t : T?) {
+    t |> run("axpy_q8kv: one mad per element - bit-exact on any perm") @(t : T?) {
         let n = 64l
         var src : array<float>
         fill_sin(src, n, 2.5, 0.61, 0.23)
@@ -484,7 +484,7 @@ def test_kv_codec_q8_axpy(t : T?) {
 
 [test]
 def test_kv_codec_tq4_dot(t : T?) {
-    t |> run("dot_q8tq4kv: integer inner sum — bit-exact vs the block reference") @(t : T?) {
+    t |> run("dot_q8tq4kv: integer inner sum - bit-exact vs the block reference") @(t : T?) {
         let n = 64l
         var src : array<float>
         fill_sin(src, n, 1.4, 0.83, 0.51)
@@ -517,7 +517,7 @@ def test_kv_codec_tq4_dot(t : T?) {
 
 [test]
 def test_kv_codec_tq4_axpy(t : T?) {
-    t |> run("axpy_tq4kv: one mad per nibble element — bit-exact on any perm") @(t : T?) {
+    t |> run("axpy_tq4kv: one mad per nibble element - bit-exact on any perm") @(t : T?) {
         let n = 64l
         var src : array<float>
         fill_sin(src, n, 1.4, 0.83, 0.51)

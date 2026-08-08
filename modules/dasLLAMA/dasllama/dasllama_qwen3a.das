@@ -152,9 +152,9 @@ def load_qwen3a_tower(path : string) : Qwen3aTower {
         let ts_img = ref_time_ticks()
         var t = Qwen3aTower()
         if (!load_image(path, t, tag)) {
-            panic("dasLLAMA: '{path}' is not a prepared qwen3a-tower image for this box/knobs (identity {image_identity(tag)}) — regenerate it from the source mmproj gguf")
+            panic("dasLLAMA: '{path}' is not a prepared qwen3a-tower image for this box/knobs (identity {image_identity(tag)}) - regenerate it from the source mmproj gguf")
         }
-        to_log(LOG_INFO, "dasLLAMA: prepared qwen3a-tower image mapped in {get_time_usec(ts_img) / 1000} ms — {path}\n")
+        to_log(LOG_INFO, "dasLLAMA: prepared qwen3a-tower image mapped in {get_time_usec(ts_img) / 1000} ms - {path}\n")
         return <- t
     }
     if (g_env_engine.image) {
@@ -163,7 +163,7 @@ def load_qwen3a_tower(path : string) : Qwen3aTower {
         let ts_img = ref_time_ticks()
         var t = Qwen3aTower()
         if (load_image(img, t, tag)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared qwen3a-tower image mapped in {get_time_usec(ts_img) / 1000} ms — {img}\n")
+            to_log(LOG_INFO, "dasLLAMA: prepared qwen3a-tower image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
             return <- t
         }
         var inscope st <- stage_qwen3a_tower(path)
@@ -303,7 +303,7 @@ def private q3a_cblob_quantize(var t : Qwen3aTower; var cblob : array<float>; va
     let d = t.core.d_model
     let feat = 16l * t.n_ch
     if (d % 32l != 0l || feat % 32l != 0l || t.proj_dim % 32l != 0l) {
-        panic("qwen3a cblob q8: d {d} / feat {feat} / proj {t.proj_dim} are not 32-multiples — the compact trio cannot serve this tower")
+        panic("qwen3a cblob q8: d {d} / feat {feat} / proj {t.proj_dim} are not 32-multiples - the compact trio cannot serve this tower")
     }
     let qtotal = d * feat + d * d + t.proj_dim * d
     qblob |> resize(qtotal)
@@ -620,7 +620,7 @@ def qwen3a_asr_caps(omni : bool) : AsrCaps {
 def create_qwen3a_asr_session(dec : Model; t : Qwen3aTower; lang : string; omni : bool;
                               kv : KVDtype = KVDtype.f16) : Qwen3aAsrSession {
     if (!omni && lang != "auto") {
-        panic("dasLLAMA asr: Qwen3-ASR detects the language itself — create the session with lang=\"auto\"")
+        panic("dasLLAMA asr: Qwen3-ASR detects the language itself - create the session with lang=\"auto\"")
     }
     return <- Qwen3aAsrSession(qctx <- create_session_(dec, kv, kv), qenc <- make_encoder_state(t.core))
 }

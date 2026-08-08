@@ -3,6 +3,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 options _jit_fast_math = true   // ggml-parity FP laxity — matches how llama.cpp is benched
 options _cyclomatic_complexity = 0   // bench cell main = the measurement protocol ladder
 options _function_length = 0   // same
+options _ascii_strings = false   // the bench report is human-facing: the markdown/console rows print the mean +- sd with a real plus-minus sign
 
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + apply_box_profile_runtime (engine-level, not re-exported)
@@ -248,7 +249,7 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
         // the dictation aggregate: 25 short clips, ONE whole-set total on one test key
         var lib <- libri_wavs()
         if (empty(lib)) {
-            print("lcpp_bench --asr: {spec.display} — librispeech set absent/partial (setup_asr_rig --libri), leg skipped\n")
+            print("lcpp_bench --asr: {spec.display} - librispeech set absent/partial (setup_asr_rig --libri), leg skipped\n")
         } else {
             var lib_ms = 0.0lf
             var lib_audio = 0.0lf
@@ -290,7 +291,7 @@ def private asr_cell_main(model, json_path : string; reps, threads : int) : bool
                 continue
             }
             if (!stat(asr_model_path(spec)).is_valid) {
-                print("lcpp_bench --asr: {spec.display} — model absent ({asr_model_path(spec)}), skipped\n")
+                print("lcpp_bench --asr: {spec.display} - model absent ({asr_model_path(spec)}), skipped\n")
                 continue
             }
             found = true
@@ -311,7 +312,7 @@ def private asr_cell_main(model, json_path : string; reps, threads : int) : bool
             }
         }
         if (!wrote) {
-            print("warning: could not open {json_path} for writing — no records file\n")
+            print("warning: could not open {json_path} for writing - no records file\n")
         }
     }
     print("{text}\n")
@@ -395,7 +396,7 @@ def private bench_output_gate(t : Model; s : Session; fmt : OutFmt; tag : string
         }
     }
     if (bad > 0l || bv <= mn) {
-        say(fmt, "REFUSED ({tag}): warmup logits unusable — {bad} non-finite of {vocab}, max {bv} min {mn}; the serving pipeline is broken and its timings would be meaningless\n")
+        say(fmt, "REFUSED ({tag}): warmup logits unusable - {bad} non-finite of {vocab}, max {bv} min {mn}; the serving pipeline is broken and its timings would be meaningless\n")
         return false
     }
     say(fmt, "sanity ({tag}): warmup argmax {bi} \"{piece_(t, bi)}\" (logit {bv})\n")
@@ -482,7 +483,7 @@ def private dispatch_census(t : Model; fmt : OutFmt) {
     say(fmt, "census: moe E={c.n_expert} k={c.n_expert_used} nfe={c.n_ff_exp} expert fmts gate/up/down: {fdesc}\n")
     say(fmt, "census: moe prefill arms: {grouped} grouped, {perpos} per-position{perpos > 0l ? " <-- UNBATCHED reference path" : ""}\n")
     if (t.experts_mx4) {
-        say(fmt, "census: mx4 experts — a grouped layer still drops to per-position when npos*k < 8*E (per-call economics)\n")
+        say(fmt, "census: mx4 experts - a grouped layer still drops to per-position when npos*k < 8*E (per-call economics)\n")
     }
 }
 
@@ -522,7 +523,7 @@ def private flavor_stamp(base : string) : string {
 [export]
 def main() : int {
     if (!jit_enabled()) {
-        print("This benchmark is JIT-only — run with: daslang -jit <file>\n")
+        print("This benchmark is JIT-only - run with: daslang -jit <file>\n")
         return 1
     }
     var r <- parse_args(type<Args>)
@@ -537,19 +538,19 @@ def main() : int {
         return 0
     }
     if (cfg.prof && !JOBQUE_PROFILING_ENABLED) {
-        print("--prof needs the marker rail compiled in — rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)\n")
+        print("--prof needs the marker rail compiled in - rerun with JOBQUE_PROFILING=1 (or --jobque-profiling)\n")
         return 1
     }
     // measurement exists only from the released exe: a -jit SCRIPT run reads whatever sidecar
     // sits beside the script and re-keys nothing — its numbers must never enter records
     g_debug_run = !empty(tune_app_script())
     if (g_debug_run && !cfg.for_debug_purposes) {
-        print("lcpp_bench: this is a -jit SCRIPT run — measurement runs the released exe (daspkg release).\n")
+        print("lcpp_bench: this is a -jit SCRIPT run - measurement runs the released exe (daspkg release).\n")
         print("  pass --for-debug-purposes to proceed as a debug instrument; output is stamped debug-jit and is not record-grade\n")
         return 1
     }
     if (g_debug_run) {
-        print("lcpp_bench: DEBUG RUN (-jit script) — numbers are debug-grade, flavor is stamped debug-jit\n")
+        print("lcpp_bench: DEBUG RUN (-jit script) - numbers are debug-grade, flavor is stamped debug-jit\n")
     }
     let gpu = cfg.ngl != 0
     if (!gpu) {
@@ -561,7 +562,7 @@ def main() : int {
     var levers <- levers_of(cfg)
     if (length(levers) > 1) {
         var names <- [for (l in levers); "--{l.flag}-ab"]
-        print("warning: A/B levers are mutually exclusive ({join(names, " ")}) — running --{levers[0].flag}-ab only\n")
+        print("warning: A/B levers are mutually exclusive ({join(names, " ")}) - running --{levers[0].flag}-ab only\n")
         delete names
         levers |> resize(1)
     }
@@ -569,7 +570,7 @@ def main() : int {
     let real_row = ab && levers[0].real
     var fmt = cfg.output
     if (ab && fmt != OutFmt.txt) {
-        print("warning: -o {cfg.output} with an A/B lever — records cover the plain protocol only, falling back to txt\n")
+        print("warning: -o {cfg.output} with an A/B lever - records cover the plain protocol only, falling back to txt\n")
         fmt = OutFmt.txt
     }
     // the standing per-box methodology, enforced here rather than left to the environment
@@ -580,7 +581,7 @@ def main() : int {
     var threads = cfg.threads > 0 ? cfg.threads : (t_env ?? profile_threads())
     if (is_some(t_env) && unwrap(t_env) != threads) {
         threads = unwrap(t_env)
-        say(fmt, "warning: DAS_JOBQUE_THREADS overrides -t — running {threads} lanes\n")
+        say(fmt, "warning: DAS_JOBQUE_THREADS overrides -t - running {threads} lanes\n")
     } elif (is_none(t_env)) {
         // the PC measurement regime caps at 16 lanes (an explicit env or -t always wins) —
         // a big-SMT box at full width measures the scheduler, not the kernels
@@ -605,14 +606,14 @@ def main() : int {
         return 1
     }
     if (cfg.accel && gpu) {
-        print("--accel is a CPU-tier lever — drop it or run with -ngl 0\n")
+        print("--accel is a CPU-tier lever - drop it or run with -ngl 0\n")
         return 1
     }
     if (cfg.accel) {
         static_if (typeinfo builtin_module_exists(das_accelerate)) {
             dasllama_accelerate_enable(32l)   // the shipped +AMX defaults: min ntok 32, work floor 512 MMAC
         } else {
-            print("--accel requested but das_accelerate is not built on this platform — no accel row to measure\n")
+            print("--accel requested but das_accelerate is not built on this platform - no accel row to measure\n")
             return 1
         }
     }
@@ -626,7 +627,7 @@ def main() : int {
     // like a real result, so it warns rather than being left to the reader
     if (ab && !empty(levers[0].env) && !env_is_set(levers[0].env)
             && !(cfg.prefill_ab && is_some(g_env_gpu.gpu_moe_stream))) {
-        print("warning: --{levers[0].flag}-ab without {levers[0].env}=1 — nothing armed, both arms identical\n")
+        print("warning: --{levers[0].flag}-ab without {levers[0].env}=1 - nothing armed, both arms identical\n")
     }
     // -m accepts a comma-separated list: one process benches every model in turn, so a sweep
     // pays the compile/startup cost once; a single -m path behaves exactly as before
@@ -662,7 +663,7 @@ def main() : int {
             delete texts
             delete tk
             if (empty(toks)) {
-                panic("lcpp_bench: prompt corpus tokenized to nothing — --{levers[0].flag}-ab needs real prompts")
+                panic("lcpp_bench: prompt corpus tokenized to nothing - --{levers[0].flag}-ab needs real prompts")
             }
             t.config.seq_len = min(t.config.seq_len, maxlen + ngen + 8l)
         } else {
@@ -771,7 +772,7 @@ def main() : int {
                 let warm <- build_prompt(plen, 999l)
                 forward_prefill(t, s, warm, plen, 0l)   // warmup — untimed full-size run, as llama-bench does
                 if (!bench_output_gate(t, s, fmt, "pp{plen}{dtag}")) {
-                    panic("lcpp_bench: output sanity gate refused pp{plen}{dtag} — see the REFUSED line")
+                    panic("lcpp_bench: output sanity gate refused pp{plen}{dtag} - see the REFUSED line")
                 }
                 var tps : array<double>
                 for (rep in range(reps)) {
@@ -802,7 +803,7 @@ def main() : int {
             if (ngen > 0l) {
                 forward(t, s, synth_id(0l, 999l), 0l)   // warmup — one untimed token, llama-bench's test_gen(ctx, 1)
                 if (!bench_output_gate(t, s, fmt, "tg{ngen}{dtag}")) {
-                    panic("lcpp_bench: output sanity gate refused tg{ngen}{dtag} — see the REFUSED line")
+                    panic("lcpp_bench: output sanity gate refused tg{ngen}{dtag} - see the REFUSED line")
                 }
                 var tps : array<double>
                 for (rep in range(reps)) {
@@ -838,7 +839,7 @@ def main() : int {
             refCmd = argv_line(refArgs)
             say(fmt, "ref: {refCmd}\n")
             if (!run_llama_bench(refArgs, refRows)) {
-                say(fmt, "warning: llama-bench run/parse failed — no ref rows\n")
+                say(fmt, "warning: llama-bench run/parse failed - no ref rows\n")
             }
             for (rr in refRows) {
                 let tag = rr.n_gen == 0 ? "pp{rr.n_prompt}" : "tg{rr.n_gen}"
@@ -943,7 +944,7 @@ def main() : int {
         if (wrote) {
             say(fmt, "records written to {cfg.json_path}\n")
         } else {
-            say(fmt, "warning: could not open {cfg.json_path} for writing — no records file\n")
+            say(fmt, "warning: could not open {cfg.json_path} for writing - no records file\n")
         }
     }
     print("{text}\n")

@@ -166,7 +166,7 @@ class private AstVerifyVisitor : AstVisitor {
         }
         let key = intptr(expr)
         if (key_exists(seen_nodes, key)) {
-            report(expr.at, "node {expr.__rtti} is aliased — reachable from two parents (missing clone_expression)")
+            report(expr.at, "node {expr.__rtti} is aliased - reachable from two parents (missing clone_expression)")
             return
         }
         seen_nodes |> insert(key, true)

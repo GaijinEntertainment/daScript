@@ -28,6 +28,6 @@ def test_display_progress_smoke(t : T?) {
 
         let static_frac = double(widget_payload_field(snap, "MAIN_WIN/PB_STATIC", "fraction") ?? 0.0)
         t |> success(static_frac > 0.3lf && static_frac < 0.4lf,
-                     "PB_STATIC fraction ≈ 0.33 ({static_frac})")
+                     "PB_STATIC fraction ~0.33 ({static_frac})")
     }
 }

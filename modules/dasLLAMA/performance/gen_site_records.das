@@ -20,7 +20,7 @@ def main : int {
     var merged : array<BenchModel>
     var stores <- list_record_stores()
     if (empty(stores)) {
-        to_log(LOG_ERROR, "gen_site_records: no stores under {RECORDS_DIR} — run gen_bench_records first\n")
+        to_log(LOG_ERROR, "gen_site_records: no stores under {RECORDS_DIR} - run gen_bench_records first\n")
         return 1
     }
     for (path in stores) {
@@ -30,7 +30,7 @@ def main : int {
             return 1
         }
         let n = length(models)
-        to_log(LOG_INFO, "gen_site_records: {path} — {n} model(s)\n")
+        to_log(LOG_INFO, "gen_site_records: {path} - {n} model(s)\n")
         for (m in models) {
             upsert_bench_model(merged, m)
         }
@@ -43,6 +43,6 @@ def main : int {
     }
     write_bench_records(SITE_PATH, merged)
     let total = length(merged)
-    to_log(LOG_INFO, "gen_site_records: wrote {SITE_PATH} — {total} model(s)\n")
+    to_log(LOG_INFO, "gen_site_records: wrote {SITE_PATH} - {total} model(s)\n")
     return 0
 }

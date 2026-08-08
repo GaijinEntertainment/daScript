@@ -39,7 +39,7 @@ def private das_filters() : array<FileDialogFilter> {
 
 [export]
 def init() {
-    harness_init("file_dialog — native New / Open / Save", 760, 560)
+    harness_init("file_dialog - native New / Open / Save", 760, 560)
 }
 
 [export]

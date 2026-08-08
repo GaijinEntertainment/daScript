@@ -1505,7 +1505,7 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
         panic("forward_prefill_embd: q4_0 mode has no batched prefill path (use q8 or fp32)")
     }
     if (long_length(embd) < npos * t.config.dim) {
-        panic("forward_prefill_embd: embd has {long_length(embd)} floats — npos={npos} rows of dim={t.config.dim} need {npos * t.config.dim}")
+        panic("forward_prefill_embd: embd has {long_length(embd)} floats - npos={npos} rows of dim={t.config.dim} need {npos * t.config.dim}")
     }
     kv_ensure(s, start_pos + npos)   // paged sessions: grow the block table BEFORE any cache-pointer hoist
     forward_prefill_alloc(t, s, npos, start_pos)

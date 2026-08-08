@@ -528,7 +528,7 @@ def test_chat_pending_cleared_on_consume(t : T?) {
 
 [test]
 def test_chat_render_seam(t : T?) {
-    t |> run("render_assistant ≡ add_assistant evals; renderer chat holds no KV (needs SmolLM2-135M)") @(t : T?) {
+    t |> run("render_assistant == add_assistant evals; renderer chat holds no KV (needs SmolLM2-135M)") @(t : T?) {
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
@@ -577,12 +577,12 @@ def test_chat_render_seam(t : T?) {
 }
 
 // detokenize a rendered span for the eyeball line; specials have no piece bytes, so they
-// render as ⟨id⟩ — the markers under test must be VISIBLE in the log
+// render as <id> — the markers under test must be VISIBLE in the log
 def private detok(m : Model; ids : array<int64>) : string {
     let raw = build_string() $(writer) {
         for (id in ids) {
             let p = piece_(m, id)
-            writer |> write(empty(p) ? "⟨{id}⟩" : p)
+            writer |> write(empty(p) ? "<{id}>" : p)
         }
     }
     return replace(raw, "\n", "\\n")
@@ -593,7 +593,7 @@ def private detok(m : Model; ids : array<int64>) : string {
 // test_audio's; nothing else pins these template tags against a real vocab).
 [test]
 def test_chat_audio_markers(t : T?) {
-    t |> run("voxtral audio turn opens with [BEGIN_AUDIO] (no closing marker — mtmd shape)") @(t : T?) {
+    t |> run("voxtral audio turn opens with [BEGIN_AUDIO] (no closing marker - mtmd shape)") @(t : T?) {
         let path = path_join(models_dir(), "voxtral-mini-3b-q8_0.gguf")
         if (!model_available(t, path)) {
             return

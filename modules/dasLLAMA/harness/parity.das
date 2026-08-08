@@ -87,7 +87,7 @@ def main : int {
     }
     var t <- load_gguf(cfg.model, cfg.quant)
     if (cfg.ngl != 0 && !convert_model_to_metal_blob(t)) {   // the Metal drivers serve blob-form models only
-        panic("dasLLAMA parity: metal-blob transform declined — cannot serve --ngl on this load")
+        panic("dasLLAMA parity: metal-blob transform declined - cannot serve --ngl on this load")
     }
     // Cap the KV context: only ~(prompt + n_gen) positions are used, and native seq_len (Llama-3 /
     // Phi / gemma4: 131072) would waste multi-GB KV allocations. Same cap test_parity.das applies.
@@ -120,7 +120,7 @@ def main : int {
         }
         print("{line}\n")
         if (count < n_gen) {
-            print("NOTE: generate stopped early ({count}/{n_gen}) — emitted BOS\n")
+            print("NOTE: generate stopped early ({count}/{n_gen}) - emitted BOS\n")
         }
         if (count <= 0) {   // an empty GEN_IDS line is nothing to diff — fail loudly
             rc = 3

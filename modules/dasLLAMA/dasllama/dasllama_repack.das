@@ -46,7 +46,7 @@ def repack_q8q8_grp(var wp : int8?; var sp : float?; n, d, mr : int64; wbias : i
     // a zero here means the caller read layout numbers a lane context cannot see — name the
     // failure instead of a bare div0 (2026-07-28)
     if (mr <= 0l || kgroup <= 0l) {
-        panic("repack_q8q8_grp: mr={mr} kgroup={kgroup} — layout numbers unreadable (pool-lane context globals?)")
+        panic("repack_q8q8_grp: mr={mr} kgroup={kgroup} - layout numbers unreadable (pool-lane context globals?)")
     }
     let nb = n / 32l
     let ng = d / mr

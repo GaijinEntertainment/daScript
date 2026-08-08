@@ -37,7 +37,7 @@ def document_module_imgui_boost_v2() {
         group_by_regex("Layout macros",          mod, %regex~^(split_h|split_v|columns|dock_left|dock_right|dock_top|dock_bottom)$%%),
         hide_group(group_by_regex("Internal",    mod, %regex~^(_|priv_).*%%))
     )
-    document("Boost macro layer — DSL for declarative widget composition", mod, "imgui_boost_v2.rst", groups)
+    document("Boost macro layer - DSL for declarative widget composition", mod, "imgui_boost_v2.rst", groups)
 }
 
 def document_module_imgui_boost_runtime() {
@@ -58,7 +58,7 @@ def document_module_imgui_boost_runtime() {
         hide_group(group_by_regex("Finalizers",   mod, %regex~^.*_finalize(_vec|_subs)?$%%)),
         hide_group(group_by_regex("Internal",     mod, %regex~^(_|priv_).*%%))
     )
-    document("Boost runtime — widget state structs, registry, and dispatcher", mod, "imgui_boost_runtime.rst", groups)
+    document("Boost runtime - widget state structs, registry, and dispatcher", mod, "imgui_boost_runtime.rst", groups)
 }
 
 def document_module_imgui_widgets_builtin() {
@@ -79,7 +79,7 @@ def document_module_imgui_widgets_builtin() {
         hide_group(group_by_regex("Finalizers", mod, %regex~^.*_finalize(_vec|_subs)?$%%)),
         hide_group(group_by_regex("Internal", mod, %regex~^(_|priv_).*%%))
     )
-    document("Built-in widgets — inputs, selection, color, plots, output", mod, "imgui_widgets_builtin.rst", groups)
+    document("Built-in widgets - inputs, selection, color, plots, output", mod, "imgui_widgets_builtin.rst", groups)
 }
 
 def document_module_imgui_containers_builtin() {
@@ -93,7 +93,7 @@ def document_module_imgui_containers_builtin() {
         hide_group(group_by_regex("Finalizers", mod, %regex~^.*_finalize(_vec|_subs)?$%%)),
         hide_group(group_by_regex("Internal", mod, %regex~^(_|priv_).*%%))
     )
-    document("Built-in containers — windows, child regions, tabs, menus, popups", mod, "imgui_containers_builtin.rst", groups)
+    document("Built-in containers - windows, child regions, tabs, menus, popups", mod, "imgui_containers_builtin.rst", groups)
 }
 
 def document_module_imgui_id_builtin() {
@@ -103,7 +103,7 @@ def document_module_imgui_id_builtin() {
         group_by_regex("Hashing",       mod, %regex~^(hash_id|get_id).*%%),
         hide_group(group_by_regex("Internal", mod, %regex~^(_|priv_).*%%))
     )
-    document("ID stack — push/pop, scoped, hashing", mod, "imgui_id_builtin.rst", groups)
+    document("ID stack - push/pop, scoped, hashing", mod, "imgui_id_builtin.rst", groups)
 }
 
 def document_module_imgui_layout_builtin() {
@@ -117,7 +117,7 @@ def document_module_imgui_layout_builtin() {
         group_by_regex("List clipping", mod, %regex~^list_clipper$%%),
         hide_group(group_by_regex("Internal", mod, %regex~^(_|priv_).*%%))
     )
-    document("Layout helpers — splits, columns, docking, spacing", mod, "imgui_layout_builtin.rst", groups)
+    document("Layout helpers - splits, columns, docking, spacing", mod, "imgui_layout_builtin.rst", groups)
 }
 
 def document_module_imgui_style_builtin() {
@@ -128,7 +128,7 @@ def document_module_imgui_style_builtin() {
         group_by_regex("Themes",        mod, %regex~^(style_colors_dark|style_colors_light|style_colors_classic)$%%),
         hide_group(group_by_regex("Internal", mod, %regex~^(_|priv_).*%%))
     )
-    document("Style helpers — colors, vars, push/pop, themes", mod, "imgui_style_builtin.rst", groups)
+    document("Style helpers - colors, vars, push/pop, themes", mod, "imgui_style_builtin.rst", groups)
 }
 
 def document_module_imgui_visual_aids() {
@@ -145,7 +145,7 @@ def document_module_imgui_visual_aids() {
         group_by_regex("Serve / lifecycle", mod, %regex~^(imgui_visual_aids_serve|visual_aids_init|render_visual_aids|effective_).*%%),
         hide_group(group_by_regex("Internal", mod, %regex~^(_|priv_).*%%))
     )
-    document("Visual aids — tutorial-mode overlays, mouse trail, narration, key HUD", mod, "imgui_visual_aids.rst", groups)
+    document("Visual aids - tutorial-mode overlays, mouse trail, narration, key HUD", mod, "imgui_visual_aids.rst", groups)
 }
 
 def document_module_imgui_playwright() {
@@ -162,7 +162,7 @@ def document_module_imgui_playwright() {
         group_by_regex("Transport plumbing", mod, %regex~^(post_command|send_imgui_command|receive_imgui_command).*%%),
         hide_group(group_by_regex("Internal", mod, %regex~^(_|priv_|dasimgui_module_root).*%%))
     )
-    document("Playwright — block-form test harness for daslang-live + dasImgui apps", mod, "imgui_playwright.rst", groups)
+    document("Playwright - block-form test harness for daslang-live + dasImgui apps", mod, "imgui_playwright.rst", groups)
 }
 
 def document_module_imgui_live() {
@@ -190,7 +190,7 @@ def document_module_imgui_transport() {
         group_by_regex("Raw HTTP",               mod, %regex~^(http_get|http_post|HttpReply)$%%),
         hide_group(group_by_regex("Internal",    mod, %regex~^(_|priv_).*%%))
     )
-    document("Transport — pluggable lambda-based IPC for imgui commands", mod, "imgui_transport.rst", groups)
+    document("Transport - pluggable lambda-based IPC for imgui commands", mod, "imgui_transport.rst", groups)
 }
 
 

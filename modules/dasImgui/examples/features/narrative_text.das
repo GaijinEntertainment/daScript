@@ -23,7 +23,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("narrative_text — boost v2 §3.2", 760, 460)
+    harness_init("narrative_text - boost v2 sec 3.2", 760, 460)
 }
 
 [export]
@@ -34,9 +34,9 @@ def update() {
     SetNextWindowSize(ImVec2(720.0, 400.0), ImGuiCond.Always)
     window(MAIN_WIN, (text = "narrative widgets", closable = false,
                       flags = ImGuiWindowFlags.None)) {
-        text(NARRATIVE_LEAD, (text = "Telemetry-bearing narrative — each line emits its rendered string back as payload value under its IDENT."))
-        text_unformatted(NARRATIVE_UNFORMATTED, (text = "text_unformatted: %s passes through literally — no printf parse."))
-        text_wrapped(NARRATIVE_WRAPPED, (text = "text_wrapped soft-wraps at the window edge instead of clipping. Useful for any paragraph copy that needs to flow with the user's column width — release notes, tooltips, help panels."))
+        text(NARRATIVE_LEAD, (text = "Telemetry-bearing narrative - each line emits its rendered string back as payload value under its IDENT."))
+        text_unformatted(NARRATIVE_UNFORMATTED, (text = "text_unformatted: %s passes through literally - no printf parse."))
+        text_wrapped(NARRATIVE_WRAPPED, (text = "text_wrapped soft-wraps at the window edge instead of clipping. Useful for any paragraph copy that needs to flow with the user's column width - release notes, tooltips, help panels."))
         text_colored(NARRATIVE_COLORED, (color = float4(0.95f, 0.65f, 0.20f, 1.0f), text = "text_colored: per-call color, payload mirrors the rendered string."))
         text_disabled(NARRATIVE_DISABLED, (text = "text_disabled: dimmed style for caption / hint copy."))
     }

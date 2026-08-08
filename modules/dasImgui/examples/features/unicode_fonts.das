@@ -1,6 +1,7 @@
 options gen2
 options _comment_hygiene = true
 options gc
+options _ascii_strings = false   // unicode font demo - non-ASCII content is the point
 
 require imgui/imgui_harness
 require imgui/imgui_theme_daslang
@@ -75,7 +76,7 @@ def update() { // nolint:STYLE038
             text("Wide glyphs use natural UI advances here: 中文 · 😀 🚀")
 
             separator()
-            text("Terminal symbols:  ✓  ✗  ⚠  ⓘ  →  ←  •  ◆  ▶  ⏱  ⌁")
+            text("Terminal symbols:  ✓  ✗  ⚠  ⓘ  ->  <-  •  ◆  ▶  ⏱  ⌁")
             text("Powerline PUA:      prompt     branch")
 
             text("Tinted glyphs:"); same_line()

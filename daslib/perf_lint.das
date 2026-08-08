@@ -1537,7 +1537,7 @@ class PerfLintVisitor : AstVisitor {
         // string(msg#) is exempt: a load-bearing clone (temporary -> permanent), not a no-op
         if (arg == null || arg._type == null || arg._type.baseType != target
                 || (target == Type.tString && arg._type.flags.temporary)) return
-        perf_warning("PERF020: redundant {fname}(...) cast — argument is already {fname}", call.at)
+        perf_warning("PERF020: redundant {fname}(...) cast - argument is already {fname}", call.at)
     }
 
     // --- PERF021: cond ? T(a) : T(b) — hoist common workhorse cast out of ternary ---
@@ -1620,7 +1620,7 @@ class PerfLintVisitor : AstVisitor {
         if (lt == Type.none || rt == Type.none || lt != rt || lname != rname
             || la == Type.none || la != ra
             || !cast_call_tail_args_equal(expr.left, expr.right)) return
-        perf_warning("PERF021: redundant per-branch {lname}(...) cast in ternary — hoist as {lname}(cond ? a : b)", expr.at)
+        perf_warning("PERF021: redundant per-branch {lname}(...) cast in ternary - hoist as {lname}(cond ? a : b)", expr.at)
     }
 
     // --- PERF014: exact char-class checks — is_number (digit range) / is_alpha (both-case compound) ---
@@ -1677,7 +1677,7 @@ class PerfLintVisitor : AstVisitor {
         var hi = 0
         if (!parse_bounded_range(expr, negated, v, lo, hi) || lo != 48 || hi != 57) return
         let neg = negated ? "!" : ""
-        perf_warning("PERF014: char-class range check{negated ? " (negated)" : ""} '0'..'9' — use '{neg}is_number({describe(v)})' from strings module", expr.at)
+        perf_warning("PERF014: char-class range check{negated ? " (negated)" : ""} '0'..'9' - use '{neg}is_number({describe(v)})' from strings module", expr.at)
     }
 
     def check_perf014_alpha(expr : ExprOp2?; negated : bool) : void {
@@ -1699,7 +1699,7 @@ class PerfLintVisitor : AstVisitor {
         let upperLower = loL == 65 && hiL == 90 && loR == 97 && hiR == 122
         if (!lowerUpper && !upperLower) return
         let neg = negated ? "!" : ""
-        perf_warning("PERF014: char-class range check{negated ? " (negated)" : ""} 'a'..'z' + 'A'..'Z' — use '{neg}is_alpha({describe(vL)})' from strings module", expr.at)
+        perf_warning("PERF014: char-class range check{negated ? " (negated)" : ""} 'a'..'z' + 'A'..'Z' - use '{neg}is_alpha({describe(vL)})' from strings module", expr.at)
     }
 
     // --- PERF017: length(collection) <op> 0/1 → empty / !empty ---
@@ -1780,9 +1780,9 @@ class PerfLintVisitor : AstVisitor {
         }
         // Diagnostic uses canon_op so Yoda forms (e.g. `1 <= length(x)`) print the canonical equivalent (`length(x) >= 1`), matching what we matched.
         if (is_empty_pattern) {
-            perf_warning("PERF017: 'length(x) {canon_op} {k}' — use 'empty(x)' (avoids unnecessary strlen on strings)", expr.at)
+            perf_warning("PERF017: 'length(x) {canon_op} {k}' - use 'empty(x)' (avoids unnecessary strlen on strings)", expr.at)
         } elif (is_nonempty_pattern) {
-            perf_warning("PERF017: 'length(x) {canon_op} {k}' — use '!empty(x)' (avoids unnecessary strlen on strings)", expr.at)
+            perf_warning("PERF017: 'length(x) {canon_op} {k}' - use '!empty(x)' (avoids unnecessary strlen on strings)", expr.at)
         }
     }
 
@@ -1824,7 +1824,7 @@ class PerfLintVisitor : AstVisitor {
             is_min = swap_order
         }
         let which = is_min ? "min" : "max"
-        perf_warning("PERF015: ternary {which} — use '{which}(a, b)' from math module", expr.at)
+        perf_warning("PERF015: ternary {which} - use '{which}(a, b)' from math module", expr.at)
         return true
     }
 
@@ -1867,7 +1867,7 @@ class PerfLintVisitor : AstVisitor {
             }
         }
         if (!is_abs) return false
-        perf_warning("PERF016: ternary abs — use 'abs(x)' from math module", expr.at)
+        perf_warning("PERF016: ternary abs - use 'abs(x)' from math module", expr.at)
         return true
     }
 
@@ -2097,9 +2097,9 @@ class PerfLintVisitor : AstVisitor {
         return if (value == null)
         let kind = perf025_value_kind(value)
         if (kind == Perf025Kind.equivalent) {
-            perf_warning("PERF025: string(...) inside string interpolation is redundant — the interpolation already converts to string; drop the cast", inner.at)
+            perf_warning("PERF025: string(...) inside string interpolation is redundant - the interpolation already converts to string; drop the cast", inner.at)
         } elif (kind == Perf025Kind.unsigned_hex) {
-            perf_warning("PERF025: string(...) inside string interpolation is redundant; drop the cast — unsigned values interpolate as hex by default, so use the '\{x:d\}' format tag to keep decimal output", inner.at)
+            perf_warning("PERF025: string(...) inside string interpolation is redundant; drop the cast - unsigned values interpolate as hex by default, so use the '\{x:d\}' format tag to keep decimal output", inner.at)
         }
     }
 
@@ -2238,7 +2238,7 @@ class PerfLintVisitor : AstVisitor {
         if (sink.bit.alloc) {
             perf_warning("PERF026: {sink.what} allocates or frees on a hot path, via {chain}{sink_pos}; hoist it out of the hot path. To allow it: {esc_alloc}", at)
         } elif (sink.bit.env) {
-            perf_warning("PERF027: {sink.what} reads the environment on a hot path, via {chain}{sink_pos}; getenv allocates a string in the context heap on every call — read it once at init and cache the value. To allow it: {esc}", at)
+            perf_warning("PERF027: {sink.what} reads the environment on a hot path, via {chain}{sink_pos}; getenv allocates a string in the context heap on every call - read it once at init and cache the value. To allow it: {esc}", at)
         } else {
             perf_warning("PERF028: {sink.what} performs I/O on a hot path, via {chain}{sink_pos}. To allow it: {esc}", at)
         }

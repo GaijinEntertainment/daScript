@@ -22,7 +22,7 @@ let private ROWS = fixed_array("Arrow", "TextInput", "ResizeAll", "Hand", "NotAl
 
 [export]
 def init() {
-    harness_init("selectable_hover — hover target", 520, 320)
+    harness_init("selectable_hover - hover target", 520, 320)
 }
 
 [export]

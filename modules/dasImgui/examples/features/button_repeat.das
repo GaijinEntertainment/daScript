@@ -18,7 +18,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("with_button_repeat — boost v2 §3.6", 720, 360)
+    harness_init("with_button_repeat - boost v2 sec 3.6", 720, 360)
 }
 
 [export]
@@ -29,7 +29,7 @@ def update() {
     SetNextWindowSize(ImVec2(680.0, 300.0), ImGuiCond.Always)
     window(MAIN_WIN, (text = "with_button_repeat", closable = false,
                       flags = ImGuiWindowFlags.None)) {
-        text(LEAD, (text = "Hold the inside button — click_count climbs every frame. The outside one fires once per press."))
+        text(LEAD, (text = "Hold the inside button - click_count climbs every frame. The outside one fires once per press."))
 
         with_button_repeat(true) {
             if (button(BTN_INSIDE, (text = "repeat (hold)"))) {}

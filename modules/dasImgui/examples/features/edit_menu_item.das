@@ -27,7 +27,7 @@ var private g_show_grid : bool = false
 
 [export]
 def init() {
-    harness_init("edit_menu_item — boost v2 §3.7", 720, 380)
+    harness_init("edit_menu_item - boost v2 sec 3.7", 720, 380)
 }
 
 [export]
@@ -54,7 +54,7 @@ def update() {
     SetNextWindowSize(ImVec2(640.0, 280.0), ImGuiCond.Always)
     window(BODY, (text = "Live state", closable = false,
                   flags = ImGuiWindowFlags.None)) {
-        text(LEAD, (text = "Click items in the menu bar — caller-owned bools flip."))
+        text(LEAD, (text = "Click items in the menu bar - caller-owned bools flip."))
         text(VAL_DARK, (text = "g_dark_mode  = {g_dark_mode}"))
         text(VAL_AUTO, (text = "g_autosave   = {g_autosave}"))
         text(VAL_GRID, (text = "g_show_grid  = {g_show_grid}"))

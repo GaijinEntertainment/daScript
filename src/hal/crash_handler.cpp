@@ -218,7 +218,7 @@ namespace das {
                 what = "non-std exception";
             }
         }
-        fprintf(stderr, "\nCRASH: std::terminate — uncaught exception: %s\n", what);
+        fprintf(stderr, "\nCRASH: std::terminate - uncaught exception: %s\n", what);
         print_current_stack_trace();
         fflush(stderr);
         // Returning from a terminate handler is undefined; abort() is the sanctioned exit. The

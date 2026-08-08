@@ -125,7 +125,7 @@ def private ref_for(baselines : array<LlmBaseline>; display : string; var prefil
 def main() {
     allow_cpu_prefill()   // CPU rows are this tool's product — disarm the Metal-build tripwire
     if (!jit_enabled()) {
-        print("gen_profile is JIT-only — run with: daslang -jit <file>\n")
+        print("gen_profile is JIT-only - run with: daslang -jit <file>\n")
         return
     }
     var r <- parse_args(type<Args>)

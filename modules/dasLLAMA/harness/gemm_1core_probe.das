@@ -128,7 +128,7 @@ def bench_shape(name : string; n, d : int64; reps : int) {   // nolint:STYLE037,
         let md = maxdiff(yref, y)
         ok[ci] = md < 1.0e-3
         if (!ok[ci]) {
-            print("  !! {cands[ci].name} maxdiff {md} vs portable — REJECTED\n")
+            print("  !! {cands[ci].name} maxdiff {md} vs portable - REJECTED\n")
         }
     }
 
@@ -341,7 +341,7 @@ def focus_main {
 [export]
 def main {
     if (!jit_enabled()) {
-        print("run with -jit — off-JIT the x64 backends do not register and dot32 runs its scalar fallback\n")
+        print("run with -jit - off-JIT the x64 backends do not register and dot32 runs its scalar fallback\n")
         return
     }
     if (!empty(g_env_harness.focus_backend)) {

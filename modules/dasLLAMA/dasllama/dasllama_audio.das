@@ -512,7 +512,7 @@ def private log_mel_whisper_(samples : array<float> | #; plan : WhisperMelPlan; 
     let n_bins = n_fft / 2l + 1l
     let n_compute = min((n_in + head) / AUDIO_HOP + 1l, m.n_len)
     if (plan.n_fft != n_fft) {
-        panic("log_mel_whisper: plan is {plan.n_fft}-pt, want {n_fft} — build_whisper_mel_plan(AUDIO_N_FFT)")
+        panic("log_mel_whisper: plan is {plan.n_fft}-pt, want {n_fft} - build_whisper_mel_plan(AUDIO_N_FFT)")
     }
     let log10_e = 0.43429448190325176lf
     let fill = float(log(1e-10lf) * log10_e)
@@ -1064,7 +1064,7 @@ def private tower_quantize_(var t : AudioTower; var fblob : array<float>; var qb
     let d = t.d_model
     let ff = t.n_ff
     if (d % 32l != 0l || ff % 32l != 0l) {
-        panic("audio tower q8: d_model {d} / n_ff {ff} are not 32-multiples — the compact layout cannot serve this tower")
+        panic("audio tower q8: d_model {d} / n_ff {ff} are not 32-multiples - the compact layout cannot serve this tower")
     }
     let has_conv = t.conv2_w_off != 0l   // a conv-less core (qwen3a: layers at 0) has no conv front end
     let m1in = d * t.stack_factor
@@ -1222,9 +1222,9 @@ def load_audio_tower(path : string; q8 : bool = false) : AudioTower {
         let ts_img = ref_time_ticks()
         var t = AudioTower()
         if (!load_image(path, t, tag)) {
-            panic("dasLLAMA: '{path}' is not a prepared audio-tower image for this box/knobs (identity {image_identity(tag)}) — regenerate it from the source mmproj gguf")
+            panic("dasLLAMA: '{path}' is not a prepared audio-tower image for this box/knobs (identity {image_identity(tag)}) - regenerate it from the source mmproj gguf")
         }
-        to_log(LOG_INFO, "dasLLAMA: prepared tower image mapped in {get_time_usec(ts_img) / 1000} ms — {path}\n")
+        to_log(LOG_INFO, "dasLLAMA: prepared tower image mapped in {get_time_usec(ts_img) / 1000} ms - {path}\n")
         return <- t
     }
     if (g_env_engine.image) {
@@ -1233,7 +1233,7 @@ def load_audio_tower(path : string; q8 : bool = false) : AudioTower {
         let ts_img = ref_time_ticks()
         var t = AudioTower()
         if (load_image(img, t, tag)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared tower image mapped in {get_time_usec(ts_img) / 1000} ms — {img}\n")
+            to_log(LOG_INFO, "dasLLAMA: prepared tower image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
             return <- t
         }
         var inscope st <- stage_audio_tower(path, q8)

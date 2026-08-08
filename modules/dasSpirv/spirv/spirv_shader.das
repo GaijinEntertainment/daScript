@@ -217,7 +217,7 @@ class SpirvComputeShader : SpirvShader {
 class SpirvKernelShader : SpirvShader {
     def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         if (func.classParent == null) {
-            errors := "[spirv_kernel] must annotate a class method — resources are the class's annotated members"
+            errors := "[spirv_kernel] must annotate a class method - resources are the class's annotated members"
             return false
         }
         return SpirvShader`apply(self, func, group, args, errors)

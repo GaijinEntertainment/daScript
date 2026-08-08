@@ -47,7 +47,7 @@ def main {
 
         var snap = wait_for_widget(app, T_GO, 10.0f)
         if (snap == null) {
-            panic("{T_GO} never registered — wrong app running?")
+            panic("{T_GO} never registered - wrong app running?")
         }
         let p_go    = widget_center(snap, T_GO)
         let p_small = widget_center(snap, T_SMALL)

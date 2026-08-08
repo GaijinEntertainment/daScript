@@ -289,7 +289,7 @@ def whisper_dec_quantize(var st : WhisperStaging) {
     let d = st.e.n_text_state
     let ff = 4l * d
     if (d % 32l != 0l) {
-        panic("whisper decoder q8: n_text_state {d} is not a 32-multiple — the compact layout cannot serve this decoder")
+        panic("whisper decoder q8: n_text_state {d} is not a 32-multiple - the compact layout cannot serve this decoder")
     }
     let qlayer = 16l * d * d
     let qtotal = st.e.n_text_layer * qlayer + st.e.n_vocab * d
@@ -457,9 +457,9 @@ def load_whisper_model(path : string; q8 : bool = false) : WhisperModel {
         let ts_img = ref_time_ticks()
         var t = WhisperModel()
         if (!load_image(path, t, tag)) {
-            panic("dasLLAMA: '{path}' is not a prepared whisper image for this box/knobs (identity {image_identity(tag)}) — regenerate it from the source model")
+            panic("dasLLAMA: '{path}' is not a prepared whisper image for this box/knobs (identity {image_identity(tag)}) - regenerate it from the source model")
         }
-        to_log(LOG_INFO, "dasLLAMA: prepared whisper image mapped in {get_time_usec(ts_img) / 1000} ms — {path}\n")
+        to_log(LOG_INFO, "dasLLAMA: prepared whisper image mapped in {get_time_usec(ts_img) / 1000} ms - {path}\n")
         return <- t
     }
     if (g_env_engine.image) {
@@ -468,7 +468,7 @@ def load_whisper_model(path : string; q8 : bool = false) : WhisperModel {
         let ts_img = ref_time_ticks()
         var t = WhisperModel()
         if (load_image(img, t, tag)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared whisper image mapped in {get_time_usec(ts_img) / 1000} ms — {img}\n")
+            to_log(LOG_INFO, "dasLLAMA: prepared whisper image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
             return <- t
         }
         var built = WhisperModel()
@@ -1680,12 +1680,12 @@ def create_session(w : WhisperModel; lang : string = "en") : WhisperSession {
             panic("dasLLAMA whisper: unknown language '{lang}'")
         }
         if (!w.multilingual && lang != "en") {
-            panic("dasLLAMA whisper: this model is English-only — lang=\"{lang}\" is not available")
+            panic("dasLLAMA whisper: this model is English-only - lang=\"{lang}\" is not available")
         }
         // the language token is tok_sot+1+lang_id — an id past n_lang lands on the shifted
         // task tokens (translate/transcribe) and silently corrupts the prompt
         if (int64(s.lang_id) >= w.n_lang) {
-            panic("dasLLAMA whisper: this model has {w.n_lang} languages — '{lang}' (id {s.lang_id}) needs the large-v3 family")
+            panic("dasLLAMA whisper: this model has {w.n_lang} languages - '{lang}' (id {s.lang_id}) needs the large-v3 family")
         }
     }
     s.es <- make_encoder_state(w.enc)

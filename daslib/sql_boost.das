@@ -613,7 +613,7 @@ class SqlIndexMacro : AstStructureAnnotation {
         }
         let table_name = extract_string_return(name_fn)
         if (empty(table_name)) {
-            errors := "[sql_index] on struct '{st.name}': internal — _sql_table_name body did not match expected shape."
+            errors := "[sql_index] on struct '{st.name}': internal - _sql_table_name body did not match expected shape."
             return false
         }
 
@@ -679,7 +679,7 @@ def private find_parent_table_and_pk(var st : StructurePtr; parent_name : string
 
 [structure_macro(name=sql_table)]
 class SqlTableMacro : AstStructureAnnotation {
-    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {   // nolint:STYLE037,STYLE038 - flat registration table, one emit call per generated [sql_table] helper
         let table_name = find_annotation(args, "name", string(st.name))
         // legacy=true: emit read-side helpers only. Writes fail as unresolved-overload.
         let is_legacy = find_annotation(args, "legacy", false)
@@ -689,7 +689,7 @@ class SqlTableMacro : AstStructureAnnotation {
         if (schema_from_arg is tString) {
             let raw_path = schema_from_arg as tString
             if (empty(raw_path)) {
-                errors := "[sql_table]: schema_from=\"\" is invalid — provide a non-empty path to a SQLite database file."
+                errors := "[sql_table]: schema_from=\"\" is invalid - provide a non-empty path to a SQLite database file."
                 return false
             }
             if (!apply_schema_from(st, raw_path, table_name, schema_assert_exprs, errors)) return false
@@ -728,11 +728,11 @@ class SqlTableMacro : AstStructureAnnotation {
             if (col_anno is tString) {
                 let cv = col_anno as tString
                 if (empty(cv)) {
-                    errors := "[sql_table]: field '{fname}' @sql_column = \"\" is invalid — provide a non-empty SQL column name."
+                    errors := "[sql_table]: field '{fname}' @sql_column = \"\" is invalid - provide a non-empty SQL column name."
                     return false
                 }
                 if (find(cv, "\"") >= 0 || find(cv, "\\") >= 0) {
-                    errors := "[sql_table]: field '{fname}' @sql_column=\"{cv}\" — embedded `\"` / `\\` are rejected (SQL identifier hygiene). Use a plain identifier."
+                    errors := "[sql_table]: field '{fname}' @sql_column=\"{cv}\" - embedded `\"` / `\\` are rejected (SQL identifier hygiene). Use a plain identifier."
                     return false
                 }
                 col_name = cv
@@ -740,15 +740,15 @@ class SqlTableMacro : AstStructureAnnotation {
 
             // ---- validation ----
             if (is_pk && is_optional) {
-                errors := "[sql_table]: @sql_primary_key on field '{fname}' must not be Option<T> — primary keys cannot be NULL in SQL. Use a non-optional type."
+                errors := "[sql_table]: @sql_primary_key on field '{fname}' must not be Option<T> - primary keys cannot be NULL in SQL. Use a non-optional type."
                 return false
             }
             if (is_computed && is_pk) {
-                errors := "[sql_table]: field '{fname}' cannot be both @sql_primary_key and @sql_computed — SQLite rejects PRIMARY KEY on a generated column."
+                errors := "[sql_table]: field '{fname}' cannot be both @sql_primary_key and @sql_computed - SQLite rejects PRIMARY KEY on a generated column."
                 return false
             }
             if (is_computed && is_unique) {
-                errors := "[sql_table]: field '{fname}' cannot be both @sql_unique and @sql_computed — declare an explicit [sql_index(fields=\"{fname}\", unique=true)] if the provider supports indexing that generated expression."
+                errors := "[sql_table]: field '{fname}' cannot be both @sql_unique and @sql_computed - declare an explicit [sql_index(fields=\"{fname}\", unique=true)] if the provider supports indexing that generated expression."
                 return false
             }
             if (is_computed && field.init != null) {
@@ -760,12 +760,12 @@ class SqlTableMacro : AstStructureAnnotation {
                 return false
             }
             if (is_json && is_blob) {
-                errors := "[sql_table]: field '{fname}' has both @sql_json and @sql_blob — pick one. Use @sql_json for queryable, schema-tolerant TEXT storage; use @sql_blob for opaque, faster binary storage."
+                errors := "[sql_table]: field '{fname}' has both @sql_json and @sql_blob - pick one. Use @sql_json for queryable, schema-tolerant TEXT storage; use @sql_blob for opaque, faster binary storage."
                 return false
             }
             let json_or_blob_kind = is_json ? "json" : "blob"
             if ((is_json || is_blob) && is_pk) {
-                errors := "[sql_table]: field '{fname}' is @sql_{json_or_blob_kind} — non-scalar columns cannot be a PRIMARY KEY."
+                errors := "[sql_table]: field '{fname}' is @sql_{json_or_blob_kind} - non-scalar columns cannot be a PRIMARY KEY."
                 return false
             }
             if ((is_json || is_blob) && is_computed) {
@@ -773,7 +773,7 @@ class SqlTableMacro : AstStructureAnnotation {
                 return false
             }
             if (field.init != null && !empty(sql_default_fn)) {
-                errors := "[sql_table]: field '{fname}' has both a daslang field initializer and @sql_default_fn — pick one. Use the field init for literal defaults, @sql_default_fn for SQL built-ins like CURRENT_TIMESTAMP."
+                errors := "[sql_table]: field '{fname}' has both a daslang field initializer and @sql_default_fn - pick one. Use the field init for literal defaults, @sql_default_fn for SQL built-ins like CURRENT_TIMESTAMP."
                 return false
             }
             if (!empty(sql_default_fn)) {
@@ -789,7 +789,7 @@ class SqlTableMacro : AstStructureAnnotation {
                 }
             }
             if ((has_on_delete_attr || has_on_update_attr) && empty(references)) {
-                errors := "[sql_table]: field '{fname}' has @sql_on_delete / @sql_on_update without @sql_references — these annotations only apply to a foreign-key relationship."
+                errors := "[sql_table]: field '{fname}' has @sql_on_delete / @sql_on_update without @sql_references - these annotations only apply to a foreign-key relationship."
                 return false
             }
             if (!empty(references)) {
@@ -834,9 +834,9 @@ class SqlTableMacro : AstStructureAnnotation {
                 let pk_lookup = find_parent_table_and_pk(st, references)
                 if (!pk_lookup.found) {
                     if (empty(pk_lookup.tab_name)) {
-                        errors := "[sql_table]: field '{fname}' @sql_references=\"{references}\" — no struct named '{references}' is visible in this module."
+                        errors := "[sql_table]: field '{fname}' @sql_references=\"{references}\" - no struct named '{references}' is visible in this module."
                     } else {
-                        errors := "[sql_table]: field '{fname}' @sql_references=\"{references}\" — parent struct '{references}' has no @sql_primary_key field; FK target column cannot be resolved."
+                        errors := "[sql_table]: field '{fname}' @sql_references=\"{references}\" - parent struct '{references}' has no @sql_primary_key field; FK target column cannot be resolved."
                     }
                     return false
                 }
@@ -950,7 +950,7 @@ class SqlTableMacro : AstStructureAnnotation {
         return true
     }
 
-    def apply_schema_from(var st : StructurePtr;
+    def apply_schema_from(var st : StructurePtr;   // nolint:STYLE037,STYLE038 - one arm per SQL affinity; the arms share the covered-column bookkeeping
                           raw_path : string;
                           tbl_name : string;
                           var assert_exprs : array<ExpressionPtr>&;
@@ -963,25 +963,25 @@ class SqlTableMacro : AstStructureAnnotation {
         for (i in range(sql_provider_count())) {
             if (sql_provider_at(i).readTableSchema != null) {
                 if (pidx >= 0) {
-                    errors := "[sql_table]: schema_from=\"{raw_path}\" — ambiguous: multiple registered providers support schema introspection ({sql_provider_names()})."
+                    errors := "[sql_table]: schema_from=\"{raw_path}\" - ambiguous: multiple registered providers support schema introspection ({sql_provider_names()})."
                     return false
                 }
                 pidx = i
             }
         }
         if (pidx < 0) {
-            errors := "[sql_table]: schema_from=\"{raw_path}\" — no registered SQL provider supports schema introspection (registered: {sql_provider_names()})."
+            errors := "[sql_table]: schema_from=\"{raw_path}\" - no registered SQL provider supports schema introspection (registered: {sql_provider_names()})."
             return false
         }
         let provider = sql_provider_at(pidx)
         var cols_result <- invoke(provider.readTableSchema, resolved, tbl_name)
         if (cols_result |> is_err) {
-            errors := "[sql_table]: schema_from=\"{raw_path}\" — {cols_result |> unwrap_err}"
+            errors := "[sql_table]: schema_from=\"{raw_path}\" - {cols_result |> unwrap_err}"
             return false
         }
         let cols <- cols_result._value
         if (empty(cols)) {
-            errors := "[sql_table]: schema_from=\"{raw_path}\" — table \"{tbl_name}\" has no columns or doesn't exist in this database."
+            errors := "[sql_table]: schema_from=\"{raw_path}\" - table \"{tbl_name}\" has no columns or doesn't exist in this database."
             return false
         }
         // Track which schema cols are covered by hand-declared fields.
@@ -999,7 +999,7 @@ class SqlTableMacro : AstStructureAnnotation {
                 }
             }
             if (matched_col_idx < 0) {
-                errors := "[sql_table]: schema_from=\"{raw_path}\" — hand-declared field '{ufname}' not found in table \"{tbl_name}\". Either remove the field, rename it, or update the .db schema."
+                errors := "[sql_table]: schema_from=\"{raw_path}\" - hand-declared field '{ufname}' not found in table \"{tbl_name}\". Either remove the field, rename it, or update the .db schema."
                 return false
             }
             covered[matched_col_idx] = true
@@ -1010,9 +1010,9 @@ class SqlTableMacro : AstStructureAnnotation {
             let user_is_pk = find_annotation(st.fields[ufi].annotation, "sql_primary_key", false)
             if (user_is_pk != col_pk) {
                 if (user_is_pk) {
-                    errors := "[sql_table]: schema_from=\"{raw_path}\" — field '{ufname}' is @sql_primary_key but column \"{col_name_s}\" in \"{tbl_name}\" is not PRIMARY KEY."
+                    errors := "[sql_table]: schema_from=\"{raw_path}\" - field '{ufname}' is @sql_primary_key but column \"{col_name_s}\" in \"{tbl_name}\" is not PRIMARY KEY."
                 } else {
-                    errors := "[sql_table]: schema_from=\"{raw_path}\" — column \"{col_name_s}\" in \"{tbl_name}\" is PRIMARY KEY but field '{ufname}' is missing @sql_primary_key."
+                    errors := "[sql_table]: schema_from=\"{raw_path}\" - column \"{col_name_s}\" in \"{tbl_name}\" is PRIMARY KEY but field '{ufname}' is missing @sql_primary_key."
                 }
                 return false
             }
@@ -1022,9 +1022,9 @@ class SqlTableMacro : AstStructureAnnotation {
             let col_is_nullable = !col_not_null && !col_pk
             if (user_is_nullable != col_is_nullable) {
                 if (user_is_nullable) {
-                    errors := "[sql_table]: schema_from=\"{raw_path}\" — field '{ufname}' is Option<T> but column \"{col_name_s}\" in \"{tbl_name}\" is NOT NULL. Drop the Option<> wrapper."
+                    errors := "[sql_table]: schema_from=\"{raw_path}\" - field '{ufname}' is Option<T> but column \"{col_name_s}\" in \"{tbl_name}\" is NOT NULL. Drop the Option<> wrapper."
                 } else {
-                    errors := "[sql_table]: schema_from=\"{raw_path}\" — column \"{col_name_s}\" in \"{tbl_name}\" allows NULL but field '{ufname}' is non-optional. Use Option<T>."
+                    errors := "[sql_table]: schema_from=\"{raw_path}\" - column \"{col_name_s}\" in \"{tbl_name}\" allows NULL but field '{ufname}' is non-optional. Use Option<T>."
                 }
                 return false
             }
@@ -1050,16 +1050,15 @@ class SqlTableMacro : AstStructureAnnotation {
             }))
         }
         // Synthesize fields for uncovered schema columns.
-        for (ci in range(length(cols))) {
-            if (covered[ci]) continue
-            let col = cols[ci]
+        for (is_covered, col in covered, cols) {
+            if (is_covered) continue
             let sql_type = col.data_type
             // SQLite quirk: INTEGER PRIMARY KEY columns report notnull=0 in pragma_table_info because
             // `INTEGER PRIMARY KEY` aliases rowid (which has its own NULL handling). Treat PK as NOT NULL.
             let effective_not_null = col.not_null || col.pk
             var td = affinity_to_typedecl(sql_type, effective_not_null)
             if (td == null) {
-                errors := "[sql_table]: schema_from=\"{raw_path}\" — column \"{col.name}\" declared type \"{col.decl_type}\" couldn't be mapped to a daslang type."
+                errors := "[sql_table]: schema_from=\"{raw_path}\" - column \"{col.name}\" declared type \"{col.decl_type}\" couldn't be mapped to a daslang type."
                 return false
             }
             let fi = st |> add_structure_field(col.name, td, default<ExpressionPtr>)
@@ -1448,7 +1447,7 @@ class SqlTableMacro : AstStructureAnnotation {
         let pk_idx = find_pk_field(fields)
         if (pk_idx < 0) {
             let st_name = string(st.name)
-            let msg = "[sql_table] {st_name}: update(row) / delete_(row) / delete_by_id are unavailable — no @sql_primary_key field. Use the macro forms `_sql_update(type<{st_name}>, where, set)` / `_sql_delete(type<{st_name}>, where)` instead."
+            let msg = "[sql_table] {st_name}: update(row) / delete_(row) / delete_by_id are unavailable - no @sql_primary_key field. Use the macro forms `_sql_update(type<{st_name}>, where, set)` / `_sql_delete(type<{st_name}>, where)` instead."
             var fn = qmacro_function("_sql_update_by_pk_sql") $(typ : $t(st); name : string) : string {
                 panic($v(msg))
                 return ""
@@ -1474,7 +1473,7 @@ class SqlTableMacro : AstStructureAnnotation {
         // No SET columns -> `UPDATE T SET WHERE pk=?` is invalid SQL; emit a runtime-panic stub.
         if (empty(set_clause)) {
             let st_name = string(st.name)
-            let msg = "[sql_table] {st_name}: update(row) has nothing to SET — every non-PK column is missing or @sql_computed. Add at least one writable non-PK column, or use raw `exec`."
+            let msg = "[sql_table] {st_name}: update(row) has nothing to SET - every non-PK column is missing or @sql_computed. Add at least one writable non-PK column, or use raw `exec`."
             var fn = qmacro_function("_sql_update_by_pk_sql") $(typ : $t(st); name : string) : string {
                 panic($v(msg))
                 return ""
@@ -1726,12 +1725,12 @@ def private emit_json_blob_adapters_for_struct(var st : StructurePtr; fields : a
 
 [structure_macro(name=sql_view)]
 class private SqlViewMacro : AstStructureAnnotation {
-    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {   // nolint:STYLE038 - flat registration table, one emit call per generated [sql_view] helper
         let view_name = find_annotation(args, "name", string(st.name))
         // Reject sibling [sql_index] up front so the error points at the macro stack, not a per-field follow-on.
         for (annDecl in st.annotations) {
             if (annDecl.annotation.name == "sql_index") {
-                errors := "[sql_view] on struct '{st.name}': [sql_index] cannot apply to a view — views are read-only and inherit indexing from the underlying table. Move the index to the underlying table's struct."
+                errors := "[sql_view] on struct '{st.name}': [sql_index] cannot apply to a view - views are read-only and inherit indexing from the underlying table. Move the index to the underlying table's struct."
                 return false
             }
         }
@@ -1741,47 +1740,47 @@ class private SqlViewMacro : AstStructureAnnotation {
         for (field in st.fields) {
             let fname = string(field.name)
             if (find_annotation(field.annotation, "sql_primary_key", false)) {
-                errors := "[sql_view]: field '{fname}' has @sql_primary_key — views are read-only and cannot declare keys; primary keys belong on the underlying table."
+                errors := "[sql_view]: field '{fname}' has @sql_primary_key - views are read-only and cannot declare keys; primary keys belong on the underlying table."
                 return false
             }
             if (find_annotation(field.annotation, "sql_unique", false)) {
-                errors := "[sql_view]: field '{fname}' has @sql_unique — uniqueness constraints belong on the underlying table, not the view."
+                errors := "[sql_view]: field '{fname}' has @sql_unique - uniqueness constraints belong on the underlying table, not the view."
                 return false
             }
             let computed_sql = find_annotation(field.annotation, "sql_computed", "")
             if (!empty(computed_sql)) {
-                errors := "[sql_view]: field '{fname}' has @sql_computed — view bodies are arbitrary SELECT expressions (write the expression directly inside `_create_view`'s chain), not GENERATED ALWAYS columns."
+                errors := "[sql_view]: field '{fname}' has @sql_computed - view bodies are arbitrary SELECT expressions (write the expression directly inside `_create_view`'s chain), not GENERATED ALWAYS columns."
                 return false
             }
             if (find_annotation(field.annotation, "sql_stored", false)) {
-                errors := "[sql_view]: field '{fname}' has @sql_stored — only @sql_computed columns can be STORED, and views don't have @sql_computed. Remove the annotation."
+                errors := "[sql_view]: field '{fname}' has @sql_stored - only @sql_computed columns can be STORED, and views don't have @sql_computed. Remove the annotation."
                 return false
             }
             if (!empty(find_annotation(field.annotation, "sql_default_fn", ""))) {
-                errors := "[sql_view]: field '{fname}' has @sql_default_fn — defaults belong on the underlying table, not the view."
+                errors := "[sql_view]: field '{fname}' has @sql_default_fn - defaults belong on the underlying table, not the view."
                 return false
             }
             if (field.init != null) {
-                errors := "[sql_view]: field '{fname}' has a daslang field initializer — view fields are read-only projections of the SELECT body. Remove the initializer."
+                errors := "[sql_view]: field '{fname}' has a daslang field initializer - view fields are read-only projections of the SELECT body. Remove the initializer."
                 return false
             }
             if (!empty(find_annotation(field.annotation, "sql_references", ""))) {
-                errors := "[sql_view]: field '{fname}' has @sql_references — foreign keys belong on the underlying table, not the view."
+                errors := "[sql_view]: field '{fname}' has @sql_references - foreign keys belong on the underlying table, not the view."
                 return false
             }
             if (!empty(find_annotation(field.annotation, "sql_on_delete", ""))) {
-                errors := "[sql_view]: field '{fname}' has @sql_on_delete — FK actions belong on the underlying table, not the view."
+                errors := "[sql_view]: field '{fname}' has @sql_on_delete - FK actions belong on the underlying table, not the view."
                 return false
             }
             if (!empty(find_annotation(field.annotation, "sql_on_update", ""))) {
-                errors := "[sql_view]: field '{fname}' has @sql_on_update — FK actions belong on the underlying table, not the view."
+                errors := "[sql_view]: field '{fname}' has @sql_on_update - FK actions belong on the underlying table, not the view."
                 return false
             }
             let is_optional = is_option_field_type(field._type)
             let is_json = find_annotation(field.annotation, "sql_json", false)
             let is_blob = find_annotation(field.annotation, "sql_blob", false)
             if (is_json && is_blob) {
-                errors := "[sql_view]: field '{fname}' has both @sql_json and @sql_blob — pick one. Use @sql_json for queryable, schema-tolerant TEXT storage; use @sql_blob for opaque binary storage."
+                errors := "[sql_view]: field '{fname}' has both @sql_json and @sql_blob - pick one. Use @sql_json for queryable, schema-tolerant TEXT storage; use @sql_blob for opaque binary storage."
                 return false
             }
             // @sql_column rename, same rules as [sql_table].
@@ -1790,11 +1789,11 @@ class private SqlViewMacro : AstStructureAnnotation {
             if (col_anno is tString) {
                 let cv = col_anno as tString
                 if (empty(cv)) {
-                    errors := "[sql_view]: field '{fname}' @sql_column = \"\" is invalid — provide a non-empty SQL column name."
+                    errors := "[sql_view]: field '{fname}' @sql_column = \"\" is invalid - provide a non-empty SQL column name."
                     return false
                 }
                 if (find(cv, "\"") >= 0 || find(cv, "\\") >= 0) {
-                    errors := "[sql_view]: field '{fname}' @sql_column=\"{cv}\" — embedded `\"` / `\\` are rejected (SQL identifier hygiene). Use a plain identifier."
+                    errors := "[sql_view]: field '{fname}' @sql_column=\"{cv}\" - embedded `\"` / `\\` are rejected (SQL identifier hygiene). Use a plain identifier."
                     return false
                 }
                 col_name = cv
@@ -2009,14 +2008,14 @@ def private make_view_column_info_fn(var st : StructurePtr; fields : array<Field
 
 def private make_view_string_panic_stub_fn(var st : StructurePtr; helper_name : string;
                                            st_name : string; verb : string) : FunctionPtr {
-    let msg = "[sql_view] {st_name}: cannot {verb} into a view — views are read-only. Mutate the underlying table(s) and re-query the view."
+    let msg = "[sql_view] {st_name}: cannot {verb} into a view - views are read-only. Mutate the underlying table(s) and re-query the view."
     return <- make_string_panic_stub_helper_fn(st, helper_name, msg)
 }
 
 def private make_view_bind_row_panic_stub_fn(var st : StructurePtr; helper_name : string;
                                              st_name : string; verb : string;
                                              has_include_pk : bool) : FunctionPtr {
-    let msg = "[sql_view] {st_name}: cannot {verb} into a view — views are read-only. Mutate the underlying table(s) and re-query the view."
+    let msg = "[sql_view] {st_name}: cannot {verb} into a view - views are read-only. Mutate the underlying table(s) and re-query the view."
     return <- make_void_panic_stub_helper_fn(st, helper_name, msg, has_include_pk)
 }
 // ===== Typed ALTER macros — migration-context ergonomics =====
@@ -2030,7 +2029,7 @@ def private resolve_sql_table(prog : ProgramPtr; at : LineInfo; var typeArg : Ex
         return false
     }
     if (typeArg._type.baseType != Type.tStructure || typeArg._type.structType == null) {
-        macro_error(prog, at, "{macroName}: second argument must be `type<SomeStruct>` — got '{describe(typeArg._type)}'")
+        macro_error(prog, at, "{macroName}: second argument must be `type<SomeStruct>` - got '{describe(typeArg._type)}'")
         return false
     }
     st = typeArg._type.structType
@@ -2041,7 +2040,7 @@ def private resolve_sql_table(prog : ProgramPtr; at : LineInfo; var typeArg : Ex
     }
     table_name = extract_string_return(tname_fn)
     if (empty(table_name)) {
-        macro_error(prog, at, "{macroName}: internal — _sql_table_name body did not match expected shape on '{st.name}'")
+        macro_error(prog, at, "{macroName}: internal - _sql_table_name body did not match expected shape on '{st.name}'")
         return false
     }
     return true
@@ -2077,7 +2076,7 @@ def private decode_string_const(e : ExpressionPtr) : tuple<ok : bool; value : st
 
 [call_macro(name="add_column")]
 class private AddColumnMacro : AstCallMacro {
-    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {   // nolint:STYLE038 - one arm per column-default literal kind
         // call.arguments = [db, type<T>, "FieldName"] (3) or [..., defaultLit] (4) after the `db |>` desugar.
         let nArgs = call.arguments |> length
         macro_verify(nArgs == 3 || nArgs == 4, prog, call.at,
@@ -2088,7 +2087,7 @@ class private AddColumnMacro : AstCallMacro {
         // Field-name string literal.
         let nameRes = decode_string_const(call.arguments[2])
         if (!nameRes.ok) {
-            macro_error(prog, call.at, "add_column: third argument must be a string literal naming the field — got '{describe(call.arguments[2])}'")
+            macro_error(prog, call.at, "add_column: third argument must be a string literal naming the field - got '{describe(call.arguments[2])}'")
             return null
         }
         let field_name = nameRes.value
@@ -2101,7 +2100,7 @@ class private AddColumnMacro : AstCallMacro {
         let pk_arg = find_arg(st.fields[idx].annotation, "sql_primary_key")
         if (pk_arg is tBool && (pk_arg as tBool)) {
             macro_error(prog, call.at,
-                "add_column cannot add a PRIMARY KEY column to an existing table; recreate the table — see chunk 14c struct_convert")
+                "add_column cannot add a PRIMARY KEY column to an existing table; recreate the table - see chunk 14c struct_convert")
             return null
         }
         let uniq_arg = find_arg(st.fields[idx].annotation, "sql_unique")
@@ -2113,13 +2112,13 @@ class private AddColumnMacro : AstCallMacro {
         let computed_arg = find_arg(st.fields[idx].annotation, "sql_computed")
         if (computed_arg is tString || (computed_arg is tBool && (computed_arg as tBool))) {
             macro_error(prog, call.at,
-                "add_column cannot add a generated/computed column to an existing table; recreate the table — see chunk 14c struct_convert")
+                "add_column cannot add a generated/computed column to an existing table; recreate the table - see chunk 14c struct_convert")
             return null
         }
         let default_fn_arg = find_arg(st.fields[idx].annotation, "sql_default_fn")
         if (default_fn_arg is tString) {
             macro_error(prog, call.at,
-                "add_column does not support @sql_default_fn fields yet; use a literal default or `db |> exec(…)`")
+                "add_column does not support @sql_default_fn fields yet; use a literal default or `db |> exec(...)`")
             return null
         }
         // Read storage hints + nullability.
@@ -2134,7 +2133,7 @@ class private AddColumnMacro : AstCallMacro {
         if (nArgs == 4) {
             if (is_json || is_blob) {
                 macro_error(prog, call.at,
-                    "add_column: explicit default not supported for @sql_json / @sql_blob columns; the column accepts NULL by default — wrap the field in Option<T> if nullability is desired")
+                    "add_column: explicit default not supported for @sql_json / @sql_blob columns; the column accepts NULL by default - wrap the field in Option<T> if nullability is desired")
                 return null
             }
             var defArg = call.arguments[3]
@@ -2144,7 +2143,7 @@ class private AddColumnMacro : AstCallMacro {
             default_clause = literal_init_to_default_clause(defArg)
             if (empty(default_clause)) {
                 macro_error(prog, call.at,
-                    "add_column: DEFAULT must be a compile-time literal (int / int64 / float / double / bool / string); got '{describe(call.arguments[3])}'. Inline the value, or use `db |> exec(…)` for runtime expressions.")
+                    "add_column: DEFAULT must be a compile-time literal (int / int64 / float / double / bool / string); got '{describe(call.arguments[3])}'. Inline the value, or use `db |> exec(...)` for runtime expressions.")
                 return null
             }
         } elif (!is_optional && !is_json && !is_blob) {
@@ -2202,13 +2201,13 @@ def private resolve_field_columns(prog : ProgramPtr; at : LineInfo; var st : Str
                 item = (item as ExprRef2Value).subexpr
             }
             if (item == null || !(item is ExprConstString)) {
-                macro_error(prog, at, "{macroName}: tuple fields entries must be string literals — got '{describe(v)}'")
+                macro_error(prog, at, "{macroName}: tuple fields entries must be string literals - got '{describe(v)}'")
                 return false
             }
             col_names |> push(string((item as ExprConstString).value))
         }
     } else {
-        macro_error(prog, at, "{macroName}: fields argument must be a string literal (\"Field\") or a tuple of string literals (\"A\", \"B\") — got '{describe(fieldsArg)}'")
+        macro_error(prog, at, "{macroName}: fields argument must be a string literal (\"Field\") or a tuple of string literals (\"A\", \"B\") - got '{describe(fieldsArg)}'")
         return false
     }
     if (empty(col_names)) {
@@ -2233,7 +2232,7 @@ def private emit_create_index(prog : ProgramPtr; var call : ExprCallMacro?; is_u
     let nArgs = call.arguments |> length
     if (nArgs < 3 || nArgs > 4) {
         macro_error(prog, call.at,
-            "{macroName} expects (db, type<T>, fields [, \"name\"]) — got {nArgs} args")
+            "{macroName} expects (db, type<T>, fields [, \"name\"]) - got {nArgs} args")
         return null
     }
     var st : StructurePtr
@@ -2246,7 +2245,7 @@ def private emit_create_index(prog : ProgramPtr; var call : ExprCallMacro?; is_u
         let nameRes = decode_string_const(call.arguments[3])
         if (!nameRes.ok) {
             macro_error(prog, call.at,
-                "{macroName}: optional `name` argument must be a string literal — got '{describe(call.arguments[3])}'")
+                "{macroName}: optional `name` argument must be a string literal - got '{describe(call.arguments[3])}'")
             return null
         }
         if (empty(nameRes.value)) {
@@ -2403,7 +2402,7 @@ class SqlFunctionMacro : AstFunctionAnnotation {
     //! Marks a daslang function as a scalar SQL UDF: registered against every connection
     //! of every UDF-capable provider, and emitted as ``<name>(args)`` inside ``_sql(...)``
     //! chains. Optional args: ``name``, ``deterministic``, ``directonly``.
-    def override apply(var func : FunctionPtr; var group : ModuleGroup;
+    def override apply(var func : FunctionPtr; var group : ModuleGroup;   // nolint:STYLE038 - flat arity ladder, one binding form per UDF signature
                        args : AnnotationArgumentList; var errors : das_string) : bool {
         if (func.fromGeneric != null) {
             errors := "[sql_function] is not supported on generic functions; instantiate with concrete types and tag the concrete instance"
@@ -2419,7 +2418,7 @@ class SqlFunctionMacro : AstFunctionAnnotation {
         for (i in range(nArgs)) {
             let r = sql_fn_tag_for_type(func.arguments[i]._type)
             if (!r.ok) {
-                errors := "[sql_function]: argument #{i + 1} of '{func.name}' has unsupported type '{describe(func.arguments[i]._type)}' — supported: int, int64, float, double, bool, string"
+                errors := "[sql_function]: argument #{i + 1} of '{func.name}' has unsupported type '{describe(func.arguments[i]._type)}' - supported: int, int64, float, double, bool, string"
                 return false
             }
             tags |> push(r.tag)
@@ -2429,7 +2428,7 @@ class SqlFunctionMacro : AstFunctionAnnotation {
         }
         let retR = sql_fn_tag_for_type(func.result)
         if (!retR.ok) {
-            errors := "[sql_function]: return type '{describe(func.result)}' of '{func.name}' is unsupported — supported: int, int64, float, double, bool, string"
+            errors := "[sql_function]: return type '{describe(func.result)}' of '{func.name}' is unsupported - supported: int, int64, float, double, bool, string"
             return false
         }
         let funcDasName = "{func.name}"

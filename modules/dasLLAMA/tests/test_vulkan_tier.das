@@ -2865,7 +2865,7 @@ let DMROWS = 64l
 
 [test]
 def test_vulkan_drop_model(t : T?) {
-    t |> run("vulkan whole-model drop — stacks + arena rebuild and serve across two cycles") @(t : T?) {
+    t |> run("vulkan whole-model drop - stacks + arena rebuild and serve across two cycles") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
             let nb = int(N / 32l)
@@ -2971,7 +2971,7 @@ def test_vulkan_drop_model(t : T?) {
 // default-cap one — so it sits with the drop test, after every stack-serving test.
 [test]
 def test_vulkan_arena_slabs(t : T?) {
-    t |> run("vulkan arena slabs — placement crosses the slab boundary, both slabs serve gemv") @(tt : T?) {
+    t |> run("vulkan arena slabs - placement crosses the slab boundary, both slabs serve gemv") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let SROWS = 64l
             let SBLK = SROWS * (N / 32l)   // blocks one [SROWS x N] q8 tensor occupies

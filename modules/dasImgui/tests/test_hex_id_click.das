@@ -55,8 +55,8 @@ def test_hex_id_click_dispatches_via_path(t : T?) {
         // → unresolvable, both g_id_to_path and g_id_to_bbox miss.
         let bad_resp = click(d, "0xdeadbeef")
         t |> equal(bad_resp?["ok"] ?? true, false,
-                   "garbage hex_id → response.ok = false")
+                   "garbage hex_id -> response.ok = false")
         t |> success(!empty(bad_resp?["error"] ?? ""),
-                     "garbage hex_id → response.error populated")
+                     "garbage hex_id -> response.error populated")
     }
 }

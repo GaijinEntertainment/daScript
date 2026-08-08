@@ -22,7 +22,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("main_menu_bar — boost v2 §3.3", 720, 360)
+    harness_init("main_menu_bar - boost v2 sec 3.3", 720, 360)
 }
 
 [export]

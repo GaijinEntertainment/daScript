@@ -335,9 +335,9 @@ def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
         let ts_img = ref_time_ticks()
         var t = Gemma4aEncoder()
         if (!load_image(path, t, tag)) {
-            panic("dasLLAMA: '{path}' is not a prepared gemma4a-encoder image for this box/knobs (identity {image_identity(tag)}) — regenerate it from the source mmproj gguf")
+            panic("dasLLAMA: '{path}' is not a prepared gemma4a-encoder image for this box/knobs (identity {image_identity(tag)}) - regenerate it from the source mmproj gguf")
         }
-        to_log(LOG_INFO, "dasLLAMA: prepared gemma4a-encoder image mapped in {get_time_usec(ts_img) / 1000} ms — {path}\n")
+        to_log(LOG_INFO, "dasLLAMA: prepared gemma4a-encoder image mapped in {get_time_usec(ts_img) / 1000} ms - {path}\n")
         return <- t
     }
     if (g_env_engine.image) {
@@ -346,7 +346,7 @@ def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
         let ts_img = ref_time_ticks()
         var t = Gemma4aEncoder()
         if (load_image(img, t, tag)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared gemma4a-encoder image mapped in {get_time_usec(ts_img) / 1000} ms — {img}\n")
+            to_log(LOG_INFO, "dasLLAMA: prepared gemma4a-encoder image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
             return <- t
         }
         var inscope st <- stage_gemma4a_encoder(path)
@@ -385,7 +385,7 @@ def private g4a_read_gemm(m : GGUFMeta; b : array<uint8> | #; name : string; var
         return
     }
     if (n_elem % 32l != 0l) {
-        panic("dasLLAMA gemma4a q8: GEMM tensor '{name}' has {n_elem} elements — not 32-aligned")
+        panic("dasLLAMA gemma4a q8: GEMM tensor '{name}' has {n_elem} elements - not 32-aligned")
     }
     if (long_length(wscratch) < n_elem) {
         wscratch |> reserve(n_elem)
@@ -402,7 +402,7 @@ def private g4a_repack(var st : Gemma4aStaging; woff, n, d : int64) {
     }
     if (n % 32l != 0l) {
         // n_elem%32==0 does not imply per-row alignment — straddling blocks serve wrong scales
-        panic("dasLLAMA gemma4a q8: GEMM row width {n} is not 32-aligned — Q8_0 blocks would straddle rows")
+        panic("dasLLAMA gemma4a q8: GEMM row width {n} is not 32-aligned - Q8_0 blocks would straddle rows")
     }
     repack_q8q8_weight(st.qblob, st.qscales, woff, n, d)
 }

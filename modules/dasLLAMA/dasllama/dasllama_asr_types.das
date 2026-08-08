@@ -38,6 +38,6 @@ struct TranscribeSegment {
 //! deep alternative is an opaque panic from eval_embd_. Family drivers call this before eval.
 def asr_ctx_guard(n_audio, npos, seq_len : int64) {
     if (npos >= seq_len) {
-        panic("dasLLAMA asr: {n_audio} audio + prompt tokens = {npos} positions exceed the decoder's {seq_len}-token context — clip too long for a single window")
+        panic("dasLLAMA asr: {n_audio} audio + prompt tokens = {npos} positions exceed the decoder's {seq_len}-token context - clip too long for a single window")
     }
 }

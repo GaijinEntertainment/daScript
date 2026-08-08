@@ -186,7 +186,7 @@ def test_file_dialog_remembers_last_dir(t : T?) {
         let folder = find_folder_row(d)
         if (empty(folder)) {
             // no clickably-visible folder at the start dir — can't exercise navigation; skip (no flake)
-            t |> success(true, "skipped — no visible folder at the start dir to navigate into")
+            t |> success(true, "skipped - no visible folder at the start dir to navigate into")
             return
         }
         let before = count_crumbs(d)

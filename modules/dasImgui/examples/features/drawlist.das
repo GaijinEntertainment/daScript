@@ -23,7 +23,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("drawlist — rail tour", 520, 540)
+    harness_init("drawlist - rail tour", 520, 540)
 }
 
 [export]
@@ -34,7 +34,7 @@ def update() { // nolint:STYLE038
     SetNextWindowSize(ImVec2(480.0, 480.0), ImGuiCond.Always)
     window(DRAW_WIN, (text = "drawlist", closable = false,
                       flags = ImGuiWindowFlags.None)) {
-        text(DRAW_INTRO, (text = "Drawlist primitives below — bboxes are mouse-cards targetable by path."))
+        text(DRAW_INTRO, (text = "Drawlist primitives below - bboxes are mouse-cards targetable by path."))
         separator()
 
         let origin = GetCursorScreenPos()
@@ -68,7 +68,7 @@ def update() { // nolint:STYLE038
                                float2(origin.x + 338.0f, origin.y + 158.0f), green, 2.0f)
             // Text label.
             dl |> add_text(float2(origin.x +  16.0f, origin.y + 180.0f), gray,
-                           "add_text — window drawlist")
+                           "add_text - window drawlist")
             // Multi-color gradient rect.
             dl |> add_rect_filled_multi_color(
                 float2(origin.x +  16.0f, origin.y + 200.0f),

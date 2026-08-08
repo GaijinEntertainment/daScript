@@ -20,7 +20,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("narrative_separator — boost v2 §3.2", 720, 460)
+    harness_init("narrative_separator - boost v2 sec 3.2", 720, 460)
 }
 
 [export]
@@ -31,7 +31,7 @@ def update() {
     SetNextWindowSize(ImVec2(680.0, 400.0), ImGuiCond.Always)
     window(MAIN_WIN, (text = "separator / separator_text / label_text",
                       closable = false, flags = ImGuiWindowFlags.None)) {
-        text(LEAD_TEXT, (text = "Three siblings — bare divider, titled divider, two-string row."))
+        text(LEAD_TEXT, (text = "Three siblings - bare divider, titled divider, two-string row."))
         separator(SEP_AFTER_LEAD)
 
         separator_text(SECTION_RUNTIME, (text = "Runtime"))

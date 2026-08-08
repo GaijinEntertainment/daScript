@@ -39,7 +39,7 @@ let private GRID_PRICE <- [1.50, 9.99, 4.25, 0.75, 19.00, 3.10, 2.80, 6.45]
 
 [export]
 def init() {
-    harness_init("data_table — boost v2 table rail", 640, 420)
+    harness_init("data_table - boost v2 table rail", 640, 420)
 }
 
 [export]

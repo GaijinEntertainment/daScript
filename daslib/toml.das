@@ -538,7 +538,7 @@ def private classify_number_or_datetime(data : array<uint8>&; var st : LexState&
         }
         // F16: `2024-01-15:...` (a stray `:` directly after a date) almost certainly means the user mis-formatted a date-time. Surface a dedicated diagnostic instead of letting the parser hit the `:` as a generic "unexpected character".
         if (st.pos < n && int(data[st.pos]) == ':') {
-            out = TomlTokenAt(value = TomlToken(_error = "':' after date '{s}' — expected 'T' or space before the time at {start_line}:{start_row}"), line = start_line, row = start_row)
+            out = TomlTokenAt(value = TomlToken(_error = "':' after date '{s}' - expected 'T' or space before the time at {start_line}:{start_row}"), line = start_line, row = start_row)
             return true
         }
         out = TomlTokenAt(value = TomlToken(_datetime = s), line = start_line, row = start_row)
@@ -1213,7 +1213,7 @@ def private resolve_header(var state : TomlState&; path : array<string>; is_arra
             }
             // F5: header walk cannot descend into an inline-bound table.
             if (existing.value is _object && key_exists(state.inline_closed, jvkey(existing))) {
-                err = "cannot open header [{path |> join(".")}] — '{key}' is an inline table (closed) at {at_line}:{at_row}"
+                err = "cannot open header [{path |> join(".")}] - '{key}' is an inline table (closed) at {at_line}:{at_row}"
                 return null
             }
             if (existing.value is _array) {
@@ -1251,7 +1251,7 @@ def private resolve_header(var state : TomlState&; path : array<string>; is_arra
         }
         // F5: header cannot open an inline-bound table.
         if (key_exists(state.inline_closed, jvkey(existing))) {
-            err = "cannot open header [{path |> join(".")}] — '{leaf}' is an inline table (closed) at {at_line}:{at_row}"
+            err = "cannot open header [{path |> join(".")}] - '{leaf}' is an inline table (closed) at {at_line}:{at_row}"
             return null
         }
         let pk = path_key(path)
@@ -1261,7 +1261,7 @@ def private resolve_header(var state : TomlState&; path : array<string>; is_arra
         }
         // F4: header cannot re-open a table that was implicitly created by a dotted-key statement. (Per TOML 1.0: "using dotted keys to redefine tables already defined ... is not allowed", same in reverse.)
         if (key_exists(state.dotted_keyed, pk)) {
-            err = "cannot open header [{path |> join(".")}] — table already implicitly defined by dotted key at {at_line}:{at_row}"
+            err = "cannot open header [{path |> join(".")}] - table already implicitly defined by dotted key at {at_line}:{at_row}"
             return null
         }
         state.explicitly_defined |> insert(pk)

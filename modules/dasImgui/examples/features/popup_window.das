@@ -23,7 +23,7 @@ var LAST_PICK : string = "(none yet)"
 
 [export]
 def init() {
-    harness_init("popup_window — container", 640, 480)
+    harness_init("popup_window - container", 640, 480)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
 }
@@ -38,9 +38,9 @@ def update() {
                       flags = ImGuiWindowFlags.None)) {
         text("Two triggers share str_id \"fruit_picker\":")
         bullet()
-        text("Left-click [Open via button] — explicit trigger.")
+        text("Left-click [Open via button] - explicit trigger.")
         bullet()
-        text("Right-click the hover region — manual cpp-style trigger.")
+        text("Right-click the hover region - manual cpp-style trigger.")
 
         // ----- Trigger 1: left-click button -----
         with_id("via_button") {
