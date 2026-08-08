@@ -23,7 +23,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("narrative_text - boost v2 §3.2", 760, 460)
+    harness_init("narrative_text - boost v2 sec 3.2", 760, 460)
 }
 
 [export]

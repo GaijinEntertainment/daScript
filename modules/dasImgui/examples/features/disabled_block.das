@@ -17,7 +17,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("with_disabled - boost v2 §3.6", 720, 360)
+    harness_init("with_disabled - boost v2 sec 3.6", 720, 360)
 }
 
 [export]

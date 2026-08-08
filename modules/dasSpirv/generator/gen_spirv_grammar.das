@@ -64,7 +64,7 @@ struct GenArgs {
 }
 
 [export]
-def main {
+def main {  // nolint:STYLE038 - one-shot generator: flat CLI handling then a single linear emit of the generated file, section by section
     var r <- parse_args(type<GenArgs>)
     if (r |> is_err) {
         print("error: {r |> unwrap_err}\n\n")

@@ -617,7 +617,7 @@ def public sf2_load(path : string) : SF2File? {
     return <- result
 }
 
-def public sf2_parse(data : array<uint8>) : SF2File? {  // nolint:STYLE037 - one arm per RIFF sub-chunk id
+def public sf2_parse(data : array<uint8>) : SF2File? {  // nolint:STYLE037,STYLE038 - one arm per RIFF sub-chunk id; a single linear cursor walk over the file
     //! Parse SF2 data from a byte array.
     var cursor = 0
 

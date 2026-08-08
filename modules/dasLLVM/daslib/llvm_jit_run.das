@@ -291,7 +291,7 @@ def reset_jit_globals_after_failure() {
 //! JIT (honoring [jit]/[no_jit] and jit_all), content-address the DLL, generate and optimize IR,
 //! and emit a .dll / .exe / .wasm per the program's jit policies. Returns true.
 [macro_function]
-def public run_jit(prog : Program?; var ctx : Context?) : bool {
+def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYLE037,STYLE038 - the JIT backend driver: flat policy/flag resolution feeding one linear codegen pipeline; the phases share the module/target state and do not survive a split
     // AOT-object host binding: compiled jit-aware + policies.aot, so linkCppAot binds each
     // function from the statically-linked .o (SimNode_Jit) -- no in-memory codegen needed
     // here. (Emit mode sets jit_emit_object, never aot, so it skips this.)

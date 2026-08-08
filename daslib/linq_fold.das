@@ -41,7 +41,7 @@ require ?pugixml pugixml/linq_fold_xml       // optional XML source adapter — 
 require daslib/linq_fold_sql                 // SQL source pass-through — provider-neutral, fires only when sql_linq is in the program
 
 [macro_function]
-def private fold_linq_default(var expr : Expression?) : Expression? {
+def private fold_linq_default(var expr : Expression?) : Expression? {   // nolint:STYLE037 - one arm per linq call shape in the folded chain
     var blk = new ExprBlock(at = expr.at)
     var (top, calls) = flatten_linq(expr)
     if (empty(calls)) return null
@@ -88,7 +88,7 @@ def private fold_linq_default(var expr : Expression?) : Expression? {
             } else {
                 // Macro emits `var pass_N = call` and a later `return <- pass_N`;
                 blk.list |> emplace_new <| qmacro_expr() {
-                    var $i(newArgName) = $e(newCall)  // nolint:PERF009
+                    var $i(newArgName) = $e(newCall)  // nolint:PERF009,LINT019 - qmacro template line; PERF009 fires only in the downstream expansion
                 }
                 (blk.list.back() as ExprLet).variables[0].flags.can_shadow = true
                 if (argIndex != 0) {

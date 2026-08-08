@@ -1939,7 +1939,7 @@ def oracle_compare(fresh, stored : BenchRun; warn_pct, fail_pct : double; var li
         }
         let note = (v == OracleVerdict.ok && delta > fail_pct) ? " (suspicious gain - verify the cell)" : ""
         let sign = delta < 0.0lf ? "" : "+"
-        lines |> push("{k} {f_tok:.1f} vs {s_tok:.1f}±{s_sd:.1f} ({sign}{delta:.1f}%) {oracle_verdict_str(v)}{note}")
+        lines |> push("{k} {f_tok:.1f} vs {s_tok:.1f}±{s_sd:.1f} ({sign}{delta:.1f}%) {oracle_verdict_str(v)}{note}")   // nolint:STYLE039 (plus-minus sign in the human-facing oracle report row)
         if (int(v) > int(worst)) {
             worst = v
         }

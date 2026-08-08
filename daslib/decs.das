@@ -1101,7 +1101,7 @@ def public get(var cmp : ComponentMap; name : string; var value : auto(TT)) {
     return value
 }
 
-def private make_callbacks(var cv : ComponentValue; value : auto(TT)) {
+def private make_callbacks(var cv : ComponentValue; value : auto(TT)) {   // nolint:STYLE038 - one no-capture lambda per ComponentValue callback slot
     cv.info.mkTypeInfo = @@() : TypeInfo const? {
         return unsafe(addr(typeinfo rtti_typeinfo(type<array<TT -const -& -#>>)))
     }

@@ -195,7 +195,7 @@ def private _log_warn_on_some(err : SqlError) : void {
 
 // ===== Internal runner — _migrate_inner =====
 
-def private _migrate_inner(db; blocking : bool) : Result<int, string> {
+def private _migrate_inner(db; blocking : bool) : Result<int, string> {   // nolint:STYLE038 - one linear migration protocol; the layers share the audit-table state
     let stream = _::_migration_stream_key(db)
     // Eager audit table; idempotent across concurrent runners.
     let create_err = db |> _::try_exec(AUDIT_CREATE_DDL)
@@ -496,7 +496,7 @@ class SqlMigrationMacro : AstFunctionAnnotation {
     //! Marks ``def fn(db : <ProviderRunner>)`` as a versioned schema migration; runs once per
     //! DB. The runner parameter's type selects the provider STREAM; versions are unique per
     //! stream. Args: ``version=<int>`` (required), optional ``description``/``vacuum``/``analyze``.
-    def override apply(var func : FunctionPtr; var group : ModuleGroup;
+    def override apply(var func : FunctionPtr; var group : ModuleGroup;   // nolint:STYLE038 - flat annotation-argument validation ladder
                        args : AnnotationArgumentList; var errors : das_string) : bool {
         if (func.fromGeneric != null) {
             errors := "[sql_migration] is not supported on generic functions"
@@ -756,7 +756,7 @@ class SqlStructConvertMacro : AstFunctionAnnotation {
     //! Marks ``def fn(old : S; var dst : T) : void`` for auto-derived field-by-field translation.
     //! Same-name-same-type / ``T → Option<T>`` / ``INT↔STRING↔FLOAT`` cast / ``@sql_renamed_from`` are
     //! filled in; an explicit ``dst.X = …`` (or ``<-``/``:=``) on the LHS suppresses the auto-fill for X.
-    def override apply(var func : FunctionPtr; var group : ModuleGroup;
+    def override apply(var func : FunctionPtr; var group : ModuleGroup;   // nolint:STYLE037,STYLE038 - one arm per auto-fill field mapping rule
                        args : AnnotationArgumentList; var errors : das_string) : bool {
         if (func.fromGeneric != null) {
             errors := "[struct_convert]: not supported on generic functions"

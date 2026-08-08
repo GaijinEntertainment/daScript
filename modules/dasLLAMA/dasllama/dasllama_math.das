@@ -1357,7 +1357,7 @@ def q51q8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 con
 }
 
 def private no_backend() {
-    panic("dasLLAMA: no Q8·Q8 kernel backend registered - require dasllama/dasllama_math_default")
+    panic("dasLLAMA: no Q8xQ8 kernel backend registered - require dasllama/dasllama_math_default")
 }
 def private backend_always_available() : bool => true
 def private q8_layout_grp4() : int => 4
@@ -1489,11 +1489,11 @@ def private mx4q8_unset_kernel(var yp : float?; wn : uint8 const?; we : uint8 co
 [unused_argument(yp, wn, we, xqp, xsp, n, d, ntok)]
 def private mx4q8_unset_batch(var yp : float?; wn : uint8 const?; we : uint8 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
     // reachable with a registered backend (slot is optional — see KernelBackend.mx4_batch)
-    panic("dasLLAMA: the active kernel backend '{g_active_backend}' provides no MXFP4·Q8 batch kernel (mx4_batch)")
+    panic("dasLLAMA: the active kernel backend '{g_active_backend}' provides no MXFP4xQ8 batch kernel (mx4_batch)")
 }
 [unused_argument(yp, wn, we, offs, nregions, xqp, xsp, bp, boffs, n, d)]
 def private mx4q8_unset_batch_groupn(var yp : float?; wn : uint8 const?; we : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) {
-    panic("dasLLAMA: the active kernel backend '{g_active_backend}' provides no MXFP4·Q8 batch groupN kernel (mx4_batch_groupn)")
+    panic("dasLLAMA: the active kernel backend '{g_active_backend}' provides no MXFP4xQ8 batch groupN kernel (mx4_batch_groupn)")
 }
 [unused_argument(yp, wp, sp, offs, nregions, xqp, xsp, bp, boffs, n, d)]
 def private q8q8_unset_groupn(var yp : float?; wp : int8 const?; sp : float const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; bp : float const?; boffs : int64 const?; n, d : int64) { no_backend() }

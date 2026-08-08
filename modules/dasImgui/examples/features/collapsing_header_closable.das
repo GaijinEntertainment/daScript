@@ -20,7 +20,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("collapsing_header_closable - boost v2 §3.5", 720, 420)
+    harness_init("collapsing_header_closable - boost v2 sec 3.5", 720, 420)
 }
 
 [export]

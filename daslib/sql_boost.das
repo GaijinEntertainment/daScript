@@ -679,7 +679,7 @@ def private find_parent_table_and_pk(var st : StructurePtr; parent_name : string
 
 [structure_macro(name=sql_table)]
 class SqlTableMacro : AstStructureAnnotation {
-    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {   // nolint:STYLE037,STYLE038 - flat registration table, one emit call per generated [sql_table] helper
         let table_name = find_annotation(args, "name", string(st.name))
         // legacy=true: emit read-side helpers only. Writes fail as unresolved-overload.
         let is_legacy = find_annotation(args, "legacy", false)
@@ -950,7 +950,7 @@ class SqlTableMacro : AstStructureAnnotation {
         return true
     }
 
-    def apply_schema_from(var st : StructurePtr;
+    def apply_schema_from(var st : StructurePtr;   // nolint:STYLE037,STYLE038 - one arm per SQL affinity; the arms share the covered-column bookkeeping
                           raw_path : string;
                           tbl_name : string;
                           var assert_exprs : array<ExpressionPtr>&;
@@ -1050,9 +1050,8 @@ class SqlTableMacro : AstStructureAnnotation {
             }))
         }
         // Synthesize fields for uncovered schema columns.
-        for (ci in range(length(cols))) {
-            if (covered[ci]) continue
-            let col = cols[ci]
+        for (is_covered, col in covered, cols) {
+            if (is_covered) continue
             let sql_type = col.data_type
             // SQLite quirk: INTEGER PRIMARY KEY columns report notnull=0 in pragma_table_info because
             // `INTEGER PRIMARY KEY` aliases rowid (which has its own NULL handling). Treat PK as NOT NULL.
@@ -1726,7 +1725,7 @@ def private emit_json_blob_adapters_for_struct(var st : StructurePtr; fields : a
 
 [structure_macro(name=sql_view)]
 class private SqlViewMacro : AstStructureAnnotation {
-    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {   // nolint:STYLE038 - flat registration table, one emit call per generated [sql_view] helper
         let view_name = find_annotation(args, "name", string(st.name))
         // Reject sibling [sql_index] up front so the error points at the macro stack, not a per-field follow-on.
         for (annDecl in st.annotations) {
@@ -2077,7 +2076,7 @@ def private decode_string_const(e : ExpressionPtr) : tuple<ok : bool; value : st
 
 [call_macro(name="add_column")]
 class private AddColumnMacro : AstCallMacro {
-    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {   // nolint:STYLE038 - one arm per column-default literal kind
         // call.arguments = [db, type<T>, "FieldName"] (3) or [..., defaultLit] (4) after the `db |>` desugar.
         let nArgs = call.arguments |> length
         macro_verify(nArgs == 3 || nArgs == 4, prog, call.at,
@@ -2403,7 +2402,7 @@ class SqlFunctionMacro : AstFunctionAnnotation {
     //! Marks a daslang function as a scalar SQL UDF: registered against every connection
     //! of every UDF-capable provider, and emitted as ``<name>(args)`` inside ``_sql(...)``
     //! chains. Optional args: ``name``, ``deterministic``, ``directonly``.
-    def override apply(var func : FunctionPtr; var group : ModuleGroup;
+    def override apply(var func : FunctionPtr; var group : ModuleGroup;   // nolint:STYLE038 - flat arity ladder, one binding form per UDF signature
                        args : AnnotationArgumentList; var errors : das_string) : bool {
         if (func.fromGeneric != null) {
             errors := "[sql_function] is not supported on generic functions; instantiate with concrete types and tag the concrete instance"

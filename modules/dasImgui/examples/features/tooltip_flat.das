@@ -21,7 +21,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("tooltip_flat - boost v2 §3.2", 720, 360)
+    harness_init("tooltip_flat - boost v2 sec 3.2", 720, 360)
 }
 
 [export]

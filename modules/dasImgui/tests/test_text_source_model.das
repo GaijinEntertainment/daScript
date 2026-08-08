@@ -21,7 +21,7 @@ def private marker_text(document : TextSourceDocument const) : string {
 
 [test]
 def test_plain_source_document(t : T?) {
-    let source = "plain 👩‍💻 text"
+    let source = "plain 👩‍💻 text"  // nolint:STYLE039 (ZWJ emoji fixture)
     var document <- plain_source_document(source, 11)
     t |> equal(document.source, source, "plain source retains exact UTF-8 text")
     t |> equal(document.revision, 11, "caller document revision is retained")
@@ -48,7 +48,7 @@ def test_plain_source_document(t : T?) {
 
 [test]
 def test_markdown_source_markers_preserve_original_bytes(t : T?) {
-    let source = "# Heading\n**bold** and `code` [link](target) 👩‍💻\n- item\n"
+    let source = "# Heading\n**bold** and `code` [link](target) 👩‍💻\n- item\n"  // nolint:STYLE039 (ZWJ emoji fixture)
     var document <- markdown_source_document(source, 7)
     t |> equal(document.source, source, "source model retains exact UTF-8 text")
     t |> equal(document.revision, 7, "caller document revision is retained")

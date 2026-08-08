@@ -27,7 +27,7 @@ let NL = 24l           // layer-slab rotation (2x26.7MB streams: defeats LLC bet
 let ROUNDS = 5
 
 def private fill(var a : array<float>; n : int64; seed : float) {
-    a |> resize(int(n))
+    a |> resize(n)
     for (i in range64(n)) {
         a[i] = sin(float(i) * 0.017 + seed) * 0.5
     }
@@ -162,12 +162,12 @@ def main() {
     fill(k, NL * CNT * KV_DIM, 0.1)
     fill(v, NL * CNT * KV_DIM, 0.7)
     fill(q, NQH * HS, 1.3)
-    att |> resize(int(NQH * SEQ))
-    flop |> resize(int(NQH * nsl * HS))
+    att |> resize(NQH * SEQ)
+    flop |> resize(NQH * nsl * HS)
     var att2 : array<float>
     var flop2 : array<float>
-    att2 |> resize(int(NQH * SEQ))
-    flop2 |> resize(int(NQH * nsl * HS))
+    att2 |> resize(NQH * SEQ)
+    flop2 |> resize(NQH * nsl * HS)
 
     let kvbytes = CNT * KV_DIM * 4l * 2l   // K+V per layer-window
     print("geometry: cnt={CNT} kv_dim={KV_DIM} kv_mul={KV_MUL} nsl={nsl} | {NL} slabs x {kvbytes / 1024l}KB KV\n")

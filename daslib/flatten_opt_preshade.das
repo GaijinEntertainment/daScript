@@ -85,7 +85,7 @@ def private is_rcp_candidate(pe : PEX; barriers : table<string>; o : ExprOp2?) :
 
 // Uniform = depends only on globals + literals, no barrier (sampler/noise) call. Leaf rule: a param
 // read is varying; a local read inherits its colored value; anything else is a module global (uniform).
-def private pex_eligible(pe : PEX; barriers : table<string>; e : ExpressionPtr) : bool {
+def private pex_eligible(pe : PEX; barriers : table<string>; e : ExpressionPtr) : bool {   // nolint:STYLE037 - exact-type `is` ladder, one arm per expression kind
     if (e == null) return false
     if (e |> is_expr_const()) return true
     if (e is ExprVar) {
@@ -169,7 +169,7 @@ def private pex_extract(var pe : PEX; barriers : table<string>; var e : Expressi
 
 // `counter` is owned by the caller's optimize loop — extraction re-runs per round, and a fresh
 // per-call numbering would collide a later round's `_preshader_0` with the surviving first one.
-def private extract_preshader(var func : FunctionPtr; var blk : ExprBlock?; barriers : table<string>; var counter : int&; no_fast_math : bool) : bool {
+def private extract_preshader(var func : FunctionPtr; var blk : ExprBlock?; barriers : table<string>; var counter : int&; no_fast_math : bool) : bool {   // nolint:STYLE037,STYLE038 - one hoist pass; seeding, colouring and splice share the dedup state
     var pe = PEX(counter = counter, noFastMath = no_fast_math)
     for (a in func.arguments) {
         pe.paramNames |> insert("{a.name}")
@@ -357,7 +357,7 @@ def private preshader_prefix_len(blk : ExprBlock?) : int {
 
 // `counter` is owned by the caller's cse/alias loop — fresh per-call numbering would collide a
 // second call's `_cse_0` with a surviving first-call `_cse_0` (error[30704] shadowing).
-def private cse_body(var blk : ExprBlock?; var counter : int&) : bool {
+def private cse_body(var blk : ExprBlock?; var counter : int&) : bool {   // nolint:STYLE037,STYLE038 - one CSE pass; scan, mint and rewrite share the name counter
     var anyChange = false
     var guard = 0
     // existing share names own their suffixes — never re-mint them (shares splice mid-body, so scan all)
@@ -665,7 +665,7 @@ def private rcp_residual_expr(pe : PEX; barriers : table<string>; e : Expression
     return fold_children_or(e) $(c) => rcp_residual_expr(pe, barriers, c)
 }
 
-def public opt_residuals(var func : FunctionPtr; barriers : table<string>; no_fast_math : bool = false) : array<string> {
+def public opt_residuals(var func : FunctionPtr; barriers : table<string>; no_fast_math : bool = false) : array<string> {   // nolint:STYLE037,STYLE038 - one arm per residual peephole; the ladder IS the optimizer
     var res : array<string>
     if (func == null || func.body == null || !(func.body is ExprBlock)) return <- res
     var blk = func.body as ExprBlock

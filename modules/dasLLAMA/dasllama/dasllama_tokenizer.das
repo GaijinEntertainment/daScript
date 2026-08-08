@@ -68,7 +68,7 @@ def load_tokenizer_gguf(path : string) : SpmTokenizer {
         tk.vocab |> reserve(n)
         tk.scores |> reserve(n)
         for (i in range(n)) {
-            let piece = replace(toks[i], "▁", " ")
+            let piece = replace(toks[i], "▁", " ")   // nolint:STYLE039 (U+2581 is the SentencePiece space marker - vocabulary data, not prose)
             tk.vocab |> push(piece)
             tk.scores |> push(scores[i])
             tk.lookup |> insert(piece, int64(i))

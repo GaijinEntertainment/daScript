@@ -1,6 +1,7 @@
 options gen2
 options _comment_hygiene = true
 options indenting = 4
+options _ascii_strings = false   // grapheme / cell-width fixtures are non-ASCII by definition
 
 require dastest/testing_boost public
 require imgui/imgui_text_flow public

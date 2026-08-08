@@ -11,7 +11,7 @@ options gen2
 //
 // ta = 1500 encoder positions (30 s window), hs = 64 on every whisper size.
 
-require dasllama/dasllama_common // nolint:STYLE029,STYLE030 — jit_enabled() via the ?-conditional llvm_tune re-export; a direct require would hard-require dasLLVM
+require dasllama/dasllama_common // nolint:STYLE029,STYLE030,LINT019 — jit_enabled() via the ?-conditional llvm_tune re-export; a direct require would hard-require dasLLVM
 require daslib/clargs
 require math
 
@@ -158,8 +158,8 @@ def vx_f4(var vx : array<float>; tmp : array<float>; d, hh, ta : int64) {
 // ===== harness =====
 
 def sized(var a : array<float>; n : int64) {
-    a |> reserve(int(n))
-    a |> resize(int(n))
+    a |> reserve(n)
+    a |> resize(n)
 }
 
 def fill_sin(var a : array<float>; scale, step : float) {

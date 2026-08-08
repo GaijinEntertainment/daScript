@@ -89,7 +89,7 @@ def test_text_viewer_open_modes_and_zoom(t : T?) { // nolint:STYLE038 — one ev
         t |> equal(marker?["columns"] ?? 0, 2,
                    "two ASCII marker bytes retain two monospace cells")
 
-        let emoji = source_range(app, "👩‍💻")
+        let emoji = source_range(app, "👩‍💻")  // nolint:STYLE039 (ZWJ emoji fixture)
         t |> success(emoji?["ok"] ?? false, "color emoji source range is inspectable")
         t |> equal(emoji?["columns"] ?? 0, 2,
                    "ZWJ color emoji reserves exactly two source cells")
@@ -237,7 +237,7 @@ def test_text_viewer_checkbox_save_reload_roundtrip(t : T?) { // nolint:STYLE038
                  "roundtrip test receives a dedicated temporary directory")
     if (!empty(temp_error) || empty(temp_dir)) return
     let fixture = path_join(temp_dir, "checkbox.md")
-    let bom = "\xEF\xBB\xBF"
+    let bom = "\xEF\xBB\xBF"  // nolint:STYLE039 (UTF-8 BOM fixture)
     let original = bom + "# Tasks\r\n\r\n- [ ] first\r\n- [X] second\n"
     let expected = bom + "# Tasks\r\n\r\n- [x] first\r\n- [X] second\n"
     t |> success(fwrite(fixture, original), "mixed-ending BOM fixture is written")

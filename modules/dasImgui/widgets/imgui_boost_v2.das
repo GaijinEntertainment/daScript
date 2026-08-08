@@ -232,7 +232,7 @@ class WidgetCallMacro : AstCallMacro {
         return true
     }
 
-    def private emit_user_args(prog : ProgramPtr; expr : ExprCallMacro?; // nolint:STYLE037
+    def private emit_user_args(prog : ProgramPtr; expr : ExprCallMacro?; // nolint:STYLE037,STYLE038 - one linear walk over the render_fn decl; the arms share cursor state
                                var newCall : ExprCall?; firstUserArg : int;
                                renderArgStart : int) : bool {
         // Destructure user call args into render_fn decl order, filling skipped defaults. renderArgStart = first user param index (2 normally; 1 for verbatim forward).
@@ -370,7 +370,7 @@ class WidgetCallMacro : AstCallMacro {
         return <- newCall
     }
 
-    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr { // nolint:STYLE037
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr { // nolint:STYLE037,STYLE038 - one dispatch over the four call forms; splitting hides the shared expansion state
         return <- emit_forward_call(prog, expr) if (forward_argument)
         // Four call forms: 1 EXPLICIT kind(IDENT,(...)) drives the state global;
         // 2 AUTO-GEN kind((...)) and 3 POSITIONAL kind("str") synth the ident from
@@ -663,7 +663,7 @@ class WidgetCallMacro : AstCallMacro {
         return <- newCall
     }
 
-    def private emit_indexed_call(prog : ProgramPtr; mod : Module?; // nolint:STYLE037
+    def private emit_indexed_call(prog : ProgramPtr; mod : Module?; // nolint:STYLE037,STYLE038 - one AST emit sequence for the indexed form; the stages are order-coupled
                                   var expr : ExprCallMacro?;
                                   bareName : string;
                                   var indexExpr : ExpressionPtr) : ExpressionPtr {

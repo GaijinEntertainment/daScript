@@ -54,7 +54,7 @@ def isSequencialMask(fields : dasvector`uint8) {
 }
 
 
-def das_to_cppString(t : Type) {
+def das_to_cppString(t : Type) {   // nolint:STYLE037 - one match arm per Type enum value
     match (t) {
         if (Type.anyArgument) { return "vec4f"; }
         if (Type.tVoid) { return "void"; }
@@ -120,7 +120,7 @@ def das_to_cppString(t : Type) {
     return ""
 }
 
-def das_to_cppCTypeString(t : Type) {
+def das_to_cppCTypeString(t : Type) {   // nolint:STYLE037 - one match arm per Type enum value
     match (t) {
         if (Type.autoinfer) { return "autoinfer"; }
         if (Type.alias) { return "alias"; }
@@ -270,7 +270,7 @@ def aotSuffixNameEx(funcName : das_string; suffix : string; force : bool = false
 def aotSuffixNameEx(funcName : string; suffix : string; force : bool = false) {
     var prefix = force || is_cpp_keyword(funcName);
 
-    let name = build_string() $(var writer) {
+    let name = build_string() $(var writer) {   // nolint:STYLE037 - one match arm per C++-illegal identifier character
         for (ch in funcName) {
             if (is_alnum(ch) || ch == '_') {
                 writer |> write_char(ch);
@@ -369,7 +369,7 @@ def fa_element(t : TypeDeclPtr) {
     return e
 }
 
-def describeCppTypeEx(typeDecl : TypeDeclPtr;
+def describeCppTypeEx(typeDecl : TypeDeclPtr;   // nolint:STYLE038 - one arm per C++ type shape; the ladder IS the emitter
                       in_cfg : DescribeConfig;
                       useAlias : CpptUseAlias) {
     var cfg := in_cfg
@@ -384,7 +384,7 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
     }
     let baseType = typeDecl.baseType;
 
-    return build_string() $(writer) {
+    return build_string() $(writer) {   // nolint:STYLE037 - one arm per C++ type shape
         if (baseType == Type.tFixedArray && typeDecl.firstType != null) {
             // natural recursion; inner chain nodes are canonically bare (qualifiers live on the head)
             write(writer, "TDim<{describeCppTypeEx(typeDecl.firstType,DescribeConfig(cross_platform=cfg.cross_platform),useAlias)},{typeDecl.fixedDim}>")
@@ -3568,7 +3568,7 @@ class public CppAot : AstVisitor {
     }
 
 // looks like call
-    def override preVisitExprLooksLikeCall(var call : ExprLooksLikeCall?) {
+    def override preVisitExprLooksLikeCall(var call : ExprLooksLikeCall?) {   // nolint:STYLE037,STYLE038 - one arm per intrinsic call name
         if (isInvokeWithTemp(call)) {
             write(*ss, "({makeLocalTempName(call)} = (");
         }
@@ -3787,7 +3787,7 @@ class public CppAot : AstVisitor {
         }
         return false;
     }
-    def CallFunc_preVisit(call : ExprCallFunc?) {
+    def CallFunc_preVisit(call : ExprCallFunc?) {   // nolint:STYLE037,STYLE038 - one arm per call-emission form
         if (call.func.moreFlags.propertyFunction) {     // property function goes ((arg0).name()). we do `((` here
             if (call.func.result.flags.aotAlias) {
                 write(*ss, "das_alias<{call.func.result.alias}>::from(");
@@ -4423,7 +4423,7 @@ def public fail_on_aot_emit_error(program : ProgramPtr) {
 }
 
 [export]
-def public run_aot(prog : Program?; var pctx : Context?; cop : CodeOfPolicies) : string {
+def public run_aot(prog : Program?; var pctx : Context?; cop : CodeOfPolicies) : string {   // nolint:STYLE038 - linear prologue emission, one write per AOT section
     //! Generates the complete AOT C++ source code string for a compiled and simulated program.
     let program <- unsafe(reinterpret<ProgramPtr>(prog));
     return build_string() $(writer) {

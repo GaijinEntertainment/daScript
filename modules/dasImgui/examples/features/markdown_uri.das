@@ -53,7 +53,7 @@ def update() {
             text_disabled("One semantic URI -> many visual fragments -> one hover/click/copy action")
             separator()
 
-            let web_target = "https://example.com/文档/naïve/é/very-long-resource-name?mode=full&emoji=👩‍💻#résumé"
+            let web_target = "https://example.com/文档/naïve/é/very-long-resource-name?mode=full&emoji=👩‍💻#résumé"  // nolint:STYLE039 (non-ASCII URI is the probe)
             let web = markdown_uri_paragraph(
                 "web", "A wrapped Unicode URI: ", web_target,
                 " - followed by ordinary paragraph text.", web_target, 620.0f)
@@ -68,7 +68,7 @@ def update() {
             report_result("relative", relative_target, relative)
 
             spacing()
-            let mail_target = "mailto:unicode@example.org?subject=Привет-мир"
+            let mail_target = "mailto:unicode@example.org?subject=Привет-мир"  // nolint:STYLE039 (non-ASCII URI is the probe)
             let mail = markdown_uri_paragraph(
                 "mail", "Custom display text still keeps its target: ",
                 "contact the Unicode team", ".", mail_target, 520.0f)

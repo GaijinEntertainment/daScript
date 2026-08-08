@@ -29,7 +29,7 @@ var private g_input_double : double = 1.5lf
 
 [export]
 def init() {
-    harness_init("edit_external_scalars_custom - boost v2 §3.7", 760, 520)
+    harness_init("edit_external_scalars_custom - boost v2 sec 3.7", 760, 520)
 }
 
 [export]

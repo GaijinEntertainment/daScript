@@ -46,7 +46,7 @@ def private gate_inputs() : tuple<array<float>; array<float>> {
 
 def private maxdiff(a, b : array<float>) : float {
     var m = 0.0
-    for (i in range(length(a))) { m = max(m, abs(a[i] - b[i])) }
+    for (av, bv in a, b) { m = max(m, abs(av - bv)) }
     return m
 }
 
@@ -73,7 +73,7 @@ def test_gate(t : T?) {
         t |> success(maxdiff(ref, got) == 0.0, "geglu bit-exact vs gelu then *u")
     }
     // The exp4 fused gate (production default) is ~2 ulp — within tolerance of the scalar reference.
-    t |> run("swiglu4 ≈ swiglu (exp4 tolerance)") @(t : T?) {
+    t |> run("swiglu4 ~= swiglu (exp4 tolerance)") @(t : T?) {
         let inp <- gate_inputs()
         var ref := inp._0
         swiglu(ref, inp._1, n)
@@ -81,7 +81,7 @@ def test_gate(t : T?) {
         swiglu4(unsafe(addr(got[0])), unsafe(addr(inp._1[0])), n)
         t |> success(maxdiff(ref, got) < 1e-3, "swiglu4 within tolerance of scalar swiglu")
     }
-    t |> run("geglu4 ≈ geglu (exp4 tolerance)") @(t : T?) {
+    t |> run("geglu4 ~= geglu (exp4 tolerance)") @(t : T?) {
         let inp <- gate_inputs()
         var ref := inp._0
         geglu(ref, inp._1, n)

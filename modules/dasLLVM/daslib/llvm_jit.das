@@ -7,6 +7,10 @@ options relaxed_pointer_const
 options unsafe_table_lookup = false
 options no_global_variables = false
 options stack = 4_194_304 // On huge files we need huge stack for jit
+// LLVM IR codegen emitter: the visitor arms are exact-type dispatch over the AST node set and
+// the builder sequences are straight-line IR emission - both metrics are dense by construction
+options _cyclomatic_complexity = 0
+options _function_length = 0
 
 module llvm_jit shared private
 
@@ -14,7 +18,7 @@ require llvm/daslib/llvm_boost
 require llvm/daslib/llvm_jit_intrin
 require llvm/daslib/llvm_jit_common
 require llvm/daslib/llvm_jit_code
-require llvm/daslib/llvm_user_modules  // nolint:STYLE030 — side-effect require: [llvm_code] generator modules must be in THIS module's closure so their [init] registration runs in the context that reads the registry
+require llvm/daslib/llvm_user_modules  // nolint:STYLE030,LINT019 - side-effect require: [llvm_code] generator modules must be in THIS module's closure so their [init] registration runs in the context that reads the registry; STYLE030 is policy-gated, so the keep only fires under a require-analysis run
 require llvm/daslib/llvm_dll_utils
 require daslib/ast_boost
 require daslib/templates_boost
@@ -1436,7 +1440,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def build_call_params(expr : ExprCallFunc?; extern_func : Function? = null) {
-        var params : array<LLVMOpaqueValue?>  // nolint:STYLE012 — built incrementally over an arg loop with multiple branches
+        var params : array<LLVMOpaqueValue?>
 
         for (a, ai in expr.arguments, count()) {
             assume funcArg = expr.func.arguments[ai]
@@ -4332,7 +4336,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def override visitMakeStructureBlock(expr : ExprMakeStruct?; blk : ExpressionPtr) : ExpressionPtr {
         if (expr._block != null) {
-            var params : array<LLVMOpaqueValue?>  // nolint:STYLE012 — built incrementally with intervening builder calls
+            var params : array<LLVMOpaqueValue?>
 
             var block_ptr = getE(expr._block)
             block_ptr = LLVMBuildPointerCast(g_builder, block_ptr, LLVMPointerType(types.t_int8, 0u), "")
@@ -7891,7 +7895,7 @@ def public generate_global_ctors_dtors(types : PrimitiveTypes?; jit_mode : bool;
 // generate_global_ctors_dtors, and also from the JIT failure path (reset_jit_globals_after_failure) so a
 // file panicking mid-codegen leaves no stale fileinfo entries that crash the next file's ctor gen.
 def public reset_codegen_accumulators() {
-    active_filenames = table<string>()
+    active_filenames |> clear()
 }
 
 [macro_function]

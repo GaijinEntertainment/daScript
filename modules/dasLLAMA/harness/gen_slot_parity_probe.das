@@ -53,9 +53,9 @@ def private close_enough(a, b : float) : bool {
 def private compare(tag : string; y : array<float>; yref : array<float>; var fails : int&) {
     var maxd = 0.0
     var bad = 0
-    for (i in range(length(yref))) {
-        maxd = max(maxd, abs(y[i] - yref[i]))
-        if (!close_enough(y[i], yref[i])) {
+    for (yv, rv in y, yref) {
+        maxd = max(maxd, abs(yv - rv))
+        if (!close_enough(yv, rv)) {
             bad++
         }
     }
@@ -68,7 +68,7 @@ def private compare(tag : string; y : array<float>; yref : array<float>; var fai
 }
 
 [export]
-def main {
+def main {   // nolint:STYLE038 - flat probe ladder: one reference/gen pair per kernel slot, in dispatch order
     if (!jit_enabled()) {
         print("SKIP: -jit only (the gen backends need the LLVM JIT)\n")
         return
@@ -108,12 +108,12 @@ def main {
         var yref0 : array<float>
         var yref1 : array<float>
         var yref2 : array<float>
-        yref0 |> resize(int(d0))
-        yref1 |> resize(int(d1))
-        yref2 |> resize(int(d2))
+        yref0 |> resize(d0)
+        yref1 |> resize(d1)
+        yref2 |> resize(d2)
         matmul_q8q8_group3(yref0, yref1, yref2, wq, ws, woff0, woff1, woff2, xq, xs, n, d0, d1, d2)
         var yref_b : array<float>
-        yref_b |> resize(int(ntok * d0))
+        yref_b |> resize(ntok * d0)
         matmul_q8q8_batch(yref_b, wq, ws, xq, xs, n, d0, ntok)
 
         // the gen backend: one flavor since slice E — every slot reads the stamped layout.
@@ -131,21 +131,21 @@ def main {
 
         var fails = 0
         var y : array<float>
-        y |> resize(int(d0))
+        y |> resize(d0)
         matmul_q8q8(y, wq, ws, xq, xs, n, d0)   // region 0 GEMV (mm slot)
         compare("mm d={d0}", y, yref0, fails)
 
         var yb : array<float>
-        yb |> resize(int(ntok * d0))
+        yb |> resize(ntok * d0)
         matmul_q8q8_batch(yb, wq, ws, xq, xs, n, d0, ntok)   // batch slot: tile + token tail
         compare("batch d={d0} ntok={ntok}", yb, yref_b, fails)
 
         var y0 : array<float>
         var y1 : array<float>
         var y2 : array<float>
-        y0 |> resize(int(d0))
-        y1 |> resize(int(d1))
-        y2 |> resize(int(d2))
+        y0 |> resize(d0)
+        y1 |> resize(d1)
+        y2 |> resize(d2)
         matmul_q8q8_group3(y0, y1, y2, wq, ws, woff0, woff1, woff2, xq, xs, n, d0, d1, d2)
         compare("group3 d0={d0}", y0, yref0, fails)
         compare("group3 d1={d1}", y1, yref1, fails)
@@ -170,16 +170,16 @@ def main {
 
         pin_kernel_backend("portable")
         var mref : array<float>
-        mref |> resize(int(d0))
+        mref |> resize(d0)
         matmul_mx4q8(mref, mxq, mxs, xq, xs, n, d0)
         var mgref : array<float>
-        mgref |> resize(int(d2 * 2l))
+        mgref |> resize(d2 * 2l)
         matmul_mx4q8_groupn(mgref, gxq, gxs, moffs, 2l, xq, xs, bias, mboffs, n, d2)
         var mbref : array<float>
-        mbref |> resize(int(ntok * d0))
+        mbref |> resize(ntok * d0)
         matmul_mx4q8_batch(mbref, mxq, mxs, xq, xs, n, d0, ntok)
         var mgbref : array<float>
-        mgbref |> resize(int(ntok * d2))
+        mgbref |> resize(ntok * d2)
         matmul_mx4q8_batch_groupn(mgbref, gxq, gxs, mtoffs, 2l, xq, xs, bias, mboffs, n, d2)
 
         pin_kernel_backend(genbe)
@@ -187,19 +187,19 @@ def main {
         repack_mx4_weight(gxq, gxs, 0l, n, d2)
         repack_mx4_weight(gxq, gxs, d2 * n, n, d2)
         var my : array<float>
-        my |> resize(int(d0))
+        my |> resize(d0)
         matmul_mx4q8(my, mxq, mxs, xq, xs, n, d0)
         compare("mm_mx4 d={d0}", my, mref, fails)
         var mgy : array<float>
-        mgy |> resize(int(d2 * 2l))
+        mgy |> resize(d2 * 2l)
         matmul_mx4q8_groupn(mgy, gxq, gxs, moffs, 2l, xq, xs, bias, mboffs, n, d2)
         compare("groupn_mx4 2x d={d2} (+bias, row tail)", mgy, mgref, fails)
         var mby : array<float>
-        mby |> resize(int(ntok * d0))
+        mby |> resize(ntok * d0)
         matmul_mx4q8_batch(mby, mxq, mxs, xq, xs, n, d0, ntok)   // mx4_batch slot: tile + token tail
         compare("mx4_batch d={d0} ntok={ntok}", mby, mbref, fails)
         var mgby : array<float>
-        mgby |> resize(int(ntok * d2))
+        mgby |> resize(ntok * d2)
         matmul_mx4q8_batch_groupn(mgby, gxq, gxs, mtoffs, 2l, xq, xs, bias, mboffs, n, d2)
         compare("mx4_batch_groupn 2x d={d2} (+bias, row tail)", mgby, mgbref, fails)
         delete mxq

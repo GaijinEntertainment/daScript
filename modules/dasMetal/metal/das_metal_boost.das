@@ -84,7 +84,7 @@ def public run_compute_1d_kargs(queue : MetalCommandQueue?; pso : MetalComputePi
 def public assert_no_metal_leaks {
     let live = metal_live_object_count()
     if (live != 0l) {
-        panic("metal_live_object_count() == {live} — every handle must be metal_release()d\n{metal_live_object_report()}")
+        panic("metal_live_object_count() == {live} - every handle must be metal_release()d\n{metal_live_object_report()}")
     }
 }
 

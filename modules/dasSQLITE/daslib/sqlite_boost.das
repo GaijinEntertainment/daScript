@@ -473,7 +473,7 @@ def private try_one_row(db : SqlRunner; sql : string;
             if (src == SQLITE_DONE) return err("{err_prefix}: expected one row, got 0 rows", type<TT -const -#>)
             if (src != SQLITE_ROW) return err("{err_prefix}: step failed: {sqlite3_errmsg(db.sqlite_handle)}", type<TT -const -#>)
             static_if (typeinfo can_copy(default<TT -const -#>)) {
-                var row : TT -const -# = invoke(row_blk, stmt) // nolint:LINT003
+                var row : TT -const -# = invoke(row_blk, stmt) // nolint:LINT003,LINT019 - move_ok consumes row, so it must stay var; LINT003 fires only in downstream instantiations of this generic
                 return move_ok(row, type<string>)
             } else {
                 var row : TT -const -# <- clone_to_move(invoke(row_blk, stmt))
@@ -492,7 +492,7 @@ def private try_one_row_opt(db : SqlRunner; sql : string;
             if (src == SQLITE_DONE) return ok(none(type<TT -const -#>), type<string>)
             if (src != SQLITE_ROW) return err("{err_prefix}: step failed: {sqlite3_errmsg(db.sqlite_handle)}", type<Option<TT -const -#>>)
             static_if (typeinfo can_copy(default<TT -const -#>)) {
-                var row : TT -const -# = invoke(row_blk, stmt) // nolint:LINT003
+                var row : TT -const -# = invoke(row_blk, stmt) // nolint:LINT003,LINT019 - move_some/move_ok consume row, so it must stay var; LINT003 fires only in downstream instantiations of this generic
                 return move_ok(move_some(row), type<string>)
             } else {
                 var row : TT -const -# <- clone_to_move(invoke(row_blk, stmt))
@@ -1656,7 +1656,7 @@ let private FTS5_REJECTED_ANNOTATIONS = fixed_array(
 
 [structure_macro(name=sql_fts5)]
 class private SqlFts5Macro : AstStructureAnnotation {
-    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {  // nolint:STYLE037,STYLE038 - one arm per rejected annotation shape, then a flat one-call-per-helper emission list
         let table_name = find_annotation(args, "name", string(st.name))
         // ---- per-field validation: FTS5 columns are simple text ----
         var fields : array<FieldInfo>
@@ -1681,8 +1681,7 @@ class private SqlFts5Macro : AstStructureAnnotation {
                     return false
                 }
             }
-            // @sql_column rename — same shape as [sql_table]; rejected on @sql_fts_rank
-            // (rank is hardcoded to FTS5's hidden `rank` column).
+            // @sql_column rename, as in [sql_table]; rejected on @sql_fts_rank (hardcoded to FTS5's hidden `rank`).
             var col_name = fname
             let col_anno = find_arg(field.annotation, "sql_column")
             if (col_anno is tString) {
@@ -1722,8 +1721,7 @@ class private SqlFts5Macro : AstStructureAnnotation {
                 }
                 rank_count++
             } elif (is_fts_unindexed) {
-                // Stored metadata: the ordinary sql_bind/sql_extract adapter rail provides
-                // its typed representation; FTS5's UNINDEXED suffix excludes it from MATCH.
+                // Stored metadata: typed by the ordinary sql_bind/sql_extract rail; FTS5's UNINDEXED excludes it from MATCH.
             } else {
                 // Content column: string or Option<string>.
                 let bt = field._type.baseType
@@ -1811,8 +1809,7 @@ class private SqlFts5Macro : AstStructureAnnotation {
         compiling_module() |> add_function(fn_bind)
         var fn_col_info = make_fts5_column_info_fn(st, fields)
         compiling_module() |> add_function(fn_col_info)
-        // Row-shaped UPDATE/DELETE-by-PK helpers are unsupported — runtime panic stubs
-        // (predicate `_sql_delete(type<T>, predicate)` uses table metadata directly and works).
+        // Row-shaped UPDATE/DELETE-by-PK are unsupported (panic stubs); predicate `_sql_delete(type<T>, pred)` still works.
         var fn_upd_pk = make_string_panic_stub_helper_fn(st, "_sql_update_by_pk_sql",
             panic_msg_pk |> replace("{0}", "update by primary key"))
         compiling_module() |> add_function(fn_upd_pk)

@@ -27,7 +27,7 @@ let private g_difficulties : array<string> <- ["Easy", "Normal", "Hard", "Insane
 
 [export]
 def init() {
-    harness_init("edit_external_combo - boost v2 §3.7", 720, 360)
+    harness_init("edit_external_combo - boost v2 sec 3.7", 720, 360)
 }
 
 [export]

@@ -4,7 +4,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default        // dot_mx4q8_scalar + the "portable" backend
 require dasllama/dasllama_math_aarch64_neon   // dot_mx4q8 (TBL+SDOT under arm64 JIT, scalar fallback elsewhere)
-require ?llvm/daslib/llvm_tune dasllama/dasllama_math_gen  // nolint:STYLE030 — registers the "arm64-gen"/"x64-gen" repack tier when dasLLVM is mounted
+require ?llvm/daslib/llvm_tune dasllama/dasllama_math_gen  // nolint:STYLE030,LINT019 — registers the "arm64-gen"/"x64-gen" repack tier when dasLLVM is mounted
 require math
 
 // MXFP4·Q8 kernels: the E8M0 scale decode, the dot leaves (scalar reference vs the NEON-intrinsic
@@ -12,19 +12,20 @@ require math
 // reference is independent of the integer-factorized kernels.
 
 def private fill_case(n : int64; var wn : array<uint8>; var we : array<uint8>; var xq : array<int8>; var xs : array<float>; seed : int) {
-    let nb = n / 32l
-    wn |> resize(int(n / 2l))
-    we |> resize(int(nb))
-    xq |> resize(int(n))
-    xs |> resize(int(nb))
-    for (i in range(int(n / 2l))) {
+    let ni = int(n)
+    let nb = int(n / 32l)
+    wn |> resize(ni / 2)
+    we |> resize(nb)
+    xq |> resize(ni)
+    xs |> resize(nb)
+    for (i in range(ni / 2)) {
         wn[i] = uint8((i * 137 + 71 + seed * 29) & 0xff)
     }
-    for (i in range(int(nb))) {
+    for (i in range(nb)) {
         we[i] = uint8(120 + ((i * 7 + seed) % 16))      // 2^-8 .. 2^7 — sane block-scale range
         xs[i] = 0.005 + 0.003 * float(i % 5)
     }
-    for (i in range(int(n))) {
+    for (i in range(ni)) {
         xq[i] = int8(((i * 37 + 11 + seed * 13) & 0xff) - 128)
     }
 }
@@ -33,9 +34,9 @@ def private fill_case(n : int64; var wn : array<uint8>; var we : array<uint8>; v
 def private ref_dot_f64(wn : array<uint8>; we : array<uint8>; xq : array<int8>; xs : array<float>; n : int64) : double {
     var lut : int8[16]
     mxfp4_fill_lut(lut)
-    let nb = n / 32l
+    let nb = int(n / 32l)
     var acc = 0.0lf
-    for (bi in range(int(nb))) {
+    for (bi in range(nb)) {
         let d = double(e8m0_half(uint(we[bi]))) * double(xs[bi])
         for (j in range(16)) {
             let b = int(wn[bi * 16 + j])
@@ -107,15 +108,15 @@ def test_dot_mx4q8(t : T?) {
 // scalar leaf. n = 64, planes sliced per row; the activation is a single token.
 def private gemv_case(var wn : array<uint8>; var we : array<uint8>; var xq : array<int8>; var xs : array<float>; var want : array<float>; n, d : int64) {
     fill_case(n * d, wn, we, xq, xs, 3)    // one long fill covers the [d x n] planes
-    xq |> resize(int(n))
-    xs |> resize(int(n / 32l))
+    xq |> resize(n)
+    xs |> resize(n / 32l)
     var lut : int8[16]
     mxfp4_fill_lut(lut)
-    want |> resize(int(d))
+    want |> resize(d)
     unsafe {
-        for (i in range(int(d))) {
-            let wnp = addr(wn[0]) + int64(i) * (n / 2l)
-            let wep = addr(we[0]) + int64(i) * (n / 32l)
+        for (i in range64(d)) {
+            let wnp = addr(wn[0]) + i * (n / 2l)
+            let wep = addr(we[0]) + i * (n / 32l)
             want[i] = dot_mx4q8_scalar(addr(lut[0]), wnp, wep, addr(xq[0]), addr(xs[0]), n)
         }
     }

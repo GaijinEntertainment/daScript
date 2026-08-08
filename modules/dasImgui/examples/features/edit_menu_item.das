@@ -27,7 +27,7 @@ var private g_show_grid : bool = false
 
 [export]
 def init() {
-    harness_init("edit_menu_item - boost v2 §3.7", 720, 380)
+    harness_init("edit_menu_item - boost v2 sec 3.7", 720, 380)
 }
 
 [export]

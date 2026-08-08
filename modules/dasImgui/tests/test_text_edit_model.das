@@ -89,7 +89,7 @@ def test_edit_backspace_delete_and_joins(t : T?) {
 def test_edit_utf8_grapheme_movement(t : T?) {
     var ed = TextEditState()
     // a(1) é(2) 你(3) 🌍(4) b(1) — byte boundaries 0,1,3,6,10,11.
-    text_edit_load(ed, "aé你🌍b")
+    text_edit_load(ed, "aé你🌍b")  // nolint:STYLE039 (multi-byte grapheme fixture)
     text_edit_move_end(ed)
     t |> equal(ed.cursor_column, 11, "End lands on the byte length")
     text_edit_move_left(ed)
@@ -106,7 +106,7 @@ def test_edit_utf8_grapheme_movement(t : T?) {
     text_edit_move_end(ed)
     text_edit_backspace(ed)
     text_edit_backspace(ed)
-    t |> equal(ed.lines[0], "aé你", "backspace removes whole graphemes")
+    t |> equal(ed.lines[0], "aé你", "backspace removes whole graphemes")  // nolint:STYLE039 (multi-byte grapheme fixture)
     let combined = "x" + codepoint_utf8(int(0x65)) + codepoint_utf8(int(0x301))
     text_edit_load(ed, combined)
     text_edit_move_end(ed)
@@ -806,8 +806,8 @@ def test_edit_move_selection_to(t : T?) {
 [test]
 def test_edit_byte_mapping(t : T?) {
     var ed = TextEditState()
-    text_edit_load(ed, "ab\r\ncd\r\né")
-    t |> equal(text_edit_text(ed), "ab\ncd\né", "text_edit_text joins with LF regardless of flavor")
+    text_edit_load(ed, "ab\r\ncd\r\né")  // nolint:STYLE039 (multi-byte grapheme fixture)
+    t |> equal(text_edit_text(ed), "ab\ncd\né", "text_edit_text joins with LF regardless of flavor")  // nolint:STYLE039 (multi-byte grapheme fixture)
     var at = text_edit_position_of_byte(ed, 0)
     t |> equal(at, int2(0, 0), "offset 0 is the buffer start")
     at = text_edit_position_of_byte(ed, 2)

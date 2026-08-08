@@ -368,7 +368,7 @@ def private mentions_ident(text : string; name : string) : bool {
 let JOIN_TI = "linq_join_ti"
 
 // Shared tail for the two-range-variable forms — `join … on … equals …` (transpile_join) and the uncorrelated multiple-`from` / SelectMany (transpile_cross). Given the first source (already built), the second range variable, and `tailStart` (the offset where the variable-length "tail" begins — the join key B for `join`, the second source expression for the second `from`), it parses the post-source clauses (a pre- or post-source `where`, one `orderby`, the `select`|`group` terminal, a trailing `iterator`) and emits the `_fold(...)` chain. Two emit shapes, decided textually (the reader runs before type inference and cannot know the source):
-def private emit_two_source(q : string; nq : int; varName : string; var2Name : string; srcA : string;
+def private emit_two_source(q : string; nq : int; varName : string; var2Name : string; srcA : string;   // nolint:STYLE037,STYLE038 - one arm per emitted `_fold` shape; the clause offsets are shared state
                             isJoin : bool; keyA : string; srcBForJoin : string; rowType2 : string;
                             secondIntroPos : int; tailStart : int; firstWhere : int;
                             prog : ProgramPtr; at : LineInfo) : string {
@@ -516,7 +516,7 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
             macro_error(prog, at, "linq: 'orderby' supports at most 4 keys (got {length(op.keys)})")
             return "(0)"
         }
-        orderKeys <- op.keys
+        orderKeys <- op.keys   // nolint:PERF030 - target is the fresh empty decl above; the fill is conditional, so it cannot fold into the declaration
         orderDescMask = op.descMask
     }
     var projText = ""
@@ -809,7 +809,7 @@ def private extract_lets(q : string; bodyStart : int; rangeVar : string;
 // A2 rewrite for a `group … into g` continuation: the group is a `tuple<key; array<members>>`, so `g.key` addresses the key (`g._0`) and a bare `g` is the member collection (`g._1`). Scans like substitute_idents (string/interpolation aware, member access after `.` skipped), but specialised: a standalone `g` followed by `.key` (a full word) becomes `g._0` (consuming the `.key`); any other standalone `g` becomes `g._1`.
 def private rewrite_group_var(text : string; gname : string) : string {
     return build_string() $(var w) {
-        peek_data(text) $(arr) {
+        peek_data(text) $(arr) {   // nolint:STYLE037 - one byte-level scanner state machine
             let n = length(arr)
             var i = 0
             var inStr = false   // inside a "…" literal (plain content portion)
@@ -909,7 +909,7 @@ struct private QueryStage {
 
 // Parse one stage of a single-source query starting at `start`, binding `rangeVar`. Fills `stage` (incl. the
 // optional `into` continuation). Returns false (after a macro_error) on a malformed stage.
-def private parse_one_stage(q : string; nq : int; start : int; rangeVar : string; isGroupVar : bool;
+def private parse_one_stage(q : string; nq : int; start : int; rangeVar : string; isGroupVar : bool;   // nolint:STYLE037,STYLE038 - one arm per query clause; the arms share the scan cursor
                             prog : ProgramPtr; at : LineInfo; var stage : QueryStage) : bool {
     stage.rangeVar = rangeVar
     stage.isGroupVar = isGroupVar
@@ -1029,7 +1029,7 @@ def private parse_one_stage(q : string; nq : int; start : int; rangeVar : string
 
 // Parse the query and emit the `_fold(...)` rewrite text. On a malformed query, register a macro error
 // and emit a benign `(0)` so the surrounding statement still parses (the error is the real signal).
-def private transpile_query(query : string; prog : ProgramPtr; at : LineInfo) : string {
+def private transpile_query(query : string; prog : ProgramPtr; at : LineInfo) : string {   // nolint:STYLE038 - one arm per query form; the dispatch IS the transpiler
     var q = strip(strip_query_comments(query))
     let fromWord = read_ident(q, 0)
     if (fromWord._0 != "from") {

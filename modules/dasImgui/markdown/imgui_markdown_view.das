@@ -1852,7 +1852,7 @@ def private render_list_item_head(doc : RichDocument const; ordered : bool;
     let node = doc.nodes[item]
     var cache & = unsafe(state.nodes[item])
     if (!cache.marker_valid) {
-        cache.marker = ordered ? "{ordinal}." : "•"
+        cache.marker = ordered ? "{ordinal}." : "•"  // nolint:STYLE039 (rendered list bullet)
         cache.marker_valid = true
     }
     cache.control_screen_valid = false
@@ -2088,7 +2088,7 @@ def private render_code_block(doc : RichDocument const; node_index : int;
             entry.screen_revision = state.render_revision
             SetCursorPos(GetCursorPos() + float2(padding, padding))
             TextColored(style.marker_color,
-                        "code · {code_block_line_count(content.text)} lines")
+                        "code · {code_block_line_count(content.text)} lines")  // nolint:STYLE039 (on-screen separator glyph)
             draw_code_block_icons(node_index, state, style, true)
         }
         EndChild()

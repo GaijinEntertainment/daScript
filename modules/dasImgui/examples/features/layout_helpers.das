@@ -23,7 +23,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("§4.6 - layout helpers", 800, 600)
+    harness_init("sec 4.6 - layout helpers", 800, 600)
     let io & = unsafe(GetIO())
     GetStyle().FontScaleMain = 1.5
 }

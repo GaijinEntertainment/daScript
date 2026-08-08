@@ -20,7 +20,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("narrative_bullet - boost v2 §3.2", 720, 360)
+    harness_init("narrative_bullet - boost v2 sec 3.2", 720, 360)
 }
 
 [export]

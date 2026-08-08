@@ -145,7 +145,7 @@ def private _parse_phrase(var st : ParseState) : int {
     return -1
 }
 
-def private _parse_near(var st : ParseState) : int {
+def private _parse_near(var st : ParseState) : int {   // nolint:STYLE038 - one linear NEAR() production; the arms share the parse cursor
     // Caller verified next is "NEAR" keyword. Consume it.
     _consume_keyword(st, "NEAR")
     _skip_ws(st)
@@ -381,7 +381,7 @@ def public try_compile_text_match(query : string) : Result<Fts5Query; string> {
     if (!empty(st.err)) return err(st.err, type<Fts5Query>)
     _skip_ws(st)
     if (st.pos < length(st.src)) return err("trailing input at position {st.pos}", type<Fts5Query>)
-    var q <- Fts5Query(nodes <- st.nodes, root = root_idx) // nolint:LINT003
+    var q <- Fts5Query(nodes <- st.nodes, root = root_idx) // nolint:LINT003,LINT019 - move_ok consumes q, so it must stay var; LINT003 fires only in downstream compiles
     return move_ok(q, type<string>)
 }
 

@@ -19,7 +19,7 @@ require imgui/imgui_harness
 
 [export]
 def init() {
-    harness_init("layout_primitives - boost v2 §3.2", 720, 420)
+    harness_init("layout_primitives - boost v2 sec 3.2", 720, 420)
 }
 
 [export]
