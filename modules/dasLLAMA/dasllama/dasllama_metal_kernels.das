@@ -3597,6 +3597,8 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_qknorm = compile_pso(metal_qk_norm_msl, metal_qk_norm_msl_entry, metal_qk_norm_msl_fastmath, ok)
     g_pso_argmax = compile_pso(metal_argmax_msl, metal_argmax_msl_entry, metal_argmax_msl_fastmath, ok)
     g_pso_moe_router = compile_pso(MetalMoeRouter_metal_moe_router_msl, MetalMoeRouter_metal_moe_router_msl_entry, MetalMoeRouter_metal_moe_router_msl_fastmath, ok)
+    g_pso_moe_router_b = compile_pso(MetalMoeRouterB_metal_moe_router_msl, MetalMoeRouterB_metal_moe_router_msl_entry, MetalMoeRouterB_metal_moe_router_msl_fastmath, ok)
+    g_pso_dn_ba = compile_pso(MetalDnBa_metal_q8_gemv_msl, MetalDnBa_metal_q8_gemv_msl_entry, MetalDnBa_metal_q8_gemv_msl_fastmath, ok)
     g_pso_moe_select = compile_pso(metal_moe_select_msl, metal_moe_select_msl_entry, metal_moe_select_msl_fastmath, ok)
     g_pso_moe_gemv_q8 = compile_pso(metal_moe_gemv_q8_msl, metal_moe_gemv_q8_msl_entry, metal_moe_gemv_q8_msl_fastmath, ok)
     g_pso_moe_kq_k4 = compile_pso(metal_moe_gemv_k4_msl, metal_moe_gemv_k4_msl_entry, metal_moe_gemv_k4_msl_fastmath, ok)
@@ -3703,7 +3705,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
 // ===== encoders =====
 
 def enc_gemv(enc : MetalComputeEncoder?; bw : MetalBuffer?; boff : uint64; bx, by, bn, bd : MetalBuffer?; d : int64; yoff : uint64 = 0ul) {
-    enc_gemv_c(enc, bw, boff, bw, bx, by, yoff, bn, bd, d)
+    enc_gemv_c(enc, bw, boff, bw, bx, by, yoff, bn, bd, d, 1l)
 }
 
 // K-quant site GEMV — the per-format twin of enc_gemv over the kq plane pair
@@ -4013,7 +4015,7 @@ def enc_add_rms_site(enc : MetalComputeEncoder?; bx, ba, bw, by, bdim, beps : Me
         enc_addrms_c(enc, bx, ba, bw, by, bdim, beps, bascale != null ? bascale : g_one)
     } else {
         enc_ew2(enc, g_pso_add, bx, 0ul, ba, 0ul, bdim, dim, bascale)
-        enc_rms(enc, bx, bw, by, bdim, beps)
+        enc_rms(enc, bx, 0ul, bw, by, bdim, beps)
     }
 }
 
@@ -4024,7 +4026,7 @@ def enc_pre_add_rms_site(enc : MetalComputeEncoder?; bx, ba, bwpa, bwffn, by, bd
     if (dim <= ADD_RMS_MAX_DIM) {
         enc_preaddrms_c(enc, bx, ba, bwpa, bwffn, by, bdim, beps)
     } else {
-        enc_rms(enc, ba, bwpa, ba, bdim, beps)
+        enc_rms(enc, ba, 0ul, bwpa, ba, bdim, beps)
         enc_add_rms_site(enc, bx, ba, bwffn, by, bdim, beps, dim)
     }
 }
@@ -4442,21 +4444,8 @@ def enc_add_rms_b(enc : MetalComputeEncoder?; bx, ba, bw, by, bdim, beps : Metal
     kn_dispatch(enc, uint3(uint(nrows), 1u, 1u), uint3(1024u, 1u, 1u))
 }
 
-// batched rmsnorm (the prologue): the prefill rms kernel is width-agnostic — one tg per row
-def enc_rms_b(enc : MetalComputeEncoder?; bx, bw, by, bdim, beps : MetalBuffer?; nrows : int64) {
-    kn_pipeline(enc, g_pso_rms)
-    kn_tgmem(enc, metal_rmsnorm_msl_tgmem, 0)
-    kn_buffer(enc, bx, 0ul, 0)
-    kn_buffer(enc, bw, 0ul, 1)
-    kn_buffer(enc, by, 0ul, 2)
-    kn_buffer(enc, bdim, 0ul, 3)
-    kn_buffer(enc, beps, 0ul, 4)
-    hz_read(bx)
-    hz_write(by)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(nrows), 1u, 1u), uint3(1024u, 1u, 1u))
-}
-
+// enc_rms_b (the batched prologue) and pf_enc_rms (the prefill 256/tg shape) are
+// [metal_dispatch]-generated from MetalRmsNorm alongside enc_rms.
 
 //! Release every PSO the registry compiled (the PSO half of metal_decode_shutdown — runs
 //! before the shared device goes).
@@ -4485,6 +4474,8 @@ def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso
         metal_release(g_pso_rms)
         g_pso_rms = null
     }
+    release_pso(g_pso_dn_ba)
+    release_pso(g_pso_moe_router_b)
     if (g_pso_add != null) {
         metal_release(g_pso_add)
         g_pso_add = null
@@ -4753,9 +4744,12 @@ def metal_tensor_race_decode : array<MetalTensorRaceResult> {
 
 // One threadgroup per row: cooperative sum of squares (simd_sum + per-simdgroup partials),
 // lane 0 folds partials into rsqrt(mean + eps), every thread scales its strided slice.
-[metal_dispatch(name = "enc_rms", pso = "g_pso_rms", tgmem = "metal_rmsnorm_msl_tgmem", tg = 1024, grid = "1")]
+// Three dispatch shapes on one class: decode single-row, batched prologue, prefill (256/tg).
+[metal_dispatch(name = "enc_rms", pso = "g_pso_rms", tgmem = "metal_rmsnorm_msl_tgmem", tg = 1024, grid = "1"),
+    metal_dispatch(name = "enc_rms_b", pso = "g_pso_rms", tgmem = "metal_rmsnorm_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64"),
+    metal_dispatch(name = "pf_enc_rms", pso = "g_pso_rms", tgmem = "metal_rmsnorm_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
 class MetalRmsNorm {
-    @ssbo @binding = 0 x : array<float>     // [nrows x dim] source
+    @ssbo @binding = 0 @off = "xoff" x : array<float>     // [nrows x dim] source
     @ssbo @binding = 1 @role = "weight" w : array<float>     // [dim] weight
     @ssbo @binding = 2 y : array<float>     // [nrows x dim] out (x aliasing is safe: x is fully
                                             // read before the barrier that precedes any write)
@@ -5111,8 +5105,9 @@ class MetalMoeRouter : MetalMoeRouterT {
 }
 
 // Position-blocked prefill twin: 8 positions per sg (the prefill router's entire cost is slab
-// traffic). Hand-bound by the prefill driver — @span inert. Same per-lane k stride and
-// per-position dot order as the single: logits stay bit-identical.
+// traffic). Same per-lane k stride and per-position dot order as the single: logits stay
+// bit-identical. Also the prefill f32-slab GEMV (pf_enc_slab_gemv_b rides this builder).
+[metal_dispatch(name = "enc_moe_router_b", pso = "g_pso_moe_router_b", tg = 128, grid = "ne/4, nst/8", params = "ne : int64, nst : int64")]
 class MetalMoeRouterB : MetalMoeRouterT {
     override NR = 8
     override NRU = 8u
@@ -5867,7 +5862,7 @@ class template MetalQ8GemvT {
     @ssbo @binding = 0 @role = "weight" @off = "boff" wsh : array<float16> // 34B-block W blob, half-scale view (block b at 17*b)
     @ssbo @binding = 1 @role = "weight" @off = "boff" wqb : array<int8>    // the same blob buffer, byte view (quants at 34*b + 2)
     @ssbo @binding = 2 x : array<float4>    // [n] f32 vector, float4 view ([npos x n] when BATCHED)
-    @ssbo @binding = 3 @off = "yoff" @span = "d*4" y : array<float>     // [d] outputs ([npos x d] when BATCHED)
+    @ssbo @binding = 3 @off = "yoff" @span = "d*np*4" y : array<float>     // [d] outputs ([np x d] when BATCHED; singles pass np = 1)
     @uniform @binding = 4 ndim : uint       // n (reduction dim, % 32)
     @uniform @binding = 5 ddim : uint       // d (output rows)
     @template_constant BATCHED : bool = false
@@ -5920,12 +5915,13 @@ class template MetalQ8GemvT {
     }
 }
 
-[metal_dispatch(name = "enc_gemv_c", pso = "g_pso_gemv", tg = "g_gemv_rows*32", grid = "d/g_gemv_rows", params = "d : int64")]
+[metal_dispatch(name = "enc_gemv_c", pso = "g_pso_gemv", tg = "g_gemv_rows*32", grid = "d/g_gemv_rows", params = "d : int64, np : int64")]
 class MetalQ8Gemv : MetalQ8GemvT {
 }
 
 // Batched narrow projection twin (DeltaNet β/α: d = dt_rank, 16..64 — under every GEMM N tile):
-// one simdgroup per (output row, position). Hand-bound by the prefill driver — @off/@span inert.
+// one simdgroup per (output row, position); 256/tg = 8 rows per threadgroup.
+[metal_dispatch(name = "pf_enc_dn_ba", pso = "g_pso_dn_ba", tg = 256, grid = "d/8, np", params = "d : int64, np : int64")]
 class MetalDnBa : MetalQ8GemvT {
     override BATCHED = true
 }
@@ -6746,7 +6742,7 @@ class MetalKqMvB8K6 {
 // q+k in ONE grid over the fused QKV buffer; prefill dispatches separate q/k panels per-plane.
 [metal_dispatch(name = "enc_qk_norm", pso = "g_pso_qknorm", tgmem = "metal_qk_norm_msl_tgmem", tg = "head_size", grid = "ntg, nrows", params = "ntg : int64, nrows : int64, head_size : int64")]
 class MetalQkNorm {
-    @ssbo @binding = 0 x : array<float>     // bound at the panel offset; normalized in place
+    @ssbo @binding = 0 @off = "xoff" x : array<float>     // bound at the panel offset; normalized in place
     @ssbo @binding = 1 @role = "weight" w : array<float>
     @uniform @binding = 2 ka : QkNormArgs
     @workgroup part : float[16]     // one per simdgroup — hs <= 512 (gemma4 global heads)

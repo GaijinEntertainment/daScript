@@ -158,6 +158,8 @@ var g_pso_rpst_q8 : MetalComputePipeline?   // per-32-block quantizing store
 var g_pso_rpst_tq4 : MetalComputePipeline?  // threadgroup-per-head FWHT + quantizing store
 var g_pso_unsign : MetalComputePipeline?    // the tq4 attention-output un-rotate
 var g_pso_qknorm : MetalComputePipeline?    // per-head QK RMSNorm prepass (MSL owned by prefill)
+var g_pso_dn_ba : MetalComputePipeline?     // DeltaNet β/α batched narrow GEMV (prefill-only dispatch)
+var g_pso_moe_router_b : MetalComputePipeline?   // position-blocked router / f32-slab GEMV (prefill-only dispatch)
 
 var g_pso_argmax : MetalComputePipeline?
 var g_pso_copy_row : MetalComputePipeline?   // zero-copy logits: staging row -> wrapped session storage
