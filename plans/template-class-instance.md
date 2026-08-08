@@ -211,6 +211,16 @@ before the `skills/make_pr.md` checklist:
    can bind an alias mid-infer (NOT `[infer_macro]` — that one runs only on a clean
    tree), and `finish`/`patch` never fire for a failed struct, so a deferred named
    error is impossible — the opt-out knob is the only way to keep the good message.
+   **SUPERSEDED (Boris, 2026-08-07, stage-2 vehicle evidence): check REMOVED, and
+   `late_bind` with it (its only effect was waiving the check — late-supplied aliases
+   are now simply the default behavior).** The check rejected valid programs on
+   declaration order (a struct declared below the instance false-errored) in a language
+   that is otherwise order-independent, and its bound-set was a blocklist that had to
+   enumerate every name category (typedefs, structs, enums, handled types, …) to stay
+   correct. A forgotten typedef now falls through to infer: one `30826
+   undefined structure field type` for a struct template; a handful of
+   `don't know what 'KT' is` errors at template lines for a class template (instance
+   named only in the mangled function name) — ugly but honest, on actually-wrong code.
 5. Call-parameter axis (`@template_call`, IMPLEMENTED same round): the field name is
    what template bodies call, the init (`@@name` or string) is the default target,
    instances redirect with `override sdot = @@ssdot`. Rides the rules engine's
@@ -260,21 +270,23 @@ dasMetal rode along: `[metal_kernel]` with no `name=` now derives spellable glob
 stamp twins stay distinguishable in GPU captures; explicit `name=` behavior unchanged
 (zero no-name users existed).
 
-**Known limitation (parse-order):** the reifier can only treat as "bound" names already
-parsed — a struct declared BELOW the instance still false-errors the eager check (the
-SqAttn args structs moved above the kernel section for exactly this). Escapes:
-declaration order, or `late_bind = true` (Boris: the existing override suffices — no
-`params=` axis).
+**Parse-order false positive → check removal:** the eager check could only treat as
+"bound" names already parsed, so `struct SqAttnArgs` declared below the instances
+false-errored (the args structs moved above the kernel section as the immediate fix —
+now pure layout preference). This plus the blocklist fragility led to the Decision-4
+supersede: the eager check and `late_bind` are REMOVED; unbound names fall through to
+infer.
 
-**Macro-diagnostics paper cut (observed 2026-08-07, fix under discussion):** Rule 2 of
+**Macro-diagnostics collapse (observed 2026-08-07, fix GO same day):** Rule 2 of
 `Program::deduplicateErrors` (cbc2184f0) collapses same-line same-cerr different-text
 errors to the first plus "+N more on this line". All macro-apply failures share cerr
 20800 `runtime_annotation`, so when two macros on one declaration both error (the
 inherited reifier + the instance's own `[metal_dispatch]`), the second macro's named
-error — an independent, actionable message — is dropped. Candidate fix: exempt the
-macro-diagnostic cerr family (20800, 31200, 31210, 50501) from Rule 2; Rule 1
-(byte-identical dedup) still applies, and macro errors are bounded by the annotation
-list so they cannot avalanche like the inference noise Rule 2 exists for.
+error — an independent, actionable message — is dropped. Fix (Boris GO: "macro errors
+are too important"): `isMacroDiagnostic` exempts the macro cerr family (20800, 31200,
+31210, 50501) from Rule 2; Rule 1 (byte-identical dedup) still applies, and macro
+errors are bounded by the annotation list so they cannot avalanche like the inference
+noise Rule 2 exists for.
 
 ## Appendix — the stage-0 reifier skeleton (matrix-green verbatim, minus probe prints)
 

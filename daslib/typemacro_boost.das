@@ -627,72 +627,11 @@ def private tsi_method_name(func : FunctionPtr) : string {
 }
 
 [macro_function]
-def private tsi_collect_alias_names(t : TypeDeclPtr; var names : table<string>) {
-    if (t == null) return
-    if (t.baseType == Type.alias) {
-        names |> insert(string(t.alias))
-    }
-    tsi_collect_alias_names(t.firstType, names)
-    tsi_collect_alias_names(t.secondType, names)
-    for (arg in t.argTypes) {
-        tsi_collect_alias_names(arg, names)
-    }
-}
-
-[macro_function]
-def private tsi_is_handled_typename(aname : string) : bool {
-    // handled types (C++-bound classes) are module ANNOTATIONS; checked only for names no other bound lookup matched
-    var found = false
-    program_for_each_module(compiling_program()) $(m) {
-        if (!found) {
-            module_for_each_annotation(m) $(value) {
-                if (value.name == aname) {
-                    found = true
-                }
-            }
-        }
-    }
-    return found
-}
-
-[macro_function]
-def private tsi_bind_aliases(st : StructurePtr; temMethods : array<FunctionPtr>; var rules : Template; lateBind : bool; var errors : das_string) : bool {
-    // every alias the instance carries (own typedefs + the template's, via the parser's clone) becomes a rule
-    var bound : table<string>
+def private tsi_bind_aliases(st : StructurePtr; var rules : Template) {
+    // instance aliases become rules; every other name is infer's to resolve (or a later macro's to supply)
     st |> for_each_structure_alias() $(var td) {
-        bound |> insert(string(td.alias))
         rules |> replaceTypeWithTypeDecl(string(td.alias)) <| clone_type(td)
     }
-    // typedefs, struct/enum names, and handled typenames all parse as alias nodes but resolve at infer on their own
-    program_for_each_module(compiling_program()) $(m) {
-        m |> for_each_typedef() $(tname, _td) {
-            bound |> insert(string(tname))
-        }
-        m |> for_each_structure() $(var s) {
-            bound |> insert(string(s.name))
-        }
-        m |> for_each_enumeration() $(var en) {
-            bound |> insert(string(en.name))
-        }
-    }
-    var used : table<string>
-    for (f in st.fields) {
-        tsi_collect_alias_names(f._type, used)
-    }
-    for (func in temMethods) {
-        tsi_collect_alias_names(func.result, used)
-        for (arg in func.arguments) {
-            tsi_collect_alias_names(arg._type, used)
-        }
-    }
-    var missing <- [for (aname in keys(used)); aname; where !key_exists(bound, aname) && !tsi_is_handled_typename(aname)]
-    if (!lateBind && !empty(missing)) { // late_bind = true: a later macro may still bind; infer reports what stays unbound
-        missing |> sort()
-        errors := "[template_struct_instance] {st.name} is missing 'typedef {missing[0]} = <type>'" + (
-            length(missing) > 1 ? " (also: {join(missing, ", ")})" : "")
-        return false
-    }
-    return true
 }
 
 [macro_function]
@@ -833,7 +772,7 @@ def private tsi_normalize_fields(var st : StructurePtr; var rules : Template) {
 [structure_macro(name = "template_struct_instance")]
 class TemplateStructInstance : AstStructureAnnotation {
     //! Reifies a ``struct template`` / ``class template`` parent into the annotated instance at parse time: instance ``typedef``s bind the template's type parameters, ``override`` inits bind its ``@template_constant`` fields (erased from the result), ``@template_call`` fields rebind free-function callees by name (``override sdot = @@ssdot`` — bare-spelled calls AND ``@@`` addresses; erased too, while ``_::sdot`` / ``__::sdot`` keep their normal resolution rules — the pinned escape to the real function), template methods are cloned onto the instance (instance-authored methods win), and the template parent is cut — every later structure annotation sees a finished concrete struct or class.
-    //! Put ``[|> template_struct_instance]`` on the template itself so every instance inherits the reifier ahead of its own annotations. ``[|> template_struct_instance(late_bind = true)]`` skips the unbound-alias check, for templates whose type parameters another macro supplies later (e.g. from a ``[dirty_infer_macro]``).
+    //! Put ``[|> template_struct_instance]`` on the template itself so every instance inherits the reifier ahead of its own annotations. Names the instance leaves unbound are left to the compiler: module types resolve on their own, a later macro (e.g. a ``[dirty_infer_macro]``) may still supply a ``typedef``, and a genuinely missing one surfaces as an undefined-type error in the stamped code.
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         if (st.flags.isTemplate) {
             return true // [|> ...] fires on the template itself: nothing to reify
@@ -864,9 +803,8 @@ class TemplateStructInstance : AstStructureAnnotation {
         var instType = new TypeDecl(at = st.at, baseType = Type.tStructure, structType = st)
         rules |> replaceStructWithTypeDecl(tem) <| clone_type(instType)
         rules |> replaceTypeWithTypeDecl(string(tem.name)) <| clone_type(instType)
-        let lateBind = find_arg(args, "late_bind") ?as tBool ?? false
-        if (!tsi_bind_aliases(st, temMethods, rules, lateBind, errors)
-                || !tsi_bind_constants(st, rules, errors)
+        tsi_bind_aliases(st, rules)
+        if (!tsi_bind_constants(st, rules, errors)
                 || !tsi_bind_calls(st, temMethods, rules, errors)
                 || !tsi_stamp_methods(st, tem, temMethods, ownMethods, rules, errors)) {
             return false

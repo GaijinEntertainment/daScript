@@ -1,5 +1,5 @@
 options gen2
-expect 20800
+expect 30826
 
 require daslib/typemacro_boost
 
@@ -11,7 +11,7 @@ struct template NT {
 
 struct NInst : NT {
     typedef KT = int
-    // VT deliberately unbound: the reifier must name the missing typedef
+    // VT deliberately unbound: falls through to infer, which reports the undefined type at the template field
 }
 
 [export]

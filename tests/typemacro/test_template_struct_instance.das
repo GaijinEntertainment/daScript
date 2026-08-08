@@ -96,7 +96,7 @@ class XModInt : XModKern {
 
 [tsi_test_bind_kt]
 class LateInt : LateKern {
-    // no typedef — [tsi_test_bind_kt] supplies KT after the reifier; late_bind waives the check
+    // no typedef — [tsi_test_bind_kt] supplies KT after the reifier; unbound names are infer's to resolve
 }
 
 def tsi_sdot(a, b : int) : int {
@@ -206,7 +206,7 @@ def test_tsi_cross_module(t : T?) {
 
 [test]
 def test_tsi_late_bind(t : T?) {
-    t |> run("late_bind = true defers alias binding to a later macro") @(t : T?) {
+    t |> run("an alias another macro supplies after the reifier binds at infer") @(t : T?) {
         unsafe {
             var inscope k <- new LateInt()
             k.x = 40

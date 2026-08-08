@@ -24,7 +24,7 @@ class TsiTestBindKt : AstStructureAnnotation {
     }
 }
 
-[ |> template_struct_instance(late_bind = true)]
+[ |> template_struct_instance]
 class template public LateKern {
     x : KT
 

@@ -60,8 +60,8 @@ Full source: :download:`template_struct_instance_mod.das <../../../../../tutoria
 Three things to notice:
 
 - ``KT`` is not declared anywhere. An unresolved name in type position is a
-  **type parameter** — every instance must bind it with a ``typedef``, and the
-  macro reports the missing name if one forgets.
+  **type parameter** — every instance binds it with a ``typedef``. A forgotten
+  ``typedef`` shows up as an undefined-type error in the stamped code.
 - ``@template_constant`` marks ``KEEP_LATEST`` as a **constant parameter**.
   Instances pick its value with ``override``; the field itself is erased from
   every stamped class, and each use site gets the value as a literal.
@@ -151,11 +151,10 @@ What the reifier does
 
 The macro runs at parse time, when the instance class is declared. It:
 
-1. binds every template alias to the instance's ``typedef`` declarations
-   (module-level aliases stay untouched — only a genuinely unbound name is
-   an error; ``[ |> template_struct_instance(late_bind = true)]`` waives the
-   check for templates whose parameters another macro supplies later in the
-   compile);
+1. binds every template alias to the instance's ``typedef`` declarations.
+   Other names are left for the compiler: module types resolve on their
+   own, a later macro may still supply a ``typedef``, and a genuinely
+   missing one surfaces as an undefined-type error in the stamped code;
 2. harvests every ``@template_constant`` value, replaces its reads with the
    literal, and erases the field;
 3. harvests every ``@template_call`` target and renames the matching calls
