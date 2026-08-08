@@ -67,18 +67,19 @@
    lane mapping, so it needs a measurement, not a refactor. Done = each scheme either justified
    in a comment at its kernel or collapsed into the one that measures as fast.
 
-6. **KqMv merges only under measurement — the tonight-sweep (2026-08-08) left it for the
-   profiling followup.** The reifier now covers the mechanism (`[template_struct_instance]`,
-   `@template_constant` width — SqAttn's D pair uses exactly this), but the family fails the
-   free byte-identical-MSL gate on three facts: B8 is a DIFFERENT algorithm now (tgmem X-panel
-   staging, float4 accs — the old "three families of three" framing is stale on that leg);
-   B2 deliberately omits B4's live `colbase` column tiling (its dispatch pins gcols = 1), so
-   the merged body puts always-zero index math on the B=2 decode GEMV; K4↔K5's qh overlay
-   modifies the innermost w-decode line (earlier stripped-body measurement agrees: format axis
-   43-49% different, width axis 11% and that 11% IS the unroll factor). Done = the profiling
-   followup runs the interleaved A/B (M1, ≥3 launches/arm): unified B2-as-colbase-form (and
-   K4/K5 via static_if if the first arm is clean) vs master, then merge or record the number
-   that says no. Prediction on record (Boris): the B2 specialization is accidental — it merges.
+6. **KqMv width merge RESOLVED by measurement (2026-08-08) — 9 classes → 3 templates + the B8
+   trio.** The A/B (bench_metal_gemv_kernels `kq_mvb*` arms, 3 launches, cls3b the honest cell)
+   ruled: a live colbase on B2 costs +2% (k4) / +0.5% (k6) — the specialization was
+   load-bearing, and NOT via the per-b mul (a hoisted form didn't recover it; occupancy
+   unchanged; mechanism unresolved at ISA level, the number is the ruling) — while k5's
+   colbase B2 measured neutral-to-BETTER (−1.4% cls3b, occupancy 448→512). Prediction outcome
+   (Boris: "accidental, will merge"): k5 hit, k4/k6 miss. The merge landed anyway via form
+   choice (46a6252f7): K4T/K6T carry a `TILED` static_if branch-duplicating only the
+   b-loop/writeback (B4 byte-identical, B2 = production text + a dead colbase decl, measured
+   free); K5T keeps one colbase spelling. K4↔K5 format merge stays ruled out (the qh
+   overlay + hq staging would duplicate most of the body). B8 trio stays hand-written
+   (different algorithm). Standing tripwire: the lab's production arms reference the stamped
+   globals.
 
 7. **Pointer families — a language-level idea, parked.** (Boris, 2026-07-30: "interesting follow …
    it maybe good - we are just not there yet.") Everything above about address spaces exists

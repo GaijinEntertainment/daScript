@@ -288,13 +288,42 @@ directions on ca5862d8e); the clamp-vs-raw pattern is now free for any format pa
 
 **Fenced → the profiling followup** (every one needs interleaved A/B on the M1; oracles
 cover correctness only):
-- KqMv B2→colbase-form unification (+ K4/K5 static_if if the first arm is clean).
+- ~~KqMv B2→colbase-form unification~~ **DONE 2026-08-08** — see the measured round below.
+  The K4/K5 FORMAT-axis merge stays ruled out: the qh overlay + hq staging + block stride
+  would static_if-duplicate most of the body (the 43-49%-different measurement stands);
+  two templates sharing nothing but scaffolding is not a merge.
 - MoeMulMm K6/Q8/Mx4 joining `MetalMoeMulMmBase` (followup_general #8: cross-iteration
   state / prologue hook / binding renumber — every route rewrites hot inner loops).
 - The plain GEMV width pairs — `MetalGemvB2/B4`, `MetalQ8MvB2/B4`,
   `MetalGemvW13SwB2/B4`: NOT scaled twins (panel sizes, staging-loop shapes, and for
   Q8Mv the whole thread geometry differ) — unifying means picking one shape per pair
-  and measuring it at both widths.
+  and measuring it at both widths. Prior from the KqMv round: width specializations
+  CAN be load-bearing at percent level — expect these to need the measurement, not skip it.
+
+### KqMv B2/B4 measured round + restamp (2026-08-08): 9→3 templates + B8 trio, −116 LOC
+
+The A/B ran in `bench_metal_gemv_kernels` (new `kq_mvb*` arms under the production
+KqMvArgs contract; 3 launches per question, interleaved, cls3b = the DRAM-honest cell):
+
+1. **Naive colbase form** (the text a plain width template stamps at NR=2): k4 +1.9/+2.0/+2.0%
+   at cls3b, +1..+5% at w13/w2; k6 +0.5% cls3b; k5 −1.4/−1.5/−1.4% cls3b (BETTER, occupancy
+   448→512). Boris's prediction ("accidental, will merge") — k5 hit; k4/k6 MISS: the omitted
+   colbase is a load-bearing specialization.
+2. **Hoisted form** (colrow/cb4, one add per chunk instead of a mul per b): did NOT recover
+   k4 cls3b (+1.8..+2.0% still); both hoisted B4s dead-neutral vs production. So the cost is
+   not the per-b mul, and occupancy is unchanged — ISA-level mechanism unresolved; the number
+   is the ruling (6 launches, 2 spellings, same +2%).
+3. **Dead-decl preview** (production text + an unused colbase line — the static_if stamp's
+   only residue): ±0.1% everywhere. Free.
+
+Restamp (46a6252f7): `MetalKqMvK4T/K5T/K6T`, NR/NRU width constants (int + uint spellings —
+fixed-array dims and `range()` take the int, colbase math the uint; `float[NR]` substitution
+works). K4T/K6T carry `TILED` static_if branch-duplicating ONLY the b-loop + writeback tail:
+B4 stamps byte-identical, B2 stamps = production + the dead decl. K5T keeps one colbase
+spelling (its B2 text change is the measured improvement). Gate: entry-normalized MSL diff
+(b4k4/b4k5/b4k6 empty; b2k4/b2k6 the one dead line; b2k5 the three expected sites), kernels
+suite 7/7. The lab's production arms now reference the stamped globals — a standing tripwire
+on the stamped text.
 
 **Genuinely different, NOT merge candidates** (surveyed, closed): rope-store quant
 stores (Q8/Tq4/BQ8/BTq4 — the tq4 rotate, 168 diff lines), `KqGemvK5C` (a measured
