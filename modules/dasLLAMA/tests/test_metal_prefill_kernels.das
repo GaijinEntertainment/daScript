@@ -343,9 +343,9 @@ def test_metal_prefill_kernels(t : T?) {
                 attn_trio_gate(t, dev, queue, 128, 6, 2, 40, true)
 
                 // ===== swiglu + residual add =====
-                var pso_sw = pipeline_from_source(dev, metal_swiglu_msl, metal_swiglu_msl_entry, metal_swiglu_msl_fastmath, err)
+                var pso_sw = pipeline_from_source(dev, MetalSwiglu_metal_ew2_msl, MetalSwiglu_metal_ew2_msl_entry, MetalSwiglu_metal_ew2_msl_fastmath, err)
                 t |> success(pso_sw != null, "swiglu pipeline: {err}")
-                var pso_add = pipeline_from_source(dev, metal_add_msl, metal_add_msl_entry, metal_add_msl_fastmath, err)
+                var pso_add = pipeline_from_source(dev, MetalAdd_metal_ew2_msl, MetalAdd_metal_ew2_msl_entry, MetalAdd_metal_ew2_msl_fastmath, err)
                 t |> success(pso_add != null, "add pipeline: {err}")
                 let total = NROWS * HIDDEN
                 var sg : array<float>
@@ -391,13 +391,13 @@ def test_metal_prefill_kernels(t : T?) {
                 unsafe {
                     delete addbufs
                 }
-                // flat copy (the gemma4 V-from-K panel copy): y = x, bit-exact
-                var pso_cp = pipeline_from_source(dev, metal_pf_copy_msl, metal_pf_copy_msl_entry, metal_pf_copy_msl_fastmath, err)
-                t |> success(pso_cp != null, "pf_copy pipeline: {err}")
+                // flat copy (the gemma4 V-from-K panel copy rides MetalCopyRow): dst = src, bit-exact
+                var pso_cp = pipeline_from_source(dev, metal_copy_row_msl, metal_copy_row_msl_entry, metal_copy_row_msl_fastmath, err)
+                t |> success(pso_cp != null, "copy_row pipeline: {err}")
                 var bcp = buf_upload(dev, su)   // pre-filled — fully overwritten by the copy
-                var cpbufs <- [bcp, bsg, btot]
-                let cpran = run_compute_1d(queue, pso_cp, cpbufs, uint(total), 64u, err)
-                t |> success(cpran, "pf_copy dispatch: {err}")
+                var cpbufs <- [bsg, bcp, btot]
+                let cpran = run_compute_1d(queue, pso_cp, cpbufs, uint(total), 256u, err)
+                t |> success(cpran, "copy_row dispatch: {err}")
                 t |> equal(buf_mismatch_exact(bcp, add_want), 0)
                 cpbufs |> clear()
                 unsafe {
@@ -2396,7 +2396,7 @@ def private dn_deint_sigmul_gate(t : T?; dev, queue; nh, hs, npos : int) {
     var err : string
     var pso_de = pipeline_from_source(dev, metal_dn_deint_msl, metal_dn_deint_msl_entry, metal_dn_deint_msl_fastmath, err)
     t |> success(pso_de != null, "dn deint pipeline: {err}")
-    var pso_sg = pipeline_from_source(dev, metal_sigmul_msl, metal_sigmul_msl_entry, metal_sigmul_msl_fastmath, err)
+    var pso_sg = pipeline_from_source(dev, MetalSigmul_metal_ew2_msl, MetalSigmul_metal_ew2_msl_entry, MetalSigmul_metal_ew2_msl_fastmath, err)
     t |> success(pso_sg != null, "sigmul pipeline: {err}")
     if (pso_de == null || pso_sg == null) {
         return

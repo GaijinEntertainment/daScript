@@ -1630,24 +1630,6 @@ class MetalAttnAVMm : MetalMmTileBase {
     }
 }
 
-// Flat element copy (dst/src bound at byte offsets) — the gemma4 V-from-K panel copy: no-wv
-// layers reuse the pre-norm/pre-rope K projection as V (mm_qkv's copy half; the ones-plane
-// norm follows when v_norm is on — bit-identical to the CPU's fused copy+norm).
-class MetalPfCopy {
-    @ssbo @binding = 0 @role = "write" y : array<float>
-    @ssbo @binding = 1 @role = "read" x : array<float>
-    @uniform @binding = 2 total : uint      // grid guard
-
-    [metal_kernel(name="metal_pf_copy_msl")]
-    def metal_pf_copy {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= total) {
-            return
-        }
-        y[gid] = x[gid]
-    }
-}
-
 // Interleave two [npos x d] panels into the [npos x 2d] MTP eh_proj input — the draft-warm
 // cat rows [enorm(embed) ; hnorm(hidden)]; one thread per source element.
 class MetalPfCat2 {
@@ -1701,7 +1683,6 @@ var private g_pf_pso_addbias : MetalComputePipeline?
 var private g_pf_pso_qk : MetalComputePipeline?
 var private g_pf_pso_softmax : MetalComputePipeline?
 var private g_pf_pso_av : MetalComputePipeline?
-var private g_pf_pso_copy : MetalComputePipeline?
 var private g_pf_pso_cat2 : MetalComputePipeline?
 var private g_pf_pso_mm_t : MetalComputePipeline?  // the mul_mm TENSOR twin; the base is the shared g_pso_mm
 var private g_pf_pso_bf16_mm : MetalComputePipeline?   // native-BF16 A twin (E-series model_proj)
@@ -1872,10 +1853,6 @@ def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-r
         metal_release(g_pf_pso_av)
         g_pf_pso_av = null
     }
-    if (g_pf_pso_copy != null) {
-        metal_release(g_pf_pso_copy)
-        g_pf_pso_copy = null
-    }
     if (g_pf_pso_cat2 != null) {
         metal_release(g_pf_pso_cat2)
         g_pf_pso_cat2 = null
@@ -1957,7 +1934,6 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
     g_pf_pso_qk = compile_pso(metal_attn_qk_msl, metal_attn_qk_msl_entry, metal_attn_qk_msl_fastmath, ok)
     g_pf_pso_softmax = compile_pso(metal_attn_softmax_msl, metal_attn_softmax_msl_entry, metal_attn_softmax_msl_fastmath, ok)
     g_pf_pso_av = compile_pso(metal_attn_av_msl, metal_attn_av_msl_entry, metal_attn_av_msl_fastmath, ok)
-    g_pf_pso_copy = compile_pso(metal_pf_copy_msl, metal_pf_copy_msl_entry, metal_pf_copy_msl_fastmath, ok)
     g_pf_pso_cat2 = compile_pso(metal_pf_cat2_msl, metal_pf_cat2_msl_entry, metal_pf_cat2_msl_fastmath, ok)
     g_pf_mm_tensor = metal_tensor_crowned("mulmm_q8")
     if (g_pf_mm_tensor) {
@@ -2465,51 +2441,40 @@ def private enc_rope(enc : MetalComputeEncoder?; bv, bcos, bsin, bn, bhs, bnpair
 
 
 
-// the ggml-geometry attention pair: same buffer lists as the trio, 32x64 C tiles, z = heads.
-// The key grid spans nk64 (= np32's value — existing rows + the chunk on a continuation);
-// bqoff/bqrows carry the causal shift and the score slab's row extent.
+// the attention dispatches: same (in, in, out) buffer list + kargs at 3, 128-thread tgs. The mm
+// pair's key grid spans nk64 (= np32 — existing rows + the chunk on a continuation); bqoff/bqrows
+// in ka carry the causal shift and the score slab's row extent.
+def private enc_attn3(enc : MetalComputeEncoder?; pso : MetalComputePipeline?; tgm : uint64;
+                      ba, bb, bc : MetalBuffer?; var ka : AttnArgs; gx, gy, gz : int64) {
+    kn_pipeline(enc, pso)
+    kn_tgmem(enc, tgm, 0)
+    kn_buffer(enc, ba, 0ul, 0)
+    kn_buffer(enc, bb, 0ul, 1)
+    kn_buffer(enc, bc, 0ul, 2)
+    kn_kargs(enc, ka, 3)
+    hz_read(ba)
+    hz_read(bb)
+    hz_write(bc)
+    hz_gate(enc)
+    kn_dispatch(enc, uint3(uint(gx), uint(gy), uint(gz)), uint3(128u, 1u, 1u))
+}
+
 def private enc_qk_mm(enc : MetalComputeEncoder?; bq, bk, batt : MetalBuffer?; var ka : AttnArgs; mp, nk64, heads : int64) {
     let twinq = g_pf_qkmm_tensor && g_pf_pso_qkmm_t != null
-    kn_pipeline(enc, twinq ? g_pf_pso_qkmm_t : g_pf_pso_qkmm)
-    kn_tgmem(enc, twinq ? metal_attn_qk_mm_t_msl_tgmem : metal_attn_qk_mm_msl_tgmem, 0)
-    kn_buffer(enc, bq, 0ul, 0)
-    kn_buffer(enc, bk, 0ul, 1)
-    kn_buffer(enc, batt, 0ul, 2)
-    kn_kargs(enc, ka, 3)
-    hz_read(bq)
-    hz_read(bk)
-    hz_write(batt)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(mp / 32l), uint(nk64 / 64l), uint(heads)), uint3(128u, 1u, 1u))
+    enc_attn3(enc, twinq ? g_pf_pso_qkmm_t : g_pf_pso_qkmm,
+        twinq ? metal_attn_qk_mm_t_msl_tgmem : metal_attn_qk_mm_msl_tgmem,
+        bq, bk, batt, ka, mp / 32l, nk64 / 64l, heads)
 }
 
 def private enc_av_mm(enc : MetalComputeEncoder?; batt, bv, bxb : MetalBuffer?; var ka : AttnArgs; mp, heads, head_size : int64) {
     let twina = g_pf_avmm_tensor && g_pf_pso_avmm_t != null
-    kn_pipeline(enc, twina ? g_pf_pso_avmm_t : g_pf_pso_avmm)
-    kn_tgmem(enc, twina ? metal_attn_av_mm_t_msl_tgmem : metal_attn_av_mm_msl_tgmem, 0)
-    kn_buffer(enc, batt, 0ul, 0)
-    kn_buffer(enc, bv, 0ul, 1)
-    kn_buffer(enc, bxb, 0ul, 2)
-    kn_kargs(enc, ka, 3)
-    hz_read(batt)
-    hz_read(bv)
-    hz_write(bxb)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(mp / 32l), uint(head_size / 64l), uint(heads)), uint3(128u, 1u, 1u))
+    enc_attn3(enc, twina ? g_pf_pso_avmm_t : g_pf_pso_avmm,
+        twina ? metal_attn_av_mm_t_msl_tgmem : metal_attn_av_mm_msl_tgmem,
+        batt, bv, bxb, ka, mp / 32l, head_size / 64l, heads)
 }
 
 def private enc_qk(enc : MetalComputeEncoder?; bq, bk, batt : MetalBuffer?; var ka : AttnArgs; mp, nk64, heads : int64) {
-    kn_pipeline(enc, g_pf_pso_qk)
-    kn_tgmem(enc, metal_attn_qk_msl_tgmem, 0)
-    kn_buffer(enc, bq, 0ul, 0)
-    kn_buffer(enc, bk, 0ul, 1)
-    kn_buffer(enc, batt, 0ul, 2)
-    kn_kargs(enc, ka, 3)
-    hz_read(bq)
-    hz_read(bk)
-    hz_write(batt)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(mp / 32l), uint(nk64 / 32l), uint(heads)), uint3(128u, 1u, 1u))
+    enc_attn3(enc, g_pf_pso_qk, metal_attn_qk_msl_tgmem, bq, bk, batt, ka, mp / 32l, nk64 / 32l, heads)
 }
 
 def private enc_softmax(enc : MetalComputeEncoder?; batt : MetalBuffer?; var ka : AttnArgs; npos, heads : int64; bsink : MetalBuffer? = null) {
@@ -2524,17 +2489,7 @@ def private enc_softmax(enc : MetalComputeEncoder?; batt : MetalBuffer?; var ka 
 }
 
 def private enc_av(enc : MetalComputeEncoder?; batt, bv, bxb : MetalBuffer?; var ka : AttnArgs; mp, heads, head_size : int64) {
-    kn_pipeline(enc, g_pf_pso_av)
-    kn_tgmem(enc, metal_attn_av_msl_tgmem, 0)
-    kn_buffer(enc, batt, 0ul, 0)
-    kn_buffer(enc, bv, 0ul, 1)
-    kn_buffer(enc, bxb, 0ul, 2)
-    kn_kargs(enc, ka, 3)
-    hz_read(batt)
-    hz_read(bv)
-    hz_write(bxb)
-    hz_gate(enc)
-    kn_dispatch(enc, uint3(uint(mp / 32l), uint(head_size / 32l), uint(heads)), uint3(128u, 1u, 1u))
+    enc_attn3(enc, g_pf_pso_av, metal_attn_av_msl_tgmem, batt, bv, bxb, ka, mp / 32l, head_size / 32l, heads)
 }
 
 // swiglu and add share the (a, b, total) elementwise shape
@@ -3025,14 +2980,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 // bx to the draft block's eh_proj input; the body below runs the draft layer
                 // verbatim (same uniforms, npos rows, K/V panel + weight arrays at index l)
                 unsafe {
-                    kn_pipeline(enc, g_pf_pso_copy)
-                    kn_buffer(enc, bwm_res, 0ul, 0)
-                    kn_buffer(enc, bx, 0ul, 1)
-                    kn_buffer(enc, u_wm_tot, 0ul, 2)
-                    hz_read(bx)
-                    hz_write(bwm_res)
-                    hz_gate(enc)
-                    kn_dispatch(enc, uint3(uint((npos * dim + 63l) / 64l), 1u, 1u), uint3(64u, 1u, 1u))
+                    enc_copy_row(enc, bx, 0ul, bwm_res, 0ul, u_wm_tot, npos * dim)
                     var bw_en = upload_region(addr < void? >(t.fblob[t.mtp_enorm_off]), uint64(dim * 4l))
                     pf_enc_rms(enc, bwm_emb, bw_en, bxb, u_dim, u_eps, npos)
                     var bw_fin = upload_region(addr < void? >(t.fblob[t.rms_final_off]), uint64(dim * 4l))
@@ -3190,14 +3138,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     // panel; v_norm then runs the weightless per-head RMS (ones plane) in place —
                     // the CPU mm_qkv order exactly, BEFORE qk_norm touches k
                     if (!has_wv) {
-                        kn_pipeline(enc, g_pf_pso_copy)
-                        kn_buffer(enc, bvs[l], koff, 0)
-                        kn_buffer(enc, bks[l], koff, 1)
-                        kn_buffer(enc, het ? u_vtot_sw : u_vtot, 0ul, 2)
-                        hz_read(bks[l])
-                        hz_write(bvs[l], koff, uint64(npos * kvd_l * 4l))
-                        hz_gate(enc)
-                        kn_dispatch(enc, uint3(uint((npos * kvd_l + 63l) / 64l), 1u, 1u), uint3(64u, 1u, 1u))
+                        enc_copy_row(enc, bks[l], koff, bvs[l], koff, het ? u_vtot_sw : u_vtot, npos * kvd_l)
                     }
                     if (c.v_norm) {
                         // MAX-width ones upload: the region cache is address-keyed and both

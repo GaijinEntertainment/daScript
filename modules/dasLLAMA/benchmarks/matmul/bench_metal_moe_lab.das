@@ -2603,7 +2603,7 @@ def private main_apple(dummy) {
     var psos : array<MetalComputePipeline?>
     psos |> push(compile_or_die(dev, metal_moe_gemv_k4_msl, metal_moe_gemv_k4_msl_entry, metal_moe_gemv_k4_msl_fastmath))
     psos |> push(compile_or_die(dev, metal_moe_gemv_q51_msl, metal_moe_gemv_q51_msl_entry, metal_moe_gemv_q51_msl_fastmath))
-    psos |> push(compile_or_die(dev, metal_geglu_msl, metal_geglu_msl_entry, metal_geglu_msl_fastmath))
+    psos |> push(compile_or_die(dev, MetalGeglu_metal_ew2_msl, MetalGeglu_metal_ew2_msl_entry, MetalGeglu_metal_ew2_msl_fastmath))
     psos |> push(compile_or_die(dev, lab_moe_k4_pair_msl, lab_moe_k4_pair_msl_entry, lab_moe_k4_pair_msl_fastmath))
     psos |> push(compile_or_die(dev, lab_moe_k4_x4_msl, lab_moe_k4_x4_msl_entry, lab_moe_k4_x4_msl_fastmath))
     psos |> push(compile_or_die(dev, lab_moe_k4_r4_msl, lab_moe_k4_r4_msl_entry, lab_moe_k4_r4_msl_fastmath))

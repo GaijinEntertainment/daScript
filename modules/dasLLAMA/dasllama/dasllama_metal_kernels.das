@@ -3619,10 +3619,10 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_gemv = compile_pso(MetalQ8Gemv_metal_q8_gemv_msl, MetalQ8Gemv_metal_q8_gemv_msl_entry, MetalQ8Gemv_metal_q8_gemv_msl_fastmath, ok)
     g_gemv_rows = clamp(int64(g_env_metal.gemv_tg), 1l, 32l)
     g_pso_rms = compile_pso(metal_rmsnorm_msl, metal_rmsnorm_msl_entry, metal_rmsnorm_msl_fastmath, ok)
-    g_pso_add = compile_pso(metal_add_msl, metal_add_msl_entry, metal_add_msl_fastmath, ok)
+    g_pso_add = compile_pso(MetalAdd_metal_ew2_msl, MetalAdd_metal_ew2_msl_entry, MetalAdd_metal_ew2_msl_fastmath, ok)
     g_pso_addrms = compile_pso(metal_add_rms_msl, metal_add_rms_msl_entry, metal_add_rms_msl_fastmath, ok)
     g_pso_preaddrms = compile_pso(metal_pre_add_rms_msl, metal_pre_add_rms_msl_entry, metal_pre_add_rms_msl_fastmath, ok)
-    g_pso_swiglu = compile_pso(metal_swiglu_msl, metal_swiglu_msl_entry, metal_swiglu_msl_fastmath, ok)
+    g_pso_swiglu = compile_pso(MetalSwiglu_metal_ew2_msl, MetalSwiglu_metal_ew2_msl_entry, MetalSwiglu_metal_ew2_msl_fastmath, ok)
     g_one = metal_new_buffer(g_dev, 4ul)
     unsafe {
         var onep = reinterpret<float?>(metal_buffer_contents(g_one))
@@ -3633,7 +3633,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
         var zp = reinterpret<uint?>(metal_buffer_contents(g_zero))
         zp[0] = 0u
     }
-    g_pso_geglu = compile_pso(metal_geglu_msl, metal_geglu_msl_entry, metal_geglu_msl_fastmath, ok)
+    g_pso_geglu = compile_pso(MetalGeglu_metal_ew2_msl, MetalGeglu_metal_ew2_msl_entry, MetalGeglu_metal_ew2_msl_fastmath, ok)
     g_pso_softcap = compile_pso(metal_softcap_row_msl, metal_softcap_row_msl_entry, metal_softcap_row_msl_fastmath, ok)
     g_pso_suppress = compile_pso(metal_suppress_row_msl, metal_suppress_row_msl_entry, metal_suppress_row_msl_fastmath, ok)
     g_pso_attn16 = compile_pso(MetalSqAttnF16_metal_sq_attn_msl, MetalSqAttnF16_metal_sq_attn_msl_entry, MetalSqAttnF16_metal_sq_attn_msl_fastmath, ok)
@@ -3671,7 +3671,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_dn_scan = compile_pso(metal_dn_scan_msl, metal_dn_scan_msl_entry, metal_dn_scan_msl_fastmath, ok)
     g_pso_dn_gate = compile_pso(metal_dn_gate_msl, metal_dn_gate_msl_entry, metal_dn_gate_msl_fastmath, ok)
     g_pso_dn_deint = compile_pso(metal_dn_deint_msl, metal_dn_deint_msl_entry, metal_dn_deint_msl_fastmath, ok)
-    g_pso_sigmul = compile_pso(metal_sigmul_msl, metal_sigmul_msl_entry, metal_sigmul_msl_fastmath, ok)
+    g_pso_sigmul = compile_pso(MetalSigmul_metal_ew2_msl, MetalSigmul_metal_ew2_msl_entry, MetalSigmul_metal_ew2_msl_fastmath, ok)
     g_pso_axpy_sig = compile_pso(metal_axpy_sig_msl, metal_axpy_sig_msl_entry, metal_axpy_sig_msl_fastmath, ok)
     g_mx4_vtab = metal_new_buffer(g_dev, 64ul)
     unsafe {
@@ -6840,62 +6840,50 @@ class MetalQkNorm {
     }
 }
 
-// Fused SwiGLU gate, one thread per element: g = silu(g) * u — swiglu exactly (the CPU side's
-// exp4 polynomial vs the GPU exp differ inside the shared tolerance envelope).
-class MetalSwiglu {
-    @ssbo @binding = 0 @role = "readwrite" g : array<float>     // [ntok x hidden] W1 gate, in place
-    @ssbo @binding = 1 @role = "read" u : array<float>     // [ntok x hidden] W3 up
-    @uniform @binding = 2 total : uint      // ntok * hidden — grid guard
-
-    [metal_kernel(name="metal_swiglu_msl")]
-    def metal_swiglu {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= total) {
-            return
-        }
-        let vv = g[gid]
-        g[gid] = (vv / (1.0 + exp(-vv))) * u[gid]
-    }
-}
-
-// GeGLU twin (gemma line): g = gelu(g) * u with the CPU's tanh-approx gelu (dasllama_math gelu —
-// 0.5*v*(1+tanh(sqrt(2/pi)*(v + 0.044715*v^3)))); GPU tanh vs the CPU exp identity differ inside
-// the shared tolerance envelope, same as swiglu's exp.
-class MetalGeglu {
-    @ssbo @binding = 0 @role = "readwrite" g : array<float>     // [ntok x hidden] W1 gate, in place
-    @ssbo @binding = 1 @role = "read" u : array<float>     // [ntok x hidden] W3 up
-    @uniform @binding = 2 total : uint      // ntok * hidden — grid guard
-
-    [metal_kernel(name="metal_geglu_msl")]
-    def metal_geglu {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= total) {
-            return
-        }
-        let vv = g[gid]
-        // tanh via the exp identity (the CPU geglu4's form) — Metal tanh NaNs past ~44,
-        // while exp saturates: exp(INF) -> denom INF -> the term is 0
-        let a = 0.7978845608028654 * (vv + 0.044715 * vv * vv * vv)
-        g[gid] = 0.5 * vv * (2.0 - 2.0 / (1.0 + exp(2.0 * a))) * u[gid]
-    }
-}
-
-// Residual add, one thread per element: x += y (add_inplace).
-class MetalAdd {
-    @ssbo @binding = 0 @role = "readwrite" x : array<float>
-    @ssbo @binding = 1 @role = "read" y : array<float>
+// One elementwise combine g[i] = combine(g[i], u[i]), one thread per element — the ew2 family.
+// enc_ew2 dispatches all four; ascale rides slot 3 (the add's layer_out_scale, g_one elsewhere).
+[ |> template_struct_instance]
+class template MetalEw2T {
+    @ssbo @binding = 0 @role = "readwrite" g : array<float>     // in place
+    @ssbo @binding = 1 @role = "read" u : array<float>
     @uniform @binding = 2 total : uint      // grid guard
-    @uniform @binding = 3 ascale : float    // (x + y) * ascale — gemma4 layer_out_scale scales
-                                            // the WHOLE layer output; every other site binds 1.0
+    @uniform @binding = 3 ascale : float    // the add's scale slot (unused by the other combines)
 
-    [metal_kernel(name="metal_add_msl")]
-    def metal_add {
+    def abstract combine(a, b : float) : float
+
+    [metal_kernel]
+    def metal_ew2 {
         let gid = gl_GlobalInvocationID.x
         if (gid >= total) {
             return
         }
-        x[gid] = (x[gid] + y[gid]) * ascale
+        let vv = g[gid]
+        g[gid] = combine(vv, u[gid])
     }
+}
+
+// g = silu(g) * u — swiglu exactly (the CPU side's exp4 polynomial vs the GPU exp differ
+// inside the shared tolerance envelope)
+class MetalSwiglu : MetalEw2T {
+    def override combine(a, b : float) : float => (a / (1.0 + exp(-a))) * b
+}
+
+// GeGLU twin (gemma line), the CPU's tanh-approx gelu via the exp identity — Metal tanh NaNs
+// past ~44 while exp saturates: exp(INF) -> denom INF -> the term is 0
+class MetalGeglu : MetalEw2T {
+    def override combine(a, b : float) : float => (
+        0.5 * a * (2.0 - 2.0 / (1.0 + exp(2.0 * (0.7978845608028654 * (a + 0.044715 * a * a * a))))) * b)
+}
+
+// residual add: x += y, scaled — gemma4 layer_out_scale scales the WHOLE layer output
+class MetalAdd : MetalEw2T {
+    def override combine(a, b : float) : float => (a + b) * ascale
+}
+
+// per-head sigmoid output gate (sigmoid_gate): x ⊙ σ(g) in place — the gated-attention
+// epilogue between the attention output and the out projection
+class MetalSigmul : MetalEw2T {
+    def override combine(a, b : float) : float => a / (1.0 + exp(-b))
 }
 
 // Suppress-token pinning (gemma4): logits[ids[i]] = -1e30 after the soft cap — the CPU
@@ -7187,23 +7175,6 @@ class MetalDnDeint {
         let sb = p * 2u * qd + (i / hs) * 2u * hs + i % hs
         q[p * qs + i] = qg[sb]
         gt[p * qd + i] = qg[sb + hs]
-    }
-}
-
-// Per-head sigmoid output gate (sigmoid_gate): x ⊙ σ(g) in place — the gated-attention
-// epilogue between the attention output and the out projection.
-class MetalSigmul {
-    @ssbo @binding = 0 @role = "readwrite" x : array<float>
-    @ssbo @binding = 1 @role = "read" g : array<float>
-    @uniform @binding = 2 total : uint      // grid guard
-
-    [metal_kernel(name="metal_sigmul_msl")]
-    def metal_sigmul {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= total) {
-            return
-        }
-        x[gid] = x[gid] / (1.0 + exp(-g[gid]))
     }
 }
 

@@ -448,7 +448,7 @@ def private qk_norm_gate(t : T?; dev, queue; hs, nq, nk, nrows : int; vfusion : 
 def private geglu_gate(t : T?; dev, queue; total : int) {
     let tag = "geglu total={total}"
     var err : string
-    var pso = pipeline_from_source(dev, metal_geglu_msl, metal_geglu_msl_entry, metal_geglu_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, MetalGeglu_metal_ew2_msl, MetalGeglu_metal_ew2_msl_entry, MetalGeglu_metal_ew2_msl_fastmath, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     var g : array<float>

@@ -93,7 +93,7 @@ def private run_ew_lab(b) {   // nolint:STYLE038 — flat lab driver: buffers bo
     var err : string
     var pso_addrms = pipeline_from_source(dev, metal_add_rms_msl, metal_add_rms_msl_entry, true, err)
     b |> success(pso_addrms != null, "production add+rms kernel compiles")
-    var pso_swiglu = pipeline_from_source(dev, metal_swiglu_msl, metal_swiglu_msl_entry, true, err)
+    var pso_swiglu = pipeline_from_source(dev, MetalSwiglu_metal_ew2_msl, MetalSwiglu_metal_ew2_msl_entry, true, err)
     b |> success(pso_swiglu != null, "production swiglu kernel compiles")
     if (pso_addrms == null || pso_swiglu == null) {
         metal_release(queue)
