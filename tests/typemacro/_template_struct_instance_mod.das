@@ -3,6 +3,7 @@ options gen2
 module _template_struct_instance_mod shared public
 
 require daslib/typemacro_boost public
+require daslib/strings_boost
 
 [ |> template_struct_instance]
 class template public XModKern {
@@ -29,5 +30,19 @@ class template public LateKern {
 
     def take(v : KT) : KT {
         return v + x
+    }
+}
+
+// apply adds an int global named for the function — the stamped-clone annotation arm asserts
+// the instance-named global exists (i.e. the reifier ran applies on the clone, exactly once)
+[function_macro(name = "tsi_test_fn_tag")]
+class TsiTestFnTag : AstFunctionAnnotation {
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+        let gname = "{func.name}_tag" |> replace("`", "_")
+        if (!add_global_var(compiling_module(), gname, new TypeDecl(at = func.at, baseType = Type.tInt), func.at, false)) {
+            errors := "can't add global {gname}"
+            return false
+        }
+        return true
     }
 }

@@ -235,3 +235,31 @@ def test_tsi_call_rebind(t : T?) {
         }
     }
 }
+
+[ |> template_struct_instance]
+class template TagKernT {
+    x : KT
+
+    [tsi_test_fn_tag]
+    def tick : KT {
+        return x + x
+    }
+}
+
+class TagInt : TagKernT {
+    typedef KT = int
+}
+
+[test]
+def test_tsi_method_annotation_apply(t : T?) {
+    t |> run("stamped methods get their function-annotation applies") @(t : T?) {
+        // TsiTestFnTag`apply added this global when the reifier stamped TagInt`tick —
+        // referencing it IS the assertion (and a double apply fails the compile loudly)
+        t |> equal(TagInt_tick_tag, 0)
+        unsafe {
+            var inscope k <- new TagInt()
+            k.x = 21
+            t |> equal(k->tick(), 42)
+        }
+    }
+}

@@ -234,6 +234,44 @@ per format, oracles cover correctness only; Q8/Mx4 joining renumbers cnt/basep/b
 6/7/8 → 7/8/9 (encoder + oracle churn accepted once). MoeGemv stays inheritance (its
 dedup is genuinely is-a). The 96 unlensed classes ride the same wave as lens adoption.
 
+### Stage 2 first vehicle (2026-08-07): plain SqAttn tier, 4→2 templates
+
+`MetalSqAttn{F16,F32}` → `MetalSqAttnKvT` (typedef `KT`); `MetalSqAttn{Q8,Tq4}` →
+`MetalSqAttnQuantT` (typedef `QB` + two `@template_call` slots — their binding layouts
+already matched, no renumber). Instances keep their own `[metal_dispatch]`; the template
+method carries a bare `[metal_kernel]`. **Proof: the four stamped kernels emit MSL
+byte-identical to the hand-written bodies (entry-name-normalized diff empty)** — same
+text ⇒ same PSO ⇒ perf settled by construction; kernels suite 7/7 green on the M1.
+
+Machinery gaps the vehicle exposed (both fixed in the same round):
+
+1. **Stamped clones never got their function-annotation applies** — the parser runs
+   `runFunctionAnnotations` only for functions it parses, so a template method's
+   `[metal_kernel]` never created its per-instance globals. Fix in `tsi_stamp_methods`:
+   re-add each cloned decl through the applying `add_function_annotation` overload,
+   then erase the inert front copies (test arm: `test_tsi_method_annotation_apply`).
+2. **The eager unbound-alias check only knew typedefs** — a struct-typed field
+   (`ka : SqAttnArgs`) parses as an alias node and false-errored as a missing template
+   parameter. Fix: the bound sweep now also counts structure/enum names and handled
+   typenames (module annotations) across the program.
+
+dasMetal rode along: `[metal_kernel]` with no `name=` now derives spellable globals
+(`Class_method_msl`, backticks flattened) and a qualified MSL entry (`Class_method`) so
+stamp twins stay distinguishable in GPU captures; explicit `name=` behavior unchanged
+(zero no-name users existed).
+
+**Known limitation (parse-order):** the reifier can only treat as "bound" names already
+parsed — a struct declared BELOW the instance still false-errors the eager check (the
+SqAttn args structs moved above the kernel section for exactly this). Escapes:
+declaration order, or `late_bind = true`. Candidate design if it keeps biting: an
+explicit `params = "KT"` annotation arg makes the check exact and order-independent —
+Boris's call, ledgered not built.
+
+**Macro-diagnostics paper cut (observed, not fixed):** when the inherited reifier and the
+instance's own `[metal_dispatch]` both error, the console collapses the second same-line
+error into "+1 more on this line" — the reifier's named error (the actionable one) was
+invisible through the whole debug round; MCP compile_check collapses it too.
+
 ## Appendix — the stage-0 reifier skeleton (matrix-green verbatim, minus probe prints)
 
 Hardcodes one alias ("KT") and one const ("WIDE") — stage 1 generalized exactly those

@@ -136,10 +136,10 @@ def private q_rows : array<float> {
 def private sq_codec_single_gate(t : T?; dev, queue; codec : string; cnt : int; softcap : float; hass : bool) {
     let tag = "sq_attn_{codec} cnt={cnt} softcap={softcap} sink={hass}"
     var err : string
-    let src = codec == "f32" ? metal_sq_attn32_msl : (codec == "q8" ? metal_sq_attn_q8_msl : metal_sq_attn_tq4_msl)
-    let entry = codec == "f32" ? metal_sq_attn32_msl_entry : (codec == "q8" ? metal_sq_attn_q8_msl_entry : metal_sq_attn_tq4_msl_entry)
-    let fm = codec == "f32" ? metal_sq_attn32_msl_fastmath : (codec == "q8" ? metal_sq_attn_q8_msl_fastmath : metal_sq_attn_tq4_msl_fastmath)
-    let tgm = codec == "f32" ? metal_sq_attn32_msl_tgmem : (codec == "q8" ? metal_sq_attn_q8_msl_tgmem : metal_sq_attn_tq4_msl_tgmem)
+    let src = codec == "f32" ? MetalSqAttnF32_metal_sq_attn_msl : (codec == "q8" ? MetalSqAttnQ8_metal_sq_attn_msl : MetalSqAttnTq4_metal_sq_attn_msl)
+    let entry = codec == "f32" ? MetalSqAttnF32_metal_sq_attn_msl_entry : (codec == "q8" ? MetalSqAttnQ8_metal_sq_attn_msl_entry : MetalSqAttnTq4_metal_sq_attn_msl_entry)
+    let fm = codec == "f32" ? MetalSqAttnF32_metal_sq_attn_msl_fastmath : (codec == "q8" ? MetalSqAttnQ8_metal_sq_attn_msl_fastmath : MetalSqAttnTq4_metal_sq_attn_msl_fastmath)
+    let tgm = codec == "f32" ? MetalSqAttnF32_metal_sq_attn_msl_tgmem : (codec == "q8" ? MetalSqAttnQ8_metal_sq_attn_msl_tgmem : MetalSqAttnTq4_metal_sq_attn_msl_tgmem)
     var pso = pipeline_from_source(dev, src, entry, fm, err)
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)

@@ -640,6 +640,22 @@ def private tsi_collect_alias_names(t : TypeDeclPtr; var names : table<string>) 
 }
 
 [macro_function]
+def private tsi_is_handled_typename(aname : string) : bool {
+    // handled types (C++-bound classes) are module ANNOTATIONS; checked only for names no other bound lookup matched
+    var found = false
+    program_for_each_module(compiling_program()) $(m) {
+        if (!found) {
+            module_for_each_annotation(m) $(value) {
+                if (value.name == aname) {
+                    found = true
+                }
+            }
+        }
+    }
+    return found
+}
+
+[macro_function]
 def private tsi_bind_aliases(st : StructurePtr; temMethods : array<FunctionPtr>; var rules : Template; lateBind : bool; var errors : das_string) : bool {
     // every alias the instance carries (own typedefs + the template's, via the parser's clone) becomes a rule
     var bound : table<string>
@@ -647,10 +663,16 @@ def private tsi_bind_aliases(st : StructurePtr; temMethods : array<FunctionPtr>;
         bound |> insert(string(td.alias))
         rules |> replaceTypeWithTypeDecl(string(td.alias)) <| clone_type(td)
     }
-    // module-level typedefs resolve at infer on their own — only an unbindable template parameter should error
+    // typedefs, struct/enum names, and handled typenames all parse as alias nodes but resolve at infer on their own
     program_for_each_module(compiling_program()) $(m) {
         m |> for_each_typedef() $(tname, _td) {
             bound |> insert(string(tname))
+        }
+        m |> for_each_structure() $(var s) {
+            bound |> insert(string(s.name))
+        }
+        m |> for_each_enumeration() $(var en) {
+            bound |> insert(string(en.name))
         }
     }
     var used : table<string>
@@ -663,7 +685,7 @@ def private tsi_bind_aliases(st : StructurePtr; temMethods : array<FunctionPtr>;
             tsi_collect_alias_names(arg._type, used)
         }
     }
-    var missing <- [for (aname in keys(used)); aname; where !key_exists(bound, aname)]
+    var missing <- [for (aname in keys(used)); aname; where !key_exists(bound, aname) && !tsi_is_handled_typename(aname)]
     if (!lateBind && !empty(missing)) { // late_bind = true: a later macro may still bind; infer reports what stays unbound
         missing |> sort()
         errors := "[template_struct_instance] {st.name} is missing 'typedef {missing[0]} = <type>'" + (
@@ -777,6 +799,14 @@ def private tsi_stamp_methods(var st : StructurePtr; tem : StructurePtr; temMeth
         if (!(mod |> add_function(fc))) {
             errors := "[template_struct_instance] can't add method {instName}`{mname}"
             return false
+        }
+        // run annotation applies (parser skips macro-added fns): re-add applying decls to the back, drop inert front copies
+        let nann = fc.annotations |> length()
+        for (i in range(nann)) {
+            fc |> add_function_annotation(fc.annotations[i])
+        }
+        for (_i in range(nann)) {
+            fc.annotations |> erase(0)
         }
     }
     return true

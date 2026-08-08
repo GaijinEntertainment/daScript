@@ -93,7 +93,7 @@ def private oracle_all(cnt : int; scale, softcap, sink : float; window : int) : 
 // the single-threadgroup form: one dispatch, the whole context in one pass
 def private sq_single_gate(t : T?; dev, queue; tag : string; cnt : int; softcap : float; hass : bool) {
     var err : string
-    var pso = pipeline_from_source(dev, metal_sq_attn16_msl, metal_sq_attn16_msl_entry, metal_sq_attn16_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, MetalSqAttnF16_metal_sq_attn_msl, MetalSqAttnF16_metal_sq_attn_msl_entry, MetalSqAttnF16_metal_sq_attn_msl_fastmath, err)
     t |> success(pso != null, "{tag}: sq_attn16 pipeline: {err}")
     return if (pso == null)
     let scale = 1.0 / sqrt(float(HS))
@@ -110,7 +110,7 @@ def private sq_single_gate(t : T?; dev, queue; tag : string; cnt : int; softcap 
         hass = hass ? 1u : 0u)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, metal_sq_attn16_msl_tgmem, 0)
+        metal_set_threadgroup_memory_length(enc, MetalSqAttnF16_metal_sq_attn_msl_tgmem, 0)
         metal_set_buffer(enc, bk, 0ul, 0)
         metal_set_buffer(enc, bv, 0ul, 1)
         metal_set_buffer(enc, bq, 0ul, 2)
