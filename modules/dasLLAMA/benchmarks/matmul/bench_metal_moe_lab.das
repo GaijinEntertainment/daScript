@@ -1567,8 +1567,28 @@ let GM_UNTOK = 15
 let GM_VT = 16      // prod doubled-e2m1 LUT
 let GM_LVT = 17     // lcpp halved LUT
 let GM_U0 = 18      // hasb = 0 (lab arms run the prod kernel without the bias fold)
+let GM_KA = 19      // MoeMmArgs kargs (the joined family contract)
 
+// the production kernel's contract (kargs@5; repaired from the pre-kargs slots at the same
+// migration that rotted the per-site section)
 def private enc_gmm4_prod(gb; pso; tgmem : uint64; enc; yslot : int) {
+    metal_set_pipeline(enc, pso)
+    metal_set_threadgroup_memory_length(enc, tgmem, 0)
+    metal_set_buffer(enc, gb[GM_GQ], 0ul, 0)
+    metal_set_buffer(enc, gb[GM_GE], 0ul, 1)
+    metal_set_buffer(enc, gb[GM_X], 0ul, 2)
+    metal_set_buffer(enc, gb[yslot], 0ul, 3)
+    metal_set_buffer(enc, gb[GM_KA], 0ul, 5)
+    metal_set_buffer(enc, gb[GM_CNT], 0ul, 6)
+    metal_set_buffer(enc, gb[GM_BASE], 0ul, 7)
+    metal_set_buffer(enc, gb[GM_BKT], 0ul, 8)
+    metal_set_buffer(enc, gb[GM_VT], 0ul, 12)   // wb slot — never read at hasb=0, any float buffer satisfies binding validation
+    metal_set_buffer(enc, gb[GM_VT], 0ul, 13)
+    metal_dispatch_threadgroups(enc, uint3(uint((GNTOK + 31l) / 32l), uint(GNFE / 64l), uint(GE)), uint3(128u, 1u, 1u))
+}
+
+// the pre-kargs per-uniform layout the bf32 lab twin still declares
+def private enc_gmm4_oldu(gb; pso; tgmem : uint64; enc; yslot : int) {
     metal_set_pipeline(enc, pso)
     metal_set_threadgroup_memory_length(enc, tgmem, 0)
     metal_set_buffer(enc, gb[GM_GQ], 0ul, 0)
@@ -1614,6 +1634,8 @@ def private check_gmm4(queue; gb : array<MetalBuffer?>; pso; tgmem : uint64; nam
     let t = time_arm(queue, false) $(enc : MetalComputeEncoder?) {
         if (kind == 0) {
             enc_gmm4_prod(gb, pso, tgmem, enc, GM_Y1)
+        } elif (kind == 1) {
+            enc_gmm4_oldu(gb, pso, tgmem, enc, GM_Y1)
         } else {
             enc_gmm4_lcpp(gb, pso, tgmem, enc, GM_Y1)
         }
@@ -1724,11 +1746,20 @@ def private run_gmm4_lab(dev; queue; rounds : int; passes : int64) {
     basepb |> resize(length(basep) * 4)
     var bktb : array<uint8>
     bktb |> resize(length(bkt) * 4)
+    var kab : array<uint8>
+    kab |> resize(24)
     unsafe {
         memcpy(addr < void? >(hidsb[0]), addr < void? >(hids[0]), length(hids) * 4)
         memcpy(addr < void? >(cntb[0]), addr < void? >(cnt[0]), length(cnt) * 4)
         memcpy(addr < void? >(basepb[0]), addr < void? >(basep[0]), length(basep) * 4)
         memcpy(addr < void? >(bktb[0]), addr < void? >(bkt[0]), length(bkt) * 4)
+        var kap = addr<uint?>(kab[0])
+        kap[0] = uint(GDIM)     // kdim
+        kap[1] = uint(GNFE)     // ndim
+        kap[2] = uint(GEBLK)    // eplane, 32-blocks
+        kap[3] = uint(GK)       // nk
+        kap[4] = 1u             // gather
+        kap[5] = 0u             // hasb
     }
     var cmin = cnt[0]
     var cmax = cnt[0]
@@ -1758,10 +1789,11 @@ def private run_gmm4_lab(dev; queue; rounds : int; passes : int64) {
     gb |> push(upload_floats(dev, vtab))                                       // GM_VT
     gb |> push(upload_floats(dev, lvt))                                        // GM_LVT
     gb |> push(upload_u32v(dev, 0u))                                           // GM_U0
+    gb |> push(upload_bytes(dev, kab))                                         // GM_KA
 
     check_gmm4(queue, gb, pso_p, metal_moe_mulmm_mx4_msl_tgmem, "gmm4_prod", 0, gq, ge, gx, etab, vtab, cnt, basep, bkt)
-    check_gmm4(queue, gb, pso_b, lab_moe_mm_mx4_bf32_msl_tgmem, "gmm4_bf32", 0, gq, ge, gx, etab, vtab, cnt, basep, bkt)
-    check_gmm4(queue, gb, pso_l, lab_moe_mm_mx4_lcpp_msl_tgmem, "gmm4_lcpp", 1, gq, ge, gx, etab, vtab, cnt, basep, bkt)
+    check_gmm4(queue, gb, pso_b, lab_moe_mm_mx4_bf32_msl_tgmem, "gmm4_bf32", 1, gq, ge, gx, etab, vtab, cnt, basep, bkt)
+    check_gmm4(queue, gb, pso_l, lab_moe_mm_mx4_lcpp_msl_tgmem, "gmm4_lcpp", 2, gq, ge, gx, etab, vtab, cnt, basep, bkt)
 
     // per pass: GLAYERS layers of the gathered 2880x2880 class that owns the pp window.
     // pipe = 2 mms/layer, concurrent, no barriers (ceiling); serial = barrier per dispatch;
@@ -1791,7 +1823,7 @@ def private run_gmm4_lab(dev; queue; rounds : int; passes : int64) {
                             if (kind == 2) {
                                 enc_gmm4_lcpp(gb, pso_l, lab_moe_mm_mx4_lcpp_msl_tgmem, enc, half == 1 ? GM_Y2 : GM_Y1)
                             } elif (kind == 1) {
-                                enc_gmm4_prod(gb, pso_b, lab_moe_mm_mx4_bf32_msl_tgmem, enc, half == 1 ? GM_Y2 : GM_Y1)
+                                enc_gmm4_oldu(gb, pso_b, lab_moe_mm_mx4_bf32_msl_tgmem, enc, half == 1 ? GM_Y2 : GM_Y1)
                             } else {
                                 enc_gmm4_prod(gb, pso_p, metal_moe_mulmm_mx4_msl_tgmem, enc, half == 1 ? GM_Y2 : GM_Y1)
                             }
@@ -1835,6 +1867,7 @@ def private run_gmm4_lab(dev; queue; rounds : int; passes : int64) {
     delete cntb
     delete basepb
     delete bktb
+    delete kab
     delete garms
     delete gbest
     for (b in gb) {
@@ -2561,11 +2594,12 @@ def private main_apple(dummy) {
     }
     print("device={metal_device_name(dev)} rounds={rounds} passes={passes}\n")
     var queue = metal_new_command_queue(dev)
-    // gmm6/gmm8 run FIRST: the per-site section below ROTTED at the kargs migration (c45724dae moved
-    // the MoE GEMV family onto MoeGemvArgs; enc_lab_w13* still bind the old uniform slots, so its
-    // correctness check panics) — repair is a standalone followup, it must not block these sections
+    // gmm6/gmm8/gmm4 run FIRST: the per-site section below ROTTED at the kargs migration (c45724dae
+    // moved the MoE GEMV family onto MoeGemvArgs; enc_lab_w13* still bind the old uniform slots, so
+    // its correctness check panics) — repair is a standalone followup, it must not block these
     run_gmm6_lab(dev, queue, rounds, passes)
     run_gmm8_lab(dev, queue, rounds, passes)
+    run_gmm4_lab(dev, queue, rounds, passes)
     var psos : array<MetalComputePipeline?>
     psos |> push(compile_or_die(dev, metal_moe_gemv_k4_msl, metal_moe_gemv_k4_msl_entry, metal_moe_gemv_k4_msl_fastmath))
     psos |> push(compile_or_die(dev, metal_moe_gemv_q51_msl, metal_moe_gemv_q51_msl_entry, metal_moe_gemv_q51_msl_fastmath))
