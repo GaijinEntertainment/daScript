@@ -633,9 +633,31 @@ namespace das {
     void InferTypes::preVisit(ExprMove *expr) {
         Visitor::preVisit(expr);
         markTableStoreTarget(expr->left);
+        if (expr->left->rtti_isAt()) {
+            // keep the raw ExprAt so visit(ExprMove) can try the []<- operator first
+            auto at = static_cast<ExprAt*>(expr->left);
+            at->underClone = true;
+        }
         markNoDiscard(expr->right);
     }
     ExpressionPtr InferTypes::visit(ExprMove *expr) {
+        if (expr->right->type && !expr->right->type->isAutoOrAlias() && expr->left->rtti_isAt()) {
+            ExprAt *eat = (ExprAt *)(expr->left);
+            if (eat->subexpr->type && !eat->subexpr->type->isExprType()) {
+                // lets find []<- operator
+                if (auto opAtMove = inferGenericOperator3("[]<-", expr->at, eat->subexpr, eat->index, expr->right)) {
+                    opAtMove->alwaysSafe = eat->alwaysSafe | expr->alwaysSafe;
+                    reportAstChanged();
+                    return opAtMove;
+                }
+                // now, lets see if at itself can be promoted
+                if (auto OpAt = inferGenericOperator("[]", expr->at, eat->subexpr, eat->index)) {
+                    reportAstChanged();
+                    OpAt->alwaysSafe = eat->alwaysSafe;
+                    expr->left = OpAt;
+                }
+            }
+        }
         if (!expr->left->type || !expr->right->type)
             return Visitor::visit(expr);
         // infer
